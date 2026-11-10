@@ -4,6 +4,8 @@
 	import { api } from '#lib/api.ts';
 	import Logo from '#lib/components/Logo.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { osVersion } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -27,80 +29,81 @@
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
+{#snippet licenseText()}
+	<div class="srow-block"><pre>{about?.license}</pre></div>
+{/snippet}
+{#snippet thirdPartyText()}
+	<div class="srow-block"><pre class="scroll">{about?.thirdParty}</pre></div>
+{/snippet}
+
 {#if about}
-	<section class="tile panel">
-		<Logo size={40} />
-		<dl>
-			<div>
-				<dt>{t('about.version')}</dt>
-				<dd class="mono">{osVersion(about.version)}</dd>
-			</div>
-			{#if slot}<div>
-					<dt>{t('about.slot')}</dt>
-					<dd class="mono">{slot}</dd>
-				</div>{/if}
-			<div>
-				<dt>{t('about.kernel')}</dt>
-				<dd class="mono">{about.kernel || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('about.base')}</dt>
-				<dd>{t('about.baseText')}</dd>
-			</div>
-		</dl>
-		<p>
-			<a href="https://github.com/ra5on/TitanOS" target="_blank" rel="noreferrer"
-				>github.com/ra5on/TitanOS</a
-			>
-		</p>
-		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<p>
-				<a href="/welcome?step=4">{t('about.setupList')}</a>
-			</p>{/if}
-	</section>
-
-	<section class="tile panel" aria-labelledby="about-license">
-		<h2 class="tile-title" id="about-license">{t('about.license')}</h2>
-		<p>{t('about.licenseText')}</p>
-		<p class="muted">{t('about.licenseLater')}</p>
-		{#if about.license}
-			<details>
-				<summary>{t('about.licenseFull')}</summary>
-				<pre>{about.license}</pre>
-			</details>
+	<!-- PLAN 78-1: what runs here as rows with the value at the right; the
+	     licence texts open inside their rows. -->
+	<SettingGroup>
+		<div class="logo"><Logo size={40} /></div>
+		<SettingRow icon="info" title={t('about.version')}>
+			{#snippet control()}<span class="mono value">{osVersion(about?.version ?? '')}</span
+				>{/snippet}
+		</SettingRow>
+		{#if slot}
+			<SettingRow icon="disc" title={t('about.slot')}>
+				{#snippet control()}<span class="mono value">{slot}</span>{/snippet}
+			</SettingRow>
 		{/if}
-	</section>
+		<SettingRow icon="chip" title={t('about.kernel')}>
+			{#snippet control()}<span class="mono value">{about?.kernel || '–'}</span>{/snippet}
+		</SettingRow>
+		<SettingRow icon="linux" title={t('about.base')}>
+			{#snippet control()}<span class="value">{t('about.baseText')}</span>{/snippet}
+		</SettingRow>
+		<SettingRow icon="external" title={t('about.source')}>
+			{#snippet control()}<a
+					href="https://github.com/ra5on/TitanOS"
+					target="_blank"
+					rel="noreferrer">github.com/ra5on/TitanOS</a
+				>{/snippet}
+		</SettingRow>
+		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}
+			<SettingRow href="/welcome?step=4" icon="list" title={t('about.setupList')} />
+		{/if}
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="about-third">
-		<h2 class="tile-title" id="about-third">{t('about.thirdParty')}</h2>
-		<p class="muted">{t('about.thirdPartyText')}</p>
-		{#if about.thirdParty}<pre class="scroll">{about.thirdParty}</pre>{/if}
-	</section>
+	<SettingGroup title={t('about.licenses')}>
+		<SettingRow
+			id="about-license"
+			icon="fileText"
+			title={t('about.license')}
+			summary="FSL-1.1-ALv2"
+			children={about.license ? licenseText : undefined}
+		>
+			{#snippet description()}
+				<p>{t('about.licenseText')}</p>
+				<p>{t('about.licenseLater')}</p>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			id="about-third"
+			icon="box"
+			title={t('about.thirdParty')}
+			desc={t('about.thirdPartyText')}
+			children={about.thirdParty ? thirdPartyText : undefined}
+		/>
+	</SettingGroup>
 {/if}
 
 <style>
-	section {
-		font-size: var(--text-md);
-	}
-	dl {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-3) var(--space-5);
+	p {
 		margin: 0;
 	}
-	dt {
-		color: var(--muted);
-		font-size: var(--text-sm);
+	.logo {
+		margin-bottom: var(--space-2);
 	}
-	dd {
-		margin: 2px 0 0;
+	.value {
+		color: var(--text);
 		overflow-wrap: anywhere;
 	}
-	summary {
-		cursor: pointer;
-		color: var(--muted);
-	}
 	pre {
-		margin: var(--space-2-5) 0 0;
+		margin: 0;
 		padding: var(--space-3);
 		background: var(--track);
 		border-radius: var(--radius-ctl);
@@ -111,7 +114,6 @@
 		overflow-wrap: anywhere;
 	}
 	.scroll {
-		margin: 0;
 		max-height: 28rem;
 		overflow: auto;
 		white-space: pre;

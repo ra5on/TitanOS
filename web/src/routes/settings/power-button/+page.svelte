@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	type Action = 'ignore' | 'reboot' | 'poweroff';
 	type Status = { settings: { action: Action }; readOnly: boolean; error?: string };
@@ -19,8 +21,9 @@
 	$effect(() => {
 		api.get<Status>('/system/power-button').then(take, fail);
 	});
-	async function save(event: SubmitEvent) {
-		event.preventDefault();
+	// PLAN 78-1: the one choice is stored when it changes (same request as
+	// the Save button sent before).
+	async function save() {
 		busy = true;
 		saved = false;
 		error = '';
@@ -42,34 +45,33 @@
 {#if status}
 	{#if status.error}<p class="notice-warn" role="status">{status.error}</p>{/if}
 	{#if status.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
-	<form class="tile panel" onsubmit={save} aria-labelledby="power-action-title">
-		<h2 class="tile-title" id="power-action-title">{t('powerButton.press')}</h2>
-		<select
-			id="power-action"
-			class="field"
-			aria-labelledby="power-action-title"
-			bind:value={action}
-			disabled={busy || status.readOnly}
-		>
-			{#each ['ignore', 'reboot', 'poweroff'] as const as value (value)}<option {value}
-					>{t(`powerButton.${value}`)}</option
-				>{/each}
-		</select>
-		<p class="muted hint">{t('powerButton.shutdownHint')}</p>
-		<p class="muted hint">{t('powerButton.longPress')}</p>
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
-			{#if saved}<span class="muted" role="status">{t('powerButton.saved')}</span>{/if}
-		</div>
-	</form>
+	<SettingGroup>
+		<SettingRow icon="power" title={t('powerButton.press')} for="power-action">
+			{#snippet description()}
+				<p>{t('powerButton.shutdownHint')}</p>
+				<p>{t('powerButton.longPress')}</p>
+			{/snippet}
+			{#snippet control()}
+				<select
+					id="power-action"
+					class="field"
+					bind:value={action}
+					disabled={busy || status?.readOnly}
+					onchange={save}
+				>
+					{#each ['ignore', 'reboot', 'poweroff'] as const as value (value)}<option {value}
+							>{t(`powerButton.${value}`)}</option
+						>{/each}
+				</select>
+			{/snippet}
+		</SettingRow>
+		{#if saved}<p class="muted" role="status">{t('powerButton.saved')}</p>{/if}
+	</SettingGroup>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 
 <style>
-	select {
-		max-width: 32rem;
-	}
-	.hint {
-		font-size: var(--text-md);
+	p {
+		margin: 0;
 	}
 	.notice-error {
 		white-space: pre-wrap;

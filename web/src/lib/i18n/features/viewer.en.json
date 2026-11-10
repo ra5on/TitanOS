@@ -76,7 +76,7 @@
 	"viewer.settings.gpuUnavailable": "{name} – not available",
 	"viewer.settings.gpuVm": "{name} – with a VM",
 	"viewer.settings.idle": "Disconnect without input",
-	"viewer.settings.idleChange": "change",
+	"viewer.settings.idleChange": "You set the time with the consoles.",
 	"viewer.settings.idleMinutes": "{minutes} minutes",
 	"viewer.settings.idleNever": "never",
 	"viewer.settings.idleText": "like consoles: {value}",

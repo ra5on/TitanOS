@@ -487,7 +487,7 @@ try {
         name: "Einstellung suchen",
       });
       await search.waitFor({ timeout: 15000 });
-      await frame.locator(".overview .tile.ui-card").first().waitFor();
+      await frame.locator(".overview .sgroup").first().waitFor();
       assert.equal(
         await frame.locator("main select, main input[type=checkbox]").count(),
         0,

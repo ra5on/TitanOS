@@ -619,7 +619,7 @@ if (!allOnly && !onlyPaths) {
 if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   const made = await openWindow("settings", "/settings", 1100);
   const { page, frame } = made;
-  await frame.waitForSelector(".overview .tile.ui-card .card-head");
+  await frame.waitForSelector(".overview .sgroup .sgroup-head");
   check(
     (await frame.$$(".home-tile")).length === 0,
     "/settings in a window: the overview, no tiles",

@@ -76,7 +76,7 @@
 	"viewer.settings.gpuUnavailable": "{name} – nicht verfügbar",
 	"viewer.settings.gpuVm": "{name} – bei einer VM",
 	"viewer.settings.idle": "Trennen ohne Eingabe",
-	"viewer.settings.idleChange": "ändern",
+	"viewer.settings.idleChange": "Die Zeit stellst du bei den Konsolen ein.",
 	"viewer.settings.idleMinutes": "{minutes} Minuten",
 	"viewer.settings.idleNever": "nie",
 	"viewer.settings.idleText": "wie Konsolen: {value}",

@@ -6,6 +6,8 @@
 	// The fields belong to the login look: the editor saves them with it.
 	import { api } from '#lib/api.ts';
 	import Segments from '#lib/components/Segments.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { LoginLook } from './look.ts';
 
@@ -36,85 +38,94 @@
 	]);
 </script>
 
-<section class="tile ui-card" aria-labelledby="h-login-accounts" data-testid="login-accounts">
-	<div class="card-head"><h2 id="h-login-accounts">{t('loginPick.title')}</h2></div>
-	<div class="set-row">
-		<span class="set-label"
-			>{t('loginPick.style')}<span class="set-hint">{t('loginPick.styleHint')}</span></span
+<!-- PLAN 78-1: a plain heading, every setting a row; the accounts are the
+     parts of their row. -->
+<div data-testid="login-accounts">
+	<SettingGroup title={t('loginPick.title')} id="h-login-accounts">
+		<SettingRow title={t('loginPick.style')} desc={t('loginPick.styleHint')}>
+			{#snippet control()}
+				<span class="previews" aria-hidden="true">
+					<span class="mini circles" class:on={look.accountsStyle === 'circles'}
+						><i></i><i></i><i></i></span
+					>
+					<span class="mini list" class:on={look.accountsStyle === 'list'}><i></i><i></i></span>
+				</span>
+				<Segments
+					label={t('loginPick.style')}
+					options={styles}
+					value={look.accountsStyle}
+					onchange={(v) => (look.accountsStyle = v)}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			title={t('loginPick.showAll')}
+			desc={t('loginPick.showAllHint')}
+			for="login-show-accounts"
 		>
-		<span class="set-control">
-			<span class="previews" aria-hidden="true">
-				<span class="mini circles" class:on={look.accountsStyle === 'circles'}
-					><i></i><i></i><i></i></span
-				>
-				<span class="mini list" class:on={look.accountsStyle === 'list'}><i></i><i></i></span>
-			</span>
-			<Segments
-				label={t('loginPick.style')}
-				options={styles}
-				value={look.accountsStyle}
-				onchange={(v) => (look.accountsStyle = v)}
-			/>
-		</span>
-	</div>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('loginPick.showAll')}<span class="set-hint">{t('loginPick.showAllHint')}</span></span
+			{#snippet control()}
+				<input
+					id="login-show-accounts"
+					type="checkbox"
+					role="switch"
+					class="switch"
+					bind:checked={look.showAccounts}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			title={t('loginPick.external')}
+			desc={t('loginPick.externalHint')}
+			for="login-show-external"
 		>
-		<span class="set-control end">
-			<input type="checkbox" role="switch" class="switch" bind:checked={look.showAccounts} />
-		</span>
-	</label>
-	<label class="set-row" class:off={!look.showAccounts}>
-		<span class="set-label"
-			>{t('loginPick.external')}<span class="set-hint">{t('loginPick.externalHint')}</span></span
-		>
-		<span class="set-control end">
-			<input
-				type="checkbox"
-				role="switch"
-				class="switch"
-				disabled={!look.showAccounts}
-				bind:checked={look.showAccountsExternal}
-			/>
-		</span>
-	</label>
-	{#if accounts?.length}
-		<div class="set-row sub-head" class:off={!look.showAccounts}>
-			<span class="set-label"
-				>{t('loginPick.each')}<span class="set-hint">{t('loginPick.eachHint')}</span></span
+			{#snippet control()}
+				<input
+					id="login-show-external"
+					type="checkbox"
+					role="switch"
+					class="switch"
+					disabled={!look.showAccounts}
+					bind:checked={look.showAccountsExternal}
+				/>
+			{/snippet}
+		</SettingRow>
+		{#if accounts?.length}
+			<SettingRow
+				id="login-accounts-each"
+				title={t('loginPick.each')}
+				desc={t('loginPick.eachHint')}
+				open
 			>
-		</div>
-		<ul class="accounts" class:off={!look.showAccounts} data-testid="login-accounts-each">
-			{#each accounts as a (a.name)}
-				<li>
-					<label class="set-row">
-						<span class="who">
-							<span class="initial" aria-hidden="true">{a.name.slice(0, 1).toUpperCase()}</span>
-							<span class="set-label"
-								>{a.name}<span class="set-hint"
-									>{t(roleKey(a.role))}{a.disabled ? ' · ' + t('loginPick.locked') : ''}</span
-								></span
-							>
-						</span>
-						<span class="set-control end">
-							<input
-								type="checkbox"
-								role="switch"
-								class="switch"
-								aria-label={t('loginPick.showNamed', { name: a.name })}
-								disabled={!look.showAccounts || a.disabled}
-								checked={!a.disabled && !(look.hiddenAccounts ?? []).includes(a.name)}
-								onchange={(e) => setShown(a.name, e.currentTarget.checked)}
-							/>
-						</span>
-					</label>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-	<p class="card-note">{t('loginPick.note')}</p>
-</section>
+				<ul class="accounts" class:off={!look.showAccounts} data-testid="login-accounts-each">
+					{#each accounts as a (a.name)}
+						<li class="srow-sub">
+							<span class="who">
+								<span class="initial" aria-hidden="true">{a.name.slice(0, 1).toUpperCase()}</span>
+								<span class="srow-text"
+									><span class="srow-title">{a.name}</span><span class="srow-desc"
+										>{t(roleKey(a.role))}{a.disabled ? ' · ' + t('loginPick.locked') : ''}</span
+									></span
+								>
+							</span>
+							<span class="srow-ctl">
+								<input
+									type="checkbox"
+									role="switch"
+									class="switch"
+									aria-label={t('loginPick.showNamed', { name: a.name })}
+									disabled={!look.showAccounts || a.disabled}
+									checked={!a.disabled && !(look.hiddenAccounts ?? []).includes(a.name)}
+									onchange={(e) => setShown(a.name, e.currentTarget.checked)}
+								/>
+							</span>
+						</li>
+					{/each}
+				</ul>
+			</SettingRow>
+		{/if}
+		<p class="group-note">{t('loginPick.note')}</p>
+	</SettingGroup>
+</div>
 
 <style>
 	.previews {
@@ -157,21 +168,21 @@
 	.off {
 		opacity: 0.6;
 	}
-	.sub-head {
-		padding-bottom: var(--space-1);
-	}
 	.accounts {
+		display: flex;
+		flex-direction: column;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-	.accounts .set-row {
-		padding-left: 28px;
+	.accounts li + li {
+		border-top: 1px solid var(--srow-line);
 	}
 	.who {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2-5);
+		flex: 1 1 0;
 		min-width: 0;
 	}
 	.initial {
@@ -186,10 +197,8 @@
 		font-weight: 600;
 		font-size: var(--text-sm);
 	}
-	.card-note {
-		margin: 0;
-		padding: var(--space-2-5) var(--space-4) 14px;
-		border-top: 1px solid var(--panel-border, var(--border));
+	.group-note {
+		margin: var(--space-1-5) 0 0;
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}

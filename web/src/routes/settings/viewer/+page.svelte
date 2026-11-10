@@ -5,6 +5,8 @@
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Segments from '#lib/components/Segments.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -169,247 +171,225 @@
 		{loadError} <button class="btn" onclick={load}>{t('common.retry')}</button>
 	</p>{/if}
 
+{#snippet openViews()}
+	<div class="srow-block">
+		<ul class="views">
+			{#each status?.sessions ?? [] as view, i (i)}
+				<li>
+					<span
+						>{t('viewer.settings.sessionRow', {
+							app: view.app,
+							user: view.user,
+							state: sessionState(view.state),
+						})}</span
+					>
+					<span class="muted mono">{formatBytes(view.memoryBytes)}</span>
+				</li>
+			{/each}
+		</ul>
+	</div>
+{/snippet}
+
 {#if draft && status}
-	<form class="tile panel" onsubmit={save} aria-labelledby="viewer-options">
-		<h2 class="tile-title" id="viewer-options">{t('viewer.settings.options')}</h2>
-		<div class="rows">
-			<div class="row">
-				<div class="label">
-					<label for="viewer-gpu"><b>{t('viewer.settings.gpu')}</b></label>
-					<p class="muted hint">{t('viewer.settings.gpuHint')}</p>
-				</div>
-				<div class="control">
-					<select id="viewer-gpu" class="field" bind:value={draft.gpu} onchange={changed}>
+	{@const d = draft}
+	{@const st = status}
+	<!-- PLAN 78-1: every option is a row; one Save for all of them (the
+	     request carries the whole set). -->
+	<form onsubmit={save}>
+		<SettingGroup title={t('viewer.settings.options')} id="viewer-options">
+			<SettingRow icon="gpu" title={t('viewer.settings.gpu')} for="viewer-gpu">
+				{#snippet description()}
+					<p>{t('viewer.settings.gpuHint')}</p>
+					<p>
+						{t('viewer.settings.encoder', { gpu: t(`viewer.gpu.${st.gpu}` as MessageKey) })}
+					</p>
+				{/snippet}
+				{#snippet control()}
+					<select id="viewer-gpu" class="field" bind:value={d.gpu} onchange={changed}>
 						<option value="auto"
 							>{gpuName
 								? t('viewer.settings.gpuAutoWith', { name: gpuName })
 								: t('viewer.settings.gpuAuto')}</option
 						>
-						{#each status.gpus as gpu (gpu.id)}
-							<option value={gpu.id} disabled={!gpu.available && draft.gpu !== gpu.id}
+						{#each st.gpus as gpu (gpu.id)}
+							<option value={gpu.id} disabled={!gpu.available && d.gpu !== gpu.id}
 								>{gpuLabel(gpu)}</option
 							>
 						{/each}
-						{#if draft.gpu !== 'auto' && draft.gpu !== 'off' && !status.gpus.some((g) => g.id === draft?.gpu)}
-							<option value={draft.gpu}>{draft.gpu}</option>
+						{#if d.gpu !== 'auto' && d.gpu !== 'off' && !st.gpus.some((g) => g.id === d.gpu)}
+							<option value={d.gpu}>{d.gpu}</option>
 						{/if}
 						<option value="off">{t('viewer.settings.gpuOff')}</option>
 					</select>
-					<p class="muted hint">
-						{t('viewer.settings.encoder', { gpu: t(`viewer.gpu.${status.gpu}` as MessageKey) })}
-					</p>
-				</div>
-			</div>
-			<div class="row">
-				<div class="label">
-					<b id="viewer-quality">{t('viewer.quality')}</b>
-					<p class="muted hint">{t('viewer.settings.qualityHint')}</p>
-				</div>
-				<div class="control">
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="image" title={t('viewer.quality')} desc={t('viewer.settings.qualityHint')}>
+				{#snippet control()}
 					<Segments
 						options={qualityOptions}
-						bind:value={draft.quality}
+						bind:value={d.quality}
 						label={t('viewer.quality')}
 						onchange={(_: Quality) => changed()}
 					/>
-				</div>
-			</div>
-			<div class="row">
-				<div class="label"><b>{t('viewer.fps')}</b></div>
-				<div class="control">
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="video" title={t('viewer.fps')}>
+				{#snippet control()}
 					<Segments
 						options={[...fpsOptions]}
-						value={String(draft.fps) as '30' | '60'}
+						value={String(d.fps) as '30' | '60'}
 						label={t('viewer.fps')}
 						onchange={(v) => {
-							if (draft) draft.fps = v === '30' ? 30 : 60;
+							d.fps = v === '30' ? 30 : 60;
 							changed();
 						}}
 					/>
-				</div>
-			</div>
-			<div class="row">
-				<div class="label">
-					<b>{t('viewer.settings.transport')}</b>
-					<p class="muted hint">{t('viewer.settings.transportHint')}</p>
-				</div>
-				<div class="control">
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="globe"
+				title={t('viewer.settings.transport')}
+				desc={t('viewer.settings.transportHint')}
+			>
+				{#snippet control()}
 					<Segments
 						options={[
 							{ value: 'auto', label: t('viewer.transport.auto') },
 							{ value: 'video', label: t('viewer.transport.video') },
 						]}
-						bind:value={draft.transport}
+						bind:value={d.transport}
 						label={t('viewer.settings.transport')}
 						onchange={() => changed()}
 					/>
-				</div>
-			</div>
-			<div class="row">
-				<div class="label">
-					<b>{t('viewer.settings.audio')}</b>
-					<p class="muted hint">{t('viewer.settings.audioHint')}</p>
-				</div>
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.audio} onchange={changed} />
-					{t('viewer.settings.audioCheck')}</label
-				>
-			</div>
-			<div class="row">
-				<div class="label"><b>{t('viewer.settings.views')}</b></div>
-				<p>
-					{t('viewer.settings.viewsAll')}{#if status.memory.more >= 0}
-						<span class="muted">
-							&nbsp;·
-							{status.memory.perViewBytes > 0
-								? t('viewer.settings.viewsNow', {
-										open: status.sessions.length,
-										room: status.memory.more,
-										per: formatBytes(status.memory.perViewBytes),
-									})
-								: t('viewer.settings.viewsNowShort', {
-										open: status.sessions.length,
-										room: status.memory.more,
-									})}</span
-						>{/if}
-				</p>
-			</div>
-			<div class="row">
-				<div class="label">
-					<label for="viewer-volume"><b>{t('viewer.settings.profiles')}</b></label>
-				</div>
-				<div class="control">
-					<select id="viewer-volume" class="field" bind:value={draft.volume} onchange={changed}>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="volume"
+				title={t('viewer.settings.audio')}
+				desc={t('viewer.settings.audioHint')}
+			>
+				{#snippet control()}
+					<input
+						type="checkbox"
+						role="switch"
+						class="switch"
+						aria-label={t('viewer.settings.audioCheck')}
+						bind:checked={d.audio}
+						onchange={changed}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="windows" title={t('viewer.settings.views')}>
+				{#snippet description()}
+					{t('viewer.settings.viewsAll')}{#if st.memory.more >= 0}
+						&nbsp;·
+						{st.memory.perViewBytes > 0
+							? t('viewer.settings.viewsNow', {
+									open: st.sessions.length,
+									room: st.memory.more,
+									per: formatBytes(st.memory.perViewBytes),
+								})
+							: t('viewer.settings.viewsNowShort', {
+									open: st.sessions.length,
+									room: st.memory.more,
+								})}{/if}
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="disk"
+				title={t('viewer.settings.profiles')}
+				desc={t('viewer.settings.profilesHint')}
+				for="viewer-volume"
+			>
+				{#snippet control()}
+					<select id="viewer-volume" class="field" bind:value={d.volume} onchange={changed}>
 						<option value="">{t('viewer.settings.profilesDocker')}</option>
 						{#each volumes as name (name)}
 							<option value={name}>{t('viewer.settings.volumeName', { name })}</option>
 						{/each}
-						{#if draft.volume && !volumes.includes(draft.volume)}
-							<option value={draft.volume}
-								>{t('viewer.settings.volumeName', { name: draft.volume })}</option
+						{#if d.volume && !volumes.includes(d.volume)}
+							<option value={d.volume}>{t('viewer.settings.volumeName', { name: d.volume })}</option
 							>
 						{/if}
 					</select>
-					<p class="muted hint">{t('viewer.settings.profilesHint')}</p>
-				</div>
+				{/snippet}
+			</SettingRow>
+			<!-- The idle time is set with the consoles: this row leads there. -->
+			<SettingRow
+				href="/settings/access#access-terminal"
+				icon="clock"
+				title={t('viewer.settings.idle')}
+				desc={t('viewer.settings.idleChange')}
+				summary={idleText}
+			/>
+			<div class="row-actions">
+				<button type="submit" class="btn btn-primary" disabled={busy || !dirty}
+					>{t('common.save')}</button
+				>
+				{#if saved}<span class="muted" role="status">{t('viewer.settings.saved')}</span>{/if}
+				{#if error}<span class="error-text" role="alert">{error}</span>{/if}
 			</div>
-			<div class="row">
-				<div class="label"><b>{t('viewer.settings.idle')}</b></div>
-				<p>
-					{idleText}
-					<a href="/settings/access#access-terminal">{t('viewer.settings.idleChange')}</a>
-				</p>
-			</div>
-		</div>
-		<div class="row-actions">
-			<button type="submit" class="btn btn-primary" disabled={busy || !dirty}
-				>{t('common.save')}</button
-			>
-			{#if saved}<span class="muted" role="status">{t('viewer.settings.saved')}</span>{/if}
-			{#if error}<span class="error-text" role="alert">{error}</span>{/if}
-		</div>
+		</SettingGroup>
 	</form>
 
-	<section class="tile panel" aria-labelledby="viewer-status">
-		<h2 class="tile-title" id="viewer-status">{t('viewer.settings.status')}</h2>
-		<div class="rows">
-			<div class="row">
-				<div class="label"><b>{t('viewer.settings.image')}</b></div>
-				<div class="control">
-					<p role="status">
-						<span
-							class="chip {image?.state === 'ready'
-								? 'ok'
-								: image?.state === 'error'
-									? 'error'
-									: 'info'}">{imageText}</span
-						>
-					</p>
-					{#if (image?.state === 'downloading' || image?.state === 'loading') && image.size > 0}
-						<progress max={image.size} value={image.bytes}></progress>
-					{/if}
-					{#if image?.state === 'missing' || image?.state === 'error'}
-						<button type="button" class="btn" disabled={loading} onclick={loadImage}
-							>{t('viewer.settings.loadNow')}</button
-						>
-					{/if}
-				</div>
-			</div>
-			<div class="row">
-				<div class="label">
-					<b>{t('viewer.settings.openViews')}</b>
-					{#if status.sessions.length}<p class="muted hint">{formatBytes(memoryOpen)}</p>{/if}
-				</div>
-				{#if status.sessions.length}
-					<ul class="views">
-						{#each status.sessions as view, i (i)}
-							<li>
-								<span
-									>{t('viewer.settings.sessionRow', {
-										app: view.app,
-										user: view.user,
-										state: sessionState(view.state),
-									})}</span
-								>
-								<span class="muted mono">{formatBytes(view.memoryBytes)}</span>
-							</li>
-						{/each}
-					</ul>
-				{:else}<p class="muted">{t('viewer.settings.noViews')}</p>{/if}
-			</div>
-		</div>
-	</section>
+	<SettingGroup title={t('viewer.settings.status')} id="viewer-status">
+		<SettingRow icon="download" title={t('viewer.settings.image')}>
+			{#snippet control()}
+				<span role="status"
+					><span
+						class="chip {image?.state === 'ready'
+							? 'ok'
+							: image?.state === 'error'
+								? 'error'
+								: 'info'}">{imageText}</span
+					></span
+				>
+				{#if (image?.state === 'downloading' || image?.state === 'loading') && image.size > 0}
+					<progress max={image.size} value={image.bytes}></progress>
+				{/if}
+				{#if image?.state === 'missing' || image?.state === 'error'}
+					<button type="button" class="btn" disabled={loading} onclick={loadImage}
+						>{t('viewer.settings.loadNow')}</button
+					>
+				{/if}
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			id="viewer-open"
+			icon="monitor"
+			title={t('viewer.settings.openViews')}
+			summary={st.sessions.length
+				? `${st.sessions.length} · ${formatBytes(memoryOpen)}`
+				: t('viewer.settings.noViews')}
+			open
+			children={st.sessions.length ? openViews : undefined}
+		/>
+	</SettingGroup>
 {/if}
 
 <style>
-	.rows {
-		display: flex;
-		flex-direction: column;
-		container-type: inline-size;
+	form {
+		display: contents;
 	}
-	.row {
-		display: grid;
-		grid-template-columns: minmax(12rem, 1fr) 2fr;
-		gap: var(--space-2) var(--space-5);
-		align-items: start;
-		padding: var(--space-3) 0;
-		border-top: 1px solid var(--panel-border);
-	}
-	.row:first-child {
-		border-top: 0;
-		padding-top: 0;
-	}
-	.label b {
-		font-weight: 600;
-	}
-	.hint {
-		margin: var(--space-1) 0 0;
-		font-size: var(--text-sm);
-		hyphens: auto;
-		overflow-wrap: break-word;
-	}
-	.row > p {
+	p {
 		margin: 0;
 	}
-	.control {
+	.row-actions {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		align-items: flex-start;
-		min-width: 0;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2-5);
+		margin-top: var(--space-2);
 	}
-	.control .field {
-		max-width: 26rem;
-		width: 100%;
-	}
-	.control progress {
+	progress {
 		width: min(20rem, 100%);
 	}
-	.control .chip {
+	.chip {
 		white-space: normal;
 		height: auto;
 		line-height: 1.4;
 		padding-block: 2px;
+		text-align: left;
 	}
 	.views {
 		list-style: none;
@@ -417,23 +397,15 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		gap: var(--space-1-5);
 	}
 	.views li {
 		display: flex;
-		gap: var(--space-3);
+		flex-wrap: wrap;
+		gap: var(--space-1) var(--space-3);
 		justify-content: space-between;
-		max-width: 26rem;
 	}
 	.error-text {
 		color: var(--error-text);
-	}
-	.muted {
-		color: var(--muted);
-	}
-	@container (max-width: 560px) {
-		.row {
-			grid-template-columns: 1fr;
-		}
 	}
 </style>

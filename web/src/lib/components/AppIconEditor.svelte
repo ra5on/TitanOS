@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	// Settings › Appearance › App symbol (for the whole NAS): the symbol of
 	// TitanOS on the home screen and, outside iOS, in notifications. Saved by
 	// the page's one "Apply" bar: it reads `dirty` and calls save()/discard().
@@ -94,9 +95,8 @@
 	}
 </script>
 
-<section class="tile panel" id="appearance-app-icon" aria-labelledby="app-icon-title">
-	<h2 class="tile-title" id="app-icon-title">{t('appIcon.title')}</h2>
-	<p class="muted">{t('appIcon.intro')}</p>
+<!-- PLAN 78-1: a plain heading; the picker with its preview stays a block. -->
+<SettingGroup title={t('appIcon.title')} id="appearance-app-icon" desc={t('appIcon.intro')}>
 	<div class="layout">
 		{#if icon}<img
 				class="preview"
@@ -142,7 +142,7 @@
 	/>
 	<p class="muted small">{t('appIcon.ios')}</p>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-</section>
+</SettingGroup>
 
 <style>
 	.layout {
@@ -150,6 +150,32 @@
 		gap: 20px;
 		align-items: flex-start;
 		flex-wrap: wrap;
+		margin-bottom: var(--space-2);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
+	}
+	p {
+		margin: 0;
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		font-size: var(--text-md);
+	}
+	.check input[type='radio'] {
+		width: 18px;
+		height: 18px;
+		margin: 0;
+		flex: none;
+	}
+	.row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2-5);
 	}
 	.preview {
 		object-fit: cover;

@@ -209,9 +209,12 @@ try {
     const main = page.locator(".settings-shell");
     await main.locator("a.srow").first().waitFor();
     assert.deepEqual(
-      (await main.locator(".sgroup-title").allTextContents()).map((s) =>
-        s.trim(),
-      ),
+      // PLAN 78-1: the overview below has group headings of its own.
+      (
+        await main
+          .locator(".sgroup-title:not(.overview *)")
+          .allTextContents()
+      ).map((s) => s.trim()),
       [
         "System",
         "Hardware und Energie",
@@ -224,7 +227,8 @@ try {
       ],
     );
     assert.equal(
-      await main.locator("a.srow").count(),
+      // PLAN 78-1: the overview below has link rows of its own.
+      await main.locator("a.srow:not(.overview a)").count(),
       ids.length,
       "one tile per area",
     );
@@ -314,7 +318,7 @@ try {
     await page.goto(base + "/settings");
     await page.locator("a.srow").first().waitFor();
     assert.equal(
-      await page.locator(".settings-shell a.srow").count(),
+      await page.locator(".settings-shell a.srow:not(.overview a)").count(),
       userIds.length,
     );
     assert.equal(await page.locator(".recent").count(), 0);
@@ -367,12 +371,10 @@ try {
       if (name === "overview") {
         // PLAN 71: in a window the side bar lists the areas; the page is the
         // "Übersicht" with its cards (no tiles, no second search).
-        await frame
-          .locator(".overview .tile.ui-card .card-head")
-          .first()
-          .waitFor();
+        await frame.locator(".overview .sgroup .sgroup-head").first().waitFor();
         assert.equal(
-          await frame.locator("a.srow").count(),
+          // PLAN 78-1: the overview has link rows of its own (Benutzer, SSH …).
+          await frame.locator("a.srow:not(.overview a)").count(),
           0,
           "no tiles in a window",
         );
@@ -383,7 +385,7 @@ try {
         );
         for (const title of ["Zustand", "Zu erledigen", "Dienste"])
           await frame
-            .locator(".overview .card-head h2", { hasText: title })
+            .locator(".overview h2.sgroup-title", { hasText: title })
             .waitFor();
       }
       await page.waitForTimeout(300);

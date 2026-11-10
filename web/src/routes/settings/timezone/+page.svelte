@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	let timezone = $state<string | null>(null);
 	let loading = $state(false);
@@ -50,27 +52,45 @@
 </script>
 
 <PageHead title={t('settings.datetime')} />
-<section class="tile panel">
-	{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
-	{#if loadError}<div class="notice-error" role="alert">
-			{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button>
-		</div>{/if}
+{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
+{#if loadError}<div class="notice-error" role="alert">
+		{loadError} <button class="btn" onclick={load}>{t('ui.retry')}</button>
+	</div>{/if}
+<!-- PLAN 78-1: the one setting is a row; choosing stores it (as before). -->
+<SettingGroup>
+	<SettingRow
+		icon="globe"
+		title={t('settings.timezone')}
+		desc={t('settings.timeHint')}
+		for="timezone-select"
+	>
+		{#snippet control()}
+			{#if timezone !== null}
+				<select
+					id="timezone-select"
+					class="field"
+					disabled={saving}
+					value={timezone}
+					onchange={async (event) => {
+						const field = event.currentTarget;
+						await save(field.value);
+						field.value = timezone ?? '';
+					}}
+					>{#each zones as zone (zone)}<option value={zone}>{zone}</option>{/each}</select
+				>
+			{/if}
+		{/snippet}
+	</SettingRow>
 	{#if timezone !== null}
-		<label class="stack"
-			><span>{t('settings.timezone')}</span><select
-				class="field"
-				disabled={saving}
-				value={timezone}
-				onchange={async (event) => {
-					const field = event.currentTarget;
-					await save(field.value);
-					field.value = timezone ?? '';
-				}}
-				>{#each zones as zone}<option value={zone}>{zone}</option>{/each}</select
-			></label
-		>
-		{#if saving || saved}<p role="status">{t(saving ? 'ui.saving' : 'ui.saved')}</p>{/if}
+		{#if saving || saved}<p class="muted" role="status">
+				{t(saving ? 'ui.saving' : 'ui.saved')}
+			</p>{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{/if}
-	<p class="muted">{t('settings.timeHint')}</p>
-</section>
+</SettingGroup>
+
+<style>
+	p {
+		margin: 0;
+	}
+</style>

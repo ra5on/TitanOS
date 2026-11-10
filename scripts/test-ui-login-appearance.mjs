@@ -183,7 +183,7 @@ try {
     };
     await loginRoutes(ctx, state);
     await page.goto(base + "/settings/appearance?tab=login");
-    const section = page.locator("section.login-look");
+    const section = page.locator("section#h-login-look");
     await section.getByRole("heading", { name: "Anmeldeseite" }).waitFor();
     await section.getByText("Gilt für das ganze NAS").waitFor();
     // The preview is the login page itself, scaled down.
@@ -417,7 +417,7 @@ try {
     };
     await loginRoutes(ctx, state);
     await page.goto(base + "/settings/appearance?tab=login");
-    const section = page.locator("section.login-look");
+    const section = page.locator("section#h-login-look");
     await section.getByRole("heading", { name: "Anmeldeseite" }).waitFor();
     const chooser = page.waitForEvent("filechooser");
     await section.getByLabel(/^Hintergrund/).selectOption("custom");

@@ -541,7 +541,7 @@ try {
       const { ctx, page } = await context("owner", theme, 390, "desktop");
       await page.goto(base + "/settings");
       await page.locator(".phone-bar").waitFor();
-      await page.locator(".overview .tile.ui-card").first().waitFor();
+      await page.locator(".overview .sgroup").first().waitFor();
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,

@@ -174,8 +174,8 @@ try {
     /30 Sekunden/,
   );
   assert.equal(await page.locator("#cache-budget").inputValue(), "20");
+  // PLAN 78-1: the share is a row; choosing stores it (no Save button).
   await page.locator("#cache-budget").selectOption("30");
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await page
     .getByText("Gespeichert und angewendet.", { exact: true })
     .waitFor();

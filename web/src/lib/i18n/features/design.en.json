@@ -142,6 +142,8 @@
 	"loginPick.style": "Layout",
 	"loginPick.styleHint": "How the accounts appear to pick",
 	"loginPick.title": "Accounts on the login page",
+	"look.fileRow": "Theme as a file",
+	"look.file": "Save and reset",
 	"look.accentCustom": "Custom …",
 	"look.customColors": "Own colours",
 	"look.densityHint": "Compact shows more rows at once",

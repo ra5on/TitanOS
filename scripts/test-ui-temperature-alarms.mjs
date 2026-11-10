@@ -93,6 +93,12 @@ try {
     );
     await page.goto(base + "/settings/temperatures");
     const panel = page.getByRole("region", { name: "Meldungen bei Hitze" });
+    // PLAN 78-1: the sensors are the parts of one row; closed, it says how
+    // many of them notify.
+    await panel.getByText("2 von 4 melden").waitFor();
+    await panel
+      .getByRole("button", { name: "Sensoren, die melden: Aufklappen" })
+      .click();
     // The effective limit, and where it comes from.
     await panel
       .getByText("Meldet ab 95 °C (5 °C unter dem Grenzwert des Chips)")

@@ -2,6 +2,9 @@
 	// Settings › Temperatures › Heat notifications: which sensors notify
 	// (notify/hardware_watch.go), muted per sensor for the whole NAS.
 	import { api } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
@@ -40,6 +43,12 @@
 		sensors.filter((s) => alarmOf(s.id)?.shutdown && !alarms?.muted.includes(s.id)),
 	);
 
+	// How many sensors notify right now (the closed row says it).
+	const reporting = $derived(
+		sensors.filter((s) => (alarmOf(s.id)?.limit ?? null) !== null && !alarms?.muted.includes(s.id))
+			.length,
+	);
+
 	async function setHeat(on: boolean) {
 		if (!alarms) return;
 		busy = true;
@@ -75,108 +84,87 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="alarms-title">
-	<h2 class="tile-title" id="alarms-title">{t('temperatures.alarmTitle')}</h2>
-	<p class="muted">{t('temperatures.alarmHint')}</p>
-	<div class="sensors">
+<!-- PLAN 78-1: the sensors that notify are the parts of one row; the heat
+     shutdown is a row of its own. Both store on change, as before. -->
+<SettingGroup title={t('temperatures.alarmTitle')} id="alarms">
+	<SettingRow
+		id="alarm-sensors"
+		icon="bell"
+		title={t('temperatures.alarmSensors')}
+		desc={t('temperatures.alarmHint')}
+		summary={alarms ? t('temperatures.alarmCount', { on: reporting, total: sensors.length }) : ''}
+	>
 		{#each sensors as sensor (sensor.id)}
 			{@const alarm = alarmOf(sensor.id)}
 			{@const limit = alarm?.limit ?? null}
 			{@const muted = !!alarms?.muted.includes(sensor.id)}
-			<div class="sensor">
-				<span class="name"
-					><strong>{sensor.label}</strong><span class="muted mono"
-						>{sensor.chip} · {sensor.device}</span
-					><span class="muted"
-						>{!alarms
-							? '–'
-							: limit === null
-								? t('temperatures.alarmNever')
-								: muted
-									? t('temperatures.alarmMuted')
-									: t(alarm?.own ? 'temperatures.alarmAtOwn' : 'temperatures.alarmAtDefault', {
-											celsius: limit.toFixed(0),
-											chip: sensor.chip,
-										})}</span
-					></span
-				>
-				<span class="mono value"
-					>{sensor.celsius === null ? '–' : `${sensor.celsius.toFixed(1)} °C`}</span
-				>
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={limit !== null && !muted}
-						disabled={!alarms || busy || limit === null}
-						aria-label={t('temperatures.alarmReportFor', {
-							sensor: `${sensor.chip} ${sensor.label}`,
-						})}
-						onchange={(e) => toggle(sensor.id, e.currentTarget.checked)}
-					/><span aria-hidden="true">{t('temperatures.alarmReport')}</span></label
-				>
-			</div>
+			<SettingSub title={sensor.label}>
+				{#snippet description()}<span class="mono">{sensor.chip} · {sensor.device}</span><br
+					/>{!alarms
+						? '–'
+						: limit === null
+							? t('temperatures.alarmNever')
+							: muted
+								? t('temperatures.alarmMuted')
+								: t(alarm?.own ? 'temperatures.alarmAtOwn' : 'temperatures.alarmAtDefault', {
+										celsius: limit.toFixed(0),
+										chip: sensor.chip,
+									})}{/snippet}
+				{#snippet control()}
+					<span class="mono value"
+						>{sensor.celsius === null ? '–' : `${sensor.celsius.toFixed(1)} °C`}</span
+					>
+					<label class="check"
+						><input
+							type="checkbox"
+							checked={limit !== null && !muted}
+							disabled={!alarms || busy || limit === null}
+							aria-label={t('temperatures.alarmReportFor', {
+								sensor: `${sensor.chip} ${sensor.label}`,
+							})}
+							onchange={(e) => toggle(sensor.id, e.currentTarget.checked)}
+						/><span aria-hidden="true">{t('temperatures.alarmReport')}</span></label
+					>
+				{/snippet}
+			</SettingSub>
 		{/each}
-	</div>
-	<div class="heat">
-		<span class="name"
-			><strong>{t('temperatures.heatTitle')}</strong><span class="muted"
-				>{guards.length
-					? t('temperatures.heatHint', {
-							sensors: guards.map((s) => `${s.chip} ${s.label}`).join(', '),
-						})
-					: t('temperatures.heatNone')}</span
-			></span
-		>
-		<input
-			type="checkbox"
-			class="switch"
-			role="switch"
-			aria-label={t('temperatures.heatTitle')}
-			checked={!!alarms?.heatShutdown}
-			disabled={!alarms || busy}
-			onchange={(e) => setHeat(e.currentTarget.checked)}
-		/>
-	</div>
+		{#if sensors.length === 0}<div class="srow-block">
+				<p class="muted">{t('temperatures.none')}</p>
+			</div>{/if}
+	</SettingRow>
+	<SettingRow
+		icon="power"
+		title={t('temperatures.heatTitle')}
+		for="temp-heat-shutdown"
+		desc={guards.length
+			? t('temperatures.heatHint', {
+					sensors: guards.map((s) => `${s.chip} ${s.label}`).join(', '),
+				})
+			: t('temperatures.heatNone')}
+	>
+		{#snippet control()}
+			<input
+				id="temp-heat-shutdown"
+				type="checkbox"
+				class="switch"
+				role="switch"
+				checked={!!alarms?.heatShutdown}
+				disabled={!alarms || busy}
+				onchange={(e) => setHeat(e.currentTarget.checked)}
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if saved}<p role="status">{t('temperatures.alarmSaved')}</p>{/if}
-</section>
+	{#if saved}<p class="muted" role="status">{t('temperatures.alarmSaved')}</p>{/if}
+</SettingGroup>
 
 <style>
 	p {
+		margin: 0;
 		font-size: var(--text-md);
 	}
-	.sensors {
-		display: flex;
-		flex-direction: column;
-	}
-	.sensor {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-3) 0;
-		border-bottom: 1px solid var(--panel-border);
-	}
-	.name {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		overflow-wrap: anywhere;
-	}
-	.name strong {
-		font-weight: 500;
-	}
-	.name .muted {
-		font-size: var(--text-sm);
-	}
-	.heat {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-4) 0 var(--space-2);
-	}
 	.value {
+		color: var(--text);
 		white-space: nowrap;
 	}
 	.check {
@@ -184,5 +172,6 @@
 		align-items: center;
 		gap: var(--space-1-5);
 		white-space: nowrap;
+		color: var(--text);
 	}
 </style>

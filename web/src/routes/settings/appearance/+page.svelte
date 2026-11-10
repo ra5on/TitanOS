@@ -5,8 +5,9 @@
 	// windows and is saved to the account a moment later.
 	import { onMount, untrack } from 'svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Segments from '#lib/components/Segments.svelte';
-	import Icon from '#lib/components/Icon.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { appearance, useAppearance } from '#lib/theme/appearance.svelte.ts';
@@ -219,6 +220,7 @@
 		Math.max(0, Math.min(100, Math.round((80 - glass) / 0.75 / 5) * 5));
 </script>
 
+<!-- PLAN 78-1: a slider is a row with the slider and its value as control. -->
 {#snippet slider(
 	id: string,
 	label: string,
@@ -228,24 +230,22 @@
 	unit: string,
 	set: (v: number) => void,
 )}
-	<div class="set-row slider">
-		<span class="slider-top">
-			<span class="set-label">
-				<label for={id}>{label}</label>
-				<span class="set-hint">{hint}</span>
+	<SettingRow title={label} desc={hint} for={id}>
+		{#snippet control()}
+			<span class="range">
+				<input
+					{id}
+					type="range"
+					min={limit.min}
+					max={limit.max}
+					step={limit.step}
+					{value}
+					oninput={(e) => set(Number(e.currentTarget.value))}
+				/>
+				<output for={id} class="value">{value} {unit}</output>
 			</span>
-			<output for={id} class="value">{value} {unit}</output>
-		</span>
-		<input
-			{id}
-			type="range"
-			min={limit.min}
-			max={limit.max}
-			step={limit.step}
-			{value}
-			oninput={(e) => set(Number(e.currentTarget.value))}
-		/>
-	</div>
+		{/snippet}
+	</SettingRow>
 {/snippet}
 
 {#snippet thumb(kind: 'light' | 'dark' | 'auto')}
@@ -275,54 +275,55 @@
 	</p>
 </div>
 
-<!-- Farben: mode, variant, accent and the five sliders (approved draft 7.11.2026). -->
+<!-- Farben: mode, variant, accent and the sliders (approved draft 7.11.2026;
+     PLAN 78-1: groups are plain headings, every setting a row). -->
 <div class="tab-panel" hidden={tab !== 'colors'} data-tab-panel="colors">
-	<section class="tile ui-card" aria-labelledby="h-colors">
-		<div class="card-head"><h2 id="h-colors">{t('look.colors')}</h2></div>
-		<div class="set-row">
-			<span class="set-label">{t('look.mode')}</span>
-			<div class="modes" role="radiogroup" aria-label={t('look.mode')}>
-				{#each modes as m (m.value)}
-					<button
-						type="button"
-						role="radio"
-						class="mode"
-						aria-checked={mode === m.value}
-						onclick={() => setMode(m.value)}
-					>
-						{@render thumb(m.value)}
-						<span class="mode-name">{m.label}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
-		{#if mode === 'dark'}
-			<div class="set-row">
-				<span class="set-label">{t('look.variant')}</span>
-				<div class="variants" role="radiogroup" aria-label={t('look.variant')}>
-					{#each DARK_THEMES as id (id)}
-						{@const colors = look(id)}
+	<SettingGroup title={t('look.colors')} id="h-colors">
+		<SettingRow title={t('look.mode')}>
+			{#snippet control()}
+				<div class="modes" role="radiogroup" aria-label={t('look.mode')}>
+					{#each modes as m (m.value)}
 						<button
 							type="button"
 							role="radio"
-							class="variant"
-							aria-checked={draft.theme === id}
-							onclick={() => setDark(id)}
+							class="mode"
+							aria-checked={mode === m.value}
+							onclick={() => setMode(m.value)}
 						>
-							<span
-								class="swatch"
-								aria-hidden="true"
-								style:background={colors.bg}
-								style:border-color={colors.border}
-							></span>{t(`theme.${id}`)}{#if id === 'eigen'}&nbsp;…{/if}
+							{@render thumb(m.value)}
+							<span class="mode-name">{m.label}</span>
 						</button>
 					{/each}
 				</div>
-			</div>
+			{/snippet}
+		</SettingRow>
+		{#if mode === 'dark'}
+			<SettingRow title={t('look.variant')}>
+				{#snippet control()}
+					<div class="variants" role="radiogroup" aria-label={t('look.variant')}>
+						{#each DARK_THEMES as id (id)}
+							{@const colors = look(id)}
+							<button
+								type="button"
+								role="radio"
+								class="variant"
+								aria-checked={draft.theme === id}
+								onclick={() => setDark(id)}
+							>
+								<span
+									class="swatch"
+									aria-hidden="true"
+									style:background={colors.bg}
+									style:border-color={colors.border}
+								></span>{t(`theme.${id}`)}{#if id === 'eigen'}&nbsp;…{/if}
+							</button>
+						{/each}
+					</div>
+				{/snippet}
+			</SettingRow>
 			{#if draft.theme === 'eigen'}
-				<div class="set-row">
-					<span class="set-label">{t('look.customColors')}</span>
-					<div class="set-control">
+				<SettingRow title={t('look.customColors')}>
+					{#snippet control()}
 						<div class="custom">
 							{#each CUSTOM_FIELDS as field (field)}
 								<label class="color">
@@ -331,69 +332,64 @@
 								</label>
 							{/each}
 						</div>
-						{#if ratio < 4.5}
-							<p class="notice-warn">
-								{t('appearance.contrastWarning', {
-									ratio:
-										new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) +
-										':1',
-								})}
-							</p>
-						{/if}
-					</div>
-				</div>
+					{/snippet}
+				</SettingRow>
+				{#if ratio < 4.5}
+					<p class="notice-warn">
+						{t('appearance.contrastWarning', {
+							ratio:
+								new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) +
+								':1',
+						})}
+					</p>
+				{/if}
 			{/if}
 		{/if}
-		<div class="set-row">
-			<span class="set-label">{t('appearance.accent')}</span>
-			<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
-				{#each ACCENT_IDS as id (id)}
-					<button
-						type="button"
-						role="radio"
-						class="pickdot"
-						aria-label={t(`accent.${id}`)}
-						title={t(`accent.${id}`)}
-						aria-checked={draft.accent === id}
-						style:background={ACCENTS[id].hex}
-						onclick={() => (draft.accent = id)}
-					></button>
-				{/each}
-				<label class="own-accent" class:picked={draft.accent === 'custom'}>
-					<input
-						type="color"
-						aria-label={t('appearance.customAccent')}
-						bind:value={draft.customAccent}
-						oninput={() => (draft.accent = 'custom')}
-					/>
-					<span>{t('look.accentCustom')}</span>
-				</label>
-			</div>
-		</div>
-	</section>
-
-	<section class="tile ui-card" aria-labelledby="h-sliders">
-		<div class="card-head"><h2 id="h-sliders">{t('look.sliders')}</h2></div>
-		<div class="set-grid">
-			<!-- PLAN 73 (owner 8.11.2026, like iOS "Liquid Glass"): one slider from
-			     clear to tinted instead of "Transparenz" and "Glaseffekt"; it sets
-			     both stored values (older apps read them as before). -->
-			<div class="set-row slider liquid">
-				<span class="slider-top">
-					<span class="set-label">
-						<label for="look-liquid">{t('look.liquid')}</label>
-						<span class="set-hint">{t('look.liquidHint')}</span>
-					</span>
-				</span>
-				<div class="liquid-preview" aria-hidden="true">
-					<span
-						class="pane"
-						style:background={`color-mix(in srgb, var(--surface) ${100 - draft.glass}%, transparent)`}
-						style:backdrop-filter={`blur(${draft.blur}px) saturate(1.4)`}
-						><b>15:11</b><span>{t('look.liquidSample')}</span></span
-					>
+		<SettingRow title={t('appearance.accent')}>
+			{#snippet control()}
+				<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
+					{#each ACCENT_IDS as id (id)}
+						<button
+							type="button"
+							role="radio"
+							class="pickdot"
+							aria-label={t(`accent.${id}`)}
+							title={t(`accent.${id}`)}
+							aria-checked={draft.accent === id}
+							style:background={ACCENTS[id].hex}
+							onclick={() => (draft.accent = id)}
+						></button>
+					{/each}
+					<label class="own-accent" class:picked={draft.accent === 'custom'}>
+						<input
+							type="color"
+							aria-label={t('appearance.customAccent')}
+							bind:value={draft.customAccent}
+							oninput={() => (draft.accent = 'custom')}
+						/>
+						<span>{t('look.accentCustom')}</span>
+					</label>
 				</div>
-				<span class="liquid-ends"
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
+
+	<SettingGroup title={t('look.sliders')} id="h-sliders">
+		<!-- PLAN 73 (owner 8.11.2026, like iOS "Liquid Glass"): one slider from
+		     clear to tinted instead of "Transparenz" and "Glaseffekt"; it sets
+		     both stored values (older apps read them as before). The live
+		     preview stands above its row. -->
+		<div class="liquid-preview" aria-hidden="true">
+			<span
+				class="pane"
+				style:background={`color-mix(in srgb, var(--surface) ${100 - draft.glass}%, transparent)`}
+				style:backdrop-filter={`blur(${draft.blur}px) saturate(1.4)`}
+				><b>15:11</b><span>{t('look.liquidSample')}</span></span
+			>
+		</div>
+		<SettingRow title={t('look.liquid')} desc={t('look.liquidHint')} for="look-liquid">
+			{#snippet control()}
+				<span class="range liquid-ends"
 					><span>{t('look.liquidClear')}</span><input
 						id="look-liquid"
 						type="range"
@@ -409,65 +405,66 @@
 						}}
 					/><span>{t('look.liquidTinted')}</span></span
 				>
-			</div>
-			{@render slider(
-				'look-corners',
-				t('look.corners'),
-				t('look.cornersHint'),
-				draft.rTile,
-				LIMITS.rTile,
-				'px',
-				(v) => (draft = withCorners(draft, v)),
-			)}
-			{@render slider(
-				'look-font',
-				t('appearance.fontSize'),
-				t('look.fontHint'),
-				draft.font,
-				LIMITS.font,
-				'%',
-				(v) => (draft.font = v),
-			)}
-			{@render slider(
-				'look-saturation',
-				t('look.saturation'),
-				t('look.saturationHint'),
-				draft.saturation,
-				LIMITS.saturation,
-				'%',
-				(v) => (draft.saturation = v),
-			)}
-		</div>
-		<div class="card-foot">
-			<span class="grow">{t('look.fileHint')}</span>
-			<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
-			<button type="button" class="btn" onclick={() => themeFile.click()}
-				>{t('appearance.import')}</button
-			>
-			<button type="button" class="btn plain" onclick={reset}>{t('appearance.reset')}</button>
-			<input
-				bind:this={themeFile}
-				type="file"
-				accept="application/json,.json"
-				hidden
-				onchange={importTheme}
-			/>
-		</div>
-	</section>
+			{/snippet}
+		</SettingRow>
+		{@render slider(
+			'look-corners',
+			t('look.corners'),
+			t('look.cornersHint'),
+			draft.rTile,
+			LIMITS.rTile,
+			'px',
+			(v) => (draft = withCorners(draft, v)),
+		)}
+		{@render slider(
+			'look-font',
+			t('appearance.fontSize'),
+			t('look.fontHint'),
+			draft.font,
+			LIMITS.font,
+			'%',
+			(v) => (draft.font = v),
+		)}
+		{@render slider(
+			'look-saturation',
+			t('look.saturation'),
+			t('look.saturationHint'),
+			draft.saturation,
+			LIMITS.saturation,
+			'%',
+			(v) => (draft.saturation = v),
+		)}
+	</SettingGroup>
+
+	<SettingGroup title={t('look.file')}>
+		<SettingRow title={t('look.fileRow')} desc={t('look.fileHint')}>
+			{#snippet control()}
+				<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
+				<button type="button" class="btn" onclick={() => themeFile.click()}
+					>{t('appearance.import')}</button
+				>
+				<input
+					bind:this={themeFile}
+					type="file"
+					accept="application/json,.json"
+					hidden
+					onchange={importTheme}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow title={t('appearance.reset')}>
+			{#snippet control()}
+				<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
 </div>
 
 <!-- Glas & Schrift: the finer settings (spacing, edges, glow, motion). -->
 <div class="tab-panel" hidden={tab !== 'glass'} data-tab-panel="glass">
-	<section class="tile ui-card" aria-labelledby="h-details">
-		<div class="card-head">
-			<h2 id="h-details">{t('look.details')}</h2>
-			<span class="card-meta">{t('look.detailsHint')}</span>
-		</div>
-		<div class="set-row">
-			<span class="set-label"
-				>{t('appearance.density')}<span class="set-hint">{t('look.densityHint')}</span></span
-			>
-			<span class="set-control">
+	<SettingGroup title={t('look.details')} id="h-details" desc={t('look.detailsHint')}>
+		<SettingRow title={t('appearance.density')} desc={t('look.densityHint')}>
+			{#snippet control()}
 				<Segments
 					label={t('appearance.density')}
 					options={[
@@ -477,98 +474,93 @@
 					value={draft.density}
 					onchange={(v) => (draft.density = v)}
 				/>
-			</span>
-		</div>
-		<label class="set-row">
-			<span class="set-label"
-				>{t('look.motion')}<span class="set-hint">{t('look.motionHint')}</span></span
-			>
-			<span class="set-control end"
-				><input type="checkbox" role="switch" class="switch" bind:checked={draft.motion} /></span
-			>
-		</label>
-		<div class="set-grid">
-			{@render slider(
-				'look-shine',
-				t('appearance.shine'),
-				t('look.shineHint'),
-				draft.shine,
-				LIMITS.shine,
-				'%',
-				(v) => (draft.shine = v),
-			)}
-			{@render slider(
-				'look-glow',
-				t('dashboard.visual.glow'),
-				t('look.glowHint'),
-				draft.glow,
-				LIMITS.glow,
-				'%',
-				(v) => (draft.glow = v),
-			)}
-			{@render slider(
-				'look-dim',
-				t('appearance.floating.dim'),
-				t('look.dimHint'),
-				draft.dialogs.dim,
-				LIMITS.dialogDim,
-				'%',
-				(v) => (draft.dialogs.dim = v),
-			)}
-		</div>
-	</section>
+			{/snippet}
+		</SettingRow>
+		<SettingRow title={t('look.motion')} desc={t('look.motionHint')} for="look-motion">
+			{#snippet control()}
+				<input
+					id="look-motion"
+					type="checkbox"
+					role="switch"
+					class="switch"
+					bind:checked={draft.motion}
+				/>
+			{/snippet}
+		</SettingRow>
+		{@render slider(
+			'look-shine',
+			t('appearance.shine'),
+			t('look.shineHint'),
+			draft.shine,
+			LIMITS.shine,
+			'%',
+			(v) => (draft.shine = v),
+		)}
+		{@render slider(
+			'look-glow',
+			t('dashboard.visual.glow'),
+			t('look.glowHint'),
+			draft.glow,
+			LIMITS.glow,
+			'%',
+			(v) => (draft.glow = v),
+		)}
+		{@render slider(
+			'look-dim',
+			t('appearance.floating.dim'),
+			t('look.dimHint'),
+			draft.dialogs.dim,
+			LIMITS.dialogDim,
+			'%',
+			(v) => (draft.dialogs.dim = v),
+		)}
+	</SettingGroup>
 
-	<section class="tile ui-card" aria-labelledby="h-fx">
-		<div class="card-head"><h2 id="h-fx">{t('look.effects')}</h2></div>
-		<label class="set-row">
-			<span class="set-label"
-				>{t('appearance.fx.enabled')}<span class="set-hint">{t('look.fxHint')}</span></span
-			>
-			<span class="set-control end"
-				><input
+	<SettingGroup title={t('look.effects')} id="h-fx">
+		<SettingRow title={t('appearance.fx.enabled')} desc={t('look.fxHint')} for="look-fx">
+			{#snippet control()}
+				<input
+					id="look-fx"
 					type="checkbox"
 					role="switch"
 					class="switch"
 					bind:checked={draft.fx.enabled}
-				/></span
-			>
-		</label>
+				/>
+			{/snippet}
+		</SettingRow>
 		{#if draft.fx.enabled}
 			{#each EFFECT_IDS as id (id)}
-				<label class="set-row">
-					<span class="set-label"
-						>{t(`appearance.fx.${id}`)}<span class="set-hint">{t(`appearance.fx.${id}Desc`)}</span
-						></span
-					>
-					<span class="set-control end"
-						><input
+				<SettingRow
+					title={t(`appearance.fx.${id}`)}
+					desc={t(`appearance.fx.${id}Desc`)}
+					for="look-fx-{id}"
+				>
+					{#snippet control()}
+						<input
+							id="look-fx-{id}"
 							type="checkbox"
 							class="switch"
 							role="switch"
 							bind:checked={draft.fx[id]}
-						/></span
-					>
-				</label>
+						/>
+					{/snippet}
+				</SettingRow>
 			{/each}
 		{/if}
-		<p class="card-note">{t('appearance.fx.hint')}</p>
-	</section>
+		<p class="group-note">{t('appearance.fx.hint')}</p>
+	</SettingGroup>
 </div>
 
 <!-- Hintergrund: the desktop's picture; the app symbol of the NAS (owners/admins). -->
 <div class="tab-panel" hidden={tab !== 'background'} data-tab-panel="background">
-	<section class="tile ui-card" aria-labelledby="h-desk">
-		<div class="card-head"><h2 id="h-desk">{t('desktop.wallpaper.title')}</h2></div>
-		<div class="set-row">
-			<span class="set-label"
-				>{t('look.desktop')}<span class="set-hint">{t('look.wallpaperHint')}</span></span
-			>
-			<span class="set-control">
+	<SettingGroup title={t('desktop.wallpaper.title')} id="h-desk">
+		<SettingRow title={t('look.desktop')} desc={t('look.wallpaperHint')}>
+			{#snippet control()}
 				<span class="wall" style:background={wallpaperPreview} aria-hidden="true"></span>
 				<button type="button" class="btn" onclick={chooseWallpaper}>{t('look.wallpaper')}</button>
-			</span>
-		</div>
-	</section>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
 	{#if canAdminister}
 		<AppIconEditor bind:this={iconEditor} bind:dirty={iconDirty} />
 	{/if}
@@ -618,6 +610,7 @@
 	.liquid-preview {
 		position: relative;
 		height: 110px;
+		margin-bottom: var(--space-1);
 		border-radius: 14px;
 		overflow: hidden;
 		background: url('/backgrounds/nordlicht.webp') center 35% / cover;
@@ -645,9 +638,6 @@
 		gap: var(--space-3);
 		font-size: var(--text-sm);
 		color: var(--muted);
-	}
-	.liquid-ends input {
-		flex: 1;
 	}
 	.tab-row {
 		position: relative;
@@ -690,6 +680,7 @@
 	.modes {
 		display: flex;
 		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: var(--space-3);
 	}
 	.mode {
@@ -700,7 +691,9 @@
 		padding: 0;
 		background: none;
 		border: 0;
-		color: var(--muted);
+		/* Not muted: on the row's tint the muted colour is too faint in the
+		   light theme; the chosen mode is bold and framed. */
+		color: var(--text);
 		font: inherit;
 		font-size: var(--text-base);
 		cursor: pointer;
@@ -768,6 +761,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
+		justify-content: flex-end;
 		gap: var(--space-2);
 	}
 	.variant {
@@ -795,10 +789,10 @@
 		border-radius: 4px;
 	}
 	.custom {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: var(--space-2);
-		width: 100%;
 	}
 	.color {
 		display: flex;
@@ -849,38 +843,35 @@
 		width: 22px;
 		height: 22px;
 	}
-	/* Sliders: name and value on one line, the hint below, the slider under it. */
-	.slider {
+	/* Sliders: the slider with its value at the right of the row. */
+	.range {
 		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: var(--space-2);
-	}
-	.slider-top {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
+		align-items: center;
 		gap: var(--space-3);
+		min-width: 0;
+		max-width: 100%;
+	}
+	.range input {
+		flex: 1 1 14rem;
+		width: 14rem;
+		min-width: 0;
+		margin: 0;
 	}
 	.value {
 		flex: none;
+		min-width: 3.5rem;
 		color: var(--muted);
 		font-size: var(--text-base);
 		font-variant-numeric: tabular-nums;
+		text-align: right;
 	}
-	.slider input {
-		width: 100%;
-		margin: 0;
-	}
-	.plain {
-		border-color: transparent;
-	}
-	.card-note {
-		margin: 0;
-		padding: var(--space-2-5) var(--space-4) 14px;
-		border-top: 1px solid var(--panel-border, var(--border));
+	.group-note {
+		margin: var(--space-1-5) 0 0;
 		color: var(--muted);
 		font-size: var(--text-sm);
+	}
+	.notice-warn {
+		margin: 0;
 	}
 	.wall {
 		width: 88px;
@@ -922,6 +913,15 @@
 		gap: var(--space-2);
 	}
 	@media (max-width: 639px) {
+		.modes,
+		.variants,
+		.accents,
+		.custom {
+			justify-content: flex-start;
+		}
+		.range {
+			width: 100%;
+		}
 		.status {
 			position: static;
 			max-width: none;

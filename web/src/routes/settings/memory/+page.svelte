@@ -2,6 +2,8 @@
 	import { poll } from '#lib/poll.ts';
 	import { api, type SystemInfo } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
@@ -46,8 +48,9 @@
 		}
 		return poll(refresh, { interval: 5000, skip: () => busy });
 	});
-	async function save(event: SubmitEvent) {
-		event.preventDefault();
+	// PLAN 78-1: the share is stored when it is chosen (same request as the
+	// Save button sent before).
+	async function save() {
 		busy = true;
 		revision++;
 		error = '';
@@ -74,89 +77,69 @@
 	{#if status.memory.lowAvailable}<p class="notice-warn" role="status">
 			{t('memoryPolicy.lowAvailable')}
 		</p>{/if}
-	<form class="tile panel" onsubmit={save}>
-		<label class="stack"
-			><span>{t('memoryPolicy.percent')}</span>
-			<select
-				id="cache-budget"
-				class="field"
-				bind:value={percent}
-				disabled={busy || status.readOnly}
-			>
-				{#each [10, 20, 30, 40, 50, 60, 70, 80, 90] as value (value)}<option {value}
-						>{value} %</option
-					>{/each}
-			</select></label
+	<SettingGroup title={t('memoryPolicy.group.budget')}>
+		<SettingRow
+			icon="memory"
+			title={t('memoryPolicy.percent')}
+			desc={t('memoryPolicy.hint')}
+			for="cache-budget"
 		>
-		<p class="muted">{t('memoryPolicy.hint')}</p>
-		<dl class="divided">
-			<div>
-				<dt>{t('memoryPolicy.budget')}</dt>
-				<dd>{formatBytes(status.budgetBytes)}</dd>
-			</div>
-			<div>
-				<dt>{t('memoryPolicy.reserve')}</dt>
-				<dd>{formatBytes(status.reserveBytes)}</dd>
-			</div>
-			<div>
-				<dt>{t('memoryPolicy.available')}</dt>
-				<dd>{formatBytes(status.memory.availableBytes)}</dd>
-			</div>
-			<div>
-				<dt>{t('memoryPolicy.dirty')}</dt>
-				<dd>
-					{formatBytes((status.memory.dirtyBytes ?? 0) + (status.memory.writebackBytes ?? 0))}
-				</dd>
-			</div>
-			<div>
-				<dt>{t('memoryPolicy.pressure')}</dt>
-				<dd>
-					{status.memory.pressure
+			{#snippet control()}
+				<select
+					id="cache-budget"
+					class="field"
+					bind:value={percent}
+					disabled={busy || status?.readOnly}
+					onchange={save}
+				>
+					{#each [10, 20, 30, 40, 50, 60, 70, 80, 90] as value (value)}<option {value}
+							>{value} %</option
+						>{/each}
+				</select>
+			{/snippet}
+		</SettingRow>
+		{#if saved}<p class="muted" role="status">{t('memoryPolicy.saved')}</p>{/if}
+	</SettingGroup>
+	<SettingGroup title={t('memoryPolicy.group.now')}>
+		<SettingRow title={t('memoryPolicy.budget')}>
+			{#snippet control()}<span class="mono value">{formatBytes(status?.budgetBytes ?? 0)}</span
+				>{/snippet}
+		</SettingRow>
+		<SettingRow title={t('memoryPolicy.reserve')}>
+			{#snippet control()}<span class="mono value">{formatBytes(status?.reserveBytes ?? 0)}</span
+				>{/snippet}
+		</SettingRow>
+		<SettingRow title={t('memoryPolicy.available')}>
+			{#snippet control()}<span class="mono value"
+					>{formatBytes(status?.memory.availableBytes ?? 0)}</span
+				>{/snippet}
+		</SettingRow>
+		<SettingRow title={t('memoryPolicy.dirty')}>
+			{#snippet control()}<span class="mono value"
+					>{formatBytes(
+						(status?.memory.dirtyBytes ?? 0) + (status?.memory.writebackBytes ?? 0),
+					)}</span
+				>{/snippet}
+		</SettingRow>
+		<SettingRow title={t('memoryPolicy.pressure')} desc={t('memoryPolicy.pressureHint')}>
+			{#snippet control()}<span class="mono value"
+					>{status?.memory.pressure
 						? `${status.memory.pressure.someAvg10.toFixed(1)} % / ${status.memory.pressure.fullAvg10.toFixed(1)} %`
-						: t('common.unavailable')}
-				</dd>
-			</div>
-		</dl>
-		<p class="muted">{t('memoryPolicy.pressureHint')}</p>
+						: t('common.unavailable')}</span
+				>{/snippet}
+		</SettingRow>
 		{#if status.paused}<p class="notice-warn" role="status">
 				{t('error.upload_memory_pressure')}
 			</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || status.readOnly}>{t('common.save')}</button>
-			{#if saved}<span class="muted" role="status">{t('memoryPolicy.saved')}</span>{/if}
-		</div>
-	</form>
+	</SettingGroup>
 {:else if !error}<p>{t('common.loading')}</p>{/if}
 
 <style>
-	.stack > span {
+	p {
+		margin: 0;
+	}
+	.value {
 		color: var(--text);
-		font-weight: 600;
-	}
-	select {
-		max-width: 12rem;
-	}
-	p,
-	dl {
-		margin: 0;
-	}
-	dl {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-	}
-	dl div {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-4);
-		flex-wrap: wrap;
-	}
-	dd {
-		margin: 0;
-		font-family: var(--font-mono);
-	}
-	dt {
-		color: var(--muted);
 	}
 	.notice-error {
 		white-space: pre-wrap;
