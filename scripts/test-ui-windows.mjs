@@ -8,7 +8,7 @@
 // beyond overflow), for a visual pass.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
-import { fixtureFactory } from "./test-ui-fixtures.mjs";
+import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -627,7 +627,9 @@ const checkedErrors = errors.filter(
 // 3. Optional: every page of every program, for a visual pass.
 if (process.env.WINDOWS_ALL) {
   const report = [];
-  for (const w of [800, 1100]) {
+  for (const w of process.env.WINDOWS_WIDTHS?.split(",").map(Number) ?? [
+    800, 1100,
+  ]) {
     for (const [app, paths] of everything) {
       for (const path of paths.filter(
         (p) => !onlyPaths || onlyPaths.includes(p),
@@ -638,10 +640,14 @@ if (process.env.WINDOWS_ALL) {
           try {
             made = await openWindow(app, path, w);
             const res = await inspect(made.frame);
+            const cut = [
+              ...(await made.frame.evaluate(cutTextIn)),
+              ...(await made.page.evaluate(cutTextIn)),
+            ];
             await made.page
               .locator("section.win")
               .screenshot({ path: `${out}/all-${w}-${slug(path)}.png` });
-            report.push({ path, w, ...res });
+            report.push({ path, w, ...res, cut });
             attempt = 2;
           } catch (err) {
             if (attempt)
@@ -670,7 +676,8 @@ if (process.env.WINDOWS_ALL) {
         path: `${out}/all-phone-${slug(path)}.png`,
         fullPage: true,
       });
-      report.push({ path, w: 390, ...res });
+      const cut = await made.page.evaluate(cutTextIn);
+      report.push({ path, w: 390, ...res, cut });
     }
     await made.ctx.close();
   }
@@ -680,7 +687,8 @@ if (process.env.WINDOWS_ALL) {
       (r.w !== 390 && r.h1.length) ||
       r.overflowX > 1 ||
       r.covered.length ||
-      r.clipped.length
+      r.clipped.length ||
+      r.cut?.length
     )
       console.log(JSON.stringify(r));
   const later = [...new Set(errors.slice(checkedCount))];

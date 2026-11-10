@@ -219,7 +219,34 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 		s.agentScheduleResult(user.Name, id, chat)
 		return err
 	})
+	if err != nil {
+		// The run never began (the agent is off, busy moving, has no model):
+		// say so in the chat and in the task instead of leaving a question
+		// without an answer and "last run: ok".
+		chat.State = agent.StateError
+		chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: now, Role: "assistant",
+			Content: "Diese Aufgabe konnte nicht starten: " + agentStartProblem(err)})
+		if e := store.SaveChat(user.Name, chat); e != nil {
+			slog.Warn("chat of a task that did not start not saved", "schedule", id, "err", e)
+		}
+		s.agentScheduleResult(user.Name, id, chat)
+	}
 	return chat.ID, err
+}
+
+// agentStartProblem says in the person's words why a planned run did not start.
+func agentStartProblem(err error) string {
+	switch {
+	case errors.Is(err, agent.ErrBusy):
+		return "Der Agent war gerade mit diesem Gespräch beschäftigt."
+	case errors.Is(err, errAgentMoving):
+		return "Die Daten des Agenten wurden gerade auf ein anderes Volume verschoben."
+	case strings.Contains(err.Error(), "switched off"):
+		return "Der KI-Agent ist ausgeschaltet."
+	case strings.Contains(err.Error(), "no model"):
+		return "Es ist kein Modell gewählt (Systemsteuerung › KI-Agent)."
+	}
+	return "Der Agent war nicht bereit. Einzelheiten stehen im Protokoll."
 }
 
 // agentRemind sends a reminder to the person's devices and, if set, to the

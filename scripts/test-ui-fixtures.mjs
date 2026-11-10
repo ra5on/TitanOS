@@ -2155,3 +2155,58 @@ function scriptRoute(data, path, method, route, time) {
   }
   return json({ error: { code: "not_found", message: "fixture" } }, 404);
 }
+
+/**
+ * PLAN 76 (F-12-15): text that is cut off – by an ellipsis, a hidden
+ * overflow or a line limit. The owner's rule: never; a place too small
+ * wraps, scrolls or shows an icon instead. Runs in the page
+ * (`frame.evaluate(cutTextIn)`), returns "selector: text" per finding.
+ * Fields (their value scrolls), screen-reader-only text and places marked
+ * `data-cut="scroll"` (they scroll by other means) do not count.
+ */
+export function cutTextIn() {
+  const found = [];
+  const seen = new Set();
+  const name = (el) =>
+    el.tagName.toLowerCase() +
+    (el.id ? "#" + el.id : "") +
+    (typeof el.className === "string" && el.className.trim()
+      ? "." + el.className.trim().split(/\s+/).slice(0, 3).join(".")
+      : "");
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.trim()) continue;
+    // The text and every box around it that could hide a part of it.
+    for (
+      let el = node.parentElement, hops = 0;
+      el && el !== document.body && hops < 6;
+      el = el.parentElement, hops++
+    ) {
+      if (seen.has(el)) break;
+      const cs = getComputedStyle(el);
+      if (cs.display === "inline" || cs.display === "contents") continue;
+      if (
+        el.closest(
+          'input, textarea, select, .sr-only, [aria-hidden="true"], [data-cut="scroll"], canvas, svg, .xterm',
+        )
+      )
+        break;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || cs.visibility !== "visible") break;
+      const hidesX = cs.overflowX === "hidden" || cs.overflowX === "clip";
+      const hidesY = cs.overflowY === "hidden" || cs.overflowY === "clip";
+      const cutX = hidesX && el.scrollWidth > el.clientWidth + 1;
+      const cutY = hidesY && el.scrollHeight > el.clientHeight + 2;
+      if (cutX || cutY) {
+        seen.add(el);
+        found.push(
+          `${name(el)} [${cutX ? "x" : ""}${cutY ? "y" : ""}]: ${el.textContent.trim().replace(/\s+/g, " ").slice(0, 60)}`,
+        );
+        break;
+      }
+      // A box that scrolls shows everything; nothing above it cuts this text.
+      if (/(auto|scroll)/.test(cs.overflowX + cs.overflowY)) break;
+    }
+  }
+  return found;
+}
