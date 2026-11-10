@@ -17,6 +17,8 @@ import (
 	"sync"
 
 	xdraw "golang.org/x/image/draw"
+
+	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
 // The symbol of TitanOS on the home screen and in notifications (Settings ›
@@ -52,21 +54,44 @@ type appIcons struct {
 	version  int
 }
 
+// appIconArea is the icon of the web app; an area with narrow dependencies
+// (PLAN 8a, see fansArea). store holds the choice, state what was read and
+// drawn from it (state of the server), ui the files of the web UI.
+// appFrameSources names the sources apps may be framed from, for the
+// answer of the web UI. The receiver is ic, a is the state in this file.
+type appIconArea struct {
+	store           *config.Store
+	ui              fs.FS
+	state           *appIcons
+	appFrameSources func() []string
+}
+
+// appIconArea is the area of the server.
+func (s *Server) appIconArea() appIconArea {
+	return appIconArea{store: s.opts.Store, ui: s.opts.UI, state: &s.appIcon, appFrameSources: s.appFrameSources}
+}
+
+func (ic appIconArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /icons/{file}", ic.handleAppIconFile)
+	mux.HandleFunc("GET /api/v1/app-icon", admin(ic.handleAppIcon))
+	mux.HandleFunc("PUT /api/v1/app-icon", admin(ic.handlePutAppIcon))
+}
+
 // appIconState reads the choice once from /config.
-func (s *Server) appIconState() (*appIcons, error) {
-	a := &s.appIcon
+func (ic appIconArea) appIconState() (*appIcons, error) {
+	a := ic.state
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.loaded {
 		return a, nil
 	}
 	settings := appIconSettings{Kind: "default"}
-	if err := s.opts.Store.ReadJSON(appIconFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := ic.store.ReadJSON(appIconFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return a, err
 	}
 	var picture image.Image
 	if settings.Kind == "image" {
-		data, err := s.opts.Store.Read(appIconImage)
+		data, err := ic.store.Read(appIconImage)
 		if err == nil {
 			picture, err = png.Decode(bytes.NewReader(data))
 		}
@@ -176,14 +201,14 @@ func squareIcon(data []byte) (image.Image, error) {
 
 // handleAppIconFile answers /icons/app-*.png: the drawn file of the choice,
 // else the built-in one. No sign-in: home screens fetch it without.
-func (s *Server) handleAppIconFile(w http.ResponseWriter, r *http.Request) {
+func (ic appIconArea) handleAppIconFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
-	a, _ := s.appIconState()
+	a, _ := ic.appIconState()
 	a.mu.Lock()
 	data := a.files[name]
 	a.mu.Unlock()
 	if _, known := appIconSizes[name]; !known || data == nil {
-		uiHandler(s.opts.UI, s.appFrameSources).ServeHTTP(w, r)
+		uiHandler(ic.ui, ic.appFrameSources).ServeHTTP(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
@@ -191,8 +216,8 @@ func (s *Server) handleAppIconFile(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (s *Server) appIconAnswer(w http.ResponseWriter) {
-	a, err := s.appIconState()
+func (ic appIconArea) appIconAnswer(w http.ResponseWriter) {
+	a, err := ic.appIconState()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -202,12 +227,12 @@ func (s *Server) appIconAnswer(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, map[string]any{"kind": a.settings.Kind, "color": a.settings.Color, "version": a.version})
 }
 
-func (s *Server) handleAppIcon(w http.ResponseWriter, r *http.Request) { s.appIconAnswer(w) }
+func (ic appIconArea) handleAppIcon(w http.ResponseWriter, r *http.Request) { ic.appIconAnswer(w) }
 
 // handlePutAppIcon takes the default or a color as JSON, or a picture as
 // the raw body (Content-Type image/…, at most 5 MiB).
-func (s *Server) handlePutAppIcon(w http.ResponseWriter, r *http.Request) {
-	a, err := s.appIconState()
+func (ic appIconArea) handlePutAppIcon(w http.ResponseWriter, r *http.Request) {
+	a, err := ic.appIconState()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -253,14 +278,14 @@ func (s *Server) handlePutAppIcon(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if pictureFile != nil {
-		if err := s.opts.Store.Write(appIconImage, pictureFile); err != nil {
+		if err := ic.store.Write(appIconImage, pictureFile); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 			return
 		}
 	} else if a.settings.Kind == "image" {
-		_ = s.opts.Store.Remove(appIconImage) // cleanup, best effort: nothing more can be done if it fails
+		_ = ic.store.Remove(appIconImage) // cleanup, best effort: nothing more can be done if it fails
 	}
-	if err := s.opts.Store.WriteJSON(appIconFile, settings); err != nil {
+	if err := ic.store.WriteJSON(appIconFile, settings); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}

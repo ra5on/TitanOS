@@ -509,7 +509,7 @@ func (s *Server) clusterApplied(before auth.User, existed bool, after auth.User,
 		// Whoever knew the old password or held a removed factor is out.
 		s.sessions.DeleteUser(name, "")
 		if before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret {
-			s.forgetWebDAV(name)
+			s.davArea().forgetWebDAV(name)
 		}
 	}
 	slog.Info("account taken over from the cluster", "user", name, "deleted", deleted)

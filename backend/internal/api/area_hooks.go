@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
 
 // What the areas with narrow dependencies (PLAN 8a, see fansArea) take from
@@ -75,3 +76,8 @@ func (s *Server) recordActivity(entry activity.Entry) {
 // jobFunc starts work that outlives its request and ends with the server
 // (Server.goJob).
 type jobFunc func(job func(ctx context.Context))
+
+// reconfirmFunc checks the password (and second factor) of the account
+// once more and answers the request itself when it refuses
+// (Server.reconfirm).
+type reconfirmFunc func(w http.ResponseWriter, user auth.User, password, code string) bool
