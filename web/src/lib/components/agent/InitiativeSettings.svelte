@@ -336,21 +336,20 @@
 {/if}
 
 <style>
-	/* PLAN 68: the same cards and rows as AgentSettings, theme colors only. */
+	/* PLAN 68/78-5: the same flat rows as AgentSettings, theme colors only. */
 	.cap {
-		margin: var(--space-3) var(--space-1) 2px;
-		font-size: var(--text-xs);
+		margin: var(--space-3) 0 var(--space-1);
+		font-size: var(--text-md);
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--muted);
+		color: var(--text);
 	}
+	/* PLAN 78-5: the rows of a group stand together, no box around them. */
 	.grp {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 		flex-shrink: 0;
-		border-radius: var(--radius-tile);
-		overflow: hidden;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		min-width: 0;
 	}
 	.row {
 		display: flex;
@@ -359,16 +358,13 @@
 		width: 100%;
 		min-height: 48px;
 		padding: var(--space-2-5) var(--space-4);
-		border: 0;
-		border-top: 1px solid var(--border);
-		background: none;
 		color: var(--text);
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
-	}
-	.row:first-child {
-		border-top: 0;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	.row.off {
 		opacity: 0.55;
@@ -436,6 +432,9 @@
 		flex-direction: column;
 		gap: var(--space-2-5);
 		padding: 14px;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	.steps {
 		display: grid;

@@ -12,9 +12,10 @@
 	let { p, current }: { p: VmsPage; current: VM } = $props();
 </script>
 
-<aside class="tile" class:open={p.listOpen} aria-labelledby="vms-title">
+<!-- PLAN 78-5: the side pane has no tile around it; its heading is plain. -->
+<aside class:open={p.listOpen} aria-labelledby="vms-title">
 	<div class="aside-head">
-		<h2 class="tile-title" id="vms-title">{t('vms.title')}</h2>
+		<h2 class="sgroup-title" id="vms-title">{t('vms.title')}</h2>
 		<button
 			type="button"
 			class="btn picker"
@@ -120,9 +121,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		min-height: 50px;
-		padding: 14px;
-		border-bottom: 1px solid var(--panel-border);
+		min-height: 44px;
+		padding: 0 0 var(--space-2);
 	}
 	.aside-head h2 {
 		flex: 1;
@@ -138,12 +138,12 @@
 	}
 	.vm-search {
 		display: block;
-		margin: var(--space-3) var(--space-3) var(--space-2);
+		margin: 0 0 var(--space-2);
 	}
 	.filters {
 		display: flex;
 		gap: var(--space-1);
-		padding: 0 var(--space-3) var(--space-2-5);
+		padding: 0 0 var(--space-2-5);
 	}
 	.filter {
 		display: inline-flex;
@@ -169,7 +169,7 @@
 	}
 	.vm-empty {
 		margin: 0;
-		padding: var(--space-1) 14px var(--space-3);
+		padding: var(--space-1) 0 var(--space-3);
 		font-size: var(--text-base);
 	}
 	.vm-cols {
@@ -288,9 +288,6 @@
 		}
 		aside:not(.open) .list-body {
 			display: none;
-		}
-		aside:not(.open) .aside-head {
-			border-bottom: 0;
 		}
 		.vm-actions .icon {
 			width: 2.75rem;

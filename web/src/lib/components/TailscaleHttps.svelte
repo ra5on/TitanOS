@@ -14,6 +14,7 @@
 	// tailscale/cert.go): a switch, off by default, with what Tailscale
 	// needs for it and what it makes public.
 	import { api } from '#lib/api.ts';
+	import SettingSub from './settings/SettingSub.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -43,15 +44,27 @@
 	}
 </script>
 
-<div class="https-box">
-	<h4>{t('tailscale.httpsTitle')}</h4>
-	<label class="check"
-		><input type="checkbox" checked={enabled} disabled={disabled || busy} onchange={change} />{t(
-			'tailscale.httpsSwitch',
-			{ name: https?.name || t('tailscale.httpsTheName') },
-		)}</label
-	>
-	<p class="muted">{t('tailscale.httpsWhat')}</p>
+<!-- PLAN 78-5: a part of the Tailscale row – the switch beside its name and
+     explanation, what it needs and its state below; no box of its own. -->
+<SettingSub title={t('tailscale.httpsTitle')} for="ts-https">
+	{#snippet description()}
+		{t('tailscale.httpsSwitch', { name: https?.name || t('tailscale.httpsTheName') })}
+		<span class="what">{t('tailscale.httpsWhat')}</span>
+	{/snippet}
+	{#snippet control()}
+		<input
+			id="ts-https"
+			class="switch"
+			type="checkbox"
+			role="switch"
+			aria-label={t('tailscale.httpsSwitch', {
+				name: https?.name || t('tailscale.httpsTheName'),
+			})}
+			checked={enabled}
+			disabled={disabled || busy}
+			onchange={change}
+		/>
+	{/snippet}
 	<div class="needs">
 		<p>{t('tailscale.httpsNeeds')}</p>
 		<ul>
@@ -90,30 +103,14 @@
 			</p>
 		{:else}<p class="muted" role="status">{t('tailscale.httpsWaiting')}</p>{/if}
 	{/if}
-</div>
+</SettingSub>
 
 <style>
-	.https-box {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-		padding: 14px var(--space-4);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-tile);
-	}
-	h4 {
-		margin: 0;
-		font-size: var(--text-md);
-		font-weight: 600;
-	}
 	p {
 		margin: 0;
 	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-weight: 500;
+	.what {
+		display: block;
 	}
 	.needs ul {
 		margin: var(--space-1) 0 0;

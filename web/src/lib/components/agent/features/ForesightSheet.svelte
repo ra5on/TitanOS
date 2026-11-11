@@ -131,21 +131,21 @@
 		color: var(--muted);
 		margin: var(--space-1-5) 2px -6px;
 	}
+	/* PLAN 78-5: flat rows that stand together, no box around the group. */
 	.body :global(.fgrp2) {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
 	}
 	.body :global(.frow2) {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
 		padding: var(--space-3) 14px;
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-	}
-	.body :global(.frow2:first-child) {
-		border-top: 0;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	.body :global(.ft) {
 		flex: 1;

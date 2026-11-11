@@ -21,15 +21,16 @@
 </script>
 
 <!-- PLAN 78-1: each service is a row that opens to the settings of its
-     plugin (those components are shared with Plugins and keep their look);
+     plugin (those components are shared with Plugins and bring the parts
+     of the row: name left, control right);
      the rest are rows that lead to their pages. -->
 <SettingGroup title={t('netx.tab.remote')} id="net-remote">
 	{#each [{ name: 'tailscale', title: 'Tailscale' }, { name: 'netbird', title: 'NetBird' }] as remote (remote.name)}
 		{#if installed(remote.name)}
 			<SettingRow icon="tailnet" title={remote.title} id="remote-{remote.name}" open>
-				<div class="srow-block">
-					{#if remote.name === 'tailscale'}<TailscaleSettings />{:else}<NetbirdSettings />{/if}
-				</div>
+				{#if remote.name === 'tailscale'}<TailscaleSettings row />{:else}<NetbirdSettings
+						row
+					/>{/if}
 			</SettingRow>
 		{:else}
 			<SettingRow

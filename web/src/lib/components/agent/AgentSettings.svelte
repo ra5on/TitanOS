@@ -393,8 +393,8 @@
 </div>
 
 <style>
-	/* PLAN 68: a sheet from the right with cards and rows like every
-	   settings page; colors from the theme only. */
+	/* PLAN 68: a sheet from the right; PLAN 78-5: its settings are flat rows
+	   under plain headings like every settings page; colors from the theme only. */
 	.scrim {
 		position: fixed;
 		inset: 0;
@@ -494,12 +494,10 @@
 		background: var(--accent);
 	}
 	.cap {
-		margin: var(--space-3) var(--space-1) 2px;
-		font-size: var(--text-xs);
+		margin: var(--space-3) 0 var(--space-1);
+		font-size: var(--text-md);
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--muted);
+		color: var(--text);
 	}
 	.pushhint {
 		margin: 0 var(--space-1) var(--space-3);
@@ -507,11 +505,13 @@
 		line-height: 1.45;
 		color: var(--muted);
 	}
+	/* PLAN 78-5: the rows of a group stand together, no box around them. */
 	.grp {
-		border-radius: var(--radius-tile);
-		overflow: hidden;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		flex-shrink: 0;
+		min-width: 0;
 	}
 	.row {
 		display: flex;
@@ -520,19 +520,16 @@
 		width: 100%;
 		min-height: 48px;
 		padding: var(--space-2-5) var(--space-4);
-		border: 0;
-		border-top: 1px solid var(--border);
-		background: none;
 		color: var(--text);
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	button.row:hover {
 		background: color-mix(in srgb, var(--text) 5%, transparent);
-	}
-	.row:first-child {
-		border-top: 0;
 	}
 	.row.off {
 		opacity: 0.55;

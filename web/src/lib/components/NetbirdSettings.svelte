@@ -4,8 +4,16 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
-	let { onpending = (_pending: boolean) => {} }: { onpending?: (pending: boolean) => void } =
-		$props();
+	import SettingGroup from './settings/SettingGroup.svelte';
+	import SettingSub from './settings/SettingSub.svelte';
+	let {
+		onpending = (_pending: boolean) => {},
+		row = false,
+	}: {
+		onpending?: (pending: boolean) => void;
+		/** Inside an open row of the control panel: only the parts, no heading. */
+		row?: boolean;
+	} = $props();
 	type Settings = {
 		managementUrl: string;
 		acceptRoutes: boolean;
@@ -130,111 +138,160 @@
 	}
 </script>
 
-<section class="mesh" aria-label="NetBird">
-	<h3>{t('netbird.connection')}</h3>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if status}
-		<div class="meta">
-			<span class="chip" class:ok={status.state === 'Connected'}
-				>{status.state in stateKeys
-					? t(stateKeys[status.state as keyof typeof stateKeys])
-					: status.state}</span
-			><span class="mono">{status.version}</span>
-		</div>
-		{#if status.fqdn}<strong>{status.fqdn}</strong>{/if}
-		{#each status.ips as ip (ip)}<span class="mono address">{ip}</span>{/each}
-		{#if status.active && status.management}<p class="muted">
-				{t('netbird.managementState', {
-					url: status.management,
-					state: t(status.managementConnected ? 'netbird.reachable' : 'netbird.unreachable'),
-				})}
-			</p>{/if}
-		{#if status.state === 'Connected'}<p class="muted">
-				{t('netbird.peerCount', { connected: status.peersConnected, total: status.peersTotal })}
-			</p>{/if}
-		{#if status.error}<p class="notice-warn">{status.error}</p>{/if}
-		{#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
-		{#if !status.active}<p class="muted">{t('netbird.activateHint')}</p>{/if}
-		{#if needsLogin && !status.setupKeySet}<p class="muted">{t('netbird.keyNeeded')}</p>{/if}
-		<div class="actions">
-			{#if !online}<button
-					class="btn"
-					disabled={locked || (needsLogin && !status.setupKeySet)}
-					onclick={() => action('connect')}>{t('netbird.connect')}</button
-				>
-			{:else}<button class="btn" disabled={locked} onclick={() => action('disconnect')}
-					>{t('netbird.disconnect')}</button
-				>{/if}
-			{#if !needsLogin && status.active}<button
-					class="btn"
-					disabled={locked}
-					onclick={() => (loggingOut = true)}>{t('netbird.logout')}</button
-				>{/if}
-		</div>
-		{#if status.pendingUntil}
-			<div class="notice-warn" role="status">
-				<p>{t('netbird.trial', { time: formatTime(new Date(status.pendingUntil)) })}</p>
+<!-- PLAN 78-5: the settings are the parts of a row (name left, control
+     right). `row`: inside an open row of Settings › Network; otherwise
+     (Plugins) the parts stand in a row of their own under a plain heading. -->
+{#snippet parts()}
+	<section class="sparts" aria-label="NetBird">
+		{#if error}<div class="srow-block"><p class="notice-error" role="alert">{error}</p></div>{/if}
+		{#if status}
+			<SettingSub title={status.fqdn || t('netbird.connection')}>
+				{#snippet description()}
+					{#each status?.ips ?? [] as ip (ip)}<span class="mono address">{ip}</span>{/each}
+					{#if status?.active && status.management}<span class="line">
+							{t('netbird.managementState', {
+								url: status.management,
+								state: t(status.managementConnected ? 'netbird.reachable' : 'netbird.unreachable'),
+							})}
+						</span>{/if}
+					{#if status?.state === 'Connected'}<span class="line">
+							{t('netbird.peerCount', {
+								connected: status.peersConnected,
+								total: status.peersTotal,
+							})}
+						</span>{/if}
+				{/snippet}
+				{#snippet control()}
+					<span class="chip" class:ok={status?.state === 'Connected'}
+						>{status && status.state in stateKeys
+							? t(stateKeys[status.state as keyof typeof stateKeys])
+							: status?.state}</span
+					><span class="mono">{status?.version}</span>
+				{/snippet}
+			</SettingSub>
+			<div class="srow-block">
+				{#if status.error}<p class="notice-warn">{status.error}</p>{/if}
+				{#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
+				{#if !status.active}<p class="muted">{t('netbird.activateHint')}</p>{/if}
+				{#if needsLogin && !status.setupKeySet}<p class="muted">{t('netbird.keyNeeded')}</p>{/if}
 				<div class="actions">
-					<button class="btn btn-primary" disabled={busy} onclick={() => action('confirm')}
-						>{t('netbird.confirm')}</button
-					><button class="btn" disabled={busy} onclick={() => action('undo')}
-						>{t('netbird.undo')}</button
-					>
-				</div>
-			</div>
-		{/if}
-		<form onsubmit={saveKey}>
-			<fieldset disabled={busy || status.readOnly || !!status.pendingUntil}>
-				<label for="nb-key">{t('netbird.setupKey')}</label>
-				<p class="muted">{status.setupKeySet ? t('netbird.keySet') : t('netbird.keyUnset')}</p>
-				<input
-					id="nb-key"
-					class="field mono"
-					type="password"
-					autocomplete="off"
-					spellcheck="false"
-					bind:value={setupKey}
-					placeholder={t('netbird.keyPlaceholder')}
-				/>
-				<p class="muted">{t('netbird.keyHint')}</p>
-				<div class="actions">
-					<button class="btn btn-primary" disabled={!setupKey.trim()}>{t('netbird.saveKey')}</button
-					>{#if status.setupKeySet}<button type="button" class="btn" onclick={removeKey}
-							>{t('netbird.removeKey')}</button
+					{#if !online}<button
+							class="btn"
+							disabled={locked || (needsLogin && !status.setupKeySet)}
+							onclick={() => action('connect')}>{t('netbird.connect')}</button
+						>
+					{:else}<button class="btn" disabled={locked} onclick={() => action('disconnect')}
+							>{t('netbird.disconnect')}</button
+						>{/if}
+					{#if !needsLogin && status.active}<button
+							class="btn"
+							disabled={locked}
+							onclick={() => (loggingOut = true)}>{t('netbird.logout')}</button
 						>{/if}
 				</div>
-			</fieldset>
-		</form>
-		<form onsubmit={save} oninput={() => (dirty = true)} onchange={() => (dirty = true)}>
-			<fieldset disabled={locked}>
-				<label for="nb-management">{t('netbird.management')}</label>
-				<input
-					id="nb-management"
-					class="field mono"
-					type="url"
-					bind:value={managementUrl}
-					placeholder="https://api.netbird.io:443"
-				/>
-				<p class="muted">{t('netbird.managementHint')}</p>
-				<label class="check"
-					><input type="checkbox" bind:checked={acceptRoutes} />{t('netbird.acceptRoutes')}</label
-				>
-				<label class="check"
-					><input type="checkbox" bind:checked={serveRoutes} />{t('netbird.serveRoutes')}</label
-				>
-				<label class="check"
-					><input type="checkbox" bind:checked={acceptDNS} />{t('netbird.acceptDNS')}</label
-				>
-				<p class="muted">{t('netbird.policyHint')}</p>
-				<button class="btn btn-primary" disabled={!dirty}>{t('netbird.apply')}</button>
-			</fieldset>
-		</form>
-		<details>
-			<summary>{t('netbird.firewall')}</summary>
-			<p class="muted">{t('netbird.firewallHint')}</p>
-		</details>
-	{/if}
-</section>
+				{#if status.pendingUntil}
+					<div class="notice-warn" role="status">
+						<p>{t('netbird.trial', { time: formatTime(new Date(status.pendingUntil)) })}</p>
+						<div class="actions">
+							<button class="btn btn-primary" disabled={busy} onclick={() => action('confirm')}
+								>{t('netbird.confirm')}</button
+							><button class="btn" disabled={busy} onclick={() => action('undo')}
+								>{t('netbird.undo')}</button
+							>
+						</div>
+					</div>
+				{/if}
+			</div>
+			<form onsubmit={saveKey}>
+				<fieldset class="sparts" disabled={busy || status.readOnly || !!status.pendingUntil}>
+					<SettingSub title={t('netbird.setupKey')} for="nb-key">
+						{#snippet description()}
+							{status?.setupKeySet ? t('netbird.keySet') : t('netbird.keyUnset')}
+							<span class="line">{t('netbird.keyHint')}</span>
+						{/snippet}
+						{#snippet control()}
+							<input
+								id="nb-key"
+								class="field mono"
+								type="password"
+								autocomplete="off"
+								spellcheck="false"
+								bind:value={setupKey}
+								placeholder={t('netbird.keyPlaceholder')}
+							/>
+						{/snippet}
+						<div class="actions">
+							<button class="btn btn-primary" disabled={!setupKey.trim()}
+								>{t('netbird.saveKey')}</button
+							>{#if status.setupKeySet}<button type="button" class="btn" onclick={removeKey}
+									>{t('netbird.removeKey')}</button
+								>{/if}
+						</div>
+					</SettingSub>
+				</fieldset>
+			</form>
+			<form onsubmit={save} oninput={() => (dirty = true)} onchange={() => (dirty = true)}>
+				<fieldset class="sparts" disabled={locked}>
+					<SettingSub
+						title={t('netbird.management')}
+						desc={t('netbird.managementHint')}
+						for="nb-management"
+					>
+						{#snippet control()}
+							<input
+								id="nb-management"
+								class="field mono"
+								type="url"
+								bind:value={managementUrl}
+								placeholder="https://api.netbird.io:443"
+							/>
+						{/snippet}
+					</SettingSub>
+					<SettingSub title={t('netbird.acceptRoutes')} for="nb-accept-routes">
+						{#snippet control()}<input
+								id="nb-accept-routes"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={acceptRoutes}
+							/>{/snippet}
+					</SettingSub>
+					<SettingSub title={t('netbird.serveRoutes')} for="nb-serve-routes">
+						{#snippet control()}<input
+								id="nb-serve-routes"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={serveRoutes}
+							/>{/snippet}
+					</SettingSub>
+					<SettingSub title={t('netbird.acceptDNS')} for="nb-accept-dns">
+						{#snippet control()}<input
+								id="nb-accept-dns"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={acceptDNS}
+							/>{/snippet}
+					</SettingSub>
+					<div class="srow-block">
+						<p class="muted">{t('netbird.policyHint')}</p>
+						<div class="actions">
+							<button class="btn btn-primary" disabled={!dirty}>{t('netbird.apply')}</button>
+						</div>
+					</div>
+				</fieldset>
+			</form>
+			<SettingSub title={t('netbird.firewall')} desc={t('netbird.firewallHint')} />
+		{/if}
+	</section>
+{/snippet}
+
+{#if row}{@render parts()}{:else}
+	<SettingGroup title={t('netbird.connection')} id="netbird-connection">
+		<div class="srow plain">{@render parts()}</div>
+	</SettingGroup>
+{/if}
 {#if loggingOut}<Dialog title={t('netbird.logout')} onclose={() => (loggingOut = false)}
 		><p>{t('netbird.logoutHint')}</p>
 		<div class="dialog-actions">
@@ -247,32 +304,7 @@
 	>{/if}
 
 <style>
-	.mesh,
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		min-width: 0;
-	}
-	.mesh {
-		border-top: 1px solid var(--border);
-		padding-top: 20px;
-	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0;
-	}
-	label {
-		font-weight: 500;
-	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-	}
-	.actions,
-	.meta {
+	.actions {
 		display: flex;
 		gap: var(--space-2-5);
 		flex-wrap: wrap;
@@ -281,7 +313,9 @@
 	.mono {
 		font-family: var(--font-mono);
 	}
-	.address {
+	.address,
+	.line {
+		display: block;
 		overflow-wrap: anywhere;
 	}
 	p {
@@ -289,14 +323,5 @@
 	}
 	.notice-error {
 		white-space: pre-wrap;
-	}
-	summary {
-		cursor: pointer;
-	}
-	details p {
-		margin-top: var(--space-2-5);
-	}
-	button {
-		align-self: flex-start;
 	}
 </style>

@@ -156,20 +156,19 @@
 	.body > :global(*) {
 		flex-shrink: 0;
 	}
-	/* Shared look of the three views. */
+	/* Shared look of the three views. PLAN 78-5: a plain heading above flat
+	   rows that stand together, no box around the group. */
 	.body :global(.pcap) {
-		margin: var(--space-2-5) 2px -2px;
-		font-size: var(--text-xs, 0.75rem);
+		margin: var(--space-2-5) 0 0;
+		font-size: var(--text-md);
 		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--muted);
+		color: var(--text);
 	}
 	.body :global(.pgrp) {
-		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		border-radius: 14px;
-		overflow: hidden;
-		background: color-mix(in srgb, var(--text) 3%, transparent);
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
 	}
 	.body :global(.prow) {
 		display: flex;
@@ -178,15 +177,12 @@
 		width: 100%;
 		min-height: 48px;
 		padding: var(--space-2-5) 14px;
-		border: 0;
-		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-		background: none;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 		color: var(--text);
 		font: inherit;
 		text-align: left;
-	}
-	.body :global(.prow:first-child) {
-		border-top: 0;
 	}
 	.body :global(.prow.wrap) {
 		flex-wrap: wrap;

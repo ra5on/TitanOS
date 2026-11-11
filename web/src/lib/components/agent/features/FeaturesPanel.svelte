@@ -13,6 +13,7 @@
 		type FeaturesMine,
 		type FeaturesPublic,
 	} from '#lib/agent-features.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import DocsGroup from './DocsGroup.svelte';
 	import ProtectGroup from './ProtectGroup.svelte';
 	import ForesightGroup from './ForesightGroup.svelte';
@@ -25,7 +26,7 @@
 	}: {
 		admin: boolean;
 		calm?: boolean;
-		/** Settings › KI-Agent: the intro becomes a card with this heading. */
+		/** Settings › KI-Agent: the intro stands under this heading. */
 		heading?: string;
 	} = $props();
 
@@ -74,26 +75,22 @@
 	] as const;
 </script>
 
-<!-- PLAN 68: one card per group, each function a row (switch on the right). -->
+<!-- PLAN 78-5: a plain heading per group, each function a flat row (switch
+     on the right). -->
 <div class="features">
 	{#if heading}
-		<section class="tile ui-card fcard" aria-labelledby="f-head">
-			<div class="card-head"><h2 id="f-head">{heading}</h2></div>
-			<div class="set-row one">
-				<span class="set-hint">{t('agent.f.intro')}</span>
-				{#if !admin}<span class="set-hint">{t('agent.f.adminOnly')}</span>{/if}
-			</div>
-		</section>
+		<SettingGroup title={heading} id="f-head" desc={t('agent.f.intro')}>
+			{#if !admin}<p class="muted intro">{t('agent.f.adminOnly')}</p>{/if}
+		</SettingGroup>
 	{:else}
 		<p class="muted intro">{t('agent.f.intro')}</p>
 		{#if !admin}<p class="muted intro">{t('agent.f.adminOnly')}</p>{/if}
 	{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#each groups as g (g.id)}
-		<section class="tile ui-card fcard" aria-labelledby="f-{g.id}">
-			<div class="card-head"><h3 id="f-{g.id}">{t(g.label)}</h3></div>
+		<SettingGroup title={t(g.label)} id="f-{g.id}">
 			<g.part {...groupProps} />
-		</section>
+		</SettingGroup>
 	{/each}
 </div>
 
@@ -109,37 +106,12 @@
 	.intro {
 		margin: 0;
 	}
-	/* No backdrop filter on these cards: the sheets of a function are fixed
-	   and must not be held inside the card. */
-	.fcard {
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-	}
-	.fcard .card-head > h3 {
-		margin: 0;
-		font-size: var(--text-md);
-		font-weight: 600;
-	}
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
-	/* The groups use .fgrp around their FeatureRows (also in their sheets). */
+	/* The groups use .fgrp around their FeatureRows (also in their sheets):
+	   the rows of a group stand together, no box around them. */
 	.features :global(.fgrp) {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
-		background: var(--surface);
-	}
-	/* In the list the rows of a group sit straight in the card. */
-	.features .fcard > :global(.fgrp) {
-		border: 0;
-		border-radius: 0;
-		background: none;
-	}
-	.features .fcard > :global(.fgrp + .fgrp) {
-		border-top: 1px solid var(--panel-border, var(--border));
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
 	}
 </style>

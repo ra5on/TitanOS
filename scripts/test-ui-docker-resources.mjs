@@ -496,7 +496,7 @@ const noOverflow = async (frame, where) => {
 // 3. Clean-up: sizes per kind and the right endpoints.
 {
   const { ctx, page, frame, state } = await inWindow("/docker/cleanup", 800);
-  await frame.locator('#cleanup-cache').waitFor();
+  await frame.locator("#cleanup-cache").waitFor();
   await page
     .locator("section.win")
     .screenshot({ path: `${out}/cleanup-800.png` });
@@ -504,10 +504,10 @@ const noOverflow = async (frame, where) => {
   const text = await frame.locator("main").innerText();
   assert.match(text, /Build-Cache/);
   assert.match(
-    await frame.locator('#cleanup-images button').innerText(),
+    await frame.locator("#cleanup-images button").innerText(),
     /2,41 GB/,
   );
-  await frame.locator('#cleanup-dangling button').click();
+  await frame.locator("#cleanup-dangling button").click();
   dangerLeft(await dialogButtons(frame), "dangling");
   await frame.locator("dialog[open] .dialog-actions .btn-danger").click();
   await frame.getByText("frei geworden").waitFor();
@@ -516,11 +516,11 @@ const noOverflow = async (frame, where) => {
     { unused: false },
     "dangling images only",
   );
-  await frame.locator('#cleanup-cache button').click();
+  await frame.locator("#cleanup-cache button").click();
   await frame.locator("dialog[open] .dialog-actions .btn-danger").click();
   await page.waitForTimeout(400);
   assert.ok(state.calls.some((c) => c.p === "/docker/builder/prune"));
-  await frame.locator('#cleanup-volumes button').click();
+  await frame.locator("#cleanup-volumes button").click();
   const vol = await dialogButtons(frame);
   dangerLeft(vol, "cleanup volumes");
   assert.match(vol.text, /a3f9c0e8/);

@@ -91,7 +91,7 @@ try {
       .getByLabel("Management-Server", { exact: true })
       .fill("https://netbird.example.org:443");
     await view
-      .getByRole("checkbox", {
+      .getByRole("switch", {
         name: "Dieses NAS als Routing-Peer bzw. Exit Node zulassen",
       })
       .check();

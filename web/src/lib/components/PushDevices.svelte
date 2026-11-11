@@ -7,6 +7,7 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
+	import SettingGroup from './settings/SettingGroup.svelte';
 	import {
 		appleMobile,
 		currentSubscription,
@@ -19,7 +20,8 @@
 
 	/** For an account with the role "Benutzer": only its agent's messages (PLAN 58). */
 	// `bare`: inside a row of the control panel (PLAN 78-1) – the row carries
-	// the name and the explanation, so no tile and no heading here.
+	// the name and the explanation, so no heading here; without it the
+	// component brings its own plain heading (the agent's settings).
 	let { personal = false, bare = false }: { personal?: boolean; bare?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
 	async function setKinds(device: PushDevice, kind: 'nas' | 'agent', on: boolean) {
@@ -205,11 +207,16 @@
 {#if bare}
 	<div class="bare">{@render body()}</div>
 {:else}
-	<section class="tile panel" id="push" aria-labelledby="push-title">
-		<h2 class="tile-title" id="push-title">{t('push.title')}</h2>
-		<p class="muted">{personal ? t('push.introPersonal') : t('push.intro')}</p>
-		{@render body()}
-	</section>
+	<!-- PLAN 78-5 (the agent's settings): a plain heading, the devices in one row. -->
+	<SettingGroup
+		title={t('push.title')}
+		id="push"
+		desc={personal ? t('push.introPersonal') : t('push.intro')}
+	>
+		<div class="srow plain">
+			<div class="srow-block bare">{@render body()}</div>
+		</div>
+	</SettingGroup>
 {/if}
 
 {#if removing}

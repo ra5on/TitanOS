@@ -2,6 +2,8 @@
 	// Creating a system container, or changing one. What is fixed at
 	// creation (image, volume, privileged) is only shown when editing.
 	import Dialog from '#lib/components/Dialog.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api, ApiError, type Share } from '#lib/api.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { mbToMiB, mibToMB } from '#lib/format.ts';
@@ -152,55 +154,54 @@
 	locked={busy}
 	{onclose}
 >
-	<!-- PLAN 72: cards with rows like every settings card (label and hint left, control right). -->
+	<!-- PLAN 78-5: plain headings above flat rows (name and hint left, control
+	     right); every row stays open, so each field is part of the form. -->
 	<form class="form" onsubmit={submit}>
-		<section class="tile ui-card">
-			<div class="set-row">
-				<label class="set-label" for="lxc-name"
-					>{t('lxc.form.name')}<small class="set-hint mono"
-						>{t('lxc.form.id', { id: identifier })}</small
-					></label
-				>
-				<span class="set-control"
-					><input id="lxc-name" class="field" bind:value={label} maxlength="80" required /></span
-				>
-			</div>
-			<div class="set-row">
-				<label class="set-label" for="lxc-description">{t('lxc.form.description')}</label>
-				<span class="set-control"
-					><input
+		<SettingGroup>
+			<SettingRow title={t('lxc.form.name')} for="lxc-name">
+				{#snippet description()}<span class="mono">{t('lxc.form.id', { id: identifier })}</span
+					>{/snippet}
+				{#snippet control()}<input
+						id="lxc-name"
+						class="field"
+						bind:value={label}
+						maxlength="80"
+						required
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('lxc.form.description')} for="lxc-description">
+				{#snippet control()}<input
 						id="lxc-description"
 						class="field"
 						bind:value={description}
 						maxlength="2000"
-					/></span
-				>
-			</div>
-		</section>
+					/>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 
-		<section class="tile ui-card">
-			<div class="card-head"><h3>{t('lxc.form.image')}</h3></div>
+		<SettingGroup title={t('lxc.form.image')}>
 			{#if initial}
-				<p class="set-row wide mono">
-					{initial.distribution}
-					{initial.release} · {initial.arch} · {initial.volume}
-				</p>
+				<SettingRow title={t('lxc.form.image')}>
+					{#snippet control()}<span class="mono value"
+							>{initial.distribution}
+							{initial.release} · {initial.arch} · {initial.volume}</span
+						>{/snippet}
+				</SettingRow>
 			{:else}
-				{#if images === null}<p class="set-row wide muted" role="status">
+				{#if images === null}<p class="muted" role="status">
 						{t('lxc.form.imagesLoading')}
 					</p>{/if}
-				{#if imagesError}<div class="set-row wide">
-						<p class="notice-warn" role="alert">
-							{t('lxc.form.imagesError')} <span class="mono">{imagesError}</span>
-						</p>
-					</div>{/if}
-				<div class="set-row">
-					<label class="set-label" for="lxc-distribution"
-						>{t('lxc.form.distribution')}<span class="set-hint">{t('lxc.form.imageSource')}</span
-						></label
-					>
-					<span class="set-control"
-						><select
+				{#if imagesError}
+					<p class="notice-warn" role="alert">
+						{t('lxc.form.imagesError')} <span class="mono">{imagesError}</span>
+					</p>
+				{/if}
+				<SettingRow
+					title={t('lxc.form.distribution')}
+					desc={t('lxc.form.imageSource')}
+					for="lxc-distribution"
+				>
+					{#snippet control()}<select
 							id="lxc-distribution"
 							class="field"
 							bind:value={distribution}
@@ -210,72 +211,60 @@
 							{#each groups as group (group.distribution)}<option value={group.distribution}
 									>{group.distribution}</option
 								>{/each}
-						</select></span
-					>
-				</div>
-				<div class="set-row">
-					<label class="set-label" for="lxc-release">{t('lxc.form.release')}</label>
-					<span class="set-control"
-						><select id="lxc-release" class="field" bind:value={release} disabled={!images?.length}>
+						</select>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('lxc.form.release')} for="lxc-release">
+					{#snippet control()}<select
+							id="lxc-release"
+							class="field"
+							bind:value={release}
+							disabled={!images?.length}
+						>
 							{#each releases as name (name)}<option value={name}>{name}</option>{/each}
-						</select></span
-					>
-				</div>
-				<div class="set-row">
-					<label class="set-label" for="lxc-volume">{t('lxc.form.volume')}</label>
-					<span class="set-control"
-						><select
+						</select>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('lxc.form.volume')} for="lxc-volume">
+					{#snippet control()}<select
 							id="lxc-volume"
 							class="field"
 							bind:value={volume}
 							disabled={volumes.length === 0}
 						>
 							{#each volumes as v (v.name)}<option value={v.name}>{v.name}</option>{/each}
-						</select></span
-					>
-				</div>
-				{#if storage.status && volumes.length === 0}<div class="set-row wide">
-						<p class="notice-warn" role="status">{t('lxc.form.noVolume')}</p>
-					</div>{/if}
+						</select>{/snippet}
+				</SettingRow>
+				{#if storage.status && volumes.length === 0}
+					<p class="notice-warn" role="status">{t('lxc.form.noVolume')}</p>
+				{/if}
 			{/if}
-		</section>
+		</SettingGroup>
 
-		<section class="tile ui-card">
-			<div class="card-head"><h3>{t('lxc.form.resources')}</h3></div>
-			<div class="set-row">
-				<label class="set-label" for="lxc-cpus">{t('lxc.form.cpus')}</label>
-				<span class="set-control"
-					><input
+		<SettingGroup title={t('lxc.form.resources')}>
+			<SettingRow title={t('lxc.form.cpus')} for="lxc-cpus">
+				{#snippet control()}<input
 						id="lxc-cpus"
-						class="field short"
+						class="field"
 						type="number"
 						min="0"
 						max={list.host.cpus}
 						bind:value={cpus}
-					/></span
-				>
-			</div>
-			<div class="set-row">
-				<label class="set-label" for="lxc-memory">{t('lxc.form.memory')}</label>
-				<span class="set-control"
-					><input
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('lxc.form.memory')} for="lxc-memory">
+				{#snippet control()}<input
 						id="lxc-memory"
-						class="field short"
+						class="field"
 						type="number"
 						min="0"
 						step="1"
 						bind:value={() => mibToMB(memoryMiB), (mb) => (memoryMiB = mbToMiB(mb))}
-					/></span
-				>
-			</div>
-		</section>
+					/>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 
-		<section class="tile ui-card">
-			<div class="card-head"><h3>{t('lxc.form.network')}</h3></div>
-			<div class="set-row">
-				<label class="set-label" for="lxc-network">{t('lxc.form.network')}</label>
-				<span class="set-control"
-					><select id="lxc-network" class="field" bind:value={network}>
+		<SettingGroup title={t('lxc.form.network')}>
+			<SettingRow title={t('lxc.form.network')} for="lxc-network">
+				{#snippet control()}<select id="lxc-network" class="field" bind:value={network}>
 						<option value="none">{t('lxc.net.none')}</option>
 						{#if list.bridge || network === 'bridge'}<option value="bridge"
 								>{t('lxc.net.bridge')}</option
@@ -283,110 +272,100 @@
 						{#each bridges as n (n.id)}<option value={`network:${n.id}`}
 								>{n.name}{n.vlan ? ` · VLAN ${n.vlan}` : ''}</option
 							>{/each}
-					</select></span
-				>
-			</div>
-			<div class="set-row">
-				<label class="set-label" for="lxc-mac">{t('lxc.form.mac')}</label>
-				<span class="set-control"
-					><input
+					</select>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('lxc.form.mac')} for="lxc-mac">
+				{#snippet control()}<input
 						id="lxc-mac"
 						class="field mono"
 						bind:value={mac}
 						placeholder="00:16:3e:…"
 						aria-invalid={!validMAC(mac)}
-					/></span
-				>
-			</div>
-			{#if !validMAC(mac)}<div class="set-row wide">
-					<p class="notice-error" role="alert">{t('lxc.form.badMac')}</p>
-				</div>{/if}
-		</section>
+					/>{/snippet}
+			</SettingRow>
+			{#if !validMAC(mac)}
+				<p class="notice-error" role="alert">{t('lxc.form.badMac')}</p>
+			{/if}
+		</SettingGroup>
 
-		<section class="tile ui-card">
-			<div class="card-head">
-				<h3>{t('lxc.form.mounts')}</h3>
-				<span class="card-tools"
-					><button type="button" class="btn" onclick={addMount} disabled={mounts.length >= 16}
-						>{t('lxc.form.addMount')}</button
-					></span
+		<SettingGroup title={t('lxc.form.mounts')}>
+			{#snippet tools()}
+				<button type="button" class="btn" onclick={addMount} disabled={mounts.length >= 16}
+					>{t('lxc.form.addMount')}</button
 				>
-			</div>
+			{/snippet}
 			{#each mounts as mount, index (index)}
-				<div class="set-row wide mount">
-					<label class="stack">
-						<span>{t('lxc.form.mountPath')}</span>
-						<input
-							class="field mono"
-							list="lxc-shares"
-							bind:value={mount.path}
-							placeholder="/mnt/…"
-						/>
-					</label>
-					<label class="stack">
-						<span>{t('lxc.form.mountTarget')}</span>
-						<input
-							class="field mono"
-							bind:value={mount.target}
-							aria-invalid={!validMountTarget(mount.target)}
-						/>
-					</label>
-					<label class="check"
-						><input type="checkbox" bind:checked={mount.readOnly} />{t(
-							'lxc.form.mountReadOnly',
-						)}</label
-					>
-					<button
-						type="button"
-						class="btn"
-						aria-label={t('lxc.form.removeMount')}
-						onclick={() => mounts.splice(index, 1)}>✕</button
-					>
+				<div class="srow plain">
+					<div class="srow-block wide mount">
+						<label class="stack">
+							<span>{t('lxc.form.mountPath')}</span>
+							<input
+								class="field mono"
+								list="lxc-shares"
+								bind:value={mount.path}
+								placeholder="/mnt/…"
+							/>
+						</label>
+						<label class="stack">
+							<span>{t('lxc.form.mountTarget')}</span>
+							<input
+								class="field mono"
+								bind:value={mount.target}
+								aria-invalid={!validMountTarget(mount.target)}
+							/>
+						</label>
+						<label class="check"
+							><input
+								type="checkbox"
+								class="switch"
+								role="switch"
+								bind:checked={mount.readOnly}
+							/>{t('lxc.form.mountReadOnly')}</label
+						>
+						<button
+							type="button"
+							class="btn"
+							aria-label={t('lxc.form.removeMount')}
+							onclick={() => mounts.splice(index, 1)}>✕</button
+						>
+					</div>
 				</div>
 			{/each}
 			<datalist id="lxc-shares">
 				{#each shares as share (share.name)}<option value={share.path}>{share.name}</option>{/each}
 			</datalist>
-			{#if invalidMounts && mounts.length > 0}<div class="set-row wide">
-					<p class="notice-error" role="alert">{t('lxc.form.badTarget')}</p>
-				</div>{/if}
-			<p class="set-row wide muted small">{t('lxc.form.mountHint')}</p>
-		</section>
+			{#if invalidMounts && mounts.length > 0}
+				<p class="notice-error" role="alert">{t('lxc.form.badTarget')}</p>
+			{/if}
+			<p class="muted small">{t('lxc.form.mountHint')}</p>
+		</SettingGroup>
 
-		<section class="tile ui-card">
-			<div class="set-row">
-				<label class="set-label" for="lxc-autostart">{t('lxc.form.autostart')}</label>
-				<span class="set-control end"
-					><input
+		<SettingGroup>
+			<SettingRow title={t('lxc.form.autostart')} for="lxc-autostart">
+				{#snippet control()}<input
 						id="lxc-autostart"
 						type="checkbox"
 						class="switch"
 						bind:checked={autostart}
-					/></span
-				>
-			</div>
+					/>{/snippet}
+			</SettingRow>
 			{#if initial}
-				<div class="set-row wide">
-					{#if initial.privileged}<p class="notice-warn">{t('lxc.form.privilegedWarning')}</p>{/if}
-					<p class="muted small">{t('lxc.form.restartHint')}</p>
-				</div>
+				{#if initial.privileged}<p class="notice-warn">{t('lxc.form.privilegedWarning')}</p>{/if}
+				<p class="muted small">{t('lxc.form.restartHint')}</p>
 			{:else}
-				<div class="set-row">
-					<label class="set-label" for="lxc-privileged">{t('lxc.form.privileged')}</label>
-					<span class="set-control end"
-						><input
+				<SettingRow title={t('lxc.form.privileged')} for="lxc-privileged">
+					{#snippet control()}<input
 							id="lxc-privileged"
 							type="checkbox"
 							class="switch"
 							bind:checked={privileged}
-						/></span
-					>
-				</div>
-				{#if privileged}<div class="set-row wide">
-						<p class="notice-warn" role="alert">{t('lxc.form.privilegedWarning')}</p>
-					</div>{/if}
+						/>{/snippet}
+				</SettingRow>
+				{#if privileged}
+					<p class="notice-warn" role="alert">{t('lxc.form.privilegedWarning')}</p>
+				{/if}
 			{/if}
-		</section>
+		</SettingGroup>
 
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
@@ -406,19 +385,12 @@
 		flex-direction: column;
 		gap: var(--gap, var(--space-4));
 	}
-	.tile.ui-card {
+	.form :global(.sgroup) {
 		flex-shrink: 0;
 	}
-	.set-row.wide {
-		grid-template-columns: minmax(0, 1fr);
-		margin: 0;
-	}
-	.set-control .field {
-		width: 18rem;
-		max-width: 100%;
-	}
-	.set-control .field.short {
-		width: 8rem;
+	.value {
+		color: var(--text);
+		overflow-wrap: anywhere;
 	}
 	label.stack {
 		display: grid;
@@ -429,15 +401,17 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		min-height: var(--control-height, 2.25rem);
 		font-size: var(--text-md);
 	}
-	.set-row.mount {
+	.mount {
+		display: grid;
 		grid-template-columns: 2fr 1.5fr auto auto;
 		align-items: end;
 	}
 	@media (max-width: 760px) {
-		.set-row.mount {
-			grid-template-columns: 1fr;
+		.mount {
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	.small {

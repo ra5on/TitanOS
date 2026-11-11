@@ -128,21 +128,19 @@
 	.body > :global(*) {
 		flex-shrink: 0;
 	}
-	/* Shared look of the group's pages. PLAN 72: cards with rows like the
-	   settings (.tile.ui-card, .card-head from app.css); a row keeps its
-	   icon, text and action side by side. */
+	/* Shared look of the group's pages. PLAN 78-5: a group is a plain
+	   heading (.sgroup from app.css) above flat rows; a row keeps its icon,
+	   text and action side by side. */
 	.body :global(.drow) {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: var(--space-3) var(--space-4);
-		min-height: 48px;
-		border-top: 1px solid var(--panel-border, var(--border));
+		padding: var(--space-2-5) var(--space-4);
+		min-height: 52px;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 		font-size: var(--text-md);
-	}
-	.body :global(.card-head + .drow),
-	.body :global(.drow:first-child) {
-		border-top: 0;
 	}
 	.body :global(.drow.col) {
 		flex-direction: column;
@@ -160,7 +158,7 @@
 	.body :global(.dt strong),
 	.body :global(.drow.col > strong),
 	.body :global(.drow.col label strong) {
-		font-weight: 400;
+		font-weight: 500;
 		color: var(--text);
 	}
 	.body :global(.dt small) {

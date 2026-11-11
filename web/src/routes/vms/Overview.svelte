@@ -1,12 +1,15 @@
 <script lang="ts">
-	// The tabs "Übersicht", "Hardware" and "Zeitplan" of a VM (PLAN 67): cards
-	// with rows, label left and value right. The overview shows the load, the
+	// The tabs "Übersicht", "Hardware" and "Zeitplan" of a VM (PLAN 67; rows
+	// instead of cards since PLAN 78-5): groups under a plain heading, every
+	// fact a flat row with its name left and its value right. The overview shows the load, the
 	// network and a summary of the hardware with "Bearbeiten"; the hardware
 	// tab every part; the schedule tab the start and stop times. The CD drive
 	// can be changed on both, also while the VM runs.
 	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Sparkline from '#lib/components/Sparkline.svelte';
 	import { formatBytes, formatDateTime, formatDuration, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -71,7 +74,7 @@
 				const result = await api.get<SnapshotStatus>(url + '/snapshots');
 				if (url === base) snapshots = result;
 			} catch {
-				// The tile then says nothing about snapshots.
+				// The group then says nothing about snapshots.
 			}
 		};
 		return poll(ask, { interval: 30000 });
@@ -209,35 +212,31 @@
 {/snippet}
 
 {#snippet cdRow()}
-	<div class="kv">
-		<span class="k">{t('vms.ov.cd')}</span>
-		<span class="v">
+	<SettingRow title={t('vms.ov.cd')}>
+		{#snippet control()}
 			{#if vm.iso}
 				<span class="mono name" title={vm.iso}>{fileName(vm.iso)}</span>
 			{:else}
 				<span class="muted name">{t('vms.ov.cdEmpty')}</span>
 			{/if}
-			<span class="row-actions">
-				<button type="button" class="btn small" onclick={chooseMedium} disabled={mediumBusy}
-					>{t(vm.iso ? 'vms.ov.cdChange' : 'vms.ov.cdInsert')}</button
-				>
-				{#if vm.iso && vm.disks.length}<button
-						type="button"
-						class="btn small"
-						onclick={() => setMedium('')}
-						disabled={mediumBusy}>{t('vms.ov.cdEject')}</button
-					>{/if}
-			</span>
-		</span>
-	</div>
+			<button type="button" class="btn" onclick={chooseMedium} disabled={mediumBusy}
+				>{t(vm.iso ? 'vms.ov.cdChange' : 'vms.ov.cdInsert')}</button
+			>
+			{#if vm.iso && vm.disks.length}<button
+					type="button"
+					class="btn"
+					onclick={() => setMedium('')}
+					disabled={mediumBusy}>{t('vms.ov.cdEject')}</button
+				>{/if}
+		{/snippet}
+	</SettingRow>
 {/snippet}
 
 {#snippet diskRows()}
 	{#each vm.disks as disk, index (index)}
 		{@const volume = diskVolume(disk)}
-		<div class="kv">
-			<span class="k">{t('vms.ov.disk')}{vm.disks.length > 1 ? ` ${index + 1}` : ''}</span>
-			<span class="v">
+		<SettingRow title="{t('vms.ov.disk')}{vm.disks.length > 1 ? ` ${index + 1}` : ''}">
+			{#snippet control()}
 				<span class="mono name" title={disk.path || disk.file}
 					>{disk.path ? fileName(disk.path) : disk.file}</span
 				>
@@ -250,65 +249,66 @@
 							percent: Math.round(usage(volume) * 100),
 						})}>{volume.name} · {Math.round(usage(volume) * 100)} %</span
 					>{/if}
-			</span>
-		</div>
+			{/snippet}
+		</SettingRow>
 	{/each}
 {/snippet}
 
-<div class="cards" class:two={part === 'overview'}>
+<!-- PLAN 78-5: every group is a plain heading above its facts as flat rows
+     (name left, value right); the buttons of a group stand beside its heading. -->
+<div class="cards sfacts" class:two={part === 'overview'}>
 	{#if part === 'overview'}
-		<section class="tile ui-card" aria-labelledby="ov-load">
-			<div class="card-head">
-				<h2 id="ov-load">{t('vms.ov.load')}</h2>
-				{#if !running}<div class="card-tools">
+		<SettingGroup title={t('vms.ov.load')} id="ov-load">
+			{#if running}
+				<SettingRow title={t('vms.ov.cpus')}>
+					{#snippet control()}
+						<span class="meter">
+							<span class="meter-top"
+								><span>{formatPercent(vm.cpuPercent)}</span><span class="muted"
+									>{vm.vcpus} vCPU</span
+								></span
+							>
+							<Sparkline values={history} label={t('vms.ov.cpuHistory')} />
+						</span>
+					{/snippet}
+				</SettingRow>
+				<SettingRow title={t('vms.ov.memory')}>
+					{#snippet control()}
+						<span class="meter">
+							<span class="meter-top"
+								><span>{formatBytes(vm.memoryBytes)}</span><span class="muted"
+									>{t('vms.ov.of', { total: formatBytes(vm.memoryMiB * 1024 * 1024) })}</span
+								></span
+							>
+							<span class="bar" aria-hidden="true"
+								><span class="metric-level" style:width="{memoryShare}%"></span></span
+							>
+						</span>
+					{/snippet}
+				</SettingRow>
+				{#if uptime}<SettingRow title={t('vms.ov.uptime')}>
+						{#snippet control()}<span>{uptime}</span>{/snippet}
+					</SettingRow>{/if}
+			{:else}
+				<SettingRow title={t('vms.ov.off')}>
+					{#snippet control()}
 						<button
 							type="button"
 							class="btn btn-primary"
 							onclick={onstart}
 							disabled={busy || !canStart}>{t('vms.startVm')}</button
 						>
-					</div>{/if}
-			</div>
-			{#if running}
-				<div class="kv">
-					<span class="k">{t('vms.ov.cpus')}</span>
-					<span class="v meter">
-						<span class="meter-top"
-							><span>{formatPercent(vm.cpuPercent)}</span><span class="muted">{vm.vcpus} vCPU</span
-							></span
-						>
-						<Sparkline values={history} label={t('vms.ov.cpuHistory')} />
-					</span>
-				</div>
-				<div class="kv">
-					<span class="k">{t('vms.ov.memory')}</span>
-					<span class="v meter">
-						<span class="meter-top"
-							><span>{formatBytes(vm.memoryBytes)}</span><span class="muted"
-								>{t('vms.ov.of', { total: formatBytes(vm.memoryMiB * 1024 * 1024) })}</span
-							></span
-						>
-						<span class="bar" aria-hidden="true"
-							><span class="metric-level" style:width="{memoryShare}%"></span></span
-						>
-					</span>
-				</div>
-				{#if uptime}<div class="kv">
-						<span class="k">{t('vms.ov.uptime')}</span><span class="v">{uptime}</span>
-					</div>{/if}
-			{:else}
-				<p class="card-text muted">{t('vms.ov.off')}</p>
+					{/snippet}
+				</SettingRow>
 			{/if}
-		</section>
+		</SettingGroup>
 	{/if}
 
 	{#if part === 'overview' || part === 'hardware'}
-		<section class="tile ui-card" aria-labelledby="ov-network">
-			<div class="card-head"><h2 id="ov-network">{t('vms.ov.network')}</h2></div>
+		<SettingGroup title={t('vms.ov.network')} id="ov-network">
 			{#if running}
-				<div class="kv">
-					<span class="k">{t('vms.ov.address')}</span>
-					<span class="v">
+				<SettingRow title={t('vms.ov.address')}>
+					{#snippet control()}
 						{#if addresses === null}
 							<span class="muted">…</span>
 						{:else if addresses.addresses.length}
@@ -333,197 +333,165 @@
 								>{t(vm.network === 'bridge' ? 'vms.ov.noAddress' : 'vms.ov.noAddressUser')}</span
 							>
 						{/if}
-					</span>
-				</div>
+					{/snippet}
+				</SettingRow>
 			{/if}
-			<div class="kv">
-				<span class="k">{t('vms.ov.connection')}</span>
-				<span class="v">{t(vm.network === 'bridge' ? 'vms.ov.bridge' : 'vms.ov.user')}</span>
-			</div>
-			<div class="kv">
-				<span class="k">MAC</span><span class="v mono">{vm.mac}</span>
-			</div>
-		</section>
+			<SettingRow title={t('vms.ov.connection')}>
+				{#snippet control()}<span
+						>{t(vm.network === 'bridge' ? 'vms.ov.bridge' : 'vms.ov.user')}</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow title="MAC">
+				{#snippet control()}<span class="mono">{vm.mac}</span>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 	{/if}
 
 	{#if part === 'overview'}
-		<section class="tile ui-card wide" aria-labelledby="ov-hardware">
-			<div class="card-head">
-				<h2 id="ov-hardware">{t('vms.ov.hardware')}</h2>
-				<div class="card-tools">{@render editButton()}</div>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.system')}</span>
-				<span class="v"
-					>{t(`vms.template.${vm.template}`)} · {vm.firmware === 'bios' ? 'BIOS' : 'UEFI'} · {vm.vcpus}
-					vCPU · {formatBytes(vm.memoryMiB * 1024 * 1024)}</span
-				>
-			</div>
-			{@render diskRows()}
-			{@render cdRow()}
-			{#if devices.length || vm.folders?.length}
-				<div class="kv">
-					<span class="k">{t('vms.ov.devices')}</span>
-					<span class="v"
-						>{[
-							...deviceRows.map((row) => deviceName(row.id)),
-							...(vm.folders ?? []).map((f) => f.tag),
-						].join(', ')}</span
-					>
-				</div>
-			{/if}
-			<div class="kv">
-				<span class="k">{t('vms.sched.title')}</span>
-				<span class="v">{@render scheduleSummary()}</span>
-			</div>
-			{#if ejectError}<p class="notice-error inside" role="alert">{ejectError}</p>{/if}
-		</section>
+		<div class="wide">
+			<SettingGroup title={t('vms.ov.hardware')} id="ov-hardware" tools={editButton}>
+				<SettingRow title={t('vms.ov.system')}>
+					{#snippet control()}<span
+							>{t(`vms.template.${vm.template}`)} · {vm.firmware === 'bios' ? 'BIOS' : 'UEFI'} · {vm.vcpus}
+							vCPU · {formatBytes(vm.memoryMiB * 1024 * 1024)}</span
+						>{/snippet}
+				</SettingRow>
+				{@render diskRows()}
+				{@render cdRow()}
+				{#if devices.length || vm.folders?.length}
+					<SettingRow title={t('vms.ov.devices')}>
+						{#snippet control()}<span
+								>{[
+									...deviceRows.map((row) => deviceName(row.id)),
+									...(vm.folders ?? []).map((f) => f.tag),
+								].join(', ')}</span
+							>{/snippet}
+					</SettingRow>
+				{/if}
+				<SettingRow title={t('vms.sched.title')}>
+					{#snippet control()}<span class="column">{@render scheduleSummary()}</span>{/snippet}
+				</SettingRow>
+				{#if ejectError}<p class="notice-error" role="alert">{ejectError}</p>{/if}
+			</SettingGroup>
+		</div>
 
-		<section class="tile ui-card wide" aria-labelledby="ov-snapshots">
-			<div class="card-head">
-				<h2 id="ov-snapshots">{t('snapshots.title')}</h2>
-				<div class="card-tools">
+		<div class="wide">
+			<SettingGroup title={t('snapshots.title')} id="ov-snapshots">
+				{#snippet tools()}
 					<button type="button" class="btn" onclick={onsnapshots}>{t('snapshots.manage')}</button>
-				</div>
-			</div>
-			{#if snapshots}
-				{@const latest = snapshots.snapshots
-					.filter((s) => !s.incomplete)
-					.sort((a, b) => b.created.localeCompare(a.created))[0]}
-				<div class="kv">
-					<span class="k">{t('vms.ov.snapshotCount')}</span>
-					<span class="v">{snapshots.snapshots.length}</span>
-				</div>
-				<div class="kv">
-					<span class="k">{t('vms.ov.snapshotLatest')}</span>
-					<span class="v">{latest ? new Date(latest.created).toLocaleString() : '–'}</span>
-				</div>
-				<div class="kv">
-					<span class="k">{t('vms.ov.snapshotPlan')}</span>
-					<span class="v"
-						>{snapshots.schedule.enabled
-							? t('vms.ov.snapshotPlanOn', { time: snapshots.schedule.time })
-							: t('vms.ov.no')}</span
-					>
-				</div>
-				{#if snapshots.reason}<p class="card-text muted small">
-						{t(`snapshots.reason.${snapshots.reason}`)}
-					</p>{/if}
-			{:else}
-				<p class="card-text muted">…</p>
-			{/if}
-		</section>
+				{/snippet}
+				{#if snapshots}
+					{@const latest = snapshots.snapshots
+						.filter((s) => !s.incomplete)
+						.sort((a, b) => b.created.localeCompare(a.created))[0]}
+					<SettingRow title={t('vms.ov.snapshotCount')}>
+						{#snippet control()}<span>{snapshots?.snapshots.length}</span>{/snippet}
+					</SettingRow>
+					<SettingRow title={t('vms.ov.snapshotLatest')}>
+						{#snippet control()}<span
+								>{latest ? new Date(latest.created).toLocaleString() : '–'}</span
+							>{/snippet}
+					</SettingRow>
+					<SettingRow title={t('vms.ov.snapshotPlan')}>
+						{#snippet control()}<span
+								>{snapshots?.schedule.enabled
+									? t('vms.ov.snapshotPlanOn', { time: snapshots.schedule.time })
+									: t('vms.ov.no')}</span
+							>{/snippet}
+					</SettingRow>
+					{#if snapshots.reason}<p class="muted small">
+							{t(`snapshots.reason.${snapshots.reason}`)}
+						</p>{/if}
+				{:else}
+					<p class="muted">…</p>
+				{/if}
+			</SettingGroup>
+		</div>
 	{/if}
 
 	{#if part === 'hardware'}
-		<section class="tile ui-card" aria-labelledby="hw-system">
-			<div class="card-head">
-				<h2 id="hw-system">{t('vms.ov.hardware')}</h2>
-				<div class="card-tools">{@render editButton()}</div>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.system')}</span><span class="v"
-					>{t(`vms.template.${vm.template}`)}</span
-				>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.cpus')}</span>
-				<span class="v"
-					>{vm.vcpus} vCPU{#if vm.cpuPin?.length}{' · '}{t('vms.ov.pinned', {
-							cpus: vm.cpuPin.join(', '),
-						})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}</span
-				>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.memory')}</span>
-				<span class="v">{formatBytes(vm.memoryMiB * 1024 * 1024)}</span>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.firmware')}</span>
-				<span class="v"
-					>{[
-						vm.firmware === 'bios' ? 'BIOS' : 'UEFI',
-						vm.secureBoot ? 'Secure Boot' : '',
-						vm.tpm ? 'TPM 2.0' : '',
-					]
-						.filter(Boolean)
-						.join(' · ')}</span
-				>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.autostart')}</span>
-				<span class="v">{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</span>
-			</div>
-		</section>
+		<SettingGroup title={t('vms.ov.hardware')} id="hw-system" tools={editButton}>
+			<SettingRow title={t('vms.ov.system')}>
+				{#snippet control()}<span>{t(`vms.template.${vm.template}`)}</span>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('vms.ov.cpus')}>
+				{#snippet control()}<span
+						>{vm.vcpus} vCPU{#if vm.cpuPin?.length}{' · '}{t('vms.ov.pinned', {
+								cpus: vm.cpuPin.join(', '),
+							})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('vms.ov.memory')}>
+				{#snippet control()}<span>{formatBytes(vm.memoryMiB * 1024 * 1024)}</span>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('vms.ov.firmware')}>
+				{#snippet control()}<span
+						>{[
+							vm.firmware === 'bios' ? 'BIOS' : 'UEFI',
+							vm.secureBoot ? 'Secure Boot' : '',
+							vm.tpm ? 'TPM 2.0' : '',
+						]
+							.filter(Boolean)
+							.join(' · ')}</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow title={t('vms.autostart')}>
+				{#snippet control()}<span>{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</span>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 
-		<section class="tile ui-card" aria-labelledby="ov-disks">
-			<div class="card-head"><h2 id="ov-disks">{t('vms.ov.disks')}</h2></div>
+		<SettingGroup title={t('vms.ov.disks')} id="ov-disks">
 			{@render diskRows()}
 			{@render cdRow()}
-			{#if ejectError}<p class="notice-error inside" role="alert">{ejectError}</p>{/if}
-			{#if running}<p class="card-text muted small">{t('vms.ov.cdLive')}</p>{/if}
-		</section>
+			{#if ejectError}<p class="notice-error" role="alert">{ejectError}</p>{/if}
+			{#if running}<p class="muted small">{t('vms.ov.cdLive')}</p>{/if}
+		</SettingGroup>
 
 		{#if devices.length || vm.folders?.length}
-			<section class="tile ui-card" aria-labelledby="ov-devices">
-				<div class="card-head"><h2 id="ov-devices">{t('vms.ov.devices')}</h2></div>
+			<SettingGroup title={t('vms.ov.devices')} id="ov-devices">
 				{#each deviceRows as row (row.id)}
-					<div class="kv">
-						<span class="k">{deviceName(row.id)}</span>
-						<span class="v mono muted">{row.ids.join(', ')}</span>
-					</div>
+					<SettingRow title={deviceName(row.id)}>
+						{#snippet control()}<span class="mono muted">{row.ids.join(', ')}</span>{/snippet}
+					</SettingRow>
 				{/each}
 				{#each vm.folders ?? [] as folder (folder.tag)}
-					<div class="kv">
-						<span class="k mono">{folder.tag}</span>
-						<span class="v"
-							><span class="mono" title={folder.path}>{folder.path}</span>{#if folder.readOnly}<span
-									class="chip">{t('vms.ov.readOnly')}</span
-								>{/if}</span
-						>
-					</div>
+					<SettingRow title={folder.tag}>
+						{#snippet control()}<span class="mono" title={folder.path}>{folder.path}</span
+							>{#if folder.readOnly}<span class="chip">{t('vms.ov.readOnly')}</span>{/if}{/snippet}
+					</SettingRow>
 				{/each}
-				{#if gpu}<p class="card-text muted small">{t('vms.ov.gpuScreen')}</p>{/if}
-			</section>
+				{#if gpu}<p class="muted small">{t('vms.ov.gpuScreen')}</p>{/if}
+			</SettingGroup>
 		{/if}
 	{/if}
 
 	{#if part === 'schedule'}
 		{@const plan = vm.powerSchedule}
-		<section class="tile ui-card" aria-labelledby="ov-schedule">
-			<div class="card-head">
-				<h2 id="ov-schedule">{t('vms.sched.title')}</h2>
-				<div class="card-tools">{@render editButton()}</div>
-			</div>
-			<div class="kv">
-				<span class="k">{t('vms.ov.state')}</span>
-				<span class="v">{plan?.enabled ? t('vms.ov.scheduleOn') : t('vms.sched.off')}</span>
-			</div>
+		<SettingGroup title={t('vms.sched.title')} id="ov-schedule" tools={editButton}>
+			<SettingRow title={t('vms.ov.state')}>
+				{#snippet control()}<span
+						>{plan?.enabled ? t('vms.ov.scheduleOn') : t('vms.sched.off')}</span
+					>{/snippet}
+			</SettingRow>
 			{#if plan?.rules.length}
 				{#each plan.rules as rule, index (index)}
-					<div class="kv">
-						<span class="k"
-							>{t(rule.action === 'start' ? 'vms.sched.start' : 'vms.sched.stop')}</span
-						>
-						<span class="v"
-							><span class="mono">{rule.time}</span><span class="muted"
+					<SettingRow title={t(rule.action === 'start' ? 'vms.sched.start' : 'vms.sched.stop')}>
+						{#snippet control()}<span class="mono">{rule.time}</span><span class="muted"
 								>{WEEK.filter((d) => rule.days.includes(d))
 									.map((d) => t(`backup.dayShort.${d}` as 'backup.dayShort.0'))
 									.join(', ')}</span
-							></span
-						>
-					</div>
+							>{/snippet}
+					</SettingRow>
 				{/each}
 			{:else}
-				<p class="card-text muted">{t('vms.sched.none')}</p>
+				<p class="muted">{t('vms.sched.none')}</p>
 			{/if}
 			{#if plan?.enabled}
-				<div class="kv">
-					<span class="k">{t('vms.ov.next')}</span>
-					<span class="v column">{@render scheduleSummary()}</span>
-				</div>
+				<SettingRow title={t('vms.ov.next')}>
+					{#snippet control()}<span class="column">{@render scheduleSummary()}</span>{/snippet}
+				</SettingRow>
 			{/if}
-		</section>
+		</SettingGroup>
 	{/if}
 </div>
 
@@ -547,7 +515,7 @@
 	.cards {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--gap, var(--space-4));
+		gap: var(--space-5) var(--gap, var(--space-4));
 		align-items: start;
 	}
 	.cards.two {
@@ -561,41 +529,20 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
-	/* A row of a card: label left, value right. */
-	.kv {
-		display: grid;
-		grid-template-columns: minmax(7rem, 34%) minmax(0, 1fr);
-		align-items: center;
-		gap: var(--space-1) var(--space-4);
-		padding: 11px var(--space-4);
-		border-top: 1px solid var(--panel-border, var(--border));
-		font-size: var(--text-md);
-		min-width: 0;
-	}
-	.card-head + .kv {
-		border-top: 0;
-	}
-	.k {
-		color: var(--text);
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.v {
+	.column {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-2-5);
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.v.column {
 		flex-direction: column;
-		align-items: flex-start;
+		align-items: flex-end;
+		gap: var(--space-1);
 	}
+	/* CPU and memory: the figures above their graph or bar. */
 	.meter {
+		display: flex;
 		flex-direction: column;
-		align-items: stretch;
 		gap: var(--space-1-5);
+		flex: 1 1 12rem;
+		min-width: 9rem;
+		text-align: start;
 	}
 	.meter-top {
 		display: flex;
@@ -614,19 +561,6 @@
 		height: 100%;
 		background: var(--accent);
 	}
-	.card-text {
-		margin: 0;
-		padding: var(--space-3) var(--space-4);
-	}
-	.card-head + .card-text {
-		padding-top: 14px;
-	}
-	.kv + .card-text {
-		border-top: 1px solid var(--panel-border, var(--border));
-	}
-	.inside {
-		margin: 0 var(--space-4) var(--space-3);
-	}
 	.mono {
 		font-size: var(--text-base);
 	}
@@ -635,22 +569,8 @@
 		max-width: 100%;
 		overflow-wrap: anywhere;
 	}
-	.row-actions {
-		display: flex;
-		gap: var(--space-1-5);
-		margin-left: auto;
-	}
 	.small {
 		font-size: var(--text-sm);
-	}
-	.btn.small {
-		min-height: 30px;
-		height: 30px;
-		padding: 0 var(--space-2-5);
-		font-size: var(--text-base);
-	}
-	p {
-		margin: 0;
 	}
 	.address {
 		display: inline-flex;
@@ -674,9 +594,9 @@
 		background: var(--chip);
 		color: var(--text);
 	}
-	@media (max-width: 479px) {
-		.kv {
-			grid-template-columns: minmax(0, 1fr);
+	@media (max-width: 639px) {
+		.column {
+			align-items: flex-start;
 		}
 	}
 </style>

@@ -4,9 +4,17 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
+	import SettingGroup from './settings/SettingGroup.svelte';
+	import SettingSub from './settings/SettingSub.svelte';
 	import TailscaleHttps, { type HttpsStatus } from './TailscaleHttps.svelte';
-	let { onpending = (_pending: boolean) => {} }: { onpending?: (pending: boolean) => void } =
-		$props();
+	let {
+		onpending = (_pending: boolean) => {},
+		row = false,
+	}: {
+		onpending?: (pending: boolean) => void;
+		/** Inside an open row of the control panel: only the parts, no heading. */
+		row?: boolean;
+	} = $props();
 	type Settings = {
 		routes: string[];
 		advertiseExit: boolean;
@@ -122,107 +130,150 @@
 	}
 </script>
 
-<section class="tailnet" aria-label="Tailscale">
-	<h3>{t('tailscale.connection')}</h3>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if status}
-		<div class="meta">
-			<span class="chip" class:ok={status.state === 'Running'}
-				>{status.state in stateKeys
-					? t(stateKeys[status.state as keyof typeof stateKeys])
-					: status.state}</span
-			><span class="mono">{status.version}</span>
-		</div>
-		{#if status.name}<strong>{status.name}</strong>{/if}
-		{#each status.ips as ip (ip)}<span class="mono address">{ip}</span>{/each}
-		{#if status.error}<p class="notice-warn">{status.error}</p>{/if}
-		{#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
-		{#if !status.active}<p class="muted">{t('tailscale.activateHint')}</p>{/if}
-		{#if status.authUrl}<a
-				class="btn btn-primary"
-				href={status.authUrl}
-				target="_blank"
-				rel="noopener noreferrer">{t('tailscale.login')}</a
-			>{/if}
-		<div class="actions">
-			{#if status.state !== 'Running'}<button
-					class="btn"
-					disabled={locked}
-					onclick={() => action('connect')}>{t('tailscale.connect')}</button
-				>
-			{:else}<button class="btn" disabled={locked} onclick={() => action('disconnect')}
-					>{t('tailscale.disconnect')}</button
-				>{/if}
-			{#if status.state !== 'NeedsLogin' && status.active}<button
-					class="btn"
-					disabled={locked}
-					onclick={() => (loggingOut = true)}>{t('tailscale.logout')}</button
-				>{/if}
-		</div>
-		{#if status.pendingUntil}
-			<div class="notice-warn" role="status">
-				<p>{t('tailscale.trial', { time: formatTime(new Date(status.pendingUntil)) })}</p>
+<!-- PLAN 78-5: the settings are the parts of a row (name left, control
+     right). `row`: inside an open row of Settings › Network; otherwise
+     (Plugins) the parts stand in a row of their own under a plain heading. -->
+{#snippet parts()}
+	<section class="sparts" aria-label="Tailscale">
+		{#if error}<div class="srow-block"><p class="notice-error" role="alert">{error}</p></div>{/if}
+		{#if status}
+			<SettingSub title={status.name || t('tailscale.connection')}>
+				{#snippet description()}
+					{#each status?.ips ?? [] as ip (ip)}<span class="mono address">{ip}</span>{/each}
+				{/snippet}
+				{#snippet control()}
+					<span class="chip" class:ok={status?.state === 'Running'}
+						>{status && status.state in stateKeys
+							? t(stateKeys[status.state as keyof typeof stateKeys])
+							: status?.state}</span
+					><span class="mono">{status?.version}</span>
+				{/snippet}
+			</SettingSub>
+			<div class="srow-block">
+				{#if status.error}<p class="notice-warn">{status.error}</p>{/if}
+				{#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
+				{#if !status.active}<p class="muted">{t('tailscale.activateHint')}</p>{/if}
 				<div class="actions">
-					<button class="btn btn-primary" disabled={busy} onclick={() => action('confirm')}
-						>{t('tailscale.confirm')}</button
-					><button class="btn" disabled={busy} onclick={() => action('undo')}
-						>{t('tailscale.undo')}</button
-					>
+					{#if status.authUrl}<a
+							class="btn btn-primary"
+							href={status.authUrl}
+							target="_blank"
+							rel="noopener noreferrer">{t('tailscale.login')}</a
+						>{/if}
+					{#if status.state !== 'Running'}<button
+							class="btn"
+							disabled={locked}
+							onclick={() => action('connect')}>{t('tailscale.connect')}</button
+						>
+					{:else}<button class="btn" disabled={locked} onclick={() => action('disconnect')}
+							>{t('tailscale.disconnect')}</button
+						>{/if}
+					{#if status.state !== 'NeedsLogin' && status.active}<button
+							class="btn"
+							disabled={locked}
+							onclick={() => (loggingOut = true)}>{t('tailscale.logout')}</button
+						>{/if}
 				</div>
-			</div>
-		{/if}
-		<TailscaleHttps
-			https={status.https}
-			disabled={busy || status.readOnly || !!status.pendingUntil}
-			onupdate={(value) => take(value as Status)}
-		/>
-		<form onsubmit={save} oninput={() => (dirty = true)} onchange={() => (dirty = true)}>
-			<fieldset disabled={locked}>
-				<label for="ts-routes">{t('tailscale.routes')}</label>
-				<textarea
-					id="ts-routes"
-					class="field mono"
-					rows="3"
-					bind:value={routes}
-					placeholder="192.168.10.0/24"></textarea>
-				<p class="muted">{t('tailscale.routesHint')}</p>
-				<label for="ts-exit-mode">{t('tailscale.exitMode')}</label>
-				<select id="ts-exit-mode" class="field" bind:value={mode}
-					><option value="none">{t('tailscale.exitNone')}</option><option value="provide"
-						>{t('tailscale.exitProvide')}</option
-					><option value="use">{t('tailscale.exitUse')}</option></select
-				>
-				{#if mode === 'use'}
-					<label for="ts-exit">{t('tailscale.exitNode')}</label>
-					<select id="ts-exit" class="field" bind:value={exitNode} required>
-						<option value="">{t('tailscale.chooseExit')}</option>
-						{#if exitNode && !status.exitNodes.some((peer) => peer.ip === exitNode)}<option
-								value={exitNode}>{exitNode} · {t('tailscale.unavailable')}</option
-							>{/if}
-						{#each status.exitNodes as peer (peer.id)}<option value={peer.ip}
-								>{peer.name} · {peer.ip}{peer.online ? '' : ` · ${t('tailscale.offline')}`}</option
-							>{/each}
-					</select>
-					<p class="muted">{t('tailscale.lanAccess')}</p>
+				{#if status.pendingUntil}
+					<div class="notice-warn" role="status">
+						<p>{t('tailscale.trial', { time: formatTime(new Date(status.pendingUntil)) })}</p>
+						<div class="actions">
+							<button class="btn btn-primary" disabled={busy} onclick={() => action('confirm')}
+								>{t('tailscale.confirm')}</button
+							><button class="btn" disabled={busy} onclick={() => action('undo')}
+								>{t('tailscale.undo')}</button
+							>
+						</div>
+					</div>
 				{/if}
-				<label class="check"
-					><input type="checkbox" bind:checked={acceptRoutes} />{t('tailscale.acceptRoutes')}</label
-				>
-				<label class="check"
-					><input type="checkbox" bind:checked={acceptDNS} />{t('tailscale.acceptDNS')}</label
-				>
-				<p class="muted">{t('tailscale.approvalHint')}</p>
-				<button class="btn btn-primary" disabled={!dirty || (mode === 'use' && !exitNode)}
-					>{t('tailscale.apply')}</button
-				>
-			</fieldset>
-		</form>
-		<details>
-			<summary>{t('tailscale.firewall')}</summary>
-			<p class="muted">{t('tailscale.firewallHint')}</p>
-		</details>
-	{/if}
-</section>
+			</div>
+			<TailscaleHttps
+				https={status.https}
+				disabled={busy || status.readOnly || !!status.pendingUntil}
+				onupdate={(value) => take(value as Status)}
+			/>
+			<form onsubmit={save} oninput={() => (dirty = true)} onchange={() => (dirty = true)}>
+				<fieldset class="sparts" disabled={locked}>
+					<SettingSub
+						title={t('tailscale.routes')}
+						desc={t('tailscale.routesHint')}
+						for="ts-routes"
+					>
+						<textarea
+							id="ts-routes"
+							class="field mono"
+							rows="3"
+							bind:value={routes}
+							placeholder="192.168.10.0/24"></textarea>
+					</SettingSub>
+					<SettingSub title={t('tailscale.exitMode')} for="ts-exit-mode">
+						{#snippet control()}
+							<select id="ts-exit-mode" class="field" bind:value={mode}
+								><option value="none">{t('tailscale.exitNone')}</option><option value="provide"
+									>{t('tailscale.exitProvide')}</option
+								><option value="use">{t('tailscale.exitUse')}</option></select
+							>
+						{/snippet}
+					</SettingSub>
+					{#if mode === 'use'}
+						<SettingSub
+							title={t('tailscale.exitNode')}
+							desc={t('tailscale.lanAccess')}
+							for="ts-exit"
+						>
+							{#snippet control()}
+								<select id="ts-exit" class="field" bind:value={exitNode} required>
+									<option value="">{t('tailscale.chooseExit')}</option>
+									{#if exitNode && !status?.exitNodes.some((peer) => peer.ip === exitNode)}<option
+											value={exitNode}>{exitNode} · {t('tailscale.unavailable')}</option
+										>{/if}
+									{#each status?.exitNodes ?? [] as peer (peer.id)}<option value={peer.ip}
+											>{peer.name} · {peer.ip}{peer.online
+												? ''
+												: ` · ${t('tailscale.offline')}`}</option
+										>{/each}
+								</select>
+							{/snippet}
+						</SettingSub>
+					{/if}
+					<SettingSub title={t('tailscale.acceptRoutes')} for="ts-accept-routes">
+						{#snippet control()}<input
+								id="ts-accept-routes"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={acceptRoutes}
+							/>{/snippet}
+					</SettingSub>
+					<SettingSub title={t('tailscale.acceptDNS')} for="ts-accept-dns">
+						{#snippet control()}<input
+								id="ts-accept-dns"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={acceptDNS}
+							/>{/snippet}
+					</SettingSub>
+					<div class="srow-block">
+						<p class="muted">{t('tailscale.approvalHint')}</p>
+						<div class="actions">
+							<button class="btn btn-primary" disabled={!dirty || (mode === 'use' && !exitNode)}
+								>{t('tailscale.apply')}</button
+							>
+						</div>
+					</div>
+				</fieldset>
+			</form>
+			<SettingSub title={t('tailscale.firewall')} desc={t('tailscale.firewallHint')} />
+		{/if}
+	</section>
+{/snippet}
+
+{#if row}{@render parts()}{:else}
+	<SettingGroup title={t('tailscale.connection')} id="tailscale-connection">
+		<div class="srow plain">{@render parts()}</div>
+	</SettingGroup>
+{/if}
 {#if loggingOut}<Dialog title={t('tailscale.logout')} onclose={() => (loggingOut = false)}
 		><p>{t('tailscale.logoutHint')}</p>
 		<div class="dialog-actions">
@@ -235,32 +286,7 @@
 	>{/if}
 
 <style>
-	.tailnet,
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		min-width: 0;
-	}
-	.tailnet {
-		border-top: 1px solid var(--border);
-		padding-top: 20px;
-	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0;
-	}
-	label {
-		font-weight: 500;
-	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-	}
-	.actions,
-	.meta {
+	.actions {
 		display: flex;
 		gap: var(--space-2-5);
 		flex-wrap: wrap;
@@ -270,6 +296,7 @@
 		font-family: var(--font-mono);
 	}
 	.address {
+		display: block;
 		overflow-wrap: anywhere;
 	}
 	p {
@@ -280,14 +307,5 @@
 	}
 	.notice-error {
 		white-space: pre-wrap;
-	}
-	summary {
-		cursor: pointer;
-	}
-	details p {
-		margin-top: var(--space-2-5);
-	}
-	button {
-		align-self: flex-start;
 	}
 </style>

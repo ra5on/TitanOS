@@ -2,6 +2,9 @@
 	// The section "Processor and memory" of the VM form: cores, pinning to
 	// host CPUs, memory and firmware. The values belong to the form.
 	import type { VMHost, VMStatus } from '#lib/api.ts';
+	import FormRow from '#lib/components/appform/FormRow.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
 	import { GB, MIB, formatBytes, formatDecimal } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -92,14 +95,17 @@
 	});
 </script>
 
-<fieldset class="content" disabled={running}>
+{#snippet memoryNotes()}
+	{#if memoryNote}<span class="warn">{memoryNote}</span>{/if}
+	{#if template === 'windows' && memoryMiB < 4096}<span class="warn"
+			>{t('vms.new.memoryWindows')}</span
+		>{/if}
+{/snippet}
+
+<fieldset class="srows" disabled={running}>
 	<!-- Only once the limits are known: a slider made with a smaller maximum would show the wrong position. -->
 	{#if status}
-		<div class="line">
-			<span
-				>{t('vms.form.cores')}{#if machine.cpuModel}
-					<span class="muted">&nbsp;· {machine.cpuModel}</span>{/if}</span
-			>
+		<FormRow label={t('vms.form.cores')} hint={machine.cpuModel}>
 			<div class="segments" role="radiogroup" aria-label={t('vms.form.cores')}>
 				<button type="button" role="radio" aria-checked={!pinning} onclick={() => (pinning = false)}
 					>{t('vms.form.auto')}</button
@@ -108,75 +114,79 @@
 					>{t('vms.form.pin')}</button
 				>
 			</div>
-		</div>
+		</FormRow>
 		{#if !pinning}
-			<div class="slider">
-				<div class="line">
-					<label for="vm-vcpus">{t('vms.new.vcpus')}</label><span class="mono"
-						>{t('vms.new.of', { value: vcpus, max: machine.cpus })}</span
-					>
-				</div>
+			<FormRow label={t('vms.new.vcpus')} id="vm-vcpus" hint={t('vms.form.autoBrief')}>
+				<span class="mono">{t('vms.new.of', { value: vcpus, max: machine.cpus })}</span>
 				<input id="vm-vcpus" type="range" min="1" max={machine.cpus} step="1" bind:value={vcpus} />
-				<small>{t('vms.form.autoBrief')}</small>
-			</div>
+			</FormRow>
 		{:else}
-			<div class="presets">
-				{#if hybrid}
-					<button
-						type="button"
-						onclick={() =>
-							preset((cpu) => cpu.kind === 'p' && cpu.id !== 0 && !cpu.siblings.includes(0))}
-						>{t('vms.form.presetP')}</button
-					>
-					<button
-						type="button"
-						onclick={() => preset((cpu) => cpu.kind === 'e' && others(cpu).length === 0)}
-						>{t('vms.form.presetE')}</button
-					>
-				{/if}
-				<button type="button" onclick={() => (pinned = [])}>{t('vms.form.presetNone')}</button>
-			</div>
-			{#if hostError}<RetryNotice text={hostError} onretry={onretryhost} />{/if}
-			<div class="cpus" role="group" aria-label={t('vms.form.pin')}>
-				{#each cpus as cpu (cpu.id)}
-					<button
-						type="button"
-						aria-pressed={pinned.includes(cpu.id)}
-						onclick={() => togglePin(cpu.id)}
-					>
-						<span class="cpu-head"
-							><span class="mono">CPU {cpu.id}</span>{#if cpu.kind}<span class="chip"
-									>{t(cpu.kind === 'p' ? 'vms.form.pCore' : 'vms.form.eCore')}</span
-								>{/if}</span
-						>
-						<span class="muted cpu-note">{cpuNote(cpu)}</span>
-					</button>
-				{/each}
-			</div>
-			<small
-				>{t('vms.form.pinSummary', {
+			<FormRow
+				label={t('vms.form.pin')}
+				hint={t('vms.form.pinSummary', {
 					count: pinned.length,
 					cpus: pinned.join(', ') || '–',
-				})}</small
+				})}
+				wide
 			>
-			<small>{t('vms.form.pinNote')}</small>
-			<label class="check"
-				><input type="checkbox" bind:checked={exclusive} /><span>{t('vms.form.exclusive')}</span
-				></label
-			>
-			<small>{t('vms.form.exclusiveNote')}</small>
-			{#each cpuWarnings as warning (warning)}<small class="warn" role="status">{warning}</small
-				>{/each}
+				<div class="presets">
+					{#if hybrid}
+						<button
+							type="button"
+							onclick={() =>
+								preset((cpu) => cpu.kind === 'p' && cpu.id !== 0 && !cpu.siblings.includes(0))}
+							>{t('vms.form.presetP')}</button
+						>
+						<button
+							type="button"
+							onclick={() => preset((cpu) => cpu.kind === 'e' && others(cpu).length === 0)}
+							>{t('vms.form.presetE')}</button
+						>
+					{/if}
+					<button type="button" onclick={() => (pinned = [])}>{t('vms.form.presetNone')}</button>
+				</div>
+				{#if hostError}<RetryNotice text={hostError} onretry={onretryhost} />{/if}
+				<div class="cpus" role="group" aria-label={t('vms.form.pin')}>
+					{#each cpus as cpu (cpu.id)}
+						<button
+							type="button"
+							aria-pressed={pinned.includes(cpu.id)}
+							onclick={() => togglePin(cpu.id)}
+						>
+							<span class="cpu-head"
+								><span class="mono">CPU {cpu.id}</span>{#if cpu.kind}<span class="chip"
+										>{t(cpu.kind === 'p' ? 'vms.form.pCore' : 'vms.form.eCore')}</span
+									>{/if}</span
+							>
+							<span class="muted cpu-note">{cpuNote(cpu)}</span>
+						</button>
+					{/each}
+				</div>
+				<small>{t('vms.form.pinNote')}</small>
+				{#each cpuWarnings as warning (warning)}<small class="warn" role="status">{warning}</small
+					>{/each}
+			</FormRow>
+			<FormRow label={t('vms.form.exclusive')} id="vm-exclusive" hint={t('vms.form.exclusiveNote')}>
+				<input
+					id="vm-exclusive"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					bind:checked={exclusive}
+				/>
+			</FormRow>
 		{/if}
-		<div class="slider">
-			<div class="line">
-				<label for="vm-memory">{t('vms.new.memory')}</label><span class="mono"
-					>{t('vms.new.memoryValue', {
-						value: formatDecimal((memoryMiB * MIB) / GB),
-						free: formatBytes(freeMemory),
-					})}</span
-				>
-			</div>
+		<FormRow
+			label={t('vms.new.memory')}
+			id="vm-memory"
+			more={memoryNote || (template === 'windows' && memoryMiB < 4096) ? memoryNotes : undefined}
+		>
+			<span class="mono"
+				>{t('vms.new.memoryValue', {
+					value: formatDecimal((memoryMiB * MIB) / GB),
+					free: formatBytes(freeMemory),
+				})}</span
+			>
 			<input
 				id="vm-memory"
 				type="range"
@@ -189,92 +199,51 @@
 					(gb: number) => (memoryMiB = Math.round((Number(gb) * GB) / MIB))
 				}
 			/>
-			{#if memoryNote}<small class="warn">{memoryNote}</small>{/if}
-			{#if template === 'windows' && memoryMiB < 4096}<small class="warn"
-					>{t('vms.new.memoryWindows')}</small
-				>{/if}
-		</div>
+		</FormRow>
 	{/if}
-	<details class="advanced">
-		<summary>{t('vms.form.firmware')} · {firmware === 'uefi' ? 'UEFI' : 'BIOS'}</summary>
-		<div class="advanced-body">
-			<label for="vm-firmware">{t('vms.form.firmware')}</label>
+</fieldset>
+<!-- Outside the locked rows: the row opens also while the VM runs. -->
+<SettingRow
+	id="vm-firmware-row"
+	title={t('vms.form.firmware')}
+	summary={firmware === 'uefi' ? 'UEFI' : 'BIOS'}
+>
+	<SettingSub
+		title={t('vms.form.firmware')}
+		desc={t(editing ? 'vms.form.firmwareFixed' : 'vms.form.firmwareNote')}
+		for="vm-firmware"
+	>
+		{#snippet control()}
 			<select id="vm-firmware" class="field" bind:value={firmware} disabled={editing || busy}>
 				<option value="uefi">{t('vms.form.uefi')}</option>
 				<option value="bios">{t('vms.form.bios')}</option>
 			</select>
-			<small>{t(editing ? 'vms.form.firmwareFixed' : 'vms.form.firmwareNote')}</small>
-			{#if firmware === 'bios' && template === 'windows'}<small class="warn"
-					>{t('vms.form.biosWindows')}</small
-				>{/if}
-			<div class="facts">
-				<span class="chip">{t(firmware === 'bios' ? 'vms.form.bios' : 'vms.form.uefi')}</span>
-				<span class="chip">{t('vms.new.machine')}</span>
-				<span class="chip">{t('vms.new.cpuMode')}</span>
-				{#if secure}<span class="chip">{t('vms.form.secureChip')}</span>{/if}
-			</div>
+		{/snippet}
+	</SettingSub>
+	<div class="srow-block">
+		{#if firmware === 'bios' && template === 'windows'}<small class="warn"
+				>{t('vms.form.biosWindows')}</small
+			>{/if}
+		<div class="facts">
+			<span class="chip">{t(firmware === 'bios' ? 'vms.form.bios' : 'vms.form.uefi')}</span>
+			<span class="chip">{t('vms.new.machine')}</span>
+			<span class="chip">{t('vms.new.cpuMode')}</span>
+			{#if secure}<span class="chip">{t('vms.form.secureChip')}</span>{/if}
 		</div>
-	</details>
-</fieldset>
+	</div>
+</SettingRow>
 
 <style>
-	.advanced {
-		border-top: 1px solid var(--panel-border);
-		padding-top: var(--space-2-5);
-		min-width: 0;
-	}
-	summary {
-		cursor: pointer;
-		font-size: var(--text-base);
-	}
-	.advanced-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding-top: var(--space-3);
-		min-width: 0;
-	}
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-4);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
 	small {
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
+		display: block;
 		color: var(--warn-text);
 	}
-	.slider {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		font-size: var(--text-base);
-	}
-	.line {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2) var(--space-3);
-	}
-	.line label {
-		flex-direction: row;
-		gap: var(--space-1-5);
-		font-size: var(--text-md);
-	}
 	input[type='range'] {
+		align-self: stretch;
 		width: 100%;
 		accent-color: var(--accent);
 	}
@@ -314,26 +283,6 @@
 	}
 	.presets button {
 		border: 1px solid var(--border);
-	}
-	fieldset {
-		min-width: 0;
-		margin: 0;
-		border: 0;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
 	}
 	.cpus {
 		display: grid;

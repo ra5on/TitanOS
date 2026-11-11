@@ -3,6 +3,9 @@
 	// through from the host and folders of the NAS shared with the VM.
 	import type { Hardware, Share, VM, VMStatus } from '#lib/api.ts';
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
+	import FormRow from '#lib/components/appform/FormRow.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
 	import { t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { folderProblem, type Folder } from './vm-form.ts';
@@ -56,26 +59,33 @@
 	}
 </script>
 
-<fieldset class="content" disabled={running}>
-	<label class="netsel"
-		><span>{t('vms.form.network')}</span>
-		<select class="field" bind:value={net}>
+{#snippet noBridge()}
+	{t('vms.form.netNoBridge')}
+	<a href="/settings/network">{t('netcfg.title')}</a>
+{/snippet}
+
+<fieldset class="srows" disabled={running}>
+	<FormRow label={t('vms.form.network')} id="vm-net" more={!status?.bridge ? noBridge : undefined}>
+		<select id="vm-net" class="field" bind:value={net}>
 			<option value="user">{t('vms.form.netUser')}</option>
 			<option value="bridge" disabled={!status?.bridge}>{t('vms.form.netBridge')}</option>
 			{#each status?.networks?.filter((n) => n.bridge) ?? [] as n}<option value={`network:${n.id}`}
 					>{n.name}{n.vlan ? ` · VLAN ${n.vlan}` : ''}</option
 				>{/each}
 		</select>
-		{#if !status?.bridge}<small
-				>{t('vms.form.netNoBridge')}
-				<a href="/settings/network">{t('netcfg.title')}</a></small
-			>{/if}
-	</label>
+	</FormRow>
 
 	{#if !running}<NetworkBridgeSetup onstate={onbridgestate} />{/if}
-	<details class="advanced" open={pci.length > 0 || usb.length > 0 || autoGPU}>
-		<summary>{t('vms.form.step4')} <span class="muted">{pci.length + usb.length}</span></summary>
-		<div class="advanced-body">
+</fieldset>
+<!-- The two rows open also while the VM runs; their fields are locked then. -->
+<SettingRow
+	id="vm-devices"
+	title={t('vms.form.step4')}
+	summary={String(pci.length + usb.length)}
+	open={pci.length > 0 || usb.length > 0 || autoGPU}
+>
+	<fieldset class="sparts" disabled={running}>
+		<div class="srow-block">
 			<p class="muted note">{t('vms.form.explicitDevices')}</p>
 			{#if hardwareError}<RetryNotice text={hardwareError} onretry={onretryhardware} />{/if}
 			{#if hardware && !hardware.hardware.iommu && hardware.hardware.pci.length > 0}<p
@@ -83,39 +93,19 @@
 				>
 					{t('hardware.noIommu')}
 				</p>{/if}
-			{#each hardware?.hardware.pci ?? [] as device (device.address)}
-				{@const elsewhere = usedElsewhere(device.address)}
-				<div class="device">
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={pci.includes(device.address)}
-							disabled={!device.passable}
-							onchange={() => togglePCI(device.address, device.companions)}
-						/><span>{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span
-						></label
-					>
-					<span class="muted mono ids"
+		</div>
+		{#each hardware?.hardware.pci ?? [] as device (device.address)}
+			{@const elsewhere = usedElsewhere(device.address)}
+			<SettingSub
+				title="{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}"
+				for="vm-pci-{device.address}"
+			>
+				{#snippet description()}
+					<span class="mono ids"
 						>{device.address} · {device.vendor}:{device.device}{device.companions.length > 0
 							? ` · ${t('hardware.companions', { list: device.companions.join(', ') })}`
 							: ''}</span
 					>
-					{#if pci.includes(device.address)}
-						{#each device.companions as address (address)}
-							<label class="check"
-								><input
-									type="checkbox"
-									checked={pci.includes(address)}
-									onchange={() => (pci = toggle(pci, address))}
-								/><span>{t('vms.form.companion', { address })}</span></label
-							>
-						{/each}
-						{#if device.companions.length}<small
-								>{t('vms.form.requiredCompanions', {
-									list: device.companions.join(', '),
-								})}</small
-							>{/if}
-					{/if}
 					{#if !device.passable}
 						<small>{tOr(`hardware.reason.${device.reason}`, device.reason)}</small>
 					{:else}
@@ -125,45 +115,92 @@
 								>{t('hardware.alsoIn', { vms: elsewhere.join(', ') })}</small
 							>{/if}
 					{/if}
-				</div>
-			{/each}
-			{#each hardware?.hardware.usb ?? [] as device (device.port)}
-				{@const elsewhere = usedElsewhere(device.id)}
-				<div class="device">
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={usb.includes(device.id)}
-							disabled={device.stick}
-							onchange={() => (usb = toggle(usb, device.id))}
-						/><span>USB · {device.name || device.id}</span></label
+				{/snippet}
+				{#snippet control()}
+					<input
+						id="vm-pci-{device.address}"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={pci.includes(device.address)}
+						disabled={!device.passable}
+						onchange={() => togglePCI(device.address, device.companions)}
+					/>
+				{/snippet}
+			</SettingSub>
+			{#if pci.includes(device.address)}
+				{#each device.companions as address (address)}
+					<SettingSub
+						title={t('vms.form.companion', { address })}
+						desc={t('vms.form.requiredCompanions', { list: device.companions.join(', ') })}
+						for="vm-pci-{address}"
 					>
-					<span class="muted mono ids"
-						>{device.id} · {t('hardware.port', { port: device.port })}</span
-					>
+						{#snippet control()}
+							<input
+								id="vm-pci-{address}"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								checked={pci.includes(address)}
+								onchange={() => (pci = toggle(pci, address))}
+							/>
+						{/snippet}
+					</SettingSub>
+				{/each}
+			{/if}
+		{/each}
+		{#each hardware?.hardware.usb ?? [] as device (device.port)}
+			{@const elsewhere = usedElsewhere(device.id)}
+			<SettingSub title="USB · {device.name || device.id}" for="vm-usb-{device.port}">
+				{#snippet description()}
+					<span class="mono ids">{device.id} · {t('hardware.port', { port: device.port })}</span>
 					{#if device.stick}<small>{t('hardware.stick')}</small>{/if}
 					{#if device.duplicate}<small class="warn">{t('hardware.duplicate')}</small>{/if}
 					{#if elsewhere.length > 0}<small
 							>{t('hardware.alsoIn', { vms: elsewhere.join(', ') })}</small
 						>{/if}
-				</div>
-			{/each}
-			{#if hardware && hardware.hardware.pci.length === 0 && hardware.hardware.usb.length === 0}<p
-					class="muted note"
-				>
-					{t('vms.form.noDevices')}
-				</p>{/if}
-			<label class="check"
-				><input type="checkbox" bind:checked={autoGPU} /><span>{t('hardware.autoGPU')}</span></label
-			>
-			<p class="muted note">{t('hardware.autoGPUHint')}</p>
+				{/snippet}
+				{#snippet control()}
+					<input
+						id="vm-usb-{device.port}"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={usb.includes(device.id)}
+						disabled={device.stick}
+						onchange={() => (usb = toggle(usb, device.id))}
+					/>
+				{/snippet}
+			</SettingSub>
+		{/each}
+		{#if hardware && hardware.hardware.pci.length === 0 && hardware.hardware.usb.length === 0}
+			<div class="srow-block"><p class="muted note">{t('vms.form.noDevices')}</p></div>
+		{/if}
+		<SettingSub title={t('hardware.autoGPU')} desc={t('hardware.autoGPUHint')} for="vm-autogpu">
+			{#snippet control()}
+				<input
+					id="vm-autogpu"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					bind:checked={autoGPU}
+				/>
+			{/snippet}
+		</SettingSub>
+		<div class="srow-block">
 			{#if pci.length > 0}<small>{t('vms.form.passNote')}</small>{/if}
 			<a href="/settings/hardware">{t('vms.form.hardwarePage')}</a>
 		</div>
-	</details>
-	<details class="advanced" open={folders.length > 0}>
-		<summary>{t('vms.form.step5')} <span class="muted">{folders.length}</span></summary>
-		<div class="advanced-body">
+	</fieldset>
+</SettingRow>
+<SettingRow
+	id="vm-folders"
+	title={t('vms.form.step5')}
+	summary={String(folders.length)}
+	open={folders.length > 0}
+>
+	<fieldset class="sparts" disabled={running}>
+		<div class="srow-block">
 			{#if sharesError}<RetryNotice text={sharesError} onretry={onretryshares} />{/if}
 			<datalist id="vm-shares"
 				>{#each shares as share (share.name)}<option value={share.path}></option>{/each}</datalist
@@ -201,7 +238,7 @@
 					</select>
 					<button
 						type="button"
-						class="btn small"
+						class="btn"
 						aria-label={t('vms.form.folderRemove')}
 						onclick={() => folders.splice(index, 1)}>✕</button
 					>
@@ -210,17 +247,19 @@
 			{:else}
 				<p class="muted note">{t('vms.form.noFolders')}</p>
 			{/each}
-			<button
-				type="button"
-				class="add"
-				onclick={() =>
-					folders.push({
-						path: shares[0]?.path ?? '',
-						tag: shares[0]?.name ?? '',
-						readOnly: false,
-					})}
-				disabled={folders.length >= 8}>+ {t('vms.form.addFolder')}</button
-			>
+			<div>
+				<button
+					type="button"
+					class="btn"
+					onclick={() =>
+						folders.push({
+							path: shares[0]?.path ?? '',
+							tag: shares[0]?.name ?? '',
+							readOnly: false,
+						})}
+					disabled={folders.length >= 8}>+ {t('vms.form.addFolder')}</button
+				>
+			</div>
 			{#if folders.length > 0}
 				<small
 					>{t(template === 'windows' ? 'vms.form.folderWindows' : 'vms.form.folderLinux')}</small
@@ -230,42 +269,12 @@
 					>{/if}
 			{/if}
 		</div>
-	</details>
-</fieldset>
+	</fieldset>
+</SettingRow>
 
 <style>
-	.advanced {
-		border-top: 1px solid var(--panel-border);
-		padding-top: var(--space-2-5);
-		min-width: 0;
-	}
-	summary {
-		cursor: pointer;
-		font-size: var(--text-base);
-	}
-	.advanced-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding-top: var(--space-3);
-		min-width: 0;
-	}
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-4);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
 	small {
+		display: block;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -275,61 +284,12 @@
 	.note {
 		font-size: var(--text-base);
 	}
-	.small {
-		height: 2rem;
-		padding: 0 0.625rem;
-		font-size: var(--text-base);
-	}
 	.path {
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
-	.add {
-		align-self: flex-start;
-		height: 2.25rem;
-		padding: 0 var(--space-3);
-		background: transparent;
-		border: 1px dashed var(--border);
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		font-size: var(--text-base);
-		cursor: pointer;
-	}
-	fieldset {
-		min-width: 0;
-		margin: 0;
-		border: 0;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
-	.device {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		padding: var(--space-3) 14px;
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
 	.ids {
-		padding-left: 28px;
-		font-size: var(--text-sm);
-	}
-	.device small {
-		padding-left: 28px;
+		display: block;
 	}
 	.folder {
 		display: flex;
@@ -338,21 +298,18 @@
 		gap: var(--space-2);
 	}
 	.path-field {
-		flex: 2 1 260px;
+		flex: 2 1 180px;
 		width: auto;
 	}
 	.tag-field {
-		flex: 1 1 140px;
+		flex: 1 1 110px;
 		width: auto;
 	}
 	.ro-field {
-		flex: 0 1 200px;
+		flex: 0 1 170px;
 		width: auto;
 	}
 	.wide-note {
 		flex: 1 1 100%;
-	}
-	.netsel {
-		max-width: 100%;
 	}
 </style>

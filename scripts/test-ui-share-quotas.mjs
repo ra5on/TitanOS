@@ -27,9 +27,7 @@ try {
     });
     await page.goto(base + "/shares");
     await page.getByRole("button", { name: "Documents", exact: true }).click();
-    const details = page
-      .locator(".sfacts")
-      .filter({ hasText: "Obergrenze" });
+    const details = page.locator(".sfacts").filter({ hasText: "Obergrenze" });
     await details.getByText(/47(,0)? GB von 50(,0)? GB belegt/).waitFor();
     assert.equal(await page.locator(".quota-bar.full").count(), 1);
     await page.screenshot({ path: `${out}/share-details.png`, fullPage: true });

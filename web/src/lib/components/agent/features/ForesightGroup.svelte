@@ -176,8 +176,9 @@
 	}
 	/* Inside a sheet the group look of FeaturesPanel is not around. */
 	:global(.fsheet) .fgrp {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
 	}
 </style>

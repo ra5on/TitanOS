@@ -189,7 +189,7 @@
 					>
 				{/each}
 			</div>
-			<section class="dgrp tile ui-card">
+			<section class="dgrp sgroup">
 				<div class="drow col">
 					<small class="muted"
 						>{t('agent.f.docs.spentIn', { month: monthName(sum.month, true).split(' ')[0] })}</small
@@ -204,8 +204,8 @@
 					>
 				</div>
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.byType')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.byType')}</h3></div>
 				{#each sum.types as ty (ty.type)}
 					<div class="drow">
 						<span class="dic" style:--c={typeLook[ty.type].color} aria-hidden="true"
@@ -229,8 +229,8 @@
 					</div>
 				{/each}
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.open')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.open')}</h3></div>
 				{#each sum.open as e (e.id)}
 					<div class="drow">
 						<span class="dt"
@@ -249,8 +249,8 @@
 					</div>
 				{/each}
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.recent')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.recent')}</h3></div>
 				{#each sum.recent as e (e.id)}
 					<div class="drow">
 						<span class="dic" aria-hidden="true">{entryIcon(e)}</span>

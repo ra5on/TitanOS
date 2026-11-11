@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The section "Installation" of the VM form: the medium the VM starts
 	// from, the VirtIO drivers for Windows and whether it starts with the NAS.
+	import FormRow from '#lib/components/appform/FormRow.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
 	import VirtIODrivers from '#lib/components/VirtIODrivers.svelte';
@@ -39,11 +40,15 @@
 	let browsing = $state(false);
 </script>
 
-<fieldset class="content" disabled={running}>
+{#snippet mediumMore()}
+	{t(media.length > 0 ? 'vms.new.mediumHint' : 'vms.new.mediumNone')}
+	<a href="/vms/media">{t('media.add')}</a>
+{/snippet}
+
+<fieldset class="srows" disabled={running}>
 	{#if mediaError}<RetryNotice text={mediaError} onretry={onretrymedia} />{/if}
-	<div class="medium">
-		<label for="vm-iso">{t('vms.new.medium')}</label>
-		<div class="medium-pick">
+	<FormRow label={t('vms.new.medium')} id="vm-iso" more={mediumMore}>
+		<div class="line">
 			<input
 				id="vm-iso"
 				class="field mono"
@@ -61,92 +66,26 @@
 					aria-label={t('vms.iso.clear')}><Icon name="close" size={14} /></button
 				>{/if}
 		</div>
-		<small>{t(media.length > 0 ? 'vms.new.mediumHint' : 'vms.new.mediumNone')}</small>
-		<a href="/vms/media">{t('media.add')}</a>
-		{#if browsing}<IsoPicker
-				title={t('vms.iso.title')}
-				initial={iso}
-				submit={t('vms.iso.pick')}
-				onpick={(path) => {
-					iso = path;
-					browsing = false;
-				}}
-				onclose={() => (browsing = false)}
-			/>{/if}
-		{#if template === 'windows'}<VirtIODrivers
-				volume={virtioVolume}
-				initial={virtioInitial}
-				defaultAuto={virtioAuto}
-				disabled={running}
-				onready={(value) => (virtioISO = value)}
-				onbusy={(value) => (virtioPending = value)}
-			/>{/if}
-	</div>
+	</FormRow>
+	{#if browsing}<IsoPicker
+			title={t('vms.iso.title')}
+			initial={iso}
+			submit={t('vms.iso.pick')}
+			onpick={(path) => {
+				iso = path;
+				browsing = false;
+			}}
+			onclose={() => (browsing = false)}
+		/>{/if}
+	{#if template === 'windows'}<VirtIODrivers
+			volume={virtioVolume}
+			initial={virtioInitial}
+			defaultAuto={virtioAuto}
+			disabled={running}
+			onready={(value) => (virtioISO = value)}
+			onbusy={(value) => (virtioPending = value)}
+		/>{/if}
 </fieldset>
-<div class="start-options">
-	<label class="check"
-		><input type="checkbox" bind:checked={autostart} /><span>{t('vms.autostartLabel')}</span></label
-	>
-</div>
-
-<style>
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-4);
-	}
-	.start-options {
-		padding: 0 var(--space-4) var(--space-4);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	small {
-		font-size: var(--text-sm);
-		color: var(--muted);
-	}
-	.medium {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		font-size: var(--text-base);
-	}
-	.medium label {
-		font-size: var(--text-md);
-	}
-	.medium-pick {
-		display: flex;
-		gap: var(--space-2);
-	}
-	.medium-pick input {
-		flex: 1;
-		min-width: 0;
-	}
-	fieldset {
-		min-width: 0;
-		margin: 0;
-		border: 0;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
-</style>
+<FormRow label={t('vms.autostartLabel')} id="vm-autostart">
+	<input id="vm-autostart" class="switch" type="checkbox" role="switch" bind:checked={autostart} />
+</FormRow>
