@@ -111,26 +111,19 @@ async function open(width) {
     return r.fulfill({ json: data });
   });
   await made.page.goto(`${base}/settings/proxy`);
-  await made.page
-    .locator("section[aria-labelledby=proxy-apps] .route")
-    .first()
-    .waitFor();
+  await made.page.locator("section#proxy-apps .route").first().waitFor();
   return { ...made, calls };
 }
 
 try {
   {
     const { ctx, page, calls } = await open(1440);
-    const apps = page.locator("section[aria-labelledby=proxy-apps]");
+    const apps = page.locator("section#proxy-apps");
     // Apps come before the settings for all names.
+    // PLAN 78-1: groups are plain headings (SettingGroup), no tiles.
     const order = await page
-      .locator(".tile")
-      .evaluateAll((tiles) =>
-        tiles.map(
-          (t) =>
-            t.getAttribute("aria-labelledby") || t.querySelector("[id]")?.id,
-        ),
-      );
+      .locator(".settings-page section.sgroup")
+      .evaluateAll((groups) => groups.map((g) => g.id));
     assert.ok(
       order.indexOf("proxy-apps") < order.indexOf("proxy-general"),
       `order ${order}`,
@@ -200,16 +193,14 @@ try {
     );
     assert.equal(await apps.getByText("jellyfin", { exact: true }).count(), 0);
     // Explanations stay folded until asked for.
-    assert.equal(
-      await page.locator("details.tile").evaluate((d) => d.open),
-      false,
-    );
-    assert.equal(
-      await page
-        .locator("form[aria-labelledby=proxy-tailnet] details")
-        .evaluate((d) => d.open),
-      false,
-    );
+    for (const row of ["proxy-how", "proxy-tailnet-help"])
+      assert.equal(
+        await page
+          .locator(`#${row} button.srow-chev`)
+          .getAttribute("aria-expanded"),
+        "false",
+        row,
+      );
     // The main switch sits in the tool bar of the page (PLAN 64).
     assert.ok(
       await page
@@ -227,9 +218,7 @@ try {
   {
     const { ctx, page } = await open(390);
     assert.ok((await overflow(page)) <= 0, "no sideways scroll at 390 px");
-    const first = page
-      .locator("section[aria-labelledby=proxy-apps] .route")
-      .first();
+    const first = page.locator("section#proxy-apps .route").first();
     const box = await first.boundingBox();
     assert.ok(box && box.height < 110, `one app takes ${box?.height} px`);
     await page.screenshot({

@@ -1253,7 +1253,15 @@ input.switch:disabled {
 	--srow-radius: calc(6px * var(--radius-scale, 1));
 	--srow-indent: calc(var(--space-4) + 24px + var(--space-4));
 }
+.set-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-4);
+	min-width: 0;
+}
 .set-path {
+	flex: 1 1 auto;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
@@ -1534,4 +1542,22 @@ span.srow-chev {
    padding there (a window without the path starts with the bar). */
 :is(main.in-window, main.phone-page):has(.set-path) {
 	padding-top: var(--page-pad);
+}
+
+/* PLAN 78-1, shared by the pages of the area "Netzwerk": notes between the
+   rows of a group and the buttons of a form of rows (what `.panel` gave
+   them inside a tile). */
+:where(.sgroup) > p {
+	margin: var(--space-1) 0 0;
+}
+:where(.sgroup) .row-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2-5);
+}
+/* A tool of a page (tables, forms of the IPv64 account) under a plain group
+   heading keeps the layout of a panel, without the tile and its padding. */
+.sgroup > .panel {
+	padding: 0;
 }

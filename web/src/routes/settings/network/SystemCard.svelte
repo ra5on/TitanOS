@@ -3,6 +3,8 @@
 	// connection, so it applies at once and is not part of the draft.
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	let {
 		hostname,
@@ -42,68 +44,49 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="net-system">
-	<h2 class="tile-title" id="net-system">{t('netx.system')}</h2>
-	<form class="row" onsubmit={save}>
-		<label class="stack"
-			><span>{t('netcfg.hostname')}</span><input
-				class="field mono"
-				type="text"
-				maxlength="63"
-				autocapitalize="none"
-				spellcheck="false"
-				required
-				bind:value
-				oninput={() => {
-					edited = true;
-					saved = false;
-				}}
-				{disabled}
-			/><small class="muted">{t('netcfg.hostnameHint')}</small></label
+<!-- PLAN 78-1: the name is a row with its field and its own button (typed
+     text is never stored half-way); the time zone leads to its page. -->
+<SettingGroup title={t('netx.system')} id="net-system">
+	<form onsubmit={save}>
+		<SettingRow
+			icon="home"
+			title={t('netcfg.hostname')}
+			desc={t('netcfg.hostnameHint')}
+			for="net-hostname"
 		>
-		<div class="row-actions">
-			<button
-				class="btn btn-primary"
-				disabled={disabled || busy || !edited || !valid || value === hostname}
-				>{t('netx.saveHostname')}</button
-			>
-			{#if saved}<span class="chip ok" role="status">{t('netx.hostnameSaved')}</span>{/if}
-		</div>
+			{#snippet control()}
+				<input
+					id="net-hostname"
+					class="field mono"
+					type="text"
+					maxlength="63"
+					autocapitalize="none"
+					spellcheck="false"
+					required
+					bind:value
+					oninput={() => {
+						edited = true;
+						saved = false;
+					}}
+					{disabled}
+				/>
+				<button
+					class="btn btn-primary"
+					disabled={disabled || busy || !edited || !valid || value === hostname}
+					>{t('netx.saveHostname')}</button
+				>
+				{#if saved}<span class="chip ok" role="status">{t('netx.hostnameSaved')}</span>{/if}
+			{/snippet}
+		</SettingRow>
 	</form>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	<div class="divided zone">
-		<span class="muted">{t('netx.timezone')}</span>
-		<span class="mono">{timezone || '–'}</span>
-		<a href="/settings/timezone">{t('netx.timezoneChange')}</a>
-	</div>
-</section>
+	<SettingRow icon="clock" title={t('netx.timezone')} href="/settings/timezone">
+		{#snippet control()}<span class="mono">{timezone || '–'}</span>{/snippet}
+	</SettingRow>
+</SettingGroup>
 
 <style>
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-2-5) var(--space-4);
-	}
-	.row .stack {
-		flex: 1 1 18rem;
-	}
-	.row .row-actions {
-		padding-bottom: 22px;
-	}
-	small {
-		font-size: var(--text-sm);
-	}
-	.zone {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1-5) var(--space-3);
-		align-items: baseline;
-		font-size: var(--text-md);
-	}
-	@media (max-width: 760px) {
-		.row .row-actions {
-			padding-bottom: 0;
-		}
+	form {
+		display: contents;
 	}
 </style>

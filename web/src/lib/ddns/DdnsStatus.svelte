@@ -4,7 +4,8 @@
 	// Dynamic DNS and Settings › IPv64 › DynDNS.
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { ddnsBadge, updateNow, type DdnsStatus } from './ddns.ts';
 
 	let {
@@ -36,65 +37,64 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby={id}>
-	<h2 class="tile-title" {id} use:revealTarget>{t('ddns.statusTitle')}</h2>
-	<div class="head"><span class="chip {badge.tone}">{t(badge.text)}</span></div>
+<!-- PLAN 78-1: the state is one row that stands open – its chip at the
+     right, the addresses and times and the two buttons as its parts. -->
+<SettingGroup title={t('ddns.statusTitle')} {id} desc={intro}>
 	{#if status.disabled}<p class="notice-warn">{t('ddns.devMode')}</p>{/if}
-	<p class="muted">{intro}</p>
-	<dl>
-		<div>
-			<dt>{t('ddns.currentIPv4')}</dt>
-			<dd class="mono">{status.currentIPv4 || '–'}</dd>
+	<SettingRow id="{id}-now" icon="activity" title={t('ddns.addresses')} open>
+		{#snippet control()}<span class="chip {badge.tone}">{t(badge.text)}</span>{/snippet}
+		<div class="srow-block">
+			<dl>
+				<div>
+					<dt>{t('ddns.currentIPv4')}</dt>
+					<dd class="mono">{status.currentIPv4 || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ddns.currentIPv6')}</dt>
+					<dd class="mono">{status.currentIPv6 || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ddns.publishedIPv4')}</dt>
+					<dd class="mono">{status.publishedIPv4 || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ddns.publishedIPv6')}</dt>
+					<dd class="mono">{status.publishedIPv6 || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('ddns.lastCheck')}</dt>
+					<dd>{when(status.lastCheck)}</dd>
+				</div>
+				<div>
+					<dt>{t('ddns.lastUpdate')}</dt>
+					<dd>{when(status.lastUpdate)}</dd>
+				</div>
+				{#if status.nextCheck}<div>
+						<dt>{t('ddns.nextCheck')}</dt>
+						<dd>{when(status.nextCheck)}</dd>
+					</div>{/if}
+			</dl>
+			{#if status.lastError}<div class="notice-error" role="alert">
+					{t('ddns.lastError')}
+					<pre>{status.lastError}</pre>
+				</div>{/if}
 		</div>
-		<div>
-			<dt>{t('ddns.currentIPv6')}</dt>
-			<dd class="mono">{status.currentIPv6 || '–'}</dd>
+		<div class="srow-block actions">
+			<button
+				type="button"
+				class="btn"
+				disabled={!status.settings.enabled || status.running || status.disabled}
+				onclick={update}>{t('ddns.updateNow')}</button
+			>
+			<button type="button" class="btn" onclick={onrefresh}>{t('ddns.refresh')}</button>
 		</div>
-		<div>
-			<dt>{t('ddns.publishedIPv4')}</dt>
-			<dd class="mono">{status.publishedIPv4 || '–'}</dd>
-		</div>
-		<div>
-			<dt>{t('ddns.publishedIPv6')}</dt>
-			<dd class="mono">{status.publishedIPv6 || '–'}</dd>
-		</div>
-		<div>
-			<dt>{t('ddns.lastCheck')}</dt>
-			<dd>{when(status.lastCheck)}</dd>
-		</div>
-		<div>
-			<dt>{t('ddns.lastUpdate')}</dt>
-			<dd>{when(status.lastUpdate)}</dd>
-		</div>
-		{#if status.nextCheck}<div>
-				<dt>{t('ddns.nextCheck')}</dt>
-				<dd>{when(status.nextCheck)}</dd>
-			</div>{/if}
-	</dl>
-	{#if status.lastError}<div class="notice-error" role="alert">
-			{t('ddns.lastError')}
-			<pre>{status.lastError}</pre>
-		</div>{/if}
-	<div class="row-actions">
-		<button
-			type="button"
-			class="btn"
-			disabled={!status.settings.enabled || status.running || status.disabled}
-			onclick={update}>{t('ddns.updateNow')}</button
-		>
-		<button type="button" class="btn" onclick={onrefresh}>{t('ddns.refresh')}</button>
-	</div>
+	</SettingRow>
 	{#if updateError}<p class="notice-error" role="alert">{updateError}</p>{/if}
-</section>
+</SettingGroup>
 
 <style>
-	section {
+	dl {
 		font-size: var(--text-md);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
 	}
 	dl {
 		display: grid;

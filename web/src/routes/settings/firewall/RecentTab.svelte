@@ -3,7 +3,7 @@
 	import { api, type FirewallStatus } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 
 	let {
 		status,
@@ -32,9 +32,14 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="firewall-recent">
-	<h2 class="tile-title" id="firewall-recent" use:revealTarget>{t('firewall.recent')}</h2>
-	<p class="muted">{t('firewall.recentText')}</p>
+<!-- PLAN 78-1: the log stays a table; its buttons stand at the heading. -->
+<SettingGroup title={t('firewall.recent')} id="firewall-recent" desc={t('firewall.recentText')}>
+	{#snippet tools()}
+		<button class="btn" type="button" onclick={onreload}>{t('firewall.refresh')}</button>
+		<button class="btn" type="button" disabled={busy || !status.recent.length} onclick={clear}
+			>{t('firewall.clearRecent')}</button
+		>
+	{/snippet}
 	{#if status.recent.length}<div class="table-wrap">
 			<table class="data-table recent">
 				<thead
@@ -67,13 +72,7 @@
 			</table>
 		</div>{:else}<p class="muted">{t('firewall.noRecent')}</p>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	<div class="row-actions">
-		<button class="btn" type="button" onclick={onreload}>{t('firewall.refresh')}</button>
-		<button class="btn" type="button" disabled={busy || !status.recent.length} onclick={clear}
-			>{t('firewall.clearRecent')}</button
-		>
-	</div>
-</section>
+</SettingGroup>
 
 <style>
 	.recent {

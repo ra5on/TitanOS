@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Overview: plan and usage, the account log page by page, API keys.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -111,144 +112,148 @@
 </script>
 
 <div class="ipv64-tab">
-	<section class="tile panel" aria-labelledby="ipv64-plan">
-		<h2 class="tile-title" id="ipv64-plan">{t('ipv64x.plan')}</h2>
-		{#if meError}<p class="notice-error" role="alert">{meError}</p>{/if}
-		{#if me}
-			<dl>
-				<div>
-					<dt>{t('ipv64x.planName')}</dt>
-					<dd>{me.plan.name}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.validUntil')}</dt>
-					<dd>{me.plan.valid_until ? when(me.plan.valid_until) : t('ipv64x.noEnd')}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.account')}</dt>
-					<dd>{me.username ?? '–'}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.keyInUse')}</dt>
-					<dd>{me.auth.key_name || me.auth.type}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.retention')}</dt>
-					<dd>{t('ipv64x.days', { count: me.log_retention_days })}</dd>
-				</div>
-			</dl>
-			<h3>{t('ipv64x.usage')}</h3>
-			<dl class="usage">
-				{#each USAGE as name (name)}
-					{#if me.usage[name]}
-						{@const percent = usagePercent(me.usage[name])}
-						<div>
-							<dt>{t(`ipv64x.usage.${name}` as MessageKey)}</dt>
-							<dd>
-								{usageText(me.usage[name])}{#if me.usage[name].limited}<span class="chip error"
-										>{t('ipv64x.limited')}</span
-									>{/if}
-								{#if percent !== null}<div
-										class="meter"
-										role="meter"
-										aria-valuenow={percent}
-										aria-valuemin={0}
-										aria-valuemax={100}
-									>
-										<span style:width="{percent}%"></span>
-									</div>{/if}
-							</dd>
-						</div>
-					{/if}
-				{/each}
-			</dl>
-			<p class="muted hint">{t('ipv64x.planHint')}</p>
-		{/if}
-	</section>
-
-	<section class="tile panel" aria-labelledby="ipv64-keys">
-		<h2 class="tile-title" id="ipv64-keys">{t('ipv64x.apiKeys')}</h2>
-		<p class="muted hint">{t('ipv64x.apiKeysHint')}</p>
-		{#if keyError}<p class="notice-error" role="alert">{keyError}</p>{/if}
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('ipv64x.name')}</th><th>{t('ipv64x.hint')}</th><th>{t('ipv64x.expires')}</th><th
-							>{t('ipv64x.uses')}</th
-						><th></th></tr
-					></thead
-				>
-				<tbody>
-					{#each keys as key (key.id)}
-						<tr>
-							<td
-								>{key.name}{#each key.usedBy as use (use)}<span class="chip ok"
-										>{t(`ipv64x.usedBy.${use}` as MessageKey)}</span
-									>{/each}</td
-							>
-							<td class="mono">{key.token_hint}</td>
-							<td
-								>{key.expires_at ? when(key.expires_at) : t('ipv64x.never')}{#if key.expired}<span
-										class="chip error">{t('ipv64x.expired')}</span
-									>{/if}</td
-							>
-							<td>{key.uses}</td>
-							<td class="actions">
-								{#if key.usedBy.length}
-									<span class="muted">{t('ipv64x.keyUsed')}</span>
-								{:else}
-									<button
-										type="button"
-										class="btn"
-										disabled={keyBusy}
-										onclick={() => (removing = key)}>{t('ipv64x.delete')}</button
-									>
-								{/if}
-							</td>
-						</tr>
-					{:else}
-						<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
+	<SettingGroup title={t('ipv64x.plan')} id="ipv64-plan">
+		<div class="panel">
+			{#if meError}<p class="notice-error" role="alert">{meError}</p>{/if}
+			{#if me}
+				<dl>
+					<div>
+						<dt>{t('ipv64x.planName')}</dt>
+						<dd>{me.plan.name}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.validUntil')}</dt>
+						<dd>{me.plan.valid_until ? when(me.plan.valid_until) : t('ipv64x.noEnd')}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.account')}</dt>
+						<dd>{me.username ?? '–'}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.keyInUse')}</dt>
+						<dd>{me.auth.key_name || me.auth.type}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.retention')}</dt>
+						<dd>{t('ipv64x.days', { count: me.log_retention_days })}</dd>
+					</div>
+				</dl>
+				<h3>{t('ipv64x.usage')}</h3>
+				<dl class="usage">
+					{#each USAGE as name (name)}
+						{#if me.usage[name]}
+							{@const percent = usagePercent(me.usage[name])}
+							<div>
+								<dt>{t(`ipv64x.usage.${name}` as MessageKey)}</dt>
+								<dd>
+									{usageText(me.usage[name])}{#if me.usage[name].limited}<span class="chip error"
+											>{t('ipv64x.limited')}</span
+										>{/if}
+									{#if percent !== null}<div
+											class="meter"
+											role="meter"
+											aria-valuenow={percent}
+											aria-valuemin={0}
+											aria-valuemax={100}
+										>
+											<span style:width="{percent}%"></span>
+										</div>{/if}
+								</dd>
+							</div>
+						{/if}
 					{/each}
-				</tbody>
-			</table>
+				</dl>
+				<p class="muted hint">{t('ipv64x.planHint')}</p>
+			{/if}
 		</div>
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => (creating = true)}
-				>{t('ipv64x.keyCreate')}</button
-			>
-		</div>
-	</section>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="ipv64-log">
-		<h2 class="tile-title" id="ipv64-log">{t('ipv64x.log')}</h2>
-		{#if logError}<p class="notice-error" role="alert">{logError}</p>{/if}
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('ipv64x.time')}</th><th>{t('ipv64x.category')}</th><th>{t('ipv64x.message')}</th
-						></tr
-					></thead
+	<SettingGroup title={t('ipv64x.apiKeys')} id="ipv64-keys">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.apiKeysHint')}</p>
+			{#if keyError}<p class="notice-error" role="alert">{keyError}</p>{/if}
+			<div class="table-wrap">
+				<table>
+					<thead
+						><tr
+							><th>{t('ipv64x.name')}</th><th>{t('ipv64x.hint')}</th><th>{t('ipv64x.expires')}</th
+							><th>{t('ipv64x.uses')}</th><th></th></tr
+						></thead
+					>
+					<tbody>
+						{#each keys as key (key.id)}
+							<tr>
+								<td
+									>{key.name}{#each key.usedBy as use (use)}<span class="chip ok"
+											>{t(`ipv64x.usedBy.${use}` as MessageKey)}</span
+										>{/each}</td
+								>
+								<td class="mono">{key.token_hint}</td>
+								<td
+									>{key.expires_at ? when(key.expires_at) : t('ipv64x.never')}{#if key.expired}<span
+											class="chip error">{t('ipv64x.expired')}</span
+										>{/if}</td
+								>
+								<td>{key.uses}</td>
+								<td class="actions">
+									{#if key.usedBy.length}
+										<span class="muted">{t('ipv64x.keyUsed')}</span>
+									{:else}
+										<button
+											type="button"
+											class="btn"
+											disabled={keyBusy}
+											onclick={() => (removing = key)}>{t('ipv64x.delete')}</button
+										>
+									{/if}
+								</td>
+							</tr>
+						{:else}
+							<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => (creating = true)}
+					>{t('ipv64x.keyCreate')}</button
 				>
-				<tbody>
-					{#each logs as entry (entry.id)}
-						<tr
-							><td>{when(entry.time)}</td><td>{entry.title}</td><td class="wrap">{entry.message}</td
+			</div>
+		</div>
+	</SettingGroup>
+
+	<SettingGroup title={t('ipv64x.log')} id="ipv64-log">
+		<div class="panel">
+			{#if logError}<p class="notice-error" role="alert">{logError}</p>{/if}
+			<div class="table-wrap">
+				<table>
+					<thead
+						><tr
+							><th>{t('ipv64x.time')}</th><th>{t('ipv64x.category')}</th><th
+								>{t('ipv64x.message')}</th
 							></tr
-						>
-					{:else}
-						<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
+						></thead
+					>
+					<tbody>
+						{#each logs as entry (entry.id)}
+							<tr
+								><td>{when(entry.time)}</td><td>{entry.title}</td><td class="wrap"
+									>{entry.message}</td
+								></tr
+							>
+						{:else}
+							<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			{#if nextBefore}<div class="row-actions">
+					<button type="button" class="btn" disabled={logBusy} onclick={() => loadLogs(true)}
+						>{t('ipv64x.older')}</button
+					>
+				</div>{/if}
 		</div>
-		{#if nextBefore}<div class="row-actions">
-				<button type="button" class="btn" disabled={logBusy} onclick={() => loadLogs(true)}
-					>{t('ipv64x.older')}</button
-				>
-			</div>{/if}
-	</section>
+	</SettingGroup>
 </div>
 
 {#if creating}

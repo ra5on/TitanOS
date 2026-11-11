@@ -5,6 +5,8 @@
 	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { NetworkStatus } from '#lib/network.ts';
 
@@ -39,24 +41,34 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="net-vlans" id="vlans">
-	<h2 class="tile-title" id="net-vlans">{t('netx.vlans.title')}<HelpTip term="vlan" /></h2>
-	<label class="check">
-		<input
-			type="checkbox"
-			checked={enabled}
-			disabled={disabled || busy || (enabled && inUse)}
-			onchange={(e) => {
-				const on = e.currentTarget.checked;
-				e.currentTarget.checked = enabled;
-				if (on) asking = true;
-				else void save(false);
-			}}
-		/><span>{t('netx.vlans.use')}</span>
-	</label>
-	<p class="muted hint">{t(enabled && inUse ? 'netx.vlans.inUse' : 'netx.vlans.hint')}</p>
+<!-- PLAN 78-1: one switch, one row. -->
+<SettingGroup title={t('netx.vlans.title')} id="vlans">
+	<SettingRow
+		icon="columns"
+		title={t('netx.vlans.use')}
+		desc={t(enabled && inUse ? 'netx.vlans.inUse' : 'netx.vlans.hint')}
+		for="net-vlans-switch"
+	>
+		{#snippet badge()}<HelpTip term="vlan" />{/snippet}
+		{#snippet control()}
+			<input
+				id="net-vlans-switch"
+				class="switch"
+				type="checkbox"
+				role="switch"
+				checked={enabled}
+				disabled={disabled || busy || (enabled && inUse)}
+				onchange={(e) => {
+					const on = e.currentTarget.checked;
+					e.currentTarget.checked = enabled;
+					if (on) asking = true;
+					else void save(false);
+				}}
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if error && !asking}<p class="notice-error" role="alert">{error}</p>{/if}
-</section>
+</SettingGroup>
 
 {#if asking}
 	<Dialog title={t('netx.vlans.confirmTitle')} locked={busy} onclose={() => (asking = false)}>
@@ -73,9 +85,3 @@
 		</div>
 	</Dialog>
 {/if}
-
-<style>
-	.hint {
-		font-size: var(--text-base);
-	}
-</style>

@@ -3,6 +3,7 @@
 	// how they are proven (DNS provider or port 80), state of the renewal.
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { api, ApiError } from '#lib/api.ts';
 	import DnsProviderFields from '#lib/components/DnsProviderFields.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -17,7 +18,8 @@
 	} from '#lib/dns-providers.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	type Settings = {
 		enabled: boolean;
@@ -101,6 +103,14 @@
 			loadError = apiErrorText(err);
 		}
 	}
+	// A link to a group of this page (#le-settings …): its content arrives after the
+	// browser's own anchor scroll, so bring it into view then.
+	const loaded = $derived(!!status);
+	$effect(() => {
+		const id = page.url.hash.slice(1);
+		if (!loaded || !id) return;
+		requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+	});
 	onMount(() => {
 		load();
 	});
@@ -200,143 +210,185 @@
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
-	<section class="tile panel" aria-labelledby="le-status">
-		<h2 class="tile-title" id="le-status" use:revealTarget>{t('letsencrypt.statusTitle')}</h2>
-		<div class="head">
-			<span class="chip {badge.tone}">{t(badge.text)}</span>
-			{#if status.running && status.phase}<span class="muted" role="status"
-					>{t(`letsencrypt.phase.${status.phase}` as MessageKey)}</span
-				>{/if}
-		</div>
+	<!-- PLAN 78-1: the state is one row that stands open – its chip at the
+	     right, the certificate, the last attempts and the buttons as parts. -->
+	<SettingGroup title={t('letsencrypt.statusTitle')} id="le-status" desc={t('letsencrypt.intro')}>
 		{#if status.disabled}<p class="notice-warn">{t('letsencrypt.devMode')}</p>{/if}
-		<p class="muted">{t('letsencrypt.intro')}</p>
-		{#if status.certificate}
-			{#if status.certificateStaging}<p class="notice-warn">{t('letsencrypt.stagingCert')}</p>{/if}
-			{#if daysLeft < 14}<p class="notice-warn">
-					{t('letsencrypt.expiring', { days: Math.max(daysLeft, 0) })}
-				</p>{/if}
-			<dl>
-				<div>
-					<dt>{t('access.certIssuer')}</dt>
-					<dd>{status.certificate.issuer || '–'}</dd>
-				</div>
-				<div>
-					<dt>{t('access.certUntil')}</dt>
-					<dd>{formatDateTime(new Date(status.certificate.notAfter))}</dd>
-				</div>
-				{#if status.renewAt}<div>
-						<dt>{t('letsencrypt.renewAt')}</dt>
-						<dd>{formatDateTime(new Date(status.renewAt))}</dd>
-					</div>{/if}
-				<div class="wide">
-					<dt>{t('access.certNames')}</dt>
-					<dd class="mono">{status.certificate.names.join(', ')}</dd>
-				</div>
-			</dl>
-		{:else if status.settings.enabled}
-			<p class="muted">{t('letsencrypt.noCert')}</p>
-		{/if}
-		{#if status.lastError}
-			<div class="notice-error" role="alert">
-				{t('letsencrypt.lastError', { count: status.failures })}
-				<pre>{status.lastError}</pre>
-				{#if status.nextAttempt}<p>
-						{t('letsencrypt.nextAttempt', { time: formatDateTime(new Date(status.nextAttempt)) })}
-					</p>{/if}
-			</div>
-		{/if}
-		<dl>
-			{#if status.lastAttempt}<div>
-					<dt>{t('letsencrypt.lastAttempt')}</dt>
-					<dd>{formatDateTime(new Date(status.lastAttempt))}</dd>
-				</div>{/if}
-			{#if status.lastSuccess}<div>
-					<dt>{t('letsencrypt.lastSuccess')}</dt>
-					<dd>{formatDateTime(new Date(status.lastSuccess))}</dd>
-				</div>{/if}
-		</dl>
-		<div class="row-actions">
-			<button
-				type="button"
-				class="btn"
-				disabled={!status.settings.enabled || status.running || status.disabled}
-				onclick={renew}>{t('letsencrypt.renewNow')}</button
-			>
-			<a class="btn" href="/settings/access#access-cert">{t('letsencrypt.toAccess')}</a>
-		</div>
-		{#if renewError}<p class="notice-error" role="alert">{renewError}</p>{/if}
-	</section>
-
-	<form class="tile panel" aria-labelledby="le-settings" onsubmit={save}>
-		<h2 class="tile-title" id="le-settings" use:revealTarget>{t('letsencrypt.settingsTitle')}</h2>
-		<label class="check"
-			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span
-				>{t('letsencrypt.enable')}</span
-			></label
-		>
-		<p class="muted hint">{t('letsencrypt.enableHint')}</p>
-
-		<label class="stack"
-			><span>{t('letsencrypt.names')}</span><textarea
-				class="field mono"
-				rows="3"
-				bind:value={names}
-				placeholder="nas.example.org"
-				spellcheck="false"
-				autocapitalize="off"
-				disabled={busy}></textarea></label
-		>
-		<p class="muted hint">{t('letsencrypt.namesHint')}</p>
-		{#if badNames.length}<p class="notice-warn" role="alert">
-				{t(wildcardAllowed ? 'letsencrypt.namesInvalid' : 'letsencrypt.namesInvalidHttp', {
-					names: badNames.join(', '),
-				})}
-			</p>{/if}
-
-		<div class="divided">
-			<h3 id="le-challenge">{t('letsencrypt.challenge')}</h3>
-			<label class="check"
-				><input
-					type="radio"
-					name="challenge"
-					value="dns-01"
-					bind:group={challenge}
-					disabled={busy}
-				/><span>{t('letsencrypt.challengeDns')}</span></label
-			>
-			<p class="muted hint">{t('letsencrypt.challengeDnsHint')}</p>
-			<label class="check"
-				><input
-					type="radio"
-					name="challenge"
-					value="http-01"
-					bind:group={challenge}
-					disabled={busy}
-				/><span>{t('letsencrypt.challengeHttp')}</span></label
-			>
-			<p class="muted hint">{t('letsencrypt.challengeHttpHint')}</p>
-			{#if challenge === 'http-01' && !status.httpPort}<p class="notice-warn">
-					{t('letsencrypt.noHttpPort')}
-				</p>{/if}
-			{#if challenge === 'http-01' && status.httpPort && status.firewall && !status.internetHttp}
-				<div class="notice-warn" role="note" data-testid="le-firewall-http">
-					<p>{t('letsencrypt.firewallHttp')}</p>
-					<p>{t('letsencrypt.firewallHttpWays')}</p>
-					<div class="row-actions">
-						<a class="btn" href="/settings/firewall?tab=policies#firewall-policies"
-							>{t('letsencrypt.toFirewall')}</a
-						>
-						<button type="button" class="btn" disabled={busy} onclick={() => (challenge = 'dns-01')}
-							>{t('letsencrypt.useDns')}</button
-						>
+		<SettingRow id="le-cert" icon="lock" title={t('letsencrypt.certRow')} open>
+			{#snippet control()}
+				{#if status!.running && status!.phase}<span class="muted" role="status"
+						>{t(`letsencrypt.phase.${status!.phase}` as MessageKey)}</span
+					>{/if}
+				<span class="chip {badge.tone}">{t(badge.text)}</span>
+			{/snippet}
+			<div class="srow-block">
+				{#if status.certificate}
+					{#if status.certificateStaging}<p class="notice-warn">
+							{t('letsencrypt.stagingCert')}
+						</p>{/if}
+					{#if daysLeft < 14}<p class="notice-warn">
+							{t('letsencrypt.expiring', { days: Math.max(daysLeft, 0) })}
+						</p>{/if}
+					<dl>
+						<div>
+							<dt>{t('access.certIssuer')}</dt>
+							<dd>{status.certificate.issuer || '–'}</dd>
+						</div>
+						<div>
+							<dt>{t('access.certUntil')}</dt>
+							<dd>{formatDateTime(new Date(status.certificate.notAfter))}</dd>
+						</div>
+						{#if status.renewAt}<div>
+								<dt>{t('letsencrypt.renewAt')}</dt>
+								<dd>{formatDateTime(new Date(status.renewAt))}</dd>
+							</div>{/if}
+						<div class="wide">
+							<dt>{t('access.certNames')}</dt>
+							<dd class="mono">{status.certificate.names.join(', ')}</dd>
+						</div>
+					</dl>
+				{:else if status.settings.enabled}
+					<p class="muted">{t('letsencrypt.noCert')}</p>
+				{/if}
+				{#if status.lastError}
+					<div class="notice-error" role="alert">
+						{t('letsencrypt.lastError', { count: status.failures })}
+						<pre>{status.lastError}</pre>
+						{#if status.nextAttempt}<p>
+								{t('letsencrypt.nextAttempt', {
+									time: formatDateTime(new Date(status.nextAttempt)),
+								})}
+							</p>{/if}
 					</div>
-				</div>
-			{/if}
-		</div>
+				{/if}
+				<dl>
+					{#if status.lastAttempt}<div>
+							<dt>{t('letsencrypt.lastAttempt')}</dt>
+							<dd>{formatDateTime(new Date(status.lastAttempt))}</dd>
+						</div>{/if}
+					{#if status.lastSuccess}<div>
+							<dt>{t('letsencrypt.lastSuccess')}</dt>
+							<dd>{formatDateTime(new Date(status.lastSuccess))}</dd>
+						</div>{/if}
+				</dl>
+			</div>
+			<div class="srow-block actions">
+				<button
+					type="button"
+					class="btn"
+					disabled={!status.settings.enabled || status.running || status.disabled}
+					onclick={renew}>{t('letsencrypt.renewNow')}</button
+				>
+				<a class="btn" href="/settings/access#access-cert">{t('letsencrypt.toAccess')}</a>
+			</div>
+		</SettingRow>
+		{#if renewError}<p class="notice-error" role="alert">{renewError}</p>{/if}
+	</SettingGroup>
 
-		{#if challenge === 'dns-01'}
-			<div class="divided">
-				<h3 id="le-provider">{t('dnsProvider.title')}</h3>
+	<!-- The settings are rows; one Save for all of them (one request, and
+	     names and sign-in are typed text). -->
+	<form class="rows" onsubmit={save}>
+		<SettingGroup title={t('letsencrypt.settingsTitle')} id="le-settings">
+			<SettingRow
+				icon="power"
+				title={t('letsencrypt.enable')}
+				desc={t('letsencrypt.enableHint')}
+				for="le-enabled"
+			>
+				{#snippet control()}
+					<input
+						id="le-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={enabled}
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="list"
+				title={t('letsencrypt.names')}
+				desc={t('letsencrypt.namesHint')}
+				for="le-names"
+			>
+				{#snippet control()}
+					<textarea
+						id="le-names"
+						class="field mono"
+						rows="3"
+						bind:value={names}
+						placeholder="nas.example.org"
+						spellcheck="false"
+						autocapitalize="off"
+						disabled={busy}></textarea>
+				{/snippet}
+			</SettingRow>
+			{#if badNames.length}<p class="notice-warn" role="alert">
+					{t(wildcardAllowed ? 'letsencrypt.namesInvalid' : 'letsencrypt.namesInvalidHttp', {
+						names: badNames.join(', '),
+					})}
+				</p>{/if}
+
+			<SettingRow
+				id="le-challenge"
+				icon="shield"
+				title={t('letsencrypt.challenge')}
+				summary={t(
+					challenge === 'dns-01'
+						? 'letsencrypt.challengeDnsShort'
+						: 'letsencrypt.challengeHttpShort',
+				)}
+				open
+			>
+				<div class="srow-block">
+					<fieldset class="choice">
+						<legend class="sr-only">{t('letsencrypt.challenge')}</legend>
+						<label class="check"
+							><input
+								type="radio"
+								name="challenge"
+								value="dns-01"
+								bind:group={challenge}
+								disabled={busy}
+							/><span>{t('letsencrypt.challengeDns')}</span></label
+						>
+						<p class="muted hint">{t('letsencrypt.challengeDnsHint')}</p>
+						<label class="check"
+							><input
+								type="radio"
+								name="challenge"
+								value="http-01"
+								bind:group={challenge}
+								disabled={busy}
+							/><span>{t('letsencrypt.challengeHttp')}</span></label
+						>
+						<p class="muted hint">{t('letsencrypt.challengeHttpHint')}</p>
+					</fieldset>
+					{#if challenge === 'http-01' && !status.httpPort}<p class="notice-warn">
+							{t('letsencrypt.noHttpPort')}
+						</p>{/if}
+					{#if challenge === 'http-01' && status.httpPort && status.firewall && !status.internetHttp}
+						<div class="notice-warn" role="note" data-testid="le-firewall-http">
+							<p>{t('letsencrypt.firewallHttp')}</p>
+							<p>{t('letsencrypt.firewallHttpWays')}</p>
+							<div class="row-actions">
+								<a class="btn" href="/settings/firewall?tab=policies#firewall-policies"
+									>{t('letsencrypt.toFirewall')}</a
+								>
+								<button
+									type="button"
+									class="btn"
+									disabled={busy}
+									onclick={() => (challenge = 'dns-01')}>{t('letsencrypt.useDns')}</button
+								>
+							</div>
+						</div>
+					{/if}
+				</div>
+			</SettingRow>
+
+			{#if challenge === 'dns-01'}
 				<DnsProviderFields
 					bind:form={provider}
 					bind:cleared
@@ -347,112 +399,155 @@
 					disabled={busy}
 					id="le-provider"
 				/>
-				<label class="stack"
-					><span>{t('letsencrypt.propagation')}</span><input
-						class="field mono short"
-						type="number"
-						min="0"
-						max="3600"
-						bind:value={propagation}
-						placeholder={t('letsencrypt.propagationDefault')}
-						disabled={busy}
-					/></label
+				<SettingRow
+					icon="clock"
+					title={t('letsencrypt.propagation')}
+					desc={t('letsencrypt.propagationHint')}
+					for="le-propagation"
 				>
-				<p class="muted hint">{t('letsencrypt.propagationHint')}</p>
+					{#snippet control()}
+						<input
+							id="le-propagation"
+							class="field mono"
+							type="number"
+							min="0"
+							max="3600"
+							bind:value={propagation}
+							placeholder={t('letsencrypt.propagationDefault')}
+							disabled={busy}
+						/>
+					{/snippet}
+				</SettingRow>
 				{#if propagationBad}<p class="notice-warn" role="alert">
 						{t('letsencrypt.propagationInvalid')}
 					</p>{/if}
-			</div>
-			<div class="divided">
-				<label class="check"
-					><input type="checkbox" bind:checked={apps} disabled={busy} /><span
-						>{t('letsencrypt.apps')}</span
-					></label
-				>
-				{#if status.appDomain}
-					<p class="muted hint">
-						{t('letsencrypt.appsHint', { wildcard: `*.${status.appDomain}` })}
-					</p>
-				{:else}
-					<p class="muted hint">
-						{t('letsencrypt.appsNoDomain')} <a href="/settings/proxy">{t('proxy.settingsTitle')}</a>
-					</p>
-				{/if}
-			</div>
-		{/if}
+				<SettingRow icon="box" title={t('letsencrypt.apps')} for="le-apps">
+					{#snippet description()}
+						{#if status!.appDomain}
+							{t('letsencrypt.appsHint', { wildcard: `*.${status!.appDomain}` })}
+						{:else}
+							{t('letsencrypt.appsNoDomain')}
+							<a href="/settings/proxy">{t('proxy.settingsTitle')}</a>
+						{/if}
+					{/snippet}
+					{#snippet control()}
+						<input
+							id="le-apps"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							bind:checked={apps}
+							disabled={busy}
+						/>
+					{/snippet}
+				</SettingRow>
+			{/if}
 
-		<div class="divided">
-			<label class="stack"
-				><span
-					>{t('letsencrypt.email')} <span class="muted">({t('dnsProvider.optional')})</span></span
-				><input
-					class="field"
-					type="email"
-					bind:value={email}
-					autocomplete="email"
-					disabled={busy}
-				/></label
+			<SettingRow
+				icon="send"
+				title="{t('letsencrypt.email')} ({t('dnsProvider.optional')})"
+				desc={t('letsencrypt.emailHint')}
+				for="le-email"
 			>
-			<p class="muted hint">{t('letsencrypt.emailHint')}</p>
-			<label class="check"
-				><input type="checkbox" bind:checked={staging} disabled={busy || !!directory.trim()} /><span
-					>{t('letsencrypt.staging')}</span
-				></label
+				{#snippet control()}
+					<input
+						id="le-email"
+						class="field"
+						type="email"
+						bind:value={email}
+						autocomplete="email"
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="tool"
+				title={t('letsencrypt.staging')}
+				desc={t('letsencrypt.stagingHint')}
+				for="le-staging"
 			>
-			<p class="muted hint">{t('letsencrypt.stagingHint')}</p>
-			<label class="stack"
-				><span
-					>{t('letsencrypt.directory')}
-					<span class="muted">({t('dnsProvider.optional')})</span></span
-				><input
-					class="field mono"
-					type="url"
-					bind:value={directory}
-					placeholder="https://acme-v02.api.letsencrypt.org/directory"
-					spellcheck="false"
-					disabled={busy}
-				/></label
+				{#snippet control()}
+					<input
+						id="le-staging"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={staging}
+						disabled={busy || !!directory.trim()}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="external"
+				title="{t('letsencrypt.directory')} ({t('dnsProvider.optional')})"
+				desc={t('letsencrypt.directoryHint')}
+				for="le-directory"
 			>
-			<p class="muted hint">{t('letsencrypt.directoryHint')}</p>
-		</div>
+				{#snippet control()}
+					<input
+						id="le-directory"
+						class="field mono"
+						type="url"
+						bind:value={directory}
+						placeholder="https://acme-v02.api.letsencrypt.org/directory"
+						spellcheck="false"
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
 
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status"
-					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
-				>{/if}
-		</div>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
+				{#if busy || saved}<span class="muted" role="status"
+						>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+					>{/if}
+			</div>
+		</SettingGroup>
 	</form>
 {/if}
 
 <style>
-	section,
-	form {
-		font-size: var(--text-md);
+	form.rows {
+		display: contents;
 	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 	.hint {
 		margin: 0;
 	}
-	h3 {
+	.choice {
+		border: 0;
+		padding: 0;
 		margin: 0;
-		font-size: var(--text-md);
-	}
-	.divided {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2-5);
+		gap: var(--space-2);
+		min-width: 0;
+	}
+	label.check {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-2);
+		font-size: var(--text-md);
+	}
+	.check input[type='radio'] {
+		width: 18px;
+		height: 18px;
+		margin: 2px 0 0;
+		flex: none;
+	}
+	.choice .hint {
+		padding-left: calc(18px + var(--space-2));
+		font-size: var(--text-sm);
 	}
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 		gap: var(--space-3) var(--space-5);
 		margin: 0;
+		font-size: var(--text-md);
 	}
 	.wide {
 		grid-column: 1 / -1;
@@ -468,15 +563,17 @@
 	textarea {
 		height: auto;
 		padding: var(--space-2-5) var(--space-3);
-		max-width: 32rem;
+		width: 20rem;
+		max-width: 100%;
 		resize: vertical;
 	}
-	input.short {
-		max-width: 12rem;
+	/* Their placeholders are longer than the usual field of a row. */
+	#le-propagation {
+		width: 13rem;
 	}
-	input[type='email'],
-	input[type='url'] {
-		max-width: 32rem;
+	#le-directory {
+		width: 26rem;
+		max-width: 100%;
 	}
 	.notice-warn p {
 		margin: 0 0 var(--space-1-5);

@@ -791,7 +791,8 @@ try {
     // An area lists only the pages the account may open.
     await userSide.getByRole("button", { name: "System", exact: true }).click();
     const userFrame = userDesk.page.frameLocator("section.win iframe").first();
-    await userFrame.locator("a.srow").first().waitFor();
+    // The overview shown before has rows of its own: wait for the area's.
+    await userFrame.locator('a.srow[href="/settings/about"]').waitFor();
     assert.deepEqual(
       await userFrame
         .locator("a.srow")

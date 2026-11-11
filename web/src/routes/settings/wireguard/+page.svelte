@@ -5,6 +5,8 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
 	import { formatBytes, formatTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -147,115 +149,145 @@
 {:else if !status}
 	<p class="muted loading">{t('common.loading')}</p>
 {:else}
-	<form class="tile panel" id="wg-server" onsubmit={save}>
-		<h2 class="tile-title">{t('wg.server')}</h2>
-		{#if status.disabled}<p class="notice-warn">{t('wg.devMode')}</p>{/if}
-		<label class="check"
-			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span>{t('wg.enabled')}</span
-			></label
-		>
-		<label class="stack"
-			><span>{t('wg.endpoint')}</span><input
-				class="field mono"
-				type="text"
-				bind:value={endpoint}
-				placeholder="nas.example.org"
-				spellcheck="false"
-				autocapitalize="off"
-				disabled={busy}
-			/><small class="muted">{t('wg.endpointHint')}</small></label
-		>
-		{#if !endpointOk}<p class="notice-warn" role="alert">{t('wg.endpointInvalid')}</p>{/if}
-		<fieldset class="choice">
-			<legend>{t('wg.access')}</legend>
-			<label class="check"
-				><input
-					type="radio"
-					name="access"
-					value={false}
-					bind:group={fullTunnel}
-					disabled={busy}
-				/><span>{t('wg.accessHome')}</span></label
+	<!-- PLAN 78-1: the server's settings are rows; one Save for all of them
+	     (one request, and address and DNS are typed text). -->
+	<form class="rows" onsubmit={save}>
+		<SettingGroup title={t('wg.server')} id="wg-server">
+			{#if status.disabled}<p class="notice-warn">{t('wg.devMode')}</p>{/if}
+			<SettingRow icon="shield" title={t('wg.enabled')} for="wg-enabled">
+				{#snippet control()}
+					{#if status!.enabled}<span class="chip" class:ok={status!.running}
+							>{t(status!.running ? 'wg.running' : 'wg.notRunning')}</span
+						>{/if}
+					<input
+						id="wg-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={enabled}
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="globe"
+				title={t('wg.endpoint')}
+				desc={t('wg.endpointHint')}
+				for="wg-endpoint"
 			>
-			<label class="check"
-				><input
-					type="radio"
-					name="access"
-					value={true}
-					bind:group={fullTunnel}
-					disabled={busy}
-				/><span>{t('wg.accessAll')}</span></label
+				{#snippet control()}
+					<input
+						id="wg-endpoint"
+						class="field mono"
+						type="text"
+						bind:value={endpoint}
+						placeholder="nas.example.org"
+						spellcheck="false"
+						autocapitalize="off"
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if !endpointOk}<p class="notice-warn" role="alert">{t('wg.endpointInvalid')}</p>{/if}
+			<SettingRow
+				id="wg-access"
+				icon="tailnet"
+				title={t('wg.access')}
+				summary={t(fullTunnel ? 'wg.accessAllShort' : 'wg.accessHomeShort')}
+				open
 			>
-		</fieldset>
-		<label class="stack"
-			><span>{t('wg.dns')}</span><input
-				class="field mono"
-				type="text"
-				bind:value={dns}
-				placeholder="192.168.178.1"
-				spellcheck="false"
-				disabled={busy}
-			/><small class="muted">{t('wg.dnsHint')}</small></label
-		>
-		{#if status.network}
-			<p class="muted small">
-				{t('wg.details', { network: status.network, port: String(status.port) })}
-			</p>
-		{/if}
-		<p class="muted small">{t('wg.router', { port: String(status.port) })}</p>
-		{#if status.error}<p class="notice-error" role="alert">{status.error}</p>{/if}
-		{#if error && !adding}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={!canSave}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status"
-					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
-				>{/if}
-			{#if status.enabled}<span class="chip" class:ok={status.running}
-					>{t(status.running ? 'wg.running' : 'wg.notRunning')}</span
-				>{/if}
-		</div>
+				<div class="srow-block">
+					<fieldset class="choice">
+						<legend class="sr-only">{t('wg.access')}</legend>
+						<label class="check"
+							><input
+								type="radio"
+								name="access"
+								value={false}
+								bind:group={fullTunnel}
+								disabled={busy}
+							/><span>{t('wg.accessHome')}</span></label
+						>
+						<label class="check"
+							><input
+								type="radio"
+								name="access"
+								value={true}
+								bind:group={fullTunnel}
+								disabled={busy}
+							/><span>{t('wg.accessAll')}</span></label
+						>
+					</fieldset>
+				</div>
+			</SettingRow>
+			<SettingRow icon="search" title={t('wg.dns')} desc={t('wg.dnsHint')} for="wg-dns">
+				{#snippet control()}
+					<input
+						id="wg-dns"
+						class="field mono"
+						type="text"
+						bind:value={dns}
+						placeholder="192.168.178.1"
+						spellcheck="false"
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if status.network}
+				<p class="muted small">
+					{t('wg.details', { network: status.network, port: String(status.port) })}
+				</p>
+			{/if}
+			<p class="muted small">{t('wg.router', { port: String(status.port) })}</p>
+			{#if status.error}<p class="notice-error" role="alert">{status.error}</p>{/if}
+			{#if error && !adding}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={!canSave}>{t('common.save')}</button>
+				{#if busy || saved}<span class="muted" role="status"
+						>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+					>{/if}
+			</div>
+		</SettingGroup>
 	</form>
 
-	<section class="tile panel" id="wg-devices" aria-labelledby="wg-devices-title">
-		<div class="head">
-			<h2 class="tile-title" id="wg-devices-title">{t('wg.devices')}</h2>
+	<!-- Every device is a row: name, when it was last seen, its address and
+	     state, and "Entfernen". -->
+	<SettingGroup title={t('wg.devices')} id="wg-devices">
+		{#snippet tools()}
 			<button
 				type="button"
 				class="btn"
-				disabled={busy || !status.enabled || !status.network}
+				disabled={busy || !status!.enabled || !status!.network}
 				onclick={() => ((adding = true), (error = ''))}>{t('wg.add')}</button
 			>
-		</div>
+		{/snippet}
 		{#if !status.enabled}<p class="muted">{t('wg.enableFirst')}</p>{/if}
-		{#if status.peers.length}
-			<ul class="peers divided">
-				{#each status.peers as peer (peer.publicKey)}
-					<li>
-						<span class="name">{peer.name}</span>
-						<span class="mono small">{peer.address.replace('/32', '')}</span>
-						<span class="chip" class:ok={connected(peer, now)}
-							>{t(connected(peer, now) ? 'wg.connected' : 'wg.notConnected')}</span
-						>
-						<span class="muted small"
-							>{peer.lastHandshake
-								? t('wg.lastSeen', { time: formatTime(new Date(peer.lastHandshake)) })
-								: t('wg.never')}{#if peer.received || peer.sent}
-								· ↓ {formatBytes(peer.sent)} · ↑ {formatBytes(peer.received)}{/if}</span
-						>
-						<button
-							type="button"
-							class="btn small"
-							disabled={busy}
-							onclick={() => (removing = peer)}>{t('wg.remove')}</button
-						>
-					</li>
-				{/each}
-			</ul>
-		{:else if status.enabled}
-			<p class="muted">{t('wg.none')}</p>
-		{/if}
+		{#each status.peers as peer (peer.publicKey)}
+			<SettingRow
+				icon="monitor"
+				title={peer.name}
+				desc={(peer.lastHandshake
+					? t('wg.lastSeen', { time: formatTime(new Date(peer.lastHandshake)) })
+					: t('wg.never')) +
+					(peer.received || peer.sent
+						? ` · ↓ ${formatBytes(peer.sent)} · ↑ ${formatBytes(peer.received)}`
+						: '')}
+			>
+				{#snippet control()}
+					<span class="mono">{peer.address.replace('/32', '')}</span>
+					<span class="chip" class:ok={connected(peer, now)}
+						>{t(connected(peer, now) ? 'wg.connected' : 'wg.notConnected')}</span
+					>
+					<button type="button" class="btn" disabled={busy} onclick={() => (removing = peer)}
+						>{t('wg.remove')}</button
+					>
+				{/snippet}
+			</SettingRow>
+		{:else}
+			{#if status.enabled}<p class="muted">{t('wg.none')}</p>{/if}
+		{/each}
 		<p class="muted small">{t('wg.apps')}</p>
-	</section>
+	</SettingGroup>
 {/if}
 
 {#if adding}
@@ -323,11 +355,11 @@
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-3);
+	form.rows {
+		display: contents;
+	}
+	.small {
+		font-size: var(--text-base);
 	}
 	.choice {
 		border: 0;
@@ -335,29 +367,23 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1-5);
+		gap: var(--space-2-5);
+		min-width: 0;
 	}
-	legend {
-		font-weight: 500;
-		margin-bottom: var(--space-1);
-	}
-	.peers {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.peers li {
+	label.check {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1-5) var(--space-3);
-		padding: var(--space-2) 0;
+		align-items: flex-start;
+		gap: var(--space-2);
+		font-size: var(--text-md);
 	}
-	.peers .name {
-		font-weight: 500;
+	.check input[type='radio'] {
+		width: 18px;
+		height: 18px;
+		margin: 2px 0 0;
+		flex: none;
 	}
-	.peers button {
-		margin-left: auto;
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 	.qr {
 		display: flex;

@@ -28,7 +28,8 @@
 		type Tab,
 	} from '#lib/firewall.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import AutoBlockTab from './AutoBlockTab.svelte';
 	import CellPanel from './CellPanel.svelte';
 	import NetworksTab from './NetworksTab.svelte';
@@ -91,6 +92,15 @@
 	// Links of the settings search change ?tab= on this page.
 	$effect(() => {
 		tab = tabFrom(page.url.searchParams.get('tab'), page.url.hash);
+	});
+
+	// A link to a group of this page (#firewall-zones …): its content arrives
+	// after the browser's own anchor scroll, so bring it into view then.
+	const loaded = $derived(!!status && !!draft);
+	$effect(() => {
+		const id = page.url.hash.slice(1);
+		if (!loaded || !id || !tab) return;
+		requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
 	});
 
 	// While a change is on trial: the countdown every second, the state
@@ -269,15 +279,27 @@
 			onrevert={() => trial('revert')}
 		/>{/if}
 
-	<section class="tile panel" aria-labelledby="firewall-main">
-		<h2 class="tile-title" id="firewall-main" use:revealTarget>{t('firewall.title')}</h2>
-		<div><span class="chip {stateChip.tone}">{t(stateChip.text)}</span></div>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.enabled} disabled={locked} /><span
-				>{t('firewall.enable')}</span
-			></label
+	<!-- PLAN 78-1: the master switch is a row; it is part of the draft and
+	     goes on trial with the save bar like before. -->
+	<SettingGroup id="firewall-main">
+		<SettingRow
+			icon="shield"
+			title={t('firewall.enable')}
+			desc={t('firewall.intro')}
+			for="firewall-enable"
 		>
-		<p class="muted">{t('firewall.intro')}</p>
+			{#snippet control()}
+				<span class="chip {stateChip.tone}">{t(stateChip.text)}</span>
+				<input
+					id="firewall-enable"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					bind:checked={draft!.enabled}
+					disabled={locked}
+				/>
+			{/snippet}
+		</SettingRow>
 		{#if status.clientAddress}<p class="muted">
 				{t('firewall.you', {
 					address: status.clientAddress,
@@ -290,7 +312,7 @@
 		{#if status.dockerError && status.config.enabled}<p class="notice-warn" role="alert">
 				{t('firewall.dockerError', { detail: status.dockerError })}
 			</p>{/if}
-	</section>
+	</SettingGroup>
 
 	<Tabs
 		tabs={TABS.map((id) => ({
@@ -304,13 +326,12 @@
 	/>
 
 	{#if tab === 'zones'}
-		<section class="tile panel" aria-labelledby="firewall-zones">
-			<h2 class="tile-title" id="firewall-zones" use:revealTarget>{t('firewall.zones')}</h2>
-			<p class="muted">{t('firewall.matrixText')}</p>
+		<!-- The matrix stays a matrix (W4), under a plain heading. -->
+		<SettingGroup title={t('firewall.zones')} id="firewall-zones" desc={t('firewall.matrixText')}>
 			<ZoneMatrix cfg={draft} {services} {selected} {zoneLabel} {zoneText} onselect={select} />
 			<p class="muted small">{t('firewall.notThroughNasText')}</p>
 			<p class="muted small">{t('firewall.always')}</p>
-		</section>
+		</SettingGroup>
 		{#if selected}<CellPanel
 				bind:draft
 				from={selected.from}
@@ -323,73 +344,65 @@
 				hostNetworkApps={(status.apps ?? []).filter((a) => a.hostNetwork).map((a) => a.name)}
 				onclose={() => (selected = null)}
 			/>{/if}
-		<section class="tile panel" aria-labelledby="firewall-zone-list">
-			<h2 class="tile-title" id="firewall-zone-list">{t('firewall.zoneList')}</h2>
-			<dl class="zones-list">
-				<div>
-					<dt>{zoneLabel('home')}</dt>
-					<dd class="mono">{(status.homeNetworks ?? []).join(', ') || '–'}</dd>
-				</div>
-				<div>
-					<dt>{zoneLabel('vpn')}</dt>
-					<dd>
-						<span class="mono">{(status.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg
-					</dd>
-				</div>
-				<div>
-					<dt>{zoneLabel('internet')}</dt>
-					<dd>{t('firewall.internetText')}</dd>
-				</div>
-				<div>
-					<dt>{zoneLabel('docker')}</dt>
-					<dd>{t('firewall.dockerText')}</dd>
-				</div>
-				{#each ownZones(draft) as zone, i (zone.id)}
-					<div class="own">
-						<dt>{zone.name || zone.id}</dt>
-						<dd>
-							<span class="mono"
-								>{[...zone.networks.map((n) => n.replace(/^[a-z]+:/, '')), ...zone.sources].join(
-									', ',
-								) || '–'}</span
-							>
-							<span class="buttons"
-								><button
-									class="btn small"
-									type="button"
-									disabled={locked || i === 0}
-									aria-label={t('firewall.ruleUp')}
-									onclick={() => moveZone(zone.id, -1)}>↑</button
-								><button
-									class="btn small"
-									type="button"
-									disabled={locked || i === ownZones(draft).length - 1}
-									aria-label={t('firewall.ruleDown')}
-									onclick={() => moveZone(zone.id, 1)}>↓</button
-								><button
-									class="btn small"
-									type="button"
-									disabled={locked}
-									onclick={() => (editing = { zone: $state.snapshot(zone), isNew: false })}
-									>{t('firewall.zoneEdit')}</button
-								></span
-							>
-						</dd>
-					</div>
-				{/each}
-			</dl>
-			<p class="muted small">{t('firewall.zonesHint')}</p>
-			<p class="muted small">{t('firewall.zoneOrder')}</p>
-			<p class="muted small">{t('firewall.bypassText')}</p>
-			<div class="row-actions start">
+		<!-- Every zone is a row: its name, what belongs to it, and for own
+		     zones the order and "Bearbeiten". -->
+		<SettingGroup title={t('firewall.zoneList')} id="firewall-zone-list">
+			{#snippet tools()}
 				<button
 					class="btn"
 					type="button"
-					disabled={locked || ownZones(draft).length >= 16}
+					disabled={locked || ownZones(draft!).length >= 16}
 					onclick={newZone}>{t('firewall.zoneAdd')}</button
 				>
-			</div>
-		</section>
+			{/snippet}
+			<SettingRow icon="home" title={zoneLabel('home')}>
+				{#snippet control()}<span class="mono"
+						>{(status!.homeNetworks ?? []).join(', ') || '–'}</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="tailnet" title={zoneLabel('vpn')}>
+				{#snippet control()}<span
+						><span class="mono">{(status!.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="globe" title={zoneLabel('internet')} desc={t('firewall.internetText')} />
+			<SettingRow icon="box" title={zoneLabel('docker')} desc={t('firewall.dockerText')} />
+			{#each ownZones(draft) as zone, i (zone.id)}
+				<SettingRow icon="shield" title={zone.name || zone.id}>
+					{#snippet control()}
+						<span class="mono"
+							>{[...zone.networks.map((n) => n.replace(/^[a-z]+:/, '')), ...zone.sources].join(
+								', ',
+							) || '–'}</span
+						>
+						<span class="buttons"
+							><button
+								class="btn small"
+								type="button"
+								disabled={locked || i === 0}
+								aria-label={t('firewall.ruleUp')}
+								onclick={() => moveZone(zone.id, -1)}>↑</button
+							><button
+								class="btn small"
+								type="button"
+								disabled={locked || i === ownZones(draft!).length - 1}
+								aria-label={t('firewall.ruleDown')}
+								onclick={() => moveZone(zone.id, 1)}>↓</button
+							><button
+								class="btn small"
+								type="button"
+								disabled={locked}
+								onclick={() => (editing = { zone: $state.snapshot(zone), isNew: false })}
+								>{t('firewall.zoneEdit')}</button
+							></span
+						>
+					{/snippet}
+				</SettingRow>
+			{/each}
+			<p class="muted small">{t('firewall.zonesHint')}</p>
+			<p class="muted small">{t('firewall.zoneOrder')}</p>
+			<p class="muted small">{t('firewall.bypassText')}</p>
+		</SettingGroup>
 	{:else if tab === 'networks'}
 		<NetworksTab bind:draft networks={status.networks ?? []} {zoneLabel} {locked} />
 	{:else if tab === 'policies'}
@@ -433,38 +446,9 @@
 	.small {
 		font-size: var(--text-base);
 	}
-	.zones-list {
-		display: grid;
-		gap: var(--space-1-5);
-		margin: 0;
-	}
-	.zones-list div {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1) var(--space-3);
-	}
-	.zones-list dt {
-		font-weight: 500;
-		min-width: 7rem;
-	}
-	.zones-list dd {
-		margin: 0;
-		overflow-wrap: anywhere;
-		flex: 1 1 12rem;
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1) var(--space-3);
-		align-items: center;
-	}
 	.buttons {
-		margin-left: auto;
-		white-space: nowrap;
-	}
-	.buttons .btn + .btn {
-		margin-left: var(--space-1);
-	}
-	.start {
-		justify-content: flex-start;
+		display: inline-flex;
+		gap: var(--space-1);
 	}
 	/* Only unsaved changes stick to the bottom: a plain message has no
 	   background of its own and would float over the tables. */

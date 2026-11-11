@@ -4,13 +4,13 @@
 	// area of its own any more). The key is the one of this tab or of dynamic
 	// DNS / Let's Encrypt; it never comes back from titand. Nothing is created
 	// at IPv64 without a click. The sub-tab is kept in ?sub=.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api } from '#lib/api.ts';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
 	import { ipv64Href, TABS, tabFrom, type Status, type Tab } from './ipv64.ts';
 	import { failure } from './ui.ts';
 	import Overview from './Overview.svelte';
@@ -74,43 +74,45 @@
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
-	<section class="tile panel" aria-labelledby="ipv64-key">
-		<h2 class="tile-title" id="ipv64-key" use:revealTarget>{t('ipv64x.key')}</h2>
-		<p class="muted hint">{t('ipv64x.intro')}</p>
-		{#if hasKey}
-			<p>{t(`ipv64x.keySource.${status.status.keySource}` as MessageKey)}</p>
-		{:else}
-			<p class="notice-warn">{t('ipv64x.noKey')}</p>
-		{/if}
-		<p class="muted hint">{t('ipv64x.keyHint')}</p>
-		<form
-			class="row-actions"
-			onsubmit={(event) => {
-				event.preventDefault();
-				if (key.trim()) saveKey();
-			}}
-		>
-			<label class="stack grow"
-				><span>{t(status.status.keySet ? 'ipv64x.keyReplace' : 'ipv64x.keyOwn')}</span><input
-					class="field mono"
-					type="password"
-					autocomplete="off"
-					bind:value={key}
-					placeholder={status.status.keySet ? t('ipv64x.isSet') : ''}
-					disabled={keyBusy}
-				/></label
+	<SettingGroup title={t('ipv64x.key')} id="ipv64-key">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.intro')}</p>
+			{#if hasKey}
+				<p>{t(`ipv64x.keySource.${status.status.keySource}` as MessageKey)}</p>
+			{:else}
+				<p class="notice-warn">{t('ipv64x.noKey')}</p>
+			{/if}
+			<p class="muted hint">{t('ipv64x.keyHint')}</p>
+			<form
+				class="row-actions"
+				onsubmit={(event) => {
+					event.preventDefault();
+					if (key.trim()) saveKey();
+				}}
 			>
-			<button class="btn btn-primary" disabled={keyBusy || !key.trim()}>{t('common.save')}</button>
-			{#if status.status.keySet}<button
-					type="button"
-					class="btn"
-					disabled={keyBusy}
-					onclick={() => saveKey(true)}>{t('ipv64x.keyRemove')}</button
-				>{/if}
-		</form>
-		{#if keyError}<p class="notice-error" role="alert">{keyError}</p>{/if}
-		{#if status.status.readOnly}<p class="notice-warn">{t('ipv64x.devMode')}</p>{/if}
-	</section>
+				<label class="stack grow"
+					><span>{t(status.status.keySet ? 'ipv64x.keyReplace' : 'ipv64x.keyOwn')}</span><input
+						class="field mono"
+						type="password"
+						autocomplete="off"
+						bind:value={key}
+						placeholder={status.status.keySet ? t('ipv64x.isSet') : ''}
+						disabled={keyBusy}
+					/></label
+				>
+				<button class="btn btn-primary" disabled={keyBusy || !key.trim()}>{t('common.save')}</button
+				>
+				{#if status.status.keySet}<button
+						type="button"
+						class="btn"
+						disabled={keyBusy}
+						onclick={() => saveKey(true)}>{t('ipv64x.keyRemove')}</button
+					>{/if}
+			</form>
+			{#if keyError}<p class="notice-error" role="alert">{keyError}</p>{/if}
+			{#if status.status.readOnly}<p class="notice-warn">{t('ipv64x.devMode')}</p>{/if}
+		</div>
+	</SettingGroup>
 
 	<Tabs
 		tabs={TABS.map((id) => ({ id, label: t(`ipv64x.tab.${id}` as MessageKey) }))}

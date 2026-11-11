@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Cloud Router: routers, WireGuard gateways and peers, routes, firewall
 	// rules, the public IPv6, and optionally the tunnel of this NAS.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -140,415 +141,426 @@
 </script>
 
 <div class="ipv64-tab">
-	<section class="tile panel" aria-labelledby="ipv64-nas-tunnel">
-		<h2 class="tile-title" id="ipv64-nas-tunnel">{t('ipv64x.thisNasTunnel')}</h2>
-		<p class="muted hint">{t('ipv64x.tunnelHint')}</p>
-		{#if wg.enabled}
-			<dl>
-				<div>
-					<dt>{t('ipv64x.state')}</dt>
-					<dd>
-						<span class="chip {status.status.tunnel.up ? 'ok' : 'error'}"
-							>{t(status.status.tunnel.up ? 'ipv64x.connected' : 'ipv64x.notConnected')}</span
-						>
-					</dd>
+	<SettingGroup title={t('ipv64x.thisNasTunnel')} id="ipv64-nas-tunnel">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.tunnelHint')}</p>
+			{#if wg.enabled}
+				<dl>
+					<div>
+						<dt>{t('ipv64x.state')}</dt>
+						<dd>
+							<span class="chip {status.status.tunnel.up ? 'ok' : 'error'}"
+								>{t(status.status.tunnel.up ? 'ipv64x.connected' : 'ipv64x.notConnected')}</span
+							>
+						</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.addresses')}</dt>
+						<dd class="mono">{(wg.addresses ?? []).join(', ')}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.endpoint')}</dt>
+						<dd class="mono">{wg.endpoint}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.routes')}</dt>
+						<dd class="mono">{status.status.tunnel.routes.join(', ') || '–'}</dd>
+					</div>
+					<div>
+						<dt>{t('ipv64x.publicKey')}</dt>
+						<dd class="mono">{wg.publicKey}</dd>
+					</div>
+				</dl>
+				{#if status.status.tunnel.error}<p class="notice-error" role="alert">
+						{status.status.tunnel.error}
+					</p>{/if}
+				<p class="muted hint">{t('ipv64x.tunnelZone')}</p>
+				<div class="row-actions">
+					<button
+						type="button"
+						class="btn btn-danger"
+						disabled={busy}
+						onclick={() => ((disconnect = true), (deletePeer = true))}
+						>{t('ipv64x.disconnect')}</button
+					>
 				</div>
-				<div>
-					<dt>{t('ipv64x.addresses')}</dt>
-					<dd class="mono">{(wg.addresses ?? []).join(', ')}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.endpoint')}</dt>
-					<dd class="mono">{wg.endpoint}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.routes')}</dt>
-					<dd class="mono">{status.status.tunnel.routes.join(', ') || '–'}</dd>
-				</div>
-				<div>
-					<dt>{t('ipv64x.publicKey')}</dt>
-					<dd class="mono">{wg.publicKey}</dd>
-				</div>
-			</dl>
-			{#if status.status.tunnel.error}<p class="notice-error" role="alert">
-					{status.status.tunnel.error}
-				</p>{/if}
-			<p class="muted hint">{t('ipv64x.tunnelZone')}</p>
-			<div class="row-actions">
+			{:else}
+				<p>{t('ipv64x.tunnelOff')}</p>
+			{/if}
+		</div>
+	</SettingGroup>
+
+	<SettingGroup title={t('ipv64x.routers')} id="ipv64-routers">
+		<div class="panel">
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
+			<div class="table-wrap">
+				<table>
+					<thead><tr><th>{t('ipv64x.name')}</th><th>{t('ipv64x.gateways')}</th><th></th></tr></thead
+					>
+					<tbody>
+						{#each routers as r (r.id)}
+							<tr>
+								<td
+									>{r.name}{#if r.traffic_limited}<span class="chip error"
+											>{t('ipv64x.limited')}</span
+										>{/if}</td
+								>
+								<td>{r.gateways.length}</td>
+								<td class="actions"
+									><button type="button" class="btn" onclick={() => open(r.id)}
+										>{t('ipv64x.manage')}</button
+									></td
+								>
+							</tr>
+						{:else}
+							<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="inline">
+				<label class="stack"
+					><span>{t('ipv64x.name')}</span><input
+						class="field"
+						type="text"
+						maxlength="100"
+						bind:value={newRouter}
+					/></label
+				>
 				<button
 					type="button"
-					class="btn btn-danger"
-					disabled={busy}
-					onclick={() => ((disconnect = true), (deletePeer = true))}
-					>{t('ipv64x.disconnect')}</button
+					class="btn"
+					disabled={busy || !newRouter.trim()}
+					onclick={() =>
+						(confirm = {
+							title: 'ipv64x.routerCreate',
+							text: t('ipv64x.routerCreateText', { name: newRouter.trim() }),
+							button: 'ipv64x.routerCreate',
+							danger: false,
+							run: () => api.post('/ipv64/routers', { name: newRouter.trim() }),
+						})}>{t('ipv64x.routerCreate')}</button
 				>
 			</div>
-		{:else}
-			<p>{t('ipv64x.tunnelOff')}</p>
-		{/if}
-	</section>
-
-	<section class="tile panel" aria-labelledby="ipv64-routers">
-		<h2 class="tile-title" id="ipv64-routers">{t('ipv64x.routers')}</h2>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
-		<div class="table-wrap">
-			<table>
-				<thead><tr><th>{t('ipv64x.name')}</th><th>{t('ipv64x.gateways')}</th><th></th></tr></thead>
-				<tbody>
-					{#each routers as r (r.id)}
-						<tr>
-							<td
-								>{r.name}{#if r.traffic_limited}<span class="chip error">{t('ipv64x.limited')}</span
-									>{/if}</td
-							>
-							<td>{r.gateways.length}</td>
-							<td class="actions"
-								><button type="button" class="btn" onclick={() => open(r.id)}
-									>{t('ipv64x.manage')}</button
-								></td
-							>
-						</tr>
-					{:else}
-						<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
 		</div>
-		<div class="inline">
-			<label class="stack"
-				><span>{t('ipv64x.name')}</span><input
-					class="field"
-					type="text"
-					maxlength="100"
-					bind:value={newRouter}
-				/></label
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={busy || !newRouter.trim()}
-				onclick={() =>
-					(confirm = {
-						title: 'ipv64x.routerCreate',
-						text: t('ipv64x.routerCreateText', { name: newRouter.trim() }),
-						button: 'ipv64x.routerCreate',
-						danger: false,
-						run: () => api.post('/ipv64/routers', { name: newRouter.trim() }),
-					})}>{t('ipv64x.routerCreate')}</button
-			>
-		</div>
-	</section>
+	</SettingGroup>
 
 	{#if detail}
-		<section class="tile panel" aria-labelledby="ipv64-router">
-			<h2 class="tile-title" id="ipv64-router">{detail.router.name}</h2>
-			<h3>{t('ipv64x.gateways')}</h3>
-			{#each detail.router.gateways as g (g.id)}
-				<div class="gateway">
-					<div class="inline">
-						<strong class="grow">{g.name}</strong>
-						<span class="chip {tone(g.state)}">{g.state}</span>
-						{#if g.disabled}<span class="chip">{t('ipv64x.disabled')}</span>{/if}
-						{#if g.traffic_limited}<span class="chip error">{t('ipv64x.limited')}</span>{/if}
-					</div>
-					<dl>
-						<div>
-							<dt>{t('ipv64x.server')}</dt>
-							<dd>{g.server ? `${g.server.hostname} · ${g.server.location}` : '–'}</dd>
+		<SettingGroup title={detail.router.name} id="ipv64-router">
+			<div class="panel">
+				<h3>{t('ipv64x.gateways')}</h3>
+				{#each detail.router.gateways as g (g.id)}
+					<div class="gateway">
+						<div class="inline">
+							<strong class="grow">{g.name}</strong>
+							<span class="chip {tone(g.state)}">{g.state}</span>
+							{#if g.disabled}<span class="chip">{t('ipv64x.disabled')}</span>{/if}
+							{#if g.traffic_limited}<span class="chip error">{t('ipv64x.limited')}</span>{/if}
 						</div>
-						<div>
-							<dt>{t('ipv64x.listenPort')}</dt>
-							<dd class="mono">{g.listen_port ?? '–'}</dd>
-						</div>
-						<div>
-							<dt>{t('ipv64x.addresses')}</dt>
-							<dd class="mono">{[g.ipv4, g.ipv6].filter(Boolean).join(', ') || '–'}</dd>
-						</div>
-						<div>
-							<dt>{t('ipv64x.traffic')}</dt>
-							<dd>↓ {size(g.traffic_bytes.in)} · ↑ {size(g.traffic_bytes.out)}</dd>
-						</div>
-					</dl>
-					<p class="muted hint">{t('ipv64x.listenPortHint')}</p>
-					<div class="row-actions">
-						<button
-							type="button"
-							class="btn"
-							disabled={busy}
-							onclick={() =>
-								(gatewayForm = { id: g.id, name: g.name, ipv4: g.ipv4 ?? '', ipv6: g.ipv6 ?? '' })}
-							>{t('ipv64x.edit')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							disabled={busy}
-							onclick={() => (peerName = { gateway: g.id, name: '' })}>{t('ipv64x.peerAdd')}</button
-						>
-						{#if !wg.enabled}<button
+						<dl>
+							<div>
+								<dt>{t('ipv64x.server')}</dt>
+								<dd>{g.server ? `${g.server.hostname} · ${g.server.location}` : '–'}</dd>
+							</div>
+							<div>
+								<dt>{t('ipv64x.listenPort')}</dt>
+								<dd class="mono">{g.listen_port ?? '–'}</dd>
+							</div>
+							<div>
+								<dt>{t('ipv64x.addresses')}</dt>
+								<dd class="mono">{[g.ipv4, g.ipv6].filter(Boolean).join(', ') || '–'}</dd>
+							</div>
+							<div>
+								<dt>{t('ipv64x.traffic')}</dt>
+								<dd>↓ {size(g.traffic_bytes.in)} · ↑ {size(g.traffic_bytes.out)}</dd>
+							</div>
+						</dl>
+						<p class="muted hint">{t('ipv64x.listenPortHint')}</p>
+						<div class="row-actions">
+							<button
 								type="button"
-								class="btn btn-primary"
-								disabled={busy || status.status.readOnly}
+								class="btn"
+								disabled={busy}
 								onclick={() =>
-									(connect = {
-										router: detail?.router.id ?? '',
-										gateway: g.id,
-										name: `titanos-${status.hostname}`,
-									})}>{t('ipv64x.connectNas')}</button
-							>{/if}
-						<button
-							type="button"
-							class="btn btn-warn"
-							disabled={busy}
-							onclick={() =>
-								(confirm = {
-									title: 'ipv64x.rotateKeys',
-									text: t('ipv64x.rotateKeysText', { name: g.name }),
-									button: 'ipv64x.rotateKeys',
-									danger: false,
-									run: () => api.post(`/ipv64/gateways/${g.id}/do/rotate-keys`),
-								})}>{t('ipv64x.rotateKeys')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							disabled={busy}
-							onclick={() =>
-								run(async () => {
-									await api.post(`/ipv64/gateways/${g.id}/do/reset-traffic`);
-									await again();
-								})}>{t('ipv64x.resetTraffic')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							disabled={busy || (wg.enabled && wg.gateway === g.id)}
-							onclick={() =>
-								(confirm = {
-									title: 'ipv64x.gatewayDelete',
-									text: t('ipv64x.gatewayDeleteText', { name: g.name }),
-									button: 'ipv64x.delete',
-									danger: true,
-									run: () => api.delete(`/ipv64/gateways/${g.id}`),
-								})}>{t('ipv64x.delete')}</button
-						>
-					</div>
-					{#if g.peers?.length}
-						<div class="table-wrap">
-							<table>
-								<thead
-									><tr
-										><th>{t('ipv64x.peer')}</th><th>{t('ipv64x.addresses')}</th><th
-											>{t('ipv64x.handshake')}</th
-										><th></th></tr
-									></thead
-								>
-								<tbody>
-									{#each g.peers as p (p.id)}
-										<tr>
-											<td
-												>{p.name}{#if wg.peer === p.id}<span class="chip ok"
-														>{t('ipv64x.thisNas')}</span
-													>{/if}</td
-											>
-											<td class="mono">{[p.ipv4, p.ipv6].filter(Boolean).join(', ')}</td>
-											<td>{p.last_handshake ?? '–'}</td>
-											<td class="actions"
-												>{#if wg.peer !== p.id}<button
-														type="button"
-														class="btn"
-														disabled={busy}
-														onclick={() =>
-															(confirm = {
-																title: 'ipv64x.peerDelete',
-																text: t('ipv64x.peerDeleteText', { name: p.name }),
-																button: 'ipv64x.delete',
-																danger: true,
-																run: () => api.delete(`/ipv64/peers/${p.id}`),
-															})}>{t('ipv64x.delete')}</button
-													>{/if}</td
-											>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
+									(gatewayForm = {
+										id: g.id,
+										name: g.name,
+										ipv4: g.ipv4 ?? '',
+										ipv6: g.ipv6 ?? '',
+									})}>{t('ipv64x.edit')}</button
+							>
+							<button
+								type="button"
+								class="btn"
+								disabled={busy}
+								onclick={() => (peerName = { gateway: g.id, name: '' })}
+								>{t('ipv64x.peerAdd')}</button
+							>
+							{#if !wg.enabled}<button
+									type="button"
+									class="btn btn-primary"
+									disabled={busy || status.status.readOnly}
+									onclick={() =>
+										(connect = {
+											router: detail?.router.id ?? '',
+											gateway: g.id,
+											name: `titanos-${status.hostname}`,
+										})}>{t('ipv64x.connectNas')}</button
+								>{/if}
+							<button
+								type="button"
+								class="btn btn-warn"
+								disabled={busy}
+								onclick={() =>
+									(confirm = {
+										title: 'ipv64x.rotateKeys',
+										text: t('ipv64x.rotateKeysText', { name: g.name }),
+										button: 'ipv64x.rotateKeys',
+										danger: false,
+										run: () => api.post(`/ipv64/gateways/${g.id}/do/rotate-keys`),
+									})}>{t('ipv64x.rotateKeys')}</button
+							>
+							<button
+								type="button"
+								class="btn"
+								disabled={busy}
+								onclick={() =>
+									run(async () => {
+										await api.post(`/ipv64/gateways/${g.id}/do/reset-traffic`);
+										await again();
+									})}>{t('ipv64x.resetTraffic')}</button
+							>
+							<button
+								type="button"
+								class="btn"
+								disabled={busy || (wg.enabled && wg.gateway === g.id)}
+								onclick={() =>
+									(confirm = {
+										title: 'ipv64x.gatewayDelete',
+										text: t('ipv64x.gatewayDeleteText', { name: g.name }),
+										button: 'ipv64x.delete',
+										danger: true,
+										run: () => api.delete(`/ipv64/gateways/${g.id}`),
+									})}>{t('ipv64x.delete')}</button
+							>
 						</div>
-					{/if}
-				</div>
-			{/each}
-			<div class="row-actions">
-				<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() =>
-						run(async () => {
-							await api.post(`${base}/gateways`, { name: 'gateway' });
-							await again();
-						}, t('ipv64x.accepted'))}>{t('ipv64x.gatewayAdd')}</button
-				>
-			</div>
-
-			<h3>{t('ipv64x.routes')}</h3>
-			<div class="table-wrap">
-				<table>
-					<tbody>
-						{#each detail.routes as r (r.id)}
-							<tr>
-								<td class="mono">{r.destination} via {r.gateway}</td>
-								<td
-									>{r.system ? t('ipv64x.system') : ''}
-									<span class="chip {tone(r.state)}">{r.state}</span>{#if r.disabled}<span
-											class="chip">{t('ipv64x.disabled')}</span
-										>{/if}</td
-								>
-								<td class="actions">
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() =>
-											run(async () => {
-												await api.patch(`${base}/routes/${r.id}`, { disabled: !r.disabled });
-												await again();
-											})}>{t(r.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
+						{#if g.peers?.length}
+							<div class="table-wrap">
+								<table>
+									<thead
+										><tr
+											><th>{t('ipv64x.peer')}</th><th>{t('ipv64x.addresses')}</th><th
+												>{t('ipv64x.handshake')}</th
+											><th></th></tr
+										></thead
 									>
-									{#if !r.system}<button
-											type="button"
-											class="btn"
-											disabled={busy}
-											onclick={() =>
-												run(async () => {
-													await api.delete(`${base}/routes/${r.id}`);
-													await again();
-												})}>{t('ipv64x.delete')}</button
-										>{/if}
-								</td>
-							</tr>
-						{:else}
-							<tr><td class="muted">{t('ipv64x.none')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<div class="row-actions">
-				<button
-					type="button"
-					class="btn"
-					onclick={() =>
-						(route = {
-							destination: '',
-							gateway: '',
-							peer: detail?.router.gateways[0]?.peers?.[0]?.id ?? '',
-							distance: 1,
-						})}>{t('ipv64x.routeAdd')}</button
-				>
-			</div>
-
-			<h3>{t('ipv64x.routerRules')}</h3>
-			<div class="table-wrap">
-				<table>
-					<tbody>
-						{#each detail.rules as r (r.id)}
-							<tr>
-								<td class="mono">{r.chain} {r.action} {r.source ?? '*'} → {r.destination ?? '*'}</td
-								>
-								<td
-									><span class="chip {tone(r.state)}">{r.state}</span>{#if r.disabled}<span
-											class="chip">{t('ipv64x.disabled')}</span
-										>{/if}</td
-								>
-								<td class="actions">
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() =>
-											run(async () => {
-												await api.patch(`${base}/firewall/${r.id}`, { disabled: !r.disabled });
-												await again();
-											})}>{t(r.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
-									>
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() =>
-											run(async () => {
-												await api.delete(`${base}/firewall/${r.id}`);
-												await again();
-											})}>{t('ipv64x.delete')}</button
-									>
-								</td>
-							</tr>
-						{:else}
-							<tr><td class="muted">{t('ipv64x.none')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<div class="row-actions">
-				<button
-					type="button"
-					class="btn"
-					onclick={() =>
-						(rule = { chain: 'forward', action: 'accept', source: '', destination: '' })}
-					>{t('ipv64x.ruleAdd')}</button
-				>
-			</div>
-
-			<h3>{t('ipv64x.publicIPs')}</h3>
-			<ul class="plain">
-				{#each detail.publicIPs as ip (ip.id)}
-					<li class="mono">
-						{ip.ip} <span class="chip {tone(ip.state)}">{ip.state}</span>
-						<button
-							type="button"
-							class="btn"
-							disabled={busy}
-							onclick={() =>
-								run(async () => {
-									await api.patch(`${base}/public-ips/${ip.id}`, { disabled: !ip.disabled });
-									await again();
-								})}>{t(ip.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							disabled={busy}
-							onclick={() =>
-								(confirm = {
-									title: 'ipv64x.ipDelete',
-									text: t('ipv64x.ipDeleteText', { ip: ip.ip }),
-									button: 'ipv64x.delete',
-									danger: true,
-									run: () => api.delete(`${base}/public-ips/${ip.id}`),
-								})}>{t('ipv64x.delete')}</button
-						>
-					</li>
-				{:else}
-					<li class="muted">{t('ipv64x.none')}</li>
+									<tbody>
+										{#each g.peers as p (p.id)}
+											<tr>
+												<td
+													>{p.name}{#if wg.peer === p.id}<span class="chip ok"
+															>{t('ipv64x.thisNas')}</span
+														>{/if}</td
+												>
+												<td class="mono">{[p.ipv4, p.ipv6].filter(Boolean).join(', ')}</td>
+												<td>{p.last_handshake ?? '–'}</td>
+												<td class="actions"
+													>{#if wg.peer !== p.id}<button
+															type="button"
+															class="btn"
+															disabled={busy}
+															onclick={() =>
+																(confirm = {
+																	title: 'ipv64x.peerDelete',
+																	text: t('ipv64x.peerDeleteText', { name: p.name }),
+																	button: 'ipv64x.delete',
+																	danger: true,
+																	run: () => api.delete(`/ipv64/peers/${p.id}`),
+																})}>{t('ipv64x.delete')}</button
+														>{/if}</td
+												>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
+					</div>
 				{/each}
-			</ul>
-			{#if !detail.publicIPs.some((ip) => ip.type === 'ipv6')}
 				<div class="row-actions">
 					<button
 						type="button"
 						class="btn"
 						disabled={busy}
 						onclick={() =>
-							(confirm = {
-								title: 'ipv64x.ipAdd',
-								text: t('ipv64x.ipAddText'),
-								button: 'ipv64x.ipAdd',
-								danger: false,
-								run: () => api.post(`${base}/public-ips`),
-							})}>{t('ipv64x.ipAdd')}</button
+							run(async () => {
+								await api.post(`${base}/gateways`, { name: 'gateway' });
+								await again();
+							}, t('ipv64x.accepted'))}>{t('ipv64x.gatewayAdd')}</button
 					>
 				</div>
-			{/if}
-		</section>
+
+				<h3>{t('ipv64x.routes')}</h3>
+				<div class="table-wrap">
+					<table>
+						<tbody>
+							{#each detail.routes as r (r.id)}
+								<tr>
+									<td class="mono">{r.destination} via {r.gateway}</td>
+									<td
+										>{r.system ? t('ipv64x.system') : ''}
+										<span class="chip {tone(r.state)}">{r.state}</span>{#if r.disabled}<span
+												class="chip">{t('ipv64x.disabled')}</span
+											>{/if}</td
+									>
+									<td class="actions">
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() =>
+												run(async () => {
+													await api.patch(`${base}/routes/${r.id}`, { disabled: !r.disabled });
+													await again();
+												})}>{t(r.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
+										>
+										{#if !r.system}<button
+												type="button"
+												class="btn"
+												disabled={busy}
+												onclick={() =>
+													run(async () => {
+														await api.delete(`${base}/routes/${r.id}`);
+														await again();
+													})}>{t('ipv64x.delete')}</button
+											>{/if}
+									</td>
+								</tr>
+							{:else}
+								<tr><td class="muted">{t('ipv64x.none')}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<div class="row-actions">
+					<button
+						type="button"
+						class="btn"
+						onclick={() =>
+							(route = {
+								destination: '',
+								gateway: '',
+								peer: detail?.router.gateways[0]?.peers?.[0]?.id ?? '',
+								distance: 1,
+							})}>{t('ipv64x.routeAdd')}</button
+					>
+				</div>
+
+				<h3>{t('ipv64x.routerRules')}</h3>
+				<div class="table-wrap">
+					<table>
+						<tbody>
+							{#each detail.rules as r (r.id)}
+								<tr>
+									<td class="mono"
+										>{r.chain} {r.action} {r.source ?? '*'} → {r.destination ?? '*'}</td
+									>
+									<td
+										><span class="chip {tone(r.state)}">{r.state}</span>{#if r.disabled}<span
+												class="chip">{t('ipv64x.disabled')}</span
+											>{/if}</td
+									>
+									<td class="actions">
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() =>
+												run(async () => {
+													await api.patch(`${base}/firewall/${r.id}`, { disabled: !r.disabled });
+													await again();
+												})}>{t(r.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
+										>
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() =>
+												run(async () => {
+													await api.delete(`${base}/firewall/${r.id}`);
+													await again();
+												})}>{t('ipv64x.delete')}</button
+										>
+									</td>
+								</tr>
+							{:else}
+								<tr><td class="muted">{t('ipv64x.none')}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<div class="row-actions">
+					<button
+						type="button"
+						class="btn"
+						onclick={() =>
+							(rule = { chain: 'forward', action: 'accept', source: '', destination: '' })}
+						>{t('ipv64x.ruleAdd')}</button
+					>
+				</div>
+
+				<h3>{t('ipv64x.publicIPs')}</h3>
+				<ul class="plain">
+					{#each detail.publicIPs as ip (ip.id)}
+						<li class="mono">
+							{ip.ip} <span class="chip {tone(ip.state)}">{ip.state}</span>
+							<button
+								type="button"
+								class="btn"
+								disabled={busy}
+								onclick={() =>
+									run(async () => {
+										await api.patch(`${base}/public-ips/${ip.id}`, { disabled: !ip.disabled });
+										await again();
+									})}>{t(ip.disabled ? 'ipv64x.switchOn' : 'ipv64x.switchOff')}</button
+							>
+							<button
+								type="button"
+								class="btn"
+								disabled={busy}
+								onclick={() =>
+									(confirm = {
+										title: 'ipv64x.ipDelete',
+										text: t('ipv64x.ipDeleteText', { ip: ip.ip }),
+										button: 'ipv64x.delete',
+										danger: true,
+										run: () => api.delete(`${base}/public-ips/${ip.id}`),
+									})}>{t('ipv64x.delete')}</button
+							>
+						</li>
+					{:else}
+						<li class="muted">{t('ipv64x.none')}</li>
+					{/each}
+				</ul>
+				{#if !detail.publicIPs.some((ip) => ip.type === 'ipv6')}
+					<div class="row-actions">
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() =>
+								(confirm = {
+									title: 'ipv64x.ipAdd',
+									text: t('ipv64x.ipAddText'),
+									button: 'ipv64x.ipAdd',
+									danger: false,
+									run: () => api.post(`${base}/public-ips`),
+								})}>{t('ipv64x.ipAdd')}</button
+						>
+					</div>
+				{/if}
+			</div>
+		</SettingGroup>
 	{/if}
 </div>
 

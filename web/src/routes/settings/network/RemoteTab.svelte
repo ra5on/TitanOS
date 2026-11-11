@@ -5,6 +5,8 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	type Plugin = { name: string; installed: boolean };
 	let plugins = $state<Plugin[] | null>(null),
@@ -18,36 +20,40 @@
 	const installed = (name: string) => !!plugins?.some((p) => p.name === name && p.installed);
 </script>
 
-{#each [{ name: 'tailscale', title: 'Tailscale' }, { name: 'netbird', title: 'NetBird' }] as remote (remote.name)}
-	<section class="tile panel" aria-labelledby="remote-{remote.name}">
-		<h2 class="tile-title" id="remote-{remote.name}">{remote.title}</h2>
-		{#if plugins === null && !failed}
-			<p class="muted">{t('netx.loading')}</p>
-		{:else if installed(remote.name)}
-			{#if remote.name === 'tailscale'}<TailscaleSettings />{:else}<NetbirdSettings />{/if}
+<!-- PLAN 78-1: each service is a row that opens to the settings of its
+     plugin (those components are shared with Plugins and keep their look);
+     the rest are rows that lead to their pages. -->
+<SettingGroup title={t('netx.tab.remote')} id="net-remote">
+	{#each [{ name: 'tailscale', title: 'Tailscale' }, { name: 'netbird', title: 'NetBird' }] as remote (remote.name)}
+		{#if installed(remote.name)}
+			<SettingRow icon="tailnet" title={remote.title} id="remote-{remote.name}" open>
+				<div class="srow-block">
+					{#if remote.name === 'tailscale'}<TailscaleSettings />{:else}<NetbirdSettings />{/if}
+				</div>
+			</SettingRow>
 		{:else}
-			<p class="muted">{failed ? t('netx.remoteUnknown') : t('netx.remoteMissing')}</p>
-			<div class="row-actions"><a class="btn" href="/plugins">{t('netx.remoteInstall')}</a></div>
+			<SettingRow
+				icon="tailnet"
+				title={remote.title}
+				id="remote-{remote.name}"
+				desc={plugins === null && !failed
+					? t('netx.loading')
+					: failed
+						? t('netx.remoteUnknown')
+						: t('netx.remoteMissing')}
+			>
+				{#snippet control()}{#if plugins !== null || failed}<a class="btn" href="/plugins"
+							>{t('netx.remoteInstall')}</a
+						>{/if}{/snippet}
+			</SettingRow>
 		{/if}
-	</section>
-{/each}
-<section class="tile panel" aria-labelledby="remote-proxy">
-	<h2 class="tile-title" id="remote-proxy">{t('netx.proxyTitle')}</h2>
-	<p class="muted">{t('netx.proxyHint')}</p>
-	<div class="row-actions">
-		<a class="btn" href="/settings/proxy">{t('proxy.settingsTitle')}</a><a
-			class="btn"
-			href="/docker">{t('netx.appLinks')}</a
-		>
-	</div>
-</section>
-<section class="tile panel" aria-labelledby="remote-dns">
-	<h2 class="tile-title" id="remote-dns">{t('netx.dnsServices')}</h2>
-	<p class="muted">{t('netx.dnsHint')}</p>
-	<div class="row-actions">
-		<a class="btn" href="/settings/ddns">{t('ddns.title')}</a><a
-			class="btn"
-			href="/settings/ddns?tab=ipv64">{t('ipv64x.title')}</a
-		>
-	</div>
-</section>
+	{/each}
+</SettingGroup>
+<SettingGroup title={t('netx.proxyTitle')} id="remote-proxy" desc={t('netx.proxyHint')}>
+	<SettingRow icon="lock" title={t('proxy.settingsTitle')} href="/settings/proxy" />
+	<SettingRow icon="external" title={t('netx.appLinks')} href="/docker" />
+</SettingGroup>
+<SettingGroup title={t('netx.dnsServices')} id="remote-dns" desc={t('netx.dnsHint')}>
+	<SettingRow icon="globe" title={t('ddns.title')} href="/settings/ddns" />
+	<SettingRow icon="globe" title={t('ipv64x.title')} href="/settings/ddns?tab=ipv64" />
+</SettingGroup>

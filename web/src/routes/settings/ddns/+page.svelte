@@ -19,7 +19,8 @@
 		type SecretName,
 	} from '#lib/dns-providers.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import DdnsStatusPanel from '#lib/ddns/DdnsStatus.svelte';
 	import UpdaterFields from '#lib/ddns/UpdaterFields.svelte';
 	import {
@@ -83,6 +84,14 @@
 	}
 	onMount(() => {
 		load();
+	});
+	// A link to a group of this page (#ddns-settings …): its content arrives after the
+	// browser's own anchor scroll, so bring it into view then.
+	const loaded = $derived(!!status);
+	$effect(() => {
+		const id = page.url.hash.slice(1);
+		if (!loaded || !id) return;
+		requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
 	});
 	$effect(() => {
 		if (!status?.running) return;
@@ -171,16 +180,22 @@
 		onrefresh={() => load(false)}
 	/>
 
-	<form class="tile panel" aria-labelledby="ddns-settings" onsubmit={save}>
-		<h2 class="tile-title" id="ddns-settings" use:revealTarget>{t('ddns.settingsTitle')}</h2>
-		<label class="check"
-			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span
-				>{t('ddns.enable')}</span
-			></label
-		>
-
-		<div class="divided">
-			<h3>{t('dnsProvider.title')}</h3>
+	<!-- PLAN 78-1: the settings are rows; one Save for all of them (one
+	     request, and names and sign-in are typed text). -->
+	<form class="rows" onsubmit={save}>
+		<SettingGroup title={t('ddns.settingsTitle')} id="ddns-settings">
+			<SettingRow icon="power" title={t('ddns.enable')} for="ddns-enabled">
+				{#snippet control()}
+					<input
+						id="ddns-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={enabled}
+						disabled={busy}
+					/>
+				{/snippet}
+			</SettingRow>
 			<DnsProviderFields
 				bind:form={provider}
 				bind:cleared
@@ -191,35 +206,39 @@
 				disabled={busy}
 				id="ddns-provider"
 			/>
-		</div>
-
-		<label class="stack"
-			><span>{t('ddns.hostnames')}</span><textarea
-				class="field mono"
-				rows="3"
-				bind:value={names}
-				placeholder="nas.example.org"
-				spellcheck="false"
-				autocapitalize="off"
-				disabled={busy}></textarea></label
-		>
-		<p class="muted hint">{t('ddns.hostnamesHint')}</p>
-		{#if badNames.length}<p class="notice-warn" role="alert">
-				{t('ddns.hostnamesInvalid', { names: badNames.join(', ') })}
-			</p>{/if}
-		{#if hostnames.length > MAX_HOSTS}<p class="notice-warn" role="alert">
-				{t('ddns.hostnamesTooMany')}
-			</p>{/if}
-
-		<UpdaterFields bind:form={updater} disabled={busy} />
-
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status"
-					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
-				>{/if}
-		</div>
+			<SettingRow
+				icon="list"
+				title={t('ddns.hostnames')}
+				desc={t('ddns.hostnamesHint')}
+				for="ddns-names"
+			>
+				{#snippet control()}
+					<textarea
+						id="ddns-names"
+						class="field mono"
+						rows="3"
+						bind:value={names}
+						placeholder="nas.example.org"
+						spellcheck="false"
+						autocapitalize="off"
+						disabled={busy}></textarea>
+				{/snippet}
+			</SettingRow>
+			{#if badNames.length}<p class="notice-warn" role="alert">
+					{t('ddns.hostnamesInvalid', { names: badNames.join(', ') })}
+				</p>{/if}
+			{#if hostnames.length > MAX_HOSTS}<p class="notice-warn" role="alert">
+					{t('ddns.hostnamesTooMany')}
+				</p>{/if}
+			<UpdaterFields bind:form={updater} disabled={busy} />
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
+				{#if busy || saved}<span class="muted" role="status"
+						>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+					>{/if}
+			</div>
+		</SettingGroup>
 	</form>
 
 	{#if provider.type === 'ipv64'}
@@ -234,25 +253,17 @@
 {/if}
 
 <style>
-	form {
-		font-size: var(--text-md);
+	form.rows {
+		display: contents;
 	}
-	.hint {
-		margin: 0;
-	}
-	h3 {
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.divided {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 	textarea {
 		height: auto;
 		padding: var(--space-2-5) var(--space-3);
-		max-width: 32rem;
+		width: 20rem;
+		max-width: 100%;
 		resize: vertical;
 	}
 </style>

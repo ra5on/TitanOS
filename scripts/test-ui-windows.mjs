@@ -515,13 +515,16 @@ for (const w of allOnly ? [] : [800, 1100]) {
       const bar = await page.locator("section.win header.titlebar").innerText();
       check(bar.includes(title), `${where}: title bar names the page (${bar})`);
     }
-    // Scrolled down the tool bar stays at the top.
-    if (hasBar) await frame.evaluate(() => window.scrollTo(0, 400));
+    // Scrolled down the tool bar stays at the top. A page of the control
+    // panel (PLAN 78-1) has its buttons beside the path title instead: they
+    // scroll away with it.
+    const sticks = hasBar && !path.startsWith("/settings");
+    if (sticks) await frame.evaluate(() => window.scrollTo(0, 400));
     await frame.waitForTimeout(100);
     const top = await frame.evaluate(
       () => document.querySelector(".win-toolbar")?.getBoundingClientRect().top,
     );
-    if (hasBar)
+    if (sticks)
       check(
         top !== undefined && top <= 1,
         `${where}: tool bar sticks (${top})`,

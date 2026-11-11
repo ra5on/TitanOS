@@ -451,7 +451,8 @@ try {
     await page
       .getByRole("heading", { level: 1, name: "Firewall" })
       .waitFor({ state: "attached" });
-    const button = page.locator(".settings-page .tile .btn").first();
+    // PLAN 78-1: groups are plain headings, no tiles around them.
+    const button = page.locator(".settings-page .sgroup .btn").first();
     await button.waitFor();
     assert.ok(
       (await button.boundingBox()).height <= 32,
@@ -461,7 +462,7 @@ try {
       path: `${out}/firewall-desktop-off.png`,
       fullPage: true,
     });
-    const master = page.getByRole("checkbox", {
+    const master = page.getByRole("switch", {
       name: "Firewall einschalten",
       exact: true,
     });

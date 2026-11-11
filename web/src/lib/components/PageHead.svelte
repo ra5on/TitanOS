@@ -25,8 +25,10 @@
 		id?: string;
 		children?: Snippet;
 		actions?: Snippet;
+		/** The places above this page, for the large path title ("Area › Page"). */
+		path?: { label: string; href?: string }[];
 	};
-	let { title, id, children, actions }: Props = $props();
+	let { title, id, children, actions, path }: Props = $props();
 
 	// The browser tab shows the title of the page; the last head that leaves clears it.
 	$effect(() => {
@@ -50,9 +52,21 @@
 	// names the place); the page's own name stays the one <h1>.
 	const settingsPage = $derived(/^\/settings(\/|$)/.test(page.url.pathname));
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	const crumbs = $derived(settingsPage ? settingsCrumbs(page.url.pathname, admin) : []);
-	const crumbLinks = !inWindow || windowApp() === 'app:settings';
-	const hasBar = $derived(!!actions || (phone && ownName && !settingsPage));
+	// `path` gives any page this head (PLAN 78-5: every program's pages get the
+	// same structure); pages of the control panel get theirs from their address.
+	const pathHead = $derived(settingsPage || !!path);
+	const shownCrumbs = $derived(
+		(
+			path ??
+			(settingsPage
+				? settingsCrumbs(page.url.pathname, admin).map((c) => ({ label: t(c.label), href: c.href }))
+				: [])
+		)
+			// An area named like its page ("Netzwerk › Netzwerk") says it once.
+			.filter((crumb) => crumb.label !== title),
+	);
+	const crumbLinks = $derived(!inWindow || windowApp() === 'app:settings' || !settingsPage);
+	const hasBar = $derived(!!actions || (phone && ownName && !pathHead));
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
 	// bar, never the main action, a field, a group or a button with a menu of
@@ -158,24 +172,15 @@
 	});
 </script>
 
-{#if settingsPage}
-	<div class="set-path">
-		{#if crumbs.length}<nav aria-label={t('settings.path')}>
-				{#each crumbs as crumb (crumb.href)}{#if crumbLinks}<a href={crumb.href}>{t(crumb.label)}</a
-						>{:else}<span class="sep">{t(crumb.label)}</span>{/if}<span
-						class="sep"
-						aria-hidden="true">›</span
-					>{/each}
-			</nav>{/if}
-		<h1 {id}>{title}</h1>
-	</div>
-{/if}
-{#if !hasBar}
-	{#if !settingsPage}<h1 class="sr-only" {id}>{title}</h1>{/if}
-	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
-{:else}
-	<div class="win-toolbar" class:phone class:sticky={!!actions || phone} bind:this={bar}>
-		{#if settingsPage}{:else if phone && ownName}
+{#snippet toolbar()}
+	<div
+		class="win-toolbar"
+		class:phone
+		class:sticky={!pathHead && (!!actions || phone)}
+		class:beside={pathHead}
+		bind:this={bar}
+	>
+		{#if pathHead}{:else if phone && ownName}
 			<h1 class="win-title" {id}>{title}</h1>
 		{:else}
 			<h1 class="sr-only" {id}>{title}</h1>
@@ -205,6 +210,30 @@
 			</div>
 		{/if}
 	</div>
+{/snippet}
+
+{#if pathHead}
+	<!-- PLAN 78-1: the path title; the page's actions stand at its right (below it when narrow). -->
+	<div class="set-head">
+		<div class="set-path">
+			{#if shownCrumbs.length}<nav aria-label={t('settings.path')}>
+					{#each shownCrumbs as crumb (crumb.label + (crumb.href ?? ''))}{#if crumb.href && crumbLinks}<a
+								href={crumb.href}>{crumb.label}</a
+							>{:else}<span class="sep">{crumb.label}</span>{/if}<span
+							class="sep"
+							aria-hidden="true">›</span
+						>{/each}
+				</nav>{/if}
+			<h1 {id}>{title}</h1>
+		</div>
+		{#if hasBar}{@render toolbar()}{/if}
+	</div>
+	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
+{:else if !hasBar}
+	<h1 class="sr-only" {id}>{title}</h1>
+	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
+{:else}
+	{@render toolbar()}
 	{#if (actions || phone) && children}<div class="win-intro">{@render children()}</div>{/if}
 {/if}
 
@@ -221,6 +250,15 @@
 		border-bottom: 1px solid var(--border);
 		min-width: 0;
 		flex-wrap: wrap;
+	}
+	/* Beside the path title: no strip of its own, just the page's buttons. */
+	.win-toolbar.beside {
+		flex: 1 1 auto;
+		min-height: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: none;
 	}
 	.win-toolbar.sticky {
 		position: sticky;
