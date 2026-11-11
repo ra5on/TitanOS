@@ -185,9 +185,11 @@ var (
 // copyLink keeps a symbolic link of the source as a link: it is made anew
 // with the same target, never followed, and what it points to is not
 // copied through it. A link that is there with the same target stays; a
-// file or another link in its place is replaced; a folder is not (a copy
-// never removes a folder for a link).
-func copyLink(target *os.Root, to, link string) error {
+// file or another link in its place is replaced. A folder in its place
+// (the source was a folder when it was copied last) is moved aside with
+// aside, never deleted: the copy may be the only place its files still
+// exist.
+func copyLink(target *os.Root, to, link string, aside func(to string) error) error {
 	info, err := target.Lstat(to)
 	switch {
 	case err == nil && info.Mode()&fs.ModeSymlink != 0:
@@ -195,7 +197,12 @@ func copyLink(target *os.Root, to, link string) error {
 			return nil
 		}
 	case err == nil && info.IsDir():
-		return fmt.Errorf("copy destination %s is a directory, the source a link", to)
+		if aside == nil {
+			return fmt.Errorf("copy destination %s is a directory, the source a link", to)
+		}
+		if err := aside(to); err != nil {
+			return err
+		}
 	case err != nil && !os.IsNotExist(err):
 		return err
 	}
@@ -239,6 +246,18 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	var special int64
 	if len(sources) == 0 {
 		return fmt.Errorf("none of the shares of this job is available")
+	}
+	// A snapshot an earlier run could not remove goes before this one reads.
+	if m.CleanSnapshots != nil {
+		cleaned := map[string]bool{}
+		for _, name := range names {
+			if volume := sources[name].Volume; volume != "" && !cleaned[volume] {
+				cleaned[volume] = true
+				if err := m.CleanSnapshots(ctx, volume); err != nil && ctx.Err() == nil {
+					slog.Warn("backup: leftover snapshot of an earlier run not removed", "job", job.ID, "volume", volume, "err", err)
+				}
+			}
+		}
 	}
 	if err := copyDirectories(target, job.Destination.Folder); err != nil {
 		return err
@@ -445,7 +464,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			}
 			roots[item.share] = root
 		}
-		if err := copyDirectories(target, path.Dir(item.dst)); err != nil {
+		if err := copyDirectoriesBelow(target, base, path.Dir(item.dst)); err != nil {
 			if fatalTarget(err) {
 				return err
 			}
@@ -453,7 +472,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			continue
 		}
 		if item.isLink {
-			if err := copyLink(target, item.dst, item.link); err != nil {
+			if err := copyLink(target, item.dst, item.link, func(to string) error { return m.moveAside(target, job, to) }); err != nil {
 				if fatalTarget(err) {
 					return err
 				}
@@ -576,13 +595,52 @@ func syncTarget(target *os.Root) error {
 	return unix.Syncfs(int(dir.Fd()))
 }
 
+// moveAside takes a folder of the copy out of the way of what the source
+// holds in its place now, into <folder>/_gelöscht/<date>/…, where a mirror
+// puts what is gone from the source. Nothing is deleted; with the mirror
+// option the day is removed after MirrorDays like the rest of it. The move
+// stays inside the destination and follows no link.
+func (m *Manager) moveAside(target *os.Root, job Job, to string) error {
+	rel := strings.TrimPrefix(to, job.Destination.Folder+"/")
+	bin := path.Join(job.Destination.Folder, deletedFolder, m.local(m.now()).Format("2006-01-02"), rel)
+	for i := 2; ; i++ {
+		if _, err := target.Lstat(bin); os.IsNotExist(err) {
+			break
+		} else if err != nil {
+			return err
+		}
+		bin = path.Join(job.Destination.Folder, deletedFolder, m.local(m.now()).Format("2006-01-02"), rel+"-"+itoa(i))
+	}
+	if err := copyDirectories(target, path.Dir(bin)); err != nil {
+		return err
+	}
+	slog.Info("backup: a folder of the copy is a link in the source now; the folder was moved aside", "job", job.ID, "folder", to, "to", bin)
+	return target.Rename(to, bin)
+}
+
 // Refuse destination links even when they point somewhere within the same disk.
 func copyDirectories(root *os.Root, dir string) error {
+	return copyDirectoriesBelow(root, dir, dir)
+}
+
+// copyDirectoriesBelow is copyDirectories that heals the copy below base:
+// a symbolic link there that the copy keeps for a link of the source
+// (copyLink) is removed when the source has a folder in its place now, and
+// the folder is made. Only the link itself goes, never what it points to;
+// base and everything above it stay strict (a destination folder that is
+// a link is refused).
+func copyDirectoriesBelow(root *os.Root, base, dir string) error {
 	parts := strings.Split(filepath.ToSlash(dir), "/")
 	current := ""
 	for _, part := range parts {
 		current = path.Join(current, part)
 		info, err := root.Lstat(current)
+		if err == nil && info.Mode()&fs.ModeSymlink != 0 && current != base && strings.HasPrefix(current, base+"/") {
+			if err := root.Remove(current); err != nil {
+				return err
+			}
+			err = fs.ErrNotExist
+		}
 		if os.IsNotExist(err) {
 			if err = root.Mkdir(current, 0700); err != nil {
 				return err

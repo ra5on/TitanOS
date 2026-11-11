@@ -245,9 +245,16 @@ type Manager struct {
 	// backupSnapshots are the snapshots backups read from right now, by
 	// path (BackupSnapshot).
 	backupSnapshots map[string]bool
+	// backupCleaned are the volumes whose leftover backup snapshots were
+	// removed since the start.
+	backupCleaned map[string]bool
 	// shadowIdle are the Btrfs volumes without previous versions and
 	// without mirrors: SyncShadowCopies leaves them alone (RAM only).
 	shadowIdle map[string]bool
+	// systemDataWaiting is since when SystemDataVolume waits for the disk
+	// sleep settings; systemDataWarned that it said it gave up waiting.
+	systemDataWaiting time.Time
+	systemDataWarned  bool
 	// systemData is the last choice of SystemDataVolume.
 	systemData systemDataChoice
 	smart      map[string]*Smart // by disk path
@@ -748,6 +755,8 @@ func (m *Manager) Run(ctx context.Context) {
 		if m.Settled() {
 			// Disk tests that a restart stopped, from volumes mounted since.
 			m.ResumeSavedTests(ctx)
+			// Snapshots a backup left behind when titand last stopped.
+			m.cleanBackupSnapshotsOnce(ctx)
 		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge

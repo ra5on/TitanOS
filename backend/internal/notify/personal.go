@@ -120,7 +120,9 @@ type personalState struct {
 }
 
 type personalStore struct {
-	dir   func() (string, bool)
+	dir func() (string, bool)
+	// hold takes the folder of dir for a write (SetPersonalDataHold).
+	hold  func() (release func(), ok bool)
 	mu    sync.Mutex
 	users map[string]*personalState
 }

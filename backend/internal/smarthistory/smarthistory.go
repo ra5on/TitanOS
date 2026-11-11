@@ -77,7 +77,11 @@ type Recorder struct {
 	// the first one), "" while there is none. Nil takes the first mounted
 	// volume by name.
 	DefaultVolume func() string
-	MountRoot     string
+	// HoldDefault takes the folder for a write and returns what lets it
+	// go; ok is false while the folder is being moved to another volume.
+	// Nil: never moved.
+	HoldDefault func() (release func(), ok bool)
+	MountRoot   string
 	// Disabled keeps disks untouched (development mode).
 	Disabled bool
 	now      func() time.Time
@@ -171,6 +175,13 @@ func sampleOf(day string, report storage.SmartReport) Sample {
 func (r *Recorder) Record(ctx context.Context) error {
 	if r.Disabled || r.Reports == nil {
 		return nil
+	}
+	if r.HoldDefault != nil {
+		release, ok := r.HoldDefault()
+		if !ok {
+			return nil
+		}
+		defer release()
 	}
 	volume, mounted := r.volume()
 	if volume == "" {
@@ -285,5 +296,9 @@ func (r *Recorder) Run(ctx context.Context) {
 			slog.Warn("SMART history not kept", "err", err)
 		}
 		wait = every
+		if r.Volume() == "" {
+			// No volume yet, or the history is being moved: soon again.
+			wait = firstAfter
+		}
 	}
 }

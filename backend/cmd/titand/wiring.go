@@ -206,7 +206,7 @@ func (w *titand) wireBase() error {
 	w.volumes = storage.NewManager(w.store)
 	// Where TitanOS keeps its own data while no volume is chosen for it: a
 	// volume that never sleeps, else the first one (PLAN 79-6).
-	w.systemData = &volumedata.Home{MountRoot: "/mnt", Mounted: w.volumes.Mounted, Choose: func() string {
+	w.systemData = &volumedata.Home{MountRoot: "/mnt", Mounted: w.volumes.Mounted, Context: w.ctx, Choose: func() string {
 		// Also for the last lines of the journal while titand stops.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(w.ctx), 10*time.Second)
 		defer cancel()
@@ -223,6 +223,7 @@ func (w *titand) wireBase() error {
 	w.smartHistory.Disabled = w.opts.dev
 	w.smartHistory.Mounted = w.volumes.Mounted
 	w.smartHistory.DefaultVolume = func() string { return w.systemData.Volume(smarthistory.Feature) }
+	w.smartHistory.HoldDefault = func() (func(), bool) { return w.systemData.Hold(smarthistory.Feature) }
 	w.smartHistory.Reports = func(ctx context.Context) ([]storage.SmartReport, error) {
 		return w.volumes.SmartReports(ctx, false)
 	}

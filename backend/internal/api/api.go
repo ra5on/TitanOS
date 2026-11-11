@@ -371,6 +371,9 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Notify != nil {
 		s.opts.Notify.SetPersonalDataDir(s.notifyDir)
+		if home := s.opts.SystemData; home != nil {
+			s.opts.Notify.SetPersonalDataHold(func() (func(), bool) { return home.Hold("notify") })
+		}
 		s.opts.Notify.Audience = s.notifyAudience
 	}
 	s.haStore.check = make(chan struct{}, 1)

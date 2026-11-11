@@ -163,3 +163,38 @@ func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
 		t.Fatalf("chosen volume not respected: %+v", st)
 	}
 }
+
+// While the folder on the default volume is being moved, nothing is
+// written or read there: entries wait in memory and come afterwards.
+func TestWaitsWhileTheFolderIsBeingMoved(t *testing.T) {
+	m := testManager(t)
+	m.DefaultVolume = func() string { return "data" }
+	held, released := false, 0
+	m.HoldDefault = func() (func(), bool) { return func() { released++ }, held }
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "login", OK: true})
+	m.Flush()
+	if _, err := os.Stat(filepath.Join(m.MountRoot, "data", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("written while the folder was being moved")
+	}
+	rows, _, stored, err := m.Query(context.Background(), Filter{Days: 7, Limit: 10})
+	if err != nil || stored || len(rows) != 1 {
+		t.Fatalf("query during the move: %v stored=%v %+v", err, stored, rows)
+	}
+	held = true
+	m.Flush()
+	if st := m.Status(); st.Pending != 0 || released != 1 {
+		t.Fatalf("not written after the move: %+v, let go %d times", st, released)
+	}
+	// A chosen volume is never moved: no hold is asked for.
+	s := Defaults()
+	s.Volume = "data"
+	if err := m.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	held = false
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "logout", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Pending != 0 {
+		t.Fatalf("chosen volume waited for a move: %+v", st)
+	}
+}

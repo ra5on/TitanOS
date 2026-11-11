@@ -103,18 +103,89 @@ func TestCopyKeepsSymbolicLinksAsLinks(t *testing.T) {
 	if entries, _ := os.ReadDir(copied); slices.ContainsFunc(entries, func(e os.DirEntry) bool { return strings.HasPrefix(e.Name(), ".titanos-copy-") }) {
 		t.Error("temporary link left behind")
 	}
-	// A folder of the copy is never removed for a link: reported instead.
-	os.MkdirAll(filepath.Join(source, "wasdir"), 0o755)
-	os.WriteFile(filepath.Join(source, "wasdir", "kept"), []byte("kept"), 0o600)
-	run()
-	os.RemoveAll(filepath.Join(source, "wasdir"))
-	os.Symlink("real", filepath.Join(source, "wasdir"))
-	state = run()
-	if data, _ := os.ReadFile(filepath.Join(copied, "wasdir", "kept")); string(data) != "kept" {
-		t.Fatal("a folder of the copy was removed for a link")
+}
+
+// What was a link in the source is a real folder now, and the reverse:
+// the copy follows on the next run instead of failing for every file below
+// it each time. The link goes (never what it points to); a folder of the
+// copy is moved aside, never deleted.
+func TestCopyHealsLinkThatBecameFolderAndFolderThatBecameLink(t *testing.T) {
+	_, source, target, run := copyFixture(t)
+	copied := filepath.Join(target, "backup", "docs")
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "precious"), []byte("outside the copy"), 0o600)
+	os.MkdirAll(filepath.Join(source, "real"), 0o755)
+	os.WriteFile(filepath.Join(source, "real", "file"), []byte("data"), 0o600)
+	// "was-link" points out of the copy; "was-dir" is a folder with a file.
+	os.Symlink(outside, filepath.Join(source, "was-link"))
+	os.MkdirAll(filepath.Join(source, "was-dir", "deep"), 0o755)
+	os.WriteFile(filepath.Join(source, "was-dir", "deep", "kept"), []byte("kept"), 0o600)
+	if state := run(); state.Warning != "" {
+		t.Fatalf("first run: %+v", state)
 	}
-	if len(state.Problems) != 1 || state.Problems[0].Code != ProblemOther || !slices.Equal(state.Problems[0].Paths, []string{"docs/wasdir"}) {
-		t.Fatalf("problems %+v", state.Problems)
+	// link → folder with files, folder → link.
+	os.Remove(filepath.Join(source, "was-link"))
+	os.MkdirAll(filepath.Join(source, "was-link", "sub"), 0o755)
+	os.WriteFile(filepath.Join(source, "was-link", "a"), []byte("a"), 0o600)
+	os.WriteFile(filepath.Join(source, "was-link", "sub", "b"), []byte("b"), 0o600)
+	os.RemoveAll(filepath.Join(source, "was-dir"))
+	os.Symlink("real", filepath.Join(source, "was-dir"))
+	state := run()
+	if state.Warning != "" || len(state.Problems) != 0 {
+		t.Fatalf("the changed kind was not healed: %+v", state)
+	}
+	if info, err := os.Lstat(filepath.Join(copied, "was-link")); err != nil || !info.IsDir() {
+		t.Fatalf("link that became a folder is no folder in the copy: %v", err)
+	}
+	for name, want := range map[string]string{"was-link/a": "a", "was-link/sub/b": "b"} {
+		if data, err := os.ReadFile(filepath.Join(copied, name)); err != nil || string(data) != want {
+			t.Fatalf("%s: %q %v", name, data, err)
+		}
+	}
+	// Only the link went: nothing was written or deleted where it pointed.
+	if entries, _ := os.ReadDir(outside); len(entries) != 1 || entries[0].Name() != "precious" {
+		t.Fatalf("the target of the old link was touched: %v", entries)
+	}
+	if to, err := os.Readlink(filepath.Join(copied, "was-dir")); err != nil || to != "real" {
+		t.Fatalf("folder that became a link: %q %v", to, err)
+	}
+	// The folder of the copy was moved aside inside the destination.
+	moved, _ := filepath.Glob(filepath.Join(target, "backup", deletedFolder, "*", "docs", "was-dir", "deep", "kept"))
+	if len(moved) != 1 {
+		t.Fatalf("the folder of the copy was not moved aside: %v", moved)
+	}
+	if data, _ := os.ReadFile(moved[0]); string(data) != "kept" {
+		t.Fatalf("moved folder lost its content: %q", data)
+	}
+	// The next run has nothing to heal and nothing to report.
+	if state := run(); state.Warning != "" {
+		t.Fatalf("third run: %+v", state)
+	}
+	// The same day again: the folder set aside before is not overwritten.
+	os.Remove(filepath.Join(source, "was-dir"))
+	os.MkdirAll(filepath.Join(source, "was-dir"), 0o755)
+	os.WriteFile(filepath.Join(source, "was-dir", "second"), []byte("second"), 0o600)
+	run()
+	os.RemoveAll(filepath.Join(source, "was-dir"))
+	os.Symlink("real", filepath.Join(source, "was-dir"))
+	if state := run(); state.Warning != "" {
+		t.Fatalf("fifth run: %+v", state)
+	}
+	if again, _ := filepath.Glob(filepath.Join(target, "backup", deletedFolder, "*", "docs", "was-dir-2", "second")); len(again) != 1 {
+		t.Fatal("a second folder moved aside on the same day was lost or overwrote the first")
+	}
+	if data, _ := os.ReadFile(moved[0]); string(data) != "kept" {
+		t.Fatal("the folder set aside first was overwritten")
+	}
+	// The destination folder itself being a link is still refused.
+	os.Symlink(t.TempDir(), filepath.Join(target, "escape"))
+	root, _ := os.OpenRoot(target)
+	defer root.Close()
+	if err := copyDirectoriesBelow(root, "escape", "escape/docs"); err == nil {
+		t.Fatal("a destination folder that is a link was accepted")
+	}
+	if err := copyDirectoriesBelow(root, "backup", "escape/docs"); err == nil {
+		t.Fatal("a link outside the job's folder was replaced")
 	}
 }
 

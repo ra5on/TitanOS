@@ -80,6 +80,7 @@ func (w *titand) wireFiles() error {
 	if !w.opts.dev {
 		w.audit.Mounted = w.volumes.Mounted
 		w.audit.DefaultVolume = func() string { return w.systemData.Volume("activity") }
+		w.audit.HoldDefault = func() (func(), bool) { return w.systemData.Hold("activity") }
 		w.background(func() { w.audit.Run(ctx) })
 	}
 	// SSH logins with the key they came in with, from the journal of sshd.

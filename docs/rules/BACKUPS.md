@@ -72,8 +72,14 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   Ursachen bekommen eine Kennung, keinen neuen Satz.
   **Verknüpfungen und Sonderdateien:** Symbolische Verknüpfungen werden als
   Verknüpfung mit demselben Ziel gesichert (nie verfolgt, das Ziel wird nicht
-  über sie kopiert; unverändert bleibt sie, geändert wird sie ersetzt, ein
-  Ordner der Kopie weicht nie einer Verknüpfung). Kann das Ziel-Dateisystem
+  über sie kopiert; unverändert bleibt sie, geändert wird sie ersetzt). Wechselt
+  in der Quelle die Art, folgt die Kopie im nächsten Lauf: Aus einer
+  Verknüpfung wurde ein Ordner → nur die Verknüpfung der Kopie wird entfernt
+  (nie ihr Ziel) und der Ordner angelegt; aus einem Ordner wurde eine
+  Verknüpfung → der Ordner der Kopie wird nach `<Ordner>/_gelöscht/<Datum>/…`
+  verschoben, nie gelöscht (mit Spiegel-Option wie dessen Inhalt nach
+  `mirrorDays` entfernt). Der Zielordner des Auftrags selbst darf weiterhin
+  keine Verknüpfung sein. Kann das Ziel-Dateisystem
   keine halten (FAT32, exFAT, SMB ohne Unix-Erweiterungen), steht sie unter
   `link_unsupported`. Sockets, FIFOs und Gerätedateien sind keine Daten: Sie
   werden still übergangen und nur als Zahl im Journal vermerkt, nie als
@@ -84,8 +90,12 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   solchen Abbild einen schreibgeschützten Snapshot des Volumes unter
   `.titanos/backup-source/` an (kein Snapshot des Nutzers: nicht gelistet,
   keine Vorgängerversion), liest **nur diese Abbilder** daraus und löscht ihn
-  am Ende des Laufs, auch nach Abbruch; ein liegen gebliebener wird beim
-  nächsten Mal entfernt. Die Kopie ist absturzkonsistent (Zustand eines
+  am Ende des Laufs, auch nach Abbruch. Ein liegen gebliebener (titand
+  beendet, Stromausfall) würde dauerhaft Platz binden; er wird deshalb nach
+  jedem Start entfernt, sobald das Volume eingebunden ist, außerdem zu Beginn
+  jedes Kopierlaufs für dessen Quell-Volumes und vor jedem neuen Snapshot
+  (`storage.CleanBackupSnapshots`). Warten auf andere Speicherarbeiten und das
+  Löschen sind begrenzt und folgen dem Abbruch des Laufs. Die Kopie ist absturzkonsistent (Zustand eines
   Augenblicks wie nach einem Stromausfall; Journal des Gasts und qcow2 erholen
   sich davon), nicht anwendungskonsistent. Alles andere wird weiter direkt
   gelesen, weil ein Btrfs-Snapshot nicht in darunterliegende Subvolumes reicht

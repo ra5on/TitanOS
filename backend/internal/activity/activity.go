@@ -102,15 +102,20 @@ type Manager struct {
 	// system data volume (one that never sleeps, else the first one), ""
 	// while there is none. Nil takes the first mounted volume by name.
 	DefaultVolume func() string
-	mu            sync.Mutex
-	ioMu          sync.Mutex
-	settings      Settings
-	recent        []Entry
-	pending       []Entry
-	dropped       int
-	problem       string
-	wake          chan struct{}
-	now           func() time.Time
+	// HoldDefault takes the folder on the default volume for a write and
+	// returns what lets it go; ok is false while the folder is being moved
+	// to another volume, and nothing is read or written then. Nil: never
+	// moved.
+	HoldDefault func() (release func(), ok bool)
+	mu          sync.Mutex
+	ioMu        sync.Mutex
+	settings    Settings
+	recent      []Entry
+	pending     []Entry
+	dropped     int
+	problem     string
+	wake        chan struct{}
+	now         func() time.Time
 }
 
 func New(store *config.Store) *Manager {
@@ -171,6 +176,15 @@ func (m *Manager) Status() Status {
 		st.Volume = m.volume(s)
 	}
 	return st
+}
+
+// hold keeps the folder on the default volume from being moved while it is
+// read or written. Called with ioMu held, before volume.
+func (m *Manager) hold(s Settings) (release func(), ok bool) {
+	if s.Volume != "" || m.HoldDefault == nil {
+		return func() {}, true
+	}
+	return m.HoldDefault()
 }
 
 // volume is the volume entries go to, or "" if none is mounted.
@@ -292,6 +306,11 @@ func (m *Manager) Flush() {
 	if len(batch) == 0 || !s.Enabled {
 		return
 	}
+	release, ok := m.hold(s)
+	if !ok {
+		return
+	}
+	defer release()
 	volume := m.volume(s)
 	if volume == "" {
 		return
@@ -476,9 +495,16 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 	recent := slices.Clone(m.recent)
 	m.mu.Unlock()
 	found := []Entry{}
+	// The volume is chosen under the lock of the writer and with the folder
+	// held: a flush or a move in between would read another place.
+	m.ioMu.Lock()
+	defer m.ioMu.Unlock()
 	volume := ""
 	if s.Enabled {
-		volume = m.volume(s)
+		if release, ok := m.hold(s); ok {
+			defer release()
+			volume = m.volume(s)
+		}
 	}
 	if volume == "" {
 		for _, e := range recent {
@@ -488,8 +514,6 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 		}
 		return finish(found, f.Limit, false)
 	}
-	m.ioMu.Lock()
-	defer m.ioMu.Unlock()
 	// Entries written while we waited for the lock are on the volume now.
 	m.mu.Lock()
 	pending := slices.Clone(m.pending)

@@ -175,3 +175,45 @@ func TestStateFilesAreNoChangeOfTheConfiguration(t *testing.T) {
 		t.Fatalf("configuration not counted: %v changes=%d", err, s.Changes())
 	}
 }
+
+// A write whose directory could not be flushed is not durable. Writing the
+// same content again must flush it, not skip it as "already there".
+func TestRetryAfterFailedFlushFlushesAgain(t *testing.T) {
+	s := Open(t.TempDir())
+	failing, calls := true, 0
+	syncDir = func(dir string) error {
+		calls++
+		if failing {
+			return errors.New("stick did not answer")
+		}
+		return syncDirectory(dir)
+	}
+	t.Cleanup(func() { syncDir = syncDirectory })
+	if err := s.Write("system/energy.json", []byte("{}")); err == nil {
+		t.Fatal("failed flush not reported")
+	}
+	if err := s.Write("system/energy.json", []byte("{}")); err == nil {
+		t.Fatal("the retry passed although the directory is still not flushed")
+	}
+	failing = false
+	before := calls
+	if err := s.Write("system/energy.json", []byte("{}")); err != nil || calls != before+1 {
+		t.Fatalf("retry did not flush the directory: %v, %d flushes", err, calls-before)
+	}
+	if err := s.Write("system/energy.json", []byte("{}")); err != nil || calls != before+1 {
+		t.Fatalf("a flushed directory was flushed again: %v, %d flushes", err, calls-before)
+	}
+	// The same for a removal.
+	failing = true
+	if err := s.Remove("system/energy.json"); err == nil {
+		t.Fatal("failed flush of a removal not reported")
+	}
+	failing = false
+	before = calls
+	if err := s.Remove("system/energy.json"); err != nil || calls != before+1 {
+		t.Fatalf("retry of the removal did not flush: %v, %d flushes", err, calls-before)
+	}
+	if s.Writes() != 2 {
+		t.Fatalf("retries counted as writes: %d", s.Writes())
+	}
+}

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,6 +70,14 @@ func TestSystemDataVolumeWaitsAndCaches(t *testing.T) {
 	if got := m.SystemDataVolume(ctx); got != "" {
 		t.Fatalf("answered %q before the disk sleep settings were read", got)
 	}
+	// Settings that stay unreadable (a damaged file) do not keep the data
+	// in RAM for good: after the grace period it is the first volume.
+	m.mu.Lock()
+	m.systemDataWaiting = time.Now().Add(-systemDataGrace - time.Second)
+	m.mu.Unlock()
+	if got := m.SystemDataVolume(ctx); got != "Backup" {
+		t.Fatalf("got %q with unreadable disk sleep settings after the grace period, want the first volume", got)
+	}
 	m.mu.Lock()
 	m.diskSleepLoaded = true
 	m.mu.Unlock()
@@ -128,5 +137,35 @@ func TestVolumeAsleepFollowsItsDisks(t *testing.T) {
 	sleepTicks(t, m, now.Add(5*time.Minute+20*time.Second), 0)
 	if m.VolumeAsleep("data") {
 		t.Fatal("still asleep after activity on its disks")
+	}
+}
+
+// A volume on SATA SSDs never sleeps: only rotational disks are put to
+// sleep, whatever the default sleep time says.
+func TestSystemDataVolumeCountsSATASSDVolumeAsAwake(t *testing.T) {
+	ctx := context.Background()
+	m, runner := systemDataManager(t, "Backup", "ssd")
+	m.volumes = []VolumeConfig{{Name: "Backup", Level: "raid5", Filesystem: "xfs", ArrayUUID: dataArrayUUID}, {Name: "ssd", Level: "raid1", Filesystem: "ext4", ArrayUUID: "99999999:88887777:66665555:44444444"}}
+	runner.disks = strings.Replace(lsblkOutput, `{"name":"/dev/sdd1","kname":"/dev/sdd1","type":"part","size":1000000000,"fstype":"ntfs","label":"Daten","uuid":"bbbb","mountpoint":null}`,
+		`{"name":"/dev/sdd1","kname":"/dev/sdd1","type":"part","size":1000000000,"fstype":"linux_raid_member","label":"any:ssd","uuid":"99999999-8888-7777-6666-555544444444","mountpoint":null}`, 1)
+	if runner.disks == lsblkOutput {
+		t.Fatal("fixture not changed")
+	}
+	if err := m.SetDiskSleep(ctx, DiskSleepSettings{IdleMinutes: 30}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := false
+	for _, disk := range status.Disks {
+		member = member || disk.Name == "sdd" && disk.Volume == "ssd" && disk.Kind == "ssd"
+	}
+	if !member {
+		t.Fatalf("fixture: sdd is no SSD member of the volume ssd: %+v", status.Disks)
+	}
+	if got := m.SystemDataVolume(ctx); got != "ssd" {
+		t.Fatalf("got %q, want the SATA SSD volume", got)
 	}
 }

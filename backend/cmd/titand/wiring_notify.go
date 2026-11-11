@@ -40,6 +40,13 @@ func (w *titand) wireNotifications() error {
 		}
 		return w.volumes.MountPoint(volume), true
 	}
+	w.logs.Hold = func() (func(), bool) { return w.systemData.Hold("logs") }
+	// The journal was moved to another volume: its marker went along.
+	w.systemData.OnMoved = func(feature, from, _ string) {
+		if feature == "logs" {
+			w.logs.Forget(w.volumes.MountPoint(from))
+		}
+	}
 	w.logs.OnUnclean = func(u logkeep.Unclean) {
 		when := u.Started.Local().Format("02.01.2006 15:04")
 		if !u.LastLine.IsZero() {

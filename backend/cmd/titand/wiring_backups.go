@@ -76,6 +76,7 @@ func (w *titand) wireBackups() error {
 	// reported if they changed meanwhile.
 	w.backups.LiveFiles = w.machines.RunningDiskFiles
 	w.backups.SnapshotSource = w.volumes.BackupSnapshot
+	w.backups.CleanSnapshots = w.volumes.CleanBackupSnapshots
 	w.backups.Timezone = w.settings.CurrentTimezone
 	w.appBackups = &appbackup.Manager{Store: w.store, Docker: w.containers, VMs: w.machines, Mounted: w.volumes.Mounted, MountRoot: "/mnt", Disabled: w.opts.dev}
 	if err := w.appBackups.Load(); err != nil {

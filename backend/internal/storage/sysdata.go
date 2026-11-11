@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,10 @@ import (
 // while the mounted volumes and the disk sleep settings stay the same. A
 // disk that joins or leaves a volume is noticed after this time.
 const systemDataMaxAge = 5 * time.Minute
+
+// systemDataGrace is how long SystemDataVolume waits for the disk sleep
+// settings before it answers without them.
+const systemDataGrace = 2 * time.Minute
 
 // systemDataChoice is the last answer of SystemDataVolume (RAM only).
 type systemDataChoice struct {
@@ -31,9 +36,11 @@ type systemDataChoice struct {
 // it is the first one by name, as before.
 //
 // It answers "" while no volume is mounted, and while the volumes or the
-// disk sleep settings are not known yet (shortly after the start, or with
-// an unreadable stick): callers then wait instead of writing to a volume
-// that would turn out to be the wrong one. It lists the disks like Status
+// disk sleep settings are not known yet (shortly after the start): callers
+// then wait instead of writing to a volume that would turn out to be the
+// wrong one. Disk sleep settings that cannot be read at all (a damaged
+// file) end the wait after systemDataGrace with the first volume: without
+// them TitanOS puts no disk to sleep either. It lists the disks like Status
 // (lsblk) at most every few minutes and reads neither a disk nor /config.
 func (m *Manager) SystemDataVolume(ctx context.Context) string {
 	mounted := slices.DeleteFunc(m.Mounted(), func(name string) bool { return !naming.ValidVolume(name) })
@@ -42,10 +49,31 @@ func (m *Manager) SystemDataVolume(ctx context.Context) string {
 	}
 	slices.Sort(mounted)
 	sleep := m.DiskSleep()
-	if !sleep.Available && !m.ReadOnly {
-		return ""
-	}
 	settings := sleep.DiskSleepSettings
+	if !sleep.Available && !m.ReadOnly {
+		// The disk sleep settings are read a few seconds after the start.
+		// A file that stays unreadable or invalid must not keep the journal,
+		// the activity log, the notifications and the copies of /config
+		// from being written for good: after a grace period it is the
+		// first volume, as it was before there was a choice.
+		m.mu.Lock()
+		if m.systemDataWaiting.IsZero() {
+			m.systemDataWaiting = time.Now()
+		}
+		waited := time.Since(m.systemDataWaiting)
+		warned := m.systemDataWarned
+		if waited >= systemDataGrace {
+			m.systemDataWarned = true
+		}
+		m.mu.Unlock()
+		if waited < systemDataGrace {
+			return ""
+		}
+		if !warned {
+			slog.Warn("disk sleep settings not readable: TitanOS keeps its own data on the first volume", "volume", mounted[0])
+		}
+		return mounted[0]
+	}
 	if !settings.anyActive() {
 		return mounted[0] // no disk sleeps: nothing to list
 	}

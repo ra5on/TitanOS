@@ -214,6 +214,9 @@ type Manager struct {
 	// and what removes it again. It fails for a volume that has no
 	// snapshots (not Btrfs). Nil: no snapshots.
 	SnapshotSource func(ctx context.Context, volume string) (dir string, release func(), err error)
+	// CleanSnapshots removes what SnapshotSource left on a volume when a
+	// run could not release it (titand stopped, power cut). Nil: nothing.
+	CleanSnapshots func(ctx context.Context, volume string) error
 	// OnResult is told of each backup that worked and of the first failure
 	// of a series; OnRecovered when a job works again after failing.
 	OnResult    func(job string, err error)

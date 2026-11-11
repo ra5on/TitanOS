@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 )
 
@@ -72,6 +73,10 @@ type Store struct {
 	changes atomic.Uint64
 	// writes counts every write that reached the stick, state included.
 	writes atomic.Uint64
+	// unsynced are the directories whose last flush failed after a file
+	// in them was replaced or removed: the change may not be durable yet.
+	unsyncedMu sync.Mutex
+	unsynced   map[string]bool
 	// OnWriteError hears about writes that failed on the medium (a worn
 	// stick); set once at the start.
 	OnWriteError func(error)
@@ -96,6 +101,34 @@ func (s *Store) Changes() uint64 { return s.changes.Load() }
 // stick since titand started, state files included. Tests use it to make
 // sure that reading and idling never write.
 func (s *Store) Writes() uint64 { return s.writes.Load() }
+
+// flush syncs a directory after a change in it and remembers a failure,
+// so that a later write of the same content does not pass for done.
+func (s *Store) flush(dir string) error {
+	err := syncDir(dir)
+	s.unsyncedMu.Lock()
+	defer s.unsyncedMu.Unlock()
+	if err != nil {
+		if s.unsynced == nil {
+			s.unsynced = map[string]bool{}
+		}
+		s.unsynced[dir] = true
+		return err
+	}
+	delete(s.unsynced, dir)
+	return nil
+}
+
+// settle flushes a directory whose last flush failed; nothing otherwise.
+func (s *Store) settle(dir string) error {
+	s.unsyncedMu.Lock()
+	pending := s.unsynced[dir]
+	s.unsyncedMu.Unlock()
+	if !pending {
+		return nil
+	}
+	return s.flush(dir)
+}
 
 // wrote notes a write that reached the stick.
 func (s *Store) wrote(name, what string) {
@@ -158,7 +191,10 @@ func (s *Store) write(name string, data []byte) error {
 	// else in its place is replaced as before.
 	if info, err := os.Lstat(p); err == nil && info.Mode().IsRegular() && info.Size() == int64(len(data)) {
 		if old, err := os.ReadFile(p); err == nil && bytes.Equal(old, data) {
-			return nil
+			// The content is there. If the write that put it there could
+			// not flush the directory, a retry must not report success
+			// without it: the new name may still be lost in a power cut.
+			return s.settle(filepath.Dir(p))
 		}
 	}
 	dir := filepath.Dir(p)
@@ -187,7 +223,7 @@ func (s *Store) write(name string, data []byte) error {
 		return err
 	}
 	s.wrote(name, "written")
-	return syncDir(dir)
+	return s.flush(dir)
 }
 
 // WriteJSON encodes v as indented JSON and writes it atomically.
@@ -207,12 +243,14 @@ func (s *Store) Remove(name string) error {
 	}
 	if err := os.Remove(p); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil // nothing was there: nothing changed, nothing to flush
+			// Nothing was there: nothing changed. Only a removal whose
+			// flush failed before is flushed now.
+			return s.settle(filepath.Dir(p))
 		}
 		return err
 	}
 	s.wrote(name, "removed")
-	return syncDir(filepath.Dir(p))
+	return s.flush(filepath.Dir(p))
 }
 
 // RemoveAll deletes a directory with everything in it. A missing directory
@@ -223,13 +261,13 @@ func (s *Store) RemoveAll(name string) error {
 		return err
 	}
 	if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
-		return nil // nothing was there: nothing changed, nothing to flush
+		return s.settle(filepath.Dir(p)) // as in Remove
 	}
 	if err := os.RemoveAll(p); err != nil {
 		return err
 	}
 	s.wrote(name, "removed")
-	return syncDir(filepath.Dir(p))
+	return s.flush(filepath.Dir(p))
 }
 
 // List returns the names of the entries in a directory. A missing directory
@@ -256,7 +294,10 @@ func (s *Store) List(name string) ([]string, error) {
 	return names, nil
 }
 
-func syncDir(dir string) error {
+// syncDir flushes a directory; a variable so that tests can make it fail.
+var syncDir = syncDirectory
+
+func syncDirectory(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
