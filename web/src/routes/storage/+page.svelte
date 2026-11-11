@@ -168,7 +168,7 @@
 		<span>{t('storage.tabDisks')} <b>{sp.disks.length}</b></span>
 		{#if size > 0}<span
 				>{t('storage.used')}
-				<b>{t('storage.usedOf', { used: formatDiskBytes(used), size: formatDiskBytes(size) })}</b
+				<b>{t('storage.usedOf', { used: formatDiskBytes(used), total: formatDiskBytes(size) })}</b
 				></span
 			>{/if}
 		{#if problems}<span class="warn">{t('storage.problemCount', { count: problems })}</span>{/if}
