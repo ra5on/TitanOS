@@ -185,7 +185,8 @@ func TestWaitsWhileTheFolderIsBeingMoved(t *testing.T) {
 	if st := m.Status(); st.Pending != 0 || released != 1 {
 		t.Fatalf("not written after the move: %+v, let go %d times", st, released)
 	}
-	// A chosen volume is never moved: no hold is asked for.
+	// A chosen volume is moved too when it changes (PLAN 79-8): the hold
+	// is asked for as well.
 	s := Defaults()
 	s.Volume = "data"
 	if err := m.Set(s); err != nil {
@@ -194,7 +195,12 @@ func TestWaitsWhileTheFolderIsBeingMoved(t *testing.T) {
 	held = false
 	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "logout", OK: true})
 	m.Flush()
+	if st := m.Status(); st.Pending != 1 {
+		t.Fatalf("chosen volume written during a move: %+v", st)
+	}
+	held = true
+	m.Flush()
 	if st := m.Status(); st.Pending != 0 {
-		t.Fatalf("chosen volume waited for a move: %+v", st)
+		t.Fatalf("chosen volume not written after the move: %+v", st)
 	}
 }

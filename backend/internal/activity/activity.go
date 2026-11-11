@@ -167,6 +167,14 @@ func (m *Manager) Set(s Settings) error {
 	return nil
 }
 
+// Settings returns the stored settings alone, without asking for the
+// volume in use.
+func (m *Manager) Settings() Settings {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings
+}
+
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	s := m.settings
@@ -181,9 +189,10 @@ func (m *Manager) Status() Status {
 // hold keeps the folder on the default volume from being moved while it is
 // read or written. Called with ioMu held, before volume.
 func (m *Manager) hold(s Settings) (release func(), ok bool) {
-	if s.Volume != "" || m.HoldDefault == nil {
+	if m.HoldDefault == nil {
 		return func() {}, true
 	}
+	// Also with a chosen volume: changing it moves the folder (PLAN 79-8).
 	return m.HoldDefault()
 }
 

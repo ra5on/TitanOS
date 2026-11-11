@@ -405,3 +405,78 @@ func TestHomeNeverMovesInTheCallerOrWhileStopping(t *testing.T) {
 		t.Fatalf("got %q after the move", got)
 	}
 }
+
+// A function with a volume of its own lives there; changing the choice
+// moves its folder, also after a restart (Pending), and the rule until
+// 0.76 does not apply to it (PLAN 79-8).
+func TestHomeOverrideAndPendingMoves(t *testing.T) {
+	base := homeFixture(t, "Backup", "fast", "other")
+	mounted := []string{"fast", "Backup", "other"}
+	own := map[string]string{"logs": "other"}
+	pending := map[string][]string{}
+	var done []string
+	home := &Home{MountRoot: base, Mounted: func() []string { return mounted }, Choose: func() string { return "fast" },
+		Override: func(feature string) string { return own[feature] },
+		Pending:  func(feature string) []string { return pending[feature] },
+		Settled:  func(feature, from string) { done = append(done, feature+":"+from) },
+		NoLegacy: []string{"monitoring"}}
+	// Old data on the first volume by name: not adopted by a function with
+	// its own volume, nor by one the old rule never applied to.
+	put(t, filepath.Join(base, "Backup", ".titanos", "logs", "old.journal"), "old")
+	put(t, filepath.Join(base, "Backup", ".titanos", "monitoring", "old.jsonl"), "old")
+	if got := settled(t, home, "logs"); got != "other" {
+		t.Fatalf("own volume: %q", got)
+	}
+	if got := settled(t, home, "monitoring"); got != "fast" {
+		t.Fatalf("default volume: %q", got)
+	}
+	for _, kept := range []string{"logs/old.journal", "monitoring/old.jsonl"} {
+		if _, err := os.Stat(filepath.Join(base, "Backup", ".titanos", kept)); err != nil {
+			t.Fatalf("%s taken from the first volume: %v", kept, err)
+		}
+	}
+	if volume, isOwn := home.Target("logs"); volume != "other" || !isOwn {
+		t.Fatalf("target: %q %v", volume, isOwn)
+	}
+	// The choice changes while running: the folder follows.
+	put(t, filepath.Join(base, "other", ".titanos", "logs", "a.journal"), "a")
+	own["logs"] = ""
+	if got := settled(t, home, "logs"); got != "fast" {
+		t.Fatalf("back to the default: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(base, "fast", ".titanos", "logs", "a.journal")); err != nil {
+		t.Fatalf("not moved after the change: %v", err)
+	}
+	// After a restart only /config knows where data were left.
+	put(t, filepath.Join(base, "other", ".titanos", "smart", "disk.jsonl"), "{}")
+	pending["smart"] = []string{"other", "gone"}
+	fresh := &Home{MountRoot: base, Mounted: home.Mounted, Choose: home.Choose, Override: home.Override, Pending: home.Pending, Settled: home.Settled}
+	done = nil
+	if got := settled(t, fresh, "smart"); got != "fast" {
+		t.Fatalf("after the restart: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(base, "fast", ".titanos", "smart", "disk.jsonl")); err != nil {
+		t.Fatalf("pending move not taken up: %v", err)
+	}
+	if !slices.Contains(done, "smart:other") || slices.Contains(done, "smart:gone") {
+		t.Fatalf("settled: %v", done)
+	}
+	// A chosen volume that is not mounted is no volume, never another one.
+	own["notify"] = "locked"
+	if got := settled(t, fresh, "notify"); got != "" {
+		t.Fatalf("unmounted own volume: %q", got)
+	}
+}
+
+func TestSizeAddsUpFiles(t *testing.T) {
+	base := homeFixture(t, "fast")
+	mounted := []string{"fast"}
+	if size, err := Size(context.Background(), base, "fast", "logs", mounted); err != nil || size != 0 {
+		t.Fatalf("missing folder: %d %v", size, err)
+	}
+	put(t, filepath.Join(base, "fast", ".titanos", "logs", "a"), "12345")
+	put(t, filepath.Join(base, "fast", ".titanos", "logs", "sub", "b"), "123")
+	if size, err := Size(context.Background(), base, "fast", "logs", mounted); err != nil || size != 8 {
+		t.Fatalf("size: %d %v", size, err)
+	}
+}

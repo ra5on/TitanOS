@@ -14,6 +14,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/sysdata"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 )
@@ -69,6 +70,10 @@ func (w *titand) wireFiles() error {
 	if err := w.history.Load(); err != nil {
 		slog.Warn("monitoring history settings unavailable", "err", err)
 	}
+	// The history follows the system data volume or has its own (PLAN
+	// 79-8); changing it moves the folder.
+	w.history.Resolve = func() string { return w.systemData.Volume(sysdata.Monitoring) }
+	w.history.Hold = func() (func(), bool) { return w.systemData.Hold(sysdata.Monitoring) }
 	if !w.opts.dev {
 		w.background(func() { w.history.Run(ctx) })
 	}
@@ -142,4 +147,25 @@ func (w *titand) wireFiles() error {
 		w.audit.Record(activity.Entry{Via: activity.ViaSystem, Action: action, Target: target, OK: ok})
 	}
 	return nil
+}
+
+// systemDataOverride is the volume chosen for one function's folder below
+// .titanos, "" while it follows the system data volume. The activity log
+// and the monitoring history keep their choice in their own settings.
+func (w *titand) systemDataOverride(feature string) string {
+	switch feature {
+	case sysdata.Activity:
+		if w.audit != nil {
+			return w.audit.Settings().Volume
+		}
+		return ""
+	case sysdata.Monitoring:
+		if w.history != nil {
+			if s := w.history.Status().Settings; !s.FollowSystemData {
+				return s.Volume
+			}
+		}
+		return ""
+	}
+	return w.sysData.Override(feature)
 }

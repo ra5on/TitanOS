@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +54,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/sysdata"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
@@ -86,6 +88,7 @@ type titand struct {
 	volumes      *storage.Manager
 	smartHistory *smarthistory.Recorder
 	systemData   *volumedata.Home
+	sysData      *sysdata.Manager
 	folders      *shares.Manager
 	routes       *appproxy.Manager
 	appRights    *appaccess.Manager
@@ -206,12 +209,32 @@ func (w *titand) wireBase() error {
 	w.volumes = storage.NewManager(w.store)
 	// Where TitanOS keeps its own data while no volume is chosen for it: a
 	// volume that never sleeps, else the first one (PLAN 79-6).
+	// The owner may choose that volume, and one per function (PLAN 79-8,
+	// Settings › Data and backup › System data).
+	w.sysData = sysdata.New(w.store)
+	w.sysData.Mounted, w.sysData.Asleep = w.volumes.Mounted, w.volumes.VolumeAsleep
+	if err := w.sysData.Load(); err != nil {
+		slog.Warn("choice of the system data volume not readable from /config: TitanOS chooses", "err", err)
+	}
 	w.systemData = &volumedata.Home{MountRoot: "/mnt", Mounted: w.volumes.Mounted, Context: w.ctx, Choose: func() string {
+		// A chosen volume that still exists counts, mounted or not (not
+		// mounted: no volume yet). One that was deleted does not.
+		if volume := w.sysData.Volume(); volume != "" && slices.Contains(w.volumes.Names(), volume) {
+			return volume
+		}
 		// Also for the last lines of the journal while titand stops.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(w.ctx), 10*time.Second)
 		defer cancel()
 		return w.volumes.SystemDataVolume(ctx)
 	}}
+	w.systemData.Override = w.systemDataOverride
+	w.systemData.Pending = w.sysData.Pending
+	w.systemData.Settled = func(feature, from string) {
+		if err := w.sysData.Settle(feature, from); err != nil {
+			slog.Warn("finished move of system data not noted in /config", "feature", feature, "from", from, "err", err)
+		}
+	}
+	w.systemData.NoLegacy = []string{sysdata.Monitoring}
 	w.volumes.ReadOnly = w.opts.dev
 	if err := w.volumes.Load(); err != nil {
 		slog.Warn("volumes not readable from /config", "err", err)

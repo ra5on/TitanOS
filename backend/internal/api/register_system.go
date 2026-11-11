@@ -13,6 +13,7 @@ func (s *Server) registerMaintenance(mux *routeMux) {
 	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.authArea().confirmed}.register(mux, s.requireAdmin)
 	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
 	activityArea{activity: s.opts.Activity}.register(mux, s.requireAdmin)
+	sysDataArea{data: s.opts.SysData, home: s.opts.SystemData, storage: s.opts.Storage, activity: s.opts.Activity, backup: s.opts.ConfigBackup, monitoring: s.opts.Monitoring}.register(mux, s.requireAdmin)
 	aboutArea{version: s.opts.Version, shareDir: s.opts.ShareDir}.register(mux, s.requireUser)
 }
 

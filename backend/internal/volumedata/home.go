@@ -52,6 +52,21 @@ type Home struct {
 	// OnMoved is told after the folder of a feature was moved away from a
 	// volume (also partly), so that its writer forgets what it knew there.
 	OnMoved func(feature, from, to string)
+	// Override returns the volume chosen for one feature, "" while it
+	// follows the default volume (PLAN 79-8). A chosen volume that is not
+	// mounted means "no volume yet", never another one. Nil: no feature
+	// has a choice of its own.
+	Override func(feature string) string
+	// Pending returns the volumes that still hold data of a feature from
+	// before its volume was changed (kept in /config, so that a move cut
+	// short by a restart is taken up again). Settled is told once such a
+	// volume was gone through without an error. Both may be nil.
+	Pending func(feature string) []string
+	Settled func(feature, from string)
+	// NoLegacy names features that never lived on the first volume by
+	// default (the monitoring history): for them the rule until 0.76 does
+	// not apply.
+	NoLegacy []string
 
 	mu       sync.Mutex
 	features map[string]*homeFeature
@@ -108,11 +123,34 @@ func (h *Home) context() context.Context {
 // Wait waits for the moves running in the background.
 func (h *Home) Wait() { h.work.Wait() }
 
-// Volume returns the default volume for a feature, "" while there is none
-// or while its folder is being moved there from an earlier default volume.
-// It never blocks for longer than a moment.
+// Target is the volume a feature belongs on, without moving anything: the
+// one chosen for it, else the default volume. own tells which of the two.
+func (h *Home) Target(feature string) (volume string, own bool) {
+	if h == nil {
+		return "", false
+	}
+	if h.Override != nil {
+		if volume := h.Override(feature); volume != "" {
+			return volume, true
+		}
+	}
+	return h.Default(), false
+}
+
+// Moving tells whether the folder of a feature is being moved right now.
+func (h *Home) Moving(feature string) bool {
+	state := h.feature(feature)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return state.moving != nil
+}
+
+// Volume returns the volume for a feature (the one chosen for it, else the
+// default volume), "" while there is none or while its folder is being
+// moved there from an earlier volume. It never blocks for longer than a
+// moment.
 func (h *Home) Volume(feature string) string {
-	volume := h.Default()
+	volume, own := h.Target(feature)
 	if volume == "" || h.Mounted == nil {
 		return volume
 	}
@@ -128,11 +166,26 @@ func (h *Home) Volume(feature string) string {
 		if state.last != "" && state.last != volume && slices.Contains(mounted, state.last) {
 			sources = append(sources, state.last)
 		}
+		if h.Pending != nil {
+			// Left behind when the volume was changed and the move did not
+			// finish (restart, time limit).
+			for _, name := range h.Pending(feature) {
+				if name != volume && !slices.Contains(sources, name) && slices.Contains(mounted, name) && !state.tried[name+"\x00"+volume] {
+					sources = append(sources, name)
+				}
+			}
+		}
+		// The rule until 0.76 (first volume by name) only counts for a
+		// feature that follows the default: one with a volume of its own
+		// never lived there by default.
 		for _, name := range slices.Sorted(slices.Values(mounted)) {
+			if own || slices.Contains(h.NoLegacy, feature) {
+				break
+			}
 			if !naming.ValidVolume(name) {
 				continue
 			}
-			if name != volume && name != state.last && !state.tried[name+"\x00"+volume] {
+			if name != volume && !slices.Contains(sources, name) && !state.tried[name+"\x00"+volume] {
 				sources = append(sources, name)
 			}
 			break
@@ -189,6 +242,9 @@ func (h *Home) move(state *homeFeature, feature string, sources []string, volume
 	state.io.Lock() // writers in flight finish first; new ones get no volume
 	for _, from := range sources {
 		result, err := Adopt(ctx, h.MountRoot, from, volume, feature, mounted)
+		if err == nil && h.Settled != nil {
+			h.Settled(feature, from)
+		}
 		switch {
 		case err != nil:
 			slog.Warn("system data of an earlier default volume not moved completely; the rest stays there", "feature", feature, "from", from, "to", volume, "moved", result.Moved, "err", err)
@@ -637,4 +693,34 @@ func copyEntry(ctx context.Context, src, dst *os.Root, name, target string) (com
 		return false, nil
 	}
 	return true, dst.Chtimes(target, info.ModTime(), info.ModTime())
+}
+
+// Size adds up the files in .titanos/<feature> of a mounted volume. A
+// folder that is not there has size 0. It reads the folder tree, so callers
+// ask first whether the disks of the volume are asleep.
+func Size(ctx context.Context, mountRoot, volume, feature string, mounted []string) (int64, error) {
+	root, err := openExisting(mountRoot, volume, feature, mounted)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer root.Close()
+	var total int64
+	err = fs.WalkDir(root.FS(), ".", func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.Type().IsRegular() {
+			if info, err := entry.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return total, err
 }

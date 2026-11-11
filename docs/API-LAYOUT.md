@@ -76,6 +76,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | snapshot | `snapshot_folders.go` | – | 1 |
 | startup | `startup.go` | `startupArea` | 0 |
 | storage | `storage.go`, `storage_crypt.go` | `storageArea`, `storageCryptArea` | 3 |
+| sysdata | `sysdata.go` | `sysDataArea` | 1 |
 | system | `system.go` | `powerArea`, `systemArea` | 0 |
 | tailscale | `tailscale.go` | `tailscaleArea` | 0 |
 | terminal | `terminal_console.go` | – | 1 |

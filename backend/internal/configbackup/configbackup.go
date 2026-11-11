@@ -112,7 +112,21 @@ type Settings struct {
 	// Versions picks which backups stay by day, week and month (0.41.0,
 	// see internal/retention); Keep stays the count older versions use.
 	Versions *retention.Keep `json:"versions,omitempty"`
+	// Pace says how soon a change is saved (0.77, PLAN 79-8): PaceChange
+	// a few minutes after every change, PaceDaily at most once a day when
+	// something changed. A stored file without it means PaceChange, as it
+	// was; without a file it is PaceDaily. Older versions ignore it and
+	// save after every change.
+	Pace string `json:"pace,omitempty"`
 }
+
+const (
+	PaceChange = "change"
+	PaceDaily  = "daily"
+	// dailyPace is the least time between two backups made for changes
+	// with PaceDaily.
+	dailyPace = 24 * time.Hour
+)
 
 // Manifest is the first file in a backup and says what it is.
 type Manifest struct {
@@ -204,7 +218,7 @@ func NewManager(store *config.Store, version string) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, version: version,
 		mountRoot: "/mnt", scanRoot: "/run/titanos-restore", sysBlock: "/sys/block", now: time.Now,
-		settings: Settings{Enabled: true, Keep: defaultKeep},
+		settings: Settings{Enabled: true, Keep: defaultKeep, Pace: PaceDaily},
 	}
 }
 
@@ -214,6 +228,14 @@ func (m *Manager) Load() error {
 	err := m.store.ReadJSON(settingsFile, &settings)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
+	}
+	switch {
+	case err != nil:
+		// No stored choice: the default since 0.77.
+		settings.Pace = PaceDaily
+	case settings.Pace != PaceDaily:
+		// A file from before 0.77 (or an unknown value): as it was.
+		settings.Pace = PaceChange
 	}
 	if settings.Keep < 1 {
 		settings.Keep = defaultKeep
@@ -233,6 +255,10 @@ func (m *Manager) SetSettings(settings Settings, known []string) error {
 	defer m.mu.Unlock()
 	if !m.loaded {
 		return ErrNotLoaded
+	}
+	if settings.Pace == "" {
+		// A request without the field (an older interface) keeps the pace.
+		settings.Pace = m.settings.Pace
 	}
 	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
 		return err
@@ -257,8 +283,14 @@ func CheckSettings(settings Settings, known []string) error {
 	if settings.Volume != "" && !slices.Contains(known, settings.Volume) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
 	}
+	if settings.Pace != "" && settings.Pace != PaceChange && settings.Pace != PaceDaily {
+		return fmt.Errorf("%w: pace", ErrInvalid)
+	}
 	return nil
 }
+
+// Settings returns the settings in use.
+func (m *Manager) Settings() Settings { return m.current() }
 
 func (m *Manager) current() Settings {
 	m.mu.Lock()
@@ -663,6 +695,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		planned      *time.Time
 		previous     Settings
 		noVolume     outage
+		lastSaved    time.Time // the last backup of this start
 	)
 	for tick := 0; ; tick++ {
 		select {
@@ -686,7 +719,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			if changedSince.IsZero() {
 				changedSince = m.now()
 			}
-			due = due || m.now().Sub(changedSince) >= settle
+			due = due || changeDue(settings.Pace, m.now(), changedSince, lastSaved)
 		}
 		if !due {
 			continue
@@ -706,12 +739,22 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			retryAfter = m.now().Add(time.Hour)
 		default:
 			noVolume = outage{}
-			saved, done, changedSince = changes, true, time.Time{}
+			saved, done, changedSince, lastSaved = changes, true, time.Time{}, m.now()
 			if scheduled {
 				planned = nextScheduled(settings, m.now())
 			}
 		}
 	}
+}
+
+// changeDue says whether a change seen at changedSince is to be saved now:
+// once the configuration was left alone for a while, and with PaceDaily at
+// most once a day (the changes wait for the next backup).
+func changeDue(pace string, now, changedSince, lastSaved time.Time) bool {
+	if now.Sub(changedSince) < settle {
+		return false
+	}
+	return pace != PaceDaily || now.Sub(lastSaved) >= dailyPace
 }
 
 // outage remembers since when saving found no volume.

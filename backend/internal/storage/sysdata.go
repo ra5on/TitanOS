@@ -137,6 +137,25 @@ func sleepingVolumes(status DiskSleepStatus) map[string]bool {
 	return sleeping
 }
 
+// SleepingVolumes names the volumes with at least one disk TitanOS may put
+// to sleep (the ones SystemDataVolume avoids). known is false while the
+// disk sleep settings or the disks cannot be told. It lists the disks like
+// Status (lsblk) and reads neither a disk nor /config.
+func (m *Manager) SleepingVolumes(ctx context.Context) (sleeping map[string]bool, known bool) {
+	sleep := m.DiskSleep()
+	if !sleep.Available {
+		return map[string]bool{}, false
+	}
+	if !sleep.DiskSleepSettings.anyActive() {
+		return map[string]bool{}, true
+	}
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return map[string]bool{}, false
+	}
+	return sleepingVolumes(m.diskSleepStatus(devices)), true
+}
+
 // pickSystemDataVolume takes the first volume by name that never sleeps,
 // else the first one. mounted is sorted and not empty.
 func pickSystemDataVolume(mounted []string, sleeping map[string]bool) string {
