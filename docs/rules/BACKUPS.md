@@ -52,7 +52,8 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
 
 - USB-Kopie-Backups: `backup/copy.go`, Ziel `usb-copy` mit Dateisystem-UUID.
   Keine Löschweitergabe und keine Versionierung/Verschlüsselung; ausschließlich
-  Freigaben, reguläre Dateien und einfache Namensmuster. `os.Root` hält das
+  Freigaben, reguläre Dateien, symbolische Verknüpfungen und einfache
+  Namensmuster. `os.Root` hält das
   geprüfte Ziel-Dateisystem fest, keine Ausweichschreibzugriffe ins RAM.
   Die USB-Verwaltung sperrt während einer Kopie nur Auswerfen dieses Laufwerks
   sowie Formatieren/Partitionieren (`usb.Manager.inUse`), nicht die anderen
@@ -61,6 +62,49 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   unlesbar, während des Kopierens geändert) und fehlende Freigaben/Ordner werden
   übersprungen und als Warnung mit Anzahl und Beispielen gezeigt; nur Fehler
   des Ziels (voll, schreibgeschützt, E/A-Fehler, abgezogen) beenden den Lauf.
+  **Hinweise als Kennung** (PLAN 79-9, 11.11.2026): `state.problems` nennt je
+  Ursache `code`, `count` und bis zu 20 `paths` (`source_unavailable`,
+  `folder_unavailable`, `read_error`, `case_conflict`, `too_large`,
+  `name_not_allowed`, `changed`, `vm_disk_changed`, `link_unsupported`,
+  `mirror_failed`, `other`); die Oberfläche übersetzt sie (`backup.problem.<code>`)
+  und zeigt die Pfade gegliedert. `state.warning` trägt dasselbe weiterhin als
+  englischen Satz für ältere Oberflächen, MCP und Home Assistant; neue
+  Ursachen bekommen eine Kennung, keinen neuen Satz.
+  **Verknüpfungen und Sonderdateien:** Symbolische Verknüpfungen werden als
+  Verknüpfung mit demselben Ziel gesichert (nie verfolgt, das Ziel wird nicht
+  über sie kopiert; unverändert bleibt sie, geändert wird sie ersetzt, ein
+  Ordner der Kopie weicht nie einer Verknüpfung). Kann das Ziel-Dateisystem
+  keine halten (FAT32, exFAT, SMB ohne Unix-Erweiterungen), steht sie unter
+  `link_unsupported`. Sockets, FIFOs und Gerätedateien sind keine Daten: Sie
+  werden still übergangen und nur als Zahl im Journal vermerkt, nie als
+  Hinweis am Auftrag.
+  **Platten laufender VMs** (`backup/copy_frozen.go`, `vm.RunningDiskFiles`,
+  `storage.BackupSnapshot`): Abbilddateien laufender VMs ändern sich beim
+  Lesen. Liegt die Datei auf einem Btrfs-Volume, legt der Lauf beim ersten
+  solchen Abbild einen schreibgeschützten Snapshot des Volumes unter
+  `.titanos/backup-source/` an (kein Snapshot des Nutzers: nicht gelistet,
+  keine Vorgängerversion), liest **nur diese Abbilder** daraus und löscht ihn
+  am Ende des Laufs, auch nach Abbruch; ein liegen gebliebener wird beim
+  nächsten Mal entfernt. Die Kopie ist absturzkonsistent (Zustand eines
+  Augenblicks wie nach einem Stromausfall; Journal des Gasts und qcow2 erholen
+  sich davon), nicht anwendungskonsistent. Alles andere wird weiter direkt
+  gelesen, weil ein Btrfs-Snapshot nicht in darunterliegende Subvolumes reicht
+  (LXC-Container, Docker-Schichten); fehlt das Abbild im Snapshot, wird es
+  direkt gelesen. Ohne Btrfs (ext4/XFS) oder wenn kein Snapshot gelingt, wird
+  das Abbild direkt gelesen; ändert es sich dabei, bleibt die Kopie des
+  vorigen Laufs stehen und der Lauf meldet `vm_disk_changed` („nicht
+  verlässlich gesichert“). Keine Prüfung wurde dafür gelockert: Eine Datei,
+  die sich beim Kopieren ändert, wird nie als gesichert übernommen. Offen
+  (Vorschlag, nicht umgesetzt): für ext4/XFS ein externer libvirt-Snapshot
+  (`virsh snapshot-create-as --disk-only --quiesce` mit anschließendem
+  `blockcommit`) oder Einfrieren über den QEMU-Gastagenten
+  (`virsh domfsfreeze`/`domfsthaw`) – beides greift in die laufende VM ein
+  (Overlay-Kette bzw. angehaltene Schreibzugriffe), braucht für `--quiesce`
+  den Gastagenten und einen Wiederanlauf nach Abbruch (Overlay zurückführen),
+  daher eigene Entscheidung; bis dahin sichert der koordinierte
+  Anwendungsweg (`applications`, VM wird für die Sicherung heruntergefahren)
+  solche VMs verlässlich. Verschlüsselte Sicherungen (restic) lesen Abbilder
+  laufender VMs weiterhin direkt.
   Platzprüfung vorab, Prozentanzeige, `syncfs` am Ende. Gleich große Dateien
   werden weiterhin byteweise verglichen. Meldung nur beim ersten Fehlschlag
   einer Serie und beim Wiederanlaufen; ein fehlgeschlagener Auftrag startet beim

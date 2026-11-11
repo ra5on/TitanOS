@@ -71,6 +71,11 @@ func (w *titand) wireBackups() error {
 	w.backups.OnIncomplete = func(job string) {
 		w.notifier.Notify(notify.Warning, "backup_incomplete", job)
 	}
+	// Disks of running VMs are read from a Btrfs snapshot made for the run
+	// (PLAN 79-9); on other file systems they are read as they are and
+	// reported if they changed meanwhile.
+	w.backups.LiveFiles = w.machines.RunningDiskFiles
+	w.backups.SnapshotSource = w.volumes.BackupSnapshot
 	w.backups.Timezone = w.settings.CurrentTimezone
 	w.appBackups = &appbackup.Manager{Store: w.store, Docker: w.containers, VMs: w.machines, Mounted: w.volumes.Mounted, MountRoot: "/mnt", Disabled: w.opts.dev}
 	if err := w.appBackups.Load(); err != nil {

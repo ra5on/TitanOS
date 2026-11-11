@@ -212,7 +212,7 @@ func (m *Manager) mirror(ctx context.Context, job Job, target *os.Root, sources 
 					if fatalTarget(err) {
 						return err
 					}
-					problems.add("deleted files that could not be moved aside", name+"/"+rel)
+					problems.add(ProblemMirrorFailed, name+"/"+rel)
 					return nil
 				}
 				if entry.IsDir() {

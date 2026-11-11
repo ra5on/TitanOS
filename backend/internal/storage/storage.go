@@ -242,6 +242,9 @@ type Manager struct {
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
 	settled bool
+	// backupSnapshots are the snapshots backups read from right now, by
+	// path (BackupSnapshot).
+	backupSnapshots map[string]bool
 	// shadowIdle are the Btrfs volumes without previous versions and
 	// without mirrors: SyncShadowCopies leaves them alone (RAM only).
 	shadowIdle map[string]bool

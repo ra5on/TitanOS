@@ -148,9 +148,15 @@ type State struct {
 	FailingSince *time.Time `json:"failingSince,omitempty"`
 	// Warning is set when a backup was made but could not read everything.
 	Warning string `json:"warning"`
-	// Skipped counts the links and special files (FIFOs, sockets, devices)
-	// a plain copy left out in its last run; they are named in Warning.
+	// Skipped counts the entries a plain copy could not save in its last
+	// run; Problems names them. Sockets, FIFOs and device files hold no
+	// data and are not counted; symbolic links are kept as links.
 	Skipped int64 `json:"skipped,omitempty"`
+	// Problems says what a plain copy could not save in its last run, as
+	// codes with the entries they hit, for the page to show in the
+	// language of the viewer. Warning carries the same in English for
+	// older pages and other readers.
+	Problems []Problem `json:"problems,omitempty"`
 	// Bytes is how much data the last backup covered.
 	Bytes uint64 `json:"bytes"`
 	// RestoredTo is the folder of the last restore; RestoreError why the
@@ -199,6 +205,15 @@ type Manager struct {
 	PrepareApplications func(context.Context, Job, string, []string) ([]string, func() error, error)
 	// WithUSB pins a mounted filesystem for the complete copy operation.
 	WithUSB func(context.Context, string, func(*os.Root) error) error
+	// LiveFiles returns the files a running guest writes to all the time:
+	// the image files of the disks of running VMs, as absolute paths. A
+	// plain copy reads them from a snapshot where it can. Nil: none.
+	LiveFiles func() []string
+	// SnapshotSource makes a read-only snapshot of a mounted volume for
+	// one run and returns its folder (the volume as it was at that moment)
+	// and what removes it again. It fails for a volume that has no
+	// snapshots (not Btrfs). Nil: no snapshots.
+	SnapshotSource func(ctx context.Context, volume string) (dir string, release func(), err error)
 	// OnResult is told of each backup that worked and of the first failure
 	// of a series; OnRecovered when a job works again after failing.
 	OnResult    func(job string, err error)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -32,32 +33,92 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 	return m.WithUSB(ctx, job.Destination.DeviceID, func(target *os.Root) error { return m.copyTo(ctx, job, target) })
 }
 
-// copyItem is one file a run wants to copy.
+// copyItem is one file or symbolic link a run wants to copy.
 type copyItem struct {
 	share, rel, dst string
 	// prev is the same file in the dated run before, if any.
 	prev string
 	size int64
+	// link is where a symbolic link points to; isLink tells it from a file.
+	link   string
+	isLink bool
 }
 
-// copyProblems collects what a run left out, by reason, for the warning.
+// Problem is one kind of thing a readable copy could not save in its last
+// run: a code the page has a text for in the language of the viewer
+// (backup.problem.<code>), how many entries it hit and the first of them.
+type Problem struct {
+	Code  string `json:"code"`
+	Count int64  `json:"count"`
+	// Paths are the first entries, "<share or Volume-name>/<path>";
+	// Count says how many there are in all.
+	Paths []string `json:"paths"`
+}
+
+// The codes of Problem.
+const (
+	ProblemSourceUnavailable = "source_unavailable" // a share or volume of the job is not there
+	ProblemFolderUnavailable = "folder_unavailable" // a chosen folder is not there
+	ProblemReadError         = "read_error"         // could not be read
+	ProblemCaseConflict      = "case_conflict"      // names that differ only in case on a drive that folds it
+	ProblemTooLarge          = "too_large"          // too large for the drive's file system (FAT32: 4 GB)
+	ProblemNameNotAllowed    = "name_not_allowed"   // a name the drive's file system does not allow
+	ProblemChanged           = "changed"            // changed while it was copied; the copy of the run before stays
+	// ProblemVMDiskChanged is the disk of a running VM that changed while
+	// it was copied and could not be read from a snapshot: it is not
+	// saved by this run.
+	ProblemVMDiskChanged   = "vm_disk_changed"
+	ProblemLinkUnsupported = "link_unsupported" // a symbolic link the drive's file system cannot hold
+	ProblemMirrorFailed    = "mirror_failed"    // a deleted file that could not be moved aside
+	ProblemOther           = "other"
+)
+
+// problemPaths is how many entries a Problem names.
+const problemPaths = 20
+
+// problemText is the English wording of each code for State.Warning,
+// which older pages and other readers (MCP, Home Assistant) show as it is.
+var problemText = map[string]string{
+	ProblemSourceUnavailable: "shares not available",
+	ProblemFolderUnavailable: "folders not available",
+	ProblemReadError:         "files that could not be read",
+	ProblemCaseConflict:      "names that differ only in upper/lower case (the drive treats them as one)",
+	ProblemTooLarge:          "files too large for the drive's file system (FAT32: 4 GB)",
+	ProblemNameNotAllowed:    "names the drive's file system does not allow",
+	ProblemChanged:           "files that changed while being copied",
+	ProblemVMDiskChanged:     "disks of running VMs that changed while being copied (not saved by this run)",
+	ProblemLinkUnsupported:   "symbolic links the drive's file system cannot hold",
+	ProblemMirrorFailed:      "deleted files that could not be moved aside",
+	ProblemOther:             "files with other errors",
+}
+
+// copyProblems collects what a run left out, by code, for the warning.
 type copyProblems struct {
 	count    map[string]int64
 	examples map[string][]string
 	order    []string
 }
 
-func (p *copyProblems) add(reason, what string) {
+func (p *copyProblems) add(code, what string) {
 	if p.count == nil {
 		p.count, p.examples = map[string]int64{}, map[string][]string{}
 	}
-	if p.count[reason] == 0 {
-		p.order = append(p.order, reason)
+	if p.count[code] == 0 {
+		p.order = append(p.order, code)
 	}
-	p.count[reason]++
-	if len(p.examples[reason]) < 5 {
-		p.examples[reason] = append(p.examples[reason], what)
+	p.count[code]++
+	if len(p.examples[code]) < problemPaths {
+		p.examples[code] = append(p.examples[code], what)
 	}
+}
+
+// list is what the page gets: every code with its count and first entries.
+func (p *copyProblems) list() []Problem {
+	var list []Problem
+	for _, code := range p.order {
+		list = append(list, Problem{Code: code, Count: p.count[code], Paths: slices.Clone(p.examples[code])})
+	}
+	return list
 }
 
 func (p *copyProblems) total() int64 {
@@ -68,12 +129,21 @@ func (p *copyProblems) total() int64 {
 	return n
 }
 
-// String is the warning of the run: per reason the count and examples.
+// String is the warning of the run in English: per code the count and
+// the first five entries.
 func (p *copyProblems) String() string {
 	var parts []string
-	for _, reason := range p.order {
-		line := fmt.Sprintf("%d %s: %s", p.count[reason], reason, strings.Join(p.examples[reason], ", "))
-		if p.count[reason] > int64(len(p.examples[reason])) {
+	for _, code := range p.order {
+		text := problemText[code]
+		if text == "" {
+			text = code
+		}
+		examples := p.examples[code]
+		if len(examples) > 5 {
+			examples = examples[:5]
+		}
+		line := fmt.Sprintf("%d %s: %s", p.count[code], text, strings.Join(examples, ", "))
+		if p.count[code] > int64(len(examples)) {
 			line += ", …"
 		}
 		parts = append(parts, line)
@@ -89,22 +159,60 @@ func fatalTarget(err error) bool {
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
-// problemOf names why one file could not be copied, in words the page shows.
+// problemOf names why one file could not be copied: the code of its Problem.
 func problemOf(err error) string {
 	switch {
+	case errors.Is(err, errLinkUnsupported):
+		return ProblemLinkUnsupported
 	case errors.Is(err, syscall.EFBIG):
-		return "files too large for the drive's file system (FAT32: 4 GB)"
+		return ProblemTooLarge
 	case errors.Is(err, syscall.EINVAL), errors.Is(err, syscall.ENAMETOOLONG), errors.Is(err, syscall.EILSEQ):
-		return "names the drive's file system does not allow"
+		return ProblemNameNotAllowed
 	case errors.Is(err, errSourceChanged):
-		return "files that changed while being copied"
+		return ProblemChanged
 	case errors.Is(err, fs.ErrPermission):
-		return "files that could not be read"
+		return ProblemReadError
 	}
-	return "files with other errors"
+	return ProblemOther
 }
 
-var errSourceChanged = errors.New("source changed")
+var (
+	errSourceChanged = errors.New("source changed")
+	// errLinkUnsupported: the destination file system has no symbolic links.
+	errLinkUnsupported = errors.New("the destination cannot hold symbolic links")
+)
+
+// copyLink keeps a symbolic link of the source as a link: it is made anew
+// with the same target, never followed, and what it points to is not
+// copied through it. A link that is there with the same target stays; a
+// file or another link in its place is replaced; a folder is not (a copy
+// never removes a folder for a link).
+func copyLink(target *os.Root, to, link string) error {
+	info, err := target.Lstat(to)
+	switch {
+	case err == nil && info.Mode()&fs.ModeSymlink != 0:
+		if old, err := target.Readlink(to); err == nil && old == link {
+			return nil
+		}
+	case err == nil && info.IsDir():
+		return fmt.Errorf("copy destination %s is a directory, the source a link", to)
+	case err != nil && !os.IsNotExist(err):
+		return err
+	}
+	temp := path.Join(path.Dir(to), ".titanos-copy-"+rand.Text())
+	if err := target.Symlink(link, temp); err != nil {
+		// FAT32, exFAT and SMB shares without Unix extensions have none.
+		if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP) || errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EACCES) {
+			return fmt.Errorf("%w: %s", errLinkUnsupported, to)
+		}
+		return err
+	}
+	if err := target.Rename(temp, to); err != nil {
+		_ = target.Remove(temp) // best effort: a leftover link is removed by the next run's rename or by hand
+		return err
+	}
+	return nil
+}
 
 // caseInsensitive finds out whether the destination folds the case of
 // names (FAT, exFAT, NTFS through some drivers).
@@ -124,8 +232,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	sources, names, folderOf, missing := m.copyEntries(job)
 	var problems copyProblems
 	for _, name := range missing {
-		problems.add("shares not available", name)
+		problems.add(ProblemSourceUnavailable, name)
 	}
+	// Sockets, FIFOs and device files hold no data: they are left out
+	// without a word on the page, only counted for the journal.
+	var special int64
 	if len(sources) == 0 {
 		return fmt.Errorf("none of the shares of this job is available")
 	}
@@ -160,7 +271,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// older version is deleted for it. After a week without that volume
 	// the drive would otherwise hold nothing of those shares any more.
 	incomplete := func() bool {
-		return problems.count["shares not available"] > 0 || problems.count["folders not available"] > 0
+		return problems.count[ProblemSourceUnavailable] > 0 || problems.count[ProblemFolderUnavailable] > 0
 	}
 	seen := map[string]string{}
 
@@ -175,7 +286,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		root, err := os.OpenRoot(source.Path)
 		if err != nil {
-			problems.add("shares not available", name)
+			problems.add(ProblemSourceUnavailable, name)
 			continue
 		}
 		folders := folderOf[name]
@@ -184,7 +295,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		for _, folder := range folders {
 			if info, err := root.Lstat(folder); err != nil || !info.IsDir() {
-				problems.add("folders not available", name+"/"+folder)
+				problems.add(ProblemFolderUnavailable, name+"/"+folder)
 				continue
 			}
 			err := fs.WalkDir(root.FS(), folder, func(rel string, entry fs.DirEntry, err error) error {
@@ -192,7 +303,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					return err
 				}
 				if err != nil {
-					problems.add("files that could not be read", name+"/"+rel)
+					problems.add(ProblemReadError, name+"/"+rel)
 					if entry != nil && entry.IsDir() {
 						return fs.SkipDir
 					}
@@ -218,7 +329,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					// Foto.jpg and foto.jpg are one file there: keep the first.
 					key := strings.ToLower(dst)
 					if other, ok := seen[key]; ok && other != dst {
-						problems.add("names that differ only in upper/lower case (the drive treats them as one)", name+"/"+rel)
+						problems.add(ProblemCaseConflict, name+"/"+rel)
 						if entry.IsDir() {
 							return fs.SkipDir
 						}
@@ -231,11 +342,21 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 				}
 				info, err := entry.Info()
 				if err != nil {
-					problems.add("files that could not be read", name+"/"+rel)
+					problems.add(ProblemReadError, name+"/"+rel)
+					return nil
+				}
+				if info.Mode()&fs.ModeSymlink != 0 {
+					// Kept as a link; where it points to is never followed.
+					link, err := root.Readlink(rel)
+					if err != nil {
+						problems.add(ProblemReadError, name+"/"+rel)
+						return nil
+					}
+					items = append(items, copyItem{share: name, rel: rel, dst: dst, link: link, isLink: true})
 					return nil
 				}
 				if !info.Mode().IsRegular() {
-					problems.add("links or special files", name+"/"+rel)
+					special++
 					return nil
 				}
 				item := copyItem{share: name, rel: rel, dst: dst, size: info.Size()}
@@ -297,6 +418,13 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			root.Close()
 		}
 	}()
+	// Disks of running VMs change while they are read. On a Btrfs volume
+	// they are read from a read-only snapshot made for this run, which
+	// holds them as they were at one moment (like after a power cut: the
+	// guest's file system and qcow2 recover from that). Everything else,
+	// and such disks where no snapshot can be made, is read as it is.
+	frozen := m.frozenSources(ctx, job)
+	defer frozen.release()
 	progress := func(done uint64) {
 		m.mu.Lock()
 		if state := m.states[job.ID]; state != nil {
@@ -312,7 +440,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if root == nil {
 			var err error
 			if root, err = os.OpenRoot(sources[item.share].Path); err != nil {
-				problems.add("shares not available", item.share)
+				problems.add(ProblemSourceUnavailable, item.share)
 				continue
 			}
 			roots[item.share] = root
@@ -324,18 +452,38 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			problems.add(problemOf(err), item.share+"/"+item.rel)
 			continue
 		}
+		if item.isLink {
+			if err := copyLink(target, item.dst, item.link); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+			}
+			continue
+		}
 		offset := total
+		from, rel := root, item.rel
+		live := frozen.live(sources[item.share], item.rel)
+		if live {
+			if snapshot, within, ok := frozen.file(sources[item.share], item.rel); ok {
+				from, rel = snapshot, within
+			}
+		}
 		var err error
 		if item.prev != "" && links {
-			_, err = copyOrLink(ctx, root, item.rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
+			_, err = copyOrLink(ctx, from, rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
 		} else {
-			_, err = copyFilePaced(ctx, root, item.rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
+			_, err = copyFilePaced(ctx, from, rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
 		}
 		if err != nil {
 			if fatalTarget(err) {
 				return err
 			}
-			problems.add(problemOf(err), item.share+"/"+item.rel)
+			code := problemOf(err)
+			if live && code == ProblemChanged {
+				code = ProblemVMDiskChanged
+			}
+			problems.add(code, item.share+"/"+item.rel)
 		}
 		total += uint64(item.size)
 		progress(total)
@@ -366,8 +514,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	if err := syncTarget(target); err != nil {
 		return err
 	}
+	if special > 0 {
+		slog.Info("backup: sockets, FIFOs and device files left out, they hold no data", "job", job.ID, "count", special)
+	}
 	m.update(job, func(s *State) {
-		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped = total, total, planned, 100, problems.String(), problems.total()
+		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped, s.Problems = total, total, planned, 100, problems.String(), problems.total(), problems.list()
 	})
 	if len(freed) > 0 && m.OnFreed != nil && job.Keep.DropsOldest() {
 		m.OnFreed(job.ID, len(freed))
@@ -456,6 +607,14 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 // and what is read back from the destination to compare.
 func copyFilePaced(ctx context.Context, source *os.Root, from string, target *os.Root, to string, pace *limiter, progress func(int64)) (int64, error) {
 	info, err := target.Lstat(to)
+	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		// What was a link when it was copied last (copyLink) is a file now:
+		// the link goes, never what it points to.
+		if err := target.Remove(to); err != nil {
+			return 0, err
+		}
+		info, err = nil, fs.ErrNotExist
+	}
 	if err == nil && !info.Mode().IsRegular() {
 		return 0, fmt.Errorf("copy destination %s is not a regular file", to)
 	}
