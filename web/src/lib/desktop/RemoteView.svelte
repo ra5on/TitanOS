@@ -3,56 +3,13 @@
 	// the app in a browser on the NAS; this view shows its picture (WebCodecs
 	// video on a canvas), plays its sound and sends mouse, keys, text, the
 	// clipboard and uploads back (protocol: docs/FERNANSICHT.md, remote.ts).
-	import { onMount, untrack, type Snippet } from 'svelte';
+	import type { Snippet } from 'svelte';
 	import Icon from '../components/Icon.svelte';
-	import Dropdown from '../components/Dropdown.svelte';
-	import { api } from '../api.ts';
-	import { apiPath, apiSocket } from '../cluster-node.ts';
-	import { formatBytes, formatPercent } from '../format.ts';
-	import { t, type MessageKey } from '../i18n/index.svelte.ts';
-	import {
-		AUDIO_JITTER,
-		AUDIO_MAX_AHEAD,
-		chunkRanges,
-		cursorCss,
-		fitRect,
-		inputMessages,
-		isDesktopShortcut,
-		isHalfKey,
-		macOptionChar,
-		fitText,
-		isPaste,
-		keyMessage,
-		loadView,
-		mapPoint,
-		MAX_DECODE_QUEUE,
-		MSG_AUDIO,
-		MSG_TILE,
-		MSG_VIDEO,
-		CODEC_TILES,
-		missingSupport,
-		parseAudio,
-		parseMessage,
-		parseTile,
-		crispScale,
-		parseVideo,
-		QUALITIES,
-		sanitizeStatus,
-		saveView,
-		sizeMessage,
-		TRANSPORTS,
-		UPLOAD_HIGH_WATER,
-		uploadChunk,
-		viewerError,
-		wheelDelta,
-		type ByeReason,
-		type Gpu,
-		type Quality,
-		type Transport,
-		type ServerMessage,
-		type ImageStatus,
-		type ViewerError,
-	} from './remote.ts';
+	import { formatBytes } from '../format.ts';
+	import { t } from '../i18n/index.svelte.ts';
+	import RemoteControls from './RemoteControls.svelte';
+	import { RemoteSession } from './remote-session.svelte.ts';
+	import RemoteVolume from './RemoteVolume.svelte';
 
 	let {
 		app,
@@ -79,1060 +36,15 @@
 		splash?: Snippet;
 	} = $props();
 
-	/** Moves the menu's part into the window's ⋯ menu (it stays this component's). */
-	function portal(node: HTMLElement, target: HTMLElement) {
-		target.appendChild(node);
-		return { destroy: () => node.remove() };
-	}
-	let section = $state<'' | 'files' | 'clip' | 'quality'>('');
-
-	type Phase =
-		| 'connecting'
-		| 'live'
-		| 'image'
-		| 'memory'
-		| 'hostnet'
-		| 'ended'
-		| 'unsupported'
-		| 'insecure'
-		| 'codec';
-	let phase = $state<Phase>('connecting');
-	// The text of the end: a bye reason or a refusal code from titand.
-	let endKey = $state<MessageKey>('viewer.bye.error');
-	// For administrators: why titand could not start the view (PLAN 75-8).
-	let endDetail = $state('');
-	let hello = $state<{ width: number; height: number; gpu: Gpu; audio: boolean; codec: string }>();
-	let stats = $state<{ fps: number; latencyMs: number }>();
-	let painted = $state(false);
+	// The connection, picture, sound and input (remote-session.svelte.ts).
+	const s = new RemoteSession(() => app);
 	let dropping = $state(false);
 	let dropNote = $state(false);
-	// PLAN 72: which transport the viewer uses right now.
-	let streamMode = $state<'tiles' | 'video'>('video');
-	let image = $state<ImageStatus>();
-	const prefs = $state(untrack(() => loadView(app)));
-	let noAudio = $state(false);
-	let remoteClip = $state('');
-	let clipDraft = $state('');
-	let clipSent = $state(false);
-	let copied = $state(false);
-	let downloads = $state<{ id: string; name: string; size: number }[]>([]);
-	let uploads = $state<
-		{
-			id: number;
-			name: string;
-			size: number;
-			sent: number;
-			state: 'run' | 'done' | 'failed';
-			error?: string;
-		}[]
-	>([]);
-	let cursor = $state('default');
-	let box = $state({ w: 0, h: 0 });
 	let showVolume = $state(false);
 
-	let screen = $state<HTMLDivElement>();
-	let canvas = $state<HTMLCanvasElement>();
-	let ime = $state<HTMLInputElement>();
-	let fileInput = $state<HTMLInputElement>();
-
-	// Not reactive: the connection, decoders and audio graph.
-	let ws: WebSocket | null = null;
-	let decoder: VideoDecoder | null = null;
-	let videoConfig: VideoDecoderConfig | null = null;
-	let supportedCodec = '';
-	let waitKey = true;
-	let droppedKey = false;
-	let lastKeyAsk = 0;
-	let pending: VideoFrame | null = null;
-	let raf = 0;
-	let audioDecoder: AudioDecoder | null = null;
-	let audioCtx: AudioContext | null = null;
-	let gain: GainNode | null = null;
-	let nextAudio = 0;
-	let liveSince = 0;
-	let retried = false;
-	let closed = false;
-	let uploadSeq = 0;
-	let sizeTimer = 0;
-	let imageTimer = 0;
-	/** The view was taken down (window closed); answers still on their way are dropped. */
-	let gone = false;
-	let lastMouse = { x: 0, y: 0, buttons: 0 };
-	const held = new Set<string>();
-	const FPS: (30 | 60)[] = [30, 60];
-
-	const shown = $derived(
-		hello
-			? fitRect(box.w, box.h, hello.width, hello.height)
-			: { left: 0, top: 0, width: 0, height: 0 },
-	);
-	// PLAN 72: integer enlargement without smoothing (sharp text), as KasmVNC.
-	const crisp = $derived(
-		!!hello && crispScale(shown.width, hello.width, globalThis.devicePixelRatio ?? 1),
-	);
-	const live = $derived(phase === 'live');
-	const stateWord = $derived(
-		phase === 'live'
-			? ''
-			: phase === 'connecting'
-				? t('viewer.state.connecting')
-				: t('viewer.state.ended'),
-	);
-	const gpuText = $derived(hello ? t(`viewer.gpu.${hello.gpu}` as MessageKey) : '');
-	// PLAN 72: the transport in front (tiles or video).
-	const statsText = $derived(
-		(hello ? t(`viewer.mode.${streamMode}` as MessageKey) + ' · ' : '') +
-			(stats && hello
-				? t('viewer.stats', {
-						fps: Math.round(stats.fps),
-						latency: Math.round(stats.latencyMs),
-						gpu: gpuText,
-					})
-				: gpuText),
-	);
-	const volumeText = $derived(formatPercent(prefs.muted ? 0 : prefs.volume * 100));
-	const quality = $derived<Quality>(prefs.quality ?? 'auto');
-
-	function send(msg: object) {
-		if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-	}
-
-	// ---- Connection ----
-
-	function connect() {
-		stop();
-		closed = false;
-		phase = 'connecting';
-		painted = false;
-		const socket = new WebSocket(apiSocket(`/viewer/${encodeURIComponent(app)}/stream`));
-		socket.binaryType = 'arraybuffer';
-		ws = socket;
-		let opened = false;
-		let ended = false;
-		socket.onopen = () => {
-			opened = true;
-			sendSize();
-			if (prefs.quality || prefs.fps || prefs.transport)
-				send({
-					t: 'quality',
-					mode: prefs.quality ?? 'auto',
-					fps: prefs.fps ?? 30,
-					webp: true,
-					...(prefs.transport ? { transport: prefs.transport } : {}),
-				});
-		};
-		socket.onmessage = (event) => {
-			if (typeof event.data === 'string') {
-				const msg = parseMessage(event.data);
-				if (msg?.t === 'bye' || msg?.t === 'error') ended = true;
-				if (msg) void onText(msg);
-				return;
-			}
-			const buf = event.data as ArrayBuffer;
-			if (!buf.byteLength) return;
-			const kind = new DataView(buf).getUint8(0);
-			if (kind === MSG_VIDEO) onVideo(buf);
-			else if (kind === MSG_TILE) onTile(buf);
-			else if (kind === MSG_AUDIO) onAudio(buf);
-		};
-		socket.onclose = (event) => {
-			if (ws !== socket) return;
-			ws = null;
-			releaseInput(false);
-			if (closed || ended) return;
-			const code = viewerError(event.reason);
-			if (code) return refuse(code);
-			if (!opened) return void refused();
-			// A network drop: one new attempt, unless the last one was just now.
-			if (phase === 'live' && (!retried || Date.now() - liveSince > 30_000)) {
-				retried = true;
-				phase = 'connecting';
-				setTimeout(() => !closed && connect(), 1000);
-				return;
-			}
-			end('lost');
-		};
-	}
-
-	/** Ends the stream (window closed, reconnect, a final state). */
-	function stop() {
-		closed = true;
-		if (ws) {
-			const socket = ws;
-			ws = null;
-			socket.onclose = null;
-			socket.close();
-		}
-		closeVideo();
-		closeAudio();
-		clearTimeout(imageTimer);
-	}
-
-	function end(reason: ByeReason | 'lost' | 'refused') {
-		endKey = `viewer.bye.${reason}` as MessageKey;
-		endDetail = '';
-		phase = 'ended';
-		stop();
-	}
-
-	// titand refused the view ({"t":"error"} and the close reason).
-	function refuse(code: ViewerError, loading?: ImageStatus, detail = '') {
-		stop();
-		endDetail = detail;
-		if (code === 'viewer_image') {
-			phase = 'image';
-			image = loading;
-			// A failed download is not retried in a loop (titand tries at most once a minute).
-			if (loading?.state !== 'error') imageTimer = window.setTimeout(watchImage, 2000);
-		} else if (code === 'viewer_memory') phase = 'memory';
-		else if (code === 'viewer_hostnet') phase = 'hostnet';
-		else {
-			endKey = `viewer.err.${code}` as MessageKey;
-			phase = 'ended';
-		}
-	}
-
-	// Refused before it began: a refused upgrade carries no reason, so the
-	// status says whether the viewer program is still missing.
-	async function refused() {
-		try {
-			const status = sanitizeStatus(await api.get('/viewer/status', AbortSignal.timeout(8000)));
-			if (gone) return;
-			if (status.image.state !== 'ready') return refuse('viewer_image');
-		} catch {
-			// No status (older NAS, no right): the generic message.
-		}
-		if (!gone) end('refused');
-	}
-
-	// The viewer program is loading: progress every 2 s, then connect.
-	async function watchImage() {
-		clearTimeout(imageTimer);
-		if (phase !== 'image') return;
-		try {
-			const status = sanitizeStatus(await api.get('/viewer/status', AbortSignal.timeout(8000)));
-			// The window was closed while the answer was on its way: nothing connects any more.
-			if (gone) return;
-			image = status.image;
-			if (status.image.state === 'ready') {
-				image = undefined;
-				return connect();
-			}
-			if (status.image.state === 'error') return;
-		} catch {
-			// Try again in a moment; the window shows the last known state.
-		}
-		if (phase === 'image' && !gone) imageTimer = window.setTimeout(watchImage, 2000);
-	}
-
-	async function onText(msg: ServerMessage) {
-		switch (msg.t) {
-			case 'hello':
-				hello = {
-					width: msg.width,
-					height: msg.height,
-					gpu: msg.gpu,
-					audio: msg.audio,
-					codec: msg.codec,
-				};
-				await configureVideo(msg.codec, msg.width, msg.height);
-				if (msg.audio) configureAudio();
-				else closeAudio();
-				if (phase === 'connecting') {
-					phase = 'live';
-					liveSince = Date.now();
-				}
-				break;
-			case 'stats':
-				stats = { fps: msg.fps, latencyMs: msg.latencyMs };
-				break;
-			case 'mode':
-				streamMode = msg.mode;
-				break;
-			case 'clipboard':
-				remoteClip = msg.text;
-				copied = false;
-				break;
-			case 'download':
-				downloads = [{ id: msg.id, name: msg.name, size: msg.size }, ...downloads].slice(0, 20);
-				break;
-			case 'cursor':
-				cursor = cursorCss(msg.shape);
-				break;
-			case 'uploaded': {
-				const u = uploads.find((x) => x.id === msg.id);
-				if (u && msg.error) {
-					// The NAS refused it: too big, no room left or a bad name.
-					u.state = 'failed';
-					u.error = msg.error;
-				} else if (u) {
-					u.state = 'done';
-					u.sent = u.size;
-				}
-				break;
-			}
-			case 'bye':
-				end(msg.reason);
-				break;
-			case 'error':
-				refuse(
-					viewerError(msg.code) ?? 'viewer_error',
-					msg.image,
-					typeof msg.detail === 'string' ? msg.detail.slice(0, 400) : '',
-				);
-				break;
-		}
-	}
-
-	// ---- Video ----
-
-	let generation = 0;
-	async function configureVideo(codec: string, width: number, height: number) {
-		// Two hellos in a row: only the newest sets up a decoder.
-		const mine = ++generation;
-		closeVideo();
-		waitKey = true;
-		droppedKey = false;
-		if (codec === CODEC_TILES) {
-			// PLAN 72: pictures of changed areas, no decoder; the canvas keeps
-			// what it shows until the tiles arrive.
-			streamMode = 'tiles';
-			sizeCanvas(width, height);
-			return;
-		}
-		streamMode = 'video';
-		if (codec !== supportedCodec) {
-			const base: VideoDecoderConfig = { codec, optimizeForLatency: true };
-			let config: VideoDecoderConfig | null = { ...base, hardwareAcceleration: 'prefer-hardware' };
-			try {
-				if (!(await VideoDecoder.isConfigSupported(config)).supported) {
-					config = (await VideoDecoder.isConfigSupported(base)).supported ? base : null;
-				}
-			} catch {
-				config = null;
-			}
-			if (mine !== generation) return;
-			if (!config) {
-				phase = 'codec';
-				stop();
-				return;
-			}
-			videoConfig = config;
-			supportedCodec = codec;
-		}
-		if (closed || mine !== generation) return;
-		sizeCanvas(width, height);
-		openDecoder();
-		// A key frame went by while the decoder was being set up.
-		if (droppedKey) askKeyframe(true);
-	}
-
-	// Setting the size clears a canvas, even to the same size: only on a change.
-	function sizeCanvas(width: number, height: number) {
-		if (canvas && (canvas.width !== width || canvas.height !== height)) {
-			canvas.width = width;
-			canvas.height = height;
-		}
-	}
-
-	// ---- Tiles (PLAN 72) ----
-
-	// Pictures are decoded side by side but drawn in the order they came,
-	// so an older picture never covers a newer one.
-	let tileChain: Promise<void> = Promise.resolve();
-	function onTile(buf: ArrayBuffer) {
-		const tile = parseTile(buf);
-		if (!tile || !canvas) return;
-		const mine = generation;
-		const bitmap = createImageBitmap(new Blob([tile.data as BlobPart], { type: tile.type }));
-		tileChain = tileChain
-			.then(() => bitmap)
-			.then((picture) => {
-				const ctx = canvas?.getContext('2d');
-				if (ctx && mine === generation && !closed) {
-					ctx.drawImage(picture, tile.x, tile.y, tile.w, tile.h);
-					painted = true;
-				}
-				picture.close();
-			})
-			.catch(() => {
-				// A broken picture: the next change of that area replaces it.
-			});
-	}
-
-	function openDecoder() {
-		if (!videoConfig) return;
-		decoder = new VideoDecoder({
-			output: (frame) => {
-				pending?.close();
-				pending = frame;
-				if (!raf) raf = requestAnimationFrame(draw);
-			},
-			error: () => {
-				// Broken stream or lost GPU: a fresh decoder and a key frame.
-				decoder = null;
-				if (closed) return;
-				openDecoder();
-				waitKey = true;
-				askKeyframe(true);
-			},
-		});
-		decoder.configure(videoConfig);
-	}
-
-	function closeVideo() {
-		if (decoder && decoder.state !== 'closed') decoder.close();
-		decoder = null;
-		pending?.close();
-		pending = null;
-		if (raf) cancelAnimationFrame(raf);
-		raf = 0;
-	}
-
-	function askKeyframe(now = false) {
-		const at = Date.now();
-		if (!now && at - lastKeyAsk < 1000) return;
-		lastKeyAsk = at;
-		send({ t: 'keyframe' });
-	}
-
-	function onVideo(buf: ArrayBuffer) {
-		const packet = parseVideo(buf);
-		if (!packet) return;
-		if (!decoder || decoder.state !== 'configured') {
-			if (packet.key) droppedKey = true;
-			return;
-		}
-		if (waitKey && !packet.key) return askKeyframe();
-		// Behind: drop until the next key frame (delta frames depend on each other).
-		if (!packet.key && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
-			waitKey = true;
-			return askKeyframe();
-		}
-		waitKey = false;
-		try {
-			decoder.decode(
-				new EncodedVideoChunk({
-					type: packet.key ? 'key' : 'delta',
-					timestamp: packet.timestamp,
-					data: packet.data,
-				}),
-			);
-		} catch {
-			waitKey = true;
-			askKeyframe(true);
-		}
-	}
-
-	// Only the newest decoded picture is drawn, once per screen refresh.
-	function draw() {
-		raf = 0;
-		const frame = pending;
-		pending = null;
-		if (!frame) return;
-		const ctx = canvas?.getContext('2d');
-		if (ctx && canvas) {
-			ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-			painted = true;
-		}
-		frame.close();
-	}
-
-	// ---- Sound ----
-
-	function configureAudio() {
-		if (audioDecoder) return;
-		if (typeof AudioDecoder !== 'function') {
-			noAudio = true;
-			return;
-		}
-		try {
-			audioDecoder = new AudioDecoder({
-				output: play,
-				error: () => {
-					audioDecoder = null;
-				},
-			});
-			audioDecoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 });
-		} catch {
-			audioDecoder = null;
-			noAudio = true;
-		}
-	}
-
-	function closeAudio() {
-		if (audioDecoder && audioDecoder.state !== 'closed') audioDecoder.close();
-		audioDecoder = null;
-	}
-
-	/** The AudioContext may only start after a gesture of the user (autoplay rules). */
-	function startAudio() {
-		if (!hello?.audio || noAudio) return;
-		try {
-			if (!audioCtx) {
-				audioCtx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
-				gain = audioCtx.createGain();
-				gain.connect(audioCtx.destination);
-				applyVolume();
-			}
-			if (audioCtx.state === 'suspended') void audioCtx.resume();
-		} catch {
-			noAudio = true;
-		}
-	}
-
-	function applyVolume() {
-		if (gain) gain.gain.value = prefs.muted ? 0 : prefs.volume;
-	}
-
-	function onAudio(buf: ArrayBuffer) {
-		if (!audioDecoder || audioDecoder.state !== 'configured') return;
-		if (!audioCtx || audioCtx.state !== 'running' || prefs.muted) return;
-		const packet = parseAudio(buf);
-		if (!packet) return;
-		try {
-			audioDecoder.decode(
-				new EncodedAudioChunk({ type: 'key', timestamp: packet.timestamp, data: packet.data }),
-			);
-		} catch {
-			// One lost packet is 20 ms of silence.
-		}
-	}
-
-	// A small jitter buffer: play ~60 ms behind, never further ahead than 250 ms.
-	function play(data: AudioData) {
-		const ctx = audioCtx;
-		if (!ctx || !gain) return data.close();
-		try {
-			const buffer = ctx.createBuffer(data.numberOfChannels, data.numberOfFrames, data.sampleRate);
-			for (let c = 0; c < data.numberOfChannels; c++)
-				data.copyTo(buffer.getChannelData(c), { planeIndex: c, format: 'f32-planar' });
-			const now = ctx.currentTime;
-			if (nextAudio < now + 0.005) nextAudio = now + AUDIO_JITTER;
-			if (nextAudio > now + AUDIO_MAX_AHEAD) return;
-			const source = ctx.createBufferSource();
-			source.buffer = buffer;
-			source.connect(gain);
-			source.start(nextAudio);
-			nextAudio += buffer.duration;
-		} catch {
-			// Skip this packet.
-		} finally {
-			data.close();
-		}
-	}
-
-	function setVolume(value: number) {
-		prefs.volume = Math.min(1, Math.max(0, value));
-		if (prefs.volume > 0) prefs.muted = false;
-		applyVolume();
-		saveView(app, $state.snapshot(prefs));
-	}
-
-	function toggleMute() {
-		startAudio();
-		prefs.muted = !prefs.muted;
-		applyVolume();
-		saveView(app, $state.snapshot(prefs));
-	}
-
-	function setQuality(
-		mode: Quality,
-		fps: 30 | 60,
-		transport: Transport = prefs.transport ?? 'auto',
-	) {
-		prefs.quality = mode;
-		prefs.fps = fps;
-		prefs.transport = transport;
-		saveView(app, $state.snapshot(prefs));
-		send({ t: 'quality', mode, fps, transport, webp: true });
-	}
-
-	// ---- Size ----
-
-	function sendSize() {
-		clearTimeout(sizeTimer);
-		if (box.w > 0 && box.h > 0) send(sizeMessage(box.w, box.h, window.devicePixelRatio || 1));
-	}
-
-	// ---- Mouse, wheel and touch ----
-
-	function point(event: { clientX: number; clientY: number }) {
-		if (!canvas || !hello) return null;
-		const r = canvas.getBoundingClientRect();
-		return mapPoint(
-			event.clientX,
-			event.clientY,
-			{ left: r.left, top: r.top, width: r.width, height: r.height },
-			hello.width,
-			hello.height,
-		);
-	}
-
-	function mouse(x: number, y: number, buttons: number, force = false) {
-		if (!force && x === lastMouse.x && y === lastMouse.y && buttons === lastMouse.buttons) return;
-		lastMouse = { x, y, buttons };
-		send({ t: 'mouse', x, y, buttons });
-	}
-
-	type Touch = { x: number; y: number; sx: number; sy: number };
-	const touches = new Map<number, Touch>();
-	let gesture: 'none' | 'tap' | 'pan' | 'done' = 'none';
-	let longPress = 0;
-
-	function pointerDown(event: PointerEvent) {
-		if (!live) return;
-		canvas?.focus({ preventScroll: true });
-		startAudio();
-		if (event.pointerType === 'touch') {
-			event.preventDefault();
-			touches.set(event.pointerId, {
-				x: event.clientX,
-				y: event.clientY,
-				sx: event.clientX,
-				sy: event.clientY,
-			});
-			canvas?.setPointerCapture(event.pointerId);
-			if (touches.size === 1) {
-				gesture = 'tap';
-				const p = point(event);
-				clearTimeout(longPress);
-				// Long press = right click.
-				longPress = window.setTimeout(() => {
-					if (gesture !== 'tap' || !p) return;
-					gesture = 'done';
-					mouse(p.x, p.y, 0, true);
-					mouse(p.x, p.y, 2);
-					mouse(p.x, p.y, 0);
-				}, 550);
-			} else {
-				clearTimeout(longPress);
-				gesture = 'pan';
-			}
-			return;
-		}
-		event.preventDefault();
-		canvas?.setPointerCapture(event.pointerId);
-		const p = point(event);
-		if (p) mouse(p.x, p.y, event.buttons);
-	}
-
-	function pointerMove(event: PointerEvent) {
-		if (!live) return;
-		if (event.pointerType === 'touch') {
-			const touch = touches.get(event.pointerId);
-			if (!touch) return;
-			const dx = event.clientX - touch.x;
-			const dy = event.clientY - touch.y;
-			touch.x = event.clientX;
-			touch.y = event.clientY;
-			if (gesture === 'tap' && Math.hypot(touch.x - touch.sx, touch.y - touch.sy) > 10) {
-				clearTimeout(longPress);
-				gesture = 'pan';
-			}
-			// Swiping scrolls: the content follows the finger.
-			if (gesture === 'pan' && (dx || dy)) {
-				const n = touches.size;
-				send({ t: 'wheel', dx: Math.round(-dx / n), dy: Math.round(-dy / n) });
-			}
-			return;
-		}
-		const p = point(event);
-		if (p) mouse(p.x, p.y, event.buttons);
-	}
-
-	function pointerUp(event: PointerEvent) {
-		if (event.pointerType === 'touch') {
-			const touch = touches.get(event.pointerId);
-			touches.delete(event.pointerId);
-			if (touch && gesture === 'tap' && touches.size === 0) {
-				clearTimeout(longPress);
-				const p = point(event);
-				// Tap = click.
-				if (p) {
-					mouse(p.x, p.y, 0, true);
-					mouse(p.x, p.y, 1);
-					mouse(p.x, p.y, 0);
-				}
-			}
-			if (!touches.size) gesture = 'none';
-			return;
-		}
-		if (!live) return;
-		const p = point(event);
-		if (p) mouse(p.x, p.y, event.buttons);
-	}
-
-	function wheel(event: WheelEvent) {
-		if (!live) return;
-		event.preventDefault();
-		const d = wheelDelta(event.deltaX, event.deltaY, event.deltaMode);
-		if (d.dx || d.dy) send({ t: 'wheel', ...d });
-	}
-
-	// ---- Keyboard and clipboard ----
-
-	let pasteKey: KeyboardEvent | null = null;
-	let pasteTimer = 0;
-
-	function keyDown(event: KeyboardEvent) {
-		if (!live) return;
-		// Alt + Q/W/M, Alt + arrows and Ctrl + Space belong to the desktop.
-		if (isDesktopShortcut(event)) return;
-		startAudio();
-		if (isPaste(event)) {
-			// The browser's paste event brings the text; the key follows it.
-			pasteKey = event;
-			clearTimeout(pasteTimer);
-			pasteTimer = window.setTimeout(() => pasteKey && pressPaste(), 200);
-			return;
-		}
-		event.preventDefault();
-		// Dead keys and IME input: the finished character follows.
-		if (isHalfKey(event)) return;
-		held.add(event.code);
-		send(remoteKey(event, true));
-	}
-
-	const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-	/** A key as the NAS gets it; Option characters of a Mac go without Alt. */
-	function remoteKey(event: KeyboardEvent, down: boolean) {
-		const msg = keyMessage(event, down);
-		if (macOptionChar(event, mac)) msg.mods.alt = false;
-		return msg;
-	}
-
-	function keyUp(event: KeyboardEvent) {
-		if (!held.has(event.code)) return;
-		event.preventDefault();
-		held.delete(event.code);
-		send(remoteKey(event, false));
-	}
-
-	function pressPaste() {
-		const event = pasteKey;
-		pasteKey = null;
-		clearTimeout(pasteTimer);
-		if (!event) return;
-		send(keyMessage(event, true));
-		send(keyMessage(event, false));
-	}
-
-	function paste(event: ClipboardEvent) {
-		if (!live) return;
-		event.preventDefault();
-		const text = event.clipboardData?.getData('text/plain') ?? '';
-		if (text) send(fitText('clipboard', text));
-		if (pasteKey) pressPaste();
-	}
-
-	/** Lets go of held keys and buttons, so nothing stays pressed on the NAS (e.g. Alt after Alt + Q). */
-	function releaseInput(sendUp = true) {
-		if (sendUp)
-			for (const code of held)
-				send({
-					t: 'key',
-					code,
-					key: '',
-					down: false,
-					mods: { shift: false, ctrl: false, alt: false, meta: false },
-				});
-		held.clear();
-		if (sendUp && lastMouse.buttons) mouse(lastMouse.x, lastMouse.y, 0);
-		else lastMouse.buttons = 0;
-	}
-
-	async function copyRemote() {
-		try {
-			await navigator.clipboard.writeText(remoteClip);
-			copied = true;
-		} catch {
-			copied = false;
-		}
-	}
-
-	function sendClip(event: SubmitEvent) {
-		event.preventDefault();
-		if (!clipDraft) return;
-		send(fitText('clipboard', clipDraft));
-		clipSent = true;
-	}
-
-	// The phone's keyboard types into a hidden field; its input goes over as text and keys.
-	const SENTINEL = '​​';
-	function imeBefore(event: InputEvent) {
-		if (event.isComposing || event.inputType === 'insertCompositionText') return;
-		const out = inputMessages(event.inputType, event.data);
-		if (!out.length) return;
-		event.preventDefault();
-		for (const m of out) send(m.t === 'text' ? fitText('text', m.text) : m);
-	}
-	function imeComposed(event: CompositionEvent) {
-		if (event.data) send(fitText('text', event.data));
-		if (ime) ime.value = SENTINEL;
-	}
-	function imeKey(event: KeyboardEvent) {
-		// Hardware and iOS keyboards report real keys; Android only 229.
-		if (event.keyCode === 229 || event.isComposing) return;
-		if (event.key === 'Backspace' || event.key === 'Enter' || event.key === 'Tab') {
-			event.preventDefault();
-			send(keyMessage(event, true));
-			send(keyMessage(event, false));
-		}
-	}
-	function openKeyboard() {
-		if (!ime) return;
-		ime.value = SENTINEL;
-		ime.focus();
-		startAudio();
-	}
-
-	// ---- Uploads ----
-
-	async function upload(files: FileList | null) {
-		for (const file of Array.from(files ?? [])) {
-			const id = ++uploadSeq;
-			uploads = [...uploads, { id, name: file.name, size: file.size, sent: 0, state: 'run' }];
-			const item = uploads[uploads.length - 1];
-			const socket = ws;
-			if (!socket || socket.readyState !== WebSocket.OPEN) {
-				item.state = 'failed';
-				continue;
-			}
-			socket.send(JSON.stringify({ t: 'upload', id, name: file.name, size: file.size }));
-			for (const [from, to] of chunkRanges(file.size)) {
-				// The picture keeps flowing: never more than ~1 MB waiting in the socket.
-				while (socket.readyState === WebSocket.OPEN && socket.bufferedAmount > UPLOAD_HIGH_WATER)
-					await new Promise((r) => setTimeout(r, 30));
-				if (socket.readyState !== WebSocket.OPEN) {
-					item.state = 'failed';
-					break;
-				}
-				const data = new Uint8Array(await file.slice(from, to).arrayBuffer());
-				socket.send(uploadChunk(id, data));
-				item.sent = to;
-			}
-		}
-		if (fileInput) fileInput.value = '';
-	}
-
-	// ---- Life cycle ----
-
-	onMount(() => {
-		const why = missingSupport(globalThis as never);
-		if (why) {
-			phase = why === 'insecure' ? 'insecure' : 'unsupported';
-			return;
-		}
-		connect();
-		return () => {
-			gone = true;
-			stop();
-			releaseInput(false);
-			void audioCtx?.close();
-			audioCtx = null;
-			clearTimeout(sizeTimer);
-			clearTimeout(longPress);
-		};
-	});
-
-	// The visible area follows the window; the NAS adapts its screen 300 ms after the last change.
-	$effect(() => {
-		if (!screen) return;
-		const observer = new ResizeObserver(([entry]) => {
-			const r = entry.contentRect;
-			box = { w: r.width, h: r.height };
-			clearTimeout(sizeTimer);
-			sizeTimer = window.setTimeout(sendSize, 300);
-		});
-		observer.observe(screen);
-		return () => observer.disconnect();
-	});
-
-	function reconnect() {
-		retried = false;
-		connect();
-	}
-
 	/** PLAN 67-1: what the menu bar of the window does with the remote view. */
-	export const menu = {
-		live: () => phase === 'live',
-		upload: () => fileInput?.click(),
-		reconnect,
-		quality: () => quality,
-		setQuality: (q: Quality) => setQuality(q, prefs.fps ?? 30),
-		audio: () => !!hello?.audio && !noAudio,
-		muted: () => prefs.muted,
-		toggleMute,
-		fullscreen: () => void screen?.requestFullscreen?.().catch(() => {}),
-		remoteClip: () => remoteClip,
-		/** Sends the text on this computer's clipboard to the app. */
-		clipSend: async () => {
-			try {
-				const text = await navigator.clipboard.readText();
-				if (text) send(fitText('clipboard', text));
-			} catch {
-				// No permission: the ⋯ menu's clipboard field still works.
-			}
-		},
-		/** Puts the app's clipboard onto this computer's. */
-		clipGet: copyRemote,
-		/** Files the app offered for download (Ablage › Heruntergeladen ›). */
-		downloads: () => downloads.map((d) => ({ id: d.id, text: d.name })),
-		download: (id: string) => {
-			const d = downloads.find((x) => x.id === id);
-			if (!d) return;
-			const a = document.createElement('a');
-			a.href = apiPath(`/viewer/${encodeURIComponent(app)}/downloads/${encodeURIComponent(d.id)}`);
-			a.download = d.name;
-			a.click();
-		},
-		/** Ansicht › Statistik: frames, delay and GPU over the picture. */
-		stats: () => showStats,
-		toggleStats: () => (showStats = !showStats),
-	};
-	let showStats = $state(false);
+	export const menu = s.menu;
 </script>
-
-{#snippet volumeControl()}
-	<button
-		type="button"
-		class="icon-btn"
-		onclick={toggleMute}
-		aria-pressed={prefs.muted}
-		title={prefs.muted ? t('viewer.unmute') : t('viewer.mute')}
-		aria-label={prefs.muted ? t('viewer.unmute') : t('viewer.mute')}
-	>
-		<Icon name="volume" size={16} />
-		{#if prefs.muted}<span class="slash" aria-hidden="true"></span>{/if}
-	</button>
-	<input
-		class="volume"
-		type="range"
-		min="0"
-		max="100"
-		step="1"
-		value={Math.round((prefs.muted ? 0 : prefs.volume) * 100)}
-		aria-label={t('viewer.volume')}
-		aria-valuetext={volumeText}
-		oninput={(e) => {
-			startAudio();
-			setVolume(Number(e.currentTarget.value) / 100);
-		}}
-	/>
-	<span class="pct mono">{volumeText}</span>
-{/snippet}
-
-{#snippet qualityItems(close: () => void)}
-	{#each QUALITIES as q (q)}
-		<button
-			type="button"
-			role="menuitemradio"
-			aria-checked={quality === q}
-			onclick={() => {
-				setQuality(q, prefs.fps ?? 30);
-				close();
-			}}><span>{t(`viewer.q.${q}` as MessageKey)}</span></button
-		>
-	{/each}
-	<hr />
-	{#each FPS as fps (fps)}
-		<button
-			type="button"
-			role="menuitemradio"
-			aria-checked={(prefs.fps ?? 30) === fps}
-			onclick={() => {
-				setQuality(quality, fps);
-				close();
-			}}><span>{t('viewer.fpsValue', { fps })}</span></button
-		>
-	{/each}
-	<hr />
-	{#each TRANSPORTS as tr (tr)}
-		<button
-			type="button"
-			role="menuitemradio"
-			aria-checked={(prefs.transport ?? 'auto') === tr}
-			onclick={() => {
-				setQuality(quality, prefs.fps ?? 30, tr);
-				close();
-			}}
-			><span
-				>{t(`viewer.transport.${tr}` as MessageKey)}<small class="muted hint-line"
-					>{t(`viewer.transport.${tr}Hint` as MessageKey)}</small
-				></span
-			></button
-		>
-	{/each}
-{/snippet}
-
-{#snippet clipboardPanel()}
-	<div class="clip">
-		<b>{t('viewer.clipboardRemote')}</b>
-		{#if remoteClip}
-			<pre class="remote-clip">{remoteClip}</pre>
-			<button type="button" class="btn" onclick={copyRemote}
-				><Icon name="copy" size={15} />{copied ? t('viewer.copied') : t('viewer.copy')}</button
-			>
-		{:else}<p class="muted">{t('viewer.clipboardEmpty')}</p>{/if}
-	</div>
-	<hr />
-	<form class="clip" onsubmit={sendClip}>
-		<label class="stack"
-			><span>{t('viewer.clipboardField')}</span>
-			<textarea class="field" rows="3" bind:value={clipDraft} oninput={() => (clipSent = false)}
-			></textarea>
-		</label>
-		<button type="submit" class="btn" disabled={!clipDraft || !live}
-			>{t('viewer.clipboardSend')}</button
-		>
-		{#if clipSent}<p class="muted small" role="status">{t('viewer.clipboardSent')}</p>{/if}
-	</form>
-{/snippet}
-
-{#snippet filesPanel()}
-	<button type="button" class="btn" disabled={!live} onclick={() => fileInput?.click()}
-		><Icon name="upload" size={15} />{t('viewer.upload')}</button
-	>
-	<p class="muted small">{t('viewer.uploadHint')}</p>
-	{#if uploads.length}
-		<ul class="list">
-			{#each uploads as u (u.id)}
-				<li>
-					<span class="name">{u.name}</span>
-					<span class="muted small" role="status"
-						>{u.state === 'done'
-							? t('viewer.uploadDone')
-							: u.state === 'failed'
-								? u.error
-									? t(`viewer.uploadError.${u.error}` as 'viewer.uploadError.failed')
-									: t('viewer.uploadFailed')
-								: formatPercent(u.size ? (100 * u.sent) / u.size : 100)}</span
-					>
-					{#if u.state === 'run'}<progress max={u.size || 1} value={u.sent}></progress>{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
-	<hr />
-	<b>{t('viewer.downloads')}</b>
-	{#if downloads.length}
-		<ul class="list">
-			{#each downloads as d (d.id)}
-				<li>
-					<a
-						href={apiPath(
-							`/viewer/${encodeURIComponent(app)}/downloads/${encodeURIComponent(d.id)}`,
-						)}
-						download={d.name}
-						><Icon name="download" size={14} /> <span class="name">{d.name}</span></a
-					>
-					<span class="muted small">{formatBytes(d.size)}</span>
-				</li>
-			{/each}
-		</ul>
-	{:else}<p class="muted small">{t('viewer.noDownloads')}</p>{/if}
-{/snippet}
 
 <div
 	class="remote"
@@ -1140,7 +52,7 @@
 	role="presentation"
 	ondragover={(e) => {
 		// PLAN 66 draft 04: files dragged into the window are uploaded to the app.
-		if (live && e.dataTransfer?.types.includes('Files')) {
+		if (s.live && e.dataTransfer?.types.includes('Files')) {
 			e.preventDefault();
 			dropping = true;
 		}
@@ -1152,199 +64,62 @@
 		if (!e.dataTransfer?.files.length) return;
 		e.preventDefault();
 		dropping = false;
-		void upload(e.dataTransfer.files);
+		void s.upload(e.dataTransfer.files);
 		dropNote = true;
 		setTimeout(() => (dropNote = false), 4000);
 	}}
 >
 	{#if dropping}<div class="drop-hint" aria-hidden="true">{t('viewer.dropHint')}</div>{/if}
 	{#if dropNote}<p class="drop-note" role="status">{t('viewer.uploadHint')}</p>{/if}
-	{#if phone}
-		<header class="phone-head">
-			<button
-				type="button"
-				class="icon-btn big"
-				onclick={onback}
-				aria-label={t('desktop.phone.home')}><Icon name="chevronLeft" size={22} /></button
-			>
-			<b class="title">{title}</b>
-			<span class="pill" class:live class:ended={!live && phase !== 'connecting'}
-				><span class="dot" aria-hidden="true"></span>{t('viewer.pill')}{#if stateWord}<span
-						class="sr-only">: {stateWord}</span
-					>{/if}</span
-			>
-			<span class="fill"></span>
-			<button
-				type="button"
-				class="icon-btn big"
-				onclick={toggleMute}
-				aria-pressed={prefs.muted}
-				aria-label={prefs.muted ? t('viewer.unmute') : t('viewer.mute')}
-				><Icon name="volume" size={19} />{#if prefs.muted}<span class="slash" aria-hidden="true"
-					></span>{/if}</button
-			>
-			<button
-				type="button"
-				class="icon-btn big"
-				onclick={openKeyboard}
-				disabled={!live}
-				aria-label={t('viewer.keyboard')}><Icon name="keyboard" size={19} /></button
-			>
-			<Dropdown label={t('viewer.more')} icon="more" align="right" kind="panel">
-				{#snippet children(close)}
-					<b>{t('viewer.quality')}</b>
-					<div class="menu-list" role="menu">{@render qualityItems(close)}</div>
-					<hr />
-					{@render clipboardPanel()}
-					<hr />
-					{@render filesPanel()}
-					<hr />
-					<button type="button" class="btn" onclick={onopentab}
-						><Icon name="external" size={15} />{t('desktop.window.openTab')}</button
-					>
-				{/snippet}
-			</Dropdown>
-		</header>
-	{:else if inTitle}
-		{#if menuHost}
-			<div class="title-menu" use:portal={menuHost}>
-				{#if hello?.audio && !noAudio}
-					<span class="vol">{@render volumeControl()}</span>
-				{:else if noAudio}<p class="muted small pad">{t('viewer.noAudio')}</p>{/if}
-				<hr />
-				<button type="button" role="menuitem" disabled={!live} onclick={() => fileInput?.click()}
-					><Icon name="upload" size={16} /><span>{t('viewer.menu.open')}</span></button
-				>
-				<button
-					type="button"
-					role="menuitem"
-					aria-expanded={section === 'files'}
-					onclick={() => (section = section === 'files' ? '' : 'files')}
-					><Icon name="download" size={16} /><span>{t('viewer.downloads')}</span><kbd
-						>{downloads.length}</kbd
-					></button
-				>
-				{#if section === 'files'}<div class="sub">{@render filesPanel()}</div>{/if}
-				<button
-					type="button"
-					role="menuitem"
-					aria-expanded={section === 'clip'}
-					onclick={() => (section = section === 'clip' ? '' : 'clip')}
-					><Icon name="paste" size={16} /><span>{t('viewer.clipboard')}</span></button
-				>
-				{#if section === 'clip'}<div class="sub">{@render clipboardPanel()}</div>{/if}
-				<button
-					type="button"
-					role="menuitem"
-					aria-expanded={section === 'quality'}
-					onclick={() => (section = section === 'quality' ? '' : 'quality')}
-					><Icon name="monitor" size={16} /><span>{t('viewer.quality')}</span><kbd
-						>{t(`viewer.q.${quality}` as MessageKey)} ›</kbd
-					></button
-				>
-				{#if section === 'quality'}<div class="sub" role="group">
-						{@render qualityItems(() => (section = ''))}
-					</div>{/if}
-				<hr />
-				<button type="button" role="menuitem" onclick={reconnect}
-					><Icon name="restart" size={16} /><span>{t('viewer.reconnect')}</span></button
-				>
-				<p class="menu-line muted">
-					<span class="pill" class:live class:ended={!live && phase !== 'connecting'}
-						><span class="dot" aria-hidden="true"></span>{t('viewer.pill')}{#if stateWord}
-							· {stateWord}{/if}</span
-					>{#if live && statsText}<span class="stats">{statsText}</span>{/if}
-				</p>
-			</div>
-		{/if}
-	{:else}
-		<div class="view-bar" role="toolbar" aria-label={t('viewer.toolbar', { app: title })}>
-			<span class="pill" class:live class:ended={!live && phase !== 'connecting'}
-				><span class="dot" aria-hidden="true"></span>{t('viewer.pill')}{#if stateWord}
-					· {stateWord}{/if}</span
-			>
-			{#if live && statsText}<span class="stats muted">{statsText}</span>{/if}
-			<span class="fill"></span>
-			{#if hello?.audio && !noAudio}
-				<span class="vol">{@render volumeControl()}</span>
-			{:else if noAudio}<span class="muted small">{t('viewer.noAudio')}</span>{/if}
-			<Dropdown
-				label={t('viewer.quality')}
-				text={t('viewer.qualityValue', { mode: t(`viewer.q.${quality}` as MessageKey) })}
-				align="right"
-				compact
-				icon="monitor"
-			>
-				{#snippet children(close)}{@render qualityItems(close)}{/snippet}
-			</Dropdown>
-			<Dropdown
-				label={t('viewer.clipboard')}
-				text={t('viewer.clipboard')}
-				icon="paste"
-				kind="panel"
-				align="right"
-				compact
-			>
-				{#snippet children()}{@render clipboardPanel()}{/snippet}
-			</Dropdown>
-			<Dropdown
-				label={t('viewer.files')}
-				text={t('viewer.files')}
-				icon="download"
-				kind="panel"
-				align="right"
-				compact
-			>
-				{#snippet children()}{@render filesPanel()}{/snippet}
-			</Dropdown>
-		</div>
-	{/if}
+	<RemoteControls {s} {title} {phone} {onopentab} {onback} {inTitle} {menuHost} />
 	<input
 		type="file"
 		multiple
 		hidden
-		bind:this={fileInput}
-		onchange={(e) => upload(e.currentTarget.files)}
+		bind:this={s.fileInput}
+		onchange={(e) => s.upload(e.currentTarget.files)}
 	/>
-	<div class="screen" bind:this={screen}>
-		{#if showStats && live && statsText}<p class="stats-line" role="status">{statsText}</p>{/if}
+	<div class="screen" bind:this={s.screen}>
+		{#if s.showStats && s.live && s.statsText}<p class="stats-line" role="status">
+				{s.statsText}
+			</p>{/if}
 		<canvas
-			bind:this={canvas}
-			class:hidden={!hello || phase !== 'live'}
-			style:left="{shown.left}px"
-			style:top="{shown.top}px"
-			style:width="{shown.width}px"
-			style:height="{shown.height}px"
-			style:image-rendering={crisp ? 'pixelated' : undefined}
-			style:cursor
+			bind:this={s.canvas}
+			class:hidden={!s.hello || s.phase !== 'live'}
+			style:left="{s.shown.left}px"
+			style:top="{s.shown.top}px"
+			style:width="{s.shown.width}px"
+			style:height="{s.shown.height}px"
+			style:image-rendering={s.crisp ? 'pixelated' : undefined}
+			style:cursor={s.cursor}
 			tabindex="0"
 			aria-label={t('viewer.screen', { app: title })}
-			onpointerdown={pointerDown}
-			onpointermove={pointerMove}
-			onpointerup={pointerUp}
-			onpointercancel={pointerUp}
-			onwheel={wheel}
-			onkeydown={keyDown}
-			onkeyup={keyUp}
-			onpaste={paste}
-			onblur={() => releaseInput()}
+			onpointerdown={s.pointerDown}
+			onpointermove={s.pointerMove}
+			onpointerup={s.pointerUp}
+			onpointercancel={s.pointerUp}
+			onwheel={s.wheel}
+			onkeydown={s.keyDown}
+			onkeyup={s.keyUp}
+			onpaste={s.paste}
+			onblur={() => s.releaseInput()}
 			oncontextmenu={(e) => e.preventDefault()}
 		></canvas>
 		<input
 			class="ime"
-			bind:this={ime}
+			bind:this={s.ime}
 			aria-label={t('viewer.keyboardField')}
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
-			onbeforeinput={imeBefore}
-			oncompositionend={imeComposed}
-			onkeydown={imeKey}
+			onbeforeinput={s.imeBefore}
+			oncompositionend={s.imeComposed}
+			onkeydown={s.imeKey}
 			oninput={(e) => {
-				if (!(e as unknown as InputEvent).isComposing) e.currentTarget.value = SENTINEL;
+				if (!(e as unknown as InputEvent).isComposing) e.currentTarget.value = s.SENTINEL;
 			}}
 		/>
-		{#if phase === 'connecting' || (phase === 'live' && !painted)}
+		{#if s.phase === 'connecting' || (s.phase === 'live' && !s.painted)}
 			{#if splash}
 				<!-- PLAN 66 draft 01: the app's symbol, its name and a bar. -->
 				<div class="note start" role="status">
@@ -1359,47 +134,47 @@
 					<p>{t('viewer.starting')}</p>
 				</div>
 			{/if}
-		{:else if phase === 'image'}
+		{:else if s.phase === 'image'}
 			<div class="note" role="status">
 				<Icon name="download" size={36} />
 				<h3>{t('viewer.image.title')}</h3>
 				<p>{t('viewer.image.text')}</p>
-				{#if image?.state === 'error'}
-					<p class="error-text">{t('viewer.image.failed', { error: image.error })}</p>
-					<button type="button" class="btn" onclick={reconnect}>{t('common.retry')}</button>
-				{:else if image && image.size > 0}
-					<progress max={image.size} value={image.bytes}></progress>
+				{#if s.image?.state === 'error'}
+					<p class="error-text">{t('viewer.image.failed', { error: s.image.error })}</p>
+					<button type="button" class="btn" onclick={s.reconnect}>{t('common.retry')}</button>
+				{:else if s.image && s.image.size > 0}
+					<progress max={s.image.size} value={s.image.bytes}></progress>
 					<p class="muted small">
 						{t('viewer.image.progress', {
-							done: formatBytes(image.bytes),
-							total: formatBytes(image.size),
+							done: formatBytes(s.image.bytes),
+							total: formatBytes(s.image.size),
 						})}
 					</p>
 				{:else}<span class="spinner" aria-hidden="true"></span>{/if}
 			</div>
-		{:else if phase !== 'live'}
+		{:else if s.phase !== 'live'}
 			<div class="note" role="alert">
 				<Icon name="monitor" size={36} />
-				{#if phase === 'memory'}
+				{#if s.phase === 'memory'}
 					<h3>{t('viewer.memory.title')}</h3>
 					<p>{t('viewer.memory.text')}</p>
-				{:else if phase === 'hostnet'}
+				{:else if s.phase === 'hostnet'}
 					<h3>{t('viewer.hostnet.title')}</h3>
 					<p>{t('viewer.hostnet.text')}</p>
-				{:else if phase === 'unsupported' || phase === 'insecure'}
+				{:else if s.phase === 'unsupported' || s.phase === 'insecure'}
 					<h3>{t('viewer.unsupported.title')}</h3>
-					<p>{t(phase === 'insecure' ? 'viewer.insecure.text' : 'viewer.unsupported.text')}</p>
-				{:else if phase === 'codec'}
+					<p>{t(s.phase === 'insecure' ? 'viewer.insecure.text' : 'viewer.unsupported.text')}</p>
+				{:else if s.phase === 'codec'}
 					<h3>{t('viewer.unsupported.title')}</h3>
-					<p>{t('viewer.codec.text', { codec: hello?.codec ?? '' })}</p>
+					<p>{t('viewer.codec.text', { codec: s.hello?.codec ?? '' })}</p>
 				{:else}
 					<h3>{t('viewer.ended.title')}</h3>
-					<p>{t(endKey)}</p>
-					{#if endDetail}<p class="end-detail">{endDetail}</p>{/if}
+					<p>{t(s.endKey)}</p>
+					{#if s.endDetail}<p class="end-detail">{s.endDetail}</p>{/if}
 				{/if}
 				<div class="actions">
-					{#if phase === 'ended' || phase === 'memory'}
-						<button type="button" class="btn btn-primary" onclick={reconnect}
+					{#if s.phase === 'ended' || s.phase === 'memory'}
+						<button type="button" class="btn btn-primary" onclick={s.reconnect}
 							>{t('viewer.reconnect')}</button
 						>
 					{/if}
@@ -1410,22 +185,23 @@
 			</div>
 		{/if}
 	</div>
-	{#if phone && live}
+	{#if phone && s.live}
 		<div class="chips">
-			{#if hello?.audio && !noAudio}
+			{#if s.hello?.audio && !s.noAudio}
 				<button
 					type="button"
 					class="chip-btn"
 					aria-expanded={showVolume}
 					onclick={() => {
-						startAudio();
+						s.startAudio();
 						showVolume = !showVolume;
-					}}>{t('viewer.volumeValue', { value: volumeText })}</button
+					}}>{t('viewer.volumeValue', { value: s.volumeText })}</button
 				>
 			{/if}
-			<button type="button" class="chip-btn" onclick={openKeyboard}>{t('viewer.keyboard')}</button>
+			<button type="button" class="chip-btn" onclick={s.openKeyboard}>{t('viewer.keyboard')}</button
+			>
 			{#if showVolume}
-				<div class="volume-sheet">{@render volumeControl()}</div>
+				<div class="volume-sheet"><RemoteVolume {s} /></div>
 			{/if}
 		</div>
 	{/if}
@@ -1442,92 +218,6 @@
 		background: #000;
 		container-type: inline-size;
 	}
-	/* PLAN 66: the part of the window's ⋯ menu. */
-	.title-menu {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		max-height: min(70vh, 560px);
-		overflow-y: auto;
-	}
-	.title-menu .vol {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-1) var(--space-2-5);
-	}
-	.title-menu .sub {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		margin: 2px 0 var(--space-1-5) 26px;
-		padding: var(--space-1-5) 0 var(--space-1-5) var(--space-2-5);
-		border-left: 2px solid var(--border);
-	}
-	.title-menu .menu-line {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-2-5);
-		margin: var(--space-1-5) var(--space-2-5) 2px;
-		font-size: var(--text-xs);
-	}
-	.title-menu .pad {
-		margin: var(--space-1) var(--space-2-5);
-	}
-	.view-bar,
-	.phone-head {
-		flex: none;
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: 40px;
-		padding: var(--space-1) var(--space-2-5);
-		background: var(--header);
-		border-bottom: 1px solid var(--border);
-		color: var(--text);
-		font-size: var(--text-sm);
-		user-select: none;
-		-webkit-user-select: none;
-	}
-	.view-bar :global(.dropdown-panel),
-	.phone-head :global(.dropdown-panel) {
-		user-select: text;
-		-webkit-user-select: text;
-	}
-	.view-bar :global(.btn) {
-		min-height: 1.875rem;
-		height: 1.875rem;
-		font-size: var(--text-sm);
-	}
-	.phone-head {
-		min-height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) var(--space-1-5) 0;
-		gap: var(--space-1);
-	}
-	.title {
-		min-width: 0;
-		overflow-wrap: break-word;
-		hyphens: auto;
-	}
-	.fill {
-		flex: 1;
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		padding: 2px var(--space-2-5);
-		border-radius: 999px;
-		background: var(--chip);
-		color: var(--muted);
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.pill.live {
-		background: color-mix(in srgb, var(--ok-text) 16%, transparent);
-		color: var(--ok-text);
-	}
 	.end-detail {
 		max-width: 36rem;
 		margin: 0;
@@ -1536,62 +226,6 @@
 		font-size: var(--text-sm);
 		overflow-wrap: break-word;
 		hyphens: auto;
-	}
-	.pill.ended {
-		color: var(--muted);
-	}
-	.dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: currentColor;
-	}
-	.stats {
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.vol {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-	}
-	.volume {
-		width: 110px;
-	}
-	.pct {
-		width: 3.2em;
-		text-align: right;
-		color: var(--muted);
-	}
-	.icon-btn {
-		position: relative;
-		display: grid;
-		place-items: center;
-		width: 30px;
-		height: 30px;
-		border: 0;
-		border-radius: 7px;
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-		flex: none;
-	}
-	.icon-btn.big {
-		width: 40px;
-		height: 40px;
-	}
-	.icon-btn:hover {
-		background: color-mix(in srgb, var(--text) 9%, transparent);
-	}
-	.icon-btn:disabled {
-		opacity: 0.5;
-	}
-	.slash {
-		position: absolute;
-		width: 2px;
-		height: 60%;
-		background: currentColor;
-		transform: rotate(45deg);
 	}
 	.stats-line {
 		position: absolute;
@@ -1690,61 +324,6 @@
 			transform: rotate(360deg);
 		}
 	}
-	.clip {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		align-items: flex-start;
-	}
-	.clip label {
-		align-self: stretch;
-	}
-	.remote-clip {
-		margin: 0;
-		max-height: 8rem;
-		max-width: 100%;
-		overflow: auto;
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
-		font-size: var(--text-sm);
-		padding: var(--space-2);
-		border-radius: var(--radius-small);
-		background: var(--chip);
-		align-self: stretch;
-	}
-	.list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-	}
-	.list li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-2);
-	}
-	.list .name {
-		flex: 1;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.list a {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		flex: 1;
-		min-width: 0;
-	}
-	.list progress {
-		width: 100%;
-	}
-	.menu-list {
-		display: flex;
-		flex-direction: column;
-	}
 	.muted {
 		color: var(--muted);
 	}
@@ -1786,28 +365,13 @@
 		gap: var(--space-2);
 		padding: var(--space-1-5) var(--space-3);
 	}
-	.volume-sheet .volume {
+	.volume-sheet :global(.volume) {
 		flex: 1;
-	}
-	@container (max-width: 760px) {
-		.stats {
-			display: none;
-		}
-	}
-	@container (max-width: 600px) {
-		.view-bar .pct,
-		.view-bar .volume {
-			display: none;
-		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.spinner {
 			animation: none;
 		}
-	}
-	.hint-line {
-		display: block;
-		font-size: var(--text-sm);
 	}
 	.note.start {
 		gap: var(--space-2-5);
