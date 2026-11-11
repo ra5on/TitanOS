@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import ProbeDialog from '#lib/operations/ProbeDialog.svelte';
 	import RecoveryPanel from '#lib/operations/RecoveryPanel.svelte';
@@ -274,7 +275,7 @@
 
 {#if !restoreOnly}<PageHead title={t('safeguard.data')}>
 		<p class="muted">{t('backup.intro')}</p>
-	</PageHead>{:else}<h2 class="tile-title" id="restore-files" use:revealTarget>
+	</PageHead>{:else}<h2 class="sgroup-title" id="restore-files" use:revealTarget>
 		{t('safeguard.filesRestore')}
 	</h2>{/if}
 
@@ -294,11 +295,15 @@
 
 {#if overview}
 	{#if !restoreOnly}<RecoveryPanel />{/if}
-	{#if !restoreOnly}<div class="targets" id="backup-targets" use:revealTarget>
-			<SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /><ReplicationPanel
-			/>
+	<!-- PLAN 78-1: the targets are rows of a group; the jobs stay a table with
+	     the chosen job's detail below it. -->
+	{#if !restoreOnly}<div id="backup-targets" use:revealTarget>
+			<SettingGroup title={t('safeguard.targets')}>
+				<SmbTargets targets={overview.smbTargets} onchange={load} /><TargetPanel /><ReplicationPanel
+				/>
+			</SettingGroup>
 		</div>{/if}
-	{#if !restoreOnly}<h2 class="tile-title" id="backup-history" use:revealTarget>
+	{#if !restoreOnly}<h2 class="sgroup-title" id="backup-history" use:revealTarget>
 			{t('safeguard.history')}
 		</h2>{/if}
 	{#if !restoreOnly && overview.jobs.length}
@@ -358,7 +363,7 @@
 			onremove={() => ((removing = view.job), (removeError = ''))}
 		/>
 	{:else}
-		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}
+		{#if !draft}<p class="muted">{t('backup.none')}</p>{/if}
 	{/each}
 	{#if !restoreOnly && overview.jobs.length}<StatusBar label={t('backup.statusBar')}>
 			<span>{t('backup.statJobs', { count: overview.jobs.length })}</span>
@@ -524,10 +529,6 @@
 	/>{/if}
 
 <style>
-	.targets {
-		display: grid;
-		gap: var(--gap);
-	}
 	form.plain {
 		display: flex;
 		flex-direction: column;

@@ -431,7 +431,7 @@ try {
     }
     for (const [path, selector, name] of [
       ["/settings", ".tiles", "einstellungen"],
-      ["/settings/backups", ".summary strong", "sicherungen"],
+      ["/settings/backups", "#backup-next strong", "sicherungen"],
       ["/settings/backups/restore", "#stick-replace", "wiederherstellung"],
       ["/vms", "#vm-title", "vms"],
       ["/docker", "h1", "docker"],
@@ -456,7 +456,7 @@ try {
     await ctx.close();
     const mobile = await context("owner", "hell", 390);
     await mobile.page.goto(base + "/settings/backups");
-    await mobile.page.locator(".summary strong").first().waitFor();
+    await mobile.page.locator("#backup-next strong").first().waitFor();
     await mobile.page
       .getByText("Nicht verfügbar", { exact: true })
       .waitFor({ state: "hidden" });
@@ -649,7 +649,7 @@ try {
       .getByText("Gespeichert", { exact: true })
       .waitFor();
     await page.goto(base + "/settings/backups");
-    await page.locator(".settings-page .groups").waitFor();
+    await page.locator(".settings-page #backup-restore").waitFor();
     await page
       .getByText("Noch keine Sicherung", { exact: true })
       .waitFor({ state: "hidden" });
@@ -663,7 +663,7 @@ try {
       }).format(new Date("2026-10-21T02:30:00Z")),
     );
     assert.equal(
-      await page.locator(".summary > div").nth(2).locator("strong").innerText(),
+      await page.locator("#backup-next strong").innerText(),
       expectedNext,
       "next backup compares instants across time zone offsets",
     );

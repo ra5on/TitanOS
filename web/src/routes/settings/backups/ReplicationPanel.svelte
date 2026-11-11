@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
 	import type { Keep } from '#lib/components/KeepVersions.svelte';
 	import { poll } from '#lib/poll.ts';
@@ -162,90 +163,96 @@
 	}
 </script>
 
-<section class="tile panel replication" aria-labelledby="replication-title">
-	<div class="head">
-		<h2 class="tile-title" id="replication-title">{t('replication.title')}</h2>
-		<button type="button" class="btn small" aria-expanded={open} onclick={() => (open = !open)}
-			>{open ? t('backup.targetHide') : t('backup.targetShow')}</button
-		>
-	</div>
-	<p class="muted">{t('replication.desc')}</p>
-	{#if error && !editing}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if loadError}<p class="notice-error" role="alert">
-			{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
-		</p>{/if}
-	{#if restored}<p class="notice-ok" role="status">
-			{t('replication.restored', { path: restored })}
-		</p>{/if}
-	{#if open && overview}
-		<h3 class="divided">{t('replication.jobs')}</h3>
-		{#each overview.jobs as job (job.id)}
-			<div class="job">
-				<span class="mono name">{job.name}</span>
-				<span class="muted">
-					{job.volume} → {job.user}
-					· {job.state.running
-						? t('replication.running', { size: formatBytes(job.state.bytes) })
-						: job.state.lastOK
-							? t('replication.lastOK', { time: formatDateTime(new Date(job.state.lastOK)) })
-							: t('replication.never')}
-					{#if job.state.next && !job.state.running}
-						· {t('replication.next', { time: formatDateTime(new Date(job.state.next)) })}{/if}
-				</span>
-				{#if job.state.lastError && !job.state.running}<span class="notice-error small"
-						>{job.state.lastError}</span
-					>{/if}
-				<span class="buttons">
-					<button
-						type="button"
-						class="btn small"
-						disabled={job.state.running}
-						onclick={() => runNow(job)}>{t('replication.runNow')}</button
-					>
-					<button
-						type="button"
-						class="btn small"
-						disabled={job.state.running}
-						onclick={() => edit(job)}>{t('replication.edit')}</button
-					>
-					<button
-						type="button"
-						class="btn small"
-						disabled={job.state.running}
-						onclick={() => (removing = job)}>{t('replication.remove')}</button
-					>
-				</span>
-			</div>
-		{:else}
-			<p class="muted">{t('replication.noJobs')}</p>
-		{/each}
-		<div class="row-actions">
-			<button type="button" class="btn" disabled={btrfsVolumes.length === 0} onclick={add}
-				>{t('replication.add')}</button
-			>
-		</div>
-		{#if btrfsVolumes.length === 0}<p class="muted">{t('replication.needBtrfs')}</p>{/if}
-
-		<h3 class="divided">{t('replication.received')}</h3>
-		{#if !overview.receiveVolume}
-			<p class="muted">{t('replication.receiveHint')}</p>
-		{:else}
-			{#each overview.received as replica (replica.source + replica.snapshot)}
+<!-- PLAN 78-1: a row of the group "Sicherungsziele" that opens to the
+     replication jobs and what this NAS received. -->
+{#snippet parts()}
+	<div class="srow-block replication">
+		{#if overview}
+			<h3 class="divided">{t('replication.jobs')}</h3>
+			{#each overview.jobs as job (job.id)}
 				<div class="job">
-					<span class="mono name">{replica.source}</span>
-					<span class="mono muted">{replica.snapshot}</span>
-					<button
-						type="button"
-						class="btn small"
-						onclick={() => ((restoring = replica), (error = ''))}>{t('replication.restore')}</button
-					>
+					<span class="mono name">{job.name}</span>
+					<span class="muted">
+						{job.volume} → {job.user}
+						· {job.state.running
+							? t('replication.running', { size: formatBytes(job.state.bytes) })
+							: job.state.lastOK
+								? t('replication.lastOK', { time: formatDateTime(new Date(job.state.lastOK)) })
+								: t('replication.never')}
+						{#if job.state.next && !job.state.running}
+							· {t('replication.next', { time: formatDateTime(new Date(job.state.next)) })}{/if}
+					</span>
+					{#if job.state.lastError && !job.state.running}<span class="notice-error small"
+							>{job.state.lastError}</span
+						>{/if}
+					<span class="buttons">
+						<button
+							type="button"
+							class="btn small"
+							disabled={job.state.running}
+							onclick={() => runNow(job)}>{t('replication.runNow')}</button
+						>
+						<button
+							type="button"
+							class="btn small"
+							disabled={job.state.running}
+							onclick={() => edit(job)}>{t('replication.edit')}</button
+						>
+						<button
+							type="button"
+							class="btn small"
+							disabled={job.state.running}
+							onclick={() => (removing = job)}>{t('replication.remove')}</button
+						>
+					</span>
 				</div>
 			{:else}
-				<p class="muted">{t('replication.noneReceived')}</p>
+				<p class="muted">{t('replication.noJobs')}</p>
 			{/each}
-		{/if}
-	{/if}
-</section>
+			<div class="row-actions">
+				<button type="button" class="btn" disabled={btrfsVolumes.length === 0} onclick={add}
+					>{t('replication.add')}</button
+				>
+			</div>
+			{#if btrfsVolumes.length === 0}<p class="muted">{t('replication.needBtrfs')}</p>{/if}
+
+			<h3 class="divided">{t('replication.received')}</h3>
+			{#if !overview.receiveVolume}
+				<p class="muted">{t('replication.receiveHint')}</p>
+			{:else}
+				{#each overview.received as replica (replica.source + replica.snapshot)}
+					<div class="job">
+						<span class="mono name">{replica.source}</span>
+						<span class="mono muted">{replica.snapshot}</span>
+						<button
+							type="button"
+							class="btn small"
+							onclick={() => ((restoring = replica), (error = ''))}
+							>{t('replication.restore')}</button
+						>
+					</div>
+				{:else}
+					<p class="muted">{t('replication.noneReceived')}</p>
+				{/each}
+			{/if}
+		{:else}<p class="muted" role="status">{t('common.loading')}</p>{/if}
+	</div>
+{/snippet}
+<SettingRow
+	id="replication-title"
+	icon="copy"
+	title={t('replication.title')}
+	desc={t('replication.desc')}
+	bind:open
+	children={parts}
+/>
+{#if error && !editing}<p class="notice-error" role="alert">{error}</p>{/if}
+{#if loadError}<p class="notice-error" role="alert">
+		{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
+	</p>{/if}
+{#if restored}<p class="notice-ok" role="status">
+		{t('replication.restored', { path: restored })}
+	</p>{/if}
 
 {#if editing}
 	<Dialog
@@ -403,13 +410,6 @@
 <style>
 	.replication {
 		overflow-wrap: anywhere;
-	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
 	}
 	.job {
 		display: flex;

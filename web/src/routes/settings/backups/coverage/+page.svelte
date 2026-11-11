@@ -4,6 +4,8 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { operationError, type BackupView } from '#lib/operations.ts';
 	type Coverage = {
 		kind: string;
@@ -56,77 +58,73 @@
 {#each unavailable as source (source)}<p class="notice-warn">
 		{t('coverage.unavailable', { source })}
 	</p>{/each}
-{#each items as item (`${item.kind}:${item.name}`)}
-	<section class="tile panel item">
-		<div class="head">
-			<h2>{item.name}</h2>
-			<span>{t(`coverage.status.${item.status}` as MessageKey)}</span>
-		</div>
-		<p class="muted">
-			{t(`coverage.kind.${item.kind}` as MessageKey)} · {t('ops.lastOK')}: {date(item.lastOK)}
-		</p>
-		{#if !item.available}<p class="notice-warn">{t('coverage.sourceOffline')}</p>{/if}
-		{#each item.jobs as job (job.id)}<div class="job">
-				<a href={'/settings/backups/data#backup-' + encodeURIComponent(job.id)}>{job.id}</a> · {t(
-					job.automatic ? 'coverage.automatic' : 'coverage.manual',
-				)}
-				{#if job.stateKnown === false}<p class="notice-warn">
-						{t('coverage.stateUnknown')}
-					</p>{/if}{#if job.partial}<p class="notice-warn">{t('coverage.partial')}</p>{/if}
-				{#if job.destinationAvailable === false}<p class="notice-warn">
-						{t('coverage.destinationOffline')}
-					</p>{/if}
-				{#if job.destinationAvailable === null}<p class="muted">
-						{t('coverage.destinationUnknown')}
-					</p>{/if}
-				<div class="dates">
-					<span>{t('ops.lastOK')}: {date(job.state.lastOK)}</span><span
-						>{t('coverage.lastCheck')}: {date(job.state.lastCheck)}</span
-					><span>{t('coverage.lastProbe')}: {date(job.state.probe?.at)}</span>
-				</div>
-				{#if job.state.lastError || job.state.warning || job.state.checkError || job.state.probe?.error}<p
-						class="notice-warn"
-					>
-						{job.state.lastError ||
-							job.state.warning ||
-							job.state.checkError ||
-							job.state.probe?.error}
-					</p>{/if}
-			</div>{/each}
-		{#if !item.jobs.length}<div class="row-actions">
-				<a class="btn" href="/settings/backups/data">{t('coverage.configure')}</a>
-			</div>{/if}
-	</section>
-{:else}{#if !busy && !error}<div class="tile panel">
-			<p class="muted">{t('ops.none')}</p>
-		</div>{/if}{/each}
+<!-- PLAN 78-1: every share and application is a row that says its state; its
+     backup jobs are its parts (open at first: this page is a report). -->
+<SettingGroup>
+	{#each items as item (`${item.kind}:${item.name}`)}
+		{#snippet parts()}
+			{#if !item.available}<div class="srow-block">
+					<p class="notice-warn">{t('coverage.sourceOffline')}</p>
+				</div>{/if}
+			{#each item.jobs as job (job.id)}<div class="srow-block job">
+					<p>
+						<a href={'/settings/backups/data#backup-' + encodeURIComponent(job.id)}>{job.id}</a> · {t(
+							job.automatic ? 'coverage.automatic' : 'coverage.manual',
+						)}
+					</p>
+					{#if job.stateKnown === false}<p class="notice-warn">
+							{t('coverage.stateUnknown')}
+						</p>{/if}{#if job.partial}<p class="notice-warn">{t('coverage.partial')}</p>{/if}
+					{#if job.destinationAvailable === false}<p class="notice-warn">
+							{t('coverage.destinationOffline')}
+						</p>{/if}
+					{#if job.destinationAvailable === null}<p class="muted">
+							{t('coverage.destinationUnknown')}
+						</p>{/if}
+					<div class="dates">
+						<span>{t('ops.lastOK')}: {date(job.state.lastOK)}</span><span
+							>{t('coverage.lastCheck')}: {date(job.state.lastCheck)}</span
+						><span>{t('coverage.lastProbe')}: {date(job.state.probe?.at)}</span>
+					</div>
+					{#if job.state.lastError || job.state.warning || job.state.checkError || job.state.probe?.error}<p
+							class="notice-warn"
+						>
+							{job.state.lastError ||
+								job.state.warning ||
+								job.state.checkError ||
+								job.state.probe?.error}
+						</p>{/if}
+				</div>{/each}
+			{#if !item.jobs.length}<div class="srow-block actions">
+					<a class="btn" href="/settings/backups/data">{t('coverage.configure')}</a>
+				</div>{/if}
+		{/snippet}
+		<SettingRow
+			id="coverage-{item.kind}-{encodeURIComponent(item.name)}"
+			icon={item.kind === 'share' ? 'folder' : item.kind === 'vm' ? 'monitor' : 'box'}
+			title={item.name}
+			desc="{t(`coverage.kind.${item.kind}` as MessageKey)} · {t('ops.lastOK')}: {date(
+				item.lastOK,
+			)}"
+			summary={t(`coverage.status.${item.status}` as MessageKey)}
+			open
+			children={parts}
+		/>
+	{:else}{#if !busy && !error}<p class="muted">{t('ops.none')}</p>{/if}{/each}
+</SettingGroup>
 
 <style>
-	.head,
 	.dates {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-3);
+		gap: var(--space-1) var(--space-3);
 		align-items: center;
-		justify-content: space-between;
-	}
-	.head h2 {
-		font-size: 1rem;
-	}
-	.head span {
 		color: var(--muted);
-		font-size: 0.875rem;
+		font-size: 0.8rem;
 	}
 	.job {
-		padding-top: 14px;
-		border-top: 1px solid var(--border);
+		gap: var(--space-2);
 		font-size: 0.875rem;
-	}
-	.dates {
-		justify-content: start;
-		color: var(--muted);
-		margin-top: var(--space-2);
-		font-size: 0.8rem;
 	}
 	.job a {
 		color: var(--accent);

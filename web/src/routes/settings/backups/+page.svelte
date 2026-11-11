@@ -3,6 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Rule321 from './Rule321.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
@@ -110,30 +112,33 @@
 		>{/snippet}
 </PageHead>
 
-<div class="tile summary" aria-busy={loading}>
-	<div>
-		<span>{t('safeguard.lastData')}</span><strong
-			>{unknown.length
-				? t('safeguard.unknown')
-				: jobs
-					? date(lastData)
-					: t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
-		>
-	</div>
-	<div>
-		<span>{t('safeguard.lastConfig')}</span><strong
-			>{config ? date(lastConfig) : t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
-		>
-	</div>
-	<div>
-		<span>{t('safeguard.next')}</span><strong
-			>{!jobs || !config
-				? t(loading ? 'common.loading' : 'safeguard.unknown')
-				: next
-					? formatDateTime(new Date(next))
-					: t('safeguard.noSchedule')}</strong
-		>
-	</div>
+<!-- PLAN 78-1: the state as rows; the value stands where a row has its control. -->
+<div class="state" aria-busy={loading}>
+	<SettingGroup title={t('safeguard.state')}>
+		<SettingRow id="backup-last-data" icon="archive" title={t('safeguard.lastData')}>
+			{#snippet control()}<strong
+					>{unknown.length
+						? t('safeguard.unknown')
+						: jobs
+							? date(lastData)
+							: t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
+				>{/snippet}
+		</SettingRow>
+		<SettingRow id="backup-last-config" icon="gear" title={t('safeguard.lastConfig')}>
+			{#snippet control()}<strong
+					>{config ? date(lastConfig) : t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
+				>{/snippet}
+		</SettingRow>
+		<SettingRow id="backup-next" icon="clock" title={t('safeguard.next')}>
+			{#snippet control()}<strong
+					>{!jobs || !config
+						? t(loading ? 'common.loading' : 'safeguard.unknown')
+						: next
+							? formatDateTime(new Date(next))
+							: t('safeguard.noSchedule')}</strong
+				>{/snippet}
+		</SettingRow>
+	</SettingGroup>
 </div>
 {#if dataError || configError}<div class="notice-error" role="alert">
 		{#if dataError}<p>{t('safeguard.data')}: {dataError}</p>{/if}
@@ -162,113 +167,75 @@
 {:else if config && !config.backup.target}<p class="notice-warn">{t('stick.noVolume')}</p>{/if}
 
 <Rule321 jobs={jobs?.jobs} />
-<div class="actions">
-	<a class="btn" href="/settings/backups/coverage">{t('coverage.title')}</a><a
-		class="btn"
-		href="/settings/backups/applications">{t('applications.title')}</a
-	>
-</div>
-<div class="groups">
-	<section class="tile panel">
-		<h2 class="tile-title">{t('safeguard.data')}</h2>
-		<p class="muted">{t('safeguard.dataHint')}</p>
-		<nav aria-label={t('safeguard.data')}>
-			<a href="/settings/backups/data">{t('safeguard.jobs')} <span aria-hidden="true">›</span></a><a
-				href="/settings/backups/data#backup-targets"
-				>{t('safeguard.targets')} <span aria-hidden="true">›</span></a
-			><a href="/settings/backups/data#backup-history"
-				>{t('safeguard.history')} <span aria-hidden="true">›</span></a
-			>
-		</nav>
-		<a class="btn" href="/settings/backups/data">{t('safeguard.manage')}</a>
-	</section>
-	<section class="tile panel">
-		<h2 class="tile-title">{t('safeguard.config')}</h2>
-		<p class="muted">{t('safeguard.configHint')}</p>
-		<nav aria-label={t('safeguard.config')}>
-			<a href="/settings/backups/configuration#config-schedule"
-				>{t('safeguard.automatic')} <span aria-hidden="true">›</span></a
-			><a href="/settings/backups/configuration#config-downloads"
-				>{t('safeguard.download')} <span aria-hidden="true">›</span></a
-			><a href="/settings/backups/configuration#config-history"
-				>{t('safeguard.history')} <span aria-hidden="true">›</span></a
-			>
-		</nav>
-		<a class="btn" href="/settings/backups/configuration">{t('stick.title')}</a>
-	</section>
-	<section class="tile panel">
-		<h2 class="tile-title">{t('safeguard.restore')}</h2>
-		<p class="muted">{t('safeguard.recoveryHint')}</p>
-		<nav aria-label={t('safeguard.restore')}>
-			<a href="/settings/backups/restore#restore-files"
-				>{t('safeguard.filesRestore')} <span aria-hidden="true">›</span></a
-			><a href="/settings/backups/restore#restore-config"
-				>{t('safeguard.configRestore')} <span aria-hidden="true">›</span></a
-			><a href="/settings/backups/restore#stick-replace"
-				>{t('stick.replace')} <span aria-hidden="true">›</span></a
-			>
-		</nav>
-		<a class="btn" href="/settings/backups/restore">{t('safeguard.openRestore')}</a>
-	</section>
-</div>
+<!-- Every part of the program as a row that leads there. -->
+<SettingGroup id="backup-data" title={t('safeguard.data')} desc={t('safeguard.dataHint')}>
+	{#snippet tools()}<a class="btn" href="/settings/backups/data">{t('safeguard.manage')}</a
+		>{/snippet}
+	<SettingRow icon="list" title={t('safeguard.jobs')} href="/settings/backups/data" />
+	<SettingRow
+		icon="disk"
+		title={t('safeguard.targets')}
+		href="/settings/backups/data#backup-targets"
+	/>
+	<SettingRow
+		icon="activity"
+		title={t('safeguard.history')}
+		href="/settings/backups/data#backup-history"
+	/>
+	<SettingRow icon="shield" title={t('coverage.title')} href="/settings/backups/coverage" />
+	<SettingRow icon="box" title={t('applications.title')} href="/settings/backups/applications" />
+</SettingGroup>
+<SettingGroup id="backup-config" title={t('safeguard.config')} desc={t('safeguard.configHint')}>
+	{#snippet tools()}<a class="btn" href="/settings/backups/configuration">{t('stick.title')}</a
+		>{/snippet}
+	<SettingRow
+		icon="clock"
+		title={t('safeguard.automatic')}
+		href="/settings/backups/configuration#config-schedule"
+	/>
+	<SettingRow
+		icon="download"
+		title={t('safeguard.download')}
+		href="/settings/backups/configuration#config-downloads"
+	/>
+	<SettingRow
+		icon="activity"
+		title={t('safeguard.history')}
+		href="/settings/backups/configuration#config-history"
+	/>
+</SettingGroup>
+<SettingGroup id="backup-restore" title={t('safeguard.restore')} desc={t('safeguard.recoveryHint')}>
+	{#snippet tools()}<a class="btn" href="/settings/backups/restore">{t('safeguard.openRestore')}</a
+		>{/snippet}
+	<SettingRow
+		icon="folder"
+		title={t('safeguard.filesRestore')}
+		href="/settings/backups/restore#restore-files"
+	/>
+	<SettingRow
+		icon="undo"
+		title={t('safeguard.configRestore')}
+		href="/settings/backups/restore#restore-config"
+	/>
+	<SettingRow
+		icon="key"
+		title={t('stick.replace')}
+		href="/settings/backups/restore#stick-replace"
+	/>
+</SettingGroup>
 
 <style>
-	.summary,
-	.groups {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 20px;
-	}
-	.summary {
-		padding: calc(var(--tile-pad) + 2px);
-	}
-	.summary > div {
-		display: grid;
-		gap: var(--space-1-5);
-	}
-	.summary span {
-		color: var(--muted);
-		font-size: 0.8125rem;
+	.state {
+		display: contents;
 	}
 	strong {
+		color: var(--text);
 		font-weight: 500;
 	}
 	p {
 		margin: 0;
 	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2-5);
-	}
-	section > .btn {
-		align-self: flex-start;
-	}
-	nav {
-		display: grid;
-		margin-top: auto;
-	}
-	nav a {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-3);
-		align-items: center;
-		padding: var(--space-3) 0;
-		border-top: 1px solid var(--panel-border);
-		color: var(--text);
-		text-decoration: none;
-		min-height: 44px;
-	}
-	nav a:hover {
-		color: var(--accent);
-	}
 	.notice-error a {
 		margin-right: var(--space-3);
-	}
-	@media (max-width: 900px) {
-		.summary,
-		.groups {
-			grid-template-columns: 1fr;
-		}
 	}
 </style>

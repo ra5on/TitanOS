@@ -3,6 +3,9 @@
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
@@ -41,9 +44,12 @@
 		}
 	}
 	onMount(() => poll(refresh, { interval: 5000, skip: () => busy }));
-	function toggle(list: string[], value: string, on: boolean) {
+	function touch() {
 		dirty = true;
 		saved = false;
+	}
+	function toggle(list: string[], value: string, on: boolean) {
+		touch();
 		return on ? [...list, value] : list.filter((item) => item !== value);
 	}
 	async function save(event: SubmitEvent) {
@@ -102,101 +108,137 @@
 		{loadError} <button class="btn" onclick={refresh}>{t('common.retry')}</button>
 	</p>{/if}
 {#if answer}
-	<form class="tile panel" onsubmit={save} aria-labelledby="index-settings">
-		<h2 class="tile-title" id="index-settings">{t('fileIndex.settings')}</h2>
-		<div class="option">
-			<label class="check"
-				><input
-					type="checkbox"
-					bind:checked={draft.enabled}
-					onchange={() => {
-						dirty = true;
-						saved = false;
-					}}
-				/>
-				{t('fileIndex.enabled')}</label
+	{@const off = !draft.enabled || busy}
+	<!-- PLAN 78-1: the settings of the index are rows of one form with one
+	     Save, as before; what is indexed opens inside its row. -->
+	<form onsubmit={save}>
+		<SettingGroup id="index-settings" title={t('fileIndex.settings')}>
+			<SettingRow
+				icon="search"
+				title={t('fileIndex.enabled')}
+				desc={t('fileIndex.enabledHint')}
+				for="index-enabled"
 			>
-			<p class="muted hint">{t('fileIndex.enabledHint')}</p>
-		</div>
-		<fieldset class="divided" disabled={!draft.enabled || busy}>
-			<legend>{t('fileIndex.volumes')}</legend>
-			{#each answer.volumes as volume (volume)}
-				<label class="check"
-					><input
+				{#snippet control()}
+					<input
+						id="index-enabled"
+						class="switch"
 						type="checkbox"
-						checked={draft.volumes.includes(volume)}
-						onchange={(event) =>
-							(draft.volumes = toggle(draft.volumes, volume, event.currentTarget.checked))}
-					/> <span class="mono">{volume}</span></label
-				>
-			{:else}<p class="muted">{t('fileIndex.noVolumes')}</p>{/each}
-		</fieldset>
-		<fieldset disabled={!draft.enabled || busy}>
-			<legend>{t('fileIndex.shares')}</legend>
-			{#each answer.shares as share (share.name)}
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={draft.shares.includes(share.name) || draft.volumes.includes(share.volume)}
-						disabled={draft.volumes.includes(share.volume)}
-						onchange={(event) =>
-							(draft.shares = toggle(draft.shares, share.name, event.currentTarget.checked))}
-					/> <span class="mono">{share.name}</span>
-					<span class="muted">({share.volume})</span></label
-				>
-			{:else}<p class="muted">{t('fileIndex.noShares')}</p>{/each}
-		</fieldset>
-		<fieldset class="divided" disabled={!draft.enabled || busy}>
-			<legend>{t('fileIndex.when')}</legend>
-			<p class="muted hint">{t('fileIndex.whenHint')}</p>
-			<label class="stack time"
-				><span>{t('fileIndex.time')}</span>
-				<input
-					class="field"
-					type="time"
-					bind:value={draft.time}
-					oninput={() => {
-						dirty = true;
-						saved = false;
-					}}
-				/></label
-			>
-			{#if draft.time}<p class="notice-warn">{t('fileIndex.timeWarning')}</p>{/if}
-			<div class="option">
-				<label class="check"
-					><input
-						type="checkbox"
-						bind:checked={draft.ocr}
-						disabled={!answer.status.ocrAvailable}
-						onchange={() => {
-							dirty = true;
-							saved = false;
-						}}
+						role="switch"
+						bind:checked={draft.enabled}
+						onchange={touch}
 					/>
-					{t('fileIndex.ocr')}</label
-				>
-				<p class="muted hint">
-					{answer.status.ocrAvailable ? t('fileIndex.ocrHint') : t('fileIndex.ocrMissing')}
-				</p>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				id="index-volumes"
+				icon="disk"
+				title={t('fileIndex.volumes')}
+				summary={t('fileIndex.chosen', {
+					count: draft.volumes.filter((v) => answer?.volumes.includes(v)).length,
+					total: answer.volumes.length,
+				})}
+			>
+				{#each answer.volumes as volume, i (volume)}
+					<SettingSub title={volume} for="index-volume-{i}">
+						{#snippet control()}
+							<input
+								id="index-volume-{i}"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								disabled={off}
+								checked={draft.volumes.includes(volume)}
+								onchange={(event) =>
+									(draft.volumes = toggle(draft.volumes, volume, event.currentTarget.checked))}
+							/>
+						{/snippet}
+					</SettingSub>
+				{:else}<div class="srow-block"><p class="muted">{t('fileIndex.noVolumes')}</p></div>{/each}
+			</SettingRow>
+			<SettingRow
+				id="index-shares"
+				icon="folder"
+				title={t('fileIndex.shares')}
+				summary={t('fileIndex.chosen', {
+					count: answer.shares.filter(
+						(s) => draft.shares.includes(s.name) || draft.volumes.includes(s.volume),
+					).length,
+					total: answer.shares.length,
+				})}
+			>
+				{#each answer.shares as share, i (share.name)}
+					<SettingSub title={share.name} desc={share.volume} for="index-share-{i}">
+						{#snippet control()}
+							<input
+								id="index-share-{i}"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								checked={draft.shares.includes(share.name) || draft.volumes.includes(share.volume)}
+								disabled={off || draft.volumes.includes(share.volume)}
+								onchange={(event) =>
+									(draft.shares = toggle(draft.shares, share.name, event.currentTarget.checked))}
+							/>
+						{/snippet}
+					</SettingSub>
+				{:else}<div class="srow-block"><p class="muted">{t('fileIndex.noShares')}</p></div>{/each}
+			</SettingRow>
+			<SettingRow
+				id="index-when"
+				icon="clock"
+				title={t('fileIndex.when')}
+				desc={t('fileIndex.whenHint')}
+				summary={draft.time || t('fileIndex.onUse')}
+			>
+				<SettingSub title={t('fileIndex.time')} for="index-time">
+					{#snippet control()}
+						<input
+							id="index-time"
+							class="field"
+							type="time"
+							disabled={off}
+							bind:value={draft.time}
+							oninput={touch}
+						/>
+					{/snippet}
+				</SettingSub>
+				{#if draft.time}<div class="srow-block">
+						<p class="notice-warn">{t('fileIndex.timeWarning')}</p>
+					</div>{/if}
+			</SettingRow>
+			<SettingRow
+				icon="fileText"
+				title={t('fileIndex.ocr')}
+				desc={answer.status.ocrAvailable ? t('fileIndex.ocrHint') : t('fileIndex.ocrMissing')}
+				for="index-ocr"
+			>
+				{#snippet control()}
+					<input
+						id="index-ocr"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={draft.ocr}
+						disabled={off || !answer?.status.ocrAvailable}
+						onchange={touch}
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !dirty}>{t('common.save')}</button>
+				{#if saved}<span role="status" class="muted">{t('fileIndex.saved')}</span>{/if}
 			</div>
-		</fieldset>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || !dirty}>{t('common.save')}</button>
-			{#if saved}<span role="status" class="muted">{t('fileIndex.saved')}</span>{/if}
-		</div>
+		</SettingGroup>
 	</form>
 
-	<section class="tile panel" aria-labelledby="index-status">
-		<h2 class="tile-title" id="index-status">{t('fileIndex.status')}</h2>
+	<SettingGroup id="index-status" title={t('fileIndex.status')} desc={t('fileIndex.runHint')}>
 		{#each answer.status.indexes as index (index.volume)}
-			<div class="row">
-				<div class="row-text">
-					<div class="row-name">
-						<strong class="mono">{index.volume}</strong>
-						<span class="chip">{t(indexStateLabel(index.state))}</span>
-					</div>
-					<p class="muted">
+			<SettingRow icon="disk" title={index.volume}>
+				{#snippet badge()}<span class="chip">{t(indexStateLabel(index.state))}</span>{/snippet}
+				{#snippet description()}
+					<p>
 						{#if index.known}{t('fileIndex.files', { count: index.files })} · {formatBytes(
 								index.bytes,
 							)}{:else}{t('fileIndex.unknown')}{/if}
@@ -211,8 +253,8 @@
 					</p>
 					{#if index.lastError}<p class="notice-warn">{index.lastError}</p>{/if}
 					{#if index.truncated}<p class="notice-warn">{t('fileIndex.truncated')}</p>{/if}
-				</div>
-				<div class="row-actions">
+				{/snippet}
+				{#snippet control()}
 					<button
 						class="btn"
 						disabled={index.state !== 'idle' || dirty}
@@ -224,25 +266,22 @@
 						onclick={() => (confirm = { kind: 'index', volume: index.volume })}
 						>{t('fileIndex.remove')}</button
 					>
-				</div>
-			</div>
+				{/snippet}
+			</SettingRow>
 		{:else}<p class="muted">{t('fileIndex.none')}</p>{/each}
-		<p class="muted hint">{t('fileIndex.runHint')}</p>
-	</section>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="index-thumbs">
-		<h2 class="tile-title" id="index-thumbs">{t('fileIndex.thumbs')}</h2>
-		<p class="muted hint">{t('fileIndex.thumbsHint')}</p>
-		{#if answer.mounted?.length}
-			<div class="row-actions">
-				{#each answer.mounted as volume (volume)}
+	<SettingGroup id="index-thumbs" title={t('fileIndex.thumbs')}>
+		<SettingRow icon="image" title={t('fileIndex.thumbs')} desc={t('fileIndex.thumbsHint')}>
+			{#snippet control()}
+				{#each answer?.mounted ?? [] as volume (volume)}
 					<button class="btn" disabled={busy} onclick={() => (confirm = { kind: 'thumbs', volume })}
 						>{t('fileIndex.clearThumbs', { volume })}</button
 					>
 				{/each}
-			</div>
-		{/if}
-	</section>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
 {/if}
 
 {#if confirm}
@@ -271,38 +310,14 @@
 {/if}
 
 <style>
-	.option {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
+	form .row-actions {
+		margin-top: var(--space-2);
 	}
-	.option .hint {
-		padding-left: 28px;
+	/* The notes of a volume's state stand below its line of facts. */
+	:global(.srow-desc) p {
+		margin: 0;
 	}
-	.hint {
-		font-size: var(--text-base);
-	}
-	.time input {
-		max-width: 10rem;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--space-3);
-		padding-top: 14px;
-		border-top: 1px solid var(--panel-border);
-	}
-	.row-text {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-	}
-	.row-name {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
+	:global(.srow-desc) .notice-warn {
+		margin-top: var(--space-1);
 	}
 </style>

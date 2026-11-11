@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -107,88 +109,103 @@
 	}
 </script>
 
-<section class="tile panel target" aria-labelledby="backup-target">
-	<div class="head">
-		<h2 class="tile-title" id="backup-target">{t('backup.target')}</h2>
-		<button type="button" class="btn small" aria-expanded={open} onclick={() => (open = !open)}
-			>{open ? t('backup.targetHide') : t('backup.targetShow')}</button
-		>
-	</div>
-	<p class="muted">{t('backup.targetDesc')}</p>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if loadError}<p class="notice-error" role="alert">
-			{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
-		</p>{/if}
-	{#if open && overview}
+<!-- PLAN 78-1: a row of the group "Sicherungsziele" that opens to the
+     switch, the volume and the paired sources. -->
+{#snippet parts()}
+	{#if overview?.target}
 		{@const target = overview.target}
-		<div class="row">
-			<label class="check"
-				><input
+		<SettingSub title={t('backup.targetOn')} for="backup-target-on">
+			{#snippet control()}
+				<input
+					id="backup-target-on"
+					class="switch"
 					type="checkbox"
+					role="switch"
 					checked={target.enabled}
 					disabled={busy || !volume}
 					onchange={(event) => configure(event.currentTarget.checked, event.currentTarget)}
-				/><span>{t('backup.targetOn')}</span></label
-			>
-			<label class="stack narrow"
-				><span>{t('backup.targetVolume')}</span>
-				<select class="field" bind:value={volume} disabled={target.enabled || busy}>
-					{#each overview.volumes ?? [] as name (name)}<option value={name}>{name}</option>{/each}
+				/>
+			{/snippet}
+		</SettingSub>
+		<SettingSub title={t('backup.targetVolume')} for="backup-target-volume">
+			{#snippet control()}
+				<select
+					id="backup-target-volume"
+					class="field"
+					bind:value={volume}
+					disabled={target.enabled || busy}
+				>
+					{#each overview?.volumes ?? [] as name (name)}<option value={name}>{name}</option>{/each}
 				</select>
-			</label>
-		</div>
-		{#if !overview.volumes?.length}<p class="notice-warn">{t('backup.targetNoVolume')}</p>{/if}
-		{#if target.enabled}
-			{#if target.problem}
-				<p class="notice-warn">
-					{t(`backup.targetProblem.${target.problem}` as 'backup.targetProblem.tailscale')}
-				</p>
-			{:else if target.listening.length > 0}
-				<p class="muted">
-					{t('backup.targetListening')} <span class="mono">{target.listening.join(', ')}</span>
-				</p>
+			{/snippet}
+		</SettingSub>
+		<div class="srow-block target">
+			{#if !overview.volumes?.length}<p class="notice-warn">{t('backup.targetNoVolume')}</p>{/if}
+			{#if target.enabled}
+				{#if target.problem}
+					<p class="notice-warn">
+						{t(`backup.targetProblem.${target.problem}` as 'backup.targetProblem.tailscale')}
+					</p>
+				{:else if target.listening.length > 0}
+					<p class="muted">
+						{t('backup.targetListening')} <span class="mono">{target.listening.join(', ')}</span>
+					</p>
+				{/if}
 			{/if}
-		{/if}
-		<h3 class="divided">{t('backup.targetSources')}</h3>
-		{#each target.sources as source (source.name)}
-			<div class="source">
-				<span class="mono name">{source.name}</span>
-				<span class="muted"
-					>{source.last
-						? t('backup.targetLast', { time: formatDateTime(new Date(source.last)) })
-						: t('backup.targetNever')} · {formatBytes(source.bytes)}</span
+			<h3 class="divided">{t('backup.targetSources')}</h3>
+			{#each target.sources as source (source.name)}
+				<div class="source">
+					<span class="mono name">{source.name}</span>
+					<span class="muted"
+						>{source.last
+							? t('backup.targetLast', { time: formatDateTime(new Date(source.last)) })
+							: t('backup.targetNever')} · {formatBytes(source.bytes)}</span
+					>
+					<button
+						type="button"
+						class="btn small"
+						aria-label={t('backup.removeNamed', { name: source.name })}
+						onclick={() => ((removing = source), (deleteData = false), (removeError = ''))}
+						>{t('backup.targetRemove')}</button
+					>
+				</div>
+			{:else}
+				<p class="muted">{t('backup.targetNoSources')}</p>
+			{/each}
+			<form class="row" onsubmit={pair}>
+				<label class="stack narrow"
+					><span>{t('backup.targetName')}</span><input
+						class="field mono"
+						bind:value={name}
+						pattern="[A-Za-z][A-Za-z0-9\-]*"
+						maxlength="31"
+						placeholder={t('backup.targetNameExample')}
+						autocapitalize="none"
+						spellcheck="false"
+						required
+					/></label
 				>
-				<button
-					type="button"
-					class="btn small"
-					aria-label={t('backup.removeNamed', { name: source.name })}
-					onclick={() => ((removing = source), (deleteData = false), (removeError = ''))}
-					>{t('backup.targetRemove')}</button
+				<button type="submit" class="btn" disabled={busy || !target.enabled || !!target.problem}
+					>{t('backup.targetPair')}</button
 				>
-			</div>
-		{:else}
-			<p class="muted">{t('backup.targetNoSources')}</p>
-		{/each}
-		<form class="row" onsubmit={pair}>
-			<label class="stack narrow"
-				><span>{t('backup.targetName')}</span><input
-					class="field mono"
-					bind:value={name}
-					pattern="[A-Za-z][A-Za-z0-9\-]*"
-					maxlength="31"
-					placeholder={t('backup.targetNameExample')}
-					autocapitalize="none"
-					spellcheck="false"
-					required
-				/></label
-			>
-			<button type="submit" class="btn" disabled={busy || !target.enabled || !!target.problem}
-				>{t('backup.targetPair')}</button
-			>
-		</form>
-		<p class="muted">{t('backup.targetPairHint')}</p>
-	{/if}
-</section>
+			</form>
+			<p class="muted">{t('backup.targetPairHint')}</p>
+		</div>
+	{:else}<div class="srow-block"><p class="muted" role="status">{t('common.loading')}</p></div>{/if}
+{/snippet}
+<SettingRow
+	id="backup-target"
+	icon="download"
+	title={t('backup.target')}
+	desc={t('backup.targetDesc')}
+	summary={overview?.target ? t(overview.target.enabled ? 'appform.on' : 'appform.off') : undefined}
+	bind:open
+	children={parts}
+/>
+{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+{#if loadError}<p class="notice-error" role="alert">
+		{loadError} <button type="button" class="btn small" onclick={load}>{t('ui.retry')}</button>
+	</p>{/if}
 
 {#if pairing}
 	<Dialog
@@ -243,13 +260,6 @@
 <style>
 	.target {
 		overflow-wrap: anywhere;
-	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
 	}
 	.row {
 		display: flex;

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
@@ -9,37 +11,42 @@
 
 <PageHead title={t('safeguard.restore')} />
 <DataBackups restoreOnly />
-<section
-	class="tile panel"
-	id="restore-config"
-	use:revealTarget
-	aria-labelledby="restore-config-title"
->
-	<h2 class="tile-title" id="restore-config-title">{t('safeguard.configRestore')}</h2>
-	<p class="muted">{t('safeguard.restoreHint')}</p>
-	<a class="btn" href="/settings/backups/configuration#config-downloads"
-		>{t('safeguard.download')}</a
-	>
-</section>
-<section class="tile panel" id="stick-replace" use:revealTarget aria-labelledby="replace-title">
-	<h2 class="tile-title" id="replace-title">{t('stick.replace')}</h2>
-	<p class="muted">{t('stick.replaceIntro')}</p>
-	<ol>
-		<li>
-			{t('stick.step1')}{#if version}
-				<span class="mono">({version})</span>{/if}
-		</li>
-		<li>{t('stick.step2')}</li>
-		<li>{t('stick.step3')}</li>
-		<li>{t('stick.step4')}</li>
-	</ol>
-	<p class="muted">{t('stick.replaceNote')}</p>
-</section>
+<!-- PLAN 78-1: the two other ways back as rows; the steps of a new stick
+     open inside their row (open at first: they are what this row is for). -->
+<SettingGroup>
+	<div id="restore-config" use:revealTarget>
+		<SettingRow icon="undo" title={t('safeguard.configRestore')} desc={t('safeguard.restoreHint')}>
+			{#snippet control()}<a class="btn" href="/settings/backups/configuration#config-downloads"
+					>{t('safeguard.download')}</a
+				>{/snippet}
+		</SettingRow>
+	</div>
+	<div id="stick-replace" use:revealTarget>
+		<SettingRow
+			id="stick-replace-steps"
+			anchors={['stick-replace']}
+			icon="key"
+			title={t('stick.replace')}
+			desc={t('stick.replaceIntro')}
+			open
+		>
+			<div class="srow-block">
+				<ol>
+					<li>
+						{t('stick.step1')}{#if version}
+							<span class="mono">({version})</span>{/if}
+					</li>
+					<li>{t('stick.step2')}</li>
+					<li>{t('stick.step3')}</li>
+					<li>{t('stick.step4')}</li>
+				</ol>
+				<p class="muted">{t('stick.replaceNote')}</p>
+			</div>
+		</SettingRow>
+	</div>
+</SettingGroup>
 
 <style>
-	section {
-		align-items: flex-start;
-	}
 	ol {
 		margin: 0;
 		padding-left: 1.4rem;

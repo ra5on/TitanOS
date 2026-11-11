@@ -5,6 +5,8 @@
 	import { api, type StorageStatus } from '#lib/api.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
@@ -164,121 +166,137 @@
 		></EmptyState
 	>{/if}
 {#if ready && jobs.length && !watching && !result && !plan}<form
-		class="tile panel form"
 		onsubmit={(e) => {
 			e.preventDefault();
 			preview();
 		}}
 	>
-		<label class="stack"
-			><span>{t('applications.job')}</span><select
-				class="field"
-				bind:value={job}
-				required
-				disabled={busy}
-				onchange={choose}
-				><option value="">{t('ops.choose')}</option>{#each jobs as entry (entry.job.id)}<option
-						value={entry.job.id}>{entry.job.id}</option
-					>{/each}</select
-			></label
-		>
-		<label class="stack"
-			><span>{t('applications.snapshot')}</span><select
-				class="field"
-				bind:value={snapshot}
-				required
-				disabled={busy || !job}
-				><option value="">{t('ops.choose')}</option>{#each snapshots as saved (saved.id)}<option
-						value={saved.id}>{formatDateTime(new Date(saved.time))} · {saved.id}</option
-					>{/each}</select
-			></label
-		>
-		<label class="stack"
-			><span>{t('applications.volume')}</span><select
-				class="field"
-				bind:value={volume}
-				required
-				disabled={busy}
-				><option value="">{t('ops.choose')}</option>{#each volumes as v (v.name)}<option
-						value={v.name}>{v.name}</option
-					>{/each}</select
-			></label
-		>
-		<button class="btn btn-primary" disabled={busy || !job || !snapshot || !volume}
-			>{t('ops.preview')}</button
-		>
+		<!-- PLAN 78-1: the three choices as rows; "Lesend prüfen" reads them together. -->
+		<SettingGroup>
+			<SettingRow icon="archive" title={t('applications.job')} for="apps-job">
+				{#snippet control()}
+					<select
+						id="apps-job"
+						class="field"
+						bind:value={job}
+						required
+						disabled={busy}
+						onchange={choose}
+						><option value="">{t('ops.choose')}</option>{#each jobs as entry (entry.job.id)}<option
+								value={entry.job.id}>{entry.job.id}</option
+							>{/each}</select
+					>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="clock" title={t('applications.snapshot')} for="apps-snapshot">
+				{#snippet control()}
+					<select
+						id="apps-snapshot"
+						class="field"
+						bind:value={snapshot}
+						required
+						disabled={busy || !job}
+						><option value="">{t('ops.choose')}</option>{#each snapshots as saved (saved.id)}<option
+								value={saved.id}>{formatDateTime(new Date(saved.time))} · {saved.id}</option
+							>{/each}</select
+					>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="disk" title={t('applications.volume')} for="apps-volume">
+				{#snippet control()}
+					<select id="apps-volume" class="field" bind:value={volume} required disabled={busy}
+						><option value="">{t('ops.choose')}</option>{#each volumes as v (v.name)}<option
+								value={v.name}>{v.name}</option
+							>{/each}</select
+					>
+				{/snippet}
+			</SettingRow>
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !job || !snapshot || !volume}
+					>{t('ops.preview')}</button
+				>
+			</div>
+		</SettingGroup>
 	</form>{/if}
-{#if plan}<section class="tile panel plan">
-		<h2 class="tile-title">{t('tasks.restorePreview')}</h2>
-		<p class="mono">{job} · {plan.snapshot.id} · {formatDateTime(new Date(plan.snapshot.time))}</p>
-		<p>
-			{t('applications.size')}: {plan.snapshot.bytes
-				? formatBytes(plan.snapshot.bytes)
-				: t('applications.unknownSize')} · {t('applications.free')}: {formatBytes(plan.freeBytes)}
-		</p>
-		<p>{t('applications.target', { volume: plan.targetVolume })}</p>
-		<h3>{t('applications.paths')}</h3>
-		<ul>
-			{#each plan.snapshot.paths as path (path)}<li class="mono">{path}</li>{/each}
-		</ul>
-		<h3>
-			{t(
-				plan.currentSelection ? 'applications.currentSelection' : 'applications.capturedSelection',
-			)}
-		</h3>
-		<ul>
-			{#each plan.capturedApplications ?? plan.applications as app (`${app.kind}:${app.name}`)}<li>
-					{app.name} · {app.kind} · {app.method}
-				</li>{/each}
-		</ul>
-		<p class="notice-warn">{t('applications.reviewHint')}</p>
-		{#if plan.currentSelection}<p class="notice-warn">
-				{t('applications.currentSelectionHint')}
-			</p>{/if}
-		<div class="row-actions">
-			<button class="btn" disabled={busy} onclick={() => (plan = null)}>{t('common.cancel')}</button
-			><button class="btn btn-primary" disabled={busy} onclick={restore}
-				>{t('applications.restoreCopy')}</button
-			>
-		</div>
-	</section>{/if}
-{#if watching}<section class="tile panel plan">
-		<h2 class="tile-title">{t('applications.running')}</h2>
-		<p class="mono">{target}</p>
-		<p>{t('applications.background')}</p>
-		<a href="/tools/tasks">{t('ops.openTasks')}</a>
-	</section>{/if}
-{#if result}<section class="tile panel plan">
-		<h2 class="tile-title">{t(result.verified ? 'applications.done' : 'applications.failed')}</h2>
-		<p class="mono">{result.target}</p>
-		{#if result.error}<p class="notice-error">{result.error}</p>{/if}
-		{#if result.verified}<ol>
-				<li>{t('applications.reviewFiles')}</li>
-				<li>{t('applications.reviewConfig')}</li>
-				<li>{t('applications.testCopy')}</li>
-			</ol>{/if}
-		<div class="row-actions">
-			{#if result.verified}<a class="btn btn-primary" href={targetLink()}
-					>{t('applications.openTarget')}</a
-				>{/if}
-			<button
-				class="btn"
-				onclick={() => {
-					result = null;
-					target = '';
-				}}>{t('applications.another')}</button
-			>
-		</div>
-	</section>{/if}
+{#if plan}<SettingGroup title={t('tasks.restorePreview')}>
+		<div class="panel plan">
+			<p class="mono">
+				{job} · {plan.snapshot.id} · {formatDateTime(new Date(plan.snapshot.time))}
+			</p>
+			<p>
+				{t('applications.size')}: {plan.snapshot.bytes
+					? formatBytes(plan.snapshot.bytes)
+					: t('applications.unknownSize')} · {t('applications.free')}: {formatBytes(plan.freeBytes)}
+			</p>
+			<p>{t('applications.target', { volume: plan.targetVolume })}</p>
+			<h3>{t('applications.paths')}</h3>
+			<ul>
+				{#each plan.snapshot.paths as path (path)}<li class="mono">{path}</li>{/each}
+			</ul>
+			<h3>
+				{t(
+					plan.currentSelection
+						? 'applications.currentSelection'
+						: 'applications.capturedSelection',
+				)}
+			</h3>
+			<ul>
+				{#each plan.capturedApplications ?? plan.applications as app (`${app.kind}:${app.name}`)}<li
+					>
+						{app.name} · {app.kind} · {app.method}
+					</li>{/each}
+			</ul>
+			<p class="notice-warn">{t('applications.reviewHint')}</p>
+			{#if plan.currentSelection}<p class="notice-warn">
+					{t('applications.currentSelectionHint')}
+				</p>{/if}
+			<div class="row-actions">
+				<button class="btn" disabled={busy} onclick={() => (plan = null)}
+					>{t('common.cancel')}</button
+				><button class="btn btn-primary" disabled={busy} onclick={restore}
+					>{t('applications.restoreCopy')}</button
+				>
+			</div>
+		</div></SettingGroup
+	>{/if}
+{#if watching}<SettingGroup title={t('applications.running')}>
+		<div class="panel plan">
+			<p class="mono">{target}</p>
+			<p>{t('applications.background')}</p>
+			<a href="/tools/tasks">{t('ops.openTasks')}</a>
+		</div></SettingGroup
+	>{/if}
+{#if result}<SettingGroup title={t(result.verified ? 'applications.done' : 'applications.failed')}>
+		<div class="panel plan">
+			<p class="mono">{result.target}</p>
+			{#if result.error}<p class="notice-error">{result.error}</p>{/if}
+			{#if result.verified}<ol>
+					<li>{t('applications.reviewFiles')}</li>
+					<li>{t('applications.reviewConfig')}</li>
+					<li>{t('applications.testCopy')}</li>
+				</ol>{/if}
+			<div class="row-actions">
+				{#if result.verified}<a class="btn btn-primary" href={targetLink()}
+						>{t('applications.openTarget')}</a
+					>{/if}
+				<button
+					class="btn"
+					onclick={() => {
+						result = null;
+						target = '';
+					}}>{t('applications.another')}</button
+				>
+			</div>
+		</div></SettingGroup
+	>{/if}
 
 <style>
-	.form {
-		flex-direction: row;
-		flex-wrap: wrap;
-		align-items: end;
+	form .row-actions {
+		margin-top: var(--space-2);
 	}
-	.form .stack {
-		flex: 1 1 200px;
+	/* A long name of a backup or its date stays inside the row. */
+	form :global(.srow-ctl select.field) {
+		max-width: 100%;
 	}
 	.plan h3 {
 		font-size: 0.875rem;

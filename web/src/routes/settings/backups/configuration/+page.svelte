@@ -3,6 +3,10 @@
 	import { api, ApiError, type StorageStatus } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
+	import { tick } from 'svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
@@ -139,9 +143,18 @@
 	);
 	const newest = $derived(status?.backups[0]);
 
+	// PLAN 78-1: the time of the schedule and the password are parts of their
+	// rows, and a closed row has no fields the browser could check. Before
+	// storing, those rows open, so that a required field is named as before.
+	let form = $state<HTMLFormElement>();
+	let open = $state({ schedule: false, password: false });
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft) return;
+		if (draft.schedule) open.schedule = true;
+		if (draft.encrypt) open.password = true;
+		await tick();
+		if (form && !form.reportValidity()) return;
 		busy = 'save';
 		saved = false;
 		error = null;
@@ -221,205 +234,256 @@
 {#if !status && !error}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 
 {#if status && draft}
-	<section class="tile panel" id="config-history" use:revealTarget aria-labelledby="stick-state">
-		<h2 class="tile-title" id="stick-state">{t('stick.state')}</h2>
-		{#if !status.settings.enabled}
-			<p class="notice-warn">{t('stick.off')}</p>
-		{:else if !status.target}
-			<p class="notice-warn">
-				{t(status.settings.volume ? 'stick.volumeMissing' : 'stick.noVolume', {
-					volume: status.settings.volume,
-				})}
-			</p>
-		{:else if status.lastError}
-			<div class="notice-error" role="alert">
-				{t('stick.failed')}
-				<pre>{status.lastError}</pre>
-			</div>
-		{:else if newest}
-			<p class="notice-ok" role="status">
-				{t('stick.ok', { time: formatDateTime(new Date(newest.time)), volume: newest.volume })}
-			</p>
-		{:else}
-			<p class="muted">{t('stick.none')}</p>
-		{/if}
-		{#if plainTarget}<p class="notice-warn" role="status">
-				{t('stick.plainVolume', { volume: status.target })}
-			</p>{/if}
-		<dl>
-			<div>
-				<dt>{t('stick.target')}</dt>
-				<dd class="mono">{status.target ? `/mnt/${status.target}/.titanos/backups` : '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('stick.lastCheck')}</dt>
-				<dd>{status.lastCheck ? formatDateTime(new Date(status.lastCheck)) : '–'}</dd>
-			</div>
-			{#if status.next}<div>
-					<dt>{t('stick.next')}</dt>
-					<dd>{formatDateTime(new Date(status.next))}</dd>
-				</div>{/if}
-			<div>
-				<dt>{t('stick.count')}</dt>
-				<dd>{status.backups.length}</dd>
-			</div>
-		</dl>
-		<div class="row-actions">
-			<button type="button" class="btn" disabled={busy !== null || !status.target} onclick={run}
-				>{t(busy === 'run' ? 'stick.running' : 'stick.run')}</button
-			>
-			{#if ran}<span class="muted" role="status">{t('stick.ran')}</span>{/if}
-		</div>
-	</section>
-
-	<form
-		class="tile panel"
-		id="config-schedule"
-		use:revealTarget
-		onsubmit={save}
-		aria-labelledby="stick-settings"
-	>
-		<h2 class="tile-title" id="stick-settings">{t('stick.settings')}</h2>
-		<div class="row">
-			<label class="stack narrow"
-				><span>{t('stick.schedule')}</span><select
-					class="field"
-					bind:value={draft.schedule}
-					onchange={() => {
-						draft!.time ||= '03:00';
-					}}
+	{@const d = draft}
+	<!-- PLAN 78-1: the state as rows of values; the notices stand above them. -->
+	<div class="part" id="config-history" use:revealTarget>
+		<SettingGroup id="stick-state" title={t('stick.state')}>
+			{#snippet tools()}
+				{#if ran}<span class="muted" role="status">{t('stick.ran')}</span>{/if}
+				<button type="button" class="btn" disabled={busy !== null || !status?.target} onclick={run}
+					>{t(busy === 'run' ? 'stick.running' : 'stick.run')}</button
 				>
-					<option value="">{t('stick.schedule.off')}</option><option value="daily"
-						>{t('stick.schedule.daily')}</option
-					><option value="weekly">{t('stick.schedule.weekly')}</option></select
-				></label
+			{/snippet}
+			{#if !status.settings.enabled}
+				<p class="notice-warn">{t('stick.off')}</p>
+			{:else if !status.target}
+				<p class="notice-warn">
+					{t(status.settings.volume ? 'stick.volumeMissing' : 'stick.noVolume', {
+						volume: status.settings.volume,
+					})}
+				</p>
+			{:else if status.lastError}
+				<div class="notice-error" role="alert">
+					{t('stick.failed')}
+					<pre>{status.lastError}</pre>
+				</div>
+			{:else if newest}
+				<p class="notice-ok" role="status">
+					{t('stick.ok', { time: formatDateTime(new Date(newest.time)), volume: newest.volume })}
+				</p>
+			{:else}
+				<p class="muted">{t('stick.none')}</p>
+			{/if}
+			{#if plainTarget}<p class="notice-warn" role="status">
+					{t('stick.plainVolume', { volume: status.target })}
+				</p>{/if}
+			<SettingRow icon="folder" title={t('stick.target')}>
+				{#snippet control()}<span class="mono value"
+						>{status?.target ? `/mnt/${status.target}/.titanos/backups` : '–'}</span
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="check" title={t('stick.lastCheck')}>
+				{#snippet control()}<span class="value"
+						>{status?.lastCheck ? formatDateTime(new Date(status.lastCheck)) : '–'}</span
+					>{/snippet}
+			</SettingRow>
+			{#if status.next}
+				<SettingRow icon="clock" title={t('stick.next')}>
+					{#snippet control()}<span class="value"
+							>{status?.next ? formatDateTime(new Date(status.next)) : ''}</span
+						>{/snippet}
+				</SettingRow>
+			{/if}
+			<SettingRow icon="archive" title={t('stick.count')}>
+				{#snippet control()}<span class="value">{status?.backups.length}</span>{/snippet}
+			</SettingRow>
+		</SettingGroup>
+	</div>
+
+	<!-- The settings are rows of one form with one Save, as before. -->
+	<form id="config-schedule" use:revealTarget onsubmit={save} bind:this={form}>
+		{#snippet scheduleParts()}
+			<SettingSub title={t('stick.schedule.time')} for="stick-time">
+				{#snippet control()}
+					<input id="stick-time" class="field" type="time" bind:value={d.time} required />
+				{/snippet}
+			</SettingSub>
+			{#if d.schedule === 'weekly'}
+				<SettingSub title={t('stick.schedule.day')} for="stick-weekday">
+					{#snippet control()}
+						<select id="stick-weekday" class="field" bind:value={d.weekday}
+							>{#each [1, 2, 3, 4, 5, 6, 0] as const as day}<option value={day}
+									>{t(`backup.weekday.${day}`)}</option
+								>{/each}</select
+						>
+					{/snippet}
+				</SettingSub>
+			{/if}
+		{/snippet}
+		<!-- A stored password never comes back: that one is stored stands below
+		     the field's name, not as a placeholder. -->
+		{#snippet passwordParts()}
+			<SettingSub
+				title={t(passwordSet ? 'stick.passwordNew' : 'stick.password')}
+				desc={passwordSet ? t('notify.secretStored') : undefined}
+				for="stick-password"
 			>
-			{#if draft.schedule}<label class="stack tiny"
-					><span>{t('stick.schedule.time')}</span><input
-						class="field"
-						type="time"
-						bind:value={draft.time}
-						required
-					/></label
-				>{/if}
-			{#if draft.schedule === 'weekly'}<label class="stack tiny"
-					><span>{t('stick.schedule.day')}</span><select class="field" bind:value={draft.weekday}
-						>{#each [1, 2, 3, 4, 5, 6, 0] as const as day}<option value={day}
-								>{t(`backup.weekday.${day}`)}</option
-							>{/each}</select
-					></label
-				>{/if}
-		</div>
-		<p class="muted">{t('stick.schedule.hint')}</p>
-		<div class="option divided">
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.enabled} /><span>{t('stick.enabled')}</span
-				></label
-			>
-			<small>{t('stick.enabledHint')}</small>
-		</div>
-		<div class="row">
-			<label class="stack narrow"
-				><span>{t('stick.volume')}</span>
-				<select class="field" bind:value={draft.volume}>
-					<option value="">{t('stick.volumeAuto')}</option>
-					{#each volumes as volume (volume)}<option value={volume}>{volumeLabel(volume)}</option
-						>{/each}
-				</select>
-			</label>
-		</div>
-		<div class="keep-block">
-			<span class="legend-sub">{t('stick.keep')}</span>
-			<KeepChoice
-				bind:count={draft.keep}
-				bind:versions={draft.versions}
-				min={1}
-				max={100}
-				unit="backups"
-			/>
-		</div>
-		<div class="option divided">
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.encrypt} /><span>{t('stick.encrypt')}</span
-				></label
-			>
-			<small>{t('stick.encryptHint')}</small>
-		</div>
-		{#if draft.encrypt}
-			<div class="row">
-				<label class="stack narrow"
-					><span>{t(passwordSet ? 'stick.passwordNew' : 'stick.password')}</span><input
+				{#snippet control()}
+					<input
+						id="stick-password"
 						class="field"
 						type="password"
 						autocomplete="new-password"
 						bind:value={password}
-						placeholder={passwordSet ? t('notify.secretStored') : ''}
 						required={!passwordSet}
-					/></label
-				>
-				<label class="stack narrow"
-					><span>{t('stick.passwordRepeat')}</span><input
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('stick.passwordRepeat')} for="stick-password-repeat">
+				{#snippet control()}
+					<input
+						id="stick-password-repeat"
 						class="field"
 						type="password"
 						autocomplete="new-password"
 						bind:value={repeat}
 						required={!passwordSet || password !== ''}
-					/></label
-				>
+					/>
+				{/snippet}
+			</SettingSub>
+			{#if passwordProblem}<div class="srow-block">
+					<p class="notice-warn" role="alert">{passwordProblem}</p>
+				</div>{/if}
+		{/snippet}
+		<SettingGroup id="stick-settings" title={t('stick.settings')}>
+			<SettingRow
+				icon="power"
+				title={t('stick.enabled')}
+				desc={t('stick.enabledHint')}
+				for="stick-enabled"
+			>
+				{#snippet control()}
+					<input
+						id="stick-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="clock"
+				title={t('stick.schedule')}
+				desc={t('stick.schedule.hint')}
+				for="stick-schedule"
+				bind:open={open.schedule}
+				children={d.schedule ? scheduleParts : undefined}
+			>
+				{#snippet control()}
+					<select
+						id="stick-schedule"
+						class="field"
+						bind:value={d.schedule}
+						onchange={() => {
+							d.time ||= '03:00';
+							if (d.schedule) open.schedule = true;
+						}}
+					>
+						<option value="">{t('stick.schedule.off')}</option><option value="daily"
+							>{t('stick.schedule.daily')}</option
+						><option value="weekly">{t('stick.schedule.weekly')}</option></select
+					>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="disk" title={t('stick.volume')} for="stick-volume">
+				{#snippet control()}
+					<select id="stick-volume" class="field" bind:value={d.volume}>
+						<option value="">{t('stick.volumeAuto')}</option>
+						{#each volumes as volume (volume)}<option value={volume}>{volumeLabel(volume)}</option
+							>{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="archive" title={t('stick.keep')}>
+				{#snippet control()}
+					<div class="keep">
+						<KeepChoice
+							bind:count={d.keep}
+							bind:versions={d.versions}
+							min={1}
+							max={100}
+							unit="backups"
+						/>
+					</div>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="lock"
+				title={t('stick.encrypt')}
+				desc={t('stick.encryptHint')}
+				for="stick-encrypt"
+				bind:open={open.password}
+				children={d.encrypt ? passwordParts : undefined}
+			>
+				{#snippet control()}
+					<input
+						id="stick-encrypt"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={!!d.encrypt}
+						onchange={(e) => {
+							d.encrypt = e.currentTarget.checked;
+							if (d.encrypt) open.password = true;
+						}}
+					/>
+				{/snippet}
+			</SettingRow>
+			<div class="row-actions">
+				<button
+					type="submit"
+					class="btn btn-primary"
+					disabled={!changed ||
+						busy !== null ||
+						!!passwordProblem ||
+						(!!d.encrypt && !passwordSet && !password)}
+					>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
+				>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
 			</div>
-			{#if passwordProblem}<p class="notice-warn" role="alert">{passwordProblem}</p>{/if}
-		{/if}
-		<div class="row-actions">
-			<button
-				type="submit"
-				class="btn btn-primary"
-				disabled={!changed ||
-					busy !== null ||
-					!!passwordProblem ||
-					(!!draft.encrypt && !passwordSet && !password)}
-				>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
-			>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
-		</div>
+		</SettingGroup>
 	</form>
 
-	<section class="tile panel" id="config-downloads" use:revealTarget aria-labelledby="stick-list">
-		<h2 class="tile-title" id="stick-list">{t('stick.backups')}</h2>
-		{#if status.backups.length === 0}
-			<p class="muted">{t('stick.none')}</p>
-		{:else}
-			<p class="muted">{t('stick.downloadHint')}</p>
-			{#if plainBackups}<p class="notice-warn" role="status">{t('stick.downloadPlain')}</p>
-			{:else}<p class="muted">{t('stick.downloadEncrypted')}</p>{/if}
-			<div class="scroll">
-				<table>
-					<thead
-						><tr
-							><th>{t('stick.when')}</th><th>{t('stick.volume')}</th><th>{t('stick.version')}</th
-							><th class="num">{t('stick.size')}</th><th></th></tr
-						></thead
-					>
-					<tbody>
-						{#each status.backups as backup (backup.volume + backup.name)}
-							<tr>
-								<td>{formatDateTime(new Date(backup.time))}</td>
-								<td class="mono">{backup.volume}</td>
-								<td class="mono"
-									>{backup.version}{#if backup.encrypted}
-										<span class="chip ok" title={t('stick.encryptedTitle')}>🔒</span>{/if}</td
-								>
-								<td class="num mono">{formatBytes(backup.sizeBytes)}</td>
-								<td class="num"
-									><button type="button" class="btn small" onclick={() => download(backup)}
-										>{t('stick.download')}</button
-									></td
-								>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</section>
+	<!-- The copies are a table: it stays one, under a plain heading. -->
+	<div class="part" id="config-downloads" use:revealTarget>
+		<SettingGroup id="stick-list" title={t('stick.backups')}>
+			{#if status.backups.length === 0}
+				<p class="muted">{t('stick.none')}</p>
+			{:else}
+				<p class="muted">{t('stick.downloadHint')}</p>
+				{#if plainBackups}<p class="notice-warn" role="status">{t('stick.downloadPlain')}</p>
+				{:else}<p class="muted">{t('stick.downloadEncrypted')}</p>{/if}
+				<div class="scroll">
+					<table>
+						<thead
+							><tr
+								><th>{t('stick.when')}</th><th>{t('stick.volume')}</th><th>{t('stick.version')}</th
+								><th class="num">{t('stick.size')}</th><th></th></tr
+							></thead
+						>
+						<tbody>
+							{#each status.backups as backup (backup.volume + backup.name)}
+								<tr>
+									<td>{formatDateTime(new Date(backup.time))}</td>
+									<td class="mono">{backup.volume}</td>
+									<td class="mono"
+										>{backup.version}{#if backup.encrypted}
+											<span class="chip ok" title={t('stick.encryptedTitle')}>🔒</span>{/if}</td
+									>
+									<td class="num mono">{formatBytes(backup.sizeBytes)}</td>
+									<td class="num"
+										><button type="button" class="btn small" onclick={() => download(backup)}
+											>{t('stick.download')}</button
+										></td
+									>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</SettingGroup>
+	</div>
 {/if}
 
 {#if wanted}
@@ -431,46 +495,28 @@
 {/if}
 
 <style>
-	section,
+	.part,
 	form {
+		min-width: 0;
+	}
+	.part,
+	.scroll {
 		font-size: 0.875rem;
 	}
-	dl {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-3) var(--space-5);
-		margin: 0;
+	/* A notice above the rows keeps its distance from them. */
+	.part :global(.sgroup > :is(p, .notice-error)) {
+		margin-bottom: var(--space-2);
 	}
-	dt {
-		color: var(--muted);
-		font-size: 0.75rem;
-	}
-	dd {
-		margin: 2px 0 0;
+	.value {
+		color: var(--text);
 		overflow-wrap: anywhere;
 	}
-	.narrow {
-		flex: 0 1 320px;
-		max-width: 320px;
+	/* "Die neuesten N Sicherungen" and its note, at the right of the row. */
+	.keep {
+		text-align: left;
 	}
-	.tiny {
-		flex: 0 1 160px;
-		max-width: 160px;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-4) var(--space-5);
-	}
-	.option {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
-	.option small {
-		padding-left: 28px;
-		font-size: 0.8125rem;
-		color: var(--muted);
+	form .row-actions {
+		margin-top: var(--space-2);
 	}
 	.scroll {
 		overflow-x: auto;
