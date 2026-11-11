@@ -1534,7 +1534,9 @@ span.srow-chev {
 		input.field:is([type='text'], [type='url'], [type='email'], [type='password'], :not([type])) {
 		width: 100%;
 	}
-	.srow-block {
+	/* Parts and free content of an open row start at the row's edge. */
+	.srow-block,
+	.srow-sub {
 		padding-left: var(--space-4);
 	}
 }

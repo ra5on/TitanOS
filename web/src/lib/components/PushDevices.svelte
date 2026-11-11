@@ -18,7 +18,9 @@
 	} from '#lib/web-push.ts';
 
 	/** For an account with the role "Benutzer": only its agent's messages (PLAN 58). */
-	let { personal = false }: { personal?: boolean } = $props();
+	// `bare`: inside a row of the control panel (PLAN 78-1) – the row carries
+	// the name and the explanation, so no tile and no heading here.
+	let { personal = false, bare = false }: { personal?: boolean; bare?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
 	async function setKinds(device: PushDevice, kind: 'nas' | 'agent', on: boolean) {
 		const off = new Set(device.off ?? []);
@@ -135,9 +137,7 @@
 	}
 </script>
 
-<section class="tile panel" id="push" aria-labelledby="push-title">
-	<h2 class="tile-title" id="push-title">{t('push.title')}</h2>
-	<p class="muted">{personal ? t('push.introPersonal') : t('push.intro')}</p>
+{#snippet body()}
 	{#if !supported && !needsHomeScreen}
 		<p class="notice-warn">{t(window.isSecureContext ? 'push.unsupported' : 'push.needsHttps')}</p>
 	{:else if needsHomeScreen}
@@ -200,7 +200,17 @@
 	{:else if devices}
 		<p class="muted">{t('push.none')}</p>
 	{/if}
-</section>
+{/snippet}
+
+{#if bare}
+	<div class="bare">{@render body()}</div>
+{:else}
+	<section class="tile panel" id="push" aria-labelledby="push-title">
+		<h2 class="tile-title" id="push-title">{t('push.title')}</h2>
+		<p class="muted">{personal ? t('push.introPersonal') : t('push.intro')}</p>
+		{@render body()}
+	</section>
+{/if}
 
 {#if removing}
 	<Dialog title={t('push.remove')} onclose={() => (removing = null)}>
@@ -220,6 +230,15 @@
 {/if}
 
 <style>
+	.bare {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		min-width: 0;
+	}
+	.bare :global(p) {
+		margin: 0;
+	}
 	.devices {
 		list-style: none;
 		margin: 0;

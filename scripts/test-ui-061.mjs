@@ -612,7 +612,8 @@ try {
       .locator("#access-terminal")
       .getByRole("button", { name: "Erneut versuchen" })
       .click();
-    const enabled = page.getByRole("checkbox", {
+    // PLAN 78-1: the settings are rows with a switch.
+    const enabled = page.getByRole("switch", {
       name: "Terminal und Konsolen erlauben",
       exact: true,
     });
@@ -638,7 +639,7 @@ try {
       0,
     );
     await page
-      .getByRole("checkbox", {
+      .getByRole("switch", {
         name: "Passwort vor dem Herunterladen von Stick-Sicherungen erneut abfragen",
         exact: true,
       })

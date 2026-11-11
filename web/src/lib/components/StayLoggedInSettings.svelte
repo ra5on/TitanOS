@@ -3,6 +3,8 @@
 	// over a restart of the NAS. Applies to the logins there are as well.
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
+	import { page } from '$app/state';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Login = { stayDays: number; choices: number[] };
@@ -25,8 +27,19 @@
 		}
 	});
 
+	// A link to this row (#access-stay): the rows above it arrive after the
+	// browser's own anchor scroll, so bring it into view once it has its state.
+	$effect(() => {
+		if (!login || page.url.hash !== '#access-stay') return;
+		requestAnimationFrame(() =>
+			document.getElementById('access-stay')?.scrollIntoView({ block: 'start' }),
+		);
+	});
+
+	// Short choices (a long one is clipped in the phone's select); what "Aus"
+	// means stands in the row's explanation.
 	function label(days: number): string {
-		if (days === 0) return t('stay.off');
+		if (days === 0) return t('stay.offShort');
 		if (days < 0) return t('stay.forever');
 		return days === 365 ? t('stay.year') : t('stay.days', { count: days });
 	}
@@ -45,14 +58,19 @@
 	}
 </script>
 
-<section class="tile panel" id="access-stay" aria-labelledby="access-stay-title">
-	<h2 class="tile-title" id="access-stay-title">{t('stay.title')}</h2>
-	<p class="muted">{t('stay.intro')}</p>
-	{#if login}
-		<label class="stack"
-			><span>{t('stay.duration')}</span>
+<!-- PLAN 78-1: one row of the group "Weboberfläche"; the choice stores on change as before. -->
+<SettingRow id="access-stay" icon="clock" title={t('stay.title')} for="access-stay-select">
+	{#snippet description()}
+		{t('stay.intro')}
+		{#if login?.stayDays === 0}{t('stay.offHint')}{/if}
+	{/snippet}
+	{#snippet control()}
+		{#if saved}<span role="status">{t('appearance.saved')}</span>{/if}
+		{#if login}
 			<select
+				id="access-stay-select"
 				class="field"
+				aria-label={t('stay.duration')}
 				disabled={busy}
 				value={login.stayDays}
 				onchange={async (event) => {
@@ -61,12 +79,11 @@
 					field.value = String(login?.stayDays ?? 0);
 				}}
 			>
-				{#each login.choices as days}<option value={days}>{label(days)}</option>{/each}
+				{#each login.choices as days (days)}<option value={days}>{label(days)}</option>{/each}
 			</select>
-		</label>
-		{#if login.stayDays !== 0}<p class="muted small">{t('stay.hint')}</p>{/if}
-		{#if login.stayDays < 0}<p class="notice-warn">{t('stay.foreverWarn')}</p>{/if}
-		{#if saved}<p class="muted small" role="status">{t('appearance.saved')}</p>{/if}
-	{/if}
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-</section>
+		{/if}
+	{/snippet}
+</SettingRow>
+{#if login && login.stayDays !== 0}<p class="muted">{t('stay.hint')}</p>{/if}
+{#if login && login.stayDays < 0}<p class="notice-warn">{t('stay.foreverWarn')}</p>{/if}
+{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
