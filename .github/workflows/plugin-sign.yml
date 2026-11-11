@@ -47,7 +47,10 @@ permissions:
 
 env:
   PLUGINS: ra5on/TitanOS-Plugins
-  DRAFTS: '[.[] | select(.draft) | select(.tag_name | test("^((common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*|pending-nvidia-[0-9]+-kernel-[0-9][0-9A-Za-z._~-]*-[1-9][0-9]*)$")) | .tag_name] | unique'
+  # A draft whose tag is already published is a leftover of a repeated build
+  # (the set was signed while the second build ran): publishing it can only
+  # fail, so it is not a set waiting to be signed.
+  DRAFTS: '[.[] | select(.draft | not) | .tag_name] as $published | [.[] | select(.draft) | select(.tag_name as $t | $published | index($t) | not) | select(.tag_name | test("^((common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*|pending-nvidia-[0-9]+-kernel-[0-9][0-9A-Za-z._~-]*-[1-9][0-9]*)$")) | .tag_name] | unique'
 
 jobs:
   dispatch:

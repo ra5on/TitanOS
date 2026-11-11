@@ -64,10 +64,25 @@ class ReleaseKindTest(unittest.TestCase):
         # The QEMU test of full system updates and its step in the workflow
         # (PLAN 76, F-13-7) run in CI only.
         self.assertEqual(self.decide("0.8.2", ["scripts/smoke-system-update.py", ".github/workflows/release.yml", "docs/RELEASING.md"])[:2], ("app", "0.8.0"))
+        self.assertEqual(self.decide("0.8.2", ["scripts/api-layout.py", "docs/API-LAYOUT.md"])[:2], ("app", "0.8.0"))
         # The README pictures are taken against vite dev, not in the image.
         self.assertEqual(self.decide("0.8.2", ["scripts/capture-readme-screenshots.mjs"])[:2], ("app", "0.8.0"))
         # Other files at the top stay a full release.
         self.assertEqual(self.decide("0.8.2", ["backend/x.go", "Makefile"])[:2], ("system", "0.8.2"))
+
+    def test_a_newer_go_or_node_alone_is_an_app_release(self):
+        old = {"go": {"version": "1.27.3"}, "node": {"version": "24.22.1"}, "mkosi": {"version": "25.3"}}
+        for new, expected in [
+            (dict(old, go={"version": "1.27.4"}), ("app", "0.8.0")),
+            (dict(old, go={"version": "1.27.4"}, node={"version": "24.23.0"}), ("app", "0.8.0")),
+            (dict(old, go={"version": "1.27.4"}, mkosi={"version": "26"}), ("system", "0.8.2")),
+            (dict(old, extra={"version": "1"}), ("system", "0.8.2")),
+            (None, ("system", "0.8.2")),
+        ]:
+            with self.subTest(new=new):
+                locks = lambda ref, new=new: new if ref == "HEAD" else old
+                result = kind.decide("0.8.2", "", "https://example", changed_since=lambda tag: ["backend/x.go", "scripts/dev-toolchains.lock.json"], fetch=fetch, tags=TAGS, lock=locks)
+                self.assertEqual(result[:2], expected)
 
     def test_changes_to_the_image_make_a_full_release(self):
         for path in ["build/mkosi.conf", "boot/entry.conf.in", "scripts/make-zip.sh", ".github/actions/image-tools/action.yml", "Makefile"]:
