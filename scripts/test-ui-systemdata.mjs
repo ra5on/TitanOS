@@ -226,7 +226,9 @@ try {
       .getByText("Auslastung der letzten Tage · Ausgeschaltet")
       .waitFor();
     assert.equal(
-      (await page.locator("#sysdata-fn-logs option").first().textContent()).trim(),
+      (
+        await page.locator("#sysdata-fn-logs option").first().textContent()
+      ).trim(),
       "Ablage-Volume (nvme)",
     );
     // The configuration backup opens downward: when, password, copies.
@@ -268,7 +270,9 @@ try {
       functions: { smart: "nvme" },
     });
     assert.equal(
-      (await page.locator("#sysdata-fn-logs option").first().textContent()).trim(),
+      (
+        await page.locator("#sysdata-fn-logs option").first().textContent()
+      ).trim(),
       "Ablage-Volume (Backup)",
     );
     await sound(page, `systemdaten-ruhemodus-${name}`);
