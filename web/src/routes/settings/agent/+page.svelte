@@ -5,8 +5,9 @@
 	// tools and folders with "Ohne Nachfrage / Nachfragen / Verboten"), its
 	// own initiative and Home Assistant. Owners and administrators only.
 	import PageHead from '#lib/components/PageHead.svelte';
-	import Segments from '#lib/components/Segments.svelte';
-	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
 	import AgentVolume from '#lib/components/agent/AgentVolume.svelte';
@@ -240,6 +241,17 @@
 		'features',
 	] as const;
 	type Tab = (typeof TABS)[number];
+	const AREA_ICON: Record<Tab, IconName> = {
+		overview: 'sparkle',
+		connection: 'globe',
+		rights: 'shield',
+		accounts: 'users',
+		phone: 'monitor',
+		ha: 'home',
+		initiative: 'zap',
+		instruction: 'fileText',
+		features: 'sparkle',
+	};
 	const tabOf = (v: string | null): Tab => (TABS.includes(v as Tab) ? (v as Tab) : 'overview');
 	let tab = $state<Tab>(tabOf(page.url.searchParams.get('tab')));
 	$effect(() => {
@@ -359,37 +371,36 @@
 		<!-- PLAN 68: one card per group of functions, each function a row. -->
 		<FeaturesPanel admin={true} heading={t('agent.f.title')} />
 	{:else if tab === 'overview'}
-		<section class="tile ui-card" aria-labelledby="ag-hero">
-			<div class="set-row">
-				<div class="set-label hero-label">
+		<!-- PLAN 78-1: the state of the agent is the first row of the page. -->
+		<SettingGroup>
+			<div class="srow">
+				<div class="srow-head hero">
 					<DesktopIcon glyph="agent" gradient="violet" size={36} name={t('nav.agent')} />
-					<span class="hero-text">
-						<strong id="ag-hero"
+					<div class="srow-text">
+						<strong class="srow-title" id="ag-hero"
 							>{t(settings.enabled ? 'agent.heroStateOn' : 'agent.heroStateOff')}</strong
 						>
-						<span class="set-hint"
+						<span class="srow-desc"
 							>{status?.reachable
 								? t('agent.heroOn', { version: status.version ?? '', model: settings.model || '–' })
 								: settings.enabled
 									? t('agent.heroDown')
 									: t('agent.heroOff')}</span
 						>
-					</span>
-				</div>
-				<div class="set-control end">
-					<label class="switch-label"
-						><input
+					</div>
+					<div class="srow-ctl">
+						<input
 							aria-label={t('agent.enabled')}
 							type="checkbox"
 							class="switch"
 							role="switch"
 							checked={settings.enabled}
 							onchange={(e) => switchOn(e.currentTarget)}
-						/></label
-					>
+						/>
+					</div>
 				</div>
 			</div>
-		</section>
+		</SettingGroup>
 		<AgentVolume
 			current={settings.volume ?? ''}
 			bind:choosing={choosingVolume}
@@ -399,74 +410,81 @@
 			}}
 			onmoved={(v) => (settings!.volume = v)}
 		/>
-		<section class="tile ui-card areas" aria-labelledby="ag-areas">
-			<div class="card-head"><h2 id="ag-areas">{t('agent.areasTitle')}</h2></div>
+		<!-- Every area of the settings is a row that leads to it. -->
+		<SettingGroup title={t('agent.areasTitle')}>
 			{#each TABS.filter((x) => x !== 'overview') as id (id)}
-				<button type="button" class="set-row area" onclick={() => choose(id)}>
-					<span class="set-label"
-						>{t(`agent.tab.${id}` as MessageKey)}<span class="set-hint"
-							>{t(`agent.areaHint.${id}` as MessageKey)}</span
-						></span
-					>
-					<span class="set-control end summary"
-						>{summary(id)}<Icon name="chevronRight" size={16} /></span
-					>
+				<button type="button" class="srow area" onclick={() => choose(id)}>
+					<span class="srow-head">
+						<span class="srow-ico" aria-hidden="true"><Icon name={AREA_ICON[id]} size={19} /></span>
+						<span class="srow-text"
+							><span class="srow-title">{t(`agent.tab.${id}` as MessageKey)}</span><span
+								class="srow-desc">{t(`agent.areaHint.${id}` as MessageKey)}</span
+							></span
+						>
+						{#if summary(id)}<span class="srow-ctl"
+								><span class="srow-summary">{summary(id)}</span></span
+							>{/if}
+						<span class="srow-chev" aria-hidden="true"><Icon name="chevronRight" size={16} /></span>
+					</span>
 				</button>
 			{/each}
-		</section>
+		</SettingGroup>
 	{/if}
 	{#if tab === 'phone'}
-		<section class="tile ui-card" aria-labelledby="ag-phone">
-			<div class="card-head"><h2 id="ag-phone">{t('agent.phoneApp')}</h2></div>
-			<div class="set-row one">
-				<span class="set-hint">{t('agent.phoneAppIntro')}</span>
-			</div>
+		<SettingGroup title={t('agent.phoneApp')} desc={t('agent.phoneAppIntro')}>
+			<!-- The ways to the NAS: a radio list, every way a row. -->
 			<fieldset class="ways">
 				<legend class="sr-only">{t('agent.phoneWay')}</legend>
 				{#each addresses as a (a.url)}
-					<label class="set-row way" class:on={way === a.url}
-						><input type="radio" name="way" value={a.url} bind:group={way} /><span class="set-label"
-							><strong>{t(`agent.way.${a.kind}` as MessageKey)}</strong><small class="set-hint mono"
-								>{a.url}</small
+					<label class="srow way" class:on={way === a.url}
+						><span class="srow-head"
+							><input type="radio" name="way" value={a.url} bind:group={way} /><span
+								class="srow-text"
+								><strong class="srow-title">{t(`agent.way.${a.kind}` as MessageKey)}</strong><small
+									class="srow-desc mono">{a.url}</small
+								></span
+							><span class="srow-ctl"
+								><span class="chip" class:ok={a.https}
+									>{a.https ? '✓ ' + t('agent.wayHttps') : t('agent.wayHttp')}</span
+								></span
 							></span
-						><span class="chip" class:ok={a.https}
-							>{a.https ? '✓ ' + t('agent.wayHttps') : t('agent.wayHttp')}</span
 						></label
 					>
 				{/each}
-				<label class="set-row way" class:on={way === 'own'}
-					><input type="radio" name="way" value="own" bind:group={way} /><span class="set-label"
-						><strong>{t('agent.way.own')}</strong>
-						{#if way === 'own'}<input
-								class="field"
-								bind:value={own}
-								placeholder="https://nas.example.org"
-								aria-label={t('agent.way.own')}
-							/>{:else}<small class="set-hint">{t('agent.wayOwnHint')}</small>{/if}</span
+				<label class="srow way" class:on={way === 'own'}
+					><span class="srow-head"
+						><input type="radio" name="way" value="own" bind:group={way} /><span class="srow-text"
+							><strong class="srow-title">{t('agent.way.own')}</strong>
+							{#if way === 'own'}<input
+									class="field"
+									bind:value={own}
+									placeholder="https://nas.example.org"
+									aria-label={t('agent.way.own')}
+								/>{:else}<small class="srow-desc">{t('agent.wayOwnHint')}</small>{/if}</span
+						></span
 					></label
 				>
 			</fieldset>
-			<div class="set-row qr-row">
-				<span class="set-label"
-					>{t('agent.phoneQrTitle')}<span class="set-hint">{t('agent.phoneHttpsHint')}</span></span
-				>
-				<div class="set-control qr">
-					{#if appUrl}
-						<QrCode text={appUrl} label={t('agent.phoneQr', { url: appUrl })} size={180} />
-						<small class="mono">{appUrl.replace(/^https?:\/\//, '')}</small>
-					{:else}
-						<p class="set-hint">{t('agent.phoneNoUrl')}</p>
-					{/if}
-				</div>
-			</div>
+			<SettingRow icon="grid" title={t('agent.phoneQrTitle')} desc={t('agent.phoneHttpsHint')}>
+				{#snippet control()}
+					<div class="qr">
+						{#if appUrl}
+							<QrCode text={appUrl} label={t('agent.phoneQr', { url: appUrl })} size={180} />
+							<small class="mono">{appUrl.replace(/^https?:\/\//, '')}</small>
+						{:else}
+							<p>{t('agent.phoneNoUrl')}</p>
+						{/if}
+					</div>
+				{/snippet}
+			</SettingRow>
 			{#if appUrl}
-				<div class="card-foot">
+				<div class="row-actions">
 					<button type="button" class="btn" onclick={copyUrl}
 						>{copied ? '✓ ' + t('agent.copied') : t('agent.copyLink')}</button
 					>
 				</div>
 			{/if}
-		</section>
+		</SettingGroup>
 	{/if}
 	{#if tab === 'connection'}
 		<ConnectionTab
@@ -489,21 +507,19 @@
 	{/if}
 
 	{#if tab === 'instruction'}
-		<section class="tile ui-card" aria-labelledby="ag-instruction">
-			<div class="card-head"><h2 id="ag-instruction">{t('agent.sectionInstruction')}</h2></div>
-			<div class="set-row one">
-				<span class="set-hint">{t('agent.instructionIntro')}</span>
-			</div>
-			<div class="card-body">
-				<textarea
-					class="field"
-					rows="8"
-					maxlength="8000"
-					bind:value={settings.instruction}
-					aria-labelledby="ag-instruction"></textarea>
-			</div>
-			<div class="card-foot">
-				<span class="grow">{t('agent.instructionHint')}</span>
+		<SettingGroup
+			id="ag-instruction"
+			title={t('agent.sectionInstruction')}
+			desc={t('agent.instructionIntro')}
+		>
+			<textarea
+				class="field"
+				rows="8"
+				maxlength="8000"
+				bind:value={settings.instruction}
+				aria-labelledby="ag-instruction-title"></textarea>
+			<div class="row-actions">
+				<span class="grow muted">{t('agent.instructionHint')}</span>
 				{#if !settings.instruction?.trim()}<button
 						type="button"
 						class="btn"
@@ -511,7 +527,7 @@
 						>{t('agent.instructionUseTemplate')}</button
 					>{/if}
 			</div>
-		</section>
+		</SettingGroup>
 	{/if}
 
 	{#if tab === 'accounts'}
@@ -534,42 +550,38 @@
 	{/if}
 
 	{#if tab === 'initiative'}
-		<section class="tile ui-card" aria-labelledby="ag-react">
-			<div class="card-head"><h2 id="ag-react">{t('agent.sectionInitiative')}</h2></div>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.react')}<span class="set-hint">{t('agent.reactHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
+		<SettingGroup title={t('agent.sectionInitiative')}>
+			<SettingRow icon="zap" title={t('agent.react')} desc={t('agent.reactHint')} for="ag-react">
+				{#snippet control()}
+					<input
+						id="ag-react"
 						type="checkbox"
 						class="switch"
 						role="switch"
-						bind:checked={settings.react}
-					/></span
-				>
-			</label>
-			<label class="set-row">
-				<span class="set-label">{t('agent.weeklyReport')}</span>
-				<span class="set-control end"
-					><input
+						bind:checked={settings!.react}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="fileText" title={t('agent.weeklyReport')} for="ag-weekly">
+				{#snippet control()}
+					<input
+						id="ag-weekly"
 						type="checkbox"
 						class="switch"
 						role="switch"
-						bind:checked={settings.weeklyReport}
-					/></span
-				>
-			</label>
-			<label class="set-row">
-				<span class="set-label">{t('agent.reactAs')}</span>
-				<span class="set-control">
-					<select class="field" bind:value={settings.reactAs}>
+						bind:checked={settings!.weeklyReport}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="users" title={t('agent.reactAs')} for="ag-react-as">
+				{#snippet control()}
+					<select id="ag-react-as" class="field" bind:value={settings!.reactAs}>
 						<option value="">{t('agent.firstOwner')}</option>
 						{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
 					</select>
-				</span>
-			</label>
-		</section>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
 	{/if}
 
 	{#if tab === 'ha'}
@@ -602,60 +614,43 @@
 		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
-	.areas .area {
-		all: unset;
-		box-sizing: border-box;
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		align-items: center;
-		gap: var(--space-3);
+	/* An area of the settings: a row that is a button. */
+	.area {
 		width: 100%;
-		padding: 11px var(--space-4);
-		border-top: 1px solid var(--panel-border, var(--border));
+		padding: 0;
+		font: inherit;
+		text-align: left;
 		cursor: pointer;
 	}
-	.areas .area:hover,
-	.areas .area:focus-visible {
-		background: color-mix(in srgb, var(--text) 5%, transparent);
+	.area:hover {
+		background: var(--srow-hover);
 	}
-	.areas .set-label {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+	.area:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
-	.summary {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		color: var(--muted);
+	.hero .srow-title {
+		font-weight: 600;
+	}
+	.row-actions:not(.sticky) {
+		margin-top: var(--space-2);
 	}
 	.row-actions .grow {
-		flex: 1;
+		flex: 1 1 14rem;
+		min-width: 0;
 	}
 	.saved-note {
 		margin: 0;
 	}
-	/* PLAN 68: every tab in cards with rows "label (+ hint) left, control
-	   right"; lists as rows; the card's own actions in its foot. */
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-
-	/* The hint on the card's surface: a little toward the text for 4.5:1. */
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
-	.set-control > .field {
-		flex: 1 1 12rem;
-		min-width: 0;
-	}
-
 	.mono {
 		font-family: var(--font-mono, monospace);
 		overflow-wrap: anywhere;
 	}
 	/* The ways to the NAS: a radio list as rows. */
 	.ways {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 		border: 0;
 		margin: 0;
 		padding: 0;
@@ -663,84 +658,33 @@
 		position: relative;
 	}
 	.way {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
 		cursor: pointer;
 	}
-	.way > .set-label {
-		flex: 1 1 auto;
-	}
-	.way > input[type='radio'] {
+	.way input[type='radio'] {
 		flex: none;
 		accent-color: var(--accent);
 	}
-	.way > .set-label > .field {
+	.way .srow-text > .field {
 		margin-top: var(--space-1);
 	}
 	.way.on {
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 	}
-	.qr-row {
-		align-items: start;
-	}
 	.qr {
+		display: flex;
 		flex-direction: column;
 		align-items: center;
+		gap: var(--space-2);
 	}
 	.qr .mono {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
 		text-align: center;
 	}
 	.qr p {
 		margin: 0;
 	}
-	.card-foot > .grow {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
 	textarea.field {
 		padding: 0.6rem 0.75rem;
 		resize: vertical;
-	}
-	/* PLAN 68: an area is a row; the label opens its tools. */
-
-	.area .set-control :global(.segments) {
-		flex-wrap: nowrap;
-	}
-	.area {
-		padding-top: 9px;
-		padding-bottom: 9px;
-	}
-
-	.hero-label {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.hero-text {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.hero-text strong {
-		font-weight: 600;
-	}
-	.switch-label {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		cursor: pointer;
-	}
-
-	/* The phone: long choices on a line of their own. */
-	@media (max-width: 639px) {
-		.area {
-			grid-template-columns: minmax(0, 1fr) !important;
-		}
-		.area .set-control {
-			justify-content: flex-start;
-		}
 	}
 
 	.sticky {

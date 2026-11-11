@@ -7,6 +7,8 @@
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	type Volume = {
 		name: string;
@@ -147,74 +149,64 @@
 	<p class="muted small">{t('agent.vol.hint')}</p>
 {/snippet}
 
-<section class="tile ui-card" aria-labelledby="ag-volume">
-	<div class="card-head"><h2 id="ag-volume">{t('agent.vol.title')}</h2></div>
-	<div class="set-row one">
-		<span class="set-hint">{t('agent.vol.intro')}</span>
-	</div>
-	{#if error}<div class="set-row one">
-			<p class="notice-error" role="alert">{error}</p>
-		</div>{/if}
+<!-- PLAN 78-1: a plain heading with rows (it was a card); only the
+     settings page of the agent shows it. -->
+<SettingGroup title={t('agent.vol.title')} desc={t('agent.vol.intro')}>
+	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if running && move}
-		<div class="set-row one moving" role="status">
-			<span
-				>{t(`agent.vol.state.${move.state}` as MessageKey, {
-					from: move.from,
-					to: move.to,
-				})}</span
-			>
-			<div
-				class="bar"
-				role="progressbar"
-				aria-valuemin="0"
-				aria-valuemax="100"
-				aria-valuenow={Math.round(percent)}
-				aria-label={t('agent.vol.progress')}
-			>
-				<span style:width="{percent}%"></span>
+		<div class="srow">
+			<div class="srow-block wide moving" role="status">
+				<span
+					>{t(`agent.vol.state.${move.state}` as MessageKey, {
+						from: move.from,
+						to: move.to,
+					})}</span
+				>
+				<div
+					class="bar"
+					role="progressbar"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={Math.round(percent)}
+					aria-label={t('agent.vol.progress')}
+				>
+					<span style:width="{percent}%"></span>
+				</div>
+				<small class="muted"
+					>{t('agent.vol.copied', {
+						files: move.files,
+						bytes: formatBytes(move.bytes),
+						total: formatBytes(move.total),
+					})}</small
+				>
 			</div>
-			<small class="set-hint"
-				>{t('agent.vol.copied', {
-					files: move.files,
-					bytes: formatBytes(move.bytes),
-					total: formatBytes(move.total),
-				})}</small
-			>
 		</div>
 	{:else}
 		{#if move?.state === 'done'}
-			<div class="set-row one">
-				<p class="notice-ok" role="status">
-					{t('agent.vol.done', { to: move.to })}{#if move.skipped}
-						{t('agent.vol.skipped', { n: move.skipped })}{/if}{#if move.cleanup}
-						{t('agent.vol.cleanup', { from: move.from })}{/if}
-				</p>
-			</div>
+			<p class="notice-ok" role="status">
+				{t('agent.vol.done', { to: move.to })}{#if move.skipped}
+					{t('agent.vol.skipped', { n: move.skipped })}{/if}{#if move.cleanup}
+					{t('agent.vol.cleanup', { from: move.from })}{/if}
+			</p>
 		{:else if move?.state === 'failed'}
-			<div class="set-row one">
-				<p class="notice-warn" role="alert">
-					{t('agent.vol.failed', { from: move.from, error: move.error ?? '' })}
-				</p>
-			</div>
+			<p class="notice-warn" role="alert">
+				{t('agent.vol.failed', { from: move.from, error: move.error ?? '' })}
+			</p>
 		{/if}
-		<div class="set-row" class:one={!(current && others.length > 0)}>
-			<span class="set-label">
-				{#if here}
-					<strong>{here.name}</strong>
-					<span class="set-hint"
-						>{t('agent.vol.free', {
-							free: formatBytes(here.freeBytes),
-							size: formatBytes(here.sizeBytes),
-						})}{kindLabel(here) ? ' · ' + kindLabel(here) : ''}</span
-					>
-				{:else if current}
-					<strong>{current}</strong><span class="set-hint">{t('agent.vol.missing')}</span>
-				{:else}
-					<span class="set-hint">{t('agent.vol.none')}</span>
-				{/if}
-			</span>
-			{#if current && others.length > 0}
-				<div class="set-control end">
+		<SettingRow
+			icon="disk"
+			title={here?.name ?? (current || t('agent.vol.title'))}
+			desc={here
+				? t('agent.vol.free', {
+						free: formatBytes(here.freeBytes),
+						size: formatBytes(here.sizeBytes),
+					}) + (kindLabel(here) ? ' · ' + kindLabel(here) : '')
+				: current
+					? t('agent.vol.missing')
+					: t('agent.vol.none')}
+		>
+			{#snippet control()}
+				{#if current && others.length > 0}
 					<button
 						type="button"
 						class="btn"
@@ -223,25 +215,24 @@
 							moving = true;
 						}}>{t('agent.vol.move')}</button
 					>
-				</div>
-			{/if}
-		</div>
+				{/if}
+			{/snippet}
+		</SettingRow>
 		{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
-			<div class="set-row">
-				<span class="set-label"
-					><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><span class="set-hint"
-						>{t('agent.vol.oldText')}</span
-					></span
-				>
-				<div class="set-control end">
+			<SettingRow
+				icon="archive"
+				title={t('agent.vol.oldTitle', { volume: v.name })}
+				desc={t('agent.vol.oldText')}
+			>
+				{#snippet control()}
 					<button type="button" class="btn" onclick={() => (removing = v.name)}
 						>{t('agent.vol.oldRemove')}</button
 					>
-				</div>
-			</div>
+				{/snippet}
+			</SettingRow>
 		{/each}
 	{/if}
-</section>
+</SettingGroup>
 
 {#if choosing}
 	<Dialog title={t('agent.vol.chooseTitle')} onclose={() => ((choosing = false), (pick = ''))}>
@@ -330,19 +321,6 @@
 		font-size: var(--text-xs, 0.75rem);
 		color: var(--accent);
 		border: 1px solid var(--accent);
-	}
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.set-row.one > p {
-		margin: 0;
-	}
-	.set-label strong {
-		font-weight: 600;
-	}
-	/* The hint on the card's surface: a little toward the text for 4.5:1. */
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
 	}
 	.moving {
 		gap: var(--space-1-5);

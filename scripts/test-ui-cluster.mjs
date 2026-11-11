@@ -402,8 +402,12 @@ try {
     await probe.getByRole("button", { name: "Schließen" }).click();
 
     // The way to one node.
-    await list.getByRole("button", { name: "Weitere Aktionen" }).nth(1).click();
-    await page.getByRole("menuitem", { name: /Weg zu diesem Knoten/ }).click();
+    // PLAN 78-1: a node is a row that opens to its details and actions.
+    await list.getByRole("button", { name: "loki: Aufklappen" }).click();
+    await list
+      .getByRole("group", { name: "Aktionen für loki" })
+      .getByRole("button", { name: /Weg zu diesem Knoten/ })
+      .click();
     const route = page.getByRole("dialog", { name: "Weg zu loki" });
     assert.equal(await route.locator("#route-manage").inputValue(), "tunnel");
     await page.screenshot({ path: out + "/3-weg-je-knoten.png" });

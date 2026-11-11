@@ -144,7 +144,10 @@ async function open(width) {
     });
   });
   await made.page.goto(`${base}/settings/homeassistant`);
-  await made.page.locator("#storage").waitFor();
+  // PLAN 78-1: the storage is a row that opens to its entries and actions.
+  await made.page
+    .getByRole("button", { name: "Speicher für Home Assistant: Aufklappen" })
+    .click();
   return { ...made, state };
 }
 const posts = (state) =>

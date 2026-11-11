@@ -4,6 +4,8 @@
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { Settings } from '#lib/agent.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	let { settings = $bindable() }: { settings: Settings } = $props();
 
@@ -71,71 +73,74 @@
 	);
 </script>
 
-<section class="tile ui-card" aria-labelledby="ag-ha-release">
-	<div class="card-head">
-		<h2 id="ag-ha-release">{t('agent.haRelease')}</h2>
-		{#if haConns.length > 1}<div class="card-tools">
-				<label class="conn"
-					><span>{t('notify.haConnection')}</span>
-					<select
-						class="field"
-						value={haConn}
-						onchange={(e) => chooseHA((e.currentTarget as HTMLSelectElement).value)}
-					>
-						{#each haConns as c (c.id)}<option value={c.id}>{c.name || t('ha.conn.first')}</option
-							>{/each}
-					</select></label
+<!-- PLAN 78-1: a plain heading; the domains and the devices are a tool of
+     their own (a grid of switches, a list to search) on a row's surface. -->
+<SettingGroup title={t('agent.haRelease')} desc={t('agent.haReleaseHint')}>
+	{#snippet tools()}
+		{#if haConns.length > 1}
+			<label class="conn"
+				><span>{t('notify.haConnection')}</span>
+				<select
+					class="field"
+					value={haConn}
+					onchange={(e) => chooseHA((e.currentTarget as HTMLSelectElement).value)}
 				>
-			</div>{/if}
-	</div>
-	<div class="set-row one"><span class="set-hint">{t('agent.haReleaseHint')}</span></div>
-	{#if haEntities === null}
-		<div class="set-row">
-			<span class="set-label"
-				>{t('agent.haReleased', {
-					domains: haRelease?.domains?.length ?? 0,
-					entities: haRelease?.entities?.length ?? 0,
-				})}</span
+					{#each haConns as c (c.id)}<option value={c.id}>{c.name || t('ha.conn.first')}</option
+						>{/each}
+				</select></label
 			>
-			<div class="set-control end">
+		{/if}
+	{/snippet}
+	{#if haEntities === null}
+		<SettingRow
+			icon="home"
+			title={t('agent.haReleased', {
+				domains: haRelease?.domains?.length ?? 0,
+				entities: haRelease?.entities?.length ?? 0,
+			})}
+		>
+			{#snippet control()}
 				<button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
+			{/snippet}
+		</SettingRow>
+		{#if haError}<p class="notice-warn">{haError}</p>{/if}
+	{:else}
+		<div class="srow">
+			<div class="srow-block wide">
+				<strong>{t('agent.haDomains')}</strong>
+				<div class="domains">
+					{#each haDomains as d (d)}
+						<label class="pick"
+							><code>{d}</code><input
+								type="checkbox"
+								class="switch"
+								role="switch"
+								checked={haRelease?.domains?.includes(d)}
+								onchange={() => toggleRelease('domains', d)}
+							/></label
+						>
+					{/each}
+				</div>
 			</div>
 		</div>
-		{#if haError}<div class="set-row one"><p class="notice-warn">{haError}</p></div>{/if}
-	{:else}
-		<div class="set-row one sub-head"><strong>{t('agent.haDomains')}</strong></div>
-		<div class="set-grid domains">
-			{#each haDomains as d (d)}
-				<label class="set-row"
-					><span class="set-label"><code>{d}</code></span><span class="set-control end"
-						><input
-							type="checkbox"
-							class="switch"
-							role="switch"
-							checked={haRelease?.domains?.includes(d)}
-							onchange={() => toggleRelease('domains', d)}
-						/></span
-					></label
-				>
-			{/each}
-		</div>
-		<div class="set-row one">
-			<input
-				class="field"
-				type="search"
-				bind:value={haQuery}
-				placeholder={t('agent.haSearch')}
-				aria-label={t('agent.haSearch')}
-			/>
-		</div>
-		<div class="entities">
-			{#each haShown as e (e.id)}
-				{@const viaDomain = haRelease?.domains?.includes(e.domain)}
-				<label class="set-row"
-					><span class="set-label"
-						>{e.name}<span class="set-hint"><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
-						></span
-					><span class="set-control end"
+		<div class="srow">
+			<div class="srow-block wide">
+				<input
+					class="field"
+					type="search"
+					bind:value={haQuery}
+					placeholder={t('agent.haSearch')}
+					aria-label={t('agent.haSearch')}
+				/>
+			</div>
+			<div class="entities">
+				{#each haShown as e (e.id)}
+					{@const viaDomain = haRelease?.domains?.includes(e.domain)}
+					<label class="pick"
+						><span class="pick-text"
+							>{e.name}<span class="muted small"
+								><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
+							></span
 						><input
 							type="checkbox"
 							class="switch"
@@ -143,50 +148,64 @@
 							checked={viaDomain || haRelease?.entities?.includes(e.id)}
 							disabled={viaDomain}
 							onchange={() => toggleRelease('entities', e.id)}
-						/></span
-					></label
-				>
-			{:else}
-				<div class="set-row one"><span class="set-hint">{t('agent.haNoEntities')}</span></div>
-			{/each}
+						/></label
+					>
+				{:else}
+					<p class="muted small none">{t('agent.haNoEntities')}</p>
+				{/each}
+			</div>
 		</div>
 	{/if}
-</section>
+</SettingGroup>
 
 <style>
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
 	/* Home Assistant: domains in two columns, the devices in a scroll box. */
-	.sub-head {
-		padding-top: var(--space-2-5);
-		padding-bottom: var(--space-1);
-		min-height: 0;
-	}
 	.domains {
-		padding-bottom: var(--space-2);
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 32px;
 	}
-	.domains > .set-row {
-		grid-template-columns: minmax(0, 1fr) auto;
+	.pick {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
 		min-height: 40px;
 		padding: var(--space-1-5) 0;
+		min-width: 0;
+		font-size: var(--text-md);
+	}
+	.pick code {
+		overflow-wrap: anywhere;
+	}
+	.pick-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.entities {
 		max-height: 360px;
 		overflow-y: auto;
-		border-top: 1px solid var(--panel-border, var(--border));
+		border-top: 1px solid var(--srow-line);
 	}
-	.entities > .set-row {
-		grid-template-columns: minmax(0, 1fr) auto;
+	.entities > .pick {
+		padding: var(--space-2) var(--space-4);
 	}
-	.entities > .set-row:first-child {
-		border-top: 0;
+	.entities > .pick + .pick {
+		border-top: 1px solid var(--srow-line);
+	}
+	.none {
+		margin: 0;
+		padding: var(--space-3) var(--space-4);
+	}
+	.small {
+		font-size: var(--text-sm);
 	}
 	.conn {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
 		font-size: var(--text-base);
@@ -194,5 +213,10 @@
 	.conn .field {
 		width: auto;
 		min-width: 9rem;
+	}
+	@media (max-width: 760px) {
+		.domains {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 </style>
