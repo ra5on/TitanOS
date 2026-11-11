@@ -38,8 +38,6 @@ type State struct {
 func (m *Manager) Run(ctx context.Context, state func() State) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	sweep := time.NewTicker(time.Hour)
-	defer sweep.Stop()
 	for {
 		m.mu.Lock()
 		loaded := m.loaded
@@ -55,14 +53,14 @@ func (m *Manager) Run(ctx context.Context, state func() State) {
 			}
 			m.ApplyQuotas(current.Quotas, current.Mounted)
 			m.resumePurges(current.Mounted)
+			// Recycle bins, once an hour per volume; sleeping disks wait.
+			m.sweepRecycleDue(current.Mounted, time.Now())
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		case <-m.kick:
-		case <-sweep.C:
-			m.sweepRecycle(state().Mounted, time.Now())
 		}
 	}
 }

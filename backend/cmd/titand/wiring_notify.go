@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
@@ -30,16 +29,16 @@ func (w *titand) wireNotifications() error {
 	// Tells in the web UI, by mail and by push message when a volume or a
 	// disk needs attention.
 	w.notifier = notify.NewManager(w.store)
-	// The journal beyond a restart, on the first volume; an earlier start
-	// that did not end cleanly becomes a notification.
+	// The journal beyond a restart, on the system data volume (one that
+	// never sleeps, else the first one); an earlier start that did not end
+	// cleanly becomes a notification.
 	w.logs = logkeep.New(command.Exec{})
 	w.logs.Target = func() (string, bool) {
-		mounted := w.volumes.Mounted()
-		if len(mounted) == 0 {
+		volume := w.systemData.Volume("logs")
+		if volume == "" {
 			return "", false
 		}
-		slices.Sort(mounted)
-		return w.volumes.MountPoint(mounted[0]), true
+		return w.volumes.MountPoint(volume), true
 	}
 	w.logs.OnUnclean = func(u logkeep.Unclean) {
 		when := u.Started.Local().Format("02.01.2006 15:04")

@@ -129,3 +129,37 @@ func TestCleanCutsLongTextOnRuneBoundary(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+// Without a chosen volume the log goes to the system data volume (PLAN
+// 79-6), not to the first volume by name; a chosen volume stays.
+func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
+	m := testManager(t)
+	os.Mkdir(filepath.Join(m.MountRoot, "Backup"), 0700)
+	m.Mounted = func() []string { return []string{"data", "Backup"} }
+	choice := "data"
+	m.DefaultVolume = func() string { return choice }
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "login", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Volume != "data" || st.Pending != 0 {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(m.MountRoot, "Backup", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("the first volume by name was written to")
+	}
+	// No system data volume yet: entries wait in memory.
+	choice = ""
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "logout", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Volume != "" || st.Pending != 1 {
+		t.Fatalf("%+v", st)
+	}
+	s := Defaults()
+	s.Volume = "Backup"
+	if err := m.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	m.Flush()
+	if st := m.Status(); st.Volume != "Backup" || st.Pending != 0 {
+		t.Fatalf("chosen volume not respected: %+v", st)
+	}
+}

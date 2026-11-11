@@ -63,6 +63,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
@@ -84,6 +85,7 @@ type titand struct {
 	packetFilter *firewall.Manager
 	volumes      *storage.Manager
 	smartHistory *smarthistory.Recorder
+	systemData   *volumedata.Home
 	folders      *shares.Manager
 	routes       *appproxy.Manager
 	appRights    *appaccess.Manager
@@ -202,16 +204,25 @@ func (w *titand) wireBase() error {
 	}
 
 	w.volumes = storage.NewManager(w.store)
+	// Where TitanOS keeps its own data while no volume is chosen for it: a
+	// volume that never sleeps, else the first one (PLAN 79-6).
+	w.systemData = &volumedata.Home{MountRoot: "/mnt", Mounted: w.volumes.Mounted, Choose: func() string {
+		// Also for the last lines of the journal while titand stops.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(w.ctx), 10*time.Second)
+		defer cancel()
+		return w.volumes.SystemDataVolume(ctx)
+	}}
 	w.volumes.ReadOnly = w.opts.dev
 	if err := w.volumes.Load(); err != nil {
 		slog.Warn("volumes not readable from /config", "err", err)
 	}
 	// Mounts the volumes as their arrays come up and reads the disks' health.
 	w.background(func() { w.volumes.Run(ctx) })
-	// Once a day the SMART values of each disk, on the first volume.
+	// Once a day the SMART values of each disk, on the system data volume.
 	w.smartHistory = smarthistory.New("/mnt")
 	w.smartHistory.Disabled = w.opts.dev
 	w.smartHistory.Mounted = w.volumes.Mounted
+	w.smartHistory.DefaultVolume = func() string { return w.systemData.Volume(smarthistory.Feature) }
 	w.smartHistory.Reports = func(ctx context.Context) ([]storage.SmartReport, error) {
 		return w.volumes.SmartReports(ctx, false)
 	}

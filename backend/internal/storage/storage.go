@@ -241,7 +241,12 @@ type Manager struct {
 	loaded       bool
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
-	settled    bool
+	settled bool
+	// shadowIdle are the Btrfs volumes without previous versions and
+	// without mirrors: SyncShadowCopies leaves them alone (RAM only).
+	shadowIdle map[string]bool
+	// systemData is the last choice of SystemDataVolume.
+	systemData systemDataChoice
 	smart      map[string]*Smart // by disk path
 	smartDisks map[string]*smartEntry
 	smartTime  time.Time
@@ -253,6 +258,8 @@ type Manager struct {
 	// diskSleepAsleep are the disks sent to standby without activity
 	// since, by device name (RAM only).
 	diskSleepAsleep map[string]bool
+	// diskSleepVolumes are the volumes with such a disk (VolumeAsleep).
+	diskSleepVolumes map[string]bool
 	// diskSleepTimes are when each disk went to standby and when activity
 	// was last seen after one, by device name (RAM only, protected by mu).
 	diskSleepTimes map[string]sleepTimes

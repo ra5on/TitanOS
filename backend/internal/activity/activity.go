@@ -34,7 +34,7 @@ const (
 )
 
 // Settings choose whether and where the log is kept. An empty Volume means
-// the first mounted volume.
+// the system data volume (Manager.DefaultVolume).
 type Settings struct {
 	Enabled bool   `json:"enabled"`
 	Volume  string `json:"volume"`
@@ -98,15 +98,19 @@ type Manager struct {
 	store     *config.Store
 	MountRoot string
 	Mounted   func() []string
-	mu        sync.Mutex
-	ioMu      sync.Mutex
-	settings  Settings
-	recent    []Entry
-	pending   []Entry
-	dropped   int
-	problem   string
-	wake      chan struct{}
-	now       func() time.Time
+	// DefaultVolume is the volume for the log while none is chosen: the
+	// system data volume (one that never sleeps, else the first one), ""
+	// while there is none. Nil takes the first mounted volume by name.
+	DefaultVolume func() string
+	mu            sync.Mutex
+	ioMu          sync.Mutex
+	settings      Settings
+	recent        []Entry
+	pending       []Entry
+	dropped       int
+	problem       string
+	wake          chan struct{}
+	now           func() time.Time
 }
 
 func New(store *config.Store) *Manager {
@@ -178,6 +182,12 @@ func (m *Manager) volume(s Settings) string {
 	if s.Volume != "" {
 		if slices.Contains(mounted, s.Volume) {
 			return s.Volume
+		}
+		return ""
+	}
+	if m.DefaultVolume != nil {
+		if v := m.DefaultVolume(); naming.ValidVolume(v) && slices.Contains(mounted, v) {
+			return v
 		}
 		return ""
 	}

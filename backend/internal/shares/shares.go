@@ -167,6 +167,14 @@ type Manager struct {
 	// Disabled leaves the system alone: no accounts, no config files, no
 	// services. Set in development mode.
 	Disabled bool
+	// Asleep tells whether the disks of a volume sleep (from RAM, without
+	// touching them). The hourly emptying of recycle bins waits for such a
+	// volume until it is awake again instead of waking it. Nil: never.
+	Asleep func(volume string) bool
+	// recycleSwept is when the recycle bins of a volume were last looked
+	// through, recycleLooked when Run last asked (only Run uses both).
+	recycleSwept  map[string]time.Time
+	recycleLooked time.Time
 
 	mountRoot string
 	mounts    func() map[string]bool
@@ -589,11 +597,47 @@ func (m *Manager) unbindShares(ctx context.Context, shares []Share) {
 // sweepRecycle deletes files that have been in a share's recycle bin for
 // longer than its retention time. It only ever looks inside ".recycle".
 func (m *Manager) sweepRecycle(mounted []string, now time.Time) {
+	m.sweepRecycleOn(mounted, nil, now)
+}
+
+// sweepRecycleDue looks through the recycle bins of every mounted volume
+// once an hour, the first time an hour after the volume was first seen.
+// A volume whose disks sleep is left alone until they are awake again; it
+// is then looked through at once, so a bin on a volume that is awake only
+// now and then still gets emptied. Asked at most once a minute.
+func (m *Manager) sweepRecycleDue(mounted []string, now time.Time) {
+	if m.Disabled || now.Sub(m.recycleLooked) < time.Minute && !now.Before(m.recycleLooked) {
+		return
+	}
+	m.recycleLooked = now
+	if m.recycleSwept == nil {
+		m.recycleSwept = map[string]time.Time{}
+	}
+	due := map[string]bool{}
+	for _, volume := range mounted {
+		last, seen := m.recycleSwept[volume]
+		switch {
+		case !seen:
+			m.recycleSwept[volume] = now
+		case now.Sub(last) < time.Hour:
+		case m.Asleep != nil && m.Asleep(volume):
+		default:
+			due[volume] = true
+			m.recycleSwept[volume] = now
+		}
+	}
+	if len(due) > 0 {
+		m.sweepRecycleOn(mounted, due, now)
+	}
+}
+
+// sweepRecycleOn is sweepRecycle for the volumes in only (nil: all).
+func (m *Manager) sweepRecycleOn(mounted []string, only map[string]bool, now time.Time) {
 	if m.Disabled {
 		return
 	}
 	for _, share := range m.List() {
-		if !share.Recycle.Enabled || !slices.Contains(mounted, share.Volume) {
+		if !share.Recycle.Enabled || !slices.Contains(mounted, share.Volume) || only != nil && !only[share.Volume] {
 			continue
 		}
 		bin := filepath.Join(m.Path(share), recycleDir)

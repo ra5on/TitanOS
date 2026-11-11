@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -114,5 +115,52 @@ func TestLockedSnapshotsStay(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(filepath.Join(point, ".titanos", "snapshots")); len(entries) != 1 {
 		t.Fatalf("retention after the lock: %d left (%v)", len(entries), runner.commands)
+	}
+}
+
+// The sync every ten minutes must not write to a volume where nothing
+// changed: sleeping disks would wake (PLAN 79-6).
+func TestShadowSyncLeavesAnUnchangedVolumeAlone(t *testing.T) {
+	m, runner, point := shadowManager(t)
+	ctx := context.Background()
+	os.Mkdir(filepath.Join(point, ".titanos", "snapshots", "daily"), 0o700)
+	runner.created["daily"] = "2026-10-27 13:00:00 +0100"
+	m.SyncShadowCopies(ctx, []string{"pool"})
+	dir := filepath.Join(point, ".snapshots")
+	changed := func(path string) syscall.Timespec {
+		t.Helper()
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Sys().(*syscall.Stat_t).Ctim
+	}
+	before, index := changed(dir), changed(filepath.Join(point, ".titanos", "shadowcopies", "index.json"))
+	time.Sleep(20 * time.Millisecond)
+	m.SyncShadowCopies(ctx, []string{"pool"})
+	if changed(dir) != before {
+		t.Fatal("the shadow folder was written to again (chmod) although its mode was right")
+	}
+	if changed(filepath.Join(point, ".titanos", "shadowcopies", "index.json")) != index {
+		t.Fatal("the index was written again although nothing changed")
+	}
+	// A wrong mode is still put right.
+	os.Chmod(dir, 0o700)
+	m.SyncShadowCopies(ctx, []string{"pool"})
+	if info, _ := os.Stat(dir); info.Mode().Perm() != 0o755 {
+		t.Fatalf("mode %v not put right", info.Mode().Perm())
+	}
+	// Nothing wants previous versions: the mirrors go, then the volume is
+	// not touched any more until a share wants them again.
+	m.SyncShadowCopies(ctx, nil)
+	m.SyncShadowCopies(ctx, nil)
+	os.RemoveAll(filepath.Join(point, ".titanos", "shadowcopies"))
+	m.SyncShadowCopies(ctx, nil)
+	if _, err := os.Stat(filepath.Join(point, ".titanos", "shadowcopies")); !os.IsNotExist(err) {
+		t.Fatal("a volume without previous versions was touched again")
+	}
+	m.SyncShadowCopies(ctx, []string{"pool"})
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Fatalf("previous versions not back after they were wanted again: %v", entries)
 	}
 }

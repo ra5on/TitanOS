@@ -12,10 +12,18 @@ import (
 type inProcessIdentity struct{}
 
 // notifyDir is where personal notifications held back for quiet hours are
-// kept: on the first mounted volume, never on the stick.
+// kept, and the messages of the bell: on the system data volume (one that
+// never sleeps, else the first one), never on the stick.
 func (s *Server) notifyDir() (string, bool) {
 	if s.core().storage == nil {
 		return "", false
+	}
+	if home := s.opts.SystemData; home != nil {
+		volume := home.Volume("notify")
+		if volume == "" {
+			return "", false
+		}
+		return filepath.Join(s.core().storage.MountPoint(volume), ".titanos", "notify"), true
 	}
 	mounted := s.core().storage.Mounted()
 	if len(mounted) == 0 {

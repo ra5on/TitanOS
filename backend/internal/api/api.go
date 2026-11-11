@@ -72,6 +72,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
@@ -97,6 +98,9 @@ type Options struct {
 	Startup *startup.Manager
 	Files   *files.Manager
 	Docker  *docker.Manager
+	// SystemData says where TitanOS keeps its own data while no volume is
+	// chosen; nil takes the first mounted volume by name.
+	SystemData *volumedata.Home
 	// SmartHistory keeps the daily SMART values per disk; nil keeps none.
 	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.

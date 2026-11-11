@@ -551,3 +551,42 @@ func TestRetentionLeavesBackupsOfAnotherSetupAlone(t *testing.T) {
 		t.Errorf("own backups kept wrongly: %v", have)
 	}
 }
+
+// Without a chosen volume the copies go to the system data volume (PLAN
+// 79-6); a chosen volume stays, and copies on other volumes stay listed.
+func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
+	e := newEnv(t)
+	mounted := []string{"tank", "fast"}
+	old := e.create(t) // "fast", the first by name, as before
+	if state := e.m.State(mounted); state.Target != "fast" {
+		t.Fatalf("target %q, want fast", state.Target)
+	}
+	choice := "tank"
+	e.m.DefaultVolume = func() string { return choice }
+	e.write(t, "users/alex/account.json", `{"name":"alex","role":"owner"}`)
+	e.clock = e.clock.Add(time.Hour)
+	name := e.create(t)
+	state := e.m.State(mounted)
+	if state.Target != "tank" {
+		t.Fatalf("target %q, want tank", state.Target)
+	}
+	found := map[string]string{}
+	for _, backup := range state.Backups {
+		found[backup.Name] = backup.Volume
+	}
+	if found[name] != "tank" || found[old] != "fast" {
+		t.Fatalf("backups %v: new one on tank and old one on fast expected", found)
+	}
+	choice = ""
+	if got := e.m.State(mounted).Target; got != "" {
+		t.Fatalf("target %q without a system data volume", got)
+	}
+	settings := e.m.current()
+	settings.Volume = "fast"
+	if err := e.m.SetSettings(settings, mounted); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.m.State(mounted).Target; got != "fast" {
+		t.Fatalf("chosen volume not respected: %q", got)
+	}
+}

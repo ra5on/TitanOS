@@ -57,7 +57,20 @@ func (m *Manager) SyncShadowCopies(ctx context.Context, wanted []string) {
 		if volume.Filesystem != "btrfs" || !slices.Contains(mounted, volume.Name) {
 			continue
 		}
-		if err := m.syncShadow(ctx, volume.Name, slices.Contains(wanted, volume.Name), mounted); err != nil {
+		// A volume that offers no previous versions and has no mirrors left
+		// is looked at once per start, not every ten minutes: its disks
+		// may sleep.
+		want := slices.Contains(wanted, volume.Name)
+		m.mu.Lock()
+		if want {
+			delete(m.shadowIdle, volume.Name)
+		}
+		idle := m.shadowIdle[volume.Name]
+		m.mu.Unlock()
+		if idle {
+			continue
+		}
+		if err := m.syncShadow(ctx, volume.Name, want, mounted); err != nil {
 			slog.Warn("previous versions not brought up to date", "volume", volume.Name, "err", err)
 		}
 	}
@@ -74,6 +87,12 @@ func (m *Manager) syncShadow(ctx context.Context, volume string, wanted bool, mo
 		return err
 	}
 	if !wanted && len(index) == 0 {
+		m.mu.Lock()
+		if m.shadowIdle == nil {
+			m.shadowIdle = map[string]bool{}
+		}
+		m.shadowIdle[volume] = true
+		m.mu.Unlock()
 		return nil
 	}
 	dir := filepath.Join(m.mountRoot, volume, shadowFolder)
@@ -106,7 +125,11 @@ func (m *Manager) syncShadow(ctx context.Context, volume string, wanted bool, mo
 		if info, err := os.Lstat(dir); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%s is not a folder", dir)
 		}
-		_ = os.Chmod(dir, 0o755) // permissions and times are a convenience; the data are there either way
+		// Only when it differs: chmod writes the inode even with the same
+		// mode, which would wake sleeping disks every ten minutes.
+		if info, err := os.Lstat(dir); err == nil && info.Mode().Perm() != 0o755 {
+			_ = os.Chmod(dir, 0o755) // permissions and times are a convenience; the data are there either way
+		}
 		entries, _ := os.ReadDir(snapshots)
 		mirrored := map[string]bool{}
 		for _, original := range index {

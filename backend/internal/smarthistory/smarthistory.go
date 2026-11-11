@@ -72,8 +72,12 @@ type Recorder struct {
 	// Reports returns the SMART state of every disk from the RAM cache.
 	Reports func(ctx context.Context) ([]storage.SmartReport, error)
 	// Mounted returns the names of the mounted volumes.
-	Mounted   func() []string
-	MountRoot string
+	Mounted func() []string
+	// DefaultVolume is the system data volume (one that never sleeps, else
+	// the first one), "" while there is none. Nil takes the first mounted
+	// volume by name.
+	DefaultVolume func() string
+	MountRoot     string
 	// Disabled keeps disks untouched (development mode).
 	Disabled bool
 	now      func() time.Time
@@ -120,13 +124,25 @@ func Key(model, serial string) string {
 	return key
 }
 
-// volume is where the history lies: the first mounted volume by name, the
-// same rule as for the kept journal.
+// Volume is where the history lies, "" without a volume.
+func (r *Recorder) Volume() string {
+	volume, _ := r.volume()
+	return volume
+}
+
+// volume is where the history lies: the system data volume, the same rule
+// as for the kept journal.
 func (r *Recorder) volume() (string, []string) {
 	if r.Mounted == nil {
 		return "", nil
 	}
 	mounted := r.Mounted()
+	if r.DefaultVolume != nil {
+		if v := r.DefaultVolume(); naming.ValidVolume(v) && slices.Contains(mounted, v) {
+			return v, mounted
+		}
+		return "", mounted
+	}
 	for _, v := range slices.Sorted(slices.Values(mounted)) {
 		if naming.ValidVolume(v) {
 			return v, mounted

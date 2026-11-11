@@ -176,6 +176,12 @@ type Manager struct {
 	// Disabled refuses to write backups and to restore: in development
 	// mode titand runs on the developer's own machine.
 	Disabled bool
+	// DefaultVolume is the volume to save to while none is chosen: the
+	// system data volume (one that never sleeps, else the first one), ""
+	// while there is none. Nil takes the first mounted volume by name.
+	// Backups on other volumes stay listed and restorable (List reads
+	// every mounted volume), so nothing is moved.
+	DefaultVolume func() string
 	// OnResult is told how each attempt to save went (nil for success).
 	OnResult func(volume string, err error)
 	// OnNoVolume is told once when nothing could be saved for noVolumeAfter
@@ -261,6 +267,18 @@ func (m *Manager) current() Settings {
 }
 
 // target picks the volume to save to among the mounted ones.
+func (m *Manager) target(settings Settings, mounted []string) string {
+	if settings.Volume == "" && m.DefaultVolume != nil && len(mounted) > 0 {
+		if volume := m.DefaultVolume(); slices.Contains(mounted, volume) {
+			return volume
+		}
+		return ""
+	}
+	return target(settings, mounted)
+}
+
+// target without a default of its own: the chosen volume, else the first
+// mounted one by name.
 func target(settings Settings, mounted []string) string {
 	if settings.Volume != "" {
 		if slices.Contains(mounted, settings.Volume) {
@@ -286,7 +304,7 @@ func (m *Manager) State(mounted []string) State {
 	}
 	m.mu.Unlock()
 	state.Next = nextScheduled(state.Settings, m.now())
-	state.Target = target(state.Settings, mounted)
+	state.Target = m.target(state.Settings, mounted)
 	state.Backups = m.List(mounted)
 	return state
 }
@@ -420,7 +438,7 @@ func (m *Manager) Create(mounted []string) (string, error) {
 	}
 	m.work.Lock()
 	defer m.work.Unlock()
-	volume := target(m.current(), mounted)
+	volume := m.target(m.current(), mounted)
 	name, err := m.create(volume)
 	m.mu.Lock()
 	m.lastCheck, m.lastError = m.now(), ""
