@@ -19,7 +19,6 @@
 	import LiveBackground from '../live/LiveBackground.svelte';
 	import { takeEnter } from '../login/enter.ts';
 	import { isLivePicture } from '../live/shaders.ts';
-	import AgentBubble from './AgentBubble.svelte';
 	import AppSwitcher from './AppSwitcher.svelte';
 	import DesktopDialogs from './DesktopDialogs.svelte';
 	import DesktopIcons from './DesktopIcons.svelte';
@@ -107,7 +106,6 @@
 			all.map((p) => ({ key: p.key, label: p.label, kind: p.kind })),
 		),
 	);
-	const agentAllowed = $derived(all.some((p) => p.key === 'app:agent'));
 	const sizes = { s: 48, m: 60, l: 72 } as const;
 	const iconPx = $derived(sizes[desktop.prefs.iconSize]);
 	const known = $derived(new Set(all.map((p) => p.key)));
@@ -637,8 +635,6 @@
 			/>{/if}
 
 		<AppSwitcher {programOf} />
-
-		{#if agentAllowed}<AgentBubble {open} />{/if}
 	</div>
 </div>
 
