@@ -14,7 +14,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { page } from '$app/state';
-	import { appForPath } from '#lib/desktop/apps.ts';
+	import { appForPath, SYSTEM_APPS } from '#lib/desktop/apps.ts';
 	import Dropdown from './Dropdown.svelte';
 	import { settingsCrumbs } from '#lib/settings-search.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -55,16 +55,27 @@
 	// `path` gives any page this head (PLAN 78-5: every program's pages get the
 	// same structure); pages of the control panel get theirs from their address.
 	const pathHead = $derived(settingsPage || !!path);
-	const shownCrumbs = $derived(
-		(
+	// PLAN 78-5: a page of the control panel shown in the window of another
+	// program (Energie in Aufgabenplaner) is a page of that program there: its
+	// path starts with the program instead of the control panel's area.
+	const hostProgram = $derived.by(() => {
+		const key = windowApp();
+		if (!settingsPage || !key || key === 'app:settings') return undefined;
+		return SYSTEM_APPS.find((app) => `app:${app.id}` === key);
+	});
+	const shownCrumbs = $derived.by(() => {
+		let crumbs =
 			path ??
 			(settingsPage
 				? settingsCrumbs(page.url.pathname, admin).map((c) => ({ label: t(c.label), href: c.href }))
-				: [])
-		)
-			// An area named like its page ("Netzwerk › Netzwerk") says it once.
-			.filter((crumb) => crumb.label !== title),
-	);
+				: []);
+		if (hostProgram && !path)
+			crumbs = [{ label: t(hostProgram.label) }, ...crumbs.slice(1)].filter(
+				(crumb, i, all) => all.findIndex((c) => c.label === crumb.label) === i,
+			);
+		// An area named like its page ("Netzwerk › Netzwerk") says it once.
+		return crumbs.filter((crumb) => crumb.label !== title);
+	});
 	const crumbLinks = $derived(!inWindow || windowApp() === 'app:settings' || !settingsPage);
 	const hasBar = $derived(!!actions || (phone && ownName && !pathHead));
 

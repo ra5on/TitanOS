@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The wizard after the first start: name of the NAS and time zone,
 	// a look at the network, and what to do next. Every step can be skipped.
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
@@ -215,11 +216,13 @@
 				<h2>{t('welcome.network')}</h2>
 				<p>{t('welcome.networkNow', { address })}</p>
 				<p class="muted">{t('welcome.networkHint')}</p>
-				<div class="panel">
-					<p class="caption">{t('welcome.bridgeTitle')}</p>
-					<p class="muted">{t('welcome.bridgeText')}</p>
-					<NetworkBridgeSetup auto />
-				</div>
+				<!-- PLAN 78-5: the bridge is one flat row, no outlined box with a caption. -->
+				<SettingRow icon="globe" title={t('welcome.bridgeTitle')}>
+					{#snippet description()}
+						{t('welcome.bridgeText')}
+						<div class="bridge"><NetworkBridgeSetup auto /></div>
+					{/snippet}
+				</SettingRow>
 				<a href="/settings/network">{t('welcome.networkSettings')}</a>
 				<div class="actions">
 					<button type="button" class="btn" onclick={() => (step = 1)}>{t('welcome.back')}</button>
@@ -424,13 +427,9 @@
 	.pre {
 		white-space: pre-line;
 	}
-	.panel {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: 14px var(--space-4);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
+	.bridge {
+		margin-top: var(--space-2);
+		color: var(--text);
 	}
 	.actions {
 		display: flex;

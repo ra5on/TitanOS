@@ -1,10 +1,12 @@
 <script lang="ts">
 	// PLAN 74: My account › picture – what the login page shows in the circle
 	// of this account: a photo of its own or one of the built-in pictures.
-	// Without a choice the page shows a part of a built-in picture.
+	// Without a choice the page shows a part of a built-in picture. A row of
+	// "Mein Konto" (PLAN 78-5): the picture at the right, the choice inside.
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { pictureStyle, rememberPicture, type AccountPicture } from '#lib/login/accounts.ts';
 
 	let { name }: { name: string } = $props();
@@ -46,18 +48,33 @@
 		if (file) void save(file);
 	}
 	const shown = $derived(pictureStyle(name, picture, true));
+	// What the closed row says: the chosen built-in picture, an own photo or none.
+	const summary = $derived(
+		picture.photo
+			? t('account.picture.own')
+			: picture.builtin && (BUILTIN as readonly string[]).includes(picture.builtin)
+				? t(`desktop.wallpaper.${picture.builtin as (typeof BUILTIN)[number]}`)
+				: t('account.picture.none'),
+	);
 </script>
 
-<div class="picture">
-	<span
-		class="avatar"
-		aria-hidden="true"
-		style:background-image={`url("${shown.url}")`}
-		style:background-position={shown.position}
-		><span class="letter">{[...name][0]?.toUpperCase()}</span></span
-	>
-	<div class="choose">
-		<p class="muted">{t('account.picture.hint')}</p>
+<SettingRow
+	id="acc-picture"
+	icon="image"
+	title={t('account.picture.title')}
+	desc={t('account.picture.hint')}
+	{summary}
+>
+	{#snippet control()}
+		<span
+			class="avatar"
+			aria-hidden="true"
+			style:background-image={`url("${shown.url}")`}
+			style:background-position={shown.position}
+			><span class="letter">{[...name][0]?.toUpperCase()}</span></span
+		>
+	{/snippet}
+	<div class="srow-block">
 		<div class="builtin" role="radiogroup" aria-label={t('account.picture.builtin')}>
 			{#each BUILTIN as id (id)}
 				<button
@@ -72,42 +89,35 @@
 				></button>
 			{/each}
 		</div>
-		<div class="actions">
-			<label class="btn" class:disabled={busy}
-				>{t('account.picture.upload')}<input
-					type="file"
-					accept="image/jpeg,image/png,image/webp"
-					hidden
-					disabled={busy}
-					onchange={upload}
-				/></label
-			>
-			{#if picture.builtin || picture.photo}<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => save(null)}>{t('account.picture.reset')}</button
-				>{/if}
-		</div>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	</div>
-</div>
+	<div class="srow-block actions">
+		<label class="btn" class:disabled={busy}
+			>{t('account.picture.upload')}<input
+				type="file"
+				accept="image/jpeg,image/png,image/webp"
+				hidden
+				disabled={busy}
+				onchange={upload}
+			/></label
+		>
+		{#if picture.builtin || picture.photo}<button
+				type="button"
+				class="btn"
+				disabled={busy}
+				onclick={() => save(null)}>{t('account.picture.reset')}</button
+			>{/if}
+	</div>
+	{#if error}<div class="srow-block"><p class="notice-error" role="alert">{error}</p></div>{/if}
+</SettingRow>
 
 <style>
-	.picture {
-		display: flex;
-		gap: 20px;
-		align-items: flex-start;
-		flex-wrap: wrap;
-	}
 	.avatar {
 		position: relative;
 		flex: none;
-		width: 88px;
-		height: 88px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
 		background: center / cover no-repeat;
-		box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.6);
 	}
 	.letter {
 		position: absolute;
@@ -116,18 +126,8 @@
 		place-items: center;
 		color: #fff;
 		font-weight: 700;
-		font-size: 34px;
+		font-size: var(--text-lg);
 		text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
-	}
-	.choose {
-		flex: 1;
-		min-width: 220px;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-	}
-	.choose p {
-		margin: 0;
 	}
 	.builtin {
 		display: flex;
@@ -150,11 +150,6 @@
 	.builtin button:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
-	}
-	.actions {
-		display: flex;
-		gap: var(--space-2);
-		flex-wrap: wrap;
 	}
 	.disabled {
 		opacity: 0.6;

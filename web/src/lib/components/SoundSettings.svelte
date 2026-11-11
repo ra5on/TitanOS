@@ -1,4 +1,8 @@
 <script lang="ts">
+	// The sound of a new message, for this account. One row of "Mein Konto"
+	// (PLAN 78-5): tone, volume and occasion are its parts.
+	import SettingRow from './settings/SettingRow.svelte';
+	import SettingSub from './settings/SettingSub.svelte';
 	import { api } from '#lib/api.ts';
 	import { sound, armSound, playSound } from '#lib/sound.svelte.ts';
 	import { tones, sanitizeSound } from '#lib/sounds.ts';
@@ -7,6 +11,10 @@
 	let error = $state('');
 	let saved = $state(false);
 	let busy = $state(false);
+	// What the row says closed: the stored tone.
+	const summary = $derived(
+		t(sound.settings.tone === 'none' ? 'sound.none' : `sound.${sound.settings.tone}`),
+	);
 	async function save() {
 		busy = true;
 		error = '';
@@ -32,42 +40,43 @@
 	}
 </script>
 
-<section class="tile sounds">
-	<h2>{t('sound.title')}</h2>
-	<p class="muted">{t('sound.hint')}</p>
-	<div class="row">
-		<label
-			><span>{t('sound.tone')}</span><select
-				class="field"
-				bind:value={draft.tone}
-				onchange={() => (saved = false)}
+<SettingRow id="sounds" icon="volume" title={t('sound.title')} desc={t('sound.hint')} {summary}>
+	<SettingSub title={t('sound.tone')} for="sound-tone">
+		{#snippet control()}
+			<select id="sound-tone" class="field" bind:value={draft.tone} onchange={() => (saved = false)}
 				><option value="none">{t('sound.none')}</option>{#each tones as tone}<option value={tone}
 						>{t(`sound.${tone}`)}</option
 					>{/each}</select
-			></label
-		>
-		<label
-			><span>{t('sound.volume')} · {draft.volume}%</span><input
+			>
+		{/snippet}
+	</SettingSub>
+	<SettingSub title="{t('sound.volume')} · {draft.volume}%" for="sound-volume">
+		{#snippet control()}
+			<input
+				id="sound-volume"
 				type="range"
 				min="0"
 				max="100"
 				step="5"
 				bind:value={draft.volume}
 				oninput={() => (saved = false)}
-			/></label
-		>
-		<label
-			><span>{t('sound.when')}</span><select
+			/>
+		{/snippet}
+	</SettingSub>
+	<SettingSub title={t('sound.when')} for="sound-when">
+		{#snippet control()}
+			<select
+				id="sound-when"
 				class="field"
 				bind:value={draft.severity}
 				onchange={() => (saved = false)}
 				><option value="important">{t('sound.important')}</option><option value="all"
 					>{t('sound.all')}</option
 				></select
-			></label
-		>
-	</div>
-	<div class="row">
+			>
+		{/snippet}
+	</SettingSub>
+	<div class="srow-block actions">
 		<button
 			class="btn"
 			type="button"
@@ -77,29 +86,14 @@
 			>{t('common.save')}</button
 		>{#if saved}<span role="status">{t('sound.saved')}</span>{/if}
 	</div>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-</section>
+	{#if error}<div class="srow-block">
+			<p class="notice-error" role="alert">{error}</p>
+		</div>{/if}
+</SettingRow>
 
 <style>
-	.sounds {
-		padding: var(--tile-pad);
-		margin-block: var(--gap);
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--gap);
-		margin-block: var(--gap);
-		align-items: center;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		min-width: 0;
-		flex: 1 1 12rem;
-	}
-	h2 {
-		font-size: var(--text-lg);
+	input[type='range'] {
+		width: 12rem;
+		max-width: 100%;
 	}
 </style>

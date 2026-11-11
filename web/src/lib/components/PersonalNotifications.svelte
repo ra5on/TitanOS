@@ -1,7 +1,11 @@
 <script lang="ts">
 	// Where the NAS reaches this account (owners and administrators): its
 	// own channels for the kinds of messages it chooses, with quiet hours.
+	import { tick } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
+	import SettingGroup from './settings/SettingGroup.svelte';
+	import SettingRow from './settings/SettingRow.svelte';
+	import SettingSub from './settings/SettingSub.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
@@ -114,8 +118,30 @@
 		}
 	}
 
+	// PLAN 78-5: the fields of a way are the parts of its row, and a closed
+	// row has no fields the browser could check. Before saving, the rows of
+	// the ways that are switched on open, so that a required field that is
+	// still empty is named as before. (A test stores without that check, as
+	// before.)
+	let form = $state<HTMLFormElement>();
+	let open = $state<Record<Channel | 'quiet', boolean>>({
+		email: false,
+		ntfy: false,
+		telegram: false,
+		discord: false,
+		homeAssistant: false,
+		quiet: false,
+	});
+	async function complete(): Promise<boolean> {
+		if (!draft) return false;
+		for (const channel of channels) if (draft[channel].enabled) open[channel] = true;
+		await tick();
+		return form?.reportValidity() ?? true;
+	}
+
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
+		if (!(await complete())) return;
 		busy = 'save';
 		tested = null;
 		saved = await store();
@@ -143,12 +169,13 @@
 			? clear.filter((name) => name !== channel)
 			: [...clear, channel];
 	}
-	const secretHolder = (channel: Channel) =>
-		secretSet[channel] && !clear.includes(channel) ? t('notify.secretStored') : '';
 </script>
 
+<!-- A stored secret never comes back: that one is stored stands below the
+     field's name (not as a placeholder, which a narrow field would clip). -->
 {#snippet secretNote(channel: Channel)}
 	{#if secretSet[channel]}
+		{#if !clear.includes(channel)}{t('notify.secretStored')}{/if}
 		<button type="button" class="link" onclick={() => toggleClear(channel)}
 			>{clear.includes(channel) ? t('notify.secretRemoved') : t('notify.secretRemove')}</button
 		>
@@ -156,7 +183,7 @@
 {/snippet}
 
 {#snippet testRow(channel: Channel)}
-	<div class="test">
+	<div class="srow-block test">
 		<button type="button" class="btn" disabled={busy !== null} onclick={() => test(channel)}
 			>{t(busy === channel ? 'notify.testing' : 'notify.test')}</button
 		>
@@ -173,334 +200,362 @@
 	</div>
 {/snippet}
 
-<section class="tile personal" id="personal-notifications" aria-labelledby="personal-title">
-	<h2 class="tile-title" id="personal-title">{t('personalNotify.title')}</h2>
-	<p class="muted">{t('personalNotify.intro')}</p>
-	{#if error}<div class="notice-error" role="alert">
-			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-		</div>{/if}
-	{#if draft}
-		<form onsubmit={save}>
-			<fieldset>
-				<legend>{t('personalNotify.events')}</legend>
+{#snippet onOff(channel: Channel, d: Personal, disabled = false)}
+	<input
+		id="pn-{channel}-on"
+		class="switch"
+		type="checkbox"
+		role="switch"
+		checked={d[channel].enabled}
+		{disabled}
+		onchange={(e) => {
+			d[channel].enabled = e.currentTarget.checked;
+			if (e.currentTarget.checked) open[channel] = true;
+		}}
+	/>
+{/snippet}
+
+<!-- PLAN 78-5: what reaches the account, its ways and the delivery are groups
+     of rows; a way's fields open inside its row. One form with one Save, as
+     before. -->
+<form id="personal-notifications" onsubmit={save} bind:this={form}>
+	<SettingGroup title={t('personalNotify.title')} id="personal" desc={t('personalNotify.intro')}>
+		{#if error}<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>{/if}
+		{#if draft}
+			{@const d = draft}
+			<SettingRow
+				id="pn-events"
+				icon="bell"
+				title={t('personalNotify.events')}
+				summary={t('personalNotify.eventsSummary', {
+					count: events.filter((event) => d.events[event]).length,
+					total: events.length,
+				})}
+			>
 				{#each events as event}
-					<label class="check"
-						><input type="checkbox" bind:checked={draft.events[event]} /><span
-							>{t(`personalNotify.event.${event}`)}</span
-						></label
-					>
+					<SettingSub title={t(`personalNotify.event.${event}`)} for="pn-event-{event}">
+						{#snippet control()}
+							<input
+								id="pn-event-{event}"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={d.events[event]}
+							/>
+						{/snippet}
+					</SettingSub>
 				{/each}
-			</fieldset>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('personalNotify.content')}</span>
-					<select class="field" bind:value={draft.content}>
+			</SettingRow>
+			<SettingRow icon="fileText" title={t('personalNotify.content')} for="pn-content">
+				{#snippet control()}
+					<select id="pn-content" class="field" bind:value={d.content}>
 						<option value="summary">{t('personalNotify.content.summary')}</option>
 						<option value="none">{t('personalNotify.content.none')}</option>
 					</select>
-				</label>
-				<label class="narrow"
-					><span>{t('notify.language')}</span>
-					<select class="field" bind:value={draft.language}>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="globe" title={t('notify.language')} for="pn-language">
+				{#snippet control()}
+					<select id="pn-language" class="field" bind:value={d.language}>
 						<option value="de">Deutsch</option>
 						<option value="en">English</option>
 					</select>
-				</label>
-			</div>
-			<div class="row quiet">
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.quiet.enabled} /><span
-						>{t('personalNotify.quiet')}</span
-					></label
-				>
-				<label class="tiny"
-					><span>{t('personalNotify.quietFrom')}</span><input
-						class="field mono"
-						type="time"
-						bind:value={draft.quiet.from}
-						disabled={!draft.quiet.enabled}
-					/></label
-				>
-				<label class="tiny"
-					><span>{t('personalNotify.quietTo')}</span><input
-						class="field mono"
-						type="time"
-						bind:value={draft.quiet.to}
-						disabled={!draft.quiet.enabled}
-					/></label
-				>
-			</div>
-			<p class="muted small">{t('personalNotify.quietHint')}</p>
+				{/snippet}
+			</SettingRow>
+			{#snippet quietParts()}
+				<SettingSub title={t('personalNotify.quietFrom')} for="pn-quiet-from">
+					{#snippet control()}
+						<input id="pn-quiet-from" class="field mono" type="time" bind:value={d.quiet.from} />
+					{/snippet}
+				</SettingSub>
+				<SettingSub title={t('personalNotify.quietTo')} for="pn-quiet-to">
+					{#snippet control()}
+						<input id="pn-quiet-to" class="field mono" type="time" bind:value={d.quiet.to} />
+					{/snippet}
+				</SettingSub>
+			{/snippet}
+			<SettingRow
+				icon="clock"
+				title={t('personalNotify.quiet')}
+				desc={t('personalNotify.quietHint')}
+				for="pn-quiet"
+				bind:open={open.quiet}
+				children={d.quiet.enabled ? quietParts : undefined}
+			>
+				{#snippet control()}
+					<input
+						id="pn-quiet"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={d.quiet.enabled}
+						onchange={(e) => {
+							d.quiet.enabled = e.currentTarget.checked;
+							if (d.quiet.enabled) open.quiet = true;
+						}}
+					/>
+				{/snippet}
+			</SettingRow>
+		{/if}
+	</SettingGroup>
 
-			{#each channels as channel}
-				<div class="channel">
-					<label class="check"
-						><input
-							type="checkbox"
-							bind:checked={draft[channel].enabled}
-							disabled={(channel === 'email' && !mailServer) ||
-								(channel === 'homeAssistant' && !haServices.length && !draft.homeAssistant.enabled)}
-						/><span class="name"
-							>{t(channel === 'homeAssistant' ? 'notify.homeassistant' : `notify.${channel}`)}</span
-						></label
+	{#if draft}
+		{@const d = draft}
+		<SettingGroup title={t('personalNotify.channels')} id="personal-channels">
+			<SettingRow
+				id="pn-email"
+				icon="send"
+				title={t('notify.email')}
+				for="pn-email-on"
+				bind:open={open.email}
+			>
+				{#snippet control()}{@render onOff('email', d, !mailServer)}{/snippet}
+				{#if !mailServer}<div class="srow-block">
+						<p class="muted">{t('personalNotify.noMailServer')}</p>
+					</div>{/if}
+				<SettingSub title={t('notify.to')} for="pn-email-to">
+					{#snippet control()}
+						<input
+							id="pn-email-to"
+							class="field mono"
+							type="email"
+							bind:value={d.email.to}
+							placeholder="me@example.org"
+							spellcheck="false"
+							required={d.email.enabled}
+						/>
+					{/snippet}
+				</SettingSub>
+				{#if d.email.enabled}{@render testRow('email')}{/if}
+			</SettingRow>
+
+			<SettingRow
+				id="pn-ntfy"
+				icon="bell"
+				title={t('notify.ntfy')}
+				for="pn-ntfy-on"
+				bind:open={open.ntfy}
+			>
+				{#snippet control()}{@render onOff('ntfy', d)}{/snippet}
+				<SettingSub title={t('notify.ntfyUrl')} for="pn-ntfy-url">
+					{#snippet control()}
+						<input
+							id="pn-ntfy-url"
+							class="field mono"
+							type="url"
+							bind:value={d.ntfy.url}
+							placeholder="https://ntfy.sh/…"
+							spellcheck="false"
+							required={d.ntfy.enabled}
+						/>
+					{/snippet}
+				</SettingSub>
+				<SettingSub title={t('notify.token')} for="pn-ntfy-token">
+					{#snippet description()}{@render secretNote('ntfy')}{/snippet}
+					{#snippet control()}
+						<input
+							id="pn-ntfy-token"
+							class="field mono"
+							type="password"
+							bind:value={d.ntfy.token}
+							autocomplete="new-password"
+						/>
+					{/snippet}
+				</SettingSub>
+				{#if d.ntfy.enabled}{@render testRow('ntfy')}{/if}
+			</SettingRow>
+
+			<SettingRow
+				id="pn-telegram"
+				icon="send"
+				title={t('notify.telegram')}
+				for="pn-telegram-on"
+				bind:open={open.telegram}
+			>
+				{#snippet control()}{@render onOff('telegram', d)}{/snippet}
+				<SettingSub title={t('notify.botToken')} for="pn-telegram-token">
+					{#snippet description()}{@render secretNote('telegram')}{/snippet}
+					{#snippet control()}
+						<input
+							id="pn-telegram-token"
+							class="field mono"
+							type="password"
+							bind:value={d.telegram.token}
+							autocomplete="new-password"
+							required={d.telegram.enabled && !secretSet.telegram}
+						/>
+					{/snippet}
+				</SettingSub>
+				<SettingSub title={t('notify.chatId')} for="pn-telegram-chat">
+					{#snippet control()}
+						<input
+							id="pn-telegram-chat"
+							class="field mono"
+							type="text"
+							bind:value={d.telegram.chatID}
+							spellcheck="false"
+							required={d.telegram.enabled}
+						/>
+					{/snippet}
+				</SettingSub>
+				{#if d.telegram.enabled}{@render testRow('telegram')}{/if}
+			</SettingRow>
+
+			<SettingRow
+				id="pn-discord"
+				icon="chat"
+				title={t('notify.discord')}
+				for="pn-discord-on"
+				bind:open={open.discord}
+			>
+				{#snippet control()}{@render onOff('discord', d)}{/snippet}
+				<SettingSub title={t('notify.webhook')} for="pn-discord-webhook">
+					{#snippet description()}{@render secretNote('discord')}{/snippet}
+					{#snippet control()}
+						<input
+							id="pn-discord-webhook"
+							class="field mono"
+							type="password"
+							bind:value={d.discord.webhook}
+							autocomplete="new-password"
+							required={d.discord.enabled && !secretSet.discord}
+						/>
+					{/snippet}
+				</SettingSub>
+				{#if d.discord.enabled}{@render testRow('discord')}{/if}
+			</SettingRow>
+
+			<SettingRow
+				id="pn-homeassistant"
+				icon="home"
+				title={t('notify.homeassistant')}
+				for="pn-homeAssistant-on"
+				bind:open={open.homeAssistant}
+			>
+				{#snippet control()}{@render onOff(
+						'homeAssistant',
+						d,
+						!haServices.length && !d.homeAssistant.enabled,
+					)}{/snippet}
+				{#if !haServices.length}<div class="srow-block">
+						<p class="muted">{t('notify.haNotSetUp')}</p>
+					</div>{/if}
+				{#if haConns.length > 1}
+					<SettingSub title={t('notify.haConnection')} for="pn-ha-connection">
+						{#snippet control()}
+							<select
+								id="pn-ha-connection"
+								class="field"
+								bind:value={d.homeAssistant.connection}
+								onchange={() => loadHAServices(draft?.homeAssistant.connection ?? '')}
+							>
+								{#each haConns as c (c.id)}<option value={c.id === 'main' ? '' : c.id}
+										>{c.name || t('ha.conn.first')}</option
+									>{/each}
+							</select>
+						{/snippet}
+					</SettingSub>
+				{/if}
+				<SettingSub title={t('notify.haService')} for="pn-ha-service">
+					{#snippet control()}
+						<select
+							id="pn-ha-service"
+							class="field mono"
+							bind:value={d.homeAssistant.service}
+							required={d.homeAssistant.enabled}
+						>
+							<option value=""></option>
+							{#each new Set([...haServices, d.homeAssistant.service].filter(Boolean)) as service}<option
+									value={service}>{service}</option
+								>{/each}
+						</select>
+					{/snippet}
+				</SettingSub>
+				{#if d.homeAssistant.enabled}{@render testRow('homeAssistant')}{/if}
+			</SettingRow>
+		</SettingGroup>
+
+		<SettingGroup title={t('personalNotify.delivery')} id="personal-delivery">
+			<SettingRow
+				icon="archive"
+				title={t('personal.persistQuiet')}
+				desc={t('personal.persistHint')}
+				for="pn-persist"
+			>
+				{#snippet control()}
+					<input
+						id="pn-persist"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.persistQuiet}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="refresh" title={t('personal.fallback')} for="pn-fallback">
+				{#snippet control()}
+					<select id="pn-fallback" class="field" bind:value={d.fallback}
+						><option value="">{t('personal.noFallback')}</option
+						>{#each channels.filter((c) => d[c].enabled) as channel}<option
+								value={channel === 'homeAssistant' ? 'homeassistant' : channel}>{channel}</option
+							>{/each}</select
 					>
-					{#if channel === 'email'}
-						{#if !mailServer}<p class="muted small">{t('personalNotify.noMailServer')}</p>{/if}
-						<div class="row">
-							<label class="narrow"
-								><span>{t('notify.to')}</span><input
-									class="field mono"
-									type="email"
-									bind:value={draft.email.to}
-									placeholder="me@example.org"
-									spellcheck="false"
-									required={draft.email.enabled}
-								/></label
-							>
-						</div>
-					{:else if channel === 'ntfy'}
-						<div class="row">
-							<label class="wide"
-								><span>{t('notify.ntfyUrl')}</span><input
-									class="field mono"
-									type="url"
-									bind:value={draft.ntfy.url}
-									placeholder="https://ntfy.sh/…"
-									spellcheck="false"
-									required={draft.ntfy.enabled}
-								/></label
-							>
-							<label class="narrow"
-								><span>{t('notify.token')}</span>
-								<input
-									class="field mono"
-									type="password"
-									bind:value={draft.ntfy.token}
-									autocomplete="new-password"
-									placeholder={secretHolder('ntfy')}
-								/>
-								{@render secretNote('ntfy')}
-							</label>
-						</div>
-					{:else if channel === 'telegram'}
-						<div class="row">
-							<label class="wide"
-								><span>{t('notify.botToken')}</span>
-								<input
-									class="field mono"
-									type="password"
-									bind:value={draft.telegram.token}
-									autocomplete="new-password"
-									placeholder={secretHolder('telegram')}
-									required={draft.telegram.enabled && !secretSet.telegram}
-								/>
-								{@render secretNote('telegram')}
-							</label>
-							<label class="narrow"
-								><span>{t('notify.chatId')}</span><input
-									class="field mono"
-									type="text"
-									bind:value={draft.telegram.chatID}
-									spellcheck="false"
-									required={draft.telegram.enabled}
-								/></label
-							>
-						</div>
-					{:else if channel === 'homeAssistant'}
-						{#if !haServices.length}<p class="muted small">{t('notify.haNotSetUp')}</p>{/if}
-						<div class="row">
-							{#if haConns.length > 1}<label class="narrow"
-									><span>{t('notify.haConnection')}</span>
-									<select
-										class="field"
-										bind:value={draft.homeAssistant.connection}
-										onchange={() => loadHAServices(draft?.homeAssistant.connection ?? '')}
-									>
-										{#each haConns as c (c.id)}<option value={c.id === 'main' ? '' : c.id}
-												>{c.name || t('ha.conn.first')}</option
-											>{/each}
-									</select>
-								</label>{/if}
-							<label class="narrow"
-								><span>{t('notify.haService')}</span>
-								<select
-									class="field mono"
-									bind:value={draft.homeAssistant.service}
-									required={draft.homeAssistant.enabled}
-								>
-									<option value=""></option>
-									{#each new Set([...haServices, draft.homeAssistant.service].filter(Boolean)) as service}<option
-											value={service}>{service}</option
-										>{/each}
-								</select>
-							</label>
-						</div>
-					{:else}
-						<div class="row">
-							<label class="wide"
-								><span>{t('notify.webhook')}</span>
-								<input
-									class="field mono"
-									type="password"
-									bind:value={draft.discord.webhook}
-									autocomplete="new-password"
-									placeholder={secretHolder('discord')}
-									required={draft.discord.enabled && !secretSet.discord}
-								/>
-								{@render secretNote('discord')}
-							</label>
-						</div>
-					{/if}
-					{#if draft[channel].enabled}{@render testRow(channel)}{/if}
+				{/snippet}
+			</SettingRow>
+			<SettingRow id="pn-delivery" icon="activity" title={t('personal.delivery')}>
+				{#each Object.entries(delivery ?? {}) as [channel, status]}
+					<div class="srow-block">
+						<p class={status.ok ? 'notice-ok' : 'notice-error'}>
+							{channel}: {t(status.ok ? 'personal.delivered' : 'personal.failed')} · {formatDateTime(
+								new Date(status.time),
+							)} ({status.attempts})
+						</p>
+					</div>
+				{/each}
+				<div class="srow-block actions">
+					<button
+						type="button"
+						class="btn"
+						onclick={async () => {
+							try {
+								const response = await api.get<Answer>('/account/notifications');
+								delivery = response.delivery ?? {};
+							} catch (e) {
+								problem(e);
+							}
+						}}>{t('personal.refreshDelivery')}</button
+					>
 				</div>
-			{/each}
-
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.persistQuiet} />{t(
-					'personal.persistQuiet',
-				)}</label
-			>
-			<p class="muted small">{t('personal.persistHint')}</p>
-			<label
-				>{t('personal.fallback')}<select class="field" bind:value={draft.fallback}
-					><option value="">{t('personal.noFallback')}</option
-					>{#each channels.filter((c) => draft?.[c].enabled) as channel}<option
-							value={channel === 'homeAssistant' ? 'homeassistant' : channel}>{channel}</option
-						>{/each}</select
-				></label
-			>
-			<details>
-				<summary>{t('personal.delivery')}</summary
-				>{#each Object.entries(delivery ?? {}) as [channel, status]}<p
-						class={status.ok ? 'notice-ok' : 'notice-error'}
-					>
-						{channel}: {t(status.ok ? 'personal.delivered' : 'personal.failed')} · {formatDateTime(
-							new Date(status.time),
-						)} ({status.attempts})
-					</p>{/each}<button
-					type="button"
-					class="btn"
-					onclick={async () => {
-						try {
-							const response = await api.get<Answer>('/account/notifications');
-							delivery = response.delivery ?? {};
-						} catch (e) {
-							problem(e);
-						}
-					}}>{t('personal.refreshDelivery')}</button
-				>
-			</details>
-			<div class="actions">
-				{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
+			</SettingRow>
+			<div class="row-actions">
 				<button type="submit" class="btn btn-primary" disabled={busy !== null}
 					>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button
 				>
+				{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
 			</div>
-		</form>
+		</SettingGroup>
 	{/if}
-</section>
+</form>
 
 <style>
-	.personal {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: var(--tile-pad);
-		margin-block: var(--gap);
-		font-size: var(--text-md);
-	}
-	.personal > p {
-		margin: 0;
-	}
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
-	}
-	fieldset {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2-5) var(--space-5);
-		margin: 0;
-		padding: 0;
-		border: 0;
-	}
-	legend {
-		margin-bottom: var(--space-2);
-		color: var(--muted);
-		font-size: var(--text-base);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check > span {
-		color: var(--text);
-	}
-	.name {
-		font-weight: 600;
-	}
-	input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-4) var(--space-5);
-	}
-	.quiet {
-		align-items: flex-end;
-	}
-	.narrow {
-		flex: 0 1 320px;
-		max-width: 320px;
-	}
-	.tiny {
-		flex: 0 1 120px;
-		max-width: 120px;
-	}
-	.wide {
-		flex: 1 1 360px;
-		max-width: 664px;
-	}
-	.small {
-		margin: 0;
-		font-size: var(--text-base);
-	}
-	.channel {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-		padding-top: 14px;
-		border-top: 1px solid var(--border);
+		gap: var(--gap);
 	}
 	.link {
-		align-self: flex-start;
 		padding: 0;
 		background: none;
 		border: 0;
 		color: var(--muted);
 		font: inherit;
-		font-size: var(--text-sm);
 		text-decoration: underline;
 		cursor: pointer;
 	}
 	.test {
-		display: flex;
+		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2-5) var(--space-4);
@@ -510,13 +565,10 @@
 		margin: 0;
 		flex: 1 1 280px;
 	}
-	.actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: var(--space-4);
+	.row-actions {
+		margin-top: var(--space-2);
 	}
-	.actions p {
+	.row-actions p {
 		margin: 0;
 	}
 	pre {

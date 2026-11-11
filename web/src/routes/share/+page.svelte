@@ -7,7 +7,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type FileRoot } from '#lib/api.ts';
-	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -116,78 +117,66 @@
 	{#if shared === null}
 		<p class="muted" role="status">{t('common.loading')}</p>
 	{:else if nothing}
-		<section class="tile ui-card">
-			<div class="card-head"><h2>{t('share.nothing')}</h2></div>
-			<p class="pad muted">
-				{page.url.searchParams.has('missing') ? t('share.missing') : t('share.noneHint')}
-			</p>
-			<div class="card-foot"><a class="btn" href="/">{t('share.home')}</a></div>
-		</section>
+		<!-- PLAN 78-5: plain headings and rows instead of cards with a head. -->
+		<SettingGroup title={t('share.nothing')}>
+			<SettingRow
+				icon="info"
+				title={page.url.searchParams.has('missing') ? t('share.missing') : t('share.noneHint')}
+			>
+				{#snippet control()}<a class="btn" href="/">{t('share.home')}</a>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 	{:else}
-		<section class="tile ui-card" aria-labelledby="share-files">
-			<div class="card-head">
-				<h2 id="share-files">{t('share.files')}</h2>
-				<span class="muted small">{formatBytes(total)}</span>
-			</div>
-			<ul class="list">
-				{#each shared as f, i (f.key)}
-					{@const u = mine.find((x) => x.file === sent[i])}
-					<li class="set-row">
-						<span class="set-label"
-							><span class="name"><Icon name="file" size={16} />{f.name}</span><span
-								class="set-hint">{formatBytes(f.size)}</span
-							></span
-						>
-						<span class="set-control end"
-							>{#if u}{u.state === 'done'
-									? t('share.done')
-									: u.state === 'failed'
-										? u.error || t('share.failed')
-										: percent(u) + ' %'}{/if}</span
-						>
-					</li>
-				{/each}
-				{#if text}
-					<li class="set-row">
-						<span class="set-label">{t('share.text')}<span class="set-hint text">{text}</span></span
-						>
-						<span class="set-control end"
-							><input
-								type="checkbox"
-								role="switch"
-								class="switch"
-								aria-label={t('share.saveText')}
-								bind:checked={saveText}
-								disabled={sent.length > 0}
-							/></span
-						>
-					</li>
-				{/if}
-			</ul>
-		</section>
+		<SettingGroup title={t('share.files')} id="share-files">
+			{#snippet tools()}<span class="muted small">{formatBytes(total)}</span>{/snippet}
+			{#each shared as f, i (f.key)}
+				{@const u = mine.find((x) => x.file === sent[i])}
+				<SettingRow icon="file" title={f.name} desc={formatBytes(f.size)}>
+					{#snippet control()}{#if u}{u.state === 'done'
+								? t('share.done')
+								: u.state === 'failed'
+									? u.error || t('share.failed')
+									: percent(u) + ' %'}{/if}{/snippet}
+				</SettingRow>
+			{/each}
+			{#if text}
+				<SettingRow icon="fileText" title={t('share.text')}>
+					{#snippet description()}<span class="text">{text}</span>{/snippet}
+					{#snippet control()}
+						<input
+							type="checkbox"
+							role="switch"
+							class="switch"
+							aria-label={t('share.saveText')}
+							bind:checked={saveText}
+							disabled={sent.length > 0}
+						/>
+					{/snippet}
+				</SettingRow>
+			{/if}
+		</SettingGroup>
 
-		<section class="tile ui-card" aria-labelledby="share-where">
-			<div class="card-head"><h2 id="share-where">{t('share.where')}</h2></div>
-			<div class="set-row">
-				<span class="set-label"
-					>{target
-						? target.rootName + (target.dir ? ' / ' + target.dir : '')
-						: t('share.noFolder')}</span
-				>
-				<span class="set-control end"
-					><button
+		<SettingGroup title={t('share.where')} id="share-where">
+			<SettingRow
+				icon="folder"
+				title={target
+					? target.rootName + (target.dir ? ' / ' + target.dir : '')
+					: t('share.noFolder')}
+			>
+				{#snippet control()}
+					<button
 						type="button"
 						class="btn"
 						disabled={sent.length > 0}
 						onclick={() => (choosing = true)}>{t('share.choose')}</button
-					></span
-				>
-			</div>
-			{#if error}<p class="notice-error pad" role="alert">{error}</p>{/if}
-			{#if failed.length}<p class="notice-error pad" role="alert">
+					>
+				{/snippet}
+			</SettingRow>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#if failed.length}<p class="notice-error" role="alert">
 					{t('share.someFailed', { count: failed.length })}
 				</p>{/if}
-			<div class="card-foot">
+			<div class="row-actions foot">
 				{#if finished}
 					<a class="btn btn-primary" href={filesLink}>{t('share.show')}</a>
 					<a class="btn" href="/">{t('share.home')}</a>
@@ -203,7 +192,7 @@
 					>
 				{/if}
 			</div>
-		</section>
+		</SettingGroup>
 	{/if}
 </div>
 {#if shared?.length}<StatusBar label={t('share.statusBar')}>
@@ -231,32 +220,12 @@
 		margin: 0 auto;
 		padding: var(--space-3, var(--space-3));
 	}
-	.list {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.list .set-row + .set-row {
-		border-top: 1px solid var(--panel-border, var(--border));
-	}
-	.name {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		overflow-wrap: anywhere;
-	}
 	.text {
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
-	.pad {
-		margin: 0;
-		padding: var(--space-3) var(--space-4);
-	}
-	.card-foot {
-		display: flex;
-		flex-wrap: wrap;
+	.foot {
 		justify-content: flex-end;
-		gap: var(--space-2);
+		margin-top: var(--space-2);
 	}
 </style>
