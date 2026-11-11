@@ -37,7 +37,7 @@ Beide Repositories bleiben eigenständig. Die Apps-Tests erwarten standardmäßi
 ### Toolchains im Benutzerkonto
 
 Der geprüfte Stand ist in [dev-toolchains.lock.json](../scripts/dev-toolchains.lock.json)
-festgehalten: Go **1.27.3**, Node **24.22.1**, npm **11.19.1** aus diesem
+festgehalten: Go **1.27.4**, Node **24.22.1**, npm **11.19.1** aus diesem
 Node-Archiv und mkosi **25.3** vom dort genannten Git-Commit. Das Fedora-Go-Paket
 war beim Test noch 1.26 und reicht für `backend/go.mod` nicht aus.
 
