@@ -5,7 +5,7 @@
 	import { api, type Share } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import FormRow from '#lib/components/appform/FormRow.svelte';
-	import FormSection from '#lib/components/appform/FormSection.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import Toggle from '#lib/components/appform/Toggle.svelte';
 	import {
 		appOpens,
@@ -120,105 +120,112 @@
 	}
 </script>
 
-<FormSection title={t('appopens.title')} />
-{#if !loaded}
-	<FormRow label={t('appopens.title')}><p class="muted">{t('common.loading')}</p></FormRow>
-{:else if !editing}
-	<FormRow label={t('appopens.title')} hint={t('appopens.noneHint')}>
-		<button type="button" class="btn" disabled={locked} onclick={() => (editing = true)}
-			>{t('appopens.setUp')}</button
-		>
-	</FormRow>
-{:else}
-	{#if opens?.error}
-		<FormRow label={t('appopens.title')} hint={opens.error} tone="error"><span></span></FormRow>
-	{/if}
-	<FormRow label={t('appopens.shown')} hint={t('appopens.shownHint')}>
-		<Toggle bind:checked={shown} label={t('appopens.shown')} disabled={locked || busy} />
-	</FormRow>
-	<FormRow label={t('appopens.types')} id="opens-type">
-		<div class="chips">
-			{#each types as type (type)}
-				<span class="chip"
-					>.{type}<button
-						type="button"
-						class="x"
-						aria-label={t('appopens.removeType', { type })}
-						disabled={locked || busy}
-						onclick={() => (types = types.filter((x) => x !== type))}>×</button
-					></span
-				>
-			{/each}
-			<input
-				id="opens-type"
-				class="field type"
-				placeholder={t('appopens.addType')}
-				maxlength="11"
-				bind:value={typeInput}
-				disabled={locked || busy}
-				onkeydown={(e) => {
-					if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
-						e.preventDefault();
-						addType();
-					}
-				}}
-				onblur={addType}
-			/>
-		</div>
-	</FormRow>
-	<FormRow
-		label={t('appopens.command')}
-		id="opens-command"
-		hint={(started && problem) || t('appopens.commandHint')}
-		tone={started && problem ? 'warn' : ''}
-	>
-		<input
-			id="opens-command"
-			class="field mono"
-			spellcheck="false"
-			bind:value={command}
-			placeholder="bambu-studio {'{file}'}"
-			disabled={locked || busy}
-		/>
-	</FormRow>
-	<FormRow label={t('appopens.user')} id="opens-user" hint={t('appopens.userHint')}>
-		<input
-			id="opens-user"
-			class="field mono"
-			spellcheck="false"
-			bind:value={user}
-			disabled={locked || busy}
-		/>
-	</FormRow>
-	{#if services.length > 1}
-		<FormRow label={t('appopens.service')} id="opens-service">
-			<select id="opens-service" class="field" bind:value={service} disabled={locked || busy}>
-				{#each services as s (s)}<option value={s}>{s}</option>{/each}
-			</select>
-		</FormRow>
-	{/if}
-	<div class="actions">
-		<div class="line">
-			<button
-				type="button"
-				class="btn btn-primary"
-				disabled={locked || busy || !!problem}
-				onclick={save}>{t('appopens.save')}</button
+<SettingGroup title={t('appopens.title')} id="app-opens">
+	{#if !loaded}
+		<FormRow label={t('appopens.title')}><p class="muted text">{t('common.loading')}</p></FormRow>
+	{:else if !editing}
+		<FormRow label={t('appopens.title')} hint={t('appopens.noneHint')}>
+			<button type="button" class="btn" disabled={locked} onclick={() => (editing = true)}
+				>{t('appopens.setUp')}</button
 			>
-			{#if !opens}<button
+		</FormRow>
+	{:else}
+		{#if opens?.error}
+			<FormRow label={t('appopens.title')} hint={opens.error} tone="error" />
+		{/if}
+		<FormRow label={t('appopens.shown')} hint={t('appopens.shownHint')}>
+			<Toggle bind:checked={shown} label={t('appopens.shown')} disabled={locked || busy} />
+		</FormRow>
+		<FormRow label={t('appopens.types')} id="opens-type">
+			<div class="chips">
+				{#each types as type (type)}
+					<span class="chip"
+						>.{type}<button
+							type="button"
+							class="x"
+							aria-label={t('appopens.removeType', { type })}
+							disabled={locked || busy}
+							onclick={() => (types = types.filter((x) => x !== type))}>×</button
+						></span
+					>
+				{/each}
+				<input
+					id="opens-type"
+					class="field type"
+					placeholder={t('appopens.addType')}
+					maxlength="11"
+					bind:value={typeInput}
+					disabled={locked || busy}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+							e.preventDefault();
+							addType();
+						}
+					}}
+					onblur={addType}
+				/>
+			</div>
+		</FormRow>
+		<FormRow
+			label={t('appopens.command')}
+			id="opens-command"
+			hint={(started && problem) || t('appopens.commandHint')}
+			tone={started && problem ? 'warn' : ''}
+		>
+			<div class="line">
+				<input
+					id="opens-command"
+					class="field mono"
+					spellcheck="false"
+					bind:value={command}
+					placeholder="bambu-studio {'{file}'}"
+					disabled={locked || busy}
+				/>
+			</div>
+		</FormRow>
+		<FormRow label={t('appopens.user')} id="opens-user" hint={t('appopens.userHint')}>
+			<div class="line">
+				<input
+					id="opens-user"
+					class="field mono"
+					spellcheck="false"
+					bind:value={user}
+					disabled={locked || busy}
+				/>
+			</div>
+		</FormRow>
+		{#if services.length > 1}
+			<FormRow label={t('appopens.service')} id="opens-service">
+				<div class="line">
+					<select id="opens-service" class="field" bind:value={service} disabled={locked || busy}>
+						{#each services as s (s)}<option value={s}>{s}</option>{/each}
+					</select>
+				</div>
+			</FormRow>
+		{/if}
+		<div class="actions">
+			<div class="row-actions">
+				<button
 					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => (editing = false)}>{t('common.cancel')}</button
-				>{/if}
+					class="btn btn-primary"
+					disabled={locked || busy || !!problem}
+					onclick={save}>{t('appopens.save')}</button
+				>
+				{#if !opens}<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => (editing = false)}>{t('common.cancel')}</button
+					>{/if}
+			</div>
+			{#if locked || error}<p class="hint" class:error role={error ? 'alert' : undefined}>
+					{locked ? t('appopens.locked') : error}
+				</p>{/if}
 		</div>
-		{#if locked || error}<p class="hint" class:error role={error ? 'alert' : undefined}>
-				{locked ? t('appopens.locked') : error}
-			</p>{/if}
-	</div>
-
-	{#if opens}
-		<FormSection title={t('appopens.shares')} />
+	{/if}
+</SettingGroup>
+{#if loaded && editing && opens}
+	<SettingGroup title={t('appopens.shares')} id="app-opens-shares">
 		{#each mounted as m (m.share)}
 			<FormRow
 				label={m.share}
@@ -234,7 +241,7 @@
 				</div>
 			</FormRow>
 		{:else}
-			<FormRow label={t('appopens.shares')} hint={t('appopens.sharesNone')}><span></span></FormRow>
+			<FormRow label={t('appopens.shares')} hint={t('appopens.sharesNone')} />
 		{/each}
 		{#if free.length}
 			<FormRow label={t('appopens.mount')} id="opens-share" hint={t('appopens.mountHint')}>
@@ -261,7 +268,7 @@
 				</div>
 			</FormRow>
 		{/if}
-	{/if}
+	</SettingGroup>
 {/if}
 
 {#if removing}
@@ -291,9 +298,9 @@
 {/if}
 
 <style>
-	.chips,
-	.line {
+	.chips {
 		display: flex;
+		justify-content: flex-end;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-1-5);
@@ -320,22 +327,7 @@
 		width: 9rem;
 	}
 	.actions {
-		display: grid;
-		grid-template-columns: minmax(10rem, 17rem) minmax(0, 1fr);
-		gap: 0 var(--space-4);
-		padding: 7px var(--space-4);
-	}
-	.actions > * {
-		grid-column: 2;
-	}
-	@media (max-width: 760px) {
-		.actions {
-			grid-template-columns: minmax(0, 1fr);
-			padding: var(--space-1-5) var(--space-3);
-		}
-		.actions > * {
-			grid-column: 1;
-		}
+		margin-top: var(--space-2);
 	}
 	.actions .hint {
 		margin: var(--space-1-5) 0 0;

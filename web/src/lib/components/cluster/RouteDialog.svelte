@@ -54,6 +54,7 @@
 <Dialog title={t('cluster.routeTitle', { name: node.name })} {onclose} locked={busy}>
 	<div class="rows">
 		<FormRow
+			dialog
 			label={t('cluster.routeManage')}
 			id="route-manage"
 			hint={t('cluster.routeManageHint', { way: wayLabel(ways.manage) })}
@@ -65,7 +66,7 @@
 				</select>
 			</div>
 		</FormRow>
-		<FormRow label={t('cluster.onlyWay')}>
+		<FormRow dialog label={t('cluster.onlyWay')}>
 			<Toggle
 				bind:checked={only}
 				label={t('cluster.onlyWay')}
@@ -73,7 +74,7 @@
 				text={t(only ? 'cluster.onlyOn' : 'cluster.onlyOff')}
 			/>
 		</FormRow>
-		<FormRow label={t('cluster.routeBackup')} id="route-backup">
+		<FormRow dialog label={t('cluster.routeBackup')} id="route-backup">
 			<div class="line">
 				<select id="route-backup" class="field" bind:value={backup}>
 					<option value="">{t('cluster.routeLikeCluster')}</option>

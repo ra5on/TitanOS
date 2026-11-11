@@ -6,8 +6,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	// embedded: a line of the app form, without the tile and its heading.
-	let { app, embedded = false }: { app: string; embedded?: boolean } = $props();
+	let { app }: { app: string } = $props();
 
 	type Published = {
 		domain: string;
@@ -100,14 +99,8 @@
 	}
 </script>
 
-<section
-	class="panel"
-	class:tile={!embedded}
-	class:embedded
-	aria-labelledby={embedded ? undefined : 'app-ipv64'}
-	aria-label={embedded ? t('ipv64x.appTitle') : undefined}
->
-	{#if !embedded}<h2 class="tile-title" id="app-ipv64">{t('ipv64x.appTitle')}</h2>{/if}
+<!-- PLAN 78-5: a row of the app form (its name stands in the row). -->
+<section class="panel" id="app-ipv64" aria-label={t('ipv64x.appTitle')}>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if info}
 		{#if info.published}
@@ -230,12 +223,11 @@
 {/if}
 
 <style>
+	/* The layout of a panel (fields, notes, buttons) without its padding. */
 	section {
-		font-size: var(--text-md);
-	}
-	section.embedded {
 		max-width: 46rem;
-		padding: var(--space-1) 0 0;
+		padding: 0;
+		font-size: var(--text-md);
 	}
 	.fields {
 		display: flex;

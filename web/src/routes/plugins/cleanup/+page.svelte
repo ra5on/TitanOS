@@ -3,6 +3,8 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	type Release = {
@@ -62,36 +64,43 @@
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if loading}<p class="loading" role="status">
 		{t('common.loading')}
-	</p>{:else if !releases.length}<EmptyState title={t('cleanup.empty')} />{:else}<section
-		class="tile content"
-	>
-		<h2 class="tile-title">{t('cleanup.versions')}</h2>
-		{#each releases as release (release.version)}<div class="release">
-				<div>
-					<strong class="mono">{release.version}</strong>
-					<p class="muted">
-						{formatBytes(release.bytes)}{release.protected
-							? ` · ${t('cleanup.protectedHint')}`
-							: ''}
-					</p>
-				</div>
-				{#if release.protected}<span class="chip">{t('cleanup.protected')}</span>{:else}<label
-						class="check"
-						><input type="checkbox" bind:group={selected} value={release.version} /><span
-							>{t('cleanup.select')}</span
-						></label
-					>{/if}
-			</div>{/each}
-	</section>
-	<p class="muted">{t('cleanup.estimate', { count: selected.length, size: formatBytes(total) })}</p>
-	<button
-		class="btn btn-primary"
-		disabled={!selected.length || busy}
-		onclick={() => {
-			checked = false;
-			confirm = true;
-		}}>{t('cleanup.preview')}</button
-	>{/if}
+	</p>{:else if !releases.length}<EmptyState title={t('cleanup.empty')} />{:else}
+	<!-- PLAN 78-5: the stored versions are rows under a plain heading. -->
+	<SettingGroup title={t('cleanup.versions')} id="cleanup-versions">
+		{#each releases as release, index (release.version)}
+			<SettingRow
+				icon="archive"
+				title={release.version}
+				for={release.protected ? undefined : `release-${index}`}
+				desc="{formatBytes(release.bytes)}{release.protected
+					? ` · ${t('cleanup.protectedHint')}`
+					: ''}"
+			>
+				{#snippet control()}{#if release.protected}<span class="chip">{t('cleanup.protected')}</span
+						>{:else}<label class="check"
+							><input
+								id="release-{index}"
+								type="checkbox"
+								bind:group={selected}
+								value={release.version}
+							/><span>{t('cleanup.select')}</span></label
+						>{/if}{/snippet}
+			</SettingRow>
+		{/each}
+		<p class="muted">
+			{t('cleanup.estimate', { count: selected.length, size: formatBytes(total) })}
+		</p>
+		<div class="row-actions">
+			<button
+				class="btn btn-primary"
+				disabled={!selected.length || busy}
+				onclick={() => {
+					checked = false;
+					confirm = true;
+				}}>{t('cleanup.preview')}</button
+			>
+		</div>
+	</SettingGroup>{/if}
 <p class="muted">{t('cleanup.safety')}</p>
 {#if confirm}<Dialog
 		title={t('cleanup.confirmTitle')}
@@ -119,23 +128,12 @@
 	>{/if}
 
 <style>
-	.content {
-		padding: var(--tile-pad);
-	}
-	.release,
 	.dialog-actions {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--gap);
 		padding: var(--row-pad) 0;
-	}
-	.release {
-		border-bottom: 1px solid var(--border);
-		min-height: 70px;
-	}
-	.release:last-child {
-		border: 0;
 	}
 	.check {
 		display: flex;

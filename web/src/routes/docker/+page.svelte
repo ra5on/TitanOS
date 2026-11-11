@@ -13,6 +13,8 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import AppTable from './AppTable.svelte';
 	import DockerDialogs from './DockerDialogs.svelte';
 	import { DockerPage } from './docker-page.svelte.ts';
@@ -142,26 +144,25 @@
 		{t('common.loading')}
 	</p>{/if}
 {#if p.status && !p.status.settings.enabled}
-	<section class="tile setup">
-		<h2>{t('docker.setupTitle')}</h2>
-		<p class="muted">{t('docker.setupText')}</p>
+	<!-- PLAN 78-5: setting Docker up is a plain heading with its one setting
+	     as a row; the button below it switches Docker on. -->
+	<SettingGroup title={t('docker.setupTitle')} id="docker-setup" desc={t('docker.setupText')}>
 		{#if p.volumes.length === 0}
 			<p class="notice-warn">{t('docker.setupNeedVolume')}</p>
 		{:else}
-			<div class="setup-row">
-				<label
-					><span>{t('docker.volume')}</span>
-					<select class="field" bind:value={p.draft.volume}
+			<SettingRow icon="disk" title={t('docker.volume')} for="docker-volume">
+				{#snippet control()}<select id="docker-volume" class="field" bind:value={p.draft.volume}
 						>{#each p.volumes as volume (volume)}<option value={volume}>{volume}</option
 							>{/each}</select
-					>
-				</label>
+					>{/snippet}
+			</SettingRow>
+			<div class="row-actions setup-actions">
 				<button type="button" class="btn btn-primary" onclick={p.enable} disabled={p.globalBusy}
 					>{t('docker.enable')}</button
 				>
 			</div>
 		{/if}
-	</section>
+	</SettingGroup>
 {:else if p.status && !p.status.running}
 	<p class="notice-warn" role="status">
 		{p.volumes.includes(p.status.settings.volume) &&
@@ -285,31 +286,8 @@
 	.job-actions {
 		margin-top: var(--space-2-5);
 	}
-	.setup {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: var(--space-5);
-		font-size: var(--text-md);
-	}
-	.setup h2 {
-		font-size: var(--text-lg);
-		font-weight: 600;
-	}
-	.setup-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-	}
-	.setup-row .field {
-		min-width: 14rem;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-md);
+	.setup-actions {
+		margin-top: var(--space-2-5);
 	}
 	.search-box {
 		position: relative;
@@ -413,7 +391,11 @@
 		flex-direction: column;
 		gap: var(--space-2);
 	}
+	/* In this column the search box keeps its own height: the row layout's
+	   flex-basis (10rem) would otherwise become its height and leave a large
+	   empty gap around the field on the phone. */
 	.phone-tools .search-box {
+		flex: none;
 		width: 100%;
 	}
 	@media (max-width: 639px) {

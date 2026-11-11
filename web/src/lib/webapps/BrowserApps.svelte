@@ -2,6 +2,8 @@
 	// PLAN 66: App-Center › Programme für den Browser – every app of the
 	// catalog with its state; administrators install and remove them.
 	import { api } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
@@ -132,107 +134,121 @@
 </script>
 
 {#if webapps.loaded && !webapps.unavailable && webapps.apps.length}
-	<section class="tile panel browser-apps" aria-labelledby="browser-apps">
-		<h2 class="tile-title" id="browser-apps">{t('webapps.center.title')}</h2>
-		<p class="muted">{t('webapps.center.intro')}</p>
-		{#if !webapps.volume}<p class="notice-warn" role="status">
-				{t('webapps.center.noVolume')}
-			</p>{/if}
-		{#if admin && webapps.volume && webapps.volumes.length > 1 && installedCount > 0}
-			<div class="where">
-				<span class="grow"
-					><span class="muted small">{t('webapps.volume.where')}</span><br /><b>{webapps.volume}</b
-					><span class="muted small">
-						· {t(installedCount === 1 ? 'webapps.volume.count.one' : 'webapps.volume.count.other', {
-							count: installedCount,
-						})}</span
-					></span
+	<!-- PLAN 78-5: no tile around the programs: a plain heading, where they
+	     are stored as a row, the programs themselves stay cards. -->
+	<div class="browser-apps">
+		<SettingGroup
+			title={t('webapps.center.title')}
+			id="browser-apps"
+			desc={t('webapps.center.intro')}
+		>
+			{#if !webapps.volume}<p class="notice-warn" role="status">
+					{t('webapps.center.noVolume')}
+				</p>{/if}
+			{#if admin && webapps.volume && webapps.volumes.length > 1 && installedCount > 0}
+				<SettingRow
+					icon="disk"
+					title={t('webapps.volume.where')}
+					desc="{webapps.volume} · {t(
+						installedCount === 1 ? 'webapps.volume.count.one' : 'webapps.volume.count.other',
+						{ count: installedCount },
+					)}"
 				>
-				<button type="button" class="btn" disabled={!!busy} onclick={() => (volumeDialog = {})}
-					>{t('webapps.volume.move')}</button
-				>
-			</div>
-		{/if}
-		<ul class="list">
-			{#each shown as a (a.id)}
-				<li class="app">
-					<DesktopIcon
-						glyph=""
-						gradient={letterGradient(a.id)}
-						image={a.icon ?? ''}
-						name={a.name}
-						size={40}
-					/>
-					<div class="text">
-						<b
-							>{a.name}{#if a.version}<span class="muted ver">{' '}{a.version}</span>{/if}</b
-						>
-						<span class="muted small types">{a.types.map((x) => '.' + x).join(' ')}</span>
-						<span class="status small" class:err={a.state === 'error'} role="status">
-							<span
-								class="dot"
-								class:on={a.installed && a.state === 'ready'}
-								class:run={a.state === 'downloading'}
-								aria-hidden="true"
-							></span>{stateText(a)}{#if a.size && !a.installed}
-								· {formatBytes(a.size)}{/if}
-						</span>
-						{#if a.state === 'downloading'}<progress max="1" value={a.progress ?? 0}
-							></progress>{/if}
-					</div>
-					{#if admin}
-						<div class="actions">
-							{#if a.installed && successorOf(a)}
-								<button
-									type="button"
-									class="btn btn-primary"
-									disabled={!!busy || !webapps.volume}
-									onclick={() => replaceBy(a)}
-									>{busy === a.id
-										? t('webapps.center.replacing', { app: successorOf(a)?.name ?? '' })
-										: t('webapps.center.replaceBy', { app: successorOf(a)?.name ?? '' })}</button
-								>
-							{/if}
-							{#if a.installed}
-								<button
-									type="button"
-									class="btn"
-									disabled={!!busy || a.state === 'downloading'}
-									onclick={() => (removing = a)}>{t('webapps.center.remove')}</button
-								>
-							{:else if a.state !== 'downloading'}
-								<button
-									type="button"
-									class="btn btn-primary"
-									disabled={!!busy || !webapps.volume}
-									onclick={() => install(a)}
-									>{a.state === 'error' ? t('common.retry') : t('webapps.center.install')}</button
-								>
-							{/if}
+					{#snippet control()}<button
+							type="button"
+							class="btn"
+							disabled={!!busy}
+							onclick={() => (volumeDialog = {})}>{t('webapps.volume.move')}</button
+						>{/snippet}
+				</SettingRow>
+			{/if}
+			<ul class="list">
+				{#each shown as a (a.id)}
+					<li class="app">
+						<DesktopIcon
+							glyph=""
+							gradient={letterGradient(a.id)}
+							image={a.icon ?? ''}
+							name={a.name}
+							size={40}
+						/>
+						<div class="text">
+							<b
+								>{a.name}{#if a.version}<span class="muted ver">{' '}{a.version}</span>{/if}</b
+							>
+							<span class="muted small types">{a.types.map((x) => '.' + x).join(' ')}</span>
+							<span class="status small" class:err={a.state === 'error'} role="status">
+								<span
+									class="dot"
+									class:on={a.installed && a.state === 'ready'}
+									class:run={a.state === 'downloading'}
+									aria-hidden="true"
+								></span>{stateText(a)}{#if a.size && !a.installed}
+									· {formatBytes(a.size)}{/if}
+							</span>
+							{#if a.state === 'downloading'}<progress max="1" value={a.progress ?? 0}
+								></progress>{/if}
 						</div>
-					{/if}
-				</li>
-			{/each}
-			{#each notYet as n (n.id)}
-				<li class="app">
-					<DesktopIcon glyph="" gradient={letterGradient(n.id)} image="" name={n.name} size={40} />
-					<div class="text">
-						<b>{n.name}</b>
-						<span class="muted small">{t(n.why)}</span>
-						<span class="status small" role="status"
-							><span class="dot" aria-hidden="true"></span>{t('webapps.center.notYet')}</span
-						>
-					</div>
-					{#if admin}
-						<div class="actions">
-							<button type="button" class="btn" disabled>{t('webapps.center.install')}</button>
+						{#if admin}
+							<div class="actions">
+								{#if a.installed && successorOf(a)}
+									<button
+										type="button"
+										class="btn btn-primary"
+										disabled={!!busy || !webapps.volume}
+										onclick={() => replaceBy(a)}
+										>{busy === a.id
+											? t('webapps.center.replacing', { app: successorOf(a)?.name ?? '' })
+											: t('webapps.center.replaceBy', { app: successorOf(a)?.name ?? '' })}</button
+									>
+								{/if}
+								{#if a.installed}
+									<button
+										type="button"
+										class="btn"
+										disabled={!!busy || a.state === 'downloading'}
+										onclick={() => (removing = a)}>{t('webapps.center.remove')}</button
+									>
+								{:else if a.state !== 'downloading'}
+									<button
+										type="button"
+										class="btn btn-primary"
+										disabled={!!busy || !webapps.volume}
+										onclick={() => install(a)}
+										>{a.state === 'error' ? t('common.retry') : t('webapps.center.install')}</button
+									>
+								{/if}
+							</div>
+						{/if}
+					</li>
+				{/each}
+				{#each notYet as n (n.id)}
+					<li class="app">
+						<DesktopIcon
+							glyph=""
+							gradient={letterGradient(n.id)}
+							image=""
+							name={n.name}
+							size={40}
+						/>
+						<div class="text">
+							<b>{n.name}</b>
+							<span class="muted small">{t(n.why)}</span>
+							<span class="status small" role="status"
+								><span class="dot" aria-hidden="true"></span>{t('webapps.center.notYet')}</span
+							>
 						</div>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	</section>
+						{#if admin}
+							<div class="actions">
+								<button type="button" class="btn" disabled>{t('webapps.center.install')}</button>
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		</SettingGroup>
+	</div>
 {/if}
 
 {#if volumeDialog}
@@ -355,20 +371,5 @@
 		display: flex;
 		gap: var(--space-2);
 		margin-left: auto;
-	}
-	.where {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-3);
-		margin: var(--space-2) 0;
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-small);
-	}
-	.where .grow {
-		flex: 1 1 14rem;
-		min-width: 0;
-		overflow-wrap: anywhere;
 	}
 </style>

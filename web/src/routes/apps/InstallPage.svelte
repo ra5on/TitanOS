@@ -9,6 +9,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import AddEntryDialog from '#lib/components/appform/AddEntryDialog.svelte';
 	import FormRow from '#lib/components/appform/FormRow.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import ViewSwitch from '#lib/components/appform/ViewSwitch.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { needList } from '#lib/hwcheck.ts';
@@ -41,94 +42,111 @@
 	<InstallProgress {ins} form={ins.form} />
 {:else}
 	{#if !ins.ready && ins.docker}<p class="notice-warn" role="status">{t('apps.dockerOff')}</p>{/if}
-	<section class="tile form">
+	{#snippet headRows()}
+		<!-- A snippet does not inherit the checks of the branch it stands in. -->
+		{@const form = ins.form!}
+		{@const problems = ins.problems!}
+		{@const tpl = ins.tpl!}
 		{#if !ins.own && ins.app}
 			<FormRow
 				label={t('apps.name')}
 				id="app-name"
-				hint={ins.problems.name
-					? t(ins.problems.name === 'exists' ? 'apps.nameExists' : 'apps.nameInvalid')
-					: ins.tpl.appdata
-						? t('apps.nameHint', { path: `${ins.tpl.appdata}/${ins.form.name}` })
+				hint={problems.name
+					? t(problems.name === 'exists' ? 'apps.nameExists' : 'apps.nameInvalid')
+					: tpl.appdata
+						? t('apps.nameHint', { path: `${tpl.appdata}/${form.name}` })
 						: ''}
-				tone={ins.problems.name ? 'error' : ''}
+				tone={problems.name ? 'error' : ''}
 			>
 				<div class="line">
 					<span class="icon"><AppIcon src={ins.app.icon} name={ins.app.name} /></span>
 					<input
 						id="app-name"
 						class="field mono"
-						bind:value={ins.form.name}
+						bind:value={form.name}
 						oninput={ins.renamed}
 						maxlength="32"
 						autocapitalize="none"
 						spellcheck="false"
-						aria-invalid={ins.problems.name !== ''}
+						aria-invalid={problems.name !== ''}
 					/>
 				</div>
 			</FormRow>
-			<FormRow label={t('appform.description')}>
-				<p class="text">
-					{localize(ins.app.description, i18n.locale) || ins.app.image}
-					<span class="muted">· {t('apps.panelSource', { source: ins.sourceName })}</span>
-				</p>
-			</FormRow>
+			<FormRow
+				label={t('appform.description')}
+				hint="{localize(ins.app.description, i18n.locale) || ins.app.image} · {t(
+					'apps.panelSource',
+					{ source: ins.sourceName },
+				)}"
+			/>
 		{:else}
 			<FormRow
 				label={t('apps.name')}
 				id="app-name"
-				hint={ins.problems.name
-					? t(ins.problems.name === 'exists' ? 'apps.nameExists' : 'apps.nameInvalid')
+				hint={problems.name
+					? t(problems.name === 'exists' ? 'apps.nameExists' : 'apps.nameInvalid')
 					: t('appform.ownHint')}
-				tone={ins.problems.name ? 'error' : ''}
+				tone={problems.name ? 'error' : ''}
 			>
 				<div class="line">
 					<input
 						id="app-name"
 						class="field mono"
-						bind:value={ins.form.name}
+						bind:value={form.name}
 						oninput={ins.renamed}
 						maxlength="32"
 						autocapitalize="none"
 						spellcheck="false"
-						aria-invalid={ins.problems.name !== ''}
+						aria-invalid={problems.name !== ''}
 					/>
 				</div>
 			</FormRow>
 		{/if}
-		{#if ins.tpl.cpuMissing?.length || ins.form.risks.length || ins.form.missingDevices.length || localize(ins.form.tips, i18n.locale)}
-			<FormRow label={t('appform.requirements')}>
+		{#if tpl.cpuMissing?.length || form.risks.length || form.missingDevices.length || localize(form.tips, i18n.locale)}
+			<FormRow wide label={t('appform.requirements')}>
 				<div class="notes">
-					{#if ins.tpl.cpuMissing?.length}<p class="notice-warn" role="note">
-							{t('apps.cpuMissing', { list: needList(ins.tpl.cpuMissing) })}
+					{#if tpl.cpuMissing?.length}<p class="notice-warn" role="note">
+							{t('apps.cpuMissing', { list: needList(tpl.cpuMissing) })}
 						</p>{/if}
-					{#if ins.form.risks.length}<div class="notice-warn" role="note">
+					{#if form.risks.length}<div class="notice-warn" role="note">
 							{t('apps.risks')}
 							<ul>
-								{#each ins.form.risks as risk (risk)}<li>{t(`apps.risk.${risk}`)}</li>{/each}
+								{#each form.risks as risk (risk)}<li>{t(`apps.risk.${risk}`)}</li>{/each}
 							</ul>
 						</div>{/if}
-					{#if ins.form.missingDevices.length}<p class="muted text">
-							{t('apps.missingDevices', { devices: ins.form.missingDevices.join(', ') })}
+					{#if form.missingDevices.length}<p class="muted text">
+							{t('apps.missingDevices', { devices: form.missingDevices.join(', ') })}
 						</p>{/if}
-					{#if localize(ins.form.tips, i18n.locale)}<details>
+					{#if localize(form.tips, i18n.locale)}<details>
 							<summary>{t('apps.tips')}</summary>
-							<pre class="tips">{localize(ins.form.tips, i18n.locale)}</pre>
+							<pre class="tips">{localize(form.tips, i18n.locale)}</pre>
 						</details>{/if}
 				</div>
 			</FormRow>
 		{/if}
-
+	{/snippet}
+	<!-- PLAN 78-5: the form is no tile: groups of flat rows under plain
+	     headings, the buttons below them. -->
+	<section class="form">
 		{#if ins.view === 'compose'}
-			<FormRow label={t('appform.composeFile')} hint={t('apps.composeNote')}>
-				<textarea
-					class="field mono yaml"
-					bind:value={ins.text}
-					spellcheck="false"
-					aria-label={t('apps.asCompose')}></textarea>
-			</FormRow>
+			<SettingGroup>
+				{@render headRows()}
+				<FormRow wide label={t('appform.composeFile')} hint={t('apps.composeNote')}>
+					<textarea
+						class="field mono yaml"
+						bind:value={ins.text}
+						spellcheck="false"
+						aria-label={t('apps.asCompose')}></textarea>
+				</FormRow>
+			</SettingGroup>
 		{:else}
-			<InstallFields {ins} bind:form={ins.form} problems={ins.problems} tpl={ins.tpl} />
+			<InstallFields
+				{ins}
+				bind:form={ins.form}
+				problems={ins.problems}
+				tpl={ins.tpl}
+				head={headRows}
+			/>
 		{/if}
 
 		{#if ins.error}
@@ -180,7 +198,10 @@
 
 <style>
 	.form {
-		padding: var(--space-2) 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap);
+		min-width: 0;
 	}
 	.icon {
 		display: inline-flex;
@@ -193,7 +214,6 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		max-width: 46rem;
-		padding-top: var(--space-1);
 		font-size: var(--text-md);
 	}
 	.notes p,
@@ -226,7 +246,7 @@
 		text-decoration: underline;
 	}
 	.error {
-		margin: var(--space-2) var(--space-4);
+		margin: 0;
 	}
 	.error pre {
 		white-space: pre-wrap;
@@ -236,16 +256,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
-		margin-top: var(--space-2);
-		padding: var(--space-3) var(--space-4) var(--space-4) calc(min(17rem, 30%) + 2 * var(--space-4));
-		border-top: 1px solid var(--border);
 	}
 	.spacer {
 		flex: 1;
-	}
-	@media (max-width: 760px) {
-		.foot {
-			padding-left: var(--space-3);
-		}
 	}
 </style>

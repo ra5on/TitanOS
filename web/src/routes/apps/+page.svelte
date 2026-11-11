@@ -12,8 +12,11 @@
 		type Share,
 	} from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
 
@@ -240,92 +243,107 @@
 <BrowserApps />
 
 {#if sourcesOpen && store}
-	<section class="tile sources" aria-labelledby="sources-title">
-		<div class="sources-head">
-			<h2 class="tile-title" id="sources-title">{t('apps.sources')}</h2>
-			<span class="muted">{t('apps.sourcesNote')}</span>
+	<!-- PLAN 78-5: the sources are settings: a plain heading, each source a
+	     row, the known stores and the form for a new one as groups of rows. -->
+	<SettingGroup title={t('apps.sources')} id="sources" desc={t('apps.sourcesNote')}>
+		{#snippet tools()}
 			<button
 				type="button"
-				class="btn small"
+				class="btn"
 				onclick={() => change(() => api.post<AppStore>('/apps/refresh'))}
 				disabled={busy}>{t('apps.refresh')}</button
 			>
-		</div>
+		{/snippet}
 		{#each sources as source (source.id)}
-			<div class="source">
-				<span class="dot" class:ok={!source.error} class:warn={!!source.error} aria-hidden="true"
-				></span>
-				<div class="source-name">
-					<span>{source.name}</span>
-					{#if source.url}<span class="muted mono url">{source.url}</span>{/if}
-				</div>
-				{#if source.format}<span class="chip">{t(`apps.format.${source.format}`)}</span>{/if}
-				<span class="mono count">{t('apps.count', { count: source.count })}</span>
-				<span class="muted when" class:failed={!!source.error}>{checked(source)}</span>
-				{#if source.builtin}
-					<span class="remove-space"></span>
-				{:else}
-					<button
-						type="button"
-						class="btn small"
-						aria-label={t('apps.sourceRemove', { name: source.name })}
-						onclick={() => removeSource(source)}
-						disabled={busy}>✕</button
+			<SettingRow icon="box" title={source.name}>
+				{#snippet description()}
+					{#if source.url}<span class="mono url">{source.url}</span>{/if}
+					<span class="when" class:failed={!!source.error}
+						><span
+							class="dot"
+							class:ok={!source.error}
+							class:warn={!!source.error}
+							aria-hidden="true"
+						></span>{checked(source)}</span
 					>
-				{/if}
-			</div>
-		{/each}
-		{#if suggestions.length > 0}
-			<div class="known">
-				<span class="muted">{t('apps.knownTitle')}</span>
-				{#each suggestions as known (known.url)}
-					<div class="source">
-						<div class="source-name">
-							<span>{known.name}</span>
-							<span class="muted mono url">{known.url}</span>
-						</div>
-						<span class="muted when wide">{t(known.note)}</span>
+				{/snippet}
+				{#snippet control()}
+					{#if source.format}<span class="chip">{t(`apps.format.${source.format}`)}</span>{/if}
+					<span class="mono count">{t('apps.count', { count: source.count })}</span>
+					{#if !source.builtin}
 						<button
 							type="button"
-							class="btn small"
+							class="btn"
+							aria-label={t('apps.sourceRemove', { name: source.name })}
+							title={t('apps.sourceRemove', { name: source.name })}
+							onclick={() => removeSource(source)}
+							disabled={busy}><Icon name="close" size={15} /></button
+						>
+					{/if}
+				{/snippet}
+			</SettingRow>
+		{/each}
+	</SettingGroup>
+	{#if suggestions.length > 0}
+		<SettingGroup title={t('apps.knownTitle')} id="sources-known">
+			{#each suggestions as known (known.url)}
+				<SettingRow icon="globe" title={known.name}>
+					{#snippet description()}
+						<span class="mono url">{known.url}</span>
+						<span class="when">{t(known.note)}</span>
+					{/snippet}
+					{#snippet control()}
+						<button
+							type="button"
+							class="btn"
+							aria-label="{t('apps.knownAdd')}: {known.name}"
 							onclick={() =>
 								change(() =>
 									api.post<AppStore>('/apps/sources', { url: known.url, name: known.name }),
 								)}
 							disabled={busy}>{t('apps.knownAdd')}</button
 						>
-					</div>
-				{/each}
+					{/snippet}
+				</SettingRow>
+			{/each}
+		</SettingGroup>
+	{/if}
+	<form class="add" onsubmit={addSource}>
+		<SettingGroup title={t('apps.sourceAdd')} id="sources-add">
+			<SettingRow
+				icon="plus"
+				title={t('apps.sourceUrl')}
+				for="source-url"
+				desc={t('apps.sourceHint')}
+			>
+				{#snippet control()}<input
+						id="source-url"
+						class="field mono"
+						type="url"
+						bind:value={draft.url}
+						placeholder="https://github.com/…"
+						spellcheck="false"
+						required
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow icon="edit" title={t('apps.sourceName')} for="source-name">
+				{#snippet control()}<input
+						id="source-name"
+						class="field"
+						type="text"
+						bind:value={draft.name}
+						maxlength="80"
+					/>{/snippet}
+			</SettingRow>
+			<p class="notice-warn">{t('apps.sourceWarning')}</p>
+			{#if sourceError}<p class="notice-error" role="alert">{sourceError}</p>{/if}
+			<div class="row-actions">
+				<button type="submit" class="btn btn-primary" disabled={busy}
+					>{t(busy ? 'apps.sourceAdding' : 'apps.sourceAdd')}</button
+				>
 			</div>
-		{/if}
-		<form class="add" onsubmit={addSource}>
-			<label class="grow"
-				><span>{t('apps.sourceUrl')}</span>
-				<input
-					class="field mono"
-					type="url"
-					bind:value={draft.url}
-					placeholder="https://github.com/…"
-					spellcheck="false"
-					required
-				/>
-			</label>
-			<label
-				><span>{t('apps.sourceName')}</span><input
-					class="field"
-					type="text"
-					bind:value={draft.name}
-					maxlength="80"
-				/></label
-			>
-			<button type="submit" class="btn btn-primary" disabled={busy}
-				>{t(busy ? 'apps.sourceAdding' : 'apps.sourceAdd')}</button
-			>
-			<p class="muted hint">{t('apps.sourceHint')}</p>
-			<p class="notice-warn hint">{t('apps.sourceWarning')}</p>
-			{#if sourceError}<p class="notice-error hint" role="alert">{sourceError}</p>{/if}
-		</form>
-	</section>
+		</SettingGroup>
+	</form>
 {/if}
 
 {#if store}
@@ -440,95 +458,22 @@
 		border-color: var(--accent);
 		color: var(--on-accent);
 	}
-	.sources {
-		overflow: hidden;
-	}
-	.sources-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-4);
-		padding: var(--space-3) 18px;
-		border-bottom: 1px solid var(--panel-border);
-		font-size: var(--text-base);
-	}
-	.sources-head h2 {
-		margin-right: auto;
-	}
-	.small {
-		height: 2.25rem;
-		padding: 0 0.75rem;
-		font-size: var(--text-base);
-	}
-	.source {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2-5) var(--space-4);
-		padding: var(--space-3) 18px;
-		border-bottom: 1px solid var(--panel-border);
-		font-size: var(--text-md);
-	}
-	.source-name {
-		flex: 1 1 280px;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		font-weight: 500;
-	}
-	.url {
-		font-size: var(--text-sm);
-		font-weight: 400;
+	.url,
+	.when {
+		display: block;
 		overflow-wrap: anywhere;
 	}
-	.count {
-		width: 5.5rem;
-		font-size: var(--text-base);
-		text-align: right;
-	}
-	.when {
-		width: 10rem;
-		font-size: var(--text-sm);
+	.when .dot {
+		margin-right: var(--space-1-5);
 	}
 	.when.failed {
 		color: var(--warn-text);
 	}
-	.known > .muted {
-		display: block;
-		padding: var(--space-3) 18px 0;
+	.count {
 		font-size: var(--text-base);
-	}
-	.when.wide {
-		width: auto;
-		flex: 0 1 22rem;
-	}
-	.remove-space {
-		width: 2.25rem;
 	}
 	.add {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-		padding: var(--space-4) 18px;
-	}
-	.add label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		flex: 0 1 240px;
-		font-size: var(--text-base);
-	}
-	.add label.grow {
-		flex: 1 1 360px;
-	}
-	.add label > span {
-		color: var(--muted);
-	}
-	.hint {
-		flex: 1 1 100%;
-		font-size: var(--text-base);
+		display: contents;
 	}
 	.layout {
 		display: flex;

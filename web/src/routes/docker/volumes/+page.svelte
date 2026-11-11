@@ -4,6 +4,8 @@
 	// plain confirmation that says so (CLAUDE.md, no name to type), the
 	// dangerous button left of "Cancel", never the focused one.
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -117,108 +119,105 @@
 {:else if !volumes.length && !error}
 	<EmptyState title={t('dres.volumes.empty')} text={t('dres.volumes.emptyText')} />
 {:else if volumes.length}
+	<!-- PLAN 78-5: what can go is one row with its button; the list stands
+	     under a plain heading and keeps the table's own surface. -->
 	{#if unused.length}
-		<section class="tile ui-card banner" aria-labelledby="volumes-unused">
-			<div class="banner-text">
-				<strong id="volumes-unused"
-					>{unused.length === 1
-						? t('dres.volumes.unusedOne')
-						: t('dres.volumes.unusedTitle', { count: unused.length })}</strong
-				>
-				<span
-					>{t('dres.volumes.unusedText')}
-					{anonymous.length
-						? t('dres.volumes.anonymousText', { count: anonymous.length })
-						: t('dres.volumes.namedOnly')}</span
-				>
-			</div>
-			{#if anonymous.length}<div class="banner-actions">
-					<button
-						type="button"
-						class="btn btn-danger-outline"
-						disabled={busy}
-						onclick={() => (prune = true)}
-						>{t('dres.volumes.deleteAnonymous', { count: anonymous.length })}</button
-					>
-				</div>{/if}
-		</section>
+		<SettingGroup>
+			<SettingRow
+				icon="trash"
+				id="volumes-unused"
+				title={unused.length === 1
+					? t('dres.volumes.unusedOne')
+					: t('dres.volumes.unusedTitle', { count: unused.length })}
+				desc="{t('dres.volumes.unusedText')} {anonymous.length
+					? t('dres.volumes.anonymousText', { count: anonymous.length })
+					: t('dres.volumes.namedOnly')}"
+			>
+				{#snippet control()}{#if anonymous.length}<button
+							type="button"
+							class="btn btn-danger-outline"
+							disabled={busy}
+							onclick={() => (prune = true)}
+							>{t('dres.volumes.deleteAnonymous', { count: anonymous.length })}</button
+						>{/if}{/snippet}
+			</SettingRow>
+		</SettingGroup>
 	{/if}
 
-	<section class="tile ui-card" aria-labelledby="volumes-list">
-		<div class="card-head">
-			<h2 id="volumes-list">{t('dres.volumes.title')}</h2>
-			<span class="card-meta"
-				>{known
-					? t('dres.images.count', {
-							count: volumes.length,
-							size: formatBytes(sumSize(volumes)),
-						})
-					: volumes.length}</span
-			>
-			<div class="card-tools">
-				<label class="search">
-					<Icon name="search" size={14} />
-					<span class="sr-only">{t('dres.volumes.search')}</span>
-					<input
-						class="field"
-						type="search"
-						placeholder={t('dres.volumes.search')}
-						bind:value={query}
-					/>
-				</label>
-			</div>
-		</div>
+	<SettingGroup
+		title={t('dres.volumes.title')}
+		id="volumes-list"
+		desc={known
+			? t('dres.images.count', { count: volumes.length, size: formatBytes(sumSize(volumes)) })
+			: String(volumes.length)}
+	>
+		{#snippet tools()}
+			<label class="search">
+				<Icon name="search" size={14} />
+				<span class="sr-only">{t('dres.volumes.search')}</span>
+				<input
+					class="field"
+					type="search"
+					placeholder={t('dres.volumes.search')}
+					bind:value={query}
+				/>
+			</label>
+		{/snippet}
 		{#if shown.length}
-			<div class="table-wrap">
-				<table class="data-table resources">
-					<thead>
-						<tr>
-							<th scope="col">{t('dres.col.name')}</th>
-							<th scope="col" class="num">{t('dres.col.size')}</th>
-							<th scope="col" class="used">{t('dres.col.usedBy')}</th>
-							<th scope="col" class="driver">{t('dres.col.driver')}</th>
-							<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each shown as volume (volume.name)}
-							{@const used = usedByText(volume.usedBy)}
-							{@const free = !used && !volume.titanos}
-							<tr class:unused={free}>
-								<td class="name">
-									<span class="mono vname">{volume.name}</span>
-									{#if volume.titanos}<span class="chip info" title={t('dres.volumes.titanosHint')}
-											><Icon name="lock" size={11} />{t('dres.volumes.titanos')}</span
-										>{/if}
-									{#if volume.anonymous}<span class="chip">{t('dres.volumes.anonymousChip')}</span
-										>{/if}
-									<span class="sub narrow">{used || t('dres.unused')}</span>
-								</td>
-								<td class="num" class:muted={volume.size === undefined}>{size(volume)}</td>
-								<td class="used" class:muted={!used}>{used || t('dres.unused')}</td>
-								<td class="driver muted">{volume.driver}</td>
-								<td class="actions">
-									{#if free}
-										<button
-											type="button"
-											class="btn btn-danger-outline small"
-											disabled={busy}
-											aria-label={t('dres.deleteNamed', { name: volume.name })}
-											onclick={() => (remove = volume)}>{t('dres.delete')}</button
-										>
-									{:else}
-										<span class="sr-only">{t('dres.inUse')}</span>
-									{/if}
-								</td>
+			<div class="tile ui-card">
+				<div class="table-wrap">
+					<table class="data-table resources">
+						<thead>
+							<tr>
+								<th scope="col">{t('dres.col.name')}</th>
+								<th scope="col" class="num">{t('dres.col.size')}</th>
+								<th scope="col" class="used">{t('dres.col.usedBy')}</th>
+								<th scope="col" class="driver">{t('dres.col.driver')}</th>
+								<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each shown as volume (volume.name)}
+								{@const used = usedByText(volume.usedBy)}
+								{@const free = !used && !volume.titanos}
+								<tr class:unused={free}>
+									<td class="name">
+										<span class="mono vname">{volume.name}</span>
+										{#if volume.titanos}<span
+												class="chip info"
+												title={t('dres.volumes.titanosHint')}
+												><Icon name="lock" size={11} />{t('dres.volumes.titanos')}</span
+											>{/if}
+										{#if volume.anonymous}<span class="chip">{t('dres.volumes.anonymousChip')}</span
+											>{/if}
+										<span class="sub narrow">{used || t('dres.unused')}</span>
+									</td>
+									<td class="num" class:muted={volume.size === undefined}>{size(volume)}</td>
+									<td class="used" class:muted={!used}>{used || t('dres.unused')}</td>
+									<td class="driver muted">{volume.driver}</td>
+									<td class="actions">
+										{#if free}
+											<button
+												type="button"
+												class="btn btn-danger-outline small"
+												disabled={busy}
+												aria-label={t('dres.deleteNamed', { name: volume.name })}
+												onclick={() => (remove = volume)}>{t('dres.delete')}</button
+											>
+										{:else}
+											<span class="sr-only">{t('dres.inUse')}</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			</div>
 		{:else}
 			<p class="muted none">{t('dres.volumes.noMatch')}</p>
 		{/if}
-	</section>
+	</SettingGroup>
 	<StatusBar label={t('dres.statusBar')}>
 		<span
 			>{known
@@ -298,7 +297,7 @@
 	}
 	.none {
 		margin: 0;
-		padding: var(--space-4);
+		padding: var(--space-2) 0;
 	}
 	.narrow {
 		display: none;
