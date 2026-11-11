@@ -497,7 +497,7 @@
 				>{/if}
 			<label
 				>{t('ops.time')}<input class="field" type="time" bind:value={draft.time} required /></label
-			><label
+			><label class="wide"
 				>{t('ops.missed')}<select class="field" bind:value={draft.missed}
 					><option value="window">{t('ops.window')}</option><option value="skip"
 						>{t('ops.skip')}</option
@@ -626,6 +626,10 @@
 	}
 	.editor label {
 		flex-basis: 45%;
+	}
+	/* A select whose options are long: the whole row, so none is cut. */
+	.editor label.wide {
+		flex-basis: 100%;
 	}
 	.actions {
 		display: flex;
