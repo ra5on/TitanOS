@@ -5,7 +5,7 @@ import { loadWebApps } from '../webapps/webapps.svelte.ts';
 import { frameMessage } from './frame.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
-import { anyUnsaved, savePrefs, wm } from './wm.svelte.ts';
+import { anyUnsaved, desktop, savePrefs, wm } from './wm.svelte.ts';
 
 // PLAN 64: Settings › Appearance › Dock runs in a window. The desktop stays
 // the only writer of its settings: a window asks for the dock and sends
@@ -16,6 +16,12 @@ function windowFrames(): HTMLIFrameElement[] {
 }
 function sendDock(target: WindowProxy, dock: unknown) {
 	target.postMessage({ type: 'titanos-dock', dock }, location.origin);
+}
+
+/** PLAN 79-10: open settings windows follow "CPU und RAM in der Leiste" (menu Ansicht, right click). */
+export function sendBarToWindows(load: boolean) {
+	for (const f of windowFrames())
+		f.contentWindow?.postMessage({ type: 'titanos-bar', load }, location.origin);
 }
 
 /** Open settings windows follow changes made on the dock itself (right click). */
@@ -43,6 +49,9 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		if (!source) return;
 		if (msg.type === 'titanos-dock-get') sendDock(source, dockNow());
 		else if (msg.type === 'titanos-prefs') savePrefs((p) => (p.dock = sanitizeDock(msg.dock)));
+		else if (msg.type === 'titanos-bar-get')
+			source.postMessage({ type: 'titanos-bar', load: desktop.prefs.barLoad }, location.origin);
+		else if (msg.type === 'titanos-bar-set') savePrefs((p) => (p.barLoad = msg.load === true));
 		else if (msg.type === 'titanos-desk-dialog' && msg.dialog === 'wallpaper') onwallpaper();
 		else if (msg.type === 'titanos-file-drag') {
 			// PLAN 66: the file manager in a window drags files; web app windows take them.

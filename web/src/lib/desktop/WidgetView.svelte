@@ -5,20 +5,33 @@
 	import {
 		formatBytes,
 		formatBytesOf,
+		formatDecimal,
 		formatDuration,
 		formatMegabytesPerSecond,
+		formatNumber,
 		formatPercent,
 	} from '../format.ts';
 	import { i18n, t } from '../i18n/index.svelte.ts';
 	import { storage } from '../storage.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import type { WidgetKind } from './prefs.ts';
+	import { isGpuWidget, type GpuValue, type WidgetKind } from './prefs.ts';
 	import { dockerPrograms, sources } from './sources.svelte.ts';
 	import { session } from '../session.svelte.ts';
 
-	let { kind, onopen }: { kind: WidgetKind; onopen: (app: string, href?: string) => void } =
-		$props();
+	let {
+		kind,
+		hide = [],
+		device = '',
+		onopen,
+	}: {
+		kind: WidgetKind;
+		/** PLAN 79-5, graphics widgets: the values switched off for this widget. */
+		hide?: GpuValue[];
+		/** PLAN 79-5, graphics widgets: the PCI address of the chosen device. */
+		device?: string;
+		onopen: (app: string, href?: string) => void;
+	} = $props();
 
 	const info = $derived(system.info);
 	const memPct = $derived(
@@ -90,6 +103,44 @@
 	});
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
+
+	// PLAN 79-5: iGPU, NPU and graphics card. The devices come with the system
+	// data the desktop asks for anyway. A value the device does not report
+	// (null) gets no tile – never a zero, never "not reported".
+	const gpuDevices = $derived(
+		isGpuWidget(kind) ? (info?.accelerators ?? []).filter((a) => a.kind === kind) : [],
+	);
+	const gpu = $derived(gpuDevices.find((a) => a.address === device) ?? gpuDevices[0]);
+	const shows = (value: GpuValue) => !hide.includes(value);
+	const gpuHistory = $derived((gpu?.history ?? []).slice(-60));
+	const gpuLine = $derived.by(() => {
+		// Gaps (null) break the line; they are not drawn as zero.
+		const n = gpuHistory.length;
+		if (n < 2 || !gpuHistory.some((v) => v !== null)) return '';
+		let path = '';
+		let pen = false;
+		gpuHistory.forEach((v, i) => {
+			if (v === null) {
+				pen = false;
+				return;
+			}
+			const x = (i / (n - 1)) * 300;
+			const y = 58 - (Math.max(0, Math.min(100, v)) / 100) * 54;
+			path += `${pen ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)} `;
+			pen = true;
+		});
+		return path.trim();
+	});
+	const gpuMemory = $derived(
+		gpu && gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null && gpu.memoryTotalBytes > 0
+			? { used: gpu.memoryUsedBytes, total: gpu.memoryTotalBytes }
+			: null,
+	);
+	const GPU_TITLE = {
+		igpu: 'desktop.widget.igpu',
+		npu: 'desktop.widget.npu',
+		gpu: 'desktop.widget.gpu',
+	} as const;
 	const programs = $derived(dockerPrograms(host));
 </script>
 
@@ -279,6 +330,74 @@
 			{/each}
 		</div>
 	{/if}
+{:else if isGpuWidget(kind)}
+	<h4 class="gpu-title">{t(GPU_TITLE[kind])}</h4>
+	{#if !gpu}
+		<p class="muted small">{t('desktop.widget.gpuNone')}</p>
+	{:else}
+		<div class="muted small gpu-name">{gpu.name || gpu.vendor || gpu.address}</div>
+		{#if shows('usage') && gpu.usagePercent !== null}
+			<div class="gpu-usage" data-gpu-value="usage">
+				<b class="huge">{formatPercent(gpu.usagePercent)}</b>
+				<span class="muted">{t('desktop.widget.gpuUsage')}</span>
+			</div>
+		{/if}
+		{#if shows('history') && gpuLine}
+			<svg
+				class="chart gpu-chart"
+				data-gpu-value="history"
+				viewBox="0 0 300 62"
+				preserveAspectRatio="none"
+				role="img"
+				aria-label={t('desktop.widget.gpuHistory')}
+			>
+				<path
+					d={gpuLine}
+					fill="none"
+					stroke="var(--accent)"
+					stroke-width="2"
+					stroke-linejoin="round"
+					vector-effect="non-scaling-stroke"
+				/>
+			</svg>
+		{/if}
+		<div class="two gpu-tiles">
+			{#if shows('temperature') && gpu.temperatureC !== null}
+				<div class="in" data-gpu-value="temperature">
+					<div class="muted small">{t('desktop.widget.gpuTemperature')}</div>
+					<b>{formatNumber(Math.round(gpu.temperatureC))} °C</b>
+				</div>
+			{/if}
+			{#if shows('memory') && gpuMemory}
+				<div class="in" data-gpu-value="memory">
+					<div class="muted small">{t('desktop.widget.gpuMemory')}</div>
+					<b>{formatBytesOf(gpuMemory.used, gpuMemory.total)}</b>
+					<div
+						class="meter"
+						role="meter"
+						aria-valuenow={Math.round((100 * gpuMemory.used) / gpuMemory.total)}
+						aria-valuemin="0"
+						aria-valuemax="100"
+						aria-label={t('desktop.widget.gpuMemory')}
+					>
+						<i style:width="{Math.min(100, (100 * gpuMemory.used) / gpuMemory.total)}%"></i>
+					</div>
+				</div>
+			{/if}
+			{#if shows('power') && gpu.powerWatts !== null}
+				<div class="in" data-gpu-value="power">
+					<div class="muted small">{t('desktop.widget.gpuPower')}</div>
+					<b>{formatDecimal(gpu.powerWatts, gpu.powerWatts < 10 ? 1 : 0)} W</b>
+				</div>
+			{/if}
+			{#if shows('clock') && gpu.frequencyMHz !== null}
+				<div class="in" data-gpu-value="clock">
+					<div class="muted small">{t('desktop.widget.gpuClock')}</div>
+					<b>{formatNumber(Math.round(gpu.frequencyMHz))} MHz</b>
+				</div>
+			{/if}
+		</div>
+	{/if}
 {:else if kind === 'tasks'}
 	<h4>{t('desktop.widget.tasks')}</h4>
 	<button type="button" class="btn small-btn" onclick={() => onopen('app:monitor', '/tools/tasks')}
@@ -424,5 +543,39 @@
 	}
 	.small-btn {
 		margin-top: var(--space-2);
+	}
+	/* PLAN 79-5: the graphics widgets. */
+	h4.gpu-title {
+		margin-bottom: 2px;
+	}
+	.gpu-name {
+		overflow-wrap: anywhere;
+		margin-bottom: var(--space-2-5);
+	}
+	.gpu-usage {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 0 var(--space-2);
+	}
+	.huge {
+		font-size: 28px;
+		font-weight: 600;
+		line-height: 1.15;
+		font-variant-numeric: tabular-nums;
+	}
+	.gpu-chart {
+		height: 54px;
+		margin: var(--space-1-5) 0 0;
+	}
+	.gpu-tiles {
+		margin-top: var(--space-2-5);
+	}
+	.gpu-tiles:empty {
+		display: none;
+	}
+	.gpu-tiles b {
+		display: block;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

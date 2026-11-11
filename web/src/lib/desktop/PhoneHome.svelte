@@ -1,21 +1,27 @@
 <script lang="ts">
 	import MigrationDialog from '../webapps/MigrationDialog.svelte';
 	// PLAN 61: TitanOS on the phone – programs as a grid like a home screen;
-	// each opens full screen with a way back (PhoneBar).
+	// each opens full screen with a way back (PhoneBar). PLAN 79-10: the bar
+	// starts with the button "Menü" and the search next to it; the menu
+	// (Launcher.svelte, the same as on the desktop) opens across the width.
+	// The account's avatar is gone: account, lock, log out and power are in
+	// the menu.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Icon from '../components/Icon.svelte';
-	import AccountMenu from '../components/AccountMenu.svelte';
 	import NodeMenu from '../components/NodeMenu.svelte';
 	import { clusterNodes } from '../cluster.svelte.ts';
 	import { t } from '../i18n/index.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import { storage } from '../storage.svelte.ts';
 	import { formatPercent } from '../format.ts';
+	import { lock } from '../lock.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
+	import Launcher from './Launcher.svelte';
+	import PowerDialog from '../components/PowerDialog.svelte';
 	import { arrangeIcons } from './prefs.ts';
-	import { openTab, programs, type Program } from './programs.svelte.ts';
+	import { openTab, programs, vmScreens, type Program } from './programs.svelte.ts';
 	import { watchSources } from './sources.svelte.ts';
 	import { desktop, loadDesktop } from './wm.svelte.ts';
 	import { wallpaperCss } from './wallpapers.ts';
@@ -77,6 +83,22 @@
 		if (p.kind !== 'docker') return void goto(p.href);
 		void goto(page.url.pathname, { state: { remote: p.key }, shallow: true });
 	}
+
+	// PLAN 79-10: the menu.
+	let menu = $state(false);
+	let menuButton = $state<HTMLButtonElement>();
+	let power = $state<'restart' | 'shutdown' | null>(null);
+	function closeMenu() {
+		if (!menu) return;
+		menu = false;
+		menuButton?.focus();
+	}
+	function openFromMenu(key: string, href?: string) {
+		menu = false;
+		const p = byKey.get(key) ?? vmScreens().find((v) => v.key === key);
+		if (href) void goto(href);
+		else if (p) open(p);
+	}
 </script>
 
 {#if remote}
@@ -105,17 +127,45 @@
 			)} center / cover"
 >
 	<header class="top">
+		<button
+			type="button"
+			class="menu-btn glass-panel"
+			class:on={menu}
+			bind:this={menuButton}
+			data-menu-button
+			aria-haspopup="dialog"
+			aria-expanded={menu}
+			onclick={() => (menu = !menu)}
+			><Icon name="grid" size={18} /><span>{t('desktop.menu.title')}</span></button
+		>
 		<label class="search glass-panel">
 			<Icon name="search" size={17} />
 			<input
 				bind:value={query}
-				placeholder={t('desktop.menu.search')}
+				placeholder={t('desktop.menu.searchShort')}
 				aria-label={t('desktop.menu.search')}
 			/>
 		</label>
 		{#if clusterNodes.nodes.length > 1}<span class="node"><NodeMenu variant="phone" /></span>{/if}
-		<span class="account glass-panel"><AccountMenu /></span>
 	</header>
+	{#if menu}
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<div class="menu-back" onclick={closeMenu}></div>
+		<Launcher
+			phone
+			{query}
+			onopen={openFromMenu}
+			onclose={closeMenu}
+			onpower={(action) => {
+				menu = false;
+				power = action;
+			}}
+			onlock={() => {
+				menu = false;
+				void lock();
+			}}
+		/>
+	{/if}
 	<div class="status glass-panel">
 		<span class="dot" class:warn={bad > 0} aria-hidden="true">{bad ? '!' : '✓'}</span>
 		<div>
@@ -146,6 +196,8 @@
 		{/each}
 	</div>
 </div>
+
+{#if power}<PowerDialog action={power} onclose={() => (power = null)} />{/if}
 
 <!-- PLAN 66: once after the update to 0.63, for owners and administrators. -->
 <MigrationDialog />
@@ -222,9 +274,34 @@
 		font-size: 16px;
 		outline: none;
 	}
-	.account {
-		border-radius: 14px;
-		padding: 2px;
+	.menu-btn {
+		flex: none;
+		height: 44px;
+		display: flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		padding: 0 var(--space-3);
+		border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+		border-radius: calc(14px * min(var(--radius-scale, 1), 1.6));
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-md);
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.menu-btn.on {
+		background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+	}
+	.menu-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	/* A touch beside the open menu closes it. */
+	.menu-back {
+		position: fixed;
+		inset: 0;
+		z-index: 4;
+		background: rgb(0 0 0 / 0.35);
 	}
 	.status {
 		display: flex;

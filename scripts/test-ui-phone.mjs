@@ -154,6 +154,95 @@ for (const [width, height] of [
     `search bar sticks at the top (${stuck.y})`,
   );
   await page.evaluate(() => window.scrollTo(0, 0));
+  // PLAN 79-10: the button "Menü" top left, the search next to it, no avatar;
+  // the menu opens across the width with its two groups of buttons, nothing
+  // overlaps or leaves the screen.
+  assert.equal(await page.locator(".home .account").count(), 0, "no avatar");
+  const menuButton = page.locator(".home [data-menu-button]");
+  const mb = await menuButton.boundingBox();
+  const sb = await page.locator(".home .search").boundingBox();
+  assert.equal((await menuButton.innerText()).trim(), "Menü");
+  assert.ok(mb.x < 24 && mb.height >= 44, "menu button top left, a touch target");
+  assert.ok(sb.x >= mb.x + mb.width, "search right of the menu button");
+  assert.ok(sb.width >= 90, `search wide enough to type (${sb.width})`);
+  await menuButton.tap();
+  const launcher = page.locator(".launcher.phone");
+  await launcher.waitFor();
+  await page.waitForTimeout(300);
+  const lb = await launcher.boundingBox();
+  assert.ok(lb.x >= 0 && lb.x + lb.width <= width, "menu on the screen");
+  assert.ok(lb.width >= width - 24, `menu across the width (${lb.width})`);
+  assert.ok(lb.y >= mb.y + mb.height, "menu below the bar");
+  assert.ok(lb.y + lb.height <= height, "menu ends on the screen");
+  assert.deepEqual(
+    await launcher
+      .locator("[data-menu-do]")
+      .evaluateAll((els) => els.map((el) => el.dataset.menuDo)),
+    [
+      "account",
+      "settings",
+      "updates",
+      "appcenter",
+      "lock",
+      "logout",
+      "restart",
+      "shutdown",
+    ],
+  );
+  const buttons = await launcher.locator(".fb, .chip, .link").evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        text: el.textContent.trim(),
+        l: r.left,
+        r: r.right,
+        t: r.top,
+        b: r.bottom,
+        cut: el.scrollWidth > el.clientWidth + 1,
+      };
+    }),
+  );
+  for (const b of buttons) {
+    assert.ok(!b.cut, `not cut off: ${b.text}`);
+    assert.ok(b.l >= lb.x && b.r <= lb.x + lb.width + 1, `inside: ${b.text}`);
+  }
+  for (const a of buttons)
+    for (const b of buttons)
+      if (a !== b)
+        assert.ok(
+          a.r <= b.l + 1 || b.r <= a.l + 1 || a.b <= b.t + 1 || b.b <= a.t + 1,
+          `overlap: ${a.text} / ${b.text}`,
+        );
+  await noSideways(page, width, "menu");
+  await page.screenshot({ path: `${out}/01b-menue-${label}.png` });
+  // The search of the bar filters the menu too; arranging works by touch.
+  await page.locator(".home .search input").fill("speich");
+  assert.deepEqual(
+    await launcher
+      .locator(".prog")
+      .evaluateAll((els) =>
+        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+      ),
+    ["Speicher"],
+  );
+  await page.locator(".home .search input").fill("");
+  await launcher.locator("[data-menu-arrange]").tap();
+  const firstTwo = async () =>
+    (
+      await launcher
+        .locator(".prog")
+        .evaluateAll((els) =>
+        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+      )
+    ).slice(0, 2);
+  const start = await firstTwo();
+  await launcher.locator(".cell").nth(1).locator('[data-move="back"]').tap();
+  assert.deepEqual(await firstTwo(), [start[1], start[0]], "reordered by touch");
+  await launcher.locator("[data-menu-reset]").tap();
+  assert.deepEqual(await firstTwo(), start);
+  // A touch beside the menu closes it.
+  await menuButton.tap();
+  await launcher.waitFor({ state: "detached" });
   // Cluster switcher beside the search; its menu stays on the screen.
   const trigger = page.locator(".home .node button.trigger");
   await trigger.waitFor();

@@ -38,6 +38,11 @@
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import DockSettings from './DockSettings.svelte';
+	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
+	import { barLink, connectBar, setBarLoad } from '#lib/desktop/bar-link.svelte.ts';
+
+	// PLAN 79-10: CPU and RAM in the top bar of the desktop (per account).
+	onMount(() => connectBar());
 
 	const CUSTOM_FIELDS: (keyof CustomColors)[] = ['bg', 'surface', 'header', 'text', 'border'];
 
@@ -463,6 +468,12 @@
 <!-- Glas & Schrift: the finer settings (spacing, edges, glow, motion). -->
 <div class="tab-panel" hidden={tab !== 'glass'} data-tab-panel="glass">
 	<SettingGroup title={t('look.details')} id="h-details" desc={t('look.detailsHint')}>
+		<!-- PLAN 79-10: the language was in the menu of the account's avatar, which is gone. -->
+		<SettingRow title={t('lang.label')} desc={t('look.languageHint')}>
+			{#snippet control()}
+				<LanguageSwitch />
+			{/snippet}
+		</SettingRow>
 		<SettingRow title={t('appearance.density')} desc={t('look.densityHint')}>
 			{#snippet control()}
 				<Segments
@@ -569,6 +580,28 @@
 <!-- Dock: the former page /settings/appearance/dock. -->
 <div class="tab-panel" hidden={tab !== 'dock'} data-tab-panel="dock">
 	<DockSettings />
+	<!-- PLAN 79-10: the top bar of the desktop. -->
+	{#if barLink.load !== null}
+		<SettingGroup title={t('desktop.bar.title')} id="h-bar">
+			<SettingRow
+				title={t('desktop.bar.load')}
+				desc={t('desktop.bar.loadHint')}
+				for="bar-load"
+				summary={barLink.load ? t('look.on') : t('look.off')}
+			>
+				{#snippet control()}
+					<input
+						id="bar-load"
+						type="checkbox"
+						role="switch"
+						class="switch"
+						checked={barLink.load}
+						onchange={(e) => setBarLoad(e.currentTarget.checked)}
+					/>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+	{/if}
 </div>
 
 <!-- Anmeldeseite (owners/admins): the account picker and the login look. -->

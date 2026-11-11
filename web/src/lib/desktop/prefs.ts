@@ -13,7 +13,10 @@ export type WidgetKind =
 	| 'temperatures'
 	| 'clock'
 	| 'homeassistant'
-	| 'tasks';
+	| 'tasks'
+	| 'igpu'
+	| 'npu'
+	| 'gpu';
 
 export const WIDGET_KINDS: WidgetKind[] = [
 	'status',
@@ -27,10 +30,34 @@ export const WIDGET_KINDS: WidgetKind[] = [
 	'clock',
 	'homeassistant',
 	'tasks',
+	'igpu',
+	'npu',
+	'gpu',
 ];
 
+/** PLAN 79-5: the widgets of the graphics devices; their kind is the kind of the device. */
+export const GPU_WIDGET_KINDS = ['igpu', 'npu', 'gpu'] as const;
+export type GpuWidgetKind = (typeof GPU_WIDGET_KINDS)[number];
+export function isGpuWidget(kind: WidgetKind): kind is GpuWidgetKind {
+	return (GPU_WIDGET_KINDS as readonly string[]).includes(kind);
+}
+/** The values such a widget can show; each can be switched off per widget. */
+export const GPU_VALUES = ['usage', 'history', 'temperature', 'memory', 'power', 'clock'] as const;
+export type GpuValue = (typeof GPU_VALUES)[number];
+
 /** A widget on the desktop: position and size in grid cells of 20 px. */
-export type Widget = { id: string; kind: WidgetKind; x: number; y: number; w: number; h: number };
+export type Widget = {
+	id: string;
+	kind: WidgetKind;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	/** PLAN 79-5, graphics widgets: the values switched off (none: all shown). */
+	hide?: GpuValue[];
+	/** PLAN 79-5, graphics widgets: the PCI address of the chosen device (none: the first). */
+	device?: string;
+};
 
 export type Folder = { id: string; name: string; apps: string[] };
 
@@ -71,6 +98,10 @@ export type DesktopPrefs = {
 	dock: Dock;
 	/** Size of the two bars at the top. */
 	barSize: IconSize;
+	/** PLAN 79-10: CPU and RAM in the top bar (on unless switched off). */
+	barLoad: boolean;
+	/** PLAN 79-11: the account's own order of the programs in the menu; empty = A–Z. */
+	menuOrder: string[];
 };
 
 export type DockPosition = 'bottom' | 'left' | 'right';
@@ -163,6 +194,8 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	widgetsHidden: false,
 	dock: defaultDock(),
 	barSize: 'm',
+	barLoad: true,
+	menuOrder: [],
 });
 
 function strings(value: unknown, max = 200): string[] {
@@ -202,14 +235,25 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 						typeof w.id === 'string' &&
 						ID.test(w.id),
 				)
-				.map((w) => ({
-					id: w.id as string,
-					kind: w.kind as WidgetKind,
-					x: int(w.x, -200, 200, 0),
-					y: int(w.y, 0, 200, 0),
-					w: int(w.w, 6, 60, 12),
-					h: int(w.h, 3, 60, 6),
-				}))
+				.map((w) => {
+					const widget: Widget = {
+						id: w.id as string,
+						kind: w.kind as WidgetKind,
+						x: int(w.x, -200, 200, 0),
+						y: int(w.y, 0, 200, 0),
+						w: int(w.w, 6, 60, 12),
+						h: int(w.h, 3, 60, 6),
+					};
+					if (isGpuWidget(widget.kind)) {
+						const hide = Array.isArray(w.hide)
+							? GPU_VALUES.filter((value) => (w.hide as unknown[]).includes(value))
+							: [];
+						if (hide.length) widget.hide = hide;
+						const device = text(w.device, 40);
+						if (/^[0-9a-f:.]+$/i.test(device)) widget.device = device;
+					}
+					return widget;
+				})
 				.slice(0, 40)
 		: base.widgets;
 	const folders = Array.isArray(v.folders)
@@ -296,6 +340,8 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 		barSize: (['s', 'm', 'l'] as IconSize[]).includes(v.barSize as IconSize)
 			? (v.barSize as IconSize)
 			: 'm',
+		barLoad: v.barLoad !== false,
+		menuOrder: strings(v.menuOrder, 300),
 	};
 }
 
@@ -480,5 +526,41 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
 	const out = [...list];
 	const [item] = out.splice(from, 1);
 	out.splice(Math.max(0, Math.min(out.length, to)), 0, item);
+	return out;
+}
+
+/**
+ * PLAN 79-11: the programs of the menu in their order. Without an own order
+ * they are sorted A–Z by name; with one, the stored order counts and programs
+ * it does not know yet (a new app) follow A–Z.
+ */
+export function menuSorted<T extends { key: string; label: string }>(
+	programs: T[],
+	order: string[],
+	locale?: string,
+): T[] {
+	const byName = [...programs].sort(
+		(a, b) =>
+			a.label.localeCompare(b.label, locale, { sensitivity: 'base', numeric: true }) ||
+			a.key.localeCompare(b.key),
+	);
+	if (!order.length) return byName;
+	const at = new Map(order.map((key, i) => [key, i]));
+	const known = byName.filter((p) => at.has(p.key));
+	known.sort((a, b) => (at.get(a.key) ?? 0) - (at.get(b.key) ?? 0));
+	return [...known, ...byName.filter((p) => !at.has(p.key))];
+}
+
+/**
+ * The order to store after `key` was put in front of `before` (or at the end
+ * when `before` is null). `shown` is the whole menu in its order now, so the
+ * first move out of A–Z keeps every other program where it is.
+ */
+export function menuMove(shown: string[], key: string, before: string | null): string[] {
+	if (key === before || !shown.includes(key)) return shown;
+	const out = shown.filter((k) => k !== key);
+	const at = before === null ? -1 : out.indexOf(before);
+	if (at < 0) out.push(key);
+	else out.splice(at, 0, key);
 	return out;
 }

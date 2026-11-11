@@ -43,5 +43,6 @@
 	"look.dock.rightClickHint": "Auch auf dem Arbeitsplatz: Rechtsklick auf eine freie Stelle des Docks öffnet „Dock bearbeiten“.",
 	"look.shineHint": "Helle Kante oben an Glasflächen",
 	"look.glowHint": "Leuchten um Karten, 0 = aus",
-	"look.dimHint": "Wie stark die Seite hinter einem Dialog abgedunkelt wird"
+	"look.dimHint": "Wie stark die Seite hinter einem Dialog abgedunkelt wird",
+	"look.languageHint": "Sprache der Oberfläche für dieses Konto."
 }
