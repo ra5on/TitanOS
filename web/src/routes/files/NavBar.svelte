@@ -342,7 +342,9 @@
 	/* PLAN 73, draft 16: the address row of the window – quiet buttons, the
 	   path in one box with a folder symbol and › between the parts. */
 	.windowed {
-		flex-wrap: nowrap;
+		/* PLAN 79-1: one row while it fits; in a narrow window the search goes
+		   below instead of squeezing the path to a few letters per line. */
+		flex-wrap: wrap;
 		gap: var(--space-1-5);
 		padding: var(--space-2) var(--space-3);
 	}
@@ -358,7 +360,7 @@
 		background: var(--chip);
 	}
 	.windowed .crumbs {
-		flex: 1 1 auto;
+		flex: 1 1 11rem;
 		flex-wrap: nowrap;
 		overflow: hidden;
 		min-height: 2rem;

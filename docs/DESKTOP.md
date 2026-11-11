@@ -53,7 +53,7 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 - **Symbole:** frei auf einem unsichtbaren Raster (ziehen an eine freie Stelle; auf ein anderes Symbol = tauschen, auf einen Ordner = hinein), „Automatisch anordnen“ im Rechtsklick; sonst ordnen nach Art, Name oder zuletzt benutzt; drei Größen; Ordner; Abzeichen (Zahl = Updates, ! = Warnung, Punkt = läuft/gestoppt, Text beim Überfahren). Rechtsklick auf ein Symbol bzw. den Arbeitsplatz für alle Aktionen.
 - **Widgets** frei auf einem Raster von 20 px; Rechtsklick auf ein Widget: Größe, Entfernen, Bearbeiten, Hinzufügen, alle ausblenden (wieder einblenden im Rechtsklick auf den Arbeitsplatz); an der Ecke vergrößern, Galerie mit Zustand, CPU/RAM, Netzwerk, Volumes, Docker-Apps, VMs, Sicherungen, Temperaturen, Uhr, Home Assistant, Aufgaben. Sie lesen nur, was die Oberfläche ohnehin abfragt, und wecken keine Platten.
 - **Hintergrund:** sechs eigene Bilder (SVG, hell und dunkel nach Theme) oder ein eigenes Bild (wie der bisherige Hintergrund je Konto auf dem Stick, höchstens 10 MB). „Bewegter Hintergrund“ verschiebt es langsam und färbt es nach Tageszeit; bei „Bewegung reduzieren“ steht es still.
-- **Mitteilungs-Center**, **Agent-Blase** (der Agent im kleinen Fenster; die Frage beginnt mit dem Fenster vorn) und **Sperrbildschirm** (Sperren im Menü, automatisch nach einstellbarer Zeit).
+- **Mitteilungs-Center** und **Sperrbildschirm** (Sperren im Menü, automatisch nach einstellbarer Zeit).
 - Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den gerade offenen Ordner hoch (mit der üblichen Rückfrage).
 
 ## Gespeichert

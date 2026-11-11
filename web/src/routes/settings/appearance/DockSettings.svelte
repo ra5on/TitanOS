@@ -362,6 +362,8 @@
 	}
 	.pins li {
 		display: flex;
+		/* PLAN 79-1: the buttons go below a name they would squeeze. */
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
 		padding: var(--space-1-5) var(--space-2);
@@ -378,7 +380,7 @@
 		display: grid;
 	}
 	.label {
-		flex: 1;
+		flex: 1 1 9rem;
 		min-width: 0;
 		font-size: var(--text-md);
 		overflow-wrap: break-word;
@@ -392,7 +394,7 @@
 	}
 	.add select {
 		flex: 1;
-		min-width: 160px;
+		min-width: 12rem;
 	}
 	.small {
 		font-size: var(--text-sm);

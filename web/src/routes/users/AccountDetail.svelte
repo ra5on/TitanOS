@@ -320,12 +320,14 @@
 		gap: var(--space-3) var(--space-4);
 		margin-bottom: var(--space-4);
 	}
+	/* The name keeps a readable width; the buttons go below it on a phone. */
 	.who {
-		flex: 1;
+		flex: 1 1 12rem;
 		min-width: 0;
 	}
 	.who h2 {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
 		margin: 0;
