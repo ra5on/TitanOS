@@ -103,7 +103,7 @@ func TestAuthority(t *testing.T) {
 
 	// The same authority and the same leaves after a restart, so that a
 	// browser exception made before installing the authority holds.
-	changes := store.Changes()
+	changes := store.Writes()
 	restarted, _ := NewManager(store, "nas")
 	restarted.localAddresses = m.localAddresses
 	der2, err := restarted.CACertificate()
@@ -118,7 +118,7 @@ func TestAuthority(t *testing.T) {
 	if string(uiAgain.Certificate[0]) != string(ui.Certificate[0]) || len(uiAgain.Certificate) != 2 {
 		t.Error("new web UI leaf after a restart")
 	}
-	if store.Changes() != changes {
+	if store.Writes() != changes {
 		t.Error("a restart wrote to the stick")
 	}
 	// A new address of the NAS: a leaf that names it, kept in RAM only.
@@ -130,7 +130,7 @@ func TestAuthority(t *testing.T) {
 	if err := verifyWith(t, caDER, leaf, "nas.local"); err != nil || !slices.ContainsFunc(leaf.Leaf.IPAddresses, net.ParseIP("10.0.0.5").Equal) {
 		t.Error("no leaf for a new address")
 	}
-	if store.Changes() != changes {
+	if store.Writes() != changes {
 		t.Error("a new address wrote to the stick")
 	}
 }
@@ -251,12 +251,12 @@ func TestAuthorityWithoutConstraintsReplacedOnce(t *testing.T) {
 		t.Fatal("replacement without constraints")
 	}
 	// The next start keeps the replacement.
-	changes := store.Changes()
+	changes := store.Writes()
 	again, _ := NewManager(store, "nas")
 	if der2, err := again.CACertificate(); err != nil || string(der2) != string(got) {
 		t.Error("replaced a second time")
 	}
-	if store.Changes() != changes {
+	if store.Writes() != changes {
 		t.Error("loading the replacement wrote to the stick")
 	}
 }
@@ -267,7 +267,7 @@ func TestNewAddressStaysInRAM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changes := store.Changes()
+	changes := store.Writes()
 	// IPv6 prefixes change: every new one gets a leaf, none is written.
 	for _, addr := range []string{"fd00:1::20", "fd00:2::20", "fe80::20"} {
 		ip := net.ParseIP(addr)
@@ -286,7 +286,7 @@ func TestNewAddressStaysInRAM(t *testing.T) {
 	if _, err := m.uiLeaf("", net.ParseIP("2001:db8::20")); !errors.Is(err, errNotPermitted) {
 		t.Errorf("global IPv6: %v", err)
 	}
-	if store.Changes() != changes {
+	if store.Writes() != changes {
 		t.Error("new addresses wrote to the stick")
 	}
 	// The stored leaf stays the one served by name.
@@ -298,7 +298,7 @@ func TestNewAddressStaysInRAM(t *testing.T) {
 	if _, err := m.uiLeaf("", nil); err != nil {
 		t.Fatal(err)
 	}
-	if store.Changes() == changes {
+	if store.Writes() == changes {
 		t.Error("a new name of the NAS was not stored")
 	}
 }

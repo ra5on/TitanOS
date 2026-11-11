@@ -79,6 +79,11 @@ func (p *preferences) get(user, kind string) (json.RawMessage, error) {
 func (p *preferences) set(user, kind string, value json.RawMessage) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// The web UI saves on many occasions; what is stored already is not
+	// written to the stick again, and the stick is not even asked.
+	if old, ok := p.cache[user+"/"+kind]; ok && old != nil && bytes.Equal(bytes.TrimSpace(old), bytes.TrimSpace(value)) {
+		return nil
+	}
 	if err := p.store.Write(preferenceFile(user, kind), append(bytes.TrimSpace(value), '\n')); err != nil {
 		return err
 	}

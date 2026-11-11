@@ -4,24 +4,74 @@
 // The stick is only mounted while it is being used (see /etc/fstab in the
 // image). Nothing in here keeps a file or directory open, and callers must
 // not touch the store on a timer: every access wakes the stick up.
+//
+// Sticks wear out, so the store writes only what is new: a file that holds
+// the same bytes already is left alone, as is removing what is not there.
+// Every write that does happen is named in the journal, so that "what
+// keeps writing to the stick?" can be answered from the log.
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sync/atomic"
 )
+
+// State are the files of /config (slash separated, globs as in path.Match)
+// that hold state of the moment rather than configuration: who is logged
+// in, a backup or update that is under way, addresses blocked by
+// themselves, when something last happened. They must survive a restart
+// and are needed before a volume is mounted, so they stay on the stick, and
+// they are part of the backups of /config. But a change to them is no
+// change of the configuration: it does not count for Changes, so it never
+// starts a backup of /config by itself (PLAN 79-12; each such backup also
+// writes to a volume and wakes its disks). New state that is written
+// without the owner changing a setting belongs in this list, or better in
+// RAM or .titanos/<function> on a volume.
+var State = []string{
+	"sessions/remembered.json",        // logins that stay (auth)
+	"backup/application-pending.json", // pointer to a running application backup (appbackup)
+	"firewall/blocked.json",           // addresses blocked for good after failed logins (firewall)
+	"system/startup-held.json",        // restart policies held over a shutdown (startup)
+	"system/update-pending.json",      // an update waiting for its restart (update)
+	"system/update-failed.json",       // a release that failed its trial (update)
+	"system/health-report-sent.json",  // when the report last went out (healthreport)
+	"ddns/heartbeat-paused",           // healthcheck paused for a planned shutdown (ddns)
+	"plugins/catalog-serial.json",     // highest plugin catalog seen (plugins)
+}
+
+// IsState tells whether a file of /config is one of State.
+func IsState(name string) bool {
+	for _, pattern := range State {
+		if ok, _ := path.Match(pattern, name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// countsAsChange tells whether writing a file changes what a backup of
+// /config should hold soon: not state, and not what backups leave out.
+func countsAsChange(name string) bool {
+	return !IsState(name) && !LeftOutOfBackups(name)
+}
 
 // Store is a directory holding the configuration. All names are slash
 // separated paths relative to that directory.
 type Store struct {
 	dir string
-	// changes counts the writes since titand started.
+	// changes counts the changes of the configuration since titand
+	// started (state files excluded, see State).
 	changes atomic.Uint64
+	// writes counts every write that reached the stick, state included.
+	writes atomic.Uint64
 	// OnWriteError hears about writes that failed on the medium (a worn
 	// stick); set once at the start.
 	OnWriteError func(error)
@@ -35,10 +85,26 @@ func Open(dir string) *Store {
 // Dir returns the directory of the store.
 func (s *Store) Dir() string { return s.dir }
 
-// Changes returns a number that grows with every change made through the
-// store. The backup of the stick uses it to tell, without waking the
-// stick, whether there is something new to save.
+// Changes returns a number that grows with every change of the
+// configuration made through the store. The backup of the stick uses it to
+// tell, without waking the stick, whether there is something new to save.
+// Writes that changed nothing and writes of state files (State) and of
+// files no backup holds (NotBackedUp) do not count.
 func (s *Store) Changes() uint64 { return s.changes.Load() }
+
+// Writes returns how often the store really wrote to or removed from the
+// stick since titand started, state files included. Tests use it to make
+// sure that reading and idling never write.
+func (s *Store) Writes() uint64 { return s.writes.Load() }
+
+// wrote notes a write that reached the stick.
+func (s *Store) wrote(name, what string) {
+	s.writes.Add(1)
+	if countsAsChange(name) {
+		s.changes.Add(1)
+	}
+	slog.Info("configuration on the stick changed", "file", name, "change", what)
+}
 
 // errInvalidName is a name no file can have; it says nothing about the stick.
 var errInvalidName = errors.New("config: invalid name")
@@ -74,6 +140,7 @@ func (s *Store) ReadJSON(name string, v any) error {
 // Write replaces a file atomically: the content goes to a temporary file in
 // the same directory, is flushed to the stick and then renamed over the old
 // file. A power cut leaves either the old or the new content, never half.
+// A file that holds exactly data already is not written again.
 func (s *Store) Write(name string, data []byte) error {
 	err := s.write(name, data)
 	if err != nil && s.OnWriteError != nil && !errors.Is(err, errInvalidName) {
@@ -86,6 +153,13 @@ func (s *Store) write(name string, data []byte) error {
 	p, err := s.path(name)
 	if err != nil {
 		return err
+	}
+	// Nothing new: no write, no wear. Only a regular file counts; anything
+	// else in its place is replaced as before.
+	if info, err := os.Lstat(p); err == nil && info.Mode().IsRegular() && info.Size() == int64(len(data)) {
+		if old, err := os.ReadFile(p); err == nil && bytes.Equal(old, data) {
+			return nil
+		}
 	}
 	dir := filepath.Dir(p)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -112,7 +186,7 @@ func (s *Store) write(name string, data []byte) error {
 	if err := os.Rename(tmp.Name(), p); err != nil {
 		return err
 	}
-	s.changes.Add(1)
+	s.wrote(name, "written")
 	return syncDir(dir)
 }
 
@@ -131,10 +205,13 @@ func (s *Store) Remove(name string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(p); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // nothing was there: nothing changed, nothing to flush
+		}
 		return err
 	}
-	s.changes.Add(1)
+	s.wrote(name, "removed")
 	return syncDir(filepath.Dir(p))
 }
 
@@ -145,10 +222,13 @@ func (s *Store) RemoveAll(name string) error {
 	if err != nil {
 		return err
 	}
+	if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+		return nil // nothing was there: nothing changed, nothing to flush
+	}
 	if err := os.RemoveAll(p); err != nil {
 		return err
 	}
-	s.changes.Add(1)
+	s.wrote(name, "removed")
 	return syncDir(filepath.Dir(p))
 }
 
