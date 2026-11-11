@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	// Every network the NAS knows, with the zone it is in; reassigning one
 	// changes the draft (applied on trial like the matrix).
 	import type { FirewallConfig, FirewallNetwork } from '#lib/api.ts';
@@ -24,9 +25,12 @@
 		n.kind === 'docker' ? t('firewall.dockerDefault') : t('firewall.byAddress');
 </script>
 
-<section class="tile panel" aria-labelledby="firewall-networks">
-	<h2 class="tile-title" id="firewall-networks">{t('firewall.tab.networks')}</h2>
-	<p class="muted">{t('firewall.networksText')}</p>
+<!-- PLAN 78-1: a table under a plain heading. -->
+<SettingGroup
+	title={t('firewall.tab.networks')}
+	id="firewall-networks"
+	desc={t('firewall.networksText')}
+>
 	{#if networks.length}<div class="table-wrap">
 			<table class="data-table networks">
 				<thead
@@ -69,7 +73,7 @@
 		</div>{:else}<p class="muted">{t('firewall.noNetworks')}</p>{/if}
 	{#if !own.length}<p class="muted small">{t('firewall.networksNoZones')}</p>{/if}
 	<p class="muted small">{t('firewall.bypassText')}</p>
-</section>
+</SettingGroup>
 
 <style>
 	.networks {

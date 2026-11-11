@@ -7,7 +7,6 @@
 	import { userSettingsPaths } from '#lib/settings-search.ts';
 	import { loadSettingsStates } from '#lib/settings-states.svelte.ts';
 	import { markAreaSeen } from '#lib/settings-seen.svelte.ts';
-	import { settingsGroups } from '#lib/settings-groups.ts';
 	let { children }: { children: Snippet } = $props();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const allowed = $derived(
@@ -21,9 +20,11 @@
 </script>
 
 <!-- PLAN 61/65: the window (or the phone's bar) lists the settings pages;
-     the page takes the whole width. -->
+     the page takes the whole width. PLAN 78-1: the pages are groups of rows
+     (components/settings); the collapsible tiles of style E3
+     (settings-groups.ts) remain for the pages of other programs only. -->
 <div class="settings-shell">
-	{#if allowed}<div class="settings-page column" use:settingsGroups={() => page.url.pathname}>
+	{#if allowed}<div class="settings-page column">
 			{@render children()}
 		</div>{:else}<p class="notice-error" role="alert">
 			{t('error.forbidden')}

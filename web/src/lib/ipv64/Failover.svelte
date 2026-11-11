@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Failover: offline pages, DNS failover policies with monitors and rules,
 	// and the one-click maintenance page for when this NAS fails.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -242,308 +243,313 @@
 </script>
 
 <div class="ipv64-tab">
-	<section class="tile panel" aria-labelledby="ipv64-wizard">
-		<h2 class="tile-title" id="ipv64-wizard">{t('ipv64x.wizard')}</h2>
-		<p>{t('ipv64x.wizardText')}</p>
-		<ol class="steps">
-			<li>{nasCheck ? t('ipv64x.wizardStepCheckKept') : t('ipv64x.wizardStepCheck')}</li>
-			<li>{t('ipv64x.wizardStepPage')}</li>
-			<li>{t('ipv64x.wizardStepPolicy')}</li>
-		</ol>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
-		{#each maintenance as m (m.id)}
-			<div class="setup">
-				<strong class="mono">{m.domain}</strong> <span class="muted">{when(m.at)}</span>
-				<ul>
-					<li>
-						{t('ipv64x.resCheck', { name: m.checkName })}{#if m.createdCheck}
-							({t('ipv64x.madeForIt')}){/if}
-					</li>
-					<li>{t('ipv64x.resPage', { name: pageName(m.offlinePage) })}</li>
-					<li>
-						{t('ipv64x.resPolicy', {
-							name: policies.find((p) => p.id === m.policy)?.name ?? m.policy,
-						})}
-					</li>
-					<li>{t('ipv64x.resRules', { count: m.records.length })}</li>
-				</ul>
+	<SettingGroup title={t('ipv64x.wizard')} id="ipv64-wizard">
+		<div class="panel">
+			<p>{t('ipv64x.wizardText')}</p>
+			<ol class="steps">
+				<li>{nasCheck ? t('ipv64x.wizardStepCheckKept') : t('ipv64x.wizardStepCheck')}</li>
+				<li>{t('ipv64x.wizardStepPage')}</li>
+				<li>{t('ipv64x.wizardStepPolicy')}</li>
+			</ol>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
+			{#each maintenance as m (m.id)}
+				<div class="setup">
+					<strong class="mono">{m.domain}</strong> <span class="muted">{when(m.at)}</span>
+					<ul>
+						<li>
+							{t('ipv64x.resCheck', { name: m.checkName })}{#if m.createdCheck}
+								({t('ipv64x.madeForIt')}){/if}
+						</li>
+						<li>{t('ipv64x.resPage', { name: pageName(m.offlinePage) })}</li>
+						<li>
+							{t('ipv64x.resPolicy', {
+								name: policies.find((p) => p.id === m.policy)?.name ?? m.policy,
+							})}
+						</li>
+						<li>{t('ipv64x.resRules', { count: m.records.length })}</li>
+					</ul>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => ((removingSetup = m), (deleteCheck = false))}
+						>{t('ipv64x.remove')}</button
+					>
+				</div>
+			{/each}
+			<div class="row-actions">
 				<button
 					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => ((removingSetup = m), (deleteCheck = false))}>{t('ipv64x.remove')}</button
+					class="btn btn-primary"
+					disabled={busy || !domains.length}
+					onclick={() => (wizard = { domain: domains[0]?.name ?? '', text: '', email: '' })}
+					>{t('ipv64x.wizardStart')}</button
 				>
 			</div>
-		{/each}
-		<div class="row-actions">
-			<button
-				type="button"
-				class="btn btn-primary"
-				disabled={busy || !domains.length}
-				onclick={() => (wizard = { domain: domains[0]?.name ?? '', text: '', email: '' })}
-				>{t('ipv64x.wizardStart')}</button
-			>
 		</div>
-	</section>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="ipv64-policies">
-		<h2 class="tile-title" id="ipv64-policies">{t('ipv64x.policies')}</h2>
-		<p class="muted hint">{t('ipv64x.policiesHint')}</p>
-		{#each policies as p (p.id)}
-			<div class="policy divided">
-				<div class="inline">
-					<strong class="grow">{p.name}</strong>
-					<span class="chip {tone(p.status)}"
-						>{t(`ipv64x.policyState.${p.status}` as MessageKey)}</span
-					>
-					<span class="muted"
-						>{t(`ipv64x.mode.${p.mode}` as MessageKey)} · {t(
-							p.linking === 'and' ? 'ipv64x.linkAnd' : 'ipv64x.linkOr',
-						)}</span
-					>
-				</div>
-				<div class="table-wrap">
-					<table>
-						<thead
-							><tr><th>{t('ipv64x.monitors')}</th><th>{t('ipv64x.state')}</th><th></th></tr></thead
+	<SettingGroup title={t('ipv64x.policies')} id="ipv64-policies">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.policiesHint')}</p>
+			{#each policies as p (p.id)}
+				<div class="policy divided">
+					<div class="inline">
+						<strong class="grow">{p.name}</strong>
+						<span class="chip {tone(p.status)}"
+							>{t(`ipv64x.policyState.${p.status}` as MessageKey)}</span
 						>
-						<tbody>
-							{#each p.monitors as m (m.healthcheck)}
-								<tr>
-									<td
-										>{m.name}{#if m.healthcheck === nasCheck}<span class="chip ok"
-												>{t('ipv64x.thisNas')}</span
-											>{/if}{#if m.negate}<span class="chip">{t('ipv64x.negated')}</span>{/if}</td
+						<span class="muted"
+							>{t(`ipv64x.mode.${p.mode}` as MessageKey)} · {t(
+								p.linking === 'and' ? 'ipv64x.linkAnd' : 'ipv64x.linkOr',
+							)}</span
+						>
+					</div>
+					<div class="table-wrap">
+						<table>
+							<thead
+								><tr><th>{t('ipv64x.monitors')}</th><th>{t('ipv64x.state')}</th><th></th></tr
+								></thead
+							>
+							<tbody>
+								{#each p.monitors as m (m.healthcheck)}
+									<tr>
+										<td
+											>{m.name}{#if m.healthcheck === nasCheck}<span class="chip ok"
+													>{t('ipv64x.thisNas')}</span
+												>{/if}{#if m.negate}<span class="chip">{t('ipv64x.negated')}</span>{/if}</td
+										>
+										<td>{m.healthcheck_status ?? '–'}</td>
+										<td class="actions"
+											><button
+												type="button"
+												class="btn"
+												disabled={busy}
+												onclick={() =>
+													run(async () => {
+														await api.delete(`/ipv64/failover/${p.id}/monitors/${m.healthcheck}`);
+														await load();
+													})}>{t('ipv64x.remove')}</button
+											></td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="table-wrap">
+						<table>
+							<thead
+								><tr
+									><th>{t('ipv64x.rules')}</th><th>{t('ipv64x.target')}</th><th
+										>{t('ipv64x.state')}</th
+									><th></th></tr
+								></thead
+							>
+							<tbody>
+								{#each p.rules as r (r.record)}
+									<tr>
+										<td class="mono">{r.record_type} {r.fqdn ?? r.record}</td>
+										<td
+											>{r.target.kind === 'offline_page'
+												? t('ipv64x.offlinePage') + ' ' + pageName(r.target.offline_page)
+												: r.target.ip || r.target.record}</td
+										>
+										<td
+											><span class="chip {tone(r.state)}"
+												>{t(
+													r.state === 'failed_over' ? 'ipv64x.ruleFailed' : 'ipv64x.ruleStandby',
+												)}</span
+											></td
+										>
+										<td class="actions"
+											><button
+												type="button"
+												class="btn"
+												disabled={busy}
+												onclick={() =>
+													run(async () => {
+														await api.delete(`/ipv64/failover/${p.id}/rules/${r.record}`);
+														await load();
+													})}>{t('ipv64x.remove')}</button
+											></td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="row-actions">
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() => (monitor = { policy: p, check: checks[0]?.id ?? '', negate: false })}
+							>{t('ipv64x.monitorAdd')}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() =>
+								(rule = {
+									policy: p,
+									domain: '',
+									records: [],
+									record: '',
+									kind: 'offline_page',
+									value: pages[0]?.id ?? 'default',
+								})}>{t('ipv64x.ruleAdd')}</button
+						>
+						<button type="button" class="btn" disabled={busy} onclick={() => editPolicy(p)}
+							>{t('ipv64x.edit')}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() =>
+								run(async () => {
+									await api.post(
+										`/ipv64/failover/${p.id}/do/${p.status === 'paused' ? 'resume' : 'pause'}`,
+									);
+									await load();
+								})}>{t(p.status === 'paused' ? 'ipv64x.resume' : 'ipv64x.pause')}</button
+						>
+						{#if p.status === 'active'}<button
+								type="button"
+								class="btn btn-warn"
+								disabled={busy}
+								onclick={() =>
+									(confirm = {
+										title: 'ipv64x.failoverTitle',
+										text: t('ipv64x.failoverText', { name: p.name }),
+										button: 'ipv64x.failoverNow',
+										danger: false,
+										run: () => api.post(`/ipv64/failover/${p.id}/do/failover`),
+									})}>{t('ipv64x.failoverNow')}</button
+							>{/if}
+						{#if p.status === 'failed_over'}<button
+								type="button"
+								class="btn btn-warn"
+								disabled={busy}
+								onclick={() =>
+									(confirm = {
+										title: 'ipv64x.fallbackTitle',
+										text: t('ipv64x.fallbackText', { name: p.name }),
+										button: 'ipv64x.fallbackNow',
+										danger: false,
+										run: () => api.post(`/ipv64/failover/${p.id}/do/fallback`),
+									})}>{t('ipv64x.fallbackNow')}</button
+							>{/if}
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() =>
+								(confirm = {
+									title: 'ipv64x.policyDeleteTitle',
+									text: t('ipv64x.policyDeleteText', { name: p.name }),
+									button: 'ipv64x.delete',
+									danger: true,
+									run: () => api.delete(`/ipv64/failover/${p.id}`),
+								})}>{t('ipv64x.delete')}</button
+						>
+					</div>
+				</div>
+			{:else}
+				<p class="muted">{t('ipv64x.none')}</p>
+			{/each}
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => editPolicy()}
+					>{t('ipv64x.policyCreate')}</button
+				>
+			</div>
+		</div>
+	</SettingGroup>
+
+	<SettingGroup title={t('ipv64x.offlinePages')} id="ipv64-offline">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.offlineHint')}</p>
+			<div class="table-wrap">
+				<table>
+					<thead
+						><tr
+							><th>{t('ipv64x.name')}</th><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.state')}</th
+							><th></th></tr
+						></thead
+					>
+					<tbody>
+						{#each pages as p (p.id)}
+							<tr>
+								<td
+									>{#if p.icon_url}<img
+											src={p.icon_url}
+											alt=""
+											class="icon"
+											referrerpolicy="no-referrer"
+										/>{/if}{p.name}</td
+								>
+								<td class="mono">{p.domain}</td>
+								<td
+									>{#if p.active}<span class="chip error">{t('ipv64x.shownNow')}</span
+										>{:else if p.in_use_by_policy}<span class="chip">{t('ipv64x.inUse')}</span
+										>{/if}</td
+								>
+								<td class="actions">
+									<a class="btn" href={p.preview_url} target="_blank" rel="noopener noreferrer"
+										>{t('ipv64x.preview')}</a
 									>
-									<td>{m.healthcheck_status ?? '–'}</td>
-									<td class="actions"
-										><button
+									<label class="btn upload"
+										>{t('ipv64x.icon')}<input
+											type="file"
+											accept="image/jpeg,image/png,image/webp"
+											onchange={(e) => upload(p, e.currentTarget.files?.[0])}
+										/></label
+									>
+									{#if p.icon_url}<button
 											type="button"
 											class="btn"
 											disabled={busy}
 											onclick={() =>
 												run(async () => {
-													await api.delete(`/ipv64/failover/${p.id}/monitors/${m.healthcheck}`);
+													await api.delete(`/ipv64/offline-pages/${p.id}/icon`);
 													await load();
-												})}>{t('ipv64x.remove')}</button
-										></td
+												})}>{t('ipv64x.iconRemove')}</button
+										>{/if}
+									<button type="button" class="btn" disabled={busy} onclick={() => editPage(p)}
+										>{t('ipv64x.edit')}</button
 									>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				<div class="table-wrap">
-					<table>
-						<thead
-							><tr
-								><th>{t('ipv64x.rules')}</th><th>{t('ipv64x.target')}</th><th
-									>{t('ipv64x.state')}</th
-								><th></th></tr
-							></thead
-						>
-						<tbody>
-							{#each p.rules as r (r.record)}
-								<tr>
-									<td class="mono">{r.record_type} {r.fqdn ?? r.record}</td>
-									<td
-										>{r.target.kind === 'offline_page'
-											? t('ipv64x.offlinePage') + ' ' + pageName(r.target.offline_page)
-											: r.target.ip || r.target.record}</td
-									>
-									<td
-										><span class="chip {tone(r.state)}"
-											>{t(
-												r.state === 'failed_over' ? 'ipv64x.ruleFailed' : 'ipv64x.ruleStandby',
-											)}</span
-										></td
-									>
-									<td class="actions"
-										><button
-											type="button"
-											class="btn"
-											disabled={busy}
-											onclick={() =>
-												run(async () => {
-													await api.delete(`/ipv64/failover/${p.id}/rules/${r.record}`);
-													await load();
-												})}>{t('ipv64x.remove')}</button
-										></td
-									>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				<div class="row-actions">
-					<button
-						type="button"
-						class="btn"
-						disabled={busy}
-						onclick={() => (monitor = { policy: p, check: checks[0]?.id ?? '', negate: false })}
-						>{t('ipv64x.monitorAdd')}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={busy}
-						onclick={() =>
-							(rule = {
-								policy: p,
-								domain: '',
-								records: [],
-								record: '',
-								kind: 'offline_page',
-								value: pages[0]?.id ?? 'default',
-							})}>{t('ipv64x.ruleAdd')}</button
-					>
-					<button type="button" class="btn" disabled={busy} onclick={() => editPolicy(p)}
-						>{t('ipv64x.edit')}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={busy}
-						onclick={() =>
-							run(async () => {
-								await api.post(
-									`/ipv64/failover/${p.id}/do/${p.status === 'paused' ? 'resume' : 'pause'}`,
-								);
-								await load();
-							})}>{t(p.status === 'paused' ? 'ipv64x.resume' : 'ipv64x.pause')}</button
-					>
-					{#if p.status === 'active'}<button
-							type="button"
-							class="btn btn-warn"
-							disabled={busy}
-							onclick={() =>
-								(confirm = {
-									title: 'ipv64x.failoverTitle',
-									text: t('ipv64x.failoverText', { name: p.name }),
-									button: 'ipv64x.failoverNow',
-									danger: false,
-									run: () => api.post(`/ipv64/failover/${p.id}/do/failover`),
-								})}>{t('ipv64x.failoverNow')}</button
-						>{/if}
-					{#if p.status === 'failed_over'}<button
-							type="button"
-							class="btn btn-warn"
-							disabled={busy}
-							onclick={() =>
-								(confirm = {
-									title: 'ipv64x.fallbackTitle',
-									text: t('ipv64x.fallbackText', { name: p.name }),
-									button: 'ipv64x.fallbackNow',
-									danger: false,
-									run: () => api.post(`/ipv64/failover/${p.id}/do/fallback`),
-								})}>{t('ipv64x.fallbackNow')}</button
-						>{/if}
-					<button
-						type="button"
-						class="btn"
-						disabled={busy}
-						onclick={() =>
-							(confirm = {
-								title: 'ipv64x.policyDeleteTitle',
-								text: t('ipv64x.policyDeleteText', { name: p.name }),
-								button: 'ipv64x.delete',
-								danger: true,
-								run: () => api.delete(`/ipv64/failover/${p.id}`),
-							})}>{t('ipv64x.delete')}</button
-					>
-				</div>
-			</div>
-		{:else}
-			<p class="muted">{t('ipv64x.none')}</p>
-		{/each}
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => editPolicy()}
-				>{t('ipv64x.policyCreate')}</button
-			>
-		</div>
-	</section>
-
-	<section class="tile panel" aria-labelledby="ipv64-offline">
-		<h2 class="tile-title" id="ipv64-offline">{t('ipv64x.offlinePages')}</h2>
-		<p class="muted hint">{t('ipv64x.offlineHint')}</p>
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('ipv64x.name')}</th><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.state')}</th><th
-						></th></tr
-					></thead
-				>
-				<tbody>
-					{#each pages as p (p.id)}
-						<tr>
-							<td
-								>{#if p.icon_url}<img
-										src={p.icon_url}
-										alt=""
-										class="icon"
-										referrerpolicy="no-referrer"
-									/>{/if}{p.name}</td
-							>
-							<td class="mono">{p.domain}</td>
-							<td
-								>{#if p.active}<span class="chip error">{t('ipv64x.shownNow')}</span
-									>{:else if p.in_use_by_policy}<span class="chip">{t('ipv64x.inUse')}</span
-									>{/if}</td
-							>
-							<td class="actions">
-								<a class="btn" href={p.preview_url} target="_blank" rel="noopener noreferrer"
-									>{t('ipv64x.preview')}</a
-								>
-								<label class="btn upload"
-									>{t('ipv64x.icon')}<input
-										type="file"
-										accept="image/jpeg,image/png,image/webp"
-										onchange={(e) => upload(p, e.currentTarget.files?.[0])}
-									/></label
-								>
-								{#if p.icon_url}<button
+									<button
 										type="button"
 										class="btn"
-										disabled={busy}
+										disabled={busy || !!p.in_use_by_policy}
 										onclick={() =>
-											run(async () => {
-												await api.delete(`/ipv64/offline-pages/${p.id}/icon`);
-												await load();
-											})}>{t('ipv64x.iconRemove')}</button
-									>{/if}
-								<button type="button" class="btn" disabled={busy} onclick={() => editPage(p)}
-									>{t('ipv64x.edit')}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy || !!p.in_use_by_policy}
-									onclick={() =>
-										(confirm = {
-											title: 'ipv64x.pageDeleteTitle',
-											text: t('ipv64x.pageDeleteText', { name: p.name }),
-											button: 'ipv64x.delete',
-											danger: true,
-											run: () => api.delete(`/ipv64/offline-pages/${p.id}`),
-										})}>{t('ipv64x.delete')}</button
-								>
-							</td>
-						</tr>
-					{:else}
-						<tr><td colspan="4" class="muted">{t('ipv64x.none')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
+											(confirm = {
+												title: 'ipv64x.pageDeleteTitle',
+												text: t('ipv64x.pageDeleteText', { name: p.name }),
+												button: 'ipv64x.delete',
+												danger: true,
+												run: () => api.delete(`/ipv64/offline-pages/${p.id}`),
+											})}>{t('ipv64x.delete')}</button
+									>
+								</td>
+							</tr>
+						{:else}
+							<tr><td colspan="4" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="muted hint">{t('ipv64x.iconHint')}</p>
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => editPage()}
+					>{t('ipv64x.offlineCreate')}</button
+				>
+			</div>
 		</div>
-		<p class="muted hint">{t('ipv64x.iconHint')}</p>
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => editPage()}
-				>{t('ipv64x.offlineCreate')}</button
-			>
-		</div>
-	</section>
+	</SettingGroup>
 </div>
 
 {#if wizard}

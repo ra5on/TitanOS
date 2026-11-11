@@ -4,6 +4,7 @@
 	import type { FirewallConfig, FirewallService } from '#lib/api.ts';
 	import { APPS, destinations, editCell, NAS } from '#lib/firewall.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import PolicyEditor from './PolicyEditor.svelte';
 
 	let {
@@ -53,9 +54,12 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="firewall-policies">
-	<h2 class="tile-title" id="firewall-policies">{t('firewall.tab.policies')}</h2>
-	<p class="muted">{t('firewall.policiesText')}</p>
+<!-- PLAN 78-1: the list with its filter under a plain heading. -->
+<SettingGroup
+	title={t('firewall.tab.policies')}
+	id="firewall-policies"
+	desc={t('firewall.policiesText')}
+>
 	<div class="filters">
 		<label class="stack"
 			><span>{t('firewall.from')}</span><select class="field" bind:value={from}
@@ -95,9 +99,26 @@
 		>
 		{#if !canAdd}<span class="muted small">{t('firewall.addPolicyHint')}</span>{/if}
 	</div>
-</section>
+</SettingGroup>
 
 <style>
+	/* Outside a tile (PLAN 78-1) the form pieces bring their own layout. */
+	.row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2-5);
+	}
+	.filters .stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1-5);
+		max-width: 32rem;
+		font-size: var(--text-md);
+	}
+	.filters .stack > span:first-child {
+		color: var(--muted);
+	}
 	.filters {
 		display: flex;
 		flex-wrap: wrap;

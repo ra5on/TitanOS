@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	// All HTTPS names in one place (backend package appproxy): the names of
 	// Docker apps and of targets outside Docker (VMs, containers, devices in
 	// the home network) first, one line each, then what holds for all names.
@@ -19,6 +20,8 @@
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
 	import { gatedAppURL } from '#lib/app-links.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
@@ -52,6 +55,14 @@
 	let autoError = $state('');
 	type CAInfo = { available: boolean; name?: string; fingerprint?: string; notAfter?: string };
 	let ca = $state<CAInfo | null>(null);
+	// A link to a group of this page (#proxy-ca): its content arrives after
+	// the browser's own anchor scroll, so bring it into view then.
+	const caLoaded = $derived(!!status && !!ca);
+	$effect(() => {
+		const id = page.url.hash.slice(1);
+		if (!caLoaded || !id) return;
+		requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+	});
 
 	const apps = $derived(status?.apps ?? []);
 	const targets = $derived(status?.targets ?? []);
@@ -396,203 +407,240 @@
 	{#if status.off}<p class="notice-warn" role="status">{t('proxy.allOffHint')}</p>{/if}
 	{#if offError}<p class="notice-error" role="alert">{offError}</p>{/if}
 
-	<section class="tile panel" aria-labelledby="proxy-apps">
-		<h2 class="tile-title" id="proxy-apps">{t('proxy.appsTitle')}</h2>
+	<!-- PLAN 78-1: groups are plain headings. The names stay a list (name,
+	     addresses, switch and menu per line); real settings are rows. -->
+	<SettingGroup title={t('proxy.appsTitle')} id="proxy-apps">
 		{#if status.auto !== undefined}
-			<div class="option">
-				<label class="check"
-					><input
+			<SettingRow
+				icon="sparkle"
+				title={t('appaccess.autoNames')}
+				desc={t('appaccess.autoNamesHint')}
+				for="proxy-auto"
+			>
+				{#snippet control()}
+					<input
+						id="proxy-auto"
+						class="switch"
 						type="checkbox"
-						checked={status.auto}
-						disabled={autoBusy || status.off}
+						role="switch"
+						checked={status!.auto}
+						disabled={autoBusy || status!.off}
 						onchange={(event) => setAuto(event.currentTarget.checked)}
-					/><span>{t('appaccess.autoNames')}</span></label
-				>
-				<p class="muted hint">{t('appaccess.autoNamesHint')}</p>
-				{#if autoError}<p class="notice-error" role="alert">{autoError}</p>{/if}
-			</div>
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if autoError}<p class="notice-error" role="alert">{autoError}</p>{/if}
 		{/if}
-		{#each apps as route (route.app)}
-			{@render routeRow('app', route)}
-		{:else}
-			<p class="muted">{t('proxy.appsEmpty')}</p>
-			<div class="row-actions"><a class="btn" href="/docker">{t('proxy.openDocker')}</a></div>
-		{/each}
+		<div class="routes">
+			{#each apps as route (route.app)}
+				{@render routeRow('app', route)}
+			{:else}
+				<p class="muted">{t('proxy.appsEmpty')}</p>
+				<div class="row-actions"><a class="btn" href="/docker">{t('proxy.openDocker')}</a></div>
+			{/each}
+		</div>
 		{#if error && !removing}<p class="notice-error" role="alert">{error}</p>{/if}
-	</section>
+	</SettingGroup>
 
 	{#if extended}
-		<section class="tile panel" aria-labelledby="proxy-targets">
-			<h2 class="tile-title" id="proxy-targets">{t('proxy.targetsTitle')}</h2>
-			<p class="muted hint">{t('proxy.targetsIntro')}</p>
-			{#each targets as route (route.app)}
-				{@render routeRow('target', route)}
-			{/each}
-			<div class="row-actions">
+		<SettingGroup title={t('proxy.targetsTitle')} id="proxy-targets" desc={t('proxy.targetsIntro')}>
+			{#snippet tools()}
 				<button class="btn" type="button" disabled={!!busyKey} onclick={() => edit('target', null)}
 					>{t('proxy.addTarget')}</button
 				>
-			</div>
-		</section>
+			{/snippet}
+			{#if targets.length}
+				<div class="routes">
+					{#each targets as route (route.app)}
+						{@render routeRow('target', route)}
+					{/each}
+				</div>
+			{/if}
+		</SettingGroup>
 	{/if}
 
-	<form class="tile panel" aria-labelledby="proxy-general" onsubmit={saveGeneral}>
-		<h2 class="tile-title" id="proxy-general">{t('proxy.generalTitle')}</h2>
-		{#if extended}
-			<div class="option">
-				<label class="check"
-					><input type="checkbox" bind:checked={general.mdns} /><span>{t('proxy.mdns')}</span
-					></label
+	<!-- One Save for the names of all apps (one request, typed text). -->
+	<form class="rows" onsubmit={saveGeneral}>
+		<SettingGroup title={t('proxy.generalTitle')} id="proxy-general">
+			{#if extended}
+				<SettingRow icon="home" title={t('proxy.mdns')} desc={t('proxy.mdnsHint')} for="proxy-mdns">
+					{#snippet control()}
+						<input
+							id="proxy-mdns"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							bind:checked={general.mdns}
+						/>
+					{/snippet}
+				</SettingRow>
+				<SettingRow
+					icon="edit"
+					title={t('proxy.localName')}
+					desc={t('proxy.localNameHint', { example: `immich.${localLabel || 'nas'}.local` })}
+					for="proxy-local-name"
 				>
-				<p class="muted hint">{t('proxy.mdnsHint')}</p>
-			</div>
-			<label class="stack"
-				><span>{t('proxy.localName')}</span><input
-					class="field mono"
-					type="text"
-					bind:value={general.localName}
-					oninput={() => (generalNotice = '')}
-					placeholder={status.defaultLocalName}
-					spellcheck="false"
-					autocapitalize="off"
-					disabled={!general.mdns}
-				/></label
+					{#snippet control()}
+						<input
+							id="proxy-local-name"
+							class="field mono"
+							type="text"
+							bind:value={general.localName}
+							oninput={() => (generalNotice = '')}
+							placeholder={status!.defaultLocalName}
+							spellcheck="false"
+							autocapitalize="off"
+							disabled={!general.mdns}
+						/>
+					{/snippet}
+				</SettingRow>
+				{#if !validLocalName(general.localName)}<p class="notice-warn" role="alert">
+						{t('proxy.localNameInvalid')}
+					</p>{/if}
+			{/if}
+			<SettingRow
+				icon="globe"
+				title={t('proxy.domain')}
+				desc={t('proxy.domainHint')}
+				for="proxy-domain"
 			>
-			<p class="muted hint">
-				{t('proxy.localNameHint', { example: `immich.${localLabel || 'nas'}.local` })}
-			</p>
-			{#if !validLocalName(general.localName)}<p class="notice-warn" role="alert">
-					{t('proxy.localNameInvalid')}
+				{#snippet control()}
+					<input
+						id="proxy-domain"
+						class="field mono"
+						type="text"
+						bind:value={general.domain}
+						oninput={() => (generalNotice = '')}
+						placeholder="home.example.org"
+						spellcheck="false"
+						autocapitalize="off"
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if !validProxyDomain(general.domain)}<p class="notice-warn" role="alert">
+					{t('proxy.domainInvalid')}
 				</p>{/if}
-			<div class="rule"></div>
-		{/if}
-		<label class="stack"
-			><span>{t('proxy.domain')}</span><input
-				class="field mono"
-				type="text"
-				bind:value={general.domain}
-				oninput={() => (generalNotice = '')}
-				placeholder="home.example.org"
-				spellcheck="false"
-				autocapitalize="off"
-			/></label
-		>
-		<p class="muted hint">{t('proxy.domainHint')}</p>
-		{#if !validProxyDomain(general.domain)}<p class="notice-warn" role="alert">
-				{t('proxy.domainInvalid')}
-			</p>{/if}
-		{#if extended && unreachable}<p class="notice-warn" role="alert">
-				{t('proxy.unreachable')}
-			</p>{/if}
-		{#if status.suffixes.length}<p class="muted hint">
-				{t('proxy.domainCurrent', { suffixes: status.suffixes.join(', ') })}
-			</p>{/if}
-		{#if generalError}<p class="notice-error" role="alert">{generalError}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={generalBusy || !generalValid || !generalChanged}
-				>{t('common.save')}</button
-			>
-			{#if generalNotice}<span class="muted" role="status">{generalNotice}</span>{/if}
-		</div>
+			{#if extended && unreachable}<p class="notice-warn" role="alert">
+					{t('proxy.unreachable')}
+				</p>{/if}
+			{#if status.suffixes.length}<p class="muted hint">
+					{t('proxy.domainCurrent', { suffixes: status.suffixes.join(', ') })}
+				</p>{/if}
+			{#if generalError}<p class="notice-error" role="alert">{generalError}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={generalBusy || !generalValid || !generalChanged}
+					>{t('common.save')}</button
+				>
+				{#if generalNotice}<span class="muted" role="status">{generalNotice}</span>{/if}
+			</div>
+		</SettingGroup>
 	</form>
 
 	{#if status.tailnet}
 		<form
-			class="tile panel"
-			aria-labelledby="proxy-tailnet"
+			class="rows"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void saveTailnetKey(tailnetKey.trim());
 			}}
 		>
-			<h2 class="tile-title" id="proxy-tailnet">{t('proxy.tailnetTitle')}</h2>
-			{#if !status.tailnet.available}<p class="notice-warn">{t('proxy.tailscaleNoPlugin')}</p>{/if}
-			<label class="stack"
-				><span>{t('proxy.tailscaleKey')}</span><input
-					class="field mono"
-					type="password"
-					autocomplete="off"
-					bind:value={tailnetKey}
-					placeholder={status.tailnet.keySet ? t('proxy.tailscaleKeySet') : 'tskey-auth-…'}
-					disabled={tailnetBusy}
-				/></label
-			>
-			<details class="explain">
-				<summary>{t('proxy.tailnetHelp')}</summary>
-				<p class="hint">{t('proxy.tailnetIntro')}</p>
-				<p class="hint">{t('proxy.tailscaleKeyHint')}</p>
-			</details>
-			{#if tailnetError}<p class="notice-error" role="alert">{tailnetError}</p>{/if}
-			<div class="row-actions">
-				<button
-					class="btn btn-primary"
-					disabled={tailnetBusy || !tailnetKey.trim().startsWith('tskey-')}
-					>{t('proxy.tailscaleKeySave')}</button
-				>
-				{#if status.tailnet.keySet}<button
-						type="button"
-						class="btn"
-						disabled={tailnetBusy}
-						onclick={() => saveTailnetKey('')}>{t('proxy.tailscaleKeyRemove')}</button
-					>{/if}
-				{#if tailnetNotice}<span class="muted" role="status">{tailnetNotice}</span>{/if}
-			</div>
+			<SettingGroup title={t('proxy.tailnetTitle')} id="proxy-tailnet">
+				{#if !status.tailnet.available}<p class="notice-warn">
+						{t('proxy.tailscaleNoPlugin')}
+					</p>{/if}
+				<SettingRow icon="key" title={t('proxy.tailscaleKey')} for="proxy-tailnet-key">
+					{#snippet control()}
+						<input
+							id="proxy-tailnet-key"
+							class="field mono"
+							type="password"
+							autocomplete="off"
+							bind:value={tailnetKey}
+							placeholder={status!.tailnet!.keySet ? t('proxy.tailscaleKeySet') : 'tskey-auth-…'}
+							disabled={tailnetBusy}
+						/>
+						<button
+							class="btn btn-primary"
+							disabled={tailnetBusy || !tailnetKey.trim().startsWith('tskey-')}
+							>{t('proxy.tailscaleKeySave')}</button
+						>
+						{#if status!.tailnet!.keySet}<button
+								type="button"
+								class="btn"
+								disabled={tailnetBusy}
+								onclick={() => saveTailnetKey('')}>{t('proxy.tailscaleKeyRemove')}</button
+							>{/if}
+					{/snippet}
+				</SettingRow>
+				<SettingRow id="proxy-tailnet-help" icon="info" title={t('proxy.tailnetHelp')}>
+					<div class="srow-block">
+						<p class="hint">{t('proxy.tailnetIntro')}</p>
+						<p class="hint">{t('proxy.tailscaleKeyHint')}</p>
+					</div>
+				</SettingRow>
+				{#if tailnetError}<p class="notice-error" role="alert">{tailnetError}</p>{/if}
+				{#if tailnetNotice}<p class="muted" role="status">{tailnetNotice}</p>{/if}
+			</SettingGroup>
 		</form>
 	{/if}
 
 	{#if ca}
-		<section class="tile panel" aria-labelledby="proxy-ca">
-			<h2 class="tile-title" id="proxy-ca">{t('appaccess.caTitle')}</h2>
-			<p class="hint">{t('appaccess.caIntro')}</p>
+		<SettingGroup title={t('appaccess.caTitle')} id="proxy-ca" desc={t('appaccess.caIntro')}>
 			<p class="muted hint">{t('appaccess.caNotNeeded')}</p>
 			{#if ca.available}
-				<dl class="facts">
-					<div>
-						<dt>{t('appaccess.caName')}</dt>
-						<dd>{ca.name}</dd>
-					</div>
-					{#if ca.notAfter}<div>
-							<dt>{t('appaccess.caUntil')}</dt>
-							<dd>{formatDateTime(new Date(ca.notAfter))}</dd>
-						</div>{/if}
-					<div>
-						<dt>{t('appaccess.caFingerprint')}</dt>
-						<dd class="mono fingerprint">{ca.fingerprint}</dd>
-					</div>
-				</dl>
-				<div class="row-actions">
-					<a class="btn btn-primary" href={apiPath('/certs/ca.crt')} download
-						>{t('appaccess.caDownloadCrt')}</a
-					>
-					<a class="btn" href={apiPath('/certs/ca.cer')} download>{t('appaccess.caDownloadCer')}</a>
-				</div>
-				<details class="explain">
-					<summary>{t('appaccess.caHowTitle')}</summary>
-					<dl class="howto">
-						{#each ['Windows', 'Mac', 'Ios', 'Android', 'Linux'] as const as os (os)}
+				<SettingRow id="proxy-ca-cert" icon="lock" title={ca.name || t('appaccess.caName')} open>
+					<div class="srow-block">
+						<dl class="facts">
+							{#if ca.notAfter}<div>
+									<dt>{t('appaccess.caUntil')}</dt>
+									<dd>{formatDateTime(new Date(ca.notAfter))}</dd>
+								</div>{/if}
 							<div>
-								<dt>{t(`appaccess.ca${os}Title`)}</dt>
-								<dd class="hint">{t(`appaccess.ca${os}`)}</dd>
+								<dt>{t('appaccess.caFingerprint')}</dt>
+								<dd class="mono fingerprint">{ca.fingerprint}</dd>
 							</div>
-						{/each}
-					</dl>
-				</details>
+						</dl>
+					</div>
+					<div class="srow-block actions">
+						<a class="btn btn-primary" href={apiPath('/certs/ca.crt')} download
+							>{t('appaccess.caDownloadCrt')}</a
+						>
+						<a class="btn" href={apiPath('/certs/ca.cer')} download
+							>{t('appaccess.caDownloadCer')}</a
+						>
+					</div>
+				</SettingRow>
+				<SettingRow id="proxy-ca-how" icon="info" title={t('appaccess.caHowTitle')}>
+					<div class="srow-block">
+						<dl class="howto">
+							{#each ['Windows', 'Mac', 'Ios', 'Android', 'Linux'] as const as os (os)}
+								<div>
+									<dt>{t(`appaccess.ca${os}Title`)}</dt>
+									<dd class="hint">{t(`appaccess.ca${os}`)}</dd>
+								</div>
+							{/each}
+						</dl>
+					</div>
+				</SettingRow>
 				<p class="muted hint">{t('appaccess.caKey')}</p>
 			{:else}
 				<p class="notice-warn">{t('appaccess.caUnavailable')}</p>
 			{/if}
-		</section>
+		</SettingGroup>
 	{/if}
 
-	<details class="tile panel explain" aria-labelledby="proxy-how">
-		<summary class="tile-title" id="proxy-how">{t('proxy.howTitle')}</summary>
-		<p class="hint">{t('proxy.howLocal')}</p>
-		<p class="hint">{t('proxy.howDomain')}</p>
-		<p class="hint">{t('proxy.howCert')}</p>
-		<div class="row-actions">
-			<a class="btn" href="/settings/access#access-cert">{t('proxy.openCert')}</a>
-		</div>
-	</details>
+	<SettingGroup>
+		<SettingRow id="proxy-how" icon="info" title={t('proxy.howTitle')}>
+			<div class="srow-block">
+				<p class="hint">{t('proxy.howLocal')}</p>
+				<p class="hint">{t('proxy.howDomain')}</p>
+				<p class="hint">{t('proxy.howCert')}</p>
+			</div>
+			<div class="srow-block actions">
+				<a class="btn" href="/settings/access#access-cert">{t('proxy.openCert')}</a>
+			</div>
+		</SettingRow>
+	</SettingGroup>
 {/if}
 
 {#if editing && status}
@@ -662,19 +710,29 @@
 	.hint {
 		font-size: var(--text-md);
 	}
-	.option {
+	form.rows {
+		display: contents;
+	}
+	.row-actions {
+		margin-top: var(--space-2);
+	}
+	/* The list of names: lines with a hair line between, no box. */
+	.routes {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		gap: var(--space-3);
+		margin-top: var(--space-2);
 	}
-	.option .hint {
-		padding-left: 28px;
+	.routes p {
+		margin: 0;
+	}
+	.route > .check input {
+		width: 18px;
+		height: 18px;
+		margin: 0;
 	}
 	.small {
 		font-size: var(--text-base);
-	}
-	.rule {
-		border-top: 1px solid var(--panel-border);
 	}
 	/* Outside a tile, so without the tile's look of checkboxes. */
 	.head-switch {
@@ -694,7 +752,7 @@
 		align-items: start;
 		gap: var(--space-1) var(--space-3);
 		padding-top: var(--space-3);
-		border-top: 1px solid var(--panel-border);
+		border-top: 1px solid var(--srow-line);
 	}
 	.route > .check,
 	.route > :global(.dropdown) {
@@ -739,16 +797,6 @@
 	}
 	.more:hover {
 		text-decoration: underline;
-	}
-	.explain summary {
-		cursor: pointer;
-	}
-	.explain[open] summary {
-		margin-bottom: var(--space-1);
-	}
-	details.explain:not(.tile) summary {
-		color: var(--accent);
-		font-size: var(--text-md);
 	}
 	.facts,
 	.howto {

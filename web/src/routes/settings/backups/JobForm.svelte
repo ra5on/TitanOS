@@ -188,8 +188,8 @@
 	}
 </script>
 
-<form class="tile panel" onsubmit={save}>
-	<h2 class="tile-title">
+<form class="srow panel job-form" onsubmit={save}>
+	<h2 class="sgroup-title">
 		{isNew ? t('backup.add') : t('backup.editTitle', { name: draft.id })}
 	</h2>
 	{#if isNew}
@@ -442,7 +442,10 @@
 </form>
 
 <style>
-	form.tile {
+	/* The quiet surface of a row, with the layout of a panel. */
+	form.job-form {
+		display: flex;
+		flex-direction: column;
 		font-size: 0.875rem;
 	}
 	p {
@@ -468,6 +471,10 @@
 	small {
 		font-size: 0.75rem;
 		color: var(--muted);
+	}
+	/* Directly in the form (a column) the basis would be a height. */
+	form.job-form > .narrow {
+		flex: none;
 	}
 	.narrow {
 		flex: 0 1 260px;

@@ -716,50 +716,47 @@ const tab = async (page, name) => {
 
 try {
   // IPv64 is a tab of Dynamic DNS (since 29 Oct 2026), not an area of its own.
-  // PLAN 71: the side bar of the Systemsteuerung window lists the areas and
-  // its search finds the parts of IPv64 under Dynamic DNS.
+  // The menu of the control panel lists the areas and its search finds the
+  // parts of IPv64 under Dynamic DNS.
   {
     const made = await create("owner");
-    await made.ctx.addInitScript(() =>
-      localStorage.removeItem("titanos.layout"),
-    );
     await routeIPv64(made.ctx, ipv64Data());
+    // PLAN 78-2: the menu of the control panel is a page of rows (links)
+    // with its search field, not the side bar of a window any more.
     await made.page.goto(base + "/settings");
-    const side = made.page.locator("section.win nav.side");
-    const items = () =>
-      side
-        .locator(".items .item")
-        .evaluateAll((a) => a.map((x) => x.textContent.trim()));
-    await side
-      .getByRole("button", { name: "Dynamisches DNS", exact: true })
-      .waitFor({ timeout: 15000 });
+    const shell = made.page.locator(".settings-shell");
+    const rows = () =>
+      shell
+        .locator("a.srow:not(.overview a)")
+        .evaluateAll((a) =>
+          a.map((x) => [
+            x.querySelector(".srow-title")?.textContent.trim(),
+            x.getAttribute("href"),
+          ]),
+        );
+    await shell.locator('a.srow[href="/settings/ddns"]').waitFor({
+      timeout: 15000,
+    });
     assert.equal(
-      (await items()).filter((x) => /^IPv64/.test(x)).length,
+      (await rows()).filter(([title]) => /^IPv64/.test(title)).length,
       0,
       "no IPv64 entry in the settings",
     );
-    await side
-      .getByRole("searchbox", { name: "Einstellung suchen" })
-      .fill("cloud router");
-    assert.deepEqual(await items(), ["Dynamisches DNS"]);
-    await side
-      .getByRole("button", { name: "Dynamisches DNS", exact: true })
-      .click();
-    await made.page.waitForFunction(
-      () => {
-        const loc =
-          document.querySelector("section.win iframe")?.contentWindow?.location;
-        return (
-          loc?.pathname === "/settings/ddns" &&
-          loc.search === "?tab=ipv64&sub=router"
-        );
-      },
-      null,
+    const search = shell.getByRole("searchbox", {
+      name: "Einstellungen suchen",
+    });
+    await search.fill("cloud router");
+    const found = await rows();
+    assert.equal(found.length, 1, JSON.stringify(found));
+    assert.match(found[0][1], /^\/settings\/ddns\?tab=ipv64&sub=router/);
+    await search.press("Enter");
+    await made.page.waitForURL(
+      (url) =>
+        url.pathname === "/settings/ddns" &&
+        url.search === "?tab=ipv64&sub=router",
       { timeout: 8000 },
     );
     await made.page
-      .frameLocator("section.win iframe")
-      .first()
       .getByRole("tab", { name: "Cloud Router", exact: true, selected: true })
       .waitFor();
     await made.ctx.close();
@@ -876,9 +873,7 @@ try {
     .waitFor();
   await page.getByText("DynDNS mit IPv64").waitFor();
   assert.equal(
-    await page
-      .locator("form[aria-labelledby=ipv64-dyn-settings] input[type=password]")
-      .count(),
+    await page.locator("#ipv64-dyn-settings input[type=password]").count(),
     0,
     "no second key field",
   );
@@ -889,7 +884,7 @@ try {
     .click();
   await page.getByLabel(/^Präfix/).selectOption("auto");
   await page
-    .locator("form[aria-labelledby=ipv64-dyn-settings]")
+    .locator("#ipv64-dyn-settings")
     .getByRole("button", { name: "Speichern", exact: true })
     .click();
   await page.getByText("Gespeichert.").first().waitFor();
@@ -1145,14 +1140,11 @@ try {
   // Accounts with the role "user" do not get the area.
   {
     const { ctx: userCtx, page: userPage } = await create("user");
-    await userCtx.addInitScript(() =>
-      localStorage.removeItem("titanos.layout"),
-    );
     await userPage.goto(base + "/settings");
-    const side = userPage.locator("section.win nav.side");
-    await side.locator(".items .item").first().waitFor({ timeout: 15000 });
-    const items = await side
-      .locator(".items .item")
+    const shell = userPage.locator(".settings-shell");
+    await shell.locator("a.srow").first().waitFor({ timeout: 15000 });
+    const items = await shell
+      .locator("a.srow")
       .evaluateAll((a) => a.map((x) => x.textContent.trim()));
     assert.equal(
       items.filter((x) => /IPv64|Dynamisches DNS/.test(x)).length,

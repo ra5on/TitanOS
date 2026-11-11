@@ -5,6 +5,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Slider from '#lib/components/Slider.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import EffectSlider from '#lib/components/EffectSlider.svelte';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
@@ -236,264 +237,275 @@
 
 <LoginAccountsSettings bind:look={draft} />
 
-<section class="tile panel login-look" aria-labelledby="h-login-look">
-	<h2 class="tile-title" id="h-login-look">{t('loginLook.title')}</h2>
-	<p class="hint muted">{t('loginLook.intro')}</p>
-
-	<div class="frame" bind:clientWidth={frameWidth} aria-label={t('loginLook.preview')} role="img">
-		<div class="stage" style:transform={`scale(${scale})`} inert>
-			<Login preview look={draft} imageURL={pending?.url ?? ''} hostname={session.data?.hostname} />
-		</div>
-	</div>
-	<div class="row-actions">
-		<button type="button" class="btn" onclick={openPreview}>{t('loginLook.openPreview')}</button>
-	</div>
-
-	{#if ratio < 4.5}
-		<p class="notice-warn" role="status">
-			{t('loginLook.contrastWarning', { ratio: format(ratio) + ':1' })}
-		</p>
-	{/if}
-
-	<div class="divided">
-		<label class="stack"
-			>{t('loginLook.theme')}<select class="field" bind:value={draft.theme}>
-				{#each LOGIN_THEMES as id (id)}
-					<option value={id}
-						>{id === 'inherit' ? t('loginLook.themeInherit') : t(`theme.${id}`)}</option
-					>
-				{/each}
-			</select></label
-		>
-		{#if draft.theme === 'inherit'}
-			<p class="hint muted">{t('loginLook.themeInheritHint')}</p>
-		{:else}
-			<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
-				{#each ACCENT_IDS as id (id)}
-					<button
-						type="button"
-						role="radio"
-						aria-label={t(`accent.${id}`)}
-						aria-checked={draft.accent === id}
-						style:background={ACCENTS[id].hex}
-						onclick={() => (draft.accent = id)}
-					></button>
-				{/each}
-				<input
-					type="color"
-					aria-label={t('appearance.customAccent')}
-					class:picked={draft.accent === 'custom'}
-					bind:value={draft.customAccent}
-					oninput={() => (draft.accent = 'custom')}
+<!-- PLAN 78-1: a plain heading instead of a tile; the editor with its live
+     preview stays one block (.panel keeps its form styles, without the box). -->
+<SettingGroup title={t('loginLook.title')} id="h-login-look" desc={t('loginLook.intro')}>
+	<div class="panel login-look">
+		<div class="frame" bind:clientWidth={frameWidth} aria-label={t('loginLook.preview')} role="img">
+			<div class="stage" style:transform={`scale(${scale})`} inert>
+				<Login
+					preview
+					look={draft}
+					imageURL={pending?.url ?? ''}
+					hostname={session.data?.hostname}
 				/>
 			</div>
-			<!-- PLAN 64: the card is always glass like the lock screen; transparency and blur stay. -->
-			<Slider
-				id="login-glass"
-				label={t('appearance.transparency')}
-				bind:value={draft.glass}
-				limit={LIMITS.glass}
-				unit="%"
-			/>
-			<Slider
-				id="login-blur"
-				label={t('appearance.blur')}
-				bind:value={draft.blur}
-				limit={LIMITS.blur}
-				unit="px"
-			/>
-			<p class="hint muted">{t('loginLook.glassHint')}</p>
-		{/if}
-	</div>
+		</div>
+		<div class="row-actions">
+			<button type="button" class="btn" onclick={openPreview}>{t('loginLook.openPreview')}</button>
+		</div>
 
-	<div class="divided">
-		<label class="stack"
-			>{t('loginLook.background')}<select
-				class="field"
-				value={draft.background.source}
-				onchange={(e) => {
-					const source = e.currentTarget.value as LoginLook['background']['source'];
-					draft.background = {
-						...draft.background,
-						source,
-						id: source === 'builtin' ? draft.background.id || BACKGROUND_IDS[0] : '',
-					};
-					if (source === 'custom' && !draft.image) fileInput?.click();
-				}}
-			>
-				{#each LOGIN_SOURCES as id (id)}<option value={id}>{t(`loginLook.bg.${id}`)}</option>{/each}
-			</select></label
-		>
-		{#if draft.background.source === 'builtin'}
-			<div class="motifs" role="radiogroup" aria-label={t('loginLook.bg.builtin')}>
-				{#each BACKGROUND_IDS as id (id)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={draft.background.id === id}
-						aria-label={t('dashboard.visual.pick', { name: t(`dashboard.bg.${id}` as MessageKey) })}
-						onclick={() => (draft.background = { ...draft.background, id })}
-						><img src={'/backgrounds/' + id + '.webp'} alt="" loading="lazy" /><span
-							>{t(`dashboard.bg.${id}` as MessageKey)}</span
-						></button
-					>
-				{/each}
-			</div>
+		{#if ratio < 4.5}
+			<p class="notice-warn" role="status">
+				{t('loginLook.contrastWarning', { ratio: format(ratio) + ':1' })}
+			</p>
 		{/if}
-		{#if draft.background.source === 'custom'}
-			<div class="upload">
-				<span class="muted"
-					>{#if pending}{pending.file.name} · {t(
-							'loginLook.imagePending',
-						)}{:else if draft.image}{draft.image.width} × {draft.image.height}{:else}{t(
-							'loginLook.imageNone',
-						)}{/if}</span
-				>
-				<button type="button" class="btn" onclick={() => fileInput?.click()}
-					>{draft.image ? t('loginLook.replaceImage') : t('loginLook.chooseImage')}</button
-				>
-			</div>
-			<p class="hint muted">{t('loginLook.imageHint')}</p>
-		{/if}
-		<input
-			bind:this={fileInput}
-			type="file"
-			accept={LOGIN_IMAGE_TYPES.join(',')}
-			hidden
-			onchange={pickImage}
-		/>
-		{#if removesImage}<p class="hint muted">{t('loginLook.imageRemoved')}</p>{/if}
-		{#if draft.background.source !== 'theme'}
+
+		<div class="divided">
 			<label class="stack"
-				>{t('dashboard.visual.fit')}<select class="field" bind:value={draft.background.fit}>
-					<option value="cover">{t('dashboard.visual.cover')}</option>
-					<option value="contain">{t('dashboard.visual.contain')}</option>
+				>{t('loginLook.theme')}<select class="field" bind:value={draft.theme}>
+					{#each LOGIN_THEMES as id (id)}
+						<option value={id}
+							>{id === 'inherit' ? t('loginLook.themeInherit') : t(`theme.${id}`)}</option
+						>
+					{/each}
 				</select></label
 			>
-			{#if draft.background.fit === 'cover'}
-				<EffectSlider
-					label={t('dashboard.visual.zoom')}
-					value={draft.background.zoom}
-					min={100}
-					max={200}
-					onbegin={() => {}}
-					onchange={(v) => (draft.background.zoom = v)}
+			{#if draft.theme === 'inherit'}
+				<p class="hint muted">{t('loginLook.themeInheritHint')}</p>
+			{:else}
+				<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
+					{#each ACCENT_IDS as id (id)}
+						<button
+							type="button"
+							role="radio"
+							aria-label={t(`accent.${id}`)}
+							aria-checked={draft.accent === id}
+							style:background={ACCENTS[id].hex}
+							onclick={() => (draft.accent = id)}
+						></button>
+					{/each}
+					<input
+						type="color"
+						aria-label={t('appearance.customAccent')}
+						class:picked={draft.accent === 'custom'}
+						bind:value={draft.customAccent}
+						oninput={() => (draft.accent = 'custom')}
+					/>
+				</div>
+				<!-- PLAN 64: the card is always glass like the lock screen; transparency and blur stay. -->
+				<Slider
+					id="login-glass"
+					label={t('appearance.transparency')}
+					bind:value={draft.glass}
+					limit={LIMITS.glass}
+					unit="%"
 				/>
-				<EffectSlider
-					label={t('dashboard.visual.positionX')}
-					value={draft.background.x}
-					onbegin={() => {}}
-					onchange={(v) => (draft.background.x = v)}
+				<Slider
+					id="login-blur"
+					label={t('appearance.blur')}
+					bind:value={draft.blur}
+					limit={LIMITS.blur}
+					unit="px"
 				/>
+				<p class="hint muted">{t('loginLook.glassHint')}</p>
+			{/if}
+		</div>
+
+		<div class="divided">
+			<label class="stack"
+				>{t('loginLook.background')}<select
+					class="field"
+					value={draft.background.source}
+					onchange={(e) => {
+						const source = e.currentTarget.value as LoginLook['background']['source'];
+						draft.background = {
+							...draft.background,
+							source,
+							id: source === 'builtin' ? draft.background.id || BACKGROUND_IDS[0] : '',
+						};
+						if (source === 'custom' && !draft.image) fileInput?.click();
+					}}
+				>
+					{#each LOGIN_SOURCES as id (id)}<option value={id}>{t(`loginLook.bg.${id}`)}</option
+						>{/each}
+				</select></label
+			>
+			{#if draft.background.source === 'builtin'}
+				<div class="motifs" role="radiogroup" aria-label={t('loginLook.bg.builtin')}>
+					{#each BACKGROUND_IDS as id (id)}
+						<button
+							type="button"
+							role="radio"
+							aria-checked={draft.background.id === id}
+							aria-label={t('dashboard.visual.pick', {
+								name: t(`dashboard.bg.${id}` as MessageKey),
+							})}
+							onclick={() => (draft.background = { ...draft.background, id })}
+							><img src={'/backgrounds/' + id + '.webp'} alt="" loading="lazy" /><span
+								>{t(`dashboard.bg.${id}` as MessageKey)}</span
+							></button
+						>
+					{/each}
+				</div>
+			{/if}
+			{#if draft.background.source === 'custom'}
+				<div class="upload">
+					<span class="muted"
+						>{#if pending}{pending.file.name} · {t(
+								'loginLook.imagePending',
+							)}{:else if draft.image}{draft.image.width} × {draft.image.height}{:else}{t(
+								'loginLook.imageNone',
+							)}{/if}</span
+					>
+					<button type="button" class="btn" onclick={() => fileInput?.click()}
+						>{draft.image ? t('loginLook.replaceImage') : t('loginLook.chooseImage')}</button
+					>
+				</div>
+				<p class="hint muted">{t('loginLook.imageHint')}</p>
+			{/if}
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept={LOGIN_IMAGE_TYPES.join(',')}
+				hidden
+				onchange={pickImage}
+			/>
+			{#if removesImage}<p class="hint muted">{t('loginLook.imageRemoved')}</p>{/if}
+			{#if draft.background.source !== 'theme'}
+				<label class="stack"
+					>{t('dashboard.visual.fit')}<select class="field" bind:value={draft.background.fit}>
+						<option value="cover">{t('dashboard.visual.cover')}</option>
+						<option value="contain">{t('dashboard.visual.contain')}</option>
+					</select></label
+				>
+				{#if draft.background.fit === 'cover'}
+					<EffectSlider
+						label={t('dashboard.visual.zoom')}
+						value={draft.background.zoom}
+						min={100}
+						max={200}
+						onbegin={() => {}}
+						onchange={(v) => (draft.background.zoom = v)}
+					/>
+					<EffectSlider
+						label={t('dashboard.visual.positionX')}
+						value={draft.background.x}
+						onbegin={() => {}}
+						onchange={(v) => (draft.background.x = v)}
+					/>
+					<EffectSlider
+						label={t('dashboard.visual.positionY')}
+						value={draft.background.y}
+						onbegin={() => {}}
+						onchange={(v) => (draft.background.y = v)}
+					/>
+				{/if}
 				<EffectSlider
-					label={t('dashboard.visual.positionY')}
-					value={draft.background.y}
+					label={t('dashboard.visual.dim')}
+					value={draft.background.dim}
+					max={80}
 					onbegin={() => {}}
-					onchange={(v) => (draft.background.y = v)}
+					onchange={(v) => (draft.background.dim = v)}
 				/>
 			{/if}
-			<EffectSlider
-				label={t('dashboard.visual.dim')}
-				value={draft.background.dim}
-				max={80}
-				onbegin={() => {}}
-				onchange={(v) => (draft.background.dim = v)}
-			/>
-		{/if}
-	</div>
+		</div>
 
-	<div class="divided two">
+		<div class="divided two">
+			<label class="stack"
+				>{t('loginLook.position')}<select class="field" bind:value={draft.position}>
+					{#each LOGIN_POSITIONS as id (id)}<option value={id}
+							>{t(`loginLook.position.${id}`)}</option
+						>{/each}
+				</select></label
+			>
+			<label class="stack"
+				>{t('loginLook.width')}<select class="field" bind:value={draft.width}>
+					{#each LOGIN_WIDTHS as id (id)}<option value={id}>{t(`loginLook.width.${id}`)}</option
+						>{/each}
+				</select></label
+			>
+		</div>
+		<p class="hint muted">{t('loginLook.positionHint')}</p>
+		<label class="check"
+			><input
+				type="checkbox"
+				checked={!draft.hideHost}
+				onchange={(e) => (draft.hideHost = !e.currentTarget.checked)}
+			/>{t('loginLook.showHost')}</label
+		>
+		<label class="check"
+			><input
+				type="checkbox"
+				checked={!draft.hideLogo}
+				onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
+			/>{t('loginLook.showLogo')}</label
+		>
+		<label class="check"
+			><input
+				type="checkbox"
+				checked={!draft.still}
+				onchange={(e) => (draft.still = !e.currentTarget.checked)}
+			/>{t('loginLook.moving')}</label
+		>
+		<p class="hint muted">{t('loginLook.movingHint')}</p>
 		<label class="stack"
-			>{t('loginLook.position')}<select class="field" bind:value={draft.position}>
-				{#each LOGIN_POSITIONS as id (id)}<option value={id}>{t(`loginLook.position.${id}`)}</option
+			>{t('loginLook.enter')}<select class="field" bind:value={draft.enter}>
+				{#each LOGIN_ENTERS as id (id)}<option value={id}>{t(`loginLook.enter.${id}`)}</option
 					>{/each}
 			</select></label
 		>
-		<label class="stack"
-			>{t('loginLook.width')}<select class="field" bind:value={draft.width}>
-				{#each LOGIN_WIDTHS as id (id)}<option value={id}>{t(`loginLook.width.${id}`)}</option
-					>{/each}
-			</select></label
+		<label class="check"
+			><input type="checkbox" bind:checked={draft.showStatus} />{t('loginLook.showStatus')}</label
 		>
-	</div>
-	<p class="hint muted">{t('loginLook.positionHint')}</p>
-	<label class="check"
-		><input
-			type="checkbox"
-			checked={!draft.hideHost}
-			onchange={(e) => (draft.hideHost = !e.currentTarget.checked)}
-		/>{t('loginLook.showHost')}</label
-	>
-	<label class="check"
-		><input
-			type="checkbox"
-			checked={!draft.hideLogo}
-			onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
-		/>{t('loginLook.showLogo')}</label
-	>
-	<label class="check"
-		><input
-			type="checkbox"
-			checked={!draft.still}
-			onchange={(e) => (draft.still = !e.currentTarget.checked)}
-		/>{t('loginLook.moving')}</label
-	>
-	<p class="hint muted">{t('loginLook.movingHint')}</p>
-	<label class="stack"
-		>{t('loginLook.enter')}<select class="field" bind:value={draft.enter}>
-			{#each LOGIN_ENTERS as id (id)}<option value={id}>{t(`loginLook.enter.${id}`)}</option>{/each}
-		</select></label
-	>
-	<label class="check"
-		><input type="checkbox" bind:checked={draft.showStatus} />{t('loginLook.showStatus')}</label
-	>
-	<p class="hint muted">{t('loginLook.showStatusHint')}</p>
+		<p class="hint muted">{t('loginLook.showStatusHint')}</p>
 
-	<fieldset class="divided texts">
-		<legend class="tile-title">{t('loginLook.texts')}</legend>
-		{#each LOGIN_LOCALES as locale (locale)}
-			{@const text = draft.texts[locale] ?? { title: '', notice: '' }}
-			<div class="language">
-				<span class="lang">{t(`lang.${locale}`)}</span>
-				<label class="stack"
-					>{t('loginLook.textTitle')}<input
-						class="field"
-						type="text"
-						lang={locale}
-						maxlength={LOGIN_TITLE_MAX}
-						placeholder={locale === 'de' ? 'Anmelden' : 'Log in'}
-						value={text.title}
-						oninput={(e) => setText(locale, 'title', e.currentTarget.value)}
-					/></label
-				>
-				<label class="stack"
-					><span>{t('loginLook.textNotice')}</span><input
-						class="field"
-						type="text"
-						lang={locale}
-						maxlength={LOGIN_NOTICE_MAX}
-						value={text.notice}
-						oninput={(e) => setText(locale, 'notice', e.currentTarget.value)}
-					/><small class="muted"
-						>{t('loginLook.count', {
-							count: [...text.notice].length,
-							max: LOGIN_NOTICE_MAX,
-						})}</small
-					></label
-				>
-			</div>
-		{/each}
-		<p class="hint muted">{t('loginLook.textsHint')}</p>
-	</fieldset>
+		<fieldset class="divided texts">
+			<legend>{t('loginLook.texts')}</legend>
+			{#each LOGIN_LOCALES as locale (locale)}
+				{@const text = draft.texts[locale] ?? { title: '', notice: '' }}
+				<div class="language">
+					<span class="lang">{t(`lang.${locale}`)}</span>
+					<label class="stack"
+						>{t('loginLook.textTitle')}<input
+							class="field"
+							type="text"
+							lang={locale}
+							maxlength={LOGIN_TITLE_MAX}
+							placeholder={locale === 'de' ? 'Anmelden' : 'Log in'}
+							value={text.title}
+							oninput={(e) => setText(locale, 'title', e.currentTarget.value)}
+						/></label
+					>
+					<label class="stack"
+						><span>{t('loginLook.textNotice')}</span><input
+							class="field"
+							type="text"
+							lang={locale}
+							maxlength={LOGIN_NOTICE_MAX}
+							value={text.notice}
+							oninput={(e) => setText(locale, 'notice', e.currentTarget.value)}
+						/><small class="muted"
+							>{t('loginLook.count', {
+								count: [...text.notice].length,
+								max: LOGIN_NOTICE_MAX,
+							})}</small
+						></label
+					>
+				</div>
+			{/each}
+			<p class="hint muted">{t('loginLook.textsHint')}</p>
+		</fieldset>
 
-	<div class="row-actions">
-		<button type="button" class="btn" onclick={reset} disabled={saving}
-			>{t('loginLook.reset')}</button
-		>
-		{#if message}<span class="state" class:warn={message.warn} role="status">{message.text}</span
-			>{/if}
+		<div class="row-actions">
+			<button type="button" class="btn" onclick={reset} disabled={saving}
+				>{t('loginLook.reset')}</button
+			>
+			{#if message}<span class="state" class:warn={message.warn} role="status">{message.text}</span
+				>{/if}
+		</div>
 	</div>
-</section>
+</SettingGroup>
 
 <style>
 	.hint {
@@ -611,10 +623,9 @@
 	.language small {
 		font-size: var(--text-xs);
 	}
-	/* The texts of a language already sit in two columns: no label-left rows
-	   of a window inside them (app.css), they would not fit. */
-	:global(main.in-window .tile.panel) .language label.stack {
-		display: flex;
+	/* PLAN 78-1: the editor stands under a plain heading, without a box. */
+	.login-look {
+		padding: 0;
 	}
 	.state {
 		font-size: var(--text-base);

@@ -2,6 +2,8 @@
 	// Settings › KI-Agent › Verbindung: the Ollama server (own or the
 	// cluster's), the model with thinking level and context, speech and pictures.
 	import Segments from '#lib/components/Segments.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		gb,
@@ -85,14 +87,11 @@
 	);
 </script>
 
-<section class="tile ui-card" aria-labelledby="ag-conn">
-	<div class="card-head"><h2 id="ag-conn">{t('agent.sectionConnection')}</h2></div>
+<!-- PLAN 78-1: plain headings with one row per setting (they were cards). -->
+<SettingGroup title={t('agent.sectionConnection')}>
 	{#if clusterInfo?.member || settings.source === 'cluster'}
-		<div class="set-row">
-			<span class="set-label"
-				>{t('agent.source')}<span class="set-hint">{t('agent.sourceHint')}</span></span
-			>
-			<div class="set-control">
+		<SettingRow icon="tailnet" title={t('agent.source')} desc={t('agent.sourceHint')}>
+			{#snippet control()}
 				<Segments
 					compact
 					label={t('agent.source')}
@@ -106,78 +105,69 @@
 					]}
 					onchange={(v) => (settings!.source = v)}
 				/>
-			</div>
-		</div>
+			{/snippet}
+		</SettingRow>
 	{/if}
 	{#if settings.source === 'cluster'}
-		<div class="set-row one">
-			<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
-				{shareState
-					? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
-					: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
-			</p>
-		</div>
+		<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
+			{shareState
+				? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
+				: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
+		</p>
 	{:else}
-		<label class="set-row">
-			<span class="set-label"
-				>{t('agent.ollamaServer')}<span class="set-hint">{t('agent.ollamaHint')}</span></span
-			>
-			<span class="set-control">
-				<input class="field" bind:value={settings.ollama} placeholder="http://192.168.1.5:11434" />
-			</span>
-		</label>
+		<SettingRow
+			icon="globe"
+			title={t('agent.ollamaServer')}
+			desc={t('agent.ollamaHint')}
+			for="ag-ollama"
+		>
+			{#snippet control()}
+				<input
+					id="ag-ollama"
+					class="field"
+					bind:value={settings.ollama}
+					placeholder="http://192.168.1.5:11434"
+				/>
+				<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
+			{/snippet}
+		</SettingRow>
 	{/if}
 	{#if check}
-		<div class="set-row one">
-			<p class={check.reachable ? 'notice-ok' : 'notice-warn'}>
-				{check.reachable
-					? t('agent.checkOk', { version: check.version ?? '', models: check.models ?? 0 })
-					: t('agent.checkFail', { error: check.error ?? '' })}
-			</p>
-		</div>
+		<p class={check.reachable ? 'notice-ok' : 'notice-warn'}>
+			{check.reachable
+				? t('agent.checkOk', { version: check.version ?? '', models: check.models ?? 0 })
+				: t('agent.checkFail', { error: check.error ?? '' })}
+		</p>
 	{:else if status?.enabled}
-		<div class="set-row one">
-			<p class="set-hint state">
-				<span class="dot {status.reachable ? 'ok' : 'error'}"></span>
-				{status.reachable
-					? t('agent.connected', {
-							version: status.version ?? '',
-							models: status.models?.length ?? 0,
-						})
-					: t('agent.notConnected', { error: status.error ?? '' })}
-			</p>
+		<p class="muted state">
+			<span class="dot {status.reachable ? 'ok' : 'error'}"></span>
+			{status.reachable
+				? t('agent.connected', {
+						version: status.version ?? '',
+						models: status.models?.length ?? 0,
+					})
+				: t('agent.notConnected', { error: status.error ?? '' })}
+		</p>
+	{/if}
+	{#if status && !status.volume}<p class="notice-warn">{t('agent.noVolume')}</p>{/if}
+	{#if settings.source === 'cluster' && shareState !== 'allowed'}
+		<div class="row-actions">
+			<button type="button" class="btn" onclick={askAdmin}
+				>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
+			>
 		</div>
 	{/if}
-	{#if status && !status.volume}<div class="set-row one">
-			<p class="notice-warn">{t('agent.noVolume')}</p>
-		</div>{/if}
-	{#if settings.source === 'cluster'}
-		{#if shareState !== 'allowed'}
-			<div class="card-foot">
-				<button type="button" class="btn" onclick={askAdmin}
-					>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
-				>
-			</div>
-		{/if}
-	{:else}
-		<div class="card-foot">
-			<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
-		</div>
-	{/if}
-</section>
+</SettingGroup>
 
 {#if clusterInfo?.admin}
-	<section class="tile ui-card" aria-labelledby="ag-nodes">
-		<div class="card-head"><h2 id="ag-nodes">{t('agent.sectionNodes')}</h2></div>
-		<div class="set-row one"><span class="set-hint">{t('agent.nodesIntro')}</span></div>
+	<SettingGroup title={t('agent.sectionNodes')} desc={t('agent.nodesIntro')}>
 		{#each settings.shared ?? [] as sh (sh.node)}
-			<div class="set-row">
-				<span class="set-label"
-					><strong>{sh.name}</strong><span class="set-hint"
-						>{t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}</span
-					></span
-				>
-				<div class="set-control node-tools">
+			<SettingRow
+				icon="tailnet"
+				title={sh.name}
+				desc={t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}
+			>
+				{#snippet control()}
 					<span class="chip {sh.allowed ? 'ok' : 'warn'}"
 						>{sh.allowed ? '✓ ' + t('agent.nodeAllowed') : t('agent.nodePending')}</span
 					>
@@ -190,21 +180,19 @@
 					<button type="button" class="btn" onclick={() => setShare(sh.node, { remove: true })}
 						>{t('agent.nodeRemove')}</button
 					>
-				</div>
-			</div>
+				{/snippet}
+			</SettingRow>
 		{:else}
-			<div class="set-row one"><span class="set-hint">{t('agent.nodesNone')}</span></div>
+			<p class="muted">{t('agent.nodesNone')}</p>
 		{/each}
-	</section>
+	</SettingGroup>
 {/if}
 
-<section class="tile ui-card" aria-labelledby="ag-model">
-	<div class="card-head"><h2 id="ag-model">{t('agent.sectionModel')}</h2></div>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.model')}
+<SettingGroup title={t('agent.sectionModel')}>
+	<SettingRow icon="sparkle" title={t('agent.model')} for="ag-model">
+		{#snippet description()}
 			{#if chosen}
-				<span class="set-hint caps">
+				<span class="caps">
 					{t('agent.can')}
 					{#each ['tools', 'thinking', 'vision'] as cap (cap)}
 						<span class="chip {chosen.capabilities.includes(cap) ? 'ok' : ''}"
@@ -214,28 +202,25 @@
 					{/each}
 				</span>
 			{/if}
-			{#if others.length}<span class="set-hint"
+			{#if others.length}<span class="line"
 					>{t('agent.modelsWithoutTools', {
 						names: others.map((m) => m.name).join(', '),
 					})}</span
-				>{/if}</span
-		>
-		<span class="set-control">
-			<select class="field" bind:value={settings.model}>
+				>{/if}
+		{/snippet}
+		{#snippet control()}
+			<select id="ag-model" class="field" bind:value={settings.model}>
 				<option value="">{t('agent.modelChoose')}</option>
 				{#each models as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option>{/each}
 				{#if settings.model && !models.some((m) => m.name === settings!.model)}<option
 						value={settings.model}>{settings.model}</option
 					>{/if}
 			</select>
-		</span>
-	</label>
+		{/snippet}
+	</SettingRow>
 	{#if chosen && chosen.levels.length}
-		<div class="set-row">
-			<span class="set-label"
-				>{t('agent.thinkDefault')}<span class="set-hint">{t('agent.thinkHint')}</span></span
-			>
-			<div class="set-control">
+		<SettingRow icon="bulb" title={t('agent.thinkDefault')} desc={t('agent.thinkHint')}>
+			{#snippet control()}
 				<Segments
 					compact
 					label={t('agent.thinkDefault')}
@@ -243,143 +228,148 @@
 					options={chosen.levels.map((l) => ({ value: l, label: levelLabel(l, i18n.locale) }))}
 					onchange={(v) => (settings!.think = v)}
 				/>
-			</div>
-		</div>
+			{/snippet}
+		</SettingRow>
 	{/if}
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.context')}<span class="set-hint">
-				{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
-				{#if runningContext}{t('agent.contextNow', {
-						tokens: tokens(runningContext),
-					})}{:else}{t('agent.contextUnknown')}{/if}
-				{t('agent.contextHint')}
-				{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
-			</span></span
-		>
-		<span class="set-control">
-			<select class="field" bind:value={settings.context}>
+	<SettingRow icon="memory" title={t('agent.context')} for="ag-context">
+		{#snippet description()}
+			{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
+			{#if runningContext}{t('agent.contextNow', {
+					tokens: tokens(runningContext),
+				})}{:else}{t('agent.contextUnknown')}{/if}
+			{t('agent.contextHint')}
+			{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
+		{/snippet}
+		{#snippet control()}
+			<select id="ag-context" class="field" bind:value={settings.context}>
 				{#each contexts as c (c)}<option value={c}
 						>{c === 0 ? t('agent.contextOllama') : tokens(c) + ' ' + t('agent.tokensWord')}</option
 					>{/each}
 			</select>
-		</span>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.maxSteps')}<span class="set-hint">{t('agent.maxStepsHint')}</span></span
-		>
-		<span class="set-control">
-			<input class="field narrow" type="number" min="1" max="100" bind:value={settings.maxSteps} />
-		</span>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.maxMinutes')}<span class="set-hint">{t('agent.maxMinutesHint')}</span></span
-		>
-		<span class="set-control">
+		{/snippet}
+	</SettingRow>
+	<SettingRow icon="list" title={t('agent.maxSteps')} desc={t('agent.maxStepsHint')} for="ag-steps">
+		{#snippet control()}
 			<input
-				class="field narrow"
+				id="ag-steps"
+				class="field"
+				type="number"
+				min="1"
+				max="100"
+				bind:value={settings.maxSteps}
+			/>
+		{/snippet}
+	</SettingRow>
+	<SettingRow
+		icon="clock"
+		title={t('agent.maxMinutes')}
+		desc={t('agent.maxMinutesHint')}
+		for="ag-minutes"
+	>
+		{#snippet control()}
+			<input
+				id="ag-minutes"
+				class="field"
 				type="number"
 				min="1"
 				max="600"
 				bind:value={settings.maxMinutes}
 			/>
-		</span>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.lazyTools')}<span class="set-hint">{t('agent.lazyToolsHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+		{/snippet}
+	</SettingRow>
+	<SettingRow
+		icon="tool"
+		title={t('agent.lazyTools')}
+		desc={t('agent.lazyToolsHint')}
+		for="ag-lazy"
+	>
+		{#snippet control()}
+			<input
+				id="ag-lazy"
 				type="checkbox"
 				class="switch"
 				role="switch"
 				checked={!settings.allTools}
 				onchange={(e) => (settings!.allTools = !e.currentTarget.checked)}
-			/></span
-		>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.delegate')}<span class="set-hint">{t('agent.delegateHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+			/>
+		{/snippet}
+	</SettingRow>
+	<SettingRow
+		icon="users"
+		title={t('agent.delegate')}
+		desc={t('agent.delegateHint')}
+		for="ag-delegate"
+	>
+		{#snippet control()}
+			<input
+				id="ag-delegate"
 				type="checkbox"
 				class="switch"
 				role="switch"
 				checked={!settings.noDelegate}
 				onchange={(e) => (settings!.noDelegate = !e.currentTarget.checked)}
-			/></span
-		>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.keepAlive')}<span class="set-hint">{t('agent.keepAliveHint')}</span></span
-		>
-		<span class="set-control">
-			<select class="field" bind:value={settings.keepAlive}>
+			/>
+		{/snippet}
+	</SettingRow>
+	<SettingRow
+		icon="pause"
+		title={t('agent.keepAlive')}
+		desc={t('agent.keepAliveHint')}
+		for="ag-keep"
+	>
+		{#snippet control()}
+			<select id="ag-keep" class="field" bind:value={settings.keepAlive}>
 				<option value="">{t('agent.keepAliveOllama')}</option>
 				{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
 						>{t(`agent.keepAlive.${k}` as MessageKey)}</option
 					>{/each}
 			</select>
-		</span>
-	</label>
-	{#if settings.source !== 'cluster'}<div class="set-row">
-			<span class="set-label"
-				><label for="ag-pull">{t('agent.pull')}</label><span class="set-hint"
-					>{t('agent.pullHint')}</span
-				>
+		{/snippet}
+	</SettingRow>
+	{#if settings.source !== 'cluster'}
+		<SettingRow icon="download" title={t('agent.pull')} for="ag-pull">
+			{#snippet description()}
+				{t('agent.pullHint')}
 				{#if pull?.model}
-					<span class="set-hint" role="status"
+					<span class="line" role="status"
 						>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
 							? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
 							: ''}</span
 					>
-				{/if}</span
-			>
-			<div class="set-control">
-				<input
-					id="ag-pull"
-					class="field grow"
-					bind:value={pullName}
-					placeholder="qwen3:8b"
-					aria-label={t('agent.pull')}
-				/>
+				{/if}
+			{/snippet}
+			{#snippet control()}
+				<input id="ag-pull" class="field" bind:value={pullName} placeholder="qwen3:8b" />
 				<button
 					type="button"
 					class="btn"
 					disabled={pull?.running || !pullName.trim()}
 					onclick={startPull}>{t('agent.pullStart')}</button
 				>
-			</div>
-		</div>{/if}
-</section>
+			{/snippet}
+		</SettingRow>
+	{/if}
+</SettingGroup>
 
-<section class="tile ui-card" aria-labelledby="ag-media">
-	<div class="card-head"><h2 id="ag-media">{t('agent.sectionMedia')}</h2></div>
-	<div class="set-row one">
-		<span class="set-label"
-			>{t('agent.pictures')}
+<SettingGroup title={t('agent.sectionMedia')}>
+	<SettingRow icon="image" title={t('agent.pictures')}>
+		{#snippet description()}
 			{#if chosen?.capabilities.includes('vision')}
-				<span class="set-hint">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
+				<span class="line">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
 			{:else}
-				<span class="set-hint">{t('agent.picturesNone')}</span>
+				<span class="line">{t('agent.picturesNone')}</span>
 			{/if}
-			{#if vram}<span class="set-hint"
+			{#if vram}<span class="line"
 					>{t('agent.vramNow', {
 						gb: (vram / 1e9).toFixed(1).replace('.', i18n.locale === 'de' ? ',' : '.'),
 					})}</span
 				>{/if}
-		</span>
-	</div>
-	<label class="set-row">
-		<span class="set-label">{t('agent.visionOwn')}</span>
-		<span class="set-control end"
-			><input
+		{/snippet}
+	</SettingRow>
+	<SettingRow icon="eye" title={t('agent.visionOwn')} for="ag-vision-on">
+		{#snippet control()}
+			<input
+				id="ag-vision-on"
 				type="checkbox"
 				class="switch"
 				role="switch"
@@ -389,22 +379,21 @@
 						...(settings!.vision ?? {}),
 						enabled: e.currentTarget.checked,
 					})}
-			/></span
-		>
-	</label>
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if settings.vision?.enabled}
-		<div class="set-row">
-			<span class="set-label"
-				><label for="ag-vision">{t('agent.visionModel')}</label><span class="set-hint"
-					>{t('agent.visionHint')}</span
-				></span
-			>
-			<div class="set-control">
+		<SettingRow
+			icon="eye"
+			title={t('agent.visionModel')}
+			desc={t('agent.visionHint')}
+			for="ag-vision"
+		>
+			{#snippet control()}
 				<select
 					id="ag-vision"
 					class="field"
 					value={settings.vision?.model ?? ''}
-					aria-label={t('agent.visionModel')}
 					onchange={(e) =>
 						(settings!.vision = { ...(settings!.vision ?? {}), model: e.currentTarget.value })}
 				>
@@ -412,15 +401,13 @@
 					{#each visionModels as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option
 						>{/each}
 				</select>
-			</div>
-		</div>
+			{/snippet}
+		</SettingRow>
 	{/if}
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.voiceOn')}<span class="set-hint">{t('agent.voiceHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+	<SettingRow icon="mic" title={t('agent.voiceOn')} desc={t('agent.voiceHint')} for="ag-voice-on">
+		{#snippet control()}
+			<input
+				id="ag-voice-on"
 				type="checkbox"
 				class="switch"
 				role="switch"
@@ -430,17 +417,17 @@
 						...(settings!.voice ?? {}),
 						enabled: e.currentTarget.checked,
 					})}
-			/></span
-		>
-	</label>
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if !settings.voice?.url}
-		<div class="set-row" id="voice">
-			<span class="set-label"
-				>{t('agent.voice')}{#if !whisperApp}<span class="set-hint"
-						>{t('agent.whisperSetupHint')}</span
-					>{/if}</span
-			>
-			<div class="set-control">
+		<SettingRow
+			id="voice"
+			icon="mic"
+			title={t('agent.voice')}
+			desc={whisperApp ? undefined : t('agent.whisperSetupHint')}
+		>
+			{#snippet control()}
 				{#if whisperApp}
 					<button type="button" class="btn btn-primary" onclick={useWhisperApp}
 						>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
@@ -450,147 +437,107 @@
 						>{t('agent.whisperSetup')}</a
 					>
 				{/if}
-			</div>
-		</div>
+			{/snippet}
+		</SettingRow>
 	{/if}
 	{#if settings.voice?.enabled}
-		<div class="set-row">
-			<span class="set-label"><label for="ag-voice-url">{t('agent.voiceUrl')}</label></span>
-			<div class="set-control">
+		<SettingRow icon="globe" title={t('agent.voiceUrl')} for="ag-voice-url">
+			{#snippet control()}
 				<input
 					id="ag-voice-url"
-					class="field grow"
+					class="field"
 					value={settings.voice?.url ?? ''}
 					placeholder="http://192.168.1.5:8000"
-					aria-label={t('agent.voiceUrl')}
 					oninput={(e) =>
 						(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
 				/>
 				<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
-			</div>
-		</div>
-		<div class="set-row">
-			<span class="set-label"><label for="ag-voice-model">{t('agent.voiceModel')}</label></span>
-			<div class="set-control">
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="mic" title={t('agent.voiceModel')} for="ag-voice-model">
+			{#snippet control()}
 				<input
 					id="ag-voice-model"
 					class="field"
 					value={settings.voice?.model ?? ''}
 					placeholder="Systran/faster-whisper-large-v3"
-					aria-label={t('agent.voiceModel')}
 					oninput={(e) =>
 						(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
 				/>
-			</div>
-		</div>
+			{/snippet}
+		</SettingRow>
 		{#if voiceCheck}
-			<div class="set-row one">
-				<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
-					{voiceCheck.reachable
-						? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
-						: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
-				</p>
-			</div>
+			<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
+				{voiceCheck.reachable
+					? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
+					: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
+			</p>
 		{/if}
 	{/if}
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.snapshots')}<span class="set-hint">{t('agent.snapshotsHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+	<SettingRow
+		icon="camera"
+		title={t('agent.snapshots')}
+		desc={t('agent.snapshotsHint')}
+		for="ag-snapshots"
+	>
+		{#snippet control()}
+			<input
+				id="ag-snapshots"
 				type="checkbox"
 				class="switch"
 				role="switch"
 				checked={!settings.noSnapshots}
 				onchange={(e) => (settings!.noSnapshots = !e.currentTarget.checked)}
-			/></span
-		>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.code')}<span class="set-hint">{t('agent.codeHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+			/>
+		{/snippet}
+	</SettingRow>
+	<SettingRow icon="terminal" title={t('agent.code')} desc={t('agent.codeHint')} for="ag-code">
+		{#snippet control()}
+			<input
+				id="ag-code"
 				type="checkbox"
 				class="switch"
 				role="switch"
 				checked={!!settings.code?.enabled}
 				onchange={(e) =>
 					(settings!.code = { ...(settings!.code ?? {}), enabled: e.currentTarget.checked })}
-			/></span
-		>
-	</label>
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if settings.code?.enabled}
-		<label class="set-row sub">
-			<span class="set-label">{t('agent.codeTimeout')}</span>
-			<span class="set-control">
+		<SettingRow icon="clock" title={t('agent.codeTimeout')} for="ag-code-timeout">
+			{#snippet control()}
 				<input
-					class="field narrow"
+					id="ag-code-timeout"
+					class="field"
 					type="number"
 					min="1"
 					max="600"
-					value={settings.code.timeout ?? 60}
+					value={settings.code?.timeout ?? 60}
 					oninput={(e) =>
 						(settings!.code = { ...settings!.code, timeout: Number(e.currentTarget.value) })}
 				/>
-			</span>
-		</label>
-		<label class="set-row sub">
-			<span class="set-label">{t('agent.codeMemory')}</span>
-			<span class="set-control">
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="memory" title={t('agent.codeMemory')} for="ag-code-memory">
+			{#snippet control()}
 				<input
-					class="field narrow"
+					id="ag-code-memory"
+					class="field"
 					type="number"
 					min="64"
 					max="8192"
 					step="64"
-					value={settings.code.memory ?? 512}
+					value={settings.code?.memory ?? 512}
 					oninput={(e) =>
 						(settings!.code = { ...settings!.code, memory: Number(e.currentTarget.value) })}
 				/>
-			</span>
-		</label>
+			{/snippet}
+		</SettingRow>
 	{/if}
-</section>
+</SettingGroup>
 
 <style>
-	/* PLAN 68: every tab in cards with rows "label (+ hint) left, control
-	   right"; lists as rows; the card's own actions in its foot. */
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.set-row.one > p {
-		margin: 0;
-	}
-	/* The hint on the card's surface: a little toward the text for 4.5:1. */
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
-	.set-control > .field {
-		flex: 1 1 12rem;
-		min-width: 0;
-	}
-	.set-control > .field.grow {
-		flex: 1 1 14rem;
-	}
-	.set-control > .field.narrow,
-	.narrow {
-		flex: none;
-		width: 100px;
-	}
-	.set-control .btn {
-		max-width: 100%;
-		white-space: normal;
-		height: auto;
-	}
-	.set-row.sub {
-		padding-left: 40px;
-	}
-	.node-tools {
-		justify-content: flex-end;
-	}
 	.state {
 		margin: 0;
 	}
@@ -600,15 +547,7 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
-
-	/* The phone: long choices on a line of their own. */
-	@media (max-width: 639px) {
-		.set-row.sub {
-			padding-left: var(--space-4);
-		}
-
-		.node-tools {
-			justify-content: flex-start;
-		}
+	.line {
+		display: block;
 	}
 </style>

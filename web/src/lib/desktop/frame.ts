@@ -7,6 +7,16 @@ import type { Dock } from './prefs.ts';
 /** True inside a window of the desktop (a frame of the same origin, lib/embedded.ts). */
 export const inWindow: boolean = embedded;
 
+/** The program of the window this page runs in ("app:settings"), or "" outside a window. */
+export function windowApp(): string {
+	if (!inWindow) return '';
+	try {
+		return (window.frameElement as HTMLElement | null)?.dataset.app ?? '';
+	} catch {
+		return '';
+	}
+}
+
 export type FrameMessage =
 	| { type: 'titanos-page'; path: string; title: string }
 	| { type: 'titanos-goto'; href: string }

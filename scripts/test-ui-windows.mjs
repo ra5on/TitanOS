@@ -492,10 +492,15 @@ for (const w of allOnly ? [] : [800, 1100]) {
       .locator("section.win")
       .screenshot({ path: `${out}/${w}-${slug(path)}.png` });
     const where = `${path} @${w}`;
-    check(
-      !res.h1.length,
-      `${where}: no big heading inside the window (${res.h1})`,
-    );
+    // PLAN 78-1: a page of the control panel shows its title large, as a
+    // path; every other page leaves its name to the title bar.
+    if (path.startsWith("/settings"))
+      check(res.h1.length === 1, `${where}: one path title (${res.h1})`);
+    else
+      check(
+        !res.h1.length,
+        `${where}: no big heading inside the window (${res.h1})`,
+      );
     if (hasBar) check(res.toolbar, `${where}: tool bar under the title bar`);
     check(
       res.overflowX <= 1,
@@ -510,13 +515,16 @@ for (const w of allOnly ? [] : [800, 1100]) {
       const bar = await page.locator("section.win header.titlebar").innerText();
       check(bar.includes(title), `${where}: title bar names the page (${bar})`);
     }
-    // Scrolled down the tool bar stays at the top.
-    if (hasBar) await frame.evaluate(() => window.scrollTo(0, 400));
+    // Scrolled down the tool bar stays at the top. A page of the control
+    // panel (PLAN 78-1) has its buttons beside the path title instead: they
+    // scroll away with it.
+    const sticks = hasBar && !path.startsWith("/settings");
+    if (sticks) await frame.evaluate(() => window.scrollTo(0, 400));
     await frame.waitForTimeout(100);
     const top = await frame.evaluate(
       () => document.querySelector(".win-toolbar")?.getBoundingClientRect().top,
     );
-    if (hasBar)
+    if (sticks)
       check(
         top !== undefined && top <= 1,
         `${where}: tool bar sticks (${top})`,
@@ -614,7 +622,7 @@ if (!allOnly && !onlyPaths) {
 if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   const made = await openWindow("settings", "/settings", 1100);
   const { page, frame } = made;
-  await frame.waitForSelector(".overview .tile.ui-card .card-head");
+  await frame.waitForSelector(".overview .sgroup .sgroup-head");
   check(
     (await frame.$$(".home-tile")).length === 0,
     "/settings in a window: the overview, no tiles",
@@ -637,7 +645,7 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   const search = side.getByRole("searchbox", { name: "Einstellung suchen" });
   await search.fill("ssh");
   check(
-    JSON.stringify(await items()) === JSON.stringify(["Zugang und Sitzungen"]),
+    JSON.stringify(await items()) === JSON.stringify(["Zugang › SSH"]),
     `side bar search "ssh" finds Zugang (${await items()})`,
   );
   // By keyboard: the window's page loads after Enter (no wait for it here).
@@ -651,7 +659,10 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
     { timeout: 8000 },
   );
   await search.fill("zeitzone");
-  check((await items()).includes("Zeitzone"), "side bar search finds Zeitzone");
+  check(
+    (await items()).includes("Datum und Uhrzeit"),
+    "side bar search finds Zeitzone",
+  );
   await search.fill("platten-ruhe");
   check(
     (await items()).includes("Energie"),

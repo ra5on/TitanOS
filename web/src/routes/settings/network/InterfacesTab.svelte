@@ -2,6 +2,7 @@
 	// Physical ports with what uses them, and the bonds of the draft.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import {
 		bondModeKeys,
 		bondUsers,
@@ -33,8 +34,8 @@
 		m in bondModeKeys ? t(bondModeKeys[m as keyof typeof bondModeKeys]) : m;
 </script>
 
-<section class="tile panel" aria-labelledby="net-ports">
-	<h2 class="tile-title" id="net-ports">{t('netx.ports')}</h2>
+<!-- PLAN 78-1: ports and bonds are tables under plain headings. -->
+<SettingGroup title={t('netx.ports')} id="net-ports">
 	<div class="table-wrap">
 		<table class="data-table">
 			<thead>
@@ -68,10 +69,14 @@
 			</tbody>
 		</table>
 	</div>
-</section>
+</SettingGroup>
 
-<section class="tile panel" aria-labelledby="net-bonds">
-	<h2 class="tile-title" id="net-bonds">{t('netx.bonds')}</h2>
+<SettingGroup title={t('netx.bonds')} id="net-bonds" desc={t('netx.switchHint')}>
+	{#snippet tools()}
+		<button class="btn" disabled={disabled || ports.length < 2} onclick={onaddbond}
+			>{t('netx.addBond')}</button
+		>
+	{/snippet}
 	{#if draft.bonds?.length}
 		<div class="table-wrap">
 			<table class="data-table">
@@ -112,13 +117,7 @@
 	{:else}
 		<EmptyState inline title={t('netx.noBonds')} />
 	{/if}
-	<div class="row-actions">
-		<button class="btn" disabled={disabled || ports.length < 2} onclick={onaddbond}
-			>{t('netx.addBond')}</button
-		>
-	</div>
-	<p class="muted">{t('netx.switchHint')}</p>
-</section>
+</SettingGroup>
 
 <style>
 	.speed {

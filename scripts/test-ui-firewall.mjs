@@ -391,15 +391,15 @@ try {
     // The overview lists the firewall under "Netzwerk" (PLAN 61), A–Z and
     // with the "neu" badge.
     await page.goto(base + "/settings");
-    await nav(page).locator(".home-tile").first().waitFor();
-    const group = nav(page).locator(".group-title", { hasText: "Netzwerk" });
+    await nav(page).locator("a.srow").first().waitFor();
+    const group = nav(page).locator(".sgroup-title", { hasText: "Netzwerk" });
     await group.waitFor();
     await page.screenshot({
       path: `${out}/settings-overview-desktop.png`,
       fullPage: true,
     });
     const hrefs = await nav(page)
-      .locator("a.home-tile")
+      .locator("a.srow")
       .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
     const network = hrefs.slice(
       hrefs.indexOf("/settings/ddns"),
@@ -430,7 +430,7 @@ try {
       .waitFor({ state: "attached" });
     // Opening an area once takes its "new" badge away; the others keep theirs.
     await page.goto(base + "/settings");
-    await nav(page).locator(".home-tile").first().waitFor();
+    await nav(page).locator("a.srow").first().waitFor();
     assert.equal(
       await nav(page)
         .locator('a[href="/settings/firewall"]')
@@ -451,7 +451,8 @@ try {
     await page
       .getByRole("heading", { level: 1, name: "Firewall" })
       .waitFor({ state: "attached" });
-    const button = page.locator(".settings-page .tile .btn").first();
+    // PLAN 78-1: groups are plain headings, no tiles around them.
+    const button = page.locator(".settings-page .sgroup .btn").first();
     await button.waitFor();
     assert.ok(
       (await button.boundingBox()).height <= 32,
@@ -461,7 +462,7 @@ try {
       path: `${out}/firewall-desktop-off.png`,
       fullPage: true,
     });
-    const master = page.getByRole("checkbox", {
+    const master = page.getByRole("switch", {
       name: "Firewall einschalten",
       exact: true,
     });
@@ -690,7 +691,7 @@ try {
         }
     }
     await page.goto(base + "/settings");
-    await page.locator(".home-tile").first().waitFor();
+    await page.locator("a.srow").first().waitFor();
     await page.screenshot({
       path: `${out}/settings-overview-mobile.png`,
       fullPage: true,

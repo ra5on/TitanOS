@@ -7,6 +7,8 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	let data = $state<Hardware | null>(null);
 	let error = $state('');
@@ -34,124 +36,95 @@
 {#if data}
 	{#if !data.hardware.iommu}<p class="notice-warn" role="status">{t('hardware.noIommu')}</p>{/if}
 
-	<section class="tile panel" aria-labelledby="hw-pci">
-		<h2 class="tile-title" id="hw-pci">{t('hardware.pci')}</h2>
+	<!-- PLAN 78-1, draft 78: a plain heading per kind, every device a row. -->
+	<SettingGroup title={t('hardware.pci')} id="hw-pci" desc={t('hardware.how')}>
 		{#each data.hardware.pci as device (device.address)}
-			<div class="device">
-				<div class="main">
-					<span class="name"
-						>{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span
-					>
-					<span class="muted mono"
-						>{device.address} · {device.vendor}:{device.device} · {device.iommuGroup >= 0
-							? t('hardware.group', { group: device.iommuGroup })
-							: t('hardware.noGroup')}</span
-					>
-					{#if device.companions.length > 0}<span class="muted mono"
-							>{t('hardware.companions', { list: device.companions.join(', ') })}</span
-						>{/if}
-				</div>
-				<div class="state">
-					<span class="chip" class:ok={device.passable}
-						>{device.passable ? t('hardware.passable') : t('hardware.notPassable')}</span
-					>
-					<span class="muted"
-						>{device.driver === 'vfio-pci'
-							? t('hardware.inVm')
-							: device.driver
-								? t('hardware.driver', { driver: device.driver })
-								: t('hardware.noDriver')}</span
-					>
-					{#if device.primary}<span class="chip">{t('hardware.primary')}</span>{/if}
-				</div>
-				<div class="use">
-					{#if device.vendor === '10de' && device.driver === 'nvidia'}<NvidiaPower
-							address={device.address}
-						/>{/if}
-					{#if users(device.address).length > 0}
-						<span>{t('hardware.assigned', { vms: users(device.address).join(', ') })}</span>
-					{:else if device.passable}
-						<span class="muted">{t('hardware.free')}</span>
-					{:else}
-						<span class="muted">{tOr(`hardware.reason.${device.reason}`, device.reason)}</span>
-					{/if}
-				</div>
-			</div>
+			{@const nvidia = device.vendor === '10de' && device.driver === 'nvidia'}
+			{@const use =
+				users(device.address).length > 0
+					? t('hardware.assigned', { vms: users(device.address).join(', ') })
+					: device.passable
+						? t('hardware.free')
+						: ''}
+			{#snippet about()}
+				<span class="mono"
+					>{device.address} · {device.vendor}:{device.device} · {device.iommuGroup >= 0
+						? t('hardware.group', { group: device.iommuGroup })
+						: t('hardware.noGroup')} · {device.driver === 'vfio-pci'
+						? t('hardware.inVm')
+						: device.driver
+							? t('hardware.driver', { driver: device.driver })
+							: t('hardware.noDriver')}</span
+				>
+				{#if device.companions.length > 0}<span class="mono"
+						>{t('hardware.companions', { list: device.companions.join(', ') })}</span
+					>{/if}
+				{#if !device.passable && !users(device.address).length}<span
+						>{tOr(`hardware.reason.${device.reason}`, device.reason)}</span
+					>{/if}
+			{/snippet}
+			{#snippet state()}
+				{#if device.primary}<span class="chip">{t('hardware.primary')}</span>{/if}
+				<span class="chip" class:ok={device.passable}
+					>{device.passable ? t('hardware.passable') : t('hardware.notPassable')}</span
+				>
+			{/snippet}
+			{#if nvidia}
+				<SettingRow
+					id="pci-{device.address}"
+					icon={device.kind === 'npu' ? 'npu' : 'gpu'}
+					title="{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}"
+					description={about}
+					summary={use}
+					control={state}
+				>
+					<NvidiaPower address={device.address} />
+				</SettingRow>
+			{:else}
+				<SettingRow
+					icon={device.kind === 'npu' ? 'npu' : 'gpu'}
+					title="{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}"
+					description={about}
+					summary={use}
+					control={state}
+				/>
+			{/if}
 		{:else}
 			<EmptyState inline title={t('hardware.nonePci')} />
 		{/each}
-	</section>
+	</SettingGroup>
 
 	<IntelGuc />
 
-	<section class="tile panel" aria-labelledby="hw-usb">
-		<h2 class="tile-title" id="hw-usb">{t('hardware.usb')}</h2>
+	<SettingGroup title={t('hardware.usb')} id="hw-usb">
 		{#each data.hardware.usb as device (device.port)}
-			<div class="device">
-				<div class="main">
-					<span class="name">{device.name || device.id}</span>
-					<span class="muted mono">{device.id} · {t('hardware.port', { port: device.port })}</span>
-				</div>
-				<div class="state">
-					{#if device.stick}<span class="chip">{t('hardware.stickChip')}</span>{/if}
-				</div>
-				<div class="use">
-					{#if device.stick}
-						<span class="muted">{t('hardware.stick')}</span>
-					{:else if users(device.id).length > 0}
-						<span>{t('hardware.assigned', { vms: users(device.id).join(', ') })}</span>
-					{:else}
-						<span class="muted">{t('hardware.free')}</span>
-					{/if}
-				</div>
-			</div>
+			<SettingRow
+				icon="disc"
+				title={device.name || device.id}
+				summary={device.stick
+					? t('hardware.stick')
+					: users(device.id).length > 0
+						? t('hardware.assigned', { vms: users(device.id).join(', ') })
+						: t('hardware.free')}
+			>
+				{#snippet description()}<span class="mono"
+						>{device.id} · {t('hardware.port', { port: device.port })}</span
+					>{/snippet}
+				{#snippet control()}{#if device.stick}<span class="chip">{t('hardware.stickChip')}</span
+						>{/if}{/snippet}
+			</SettingRow>
 		{:else}
 			<EmptyState inline title={t('hardware.noneUsb')} />
 		{/each}
-	</section>
-	<p class="muted hint">{t('hardware.how')}</p>
+	</SettingGroup>
 {/if}
 
 <Unbound />
 
 <style>
-	.hint {
-		max-width: 60rem;
-		font-size: var(--text-md);
-	}
-	.device {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2-5) 20px;
-		padding-top: 14px;
-		border-top: 1px solid var(--panel-border);
-		font-size: var(--text-md);
-	}
-	.main {
-		flex: 2 1 320px;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
-	}
-	.main .mono {
-		font-size: var(--text-sm);
+	/* Each fact of a device on a line of its own below its name. */
+	.mono {
+		display: block;
 		overflow-wrap: anywhere;
-	}
-	.name {
-		font-weight: 600;
-	}
-	.state {
-		flex: 1 1 220px;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-base);
-	}
-	.use {
-		flex: 1 1 260px;
-		font-size: var(--text-base);
 	}
 </style>

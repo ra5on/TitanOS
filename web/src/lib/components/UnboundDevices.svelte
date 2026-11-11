@@ -5,8 +5,13 @@
 	import { attention } from '#lib/hwcheck.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 
-	type Props = { unbound: UnboundDevice[]; firmware: FirmwareMissing[] };
-	let { unbound, firmware }: Props = $props();
+	type Props = {
+		unbound: UnboundDevice[];
+		firmware: FirmwareMissing[];
+		/** Only one of the two lists (Einstellungen › Hardware shows each in a row of its own). */
+		part?: 'unbound' | 'firmware';
+	};
+	let { unbound, firmware, part }: Props = $props();
 
 	// Issue form for hardware reports (.github/ISSUE_TEMPLATE/hardware.yml).
 	const hardwareIssue = 'https://github.com/ra5on/TitanOS/issues/new?template=hardware.yml';
@@ -87,38 +92,41 @@
 	</li>
 {/snippet}
 
-<p class="muted intro">{t('hwcheck.unboundIntro')}</p>
-{#if unbound.length === 0}
-	<p class="notice-ok">{t('hwcheck.unboundNone')}</p>
-{:else}
-	<ul class="list">
-		{#each important as device (device.bus + device.address)}{@render row(device)}{/each}
-	</ul>
-	{#if quiet.length > 0}
-		<details>
-			<summary>{t('hwcheck.unboundHidden', { count: quiet.length })}</summary>
-			<ul class="list">
-				{#each quiet as device (device.bus + device.address)}{@render row(device)}{/each}
-			</ul>
-		</details>
+{#if part !== 'firmware'}
+	<p class="muted intro">{t('hwcheck.unboundIntro')}</p>
+	{#if unbound.length === 0}
+		<p class="notice-ok">{t('hwcheck.unboundNone')}</p>
+	{:else}
+		<ul class="list">
+			{#each important as device (device.bus + device.address)}{@render row(device)}{/each}
+		</ul>
+		{#if quiet.length > 0}
+			<details>
+				<summary>{t('hwcheck.unboundHidden', { count: quiet.length })}</summary>
+				<ul class="list">
+					{#each quiet as device (device.bus + device.address)}{@render row(device)}{/each}
+				</ul>
+			</details>
+		{/if}
 	{/if}
 {/if}
-
-<h3 class="sub">{t('hwcheck.firmware')}</h3>
-{#if firmware.length === 0}
-	<p class="muted">{t('hwcheck.firmwareNone')}</p>
-{:else}
-	<p class="muted intro">{t('hwcheck.firmwareIntro')}</p>
-	<ul class="list">
-		{#each firmware as entry (entry.file)}
-			<li class="device">
-				<div class="main">
-					<span class="name mono">{entry.file}</span>
-					{#if entry.device}<span class="muted mono">{entry.device}</span>{/if}
-				</div>
-			</li>
-		{/each}
-	</ul>
+{#if part !== 'unbound'}
+	{#if !part}<h3 class="sub">{t('hwcheck.firmware')}</h3>{/if}
+	{#if firmware.length === 0}
+		<p class="muted">{t('hwcheck.firmwareNone')}</p>
+	{:else}
+		<p class="muted intro">{t('hwcheck.firmwareIntro')}</p>
+		<ul class="list">
+			{#each firmware as entry (entry.file)}
+				<li class="device">
+					<div class="main">
+						<span class="name mono">{entry.file}</span>
+						{#if entry.device}<span class="muted mono">{entry.device}</span>{/if}
+					</div>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 {/if}
 
 <style>

@@ -2,6 +2,8 @@
 	// PLAN 65: the sensors as the kernel reports them, plus alarms and fans.
 	// The choice for the old dashboard's tile is gone with the dashboard.
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import FanControl from '#lib/components/FanControl.svelte';
@@ -14,60 +16,34 @@
 <PageHead title={t('temperatures.title')}>
 	<p class="muted">{t('temperatures.description')}</p>
 </PageHead>
-<section class="tile panel">
-	{#if !system.info}<p>{t('accelerator.loading')}</p>
+<!-- PLAN 78-1: every sensor is a row with its value at the right. -->
+<SettingGroup title={t('temperatures.sensors')}>
+	{#if !system.info}<p class="muted">{t('accelerator.loading')}</p>
 	{:else if sensors.length === 0}<p class="muted">{t('temperatures.none')}</p>{/if}
-	<div class="sensors">
-		{#each sensors as sensor (sensor.id)}
-			<div class="sensor">
-				<span class="name"
-					><strong>{sensor.label}</strong><span class="muted mono"
-						>{sensor.chip} · {sensor.device}</span
-					></span
-				>
-				<span class="mono value"
+	{#each sensors as sensor (sensor.id)}
+		<SettingRow icon="chip" title={sensor.label}>
+			{#snippet description()}<span class="mono">{sensor.chip} · {sensor.device}</span>{/snippet}
+			{#snippet control()}<span class="mono value"
 					>{sensor.celsius === null ? '–' : `${sensor.celsius.toFixed(1)} °C`}</span
-				>
-			</div>
-		{/each}
-	</div>
-	<p class="muted">{t('temperatures.sensorHint')}</p>
-</section>
+				>{/snippet}
+		</SettingRow>
+	{/each}
+	<p class="muted hint">{t('temperatures.sensorHint')}</p>
+</SettingGroup>
 {#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<TempAlarms
 	/><FanControl />{/if}
 
 <style>
 	p {
+		margin: 0;
 		font-size: var(--text-md);
 	}
-	.sensor {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.sensors {
-		display: flex;
-		flex-direction: column;
-	}
-	.sensor {
-		padding: var(--space-3) 0;
-		border-bottom: 1px solid var(--panel-border);
-	}
-	.name {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		overflow-wrap: anywhere;
-	}
-	.name strong {
-		font-weight: 500;
-	}
-	.name .muted {
+	.hint {
+		margin-top: var(--space-1-5);
 		font-size: var(--text-sm);
 	}
 	.value {
+		color: var(--text);
 		white-space: nowrap;
 	}
 </style>

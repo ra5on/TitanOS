@@ -4,6 +4,8 @@
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { NASNetwork } from '#lib/network.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
 	let {
 		networks,
@@ -39,27 +41,26 @@
 	});
 </script>
 
-<section class="tile panel" aria-labelledby="net-diagnostics">
-	<h2 class="tile-title" id="net-diagnostics">{t('netx.tab.diagnostics')}</h2>
+<!-- PLAN 78-1: the choice is a row; the result stays a table below it. -->
+<SettingGroup title={t('netx.tab.diagnostics')} id="net-diagnostics">
 	{#if pending}<p class="notice-warn">{t('netx.diagnosticsPending')}</p>{/if}
-	<div class="row">
-		<label class="stack"
-			><span>{t('netx.network')}</span><select
-				class="field"
-				bind:value={selected}
-				disabled={pending}
+	<SettingRow
+		icon="activity"
+		title={t('netx.network')}
+		desc={t('netx.diagnosticsDraft')}
+		for="net-diagnose-network"
+	>
+		{#snippet control()}
+			<select id="net-diagnose-network" class="field" bind:value={selected} disabled={pending}
 				><option value="">{t('netx.choose')}</option>{#each networks as n (n.id)}<option
 						value={n.id}>{n.name}</option
 					>{/each}</select
-			></label
-		>
-		<div class="row-actions">
+			>
 			<button class="btn" disabled={busy || pending || !selected} onclick={run}
 				>{t('netx.check')}</button
 			>
-		</div>
-	</div>
-	<p class="muted">{t('netx.diagnosticsDraft')}</p>
+		{/snippet}
+	</SettingRow>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if checks.length}
 		<div class="table-wrap">
@@ -82,18 +83,9 @@
 			</table>
 		</div>
 	{/if}
-</section>
+</SettingGroup>
 
 <style>
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-2-5) var(--space-4);
-	}
-	.row .stack {
-		flex: 1 1 16rem;
-	}
 	pre {
 		margin: var(--space-1) 0 0;
 		white-space: pre-wrap;

@@ -2,6 +2,8 @@
 	// DynDNS within Settings › IPv64: everything Settings › Dynamic DNS can
 	// do, with IPv64 as provider and the key of this area. Both pages work
 	// on the same settings; Settings › Dynamic DNS stays for other providers.
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
@@ -221,248 +223,272 @@
 			onrefresh={() => load(false)}
 		/>
 
-		<form class="tile panel" aria-labelledby="ipv64-dyn-settings" onsubmit={save}>
-			<h2 class="tile-title" id="ipv64-dyn-settings">{t('ipv64x.dyn.settings')}</h2>
-			{#if otherProvider}<p class="notice-warn">
-					{t('ipv64x.dyn.otherProvider', { provider })}
-					<a href="/settings/ddns">{t('ipv64x.toDdns')}</a>
-				</p>{/if}
-			<p class="muted hint">
-				{t(`ipv64x.dyn.key.${area.status.keySource || 'none'}` as MessageKey)}
-				{t('ipv64x.dyn.samePage')}
-			</p>
-			<label class="check"
-				><input type="checkbox" bind:checked={enabled} disabled={busy} /><span
-					>{t('ddns.enable')}</span
-				></label
-			>
-
-			<h3>{t('ipv64x.dyn.hostnames', { count: hosts.length, max: MAX_HOSTS })}</h3>
-			<div class="table-wrap">
-				<table>
-					<tbody>
-						{#each hosts as host (host)}
-							<tr>
-								<td class="mono"
-									>{host}{#if !validHostName(host)}<span class="chip error"
-											>{t('ipv64x.dyn.invalid')}</span
-										>{/if}</td
-								>
-								<td class="actions"
-									><button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() => (hosts = hosts.filter((h) => h !== host))}
-										>{t('ipv64x.dyn.remove')}</button
-									></td
-								>
-							</tr>
-						{:else}
-							<tr><td colspan="2" class="muted">{t('ipv64x.dyn.noHosts')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<div class="inline">
-				<label class="stack grow"
-					><span>{t('ipv64x.dyn.pick')}</span><select
-						class="field mono"
-						bind:value={pick}
-						disabled={busy || !choices.length}
-					>
-						<option value=""
-							>{t(choices.length ? 'ipv64x.dyn.pickNone' : 'ipv64x.dyn.pickEmpty')}</option
-						>
-						{#each choices as name (name)}<option value={name}>{name}</option>{/each}
-					</select></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !pick || hosts.length >= MAX_HOSTS}
-					onclick={() => ((hosts = withHost(hosts, pick)), (pick = ''))}
-					>{t('ipv64x.dyn.add')}</button
-				>
-			</div>
-			<div class="inline">
-				<label class="stack grow"
-					><span>{t('ipv64x.dyn.typed')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={typed}
-						placeholder="photos.nas.ipv64.de"
-						autocapitalize="off"
-						spellcheck="false"
-						disabled={busy}
-					/></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !validHostName(typedName) || hosts.length >= MAX_HOSTS}
-					onclick={() => ((hosts = withHost(hosts, typedName)), (typed = ''))}
-					>{t('ipv64x.dyn.add')}</button
-				>
-			</div>
-			<div class="inline">
-				<label class="stack"
-					><span>{t('ipv64x.newName')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={wish}
-						placeholder={t('ipv64.nameExample')}
-						autocapitalize="off"
-						spellcheck="false"
-						disabled={busy}
-					/></label
-				>
-				<label class="stack"
-					><span>{t('ipv64x.zone')}</span><select
-						class="field mono"
-						bind:value={zone}
-						disabled={busy}
-						>{#each area.zones as z (z)}<option value={z}>{z}</option>{/each}</select
-					></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !validIpv64Wish(wish.trim().toLowerCase()) || hosts.length >= MAX_HOSTS}
-					onclick={() => (creating = `${wish.trim().toLowerCase()}.${zone}`)}
-					>{t('ipv64x.dyn.createAdd')}</button
-				>
-			</div>
-			{#if hosts.length > MAX_HOSTS}<p class="notice-warn" role="alert">
-					{t('ddns.hostnamesTooMany')}
-				</p>{/if}
-
-			<div class="divided">
-				<h3>{t('ipv64x.dyn.prefixTitle')}</h3>
-				<label class="stack"
-					><span>{t('ipv64x.dyn.prefixMode')}</span><select
-						class="field short"
-						bind:value={prefixMode}
-						disabled={busy}
-					>
-						<option value="none">{t('ipv64x.dyn.prefixNone')}</option>
-						<option value="auto">{t('ipv64x.dyn.prefixAuto')}</option>
-						<option value="fixed">{t('ipv64x.dyn.prefixFixed')}</option>
-					</select></label
-				>
-				{#if prefixMode === 'fixed'}
-					<label class="stack"
-						><span>{t('ipv64x.prefix6')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={prefixValue}
-							placeholder="2001:db8:1234:5600::/56"
-							spellcheck="false"
+		<!-- PLAN 78-1: switches and choices are rows; the list of names with its
+		     three ways to add one stays a tool. One Save for all of it. -->
+		<form class="rows" onsubmit={save}>
+			<SettingGroup title={t('ipv64x.dyn.settings')} id="ipv64-dyn-settings">
+				{#if otherProvider}<p class="notice-warn">
+						{t('ipv64x.dyn.otherProvider', { provider })}
+						<a href="/settings/ddns">{t('ipv64x.toDdns')}</a>
+					</p>{/if}
+				<p class="muted hint">
+					{t(`ipv64x.dyn.key.${area.status.keySource || 'none'}` as MessageKey)}
+					{t('ipv64x.dyn.samePage')}
+				</p>
+				<SettingRow icon="power" title={t('ddns.enable')} for="ipv64-dyn-enabled">
+					{#snippet control()}
+						<input
+							id="ipv64-dyn-enabled"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							bind:checked={enabled}
 							disabled={busy}
-						/></label
-					>
+						/>
+					{/snippet}
+				</SettingRow>
+				<div class="panel names">
+					<h3>{t('ipv64x.dyn.hostnames', { count: hosts.length, max: MAX_HOSTS })}</h3>
+					<div class="table-wrap">
+						<table>
+							<tbody>
+								{#each hosts as host (host)}
+									<tr>
+										<td class="mono"
+											>{host}{#if !validHostName(host)}<span class="chip error"
+													>{t('ipv64x.dyn.invalid')}</span
+												>{/if}</td
+										>
+										<td class="actions"
+											><button
+												type="button"
+												class="btn"
+												disabled={busy}
+												onclick={() => (hosts = hosts.filter((h) => h !== host))}
+												>{t('ipv64x.dyn.remove')}</button
+											></td
+										>
+									</tr>
+								{:else}
+									<tr><td colspan="2" class="muted">{t('ipv64x.dyn.noHosts')}</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="inline">
+						<label class="stack grow"
+							><span>{t('ipv64x.dyn.pick')}</span><select
+								class="field mono"
+								bind:value={pick}
+								disabled={busy || !choices.length}
+							>
+								<option value=""
+									>{t(choices.length ? 'ipv64x.dyn.pickNone' : 'ipv64x.dyn.pickEmpty')}</option
+								>
+								{#each choices as name (name)}<option value={name}>{name}</option>{/each}
+							</select></label
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy || !pick || hosts.length >= MAX_HOSTS}
+							onclick={() => ((hosts = withHost(hosts, pick)), (pick = ''))}
+							>{t('ipv64x.dyn.add')}</button
+						>
+					</div>
+					<div class="inline">
+						<label class="stack grow"
+							><span>{t('ipv64x.dyn.typed')}</span><input
+								class="field mono"
+								type="text"
+								bind:value={typed}
+								placeholder="photos.nas.ipv64.de"
+								autocapitalize="off"
+								spellcheck="false"
+								disabled={busy}
+							/></label
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy || !validHostName(typedName) || hosts.length >= MAX_HOSTS}
+							onclick={() => ((hosts = withHost(hosts, typedName)), (typed = ''))}
+							>{t('ipv64x.dyn.add')}</button
+						>
+					</div>
+					<div class="inline">
+						<label class="stack"
+							><span>{t('ipv64x.newName')}</span><input
+								class="field mono"
+								type="text"
+								bind:value={wish}
+								placeholder={t('ipv64.nameExample')}
+								autocapitalize="off"
+								spellcheck="false"
+								disabled={busy}
+							/></label
+						>
+						<label class="stack"
+							><span>{t('ipv64x.zone')}</span><select
+								class="field mono"
+								bind:value={zone}
+								disabled={busy}
+								>{#each area.zones as z (z)}<option value={z}>{z}</option>{/each}</select
+							></label
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy ||
+								!validIpv64Wish(wish.trim().toLowerCase()) ||
+								hosts.length >= MAX_HOSTS}
+							onclick={() => (creating = `${wish.trim().toLowerCase()}.${zone}`)}
+							>{t('ipv64x.dyn.createAdd')}</button
+						>
+					</div>
+					{#if hosts.length > MAX_HOSTS}<p class="notice-warn" role="alert">
+							{t('ddns.hostnamesTooMany')}
+						</p>{/if}
+				</div>
+				<SettingRow
+					icon="globe"
+					title={t('ipv64x.dyn.prefixTitle')}
+					desc={t('ipv64x.dyn.prefixHint')}
+					for="ipv64-dyn-prefix-mode"
+				>
+					{#snippet control()}
+						<select
+							id="ipv64-dyn-prefix-mode"
+							class="field"
+							aria-label={t('ipv64x.dyn.prefixMode')}
+							bind:value={prefixMode}
+							disabled={busy}
+						>
+							<option value="none">{t('ipv64x.dyn.prefixNone')}</option>
+							<option value="auto">{t('ipv64x.dyn.prefixAuto')}</option>
+							<option value="fixed">{t('ipv64x.dyn.prefixFixed')}</option>
+						</select>
+					{/snippet}
+				</SettingRow>
+				{#if prefixMode === 'fixed'}
+					<SettingRow icon="globe" title={t('ipv64x.prefix6')} for="ipv64-dyn-prefix">
+						{#snippet control()}
+							<input
+								id="ipv64-dyn-prefix"
+								class="field mono"
+								type="text"
+								bind:value={prefixValue}
+								placeholder="2001:db8:1234:5600::/56"
+								spellcheck="false"
+								disabled={busy}
+							/>
+						{/snippet}
+					</SettingRow>
 				{/if}
-				<p class="muted hint">{t('ipv64x.dyn.prefixHint')}</p>
-			</div>
 
-			<UpdaterFields bind:form={updater} disabled={busy} />
+				<UpdaterFields bind:form={updater} disabled={busy} />
 
-			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			<div class="row-actions">
-				<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
-				{#if notice}<span class="muted" role="status">{notice}</span>{/if}
-			</div>
+				{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+				<div class="row-actions">
+					<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
+					{#if notice}<span class="muted" role="status">{notice}</span>{/if}
+				</div>
+			</SettingGroup>
 		</form>
 
-		<section class="tile panel" aria-labelledby="ipv64-dyn-domains">
-			<h2 class="tile-title" id="ipv64-dyn-domains">{t('ipv64x.dyn.domains')}</h2>
-			<p class="muted hint">{t('ipv64x.dyn.domainsHint')}</p>
-			{#if domainError}<p class="notice-error" role="alert">{domainError}</p>{/if}
-			{#if domainNotice}<p class="notice-ok" role="status">{domainNotice}</p>{/if}
-			<div class="table-wrap">
-				<table>
-					<thead
-						><tr
-							><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.wildcard')}</th><th
-								>{t('ipv64x.ignore')}</th
-							><th>{t('ipv64x.prefix6')}</th><th></th></tr
-						></thead
-					>
-					<tbody>
-						{#each domains as d (d.name)}
-							<tr>
-								<td class="mono"
-									>{d.name}{#if hosts.includes(d.name)}<span class="chip">{t('ipv64x.inDdns')}</span
-										>{/if}</td
-								>
-								<td
-									><input
-										type="checkbox"
-										checked={d.wildcard}
-										disabled={busy}
-										aria-label={t('ipv64x.wildcard')}
-										onchange={(e) => change(d.name, { wildcard: e.currentTarget.checked })}
-									/></td
-								>
-								<td
-									><select
-										class="field"
-										value={d.ignore}
-										disabled={busy}
-										aria-label={t('ipv64x.ignore')}
-										onchange={(e) => change(d.name, { ignore: e.currentTarget.value })}
+		<SettingGroup title={t('ipv64x.dyn.domains')} id="ipv64-dyn-domains">
+			<div class="panel">
+				<p class="muted hint">{t('ipv64x.dyn.domainsHint')}</p>
+				{#if domainError}<p class="notice-error" role="alert">{domainError}</p>{/if}
+				{#if domainNotice}<p class="notice-ok" role="status">{domainNotice}</p>{/if}
+				<div class="table-wrap">
+					<table>
+						<thead
+							><tr
+								><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.wildcard')}</th><th
+									>{t('ipv64x.ignore')}</th
+								><th>{t('ipv64x.prefix6')}</th><th></th></tr
+							></thead
+						>
+						<tbody>
+							{#each domains as d (d.name)}
+								<tr>
+									<td class="mono"
+										>{d.name}{#if hosts.includes(d.name)}<span class="chip"
+												>{t('ipv64x.inDdns')}</span
+											>{/if}</td
 									>
-										<option value="none">{t('ipv64x.ignoreNone')}</option>
-										<option value="ipv4">{t('ipv64x.ignore4')}</option>
-										<option value="ipv6">{t('ipv64x.ignore6')}</option>
-									</select></td
-								>
-								<td class="prefix"
-									><input
-										class="field mono"
-										type="text"
-										bind:value={prefixes[d.name]}
-										placeholder="2001:db8::/56"
-										spellcheck="false"
-										aria-label={t('ipv64x.prefix6')}
-										disabled={busy}
-									/><button
-										type="button"
-										class="btn"
-										disabled={busy || (prefixes[d.name] ?? '') === (d.ipv6Prefix ?? '')}
-										onclick={() => change(d.name, { ipv6_prefix: (prefixes[d.name] ?? '').trim() })}
-										>{t('common.save')}</button
-									></td
-								>
-								<td class="actions">
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() => (forApps = d.name)}>{t('ipv64.forApps')}</button
+									<td
+										><input
+											type="checkbox"
+											checked={d.wildcard}
+											disabled={busy}
+											aria-label={t('ipv64x.wildcard')}
+											onchange={(e) => change(d.name, { wildcard: e.currentTarget.checked })}
+										/></td
 									>
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() => (updaterFor = d.name)}>{t('ipv64x.dyn.router')}</button
+									<td
+										><select
+											class="field"
+											value={d.ignore}
+											disabled={busy}
+											aria-label={t('ipv64x.ignore')}
+											onchange={(e) => change(d.name, { ignore: e.currentTarget.value })}
+										>
+											<option value="none">{t('ipv64x.ignoreNone')}</option>
+											<option value="ipv4">{t('ipv64x.ignore4')}</option>
+											<option value="ipv6">{t('ipv64x.ignore6')}</option>
+										</select></td
 									>
-								</td>
-							</tr>
-						{:else}
-							<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
+									<td class="prefix"
+										><input
+											class="field mono"
+											type="text"
+											bind:value={prefixes[d.name]}
+											placeholder="2001:db8::/56"
+											spellcheck="false"
+											aria-label={t('ipv64x.prefix6')}
+											disabled={busy}
+										/><button
+											type="button"
+											class="btn"
+											disabled={busy || (prefixes[d.name] ?? '') === (d.ipv6Prefix ?? '')}
+											onclick={() =>
+												change(d.name, { ipv6_prefix: (prefixes[d.name] ?? '').trim() })}
+											>{t('common.save')}</button
+										></td
+									>
+									<td class="actions">
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() => (forApps = d.name)}>{t('ipv64.forApps')}</button
+										>
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() => (updaterFor = d.name)}>{t('ipv64x.dyn.router')}</button
+										>
+									</td>
+								</tr>
+							{:else}
+								<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="muted hint">{t('ipv64x.wildcardHint')}</p>
 			</div>
-			<p class="muted hint">{t('ipv64x.wildcardHint')}</p>
-		</section>
+		</SettingGroup>
 
-		<section class="tile panel" aria-labelledby="ipv64-dyn-heartbeat">
-			<h2 class="tile-title" id="ipv64-dyn-heartbeat">{t('ipv64x.dyn.heartbeatTitle')}</h2>
-			{#if !keyKnown}<p class="notice-warn">{t('ipv64x.dyn.heartbeatNeedsSave')}</p>{/if}
-			<Heartbeat status={ddns} {keyKnown} onstatus={(next) => (ddns = next)} />
-		</section>
+		<SettingGroup title={t('ipv64x.dyn.heartbeatTitle')} id="ipv64-dyn-heartbeat">
+			<div class="panel">
+				{#if !keyKnown}<p class="notice-warn">{t('ipv64x.dyn.heartbeatNeedsSave')}</p>{/if}
+				<Heartbeat status={ddns} {keyKnown} onstatus={(next) => (ddns = next)} />
+			</div>
+		</SettingGroup>
 	{/if}
 </div>
 
@@ -535,6 +561,12 @@
 {/if}
 
 <style>
+	.names {
+		margin: var(--space-2) 0;
+	}
+	form.rows {
+		display: contents;
+	}
 	.chip {
 		margin-left: var(--space-1-5);
 	}

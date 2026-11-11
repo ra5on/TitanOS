@@ -14,11 +14,10 @@
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { switchNode } from '#lib/cluster-node.ts';
-	import Dropdown from '#lib/components/Dropdown.svelte';
+	import { revealTarget } from '#lib/reveal-target.ts';
 	import Icon from '#lib/components/Icon.svelte';
-	import FormRow from '#lib/components/appform/FormRow.svelte';
-	import FormSection from '#lib/components/appform/FormSection.svelte';
-	import Toggle from '#lib/components/appform/Toggle.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import ProbeDialog from '#lib/components/cluster/ProbeDialog.svelte';
 	import RouteDialog from '#lib/components/cluster/RouteDialog.svelte';
 	import UpdateAllDialog from '#lib/components/cluster/UpdateAllDialog.svelte';
@@ -74,8 +73,11 @@
 	let handing = $state<NodeView | null>(null);
 	/** The local account about to become one of the cluster. */
 	let sharing = $state<string | null>(null);
-	// The node whose warnings and errors are unfolded under it.
-	let noticesOf = $state('');
+	// PLAN 78-1: which node rows are open (a node's chips "N Fehler" open its
+	// row, where its warnings and errors are read and deleted).
+	let openNodes = $state<Record<string, boolean>>({});
+	// The row of the join information opens when it is shown.
+	let joinOpen = $state(false);
 
 	const owner = $derived(session.data?.user?.role === 'owner');
 	const cluster = $derived(page?.cluster);
@@ -151,6 +153,7 @@
 		try {
 			const answer = await api.post<{ joinInfo: string }>('/cluster/join-info', proof);
 			joinInfo = answer.joinInfo;
+			joinOpen = true;
 			revealing = false;
 			clearTimeout(hideTimer);
 			hideTimer = setTimeout(hideJoinInfo, JOIN_INFO_SHOWN);
@@ -300,13 +303,6 @@
 			handing = null;
 	}
 
-	/** The state dot of a node: ok, warn (another way, version or clock) or off. */
-	function tone(n: NodeView): 'ok' | 'warn' | 'off' {
-		if (!n.online) return 'off';
-		if (n.fallback || n.clockSkew || otherVersion(n, version) || n.status?.errors) return 'warn';
-		return 'ok';
-	}
-
 	function older(n: NodeView): boolean {
 		return otherVersion(n, version) && compareVersions(n.status?.version ?? '', version) < 0;
 	}
@@ -314,7 +310,7 @@
 	function used(n: NodeView): string {
 		const m = n.status?.memory;
 		if (!m || !m.totalBytes) return '';
-		return t('cluster.memory', {
+		return t('cluster.detail.memoryValue', {
 			used: formatBytes(m.totalBytes - m.availableBytes),
 			total: formatBytes(m.totalBytes),
 		});
@@ -331,6 +327,17 @@
 	<p class="muted">{t('cluster.intro')}</p>
 </PageHead>
 
+<!-- The warnings and errors of a node: its chips, as a button where this
+     node may read them (they open the node's row with the messages). -->
+{#snippet noticeChips(node: NodeView)}
+	{#if node.status?.errors}<span class="chip error"
+			>{t('cluster.errors', { count: node.status.errors })}</span
+		>{/if}
+	{#if node.status?.warnings}<span class="chip warn"
+			>{t('cluster.warnings', { count: node.status.warnings })}</span
+		>{/if}
+{/snippet}
+
 {#if loadError}
 	<div class="notice-error" role="alert">
 		{loadError} <button class="btn" onclick={() => load()}>{t('ui.retry')}</button>
@@ -338,33 +345,12 @@
 {:else if !page || !cluster}
 	<p class="muted loading">{t('common.loading')}</p>
 {:else if !inCluster}
-	<section class="tile panel">
-		<h2 class="tile-title">{t('cluster.create')}</h2>
-		<p class="muted">{t('cluster.createHint')}</p>
-		{#if owner}
-			<form class="row-actions" onsubmit={create}>
-				<input
-					class="field"
-					type="text"
-					bind:value={newName}
-					maxlength="63"
-					placeholder={t('cluster.namePlaceholder')}
-					aria-label={t('cluster.name')}
-					disabled={busy}
-				/>
-				<button class="btn btn-primary" disabled={busy || !newName.trim()}
-					>{t('cluster.createButton')}</button
-				>
-			</form>
-		{:else}
-			<p class="notice-warn">{t('cluster.ownerOnly')}</p>
-		{/if}
-	</section>
-	<section class="tile panel">
-		<h2 class="tile-title">{t('cluster.join')}</h2>
-		<p class="muted">{t('cluster.joinHint')}</p>
-		{#if owner}
-			<form onsubmit={check}>
+	<!-- PLAN 78-1: the two ways into a cluster are two rows; pasting and
+	     checking the join information are the parts of the second one. -->
+	{#if !owner}<p class="notice-warn">{t('cluster.ownerOnly')}</p>{/if}
+	{#snippet joinParts()}
+		<form onsubmit={check}>
+			<div class="srow-block">
 				<label class="stack"
 					><span>{t('cluster.joinInfo')}</span><textarea
 						class="field mono"
@@ -377,40 +363,69 @@
 				<div class="row-actions">
 					<button class="btn" disabled={busy || !joinText.trim()}>{t('cluster.check')}</button>
 				</div>
-			</form>
-			{#if preview}
-				<div class="preview divided">
-					<p>
-						{t('cluster.previewCluster', {
-							name: preview.cluster,
-							nodes: preview.nodes.join(', '),
-						})}
-					</p>
-					{#if preview.replaced.length}<p class="notice-warn">
-							{t('cluster.previewReplaced', { names: preview.replaced.join(', ') })}
-						</p>{/if}
-					{#if preview.local.length}<p>
-							{t('cluster.previewLocal', { names: preview.local.join(', ') })}
-						</p>{/if}
-					{#if preview.taken.length}<p>
-							{t('cluster.previewTaken', { names: preview.taken.join(', ') })}
-						</p>{/if}
-					<div class="row-actions">
-						<button class="btn btn-primary" disabled={busy} onclick={() => (confirmJoin = true)}
-							>{t('cluster.joinButton')}</button
-						>
-					</div>
+			</div>
+		</form>
+		{#if preview}
+			<div class="srow-block preview">
+				<p>
+					{t('cluster.previewCluster', {
+						name: preview.cluster,
+						nodes: preview.nodes.join(', '),
+					})}
+				</p>
+				{#if preview.replaced.length}<p class="notice-warn">
+						{t('cluster.previewReplaced', { names: preview.replaced.join(', ') })}
+					</p>{/if}
+				{#if preview.local.length}<p>
+						{t('cluster.previewLocal', { names: preview.local.join(', ') })}
+					</p>{/if}
+				{#if preview.taken.length}<p>
+						{t('cluster.previewTaken', { names: preview.taken.join(', ') })}
+					</p>{/if}
+				<div class="row-actions">
+					<button class="btn btn-primary" disabled={busy} onclick={() => (confirmJoin = true)}
+						>{t('cluster.joinButton')}</button
+					>
 				</div>
-			{/if}
-		{:else}
-			<p class="notice-warn">{t('cluster.ownerOnly')}</p>
+			</div>
 		{/if}
-	</section>
+	{/snippet}
+	<SettingGroup>
+		<SettingRow icon="plus" title={t('cluster.create')} desc={t('cluster.createHint')}>
+			{#snippet control()}
+				{#if owner}
+					<form class="create" onsubmit={create}>
+						<input
+							class="field"
+							type="text"
+							bind:value={newName}
+							maxlength="63"
+							placeholder={t('cluster.namePlaceholder')}
+							aria-label={t('cluster.name')}
+							disabled={busy}
+						/>
+						<button class="btn btn-primary" disabled={busy || !newName.trim()}
+							>{t('cluster.createButton')}</button
+						>
+					</form>
+				{/if}
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			id="cluster-join"
+			icon="tailnet"
+			title={t('cluster.join')}
+			desc={t('cluster.joinHint')}
+			open
+			children={owner ? joinParts : undefined}
+		/>
+	</SettingGroup>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {:else}
-	<section class="tile nodes-tile" id="cluster-nodes" aria-labelledby="cluster-nodes-title">
-		<div class="nodes-head">
-			<h2 id="cluster-nodes-title">{t('cluster.nodesOf', { name: cluster.name ?? '' })}</h2>
+	<!-- PLAN 78-1: every node is a row – name, role and state; it opens to
+	     its details, its messages and what can be done with it. -->
+	<SettingGroup title={t('cluster.nodesOf', { name: cluster.name ?? '' })} id="cluster-nodes">
+		{#snippet tools()}
 			{#if manages}
 				<button type="button" class="btn small" onclick={() => (probing = true)}
 					><Icon name="refresh" size={15} />{t('cluster.probe')}</button
@@ -419,351 +434,406 @@
 					><Icon name="download" size={15} />{t('cluster.updateAll')}</button
 				>
 			{/if}
-		</div>
-		<ul class="nodes">
-			{#each page.nodes as node (node.id)}
-				{@const route = cluster.routes[node.id]}
-				<li>
-					<span class="dot {tone(node)}" aria-hidden="true"></span>
-					<div class="info">
-						<div class="node-head">
-							<span class="name">{node.name}</span>
-							{#if node.self}<span class="chip">{t('cluster.thisNode')}</span>{/if}
-							<span class="chip" class:info={node.id === cluster.admin || node.manage}
-								>{t(
-									node.id === cluster.admin
-										? 'cluster.roleAdmin'
-										: node.manage
-											? 'cluster.roleManage'
-											: 'cluster.roleMember',
-								)}</span
+		{/snippet}
+		{#each page.nodes as node (node.id)}
+			{@const route = cluster.routes[node.id]}
+			{@const readable = node.self || (manages && manageable(node))}
+			{@const noticed = !!(node.status?.errors || node.status?.warnings)}
+			{@const takeOver = owner && !isAdmin && node.id === cluster.admin && !node.online}
+			<SettingRow
+				id="node-{node.id}"
+				icon="tailnet"
+				title={node.name}
+				bind:open={() => !!openNodes[node.id], (on) => (openNodes[node.id] = on)}
+			>
+				{#snippet badge()}
+					{#if node.self}<span class="chip">{t('cluster.thisNode')}</span>{/if}
+					<span class="chip" class:info={node.id === cluster.admin || node.manage}
+						>{t(
+							node.id === cluster.admin
+								? 'cluster.roleAdmin'
+								: node.manage
+									? 'cluster.roleManage'
+									: 'cluster.roleMember',
+						)}</span
+					>
+				{/snippet}
+				{#snippet description()}
+					<span class="line">
+						{#if node.self}
+							<span class="mono">{node.addresses.slice(0, 4).join(' · ')}</span>
+						{:else if node.online && node.way}
+							<span
+								>{t('cluster.via', { way: wayLabel(node.way) }) +
+									(node.millis ? ` · ${node.millis} ms` : '')}</span
 							>
-							{#if !node.online}<span class="chip error">{t('cluster.offline')}</span>{/if}
-							{#if node.status && otherVersion(node, version)}<span class="chip warn"
-									>{t(older(node) ? 'cluster.olderVersion' : 'cluster.newerVersion')}</span
-								>{/if}
-							{#if route?.manage}<span class="chip info"
-									>{t('cluster.ownWay', { way: wayLabel(route.manage) })}</span
-								>{/if}
-							{#if node.status?.errors || node.status?.warnings}
-								{#if node.self || (manages && manageable(node))}
-									<button
-										type="button"
-										class="chip-button"
-										aria-expanded={noticesOf === node.id}
-										aria-controls="notices-{node.id}"
-										title={t('cluster.noticesShow')}
-										onclick={() => (noticesOf = noticesOf === node.id ? '' : node.id)}
-									>
-										{#if node.status.errors}<span class="chip error"
-												>{t('cluster.errors', { count: node.status.errors })}</span
-											>{/if}
-										{#if node.status.warnings}<span class="chip warn"
-												>{t('cluster.warnings', { count: node.status.warnings })}</span
-											>{/if}
-										<span class="fold" class:open={noticesOf === node.id}
-											><Icon name="chevronDown" size={14} /></span
-										>
-									</button>
-								{:else}
-									{#if node.status.errors}<span class="chip error"
-											>{t('cluster.errors', { count: node.status.errors })}</span
-										>{/if}
-									{#if node.status.warnings}<span class="chip warn"
-											>{t('cluster.warnings', { count: node.status.warnings })}</span
-										>{/if}
-								{/if}
-							{/if}
-						</div>
-						<p class="line">
-							{#if node.self}
-								<span class="mono small muted">{node.addresses.slice(0, 4).join(' · ')}</span>
-							{:else if node.online && node.way}
-								<span
-									>{t('cluster.via', { way: wayLabel(node.way) }) +
-										(node.millis ? ` · ${node.millis} ms` : '')}</span
-								>
-								<span class="mono small muted">{node.address}</span>
-								{#if node.fallback}<span class="warn-text small"
-										>{t((ways.return ?? 0) < 0 ? 'cluster.fallbackStays' : 'cluster.fallback', {
-											way: wayLabel(node.preferred),
-										})}</span
-									>{/if}
-							{:else if node.error}
-								<span class="muted">{errorText(node.error)}</span>
-								<span class="mono small muted">{node.addresses.slice(0, 3).join(' · ')}</span>
-							{/if}
-						</p>
-						{#if node.status}
-							<p class="line small muted">
-								<span
-									>{t('cluster.version', { version: node.status.version }) +
-										(older(node) ? ' ' : '')}{#if older(node)}<span class="warn-text"
-											>→ {version}</span
-										>{/if}</span
-								>
-								<span
-									>· {t('cluster.uptime', {
-										time: formatDuration(node.status.uptimeSeconds),
+							<span class="mono">{node.address}</span>
+							{#if node.fallback}<span class="warn-text"
+									>{t((ways.return ?? 0) < 0 ? 'cluster.fallbackStays' : 'cluster.fallback', {
+										way: wayLabel(node.preferred),
 									})}</span
-								>
-								{#if node.status.cpuPercent !== null}<span
-										>· CPU {Math.round(node.status.cpuPercent)} %</span
-									>{/if}
-								{#if used(node)}<span>· {used(node)}</span>{/if}
-								<span
-									>· {t('cluster.volumes', {
-										count: node.status.volumes.length,
-									})}{#if volumeProblems(node)}
+								>{/if}
+						{:else if node.error}
+							<span>{errorText(node.error)}</span>
+							<span class="mono">{node.addresses.slice(0, 3).join(' · ')}</span>
+						{/if}
+					</span>
+					{#if node.clockSkew}<span class="line warn-text"
+							>{t(node.clockSkew > 0 ? 'cluster.clockAhead' : 'cluster.clockBehind', {
+								minutes: Math.max(1, Math.round(Math.abs(node.clockSkew) / 60)),
+							})}</span
+						>{/if}
+				{/snippet}
+				{#snippet control()}
+					<!-- The state in words (it was a coloured dot before). -->
+					{#if node.online}<span class="chip ok">{t('cluster.online')}</span>{:else}<span
+							class="chip error">{t('cluster.offline')}</span
+						>{/if}
+					{#if node.status && otherVersion(node, version)}<span class="chip warn"
+							>{t(older(node) ? 'cluster.olderVersion' : 'cluster.newerVersion')}</span
+						>{/if}
+					{#if route?.manage}<span class="chip info"
+							>{t('cluster.ownWay', { way: wayLabel(route.manage) })}</span
+						>{/if}
+					{#if noticed}
+						{#if readable}
+							<button
+								type="button"
+								class="chip-button"
+								aria-expanded={!!openNodes[node.id]}
+								aria-controls="node-{node.id}-parts"
+								title={t('cluster.noticesShow')}
+								onclick={() => (openNodes[node.id] = !openNodes[node.id])}
+							>
+								{@render noticeChips(node)}
+							</button>
+						{:else}
+							{@render noticeChips(node)}
+						{/if}
+					{/if}
+					{#if !node.self && manages}
+						<button
+							class="btn small"
+							disabled={!manageable(node)}
+							onclick={() => switchNode(node.id)}>{t('cluster.manage')}</button
+						>
+						{#if older(node) && node.online}<button
+								class="btn small btn-primary"
+								onclick={() => switchNode(node.id, '/settings/updates')}
+								>{t('cluster.update')}</button
+							>{/if}
+					{/if}
+				{/snippet}
+				<div class="srow-block">
+					<dl>
+						<div>
+							<dt>{t('cluster.detail.addresses')}</dt>
+							<dd class="mono">
+								{#each node.addresses as address (address)}<span>{address}</span>{:else}–{/each}
+							</dd>
+						</div>
+						{#if node.status}
+							<div>
+								<dt>{t('cluster.detail.version')}</dt>
+								<dd>
+									{node.status.version}{#if older(node)}{' '}
+										<span class="warn-text">→ {version}</span>{/if}
+								</dd>
+							</div>
+							<div>
+								<dt>{t('cluster.detail.uptime')}</dt>
+								<dd>{formatDuration(node.status.uptimeSeconds)}</dd>
+							</div>
+							{#if node.status.cpuPercent !== null}
+								<div>
+									<dt>{t('cluster.detail.cpu')}</dt>
+									<dd>{Math.round(node.status.cpuPercent)} %</dd>
+								</div>
+							{/if}
+							{#if used(node)}
+								<div>
+									<dt>{t('cluster.detail.memory')}</dt>
+									<dd>{used(node)}</dd>
+								</div>
+							{/if}
+							<div>
+								<dt>{t('cluster.detail.volumes')}</dt>
+								<dd>
+									{node.status.volumes.length}{#if volumeProblems(node)}{' '}
 										<span class="warn-text"
 											>({t('cluster.volumeProblems', { count: volumeProblems(node) })})</span
-										>{/if}</span
-								>
-								{#if node.clockSkew}<span class="warn-text"
-										>· {t(node.clockSkew > 0 ? 'cluster.clockAhead' : 'cluster.clockBehind', {
-											minutes: Math.max(1, Math.round(Math.abs(node.clockSkew) / 60)),
-										})}</span
-									>{/if}
-							</p>
-						{/if}
-						{#if noticesOf === node.id}
-							<div id="notices-{node.id}">
-								<NodeNotices node={node.id} self={node.self} name={node.name} onchange={load} />
+										>{/if}
+								</dd>
 							</div>
 						{/if}
+					</dl>
+				</div>
+				{#if noticed && readable}
+					<div class="srow-block">
+						<NodeNotices node={node.id} self={node.self} name={node.name} onchange={load} />
 					</div>
-					<div class="actions">
-						{#if !node.self && manages}
-							<button
-								class="btn small"
-								disabled={!manageable(node)}
-								onclick={() => switchNode(node.id)}>{t('cluster.manage')}</button
-							>
-							{#if older(node) && node.online}<button
-									class="btn small btn-primary"
-									onclick={() => switchNode(node.id, '/settings/updates')}
-									>{t('cluster.update')}</button
-								>{/if}
-						{/if}
-						{#if manages && (!node.self || (owner && !isAdmin && adminNode && !adminNode.online))}
-							<Dropdown label={t('ui.more')} icon="more" align="right">
-								{#snippet children(close)}
-									{#if !node.self}
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												routing = node;
-											}}
-											><Icon name="globe" size={16} /><span>{t('cluster.routeMenu')}</span></button
-										>
-									{/if}
-									{#if owner && isAdmin && !node.self}
-										<button
-											type="button"
-											role="menuitem"
-											disabled={busy}
-											onclick={() => {
-												close();
-												setManage(node, !node.manage);
-											}}
-											><Icon name="shield" size={16} /><span
-												>{t(node.manage ? 'cluster.manageRevoke' : 'cluster.manageAllow')}</span
-											></button
-										>
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												handing = node;
-											}}
-											><Icon name="users" size={16} /><span
-												>{t('cluster.handOver', { name: node.name })}</span
-											></button
-										>
-									{/if}
-									{#if owner && !isAdmin && node.id === cluster.admin && !node.online}
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												handing = page?.nodes.find((n) => n.self) ?? null;
-											}}><Icon name="users" size={16} /><span>{t('cluster.takeOver')}</span></button
-										>
-									{/if}
-									{#if owner && node.id !== cluster.admin && !node.self}
-										<button
-											type="button"
-											role="menuitem"
-											class="danger"
-											onclick={() => {
-												close();
-												removing = node;
-											}}><Icon name="trash" size={16} /><span>{t('cluster.remove')}</span></button
-										>
-									{/if}
-								{/snippet}
-							</Dropdown>
-						{/if}
-					</div>
-				</li>
-			{/each}
-		</ul>
-		<p class="muted small trust">{t(manages ? 'cluster.trust' : 'cluster.memberHint')}</p>
-	</section>
-
-	<form class="tile settings-form" onsubmit={saveSettings}>
-		<FormSection title={t('cluster.settings')} />
-		<FormRow label={t('cluster.name')} id="cluster-name">
-			<div class="line">
-				<input
-					id="cluster-name"
-					class="field"
-					type="text"
-					bind:value={clusterName}
-					maxlength="63"
-					disabled={busy || !manages}
-				/>
-			</div>
-		</FormRow>
-
-		<FormSection title={t('cluster.connection')} />
-		<FormRow label={t('cluster.manageWay')} id="cluster-way" hint={t('cluster.manageWayHint')}>
-			<div class="line">
-				<select id="cluster-way" class="field" bind:value={ways.manage} disabled={busy || !manages}>
-					<option value="">{t('cluster.wayAuto')}</option>
-					{#each WAYS as way (way)}<option value={way}
-							>{t('cluster.wayFirst', { way: wayLabel(way) })}</option
-						>{/each}
-				</select>
-			</div>
-		</FormRow>
-		<FormRow label={t('cluster.onlyWay')}>
-			<Toggle
-				checked={!!ways.only && !!ways.manage}
-				onchange={(on) => (ways.only = on)}
-				label={t('cluster.onlyWay')}
-				disabled={busy || !manages || !ways.manage}
-				text={t(ways.only && ways.manage ? 'cluster.onlyOn' : 'cluster.onlyOff')}
-			/>
-		</FormRow>
-		<FormRow label={t('cluster.returnWay')} id="cluster-return" hint={t('cluster.returnWayHint')}>
-			<div class="line">
-				<select
-					id="cluster-return"
-					class="field"
-					bind:value={ways.return}
-					disabled={busy || !manages}
-				>
-					<option value={0}>{t('cluster.everyMinute')}</option>
-					<option value={5}>{t('cluster.everyMinutes', { count: 5 })}</option>
-					<option value={15}>{t('cluster.everyMinutes', { count: 15 })}</option>
-					<option value={-1}>{t('cluster.never')}</option>
-				</select>
-			</div>
-		</FormRow>
-		<FormRow label={t('cluster.backupWay')} id="cluster-backup" hint={t('cluster.backupWayHint')}>
-			<div class="line">
-				<select
-					id="cluster-backup"
-					class="field"
-					bind:value={ways.backup}
-					disabled={busy || !manages}
-				>
-					<option value="">{t('cluster.backupLikeManage')}</option>
-					{#each WAYS as way (way)}<option value={way}
-							>{t('cluster.onlyThis', { way: wayLabel(way) })}</option
-						>{/each}
-				</select>
-			</div>
-		</FormRow>
-
-		<FormSection title={t('cluster.waysTitle')} />
-		{#each FOUND_WAYS as way (way)}
-			{@const found = foundOf(way)}
-			<FormRow
-				label={wayLabel(way)}
-				hint={way === 'tailscale' && found.some((a) => a.includes('.ts.net'))
-					? t('cluster.tailscaleNameHint')
-					: ''}
-			>
-				<p class="line found">
-					<span class="chip" class:ok={found.length > 0}
-						>{t(found.length ? 'cluster.wayFound' : 'cluster.wayNotFound')}</span
+				{/if}
+				{#if manages && (!node.self || (owner && !isAdmin && adminNode && !adminNode.online))}
+					<div
+						class="srow-block actions"
+						role="group"
+						aria-label={t('cluster.actionsFor', { name: node.name })}
 					>
-					{#if found.length}<span class="mono small">{found.join(' · ')}</span>{/if}
-				</p>
-			</FormRow>
+						{#if !node.self}
+							<button type="button" class="btn" onclick={() => (routing = node)}
+								><Icon name="globe" size={16} />{t('cluster.routeMenu')}</button
+							>
+						{/if}
+						{#if owner && isAdmin && !node.self}
+							<button
+								type="button"
+								class="btn"
+								disabled={busy}
+								onclick={() => setManage(node, !node.manage)}
+								><Icon name="shield" size={16} />{t(
+									node.manage ? 'cluster.manageRevoke' : 'cluster.manageAllow',
+								)}</button
+							>
+							<button type="button" class="btn" onclick={() => (handing = node)}
+								><Icon name="users" size={16} />{t('cluster.handOver', { name: node.name })}</button
+							>
+						{/if}
+						{#if takeOver}
+							<button
+								type="button"
+								class="btn"
+								onclick={() => (handing = page?.nodes.find((n) => n.self) ?? null)}
+								><Icon name="users" size={16} />{t('cluster.takeOver')}</button
+							>
+						{/if}
+						{#if owner && node.id !== cluster.admin && !node.self}
+							<button type="button" class="btn btn-danger" onclick={() => (removing = node)}
+								><Icon name="trash" size={16} />{t('cluster.remove')}</button
+							>
+						{/if}
+					</div>
+				{/if}
+			</SettingRow>
 		{/each}
-		<FormRow
-			label={t('cluster.tunnel')}
-			hint={cluster.tunnel.error
-				? cluster.tunnel.error
-				: t('cluster.tunnelHint', { port: cluster.tunnel.port ?? 51821 })}
-			tone={cluster.tunnel.error ? 'error' : ''}
-		>
-			<Toggle
-				bind:checked={tunnel}
-				label={t('cluster.tunnel')}
-				disabled={busy || !manages}
-				text={tunnel && cluster.tunnel.enabled && cluster.tunnel.address
-					? t('cluster.tunnelOn', { address: cluster.tunnel.address })
-					: undefined}
-			/>
-		</FormRow>
-		<FormRow
-			label={t('cluster.internetWay')}
-			hint={internet ? t('cluster.internetWarn') : t('cluster.internetHint')}
-			tone={internet ? 'warn' : ''}
-		>
-			<Toggle
-				bind:checked={internet}
-				label={t('cluster.internetWay')}
-				disabled={busy || !manages}
-			/>
-		</FormRow>
-		<FormRow label={t('cluster.extra')} id="cluster-extra" hint={t('cluster.extraHint')}>
-			<textarea
-				id="cluster-extra"
-				class="field mono extra"
-				rows="2"
-				bind:value={extra}
-				spellcheck="false"
-				placeholder="nas.example.org"
-				disabled={busy}></textarea>
-		</FormRow>
+		<p class="muted small">{t(manages ? 'cluster.trust' : 'cluster.memberHint')}</p>
+	</SettingGroup>
 
-		<FormSection title={t('cluster.notices')} />
-		<FormRow label={t('cluster.alert')} id="cluster-alert" hint={t('cluster.alertHint')}>
-			<div class="line">
-				<select
-					id="cluster-alert"
-					class="field"
-					bind:value={ways.alert}
-					disabled={busy || !manages}
+	<!-- The settings of the cluster are one form with one Save, as before:
+	     every setting a row of its own, grouped under plain headings. -->
+	<form class="settings-form" onsubmit={saveSettings}>
+		<SettingGroup title={t('cluster.settings')}>
+			<SettingRow icon="edit" title={t('cluster.name')} for="cluster-name">
+				{#snippet control()}
+					<input
+						id="cluster-name"
+						class="field"
+						type="text"
+						bind:value={clusterName}
+						maxlength="63"
+						disabled={busy || !manages}
+					/>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+
+		<SettingGroup title={t('cluster.connection')}>
+			<SettingRow
+				icon="globe"
+				title={t('cluster.manageWay')}
+				desc={t('cluster.manageWayHint')}
+				for="cluster-way"
+			>
+				{#snippet control()}
+					<select
+						id="cluster-way"
+						class="field"
+						bind:value={ways.manage}
+						disabled={busy || !manages}
+					>
+						<option value="">{t('cluster.wayAuto')}</option>
+						{#each WAYS as way (way)}<option value={way}
+								>{t('cluster.wayFirst', { way: wayLabel(way) })}</option
+							>{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="lock"
+				title={t('cluster.onlyWay')}
+				desc={t(ways.only && ways.manage ? 'cluster.onlyOn' : 'cluster.onlyOff')}
+				for="cluster-only"
+			>
+				{#snippet control()}
+					<input
+						id="cluster-only"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={!!ways.only && !!ways.manage}
+						onchange={(e) => (ways.only = e.currentTarget.checked)}
+						disabled={busy || !manages || !ways.manage}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="undo"
+				title={t('cluster.returnWay')}
+				desc={t('cluster.returnWayHint')}
+				for="cluster-return"
+			>
+				{#snippet control()}
+					<select
+						id="cluster-return"
+						class="field"
+						bind:value={ways.return}
+						disabled={busy || !manages}
+					>
+						<option value={0}>{t('cluster.everyMinute')}</option>
+						<option value={5}>{t('cluster.everyMinutes', { count: 5 })}</option>
+						<option value={15}>{t('cluster.everyMinutes', { count: 15 })}</option>
+						<option value={-1}>{t('cluster.never')}</option>
+					</select>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="archive"
+				title={t('cluster.backupWay')}
+				desc={t('cluster.backupWayHint')}
+				for="cluster-backup"
+			>
+				{#snippet control()}
+					<select
+						id="cluster-backup"
+						class="field"
+						bind:value={ways.backup}
+						disabled={busy || !manages}
+					>
+						<option value="">{t('cluster.backupLikeManage')}</option>
+						{#each WAYS as way (way)}<option value={way}
+								>{t('cluster.onlyThis', { way: wayLabel(way) })}</option
+							>{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+
+		<SettingGroup title={t('cluster.waysTitle')}>
+			{#each FOUND_WAYS as way (way)}
+				{@const found = foundOf(way)}
+				<SettingRow
+					icon={way === 'home' ? 'home' : 'tailnet'}
+					title={wayLabel(way)}
+					desc={way === 'tailscale' && found.some((a) => a.includes('.ts.net'))
+						? t('cluster.tailscaleNameHint')
+						: undefined}
 				>
-					<option value={5}>{t('cluster.alertAfter', { count: 5 })}</option>
-					<option value={0}>{t('cluster.alertAfter', { count: 10 })}</option>
-					<option value={30}>{t('cluster.alertAfter', { count: 30 })}</option>
-					<option value={60}>{t('cluster.alertAfter', { count: 60 })}</option>
-					<option value={-1}>{t('cluster.never')}</option>
-				</select>
-			</div>
-		</FormRow>
-		<FormRow label={t('cluster.clock')} hint={t('cluster.clockHint')}>
-			<Toggle
-				checked={!ways.clockOff}
-				onchange={(on) => (ways.clockOff = !on)}
-				label={t('cluster.clock')}
-				disabled={busy || !manages}
-			/>
-		</FormRow>
-		{#if error}<p class="notice-error form-error" role="alert">{error}</p>{/if}
-		<div class="form-foot">
-			<div>
+					{#snippet control()}
+						{#if found.length}<span class="mono small">{found.join(' · ')}</span>{/if}
+						<span class="chip" class:ok={found.length > 0}
+							>{t(found.length ? 'cluster.wayFound' : 'cluster.wayNotFound')}</span
+						>
+					{/snippet}
+				</SettingRow>
+			{/each}
+			<SettingRow icon="shield" title={t('cluster.tunnel')} for="cluster-tunnel">
+				{#snippet description()}
+					{#if cluster.tunnel.error}<span class="error-text">{cluster.tunnel.error}</span>{:else}{t(
+							'cluster.tunnelHint',
+							{ port: cluster.tunnel.port ?? 51821 },
+						)}{/if}
+				{/snippet}
+				{#snippet control()}
+					{#if tunnel && cluster.tunnel.enabled && cluster.tunnel.address}<span
+							>{t('cluster.tunnelOn', { address: cluster.tunnel.address })}</span
+						>{/if}
+					<input
+						id="cluster-tunnel"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={tunnel}
+						disabled={busy || !manages}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="external" title={t('cluster.internetWay')} for="cluster-internet">
+				{#snippet description()}
+					{#if internet}<span class="warn-text">{t('cluster.internetWarn')}</span>{:else}{t(
+							'cluster.internetHint',
+						)}{/if}
+				{/snippet}
+				{#snippet control()}
+					<input
+						id="cluster-internet"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={internet}
+						disabled={busy || !manages}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="list"
+				title={t('cluster.extra')}
+				desc={t('cluster.extraHint')}
+				for="cluster-extra"
+			>
+				{#snippet control()}
+					<textarea
+						id="cluster-extra"
+						class="field mono extra"
+						rows="2"
+						bind:value={extra}
+						spellcheck="false"
+						placeholder="nas.example.org"
+						disabled={busy}></textarea>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+
+		<SettingGroup title={t('cluster.notices')}>
+			<SettingRow
+				icon="bell"
+				title={t('cluster.alert')}
+				desc={t('cluster.alertHint')}
+				for="cluster-alert"
+			>
+				{#snippet control()}
+					<select
+						id="cluster-alert"
+						class="field"
+						bind:value={ways.alert}
+						disabled={busy || !manages}
+					>
+						<option value={5}>{t('cluster.alertAfter', { count: 5 })}</option>
+						<option value={0}>{t('cluster.alertAfter', { count: 10 })}</option>
+						<option value={30}>{t('cluster.alertAfter', { count: 30 })}</option>
+						<option value={60}>{t('cluster.alertAfter', { count: 60 })}</option>
+						<option value={-1}>{t('cluster.never')}</option>
+					</select>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="clock"
+				title={t('cluster.clock')}
+				desc={t('cluster.clockHint')}
+				for="cluster-clock"
+			>
+				{#snippet control()}
+					<input
+						id="cluster-clock"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={!ways.clockOff}
+						onchange={(e) => (ways.clockOff = !e.currentTarget.checked)}
+						disabled={busy || !manages}
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
 				<button class="btn btn-primary" disabled={busy || !clusterName.trim()}
 					>{t('common.save')}</button
 				>
@@ -771,49 +841,70 @@
 						>{t(busy ? 'ui.saving' : 'ui.saved')}</span
 					>{/if}
 			</div>
-		</div>
+		</SettingGroup>
 	</form>
 
 	{#if owner && cluster.localAccounts?.length}
-		<section class="tile panel" id="cluster-local" aria-labelledby="cluster-local-title">
-			<h2 class="tile-title" id="cluster-local-title">{t('cluster.local.title')}</h2>
-			<p class="muted">{t('cluster.local.hint')}</p>
-			<ul class="local-accounts">
-				{#each cluster.localAccounts as name (name)}
-					<li>
-						<span class="local-name">{name}</span>
+		<SettingGroup
+			title={t('cluster.local.title')}
+			id="cluster-local"
+			desc={t('cluster.local.hint')}
+		>
+			{#each cluster.localAccounts as name (name)}
+				<SettingRow icon="users" title={name}>
+					{#snippet control()}
 						<button type="button" class="btn" disabled={busy} onclick={() => (sharing = name)}
 							>{t('cluster.local.share')}</button
 						>
-					</li>
-				{/each}
-			</ul>
-		</section>
+					{/snippet}
+				</SettingRow>
+			{/each}
+		</SettingGroup>
 	{/if}
 
-	{#if manages}<section class="tile panel" id="cluster-join" aria-labelledby="cluster-join-title">
-			<h2 class="tile-title" id="cluster-join-title">{t('cluster.joinInfo')}</h2>
-			<p class="muted">{t('cluster.joinInfoHint')}</p>
-			{#if joinInfo}<textarea
+	{#if manages}
+		<!-- The join information is a row; shown (after the confirmation), it
+		     is the row's part and goes away again by itself. -->
+		{#snippet joinInfoParts()}
+			<div class="srow-block">
+				<textarea
 					class="field mono join-info"
 					rows="4"
 					readonly
 					value={joinInfo}
 					aria-label={t('cluster.joinInfo')}
 					onfocus={(e) => e.currentTarget.select()}></textarea>
-				<p class="muted small">{t('cluster.joinInfoHides')}</p>{/if}
-			<div class="row-actions">
-				{#if joinInfo}<button class="btn btn-primary" onclick={copy}
-						>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
-					><button class="btn" onclick={hideJoinInfo}>{t('cluster.hideJoinInfo')}</button
-					>{:else}<button class="btn btn-primary" disabled={busy} onclick={openReveal}
-						>{t('cluster.showJoinInfo')}</button
-					>{/if}
-				<button class="btn" disabled={busy} onclick={() => (confirmKey = true)}
-					>{t('cluster.newKey')}</button
-				>
+				<p class="muted small">{t('cluster.joinInfoHides')}</p>
 			</div>
-		</section>{/if}
+			<div class="srow-block actions">
+				<button class="btn btn-primary" onclick={copy}
+					>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
+				><button class="btn" onclick={hideJoinInfo}>{t('cluster.hideJoinInfo')}</button>
+			</div>
+		{/snippet}
+		<!-- The anchor of the search; the content comes after the first load. -->
+		<div id="cluster-join" use:revealTarget>
+			<SettingGroup title={t('cluster.groupJoin')}>
+				<SettingRow
+					id="cluster-join-info"
+					icon="key"
+					title={t('cluster.joinInfo')}
+					desc={t('cluster.joinInfoHint')}
+					bind:open={joinOpen}
+					children={joinInfo ? joinInfoParts : undefined}
+				>
+					{#snippet control()}
+						{#if !joinInfo}<button class="btn btn-primary" disabled={busy} onclick={openReveal}
+								>{t('cluster.showJoinInfo')}</button
+							>{/if}
+						<button class="btn" disabled={busy} onclick={() => (confirmKey = true)}
+							>{t('cluster.newKey')}</button
+						>
+					{/snippet}
+				</SettingRow>
+			</SettingGroup>
+		</div>
+	{/if}
 
 	{#if owner}
 		<!-- Leaving is the destroying action of this page: its own tile at the end. -->
@@ -987,6 +1078,7 @@
 <style>
 	.chip-button {
 		display: inline-flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-1);
 		padding: 0;
@@ -996,123 +1088,60 @@
 		font: inherit;
 		cursor: pointer;
 	}
-	.fold {
-		display: inline-flex;
-		transition: transform 0.15s;
-	}
-	.fold.open {
-		transform: rotate(180deg);
-	}
 	.chip-button:focus-visible {
 		outline: 2px solid var(--focus, var(--accent));
 		outline-offset: 2px;
 		border-radius: 6px;
 	}
-	.nodes-tile {
-		padding: 0;
-	}
-	.nodes-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-2-5);
-		padding: var(--space-3) var(--space-4) var(--space-1-5);
-	}
-	.nodes-head h2 {
-		margin: 0 auto 0 0;
-		font-size: var(--text-lg);
-		font-weight: 600;
-	}
-	.nodes {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.nodes li {
-		display: grid;
-		grid-template-columns: 12px minmax(0, 1fr) auto;
-		gap: var(--space-1) 14px;
-		align-items: start;
-		padding: var(--space-3) var(--space-4);
-		border-top: 1px solid var(--border);
-	}
-	.nodes li:first-child {
-		border-top: 0;
-	}
-	.dot {
-		width: 10px;
-		height: 10px;
-		margin-top: var(--space-1-5);
-		border-radius: 50%;
-		background: var(--status-ok);
-	}
-	.dot.warn {
-		background: var(--status-warn);
-	}
-	.dot.off {
-		background: var(--status-inactive);
-	}
-	.info {
+	.settings-form {
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
-		min-width: 0;
+		gap: var(--gap);
 	}
-	.node-head {
+	.create {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-1-5) var(--space-2);
+		justify-content: flex-end;
+		gap: var(--space-2) var(--space-2-5);
 	}
-	.name {
-		font-weight: 600;
-	}
+	/* The lines under a node's name: how it is reached, what is wrong. */
 	.line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 2px var(--space-1-5);
-		font-size: var(--text-md);
 	}
-	.line.small,
 	.small {
 		font-size: var(--text-sm);
 	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: var(--space-1-5);
+	dl {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--space-1) var(--space-3);
+		margin: 0;
+		font-size: var(--text-md);
 	}
-	.trust {
-		padding: var(--space-2-5) var(--space-4) var(--space-3);
-		border-top: 1px solid var(--border);
+	dl > div {
+		display: contents;
 	}
-	.settings-form {
-		padding: 0 0 var(--space-2);
+	dt {
+		color: var(--muted);
 	}
-	.found {
-		padding-top: 0.45rem;
+	dd {
+		margin: 0;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	dd.mono > span {
+		display: block;
 	}
 	.extra {
-		max-width: 34rem;
+		width: 20rem;
+		max-width: 100%;
 	}
-	.form-error {
-		margin: var(--space-2) var(--space-4);
-	}
-	.form-foot {
-		display: grid;
-		grid-template-columns: minmax(10rem, 17rem) minmax(0, 1fr);
-		gap: 0 var(--space-4);
+	.row-actions {
 		margin-top: var(--space-2);
-		padding: 14px var(--space-4) var(--space-2);
-		border-top: 1px solid var(--border);
-	}
-	.form-foot > div {
-		grid-column: 2;
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
 	}
 	.reveal {
 		display: flex;
@@ -1123,52 +1152,21 @@
 		width: 100%;
 		word-break: break-all;
 	}
-	.preview {
-		margin-top: var(--space-3);
-	}
 	.warn-text {
 		color: var(--warn-text);
+	}
+	.error-text {
+		color: var(--error-text);
 	}
 	p {
 		margin: 0;
 	}
-	@media (max-width: 760px) {
-		.nodes li {
-			grid-template-columns: 12px minmax(0, 1fr);
-			padding: var(--space-3) var(--space-3);
-		}
-		.actions {
-			grid-column: 2;
+	@media (max-width: 639px) {
+		.create {
 			justify-content: flex-start;
 		}
-		.nodes-head {
-			padding-inline: var(--space-3);
+		.extra {
+			width: 100%;
 		}
-		.form-foot {
-			grid-template-columns: minmax(0, 1fr);
-			padding-inline: var(--space-3);
-		}
-		.form-foot > div {
-			grid-column: 1;
-		}
-	}
-	.local-accounts {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 8px;
-	}
-	.local-accounts li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px 16px;
-	}
-	.local-name {
-		min-width: 0;
-		overflow-wrap: anywhere;
-		font-weight: 600;
 	}
 </style>

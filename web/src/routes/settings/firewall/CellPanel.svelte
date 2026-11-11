@@ -5,6 +5,8 @@
 	import Segments from '#lib/components/Segments.svelte';
 	import { APPS, NAS } from '#lib/firewall.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import PolicyEditor from './PolicyEditor.svelte';
 
 	let {
@@ -53,14 +55,15 @@
 	}
 </script>
 
-{#if cell}<section class="tile panel cell" aria-labelledby="firewall-cell">
-		<div class="title-row">
-			<h2 class="tile-title" id="firewall-cell">
-				{t('firewall.cellTitle', { from: fromLabel, to: toLabel })}
-			</h2>
+{#if cell}<!-- PLAN 78-1: the detail of the chosen cell under its own heading. -->
+	<SettingGroup
+		title={t('firewall.cellTitle', { from: fromLabel, to: toLabel })}
+		id="firewall-cell"
+		desc={t('firewall.cellText')}
+	>
+		{#snippet tools()}
 			<button class="btn small" type="button" onclick={onclose}>{t('common.close')}</button>
-		</div>
-		<p class="muted">{t('firewall.cellText')}</p>
+		{/snippet}
 		{#if to === APPS}<p class="muted">{t('firewall.appsText')}</p>{/if}
 		{#if to === APPS && hostNetworkApps.length}<p class="notice-warn">
 				{t('firewall.hostNetworkHint', { apps: hostNetworkApps.join(', ') })}
@@ -88,27 +91,22 @@
 				onclick={add}>{t('firewall.addPolicy')}</button
 			>
 		</div>
-		<div class="default">
-			<span>{t('firewall.default')}</span>
-			<Segments
-				options={[
-					{ value: 'allow', label: t('firewall.allow') },
-					{ value: 'deny', label: t('firewall.deny') },
-				]}
-				bind:value={draft.cells[index].default}
-				label={t('firewall.default')}
-				disabled={locked}
-			/>
-		</div>
-	</section>{/if}
+		<SettingRow title={t('firewall.default')}>
+			{#snippet control()}
+				<Segments
+					options={[
+						{ value: 'allow', label: t('firewall.allow') },
+						{ value: 'deny', label: t('firewall.deny') },
+					]}
+					bind:value={draft.cells[index].default}
+					label={t('firewall.default')}
+					disabled={locked}
+				/>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>{/if}
 
 <style>
-	.title-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2);
-	}
 	.policies {
 		display: flex;
 		flex-direction: column;
@@ -118,11 +116,5 @@
 	}
 	.start {
 		justify-content: flex-start;
-	}
-	.default {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-3);
 	}
 </style>

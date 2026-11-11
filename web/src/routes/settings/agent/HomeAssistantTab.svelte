@@ -3,6 +3,8 @@
 	// who it tells, and Assist.
 	import Icon from '#lib/components/Icon.svelte';
 	import Segments from '#lib/components/Segments.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { Mode, Settings } from '#lib/agent.ts';
 	import AgentHARelease from './AgentHARelease.svelte';
@@ -22,142 +24,111 @@
 	} = $props();
 </script>
 
-<section class="tile ui-card" aria-labelledby="ag-ha">
-	<div class="card-head"><h2 id="ag-ha">{t('agent.sectionHA')}</h2></div>
-	<div class="set-row one"><span class="set-hint">{t('agent.haIntro')}</span></div>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.haNotify')}<span class="set-hint">{t('agent.haNotifyHint')}</span></span
-		>
-		<span class="set-control">
-			<input class="field" bind:value={haNotify} placeholder="notify.mobile_app_iphone" />
-		</span>
-	</label>
-	<label class="set-row">
-		<span class="set-label"
-			>{t('agent.haAssist')}<span class="set-hint">{t('agent.haAssistHint')}</span></span
-		>
-		<span class="set-control end"
-			><input
+<!-- PLAN 78-1: plain headings with one row per setting (they were cards). -->
+<SettingGroup title={t('agent.sectionHA')} desc={t('agent.haIntro')}>
+	<SettingRow
+		icon="bell"
+		title={t('agent.haNotify')}
+		desc={t('agent.haNotifyHint')}
+		for="ag-ha-notify"
+	>
+		{#snippet control()}
+			<input
+				id="ag-ha-notify"
+				class="field"
+				bind:value={haNotify}
+				placeholder="notify.mobile_app_iphone"
+			/>
+		{/snippet}
+	</SettingRow>
+	<SettingRow
+		icon="mic"
+		title={t('agent.haAssist')}
+		desc={t('agent.haAssistHint')}
+		for="ag-ha-assist"
+	>
+		{#snippet control()}
+			<input
+				id="ag-ha-assist"
 				type="checkbox"
 				class="switch"
 				role="switch"
 				bind:checked={settings.homeassistant.assist}
-			/></span
-		>
-	</label>
+			/>
+		{/snippet}
+	</SettingRow>
 	{#if settings.homeassistant.assist}
-		<label class="set-row">
-			<span class="set-label">{t('agent.haAssistAs')}</span>
-			<span class="set-control">
-				<select class="field" bind:value={settings.homeassistant.assistAs}>
+		<SettingRow icon="users" title={t('agent.haAssistAs')} for="ag-ha-assist-as">
+			{#snippet control()}
+				<select id="ag-ha-assist-as" class="field" bind:value={settings.homeassistant.assistAs}>
 					<option value="">{t('agent.firstOwner')}</option>
 					{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
 				</select>
-			</span>
-		</label>
-		<div class="set-row one">
-			<p class="notice-ok">
-				{t('agent.haAssistSetup', {
-					url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
-				})}
-			</p>
-		</div>
+			{/snippet}
+		</SettingRow>
+		<p class="notice-ok">
+			{t('agent.haAssistSetup', {
+				url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
+			})}
+		</p>
 	{/if}
-</section>
+</SettingGroup>
 
 {#if settings}<AgentHARelease bind:settings />{/if}
 
-<section class="tile ui-card" aria-labelledby="ag-ha-rules">
-	<div class="card-head">
-		<h2 id="ag-ha-rules">{t('agent.haRules')}</h2>
-		<div class="card-tools">
-			<button
-				type="button"
-				class="btn"
-				onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
-				><Icon name="plus" size={15} />{t('agent.haRuleAdd')}</button
-			>
-		</div>
-	</div>
+<SettingGroup title={t('agent.haRules')}>
+	{#snippet tools()}
+		<button type="button" class="btn" onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
+			><Icon name="plus" size={15} />{t('agent.haRuleAdd')}</button
+		>
+	{/snippet}
 	{#each haRules as r, i (i)}
-		<div class="set-row frule">
-			<span class="set-label frule-where">
-				<input
-					class="field"
-					bind:value={r.key}
-					placeholder="domain:lock · entity:light.flur · area:kueche"
-					aria-label={t('agent.haRules')}
-				/>
-			</span>
-			<div class="set-control end">
-				<Segments compact label={t('agent.haRules')} bind:value={r.mode} options={modeOptions} />
-				<button
-					type="button"
-					class="btn"
-					aria-label={t('common.delete')}
-					title={t('common.delete')}
-					onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
-				>
+		<!-- A rule is a row without a name: what it is for, then what applies. -->
+		<div class="srow plain">
+			<div class="srow-head frule">
+				<span class="frule-where">
+					<input
+						class="field"
+						bind:value={r.key}
+						placeholder="domain:lock · entity:light.flur · area:kueche"
+						aria-label={t('agent.haRules')}
+					/>
+				</span>
+				<div class="srow-ctl">
+					<Segments compact label={t('agent.haRules')} bind:value={r.mode} options={modeOptions} />
+					<button
+						type="button"
+						class="btn"
+						aria-label={t('common.delete')}
+						title={t('common.delete')}
+						onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
+					>
+				</div>
 			</div>
 		</div>
 	{/each}
-	<div class="card-foot"><span class="grow">{t('agent.haRulesHint')}</span></div>
-</section>
+	<p class="muted">{t('agent.haRulesHint')}</p>
+</SettingGroup>
 
 <style>
-	/* PLAN 68: every tab in cards with rows "label (+ hint) left, control
-	   right"; lists as rows; the card's own actions in its foot. */
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.set-row.one > p {
-		margin: 0;
-	}
-	/* The hint on the card's surface: a little toward the text for 4.5:1. */
-	.set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
-	.set-control > .field {
-		flex: 1 1 12rem;
-		min-width: 0;
-	}
-
-	.set-control .btn {
-		max-width: 100%;
-		white-space: normal;
-		height: auto;
-	}
-
-	/* The ways to the NAS: a radio list as rows. */
-
-	.card-foot > .grow {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
-
-	/* PLAN 68: an area is a row; the label opens its tools. */
-
-	.frule .set-control :global(.segments) {
-		flex-wrap: nowrap;
-	}
-
 	.frule-where {
-		flex-direction: row;
+		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
+		flex: 1 1 0;
+		min-width: 0;
 	}
 	.frule-where .field {
 		flex: 1 1 9rem;
 		min-width: 0;
 	}
-
-	/* The phone: long choices on a line of their own. */
+	.frule .srow-ctl {
+		max-width: none;
+	}
+	/* The phone: the rule on a line of its own. */
 	@media (max-width: 639px) {
-		.frule {
-			grid-template-columns: minmax(0, 1fr) !important;
-		}
-		.frule .set-control {
-			justify-content: flex-start;
+		.frule-where {
+			flex-basis: 100%;
 		}
 	}
 </style>

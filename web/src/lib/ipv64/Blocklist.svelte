@@ -1,6 +1,8 @@
 <script lang="ts">
 	// Blocklist and notifications: the v64 blocklist of IPv64 for the
 	// firewall (off by default) and notifications from polling the account.
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -50,29 +52,15 @@
 			busy = false;
 		}
 	}
+	// The state of the list is what is looked at here: its row stands open.
+	let listOpen = $state(true);
 </script>
 
 <div class="ipv64-tab">
-	<section class="tile panel" aria-labelledby="ipv64-blocklist">
-		<h2 class="tile-title" id="ipv64-blocklist">{t('ipv64x.blocklist')}</h2>
-		<p>{t('ipv64x.blocklistText')}</p>
-		{#if !status.firewall}<p class="notice-warn">
-				{t('ipv64x.blocklistNoFirewall')} <a href="/settings/firewall">{t('ipv64x.toFirewall')}</a>
-			</p>{/if}
-		<label class="check"
-			><input
-				type="checkbox"
-				checked={list.enabled}
-				disabled={busy || status.status.readOnly}
-				onchange={(e) => {
-					const on = e.currentTarget.checked;
-					e.currentTarget.checked = list.enabled;
-					if (on) confirmOn = true;
-					else setList(false);
-				}}
-			/><span>{t('ipv64x.blocklistEnable')}</span></label
-		>
-		{#if list.enabled}
+	<!-- PLAN 78-1: the switches are rows (each stores on change, as before);
+	     the state of the list is the part of its row. -->
+	{#snippet listParts()}
+		<div class="srow-block">
 			<dl>
 				<div>
 					<dt>{t('ipv64x.entries')}</dt>
@@ -95,50 +83,99 @@
 				</div>
 			</dl>
 			{#if info.error}<p class="notice-error" role="alert">{info.error}</p>{/if}
-			<div class="row-actions">
-				<button type="button" class="btn" disabled={busy} onclick={refresh}
-					>{t('ipv64x.fetchNow')}</button
-				>
-			</div>
-		{/if}
-		<p class="muted hint">{t('ipv64x.blocklistHint')}</p>
-	</section>
+		</div>
+		<div class="srow-block actions">
+			<button type="button" class="btn" disabled={busy} onclick={refresh}
+				>{t('ipv64x.fetchNow')}</button
+			>
+		</div>
+	{/snippet}
+	<SettingGroup title={t('ipv64x.blocklist')} id="ipv64-blocklist" desc={t('ipv64x.blocklistText')}>
+		{#if !status.firewall}<p class="notice-warn">
+				{t('ipv64x.blocklistNoFirewall')}
+				<a href="/settings/firewall">{t('ipv64x.toFirewall')}</a>
+			</p>{/if}
+		<SettingRow
+			id="ipv64-blocklist-row"
+			icon="shield"
+			title={t('ipv64x.blocklistEnable')}
+			desc={t('ipv64x.blocklistHint')}
+			for="ipv64-blocklist-on"
+			bind:open={listOpen}
+			children={list.enabled ? listParts : undefined}
+		>
+			{#snippet control()}
+				<input
+					id="ipv64-blocklist-on"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={list.enabled}
+					disabled={busy || status.status.readOnly}
+					onchange={(e) => {
+						const on = e.currentTarget.checked;
+						e.currentTarget.checked = list.enabled;
+						if (on) confirmOn = true;
+						else setList(false);
+					}}
+				/>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="ipv64-notify">
-		<h2 class="tile-title" id="ipv64-notify">{t('ipv64x.notifications')}</h2>
-		<p class="muted hint">{t('ipv64x.notifyHint')}</p>
-		<label class="check"
-			><input
-				type="checkbox"
-				checked={notify.enabled}
-				disabled={busy}
-				onchange={(e) => setNotify({ enabled: e.currentTarget.checked })}
-			/><span>{t('ipv64x.notifyEnable')}</span></label
-		>
-		<label class="check"
-			><input
-				type="checkbox"
-				checked={notify.failover}
-				disabled={busy || !notify.enabled}
-				onchange={(e) => setNotify({ failover: e.currentTarget.checked })}
-			/><span>{t('ipv64x.notifyFailover')}</span></label
-		>
-		<label class="check"
-			><input
-				type="checkbox"
-				checked={notify.healthchecks}
-				disabled={busy || !notify.enabled}
-				onchange={(e) => setNotify({ healthchecks: e.currentTarget.checked })}
-			/><span>{t('ipv64x.notifyChecks')}</span></label
-		>
-		<label class="check"
-			><input
-				type="checkbox"
-				checked={notify.cdnTraffic}
-				disabled={busy || !notify.enabled}
-				onchange={(e) => setNotify({ cdnTraffic: e.currentTarget.checked })}
-			/><span>{t('ipv64x.notifyTraffic')}</span></label
-		>
+	<SettingGroup title={t('ipv64x.notifications')} id="ipv64-notify" desc={t('ipv64x.notifyHint')}>
+		<SettingRow icon="bell" title={t('ipv64x.notifyEnable')} for="ipv64-notify-on">
+			{#snippet control()}
+				<input
+					id="ipv64-notify-on"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={notify.enabled}
+					disabled={busy}
+					onchange={(e) => setNotify({ enabled: e.currentTarget.checked })}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="refresh" title={t('ipv64x.notifyFailover')} for="ipv64-notify-failover">
+			{#snippet control()}
+				<input
+					id="ipv64-notify-failover"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={notify.failover}
+					disabled={busy || !notify.enabled}
+					onchange={(e) => setNotify({ failover: e.currentTarget.checked })}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="activity" title={t('ipv64x.notifyChecks')} for="ipv64-notify-checks">
+			{#snippet control()}
+				<input
+					id="ipv64-notify-checks"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={notify.healthchecks}
+					disabled={busy || !notify.enabled}
+					onchange={(e) => setNotify({ healthchecks: e.currentTarget.checked })}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="globe" title={t('ipv64x.notifyTraffic')} for="ipv64-notify-traffic">
+			{#snippet control()}
+				<input
+					id="ipv64-notify-traffic"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={notify.cdnTraffic}
+					disabled={busy || !notify.enabled}
+					onchange={(e) => setNotify({ cdnTraffic: e.currentTarget.checked })}
+				/>
+			{/snippet}
+		</SettingRow>
 		{#if notify.enabled}<p class="muted">
 				{t('ipv64x.lastPoll', { at: when(status.status.poll.last) })}
 			</p>{/if}
@@ -146,7 +183,7 @@
 				{status.status.poll.error}
 			</p>{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	</section>
+	</SettingGroup>
 </div>
 
 {#if confirmOn}

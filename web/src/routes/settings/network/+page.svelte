@@ -27,6 +27,7 @@
 		type NetworkConfig,
 		type NetworkStatus,
 	} from '#lib/network.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SystemCard from './SystemCard.svelte';
 	import NetworkCard from './NetworkCard.svelte';
 	import InterfacesTab from './InterfacesTab.svelte';
@@ -265,26 +266,24 @@
 				void load();
 			}}
 		/>
-		<section class="tile panel" aria-labelledby="net-list">
-			<h2 class="tile-title" id="net-list">{t('netx.networks')}</h2>
-			{#if status.migrated && !dirty && !status.pending}<p class="muted">
-					{t('netx.migrated')}
-				</p>{/if}
-			<div class="cards">
-				{#each draft.networks ?? [] as n (n.id)}
-					<NetworkCard
-						network={n}
-						{status}
-						applied={applied(n)}
-						disabled={locked}
-						onedit={() => editNetwork(n)}
-						ondiagnose={() => runDiagnosis(n)}
-						onremove={() => (removeNetwork = n)}
-					/>
-				{/each}
-			</div>
-			<p class="muted">{t('netx.external')}</p>
-		</section>
+		<SettingGroup
+			title={t('netx.networks')}
+			id="net-list"
+			desc={status.migrated && !dirty && !status.pending ? t('netx.migrated') : undefined}
+		>
+			{#each draft.networks ?? [] as n (n.id)}
+				<NetworkCard
+					network={n}
+					{status}
+					applied={applied(n)}
+					disabled={locked}
+					onedit={() => editNetwork(n)}
+					ondiagnose={() => runDiagnosis(n)}
+					onremove={() => (removeNetwork = n)}
+				/>
+			{/each}
+			<p class="muted external">{t('netx.external')}</p>
+		</SettingGroup>
 	{:else if tab === 'interfaces'}
 		<InterfacesTab
 			{draft}
@@ -400,9 +399,7 @@
 		gap: var(--space-2);
 		justify-content: flex-end;
 	}
-	.cards {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
-		gap: var(--gap);
+	.external {
+		margin: var(--space-2) 0 0;
 	}
 </style>

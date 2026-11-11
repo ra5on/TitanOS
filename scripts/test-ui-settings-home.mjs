@@ -163,7 +163,7 @@ const pages = [
 const report = [];
 
 try {
-  // Overview, desktop: search on top, tiles in four groups, equal sizes.
+  // Overview, desktop: search on top, the pages as rows under their eight areas.
   {
     const { ctx, page, data } = await create("owner");
     data.activity = {
@@ -207,20 +207,33 @@ try {
     };
     await page.goto(base + "/settings");
     const main = page.locator(".settings-shell");
-    await main.locator(".home-tile").first().waitFor();
+    await main.locator("a.srow").first().waitFor();
     assert.deepEqual(
-      (await main.locator(".group-title").allTextContents()).map((s) =>
-        s.trim(),
-      ),
-      ["System", "Netzwerk", "Konten und Dienste", "Daten"],
+      // PLAN 78-1: the overview below has group headings of its own.
+      (
+        await main
+          .locator(".sgroup-title:not(.overview *)")
+          .allTextContents()
+      ).map((s) => s.trim()),
+      [
+        "System",
+        "Hardware und Energie",
+        "Netzwerk",
+        "Konten und Zugang",
+        "Dienste und Meldungen",
+        "KI und Smart Home",
+        "Daten und Sicherung",
+        "Updates",
+      ],
     );
     assert.equal(
-      await main.locator(".home-tile").count(),
+      // PLAN 78-1: the overview below has link rows of its own.
+      await main.locator("a.srow:not(.overview a)").count(),
       ids.length,
       "one tile per area",
     );
     const hrefs = await main
-      .locator(".home-tile")
+      .locator("a.srow")
       .evaluateAll((a) => a.map((x) => x.getAttribute("href")));
     for (const id of ids) assert.ok(hrefs.includes(`/settings/${id}`), id);
     // PLAN 65: the window lists the settings pages; the page has no sidebar of its own.
@@ -229,28 +242,16 @@ try {
       0,
       "no sidebar",
     );
-    // Four equal columns on a wide screen.
-    const sizes = await main.locator(".home-tile").evaluateAll((a) =>
+    // PLAN 78: every page is a flat row under the plain heading of its area –
+    // one column, all rows as wide as the page.
+    const sizes = await main.locator("a.srow").evaluateAll((a) =>
       a.map((x) => {
         const r = x.getBoundingClientRect();
-        return [Math.round(r.width), Math.round(r.height), Math.round(r.left)];
+        return [Math.round(r.width), Math.round(r.left)];
       }),
     );
-    assert.equal(
-      new Set(sizes.map((s) => s[0])).size,
-      1,
-      `equal widths ${sizes}`,
-    );
-    assert.equal(
-      new Set(sizes.map((s) => s[1])).size,
-      1,
-      `equal heights ${sizes}`,
-    );
-    assert.equal(
-      new Set(sizes.map((s) => s[2])).size,
-      4,
-      "four columns at 1440 px",
-    );
+    assert.equal(new Set(sizes.map((s) => s[0])).size, 1, `equal widths`);
+    assert.equal(new Set(sizes.map((s) => s[1])).size, 1, "one column");
     // Zuletzt geändert: only settings changes, the file deletion is left out.
     const recent = main.locator(".recent li");
     await recent.first().waitFor();
@@ -266,7 +267,7 @@ try {
     });
     await search.fill("SSH");
     assert.equal(
-      await main.locator(".home-tile").first().getAttribute("href"),
+      await main.locator("a.srow").first().getAttribute("href"),
       "/settings/access#access-ssh",
     );
     assert.equal(
@@ -286,22 +287,22 @@ try {
   }
 
   // Overview at 800 and 390 px, light theme too.
-  for (const [width, theme, columns] of [
-    [800, "graphit", 3],
-    [390, "graphit", 1],
-    [1440, "hell", 4],
+  for (const [width, theme] of [
+    [800, "graphit"],
+    [390, "graphit"],
+    [1440, "hell"],
   ]) {
     const { ctx, page } = await create("owner", theme, width);
     await page.goto(base + "/settings");
-    await page.locator(".home-tile").first().waitFor();
+    await page.locator("a.srow").first().waitFor();
     const lefts = await page
-      .locator(".settings-shell .home-tile")
+      .locator(".settings-shell a.srow")
       .evaluateAll(
         (a) =>
           new Set(a.map((x) => Math.round(x.getBoundingClientRect().left)))
             .size,
       );
-    assert.equal(lefts, columns, `${columns} columns at ${width} px`);
+    assert.equal(lefts, 1, `rows in one column at ${width} px`);
     assert.deepEqual(await problems(page), [], `overview at ${width}`);
     await fonts(page);
     await page.screenshot({
@@ -315,9 +316,9 @@ try {
   {
     const { ctx, page, data } = await create("user");
     await page.goto(base + "/settings");
-    await page.locator(".home-tile").first().waitFor();
+    await page.locator("a.srow").first().waitFor();
     assert.equal(
-      await page.locator(".settings-shell .home-tile").count(),
+      await page.locator(".settings-shell a.srow:not(.overview a)").count(),
       userIds.length,
     );
     assert.equal(await page.locator(".recent").count(), 0);
@@ -370,12 +371,10 @@ try {
       if (name === "overview") {
         // PLAN 71: in a window the side bar lists the areas; the page is the
         // "Übersicht" with its cards (no tiles, no second search).
-        await frame
-          .locator(".overview .tile.ui-card .card-head")
-          .first()
-          .waitFor();
+        await frame.locator(".overview .sgroup .sgroup-head").first().waitFor();
         assert.equal(
-          await frame.locator(".home-tile").count(),
+          // PLAN 78-1: the overview has link rows of its own (Benutzer, SSH …).
+          await frame.locator("a.srow:not(.overview a)").count(),
           0,
           "no tiles in a window",
         );
@@ -386,7 +385,7 @@ try {
         );
         for (const title of ["Zustand", "Zu erledigen", "Dienste"])
           await frame
-            .locator(".overview .card-head h2", { hasText: title })
+            .locator(".overview h2.sgroup-title", { hasText: title })
             .waitFor();
       }
       await page.waitForTimeout(300);

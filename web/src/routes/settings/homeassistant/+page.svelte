@@ -5,6 +5,11 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HAStorage from './HAStorage.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
+	import { tick } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
@@ -196,6 +201,8 @@
 
 	function take(res: Answer) {
 		sentEvery = res.settings.mqtt.interval || 30;
+		// A connection without an address shows its fields right away.
+		if (!res.settings.url) open.connection = true;
 		draft = {
 			...res.settings,
 			token: '',
@@ -247,8 +254,23 @@
 		}
 	}
 
+	// PLAN 78-1: the fields are the parts of rows, and a closed row has no
+	// fields the browser could check. Before storing, the rows that are
+	// switched on open, so that a required field that is still empty is named
+	// as before.
+	let form = $state<HTMLFormElement>();
+	let open = $state({ connection: false, mqtt: false });
+	async function complete(): Promise<boolean> {
+		if (!draft) return false;
+		if (draft.enabled) open.connection = true;
+		if (draft.mqtt.enabled) open.mqtt = true;
+		await tick();
+		return form?.reportValidity() ?? true;
+	}
+
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
+		if (!(await complete())) return;
 		busy = 'save';
 		saved = await store();
 		busy = null;
@@ -314,336 +336,432 @@
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>{/if}
 
+<!-- A stored secret never comes back: that one is stored stands below the
+     field's name (not as a placeholder, which a narrow field would clip). -->
+{#snippet secretNote(name: string, set: boolean)}
+	{#if set}
+		{#if !clear.includes(name)}{t('notify.secretStored')}{/if}
+		<button type="button" class="link" onclick={() => toggleClear(name)}
+			>{clear.includes(name) ? t('notify.secretRemoved') : t('notify.secretRemove')}</button
+		>
+	{/if}
+{/snippet}
+
+<!-- PLAN 78-1: every connection is a row; a click on it chooses the one the
+     rows below work on. -->
 {#if connections.length}
-	<section class="tile panel conns" id="connections" aria-labelledby="ha-conns">
-		<div class="head">
-			<h2 class="tile-title" id="ha-conns">{t('ha.conn.title')}</h2>
+	<SettingGroup title={t('ha.conn.title')} id="connections">
+		{#snippet tools()}
 			<button
 				type="button"
 				class="btn small"
 				disabled={listBusy || connections.length >= maxConnections}
 				onclick={() => (adding = true)}>{t('ha.conn.add')}</button
 			>
-		</div>
-		<ul class="conn-list">
-			{#each connections as c (c.id)}
-				<li class:chosen={c.id === current}>
+		{/snippet}
+		{#each connections as c (c.id)}
+			<div class="srow" class:chosen={c.id === current}>
+				<div class="srow-head">
+					<span class="srow-ico" aria-hidden="true"><Icon name="home" size={19} /></span>
 					<button
 						type="button"
-						class="conn"
+						class="conn srow-text"
 						aria-current={c.id === current ? 'true' : undefined}
 						onclick={() => choose(c.id)}
 					>
-						<span class="conn-name">{label(c)}</span>
-						<span class="muted mono">{c.url || t('ha.conn.noUrl')}</span>
+						<span class="srow-title conn-name">{label(c)}</span>
+						<span class="srow-desc mono">{c.url || t('ha.conn.noUrl')}</span>
 					</button>
-					<span class="chip" class:ok={c.active}
-						>{t(c.active ? 'ha.conn.on' : c.url ? 'ha.conn.off' : 'ha.conn.empty')}{c.mqtt
-							? ' · MQTT'
-							: ''}</span
-					>
-					{#if c.id !== 'main'}
-						<button
-							type="button"
-							class="btn small"
-							disabled={listBusy}
-							onclick={() => (removing = c)}>{t('ha.conn.remove')}</button
+					<div class="srow-ctl">
+						<span class="chip" class:ok={c.active}
+							>{t(c.active ? 'ha.conn.on' : c.url ? 'ha.conn.off' : 'ha.conn.empty')}{c.mqtt
+								? ' · MQTT'
+								: ''}</span
 						>
-					{/if}
-				</li>
-			{/each}
-		</ul>
+						{#if c.id !== 'main'}
+							<button
+								type="button"
+								class="btn small"
+								disabled={listBusy}
+								onclick={() => (removing = c)}>{t('ha.conn.remove')}</button
+							>
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/each}
 		{#if connections.length > 1}<p class="muted">{t('ha.conn.hint')}</p>{/if}
-	</section>
+	</SettingGroup>
 {/if}
 
 {#if draft}
-	<div class="ha-page">
-		<form id="ha-form" class="ha-form" onsubmit={save}>
-			<section class="tile panel" id="connection">
-				<div class="head">
-					<h2 class="tile-title">{t('ha.connection')}</h2>
-					<label class="check"
-						><input type="checkbox" bind:checked={draft.enabled} /><span>{t('notify.enabled')}</span
-						></label
-					>
-				</div>
-				<div class="row">
-					<label class="wide"
-						><span>{t('ha.conn.name')}</span><input
-							class="field"
-							type="text"
-							maxlength="40"
-							bind:value={draft.name}
-							placeholder={current === 'main' ? t('ha.conn.first') : ''}
-						/></label
-					>
-				</div>
-				<div class="row">
-					<label class="wide"
-						><span>{t('ha.url')}</span><input
-							class="field mono"
-							type="url"
-							bind:value={draft.url}
-							placeholder="http://homeassistant.local:8123"
-							spellcheck="false"
-							autocapitalize="none"
-							required={draft.enabled}
-						/></label
-					>
-				</div>
-				<div class="row">
-					<label class="wide"
-						><span>{t('ha.token')}</span>
-						<input
-							class="field mono"
-							type="password"
-							bind:value={draft.token}
-							autocomplete="new-password"
-							placeholder={tokenSet && !clear.includes('token') ? t('notify.secretStored') : ''}
-							required={draft.enabled && !tokenSet}
-						/>
-						{#if tokenSet}<button type="button" class="link" onclick={() => toggleClear('token')}
-								>{clear.includes('token')
-									? t('notify.secretRemoved')
-									: t('notify.secretRemove')}</button
-							>{/if}
-					</label>
-				</div>
-				<p class="muted small">{t('ha.tokenHint')}</p>
-				<details>
-					<summary>{t('ha.fingerprint')}</summary>
-					<label class="wide"
-						><span>{t('ha.fingerprintLabel')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.fingerprint}
-							placeholder="AB:CD:…"
-							spellcheck="false"
-						/></label
-					>
-					<p class="muted small">{t('ha.fingerprintHint')}</p>
-				</details>
-				<div class="test">
-					<button type="button" class="btn" disabled={busy !== null} onclick={check}
-						>{t(busy === 'check' ? 'ha.checking' : 'ha.check')}</button
-					>
-					{#if checked}<p class="notice-ok" role="status">
-							{t('ha.checkOk', { version: checked.version, location: checked.location })}
-						</p>{/if}
-					{#if checkError}<div class="notice-error" role="alert">
-							{t('ha.checkFailed')}
-							<pre>{checkError}</pre>
-						</div>{/if}
-				</div>
-			</section>
-		</form>
-		{#if diagnostics}<section class="tile panel">
-				<h2 class="tile-title">{t('ha.diagnostics')}</h2>
-				<p>
-					{t('ha.lastConnected')}: {diagnostics.lastConnected &&
-					!diagnostics.lastConnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastConnected))
-						: '—'}
-				</p>
-				<p>
-					{t('ha.lastDisconnected')}: {diagnostics.lastDisconnected &&
-					!diagnostics.lastDisconnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastDisconnected))
-						: '—'}
-				</p>
-				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>
-				<p class="muted">{t('ha.gaps')}</p>
-			</section>{/if}
-		{#key current}<HAStorage connection={current} />{/key}
-		<section class="tile panel" id="mqtt">
-			<div class="head">
-				<h2 class="tile-title">{t('ha.mqtt')}</h2>
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.mqtt.enabled} /><span
-						>{t('notify.enabled')}</span
-					></label
-				>
-			</div>
-			<p class="muted">{t('ha.mqttIntro')}</p>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('ha.mqttHost')}</span><input
+	{@const d = draft}
+	{@const chosen = connections.find((c) => c.id === current)}
+	<!-- The form of the page: the fields of the connection and the broker
+	     belong to it by their `form` attribute, as before (they are parts of
+	     rows now, a closed row has none). -->
+	<form id="ha-form" hidden onsubmit={save} bind:this={form}></form>
+	<!-- Order decided 31.10.2026: connection, storage, sensors and buttons
+	     (MQTT), devices for MCP. Each is a row that opens (PLAN 78-1). -->
+	<SettingGroup title={connections.length > 1 && chosen ? label(chosen) : undefined}>
+		<SettingRow
+			id="connection"
+			icon="home"
+			title={t('ha.connection')}
+			for="ha-enabled"
+			bind:open={open.connection}
+		>
+			{#snippet description()}<span class="mono">{d.url || t('ha.conn.noUrl')}</span>{/snippet}
+			{#snippet control()}
+				<input
+					id="ha-enabled"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={d.enabled}
+					onchange={(e) => {
+						d.enabled = e.currentTarget.checked;
+						if (d.enabled) open.connection = true;
+					}}
+				/>
+			{/snippet}
+			<SettingSub title={t('ha.conn.name')} for="ha-name">
+				{#snippet control()}
+					<input
+						id="ha-name"
+						class="field"
+						type="text"
+						maxlength="40"
+						form="ha-form"
+						bind:value={d.name}
+						placeholder={current === 'main' ? t('ha.conn.first') : ''}
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('ha.url')} for="ha-url">
+				{#snippet control()}
+					<input
+						id="ha-url"
+						class="field mono"
+						type="url"
+						form="ha-form"
+						bind:value={d.url}
+						placeholder="http://homeassistant.local:8123"
+						spellcheck="false"
+						autocapitalize="none"
+						required={d.enabled}
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('ha.token')} for="ha-token">
+				{#snippet description()}
+					{t('ha.tokenHint')}
+					{@render secretNote('token', tokenSet)}
+				{/snippet}
+				{#snippet control()}
+					<input
+						id="ha-token"
+						class="field mono"
+						type="password"
+						form="ha-form"
+						bind:value={d.token}
+						autocomplete="new-password"
+						required={d.enabled && !tokenSet}
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub
+				title={t('ha.fingerprintLabel')}
+				desc="{t('ha.fingerprint')}: {t('ha.fingerprintHint')}"
+				for="ha-fingerprint"
+			>
+				{#snippet control()}
+					<input
+						id="ha-fingerprint"
 						class="field mono"
 						type="text"
-						bind:value={draft.mqtt.host}
+						form="ha-form"
+						bind:value={d.fingerprint}
+						placeholder="AB:CD:…"
+						spellcheck="false"
+					/>
+				{/snippet}
+			</SettingSub>
+			<div class="srow-block test">
+				<button type="button" class="btn" disabled={busy !== null} onclick={check}
+					>{t(busy === 'check' ? 'ha.checking' : 'ha.check')}</button
+				>
+				{#if checked}<p class="notice-ok" role="status">
+						{t('ha.checkOk', { version: checked.version, location: checked.location })}
+					</p>{/if}
+				{#if checkError}<div class="notice-error" role="alert">
+						{t('ha.checkFailed')}
+						<pre>{checkError}</pre>
+					</div>{/if}
+			</div>
+		</SettingRow>
+
+		{#if diagnostics}
+			{@const diag = diagnostics}
+			{@const connectedAt =
+				diag.lastConnected && !diag.lastConnected.startsWith('0001-')
+					? formatDateTime(new Date(diag.lastConnected))
+					: '—'}
+			<SettingRow
+				id="diagnostics"
+				icon="activity"
+				title={t('ha.diagnostics')}
+				summary="{t('ha.lastConnected')}: {connectedAt}"
+			>
+				<SettingSub title={t('ha.lastConnected')}>
+					{#snippet control()}{connectedAt}{/snippet}
+				</SettingSub>
+				<SettingSub title={t('ha.lastDisconnected')}>
+					{#snippet control()}{diag.lastDisconnected && !diag.lastDisconnected.startsWith('0001-')
+							? formatDateTime(new Date(diag.lastDisconnected))
+							: '—'}{/snippet}
+				</SettingSub>
+				<SettingSub title={t('ha.evicted')}>
+					{#snippet control()}{diag.evictedTransitions}{/snippet}
+				</SettingSub>
+				<div class="srow-block"><p class="muted">{t('ha.gaps')}</p></div>
+			</SettingRow>
+		{/if}
+
+		{#key current}<HAStorage connection={current} />{/key}
+
+		<SettingRow
+			id="mqtt"
+			icon="activity"
+			title={t('ha.mqtt')}
+			desc={t('ha.mqttIntro')}
+			for="ha-mqtt-enabled"
+			bind:open={open.mqtt}
+		>
+			{#snippet control()}
+				<!-- The state of the broker in words, also while the row is closed. -->
+				{#if status?.mqtt}<span class="chip ok">{t('ha.conn.on')}</span
+					>{:else if status?.mqttError}<span class="chip error">{t('ha.mqttNoConnection')}</span
+					>{/if}
+				<input
+					id="ha-mqtt-enabled"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={d.mqtt.enabled}
+					onchange={(e) => {
+						d.mqtt.enabled = e.currentTarget.checked;
+						if (d.mqtt.enabled) open.mqtt = true;
+					}}
+				/>
+			{/snippet}
+			<SettingSub title={t('ha.mqttHost')} for="ha-mqtt-host">
+				{#snippet control()}
+					<input
+						id="ha-mqtt-host"
+						class="field mono"
+						type="text"
+						bind:value={d.mqtt.host}
 						placeholder="homeassistant.local"
 						spellcheck="false"
 						autocapitalize="none"
-						required={draft.mqtt.enabled}
+						required={d.mqtt.enabled}
 						form="ha-form"
-					/></label
-				>
-				<label class="tiny"
-					><span>{t('notify.port')}</span><input
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('notify.port')} for="ha-mqtt-port">
+				{#snippet control()}
+					<input
+						id="ha-mqtt-port"
 						class="field mono"
 						type="number"
 						form="ha-form"
 						min="1"
 						max="65535"
-						bind:value={draft.mqtt.port}
-					/></label
-				>
-				<label class="check tls"
-					><input type="checkbox" bind:checked={draft.mqtt.tls} /><span>TLS</span></label
-				>
-			</div>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('notify.username')}</span><input
+						bind:value={d.mqtt.port}
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title="TLS" for="ha-mqtt-tls">
+				{#snippet control()}
+					<input
+						id="ha-mqtt-tls"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.mqtt.tls}
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('notify.username')} for="ha-mqtt-user">
+				{#snippet control()}
+					<input
+						id="ha-mqtt-user"
 						class="field mono"
 						type="text"
-						bind:value={draft.mqtt.username}
+						bind:value={d.mqtt.username}
 						autocomplete="off"
 						spellcheck="false"
 						autocapitalize="none"
-					/></label
-				>
-				<label class="narrow"
-					><span>{t('notify.password')}</span>
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('notify.password')} for="ha-mqtt-password">
+				{#snippet description()}{@render secretNote('mqtt', mqttPasswordSet)}{/snippet}
+				{#snippet control()}
 					<input
+						id="ha-mqtt-password"
 						class="field mono"
 						type="password"
-						bind:value={draft.mqtt.password}
+						bind:value={d.mqtt.password}
 						autocomplete="new-password"
-						placeholder={mqttPasswordSet && !clear.includes('mqtt') ? t('notify.secretStored') : ''}
 					/>
-					{#if mqttPasswordSet}<button
-							type="button"
-							class="link"
-							onclick={() => toggleClear('mqtt')}
-							>{clear.includes('mqtt')
-								? t('notify.secretRemoved')
-								: t('notify.secretRemove')}</button
-						>{/if}
-				</label>
-				<label class="narrow"
-					><span>{t('ha.mqttPrefix')}</span><input
+				{/snippet}
+			</SettingSub>
+			<SettingSub title={t('ha.mqttPrefix')} for="ha-mqtt-prefix">
+				{#snippet control()}
+					<input
+						id="ha-mqtt-prefix"
 						class="field mono"
 						type="text"
-						bind:value={draft.mqtt.prefix}
+						bind:value={d.mqtt.prefix}
 						spellcheck="false"
-					/></label
-				>
-				<label class="narrow"
-					><span>{t('ha.mqttInterval')}</span><input
+					/>
+				{/snippet}
+			</SettingSub>
+			<SettingSub
+				title={t('ha.mqttInterval')}
+				desc={t('ha.mqttIntervalHint')}
+				for="ha-mqtt-interval"
+			>
+				{#snippet control()}
+					<input
+						id="ha-mqtt-interval"
 						class="field"
 						type="number"
 						min="5"
 						max="3600"
 						step="1"
 						placeholder="30"
-						bind:value={draft.mqtt.interval}
-						aria-describedby="ha-mqtt-interval-hint"
-					/><small class="muted" id="ha-mqtt-interval-hint">{t('ha.mqttIntervalHint')}</small
-					></label
-				>
-			</div>
-			<fieldset>
-				<legend>{t('ha.sensorGroups')}</legend>
-				{#each sensorGroups as group}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={draft.mqtt.groups.includes(group)}
-							onchange={() => (draft!.mqtt.groups = toggle(draft!.mqtt.groups, group))}
-						/><span>{t(`ha.group.${group}` as MessageKey)}</span></label
-					>
-				{/each}
-			</fieldset>
-			{#each sensorGroups.filter((g) => draft?.mqtt.groups.includes(g)) as group}
-				{@const devices = mqttDevices.filter((d) => d.group === group)}
-				{#if !['system', 'work'].includes(group)}<details class="device-selection">
-						<summary>{t(`ha.group.${group}` as MessageKey)} · {t('ha.deviceSelection')}</summary>
+						bind:value={d.mqtt.interval}
+					/>
+				{/snippet}
+			</SettingSub>
+			<div class="srow-block">
+				<fieldset>
+					<legend>{t('ha.sensorGroups')}</legend>
+					{#each sensorGroups as group}
 						<label class="check"
 							><input
 								type="checkbox"
-								checked={!draft.mqtt.devices || !(group in draft.mqtt.devices)}
-								onchange={(e) => {
-									const next = { ...draft!.mqtt.devices };
-									if (e.currentTarget.checked) delete next[group];
-									else next[group] = devices.map((d) => d.id);
-									draft!.mqtt.devices = next;
-								}}
-							/>{t('ha.allDevices')}</label
+								checked={d.mqtt.groups.includes(group)}
+								onchange={() => (d.mqtt.groups = toggle(d.mqtt.groups, group))}
+							/><span>{t(`ha.group.${group}` as MessageKey)}</span></label
 						>
-						{#if draft.mqtt.devices && group in draft.mqtt.devices}
-							{#each [...new Set( [...devices.map((d) => d.id), ...draft.mqtt.devices[group]] )] as id}
-								<label class="check"
-									><input
-										type="checkbox"
-										checked={draft.mqtt.devices[group].includes(id)}
-										onchange={() =>
-											(draft!.mqtt.devices = {
-												...draft!.mqtt.devices,
-												[group]: toggle(draft!.mqtt.devices![group], id),
-											})}
-									/>{devices.find((d) => d.id === id)?.name ?? id}</label
-								>
-							{/each}
-						{/if}
-					</details>{/if}
-			{/each}
-
-			<p class="muted small">{t('ha.accountIntro')}</p>
-			<label class="account"
-				><span>{t('ha.accountLabel')}</span>
-				<select class="field" bind:value={draft.account}>
-					<option value="">{t('ha.accountNone')}</option>
-					{#each accounts as account (account.name)}<option value={account.name}
-							>{account.name}</option
-						>{/each}
-				</select>
-			</label>
-			<fieldset>
-				<legend>{t('ha.commandGroups')}</legend>
-				{#each commandGroups as group}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={draft.mqtt.commands.includes(group)}
-							onchange={() => (draft!.mqtt.commands = toggle(draft!.mqtt.commands, group))}
-						/><span>{t(`ha.command.${group}` as MessageKey)}</span></label
-					>
+					{/each}
+				</fieldset>
+				{#each sensorGroups.filter((g) => d.mqtt.groups.includes(g)) as group}
+					{@const devices = mqttDevices.filter((dev) => dev.group === group)}
+					{#if !['system', 'work'].includes(group)}<details class="device-selection">
+							<summary>{t(`ha.group.${group}` as MessageKey)} · {t('ha.deviceSelection')}</summary>
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={!d.mqtt.devices || !(group in d.mqtt.devices)}
+									onchange={(e) => {
+										const next = { ...d.mqtt.devices };
+										if (e.currentTarget.checked) delete next[group];
+										else next[group] = devices.map((dev) => dev.id);
+										d.mqtt.devices = next;
+									}}
+								/>{t('ha.allDevices')}</label
+							>
+							{#if d.mqtt.devices && group in d.mqtt.devices}
+								{#each [...new Set( [...devices.map((dev) => dev.id), ...d.mqtt.devices[group]] )] as id}
+									<label class="check"
+										><input
+											type="checkbox"
+											checked={d.mqtt.devices[group].includes(id)}
+											onchange={() =>
+												(d.mqtt.devices = {
+													...d.mqtt.devices,
+													[group]: toggle(d.mqtt.devices![group], id),
+												})}
+										/>{devices.find((dev) => dev.id === id)?.name ?? id}</label
+									>
+								{/each}
+							{/if}
+						</details>{/if}
 				{/each}
-			</fieldset>
-			{#if draft.mqtt.commands.length}
-				<p class="notice-warn">{t('ha.commandsWarning')}</p>
-				{#if !draft.account}<p class="notice-warn">{t('ha.commandsNoAccount')}</p>{/if}
+			</div>
+			<SettingSub title={t('ha.accountLabel')} desc={t('ha.accountIntro')} for="ha-account">
+				{#snippet control()}
+					<select id="ha-account" class="field" bind:value={d.account}>
+						<option value="">{t('ha.accountNone')}</option>
+						{#each accounts as account (account.name)}<option value={account.name}
+								>{account.name}</option
+							>{/each}
+					</select>
+				{/snippet}
+			</SettingSub>
+			<div class="srow-block">
+				<fieldset>
+					<legend>{t('ha.commandGroups')}</legend>
+					{#each commandGroups as group}
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={d.mqtt.commands.includes(group)}
+								onchange={() => (d.mqtt.commands = toggle(d.mqtt.commands, group))}
+							/><span>{t(`ha.command.${group}` as MessageKey)}</span></label
+						>
+					{/each}
+				</fieldset>
+				{#if d.mqtt.commands.length}
+					<p class="notice-warn">{t('ha.commandsWarning')}</p>
+					{#if !d.account}<p class="notice-warn">{t('ha.commandsNoAccount')}</p>{/if}
+				{/if}
+			</div>
+			{#if status?.mqtt || status?.mqttError}
+				<div class="srow-block">
+					{#if status?.mqtt}<p class="notice-ok" role="status">
+							{t('ha.mqttConnected', { seconds: String(sentEvery) })}
+						</p>{:else if status?.mqttError}<div class="notice-error" role="alert">
+							{t('ha.mqttFailed')}
+							<pre>{status.mqttError}</pre>
+						</div>{/if}
+				</div>
 			{/if}
-			{#if status?.mqtt}<p class="notice-ok" role="status">
-					{t('ha.mqttConnected', { seconds: String(sentEvery) })}
-				</p>{:else if status?.mqttError}<div class="notice-error" role="alert">
-					{t('ha.mqttFailed')}
-					<pre>{status.mqttError}</pre>
-				</div>{/if}
-		</section>
-		<section class="tile panel" id="release">
-			<h2 class="tile-title">{t('ha.release')}</h2>
-			<p class="muted">
-				{t('ha.releaseIntro')}
-			</p>
-			<fieldset>
-				<legend>{t('ha.domains')}</legend>
-				{#each domains as domain}
-					<label class="check domain"
-						><input
-							type="checkbox"
-							checked={draft.domains.includes(domain)}
-							onchange={() => (draft!.domains = toggle(draft!.domains, domain))}
-						/><span class="mono">{domain}</span><span
-							class="chip {level(domain) === 'danger' ? 'warn' : 'info'}"
-							>{t(`ha.level.${level(domain)}` as MessageKey)}</span
-						></label
-					>
-				{/each}
-			</fieldset>
-			<div class="entities">
+		</SettingRow>
+
+		<SettingRow
+			id="release"
+			icon="shield"
+			title={t('ha.release')}
+			desc={t('ha.releaseIntro')}
+			summary={t('ha.releaseSummary', { domains: d.domains.length, entities: d.entities.length })}
+		>
+			<div class="srow-block">
+				<fieldset>
+					<legend>{t('ha.domains')}</legend>
+					{#each domains as domain}
+						<label class="check domain"
+							><input
+								type="checkbox"
+								checked={d.domains.includes(domain)}
+								onchange={() => (d.domains = toggle(d.domains, domain))}
+							/><span class="mono">{domain}</span><span
+								class="chip {level(domain) === 'danger' ? 'warn' : 'info'}"
+								>{t(`ha.level.${level(domain)}` as MessageKey)}</span
+							></label
+						>
+					{/each}
+				</fieldset>
+			</div>
+			<!-- The devices of Home Assistant are a tool of their own: a list to
+			     search, with the rights of each device. -->
+			<div class="srow-block entities">
 				<div class="row end">
 					<button
 						type="button"
@@ -659,20 +777,20 @@
 							/></label
 						>{/if}
 				</div>
-				{#if draft.entities.length}<p class="muted small">
-						{t('ha.singleCount', { count: draft.entities.length })}
+				{#if d.entities.length}<p class="muted small">
+						{t('ha.singleCount', { count: d.entities.length })}
 					</p>{/if}
 				{#if entities}
 					<ul>
 						{#each shown as entity (entity.id)}
-							{@const viaDomain = draft.domains.includes(entity.domain)}
+							{@const viaDomain = d.domains.includes(entity.domain)}
 							<li>
 								<label class="check"
 									><input
 										type="checkbox"
-										checked={viaDomain || draft.entities.includes(entity.id)}
+										checked={viaDomain || d.entities.includes(entity.id)}
 										disabled={viaDomain}
-										onchange={() => (draft!.entities = toggle(draft!.entities, entity.id))}
+										onchange={() => (d.entities = toggle(d.entities, entity.id))}
 									/>
 									<span
 										><span class="name">{entity.name}</span>
@@ -735,14 +853,15 @@
 					</ul>
 				{/if}
 			</div>
-		</section>
-		<div class="actions">
-			{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
+		</SettingRow>
+
+		<div class="row-actions">
 			<button type="submit" form="ha-form" class="btn btn-primary" disabled={busy !== null}
 				>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button
 			>
+			{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
 		</div>
-	</div>
+	</SettingGroup>
 {/if}
 
 {#if adding}
@@ -783,80 +902,27 @@
 {/if}
 
 <style>
-	.conns {
-		margin-bottom: var(--gap);
-	}
-	.conn-list {
-		list-style: none;
-		margin: var(--space-3) 0 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.conn-list li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-3);
-		padding: var(--space-3) 0;
-		border-top: 1px solid var(--border);
-	}
-	.conn-list li:first-child {
-		border-top: 0;
-	}
+	/* A connection is chosen by a click on its name (the row's text). */
 	.conn {
-		flex: 1 1 14rem;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		text-align: start;
-		background: none;
-		border: 0;
 		padding: var(--space-1) var(--space-2);
 		margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+		border: 0;
 		border-radius: var(--radius-small);
+		background: none;
 		color: inherit;
 		font: inherit;
+		text-align: start;
 		cursor: pointer;
-	}
-	.conn .mono {
-		overflow-wrap: anywhere;
 	}
 	.conn:hover,
 	.conn:focus-visible {
 		background: var(--chip);
 	}
-	.chosen .conn {
+	.chosen {
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	.chosen .conn-name::after {
 		content: ' ✓';
-	}
-	.conn-name {
-		font-weight: 600;
-	}
-	.ha-page,
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--gap);
-	}
-	/* Stacked under its hint, never stretched by the column (flex-basis
-	   would become the height there). */
-	.account {
-		flex: none;
-		width: min(100%, 320px);
-	}
-	section {
-		font-size: var(--text-md);
-	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2) var(--space-4);
 	}
 	label {
 		display: flex;
@@ -883,14 +949,6 @@
 		flex: 0 1 320px;
 		max-width: 320px;
 	}
-	.tiny {
-		flex: 0 1 110px;
-		max-width: 110px;
-	}
-	.tls {
-		align-self: flex-end;
-		padding-bottom: var(--space-2-5);
-	}
 	.small {
 		margin: 0;
 		font-size: var(--text-base);
@@ -904,7 +962,7 @@
 	.check > span {
 		color: var(--text);
 	}
-	input[type='checkbox'] {
+	input[type='checkbox']:not(.switch) {
 		width: 18px;
 		height: 18px;
 		margin: 0;
@@ -937,8 +995,6 @@
 		color: var(--muted);
 	}
 	.entities {
-		display: flex;
-		flex-direction: column;
 		gap: var(--space-2-5);
 	}
 	ul {
@@ -952,6 +1008,7 @@
 	}
 	li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
@@ -971,18 +1028,16 @@
 		font-weight: 600;
 	}
 	.link {
-		align-self: flex-start;
 		padding: 0;
 		background: none;
 		border: 0;
 		color: var(--muted);
 		font: inherit;
-		font-size: var(--text-sm);
 		text-decoration: underline;
 		cursor: pointer;
 	}
 	.test {
-		display: flex;
+		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2-5) var(--space-4);
@@ -992,13 +1047,10 @@
 		margin: 0;
 		flex: 1 1 280px;
 	}
-	.actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: var(--space-4);
+	.row-actions {
+		margin-top: var(--space-2);
 	}
-	.actions p {
+	.row-actions p {
 		margin: 0;
 	}
 	pre {

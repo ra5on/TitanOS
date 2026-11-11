@@ -4,8 +4,12 @@
 	// shows how the NAS is doing, what is still open, which services run and
 	// what was changed last. Only real answers of the NAS; what an account may
 	// not read is not asked for.
+	// PLAN 78-1: no cards any more – every block is a plain heading above its
+	// rows (value at the right); a row that leads somewhere is a link row.
 	import { onMount } from 'svelte';
 	import { api, type VolumeState } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { activityLabel, type ActivityEntry, type ActivityPage } from '#lib/activity.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime, formatDuration, osVersion } from '#lib/format.ts';
@@ -85,258 +89,195 @@
 	}
 </script>
 
-<div class="overview">
-	<section class="tile ui-card health" aria-labelledby="{prefix}-health">
-		<div class="card-head"><h2 id="{prefix}-health">{t('settingshome.health')}</h2></div>
-		{#if info}
-			<div class="set-row">
-				<span class="set-label">{t('settingshome.health.host')}</span>
-				<span class="set-control value">{info.hostname}</span>
-			</div>
-			<div class="set-row">
-				<span class="set-label">{t('settingshome.health.version')}</span>
-				<span class="set-control value">{osVersion(info.version)}</span>
-			</div>
-			<div class="set-row">
-				<span class="set-label">{t('settingshome.health.uptime')}</span>
-				<span class="set-control value">{formatDuration(info.uptimeSeconds)}</span>
-			</div>
-		{:else}
-			<p class="card-text muted" role="status">{t('settingshome.health.loading')}</p>
-		{/if}
-		{#if admin && volumes}
-			<div class="set-row">
-				<span class="set-label"
-					>{t('settingshome.health.volumes')}{#if volumes.length}<span class="set-hint"
-							>{volumes.every((v) => v.state === 'ok')
-								? t('settingshome.health.allOk')
-								: t('settingshome.health.attention')}</span
-						>{/if}</span
-				>
-				<span class="set-control">
-					{#each volumes as volume (volume.name)}
-						<a class="chip {tone(volume.state)}" href="/storage"
-							>{volume.name}: {t(`state.${volume.state}` as MessageKey)}</a
-						>
-					{:else}
-						<a class="chip warn" href="/storage">{t('settingshome.health.noVolume')}</a>
-					{/each}
-				</span>
-			</div>
-		{/if}
-	</section>
+{#snippet onOff(on: boolean)}
+	<span class="state" class:on
+		><span class="dot" aria-hidden="true"></span>{on
+			? t('settingshome.services.on')
+			: t('settingshome.services.off')}</span
+	>
+{/snippet}
 
-	<section class="tile ui-card todo" aria-labelledby="{prefix}-todo">
-		<div class="card-head"><h2 id="{prefix}-todo">{t('settingshome.todo')}</h2></div>
-		{#each states as [area, state] (area)}
-			<div class="set-row">
-				<span class="set-label"
-					><span><span class="chip {state.tone}">{t(state.text)}</span></span><span class="set-hint"
-						>{areaLabel(area)}</span
-					></span
+<div class="overview">
+	<div class="health">
+		<SettingGroup title={t('settingshome.health')} id="{prefix}-health">
+			{#if info}
+				<SettingRow icon="home" title={t('settingshome.health.host')}>
+					{#snippet control()}<span class="value">{info.hostname}</span>{/snippet}
+				</SettingRow>
+				<SettingRow icon="info" title={t('settingshome.health.version')}>
+					{#snippet control()}<span class="value">{osVersion(info.version)}</span>{/snippet}
+				</SettingRow>
+				<SettingRow icon="clock" title={t('settingshome.health.uptime')}>
+					{#snippet control()}<span class="value">{formatDuration(info.uptimeSeconds)}</span
+						>{/snippet}
+				</SettingRow>
+			{:else}
+				<p class="note muted" role="status">{t('settingshome.health.loading')}</p>
+			{/if}
+			{#if admin && volumes}
+				<SettingRow
+					icon="disk"
+					title={t('settingshome.health.volumes')}
+					desc={volumes.length
+						? volumes.every((v) => v.state === 'ok')
+							? t('settingshome.health.allOk')
+							: t('settingshome.health.attention')
+						: undefined}
 				>
-				<span class="set-control end"
-					><a class="btn" href="/settings/{area}">{t('settingshome.open')}</a></span
-				>
-			</div>
-		{/each}
-		{#each open as todo (todo.key)}
-			<div class="set-row">
-				<span class="set-label"
-					>{t(todo.key)}<span class="set-hint">{t(`${todo.key}Text` as MessageKey)}</span></span
-				>
-				<span class="set-control end"
-					><a class="btn" href={todo.href}>{t('settingshome.open')}</a></span
-				>
-			</div>
-		{/each}
-		{#if setup === null}
-			<p class="card-text muted" role="status">{t('settingshome.todo.checking')}</p>
-		{:else if !states.length && !open.length}
-			<p class="card-text done" role="status">
-				<span class="mark" aria-hidden="true">✓</span>{t('settingshome.todo.none')}
-			</p>
-		{/if}
-		{#if setupFailed}<p class="card-text muted">{t('settingshome.todo.unknown')}</p>{/if}
-	</section>
+					{#snippet control()}
+						{#each volumes as volume (volume.name)}
+							<a class="chip {tone(volume.state)}" href="/storage"
+								>{volume.name}: {t(`state.${volume.state}` as MessageKey)}</a
+							>
+						{:else}
+							<a class="chip warn" href="/storage">{t('settingshome.health.noVolume')}</a>
+						{/each}
+					{/snippet}
+				</SettingRow>
+			{/if}
+		</SettingGroup>
+	</div>
+
+	<div class="todo">
+		<SettingGroup title={t('settingshome.todo')} id="{prefix}-todo">
+			{#each states as [area, state] (area)}
+				<SettingRow href="/settings/{area}" icon="bell" title={areaLabel(area)}>
+					{#snippet control()}<span class="chip {state.tone}">{t(state.text)}</span>{/snippet}
+				</SettingRow>
+			{/each}
+			{#each open as todo (todo.key)}
+				<SettingRow
+					href={todo.href}
+					icon="list"
+					title={t(todo.key)}
+					desc={t(`${todo.key}Text` as MessageKey)}
+				/>
+			{/each}
+			{#if setup === null}
+				<p class="note muted" role="status">{t('settingshome.todo.checking')}</p>
+			{:else if !states.length && !open.length}
+				<div role="status"><SettingRow icon="check" title={t('settingshome.todo.none')} /></div>
+			{/if}
+			{#if setupFailed}<p class="note muted">{t('settingshome.todo.unknown')}</p>{/if}
+		</SettingGroup>
+	</div>
 
 	{#if admin}
-		<section class="tile ui-card services" aria-labelledby="{prefix}-services">
-			<div class="card-head">
-				<h2 id="{prefix}-services">{t('settingshome.services')}</h2>
-				<div class="card-tools">
+		<div class="services">
+			<SettingGroup title={t('settingshome.services')} id="{prefix}-services">
+				{#snippet tools()}
 					<a class="btn" href="/settings/services">{t('settingshome.services.manage')}</a>
-				</div>
-			</div>
-			{#each NAMES as name (name)}
-				{@const s = services?.[name]}
-				{#if s && typeof s.enabled === 'boolean'}
-					<div class="set-row">
-						<span class="set-label">{t(`services.${name}`)}</span>
-						<span class="set-control">
-							{#if !s.available}
-								<span class="state">{t('settingshome.services.notPossible')}</span>
-							{:else}
-								<span class="state" class:on={s.enabled}
-									><span class="dot" aria-hidden="true"></span>{s.enabled
-										? t('settingshome.services.on')
-										: t('settingshome.services.off')}</span
-								>
-								{#if s.enabled && s.total}<span class="muted"
-										>{t('services.counts', { running: s.running, total: s.total })}</span
-									>{/if}
-							{/if}
-						</span>
-					</div>
+				{/snippet}
+				{#each NAMES as name (name)}
+					{@const s = services?.[name]}
+					{#if s && typeof s.enabled === 'boolean'}
+						<SettingRow icon={name === 'vms' ? 'monitor' : 'box'} title={t(`services.${name}`)}>
+							{#snippet control()}
+								{#if !s.available}
+									<span class="state">{t('settingshome.services.notPossible')}</span>
+								{:else}
+									{@render onOff(s.enabled)}
+									{#if s.enabled && s.total}<span class="muted"
+											>{t('services.counts', { running: s.running, total: s.total })}</span
+										>{/if}
+								{/if}
+							{/snippet}
+						</SettingRow>
+					{/if}
+				{/each}
+				{#if accounts}
+					{@const locked = accounts.filter((a) => a.disabled).length}
+					<SettingRow
+						href="/settings/users"
+						icon="users"
+						title={t('desktop.app.users')}
+						summary={t('settingshome.users.count', { n: accounts.length }) +
+							(locked ? ' · ' + t('settingshome.users.locked', { n: locked }) : '')}
+					/>
 				{/if}
-			{/each}
-			{#if accounts}
-				{@const locked = accounts.filter((a) => a.disabled).length}
-				<div class="set-row">
-					<span class="set-label">{t('desktop.app.users')}</span>
-					<span class="set-control">
-						<span class="state"
-							>{t('settingshome.users.count', { n: accounts.length })}{#if locked}{' · '}{t(
-									'settingshome.users.locked',
-									{ n: locked },
-								)}{/if}</span
-						>
-						<a class="more" href="/settings/users">{t('settingshome.open')}</a>
-					</span>
-				</div>
-			{/if}
-			{#if ssh}
-				<div class="set-row">
-					<span class="set-label">{t('access.ssh')}</span>
-					<span class="set-control">
-						<span class="state" class:on={ssh.enabled}
-							><span class="dot" aria-hidden="true"></span>{ssh.enabled
-								? t('settingshome.services.on')
-								: t('settingshome.services.off')}</span
-						>
-						<a class="more" href="/settings/access#access-ssh">{t('settingshome.open')}</a>
-					</span>
-				</div>
-			{/if}
-			{#if firewall}
-				<div class="set-row">
-					<span class="set-label">{t('firewall.title')}</span>
-					<span class="set-control">
-						<span class="state" class:on={firewall.config.enabled}
-							><span class="dot" aria-hidden="true"></span>{firewall.config.enabled
-								? t('settingshome.services.on')
-								: t('settingshome.services.off')}</span
-						>
-						<a class="more" href="/settings/firewall">{t('settingshome.open')}</a>
-					</span>
-				</div>
-			{/if}
-			{#if services === null}
-				<p class="card-text muted" role="status">{t('settingshome.health.loading')}</p>
-			{/if}
-		</section>
+				{#if ssh}
+					<SettingRow href="/settings/access#access-ssh" icon="terminal" title={t('access.ssh')}>
+						{#snippet control()}{@render onOff(ssh?.enabled ?? false)}{/snippet}
+					</SettingRow>
+				{/if}
+				{#if firewall}
+					<SettingRow href="/settings/firewall" icon="shield" title={t('firewall.title')}>
+						{#snippet control()}{@render onOff(firewall?.config.enabled ?? false)}{/snippet}
+					</SettingRow>
+				{/if}
+				{#if services === null}
+					<p class="note muted" role="status">{t('settingshome.health.loading')}</p>
+				{/if}
+			</SettingGroup>
+		</div>
 	{/if}
 
 	{#if admin && recent.length}
-		<section class="tile ui-card recent-card" aria-labelledby="{prefix}-recent">
-			<div class="card-head">
-				<h2 id="{prefix}-recent">{t('settingshome.recent')}</h2>
-				<div class="card-tools">
+		<div class="recent-card">
+			<SettingGroup title={t('settingshome.recent')} id="{prefix}-recent">
+				{#snippet tools()}
 					<a class="btn" href="/tools/activity">{t('settingshome.recentAll')}</a>
-				</div>
-			</div>
-			<ul class="recent">
-				{#each recent as entry, index (index)}
-					<li>
-						<a class="area" href="/settings/{entry.area}">{areaLabel(entry.area)}</a>
-						<span class="what">{describe(entry)}</span>
-						<span class="who"
-							>{entry.user ? t('settingshome.recentBy', { user: entry.user }) : ''}</span
-						>
-						<time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time>
-					</li>
-				{/each}
-			</ul>
-		</section>
+				{/snippet}
+				<ul class="recent">
+					{#each recent as entry, index (index)}
+						<li>
+							<SettingRow
+								href="/settings/{entry.area}"
+								icon="edit"
+								title={areaLabel(entry.area)}
+								desc={describe(entry)}
+							>
+								{#snippet control()}
+									{#if entry.user}<span class="who"
+											>{t('settingshome.recentBy', { user: entry.user })}</span
+										>{/if}
+									<time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time>
+								{/snippet}
+							</SettingRow>
+						</li>
+					{/each}
+				</ul>
+			</SettingGroup>
+		</div>
 	{/if}
 </div>
 
 <style>
-	/* One column; from 52rem two: Zustand and Dienste on the left, Zu
-	   erledigen on the right, the last changes below over the full width. */
+	/* One column of groups, as on every page of the control panel. */
 	.overview {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		align-items: start;
+		display: flex;
+		flex-direction: column;
 		gap: var(--gap, var(--space-4));
 		min-width: 0;
 	}
-	@media (min-width: 52rem) {
-		.overview {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			grid-template-rows: auto 1fr auto;
-			grid-template-areas:
-				'health todo'
-				'services todo'
-				'recent recent';
-		}
-		.health {
-			grid-area: health;
-		}
-		.todo {
-			grid-area: todo;
-		}
-		.services {
-			grid-area: services;
-		}
-		.recent-card {
-			grid-area: recent;
-		}
-	}
-	.recent-card {
-		container-type: inline-size;
-	}
-	/* A to-do: its text takes the room, the button stays on the right. */
-	.todo .set-row {
-		grid-template-columns: minmax(0, 1fr) auto;
+	.overview > div {
+		min-width: 0;
 	}
 	.value {
+		color: var(--text);
 		overflow-wrap: anywhere;
 		font-weight: 500;
 	}
-	.card-text {
+	.note {
 		margin: 0;
-		padding: var(--space-3) var(--space-4);
 		font-size: var(--text-base);
-	}
-	.card-text + .card-text {
-		padding-top: 0;
 	}
 	.muted {
 		color: var(--muted);
-	}
-	.done {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		color: var(--text);
-	}
-	.mark {
-		color: var(--ok-text);
-		font-weight: 700;
 	}
 	a.chip {
 		text-decoration: none;
 		white-space: normal;
 		overflow-wrap: anywhere;
 	}
-	.set-label .chip {
+	.chip {
 		white-space: normal;
 	}
 	.state {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
+		color: var(--text);
 		font-weight: 600;
 	}
 	.dot {
@@ -349,59 +290,20 @@
 		border-color: var(--ok-text);
 		background: var(--ok-text);
 	}
-	.more {
-		margin-left: auto;
-	}
 	ul {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 		list-style: none;
 		margin: 0;
-		padding: 0 var(--space-4);
+		padding: 0;
 	}
-	.recent li {
-		display: grid;
-		grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr) auto auto;
-		align-items: baseline;
-		gap: var(--space-1) var(--space-3);
-		padding: var(--space-2) 0;
-		font-size: var(--text-base);
-	}
-	.recent li + li {
-		border-top: 1px solid var(--panel-border, var(--border));
-	}
-	.recent .area {
-		font-weight: 500;
-		overflow-wrap: anywhere;
-	}
-	.what {
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.who,
-	time {
-		color: var(--muted);
-	}
-	time {
-		white-space: nowrap;
-	}
-	/* A long account name wraps instead of pushing the row out of the card. */
+	/* A long account name wraps instead of pushing the row out. */
 	.who {
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
-	.recent li {
-		grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr) minmax(0, auto) auto;
-	}
-	@container (max-width: 34rem) {
-		.recent li {
-			grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-		}
-		.recent .what {
-			grid-column: 1;
-			grid-row: 2;
-		}
-		.recent .who {
-			grid-column: 2;
-			grid-row: 2;
-		}
+	time {
+		white-space: nowrap;
 	}
 </style>

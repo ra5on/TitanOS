@@ -188,6 +188,20 @@ async function context(theme = "graphit", width = 1440) {
       }
       return json(state);
     }
+    if (path === "/update/install" && state.kind === "system") {
+      // A system update: loading; the test moves it on.
+      installs++;
+      state = {
+        ...state,
+        progress: {
+          ...progress("download"),
+          file: "filesystem.squashfs",
+          percent: 62,
+          speedBytesPerSecond: 18e6,
+        },
+      };
+      return json(state);
+    }
     if (path === "/update/install") {
       installs++;
       state = { ...state, progress: progress("restart") };
@@ -250,13 +264,27 @@ try {
   {
     const { ctx, page } = await context();
     await page.goto(`${base}/settings/updates`);
-    await page.getByText("TitanOS 0.8.1", { exact: true }).waitFor();
+    // PLAN 78-3: the card of the new version says what it is.
+    await page.getByRole("heading", { name: "TitanOS 0.8.1 ist da" }).waitFor();
+    assert.equal(
+      (await page.getByTestId("update-kind").textContent()).trim(),
+      "App-Update · ohne Neustart",
+    );
     assert.ok(await page.getByText("Ohne Neustart").isVisible());
+    assert.ok(
+      /1[89][,.]?\d* MB/.test(
+        await page.getByTestId("update-size").textContent(),
+      ),
+    );
+    assert.equal(
+      (await page.locator(".hero .jump .sr-only").textContent()).trim(),
+      "Von 0.8 auf 0.8.1",
+    );
     await page.screenshot({
       path: `${out}/app-available-graphit-1440.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Jetzt aktualisieren" }).click();
+    await page.getByRole("button", { name: "Jetzt installieren" }).click();
     assert.ok(
       await page
         .getByText("startet danach nur seine Weboberfläche neu", {
@@ -276,6 +304,18 @@ try {
       fullPage: true,
     });
     await page.locator(".dialog-actions .btn-primary").click();
+    // The steps of an app update: the service restarts, loading and
+    // checking are done.
+    const appSteps = page.getByTestId("update-steps");
+    await appSteps
+      .locator('li[aria-current="step"]', { hasText: "Neustart des Dienstes" })
+      .waitFor();
+    assert.deepEqual(
+      await appSteps.locator("li.done .step-name").allTextContents(),
+      ["Laden", "Prüfen"],
+    );
+    assert.equal(await appSteps.locator("li").count(), 4);
+    assert.equal(await page.getByTestId("update-hero").count(), 0);
     // The page waits for the new titand and says which version runs.
     await page
       .getByText(
@@ -283,8 +323,15 @@ try {
       )
       .waitFor({ timeout: 15000 });
     assert.ok(
-      await page.getByText("läuft auf Probe", { exact: false }).isVisible(),
+      await page
+        .getByText("Die neue Version läuft auf Probe", { exact: false })
+        .isVisible(),
     );
+    // The trial is the last step of an app update.
+    await appSteps
+      .locator('li[aria-current="step"]', { hasText: "Probe" })
+      .waitFor();
+    assert.equal(await appSteps.locator("li.done").count(), 3);
     assert.ok(
       await page.getByText("App-Update auf Systemabbild 0.8").isVisible(),
     );
@@ -301,7 +348,7 @@ try {
     };
     await page.reload();
     await page
-      .getByRole("button", { name: "Auf Systemabbild 0.8.0 zurück …" })
+      .getByRole("button", { name: "Zurückgehen … – Systemabbild 0.8.0" })
       .click();
     await page.locator(".dialog-actions .btn-primary").click();
     await page
@@ -310,7 +357,7 @@ try {
     assert.equal(appRollbacks, 1);
     assert.ok(
       await page
-        .getByRole("button", { name: "Auf 0.8.1 zurück …" })
+        .getByRole("button", { name: "Zurückgehen … – 0.8.1" })
         .isVisible(),
     );
     await ctx.close();
@@ -329,13 +376,17 @@ try {
     };
     const { ctx, page } = await context("hell", 390);
     await page.goto(`${base}/settings/updates`);
-    await page.getByText("TitanOS 0.9.0", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "TitanOS 0.9 ist da" }).waitFor();
     assert.equal(await page.getByText("Ohne Neustart").count(), 0);
+    assert.equal(
+      (await page.getByTestId("update-kind").textContent()).trim(),
+      "Systemupdate · mit Neustart",
+    );
     await page.screenshot({
       path: `${out}/system-available-hell-390.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Jetzt aktualisieren" }).click();
+    await page.getByRole("button", { name: "Jetzt installieren" }).click();
     assert.ok(
       await page
         .getByText("Aktiv wird die neue Version erst mit einem Neustart", {
@@ -417,6 +468,10 @@ try {
     };
     const { ctx, page } = await context();
     await page.goto(`${base}/settings/updates`);
+    // PLAN 78-3: "Version wählen" is a row that opens downward.
+    await page
+      .getByRole("button", { name: "Version wählen: Aufklappen" })
+      .click();
     const select = page.getByLabel("Version", { exact: true });
     await select.waitFor();
     assert.equal(await select.inputValue(), "0.46.5");
@@ -463,6 +518,9 @@ try {
     await ctx.close();
     const phone = await context("hell", 390);
     await phone.page.goto(`${base}/settings/updates`);
+    await phone.page
+      .getByRole("button", { name: "Version wählen: Aufklappen" })
+      .click();
     await phone.page.getByLabel("Version", { exact: true }).waitFor();
     const overflow = await phone.page.evaluate(
       () =>
@@ -509,6 +567,9 @@ try {
     };
     const { ctx, page } = await context();
     await page.goto(`${base}/settings/updates`);
+    await page
+      .getByRole("button", { name: "Version wählen: Aufklappen" })
+      .click();
     const select = page.getByLabel("Version", { exact: true });
     await select.waitFor();
     await select.selectOption("0.46.2");
@@ -552,6 +613,359 @@ try {
     await dialog.getByRole("button", { name: "Abbrechen" }).click();
     assert.deepEqual(chosenVersions, ["0.46.2"]); // only the earlier block installed
     await ctx.close();
+    versions = listed;
+  }
+  {
+    // PLAN 78-3: what is new in the update – the release notes in their
+    // three tagged blocks, as text only.
+    reset();
+    installs = 0;
+    const notes = [
+      "# TitanOS 0.9 — Systemsteuerung im neuen Aufbau",
+      "",
+      "Ein **volles Systemupdate**. Tag und Manifest heißen `v0.9.0`.",
+      "",
+      "## Neu",
+      "",
+      "**Oberfläche**",
+      "- **Systemsteuerung:** jede Einstellung eine eigene Zeile.",
+      "- Punkt zwei, der in der nächsten",
+      "  Zeile weitergeht.",
+      "- Punkt drei.",
+      "",
+      "**Cluster**",
+      "- Punkt vier.",
+      "- Punkt fünf.",
+      "- Punkt sechs.",
+      "- Punkt sieben.",
+      "- Punkt acht.",
+      "",
+      "## Sicherheit",
+      "",
+      "- <img src=x onerror=window.__pwned=1> bleibt Text.",
+      "- [link](https://evil.example) bleibt Text.",
+      "- Siehe [Release](https://github.com/ra5on/TitanOS/releases/tag/v0.9.0).",
+      "",
+      "## Behoben",
+      "",
+      "- Eine Korrektur mit `mdadm --detail`.",
+      "",
+      "## Rückweg",
+      "",
+      "Über Einstellungen › Updates zurück auf 0.8.",
+    ].join("\n");
+    state = {
+      ...state,
+      kind: "system",
+      available: {
+        ...manifest,
+        version: "0.9.0",
+        changelog: notes,
+        app: { base: "0.9.0", size: 19e6 },
+      },
+    };
+    for (const [theme, width] of [
+      ["graphit", 1100],
+      ["hell", 390],
+    ]) {
+      const { ctx, page } = await context(theme, width);
+      await page.goto(`${base}/settings/updates`);
+      const news = page.locator("#news");
+      await news.waitFor();
+      // The card: version jump, kind and size.
+      const hero = page.getByTestId("update-hero");
+      assert.equal(
+        (await hero.locator(".jump .sr-only").textContent()).trim(),
+        "Von 0.8 auf 0.9",
+      );
+      assert.deepEqual(await hero.locator(".jump b").allTextContents(), [
+        "0.8",
+        "0.9",
+      ]);
+      assert.ok(
+        /\d+ MB/.test(await hero.getByTestId("update-size").textContent()),
+      );
+      assert.ok(
+        await hero
+          .getByText("Signatur des Releases geprüft", { exact: false })
+          .isVisible(),
+      );
+      assert.ok(await hero.getByText("Kernel 6.12.48").isVisible());
+      // Closed, the row sums up what the notes hold.
+      assert.ok(
+        await news
+          .getByText("8 Neuerungen · 3 zur Sicherheit · 1 Korrektur", {
+            exact: true,
+          })
+          .isVisible(),
+      );
+      assert.equal(await news.locator(".notes").count(), 0);
+      await page
+        .getByRole("button", { name: "Das ist neu in 0.9: Aufklappen" })
+        .click();
+      await news.locator(".notes").waitFor();
+      assert.deepEqual(
+        await news
+          .locator(".notes section")
+          .evaluateAll((all) =>
+            all.map((s) => [
+              s.dataset.kind,
+              s.querySelector("h4").textContent.trim(),
+            ]),
+          ),
+        [
+          ["intro", "Zu diesem Release"],
+          ["new", "Neu"],
+          ["security", "Sicherheit"],
+          ["fixed", "Behoben"],
+          ["other", "Rückweg"],
+        ],
+      );
+      // The tags are chips with their word, not a colour alone.
+      assert.equal(await news.locator("h4 .chip").count(), 3);
+      assert.ok(
+        await news
+          .getByText("Systemsteuerung im neuen Aufbau", { exact: true })
+          .isVisible(),
+      );
+      // Bold and code are elements, sub-headings name their bullets.
+      assert.equal(
+        await news.locator('[data-kind="new"] li strong').first().textContent(),
+        "Systemsteuerung:",
+      );
+      assert.equal(
+        await news.locator('[data-kind="fixed"] code').textContent(),
+        "mdadm --detail",
+      );
+      assert.ok(
+        await news.getByText("Oberfläche", { exact: true }).isVisible(),
+      );
+      assert.ok(
+        await news
+          .getByText("Punkt zwei, der in der nächsten Zeile weitergeht.")
+          .isVisible(),
+      );
+      // A long block shows its first six points and a button for the rest.
+      const fresh = news.locator('[data-kind="new"]');
+      assert.equal(await fresh.locator("li").count(), 6);
+      assert.equal(await fresh.getByText("Punkt sieben.").count(), 0);
+      await fresh.getByRole("button", { name: "Alle 8 anzeigen" }).click();
+      assert.equal(await fresh.locator("li").count(), 8);
+      assert.ok(await fresh.getByText("Punkt acht.").isVisible());
+      await fresh.getByRole("button", { name: "Weniger anzeigen" }).click();
+      assert.equal(await fresh.locator("li").count(), 6);
+      assert.equal(
+        await news
+          .locator('[data-kind="security"]')
+          .getByRole("button")
+          .count(),
+        0,
+      );
+      // Nothing of the notes becomes HTML; only links to the project are links.
+      assert.equal(await news.locator("img, script, iframe").count(), 0);
+      assert.equal(await page.evaluate(() => window.__pwned), undefined);
+      assert.ok(
+        await news
+          .getByText("<img src=x onerror=window.__pwned=1> bleibt Text.", {
+            exact: true,
+          })
+          .isVisible(),
+      );
+      assert.ok(
+        await news
+          .getByText("[link](https://evil.example) bleibt Text.", {
+            exact: true,
+          })
+          .isVisible(),
+      );
+      assert.deepEqual(
+        await news
+          .locator(".notes a")
+          .evaluateAll((all) =>
+            all.map((a) => [
+              a.textContent.trim(),
+              a.getAttribute("href"),
+              a.target,
+              a.rel,
+            ]),
+          ),
+        [
+          [
+            "Release",
+            "https://github.com/ra5on/TitanOS/releases/tag/v0.9.0",
+            "_blank",
+            "noopener noreferrer",
+          ],
+          [
+            "Auf GitHub lesen",
+            "https://github.com/ra5on/TitanOS/releases/tag/v0.9.0",
+            "_blank",
+            "noopener noreferrer",
+          ],
+        ],
+      );
+      // No text is cut, nothing scrolls sideways.
+      const cut = await page.evaluate(() => {
+        const found = [];
+        for (const el of document.querySelectorAll("main *")) {
+          const cs = getComputedStyle(el);
+          if (cs.textOverflow === "ellipsis" || cs.webkitLineClamp !== "none")
+            found.push(el.className);
+        }
+        return {
+          found,
+          over:
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        };
+      });
+      assert.deepEqual(cut.found, []);
+      assert.ok(cut.over <= 0, `page scrolls sideways by ${cut.over}px`);
+      await page.screenshot({
+        path: `${out}/news-open-${theme}-${width}.png`,
+        fullPage: true,
+      });
+      // "Was war neu?": the notes of the running version from the list of releases.
+      const installed = page.locator("#installed");
+      assert.ok(await installed.getByText("Was war neu?").isVisible());
+      await page
+        .getByRole("button", { name: "TitanOS 0.8: Aufklappen" })
+        .click();
+      assert.ok(
+        await installed.getByText("Läuft", { exact: true }).isVisible(),
+      );
+      assert.equal(
+        await installed.locator(".notes .source a").getAttribute("href"),
+        "https://github.com/ra5on/TitanOS/releases/tag/v0.8.0",
+      );
+      await ctx.close();
+    }
+
+    // The steps of a system update follow the phases titand reports.
+    const { ctx, page } = await context("graphit", 1100);
+    await page.goto(`${base}/settings/updates`);
+    await page.getByRole("button", { name: "Jetzt installieren" }).click();
+    await page.locator(".dialog-actions .btn-primary").click();
+    const steps = page.getByTestId("update-steps");
+    const current = (name) =>
+      steps.locator('li[aria-current="step"]', { hasText: name }).waitFor();
+    const done = () => steps.locator("li.done .step-name").allTextContents();
+    await current("Laden");
+    assert.equal(installs, 1);
+    assert.equal(await steps.locator("li").count(), 5);
+    assert.deepEqual(await done(), []);
+    assert.ok(await page.getByText("TitanOS 0.9 wird installiert").isVisible());
+    assert.ok(await page.getByText("62 % · 18.0 MB/s").isVisible());
+    assert.equal(
+      await page.getByRole("progressbar").getAttribute("aria-valuenow"),
+      "62",
+    );
+    assert.ok(
+      await steps
+        .getByText("kommt TitanOS 0.8 von selbst zurück", { exact: false })
+        .isVisible(),
+    );
+    // The card of the update gives way while it installs.
+    assert.equal(await page.getByTestId("update-hero").count(), 0);
+    await page.screenshot({
+      path: `${out}/steps-download-graphit-1100.png`,
+      fullPage: true,
+    });
+    state = { ...state, progress: { ...progress("switch"), percent: 100 } };
+    await current("Start einrichten");
+    assert.deepEqual(await done(), ["Laden", "Prüfen"]);
+    // Done is said in words too, not by the colour of the frame.
+    assert.ok(
+      (await steps.locator("li.done").first().textContent()).includes(
+        "(erledigt)",
+      ),
+    );
+    assert.equal(await steps.locator("li.done svg").count(), 2);
+    assert.equal(await page.getByText("62 % · 18.0 MB/s").count(), 0);
+    state = {
+      ...state,
+      progress: { ...progress("done"), percent: 100 },
+      pending: { kind: "update", version: "0.9.0", slot: "b" },
+    };
+    await current("Neustart");
+    assert.deepEqual(await done(), ["Laden", "Prüfen", "Start einrichten"]);
+    assert.ok(
+      await page.getByText("TitanOS 0.9 wartet auf den Neustart").isVisible(),
+    );
+    assert.ok(
+      await steps
+        .getByText("liegt auf dem Stick und startet beim nächsten Neustart", {
+          exact: false,
+        })
+        .isVisible(),
+    );
+    assert.ok(
+      await steps
+        .getByRole("button", { name: "Jetzt neu starten …" })
+        .isVisible(),
+    );
+    assert.ok(
+      await steps.getByRole("button", { name: "Doch nicht" }).isVisible(),
+    );
+    assert.equal(await page.getByRole("progressbar").count(), 0);
+    await page.screenshot({
+      path: `${out}/steps-pending-graphit-1100.png`,
+      fullPage: true,
+    });
+    // After the restart the new system runs on trial: the last step.
+    state = {
+      ...state,
+      version: "0.9.0",
+      base: "0.9.0",
+      available: null,
+      kind: "",
+      pending: null,
+      progress: progress(""),
+      unconfirmed: true,
+      slots: [
+        { ...slots[0], running: false, next: false },
+        { ...slots[1], version: "0.9.0", running: true, next: true },
+      ],
+    };
+    await page.reload();
+    await current("Probestart");
+    assert.equal((await done()).length, 4);
+    assert.ok(
+      await steps
+        .getByText("Dieses System läuft noch auf Probe", { exact: false })
+        .isVisible(),
+    );
+    assert.ok(
+      await steps
+        .getByText("kommt TitanOS 0.8 von selbst zurück", { exact: false })
+        .isVisible(),
+    );
+    await ctx.close();
+
+    // Up to date, and no notes of the running version in the list: the row
+    // of the installed version has nothing to open.
+    reset();
+    state = { ...state, available: null, kind: "" };
+    const listed = versions;
+    versions = listed.filter((v) => !v.running);
+    const plain = await context("graphit", 1100);
+    await plain.page.goto(`${base}/settings/updates`);
+    await plain.page
+      .getByText("TitanOS ist aktuell.", { exact: true })
+      .waitFor();
+    assert.equal(await plain.page.locator("#news").count(), 0);
+    assert.equal(await plain.page.getByTestId("update-hero").count(), 0);
+    assert.equal(await plain.page.getByTestId("update-steps").count(), 0);
+    assert.equal(await plain.page.getByText("Was war neu?").count(), 0);
+    assert.equal(
+      await plain.page.locator("#installed button.srow-chev").count(),
+      0,
+    );
+    await plain.page.screenshot({
+      path: `${out}/up-to-date-graphit-1100.png`,
+      fullPage: true,
+    });
+    await plain.ctx.close();
     versions = listed;
   }
   assert.deepEqual(errors, []);

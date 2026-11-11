@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One backup job as a tile: its state, what the last run did, and what
+	// One backup job as a flat surface like a row (PLAN 78-1): its state, what the last run did, and what
 	// can be done with it. The page shows the tile of the chosen job.
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
@@ -40,7 +40,7 @@
 	const next = $derived(view.next);
 </script>
 
-<section class="tile panel" class:hidden-job={hidden} use:revealTarget id="backup-{job.id}">
+<section class="srow panel job" class:hidden-job={hidden} use:revealTarget id="backup-{job.id}">
 	<div class="head">
 		<div>
 			<h2 class="name mono">{job.id}</h2>
@@ -219,7 +219,10 @@
 </section>
 
 <style>
+	/* The quiet surface of a row, with the layout of a panel. */
 	section {
+		display: flex;
+		flex-direction: column;
 		font-size: 0.875rem;
 	}
 	p {

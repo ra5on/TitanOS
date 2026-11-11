@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Monitoring: healthchecks of every type with events, incidents and
 	// statistics, integrations (secrets write-only) and status pages.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -256,207 +257,56 @@
 </script>
 
 <div class="ipv64-tab">
-	<section class="tile panel" aria-labelledby="ipv64-checks">
-		<h2 class="tile-title" id="ipv64-checks">{t('ipv64x.checks')}</h2>
-		<p class="muted hint">
-			{t('ipv64x.checksHint')}
-			<a href="/settings/ddns#ipv64-heartbeat">{t('ipv64x.toHeartbeat')}</a>
-		</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('ipv64x.name')}</th><th>{t('ipv64x.type')}</th><th>{t('ipv64x.state')}</th><th
-							>{t('ipv64x.lastSeen')}</th
-						><th></th></tr
-					></thead
-				>
-				<tbody>
-					{#each checks as c (c.id)}
-						<tr>
-							<td
-								>{c.name}{#if c.id === nasCheck}<span class="chip ok">{t('ipv64x.thisNas')}</span
-									>{/if}</td
-							>
-							<td>{t(`ipv64x.checkType.${c.type}` as MessageKey)}</td>
-							<td
-								><span class="chip {tone(c.status)}"
-									>{t(`ipv64x.checkState.${c.status}` as MessageKey)}</span
-								></td
-							>
-							<td>{when(c.last_seen_at)}</td>
-							<td class="actions">
-								<button type="button" class="btn" onclick={() => show(c)}
-									>{t('ipv64x.details')}</button
-								>
-								<button type="button" class="btn" disabled={busy} onclick={() => edit(c)}
-									>{t('ipv64x.edit')}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy}
-									onclick={() => action(c, c.status === 'paused' ? 'resume' : 'pause')}
-									>{t(c.status === 'paused' ? 'ipv64x.resume' : 'ipv64x.pause')}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy || testWait[c.id]}
-									onclick={() => action(c, 'test-notification')}>{t('ipv64x.test')}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy}
-									onclick={() =>
-										(confirm = {
-											kind: 'rotateCheck',
-											name: c.name,
-											run: () => api.post(`/ipv64/healthchecks/${c.id}/rotate-token`),
-										})}>{t('ipv64x.newToken')}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy}
-									onclick={() =>
-										(confirm = {
-											kind: 'deleteCheck',
-											name: c.name + (c.id === nasCheck ? ` (${t('ipv64x.thisNas')})` : ''),
-											run: () => api.delete(`/ipv64/healthchecks/${c.id}`),
-										})}>{t('ipv64x.delete')}</button
-								>
-							</td>
-						</tr>
-					{:else}
-						<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => edit()}>{t('ipv64x.checkCreate')}</button>
-		</div>
-	</section>
-
-	{#if selected}
-		<section class="tile panel" aria-labelledby="ipv64-check">
-			<h2 class="tile-title" id="ipv64-check">{selected.name}</h2>
-			<div class="row-actions" role="group" aria-label={t('ipv64x.range')}>
-				{#each STATS_RANGES as r (r)}<button
-						type="button"
-						class="btn"
-						aria-pressed={range === r}
-						onclick={() => setRange(r)}>{r}</button
-					>{/each}
-			</div>
-			{#if stats}
-				<dl>
-					<div>
-						<dt>{t('ipv64x.availability')}</dt>
-						<dd>
-							{stats.availability_percent === null
-								? '–'
-								: `${stats.availability_percent.toFixed(2)} %`}
-						</dd>
-					</div>
-					<div>
-						<dt>{t('ipv64x.latency')}</dt>
-						<dd>
-							{stats.latency_ms.avg === null
-								? '–'
-								: `${Math.round(stats.latency_ms.avg)} ms (${stats.latency_ms.min ?? '–'}–${stats.latency_ms.max ?? '–'})`}
-						</dd>
-					</div>
-					<div>
-						<dt>{t('ipv64x.measurements')}</dt>
-						<dd>{stats.measurements}</dd>
-					</div>
-				</dl>
-				{#if stats.series.length}
-					<svg
-						class="chart"
-						viewBox="0 0 300 60"
-						preserveAspectRatio="none"
-						role="img"
-						aria-label={t('ipv64x.chart')}
+	<SettingGroup title={t('ipv64x.checks')} id="ipv64-checks">
+		<div class="panel">
+			<p class="muted hint">
+				{t('ipv64x.checksHint')}
+				<a href="/settings/ddns#ipv64-heartbeat">{t('ipv64x.toHeartbeat')}</a>
+			</p>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
+			<div class="table-wrap">
+				<table>
+					<thead
+						><tr
+							><th>{t('ipv64x.name')}</th><th>{t('ipv64x.type')}</th><th>{t('ipv64x.state')}</th><th
+								>{t('ipv64x.lastSeen')}</th
+							><th></th></tr
+						></thead
 					>
-						<polyline
-							points={chartPoints(stats.series, 300, 60)}
-							fill="none"
-							stroke="var(--accent)"
-							stroke-width="2"
-							vector-effect="non-scaling-stroke"
-						/>
-					</svg>
-				{/if}
-			{/if}
-			<h3>{t('ipv64x.events')}</h3>
-			<ul class="plain">
-				{#each events as e (e.id)}<li>
-						<span class="chip {tone(e.status)}"
-							>{t(`ipv64x.checkState.${e.status}` as MessageKey)}</span
-						>
-						{when(e.time)}
-						{e.message}{#if e.latency_ms !== null}
-							· {e.latency_ms} ms{/if}
-					</li>{:else}<li class="muted">{t('ipv64x.none')}</li>{/each}
-			</ul>
-			<h3>{t('ipv64x.incidents')}</h3>
-			<ul class="plain">
-				{#each incidents as i (i.id)}<li>
-						{when(i.created_at)} – {i.closed_at ? when(i.closed_at) : t('ipv64x.open')}
-						<span class="chip {i.status === 'open' ? 'error' : ''}"
-							>{t(i.status === 'open' ? 'ipv64x.open' : 'ipv64x.closed')}</span
-						>
-					</li>{:else}<li class="muted">{t('ipv64x.none')}</li>{/each}
-			</ul>
-		</section>
-	{/if}
-
-	<section class="tile panel" aria-labelledby="ipv64-integrations">
-		<h2 class="tile-title" id="ipv64-integrations">{t('ipv64x.integrations')}</h2>
-		<p class="muted hint">{t('ipv64x.integrationsHint')}</p>
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('ipv64x.name')}</th><th>{t('ipv64x.type')}</th><th>{t('ipv64x.state')}</th><th
-						></th></tr
-					></thead
-				>
-				<tbody>
-					{#each integrations as i (i.id)}
-						<tr>
-							<td
-								>{i.name}{#if i.default}<span class="chip">{t('ipv64x.preselected')}</span>{/if}</td
-							>
-							<td>{t(`ipv64x.integrationType.${i.type}` as MessageKey)}</td>
-							<td
-								><span class="chip {tone(i.status)}"
-									>{t(i.status === 'active' ? 'ipv64x.active' : 'ipv64x.unconfirmed')}</span
-								></td
-							>
-							<td class="actions">
-								<button
-									type="button"
-									class="btn"
-									disabled={busy || integrationWait[i.id]}
-									onclick={() => testIntegration(i)}>{t('ipv64x.test')}</button
+					<tbody>
+						{#each checks as c (c.id)}
+							<tr>
+								<td
+									>{c.name}{#if c.id === nasCheck}<span class="chip ok">{t('ipv64x.thisNas')}</span
+										>{/if}</td
 								>
-								{#if i.id !== 0}
+								<td>{t(`ipv64x.checkType.${c.type}` as MessageKey)}</td>
+								<td
+									><span class="chip {tone(c.status)}"
+										>{t(`ipv64x.checkState.${c.status}` as MessageKey)}</span
+									></td
+								>
+								<td>{when(c.last_seen_at)}</td>
+								<td class="actions">
+									<button type="button" class="btn" onclick={() => show(c)}
+										>{t('ipv64x.details')}</button
+									>
+									<button type="button" class="btn" disabled={busy} onclick={() => edit(c)}
+										>{t('ipv64x.edit')}</button
+									>
 									<button
 										type="button"
 										class="btn"
 										disabled={busy}
-										onclick={() =>
-											run(async () => {
-												await api.patch(`/ipv64/integrations/${i.id}`, { default: !i.default });
-												await load();
-											})}>{t(i.default ? 'ipv64x.unpreselect' : 'ipv64x.preselect')}</button
+										onclick={() => action(c, c.status === 'paused' ? 'resume' : 'pause')}
+										>{t(c.status === 'paused' ? 'ipv64x.resume' : 'ipv64x.pause')}</button
+									>
+									<button
+										type="button"
+										class="btn"
+										disabled={busy || testWait[c.id]}
+										onclick={() => action(c, 'test-notification')}>{t('ipv64x.test')}</button
 									>
 									<button
 										type="button"
@@ -464,77 +314,236 @@
 										disabled={busy}
 										onclick={() =>
 											(confirm = {
-												kind: 'deleteIntegration',
-												name: i.name,
-												run: () => api.delete(`/ipv64/integrations/${i.id}`),
+												kind: 'rotateCheck',
+												name: c.name,
+												run: () => api.post(`/ipv64/healthchecks/${c.id}/rotate-token`),
+											})}>{t('ipv64x.newToken')}</button
+									>
+									<button
+										type="button"
+										class="btn"
+										disabled={busy}
+										onclick={() =>
+											(confirm = {
+												kind: 'deleteCheck',
+												name: c.name + (c.id === nasCheck ? ` (${t('ipv64x.thisNas')})` : ''),
+												run: () => api.delete(`/ipv64/healthchecks/${c.id}`),
 											})}>{t('ipv64x.delete')}</button
 									>
-								{/if}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+								</td>
+							</tr>
+						{:else}
+							<tr><td colspan="5" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => edit()}>{t('ipv64x.checkCreate')}</button>
+			</div>
 		</div>
-		<div class="row-actions">
-			<button
-				type="button"
-				class="btn"
-				onclick={() => (newIntegration = { type: 'ntfy', name: '', preselect: false, values: {} })}
-				>{t('ipv64x.integrationCreate')}</button
-			>
-		</div>
-	</section>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="ipv64-pages">
-		<h2 class="tile-title" id="ipv64-pages">{t('ipv64x.statusPages')}</h2>
-		<p class="muted hint">{t('ipv64x.statusPagesHint')}</p>
-		<div class="table-wrap">
-			<table>
-				<thead><tr><th>{t('ipv64x.name')}</th><th>{t('ipv64x.address')}</th><th></th></tr></thead>
-				<tbody>
-					{#each pages as p (p.id)}
-						<tr>
-							<td
-								>{p.name}{#if p.password_protected}<span class="chip"
-										>{t('ipv64x.withPassword')}</span
-									>{/if}</td
+	{#if selected}
+		<SettingGroup title={selected.name} id="ipv64-check">
+			<div class="panel">
+				<div class="row-actions" role="group" aria-label={t('ipv64x.range')}>
+					{#each STATS_RANGES as r (r)}<button
+							type="button"
+							class="btn"
+							aria-pressed={range === r}
+							onclick={() => setRange(r)}>{r}</button
+						>{/each}
+				</div>
+				{#if stats}
+					<dl>
+						<div>
+							<dt>{t('ipv64x.availability')}</dt>
+							<dd>
+								{stats.availability_percent === null
+									? '–'
+									: `${stats.availability_percent.toFixed(2)} %`}
+							</dd>
+						</div>
+						<div>
+							<dt>{t('ipv64x.latency')}</dt>
+							<dd>
+								{stats.latency_ms.avg === null
+									? '–'
+									: `${Math.round(stats.latency_ms.avg)} ms (${stats.latency_ms.min ?? '–'}–${stats.latency_ms.max ?? '–'})`}
+							</dd>
+						</div>
+						<div>
+							<dt>{t('ipv64x.measurements')}</dt>
+							<dd>{stats.measurements}</dd>
+						</div>
+					</dl>
+					{#if stats.series.length}
+						<svg
+							class="chart"
+							viewBox="0 0 300 60"
+							preserveAspectRatio="none"
+							role="img"
+							aria-label={t('ipv64x.chart')}
+						>
+							<polyline
+								points={chartPoints(stats.series, 300, 60)}
+								fill="none"
+								stroke="var(--accent)"
+								stroke-width="2"
+								vector-effect="non-scaling-stroke"
+							/>
+						</svg>
+					{/if}
+				{/if}
+				<h3>{t('ipv64x.events')}</h3>
+				<ul class="plain">
+					{#each events as e (e.id)}<li>
+							<span class="chip {tone(e.status)}"
+								>{t(`ipv64x.checkState.${e.status}` as MessageKey)}</span
 							>
-							<td
-								><a
-									href={statusPageURL(p.slug)}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="mono">ipv64.net/status/{p.slug}</a
-								></td
+							{when(e.time)}
+							{e.message}{#if e.latency_ms !== null}
+								· {e.latency_ms} ms{/if}
+						</li>{:else}<li class="muted">{t('ipv64x.none')}</li>{/each}
+				</ul>
+				<h3>{t('ipv64x.incidents')}</h3>
+				<ul class="plain">
+					{#each incidents as i (i.id)}<li>
+							{when(i.created_at)} – {i.closed_at ? when(i.closed_at) : t('ipv64x.open')}
+							<span class="chip {i.status === 'open' ? 'error' : ''}"
+								>{t(i.status === 'open' ? 'ipv64x.open' : 'ipv64x.closed')}</span
 							>
-							<td class="actions">
-								<button type="button" class="btn" disabled={busy} onclick={() => editPage(p)}
-									>{t('ipv64x.edit')}</button
+						</li>{:else}<li class="muted">{t('ipv64x.none')}</li>{/each}
+				</ul>
+			</div>
+		</SettingGroup>
+	{/if}
+
+	<SettingGroup title={t('ipv64x.integrations')} id="ipv64-integrations">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.integrationsHint')}</p>
+			<div class="table-wrap">
+				<table>
+					<thead
+						><tr
+							><th>{t('ipv64x.name')}</th><th>{t('ipv64x.type')}</th><th>{t('ipv64x.state')}</th><th
+							></th></tr
+						></thead
+					>
+					<tbody>
+						{#each integrations as i (i.id)}
+							<tr>
+								<td
+									>{i.name}{#if i.default}<span class="chip">{t('ipv64x.preselected')}</span
+										>{/if}</td
 								>
-								<button
-									type="button"
-									class="btn"
-									disabled={busy}
-									onclick={() =>
-										(confirm = {
-											kind: 'deletePage',
-											name: p.name || p.slug,
-											run: () => api.delete(`/ipv64/status-pages/${p.id}`),
-										})}>{t('ipv64x.delete')}</button
+								<td>{t(`ipv64x.integrationType.${i.type}` as MessageKey)}</td>
+								<td
+									><span class="chip {tone(i.status)}"
+										>{t(i.status === 'active' ? 'ipv64x.active' : 'ipv64x.unconfirmed')}</span
+									></td
 								>
-							</td>
-						</tr>
-					{:else}
-						<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
-					{/each}
-				</tbody>
-			</table>
+								<td class="actions">
+									<button
+										type="button"
+										class="btn"
+										disabled={busy || integrationWait[i.id]}
+										onclick={() => testIntegration(i)}>{t('ipv64x.test')}</button
+									>
+									{#if i.id !== 0}
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() =>
+												run(async () => {
+													await api.patch(`/ipv64/integrations/${i.id}`, { default: !i.default });
+													await load();
+												})}>{t(i.default ? 'ipv64x.unpreselect' : 'ipv64x.preselect')}</button
+										>
+										<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() =>
+												(confirm = {
+													kind: 'deleteIntegration',
+													name: i.name,
+													run: () => api.delete(`/ipv64/integrations/${i.id}`),
+												})}>{t('ipv64x.delete')}</button
+										>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="row-actions">
+				<button
+					type="button"
+					class="btn"
+					onclick={() =>
+						(newIntegration = { type: 'ntfy', name: '', preselect: false, values: {} })}
+					>{t('ipv64x.integrationCreate')}</button
+				>
+			</div>
 		</div>
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => editPage()}>{t('ipv64x.pageCreate')}</button>
+	</SettingGroup>
+
+	<SettingGroup title={t('ipv64x.statusPages')} id="ipv64-pages">
+		<div class="panel">
+			<p class="muted hint">{t('ipv64x.statusPagesHint')}</p>
+			<div class="table-wrap">
+				<table>
+					<thead><tr><th>{t('ipv64x.name')}</th><th>{t('ipv64x.address')}</th><th></th></tr></thead>
+					<tbody>
+						{#each pages as p (p.id)}
+							<tr>
+								<td
+									>{p.name}{#if p.password_protected}<span class="chip"
+											>{t('ipv64x.withPassword')}</span
+										>{/if}</td
+								>
+								<td
+									><a
+										href={statusPageURL(p.slug)}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="mono">ipv64.net/status/{p.slug}</a
+									></td
+								>
+								<td class="actions">
+									<button type="button" class="btn" disabled={busy} onclick={() => editPage(p)}
+										>{t('ipv64x.edit')}</button
+									>
+									<button
+										type="button"
+										class="btn"
+										disabled={busy}
+										onclick={() =>
+											(confirm = {
+												kind: 'deletePage',
+												name: p.name || p.slug,
+												run: () => api.delete(`/ipv64/status-pages/${p.id}`),
+											})}>{t('ipv64x.delete')}</button
+									>
+								</td>
+							</tr>
+						{:else}
+							<tr><td colspan="3" class="muted">{t('ipv64x.none')}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => editPage()}
+					>{t('ipv64x.pageCreate')}</button
+				>
+			</div>
 		</div>
-	</section>
+	</SettingGroup>
 </div>
 
 {#if form}

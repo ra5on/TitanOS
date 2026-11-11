@@ -5,6 +5,7 @@
 	// and watches the backups.
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { GB, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -236,86 +237,100 @@
 	}
 </script>
 
-<section class="tile panel" id="storage" aria-labelledby="hastore-title">
-	<h2 class="tile-title" id="hastore-title">{t('hastore.title')}</h2>
-	<p class="muted hint">{t('hastore.intro')}</p>
-
+<!-- PLAN 78-1: the storage is a row of the connection; it opens to its
+     entries (a list of its own) and its actions. -->
+<SettingRow
+	id="storage"
+	icon="disk"
+	title={t('hastore.title')}
+	desc={t('hastore.intro')}
+	summary={status
+		? status.entries.length
+			? t('hastore.entryCount', { count: status.entries.length })
+			: t('ha.conn.empty')
+		: undefined}
+>
 	{#if loadError}
-		<div class="notice-error" role="alert">
-			{loadError}
-			<button class="btn small" type="button" onclick={load}>{t('common.retry')}</button>
+		<div class="srow-block">
+			<div class="notice-error" role="alert">
+				{loadError}
+				<button class="btn small" type="button" onclick={load}>{t('common.retry')}</button>
+			</div>
 		</div>
 	{:else if !status}
-		<p class="muted" role="status">{t('common.loading')}</p>
+		<div class="srow-block"><p class="muted" role="status">{t('common.loading')}</p></div>
 	{:else}
-		{#if status.account}
-			<p class="account">
-				{t('hastore.accountLine', { account: status.account, server: status.server })}
-			</p>
-			{#if status.accountMissing}
-				<p class="notice-warn" role="status">
-					{t('hastore.accountMissing', { account: status.account })}
+		<div class="srow-block">
+			{#if status.account}
+				<p class="account">
+					{t('hastore.accountLine', { account: status.account, server: status.server })}
 				</p>
+				{#if status.accountMissing}
+					<p class="notice-warn" role="status">
+						{t('hastore.accountMissing', { account: status.account })}
+					</p>
+				{/if}
 			{/if}
-		{/if}
-		{#if status.entries.length}
-			<ul class="entries">
-				{#each status.entries as entry (entry.mount)}
-					<li>
-						<div class="entry-head">
-							<span class="mono name">{place(entry)}</span>
-							<span class="chip">{t(`hastore.usage.${entry.usage}`)}</span>
-							{#if entry.readOnly}<span class="chip">{t('hastore.readOnlyShort')}</span>{/if}
-							<button
-								class="btn small remove"
-								type="button"
-								disabled={!!busy}
-								onclick={() => (confirm = { kind: 'remove', entry })}>{t('hastore.remove')}</button
-							>
-						</div>
-						<span class="muted small">{t('hastore.mountLine', { mount: entry.mount })}</span>
-						{#if entry.usage === 'backup'}
-							<div class="backup">
-								{#if entry.backup?.error}
-									<span class="muted small">{t('hastore.backupUnknown')}</span>
-								{:else if entry.backup?.latest}
-									<span class="small" class:warn={entry.backup.overdue}
-										>{t('hastore.backupLatest', {
-											name: entry.backup.name ?? '',
-											date: formatDateTime(new Date(entry.backup.latest)),
-										})}</span
-									>
-								{:else if entry.backup}
-									<span
-										class="small"
-										class:warn={entry.backup.overdue}
-										class:muted={!entry.backup.overdue}>{t('hastore.backupNone')}</span
-									>
-								{/if}
-								<label class="age small"
-									><span>{t('hastore.maxAge')}</span>
-									<select
-										class="field"
-										value={entry.maxAgeDays}
-										disabled={!!busy}
-										onchange={(event) => setAge(entry, Number(event.currentTarget.value))}
-									>
-										{#each ages as days (days)}<option value={days}
-												>{days ? t('hastore.days', { count: days }) : t('hastore.off')}</option
-											>{/each}
-									</select></label
+			{#if status.entries.length}
+				<ul class="entries">
+					{#each status.entries as entry (entry.mount)}
+						<li>
+							<div class="entry-head">
+								<span class="mono name">{place(entry)}</span>
+								<span class="chip">{t(`hastore.usage.${entry.usage}`)}</span>
+								{#if entry.readOnly}<span class="chip">{t('hastore.readOnlyShort')}</span>{/if}
+								<button
+									class="btn small remove"
+									type="button"
+									disabled={!!busy}
+									onclick={() => (confirm = { kind: 'remove', entry })}
+									>{t('hastore.remove')}</button
 								>
 							</div>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
-		{#if !status.volumes.length && !status.shares.length}
-			<p class="notice-warn">{t('hastore.noVolume')}</p>
-		{/if}
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
+							<span class="muted small">{t('hastore.mountLine', { mount: entry.mount })}</span>
+							{#if entry.usage === 'backup'}
+								<div class="backup">
+									{#if entry.backup?.error}
+										<span class="muted small">{t('hastore.backupUnknown')}</span>
+									{:else if entry.backup?.latest}
+										<span class="small" class:warn={entry.backup.overdue}
+											>{t('hastore.backupLatest', {
+												name: entry.backup.name ?? '',
+												date: formatDateTime(new Date(entry.backup.latest)),
+											})}</span
+										>
+									{:else if entry.backup}
+										<span
+											class="small"
+											class:warn={entry.backup.overdue}
+											class:muted={!entry.backup.overdue}>{t('hastore.backupNone')}</span
+										>
+									{/if}
+									<label class="age small"
+										><span>{t('hastore.maxAge')}</span>
+										<select
+											class="field"
+											value={entry.maxAgeDays}
+											disabled={!!busy}
+											onchange={(event) => setAge(entry, Number(event.currentTarget.value))}
+										>
+											{#each ages as days (days)}<option value={days}
+													>{days ? t('hastore.days', { count: days }) : t('hastore.off')}</option
+												>{/each}
+										</select></label
+									>
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if !status.volumes.length && !status.shares.length}
+				<p class="notice-warn">{t('hastore.noVolume')}</p>
+			{/if}
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		</div>
+		<div class="srow-block actions">
 			<button
 				class="btn"
 				class:btn-primary={!status.entries.length}
@@ -337,9 +352,11 @@
 				>
 			{/if}
 		</div>
-		{#if hasBackups}<p class="muted hint">{t('hastore.maxAgeHint')}</p>{/if}
+		{#if hasBackups}<div class="srow-block">
+				<p class="muted hint">{t('hastore.maxAgeHint')}</p>
+			</div>{/if}
 	{/if}
-</section>
+</SettingRow>
 
 {#if adding && status}
 	<Dialog
@@ -609,6 +626,10 @@
 {/if}
 
 <style>
+	/* Nothing set up yet and nothing to say: no empty part. */
+	.srow-block:empty {
+		display: none;
+	}
 	.hint,
 	.account {
 		font-size: var(--text-md);

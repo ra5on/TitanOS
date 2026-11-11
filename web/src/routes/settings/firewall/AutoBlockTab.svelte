@@ -6,7 +6,8 @@
 	import { validSource } from '#lib/firewall.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { parseNetworks } from '#lib/ssh-networks.ts';
 
 	let { status, ontake }: { status: FirewallStatus; ontake: (next: FirewallStatus) => void } =
@@ -64,9 +65,12 @@
 	const sourceLabel = (source: string) => t(`firewall.source.${source}` as MessageKey);
 </script>
 
-{#if draft}<form
-		class="tile panel"
-		aria-labelledby="firewall-autoblock"
+{#if draft}
+	{@const d = draft}
+	<!-- PLAN 78-1: every value is a row; one Save for all of them (one request,
+	     and the list of exempt networks is typed text). -->
+	<form
+		class="rows"
 		onsubmit={(event) => {
 			event.preventDefault();
 			void save();
@@ -76,75 +80,112 @@
 			notice = '';
 		}}
 	>
-		<h2 class="tile-title" id="firewall-autoblock" use:revealTarget>{t('firewall.autoBlock')}</h2>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.enabled} /><span
-				>{t('firewall.autoBlockEnable')}</span
-			></label
-		>
-		<p class="muted">{t('firewall.autoBlockText')}</p>
-		<div class="numbers">
-			<label class="stack"
-				><span>{t('firewall.attempts')}</span><input
-					class="field"
-					type="number"
-					min="2"
-					max="100"
-					bind:value={draft.attempts}
-					disabled={!draft.enabled}
-				/></label
+		<SettingGroup title={t('firewall.autoBlock')} id="firewall-autoblock">
+			<SettingRow
+				icon="shield"
+				title={t('firewall.autoBlockEnable')}
+				desc={t('firewall.autoBlockText')}
+				for="fw-ab-enabled"
 			>
-			<label class="stack"
-				><span>{t('firewall.within')}</span><input
-					class="field"
-					type="number"
-					min="1"
-					max="1440"
-					bind:value={draft.within}
-					disabled={!draft.enabled}
-				/></label
-			>
-			<label class="stack"
-				><span>{t('firewall.blockMinutes')}</span><input
-					class="field"
-					type="number"
-					min="1"
-					max="525600"
-					bind:value={draft.minutes}
-					disabled={!draft.enabled || draft.permanent}
-				/></label
-			>
-		</div>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.permanent} disabled={!draft.enabled} /><span
-				>{t('firewall.permanent')}</span
-			></label
-		>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.exemptLocal} disabled={!draft.enabled} /><span
-				>{t('firewall.exemptLocal')}</span
-			></label
-		>
-		<label class="stack"
-			><span>{t('firewall.exempt')}</span><textarea
-				class="field mono"
-				rows="3"
-				spellcheck="false"
-				placeholder="203.0.113.0/24"
-				bind:value={exemptText}
-				disabled={!draft.enabled}></textarea></label
-		>
-		{#if !exemptValid}<p class="notice-warn" role="alert">{t('firewall.ruleSource')}</p>{/if}
-		<p class="muted small">{t('firewall.autoBlockSources')}</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		<div class="row-actions">
-			<button class="btn btn-primary" disabled={busy || !edited || !exemptValid}
-				>{t('common.save')}</button
-			>
-			{#if notice}<span class="muted" role="status">{notice}</span>{/if}
-		</div>
+				{#snippet control()}
+					<input
+						id="fw-ab-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="key" title={t('firewall.attempts')} for="fw-ab-attempts">
+				{#snippet control()}
+					<input
+						id="fw-ab-attempts"
+						class="field"
+						type="number"
+						min="2"
+						max="100"
+						bind:value={d.attempts}
+						disabled={!d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="clock" title={t('firewall.within')} for="fw-ab-within">
+				{#snippet control()}
+					<input
+						id="fw-ab-within"
+						class="field"
+						type="number"
+						min="1"
+						max="1440"
+						bind:value={d.within}
+						disabled={!d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="lock" title={t('firewall.blockMinutes')} for="fw-ab-minutes">
+				{#snippet control()}
+					<input
+						id="fw-ab-minutes"
+						class="field"
+						type="number"
+						min="1"
+						max="525600"
+						bind:value={d.minutes}
+						disabled={!d.enabled || d.permanent}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="lock" title={t('firewall.permanent')} for="fw-ab-permanent">
+				{#snippet control()}
+					<input
+						id="fw-ab-permanent"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.permanent}
+						disabled={!d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="home" title={t('firewall.exemptLocal')} for="fw-ab-local">
+				{#snippet control()}
+					<input
+						id="fw-ab-local"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={d.exemptLocal}
+						disabled={!d.enabled}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="list" title={t('firewall.exempt')} for="fw-ab-exempt">
+				{#snippet control()}
+					<textarea
+						id="fw-ab-exempt"
+						class="field mono"
+						rows="3"
+						spellcheck="false"
+						placeholder="203.0.113.0/24"
+						bind:value={exemptText}
+						disabled={!d.enabled}></textarea>
+				{/snippet}
+			</SettingRow>
+			{#if !exemptValid}<p class="notice-warn" role="alert">{t('firewall.ruleSource')}</p>{/if}
+			<p class="muted small">{t('firewall.autoBlockSources')}</p>
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !edited || !exemptValid}
+					>{t('common.save')}</button
+				>
+				{#if notice}<span class="muted" role="status">{notice}</span>{/if}
+			</div>
+		</SettingGroup>
+	</form>
 
-		<h3 class="divided">{t('firewall.blocked')}</h3>
+	<!-- The blocked senders stay a table. -->
+	<SettingGroup title={t('firewall.blocked')} id="firewall-blocked">
 		{#if status.blocked.length}<div class="table-wrap">
 				<table class="data-table">
 					<thead
@@ -175,7 +216,8 @@
 					</tbody>
 				</table>
 			</div>{:else}<p class="muted">{t('firewall.noBlocked')}</p>{/if}
-	</form>{/if}
+	</SettingGroup>
+{/if}
 
 {#if releasing}
 	<Dialog
@@ -197,13 +239,15 @@
 {/if}
 
 <style>
-	.numbers {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
+	form.rows {
+		display: contents;
 	}
-	.numbers .stack {
-		flex: 1 1 10rem;
+	textarea {
+		width: 20rem;
+		max-width: 100%;
+	}
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 	.small {
 		font-size: var(--text-base);

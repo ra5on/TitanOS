@@ -3,7 +3,9 @@
 	import TerminalSettings from '#lib/components/TerminalSettings.svelte';
 	import WebDavSettings from '#lib/components/WebDavSettings.svelte';
 	import StayLoggedInSettings from '#lib/components/StayLoggedInSettings.svelte';
-	import { revealTarget } from '#lib/reveal-target.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	// SSH access and the certificate of the web UI.
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -222,6 +224,14 @@
 		busy = false;
 	}
 
+	let certOpen = $state(false);
+	const certKind = $derived(
+		!certificate
+			? ''
+			: certificate.kind === 'titanos-ca'
+				? t('appaccess.certKindCa')
+				: t(`access.certKind.${certificate.kind}`),
+	);
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || system.info?.hostname || 'nas');
 	const daysLeft = $derived(
 		certificate ? Math.floor((Date.parse(certificate.notAfter) - Date.now()) / 86_400_000) : 0,
@@ -232,83 +242,114 @@
 
 <PageHead title={t('access.title')} />
 
-<section class="tile panel" aria-labelledby="access-ssh">
-	<h2 class="tile-title" id="access-ssh" use:revealTarget>{t('access.ssh')}</h2>
+<!-- PLAN 78-1: every access is a row of its own; what belongs to it opens
+     inside the row. The search anchors (#access-ssh, #access-cert …) are the
+     rows' ids. -->
+<SettingGroup title={t('access.groupRemote')}>
 	{#if ssh}
-		<div class="head">
-			<span class="chip {ssh.running ? 'ok' : ''}"
-				>{ssh.running ? t('access.sshRunning') : t('access.sshOff')}</span
-			>
-		</div>
-		<label class="check">
-			<input
-				type="checkbox"
-				checked={ssh.enabled}
-				disabled={sshBusy}
-				onchange={async (event) => {
-					const field = event.currentTarget;
-					await setSsh(field.checked);
-					field.checked = ssh?.enabled ?? false;
-				}}
-			/>
-			<span>{t('access.sshEnable')}</span>
-		</label>
-		<p class="muted">{t('access.sshText')}</p>
-		{#if ssh.enabled}
-			<dl>
-				<div>
-					<dt>{t('access.sshWho')}</dt>
-					<dd>{ssh.accounts.length ? ssh.accounts.join(', ') : t('access.sshNobody')}</dd>
+		{@const s = ssh}
+		<SettingRow
+			id="access-ssh"
+			icon="key"
+			title={t('access.sshEnable')}
+			desc={t('access.sshShort')}
+			for="access-ssh-switch"
+		>
+			{#snippet control()}
+				{#if sshBusy || sshSaved}<span role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</span
+					>{/if}
+				<span class="chip {s.running ? 'ok' : ''}"
+					>{s.running ? t('access.sshRunning') : t('access.sshOff')}</span
+				>
+				<input
+					id="access-ssh-switch"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={s.enabled}
+					disabled={sshBusy}
+					onchange={async (event) => {
+						const field = event.currentTarget;
+						await setSsh(field.checked);
+						field.checked = ssh?.enabled ?? false;
+					}}
+				/>
+			{/snippet}
+			<div class="srow-block"><p class="muted">{t('access.sshText')}</p></div>
+			{#if s.enabled}
+				<SettingSub title={t('access.sshWho')}>
+					{#snippet control()}<span class="value"
+							>{s.accounts.length ? s.accounts.join(', ') : t('access.sshNobody')}</span
+						>{/snippet}
+				</SettingSub>
+				<SettingSub title={t('access.sshCommand')}>
+					{#snippet control()}<span class="value mono">ssh {session.data?.user?.name}@{host}</span
+						>{/snippet}
+				</SettingSub>
+				<SettingSub title={t('access.sshFingerprint')}>
+					{#snippet control()}<span class="value mono">{s.fingerprint || '–'}</span>{/snippet}
+				</SettingSub>
+				<div class="srow-block">
+					{#if s.accounts.length === 0}<p class="notice-warn">
+							{t('access.sshNoKeys')} <a href="/account">{t('menu.account')}</a>
+						</p>{/if}
+					<p class="muted">{t('access.sshNote')}</p>
 				</div>
-				<div>
-					<dt>{t('access.sshCommand')}</dt>
-					<dd class="mono">ssh {session.data?.user?.name}@{host}</dd>
-				</div>
-				<div class="wide">
-					<dt>{t('access.sshFingerprint')}</dt>
-					<dd class="mono">{ssh.fingerprint || '–'}</dd>
-				</div>
-			</dl>
-			{#if ssh.accounts.length === 0}<p class="notice-warn">
-					{t('access.sshNoKeys')} <a href="/account">{t('menu.account')}</a>
-				</p>{/if}
-			<p class="muted">{t('access.sshNote')}</p>
-		{/if}
-		<div class="networks divided">
-			<h3 id="access-ssh-networks">{t('access.sshNetworks')}</h3>
-			<p class="muted">{t('access.sshNetworksText')}</p>
-			<p>
-				{ssh.allowedNetworks.length
-					? t('access.sshNetworksActive', { list: ssh.allowedNetworks.join(', ') })
-					: t('access.sshNetworksAll')}
-			</p>
-			{#if ssh.networksError}<p class="notice-error" role="alert">
-					{t('access.sshNetworksError', { detail: ssh.networksError })}
-				</p>{/if}
-			<textarea
-				class="field mono"
-				rows="4"
-				aria-labelledby="access-ssh-networks"
-				placeholder="192.168.1.0/24"
-				spellcheck="false"
-				bind:value={netText}
-				oninput={() => (netEdited = true)}
-				disabled={netBusy}></textarea>
-			<div class="row-actions">
+			{/if}
+		</SettingRow>
+	{/if}
+	{#if sshError}<div class="notice-error" role="alert">
+			{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button>
+		</div>{:else if !ssh}<p class="loading" role="status">{t('common.loading')}</p>{/if}
+	{#if sshStuck && ssh && ssh.enabled !== ssh.running}<div class="notice-warn" role="alert">
+			{t(ssh.enabled ? 'access.sshNotStarted' : 'access.sshNotStopped')}
+			<button class="btn" onclick={retrySsh}>{t('ui.retry')}</button>
+		</div>{/if}
+	{#if ssh}
+		{@const s = ssh}
+		<!-- The list is typed text: it keeps its own Save. -->
+		<SettingRow
+			id="access-ssh-networks"
+			icon="globe"
+			title={t('access.sshNetworks')}
+			desc={t('access.sshNetworksShort')}
+			summary={s.allowedNetworks.length
+				? s.allowedNetworks.join(', ')
+				: t('access.sshNetworksAllShort')}
+		>
+			<div class="srow-block">
+				<p class="muted">{t('access.sshNetworksText')}</p>
+				<p>
+					{s.allowedNetworks.length
+						? t('access.sshNetworksActive', { list: s.allowedNetworks.join(', ') })
+						: t('access.sshNetworksAll')}
+				</p>
+				{#if s.networksError}<p class="notice-error" role="alert">
+						{t('access.sshNetworksError', { detail: s.networksError })}
+					</p>{/if}
+				<textarea
+					class="field mono networks"
+					rows="4"
+					aria-label={t('access.sshNetworks')}
+					placeholder="192.168.1.0/24"
+					spellcheck="false"
+					bind:value={netText}
+					oninput={() => (netEdited = true)}
+					disabled={netBusy}></textarea>
+			</div>
+			<div class="srow-block actions">
 				<button
 					type="button"
 					class="btn"
-					disabled={netBusy || ssh.homeNetworks.length === 0}
-					title={ssh.homeNetworks.length
-						? ssh.homeNetworks.join(', ')
-						: t('access.sshNetworksNoHome')}
+					disabled={netBusy || s.homeNetworks.length === 0}
+					title={s.homeNetworks.length ? s.homeNetworks.join(', ') : t('access.sshNetworksNoHome')}
 					onclick={() => addPreset(ssh?.homeNetworks ?? [])}>{t('access.sshNetworksHome')}</button
 				>
 				<button
 					type="button"
 					class="btn"
 					disabled={netBusy}
-					title={ssh.tailscaleNetworks.join(', ')}
+					title={s.tailscaleNetworks.join(', ')}
 					onclick={() => addPreset(ssh?.tailscaleNetworks ?? [])}
 					>{t('access.sshNetworksTailscale')}</button
 				>
@@ -316,7 +357,7 @@
 					type="button"
 					class="btn"
 					disabled={netBusy}
-					title={ssh.netbirdNetworks.join(', ')}
+					title={s.netbirdNetworks.join(', ')}
 					onclick={() => addPreset(ssh?.netbirdNetworks ?? [])}
 					>{t('access.sshNetworksNetbird')}</button
 				>
@@ -326,85 +367,64 @@
 					disabled={netBusy || !netChanged}
 					onclick={() => saveNetworks()}>{t('access.sshNetworksSave')}</button
 				>
+				{#if netBusy || netSaved}<span role="status">{t(netBusy ? 'ui.saving' : 'ui.saved')}</span
+					>{/if}
 			</div>
-			{#if ssh.homeNetworks.length === 0}<p class="muted">{t('access.sshNetworksNoHome')}</p>{/if}
-			{#if ssh.clientAddress}<p class="muted">
-					{t('access.sshNetworksYou', { address: ssh.clientAddress })}
-				</p>{/if}
-			{#if netBusy || netSaved}<p role="status">{t(netBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
-			{#if netError}<p class="notice-error" role="alert">{netError}</p>{/if}
-			<p class="muted">{t('access.sshNetworksRecovery')}</p>
-		</div>
+			<div class="srow-block">
+				{#if s.homeNetworks.length === 0}<p class="muted">{t('access.sshNetworksNoHome')}</p>{/if}
+				{#if s.clientAddress}<p class="muted">
+						{t('access.sshNetworksYou', { address: s.clientAddress })}
+					</p>{/if}
+				{#if netError}<p class="notice-error" role="alert">{netError}</p>{/if}
+				<p class="muted">{t('access.sshNetworksRecovery')}</p>
+			</div>
+		</SettingRow>
 	{/if}
-	{#if sshBusy || sshSaved}<p role="status">{t(sshBusy ? 'ui.saving' : 'ui.saved')}</p>{/if}
-	{#if sshError}<div class="notice-error" role="alert">
-			{sshError}<button class="btn" onclick={loadSsh}>{t('ui.retry')}</button>
-		</div>{:else if !ssh}<p class="loading" role="status">{t('common.loading')}</p>{/if}
-	{#if sshStuck && ssh && ssh.enabled !== ssh.running}<div class="notice-warn" role="alert">
-			{t(ssh.enabled ? 'access.sshNotStarted' : 'access.sshNotStopped')}
-			<button class="btn" onclick={retrySsh}>{t('ui.retry')}</button>
-		</div>{/if}
-</section>
+	<WebDavSettings />
+</SettingGroup>
 
-<section class="tile panel" aria-labelledby="access-cert">
-	<h2 class="tile-title" id="access-cert" use:revealTarget>{t('access.cert')}</h2>
-	{#if error}<div class="notice-error" role="alert">
-			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}<button
-				class="btn"
-				onclick={loadCertificate}>{t('ui.retry')}</button
-			>
-		</div>{/if}
-	{#if noTls}
-		<p class="muted">{t('access.certNone')}</p>
-	{:else if certificate}
-		{#if certificate.kind === 'self-signed'}
-			<p class="muted">{t('access.certSelf')}</p>
-		{:else if certificate.kind === 'titanos-ca'}
-			<p class="muted">
-				{t('appaccess.certCa')}
-				<a href="/settings/proxy#proxy-ca">{t('appaccess.certCaLink')}</a>
-			</p>
-		{:else if daysLeft < 14}
-			<p class="notice-warn">{t('access.certExpiring', { days: Math.max(daysLeft, 0) })}</p>
-		{/if}
-		{#if saved}<p class="notice-ok" role="status">{t('access.certSaved')}</p>{/if}
-		{#if certificate.letsEncrypt}<p class="notice-ok">
-				{t('access.letsEncryptActive', {
-					names: certificate.letsEncrypt.names.join(', '),
-					date: formatDateTime(new Date(certificate.letsEncrypt.notAfter)),
-				})}
-				<a href="/settings/letsencrypt">{t('letsencrypt.title')}</a>
-			</p>{:else}<p class="muted">
-				<a href="/settings/letsencrypt">{t('access.letsEncryptLink')}</a>
-			</p>{/if}
-		<dl>
-			<div>
-				<dt>{t('access.certKind')}</dt>
-				<dd>
-					{certificate.kind === 'titanos-ca'
-						? t('appaccess.certKindCa')
-						: t(`access.certKind.${certificate.kind}`)}
-				</dd>
-			</div>
-			<div>
-				<dt>{t('access.certIssuer')}</dt>
-				<dd>{certificate.issuer || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('access.certUntil')}</dt>
-				<dd>{formatDateTime(new Date(certificate.notAfter))}</dd>
-			</div>
-			<div class="wide">
-				<dt>{t('access.certNames')}</dt>
-				<dd class="mono">{certificate.names.join(', ')}</dd>
-			</div>
-			<div class="wide">
-				<dt>{t('access.certFingerprint')}</dt>
-				<dd class="mono small">{fingerprint}</dd>
-			</div>
-		</dl>
+{#snippet certParts()}
+	{#if certificate}
+		{@const c = certificate}
+		<div class="srow-block">
+			{#if c.kind === 'self-signed'}
+				<p class="muted">{t('access.certSelf')}</p>
+			{:else if c.kind === 'titanos-ca'}
+				<p class="muted">
+					{t('appaccess.certCa')}
+					<a href="/settings/proxy#proxy-ca">{t('appaccess.certCaLink')}</a>
+				</p>
+			{:else if daysLeft < 14}
+				<p class="notice-warn">{t('access.certExpiring', { days: Math.max(daysLeft, 0) })}</p>
+			{/if}
+			{#if c.letsEncrypt}<p class="notice-ok">
+					{t('access.letsEncryptActive', {
+						names: c.letsEncrypt.names.join(', '),
+						date: formatDateTime(new Date(c.letsEncrypt.notAfter)),
+					})}
+					<a href="/settings/letsencrypt">{t('letsencrypt.title')}</a>
+				</p>{:else}<p class="muted">
+					<a href="/settings/letsencrypt">{t('access.letsEncryptLink')}</a>
+				</p>{/if}
+		</div>
+		<SettingSub title={t('access.certKind')}>
+			{#snippet control()}<span class="value">{certKind}</span>{/snippet}
+		</SettingSub>
+		<SettingSub title={t('access.certIssuer')}>
+			{#snippet control()}<span class="value">{c.issuer || '–'}</span>{/snippet}
+		</SettingSub>
+		<SettingSub title={t('access.certUntil')}>
+			{#snippet control()}<span class="value">{formatDateTime(new Date(c.notAfter))}</span
+				>{/snippet}
+		</SettingSub>
+		<SettingSub title={t('access.certNames')}>
+			{#snippet control()}<span class="value mono">{c.names.join(', ')}</span>{/snippet}
+		</SettingSub>
+		<SettingSub title={t('access.certFingerprint')}>
+			{#snippet control()}<span class="value mono small">{fingerprint}</span>{/snippet}
+		</SettingSub>
 		{#if replacing}
-			<form class="divided" onsubmit={saveCertificate}>
+			<form class="srow-block" onsubmit={saveCertificate}>
 				<p class="muted">{t('access.certFormHint')}</p>
 				<label class="stack"
 					><span>{t('access.certChain')}</span>
@@ -447,11 +467,11 @@
 				</div>
 			</form>
 		{:else}
-			<div class="row-actions">
+			<div class="srow-block actions">
 				<button type="button" class="btn" onclick={() => ((replacing = true), (saved = false))}
-					>{t(certificate.kind === 'custom' ? 'access.certReplace' : 'access.certOwn')}</button
+					>{t(c.kind === 'custom' ? 'access.certReplace' : 'access.certOwn')}</button
 				>
-				{#if certificate.kind === 'custom'}<button
+				{#if c.kind === 'custom'}<button
 						type="button"
 						class="btn"
 						onclick={() => ((removing = true), (error = null))}
@@ -460,7 +480,33 @@
 			</div>
 		{/if}
 	{/if}
-</section>
+{/snippet}
+
+<SettingGroup title={t('access.groupWeb')}>
+	{#if error}<div class="notice-error" role="alert">
+			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}<button
+				class="btn"
+				onclick={loadCertificate}>{t('ui.retry')}</button
+			>
+		</div>{/if}
+	{#if saved}<p class="notice-ok" role="status">{t('access.certSaved')}</p>{/if}
+	<SettingRow
+		id="access-cert"
+		icon="lock"
+		title={t('access.cert')}
+		desc={noTls ? t('access.certNone') : undefined}
+		summary={certificate ? certKind : undefined}
+		bind:open={certOpen}
+		children={certificate && !noTls ? certParts : undefined}
+	>
+		{#snippet control()}
+			{#if certificate?.kind === 'custom' && daysLeft < 14}<span class="chip warn"
+					>{t('access.certExpiringShort')}</span
+				>{/if}
+		{/snippet}
+	</SettingRow>
+	<StayLoggedInSettings />
+</SettingGroup>
 
 {#if netConfirm && ssh}
 	<Dialog
@@ -498,56 +544,19 @@
 	</Dialog>
 {/if}
 
-<StayLoggedInSettings />
 <TerminalSettings />
-<WebDavSettings />
 
 <style>
-	section {
-		font-size: var(--text-md);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-3);
-	}
-	dl {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: var(--space-3) var(--space-5);
-		margin: 0;
+	/* A value at the right of its name: it wraps, never cut. */
+	.value {
+		color: var(--text);
+		overflow-wrap: anywhere;
 	}
 	.networks {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-	}
-	.networks h3 {
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.networks textarea {
 		max-width: 32rem;
-	}
-	.wide {
-		grid-column: 1 / -1;
-	}
-	dt {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	dd {
-		margin: 2px 0 0;
-		overflow-wrap: anywhere;
 	}
 	.small {
 		font-size: var(--text-sm);
-	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
 	}
 	textarea {
 		height: auto;

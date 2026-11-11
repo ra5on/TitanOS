@@ -2,6 +2,9 @@
 	// Settings › Temperatures › Fans (backend package fans): every fan stays
 	// with the BIOS until it gets a fixed speed or a curve here.
 	import { poll } from '#lib/poll.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -91,102 +94,120 @@
 	const sensors = $derived((system.info?.temperatures ?? []).filter((s) => s.celsius !== null));
 </script>
 
-<section class="tile panel" id="fans" aria-labelledby="fans-title">
-	<h2 class="tile-title" id="fans-title">{t('fans.title')}</h2>
-	<p class="muted">{t('fans.intro')}</p>
+<!-- PLAN 78-1: every fan is a row that opens (its state at the right);
+     one Save for all of them, as the request carries every fan. -->
+<SettingGroup title={t('fans.title')} id="fans" desc={t('fans.intro')}>
 	{#if readOnly}<p class="notice-warn">{t('fans.readOnly')}</p>{/if}
 	{#if fans && fans.length === 0}<p class="muted">{t('fans.none')}</p>{/if}
-	{#each fans ?? [] as fan (fan.id)}
+	{#each fans ?? [] as fan, n (fan.id)}
 		{@const d = drafts[fan.id]}
 		{#if d}
-			<div class="fan">
-				<div class="head">
-					<strong>{fan.label}</strong>
-					<span class="muted mono">{fan.chip}</span>
-					<span class="mono"
-						>{fan.rpm === null ? '–' : t('fans.rpm', { rpm: String(fan.rpm) })} · {fan.percent} %</span
-					>
-					{#if fan.sensorC !== undefined}<span class="mono muted">{fan.sensorC.toFixed(0)} °C</span
-						>{/if}
-				</div>
-				{#if fan.error}<p class="notice-warn">{fan.error}</p>{/if}
-				<div class="modes" role="radiogroup" aria-label={t('fans.mode')}>
-					{#each ['bios', 'fixed', 'curve'] as mode (mode)}
-						<label class="check"
-							><input
-								type="radio"
-								name="mode-{fan.id}"
-								checked={d.mode === mode}
-								disabled={busy || readOnly}
-								onchange={() => setMode(fan.id, mode as Control['mode'])}
-							/><span>{t(`fans.mode.${mode}` as never)}</span></label
-						>
-					{/each}
-				</div>
-				{#if d.mode === 'fixed'}
-					<label class="stack"
-						><span>{t('fans.fixed', { percent: String(d.percent ?? 60) })}</span><input
-							type="range"
-							min={d.min}
-							max="100"
-							step="5"
-							bind:value={d.percent}
-							disabled={busy || readOnly}
-						/></label
-					>
-				{:else if d.mode === 'curve'}
-					<label class="stack"
-						><span>{t('fans.sensor')}</span><select
+			<SettingRow
+				id="fan-{n}"
+				icon="activity"
+				title={fan.label}
+				summary={[
+					fan.rpm === null ? '–' : t('fans.rpm', { rpm: String(fan.rpm) }),
+					`${fan.percent} %`,
+					...(fan.sensorC !== undefined ? [`${fan.sensorC.toFixed(0)} °C`] : []),
+					t(`fans.mode.${d.mode}` as never),
+				].join(' · ')}
+			>
+				{#snippet description()}<span class="mono">{fan.chip}</span>{/snippet}
+				{#if fan.error}<div class="srow-block"><p class="notice-warn">{fan.error}</p></div>{/if}
+				<SettingSub title={t('fans.mode')} for="fan-{n}-mode">
+					{#snippet control()}
+						<select
+							id="fan-{n}-mode"
 							class="field"
-							bind:value={d.sensor}
+							value={d.mode}
 							disabled={busy || readOnly}
-							><option value="disks">{t('fans.disks')}</option>{#each sensors as s (s.id)}<option
-									value={s.id}>{s.chip} · {s.label} ({s.celsius?.toFixed(0)} °C)</option
-								>{/each}</select
-						></label
+							onchange={(e) => setMode(fan.id, e.currentTarget.value as Control['mode'])}
+						>
+							{#each ['bios', 'fixed', 'curve'] as mode (mode)}<option value={mode}
+									>{t(`fans.mode.${mode}` as never)}</option
+								>{/each}
+						</select>
+					{/snippet}
+				</SettingSub>
+				{#if d.mode === 'fixed'}
+					<SettingSub
+						title={t('fans.fixed', { percent: String(d.percent ?? 60) })}
+						for="fan-{n}-percent"
 					>
-					<div class="points">
-						<span class="muted small">{t('fans.points')}</span>
-						{#each d.points ?? [] as point, i (i)}
-							<span class="point"
-								><input
-									class="field mono"
-									type="number"
-									min="0"
-									max="110"
-									bind:value={point.celsius}
-									aria-label={t('fans.celsius')}
-									disabled={busy || readOnly}
-								/>
-								°C →
-								<input
-									class="field mono"
-									type="number"
-									min="0"
-									max="100"
-									step="5"
-									bind:value={point.percent}
-									aria-label={t('fans.percent')}
-									disabled={busy || readOnly}
-								/> %</span
+						{#snippet control()}
+							<input
+								id="fan-{n}-percent"
+								type="range"
+								min={d.min}
+								max="100"
+								step="5"
+								bind:value={d.percent}
+								disabled={busy || readOnly}
+							/>
+						{/snippet}
+					</SettingSub>
+				{:else if d.mode === 'curve'}
+					<SettingSub title={t('fans.sensor')} for="fan-{n}-sensor">
+						{#snippet control()}
+							<select
+								id="fan-{n}-sensor"
+								class="field"
+								bind:value={d.sensor}
+								disabled={busy || readOnly}
+								><option value="disks">{t('fans.disks')}</option>{#each sensors as s (s.id)}<option
+										value={s.id}>{s.chip} · {s.label} ({s.celsius?.toFixed(0)} °C)</option
+									>{/each}</select
 							>
-						{/each}
+						{/snippet}
+					</SettingSub>
+					<div class="srow-block">
+						<div class="points" role="group" aria-label={t('fans.points')}>
+							<span class="muted small">{t('fans.points')}</span>
+							{#each d.points ?? [] as point, i (i)}
+								<span class="point"
+									><input
+										class="field mono"
+										type="number"
+										min="0"
+										max="110"
+										bind:value={point.celsius}
+										aria-label={t('fans.celsius')}
+										disabled={busy || readOnly}
+									/>
+									°C →
+									<input
+										class="field mono"
+										type="number"
+										min="0"
+										max="100"
+										step="5"
+										bind:value={point.percent}
+										aria-label={t('fans.percent')}
+										disabled={busy || readOnly}
+									/> %</span
+								>
+							{/each}
+						</div>
 					</div>
 				{/if}
 				{#if d.mode !== 'bios'}
-					<label class="stack narrow"
-						><span>{t('fans.min')}</span><input
-							class="field mono"
-							type="number"
-							min="20"
-							max="100"
-							step="5"
-							bind:value={d.min}
-							disabled={busy || readOnly}
-						/></label
-					>
+					<SettingSub title={t('fans.min')} for="fan-{n}-min">
+						{#snippet control()}
+							<input
+								id="fan-{n}-min"
+								class="field mono"
+								type="number"
+								min="20"
+								max="100"
+								step="5"
+								bind:value={d.min}
+								disabled={busy || readOnly}
+							/>
+						{/snippet}
+					</SettingSub>
 				{/if}
-			</div>
+			</SettingRow>
 		{/if}
 	{/each}
 	<p class="muted small">{t('fans.safety')}</p>
@@ -199,26 +220,21 @@
 			{#if saved}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
 		</div>
 	{/if}
-</section>
+</SettingGroup>
 
 <style>
-	.fan {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-3) 0;
-		border-bottom: 1px solid var(--panel-border);
+	p {
+		margin: 0;
 	}
-	.head {
+	.small {
+		margin-top: var(--space-1-5);
+	}
+	.row-actions {
 		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--space-2-5);
-		flex-wrap: wrap;
-		align-items: baseline;
-	}
-	.modes {
-		display: flex;
-		gap: var(--space-4);
-		flex-wrap: wrap;
+		margin-top: var(--space-2);
 	}
 	.points {
 		display: flex;
@@ -235,7 +251,8 @@
 	.point input {
 		width: 4.5rem;
 	}
-	.narrow input {
-		width: 6rem;
+	input[type='range'] {
+		width: 14rem;
+		max-width: 100%;
 	}
 </style>

@@ -330,16 +330,23 @@ try {
     await page.getByRole("textbox", { name: "Name des NAS" }).inputValue(),
     "titan-test",
   );
+  // PLAN 78-1: a network is a row; its actions stand in the opened row.
   await page
-    .getByRole("button", { name: "Aktionen für Verwaltung", exact: true })
+    .getByRole("button", { name: "Verwaltung: Aufklappen", exact: true })
     .click();
+  const netActions = page.getByRole("group", {
+    name: "Aktionen für Verwaltung",
+    exact: true,
+  });
   assert.ok(
-    await page
-      .getByRole("menuitem", { name: "Entfernen", exact: true })
+    await netActions
+      .getByRole("button", { name: "Entfernen", exact: true })
       .isDisabled(),
     "management network removable",
   );
-  await page.getByRole("menuitem", { name: "Bearbeiten", exact: true }).click();
+  await netActions
+    .getByRole("button", { name: "Bearbeiten", exact: true })
+    .click();
   await page.getByRole("dialog", { name: "Netz bearbeiten" }).waitFor();
   await page
     .getByRole("dialog")

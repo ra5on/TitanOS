@@ -67,16 +67,16 @@ test('the HTTPS names of apps have their own admin-only settings page', async ()
 		assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
 });
 
-test('the settings navigation keeps its four groups in order, sorts entries A–Z and filters by role', async () => {
+test('the settings navigation keeps its eight areas in order, sorts entries A–Z and filters by role', async () => {
 	const { settingsEntries } = await import('../src/lib/settings-search.ts');
 	const { readFileSync } = await import('node:fs');
 	const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url), 'utf8'));
 	const label = (key) => de[key] ?? key;
 	const admin = settingsEntries('', true, label);
-	// PLAN 61: System, Network, Accounts and services, Data – in this order.
+	// PLAN 78 (draft 78): the eight areas of the menu – in this order.
 	assert.deepEqual(
 		admin.map((g) => g.group),
-		['system', 'network', 'accounts', 'data'],
+		['system', 'hardware', 'network', 'accounts', 'services', 'ai', 'data', 'updates'],
 	);
 	const order = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 	for (const g of admin) {
@@ -172,28 +172,67 @@ test('"new" badges end by themselves after two minor versions or 30 days', async
 	assert.ok(!stillNew({ version: '0.31.0', date: '2026-10-28' }, '0.40.0', day('2026-10-31')));
 });
 
-test('PLAN 71: the side bar search of Systemsteuerung finds areas by name, keyword and section', async () => {
-	const { settingsSideMatches, settingsSideAllowed } =
+test('PLAN 78: the menu of Systemsteuerung lists the areas an account may open; its search finds pages and sections', async () => {
+	const { settingsEntries, settingsMenu, settingsSideAllowed, settingsCrumbs, settingsGroupOf } =
 		await import('../src/lib/settings-search.ts');
-	const { SYSTEM_APPS } = await import('../src/lib/desktop/apps.ts');
+	const { SYSTEM_APPS, sideActive } = await import('../src/lib/desktop/apps.ts');
 	const { readFileSync, readdirSync } = await import('node:fs');
 	const dir = new URL('../src/lib/i18n/', import.meta.url);
 	const de = JSON.parse(readFileSync(new URL('de.json', dir), 'utf8'));
 	for (const f of readdirSync(new URL('features/', dir)).filter((n) => n.endsWith('.de.json')))
 		Object.assign(de, JSON.parse(readFileSync(new URL('features/' + f, dir), 'utf8')));
 	const label = (key) => de[key] ?? key;
-	const items = SYSTEM_APPS.find((a) => a.id === 'settings').side.filter((i) => 'href' in i);
-	const find = (q, admin = true) => settingsSideMatches(q, admin, label, items);
-	// A section hit shows its area and leads to the section's anchor.
-	assert.deepEqual([...find('ssh')], [['/settings/access', '/settings/access#access-ssh']]);
-	assert.ok(find('Zeitzone').has('/settings/timezone'));
-	assert.ok(find('platten-ruhe').has('/settings/energy'));
-	// The side bar's own name counts too ("Übersicht", "Fernzugriff" …).
-	assert.ok(find('übersicht').has('/settings'));
-	assert.equal(find('xyzzy').size, 0);
+	const find = (q, admin = true) =>
+		settingsEntries(q, admin, label).flatMap((g) => g.entries.map((e) => e.href));
+	// A section hit leads to the section's anchor.
+	assert.deepEqual(find('ssh'), ['/settings/access#access-ssh']);
+	assert.ok(find('Zeitzone').includes('/settings/timezone'));
+	assert.ok(find('platten-ruhe').includes('/settings/energy'));
+	assert.equal(find('xyzzy').length, 0);
 	// Accounts with the role "user" only find what they may open.
-	assert.equal(find('ssh', false).size, 0);
-	assert.ok(find('darstellung', false).has('/settings/appearance'));
+	assert.equal(find('ssh', false).length, 0);
+	assert.ok(find('darstellung', false).includes('/settings/appearance'));
 	assert.ok(settingsSideAllowed('/settings', false));
 	assert.ok(!settingsSideAllowed('/settings/network', false));
+
+	// The menu: every area with its name; an account sees only areas with a page it may open.
+	const menu = settingsMenu(true);
+	assert.deepEqual(
+		menu.map((e) => label(e.label)),
+		[
+			'System',
+			'Hardware und Energie',
+			'Netzwerk',
+			'Konten und Zugang',
+			'Dienste und Meldungen',
+			'KI und Smart Home',
+			'Daten und Sicherung',
+			'Updates',
+		],
+	);
+	// An area with one page leads straight to it.
+	assert.equal(menu.at(-1).href, '/settings/updates');
+	assert.equal(menu[1].href, '/settings?area=hardware');
+	const user = settingsMenu(false);
+	assert.deepEqual(
+		user.map((e) => e.group),
+		['system', 'hardware', 'accounts', 'ai'],
+	);
+	for (const entry of user) for (const page of entry.pages) assert.ok(!page.admin, page.id);
+	// The path above a page's title and the area an address belongs to.
+	assert.deepEqual(settingsCrumbs('/settings/energy', true), [
+		{ label: 'settingshome.group.hardware', href: '/settings?area=hardware' },
+	]);
+	assert.deepEqual(
+		settingsCrumbs('/settings/backups/coverage', true).map((c) => c.href),
+		['/settings?area=data', '/settings/backups'],
+	);
+	assert.deepEqual(settingsCrumbs('/settings', true), []);
+	assert.equal(settingsGroupOf('/settings?area=network'), 'network');
+	assert.equal(settingsGroupOf('/settings/ups'), 'hardware');
+	assert.equal(settingsGroupOf('/settings'), undefined);
+	// The window's side list carries the same areas (phone menu, menu bar).
+	const side = SYSTEM_APPS.find((a) => a.id === 'settings').side;
+	assert.equal(side.length, 9);
+	assert.ok(sideActive(side[2], '/settings/energy', side));
 });

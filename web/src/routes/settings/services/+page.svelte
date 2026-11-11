@@ -7,7 +7,9 @@
 	// apps and VMs start only when TitanOS is ready (volumes, shares over
 	// SMB/NFS) plus an extra wait, in an order with a wait after each entry.
 	import PageHead from '#lib/components/PageHead.svelte';
-	import Icon from '#lib/components/Icon.svelte';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api, type DockerStatus, type VMStatus } from '#lib/api.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { loadServices } from '#lib/session.svelte.ts';
@@ -15,6 +17,7 @@
 	type Service = { enabled: boolean; running: number; total: number; available: boolean };
 	type Name = 'docker' | 'vms' | 'lxc';
 	const NAMES: Name[] = ['docker', 'vms', 'lxc'];
+	const ICONS: Record<Name, IconName> = { docker: 'box', vms: 'monitor', lxc: 'terminal' };
 
 	let services = $state<Partial<Record<Name, Service>>>({});
 	let error = $state('');
@@ -132,32 +135,30 @@
 
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
-<section class="tile ui-card" aria-labelledby="sv-services">
-	<div class="card-head"><h2 id="sv-services">{t('services.title')}</h2></div>
+<!-- PLAN 78-1: every service is a row with its state and its switch. -->
+<SettingGroup title={t('services.title')} id="sv-services">
 	{#each NAMES as name (name)}
 		{@const service = services[name]}
 		{#if service}
-			<div class="set-row">
-				<span class="set-label"
-					><span class="title"
-						>{t(`services.${name}` as MessageKey)}
-						<span class="chip {service.enabled ? 'ok' : ''}"
-							>{service.enabled ? '● ' + t('services.on') : '○ ' + t('services.off')}</span
-						></span
-					><span class="set-hint">{t(`services.${name}Desc` as MessageKey)}</span><span
-						class="set-hint"
+			<SettingRow icon={ICONS[name]} title={t(`services.${name}` as MessageKey)} for="sv-{name}">
+				{#snippet description()}
+					{t(`services.${name}Desc` as MessageKey)}
+					<span class="state"
 						>{#if !service.available}{t('services.unavailable')}{:else if service.enabled}{t(
 								'services.counts',
 								{ running: service.running, total: service.total },
 							)}{:else}{t('services.offHint')}{/if}</span
-					></span
-				>
-				<span class="set-control end"
-					><input
+					>
+				{/snippet}
+				{#snippet control()}
+					<span class="chip {service.enabled ? 'ok' : ''}"
+						>{service.enabled ? '● ' + t('services.on') : '○ ' + t('services.off')}</span
+					>
+					<input
+						id="sv-{name}"
 						type="checkbox"
 						class="switch"
 						role="switch"
-						aria-label={t(`services.${name}` as MessageKey)}
 						checked={service.enabled}
 						disabled={busy !== '' || (!service.available && !service.enabled)}
 						onchange={(e) => {
@@ -165,9 +166,9 @@
 							e.currentTarget.checked = service.enabled;
 							toggle(name, on);
 						}}
-					/></span
-				>
-			</div>
+					/>
+				{/snippet}
+			</SettingRow>
 			{#if asking === name}
 				<div class="notice-warn ask" role="alert">
 					<p>
@@ -188,62 +189,55 @@
 			{/if}
 		{/if}
 	{/each}
-</section>
+</SettingGroup>
 
 {#if startup}
-	<section class="tile ui-card" aria-labelledby="sv-start">
-		<div class="card-head"><h2 id="sv-start">{t('startup.title')}</h2></div>
-		<div class="set-row">
-			<span class="set-label"
-				>{t('startup.waitReady')}<span class="set-hint">{t('startup.waitReadyHint')}</span></span
-			>
-			<span class="set-control end"
-				><input
+	<!-- The start after booting is one form with one Save (the bar below):
+	     the request carries the waits and the whole order. -->
+	<SettingGroup title={t('startup.title')} id="sv-start">
+		<SettingRow
+			icon="power"
+			title={t('startup.waitReady')}
+			desc={t('startup.waitReadyHint')}
+			for="sv-wait-ready"
+		>
+			{#snippet control()}
+				<input
+					id="sv-wait-ready"
 					type="checkbox"
 					class="switch"
 					role="switch"
-					aria-label={t('startup.waitReady')}
-					checked={!startup.noWait}
+					checked={!startup!.noWait}
 					onchange={(e) => (startup!.noWait = !e.currentTarget.checked)}
-				/></span
-			>
-		</div>
-		<div class="set-row">
-			<span class="set-label"
-				>{t('startup.extra')}<span class="set-hint">{t('startup.extraHint')}</span></span
-			>
-			<span class="set-control end"
-				><select
-					class="field"
-					aria-label={t('startup.extra')}
-					disabled={startup.noWait}
-					bind:value={startup.extra}
-				>
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			icon="clock"
+			title={t('startup.extra')}
+			desc={t('startup.extraHint')}
+			for="sv-extra"
+		>
+			{#snippet control()}
+				<select id="sv-extra" class="field" disabled={startup!.noWait} bind:value={startup!.extra}>
 					{#each EXTRAS as s (s)}<option value={s}>{t('startup.seconds', { count: s })}</option
 						>{/each}
-				</select></span
-			>
-		</div>
-	</section>
+				</select>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
 
-	<section class="tile ui-card" aria-labelledby="sv-order">
-		<div class="card-head">
-			<h2 id="sv-order">{t('startup.order')}</h2>
-			<span class="set-hint">{t('startup.orderHint')}</span>
-		</div>
+	<SettingGroup title={t('startup.order')} id="sv-order" desc={t('startup.orderHint')}>
 		{#each startup.order as entry, i (entry.kind + '/' + entry.name)}
-			<div class="set-row entry">
-				<span class="set-label"
-					><span class="title"><span class="num">{i + 1}.</span> {entry.name}</span><span
-						class="set-hint"
-						>{t(
-							entry.kind === 'vm' ? 'startup.kindVm' : 'startup.kindApp',
-						)}{#if entry.kind === 'vm' && !vmAutostart(entry.name)}{' · '}{t(
-								'startup.vmAutostartOff',
-							)}{/if}</span
-					></span
-				>
-				<span class="set-control end controls">
+			<SettingRow
+				icon={entry.kind === 'vm' ? 'monitor' : 'box'}
+				title="{i + 1}. {entry.name}"
+				desc={t(entry.kind === 'vm' ? 'startup.kindVm' : 'startup.kindApp') +
+					(entry.kind === 'vm' && !vmAutostart(entry.name)
+						? ' · ' + t('startup.vmAutostartOff')
+						: '')}
+			>
+				{#snippet control()}
 					<button
 						type="button"
 						class="btn icon"
@@ -255,7 +249,7 @@
 						type="button"
 						class="btn icon"
 						aria-label={t('startup.down', { name: entry.name })}
-						disabled={i === startup.order.length - 1}
+						disabled={i === startup!.order.length - 1}
 						onclick={() => move(i, 1)}><Icon name="chevronDown" size={14} /></button
 					>
 					<label class="wait"
@@ -280,13 +274,13 @@
 						onclick={() => (startup!.order = startup!.order.filter((_, k) => k !== i))}
 						><Icon name="close" size={14} /></button
 					>
-				</span>
-			</div>
+				{/snippet}
+			</SettingRow>
 		{:else}
-			<div class="set-row one"><span class="set-hint">{t('startup.empty')}</span></div>
+			<p class="muted">{t('startup.empty')}</p>
 		{/each}
 		{#if missing.length}
-			<div class="card-foot">
+			<div class="row-actions add">
 				<select class="field" aria-label={t('startup.add')} bind:value={adding}>
 					<option value="">{t('startup.add')}</option>
 					{#each missing as m (m.kind + '/' + m.name)}<option value={m.kind + '/' + m.name}
@@ -298,7 +292,7 @@
 				>
 			</div>
 		{/if}
-	</section>
+	</SettingGroup>
 
 	{#if dirty || saving}
 		<div class="row-actions sticky">
@@ -314,46 +308,13 @@
 {/if}
 
 <style>
-	.title {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		color: var(--text);
-	}
-	.set-label {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.ask {
-		margin: 0 var(--space-4) var(--space-3);
+	.state {
+		display: block;
 	}
 	.ask p {
 		margin: 0 0 var(--space-2);
 	}
-	.num {
-		color: var(--muted);
-		font-variant-numeric: tabular-nums;
-	}
-	.controls {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-	.set-control select {
-		width: auto;
-		min-width: 6.5rem;
-	}
-	.card-foot {
-		display: flex;
-		gap: var(--space-2);
-		align-items: center;
-	}
-	.card-foot select {
-		flex: 1;
-	}
+	/* The controls of an entry of the order: a narrow select for the wait. */
 	.wait {
 		white-space: nowrap;
 		display: inline-flex;
@@ -362,14 +323,22 @@
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
+	.wait select.field {
+		width: auto;
+		min-width: 6.5rem;
+	}
+	.add {
+		margin-top: var(--space-1-5);
+	}
+	.add select {
+		flex: 1 1 12rem;
+		min-width: 0;
+	}
 	.btn.icon {
 		width: 2rem;
 		height: 2rem;
 		padding: 0;
 		justify-content: center;
-	}
-	.card-head .set-hint {
-		margin-left: var(--space-2);
 	}
 	.row-actions .grow {
 		flex: 1;

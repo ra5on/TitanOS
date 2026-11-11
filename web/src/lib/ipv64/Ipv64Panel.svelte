@@ -4,6 +4,7 @@
 	// records and everything else are under Settings › IPv64. Every call
 	// counts against the limits of the account, so nothing is fetched by
 	// itself: each part loads on a click.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { IPV64_ZONES, validIpv64Wish } from '#lib/dns-providers.ts';
@@ -110,91 +111,92 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="ipv64-title">
-	<h2 class="tile-title" id="ipv64-title">{t('ipv64.title')}</h2>
-	<p class="muted">{t('ipv64.intro')}</p>
-	{#if !keyKnown}<p class="notice-warn">{t('ipv64.needsKey')}</p>{/if}
+<SettingGroup title={t('ipv64.title')} id="ipv64-title">
+	<div class="panel">
+		<p class="muted">{t('ipv64.intro')}</p>
+		{#if !keyKnown}<p class="notice-warn">{t('ipv64.needsKey')}</p>{/if}
 
-	<p class="muted hint">
-		{t('ipv64.moved')} <a href="/settings/ddns?tab=ipv64&sub=domains">{t('ipv64.movedLink')}</a>
-	</p>
+		<p class="muted hint">
+			{t('ipv64.moved')} <a href="/settings/ddns?tab=ipv64&sub=domains">{t('ipv64.movedLink')}</a>
+		</p>
 
-	<div class="part">
-		<h3>{t('ipv64.domains')}</h3>
-		<div class="row-actions">
-			<button type="button" class="btn" disabled={!keyKnown || domainsBusy} onclick={loadDomains}
-				>{t('ipv64.domainsLoad')}</button
-			>
-		</div>
-		{#if domainsError}<p class="notice-error" role="alert">{domainsError}</p>{/if}
-		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
-		{#if domains}
-			{#if domains.length === 0}<p class="muted">{t('ipv64.noDomains')}</p>{/if}
-			<div class="table-wrap">
-				<table>
-					<tbody>
-						{#each domains as domain (domain.name)}
-							<tr>
-								<td class="mono">{domain.name}</td>
-								<td>
-									{#if domain.wildcard}<span class="chip ok">{t('ipv64.wildcardOn')}</span>{/if}
-									{#if hostnames.includes(domain.name)}<span class="chip">{t('ipv64.inUse')}</span
-										>{/if}
-								</td>
-								<td class="actions">
-									{#if !hostnames.includes(domain.name)}<button
+		<div class="part">
+			<h3>{t('ipv64.domains')}</h3>
+			<div class="row-actions">
+				<button type="button" class="btn" disabled={!keyKnown || domainsBusy} onclick={loadDomains}
+					>{t('ipv64.domainsLoad')}</button
+				>
+			</div>
+			{#if domainsError}<p class="notice-error" role="alert">{domainsError}</p>{/if}
+			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
+			{#if domains}
+				{#if domains.length === 0}<p class="muted">{t('ipv64.noDomains')}</p>{/if}
+				<div class="table-wrap">
+					<table>
+						<tbody>
+							{#each domains as domain (domain.name)}
+								<tr>
+									<td class="mono">{domain.name}</td>
+									<td>
+										{#if domain.wildcard}<span class="chip ok">{t('ipv64.wildcardOn')}</span>{/if}
+										{#if hostnames.includes(domain.name)}<span class="chip">{t('ipv64.inUse')}</span
+											>{/if}
+									</td>
+									<td class="actions">
+										{#if !hostnames.includes(domain.name)}<button
+												type="button"
+												class="btn"
+												onclick={() => onhost(domain.name)}>{t('ipv64.use')}</button
+											>{/if}
+										<button
 											type="button"
 											class="btn"
-											onclick={() => onhost(domain.name)}>{t('ipv64.use')}</button
-										>{/if}
-									<button
-										type="button"
-										class="btn"
-										disabled={domainsBusy}
-										onclick={() => setWildcard(domain, !domain.wildcard)}
-										>{t(domain.wildcard ? 'ipv64.wildcardOff' : 'ipv64.wildcardTurnOn')}</button
-									>
-									<button
-										type="button"
-										class="btn"
-										disabled={domainsBusy}
-										onclick={() => (proxyDomain = domain.name)}>{t('ipv64.forApps')}</button
-									>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<p class="muted hint">{t('ipv64.wildcardHint')}</p>
-			<div class="create">
-				<label class="stack"
-					><span>{t('ipv64.newName')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={wish}
-						placeholder={t('ipv64.nameExample')}
-						spellcheck="false"
-						autocapitalize="off"
-					/></label
-				>
-				<label class="stack"
-					><span>{t('ipv64.zone')}</span><select class="field mono" bind:value={zone}>
-						{#each zones as z (z)}<option value={z}>{z}</option>{/each}
-					</select></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={!validIpv64Wish(wish.trim().toLowerCase()) || domainsBusy}
-					onclick={() => (creating = true)}>{t('ipv64.create')}</button
-				>
-			</div>
-		{/if}
-	</div>
+											disabled={domainsBusy}
+											onclick={() => setWildcard(domain, !domain.wildcard)}
+											>{t(domain.wildcard ? 'ipv64.wildcardOff' : 'ipv64.wildcardTurnOn')}</button
+										>
+										<button
+											type="button"
+											class="btn"
+											disabled={domainsBusy}
+											onclick={() => (proxyDomain = domain.name)}>{t('ipv64.forApps')}</button
+										>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="muted hint">{t('ipv64.wildcardHint')}</p>
+				<div class="create">
+					<label class="stack"
+						><span>{t('ipv64.newName')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={wish}
+							placeholder={t('ipv64.nameExample')}
+							spellcheck="false"
+							autocapitalize="off"
+						/></label
+					>
+					<label class="stack"
+						><span>{t('ipv64.zone')}</span><select class="field mono" bind:value={zone}>
+							{#each zones as z (z)}<option value={z}>{z}</option>{/each}
+						</select></label
+					>
+					<button
+						type="button"
+						class="btn"
+						disabled={!validIpv64Wish(wish.trim().toLowerCase()) || domainsBusy}
+						onclick={() => (creating = true)}>{t('ipv64.create')}</button
+					>
+				</div>
+			{/if}
+		</div>
 
-	<Heartbeat {status} {apiKey} {keyKnown} {onstatus} />
-</section>
+		<Heartbeat {status} {apiKey} {keyKnown} {onstatus} />
+	</div>
+</SettingGroup>
 
 {#if creating}
 	<Dialog title={t('ipv64.createTitle')} locked={domainsBusy} onclose={() => (creating = false)}>
@@ -228,7 +230,7 @@
 {/if}
 
 <style>
-	section {
+	.panel {
 		font-size: var(--text-md);
 	}
 	.part {

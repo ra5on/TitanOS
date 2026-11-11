@@ -205,6 +205,12 @@ try {
       }),
     );
     await page.goto(base + "/settings/homeassistant");
+    // PLAN 78-1: the broker's fields are the parts of the MQTT row.
+    await page
+      .getByRole("button", {
+        name: "Sensoren für Home Assistant (MQTT): Aufklappen",
+      })
+      .click();
     const interval = page.getByLabel("Intervall (Sekunden)");
     await interval.fill("120");
     await page.locator('button[type="submit"][form="ha-form"]').click();

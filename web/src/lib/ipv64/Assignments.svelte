@@ -4,6 +4,7 @@
 	// the NAS, or over the internet through the CDN of IPv64), or a VM or
 	// device (a target of the HTTPS names). Changing one takes it from
 	// where it pointed before; taking it back leaves the domain at IPv64.
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { onMount } from 'svelte';
 	import { api, type AppProxyStatus, type DockerStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -231,123 +232,124 @@
 	{:else if !data}
 		<p class="muted loading" role="status">{t('common.loading')}</p>
 	{:else}
-		<section class="tile panel" aria-labelledby="ipv64-assign">
-			<h2 class="tile-title" id="ipv64-assign">{t('ipv64x.assign.title')}</h2>
-			<p class="muted hint">{t('ipv64x.assign.intro')}</p>
-			{#if data.ddns.provider && data.ddns.provider !== 'ipv64'}<p class="notice-warn">
-					{t('ipv64x.dyn.otherProvider', { provider: data.ddns.provider })}
-				</p>{/if}
-			{#if !editing && error}<p class="notice-error" role="alert">{error}</p>{/if}
-			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
-			<div class="table-wrap">
-				<table>
-					<thead
-						><tr
-							><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.assign.target')}</th><th
-								>{t('ipv64x.assign.dns')}</th
-							><th></th></tr
-						></thead
-					>
-					<tbody>
-						{#each rows as row (row.name)}
-							<tr>
-								<td class="mono" class:sub={row.name !== row.zone}
-									>{#if row.assignment?.url}<a
-											href={row.assignment.url}
-											target="_blank"
-											rel="noopener noreferrer">{row.name}</a
-										>{:else}{row.name}{/if}</td
-								>
-								<td class="wrap"
-									>{#if row.assignment}<span
-											class="chip {row.assignment.target === 'public' ? 'warn' : 'ok'}"
-											>{t(`ipv64x.assign.kind.${row.assignment.target}` as MessageKey)}</span
-										>
-										{targetText(row.assignment)}{:else}<span class="muted"
-											>{t('ipv64x.assign.none')}</span
-										>{/if}</td
-								>
-								<td>{row.assignment ? dnsText(row.assignment) : '–'}</td>
-								<td class="actions">
-									<button
-										type="button"
-										class="btn"
-										disabled={busy}
-										onclick={() => open(row.name, row.assignment)}
-										>{t(row.assignment ? 'ipv64x.assign.change' : 'ipv64x.assign.assign')}</button
+		<SettingGroup title={t('ipv64x.assign.title')} id="ipv64-assign">
+			<div class="panel">
+				<p class="muted hint">{t('ipv64x.assign.intro')}</p>
+				{#if data.ddns.provider && data.ddns.provider !== 'ipv64'}<p class="notice-warn">
+						{t('ipv64x.dyn.otherProvider', { provider: data.ddns.provider })}
+					</p>{/if}
+				{#if !editing && error}<p class="notice-error" role="alert">{error}</p>{/if}
+				{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
+				<div class="table-wrap">
+					<table>
+						<thead
+							><tr
+								><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.assign.target')}</th><th
+									>{t('ipv64x.assign.dns')}</th
+								><th></th></tr
+							></thead
+						>
+						<tbody>
+							{#each rows as row (row.name)}
+								<tr>
+									<td class="mono" class:sub={row.name !== row.zone}
+										>{#if row.assignment?.url}<a
+												href={row.assignment.url}
+												target="_blank"
+												rel="noopener noreferrer">{row.name}</a
+											>{:else}{row.name}{/if}</td
 									>
-									{#if row.assignment}<button
+									<td class="wrap"
+										>{#if row.assignment}<span
+												class="chip {row.assignment.target === 'public' ? 'warn' : 'ok'}"
+												>{t(`ipv64x.assign.kind.${row.assignment.target}` as MessageKey)}</span
+											>
+											{targetText(row.assignment)}{:else}<span class="muted"
+												>{t('ipv64x.assign.none')}</span
+											>{/if}</td
+									>
+									<td>{row.assignment ? dnsText(row.assignment) : '–'}</td>
+									<td class="actions">
+										<button
 											type="button"
 											class="btn"
 											disabled={busy}
-											onclick={() => ((removing = row.assignment), (error = ''))}
-											>{t('ipv64x.assign.remove')}</button
-										>{/if}
-								</td>
-							</tr>
-						{:else}
-							<tr><td colspan="4" class="muted">{t('ipv64x.none')}</td></tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			{#if full}<p class="muted hint">{t('ipv64x.assign.full', { max: data.ddns.max })}</p>{/if}
+											onclick={() => open(row.name, row.assignment)}
+											>{t(row.assignment ? 'ipv64x.assign.change' : 'ipv64x.assign.assign')}</button
+										>
+										{#if row.assignment}<button
+												type="button"
+												class="btn"
+												disabled={busy}
+												onclick={() => ((removing = row.assignment), (error = ''))}
+												>{t('ipv64x.assign.remove')}</button
+											>{/if}
+									</td>
+								</tr>
+							{:else}
+								<tr><td colspan="4" class="muted">{t('ipv64x.none')}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				{#if full}<p class="muted hint">{t('ipv64x.assign.full', { max: data.ddns.max })}</p>{/if}
 
-			<h3>{t('ipv64x.assign.newTitle')}</h3>
-			<div class="inline">
-				<label class="stack"
-					><span>{t('ipv64x.assign.prefix')}</span><input
-						class="field mono short"
-						type="text"
-						bind:value={prefix}
-						placeholder="photos"
-						autocapitalize="off"
-						spellcheck="false"
-					/></label
-				>
-				<label class="stack grow"
-					><span>{t('ipv64x.domain')}</span><select class="field mono" bind:value={parent}
-						>{#each data.domains as d (d.name)}<option value={d.name}>{d.name}</option
-							>{/each}</select
-					></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !parent || !prefix.trim() || !validAssignPrefix(prefix)}
-					onclick={() =>
-						open(
-							assignName(prefix, parent),
-							data?.assignments.find((a) => a.domain === assignName(prefix, parent)) ?? null,
-						)}>{t('ipv64x.assign.assign')}</button
-				>
+				<h3>{t('ipv64x.assign.newTitle')}</h3>
+				<div class="inline">
+					<label class="stack"
+						><span>{t('ipv64x.assign.prefix')}</span><input
+							class="field mono short"
+							type="text"
+							bind:value={prefix}
+							placeholder="photos"
+							autocapitalize="off"
+							spellcheck="false"
+						/></label
+					>
+					<label class="stack grow"
+						><span>{t('ipv64x.domain')}</span><select class="field mono" bind:value={parent}
+							>{#each data.domains as d (d.name)}<option value={d.name}>{d.name}</option
+								>{/each}</select
+						></label
+					>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy || !parent || !prefix.trim() || !validAssignPrefix(prefix)}
+						onclick={() =>
+							open(
+								assignName(prefix, parent),
+								data?.assignments.find((a) => a.domain === assignName(prefix, parent)) ?? null,
+							)}>{t('ipv64x.assign.assign')}</button
+					>
+				</div>
+				<div class="inline">
+					<label class="stack"
+						><span>{t('ipv64x.newName')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={wish}
+							placeholder={t('ipv64.nameExample')}
+							autocapitalize="off"
+							spellcheck="false"
+						/></label
+					>
+					<label class="stack"
+						><span>{t('ipv64x.zone')}</span><select class="field mono" bind:value={zone}
+							>{#each status.zones as z (z)}<option value={z}>{z}</option>{/each}</select
+						></label
+					>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy || !validIpv64Wish(wish.trim().toLowerCase())}
+						onclick={() => open(`${wish.trim().toLowerCase()}.${zone}`, null, true)}
+						>{t('ipv64x.assign.createAssign')}</button
+					>
+				</div>
+				<p class="muted hint">{t('ipv64x.assign.newHint')}</p>
 			</div>
-			<div class="inline">
-				<label class="stack"
-					><span>{t('ipv64x.newName')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={wish}
-						placeholder={t('ipv64.nameExample')}
-						autocapitalize="off"
-						spellcheck="false"
-					/></label
-				>
-				<label class="stack"
-					><span>{t('ipv64x.zone')}</span><select class="field mono" bind:value={zone}
-						>{#each status.zones as z (z)}<option value={z}>{z}</option>{/each}</select
-					></label
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !validIpv64Wish(wish.trim().toLowerCase())}
-					onclick={() => open(`${wish.trim().toLowerCase()}.${zone}`, null, true)}
-					>{t('ipv64x.assign.createAssign')}</button
-				>
-			</div>
-			<p class="muted hint">{t('ipv64x.assign.newHint')}</p>
-		</section>
+		</SettingGroup>
 	{/if}
 </div>
 

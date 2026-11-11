@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	// PLAN 64/67: the dock's settings, the tab "Dock" of Systemsteuerung ›
 	// Darstellung – shown or not, place, size, plate, growing under the
 	// pointer and the kept programs (order by dragging or the arrows, remove,
@@ -101,8 +103,8 @@
 	{#if !dock}
 		<p class="muted" role="status">{t('common.loading')}</p>
 	{:else}
-		<section class="tile ui-card" aria-labelledby="h-dock-preview">
-			<div class="card-head"><h2 id="h-dock-preview">{t('look.dock.preview')}</h2></div>
+		<!-- PLAN 78-1: plain headings; the preview stays a block of its own. -->
+		<SettingGroup title={t('look.dock.preview')} id="h-dock-preview">
 			<div
 				class="stage"
 				style:background={wallpaper}
@@ -115,86 +117,90 @@
 					<p class="hidden-note">{t('look.dock.hiddenNote')}</p>
 				{/if}
 			</div>
-		</section>
+		</SettingGroup>
 
-		<section class="tile ui-card" aria-labelledby="h-dock-look">
-			<div class="card-head"><h2 id="h-dock-look">{t('look.dock.look')}</h2></div>
-			<div class="set-row">
-				<span class="set-label" id="dock-show-label">{t('look.dock.show')}</span>
-				<label class="check set-control end">
+		<SettingGroup title={t('look.dock.look')} id="h-dock-look" desc={t('look.dock.intro')}>
+			{#snippet tools()}
+				<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>
+			{/snippet}
+			<SettingRow
+				title={t('look.dock.show')}
+				for="dock-show"
+				summary={dock.show ? t('look.on') : t('look.off')}
+			>
+				{#snippet control()}
 					<input
+						id="dock-show"
 						type="checkbox"
 						role="switch"
 						class="switch"
-						aria-labelledby="dock-show-label"
 						checked={dock.show}
 						onchange={(e) => {
 							const on = e.currentTarget.checked;
 							changeDock((d) => (d.show = on));
 						}}
-					/><span class="muted">{dock.show ? t('look.on') : t('look.off')}</span>
-				</label>
-			</div>
-			<div class="set-row">
-				<span class="set-label">{t('desktop.dock.position')}</span>
-				<span class="set-control"
-					><Segments
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('desktop.dock.position')}>
+				{#snippet control()}
+					<Segments
 						label={t('desktop.dock.position')}
 						options={positions}
 						value={dock.position}
 						onchange={(v) => changeDock((d) => (d.position = v))}
-					/></span
-				>
-			</div>
-			<div class="set-row">
-				<label class="set-label" for="dock-size">{t('desktop.dock.size')}</label>
-				<span class="range">
-					<input
-						id="dock-size"
-						type="range"
-						min="36"
-						max="80"
-						step="2"
-						value={dock.size}
-						oninput={(e) => {
-							const v = Number(e.currentTarget.value);
-							changeDock((d) => (d.size = v));
-						}}
-					/><span class="mono value">{dock.size} px</span>
-				</span>
-			</div>
-			<div class="set-row">
-				<label class="set-label" for="dock-opacity">{t('desktop.dock.opacity')}</label>
-				<span class="range">
-					<input
-						id="dock-opacity"
-						type="range"
-						min="30"
-						max="100"
-						step="5"
-						value={dock.opacity}
-						oninput={(e) => {
-							const v = Number(e.currentTarget.value);
-							changeDock((d) => (d.opacity = v));
-						}}
-					/><span class="mono value">{dock.opacity} %</span>
-				</span>
-			</div>
-			<div class="set-row">
-				<span class="set-label">{t('desktop.dock.magnify')}</span>
-				<span class="set-control"
-					><Segments
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('desktop.dock.size')} for="dock-size">
+				{#snippet control()}
+					<span class="range">
+						<input
+							id="dock-size"
+							type="range"
+							min="36"
+							max="80"
+							step="2"
+							value={dock.size}
+							oninput={(e) => {
+								const v = Number(e.currentTarget.value);
+								changeDock((d) => (d.size = v));
+							}}
+						/><span class="mono value">{dock.size} px</span>
+					</span>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('desktop.dock.opacity')} for="dock-opacity">
+				{#snippet control()}
+					<span class="range">
+						<input
+							id="dock-opacity"
+							type="range"
+							min="30"
+							max="100"
+							step="5"
+							value={dock.opacity}
+							oninput={(e) => {
+								const v = Number(e.currentTarget.value);
+								changeDock((d) => (d.opacity = v));
+							}}
+						/><span class="mono value">{dock.opacity} %</span>
+					</span>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('desktop.dock.magnify')}>
+				{#snippet control()}
+					<Segments
 						label={t('desktop.dock.magnify')}
 						options={magnifyOptions}
 						value={String(dock.magnify) as '0' | '1' | '2'}
 						onchange={(v) => changeDock((d) => (d.magnify = Number(v) as 0 | 1 | 2))}
-					/></span
-				>
-			</div>
-			<div class="set-row">
-				<span class="set-label">{t('desktop.dock.border')}</span>
-				<span class="set-control"
-					><Segments
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('desktop.dock.border')}>
+				{#snippet control()}
+					<Segments
 						label={t('desktop.dock.border')}
 						options={[
 							{ value: 'on', label: t('desktop.dock.borderOn') },
@@ -202,21 +208,13 @@
 						]}
 						value={dock.border ? 'on' : 'off'}
 						onchange={(v) => changeDock((d) => (d.border = v === 'on'))}
-					/></span
-				>
-			</div>
-			<div class="card-foot">
-				<span class="grow">{t('look.dock.intro')}</span>
-				<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>
-			</div>
-		</section>
+					/>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
 
-		<section class="tile ui-card" aria-labelledby="h-dock-apps">
-			<div class="card-head">
-				<h2 id="h-dock-apps">{t('look.dock.apps')}</h2>
-				<span class="card-meta">{t('look.dock.appsHint')}</span>
-			</div>
-			<div class="card-body">
+		<SettingGroup title={t('look.dock.apps')} id="h-dock-apps" desc={t('look.dock.appsHint')}>
+			<div class="apps">
 				{#if pinned.length}
 					<ol class="pins" data-testid="dock-pins">
 						{#each pinned as key, i (key)}
@@ -295,7 +293,7 @@
 				{/if}
 				<p class="muted small">{t('look.dock.rightClickHint')}</p>
 			</div>
-		</section>
+		</SettingGroup>
 	{/if}
 </div>
 
@@ -306,7 +304,6 @@
 		gap: var(--gap, var(--space-4));
 	}
 	.stage {
-		margin: var(--space-4);
 		position: relative;
 		/* The dock's own z-index stays inside the preview. */
 		isolation: isolate;
@@ -332,19 +329,28 @@
 		min-width: 0;
 	}
 	.range input {
-		flex: 1;
+		flex: 1 1 14rem;
+		width: 14rem;
 		min-width: 0;
+	}
+	@media (max-width: 639px) {
+		.range {
+			width: 100%;
+		}
 	}
 	.value {
 		min-width: 56px;
 		text-align: right;
 		font-size: var(--text-base);
 	}
-	.check {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-md);
+	.apps {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		min-width: 0;
+	}
+	.apps p {
+		margin: 0;
 	}
 	.pins {
 		list-style: none;
@@ -360,8 +366,8 @@
 		gap: var(--space-2);
 		padding: var(--space-1-5) var(--space-2);
 		border-radius: var(--radius-ctl);
-		background: var(--chip);
-		border: 1px solid transparent;
+		background: var(--srow-bg);
+		border: 1px solid var(--srow-line);
 		cursor: grab;
 	}
 	.pins li.over {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -74,14 +75,11 @@
 	}
 </script>
 
-<section class="tile panel" aria-labelledby="smb-targets">
-	<div class="row">
-		<h2 class="tile-title" id="smb-targets">{t('backup.smb.title')}</h2>
-		<span class="chip warn">{t('backup.beta')}</span>
-	</div>
-	<p class="muted">{t('backup.smb.intro')}</p>
+<!-- PLAN 78-1: a row of the group "Sicherungsziele"; the connected targets
+     are its parts (open at first: they are few and each has its buttons). -->
+{#snippet list()}
 	{#each targets as target (target.id)}
-		<div class="row divided">
+		<div class="srow-block row">
 			<span class="mono">{target.id} · //{target.host}/{target.share}/{target.folder}</span><button
 				class="btn"
 				aria-label={t('backup.editNamed', { name: target.id })}
@@ -96,10 +94,19 @@
 			>
 		</div>
 	{/each}
-	<div class="row-actions">
-		<button class="btn" onclick={() => edit()}>{t('backup.smb.add')}</button>
-	</div>
-</section>
+{/snippet}
+<SettingRow
+	id="smb-targets"
+	icon="folder"
+	title={t('backup.smb.title')}
+	desc={t('backup.smb.intro')}
+	open
+	children={targets.length ? list : undefined}
+>
+	{#snippet badge()}<span class="chip warn">{t('backup.beta')}</span>{/snippet}
+	{#snippet control()}<button class="btn" onclick={() => edit()}>{t('backup.smb.add')}</button
+		>{/snippet}
+</SettingRow>
 {#if draft}
 	<Dialog
 		title={t('backup.smb.title')}
@@ -214,7 +221,7 @@
 		gap: 14px;
 	}
 	.row {
-		display: flex;
+		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-3);

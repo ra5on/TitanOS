@@ -8,6 +8,8 @@
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { claudeCodeCommand, mcpEndpoint, mcpTokenScopes, type MCPStatus } from '#lib/mcp.ts';
 	type Token = { id: string; name: string; scopes: string[]; created: string; lastUsed?: string };
@@ -149,40 +151,42 @@
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 {#if loading}<p class="loading" role="status">
 		{t('common.loading')}
-	</p>{:else if !tokens.length}<EmptyState title={t('api.empty')} />{:else}<section
-		class="tile panel tokens"
-		aria-labelledby="api-mine"
-	>
-		<h2 class="tile-title" id="api-mine">{t('api.mine')}</h2>
-		{#each tokens as token (token.id)}<div class="token">
-				<div>
-					<strong>{token.name}</strong>
-					<p class="muted">{token.scopes.map((s) => t(labels[s])).join(' · ')}</p>
-					<small class="muted"
+	</p>{:else if !tokens.length}<EmptyState title={t('api.empty')} />{:else}
+	<!-- PLAN 78-1: every token is a row – name, what it may do, when it was
+	     made and used, and its one action at the right. -->
+	<SettingGroup title={t('api.mine')} id="api-mine">
+		{#each tokens as token (token.id)}
+			<SettingRow icon="key" title={token.name}>
+				{#snippet description()}
+					{token.scopes.map((s) => t(labels[s])).join(' · ')}
+					<span class="when"
 						>{t('api.created')}
-						{formatDate(new Date(token.created))}{#if token.lastUsed}
-							· {t('api.lastUsed')} {formatDateTime(new Date(token.lastUsed))}{/if}</small
+						{formatDate(new Date(token.created))}{#if token.lastUsed}{' · '}{t('api.lastUsed')}
+							{formatDateTime(new Date(token.lastUsed))}{/if}</span
 					>
-				</div>
-				<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}
-					>{t('api.revoke')}</button
-				>
-			</div>{/each}
-	</section>{/if}
-<section class="tile panel" aria-labelledby="api-docs">
-	<h2 class="tile-title" id="api-docs">{t('api.documentation')}</h2>
-	<div class="row-actions">
-		<a class="btn" href={apiPath('/openapi.json')} target="_blank" rel="noreferrer"
-			>{t('api.openapi')}</a
-		>
-	</div>
-	<p class="muted">{t('api.cliHint')}</p>
-</section>
-<section class="tile panel" id="api-mcp" aria-labelledby="api-mcp-title">
-	<h2 class="tile-title" id="api-mcp-title">{t('mcp.title')}</h2>
-	<p class="muted">{t('api.mcpMoved')} <a href="/settings/mcp">{t('mcp.pageTitle')}</a></p>
-</section>
-<p class="muted">{t('api.security')}</p>
+				{/snippet}
+				{#snippet control()}
+					<button class="btn btn-danger" onclick={() => ((dialogError = ''), (revoking = token))}
+						>{t('api.revoke')}</button
+					>
+				{/snippet}
+			</SettingRow>
+		{/each}
+	</SettingGroup>
+{/if}
+<SettingGroup title={t('api.documentation')} id="api-docs">
+	<SettingRow icon="fileText" title={t('api.openapiTitle')} desc={t('api.cliHint')}>
+		{#snippet control()}
+			<a class="btn" href={apiPath('/openapi.json')} target="_blank" rel="noreferrer"
+				>{t('api.openapi')}</a
+			>
+		{/snippet}
+	</SettingRow>
+	<SettingRow id="api-mcp" icon="sparkle" title={t('mcp.title')} desc={t('api.mcpMoved')}>
+		{#snippet control()}<a class="btn" href="/settings/mcp">{t('mcp.pageTitle')}</a>{/snippet}
+	</SettingRow>
+	<p class="muted">{t('api.security')}</p>
+</SettingGroup>
 
 {#if creating}<Dialog title={t('api.create')} locked={busy} onclose={() => (creating = false)}
 		><form onsubmit={create}>
@@ -251,32 +255,8 @@
 	>{/if}
 
 <style>
-	.tokens {
-		gap: 0;
-	}
-	.tokens h2 {
-		margin-bottom: var(--space-1);
-	}
-	.token {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--gap);
-		padding: calc(var(--row-pad) + var(--space-1-5)) 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.token:last-child {
-		border: 0;
-	}
-	.token > div {
-		min-width: 0;
-	}
-	.token strong,
-	.token p {
-		overflow-wrap: anywhere;
-	}
-	.token .btn {
-		flex: none;
+	.when {
+		display: block;
 	}
 	form,
 	.field-row {
@@ -326,11 +306,5 @@
 		background: var(--track);
 		overflow-x: auto;
 		white-space: pre;
-	}
-	@media (max-width: 500px) {
-		.token {
-			align-items: flex-start;
-			flex-wrap: wrap;
-		}
 	}
 </style>

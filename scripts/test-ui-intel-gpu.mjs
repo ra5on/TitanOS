@@ -158,6 +158,11 @@ try {
         document.documentElement.clientWidth,
     );
     assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
+    // PLAN 78: each GPU is a row that opens to what the kernel loaded.
+    for (const chevron of await page
+      .locator('#hw-intel button.srow-chev[aria-expanded="false"]')
+      .all())
+      await chevron.click();
     // Firmware file names wrap only after "/" or "_", never inside a word.
     const badBreaks = await page.locator(".mono.file").evaluateAll((spans) =>
       spans.flatMap((span) => {

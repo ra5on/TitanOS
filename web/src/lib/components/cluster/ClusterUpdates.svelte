@@ -4,6 +4,8 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import { poll } from '#lib/poll.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -48,12 +50,11 @@
 	}
 </script>
 
+<!-- PLAN 78-1: a plain heading with one row per node (no tile), so that it
+     fits the rows of the updates page. -->
 {#if nodes.length > 1}
-	<section class="tile cluster-updates" aria-labelledby="cluster-updates-title">
-		<div class="head">
-			<h2 class="tile-title" id="cluster-updates-title">
-				{t('cluster.updatesOf', { name: cluster })}
-			</h2>
+	<SettingGroup title={t('cluster.updatesOf', { name: cluster })} id="cluster-updates">
+		{#snippet tools()}
 			<button
 				type="button"
 				class="btn btn-primary small"
@@ -61,42 +62,32 @@
 				onclick={() => (dialog = true)}
 				><Icon name="download" size={15} />{t('cluster.updateAll')}</button
 			>
-		</div>
-		<div class="table-wrap">
-			<table>
-				<thead
-					><tr
-						><th>{t('cluster.updateNode')}</th><th>{t('cluster.updateNow')}</th><th
-							>{t('cluster.updateNew')}</th
-						><th>{t('cluster.updateState')}</th></tr
-					></thead
-				>
-				<tbody>
-					{#each nodes as node (node.id)}
-						{@const r = runNode(node.id)}
-						<tr>
-							<td
-								>{node.name}{#if node.self}<span class="chip">{t('cluster.thisNode')}</span
-									>{/if}</td
-							>
-							<td class="mono small">{node.version ?? '–'}</td>
-							<td class="mono small">{r?.to || available[node.id] || '–'}</td>
-							<td class:error-text={r?.state === 'failed'}>
-								{#if r}{t(`cluster.run.${r.state}` as MessageKey)}{#if r.error}: {r.error}{/if}{:else if !node.online}{t(
-										'cluster.offline',
-									)}{:else if available[node.id]}{t('cluster.updateAvailable')}{:else}<span
-										class="ok-text">{t('cluster.updateCurrent')}</span
-									>{/if}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
+		{/snippet}
+		{#each nodes as node (node.id)}
+			{@const r = runNode(node.id)}
+			{@const next = r?.to || available[node.id]}
+			<SettingRow icon="tailnet" title={node.name}>
+				{#snippet badge()}
+					{#if node.self}<span class="chip">{t('cluster.thisNode')}</span>{/if}
+				{/snippet}
+				{#snippet description()}
+					{t('cluster.updateNow')}: <span class="mono">{node.version ?? '–'}</span>{#if next}{' '}
+						· {t('cluster.updateNew')}: <span class="mono">{next}</span>{/if}
+				{/snippet}
+				{#snippet control()}
+					{#if r}<span class:error-text={r.state === 'failed'}
+							>{t(`cluster.run.${r.state}` as MessageKey)}{#if r.error}: {r.error}{/if}</span
+						>{:else if !node.online}<span class="chip error">{t('cluster.offline')}</span
+						>{:else if available[node.id]}<span class="chip info"
+							>{t('cluster.updateAvailable')}</span
+						>{:else}<span class="chip ok">{t('cluster.updateCurrent')}</span>{/if}
+				{/snippet}
+			</SettingRow>
+		{/each}
 		{#if run?.running}<p class="muted small" role="status">
 				{t(run.parallel ? 'cluster.runningParallel' : 'cluster.runningSerial')}
 			</p>{/if}
-	</section>
+	</SettingGroup>
 {/if}
 
 {#if dialog}
@@ -104,45 +95,6 @@
 {/if}
 
 <style>
-	.cluster-updates {
-		padding: var(--space-3) var(--space-4) var(--space-4);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		flex-wrap: wrap;
-		margin-bottom: var(--space-2);
-	}
-	.head h2 {
-		margin: 0 auto 0 0;
-	}
-	.table-wrap {
-		overflow-x: auto;
-	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: var(--text-md);
-	}
-	th {
-		text-align: left;
-		font-size: var(--text-sm);
-		font-weight: 600;
-		color: var(--muted);
-		padding: var(--space-1-5) var(--space-2-5);
-		border-bottom: 1px solid var(--border);
-	}
-	td {
-		padding: var(--space-2) var(--space-2-5);
-		border-bottom: 1px solid var(--border);
-	}
-	td .chip {
-		margin-left: var(--space-2);
-	}
-	.ok-text {
-		color: var(--ok-text);
-	}
 	.error-text {
 		color: var(--error-text);
 	}

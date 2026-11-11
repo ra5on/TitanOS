@@ -5,7 +5,11 @@
 	// opens it (PLAN 19b): users see the state, the endpoint, how
 	// to connect and the token button; the switch, the tools and the last calls
 	// stay with owners and administrators (the server checks the same).
+	import type { IconName } from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -31,6 +35,20 @@
 	type Status = MCPStatus & { tools: Tool[] };
 	type Call = { at: string; target?: string; ok: boolean; status?: number };
 
+	const AREA_ICONS: Record<string, IconName> = {
+		system: 'gear',
+		storage: 'disk',
+		shares: 'folder',
+		files: 'file',
+		docker: 'box',
+		vms: 'monitor',
+		backups: 'archive',
+		network: 'globe',
+		accounts: 'users',
+		plugins: 'grid',
+		updates: 'download',
+		home: 'home',
+	};
 	const AREAS = [
 		'system',
 		'storage',
@@ -55,7 +73,6 @@
 	let saved = $state(false);
 	let tab = $state<'code' | 'remote' | 'bridge'>('code');
 	let copied = $state('');
-	let open = $state<Record<string, boolean>>({});
 
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const origin = typeof location === 'undefined' ? '' : location.origin;
@@ -171,78 +188,87 @@
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
 {#if status}
-	<section class="tile panel" aria-labelledby="mcp-status">
-		<div class="head">
-			<h2 class="tile-title" id="mcp-status">{t('mcp.status')}</h2>
-			{#if admin}<label class="check"
-					><input
+	{@const st = status}
+	<!-- PLAN 78-1: the state as rows; the switch stores on change as before. -->
+	<SettingGroup title={t('mcp.status')} id="mcp-status">
+		<SettingRow
+			icon="sparkle"
+			title={admin ? t('mcp.enabled') : t('mcp.state')}
+			for={admin ? 'mcp-enabled' : undefined}
+		>
+			{#snippet control()}
+				<span class="chip {st.enabled ? 'ok' : ''}"
+					>{st.enabled ? '● ' + t('mcp.ready') : '○ ' + t('mcp.off')}</span
+				>
+				{#if admin}<input
+						id="mcp-enabled"
+						class="switch"
 						type="checkbox"
-						checked={status.enabled}
+						role="switch"
+						checked={st.enabled}
 						disabled={saving}
 						onchange={(e) => save(e.currentTarget.checked)}
-					/><span>{t('mcp.enabled')}</span></label
-				>{/if}
-		</div>
-		<div class="facts">
-			<div>
-				<span class="muted">{t('mcp.state')}</span>
-				<span class="chip {status.enabled ? 'ok' : ''}"
-					>{status.enabled ? '● ' + t('mcp.ready') : '○ ' + t('mcp.off')}</span
-				>
-			</div>
-			{#if admin}<div>
-					<span class="muted">{t('mcp.callsToday')}</span>
-					<span
-						><strong>{today.length}</strong>{#if today.some((c) => !c.ok)}
-							· {t('mcp.refused', { count: today.filter((c) => !c.ok).length })}{/if}</span
+					/>{/if}
+			{/snippet}
+		</SettingRow>
+		{#if admin}
+			<SettingRow icon="activity" title={t('mcp.callsToday')}>
+				{#snippet control()}
+					<span class="value"
+						><strong>{today.length}</strong>{#if today.some((c) => !c.ok)}{' · '}{t('mcp.refused', {
+								count: today.filter((c) => !c.ok).length,
+							})}{/if}</span
 					>
-				</div>{/if}
-			<div>
-				<span class="muted">{t('mcp.tokens')}</span>
-				<strong>{tokens}</strong>
-			</div>
-			<label class="address">
-				<span class="muted">{t('mcp.endpoint')}</span>
-				<span class="copy-row"
-					><input class="field mono" value={endpoint} readonly /><button
+				{/snippet}
+			</SettingRow>
+		{/if}
+		<SettingRow icon="key" title={t('mcp.tokens')}>
+			{#snippet control()}<strong class="value">{tokens}</strong>{/snippet}
+		</SettingRow>
+		<SettingRow icon="globe" title={t('mcp.endpoint')} for="mcp-endpoint">
+			{#snippet control()}
+				<input id="mcp-endpoint" class="field mono" value={endpoint} readonly />
+				<button type="button" class="btn" onclick={() => copy('endpoint', endpoint)}
+					>{t(copied === 'endpoint' ? 'mcp.copied' : 'mcp.copy')}</button
+				>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
+
+	<!-- A tool of the page (tabs and the command to copy): it stands under its
+	     heading without a box. -->
+	<SettingGroup title={t('mcp.connect')} id="mcp-connect">
+		<div class="connect">
+			<div class="tabs" role="tablist">
+				{#each [['code', 'mcp.claudeCode'], ['remote', 'mcp.desktopRemote'], ['bridge', 'mcp.desktopBridge']] as const as [id, label] (id)}
+					<button
 						type="button"
-						class="btn"
-						onclick={() => copy('endpoint', endpoint)}
-						>{t(copied === 'endpoint' ? 'mcp.copied' : 'mcp.copy')}</button
-					></span
+						role="tab"
+						aria-selected={tab === id}
+						class:active={tab === id}
+						onclick={() => (tab = id)}>{t(label)}</button
+					>
+				{/each}
+			</div>
+			<pre class="mono snippet">{snippet}</pre>
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => copy('snippet', snippet)}
+					>{t(copied === 'snippet' ? 'mcp.copied' : 'mcp.copy')}</button
 				>
-			</label>
+				<a class="btn btn-primary" href="/settings/api?mcp=1">{t('mcp.createToken')}</a>
+			</div>
+			<p class="muted small">{t('mcp.tokenHint')}</p>
+			<p class="muted small">{t('mcp.placeholder')}</p>
+			{#if tab === 'bridge'}<p class="muted small">{t('mcp.bridgeHint')}</p>{/if}
 		</div>
-	</section>
+	</SettingGroup>
 
-	<section class="tile panel" aria-labelledby="mcp-connect">
-		<h2 class="tile-title" id="mcp-connect">{t('mcp.connect')}</h2>
-		<div class="tabs" role="tablist">
-			{#each [['code', 'mcp.claudeCode'], ['remote', 'mcp.desktopRemote'], ['bridge', 'mcp.desktopBridge']] as const as [id, label]}
-				<button
-					type="button"
-					role="tab"
-					aria-selected={tab === id}
-					class:active={tab === id}
-					onclick={() => (tab = id)}>{t(label)}</button
-				>
-			{/each}
-		</div>
-		<pre class="mono snippet">{snippet}</pre>
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => copy('snippet', snippet)}
-				>{t(copied === 'snippet' ? 'mcp.copied' : 'mcp.copy')}</button
-			>
-			<a class="btn btn-primary" href="/settings/api?mcp=1">{t('mcp.createToken')}</a>
-		</div>
-		<p class="muted small">{t('mcp.tokenHint')}</p>
-		<p class="muted small">{t('mcp.placeholder')}</p>
-		{#if tab === 'bridge'}<p class="muted small">{t('mcp.bridgeHint')}</p>{/if}
-	</section>
-
-	{#if admin}<section class="tile panel" aria-labelledby="mcp-tools">
-			<div class="head">
-				<h2 class="tile-title" id="mcp-tools">{t('mcp.tools')}</h2>
+	{#if admin}
+		<!-- Every area is a row: its switch turns all its tools on or off, the
+		     row opens to the tools with their own choice. Each change stores at
+		     once, as before. -->
+		<SettingGroup title={t('mcp.tools')} id="mcp-tools" desc={t('mcp.toolsIntro')}>
+			{#snippet tools()}
 				<div class="quick" role="group" aria-label={t('mcp.quick')}>
 					<span class="muted small">{t('mcp.quick')}</span>
 					<button type="button" class="btn small" disabled={saving} onclick={() => quick('read')}
@@ -259,69 +285,66 @@
 						>{t('mcp.quickAll')}</button
 					>
 				</div>
-			</div>
-			<p class="muted small">{t('mcp.toolsIntro')}</p>
+			{/snippet}
 			{#if saved}<p class="notice-ok" role="status">{t('mcp.saved')}</p>{/if}
-			<div class="groups">
+			<div class="areas">
 				{#each groups as group (group.area)}
 					{@const on = group.tools.some((tool) => modes[tool.name] !== 'off')}
-					<div class="group">
-						<div class="group-head">
+					<SettingRow
+						id="mcp-area-{group.area}"
+						icon={AREA_ICONS[group.area] ?? 'tool'}
+						title={t(`mcp.area.${group.area}` as MessageKey)}
+						summary={groupLine(group.tools)}
+						for="mcp-area-{group.area}-on"
+					>
+						{#snippet control()}
 							<input
+								id="mcp-area-{group.area}-on"
+								class="switch"
 								type="checkbox"
+								role="switch"
 								checked={on}
 								disabled={saving}
-								aria-label={t(`mcp.area.${group.area}` as MessageKey)}
 								onchange={(e) => setGroup(group.tools, e.currentTarget.checked)}
 							/>
-							<button
-								type="button"
-								class="group-toggle"
-								aria-expanded={!!open[group.area]}
-								onclick={() => (open[group.area] = !open[group.area])}
+						{/snippet}
+						{#each group.tools as tool (tool.name)}
+							<SettingSub
+								title={tool.name}
+								desc={t(`mcp.tool.${tool.name}` as MessageKey)}
+								for="mcp-tool-{tool.name}"
 							>
-								<strong>{t(`mcp.area.${group.area}` as MessageKey)}</strong>
-								<span class="muted small">{groupLine(group.tools)}</span>
-								<span class="muted" aria-hidden="true">{open[group.area] ? '▾' : '▸'}</span>
-							</button>
-						</div>
-						{#if open[group.area]}
-							<div class="tools">
-								{#each group.tools as tool (tool.name)}
-									<div class="tool">
-										<span class="mono name">{tool.name}</span>
-										<span class="muted small">{t(`mcp.tool.${tool.name}` as MessageKey)}</span>
-										<span
-											class="chip {kind(tool) === 'read'
-												? 'info'
-												: kind(tool) === 'danger'
-													? 'warn'
-													: ''}"
-											>{kind(tool) === 'read' ? '◉' : kind(tool) === 'danger' ? '⚠' : '✎'}
-											{t(kindLabel[kind(tool)])}</span
-										>
-										<select
-											class="field"
-											value={modes[tool.name]}
-											disabled={saving}
-											aria-label={tool.name}
-											onchange={(e) => setMode(tool.name, e.currentTarget.value as Mode)}
-										>
-											<option value="off">{t('mcp.modeOff')}</option>
-											<option value="on">{t('mcp.modeOn')}</option>
-											{#if tool.dangerous}<option value="all">{t('mcp.modeAll')}</option>{/if}
-										</select>
-									</div>
-								{/each}
-							</div>
-						{/if}
-					</div>
+								{#snippet control()}
+									<span
+										class="chip {kind(tool) === 'read'
+											? 'info'
+											: kind(tool) === 'danger'
+												? 'warn'
+												: ''}"
+										>{kind(tool) === 'read' ? '◉' : kind(tool) === 'danger' ? '⚠' : '✎'}
+										{t(kindLabel[kind(tool)])}</span
+									>
+									<select
+										id="mcp-tool-{tool.name}"
+										class="field"
+										value={modes[tool.name]}
+										disabled={saving}
+										onchange={(e) => setMode(tool.name, e.currentTarget.value as Mode)}
+									>
+										<option value="off">{t('mcp.modeOff')}</option>
+										<option value="on">{t('mcp.modeOn')}</option>
+										{#if tool.dangerous}<option value="all">{t('mcp.modeAll')}</option>{/if}
+									</select>
+								{/snippet}
+							</SettingSub>
+						{/each}
+					</SettingRow>
 				{/each}
 			</div>
-		</section>
+		</SettingGroup>
 
-		<section class="tile panel" aria-labelledby="mcp-recent">
-			<h2 class="tile-title" id="mcp-recent">{t('mcp.recent')}</h2>
+		<!-- A log stays a table. -->
+		<SettingGroup title={t('mcp.recent')} id="mcp-recent">
 			{#if calls.length === 0}<p class="muted">{t('mcp.recentNone')}</p>{:else}
 				<table class="calls">
 					<tbody>
@@ -339,44 +362,28 @@
 					</tbody>
 				</table>
 			{/if}
-			<a href="/tools/activity">{t('mcp.recentAll')}</a>
-		</section>{/if}
+			<p><a href="/tools/activity">{t('mcp.recentAll')}</a></p>
+		</SettingGroup>
+	{/if}
 {/if}
 
 <style>
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2) var(--space-4);
+	.value {
+		color: var(--text);
 	}
-	.head h2 {
-		margin: 0;
+	/* The address: as wide as the row allows, the button beside it. */
+	#mcp-endpoint {
+		width: 20rem;
+		max-width: 100%;
 	}
-	.facts {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3) 28px;
-		font-size: var(--text-md);
-	}
-	.facts > div,
-	.address {
+	.connect {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
-	}
-	.address {
-		flex: 1;
-		min-width: min(100%, 260px);
-	}
-	.copy-row {
-		display: flex;
-		gap: var(--space-2);
-	}
-	.copy-row input {
-		flex: 1;
+		gap: var(--space-3);
 		min-width: 0;
+	}
+	.connect p {
+		margin: 0;
 	}
 	.tabs {
 		display: flex;
@@ -417,60 +424,13 @@
 	.quick .chosen {
 		border-color: var(--accent);
 	}
-	.groups {
-		display: grid;
-		gap: var(--space-1-5);
+	/* The rows stay direct parts of their group; a tool's name is its
+	   technical name. */
+	.areas {
+		display: contents;
 	}
-	.group {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: 0 var(--space-3);
-	}
-	.group-head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.group-head input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.group-toggle {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		min-height: 44px;
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.group-toggle strong {
-		flex: 1;
-	}
-	.tools {
-		display: grid;
-		padding: 0 0 var(--space-2-5) 30px;
-	}
-	.tool {
-		display: grid;
-		grid-template-columns: minmax(150px, 190px) 1fr auto 170px;
-		gap: var(--space-3);
-		align-items: center;
-		padding: var(--space-1-5) 0;
-		border-top: 1px solid var(--border);
-	}
-	.tool .name {
-		font-size: var(--text-base);
-		overflow-wrap: anywhere;
-	}
-	.tool select {
-		height: 32px;
+	.areas :global(.srow-sub .srow-title) {
+		font-family: var(--font-mono);
 		font-size: var(--text-base);
 	}
 	.chip {
@@ -485,18 +445,11 @@
 		padding: var(--space-1-5) var(--space-2) var(--space-1-5) 0;
 		border-top: 1px solid var(--border);
 	}
+	/* A long target wraps; date and result keep their words. */
+	.calls td:nth-child(2) {
+		overflow-wrap: anywhere;
+	}
 	.calls .result {
 		text-align: right;
-	}
-	@media (max-width: 760px) {
-		.tools {
-			padding-left: 0;
-		}
-		.tool {
-			grid-template-columns: 1fr auto;
-		}
-		.tool .muted {
-			grid-column: 1 / -1;
-		}
 	}
 </style>

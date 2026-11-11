@@ -2,7 +2,9 @@
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PowerSchedule from '#lib/components/PowerSchedule.svelte';
-	import Expander from '#lib/components/explorer/Expander.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	// Disk sleep stays set in its one dialog (Plan 28b): this page only links
 	// to it, so there are never two places with their own values.
@@ -42,8 +44,43 @@
 			(err) => (sleepError = apiErrorText(err)),
 		);
 	});
-	let cpuOpen = $state(false);
-	// E3: a changed profile is stored right away.
+	// The rows that lead to their own pages say the state there in passing;
+	// if it cannot be read, the row simply says nothing.
+	let button = $state<'ignore' | 'reboot' | 'poweroff' | ''>('');
+	let upsSummary = $state('');
+	$effect(() => {
+		api
+			.get<{ settings: { action: 'ignore' | 'reboot' | 'poweroff' } }>('/system/power-button')
+			.then(
+				(result) => (button = result.settings?.action ?? ''),
+				() => {},
+			);
+		api
+			.get<{
+				status: { mode: string; connected: boolean; onBattery: boolean; model: string };
+			}>('/ups')
+			.then(
+				({ status: ups }) =>
+					(upsSummary = !ups
+						? ''
+						: ups.mode === 'off'
+							? t('ups.mode.off')
+							: [
+									ups.model,
+									t(
+										!ups.connected
+											? 'ups.notConnected'
+											: ups.onBattery
+												? 'ups.onBattery'
+												: 'ups.online',
+									),
+								]
+									.filter(Boolean)
+									.join(' · ')),
+				() => {},
+			);
+	});
+	// A changed profile is stored right away.
 	async function store() {
 		busy = true;
 		error = '';
@@ -71,85 +108,105 @@
 	<p class="muted">{t('energy.intro')}</p>
 </PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-{#if status}
-	{#if status.error}<p class="notice-warn" role="status">
-			{t('energy.startupError')}
-			{status.error}
-		</p>{/if}
-	{#if status.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
-	{#if status.controls.length === 0}
-		<Expander icon="chip" title={t('energy.cpu')} summary={t('energy.unsupported')} />
-	{:else}
-		<!-- PLAN 75-19, draft E3: each profile a row, saved when it changes. -->
-		<Expander
-			icon="chip"
-			title={t('energy.cpu')}
-			summary={[
-				...status.controls.map(
-					(c) => `${t(`energy.${c.key}`)}: ${c.mixed ? t('energy.mixed') : label(c.current)}`,
-				),
-				status.drivers.length ? `${t('energy.driver')} ${status.drivers.join(', ')}` : '',
-			]
-				.filter(Boolean)
-				.join(' · ')}
-			bind:open={cpuOpen}
-		>
-			{#each status.controls as control (control.key)}
-				<div class="part">
-					<span class="t"
-						><label for="energy-{control.key}">{t(`energy.${control.key}`)}</label><small
-							>{t(`energy.${control.key}Hint`)} · {t('energy.current')}: {control.mixed
-								? t('energy.mixed')
-								: label(control.current)}</small
-						></span
+{#if status?.error}<p class="notice-warn" role="status">
+		{t('energy.startupError')}
+		{status.error}
+	</p>{/if}
+{#if status?.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
+
+<!-- PLAN 78-1, draft 78: groups are plain headings, every setting a row. -->
+<SettingGroup title={t('energy.group.power')}>
+	<PowerSchedule />
+	<SettingRow
+		href="/settings/power-button"
+		icon="power"
+		title={t('energy.powerButton')}
+		desc={t('energy.powerButtonDesc')}
+		summary={button ? t(`powerButton.${button}`) : undefined}
+	/>
+</SettingGroup>
+
+<SettingGroup title={t('energy.group.saving')}>
+	<SettingRow
+		id="disk-sleep"
+		icon="disk"
+		title={t('energy.diskSleep')}
+		desc={sleepError || t('energy.diskSleepHint')}
+		summary={sleepSummary}
+	>
+		{#snippet control()}
+			<button type="button" class="btn" disabled={!sleep} onclick={() => (sleepOpen = true)}
+				>{t('energy.diskSleepOpen')}</button
+			>
+		{/snippet}
+	</SettingRow>
+	{#if status}
+		{#if status.controls.length === 0}
+			<SettingRow icon="chip" title={t('energy.cpu')} desc={t('energy.unsupported')} />
+		{:else}
+			<SettingRow
+				id="cpu"
+				icon="chip"
+				title={t('energy.cpu')}
+				desc={status.drivers.length
+					? `${t('energy.driver')} ${status.drivers.join(', ')}`
+					: undefined}
+				summary={status.controls
+					.map((c) => (c.mixed ? t('energy.mixed') : label(c.current)))
+					.join(' · ')}
+			>
+				{#each status.controls as item (item.key)}
+					<SettingSub
+						title={t(`energy.${item.key}`)}
+						for="energy-{item.key}"
+						desc="{t(`energy.${item.key}Hint`)} · {t('energy.current')}: {item.mixed
+							? t('energy.mixed')
+							: label(item.current)}"
 					>
-					<select
-						id="energy-{control.key}"
-						class="field"
-						bind:value={draft[control.key]}
-						disabled={busy || status.readOnly}
-						onchange={store}
-					>
-						<option value="">{t('energy.unmanaged')}</option>
-						{#if draft[control.key] && !control.choices.includes(draft[control.key])}<option
-								value={draft[control.key]}
-								disabled>{draft[control.key]} — {t('energy.noLongerAvailable')}</option
-							>{/if}
-						{#each control.choices as choice (choice)}<option value={choice}
-								>{label(choice)}{label(choice) !== choice ? ` (${choice})` : ''}</option
-							>{/each}
-					</select>
-				</div>
-			{/each}
-			{#if saved}<p class="part muted" role="status">{t('energy.saved')}</p>{/if}
-		</Expander>
-	{/if}
-{:else if !error}<p>{t('common.loading')}</p>{/if}
-<Expander
-	icon="disk"
-	title={t('energy.diskSleep')}
-	summary={sleepError || sleepSummary || t('energy.diskSleepHint')}
->
-	{#snippet control()}
-		<button type="button" class="btn" disabled={!sleep} onclick={() => (sleepOpen = true)}
-			>{t('energy.diskSleepOpen')}</button
-		>
-	{/snippet}
-</Expander>
+						{#snippet control()}
+							<select
+								id="energy-{item.key}"
+								class="field"
+								bind:value={draft[item.key]}
+								disabled={busy || status?.readOnly}
+								onchange={store}
+							>
+								<option value="">{t('energy.unmanaged')}</option>
+								{#if draft[item.key] && !item.choices.includes(draft[item.key])}<option
+										value={draft[item.key]}
+										disabled>{draft[item.key]} — {t('energy.noLongerAvailable')}</option
+									>{/if}
+								{#each item.choices as choice (choice)}<option value={choice}
+										>{label(choice)}{label(choice) !== choice ? ` (${choice})` : ''}</option
+									>{/each}
+							</select>
+						{/snippet}
+					</SettingSub>
+				{/each}
+				{#if saved}<div class="srow-block">
+						<p class="muted" role="status">{t('energy.saved')}</p>
+					</div>{/if}
+			</SettingRow>
+		{/if}
+	{:else if !error}<p class="muted">{t('common.loading')}</p>{/if}
+</SettingGroup>
+
+<SettingGroup title={t('energy.group.ups')}>
+	<SettingRow
+		href="/settings/ups"
+		icon="battery"
+		title={t('ups.title')}
+		desc={t('energy.upsDesc')}
+		summary={upsSummary}
+	/>
+</SettingGroup>
 {#if sleepOpen && sleep}<DiskSleepDialog
 		status={sleep}
 		onclose={() => (sleepOpen = false)}
 		onsaved={(updated: DiskSleepStatus) => (sleep = updated)}
 	/>{/if}
-<PowerSchedule />
 
 <style>
-	.part select {
-		max-width: 20rem;
-	}
-	.part label {
-		font-weight: 500;
-	}
 	p {
 		margin: 0;
 	}
