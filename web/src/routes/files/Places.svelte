@@ -6,6 +6,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import FolderTree from './FolderTree.svelte';
 	import { backupFolder, type USBBackup } from './usb-backup.ts';
+	import { notesLine } from '#lib/backup-notes.ts';
 
 	type Props = {
 		roots: FileRoot[];
@@ -268,8 +269,8 @@
 								: t('files.backupNever'),
 						})}</span
 					>{/if}
-				{#if backup.state?.warning}<span>{backup.state.warning}</span>{/if}
-				{#if !backup.state?.running && backup.state?.skipped}<span
+				{#if backup.state && notesLine(backup.state)}<span>{notesLine(backup.state)}</span>{/if}
+				{#if !backup.state?.running && backup.state?.skipped && !backup.state.problems?.length}<span
 						>{t('backup.skipped', { n: backup.state.skipped })}</span
 					>{/if}
 				<button

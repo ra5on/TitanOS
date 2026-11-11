@@ -6,6 +6,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Rule321 from './Rule321.svelte';
+	import { notesLine, type BackupNote } from '#lib/backup-notes.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
@@ -13,7 +14,14 @@
 		jobs: {
 			job: { id: string; enabled: boolean };
 			stateKnown?: boolean;
-			state: { lastOK: string | null; lastError: string; warning: string; statusError?: string };
+			state: {
+				lastOK: string | null;
+				lastError: string;
+				warning: string;
+				problems?: BackupNote[] | null;
+				notices?: BackupNote[] | null;
+				statusError?: string;
+			};
 			next: string | null;
 		}[];
 	};
@@ -93,7 +101,9 @@
 	const unknown = $derived(
 		jobs?.jobs.filter((v) => v.stateKnown === false || v.state.statusError) ?? [],
 	);
-	const warnings = $derived(jobs?.jobs.filter((v) => v.state.warning) ?? []);
+	const warnings = $derived(
+		jobs?.jobs.filter((v) => v.state.warning || v.state.problems?.length) ?? [],
+	);
 	const date = (value: string | undefined) =>
 		value ? formatDateTime(new Date(value)) : t('safeguard.none');
 
@@ -157,8 +167,9 @@
 		)}
 	</p>{/each}
 {#each warnings as view}<p class="notice-warn">
-		<a href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a>: {view
-			.state.warning}
+		<a href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a>: {notesLine(
+			view.state,
+		)}
 	</p>{/each}
 {#if config?.backup.lastError}<p class="notice-error" role="alert">
 		<a href="/settings/backups/configuration">{t('safeguard.config')}</a>: {config.backup.lastError}

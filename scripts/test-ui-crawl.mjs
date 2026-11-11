@@ -46,6 +46,7 @@ const routes = [
   "/settings/notifications",
   "/settings/power-button",
   "/settings/stick",
+  "/settings/systemdata",
   "/settings/temperatures",
   "/settings/timezone",
   "/settings/updates",

@@ -1,6 +1,7 @@
 // Backups of shares to another volume, another server or the cloud: the
 // shapes the API sends and the texts and payloads the page builds from them.
 import { bandwidthParts, type Bandwidth } from '#lib/backup-bandwidth.ts';
+import type { BackupNote } from '#lib/backup-notes.ts';
 import type { Keep } from '#lib/components/KeepVersions.svelte';
 import { t } from '#lib/i18n/index.svelte.ts';
 import type { Application } from '#lib/operations/ApplicationSelection.svelte';
@@ -69,7 +70,50 @@ export type Job = {
 	volumes?: string[];
 	places?: string[];
 	bandwidth?: Bandwidth;
+	/** How a readable copy treats disks of running VMs (0.77); none: no choice yet. */
+	vmDisks?: VMDisks;
 };
+/** The job's choice for the image files of running VMs. */
+export type VMDisks = { mode: 'consistent' | 'skip'; raw?: 'skip' | 'pause' };
+/** One image file of a VM in the sources of a job (GET /backups/vm-disks). */
+export type VMDisk = {
+	vm: string;
+	path: string;
+	file: string;
+	format: string;
+	sizeBytes: number;
+	state: 'running' | 'stopped';
+	way: 'copy' | 'btrfs_snapshot' | 'libvirt_snapshot' | 'pause' | 'as_is' | 'skip' | 'none';
+	agent: boolean;
+	reason?: string;
+	needBytes?: number;
+	freeBytes?: number;
+};
+export type VMDisksAnswer = {
+	choice?: VMDisks | null;
+	choiceNeeded: boolean;
+	disks: VMDisk[] | null;
+};
+
+/**
+ * The query of GET /backups/vm-disks for the sources chosen in the form and
+ * the choice not stored yet; "" without a source (nothing to ask).
+ */
+export function vmDisksQuery(
+	selection: { sources: string[]; volumes: string[]; places: string[] },
+	choice: VMDisks | undefined,
+): string {
+	const query = new URLSearchParams();
+	for (const source of selection.sources) query.append('source', source);
+	for (const volume of selection.volumes) query.append('volume', volume);
+	for (const place of selection.places) query.append('place', place);
+	if ([...query].length === 0) return '';
+	if (choice) {
+		query.set('mode', choice.mode);
+		if (choice.mode === 'consistent' && choice.raw) query.set('raw', choice.raw);
+	}
+	return query.toString();
+}
 export type State = {
 	statusError?: string;
 	probe?: {
@@ -94,7 +138,10 @@ export type State = {
 	/** A known cause of lastError, with a text under error.<code>. */
 	lastErrorCode?: string;
 	warning: string;
-	/** Links and special files (FIFOs, sockets, devices) the last run left out. */
+	/** What the last run could not save and what else it tells, as codes (0.77). */
+	problems?: BackupNote[] | null;
+	notices?: BackupNote[] | null;
+	/** Entries the last run of a readable copy could not save. */
 	skipped?: number;
 	bytes: number;
 	restoredTo: string;
@@ -284,6 +331,7 @@ export function where(d: Destination): string {
 		return `${t('backup.kind.usb-copy')} ${d.deviceName || d.deviceId} / ${d.folder}`;
 	switch (d.type) {
 		case 'local':
+		case 'local-copy':
 			return `/mnt/${d.volume}/${d.folder}`;
 		case 's3':
 			return `${d.endpoint}/${d.bucket}${d.prefix ? '/' + d.prefix : ''}`;
@@ -304,7 +352,8 @@ export function stateChip(view: View): { text: string; tone: string } {
 	if (state.lastError && state.lastError !== 'cancelled')
 		return { text: t('backup.failed'), tone: 'error' };
 	if (state.lastError === 'cancelled') return { text: t('backup.cancelled'), tone: 'warn' };
-	if (state.warning) return { text: t('backup.withWarning'), tone: 'warn' };
+	if (state.warning || state.problems?.length)
+		return { text: t('backup.withWarning'), tone: 'warn' };
 	if (state.lastOK) return { text: t('backup.ok'), tone: 'ok' };
 	return { text: t('backup.never'), tone: '' };
 }

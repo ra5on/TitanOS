@@ -1,3 +1,5 @@
+import type { BackupNote } from '#lib/backup-notes.ts';
+
 export type BackupState = {
 	running: boolean;
 	percent: number;
@@ -6,7 +8,10 @@ export type BackupState = {
 	lastOK: string | null;
 	lastError: string;
 	warning: string;
-	/** Links and special files left out by the last copy (0.38.1). */
+	/** What the last copy could not save and what else it tells, as codes (0.77). */
+	problems?: BackupNote[] | null;
+	notices?: BackupNote[] | null;
+	/** Entries the last copy could not save. */
 	skipped?: number;
 };
 export type USBBackup = {

@@ -44,6 +44,8 @@ const pages = [
   "/settings/appearance",
   "/settings/access",
   "/settings/notifications",
+  "/settings/systemdata",
+  "/settings/backups/data",
   "/tools",
   "/tools/monitoring",
   "/tools/disks",

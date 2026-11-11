@@ -42,6 +42,7 @@
 	"settingshome.desc.viewer": "Docker apps in windows, GPU and sound",
 	"settingshome.desc.backups": "Data, apps, stick, restore",
 	"settingshome.desc.files": "File search, index, thumbnails",
+	"settingshome.desc.systemdata": "Storage volume, configuration backup, logs",
 	"settingshome.desc.memory": "Memory, write cache",
 	"settingshome.overview": "Overview",
 	"settingshome.sideSearch": "Search settings",

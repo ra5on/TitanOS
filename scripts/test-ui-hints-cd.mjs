@@ -122,14 +122,12 @@ try {
       await page.getByText("Kopien ohne Passwort (ohne Schloss)").isVisible(),
     );
     const options = await page
-      .locator("#config-schedule select")
-      .nth(1)
-      .locator("option")
+      .locator("#stick-volume option")
       .allTextContents();
     assert.deepEqual(
       options.map((o) => o.replace(/\s+/g, " ").trim()),
       [
-        "Automatisch (erstes Volume)",
+        "Ablage-Volume (Systemdaten)",
         "Data · unverschlüsselt",
         "Safe · verschlüsselt",
       ],

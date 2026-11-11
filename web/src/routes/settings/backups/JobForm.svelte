@@ -27,6 +27,7 @@
 		type UsbDrive,
 	} from './data-backups.ts';
 	import JobDestination from './JobDestination.svelte';
+	import VmDisksChoice from './VmDisksChoice.svelte';
 	import ScheduleFields from './ScheduleFields.svelte';
 	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
 
@@ -110,6 +111,8 @@
 
 	const shareOf = (c: Chosen) => shareOfIn(overview.shares, c);
 	const selectionOf = (list: Chosen[]) => selectionOfIn(overview.shares, list);
+	// What the chosen places mean for the job, for the list of VM disks.
+	const selection = $derived(selectionOf(chosen));
 
 	function pick(c: Chosen) {
 		if (picking === null) return;
@@ -134,7 +137,6 @@
 			busy = false;
 			return;
 		}
-		const selection = selectionOf(chosen);
 		// Left-out folders of shares that are no longer chosen go too.
 		const skip = (draft.skip ?? []).filter((entry) =>
 			selection.sources.includes(entry.split('/')[0]),
@@ -175,6 +177,8 @@
 				: undefined,
 			volumes: selection.volumes,
 			places: selection.places,
+			// Only readable copies have the choice for disks of running VMs.
+			vmDisks: plainCopy(draft.destination.type) ? draft.vmDisks : undefined,
 		};
 		try {
 			const next = isNew
@@ -373,6 +377,14 @@
 			</p>
 		{/if}
 	</fieldset>
+	{#if plainCopy(draft.destination.type)}
+		<VmDisksChoice
+			bind:vmDisks={draft.vmDisks}
+			sources={selection.sources}
+			volumes={selection.volumes}
+			places={selection.places}
+		/>
+	{/if}
 	{#if plainCopy(draft.destination.type)}<fieldset class="divided">
 			<legend>{t('backup.copy.deleted')}</legend>
 			{#if draft.copy?.dated}

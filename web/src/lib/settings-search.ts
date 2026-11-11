@@ -38,6 +38,13 @@ const keywords: Record<string, string> = {
 		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc ruhemodus standby festplatten platten-ruhe plattenruhe disk sleep spindown',
 	temperatures:
 		'temperatur temperature sensor wärme heat lüfter fan pwm drehzahl kurve curve überhitzung overheating notabschaltung herunterfahren shutdown',
+	systemdata:
+		'systemdaten system data ablage ablage-volume storage volume speicherort location konfigurationssicherung configuration backup stick protokoll protokolle logs journal systemprotokoll aktivitätsprotokoll activity meldungen notifications smart verlauf history monitoring ruhemodus schlafen sleep platten disks wecken wake .titanos',
+	'systemdata-store': 'ablage volume speicherort storage location ruhemodus sleep wecken wake',
+	'systemdata-config':
+		'konfigurationssicherung configuration backup stick einstellungen settings passwort password stände copies täglich daily',
+	'systemdata-logs':
+		'protokoll protokolle logs journal aktivität activity meldungen notifications smart monitoring verlauf history',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',
 	coverage: 'abdeckung coverage geschützt protected ungesichert unprotected',
@@ -211,6 +218,19 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
 		{ id: 'mqtt', label: 'ha.mqtt', href: '/settings/homeassistant#mqtt' },
 		{ id: 'storage', label: 'hastore.title', href: '/settings/homeassistant#storage' },
+	],
+	systemdata: [
+		{ id: 'systemdata-store', label: 'sysdata.common', href: '/settings/systemdata#sysdata-store' },
+		{
+			id: 'systemdata-config',
+			label: 'sysdata.group.config',
+			href: '/settings/systemdata#config',
+		},
+		{
+			id: 'systemdata-logs',
+			label: 'sysdata.group.logs',
+			href: '/settings/systemdata#sysdata-logs',
+		},
 	],
 	backups: [
 		{ id: 'coverage', label: 'coverage.title', href: '/settings/backups/coverage' },
@@ -411,6 +431,14 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'homeassistant', label: 'ha.title', group: 'ai', icon: 'home', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
+	{
+		id: 'systemdata',
+		label: 'sysdata.title',
+		group: 'data',
+		icon: 'disk',
+		admin: true,
+		newSince: { version: '0.77.0', date: '2026-11-12' },
+	},
 	{ id: 'updates', label: 'update.title', group: 'updates', icon: 'download', admin: true },
 ];
 

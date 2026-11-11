@@ -99,6 +99,7 @@
 	"error.not_found": "Das gibt es nicht (mehr).",
 	"error.note_changed": "Die Notiz wurde inzwischen woanders geändert.",
 	"error.note_invalid": "Die Notiz lässt sich so nicht speichern.",
+	"error.invalid_volume": "Dieses Volume ist nicht eingebunden. Wähle ein eingebundenes Volume.",
 	"error.operation_failed": "Das geht gerade nicht.",
 	"error.paper_failed": "Die Änderung an diesem Eintrag hat nicht geklappt.",
 	"error.paper_off": "Der Papierkram-Autopilot ist für dieses Konto ausgeschaltet.",

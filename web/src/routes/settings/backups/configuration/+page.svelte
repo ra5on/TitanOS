@@ -23,6 +23,8 @@
 		time: string;
 		weekday: number;
 		encrypt?: boolean;
+		/** "change": after every change; "daily": at most once a day (0.77). */
+		pace?: string;
 	};
 	type Backup = {
 		name: string;
@@ -384,6 +386,19 @@
 							>{t('stick.schedule.daily')}</option
 						><option value="weekly">{t('stick.schedule.weekly')}</option></select
 					>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="refresh"
+				title={t('stick.pace')}
+				desc={t('stick.pace.hint')}
+				for="stick-pace"
+			>
+				{#snippet control()}
+					<select id="stick-pace" class="field" bind:value={d.pace}>
+						<option value="daily">{t('sysdata.config.pace.daily')}</option>
+						<option value="change">{t('sysdata.config.pace.change')}</option>
+					</select>
 				{/snippet}
 			</SettingRow>
 			<SettingRow icon="disk" title={t('stick.volume')} for="stick-volume">

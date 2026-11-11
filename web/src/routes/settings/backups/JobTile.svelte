@@ -5,6 +5,7 @@
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
+	import BackupNotes from './BackupNotes.svelte';
 	import { bandwidthText, plainCopy, when, where, type Job, type View } from './data-backups.ts';
 
 	let {
@@ -62,7 +63,9 @@
 				>{t('backup.failed')}</span
 			>
 		{:else if state.lastError === 'cancelled'}<span class="chip warn">{t('backup.cancelled')}</span>
-		{:else if state.warning}<span class="chip warn">{t('backup.withWarning')}</span>
+		{:else if state.warning || state.problems?.length}<span class="chip warn"
+				>{t('backup.withWarning')}</span
+			>
 		{:else if state.lastOK}<span class="chip ok">{t('backup.ok')}</span>
 		{:else}<span class="chip">{t('backup.never')}</span>{/if}
 	</div>
@@ -143,12 +146,9 @@
 			{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
 			<pre>{state.lastError}</pre>
 		</div>{/if}
-	{#if !state.running && state.warning}<div class="notice-warn">
-			{t('backup.warning')}
-			<pre>{state.warning}</pre>
-		</div>{/if}
+	{#if !state.running}<BackupNotes {state} id={job.id} onchoice={() => edit(view)} />{/if}
 	{#if !state.running && state.skipped}<p class="muted">
-			{t('backup.skipped', { n: state.skipped })}
+			{t(state.problems?.length ? 'backup.skippedNote' : 'backup.skipped', { n: state.skipped })}
 		</p>{/if}
 	{#if !state.running && state.lastCheck}
 		{#if state.checkError}<div class="notice-error">
