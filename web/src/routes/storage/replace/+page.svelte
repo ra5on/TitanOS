@@ -7,6 +7,8 @@
 	import { api, type Disk, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import {
 		needsSwap,
 		newlyAttached,
@@ -176,35 +178,36 @@
 
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
+	<!-- PLAN 78-5: every step is a plain heading with flat rows; a disk to
+	     choose is a row with its radio button at the right. -->
 	{#if step === 'pick'}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('swap.pickTitle')}</h2>
-			<label class="stack"
-				><span>{t('swap.volume')}</span><select class="field" bind:value={volumeName}
-					>{#each volumes as v (v.name)}<option value={v.name}
-							>{v.name} · {t(`state.${v.state}` as never)}</option
-						>{/each}</select
-				></label
-			>
-			<fieldset class="disks">
-				<legend>{t('swap.disk')}</legend>
-				{#each candidates as c (c.disk)}
-					<label class="choice" class:off={c.mode === 'impossible'}>
-						<input
-							type="radio"
-							name="disk"
-							value={c.disk}
-							bind:group={diskName}
-							disabled={c.mode === 'impossible'}
-						/>
-						<span class="mono">{c.disk || '–'}</span>
-						<span class="what">{describe(c)}</span>
-						{#if c.mode === 'rebuild'}<span class="chip error"
-								>{t(c.present ? 'swap.failed' : 'swap.missing')}</span
-							>{:else if c.warn}<span class="chip warn">{t('swap.smartWarn')}</span>{/if}
-					</label>
+		<SettingGroup title={t('swap.pickTitle')} id="swap-pick">
+			<SettingRow icon="disk" title={t('swap.volume')} for="swap-volume">
+				{#snippet control()}<select id="swap-volume" class="field" bind:value={volumeName}
+						>{#each volumes as v (v.name)}<option value={v.name}
+								>{v.name} · {t(`state.${v.state}` as never)}</option
+							>{/each}</select
+					>{/snippet}
+			</SettingRow>
+			<div class="disks" role="radiogroup" aria-labelledby="swap-disk-label">
+				<p class="label" id="swap-disk-label">{t('swap.disk')}</p>
+				{#each candidates as c, i (c.disk)}
+					<div class="choice" class:off={c.mode === 'impossible'}>
+						<SettingRow title={c.disk || '–'} desc={describe(c)} for="swap-old-{i}">
+							{#snippet control()}{#if c.mode === 'rebuild'}<span class="chip error"
+										>{t(c.present ? 'swap.failed' : 'swap.missing')}</span
+									>{:else if c.warn}<span class="chip warn">{t('swap.smartWarn')}</span>{/if}<input
+									id="swap-old-{i}"
+									type="radio"
+									name="disk"
+									value={c.disk}
+									bind:group={diskName}
+									disabled={c.mode === 'impossible'}
+								/>{/snippet}
+						</SettingRow>
+					</div>
 				{/each}
-			</fieldset>
+			</div>
 			{#if candidate}<p class="muted">{t(`swap.mode.${candidate.mode}` as never)}</p>{/if}
 			<div class="row-actions">
 				<button
@@ -213,59 +216,67 @@
 					onclick={begin}>{t('swap.next')}</button
 				>
 			</div>
-		</section>
+		</SettingGroup>
 	{:else if step === 'prepare'}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('swap.prepareTitle', { disk: diskName })}</h2>
+		<SettingGroup title={t('swap.prepareTitle', { disk: diskName })} id="swap-prepare">
 			<p>{t('swap.prepareText')}</p>
 			<div class="row-actions">
 				<button class="btn btn-danger" disabled={busy} onclick={takeOut}>{t('swap.takeOut')}</button
 				>
 				<button class="btn" onclick={() => (step = 'pick')}>{t('swap.back')}</button>
 			</div>
-		</section>
+		</SettingGroup>
 	{:else if step === 'insert'}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('swap.insertTitle')}</h2>
+		<SettingGroup title={t('swap.insertTitle')} id="swap-insert">
 			{#if oldDisk}
-				<div class="find">
-					<p>
-						{t(candidate?.mode === 'rebuild' ? 'swap.pullOld' : 'swap.keepOld', {
-							disk: diskName,
-							model: oldDisk.model || '–',
-							serial: oldDisk.serial || '–',
-						})}
-					</p>
-					<button
-						class="btn"
-						disabled={busy || identifyUntil > now}
-						onclick={() => identify(diskName)}
-						>{identifyUntil > now
-							? t('swap.identifying', { seconds: String(Math.ceil((identifyUntil - now) / 1000)) })
-							: t('swap.identify')}</button
-					>
-				</div>
+				<SettingRow
+					icon="search"
+					title={diskName}
+					desc={t(candidate?.mode === 'rebuild' ? 'swap.pullOld' : 'swap.keepOld', {
+						disk: diskName,
+						model: oldDisk.model || '–',
+						serial: oldDisk.serial || '–',
+					})}
+				>
+					{#snippet control()}<button
+							class="btn"
+							disabled={busy || identifyUntil > now}
+							onclick={() => identify(diskName)}
+							>{identifyUntil > now
+								? t('swap.identifying', {
+										seconds: String(Math.ceil((identifyUntil - now) / 1000)),
+									})
+								: t('swap.identify')}</button
+						>{/snippet}
+				</SettingRow>
 			{/if}
 			<p>{t('swap.insertText')}</p>
 			{#if options.length}
-				<fieldset class="disks">
-					<legend>{t('swap.newDisk')}</legend>
-					{#each options as d (d.name)}
-						<label class="choice">
-							<input type="radio" name="new" value={d.name} bind:group={chosenNew} />
-							<span class="mono">{d.name}</span>
-							<span class="what"
-								>{diskType(d)} · {d.model || '–'} · {d.serial || '–'} · {formatDiskBytes(
+				<div class="disks" role="radiogroup" aria-labelledby="swap-new-label">
+					<p class="label" id="swap-new-label">{t('swap.newDisk')}</p>
+					{#each options as d, i (d.name)}
+						<div class="choice">
+							<SettingRow
+								title={d.name}
+								desc="{diskType(d)} · {d.model || '–'} · {d.serial || '–'} · {formatDiskBytes(
 									d.sizeBytes,
-								)}</span
+								)}"
+								for="swap-new-{i}"
 							>
-							{#if fresh.some((f) => f.name === d.name)}<span class="chip ok"
-									>{t('swap.justAttached')}</span
-								>{/if}
-							{#if d.role === 'used'}<span class="chip warn">{t('swap.hasData')}</span>{/if}
-						</label>
+								{#snippet control()}{#if fresh.some((f) => f.name === d.name)}<span class="chip ok"
+											>{t('swap.justAttached')}</span
+										>{/if}{#if d.role === 'used'}<span class="chip warn">{t('swap.hasData')}</span
+										>{/if}<input
+										id="swap-new-{i}"
+										type="radio"
+										name="new"
+										value={d.name}
+										bind:group={chosenNew}
+									/>{/snippet}
+							</SettingRow>
+						</div>
 					{/each}
-				</fieldset>
+				</div>
 			{:else}
 				<p class="muted" role="status">
 					{t('swap.waiting', {
@@ -278,14 +289,15 @@
 					})}
 				</p>
 			{/if}
-			{#if needsPassword}<label class="stack"
-					><span>{t('swap.password')}</span><input
-						class="field"
-						type="password"
-						bind:value={password}
-						autocomplete="off"
-					/></label
-				>{/if}
+			{#if needsPassword}<SettingRow icon="key" title={t('swap.password')} for="swap-password">
+					{#snippet control()}<input
+							id="swap-password"
+							class="field"
+							type="password"
+							bind:value={password}
+							autocomplete="off"
+						/>{/snippet}
+				</SettingRow>{/if}
 			<div class="row-actions">
 				<button
 					class="btn btn-primary"
@@ -293,12 +305,12 @@
 					onclick={() => (confirming = true)}>{t('swap.start')}</button
 				>
 			</div>
-		</section>
+		</SettingGroup>
 	{:else if step === 'running'}
-		<section class="tile panel">
-			<h2 class="tile-title">
-				{t(candidate?.mode === 'live' ? 'swap.copying' : 'swap.rebuilding')}
-			</h2>
+		<SettingGroup
+			title={t(candidate?.mode === 'live' ? 'swap.copying' : 'swap.rebuilding')}
+			id="swap-running"
+		>
 			{#if volume?.sync}
 				<div
 					class="bar"
@@ -318,33 +330,34 @@
 				<p class="muted" role="status">{t('swap.starting')}</p>
 			{/if}
 			<p class="muted">{t('swap.runningHint')}</p>
-		</section>
+		</SettingGroup>
 	{:else if step === 'cleanup'}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('swap.cleanupTitle')}</h2>
+		<SettingGroup title={t('swap.cleanupTitle')} id="swap-cleanup">
 			<p>{t('swap.cleanupText', { disk: diskName })}</p>
 			<div class="row-actions">
 				<button class="btn btn-primary" disabled={busy} onclick={removeOld}
 					>{t('swap.removeOld')}</button
 				>
 			</div>
-		</section>
+		</SettingGroup>
 	{:else}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('swap.doneTitle')}</h2>
+		<SettingGroup title={t('swap.doneTitle')} id="swap-done">
 			<p>{t('swap.doneText', { volume: volumeName })}</p>
 			{#if oldDisk && !oldDisk.volume}
-				<div class="find">
-					<p>{t('swap.pullNow', { disk: diskName, serial: oldDisk.serial || '–' })}</p>
-					<button
-						class="btn"
-						disabled={busy || identifyUntil > now}
-						onclick={() => identify(diskName)}>{t('swap.identify')}</button
-					>
-				</div>
+				<SettingRow
+					icon="search"
+					title={diskName}
+					desc={t('swap.pullNow', { disk: diskName, serial: oldDisk.serial || '–' })}
+				>
+					{#snippet control()}<button
+							class="btn"
+							disabled={busy || identifyUntil > now}
+							onclick={() => identify(diskName)}>{t('swap.identify')}</button
+						>{/snippet}
+				</SettingRow>
 			{/if}
 			<div class="row-actions"><a class="btn" href="/storage">{t('swap.toStorage')}</a></div>
-		</section>
+		</SettingGroup>
 	{/if}
 {/if}
 
@@ -378,42 +391,26 @@
 		font-weight: 600;
 	}
 	.disks {
-		border: 0;
-		margin: 0;
-		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1-5);
+		gap: 3px;
+		min-width: 0;
 	}
-	legend {
+	.label {
+		margin: var(--space-2) 0 var(--space-1);
 		font-weight: 500;
-		margin-bottom: var(--space-1);
-	}
-	.choice {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		flex-wrap: wrap;
-		padding: var(--space-2) var(--space-2-5);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
 	}
 	.choice.off {
 		opacity: 0.6;
 	}
-	.what {
-		flex: 1 1 14rem;
-		font-size: var(--text-base);
+	.choice input {
+		flex: none;
+		width: 1.125rem;
+		height: 1.125rem;
+		accent-color: var(--accent);
 	}
-	.find {
-		display: flex;
-		gap: var(--space-3);
-		align-items: center;
-		flex-wrap: wrap;
-	}
-	.find p {
-		flex: 1 1 18rem;
-		margin: 0;
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 	.bar {
 		height: 10px;

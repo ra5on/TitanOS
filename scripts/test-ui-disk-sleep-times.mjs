@@ -200,7 +200,7 @@ try {
     // Disk details: the section with value, state and time.
     await row("sdb").locator("button").first().click();
     const details = page.locator("aside.disk-details");
-    const section = details.locator("section.sleep");
+    const section = details.locator("div.sleep");
     await section.getByRole("heading", { name: "Ruhemodus" }).waitFor();
     await section.getByText(`zuletzt geweckt ${hhmm(wokenAt)}`).waitFor();
     await section.getByText("aktiv", { exact: true }).waitFor();
@@ -236,7 +236,7 @@ try {
       .first()
       .click();
     await page
-      .locator("aside.disk-details section.sleep")
+      .locator("aside.disk-details div.sleep")
       .getByText("NVMe, schläft nie")
       .waitFor();
     await ctx.close();
@@ -315,7 +315,7 @@ try {
       .click();
     const details = page.locator("aside.disk-details");
     await details
-      .locator("section.sleep")
+      .locator("div.sleep")
       .getByText(`schläft seit ${hhmm(asleepAt)}`)
       .waitFor();
     await details.screenshot({

@@ -113,7 +113,7 @@ try {
     );
     await page.goto(base + "/files?root=share%2FDocuments");
     // The jobs section has an accessible label; query its class to avoid coupling to a translation.
-    const section = page.locator("section.jobs");
+    const section = page.locator("div.jobs");
     await section.waitFor().catch(async (error) => {
       console.error({
         width,
@@ -126,7 +126,7 @@ try {
       throw error;
     });
     await page.waitForFunction(
-      () => document.querySelectorAll("section.jobs .job").length === 3,
+      () => document.querySelectorAll("div.jobs .job").length === 3,
     );
     if (width === 390) await page.locator(".places-toggle").click();
     await page.getByText("Import HDD", { exact: false }).waitFor();
@@ -164,7 +164,7 @@ try {
     holdPoll = false;
     releasePoll();
     await page.waitForFunction(
-      () => document.querySelectorAll("section.jobs .job").length === 2,
+      () => document.querySelectorAll("div.jobs .job").length === 2,
     );
     assert.deepEqual(deleted, ["done1"]);
     assert.equal(await page.getByRole("dialog").count(), 0);
@@ -174,7 +174,7 @@ try {
       ...Array.from({ length: 8 }, (_, i) => makeJob("older" + i)),
     ];
     await page.waitForFunction(
-      () => document.querySelectorAll("section.jobs .job").length === 9,
+      () => document.querySelectorAll("div.jobs .job").length === 9,
     );
     fail = true;
     await section.getByRole("button", { name: clearName, exact: true }).click();
@@ -183,12 +183,12 @@ try {
     fail = false;
     await section.getByRole("button", { name: clearName, exact: true }).click();
     await page.waitForFunction(
-      () => document.querySelectorAll("section.jobs .job").length === 1,
+      () => document.querySelectorAll("div.jobs .job").length === 1,
     );
     assert.equal(jobs[0].id, "active");
     await page.reload();
     await page.waitForFunction(
-      () => document.querySelectorAll("section.jobs .job").length === 1,
+      () => document.querySelectorAll("div.jobs .job").length === 1,
     );
     assert.equal(
       await section

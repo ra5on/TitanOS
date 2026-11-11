@@ -1563,3 +1563,14 @@ span.srow-chev {
 .sgroup > .panel {
 	padding: 0;
 }
+
+/* PLAN 78-5: the read-only facts of a detail pane (a disk, a share) as
+   rows: lower than a setting with its control, the value in the text colour. */
+.sfacts .srow-head {
+	min-height: 40px;
+	padding-block: var(--space-1-5);
+}
+.sfacts .srow-ctl {
+	color: var(--text);
+	overflow-wrap: anywhere;
+}
