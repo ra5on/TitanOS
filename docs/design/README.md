@@ -88,7 +88,7 @@ Verbindung zwischen den Knoten, Wege, Meldungen; Beitrittsinformation und
 Verlassen unverändert darunter. „Wege prüfen“, „Weg zu <Knoten>“ und „Alle
 Knoten aktualisieren“ (nacheinander vorausgewählt) sind einfache Dialoge.
 Ein Knoten mit anderer Version ist verwaltbar; der Balken oben nennt beide
-Versionen. Updates zeigt die Knoten des Clusters als Tabelle; das Dashboard
+Versionen. Updates zeigt die Knoten des Clusters als Zeilen (seit PLAN 78, vorher Tabelle); das Dashboard
 hat die Kachel „Cluster“. Prüfung `scripts/test-ui-cluster.mjs`, Regeln
 `docs/rules/CLUSTER.md`.
 
@@ -149,6 +149,15 @@ liegen daneben unter `ist/`.
   einsortiert). Ein Bereich zeigt die Liste seiner Seiten.
 - Tabellen und Werkzeuge (Firewall, Sicherungsaufträge) bleiben Tabellen unter
   Pfadtitel und Überschrift.
+
+Updates (PLAN 78-3, „Loslegen“ am 10.11.2026): Entwurf
+`Entwuerfe/78-updates/entwurf.html` – große Karte für ein vorhandenes Update,
+„Das ist neu in …“ aufklappbar und gegliedert in Neu/Sicherheit/Behoben,
+Installation als Schritte, „Auf diesem NAS“ und „Automatik“ als Zeilen. Echte
+Aufnahmen unter `Entwuerfe/78-updates/ist/`. Abweichung vom Entwurf: Schritt 3
+heißt „Start einrichten“ statt „Auf den Stick schreiben“, weil titand die
+Dateien schon beim Laden auf den Stick schreibt und in dieser Phase nur den
+Starteintrag umstellt.
 
 Verbindlicher Wortlaut: `docs/rules/WEB-UI.md`, Absatz „Systemsteuerung im
 Zeilenaufbau“. Er ersetzt für die Seiten unter `/settings` die Kachel-Abschnitte
