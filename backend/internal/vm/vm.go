@@ -245,16 +245,21 @@ type Manager struct {
 	// sysDir and devDir are /sys and /dev.
 	sysDir, devDir string
 
-	operations      sync.Map
-	snapshotJobs    map[string]*Job
-	snapshotSpaceMu sync.Mutex
-	snapshotSpace   map[uint64]uint64
-	createMu        sync.Mutex
-	mu              sync.Mutex
-	loaded          bool
-	vms             map[string]VM
-	samples         map[string]*sample
-	autostarted     map[string]bool
+	operations   sync.Map
+	snapshotJobs map[string]*Job
+	// diskBackups are the VMs (by UUID) whose disks a backup holds still
+	// right now; diskBackupChecked the volumes looked through for what an
+	// interrupted backup left (diskbackup.go).
+	diskBackups       map[string]*DiskBackup
+	diskBackupChecked map[string]bool
+	snapshotSpaceMu   sync.Mutex
+	snapshotSpace     map[uint64]uint64
+	createMu          sync.Mutex
+	mu                sync.Mutex
+	loaded            bool
+	vms               map[string]VM
+	samples           map[string]*sample
+	autostarted       map[string]bool
 	// ioPaused are the running VMs paused after a disk error; ioChecked
 	// is when that was last looked at.
 	ioPaused  map[string]bool

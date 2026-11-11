@@ -114,10 +114,54 @@ type Job struct {
 	// Copy holds the options of readable copies; nil is a plain copy that
 	// only adds and replaces. Older versions ignore it.
 	Copy *CopyOptions `json:"copy,omitempty"`
+	// VMDisks says how a readable copy treats the image files of running
+	// VMs; nil means no choice was made yet (the run then only uses what
+	// touches no VM and tells the page that a choice is needed). Older
+	// versions ignore it.
+	VMDisks *VMDisks `json:"vmDisks,omitempty"`
 	// Bandwidth limits how fast a run moves data; nil is no limit.
 	Bandwidth *Bandwidth `json:"bandwidth,omitempty"`
 	// Password encrypts the backup. It is made once and never changes.
 	Password string `json:"password,omitempty"`
+}
+
+// VMDisks is the choice of a job for the image files of running VMs.
+// Disks of VMs that are shut off are always copied like any file.
+type VMDisks struct {
+	// Mode is VMDisksConsistent (the best way that works for each disk: a
+	// Btrfs snapshot of the volume, else a libvirt snapshot of the VM,
+	// else what Raw says) or VMDisksSkip (never read them in this job;
+	// what the destination holds of them stays untouched).
+	Mode string `json:"mode"`
+	// Raw says, with VMDisksConsistent, what happens to disks no snapshot
+	// works for (raw images): "" or VMDisksRawSkip reads them as they are
+	// and warns if they changed meanwhile (the earlier copy stays),
+	// VMDisksRawPause pauses the VM for the copy.
+	Raw string `json:"raw,omitempty"`
+}
+
+// The values of VMDisks.
+const (
+	VMDisksConsistent = "consistent"
+	VMDisksSkip       = "skip"
+	VMDisksRawSkip    = "skip"
+	VMDisksRawPause   = "pause"
+	// VMDiskWayPause is the way of a VMDiskSession that pauses the VM.
+	VMDiskWayPause = "pause"
+)
+
+// VMDiskSession holds the disks of one running VM still while they are
+// copied (vm.DiskBackup).
+type VMDiskSession interface {
+	// Method is the way used ("libvirt_snapshot" or "pause") and whether
+	// the guest agent froze the guest's file systems.
+	Method() (way string, quiesced bool)
+	// Context ends when the copy must stop.
+	Context() context.Context
+	// Expired tells that a pause was ended by its time limit.
+	Expired() bool
+	// End brings the VM back to normal; it must always be called.
+	End() error
 }
 
 // State is what is known about the runs of a job.
@@ -157,6 +201,13 @@ type State struct {
 	// language of the viewer. Warning carries the same in English for
 	// older pages and other readers.
 	Problems []Problem `json:"problems,omitempty"`
+	// Notices are things the page tells about the last run of a plain copy
+	// that are no failure: disks of running VMs left out on purpose
+	// (vm_disk_skipped), how such a disk was saved (vm_disk_paused,
+	// vm_disk_crash_consistent), a choice the job still needs
+	// (vm_disk_choice_needed). Same shape as Problems; they do not count
+	// for Skipped and set no Warning.
+	Notices []Problem `json:"notices,omitempty"`
 	// Bytes is how much data the last backup covered.
 	Bytes uint64 `json:"bytes"`
 	// RestoredTo is the folder of the last restore; RestoreError why the
@@ -209,6 +260,16 @@ type Manager struct {
 	// the image files of the disks of running VMs, as absolute paths. A
 	// plain copy reads them from a snapshot where it can. Nil: none.
 	LiveFiles func() []string
+	// LiveDisks is LiveFiles with the name of the VM each file belongs to.
+	LiveDisks func() map[string]string
+	// BeginVMDisks holds the disks of a running VM still for the copy (a
+	// libvirt snapshot, or a pause if allowPause and nothing else works).
+	// An error carries a problem code (ProblemCode); nothing is changed
+	// then. Nil: disks are read as they are.
+	BeginVMDisks func(ctx context.Context, vm string, allowPause bool) (VMDiskSession, error)
+	// RecoverVMDisks brings VMs back to normal that an interrupted run
+	// left paused or on an overlay. Nil: nothing.
+	RecoverVMDisks func(ctx context.Context) error
 	// SnapshotSource makes a read-only snapshot of a mounted volume for
 	// one run and returns its folder (the volume as it was at that moment)
 	// and what removes it again. It fails for a volume that has no

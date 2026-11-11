@@ -18,10 +18,12 @@ import (
 // layers, older snapshots); copying everything from it would silently leave
 // those out. A live file the snapshot does not hold is read as it is.
 type frozenSources struct {
-	m     *Manager
-	ctx   context.Context
-	job   Job
-	lives map[string]bool
+	m   *Manager
+	ctx context.Context
+	job Job
+	// lives are the files running guests write to, with the name of their
+	// VM ("" if unknown).
+	lives map[string]string
 	// roots holds the snapshot of each volume asked for; nil if none
 	// could be made.
 	roots    map[string]*os.Root
@@ -29,10 +31,15 @@ type frozenSources struct {
 }
 
 func (m *Manager) frozenSources(ctx context.Context, job Job) *frozenSources {
-	f := &frozenSources{m: m, ctx: ctx, job: job, lives: map[string]bool{}, roots: map[string]*os.Root{}}
+	f := &frozenSources{m: m, ctx: ctx, job: job, lives: map[string]string{}, roots: map[string]*os.Root{}}
 	if m.LiveFiles != nil {
 		for _, file := range m.LiveFiles() {
-			f.lives[filepath.Clean(file)] = true
+			f.lives[filepath.Clean(file)] = ""
+		}
+	}
+	if m.LiveDisks != nil {
+		for file, vm := range m.LiveDisks() {
+			f.lives[filepath.Clean(file)] = vm
 		}
 	}
 	return f
@@ -40,7 +47,16 @@ func (m *Manager) frozenSources(ctx context.Context, job Job) *frozenSources {
 
 // live tells whether a file of a source is one a running guest writes to.
 func (f *frozenSources) live(source Source, rel string) bool {
-	return len(f.lives) > 0 && f.lives[filepath.Join(source.Path, filepath.FromSlash(rel))]
+	if len(f.lives) == 0 {
+		return false
+	}
+	_, live := f.lives[filepath.Join(source.Path, filepath.FromSlash(rel))]
+	return live
+}
+
+// vm is the VM a live file belongs to, "" if that is not known.
+func (f *frozenSources) vm(source Source, rel string) string {
+	return f.lives[filepath.Join(source.Path, filepath.FromSlash(rel))]
 }
 
 // file returns the snapshot of the source's volume and the path of the

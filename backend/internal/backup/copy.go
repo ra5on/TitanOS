@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -67,11 +68,47 @@ const (
 	// ProblemVMDiskChanged is the disk of a running VM that changed while
 	// it was copied and could not be read from a snapshot: it is not
 	// saved by this run.
-	ProblemVMDiskChanged   = "vm_disk_changed"
+	ProblemVMDiskChanged = "vm_disk_changed"
+	// Disks of running VMs this run did not save, and why (see vm.Disk…):
+	// the copy of the run before stays.
+	ProblemVMDiskBusy           = "vm_disk_busy"            // another operation of the VM runs, or it is paused
+	ProblemVMDiskPassthrough    = "vm_disk_passthrough"     // the VM has a whole disk of the NAS
+	ProblemVMDiskBackingChain   = "vm_disk_backing_chain"   // the image has snapshots or a backing chain of its own
+	ProblemVMDiskNoSpace        = "vm_disk_no_space"        // no room for the overlay next to the disk
+	ProblemVMDiskSnapshotFailed = "vm_disk_snapshot_failed" // libvirt refused the snapshot
+	ProblemVMDiskPauseFailed    = "vm_disk_pause_failed"    // libvirt refused to pause the VM
+	ProblemVMDiskPauseTimeout   = "vm_disk_pause_timeout"   // the pause reached its limit before the copy was done
+	// ProblemVMDiskUndoFailed: the VM is not back to normal yet (still on
+	// the overlay, or paused); TitanOS tries again. Needs attention.
+	ProblemVMDiskUndoFailed = "vm_disk_undo_failed"
+	// ProblemVMDiskRawImage is never reported: a raw image without leave
+	// to pause is read as it is (ProblemVMDiskChanged if it changed).
+	ProblemVMDiskRawImage  = "vm_disk_raw_image"
 	ProblemLinkUnsupported = "link_unsupported" // a symbolic link the drive's file system cannot hold
 	ProblemMirrorFailed    = "mirror_failed"    // a deleted file that could not be moved aside
 	ProblemOther           = "other"
 )
+
+// The codes of State.Notices: no failure, nothing to repair.
+const (
+	NoticeVMDiskSkipped         = "vm_disk_skipped"          // left out on purpose (job setting); the earlier copy stays untouched
+	NoticeVMDiskChoiceNeeded    = "vm_disk_choice_needed"    // the job has no setting for disks of running VMs yet
+	NoticeVMDiskCrashConsistent = "vm_disk_crash_consistent" // saved from a libvirt snapshot without the guest agent
+	NoticeVMDiskPaused          = "vm_disk_paused"           // saved while the VM was paused for the copy
+)
+
+// overlaySuffix ends the overlay a backup puts next to the disk of a
+// running VM (vm.OverlaySuffix); never copied.
+const overlaySuffix = ".titanos-overlay"
+
+// vmDiskCode is the problem code of an error of BeginVMDisks.
+func vmDiskCode(err error) string {
+	var coded interface{ ProblemCode() string }
+	if errors.As(err, &coded) && problemText[coded.ProblemCode()] != "" {
+		return coded.ProblemCode()
+	}
+	return ProblemVMDiskSnapshotFailed
+}
 
 // problemPaths is how many entries a Problem names.
 const problemPaths = 20
@@ -88,8 +125,18 @@ var problemText = map[string]string{
 	ProblemChanged:           "files that changed while being copied",
 	ProblemVMDiskChanged:     "disks of running VMs that changed while being copied (not saved by this run)",
 	ProblemLinkUnsupported:   "symbolic links the drive's file system cannot hold",
-	ProblemMirrorFailed:      "deleted files that could not be moved aside",
-	ProblemOther:             "files with other errors",
+
+	ProblemVMDiskBusy:           "disks of running VMs not saved by this run: another operation of the VM was running or it was paused",
+	ProblemVMDiskPassthrough:    "disks of running VMs not saved by this run: the VM uses a whole disk of the NAS",
+	ProblemVMDiskBackingChain:   "disks of running VMs not saved by this run: the image has snapshots of its own",
+	ProblemVMDiskNoSpace:        "disks of running VMs not saved by this run: no room for the snapshot next to the disk",
+	ProblemVMDiskSnapshotFailed: "disks of running VMs not saved by this run: the snapshot failed",
+	ProblemVMDiskPauseFailed:    "disks of running VMs not saved by this run: the VM could not be paused",
+	ProblemVMDiskPauseTimeout:   "disks of running VMs not saved by this run: the pause reached its time limit",
+	ProblemVMDiskUndoFailed:     "VMs not back to normal after the backup (TitanOS tries again; check the VM)",
+	ProblemVMDiskRawImage:       "disks of running VMs that are raw images",
+	ProblemMirrorFailed:         "deleted files that could not be moved aside",
+	ProblemOther:                "files with other errors",
 }
 
 // copyProblems collects what a run left out, by code, for the warning.
@@ -244,6 +291,22 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// Sockets, FIFOs and device files hold no data: they are left out
 	// without a word on the page, only counted for the journal.
 	var special int64
+	// notices are what the page shows without calling the run incomplete:
+	// disks left out on purpose, how a disk was saved, a choice to make.
+	var notices copyProblems
+	// What an interrupted run left: a VM still paused, an overlay.
+	if m.RecoverVMDisks != nil {
+		if err := m.RecoverVMDisks(ctx); err != nil && ctx.Err() == nil {
+			slog.Warn("backup: a VM is not back to normal after an interrupted backup", "job", job.ID, "err", err)
+		}
+	}
+	// Disks of running VMs change while they are read. In this order: on a
+	// Btrfs volume they are read from a read-only snapshot made for this
+	// run; else, if the job says so, the VM is held still (a libvirt
+	// snapshot, or a pause for raw images); else they are read as they are
+	// and reported if they changed. A job set to skip never opens them.
+	frozen := m.frozenSources(ctx, job)
+	defer frozen.release()
 	if len(sources) == 0 {
 		return fmt.Errorf("none of the shares of this job is available")
 	}
@@ -293,6 +356,20 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		return problems.count[ProblemSourceUnavailable] > 0 || problems.count[ProblemFolderUnavailable] > 0
 	}
 	seen := map[string]string{}
+	// protected are the dated runs that hold the newest copy of a disk
+	// this run does not save (left out on purpose, or not saved): they are
+	// not removed by the retention or to make room, or the last copy of
+	// that disk would go because it was skipped.
+	protected := map[string]bool{}
+	earlier := slices.Clone(runs)
+	protect := func(share, rel string) {
+		for i := len(earlier) - 1; i >= 0 && dated; i-- {
+			if info, err := target.Lstat(path.Join(job.Destination.Folder, earlier[i].name, share, rel)); err == nil && info.Mode().IsRegular() {
+				protected[earlier[i].name] = true
+				return
+			}
+		}
+	}
 
 	// First the list: what there is, how much, and what is new. It gives the
 	// page a percentage and the run a check of the free space.
@@ -328,7 +405,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					}
 					return nil
 				}
-				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part")
+				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part") || strings.HasSuffix(entry.Name(), overlaySuffix)
 				for _, skip := range job.Skip {
 					full := name + "/" + rel
 					excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")
@@ -378,6 +455,13 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					special++
 					return nil
 				}
+				if job.VMDisks != nil && job.VMDisks.Mode == VMDisksSkip && frozen.live(source, rel) {
+					// Left out on purpose: never opened, and what the
+					// destination holds of it stays as it is.
+					notices.add(NoticeVMDiskSkipped, name+"/"+rel)
+					protect(name, rel)
+					return nil
+				}
 				item := copyItem{share: name, rel: rel, dst: dst, size: info.Size()}
 				compare := dst
 				if dated {
@@ -411,14 +495,22 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if !ok || needed <= free {
 			break
 		}
-		if !dated || !job.Keep.DropsOldest() || len(runs) < 2 || incomplete() {
+		// The oldest run that does not hold the last copy of a skipped disk;
+		// never the newest.
+		oldest := -1
+		for i := 0; i < len(runs)-1 && oldest < 0; i++ {
+			if !protected[runs[i].name] {
+				oldest = i
+			}
+		}
+		if !dated || !job.Keep.DropsOldest() || oldest < 0 || incomplete() {
 			return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
 		}
-		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[0].name)); err != nil {
+		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[oldest].name)); err != nil {
 			return err
 		}
-		freed = append(freed, runs[0].name)
-		runs = runs[1:]
+		freed = append(freed, runs[oldest].name)
+		runs = slices.Delete(runs, oldest, oldest+1)
 	}
 	m.update(job, func(s *State) { s.BytesTotal = planned })
 
@@ -437,13 +529,6 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			root.Close()
 		}
 	}()
-	// Disks of running VMs change while they are read. On a Btrfs volume
-	// they are read from a read-only snapshot made for this run, which
-	// holds them as they were at one moment (like after a power cut: the
-	// guest's file system and qcow2 recover from that). Everything else,
-	// and such disks where no snapshot can be made, is read as it is.
-	frozen := m.frozenSources(ctx, job)
-	defer frozen.release()
 	progress := func(done uint64) {
 		m.mu.Lock()
 		if state := m.states[job.ID]; state != nil {
@@ -454,21 +539,68 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		m.mu.Unlock()
 	}
-	for _, item := range items {
+	// ready opens the source of an item and makes its folder at the destination.
+	ready := func(item copyItem) (*os.Root, bool, error) {
 		root := roots[item.share]
 		if root == nil {
 			var err error
 			if root, err = os.OpenRoot(sources[item.share].Path); err != nil {
 				problems.add(ProblemSourceUnavailable, item.share)
-				continue
+				return nil, false, nil
 			}
 			roots[item.share] = root
 		}
 		if err := copyDirectoriesBelow(target, base, path.Dir(item.dst)); err != nil {
 			if fatalTarget(err) {
-				return err
+				return nil, false, err
 			}
 			problems.add(problemOf(err), item.share+"/"+item.rel)
+			return nil, false, nil
+		}
+		return root, true, nil
+	}
+	// copyOne copies one file from the root it is read from.
+	copyOne := func(ctx context.Context, from *os.Root, rel string, item copyItem, offset uint64) error {
+		if item.prev != "" && links {
+			_, err := copyOrLink(ctx, from, rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
+			return err
+		}
+		_, err := copyFilePaced(ctx, from, rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
+		return err
+	}
+	// asIs reads the disk of a running VM as it is, as before there were
+	// better ways: if it changes meanwhile, the copy of the run before
+	// stays and the run says so.
+	asIs := func(root *os.Root, item copyItem, offset uint64) error {
+		err := copyOne(ctx, root, item.rel, item, offset)
+		if err == nil {
+			return nil
+		}
+		if fatalTarget(err) {
+			return err
+		}
+		code := problemOf(err)
+		if code == ProblemChanged {
+			code = ProblemVMDiskChanged
+		}
+		problems.add(code, item.share+"/"+item.rel)
+		protect(item.share, item.rel)
+		return nil
+	}
+	// held are the disks of running VMs that need the VM itself to stand
+	// still (a libvirt snapshot, a pause): copied VM by VM after the rest,
+	// so that no VM is held for longer than its own disks take.
+	type heldItem struct {
+		item   copyItem
+		offset uint64
+	}
+	held := map[string][]heldItem{}
+	for _, item := range items {
+		root, ok, err := ready(item)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			continue
 		}
 		if item.isLink {
@@ -481,30 +613,114 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			continue
 		}
 		offset := total
-		from, rel := root, item.rel
-		live := frozen.live(sources[item.share], item.rel)
-		if live {
-			if snapshot, within, ok := frozen.file(sources[item.share], item.rel); ok {
-				from, rel = snapshot, within
-			}
-		}
-		var err error
-		if item.prev != "" && links {
-			_, err = copyOrLink(ctx, from, rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
-		} else {
-			_, err = copyFilePaced(ctx, from, rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
-		}
-		if err != nil {
-			if fatalTarget(err) {
-				return err
-			}
-			code := problemOf(err)
-			if live && code == ProblemChanged {
-				code = ProblemVMDiskChanged
-			}
-			problems.add(code, item.share+"/"+item.rel)
-		}
 		total += uint64(item.size)
+		source := sources[item.share]
+		if !frozen.live(source, item.rel) {
+			if err := copyOne(ctx, root, item.rel, item, offset); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+			}
+			progress(total)
+			continue
+		}
+		// The disk of a running VM. A job without a stored choice keeps to
+		// what touches no VM (a Btrfs snapshot, else reading it as it is)
+		// and tells the page that a choice is needed.
+		if job.VMDisks == nil {
+			notices.add(NoticeVMDiskChoiceNeeded, item.share+"/"+item.rel)
+		}
+		vm := frozen.vm(source, item.rel)
+		if snapshot, within, ok := frozen.file(source, item.rel); ok {
+			// Read-only and of one moment: it cannot change while it is read.
+			if err := copyOne(ctx, snapshot, within, item, offset); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+				protect(item.share, item.rel)
+			}
+		} else if job.VMDisks != nil && job.VMDisks.Mode == VMDisksConsistent && vm != "" && m.BeginVMDisks != nil {
+			held[vm] = append(held[vm], heldItem{item, offset})
+			continue
+		} else if err := asIs(root, item, offset); err != nil {
+			return err
+		}
+		progress(total)
+	}
+	for _, vm := range slices.Sorted(maps.Keys(held)) {
+		err := func() error {
+			each := func(to *copyProblems, code string) {
+				for _, h := range held[vm] {
+					to.add(code, h.item.share+"/"+h.item.rel)
+				}
+			}
+			session, err := m.BeginVMDisks(ctx, vm, job.VMDisks.Raw == VMDisksRawPause)
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				code := vmDiskCode(err)
+				if code == ProblemVMDiskRawImage {
+					// Raw images and no leave to pause: as it is, with a
+					// warning if it changed.
+					for _, h := range held[vm] {
+						if err := asIs(roots[h.item.share], h.item, h.offset); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				slog.Warn("backup: disks of a running VM not saved by this run", "job", job.ID, "vm", vm, "reason", err)
+				each(&problems, code)
+				for _, h := range held[vm] {
+					protect(h.item.share, h.item.rel)
+				}
+				return nil
+			}
+			// Always, whatever happens below: the VM goes back to normal.
+			defer func() {
+				if err := session.End(); err != nil {
+					each(&problems, ProblemVMDiskUndoFailed)
+				}
+			}()
+			way, quiesced := session.Method()
+			for _, h := range held[vm] {
+				name := h.item.share + "/" + h.item.rel
+				err := copyOne(session.Context(), roots[h.item.share], h.item.rel, h.item, h.offset)
+				switch {
+				case err == nil && way == VMDiskWayPause:
+					notices.add(NoticeVMDiskPaused, name)
+				case err == nil && !quiesced:
+					notices.add(NoticeVMDiskCrashConsistent, name)
+				case err == nil:
+				case session.Context().Err() != nil && ctx.Err() == nil:
+					// The VM was let go before the copy was done: the pause
+					// reached its limit, or the VM is being shut down. The
+					// copy of the run before stays.
+					code := ProblemVMDiskBusy
+					if session.Expired() {
+						code = ProblemVMDiskPauseTimeout
+					}
+					problems.add(code, name)
+					protect(h.item.share, h.item.rel)
+				case fatalTarget(err):
+					return err
+				default:
+					code := problemOf(err)
+					if code == ProblemChanged {
+						code = ProblemVMDiskChanged
+					}
+					problems.add(code, name)
+					protect(h.item.share, h.item.rel)
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
 		progress(total)
 	}
 	if job.Copy != nil && job.Copy.Mirror && !dated {
@@ -523,7 +739,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			}
 		}
 		if !incomplete() {
-			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())); err != nil {
+			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location()), protected); err != nil {
 				return err
 			}
 		}
@@ -537,7 +753,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		slog.Info("backup: sockets, FIFOs and device files left out, they hold no data", "job", job.ID, "count", special)
 	}
 	m.update(job, func(s *State) {
-		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped, s.Problems = total, total, planned, 100, problems.String(), problems.total(), problems.list()
+		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped, s.Problems, s.Notices = total, total, planned, 100, problems.String(), problems.total(), problems.list(), notices.list()
 	})
 	if len(freed) > 0 && m.OnFreed != nil && job.Keep.DropsOldest() {
 		m.OnFreed(job.ID, len(freed))

@@ -65,8 +65,11 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   **Hinweise als Kennung** (PLAN 79-9, 11.11.2026): `state.problems` nennt je
   Ursache `code`, `count` und bis zu 20 `paths` (`source_unavailable`,
   `folder_unavailable`, `read_error`, `case_conflict`, `too_large`,
-  `name_not_allowed`, `changed`, `vm_disk_changed`, `link_unsupported`,
-  `mirror_failed`, `other`); die Oberfläche übersetzt sie (`backup.problem.<code>`)
+  `name_not_allowed`, `changed`, `link_unsupported`, `mirror_failed`, `other`
+  sowie für Platten laufender VMs `vm_disk_changed`, `vm_disk_busy`,
+  `vm_disk_passthrough`, `vm_disk_backing_chain`, `vm_disk_no_space`,
+  `vm_disk_snapshot_failed`, `vm_disk_pause_failed`, `vm_disk_pause_timeout`,
+  `vm_disk_undo_failed`); die Oberfläche übersetzt sie (`backup.problem.<code>`)
   und zeigt die Pfade gegliedert. `state.warning` trägt dasselbe weiterhin als
   englischen Satz für ältere Oberflächen, MCP und Home Assistant; neue
   Ursachen bekommen eine Kennung, keinen neuen Satz.
@@ -84,37 +87,97 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   `link_unsupported`. Sockets, FIFOs und Gerätedateien sind keine Daten: Sie
   werden still übergangen und nur als Zahl im Journal vermerkt, nie als
   Hinweis am Auftrag.
-  **Platten laufender VMs** (`backup/copy_frozen.go`, `vm.RunningDiskFiles`,
-  `storage.BackupSnapshot`): Abbilddateien laufender VMs ändern sich beim
-  Lesen. Liegt die Datei auf einem Btrfs-Volume, legt der Lauf beim ersten
-  solchen Abbild einen schreibgeschützten Snapshot des Volumes unter
-  `.titanos/backup-source/` an (kein Snapshot des Nutzers: nicht gelistet,
-  keine Vorgängerversion), liest **nur diese Abbilder** daraus und löscht ihn
-  am Ende des Laufs, auch nach Abbruch. Ein liegen gebliebener (titand
-  beendet, Stromausfall) würde dauerhaft Platz binden; er wird deshalb nach
-  jedem Start entfernt, sobald das Volume eingebunden ist, außerdem zu Beginn
-  jedes Kopierlaufs für dessen Quell-Volumes und vor jedem neuen Snapshot
-  (`storage.CleanBackupSnapshots`). Warten auf andere Speicherarbeiten und das
-  Löschen sind begrenzt und folgen dem Abbruch des Laufs. Die Kopie ist absturzkonsistent (Zustand eines
-  Augenblicks wie nach einem Stromausfall; Journal des Gasts und qcow2 erholen
-  sich davon), nicht anwendungskonsistent. Alles andere wird weiter direkt
-  gelesen, weil ein Btrfs-Snapshot nicht in darunterliegende Subvolumes reicht
-  (LXC-Container, Docker-Schichten); fehlt das Abbild im Snapshot, wird es
-  direkt gelesen. Ohne Btrfs (ext4/XFS) oder wenn kein Snapshot gelingt, wird
-  das Abbild direkt gelesen; ändert es sich dabei, bleibt die Kopie des
-  vorigen Laufs stehen und der Lauf meldet `vm_disk_changed` („nicht
-  verlässlich gesichert“). Keine Prüfung wurde dafür gelockert: Eine Datei,
-  die sich beim Kopieren ändert, wird nie als gesichert übernommen. Offen
-  (Vorschlag, nicht umgesetzt): für ext4/XFS ein externer libvirt-Snapshot
-  (`virsh snapshot-create-as --disk-only --quiesce` mit anschließendem
-  `blockcommit`) oder Einfrieren über den QEMU-Gastagenten
-  (`virsh domfsfreeze`/`domfsthaw`) – beides greift in die laufende VM ein
-  (Overlay-Kette bzw. angehaltene Schreibzugriffe), braucht für `--quiesce`
-  den Gastagenten und einen Wiederanlauf nach Abbruch (Overlay zurückführen),
-  daher eigene Entscheidung; bis dahin sichert der koordinierte
-  Anwendungsweg (`applications`, VM wird für die Sicherung heruntergefahren)
-  solche VMs verlässlich. Verschlüsselte Sicherungen (restic) lesen Abbilder
-  laufender VMs weiterhin direkt.
+  **Platten laufender VMs** (PLAN 79-9, Entscheidungen des Inhabers vom
+  11.11.2026; `backup/copy.go`, `backup/copy_frozen.go`,
+  `backup/vmdisks_preview.go`, `vm/diskbackup.go`, `storage.BackupSnapshot`):
+  Abbilddateien laufender VMs ändern sich beim Lesen. Der Auftrag entscheidet
+  mit dem optionalen Feld `vmDisks` (nur lesbare Kopien; ältere titand
+  ignorieren es): `{"mode":"consistent"}` nimmt je Platte den besten Weg,
+  `{"mode":"consistent","raw":"pause"}` erlaubt dazu das kurze Anhalten für
+  Abbilder ohne Snapshot-Weg, `{"mode":"skip"}` lässt Platten laufender VMs
+  ganz aus. **Ohne gespeicherte Wahl** (alle Aufträge vor dieser Version)
+  ändert ein Update nichts Riskantes: Der Lauf nutzt nur, was keine VM
+  anfasst (Btrfs-Snapshot, sonst direktes Lesen wie bisher mit
+  `vm_disk_changed`), und meldet den Hinweis `vm_disk_choice_needed`, damit
+  die Oberfläche fragt. Platten ausgeschalteter VMs werden immer normal kopiert.
+  Reihenfolge bei `consistent`:
+  (1) **Btrfs-Snapshot:** Liegt das Abbild auf einem Btrfs-Volume, legt der
+  Lauf beim ersten solchen Abbild einen schreibgeschützten Snapshot des Volumes
+  unter `.titanos/backup-source/` an (kein Snapshot des Nutzers: nicht
+  gelistet, keine Vorgängerversion), liest **nur diese Abbilder** daraus und
+  löscht ihn am Ende des Laufs, auch nach Abbruch. Ein liegen gebliebener
+  (titand beendet, Stromausfall) würde dauerhaft Platz binden; er wird deshalb
+  nach jedem Start entfernt, sobald das Volume eingebunden ist, außerdem zu
+  Beginn jedes Kopierlaufs für dessen Quell-Volumes und vor jedem neuen
+  Snapshot (`storage.CleanBackupSnapshots`). Warten auf andere Speicherarbeiten
+  und das Löschen sind begrenzt und folgen dem Abbruch des Laufs. Alles andere
+  wird weiter direkt gelesen, weil ein Btrfs-Snapshot nicht in
+  darunterliegende Subvolumes reicht (LXC-Container, Docker-Schichten); fehlt
+  das Abbild im Snapshot, wird es direkt gelesen.
+  (2) **libvirt-Snapshot** (qcow2 auf ext4/XFS): `virsh snapshot-create-as
+  <vm> --disk-only --atomic --no-metadata` mit einer Zwischenschicht
+  `<abbild>.<id>.titanos-overlay` neben jeder Platte, mit `--quiesce`, wenn der
+  QEMU-Gastagent antwortet (sonst, oder wenn das Einfrieren scheitert, ohne:
+  absturzkonsistent, Hinweis `vm_disk_crash_consistent`, kein Fehler). Das nun
+  stillstehende Abbild wird kopiert, danach `virsh blockcommit <vm> <ziel>
+  --active --wait --pivot` und die Zwischenschicht gelöscht. Vorher geprüft:
+  alle Platten der VM sind qcow2-Dateien ohne eigene Backing-Kette oder externe
+  Datendatei (`vm_disk_backing_chain`, solche VMs werden nie angefasst, auch
+  nicht angehalten), keine durchgereichte ganze Platte (`vm_disk_passthrough`),
+  keine andere Aktion der VM läuft und sie ist im Zustand „running“
+  (`vm_disk_busy`), neben jeder Platte ist Platz für die Zwischenschicht (ein
+  Zehntel der Plattengröße, mindestens 4 GiB, höchstens die Plattengröße;
+  sonst `vm_disk_no_space`). Scheitert der Snapshot, ist nichts verändert
+  (`vm_disk_snapshot_failed`). In all diesen Fällen wird die Platte in diesem
+  Lauf nicht gelesen, die Kopie des vorigen Laufs bleibt.
+  (3) **Abbilder ohne Snapshot-Weg** (raw): mit `raw: "pause"` wird die VM
+  angehalten (`virsh suspend`), kopiert und fortgesetzt (Hinweis
+  `vm_disk_paused`), mit fester Obergrenze von 15 Minuten – danach läuft die VM
+  wieder, die Platte gilt als nicht gesichert (`vm_disk_pause_timeout`). Ohne
+  diese Erlaubnis (Vorgabe) wird sie wie bisher direkt gelesen; ändert sie
+  sich dabei, bleibt die Kopie des vorigen Laufs und der Lauf meldet
+  `vm_disk_changed`.
+  **Nie bleibt eine VM angehalten oder auf einer Zwischenschicht:** Die
+  Platten einer VM werden erst nach allem anderen und VM für VM kopiert. Vor
+  dem Start steht in `.titanos/vmbackup/<uuid>.json` auf dem Volume der VM
+  (nie in `/config`), was läuft (Weg, Platten, Zwischenschichten). Ende,
+  Abbruch, Kopierfehler und Zeitgrenze laufen durch dasselbe Zurückstellen
+  (`DiskBackup.End`, immer per `defer`); nach einem Neustart von titand, zu
+  Beginn jedes Kopierlaufs und vor jedem Start der VM wird aus dem Eintrag
+  zurückgestellt (`vm.RecoverDiskBackups`): angehaltene VM fortsetzen,
+  Zwischenschicht einer laufenden VM per `blockcommit --pivot` zurückführen,
+  die einer gestoppten VM (NAS ging aus) per `qemu-img commit` – erst danach
+  startet die VM; gelingt das nicht, startet sie nicht. Angefasst wird nur, was
+  der Eintrag nennt, nie eigene Snapshots des Nutzers. Scheitert das
+  Zurückstellen, bleibt der Eintrag, es gibt `vm_disk_undo_failed` am Auftrag
+  und die Meldung `vm_backup_undo_failed`, und es wird erneut versucht. Während
+  die Platten stillstehen, hält die Sicherung die Aktionssperre der VM
+  (Snapshot, Klon, Neustart werden solange abgelehnt). Herunterfahren und
+  Ausschalten der VM über TitanOS gehen vor: Die Sicherung gibt die VM frei
+  (Zwischenschicht zurückführen bzw. fortsetzen), die Platte gilt in diesem
+  Lauf als nicht gesichert (`vm_disk_busy`), erst dann wird die VM gestoppt. Dateien `*.titanos-overlay` werden nie gesichert. Nichts davon
+  wurde gegen echtes libvirt geprüft (nur mit nachgestelltem `virsh`/`qemu-img`).
+  **`skip`:** Die Datei wird nicht geöffnet; die frühere Kopie am Ziel bleibt
+  unberührt (kein Ersetzen, die Spiegel-Option verschiebt sie nicht, bei
+  datierten Ordnern bleibt der Lauf mit der letzten Kopie der Platte von
+  Aufbewahrung und Platzschaffen ausgenommen – das gilt auch für Platten, die
+  ein Lauf nicht sichern konnte). Der Lauf meldet den Hinweis
+  `vm_disk_skipped`. **Hinweise** stehen in `state.notices` (gleiche Form wie
+  `problems`), zählen nicht zu `skipped`, setzen kein `warning` und machen den
+  Lauf nicht zur Warnung.
+  **Vorschau für den Auftragseditor:** `GET /api/v1/backups/vm-disks` (nur
+  Besitzer/Administratoren, nicht in `publicRoutes`, nicht im Werkzeugkatalog)
+  mit `?job=<id>` oder `?source=…&volume=…&place=…` (mehrfach), optional
+  `mode`/`raw` für eine noch nicht gespeicherte Wahl. Antwort: `choice`,
+  `choiceNeeded` und `disks` mit `vm`, `path`, `file`, `format`, `sizeBytes`,
+  `state` (`running`/`stopped`), `way` (`copy`, `btrfs_snapshot`,
+  `libvirt_snapshot`, `pause`, `as_is`, `skip`, `none`), `agent`, `reason`
+  (Kennung, warum kein besserer Weg), `needBytes`/`freeBytes`. Sie öffnet
+  keine Datei der Quellen (Pfade aus der VM-Konfiguration); nur für laufende
+  VMs ohne Btrfs und nur bei `mode=consistent` fragt sie libvirt, den Kopf der
+  Abbilder und den freien Platz ab. Verschlüsselte Sicherungen (restic) lesen
+  Abbilder laufender VMs weiterhin direkt; dort sichert der koordinierte
+  Anwendungsweg (`applications`, VM wird heruntergefahren) verlässlich.
   Platzprüfung vorab, Prozentanzeige, `syncfs` am Ende. Gleich große Dateien
   werden weiterhin byteweise verglichen. Meldung nur beim ersten Fehlschlag
   einer Serie und beim Wiederanlaufen; ein fehlgeschlagener Auftrag startet beim

@@ -23,7 +23,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | area | `area_hooks.go` | – | 0 |
 | auth | `auth.go`, `auth_area.go` | `authArea` | 1 |
 | backup | `backup_coverage.go` | – | 2 |
-| backups | `backups.go` | `backupsArea` | 0 |
+| backups | `backups.go`, `backups_vmdisks.go` | `backupsArea` | 1 |
 | backuptarget | `backuptarget.go` | `backupTargetArea` | 0 |
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 2 |
 | cluster | `cluster.go` | `clusterArea` | 1 |

@@ -178,7 +178,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	slog.Info("backup started", "job", job.ID, "shares", len(paths))
 
-	args := append(slices.Clone(base), "backup", "--json", "--tag", "titanos", "--exclude", ".recycle", "--exclude", "*.titanos-part")
+	args := append(slices.Clone(base), "backup", "--json", "--tag", "titanos", "--exclude", ".recycle", "--exclude", "*.titanos-part", "--exclude", "*"+overlaySuffix)
 	for _, exclude := range sel.excludes {
 		args = append(args, "--exclude", exclude)
 	}

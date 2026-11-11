@@ -189,7 +189,7 @@ func TestBackupRunsAndRemembers(t *testing.T) {
 	calls := e.calls()
 	for _, want := range []string{
 		"cat config --quiet | repo=s3:https://s3.example.com/nas-backup/keller", "init |", "unlock |",
-		"backup --json --tag titanos --exclude .recycle --exclude *.titanos-part " + filepath.Join(e.m.mountRoot, "tank/media"),
+		"backup --json --tag titanos --exclude .recycle --exclude *.titanos-part --exclude *.titanos-overlay " + filepath.Join(e.m.mountRoot, "tank/media"),
 		"cache=" + filepath.Join(e.m.mountRoot, "tank/.titanos/backup/cache"), "aws=AKIA123",
 		"forget --tag titanos --group-by tags --prune", "--keep-daily 7", "--keep-monthly 6",
 	} {

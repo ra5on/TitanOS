@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -41,6 +42,13 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	vm, err := m.get(name)
 	if err != nil {
 		return err
+	}
+	// A backup that was cut off left the guest's last writes in an overlay:
+	// they go back into the image before the VM starts from the image.
+	if slices.Contains(mounted, vm.Volume) {
+		if err := m.finishDiskBackupOf(ctx, vm); err != nil {
+			return fmt.Errorf("%w: %v", ErrSnapshotRecovery, err)
+		}
 	}
 	if !m.HasKVM() {
 		return ErrNoKVM
@@ -208,6 +216,23 @@ func copyFile(from, to string) error {
 // Action asks a running VM to shut down or restart, or switches it off.
 func (m *Manager) Action(ctx context.Context, name, action string) error {
 	lock, lockErr := m.operation(name)
+	if lockErr != nil && slices.Contains([]string{"shutdown", "poweroff"}, action) && m.yieldDiskBackup(name) {
+		// A backup holds the disks still: stopping the VM comes first. The
+		// backup lets go (the overlay is committed back, a pause ended).
+		wait := time.NewTicker(100 * time.Millisecond)
+		defer wait.Stop()
+		deadline := time.After(yieldLimit)
+		for lockErr != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline:
+				return lockErr
+			case <-wait.C:
+				lock, lockErr = m.operation(name)
+			}
+		}
+	}
 	if lockErr != nil {
 		return lockErr
 	}

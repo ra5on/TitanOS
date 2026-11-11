@@ -50,10 +50,11 @@ Muster mit Pfaden oder `**` werden abgelehnt. Papierkorb und unvollständige Upl
 bleiben ausgenommen. Symbolische Verknüpfungen werden als Verknüpfung gesichert
 (nie verfolgt; auf FAT32/exFAT, die keine halten können, stehen sie im Hinweis
 `link_unsupported`). Sockets, FIFOs und Gerätedateien enthalten keine Daten und
-werden still übergangen. Abbilder laufender VMs liest der Lauf auf Btrfs aus
-einem eigenen, danach gelöschten Snapshot; sonst meldet er sie als
-`vm_disk_changed`, wenn sie sich beim Kopieren geändert haben (Regeln in
-`docs/rules/BACKUPS.md`). Konfiguration, VM- und App-Daten als zusätzliche Systembereiche bleiben
+werden still übergangen. Für Abbilder laufender VMs entscheidet die Einstellung `vmDisks` des Auftrags:
+konsistent sichern (Btrfs-Snapshot, sonst libvirt-Snapshot, für raw-Abbilder
+auf Wunsch kurzes Anhalten) oder auslassen; ohne gespeicherte Wahl fasst der
+Lauf keine VM an und bittet um die Wahl (Regeln, Kennungen und Vorschau-Route
+in `docs/rules/BACKUPS.md`). Konfiguration, VM- und App-Daten als zusätzliche Systembereiche bleiben
 bei diesem Kopieformat ausgenommen; dafür stehen die verschlüsselten
 restic-Aufträge zur Verfügung. Für konsistente Kopien veränderlicher Dateien
 Anwendungen vorher beenden bzw. deren eigene Exportfunktion verwenden.

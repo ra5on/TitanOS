@@ -74,7 +74,25 @@ func (w *titand) wireBackups() error {
 	// Disks of running VMs are read from a Btrfs snapshot made for the run
 	// (PLAN 79-9); on other file systems they are read as they are and
 	// reported if they changed meanwhile.
-	w.backups.LiveFiles = w.machines.RunningDiskFiles
+	w.backups.LiveDisks = func() map[string]string {
+		live := map[string]string{}
+		for _, disk := range w.machines.FileDisks() {
+			if disk.Running {
+				live[disk.Path] = disk.VM
+			}
+		}
+		return live
+	}
+	// Without Btrfs and with the job's leave: a libvirt snapshot of the VM,
+	// or a pause for raw images (vm/diskbackup.go).
+	w.backups.BeginVMDisks = func(ctx context.Context, name string, allowPause bool) (backup.VMDiskSession, error) {
+		session, err := w.machines.BeginDiskBackup(ctx, name, allowPause)
+		if err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+	w.backups.RecoverVMDisks = func(ctx context.Context) error { return w.machines.RecoverDiskBackups(ctx, true) }
 	w.backups.SnapshotSource = w.volumes.BackupSnapshot
 	w.backups.CleanSnapshots = w.volumes.CleanBackupSnapshots
 	w.backups.Timezone = w.settings.CurrentTimezone
