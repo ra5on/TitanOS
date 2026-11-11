@@ -261,7 +261,7 @@
 			<p class="muted">{t('agent.f.notThere')}</p>
 		{:else}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			<section class="dgrp tile ui-card">
+			<section class="dgrp sgroup">
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.memory')}</strong><small
@@ -271,8 +271,8 @@
 					{@render sw(!!docs.on, t('agent.f.docs.memory'), (on) => saveDocs({ ...docs, on }))}
 				</div>
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.folders')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.folders')}</h3></div>
 				{#each folders as f (f.root + '/' + f.path)}
 					{@const tag = stateTag(f.state)}
 					<div class="drow">
@@ -301,8 +301,8 @@
 				>
 			</div>
 			{#if pub?.deadlines}
-				<section class="dgrp tile ui-card">
-					<div class="card-head"><h3>{t('agent.f.docs.deadlines')}</h3></div>
+				<section class="dgrp sgroup">
+					<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.deadlines')}</h3></div>
 					<div class="drow">
 						<span class="dt"
 							><strong>{t('agent.f.docs.findDeadlines')}</strong><small
@@ -352,8 +352,8 @@
 					</div>
 				</section>
 			{/if}
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.ocr')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.ocr')}</h3></div>
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.pdfText')}</strong><small
@@ -381,7 +381,7 @@
 		{:else}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if note}<p class="notice-ok" role="status">{note}</p>{/if}
-			<section class="dgrp tile ui-card">
+			<section class="dgrp sgroup">
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.paper')}</strong><small>{t('agent.f.docs.paperOwn')}</small
@@ -392,8 +392,8 @@
 					)}
 				</div>
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.inbox')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.inbox')}</h3></div>
 				<div class="drow">
 					<span class="dic" aria-hidden="true">📥</span>
 					<span class="dt"
@@ -414,8 +414,8 @@
 					>
 				</div>
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.filing')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.filing')}</h3></div>
 				<div class="drow col">
 					<div class="seg" role="group" aria-label={t('agent.f.docs.filing')}>
 						<button
@@ -466,8 +466,8 @@
 					</select>
 				</div>
 			</section>
-			<section class="dgrp tile ui-card">
-				<div class="card-head"><h3>{t('agent.f.docs.mailbox')}</h3></div>
+			<section class="dgrp sgroup">
+				<div class="sgroup-head"><h3 class="sgroup-title">{t('agent.f.docs.mailbox')}</h3></div>
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.mailOn')}</strong><small>{t('agent.f.docs.mailSub')}</small

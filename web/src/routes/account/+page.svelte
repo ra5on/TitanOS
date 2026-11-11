@@ -25,6 +25,9 @@
 	import WebDav from './WebDav.svelte';
 	import Picture from './Picture.svelte';
 	import AppInstallCard from '#lib/components/AppInstallCard.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import { tick } from 'svelte';
 
 	type Device = {
 		id: string;
@@ -38,6 +41,7 @@
 	};
 
 	const user = $derived(session.data?.user);
+	const admin = $derived(user?.role === 'owner' || user?.role === 'admin');
 	let devices = $state<Device[] | null>(null);
 	let devicesError = $state('');
 	let error = $state('');
@@ -46,6 +50,8 @@
 	// Setting up the second factor: the secret to scan, then the recovery codes.
 	type TotpSetup = { secret: string; uri: string };
 	let setup = $state<TotpSetup | null>(null);
+	// The row of the second factor is open while its setup form shows.
+	let setupOpen = $state(true);
 	let code = $state('');
 	let recovery = $state<string[] | null>(null);
 	let disabling = $state(false);
@@ -96,6 +102,7 @@
 		dialogError = '';
 		try {
 			setup = await api.post<TotpSetup>('/account/2fa/begin', { password });
+			setupOpen = true;
 			beginning = false;
 			password = '';
 			code = '';
@@ -233,11 +240,13 @@
 
 	// PLAN 67-1: the menu bar of the desktop (Konto): the dialogs, or the section on the page.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
-	const reveal = (id: string) => () =>
-		document
-			.getElementById(id)
-			?.closest('section')
-			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	// A group (devices) scrolls into view; a row with parts opens first.
+	let rows = $state<Record<string, boolean>>({ 'acc-passkeys': false, 'acc-ssh': false });
+	const reveal = (id: string) => async () => {
+		if (id in rows) rows[id] = true;
+		await tick();
+		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	};
 	registerMenuCommands({
 		'account.password': () => (changingPassword = true),
 		'account.twoFactorOn': {
@@ -269,107 +278,119 @@
 <PageHead title={t('account.title')} />
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
+{#snippet twoFactorSetup()}
+	{#if setup && qr}
+		<form class="srow-block setup" onsubmit={enable}>
+			<svg
+				class="qr"
+				viewBox="-2 -2 {qr.size + 4} {qr.size + 4}"
+				role="img"
+				aria-label={t('account.twoFactor')}
+				><rect x="-2" y="-2" width={qr.size + 4} height={qr.size + 4} class="paper" /><path
+					d={qr.path}
+					class="ink"
+				/></svg
+			>
+			<div class="fields">
+				<p class="muted">{t('account.scan')}</p>
+				<label
+					><span>{t('account.secret')}</span><input
+						class="field mono"
+						type="text"
+						value={setup.secret}
+						readonly
+						onfocus={(event) => event.currentTarget.select()}
+					/></label
+				>
+				<label
+					><span>{t('account.enterCode')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={code}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						spellcheck="false"
+						required
+					/></label
+				>
+				{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
+				<div class="actions">
+					<button type="button" class="btn" onclick={cancelSetup}>{t('common.cancel')}</button>
+					<button type="submit" class="btn btn-primary" disabled={busy}
+						>{t('account.enable')}</button
+					>
+				</div>
+			</div>
+		</form>
+	{/if}
+{/snippet}
+
+<!-- PLAN 78-5: the page in rows like the control panel – a group is a plain
+     heading, every setting a row; what has parts opens inside its row. -->
 {#if user}
-	<section class="tile" aria-labelledby="acc-who">
-		<h2 class="tile-title" id="acc-who">
-			<span class="mono">{user.name}</span>
-			<span class="muted">· {t('account.role')}: {t(`role.${user.role}`)}</span>
-		</h2>
+	<SettingGroup title={t('account.group.account')} id="acc-account">
+		<SettingRow
+			id="acc-who"
+			icon="users"
+			title={user.name}
+			desc="{t('account.role')}: {t(`role.${user.role}`)}"
+		/>
 		<!-- PLAN 74: the picture of the account on the login page. -->
 		<Picture name={user.name} />
-	</section>
+		<AppInstallCard />
+	</SettingGroup>
 
-	<section class="tile" aria-labelledby="acc-password">
-		<h2 class="tile-title" id="acc-password">{t('account.password')}</h2>
-		<div class="row">
-			<p class="muted">{t('account.passwordText')}</p>
-			<button type="button" class="btn" onclick={() => (changingPassword = true)}
-				>{t('account.changePassword')}</button
+	<SettingGroup title={t('account.group.login')} id="acc-login">
+		<SettingRow
+			id="acc-password"
+			icon="lock"
+			title={t('account.password')}
+			desc={t('account.passwordText')}
+		>
+			{#snippet control()}
+				<button type="button" class="btn" onclick={() => (changingPassword = true)}
+					>{t('account.changePassword')}</button
+				>
+			{/snippet}
+		</SettingRow>
+
+		<!-- The form with the QR code opens inside the row while setting up
+		     (no id on the row: it must not remember being closed). -->
+		<div id="acc-2fa">
+			<SettingRow
+				icon="shield"
+				title={t('account.twoFactor')}
+				desc={t(user.twoFactor ? 'account.twoFactorOn' : 'account.twoFactorOff')}
+				bind:open={setupOpen}
+				children={setup && qr ? twoFactorSetup : undefined}
 			>
-		</div>
-	</section>
-
-	<section class="tile" aria-labelledby="acc-2fa">
-		<h2 class="tile-title" id="acc-2fa">{t('account.twoFactor')}</h2>
-		<div class="row">
-			<p>
-				<span class="chip" class:ok={user.twoFactor}
-					>{t(user.twoFactor ? 'plugins.active' : 'plugins.off')}</span
-				>
-				<span class="muted"
-					>{t(user.twoFactor ? 'account.twoFactorOn' : 'account.twoFactorOff')}</span
-				>
-			</p>
-			{#if user.twoFactor}
-				<div class="buttons">
-					<button type="button" class="btn" onclick={() => openConfirm('renew')}
-						>{t('account.recoveryRenew')}</button
+				{#snippet control()}
+					<span class="chip" class:ok={user.twoFactor}
+						>{t(user.twoFactor ? 'plugins.active' : 'plugins.off')}</span
 					>
-					<button type="button" class="btn" onclick={() => openConfirm('disable')}
-						>{t('account.twoFactorDisable')}</button
-					>
-				</div>
-			{:else if !setup}
-				<button type="button" class="btn btn-primary" onclick={() => openConfirm('begin')}
-					>{t('account.twoFactorSetup')}</button
-				>
-			{/if}
-		</div>
-		{#if setup && qr}
-			<form class="setup" onsubmit={enable}>
-				<svg
-					class="qr"
-					viewBox="-2 -2 {qr.size + 4} {qr.size + 4}"
-					role="img"
-					aria-label={t('account.twoFactor')}
-					><rect x="-2" y="-2" width={qr.size + 4} height={qr.size + 4} class="paper" /><path
-						d={qr.path}
-						class="ink"
-					/></svg
-				>
-				<div class="fields">
-					<p class="muted">{t('account.scan')}</p>
-					<label
-						><span>{t('account.secret')}</span><input
-							class="field mono"
-							type="text"
-							value={setup.secret}
-							readonly
-							onfocus={(event) => event.currentTarget.select()}
-						/></label
-					>
-					<label
-						><span>{t('account.enterCode')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={code}
-							inputmode="numeric"
-							autocomplete="one-time-code"
-							spellcheck="false"
-							required
-						/></label
-					>
-					{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
-					<div class="actions">
-						<button type="button" class="btn" onclick={cancelSetup}>{t('common.cancel')}</button>
-						<button type="submit" class="btn btn-primary" disabled={busy}
-							>{t('account.enable')}</button
+					{#if user.twoFactor}
+						<button type="button" class="btn" onclick={() => openConfirm('renew')}
+							>{t('account.recoveryRenew')}</button
 						>
-					</div>
-				</div>
-			</form>
-		{/if}
-	</section>
+						<button type="button" class="btn" onclick={() => openConfirm('disable')}
+							>{t('account.twoFactorDisable')}</button
+						>
+					{:else if !setup}
+						<button type="button" class="btn btn-primary" onclick={() => openConfirm('begin')}
+							>{t('account.twoFactorSetup')}</button
+						>
+					{/if}
+				{/snippet}
+			</SettingRow>
+		</div>
 
-	<Passkeys />
-	<WebDav />
-	<AppInstallCard />
+		<Passkeys bind:open={rows['acc-passkeys']} />
+		<SshKeys bind:open={rows['acc-ssh']} />
+		<WebDav />
+	</SettingGroup>
 
-	<SshKeys />
-
-	<section class="tile" aria-labelledby="acc-devices">
-		<div class="row">
-			<h2 class="tile-title" id="acc-devices">{t('account.devices')}</h2>
+	<SettingGroup title={t('account.devices')} id="acc-devices">
+		{#snippet tools()}
 			{#if devices && devices.some((device) => !device.current)}
 				<button
 					type="button"
@@ -378,7 +399,7 @@
 					>{t('account.endOthers')}</button
 				>
 			{/if}
-		</div>
+		{/snippet}
 		{#if devicesError}
 			<div class="notice-error row" role="alert">
 				<span>{devicesError}</span><button type="button" class="btn" onclick={loadDevices}
@@ -389,43 +410,53 @@
 			<p class="muted loading" role="status">{t('common.loading')}</p>
 		{:else}
 			{#each devices as device (device.id)}
-				<div class="device">
-					<div>
-						<span class="name"
-							>{browser(device.userAgent)}{#if device.current}
-								<span class="chip ok">{t('account.thisDevice')}</span>{/if}</span
-						>
-						<span class="muted mono"
+				<SettingRow icon="monitor" title={browser(device.userAgent)}>
+					{#snippet badge()}{#if device.current}
+							<span class="chip ok">{t('account.thisDevice')}</span>{/if}{/snippet}
+					{#snippet description()}
+						<span class="mono"
 							>{device.remoteIP} · {t('account.since', {
 								time: time.format(new Date(device.created)),
 							})} · {t('account.lastSeen', {
 								time: time.format(new Date(device.lastSeen)),
-							})}{#if device.kept}
+							})}{#if device.kept}{' '}
 								· {device.until
 									? t('account.keptUntil', { time: time.format(new Date(device.until)) })
 									: t('account.keptForever')}{/if}</span
 						>
-					</div>
-					{#if !device.current}<button type="button" class="btn" onclick={() => end(device)}
-							>{t('account.end')}</button
-						>{/if}
-				</div>
+					{/snippet}
+					{#snippet control()}
+						{#if !device.current}<button
+								type="button"
+								class="btn"
+								aria-label="{t('account.end')}: {browser(device.userAgent)}, {device.remoteIP}"
+								onclick={() => end(device)}>{t('account.end')}</button
+							>{/if}
+					{/snippet}
+				</SettingRow>
 			{/each}
 		{/if}
 		<p class="muted note">{t('account.devicesNote')}</p>
-	</section>
-{/if}
+	</SettingGroup>
 
-{#if user?.role === 'owner' || user?.role === 'admin'}<PersonalNotifications
-	/>{:else if user}<PushDevices personal />{/if}
-{#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
-{#if emergencyMe}
-	<section class="tile" aria-labelledby="emergency-title">
-		<h2 class="tile-title" id="emergency-title">{t('agent.f.menu.emergency')}</h2>
-		<ProtectEmergency />
-	</section>
+	<SettingGroup title={t(admin ? 'account.group.bell' : 'account.group.notify')} id="acc-notify">
+		{#if !admin}
+			<!-- The devices keep their look (the component also serves the control
+			     panel and the agent); here they are the parts of a row. -->
+			<SettingRow id="push" icon="bell" title={t('push.title')} desc={t('push.introPersonal')} open>
+				<div class="srow-block"><PushDevices bare personal /></div>
+			</SettingRow>
+		{/if}
+		{#if admin}<BellSettings />{/if}
+		<SoundSettings />
+	</SettingGroup>
+	{#if admin}<PersonalNotifications />{/if}
+	{#if emergencyMe}
+		<SettingGroup title={t('agent.f.menu.emergency')} id="emergency">
+			<div class="emergency"><ProtectEmergency /></div>
+		</SettingGroup>
+	{/if}
 {/if}
-<SoundSettings />
 
 {#if changingPassword && user}
 	<PasswordDialog
@@ -549,13 +580,6 @@
 {/if}
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: 18px;
-		font-size: var(--text-md);
-	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
@@ -564,11 +588,9 @@
 		gap: var(--space-3);
 	}
 	.setup {
-		display: flex;
+		flex-direction: row;
 		flex-wrap: wrap;
 		gap: 20px;
-		padding-top: var(--space-3);
-		border-top: 1px solid var(--panel-border);
 	}
 	.qr {
 		width: 200px;
@@ -588,6 +610,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
+		min-width: 0;
 	}
 	label {
 		display: flex;
@@ -608,27 +631,17 @@
 		justify-content: flex-end;
 		gap: var(--space-2-5);
 	}
-	.device {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2-5);
-		padding-top: var(--space-3);
-		border-top: 1px solid var(--panel-border);
-	}
-	.device div {
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
-		min-width: 0;
-	}
-	.device .mono {
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
-	}
 	.note {
 		font-size: var(--text-base);
+	}
+	/* The emergency access brings its own cards; they stand below the heading
+	   with the spacing the tile gave them. */
+	.emergency {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		min-width: 0;
+		font-size: var(--text-md);
 	}
 	.text {
 		font-size: var(--text-md);

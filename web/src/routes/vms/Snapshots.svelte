@@ -5,6 +5,8 @@
 	import { api, ApiError, type VM } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import KeepVersions from '#lib/components/KeepVersions.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -156,38 +158,41 @@
 		</p>{/if}
 
 	{#if status}
-		<div class="tile list">
+		<!-- PLAN 78-5: one flat row per snapshot, its buttons at the right. -->
+		<SettingGroup>
 			{#each status.snapshots as snapshot (snapshot.id)}
-				<div class="row">
-					<div class="info">
-						<strong>{snapshot.incomplete ? t('snapshots.incomplete') : snapshot.name}</strong>
+				<SettingRow
+					icon="camera"
+					title={snapshot.incomplete ? t('snapshots.incomplete') : snapshot.name}
+				>
+					{#snippet description()}
 						{#if snapshot.incomplete}
 							<span class="mono">{snapshot.id}</span>
 						{:else}
-							<span class="muted"
-								>{new Date(snapshot.created).toLocaleString()} · {formatBytes(snapshot.bytes)} · {t(
-									snapshot.memory ? 'snapshots.withMemory' : 'snapshots.disksOnly',
-								)}{snapshot.automatic ? ` · ${t('snapshots.automatic')}` : ''}</span
-							>
+							{new Date(snapshot.created).toLocaleString()} · {formatBytes(snapshot.bytes)} · {t(
+								snapshot.memory ? 'snapshots.withMemory' : 'snapshots.disksOnly',
+							)}{snapshot.automatic ? ` · ${t('snapshots.automatic')}` : ''}
 						{/if}
-					</div>
-					<button
-						type="button"
-						class="btn"
-						disabled={working || status.pending || vm.state === 'running' || snapshot.incomplete}
-						onclick={() => open('restore', snapshot)}>{t('snapshots.restore')}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={working || status.pending}
-						onclick={() => open('delete', snapshot)}>{t('snapshots.delete')}</button
-					>
-				</div>
+					{/snippet}
+					{#snippet control()}
+						<button
+							type="button"
+							class="btn"
+							disabled={working || status?.pending || vm.state === 'running' || snapshot.incomplete}
+							onclick={() => open('restore', snapshot)}>{t('snapshots.restore')}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={working || status?.pending}
+							onclick={() => open('delete', snapshot)}>{t('snapshots.delete')}</button
+						>
+					{/snippet}
+				</SettingRow>
 			{:else}
 				<EmptyState inline title={t('snapshots.empty')} />
 			{/each}
-		</div>
+		</SettingGroup>
 		{#if vm.state === 'running' && status.snapshots.length}<p class="muted">
 				{t('snapshots.stopFirst')}
 			</p>{/if}
@@ -359,32 +364,6 @@
 		background: var(--glass-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-	}
-	.list {
-		padding: 0 var(--space-4);
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 14px;
-		padding: 20px 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.row:last-child {
-		border-bottom: 0;
-	}
-	.info {
-		display: flex;
-		flex: 1 1 260px;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-		overflow-wrap: anywhere;
-		font-size: var(--text-md);
-	}
-	.info .muted {
-		font-size: var(--text-base);
 	}
 	form {
 		display: flex;

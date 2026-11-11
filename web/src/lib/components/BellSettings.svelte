@@ -1,15 +1,21 @@
 <script lang="ts">
 	// Which messages this account's bell shows. The NAS keeps all of them;
-	// mail and push follow the shared settings.
+	// mail and push follow the shared settings. One row of "Mein Konto"
+	// (PLAN 78-5, anchor #bell): the level and the areas are its parts.
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { bell } from '#lib/notifications.svelte.ts';
 	import { bellGroups, sanitizeBell } from '#lib/notify-groups.ts';
+	import SettingRow from './settings/SettingRow.svelte';
+	import SettingSub from './settings/SettingSub.svelte';
 
 	let draft = $state(sanitizeBell(bell.settings));
 	let error = $state('');
 	let saved = $state(false);
 	let busy = $state(false);
+
+	// What the row says closed: the level the bell shows from (as stored).
+	const summary = $derived(t(`notify.min.${bell.settings.minSeverity}`));
 
 	async function save() {
 		busy = true;
@@ -28,98 +34,45 @@
 	}
 </script>
 
-<section class="tile bell" id="bell" aria-labelledby="bell-title">
-	<h2 class="tile-title" id="bell-title">{t('bell.title')}</h2>
-	<p class="muted">{t('bell.intro')}</p>
-	<label class="narrow"
-		><span>{t('bell.minSeverity')}</span>
-		<select class="field" bind:value={draft.minSeverity} onchange={() => (saved = false)}>
-			<option value="info">{t('notify.min.info')}</option>
-			<option value="warning">{t('notify.min.warning')}</option>
-			<option value="error">{t('notify.min.error')}</option>
-		</select>
-	</label>
-	<fieldset>
-		<legend>{t('bell.groups')}</legend>
-		{#each bellGroups as group}
-			<label class="check"
-				><input
+<SettingRow id="bell" icon="bell" title={t('bell.title')} desc={t('bell.intro')} {summary}>
+	<SettingSub title={t('bell.minSeverity')} for="bell-min">
+		{#snippet control()}
+			<select
+				id="bell-min"
+				class="field"
+				bind:value={draft.minSeverity}
+				onchange={() => (saved = false)}
+			>
+				<option value="info">{t('notify.min.info')}</option>
+				<option value="warning">{t('notify.min.warning')}</option>
+				<option value="error">{t('notify.min.error')}</option>
+			</select>
+		{/snippet}
+	</SettingSub>
+	<div class="srow-block"><p class="muted" id="bell-groups">{t('bell.groups')}</p></div>
+	{#each bellGroups as group}
+		<SettingSub title={t(`bell.group.${group}`)} for="bell-group-{group}">
+			{#snippet control()}
+				<input
+					id="bell-group-{group}"
+					class="switch"
 					type="checkbox"
+					role="switch"
+					aria-describedby="bell-groups"
 					bind:checked={draft.groups[group]}
 					onchange={() => (saved = false)}
-				/><span>{t(`bell.group.${group}`)}</span></label
-			>
-		{/each}
-	</fieldset>
-	<p class="muted small">{t('bell.storageErrors')}</p>
-	<div class="actions">
-		{#if saved}<span role="status">{t('notify.saved')}</span>{/if}
+				/>
+			{/snippet}
+		</SettingSub>
+	{/each}
+	<div class="srow-block"><p class="muted">{t('bell.storageErrors')}</p></div>
+	<div class="srow-block actions">
 		<button class="btn btn-primary" type="button" onclick={save} disabled={busy}
 			>{t('common.save')}</button
 		>
+		{#if saved}<span role="status">{t('notify.saved')}</span>{/if}
 	</div>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-</section>
-
-<style>
-	.bell {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: var(--tile-pad);
-		margin-block: var(--gap);
-		font-size: var(--text-md);
-	}
-	.bell > p {
-		margin: 0;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.narrow {
-		max-width: 320px;
-	}
-	fieldset {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2-5) var(--space-5);
-		margin: 0;
-		padding: 0;
-		border: 0;
-	}
-	legend {
-		margin-bottom: var(--space-2);
-		color: var(--muted);
-		font-size: var(--text-base);
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check > span {
-		color: var(--text);
-	}
-	input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
-	}
-	.small {
-		font-size: var(--text-base);
-	}
-	.actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: var(--space-4);
-	}
-</style>
+	{#if error}<div class="srow-block">
+			<p class="notice-error" role="alert">{error}</p>
+		</div>{/if}
+</SettingRow>

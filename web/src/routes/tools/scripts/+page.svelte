@@ -6,6 +6,8 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
@@ -158,38 +160,39 @@
 	{#if status?.error}<p class="notice-warn">{status.error}</p>{/if}
 	{#if actionError}<p class="notice-error" role="alert">{actionError}</p>{/if}
 
-	{#if status}<section class="tile panel" aria-labelledby="scripts-place">
-			<h2 class="tile-title" id="scripts-place">{t('scripts.place')}</h2>
-			<form
-				class="place"
-				onsubmit={(e) => {
-					e.preventDefault();
-					void saveVolume();
-				}}
-			>
-				<label class="stack"
-					><span>{t('scripts.volume')}<HelpTip term="scriptsVolume" /></span><select
-						class="field"
-						bind:value={volume}
-						disabled={busy}
-						>{#if status.volume && !status.volumes.includes(status.volume)}<option
-								value={status.volume}>{t('scripts.volumeAway', { volume: status.volume })}</option
-							>{/if}{#each status.volumes as v (v)}<option value={v}>{v}</option>{/each}</select
-					></label
-				>
-				<div class="row-actions">
-					<button class="btn btn-primary" disabled={busy || !volumeChanged}>{t('ops.save')}</button>
-				</div>
-			</form>
-			<p class="muted">
-				{t('scripts.path')}
-				<code class="mono">/mnt/{volume || status.volume || '…'}/.titanos/scripts</code>
-				{#if !status.chosen && status.volume}· {t('scripts.defaultVolume')}{/if}
-			</p>
-		</section>
+	<!-- PLAN 78-5: where the scripts live is one flat row; the list of the
+	     scripts stands under a plain heading. -->
+	{#if status}<SettingGroup title={t('scripts.place')} id="scripts-place">
+			<SettingRow icon="disk" title={t('scripts.volume')} for="scripts-volume">
+				{#snippet badge()}<HelpTip term="scriptsVolume" />{/snippet}
+				{#snippet description()}
+					{t('scripts.path')}
+					<code class="mono">/mnt/{volume || status?.volume || '…'}/.titanos/scripts</code>
+					{#if !status?.chosen && status?.volume}· {t('scripts.defaultVolume')}{/if}
+				{/snippet}
+				{#snippet control()}
+					<form
+						class="place"
+						onsubmit={(e) => {
+							e.preventDefault();
+							void saveVolume();
+						}}
+					>
+						<select id="scripts-volume" class="field" bind:value={volume} disabled={busy}
+							>{#if status?.volume && !status.volumes.includes(status.volume)}<option
+									value={status.volume}>{t('scripts.volumeAway', { volume: status.volume })}</option
+								>{/if}{#each status?.volumes ?? [] as v (v)}<option value={v}>{v}</option
+								>{/each}</select
+						>
+						<button class="btn btn-primary" disabled={busy || !volumeChanged}
+							>{t('ops.save')}</button
+						>
+					</form>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
 
-		<section class="tile panel" aria-labelledby="scripts-list">
-			<h2 class="tile-title" id="scripts-list">{t('scripts.list')}</h2>
+		<SettingGroup title={t('scripts.list')} id="scripts-list">
 			<!-- Style W4 (0.74): one row per script, its output opens below it. -->
 			{#if status.scripts.length}
 				<div class="table-wrap">
@@ -259,7 +262,7 @@
 			{:else}
 				<EmptyState inline title={t('scripts.none')} />
 			{/if}
-		</section>
+		</SettingGroup>
 		<StatusBar label={t('scripts.statusBar')}>
 			<span>{t('scripts.statCount', { count: status.scripts.length })}</span>
 			<span>{t('scripts.statRunning')} <b>{status.scripts.filter((x) => x.running).length}</b></span
@@ -297,11 +300,10 @@
 	.place {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-	}
-	.place label {
-		min-width: 14rem;
+		align-items: center;
+		justify-content: inherit;
+		gap: var(--space-2) var(--space-2-5);
+		min-width: 0;
 	}
 	.meta {
 		margin: 0;

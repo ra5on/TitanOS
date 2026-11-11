@@ -12,7 +12,9 @@
 	let { ed }: { ed: AppEditor } = $props();
 </script>
 
-<section class="tile app-head" aria-label={t('editor.appState')}>
+<!-- PLAN 78-5: no tile: one flat row with the state on the left and the
+     app's actions on the right. -->
+<section class="srow plain app-head" aria-label={t('editor.appState')}>
 	<div class="app-state">
 		{#if ed.members.length}
 			<span class="state"
@@ -109,7 +111,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2-5) var(--space-4);
-		padding: var(--space-3) 18px;
+		padding: var(--space-2-5) var(--space-4);
 	}
 	.app-state,
 	.quick {
@@ -120,11 +122,7 @@
 		font-size: var(--text-md);
 	}
 	.quick {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-4);
-		font-size: var(--text-md);
+		gap: var(--space-2);
 	}
 	.state {
 		display: inline-flex;

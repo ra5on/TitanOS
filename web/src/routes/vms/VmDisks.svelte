@@ -2,6 +2,8 @@
 	// The section "Disks" of the VM form: the disks of a VM being edited,
 	// which can grow, or the disks a new VM is made with.
 	import type { Volume, VM, VMHost } from '#lib/api.ts';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -103,41 +105,52 @@
 	}
 </script>
 
-<fieldset class="content" disabled={running}>
+<!-- PLAN 78-5: every disk is a row; its settings are the parts below its name. -->
+<fieldset class="srows" disabled={running}>
 	{#if hostError}<RetryNotice text={hostError} onretry={onretryhost} />{/if}
 	{#if existing}
 		{#each existing.disks as disk, index (index)}
-			<div class="disk">
-				<div class="line">
-					<span class="mono file">{disk.path || disk.file}</span>
-					<span class="muted"
-						>{disk.path
-							? t(disk.path.startsWith('/dev/') ? 'vms.form.wholeDisk' : 'vms.form.existingImage')
-							: `${disk.format === 'raw' ? 'img' : 'qcow2'} · ${disk.volume}`}</span
-					>
-					<span class="grow"></span>
-					<span class="mono">{formatBytes(disk.sizeBytes)}</span>
+			<div class="srow plain disk">
+				<div class="srow-head">
+					<div class="srow-text">
+						<span class="srow-title mono file">{disk.path || disk.file}</span>
+						<p class="srow-desc">
+							{disk.path
+								? t(disk.path.startsWith('/dev/') ? 'vms.form.wholeDisk' : 'vms.form.existingImage')
+								: `${disk.format === 'raw' ? 'img' : 'qcow2'} · ${disk.volume}`}
+						</p>
+					</div>
+					<div class="srow-ctl">
+						<span class="mono size-now">{formatBytes(disk.sizeBytes)}</span>
+					</div>
 				</div>
 				{#if !disk.path?.startsWith('/dev/')}
-					<div class="size">
-						<label for="disk-grow-{index}">{t('vms.form.growTo')}</label>
-						<input
-							id="disk-grow-{index}"
-							class="field mono number"
-							type="number"
-							min={Math.ceil(disk.sizeBytes / GB) + 1}
-							max="16384"
-							bind:value={grow[index]}
-							placeholder={String(Math.ceil(disk.sizeBytes / GB))}
-						/><span class="muted">GB</span>
-						<button
-							type="button"
-							class="btn small"
-							onclick={() => ongrow(index)}
-							disabled={busy || !(grow[index] * GB > disk.sizeBytes)}>{t('vms.form.grow')}</button
+					<div class="srow-body">
+						<SettingSub
+							title={t('vms.form.growTo')}
+							desc={t('vms.form.growNote')}
+							for="disk-grow-{index}"
 						>
+							{#snippet control()}
+								<input
+									id="disk-grow-{index}"
+									class="field mono number"
+									type="number"
+									min={Math.ceil(disk.sizeBytes / GB) + 1}
+									max="16384"
+									bind:value={grow[index]}
+									placeholder={String(Math.ceil(disk.sizeBytes / GB))}
+								/><span class="muted">GB</span>
+								<button
+									type="button"
+									class="btn"
+									onclick={() => ongrow(index)}
+									disabled={busy || !(grow[index] * GB > disk.sizeBytes)}
+									>{t('vms.form.grow')}</button
+								>
+							{/snippet}
+						</SettingSub>
 					</div>
-					<small>{t('vms.form.growNote')}</small>
 				{/if}
 			</div>
 		{/each}
@@ -145,215 +158,200 @@
 		{#each disks as disk, index (index)}
 			{@const note = diskNote(disk)}
 			{@const image = imageOf(host.images, disk)}
-			<div class="disk">
-				<div class="line">
-					<span class="mono file"
-						>{disk.mode === 'block'
-							? t('vms.form.wholeDisk')
-							: disk.mode === 'direct'
-								? t('vms.form.existingImage')
-								: fileOf(disk)}</span
-					>
-					<span class="muted">{t(index === 0 ? 'vms.new.systemDisk' : 'vms.new.dataDisk')}</span>
-					<span class="grow"></span>
-					{#if disk.mode === 'new' || disk.mode === 'copy'}
-						<div
-							class="segments"
-							role="radiogroup"
-							aria-label={t('vms.new.format', { file: fileOf(disk) })}
+			<div class="srow plain disk">
+				<div class="srow-head">
+					<div class="srow-text">
+						<span class="srow-title mono file"
+							>{disk.mode === 'block'
+								? t('vms.form.wholeDisk')
+								: disk.mode === 'direct'
+									? t('vms.form.existingImage')
+									: fileOf(disk)}</span
 						>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={disk.format === 'qcow2'}
-								onclick={() => (disk.format = 'qcow2')}>qcow2</button
-							>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={disk.format === 'raw'}
-								onclick={() => (disk.format = 'raw')}>img (raw)</button
-							>
-						</div>
-					{/if}
-					<button
-						type="button"
-						class="btn small"
-						aria-label={t('vms.new.removeDisk', { file: pathOf(disk) })}
-						onclick={() => (ontouch(), disks.splice(index, 1))}>✕</button
-					>
-				</div>
-				{#if disk.mode === 'copy' || disk.mode === 'direct'}
-					<label
-						><span>{t('vms.form.image')}</span>
-						<select
-							class="field mono"
-							value={disk.path}
-							onchange={(event) => pickImage(disk, event.currentTarget.value)}
-						>
-							{#each disk.mode === 'direct' ? directImages : host.images as candidate (candidate.path)}
-								<option value={candidate.path}
-									>{candidate.path} · {candidate.format} · {formatBytes(
-										candidate.virtualBytes,
-									)}{candidate.usedBy
-										? ` · ${t('vms.form.usedBy', { vm: candidate.usedBy })}`
-										: ''}</option
-								>
-							{/each}
-						</select>
-					</label>
-					<div class="place">
-						<span class="muted">{t('vms.form.use')}</span>
-						<div class="segments" role="radiogroup" aria-label={t('vms.form.use')}>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={disk.mode === 'copy'}
-								onclick={() => setUse(disk, 'copy')}>{t('vms.form.useCopy')}</button
-							>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={disk.mode === 'direct'}
-								onclick={() => setUse(disk, 'direct')}
-								disabled={!image ||
-									(image.format !== 'qcow2' && image.format !== 'raw') ||
-									!!image.usedBy}>{t('vms.form.useDirect')}</button
-							>
-						</div>
+						<p class="srow-desc">{t(index === 0 ? 'vms.new.systemDisk' : 'vms.new.dataDisk')}</p>
 					</div>
-				{/if}
-				{#if disk.mode === 'block'}
-					<label
-						><span>{t('vms.form.disk')}</span>
-						<select class="field mono" bind:value={disk.path}>
-							{#each freeDisks as candidate (candidate.path)}<option value={candidate.path}
-									>{candidate.device} · {candidate.path}</option
-								>{/each}
-						</select>
-					</label>
-				{/if}
-				{#if disk.mode === 'new' || disk.mode === 'copy'}
-					<div class="size">
-						<label for="disk-size-{index}">{t('vms.new.size')}</label>
-						<input
-							type="range"
-							min="8"
-							max="2048"
-							step="8"
-							bind:value={disk.sizeGB}
-							aria-label={t('vms.new.sizeOf', { file: fileOf(disk) })}
-						/>
-						<input
-							id="disk-size-{index}"
-							class="field mono number"
-							type="number"
-							min="1"
-							max="16384"
-							bind:value={disk.sizeGB}
-						/><span class="muted">GB</span>
-					</div>
-					{#if disk.mode === 'new'}
-						<details class="size-presets">
-							<summary>{t('vms.form.sizePresets')}</summary>
-							<div class="presets">
-								{#each SIZES as size (size)}
-									<button
-										type="button"
-										aria-pressed={disk.sizeGB === size}
-										onclick={() => (disk.sizeGB = size)}>{size} GB</button
-									>
-								{/each}
-							</div>
-						</details>
-					{/if}
-					<div class="place">
-						<span class="muted">{t('vms.new.place')}</span>
-						<div class="segments" role="radiogroup" aria-label={t('vms.new.place')}>
-							{#each volumes as volume (volume.name)}
+					<div class="srow-ctl">
+						{#if disk.mode === 'new' || disk.mode === 'copy'}
+							<div
+								class="segments"
+								role="radiogroup"
+								aria-label={t('vms.new.format', { file: fileOf(disk) })}
+							>
 								<button
 									type="button"
 									role="radio"
-									aria-checked={disk.volume === volume.name}
-									onclick={() => (disk.volume = volume.name)}
-									>{t('vms.new.volume', {
-										name: volume.name,
-										free: formatBytes(volume.sizeBytes - volume.usedBytes),
-									})}</button
+									aria-checked={disk.format === 'qcow2'}
+									onclick={() => (disk.format = 'qcow2')}>qcow2</button
 								>
-							{/each}
-						</div>
+								<button
+									type="button"
+									role="radio"
+									aria-checked={disk.format === 'raw'}
+									onclick={() => (disk.format = 'raw')}>img (raw)</button
+								>
+							</div>
+						{/if}
+						<button
+							type="button"
+							class="btn"
+							aria-label={t('vms.new.removeDisk', { file: pathOf(disk) })}
+							onclick={() => (ontouch(), disks.splice(index, 1))}>✕</button
+						>
 					</div>
-				{/if}
-				<small class:warn={note.warn}>{note.text}</small>
-				<span class="muted mono path">→ {pathOf(disk)}</span>
+				</div>
+				<div class="srow-body">
+					{#if disk.mode === 'copy' || disk.mode === 'direct'}
+						<SettingSub title={t('vms.form.image')} for="disk-image-{index}">
+							{#snippet control()}
+								<select
+									id="disk-image-{index}"
+									class="field mono long"
+									value={disk.path}
+									onchange={(event) => pickImage(disk, event.currentTarget.value)}
+								>
+									{#each disk.mode === 'direct' ? directImages : host.images as candidate (candidate.path)}
+										<option value={candidate.path}
+											>{candidate.path} · {candidate.format} · {formatBytes(
+												candidate.virtualBytes,
+											)}{candidate.usedBy
+												? ` · ${t('vms.form.usedBy', { vm: candidate.usedBy })}`
+												: ''}</option
+										>
+									{/each}
+								</select>
+							{/snippet}
+						</SettingSub>
+						<SettingSub title={t('vms.form.use')}>
+							{#snippet control()}
+								<div class="segments" role="radiogroup" aria-label={t('vms.form.use')}>
+									<button
+										type="button"
+										role="radio"
+										aria-checked={disk.mode === 'copy'}
+										onclick={() => setUse(disk, 'copy')}>{t('vms.form.useCopy')}</button
+									>
+									<button
+										type="button"
+										role="radio"
+										aria-checked={disk.mode === 'direct'}
+										onclick={() => setUse(disk, 'direct')}
+										disabled={!image ||
+											(image.format !== 'qcow2' && image.format !== 'raw') ||
+											!!image.usedBy}>{t('vms.form.useDirect')}</button
+									>
+								</div>
+							{/snippet}
+						</SettingSub>
+					{/if}
+					{#if disk.mode === 'block'}
+						<SettingSub title={t('vms.form.disk')} for="disk-block-{index}">
+							{#snippet control()}
+								<select id="disk-block-{index}" class="field mono long" bind:value={disk.path}>
+									{#each freeDisks as candidate (candidate.path)}<option value={candidate.path}
+											>{candidate.device} · {candidate.path}</option
+										>{/each}
+								</select>
+							{/snippet}
+						</SettingSub>
+					{/if}
+					{#if disk.mode === 'new' || disk.mode === 'copy'}
+						<SettingSub title={t('vms.new.size')} for="disk-size-{index}">
+							{#snippet control()}
+								<input
+									type="range"
+									min="8"
+									max="2048"
+									step="8"
+									bind:value={disk.sizeGB}
+									aria-label={t('vms.new.sizeOf', { file: fileOf(disk) })}
+								/>
+								<input
+									id="disk-size-{index}"
+									class="field mono number"
+									type="number"
+									min="1"
+									max="16384"
+									bind:value={disk.sizeGB}
+								/><span class="muted">GB</span>
+							{/snippet}
+						</SettingSub>
+						{#if disk.mode === 'new'}
+							<div class="srow-block">
+								<details class="size-presets">
+									<summary>{t('vms.form.sizePresets')}</summary>
+									<div class="presets">
+										{#each SIZES as size (size)}
+											<button
+												type="button"
+												aria-pressed={disk.sizeGB === size}
+												onclick={() => (disk.sizeGB = size)}>{size} GB</button
+											>
+										{/each}
+									</div>
+								</details>
+							</div>
+						{/if}
+						<SettingSub title={t('vms.new.place')}>
+							{#snippet control()}
+								<div class="segments" role="radiogroup" aria-label={t('vms.new.place')}>
+									{#each volumes as volume (volume.name)}
+										<button
+											type="button"
+											role="radio"
+											aria-checked={disk.volume === volume.name}
+											onclick={() => (disk.volume = volume.name)}
+											>{t('vms.new.volume', {
+												name: volume.name,
+												free: formatBytes(volume.sizeBytes - volume.usedBytes),
+											})}</button
+										>
+									{/each}
+								</div>
+							{/snippet}
+						</SettingSub>
+					{/if}
+					<div class="srow-block notes">
+						<small class:warn={note.warn}>{note.text}</small>
+						<span class="muted mono path">→ {pathOf(disk)}</span>
+					</div>
+				</div>
 			</div>
 		{/each}
 		<div class="adds">
 			<button
 				type="button"
-				class="add"
+				class="btn"
 				onclick={() => addDisk('new')}
 				disabled={volumes.length === 0 || disks.length >= 8}>+ {t('vms.form.addNew')}</button
 			>
 			<button
 				type="button"
-				class="add"
+				class="btn"
 				onclick={() => addDisk('copy')}
 				disabled={volumes.length === 0 || host.images.length === 0 || disks.length >= 8}
 				>+ {t('vms.form.addImage')}</button
 			>
 			<button
 				type="button"
-				class="add"
+				class="btn"
 				onclick={() => addDisk('block')}
 				disabled={freeDisks.length === 0 || disks.length >= 8}>+ {t('vms.form.addBlock')}</button
 			>
 		</div>
 		{#if host.images.length === 0}<small>{t('vms.form.noImages')}</small>{/if}
-		<details class="advanced">
-			<summary>{t('vms.form.diskHelp')}</summary>
-			<p class="muted note">{t('vms.new.formats')}</p>
-		</details>
 	{/if}
 </fieldset>
+{#if !existing}
+	<!-- Outside the locked rows, like every row that only opens. -->
+	<SettingRow id="vm-disk-help" title={t('vms.form.diskHelp')}>
+		<div class="srow-block"><p class="muted note">{t('vms.new.formats')}</p></div>
+	</SettingRow>
+{/if}
 
 <style>
-	.advanced {
-		border-top: 1px solid var(--panel-border);
-		padding-top: var(--space-2-5);
-		min-width: 0;
-	}
 	summary {
 		cursor: pointer;
 		font-size: var(--text-base);
-	}
-	/* Also on the inputs for a size, where `.size .number` takes most of it back. */
-	.number {
-		width: 1.75rem;
-		height: 1.75rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: color-mix(in srgb, var(--accent) 18%, transparent);
-		border-radius: 50%;
-		font-size: var(--text-base);
-		font-weight: 600;
-	}
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-4);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
 	}
 	small {
 		font-size: var(--text-sm);
@@ -362,35 +360,17 @@
 	.warn {
 		color: var(--warn-text);
 	}
-	.line {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2) var(--space-3);
-	}
-	input[type='range'] {
-		width: 100%;
-		accent-color: var(--accent);
-	}
 	.note {
 		font-size: var(--text-base);
 	}
-	.disk {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: 14px;
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-		font-size: var(--text-base);
-	}
 	.file {
-		font-size: var(--text-md);
-		font-weight: 500;
+		overflow-wrap: anywhere;
 	}
-	.grow {
-		flex: 1 1 auto;
+	.size-now {
+		color: var(--text);
+	}
+	.notes {
+		gap: var(--space-1);
 	}
 	.segments {
 		display: inline-flex;
@@ -416,40 +396,27 @@
 		background: var(--accent);
 		color: var(--on-accent);
 	}
-	.small {
-		height: 2rem;
-		padding: 0 0.625rem;
-		font-size: var(--text-base);
+	/* The slider takes the room the control has; the number keeps its width. */
+	.disk :global(.srow-ctl input[type='range']) {
+		flex: 1 1 10rem;
+		min-width: 6rem;
+		accent-color: var(--accent);
 	}
-	.size,
-	.place {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2-5);
-	}
-	.size label {
-		flex-direction: row;
-		color: var(--muted);
-	}
-	.size input[type='range'] {
-		flex: 1 1 220px;
-		width: auto;
-	}
-	.number {
+	.disk :global(.srow-ctl .number) {
 		flex: none;
-	}
-	.size .number {
 		width: 6.5rem;
-		height: 2.25rem;
-		border-radius: var(--radius-ctl);
-		background: var(--bg);
-		font-weight: 400;
+		min-width: 0;
+	}
+	.disk :global(.srow-ctl .long) {
+		flex: 1 1 14rem;
+		min-width: 0;
+		max-width: 100%;
 	}
 	.presets {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-1-5);
+		padding-top: var(--space-2);
 	}
 	.presets button {
 		border: 1px solid var(--border);
@@ -461,26 +428,10 @@
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
-	.add {
-		align-self: flex-start;
-		height: 2.25rem;
-		padding: 0 var(--space-3);
-		background: transparent;
-		border: 1px dashed var(--border);
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		font-size: var(--text-base);
-		cursor: pointer;
-	}
-	fieldset {
-		min-width: 0;
-		margin: 0;
-		border: 0;
-	}
 	.adds {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
+		margin: var(--space-2) 0;
 	}
 </style>

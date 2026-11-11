@@ -32,6 +32,7 @@
 		}
 	}
 	import { poll } from '#lib/poll.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { transferSample, transferProblem, type TransferSample } from '#lib/transfer-progress.ts';
 	import { api, type CopyJob } from '#lib/api.ts';
 	import { MB, formatBytes } from '#lib/format.ts';
@@ -214,199 +215,202 @@
 			onclick={() => (notices = notices.filter((item) => item.id !== notice.id))}>×</button
 		>
 	</div>{/each}
+<!-- PLAN 78-5: the jobs stay a list, under a plain heading with the button
+     of the list; every job is a flat row of its own. -->
 {#if jobs.length > 0}
-	<section class="tile jobs" aria-label={t('files.jobs')}>
-		{#if retryError}<p class="notice-error" role="alert">{retryError}</p>{/if}
-		<div class="line">
-			<h2 class="tile-title">{t('files.jobs')}</h2>
-			{#if jobs.some((job) => job.state !== 'running')}<button
-					class="btn"
-					disabled={!!retrying}
-					title={t('ops.forgetHint')}
-					onclick={clearFinished}>{t('files.clearFinishedJobs')}</button
-				>{/if}
-		</div>
-		{#if pollError}<p class="notice-warn" role="status">{t('files.jobsStale')}</p>{/if}
-		{#if activeJobs.length}<div class="overall">
-				<strong>{t('files.overallProgress', { count: activeJobs.length })}</strong><progress
-					max="100"
-					value={totalKnown && totalBytes > 0
-						? Math.min(100, (100 * totalCopied) / totalBytes)
-						: undefined}
-					aria-label={t('files.overallProgress', { count: activeJobs.length })}
-				></progress><span
-					>{formatBytes(totalCopied)} / {totalKnown
-						? formatBytes(totalBytes)
-						: t('files.totalPending')}{#if overallSpeed > 0}
-						· {formatBytes(overallSpeed)}/s{/if}</span
-				>
-			</div>{/if}
-		<p class="muted small">{t('files.queueHint')}</p>
-		{#each jobs as job (job.id)}
-			<div class="job">
-				<div class="line">
-					<span class="what"
-						>{t(
-							job.operation === 'extract'
-								? 'files.jobExtract'
-								: job.operation === 'download'
-									? 'files.jobDownload'
-									: job.move
-										? 'files.jobMove'
-										: 'files.jobCopy',
-							{ count: job.names.length },
-						)} · <span class="mono">{job.from} → {job.to}/{job.dir}</span></span
-					>
-					{#if job.state === 'running'}
-						<button type="button" class="btn small" onclick={() => cancel(job)}
-							>{t('common.cancel')}</button
-						>
-					{:else}
-						<span class="chip" class:chip-warn={withErrors(job)}>{stateText(job)}</span>
-					{/if}
-				</div>
-				{#if job.state === 'running' && !job.operation}<div class="line controls">
-						<button
-							class="btn small"
-							disabled={!!controlling || (!!job.paused && !canRetry(job))}
-							onclick={() => control(job, { paused: !job.paused })}
-							>{t(job.paused ? 'files.transferResume' : 'files.transferPause')}</button
-						>
-						{#if job.waiting && !job.paused}<span class="chip">{t('files.transferWaiting')}</span
-							>{/if}
-						{#if job.paused}<span class="chip">{t('files.transferPaused')}</span>{/if}
-						<label
-							>{t('files.transferPriority')}
-							<select
-								class="field"
-								aria-label={t('files.transferPriority')}
-								disabled={!!controlling}
-								value={String(job.priority ?? 0)}
-								onchange={(e) => control(job, { priority: Number(e.currentTarget.value) })}
-								><option value="0">{t('files.priorityNormal')}</option><option value="1"
-									>{t('files.priorityHigh')}</option
-								><option value="2">{t('files.priorityFirst')}</option></select
-							></label
-						>
-						<label
-							>{t('files.transferRate')}
-							<input
-								class="field"
-								aria-label={t('files.transferRate')}
-								disabled={!!controlling}
-								type="number"
-								min="0"
-								max="1073"
-								step="1"
-								value={Math.round((job.rate ?? 0) / MB)}
-								onchange={(e) => {
-									if (e.currentTarget.checkValidity())
-										control(job, { rate: Number(e.currentTarget.value) * MB });
-								}}
-							/></label
-						>
-					</div>{/if}
-				<progress
-					value={job.bytes > 0 || job.state !== 'running' ? percent(job) : undefined}
-					max="100"
-					aria-label={t('files.jobs')}
-				></progress>
-				<div class="muted small">
-					{#if job.operation === 'download'}{formatBytes(job.copied)} / {job.bytes > 0
-							? formatBytes(job.bytes)
-							: t('files.urlSizeUnknown')} ·
-						<span class="mono">{job.names[0]}</span>{:else}{formatBytes(job.copied)} / {formatBytes(
-							job.bytes,
-						)} · {t('files.jobFiles', {
-							done: job.done,
-							files: job.files,
-						})}{/if}{#if job.state === 'running' && job.current}
-						· <span class="mono">{job.current}</span>{/if}
-				</div>
-				{#if job.state === 'running' && job.planning}<p class="small muted" role="status">
-						{t('files.jobPlanning')}
-					</p>{/if}
-				{#if (job.identical ?? 0) > 0}<p class="small muted">
-						{t('files.jobIdentical', { count: job.identical ?? 0 })}
-					</p>{/if}
-				{#if job.state === 'running' && !job.paused && !job.waiting && !job.planning}<p
-						class="small muted"
-					>
-						{#if samples[job.id]?.speed > 0}{formatBytes(
-								samples[job.id].speed,
-							)}/s{#if job.bytes > job.copied}
-								· {t('files.remainingMinutes', {
-									minutes: Math.max(
-										1,
-										Math.ceil((job.bytes - job.copied) / samples[job.id].speed / 60),
-									),
-								})}{/if}{:else}{t('files.speedPending')}{/if}
-					</p>{/if}
-				{#if job.problems?.length}
-					<details class="problems" open={job.problems.length <= 5}>
-						<summary
-							>{t('files.problemSummary', {
-								failed: job.failed ?? 0,
-								kept: job.kept ?? 0,
-							})}</summary
-						>
-						<ul>
-							{#each job.problems as problem, index (index)}<li class:kept={isKept(problem.code)}>
-									<span class="mono">{problem.path}</span><span>{t(problemKey(problem.code))}</span>
-								</li>{/each}
-						</ul>
-						{#if (job.failed ?? 0) + (job.kept ?? 0) > job.problems.length}<p class="muted small">
-								{t('files.problemsMore', {
-									count: (job.failed ?? 0) + (job.kept ?? 0) - job.problems.length,
-								})}
-							</p>{/if}
-					</details>
-				{/if}
-				{#if job.error}<div class="notice-warn">
-						<strong
-							>{copyErrorKey(job.errorCode)
-								? t(copyErrorKey(job.errorCode) as 'files.copyError.other')
-								: t(`files.transferProblem.${transferProblem(job.error)}`)}</strong
-						>{#if job.current}<p class="mono">{job.current}</p>{/if}
-						<details>
-							<summary>{t('files.technicalDetails')}</summary>
-							<p>{job.error}</p>
-						</details>
-					</div>{/if}
-				{#if job.durable}<p class="muted small">{t('ops.durable')}</p>{/if}{#if job.blocked}<p
-						class="notice-warn"
-					>
-						{t('ops.transferBlocked')}
-					</p>{/if}
-				{#if job.retryable}<button
-						class="btn"
-						disabled={retrying !== '' || !canRetry(job)}
-						onclick={() => retry(job)}
-						>{t(withErrors(job) ? 'files.retryFailed' : 'files.retryRemaining')}</button
-					>
-					<p class="muted small">{t('files.retryHint')}</p>{/if}
-				{#if job.rebooted && job.state !== 'running' && !job.operation && !job.blocked}<p
-						class="muted small"
-					>
-						{t('files.rebootedHint')}
-					</p>
-					<button
-						class="btn"
-						disabled={retrying !== '' || !canRetry(job)}
-						onclick={() => copyMissing(job)}>{t('files.copyMissing')}</button
-					>{/if}
-				{#if job.state !== 'running'}<button
+	<div class="jobs">
+		<SettingGroup title={t('files.jobs')} id="files-jobs">
+			{#snippet tools()}{#if jobs.some((job) => job.state !== 'running')}<button
 						class="btn"
 						disabled={!!retrying}
 						title={t('ops.forgetHint')}
-						onclick={() => forget(job)}>{t('ops.forget')}</button
-					>{/if}
-				{#if job.state !== 'running'}<button class="btn" onclick={() => onopen(job.to, job.dir)}
-						>{t('files.openDestination')}</button
-					>{/if}
-			</div>
-		{/each}
-	</section>
+						onclick={clearFinished}>{t('files.clearFinishedJobs')}</button
+					>{/if}{/snippet}
+			{#if retryError}<p class="notice-error" role="alert">{retryError}</p>{/if}
+			{#if pollError}<p class="notice-warn" role="status">{t('files.jobsStale')}</p>{/if}
+			{#if activeJobs.length}<div class="overall">
+					<strong>{t('files.overallProgress', { count: activeJobs.length })}</strong><progress
+						max="100"
+						value={totalKnown && totalBytes > 0
+							? Math.min(100, (100 * totalCopied) / totalBytes)
+							: undefined}
+						aria-label={t('files.overallProgress', { count: activeJobs.length })}
+					></progress><span
+						>{formatBytes(totalCopied)} / {totalKnown
+							? formatBytes(totalBytes)
+							: t('files.totalPending')}{#if overallSpeed > 0}
+							· {formatBytes(overallSpeed)}/s{/if}</span
+					>
+				</div>{/if}
+			<p class="muted small">{t('files.queueHint')}</p>
+			{#each jobs as job (job.id)}
+				<div class="srow plain job">
+					<div class="line">
+						<span class="what"
+							>{t(
+								job.operation === 'extract'
+									? 'files.jobExtract'
+									: job.operation === 'download'
+										? 'files.jobDownload'
+										: job.move
+											? 'files.jobMove'
+											: 'files.jobCopy',
+								{ count: job.names.length },
+							)} · <span class="mono">{job.from} → {job.to}/{job.dir}</span></span
+						>
+						{#if job.state === 'running'}
+							<button type="button" class="btn small" onclick={() => cancel(job)}
+								>{t('common.cancel')}</button
+							>
+						{:else}
+							<span class="chip" class:chip-warn={withErrors(job)}>{stateText(job)}</span>
+						{/if}
+					</div>
+					{#if job.state === 'running' && !job.operation}<div class="line controls">
+							<button
+								class="btn small"
+								disabled={!!controlling || (!!job.paused && !canRetry(job))}
+								onclick={() => control(job, { paused: !job.paused })}
+								>{t(job.paused ? 'files.transferResume' : 'files.transferPause')}</button
+							>
+							{#if job.waiting && !job.paused}<span class="chip">{t('files.transferWaiting')}</span
+								>{/if}
+							{#if job.paused}<span class="chip">{t('files.transferPaused')}</span>{/if}
+							<label
+								>{t('files.transferPriority')}
+								<select
+									class="field"
+									aria-label={t('files.transferPriority')}
+									disabled={!!controlling}
+									value={String(job.priority ?? 0)}
+									onchange={(e) => control(job, { priority: Number(e.currentTarget.value) })}
+									><option value="0">{t('files.priorityNormal')}</option><option value="1"
+										>{t('files.priorityHigh')}</option
+									><option value="2">{t('files.priorityFirst')}</option></select
+								></label
+							>
+							<label
+								>{t('files.transferRate')}
+								<input
+									class="field"
+									aria-label={t('files.transferRate')}
+									disabled={!!controlling}
+									type="number"
+									min="0"
+									max="1073"
+									step="1"
+									value={Math.round((job.rate ?? 0) / MB)}
+									onchange={(e) => {
+										if (e.currentTarget.checkValidity())
+											control(job, { rate: Number(e.currentTarget.value) * MB });
+									}}
+								/></label
+							>
+						</div>{/if}
+					<progress
+						value={job.bytes > 0 || job.state !== 'running' ? percent(job) : undefined}
+						max="100"
+						aria-label={t('files.jobs')}
+					></progress>
+					<div class="muted small">
+						{#if job.operation === 'download'}{formatBytes(job.copied)} / {job.bytes > 0
+								? formatBytes(job.bytes)
+								: t('files.urlSizeUnknown')} ·
+							<span class="mono">{job.names[0]}</span>{:else}{formatBytes(job.copied)} / {formatBytes(
+								job.bytes,
+							)} · {t('files.jobFiles', {
+								done: job.done,
+								files: job.files,
+							})}{/if}{#if job.state === 'running' && job.current}
+							· <span class="mono">{job.current}</span>{/if}
+					</div>
+					{#if job.state === 'running' && job.planning}<p class="small muted" role="status">
+							{t('files.jobPlanning')}
+						</p>{/if}
+					{#if (job.identical ?? 0) > 0}<p class="small muted">
+							{t('files.jobIdentical', { count: job.identical ?? 0 })}
+						</p>{/if}
+					{#if job.state === 'running' && !job.paused && !job.waiting && !job.planning}<p
+							class="small muted"
+						>
+							{#if samples[job.id]?.speed > 0}{formatBytes(
+									samples[job.id].speed,
+								)}/s{#if job.bytes > job.copied}
+									· {t('files.remainingMinutes', {
+										minutes: Math.max(
+											1,
+											Math.ceil((job.bytes - job.copied) / samples[job.id].speed / 60),
+										),
+									})}{/if}{:else}{t('files.speedPending')}{/if}
+						</p>{/if}
+					{#if job.problems?.length}
+						<details class="problems" open={job.problems.length <= 5}>
+							<summary
+								>{t('files.problemSummary', {
+									failed: job.failed ?? 0,
+									kept: job.kept ?? 0,
+								})}</summary
+							>
+							<ul>
+								{#each job.problems as problem, index (index)}<li class:kept={isKept(problem.code)}>
+										<span class="mono">{problem.path}</span><span
+											>{t(problemKey(problem.code))}</span
+										>
+									</li>{/each}
+							</ul>
+							{#if (job.failed ?? 0) + (job.kept ?? 0) > job.problems.length}<p class="muted small">
+									{t('files.problemsMore', {
+										count: (job.failed ?? 0) + (job.kept ?? 0) - job.problems.length,
+									})}
+								</p>{/if}
+						</details>
+					{/if}
+					{#if job.error}<div class="notice-warn">
+							<strong
+								>{copyErrorKey(job.errorCode)
+									? t(copyErrorKey(job.errorCode) as 'files.copyError.other')
+									: t(`files.transferProblem.${transferProblem(job.error)}`)}</strong
+							>{#if job.current}<p class="mono">{job.current}</p>{/if}
+							<details>
+								<summary>{t('files.technicalDetails')}</summary>
+								<p>{job.error}</p>
+							</details>
+						</div>{/if}
+					{#if job.durable}<p class="muted small">{t('ops.durable')}</p>{/if}{#if job.blocked}<p
+							class="notice-warn"
+						>
+							{t('ops.transferBlocked')}
+						</p>{/if}
+					{#if job.retryable}<button
+							class="btn"
+							disabled={retrying !== '' || !canRetry(job)}
+							onclick={() => retry(job)}
+							>{t(withErrors(job) ? 'files.retryFailed' : 'files.retryRemaining')}</button
+						>
+						<p class="muted small">{t('files.retryHint')}</p>{/if}
+					{#if job.rebooted && job.state !== 'running' && !job.operation && !job.blocked}<p
+							class="muted small"
+						>
+							{t('files.rebootedHint')}
+						</p>
+						<button
+							class="btn"
+							disabled={retrying !== '' || !canRetry(job)}
+							onclick={() => copyMissing(job)}>{t('files.copyMissing')}</button
+						>{/if}
+					{#if job.state !== 'running'}<button
+							class="btn"
+							disabled={!!retrying}
+							title={t('ops.forgetHint')}
+							onclick={() => forget(job)}>{t('ops.forget')}</button
+						>{/if}
+					{#if job.state !== 'running'}<button class="btn" onclick={() => onopen(job.to, job.dir)}
+							>{t('files.openDestination')}</button
+						>{/if}
+				</div>
+			{/each}
+		</SettingGroup>
+	</div>
 {/if}
 
 <style>
@@ -426,7 +430,9 @@
 	}
 	.jobs {
 		margin-top: var(--gap);
-		padding: var(--tile-pad);
+	}
+	.jobs p {
+		margin: 0;
 	}
 	.line.controls {
 		justify-content: flex-start;
@@ -442,8 +448,10 @@
 		width: 6rem;
 	}
 	.job {
-		padding: 0.5rem 0;
-		border-top: 1px solid var(--border);
+		padding: var(--space-2-5) var(--space-4);
+	}
+	.job p {
+		margin: var(--space-1) 0;
 	}
 	.line {
 		display: flex;

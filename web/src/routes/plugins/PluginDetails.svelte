@@ -7,6 +7,8 @@
 	import DriverChoice from '#lib/components/DriverChoice.svelte';
 	import DriverUpdates from '#lib/components/DriverUpdates.svelte';
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import PluginSteps from '#lib/components/PluginSteps.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -18,7 +20,9 @@
 	let { pg, status, current }: { pg: PluginsPage; status: Status; current: Plugin } = $props();
 </script>
 
-<aside class="tile" aria-labelledby="plugin-title" bind:this={pg.details}>
+<!-- PLAN 78-5: the details are no tile: the plugin's name, what it is as
+     text under plain headings, its facts and settings as flat rows. -->
+<aside aria-labelledby="plugin-title" bind:this={pg.details}>
 	<div class="head">
 		<span class="monogram large" style:background="hsl({hue(current)} 45% 42%)" aria-hidden="true"
 			>{monogram(current)}</span
@@ -41,30 +45,26 @@
 
 	<div class="body">
 		{#if pg.contains(current).length > 0}
-			<div class="block">
-				<h3>{t('plugins.contains')}</h3>
+			<SettingGroup title={t('plugins.contains')} id="plugin-contains">
 				<div class="chips">
 					{#each pg.contains(current) as entry (entry)}<span class="chip">{entry}</span>{/each}
 				</div>
-			</div>
+			</SettingGroup>
 		{/if}
 		{#if pg.about(current)?.when}
-			<div class="block">
-				<h3>{t('plugins.when')}</h3>
+			<SettingGroup title={t('plugins.when')} id="plugin-when">
 				<p>{pg.about(current)?.when}</p>
-			</div>
+			</SettingGroup>
 		{/if}
 		{#if pg.about(current)?.hardware?.length}
-			<div class="block">
-				<h3>{t('plugins.hardware')}</h3>
+			<SettingGroup title={t('plugins.hardware')} id="plugin-hardware">
 				<ul>
 					{#each pg.about(current)?.hardware ?? [] as entry (entry)}<li>{entry}</li>{/each}
 				</ul>
-			</div>
+			</SettingGroup>
 		{/if}
 		{#if current.devices?.length || pg.about(current)?.hardware?.length}
-			<div class="block">
-				<h3>{t('plugins.detected')}</h3>
+			<SettingGroup title={t('plugins.detected')} id="plugin-detected">
 				{#if current.devices?.length}
 					<ul>
 						{#each current.devices as device (device.key + (device.address ?? ''))}
@@ -83,10 +83,9 @@
 				{:else}
 					<p class="muted">{t('plugins.detectedNone')}</p>
 				{/if}
-			</div>
+			</SettingGroup>
 		{/if}
-		<div class="block">
-			<h3>{t('plugins.does')}</h3>
+		<SettingGroup title={t('plugins.does')} id="plugin-does">
 			<ul>
 				<li>{t('plugins.doesFiles')}</li>
 				{#if current.modules?.length}<li>
@@ -98,52 +97,56 @@
 				{#if current.kernel}<li>{t('plugins.forKernel', { kernel: current.kernel })}</li>{/if}
 			</ul>
 			{#if pg.about(current)?.changes}<p>{pg.about(current)?.changes}</p>{/if}
-		</div>
+		</SettingGroup>
 		{#if pg.about(current)?.limits?.length}
-			<div class="block">
-				<h3>{t('plugins.limits')}</h3>
+			<SettingGroup title={t('plugins.limits')} id="plugin-limits">
 				<ul>
 					{#each pg.about(current)?.limits ?? [] as entry (entry)}<li>{entry}</li>{/each}
 				</ul>
-			</div>
+			</SettingGroup>
 		{/if}
 		{#if current.license || current.upstream || pg.about(current)?.footprint || current.sources?.length}
-			<div class="block">
-				<h3>{t('plugins.facts')}</h3>
-				<dl class="facts">
-					{#if current.license}<dt>{t('plugins.license')}</dt>
-						<dd>{current.license}</dd>{/if}
+			<div class="sfacts">
+				<SettingGroup title={t('plugins.facts')} id="plugin-facts">
+					{#if current.license}
+						<SettingRow title={t('plugins.license')}>
+							{#snippet control()}<span>{current.license}</span>{/snippet}
+						</SettingRow>
+					{/if}
 					{#if current.upstream}
-						<dt>{t('plugins.upstream')}</dt>
-						<dd>
-							{#if current.upstream.url && pg.link(current.upstream.url)}<a
-									href={current.upstream.url}
-									rel="noreferrer">{current.upstream.name || current.upstream.url}</a
-								>{:else}{current.upstream.name}{/if}{#if current.upstream.version}<span
-									class="mono"
-								>
-									· {current.upstream.version}</span
-								>{/if}
-						</dd>
+						<SettingRow title={t('plugins.upstream')}>
+							{#snippet control()}<span
+									>{#if current.upstream?.url && pg.link(current.upstream.url)}<a
+											href={current.upstream.url}
+											rel="noreferrer">{current.upstream.name || current.upstream.url}</a
+										>{:else}{current.upstream?.name}{/if}{#if current.upstream?.version}<span
+											class="mono"
+										>
+											· {current.upstream.version}</span
+										>{/if}</span
+								>{/snippet}
+						</SettingRow>
 					{/if}
-					<dt>{t('plugins.footprint')}</dt>
-					<dd>
-						{t('plugins.diskSize', {
-							size: formatBytes(current.size),
-						})}{#if pg.about(current)?.footprint}. {pg.about(current)?.footprint}{/if}
-					</dd>
+					<SettingRow title={t('plugins.footprint')}>
+						{#snippet control()}<span
+								>{t('plugins.diskSize', {
+									size: formatBytes(current.size),
+								})}{#if pg.about(current)?.footprint}. {pg.about(current)?.footprint}{/if}</span
+							>{/snippet}
+					</SettingRow>
 					{#if current.sources?.length}
-						<dt>{t('plugins.sources')}</dt>
-						<dd>
-							<ul class="plain">
-								{#each current.sources as source (source)}<li class="mono">
-										{#if pg.link(source)}<a href={source} rel="noreferrer">{source}</a
-											>{:else}{source}{/if}
-									</li>{/each}
-							</ul>
-						</dd>
+						<SettingRow title={t('plugins.sources')}>
+							{#snippet control()}
+								<ul class="plain">
+									{#each current.sources as source (source)}<li class="mono">
+											{#if pg.link(source)}<a href={source} rel="noreferrer">{source}</a
+												>{:else}{source}{/if}
+										</li>{/each}
+								</ul>
+							{/snippet}
+						</SettingRow>
 					{/if}
-				</dl>
+				</SettingGroup>
 			</div>
 		{/if}
 
@@ -164,23 +167,25 @@
 		{/if}
 
 		{#if !current.installed && !pg.asking}
-			<div class="row">
-				<span class="muted path"
-					>{current.download
+			<SettingGroup>
+				<SettingRow
+					icon="download"
+					title={current.download
 						? t('plugins.githubSource', { version: status.catalog.release })
-						: current.path}</span
+						: current.path}
 				>
-				<button
-					type="button"
-					class="btn btn-primary"
-					disabled={pg.locked ||
-						pg.refreshing ||
-						!pg.volumes.length ||
-						current.problem === 'kernel'}
-					onclick={pg.ask}
-					>{t(current.download ? 'plugins.downloadInstall' : 'plugins.install')}</button
-				>
-			</div>
+					{#snippet control()}<button
+							type="button"
+							class="btn btn-primary"
+							disabled={pg.locked ||
+								pg.refreshing ||
+								!pg.volumes.length ||
+								current.problem === 'kernel'}
+							onclick={pg.ask}
+							>{t(current.download ? 'plugins.downloadInstall' : 'plugins.install')}</button
+						>{/snippet}
+				</SettingRow>
+			</SettingGroup>
 			{#if !pg.volumes.length}<p class="muted">
 					{t('plugins.needVolume')} <a href="/storage">{t('nav.storage')}</a>
 				</p>{/if}
@@ -194,21 +199,31 @@
 						{t('plugins.downloadNote', { size: formatBytes(current.size) })}
 					</p>{/if}
 				{#if current.licenseUrl}<a href={current.licenseUrl}>{t('plugins.licenses')}</a>{/if}
-				{#if !status.volume}
-					<label
-						><span>{t('plugins.volume')}</span>
-						<select class="field" bind:value={pg.volume}
-							>{#each pg.volumes as entry (entry)}<option value={entry}>{entry}</option
-								>{/each}</select
-						>
-					</label>
-				{/if}
-				<label class="check"
-					><input type="checkbox" bind:checked={pg.activate} disabled={pg.busy} /><span
-						>{t('plugins.activateNow')}</span
-					></label
-				>
-				<p class="muted note">{t('plugins.activateLaterHint')}</p>
+				<SettingGroup>
+					{#if !status.volume}
+						<SettingRow icon="disk" title={t('plugins.volume')} for="plugin-volume">
+							{#snippet control()}<select id="plugin-volume" class="field" bind:value={pg.volume}
+									>{#each pg.volumes as entry (entry)}<option value={entry}>{entry}</option
+										>{/each}</select
+								>{/snippet}
+						</SettingRow>
+					{/if}
+					<SettingRow
+						icon="power"
+						title={t('plugins.activateNow')}
+						for="plugin-activate"
+						desc={t('plugins.activateLaterHint')}
+					>
+						{#snippet control()}<input
+								id="plugin-activate"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								bind:checked={pg.activate}
+								disabled={pg.busy}
+							/>{/snippet}
+					</SettingRow>
+				</SettingGroup>
 				{#if pg.error}<ProblemNotice problem={pg.error} />{/if}
 				{#if pg.shown}
 					<PluginSteps
@@ -228,7 +243,7 @@
 						>
 					</div>
 				{/if}
-				<div class="row">
+				<div class="row-actions">
 					<button type="button" class="btn" disabled={pg.busy} onclick={() => (pg.asking = false)}
 						>{t('common.cancel')}</button
 					>
@@ -271,33 +286,40 @@
 				</div>
 			</form>
 		{:else}
-			<div class="row">
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={current.enabled}
-						disabled={pg.locked}
-						onchange={(event) => pg.toggle(current.name, event.currentTarget)}
-					/><span>{t('plugins.enabled')}</span></label
+			<SettingGroup>
+				<SettingRow
+					icon="power"
+					title={t('plugins.enabled')}
+					for="plugin-enabled"
+					desc={t('plugins.enabledNote')}
 				>
-			</div>
-			<p class="muted note">{t('plugins.enabledNote')}</p>
-			{#if current.update}
-				<div class="row update">
-					{#if current.update.download}<span
-							>{t('plugins.updateAvailableDownload', { version: current.update.version })}</span
-						>{:else}<span
-							>{t('plugins.updateAvailable', { version: current.update.version })}
-							<span class="muted path">{current.update.path}</span></span
-						>{/if}
-					<button
-						type="button"
-						class="btn btn-primary"
-						disabled={pg.locked}
-						onclick={() => pg.openUpdate(current)}>{t('plugins.update')}</button
+					{#snippet control()}<input
+							id="plugin-enabled"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							checked={current.enabled}
+							disabled={pg.locked}
+							onchange={(event) => pg.toggle(current.name, event.currentTarget)}
+						/>{/snippet}
+				</SettingRow>
+				{#if current.update}
+					<SettingRow
+						icon="download"
+						title={current.update.download
+							? t('plugins.updateAvailableDownload', { version: current.update.version })
+							: t('plugins.updateAvailable', { version: current.update.version })}
+						desc={current.update.download ? undefined : current.update.path}
 					>
-				</div>
-			{/if}
+						{#snippet control()}<button
+								type="button"
+								class="btn btn-primary"
+								disabled={pg.locked}
+								onclick={() => pg.openUpdate(current)}>{t('plugins.update')}</button
+							>{/snippet}
+					</SettingRow>
+				{/if}
+			</SettingGroup>
 			{#if current.name === 'tailscale'}<TailscaleSettings
 					onpending={(value) => (pg.tailnetPending = value)}
 				/>{/if}
@@ -333,23 +355,10 @@
 </aside>
 
 <style>
-	.facts {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: var(--space-1-5) var(--space-3);
-		margin: 0;
-	}
-	.facts dt {
-		color: var(--muted);
-	}
-	.facts dd {
-		margin: 0;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
 	.plain {
 		list-style: none;
 		padding: 0;
+		text-align: right;
 	}
 	.monogram {
 		width: 44px;
@@ -378,29 +387,23 @@
 		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
-	.note {
-		font-size: var(--text-base);
-	}
 	aside {
 		flex: 0 1 520px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
+		gap: var(--space-4);
 	}
 	.head {
 		display: flex;
 		align-items: flex-start;
 		gap: 14px;
-		padding: 20px;
-		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
 		font-size: var(--text-lg);
 		font-weight: 600;
 	}
-	.meta,
-	.path {
+	.meta {
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
@@ -408,20 +411,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
-		padding: var(--tile-pad);
 		font-size: var(--text-md);
 	}
-	.block {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
+	.body :global(.sgroup > p) {
+		margin: 0;
 	}
-	h3 {
-		font-size: var(--text-sm);
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: var(--muted);
+	.row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2-5);
 	}
 	.chips {
 		display: flex;
@@ -435,45 +434,10 @@
 		flex-direction: column;
 		gap: var(--space-1);
 	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-3);
-	}
-	.update {
-		padding: var(--space-2-5) var(--space-3);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
 	.confirm {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
 	}
 	.progress {
 		display: flex;

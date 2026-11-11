@@ -5,6 +5,8 @@
 	// says so. While Docker still counts (measuring), the page asks again
 	// every 3 s.
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -186,44 +188,46 @@
 {#if loading}
 	<p class="muted" role="status">{t('common.loading')}</p>
 {:else}
-	<section class="tile ui-card" aria-labelledby="cleanup-summary">
-		<div class="card-head">
-			<h2 id="cleanup-summary">{t('dres.cleanup.summary')}</h2>
-			<div class="card-tools">
+	<!-- PLAN 78-5: what Docker holds and what can go, as rows under plain headings. -->
+	<div class="sfacts">
+		<SettingGroup
+			title={t('dres.cleanup.summary')}
+			id="cleanup-summary"
+			desc={df
+				? `${formatBytes(total)} · ${t('dres.cleanup.reclaimable')} ${formatBytes(free)}`
+				: undefined}
+		>
+			{#snippet tools()}
 				<button type="button" class="btn" disabled={df?.measuring} onclick={() => load(true)}
 					>{t('dres.cleanup.recount')}</button
 				>
-			</div>
-			{#if df}<span class="card-meta"
-					>{formatBytes(total)} · {t('dres.cleanup.reclaimable')} {formatBytes(free)}</span
-				>{/if}
-		</div>
-		{#if df?.measuring}<p class="muted none" role="status">{t('dres.cleanup.measuring')}</p>{/if}
-		{#if parts.length}
-			<div class="summary">
-				{#each parts as [label, p] (label)}
-					<div class="part">
-						<span class="part-label">{t(label)}</span>
-						<strong class="part-size">{formatBytes(p?.size ?? 0)}</strong>
-						<span class="part-free"
-							>{p?.count ?? 0} · {t('dres.cleanup.free', {
-								size: formatBytes(p?.reclaimable ?? 0),
-							})}</span
-						>
-					</div>
-				{/each}
-			</div>
-		{:else}
-			<p class="muted none">{t('dres.cleanup.unknown')}</p>
-		{/if}
-	</section>
+			{/snippet}
+			{#if df?.measuring}<p class="muted" role="status">{t('dres.cleanup.measuring')}</p>{/if}
+			{#each parts as [label, p] (label)}
+				<SettingRow
+					title={t(label)}
+					desc="{p?.count ?? 0} · {t('dres.cleanup.free', {
+						size: formatBytes(p?.reclaimable ?? 0),
+					})}"
+				>
+					{#snippet control()}<strong class="part-size">{formatBytes(p?.size ?? 0)}</strong
+						>{/snippet}
+				</SettingRow>
+			{:else}
+				<p class="muted">{t('dres.cleanup.unknown')}</p>
+			{/each}
+		</SettingGroup>
+	</div>
 
-	<section class="tile ui-card" aria-labelledby="cleanup-actions">
-		<div class="card-head"><h2 id="cleanup-actions">{t('dres.cleanup.actions')}</h2></div>
+	<SettingGroup title={t('dres.cleanup.actions')} id="cleanup-actions">
 		{#each rows as row (row.kind)}
-			<div class="set-row" data-kind={row.kind}>
-				<span class="set-label">{t(row.title)}<span class="set-hint">{t(row.hint)}</span></span>
-				<span class="set-control end">
+			<SettingRow
+				icon={row.kind === 'networks' ? 'globe' : row.kind === 'volumes' ? 'disk' : 'trash'}
+				id="cleanup-{row.kind}"
+				title={t(row.title)}
+				desc={t(row.hint)}
+			>
+				{#snippet control()}
 					{#if row.kind !== 'cache'}<span class="count muted">{row.count}</span>{/if}
 					<button
 						type="button"
@@ -239,10 +243,10 @@
 									? t('dnet.remove')
 									: t('dres.cleanup.runSize', { size: formatBytes(row.size) })}</button
 					>
-				</span>
-			</div>
+				{/snippet}
+			</SettingRow>
 		{/each}
-	</section>
+	</SettingGroup>
 {/if}
 
 {#if asked}
@@ -287,39 +291,14 @@
 {/if}
 
 <style>
-	.summary {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-	}
-	.part {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: var(--space-3) var(--space-4);
-		box-shadow: inset 1px 0 0 var(--panel-border, var(--border));
-		margin-left: -1px;
-		min-width: 0;
-	}
-	.part-label {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
 	.part-size {
-		font-size: var(--text-lg);
+		font-size: var(--text-md);
 		font-weight: 600;
-	}
-	.part-free {
-		color: var(--muted);
-		font-size: var(--text-sm);
 	}
 	.count {
 		min-width: 2ch;
 		text-align: right;
 		font-size: var(--text-base);
-	}
-	.none {
-		margin: 0;
-		padding: var(--space-4);
 	}
 	.names {
 		margin: var(--space-2) 0;

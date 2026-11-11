@@ -371,22 +371,23 @@
 		text-transform: uppercase;
 		color: var(--muted);
 	}
+	/* PLAN 78-5: the rows of a group stand together, no box around them. */
 	.grp {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
-		background: color-mix(in srgb, var(--surface) 55%, transparent);
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		flex-shrink: 0;
+		min-width: 0;
 	}
 	.row {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2-5);
 		padding: var(--space-2-5) var(--space-3);
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 		min-width: 0;
-	}
-	.row:first-child {
-		border-top: 0;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	.row.col {
 		flex-direction: column;
@@ -484,10 +485,10 @@
 	.unit .field {
 		max-width: 10rem;
 	}
+	/* A group of check boxes under its name, no box around it (PLAN 78-5). */
 	fieldset {
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: var(--space-2) var(--space-3) var(--space-3);
+		border: 0;
+		padding: 0;
 		margin: 0;
 		display: flex;
 		flex-direction: column;
@@ -496,7 +497,7 @@
 	}
 	legend {
 		font-weight: 600;
-		padding: 0 var(--space-1);
+		padding: 0 0 var(--space-1);
 	}
 	.check {
 		display: flex;

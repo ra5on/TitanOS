@@ -31,7 +31,6 @@
 	import { desktop } from '#lib/desktop/wm.svelte.ts';
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { uploads } from '#lib/uploads.svelte.ts';
-	import { settingsGroups } from '#lib/settings-groups.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
 	import { THEMES } from '#lib/theme/themes.ts';
 	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
@@ -188,14 +187,6 @@
 				: 'width=device-width, initial-scale=1',
 		);
 	});
-	// Since 0.74 (owner 9.11.2026): every page's titled tiles open and close
-	// like the settings' groups (style E3), except views that are no forms.
-	const NO_GROUPS = ['/files', '/terminal', '/vms/screen', '/share', '/welcome', '/login'];
-	const grouped = $derived(
-		page.url.pathname !== '/' &&
-			!page.url.pathname.startsWith('/settings') &&
-			!NO_GROUPS.some((p) => page.url.pathname === p || page.url.pathname.startsWith(p + '/')),
-	);
 </script>
 
 <svelte:head>
@@ -232,9 +223,9 @@
 		<LoginPreview />
 	{:else}
 		<Shell
-			>{#if grouped}<div class="page-groups" use:settingsGroups={() => page.url.pathname}>
-					{@render children()}
-				</div>{:else}{@render children()}{/if}</Shell
+			><!-- PLAN 78-5: every page's groups are headings above rows (SettingGroup,
+			     SettingRow); the collapsible tiles of style E3 are gone. -->
+			{@render children()}</Shell
 		>
 		<!-- PLAN 61: the lock screen of the session, above everything. -->
 		<LockScreen background={lockBackground} />

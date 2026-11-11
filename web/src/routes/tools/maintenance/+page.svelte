@@ -7,6 +7,8 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -223,130 +225,165 @@
 		<button class="btn small" disabled={busy} onclick={load}>{t('ui.retry')}</button>
 	</p>{/if}
 <p class="muted">{t('ops.maintenanceHint')}</p>
+<!-- PLAN 78-5: the settings of the planner as flat rows, stored with "Speichern". -->
 {#if settings}<form
-		class="tile configuration"
+		class="configuration"
 		onsubmit={(e) => {
 			e.preventDefault();
 			if (settings) save(settings);
 		}}
 	>
-		<label class="check"
-			><input type="checkbox" bind:checked={settings.enabled} />{t('ops.enabled')}</label
-		>
-		<label
-			>{t('ops.volume')}<select
-				class="field"
-				bind:value={settings.volume}
-				required={settings.enabled || settings.jobs.length > 0}
-				><option value="">{t('ops.choose')}</option
-				>{#if settings.volume && !storage?.volumes.some((v) => v.name === settings!.volume)}<option
-						value={settings.volume}>{settings.volume} · {t('tasks.wait.volume')}</option
-					>{/if}{#each storage?.volumes ?? [] as v (v.name)}<option value={v.name}>{v.name}</option
-					>{/each}</select
-			></label
-		>
-		<label class="check"
-			><input type="checkbox" bind:checked={settings.backupsFirst} />{t(
-				'tasks.backupsFirst',
-			)}</label
-		>
-		<label
-			>{t('ops.timezone')}<select class="field" bind:value={settings.timezone} required
-				>{#each zones as zone (zone)}<option value={zone}
-						>{zone === nasZone ? t('ops.timezoneNas', { zone }) : zone}</option
-					>{/each}</select
-			>{#if nasZone && settings.timezone !== nasZone}<small class="muted"
-					>{t('ops.timezoneDiffers', { zone: nasZone })}</small
-				>{/if}</label
-		>
-		<label
-			>{t('ops.from')}<input
-				class="field"
-				type="time"
-				bind:value={settings.windowFrom}
-				required
-			/></label
-		><label
-			>{t('ops.to')}<input
-				class="field"
-				type="time"
-				bind:value={settings.windowTo}
-				required
-			/></label
-		>
-		<button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
-		>{#if saved && !settingsDirty && !jobDirty}<span role="status">{t('notify.saved')}</span>{/if}
+		<SettingGroup title={t('ops.maintenanceSettings')} id="maintenance-settings">
+			<SettingRow icon="tool" title={t('ops.enabled')} for="maintenance-enabled">
+				{#snippet control()}<input
+						id="maintenance-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={settings!.enabled}
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow icon="disk" title={t('ops.volume')} for="maintenance-volume">
+				{#snippet control()}<select
+						id="maintenance-volume"
+						class="field"
+						bind:value={settings!.volume}
+						required={settings!.enabled || settings!.jobs.length > 0}
+						><option value="">{t('ops.choose')}</option
+						>{#if settings!.volume && !storage?.volumes.some((v) => v.name === settings!.volume)}<option
+								value={settings!.volume}>{settings!.volume} · {t('tasks.wait.volume')}</option
+							>{/if}{#each storage?.volumes ?? [] as v (v.name)}<option value={v.name}
+								>{v.name}</option
+							>{/each}</select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="archive" title={t('tasks.backupsFirst')} for="maintenance-backups-first">
+				{#snippet control()}<input
+						id="maintenance-backups-first"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={settings!.backupsFirst}
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="globe"
+				title={t('ops.timezone')}
+				for="maintenance-timezone"
+				desc={nasZone && settings.timezone !== nasZone
+					? t('ops.timezoneDiffers', { zone: nasZone })
+					: undefined}
+			>
+				{#snippet control()}<select
+						id="maintenance-timezone"
+						class="field"
+						bind:value={settings!.timezone}
+						required
+						>{#each zones as zone (zone)}<option value={zone}
+								>{zone === nasZone ? t('ops.timezoneNas', { zone }) : zone}</option
+							>{/each}</select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="clock" title={t('ops.from')} for="maintenance-from">
+				{#snippet control()}<input
+						id="maintenance-from"
+						class="field"
+						type="time"
+						bind:value={settings!.windowFrom}
+						required
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow icon="clock" title={t('ops.to')} for="maintenance-to">
+				{#snippet control()}<input
+						id="maintenance-to"
+						class="field"
+						type="time"
+						bind:value={settings!.windowTo}
+						required
+					/>{/snippet}
+			</SettingRow>
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
+				>{#if saved && !settingsDirty && !jobDirty}<span role="status">{t('notify.saved')}</span
+					>{/if}
+			</div>
+		</SettingGroup>
 	</form>{/if}
 {#if status?.error}<p class="notice-warn">
 		{@render problemLine(problemText(status.error, t))}
 	</p>{/if}
-<section class="tile schedules">
-	<div class="table-wrap">
-		<table>
-			<thead
-				><tr
-					><th>{t('ops.name')}</th><th>{t('ops.target')}</th><th>{t('ops.next')}</th><th
-						>{t('ops.lastOK')}</th
-					><th>{t('ops.state')}</th><th></th></tr
-				></thead
-			><tbody>
-				{#each status?.jobs ?? [] as view (view.job.id)}<tr
-						><td
-							><strong>{view.job.name}</strong>
-							<div class="muted">{t(`ops.kind.${view.job.kind}`)}</div></td
-						><td class="mono">{view.job.target}</td><td
-							>{view.job.enabled && status?.settings.enabled ? time(view.next) : '—'}</td
-						><td>{time(view.state.lastOK)}</td><td
-							>{t(
-								view.state.running
-									? 'ops.running'
-									: view.state.blocked
-										? 'ops.blocked'
-										: 'ops.ready',
-							)}{#if view.wait && !view.state.running}<p class="muted">
-									{t(`tasks.wait.${view.wait}` as MessageKey)}
-								</p>{/if}{#if view.state.error}<p class="notice-warn">
-									{@render problemLine(problemText(view.state.error, t))}
-								</p>{/if}</td
-						><td
-							><div class="actions">
-								<button
-									class="btn"
-									disabled={busy || view.state.running}
-									onclick={() => edit(view.job)}>{t('ops.edit')}</button
-								>{#if view.state.running}<button
+<!-- The jobs stay a table on its own surface, under a plain heading. -->
+<div class="schedules">
+	<SettingGroup title={t('ops.schedules')} id="maintenance-jobs">
+		<div class="tile table-wrap">
+			<table>
+				<thead
+					><tr
+						><th>{t('ops.name')}</th><th>{t('ops.target')}</th><th>{t('ops.next')}</th><th
+							>{t('ops.lastOK')}</th
+						><th>{t('ops.state')}</th><th></th></tr
+					></thead
+				><tbody>
+					{#each status?.jobs ?? [] as view (view.job.id)}<tr
+							><td
+								><strong>{view.job.name}</strong>
+								<div class="muted">{t(`ops.kind.${view.job.kind}`)}</div></td
+							><td class="mono">{view.job.target}</td><td
+								>{view.job.enabled && status?.settings.enabled ? time(view.next) : '—'}</td
+							><td>{time(view.state.lastOK)}</td><td
+								>{t(
+									view.state.running
+										? 'ops.running'
+										: view.state.blocked
+											? 'ops.blocked'
+											: 'ops.ready',
+								)}{#if view.wait && !view.state.running}<p class="muted">
+										{t(`tasks.wait.${view.wait}` as MessageKey)}
+									</p>{/if}{#if view.state.error}<p class="notice-warn">
+										{@render problemLine(problemText(view.state.error, t))}
+									</p>{/if}</td
+							><td
+								><div class="actions">
+									<button
 										class="btn"
-										disabled={busy}
-										onclick={() => action(view.job.id, 'stop')}>{t('ops.stop')}</button
-									>{:else if view.state.blocked}<button
-										class="btn"
-										onclick={() => {
-											review = view.job.id;
-										}}>{t('ops.review')}</button
-									>{:else}<button
-										class="btn"
-										disabled={busy}
-										onclick={() => action(view.job.id, 'run')}>{t('ops.run')}</button
-									>{/if}
-							</div></td
-						></tr
-					>{:else}<tr><td colspan="6"><EmptyState inline title={t('ops.none')} /></td></tr>{/each}
-			</tbody>
-		</table>
-	</div>
-</section>
-<section class="tile history">
-	<h2 class="tile-title">{t('ops.history')}</h2>
-	{#each status?.history ?? [] as result, i (`${result.id}-${result.started}-${i}`)}<div
-			class="result"
-		>
-			<strong>{result.name}</strong><time>{time(result.finished)}</time><span
-				>{#if result.error}{@render problemLine(problemText(result.error, t))}{:else}{t(
-						'ops.finished',
-					)}{/if}</span
+										disabled={busy || view.state.running}
+										onclick={() => edit(view.job)}>{t('ops.edit')}</button
+									>{#if view.state.running}<button
+											class="btn"
+											disabled={busy}
+											onclick={() => action(view.job.id, 'stop')}>{t('ops.stop')}</button
+										>{:else if view.state.blocked}<button
+											class="btn"
+											onclick={() => {
+												review = view.job.id;
+											}}>{t('ops.review')}</button
+										>{:else}<button
+											class="btn"
+											disabled={busy}
+											onclick={() => action(view.job.id, 'run')}>{t('ops.run')}</button
+										>{/if}
+								</div></td
+							></tr
+						>{:else}<tr><td colspan="6"><EmptyState inline title={t('ops.none')} /></td></tr>{/each}
+				</tbody>
+			</table>
+		</div>
+	</SettingGroup>
+</div>
+<div class="history">
+	<SettingGroup title={t('ops.history')} id="maintenance-history">
+		{#each status?.history ?? [] as result, i (`${result.id}-${result.started}-${i}`)}<SettingRow
+				title={result.name}
 			>
-		</div>{:else}<p class="muted">{t('ops.none')}</p>{/each}
-</section>
+				{#snippet description()}<span class="result"
+						>{#if result.error}{@render problemLine(problemText(result.error, t))}{:else}{t(
+								'ops.finished',
+							)}{/if}</span
+					>{/snippet}
+				{#snippet control()}<time>{time(result.finished)}</time>{/snippet}
+			</SettingRow>{:else}<p class="muted">{t('ops.none')}</p>{/each}
+	</SettingGroup>
+</div>
 {#if draft}<Dialog
 		title={t(draft.id ? 'ops.edit' : 'ops.add')}
 		locked={busy}
@@ -563,13 +600,17 @@
 	>{/if}
 
 <style>
-	.configuration,
+	.row-actions {
+		margin-top: var(--space-2);
+	}
+	.configuration {
+		margin: var(--gap) 0;
+	}
 	.editor {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: end;
 		gap: 14px;
-		padding: var(--tile-pad);
 	}
 	label {
 		display: flex;
@@ -583,9 +624,6 @@
 		flex-direction: row;
 		align-items: center;
 	}
-	.editor {
-		padding: 0;
-	}
 	.editor label {
 		flex-basis: 45%;
 	}
@@ -597,7 +635,9 @@
 	.table-wrap {
 		overflow-x: auto;
 	}
+	/* Narrow windows: the table scrolls sideways instead of breaking words. */
 	table {
+		min-width: 48rem;
 		width: 100%;
 		border-collapse: collapse;
 		font-size: var(--text-base);
@@ -614,18 +654,7 @@
 		overflow-wrap: anywhere;
 	}
 	.history {
-		padding: var(--tile-pad);
 		margin-top: var(--gap);
-	}
-	.result {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
-		padding: var(--space-2-5) 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.result span {
-		overflow-wrap: anywhere;
 	}
 	.detail {
 		display: block;

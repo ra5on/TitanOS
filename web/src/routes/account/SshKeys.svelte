@@ -6,6 +6,12 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
+
+	// PLAN 78-5: one row of "Mein Konto"; the keys and the form for a new one
+	// are its parts. `open` lets the page open the row (menu bar › SSH).
+	let { open = $bindable(false) }: { open?: boolean } = $props();
 
 	type Key = { id: string; type: string; fingerprint: string; comment: string };
 	type Answer = { keys: Key[]; mayLogin: boolean; sshEnabled: boolean };
@@ -69,47 +75,64 @@
 		busy = false;
 	}
 
+	const summary = $derived.by(() => {
+		if (!state_) return loadError ? '' : t('common.loading');
+		const count = state_.keys?.length ?? 0;
+		return count === 0
+			? t('ssh.countNone')
+			: count === 1
+				? t('ssh.countOne')
+				: t('ssh.count', { count });
+	});
+
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || system.info?.hostname || 'nas');
 </script>
 
-<section class="tile" aria-labelledby="acc-ssh">
-	<h2 class="tile-title" id="acc-ssh">{t('ssh.keys')}</h2>
-	{#if !state_}
-		{#if loadError}
-			<div class="notice-error failed" role="alert">
-				<span>{loadError}</span><button type="button" class="btn" onclick={load}
-					>{t('common.retry')}</button
-				>
-			</div>
-		{:else}
-			<p class="muted loading" role="status">{t('common.loading')}</p>
-		{/if}
-	{:else}
-		{#if !state_.mayLogin}
-			<p class="muted">{t('ssh.onlyAdmins')}</p>
-		{:else if !state_.sshEnabled}
-			<p class="muted">{t('ssh.offHint')} <a href="/settings/access">{t('ssh.settingsLink')}</a></p>
-		{:else}
-			<p class="muted">
+<SettingRow id="acc-ssh" icon="terminal" title={t('ssh.keys')} {summary} bind:open>
+	{#snippet description()}
+		{#if state_}
+			{#if !state_.mayLogin}
+				{t('ssh.onlyAdmins')}
+			{:else if !state_.sshEnabled}
+				{t('ssh.offHint')} <a href="/settings/access">{t('ssh.settingsLink')}</a>
+			{:else}
 				{t('ssh.onHint')} <span class="mono">ssh {session.data?.user?.name}@{host}</span>
-			</p>
+			{/if}
 		{/if}
-		{#each state_.keys as key (key.id)}
-			<div class="key">
-				<div>
-					<span class="name">{key.comment || key.type}</span>
-					<span class="muted mono">{key.type} · {key.fingerprint}</span>
+	{/snippet}
+	{#if !state_}
+		<div class="srow-block">
+			{#if loadError}
+				<div class="notice-error failed" role="alert">
+					<span>{loadError}</span><button type="button" class="btn" onclick={load}
+						>{t('common.retry')}</button
+					>
 				</div>
-				<button type="button" class="btn" onclick={() => ((removeError = ''), (removing = key))}
-					>{t('ssh.remove')}</button
-				>
-			</div>
+			{:else}
+				<p class="muted loading" role="status">{t('common.loading')}</p>
+			{/if}
+		</div>
+	{:else}
+		{#each state_.keys as key (key.id)}
+			<SettingSub title={key.comment || key.type}>
+				{#snippet description()}<span class="mono">{key.type} · {key.fingerprint}</span>{/snippet}
+				{#snippet control()}
+					<button
+						type="button"
+						class="btn"
+						aria-label="{t('ssh.remove')}: {key.comment || key.type}"
+						onclick={() => ((removeError = ''), (removing = key))}>{t('ssh.remove')}</button
+					>
+				{/snippet}
+			</SettingSub>
 		{:else}
-			<p class="muted">{t('ssh.noKeys')}</p>
+			<div class="srow-block"><p class="muted">{t('ssh.noKeys')}</p></div>
 		{/each}
-		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
+		{#if error}<div class="srow-block">
+				<p class="notice-warn" role="alert">{error}</p>
+			</div>{/if}
 		{#if adding}
-			<form onsubmit={add}>
+			<form class="srow-block" onsubmit={add}>
 				<label
 					><span class="muted">{t('ssh.keyLabel')}</span>
 					<!-- svelte-ignore a11y_autofocus -->
@@ -140,12 +163,12 @@
 				</div>
 			</form>
 		{:else}
-			<div>
+			<div class="srow-block actions">
 				<button type="button" class="btn" onclick={() => (adding = true)}>{t('ssh.addKey')}</button>
 			</div>
 		{/if}
 	{/if}
-</section>
+</SettingRow>
 {#if state_}
 	{#if removing}
 		{@const key = removing}
@@ -167,39 +190,6 @@
 {/if}
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: 18px;
-		font-size: var(--text-md);
-	}
-	p {
-		margin: 0;
-	}
-	.key {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2-5) var(--space-4);
-		padding: var(--space-2-5) var(--space-3);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
-	.key div {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.key .mono {
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
-	}
-	.name {
-		font-weight: 600;
-	}
 	form,
 	label {
 		display: flex;
@@ -222,8 +212,9 @@
 		justify-content: space-between;
 		gap: var(--space-2-5);
 	}
-	.actions {
+	form .actions {
 		display: flex;
+		flex-wrap: wrap;
 		justify-content: flex-end;
 		gap: var(--space-2-5);
 	}

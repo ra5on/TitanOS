@@ -2,6 +2,8 @@
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { operationError } from '#lib/operations.ts';
@@ -103,54 +105,62 @@
 	}
 </script>
 
-{#if app || clones.length || appError || cloneError}<section class="tile recovery">
-		<div class="head">
-			<h2 class="tile-title">{t('ops.review')}</h2>
-			<button class="btn" disabled={busy} onclick={() => load()}>{t('ops.refresh')}</button>
-		</div>
+<!-- PLAN 78-5: a plain heading; every interrupted operation is a flat row
+     with its buttons at the right. -->
+{#if app || clones.length || appError || cloneError}<SettingGroup
+		title={t('ops.review')}
+		id="recovery"
+	>
+		{#snippet tools()}<button class="btn" disabled={busy} onclick={() => load()}
+				>{t('ops.refresh')}</button
+			>{/snippet}
 		{#if appError}<p class="notice-warn">{appError}</p>{/if}
 		{#if cloneError}<p class="notice-warn">{cloneError}</p>{/if}
-		{#if app}<div class="row">
-				<strong>{t('ops.appRecover')} · {app.job}</strong><span class="mono">{app.id}</span><button
-					class="btn"
-					disabled={busy || active}
-					onclick={openApplication}>{t('ops.review')}</button
-				>
-			</div>{/if}
-		{#each clones as op (op.id)}<div class="row">
-				<strong>{t('ops.cloneRecovery')} · {op.vm.name}</strong><span>{op.phase}</span><span
-					class="mono">{op.id}</span
-				>{#if op.error}<p class="notice-warn">
-						{op.error}
-					</p>{/if}{#if ['verified', 'publishing', 'conflict'].includes(op.phase)}<button
-						class="btn"
-						disabled={busy}
-						onclick={() => {
-							error = '';
-							review = {
-								kind: 'clone',
-								id: op.id,
-								volume: op.vm.volume,
-								action: 'finish',
-								vm: op.vm.name,
-							};
-						}}>{t('ops.finishClone')}</button
-					>{/if}{#if ['copying', 'verified', 'publishing', 'conflict'].includes(op.phase)}<button
-						class="btn"
-						disabled={busy}
-						onclick={() => {
-							error = '';
-							review = {
-								kind: 'clone',
-								id: op.id,
-								volume: op.vm.volume,
-								action: 'discard',
-								vm: op.vm.name,
-							};
-						}}>{t('ops.discardClone')}</button
-					>{/if}
-			</div>{/each}
-	</section>{/if}
+		{#if app}<SettingRow icon="archive" title="{t('ops.appRecover')} · {app.job}">
+				{#snippet description()}<span class="mono">{app?.id}</span>{/snippet}
+				{#snippet control()}<button class="btn" disabled={busy || active} onclick={openApplication}
+						>{t('ops.review')}</button
+					>{/snippet}
+			</SettingRow>{/if}
+		{#each clones as op (op.id)}<SettingRow
+				icon="copy"
+				title="{t('ops.cloneRecovery')} · {op.vm.name}"
+			>
+				{#snippet description()}
+					<span>{op.phase}</span> · <span class="mono">{op.id}</span>
+					{#if op.error}<p class="notice-warn">{op.error}</p>{/if}
+				{/snippet}
+				{#snippet control()}
+					{#if ['verified', 'publishing', 'conflict'].includes(op.phase)}<button
+							class="btn"
+							disabled={busy}
+							onclick={() => {
+								error = '';
+								review = {
+									kind: 'clone',
+									id: op.id,
+									volume: op.vm.volume,
+									action: 'finish',
+									vm: op.vm.name,
+								};
+							}}>{t('ops.finishClone')}</button
+						>{/if}{#if ['copying', 'verified', 'publishing', 'conflict'].includes(op.phase)}<button
+							class="btn"
+							disabled={busy}
+							onclick={() => {
+								error = '';
+								review = {
+									kind: 'clone',
+									id: op.id,
+									volume: op.vm.volume,
+									action: 'discard',
+									vm: op.vm.name,
+								};
+							}}>{t('ops.discardClone')}</button
+						>{/if}
+				{/snippet}
+			</SettingRow>{/each}
+	</SettingGroup>{/if}
 {#if review}<Dialog
 		title={t(
 			review.kind === 'app'
@@ -209,27 +219,8 @@
 	>{/if}
 
 <style>
-	.recovery {
-		padding: var(--tile-pad);
-		margin: var(--gap) 0;
-	}
-	.row,
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
-		align-items: center;
-	}
-	.head {
-		justify-content: space-between;
-	}
-	.row {
-		padding: 14px 0;
-		border-bottom: 1px solid var(--border);
-		font-size: var(--text-base);
-	}
-	.row p {
-		flex-basis: 100%;
+	p {
+		margin: var(--space-1-5) 0 0;
 	}
 	.mono {
 		overflow-wrap: anywhere;

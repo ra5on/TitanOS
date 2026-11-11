@@ -4,6 +4,7 @@
 	import type { FileRoot } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import TrashView from './TrashView.svelte';
 
@@ -49,13 +50,26 @@
 	<div class="toolbar">
 		<button type="button" class="btn" onclick={onback}>{t('files.trashBack')}</button>
 	</div>
-	<section class="bin-choice" aria-label={t('files.trashChoose')}>
-		<h2 class="tile-title">{t('files.trashChoose')}</h2>
-		<p class="muted">{t('files.trashChooseHint', { name: root.name })}</p>
-		{#each bins as bin (bin)}<button type="button" class="btn bin" onclick={() => (trashBin = bin)}
-				><Icon name="trash" size={16} /><span class="mono">{root.name}/{bin}</span></button
-			>{/each}
-	</section>
+	<!-- PLAN 78-5: a plain heading; every bin is a row that opens it. -->
+	<div class="bin-choice">
+		<SettingGroup
+			title={t('files.trashChoose')}
+			desc={t('files.trashChooseHint', { name: root.name })}
+			id="files-bins"
+		>
+			{#each bins as bin (bin)}<button
+					type="button"
+					class="srow bin"
+					onclick={() => (trashBin = bin)}
+					><span class="srow-head"
+						><span class="srow-ico" aria-hidden="true"><Icon name="trash" size={19} /></span><span
+							class="srow-text"><span class="srow-title mono">{root.name}/{bin}</span></span
+						><span class="srow-chev" aria-hidden="true"><Icon name="chevronRight" size={16} /></span
+						></span
+					></button
+				>{/each}
+		</SettingGroup>
+	</div>
 {:else}
 	<div class="toolbar">
 		<button type="button" class="btn" onclick={onback}>{t('files.trashBack')}</button>
@@ -77,15 +91,21 @@
 		height: 2.375rem;
 	}
 	.bin-choice {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: var(--space-2);
 		padding: var(--space-3) var(--space-4) var(--space-4);
 	}
 	.bin-choice .bin {
-		justify-content: flex-start;
-		gap: var(--space-2);
+		width: 100%;
+		padding: 0;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.bin-choice .bin:hover {
+		background: var(--srow-hover);
+	}
+	.bin-choice .bin:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.trash-configure {
 		align-self: center;

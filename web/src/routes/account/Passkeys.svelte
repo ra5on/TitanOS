@@ -6,6 +6,12 @@
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { addPasskey, passkeysPossible, type Passkey } from '#lib/passkeys.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
+
+	// PLAN 78-5: one row of "Mein Konto"; the keys are its parts. `open` lets
+	// the page open the row (menu bar › Passkeys).
+	let { open = $bindable(false) }: { open?: boolean } = $props();
 
 	type Answer = { passkeys: Passkey[]; rpId: string; usable: boolean };
 
@@ -39,7 +45,7 @@
 		load();
 	});
 
-	function open() {
+	function open_() {
 		password = code = error = '';
 		name = defaultName();
 		adding = true;
@@ -90,47 +96,71 @@
 		busy = false;
 	}
 
+	const summary = $derived.by(() => {
+		if (!state_) return loadError ? '' : t('common.loading');
+		const count = state_.passkeys?.length ?? 0;
+		return count === 0
+			? t('passkeys.countNone')
+			: count === 1
+				? t('passkeys.countOne')
+				: t('passkeys.count', { count });
+	});
+
 	const date = (value: string) =>
 		new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }).format(new Date(value));
 </script>
 
-<section class="tile" aria-labelledby="acc-passkeys">
-	<h2 class="tile-title" id="acc-passkeys">{t('passkeys.title')}</h2>
+<SettingRow
+	id="acc-passkeys"
+	icon="key"
+	title={t('passkeys.title')}
+	desc={t('passkeys.intro')}
+	{summary}
+	bind:open
+>
 	{#if !state_}
-		{#if loadError}
-			<div class="notice-error" role="alert">
-				{loadError} <button type="button" class="btn" onclick={load}>{t('common.retry')}</button>
-			</div>
-		{:else}
-			<p class="muted loading" role="status">{t('common.loading')}</p>
-		{/if}
-	{:else}
-		<p class="muted">{t('passkeys.intro')}</p>
-		{#each state_.passkeys as key (key.id)}
-			<div class="key">
-				<div>
-					<span class="name">{key.name}</span>
-					<span class="muted small"
-						>{key.rpId} · {t('passkeys.added', { date: date(key.created) })}{key.synced
-							? ` · ${t('passkeys.synced')}`
-							: ''}</span
-					>
+		<div class="srow-block">
+			{#if loadError}
+				<div class="notice-error" role="alert">
+					{loadError}
+					<button type="button" class="btn" onclick={load}>{t('common.retry')}</button>
 				</div>
-				<button type="button" class="btn" onclick={() => ((error = ''), (removing = key))}
-					>{t('passkeys.remove')}</button
-				>
-			</div>
+			{:else}
+				<p class="muted loading" role="status">{t('common.loading')}</p>
+			{/if}
+		</div>
+	{:else}
+		{#each state_.passkeys as key (key.id)}
+			<SettingSub
+				title={key.name}
+				desc="{key.rpId} · {t('passkeys.added', { date: date(key.created) })}{key.synced
+					? ` · ${t('passkeys.synced')}`
+					: ''}"
+			>
+				{#snippet control()}
+					<button
+						type="button"
+						class="btn"
+						aria-label="{t('passkeys.remove')}: {key.name}"
+						onclick={() => ((error = ''), (removing = key))}>{t('passkeys.remove')}</button
+					>
+				{/snippet}
+			</SettingSub>
 		{:else}
-			<p class="muted">{t('passkeys.none')}</p>
+			<div class="srow-block"><p class="muted">{t('passkeys.none')}</p></div>
 		{/each}
 		{#if !state_.usable || !possible}
-			<p class="notice-warn">{t('passkeys.notHere')}</p>
+			<div class="srow-block"><p class="notice-warn">{t('passkeys.notHere')}</p></div>
 		{:else}
-			<div><button type="button" class="btn" onclick={open}>{t('passkeys.add')}</button></div>
+			<div class="srow-block actions">
+				<button type="button" class="btn" onclick={open_}>{t('passkeys.add')}</button>
+			</div>
 		{/if}
-		{#if error && !adding && !removing}<p class="notice-error" role="alert">{error}</p>{/if}
+		{#if error && !adding && !removing}<div class="srow-block">
+				<p class="notice-error" role="alert">{error}</p>
+			</div>{/if}
 	{/if}
-</section>
+</SettingRow>
 
 {#if adding}
 	<Dialog title={t('passkeys.add')} locked={busy} onclose={() => (adding = false)}>
@@ -198,39 +228,6 @@
 {/if}
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: 18px;
-		font-size: var(--text-md);
-	}
-	section p {
-		margin: 0;
-	}
-	.key {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2-5) var(--space-4);
-		padding: var(--space-2-5) var(--space-3);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
-	.key > div {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.name {
-		font-weight: 500;
-	}
-	.small {
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
-	}
 	form {
 		display: flex;
 		flex-direction: column;

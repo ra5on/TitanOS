@@ -3,6 +3,8 @@
 	// why the disk cannot sleep. The disk's own value can be changed here; it
 	// sends the same request as the sleep dialog with every other value kept.
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { overridesFrom } from './disk-sleep.ts';
 	import { diskSleep, sleepDuration, sleepOrigin, sleepSince } from './sleep-view.ts';
@@ -61,97 +63,80 @@
 	}
 </script>
 
+<!-- PLAN 78-5: a plain heading; the value with its state is a flat row, the
+     disk's own time a row with its choice. -->
 {#if entry}
-	<section class="sleep" aria-labelledby="disk-sleep-{name}">
-		<div class="head">
-			<h3 id="disk-sleep-{name}">{t('storage.sleepCard')}</h3>
+	<div class="sleep">
+		<SettingGroup title={t('storage.sleepCard')} id="disk-sleep-{name}">
 			{#if disk}
-				<span>{sleepDuration(disk.effective)}</span>
-				<span class="muted small">({sleepOrigin(disk.origin)})</span>
-				<span class="chip" class:ok={disk.state === 'asleep'}
-					>{disk.state === 'asleep' ? t('storage.sleepAsleep') : t('storage.sleepAwake')}</span
-				>
-				{#if disk.error}<span class="chip error" title={disk.error}
-						>{t('storage.sleepStandbyFailed')}</span
-					>{/if}
-			{:else}
-				<span class="muted">{entry.reason ? t(`storage.sleepReason.${entry.reason}`) : '–'}</span>
-			{/if}
-		</div>
-		{#if since}<p class="muted small since">{since}</p>{/if}
-		{#if disk && !disk.id}<p class="muted small">{t('storage.sleepNoIdentity')}</p>{/if}
-		{#if disk && canAdminister}
-			{#if editing}
-				<div class="editor">
-					<label for="disk-sleep-edit-{name}">{t('storage.sleepDiskOwn')}</label>
-					<select id="disk-sleep-edit-{name}" class="field" bind:value={draft} disabled={busy}>
-						<option value={INHERIT}
-							>{disk.volume ? t('storage.sleepVolumeOption') : t('storage.sleepInherit')}</option
+				<SettingRow icon="power" title={sleepDuration(disk.effective)}>
+					{#snippet description()}<span>({sleepOrigin(disk.origin)})</span>{#if since}<span
+								class="since">{since}</span
+							>{/if}{/snippet}
+					{#snippet control()}<span class="chip" class:ok={disk.state === 'asleep'}
+							>{disk.state === 'asleep' ? t('storage.sleepAsleep') : t('storage.sleepAwake')}</span
 						>
-						{#each minutes as value}<option value={String(value)}>{sleepDuration(value)}</option
-							>{/each}
-					</select>
-				</div>
-				{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-				<div class="actions">
-					<button type="button" class="btn btn-primary" onclick={save} disabled={busy}
-						>{t('storage.sleepSave')}</button
-					>
-					<button type="button" class="btn" onclick={() => (editing = false)} disabled={busy}
-						>{t('storage.sleepCancel')}</button
-					>
-				</div>
+						{#if disk.error}<span class="chip error" title={disk.error}
+								>{t('storage.sleepStandbyFailed')}</span
+							>{/if}{/snippet}
+				</SettingRow>
 			{:else}
-				<div class="actions">
-					{#if disk.id}<button type="button" class="btn small" onclick={open}
-							>{t('storage.sleepChange')}</button
-						>{/if}
-					<button type="button" class="btn small" onclick={onopen}
-						>{t('storage.sleepOpenHint')}</button
-					>
-				</div>
+				<p class="muted">{entry.reason ? t(`storage.sleepReason.${entry.reason}`) : '–'}</p>
 			{/if}
-		{/if}
-	</section>
+			{#if disk && !disk.id}<p class="muted small">{t('storage.sleepNoIdentity')}</p>{/if}
+			{#if disk && canAdminister}
+				{#if editing}
+					<SettingRow title={t('storage.sleepDiskOwn')} for="disk-sleep-edit-{name}">
+						{#snippet control()}<select
+								id="disk-sleep-edit-{name}"
+								class="field"
+								bind:value={draft}
+								disabled={busy}
+							>
+								<option value={INHERIT}
+									>{disk.volume
+										? t('storage.sleepVolumeOption')
+										: t('storage.sleepInherit')}</option
+								>
+								{#each minutes as value}<option value={String(value)}>{sleepDuration(value)}</option
+									>{/each}
+							</select>{/snippet}
+					</SettingRow>
+					{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+					<div class="row-actions">
+						<button type="button" class="btn btn-primary" onclick={save} disabled={busy}
+							>{t('storage.sleepSave')}</button
+						>
+						<button type="button" class="btn" onclick={() => (editing = false)} disabled={busy}
+							>{t('storage.sleepCancel')}</button
+						>
+					</div>
+				{:else}
+					<div class="row-actions">
+						{#if disk.id}<button type="button" class="btn small" onclick={open}
+								>{t('storage.sleepChange')}</button
+							>{/if}
+						<button type="button" class="btn small" onclick={onopen}
+							>{t('storage.sleepOpenHint')}</button
+						>
+					</div>
+				{/if}
+			{/if}
+		</SettingGroup>
+	</div>
 {/if}
 
 <style>
 	.sleep {
-		display: grid;
-		gap: var(--space-2);
-		border-top: 1px solid var(--border);
-		padding-top: var(--space-3);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		flex-wrap: wrap;
-	}
-	h3 {
-		margin: 0;
-		font-size: inherit;
-		font-weight: 600;
+		min-width: 0;
 	}
 	.small {
 		font-size: var(--text-sm);
 	}
-	.editor {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-3);
+	.since {
+		display: block;
 	}
-	.editor select {
-		width: auto;
-		min-width: 150px;
-	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	p {
-		margin: 0;
+	.row-actions {
+		margin-top: var(--space-1-5);
 	}
 </style>

@@ -33,8 +33,10 @@
 	}
 </script>
 
+<!-- PLAN 78-5: a group of fields inside the row "LAN-Netze" of the app form,
+     without a box of its own; the row says what it is for. -->
 <fieldset>
-	<legend>{t('lan.service')}</legend><label
+	<legend class="sr-only">{t('lan.service')}</legend><label
 		><span>{t('lan.title')}</span><select class="field" bind:value={selected}
 			><option value="">{t('lan.noLAN')}</option>{#each networks as n}<option value={n.name}
 					>{n.name} · {n.range}</option
@@ -55,10 +57,17 @@
 	fieldset {
 		display: grid;
 		gap: var(--gap);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: var(--tile-pad);
+		max-width: 46rem;
+		margin: 0;
+		border: 0;
+		padding: 0;
 		min-width: 0;
+	}
+	.btn {
+		justify-self: start;
+	}
+	p {
+		margin: 0;
 	}
 	label {
 		display: grid;

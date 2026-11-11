@@ -3,6 +3,8 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import LinkDialog from './LinkDialog.svelte';
 	import PluginDetails from './PluginDetails.svelte';
@@ -82,53 +84,49 @@
 {/if}
 
 {#if status && pg.recommendations.length > 0}
-	<section class="tile panel recommended" aria-labelledby="recommended-title">
-		<h2 class="tile-title" id="recommended-title">{t('plugins.recommendedTitle')}</h2>
-		<p class="muted note">{t('plugins.recommendedIntro')}</p>
-		<ul class="recommendations">
-			{#each pg.recommendations as entry (entry.plugin)}
-				{@const offered = pg.plugins.find((plugin) => plugin.name === entry.plugin)}
-				<li class="recommendation">
-					<div class="about">
-						<span class="name-row"
-							><span class="name">{offered?.title ?? entry.title}</span><span class="muted source"
-								>{t(categoryKey[categoryOf(entry)])}</span
-							></span
+	<!-- PLAN 78-5: the recommendations are rows under a plain heading. -->
+	<SettingGroup
+		title={t('plugins.recommendedTitle')}
+		id="recommended"
+		desc={t('plugins.recommendedIntro')}
+	>
+		{#each pg.recommendations as entry (entry.plugin)}
+			{@const offered = pg.plugins.find((plugin) => plugin.name === entry.plugin)}
+			<SettingRow icon="chip" title={offered?.title ?? entry.title}>
+				{#snippet badge()}<span class="chip">{t(categoryKey[categoryOf(entry)])}</span>{/snippet}
+				{#snippet description()}
+					{#each entry.devices as device (device.key + (device.address ?? ''))}
+						<span class="device"
+							>{device.name}{#if device.address}<span class="mono">
+									· {device.address}</span
+								>{/if}</span
 						>
-						{#each entry.devices as device (device.key + (device.address ?? ''))}
-							<span class="description"
-								>{device.name}{#if device.address}<span class="muted mono">
-										· {device.address}</span
-									>{/if}</span
-							>
-						{/each}
-						{#if !offered}<span class="muted note">{t('plugins.recommendedUnavailable')}</span>{/if}
-					</div>
-					<div class="row-actions">
-						<button
-							type="button"
-							class="btn"
-							disabled={pg.busy}
-							onclick={() =>
-								pg.run(() =>
-									api.post<Status>(
-										`/plugins/recommendations/${encodeURIComponent(entry.plugin)}/dismiss`,
-										{},
-									),
-								)}>{t('plugins.recommendedDismiss')}</button
-						>
-						<button
-							type="button"
-							class="btn btn-primary"
-							disabled={pg.busy || !offered}
-							onclick={() => pg.showRecommended(entry.plugin)}
-							>{t('plugins.recommendedShow')}</button
-						>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	</section>
+					{/each}
+					{#if !offered}<span class="device">{t('plugins.recommendedUnavailable')}</span>{/if}
+				{/snippet}
+				{#snippet control()}
+					<button
+						type="button"
+						class="btn"
+						disabled={pg.busy}
+						onclick={() =>
+							pg.run(() =>
+								api.post<Status>(
+									`/plugins/recommendations/${encodeURIComponent(entry.plugin)}/dismiss`,
+									{},
+								),
+							)}>{t('plugins.recommendedDismiss')}</button
+					>
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={pg.busy || !offered}
+						onclick={() => pg.showRecommended(entry.plugin)}>{t('plugins.recommendedShow')}</button
+					>
+				{/snippet}
+			</SettingRow>
+		{/each}
+	</SettingGroup>
 {/if}
 {#if status?.dismissed}
 	<p class="muted note">
@@ -322,8 +320,9 @@
 	}
 	.card {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 14px;
+		gap: var(--space-2) 14px;
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border-width: 2px;
 		color: var(--text);
@@ -331,24 +330,8 @@
 		text-align: left;
 		cursor: pointer;
 	}
-	.recommended {
-		margin-bottom: var(--space-4);
-	}
-	.recommendations {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.recommendation {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-3);
-		padding: var(--space-3) 0;
-		border-top: 1px solid var(--panel-border);
+	.device {
+		display: block;
 	}
 	.filters {
 		display: flex;
@@ -380,8 +363,9 @@
 		color: var(--on-monogram);
 		font-weight: 600;
 	}
+	/* Wide enough to read: the chips go below a long name instead of squeezing it. */
 	.about {
-		flex: 1 1 auto;
+		flex: 1 1 12rem;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
@@ -410,13 +394,6 @@
 	h2 {
 		font-size: var(--text-lg);
 		font-weight: 600;
-	}
-	ul {
-		margin: 0;
-		padding-left: 1.25rem;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
 	}
 	.text {
 		font-size: var(--text-md);

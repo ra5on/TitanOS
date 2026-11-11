@@ -187,7 +187,6 @@
 					/>
 					<!-- Removing stands apart, at the end of the hardware. -->
 					{#if p.tab === 'hardware'}<DangerZone
-							tile
 							hint={t(current.state === 'running' ? 'vms.removeStopFirst' : 'vms.removeHint')}
 						>
 							<button

@@ -13,6 +13,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	let jobs = $state<MediaJob[]>([]),
 		loading = $state(true),
 		error = $state(''),
@@ -311,12 +312,12 @@
 			</div>
 		</section>{/each}{/if}
 <p class="muted">{t('media.background')}</p>
-<section class="tile files" aria-labelledby="media-files">
-	<div class="row">
-		<h2 class="tile-title" id="media-files">{t('media.files')}</h2>
+<!-- PLAN 78-5: a plain heading with its button, the table below it. -->
+<SettingGroup title={t('media.files')} id="media-files">
+	{#snippet tools()}
 		<button class="btn" onclick={loadMedia}><Icon name="refresh" />{t('media.filesRefresh')}</button
 		>
-	</div>
+	{/snippet}
 	{#if mediaError}<div class="notice-error" role="alert">
 			<span>{mediaError}</span>
 			<button class="btn" onclick={loadMedia}>{t('common.retry')}</button>
@@ -350,7 +351,7 @@
 				</tbody>
 			</table>
 		</div>{/if}
-</section>
+</SettingGroup>
 {#if media}<StatusBar label={t('media.statusBar')}>
 		<span
 			>{t('media.statFiles', { count: media.length })} · {formatBytes(
@@ -526,12 +527,6 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2);
-	}
-	.files {
-		padding: var(--tile-pad);
-		display: grid;
-		gap: var(--gap);
-		margin-top: var(--gap);
 	}
 	.media-files .path {
 		overflow-wrap: anywhere;

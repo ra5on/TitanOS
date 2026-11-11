@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { apiPath } from '#lib/cluster-node.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 
 	let started = $state(false);
@@ -24,45 +26,24 @@
 	registerMenuCommands({ 'logs.pack': { run: pack, enabled: () => true } });
 </script>
 
-<PageHead title={t('tools.bundle')} />
-
-<section class="tile panel" id="tools-bundle" aria-label={t('tools.bundle')}>
+<PageHead title={t('tools.bundle')}>
 	<p class="muted">{t('tools.bundleText')}</p>
-	<dl class="facts">
-		<dt>{t('tools.bundleIn')}</dt>
-		<dd>{t('tools.bundleInText')}</dd>
-		<dt>{t('tools.bundleOut')}</dt>
-		<dd>{t('tools.bundleOutText')}</dd>
-	</dl>
+</PageHead>
+
+<!-- PLAN 78-5: what the bundle holds and leaves out as two flat rows, the
+     button as the third. -->
+<SettingGroup id="tools-bundle">
+	<SettingRow icon="archive" title={t('tools.bundleIn')} desc={t('tools.bundleInText')} />
+	<SettingRow icon="shield" title={t('tools.bundleOut')} desc={t('tools.bundleOutText')} />
 	<p class="notice-warn">{t('tools.bundleCheck')}</p>
 	{#if started}<p class="notice-ok" role="status">{t('tools.bundleStarted')}</p>{/if}
-	<div>
+	<div class="row-actions">
 		<button type="button" class="btn btn-primary" onclick={pack}>{t('tools.bundleMake')}</button>
 	</div>
-</section>
+</SettingGroup>
 
 <style>
-	.facts {
-		display: grid;
-		grid-template-columns: 12rem minmax(0, 1fr);
-		gap: var(--space-2) var(--space-4);
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.facts dt {
-		color: var(--muted);
-	}
-	.facts dd {
-		margin: 0;
-		min-width: 0;
-	}
-	@media (max-width: 760px) {
-		.facts {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 2px;
-		}
-		.facts dd + dt {
-			margin-top: var(--space-2);
-		}
+	.row-actions {
+		margin-top: var(--space-2);
 	}
 </style>

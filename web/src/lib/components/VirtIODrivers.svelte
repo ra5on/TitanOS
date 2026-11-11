@@ -1,4 +1,5 @@
 <script lang="ts">
+	import FormRow from '#lib/components/appform/FormRow.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { untrack } from 'svelte';
 	import { api } from '#lib/api.ts';
@@ -81,49 +82,51 @@
 	});
 </script>
 
-<div class="drivers">
-	<label class="check"
-		><input type="checkbox" bind:checked={automatic} {disabled} /><span
-			>{t('media.virtioAuto')}</span
-		></label
-	><small class="muted">{t('media.virtioHint')}</small
-	>{#if automatic && (!job || job.phase !== 'done')}<p role="status">
-			{t('media.virtioLoading')}{#if job?.total}
-				{formatBytes(job.bytes)} / {formatBytes(job.total)}{/if}
-		</p>{/if}{#if error}<p class="notice-error" role="alert">{error}</p>
-		<button type="button" class="btn" onclick={() => retry++}>{t('media.virtioRetry')}</button
-		>{/if}<label
-		><span>{t('media.driverISO')}</span><input
+{#snippet mediaLink()}<a href="/vms/media">{t('media.title')}</a>{/snippet}
+{#snippet state()}
+	{#if automatic && (!job || job.phase !== 'done')}<span class="state" role="status">
+			{t('media.virtioLoading')}{#if job?.total}{' '}{formatBytes(job.bytes)} / {formatBytes(
+					job.total,
+				)}{/if}
+		</span>{/if}
+	{#if error}<span class="state failed" role="alert">{error}</span>{/if}
+{/snippet}
+
+<!-- PLAN 78-5: two rows of the form (the only user is the VM form). -->
+<FormRow label={t('media.virtioAuto')} id="virtio-auto" hint={t('media.virtioHint')} more={state}>
+	<div class="line">
+		{#if error}<button type="button" class="btn" onclick={() => retry++}
+				>{t('media.virtioRetry')}</button
+			>{/if}
+		<input
+			id="virtio-auto"
+			class="switch"
+			type="checkbox"
+			role="switch"
+			bind:checked={automatic}
+			{disabled}
+		/>
+	</div>
+</FormRow>
+<FormRow label={t('media.driverISO')} id="virtio-iso" more={mediaLink}>
+	<div class="line">
+		<input
+			id="virtio-iso"
 			class="field mono"
 			bind:value={path}
 			readonly={automatic}
 			{disabled}
 			oninput={() => onready(path)}
-		/></label
-	><a href="/vms/media">{t('media.title')}</a>
-</div>
+		/>
+	</div>
+</FormRow>
 
 <style>
-	.drivers {
-		display: grid;
-		gap: var(--gap);
-		min-width: 0;
+	.state {
+		display: block;
+		color: var(--text);
 	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: 44px;
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-	}
-	.drivers > label:not(.check) {
-		display: grid;
-		gap: var(--space-2);
-	}
-	.drivers input {
-		min-width: 0;
+	.state.failed {
+		color: var(--error-text);
 	}
 </style>

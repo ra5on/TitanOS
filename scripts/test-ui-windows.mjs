@@ -561,7 +561,10 @@ for (const [, path] of allOnly ? [] : representative.slice(0, 9)) {
 if (!allOnly && (!onlyPaths || onlyPaths.includes("/tools/monitoring"))) {
   const made = await openWindow("monitor", "/tools/monitoring", 1100);
   const { page, frame } = made;
-  const box = frame.locator("form.settings input[type=checkbox]").first();
+  // PLAN 78-5: the settings are rows; "Aktiviert" is the switch of the first.
+  const box = frame
+    .locator("#monitoring-settings input[type=checkbox]")
+    .first();
   await box.waitFor();
   await box.click();
   const close = page.locator("section.win button.ctl.close");

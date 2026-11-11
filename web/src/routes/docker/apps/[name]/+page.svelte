@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import FormRow from '#lib/components/appform/FormRow.svelte';
 	import ViewSwitch from '#lib/components/appform/ViewSwitch.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -45,28 +46,41 @@
 	</div>
 {/if}
 
+{#snippet nameRow()}
+	<FormRow
+		label={t('apps.name')}
+		hint={t('editor.location', { path: `/config/apps/${ed.name}/compose.yaml` })}
+	>
+		<p class="text mono">
+			{ed.name}{#if ed.services.length > 1}<span class="muted">&nbsp;· {ed.service}</span>{/if}
+		</p>
+	</FormRow>
+{/snippet}
+
 {#if ed.loaded}
-	<section class="tile form" aria-label={t('editor.title', { name: ed.name })}>
-		<FormRow
-			label={t('apps.name')}
-			hint={t('editor.location', { path: `/config/apps/${ed.name}/compose.yaml` })}
-		>
-			<p class="text mono">
-				{ed.name}{#if ed.services.length > 1}<span class="muted">&nbsp;· {ed.service}</span>{/if}
-			</p>
-		</FormRow>
+	<!-- PLAN 78-5: the form is no tile: groups of flat rows under plain
+	     headings, the bar with "Apply" below them. -->
+	<section class="form" aria-label={t('editor.title', { name: ed.name })}>
 		{#if ed.view === 'compose'}
-			<FormRow label={t('appform.composeFile')}>
-				<textarea
-					class="field mono yaml"
-					bind:value={ed.text}
-					spellcheck="false"
-					aria-label={t('editor.compose')}></textarea>
-			</FormRow>
+			<SettingGroup>
+				{@render nameRow()}
+				<FormRow wide label={t('appform.composeFile')}>
+					<textarea
+						class="field mono yaml"
+						bind:value={ed.text}
+						spellcheck="false"
+						aria-label={t('editor.compose')}></textarea>
+				</FormRow>
+			</SettingGroup>
 		{:else if ed.form && ed.problems}
-			<ServiceFields {ed} bind:form={ed.form} problems={ed.problems} />
-		{:else if !ed.loadError && !ed.yamlError && ed.original}
-			<p class="notice-warn">{t('editor.noServices')}</p>
+			<ServiceFields {ed} bind:form={ed.form} problems={ed.problems} head={nameRow} />
+		{:else}
+			<SettingGroup>
+				{@render nameRow()}
+				{#if !ed.loadError && !ed.yamlError && ed.original}
+					<p class="notice-warn">{t('editor.noServices')}</p>
+				{/if}
+			</SettingGroup>
 		{/if}
 
 		{#if ed.result}
@@ -143,7 +157,7 @@
 	.yaml {
 		min-height: 60vh;
 		height: auto;
-		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
+		padding: var(--space-3) var(--space-4);
 		font-size: var(--text-base);
 		line-height: 1.55;
 		resize: vertical;
@@ -174,18 +188,16 @@
 		margin-bottom: calc(-1 * var(--space-2));
 	}
 	.form {
-		padding: var(--space-2) 0 0;
-	}
-	.text {
-		margin: 0;
-		padding-top: 0.5rem;
-		font-size: var(--text-md);
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap);
+		min-width: 0;
 	}
 	.form :global(.line > .field.ro) {
 		flex: 0 1 12rem;
 	}
 	.form :global(.short-name) {
-		flex: 0 1 12rem;
+		flex: 0 1 10rem;
 	}
 	.link {
 		display: inline-flex;
@@ -202,13 +214,7 @@
 	.link:hover {
 		text-decoration: underline;
 	}
-	.result {
-		margin: var(--space-2) var(--space-4);
-	}
 	/* Always in reach at the bottom of the window while editing. */
-	.danger {
-		padding: 0 var(--space-4) var(--space-3);
-	}
 	.apply {
 		position: sticky;
 		bottom: 0;
@@ -217,11 +223,10 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
-		margin-top: var(--space-2);
-		padding: var(--space-3) var(--space-4) var(--space-3) calc(min(17rem, 30%) + 2 * var(--space-4));
+		padding: var(--space-3) var(--space-4);
 		background: var(--surface);
-		border-top: 1px solid var(--border);
-		border-radius: 0 0 var(--radius-tile) var(--radius-tile);
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
 	}
 	.apply .note {
 		flex: 1 1 12rem;

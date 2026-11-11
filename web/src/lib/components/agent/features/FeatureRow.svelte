@@ -16,44 +16,41 @@
 	let { icon, title, sub, on = false, toggle = true, ontoggle, onopen }: Props = $props();
 </script>
 
-<div class="frow">
-	<button type="button" class="open" onclick={onopen} disabled={!onopen}>
-		<span class="ic" aria-hidden="true">{icon}</span>
-		<span class="t"
-			><strong>{title}</strong>{#if sub}<small>{sub}</small>{/if}</span
-		>
-	</button>
-	{#if toggle}
-		<input
-			type="checkbox"
-			class="switch"
-			role="switch"
-			checked={on}
-			aria-label={title}
-			onchange={(e) => ontoggle?.(e.currentTarget.checked)}
-		/>
-	{/if}
+<!-- PLAN 78-5: a flat row like every setting (styles: app.css, .srow). -->
+<div class="srow">
+	<div class="srow-head frow">
+		<button type="button" class="open" onclick={onopen} disabled={!onopen}>
+			<span class="srow-ico ic" aria-hidden="true">{icon}</span>
+			<span class="srow-text"
+				><strong class="srow-title">{title}</strong>{#if sub}<small class="srow-desc">{sub}</small
+					>{/if}</span
+			>
+		</button>
+		{#if toggle}
+			<input
+				type="checkbox"
+				class="switch"
+				role="switch"
+				checked={on}
+				aria-label={title}
+				onchange={(e) => ontoggle?.(e.currentTarget.checked)}
+			/>
+		{/if}
+	</div>
 </div>
 
 <style>
-	/* A row like every settings row: name and hint left, switch right. */
+	/* The name opens the function's page, the switch stays beside it (also
+	   on a phone: the row does not stack). */
 	.frow {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		min-height: 48px;
-		padding: var(--space-2-5) var(--space-4);
-		border-top: 1px solid var(--panel-border, var(--border));
-	}
-	.frow:first-child {
-		border-top: 0;
+		flex-wrap: nowrap;
 	}
 	.open {
 		flex: 1;
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
+		gap: var(--space-4);
 		padding: 0;
 		border: 0;
 		background: none;
@@ -70,28 +67,10 @@
 		outline-offset: 2px;
 	}
 	.ic {
-		width: 30px;
-		height: 30px;
-		flex-shrink: 0;
-		display: grid;
-		place-items: center;
-		border-radius: var(--radius-ctl);
-		font-size: 16px;
-		background: var(--chip);
+		font-size: 17px;
 	}
-	.t {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.t strong {
-		font-weight: 500;
-	}
-	.t small {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-		font-size: var(--text-sm);
-		line-height: 1.35;
+	.switch {
+		flex: none;
 	}
 	.switch:focus-visible {
 		outline: 2px solid var(--accent);

@@ -7,6 +7,8 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -31,6 +33,18 @@
 	let snapshots = $state<LXCSnapshot[] | null>(null);
 	let snapshotFor = '';
 	let config = $state('');
+	// The row "Konfiguration anzeigen": asked for when it opens.
+	let configOpen = $state(false);
+	let configFor = '';
+	$effect(() => {
+		const c = selected;
+		if (!configOpen || !c) configFor = '';
+		else if (configFor !== c.name) {
+			configFor = c.name;
+			config = '';
+			void showConfig(c);
+		}
+	});
 
 	const selectedName = $derived(page.url.searchParams.get('ct') ?? '');
 	const selected = $derived(
@@ -233,7 +247,7 @@
 	<EmptyState title={t('lxc.empty')} text={t('lxc.emptyText')} />
 {:else}
 	<div class="layout">
-		<ul class="tile list" aria-label={t('lxc.title')}>
+		<ul class="list" aria-label={t('lxc.title')}>
 			{#each list.containers as c (c.name)}
 				<li>
 					<button
@@ -258,7 +272,8 @@
 
 		{#if selected}
 			{@const c = selected}
-			<section class="tile detail" aria-label={containerLabel(c)}>
+			<!-- PLAN 78-5: the detail pane has no frame; its facts and snapshots are rows. -->
+			<section class="detail" aria-label={containerLabel(c)}>
 				<header>
 					<div>
 						<h2>{containerLabel(c)}</h2>
@@ -333,112 +348,135 @@
 					>
 				</div>
 
-				<dl>
-					<dt>{t('lxc.detail.mode')}</dt>
-					<dd>{t(c.privileged ? 'lxc.privileged' : 'lxc.unprivileged')}</dd>
-					<dt>{t('lxc.detail.path')}</dt>
-					<dd class="mono">/mnt/{c.volume}/lxc/{c.name}</dd>
-					<dt>{t('lxc.detail.network')}</dt>
-					<dd>
-						{networkText(c)}{#if c.network !== 'none'}
-							· <span class="mono">{c.mac}</span>{/if}
-					</dd>
-					<dt>{t('lxc.detail.limits')}</dt>
-					<dd>
-						{c.cpus ? t('lxc.cpus', { count: c.cpus }) : t('lxc.unlimited')} · {c.memoryMiB
-							? formatBytes(c.memoryMiB * 1048576)
-							: t('lxc.unlimited')}
-					</dd>
-					{#if c.state === 'running'}
-						<dt>{t('lxc.detail.usage')}</dt>
-						<dd>{Math.round(c.cpuPercent)} % · {formatBytes(c.memoryBytes)}</dd>
-					{/if}
-					<dt>{t('lxc.autostart')}</dt>
-					<dd>{t(c.autostart ? 'lxc.on' : 'lxc.off')}</dd>
-					<dt>{t('lxc.detail.created')}</dt>
-					<dd>{formatDateTime(new Date(c.created))}</dd>
-					{#if c.description}
-						<dt>{t('lxc.form.description')}</dt>
-						<dd>{c.description}</dd>
-					{/if}
-					<dt>{t('lxc.detail.mounts')}</dt>
-					<dd>
-						{#each c.mounts ?? [] as mount (mount.target)}
-							<span class="mono block"
-								>{mount.path} → {mount.target} ({t(
-									mount.readOnly ? 'lxc.readOnly' : 'lxc.readWrite',
-								)})</span
-							>
-						{:else}—{/each}
-					</dd>
-				</dl>
+				<div class="sfacts">
+					<SettingGroup>
+						<SettingRow title={t('lxc.detail.mode')}>
+							{#snippet control()}<span
+									>{t(c.privileged ? 'lxc.privileged' : 'lxc.unprivileged')}</span
+								>{/snippet}
+						</SettingRow>
+						<SettingRow title={t('lxc.detail.path')}>
+							{#snippet control()}<span class="mono">/mnt/{c.volume}/lxc/{c.name}</span>{/snippet}
+						</SettingRow>
+						<SettingRow title={t('lxc.detail.network')}>
+							{#snippet control()}<span
+									>{networkText(c)}{#if c.network !== 'none'}
+										· <span class="mono">{c.mac}</span>{/if}</span
+								>{/snippet}
+						</SettingRow>
+						<SettingRow title={t('lxc.detail.limits')}>
+							{#snippet control()}<span
+									>{c.cpus ? t('lxc.cpus', { count: c.cpus }) : t('lxc.unlimited')} · {c.memoryMiB
+										? formatBytes(c.memoryMiB * 1048576)
+										: t('lxc.unlimited')}</span
+								>{/snippet}
+						</SettingRow>
+						{#if c.state === 'running'}
+							<SettingRow title={t('lxc.detail.usage')}>
+								{#snippet control()}<span
+										>{Math.round(c.cpuPercent)} % · {formatBytes(c.memoryBytes)}</span
+									>{/snippet}
+							</SettingRow>
+						{/if}
+						<SettingRow title={t('lxc.autostart')}>
+							{#snippet control()}<span>{t(c.autostart ? 'lxc.on' : 'lxc.off')}</span>{/snippet}
+						</SettingRow>
+						<SettingRow title={t('lxc.detail.created')}>
+							{#snippet control()}<span>{formatDateTime(new Date(c.created))}</span>{/snippet}
+						</SettingRow>
+						{#if c.description}
+							<SettingRow title={t('lxc.form.description')}>
+								{#snippet control()}<span>{c.description}</span>{/snippet}
+							</SettingRow>
+						{/if}
+						<SettingRow title={t('lxc.detail.mounts')}>
+							{#snippet control()}<span>
+									{#each c.mounts ?? [] as mount (mount.target)}
+										<span class="mono block"
+											>{mount.path} → {mount.target} ({t(
+												mount.readOnly ? 'lxc.readOnly' : 'lxc.readWrite',
+											)})</span
+										>
+									{:else}—{/each}
+								</span>{/snippet}
+						</SettingRow>
+					</SettingGroup>
+				</div>
 
-				<section class="snapshots" aria-label={t('lxc.snap.title')}>
-					<h3>{t('lxc.snap.title')}</h3>
-					{#if !c.btrfs}
-						<p class="muted">{t('lxc.snap.notBtrfs')}</p>
-					{:else if snapshots}
-						<div>
-							<button
+				<SettingGroup title={t('lxc.snap.title')} id="lxc-snapshots">
+					{#snippet tools()}
+						{#if c.btrfs && snapshots}<button
 								class="btn"
 								disabled={readOnly || busy === c.name || !!c.job}
 								onclick={() =>
 									snapshotAction(c, () => api.post(`/lxc/${encodeURIComponent(c.name)}/snapshots`))}
 								>{t('lxc.snap.create')}</button
-							>
-						</div>
+							>{/if}
+					{/snippet}
+					{#if !c.btrfs}
+						<p class="muted">{t('lxc.snap.notBtrfs')}</p>
+					{:else if snapshots}
 						{#each snapshots as snapshot (snapshot.id)}
-							<div class="snapshot">
-								<span>{formatDateTime(new Date(snapshot.created))}</span>
-								<button
-									class="btn"
-									disabled={readOnly || busy === c.name || c.state === 'running'}
-									title={c.state === 'running' ? t('lxc.snap.stoppedOnly') : undefined}
-									onclick={() =>
-										(confirming = {
-											title: t('lxc.snap.restoreTitle'),
-											text: t('lxc.snap.restoreText', {
-												name: containerLabel(c),
-												time: formatDateTime(new Date(snapshot.created)),
-											}),
-											label: t('lxc.snap.restore'),
-											run: () =>
-												snapshotAction(c, () =>
-													api.post(
-														`/lxc/${encodeURIComponent(c.name)}/snapshots/${snapshot.id}/restore`,
+							<SettingRow icon="camera" title={formatDateTime(new Date(snapshot.created))}>
+								{#snippet control()}
+									<button
+										class="btn"
+										disabled={readOnly || busy === c.name || c.state === 'running'}
+										title={c.state === 'running' ? t('lxc.snap.stoppedOnly') : undefined}
+										onclick={() =>
+											(confirming = {
+												title: t('lxc.snap.restoreTitle'),
+												text: t('lxc.snap.restoreText', {
+													name: containerLabel(c),
+													time: formatDateTime(new Date(snapshot.created)),
+												}),
+												label: t('lxc.snap.restore'),
+												run: () =>
+													snapshotAction(c, () =>
+														api.post(
+															`/lxc/${encodeURIComponent(c.name)}/snapshots/${snapshot.id}/restore`,
+														),
 													),
-												),
-										})}>{t('lxc.snap.restore')}</button
-								>
-								<button
-									class="btn"
-									disabled={readOnly || busy === c.name}
-									onclick={() =>
-										(confirming = {
-											title: t('lxc.snap.deleteTitle'),
-											text: t('lxc.snap.deleteText', {
-												time: formatDateTime(new Date(snapshot.created)),
-											}),
-											label: t('lxc.snap.delete'),
-											run: () =>
-												snapshotAction(c, () =>
-													api.delete(`/lxc/${encodeURIComponent(c.name)}/snapshots/${snapshot.id}`),
-												),
-										})}>{t('lxc.snap.delete')}</button
-								>
-							</div>
+											})}>{t('lxc.snap.restore')}</button
+									>
+									<button
+										class="btn"
+										disabled={readOnly || busy === c.name}
+										onclick={() =>
+											(confirming = {
+												title: t('lxc.snap.deleteTitle'),
+												text: t('lxc.snap.deleteText', {
+													time: formatDateTime(new Date(snapshot.created)),
+												}),
+												label: t('lxc.snap.delete'),
+												run: () =>
+													snapshotAction(c, () =>
+														api.delete(
+															`/lxc/${encodeURIComponent(c.name)}/snapshots/${snapshot.id}`,
+														),
+													),
+											})}>{t('lxc.snap.delete')}</button
+									>
+								{/snippet}
+							</SettingRow>
 						{:else}
 							<p class="muted">{t('lxc.snap.empty')}</p>
 						{/each}
 					{/if}
-				</section>
+				</SettingGroup>
 
-				<details
-					ontoggle={(event) => (event.currentTarget as HTMLDetailsElement).open && showConfig(c)}
-				>
-					<summary>{t('lxc.showConfig')}</summary>
-					{#if config}<pre class="mono config">{config}</pre>{/if}
-				</details>
+				<SettingGroup>
+					<SettingRow id="lxc-config" title={t('lxc.showConfig')} bind:open={configOpen}>
+						<div class="srow-block">
+							{#if config}<pre class="mono config">{config}</pre>{:else}<p
+									class="muted"
+									role="status"
+								>
+									{t('common.loading')}
+								</p>{/if}
+						</div>
+					</SettingRow>
+				</SettingGroup>
 
 				<DangerZone hint={t('lxc.removeHint')}>
 					<button
@@ -534,7 +572,7 @@
 		flex-direction: column;
 		gap: 2px;
 		margin: 0;
-		padding: var(--space-1-5);
+		padding: 0;
 		list-style: none;
 	}
 	.list button {
@@ -568,7 +606,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		padding: var(--tile-pad);
 		min-width: 0;
 	}
 	header {
@@ -582,10 +619,6 @@
 		font-size: var(--text-lg);
 		overflow-wrap: anywhere;
 	}
-	h3 {
-		margin: 0;
-		font-size: var(--text-md);
-	}
 	header p {
 		margin: 2px 0 0;
 		font-size: var(--text-base);
@@ -595,38 +628,8 @@
 		flex-wrap: wrap;
 		gap: var(--space-2);
 	}
-	dl {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: var(--space-1-5) var(--space-4);
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	dt {
-		color: var(--muted);
-	}
-	dd {
-		margin: 0;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
 	.block {
 		display: block;
-	}
-	.snapshots {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.snapshot {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-	}
-	.snapshot span {
-		flex: 1;
-		font-size: var(--text-md);
 	}
 	pre {
 		margin: var(--space-1-5) 0 0;
@@ -639,10 +642,6 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-	}
-	summary {
-		cursor: pointer;
-		font-size: var(--text-md);
 	}
 	label.check {
 		display: flex;

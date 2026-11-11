@@ -3,6 +3,8 @@
 	// disk with its facts, sleep time and actions.
 	import ForesightPlay from '#lib/components/agent/features/ForesightPlay.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -48,86 +50,82 @@
 				)}
 			/>
 		{/key}
+		<!-- PLAN 78-5: what lives on the volume, as flat rows under a plain heading. -->
 		{#if sp.canAdminister}{@const used = sp.usageFor(detail.name)}
-			<section class="tile usage" aria-labelledby="volume-usage">
-				<h3 id="volume-usage">{t('storage.onVolume')}</h3>
-				{#if !used}<p class="muted loading" role="status">{t('common.loading')}</p>
-				{:else}
-					<dl>
-						<div>
-							<dt>{t('storage.onVolumeShares')}</dt>
-							<dd>
-								{#each used.shares as share, i (share)}{i ? ', ' : ''}<a
-										class="mono"
-										href="/shares?share={encodeURIComponent(share)}">{share}</a
-									>{:else}<span class="muted">{t('storage.onVolumeNone')}</span>{/each}
-							</dd>
-						</div>
-						<div>
-							<dt>{t('storage.onVolumeVms')}</dt>
-							<dd>
-								{used.vms.join(', ') || t('storage.onVolumeNone')}
-							</dd>
-						</div>
-						<div>
-							<dt>{t('storage.onVolumeDocker')}</dt>
-							<dd>
-								{used.docker
-									? used.docker.length
-										? t('storage.onVolumeDockerApps', { apps: used.docker.join(', ') })
-										: t('storage.onVolumeDockerEngine')
-									: t('storage.onVolumeNone')}
-							</dd>
-						</div>
-					</dl>
-					{#if used.failed}<div class="notice-warn usage-failed" role="alert">
-							<span>{t('storage.onVolumeIncomplete')}</span><button
-								class="btn"
-								onclick={() => sp.loadUsage(detail.name)}>{t('common.retry')}</button
-							>
-						</div>{/if}
-				{/if}
-			</section>
+			<div class="usage sfacts">
+				<SettingGroup title={t('storage.onVolume')} id="volume-usage">
+					{#if !used}<p class="muted loading" role="status">{t('common.loading')}</p>
+					{:else}
+						<SettingRow icon="folder" title={t('storage.onVolumeShares')}>
+							{#snippet control()}<span
+									>{#each used.shares as share, i (share)}{i ? ', ' : ''}<a
+											class="mono"
+											href="/shares?share={encodeURIComponent(share)}">{share}</a
+										>{:else}<span class="muted">{t('storage.onVolumeNone')}</span>{/each}</span
+								>{/snippet}
+						</SettingRow>
+						<SettingRow icon="monitor" title={t('storage.onVolumeVms')}>
+							{#snippet control()}<span>{used.vms.join(', ') || t('storage.onVolumeNone')}</span
+								>{/snippet}
+						</SettingRow>
+						<SettingRow icon="box" title={t('storage.onVolumeDocker')}>
+							{#snippet control()}<span
+									>{used.docker
+										? used.docker.length
+											? t('storage.onVolumeDockerApps', { apps: used.docker.join(', ') })
+											: t('storage.onVolumeDockerEngine')
+										: t('storage.onVolumeNone')}</span
+								>{/snippet}
+						</SettingRow>
+						{#if used.failed}<div class="notice-warn usage-failed" role="alert">
+								<span>{t('storage.onVolumeIncomplete')}</span><button
+									class="btn"
+									onclick={() => sp.loadUsage(detail.name)}>{t('common.retry')}</button
+								>
+							</div>{/if}
+					{/if}
+				</SettingGroup>
+			</div>
 		{/if}
 	</aside>
 {:else if sp.tab === 'disks' && diskDetail}
-	<aside class="tile disk-details" use:revealTarget id="disk-{diskDetail.name}">
+	<!-- PLAN 78-5: the disk's detail is no tile: its name, the facts as flat
+	     rows, the sleep time, then its actions. -->
+	<aside class="disk-details" use:revealTarget id="disk-{diskDetail.name}">
 		<div class="detail-heading">
 			<h2 class="mono">{diskDetail.name}</h2>
 			<button class="btn" aria-label={t('common.close')} onclick={() => (sp.selectedDisk = '')}
 				><Icon name="close" size={16} /></button
 			>
 		</div>
-		<dl>
-			<div>
-				<dt>{t('disk.device')}</dt>
-				<dd>{diskDetail.model}</dd>
-			</div>
-			<div>
-				<dt>{t('disk.serial')}</dt>
-				<dd class="mono">{diskDetail.serial || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('disk.type')}</dt>
-				<dd>{diskType(diskDetail)}</dd>
-			</div>
-			<div>
-				<dt>{t('disk.hours')}</dt>
-				<dd>{diskDetail.smart ? sp.hours.format(diskDetail.smart.powerOnHours) : '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('disk.errors')}</dt>
-				<dd>{diskDetail.smart?.errors ?? '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('disk.wear')}</dt>
-				<dd>
-					{diskDetail.smart && diskDetail.smart.wearPercent >= 0
-						? `${diskDetail.smart.wearPercent} %`
-						: '–'}
-				</dd>
-			</div>
-		</dl>
+		<div class="sfacts">
+			<SettingGroup>
+				<SettingRow title={t('disk.device')}>
+					{#snippet control()}<span>{diskDetail.model}</span>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('disk.serial')}>
+					{#snippet control()}<span class="mono">{diskDetail.serial || '–'}</span>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('disk.type')}>
+					{#snippet control()}<span>{diskType(diskDetail)}</span>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('disk.hours')}>
+					{#snippet control()}<span
+							>{diskDetail.smart ? sp.hours.format(diskDetail.smart.powerOnHours) : '–'}</span
+						>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('disk.errors')}>
+					{#snippet control()}<span>{diskDetail.smart?.errors ?? '–'}</span>{/snippet}
+				</SettingRow>
+				<SettingRow title={t('disk.wear')}>
+					{#snippet control()}<span
+							>{diskDetail.smart && diskDetail.smart.wearPercent >= 0
+								? `${diskDetail.smart.wearPercent} %`
+								: '–'}</span
+						>{/snippet}
+				</SettingRow>
+			</SettingGroup>
+		</div>
 		<DiskSleepSection
 			name={diskDetail.name}
 			status={sp.diskSleep}
@@ -194,7 +192,11 @@
 		min-height: 30px;
 	}
 	.disk-details {
-		padding: 20px;
+		display: grid;
+		gap: var(--space-4);
+	}
+	.disk-details .detail-heading {
+		margin-bottom: 0;
 	}
 	.disk-actions,
 	.usage-failed {
@@ -203,48 +205,7 @@
 		align-items: center;
 		gap: var(--space-2);
 	}
-	.disk-actions {
-		margin-top: 18px;
-	}
 	.usage {
 		margin-top: var(--space-4);
-		padding: var(--space-4) 20px;
-		display: grid;
-		gap: var(--space-3);
-		font-size: var(--text-md);
-	}
-	.usage h3 {
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.usage dl {
-		display: grid;
-		gap: var(--space-2-5);
-		margin: 0;
-	}
-	.usage dt {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	.usage dd {
-		margin: 2px 0 0;
-		overflow-wrap: anywhere;
-	}
-	.disk-details dl {
-		display: grid;
-		gap: var(--space-4);
-		margin: 0;
-	}
-	.disk-details dl > div {
-		display: grid;
-		gap: var(--space-1);
-	}
-	.disk-details dt {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	.disk-details dd {
-		margin: 0;
-		overflow-wrap: anywhere;
 	}
 </style>

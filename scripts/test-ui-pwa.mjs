@@ -166,10 +166,10 @@ async function phone() {
   const dialog = page.getByRole("dialog", { name: "Ablegen in" });
   await dialog.getByRole("button", { name: "Handy" }).click();
   await dialog.getByRole("button", { name: "Hier ablegen" }).click();
-  // Style W4 (0.74): the chosen folder shows in its row and, as before a
-  // tile would, in the status bar at the end of the page.
+  // The chosen folder shows in its row (PLAN 78-5: a row of the group
+  // "Ablegen in") and in the status bar at the end of the page.
   await page
-    .locator(".set-row .set-label")
+    .locator("#share-where .srow .srow-title")
     .getByText("Fotos / Handy", { exact: true })
     .waitFor();
   await page

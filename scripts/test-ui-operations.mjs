@@ -49,7 +49,8 @@ try {
     await page.locator('svg[aria-label="CPU (%)"] polyline').count(),
     2,
   );
-  await page.getByRole("checkbox", { name: "Aktiviert", exact: true }).check();
+  // PLAN 78-5: the settings are rows; "Aktiviert" is a switch.
+  await page.getByRole("switch", { name: "Aktiviert", exact: true }).check();
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   assert.equal(data.monitor.enabled, true);
   await page.goto(base + "/storage/import");

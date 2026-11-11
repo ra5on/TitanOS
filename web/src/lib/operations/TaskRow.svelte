@@ -9,57 +9,50 @@
 	const displayName = $derived(task.titleKey ? t(task.titleKey) : task.name);
 </script>
 
+<!-- PLAN 78-5: a task is a flat row (the look of SettingRow): name, state
+     and details at the left, its buttons at the right. -->
 <div
-	class="task"
+	class="srow plain task"
 	class:problem={task.state === 'failed' || task.state === 'blocked' || task.state === 'unknown'}
 >
-	<div class="description">
-		<a href={task.href}><strong>{displayName}</strong></a>
-		<div class="meta">
-			{t(`tasks.kind.${task.kind}` as MessageKey)} · {t(
-				`tasks.state.${task.state}` as MessageKey,
-			)}{#if task.stepKey}
-				· {t(task.stepKey)}{/if}{#if task.at}
-				· <time datetime={task.at}>{new Date(task.at).toLocaleString()}</time>{/if}
+	<div class="srow-head">
+		<div class="srow-text">
+			<a class="srow-title" href={task.href}><strong>{displayName}</strong></a>
+			<div class="srow-desc">
+				{t(`tasks.kind.${task.kind}` as MessageKey)} · {t(
+					`tasks.state.${task.state}` as MessageKey,
+				)}{#if task.stepKey}
+					· {t(task.stepKey)}{/if}{#if task.at}
+					· <time datetime={task.at}>{new Date(task.at).toLocaleString()}</time>{/if}
+			</div>
+			{#if task.wait && task.state === 'waiting'}<p>
+					{t(`tasks.wait.${task.wait}` as MessageKey)}
+				</p>{/if}
+			{#if task.kind === 'upload'}<p class="muted">{t('tasks.uploadHint')}</p>{/if}
+			{#if task.detail}<details>
+					<summary>{t('ops.details')}</summary>
+					<pre>{task.detail}</pre>
+				</details>{/if}
+			{#if task.progress !== undefined && ['running', 'paused', 'waiting'].includes(task.state)}<progress
+					max="100"
+					value={task.progress}
+					aria-label={task.name}
+				></progress>{/if}
 		</div>
-		{#if task.wait && task.state === 'waiting'}<p>
-				{t(`tasks.wait.${task.wait}` as MessageKey)}
-			</p>{/if}
-		{#if task.kind === 'upload'}<p class="muted">{t('tasks.uploadHint')}</p>{/if}
-		{#if task.detail}<details>
-				<summary>{t('ops.details')}</summary>
-				<pre>{task.detail}</pre>
-			</details>{/if}
-		{#if task.progress !== undefined && ['running', 'paused', 'waiting'].includes(task.state)}<progress
-				max="100"
-				value={task.progress}
-				aria-label={task.name}
-			></progress>{/if}
+		{#if onaction && task.actions?.length}<div class="srow-ctl">
+				{#each task.actions as action (action.label)}<button
+						class="btn"
+						disabled={busy}
+						onclick={() => onaction?.(action)}
+						>{t(`tasks.action.${action.label}` as MessageKey)}</button
+					>{/each}
+			</div>{/if}
 	</div>
-	{#if onaction && task.actions?.length}<div class="actions">
-			{#each task.actions as action (action.label)}<button
-					class="btn"
-					disabled={busy}
-					onclick={() => onaction?.(action)}
-					>{t(`tasks.action.${action.label}` as MessageKey)}</button
-				>{/each}
-		</div>{/if}
 </div>
 
 <style>
 	.task {
-		display: flex;
-		align-items: start;
-		justify-content: space-between;
-		gap: var(--space-4);
-		padding: 14px 0;
-		border-bottom: 1px solid var(--border);
 		font-size: var(--text-md);
-		min-width: 0;
-	}
-	.description {
-		flex: 1;
-		min-width: 0;
 	}
 	.task a {
 		color: var(--text);
@@ -67,11 +60,6 @@
 	}
 	.task a:hover {
 		color: var(--accent);
-	}
-	.meta {
-		color: var(--muted);
-		font-size: var(--text-sm);
-		margin-top: var(--space-1);
 	}
 	.problem strong {
 		color: var(--warn-text);
@@ -94,22 +82,9 @@
 		overflow: auto;
 		font: inherit;
 	}
-	.actions {
-		display: flex;
-		gap: var(--space-1-5);
-		flex-wrap: wrap;
-	}
 	progress {
 		margin-top: var(--space-2);
 		width: min(100%, 300px);
 		accent-color: var(--accent);
-	}
-	@media (max-width: 760px) {
-		.task {
-			flex-direction: column;
-		}
-		.actions {
-			width: 100%;
-		}
 	}
 </style>

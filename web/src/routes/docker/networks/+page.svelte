@@ -3,6 +3,8 @@
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import type { NASNetwork } from '#lib/network.ts';
 	import type { ContainerLAN } from '#lib/compose/lan.ts';
@@ -184,101 +186,97 @@
 {#if error && !draft && !bridge}<div class="notice-error" role="alert">{error}</div>{/if}
 {#if message}<p class="notice-ok" role="status">{message}</p>{/if}
 
-<section class="tile ui-card" aria-labelledby="dnet-list">
-	<div class="card-head">
-		<h2 id="dnet-list">{t('dnet.list')}</h2>
-		<span class="card-meta">{all.length}</span>
-		<div class="card-tools">
-			<button class="btn" disabled={busy || !unused.length} onclick={() => (pruning = true)}
-				>{t('dnet.prune', { count: unused.length })}</button
-			>
-		</div>
-	</div>
-	{#if allError}<p class="notice-error inside" role="alert">{allError}</p>{/if}
+<!-- PLAN 78-5: the networks stand under a plain heading and keep the table's
+     own surface; the LAN networks of apps are rows with their button. -->
+<SettingGroup
+	title={t('dnet.list')}
+	id="dnet-list"
+	desc={t('dres.statNetworks', { count: all.length })}
+>
+	{#snippet tools()}
+		<button class="btn" disabled={busy || !unused.length} onclick={() => (pruning = true)}
+			>{t('dnet.prune', { count: unused.length })}</button
+		>
+	{/snippet}
+	{#if allError}<p class="notice-error" role="alert">{allError}</p>{/if}
 	{#if all.length}
-		<div class="table-wrap">
-			<table class="data-table nets">
-				<thead>
-					<tr>
-						<th scope="col">{t('dres.col.name')}</th>
-						<th scope="col" class="driver">{t('dres.col.driver')}</th>
-						<th scope="col">{t('dnet.subnet')}</th>
-						<th scope="col" class="used">{t('dres.col.usedBy')}</th>
-						<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each all as n (n.id || n.name)}
-						{@const used = usedByText(n.usedBy)}
+		<div class="tile ui-card">
+			<div class="table-wrap">
+				<table class="data-table nets">
+					<thead>
 						<tr>
-							<td class="name">
-								<span class="mono nname">{n.name}</span>
-								{#if n.protected || n.kind !== 'user'}<span class="chip" title={t('dnet.kept')}
-										><Icon name="lock" size={11} />{reason(n)}</span
-									>{/if}
-								{#if n.internal}<span class="chip">{t('dnet.internal')}</span>{/if}
-								<span class="sub narrow">{used || t('dres.unused')}</span>
-							</td>
-							<td class="driver muted">{n.driver}</td>
-							<td class="mono subnet">{n.subnets.join(', ') || '–'}</td>
-							<td class="used" class:muted={!used}>{used || t('dres.unused')}</td>
-							<td class="actions">
-								{#if n.kind === 'user' && !n.protected && !used}<button
-										type="button"
-										class="btn btn-danger-outline small"
-										disabled={busy}
-										aria-label={t('dres.deleteNamed', { name: n.name })}
-										onclick={() => (dropBridge = n)}>{t('dnet.remove')}</button
-									>{/if}
-							</td>
+							<th scope="col">{t('dres.col.name')}</th>
+							<th scope="col" class="driver">{t('dres.col.driver')}</th>
+							<th scope="col">{t('dnet.subnet')}</th>
+							<th scope="col" class="used">{t('dres.col.usedBy')}</th>
+							<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
 						</tr>
-					{/each}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{#each all as n (n.id || n.name)}
+							{@const used = usedByText(n.usedBy)}
+							<tr>
+								<td class="name">
+									<span class="mono nname">{n.name}</span>
+									{#if n.protected || n.kind !== 'user'}<span class="chip" title={t('dnet.kept')}
+											><Icon name="lock" size={11} />{reason(n)}</span
+										>{/if}
+									{#if n.internal}<span class="chip">{t('dnet.internal')}</span>{/if}
+									<span class="sub narrow">{used || t('dres.unused')}</span>
+								</td>
+								<td class="driver muted">{n.driver}</td>
+								<td class="mono subnet">{n.subnets.join(', ') || '–'}</td>
+								<td class="used" class:muted={!used}>{used || t('dres.unused')}</td>
+								<td class="actions">
+									{#if n.kind === 'user' && !n.protected && !used}<button
+											type="button"
+											class="btn btn-danger-outline small"
+											disabled={busy}
+											aria-label={t('dres.deleteNamed', { name: n.name })}
+											onclick={() => (dropBridge = n)}>{t('dnet.remove')}</button
+										>{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	{:else if !allError}
 		<p class="muted none">{t('common.loading')}</p>
 	{/if}
-</section>
+</SettingGroup>
 
-<section class="tile ui-card" aria-labelledby="dnet-lan">
-	<div class="card-head">
-		<h2 id="dnet-lan">{t('lan.title')}</h2>
-		<span class="card-meta">{t('lan.intro')}</span>
-	</div>
-	{#if !parents.length && !loading}<p class="notice-warn inside">
+<SettingGroup title={t('lan.title')} id="dnet-lan" desc={t('lan.intro')}>
+	{#if !parents.length && !loading}<p class="notice-warn">
 			{t('lan.needParent')} <a href="/settings/network">{t('netcfg.title')}</a>
 		</p>{/if}
 	{#if loading}<p class="muted none" role="status">
 			{t('common.loading')}
-		</p>{:else if !networks.length}<p class="muted none">{t('lan.empty')}</p>{:else}<div
-			class="content"
-		>
-			{#each networks as n (n.name)}<article>
-					<div class="row">
-						<div>
-							<strong>{n.name}</strong>
-							<p class="muted">
-								{parents.find((p) => p.id === n.parent)?.name ?? n.parent} · {n.driver}
-							</p>
-						</div>
-						<button
-							class="btn btn-danger-outline small"
-							disabled={busy}
-							onclick={() => (remove = n)}>{t('netx.remove')}</button
-						>
-					</div>
-					<p class="mono">{n.subnet} · {n.range}</p>
-					<p class="muted">
-						{t('netx.gateway')}: {n.gateway}{n.hostAccess
+		</p>{:else if !networks.length}<p class="muted none">{t('lan.empty')}</p>{:else}
+		{#each networks as n (n.name)}
+			<SettingRow icon="globe" title={n.name}>
+				{#snippet description()}
+					<span class="lan-line"
+						>{parents.find((p) => p.id === n.parent)?.name ?? n.parent} · {n.driver}</span
+					>
+					<span class="lan-line mono">{n.subnet} · {n.range}</span>
+					<span class="lan-line"
+						>{t('netx.gateway')}: {n.gateway}{n.hostAccess
 							? ` · ${t('lan.hostAddress')}: ${n.hostAddress}`
-							: ''}
-					</p>
-					{#if n.error}<div class="notice-error" role="alert">{n.error}</div>{/if}
-				</article>{/each}
-		</div>{/if}
-	<p class="muted none foot">{t('lan.external')}</p>
-</section>
+							: ''}</span
+					>
+					{#if n.error}<span class="lan-line notice-error" role="alert">{n.error}</span>{/if}
+				{/snippet}
+				{#snippet control()}<button
+						class="btn btn-danger-outline small"
+						disabled={busy}
+						onclick={() => (remove = n)}>{t('netx.remove')}</button
+					>{/snippet}
+			</SettingRow>
+		{/each}{/if}
+	<p class="muted foot">{t('lan.external')}</p>
+</SettingGroup>
 {#if draft}<Dialog title={t('lan.add')} wide locked={busy} onclose={() => (draft = null)}
 		><form onsubmit={create}>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -417,22 +415,21 @@
 </StatusBar>
 
 <style>
-	.content {
-		padding: 0 var(--space-4);
-	}
 	fieldset {
 		padding: var(--tile-pad);
 	}
-	.inside {
-		margin: var(--space-3) var(--space-4) 0;
-	}
 	.none {
 		margin: 0;
-		padding: var(--space-3) var(--space-4);
+		padding: var(--space-2) 0;
 	}
 	.foot {
-		border-top: 1px solid var(--panel-border, var(--border));
 		font-size: var(--text-sm);
+	}
+	.lan-line {
+		display: block;
+	}
+	.lan-line.notice-error {
+		margin-top: var(--space-1-5);
 	}
 	.nname {
 		overflow-wrap: anywhere;
@@ -480,24 +477,12 @@
 			display: block;
 		}
 	}
-	article {
-		padding: var(--tile-pad) 0;
-		border-bottom: 1px solid var(--border);
-	}
-	article:last-child {
-		border: 0;
-	}
-	.row,
 	.dialog-actions {
 		display: flex;
 		gap: var(--gap);
 		justify-content: space-between;
 		align-items: center;
 	}
-	.row > div {
-		min-width: 0;
-	}
-	.row p,
 	.mono {
 		overflow-wrap: anywhere;
 	}

@@ -3,8 +3,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import Icon from '#lib/components/Icon.svelte';
+	import type { IconName } from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import type { MonitorStatus, Operations } from '#lib/operations.ts';
@@ -104,134 +106,55 @@
 			? many(running, 'tools.glance.testsOne', 'tools.glance.testsMany')
 			: t('tools.glance.noTests');
 	});
-	const glance = $derived<{ label: MessageKey; value: string }[]>([
-		{ label: 'ops.tasks', value: tasksLine },
-		{ label: 'ops.maintenance', value: maintenanceLine },
-		{ label: 'scripts.title', value: scriptsLine },
-		{ label: 'ops.monitoring', value: monitoringLine },
-		{ label: 'disktest.title', value: disksLine },
+	const glance = $derived<{ label: MessageKey; value: string; href: string; icon: IconName }[]>([
+		{ label: 'ops.tasks', value: tasksLine, href: '/tools/tasks', icon: 'list' },
+		{ label: 'ops.maintenance', value: maintenanceLine, href: '/tools/maintenance', icon: 'tool' },
+		{ label: 'scripts.title', value: scriptsLine, href: '/tools/scripts', icon: 'terminal' },
+		{ label: 'ops.monitoring', value: monitoringLine, href: '/tools/monitoring', icon: 'activity' },
+		{ label: 'disktest.title', value: disksLine, href: '/tools/disks', icon: 'disk' },
 	]);
 </script>
 
 <PageHead title={t('nav.tools')} />
 
-<!-- Desktop: the sidebar lists the tools; the overview only says how they stand. -->
-<section class="tile panel desk-only" aria-labelledby="tools-glance">
-	<h2 class="tile-title" id="tools-glance">{t('tools.glance')}</h2>
-	<dl class="facts">
+<!-- Desktop: the sidebar lists the tools; the overview only says how they
+     stand – one row per tool, the row leads to it. -->
+<div class="desk-only">
+	<SettingGroup title={t('tools.glance')} id="tools-glance">
 		{#each glance as row (row.label)}
-			<dt>{t(row.label)}</dt>
-			<dd aria-busy={row.value === '' ? 'true' : undefined}>{row.value || '…'}</dd>
+			<SettingRow icon={row.icon} title={t(row.label)} href={row.href}>
+				{#snippet control()}<span aria-busy={row.value === '' ? 'true' : undefined}
+						>{row.value || '…'}</span
+					>{/snippet}
+			</SettingRow>
 		{/each}
-	</dl>
-</section>
+	</SettingGroup>
+</div>
 
 <!-- Phones: no sidebar; the overview is the grouped list. -->
 <div class="groups phone-only">
 	{#each toolsGroups as group (group.group)}
-		<section class="tile tools-group" aria-labelledby="tools-group-{group.group}">
-			<h2 class="tile-title" id="tools-group-{group.group}">
-				{t(`tools.group.${group.group}` as MessageKey)}
-			</h2>
-			<ul>
-				{#each group.entries as entry (entry.href)}
-					<li>
-						<a href={entry.href}
-							><span class="tool-icon"><Icon name={entry.icon} size={16} /></span><span class="what"
-								><span class="name">{t(entry.label)}</span><span class="muted text"
-									>{t(entry.text)}</span
-								></span
-							><span class="chevron"><Icon name="arrowRight" size={14} /></span></a
-						>
-					</li>
-				{/each}
-			</ul>
-		</section>
+		<SettingGroup
+			title={t(`tools.group.${group.group}` as MessageKey)}
+			id="tools-group-{group.group}"
+		>
+			{#each group.entries as entry (entry.href)}
+				<SettingRow
+					icon={entry.icon}
+					title={t(entry.label)}
+					desc={t(entry.text)}
+					href={entry.href}
+				/>
+			{/each}
+		</SettingGroup>
 	{/each}
 </div>
 
 <style>
-	.facts {
-		display: grid;
-		grid-template-columns: 12rem minmax(0, 1fr);
-		gap: var(--space-2) var(--space-4);
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.facts dt {
-		color: var(--muted);
-	}
-	.facts dd {
-		margin: 0;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
 	.groups {
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
-	}
-	.tools-group {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-		overflow: hidden;
-	}
-	.tools-group h2 {
-		margin: 0;
-		padding: var(--space-2-5) var(--tile-pad);
-		border-bottom: 1px solid var(--panel-border);
-	}
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	li + li {
-		border-top: 1px solid var(--panel-border);
-	}
-	a {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		min-height: 44px;
-		padding: var(--space-2) var(--tile-pad);
-		color: var(--text);
-		text-decoration: none;
-	}
-	a:hover {
-		background: var(--chip);
-	}
-	a:focus-visible {
-		outline-offset: -2px;
-	}
-	.tool-icon {
-		display: grid;
-		place-items: center;
-		flex: none;
-		width: 28px;
-		height: 28px;
-		border-radius: var(--radius-small);
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		color: var(--accent);
-	}
-	.what {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-width: 0;
-	}
-	.name {
-		font-weight: 500;
-		overflow-wrap: anywhere;
-	}
-	.text {
-		font-size: var(--text-sm);
-	}
-	.chevron {
-		display: flex;
-		flex: none;
-		color: var(--muted);
 	}
 	@media (min-width: 761px) {
 		.phone-only {

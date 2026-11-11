@@ -6,6 +6,8 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import SmartHistory from './SmartHistory.svelte';
 	import { formatDateTime, formatNumber } from '#lib/format.ts';
@@ -167,7 +169,8 @@
 			{/if}
 		</div>
 		{#if selected}
-			<aside class="tile detail" aria-labelledby="smart-detail-title">
+			<!-- PLAN 78-5: the detail is no tile: plain headings, facts as flat rows. -->
+			<aside class="detail" aria-labelledby="smart-detail-title">
 				<div class="detail-heading">
 					<h2 class="mono" id="smart-detail-title">{selected}</h2>
 					<button class="btn" aria-label={t('common.close')} onclick={() => choose('')}
@@ -191,105 +194,97 @@
 					{:else if d.state === 'unavailable'}<p class="muted">{t('smart.unavailableHint')}</p>
 					{:else if d.state === 'unknown'}<p class="muted">{t('smart.unknownHint')}</p>{/if}
 					{#if d.warnings.length}
-						<section aria-labelledby="smart-findings">
-							<h3 id="smart-findings">{t('smart.warningsTitle')}</h3>
+						<SettingGroup title={t('smart.warningsTitle')} id="smart-findings">
 							<ul class="findings">
 								{#each d.warnings as warning (warning)}<li>{t(`smart.warn.${warning}`)}</li>{/each}
 							</ul>
-						</section>
+						</SettingGroup>
 					{/if}
-					<dl>
-						<div>
-							<dt>{t('smart.device')}</dt>
-							<dd>{d.model || '–'}</dd>
-						</div>
-						<div>
-							<dt>{t('disk.serial')}</dt>
-							<dd class="mono">{d.serial || '–'}</dd>
-						</div>
-						{#if v?.modelFamily}<div>
-								<dt>{t('smart.family')}</dt>
-								<dd>{v.modelFamily}</dd>
-							</div>{/if}
-						{#if v?.firmware}<div>
-								<dt>{t('smart.firmware')}</dt>
-								<dd class="mono">{v.firmware}</dd>
-							</div>{/if}
-						{#if v}<div>
-								<dt>{t('smart.protocol')}</dt>
-								<dd>{v.protocol || '–'}</dd>
-							</div>
-							<div>
-								<dt>{t('smart.passed')}</dt>
-								<dd class:bad={!v.passed}>
-									{v.passed ? t('smart.passedYes') : t('smart.passedNo')}
-								</dd>
-							</div>
-							<div>
-								<dt>{t('smart.temperature')}</dt>
-								<dd class="mono">
-									{typeof v.temperatureC === 'number' ? `${v.temperatureC} °C` : '–'}
-								</dd>
-							</div>
-							<div>
-								<dt>{t('smart.hours')}</dt>
-								<dd class="mono">{count(v.powerOnHours)}</dd>
-							</div>
-							<div>
-								<dt>{t('smart.powerCycles')}</dt>
-								<dd class="mono">{count(v.powerCycles)}</dd>
-							</div>
-							{#if !v.nvme}
-								<div>
-									<dt>{t('smart.reallocated')}</dt>
-									<dd class="mono">{count(v.reallocatedSectors)}</dd>
-								</div>
-								<div>
-									<dt>{t('smart.pending')}</dt>
-									<dd class="mono">{count(v.pendingSectors)}</dd>
-								</div>
-								<div>
-									<dt>{t('smart.uncorrectable')}</dt>
-									<dd class="mono">{count(v.uncorrectableSectors)}</dd>
-								</div>
-								<div>
-									<dt>{t('smart.crc')}</dt>
-									<dd class="mono">{count(v.crcErrors)}</dd>
-								</div>
-							{:else}
-								<div>
-									<dt>{t('smart.wear')}</dt>
-									<dd class="mono">{v.nvme.percentageUsed} %</dd>
-								</div>
-								<div>
-									<dt>{t('smart.spare')}</dt>
-									<dd class="mono">
-										{v.nvme.availableSpare} % / {v.nvme.availableSpareThreshold} %
-									</dd>
-								</div>
-								<div>
-									<dt>{t('smart.mediaErrors')}</dt>
-									<dd class="mono">{count(v.nvme.mediaErrors)}</dd>
-								</div>
-								<div>
-									<dt>{t('smart.errorLog')}</dt>
-									<dd class="mono">{count(v.nvme.errorLogEntries)}</dd>
-								</div>
-								<div>
-									<dt>{t('smart.unsafeShutdowns')}</dt>
-									<dd class="mono">{count(v.nvme.unsafeShutdowns)}</dd>
-								</div>
+					<div class="sfacts">
+						<SettingGroup title={t('smart.facts')} id="smart-facts">
+							<SettingRow title={t('smart.device')}
+								>{#snippet control()}<span>{d.model || '–'}</span>{/snippet}</SettingRow
+							>
+							<SettingRow title={t('disk.serial')}
+								>{#snippet control()}<span class="mono">{d.serial || '–'}</span
+									>{/snippet}</SettingRow
+							>
+							{#if v?.modelFamily}<SettingRow title={t('smart.family')}
+									>{#snippet control()}<span>{v.modelFamily}</span>{/snippet}</SettingRow
+								>{/if}
+							{#if v?.firmware}<SettingRow title={t('smart.firmware')}
+									>{#snippet control()}<span class="mono">{v.firmware}</span>{/snippet}</SettingRow
+								>{/if}
+							{#if v}<SettingRow title={t('smart.protocol')}
+									>{#snippet control()}<span>{v.protocol || '–'}</span>{/snippet}</SettingRow
+								>
+								<SettingRow title={t('smart.passed')}
+									>{#snippet control()}<span class:bad={!v.passed}
+											>{v.passed ? t('smart.passedYes') : t('smart.passedNo')}</span
+										>{/snippet}</SettingRow
+								>
+								<SettingRow title={t('smart.temperature')}
+									>{#snippet control()}<span class="mono"
+											>{typeof v.temperatureC === 'number' ? `${v.temperatureC} °C` : '–'}</span
+										>{/snippet}</SettingRow
+								>
+								<SettingRow title={t('smart.hours')}
+									>{#snippet control()}<span class="mono">{count(v.powerOnHours)}</span
+										>{/snippet}</SettingRow
+								>
+								<SettingRow title={t('smart.powerCycles')}
+									>{#snippet control()}<span class="mono">{count(v.powerCycles)}</span
+										>{/snippet}</SettingRow
+								>
+								{#if !v.nvme}
+									<SettingRow title={t('smart.reallocated')}
+										>{#snippet control()}<span class="mono">{count(v.reallocatedSectors)}</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.pending')}
+										>{#snippet control()}<span class="mono">{count(v.pendingSectors)}</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.uncorrectable')}
+										>{#snippet control()}<span class="mono">{count(v.uncorrectableSectors)}</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.crc')}
+										>{#snippet control()}<span class="mono">{count(v.crcErrors)}</span
+											>{/snippet}</SettingRow
+									>
+								{:else}{@const nvme = v.nvme}
+									<SettingRow title={t('smart.wear')}
+										>{#snippet control()}<span class="mono">{nvme.percentageUsed} %</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.spare')}
+										>{#snippet control()}<span class="mono"
+												>{nvme.availableSpare} % / {nvme.availableSpareThreshold} %</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.mediaErrors')}
+										>{#snippet control()}<span class="mono">{count(nvme.mediaErrors)}</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.errorLog')}
+										>{#snippet control()}<span class="mono">{count(nvme.errorLogEntries)}</span
+											>{/snippet}</SettingRow
+									>
+									<SettingRow title={t('smart.unsafeShutdowns')}
+										>{#snippet control()}<span class="mono">{count(nvme.unsafeShutdowns)}</span
+											>{/snippet}</SettingRow
+									>
+								{/if}
 							{/if}
-						{/if}
-						<div>
-							<dt>{t('smart.readAt')}</dt>
-							<dd>{time(d.readAt)}</dd>
-						</div>
-						<div>
-							<dt>{t('smart.checkedAt')}</dt>
-							<dd>{time(d.checkedAt)}</dd>
-						</div>
-					</dl>
+							<SettingRow title={t('smart.readAt')}
+								>{#snippet control()}<span>{time(d.readAt)}</span>{/snippet}</SettingRow
+							>
+							<SettingRow title={t('smart.checkedAt')}
+								>{#snippet control()}<span>{time(d.checkedAt)}</span>{/snippet}</SettingRow
+							>
+						</SettingGroup>
+					</div>
 					<p class="links">
 						<a class="btn" href="/storage?tab=disks#disk-{encodeURIComponent(d.disk)}"
 							>{t('smart.openStorage')}</a
@@ -300,11 +295,13 @@
 					</p>
 					<SmartHistory disk={d.disk} />
 					{#if v}
-						<section aria-labelledby="smart-attributes">
-							<h3 id="smart-attributes">{v.nvme ? t('smart.healthLog') : t('smart.attributes')}</h3>
+						<SettingGroup
+							title={v.nvme ? t('smart.healthLog') : t('smart.attributes')}
+							id="smart-attributes"
+						>
 							{#if !v.attributes?.length}<p class="muted">{t('smart.noAttributes')}</p>
 							{:else if v.nvme}
-								<div class="attr-table">
+								<div class="tile attr-table">
 									<table>
 										<thead
 											><tr
@@ -319,7 +316,7 @@
 									</table>
 								</div>
 							{:else}
-								<div class="attr-table">
+								<div class="tile attr-table">
 									<table>
 										<thead>
 											<tr>
@@ -352,16 +349,19 @@
 									</table>
 								</div>
 							{/if}
-						</section>
+						</SettingGroup>
 					{/if}
 				{/if}
 			</aside>
 		{/if}
 	</div>
-	<details class="tile thresholds">
-		<summary>{t('smart.thresholdsTitle')}</summary>
-		<p>{t('smart.thresholds')}</p>
-	</details>
+	<div class="thresholds">
+		<SettingGroup>
+			<SettingRow icon="info" id="thresholds" title={t('smart.thresholdsTitle')}>
+				<div class="srow-block"><p>{t('smart.thresholds')}</p></div>
+			</SettingRow>
+		</SettingGroup>
+	</div>
 	{#if reports}<StatusBar label={t('smart.statusBar')}>
 			<span>{t('smart.statDisks', { count: reports.length })}</span>
 			<span>{t('smart.statOk')} <b>{counts.ok}</b></span>
@@ -439,7 +439,6 @@
 		color: var(--error-text);
 	}
 	.detail {
-		padding: 20px;
 		min-width: 0;
 		display: grid;
 		gap: 14px;
@@ -456,24 +455,6 @@
 	.detail-heading .btn {
 		padding: var(--space-1-5);
 		min-height: 30px;
-	}
-	.detail h3 {
-		margin: 0 0 var(--space-2);
-		font-size: var(--text-md);
-	}
-	.detail dl {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-		gap: var(--space-3);
-		margin: 0;
-	}
-	.detail dt {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	.detail dd {
-		margin: 2px 0 0;
-		overflow-wrap: anywhere;
 	}
 	.findings {
 		margin: 0;
@@ -495,15 +476,6 @@
 	}
 	.thresholds {
 		margin-top: 20px;
-		padding: 14px 18px;
-		font-size: var(--text-md);
-	}
-	.thresholds summary {
-		cursor: pointer;
-		font-weight: 500;
-	}
-	.thresholds p {
-		margin: var(--space-2-5) 0 0;
 	}
 	@media (max-width: 1100px) {
 		.smart-layout.with-detail {

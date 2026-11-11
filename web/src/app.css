@@ -1162,82 +1162,6 @@ input.switch:disabled {
 	}
 }
 
-/* PLAN 75-19, style E3: a group (settings, and since 0.74 every page with titled tiles) is a row that opens downward. */
-.tile.e3-group {
-	border-radius: var(--radius-small);
-}
-.e3-group > .tile-title {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
-	padding: var(--space-1) var(--space-2);
-	border-radius: var(--radius-bar);
-	color: var(--text);
-	font-size: var(--text-md);
-	font-weight: 600;
-	letter-spacing: 0;
-	text-transform: none;
-	cursor: pointer;
-	user-select: none;
-}
-/* Never cut off (owner 10.11.2026): a long summary wraps beside the title. */
-.e3-summary {
-	display: none;
-	flex: 1 1 0;
-	min-width: 8ch;
-	margin-left: auto;
-	color: var(--muted);
-	font-size: var(--text-sm);
-	font-weight: 400;
-	text-align: right;
-	overflow-wrap: anywhere;
-}
-.e3-group[data-closed] .e3-summary {
-	display: block;
-}
-.e3-group[data-closed] .e3-summary + .e3-toggle {
-	margin-left: 0;
-}
-.e3-toggle {
-	display: grid;
-	place-items: center;
-	flex: none;
-	width: 26px;
-	height: 26px;
-	margin-left: auto;
-	padding: 0;
-	border: 0;
-	border-radius: var(--radius-bar);
-	background: none;
-	cursor: pointer;
-}
-.e3-toggle::after {
-	content: '';
-	width: 8px;
-	height: 8px;
-	border-right: 1.6px solid var(--muted);
-	border-bottom: 1.6px solid var(--muted);
-	transform: translateY(2px) rotate(-135deg);
-	transition: transform 0.15s;
-}
-.e3-group[data-closed] .e3-toggle::after {
-	transform: translateY(-2px) rotate(45deg);
-}
-.e3-toggle:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 1px;
-}
-.e3-group > .tile-title:hover {
-	background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-.e3-group[data-closed] > :not(.tile-title) {
-	display: none !important;
-}
-.page-groups {
-	display: contents;
-}
-
 /* PLAN 78-1 (owner 10.11.2026, draft Entwuerfe/78-einstellungen-win11): the
    pages of the control panel like Windows 11's settings. The page title is a
    path ("Hardware und Energie › Energie"); a group is a plain heading above
@@ -1562,4 +1486,40 @@ span.srow-chev {
    heading keeps the layout of a panel, without the tile and its padding. */
 .sgroup > .panel {
 	padding: 0;
+}
+
+/* PLAN 78-5: the read-only facts of a detail pane (a disk, a share) as
+   rows: lower than a setting with its control, the value in the text colour. */
+.sfacts .srow-head {
+	min-height: 40px;
+	padding-block: var(--space-1-5);
+}
+.sfacts .srow-ctl {
+	color: var(--text);
+	overflow-wrap: anywhere;
+}
+
+/* PLAN 78-5: rows of a form that lock together (the hardware of a running
+   VM): a fieldset without frame or legend, its rows like those of a group. */
+fieldset.srows {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+/* PLAN 78-5: parts of a row that come in a wrapper of their own (the form or
+   fieldset of a component): the hair lines .srow-body gives its children. */
+.sparts {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.sparts > * + * {
+	border-top: 1px solid var(--srow-line);
 }

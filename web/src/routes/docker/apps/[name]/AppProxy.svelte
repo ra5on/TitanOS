@@ -30,13 +30,10 @@
 		app,
 		members,
 		version = 0,
-		embedded = false,
 	}: {
 		app: string;
 		members: DockerContainer[];
 		version?: number;
-		/** A line of the app form, without the tile, heading and introduction. */
-		embedded?: boolean;
 	} = $props();
 
 	let status = $state<AppProxyStatus | null>(null);
@@ -132,14 +129,9 @@
 	}
 </script>
 
-<section
-	class:tile={!embedded}
-	class:embedded
-	aria-labelledby={embedded ? undefined : 'h-proxy'}
-	aria-label={embedded ? t('proxy.title') : undefined}
->
-	{#if !embedded}<h2 class="tile-title" id="h-proxy">{t('proxy.title')}</h2>
-		<p class="muted hint">{t('proxy.intro')}</p>{/if}
+<!-- PLAN 78-5: a row of the app form (its name stands in the row); the
+     settings page of the HTTPS names links to it by #h-proxy. -->
+<section id="h-proxy" aria-label={t('proxy.title')}>
 	{#if loadError}
 		<div class="notice-error row-note" role="alert">
 			<span>{loadError}</span><button type="button" class="btn small" onclick={() => load()}
@@ -148,7 +140,7 @@
 		</div>
 	{:else if !status}
 		<p class="muted loading" role="status">{t('common.loading')}</p>
-	{:else if embedded && !open}
+	{:else if !open}
 		<div class="summary">
 			{#if saved?.enabled && !status.off && saved.urls.length}
 				<a
@@ -214,11 +206,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
-		padding: 18px;
-	}
-	section.embedded {
 		max-width: 46rem;
-		padding: var(--space-1) 0 0;
 	}
 	.summary {
 		display: flex;

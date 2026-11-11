@@ -271,6 +271,14 @@ async function menu(page, name, item, how = "mouse") {
     await page.keyboard.press("Enter");
   } else await target.click();
 }
+// A setting with parts is a row that opens by its chevron button (PLAN 78-5).
+async function openRow(page, title) {
+  const chevron = page.getByRole("button", { name: `${title}: Aufklappen` });
+  if (await chevron.count()) await chevron.click();
+  await page
+    .getByRole("button", { name: `${title}: Zuklappen` })
+    .waitFor({ timeout: 5000 });
+}
 async function shot(page, file) {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -364,8 +372,13 @@ try {
     await page.waitForFunction(() =>
       document.querySelector(".bridge-setup")?.textContent?.includes("br0"),
     );
-    assert.equal(await page.locator(".netsel select").inputValue(), "bridge");
-    assert.equal(await page.locator(".vm-card").count(), 6);
+    assert.equal(await page.locator("#vm-net").inputValue(), "bridge");
+    // Six groups of the form, each a plain heading above its rows (PLAN 78-5).
+    assert.equal(await page.locator(".steps > section.sgroup").count(), 6);
+    assert.equal(
+      await page.locator(".steps .tile, .steps .tile-title").count(),
+      0,
+    );
     await shot(page, `${theme}-${width}-${locale}`);
     assert.ok(
       await page.evaluate(
@@ -421,7 +434,7 @@ try {
       "Bridge draft",
     );
     assert.equal(
-      await page.locator(".netsel select").inputValue(),
+      await page.locator("#vm-net").inputValue(),
       revert ? "user" : "bridge",
     );
     assert.equal(state.bridgeCalls, 2);
@@ -477,7 +490,7 @@ try {
     );
     await page.goto(`${base}/vms/new`);
     await page.locator('input[maxlength="160"]').fill("Hardware test");
-    await page.locator("summary").filter({ hasText: "VM-Ordner" }).click();
+    await openRow(page, "VM-Ordner");
     await page
       .locator('input[placeholder="hardware-test"]')
       .fill("custom-folder");
@@ -506,10 +519,7 @@ try {
       .getByRole("button", { name: "+ Ganze Platte", exact: true })
       .click();
     assert.equal(await page.locator(".disk").count(), 4);
-    await page
-      .locator("summary")
-      .filter({ hasText: "Geräte durchreichen" })
-      .click();
+    await openRow(page, "Geräte durchreichen");
     await page.getByLabel("Grafikkarte · Fixture GPU", { exact: true }).check();
     await page.getByLabel("USB · Fixture USB", { exact: true }).check();
     assert.ok(
@@ -517,16 +527,13 @@ try {
         .getByLabel("USB · TitanOS stick", { exact: true })
         .isDisabled(),
     );
-    await page
-      .locator("summary")
-      .filter({ hasText: "Ordner vom NAS freigeben" })
-      .click();
+    await openRow(page, "Ordner vom NAS freigeben");
     await page
       .getByRole("button", { name: "+ Ordner hinzufügen", exact: true })
       .click();
     await page.getByLabel("Name in der VM", { exact: true }).fill("documents");
     await page.getByRole("radio", { name: /^Windows/ }).click();
-    await page.locator("summary").filter({ hasText: "Start-Firmware" }).click();
+    await openRow(page, "Start-Firmware");
     await page.locator("#vm-firmware").selectOption("bios");
     await page.locator("#vm-firmware").selectOption("uefi");
     await page
@@ -551,7 +558,7 @@ try {
     await page.goto(`${base}/vms/edit?vm=running`);
     await page.locator('input[maxlength="160"]').fill("Updated running VM");
     assert.ok(await page.locator("#vm-memory").isDisabled());
-    assert.ok(await page.locator(".netsel select").isDisabled());
+    assert.ok(await page.locator("#vm-net").isDisabled());
     await page.getByRole("button", { name: "Speichern", exact: true }).click();
     await page.waitForTimeout(150);
     assert.equal(
@@ -624,7 +631,15 @@ try {
       .waitFor();
     await ctx.close();
   }
-  assert.deepEqual(errors, []);
+  // Saving a running VM lands on its page, whose screen starts noVNC. The
+  // fixtures replace WebSocket with Playwright's routed class (the remote
+  // view's stream), which noVNC refuses ("Raw channel missing property"):
+  // an artefact of the fixtures that showed or not depending on how soon the
+  // context closed. Every other page error still fails the suite.
+  assert.deepEqual(
+    errors.filter((e) => e !== "Error: Raw channel missing property: send"),
+    [],
+  );
   console.log(
     "VM cards, menu actions, bridge setup/rollback and journal browser checks passed.",
   );

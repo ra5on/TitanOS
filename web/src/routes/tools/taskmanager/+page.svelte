@@ -20,6 +20,7 @@
 	import { containerLabel, type LXCList, type LXCStatus } from '#lib/lxc.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Segments from '#lib/components/Segments.svelte';
@@ -517,77 +518,81 @@
 			</ul>
 		{:else if !error}<p class="muted">{t('taskmanager.loading')}</p>{/if}
 	{:else if tab === 'guests'}
-		<h2 class="tile-title">{t('taskmanager.vm.title')}</h2>
-		{#if vms}
-			<ul class="rows-list">
-				{#each vms as v (v.name)}
-					{@const on = v.state === 'running'}
-					<li class="tile entry">
-						<div class="entry-main"><span class="name">{vmLabel(v)}</span></div>
-						<span class="state"
-							><span class="dot" class:ok={on} aria-hidden="true"></span>{t(
-								on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
-							)}</span
-						>
-						<span class="mono num">{on ? `${formatDecimal(v.cpuPercent, 1)} %` : '–'}</span>
-						<span class="mono num">{on ? formatBytes(v.memoryBytes) : '–'}</span>
-						<div class="actions">
-							{#if on}
-								<button
-									class="btn small"
-									disabled={busy !== ''}
-									onclick={() => vmAction(v, 'shutdown')}>{t('taskmanager.vm.shutdown')}</button
-								>
-							{:else}
-								<button
-									class="btn small"
-									disabled={busy !== '' || !v.available}
-									onclick={() => vmAction(v, 'start')}>{t('taskmanager.action.start')}</button
-								>
-							{/if}
-						</div>
-					</li>
-				{:else}<li class="muted">{t('taskmanager.vm.none')}</li>{/each}
-			</ul>
-		{/if}
-		<h2 class="tile-title">{t('taskmanager.lxc.title')}</h2>
-		{#if lxc}
-			<ul class="rows-list">
-				{#each lxc.containers as c (c.name)}
-					{@const on = c.state === 'running'}
-					<li class="tile entry">
-						<div class="entry-main"><span class="name">{containerLabel(c)}</span></div>
-						<span class="state"
-							><span class="dot" class:ok={on} aria-hidden="true"></span>{t(
-								on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
-							)}</span
-						>
-						<span class="mono num">{on ? `${formatDecimal(c.cpuPercent, 1)} %` : '–'}</span>
-						<span class="mono num">{on ? formatBytes(c.memoryBytes) : '–'}</span>
-						<div class="actions">
-							{#if on}
-								<button
-									class="btn small"
-									disabled={busy !== '' || lxc.dev}
-									onclick={() => lxcAction(c, 'restart')}>{t('taskmanager.action.restart')}</button
-								>
-								<button
-									class="btn small"
-									disabled={busy !== '' || lxc.dev}
-									onclick={() => lxcAction(c, 'stop')}>{t('taskmanager.action.stop')}</button
-								>
-							{:else}
-								<button
-									class="btn small"
-									disabled={busy !== '' || lxc.dev || !c.available}
-									onclick={() => lxcAction(c, 'start')}>{t('taskmanager.action.start')}</button
-								>
-							{/if}
-						</div>
-					</li>
-				{:else}<li class="muted">{t('taskmanager.lxc.none')}</li>{/each}
-			</ul>
-		{/if}
+		<!-- PLAN 78-5: plain headings above the two lists. -->
+		<SettingGroup title={t('taskmanager.vm.title')} id="taskmanager-vms">
+			{#if vms}
+				<ul class="rows-list">
+					{#each vms as v (v.name)}
+						{@const on = v.state === 'running'}
+						<li class="tile entry">
+							<div class="entry-main"><span class="name">{vmLabel(v)}</span></div>
+							<span class="state"
+								><span class="dot" class:ok={on} aria-hidden="true"></span>{t(
+									on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
+								)}</span
+							>
+							<span class="mono num">{on ? `${formatDecimal(v.cpuPercent, 1)} %` : '–'}</span>
+							<span class="mono num">{on ? formatBytes(v.memoryBytes) : '–'}</span>
+							<div class="actions">
+								{#if on}
+									<button
+										class="btn small"
+										disabled={busy !== ''}
+										onclick={() => vmAction(v, 'shutdown')}>{t('taskmanager.vm.shutdown')}</button
+									>
+								{:else}
+									<button
+										class="btn small"
+										disabled={busy !== '' || !v.available}
+										onclick={() => vmAction(v, 'start')}>{t('taskmanager.action.start')}</button
+									>
+								{/if}
+							</div>
+						</li>
+					{:else}<li class="muted">{t('taskmanager.vm.none')}</li>{/each}
+				</ul>
+			{/if}
+		</SettingGroup>
+		<SettingGroup title={t('taskmanager.lxc.title')} id="taskmanager-lxc">
+			{#if lxc}
+				<ul class="rows-list">
+					{#each lxc.containers as c (c.name)}
+						{@const on = c.state === 'running'}
+						<li class="tile entry">
+							<div class="entry-main"><span class="name">{containerLabel(c)}</span></div>
+							<span class="state"
+								><span class="dot" class:ok={on} aria-hidden="true"></span>{t(
+									on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
+								)}</span
+							>
+							<span class="mono num">{on ? `${formatDecimal(c.cpuPercent, 1)} %` : '–'}</span>
+							<span class="mono num">{on ? formatBytes(c.memoryBytes) : '–'}</span>
+							<div class="actions">
+								{#if on}
+									<button
+										class="btn small"
+										disabled={busy !== '' || lxc.dev}
+										onclick={() => lxcAction(c, 'restart')}
+										>{t('taskmanager.action.restart')}</button
+									>
+									<button
+										class="btn small"
+										disabled={busy !== '' || lxc.dev}
+										onclick={() => lxcAction(c, 'stop')}>{t('taskmanager.action.stop')}</button
+									>
+								{:else}
+									<button
+										class="btn small"
+										disabled={busy !== '' || lxc.dev || !c.available}
+										onclick={() => lxcAction(c, 'start')}>{t('taskmanager.action.start')}</button
+									>
+								{/if}
+							</div>
+						</li>
+					{:else}<li class="muted">{t('taskmanager.lxc.none')}</li>{/each}
+				</ul>
+			{/if}
+		</SettingGroup>
 	{:else if tab === 'network'}
 		{#if system}
 			<ul class="rows-list">

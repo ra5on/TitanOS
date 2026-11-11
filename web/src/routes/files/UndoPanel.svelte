@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
 	import { api, type FileRoot } from '#lib/api.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	let { refresh, roots, onchanged }: { refresh: number; roots: FileRoot[]; onchanged: () => void } =
 		$props();
@@ -51,33 +53,26 @@
 	});
 </script>
 
-{#if records.length || error}<section class="tile undo" aria-label={t('files.undoTitle')}>
-		<h2 class="tile-title">{t('files.undoTitle')}</h2>
-		<p class="muted">{t('files.undoHint')}</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#each records as record (record.id)}<div class="record">
-				<span>{t(`files.undoKind.${record.kind}`, { count: record.count })}</span><button
-					class="btn"
-					disabled={!!busy || record.busy || !allowed(record)}
-					onclick={() => undo(record)}>{t('files.undo')}</button
+<!-- PLAN 78-5: a plain heading; every change that can be taken back is a
+     flat row with its button. -->
+{#if records.length || error}<div class="undo">
+		<SettingGroup title={t('files.undoTitle')} desc={t('files.undoHint')} id="files-undo">
+			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+			{#each records as record (record.id)}<SettingRow
+					icon="undo"
+					title={t(`files.undoKind.${record.kind}`, { count: record.count })}
 				>
-			</div>{/each}
-	</section>{/if}
+					{#snippet control()}<button
+							class="btn"
+							disabled={!!busy || record.busy || !allowed(record)}
+							onclick={() => undo(record)}>{t('files.undo')}</button
+						>{/snippet}
+				</SettingRow>{/each}
+		</SettingGroup>
+	</div>{/if}
 
 <style>
 	.undo {
 		margin-top: var(--gap);
-		padding: var(--tile-pad);
-	}
-	.record {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-2) 0;
-		border-top: 1px solid var(--border);
-	}
-	p {
-		font-size: var(--text-md);
 	}
 </style>

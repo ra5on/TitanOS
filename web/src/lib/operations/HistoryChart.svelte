@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { chartSegments, type MonitorSample } from '#lib/operations.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	let {
 		samples,
 		value,
@@ -28,54 +29,49 @@
 	const last = $derived(segments.at(-1)?.at(-1));
 </script>
 
-<section class="tile chart">
-	<div class="head">
-		<h2 class="tile-title">{label}</h2>
-		<span class="mono"
+<!-- PLAN 78-5: the name and the latest value are a plain heading; the chart
+     keeps its own surface below it. -->
+<SettingGroup title={label}>
+	{#snippet tools()}<span class="mono last"
 			>{last
 				? `${last.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`
 				: '—'}</span
-		>
-	</div>
-	{#if segments.length}<p class="scale">
-			{high.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-			{unit}
-		</p>
-		<svg viewBox="0 0 750 195" role="img" aria-label={label}
-			><title>{label}</title><line x1="40" y1="165" x2="730" y2="165" /><line
-				x1="40"
-				y1="25"
-				x2="730"
-				y2="25"
-			/>{#each segments as segment, i (i)}<polyline
-					points={points(segment)}
-				/>{#each segment.length === 1 ? segment : [] as p (p.at)}<circle
-						cx={40 + (690 * (Date.parse(p.at) - start)) / Math.max(1, end - start)}
-						cy={165 - (140 * p.value) / high}
-						r="2"
-					/>{/each}{/each}</svg
-		>
-		<div class="axis mono">
-			<time datetime={samples[0].at}
-				>{new Date(start).toISOString().slice(5, 16).replace('T', ' ')}</time
-			><time datetime={samples.at(-1)!.at}
-				>{new Date(end).toISOString().slice(5, 16).replace('T', ' ')}</time
+		>{/snippet}
+	<div class="tile chart">
+		{#if segments.length}<p class="scale">
+				{high.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+				{unit}
+			</p>
+			<svg viewBox="0 0 750 195" role="img" aria-label={label}
+				><title>{label}</title><line x1="40" y1="165" x2="730" y2="165" /><line
+					x1="40"
+					y1="25"
+					x2="730"
+					y2="25"
+				/>{#each segments as segment, i (i)}<polyline
+						points={points(segment)}
+					/>{#each segment.length === 1 ? segment : [] as p (p.at)}<circle
+							cx={40 + (690 * (Date.parse(p.at) - start)) / Math.max(1, end - start)}
+							cy={165 - (140 * p.value) / high}
+							r="2"
+						/>{/each}{/each}</svg
 			>
-		</div>{:else}<p class="muted">{t('ops.noSamples')}</p>{/if}
-</section>
+			<div class="axis mono">
+				<time datetime={samples[0].at}
+					>{new Date(start).toISOString().slice(5, 16).replace('T', ' ')}</time
+				><time datetime={samples.at(-1)!.at}
+					>{new Date(end).toISOString().slice(5, 16).replace('T', ' ')}</time
+				>
+			</div>{:else}<p class="muted">{t('ops.noSamples')}</p>{/if}
+	</div>
+</SettingGroup>
 
 <style>
 	.chart {
 		padding: var(--tile-pad);
 		min-width: 0;
 	}
-	.head {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-2-5);
-		flex-wrap: wrap;
-	}
-	.head span {
+	.last {
 		font-size: var(--text-base);
 	}
 	svg {

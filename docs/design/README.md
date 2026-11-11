@@ -162,8 +162,21 @@ Starteintrag umstellt.
 Verbindlicher Wortlaut: `docs/rules/WEB-UI.md`, Absatz „Systemsteuerung im
 Zeilenaufbau“. Er ersetzt für die Seiten unter `/settings` die Kachel-Abschnitte
 der drei folgenden Abschnitte (Gruppen, Seitenleiste, Gerüst 0.30.0) und die
-aufklappbaren Kacheln aus PLAN 75-19 (Stil E3), die für die Seiten anderer
-Programme weiter gelten.
+aufklappbaren Kacheln aus PLAN 75-19 (Stil E3).
+
+**Alle Programme im Zeilenaufbau (PLAN 78-5, 11. November 2026).** Wunsch des
+Projektinhabers: „jedes Fenster, Seite usw. braucht ja jetzt den Stil, den die
+Einstellungsseite bekommt“. Seitdem folgen auch die Seiten der anderen
+Programme dem Aufbau: Gruppenname als schlichte Überschrift, jede Einstellung
+eine flache Zeile, Unterpunkte in der Zeile. Tabellen, Explorer, Auftragslisten,
+Protokolle, Diagramme, Messwertkacheln und Karten, die ein Objekt sind, bleiben
+und verlieren nur den Rahmen mit Kopfzeile um sich; Detailbereiche zeigen ihre
+Fakten als kompakte Zeilen; Dialoge bleiben. Die aufklappbaren Kacheln (Stil
+E3, `settings-groups.ts`) sind entfernt. Ohne eigenen Entwurf ausgerollt
+(Stil der Systemsteuerung, Entwurf 78); echte Aufnahmen jeder Seite bei 1100 px
+und am Handy unter `Entwuerfe/78-programme-zeilen/ist/`. Verbindlicher
+Wortlaut und Auslegung: `docs/rules/WEB-UI.md`, „Alle Programme im
+Zeilenaufbau“.
 
 ### „Alle Einstellungen“ und vier Gruppen (PLAN 61, 6. November 2026)
 

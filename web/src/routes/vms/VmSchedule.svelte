@@ -2,6 +2,7 @@
 	// The section "Schedule" of the VM form: times to start the VM and to
 	// shut it down on chosen weekdays. It edits a draft owned by the form,
 	// so the unsaved-changes guard of the form covers it.
+	import FormRow from '#lib/components/appform/FormRow.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -29,99 +30,95 @@
 	const hasStop = $derived(draft.rules.some((rule) => rule.action === 'stop'));
 </script>
 
-<div class="schedule">
-	<label class="check"
-		><input type="checkbox" bind:checked={draft.enabled} /><span>{t('vms.sched.enabled')}</span
-		></label
-	>
-	<small class="muted">{t('vms.sched.hint')}</small>
-	{#if draft.rules.length === 0}
-		<p class="muted">{t('vms.sched.none')}</p>
-	{/if}
-	<ul class="rules">
-		{#each draft.rules as rule, index (index)}
-			<li class:off={!draft.enabled}>
-				<select
-					class="field"
-					bind:value={rule.action}
-					aria-label={t('vms.sched.action', { n: index + 1 })}
-				>
-					<option value="start">{t('vms.sched.start')}</option>
-					<option value="stop">{t('vms.sched.stop')}</option>
-				</select>
-				<input
-					class="field mono time"
-					type="time"
-					step="60"
-					bind:value={rule.time}
-					aria-label={t('vms.sched.time', { n: index + 1 })}
-				/>
-				<fieldset class="week">
-					<legend class="sr-only">{t('vms.sched.days', { n: index + 1 })}</legend>
-					{#each WEEK as day (day)}
-						<label class="day"
-							><input
-								type="checkbox"
-								checked={rule.days.includes(day)}
-								onchange={(event) => toggleDay(index, day, event.currentTarget.checked)}
-							/><span>{t(`backup.dayShort.${day}` as 'backup.dayShort.0')}</span></label
-						>
-					{/each}
-				</fieldset>
-				<button
-					type="button"
-					class="icon"
-					aria-label={t('vms.sched.remove', { n: index + 1 })}
-					title={t('vms.sched.remove', { n: index + 1 })}
-					onclick={() => draft.rules.splice(index, 1)}><Icon name="close" size={14} /></button
-				>
-			</li>
-		{/each}
-	</ul>
-	<div>
-		<button type="button" class="btn" onclick={add} disabled={draft.rules.length >= MAX_RULES}
-			><Icon name="plus" size={14} />{t('vms.sched.add')}</button
-		>
-	</div>
-	{#if hasStop}
-		<div class="stop">
-			<label
-				><span>{t('vms.sched.timeout')}</span>
-				<select class="field" bind:value={draft.stopTimeout}>
-					{#each timeoutChoices(draft.stopTimeout) as seconds (seconds)}
-						<option value={seconds}>{minutes(seconds)}</option>
-					{/each}
-				</select>
-				<small class="muted">{t('vms.sched.timeoutHint')}</small>
-			</label>
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.forceOff} /><span
-					>{t('vms.sched.forceOff')}</span
-				></label
+<!-- PLAN 78-5: the switch, the times and what a stop does are rows of the form. -->
+<FormRow label={t('vms.sched.enabled')} id="vm-sched-enabled" hint={t('vms.sched.hint')}>
+	<input
+		id="vm-sched-enabled"
+		class="switch"
+		type="checkbox"
+		role="switch"
+		bind:checked={draft.enabled}
+	/>
+</FormRow>
+<div class="srow plain">
+	<div class="srow-block">
+		{#if draft.rules.length === 0}
+			<p class="muted">{t('vms.sched.none')}</p>
+		{/if}
+		<ul class="rules">
+			{#each draft.rules as rule, index (index)}
+				<li class:off={!draft.enabled}>
+					<select
+						class="field"
+						bind:value={rule.action}
+						aria-label={t('vms.sched.action', { n: index + 1 })}
+					>
+						<option value="start">{t('vms.sched.start')}</option>
+						<option value="stop">{t('vms.sched.stop')}</option>
+					</select>
+					<input
+						class="field mono time"
+						type="time"
+						step="60"
+						bind:value={rule.time}
+						aria-label={t('vms.sched.time', { n: index + 1 })}
+					/>
+					<fieldset class="week">
+						<legend class="sr-only">{t('vms.sched.days', { n: index + 1 })}</legend>
+						{#each WEEK as day (day)}
+							<label class="day"
+								><input
+									type="checkbox"
+									checked={rule.days.includes(day)}
+									onchange={(event) => toggleDay(index, day, event.currentTarget.checked)}
+								/><span>{t(`backup.dayShort.${day}` as 'backup.dayShort.0')}</span></label
+							>
+						{/each}
+					</fieldset>
+					<button
+						type="button"
+						class="icon"
+						aria-label={t('vms.sched.remove', { n: index + 1 })}
+						title={t('vms.sched.remove', { n: index + 1 })}
+						onclick={() => draft.rules.splice(index, 1)}><Icon name="close" size={14} /></button
+					>
+				</li>
+			{/each}
+		</ul>
+		<div>
+			<button type="button" class="btn" onclick={add} disabled={draft.rules.length >= MAX_RULES}
+				><Icon name="plus" size={14} />{t('vms.sched.add')}</button
 			>
-			{#if draft.forceOff}<small class="notice-warn">{t('vms.sched.forceOffHint')}</small>{/if}
 		</div>
-	{/if}
+	</div>
 </div>
+{#if hasStop}
+	<FormRow label={t('vms.sched.timeout')} id="vm-sched-timeout" hint={t('vms.sched.timeoutHint')}>
+		<select id="vm-sched-timeout" class="field" bind:value={draft.stopTimeout}>
+			{#each timeoutChoices(draft.stopTimeout) as seconds (seconds)}
+				<option value={seconds}>{minutes(seconds)}</option>
+			{/each}
+		</select>
+	</FormRow>
+	<FormRow
+		label={t('vms.sched.forceOff')}
+		id="vm-sched-force"
+		hint={draft.forceOff ? t('vms.sched.forceOffHint') : ''}
+		tone="warn"
+	>
+		<input
+			id="vm-sched-force"
+			class="switch"
+			type="checkbox"
+			role="switch"
+			bind:checked={draft.forceOff}
+		/>
+	</FormRow>
+{/if}
 
 <style>
-	.schedule {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-		padding: var(--space-4);
-	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
+	p {
 		margin: 0;
-		flex: none;
 	}
 	.rules {
 		display: flex;
@@ -153,6 +150,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-1);
+		flex: 1 1 14rem;
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -183,18 +181,5 @@
 		border: 0;
 		color: var(--muted);
 		cursor: pointer;
-	}
-	.stop {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		border-top: 1px solid var(--panel-border);
-		padding-top: var(--space-2-5);
-	}
-	.stop label:not(.check) {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		max-width: 22rem;
 	}
 </style>

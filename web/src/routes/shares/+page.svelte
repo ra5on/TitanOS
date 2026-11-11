@@ -7,6 +7,8 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -387,7 +389,9 @@
 			</div>
 			<p class="list-count" role="status">{t('ui.results', { count: shown.length })}</p>
 		</section>
-		{#if detail}<aside class="tile detail" aria-label={detail.name}>
+		<!-- PLAN 78-5: the detail is no tile: the name, the tabs and the facts
+		     of the chosen tab as flat rows. -->
+		{#if detail}<aside class="detail" aria-label={detail.name}>
 				<div class="detail-head">
 					<h2>{detail.name}</h2>
 					<button
@@ -416,67 +420,91 @@
 							onclick={() => (tab = id as typeof tab)}>{t(`shares.tab.${id}`)}</button
 						>{/each}
 				</div>
-				<dl>
-					{#if tab === 'general'}<dt>{t('share.volume')}</dt>
-						<dd>{detail.volume}</dd>
-						<dt>{t('shares.path')}</dt>
-						<dd class="mono">{detail.path}</dd>
-						<dt>{t('shares.status')}</dt>
-						<dd>{t(detail.available ? 'shares.available' : 'shares.unavailable')}</dd>
-						<dt>{t('shares.quota')}</dt>
-						<dd>
-							{#if !detail.quota}{t(
-									'shares.noQuota',
-								)}{:else if detail.quotaStatus?.state === 'active' || detail.quotaStatus?.state === 'applying'}{t(
-									'shares.quotaUsed',
-									{
-										used: formatDiskBytes(detail.quotaStatus.used),
-										limit: formatDiskBytes(detail.quota),
-									},
-								)}<span class="quota-bar" class:full={detail.quotaStatus.used >= detail.quota * 0.9}
-									><span
-										style:width="{Math.min(100, (100 * detail.quotaStatus.used) / detail.quota)}%"
-									></span></span
-								>{#if detail.quotaStatus.state === 'applying'}<small class="muted"
-										>{t('shares.quotaApplying')}</small
-									>{/if}{:else}{formatDiskBytes(detail.quota)} ·
-								<span class:problem={detail.quotaStatus?.state === 'error'}
-									>{detail.quotaStatus?.state === 'error'
-										? t('shares.quotaError', { error: detail.quotaStatus.error ?? '' })
-										: t('shares.quotaPending')}</span
-								>{/if}
-						</dd>
-					{:else if tab === 'access'}{#each Object.entries(detail.access).sort( ([a], [b]) => a.localeCompare(b) ) as [name, level]}<dt
-								class="mono"
-							>
-								{name}
-							</dt>
-							<dd>{t(`share.${level}`)}</dd>{/each}
-						<dt>{t('shares.guest')}</dt>
-						<dd>{detail.guest ? t('share.ro') : t('share.none')}</dd>
-						{#if detail.nfs.enabled}<dt>NFS</dt>
-							<dd>{(detail.nfs.clients ?? []).join(', ')}</dd>{/if}
-					{:else}<dt>{t('share.recycle')}</dt>
-						<dd>
-							{detail.recycle.enabled
-								? t('shares.recycleChip', { days: detail.recycle.days })
-								: t('shares.off')}
-						</dd>
-						<dt>{t('share.timeMachine')}</dt>
-						<dd>
-							{detail.timeMachine.enabled
-								? detail.timeMachine.sizeGB
-									? `${detail.timeMachine.sizeGB} GB`
-									: t('shares.on')
-								: t('shares.off')}
-						</dd>
-						<dt>{t('share.previousVersions')}</dt>
-						<dd>{t(detail.previousVersions ? 'shares.on' : 'shares.off')}</dd>
-						<dt>{t('share.guard')}</dt>
-						<dd>{t(detail.guard ? 'shares.on' : 'shares.off')}</dd>
-						<dt>{t('share.browseable')}</dt>
-						<dd>{t(detail.browseable ? 'shares.on' : 'shares.off')}</dd>{/if}
-				</dl>
+				<div class="sfacts">
+					<SettingGroup>
+						{#if tab === 'general'}<SettingRow title={t('share.volume')}>
+								{#snippet control()}<span>{detail.volume}</span>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('shares.path')}>
+								{#snippet control()}<span class="mono">{detail.path}</span>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('shares.status')}>
+								{#snippet control()}<span
+										>{t(detail.available ? 'shares.available' : 'shares.unavailable')}</span
+									>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('shares.quota')}>
+								{#snippet control()}<span class="quota"
+										>{#if !detail.quota}{t(
+												'shares.noQuota',
+											)}{:else if detail.quotaStatus?.state === 'active' || detail.quotaStatus?.state === 'applying'}{t(
+												'shares.quotaUsed',
+												{
+													used: formatDiskBytes(detail.quotaStatus.used),
+													limit: formatDiskBytes(detail.quota),
+												},
+											)}<span
+												class="quota-bar"
+												class:full={detail.quotaStatus.used >= detail.quota * 0.9}
+												><span
+													style:width="{Math.min(
+														100,
+														(100 * detail.quotaStatus.used) / detail.quota,
+													)}%"
+												></span></span
+											>{#if detail.quotaStatus.state === 'applying'}<small class="muted"
+													>{t('shares.quotaApplying')}</small
+												>{/if}{:else}{formatDiskBytes(detail.quota)} ·
+											<span class:problem={detail.quotaStatus?.state === 'error'}
+												>{detail.quotaStatus?.state === 'error'
+													? t('shares.quotaError', { error: detail.quotaStatus.error ?? '' })
+													: t('shares.quotaPending')}</span
+											>{/if}</span
+									>{/snippet}
+							</SettingRow>
+						{:else if tab === 'access'}{#each Object.entries(detail.access).sort( ([a], [b]) => a.localeCompare(b) ) as [name, level]}<SettingRow
+									title={name}
+								>
+									{#snippet control()}<span>{t(`share.${level}`)}</span>{/snippet}
+								</SettingRow>{/each}
+							<SettingRow title={t('shares.guest')}>
+								{#snippet control()}<span>{detail.guest ? t('share.ro') : t('share.none')}</span
+									>{/snippet}
+							</SettingRow>
+							{#if detail.nfs.enabled}<SettingRow title="NFS">
+									{#snippet control()}<span>{(detail.nfs.clients ?? []).join(', ')}</span>{/snippet}
+								</SettingRow>{/if}
+						{:else}<SettingRow title={t('share.recycle')}>
+								{#snippet control()}<span
+										>{detail.recycle.enabled
+											? t('shares.recycleChip', { days: detail.recycle.days })
+											: t('shares.off')}</span
+									>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('share.timeMachine')}>
+								{#snippet control()}<span
+										>{detail.timeMachine.enabled
+											? detail.timeMachine.sizeGB
+												? `${detail.timeMachine.sizeGB} GB`
+												: t('shares.on')
+											: t('shares.off')}</span
+									>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('share.previousVersions')}>
+								{#snippet control()}<span
+										>{t(detail.previousVersions ? 'shares.on' : 'shares.off')}</span
+									>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('share.guard')}>
+								{#snippet control()}<span>{t(detail.guard ? 'shares.on' : 'shares.off')}</span
+									>{/snippet}
+							</SettingRow>
+							<SettingRow title={t('share.browseable')}>
+								{#snippet control()}<span>{t(detail.browseable ? 'shares.on' : 'shares.off')}</span
+									>{/snippet}
+							</SettingRow>{/if}
+					</SettingGroup>
+				</div>
 				{#if tab === 'access' && detail.nfs.enabled}<p class="muted hint">
 						{t('share.nfsWarning')}
 					</p>{/if}
@@ -568,6 +596,7 @@
 		display: block;
 		height: 6px;
 		margin: var(--space-1-5) 0 2px;
+		min-width: 120px;
 		max-width: 260px;
 		border-radius: 3px;
 		background: var(--track);
@@ -581,8 +610,12 @@
 	.quota-bar.full > span {
 		background: var(--warn-text);
 	}
-	dd .problem {
+	.quota .problem {
 		color: var(--error-text);
+	}
+	.quota {
+		display: block;
+		min-width: 0;
 	}
 	.toolbar select {
 		width: auto;
@@ -716,7 +749,6 @@
 		color: var(--muted);
 	}
 	.detail {
-		padding: var(--space-4);
 		min-width: 0;
 	}
 	.detail-head {
@@ -748,20 +780,6 @@
 	.tabs button[aria-selected='true'] {
 		color: var(--accent);
 		border-color: var(--accent);
-	}
-	dl {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
-		gap: var(--space-3);
-		font-size: var(--text-base);
-	}
-	dt {
-		color: var(--muted);
-	}
-	dd {
-		margin: 0;
-		text-align: right;
-		overflow-wrap: anywhere;
 	}
 	.detail-actions {
 		display: flex;

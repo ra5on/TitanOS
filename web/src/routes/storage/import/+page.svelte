@@ -4,6 +4,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { formatBytes } from '#lib/format.ts';
@@ -111,27 +113,31 @@
 		>
 			<a href="/storage">{registered} →</a>
 		</p>{/if}
-	<section class="tile candidates">
-		{#each list as c (c.id)}<article>
-				<div>
-					<strong
-						>{c.level}{c.filesystem ? ` · ${c.filesystem.toUpperCase()}` : ''}{#if c.encrypted}
-							· {t('crypt.encrypted')}{/if}</strong
-					>
-					<p class="mono">{c.id}</p>
-					<p>{c.disks.join(' · ')} · {formatBytes(c.size)}</p>
-					{#if c.reason === 'encrypted-partition'}<p class="notice-warn">
-							{t('crypt.importRefused')}
-						</p>{:else if c.reason}<p class="notice-warn">{c.reason}</p>{/if}
-				</div>
-				<button class="btn btn-primary" disabled={busy || !!c.reason} onclick={() => inspect(c)}
-					>{t('ops.preview')}</button
+	<!-- PLAN 78-5: every found array is a flat row with its button. -->
+	<div class="candidates">
+		<SettingGroup title={t('ops.importFound')} id="import-candidates">
+			{#each list as c (c.id)}<SettingRow
+					icon="disk"
+					title="{c.level}{c.filesystem ? ` · ${c.filesystem.toUpperCase()}` : ''}{c.encrypted
+						? ` · ${t('crypt.encrypted')}`
+						: ''}"
 				>
-			</article>{:else}<EmptyState
-				inline
-				title={busy ? t('ops.loading') : t('ops.importNone')}
-			/>{/each}
-	</section>
+					{#snippet description()}<p class="mono">{c.id}</p>
+						<p>{c.disks.join(' · ')} · {formatBytes(c.size)}</p>
+						{#if c.reason === 'encrypted-partition'}<p class="notice-warn">
+								{t('crypt.importRefused')}
+							</p>{:else if c.reason}<p class="notice-warn">{c.reason}</p>{/if}{/snippet}
+					{#snippet control()}<button
+							class="btn btn-primary"
+							disabled={busy || !!c.reason}
+							onclick={() => inspect(c)}>{t('ops.preview')}</button
+						>{/snippet}
+				</SettingRow>{:else}<EmptyState
+					inline
+					title={busy ? t('ops.loading') : t('ops.importNone')}
+				/>{/each}
+		</SettingGroup>
+	</div>
 	{#if unlocking}<Dialog title={t('crypt.importTitle')} locked={busy} onclose={closeAll}
 			><form
 				onsubmit={(e) => {
@@ -191,24 +197,14 @@
 
 <style>
 	.candidates {
-		padding: var(--tile-pad);
 		margin-top: var(--gap);
 	}
-	article {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 14px;
-		padding: var(--space-4) 0;
-		border-bottom: 1px solid var(--border);
-	}
-	article p {
+	.candidates p {
+		margin: 0;
 		overflow-wrap: anywhere;
-		font-size: var(--text-base);
 	}
-	article div {
-		min-width: 0;
+	.candidates .notice-warn {
+		margin-top: var(--space-1-5);
 	}
 	label {
 		display: flex;

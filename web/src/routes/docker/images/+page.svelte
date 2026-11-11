@@ -3,6 +3,8 @@
 	// app uses them; unused ones can go one by one or all at once. Images in
 	// use are never offered for deletion (the NAS refuses them too).
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -134,104 +136,111 @@
 {:else if !images.length && !error}
 	<EmptyState title={t('dres.images.empty')} text={t('dres.images.emptyText')} />
 {:else if images.length}
+	<!-- PLAN 78-5: what can go is one row with its button; the list stands
+	     under a plain heading and keeps the table's own surface. -->
 	{#if unused.length}
-		<section class="tile ui-card banner" aria-labelledby="images-unused">
-			<div class="banner-text">
-				<strong id="images-unused"
-					>{unused.length === 1
-						? t('dres.images.unusedOne')
-						: t('dres.images.unusedTitle', { count: unused.length })}</strong
-				>
-				<span>{t('dres.images.unusedText', { size: formatBytes(unusedSize) })}</span>
-			</div>
-			<div class="banner-actions">
-				<button type="button" class="btn btn-primary" disabled={busy} onclick={() => (prune = true)}
-					>{t('dres.images.deleteUnused', { size: formatBytes(unusedSize) })}</button
-				>
-			</div>
-		</section>
+		<SettingGroup>
+			<SettingRow
+				icon="trash"
+				id="images-unused"
+				title={unused.length === 1
+					? t('dres.images.unusedOne')
+					: t('dres.images.unusedTitle', { count: unused.length })}
+				desc={t('dres.images.unusedText', { size: formatBytes(unusedSize) })}
+			>
+				{#snippet control()}<button
+						type="button"
+						class="btn btn-primary"
+						disabled={busy}
+						onclick={() => (prune = true)}
+						>{t('dres.images.deleteUnused', { size: formatBytes(unusedSize) })}</button
+					>{/snippet}
+			</SettingRow>
+		</SettingGroup>
 	{/if}
 
-	<section class="tile ui-card" aria-labelledby="images-list">
-		<div class="card-head">
-			<h2 id="images-list">{t('dres.images.title')}</h2>
-			<span class="card-meta"
-				>{t('dres.images.count', { count: images.length, size: formatBytes(total) })}</span
-			>
-			<div class="card-tools">
-				<label class="search">
-					<Icon name="search" size={14} />
-					<span class="sr-only">{t('dres.images.search')}</span>
-					<input
-						class="field"
-						type="search"
-						placeholder={t('dres.images.search')}
-						bind:value={query}
-					/>
-				</label>
-			</div>
-		</div>
+	<SettingGroup
+		title={t('dres.images.title')}
+		id="images-list"
+		desc={t('dres.images.count', { count: images.length, size: formatBytes(total) })}
+	>
+		{#snippet tools()}
+			<label class="search">
+				<Icon name="search" size={14} />
+				<span class="sr-only">{t('dres.images.search')}</span>
+				<input
+					class="field"
+					type="search"
+					placeholder={t('dres.images.search')}
+					bind:value={query}
+				/>
+			</label>
+		{/snippet}
 		{#if shown.length}
-			<div class="table-wrap">
-				<table class="data-table resources">
-					<thead>
-						<tr>
-							<th scope="col">{t('dres.col.name')}</th>
-							<th scope="col" class="num">{t('dres.col.size')}</th>
-							<th scope="col" class="used">{t('dres.col.usedBy')}</th>
-							<th scope="col" class="created">{t('dres.col.created')}</th>
-							<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each shown as image (image.id)}
-							{@const n = imageName(image)}
-							{@const used = usedByText(image.usedBy)}
-							{@const free = !used && !image.protected}
-							<tr class:unused={free}>
-								<td class="name">
-									{#if n.repo}<strong>{n.repo}</strong>
-										{#if n.tag}<span class="tag">{n.tag}</span>{/if}
-									{:else}<strong>{t('dres.noName')}</strong>
-										<span class="tag mono">{n.tag}</span>{/if}
-									{#if image.protected}<span
-											class="chip info"
-											title={t(
-												`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`,
-											)}><Icon name="lock" size={11} />{t('dres.protectedChip')}</span
-										>{/if}
-									<span class="sub narrow">{used || t('dres.unused')}</span>
-								</td>
-								<td class="num">{formatBytes(image.size)}</td>
-								<td class="used" class:muted={!used}
-									>{used ||
-										(image.protected
-											? t(`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`)
-											: t('dres.unused'))}</td
-								>
-								<td class="created">{relativeDate(createdDate(image.created), i18n.locale)}</td>
-								<td class="actions">
-									{#if free}
-										<button
-											type="button"
-											class="btn btn-danger-outline small"
-											disabled={busy}
-											aria-label={t('dres.deleteNamed', { name: label(image) })}
-											onclick={() => (remove = image)}>{t('dres.delete')}</button
-										>
-									{:else}
-										<span class="sr-only">{t('dres.inUse')}</span>
-									{/if}
-								</td>
+			<div class="tile ui-card">
+				<div class="table-wrap">
+					<table class="data-table resources">
+						<thead>
+							<tr>
+								<th scope="col">{t('dres.col.name')}</th>
+								<th scope="col" class="num">{t('dres.col.size')}</th>
+								<th scope="col" class="used">{t('dres.col.usedBy')}</th>
+								<th scope="col" class="created">{t('dres.col.created')}</th>
+								<th scope="col"><span class="sr-only">{t('ui.more')}</span></th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each shown as image (image.id)}
+								{@const n = imageName(image)}
+								{@const used = usedByText(image.usedBy)}
+								{@const free = !used && !image.protected}
+								<tr class:unused={free}>
+									<td class="name">
+										{#if n.repo}<strong>{n.repo}</strong>
+											{#if n.tag}<span class="tag">{n.tag}</span>{/if}
+										{:else}<strong>{t('dres.noName')}</strong>
+											<span class="tag mono">{n.tag}</span>{/if}
+										{#if image.protected}<span
+												class="chip info"
+												title={t(
+													`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`,
+												)}><Icon name="lock" size={11} />{t('dres.protectedChip')}</span
+											>{/if}
+										<span class="sub narrow">{used || t('dres.unused')}</span>
+									</td>
+									<td class="num">{formatBytes(image.size)}</td>
+									<td class="used" class:muted={!used}
+										>{used ||
+											(image.protected
+												? t(
+														`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`,
+													)
+												: t('dres.unused'))}</td
+									>
+									<td class="created">{relativeDate(createdDate(image.created), i18n.locale)}</td>
+									<td class="actions">
+										{#if free}
+											<button
+												type="button"
+												class="btn btn-danger-outline small"
+												disabled={busy}
+												aria-label={t('dres.deleteNamed', { name: label(image) })}
+												onclick={() => (remove = image)}>{t('dres.delete')}</button
+											>
+										{:else}
+											<span class="sr-only">{t('dres.inUse')}</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			</div>
 		{:else}
 			<p class="muted none">{t('dres.images.noMatch')}</p>
 		{/if}
-	</section>
+	</SettingGroup>
 	<StatusBar label={t('dres.statusBar')}>
 		<span>{t('dres.images.count', { count: images.length, size: formatBytes(total) })}</span>
 		<span class:warn={unused.length > 0}
@@ -321,7 +330,7 @@
 	}
 	.none {
 		margin: 0;
-		padding: var(--space-4);
+		padding: var(--space-2) 0;
 	}
 	.narrow {
 		display: none;

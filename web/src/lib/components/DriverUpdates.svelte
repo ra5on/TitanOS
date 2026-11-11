@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SettingGroup from './settings/SettingGroup.svelte';
+	import SettingRow from './settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	export type DriverStatus = {
@@ -54,121 +56,115 @@
 	);
 </script>
 
-<section class="driver-updates">
-	<h3>{t('plugins.driverTitle')}</h3>
-	<p class="muted">{t('plugins.driverHint')}</p>
-	<label class="check"
-		><input
-			type="checkbox"
-			checked={status.automatic}
-			disabled={busy}
-			onchange={(e) => action({ action: 'automatic', automatic: e.currentTarget.checked })}
-		/><span>{t('plugins.driverAutomatic')}</span></label
-	>
-	<div class="row">
-		<button
-			class="btn"
-			type="button"
-			disabled={busy || loading}
-			onclick={() => action({ action: 'check' })}
-			>{t(loading ? 'plugins.driverWorking' : 'plugins.driverCheck')}</button
-		><span role="status" class="muted">{t(`plugins.driverState.${status.state}`)}</span>
-	</div>
-	{#if status.source}
-		<p>
-			{t('plugins.driverSource', { driver: status.source.driver, toolkit: status.source.toolkit })}
-		</p>
-		<button
-			class="btn"
-			type="button"
-			disabled={busy || loading || !!status.pending || !status.source.downloaded}
-			onclick={() => action({ action: 'prepare' })}>{t('plugins.driverPrepare')}</button
-		>
-	{/if}
-	<p class="muted">{t('plugins.driverBuildHint')}</p>
-	<label
-		><span>{t('plugins.driverVersion')}</span><select
-			class="field"
-			bind:value={selected}
-			disabled={busy || !!status.pending}
-		>
-			<option value="bundled">{t('plugins.driverBundled')}</option>
-			{#each versions as version (version.sha256)}<option value={version.sha256}
-					>{version.version}{version.local
-						? ` · ${t('plugins.driverLocal')}`
-						: ''}{version.recommended ? ` · ${t('plugins.driverRecommended')}` : ''} · {formatBytes(
-						version.size,
-					)}{version.downloaded ? ` · ${t('plugins.driverDownloaded')}` : ''}</option
-				>{/each}
-		</select></label
-	>
-	{#if status.pending}
-		<p role="status" class="notice-warn">
-			{t('plugins.driverPending', { version: status.pending.version })}
-		</p>
-		<button
-			type="button"
-			class="btn"
-			disabled={busy}
-			onclick={() => action({ action: 'select', sha256: 'cancel' })}
-			>{t('plugins.driverCancel')}</button
-		>
-	{:else if choice && !choice.downloaded}
-		<button
-			type="button"
-			class="btn"
-			disabled={busy || loading}
-			onclick={() => action({ action: 'check', sha256: selected })}
-			>{t('plugins.driverDownload')}</button
-		>
-	{:else}
-		<button
-			type="button"
-			class="btn btn-primary"
-			disabled={busy || (selected === 'bundled' ? !status.canRestore : !choice?.downloaded)}
-			onclick={() => action({ action: 'select', sha256: selected })}
-			>{t('plugins.driverSelect')}</button
-		>
-	{/if}
-	{#if status.error}<details class="notice-warn">
-			<summary>{t('plugins.errorDetails')}</summary>
-			<pre>{status.error}</pre>
-		</details>{/if}
-</section>
+<!-- PLAN 78-5: a plain heading, each setting of the driver a flat row. -->
+<div class="driver-updates">
+	<SettingGroup title={t('plugins.driverTitle')} id="driver-updates" desc={t('plugins.driverHint')}>
+		<SettingRow icon="refresh" title={t('plugins.driverAutomatic')} for="driver-automatic">
+			{#snippet control()}
+				<input
+					id="driver-automatic"
+					class="switch"
+					type="checkbox"
+					role="switch"
+					checked={status.automatic}
+					disabled={busy}
+					onchange={(e) => action({ action: 'automatic', automatic: e.currentTarget.checked })}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="search" title={t('plugins.driverCheck')}>
+			{#snippet description()}<span role="status">{t(`plugins.driverState.${status.state}`)}</span
+				>{/snippet}
+			{#snippet control()}
+				<button
+					class="btn"
+					type="button"
+					disabled={busy || loading}
+					onclick={() => action({ action: 'check' })}
+					>{t(loading ? 'plugins.driverWorking' : 'plugins.driverCheck')}</button
+				>
+			{/snippet}
+		</SettingRow>
+		{#if status.source}
+			<SettingRow
+				icon="tool"
+				title={t('plugins.driverSource', {
+					driver: status.source.driver,
+					toolkit: status.source.toolkit,
+				})}
+				desc={t('plugins.driverBuildHint')}
+			>
+				{#snippet control()}
+					<button
+						class="btn"
+						type="button"
+						disabled={busy || loading || !!status.pending || !status.source?.downloaded}
+						onclick={() => action({ action: 'prepare' })}>{t('plugins.driverPrepare')}</button
+					>
+				{/snippet}
+			</SettingRow>
+		{:else}
+			<p class="muted">{t('plugins.driverBuildHint')}</p>
+		{/if}
+		<SettingRow icon="gpu" title={t('plugins.driverVersion')} for="driver-version">
+			{#snippet control()}
+				<select
+					id="driver-version"
+					class="field"
+					bind:value={selected}
+					disabled={busy || !!status.pending}
+				>
+					<option value="bundled">{t('plugins.driverBundled')}</option>
+					{#each versions as version (version.sha256)}<option value={version.sha256}
+							>{version.version}{version.local
+								? ` · ${t('plugins.driverLocal')}`
+								: ''}{version.recommended ? ` · ${t('plugins.driverRecommended')}` : ''} · {formatBytes(
+								version.size,
+							)}{version.downloaded ? ` · ${t('plugins.driverDownloaded')}` : ''}</option
+						>{/each}
+				</select>
+				{#if status.pending}
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => action({ action: 'select', sha256: 'cancel' })}
+						>{t('plugins.driverCancel')}</button
+					>
+				{:else if choice && !choice.downloaded}
+					<button
+						type="button"
+						class="btn"
+						disabled={busy || loading}
+						onclick={() => action({ action: 'check', sha256: selected })}
+						>{t('plugins.driverDownload')}</button
+					>
+				{:else}
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={busy || (selected === 'bundled' ? !status.canRestore : !choice?.downloaded)}
+						onclick={() => action({ action: 'select', sha256: selected })}
+						>{t('plugins.driverSelect')}</button
+					>
+				{/if}
+			{/snippet}
+		</SettingRow>
+		{#if status.pending}
+			<p role="status" class="notice-warn">
+				{t('plugins.driverPending', { version: status.pending.version })}
+			</p>
+		{/if}
+		{#if status.error}<details class="notice-warn">
+				<summary>{t('plugins.errorDetails')}</summary>
+				<pre>{status.error}</pre>
+			</details>{/if}
+	</SettingGroup>
+</div>
 
 <style>
-	.driver-updates {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		border-top: 1px solid var(--border);
-		padding-top: var(--space-4);
-	}
 	p {
-		margin: 0;
 		font-size: var(--text-base);
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-		min-width: 0;
-	}
-	.check {
-		flex-direction: row;
-		align-items: flex-start;
-		gap: var(--space-2);
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-	}
-	select {
-		width: 100%;
-		min-width: 0;
 	}
 	pre {
 		white-space: pre-wrap;

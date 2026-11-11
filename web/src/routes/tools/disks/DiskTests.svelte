@@ -3,6 +3,8 @@
 	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type Disk } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { resumeBody, resumeKind, restartHint } from '#lib/disktest.ts';
 	import { formatDateTime, formatDiskBytes, formatDuration, formatTime } from '#lib/format.ts';
 	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
@@ -193,8 +195,9 @@
 	}
 </script>
 
-<!-- The page title names it; the lists below are its sections. -->
-<section class="tile" id="tools-disks" aria-label={t('disktest.title')}>
+<!-- The page title names it; the lists below are its groups (PLAN 78-5:
+     plain headings, every test and every disk a flat row of its own). -->
+<section class="page" id="tools-disks" aria-label={t('disktest.title')}>
 	<p class="muted">{t('disktest.intro')}</p>
 	{#if error && !chosen && !stopping && !resuming}<div class="notice-error" role="alert">
 			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
@@ -227,133 +230,136 @@
 		</p>{/if}
 
 	{#if tests.length > 0}
-		<h2>{t('disktest.running')}</h2>
-		<ul class="tests">
-			{#each tests as test (test.disk)}
-				<li>
-					<div class="head">
-						<span
-							><span class="mono name">{test.disk}</span>
-							<span class="muted"
-								>{[test.model, test.serial, formatDiskBytes(test.sizeBytes)]
-									.filter(Boolean)
-									.join(' · ')}</span
-							></span
-						>
-						{#if test.result}
-							<span class="chip {TONE[test.result]}">{t(`disktest.result.${test.result}`)}</span>
-						{:else}
-							<span class="chip info">{t(`disktest.mode.${test.mode}`)}</span>
-						{/if}
-					</div>
-					<p class="muted">
-						{t('disktest.startedAt', {
-							time: formatDateTime(new Date(test.started)),
-						})}{#if test.resumed}{' · '}{t('disktest.resumedAt', {
-								time: formatDateTime(new Date(test.resumed)),
-								count: test.resumes ?? 1,
-							})}{/if}
-					</p>
-					{#if test.result === 'interrupted'}
-						<p>
-							{t(test.mode === 'write' ? 'disktest.interruptedWrite' : 'disktest.interruptedRead', {
-								phase: test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting'),
-								percent: test.percent.toFixed(0),
-							})}
-						</p>
-						<div class="line">
-							<button type="button" class="btn small" disabled={busy} onclick={() => stop(test)}
-								>{t('disktest.discard')}</button
-							>
-							<button
-								type="button"
-								class="btn small btn-primary"
-								disabled={busy}
-								onclick={() => {
-									error = null;
-									if (resumeKind(test) === 'confirm') resuming = test;
-									else resume(test);
-								}}>{t('disktest.resume')}</button
-							>
-						</div>
-					{:else if !test.result}
-						<div
-							class="bar"
-							role="progressbar"
-							aria-valuemin="0"
-							aria-valuemax="100"
-							aria-valuenow={Math.round(test.percent)}
-							aria-label={test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}
-						>
-							<span style:width="{test.percent}%"></span>
-						</div>
-						<div class="line">
+		<SettingGroup title={t('disktest.running')} id="disktest-running">
+			<ul class="tests">
+				{#each tests as test (test.disk)}
+					<li class="srow plain">
+						<div class="head">
 							<span
-								>{test.phase
-									? t(`disktest.phase.${test.phase}`)
-									: t('disktest.starting')}{#if progress(test) && test.phase}{' · '}<span
-										class="mono">{progress(test)}</span
-									>{/if}</span
+								><span class="mono name">{test.disk}</span>
+								<span class="muted"
+									>{[test.model, test.serial, formatDiskBytes(test.sizeBytes)]
+										.filter(Boolean)
+										.join(' · ')}</span
+								></span
 							>
-							<button
-								type="button"
-								class="btn small"
-								onclick={() => {
-									error = null;
-									stopping = test;
-								}}>{t('disktest.cancel')}</button
-							>
+							{#if test.result}
+								<span class="chip {TONE[test.result]}">{t(`disktest.result.${test.result}`)}</span>
+							{:else}
+								<span class="chip info">{t(`disktest.mode.${test.mode}`)}</span>
+							{/if}
 						</div>
-						{#if restartHint(test)}<p class="muted">
-								{t(`disktest.restart.${restartHint(test)}` as 'disktest.restart.kept')}
-							</p>{/if}
-					{:else}
-						<div class="line">
-							<span class:bad={test.result === 'failed'}>
-								{#if test.result === 'passed'}{t(
-										'disktest.passedText',
-									)}{:else if test.result === 'failed'}{t('disktest.failedText')}{/if}
-							</span>
-							<button type="button" class="btn small" onclick={() => stop(test)}
-								>{t('disktest.dismiss')}</button
-							>
-						</div>
-					{/if}
-					{#if test.errors > 0}<p class="bad">
-							{t('disktest.errors', { count: test.errors })}
-						</p>{/if}
-					{#each test.notes as note, index (index)}
 						<p class="muted">
-							{tOr(`disktest.note.${note.kind}`, note.kind).replace('{detail}', note.detail)}
+							{t('disktest.startedAt', {
+								time: formatDateTime(new Date(test.started)),
+							})}{#if test.resumed}{' · '}{t('disktest.resumedAt', {
+									time: formatDateTime(new Date(test.resumed)),
+									count: test.resumes ?? 1,
+								})}{/if}
 						</p>
-					{/each}
-				</li>
-			{/each}
-		</ul>
+						{#if test.result === 'interrupted'}
+							<p>
+								{t(
+									test.mode === 'write' ? 'disktest.interruptedWrite' : 'disktest.interruptedRead',
+									{
+										phase: test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting'),
+										percent: test.percent.toFixed(0),
+									},
+								)}
+							</p>
+							<div class="line">
+								<button type="button" class="btn small" disabled={busy} onclick={() => stop(test)}
+									>{t('disktest.discard')}</button
+								>
+								<button
+									type="button"
+									class="btn small btn-primary"
+									disabled={busy}
+									onclick={() => {
+										error = null;
+										if (resumeKind(test) === 'confirm') resuming = test;
+										else resume(test);
+									}}>{t('disktest.resume')}</button
+								>
+							</div>
+						{:else if !test.result}
+							<div
+								class="bar"
+								role="progressbar"
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-valuenow={Math.round(test.percent)}
+								aria-label={test.phase ? t(`disktest.phase.${test.phase}`) : t('disktest.starting')}
+							>
+								<span style:width="{test.percent}%"></span>
+							</div>
+							<div class="line">
+								<span
+									>{test.phase
+										? t(`disktest.phase.${test.phase}`)
+										: t('disktest.starting')}{#if progress(test) && test.phase}{' · '}<span
+											class="mono">{progress(test)}</span
+										>{/if}</span
+								>
+								<button
+									type="button"
+									class="btn small"
+									onclick={() => {
+										error = null;
+										stopping = test;
+									}}>{t('disktest.cancel')}</button
+								>
+							</div>
+							{#if restartHint(test)}<p class="muted">
+									{t(`disktest.restart.${restartHint(test)}` as 'disktest.restart.kept')}
+								</p>{/if}
+						{:else}
+							<div class="line">
+								<span class:bad={test.result === 'failed'}>
+									{#if test.result === 'passed'}{t(
+											'disktest.passedText',
+										)}{:else if test.result === 'failed'}{t('disktest.failedText')}{/if}
+								</span>
+								<button type="button" class="btn small" onclick={() => stop(test)}
+									>{t('disktest.dismiss')}</button
+								>
+							</div>
+						{/if}
+						{#if test.errors > 0}<p class="bad">
+								{t('disktest.errors', { count: test.errors })}
+							</p>{/if}
+						{#each test.notes as note, index (index)}
+							<p class="muted">
+								{tOr(`disktest.note.${note.kind}`, note.kind).replace('{detail}', note.detail)}
+							</p>
+						{/each}
+					</li>
+				{/each}
+			</ul>
+		</SettingGroup>
 	{/if}
 
-	<h2>{t('disktest.candidates')}</h2>
-	{#if candidates.length === 0}
-		<p class="muted">{t('disktest.none')}</p>
-	{:else}
-		<ul class="disks">
+	<SettingGroup title={t('disktest.candidates')} id="disktest-candidates">
+		{#if candidates.length === 0}
+			<p class="muted">{t('disktest.none')}</p>
+		{:else}
 			{#each candidates as disk (disk.name)}
-				<li>
-					<span class="mono name">{disk.name}</span>
-					<span class="muted grow"
-						>{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)]
-							.filter(Boolean)
-							.join(' · ')} · {disk.contents?.length
-							? t('disktest.contents', { contents: disk.contents.join(', ') })
-							: t('disktest.empty')}</span
-					>
-					<button type="button" class="btn small" onclick={() => open(disk)}
-						>{t('disktest.start')}</button
-					>
-				</li>
+				<SettingRow
+					icon="disk"
+					title={disk.name}
+					desc="{[disk.model, disk.serial, formatDiskBytes(disk.sizeBytes)]
+						.filter(Boolean)
+						.join(' · ')} · {disk.contents?.length
+						? t('disktest.contents', { contents: disk.contents.join(', ') })
+						: t('disktest.empty')}"
+				>
+					{#snippet control()}<button type="button" class="btn" onclick={() => open(disk)}
+							>{t('disktest.start')}</button
+						>{/snippet}
+				</SettingRow>
 			{/each}
-		</ul>
-	{/if}
+		{/if}
+	</SettingGroup>
 </section>
 
 {#if chosen}
@@ -486,20 +492,15 @@
 {/if}
 
 <style>
-	section {
+	.page {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		padding: 18px;
 		font-size: var(--text-md);
+		min-width: 0;
 	}
 	p {
 		margin: 0;
-	}
-	h2 {
-		margin: var(--space-1) 0 0;
-		font-size: var(--text-md);
-		font-weight: 600;
 	}
 	ul {
 		margin: 0;
@@ -507,27 +508,13 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.disks li,
-	.tests li {
-		padding: var(--space-3) 14px;
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
-	.disks li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) 14px;
+		gap: 3px;
 	}
 	.tests li {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2-5);
-	}
-	.grow {
-		flex: 1 1 240px;
+		padding: var(--space-3) var(--space-4);
 	}
 	.name {
 		font-weight: 600;

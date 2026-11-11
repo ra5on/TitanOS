@@ -4,6 +4,8 @@
 	import { api, type Account, type StorageStatus } from '#lib/api.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { formatDateTime, mbToMiB, mibToMB } from '#lib/format.ts';
@@ -143,8 +145,8 @@
 		{t('activity.dropped', { count: status.dropped })}
 	</p>{/if}
 
-<section class="tile list" aria-labelledby="activity-list">
-	<h2 class="tile-title" id="activity-list">{t('activity.entries')}</h2>
+<!-- PLAN 78-5: a plain heading, the filters and the table below it. -->
+<SettingGroup title={t('activity.entries')} id="activity-list">
 	<div class="filters">
 		<label
 			><span>{t('ops.range')}</span><select class="field" bind:value={days} onchange={() => load()}
@@ -229,10 +231,10 @@
 	{:else}
 		<EmptyState inline title={busy ? t('tools.loading') : t('activity.none')} />
 	{/if}
-	{#if more}<div>
+	{#if more}<div class="more">
 			<button class="btn" disabled={busy} onclick={() => load(true)}>{t('activity.older')}</button>
 		</div>{/if}
-</section>
+</SettingGroup>
 
 {#if status}<StatusBar label={t('activity.statusBar')}>
 		<span>{t('activity.statEntries', { count: entries.length })}</span>
@@ -247,77 +249,78 @@
 		>
 	</StatusBar>{/if}
 
+<!-- The retention as flat rows, stored with "Speichern". -->
 {#if settings}<form
-		class="tile settings"
+		class="settings"
 		onsubmit={(e) => {
 			e.preventDefault();
 			save();
 		}}
 	>
-		<h2 class="tile-title">{t('activity.settings')}</h2>
-		<label class="check"
-			><input type="checkbox" bind:checked={settings.enabled} /><span>{t('ops.enabled')}</span
-			></label
-		><label
-			><span>{t('ops.volume')}</span><select class="field" bind:value={settings.volume}
-				><option value="">{t('activity.autoVolume')}</option
-				>{#each storage?.volumes ?? [] as volume (volume.name)}<option value={volume.name}
-						>{volume.name}</option
-					>{/each}</select
-			></label
-		><label
-			><span>{t('ops.days')}</span><select class="field" bind:value={settings.days}
-				><option value={30}>30</option><option value={90}>90</option><option value={365}>365</option
-				></select
-			></label
-		><label
-			><span>{t('ops.budget')}</span><input
-				class="field"
-				type="number"
-				min="8"
-				max="268"
-				bind:value={
-					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
-				}
-				required
-			/></label
-		>
-		<p class="muted note">
-			{status?.volume ? t('activity.storedOn', { volume: status.volume }) : t('activity.noVolume')}
-		</p>
-		<div class="row">
-			<button class="btn btn-primary" disabled={busy || !dirty}>{t('ops.save')}</button
-			>{#if saved && !dirty}<span role="status">{t('notify.saved')}</span>{/if}
-		</div>
+		<SettingGroup title={t('activity.settings')} id="activity-settings">
+			<SettingRow icon="clock" title={t('ops.enabled')} for="activity-enabled">
+				{#snippet control()}<input
+						id="activity-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={settings!.enabled}
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="disk"
+				title={t('ops.volume')}
+				for="activity-volume"
+				desc={status?.volume
+					? t('activity.storedOn', { volume: status.volume })
+					: t('activity.noVolume')}
+			>
+				{#snippet control()}<select id="activity-volume" class="field" bind:value={settings!.volume}
+						><option value="">{t('activity.autoVolume')}</option
+						>{#each storage?.volumes ?? [] as volume (volume.name)}<option value={volume.name}
+								>{volume.name}</option
+							>{/each}</select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="refresh" title={t('ops.days')} for="activity-days">
+				{#snippet control()}<select id="activity-days" class="field" bind:value={settings!.days}
+						><option value={30}>30</option><option value={90}>90</option><option value={365}
+							>365</option
+						></select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="archive" title={t('ops.budget')} for="activity-budget">
+				{#snippet control()}<input
+						id="activity-budget"
+						class="field"
+						type="number"
+						min="8"
+						max="268"
+						bind:value={
+							() => mibToMB(settings?.maxMiB ?? 0),
+							(mb) => settings && (settings.maxMiB = mbToMiB(mb))
+						}
+						required
+					/>{/snippet}
+			</SettingRow>
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy || !dirty}>{t('ops.save')}</button
+				>{#if saved && !dirty}<span role="status">{t('notify.saved')}</span>{/if}
+			</div>
+		</SettingGroup>
 	</form>{/if}
 
 <style>
-	section,
+	.row-actions {
+		margin-top: var(--space-2);
+	}
 	.settings {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		padding: var(--tile-pad);
 		margin: var(--gap) 0;
+	}
+	.filters,
+	.more {
+		margin-bottom: var(--space-2);
 		font-size: var(--text-md);
-	}
-	.settings {
-		flex-flow: row wrap;
-		align-items: end;
-	}
-	.settings .tile-title,
-	.settings .note,
-	.settings .row {
-		flex: 1 1 100%;
-		margin: 0;
-	}
-	.settings label {
-		flex: 1 1 150px;
-	}
-	.row {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
 	}
 	.filters {
 		display: flex;

@@ -21,8 +21,8 @@
 
 <!-- PLAN 61/65: the window (or the phone's bar) lists the settings pages;
      the page takes the whole width. PLAN 78-1: the pages are groups of rows
-     (components/settings); the collapsible tiles of style E3
-     (settings-groups.ts) remain for the pages of other programs only. -->
+     (components/settings), like the pages of every other program since
+     PLAN 78-5; the collapsible tiles of style E3 are gone. -->
 <div class="settings-shell">
 	{#if allowed}<div class="settings-page column">
 			{@render children()}

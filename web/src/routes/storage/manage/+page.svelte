@@ -11,6 +11,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { t, tOr } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { operationError, type Growth, type GrowthStatus } from '#lib/operations.ts';
@@ -276,210 +278,260 @@
 				)}</button
 			>{/each}
 	</nav>
-	<label class="volume"
-		>{t('ops.volume')}<select class="field" bind:value={volume} disabled={busy} onchange={reset}
-			>{#each storage?.volumes ?? [] as v (v.name)}<option value={v.name}
-					>{v.name} · {t(`level.${v.level}`)} · {t(`fs.${v.filesystem}`)}</option
-				>{/each}</select
-		></label
-	>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if mode === 'usage'}<p class="muted">{t('ops.usageHint')}</p>
-		<button class="btn btn-primary" disabled={busy || !volume} onclick={analyze}
-			>{t(busy ? 'ops.loading' : 'ops.analyze')}</button
-		>
-		{#if usage}<section class="tile results">
-				<UsageBreakdown entries={usage.entries} />{#if usage.incomplete}<p class="notice-warn">
-						{t('ops.incomplete')}
-					</p>{/if}
-				<div class="table-wrap">
-					<table>
-						<thead
-							><tr
-								><th>{t('ops.name')}</th><th>{t('ops.category')}</th><th>{t('ops.logical')}</th><th
-									>{t('ops.allocated')}</th
-								><th>{t('ops.files')}</th></tr
-							></thead
-						><tbody
-							>{#each usage.entries as entry (entry.id ?? entry.name)}<tr
-									><td class="mono"
-										>{entry.name}{#if entry.error}<p class="notice-warn">{entry.error}</p>{/if}</td
-									><td>{t(`ops.usage.${entry.kind ?? 'other'}` as 'ops.usage.other')}</td><td
-										>{formatBytes(entry.bytes)}</td
-									><td>{formatBytes(entry.allocated)}</td><td>{entry.files}</td></tr
-								>{/each}</tbody
-						>
-					</table>
-				</div>
-			</section>{/if}
-	{:else if mode === 'grow'}<p class="muted">{t('ops.growHint')}</p>
-		{#if growth?.pending}<section class="tile results">
-				<p class="notice-warn">{t('ops.growthPending')}</p>
-				<p>
-					<span class="mono">{growth.operation.volume}</span> · {phase(growth.operation.phase)}
-				</p>
-				<p>{growth.error || growth.operation.error}</p>
-				<p>
-					{t('ops.members', {
-						before: growth.operation.originalDisks,
-						after: growth.operation.targetDisks,
-					})}
-				</p>
-				<button
-					type="button"
-					class="btn btn-warn"
-					disabled={busy || growth.active}
-					onclick={() => (growthAction = 'recover')}>{t('ops.resume')}</button
-				>{#if ['preparing', 'adding', 'starting', 'aborting'].includes(growth.operation.phase) && !growth.active}<p
-						class="muted"
-					>
-						{t('ops.cancelGrowthHint')}
-					</p>
-					<button
-						type="button"
-						class="btn btn-warn"
-						disabled={busy}
-						onclick={() => (growthAction = 'cancel')}>{t('ops.cancelGrowth')}</button
-					>{/if}
-			</section>
-		{:else if growBlocked}<p class="notice-warn" role="status">{growBlocked}</p>
-		{:else}<form
-				class="tile results"
-				onsubmit={(e) => {
-					e.preventDefault();
-					growPreview();
-				}}
-			>
-				<label
-					>{t('ops.disk')}<select class="field" bind:value={disk} required
-						><option value="">{t('ops.choose')}</option>{#each candidates as d (d.name)}<option
-								value={d.name}>{d.model} · {d.serial} · {formatBytes(d.sizeBytes)}</option
-							>{/each}</select
-					></label
-				><label
-					>{t('ops.recoveryVolume')}<select class="field" bind:value={recoveryVolume} required
-						><option value="">{t('ops.choose')}</option
-						>{#each storage?.volumes.filter((v) => v.name !== volume && v.mounted && v.state === 'ok') ?? [] as v (v.name)}<option
-								value={v.name}>{v.name}</option
-							>{/each}</select
-					></label
-				><button
-					class="btn btn-primary"
-					disabled={busy || !selectedVolume || !['raid5', 'raid6'].includes(selectedVolume.level)}
-					>{t('ops.preview')}</button
-				>
-			</form>{/if}
-	{:else}<p class="muted">{t('ops.snapshotHint')}</p>
-		{#if selectedVolume?.filesystem === 'btrfs'}<div class="tile results">
-				<label
-					>{t('snapshot.title')}<select
+	<!-- PLAN 78-5: the choices of a tab are flat rows, results stand under a
+	     plain heading; tables keep their own surface. -->
+	<div class="groups">
+		<SettingGroup>
+			<SettingRow icon="disk" title={t('ops.volume')} for="manage-volume">
+				{#snippet control()}<select
+						id="manage-volume"
 						class="field"
-						bind:value={snapshot}
+						bind:value={volume}
 						disabled={busy}
-						onchange={pickSnapshot}
-						><option value="">{t('ops.choose')}</option>{#each snapshots as s (s.name)}<option
-								value={s.name}>{s.name}</option
+						onchange={reset}
+						>{#each storage?.volumes ?? [] as v (v.name)}<option value={v.name}
+								>{v.name} · {t(`level.${v.level}`)} · {t(`fs.${v.filesystem}`)}</option
 							>{/each}</select
-					></label
-				>{#if snapshot}<div class="toolbar">
-						<button
-							class="btn"
-							disabled={busy || !folder}
-							onclick={() => browse(folder.split('/').slice(0, -1).join('/'))}>{t('ops.up')}</button
-						><span class="mono">/{folder}</span>{#if folder}<button
-								class="btn"
-								disabled={busy}
-								onclick={() => (folderRestore = folder)}>{t('snapshotRestore.thisFolder')}</button
-							>{/if}
-					</div>
-					<div class="table-wrap">
+					>{/snippet}
+			</SettingRow>
+			{#if mode === 'usage'}<SettingRow
+					icon="search"
+					title={t('ops.usage')}
+					desc={t('ops.usageHint')}
+				>
+					{#snippet control()}<button
+							class="btn btn-primary"
+							disabled={busy || !volume}
+							onclick={analyze}>{t(busy ? 'ops.loading' : 'ops.analyze')}</button
+						>{/snippet}
+				</SettingRow>{/if}
+		</SettingGroup>
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		{#if mode === 'usage'}
+			{#if usage}<SettingGroup title={t('ops.usageResult')} id="usage-result">
+					<UsageBreakdown entries={usage.entries} />{#if usage.incomplete}<p class="notice-warn">
+							{t('ops.incomplete')}
+						</p>{/if}
+					<div class="tile table-wrap">
 						<table>
-							<thead><tr><th>{t('ops.name')}</th><th>{t('ops.logical')}</th></tr></thead><tbody
-								>{#each entries as entry (entry.path)}<tr
-										><td
-											>{#if entry.directory}<span class="folder"
-													><button class="btn" disabled={busy} onclick={() => browse(entry.path)}
-														>{entry.path.split('/').at(-1)} /</button
-													><button
-														class="btn"
-														disabled={busy}
-														aria-label={t('snapshotRestore.folderLabel', {
-															name: entry.path.split('/').at(-1) ?? '',
-														})}
-														onclick={() => (folderRestore = entry.path)}
-														>{t('snapshotRestore.restore')}</button
-													></span
-												>{:else}<label class="check"
-													><input
-														type="checkbox"
-														checked={selected.includes(entry.path)}
-														disabled={busy}
-														onchange={(e) => {
-															selected = e.currentTarget.checked
-																? [...selected, entry.path]
-																: selected.filter((p) => p !== entry.path);
-														}}
-													/><span class="mono">{entry.path.split('/').at(-1)}</span></label
-												>{/if}</td
-										><td>{entry.directory ? '—' : formatBytes(entry.bytes)}</td></tr
+							<thead
+								><tr
+									><th>{t('ops.name')}</th><th>{t('ops.category')}</th><th>{t('ops.logical')}</th
+									><th>{t('ops.allocated')}</th><th>{t('ops.files')}</th></tr
+								></thead
+							><tbody
+								>{#each usage.entries as entry (entry.id ?? entry.name)}<tr
+										><td class="mono"
+											>{entry.name}{#if entry.error}<p class="notice-warn">
+													{entry.error}
+												</p>{/if}</td
+										><td>{t(`ops.usage.${entry.kind ?? 'other'}` as 'ops.usage.other')}</td><td
+											>{formatBytes(entry.bytes)}</td
+										><td>{formatBytes(entry.allocated)}</td><td>{entry.files}</td></tr
 									>{/each}</tbody
 							>
 						</table>
 					</div>
-					{#if next}<button class="btn" disabled={busy} onclick={() => browse(folder, next)}
-							>{t('ops.more')}</button
-						>{/if}
-					{#if files.length}<div class="toolbar">
+				</SettingGroup>{/if}
+		{:else if mode === 'grow'}<p class="muted">{t('ops.growHint')}</p>
+			{#if growth?.pending}<SettingGroup title={t('ops.growthOpen')} id="growth-pending">
+					<p class="notice-warn">{t('ops.growthPending')}</p>
+					<SettingRow
+						icon="disk"
+						title={growth.operation.volume}
+						desc="{phase(growth.operation.phase)} · {t('ops.members', {
+							before: growth.operation.originalDisks,
+							after: growth.operation.targetDisks,
+						})}"
+					>
+						{#snippet control()}<button
+								type="button"
+								class="btn btn-warn"
+								disabled={busy || growth!.active}
+								onclick={() => (growthAction = 'recover')}>{t('ops.resume')}</button
+							>{/snippet}
+					</SettingRow>
+					{#if growth.error || growth.operation.error}<p class="notice-warn">
+							{growth.error || growth.operation.error}
+						</p>{/if}
+					{#if ['preparing', 'adding', 'starting', 'aborting'].includes(growth.operation.phase) && !growth.active}<SettingRow
+							icon="stop"
+							title={t('ops.cancelGrowth')}
+							desc={t('ops.cancelGrowthHint')}
+						>
+							{#snippet control()}<button
+									type="button"
+									class="btn btn-warn"
+									disabled={busy}
+									onclick={() => (growthAction = 'cancel')}>{t('ops.cancelGrowth')}</button
+								>{/snippet}
+						</SettingRow>{/if}
+				</SettingGroup>
+			{:else if growBlocked}<p class="notice-warn" role="status">{growBlocked}</p>
+			{:else}<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						growPreview();
+					}}
+				>
+					<SettingGroup title={t('ops.grow')} id="growth-form">
+						<SettingRow icon="disk" title={t('ops.disk')} for="grow-disk">
+							{#snippet control()}<select id="grow-disk" class="field" bind:value={disk} required
+									><option value="">{t('ops.choose')}</option
+									>{#each candidates as d (d.name)}<option value={d.name}
+											>{d.model} · {d.serial} · {formatBytes(d.sizeBytes)}</option
+										>{/each}</select
+								>{/snippet}
+						</SettingRow>
+						<SettingRow icon="shield" title={t('ops.recoveryVolume')} for="grow-recovery">
+							{#snippet control()}<select
+									id="grow-recovery"
+									class="field"
+									bind:value={recoveryVolume}
+									required
+									><option value="">{t('ops.choose')}</option
+									>{#each storage?.volumes.filter((v) => v.name !== volume && v.mounted && v.state === 'ok') ?? [] as v (v.name)}<option
+											value={v.name}>{v.name}</option
+										>{/each}</select
+								>{/snippet}
+						</SettingRow>
+						<div class="row-actions">
 							<button
+								class="btn btn-primary"
+								disabled={busy ||
+									!selectedVolume ||
+									!['raid5', 'raid6'].includes(selectedVolume.level)}>{t('ops.preview')}</button
+							>
+						</div>
+					</SettingGroup>
+				</form>{/if}
+		{:else}<p class="muted">{t('ops.snapshotHint')}</p>
+			{#if selectedVolume?.filesystem === 'btrfs'}<SettingGroup>
+					<SettingRow icon="camera" title={t('snapshot.title')} for="manage-snapshot">
+						{#snippet control()}<select
+								id="manage-snapshot"
+								class="field"
+								bind:value={snapshot}
+								disabled={busy}
+								onchange={pickSnapshot}
+								><option value="">{t('ops.choose')}</option>{#each snapshots as s (s.name)}<option
+										value={s.name}>{s.name}</option
+									>{/each}</select
+							>{/snippet}
+					</SettingRow>
+				</SettingGroup>
+				{#if snapshot}<SettingGroup title={t('ops.snapshotContent')} id="snapshot-files">
+						{#snippet tools()}<button
 								class="btn"
-								disabled={busy || files.every((f) => selected.includes(f))}
-								onclick={() => (selected = [...new Set([...selected, ...files])])}
-								>{t('ops.selectFolderFiles', { count: files.length })}</button
-							>{#if selected.length}<button
+								disabled={busy || !folder}
+								onclick={() => browse(folder.split('/').slice(0, -1).join('/'))}
+								>{t('ops.up')}</button
+							>{#if folder}<button
 									class="btn"
 									disabled={busy}
-									onclick={() => (selected = [])}>{t('ops.selectNone')}</button
-								>{/if}
+									onclick={() => (folderRestore = folder)}>{t('snapshotRestore.thisFolder')}</button
+								>{/if}{/snippet}
+						<p class="mono where">/{folder}</p>
+						<div class="tile table-wrap">
+							<table>
+								<thead><tr><th>{t('ops.name')}</th><th>{t('ops.logical')}</th></tr></thead><tbody
+									>{#each entries as entry (entry.path)}<tr
+											><td
+												>{#if entry.directory}<span class="folder"
+														><button class="btn" disabled={busy} onclick={() => browse(entry.path)}
+															>{entry.path.split('/').at(-1)} /</button
+														><button
+															class="btn"
+															disabled={busy}
+															aria-label={t('snapshotRestore.folderLabel', {
+																name: entry.path.split('/').at(-1) ?? '',
+															})}
+															onclick={() => (folderRestore = entry.path)}
+															>{t('snapshotRestore.restore')}</button
+														></span
+													>{:else}<label class="check"
+														><input
+															type="checkbox"
+															checked={selected.includes(entry.path)}
+															disabled={busy}
+															onchange={(e) => {
+																selected = e.currentTarget.checked
+																	? [...selected, entry.path]
+																	: selected.filter((p) => p !== entry.path);
+															}}
+														/><span class="mono">{entry.path.split('/').at(-1)}</span></label
+													>{/if}</td
+											><td>{entry.directory ? '—' : formatBytes(entry.bytes)}</td></tr
+										>{/each}</tbody
+								>
+							</table>
 						</div>
-						<p class="muted">{t('ops.foldersHint')}</p>
-						{#if selected.length > 200}<p class="notice-warn" role="alert">
-								{t('ops.selectTooMany', { count: selected.length })}
-							</p>{/if}{/if}
+						{#if next}<div class="row-actions">
+								<button class="btn" disabled={busy} onclick={() => browse(folder, next)}
+									>{t('ops.more')}</button
+								>
+							</div>{/if}
+						{#if files.length}<div class="row-actions">
+								<button
+									class="btn"
+									disabled={busy || files.every((f) => selected.includes(f))}
+									onclick={() => (selected = [...new Set([...selected, ...files])])}
+									>{t('ops.selectFolderFiles', { count: files.length })}</button
+								>{#if selected.length}<button
+										class="btn"
+										disabled={busy}
+										onclick={() => (selected = [])}>{t('ops.selectNone')}</button
+									>{/if}
+							</div>
+							<p class="muted">{t('ops.foldersHint')}</p>
+							{#if selected.length > 200}<p class="notice-warn" role="alert">
+									{t('ops.selectTooMany', { count: selected.length })}
+								</p>{/if}{/if}
+					</SettingGroup>
 					<form
 						onsubmit={(e) => {
 							e.preventDefault();
 							previewRestore();
 						}}
 					>
-						<label
-							>{t('ops.target')}<select class="field" bind:value={restoreVolume} required
-								><option value="">{t('ops.choose')}</option
-								>{#each storage?.volumes.filter((v) => v.mounted) ?? [] as v (v.name)}<option
-										value={v.name}>{v.name}</option
-									>{/each}</select
-							></label
-						><button
-							class="btn btn-primary"
-							disabled={busy || !selected.length || selected.length > 200}
-							>{t('ops.restoreSelected')} ({selected.length})</button
-						>
-					</form>{/if}
-			</div>{/if}
-		{#if selectedVolume?.filesystem === 'btrfs'}<SnapshotRestoreJobs
-				bind:this={jobList}
-				bind:jobs={restoreJobs}
-			/>{/if}
-		{#if restored}<p class="notice" role="status">
-				{t('ops.restored', { path: restored })}
-				<a
-					href={'/files?' +
-						new URLSearchParams({
-							root: `volume/${restored.split('/')[0]}`,
-							path: restored.split('/').slice(1).join('/'),
-						})}>{t('nav.files')} →</a
-				>
-			</p>{/if}
-	{/if}
+						<SettingGroup title={t('ops.restoreSelected')} id="snapshot-restore">
+							<SettingRow icon="folder" title={t('ops.target')} for="restore-target">
+								{#snippet control()}<select
+										id="restore-target"
+										class="field"
+										bind:value={restoreVolume}
+										required
+										><option value="">{t('ops.choose')}</option
+										>{#each storage?.volumes.filter((v) => v.mounted) ?? [] as v (v.name)}<option
+												value={v.name}>{v.name}</option
+											>{/each}</select
+									>{/snippet}
+							</SettingRow>
+							<div class="row-actions">
+								<button
+									class="btn btn-primary"
+									disabled={busy || !selected.length || selected.length > 200}
+									>{t('ops.restoreSelected')} ({selected.length})</button
+								>
+							</div>
+						</SettingGroup>
+					</form>{/if}{/if}
+			{#if selectedVolume?.filesystem === 'btrfs'}<SnapshotRestoreJobs
+					bind:this={jobList}
+					bind:jobs={restoreJobs}
+				/>{/if}
+			{#if restored}<p class="notice" role="status">
+					{t('ops.restored', { path: restored })}
+					<a
+						href={'/files?' +
+							new URLSearchParams({
+								root: `volume/${restored.split('/')[0]}`,
+								path: restored.split('/').slice(1).join('/'),
+							})}>{t('nav.files')} →</a
+					>
+				</p>{/if}
+		{/if}
+	</div>
 	{#if preview}<Dialog title={t('ops.grow')} locked={busy} onclose={() => (preview = null)}
 			><p>{t('ops.growHint')}</p>
 			<p>{t('ops.members', { before: preview.originalDisks, after: preview.targetDisks })}</p>
@@ -567,45 +619,34 @@
 {:else}<p class="notice-error">{t('error.forbidden')}</p>{/if}
 
 <style>
-	.tabs,
-	.toolbar {
+	.tabs {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
 		margin-bottom: var(--space-4);
 	}
-	.volume {
-		max-width: 500px;
-		margin-bottom: 20px;
-	}
-	label {
+	/* The groups of a tab stand apart like the groups of a settings page. */
+	.groups {
 		display: flex;
 		flex-direction: column;
+		gap: var(--gap);
+		min-width: 0;
+	}
+	.groups > p {
+		margin: 0;
+	}
+	.row-actions {
+		margin-top: var(--space-2);
+	}
+	.where {
+		margin: 0 0 var(--space-1);
+	}
+	.check {
+		display: flex;
+		align-items: center;
 		gap: var(--space-1-5);
 		font-size: var(--text-base);
 		min-width: 0;
-	}
-	.results {
-		padding: var(--tile-pad);
-		margin-top: var(--gap);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
-	.results form,
-	form.results {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: end;
-		gap: var(--space-4);
-	}
-	.results form label,
-	form.results label {
-		flex: 1 1 220px;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
 	}
 	.folder {
 		display: flex;
@@ -633,9 +674,5 @@
 	p,
 	.mono {
 		overflow-wrap: anywhere;
-	}
-	.toolbar {
-		align-items: center;
-		margin: 0;
 	}
 </style>

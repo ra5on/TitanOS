@@ -18,7 +18,10 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import VirtCheck from '#lib/components/VirtCheck.svelte';
-	import Icon from '#lib/components/Icon.svelte';
+	import FormRow from '#lib/components/appform/FormRow.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import VmConnections from './VmConnections.svelte';
 	import VmCpu from './VmCpu.svelte';
 	import VmDisks from './VmDisks.svelte';
@@ -387,6 +390,15 @@
 	</p>{/if}
 {#if running}<p class="notice-warn" role="status">{t('vms.form.running')}</p>{/if}
 
+{#snippet nameWarning()}<span class="warn" role="alert">{nameProblem}</span>{/snippet}
+{#snippet fact(name: string, value: string, mono = false)}
+	<SettingRow title={name}>
+		{#snippet control()}<span class:mono>{value}</span>{/snippet}
+	</SettingRow>
+{/snippet}
+
+<!-- PLAN 78-5: the sections are plain headings above flat rows (one setting
+     per row); the summary beside them lists the choices the same way. -->
 <div class="layout">
 	<div
 		class="steps"
@@ -396,13 +408,9 @@
 		onkeydown={markEdited}
 		role="presentation"
 	>
-		<section class="tile vm-card card-1" aria-labelledby="s1">
-			<div class="step">
-				<span class="section-icon"><Icon name="monitor" size={15} /></span>
-				<h2 id="s1">{t('vms.form.general')}</h2>
-			</div>
-			<div class="content">
-				{#if !existing}
+		<SettingGroup title={t('vms.form.general')} id="vm-general">
+			{#if !existing}
+				<FormRow label={t('vms.new.template')} wide>
 					<div class="templates" role="radiogroup" aria-label={t('vms.new.template')}>
 						{#each TEMPLATES as entry (entry)}
 							<button
@@ -416,69 +424,83 @@
 							</button>
 						{/each}
 					</div>
-					{#if template === 'windows' && firmware === 'uefi'}
-						<label class="check"
-							><input type="checkbox" bind:checked={secure} /><span>{t('vms.form.secure')}</span
-							></label
-						>
-						<small>{t('vms.form.secureNote')}</small>
-					{/if}
-				{/if}
-				<div class="row">
-					<label class="narrow"
-						><span>{t('vms.new.name')}</span>
+				</FormRow>
+				{#if template === 'windows' && firmware === 'uefi'}
+					<FormRow label={t('vms.form.secure')} id="vm-secure" hint={t('vms.form.secureNote')}>
 						<input
-							class="field"
-							type="text"
-							bind:value={displayName}
-							maxlength="160"
-							aria-invalid={nameProblem !== ''}
-							disabled={busy}
-							placeholder={t('vms.form.displayNameExample')}
+							id="vm-secure"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							bind:checked={secure}
 						/>
-						{#if nameProblem}<small class="warn" role="alert">{nameProblem}</small>{/if}
-					</label>
-					<label class="wide"
-						><span>{t('vms.new.description')}</span><input
-							class="field"
-							type="text"
-							bind:value={description}
-							maxlength="200"
-						/></label
+					</FormRow>
+				{/if}
+			{/if}
+			<FormRow label={t('vms.new.name')} id="vm-name" more={nameProblem ? nameWarning : undefined}>
+				<input
+					id="vm-name"
+					class="field"
+					type="text"
+					bind:value={displayName}
+					maxlength="160"
+					aria-invalid={nameProblem !== ''}
+					disabled={busy}
+					placeholder={t('vms.form.displayNameExample')}
+				/>
+			</FormRow>
+			<FormRow label={t('vms.new.description')} id="vm-description">
+				<input
+					id="vm-description"
+					class="field"
+					type="text"
+					bind:value={description}
+					maxlength="200"
+				/>
+			</FormRow>
+			<SettingRow
+				id="vm-directory"
+				title={t('vms.directory')}
+				summary={existing ? existing.directory || existing.name : directory}
+			>
+				{#if !existing}
+					<SettingSub
+						title={t('vms.directory')}
+						desc={t('vms.directoryHint')}
+						for="vm-directory-name"
 					>
-				</div>
-				<details class="advanced">
-					<summary>{t('vms.directory')}</summary>
-					<div class="advanced-body">
-						{#if !existing}
-							<label
-								><span>{t('vms.directory')}</span><input
-									class="field"
-									bind:value={chosenDirectory}
-									placeholder={directory}
-									disabled={busy}
-								/><small>{t('vms.directoryHint')}</small></label
-							>
-							{#if directFolder}<label class="check"
-									><input
-										type="checkbox"
-										bind:checked={reuseImageFolder}
-										disabled={busy || !!chosenDirectory.trim()}
-									/><span>{t('vms.reuseDirectory', { name: directFolder.directory })}</span></label
-								>{/if}
-							<p class="mono muted">{t('vms.directoryPreview', { name: directory })}</p>
-						{:else}<p class="mono muted">
-								{t('vms.directoryPreview', { name: existing.directory || existing.name })}
-							</p>{/if}
+						{#snippet control()}<input
+								id="vm-directory-name"
+								class="field"
+								bind:value={chosenDirectory}
+								placeholder={directory}
+								disabled={busy}
+							/>{/snippet}
+					</SettingSub>
+					{#if directFolder}<SettingSub
+							title={t('vms.reuseDirectory', { name: directFolder.directory })}
+							for="vm-directory-reuse"
+						>
+							{#snippet control()}<input
+									id="vm-directory-reuse"
+									class="switch"
+									type="checkbox"
+									role="switch"
+									bind:checked={reuseImageFolder}
+									disabled={busy || !!chosenDirectory.trim()}
+								/>{/snippet}
+						</SettingSub>{/if}
+					<div class="srow-block">
+						<p class="mono muted">{t('vms.directoryPreview', { name: directory })}</p>
 					</div>
-				</details>
-			</div>
-		</section>
-		<section class="tile vm-card card-2" aria-labelledby="s2">
-			<div class="step">
-				<span class="section-icon"><Icon name="chip" size={15} /></span>
-				<h2 id="s2">{t('vms.new.step2')}</h2>
-			</div>
+				{:else}<div class="srow-block">
+						<p class="mono muted">
+							{t('vms.directoryPreview', { name: existing.directory || existing.name })}
+						</p>
+					</div>{/if}
+			</SettingRow>
+		</SettingGroup>
+		<SettingGroup title={t('vms.new.step2')} id="vm-cpu">
 			<VmCpu
 				{status}
 				cpus={host.cpus}
@@ -497,12 +519,8 @@
 				bind:exclusive
 				bind:firmware
 			/>
-		</section>
-		<section class="tile vm-card card-3" aria-labelledby="s3">
-			<div class="step">
-				<span class="section-icon"><Icon name="disk" size={15} /></span>
-				<h2 id="s3">{t('vms.new.step3')}</h2>
-			</div>
+		</SettingGroup>
+		<SettingGroup title={t('vms.new.step3')} id="vm-disks">
 			<VmDisks
 				{existing}
 				{host}
@@ -517,12 +535,8 @@
 				bind:disks
 				bind:grow
 			/>
-		</section>
-		<section class="tile vm-card">
-			<div class="step">
-				<span class="section-icon"><Icon name="disc" size={15} /></span>
-				<h2>{t('vms.form.installation')}</h2>
-			</div>
+		</SettingGroup>
+		<SettingGroup title={t('vms.form.installation')} id="vm-install">
 			<VmInstall
 				{media}
 				{template}
@@ -537,12 +551,8 @@
 				bind:virtioPending
 				bind:autostart
 			/>
-		</section>
-		<section class="tile vm-card">
-			<div class="step">
-				<span class="section-icon"><Icon name="globe" size={15} /></span>
-				<h2>{t('vms.form.connections')}</h2>
-			</div>
+		</SettingGroup>
+		<SettingGroup title={t('vms.form.connections')} id="vm-connections">
 			<VmConnections
 				{status}
 				{hardware}
@@ -561,81 +571,52 @@
 				bind:autoGPU
 				bind:folders
 			/>
-		</section>
-		<section class="tile vm-card card-1" aria-labelledby="vm-schedule-title">
-			<div class="step">
-				<span class="section-icon"><Icon name="clock" size={15} /></span>
-				<h2 id="vm-schedule-title">{t('vms.sched.title')}</h2>
-			</div>
+		</SettingGroup>
+		<SettingGroup title={t('vms.sched.title')} id="vm-schedule">
 			<VmSchedule bind:draft={schedule} />
-		</section>
+		</SettingGroup>
 	</div>
 
-	<aside class="tile" aria-labelledby="summary-title">
-		<h2 class="tile-title" id="summary-title">
-			<Icon name="monitor" size={15} />
-			{t('vms.new.summary')}
-		</h2>
-		<dl>
-			<div>
-				<dt>{t('vms.new.name')}</dt>
-				<dd>{displayName.trim() || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.new.template')}</dt>
-				<dd>{t(`vms.template.${template}`)}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.new.vcpus')}</dt>
-				<dd class="mono">{vcpuCount}{pinning ? ` (CPU ${pinned.join(', ') || '–'})` : ''}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.new.memory')}</dt>
-				<dd class="mono">{formatBytes(memoryMiB * MIB)}</dd>
-			</div>
-			{#if !existing}<div>
-					<dt>{t('vms.new.step3')}</dt>
-					<dd class="mono">
-						{disks
-							.map((disk) =>
-								disk.mode === 'block' || disk.mode === 'direct'
-									? disk.path.split('/').at(-1)
-									: `${disk.sizeGB} GB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
-							)
-							.join(', ') || '–'}
-					</dd>
-				</div>{/if}
-			<div>
-				<dt>{t('vms.form.network')}</dt>
-				<dd>
-					{net.startsWith('network:')
-						? (status?.networks?.find((n) => 'network:' + n.id === net)?.name ?? net)
-						: t(net === 'bridge' ? 'vms.form.netBridge' : 'vms.form.netUser')}
-				</dd>
-			</div>
-			<div>
-				<dt>{t('vms.autostart')}</dt>
-				<dd>{t(autostart ? 'vms.ov.yes' : 'vms.ov.no')}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.sched.title')}</dt>
-				<dd>
-					{schedule.enabled ? t('vms.sched.count', { n: schedule.rules.length }) : t('vms.ov.no')}
-				</dd>
-			</div>
-			<div>
-				<dt>{t('vms.new.medium')}</dt>
-				<dd class="mono">{iso.trim().split('/').at(-1) || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.form.step4')}</dt>
-				<dd class="mono">{[...pci, ...usb].join(', ') || '–'}</dd>
-			</div>
-			<div>
-				<dt>{t('vms.form.step5')}</dt>
-				<dd class="mono">{folders.map((folder) => folder.tag).join(', ') || '–'}</dd>
-			</div>
-		</dl>
+	<aside class="sfacts" aria-labelledby="summary-title">
+		<SettingGroup title={t('vms.new.summary')} id="summary">
+			{@render fact(t('vms.new.name'), displayName.trim() || '–')}
+			{@render fact(t('vms.new.template'), t(`vms.template.${template}`))}
+			{@render fact(
+				t('vms.new.vcpus'),
+				`${vcpuCount}${pinning ? ` (CPU ${pinned.join(', ') || '–'})` : ''}`,
+				true,
+			)}
+			{@render fact(t('vms.new.memory'), formatBytes(memoryMiB * MIB), true)}
+			{#if !existing}{@render fact(
+					t('vms.new.step3'),
+					disks
+						.map((disk) =>
+							disk.mode === 'block' || disk.mode === 'direct'
+								? disk.path.split('/').at(-1)
+								: `${disk.sizeGB} GB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
+						)
+						.join(', ') || '–',
+					true,
+				)}{/if}
+			{@render fact(
+				t('vms.form.network'),
+				net.startsWith('network:')
+					? (status?.networks?.find((n) => 'network:' + n.id === net)?.name ?? net)
+					: t(net === 'bridge' ? 'vms.form.netBridge' : 'vms.form.netUser'),
+			)}
+			{@render fact(t('vms.autostart'), t(autostart ? 'vms.ov.yes' : 'vms.ov.no'))}
+			{@render fact(
+				t('vms.sched.title'),
+				schedule.enabled ? t('vms.sched.count', { n: schedule.rules.length }) : t('vms.ov.no'),
+			)}
+			{@render fact(t('vms.new.medium'), iso.trim().split('/').at(-1) || '–', true)}
+			{@render fact(t('vms.form.step4'), [...pci, ...usb].join(', ') || '–', true)}
+			{@render fact(
+				t('vms.form.step5'),
+				folders.map((folder) => folder.tag).join(', ') || '–',
+				true,
+			)}
+		</SettingGroup>
 		{#if error}<div class="notice-error" role="alert">
 				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 			</div>{/if}
@@ -695,49 +676,17 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 310px;
 		align-items: start;
-		gap: var(--space-4);
+		gap: var(--space-5);
 	}
 	.steps {
 		min-width: 0;
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		align-items: start;
-		gap: 14px;
-	}
-	.vm-card {
-		min-width: 0;
-		overflow: hidden;
-		padding: 0;
-	}
-	.card-1 {
-		grid-column: 1 / -1;
-	}
-	.section-icon {
-		color: var(--accent);
-		display: inline-flex;
-	}
-	.advanced {
-		border-top: 1px solid var(--panel-border);
-		padding-top: var(--space-2-5);
-		min-width: 0;
-	}
-	summary {
-		cursor: pointer;
-		font-size: var(--text-base);
-	}
-	.advanced-body {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
-		padding-top: var(--space-3);
-		min-width: 0;
+		gap: var(--space-5);
 	}
 	@media (max-width: 1100px) {
 		.layout {
 			grid-template-columns: minmax(0, 1fr) 280px;
-		}
-		.steps {
-			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	@media (max-width: 800px) {
@@ -747,25 +696,6 @@
 		.layout > aside {
 			position: static;
 		}
-	}
-	.step {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-2-5) var(--space-4);
-		border-bottom: 1px solid var(--panel-border);
-	}
-	h2 {
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.045em;
-	}
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-4);
 	}
 	.templates {
 		display: grid;
@@ -801,26 +731,6 @@
 		font-size: var(--text-md);
 		font-weight: 600;
 	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 14px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.narrow {
-		flex: 1 1 260px;
-	}
-	.wide {
-		flex: 2 1 320px;
-	}
 	small {
 		font-size: var(--text-sm);
 		color: var(--muted);
@@ -835,27 +745,19 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
-		padding: 18px;
 	}
-	dl {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		margin: 0;
-		font-size: var(--text-base);
+	/* The summary is a narrow column: a name is never broken inside a word,
+	   a long value moves below its name. */
+	aside :global(.srow-head) {
+		flex-wrap: wrap;
 	}
-	dl div {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-3);
+	aside :global(.srow-text) {
+		flex: 1 1 auto;
+		min-width: min-content;
 	}
-	dt {
-		color: var(--muted);
-	}
-	dd {
-		margin: 0;
-		text-align: right;
-		overflow-wrap: anywhere;
+	aside :global(.srow-ctl) {
+		flex: 1 1 auto;
+		max-width: 100%;
 	}
 	pre {
 		margin: var(--space-2) 0 0;
@@ -863,20 +765,5 @@
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-		flex: none;
 	}
 </style>

@@ -173,11 +173,13 @@
 		text-transform: uppercase;
 		color: var(--muted);
 	}
+	/* PLAN 78-5: the rows of a group stand together, no box around them. */
 	.grp {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
-		background: color-mix(in srgb, var(--surface) 55%, transparent);
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		flex-shrink: 0;
+		min-width: 0;
 	}
 	.row {
 		display: flex;
@@ -185,19 +187,16 @@
 		gap: var(--space-2-5);
 		width: 100%;
 		padding: var(--space-2-5) var(--space-3);
-		border: 0;
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-		background: none;
 		color: inherit;
 		font: inherit;
 		text-align: left;
 		min-width: 0;
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	button.row {
 		cursor: pointer;
-	}
-	.row:first-child {
-		border-top: 0;
 	}
 	.ic {
 		width: 30px;
