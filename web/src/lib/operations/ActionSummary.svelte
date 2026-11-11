@@ -6,6 +6,7 @@
 	import { operationError, type Operations } from '#lib/operations.ts';
 	import { taskItems, needsAttention, isActive, type TaskAction } from './tasks.ts';
 	import TaskRow from './TaskRow.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	let { compact = false }: { compact?: boolean } = $props();
 	let data = $state<Operations | null>(null),
@@ -60,24 +61,22 @@
 	});
 </script>
 
-<section class="tile summary">
-	<div class="head">
-		<h2 class="tile-title">{t('ops.attention')}</h2>
-		<div class="actions">
-			<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button>{#if compact}<a
-					href="/tools/tasks">{t('ops.openTasks')}</a
-				>{/if}
-		</div>
-	</div>
+<!-- PLAN 78-5: plain headings; every task is a flat row of its own (TaskRow). -->
+<SettingGroup title={t('ops.attention')} id="tasks-attention">
+	{#snippet tools()}
+		<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button>{#if compact}<a
+				href="/tools/tasks">{t('ops.openTasks')}</a
+			>{/if}
+	{/snippet}
 	{#if error}<p class="notice-warn" role="alert">{t('ops.stale')} {error}</p>{/if}
 	{#each problems.slice(0, compact ? 3 : 50) as task (task.id)}<TaskRow
 			{task}
 		/>{:else}{#if data && !error}<p class="muted">{t('ops.allClear')}</p>{/if}{/each}
 	{#if compact && upcoming.length}<h3>{t('ops.next')}</h3>
 		{#each upcoming.slice(0, 3) as task (task.id)}<TaskRow {task} />{/each}{/if}
-</section>
+</SettingGroup>
 {#if !compact}
-	<section class="tile summary">
+	<SettingGroup title={t('tasks.listTitle')} id="tasks-list">
 		<div class="toolbar" aria-label={t('ops.tasks')}>
 			{#each ['all', 'active', 'scheduled', 'done', 'failed'] as value (value)}<button
 					class="btn"
@@ -95,7 +94,7 @@
 		{#each shown as task (task.id)}<TaskRow {task} {busy} onaction={act} />{:else}<p class="muted">
 				{t('ops.none')}
 			</p>{/each}
-	</section>
+	</SettingGroup>
 	<!-- Style W4 (0.74): the figures of the tasks in the status bar. -->
 	<StatusBar label={t('tasks.statusBar')}>
 		<span>{t('tasks.statCount', { count: tasks.length })}</span>
@@ -108,28 +107,16 @@
 {/if}
 
 <style>
-	.summary {
-		padding: var(--tile-pad);
-		margin-bottom: var(--gap);
-		min-width: 0;
-	}
-	.head,
-	.actions,
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2-5);
+		margin-bottom: var(--space-2);
 	}
-	.head {
-		justify-content: space-between;
-	}
-	.head a {
+	a {
 		color: var(--accent);
 		font-size: var(--text-md);
-	}
-	.toolbar {
-		margin-bottom: var(--space-3);
 	}
 	.toolbar input {
 		flex: 1;
@@ -138,6 +125,9 @@
 	}
 	h3 {
 		font-size: var(--text-base);
-		margin-top: 18px;
+		margin: var(--space-3) 0 var(--space-1);
+	}
+	p {
+		margin: 0;
 	}
 </style>

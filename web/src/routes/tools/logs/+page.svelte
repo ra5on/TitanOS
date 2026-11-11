@@ -246,7 +246,8 @@
 
 <PageHead title={t('tools.logs')} />
 
-<section class="tile logs" aria-labelledby="tools-logs">
+<!-- PLAN 78-5: no frame around the tool; the log itself keeps its surface. -->
+<section class="logs" aria-labelledby="tools-logs">
 	<h2 class="sr-only" id="tools-logs">{t('tools.logs')}</h2>
 	<div class="filters">
 		<label
@@ -360,7 +361,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		padding: 18px;
+		min-width: 0;
 		font-size: var(--text-md);
 	}
 	section p {

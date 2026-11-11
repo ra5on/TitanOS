@@ -5,6 +5,8 @@
 	import { GB, MB, mbToMiB, mibToMB } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import HistoryChart from '#lib/operations/HistoryChart.svelte';
 	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import { type MonitorSettings, type MonitorStatus, type MonitorSample } from '#lib/operations.ts';
@@ -117,42 +119,59 @@
 	</p>{/if}{#if status?.error}<p class="notice-warn">
 		{@render problemLine(problemText(status.error, t))}
 	</p>{/if}
+<!-- PLAN 78-5: the settings of the recording as flat rows, stored with "Speichern". -->
 {#if settings}<form
-		class="tile settings"
 		onsubmit={(e) => {
 			e.preventDefault();
 			save();
 		}}
 	>
-		<label class="check"
-			><input type="checkbox" bind:checked={settings.enabled} />{t('ops.enabled')}</label
-		><label
-			>{t('ops.volume')}<select
-				class="field"
-				bind:value={settings.volume}
-				required={settings.enabled}
-				><option value="">{t('ops.choose')}</option
-				>{#each storage?.volumes ?? [] as volume (volume.name)}<option value={volume.name}
-						>{volume.name}</option
-					>{/each}</select
-			></label
-		><label
-			>{t('ops.days')}<select class="field" bind:value={settings.days}
-				><option value={7}>7</option><option value={30}>30</option></select
-			></label
-		><label
-			>{t('ops.budget')}<input
-				class="field"
-				type="number"
-				min="8"
-				max="268"
-				bind:value={
-					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
-				}
-				required
-			/></label
-		><button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
-		>{#if saved && !dirty}<span role="status">{t('notify.saved')}</span>{/if}
+		<SettingGroup title={t('ops.monitorSettings')} id="monitoring-settings">
+			<SettingRow icon="activity" title={t('ops.enabled')} for="monitoring-enabled">
+				{#snippet control()}<input
+						id="monitoring-enabled"
+						class="switch"
+						type="checkbox"
+						role="switch"
+						bind:checked={settings!.enabled}
+					/>{/snippet}
+			</SettingRow>
+			<SettingRow icon="disk" title={t('ops.volume')} for="monitoring-volume">
+				{#snippet control()}<select
+						id="monitoring-volume"
+						class="field"
+						bind:value={settings!.volume}
+						required={settings!.enabled}
+						><option value="">{t('ops.choose')}</option
+						>{#each storage?.volumes ?? [] as volume (volume.name)}<option value={volume.name}
+								>{volume.name}</option
+							>{/each}</select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="clock" title={t('ops.days')} for="monitoring-days">
+				{#snippet control()}<select id="monitoring-days" class="field" bind:value={settings!.days}
+						><option value={7}>7</option><option value={30}>30</option></select
+					>{/snippet}
+			</SettingRow>
+			<SettingRow icon="archive" title={t('ops.budget')} for="monitoring-budget">
+				{#snippet control()}<input
+						id="monitoring-budget"
+						class="field"
+						type="number"
+						min="8"
+						max="268"
+						bind:value={
+							() => mibToMB(settings?.maxMiB ?? 0),
+							(mb) => settings && (settings.maxMiB = mbToMiB(mb))
+						}
+						required
+					/>{/snippet}
+			</SettingRow>
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
+				>{#if saved && !dirty}<span role="status">{t('notify.saved')}</span>{/if}
+			</div>
+		</SettingGroup>
 	</form>{/if}
 <div class="toolbar">
 	<label
@@ -167,21 +186,20 @@
 		>{t('tasks.exportJSON')}</button
 	><span class="muted">{t('ops.samples', { count: samples.length })}</span>
 </div>
-{#if trends.length}<section class="tile trends">
-		<h2 class="tile-title">{t('tasks.trends')}</h2>
-		<p class="muted">{t('tasks.trendHint')}</p>
-		{#each trends as trend (trend.volume)}<div>
-				<strong>{trend.volume}</strong>{#if trend.warning}<p class="notice-warn">
-						{t('tasks.capacityWarning')}
-					</p>{/if}{#if trend.known && trend.daysTo90 !== null}<p>
-						{t('tasks.days90', { count: Math.ceil(trend.daysTo90) })} · {t('tasks.daysFull', {
-							count: Math.ceil(trend.daysToFull ?? 0),
-						})}
-					</p>{:else}<p class="muted">
-						{t(trend.known ? 'tasks.noGrowth' : 'tasks.trendUnknown')}
-					</p>{/if}
-			</div>{/each}
-	</section>{/if}
+{#if trends.length}<SettingGroup title={t('tasks.trends')} desc={t('tasks.trendHint')} id="trends">
+		{#each trends as trend (trend.volume)}<SettingRow icon="disk" title={trend.volume}>
+				{#snippet description()}
+					{#if trend.warning}<p class="notice-warn">{t('tasks.capacityWarning')}</p>{/if}
+					{#if trend.known && trend.daysTo90 !== null}<p>
+							{t('tasks.days90', { count: Math.ceil(trend.daysTo90) })} · {t('tasks.daysFull', {
+								count: Math.ceil(trend.daysToFull ?? 0),
+							})}
+						</p>{:else}<p>
+							{t(trend.known ? 'tasks.noGrowth' : 'tasks.trendUnknown')}
+						</p>{/if}
+				{/snippet}
+			</SettingRow>{/each}
+	</SettingGroup>{/if}
 <div class="charts">
 	<HistoryChart {samples} value={(s) => s.cpu} label={t('ops.cpu')} maximum={100} /><HistoryChart
 		{samples}
@@ -258,20 +276,17 @@
 </div>
 
 <style>
-	.trends {
-		padding: var(--tile-pad);
-		margin: var(--gap) 0;
+	.row-actions {
+		margin-top: var(--space-2);
 	}
-	.trends > div {
-		border-bottom: 1px solid var(--border);
-		padding: var(--space-3) 0;
+	form {
+		margin-top: var(--gap);
 	}
-	.settings {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: end;
-		gap: 14px;
-		padding: var(--tile-pad);
+	p {
+		margin: 0;
+	}
+	.notice-warn {
+		margin: var(--space-1-5) 0;
 	}
 	label {
 		display: flex;
@@ -279,13 +294,6 @@
 		gap: var(--space-1-5);
 		min-width: 0;
 		font-size: var(--text-base);
-	}
-	.settings label {
-		flex: 1 1 150px;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
 	}
 	.toolbar {
 		display: flex;

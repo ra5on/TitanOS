@@ -6,6 +6,7 @@
 	import { api } from '#lib/api.ts';
 	import { formatBytes, formatBytesOf } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import { operationError } from '#lib/operations.ts';
 	import {
 		folderRestoreProgress,
@@ -47,8 +48,8 @@
 	}
 </script>
 
-{#if jobs.length || error}<section class="tile jobs" aria-label={t('snapshotRestore.jobs')}>
-		<h2>{t('snapshotRestore.jobs')}</h2>
+<!-- PLAN 78-5: a plain heading; every restore is a flat row of its own. -->
+{#if jobs.length || error}<SettingGroup title={t('snapshotRestore.jobs')} id="snapshot-restores">
 		{#if error}<p class="notice-error" role="alert">
 				{error}
 				<button type="button" class="btn" onclick={load}>{t('snapshotRestore.again')}</button>
@@ -56,7 +57,7 @@
 		<ul>
 			{#each jobs as job (job.id)}
 				{@const progress = folderRestoreProgress(job)}
-				<li>
+				<li class="srow plain">
 					<div class="head">
 						<span class="mono">{job.volume} / {job.snapshot} / {job.path}</span>
 						<span class="state">{t(`snapshotRestore.state.${job.state}`)}</span>
@@ -103,32 +104,19 @@
 				</li>
 			{/each}
 		</ul>
-	</section>{/if}
+	</SettingGroup>{/if}
 
 <style>
-	.jobs {
-		padding: var(--tile-pad);
-		margin-top: var(--gap);
-	}
-	h2 {
-		margin: 0 0 var(--space-3);
-		font-size: var(--text-lg);
-	}
 	ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: 3px;
 	}
 	li {
-		border-bottom: 1px solid var(--border);
-		padding-bottom: var(--space-3);
-	}
-	li:last-child {
-		border-bottom: 0;
-		padding-bottom: 0;
+		padding: var(--space-2-5) var(--space-4);
 	}
 	.head {
 		display: flex;

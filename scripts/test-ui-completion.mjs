@@ -120,7 +120,7 @@ try {
   };
   await page.getByText(/late-recovery/).waitFor({ timeout: 22000 });
   await page
-    .locator(".recovery")
+    .locator("#recovery")
     .getByRole("button", { name: "Ergebnis prüfen", exact: true })
     .click();
   dialog = page.getByRole("dialog");

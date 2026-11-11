@@ -71,10 +71,11 @@
 </fieldset>
 
 <style>
+	/* PLAN 78-5: a plain sub-heading and its content, no box around them. */
 	fieldset {
-		padding: var(--space-4);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
+		margin: var(--space-3) 0 0;
+		padding: 0;
+		border: 0;
 		min-width: 0;
 	}
 	.select,
@@ -101,6 +102,7 @@
 		font-size: var(--text-base);
 	}
 	legend {
+		padding: 0;
 		font-weight: 600;
 	}
 </style>
