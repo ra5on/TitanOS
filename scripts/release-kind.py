@@ -205,7 +205,28 @@ def manifest(source, tag):
         raise
 
 
-def decide(version, message, source, changed_since=None, fetch=manifest, tags=None):
+LOCK = "scripts/dev-toolchains.lock.json"
+# The toolchains that build titand and its web UI; every other entry of the
+# lock (mkosi, image tools) builds the system image.
+TITAND_TOOLCHAINS = ("go", "node")
+
+
+def lock_at(ref):
+    try:
+        return json.loads(git("show", f"{ref}:{LOCK}"))
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def only_titand_toolchains(before, after):
+    """True if the lock differs in nothing but the compilers of titand."""
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return False
+    rest = lambda lock: {name: entry for name, entry in lock.items() if name not in TITAND_TOOLCHAINS}
+    return rest(before) == rest(after)
+
+
+def decide(version, message, source, changed_since=None, fetch=manifest, tags=None, lock=lock_at):
     """Returns (kind, base, reason)."""
     if "[system]" in message:
         return "system", version, "the tag asks for a full release"
@@ -226,6 +247,10 @@ def decide(version, message, source, changed_since=None, fetch=manifest, tags=No
         raise ValueError(f"odd base version in {previous['tag']}: {base}")
     changed = changed_since(f"v{base}") if changed_since else git("diff", "--name-only", f"v{base}..HEAD").split()
     outside = [path for path in changed if not path.startswith(ALLOWED)]
+    # A newer Go or Node only rebuilds titand (a security fix of the standard
+    # library, say); a change to any other pinned tool is one to the image.
+    if LOCK in outside and only_titand_toolchains(lock(f"v{base}"), lock("HEAD")):
+        outside.remove(LOCK)
     if outside:
         return "system", version, f"changed since v{base}: " + ", ".join(outside[:10])
     return "app", base, f"only titand changed since v{base}"
