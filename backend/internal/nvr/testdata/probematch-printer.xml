@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery" xmlns:wsdp="http://schemas.xmlsoap.org/ws/2006/02/devprof" xmlns:pri="http://schemas.microsoft.com/windows/2006/08/wdp/print">
+<soap:Header><wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches</wsa:Action></soap:Header>
+<soap:Body><wsd:ProbeMatches><wsd:ProbeMatch>
+<wsa:EndpointReference><wsa:Address>urn:uuid:16a65700-007c-1000-bb49-f4a997aa0b0e</wsa:Address></wsa:EndpointReference>
+<wsd:Types>wsdp:Device pri:PrintDeviceType</wsd:Types>
+<wsd:XAddrs>http://192.168.1.30:80/wsd/pnpx-metadata.cgi</wsd:XAddrs>
+<wsd:MetadataVersion>62</wsd:MetadataVersion>
+</wsd:ProbeMatch></wsd:ProbeMatches></soap:Body></soap:Envelope>

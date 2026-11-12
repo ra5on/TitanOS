@@ -1,0 +1,38 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+tls:
+  enabled: false
+networking:
+  listen:
+    external: 127.0.0.1:8971
+telemetry:
+  version_check: false
+detectors:
+  ov:
+    type: openvino
+    device: CPU
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+ffmpeg:
+  hwaccel_args: ""
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: false
+go2rtc:
+  webrtc:
+    candidates: []
+  streams: {}
+cameras: {}

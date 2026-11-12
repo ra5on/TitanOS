@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery" xmlns:tdn="http://www.onvif.org/ver10/network/wsdl">
+<SOAP-ENV:Header><wsa:MessageID>uuid:2419d68a-2dd2-21b2-a205-ec71db3a1c11</wsa:MessageID><wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches</wsa:Action></SOAP-ENV:Header>
+<SOAP-ENV:Body><wsdd:ProbeMatches><wsdd:ProbeMatch>
+<wsa:EndpointReference><wsa:Address>uuid:2419d68a-2dd2-21b2-a205-ec71db3a1c11</wsa:Address></wsa:EndpointReference>
+<wsdd:Types>tdn:NetworkVideoTransmitter</wsdd:Types>
+<wsdd:Scopes>onvif://www.onvif.org/type/NetworkVideoTransmitter onvif://www.onvif.org/name/Reolink%20RLC-810A onvif://www.onvif.org/hardware/RLC-810A onvif://www.onvif.org/location/</wsdd:Scopes>
+<wsdd:XAddrs>http://10.99.99.99:80/onvif/device_service http://192.168.1.70:8000/onvif/device_service http://127.0.0.1:8000/onvif/device_service</wsdd:XAddrs>
+<wsdd:MetadataVersion>1</wsdd:MetadataVersion>
+</wsdd:ProbeMatch></wsdd:ProbeMatches></SOAP-ENV:Body></SOAP-ENV:Envelope>

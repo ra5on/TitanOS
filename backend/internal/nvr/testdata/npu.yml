@@ -1,0 +1,146 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+tls:
+  enabled: false
+networking:
+  listen:
+    external: 127.0.0.1:8971
+telemetry:
+  version_check: false
+detectors:
+  ov:
+    type: openvino
+    device: NPU
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+ffmpeg:
+  hwaccel_args: preset-vaapi
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: false
+go2rtc:
+  webrtc:
+    candidates:
+      - 192.168.1.10:8555
+  streams:
+    haustuer:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#backchannel=0
+      - ffmpeg:haustuer#audio=opus
+    haustuer_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#backchannel=0
+    haustuer_twoway:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101
+    garten:
+      - rtsp://admin:p%40ss%2Fw%3Ard%20%7Bx%7D@192.168.1.63:554/main#media=video#backchannel=0
+    garten_sub:
+      - rtsp://admin:p%40ss%2Fw%3Ard%20%7Bx%7D@192.168.1.63:554/sub#media=video#backchannel=0
+cameras:
+  haustuer:
+    enabled: true
+    friendly_name: Haustür
+    ffmpeg:
+      output_args:
+        record: preset-record-generic-audio-copy
+      inputs:
+        - path: rtsp://127.0.0.1:8554/haustuer
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/haustuer_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+        - dog
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  garten:
+    enabled: true
+    friendly_name: Garten
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/garten
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/garten_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 7
+      motion:
+        days: 7
+      alerts:
+        pre_capture: 10
+        post_capture: 20
+        retain:
+          days: 7
+          mode: all
+      detections:
+        pre_capture: 10
+        post_capture: 20
+        retain:
+          days: 7
+          mode: all
+    snapshots:
+      enabled: true
+      retain:
+        default: 7
+    audio:
+      enabled: false
+    onvif:
+      host: 192.168.1.63
+      port: 8000
+      user: admin
+      password: p@ss/w:rd {{x}}

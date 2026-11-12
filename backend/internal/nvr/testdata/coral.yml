@@ -1,0 +1,162 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+tls:
+  enabled: false
+networking:
+  listen:
+    external: 127.0.0.1:8971
+telemetry:
+  version_check: false
+detectors:
+  coral:
+    type: edgetpu
+    device: usb
+ffmpeg:
+  hwaccel_args: ""
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: false
+go2rtc:
+  webrtc:
+    candidates: []
+  streams:
+    carport:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    carport_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+    hof:
+      - rtsp://192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    hof_sub:
+      - rtsp://192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+    keller:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    keller_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+cameras:
+  carport:
+    enabled: true
+    friendly_name: Carport
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/carport
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/carport_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: false
+    snapshots:
+      enabled: false
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  hof:
+    enabled: true
+    friendly_name: Hof
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/hof
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/hof_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  keller:
+    enabled: false
+    friendly_name: Keller
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/keller
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/keller_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false

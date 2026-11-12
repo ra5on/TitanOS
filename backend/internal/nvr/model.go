@@ -301,10 +301,13 @@ func validName(name string) bool {
 
 var hostRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
 
+// loopbackIsCamera lets tests reach their stand-in cameras on 127.0.0.1.
+var loopbackIsCamera = false
+
 // validHost: an IP address or a host name; never this host.
 func validHost(host string) bool {
 	if addr, err := netip.ParseAddr(host); err == nil {
-		return !addr.IsLoopback() && !addr.IsUnspecified() && !addr.IsMulticast()
+		return (!addr.IsLoopback() || loopbackIsCamera) && !addr.IsUnspecified() && !addr.IsMulticast()
 	}
 	return hostRE.MatchString(host) && !strings.EqualFold(host, "localhost") && !strings.HasSuffix(strings.ToLower(host), ".localhost")
 }

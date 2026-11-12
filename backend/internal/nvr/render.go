@@ -25,6 +25,10 @@ type RenderHardware struct {
 	Candidates []string
 }
 
+// frigateConfigVersion is CURRENT_CONFIG_VERSION of Frigate 0.18
+// (frigate/util/config.py); it changes with FrigateVersion.
+const frigateConfigVersion = "0.18-0"
+
 // The header of the file: whoever opens it should know it is overwritten.
 const renderHeader = "# Written by TitanOS (NVR). Do not edit: every change of the settings\n# or cameras in TitanOS replaces this file.\n"
 
@@ -106,6 +110,9 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	go2rtc = append(go2rtc, yentry{"webrtc", ymap{{"candidates", candidates}}}, yentry{"streams", streams})
 
 	root := ymap{
+		// The version of the config format. Without it Frigate takes the
+		// file for one of 0.13, "migrates" it and writes it back.
+		{"version", frigateConfigVersion},
 		{"mqtt", ymap{{"enabled", false}}},
 		// titand is the only client and uses port 5000, which never asks
 		// for a login. Port 8971 (TLS, login) is bound to the container's

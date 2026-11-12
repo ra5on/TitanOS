@@ -1,0 +1,88 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+tls:
+  enabled: false
+networking:
+  listen:
+    external: 127.0.0.1:8971
+telemetry:
+  version_check: false
+detectors:
+  hailo:
+    type: hailo8l
+    device: PCIe
+model:
+  width: 320
+  height: 320
+  input_tensor: nhwc
+  input_pixel_format: rgb
+  input_dtype: int
+  model_type: yolo-generic
+  labelmap_path: /labelmap/coco-80.txt
+ffmpeg:
+  hwaccel_args: preset-vaapi
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: false
+go2rtc:
+  webrtc:
+    candidates: []
+  streams:
+    tor:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    tor_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+cameras:
+  tor:
+    enabled: true
+    friendly_name: Tor
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/tor
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/tor_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
