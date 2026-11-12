@@ -62,10 +62,20 @@ func (a configBackupArea) register(mux *routeMux, admin func(http.HandlerFunc) h
 
 func (a configBackupArea) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"backup":      a.backup.State(a.storage.Mounted()),
+		"backup":      a.configBackupState(r),
 		"volumes":     a.storage.Names(),
 		"passwordSet": a.backup.PasswordSet(),
 	})
+}
+
+// configBackupState lists the backups without reading volumes whose disks
+// sleep; "?search=asleep" is the explicit wish to look there too, which
+// wakes them.
+func (a configBackupArea) configBackupState(r *http.Request) configbackup.State {
+	if r.Method == http.MethodGet && r.URL.Query().Get("search") == "asleep" {
+		return a.backup.StateSearching(a.storage.Mounted(), currentUser(r).Name)
+	}
+	return a.backup.State(a.storage.Mounted())
 }
 
 func (a configBackupArea) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {

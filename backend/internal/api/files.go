@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
@@ -284,6 +285,9 @@ func machineRoots(roots []files.Root) []files.Root {
 func (a filesArea) fileRoot(w http.ResponseWriter, r *http.Request, id string) (files.Root, bool) {
 	for _, root := range a.requestRoots(r) {
 		if root.ID == id {
+			// The request reads or writes there next: it is what woke
+			// the disks if they slept (RAM only).
+			diskwake.Note(root.Volume, diskwake.FileManager, currentUser(r).Name)
 			return root, true
 		}
 	}

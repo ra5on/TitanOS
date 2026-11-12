@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // LongSMART runs the long SMART self-test of a disk; see SelfTest.
@@ -169,6 +171,7 @@ func (m *Manager) testSnapshot(t *DiskTest) DiskTest {
 	return *t
 }
 func (m *Manager) MaintenanceCheck(ctx context.Context, name string) error {
+	diskwake.Note(name, diskwake.Maintenance, "check")
 	if err := m.Check(ctx, name, true); err != nil {
 		return err
 	}

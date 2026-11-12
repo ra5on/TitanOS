@@ -22,6 +22,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
@@ -231,8 +232,11 @@ func (a davArea) handleWebDAV(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	handler := &webdav.Handler{
-		Prefix:     davPrefix,
-		FileSystem: &davShares{roots: roots, open: func(root files.Root) webdav.FileSystem { return a.files.DAV(root, user.Name, user.UID) }},
+		Prefix: davPrefix,
+		FileSystem: &davShares{roots: roots, open: func(root files.Root) webdav.FileSystem {
+			diskwake.Note(root.Volume, diskwake.WebDAV, user.Name)
+			return a.files.DAV(root, user.Name, user.UID)
+		}},
 		LockSystem: a.state.locks,
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, os.ErrNotExist) {

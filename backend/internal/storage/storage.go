@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
@@ -274,7 +275,23 @@ type Manager struct {
 	// was last seen after one, by device name (RAM only, protected by mu).
 	diskSleepTimes map[string]sleepTimes
 	// sleepSamples is protected by actions, never persisted on the stick.
-	sleepSamples  map[string]sleepSample
+	sleepSamples map[string]sleepSample
+	// diskWakes is the history of wakes by wakeKey (wake.go, protected by
+	// mu); Dirty: not yet in the file on the system data volume; Loaded:
+	// that file was read.
+	diskWakes       map[string]wakeLog
+	diskWakesDirty  bool
+	diskWakesLoaded bool
+	// diskWakesTried is when the file last failed (protected by actions).
+	diskWakesTried time.Time
+	// wakeRecorder replaces diskwake.Default in tests.
+	wakeRecorder *diskwake.Recorder
+	// WakeDataVolume names the system data volume for the history of
+	// wakes; nil keeps it in RAM only.
+	WakeDataVolume func() string
+	// WakeProbe is asked what else uses a volume when a disk woke and
+	// TitanOS itself did not touch it (connected SMB clients).
+	WakeProbe     func(ctx context.Context, volume string) []diskwake.Cause
 	btrfsProgress map[string]btrfsProgress
 	// btrfsProbed is when refreshBtrfs last asked btrfs (protected by
 	// actions).

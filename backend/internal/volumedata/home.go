@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
@@ -344,6 +345,8 @@ func (h *Home) move(state *homeFeature, feature string, sources []string, volume
 	state.io.Lock() // writers in flight finish first; new ones get no volume
 	failed := map[string]bool{}
 	for _, from := range sources {
+		diskwake.Note(from, diskwake.DataMove, feature)
+		diskwake.Note(volume, diskwake.DataMove, feature)
 		result, err := Adopt(ctx, h.MountRoot, from, volume, feature, mounted)
 		if err == nil && h.Settled != nil {
 			h.Settled(feature, from)
@@ -390,11 +393,13 @@ func (h *Home) move(state *homeFeature, feature string, sources []string, volume
 // than a moment.
 func (h *Home) Hold(feature string) (release func(), ok bool) {
 	// Starts a move that is due and waits a moment for one with nothing to do.
-	h.Volume(feature)
+	volume := h.Volume(feature)
 	state := h.feature(feature)
 	if !state.io.TryRLock() {
 		return func() {}, false
 	}
+	// The writer writes next: that is what woke the disks if they slept.
+	diskwake.NoteFeature(volume, feature)
 	return sync.OnceFunc(state.io.RUnlock), true
 }
 
@@ -410,6 +415,14 @@ func (h *Home) Use(feature string) (volume string, release func()) {
 		return "", func() {}
 	}
 	return volume, release
+}
+
+// OpenExisting pins .titanos/<feature> of a mounted volume if it is there
+// and private; unlike Open it creates nothing. fs.ErrNotExist without the
+// folder.
+func OpenExisting(mountRoot, volume, feature string, mounted []string) (*os.Root, error) {
+	diskwake.NoteFeature(volume, feature)
+	return openExisting(mountRoot, volume, feature, mounted)
 }
 
 // openExisting pins .titanos/<feature> of a mounted volume if it is there

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -180,6 +181,22 @@ func (w *titand) wireApplications() error {
 	}
 	// And a disk a VM uses is never overwritten by a disk test.
 	w.volumes.Claimed = w.machines.ClaimedDisks
+	// What woke a sleeping disk (PLAN 79-6): the history lies on the system
+	// data volume, never on a volume that sleeps and never on the stick.
+	w.volumes.WakeDataVolume = w.systemData.Default
+	// TitanOS itself did not touch the volume: who else is on it. Both
+	// answers come from RAM (Samba's tables, the engine's data root) and
+	// are likely reasons, not proven ones.
+	w.volumes.WakeProbe = func(ctx context.Context, volume string) []diskwake.Cause {
+		var causes []diskwake.Cause
+		for _, share := range w.folders.SMBConnected(ctx, volume) {
+			causes = append(causes, diskwake.Cause{Code: diskwake.SMBSession, Detail: share})
+		}
+		if strings.HasPrefix(w.containers.DataRoot(), w.volumes.MountPoint(volume)+"/") {
+			causes = append(causes, diskwake.Cause{Code: diskwake.DockerRunning})
+		}
+		return causes
+	}
 	w.background(func() { w.volumes.RunDiskSleep(ctx) })
 
 	// System extensions on a volume, laid over the system once it is mounted.

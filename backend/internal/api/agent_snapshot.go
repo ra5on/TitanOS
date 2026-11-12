@@ -109,7 +109,9 @@ func (s *Server) agentPruneSnapshots(now time.Time) {
 		return
 	}
 	for _, volume := range env.storage.Mounted() {
-		if env.storage.FilesystemOf(volume) != "btrfs" {
+		// Sleeping disks are not woken for tidying up: the next night
+		// that finds them awake does it.
+		if env.storage.FilesystemOf(volume) != "btrfs" || env.storage.VolumeAsleep(volume) {
 			continue
 		}
 		list, err := env.storage.Snapshots(volume)

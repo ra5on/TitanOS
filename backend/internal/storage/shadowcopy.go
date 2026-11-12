@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
@@ -77,6 +78,7 @@ func (m *Manager) SyncShadowCopies(ctx context.Context, wanted []string) {
 }
 
 func (m *Manager) syncShadow(ctx context.Context, volume string, wanted bool, mounted []string) error {
+	diskwake.Note(volume, diskwake.ShadowCopies, "")
 	root, err := volumedata.Open(m.mountRoot, volume, "shadowcopies", mounted)
 	if err != nil {
 		return err

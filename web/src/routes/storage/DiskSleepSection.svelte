@@ -7,6 +7,7 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { overridesFrom } from './disk-sleep.ts';
+	import DiskWakes from './DiskWakes.svelte';
 	import { diskSleep, sleepDuration, sleepOrigin, sleepSince } from './sleep-view.ts';
 
 	type Props = {
@@ -84,6 +85,7 @@
 				<p class="muted">{entry.reason ? t(`storage.sleepReason.${entry.reason}`) : '–'}</p>
 			{/if}
 			{#if disk && !disk.id}<p class="muted small">{t('storage.sleepNoIdentity')}</p>{/if}
+			{#if disk}<DiskWakes {disk} />{/if}
 			{#if disk && canAdminister}
 				{#if editing}
 					<SettingRow title={t('storage.sleepDiskOwn')} for="disk-sleep-edit-{name}">

@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // Start boots a VM.
@@ -42,6 +44,11 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	vm, err := m.get(name)
 	if err != nil {
 		return err
+	}
+	// Starting it reads its disks: says what woke theirs if they slept.
+	diskwake.Note(vm.Volume, diskwake.VMStart, name)
+	for _, disk := range vm.Disks {
+		diskwake.Note(disk.Volume, diskwake.VMStart, name)
 	}
 	// A backup that was cut off left the guest's last writes in an overlay:
 	// they go back into the image before the VM starts from the image.

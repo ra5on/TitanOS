@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
@@ -227,6 +228,7 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 // downloaded. Without pull, images that are still missing are pulled first
 // with progress; that is what "up" would do anyway, only quietly.
 func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, pull bool) {
+	diskwake.Note(volume, diskwake.ContainerStart, name)
 	ctx = context.WithoutCancel(ctx)
 	go func() {
 		var log jobLog

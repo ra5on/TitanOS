@@ -9,6 +9,7 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { effectiveSleep, overridesFrom, shortSerial } from './disk-sleep.ts';
+	import DiskWakes from './DiskWakes.svelte';
 	import { sleepListed, sleepSince } from './sleep-view.ts';
 
 	type Props = {
@@ -224,6 +225,7 @@
 											>{/if}
 									</span>
 									{#if !disk.id}<span class="muted small">{t('storage.sleepNoIdentity')}</span>{/if}
+									<DiskWakes {disk} />
 								</div>
 								<select
 									class="field"

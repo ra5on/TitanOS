@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,21 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
+// pointerFile is the pointer to an interrupted application backup on the
+// stick. Up to 0.76 it was written at the start of every run and removed
+// at its end: two stick writes per backup (PLAN 79-12). A run now keeps
+// its pointer next to its journal on the volume (volumePointer) and the
+// stick is written only when an interrupted run is found after a restart,
+// so that an older titand (after a rollback) still sees it and fences
+// application changes. A pointer an older titand left is read as before.
 const pointerFile = "backup/application-pending.json"
+
+// volumePointer names, in .titanos/appbackups of the journal's volume, the
+// run that is underway: {id, volume, job}. It is written before anything
+// is stopped and removed when everything runs again.
+const volumePointer = "pending.json"
+
+var operationID = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
 // ErrJournalMissing means the pointer on the stick names an operation whose
 // journal is not on its (mounted) volume, for example after a stick backup
@@ -58,10 +73,26 @@ type Manager struct {
 	MountRoot string
 	Disabled  bool
 	Gate      sync.RWMutex
-	mu        sync.Mutex
-	pending   *Operation
-	active    bool
-	loaded    bool
+	// Settled tells that the volumes were read and a first attempt to
+	// mount them was made (nil: at once). Until then, and until the mounted
+	// volumes were looked through once, Busy fences application changes.
+	Settled func() bool
+	mu      sync.Mutex
+	pending *Operation
+	active  bool
+	loaded  bool
+	// onStick: pointerFile exists (read at the start or written since).
+	onStick bool
+	// looked are the mounted volumes whose pointer was looked for since
+	// they were mounted; scanned that this happened at least once.
+	looked  map[string]bool
+	scanned bool
+	// inventory replaces prepareDocker in tests.
+	inventory func(ctx context.Context, applications []backup.Application, protected []string) (*docker.BackupLease, []Member, []string, error)
+}
+
+func validPointer(op *Operation) bool {
+	return op != nil && operationID.MatchString(op.ID) && naming.ValidVolume(op.Volume) && naming.ValidBackup(op.Job)
 }
 
 func (m *Manager) Load() error {
@@ -69,14 +100,135 @@ func (m *Manager) Load() error {
 	if err := m.Store.ReadJSON(pointerFile, &op); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if op != nil && (!regexp.MustCompile(`^[0-9a-f]{24}$`).MatchString(op.ID) || !naming.ValidVolume(op.Volume) || !naming.ValidBackup(op.Job)) {
+	if op != nil && !validPointer(op) {
 		return errors.New("invalid application recovery pointer")
 	}
 	m.mu.Lock()
 	m.pending = op
+	m.onStick = op != nil
 	m.loaded = true
+	// Without volumes to look at (tests, development mode) nothing more
+	// can turn up.
+	m.scanned = m.scanned || m.Mounted == nil || m.Disabled
 	m.mu.Unlock()
 	return nil
+}
+
+// Run looks for the pointer of an interrupted run on every volume once
+// after it was mounted. The mounted volumes come from RAM; a volume is read
+// once (one small file), never cyclically, and never the stick.
+func (m *Manager) Run(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		m.Discover()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// Discover reads the pointer of volumes mounted since the last look. A run
+// that was cut off (titand or the NAS went down) is taken up as pending,
+// and only then noted on the stick for older versions.
+func (m *Manager) Discover() {
+	// A run or a recovery owns the pointer right now.
+	if !m.Gate.TryRLock() {
+		return
+	}
+	defer m.Gate.RUnlock()
+	m.discover()
+}
+
+// discover is Discover for a caller that holds Gate.
+func (m *Manager) discover() {
+	if m.Mounted == nil || m.Disabled {
+		m.mu.Lock()
+		m.scanned = true
+		m.mu.Unlock()
+		return
+	}
+	if m.Settled != nil && !m.Settled() {
+		return
+	}
+	mounted := m.Mounted()
+	m.mu.Lock()
+	if !m.loaded {
+		m.mu.Unlock()
+		return
+	}
+	for volume := range m.looked {
+		if !slices.Contains(mounted, volume) {
+			delete(m.looked, volume) // mounted again later: looked at again
+		}
+	}
+	var look []string
+	if m.pending == nil && !m.active {
+		for _, volume := range mounted {
+			if !m.looked[volume] {
+				look = append(look, volume)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, volume := range look {
+		op, err := readVolumePointer(m.MountRoot, volume, mounted)
+		if err != nil {
+			slog.Warn("pointer of an application backup not readable; looked at again after the next start", "volume", volume, "err", err)
+		}
+		m.mu.Lock()
+		if m.looked == nil {
+			m.looked = map[string]bool{}
+		}
+		m.looked[volume] = true
+		found := op != nil && m.pending == nil
+		if found {
+			m.pending = op
+		}
+		m.mu.Unlock()
+		if !found {
+			continue
+		}
+		slog.Warn("an application backup was cut off; review it under Tools › Jobs", "volume", op.Volume, "job", op.Job)
+		// An event, not a cycle: an older titand reads only the stick.
+		if err := m.Store.WriteJSON(pointerFile, op); err != nil {
+			slog.Warn("interrupted application backup not noted on the stick", "err", err)
+		} else {
+			m.mu.Lock()
+			m.onStick = true
+			m.mu.Unlock()
+		}
+		break
+	}
+	m.mu.Lock()
+	m.scanned = true
+	m.mu.Unlock()
+}
+
+// readVolumePointer reads volumePointer of a volume without creating
+// anything there. nil without one.
+func readVolumePointer(mountRoot, volume string, mounted []string) (*Operation, error) {
+	root, err := volumedata.OpenExisting(mountRoot, volume, "appbackups", mounted)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer root.Close()
+	var op *Operation
+	if err := volumedata.ReadJSON(root, volumePointer, &op, 1<<16); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !validPointer(op) || op.Volume != volume {
+		return nil, errors.New("invalid application recovery pointer")
+	}
+	return &Operation{ID: op.ID, Volume: op.Volume, Job: op.Job}, nil
 }
 func (m *Manager) Status() (*Operation, bool) {
 	m.mu.Lock()
@@ -93,8 +245,16 @@ func (m *Manager) Status() (*Operation, bool) {
 // restart must not silently permit application changes or an app downgrade.
 func (m *Manager) Busy() bool {
 	m.mu.Lock()
+	scanned := m.scanned
+	m.mu.Unlock()
+	if !scanned {
+		// Asked before the first round of Run after the volumes settled:
+		// look now instead of refusing for up to one round.
+		m.Discover()
+	}
+	m.mu.Lock()
 	defer m.mu.Unlock()
-	return !m.loaded || m.pending != nil || m.active
+	return !m.loaded || !m.scanned || m.pending != nil || m.active
 }
 func (m *Manager) save(root *os.Root, op *Operation) error {
 	if err := volumedata.WriteJSON(root, op.ID+"/operation.json", op); err != nil {
@@ -108,13 +268,31 @@ func (m *Manager) save(root *os.Root, op *Operation) error {
 	return nil
 }
 func (m *Manager) clear(root *os.Root, op *Operation) error {
-	if err := m.Store.WriteJSON(pointerFile, nil); err != nil {
+	if err := m.forget(root); err != nil {
+		return err
+	}
+	return root.RemoveAll(op.ID)
+}
+
+// forget removes the pointer: the one on the volume and, only if there is
+// one, the one on the stick. A run that was never cut off does not touch
+// the stick at all.
+func (m *Manager) forget(root *os.Root) error {
+	if err := root.Remove(volumePointer); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	m.mu.Lock()
-	m.pending = nil
+	onStick := m.onStick
 	m.mu.Unlock()
-	return root.RemoveAll(op.ID)
+	if onStick {
+		if err := m.Store.WriteJSON(pointerFile, nil); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	m.pending, m.onStick = nil, false
+	m.mu.Unlock()
+	return nil
 }
 func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, rawPaths []string) (paths []string, finish func() error, result error) {
 	if m.Disabled {
@@ -129,8 +307,11 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 			m.Gate.Unlock()
 		}
 	}()
+	// A run cut off before the last start must be found first: the volumes
+	// mounted by now are looked at here, not only by the next round of Run.
+	m.discover()
 	m.mu.Lock()
-	busy := !m.loaded || m.pending != nil || m.active
+	busy := !m.loaded || !m.scanned || m.pending != nil || m.active
 	m.mu.Unlock()
 	if busy {
 		return nil, nil, errors.New("an application backup needs recovery")
@@ -171,7 +352,11 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 	}
 	var dockerMembers []Member
 	var dockerPaths []string
-	dl, dockerMembers, dockerPaths, err = m.prepareDocker(ctx, job.Applications, append(slices.Clone(rawPaths), paths...))
+	inventory := m.prepareDocker
+	if m.inventory != nil {
+		inventory = m.inventory
+	}
+	dl, dockerMembers, dockerPaths, err = inventory(ctx, job.Applications, append(slices.Clone(rawPaths), paths...))
 	if err != nil {
 		return fail(err)
 	}
@@ -189,7 +374,8 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 	if err := m.save(root, &op); err != nil {
 		return fail(err)
 	}
-	if err := m.Store.WriteJSON(pointerFile, Operation{ID: op.ID, Volume: volume, Job: job.ID}); err != nil {
+	// The pointer lies next to the journal, not on the stick (PLAN 79-12).
+	if err := volumedata.WriteJSON(root, volumePointer, Operation{ID: op.ID, Volume: volume, Job: job.ID}); err != nil {
 		// Nothing was stopped yet and nothing points to this operation:
 		// it is no pending one. Left set, "a backup is running" would
 		// hold every change of an app until titand restarts.
@@ -406,12 +592,10 @@ func (m *Manager) Recover(ctx context.Context, confirm string, restart bool) err
 		}
 		// Without a journal there is nothing to restart or remove: only the
 		// pointer is forgotten, so that application changes work again.
-		if err := m.Store.WriteJSON(pointerFile, nil); err != nil {
+		if err := m.forget(root); err != nil {
 			return err
 		}
-		m.mu.Lock()
-		m.pending = nil
-		m.mu.Unlock()
+		m.rediscover()
 		return nil
 	}
 	if op.ID != p.ID || op.Volume != p.Volume {
@@ -459,5 +643,19 @@ func (m *Manager) Recover(ctx context.Context, confirm string, restart bool) err
 			return failures
 		}
 	}
-	return m.clear(root, &op)
+	if err := m.clear(root, &op); err != nil {
+		return err
+	}
+	m.rediscover()
+	return nil
+}
+
+// rediscover looks through every mounted volume again after a recovery
+// (caller holds Gate): another volume may hold a pointer that was passed
+// over while this one was pending.
+func (m *Manager) rediscover() {
+	m.mu.Lock()
+	m.looked = nil
+	m.mu.Unlock()
+	m.discover()
 }

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 const diskSleepFile = "storage/disk-sleep.json"
@@ -191,7 +193,17 @@ type DiskSleepDisk struct {
 	// unknown, e.g. since the start of titand. RAM only; older interfaces
 	// ignore it.
 	Since time.Time `json:"since,omitzero"`
-	Error string    `json:"error,omitempty"`
+	// Wakes are the last times the disk woke from standby with what woke
+	// it (newest first, at most 20), WakesToday and WakeDays how often it
+	// did today and on the last days (local time). Kept in RAM and, where
+	// a volume never sleeps, in .titanos/disksleep on the system data
+	// volume. Only for administrators (AddDiskWakes): the disk sleep routes
+	// and the storage status of an administrator. Older interfaces ignore
+	// them.
+	Wakes      []DiskWake    `json:"wakes,omitempty"`
+	WakesToday int           `json:"wakesToday,omitempty"`
+	WakeDays   []DiskWakeDay `json:"wakeDays,omitempty"`
+	Error      string        `json:"error,omitempty"`
 }
 
 // DiskSleepUnavailable is a disk that cannot be put to sleep, with the
@@ -277,7 +289,21 @@ func (m *Manager) DiskSleepStatus(ctx context.Context) (DiskSleepStatus, error) 
 	if err != nil {
 		return DiskSleepStatus{}, err
 	}
-	return m.diskSleepStatus(devices), nil
+	status := m.diskSleepStatus(devices)
+	m.AddDiskWakes(&status)
+	return status, nil
+}
+
+// AddDiskWakes adds to each listed disk when and by what it was last woken
+// (RAM only). The history names accounts, shares and jobs: it is for
+// administrators and is left out of Status, which every account and the
+// tools read.
+func (m *Manager) AddDiskWakes(status *DiskSleepStatus) {
+	now := m.now()
+	for i := range status.DiskStatus {
+		disk := &status.DiskStatus[i]
+		disk.Wakes, disk.WakesToday, disk.WakeDays = m.wakesOf(wakeKey(disk.ID, disk.Name), now)
+	}
 }
 
 func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
@@ -550,17 +576,27 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	defer m.actions.Unlock()
 	settings := m.DiskSleep()
 	if m.ReadOnly || !settings.Available || !settings.anyActive() || ctx.Err() != nil {
+		// No disk may sleep: nothing notes its accesses either.
+		m.wakeNotes().Enable(false)
 		m.resetSleepSamples()
 		return nil
 	}
+	m.wakeNotes().Enable(true)
 	devices, err := m.blockDevices(ctx)
 	if err != nil {
 		m.resetSleepSamples() // an observation gap never counts as confirmed idle
 		return err
 	}
-	busy := m.testing()
+	// busyWhy is why a busy disk is busy, for a disk it woke up.
+	busy, busyWhy := m.testing(), map[string]diskwake.Cause{}
+	for disk := range busy {
+		busyWhy[disk] = diskwake.Cause{Code: diskwake.DiskTest}
+	}
 	if m.Claimed != nil {
-		for disk := range m.Claimed() {
+		for disk, vm := range m.Claimed() {
+			if !busy[disk] {
+				busyWhy[disk] = diskwake.Cause{Code: diskwake.VMDisk, Detail: vm}
+			}
 			busy[disk] = true
 		}
 	}
@@ -585,6 +621,9 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	m.mu.RUnlock()
 	next := map[string]sleepSample{}
 	volumeOf := map[string]string{}
+	// sleeping are the volumes with a disk that may sleep: the history of
+	// wakes is never written there.
+	sleeping := map[string]bool{}
 	var problems []DiskSleepError
 	m.mu.RLock()
 	previousTimes := m.diskSleepTimes
@@ -599,18 +638,42 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 		}
 		args := standbyArgs(device)
 		device.walk(func(part blockDevice) {
-			if busyParts[filepath.Base(part.KName)] || part.FSType == "btrfs" && busyBtrfs[part.UUID] {
-				busy[name] = true
+			raid, btrfs := busyParts[filepath.Base(part.KName)], part.FSType == "btrfs" && busyBtrfs[part.UUID]
+			if !raid && !btrfs {
+				return
 			}
+			if !busy[name] {
+				busyWhy[name] = diskwake.Cause{Code: diskwake.Maintenance, Detail: "raid"}
+				if btrfs {
+					busyWhy[name] = diskwake.Cause{Code: diskwake.Maintenance, Detail: "btrfs"}
+				}
+			}
+			busy[name] = true
 		})
+		// Members of a volume take its value, a disk's own value comes
+		// first.
+		volume := classify(device, byUUID).Volume
+		minutes, _ := settings.effective(ids[device.Name], volume)
+		if args != nil && minutes != 0 && volume != "" {
+			sleeping[volume] = true
+		}
 		if args == nil || busy[name] {
+			// A test, a VM or maintenance took a disk that slept: that woke
+			// it. Its sample is dropped as before.
+			if previous, known := m.sleepSamples[name]; args != nil && known && previous.attempted && previous.err == "" &&
+				previous.identity == m.sleepIdentity(device) && !now.Before(previous.sampled) && now.Sub(previous.sampled) <= 30*time.Second {
+				why := busyWhy[name]
+				entry := times[name]
+				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, &why)}
+				entry.identity, entry.asleepSince, entry.wokenAt = previous.identity, time.Time{}, wake.At
+				times[name] = entry
+				m.recordWake(wakeKey(ids[device.Name], name), wake)
+			}
 			continue
 		}
-		// Members of a volume take its value, a disk's own value comes
-		// first. Never sleeping keeps no sample: switching sleep on again
-		// starts a full idle period.
-		volumeOf[name] = classify(device, byUUID).Volume
-		minutes, _ := settings.effective(ids[device.Name], volumeOf[name])
+		// Never sleeping keeps no sample: switching sleep on again starts a
+		// full idle period.
+		volumeOf[name] = volume
 		if minutes == 0 {
 			continue
 		}
@@ -627,8 +690,10 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 			if known && previous.identity == identity && previous.attempted && previous.err == "" &&
 				!now.Before(previous.sampled) && now.Sub(previous.sampled) <= 30*time.Second {
 				entry := times[name]
-				entry.identity, entry.asleepSince, entry.wokenAt = identity, time.Time{}, now.Truncate(time.Second)
+				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, nil)}
+				entry.identity, entry.asleepSince, entry.wokenAt = identity, time.Time{}, wake.At
 				times[name] = entry
+				m.recordWake(wakeKey(ids[device.Name], name), wake)
 			}
 			next[name] = sleepSample{identity: identity, io: io, lastIO: now, sampled: now}
 			continue
@@ -676,6 +741,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	m.mu.Lock()
 	m.diskSleepErrors, m.diskSleepAsleep, m.diskSleepVolumes, m.diskSleepTimes = problems, asleep, asleepVolumes, times
 	m.mu.Unlock()
+	m.syncWakes(sleeping, now)
 	return nil
 }
 

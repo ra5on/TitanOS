@@ -28,6 +28,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 
 	"golang.org/x/sys/unix"
@@ -643,6 +644,7 @@ func (m *Manager) sweepRecycleOn(mounted []string, only map[string]bool, now tim
 		bin := filepath.Join(m.Path(share), recycleDir)
 		cutoff := now.AddDate(0, 0, -share.Recycle.Days)
 		removed := 0
+		diskwake.Note(share.Volume, diskwake.RecycleSweep, share.Name)
 		var dirs []string
 		// When a folder was deleted: the file manager notes it on the
 		// folder and leaves the dates of the files inside alone

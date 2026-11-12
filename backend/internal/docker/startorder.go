@@ -86,6 +86,7 @@ func (m *Manager) HoldApps(ctx context.Context, apps []string) (map[string]HeldP
 
 // StartApp starts the containers of one app that do not run.
 func (m *Manager) StartApp(ctx context.Context, app string) error {
+	m.noteStart(app)
 	containers, err := m.appContainers(ctx, app)
 	if err != nil {
 		return err

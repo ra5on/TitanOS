@@ -28,7 +28,36 @@ const minutesAgo = (minutes) => {
     : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 1);
 };
 const asleepAt = minutesAgo(42),
-  wokenAt = minutesAgo(7);
+  wokenAt = minutesAgo(7),
+  wokenByAt = minutesAgo(3);
+// PLAN 79-6: what woke a disk. sdd was woken by TitanOS's own data, by a
+// backup job, by something unknown and by a connected SMB client.
+const daysAgo = (days, hour) =>
+  new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, hour, 5);
+const wakes = [
+  { at: wokenByAt.toISOString(), causes: [{ code: "activity_log" }] },
+  {
+    at: daysAgo(1, 21).toISOString(),
+    causes: [{ code: "journal" }, { code: "notifications" }],
+  },
+  {
+    at: daysAgo(1, 3).toISOString(),
+    causes: [{ code: "backup_job", detail: "Backup-alles" }],
+  },
+  { at: daysAgo(2, 14).toISOString(), causes: [{ code: "unknown" }] },
+  {
+    at: daysAgo(2, 9).toISOString(),
+    causes: [{ code: "smb_session", detail: "Fotos" }],
+  },
+  {
+    at: daysAgo(3, 2).toISOString(),
+    causes: [{ code: "maintenance", detail: "raid" }],
+  },
+  {
+    at: daysAgo(4, 18).toISOString(),
+    causes: [{ code: "file_manager", detail: "anna" }],
+  },
+];
 const hhmm = (date) =>
   new Intl.DateTimeFormat("de", { hour: "2-digit", minute: "2-digit" }).format(
     date,
@@ -78,6 +107,7 @@ function sleepStatus() {
       sleepDisk("sdb", "B1", "active", wokenAt),
       // Nothing known since the start of titand: no time.
       sleepDisk("sdc", "C1", "active", null),
+      sleepDisk("sdd", "D1", "active", wokenByAt, { wakes, wakesToday: 1 }),
     ],
     unavailable: [
       {
@@ -90,8 +120,8 @@ function sleepStatus() {
   };
 }
 
-async function open(theme = "graphit", width = 1440) {
-  const made = await create("owner", theme, width);
+async function open(theme = "graphit", width = 1440, options = {}) {
+  const made = await create("owner", theme, width, "de", options);
   const { ctx } = made;
   const puts = [];
   made.puts = puts;
@@ -119,6 +149,7 @@ async function open(theme = "graphit", width = 1440) {
           hdd("sda", "A1"),
           hdd("sdb", "B1"),
           hdd("sdc", "C1"),
+          hdd("sdd", "D1"),
           {
             ...hdd("nvme0n1", "N1", { kind: "nvme", model: "Fixture NVMe" }),
             role: "free",
@@ -254,7 +285,7 @@ try {
       hasText: "Ruhemodus der Festplatten",
     });
     await tile
-      .getByText("Standard: 15 Minuten · 1 von 3 Platten schlafen")
+      .getByText("Standard: 15 Minuten · 1 von 4 Platten schlafen")
       .waitFor()
       .catch(async (err) => {
         await page.screenshot({
@@ -321,6 +352,172 @@ try {
     await details.screenshot({
       path: `${out}/plattendetails-${theme}-${width}.png`,
     });
+    await ctx.close();
+  }
+  // PLAN 79-6: "aufgeweckt heute hh:mm durch …" and the list of the last
+  // wakes, in the table, the disk details, the volume details and the
+  // dialog; real pictures at 1100 and 390 px for the owner (WAKE_SHOTS).
+  const shots = process.env.WAKE_SHOTS;
+  if (shots) await mkdir(shots, { recursive: true });
+  const wokenBy = `aufgeweckt heute ${hhmm(wokenByAt)} durch Aktivitätsprotokoll`;
+  for (const [theme, width] of [
+    ["graphit", 1100],
+    ["graphit", 390],
+    ["hell", 1100],
+  ]) {
+    const { ctx, page } = await open(theme, width, { deviceScaleFactor: 2 });
+    const shot = async (target, name) => {
+      if (shots)
+        await target.screenshot({
+          path: `${shots}/${name}-${theme}-${width}.png`,
+          ...(target === page ? { fullPage: true } : {}),
+        });
+    };
+    const noOverflow = async (locator, what) =>
+      assert.equal(
+        await locator.evaluate((node) =>
+          [node, ...node.querySelectorAll("*")].some(
+            (el) => el.scrollWidth > el.clientWidth + 1,
+          ),
+        ),
+        false,
+        `${what} cuts text off at ${width}px`,
+      );
+    await page.goto(`${base}/storage?tab=disks`);
+    const row = page.locator("tr", { hasText: "sdd" }).first();
+    await row.getByText(wokenBy).waitFor();
+    await shot(page, "laufwerke");
+
+    // Disk details: the history is folded away until asked for.
+    await row.locator("button").first().click();
+    const section = page.locator("aside.disk-details div.sleep");
+    await section.getByText(wokenBy).waitFor();
+    const history = section.locator("details.wakes");
+    await history.getByText("Letzte Weckvorgänge (7)").waitFor();
+    await history.getByText("heute 1×").waitFor();
+    assert.equal(await history.locator("li").first().isVisible(), false);
+    await shot(section, "plattendetails-zu");
+    await history.locator("summary").click();
+    assert.equal(await history.locator("li").count(), 7);
+    await history.getByText("Datensicherung „Backup-alles“").waitFor();
+    await history.getByText("Systemprotokoll, Meldungen").waitFor();
+    await history
+      .getByText("unbekannt (nicht TitanOS selbst", { exact: false })
+      .first()
+      .waitFor();
+    await history.getByText("vermutlich SMB-Zugriff auf „Fotos“").waitFor();
+    await history.getByText("RAID-Prüfung oder Wiederaufbau").waitFor();
+    await history.getByText("Dateizugriff von anna").waitFor();
+    // TitanOS's own data woke it most often: that hint comes first and
+    // leads to where the volume for it is chosen.
+    const link = history.getByRole("link", {
+      name: "Systemsteuerung › Daten und Sicherung › Systemdaten",
+    });
+    assert.equal(await link.getAttribute("href"), "/settings/systemdata");
+    assert.equal(await history.locator("p.hint").count(), 3);
+    await noOverflow(section, "the wake history in the disk details");
+    await shot(section, "plattendetails-offen");
+    // A disk without a recorded wake has no list at all.
+    assert.equal(
+      await page.locator("aside.disk-details details.wakes").count(),
+      1,
+    );
+
+    // The dialog names it too.
+    await section.getByRole("button", { name: "Ruhemodus einstellen" }).click();
+    const dialog = page.getByRole("dialog");
+    const entry = dialog.locator("#sleep-disk-sdd");
+    await entry.getByText(wokenBy).waitFor();
+    await entry.locator("details.wakes summary").click();
+    await entry.getByText("Datensicherung „Backup-alles“").waitFor();
+    assert.equal(await dialog.locator("details.wakes").count(), 1);
+    await entry.scrollIntoViewIfNeeded();
+    await noOverflow(entry, "the wake history in the dialog");
+    await shot(entry, "dialog");
+    await ctx.close();
+
+    // Volume details: each member with its own history.
+    const volume = await open(theme, width, { deviceScaleFactor: 2 });
+    await volume.page.goto(`${base}/storage#volume-Data`);
+    const members = volume.page.locator(".block.sleep .members-sleep");
+    await members.getByText(wokenBy).waitFor();
+    await members.locator("details.wakes summary").click();
+    await members.getByText("Dateizugriff von anna").waitFor();
+    await noOverflow(members, "the wake history in the volume details");
+    if (shots)
+      await volume.page
+        .locator(".block.sleep")
+        .screenshot({ path: `${shots}/volumedetails-${theme}-${width}.png` });
+    await volume.ctx.close();
+  }
+  // The copies of the stick on a sleeping volume are not searched by
+  // opening the page; the button is the explicit wish to wake it.
+  for (const width of [1100, 390]) {
+    const { ctx, page } = await open("graphit", width, {
+      deviceScaleFactor: 2,
+    });
+    const copy = (volume, name) => ({
+      name,
+      volume,
+      time: now.toISOString(),
+      sizeBytes: 2846135,
+      hostname: "titan",
+      version: "0.77.0",
+      encrypted: true,
+    });
+    const asked = [];
+    await ctx.route("**/api/v1/config-backup**", (route) => {
+      const searched = new URL(route.request().url()).searchParams.get(
+        "search",
+      );
+      asked.push(searched);
+      const backups = [copy("Data", "config-20261112-080000-aaaaaaaa.tar.gz")];
+      if (searched === "asleep")
+        backups.push(copy("Backup", "config-20261111-080000-bbbbbbbb.tar.gz"));
+      return route.fulfill({
+        json: {
+          backup: {
+            settings: {
+              enabled: true,
+              volume: "",
+              keep: 14,
+              schedule: "",
+              time: "",
+              weekday: 1,
+              encrypt: true,
+              pace: "daily",
+            },
+            target: "Data",
+            lastCheck: now.toISOString(),
+            lastError: "",
+            backups,
+            next: null,
+            ...(searched === "asleep"
+              ? {}
+              : { unsearched: { code: "volume_asleep", volumes: ["Backup"] } }),
+          },
+          volumes: ["Backup", "Data"],
+          passwordSet: true,
+        },
+      });
+    });
+    await page.goto(`${base}/settings/backups/configuration#config-downloads`);
+    const list = page.locator("#config-downloads");
+    const notice = list.getByText(
+      "Volume Backup schläft – seine Sicherungen werden nicht durchsucht.",
+      { exact: false },
+    );
+    await notice.waitFor();
+    assert.ok(!asked.includes("asleep"), "opening the page searched it");
+    assert.equal(await list.locator("tbody tr").count(), 1);
+    if (shots)
+      await list.screenshot({
+        path: `${shots}/sicherungen-schlaeft-${width}.png`,
+      });
+    await list.getByRole("button", { name: "Trotzdem durchsuchen" }).click();
+    await list.locator("tbody tr").nth(1).waitFor();
+    assert.equal(asked.at(-1), "asleep");
+    assert.equal(await notice.count(), 0);
     await ctx.close();
   }
   assert.deepEqual(errors, []);

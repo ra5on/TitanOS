@@ -5,6 +5,7 @@
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { overridesFrom } from './disk-sleep.ts';
+	import DiskWakes from './DiskWakes.svelte';
 	import { sleepDuration, sleepOrigin, sleepSince, volumeSleep } from './sleep-view.ts';
 
 	type Props = {
@@ -160,6 +161,7 @@
 						>
 						{#if sleepSince(disk)}<span class="muted">{sleepSince(disk)}</span>{/if}
 						<span class="muted">{sleepDuration(disk.effective)} · {sleepOrigin(disk.origin)}</span>
+						<div class="wakes"><DiskWakes {disk} /></div>
 					</li>
 				{/each}
 			</ul>
@@ -199,6 +201,13 @@
 		align-items: center;
 		gap: var(--space-2-5);
 		flex-wrap: wrap;
+	}
+	.wakes {
+		flex-basis: 100%;
+		min-width: 0;
+	}
+	.wakes:empty {
+		display: none;
 	}
 	.editor {
 		display: grid;

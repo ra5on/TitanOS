@@ -13,6 +13,7 @@ import (
 	"slices"
 	"syscall"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
@@ -45,6 +46,8 @@ func Open(mountRoot, volume, feature string, mounted []string) (*os.Root, error)
 	if !naming.ValidVolume(feature) {
 		return nil, ErrUnavailable
 	}
+	// Says what woke the disks if they slept (RAM only, no I/O).
+	diskwake.NoteFeature(volume, feature)
 	root, err := OpenVolume(mountRoot, volume, mounted)
 	if err != nil {
 		return nil, err

@@ -43,6 +43,8 @@
 		lastError: string;
 		backups: Backup[];
 		next: string | null;
+		/** Mounted volumes that were not read, with the reason as a code (volume_asleep). */
+		unsearched?: { code: string; volumes: string[] };
 	};
 	type Answer = { backup: State; volumes: string[] | null; passwordSet?: boolean };
 
@@ -95,6 +97,20 @@
 	$effect(() => {
 		load();
 	});
+
+	// The copies on volumes whose disks sleep are not looked for by
+	// themselves (that would wake them); this is the explicit wish to do so.
+	let searching = $state(false);
+	async function searchAsleep() {
+		searching = true;
+		error = null;
+		try {
+			take(await api.get<Answer>('/config-backup?search=asleep'), true);
+		} catch (err) {
+			problem(err);
+		}
+		searching = false;
+	}
 
 	// Which volumes are encrypted (plan 6e): the hints below appear only when
 	// this is known, never on a guess.
@@ -463,6 +479,18 @@
 	<!-- The copies are a table: it stays one, under a plain heading. -->
 	<div class="part" id="config-downloads" use:revealTarget>
 		<SettingGroup id="stick-list" title={t('stick.backups')}>
+			{#if status.unsearched?.volumes.length}
+				<div class="asleep" role="status">
+					<p>
+						{t(status.unsearched.volumes.length === 1 ? 'stick.asleepOne' : 'stick.asleepMany', {
+							volumes: status.unsearched.volumes.join(', '),
+						})}
+					</p>
+					<button type="button" class="btn small" onclick={searchAsleep} disabled={searching}
+						>{t('stick.asleepSearch')}</button
+					>
+				</div>
+			{/if}
 			{#if status.backups.length === 0}
 				<p class="muted">{t('stick.none')}</p>
 			{:else}
@@ -567,5 +595,17 @@
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
+	}
+	.asleep {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+		margin-bottom: var(--space-2);
+	}
+	.asleep p {
+		margin: 0;
+		flex: 1 1 16rem;
+		min-width: 0;
 	}
 </style>

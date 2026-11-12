@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // Changing, starting, stopping and deleting containers, consoles
@@ -80,6 +82,7 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	if m.running(name) != "" {
 		return ErrRunning
 	}
+	diskwake.Note(c.Volume, diskwake.LXCStart, name)
 	if c.Network != "none" {
 		if !m.networkReady(c) {
 			return ErrNoBridge

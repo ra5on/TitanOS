@@ -31,6 +31,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
 	"github.com/ra5on/TitanOS/backend/internal/office"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -497,6 +498,7 @@ func (m *Manager) pass(parent context.Context, volume string, prefixes []string,
 		m.mu.Unlock()
 	}()
 	m.setStatus(volume, func(st *VolumeStatus) { st.Scanned, st.Updated, st.Truncated = 0, 0, false })
+	diskwake.Note(volume, diskwake.FileIndex, "")
 	err := m.update(ctx, volume, prefixes, ocr)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		slog.Warn("file index pass", "volume", volume, "err", err)

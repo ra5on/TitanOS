@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 type UsageEntry struct {
@@ -41,6 +43,7 @@ func (m *Manager) Usage(ctx context.Context, volume string) (UsageReport, error)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	diskwake.Note(volume, diskwake.UsageScan, "")
 	root, err := os.OpenRoot(m.MountPoint(volume))
 	if err != nil {
 		return out, err

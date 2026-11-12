@@ -416,6 +416,38 @@ func parseSnapshots(out string) []Usage {
 	return list
 }
 
+// SMBConnected names the SMB shares on a volume a client is connected to
+// right now (smbstatus reads Samba's tables in RAM, no disk). Asked when a
+// sleeping disk woke and TitanOS itself did not touch the volume: a
+// connected client is the likely reason, not a proven one.
+func (m *Manager) SMBConnected(ctx context.Context, volume string) []string {
+	if m.Disabled {
+		return nil
+	}
+	var onVolume []Share
+	for _, share := range m.List() {
+		if share.SMB && share.Volume == volume {
+			onVolume = append(onVolume, share)
+		}
+	}
+	if len(onVolume) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := m.runner.Run(ctx, "", "smbstatus", "--shares", "--json")
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, share := range onVolume {
+		if sessions, err := parseSessions(out, share.Name); err == nil && len(sessions) > 0 {
+			names = append(names, share.Name)
+		}
+	}
+	return names
+}
+
 // smbSessions returns the open SMB connections to a share.
 func (m *Manager) smbSessions(ctx context.Context, share Share) ([]Usage, error) {
 	if m.Disabled || !share.SMB {
