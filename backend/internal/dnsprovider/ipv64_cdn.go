@@ -3,10 +3,8 @@ package dnsprovider
 import (
 	"context"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -202,17 +200,6 @@ func (c *IPv64) CDNAction(ctx context.Context, token, action string) (IPv64CDN, 
 	return c.cdn(ctx, http.MethodPost, token, "/"+action, nil)
 }
 
-// CDNRecords lists A and AAAA records of the domain with their CDN state.
-func (c *IPv64) CDNRecords(ctx context.Context, token string) ([]IPv64FullRecord, error) {
-	path, err := cdnPath(token, "/records")
-	if err != nil {
-		return nil, err
-	}
-	list := []IPv64FullRecord{}
-	err = c.call(ctx, http.MethodGet, path, nil, nil, &list)
-	return list, err
-}
-
 // CDNRecord routes a record through the CDN (mode full or
 // other_family_only) or back to direct delivery (mode "").
 func (c *IPv64) CDNRecord(ctx context.Context, token, record, mode string) (IPv64FullRecord, error) {
@@ -233,112 +220,4 @@ func (c *IPv64) CDNRecord(ctx context.Context, token, record, mode string) (IPv6
 	var r IPv64FullRecord
 	err = c.call(ctx, http.MethodPost, path, nil, body, &r)
 	return r, err
-}
-
-// MappingInput is a new port of the portmapper.
-type MappingInput struct {
-	Record     string `json:"record"`
-	TargetPort int    `json:"target_port"`
-	Transport  string `json:"transport,omitempty"`
-	Name       string `json:"name,omitempty"`
-	ListenPort int    `json:"listen_port,omitempty"`
-}
-
-// Validate checks ports and transport; ListenPort 0 lets IPv64 choose.
-func (in MappingInput) Validate() error {
-	if !validRef(in.Record) {
-		return invalid("record")
-	}
-	if in.TargetPort < 1 || in.TargetPort > 65535 {
-		return invalid("target_port is 1 to 65535")
-	}
-	if in.Transport != "" && !slices.Contains(IPv64Transports, in.Transport) {
-		return invalid("transport is tcp or udp")
-	}
-	if in.ListenPort != 0 && (in.ListenPort < 50000 || in.ListenPort > 62000) {
-		return invalid("listen_port is 50000 to 62000")
-	}
-	if len(in.Name) > 100 || strings.ContainsAny(in.Name, "\r\n") {
-		return invalid("name")
-	}
-	return nil
-}
-
-// Mappings lists the ports of the portmapper.
-func (c *IPv64) Mappings(ctx context.Context, token string) ([]IPv64CDNMapping, error) {
-	path, err := cdnPath(token, "/mappings")
-	if err != nil {
-		return nil, err
-	}
-	list := []IPv64CDNMapping{}
-	err = c.call(ctx, http.MethodGet, path, nil, nil, &list)
-	return list, err
-}
-
-// CreateMapping adds a port.
-func (c *IPv64) CreateMapping(ctx context.Context, token string, in MappingInput) (IPv64CDNMapping, error) {
-	if err := in.Validate(); err != nil {
-		return IPv64CDNMapping{}, err
-	}
-	path, err := cdnPath(token, "/mappings")
-	if err != nil {
-		return IPv64CDNMapping{}, err
-	}
-	var m IPv64CDNMapping
-	err = c.call(ctx, http.MethodPost, path, nil, in, &m)
-	return m, err
-}
-
-// DeleteMapping removes a port.
-func (c *IPv64) DeleteMapping(ctx context.Context, token, mapping string) error {
-	if !validRef(mapping) {
-		return invalid("mapping")
-	}
-	path, err := cdnPath(token, "/mappings/", url.PathEscape(mapping))
-	if err != nil {
-		return err
-	}
-	return c.call(ctx, http.MethodDelete, path, nil, nil, nil)
-}
-
-// IPv64AccessEntry is an address of the access list.
-type IPv64AccessEntry struct {
-	ID      int64  `json:"id"`
-	Address string `json:"address"`
-}
-
-// AccessList reads the access list of the reverse proxy.
-func (c *IPv64) AccessList(ctx context.Context, token string) ([]IPv64AccessEntry, error) {
-	path, err := cdnPath(token, "/access-list")
-	if err != nil {
-		return nil, err
-	}
-	list := []IPv64AccessEntry{}
-	err = c.call(ctx, http.MethodGet, path, nil, nil, &list)
-	return list, err
-}
-
-// AddAccess adds an address or network (CIDR).
-func (c *IPv64) AddAccess(ctx context.Context, token, address string) (IPv64AccessEntry, error) {
-	if _, err := netip.ParsePrefix(address); err != nil {
-		if _, err := netip.ParseAddr(address); err != nil {
-			return IPv64AccessEntry{}, invalid("address is an IP or a network in CIDR")
-		}
-	}
-	path, err := cdnPath(token, "/access-list")
-	if err != nil {
-		return IPv64AccessEntry{}, err
-	}
-	var e IPv64AccessEntry
-	err = c.call(ctx, http.MethodPost, path, nil, map[string]string{"address": address}, &e)
-	return e, err
-}
-
-// RemoveAccess removes an entry of the access list.
-func (c *IPv64) RemoveAccess(ctx context.Context, token string, id int64) error {
-	path, err := cdnPath(token, "/access-list/", strconv.FormatInt(id, 10))
-	if err != nil {
-		return err
-	}
-	return c.call(ctx, http.MethodDelete, path, nil, nil, nil)
 }

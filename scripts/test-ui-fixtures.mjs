@@ -1663,7 +1663,7 @@ export function fixtureFactory(browser, errors) {
             "mcp",
           ],
         });
-      // Dynamic DNS and the IPv64 tab: nothing set up, no IPv64 key.
+      // Dynamic DNS: nothing set up, no IPv64 key.
       if (path === "/network/ddns" && method === "GET")
         return json({
           settings: {
@@ -1680,44 +1680,6 @@ export function fixtureFactory(browser, errors) {
           secrets: {},
           running: false,
           heartbeat: {},
-        });
-      if (path === "/ipv64" && method === "GET")
-        return json({
-          status: {
-            settings: {
-              notify: {
-                enabled: false,
-                failover: true,
-                cdnTraffic: true,
-                healthchecks: true,
-              },
-              blocklist: { enabled: false },
-              wireguard: { enabled: false },
-              published: [],
-              maintenance: [],
-            },
-            keySet: false,
-            keySource: "",
-            poll: {},
-            blocklistStatus: { entries: 0, live: false },
-            tunnel: { up: false, routes: [] },
-            readOnly: false,
-          },
-          firewall: false,
-          nasCheck: "",
-          hostname: "titan-test",
-          zones: ["ipv64.de", "ipv64.net", "home64.de"],
-          recordTypes: [
-            "A",
-            "AAAA",
-            "CNAME",
-            "MX",
-            "TXT",
-            "NS",
-            "SRV",
-            "TLSA",
-            "CAA",
-          ],
         });
       // New VM: eight threads, no image or free disk yet.
       if (path === "/vms/host")

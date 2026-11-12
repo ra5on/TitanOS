@@ -1,6 +1,6 @@
 <script lang="ts">
-	// IPv4/IPv6, interval, lookup service and interface of the updater,
-	// shared by Settings › Dynamic DNS and Settings › IPv64 › DynDNS.
+	// IPv4/IPv6, interval, lookup service and interface of the updater
+	// (Settings › Dynamic DNS).
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { INTERVALS, type UpdaterForm } from './ddns.ts';

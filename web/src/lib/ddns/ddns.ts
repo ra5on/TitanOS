@@ -1,6 +1,5 @@
-// Dynamic DNS shared by Settings › Dynamic DNS and Settings › IPv64 ›
-// DynDNS: the types titand sends, the form of the updater settings and the
-// calls of the IPv64 healthcheck. Both pages work on the same settings
+// Dynamic DNS (Settings › Dynamic DNS): the types titand sends, the form
+// of the updater settings and the calls of the IPv64 healthcheck
 // (/config/ddns/settings.json).
 import { api } from '#lib/api.ts';
 import type { DnsProvider, SecretName } from '#lib/dns-providers.ts';
@@ -39,14 +38,6 @@ export type DdnsStatus = {
 	heartbeat: { lastPing?: string; lastError?: string; nextPing?: string; paused?: boolean };
 };
 
-export type Ipv64Usage = { used: number; limit: number | null };
-export type Ipv64Account = {
-	username: string;
-	plan: string;
-	validUntil?: string;
-	usage: Record<string, Ipv64Usage>;
-	keyName?: string;
-};
 export type Ipv64Domain = {
 	id: number;
 	name: string;
@@ -56,16 +47,6 @@ export type Ipv64Domain = {
 	ignore: string;
 	active: boolean;
 	updateCount: number;
-};
-export type Ipv64Record = {
-	id: number;
-	prefix: string;
-	fqdn: string;
-	type: string;
-	content: string;
-	ttl: number;
-	state: string;
-	pendingDNS: boolean;
 };
 export type Ipv64Healthcheck = {
 	id: string;
@@ -78,39 +59,6 @@ export type Ipv64Healthcheck = {
 	integrations: number[];
 };
 export type Ipv64Integration = { id: number; type: string; name: string; status: string };
-
-/** "3 of 48", "3" without a limit. */
-export function usageText(
-	usage: Ipv64Usage | undefined,
-	of: (used: number, limit: number) => string,
-): string {
-	if (!usage) return '–';
-	return usage.limit === null || usage.limit === undefined
-		? String(usage.used)
-		: of(usage.used, usage.limit);
-}
-
-/** The CAA record that allows only Let's Encrypt to issue certificates. */
-export const CAA_LETSENCRYPT = '0 issue "letsencrypt.org"';
-
-/** A rough check of record contents before they are sent (titand checks again). */
-export function recordProblem(type: string, content: string): boolean {
-	const value = content.trim();
-	if (!value || /[\r\n]/.test(value)) return true;
-	switch (type) {
-		case 'A':
-			return !/^(\d{1,3}\.){3}\d{1,3}$/.test(value);
-		case 'AAAA':
-			return !value.includes(':');
-		case 'MX':
-			return !/^\d{1,5}\s+\S+$/.test(value);
-		case 'SRV':
-			return !/^\d+\s+\d+\s+\d+\s+\S+$/.test(value);
-		case 'CAA':
-			return !/^\d{1,3}\s+(issue|issuewild|iodef)\s+\S+/.test(value);
-	}
-	return false;
-}
 
 /** The intervals offered besides the default, in minutes. */
 export const INTERVALS = [5, 10, 15, 30, 60, 360, 1440];
@@ -160,17 +108,6 @@ export function ddnsBadge(status: DdnsStatus | null): { text: MessageKey; tone: 
 /** Sends the addresses now, even if they did not change. */
 export function updateNow(): Promise<DdnsStatus> {
 	return api.post<DdnsStatus>('/network/ddns/update', {});
-}
-
-/** Adds a name to a list of names (lower case, no doubles, at most MAX_HOSTS). */
-export function withHost(hosts: string[], name: string): string[] {
-	const value = name.trim().toLowerCase().replace(/\.$/, '');
-	return !value || hosts.includes(value) || hosts.length >= MAX_HOSTS ? hosts : [...hosts, value];
-}
-
-/** The address a router or other updater calls for a domain of IPv64 (the token stays on ipv64.net). */
-export function ipv64UpdateURL(domain: string, token = '<update-token>'): string {
-	return `https://ipv64.net/nic/update?key=${token}&domain=${domain}&ip=<ipaddr>&ip6=<ip6addr>`;
 }
 
 // --- the healthcheck "watch reachability" (POST /network/ipv64/heartbeat/…) ---

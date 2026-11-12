@@ -134,7 +134,7 @@ type Options struct {
 	HealthReport *healthreport.Manager
 	// Fans drives the fans; nil makes one that only reads.
 	Fans *fans.Manager
-	// IPv64 is the account area of IPv64.net; nil makes one that is off.
+	// IPv64 keeps the apps published through IPv64.net; nil makes one that is off.
 	IPv64 *ipv64.Manager
 	// IPv64Reserved are ports of titand that are never published.
 	IPv64Reserved []int

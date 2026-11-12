@@ -41,7 +41,7 @@ Verwaltet man einen Knoten mit anderer Version, nennt der Balken oben beide Vers
 Die Knoten sprechen über den HTTPS-Port von titand. Jeder Knoten nennt seine Adressen in dieser Reihenfolge, jede mit ihrem **Weg** (`Node.Ways`, seit 0.44.0):
 
 1. **Weitere Adressen**, die man selbst einträgt, z. B. einen DDNS-Namen, eine Adresse in einem eigenen VPN oder Name:Port einer Portweiterleitung (Weg „Eigene Adresse“).
-2. **Gefundene Adressen** der Netzwerkschnittstellen: zuerst das Heimnetz, dann die VPNs. Der Weg richtet sich nach der Schnittstelle: `titanoscl` ist der Tunnel von TitanOS, `wg*`, `titanoswg` und `ipv64wg` WireGuard, `tailscale0` Tailscale, `wt0`/`nb-*` NetBird; sonst 100.64.0.0/10 Tailscale, private Adressen Heimnetz, öffentliche Internet. Ist Tailscale verbunden, kommt der MagicDNS-Name (`<name>.<tailnet>.ts.net`) hinter den Tailscale-IPs dazu; er überlebt eine neue IP.
+2. **Gefundene Adressen** der Netzwerkschnittstellen: zuerst das Heimnetz, dann die VPNs. Der Weg richtet sich nach der Schnittstelle: `titanoscl` ist der Tunnel von TitanOS, `wg*` und `titanoswg` WireGuard, `tailscale0` Tailscale, `wt0`/`nb-*` NetBird; sonst 100.64.0.0/10 Tailscale, private Adressen Heimnetz, öffentliche Internet. Ist Tailscale verbunden, kommt der MagicDNS-Name (`<name>.<tailnet>.ts.net`) hinter den Tailscale-IPs dazu; er überlebt eine neue IP.
 
 Ältere Knoten senden keine Wege; dann bestimmt der Empfänger ihn aus der Adresse. Docker- und VM-Brücken gelten nicht als Weg.
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// "Public through IPv64": the app's port reachable from the internet
-	// through the CDN/reverse proxy of IPv64.net (Settings › IPv64). titand
+	// through the CDN/reverse proxy of IPv64.net. titand
 	// creates the record and the CDN entry; never for the ports of TitanOS.
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -130,7 +130,7 @@
 			</div>
 		{:else if !info.keySource}
 			<p class="muted">
-				{t('ipv64x.appNoKey')} <a href="/settings/ddns?tab=ipv64">{t('ipv64x.title')}</a>
+				{t('ipv64x.appNoKey')} <a href="/settings/ddns">{t('ddns.title')}</a>
 			</p>
 		{:else if !info.ports.length}
 			<p class="muted">{t('ipv64x.appNoPort')}</p>

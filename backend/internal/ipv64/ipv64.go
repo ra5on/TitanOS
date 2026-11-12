@@ -1,20 +1,22 @@
-// Package ipv64 keeps what TitanOS itself does with an IPv64.net account
-// beyond dynamic DNS: its own API key (optional), notifications from
-// polling the account, the v64 blocklist for the firewall, the WireGuard
-// tunnel of the NAS into a Cloud Router, and the list of what TitanOS
-// created at IPv64 for apps and the maintenance page.
+// Package ipv64 keeps the list of Docker apps TitanOS made reachable
+// through the CDN of IPv64.net ("public through IPv64" in the app editor).
 //
-// Everything is off by default and nothing is created at IPv64 without an
-// explicit action in the web UI. Settings live in /config/ipv64/ and are
-// written only when they change; polling works from RAM.
+// The account area of IPv64.net (own API key, notifications from polling,
+// v64 blocklist, WireGuard tunnel into a Cloud Router, maintenance pages)
+// was removed with PLAN 79-2. Its settings share /config/ipv64/settings.json
+// with the list kept here: they are neither used nor dropped, so that an
+// older version of the app still finds them after a way back. The only
+// thing still read besides the list is the area's own API key, as the last
+// source of a key, so that an app published with it can be taken back.
 package ipv64
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
-	"net/netip"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -26,27 +28,14 @@ import (
 
 const settingsFile = "ipv64/settings.json"
 
+// tunnelInterface is the WireGuard tunnel an older version set up into a
+// Cloud Router of IPv64.
+const tunnelInterface = "ipv64wg"
+
 var (
 	ErrNotLoaded = errors.New("ipv64: settings could not be read from /config")
 	ErrNoKey     = errors.New("ipv64: no API key of the account")
-	ErrDisabled  = errors.New("ipv64: not available in development mode")
 )
-
-// Notify chooses which polled changes become notifications.
-type Notify struct {
-	Enabled bool `json:"enabled"`
-	// Failover: a policy switched to its replacement or back.
-	Failover bool `json:"failover"`
-	// CDNTraffic: the CDN traffic of the month is used up.
-	CDNTraffic bool `json:"cdnTraffic"`
-	// Healthchecks: a healthcheck went down.
-	Healthchecks bool `json:"healthchecks"`
-}
-
-// Blocklist feeds the firewall with the v64 blocklist.
-type Blocklist struct {
-	Enabled bool `json:"enabled"`
-}
 
 // Published is an app TitanOS made reachable through the CDN of IPv64.
 type Published struct {
@@ -74,46 +63,7 @@ type AppZones struct {
 	Internet bool `json:"internet"`
 }
 
-// Maintenance is the set of resources of "maintenance page when this NAS
-// fails" for one domain.
-type Maintenance struct {
-	ID          string    `json:"id"`
-	Domain      string    `json:"domain"`
-	Check       string    `json:"check"`
-	CheckName   string    `json:"checkName"`
-	CreatedNew  bool      `json:"createdCheck,omitempty"`
-	OfflinePage string    `json:"offlinePage"`
-	Policy      string    `json:"policy"`
-	Records     []string  `json:"records"`
-	At          time.Time `json:"at"`
-}
-
-// Settings is /config/ipv64/settings.json.
-type Settings struct {
-	// APIKey is an own key for this area; empty takes the one of dynamic
-	// DNS or Let's Encrypt. Never shown.
-	APIKey      string        `json:"apiKey,omitempty"`
-	Notify      Notify        `json:"notify"`
-	Blocklist   Blocklist     `json:"blocklist"`
-	WireGuard   WireGuard     `json:"wireguard"`
-	Published   []Published   `json:"published"`
-	Maintenance []Maintenance `json:"maintenance"`
-}
-
-// Status is what the page shows; the key only as "is set".
-type Status struct {
-	Settings Settings `json:"settings"`
-	// KeySet says an own key is stored; KeySource names where the key in
-	// use comes from: own, ddns, letsencrypt or "".
-	KeySet    bool            `json:"keySet"`
-	KeySource string          `json:"keySource"`
-	Poll      PollStatus      `json:"poll"`
-	List      BlocklistStatus `json:"blocklistStatus"`
-	Tunnel    TunnelStatus    `json:"tunnel"`
-	ReadOnly  bool            `json:"readOnly"`
-}
-
-// Manager keeps the settings and the background work.
+// Manager keeps the published apps.
 type Manager struct {
 	store  *config.Store
 	runner run.Runner
@@ -123,113 +73,101 @@ type Manager struct {
 	Options dnsprovider.Options
 	// Fallback returns the keys of dynamic DNS and Let's Encrypt.
 	Fallback func() (ddns, letsencrypt string)
-	// Notify sends a notification (severity, kind, subject).
-	Notify func(severity, kind, subject string)
-	// Firewall takes the blocklist; nil leaves it out.
-	Firewall interface {
-		SetBlocklist(ctx context.Context, list []netip.Prefix) error
-	}
-	// Fetch is the HTTP client for the blocklist file (tests).
-	now     func() time.Time
-	runDir  string
-	pokeCh  chan struct{}
-	poll    pollState
-	list    listState
-	tunnel  tunnelState
-	mu      sync.Mutex
-	loaded  bool
-	current Settings
+
+	// exists tells whether a network interface is there (tests).
+	exists func(iface string) bool
+
+	mu     sync.Mutex
+	loaded bool
+	// file is settings.json as it was read, field by field: what this
+	// version does not know is written back unchanged.
+	file      map[string]json.RawMessage
+	legacyKey string
+	published []Published
 }
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, runner: run.Exec{}, now: time.Now, runDir: "/run/titanos/ipv64", pokeCh: make(chan struct{}, 1)}
+	return &Manager{store: store, runner: run.Exec{}, exists: func(iface string) bool {
+		_, err := os.Stat("/sys/class/net/" + iface)
+		return err == nil
+	}}
 }
 
-func normal(s Settings) Settings {
-	if s.Published == nil {
-		s.Published = []Published{}
-	}
-	if s.Maintenance == nil {
-		s.Maintenance = []Maintenance{}
-	}
-	for i := range s.Published {
-		if s.Published[i].Records == nil {
-			s.Published[i].Records = []string{}
-		}
-	}
-	return s
-}
-
-// Load reads the settings once at the start and brings the tunnel up if
-// it is switched on.
+// Load reads the settings once at the start. Settings of the removed
+// account area are left alone; a tunnel an older version of the app left
+// running (an app update restarts titand, not the NAS) is taken down,
+// because nothing manages it any more.
 func (m *Manager) Load(ctx context.Context) error {
-	s := Settings{}
-	err := m.store.ReadJSON(settingsFile, &s)
+	file := map[string]json.RawMessage{}
+	err := m.store.ReadJSON(settingsFile, &file)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	m.mu.Lock()
-	m.current, m.loaded = normal(s), true
-	wg := m.current.WireGuard
-	m.mu.Unlock()
-	if wg.Enabled && !m.Disabled {
-		key, psk := m.readKeys()
-		if err := m.up(ctx, wg, key, psk); err != nil {
-			slog.Error("IPv64 WireGuard tunnel not up", "err", err)
+	var published []Published
+	var key string
+	if raw, ok := file["published"]; ok {
+		if err := json.Unmarshal(raw, &published); err != nil {
+			return err
 		}
 	}
+	if raw, ok := file["apiKey"]; ok {
+		_ = json.Unmarshal(raw, &key) // a key of another shape is no key
+	}
+	for i := range published {
+		if published[i].Records == nil {
+			published[i].Records = []string{}
+		}
+	}
+	m.mu.Lock()
+	m.file, m.published, m.legacyKey, m.loaded = file, published, key, true
+	m.mu.Unlock()
+	m.removeLeftoverTunnel(ctx)
 	return nil
 }
 
-// Settings returns a copy of the settings with the key.
-func (m *Manager) Settings() Settings {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return clone(m.current)
+func (m *Manager) removeLeftoverTunnel(ctx context.Context) {
+	if m.Disabled || m.exists == nil || !m.exists(tunnelInterface) {
+		return
+	}
+	if _, err := m.runner.Run(ctx, "", "ip", "link", "del", "dev", tunnelInterface); err != nil {
+		slog.Warn("tunnel to the IPv64 Cloud Router of an older version not removed", "interface", tunnelInterface, "err", err)
+		return
+	}
+	slog.Info("tunnel to the IPv64 Cloud Router of an older version removed; the Cloud Router is no longer part of TitanOS", "interface", tunnelInterface)
 }
 
-func clone(s Settings) Settings {
-	out := s
-	out.Published = slices.Clone(s.Published)
-	out.Maintenance = slices.Clone(s.Maintenance)
-	return normal(out)
-}
-
-// update changes the settings under the lock and stores them.
-func (m *Manager) update(change func(*Settings) error) error {
+// update changes the list under the lock and stores it, keeping every
+// other field of the file as it was.
+func (m *Manager) update(change func([]Published) []Published) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
 		return ErrNotLoaded
 	}
-	next := clone(m.current)
-	if err := change(&next); err != nil {
+	next := change(slices.Clone(m.published))
+	if next == nil {
+		next = []Published{}
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
 		return err
 	}
-	if err := m.store.WriteJSON(settingsFile, next); err != nil {
+	file := make(map[string]json.RawMessage, len(m.file)+1)
+	for k, v := range m.file {
+		file[k] = v
+	}
+	file["published"] = raw
+	if err := m.store.WriteJSON(settingsFile, file); err != nil {
 		return err
 	}
-	m.current = next
-	m.wake()
+	m.file, m.published = file, next
 	return nil
 }
 
-func (m *Manager) wake() {
-	select {
-	case m.pokeCh <- struct{}{}:
-	default:
-	}
-}
-
-// Key returns the API key in use and where it comes from.
+// Key returns the API key in use and where it comes from: ddns,
+// letsencrypt or legacy (the own key of the removed account area).
 func (m *Manager) Key() (string, string) {
-	m.mu.Lock()
-	own := m.current.APIKey
-	m.mu.Unlock()
-	if own != "" {
-		return own, "own"
-	}
 	if m.Fallback != nil {
 		ddns, le := m.Fallback()
 		if ddns != "" {
@@ -239,27 +177,12 @@ func (m *Manager) Key() (string, string) {
 			return le, "letsencrypt"
 		}
 	}
-	return "", ""
-}
-
-// Keys returns every distinct key TitanOS keeps, by where it is used.
-func (m *Manager) Keys() map[string]string {
-	out := map[string]string{}
 	m.mu.Lock()
-	if m.current.APIKey != "" {
-		out["own"] = m.current.APIKey
+	defer m.mu.Unlock()
+	if m.legacyKey != "" {
+		return m.legacyKey, "legacy"
 	}
-	m.mu.Unlock()
-	if m.Fallback != nil {
-		ddns, le := m.Fallback()
-		if ddns != "" {
-			out["ddns"] = ddns
-		}
-		if le != "" {
-			out["letsencrypt"] = le
-		}
-	}
-	return out
+	return "", ""
 }
 
 // Client returns a client with the key in use.
@@ -271,52 +194,21 @@ func (m *Manager) Client() (*dnsprovider.IPv64, error) {
 	return dnsprovider.NewIPv64(key, "", m.Options), nil
 }
 
-// SetKey stores an own key; "" with clear removes it.
-func (m *Manager) SetKey(key string, clear bool) error {
-	return m.update(func(s *Settings) error {
-		if clear {
-			s.APIKey = ""
-		} else if key != "" {
-			s.APIKey = key
-		}
-		return nil
-	})
-}
-
-// SetNotify stores the choice of notifications.
-func (m *Manager) SetNotify(n Notify) error {
-	return m.update(func(s *Settings) error {
-		s.Notify = n
-		return nil
-	})
-}
-
-// SetBlocklist switches the blocklist on or off.
-func (m *Manager) SetBlocklist(ctx context.Context, b Blocklist) error {
-	err := m.update(func(s *Settings) error {
-		s.Blocklist = b
-		return nil
-	})
-	if err == nil && !b.Enabled {
-		m.dropList(ctx)
-	}
-	return err
-}
-
 // AddPublished records an app published through the CDN.
 func (m *Manager) AddPublished(p Published) error {
-	return m.update(func(s *Settings) error {
-		s.Published = slices.DeleteFunc(s.Published, func(o Published) bool { return o.App == p.App })
-		s.Published = append(s.Published, p)
-		return nil
+	if p.Records == nil {
+		p.Records = []string{}
+	}
+	return m.update(func(list []Published) []Published {
+		list = slices.DeleteFunc(list, func(o Published) bool { return o.App == p.App })
+		return append(list, p)
 	})
 }
 
 // RemovePublished forgets a published app.
 func (m *Manager) RemovePublished(app string) error {
-	return m.update(func(s *Settings) error {
-		s.Published = slices.DeleteFunc(s.Published, func(o Published) bool { return o.App == app })
-		return nil
+	return m.update(func(list []Published) []Published {
+		return slices.DeleteFunc(list, func(o Published) bool { return o.App == app })
 	})
 }
 
@@ -324,61 +216,10 @@ func (m *Manager) RemovePublished(app string) error {
 func (m *Manager) PublishedApp(app string) (Published, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, p := range m.current.Published {
+	for _, p := range m.published {
 		if p.App == app {
 			return p, true
 		}
 	}
 	return Published{}, false
-}
-
-// AddMaintenance records a maintenance page setup.
-func (m *Manager) AddMaintenance(entry Maintenance) error {
-	return m.update(func(s *Settings) error {
-		s.Maintenance = slices.DeleteFunc(s.Maintenance, func(o Maintenance) bool { return o.ID == entry.ID })
-		s.Maintenance = append(s.Maintenance, entry)
-		return nil
-	})
-}
-
-// RemoveMaintenance forgets a maintenance page setup.
-func (m *Manager) RemoveMaintenance(id string) error {
-	return m.update(func(s *Settings) error {
-		s.Maintenance = slices.DeleteFunc(s.Maintenance, func(o Maintenance) bool { return o.ID == id })
-		return nil
-	})
-}
-
-// Status returns the settings without the key.
-func (m *Manager) Status() Status {
-	s := m.Settings()
-	_, source := m.Key()
-	st := Status{KeySet: s.APIKey != "", KeySource: source, ReadOnly: m.Disabled}
-	s.APIKey = ""
-	st.Settings = s
-	st.Poll = m.pollStatus()
-	st.List = m.listStatus()
-	st.Tunnel = m.tunnelStatus()
-	return st
-}
-
-// Run polls for notifications and refreshes the blocklist while switched
-// on. It never touches /config.
-func (m *Manager) Run(ctx context.Context) {
-	timer := time.NewTimer(2 * time.Minute)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		case <-m.pokeCh:
-		}
-		if !m.Disabled {
-			m.pollOnce(ctx)
-			m.refreshList(ctx)
-			m.retryTunnel(ctx)
-		}
-		timer.Reset(time.Minute)
-	}
 }

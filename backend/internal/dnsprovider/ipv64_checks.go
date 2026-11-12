@@ -5,11 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/netip"
 	"net/url"
-	"slices"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -133,12 +129,6 @@ func (c *IPv64) Ping(ctx context.Context, token string) error {
 	return nil
 }
 
-// IPv64HealthcheckTypes are the kinds of checks.
-var IPv64HealthcheckTypes = []string{"push", "icmp", "tcp", "http", "keyword"}
-
-// IPv64HealthcheckStates are the states of a check and of its events.
-var IPv64HealthcheckStates = []string{"new", "up", "paused", "warning", "down", "stabilizing"}
-
 // IPv64Event is an event of a healthcheck.
 type IPv64Event struct {
 	ID        int64           `json:"id"`
@@ -228,220 +218,9 @@ type HealthcheckInput struct {
 	FailuresBeforeAlarm  *int    `json:"failures_before_alarm,omitempty"`
 }
 
-// Validate checks the fields against the description; create needs name.
-func (in HealthcheckInput) Validate(create bool) error {
-	if create && (in.Name == nil || strings.TrimSpace(*in.Name) == "") {
-		return invalid("name is required")
-	}
-	if in.Name != nil && (len(*in.Name) > 100 || strings.ContainsAny(*in.Name, "\r\n")) {
-		return invalid("name")
-	}
-	kind := ""
-	if in.Type != nil {
-		kind = *in.Type
-		if !slices.Contains(IPv64HealthcheckTypes, kind) {
-			return invalid("type is one of %s", strings.Join(IPv64HealthcheckTypes, ", "))
-		}
-	}
-	if in.Integrations != nil {
-		if len(*in.Integrations) > 50 {
-			return invalid("integrations")
-		}
-		for _, id := range *in.Integrations {
-			if id < 0 {
-				return invalid("integrations")
-			}
-		}
-	}
-	for _, d := range []*int{in.PeriodSeconds, in.GraceSeconds} {
-		if d != nil && (*d < 60 || *d%60 != 0) {
-			return invalid("period and grace are whole minutes, hours or days, at least 60 seconds")
-		}
-	}
-	if in.Port != nil && (*in.Port < 1 || *in.Port > 65535) {
-		return invalid("port is 1 to 65535")
-	}
-	if in.IntervalSeconds != nil && (*in.IntervalSeconds < 1 || *in.IntervalSeconds > 86400) {
-		return invalid("interval_seconds is 1 to 86400")
-	}
-	if in.RetryIntervalSeconds != nil && (*in.RetryIntervalSeconds < 10 || *in.RetryIntervalSeconds > 86400) {
-		return invalid("retry_interval_seconds is 10 to 86400")
-	}
-	if in.FailuresBeforeAlarm != nil && (*in.FailuresBeforeAlarm < 1 || *in.FailuresBeforeAlarm > 60) {
-		return invalid("failures_before_alarm is 1 to 60")
-	}
-	if in.Target != nil && *in.Target != "" && !ValidHost(strings.ToLower(*in.Target)) {
-		if _, err := netip.ParseAddr(*in.Target); err != nil {
-			return invalid("target is a host name or an IP address")
-		}
-	}
-	if in.URL != nil && *in.URL != "" && !httpURL(*in.URL) {
-		return invalid("url must begin with http:// or https://")
-	}
-	if in.Keyword != nil && len(*in.Keyword) > 200 {
-		return invalid("keyword")
-	}
-	if create {
-		switch kind {
-		case "icmp", "tcp":
-			if in.Target == nil || *in.Target == "" {
-				return invalid("target is required for %s", kind)
-			}
-			if kind == "tcp" && in.Port == nil {
-				return invalid("port is required for tcp")
-			}
-		case "http", "keyword":
-			if in.URL == nil || *in.URL == "" {
-				return invalid("url is required for %s", kind)
-			}
-			if kind == "keyword" && (in.Keyword == nil || *in.Keyword == "") {
-				return invalid("keyword is required")
-			}
-		}
-	}
-	return nil
-}
-
-func httpURL(text string) bool {
-	u, err := url.Parse(text)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil && len(text) <= 2048
-}
-
-// Checks lists all healthchecks.
-func (c *IPv64) Checks(ctx context.Context) ([]IPv64Check, error) {
-	return c.checks(ctx, nil)
-}
-
 // Check reads one check with its last 20 events.
 func (c *IPv64) Check(ctx context.Context, token string) (IPv64Check, error) {
 	var h IPv64Check
 	err := c.call(ctx, http.MethodGet, "/healthchecks/"+url.PathEscape(token), nil, nil, &h)
 	return h, err
-}
-
-// CreateCheck makes a check of any type.
-func (c *IPv64) CreateCheck(ctx context.Context, in HealthcheckInput) (IPv64Check, error) {
-	if in.Type == nil {
-		push := "push"
-		in.Type = &push
-	}
-	if err := in.Validate(true); err != nil {
-		return IPv64Check{}, err
-	}
-	var h IPv64Check
-	err := c.call(ctx, http.MethodPost, "/healthchecks", nil, in, &h)
-	return h, err
-}
-
-// ChangeCheck changes the given fields of a check.
-func (c *IPv64) ChangeCheck(ctx context.Context, token string, in HealthcheckInput) (IPv64Check, error) {
-	if err := in.Validate(false); err != nil {
-		return IPv64Check{}, err
-	}
-	var h IPv64Check
-	err := c.call(ctx, http.MethodPatch, "/healthchecks/"+url.PathEscape(token), nil, in, &h)
-	return h, err
-}
-
-// CheckAction is pause, resume or rotate-token of a check.
-func (c *IPv64) CheckAction(ctx context.Context, token, action string) (IPv64Check, error) {
-	if !slices.Contains([]string{"pause", "resume", "rotate-token"}, action) {
-		return IPv64Check{}, invalid("action")
-	}
-	var h IPv64Check
-	err := c.call(ctx, http.MethodPost, "/healthchecks/"+url.PathEscape(token)+"/"+action, nil, nil, &h)
-	return h, err
-}
-
-// IPv64EventPage is a page of events.
-type IPv64EventPage struct {
-	Events     []IPv64Event `json:"events"`
-	HasMore    bool         `json:"has_more"`
-	NextBefore *int64       `json:"next_before"`
-}
-
-// Events reads events of a check, newest first; before is the cursor.
-func (c *IPv64) Events(ctx context.Context, token string, limit int, before int64) (IPv64EventPage, error) {
-	if limit < 1 || limit > 1000 {
-		return IPv64EventPage{}, invalid("limit is 1 to 1000")
-	}
-	query := url.Values{"limit": {strconv.Itoa(limit)}}
-	if before > 0 {
-		query.Set("before", strconv.FormatInt(before, 10))
-	}
-	answer, err := c.Do(ctx, http.MethodGet, "/healthchecks/"+url.PathEscape(token)+"/events", query, nil)
-	if err != nil {
-		return IPv64EventPage{}, err
-	}
-	page := IPv64EventPage{Events: []IPv64Event{}}
-	if err := decodeData(answer.Data, &page.Events); err != nil {
-		return IPv64EventPage{}, err
-	}
-	var meta struct {
-		HasMore    bool   `json:"has_more"`
-		NextBefore *int64 `json:"next_before"`
-	}
-	if len(answer.Meta) > 0 {
-		_ = json.Unmarshal(answer.Meta, &meta) // a value that cannot be read leaves the zero value, which the code handles
-	}
-	page.HasMore, page.NextBefore = meta.HasMore, meta.NextBefore
-	return page, nil
-}
-
-// IPv64Incident is a down phase of a check.
-type IPv64Incident struct {
-	ID        int64      `json:"id"`
-	Status    string     `json:"status"`
-	CreatedAt *time.Time `json:"created_at"`
-	ClosedAt  *time.Time `json:"closed_at"`
-	Events    []struct {
-		Time    *time.Time `json:"time"`
-		Kind    string     `json:"kind"`
-		Message string     `json:"message"`
-	} `json:"events"`
-}
-
-// Incidents reads the incidents of a check.
-func (c *IPv64) Incidents(ctx context.Context, token string, limit int) ([]IPv64Incident, error) {
-	if limit < 1 || limit > 500 {
-		return nil, invalid("limit is 1 to 500")
-	}
-	list := []IPv64Incident{}
-	err := c.call(ctx, http.MethodGet, "/healthchecks/"+url.PathEscape(token)+"/incidents", url.Values{"limit": {strconv.Itoa(limit)}}, nil, &list)
-	return list, err
-}
-
-// IPv64StatsRanges are the ranges of the statistics.
-var IPv64StatsRanges = []string{"1h", "24h", "7d", "30d"}
-
-// IPv64Stats is availability and latency of a check over a range.
-type IPv64Stats struct {
-	Range               string     `json:"range"`
-	From                *time.Time `json:"from"`
-	To                  *time.Time `json:"to"`
-	Measurements        int        `json:"measurements"`
-	AvailabilityPercent *float64   `json:"availability_percent"`
-	LatencyMS           struct {
-		Avg *float64 `json:"avg"`
-		Min *float64 `json:"min"`
-		Max *float64 `json:"max"`
-	} `json:"latency_ms"`
-	BucketSeconds int `json:"bucket_seconds"`
-	Series        []struct {
-		Time                time.Time `json:"time"`
-		Measurements        int       `json:"measurements"`
-		AvailabilityPercent float64   `json:"availability_percent"`
-		LatencyAvgMS        *float64  `json:"latency_avg_ms"`
-		LatencyMaxMS        *float64  `json:"latency_max_ms"`
-	} `json:"series"`
-}
-
-// Stats reads the statistics of a check.
-func (c *IPv64) Stats(ctx context.Context, token, rangeName string) (IPv64Stats, error) {
-	if !slices.Contains(IPv64StatsRanges, rangeName) {
-		return IPv64Stats{}, invalid("range is one of 1h, 24h, 7d, 30d")
-	}
-	var s IPv64Stats
-	err := c.call(ctx, http.MethodGet, "/healthchecks/"+url.PathEscape(token)+"/stats", url.Values{"range": {rangeName}}, nil, &s)
-	return s, err
 }

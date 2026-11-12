@@ -161,9 +161,8 @@ func sampleRuleset() ruleset {
 			{Key: "immich", Name: "immich", Ports: []AppPort{{2283, "tcp"}}},
 			{Key: "container:pihole", Name: "pihole", Ports: []AppPort{{53, "tcp"}, {53, "udp"}, {8053, "tcp"}}},
 		},
-		blocked:   []netip.Prefix{netip.MustParsePrefix("198.51.100.7/32"), netip.MustParsePrefix("2001:db8:bad::/64")},
-		admin:     netip.MustParseAddr("192.168.1.20"),
-		blocklist: []netip.Prefix{netip.MustParsePrefix("203.0.113.66/32"), netip.MustParsePrefix("2001:db8:66::/48")},
+		blocked: []netip.Prefix{netip.MustParsePrefix("198.51.100.7/32"), netip.MustParsePrefix("2001:db8:bad::/64")},
+		admin:   netip.MustParseAddr("192.168.1.20"),
 	}
 }
 
@@ -227,7 +226,8 @@ func sortAppRuns(script string) string {
 
 func TestRenderGolden(t *testing.T) {
 	// testdata/enabled.nft is what version 1 rendered from sampleLegacy;
-	// it is never rewritten. Migrated to version 2, the same settings must
+	// it is never rewritten (but for the v64 blocklist and the tunnel
+	// "ipv64wg", taken out by hand with PLAN 79-2). Migrated to version 2, the same settings must
 	// filter the same way: equal but for the order of app lines.
 	v1, err := os.ReadFile(filepath.Join("testdata", "enabled.nft"))
 	if err != nil {

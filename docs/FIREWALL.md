@@ -15,7 +15,7 @@ Reihenfolge (die erste passende gilt):
 |---|---|
 | eigene Zonen (bis 16, in der Reihenfolge der Liste) | Netze des NAS, die der Zone zugeordnet sind (Anschluss **und** Subnetz, siehe unten), und ihre Quellnetze (Adressen/Netze, egal über welchen Anschluss) |
 | Docker | alle Docker-Bridge-Netze (`docker0`, `br-<id>`), die keiner eigenen Zone gehören – auch jedes neu angelegte |
-| VPN | Schnittstellen `tailscale0`, `wt0`, `titanoswg` (WireGuard-Server des NAS, `docs/WIREGUARD.md`) sowie `ipv64wg` (Tunnel zu einem IPv64 Cloud Router, `docs/IPV64.md`) und `titanoscl` (Tunnel zwischen den Knoten eines Clusters, `docs/CLUSTER.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
+| VPN | Schnittstellen `tailscale0`, `wt0`, `titanoswg` (WireGuard-Server des NAS, `docs/WIREGUARD.md`) und `titanoscl` (Tunnel zwischen den Knoten eines Clusters, `docs/CLUSTER.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
 | Heimnetz | private Bereiche (10/8, 172.16/12, 192.168/16, 169.254/16, `fc00::/7`, `fe80::/10`) und die Netze der eigenen Anschlüsse des NAS (Bridge `br0`, VLANs, Bonds), damit auch das öffentliche IPv6-Präfix des Heimnetzes |
 | Internet | alles andere, ausdrücklich auch öffentliche IPv6-Adressen außerhalb des eigenen Präfixes |
 
@@ -182,7 +182,7 @@ in einem Wegwerf-Namespace: Ersetzen und Entfernen).
 Apps im Host-Netzwerk veröffentlichen keine Ports; die Seite markiert sie, ihre
 Ports gibt man mit Port-Richtlinien in der Zelle zum NAS frei.
 
-## IPv64: veröffentlichte Apps und v64 Blocklist
+## IPv64: veröffentlichte Apps
 
 - **„Öffentlich über IPv64“** im App-Editor (`docs/IPV64.md`): Ist die Firewall
   eingeschaltet, lässt TitanOS auf Wunsch (Häkchen, ab Werk an) die
@@ -195,12 +195,8 @@ Ports gibt man mit Port-Richtlinien in der Zelle zum NAS frei.
   sich nichts. IPv64 dokumentiert keine Quelladressbereiche des CDN; die
   Freigabe gilt deshalb für die ganze Zone Internet, nur für die Ports der App.
   Die Ports der Weboberfläche (und 22, 8750, 8752) werden nie veröffentlicht.
-- **v64 Blocklist** (ab Werk aus, Einstellungen › Dynamisches DNS › IPv64 › Blocklist): titand
-  holt die Liste höchstens einmal am Tag (nur im RAM, höchstens 200.000
-  Einträge, ohne private/VPN-Bereiche und Netze größer als /16 bzw. /32) und legt
-  sie als Mengen `blocklist4`/`blocklist6` in die Tabelle. Verworfen wird nur in
-  der Zone Internet (`internet` und `app_internet`), und nur, solange die
-  Firewall eingeschaltet ist.
+- Die **v64 Blocklist** (Mengen `blocklist4`/`blocklist6`) und die Schnittstelle
+  `ipv64wg` in der Zone VPN gibt es seit PLAN 79-2 nicht mehr (`docs/IPV64.md`).
 
 ## Einstellungsdatei, Migration und Rückweg
 

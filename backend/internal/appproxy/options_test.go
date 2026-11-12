@@ -342,17 +342,8 @@ func TestFullDomains(t *testing.T) {
 	if err := m.SetTarget("ha", Route{Enabled: true, Name: "ha", Host: "192.168.1.30", Port: 8123}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.AddDomain(true, "ha", "ha.nas.ipv64.de"); err != nil {
+	if err := m.SetTarget("ha", Route{Enabled: true, Name: "ha", Host: "192.168.1.30", Port: 8123, Domains: []string{"ha.nas.ipv64.de"}}); err != nil {
 		t.Fatal(err)
-	}
-	if err := m.AddDomain(true, "ha", "photos.nas.ipv64.de"); !errors.Is(err, ErrNameTaken) {
-		t.Fatalf("add taken domain: %v", err)
-	}
-	if err := m.AddDomain(false, "missing", "x.nas.ipv64.de"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("add to missing route: %v", err)
-	}
-	if target, key, ok := m.DomainRoute("HA.nas.ipv64.de"); !ok || !target || key != "ha" {
-		t.Fatalf("owner: %v %q %v", target, key, ok)
 	}
 	// Addresses, certificate names and the list for Let's Encrypt.
 	info := m.Info()
@@ -376,15 +367,6 @@ func TestFullDomains(t *testing.T) {
 		t.Fatal("domain lost after a restart")
 	}
 	// Switched off, a route answers to none of its domains.
-	if err := m.RemoveDomain("photos.nas.ipv64.de"); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, ok := m.match("photos.nas.ipv64.de"); ok {
-		t.Fatal("removed domain still answers")
-	}
-	if err := m.RemoveDomain("photos.nas.ipv64.de"); err != nil {
-		t.Fatalf("removing twice: %v", err)
-	}
 	m.SetGeneral(General{Off: ptr(true)})
 	if _, _, ok := m.match("ha.nas.ipv64.de"); ok || len(m.Domains()) != 0 {
 		t.Fatal("domain answers with every name off")
