@@ -161,7 +161,7 @@ Seit 0.72 gehören **T-Word**, **T-PDF** und **T-Exel** zur Grundausstattung, ni
 - **`successor`** im Katalog (wordcraft → t-word, pdfcraft → t-pdf, gridcraft → t-exel und die übrigen Craft-Apps → ihre T-Fassung): Docker-Versionen einer Craft-App werden durch den Nachfolger ersetzt. Im App-Center zeigt ein installiertes Original „Durch T-Word ersetzen“: erst wird der Nachfolger installiert, wenn er bereit ist, wird das Original entfernt.
 - **Fehler in 0.72 behoben:** Die Liste der Web-Apps in der Oberfläche verlor `trusted`; T-Word, T-PDF und T-Exel liefen dadurch weiter abgeschottet und über Cloudflare Access nicht ohne Bypass-Regel.
 
-## Alle Craft-Apps als T-Fassungen (0.73, TitanOS-Office 1.1.0; Stand 0.76: TitanOS-Office 1.4.0)
+## Alle Craft-Apps als T-Fassungen (0.73, TitanOS-Office 1.1.0; Stand 0.77: TitanOS-Office 1.5.0)
 
 | T-Fassung | Original | Brücke | Typen |
 |---|---|---|---|
