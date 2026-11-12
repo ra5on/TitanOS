@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -39,8 +40,10 @@ func TestNVRRealFrigate(t *testing.T) {
 	if root == "" {
 		t.Skip("set TITANOS_NVR_REAL to a folder to run Frigate for real")
 	}
-	if err := os.MkdirAll(filepath.Join(root, "tank"), 0o755); err != nil {
-		t.Fatal(err)
+	for _, volume := range []string{"tank", "tank2"} {
+		if err := os.MkdirAll(filepath.Join(root, volume), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	image := nvr.FrigateRepository + "@" + nvr.FrigateDigest
 	run := func(args ...string) string {
@@ -62,7 +65,7 @@ func TestNVRRealFrigate(t *testing.T) {
 		manager = nvr.New(opts.Store)
 		manager.Engine = realNVREngine{docker.NewManager(opts.Store, "")}
 		manager.MountRoot = root
-		manager.Mounted = func() []string { return []string{"tank"} }
+		manager.Mounted = func() []string { return []string{"tank", "tank2"} }
 		manager.Tick = 2 * time.Second
 		users := opts.Users
 		manager.Access.Lookup = func(name string) (nvr.Account, bool) {
@@ -100,6 +103,8 @@ func TestNVRRealFrigate(t *testing.T) {
 		until("NVR off, container removed", 2*time.Minute, func() bool { return status().State == nvr.PhaseOff })
 		cancel()
 		<-done
+		run("rm", "-f", "titanos-nvr-probe")
+		run("network", "rm", "titanos-nvr-probe")
 		run("network", "rm", "titanos-nvr")
 	}()
 
@@ -107,6 +112,62 @@ func TestNVRRealFrigate(t *testing.T) {
 		t.Fatalf("enable: %d %s", res.StatusCode, body)
 	}
 	until("Frigate runs", 25*time.Minute, func() bool { return status().State == nvr.PhaseRunning })
+	secret := manager.Settings().ProxySecret
+	address := run("inspect", "-f", `{{(index .NetworkSettings.Networks "titanos-nvr").IPAddress}}`, "titanos-nvr")
+	frigate := func(path string, withSecret bool) (int, []byte) {
+		req, _ := http.NewRequest("GET", "http://"+address+":8971"+path, nil)
+		if withSecret {
+			req.Header.Set("X-Proxy-Secret", secret)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, []byte(err.Error())
+		}
+		defer res.Body.Close()
+		data, _ := io.ReadAll(res.Body)
+		return res.StatusCode, data
+	}
+	t.Logf("Frigate at %s, secret of %d characters", address, len(secret))
+
+	// Nothing of Frigate answers without the secret: 5000, go2rtc's API
+	// and its RTSP server listen on the container's loopback only, 8971
+	// wants the secret. From the host:
+	for _, port := range []string{"5000", "1984", "8554", "8971"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(address, port), 3*time.Second)
+		if conn != nil {
+			conn.Close()
+		}
+		t.Logf("host → %s:%s: %v", address, port, err)
+		if (port == "8971") != (err == nil) {
+			t.Errorf("port %s from the host: %v", port, err)
+		}
+	}
+	if code, body := frigate("/api/config/raw", false); code != 401 {
+		t.Errorf("8971 without the secret: %d %s", code, body[:min(len(body), 200)])
+	} else {
+		t.Logf("host → :8971/api/config/raw without the secret: %d", code)
+	}
+	if code, _ := frigate("/api/config/raw", true); code != 200 {
+		t.Errorf("8971 with the secret: %d", code)
+	}
+	if code, body := frigate("/api/recordings/storage", true); code != 200 {
+		t.Errorf("an admin route with the secret: %d %s", code, body)
+	}
+	// From a container on another Docker network, and from one on the
+	// NVR's own network (stands for a host that routes to it).
+	run("network", "create", "titanos-nvr-probe")
+	for _, network := range []string{"titanos-nvr-probe", "titanos-nvr"} {
+		for _, port := range []string{"5000", "8971"} {
+			out := run("run", "--rm", "--network", network, "--entrypoint", "curl", image, "-s", "-o", "/dev/null", "-w", "%{http_code} %{errormsg}", "--max-time", "5", "http://"+address+":"+port+"/api/config/raw")
+			t.Logf("container on %s → %s:%s/api/config/raw: %s", network, address, port, out)
+			if strings.HasPrefix(out, "200") {
+				t.Errorf("%s reaches Frigate's config on %s: %s", network, port, out)
+			}
+		}
+	}
+	if out := run("exec", "titanos-nvr", "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:5000/api/version"); out != "200" {
+		t.Errorf("port 5000 inside the container (Frigate's own export uses it): %s", out)
+	}
 
 	// The camera: checked with titand's own RTSP probe, then added.
 	res, body := ts.request("POST", "/api/v1/nvr/cameras/probe", map[string]any{"kind": "rtsp", "mainURL": stream})
@@ -152,7 +213,7 @@ func TestNVRRealFrigate(t *testing.T) {
 			binary += 1
 		}
 	}
-	t.Logf("live: %s, then video", text)
+	t.Logf("live: %s, then video (through 8971 with the secret)", text)
 	if !strings.Contains(text, `"type":"mse"`) || !strings.Contains(text, "avc1") {
 		t.Errorf("live answer: %s", text)
 	}
@@ -237,6 +298,15 @@ func TestNVRRealFrigate(t *testing.T) {
 			t.Errorf("%s: %d, %d bytes", file, res.StatusCode, len(body))
 		}
 	}
+	// A range of a segment.
+	req, _ := http.NewRequest("GET", ts.url+vod+files[1], nil)
+	req.Header.Set("Range", "bytes=0-99")
+	if part, err := ts.client.Do(req); err != nil || part.StatusCode != 206 {
+		t.Errorf("range of a segment: %v %v", part, err)
+	} else {
+		t.Logf("range of %s: %d %s", files[1], part.StatusCode, part.Header.Get("Content-Range"))
+		part.Body.Close()
+	}
 	res, body = ts.request("GET", "/api/v1/nvr/cameras/test/recordings/frame.jpg?at="+itoa(from+5), nil)
 	t.Logf("frame: %d, %s, %d bytes", res.StatusCode, res.Header.Get("Content-Type"), len(body))
 	if res.StatusCode != 200 || len(body) < 1000 {
@@ -255,7 +325,7 @@ func TestNVRRealFrigate(t *testing.T) {
 		return export.State == nvr.ExportDone && export.SizeBytes != nil
 	})
 	t.Logf("export: %+v, %d bytes", export, *export.SizeBytes)
-	req, _ := http.NewRequest("GET", ts.url+"/api/v1/nvr/exports/"+export.ID+"/download", nil)
+	req, _ = http.NewRequest("GET", ts.url+"/api/v1/nvr/exports/"+export.ID+"/download", nil)
 	req.Header.Set("Range", "bytes=0-1023")
 	part, err := ts.client.Do(req)
 	if err != nil {
@@ -284,7 +354,126 @@ func TestNVRRealFrigate(t *testing.T) {
 		t.Errorf("ptz of a camera without: %d %+v", code, ptz)
 	}
 
-	// The storage figures move (the watch looks every five minutes).
+	pids := run("stats", "--no-stream", "--format", "{{.PIDs}} {{.MemUsage}}", "titanos-nvr")
+	t.Logf("container with one camera: PIDs and memory %s (limit %d)", pids, docker.NVRPidsLimit)
+	t.Logf("published: %s", run("port", "titanos-nvr"))
+	if ss, err := exec.Command("ss", "-ltnuH").CombinedOutput(); err == nil {
+		for _, line := range strings.Split(string(ss), "\n") {
+			if strings.Contains(line, ":8555") {
+				t.Logf("listening: %s", strings.Join(strings.Fields(line), " "))
+			}
+		}
+	}
+
+	// Talking back: go2rtc's WebRTC signalling through titand and 8971.
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/test", map[string]any{"audio": map[string]any{"enabled": true, "twoWay": true}}); res.StatusCode != 200 {
+		t.Fatalf("talk on: %d %s", res.StatusCode, body)
+	}
+	time.Sleep(5 * time.Second) // the restart begins
+	until("camera online with talking back", 5*time.Minute, func() bool {
+		var view nvr.CameraView
+		getJSON(t, ts, ts.client, "/nvr/cameras/test", &view)
+		return status().State == nvr.PhaseRunning && view.State.Online
+	})
+	talk, tctx := liveDial(t, ts, ts.client, "/nvr/cameras/test/talk")
+	offer := "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sendrecv\r\na=rtpmap:111 opus/48000/2\r\na=ice-ufrag:abcd\r\na=ice-pwd:abcdefghijklmnopqrstuvwx\r\na=fingerprint:sha-256 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF\r\na=setup:actpass\r\n"
+	data, _ = json.Marshal(map[string]string{"type": "webrtc/offer", "value": offer})
+	if err := talk.Write(tctx, websocket.MessageText, data); err != nil {
+		t.Errorf("talk offer: %v", err)
+	} else if _, answer, err := talk.Read(tctx); err != nil {
+		t.Errorf("talk: no answer from go2rtc: %v", err)
+	} else {
+		t.Logf("talk: go2rtc answered %s", answer[:min(len(answer), 120)])
+	}
+	talk.CloseNow()
+
+	// The NVR moves to another volume: config.yml is written there before
+	// the new container starts, and Frigate runs the camera there (titand
+	// checks /api/config after the start); then back.
+	for _, volume := range []string{"tank2", "tank"} {
+		if res, body := ts.request("PUT", "/api/v1/nvr/settings", map[string]any{"volume": volume}); res.StatusCode != 200 {
+			t.Fatalf("move to %s: %d %s", volume, res.StatusCode, body)
+		}
+		time.Sleep(5 * time.Second) // the restart begins
+		until("Frigate runs on "+volume, 5*time.Minute, func() bool {
+			var view nvr.CameraView
+			getJSON(t, ts, ts.client, "/nvr/cameras/test", &view)
+			return status().State == nvr.PhaseRunning && view.State.Online
+		})
+		file := filepath.Join(root, volume, ".titanos", "nvr", "config", "config.yml")
+		if info, err := os.Stat(file); err != nil {
+			t.Errorf("config.yml on %s: %v", volume, err)
+		} else {
+			t.Logf("config.yml on %s: %d bytes", volume, info.Size())
+		}
+		address = run("inspect", "-f", `{{(index .NetworkSettings.Networks "titanos-nvr").IPAddress}}`, "titanos-nvr")
+		if code, body := frigate("/api/config", true); code != 200 || !strings.Contains(string(body), `"test":{`) {
+			t.Errorf("Frigate on %s runs without the camera: %d", volume, code)
+		}
+	}
+
+	// The camera is deleted: its recordings stay (a stub that is switched
+	// off keeps Frigate's cleanup from deleting them), counted and
+	// playable for an administrator.
+	var before struct {
+		Segments []nvr.Segment `json:"segments"`
+	}
+	now := time.Now().Unix()
+	getJSON(t, ts, ts.client, "/nvr/cameras/test/recordings?from="+itoa(now-3600)+"&to="+itoa(now), &before)
+	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/test", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete camera: %d %s", res.StatusCode, body)
+	}
+	time.Sleep(5 * time.Second) // the restart begins
+	until("Frigate runs with the deleted camera", 5*time.Minute, func() bool { return status().State == nvr.PhaseRunning })
+	restarted := time.Now()
+	// Frigate's cleanup runs a minute after its start.
+	time.Sleep(75 * time.Second)
+	var after struct {
+		Segments []nvr.Segment `json:"segments"`
+	}
+	getJSON(t, ts, ts.client, "/nvr/cameras/test/recordings?from="+itoa(now-3600)+"&to="+itoa(now), &after)
+	t.Logf("segments of the deleted camera %v after Frigate's restart: %d before, %d after", time.Since(restarted).Round(time.Second), len(before.Segments), len(after.Segments))
+	if len(after.Segments) == 0 || len(after.Segments) < len(before.Segments) {
+		t.Errorf("recordings of the deleted camera: %d before, %d after", len(before.Segments), len(after.Segments))
+	}
+	if code, body := frigate("/api/recordings/storage", true); code != 200 || !strings.Contains(string(body), `"test":{`) {
+		t.Errorf("Frigate does not count the deleted camera: %d %s", code, body)
+	} else {
+		t.Logf("Frigate's storage: %s", body)
+	}
+	var running struct {
+		Cameras map[string]struct {
+			Enabled bool `json:"enabled"`
+		} `json:"cameras"`
+	}
+	if code, body := frigate("/api/config", true); code != 200 || json.Unmarshal(body, &running) != nil {
+		t.Errorf("Frigate's config: %d", code)
+	} else if stub, ok := running.Cameras["test"]; !ok || stub.Enabled {
+		t.Errorf("the deleted camera in Frigate's config: %+v", running.Cameras)
+	}
+	if len(after.Segments) > 0 {
+		vod := "/api/v1/nvr/cameras/test/vod/" + itoa(int64(after.Segments[0].Start)) + "/" + itoa(int64(after.Segments[len(after.Segments)-1].End)+1) + "/master.m3u8"
+		if res, body := ts.request("GET", vod, nil); res.StatusCode != 200 {
+			t.Errorf("playback of the deleted camera: %d %s", res.StatusCode, body)
+		}
+	}
+	var listed struct {
+		Cameras []nvr.CameraView `json:"cameras"`
+	}
+	getJSON(t, ts, ts.client, "/nvr/cameras", &listed)
+	if len(listed.Cameras) != 1 || !listed.Cameras[0].Deleted {
+		t.Errorf("administrator's list: %+v", listed.Cameras)
+	}
+	guest := ts.guest("gast")
+	if code := getJSON(t, ts, guest, "/nvr/cameras/test/recordings/summary", &summary); code != 404 {
+		t.Errorf("a user reaches the deleted camera: %d", code)
+	}
+	if strings.Contains(run("logs", "--tail", "3000", "titanos-nvr"), secret) {
+		t.Error("the secret is in the container's log")
+	}
+
+	// The storage figures move (the watch looks every five minutes); the
+	// recordings now are those of the deleted camera.
 	until("storage figures", 7*time.Minute, func() bool {
 		st := status().Storage
 		return st.RecordingsBytes != nil && *st.RecordingsBytes > 0 && st.ExportsBytes != nil && *st.ExportsBytes > 0 && st.SpanDays != nil
