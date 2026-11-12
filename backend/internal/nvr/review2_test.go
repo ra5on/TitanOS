@@ -769,3 +769,41 @@ func TestFrigateErrorsHoldNoPath(t *testing.T) {
 		t.Error("no error became one")
 	}
 }
+
+// R1: a look whose plan is dropped because a change came in the middle
+// leaves the restart for the next look when it rewrote config.yml: the
+// next plan writes the same file and would see no change.
+func TestDroppedPlanStillRestartsFrigate(t *testing.T) {
+	r := newRig(t, true)
+	r.up()
+	started := func() int {
+		r.engine.mu.Lock()
+		defer r.engine.mu.Unlock()
+		return r.engine.Starts
+	}
+	starts := started()
+	// The camera changes config.yml; a change that does not (the privacy
+	// notice) lands while the look waits for Docker.
+	c, _ := r.m.Camera("haustuer")
+	c.Detect.Objects = []string{"person", "cat"}
+	if _, err := r.m.UpdateCamera(context.Background(), "haustuer", c, CameraOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	hook := &hookEngine{DevEngine: r.engine}
+	r.m.Engine = hook
+	hook.onInspect = func() {
+		s := r.m.Settings()
+		s.PrivacyNoticeDismissed = !s.PrivacyNoticeDismissed
+		if err := r.m.SetSettings(context.Background(), s, SetOptions{}); err != nil {
+			t.Error(err)
+		}
+	}
+	r.look()
+	r.look()
+	if !strings.Contains(r.config(), "cat") {
+		t.Fatal("config.yml not written")
+	}
+	if started() == starts {
+		t.Error("config.yml changed, Frigate was never restarted to read it")
+	}
+}

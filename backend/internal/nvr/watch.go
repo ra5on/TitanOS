@@ -671,18 +671,21 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 		}
 		m.mu.Lock()
 		// A change that came while this look planned (the settings were
-		// read before Docker was asked) is planned again at once.
-		again := m.rt.gen != gen
-		if !again {
-			m.rt.dirty = false
+		// read before Docker was asked) is planned again at once; this
+		// plan, made from what was before, is not applied to the container.
+		if m.rt.gen != gen {
+			// The file changed already: Frigate still has to read it, even if
+			// the next plan writes the same.
+			m.rt.restart = m.rt.restart || changed
+			m.mu.Unlock()
+			m.wake()
+			return nil
 		}
+		m.rt.dirty = false
 		restart := m.rt.restart
 		m.rt.restart = false
 		m.rt.active = p.active
 		m.mu.Unlock()
-		if again {
-			m.wake()
-		}
 		recreate := !st.Exists || st.Hash != p.spec.Hash || st.Image != imageID
 		if !recreate {
 			// The container is the one of the plan (its folders are in the
