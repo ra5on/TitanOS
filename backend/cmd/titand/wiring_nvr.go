@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
@@ -46,6 +47,7 @@ func (w *titand) wireNVR() error {
 		w.recorder.Engine = w.containers
 		w.recorder.Mounted = w.volumes.Mounted
 		w.recorder.Sleeps = w.volumes.SleepingVolumes
+		w.recorder.Asleep = w.volumes.VolumeAsleep
 		w.recorder.Devices = w.devices.ContainerDevices
 		w.recorder.Leased = w.containers.LeasedHardware
 		w.recorder.DockerEnabled = func() bool { return w.containers.Current().Enabled }
@@ -70,6 +72,17 @@ func (w *titand) wireNVR() error {
 	}
 	if err := w.recorder.Load(); err != nil {
 		slog.Warn("NVR settings not readable from /config", "err", err)
+	}
+	// The faces the NVR knows go into the backup of /config (they live on
+	// the NVR's volume; sleeping disks are not woken for it).
+	if w.stickBackup != nil {
+		w.stickBackup.Extra = func() []configbackup.ExtraFile {
+			var out []configbackup.ExtraFile
+			for _, f := range w.recorder.BackupFiles() {
+				out = append(out, configbackup.ExtraFile{Name: f.Name, Data: f.Data})
+			}
+			return out
+		}
 	}
 	w.background(func() { w.recorder.Run(ctx) })
 	return nil

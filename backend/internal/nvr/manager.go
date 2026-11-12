@@ -88,6 +88,9 @@ type Manager struct {
 	MountRoot string
 	// Mounted lists the mounted volumes.
 	Mounted func() []string
+	// Asleep tells whether the disks of a volume sleep right now (RAM of
+	// the storage manager): the backup of the faces does not wake them.
+	Asleep func(volume string) bool
 	// Sleeps names the volumes whose disks may be put to sleep; known is
 	// false while that cannot be told.
 	Sleeps func(ctx context.Context) (sleeping map[string]bool, known bool)
@@ -140,6 +143,10 @@ type Manager struct {
 	rt       runtime
 	kick     chan struct{}
 	devDir   string
+	// restored are faces a restore of /config left on the stick, until
+	// they are on the volume; backupFaces is the library as last read for
+	// the backup (backup.go).
+	restored, backupFaces []BackupFile
 	// devFrigate is the stand-in of development mode (dev.go).
 	devFrigate *DevFrigate
 	// snapshots are the stills of the last second (status.go).
@@ -195,7 +202,9 @@ func (m *Manager) Load() error {
 		cameras = []Camera{}
 	}
 	sortCameras(cameras)
+	restored := m.loadRestored()
 	m.mu.Lock()
+	m.restored = restored
 	m.settings, m.cameras, m.loaded = normalize(s), cameras, true
 	m.rt.dirty = true
 	m.mu.Unlock()

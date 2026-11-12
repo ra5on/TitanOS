@@ -131,6 +131,47 @@ const (
 	dailyPace = 24 * time.Hour
 )
 
+// ExtraPrefix starts the names of files in a backup that do not come
+// from /config (Manager.Extra). A file of /config below it waits to be
+// picked up after a restore and is not saved as configuration.
+const ExtraPrefix = "volume-data/"
+
+// maxExtra bounds what Extra may add; more is left out with a warning,
+// so that it never makes the backup of the configuration fail.
+const maxExtra int64 = 16 << 20
+
+// ExtraFile is one file of Manager.Extra.
+type ExtraFile struct {
+	// Name is slash separated and starts with ExtraPrefix.
+	Name string
+	Data []byte
+}
+
+// extraFiles returns what Extra gives, checked, sorted and bounded.
+func (m *Manager) extraFiles() []ExtraFile {
+	if m.Extra == nil {
+		return nil
+	}
+	var out []ExtraFile
+	var total int64
+	seen := map[string]bool{}
+	for _, f := range m.Extra() {
+		if !strings.HasPrefix(f.Name, ExtraPrefix) || !validName(f.Name) || seen[f.Name] {
+			slog.Warn("extra file left out of the backup of the configuration", "name", f.Name)
+			continue
+		}
+		seen[f.Name] = true
+		total += int64(len(f.Data))
+		out = append(out, f)
+	}
+	if total > maxExtra {
+		slog.Warn("extra files left out of the backup of the configuration: too large", "MiB", total>>20, "files", len(out))
+		return nil
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // Manifest is the first file in a backup and says what it is.
 type Manifest struct {
 	Format   int       `json:"format"`
@@ -215,6 +256,13 @@ type Manager struct {
 	// Asleep tells whether the disks of a volume sleep (from RAM). Listing
 	// the backups does not read such a volume unless asked to (PLAN 79-6).
 	Asleep func(volume string) bool
+	// Extra adds what a function keeps on a data volume but belongs to
+	// the configuration (the faces the NVR knows) to every backup: files
+	// named below ExtraPrefix. It is asked when a backup is made; whoever
+	// gives it leaves sleeping disks alone and bounds what it returns.
+	// Restoring writes these files to /config below the same names, where
+	// their owner picks them up (docs/NVR.md).
+	Extra func() []ExtraFile
 	// seen are the backups last read per volume, shown while it sleeps
 	// (RAM only, protected by mu).
 	seen map[string][]Backup
@@ -546,7 +594,9 @@ func (m *Manager) configFiles() ([]file, error) {
 			return err
 		}
 		name := filepath.ToSlash(rel)
-		if leftOut(name) {
+		// What waits below ExtraPrefix after a restore comes into the
+		// backup through Extra (its owner still returns it), not twice.
+		if leftOut(name) || strings.HasPrefix(name, ExtraPrefix) {
 			return nil
 		}
 		files = append(files, file{name: name, path: p, info: info})
@@ -678,6 +728,16 @@ func (m *Manager) create(volume string) (string, error) {
 			return "", err
 		}
 		if _, err := archive.Write(data); err != nil {
+			return "", err
+		}
+	}
+	for _, f := range m.extraFiles() {
+		fmt.Fprintf(digest, "%s\x00%d\x00", f.Name, len(f.Data))
+		digest.Write(f.Data)
+		if err := archive.WriteHeader(&tar.Header{Name: f.Name, Mode: 0o600, Size: int64(len(f.Data)), ModTime: now, Typeflag: tar.TypeReg}); err != nil {
+			return "", err
+		}
+		if _, err := archive.Write(f.Data); err != nil {
 			return "", err
 		}
 	}

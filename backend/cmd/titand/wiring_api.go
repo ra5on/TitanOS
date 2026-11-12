@@ -31,6 +31,13 @@ func (w *titand) wireAPI() error {
 	w.diagnostics = diagnose.NewManager(w.store, version.Version)
 	w.diagnostics.SMART = func(ctx context.Context) any { return w.volumes.SmartDumps(ctx) }
 	w.diagnostics.IntelGPU = w.intelGuc.Report
+	// The NVR's own diagnosis, while it is switched on.
+	w.diagnostics.NVR = func(ctx context.Context) any {
+		if w.recorder == nil || !w.recorder.Settings().Enabled {
+			return nil
+		}
+		return w.recorder.Diagnosis(ctx)
+	}
 	w.handler = api.New(api.Options{
 		Media:              w.mediaImports,
 		UI:                 webui.FS(),

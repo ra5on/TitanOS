@@ -82,6 +82,11 @@ type Manager struct {
 	// IntelGPU returns what the kernel loaded of GuC/HuC on Intel graphics
 	// and the GuC/HuC setting, for intel-gpu.json. Nil leaves it out.
 	IntelGPU func(context.Context) any
+	// NVR returns the diagnosis of the NVR for nvr.json (state of the
+	// container and the detection, the last lines of Frigate's log with
+	// passwords taken out; no pictures, no faces). Nil, or a nil answer
+	// (the NVR is off), leaves it out.
+	NVR func(context.Context) any
 }
 
 // NewManager returns a manager working on the real system.
@@ -344,6 +349,21 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 		}
 		if err := add("intel-gpu.json", redactor.Text(string(data)+"\n")); err != nil {
 			return err
+		}
+	}
+
+	if m.NVR != nil {
+		nvrCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		state := m.NVR(nvrCtx)
+		cancel()
+		if state != nil {
+			data, err := json.MarshalIndent(state, "", "  ")
+			if err != nil {
+				data = []byte(fmt.Sprintf("(%v)", err))
+			}
+			if err := add("nvr.json", redactor.Text(string(data)+"\n")); err != nil {
+				return err
+			}
 		}
 	}
 
