@@ -25,6 +25,8 @@
 		/** The height asked for still pictures. */
 		height = 480,
 		fit = 'cover',
+		/** The tile says itself why there is no picture (camera offline). */
+		quiet = false,
 		onmode,
 	}: {
 		id: string;
@@ -35,6 +37,7 @@
 		stillMs?: number;
 		height?: number;
 		fit?: 'cover' | 'contain';
+		quiet?: boolean;
 		/** Tells the tile what is shown: live video, still pictures or nothing. */
 		onmode?: (mode: 'live' | 'still' | 'none') => void;
 	} = $props();
@@ -183,7 +186,7 @@
 			aria-label={t('nvr.live.videoOf', { name })}
 		></video>
 	{/if}
-	{#if shown === 'none'}
+	{#if shown === 'none' && !quiet}
 		<p class="none" role="status">
 			{reason === 'forbidden'
 				? t('nvr.live.forbidden')

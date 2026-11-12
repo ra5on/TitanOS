@@ -644,7 +644,7 @@
 			{/snippet}
 		</SettingRow>
 		<SettingRow
-			icon="resize"
+			icon="move"
 			title={t('nvr.ptz.title')}
 			desc={kind !== 'onvif'
 				? t('nvr.ptz.needsOnvif')

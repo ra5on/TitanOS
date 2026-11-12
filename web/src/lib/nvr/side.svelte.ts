@@ -20,26 +20,34 @@ export function rightsOf(cameras: { rights?: Partial<NvrRights> }[]): NvrRights 
 const RECORDING_PAGES = ['/nvr/recordings', '/nvr/events'];
 
 /**
- * The entries of the NVR's side bar for these rights. Unknown rights (not
- * read yet, or an administrator) leave the list as it is; without any right
- * "Live" stays, which then says that no camera is shared.
+ * Whether a page of the NVR is worth offering for these rights. Unknown
+ * rights (not read yet, or an administrator) offer everything; without any
+ * right "Live" stays, which then says that no camera is shared.
  */
+export function nvrPageAllowed(href: string, rights: NvrRights | null): boolean {
+	if (!rights) return true;
+	const path = href.split(/[?#]/)[0];
+	if (path === '/nvr') return rights.live || !rights.recordings;
+	if (RECORDING_PAGES.includes(path)) return rights.recordings;
+	return true;
+}
+
+/** The entries of the NVR's side bar for these rights (nvrPageAllowed). */
 export function nvrSideFor(side: SideItem[], rights: NvrRights | null): SideItem[] {
-	if (!rights) return side;
-	const out = side.filter((item) => {
-		if (!('href' in item)) return true;
-		const path = item.href.split('?')[0];
-		if (path === '/nvr') return rights.live || !rights.recordings;
-		if (RECORDING_PAGES.includes(path)) return rights.recordings;
-		return true;
-	});
-	return out;
+	return side.filter((item) => !('href' in item) || nvrPageAllowed(item.href, rights));
 }
 
 /** The rights of the signed-in account, read once in a while for the desktop's side bar. */
 export const nvrRights = $state<{ value: NvrRights | null }>({ value: null });
 let readAt = 0;
 let reading = false;
+
+/** The rights for the desktop's menus: null for administrators and while unknown. */
+export function desktopNvrRights(role: string): NvrRights | null {
+	if (role !== 'user') return null;
+	wantNvrRights();
+	return nvrRights.value;
+}
 
 /** Reads the rights again when they are older than a minute (called while the side bar is drawn). */
 export function wantNvrRights(): void {

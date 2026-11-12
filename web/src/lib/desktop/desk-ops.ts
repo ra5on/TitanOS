@@ -10,7 +10,7 @@ import {
 	type Widget,
 	type WidgetKind,
 } from './prefs.ts';
-import { nvrRights, nvrSideFor, wantNvrRights } from '../nvr/side.svelte.ts';
+import { desktopNvrRights, nvrSideFor } from '../nvr/side.svelte.ts';
 import { session } from '../session.svelte.ts';
 import type { Program } from './programs.svelte.ts';
 import { sources } from './sources.svelte.ts';
@@ -196,11 +196,8 @@ export function showDesktop() {
 // PLAN 62-3: the VMs window lists every machine below its pages (saves the page's own list).
 export function sideOf(app: string, side: Program['side']): Program['side'] {
 	// PLAN 79-7: an account without the admin role sees the NVR's pages it has a right for.
-	if (app === 'app:nvr') {
-		if (['owner', 'admin'].includes(session.data?.user?.role ?? '')) return side;
-		wantNvrRights();
-		return nvrSideFor(side, nvrRights.value);
-	}
+	if (app === 'app:nvr')
+		return nvrSideFor(side, desktopNvrRights(session.data?.user?.role ?? 'user'));
 	if (app !== 'app:vms' || !sources.vms.length) return side;
 	return [
 		...side,

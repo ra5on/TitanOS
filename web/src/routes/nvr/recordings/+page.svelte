@@ -158,7 +158,10 @@
 			const player = new Hls();
 			hls = player;
 			player.on(Hls.Events.ERROR, (_event, data) => {
-				if (data.fatal) playError = t('nvr.rec.playFailed');
+				// A browser without the camera's codec (H.264/H.265) says so in plain words.
+				if (data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR)
+					playError = t('nvr.rec.unsupported');
+				else if (data.fatal) playError = t('nvr.rec.playFailed');
 			});
 			player.on(Hls.Events.MANIFEST_PARSED, begin);
 			player.loadSource(src);
@@ -640,10 +643,11 @@
 	.sw.gap {
 		background: var(--track, var(--surface));
 	}
+	/* The controls below stay in view: the picture is at most about half the window high. */
 	.player {
 		position: relative;
 		width: 100%;
-		max-width: 64rem;
+		max-width: min(64rem, calc(max(240px, 55vh) * 16 / 9));
 		aspect-ratio: 16 / 9;
 		border-radius: 10px;
 		overflow: hidden;

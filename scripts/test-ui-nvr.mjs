@@ -834,7 +834,7 @@ try {
 
   // --- The desktop: the program in the menu and the camera widget ---
   {
-    const { ctx, page } = await open("owner", (_s, data) => {
+    const { ctx, page, data } = await open("owner", (_s, data) => {
       data.prefs.desktop = {
         version: 1,
         customWidgets: true,
@@ -855,6 +855,75 @@ try {
     for (const name of ["Live", "Aufnahmen", "Ereignisse", "Kameras", "Einstellungen", "Diagnose"])
       await side.getByRole("link", { name, exact: true }).or(side.getByRole("button", { name, exact: true })).first().waitFor();
     await shot(page, "fenster");
+    // The left menu folds to its symbols and stays folded for the account.
+    await side.getByRole("button", { name: "Seitenleiste einklappen" }).click();
+    await page.locator("section.win nav.side.folded").waitFor();
+    await until(() => (data.prefs.desktop.folded ?? []).includes("app:nvr"), "folding is remembered");
+    await side.getByRole("button", { name: "Seitenleiste ausklappen" }).click();
+    await page.locator("section.win nav.side:not(.folded)").waitFor();
+    await ctx.close();
+  }
+
+  // --- Every page in a maximized window of the desktop (what the owner sees at 1280 px) ---
+  const windowShots = [
+    ["einrichtung", "/nvr", (s) => ((s.settings.enabled = false), (s.settings.privacyNoticeDismissed = false))],
+    ["live", "/nvr"],
+    ["live-ereignisse", "/nvr", (_s, data) => (data.prefs.desktop.nvr = { events: true })],
+    ["aufnahmen", "/nvr/recordings?camera=einfahrt"],
+    ["ereignisse", "/nvr/events"],
+    ["ereignis", "/nvr/events?event=EVENT2"],
+    ["kameras", "/nvr/cameras"],
+    ["kamera-aendern", "/nvr/cameras?edit=haustuer"],
+    ["kamera-hinzufuegen", "/nvr/cameras?new=1"],
+    ["einstellungen", "/nvr/settings", (s) => ((s.settings.rtspOut = true), (s.settings.rtspUser = "titanos"), (s.settings.rtspPassword = "k3Jw-91Lm-x0Qp-77Zt"))],
+    ["diagnose-ausweichen", "/nvr/diagnosis", (s) => {
+      s.detector = {
+        kind: "auto",
+        active: "igpu",
+        inferenceMs: 23.8,
+        failover: {
+          from: "npu",
+          to: "igpu",
+          at: new Date((s.now - 1200) * 1000).toISOString(),
+          reason: "npu_firmware_old",
+          detail: "MAPPED_INFERENCE_VERSION is NOT compatible with the ELF",
+        },
+      };
+    }],
+  ];
+  for (const [name, path, change = () => {}] of windowShots) {
+    const { ctx, page, state } = await open("owner", (s, data) => {
+      data.prefs.desktop = { version: 1 };
+      change(s, data);
+    });
+    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+    await page.goto(base + path.replace("EVENT2", encodeURIComponent(state.events[1].id)));
+    const win = page.locator("section.win").first();
+    await win.waitFor();
+    await win.locator("header.titlebar").dblclick({ position: { x: 300, y: 10 } });
+    const handle = await page.locator('iframe[data-app="app:nvr"]').elementHandle();
+    const frame = await handle.contentFrame();
+    await frame.locator("h1, h2").first().waitFor();
+    if (name === "kamera-hinzufuegen") {
+      await frame.getByRole("button", { name: "Suchen", exact: true }).click();
+      await frame.getByRole("button", { name: /Reolink RLC-810A/ }).click();
+      await frame.getByLabel("Benutzer", { exact: true }).fill("admin");
+      await frame.getByLabel("Passwort", { exact: true }).fill("geheim");
+      await frame.getByRole("button", { name: "Prüfen" }).click();
+      await frame.getByText("Verbindung steht.").waitFor();
+    }
+    if (name === "aufnahmen") await frame.locator(".timeline .piece").first().waitFor();
+    if (name.startsWith("live")) await frame.locator(".tile-view img").first().waitFor();
+    if (name === "live-ereignisse") await frame.getByRole("complementary", { name: "Ereignisse" }).waitFor();
+    // Dialogs fade in; the picture waits for them.
+    await page.waitForTimeout(name === "ereignis" ? 1500 : 700);
+    assert.equal(
+      await frame.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      0,
+      `${name} in a window: nothing sideways`,
+    );
+    assert.deepEqual(await frame.evaluate(cutTextIn), [], `${name} in a window: cut text`);
+    await page.screenshot({ path: `${out}/fenster-${name}-${WIDTH}.png`, animations: "disabled" });
     await ctx.close();
   }
 

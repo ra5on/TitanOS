@@ -273,13 +273,11 @@
 						<dd>{t('nvr.events.keptText')}</dd>
 					</div>{/if}
 			</dl>
-			{#if detailError}<p class="notice-error" role="alert">{detailError}</p>{/if}
-			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (open = null)}>{t('common.close')}</button>
+			<div class="links">
 				<a
 					class="btn"
 					href="/nvr/recordings?camera={encodeURIComponent(e.camera)}&at={Math.floor(e.start)}"
-					>{t('nvr.events.inRecordings')}</a
+					><Icon name="play" size={15} />{t('nvr.events.inRecordings')}</a
 				>
 				{#if e.hasSnapshot}<a class="btn" href={apiPath(`${eventBase}/snapshot.jpg`)} download
 						><Icon name="image" size={15} />{t('nvr.events.snapshotSave')}</a
@@ -287,6 +285,10 @@
 				{#if e.hasClip}<a class="btn" href={apiPath(`${eventBase}/clip.mp4?download=1`)} download
 						><Icon name="download" size={15} />{t('nvr.events.clipSave')}</a
 					>{/if}
+			</div>
+			{#if detailError}<p class="notice-error" role="alert">{detailError}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" onclick={() => (open = null)}>{t('common.close')}</button>
 				{#if admin}<button type="button" class="btn btn-danger" onclick={() => (removing = true)}
 						>{t('common.delete')}</button
 					>{/if}
@@ -314,6 +316,16 @@
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
 		min-width: 0;
+	}
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.links .btn {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
 	}
 	.seen-hint {
 		margin: 0;

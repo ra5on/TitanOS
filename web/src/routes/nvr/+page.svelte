@@ -154,6 +154,12 @@
 
 	// ---- One camera large, full screen ----
 	let solo = $state('');
+	/** The large camera opens with its pad for moving it. */
+	let soloPtz = $state(false);
+	function showSolo(id: string, ptz = false) {
+		soloPtz = ptz;
+		solo = id;
+	}
 	$effect(() => {
 		// A link from the desktop's widget or an event: /nvr?camera=<id>.
 		const wanted = page.url.searchParams.get('camera');
@@ -286,6 +292,7 @@
 							{prefs}
 							activity={feed.activity[solo]}
 							solo
+							ptzStart={soloPtz}
 							onsolo={() => (solo = '')}
 						/>
 					</div>
@@ -301,7 +308,8 @@
 									activity={feed.activity[id]}
 									{arranging}
 									small={admin && !!camera.source?.subURL}
-									onsolo={() => (solo = id)}
+									onsolo={() => showSolo(id)}
+									onptz={() => showSolo(id, true)}
 								/>
 								{#if arranging}
 									<div class="reorder">
@@ -350,7 +358,8 @@
 									activity={feed.activity[tile.id]}
 									{arranging}
 									small={admin && !!camera.source?.subURL && tile.w * cell < 520}
-									onsolo={() => (solo = tile.id)}
+									onsolo={() => showSolo(tile.id)}
+									onptz={() => showSolo(tile.id, true)}
 								/>
 								{#if arranging}
 									{#if active?.id === tile.id}
@@ -471,10 +480,12 @@
 		width: 100%;
 		aspect-ratio: 16 / 9;
 	}
+	/* At least 340 px high: on a phone in portrait the picture is letterboxed
+	   and the pad for moving the camera has room. */
 	.tile.solo {
 		width: 100%;
-		height: min(calc(100dvh - 120px), 56.25vw);
-		min-height: 220px;
+		height: min(calc(100dvh - 120px), max(56.25vw, 340px));
+		min-height: 240px;
 	}
 	.live.full .tile.solo {
 		height: calc(100dvh - 20px);

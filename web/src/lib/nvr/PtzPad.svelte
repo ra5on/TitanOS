@@ -154,11 +154,15 @@
 {/if}
 
 <style>
+	/* As wide as the pad: directions and zoom side by side, the positions below. */
 	.ptz {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: auto auto;
+		justify-content: start;
 		align-items: center;
 		gap: var(--space-2);
+		width: fit-content;
+		max-width: 100%;
 		padding: var(--space-2);
 		border-radius: 10px;
 		background: rgb(11 15 20 / 0.78);
@@ -195,12 +199,13 @@
 		border-color: var(--accent);
 	}
 	.presets {
+		grid-column: 1 / -1;
 		width: auto;
 		max-width: 100%;
 		min-height: 30px;
 	}
 	.ptz-error {
-		flex-basis: 100%;
+		grid-column: 1 / -1;
 		margin: 0;
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;

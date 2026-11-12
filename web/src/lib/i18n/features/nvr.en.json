@@ -328,7 +328,7 @@
 	"nvr.rec.missing": "Recordings are not available on this NAS yet.",
 	"nvr.rec.pickHint": "Choose a time on the time line.",
 	"nvr.rec.videoOf": "Recording of {name}",
-	"nvr.rec.unsupported": "This browser cannot play the recording.",
+	"nvr.rec.unsupported": "This browser cannot play the camera’s video format (often H.265). Download a clip or use another browser.",
 	"nvr.rec.playFailed": "The recording could not be played.",
 	"nvr.rec.nothingAfter": "There is no recording after this time on this day.",
 	"nvr.rec.speed": "Speed",
