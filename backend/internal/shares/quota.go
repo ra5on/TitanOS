@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/quota"
 )
 
@@ -55,6 +56,7 @@ type kernelQuota struct{}
 func (kernelQuota) Project(dir string) (uint32, bool, error) { return quota.Project(dir) }
 func (kernelQuota) Assign(dir string, id uint32) error       { return quota.Assign(dir, id) }
 func (kernelQuota) Get(mountPoint string, id uint32) (quota.Usage, error) {
+	diskwake.NotePath(mountPoint+"/", diskwake.QuotaScan, "")
 	return quota.Get(mountPoint, id)
 }
 func (kernelQuota) SetLimit(mountPoint string, id uint32, bytes uint64) error {

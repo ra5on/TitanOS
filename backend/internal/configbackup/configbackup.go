@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/retention"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -369,6 +370,7 @@ func (m *Manager) State(mounted []string) State {
 func (m *Manager) List(mounted []string) []Backup {
 	list := []Backup{}
 	for _, volume := range mounted {
+		diskwake.Note(volume, diskwake.ConfigBackup, "list")
 		for _, backup := range readFolder(filepath.Join(m.mountRoot, volume, folder)) {
 			backup.Volume = volume
 			list = append(list, backup)
@@ -538,6 +540,7 @@ func (m *Manager) create(volume string) (string, error) {
 	if len(files) > maxFiles || content > maxContent {
 		return "", fmt.Errorf("%w: %d files, %d MiB", ErrTooLarge, len(files), content>>20)
 	}
+	diskwake.Note(volume, diskwake.ConfigBackup, "")
 	dir := filepath.Join(m.mountRoot, volume, folder)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -695,6 +698,7 @@ func (m *Manager) Open(mounted []string, volume, name string) (*os.File, error) 
 	if !slices.Contains(mounted, volume) || !backupName.MatchString(name) {
 		return nil, ErrNotFound
 	}
+	diskwake.Note(volume, diskwake.ConfigBackup, "")
 	f, err := os.Open(filepath.Join(m.mountRoot, volume, folder, name))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, ErrNotFound

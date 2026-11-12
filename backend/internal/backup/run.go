@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // Start begins a backup now. It returns at once.
@@ -24,6 +26,47 @@ func (m *Manager) Start(id string) error {
 		return ErrNotFound
 	}
 	return m.begin(job, "backup", func(ctx context.Context) error { return m.backup(ctx, job) })
+}
+
+// noteAccess says, while a backup runs, that this job reads its volumes
+// and writes to a local target: it is what woke their disks if they slept
+// (RAM only, no I/O). A long job gets to its later volumes long after its
+// start, so it is noted again every few seconds until stop is called.
+func (m *Manager) noteAccess(ctx context.Context, job Job) (stop func()) {
+	volumes := map[string]bool{job.Destination.Volume: true}
+	for _, volume := range job.Volumes {
+		volumes[volume] = true
+	}
+	for _, place := range job.Places {
+		volume, _, _ := strings.Cut(place, "/")
+		volumes[volume] = true
+	}
+	for _, source := range m.sources() {
+		if slices.Contains(job.Sources, source.Name) {
+			volumes[source.Volume] = true
+		}
+	}
+	delete(volumes, "")
+	note := func() {
+		for volume := range volumes {
+			diskwake.Note(volume, diskwake.BackupJob, job.ID)
+		}
+	}
+	note()
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				note()
+			}
+		}
+	}()
+	return cancel
 }
 
 // begin runs work for a job in the background, one job at a time.
@@ -118,6 +161,7 @@ func (m *Manager) Stop(id string) error {
 }
 
 func (m *Manager) backup(ctx context.Context, job Job) (result error) {
+	defer m.noteAccess(ctx, job)()
 	if plainCopy(job.Destination.Type) {
 		if job.Destination.Type == "smb-copy" {
 			target, err := m.smbTarget(job.Destination.TargetID)

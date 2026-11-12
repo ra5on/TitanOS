@@ -415,8 +415,17 @@ export type DiskSleepDisk = {
 	state: 'asleep' | 'active';
 	/** RFC 3339: since when asleep, or when last woken while active; absent when unknown. */
 	since?: string;
+	/** The last wakes from standby with what woke the disk, newest first (at most 20). */
+	wakes?: DiskWake[];
+	/** How often the disk woke today and on the last days (local time of the NAS). */
+	wakesToday?: number;
+	wakeDays?: { day: string; count: number }[];
 	error?: string;
 };
+/** Why a volume was touched: a code the interface translates and a value (job, account, share). */
+export type DiskWakeCause = { code: string; detail?: string };
+/** One wake of a sleeping disk; causes is never empty ("unknown" when it was not TitanOS). */
+export type DiskWake = { at: string; causes: DiskWakeCause[] };
 export type DiskSleepUnavailable = {
 	name: string;
 	model: string;

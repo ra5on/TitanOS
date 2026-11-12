@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
@@ -480,8 +481,28 @@ func (m *Manager) StartEngine(ctx context.Context) error {
 	if m.Disabled || applied == "" {
 		return nil
 	}
+	diskwake.NotePath(applied, diskwake.DockerData, "")
 	_, err := m.runner.Run(ctx, "", "systemctl", "start", "docker.service")
 	return err
+}
+
+// noteStart says that a container is about to be started from the data
+// root: it is what woke the disks of Docker's volume if they slept (RAM
+// only, no I/O). Volumes the container mounts from elsewhere are not known
+// here.
+func (m *Manager) noteStart(what string) {
+	m.mu.Lock()
+	applied := m.applied
+	m.mu.Unlock()
+	diskwake.NotePath(applied, diskwake.ContainerStart, what)
+}
+
+// DataRoot is the folder the engine runs on ("" while it does not run),
+// from RAM.
+func (m *Manager) DataRoot() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.applied
 }
 
 // sample reads CPU and memory of the running containers.
@@ -639,6 +660,9 @@ func (m *Manager) Action(ctx context.Context, id, action string) error {
 	// Viewers of the remote view are no apps (docs/FERNANSICHT.md).
 	if m.isViewerContainer(ctx, id) {
 		return ErrNotFound
+	}
+	if action != "stop" {
+		m.noteStart(id[:min(12, len(id))])
 	}
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()

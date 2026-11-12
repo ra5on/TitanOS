@@ -1,11 +1,13 @@
 import type {
 	DiskSleepDisk,
+	DiskWake,
+	DiskWakeCause,
 	DiskSleepOrigin,
 	DiskSleepStatus,
 	DiskSleepUnavailable,
 } from '#lib/api.ts';
 import { formatDateTime, formatTime } from '#lib/format.ts';
-import { t } from '#lib/i18n/index.svelte.ts';
+import { t, tOr } from '#lib/i18n/index.svelte.ts';
 
 /** "nach 30 Minuten", "Aus" ... for an idle time in minutes. */
 export function sleepDuration(minutes: number): string {
@@ -75,15 +77,76 @@ export function diskSleep(
 }
 
 /**
- * "schläft seit 14:02" or "zuletzt geweckt 14:02" for a disk, with the date
- * when it was not today; undefined when titand knows no time (RAM only, so
- * nothing before its start). `now` is for tests.
+ * "schläft seit 14:02", "zuletzt geweckt 14:02" or, when titand knows what
+ * woke the disk, "aufgeweckt heute 14:02 durch Aktivitätsprotokoll"; with
+ * the date when it was not today. undefined when titand knows no time (RAM
+ * only, so nothing before its start). `now` is for tests.
  */
 export function sleepSince(disk: DiskSleepDisk, now = new Date()): string | undefined {
 	if (!disk.since) return undefined;
 	const since = new Date(disk.since);
 	if (Number.isNaN(since.getTime())) return undefined;
-	const time =
-		since.toDateString() === now.toDateString() ? formatTime(since) : formatDateTime(since);
-	return t(disk.state === 'asleep' ? 'storage.sleepAsleepSince' : 'storage.sleepWokenAt', { time });
+	const today = since.toDateString() === now.toDateString();
+	const time = today ? formatTime(since) : formatDateTime(since);
+	if (disk.state === 'asleep') return t('storage.sleepAsleepSince', { time });
+	const wake = disk.wakes?.[0];
+	if (!wake || new Date(wake.at).getTime() !== since.getTime())
+		return t('storage.sleepWokenAt', { time });
+	return t('storage.sleepWokenBy', { time: wakeTime(wake.at, now), cause: wakeCausesText(wake) });
+}
+
+/** "heute 21:25", or date and time when it was not today. */
+export function wakeTime(at: string, now = new Date()): string {
+	const date = new Date(at);
+	if (Number.isNaN(date.getTime())) return '–';
+	return date.toDateString() === now.toDateString()
+		? t('storage.wakeTodayAt', { time: formatTime(date) })
+		: formatDateTime(date);
+}
+
+/** The text for one cause: its code translated, with its value where it has one. */
+export function wakeCauseText(cause: DiskWakeCause): string {
+	const detail = cause.detail ?? '';
+	// Maintenance names its kind in the detail (raid, btrfs, check, plan).
+	const key =
+		cause.code === 'maintenance'
+			? `storage.wakeCause.maintenance_${detail}`
+			: `storage.wakeCause.${cause.code}`;
+	const text = tOr(key, '');
+	if (text) return text.replace('{detail}', detail);
+	// A code a newer titand knows: shown as it is rather than hidden.
+	return t('storage.wakeCause.other', { code: detail ? `${cause.code} ${detail}` : cause.code });
+}
+
+/** All causes of a wake in one line. */
+export function wakeCausesText(wake: DiskWake): string {
+	return wake.causes.map(wakeCauseText).join(', ');
+}
+
+/** What TitanOS writes by itself and the owner can move to another volume. */
+const SYSTEM_DATA = [
+	'journal',
+	'activity_log',
+	'notifications',
+	'smart_history',
+	'monitoring',
+	'config_backup',
+];
+/** Likely, not proven: taken from who was connected when nothing of TitanOS touched the volume. */
+const LIKELY = ['smb_session', 'docker_running'];
+
+export type WakeHint = 'systemData' | 'unknown' | 'likely';
+
+/** Which hints fit the recent wakes of a disk, the most frequent kind first. */
+export function wakeHints(disk: DiskSleepDisk): WakeHint[] {
+	const count: Record<WakeHint, number> = { systemData: 0, unknown: 0, likely: 0 };
+	for (const wake of disk.wakes ?? []) {
+		const codes = wake.causes.map((cause) => cause.code);
+		if (codes.some((code) => SYSTEM_DATA.includes(code))) count.systemData++;
+		if (codes.includes('unknown')) count.unknown++;
+		if (codes.some((code) => LIKELY.includes(code))) count.likely++;
+	}
+	return (Object.keys(count) as WakeHint[])
+		.filter((hint) => count[hint] > 0)
+		.sort((a, b) => count[b] - count[a]);
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // Native Btrfs volumes use one of btrfsLayouts for data and metadata. No md
@@ -503,6 +505,7 @@ func (m *Manager) Snapshots(name string) ([]Snapshot, error) {
 func (m *Manager) SnapshotAction(ctx context.Context, volume, name, action, confirm string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	diskwake.Note(volume, diskwake.Snapshot, action)
 	return m.snapshotAction(ctx, volume, name, action, confirm)
 }
 
