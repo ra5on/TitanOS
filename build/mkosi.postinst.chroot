@@ -28,6 +28,19 @@ ln -s ../usr/lib/os-release /etc/os-release
 install -d /usr/share/titanos
 printf '%s\n' "$version" > /usr/share/titanos/base-version
 
+# The Intel NPU firmware must come from trixie-backports (build/sandbox/etc/apt,
+# PLAN 79-7): trixie's is too old for the NPU driver in the NVR's Frigate image.
+# mkosi's cache key does not cover SandboxTrees, so a build on an old cache
+# would silently keep trixie's package; fail instead (rebuild with -ff).
+npu_firmware=$(dpkg-query -W -f '${Version}' firmware-intel-misc)
+case "$npu_firmware" in
+*bpo13*) ;;
+*)
+	echo "firmware-intel-misc $npu_firmware is not from trixie-backports; rebuild without the old cache (mkosi -ff)" >&2
+	exit 1
+	;;
+esac
+
 # GRUB for 32-bit UEFI and legacy BIOS boards (scripts/make-grub.sh). The
 # images stay in the system: they are what make-zip.sh puts on the stick.
 sh /usr/share/titanos/make-grub.sh /usr/share/titanos/grub-early.cfg /usr/share/titanos/boot
