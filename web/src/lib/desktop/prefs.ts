@@ -18,7 +18,9 @@ export type WidgetKind =
 	| 'tasks'
 	| 'igpu'
 	| 'npu'
-	| 'gpu';
+	| 'gpu'
+	/** PLAN 79-7: the picture of one camera of the NVR. */
+	| 'camera';
 
 export const WIDGET_KINDS: WidgetKind[] = [
 	'status',
@@ -35,6 +37,7 @@ export const WIDGET_KINDS: WidgetKind[] = [
 	'igpu',
 	'npu',
 	'gpu',
+	'camera',
 ];
 
 /** PLAN 79-5: the widgets of the graphics devices; their kind is the kind of the device. */
@@ -59,6 +62,8 @@ export type Widget = {
 	hide?: GpuValue[];
 	/** PLAN 79-5, graphics widgets: the PCI address of the chosen device (none: the first). */
 	device?: string;
+	/** PLAN 79-7, camera widget: the id of the chosen camera (none: the first). */
+	camera?: string;
 };
 
 export type Folder = { id: string; name: string; apps: string[] };
@@ -256,6 +261,9 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 						if (hide.length) widget.hide = hide;
 						const device = text(w.device, 40);
 						if (/^[0-9a-f:.]+$/i.test(device)) widget.device = device;
+					}
+					if (widget.kind === 'camera' && typeof w.camera === 'string') {
+						if (/^[a-z][a-z0-9_]{0,31}$/.test(w.camera)) widget.camera = w.camera;
 					}
 					return widget;
 				})

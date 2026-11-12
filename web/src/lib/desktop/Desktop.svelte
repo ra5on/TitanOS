@@ -4,6 +4,7 @@
 	// windows, widgets and a main menu. It replaces the head line and side
 	// bar on large screens; every page of TitanOS opens in a window.
 	import { onMount, untrack } from 'svelte';
+	import { loadWidgetCameras, widgetCameras } from '../nvr/widget.svelte.ts';
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
@@ -355,9 +356,14 @@
 	const widgetKinds = $derived(
 		WIDGET_KINDS.filter(
 			(kind) =>
-				!isGpuWidget(kind) || (system.info?.accelerators ?? []).some((a) => a.kind === kind),
+				(!isGpuWidget(kind) || (system.info?.accelerators ?? []).some((a) => a.kind === kind)) &&
+				// PLAN 79-7: the camera widget only for accounts that may watch a camera.
+				(kind !== 'camera' || widgetCameras.list.length > 0),
 		),
 	);
+	$effect(() => {
+		if (dialog === 'gallery') void loadWidgetCameras(true);
+	});
 	function addWidget(kind: WidgetKind, size: 's' | 'm' | 'l') {
 		const dims = widgetDims(kind, size);
 		// New widgets go beside the icons, never on top of them.

@@ -494,5 +494,15 @@
 	"nvr.reason.not_healthy.todo": "Look into the log below and press “Try again”. A very full NAS (memory) can be the reason.",
 	"nvr.reason.engine.title": "Docker did not start the container.",
 	"nvr.reason.engine.what": "Docker refused to create or start the container.",
-	"nvr.reason.engine.todo": "TitanOS tries again every minute. Docker's message is under “Detail”."
+	"nvr.reason.engine.todo": "TitanOS tries again every minute. Docker's message is under “Detail”.",
+	"nvr.rights.title": "Cameras",
+	"nvr.rights.hint": "Which cameras of the NVR this account may see. Without a switch it does not see a camera at all.",
+	"nvr.rights.live": "Live",
+	"nvr.rights.recordings": "Recordings",
+	"nvr.rights.liveFor": "{camera}: watch live",
+	"nvr.rights.recordingsFor": "{camera}: see recordings",
+	"nvr.rights.adminAll": "all cameras (owner and administrators)",
+	"nvr.rights.adminHint": "Owner and administrators always see all cameras and recordings.",
+	"nvr.rights.noCameras": "No camera is set up in the NVR yet.",
+	"nvr.rights.count": "Live: {live} of {total} · recordings: {recordings} of {total}"
 }

@@ -9,6 +9,7 @@
 		removeIcon as dropIcon,
 		removeWidget,
 		resizeWidget,
+		setWidgetCamera,
 		setWidgetDevice,
 		toggleWidgetValue,
 		type Cell,
@@ -18,6 +19,7 @@
 	} from './desk-ops.ts';
 	import { dockPin, dockUnpin } from './Dock.svelte';
 	import { GPU_VALUES, isGpuWidget, type GpuValue } from './prefs.ts';
+	import { loadWidgetCameras, widgetCameras } from '../nvr/widget.svelte.ts';
 	import { openProgram, openTab, type Program } from './programs.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import { desktop, requestClose, savePrefs, wm } from './wm.svelte.ts';
@@ -80,6 +82,14 @@
 		const devices = (system.info?.accelerators ?? []).filter((a) => a.kind === w.kind);
 		const chosen = devices.find((a) => a.address === w.device) ?? devices[0];
 		return { w, kind: w.kind, devices, chosen };
+	});
+	const cameraWidget = $derived(
+		menu?.kind === 'widget' && menu.key
+			? (desktop.prefs.widgets.find((x) => x.id === menu?.key && x.kind === 'camera') ?? null)
+			: null,
+	);
+	$effect(() => {
+		if (cameraWidget) void loadWidgetCameras();
 	});
 	function dockerAction(key: string, action: 'restart' | 'stop' | 'start') {
 		menu = null;
@@ -280,6 +290,21 @@
 						>
 					{/each}
 				{/if}
+				<span class="menu-rule" role="separator"></span>
+			{/if}
+			{#if cameraWidget && widgetCameras.list.length}
+				<!-- PLAN 79-7: which camera the widget shows. -->
+				<div class="menu-title">{t('desktop.widget.cameraChoice')}</div>
+				{#each widgetCameras.list as c (c.id)}
+					<button
+						type="button"
+						class="wrap"
+						role="menuitemradio"
+						data-widget-camera={c.id}
+						aria-checked={(cameraWidget.camera ?? widgetCameras.list[0]?.id) === c.id}
+						onclick={() => setWidgetCamera(id, c.id)}><span>{c.name}</span></button
+					>
+				{/each}
 				<span class="menu-rule" role="separator"></span>
 			{/if}
 			<button

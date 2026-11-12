@@ -15,6 +15,8 @@
 	import { storage } from '../storage.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
+	import LiveVideo from '../nvr/LiveVideo.svelte';
+	import { loadWidgetCameras, widgetCameras } from '../nvr/widget.svelte.ts';
 	import { isGpuWidget, type GpuValue, type WidgetKind } from './prefs.ts';
 	import { dockerPrograms, sources } from './sources.svelte.ts';
 	import { session } from '../session.svelte.ts';
@@ -23,8 +25,14 @@
 		kind,
 		hide = [],
 		device = '',
+		camera = '',
+		large = false,
 		onopen,
 	}: {
+		/** PLAN 79-7, camera widget: the id of the chosen camera. */
+		camera?: string;
+		/** PLAN 79-7, camera widget: large enough for live video instead of still pictures. */
+		large?: boolean;
 		kind: WidgetKind;
 		/** PLAN 79-5, graphics widgets: the values switched off for this widget. */
 		hide?: GpuValue[];
@@ -103,6 +111,17 @@
 	});
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
+
+	// PLAN 79-7: one camera of the NVR. A small widget shows a still picture
+	// every five seconds, a large one live video; a click opens the NVR.
+	$effect(() => {
+		if (kind === 'camera') void loadWidgetCameras();
+	});
+	const shownCamera = $derived(
+		kind === 'camera'
+			? (widgetCameras.list.find((c) => c.id === camera) ?? widgetCameras.list[0])
+			: undefined,
+	);
 
 	// PLAN 79-5: iGPU, NPU and graphics card. The devices come with the system
 	// data the desktop asks for anyway. A value the device does not report
@@ -398,6 +417,31 @@
 			{/if}
 		</div>
 	{/if}
+{:else if kind === 'camera'}
+	{#if shownCamera}
+		<button
+			type="button"
+			class="cam"
+			aria-label={t('desktop.widget.cameraOpen', { name: shownCamera.name })}
+			onclick={() => onopen('app:nvr', '/nvr?camera=' + encodeURIComponent(shownCamera.id))}
+		>
+			{#key shownCamera.id}
+				<LiveVideo
+					id={shownCamera.id}
+					name={shownCamera.name}
+					stillOnly={!large}
+					stillMs={5000}
+					height={large ? 720 : 360}
+				/>
+			{/key}
+			<span class="cam-name">{shownCamera.name}</span>
+		</button>
+	{:else}
+		<h4>{t('desktop.widget.camera')}</h4>
+		<p class="muted">
+			{widgetCameras.loaded ? t('desktop.widget.cameraNone') : t('common.loading')}
+		</p>
+	{/if}
 {:else if kind === 'tasks'}
 	<h4>{t('desktop.widget.tasks')}</h4>
 	<button type="button" class="btn small-btn" onclick={() => onopen('app:monitor', '/tools/tasks')}
@@ -406,6 +450,33 @@
 {/if}
 
 <style>
+	.cam {
+		position: absolute;
+		inset: 0;
+		padding: 0;
+		border: 0;
+		border-radius: inherit;
+		overflow: hidden;
+		background: #0b0f14;
+		cursor: pointer;
+	}
+	.cam:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.cam-name {
+		position: absolute;
+		left: 8px;
+		bottom: 8px;
+		max-width: calc(100% - 16px);
+		padding: 2px 8px;
+		border-radius: 6px;
+		background: rgb(11 15 20 / 0.72);
+		color: #fff;
+		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
+		text-align: left;
+	}
 	h4 {
 		margin: 0 0 var(--space-2-5);
 		font-size: var(--text-md);

@@ -116,9 +116,11 @@ export const CELL = 20;
 export const WIDGET_DIMS = { s: [12, 5], m: [17, 8], l: [24, 12] } as const;
 // PLAN 79-5: the graphics widgets hold a headline, a line and up to four tiles.
 const GPU_DIMS = { s: [15, 17], m: [17, 17], l: [24, 18] } as const;
+// PLAN 79-7: a camera's picture is 16:9 under its name.
+const CAMERA_DIMS = { s: [14, 10], m: [20, 13], l: [30, 19] } as const;
 /** Width and height in cells a widget of this kind gets for a size. */
 export function widgetDims(kind: WidgetKind, size: 's' | 'm' | 'l'): readonly [number, number] {
-	return (isGpuWidget(kind) ? GPU_DIMS : WIDGET_DIMS)[size];
+	return (isGpuWidget(kind) ? GPU_DIMS : kind === 'camera' ? CAMERA_DIMS : WIDGET_DIMS)[size];
 }
 
 export function widgetLeft(w: Widget, columns: number) {
@@ -164,6 +166,14 @@ export function toggleWidgetValue(id: string, value: GpuValue) {
 export function setWidgetDevice(id: string, device: string) {
 	savePrefs((p) => {
 		p.widgets = p.widgets.map((w) => (w.id === id ? { ...w, device } : w));
+		p.customWidgets = true;
+	});
+}
+
+/** PLAN 79-7: the camera a camera widget shows. */
+export function setWidgetCamera(id: string, camera: string) {
+	savePrefs((p) => {
+		p.widgets = p.widgets.map((w) => (w.id === id ? { ...w, camera } : w));
 		p.customWidgets = true;
 	});
 }
