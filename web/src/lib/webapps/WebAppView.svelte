@@ -3,7 +3,7 @@
 	// browser in a sandboxed frame of its own (opaque origin: no cookies, no
 	// TitanOS API). host.js in the frame passes files in and saves out; this
 	// view reads and writes them with the rights of the account.
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { saveBlob } from '#lib/api.ts';
@@ -150,11 +150,45 @@
 		frame?.contentWindow?.postMessage(message, '*', transfer);
 	}
 
+	/**
+	 * PLAN 79-3: the keyboard goes into the app (its canvas, by host.js), so a
+	 * document scrolls by the keys without a click into it first. Only for the
+	 * window in front, never away from a dialog, and never away from where
+	 * the person went meanwhile (the bar, the search, the launcher).
+	 */
+	export function focusApp() {
+		if (phase !== 'ready' || !frame) return;
+		if (winId && wm.focused !== winId) return;
+		if (document.querySelector('dialog[open]')) return;
+		const active = document.activeElement;
+		const own = frame.closest('section.win');
+		if (
+			active &&
+			active !== document.body &&
+			active !== frame &&
+			!own?.contains(active) &&
+			!active.closest('section.win')
+		)
+			return;
+		frame.focus({ preventScroll: true });
+		post({ type: 'webapp-focus' });
+	}
+	/** Once the page is drawn anew (the frame shows, a dialog is gone). */
+	const focusSoon = () => void tick().then(focusApp);
+
 	/** Hands a file to the app (the bytes are transferred, not copied). */
 	function give(name: string, bytes: ArrayBuffer) {
 		post({ type: 'webapp-open', name, bytes }, [bytes]);
 		onname?.(name);
+		focusSoon();
 	}
+	// A dialog of the window (open, save, a question) closed: back into the app.
+	let asked = false;
+	$effect(() => {
+		const open = !!(saving || picking || pick || conflict || replace);
+		if (!open && asked) focusSoon();
+		asked = open;
+	});
 
 	let opened = '';
 	async function openDoc(next: DocRef) {
@@ -201,6 +235,7 @@
 		if (msg.type === 'webapp-ready') {
 			opened = '';
 			phase = 'ready';
+			focusSoon();
 		} else if (msg.type === 'webapp-dirty') appDirty = msg.dirty;
 		else if (msg.type === 'webapp-failed') {
 			// host.js: the app's files were turned away (Cloudflare Access).

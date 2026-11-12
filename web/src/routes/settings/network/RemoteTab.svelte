@@ -56,5 +56,4 @@
 </SettingGroup>
 <SettingGroup title={t('netx.dnsServices')} id="remote-dns" desc={t('netx.dnsHint')}>
 	<SettingRow icon="globe" title={t('ddns.title')} href="/settings/ddns" />
-	<SettingRow icon="globe" title={t('ipv64x.title')} href="/settings/ddns?tab=ipv64" />
 </SettingGroup>

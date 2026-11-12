@@ -21,7 +21,6 @@
 	import AppAccess from './AppAccess.svelte';
 	import type { Snippet } from 'svelte';
 	import type { AppEditor } from './app-editor.svelte.ts';
-	import AppIpv64 from './AppIpv64.svelte';
 	import AppOpens from './AppOpens.svelte';
 	import AppProxy from './AppProxy.svelte';
 
@@ -193,9 +192,6 @@
 			</div>
 		</FormRow>
 	{/if}
-	<FormRow wide label={t('appform.ipv64')}>
-		<AppIpv64 app={ed.name} />
-	</FormRow>
 	<FormRow
 		label={t('editor.privileged')}
 		changed={ed.differs('privileged')}

@@ -3,10 +3,8 @@
 	// address of the connection and the global IPv6 address of the NAS.
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError } from '#lib/api.ts';
-	import Tabs from '#lib/components/Tabs.svelte';
 	import DnsProviderFields from '#lib/components/DnsProviderFields.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import {
@@ -30,20 +28,10 @@
 		type DdnsStatus,
 		type UpdaterForm,
 	} from '#lib/ddns/ddns.ts';
-	import Ipv64Panel from '#lib/ipv64/Ipv64Panel.svelte';
-	import Ipv64Area from '#lib/ipv64/Ipv64Area.svelte';
-	import { DDNS_TABS, ddnsTabFrom, type DdnsTab } from '#lib/ipv64/ipv64.ts';
+	import Ipv64Panel from '#lib/ddns/Ipv64Panel.svelte';
 
-	// Two tabs (decision of the owner of 29 Oct 2026): dynamic DNS for every
-	// provider and the IPv64.net account (?tab=ipv64, sub-tab in ?sub=).
-	let tab = $state<DdnsTab>(ddnsTabFrom(page.url.searchParams.get('tab')));
-	$effect(() => {
-		tab = ddnsTabFrom(page.url.searchParams.get('tab'));
-	});
-	function chooseTab(next: DdnsTab) {
-		tab = next;
-		goto(next === 'ipv64' ? '/settings/ddns?tab=ipv64' : '/settings/ddns', { replaceState: true });
-	}
+	// One page without tabs: the tab "IPv64" (the IPv64.net account) went
+	// with PLAN 79-2. Old links (?tab=ipv64, &sub=…) show this page.
 
 	let status = $state<DdnsStatus | null>(null);
 	let loadError = $state('');
@@ -157,16 +145,7 @@
 
 <PageHead title={t('ddns.title')} />
 
-<Tabs
-	tabs={DDNS_TABS.map((id) => ({ id, label: t(id === 'ipv64' ? 'ipv64x.title' : 'ddns.tabDdns') }))}
-	value={tab}
-	label={t('ddns.title')}
-	onchange={chooseTab}
-/>
-
-{#if tab === 'ipv64'}
-	<Ipv64Area />
-{:else if loadError}
+{#if loadError}
 	<div class="notice-error" role="alert">
 		{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button>
 	</div>

@@ -646,6 +646,22 @@ try {
       .waitFor({ state: "attached" });
     await page.getByText("198.51.100.20").first().waitFor();
     await page.screenshot({ path: `${out}/ddns-desktop.png`, fullPage: true });
+    // PLAN 79-2: the tab "IPv64" (the IPv64.net account) is gone. The page
+    // has no tabs, and old links land on it instead of a missing page.
+    assert.equal(await page.getByRole("tab").count(), 0, "ddns has tabs");
+    for (const old of [
+      "/settings/ipv64",
+      "/settings/ipv64?tab=failover",
+      "/settings/ddns?tab=ipv64&sub=blocklist",
+    ]) {
+      await page.goto(base + old);
+      await page
+        .getByRole("heading", { level: 1, name: "Dynamisches DNS" })
+        .waitFor({ state: "attached" });
+      await page.getByText("198.51.100.20").first().waitFor();
+      assert.equal(new URL(page.url()).pathname, "/settings/ddns", old);
+      assert.equal(await page.getByRole("tab").count(), 0, old);
+    }
     await ctx.close();
   }
 

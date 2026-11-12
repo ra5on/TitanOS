@@ -48,10 +48,10 @@ func TestStartTiesRootContext(t *testing.T) {
 func TestNewLeavesLoadingToStart(t *testing.T) {
 	ts := newTestServer(t)
 	opts := ts.server.opts
-	opts.WireGuard, opts.Fans, opts.HealthReport, opts.WebPush, opts.IPv64 = nil, nil, nil, nil, nil
+	opts.WireGuard, opts.Fans, opts.HealthReport, opts.WebPush = nil, nil, nil, nil
 	s := New(opts)
-	if len(s.pending) != 5 {
-		t.Fatalf("pending loads = %d, want 5", len(s.pending))
+	if len(s.pending) != 4 {
+		t.Fatalf("pending loads = %d, want 4", len(s.pending))
 	}
 	if err := s.Start(t.Context()); err != nil {
 		t.Fatal(err)

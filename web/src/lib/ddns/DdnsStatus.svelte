@@ -1,7 +1,6 @@
 <script lang="ts">
 	// The state of dynamic DNS: found and published addresses, the last and
-	// next look, the last error and "Update now". Shared by Settings ›
-	// Dynamic DNS and Settings › IPv64 › DynDNS.
+	// next look, the last error and "Update now" (Settings › Dynamic DNS).
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';

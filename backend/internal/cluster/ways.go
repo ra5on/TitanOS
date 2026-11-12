@@ -106,7 +106,7 @@ func wayOfInterface(iface string, ip netip.Addr) string {
 		return WayTailscale
 	case iface == "wt0" || strings.HasPrefix(iface, "nb-") || strings.HasPrefix(iface, "netbird"):
 		return WayNetBird
-	case strings.HasPrefix(iface, "wg") || iface == "titanoswg" || iface == "ipv64wg":
+	case strings.HasPrefix(iface, "wg") || iface == "titanoswg":
 		return WayWireGuard
 	}
 	return wayOfIP(ip)
