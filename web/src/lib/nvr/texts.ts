@@ -128,3 +128,8 @@ export function faceNameProblem(raw: string): FaceNameProblem {
 	if (!/^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u.test(name)) return 'chars';
 	return '';
 }
+
+/** A known plate as the NAS takes it: 1–64 letters, digits, spaces, "-" and "*" (any characters). */
+export function plateOk(plate: string): boolean {
+	return /^[\p{L}\p{N} *-]{1,64}$/u.test(plate) && [...plate].length <= 64;
+}

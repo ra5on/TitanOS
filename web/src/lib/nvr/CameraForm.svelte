@@ -600,7 +600,13 @@
 				{/snippet}
 			</SettingRow>
 			{#if mode !== 'continuous'}
-				<SettingRow icon="clock" title={t('nvr.record.around')} desc={t('nvr.record.aroundHint')}>
+				<SettingRow
+					icon="clock"
+					title={t('nvr.record.around')}
+					desc={mode === 'events'
+						? `${t('nvr.record.aroundHint')} ${t('nvr.record.aroundEvents')}`
+						: t('nvr.record.aroundHint')}
+				>
 					{#snippet control()}
 						<label class="unit around"
 							><span>{t('nvr.record.before')}</span><input

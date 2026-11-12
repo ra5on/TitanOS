@@ -579,6 +579,11 @@ try {
     await plates.getByText(de["nvr.plates.seenOld"]).waitFor();
     await plates.locator("li", { hasText: "B-XY 987" }).getByText(/^gesehen: 1 · zuletzt: .+ · Kamera: Einfahrt$/).waitFor();
     await plates.locator("li", { hasText: "B-XY 987" }).getByRole("button", { name: "Als bekannt übernehmen" }).click();
+    // A plate the NAS would refuse is named under its row; nothing is saved.
+    await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().fill("B-XY 987, B/XY 98");
+    await plates.getByText("„B/XY 98“ geht nicht", { exact: false }).waitFor();
+    assert.equal(await plates.getByRole("button", { name: "Speichern" }).isDisabled(), true);
+    await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().fill("B-XY 987");
     await plates.getByLabel("Name", { exact: true }).last().fill("Nachbar");
     await plates.getByRole("button", { name: "Speichern" }).click();
     await page.waitForFunction(() => !!document.querySelector("#nvr-plates .seen") && document.querySelectorAll("#nvr-plates .seen .chip").length === 2);

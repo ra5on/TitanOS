@@ -6,7 +6,7 @@
 	import SettingRow from '../components/settings/SettingRow.svelte';
 	import { i18n, t } from '../i18n/index.svelte.ts';
 	import { cameraName, nvr } from './nvr.svelte.ts';
-	import { dayClock } from './texts.ts';
+	import { dayClock, plateOk } from './texts.ts';
 	import type { PlateEntry, RecognizedPlate } from './types.ts';
 
 	let {
@@ -40,6 +40,18 @@
 			}))
 			.filter((row) => row.name && row.plates.length);
 	const dirty = $derived(JSON.stringify(clean(draft)) !== JSON.stringify(plates));
+	/** What is wrong with a row (its plates); '' when the NAS takes it. */
+	function rowProblem(row: Draft): string {
+		const list = row.plates
+			.split(',')
+			.map((p) => p.trim())
+			.filter(Boolean);
+		const bad = list.find((p) => !plateOk(p));
+		if (bad) return t('nvr.plates.badPlate', { plate: bad });
+		if (list.length > 20) return t('nvr.plates.tooMany');
+		return '';
+	}
+	const problems = $derived(draft.map(rowProblem));
 
 	let recognized = $state<RecognizedPlate[] | null>(null);
 	let open = $state(false);
@@ -85,6 +97,7 @@
 							class="field mono"
 							type="text"
 							bind:value={row.plates}
+							aria-invalid={problems[i] ? 'true' : undefined}
 							aria-label={t('nvr.plates.plates')}
 							placeholder="M-AB 1234, MAB12*"
 							spellcheck="false"
@@ -95,6 +108,7 @@
 							onclick={() => (draft = draft.filter((_, at) => at !== i))}
 							>{t('nvr.plates.remove')}</button
 						>
+						{#if problems[i]}<p class="bad" role="alert">{problems[i]}</p>{/if}
 					</li>
 				{/each}
 			</ul>
@@ -108,7 +122,7 @@
 				<button
 					type="button"
 					class="btn btn-primary"
-					disabled={busy || !dirty}
+					disabled={busy || !dirty || problems.some(Boolean)}
 					onclick={() => onsave(clean(draft))}>{t('common.save')}</button
 				>
 			</div>
@@ -195,6 +209,12 @@
 	}
 	p {
 		margin: 0;
+	}
+	.bad {
+		flex: 1 1 100%;
+		color: var(--error-text);
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
 	}
 	.old {
 		margin-top: var(--space-2);

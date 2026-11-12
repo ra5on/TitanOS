@@ -4,7 +4,7 @@
 	// plain question that says what happens to the recordings.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api } from '#lib/api.ts';
+	import { api, ApiError } from '#lib/api.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -70,7 +70,11 @@
 			removing = null;
 			await refreshNvr();
 		} catch (err) {
-			error = apiErrorText(err);
+			// Without the NVR's volume the NAS keeps the camera (its recordings would be lost).
+			error =
+				err instanceof ApiError && err.code === 'nvr_no_volume'
+					? t('nvr.cameras.removeNoVolume')
+					: apiErrorText(err);
 		} finally {
 			busy = '';
 		}

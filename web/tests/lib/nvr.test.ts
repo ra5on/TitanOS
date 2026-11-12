@@ -20,7 +20,7 @@ import {
 import { supportedCodecs } from '../../src/lib/nvr/mse.ts';
 import { nvrSideFor, rightsOf } from '../../src/lib/nvr/side.svelte.ts';
 import { talkCloseProblem } from '../../src/lib/nvr/talk.ts';
-import { faceNameProblem, groupsOf, toggleGroup } from '../../src/lib/nvr/texts.ts';
+import { faceNameProblem, groupsOf, plateOk, toggleGroup } from '../../src/lib/nvr/texts.ts';
 import {
 	dayOf,
 	dayStart,
@@ -243,4 +243,11 @@ test('an account without the admin role sees the pages of the NVR it has a right
 		]),
 	).toEqual({ live: true, recordings: true });
 	expect(rightsOf([])).toEqual({ live: false, recordings: false });
+});
+
+test('known plates are what the NAS takes: letters, digits, spaces, - and * only', () => {
+	for (const ok of ['M-AB 1234', 'MAB12*', 'K-TI 2026', 'ÖHR 12', '*', 'a'.repeat(64)])
+		expect(plateOk(ok), ok).toBe(true);
+	for (const bad of ['', 'M/AB 12', 'MAB.12', 'M(AB)', '[A-Z]+', 'a'.repeat(65)])
+		expect(plateOk(bad), bad).toBe(false);
 });
