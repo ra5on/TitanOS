@@ -100,7 +100,11 @@
 				}),
 			);
 		if (store.spanDays != null)
-			parts.push(t('nvr.storage.span', { days: formatDecimal(store.spanDays, 1) }));
+			parts.push(
+				formatDecimal(store.spanDays, 1) === formatDecimal(1, 1)
+					? t('nvr.storage.spanOne')
+					: t('nvr.storage.span', { days: formatDecimal(store.spanDays, 1) }),
+			);
 		return parts.join(' · ');
 	});
 	const capNote = $derived(

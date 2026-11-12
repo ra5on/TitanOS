@@ -113,10 +113,10 @@
 		camsError = '';
 		api.get<UserCameras>(`/users/${encodeURIComponent(name)}/cameras`).then(
 			(res) => {
-				if (name === account.name) {
-					cams = res;
-					camsMissing = false;
-				}
+				if (name !== account.name) return;
+				// An answer without the list is no NVR's answer: leave the group out.
+				camsMissing = !Array.isArray(res?.cameras);
+				cams = camsMissing ? null : res;
 			},
 			() => {
 				if (name === account.name) camsMissing = true;
@@ -129,11 +129,11 @@
 		camsBusy = true;
 		camsError = '';
 		try {
-			cams = await api.put<UserCameras>(`/users/${encodeURIComponent(account.name)}/cameras`, {
-				cameras: {
-					[id]: { live: row.live, recordings: row.recordings, [right]: on },
-				},
-			});
+			const next = await api.put<UserCameras>(
+				`/users/${encodeURIComponent(account.name)}/cameras`,
+				{ cameras: { [id]: { live: row.live, recordings: row.recordings, [right]: on } } },
+			);
+			if (Array.isArray(next?.cameras)) cams = next;
 		} catch (err) {
 			camsError = apiErrorText(err);
 		} finally {

@@ -112,9 +112,11 @@
 			: !faces
 				? ''
 				: faces.faces.length
-					? t('nvr.faces.count', { count: faces.faces.length }) +
+					? (faces.faces.length === 1
+							? t('nvr.faces.countOne')
+							: t('nvr.faces.count', { count: faces.faces.length })) +
 						(faces.attempts.length
-							? ` · ${t('nvr.faces.unknownCount', { count: faces.attempts.length })}`
+							? ` · ${faces.attempts.length === 1 ? t('nvr.faces.unknownCountOne') : t('nvr.faces.unknownCount', { count: faces.attempts.length })}`
 							: '')
 					: t('nvr.faces.none'),
 	);
@@ -166,7 +168,11 @@
 								</form>
 							{:else}
 								<b>{face.name}</b>
-								<small>{t('nvr.faces.pictures', { count: face.images.length })}</small>
+								<small
+									>{face.images.length === 1
+										? t('nvr.faces.picturesOne')
+										: t('nvr.faces.pictures', { count: face.images.length })}</small
+								>
 							{/if}
 						</div>
 						<div class="pics">

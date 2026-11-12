@@ -157,7 +157,9 @@
 		</EmptyState>
 	{:else}
 		<SettingGroup
-			title={t('nvr.cameras.count', { count: nvr.cameras.length })}
+			title={nvr.cameras.length === 1
+				? t('nvr.cameras.countOne')
+				: t('nvr.cameras.count', { count: nvr.cameras.length })}
 			desc={many ? t('nvr.cameras.many') : undefined}
 			id="nvr-cameras"
 		>

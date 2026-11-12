@@ -253,7 +253,7 @@
 					<dd>
 						{dayClock(e.start, locale)}{e.end === null
 							? ` · ${t('nvr.events.running')}`
-							: ` – ${clock(e.end, locale)} (${t('nvr.events.seconds', { seconds: Math.max(1, Math.round(e.end - e.start)) })})`}
+							: ` – ${clock(e.end, locale)} (${Math.max(1, Math.round(e.end - e.start)) === 1 ? t('nvr.events.secondsOne') : t('nvr.events.seconds', { seconds: Math.round(e.end - e.start) })})`}
 					</dd>
 				</div>
 				{#if e.subLabel}<div>

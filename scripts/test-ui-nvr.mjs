@@ -768,6 +768,7 @@ try {
     assert.deepEqual(sent(state, "PUT", "/nvr/exports/haustuer_ab12cd")[0], { name: "Paketbote DHL" });
     await sound(page, "recordings");
     await shot(page, "aufnahmen");
+    await page.locator("#nvr-exports").screenshot({ path: `${out}/exporte-${WIDTH}.png`, animations: "disabled" });
     await done.getByRole("button", { name: "Löschen" }).click();
     const remove = confirmDialog(page, "Export löschen?");
     assert.equal(await remove.locator("input").count(), 0);

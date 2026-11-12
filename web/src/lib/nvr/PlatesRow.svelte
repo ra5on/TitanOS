@@ -58,7 +58,11 @@
 	icon="file"
 	title={t('nvr.plates.title')}
 	desc={used ? t('nvr.plates.hint') : t('nvr.plates.unused')}
-	summary={plates.length ? t('nvr.plates.count', { count: plates.length }) : t('nvr.plates.none')}
+	summary={plates.length
+		? plates.length === 1
+			? t('nvr.plates.countOne')
+			: t('nvr.plates.count', { count: plates.length })
+		: t('nvr.plates.none')}
 	id="nvr-plates"
 	bind:open
 >
