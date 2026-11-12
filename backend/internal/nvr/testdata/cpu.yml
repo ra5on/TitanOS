@@ -31,9 +31,9 @@ ffmpeg:
   hwaccel_args: ""
 record:
   continuous:
-    days: 1
+    days: 30
   motion:
-    days: 1
+    days: 30
 birdseye:
   enabled: false
 lpr:

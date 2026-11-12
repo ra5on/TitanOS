@@ -438,8 +438,18 @@ export async function installNvr(target, state = nvrState()) {
       }
       if (method === "PUT" && body.name !== undefined && nameTaken(body.name, m[1]))
         return fail(409, "nvr_camera_name_exists");
+      // A narrower mode or fewer days delete recordings: the NAS asks first (manager.go, shrinks).
+      const keeps = { continuous: 3, off: 3, motion: 2, events: 1 };
+      const was = s.cameras[index].record;
+      if (
+        method === "PUT" &&
+        body.record &&
+        !body.confirmShrink &&
+        (keeps[body.record.mode] < keeps[was.mode] || body.record.retainDays < was.retainDays)
+      )
+        return fail(409, "nvr_recordings_shrink");
       if (method === "PUT") {
-        const { source, clearPassword: _c, ...rest } = body;
+        const { source, clearPassword: _c, confirmShrink: _s, ...rest } = body;
         Object.assign(s.cameras[index], rest);
         if (source) Object.assign(s.cameras[index].source, { ...source, password: undefined });
       }

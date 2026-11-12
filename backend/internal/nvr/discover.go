@@ -68,7 +68,12 @@ func Discover(ctx context.Context) ([]Found, error) {
 // discoverOn sends the probe from every connection to target and
 // collects the answers for wait.
 func discoverOn(ctx context.Context, conns []*net.UDPConn, target *net.UDPAddr, wait time.Duration, allow func(netip.Addr) bool) ([]Found, error) {
+	// The deadline is set before the request's end can be: a cancelled
+	// request (even one cancelled already) always has the last word.
 	deadline := time.Now().Add(wait)
+	for _, conn := range conns {
+		_ = conn.SetDeadline(deadline) // a connection that cannot take a deadline is closed by the caller's context
+	}
 	stop := context.AfterFunc(ctx, func() {
 		for _, conn := range conns {
 			_ = conn.SetReadDeadline(time.Unix(1, 0)) // ends the read; a closed connection is no error here
@@ -82,7 +87,6 @@ func discoverOn(ctx context.Context, conns []*net.UDPConn, target *net.UDPAddr, 
 		go func() {
 			defer func() { done <- struct{}{} }()
 			defer func() { _ = conn.Close() }() // a connection that is closed already is no error here
-			_ = conn.SetDeadline(deadline)      // a connection that cannot take a deadline is closed by the caller's context
 			// Twice: UDP may lose one.
 			for range 2 {
 				if _, err := conn.WriteToUDP(message, target); err != nil {

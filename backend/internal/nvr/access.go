@@ -49,7 +49,9 @@ type Account struct {
 // account and a new camera start with nothing ticked.
 //
 // The rights live in /config/nvr/camera-access.json, written only when
-// they change and read once at the start.
+// they change and read once at the start. A file that could not be read
+// is never written over: until a start reads it, normal accounts see no
+// camera and every change of the rights is refused (ErrNotLoaded).
 type Access struct {
 	store *config.Store
 	// Lookup returns the account as it is now; false if it does not exist.
@@ -57,6 +59,8 @@ type Access struct {
 
 	mu      sync.RWMutex
 	cameras map[string]CameraAccess
+	// unreadable: Load could not read the file.
+	unreadable bool
 }
 
 // NewAccess returns rights with nothing stored; Load reads them.
@@ -69,13 +73,16 @@ func (a *Access) Load() error {
 	var s accessSettings
 	err := a.store.ReadJSON(accessFile, &s)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		a.mu.Lock()
+		a.unreadable = true
+		a.mu.Unlock()
 		return err
 	}
 	if s.Cameras == nil {
 		s.Cameras = map[string]CameraAccess{}
 	}
 	a.mu.Lock()
-	a.cameras = s.Cameras
+	a.cameras, a.unreadable = s.Cameras, false
 	a.mu.Unlock()
 	return nil
 }
@@ -176,6 +183,9 @@ func (a *Access) ForgetCamera(camera string) error {
 func (a *Access) change(edit func(map[string]CameraAccess)) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.unreadable {
+		return ErrNotLoaded
+	}
 	next := make(map[string]CameraAccess, len(a.cameras))
 	for id, entry := range a.cameras {
 		next[id] = CameraAccess{Live: slices.Clone(entry.Live), Recordings: slices.Clone(entry.Recordings)}

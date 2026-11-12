@@ -86,9 +86,17 @@ func TestChains(t *testing.T) {
 	if plain.next(DetectorAuto, "npu") != "igpu" || plain.next(DetectorAuto, "igpu") != "cpu" || plain.next(DetectorAuto, "cpu") != "" {
 		t.Error("next along npu → igpu → cpu")
 	}
-	// The device in use was unplugged: the CPU remains.
-	if got := plain.next(DetectorAuto, "coral"); got != "cpu" {
-		t.Errorf("next after a vanished device = %q", got)
+	// The device in use was unplugged (or went to a VM): on down the chain
+	// from it, never back up.
+	if got := plain.next(DetectorAuto, "coral"); got != "npu" {
+		t.Errorf("next after a vanished stick = %q", got)
+	}
+	onlyNPU := probeHardware([]hardware.ContainerDevice{devNPU}, nil, hostFacts{})
+	if got := onlyNPU.next(DetectorNPU, "igpu"); got != "cpu" {
+		t.Errorf("next after a vanished iGPU = %q (never back to the NPU)", got)
+	}
+	if got := plain.after(DetectorNPU, "igpu"); got != "cpu" {
+		t.Errorf("after the iGPU = %q", got)
 	}
 }
 

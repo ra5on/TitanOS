@@ -192,19 +192,21 @@ func (h HardwareInfo) chain(setting string) []string {
 	}
 	// Never back up the order: a failing NPU goes on to the iGPU, a
 	// failing iGPU never to the NPU or a stick.
-	rank := []string{DetectorCoral, DetectorHailo, DetectorNPU, DetectorIGPU, DetectorCPU}
-	at := slices.Index(rank, setting)
+	at := slices.Index(deviceRank, setting)
 	if setting == DetectorCoral || setting == DetectorHailo {
-		at = slices.Index(rank, DetectorHailo) // the two sticks do not stand in for each other
+		at = slices.Index(deviceRank, DetectorHailo) // the two sticks do not stand in for each other
 	}
 	out := []string{setting}
 	for _, kind := range order {
-		if slices.Index(rank, kind) > at && kind != setting {
+		if slices.Index(deviceRank, kind) > at && kind != setting {
 			out = append(out, kind)
 		}
 	}
 	return out
 }
+
+// deviceRank is the order of the chains: the sticks, NPU, iGPU, CPU.
+var deviceRank = []string{DetectorCoral, DetectorHailo, DetectorNPU, DetectorIGPU, DetectorCPU}
 
 // next is the device after current in the chain of setting, "" at its end.
 func (h HardwareInfo) next(setting, current string) string {
@@ -213,10 +215,23 @@ func (h HardwareInfo) next(setting, current string) string {
 		return chain[i+1]
 	}
 	if i := slices.Index(chain, current); i < 0 && current != DetectorCPU {
-		// The device in use left the chain (unplugged): the CPU remains.
-		return DetectorCPU
+		// The device in use left the chain (unplugged, or with a VM).
+		return h.after(setting, current)
 	}
 	return ""
+}
+
+// after is the first device of the chain of setting that comes after
+// current in the order of the chains, the CPU if none does: never one
+// before it (those failed, or were passed over).
+func (h HardwareInfo) after(setting, current string) string {
+	at := slices.Index(deviceRank, current)
+	for _, kind := range h.chain(setting) {
+		if slices.Index(deviceRank, kind) > at {
+			return kind
+		}
+	}
+	return DetectorCPU
 }
 
 // containerDevices are the device nodes Frigate gets for a detector: the

@@ -447,12 +447,8 @@ func TestNVRLive(t *testing.T) {
 	if kind, data, err := conn.Read(ctx); err != nil || kind != websocket.MessageText || string(data) != `frigate:{"type":"mse"}` {
 		t.Fatalf("relay: %v %s %v", kind, data, err)
 	}
-	if err := conn.Write(ctx, websocket.MessageBinary, []byte{1, 2, 3}); err != nil {
-		t.Fatal(err)
-	}
-	if kind, data, err := conn.Read(ctx); err != nil || kind != websocket.MessageBinary || len(data) != 11 {
-		t.Fatalf("binary relay: %v %v %v", kind, data, err)
-	}
+	// The browser sends no video (TestNVRSocketsPassOnlyTheirMessages);
+	// Frigate's binary messages go through as they are.
 	if asked != "/live/mse/api/ws?src=haustuer_sub" {
 		t.Errorf("asked Frigate for %q", asked)
 	}
@@ -467,10 +463,10 @@ func TestNVRLive(t *testing.T) {
 	}
 	// Logging out ends it as well.
 	conn, ctx = liveDial(t, ts, ts.client, "/nvr/cameras/haustuer/live")
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`x`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"mse","value":"avc1"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, data, err := conn.Read(ctx); err != nil || string(data) != "frigate:x" {
+	if _, data, err := conn.Read(ctx); err != nil || string(data) != `frigate:{"type":"mse","value":"avc1"}` {
 		t.Fatalf("owner relay: %s %v", data, err)
 	}
 	if res, _ := ts.request("POST", "/api/v1/logout", nil); res.StatusCode >= 400 {

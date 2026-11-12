@@ -11,7 +11,9 @@
 	import SettingRow from '../components/settings/SettingRow.svelte';
 	import SettingSub from '../components/settings/SettingSub.svelte';
 	import { apiErrorText, t, type MessageKey } from '../i18n/index.svelte.ts';
+	import Confirm from './Confirm.svelte';
 	import Pills from './Pills.svelte';
+	import { shrinks } from './shrink.ts';
 	import {
 		groupsOf,
 		labelName,
@@ -258,10 +260,20 @@
 			taken.some((other) => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()),
 	);
 	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '' && !nameTaken);
+	/** The NAS asked before deleting recordings that exist (a narrower mode, fewer days). */
+	let askShrink = $state<{ body: Record<string, unknown>; lines: string[] } | null>(null);
+	function shrinkLines(next: { mode: RecordMode; retainDays: number }): string[] {
+		const lines = shrinks(initial?.record, next).map((what) =>
+			what === 'days'
+				? t('nvr.shrink.days', { days: String(next.retainDays) })
+				: t(`nvr.shrink.${what}` as MessageKey),
+		);
+		if (lines.length === 0) lines.push(t('nvr.shrink.generic'));
+		lines.push(t('nvr.shrink.when'));
+		return lines;
+	}
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
-		saving = true;
-		error = '';
 		const body: Record<string, unknown> = {
 			name: name.trim(),
 			source: {
@@ -287,12 +299,26 @@
 			notify: $state.snapshot(notify),
 		};
 		if (adding) body.enabled = true;
+		await send(body);
+	}
+	async function send(body: Record<string, unknown>) {
+		saving = true;
+		error = '';
 		try {
 			const saved = adding
 				? await api.post<Camera>('/nvr/cameras', body)
 				: await api.put<Camera>(`/nvr/cameras/${encodeURIComponent(camera!.id)}`, body);
+			askShrink = null;
 			onsaved(saved);
 		} catch (err) {
+			if (err instanceof ApiError && err.code === 'nvr_recordings_shrink' && !body.confirmShrink) {
+				askShrink = {
+					body,
+					lines: shrinkLines(body.record as { mode: RecordMode; retainDays: number }),
+				};
+				return;
+			}
+			askShrink = null;
 			if (err instanceof ApiError && err.code === 'nvr_target_public') askPublic = true;
 			if (err instanceof ApiError && err.code === 'nvr_camera_name_exists') nameError = true;
 			error = apiErrorText(err);
@@ -734,6 +760,18 @@
 		>
 	</div>
 </form>
+
+{#if askShrink}
+	<Confirm
+		title={t('nvr.shrink.title')}
+		text={askShrink.lines}
+		confirm={t('nvr.shrink.confirm')}
+		danger
+		busy={saving}
+		onconfirm={() => askShrink && send({ ...askShrink.body, confirmShrink: true })}
+		onclose={() => (askShrink = null)}
+	/>
+{/if}
 
 <style>
 	.camera-form {

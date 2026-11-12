@@ -36,7 +36,7 @@ func (w *titand) wireNVR() error {
 		return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled, Created: user.Created}, true
 	}
 	if err := w.recorder.Access.Load(); err != nil {
-		slog.Warn("camera rights not readable from /config", "err", err)
+		slog.Warn("camera rights not readable from /config; they are not changed until a start reads them", "err", err)
 	}
 	if w.opts.dev {
 		if err := w.recorder.StartDev(ctx); err != nil {
@@ -68,7 +68,7 @@ func (w *titand) wireNVR() error {
 	// Messages about a camera go the ways its owner chose for it; Home
 	// Assistant reads its sensors from the NVR (api/homeassistant_mqtt.go).
 	w.recorder.Route = func(n nvr.Notice) {
-		w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent})
+		w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent, Ref: n.Camera})
 	}
 	if err := w.recorder.Load(); err != nil {
 		slog.Warn("NVR settings not readable from /config", "err", err)

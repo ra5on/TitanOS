@@ -70,7 +70,7 @@ func (f *frigate) get(ctx context.Context, base, path string, query url.Values, 
 	}
 	res, err := f.http.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, withoutURL(err)
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, limit))
@@ -255,7 +255,7 @@ func (f *frigate) call(ctx context.Context, method, base, path string, query url
 	}
 	res, err := f.http.Do(req)
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))
@@ -297,5 +297,17 @@ func (f *frigate) open(ctx context.Context, base, path, rawQuery string, header 
 	}
 	// No overall timeout: a video is as long as it is. The request ends
 	// with ctx (the browser's request).
-	return f.stream.Do(req)
+	res, err := f.stream.Do(req)
+	return res, withoutURL(err)
+}
+
+// withoutURL drops the address from an error of the HTTP client: paths of
+// Frigate's API can hold a person's name (faces), and such an error may
+// end in the log (the address of the container says nothing either).
+func withoutURL(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		return fmt.Errorf("%s Frigate: %w", uerr.Op, uerr.Err)
+	}
+	return err
 }

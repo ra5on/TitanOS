@@ -195,7 +195,7 @@ func TestChangesRestartOnlyWhenNeeded(t *testing.T) {
 	// A renamed camera: the name is not in config.yml, nothing restarts.
 	c, _ := r.m.Camera("einfahrt")
 	c.Name = "Einfahrt Nord"
-	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -204,7 +204,7 @@ func TestChangesRestartOnlyWhenNeeded(t *testing.T) {
 	}
 	// A changed camera: new config, Frigate restarts in the same container.
 	c.Record.RetainDays = 30
-	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -212,7 +212,7 @@ func TestChangesRestartOnlyWhenNeeded(t *testing.T) {
 		t.Errorf("change: creates %d starts %d", r.engine.Creates, r.engine.Starts)
 	}
 	// Storing the same camera again changes nothing.
-	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -625,7 +625,7 @@ func TestOfflineCameraIsReportedOnce(t *testing.T) {
 	// einfahrt does not want the message.
 	c, _ := r.m.Camera("einfahrt")
 	c.Notify.Kinds = []string{"person"}
-	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -675,46 +675,46 @@ func TestCameraCRUD(t *testing.T) {
 	c.Source = Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.80/live", User: "u", Password: "p"}
 	// Names are unique, letter case aside (people tell cameras apart by
 	// name).
-	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrNameExists) {
+	if _, err := r.m.AddCamera(context.Background(), c, CameraOptions{}); !errors.Is(err, ErrNameExists) {
 		t.Fatalf("a second Haustür: %v", err)
 	}
 	c.Name = "Haustür hinten"
-	added, err := r.m.AddCamera(context.Background(), c)
+	added, err := r.m.AddCamera(context.Background(), c, CameraOptions{})
 	if err != nil || added.ID != "haustuer_hinten" || added.Order != 5 {
 		t.Fatalf("%+v %v", added, err)
 	}
 	if renamed := added; true {
 		renamed.Name = "garten"
-		if _, err := r.m.UpdateCamera(context.Background(), added.ID, renamed, false); !errors.Is(err, ErrNameExists) {
+		if _, err := r.m.UpdateCamera(context.Background(), added.ID, renamed, CameraOptions{}); !errors.Is(err, ErrNameExists) {
 			t.Errorf("renamed like another camera: %v", err)
 		}
 	}
 	c.ID = "haustuer"
-	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrExists) {
+	if _, err := r.m.AddCamera(context.Background(), c, CameraOptions{}); !errors.Is(err, ErrExists) {
 		t.Errorf("double ID: %v", err)
 	}
 	// An edit without a password keeps it …
 	edit := added
 	edit.Source.Password = ""
 	edit.Name = "Seiteneingang"
-	got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false)
+	got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, CameraOptions{})
 	if err != nil || got.Source.Password != "p" {
 		t.Errorf("%+v %v", got.Source, err)
 	}
 	// … but never sends it to another address or user.
 	edit.Source.MainURL = "rtsp://192.168.1.99/live"
-	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, CameraOptions{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another host kept the password: %v", err)
 	}
 	edit.Source.MainURL, edit.Source.User = "rtsp://192.168.1.80/live", "other"
-	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, CameraOptions{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another user kept the password: %v", err)
 	}
 	edit.Source.User = ""
-	if got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, true); err != nil || got.Source.Password != "" {
+	if got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, CameraOptions{ClearPassword: true}); err != nil || got.Source.Password != "" {
 		t.Errorf("clearing: %+v %v", got.Source, err)
 	}
-	if _, err := r.m.UpdateCamera(context.Background(), "nope", edit, false); !errors.Is(err, ErrNotFound) {
+	if _, err := r.m.UpdateCamera(context.Background(), "nope", edit, CameraOptions{}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown camera: %v", err)
 	}
 	// Deleting a camera deletes its rights.
@@ -971,13 +971,13 @@ func TestAudioCodecFromTheCheck(t *testing.T) {
 	c := NewCamera()
 	c.Name, c.Source = "Hof", Source{Kind: "rtsp", MainURL: main}
 	c.Audio = Audio{Enabled: true, Codec: "whatever the page says"}
-	added, err := r.m.AddCamera(ctx, c)
+	added, err := r.m.AddCamera(ctx, c, CameraOptions{})
 	if err != nil || added.Audio.Codec != "MPEG4-GENERIC" {
 		t.Fatalf("%+v %v", added.Audio, err)
 	}
 	// Not checked: unknown.
 	c.Name, c.Source.MainURL = "Tor", "rtsp://192.168.1.82:554/main"
-	other, err := r.m.AddCamera(ctx, c)
+	other, err := r.m.AddCamera(ctx, c, CameraOptions{})
 	if err != nil || other.Audio.Codec != "" {
 		t.Fatalf("%+v %v", other.Audio, err)
 	}
@@ -991,11 +991,11 @@ func TestAudioCodecFromTheCheck(t *testing.T) {
 	}
 	// An edit of the same stream keeps it; another stream forgets it.
 	added.Audio.Codec = ""
-	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "MPEG4-GENERIC" {
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, CameraOptions{}); err != nil || got.Audio.Codec != "MPEG4-GENERIC" {
 		t.Errorf("same stream: %+v %v", got.Audio, err)
 	}
 	added.Source.MainURL = "rtsp://192.168.1.81:554/other"
-	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "" {
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, CameraOptions{}); err != nil || got.Audio.Codec != "" {
 		t.Errorf("other stream: %+v %v", got.Audio, err)
 	}
 }
@@ -1032,7 +1032,7 @@ func TestCameraTargetsAreChecked(t *testing.T) {
 	} {
 		c.ID, c.Name = fmt.Sprintf("cam_%d", i), fmt.Sprintf("Cam %d", i)
 		c.Source = Source{Kind: "rtsp", MainURL: tc.main, SubURL: tc.sub, AllowPublic: tc.allowPublic}
-		_, err := r.m.AddCamera(ctx, c)
+		_, err := r.m.AddCamera(ctx, c, CameraOptions{})
 		if (tc.want == nil && err != nil) || (tc.want != nil && !errors.Is(err, tc.want)) {
 			t.Errorf("%s %s public %v: %v, want %v", tc.main, tc.sub, tc.allowPublic, err, tc.want)
 		}
@@ -1040,7 +1040,7 @@ func TestCameraTargetsAreChecked(t *testing.T) {
 	// ONVIF: the host too.
 	c.ID, c.Name = "onvif_cam", "ONVIF"
 	c.Source = Source{Kind: "onvif", Host: "cam.example", ONVIFPort: 80, MainURL: "rtsp://192.168.1.73/main"}
-	if _, err := r.m.AddCamera(ctx, c); !errors.Is(err, ErrTargetNotAllowed) {
+	if _, err := r.m.AddCamera(ctx, c, CameraOptions{}); !errors.Is(err, ErrTargetNotAllowed) {
 		t.Errorf("onvif host: %v", err)
 	}
 }
@@ -1077,17 +1077,20 @@ func TestDeletedCameraKeepsItsRecordings(t *testing.T) {
 		t.Error("the deleted camera's stream is still in config.yml")
 	}
 	// The global retention is no longer Frigate's 0 days.
-	if dig(t, cfg, "record", "continuous", "days") != 14 {
+	if dig(t, cfg, "record", "continuous", "days") != unknownDays {
 		t.Errorf("global record: %v", cfg["record"])
 	}
-	// Noted on the volume, not on the stick.
+	// Noted on the stick, next to the cameras, and gone from them.
 	var noted []DeletedCamera
-	data, err := os.ReadFile(filepath.Join(r.dir, deletedFile))
-	if err != nil || json.Unmarshal(data, &noted) != nil || len(noted) != 1 || noted[0].ID != "einfahrt" || noted[0].Name != "Einfahrt" || noted[0].RetainDays != 14 {
-		t.Fatalf("deleted cameras on the volume: %s %v", data, err)
+	data := r.mustRead(deletedFile)
+	if json.Unmarshal(data, &noted) != nil || len(noted) != 1 || noted[0].ID != "einfahrt" || noted[0].Name != "Einfahrt" || noted[0].RetainDays != 14 {
+		t.Fatalf("deleted cameras on the stick: %s", data)
 	}
 	if strings.Contains(string(r.mustRead(camerasFile)), "einfahrt") {
-		t.Error("still on the stick")
+		t.Error("still among the cameras")
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "deleted-cameras.json")); err == nil {
+		t.Error("noted on the volume")
 	}
 	// Its recordings count and can be shown.
 	if got := r.m.DeletedCameras(); len(got) != 1 || !got[0].ExpiresAt().Equal(deletedAt.Add(14*24*time.Hour)) {
@@ -1104,15 +1107,23 @@ func TestDeletedCameraKeepsItsRecordings(t *testing.T) {
 	// takes the recordings back.
 	c := NewCamera()
 	c.Name, c.Source = "Einfahrt", Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.62/main"}
-	added, err := r.m.AddCamera(ctx, c)
+	added, err := r.m.AddCamera(ctx, c, CameraOptions{})
 	if err != nil || added.ID != "einfahrt_2" {
 		t.Fatalf("%+v %v", added, err)
 	}
 	if err := r.m.RemoveCamera(added.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Taking the recordings back as a camera that keeps less of them (only
+	// events, where the stub keeps everything) is asked first.
 	c.ID = "einfahrt"
-	if _, err := r.m.AddCamera(ctx, c); err != nil {
+	if _, err := r.m.AddCamera(ctx, c, CameraOptions{}); !errors.Is(err, ErrRecordingsShrink) {
+		t.Fatalf("taken back with less kept, unasked: %v", err)
+	}
+	if got := r.m.DeletedCameras(); len(got) != 2 {
+		t.Fatalf("the refused camera took the stub: %+v", got)
+	}
+	if _, err := r.m.AddCamera(ctx, c, CameraOptions{ConfirmShrink: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got := r.m.DeletedCameras(); len(got) != 1 || got[0].ID != "einfahrt_2" {
@@ -1139,33 +1150,37 @@ func TestDeletedCameraKeepsItsRecordings(t *testing.T) {
 	}
 }
 
-// Without the NVR's volume a camera is not deleted: the stub could not be
-// noted, and Frigate would delete its recordings at the next start.
-func TestDeleteCameraNeedsTheVolume(t *testing.T) {
-	r := newRig(t, true)
-	mnt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(mnt, "a"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+// The deleted camera is noted on the stick, whatever volume is there: a
+// camera is deleted without the NVR's volume, and is not deleted when the
+// stick cannot be written (Frigate would delete its recordings at the
+// next start).
+func TestDeleteCameraNeedsTheStick(t *testing.T) {
+	r, _, mounted := volumeRig(t, "a")
 	m := r.m
-	m.Dev, m.MountRoot = false, mnt
-	mounted := []string{"a"}
-	m.Mounted = func() []string { return mounted }
 	if err := m.Enable(context.Background(), "a", SetOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	mounted = nil
-	if err := m.RemoveCamera("garten"); !errors.Is(err, ErrNoVolume) {
+	*mounted = nil
+	if err := m.RemoveCamera("garten"); err != nil {
 		t.Fatalf("without the volume: %v", err)
 	}
-	if _, ok := m.Camera("garten"); !ok {
-		t.Fatal("deleted without its stub")
-	}
-	mounted = []string{"a"}
-	if err := m.RemoveCamera("garten"); err != nil {
+	folder := filepath.Join(r.store.Dir(), "nvr")
+	if err := os.Chmod(folder, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(mnt, "a", ".titanos", "nvr", deletedFile)); err != nil {
-		t.Error(err)
+	t.Cleanup(func() { _ = os.Chmod(folder, 0o700) })
+	err := m.RemoveCamera("einfahrt")
+	_ = os.Chmod(folder, 0o700)
+	if err == nil {
+		if os.Geteuid() == 0 {
+			t.Skip("the stick folder was writable despite mode 0500 (running as root)")
+		}
+		t.Fatal("deleted although the stick could not be written")
+	}
+	if _, ok := m.Camera("einfahrt"); !ok {
+		t.Fatal("deleted without its stub")
+	}
+	if got := m.DeletedCameras(); len(got) != 1 || got[0].ID != "garten" {
+		t.Errorf("deleted cameras: %+v", got)
 	}
 }

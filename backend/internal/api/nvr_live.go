@@ -11,6 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -125,7 +126,7 @@ func (a nvrArea) handleLive(w http.ResponseWriter, r *http.Request) {
 	defer upstream.CloseNow()
 	upstream.SetReadLimit(nvrLiveMessage)
 
-	reason := a.watchLive(ctx, r, user, id, func(run context.Context) { relayWebSockets(run, conn, upstream) })
+	reason := a.watchLive(ctx, r, user, id, func(run context.Context) { relayWebSockets(run, conn, upstream, mseMessage) })
 	if reason != "" {
 		bye, _ := json.Marshal(map[string]string{"t": "bye", "reason": reason})
 		wctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -174,22 +175,68 @@ func (a nvrArea) watchLive(ctx context.Context, r *http.Request, user auth.User,
 	return why
 }
 
-// relayWebSockets copies messages between two WebSockets, text and
-// binary as they come, until one side ends or ctx is done.
+// browserMessage is a message of go2rtc's WebSocket protocol as a browser
+// sends it ({"type":"mse","value":"<codecs>"}).
+type browserMessage struct {
+	Type  string `json:"type"`
+	Value string `json:"value,omitempty"`
+}
+
+// passMessage decides what of a browser's message goes on to go2rtc: the
+// message to send, or false to drop it.
+type passMessage func(kind websocket.MessageType, data []byte) ([]byte, bool)
+
+// allowTypes passes text messages of go2rtc's protocol whose type is one
+// of types, as a message titand writes itself (one type, one value: no
+// second "type" that another parser would read). Everything else of the
+// browser is dropped, binary messages too.
+func allowTypes(types ...string) passMessage {
+	return func(kind websocket.MessageType, data []byte) ([]byte, bool) {
+		if kind != websocket.MessageText {
+			return nil, false
+		}
+		var msg browserMessage
+		if err := json.Unmarshal(data, &msg); err != nil || !slices.Contains(types, msg.Type) {
+			return nil, false
+		}
+		out, err := json.Marshal(msg)
+		return out, err == nil
+	}
+}
+
+// mseMessage is what a live view sends: go2rtc's MSE player (and Frigate's)
+// sends only "mse" with the codecs it plays. A "webrtc/offer" on the live
+// socket would open a WebRTC session that bypasses the relay (and its end
+// with the login).
+var mseMessage = allowTypes("mse")
+
+// talkMessage is the WebRTC signalling of talking back (talk.ts): an offer
+// and the browser's candidates.
+var talkMessage = allowTypes("webrtc/offer", "webrtc/candidate")
+
+// relayWebSockets copies messages between the browser's WebSocket and
+// go2rtc's until one side ends or ctx is done: go2rtc's messages as they
+// come, the browser's only as pass lets them.
 //
 // The copies do not stop with ctx: a cancelled read would close the
 // browser's connection before the caller could say why it ends (as in
 // viewer.Relay). The caller closes both connections after this returned;
 // that ends the copies.
-func relayWebSockets(ctx context.Context, a, b *websocket.Conn) {
+func relayWebSockets(ctx context.Context, browser, upstream *websocket.Conn, pass passMessage) {
 	open := context.WithoutCancel(ctx)
 	ended := make(chan struct{}, 2)
-	copyMessages := func(from, to *websocket.Conn) {
+	copyMessages := func(from, to *websocket.Conn, pass passMessage) {
 		defer func() { ended <- struct{}{} }()
 		for {
 			kind, data, err := from.Read(open)
 			if err != nil {
 				return
+			}
+			if pass != nil {
+				var ok bool
+				if data, ok = pass(kind, data); !ok {
+					continue
+				}
 			}
 			wctx, done := context.WithTimeout(open, 30*time.Second)
 			err = to.Write(wctx, kind, data)
@@ -199,8 +246,8 @@ func relayWebSockets(ctx context.Context, a, b *websocket.Conn) {
 			}
 		}
 	}
-	go copyMessages(a, b)
-	go copyMessages(b, a)
+	go copyMessages(browser, upstream, pass)
+	go copyMessages(upstream, browser, nil)
 	select {
 	case <-ended:
 	case <-ctx.Done():

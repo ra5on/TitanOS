@@ -113,11 +113,13 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrLimit, http.StatusConflict, "nvr_camera_limit", "no more cameras can be added"},
 		{nvr.ErrNotRunning, http.StatusConflict, "nvr_not_running", "the NVR does not run"},
 		{nvr.ErrDisabled, http.StatusConflict, "nvr_disabled", "the NVR is switched off"},
+		{nvr.ErrRecordingsShrink, http.StatusConflict, "nvr_recordings_shrink", "the change deletes recordings that exist now; confirm it"},
 		{nvr.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable", "the configuration could not be read from the stick"},
 		{nvr.ErrEventNotFound, http.StatusNotFound, "nvr_event_not_found", "no such event"},
 		{nvr.ErrExportNotFound, http.StatusNotFound, "nvr_export_not_found", "no such export"},
 		{nvr.ErrExportRunning, http.StatusConflict, "nvr_export_running", "the export is still being made"},
 		{nvr.ErrExportFailed, http.StatusConflict, "nvr_export_failed", "the export could not be started; is there a recording in this time?"},
+		{nvr.ErrExportsUnreadable, http.StatusServiceUnavailable, "nvr_exports_unreadable", "the owners of the exports could not be read from the NVR's volume"},
 		{nvr.ErrPTZUnsupported, http.StatusConflict, "nvr_ptz_unsupported", "this camera cannot be moved"},
 		{nvr.ErrRateLimited, http.StatusTooManyRequests, "rate_limited", "too many commands, slow down"},
 		{nvr.ErrFaceNotFound, http.StatusNotFound, "nvr_face_not_found", "no such face"},
@@ -408,10 +410,18 @@ func (a nvrArea) handleCamera(w http.ResponseWriter, r *http.Request) {
 
 // nvrCameraRequest is a camera as the page sends it: nvr.Camera with the
 // password in source.password (empty: keep the stored one) and
-// clearPassword to drop it.
+// clearPassword to drop it. confirmShrink answers nvr_recordings_shrink:
+// the page told that the change deletes recordings that exist now (a
+// narrower recording mode, fewer days, or the ID of a deleted camera with
+// less kept than it).
 type nvrCameraRequest struct {
 	nvr.Camera
 	ClearPassword bool `json:"clearPassword"`
+	ConfirmShrink bool `json:"confirmShrink"`
+}
+
+func (req nvrCameraRequest) options() nvr.CameraOptions {
+	return nvr.CameraOptions{ClearPassword: req.ClearPassword, ConfirmShrink: req.ConfirmShrink}
 }
 
 // fromRequest tidies what people paste: a stream address with the login
@@ -440,7 +450,7 @@ func (a nvrArea) handleCameraAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.tidy()
-	c, err := a.nvr.AddCamera(r.Context(), req.Camera)
+	c, err := a.nvr.AddCamera(r.Context(), req.Camera, req.options())
 	if err != nil {
 		writeNVRError(w, err)
 		return
@@ -469,7 +479,7 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.tidy()
-	c, err := a.nvr.UpdateCamera(r.Context(), id, req.Camera, req.ClearPassword)
+	c, err := a.nvr.UpdateCamera(r.Context(), id, req.Camera, req.options())
 	if err != nil {
 		writeNVRError(w, err)
 		return
@@ -481,8 +491,8 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 
 // handleCameraRemove removes a camera and the rights on it. Its
 // recordings stay until their days are over (administrators find them
-// under the camera, listed as deleted). With the NVR's volume not there
-// it answers nvr_no_volume: that is where the deleted camera is noted.
+// under the camera, listed as deleted): the deleted camera is noted on
+// the stick first, and if that fails the camera stays.
 func (a nvrArea) handleCameraRemove(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return

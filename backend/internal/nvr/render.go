@@ -25,6 +25,13 @@ type RenderHardware struct {
 	Candidates []string
 }
 
+// unknownDays is the least global retention: how long Frigate keeps the
+// recordings of cameras TitanOS does not know (a new stick without a
+// backup, a /config restored from before them). Those recordings are not
+// counted by the storage cap: Frigate reports and deletes only cameras
+// of its config.
+const unknownDays = 30
+
 // frigateConfigVersion is CURRENT_CONFIG_VERSION of Frigate 0.18
 // (frigate/util/config.py); it changes with FrigateVersion.
 const frigateConfigVersion = "0.18-0"
@@ -98,8 +105,9 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 		streams = append(streams, entries...)
 		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
 	}
-	// The longest any recording is kept, for the global retention below.
-	keep := 1
+	// The longest any recording is kept, at least unknownDays, for the
+	// global retention below.
+	keep := unknownDays
 	for _, c := range cameras {
 		keep = max(keep, c.Record.RetainDays)
 	}
@@ -155,10 +163,13 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 	}
 	root = append(root,
 		yentry{"ffmpeg", ymap{{"hwaccel_args", hwaccel}}},
-		// The global retention is no camera's (each sets all of its own).
-		// It is what Frigate keeps of a camera that is in no config at all
-		// (it deletes those recordings within the hour by it): as long as
-		// the longest of the cameras, instead of Frigate's 0 days.
+		// The global retention is no camera's: Frigate merges it into each
+		// camera field by field, and every camera and stub sets both days
+		// itself (recordBlock, keepBlock), so none records continuously by
+		// it. It is what Frigate keeps of a camera that is in no config at
+		// all (it deletes those recordings within the hour by it): as long
+		// as the longest of the cameras and stubs, and never less than
+		// unknownDays, instead of Frigate's 0 days.
 		yentry{"record", ymap{{"continuous", ymap{{"days", keep}}}, {"motion", ymap{{"days", keep}}}}},
 		yentry{"birdseye", ymap{{"enabled", false}}},
 		yentry{"lpr", lprBlock(s, anyPlates)},

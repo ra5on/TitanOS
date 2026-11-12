@@ -79,7 +79,8 @@ func (a nvrArea) handlePTZCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTalk passes the WebRTC signalling for talking back through a
-// camera to go2rtc and back (offer, answer, candidates), unchanged. The
+// camera to go2rtc and back (offer, answer, candidates; from the browser
+// nothing else, talkMessage). The
 // sound itself does not go through titand: the browser sends it straight
 // to port 8555 of the NAS. Ends like the live stream.
 func (a nvrArea) handleTalk(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +116,7 @@ func (a nvrArea) handleTalk(w http.ResponseWriter, r *http.Request) {
 	defer upstream.CloseNow()
 	upstream.SetReadLimit(256 << 10)
 	slog.Info("NVR talk opened", "camera", id, "user", user.Name, "ip", remoteIP(r))
-	reason := a.watchLive(r.Context(), r, user, id, func(run context.Context) { relayWebSockets(run, conn, upstream) })
+	reason := a.watchLive(r.Context(), r, user, id, func(run context.Context) { relayWebSockets(run, conn, upstream, talkMessage) })
 	if reason != "" {
 		conn.Close(websocket.StatusNormalClosure, reason)
 	}

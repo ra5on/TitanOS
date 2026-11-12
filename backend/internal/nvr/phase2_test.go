@@ -477,7 +477,7 @@ func TestRoutingOfMessages(t *testing.T) {
 	set := func(id string, edit func(*Camera)) {
 		c, _ := r.m.Camera(id)
 		edit(&c)
-		if _, err := r.m.UpdateCamera(context.Background(), id, c, false); err != nil {
+		if _, err := r.m.UpdateCamera(context.Background(), id, c, CameraOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -697,7 +697,7 @@ func TestFaces(t *testing.T) {
 	// No camera recognises faces: the library is off.
 	c, _ := r.m.Camera("haustuer")
 	c.Detect.Faces = false
-	if _, err := r.m.UpdateCamera(context.Background(), "haustuer", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "haustuer", c, CameraOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if faces, err := r.m.Faces(ctx); err != nil || faces.Enabled || len(faces.Faces) != 0 {

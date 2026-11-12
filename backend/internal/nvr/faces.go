@@ -287,7 +287,7 @@ func (m *Manager) AddFaceImage(ctx context.Context, name, contentType string, im
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	res, err := m.frigate.stream.Do(req)
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	defer res.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<20)) // the answer only says yes or no

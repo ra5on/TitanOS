@@ -137,11 +137,16 @@ func (m *Manager) importRestored(volume string) {
 	}
 	// Only what was put back (or was there already) leaves the stick: a
 	// picture left out (beyond the limits, a name TitanOS does not take)
-	// stays, and the next start of the NVR goes on with it.
+	// stays, and the next start of the NVR goes on with it. The stick is
+	// tried once per start of titand: a removal that fails is not tried
+	// again at every look (the next start does).
+	m.mu.Lock()
+	m.restored = nil
+	m.mu.Unlock()
 	persons := map[string]bool{}
 	for _, f := range pending {
 		if err := m.store.Remove(f.Name); err != nil {
-			slog.Warn("NVR: restored faces not removed from the stick", "err", err)
+			slog.Warn("NVR: restored faces not removed from the stick; the next start of titand tries again", "err", err)
 			return
 		}
 		persons[path.Dir(f.Name)] = true
@@ -156,9 +161,6 @@ func (m *Manager) importRestored(volume string) {
 	} else {
 		slog.Warn("NVR: some faces of the restored configuration were left on the stick (limits of the backup, or names TitanOS does not take)")
 	}
-	m.mu.Lock()
-	m.restored = nil
-	m.mu.Unlock()
 	slog.Info("NVR: faces of the restored configuration put back", "pictures", copied, "ofBackup", len(pending))
 }
 
@@ -196,7 +198,8 @@ func removeEmpty(store interface {
 // wait; else the library of the volume is read. Sleeping disks are never
 // woken for it and a volume that is not mounted is never read: then the
 // library as last read is returned (RAM), nothing if it was never read
-// since titand started.
+// since titand started. A library larger than a backup takes is left out
+// as a whole: nothing, also not the library as read before.
 func (m *Manager) BackupFiles() []BackupFile {
 	m.mu.Lock()
 	pending, cached, volume := m.restored, m.backupFaces, m.settings.Volume
@@ -217,7 +220,10 @@ func (m *Manager) BackupFiles() []BackupFile {
 	defer root.Close()
 	files, ok := readFaces(root)
 	if !ok {
-		return cached
+		m.mu.Lock()
+		m.backupFaces = []BackupFile{}
+		m.mu.Unlock()
+		return nil
 	}
 	m.mu.Lock()
 	m.backupFaces = files

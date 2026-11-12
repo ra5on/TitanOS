@@ -26,6 +26,10 @@ var (
 	// ErrExportFailed: Frigate refused the export (nothing recorded in
 	// the time asked for, its queue is full).
 	ErrExportFailed = errors.New("nvr: the export could not be started")
+	// ErrExportsUnreadable: exports.json on the NVR's volume could not be
+	// read; nothing is written over it (the owners of the exports would be
+	// lost), so no export is made, renamed or deleted until it is read.
+	ErrExportsUnreadable = errors.New("nvr: the owners of the exports could not be read from the volume")
 )
 
 // The states of an export.
@@ -82,50 +86,62 @@ const exportsFile = "exports.json"
 const MaxExportSeconds = 24 * 3600
 
 // exportRecords returns the records, read once per start from the volume.
+// A file that cannot be read gives none (exports are then shown to
+// administrators only) and is read again the next time.
 func (m *Manager) exportRecords() (map[string]exportRecord, error) {
+	records, _, _, err := m.readExportRecords()
+	return records, err
+}
+
+// readExportRecords returns the records of the NVR's volume, the volume,
+// and whether the file could be read (missing counts as read: none yet).
+func (m *Manager) readExportRecords() (records map[string]exportRecord, volume string, readable bool, err error) {
 	m.mu.Lock()
-	records, volume := m.rt.exports, m.settings.Volume
+	records, volume = m.rt.exports, m.settings.Volume
 	m.mu.Unlock()
 	if records != nil {
-		return records, nil
+		return records, volume, true, nil
 	}
 	root, _, err := m.privateRoot(volume)
 	if err != nil {
-		return nil, err
+		return nil, volume, false, err
 	}
 	defer root.Close()
 	records = map[string]exportRecord{}
 	if err := volumedata.ReadJSON(root, exportsFile, &records, 4<<20); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("NVR: owners of the exports not readable; exports are shown to administrators only", "err", err)
-		records = map[string]exportRecord{}
+		slog.Warn("NVR: owners of the exports not readable; exports are shown to administrators only and not changed", "err", err)
+		return map[string]exportRecord{}, volume, false, nil
 	}
 	if m.Dev && len(records) == 0 {
 		records = devExportRecords(m.Cameras())
 	}
 	m.mu.Lock()
-	if m.rt.exports == nil {
+	// Kept for the volume they were read from only.
+	if m.rt.exports == nil && m.settings.Volume == volume {
 		m.rt.exports = records
 	}
-	records = m.rt.exports
 	m.mu.Unlock()
-	return records, nil
+	return records, volume, true, nil
 }
 
-// changeExportRecords edits the records and writes them to the volume.
-// One change at a time: two at once would lose one of them.
+// changeExportRecords edits the records and writes them to the volume
+// they were read from. One change at a time: two at once would lose one of
+// them. A file that could not be read is never written over
+// (ErrExportsUnreadable).
 func (m *Manager) changeExportRecords(edit func(map[string]exportRecord)) error {
 	m.exportsMu.Lock()
 	defer m.exportsMu.Unlock()
-	if _, err := m.exportRecords(); err != nil {
+	records, volume, readable, err := m.readExportRecords()
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
+	if !readable {
+		return ErrExportsUnreadable
+	}
 	next := map[string]exportRecord{}
-	for id, record := range m.rt.exports {
+	for id, record := range records {
 		next[id] = record
 	}
-	volume := m.settings.Volume
-	m.mu.Unlock()
 	edit(next)
 	root, _, err := m.privateRoot(volume)
 	if err != nil {
@@ -204,6 +220,13 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 	base, err := m.base()
 	if err != nil {
 		return Export{}, err
+	}
+	// The owner of the export must be noted: not over a file that could
+	// not be read.
+	if _, _, readable, err := m.readExportRecords(); err != nil {
+		return Export{}, err
+	} else if !readable {
+		return Export{}, ErrExportsUnreadable
 	}
 	var started struct {
 		ID string `json:"export_id"`

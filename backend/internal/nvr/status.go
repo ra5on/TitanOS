@@ -408,10 +408,31 @@ type cachedSnapshot struct {
 	picture []byte
 }
 
-// Snapshot fetches the latest picture of a camera as JPEG, height pixels
-// high (0: as Frigate keeps it). The same picture is handed out for
-// snapshotAge; the caller must not change it.
+// snapshotHeights are the heights stills are made in: a height asked for
+// is taken up to the next of them, so that the cache holds a few pictures
+// per camera, not one per pixel.
+var snapshotHeights = []int{90, 180, 360, 720, 1080, 2160}
+
+// snapshotHeight is the height a still of height pixels is made in (0:
+// as Frigate keeps it).
+func snapshotHeight(height int) int {
+	if height <= 0 {
+		return 0
+	}
+	for _, h := range snapshotHeights {
+		if height <= h {
+			return h
+		}
+	}
+	return snapshotHeights[len(snapshotHeights)-1]
+}
+
+// Snapshot fetches the latest picture of a camera as JPEG, at least
+// height pixels high (the next of snapshotHeights; 0: as Frigate keeps
+// it). The same picture is handed out for snapshotAge; the caller must not
+// change it.
 func (m *Manager) Snapshot(ctx context.Context, id string, height int) ([]byte, error) {
+	height = snapshotHeight(height)
 	c, ok := m.Camera(id)
 	if !ok {
 		return nil, ErrNotFound

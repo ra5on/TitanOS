@@ -18,12 +18,17 @@ type Ways struct {
 	Email bool
 	// Agent hands it to the KI-Agent (Observer).
 	Agent bool
+	// Ref names what the message is about in the system log (a camera's
+	// ID): the subject may hold a recognised person's name or a plate and
+	// is never logged.
+	Ref string
 }
 
 // NotifyVia records and sends an event through the given ways only. kind
 // and subject pick the wording as for Notify. Unlike Notify it neither
 // looks at the least severity of the settings nor collects for the
-// summary: whoever calls it has asked the owner per event.
+// summary: whoever calls it has asked the owner per event. The log names
+// kind and ways.Ref, never the subject.
 func (m *Manager) NotifyVia(severity, kind, subject string, ways Ways) {
 	m.mu.Lock()
 	settings := m.settings
@@ -38,7 +43,7 @@ func (m *Manager) NotifyVia(severity, kind, subject string, ways Ways) {
 		}
 	}
 	m.mu.Unlock()
-	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject, "bell", ways.Bell, "push", ways.Push, "email", ways.Email, "agent", ways.Agent)
+	slog.Info("notification", "severity", severity, "kind", kind, "ref", ways.Ref, "bell", ways.Bell, "push", ways.Push, "email", ways.Email, "agent", ways.Agent)
 	if ways.Bell {
 		go m.tellPeople(message)
 		m.goKeepBell()

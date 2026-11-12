@@ -32,9 +32,9 @@ ffmpeg:
   hwaccel_args: preset-vaapi
 record:
   continuous:
-    days: 14
+    days: 30
   motion:
-    days: 14
+    days: 30
 birdseye:
   enabled: false
 lpr:

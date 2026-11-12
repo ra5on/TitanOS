@@ -77,6 +77,10 @@ var (
 	ErrNotLoaded = errors.New("nvr: configuration could not be read from /config")
 	// ErrDisabled: the NVR is switched off.
 	ErrDisabled = errors.New("nvr: the NVR is switched off")
+	// ErrRecordingsShrink: the change of a camera lets Frigate delete
+	// recordings that exist now (a narrower recording mode, fewer days);
+	// the administrator confirms (CameraOptions.ConfirmShrink).
+	ErrRecordingsShrink = errors.New("nvr: the change deletes recordings that exist now")
 )
 
 // Manager runs the NVR.
@@ -141,18 +145,23 @@ type Manager struct {
 	bootID  func() string
 
 	mu sync.Mutex
-	// deletedMu orders the changes of the deleted cameras' file
-	// (deleted.go); taken before mu, never while mu is held.
-	deletedMu sync.Mutex
+	// camerasMu orders the owner's changes of the cameras and of the
+	// deleted cameras (cameras.json, deleted-cameras.json); settingsMu
+	// those of settings.json. Both are taken before mu, never while mu is
+	// held, and never by the loop while it waits for Docker.
+	camerasMu, settingsMu sync.Mutex
 	// exportsMu orders the changes of exports.json (exports.go).
 	exportsMu sync.Mutex
 	loaded    bool
 	settings  Settings
 	cameras   []Camera
-	state     State
-	rt        runtime
-	kick      chan struct{}
-	devDir    string
+	// deleted are the deleted cameras whose recordings are kept, as read
+	// from the stick (deleted.go).
+	deleted []DeletedCamera
+	state   State
+	rt      runtime
+	kick    chan struct{}
+	devDir  string
 	// restored are faces a restore of /config left on the stick, until
 	// they are on the volume; backupFaces is the library as last read for
 	// the backup (backup.go).
@@ -217,13 +226,29 @@ func (m *Manager) Load() error {
 		cameras = []Camera{}
 	}
 	sortCameras(cameras)
+	// Without the deleted cameras config.yml would have Frigate delete
+	// their recordings, and a new camera could take one's ID: a list that
+	// cannot be read leaves the NVR unloaded, like the cameras.
+	var deleted []DeletedCamera
+	if err := m.store.ReadJSON(deletedFile, &deleted); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	deleted = slices.DeleteFunc(deleted, func(d DeletedCamera) bool { return !validDeleted(d) })
 	restored := m.loadRestored()
 	m.mu.Lock()
 	m.restored = restored
-	m.settings, m.cameras, m.loaded = normalize(s), cameras, true
-	m.rt.dirty = true
+	m.settings, m.cameras, m.deleted, m.loaded = normalize(s), cameras, deleted, true
+	m.changedLocked()
 	m.mu.Unlock()
 	return nil
+}
+
+// changedLocked notes a change the loop applies (m.mu held): config and
+// container are compared with what they should be at the next look, and
+// a look that planned from what was before plans again (watch.go).
+func (m *Manager) changedLocked() {
+	m.rt.dirty = true
+	m.rt.gen++
 }
 
 // Settings returns the settings (with the restream password: only for
@@ -265,8 +290,11 @@ type SetOptions struct {
 
 // SetSettings validates and stores the settings and applies them. The
 // restream password is kept (made when the restream is first switched on);
-// what the request says about it is ignored.
+// what the request says about it is ignored. One change at a time: two at
+// once could leave the stick and RAM with different settings.
 func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) error {
+	m.settingsMu.Lock()
+	defer m.settingsMu.Unlock()
 	s = normalize(s)
 	if m.Dev && s.Volume == "" {
 		s.Volume = devVolume
@@ -314,6 +342,10 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 			return fmt.Errorf("nvr: switch Docker on: %w", err)
 		}
 		slog.Info("Docker switched on for the NVR", "volume", volume)
+		// The container Docker finds ended is no crash of Frigate.
+		m.mu.Lock()
+		m.dockerWentLocked()
+		m.mu.Unlock()
 	}
 	if err := m.store.WriteJSON(settingsFile, s); err != nil {
 		return err
@@ -329,9 +361,8 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		// Another volume: its state, exports and config.yml are its own.
 		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
 		m.rt.configHash, m.rt.configDir, m.rt.configCameras = "", "", nil
-		m.rt.deleted, m.rt.deletedVolume = nil, ""
 	}
-	m.rt.dirty = true
+	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.mu.Unlock()
 	m.wake()
@@ -374,8 +405,13 @@ func (m *Manager) FrigateHeader() http.Header {
 // ensureSecret makes the secret of an NVR that is on without one (its
 // settings came from a build before the secret): once per start of
 // titand. If the stick cannot be written the secret stays in RAM; the
-// next start makes another one.
+// next start makes another one. While a change of the settings is being
+// made the loop does not wait for it: that change makes the secret.
 func (m *Manager) ensureSecret() {
+	if !m.settingsMu.TryLock() {
+		return
+	}
+	defer m.settingsMu.Unlock()
 	m.mu.Lock()
 	if m.settings.ProxySecret != "" || !m.settings.Enabled || !m.loaded {
 		m.mu.Unlock()
@@ -383,7 +419,7 @@ func (m *Manager) ensureSecret() {
 	}
 	m.settings.ProxySecret = newProxySecret()
 	s := m.settings
-	m.rt.dirty = true
+	m.changedLocked()
 	m.mu.Unlock()
 	if err := m.store.WriteJSON(settingsFile, s); err != nil {
 		slog.Warn("NVR: the secret for Frigate is not on the stick; another one is made at the next start", "err", err)
@@ -417,7 +453,7 @@ func (m *Manager) RetryDetector() error {
 		return ErrDisabled
 	}
 	m.resetStateLocked()
-	m.rt.dirty = true
+	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.mu.Unlock()
 	m.wake()
@@ -430,6 +466,15 @@ func (m *Manager) resetStateLocked() {
 	m.rt.stateDirty = true
 	m.rt.crashes, m.rt.hangs = nil, nil
 	m.rt.lastError = nil
+	m.rt.active = ""
+}
+
+// dockerWentLocked notes that Docker's engine was down or switched on by
+// titand (m.mu held): a container found ended afterwards was stopped by
+// Docker, not by a crash of Frigate, and is started without counting.
+func (m *Manager) dockerWentLocked() {
+	m.rt.startedAt, m.rt.healthy = time.Time{}, false
+	m.rt.crashes = nil
 }
 
 // wake makes the loop look now.
@@ -477,22 +522,58 @@ func (m *Manager) CameraIDs() []string {
 	return ids
 }
 
+// CameraOptions go with a change of a camera.
+type CameraOptions struct {
+	// ClearPassword drops the stored password (UpdateCamera).
+	ClearPassword bool
+	// ConfirmShrink: the administrator was told that the change lets
+	// Frigate delete recordings that exist now (ErrRecordingsShrink).
+	ConfirmShrink bool
+}
+
+// keepRank orders the recording modes by what Frigate keeps of the
+// recordings that exist: continuous keeps every segment, motion those
+// with motion, events those with an active object. Off records nothing
+// and keeps everything that was recorded, like continuous.
+func keepRank(mode string) int {
+	switch mode {
+	case RecordContinuous, RecordOff:
+		return 3
+	case RecordMotion:
+		return 2
+	}
+	return 1
+}
+
+// shrinks tells whether going from was to next lets Frigate delete
+// recordings that exist now: a narrower mode (continuous → motion →
+// events; off counts as continuous, and any mode → off keeps), or fewer
+// days. Frigate applies the new retention to what is there within a
+// minute of its restart (frigate/record/cleanup.py), and a retention that
+// protected the old segments would keep every new one
+// (frigate/record/maintainer.py: continuous.days > 0 keeps all).
+func shrinks(was, next Record) bool {
+	return next.RetainDays < was.RetainDays || keepRank(next.Mode) < keepRank(was.Mode)
+}
+
 // AddCamera stores a new camera. An empty ID is made from the name.
-func (m *Manager) AddCamera(ctx context.Context, c Camera) (Camera, error) {
+func (m *Manager) AddCamera(ctx context.Context, c Camera, opts CameraOptions) (Camera, error) {
 	if err := m.checkNames(ctx, c); err != nil {
 		return c, err
 	}
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
 	// A new ID is never one of a deleted camera whose recordings are
-	// kept; that ID given on purpose takes them back.
-	deleted := m.DeletedCameras()
-	added, err := m.addCamera(c, deleted)
+	// kept, whatever volume is mounted; that ID given on purpose takes
+	// them back.
+	deleted := m.deletedList()
+	added, err := m.addCamera(c, deleted, opts)
 	if err != nil {
 		return added, err
 	}
 	if slices.ContainsFunc(deleted, func(d DeletedCamera) bool { return d.ID == added.ID }) {
-		volume := m.Settings().Volume
-		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
-			return slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == added.ID })
+		if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
+			return slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == added.ID })
 		}); err != nil {
 			// The camera wins over its stub in config.yml anyway.
 			slog.Warn("NVR: deleted camera not taken off its list", "camera", added.ID, "err", err)
@@ -501,7 +582,7 @@ func (m *Manager) AddCamera(ctx context.Context, c Camera) (Camera, error) {
 	return added, nil
 }
 
-func (m *Manager) addCamera(c Camera, deleted []DeletedCamera) (Camera, error) {
+func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOptions) (Camera, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
@@ -518,8 +599,6 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera) (Camera, error) {
 		for _, d := range deleted {
 			taken = append(taken, d.ID)
 		}
-	}
-	if c.ID == "" {
 		c.ID = SlugID(c.Name, taken)
 	} else if slices.Contains(taken, c.ID) {
 		return c, ErrExists
@@ -536,6 +615,12 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera) (Camera, error) {
 	}
 	if err := m.uniqueNameLocked(c); err != nil {
 		return c, err
+	}
+	// The ID of a deleted camera takes its recordings back: they are kept
+	// from now on as the new camera keeps its own.
+	if at := slices.IndexFunc(deleted, func(d DeletedCamera) bool { return d.ID == c.ID }); at >= 0 && !opts.ConfirmShrink &&
+		shrinks(Record{Mode: RecordOff, RetainDays: deleted[at].RetainDays}, c.Record) {
+		return c, ErrRecordingsShrink
 	}
 	c.Audio.Codec, _ = m.probedCodecLocked(c.Source.MainURL)
 	return c, m.storeCamerasLocked(append(cloneCameras(m.cameras), c))
@@ -597,11 +682,14 @@ func (m *Manager) checkNames(ctx context.Context, c Camera) error {
 // UpdateCamera replaces a camera. An empty password keeps the stored one
 // as long as the camera is still reached at the same host with the same
 // user: a password is never sent to another address by an edit.
-// clearPassword drops it.
-func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, clearPassword bool) (Camera, error) {
+// opts.ClearPassword drops it. A change that lets Frigate delete
+// recordings that exist now needs opts.ConfirmShrink (ErrRecordingsShrink).
+func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, opts CameraOptions) (Camera, error) {
 	if err := m.checkNames(ctx, c); err != nil {
 		return c, err
 	}
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
@@ -617,7 +705,7 @@ func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, clearPa
 	if err != nil {
 		return c, err
 	}
-	if c.Source.Password == "" && !clearPassword && was.Source.Password != "" {
+	if c.Source.Password == "" && !opts.ClearPassword && was.Source.Password != "" {
 		known := []string{was.Source.Host, streamHost(was.Source.MainURL), streamHost(was.Source.SubURL)}
 		for _, host := range []string{c.Source.Host, streamHost(c.Source.MainURL), streamHost(c.Source.SubURL)} {
 			if host != "" && !slices.Contains(known, host) {
@@ -639,6 +727,10 @@ func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, clearPa
 		codec = was.Audio.Codec
 	}
 	c.Audio.Codec = codec
+	// Asked last: a change that is refused anyway needs no confirmation.
+	if !opts.ConfirmShrink && shrinks(was.Record, c.Record) {
+		return c, ErrRecordingsShrink
+	}
 	list := cloneCameras(m.cameras)
 	list[at] = c
 	return c, m.storeCamerasLocked(list)
@@ -651,11 +743,14 @@ func streamHost(raw string) string {
 
 // RemoveCamera deletes a camera and its rights. Its recordings stay until
 // their days are over: the camera stays in config.yml as a stub that is
-// switched off (deleted.go). That is noted on the NVR's volume first; with
-// the volume not there the camera is not deleted (ErrNoVolume).
+// switched off (deleted.go). That is noted on the stick first, whatever
+// volume is mounted or chosen; if the stick cannot be written the camera
+// is not deleted.
 func (m *Manager) RemoveCamera(id string) error {
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
 	m.mu.Lock()
-	loaded, volume := m.loaded, m.settings.Volume
+	loaded := m.loaded
 	at := slices.IndexFunc(m.cameras, func(each Camera) bool { return each.ID == id })
 	var gone Camera
 	if at >= 0 {
@@ -668,29 +763,14 @@ func (m *Manager) RemoveCamera(id string) error {
 	if at < 0 {
 		return ErrNotFound
 	}
-	// No volume chosen: the NVR never recorded anything.
-	if volume != "" {
-		stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
-		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
-			list = slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == id })
-			return append(list, stub)
-		}); err != nil {
-			if errors.Is(err, ErrNoVolume) {
-				return ErrNoVolume
-			}
-			return fmt.Errorf("nvr: deleted camera not noted on the volume: %w", err)
-		}
+	stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
+	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
+		return append(slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id }), stub)
+	}); err != nil {
+		return fmt.Errorf("nvr: deleted camera not noted on the stick: %w", err)
 	}
 	m.mu.Lock()
-	if !m.loaded {
-		m.mu.Unlock()
-		return ErrNotLoaded
-	}
 	list := slices.DeleteFunc(cloneCameras(m.cameras), func(each Camera) bool { return each.ID == id })
-	if len(list) == len(m.cameras) {
-		m.mu.Unlock()
-		return ErrNotFound
-	}
 	err := m.storeCamerasLocked(list)
 	m.mu.Unlock()
 	if err != nil {
@@ -711,7 +791,7 @@ func (m *Manager) storeCamerasLocked(list []Camera) error {
 		return err
 	}
 	m.cameras = list
-	m.rt.dirty = true
+	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.wake()
 	return nil

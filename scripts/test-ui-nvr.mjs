@@ -53,8 +53,8 @@ async function sound(page, name) {
   assert.deepEqual(await page.evaluate(cutTextIn), [], `${name}: cut text`);
 }
 /** A page of the NVR for a role, with the NVR's data and the desktop settings it saves. */
-async function open(role, change = () => {}, theme = "hell") {
-  const made = await create(role, theme, WIDTH, "de", { deviceScaleFactor: 2 });
+async function open(role, change = () => {}, theme = "hell", width = WIDTH) {
+  const made = await create(role, theme, width, "de", { deviceScaleFactor: 2 });
   const state = nvrState();
   state.admin = role !== "user";
   change(state, made.data);
@@ -318,6 +318,54 @@ try {
       faces: true,
     });
     assert.equal("enabled" in change, false);
+    await ctx.close();
+  }
+
+  // --- A change that deletes recordings: a plain question first (also at phone width) ---
+  for (const width of [WIDTH, 390]) {
+    const { ctx, page, state } = await open("owner", () => {}, "hell", width);
+    await page.goto(base + "/nvr/cameras?edit=einfahrt");
+    await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
+    // Continuous for 7 days → on detected objects for 3 days.
+    await page.getByLabel("Aufnehmen", { exact: true }).selectOption("events");
+    await page.getByLabel("Aufbewahren", { exact: true }).fill("3");
+    await page.getByRole("button", { name: "Speichern" }).click();
+    const ask = confirmDialog(page, de["nvr.shrink.title"]);
+    await ask.waitFor();
+    for (const line of [de["nvr.shrink.events"], de["nvr.shrink.days"].replace("{days}", "3"), de["nvr.shrink.when"]])
+      await ask.getByText(line).waitFor();
+    assert.equal(await ask.locator("input").count(), 0, "nothing to type");
+    assert.equal(
+      await ask.getByRole("button", { name: "Abbrechen" }).evaluate((b) => b === document.activeElement),
+      true,
+      "Abbrechen has the focus",
+    );
+    await sound(page, `shrink question ${width}`);
+    if (width === WIDTH) await shot(page, "aufnahmen-loeschen-frage");
+    else await page.screenshot({ path: `${out}/aufnahmen-loeschen-frage-${width}.png`, animations: "disabled" });
+    // Cancel: nothing is sent again, the form stays as it was typed.
+    await ask.getByRole("button", { name: "Abbrechen" }).click();
+    await ask.waitFor({ state: "detached" });
+    assert.equal(sent(state, "PUT", "/nvr/cameras/einfahrt").length, 1);
+    assert.equal(state.cameras.find((c) => c.id === "einfahrt").record.mode, "continuous");
+    // Confirmed: the same change once more, with the answer.
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await confirmDialog(page, de["nvr.shrink.title"]).getByRole("button", { name: de["nvr.shrink.confirm"] }).click();
+    await page.locator('[data-camera="einfahrt"]').waitFor();
+    const [first, second] = sent(state, "PUT", "/nvr/cameras/einfahrt").slice(-2);
+    assert.equal(first.confirmShrink, undefined);
+    assert.equal(second.confirmShrink, true);
+    assert.deepEqual(second.record, { ...first.record });
+    assert.equal(state.cameras.find((c) => c.id === "einfahrt").record.mode, "events");
+    // More days and a wider mode ask nothing.
+    await page.goto(base + "/nvr/cameras?edit=einfahrt");
+    await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
+    await page.getByLabel("Aufnehmen", { exact: true }).selectOption("continuous");
+    await page.getByLabel("Aufbewahren", { exact: true }).fill("30");
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="einfahrt"]').waitFor();
+    assert.equal(sent(state, "PUT", "/nvr/cameras/einfahrt").at(-1).confirmShrink, undefined);
+    assert.equal(await confirmDialog(page, de["nvr.shrink.title"]).count(), 0);
     await ctx.close();
   }
 
@@ -677,7 +725,7 @@ try {
     await page.goto(base + "/nvr/settings");
     await page.locator("#nvr-cap-note").getByText(de["nvr.storage.capExports"]).waitFor();
     await page.getByText("Belegt: 250 GB · Aufnahmen 20,4 GB, Exporte 230 GB · reicht etwa 12,4 Tage zurück").waitFor();
-    await page.getByText(/^Zuletzt aufgeräumt: \d\d:\d\d$/).waitFor();
+    await page.getByText(/^Zuletzt aufgeräumt: (\d\d\.\d\d\., )?\d\d:\d\d$/).waitFor();
     await sound(page, "exports exceed");
     await shot(page, "einstellungen-exporte-ueber-grenze");
     await ctx.close();

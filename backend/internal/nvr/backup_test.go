@@ -53,12 +53,13 @@ func TestFacesGoIntoTheBackup(t *testing.T) {
 	if got := r.m.BackupFiles(); len(got) != 4 {
 		t.Errorf("awake: %d files", len(got))
 	}
-	// A library larger than a backup takes is left out, not cut.
+	// A library larger than a backup takes is left out as a whole: not
+	// cut, and not the library as it was (TestTooLargeFaceLibraryIsLeftOut).
 	for i := range 7 {
 		writeFace(t, r.dir, "Big", "Big-"+string(rune('a'+i))+".webp", maxBackupFaceFile)
 	}
-	if got := r.m.BackupFiles(); len(got) != 4 {
-		t.Errorf("too large: %d files (the last good state is kept)", len(got))
+	if got := r.m.BackupFiles(); len(got) != 0 {
+		t.Errorf("too large: %d files", len(got))
 	}
 }
 
