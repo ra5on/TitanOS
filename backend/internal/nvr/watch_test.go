@@ -150,8 +150,9 @@ func TestEnableStartsFrigate(t *testing.T) {
 		t.Fatalf("after enabling: phase %s creates %d starts %d", r.phase(), r.engine.Creates, r.engine.Starts)
 	}
 	spec := r.engine.Spec()
-	// Three of the four demo cameras are on: 128 + 3·64 MB.
-	if spec.ShmBytes != 320<<20 || spec.CacheBytes != 1<<30 || spec.Config != filepath.Join(r.dir, "config") || spec.Media != filepath.Join(r.dir, "media") {
+	// Three of the four demo cameras are on: 128 + 3·64 MB, and room for
+	// 4096 + 3·512 processes and threads.
+	if spec.ShmBytes != 320<<20 || spec.PidsLimit != 5632 || spec.CacheBytes != 1<<30 || spec.Config != filepath.Join(r.dir, "config") || spec.Media != filepath.Join(r.dir, "media") {
 		t.Errorf("spec: %+v", spec)
 	}
 	// WebRTC only; never Frigate's API, its login port or go2rtc.

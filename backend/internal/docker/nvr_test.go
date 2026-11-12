@@ -68,6 +68,12 @@ func TestNVRCreateBody(t *testing.T) {
 	if strings.Join(h.CapDrop, ",") != "NET_RAW" || h.PidsLimit != NVRPidsLimit {
 		t.Errorf("capdrop %v pids %d", h.CapDrop, h.PidsLimit)
 	}
+	spec.PidsLimit = 6000
+	data, _ = json.Marshal(nvrCreateBody(spec))
+	if err := json.Unmarshal(data, &body); err != nil || body.HostConfig.PidsLimit != 6000 {
+		t.Errorf("pids of the spec: %d %v", body.HostConfig.PidsLimit, err)
+	}
+	spec.PidsLimit = 0
 	if len(h.Devices) != 2 || h.Devices[1].PathOnHost != "/dev/accel/accel0" || h.Devices[1].PathInContainer != "/dev/accel/accel0" || len(h.DeviceCgroupRules) != 0 {
 		t.Errorf("devices %+v rules %v", h.Devices, h.DeviceCgroupRules)
 	}

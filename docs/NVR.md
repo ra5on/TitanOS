@@ -26,7 +26,7 @@ Eine feste, geprüfte Version je TitanOS-Release: **0.18.2**, Abbild `ghcr.io/bl
 | Punkt | Wert |
 |---|---|
 | Name, Netz | `titanos-nvr`, eigenes Bridge-Netz `titanos-nvr` (nicht „internal“: Frigate erreicht die Kameras im Heimnetz darüber) |
-| Rechte | nicht privilegiert, `no-new-privileges`, ohne `NET_RAW`, höchstens 8192 Prozesse/Threads (`PidsLimit`; Threads zählen mit, der echte Lauf mit einer Kamera brauchte weit weniger, siehe Prüfstand) |
+| Rechte | nicht privilegiert, `no-new-privileges`, ohne `NET_RAW`, höchstens 4096 + 512 je eingeschalteter Kamera Prozesse/Threads (`PidsLimit`; Threads zählen mit; der echte Lauf mit einer Kamera brauchte 362, was jede weitere Kamera braucht, ist nicht gemessen – daher reichlich Raum) |
 | Daten | `<Volume>/.titanos/nvr/config` → `/config` (Datenbank, Modelle, `config.yml`), `<Volume>/.titanos/nvr/media` → `/media/frigate` (Aufnahmen, Schnappschüsse, Exporte), `/etc/localtime` nur lesend – als **Bind-Mounts** (`HostConfig.Mounts`, nicht `Binds`): Fehlt ein Quellordner, lehnt Docker den Start ab, statt einen leeren Ordner anzulegen (ein Volume, das zwischen Prüfung und Start verschwand, wird so nie zu einem Ordner im RAM) |
 | tmpfs | `/tmp/cache` 1 GB (Segmente, bevor sie aufs Volume wandern) |
 | `/dev/shm` | 128 MB + 64 MB je eingeschalteter Kamera, mindestens 256 MB. Frigate hält dort dekodierte Bilder des Erkennungsstroms (etwa 1,6 MB je Bild bei 1280×720, bestenfalls 50 je Kamera) plus rund 50 MB für Protokolle; das reicht je Kamera für mindestens 30 Bilder bei 720p (Frigate warnt unter 20). Ein Nebenstrom über 720p braucht mehr – die Diagnose zeigt die Belegung. |
@@ -460,7 +460,7 @@ Die Beispieldateien (`backend/internal/nvr/devmedia/`, zusammen rund 113 KB) sin
   - Alle Wege von titand über 8971 mit Geheimnis: Live-MSE (`video/mp4; codecs="avc1.420029"`, Videodaten), Feed (`hello`, `activity`), Gegensprechen (go2rtc antwortet auf ein Angebot – mit „codecs not matched“, das Testbild hat keinen Ton), Wiedergabe (`master`/`index`/`init`/Segment; `Range` auf ein Segment `206`), Standbild, Export samt Download mit `Range` (`206`). Das Geheimnis steht nicht in `docker logs`.
   - **Volume-Wechsel** tank → tank2 → tank: `config.yml` liegt jeweils im neuen Ordner (1879 Bytes), Frigate läuft dort mit der Kamera (titands Prüfung von `/api/config` nach dem Start bestanden).
   - **Gelöschte Kamera:** Kamera gelöscht, Frigate neu gestartet, 75 s gewartet (Frigates Aufräumen läuft 60 s nach dem Start): 7 Segmente vorher, 7 nachher; Frigate zählt sie (`/api/recordings/storage`: `test` 8,27 MB), `/api/config` nennt sie ausgeschaltet; Wiedergabe für den Administrator `200`, ein normales Konto `404`; titands Speicherzahl danach 8,7 MB Aufnahmen – allein die der gelöschten Kamera.
-  - Container mit einer Kamera (640×360, CPU-Erkennung): **362 Prozesse/Threads** (Grenze 8192), 820 MB RAM; 8555 nur auf `0.0.0.0` (tcp und udp, `ss`), kein IPv6.
+  - Container mit einer Kamera (640×360, CPU-Erkennung): **362 Prozesse/Threads** (Grenze damals fest 8192, jetzt 4096 + 512 je Kamera), 820 MB RAM; 8555 nur auf `0.0.0.0` (tcp und udp, `ss`), kein IPv6.
 
 **Nicht geprüft**
 

@@ -462,6 +462,16 @@ func shmBytes(cameras int) int64 {
 	return max(256<<20, int64(128+64*cameras)<<20)
 }
 
+// pidsLimit bounds the processes and threads of the container for a
+// number of cameras. Threads count: Frigate runs Python processes per
+// camera and service, ffmpeg per camera and stream, and the detector's
+// threads. The real run with one camera used 362 (docs/NVR.md); how much
+// each further camera adds is not measured, so the room per camera is
+// wide.
+func pidsLimit(cameras int) int64 {
+	return int64(4096 + 512*cameras)
+}
+
 // cacheBytes is the tmpfs /tmp/cache: the segments of the recordings
 // before they are moved to the volume (Frigate's documentation: 1 GB).
 const cacheBytes = 1 << 30
@@ -498,7 +508,7 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera
 	}
 	spec := docker.NVRSpec{
 		Image: imageID, Config: filepath.Join(dir, "config"), Media: filepath.Join(dir, "media"),
-		ShmBytes: shmBytes(enabled), CacheBytes: cacheBytes, Devices: nodes, USBBus: usb,
+		ShmBytes: shmBytes(enabled), CacheBytes: cacheBytes, Devices: nodes, USBBus: usb, PidsLimit: pidsLimit(enabled),
 		// WebRTC (talking back) needs a port browsers reach directly; the
 		// restream only when the owner switched it on. Frigate's API
 		// (5000), its login port (8971) and go2rtc (1984) are never
