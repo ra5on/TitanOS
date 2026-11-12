@@ -535,12 +535,18 @@
 		display: flex;
 		gap: 4px;
 	}
+	/* Over the dark picture the arrows need a solid ground of their own. */
 	.reorder .btn {
 		display: grid;
 		place-items: center;
 		width: 40px;
 		height: 40px;
 		padding: 0;
+		background: var(--surface);
+		color: var(--text);
+	}
+	.reorder .btn:disabled {
+		opacity: 0.55;
 	}
 	.events {
 		flex: 0 0 min(17rem, 34%);

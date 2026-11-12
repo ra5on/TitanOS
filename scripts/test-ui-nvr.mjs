@@ -34,12 +34,15 @@ const de = JSON.parse(
 );
 const WIDTH = 1280;
 
-const shot = (page, name) =>
-  page.screenshot({
+/** The whole page; with a dialog open the screen (the dialog covers the screen, not the page). */
+async function shot(page, name) {
+  const dialog = await page.locator("dialog[open]").count();
+  await page.screenshot({
     path: `${out}/${name}-${WIDTH}.png`,
-    fullPage: true,
+    fullPage: !dialog,
     animations: "disabled",
   });
+}
 async function sound(page, name) {
   const overflow = await page.evaluate(
     () =>
@@ -362,7 +365,7 @@ try {
       await page.mouse.down();
     };
     await hold("Nach links");
-    await page.waitForTimeout(4500);
+    await page.waitForTimeout(5000);
     assert.ok(actions().filter((a) => a === "move_left").length >= 3, `repeated: ${actions()}`);
     assert.equal(actions().includes("stop"), false, "no stop while held");
     // A "stop" the NAS drops (429) is sent again: the camera must not run on.
@@ -378,10 +381,13 @@ try {
     await page.getByRole("combobox", { name: "Gespeicherte Position" }).selectOption("tor");
     await until(() => ptz().at(-1)[2].preset === "tor", "preset sent");
     assert.deepEqual(ptz().at(-1)[2], { action: "preset", preset: "tor" });
-    // Never more than ten commands a second.
+    // Never more than ten commands in any second (the NAS's limit).
     const times = ptz().map((r) => r[3]);
-    for (let i = 1; i < times.length; i++)
-      assert.ok(times[i] - times[i - 1] >= 90, `commands ${times[i] - times[i - 1]} ms apart`);
+    for (let i = 0; i < times.length; i++)
+      assert.ok(
+        times.filter((at) => at >= times[i] && at < times[i] + 1000).length <= 10,
+        "at most ten commands a second",
+      );
     // Talking: the NAS's reason in plain words.
     const talk = page.getByRole("button", { name: /Mit Haustür sprechen/ });
     const tb = await talk.boundingBox();

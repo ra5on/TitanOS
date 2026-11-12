@@ -36,10 +36,12 @@ const WIDTH = 390;
 
 /** The whole page from its top (a sticky bar would otherwise sit in the middle). */
 async function shot(page, name) {
-  await page.evaluate(() => window.scrollTo(0, 0));
+  // A dialog covers the screen, not the page: then the screen is what counts.
+  const dialog = await page.locator("dialog[open]").count();
+  if (!dialog) await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: `${out}/${name}-${WIDTH}.png`,
-    fullPage: true,
+    fullPage: !dialog,
     animations: "disabled",
   });
 }
