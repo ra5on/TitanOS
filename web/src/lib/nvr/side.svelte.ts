@@ -10,10 +10,11 @@ import type { CameraList } from './types.ts';
 export type NvrRights = { live: boolean; recordings: boolean };
 
 /** What the account may do on any camera; null while unknown. */
-export function rightsOf(cameras: { rights?: Partial<NvrRights> }[]): NvrRights {
+export function rightsOf(cameras: { rights?: Partial<NvrRights>; deleted?: boolean }[]): NvrRights {
+	const shown = cameras.filter((c) => !c.deleted);
 	return {
-		live: cameras.some((c) => c.rights?.live === true),
-		recordings: cameras.some((c) => c.rights?.recordings === true),
+		live: shown.some((c) => c.rights?.live === true),
+		recordings: shown.some((c) => c.rights?.recordings === true),
 	};
 }
 

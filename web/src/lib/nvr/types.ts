@@ -144,6 +144,14 @@ export type Camera = {
 	ptz: boolean;
 	state: CameraState;
 	rights?: { live: boolean; recordings: boolean };
+	/**
+	 * A removed camera (administrators only): it records nothing and has no
+	 * live picture; its recordings and events stay until `expiresAt`.
+	 * Times are Unix seconds or ISO text.
+	 */
+	deleted?: boolean;
+	deletedAt?: number | string | null;
+	expiresAt?: number | string | null;
 	source?: CameraSource;
 	detect?: CameraDetect;
 	record?: CameraRecord;
@@ -292,5 +300,6 @@ export type RecognizedPlate = {
 
 export type UserCameras = {
 	admin: boolean;
-	cameras: { id: string; name: string; live: boolean; recordings: boolean }[];
+	/** `deleted`: a removed camera (rights do not matter for it any more; left out). */
+	cameras: { id: string; name: string; live: boolean; recordings: boolean; deleted?: boolean }[];
 };

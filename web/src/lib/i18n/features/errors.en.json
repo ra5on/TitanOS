@@ -134,6 +134,7 @@
 	"error.nvr_target_public": "This address is not in the home network. Confirm explicitly that the camera is meant to be there.",
 	"error.nvr_camera_not_found": "This camera does not exist (any more).",
 	"error.nvr_camera_exists": "A camera with this ID exists already.",
+	"error.nvr_camera_name_exists": "A camera with this name exists already (upper and lower case do not count).",
 	"error.nvr_camera_limit": "No more cameras can be added.",
 	"error.nvr_not_running": "The NVR does not run right now, or the camera is switched off.",
 	"error.nvr_disabled": "The NVR is switched off.",

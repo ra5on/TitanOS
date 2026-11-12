@@ -14,7 +14,7 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Confirm from '#lib/nvr/Confirm.svelte';
-	import { mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
+	import { cameraName, mayRecordings, nvr, nvrAdmin, unixOf } from '#lib/nvr/nvr.svelte.ts';
 	import { clock, dayClock, labelName } from '#lib/nvr/texts.ts';
 	import Timeline from '#lib/nvr/Timeline.svelte';
 	import {
@@ -38,13 +38,23 @@
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const cameras = $derived(nvr.cameras.filter(mayRecordings));
-	const nameOf = (id: string) => nvr.cameras.find((c) => c.id === id)?.name ?? id;
+	// Removed cameras keep their recordings for a while (administrators only).
+	const removed = $derived(nvrAdmin() ? nvr.removed : []);
+	const choosable = $derived([...cameras, ...removed]);
+	const removedChosen = $derived(removed.find((c) => c.id === camera));
+	const dayText = (seconds: number) =>
+		new Date(seconds * 1000).toLocaleDateString(locale, {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+		});
+	const nameOf = cameraName;
 
 	let camera = $state(page.url.searchParams.get('camera') ?? '');
 	const wantedAt = Number(page.url.searchParams.get('at')) || 0;
 	let day = $state(dayOf(wantedAt || Date.now() / 1000));
 	$effect(() => {
-		if (cameras.length && !cameras.some((c) => c.id === camera)) camera = cameras[0].id;
+		if (choosable.length && !choosable.some((c) => c.id === camera)) camera = choosable[0].id;
 	});
 	const from = $derived(dayStart(day));
 	const base = $derived(`/nvr/cameras/${encodeURIComponent(camera)}`);
@@ -312,7 +322,7 @@
 
 <PageHead title={t('nvr.menu.recordings')} />
 
-{#if cameras.length === 0}
+{#if choosable.length === 0}
 	<EmptyState
 		title={t('nvr.rec.noneTitle')}
 		text={nvrAdmin() ? t('nvr.live.noneAdmin') : t('nvr.rec.noneUser')}
@@ -323,6 +333,11 @@
 			><span>{t('nvr.rec.camera')}</span>
 			<select class="field" bind:value={camera} onchange={stop}>
 				{#each cameras as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				{#if removed.length}
+					<optgroup label={t('nvr.removed.optgroup')}>
+						{#each removed as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+					</optgroup>
+				{/if}
 			</select>
 		</label>
 		<div class="day">
@@ -365,6 +380,12 @@
 		/>
 	</div>
 
+	{#if removedChosen}
+		{@const until = unixOf(removedChosen.expiresAt)}
+		<p class="muted removed-note" role="status">
+			{until ? t('nvr.removed.until', { date: dayText(until) }) : t('nvr.removed.untilUnknown')}
+		</p>
+	{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if missing}
 		<p class="muted" role="status">{t('nvr.rec.missing')}</p>
@@ -642,6 +663,10 @@
 	}
 	.sw.gap {
 		background: var(--track, var(--surface));
+	}
+	.removed-note {
+		margin: 0;
+		overflow-wrap: break-word;
 	}
 	/* The controls below stay in view: the picture is at most about half the window high. */
 	.player {

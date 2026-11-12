@@ -21,7 +21,7 @@ export function loadWidgetCameras(force = false): Promise<void> {
 		.then(
 			(res) => {
 				widgetCameras.list = (res.cameras ?? [])
-					.filter((c) => c.enabled && (!c.rights || c.rights.live))
+					.filter((c) => !c.deleted && c.enabled && (!c.rights || c.rights.live))
 					.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 			},
 			() => {

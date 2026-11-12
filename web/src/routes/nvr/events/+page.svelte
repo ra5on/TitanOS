@@ -13,14 +13,14 @@
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import Confirm from '#lib/nvr/Confirm.svelte';
 	import EventCard from '#lib/nvr/EventCard.svelte';
-	import { mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
+	import { cameraName, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
 	import { clock, dayClock, labelName, OBJECT_GROUPS } from '#lib/nvr/texts.ts';
 	import type { EventList, NvrEvent } from '#lib/nvr/types.ts';
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const admin = $derived(nvrAdmin());
 	const cameras = $derived(nvr.cameras.filter(mayRecordings));
-	const nameOf = (id: string) => nvr.cameras.find((c) => c.id === id)?.name ?? id;
+	const nameOf = cameraName;
 
 	let camera = $state('');
 	let kind = $state<'' | 'persons' | 'vehicles' | 'animals'>('');
@@ -122,7 +122,7 @@
 
 <PageHead title={t('nvr.menu.events')} />
 
-{#if cameras.length === 0}
+{#if cameras.length === 0 && !(admin && nvr.removed.length)}
 	<EmptyState
 		title={t('nvr.events.noneTitle')}
 		text={admin ? t('nvr.live.noneAdmin') : t('nvr.rec.noneUser')}
@@ -134,6 +134,11 @@
 			<select class="field" bind:value={camera} aria-label={t('nvr.rec.camera')}>
 				<option value="">{t('nvr.events.allCameras')}</option>
 				{#each cameras as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				{#if admin && nvr.removed.length}
+					<optgroup label={t('nvr.removed.optgroup')}>
+						{#each nvr.removed as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+					</optgroup>
+				{/if}
 			</select>
 		</label>
 		<label

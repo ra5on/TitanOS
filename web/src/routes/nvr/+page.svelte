@@ -27,7 +27,7 @@
 	} from '#lib/nvr/layout.ts';
 	import LiveTile from '#lib/nvr/LiveTile.svelte';
 	import { changeNvrPrefs, connectNvrPrefs, nvrLink } from '#lib/nvr/nvr-link.svelte.ts';
-	import { mayLive, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
+	import { cameraName, mayLive, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
 
 	const admin = $derived(nvrAdmin());
 	const running = $derived(nvr.status?.state === 'running');
@@ -189,7 +189,7 @@
 			{ key: 'hideBar', label: 'nvr.view.hideBar' },
 		];
 	const showEvents = $derived(prefs.events && anyRecordings && !arranging);
-	const nameOf = (id: string) => nvr.cameras.find((c) => c.id === id)?.name ?? id;
+	const nameOf = cameraName;
 </script>
 
 <svelte:window onkeydown={keys} />

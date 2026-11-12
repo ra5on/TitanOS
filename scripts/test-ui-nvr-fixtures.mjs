@@ -141,6 +141,14 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
           offlineSince: new Date((now - 1800) * 1000).toISOString(),
         },
       }),
+      // Removed: no live picture, its recordings stay until they expire (administrators only).
+      camera("schuppen", "Schuppen", 5, {
+        enabled: false,
+        deleted: true,
+        deletedAt: now - 2 * day,
+        expiresAt: now + 12 * day,
+        state: { online: false, known: false, fps: 0, detectionFps: 0, offlineSince: null },
+      }),
     ],
     objects: [
       "person", "bicycle", "car", "motorcycle", "bus", "bird",
@@ -210,7 +218,7 @@ const picture = (seed, label = "") => {
 };
 
 function status(s) {
-  const mine = visible(s);
+  const mine = visible(s).filter((c) => !c.deleted);
   const counts = {
     total: mine.length,
     enabled: mine.filter((c) => c.enabled).length,
@@ -243,7 +251,7 @@ function status(s) {
 function visible(s) {
   if (s.admin) return s.cameras;
   return s.cameras
-    .filter((c) => s.rights[c.id]?.live || s.rights[c.id]?.recordings)
+    .filter((c) => !c.deleted && (s.rights[c.id]?.live || s.rights[c.id]?.recordings))
     .map((c) => ({
       id: c.id,
       name: c.name,
@@ -279,7 +287,7 @@ function diagnosis(s) {
     npuFirmware: s.npuFirmware,
     gpuUsage: {},
     npuUsage: {},
-    cameras: s.cameras.map((c) => ({
+    cameras: s.cameras.filter((c) => !c.deleted).map((c) => ({
       id: c.id,
       name: c.name,
       ...c.state,
@@ -339,7 +347,7 @@ export async function installNvr(target, state = nvrState()) {
       const name = decodeURIComponent(m[1]);
       const rows = (s.userCameras[name] ??= {
         admin: false,
-        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false })),
+        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
@@ -403,7 +411,11 @@ export async function installNvr(target, state = nvrState()) {
         clockOffsetSeconds: 0,
       });
     }
+    // Camera names are unique, upper and lower case aside (removed cameras count too).
+    const nameTaken = (name, id = "") =>
+      s.cameras.some((c) => c.id !== id && c.name.trim().toLowerCase() === String(name ?? "").trim().toLowerCase());
     if (path === "/nvr/cameras") {
+      if (method === "POST" && nameTaken(body.name)) return fail(409, "nvr_camera_name_exists");
       if (method === "POST") {
         const id = body.name.toLowerCase().replace(/ü/g, "ue").replace(/[^a-z0-9]+/g, "_");
         const made = camera(id, body.name, s.cameras.length + 1, {
@@ -424,6 +436,8 @@ export async function installNvr(target, state = nvrState()) {
         s.cameras.splice(index, 1);
         return route.fulfill({ status: 204 });
       }
+      if (method === "PUT" && body.name !== undefined && nameTaken(body.name, m[1]))
+        return fail(409, "nvr_camera_name_exists");
       if (method === "PUT") {
         const { source, clearPassword: _c, ...rest } = body;
         Object.assign(s.cameras[index], rest);

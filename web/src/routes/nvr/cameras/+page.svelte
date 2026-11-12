@@ -13,7 +13,7 @@
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import CameraForm from '#lib/nvr/CameraForm.svelte';
 	import Confirm from '#lib/nvr/Confirm.svelte';
-	import { nvr, refreshNvr, snapshotPath } from '#lib/nvr/nvr.svelte.ts';
+	import { nvr, refreshNvr, snapshotPath, unixOf } from '#lib/nvr/nvr.svelte.ts';
 	import { cameraCondition, groupsOf, sinceText } from '#lib/nvr/texts.ts';
 	import type { Camera } from '#lib/nvr/types.ts';
 
@@ -96,6 +96,14 @@
 		if (camera.record) parts.push(t(`nvr.record.short.${camera.record.mode}` as MessageKey));
 		return parts.join(' · ');
 	}
+	/** A day as the page's language writes it (12.11.2026). */
+	function dateText(seconds: number): string {
+		return new Date(seconds * 1000).toLocaleDateString(locale, {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+		});
+	}
 	function stateText(camera: Camera): string {
 		const condition = cameraCondition(camera, running);
 		if (condition === 'offline' && camera.state.offlineSince)
@@ -117,6 +125,7 @@
 	<CameraForm
 		hardware={nvr.status?.hardware}
 		objects={nvr.objects}
+		taken={nvr.cameras.map((c) => c.name)}
 		oncancel={() => goto('/nvr/cameras')}
 		onsaved={saved}
 	/>
@@ -134,6 +143,7 @@
 				camera={editing}
 				hardware={nvr.status?.hardware}
 				objects={nvr.objects}
+				taken={nvr.cameras.filter((c) => c.id !== editing.id).map((c) => c.name)}
 				oncancel={() => goto('/nvr/cameras')}
 				onsaved={saved}
 			/>
@@ -229,6 +239,37 @@
 			{/each}
 		</SettingGroup>
 	{/if}
+	{#if nvr.removed.length}
+		<!-- Removed cameras keep their recordings until these expire; administrators only. -->
+		<SettingGroup title={t('nvr.removed.group')} desc={t('nvr.removed.groupHint')} id="nvr-removed">
+			{#each nvr.removed as camera (camera.id)}
+				{@const until = unixOf(camera.expiresAt)}
+				{@const since = unixOf(camera.deletedAt)}
+				<div class="srow cam removed" data-camera={camera.id}>
+					<div class="srow-head">
+						<span class="thumb gone" aria-hidden="true"><Icon name="camera" size={20} /></span>
+						<div class="srow-text">
+							<span class="srow-title"
+								>{camera.name}<span class="chip info"
+									>{until
+										? t('nvr.removed.until', { date: dateText(until) })
+										: t('nvr.removed.untilUnknown')}</span
+								></span
+							>
+							{#if since}<p class="srow-desc">
+									{t('nvr.removed.since', { date: dateText(since) })}
+								</p>{/if}
+						</div>
+						<div class="srow-ctl">
+							<a class="btn" href="/nvr/recordings?camera={encodeURIComponent(camera.id)}"
+								>{t('nvr.removed.show')}</a
+							>
+						</div>
+					</div>
+				</div>
+			{/each}
+		</SettingGroup>
+	{/if}
 {/if}
 
 {#if removing}
@@ -252,6 +293,12 @@
 		border-radius: 7px;
 		overflow: hidden;
 		background: #0b0f14;
+	}
+	.thumb.gone {
+		display: grid;
+		place-items: center;
+		background: var(--srow-bg, var(--surface));
+		color: var(--muted);
 	}
 	.thumb img {
 		width: 100%;

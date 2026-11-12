@@ -33,6 +33,7 @@
 		camera,
 		hardware,
 		objects,
+		taken = [],
 		oncancel,
 		onsaved,
 	}: {
@@ -41,6 +42,8 @@
 		hardware?: NvrHardware;
 		/** The objects the NAS allows. */
 		objects: string[];
+		/** Names of the other cameras: a name is unique, upper and lower case aside. */
+		taken?: string[];
 		oncancel: () => void;
 		onsaved: (camera: Camera) => void;
 	} = $props();
@@ -248,7 +251,13 @@
 	// ---- Save ----
 	let saving = $state(false);
 	let error = $state('');
-	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '');
+	/** The NAS said the name is taken (also by a camera this page does not list). */
+	let nameError = $state(false);
+	const nameTaken = $derived(
+		name.trim() !== '' &&
+			taken.some((other) => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()),
+	);
+	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '' && !nameTaken);
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		saving = true;
@@ -285,6 +294,7 @@
 			onsaved(saved);
 		} catch (err) {
 			if (err instanceof ApiError && err.code === 'nvr_target_public') askPublic = true;
+			if (err instanceof ApiError && err.code === 'nvr_camera_name_exists') nameError = true;
 			error = apiErrorText(err);
 		} finally {
 			saving = false;
@@ -482,6 +492,11 @@
 			{/snippet}
 		</SettingRow>
 		<SettingRow icon="edit" title={t('nvr.camera.name')} for="{uid}-name">
+			{#snippet description()}
+				{#if nameTaken || nameError}<span class="bad" id="{uid}-name-taken" role="alert"
+						>{t('nvr.camera.nameExists')}</span
+					>{/if}
+			{/snippet}
 			{#snippet control()}
 				<input
 					id="{uid}-name"
@@ -491,6 +506,9 @@
 					maxlength="60"
 					required
 					autocomplete="off"
+					aria-invalid={nameTaken || nameError ? 'true' : undefined}
+					aria-describedby={nameTaken || nameError ? `${uid}-name-taken` : undefined}
+					oninput={() => (nameError = false)}
 				/>
 			{/snippet}
 		</SettingRow>

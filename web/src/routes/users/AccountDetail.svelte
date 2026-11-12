@@ -140,17 +140,19 @@
 			camsBusy = false;
 		}
 	}
+	// A removed camera shows nowhere for other accounts: no switches for it.
+	const camRows = $derived((cams?.cameras ?? []).filter((c) => !c.deleted));
 	const camsSummary = $derived(
 		!cams
 			? ''
 			: cams.admin
 				? t('nvr.rights.adminAll')
-				: cams.cameras.length === 0
+				: camRows.length === 0
 					? t('nvr.rights.noCameras')
 					: t('nvr.rights.count', {
-							live: cams.cameras.filter((c) => c.live).length,
-							recordings: cams.cameras.filter((c) => c.recordings).length,
-							total: cams.cameras.length,
+							live: camRows.filter((c) => c.live).length,
+							recordings: camRows.filter((c) => c.recordings).length,
+							total: camRows.length,
 						}),
 	);
 
@@ -347,11 +349,11 @@
 				<p class="muted part" role="status">{t('common.loading')}</p>
 			{:else if cams.admin}
 				<p class="muted part">{t('nvr.rights.adminHint')}</p>
-			{:else if cams.cameras.length === 0}
+			{:else if camRows.length === 0}
 				<p class="muted part">{t('nvr.rights.noCameras')}</p>
 			{:else}
 				<p class="muted part">{t('nvr.rights.hint')}</p>
-				{#each cams.cameras as c (c.id)}
+				{#each camRows as c (c.id)}
 					<div class="part cam" data-camera={c.id}>
 						<span class="t">{c.name}</span>
 						<span class="cam-rights">

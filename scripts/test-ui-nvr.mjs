@@ -197,6 +197,10 @@ try {
     await page.getByText("Hauptstrom: 3840 × 2160 · H265 · mit Ton").waitFor();
     await page.getByText("Nebenstrom: 640 × 360 · H264 · ohne Ton").waitFor();
     await page.getByText(de["nvr.probe.ptzYes"]).waitFor();
+    // A name is unique, upper and lower case aside: said under the field, nothing sent.
+    await page.getByLabel("Name", { exact: true }).fill("haustür");
+    await page.getByText(de["nvr.camera.nameExists"]).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Kamera hinzufügen" }).isDisabled(), true);
     await page.getByLabel("Name", { exact: true }).fill("Carport");
     const pill = (group, name) =>
       page.getByRole("group", { name: group }).getByRole("button", { name, exact: true });
@@ -257,6 +261,15 @@ try {
 
     // The list: state, order, switch, remove with a plain question.
     await page.getByText("Nicht erreichbar seit").first().waitFor();
+    // A removed camera stands apart, with the day its recordings end, never as a live tile.
+    const removed = page.locator("#nvr-removed");
+    const until = new Date((state.now + 12 * 86400) * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+    await removed.locator('[data-camera="schuppen"]').getByText(`Entfernt – Aufnahmen bis ${until}`).waitFor();
+    assert.equal(
+      await removed.getByRole("link", { name: "Aufnahmen ansehen" }).getAttribute("href"),
+      "/nvr/recordings?camera=schuppen",
+    );
+    assert.equal(await removed.getByRole("switch").count(), 0, "a removed camera cannot be switched on");
     await sound(page, "cameras");
     await shot(page, "kameras");
     await page.getByRole("button", { name: "Einfahrt nach oben" }).click();
@@ -286,6 +299,11 @@ try {
     assert.equal(await page.getByRole("switch", { name: "Gegensprechen" }).isChecked(), true);
     await sound(page, "edit camera");
     await shot(page, "kamera-aendern");
+    // The NAS knows names the page does not list (a removed camera's): its answer is said too.
+    await page.getByLabel("Name", { exact: true }).fill("Schuppen");
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.getByText(de["nvr.camera.nameExists"]).waitFor();
+    await page.getByLabel("Name", { exact: true }).fill("Haustür");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.locator('[data-camera="haustuer"]').waitFor();
     const change = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);
@@ -319,6 +337,7 @@ try {
     const { ctx, page, saved, data, state } = await open("owner");
     await page.goto(base + "/nvr");
     await page.locator("[data-tile]").nth(3).waitFor();
+    assert.equal(await page.locator('[data-tile="schuppen"]').count(), 0, "a removed camera has no tile");
     const box = async (id) => page.locator(`[data-tile="${id}"]`).boundingBox();
     const before = await box("haustuer");
     // What the camera sees right now (feed), the name, the offline note.
@@ -731,6 +750,17 @@ try {
       () => state.requests.some(([m, p]) => m === "GET" && /^\/nvr\/cameras\/einfahrt\/vod\/\d+\/\d+\/master\.m3u8$/.test(p)),
       "the player asks for the HLS list of the hour",
     );
+    // A removed camera's recordings, for administrators, with the day they end.
+    assert.deepEqual(
+      await page.locator(".pick select optgroup option").allTextContents(),
+      ["Schuppen"],
+    );
+    await page.locator(".pick select").selectOption("schuppen");
+    await page.getByText(/^Entfernt – Aufnahmen bis \d\d\.\d\d\.\d{4}$/).waitFor();
+    await page.locator(".pick select").selectOption("einfahrt");
+    await page.locator(".timeline .piece").first().waitFor();
+    await page.mouse.click(track.x + (track.width * 7) / 24 + 0.5, track.y + 20);
+    await page.getByRole("status").filter({ hasText: /^07:0[01]:\d\d$/ }).waitFor();
     await page.getByRole("radio", { name: "6 h" }).click();
     assert.ok(await page.locator(".timeline .inner").evaluate((el) => el.scrollWidth > el.parentElement.clientWidth * 3));
     await page.getByRole("radio", { name: "24 h" }).click();

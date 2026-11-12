@@ -5,7 +5,7 @@
 	import { api } from '../api.ts';
 	import SettingRow from '../components/settings/SettingRow.svelte';
 	import { i18n, t } from '../i18n/index.svelte.ts';
-	import { nvr } from './nvr.svelte.ts';
+	import { cameraName, nvr } from './nvr.svelte.ts';
 	import { dayClock } from './texts.ts';
 	import type { PlateEntry, RecognizedPlate } from './types.ts';
 
@@ -51,7 +51,7 @@
 		);
 	});
 	const known = $derived(new Set(clean(draft).flatMap((row) => row.plates)));
-	const nameOf = (id: string) => nvr.cameras.find((c) => c.id === id)?.name ?? id;
+	const nameOf = cameraName;
 </script>
 
 <SettingRow

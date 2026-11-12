@@ -8,12 +8,15 @@ import type { Camera, CameraList, NvrStatus } from './types.ts';
 
 export const nvr = $state<{
 	status: NvrStatus | null;
+	/** The cameras as they are (without removed ones). */
 	cameras: Camera[];
+	/** Removed cameras whose recordings are still kept (administrators only). */
+	removed: Camera[];
 	/** The objects a camera can look for (administrators). */
 	objects: string[];
 	loaded: boolean;
 	error: string;
-}>({ status: null, cameras: [], objects: [], loaded: false, error: '' });
+}>({ status: null, cameras: [], removed: [], objects: [], loaded: false, error: '' });
 
 export function nvrAdmin(): boolean {
 	return ['owner', 'admin'].includes(session.data?.user?.role ?? '');
@@ -36,7 +39,9 @@ async function read(signal?: AbortSignal) {
 			api.get<CameraList>('/nvr/cameras', signal),
 		]);
 		nvr.status = status;
-		nvr.cameras = [...(list.cameras ?? [])].sort(byOrder);
+		const all = [...(list.cameras ?? [])].sort(byOrder);
+		nvr.cameras = all.filter((c) => !c.deleted);
+		nvr.removed = all.filter((c) => c.deleted);
 		nvr.objects = list.objects ?? [];
 		nvr.error = '';
 	} catch (err) {
@@ -72,6 +77,21 @@ export function watchNvr(): () => void {
 		current();
 		if (poller === current) poller = null;
 	};
+}
+
+/** The name of a camera, also of a removed one (events and exports keep their camera). */
+export function cameraName(id: string): string {
+	return (nvr.cameras.find((c) => c.id === id) ?? nvr.removed.find((c) => c.id === id))?.name ?? id;
+}
+
+/** A time of the API as Unix seconds: numbers are seconds, text is ISO. */
+export function unixOf(value: number | string | null | undefined): number | null {
+	if (typeof value === 'number' && Number.isFinite(value)) return value;
+	if (typeof value === 'string' && value) {
+		const ms = Date.parse(value);
+		return Number.isNaN(ms) ? null : ms / 1000;
+	}
+	return null;
 }
 
 /** The address of a camera's still picture; `tick` makes the browser ask again. */
