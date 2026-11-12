@@ -459,10 +459,11 @@ func TestArrayUUIDIsAskedOncePerRunningArray(t *testing.T) {
 		t.Fatalf("mdadm --detail ran %d times for one running array", runner.asked)
 	}
 	// Stopped and started again (possibly another array under the name).
-	if err := os.RemoveAll(filepath.Dir(md)); err != nil {
+	// Moved aside instead of removed: the old folder keeps its inode, so
+	// the new one surely gets another (a freed inode may be handed out again).
+	if err := os.Rename(filepath.Dir(md), filepath.Join(t.TempDir(), "stopped")); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(m.sysBlock, "placeholder"), nil, 0o644) // takes the freed inode
 	start()
 	m.arrays(ctx)
 	if runner.asked != 2 {
