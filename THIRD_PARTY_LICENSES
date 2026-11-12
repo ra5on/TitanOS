@@ -60,6 +60,7 @@ go.yaml.in/yaml           MIT and Apache-2.0      https://github.com/yaml/go-yam
 yaml (JavaScript)         ISC                     https://github.com/eemeli/yaml
 noVNC                     MPL-2.0                 https://github.com/novnc/noVNC
 xterm.js                  MIT                     https://github.com/xtermjs/xterm.js
+hls.js                    Apache-2.0              https://github.com/video-dev/hls.js
 qrcode-generator          MIT                     https://github.com/kazuhikoarase/qrcode-generator
 IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 

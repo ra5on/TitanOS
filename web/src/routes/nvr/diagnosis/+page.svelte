@@ -97,8 +97,7 @@
 				{#snippet description()}
 					<p><b>{t('nvr.diag.means')}</b> {reasonMeaning(cause)}</p>
 					<p><b>{t('nvr.diag.todo')}</b> {reasonAdvice(cause)}</p>
-					<p class="mono code">{cause}</p>
-					<BackendDetail text={causeDetail} />
+					<BackendDetail text={causeDetail ? `${cause}: ${causeDetail}` : cause} />
 				{/snippet}
 			</SettingRow>
 		{/if}
@@ -275,13 +274,9 @@
 	p {
 		margin: 0;
 	}
-	.wrap,
-	.code {
+	.wrap {
 		overflow-wrap: anywhere;
 		word-break: break-all;
-	}
-	.code {
-		color: var(--muted);
 	}
 	.log {
 		margin: 0;

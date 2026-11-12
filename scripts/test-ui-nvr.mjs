@@ -711,11 +711,11 @@ try {
       const cause = page.locator("#nvr-diag-cause");
       for (const part of ["title", "what", "todo"])
         await cause.getByText(de[`nvr.reason.${code}.${part}`]).waitFor();
-      await cause.getByText(code, { exact: true }).waitFor();
-      // The NAS's own words wait behind "Einzelheit".
+      // The code and the NAS's own words wait behind "Einzelheit".
+      assert.equal(await cause.getByText(code, { exact: true }).count(), 0);
       assert.equal(await cause.getByText(`raw line for ${code}`).count(), 0);
       await cause.getByRole("button", { name: "Einzelheit" }).click();
-      await cause.getByText(`raw line for ${code}`).waitFor();
+      await cause.getByText(`${code}: raw line for ${code}`).waitFor();
       if (code === "config_invalid") {
         await page.getByText("Angehalten", { exact: true }).waitFor();
         await page.getByRole("button", { name: "Wieder versuchen" }).waitFor();
