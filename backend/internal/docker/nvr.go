@@ -340,3 +340,55 @@ func (m *Manager) EngineReady() bool {
 	defer m.mu.Unlock()
 	return !m.Disabled && m.settings.Enabled && m.applied != ""
 }
+
+// NVRPruneImages removes older images of the NVR: images of repository
+// that were pulled by digest only (no tag: what a person pulled or an app
+// uses keeps its tag and stays) and are not keep. Never by force: Docker
+// refuses an image a container still uses. It returns what was removed.
+func (m *Manager) NVRPruneImages(ctx context.Context, repository, keep string) ([]string, error) {
+	var list []struct {
+		ID          string `json:"Id"`
+		RepoTags    []string
+		RepoDigests []string
+	}
+	filters, err := json.Marshal(map[string][]string{"reference": {repository}})
+	if err != nil {
+		return nil, err
+	}
+	if err := m.api.getJSON(ctx, "/images/json", url.Values{"filters": {string(filters)}}, &list); err != nil {
+		return nil, err
+	}
+	var removed []string
+	for _, image := range list {
+		if image.ID == keep || !prunable(repository, image.RepoTags, image.RepoDigests) {
+			continue
+		}
+		res, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(image.ID), nil)
+		if res != nil {
+			res.Body.Close() // the answer lists what was removed; left open, it keeps a connection to the engine
+		}
+		if err == nil {
+			removed = append(removed, image.ID)
+		}
+	}
+	return removed, nil
+}
+
+// prunable tells whether an image is one the NVR pulled: known only by
+// digests of repository, under no tag.
+func prunable(repository string, tags, digests []string) bool {
+	for _, tag := range tags {
+		if tag != "" && tag != "<none>:<none>" {
+			return false
+		}
+	}
+	if len(digests) == 0 {
+		return false
+	}
+	for _, digest := range digests {
+		if !strings.HasPrefix(digest, repository+"@sha256:") {
+			return false
+		}
+	}
+	return true
+}

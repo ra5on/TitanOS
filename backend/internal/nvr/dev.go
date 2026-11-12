@@ -92,6 +92,8 @@ type DevEngine struct {
 	PullTime  time.Duration
 	// Starts counts NVRStart and NVRRestart, Creates NVRCreate.
 	Starts, Creates int
+	// Prunes counts NVRPruneImages.
+	Prunes int
 }
 
 // NewDevEngine returns an engine; with image the image counts as pulled.
@@ -177,6 +179,13 @@ func (e *DevEngine) NVRPull(ctx context.Context, _, _ string, progress func(done
 	return nil
 }
 
+func (e *DevEngine) NVRPruneImages(context.Context, string, string) ([]string, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.Prunes++
+	return nil, nil
+}
+
 // Exit ends the container as a crash of Frigate would.
 func (e *DevEngine) Exit(code int) {
 	e.mu.Lock()
@@ -210,6 +219,8 @@ type DevFrigate struct {
 	Cameras map[string]float64
 	// Log are the lines of /api/logs/frigate.
 	Log []string
+	// data are events, recordings, exports and faces (dev_data.go).
+	data devData
 }
 
 // NewDevFrigate returns a stand-in that runs the given cameras.
@@ -319,7 +330,9 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	default:
-		http.NotFound(w, r)
+		if !f.serveData(w, r) {
+			http.NotFound(w, r)
+		}
 	}
 }
 
@@ -352,6 +365,7 @@ func (m *Manager) StartDev(ctx context.Context) error {
 		return err
 	}
 	stand := NewDevFrigate(nil)
+	m.devFrigate = stand
 	server := &http.Server{Handler: stand, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = server.Serve(listener) }() // ends with Close below
 	context.AfterFunc(ctx, func() { _ = server.Close() })
@@ -362,6 +376,7 @@ func (m *Manager) StartDev(ctx context.Context) error {
 	m.FrigateBase = func(string) string {
 		// The stand-in runs what is configured now.
 		stand.SetCameras(m.Cameras())
+		stand.seedOnce(m.Cameras())
 		stand.Set(func(f *DevFrigate) {
 			if _, ok := f.Cameras["garten"]; ok {
 				f.Cameras["garten"] = 0 // one demo camera is offline
@@ -370,4 +385,15 @@ func (m *Manager) StartDev(ctx context.Context) error {
 		return base
 	}
 	return nil
+}
+
+// seedOnce fills the stand-in with example data the first time it is
+// asked for its address.
+func (f *DevFrigate) seedOnce(cameras []Camera) {
+	f.mu.Lock()
+	seeded := f.data.seeded
+	f.mu.Unlock()
+	if !seeded {
+		f.Seed(cameras, time.Now())
+	}
 }

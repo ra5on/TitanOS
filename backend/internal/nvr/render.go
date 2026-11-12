@@ -129,7 +129,7 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	root = append(root,
 		yentry{"ffmpeg", ymap{{"hwaccel_args", hwaccel}}},
 		yentry{"birdseye", ymap{{"enabled", false}}},
-		yentry{"lpr", ymap{{"enabled", anyPlates}}},
+		yentry{"lpr", lprBlock(s, anyPlates)},
 		yentry{"face_recognition", ymap{{"enabled", anyFaces}}},
 		yentry{"go2rtc", go2rtc},
 		yentry{"cameras", cams},
@@ -342,4 +342,20 @@ func recordBlock(r Record) ymap {
 		{"alerts", events},
 		{"detections", events},
 	}
+}
+
+// lprBlock is the global block for license plates: on if a camera reads
+// plates, with the known plates of the settings (sorted by name).
+func lprBlock(s Settings, enabled bool) ymap {
+	block := ymap{{"enabled", enabled}}
+	if !enabled || len(s.Plates) == 0 {
+		return block
+	}
+	plates := slices.Clone(s.Plates)
+	slices.SortFunc(plates, func(a, b KnownPlate) int { return strings.Compare(a.Name, b.Name) })
+	known := ymap{}
+	for _, entry := range plates {
+		known = append(known, yentry{entry.Name, entry.Plates})
+	}
+	return append(block, yentry{"known_plates", known})
 }

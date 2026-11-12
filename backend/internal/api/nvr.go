@@ -56,6 +56,11 @@ func (a nvrArea) register(mux *routeMux, g guards) {
 	// Next to the apps and shares of an account (Konten und Zugang › Nutzer).
 	mux.HandleFunc("GET /api/v1/users/{name}/cameras", g.admin(a.handleUserCameras))
 	mux.HandleFunc("PUT /api/v1/users/{name}/cameras", g.admin(a.handleUserCamerasSet))
+	a.registerEvents(mux, g)
+	a.registerRecordings(mux, g)
+	a.registerExports(mux, g)
+	a.registerPTZ(mux, g)
+	a.registerFaces(mux, g)
 }
 
 // available answers 404 where there is no NVR.
@@ -94,6 +99,16 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrNotRunning, http.StatusConflict, "nvr_not_running", "the NVR does not run"},
 		{nvr.ErrDisabled, http.StatusConflict, "nvr_disabled", "the NVR is switched off"},
 		{nvr.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable", "the configuration could not be read from the stick"},
+		{nvr.ErrEventNotFound, http.StatusNotFound, "nvr_event_not_found", "no such event"},
+		{nvr.ErrExportNotFound, http.StatusNotFound, "nvr_export_not_found", "no such export"},
+		{nvr.ErrExportRunning, http.StatusConflict, "nvr_export_running", "the export is still being made"},
+		{nvr.ErrExportFailed, http.StatusConflict, "nvr_export_failed", "the export could not be started; is there a recording in this time?"},
+		{nvr.ErrPTZUnsupported, http.StatusConflict, "nvr_ptz_unsupported", "this camera cannot be moved"},
+		{nvr.ErrRateLimited, http.StatusTooManyRequests, "rate_limited", "too many commands, slow down"},
+		{nvr.ErrFaceNotFound, http.StatusNotFound, "nvr_face_not_found", "no such face"},
+		{nvr.ErrFaceExists, http.StatusConflict, "nvr_face_exists", "a person of this name exists"},
+		{nvr.ErrFaceRejected, http.StatusBadRequest, "nvr_face_rejected", "the picture cannot be used: it must show exactly one face"},
+		{nvr.ErrFacesOff, http.StatusConflict, "nvr_faces_off", "no camera recognises faces"},
 	} {
 		if errors.Is(err, known.err) {
 			writeError(w, known.status, known.code, known.message)
@@ -168,6 +183,8 @@ type nvrSettingsView struct {
 	Storage                nvr.StorageSetting  `json:"storage"`
 	PrivacyNoticeDismissed bool                `json:"privacyNoticeDismissed"`
 	RTSPOut                bool                `json:"rtspOut"`
+	// Plates are the known license plates.
+	Plates []nvr.KnownPlate `json:"plates"`
 	// RTSPUser and RTSPPassword are the login of the restream on port
 	// 8554 ("" while it was never switched on).
 	RTSPUser     string `json:"rtspUser"`
@@ -176,7 +193,10 @@ type nvrSettingsView struct {
 
 func settingsView(s nvr.Settings) nvrSettingsView {
 	view := nvrSettingsView{Enabled: s.Enabled, Volume: s.Volume, Detector: s.Detector, Storage: s.Storage,
-		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut}
+		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut, Plates: s.Plates}
+	if view.Plates == nil {
+		view.Plates = []nvr.KnownPlate{}
+	}
 	if s.RTSPOut {
 		view.RTSPUser, view.RTSPPassword = nvr.RTSPUser, s.RTSPPassword
 	}
@@ -220,7 +240,7 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	}
 	next := current
 	next.Enabled, next.Volume, next.Detector, next.Storage = req.Enabled, req.Volume, req.Detector, req.Storage
-	next.PrivacyNoticeDismissed, next.RTSPOut = req.PrivacyNoticeDismissed, req.RTSPOut
+	next.PrivacyNoticeDismissed, next.RTSPOut, next.Plates = req.PrivacyNoticeDismissed, req.RTSPOut, req.Plates
 	if err := a.nvr.SetSettings(r.Context(), next, req.options()); err != nil {
 		writeNVRError(w, err)
 		return
@@ -586,11 +606,13 @@ func (a nvrArea) handleUserCamerasSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.userCameras(target))
 }
 
-// nvrForgetUser removes a deleted account from the cameras.
+// nvrForgetUser removes a deleted account from the cameras and from its
+// exports (they stay, for administrators).
 func (a nvrArea) nvrForgetUser(name string) {
 	if a.nvr == nil || a.nvr.Access == nil {
 		return
 	}
+	a.nvr.ForgetExportOwner(name)
 	if err := a.nvr.Access.ForgetUser(name); err != nil {
 		slog.Error("remove account from the cameras", "user", name, "err", err)
 	}

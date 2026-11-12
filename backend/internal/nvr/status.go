@@ -20,11 +20,32 @@ type DetectorStatus struct {
 	InferenceMs *float64 `json:"inferenceMs"`
 }
 
+// The states of the storage cap.
+const (
+	CapOff = "off" // no cap is set
+	CapOK  = "ok"  // below the cap
+	// CapCleaning: above the cap; the oldest recordings are being deleted
+	// (or nothing old enough is left to delete).
+	CapCleaning = "cleaning"
+	// CapExportsExceed: the exports alone are above the cap. Exports are
+	// never deleted by TitanOS, so nothing is deleted.
+	CapExportsExceed = "exports_exceed"
+)
+
 // StorageStatus is the space of the recordings.
 type StorageStatus struct {
-	// UsedBytes is null until Frigate was asked.
-	UsedBytes *uint64 `json:"usedBytes"`
-	LimitGB   int     `json:"limitGB"`
+	// UsedBytes is recordings plus exports; null until Frigate was asked.
+	UsedBytes       *uint64 `json:"usedBytes"`
+	RecordingsBytes *uint64 `json:"recordingsBytes"`
+	ExportsBytes    *uint64 `json:"exportsBytes"`
+	LimitGB         int     `json:"limitGB"`
+	// SpanDays is how far back the recordings reach; null without any.
+	SpanDays *float64 `json:"spanDays"`
+	// Cap is the state of the storage cap (CapOff, …).
+	Cap string `json:"cap"`
+	// LastCleanup is when the cap last deleted recordings (Unix seconds;
+	// null if not since titand started).
+	LastCleanup *int64 `json:"lastCleanup"`
 }
 
 // CameraCounts counts cameras.
@@ -108,7 +129,7 @@ func (m *Manager) Status(ctx context.Context) Status {
 		Enabled: s.Enabled, State: m.rt.phase, Error: m.rt.lastError, Image: m.imageLocked(),
 		Volume: s.Volume, VolumeMounted: s.Volume != "" && slices.Contains(mounted, s.Volume),
 		Detector:               DetectorStatus{Kind: s.Detector.Kind, Active: m.activeLocked(), Failover: m.state.Failover, InferenceMs: m.rt.inferenceMs},
-		Storage:                StorageStatus{UsedBytes: m.rt.usedBytes, LimitGB: s.Storage.LimitGB},
+		Storage:                m.storageStatusLocked(),
 		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut,
 		FrigateVersion: FrigateVersion, Hardware: hw,
 	}
@@ -353,8 +374,23 @@ func (m *Manager) Live(id string, sub bool) (string, error) {
 	return "ws" + strings.TrimPrefix(base, "http") + "/live/mse/api/ws?src=" + LiveStream(c, sub), nil
 }
 
+// snapshotAge is how long a still is handed out again: widgets and tiles
+// of several windows ask for the same picture.
+const snapshotAge = time.Second
+
+type snapshotKey struct {
+	camera string
+	height int
+}
+
+type cachedSnapshot struct {
+	at      time.Time
+	picture []byte
+}
+
 // Snapshot fetches the latest picture of a camera as JPEG, height pixels
-// high (0: as Frigate keeps it).
+// high (0: as Frigate keeps it). The same picture is handed out for
+// snapshotAge; the caller must not change it.
 func (m *Manager) Snapshot(ctx context.Context, id string, height int) ([]byte, error) {
 	c, ok := m.Camera(id)
 	if !ok {
@@ -362,9 +398,31 @@ func (m *Manager) Snapshot(ctx context.Context, id string, height int) ([]byte, 
 	}
 	m.mu.Lock()
 	address, running := m.rt.address, m.rt.phase == PhaseRunning
+	key := snapshotKey{id, height}
+	cached, hit := m.snapshots[key]
 	m.mu.Unlock()
 	if !running || address == "" || !c.Enabled {
 		return nil, ErrNotRunning
 	}
-	return m.frigate.snapshot(ctx, m.FrigateBase(address), id, height)
+	now := time.Now()
+	if hit && now.Sub(cached.at) < snapshotAge {
+		return cached.picture, nil
+	}
+	picture, err := m.frigate.snapshot(ctx, m.FrigateBase(address), id, height)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	if m.snapshots == nil {
+		m.snapshots = map[snapshotKey]cachedSnapshot{}
+	}
+	// Old pictures of other sizes and cameras do not pile up.
+	for other, entry := range m.snapshots {
+		if now.Sub(entry.at) > 10*snapshotAge {
+			delete(m.snapshots, other)
+		}
+	}
+	m.snapshots[key] = cachedSnapshot{at: now, picture: picture}
+	m.mu.Unlock()
+	return picture, nil
 }

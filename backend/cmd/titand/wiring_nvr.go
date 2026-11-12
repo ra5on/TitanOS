@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 )
@@ -61,6 +62,12 @@ func (w *titand) wireNVR() error {
 		}
 	}
 	w.recorder.Notify = w.notifier.Notify
+	w.recorder.Timezone = w.settings.CurrentTimezone
+	// Messages about a camera go the ways its owner chose for it; Home
+	// Assistant reads its sensors from the NVR (api/homeassistant_mqtt.go).
+	w.recorder.Route = func(n nvr.Notice) {
+		w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent})
+	}
 	if err := w.recorder.Load(); err != nil {
 		slog.Warn("NVR settings not readable from /config", "err", err)
 	}

@@ -57,9 +57,62 @@ type Settings struct {
 	// RTSPOut publishes the restream on port 8554 (for Home Assistant),
 	// protected by RTSPUser and RTSPPassword.
 	RTSPOut bool `json:"rtspOut"`
+	// Plates are the known license plates: a name and the plates (or
+	// patterns) that belong to it. Frigate puts the name on vehicles whose
+	// plate matches.
+	Plates []KnownPlate `json:"plates,omitempty"`
 	// RTSPPassword is made when RTSPOut is first switched on; only
 	// administrators ever see it (they type it into Home Assistant).
 	RTSPPassword string `json:"rtspPassword,omitempty"`
+}
+
+// KnownPlate is one entry of the known license plates.
+type KnownPlate struct {
+	Name string `json:"name"`
+	// Plates are plates or patterns as Frigate reads them: "*" stands
+	// for any characters, regular expressions are allowed.
+	Plates []string `json:"plates"`
+}
+
+// MaxKnownPlates bounds the list of names, maxPlatePatterns the plates
+// of one name.
+const (
+	MaxKnownPlates   = 100
+	maxPlatePatterns = 20
+)
+
+// cleanPlates checks the known plates and returns them without doubles.
+func cleanPlates(list []KnownPlate) ([]KnownPlate, error) {
+	if len(list) > MaxKnownPlates {
+		return nil, invalid("plates: at most %d names", MaxKnownPlates)
+	}
+	out := []KnownPlate{}
+	names := map[string]bool{}
+	for _, entry := range list {
+		if !validName(entry.Name) || utf8.RuneCountInString(entry.Name) > 40 || names[entry.Name] {
+			return nil, invalid("plates: name %q", entry.Name)
+		}
+		names[entry.Name] = true
+		plates := []string{}
+		for _, plate := range entry.Plates {
+			// A pattern must compile as the regular expression Frigate
+			// makes of it, and hold nothing that could leave its YAML line.
+			if plate == "" || len(plate) > 64 || strings.ContainsAny(plate, "\r\n\x00\"'`") || strings.TrimSpace(plate) != plate {
+				return nil, invalid("plates: plate of %q", entry.Name)
+			}
+			if _, err := regexp.Compile(strings.ReplaceAll(plate, "*", ".*")); err != nil {
+				return nil, invalid("plates: pattern of %q", entry.Name)
+			}
+			if !slices.Contains(plates, plate) {
+				plates = append(plates, plate)
+			}
+		}
+		if len(plates) == 0 || len(plates) > maxPlatePatterns {
+			return nil, invalid("plates: 1 to %d plates for %q", maxPlatePatterns, entry.Name)
+		}
+		out = append(out, KnownPlate{Name: entry.Name, Plates: plates})
+	}
+	return out, nil
 }
 
 // RTSPUser is the fixed user name of the published restream.
@@ -110,6 +163,9 @@ func ValidateSettings(s Settings, mounted []string) error {
 	}
 	if s.Storage.LimitGB < 0 || s.Storage.LimitGB > MaxLimitGB {
 		return invalid("storage.limitGB")
+	}
+	if _, err := cleanPlates(s.Plates); err != nil {
+		return err
 	}
 	if s.Volume == "" {
 		if s.Enabled {
@@ -514,6 +570,9 @@ type State struct {
 	Stopped       bool   `json:"stopped"`
 	StoppedReason string `json:"stoppedReason,omitempty"`
 	StoppedDetail string `json:"stoppedDetail,omitempty"`
+	// CapNoticeDay is the day (time zone of the NAS) the owner was last
+	// told that the storage cap deleted recordings.
+	CapNoticeDay string `json:"capNoticeDay,omitempty"`
 	// Boot is the boot of the NAS the state was written in: after a
 	// restart of the NAS the chosen device is tried again.
 	Boot string `json:"boot"`

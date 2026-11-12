@@ -28,6 +28,7 @@ type rig struct {
 	now     time.Time
 	mu      sync.Mutex
 	notes   []string
+	routed  []Notice
 }
 
 func newRig(t *testing.T, image bool) *rig {
@@ -54,6 +55,12 @@ func (r *rig) manager(base string) *Manager {
 	m.FrigateBase = func(string) string { return base }
 	m.Now = func() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.now }
 	m.bootID = func() string { return "boot-1" }
+	m.Route = func(n Notice) {
+		r.mu.Lock()
+		r.notes = append(r.notes, n.Severity+" "+n.Message+" "+n.Subject)
+		r.routed = append(r.routed, n)
+		r.mu.Unlock()
+	}
 	m.Notify = func(severity, kind, subject string) {
 		r.mu.Lock()
 		r.notes = append(r.notes, severity+" "+kind+" "+subject)
