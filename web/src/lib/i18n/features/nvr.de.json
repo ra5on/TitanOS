@@ -339,7 +339,7 @@
 	"nvr.rec.missing": "Aufnahmen stehen auf diesem NAS noch nicht bereit.",
 	"nvr.rec.pickHint": "Wähle auf der Zeitleiste eine Zeit.",
 	"nvr.rec.videoOf": "Aufnahme von {name}",
-	"nvr.rec.unsupported": "Dieser Browser kann das Videoformat der Kamera nicht abspielen (oft H.265). Lade einen Ausschnitt herunter oder nimm einen anderen Browser.",
+	"nvr.rec.unsupported": "Dieser Browser kann das Videoformat der Kamera nicht abspielen. Lade einen Ausschnitt herunter oder nimm einen anderen Browser.",
 	"nvr.rec.playFailed": "Die Aufnahme ließ sich nicht abspielen.",
 	"nvr.rec.nothingAfter": "Ab dieser Zeit gibt es an diesem Tag keine Aufnahme mehr.",
 	"nvr.rec.speed": "Tempo",

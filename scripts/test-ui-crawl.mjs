@@ -67,6 +67,15 @@ const routes = [
   "/tools/activity",
   "/tools/tasks",
   "/users",
+  // PLAN 79-7: the NVR (its stand-in of -dev is switched on below).
+  "/nvr",
+  "/nvr/recordings",
+  "/nvr/events",
+  "/nvr/cameras",
+  "/nvr/cameras?new=1",
+  "/nvr/cameras?edit=haustuer",
+  "/nvr/settings",
+  "/nvr/diagnosis",
   "/vms",
   "/vms/edit?vm=source",
   "/vms/media",
@@ -116,6 +125,22 @@ page.on("pageerror", (e) => errors.push(String(e)));
   );
   if (status !== 200) throw new Error(`login failed: ${status}`);
 }
+// PLAN 79-7: the NVR of -dev starts switched off, so all its pages would show
+// the setup. Its stand-in (no Docker, demo cameras) is switched on first, on
+// the first volume, as a person would do it.
+if (routes.some((route) => route.startsWith("/nvr")))
+  await page.evaluate(async () => {
+    const storage = await (await fetch("/api/v1/storage")).json().catch(() => ({}));
+    await fetch("/api/v1/nvr/enable", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        volume: storage?.volumes?.[0]?.name ?? "",
+        enableDocker: true,
+        confirmSleepingVolume: true,
+      }),
+    });
+  });
 // Richer data than an empty -dev NAS has, so that forms with sources render.
 await ctx.route("**/api/v1/backups", (route) =>
   route.request().method() === "GET"
