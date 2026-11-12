@@ -371,7 +371,7 @@
 						<p class="muted">{t('nvr.events.none')}</p>
 					{:else}
 						<ul>
-							{#each feed.events.slice(0, 12) as event (event.id)}
+							{#each feed.events.slice(0, 8) as event (event.id)}
 								<li>
 									<EventCard
 										{event}

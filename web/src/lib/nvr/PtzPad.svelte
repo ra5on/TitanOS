@@ -160,7 +160,8 @@
 		border-color: var(--accent);
 	}
 	.presets {
-		max-width: 11rem;
+		width: auto;
+		max-width: 100%;
 		min-height: 30px;
 	}
 	.ptz-error {

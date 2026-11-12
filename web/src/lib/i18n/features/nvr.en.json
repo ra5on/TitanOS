@@ -504,5 +504,12 @@
 	"nvr.rights.adminAll": "all cameras (owner and administrators)",
 	"nvr.rights.adminHint": "Owner and administrators always see all cameras and recordings.",
 	"nvr.rights.noCameras": "No camera is set up in the NVR yet.",
-	"nvr.rights.count": "Live: {live} of {total} · recordings: {recordings} of {total}"
+	"nvr.rights.count": "Live: {live} of {total} · recordings: {recordings} of {total}",
+	"nvr.search.live": "NVR › Live (cameras)",
+	"nvr.search.recordings": "NVR › Recordings",
+	"nvr.search.events": "NVR › Events",
+	"nvr.search.cameras": "NVR › Cameras",
+	"nvr.search.add": "NVR › Add a camera",
+	"nvr.search.settings": "NVR › Settings (storage, detection device, faces, plates)",
+	"nvr.search.diagnosis": "NVR › Diagnosis (NPU, detection, log)"
 }

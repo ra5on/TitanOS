@@ -504,5 +504,12 @@
 	"nvr.rights.adminAll": "alle Kameras (Besitzer und Administratoren)",
 	"nvr.rights.adminHint": "Besitzer und Administratoren sehen immer alle Kameras und Aufnahmen.",
 	"nvr.rights.noCameras": "Im NVR ist noch keine Kamera eingerichtet.",
-	"nvr.rights.count": "Live: {live} von {total} · Aufnahmen: {recordings} von {total}"
+	"nvr.rights.count": "Live: {live} von {total} · Aufnahmen: {recordings} von {total}",
+	"nvr.search.live": "NVR › Live (Kameras)",
+	"nvr.search.recordings": "NVR › Aufnahmen",
+	"nvr.search.events": "NVR › Ereignisse",
+	"nvr.search.cameras": "NVR › Kameras",
+	"nvr.search.add": "NVR › Kamera hinzufügen",
+	"nvr.search.settings": "NVR › Einstellungen (Speicher, Erkennungsgerät, Gesichter, Kennzeichen)",
+	"nvr.search.diagnosis": "NVR › Diagnose (NPU, Erkennung, Protokoll)"
 }
