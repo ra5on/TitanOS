@@ -50,13 +50,15 @@ func (m *Manager) ownViewer(labels map[string]string, name string) bool {
 }
 
 // isViewerContainer tells whether a container is part of the remote view
-// (label OR name): the routes for apps refuse those.
+// or the container of the NVR (label OR name): the routes for apps refuse
+// those.
 func (m *Manager) isViewerContainer(ctx context.Context, id string) bool {
 	info, err := m.inspectAny(ctx, id)
 	if err != nil {
 		return false
 	}
-	return info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix)
+	name := strings.TrimPrefix(info.Name, "/")
+	return info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(name, ViewerPrefix) || info.Config.Labels[NVRLabel] != "" || name == NVRName
 }
 
 // ViewerSpec is one viewer container.
