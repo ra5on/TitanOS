@@ -28,6 +28,17 @@ type hookEngine struct {
 	mu        sync.Mutex
 	down      bool
 	onInspect func()
+	onRemove  func()
+}
+
+func (h *hookEngine) NVRRemove(ctx context.Context) error {
+	h.mu.Lock()
+	f := h.onRemove
+	h.mu.Unlock()
+	if f != nil {
+		f()
+	}
+	return h.DevEngine.NVRRemove(ctx)
 }
 
 func (h *hookEngine) EngineReady() bool {
@@ -444,9 +455,22 @@ func TestOldVolumeIsLetGoAfterAChange(t *testing.T) {
 	if err := m.SetSettings(ctx, s, SetOptions{ConfirmSleepingVolume: true}); err != nil {
 		t.Fatal(err)
 	}
+	// While the old container stops (up to half a minute) the NVR does not
+	// say it runs.
+	hook := &hookEngine{DevEngine: r.engine}
+	m.Engine = hook
+	phase := ""
+	hook.onRemove = func() {
+		if phase == "" {
+			phase = r.phase()
+		}
+	}
 	r.look()
 	if st, _ := r.engine.NVRInspect(ctx); st.Exists && strings.HasPrefix(r.engine.Spec().Config, filepath.Join(mnt, "a")) {
 		t.Errorf("the settings name b, the container still runs on a (phase %s)", r.phase())
+	}
+	if phase == PhaseRunning {
+		t.Error("the phase said running while the container on the old volume was being removed")
 	}
 }
 

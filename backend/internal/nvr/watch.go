@@ -254,6 +254,8 @@ func (m *Manager) reconcile(ctx context.Context) {
 	on := m.rt.volume
 	m.mu.Unlock()
 	if on != "" && on != s.Volume {
+		// Stopping takes up to half a minute; Frigate does not run meanwhile.
+		m.setPhase(PhaseStarting)
 		m.removeContainer(ctx)
 	}
 	// A volume that is being unmounted or locked no longer counts as
