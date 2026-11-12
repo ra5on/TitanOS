@@ -3,7 +3,13 @@
 // icons themselves. The components of the desktop share them.
 import { api } from '../api.ts';
 import { t } from '../i18n/index.svelte.ts';
-import { defaultWidgets, type Widget } from './prefs.ts';
+import {
+	defaultWidgets,
+	isGpuWidget,
+	type GpuValue,
+	type Widget,
+	type WidgetKind,
+} from './prefs.ts';
 import type { Program } from './programs.svelte.ts';
 import { sources } from './sources.svelte.ts';
 import { desktop, focus, minimize, savePrefs, wm } from './wm.svelte.ts';
@@ -108,6 +114,12 @@ export const folderOf = (key: string) =>
 // Widgets: placed freely on a grid of 20 px; negative x counts from the right edge.
 export const CELL = 20;
 export const WIDGET_DIMS = { s: [12, 5], m: [17, 8], l: [24, 12] } as const;
+// PLAN 79-5: the graphics widgets hold a headline, a line and up to four tiles.
+const GPU_DIMS = { s: [15, 17], m: [17, 17], l: [24, 18] } as const;
+/** Width and height in cells a widget of this kind gets for a size. */
+export function widgetDims(kind: WidgetKind, size: 's' | 'm' | 'l'): readonly [number, number] {
+	return (isGpuWidget(kind) ? GPU_DIMS : WIDGET_DIMS)[size];
+}
 
 export function widgetLeft(w: Widget, columns: number) {
 	return (w.x < 0 ? columns + w.x : w.x) * CELL;
@@ -121,13 +133,37 @@ export function removeWidget(id: string) {
 }
 
 export function resizeWidget(id: string, size: 's' | 'm' | 'l') {
-	const dims = WIDGET_DIMS[size];
 	savePrefs((p) => {
-		p.widgets = p.widgets.map((w) =>
-			w.id === id
-				? { ...w, x: w.x < 0 ? -dims[0] : w.x, w: dims[0], h: Math.max(w.h, dims[1]) }
-				: w,
-		);
+		p.widgets = p.widgets.map((w) => {
+			if (w.id !== id) return w;
+			const dims = widgetDims(w.kind, size);
+			return { ...w, x: w.x < 0 ? -dims[0] : w.x, w: dims[0], h: Math.max(w.h, dims[1]) };
+		});
+		p.customWidgets = true;
+	});
+}
+
+/** PLAN 79-5: shows or hides one value of a graphics widget. */
+export function toggleWidgetValue(id: string, value: GpuValue) {
+	savePrefs((p) => {
+		p.widgets = p.widgets.map((w) => {
+			if (w.id !== id) return w;
+			const hide = (w.hide ?? []).includes(value)
+				? (w.hide ?? []).filter((v) => v !== value)
+				: [...(w.hide ?? []), value];
+			const next: Widget = { ...w };
+			if (hide.length) next.hide = hide;
+			else delete next.hide;
+			return next;
+		});
+		p.customWidgets = true;
+	});
+}
+
+/** PLAN 79-5: the device a graphics widget shows (its PCI address). */
+export function setWidgetDevice(id: string, device: string) {
+	savePrefs((p) => {
+		p.widgets = p.widgets.map((w) => (w.id === id ? { ...w, device } : w));
 		p.customWidgets = true;
 	});
 }

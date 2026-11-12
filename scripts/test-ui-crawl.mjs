@@ -132,6 +132,35 @@ await ctx.route("**/api/v1/backups", (route) =>
       })
     : route.fallback(),
 );
+// PLAN 79-14: several shares with short and long names on the accounts page,
+// whose "Shares" row opens to one line per share (79-1: the names stood one
+// letter per line there). Only for that page: the shares page would offer to
+// change shares titand does not have.
+const crawlShares = [
+  ["Agent", "nvme"],
+  ["Dokumente", "nvme"],
+  ["Familienfotos-und-Videos-Archiv-2019-bis-2026", "Datenspeicher-gross"],
+  ["Sicherungen_der_Arbeitsrechner_im_Buero", "Data"],
+  ["Medien", "Data"],
+].map(([name, volume], index) => ({
+  name,
+  volume,
+  smb: true,
+  nfs: { enabled: false, clients: [] },
+  access: index % 3 ? { [login.split(":")[0]]: index % 2 ? "ro" : "rw" } : {},
+  guest: false,
+  browseable: true,
+  recycle: { enabled: true, days: 30 },
+  timeMachine: { enabled: false, sizeGB: 0 },
+  path: `/mnt/${volume}/${name}`,
+  available: true,
+}));
+await ctx.route("**/api/v1/shares", (route) =>
+  route.request().method() === "GET" &&
+  new URL(page.url()).pathname === "/users"
+    ? route.fulfill({ json: crawlShares })
+    : route.fallback(),
+);
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
@@ -228,6 +257,34 @@ async function crawl(route) {
       await open(route);
   }
   console.log(`ok ${route} (${seen.size} buttons)`);
+}
+
+// PLAN 79-14: the same pages at phone width (390 px), where a control stands
+// below its name and a select is as narrow as the screen. Every folded row
+// (aria-expanded="false") is opened; nothing else is clicked.
+await page.setViewportSize({ width: 390, height: 844 });
+for (const route of routes) {
+  try {
+    await open(route);
+    if (await broken()) continue; // reported by the pass above
+    const account = page.locator("main [data-account]:visible").first();
+    if (route === "/users" && (await account.count())) {
+      await account.click();
+      await page.waitForTimeout(300);
+    }
+    const folded = page.locator('main button[aria-expanded="false"]:visible');
+    for (let n = 0; n < 40 && (await folded.count()); n++) {
+      try {
+        await folded.first().click({ timeout: 2000 });
+      } catch {
+        break;
+      }
+      await page.waitForTimeout(150);
+    }
+    await cutText(route, "phone, rows open");
+  } catch (e) {
+    note(route, "phone", String(e).split("\n")[0]);
+  }
 }
 
 await writeFile(`${out}/findings.json`, JSON.stringify(findings, null, 2));

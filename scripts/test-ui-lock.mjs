@@ -115,7 +115,7 @@ async function open(width, options = {}) {
         },
       });
     });
-  // The account menu sits in the desktop's top bar (PLAN 65: no classic frame).
+  // The menu sits in the desktop's top bar (PLAN 65: no classic frame).
   await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   if (options.clock) await made.page.clock.install();
   await made.page.goto(`${options.base ?? base}/`);
@@ -168,10 +168,11 @@ try {
   // 1. Lock from the account menu, wrong and right password.
   {
     const { ctx, page, nas } = await open(1440);
-    await page.locator("header .account .trigger").click();
-    const item = page.getByRole("menuitem", { name: /Sperren/ });
+    // PLAN 79-10: "Sperren" is a button of the one menu; its tooltip names the shortcut.
+    await page.locator("header [data-menu-button]").click();
+    const item = page.locator('.launcher [data-menu-do="lock"]');
     await item.waitFor();
-    assert.match(await item.textContent(), /Strg\+Alt\+L|⌘/);
+    assert.match(await item.getAttribute("title"), /Strg\+Alt\+L|⌘/);
     await item.click();
     await screen(page).waitFor();
     assert.deepEqual(nas.calls[0], ["lock"]);
@@ -334,7 +335,7 @@ try {
   //    locks the top window; the frame shows nothing; unlocking frees both.
   {
     const { ctx, page } = await open(1440);
-    await page.locator("header .account .trigger").waitFor();
+    await page.locator("header [data-menu-button]").waitFor();
     await page.evaluate((src) => {
       const frame = document.createElement("iframe");
       frame.src = src;
@@ -368,7 +369,7 @@ try {
       clock: true,
       lockMinutes: 5,
     });
-    await page.locator("header .account .trigger").waitFor();
+    await page.locator("header [data-menu-button]").waitFor();
     await page.clock.fastForward("04:00");
     assert.equal(await screen(page).count(), 0, "not yet");
     await page.clock.fastForward("01:30");

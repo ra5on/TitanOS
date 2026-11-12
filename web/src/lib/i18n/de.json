@@ -4260,7 +4260,7 @@
 	"personal.persistQuiet": "Zurückgehaltene Nachrichten auf dem Daten-Volume speichern",
 	"personal.persistHint": "Übersteht einen Dienstneustart. Freigabeknöpfe werden nie gespeichert. Bei nicht verfügbarem Volume wird ein Fehler gemeldet.",
 	"personal.fallback": "Ersatzkanal bei Zustellfehlern",
-	"personal.noFallback": "Keiner – an alle aktivierten Kanäle senden",
+	"personal.noFallback": "Keiner – alle aktiven Kanäle",
 	"personal.delivery": "Letzte Zustellversuche je Kanal",
 	"personal.delivered": "Vom Dienst angenommen",
 	"personal.failed": "Zustellung fehlgeschlagen",

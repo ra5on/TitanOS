@@ -127,7 +127,7 @@ test('menus and windows: every style and fallback sets the surfaces; menus use t
 		assert.match(part, /--menu-bg: var\(--surface\)/);
 		assert.match(part, /--dialog-bg: var\(--surface\)/);
 	}
-	for (const file of ['AccountMenu', 'Dropdown', 'ContextMenu', 'Notifications', 'TerminalPanel']) {
+	for (const file of ['Dropdown', 'ContextMenu', 'Notifications', 'TerminalPanel']) {
 		const source = await readFile(
 			new URL(`../src/lib/components/${file}.svelte`, import.meta.url),
 			'utf8',

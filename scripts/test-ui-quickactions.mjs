@@ -56,7 +56,10 @@ async function open(role) {
   const { ctx, page } = made;
   await page.keyboard.press("Control+Space");
   const menu = page.locator(".launcher");
-  const search = menu.getByRole("textbox", { name: /suchen/i });
+  // PLAN 79-10: the search field of the menu sits in the top bar.
+  const search = page
+    .locator(".topbar")
+    .getByRole("searchbox", { name: /suchen/i });
   await search.fill("db starten");
   await menu
     .getByRole("button", { name: "Container starten: photos-db-1" })
@@ -119,7 +122,10 @@ async function open(role) {
   const { ctx, page } = made;
   await page.keyboard.press("Control+Space");
   const menu = page.locator(".launcher");
-  const search = menu.getByRole("textbox", { name: /suchen/i });
+  // PLAN 79-10: the search field of the menu sits in the top bar.
+  const search = page
+    .locator(".topbar")
+    .getByRole("searchbox", { name: /suchen/i });
   await search.fill("starten");
   await page.waitForTimeout(300);
   assert.equal(await menu.locator(".action").count(), 0, "no admin actions");

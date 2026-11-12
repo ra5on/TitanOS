@@ -410,8 +410,9 @@
 		align-self: flex-end;
 		margin: -4px var(--space-2-5) var(--space-1);
 	}
+	/* The name keeps a readable width; the button goes below it in a narrow sidebar. */
 	.drive-description {
-		flex: 1;
+		flex: 1 1 7rem;
 		min-width: 0;
 	}
 	.drive-description .place-name {
@@ -424,6 +425,7 @@
 	}
 	.usb {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2-5);
 		min-height: 38px;

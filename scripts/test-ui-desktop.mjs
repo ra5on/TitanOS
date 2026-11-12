@@ -181,7 +181,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     "snapped to the left half",
   );
   // A second program and the switcher.
-  await page.getByRole("button", { name: "Alle Programme" }).click();
+  await page.locator(".topbar [data-menu-button]").click();
   await page.locator(".launcher .prog", { hasText: "Speicher" }).click();
   await page.waitForTimeout(1200);
   await page.keyboard.down("Alt");
@@ -192,9 +192,15 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.waitForTimeout(200);
   assert.equal(await page.locator(".switcher").count(), 0, "switcher closed");
   // Main menu with search.
-  await page.getByRole("button", { name: "Alle Programme" }).click();
+  await page.locator(".topbar [data-menu-button]").click();
+  // PLAN 79-10: the menu has no search field of its own; the one in the bar filters it.
+  assert.equal(
+    await page.locator(".launcher input").count(),
+    0,
+    "no search field inside the menu",
+  );
   await page
-    .getByRole("textbox", { name: "Programme und Seiten suchen …" })
+    .getByRole("searchbox", { name: "Programme und Seiten suchen …" })
     .fill("netz");
   await page.waitForTimeout(200);
   assert.ok(
@@ -204,13 +210,18 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     "search finds pages",
   );
   await page
-    .getByRole("textbox", { name: "Programme und Seiten suchen …" })
+    .getByRole("searchbox", { name: "Programme und Seiten suchen …" })
     .fill("");
   await shot(page, "06-hauptmenue");
   await page.keyboard.press("Escape");
   // "Show desktop" minimizes every window; then the context menus.
-  // PLAN 67: "Arbeitsplatz zeigen" sits in the logo menu of the top bar (and Alt + K).
-  await page.locator('header.topbar [data-menu="logo"]').click();
+  // PLAN 79-10: no logo menu any more; "Arbeitsplatz zeigen" sits in the menu Fenster (and Alt + K).
+  assert.equal(
+    await page.locator('header.topbar [data-menu="logo"]').count(),
+    0,
+    "logo menu gone",
+  );
+  await page.locator('header.topbar [data-menu="window"]').click();
   await page
     .locator(".mb-menu")
     .getByRole("menuitem", { name: "Arbeitsplatz zeigen" })
@@ -437,7 +448,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await dock
     .getByRole("button", { name: "Docker", exact: true })
     .waitFor({ timeout: 5000 });
-  await page.getByRole("button", { name: "Alle Programme" }).first().click();
+  await page.locator(".topbar [data-menu-button]").click();
   await page.locator(".launcher").waitFor();
   await page
     .locator(".launcher .prog", { hasText: "Sicherung" })
@@ -529,7 +540,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     .click();
   assert.ok((await page.locator(".widget").count()) > 0, "widgets back");
   // The menu closes on a click beside it.
-  await page.getByRole("button", { name: "Alle Programme" }).first().click();
+  await page.locator(".topbar [data-menu-button]").click();
   await page.locator(".launcher").waitFor();
   await page.mouse.click(area.x + area.width - 300, area.y + area.height * 0.5);
   await page.locator(".launcher").waitFor({ state: "detached", timeout: 3000 });
@@ -538,7 +549,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     .locator("header.topbar")
     .click({ button: "right", position: { x: 700, y: 6 } });
   await page.getByRole("menuitemradio", { name: /Groß/ }).click();
-  const pb = await page.locator("header.topbar .pb").first().boundingBox();
+  const pb = await page.locator("header.topbar .menu-btn").boundingBox();
   assert.ok(pb.height >= 40, "large bar");
   await shot(page, "13-leisten-gross");
   await ctx.close();
@@ -719,13 +730,360 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await ctx.close();
 }
 
+// PLAN 79-10/79-11: the one menu. The same from the top bar and from the
+// dock: filters, programs A–Z, two rows of buttons of one size; the account's
+// own order by the arrows, the keyboard and by dragging, saved per account;
+// "Wieder A–Z sortieren" resets it. No avatar and no quick settings in the bar.
+{
+  const made = await open(1440, 900);
+  const { ctx, page } = made;
+  const bar = page.locator("header.topbar");
+  assert.equal(await bar.locator(".account, .avatar").count(), 0, "no avatar");
+  assert.equal(await bar.locator('[data-opens="center"]').count(), 0);
+  const menuButton = bar.locator("[data-menu-button]");
+  assert.equal((await menuButton.innerText()).trim(), "Menü");
+  const search = bar.getByRole("searchbox");
+  assert.equal(await search.getAttribute("placeholder"), "Suchen");
+  const [mb, sb, first] = await Promise.all([
+    menuButton.boundingBox(),
+    bar.locator(".bar-search").boundingBox(),
+    bar.locator(".menubar").boundingBox(),
+  ]);
+  assert.ok(mb.x < 20, "menu button at the very left");
+  assert.ok(sb.x >= mb.x + mb.width && sb.width < 200, "small search next to it");
+  assert.ok(first.x >= sb.x + sb.width, "then the menus of the program");
+  const launcher = page.locator(".launcher");
+  const labels = () =>
+    launcher
+      .locator(".prog")
+      .evaluateAll((els) =>
+        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+      );
+  const structure = async () => ({
+    filters: await launcher
+      .locator(".chip")
+      .evaluateAll((els) => els.map((el) => el.textContent.trim())),
+    programs: await labels(),
+    row1: await launcher
+      .locator('[data-menu-row="1"] [data-menu-do]')
+      .evaluateAll((els) => els.map((el) => el.dataset.menuDo)),
+    row2: await launcher
+      .locator('[data-menu-row="2"] [data-menu-do]')
+      .evaluateAll((els) => els.map((el) => el.dataset.menuDo)),
+  });
+  await menuButton.click();
+  await launcher.waitFor();
+  const fromBar = await structure();
+  assert.deepEqual(fromBar.filters, [
+    "Alle",
+    "TitanOS",
+    "Docker-Apps",
+    "VMs",
+    "Zuletzt",
+  ]);
+  assert.deepEqual(fromBar.row1, ["account", "settings", "updates", "appcenter"]);
+  assert.deepEqual(fromBar.row2, ["lock", "logout", "restart", "shutdown"]);
+  const sorted = [...fromBar.programs].sort((a, b) =>
+    a.localeCompare(b, "de", { sensitivity: "base", numeric: true }),
+  );
+  assert.deepEqual(fromBar.programs, sorted, "programs A–Z");
+  assert.equal(
+    await launcher.locator(".order-now").innerText(),
+    "Sortiert A–Z",
+    "the header names the order",
+  );
+  assert.equal(await launcher.getByText("Über TitanOS").count(), 0);
+  // Buttons of one size, nothing cut off.
+  const sizes = await launcher.locator(".fb").evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        cut: el.scrollWidth > el.clientWidth + 1,
+      };
+    }),
+  );
+  assert.equal(new Set(sizes.map((x) => x.w + "x" + x.h)).size, 1, "one size");
+  assert.ok(!sizes.some((x) => x.cut), "no button text cut off");
+  // Typing with the menu open goes to the search field of the bar and filters.
+  await page.keyboard.type("speich");
+  assert.equal(await search.inputValue(), "speich");
+  assert.deepEqual(await labels(), ["Speicher"]);
+  await page.keyboard.press("Escape");
+  await launcher.waitFor({ state: "detached" });
+  assert.equal(await search.inputValue(), "", "the search is empty again");
+  // The dock's button opens the same menu.
+  await page.locator(".dock [data-opens=launcher]").click();
+  await launcher.waitFor();
+  assert.deepEqual(await structure(), fromBar, "same menu from the dock");
+  // The account's button opens "Mein Konto".
+  await launcher.locator('[data-menu-do="account"]').click();
+  await page.locator("section.win").first().waitFor();
+  assert.equal(new URL(page.url()).pathname, "/account");
+  await page
+    .locator("section.win header.titlebar")
+    .getByRole("button", { name: "Schließen" })
+    .click();
+  await page.locator("section.win").first().waitFor({ state: "detached" });
+  // Own order: the arrows while arranging …
+  await menuButton.click();
+  await launcher.locator("[data-menu-arrange]").click();
+  const before = await labels();
+  const second = launcher.locator(".cell").nth(1);
+  await second.locator('[data-move="back"]').click();
+  let now = await labels();
+  assert.deepEqual(now.slice(0, 2), [before[1], before[0]], "moved to the front");
+  assert.equal(await launcher.locator(".order-now").innerText(), "Eigene Reihenfolge");
+  assert.match(
+    await launcher.locator("[role=status]").innerText(),
+    new RegExp(`${before[1]}: Platz 1 von ${before.length}`),
+    "the move is announced",
+  );
+  await launcher.locator("[data-menu-arrange]").click();
+  // … the keyboard (Ctrl + Shift + arrow on a program) …
+  await launcher.locator(".prog").first().focus();
+  await page.keyboard.press("Control+Shift+ArrowRight");
+  now = await labels();
+  assert.deepEqual(now.slice(0, 2), [before[0], before[1]], "moved back by keyboard");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.textContent.trim()),
+    before[1],
+    "the keyboard stays on the moved program",
+  );
+  // … and dragging one program onto another.
+  const from = launcher.locator(".cell").nth(4);
+  const to = await launcher.locator(".cell").nth(1).boundingBox();
+  const fromLabel = (await labels())[4];
+  await from.locator(".prog").hover();
+  await page.mouse.down();
+  await page.mouse.move(to.x + 12, to.y + 30, { steps: 8 });
+  await page.mouse.move(to.x + 10, to.y + 30, { steps: 2 });
+  assert.ok(await launcher.locator(".cell.drop-before").count(), "drop mark shown");
+  await shot(page, "14-menue-ziehen");
+  await page.mouse.up();
+  now = await labels();
+  assert.equal(now[1], fromLabel, "dragged in front of the second program");
+  assert.ok(await launcher.isVisible(), "the menu stays open after reordering");
+  assert.equal(await page.locator(".icons > .ico.dragging").count(), 0);
+  await shot(page, "15-menue-eigene-reihenfolge");
+  // Saved per account.
+  await page.waitForTimeout(1800);
+  const saved = made.puts.at(-1)?.menuOrder ?? [];
+  assert.equal(saved.length, before.length, "the whole order is stored");
+  assert.ok(saved.every((k) => /^[a-z]+:/.test(k)), "as program keys");
+  // "Wieder A–Z sortieren".
+  await launcher.locator("[data-menu-reset]").click();
+  assert.deepEqual(await labels(), before, "A–Z again");
+  assert.equal(await launcher.locator(".order-now").innerText(), "Sortiert A–Z");
+  assert.equal(await launcher.locator("[data-menu-reset]").count(), 0);
+  await page.waitForTimeout(1800);
+  assert.deepEqual(made.puts.at(-1)?.menuOrder, [], "reset stored");
+  await ctx.close();
+}
+// A stored order is used; a user sees no administration in the menu.
+{
+  const { ctx, page } = await open(1440, 900, "graphit", "/", (made) => {
+    made.data.prefs.desktop = {
+      version: 1,
+      menuOrder: ["app:storage", "docker:immich"],
+      barLoad: false,
+    };
+  });
+  assert.equal(await page.locator("header.topbar .load").count(), 0, "load off");
+  await page.locator(".topbar [data-menu-button]").click();
+  const programs = await page
+    .locator(".launcher .prog")
+    .evaluateAll((els) =>
+        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+      );
+  assert.deepEqual(programs.slice(0, 2), ["Speicher", "immich"], "stored order first");
+  const rest = programs.slice(2);
+  assert.deepEqual(
+    rest,
+    [...rest].sort((a, b) =>
+      a.localeCompare(b, "de", { sensitivity: "base", numeric: true }),
+    ),
+    "the others A–Z",
+  );
+  await ctx.close();
+  const user = await create("user", "graphit", 1440);
+  await user.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+  await user.page.goto(base + "/");
+  await user.page.waitForSelector(".desktop");
+  await user.page.locator(".topbar [data-menu-button]").click();
+  const dos = await user.page
+    .locator(".launcher [data-menu-do]")
+    .evaluateAll((els) => els.map((el) => el.dataset.menuDo));
+  assert.deepEqual(dos, ["account", "settings", "lock", "logout"], "user's buttons");
+  await user.ctx.close();
+}
+
+// PLAN 79-5: widgets for iGPU, NPU and graphics card. A value the device does
+// not report gets no tile; the widget's menu switches values and the device;
+// "Widget hinzufügen" offers only kinds this NAS has.
+{
+  const acc = (o) => ({
+    address: "0000:00:02.0",
+    name: "",
+    vendor: "",
+    kind: "igpu",
+    driver: "",
+    state: "ready",
+    usagePercent: null,
+    temperatureC: null,
+    powerWatts: null,
+    memoryUsedBytes: null,
+    memoryTotalBytes: null,
+    frequencyMHz: null,
+    pState: "",
+    engines: [],
+    history: [],
+    ...o,
+  });
+  const line = (v) => Array.from({ length: 40 }, (_, i) => v + Math.sin(i / 4) * 5);
+  const accelerators = [
+    acc({
+      name: "Intel AI Boost",
+      kind: "npu",
+      address: "0000:00:0b.0",
+      usagePercent: 18,
+      powerWatts: 2.1,
+      history: [null, null, ...line(15)],
+    }),
+    acc({
+      name: "NVIDIA GeForce RTX 4060",
+      kind: "gpu",
+      address: "0000:01:00.0",
+      usagePercent: 71,
+      temperatureC: 64,
+      powerWatts: 92,
+      memoryUsedBytes: 5.1e9,
+      memoryTotalBytes: 8e9,
+      frequencyMHz: 2520,
+      history: line(68),
+    }),
+    acc({
+      name: "NVIDIA Quadro P400",
+      kind: "gpu",
+      address: "0000:02:00.0",
+      usagePercent: 0,
+      temperatureC: 41,
+      history: line(6),
+    }),
+  ];
+  const made = await open(1440, 900, "graphit", "/", (m) => {
+    m.data.system.accelerators = accelerators;
+    m.data.prefs.desktop = {
+      version: 1,
+      customIcons: true,
+      icons: ["app:files"],
+      customWidgets: true,
+      widgets: [
+        { id: "w-npu", kind: "npu", x: 12, y: 1, w: 17, h: 17 },
+        { id: "w-gpu", kind: "gpu", x: 30, y: 1, w: 17, h: 17 },
+      ],
+    };
+  });
+  const { ctx, page } = made;
+  const values = (kind) =>
+    page
+      .locator(`[data-widget="${kind}"] [data-gpu-value]`)
+      .evaluateAll((els) => els.map((el) => el.dataset.gpuValue));
+  const npu = page.locator('[data-widget="npu"]');
+  const gpu = page.locator('[data-widget="gpu"]');
+  await gpu.waitFor();
+  assert.equal(await npu.locator("h4").innerText(), "NPU");
+  assert.match(await npu.innerText(), /Intel AI Boost/);
+  assert.deepEqual(await values("npu"), ["usage", "history", "power"], "NPU: only what it reports");
+  assert.doesNotMatch(await npu.innerText(), /nicht gemeldet|Temperatur|Takt|Grafikspeicher/);
+  assert.equal(await gpu.locator("h4").innerText(), "Grafikkarte");
+  assert.match(await gpu.innerText(), /NVIDIA GeForce RTX 4060/);
+  assert.deepEqual(await values("gpu"), [
+    "usage",
+    "history",
+    "temperature",
+    "memory",
+    "power",
+    "clock",
+  ]);
+  assert.match(await gpu.innerText(), /71 %[\s\S]*64 °C[\s\S]*5,1 \/ 8 GB[\s\S]*92 W[\s\S]*2\.520 MHz/);
+  // Nothing in a widget is cut off or needs scrolling at its standard size.
+  for (const w of [npu, gpu]) {
+    const box = await w.evaluate((el) => [
+      el.scrollHeight,
+      el.clientHeight,
+      el.scrollWidth,
+      el.clientWidth,
+    ]);
+    assert.ok(
+      box[0] <= box[1] + 1 && box[2] <= box[3] + 1,
+      `widget content fits (${box})`,
+    );
+  }
+  await shot(page, "16-grafik-widgets");
+  // The widget's menu: a check per value, the device with several of the kind.
+  await npu.click({ button: "right" });
+  assert.equal(await page.locator("[data-gpu-device]").count(), 0, "one NPU: no device choice");
+  await page.keyboard.press("Escape");
+  await gpu.click({ button: "right" });
+  const toggles = page.locator("[data-gpu-toggle]");
+  assert.deepEqual(
+    await toggles.evaluateAll((els) => els.map((el) => el.textContent.trim())),
+    ["Auslastung", "Verlauf", "Temperatur", "Grafikspeicher", "Leistung", "Takt"],
+  );
+  await page.locator('[data-gpu-toggle="power"]').click();
+  await page.locator('[data-gpu-toggle="history"]').click();
+  assert.equal(
+    await page.locator('[data-gpu-toggle="power"]').getAttribute("aria-checked"),
+    "false",
+  );
+  assert.deepEqual(await values("gpu"), ["usage", "temperature", "memory", "clock"]);
+  assert.deepEqual(
+    await values("npu"),
+    ["usage", "history", "power"],
+    "stored per widget, the other one keeps its values",
+  );
+  await shot(page, "17-grafik-widget-menue");
+  await page.locator('[data-gpu-device="0000:02:00.0"]').click();
+  assert.match(await gpu.innerText(), /NVIDIA Quadro P400/);
+  // 0 % is a reported value and is shown; what the card does not report has no tile.
+  assert.deepEqual(await values("gpu"), ["usage", "temperature"]);
+  assert.match(await gpu.innerText(), /0 %/);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(1800);
+  const stored = made.puts.at(-1).widgets.find((w) => w.id === "w-gpu");
+  assert.deepEqual(stored.hide, ["power", "history"]);
+  assert.equal(stored.device, "0000:02:00.0");
+  // The gallery: NPU and graphics card, no iGPU (this NAS has none).
+  await gpu.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Widget hinzufügen" }).click();
+  const offered = await page
+    .locator(".gallery .g-item b")
+    .evaluateAll((els) => els.map((el) => el.firstChild.textContent.trim()));
+  assert.ok(offered.includes("NPU") && offered.includes("Grafikkarte"));
+  assert.ok(!offered.includes("iGPU"), "no iGPU widget without an iGPU");
+  await shot(page, "18-widget-hinzufuegen");
+  await ctx.close();
+  // Without any such device none of the three is offered.
+  const plain = await open(1440, 900);
+  await plain.page.locator(".widget").first().click({ button: "right" });
+  await plain.page.getByRole("menuitem", { name: "Widget hinzufügen" }).click();
+  const names = await plain.page
+    .locator(".gallery .g-item b")
+    .evaluateAll((els) => els.map((el) => el.firstChild.textContent.trim()));
+  assert.ok(names.includes("Uhr"));
+  assert.ok(!names.some((n) => ["iGPU", "NPU", "Grafikkarte"].includes(n)));
+  await plain.ctx.close();
+}
+
 // PLAN 69: the dock's menu button opens all programs above the dock; the
 // widget edit bar sits clear of the dock.
 {
   const { ctx, page } = await open(1440, 900);
   const button = page
     .locator(".dock")
-    .getByRole("button", { name: "Alle Apps" });
+    .getByRole("button", { name: "Menü" });
   await button.waitFor();
   const first = await page.locator(".dock .slot").first().getAttribute("class");
   assert.match(first, /menu-slot/, "menu button first in the dock");
@@ -745,8 +1103,8 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     .waitFor();
   await button.click();
   await launcher.waitFor({ state: "detached" });
-  // The search button of the top bar still opens it under the bar.
-  await page.locator('[data-opens="launcher"]').first().click();
+  // The menu button of the top bar opens the same menu under the bar.
+  await page.locator(".topbar [data-menu-button]").click();
   const top = await page.locator(".launcher").boundingBox();
   assert.ok(top.y < 120, `menu from the top bar at the top: ${top.y}`);
   await page.keyboard.press("Escape");

@@ -4260,7 +4260,7 @@
 	"personal.persistQuiet": "Persist deferred messages on the data volume",
 	"personal.persistHint": "Survives a service restart. Approval buttons are never saved. An unavailable volume produces an error.",
 	"personal.fallback": "Fallback channel for delivery failures",
-	"personal.noFallback": "None – send to all enabled channels",
+	"personal.noFallback": "None – all enabled channels",
 	"personal.delivery": "Latest delivery attempts by channel",
 	"personal.delivered": "Accepted by the service",
 	"personal.failed": "Delivery failed",

@@ -71,6 +71,7 @@
 	<div
 		class="widget glass-panel"
 		class:edit={editWidgets}
+		data-widget={w.kind}
 		style:left="{widgetLeft(w, columns)}px"
 		style:top="{w.y * CELL}px"
 		style:width="{w.w * CELL - 10}px"
@@ -82,7 +83,12 @@
 			menu = { ...menuAt(e), kind: 'widget', key: w.id };
 		}}
 	>
-		<WidgetView kind={w.kind} onopen={(key, href) => open(key, undefined, href)} />
+		<WidgetView
+			kind={w.kind}
+			hide={w.hide}
+			device={w.device}
+			onopen={(key, href) => open(key, undefined, href)}
+		/>
 		{#if editWidgets}
 			<button
 				type="button"

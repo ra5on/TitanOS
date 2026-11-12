@@ -145,6 +145,18 @@
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
+	/* PLAN 79-1: a field beside the name keeps its own width (a .field is
+	   100 % wide by default and squeezed the name to one letter per line). */
+	.ctl :global(:is(select.field, input.field)),
+	.body :global(.part > :is(select.field, input.field)) {
+		flex: none;
+		width: auto;
+		min-width: 9rem;
+		max-width: min(17rem, 60%);
+	}
+	.body :global(.part > .t) {
+		overflow-wrap: break-word;
+	}
 	@media (max-width: 560px) {
 		.row {
 			flex-wrap: wrap;
@@ -157,6 +169,15 @@
 		.body :global(.part) {
 			flex-wrap: wrap;
 			padding-left: var(--space-4);
+		}
+		/* The field stands below the name, as wide as the row. */
+		.body :global(.part:has(> :is(select.field, input.field)) > .t) {
+			flex-basis: 100%;
+		}
+		.ctl :global(:is(select.field, input.field)),
+		.body :global(.part > :is(select.field, input.field)) {
+			width: 100%;
+			max-width: none;
 		}
 	}
 </style>

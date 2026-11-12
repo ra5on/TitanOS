@@ -15,11 +15,10 @@
 	import { lock } from '../lock.svelte.ts';
 	import { appForPath, appAllowed } from './apps.ts';
 	import Launcher from './Launcher.svelte';
-	import NotifyCenter from './NotifyCenter.svelte';
+	import PowerDialog from '../components/PowerDialog.svelte';
 	import LiveBackground from '../live/LiveBackground.svelte';
 	import { takeEnter } from '../login/enter.ts';
 	import { isLivePicture } from '../live/shaders.ts';
-	import AgentBubble from './AgentBubble.svelte';
 	import AppSwitcher from './AppSwitcher.svelte';
 	import DesktopDialogs from './DesktopDialogs.svelte';
 	import DesktopIcons from './DesktopIcons.svelte';
@@ -27,6 +26,7 @@
 	import DesktopWidgets from './DesktopWidgets.svelte';
 	import FolderPop from './FolderPop.svelte';
 	import TopBar from './TopBar.svelte';
+	import { system } from '../system.svelte.ts';
 	import Window from './Window.svelte';
 	import Dock from './Dock.svelte';
 	import {
@@ -36,11 +36,17 @@
 		dropIcon,
 		placeWidget,
 		WIDGET_KINDS,
+		isGpuWidget,
 		type WidgetKind,
 	} from './prefs.ts';
 	import { findProgram, openProgram, programs, type Program } from './programs.svelte.ts';
 	import { watchSources } from './sources.svelte.ts';
-	import { sendDockToWindows, sendFilesToFileManager, watchWindows } from './desk-messages.ts';
+	import {
+		sendBarToWindows,
+		sendDockToWindows,
+		sendFilesToFileManager,
+		watchWindows,
+	} from './desk-messages.ts';
 	import {
 		autoArrange,
 		CELL,
@@ -49,7 +55,7 @@
 		setSort,
 		showDesktop,
 		sideOf,
-		WIDGET_DIMS,
+		widgetDims,
 		widgetLeft,
 		type DeskDialog,
 		type DeskMenu,
@@ -77,7 +83,11 @@
 	let launcher = $state(false);
 	/** Where the main menu opens: under the top bar, or at the dock's menu button. */
 	let launcherAt = $state<'top' | 'bottom' | 'left' | 'right'>('top');
-	let center = $state(false);
+	/** PLAN 79-10: what is typed into the search field of the top bar; the menu shows the hits. */
+	let menuQuery = $state('');
+	let launcherView = $state<Launcher>();
+	/** Restart or shut down, asked for in the menu: the dialog belongs to the desktop. */
+	let power = $state<'restart' | 'shutdown' | null>(null);
 	let editWidgets = $state(false);
 	let editDock = $state(false);
 	let dialog = $state<DeskDialog | null>(null);
@@ -107,7 +117,6 @@
 			all.map((p) => ({ key: p.key, label: p.label, kind: p.kind })),
 		),
 	);
-	const agentAllowed = $derived(all.some((p) => p.key === 'app:agent'));
 	const sizes = { s: 48, m: 60, l: 72 } as const;
 	const iconPx = $derived(sizes[desktop.prefs.iconSize]);
 	const known = $derived(new Set(all.map((p) => p.key)));
@@ -226,6 +235,11 @@
 		untrack(() => sendDockToWindows($state.snapshot(desktop.prefs.dock)));
 	});
 
+	$effect(() => {
+		const load = desktop.prefs.barLoad;
+		untrack(() => sendBarToWindows(load));
+	});
+
 	// The address of the browser follows the window in front.
 	function address(href: string) {
 		// Without a jump mark: "/settings/access#access-ssh" (a hit of the side
@@ -337,8 +351,15 @@
 			}
 		return out;
 	});
+	// PLAN 79-5: "Widget hinzufügen" offers the graphics widgets only for devices this NAS has.
+	const widgetKinds = $derived(
+		WIDGET_KINDS.filter(
+			(kind) =>
+				!isGpuWidget(kind) || (system.info?.accelerators ?? []).some((a) => a.kind === kind),
+		),
+	);
 	function addWidget(kind: WidgetKind, size: 's' | 'm' | 'l') {
-		const dims = WIDGET_DIMS[size];
+		const dims = widgetDims(kind, size);
 		// New widgets go beside the icons, never on top of them.
 		const iconsRight =
 			ICON_LEFT + wm.inset.l + (Math.max(0, ...[...places.values()].map((at) => at.c)) + 1) * colW;
@@ -413,43 +434,49 @@
 		}
 		if (event.key === 'Escape') {
 			launcher = false;
-			center = false;
 			openFolder = null;
 			editWidgets = false;
 			editDock = false;
 		}
 	}
 
-	// PLAN 65-5: when the menu or the message centre closes and the focus went
-	// nowhere, it returns to the button that opened it.
-	let wasOpen = { launcher: false, center: false };
+	// PLAN 65-5: when the menu closes and the focus went nowhere (or stayed in
+	// its search field), it returns to the button that opened it. PLAN 79-10:
+	// opening the menu puts the keyboard into the search field of the bar, so
+	// typing finds programs as before; what was typed goes when it closes.
+	let wasOpen = false;
 	$effect(() => {
-		const now = { launcher, center };
-		for (const kind of ['launcher', 'center'] as const)
-			if (wasOpen[kind] && !now[kind])
-				setTimeout(() => {
-					const active = document.activeElement;
-					if (active && active !== document.body) return;
-					document.querySelector<HTMLElement>(`[data-opens="${kind}"]`)?.focus();
-				}, 0);
+		const now = launcher;
+		const from = launcherAt;
+		if (now && !wasOpen) topBar?.focusSearch();
+		if (wasOpen && !now) {
+			menuQuery = '';
+			setTimeout(() => {
+				const active = document.activeElement;
+				if (active && active !== document.body && !active.closest('.bar-search')) return;
+				document
+					.querySelector<HTMLElement>(
+						from === 'top' || !desktop.prefs.dock.show
+							? '.topbar button[data-opens="launcher"]'
+							: '.dock button[data-opens="launcher"]',
+					)
+					?.focus();
+			}, 0);
+		}
 		wasOpen = now;
 	});
 
-	// Menu and message centre close on a click beside them (also into a window's frame).
+	// The menu closes on a click beside it (also into a window's frame).
 	function outside(event: PointerEvent) {
 		menuKeyReset();
 		const el = event.target as HTMLElement | null;
 		if (launcher && !el?.closest('.launcher, [data-opens="launcher"], .dropdown-panel, dialog'))
 			launcher = false;
-		if (center && !el?.closest('.center, [data-opens="center"], dialog')) center = false;
 	}
 	function blurred() {
 		// Focus went into a window's frame: that was a click beside the menu.
 		setTimeout(() => {
-			if (document.activeElement instanceof HTMLIFrameElement) {
-				launcher = false;
-				center = false;
-			}
+			if (document.activeElement instanceof HTMLIFrameElement) launcher = false;
 		}, 0);
 	}
 	function keyUp(event: KeyboardEvent) {
@@ -472,6 +499,7 @@
 		else if (op === 'autoArrange') autoArrange();
 		else if (op === 'widgets') savePrefs((p) => (p.widgetsHidden = !p.widgetsHidden));
 		else if (op === 'dock') savePrefs((p) => (p.dock.show = !p.dock.show));
+		else if (op === 'barLoad') savePrefs((p) => (p.barLoad = !p.barLoad));
 		else if (op.startsWith('size:')) {
 			const size = op.slice(5) as 's' | 'm' | 'l';
 			savePrefs((p) => (p.iconSize = size));
@@ -519,7 +547,16 @@
 				></span>{/if}
 		</div>
 	{/if}
-	<TopBar bind:this={topBar} bind:menu bind:launcher bind:launcherAt bind:center {role} {deskOp} />
+	<TopBar
+		bind:this={topBar}
+		bind:menu
+		bind:launcher
+		bind:launcherAt
+		bind:query={menuQuery}
+		{role}
+		{deskOp}
+		onsearchkey={(e) => (launcher ? (launcherView?.searchKey(e) ?? false) : false)}
+	/>
 
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
@@ -626,19 +663,20 @@
 		{#if openFolder}<FolderPop bind:openFolder bind:renaming {byKey} {iconsNow} {open} />{/if}
 
 		{#if launcher}<Launcher
+				bind:this={launcherView}
 				at={launcherAt}
+				query={menuQuery}
 				onopen={(key, href) => open(key, undefined, href)}
 				onclose={() => (launcher = false)}
+				onsearch={() => topBar?.focusSearch()}
+				onpower={(action) => {
+					launcher = false;
+					power = action;
+				}}
 				{onlock}
-			/>{/if}
-		{#if center}<NotifyCenter
-				onclose={() => (center = false)}
-				onopen={(key, href) => open(key, undefined, href)}
 			/>{/if}
 
 		<AppSwitcher {programOf} />
-
-		{#if agentAllowed}<AgentBubble {open} />{/if}
 	</div>
 </div>
 
@@ -664,8 +702,10 @@
 		kind={dialog}
 		onclose={() => (dialog = null)}
 		onaddwidget={addWidget}
-		kinds={WIDGET_KINDS}
+		kinds={widgetKinds}
 	/>{/if}
+
+{#if power}<PowerDialog action={power} onclose={() => (power = null)} />{/if}
 
 <!-- PLAN 66: once after the update to 0.63, for owners and administrators. -->
 <MigrationDialog />

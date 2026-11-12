@@ -30,6 +30,12 @@ export type FrameMessage =
 	| { type: 'titanos-dock'; dock: Dock }
 	/** A window changes the dock; the desktop checks it and saves it (one writer). */
 	| { type: 'titanos-prefs'; dock: Dock }
+	/** PLAN 79-10, Settings › Appearance: a window asks whether the top bar shows CPU and RAM. */
+	| { type: 'titanos-bar-get' }
+	/** The answer, and after every change on the desktop. */
+	| { type: 'titanos-bar'; load: boolean }
+	/** A window switches CPU and RAM in the top bar on or off; the desktop saves it. */
+	| { type: 'titanos-bar-set'; load: boolean }
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
 	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
 	| { type: 'titanos-console'; session: unknown }

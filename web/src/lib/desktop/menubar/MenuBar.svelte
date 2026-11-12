@@ -1,23 +1,19 @@
 <script lang="ts">
 	// PLAN 67-1: the menu bar in the top bar (variant B, like macOS): the
-	// TitanOS logo menu, the name of the program in front and its menus.
+	// name of the program in front and its menus. PLAN 79-10: the TitanOS
+	// logo menu is gone; its entries live in the one menu (Launcher.svelte).
 	// Menus open on a click and follow the pointer while one is open; Alt or
 	// F10 brings the keyboard here (arrows move, Enter opens, Esc closes).
 	import { tick } from 'svelte';
-	import { api } from '../../api.ts';
-	import Icon from '../../components/Icon.svelte';
-	import PowerDialog from '../../components/PowerDialog.svelte';
 	import ShortcutsDialog from '../../components/ShortcutsDialog.svelte';
 	import { t } from '../../i18n/index.svelte.ts';
-	import { lock } from '../../lock.svelte.ts';
 	import {
 		hasWindowCommands,
 		runWindowCommand,
 		windowCommandState,
 	} from '../../menu-commands.svelte.ts';
-	import { logout, session } from '../../session.svelte.ts';
+	import { session } from '../../session.svelte.ts';
 	import { findProgram, openProgram, openTab } from '../programs.svelte.ts';
-	import { dockerUpdates } from '../sources.svelte.ts';
 	import {
 		desktop,
 		focus,
@@ -35,7 +31,6 @@
 		desktopMenus,
 		goTarget,
 		helpUrl,
-		logoMenu,
 		menusFor,
 		type DeskOp,
 		type Menu,
@@ -62,9 +57,7 @@
 	const programName = $derived(
 		front ? (findProgram(front.app)?.label ?? front.title) : t('menubar.desktop'),
 	);
-	const logo = $derived(logoMenu(role));
-	const menus = $derived(front ? menusFor(front.app, role) : desktopMenus(role));
-	const tops = $derived<Menu[]>([logo, ...menus]);
+	const tops = $derived<Menu[]>(front ? menusFor(front.app, role) : desktopMenus(role));
 
 	let open = $state<string | null>(null);
 	let sub = $state<string | null>(null);
@@ -73,9 +66,7 @@
 	let bar = $state<HTMLElement>();
 	let panel = $state<HTMLElement>();
 	let subPanel = $state<HTMLElement>();
-	let power = $state<'restart' | 'shutdown' | null>(null);
 	let shortcuts = $state(false);
-	let systemUpdate = $state(false);
 	/** Where the keyboard came from (a window's page): it goes back there. */
 	let returnTo: HTMLElement | null = null;
 	let current = $state(0);
@@ -100,24 +91,12 @@
 			picked: item.checked,
 		}));
 	}
-	const updates = $derived((systemUpdate ? 1 : 0) + dockerUpdates());
 
 	// A different program in front closes what was open.
 	$effect(() => {
 		void front?.app;
 		open = null;
 		sub = null;
-	});
-
-	function checkUpdates() {
-		if (!admin) return;
-		api
-			.get<{ available: unknown }>('/update')
-			.then((u) => (systemUpdate = !!u?.available))
-			.catch(() => {});
-	}
-	$effect(() => {
-		if (admin) checkUpdates();
 	});
 
 	// ---- What the pages in the windows announce ----
@@ -159,6 +138,7 @@
 		if (op.startsWith('size:')) return p.iconSize === op.slice(5);
 		if (op === 'widgets') return !p.widgetsHidden;
 		if (op === 'dock') return p.dock.show;
+		if (op === 'barLoad') return p.barLoad;
 		return undefined;
 	}
 	function entryState(e: MenuEntry): { enabled: boolean; checked?: boolean } {
@@ -234,22 +214,6 @@
 		}
 		if ('sys' in action) {
 			switch (action.sys) {
-				case 'about':
-					return void openProgram('app:settings', { href: '/settings/about' });
-				case 'settings':
-					return void openProgram('app:settings');
-				case 'appcenter':
-					return void openProgram('app:appcenter');
-				case 'updates':
-					return void openProgram('app:settings', { href: '/settings/updates' });
-				case 'lock':
-					return void lock();
-				case 'logout':
-					return void logout();
-				case 'restart':
-				case 'shutdown':
-					power = action.sys;
-					return;
 				case 'help':
 					window.open(helpUrl(win?.app ?? ''), '_blank', 'noopener');
 					return;
@@ -292,8 +256,7 @@
 			0,
 			tops.findIndex((m) => m.id === id),
 		);
-		if (id === 'logo') checkUpdates();
-		else askFrame(front);
+		askFrame(front);
 		if (focusFirst) {
 			await tick();
 			firstItem(panel)?.focus();
@@ -319,7 +282,7 @@
 	export function focusBar() {
 		const active = document.activeElement as HTMLElement | null;
 		if (!bar?.contains(active)) returnTo = active && active !== document.body ? active : null;
-		current = tops.length > 1 ? 1 : 0;
+		current = 0;
 		topButton(current)?.focus();
 	}
 
@@ -509,9 +472,6 @@
 					>{#if item.mark && s.checked}{item.mark === 'radio' ? '•' : '✓'}{/if}</span
 				>
 				<span class="text">{label(item)}</span>
-				{#if item.id === 'sys.updates' && updates}<span class="count"
-						>{t('menubar.updatesCount', { count: updates })}</span
-					>{/if}
 				{#if item.keys}<kbd>{keysText(item.keys)}</kbd>{/if}
 				{#if opens}<span class="arrow" aria-hidden="true">›</span>{/if}
 			</button>
@@ -528,19 +488,16 @@
 	bind:this={bar}
 	onkeydown={barKey}
 >
+	<b class="program" title={programName}>{programName}</b>
 	{#each tops as m, i (m.id)}
-		{#if i === 1}<b class="program" title={programName}>{programName}</b>{/if}
 		<button
 			type="button"
 			role="menuitem"
 			class="top"
-			class:logo={m.id === 'logo'}
 			class:on={open === m.id}
 			data-menu={m.id}
 			aria-haspopup="menu"
 			aria-expanded={open === m.id}
-			aria-label={m.id === 'logo' ? t('menubar.logo') : undefined}
-			title={m.id === 'logo' ? t('menubar.logo') : undefined}
 			tabindex={current === i ? 0 : -1}
 			onclick={() => (open === m.id ? close(false) : show(m.id, false))}
 			onpointerenter={() => {
@@ -548,12 +505,8 @@
 			}}
 			onfocus={() => (current = i)}
 		>
-			{#if m.id === 'logo'}
-				<img src="/favicon.svg" alt="" width="20" height="20" />
-				{#if updates}<span class="dot" aria-hidden="true"></span>{/if}
-			{:else}{t(m.label)}{/if}
+			{t(m.label)}
 		</button>
-		{#if i === 0 && tops.length === 1}<b class="program" title={programName}>{programName}</b>{/if}
 	{/each}
 </div>
 
@@ -563,7 +516,7 @@
 		class="mb-menu floating-menu"
 		use:portal
 		role="menu"
-		aria-label={openMenu.id === 'logo' ? t('menubar.logo') : t(openMenu.label)}
+		aria-label={t(openMenu.label)}
 		style:left="{at.x}px"
 		style:top="{at.y}px"
 		bind:this={panel}
@@ -588,7 +541,6 @@
 	{/if}
 {/if}
 
-{#if power}<PowerDialog action={power} onclose={() => (power = null)} />{/if}
 {#if shortcuts}<ShortcutsDialog {admin} desktop onclose={() => (shortcuts = false)} />{/if}
 
 <style>
@@ -622,24 +574,6 @@
 	.top:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
-	}
-	.top.logo {
-		position: relative;
-		padding: 0 var(--space-1-5);
-	}
-	.top.logo img {
-		display: block;
-		border-radius: 5px;
-	}
-	.top.logo .dot {
-		position: absolute;
-		top: 3px;
-		right: 2px;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--accent);
-		border: 1.5px solid var(--surface);
 	}
 	.program {
 		/* The bar has one line: the name is shown whole in it, never cut off. */
@@ -711,14 +645,6 @@
 	}
 	.arrow {
 		margin-left: 14px;
-	}
-	.count {
-		padding: 0 7px;
-		border-radius: 9px;
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: var(--text-xs);
-		font-weight: 600;
 	}
 	.mb-menu hr {
 		height: 1px;

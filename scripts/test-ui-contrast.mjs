@@ -70,7 +70,7 @@ function collect({ offset, prefix }) {
       where:
         el
           .closest(
-            "section.win, .launcher, .center, nav.dock, .widget, [role=menu], header.topbar, .icons",
+            "section.win, .launcher, nav.dock, .widget, [role=menu], header.topbar, .icons",
           )
           ?.className.split(" ")[0] || el.tagName,
       wallpaper: !!el.closest(".icons .label, .icons > .ico"),
@@ -228,10 +228,6 @@ for (const theme of themes) {
     await page.locator('[data-opens="launcher"]').first().click();
     await page.locator(".launcher").waitFor();
     results.push(...(await check(page, `${tag}-menu`)));
-    await page.keyboard.press("Escape");
-    await page.locator('[data-opens="center"]').first().click();
-    await page.locator(".center").waitFor();
-    results.push(...(await check(page, `${tag}-center`)));
     await page.keyboard.press("Escape");
     await page.mouse.click(300, 760, { button: "right" });
     await page.locator("[role=menu]").first().waitFor();

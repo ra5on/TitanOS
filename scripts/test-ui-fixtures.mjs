@@ -2217,6 +2217,10 @@ function scriptRoute(data, path, method, route, time) {
  * nor does a box marked `data-cut` itself: "excerpt" for the first lines of
  * long content shown whole elsewhere, "frame" for the desktop and its
  * windows, which clip what is moved partly out of them.
+ *
+ * PLAN 79-14: it also reports a word that runs over several lines (a label
+ * narrower than its longest word) and a native select narrower than the
+ * option it shows.
  */
 export function cutTextIn() {
   const found = [];
@@ -2264,6 +2268,72 @@ export function cutTextIn() {
       // A box that scrolls shows everything; nothing above it cuts this text.
       if (/(auto|scroll)/.test(cs.overflowX + cs.overflowY)) break;
     }
+  }
+  // PLAN 79-14: a word that runs over several lines. A label breaks between
+  // words only, so a broken word means its box is narrower than its longest
+  // word (words of more than 30 letters are names that cannot fit a phone).
+  // Paths, addresses and identifiers (`overflow-wrap: anywhere`) may break,
+  // but not in a box squeezed to a few letters per line – the share names
+  // that stood one letter per line beside a full-width select (79-1).
+  const skip =
+    'script, style, noscript, input, textarea, select, .sr-only, [aria-hidden="true"], canvas, svg, .xterm, pre, code, [data-cut]';
+  const words = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let node = words.nextNode(); node; node = words.nextNode()) {
+    const el = node.parentElement;
+    if (!el || !node.textContent.trim() || seen.has(el) || el.closest(skip))
+      continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility !== "visible" || !el.getClientRects().length) continue;
+    const anywhere =
+      cs.overflowWrap === "anywhere" ||
+      cs.wordBreak === "break-all" ||
+      cs.wordBreak === "break-word";
+    let box = el;
+    while (box.parentElement && getComputedStyle(box).display === "inline")
+      box = box.parentElement;
+    const squeezed = box.clientWidth < 4 * parseFloat(cs.fontSize);
+    for (const m of node.textContent.matchAll(/[\p{L}\p{N}]{2,}/gu)) {
+      range.setStart(node, m.index);
+      range.setEnd(node, m.index + m[0].length);
+      const tops = new Set(
+        [...range.getClientRects()]
+          .filter((r) => r.width > 0)
+          .map((r) => Math.round(r.top)),
+      );
+      if (tops.size < 2) continue;
+      if (squeezed || (!anywhere && m[0].length >= 4 && m[0].length <= 30)) {
+        seen.add(el);
+        found.push(
+          `${name(el)} [word over ${tops.size} lines, box ${box.clientWidth}px]: ${m[0].slice(0, 60)}`,
+        );
+        break;
+      }
+    }
+  }
+  // PLAN 79-14: a native select shows its chosen option in one line and
+  // cuts what does not fit; the control must be as wide as that text.
+  const canvas = document.createElement("canvas").getContext("2d");
+  for (const el of document.querySelectorAll("select")) {
+    if (el.multiple || el.size > 1 || el.closest("[data-cut], .sr-only"))
+      continue;
+    const cs = getComputedStyle(el);
+    const text = el.selectedOptions[0]?.text.trim();
+    if (!text || cs.visibility !== "visible" || !el.getClientRects().length)
+      continue;
+    canvas.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const need = canvas.measureText(text).width;
+    // The arrow of a native control stands inside its content box.
+    const arrow = cs.appearance === "none" ? 0 : 18;
+    const room =
+      el.clientWidth -
+      parseFloat(cs.paddingLeft) -
+      parseFloat(cs.paddingRight) -
+      arrow;
+    if (need > room + 1)
+      found.push(
+        `${name(el)} [select ${Math.round(room)}px for ${Math.round(need)}px]: ${text.slice(0, 60)}`,
+      );
   }
   return found;
 }

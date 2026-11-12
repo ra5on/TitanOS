@@ -1,7 +1,7 @@
 // PLAN 67-1: the top bar variant B with a menu bar per program – layout at
 // 1600/1280/1024 px without overlap (long names cut off), keyboard (F10,
 // Alt, arrows, Esc), a page command (Dateien › Ablage › Neuer Ordner),
-// disabled entries without a handler, the logo menu's dialogs and the
+// disabled entries without a handler, the help's dialogs and the
 // cluster switcher. Isolated API data only; nothing reaches a NAS.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5282 node scripts/test-ui-menubar.mjs
 import assert from "node:assert/strict";
@@ -317,39 +317,60 @@ for (const width of [1600, 1280, 1024]) {
   await ctx.close();
 }
 
-// 5. The logo menu opens the right dialogs and programs.
+// 5. PLAN 79-10: no logo menu, no quick settings, no avatar; the bar starts
+// with the button "Menü" and the search, the help opens its dialogs.
 {
   const { ctx, page } = await open(1600);
-  const logo = bar(page).locator('[data-menu="logo"]');
-  await logo.click();
-  await anyItem(page, "Updates").waitFor();
-  assert.ok(
-    await page.locator('.mb-menu [data-id="sys.updates"] .count').count(),
-    "updates with their number",
+  assert.equal(await bar(page).locator('[data-menu="logo"]').count(), 0);
+  assert.equal(await bar(page).locator('[data-opens="center"]').count(), 0);
+  assert.equal(await bar(page).locator(".account").count(), 0);
+  const order = await bar(page).evaluate((el) =>
+    [
+      ".menu-btn",
+      ".bar-search",
+      ".menubar",
+      ".notifications",
+      ".load",
+      ".clock",
+    ].map((s) => Math.round(el.querySelector(s).getBoundingClientRect().left)),
   );
-  await page.waitForTimeout(250);
-  await shot(page, "07-logo-menue");
-  await anyItem(page, "Herunterfahren").click();
-  const power = page.getByRole("dialog").filter({ hasText: "herunterfahren" });
-  await power.first().waitFor();
-  await page.getByRole("button", { name: "Abbrechen" }).click();
-  await logo.click();
-  await anyItem(page, "Arbeitsplatz zeigen").waitFor();
-  await page.keyboard.press("Escape");
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    `menu, search, menus, bell, load, clock: ${order}`,
+  );
+  // CPU and RAM share one frame in the look of the search field.
+  const frames = await bar(page).evaluate((el) =>
+    [".bar-search", ".load"].map((s) => {
+      const c = getComputedStyle(el.querySelector(s));
+      return [c.borderTopWidth, c.borderTopColor, c.borderRadius, c.height];
+    }),
+  );
+  assert.deepEqual(frames[0], frames[1], "load framed like the search field");
+  assert.match(await bar(page).locator(".load").innerText(), /CPU.*RAM/);
+  // Ansicht (desktop in front) switches CPU and RAM in the bar off and on.
+  await top(page, "Ansicht").click();
+  const load = page
+    .locator(".mb-menu")
+    .getByRole("menuitemcheckbox", { name: "CPU und RAM in der Leiste" });
+  assert.equal(await load.getAttribute("aria-checked"), "true", "on at first");
+  await load.click();
+  await bar(page).locator(".load").waitFor({ state: "detached" });
+  await shot(page, "07-ohne-cpu-ram");
+  await top(page, "Ansicht").click();
+  await page
+    .locator(".mb-menu")
+    .getByRole("menuitemcheckbox", { name: "CPU und RAM in der Leiste" })
+    .click();
+  await bar(page).locator(".load").waitFor();
   await top(page, "Hilfe").click();
   await anyItem(page, "Tastenkürzel").click();
   await page.getByRole("dialog").filter({ hasText: "Alt" }).first().waitFor();
   await shot(page, "08-tastenkuerzel");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
-  await logo.click();
-  await anyItem(page, "Über TitanOS").click();
+  await page.locator(".ico", { hasText: "Dateien" }).first().dblclick();
   await page.locator("section.win").first().waitFor();
-  assert.match(
-    await bar(page).locator(".program").innerText(),
-    /System\u00adsteuerung|Systemsteuerung/,
-    "Über TitanOS opens the Systemsteuerung",
-  );
   // Arbeitsplatz zeigen by keyboard (Alt + K).
   await page.waitForTimeout(1500);
   await page.keyboard.press("Alt+k");
