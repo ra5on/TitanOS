@@ -4181,6 +4181,7 @@
 	"bell.group.updates": "Updates",
 	"bell.group.ups": "USV",
 	"bell.group.usb": "USB-Laufwerke",
+	"bell.group.cameras": "Kameras",
 	"bell.group.system": "System und Sonstiges",
 	"bell.storageErrors": "Fehler an Volumes und Platten zeigt die Glocke immer an, damit kein drohender Datenverlust untergeht.",
 	"notify.hidden": "{count} ausgeblendet – Filter ändern",

@@ -36,6 +36,12 @@ export type FrameMessage =
 	| { type: 'titanos-bar'; load: boolean }
 	/** A window switches CPU and RAM in the top bar on or off; the desktop saves it. */
 	| { type: 'titanos-bar-set'; load: boolean }
+	/** PLAN 79-7, NVR live view: a window asks for the account's arrangement (answer: titanos-nvr). */
+	| { type: 'titanos-nvr-get' }
+	/** The answer; the page checks it (nvr/layout.ts). */
+	| { type: 'titanos-nvr'; prefs: unknown }
+	/** The NVR's window changes the arrangement or a view option; the desktop checks and saves it. */
+	| { type: 'titanos-nvr-set'; prefs: unknown }
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
 	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
 	| { type: 'titanos-console'; session: unknown }

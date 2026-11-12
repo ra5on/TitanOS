@@ -4181,6 +4181,7 @@
 	"bell.group.updates": "Updates",
 	"bell.group.ups": "UPS",
 	"bell.group.usb": "USB drives",
+	"bell.group.cameras": "Cameras",
 	"bell.group.system": "System and other",
 	"bell.storageErrors": "The bell always shows errors on volumes and disks, so that a risk of data loss is never missed.",
 	"notify.hidden": "{count} hidden – change filter",

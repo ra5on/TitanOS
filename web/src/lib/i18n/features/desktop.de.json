@@ -17,6 +17,7 @@
 	"desktop.app.shares": "Freigaben",
 	"desktop.app.storage": "Speicher",
 	"desktop.app.terminal": "Terminal",
+	"desktop.app.nvr": "NVR",
 	"desktop.app.users": "Benutzer",
 	"desktop.app.vms": "Virtuelle Maschinen",
 	"desktop.badge.updates": "{count} Update(s) verfügbar",

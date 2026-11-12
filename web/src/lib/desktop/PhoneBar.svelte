@@ -6,7 +6,7 @@
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import { appForPath, sideActive } from './apps.ts';
+	import { sideFor, appForPath, sideActive } from './apps.ts';
 	import { activeNode } from '../cluster-node.ts';
 	import { clusterNodes } from '../cluster.svelte.ts';
 	import { session } from '../session.svelte.ts';
@@ -14,10 +14,11 @@
 	import { entries, goTarget, menusFor, type MenuEntry } from './menubar/menus.ts';
 
 	const app = $derived(appForPath(page.url.pathname));
-	const items = $derived((app?.side ?? []).filter((i) => 'href' in i));
+	const role = $derived(session.data?.user?.role ?? 'user');
+	// PLAN 79-7: entries only some roles see (the NVR's settings) are left out.
+	const items = $derived(sideFor(app?.side ?? [], role).filter((i) => 'href' in i));
 	let open = $state(false);
 	// PLAN 67-1: the program's menus of the desktop's menu bar, as groups in the ⋯ menu.
-	const role = $derived(session.data?.user?.role ?? 'user');
 	const pageHrefs = $derived(
 		new Set(items.length > 1 ? items.map((i) => ('href' in i ? i.href : '')) : []),
 	);

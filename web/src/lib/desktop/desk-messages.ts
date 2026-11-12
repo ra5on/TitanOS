@@ -2,6 +2,7 @@
 // the pages in windows, files dragged in from this PC, and leaving the page.
 import { setWindowDrag } from '../file-drag.ts';
 import { loadWebApps } from '../webapps/webapps.svelte.ts';
+import { sanitizeNvrPrefs } from '../nvr/layout.ts';
 import { frameMessage } from './frame.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
@@ -52,6 +53,13 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		else if (msg.type === 'titanos-bar-get')
 			source.postMessage({ type: 'titanos-bar', load: desktop.prefs.barLoad }, location.origin);
 		else if (msg.type === 'titanos-bar-set') savePrefs((p) => (p.barLoad = msg.load === true));
+		else if (msg.type === 'titanos-nvr-get')
+			source.postMessage(
+				{ type: 'titanos-nvr', prefs: JSON.parse(JSON.stringify(desktop.prefs.nvr)) },
+				location.origin,
+			);
+		else if (msg.type === 'titanos-nvr-set')
+			savePrefs((p) => (p.nvr = sanitizeNvrPrefs(msg.prefs)));
 		else if (msg.type === 'titanos-desk-dialog' && msg.dialog === 'wallpaper') onwallpaper();
 		else if (msg.type === 'titanos-file-drag') {
 			// PLAN 66: the file manager in a window drags files; web app windows take them.

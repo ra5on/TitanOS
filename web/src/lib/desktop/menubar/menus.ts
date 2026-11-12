@@ -440,6 +440,19 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('terminal.fullscreen', 'menubar.vms.fullscreen'),
 		]),
 	],
+	// PLAN 79-7: the NVR's pages; what only administrators may open is left out for others.
+	nvr: [
+		menu('view', 'menubar.menu.view', [
+			go('nvr.go.live', 'nvr.menu.live', '/nvr'),
+			go('nvr.go.recordings', 'nvr.menu.recordings', '/nvr/recordings'),
+			go('nvr.go.events', 'nvr.menu.events', '/nvr/events'),
+			sep,
+			go('nvr.go.cameras', 'nvr.menu.cameras', '/nvr/cameras', { roles: ADMIN }),
+			go('nvr.go.add', 'nvr.add.title', '/nvr/cameras?new=1', { roles: ADMIN }),
+			go('nvr.go.settings', 'nvr.menu.settings', '/nvr/settings', { roles: ADMIN }),
+			go('nvr.go.diagnosis', 'nvr.menu.diagnosis', '/nvr/diagnosis', { roles: ADMIN }),
+		]),
+	],
 	users: [
 		menu('file', 'menubar.menu.file', [
 			cmd('users.new', 'menubar.users.new'),
@@ -589,6 +602,7 @@ const DOCS: Record<string, string> = {
 	vms: 'VM-MEDIA.md',
 	vmscreen: 'VM-MEDIA.md',
 	lxc: 'LXC.md',
+	nvr: 'NVR.md',
 	appcenter: 'PLUGINS.md',
 	backup: 'REPLICATION.md',
 	agent: 'AGENT.md',

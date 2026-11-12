@@ -17,6 +17,7 @@
 	"desktop.app.shares": "Shares",
 	"desktop.app.storage": "Storage",
 	"desktop.app.terminal": "Terminal",
+	"desktop.app.nvr": "NVR",
 	"desktop.app.users": "Users",
 	"desktop.app.vms": "Virtual machines",
 	"desktop.badge.updates": "{count} update(s) available",

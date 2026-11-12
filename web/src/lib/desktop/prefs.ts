@@ -2,6 +2,8 @@
 // NAS, written only when something changes). Open windows stay in this
 // browser (wm.svelte.ts): they change all the time and must not wear the stick.
 
+import { defaultNvrPrefs, sanitizeNvrPrefs, type NvrPrefs } from '../nvr/layout.ts';
+
 export type WidgetKind =
 	| 'status'
 	| 'cpuram'
@@ -102,6 +104,8 @@ export type DesktopPrefs = {
 	barLoad: boolean;
 	/** PLAN 79-11: the account's own order of the programs in the menu; empty = A–Z. */
 	menuOrder: string[];
+	/** PLAN 79-7: the live view of the NVR – the account's arrangement of the cameras and what it shows. */
+	nvr: NvrPrefs;
 };
 
 export type DockPosition = 'bottom' | 'left' | 'right';
@@ -196,6 +200,7 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	barSize: 'm',
 	barLoad: true,
 	menuOrder: [],
+	nvr: defaultNvrPrefs(),
 });
 
 function strings(value: unknown, max = 200): string[] {
@@ -342,6 +347,7 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 			: 'm',
 		barLoad: v.barLoad !== false,
 		menuOrder: strings(v.menuOrder, 300),
+		nvr: sanitizeNvrPrefs(v.nvr),
 	};
 }
 
