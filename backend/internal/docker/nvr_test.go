@@ -37,7 +37,10 @@ func TestNVRCreateBody(t *testing.T) {
 			Devices           []struct{ PathOnHost, PathInContainer, CgroupPermissions string }
 			DeviceCgroupRules []string
 			RestartPolicy     struct{ Name string }
-			PortBindings      map[string][]struct{ HostIp, HostPort string }
+			PortBindings      map[string][]struct {
+				HostIP   string `json:"HostIp"`
+				HostPort string
+			}
 		}
 	}
 	if err := json.Unmarshal(data, &body); err != nil {
@@ -73,8 +76,8 @@ func TestNVRCreateBody(t *testing.T) {
 		t.Errorf("ports %+v", h.PortBindings)
 	}
 	for key, binding := range h.PortBindings {
-		if binding[0].HostIp != "0.0.0.0" {
-			t.Errorf("%s published on %q", key, binding[0].HostIp)
+		if binding[0].HostIP != "0.0.0.0" {
+			t.Errorf("%s published on %q", key, binding[0].HostIP)
 		}
 	}
 

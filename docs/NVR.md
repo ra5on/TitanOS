@@ -7,7 +7,7 @@ Der NVR nimmt Netzwerkkameras (RTSP, ONVIF) auf und erkennt Personen, Fahrzeuge,
 ## Aufbau
 
 ```
-Browser ──HTTPS/WebSocket, Anmeldung, Kamerarecht──▶ titand ──HTTP/WebSocket, Port 5000, nur Container-Netz──▶ Frigate (Container titanos-nvr)
+Browser ──HTTPS/WebSocket, Anmeldung, Kamerarecht──▶ titand ──HTTP/WebSocket, Port 8971 + X-Proxy-Secret, Container-Netz──▶ Frigate (Container titanos-nvr)
                                                         │                                                        ├─ go2rtc: holt die Kameras ab (ein Abruf je Strom), verteilt sie
  /config/nvr/*.json (Stick) ─▶ nvr.Render ─▶ config.yml ┘                                                        ├─ ffmpeg: Aufnahme (Hauptstrom), Erkennung (Nebenstrom)
                                                                                                                  └─ Detektor: NPU, iGPU, Coral, Hailo oder CPU
@@ -26,16 +26,20 @@ Eine feste, geprüfte Version je TitanOS-Release: **0.18.2**, Abbild `ghcr.io/bl
 | Punkt | Wert |
 |---|---|
 | Name, Netz | `titanos-nvr`, eigenes Bridge-Netz `titanos-nvr` (nicht „internal“: Frigate erreicht die Kameras im Heimnetz darüber) |
-| Rechte | nicht privilegiert, `no-new-privileges` |
-| Daten | `<Volume>/.titanos/nvr/config` → `/config` (Datenbank, Modelle, `config.yml`), `<Volume>/.titanos/nvr/media` → `/media/frigate` (Aufnahmen, Schnappschüsse, Exporte), `/etc/localtime` nur lesend |
+| Rechte | nicht privilegiert, `no-new-privileges`, ohne `NET_RAW`, höchstens 8192 Prozesse/Threads (`PidsLimit`; Threads zählen mit, der echte Lauf mit einer Kamera brauchte weit weniger, siehe Prüfstand) |
+| Daten | `<Volume>/.titanos/nvr/config` → `/config` (Datenbank, Modelle, `config.yml`), `<Volume>/.titanos/nvr/media` → `/media/frigate` (Aufnahmen, Schnappschüsse, Exporte), `/etc/localtime` nur lesend – als **Bind-Mounts** (`HostConfig.Mounts`, nicht `Binds`): Fehlt ein Quellordner, lehnt Docker den Start ab, statt einen leeren Ordner anzulegen (ein Volume, das zwischen Prüfung und Start verschwand, wird so nie zu einem Ordner im RAM) |
 | tmpfs | `/tmp/cache` 1 GB (Segmente, bevor sie aufs Volume wandern) |
 | `/dev/shm` | 128 MB + 64 MB je eingeschalteter Kamera, mindestens 256 MB. Frigate hält dort dekodierte Bilder des Erkennungsstroms (etwa 1,6 MB je Bild bei 1280×720, bestenfalls 50 je Kamera) plus rund 50 MB für Protokolle; das reicht je Kamera für mindestens 30 Bilder bei 720p (Frigate warnt unter 20). Ein Nebenstrom über 720p braucht mehr – die Diagnose zeigt die Belegung. |
 | Geräte | Render-Knoten der Intel-/AMD-GPUs (`/dev/dri/renderD*`, Videodekodierung und iGPU-Erkennung), `/dev/accel/accel*` nur bei NPU, `/dev/bus/usb` mit Geräteregel `c 189:* rmw` nur bei Coral, `/dev/hailo0` nur bei Hailo. Eine GPU, die an eine VM vergeben ist, bekommt der Container nicht. |
-| Veröffentlichte Ports | **8555 tcp+udp** (WebRTC, fürs Gegensprechen) immer; **8554 tcp** (RTSP-Weitergabe für Home Assistant) nur mit `rtspOut`, dann mit Anmeldung (`titanos` + erzeugtes Passwort, nur Administratoren sehen es). **Nie** 5000 (API ohne Anmeldung), 8971, 1984 (go2rtc). |
+| Veröffentlichte Ports | **8555 tcp+udp** (WebRTC, fürs Gegensprechen) immer; **8554 tcp** (RTSP-Weitergabe für Home Assistant) nur mit `rtspOut`, dann mit Anmeldung (`titanos` + erzeugtes Passwort, nur Administratoren sehen es). Beide nur über **IPv4** (`HostIp 0.0.0.0`): ohne Adresse hört Docker auch auf jeder IPv6-Adresse des NAS, auch globalen. Nicht nur auf den Heimnetz-Adressen: ändert sich eine (DHCP), startete der Container nicht mehr, bis er neu angelegt wird. (Keine andere von TitanOS veröffentlichte Portbindung setzt eine Adresse; Apps veröffentlichen, was ihre Compose-Datei sagt.) **Nie** 5000, 8971, 1984. |
 | Neustart | Dockers Neustart-Regel ist `no`. titand startet Frigate selbst neu und zählt dabei mit; Dockers eigene Regel würde eine Absturzschleife vor titand verbergen. |
 | Stoppen | 30 Sekunden (Frigate schließt Datenbank und laufende Segmente). |
 
-titand erreicht Frigate über die Adresse des Containers im Netz `titanos-nvr`, Port 5000. Port 5000 fragt nie nach einer Anmeldung; deshalb wird er nicht veröffentlicht. Frigates zweiter Port 8971 (TLS, Anmeldung) ist in `config.yml` auf `127.0.0.1` im Container gebunden (`networking.listen.external`), also von nirgends erreichbar; `auth` und `tls` sind aus.
+**Zugang zu Frigate (seit der Durchsicht vom 12.11.2026):** Port 5000 fragt nie nach etwas und gab jedem, der die Container-Adresse erreicht (andere Docker-Netze, Prozesse des NAS, mit passender Route auch das Heimnetz – die Firewall ist ab Werk aus), Frigates ganze API: alle Kameras, `/api/config/raw` mit den Kamerapasswörtern, `/api/config/save`. Ebenso go2rtcs API (1984) und sein RTSP-Server (8554). Deshalb:
+
+- Port 5000 hört nur auf dem Loopback des Containers (`networking.listen.internal: 127.0.0.1:5000`); Frigates eigener Export-Auftrag und Dockers Gesundheitsprüfung im Abbild benutzen ihn dort. go2rtcs API hört auf `127.0.0.1:1984` (Frigates Webserver reicht die Live-Ströme dorthin weiter, hinter seiner Prüfung), sein RTSP-Server auf `127.0.0.1:8554` – nur mit `rtspOut` auf allen Adressen, dann mit Anmeldung.
+- titand spricht ausschließlich mit Port **8971**. Dessen Webserver lässt eine Anfrage nur durch, wenn sie das Geheimnis im Kopf `X-Proxy-Secret` trägt (`proxy.auth_secret`, geprüft in `frigate/api/auth.py` für jede Anfrage, auch WebSockets und Dateien); sonst `401`. Die Rolle dessen, der es zeigt, ist `admin` (`proxy.default_role`). **`auth.enabled` bleibt aus:** Frigates Proxy-Prüfung setzt das voraus – mit `auth` an verlangt Frigate nach dem Geheimnis zusätzlich ein Anmelde-Token (JWT) und ignoriert die Kopfzeilen-Zuordnung (`header_map`); auch käme ein eigener Rollen-Kopf gar nicht bei der Prüfung an (nginx reicht ihr nur die Köpfe aus `proxy_trusted_headers.conf` weiter). Kein TLS: titand und Frigate sprechen im eigenen Netz des NVR.
+- Das Geheimnis (256 Bit) entsteht beim ersten Einschalten (bei Einstellungen ohne Geheimnis einmal je Start von titand; lässt sich der Stick nicht schreiben, bleibt es im RAM) und liegt wie die Kamerapasswörter in `/config/nvr/settings.json` (Feld `proxySecret`; ältere titand ignorieren es). Es steht in keiner Antwort der API, in keinem Protokoll und nicht in der Diagnose (`Manager.redact` nimmt es heraus); in der Sicherung des Sticks wie alle Geheimnisse von `/config` (verschlüsselt, wenn die Sicherung ein Passwort hat). Jede Anfrage und jeder WebSocket von titand trägt es (`secretTransport`, `FrigateHeader`); der Ersatz für Frigate in Tests und Entwicklungsmodus lehnt Anfragen ohne es ab. nginx protokolliert nur die Anfragezeile, nie Köpfe.
 
 ### Daten
 
@@ -45,6 +49,8 @@ titand erreicht Frigate über die Adresse des Containers im Netz `titanos-nvr`, 
 | Kameras samt Passwörtern | `/config/nvr/cameras.json` (Stick) | nur bei Änderung |
 | Kamerarechte | `/config/nvr/camera-access.json` (Stick) | nur bei Änderung |
 | Zustand (aktives Erkennungsgerät, letztes Ausweichen, „angehalten“) | `<Volume>/.titanos/nvr/state.json` | bei Ausweichen/Anhalten – **nicht** auf dem Stick, weil es sich ohne Zutun des Besitzers ändert |
+| Gelöschte Kameras, deren Aufnahmen noch aufbewahrt werden | `<Volume>/.titanos/nvr/deleted-cameras.json` (`id`, `name`, `retainDays`, `deletedAt`) | beim Löschen einer Kamera und wenn ihre Tage um sind – auf dem Volume, weil dort die Aufnahmen liegen und ihr Ende keine Änderung des Besitzers ist |
+| Besitzer der Exporte | `<Volume>/.titanos/nvr/exports.json` | beim Anlegen, Löschen, Fehlschlag eines Exports |
 | `config.yml` für Frigate | `<Volume>/.titanos/nvr/config/config.yml`, Modus 0600 | nur wenn sich der Inhalt ändert |
 | Frigates Datenbank, Modelle, Aufnahmen | `<Volume>/.titanos/nvr/config`, `…/media` | von Frigate |
 
@@ -63,6 +69,7 @@ titand erreicht Frigate über die Adresse des Containers im Netz `titanos-nvr`, 
   "storage": { "limitGB": 0 },               // 0 = keine Grenze von TitanOS
   "privacyNoticeDismissed": false,
   "rtspOut": false, "rtspUser": "", "rtspPassword": "" }   // die letzten beiden nur lesen
+// Das Geheimnis zwischen titand und Frigate (proxySecret) steht nie in einer Antwort; eine Anfrage ändert es nicht.
 ```
 
 ```jsonc
@@ -76,26 +83,35 @@ titand erreicht Frigate über die Adresse des Containers im Netz `titanos-nvr`, 
               "allowPublic": false },
   "detect": { "enabled": true, "objects": ["person", "car"], "plates": false, "faces": false },
   "record": { "mode": "events", "retainDays": 14, "preSeconds": 5, "postSeconds": 5 },   // off | events | motion | continuous
-  "audio": { "enabled": false, "twoWay": false },
+  "audio": { "enabled": false, "twoWay": false,
+             "codec": "MPEG4-GENERIC" },     // nur lesen: Ton-Codec des Hauptstroms, wie titands Prüfung ihn fand; fehlt, solange unbekannt
   "ptz": false,
   "notify": { "titan": true, "push": false, "email": false, "homeAssistant": false, "agent": false, "kinds": ["person", "offline"] },
-  "state": { "online": true, "known": true, "fps": 15, "detectionFps": 1.2, "offlineSince": null } }
+  "state": { "online": true, "known": true, "fps": 15, "detectionFps": 1.2, "offlineSince": null },
+  "deleted": false, "deletedAt": null, "expiresAt": null }   // siehe „Gelöschte Kameras“
 ```
 
 Erlaubte Objekte: `person, bicycle, car, motorcycle, bus, bird, cat, dog, horse, sheep, cow, bear` (`GET …/cameras` liefert die Liste als `objects` mit). Keine feste Obergrenze unter 64 Kameras; gebaut und geprüft für 4.
 
-Geprüft wird streng (`nvr.ValidateCamera`): nur `rtsp://`/`rtsps://`, keine Zugangsdaten und kein `#…` in der Adresse (go2rtc liest `#` als eigene Optionen), keine geschweiften Klammern (Frigate wendet `str.format()` auf jede Stromadresse an), nie dieses NAS (`127.0.0.1`, `localhost`). Eine eingefügte Adresse `rtsp://user:pass@…` zerlegt die API in Adresse und Zugangsdaten. Eine IP-Adresse außerhalb des Heimnetzes (privat, Tailscale/NetBird) wird nur mit `allowPublic` angenommen (`nvr_target_public`).
+**Namen** sind eindeutig, ohne Rücksicht auf Groß-/Kleinschreibung (`409 nvr_camera_name_exists`): Menschen unterscheiden Kameras am Namen. Der Name steht nicht in `config.yml` (siehe unten); Umbenennen startet Frigate nicht neu.
+
+**Ton-Codec** (`audio.codec`): titand merkt sich bei jeder Prüfung (`…/probe`) den Ton-Codec des Hauptstroms (RTSP-Name aus dem SDP) für eine Stunde und schreibt ihn beim Anlegen/Ändern der Kamera mit dieser Hauptstrom-Adresse dazu; ohne frische Prüfung bleibt er bei gleicher Adresse, sonst ist er unbekannt. Die Oberfläche setzt ihn nie (was sie schickt, wird übergangen).
+
+Geprüft wird streng (`nvr.ValidateCamera`): nur `rtsp://`/`rtsps://`, keine Zugangsdaten und kein `#…` in der Adresse (go2rtc liest `#` als eigene Optionen), keine geschweiften Klammern (Frigate wendet `str.format()` auf jede Stromadresse an), nie dieses NAS (`127.0.0.1`, `localhost`). Eine eingefügte Adresse `rtsp://user:pass@…` zerlegt die API in Adresse und Zugangsdaten. Eine Adresse außerhalb des Heimnetzes (privat, Tailscale/NetBird) wird nur mit `allowPublic` angenommen (`nvr_target_public`) – für Haupt- und Nebenstrom und den ONVIF-Host gleich. Ein **Hostname** wird beim Anlegen/Ändern aufgelöst und jede seiner Adressen so geprüft (mit `allowPublic` alles außer diesem NAS); ein Name, der sich nicht auflösen lässt, wird abgelehnt (`nvr_invalid`). titands eigene Verbindungen (Prüfung, Suche) prüfen die Adresse zusätzlich im Moment des Verbindens; Frigates Verbindungen zu den Kameras kann titand nicht prüfen – ein Name, der später woanders hinzeigt, bekommt dann auch das Passwort.
 
 ### Was daraus in `config.yml` wird (`nvr.Render`)
 
 Reine Funktion, gleiche Eingabe → gleiche Bytes (Kameras nach `order`, dann `id`; feste Reihenfolge aller Schlüssel). Golden-Dateien: `backend/internal/nvr/testdata/{cpu,npu,igpu,coral,hailo}.yml`.
 
-- Fest: `version: 0.18-0` (sonst hält Frigate die Datei für eine von 0.13, „migriert“ sie und schreibt sie zurück), `mqtt.enabled: false`, `auth.enabled: false`, `tls.enabled: false`, `networking.listen.external: 127.0.0.1:8971`, `telemetry.version_check: false`, `birdseye.enabled: false`.
+- Fest: `version: 0.18-0` (sonst hält Frigate die Datei für eine von 0.13, „migriert“ sie und schreibt sie zurück), `mqtt.enabled: false`, `auth.enabled: false` mit `proxy.auth_secret` (das Geheimnis) und `proxy.default_role: admin`, `tls.enabled: false`, `networking.listen.internal: 127.0.0.1:5000`, `networking.listen.external: 8971`, `go2rtc.api.listen: 127.0.0.1:1984`, `go2rtc.rtsp.listen: 127.0.0.1:8554` (mit `rtspOut`: `:8554` samt Anmeldung), `telemetry.version_check: false`, `birdseye.enabled: false`. Ohne Geheimnis schreibt `Render` keine Datei.
+- **Globales `record`:** `continuous.days` und `motion.days` = die längste Aufbewahrung aller Kameras und gelöschten Kameras (mindestens 1). Es gilt für keine Kamera (jede setzt alles selbst), sondern nur für Aufnahmen einer Kamera, die in gar keiner `config.yml` mehr steht: Frigate löscht sie danach – mit seiner Vorgabe von 0 Tagen innerhalb der Stunde.
 - `detectors`/`model` je Gerät wie in Frigates Doku: OpenVINO mit `device: NPU`/`GPU`/`CPU` und dem mitgelieferten SSDLite MobileNet v2 (300×300, COCO); Coral `edgetpu`/`usb` (Modell des Abbilds); Hailo `hailo8l`/`PCIe` (YOLOv6n, lädt Frigate beim ersten Start).
 - `ffmpeg.hwaccel_args`: `preset-vaapi`, wenn ein Render-Knoten durchgereicht ist (findet den Codec selbst; die QSV-Voreinstellungen sind je Codec), sonst ausdrücklich leer (Frigates Vorgabe `auto` würde selbst suchen).
 - `go2rtc.streams`: je Kamera `<id>` (Hauptstrom) und `<id>_sub` (Nebenstrom, falls vorhanden), Zugangsdaten URL-kodiert, mit `#backchannel=0`; ohne Ton zusätzlich `#media=video`. Mit Gegensprechen ein dritter Strom `<id>_twoway` ohne jede Option (nur so öffnet go2rtc den Rückkanal) und ein Opus-Ableger für WebRTC. `go2rtc.webrtc.candidates` sind die Heimnetz-Adressen des NAS mit Port 8555 – immer gesetzt, sonst trägt Frigate einen öffentlichen STUN-Server ein.
-- `cameras.<id>`: Eingänge über die lokale Weitergabe (`rtsp://127.0.0.1:8554/<id>`, `preset-rtsp-restream`); Hauptstrom `record`, Nebenstrom `detect` (ohne Nebenstrom beides auf dem Hauptstrom); `detect.fps: 5`; `objects.track` (Kennzeichen ziehen `car`, Gesichter `person` nach); Schnappschüsse an, solange erkannt wird; Frigates Geräuscherkennung aus (`audio.enabled` der Kamera meint den Ton zum Bild: `preset-record-generic-audio-copy` statt `preset-record-generic`); `onvif` nur bei PTZ.
-- Aufnahme: `continuous` → alles für `retainDays`; `motion` → nur Segmente mit Bewegung; `events` → nur Segmente mit aktivem erkanntem Objekt (`active_objects`). Alarme und Erkennungen bekommen dieselben Tage und die Sekunden davor/danach.
+- `cameras.<id>`: Eingänge über die lokale Weitergabe (`rtsp://127.0.0.1:8554/<id>`, `preset-rtsp-restream`); Hauptstrom `record`, Nebenstrom `detect` (ohne Nebenstrom beides auf dem Hauptstrom); `detect.fps: 5`; `objects.track` (Kennzeichen ziehen `car`, Gesichter `person` nach); Schnappschüsse an, solange erkannt wird; Frigates Geräuscherkennung aus (`audio.enabled` der Kamera meint den Ton zum Bild: mit AAC (`MPEG4-GENERIC`) `preset-record-generic-audio-copy`, mit G.711 (`PCMA`/`PCMU`) oder unbekanntem Codec `preset-record-generic-audio-aac` – eine MP4-Datei nimmt kein G.711, mit `copy` schriebe Frigate gar kein Segment; ohne Ton `preset-record-generic`); `onvif` nur bei PTZ. **Kein `friendly_name`:** Frigate schlüsselt seine Speicherzahlen (`/api/recordings/storage`) danach, zwei Kameras gleichen Namens zählten einmal; so sind es die Kennungen.
+- Aufnahme: `continuous` → alles für `retainDays`; `motion` → nur Segmente mit Bewegung; `events` → nur Segmente mit aktivem erkanntem Objekt (`active_objects`). Alarme und Erkennungen bekommen dieselben Tage und die Sekunden davor/danach. `off` → nichts wird aufgenommen, was aufgenommen ist, bleibt `retainDays` (`continuous`/`motion` = `retainDays` bei `record.enabled: false`; Frigates Aufräumen geht durch jede Kamera, ob sie aufnimmt oder nicht, und löschte es sonst mit seinen Vorgaben).
+- **Gelöschte Kameras** stehen als ausgeschaltete Kamera darin, bis ihre Tage um sind: `enabled: false`, ein Eingang `rtsp://127.0.0.1:8554/<id>` mit Rolle `detect` (Frigate verlangt eine), aber **ohne** go2rtc-Strom und ohne Zugangsdaten, `detect.enabled: false` mit fester Größe 1280×720 (sonst prüft Frigate beim Start einen Strom, den es nicht gibt), `record` wie bei `off` mit ihren Tagen, `snapshots.retain.default` = ihre Tage. Frigate startet für eine ausgeschaltete Kamera keinen Prozess (`frigate/camera/maintainer.py`), sein Aufräumen (`frigate/record/cleanup.py`, Schleife über alle Kameras der Konfiguration) hält sich an ihre Tage.
+- Bekannte Kennzeichen: `*` wird zu `.*`, sonst unverändert (siehe „Gesichter und Kennzeichen“).
 - `lpr.enabled`/`face_recognition.enabled` global genau dann, wenn eine eingeschaltete Kamera es will, dazu je Kamera.
 
 ## Ablauf
@@ -115,20 +131,23 @@ Reine Funktion, gleiche Eingabe → gleiche Bytes (Kameras nach `order`, dann `i
 
 - **Einschalten** (`POST /nvr/enable`): prüft Volume und Docker. Ist Docker aus, antwortet die Route `nvr_docker_off`; die Oberfläche fragt „Docker einschalten?“ und schickt dieselbe Anfrage mit `enableDocker: true` – dann schaltet der NVR Docker über denselben Schalter wie die Docker-Seite ein (Docker behält sein Volume, sonst nimmt es das des NVR). Danach: Abbild laden, `config.yml` schreiben, Netz und Container anlegen, starten, auf `GET /api/version` warten.
 - **Ausschalten**: Container stoppen und entfernen. Einstellungen, Kameras, Datenbank und Aufnahmen bleiben.
-- **Änderungen** (Einstellungen, Kameras): `config.yml` wird nur geschrieben, wenn sich ihr Inhalt ändert; dann startet Frigate im selben Container neu (Lücke von grob einer Minute). Ändert sich der Container selbst (Geräte, `/dev/shm` wegen der Kamerazahl, Port 8554), wird er ersetzt. Dieselbe Eingabe noch einmal ändert nichts und startet nichts neu.
-- **App-Update von TitanOS**: Frigate läuft weiter; der neue titand übernimmt den Container.
+- **Änderungen** (Einstellungen, Kameras): `config.yml` wird nur geschrieben, wenn sich ihr Inhalt ändert; dann startet Frigate im selben Container neu (Lücke von grob einer Minute). Ändert sich der Container selbst (Geräte, `/dev/shm` wegen der Kamerazahl, Port 8554), wird er ersetzt. Dieselbe Eingabe noch einmal ändert nichts und startet nichts neu. Was titand über `config.yml` weiß (Prüfsumme, Kameras), gilt nur für den Ordner, in den es sie geschrieben hat: Nach einem Wechsel des Volumes wird sie dort geschrieben, bevor der neue Container startet, und Ordner und Datei werden neu angelegt, falls jemand sie entfernt hat.
+- **Gelöschte Kamera:** Siehe „Gelöschte Kameras“ – sie bleibt als ausgeschaltete Kamera in `config.yml`; die Tage, die um sind, verschwinden mit der nächsten Änderung, die Frigate ohnehin neu startet.
+- **App-Update von TitanOS**: Frigate läuft weiter; der neue titand übernimmt den Container und beobachtet ihn von da an wie frisch gestartet (eine Antwort, die gerade ausbleibt, ist kein Ausweichen).
 - **Neustart/Herunterfahren des NAS**: Docker beendet beim Stoppen alle Container, Frigate bekommt seine 30 Sekunden. Nach dem Start bringt titand den Container wieder hoch (das zählt nicht als Absturz).
 - **Volume aushängen/sperren**: Ein Volume, das ausgehängt oder gesperrt wird, zählt sofort nicht mehr als eingebunden; der NVR entfernt seinen Container beim nächsten Nachsehen (wie Docker es für sein eigenes Volume tut).
 
 ### Gesund oder nicht
 
-Ein Start gilt als gelungen, wenn (1) `GET /api/version` antwortet, (2) `GET /api/config` **nicht** `safe_mode: true` meldet – eine abgelehnte `config.yml` beendet Frigate nicht, es startet dann leer und antwortet, als wäre alles gut – und (3) `GET /api/stats` für jeden Detektor einen Prozess nennt.
+Ein Start gilt als gelungen, wenn (1) `GET /api/version` antwortet, (2) `GET /api/config` **nicht** `safe_mode: true` meldet – eine abgelehnte `config.yml` beendet Frigate nicht, es startet dann leer und antwortet, als wäre alles gut –, (3) `GET /api/config` genau die Kameras nennt, die in `config.yml` stehen (gelöschte eingeschlossen) – sonst hat Frigate keine oder eine andere Datei gelesen und seine eigene ohne Kameras geschrieben: titand schreibt die Datei neu und startet Frigate neu; passiert das 3-mal binnen der Hängefrist (unten), hält der NVR an (`config_invalid`) – und (4) `GET /api/stats` für jeden Detektor einen Prozess nennt. `/api/config` (groß, und eine Zeile in nginx' Protokoll) wird nur bis zum gesunden Zustand nach jedem Start gefragt, danach nicht mehr.
+
+Eine einzelne ausbleibende Antwort zählt nicht: Erst **3 Blicke nacheinander** ohne Antwort machen aus „antwortet nicht“ einen Fehlschlag des Starts bzw. ein Hängen.
 
 ### Ausweichen des Erkennungsgeräts
 
 Frigate kennt kein Ausweichen: Stirbt der Detektor, beendet es sich. TitanOS erkennt das und stellt um:
 
-- **Auslöser:** 3 Enden des Containers innerhalb von 5 Minuten; oder 5 Minuten nach dem Start noch keine Antwort; oder dreimal nacheinander (30 s) kein Detektorprozess in `/api/stats`. (Ein Frigate, das lief und 5 Minuten nicht mehr antwortet, wird neu gestartet; das zählt wie ein Ende.)
+- **Auslöser:** 3 Enden des Containers innerhalb von 5 Minuten; oder 5 Minuten nach dem Start (bzw. der Übernahme) und 3 Blicke nacheinander noch keine Antwort; oder dreimal nacheinander (30 s) kein Detektorprozess in `/api/stats`; oder 3-mal Hängen innerhalb der Hängefrist. **Hängen:** Ein Frigate, das lief und 5 Minuten (und 3 Blicke) nicht mehr antwortet, wird neu gestartet. Weil das erst nach 5 Minuten auffällt, passen nie 3 davon ins Fenster der Enden; sie zählen deshalb in einem eigenen Fenster von (3 + 1) × (5 + 5) = 40 Minuten und wechseln dann das Gerät wie 3 Enden.
 - **Ursache:** aus dem Protokoll des Containers seit Beginn der Störung (`nvr.Classify`):
 
   | Code | Erkannt an |
@@ -139,7 +158,7 @@ Frigate kennt kein Ausweichen: Stirbt der Detektor, beendet es sich. TitanOS erk
   | `coral_missing` | `No EdgeTPU was detected` |
   | `not_healthy` | Frigate hat nach dem Start nie geantwortet |
   | `detector_unknown` | etwas anderes; die letzte Fehlerzeile steht im Detail |
-  | `config_invalid` | Frigate hat `config.yml` abgelehnt – **kein** Ausweichen (das Gerät ist nicht schuld), der NVR hält an |
+  | `config_invalid` | Frigate hat `config.yml` abgelehnt, oder läuft nach wiederholtem Neuschreiben noch immer mit anderen Kameras – **kein** Ausweichen (das Gerät ist nicht schuld), der NVR hält an |
 
 - **Kette:** `auto` nimmt das erste verfügbare Gerät in der Reihenfolge **Coral, Hailo, NPU, iGPU, CPU** (wer einen Stick hat, hat ihn dafür gekauft; ohne Stick also NPU → iGPU → CPU). Beim Ausfall geht es in dieser Reihenfolge weiter, nie zurück: NPU → iGPU → CPU; Coral/Hailo → NPU → iGPU → CPU (die beiden Sticks vertreten einander nicht, außer bei `auto`); eine gewählte iGPU fällt nur auf die CPU. Ein ausdrücklich gewähltes Gerät wird auch versucht, wenn es gerade nicht verfügbar scheint – so sieht der Besitzer in der Diagnose, warum es nicht geht.
 - **Umstellen:** `state.json` bekommt `active` und `failover {from, to, at, reason, detail}`, `config.yml` wird fürs nächste Gerät geschrieben, der Container ersetzt (andere Geräte), Meldung `nvr_failover` („NPU → iGPU“).
@@ -162,8 +181,19 @@ Frigate kennt kein Ausweichen: Stirbt der Detektor, beendet es sich. TitanOS erk
 Wie bei den Apps (`appaccess`): Besitzer und Administratoren sehen immer alle Kameras. Ein normales Konto sieht eine Kamera nur mit Haken, getrennt für **Live ansehen** (`live`) und **Aufnahmen ansehen** (`recordings`). Neue Konten und neue Kameras: kein Haken. Geprüft wird serverseitig bei jeder Anfrage gegen das Konto, wie es jetzt ist (gesperrt → nichts).
 
 - `GET/PUT /api/v1/users/{name}/cameras` (Administratoren) – neben `…/apps` für den Reiter „Kameras“ unter Konten und Zugang › Nutzer: `{admin, cameras: [{id, name, live, recordings}]}` bzw. `{cameras: {"<id>": {live, recordings}}}`.
-- Löschen einer Kamera oder eines Kontos entfernt die Haken (ein neues Konto gleichen Namens fängt bei null an).
+- Löschen einer Kamera oder eines Kontos entfernt die Haken (ein neues Konto gleichen Namens fängt bei null an). Die Aufnahmen einer gelöschten Kamera sehen nur noch Besitzer und Administratoren (Abschnitt „Gelöschte Kameras“).
 - Für normale Konten: `GET /nvr/cameras` und `/nvr/cameras/{id}` liefern nur sichtbare Kameras und nur `{id, name, enabled, order, audio, ptz, state, rights}` – nichts über Adresse, Zugang, Erkennung oder Aufnahme; eine nicht sichtbare Kamera wird wie eine nicht vorhandene beantwortet. `GET /nvr/status` liefert nur `{enabled, state, cameras, privacyNoticeDismissed}` mit den Zahlen der eigenen Kameras; Gründe für einen Stillstand erscheinen als `unavailable`.
+
+### Gelöschte Kameras
+
+Frigate löscht die Aufnahmen einer Kamera, die nicht mehr in `config.yml` steht, mit der globalen Aufbewahrung – ab Werk 0 Tage, also binnen einer Stunde (`frigate/record/cleanup.py`). Deshalb bleibt eine gelöschte Kamera als ausgeschaltete Kamera in `config.yml`, bis ihre Tage um sind (`retainDays` beim Löschen), und ihre Aufnahmen werden so aufbewahrt, wie sie es als Kamera wurden.
+
+- **Löschen** (`DELETE /nvr/cameras/{id}`): titand vermerkt die Kamera zuerst auf dem NVR-Volume (`deleted-cameras.json`), dann nimmt es sie vom Stick. Ist das Volume nicht da, wird die Kamera **nicht** gelöscht: `409 nvr_no_volume` (ohne Vermerk würde Frigate ihre Aufnahmen beim nächsten Start löschen). Ohne gewähltes Volume (der NVR hat nie aufgenommen) ist kein Vermerk nötig.
+- **Für Administratoren:** `GET /nvr/cameras` listet sie nach den anderen als `{id, name, deleted: true, deletedAt, expiresAt, record: {mode: "off", retainDays}, …}` (Zeiten in Unix-Sekunden; Quelle, Erkennung, Meldungen leer); `GET /nvr/cameras/{id}` ebenso. Zusammenfassung, Segmente, Wiedergabe, Standbild zu einem Zeitpunkt, Ereignisse (auch in `GET /events`) und Exporte gehen wie bei einer Kamera. Live, Standbild, PTZ, Gegensprechen, Ändern und erneutes Löschen nicht (`404 nvr_camera_not_found`). Alle anderen Kameras tragen `deleted: false`.
+- **Für normale Konten:** nichts davon – weder in Listen noch über eine Route (ihre Haken wurden beim Löschen entfernt).
+- **Speicher:** Ihre Aufnahmen zählen zu `storage.recordingsBytes` und zur Speichergrenze, die auch sie (älteste zuerst) löscht.
+- **Wieder anlegen:** Eine neue Kamera bekommt nie zufällig die Kennung einer gelöschten (`einfahrt_2`); wer die Kennung beim Anlegen ausdrücklich angibt, bekommt ihre Aufnahmen zurück (der Vermerk entfällt).
+- **Ende:** Ab `expiresAt` erscheint sie nirgends mehr; aus `config.yml` geht sie einen Tag später mit der nächsten Änderung, die Frigate ohnehin neu startet (Frigate räumt stündlich, ihre letzten Segmente enden kurz nach dem Löschen). Ereignisse, die in Frigate „für immer“ behalten sind, bleiben danach in Frigates Datenbank, ohne dass TitanOS sie noch zeigt.
 
 ## Live-Bild
 
@@ -186,7 +216,7 @@ Wie bei den Apps (`appaccess`): Besitzer und Administratoren sehen immer alle Ka
 | `GET /api/v1/nvr/diagnosis` | Administrator | Diagnose |
 | `POST /api/v1/nvr/detector/retry` | Administrator | zurück zum gewählten Erkennungsgerät |
 | `GET /api/v1/nvr/cameras`, `GET …/{id}` | angemeldet | Kameras (gefiltert) |
-| `POST /api/v1/nvr/cameras`, `PUT`/`DELETE …/{id}` | Administrator | anlegen, ändern, löschen |
+| `POST /api/v1/nvr/cameras`, `PUT`/`DELETE …/{id}` | Administrator | anlegen, ändern, löschen (`DELETE` ohne NVR-Volume: `409 nvr_no_volume`) |
 | `POST /api/v1/nvr/cameras/discover`, `…/probe` | Administrator | Suche, Prüfung |
 | `GET /api/v1/nvr/cameras/{id}/snapshot.jpg` | Recht `live` | Standbild |
 | `GET /api/v1/nvr/cameras/{id}/live` | Recht `live` | Live (WebSocket) |
@@ -194,7 +224,7 @@ Wie bei den Apps (`appaccess`): Besitzer und Administratoren sehen immer alle Ka
 
 Dazu die Routen des Abschnitts „API Phase 2“ (Ereignisse, Feed, Aufnahmen, Wiedergabe, Export, PTZ, Gegensprechen, Gesichter, Kennzeichen).
 
-Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_event_not_found`, `nvr_export_not_found`, `nvr_export_running`, `nvr_export_failed`, `nvr_ptz_unsupported`, `nvr_face_not_found`, `nvr_face_exists`, `nvr_face_rejected`, `nvr_faces_off`, `rate_limited`, `nvr_unavailable`, `nvr_docker_off`, `nvr_no_volume`, `nvr_volume_sleeps`, `nvr_target_public`, `nvr_camera_not_found`, `nvr_camera_exists`, `nvr_camera_limit`, `nvr_not_running`, `nvr_disabled`, `nvr_invalid`, `nvr_access_admin`, `nvr_no_picture`.
+Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_event_not_found`, `nvr_export_not_found`, `nvr_export_running`, `nvr_export_failed`, `nvr_ptz_unsupported`, `nvr_face_not_found`, `nvr_face_exists`, `nvr_face_rejected`, `nvr_faces_off`, `rate_limited`, `nvr_unavailable`, `nvr_docker_off`, `nvr_no_volume`, `nvr_volume_sleeps`, `nvr_target_public`, `nvr_camera_not_found`, `nvr_camera_exists`, `nvr_camera_name_exists`, `nvr_camera_limit`, `nvr_not_running`, `nvr_disabled`, `nvr_invalid`, `nvr_access_admin`, `nvr_no_picture`.
 
 ## API Phase 2
 
@@ -222,8 +252,10 @@ Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_eve
   "start": 1731412345.1, "end": 1731412361.9,   // end null: läuft noch
   "hasClip": true, "hasSnapshot": true,
   "zones": [], "reviewed": false,
-  "kept": false }                    // „behalten“: wird nie von der Speichergrenze gelöscht
+  "kept": false }                    // nur lesen: Frigates „retain indefinitely“ (siehe unten)
 ```
+
+**`kept`** zeigt nur Frigates Merkmal „retain indefinitely“. TitanOS kann es nicht setzen (keine Route), und es schützt **nicht** die Aufnahme: Frigates Aufräumen nach Tagen sieht es nicht an (`frigate/record/cleanup.py` behält Segmente nur über Review-Abschnitte), nur Schnappschuss und Eintrag des Ereignisses bleiben. Die Speichergrenze von TitanOS spart solche Ereignisse beim Löschen aus, soweit sie sie findet (siehe „Speichergrenze“) – nach `retainDays` sind ihre Aufnahmen trotzdem weg. Die Oberfläche bietet deshalb **kein** „Behalten“ an und verspricht nicht, dass etwas nie gelöscht wird.
 
 `reviewed` gilt für den NVR insgesamt, nicht je Konto (Frigate führt „gesehen“ je Review-Abschnitt; titand setzt den Abschnitt, zu dem das Ereignis gehört).
 
@@ -257,6 +289,11 @@ Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_eve
 
 Exporte gehören dem Konto, das sie angelegt hat; es sieht nur die eigenen, Administratoren alle. Anlegen braucht `recordings` auf der Kamera. Exporte zählen zur Belegung (`status.storage.exportsBytes`) und werden nie von der Speichergrenze gelöscht.
 
+- **Besitz** steht in `exports.json` auf dem Volume (Konto, Kamera, Name, Zeitraum, wann angelegt). Ein Konto besitzt einen Export nur, wenn es beim Anlegen schon bestand: Ein späteres Konto gleichen Namens erbt nie Exporte eines gelöschten, auch wenn das Löschen des Kontos nicht vermerkt werden konnte (Volume nicht da). Vermerkt (Besitzer leer) wird es, wann immer das Volume da ist, ob der NVR läuft oder nicht.
+- Ein normales Konto, das das Recht `recordings` auf der Kamera verloren hat, sieht deren Exporte weder in der Liste noch einzeln.
+- Ein **fehlgeschlagener** Export bleibt als `failed` stehen (mit Kamera und Name aus dem Vermerk), bis jemand ihn löscht – auch wenn Frigate den Auftrag längst vergessen hat; Frigate wird danach nicht mehr gefragt. Ein Vermerk zu einem Export, den Frigate nirgends kennt (weder fertig noch als Auftrag), wird entfernt.
+- Änderungen an `exports.json` kommen nacheinander (eine gleichzeitige ging sonst verloren).
+
 | Route | |
 |---|---|
 | `POST /exports` | `{camera, from, to, name}` (höchstens 24 h, `name` 1–80 Zeichen, sonst aus Kamera und Zeit) → `201` Export |
@@ -286,6 +323,8 @@ Fehler: `nvr_export_not_found`, `nvr_export_running`, `nvr_export_failed` (Friga
 | `POST /cameras/{id}/ptz` | `live` | `{action, preset}`; `action`: `move_up`, `move_down`, `move_left`, `move_right`, `zoom_in`, `zoom_out`, `stop`, `preset` (mit `preset`: Name). `204`. |
 
 Eine Bewegung läuft, bis `stop` kommt. titand schickt `stop` von selbst, wenn 5 Sekunden lang keine Anfrage für diese Kamera kommt – die Oberfläche wiederholt die Bewegung also spätestens alle 4 Sekunden, solange die Taste gehalten wird, und schickt beim Loslassen `stop`. Höchstens 10 Befehle je Sekunde und Konto (`429 rate_limited`). `409 nvr_ptz_unsupported`, wenn die Kamera nicht schwenkt.
+
+**Der Stopp kommt an:** Geht ein `stop` (von titand oder von der Oberfläche) nicht durch, weil die Verbindung zu Frigate gerade fehlt, versucht titand es alle 2 Sekunden eine Minute lang wieder; danach bleibt es vermerkt und geht hinaus, sobald die Verbindung wieder steht. Endet titand (App-Update, Herunterfahren), schickt es vor dem Schließen der Verbindung `stop` an jede Kamera, die noch dreht. Ein `stop` der Oberfläche, der nicht durchging, antwortet `409 nvr_not_running` – der Stopp wird trotzdem weiter versucht. Ist Frigate beim Ende von titand nicht erreichbar, bleibt nur die Protokollzeile.
 
 ### Gegensprechen
 
@@ -323,8 +362,10 @@ Personennamen: 1–40 Zeichen, Buchstaben (auch Umlaute) und Ziffern, dazu `-` u
 Bekannte Kennzeichen sind Teil der Einstellungen (`GET/PUT /settings`), neu:
 
 ```jsonc
-"plates": [ { "name": "Annas Auto", "plates": ["M-AB 1234", "MAB12*"] } ]   // Muster wie in Frigate (reguläre Ausdrücke erlaubt); höchstens 100 Namen
+"plates": [ { "name": "Annas Auto", "plates": ["M-AB 1234", "MAB12*"] } ]   // höchstens 100 Namen, je 1–20 Kennzeichen
 ```
+
+Ein Kennzeichen: 1–64 Zeichen aus Buchstaben (auch Umlaute), Ziffern, Leerzeichen und `-`; `*` steht für beliebige Zeichen (nicht nur `*`). Nichts sonst (`nvr_invalid`): Frigate liest jedes Kennzeichen als regulären Ausdruck (`re.match("^…$")`) in **einem** Versuch für alle – eines, das sich nicht übersetzen lässt, legte den Abgleich aller bekannten Kennzeichen still. In `config.yml` wird `*` zu `.*`; ein Kennzeichen ohne `*` kommt unverändert an, damit Frigates zusätzlicher Vergleich Buchstabe für Buchstabe (`match_distance`) weiter greift. Frigate schreibt die ganze Liste ins Protokoll nur bei einem solchen Übersetzungsfehler – den es so nicht mehr geben kann; gelesene Kennzeichen stehen in Frigates Protokoll nur auf Stufe `debug`, die TitanOS nicht einschaltet.
 
 ### Zustand: Speicher
 
@@ -335,7 +376,7 @@ Bekannte Kennzeichen sind Teil der Einstellungen (`GET/PUT /settings`), neu:
              "recordingsBytes": 20401094656, "exportsBytes": 1073741824,
              "limitGB": 200,
              "spanDays": 12.4,                // so weit reichen die Aufnahmen zurück; null wenn keine
-             "cap": "off" | "ok" | "cleaning" | "exports_exceed",   // cleaning: über der Grenze, es wird gelöscht (oder nichts ist alt genug); exports_exceed: die Exporte allein liegen über der Grenze – nichts wird gelöscht
+             "cap": "off" | "ok" | "cleaning" | "exports_exceed",   // cleaning: über der Grenze, es wird gelöscht (oder nichts ist alt genug); exports_exceed: die Exporte allein erreichen die Grenze – nichts wird gelöscht
              "lastCleanup": 1731400000 | null }
 ```
 
@@ -343,10 +384,10 @@ Bekannte Kennzeichen sind Teil der Einstellungen (`GET/PUT /settings`), neu:
 
 `settings.storage.limitGB` (0 = aus). Frigate selbst räumt nur, wenn das Volume fast voll ist; die Grenze setzt TitanOS durch (`nvr/storage.go`, alle 5 Minuten zusammen mit den Speicherzahlen):
 
-- **Belegung** = Aufnahmen (wie Frigate sie je Kamera meldet, `/api/recordings/storage`) + Exporte (Größe jeder fertigen Exportdatei). Schnappschüsse, Vorschauen und Frigates Datenbank zählen nicht mit.
-- Liegt die Belegung über der Grenze, löscht TitanOS die **ältesten Aufnahmen aller Kameras stundenweise** (`DELETE /api/recordings/start/{s}/end/{e}`), bis höchstens **95 %** der Grenze belegt sind; je Durchgang höchstens 72 Stunden.
-- **Nie gelöscht:** Exporte; die Aufnahmen **behaltener Ereignisse** (`kept`, in Frigate „retain indefinitely“) samt einer Minute davor und danach – aus der Stunde wird um sie herum gelöscht; die jüngste Stunde. Lässt sich nicht erfahren, was behalten ist (Frigate antwortet nicht), wird aus der Stunde nichts gelöscht.
-- Liegen **die Exporte allein** über der Grenze, wird nichts gelöscht und der Zustand sagt es (`cap: "exports_exceed"`): Der Besitzer muss Exporte löschen oder die Grenze anheben.
+- **Belegung** = Aufnahmen (wie Frigate sie je Kamera meldet, `/api/recordings/storage`, gelöschte Kameras eingeschlossen) + Exporte (Größe jeder fertigen Exportdatei). Schnappschüsse, Vorschauen und Frigates Datenbank zählen nicht mit.
+- Liegt die Belegung über der Grenze, löscht TitanOS die **ältesten Aufnahmen aller Kameras stundenweise** (`DELETE /api/recordings/start/{s}/end/{e}`), bis höchstens **95 %** der Grenze belegt sind; je Durchgang höchstens 72 Stunden. **Ziel für die Aufnahmen** = 95 % der Grenze minus Exporte, aber nie weniger als 5 % der Grenze – solange das noch unter die Grenze passt, sonst was unter der Grenze übrig ist (`recordingsTarget`). Beispiel: Grenze 100 GB, Exporte 96 GB → 4 GB Aufnahmen bleiben (vorher löschte der Durchgang alle Aufnahmen, weil 95 GB mit 96 GB Exporten nie erreichbar sind).
+- **Nie gelöscht:** Exporte; die Aufnahmen **behaltener Ereignisse** (`kept`, in Frigate „retain indefinitely“) samt einer Minute davor und danach – aus der Stunde wird um sie herum gelöscht; die jüngste Stunde. Lässt sich nicht erfahren, was behalten ist (Frigate antwortet nicht), endet der Durchgang: aus dieser Stunde und den jüngeren wird nichts gelöscht. Behaltene Ereignisse werden über Frigates `favorites=1` gesucht, höchstens 500 je Stunde, mit Beginn bis 6 Stunden vor der Stunde; ein längeres Ereignis oder mehr davon schützt die Spanne nicht sicher (Segmente sind bis 10 s lang, Frigate löscht ein Segment, das die Spanne berührt, ganz). Frigates eigene Aufbewahrung nach Tagen löscht die Aufnahmen behaltener Ereignisse ohnehin (siehe `kept`).
+- Erreichen **die Exporte allein** die Grenze, wird nichts gelöscht und der Zustand sagt es (`cap: "exports_exceed"`): Der Besitzer muss Exporte löschen oder die Grenze anheben.
 - Meldung `nvr_storage_cap` höchstens **einmal am Tag** (der Tag steht in `state.json` auf dem Volume, damit ein Neustart von titand nicht erneut meldet).
 - `spanDays`: wie weit die Aufnahmen zurückreichen (Beginn der ältesten Stunde über alle Kameras – auf die Stunde genau).
 
@@ -375,7 +416,7 @@ Jede Kamera wählt Wege (`notify.titan`, `push`, `email`, `homeAssistant`, `agen
 - **Einstellungen, Kameras, Kamerarechte und bekannte Kennzeichen** liegen in `/config/nvr/` und laufen mit jeder Sicherung des Sticks mit.
 - **Bekannte Gesichter** liegen bei Frigate auf dem NVR-Volume (`.titanos/nvr/media/clips/faces/<Person>/<Bild>`). Sie kommen als Zusatzdateien `volume-data/nvr/faces/<Person>/<Bild>` in dieselbe Sicherung (`configbackup.Manager.Extra`, `nvr/backup.go`). Nicht zugeordnete Gesichter (`train`) bleiben draußen. Grenzen: 2 MB je Bild, 2000 Bilder, 12 MB – eine größere Bibliothek wird als Ganzes ausgelassen (Protokollzeile), nie gekürzt, und lässt die Sicherung nie scheitern.
 - **Schlafende Platten** werden dafür nie geweckt, ein nicht eingebundenes Volume nie gelesen: Dann kommt die Bibliothek so in die Sicherung, wie sie zuletzt gelesen wurde (RAM); wurde sie seit dem Start von titand nie gelesen, fehlt sie in dieser Sicherung (Protokollzeile).
-- **Wiederherstellen:** Die Wiederherstellung des Sticks schreibt die Zusatzdateien unter demselben Namen nach `/config/volume-data/nvr/faces/`. Sobald der NVR das nächste Mal startet (Volume da, vor dem Start des Containers), kopiert er sie in die Bibliothek auf dem Volume – nur Bilder, die dort fehlen – und entfernt sie vom Stick. Bis dahin gehen sie weiter in jede neue Sicherung ein. Aufnahmen, Ereignisse und Frigates Datenbank sind **nicht** Teil der Sicherung.
+- **Wiederherstellen:** Die Wiederherstellung des Sticks schreibt die Zusatzdateien unter demselben Namen nach `/config/volume-data/nvr/faces/`. Sobald der NVR das nächste Mal startet (Volume da, vor dem Start des Containers), kopiert er sie in die Bibliothek auf dem Volume – nur Bilder, die dort fehlen –, schreibt Bilder und Ordner fest auf die Platte (`fsync`) und entfernt erst dann vom Stick, was er kopiert hat oder was schon da war. Bilder, die er nicht nimmt (über den Grenzen der Sicherung, ein Name, den TitanOS nicht annimmt), bleiben auf dem Stick (Protokollzeile); der nächste Start macht mit ihnen weiter. Bis dahin gehen sie weiter in jede neue Sicherung ein. Aufnahmen, Ereignisse und Frigates Datenbank sind **nicht** Teil der Sicherung.
 - **Diagnosepaket:** `nvr.json` enthält die Diagnose (Zustand, Container, Erkennungsgerät, letzter Fehler, Protokoll ohne Passwörter, Kameranamen), solange der NVR eingeschaltet ist; keine Bilder, keine Gesichter, keine Zugangsdaten.
 
 ## Entwicklungsmodus
@@ -437,6 +478,15 @@ Die Beispieldateien (`backend/internal/nvr/devmedia/`, zusammen rund 113 KB) sin
 - „Gesehen“ gilt für den NVR insgesamt, nicht je Konto. Exporte kennen ihren Besitzer nur, wenn TitanOS sie angelegt hat (`exports.json` auf dem Volume); fehlt die Datei, sehen nur Administratoren die Exporte.
 - Die Speicherzahlen und die Grenze zählen Aufnahmen und Exporte, nicht Schnappschüsse, Vorschauen und Frigates Datenbank.
 - Standbilder werden je Kamera und Größe eine Sekunde lang wiederverwendet (Widgets mehrerer Fenster fragen dasselbe Bild).
+- **Behaltene Ereignisse (`kept`):** nur Frigates Merkmal, von TitanOS nicht zu setzen; es schützt die Aufnahme nicht vor Frigates Aufbewahrung nach Tagen (Abschnitt „Ereignisse“). Die Oberfläche bietet kein „Behalten“ an.
+- **Aufnahme bei Ereignissen** (`events`, Frigates `active_objects`): Frigate behält nur Segmente, in denen ein Objekt sich bewegt; die Sekunden davor/danach (`preSeconds`/`postSeconds`) greifen dadurch meist nicht – vor dem Ereignis und danach liegt oft ein Segment ohne aktives Objekt, das wegfällt.
+- **Löschen von Aufnahmen** (`DELETE /api/recordings/start/…/end/…`, Speichergrenze) gilt in Frigate für alle Kameras zugleich und nimmt jedes Segment ganz, das die Spanne berührt (bis 10 s über ihre Ränder).
+- **Protokolle von Frigate auf Dockers Volume:** nginx schreibt jede Anfrage (die Anfragezeile mit Abfrageteil, nie Köpfe) in Dockers `json-file`-Protokoll des Containers (je 5 MB, zwei Dateien). titand legt nie Zugangsdaten in einen Abfrageteil. Liegt Docker auf einem anderen Volume als der NVR, halten diese Zeilen dessen Platten wach; `/api/version` und `/api/stats` protokolliert Frigate nicht, `/api/config` fragt titand nur noch bis zum gesunden Start.
+- **Feed:** Frigates Antwort `camera_activity` auf `onConnect` wertet titand nicht aus; der Zustand jeder Kamera kommt mit Frigates nächsten Meldungen je Kamera (`<id>/motion`, `<id>/<objekt>`).
+- **Coral über USB:** Der Container bekommt den ganzen USB-Bus (`/dev/bus/usb`, Geräteregel `c 189:* rmw`), also roh lesend und schreibend auch alle anderen USB-Geräte des NAS samt Stick – nötig, weil der Coral seine Gerätenummer wechselt, sobald seine Firmware geladen ist. Frigate läuft ohne `NET_RAW` und mit begrenzter Prozesszahl, aber ohne weitere Begrenzung von CPU und Speicher (die Erkennung soll nehmen dürfen, was frei ist).
+- **Verbindungen von Frigate:** titand prüft Kamera-Adressen beim Speichern (auch Namen, aufgelöst) und bei seinen eigenen Verbindungen; wohin Frigate/go2rtc später verbinden, prüft es nicht – ein Name, der danach auf eine andere Adresse zeigt, bekommt dort auch das Passwort der Kamera.
+- **Geheimnis für Frigate:** Wer `config.yml` lesen kann (root auf dem NAS, wie bei den Kamerapasswörtern darin), kennt es; Port 5000 bleibt für Prozesse im Container offen (Frigates eigener Export-Auftrag braucht ihn).
+- **Örtlich gebaute Abbilder:** Ein Bau aus dem örtlichen mkosi-Zwischenspeicher behält die NPU-Firmware von trixie, weil `sandbox_trees` nicht in dessen Prüfsumme eingeht; ein frischer Bau (CI, `make-zip --force`) nimmt die aus trixie-backports.
 
 ## Was noch fehlt
 
