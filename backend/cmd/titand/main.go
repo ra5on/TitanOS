@@ -406,12 +406,6 @@ func proxyPorts(opts options) (int, []int) {
 	return https, reserved
 }
 
-// reservedPorts are the ports of titand that are never published.
-func reservedPorts(opts options) []int {
-	_, reserved := proxyPorts(opts)
-	return reserved
-}
-
 // webPorts are the ports of the web UI for the firewall.
 func webPorts(opts options) firewall.WebPorts {
 	ports := firewall.WebPorts{HTTP: -1}

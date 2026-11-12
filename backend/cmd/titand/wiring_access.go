@@ -12,9 +12,9 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
-	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
@@ -79,7 +79,7 @@ func (w *titand) wireAccess() error {
 	return nil
 }
 
-// wireRemoteAccess wires certificates from Let's Encrypt, dynamic DNS, apps published through IPv64 and WireGuard.
+// wireRemoteAccess wires certificates from Let's Encrypt, dynamic DNS and WireGuard.
 func (w *titand) wireRemoteAccess() error {
 	ctx := w.ctx
 	// Certificates from Let's Encrypt, served next to the own or
@@ -125,14 +125,10 @@ func (w *titand) wireRemoteAccess() error {
 	}
 	w.background(func() { w.dynamicDNS.Run(ctx) })
 	w.beforePowerOff = func() { w.dynamicDNS.PauseForShutdown(context.Background()) }
-	// Docker apps published through the CDN of IPv64.net (app editor). The
-	// account area of IPv64 is gone (PLAN 79-2): no polling, no blocklist,
-	// no tunnel; its settings in /config/ipv64/ are left alone.
-	w.account64 = ipv64.NewManager(w.store)
-	w.account64.Disabled = w.opts.dev
-	w.account64.Fallback = func() (string, string) { return w.dynamicDNS.IPv64Key(), w.acmeCerts.IPv64Key() }
-	if err := w.account64.Load(ctx); err != nil {
-		slog.Warn("IPv64 settings not readable from /config", "err", err)
+	// The IPv64 account area is gone (PLAN 79-2); /config/ipv64/ is neither
+	// read nor deleted. Only a tunnel an older version left up is removed.
+	if !w.opts.dev {
+		removeLeftoverIPv64Tunnel(ctx, command.Exec{}, interfaceExists)
 	}
 	// The WireGuard server of the NAS, off unless switched on.
 	w.vpnServer = wgserver.New(w.store)

@@ -4,7 +4,7 @@
 // background changes, and bodies checked field by field (an unknown field
 // or a value outside an enum is a 422, as a strict server would answer).
 // It covers what TitanOS still uses of the API (account, domains and
-// records, healthchecks, integrations, CDN). Only test code imports it.
+// records, healthchecks, integrations). Only test code imports it.
 package ipv64fake
 
 import (
@@ -332,147 +332,11 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data(w, 200, f.Integrations)
-	case "GET /cdn":
-		list := []any{}
-		for _, c := range f.CDNs {
-			list = append(list, f.cdnView(c, false))
-		}
-		data(w, 200, list)
-	case "POST /cdn":
-		b, ok := body(w, r, "domain")
-		if !ok {
-			return
-		}
-		for _, c := range f.CDNs {
-			if c["domain"] == b["domain"] {
-				problem(w, 409, "cdn_exists", "The domain is already in the CDN.")
-				return
-			}
-		}
-		id := f.id("cd")
-		c := map[string]any{"id": id, "domain": b["domain"], "active": true, "dns_records_enabled": false, "server": nil,
-			"proxy":      map[string]any{"state": "off", "frontend": nil, "backend": map[string]any{"scheme": "http", "port": 80}, "websocket": false, "certificate": "default", "caching": map[string]any{"enabled": false, "time_minutes": 60, "size_mb": 100}, "access_list": map[string]any{"enabled": false, "mode": "allowlist"}},
-			"portmapper": map[string]any{"state": "off"}, "traffic_mb": map[string]any{"in": 0, "out": 0}, "mappings": []any{}, "access": []any{}, "records": []any{}}
-		f.CDNs[id] = c
-		f.pending[id] = f.PendingServer
-		data(w, 201, f.cdnView(c, true))
-	case "GET /cdn/*", "PATCH /cdn/*", "DELETE /cdn/*":
-		c, ok := f.CDNs[p(1)]
-		if !ok {
-			problem(w, 404, "cdn_not_found", "CDN domain not found.")
-			return
-		}
-		switch r.Method {
-		case "DELETE":
-			if len(c["records"].([]any)) > 0 {
-				problem(w, 409, "records_enabled", "Switch the CDN off for all records first.")
-				return
-			}
-			delete(f.CDNs, p(1))
-			data(w, 202, f.cdnView(c, false))
-		case "PATCH":
-			b, ok := body(w, r, "frontend=http|https_redirect|http_and_https", "backend_scheme=http|https", "backend_port", "websocket", "caching", "access_list")
-			if !ok {
-				return
-			}
-			proxy := c["proxy"].(map[string]any)
-			if b["websocket"] != nil && proxy["state"] != "on" {
-				problem(w, 409, "proxy_disabled", "Switch the reverse proxy on first.")
-				return
-			}
-			for k, v := range b {
-				switch k {
-				case "backend_scheme":
-					proxy["backend"].(map[string]any)["scheme"] = v
-				case "backend_port":
-					proxy["backend"].(map[string]any)["port"] = v
-				default:
-					proxy[k] = v
-				}
-			}
-			data(w, 200, f.cdnView(c, true))
-		default:
-			if f.pending[p(1)] > 0 {
-				f.pending[p(1)]--
-			} else {
-				c["server"] = map[string]any{"name": "cdn1", "hostname": "cdn1.ipv64.net", "ipv4": "192.0.2.50", "ipv6": "2001:db8:cd::50"}
-			}
-			data(w, 200, f.cdnView(c, true))
-		}
-	case "POST /cdn/*/proxy/enable", "POST /cdn/*/proxy/disable", "POST /cdn/*/portmapper/enable", "POST /cdn/*/portmapper/disable":
-		c := f.CDNs[p(1)]
-		if c["server"] == nil {
-			problem(w, 409, "cdn_server_pending", "The CDN server is still being assigned.")
-			return
-		}
-		if p(3) == "enable" && len(c["records"].([]any)) == 0 {
-			problem(w, 409, "no_records", "Route at least one record through the CDN first.")
-			return
-		}
-		state := map[string]string{"enable": "on", "disable": "off"}[p(3)]
-		c[p(2)].(map[string]any)["state"] = state
-		data(w, 202, f.cdnView(c, false))
-	case "POST /cdn/*/records/*/enable", "POST /cdn/*/records/*/disable":
-		c := f.CDNs[p(1)]
-		if c["server"] == nil {
-			problem(w, 409, "cdn_server_pending", "The CDN server is still being assigned.")
-			return
-		}
-		var mode string
-		if p(4) == "enable" {
-			b, ok := body(w, r, "mode=full|other_family_only")
-			if !ok {
-				return
-			}
-			mode, _ = b["mode"].(string)
-		}
-		records := c["records"].([]any)
-		if p(4) == "enable" {
-			if slices.Contains(records, any(p(3))) {
-				problem(w, 409, "already_enabled", "The record already runs through the CDN.")
-				return
-			}
-			c["records"] = append(records, p(3))
-		} else {
-			if !slices.Contains(records, any(p(3))) {
-				problem(w, 409, "not_enabled", "The record does not run through this CDN domain.")
-				return
-			}
-			c["records"] = slices.DeleteFunc(records, func(x any) bool { return x == p(3) })
-		}
-		for _, rec := range f.Records[fmt.Sprint(c["domain"])] {
-			if rec["token"] == p(3) {
-				rec["state"] = map[string]string{"enable": "cdn_proxied", "disable": "active"}[p(4)]
-				_ = mode
-				data(w, 202, rec)
-				return
-			}
-		}
-		problem(w, 404, "record_not_found", "Record not found.")
 	default:
 		problem(w, 404, "not_found", "The fake knows no "+route)
 	}
 }
 
-func (f *Fake) cdnView(c map[string]any, detail bool) map[string]any {
-	out := map[string]any{}
-	for k, v := range c {
-		if k == "records" || k == "access" || (k == "mappings" && !detail) {
-			continue
-		}
-		out[k] = v
-	}
-	pending := []any{}
-	if c["server"] == nil {
-		pending = append(pending, "server_assignment")
-	}
-	out["pending"] = pending
-	out["dns_records_enabled"] = len(c["records"].([]any)) > 0
-	return out
-}
-
-// pattern replaces IDs and names in a path with "*", keeping the words of
-// the API.
 func pattern(parts []string) []string {
 	words := []string{"me", "logs", "api-keys", "domains", "rotate-token", "reset", "dyndns", "records", "healthchecks", "pause", "resume", "events", "incidents", "stats", "test-notification",
 		"integrations", "test", "failover", "policies", "failover", "fallback", "monitors", "rules", "status-pages", "offline-pages", "icon", "cdn", "proxy", "portmapper", "enable", "disable",

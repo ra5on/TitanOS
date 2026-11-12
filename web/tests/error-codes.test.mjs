@@ -73,7 +73,7 @@ const PATTERNS = [
 	/\bhttp\.Status\w+,\s*"([a-z0-9_]+)"/g,
 	// code = "media_busy" and code, next = "file_not_found", "…"
 	/\bcode(?:,\s*\w+)?\s*:?=\s*"([a-z0-9_]+)"/g,
-	// &dnsprovider.APIError{…, Code: "cdn_in_use", …}
+	// errorBody{Code: "rate_limited", …}
 	/\bCode:\s*"([a-z0-9_]+)"/g,
 ];
 
@@ -99,7 +99,7 @@ test('every error code of the API has a text or a reason to have none', () => {
 	// The patterns still find the codes: a refactoring of writeError must
 	// not turn this test into one that passes on nothing.
 	assert.ok(codes.size > 400, `only ${codes.size} codes found in ${api}`);
-	for (const code of ['agent_busy', 'volume_busy', 'media_busy', 'cdn_in_use'])
+	for (const code of ['agent_busy', 'volume_busy', 'media_busy'])
 		assert.ok(codes.has(code), `${code} not found`);
 	const known = keys('de');
 	const missing = [...codes]

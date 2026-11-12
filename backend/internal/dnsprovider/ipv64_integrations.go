@@ -68,5 +68,3 @@ func (c *IPv64) FullIntegrations(ctx context.Context) ([]IPv64IntegrationInfo, e
 	}
 	return list, err
 }
-
-func inRange(v *int, low, high int) bool { return v == nil || (*v >= low && *v <= high) }

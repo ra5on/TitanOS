@@ -46,8 +46,6 @@ const named: Record<string, string> = {
 	'POST /api/v1/network/wireguard/peers/remove': 'wireguardRemove',
 	'POST /api/v1/notifications/push': 'pushAdd',
 	'DELETE /api/v1/notifications/push/{id}': 'pushRemove',
-	'PUT /api/v1/ipv64/apps/{app}': 'ipv64Publish',
-	'DELETE /api/v1/ipv64/apps/{app}': 'ipv64Unpublish',
 	'POST /api/v1/firewall/confirm': 'firewallConfirm',
 	'POST /api/v1/firewall/revert': 'firewallRevert',
 	'PUT /api/v1/firewall/autoblock': 'firewallAutoBlock',

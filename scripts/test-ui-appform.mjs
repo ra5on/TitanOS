@@ -268,18 +268,6 @@ async function open(width, path, extra = {}) {
       });
     return route.fulfill({ json: tpl(template) });
   });
-  await made.ctx.route("**/api/v1/ipv64/**", (route) =>
-    route.fulfill({
-      json: route.request().url().endsWith("/domains")
-        ? { domains: [] }
-        : {
-            ports: [8097],
-            firewall: false,
-            zones: { internet: false },
-            keySource: "",
-          },
-    }),
-  );
   await made.ctx.route("**/api/v1/hardware/container-devices", (route) =>
     route.fulfill({
       json: [

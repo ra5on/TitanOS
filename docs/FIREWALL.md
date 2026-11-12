@@ -182,21 +182,14 @@ in einem Wegwerf-Namespace: Ersetzen und Entfernen).
 Apps im Host-Netzwerk veröffentlichen keine Ports; die Seite markiert sie, ihre
 Ports gibt man mit Port-Richtlinien in der Zelle zum NAS frei.
 
-## IPv64: veröffentlichte Apps
+## IPv64 (entfernt)
 
-- **„Öffentlich über IPv64“** im App-Editor (`docs/IPV64.md`): Ist die Firewall
-  eingeschaltet, lässt TitanOS auf Wunsch (Häkchen, ab Werk an) die
-  veröffentlichten Ports **genau dieser App** aus der Zone Internet zu
-  (`Manager.SetAppZones`: setzt die Richtlinie dieser App in den Zellen
-  Heimnetz/VPN/Internet → Docker-Apps bzw. hängt sie an, ohne Probezeit: die Ports einer App tragen nie die
-  Weboberfläche, niemand kann sich damit aussperren; während eine andere
-  Änderung auf Probe läuft, wird abgelehnt). Die vorige Einstellung wird
-  gemerkt und beim Zurücknehmen wiederhergestellt. Ist die Firewall aus, ändert
-  sich nichts. IPv64 dokumentiert keine Quelladressbereiche des CDN; die
-  Freigabe gilt deshalb für die ganze Zone Internet, nur für die Ports der App.
-  Die Ports der Weboberfläche (und 22, 8750, 8752) werden nie veröffentlicht.
-- Die **v64 Blocklist** (Mengen `blocklist4`/`blocklist6`) und die Schnittstelle
-  `ipv64wg` in der Zone VPN gibt es seit PLAN 79-2 nicht mehr (`docs/IPV64.md`).
+Seit PLAN 79-2 gibt es weder die **v64 Blocklist** (Mengen
+`blocklist4`/`blocklist6`) noch die Schnittstelle `ipv64wg` in der Zone VPN noch
+„Öffentlich über IPv64“ im App-Editor, das die Ports einer App aus der Zone
+Internet zuließ (`Manager.SetAppZones`). Eine früher so gesetzte Richtlinie
+bleibt in den Einstellungen stehen und lässt sich wie jede andere bei den
+Docker-Apps ändern (`docs/IPV64.md`).
 
 ## Einstellungsdatei, Migration und Rückweg
 

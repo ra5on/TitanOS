@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -322,18 +321,3 @@ func (b *tokenBucket) observe(header http.Header, status int) {
 }
 
 // --- helpers ---
-
-var refRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
-
-// validRef accepts the IDs and tokens of IPv64 in a path.
-func validRef(ref string) bool { return refRE.MatchString(ref) }
-
-func decodeData(data json.RawMessage, out any) error {
-	if len(data) == 0 {
-		return &APIError{Provider: "IPv64", Message: "unexpected answer"}
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return &APIError{Provider: "IPv64", Message: fmt.Sprintf("unexpected answer: %v", err)}
-	}
-	return nil
-}

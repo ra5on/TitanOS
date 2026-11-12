@@ -247,11 +247,3 @@ type IPv64FullRecord struct {
 	Token      string     `json:"token"`
 	UpdatedAt  *time.Time `json:"updated_at"`
 }
-
-// FullRecords lists the records of a domain with their tokens.
-func (c *IPv64) FullRecords(ctx context.Context, domain string) ([]IPv64FullRecord, error) {
-	if !ValidHost(domain) {
-		return nil, invalid("domain")
-	}
-	return c.records(ctx, domain, nil)
-}

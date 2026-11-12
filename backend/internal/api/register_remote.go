@@ -9,7 +9,7 @@ func (s *Server) registerRemoteAccess(mux *routeMux) {
 	ddnsArea{ddns: s.opts.DDNS}.register(mux, s.requireAdmin)
 }
 
-// registerIPv64 registers the routes of the IPv64.net account.
+// registerIPv64 registers the routes of IPv64.net as a provider of dynamic DNS.
 func (s *Server) registerIPv64(mux *routeMux) {
-	s.ipv64Area().register(mux, s.requireAdmin, s.browserOnly)
+	s.ipv64Area().register(mux, s.requireAdmin)
 }

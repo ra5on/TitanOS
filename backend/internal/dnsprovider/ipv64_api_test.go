@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +26,7 @@ func noSecrets(t *testing.T, v any, secrets ...string) {
 	}
 }
 
-func TestIPv64AccountAndDomainUpdate(t *testing.T) {
+func TestIPv64Account(t *testing.T) {
 	fake := ipv64fake.New(t)
 	c := NewIPv64(ipv64fake.Key, "", Options{BaseURL: fake.Server.URL})
 	ctx := context.Background()
@@ -38,10 +37,6 @@ func TestIPv64AccountAndDomainUpdate(t *testing.T) {
 	noSecrets(t, me, "owner@example.org")
 	if _, err := c.ChangeDomain(ctx, "nas.ipv64.de", IPv64DomainChange{Ignore: ptr("bogus")}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("bad ignore accepted")
-	}
-	result, err := c.UpdatePrefix(ctx, "nas.ipv64.de", "photos", netip.MustParseAddr("198.51.100.1"), netip.Addr{})
-	if err != nil || result.Results[0].Result != "created" {
-		t.Fatal(result, err)
 	}
 }
 
@@ -54,53 +49,6 @@ func TestIPv64IntegrationsNeverWithSecrets(t *testing.T) {
 		t.Fatal(list, err)
 	}
 	noSecrets(t, list, "1234…abcd")
-}
-
-// The CDN as publishing an app uses it.
-func TestIPv64CDN(t *testing.T) {
-	fake := ipv64fake.New(t)
-	c := NewIPv64(ipv64fake.Key, "", Options{BaseURL: fake.Server.URL})
-	ctx := context.Background()
-	cdn, err := c.CreateCDN(ctx, "nas.ipv64.de")
-	if err != nil || cdn.ID == "" {
-		t.Fatal(cdn, err)
-	}
-	if list, err := c.CDNs(ctx); err != nil || len(list) != 1 {
-		t.Fatalf("CDNs: %+v %v", list, err)
-	}
-	if _, err := c.CDN(ctx, "../me"); !errors.Is(err, ErrInvalid) {
-		t.Fatal("path in a CDN token accepted")
-	}
-	if _, err := c.ChangeCDN(ctx, cdn.ID, CDNInput{Frontend: ptr("ftp")}); !errors.Is(err, ErrInvalid) {
-		t.Fatal("bad frontend")
-	}
-	records, err := c.FullRecords(ctx, "nas.ipv64.de")
-	if err != nil || len(records) != 1 {
-		t.Fatal(records, err)
-	}
-	c.CDN(ctx, cdn.ID) // server assigned
-	if _, err := c.CDNRecord(ctx, cdn.ID, records[0].Token, "half"); !errors.Is(err, ErrInvalid) {
-		t.Fatal("bad mode")
-	}
-	if r, err := c.CDNRecord(ctx, cdn.ID, records[0].Token, "full"); err != nil || r.State != "cdn_proxied" {
-		t.Fatal(r, err)
-	}
-	if _, status, err := c.CDNAction(ctx, cdn.ID, "proxy/enable"); err != nil || status != http.StatusAccepted {
-		t.Fatal(status, err)
-	}
-	if _, _, err := c.CDNAction(ctx, cdn.ID, "self-destruct"); !errors.Is(err, ErrInvalid) {
-		t.Fatal("bad action")
-	}
-	detail, err := c.ChangeCDN(ctx, cdn.ID, CDNInput{Frontend: ptr("https_redirect"), BackendPort: ptr(2283), Websocket: ptr(true)})
-	if err != nil || detail.Proxy.Backend.Port != 2283 {
-		t.Fatal(detail.Proxy, err)
-	}
-	if _, err := c.CDNRecord(ctx, cdn.ID, records[0].Token, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.DeleteCDN(ctx, cdn.ID); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestIPv64TokenBucketFollowsHeaders(t *testing.T) {
@@ -165,14 +113,10 @@ func TestIPv64ViewsOfTheFullAPI(t *testing.T) {
 		t.Fatalf("TXT records: %+v %v", txt, err)
 	}
 	all, err := c.Records(ctx, "nas.ipv64.de", "", "")
-	full, err2 := c.FullRecords(ctx, "nas.ipv64.de")
-	if err != nil || err2 != nil || len(all) != 2 || len(full) != 2 || all[0].ID != full[0].ID || full[0].Token == "" {
-		t.Fatalf("records: %+v / %+v %v %v", all, full, err, err2)
+	if err != nil || len(all) != 2 || all[0].ID == 0 {
+		t.Fatalf("records: %+v %v", all, err)
 	}
-	noSecrets(t, all, full[0].Token)
-	if _, err := c.FullRecords(ctx, "not a host"); !errors.Is(err, ErrInvalid) {
-		t.Fatal("bad domain accepted")
-	}
+	noSecrets(t, all, "record_token", "rec-")
 	if err := c.DeleteRecord(ctx, added.ID); err != nil {
 		t.Fatal(err)
 	}
