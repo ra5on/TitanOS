@@ -1,0 +1,8 @@
+# Intel NPU firmware (intel/vpu) from trixie-backports, everything else from
+# trixie. trixie's firmware-intel-misc (20250410) is older than what the NPU
+# driver inside the Frigate image of the NVR needs (July 2025 or newer): the
+# NPU then refuses with "MAPPED_INFERENCE_VERSION is NOT compatible with the
+# ELF" (docs/NVR.md). Firmware only; the kernel stays trixie's.
+Package: firmware-intel-misc
+Pin: release n=trixie-backports
+Pin-Priority: 990
