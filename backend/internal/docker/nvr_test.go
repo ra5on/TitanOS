@@ -2,6 +2,7 @@ package docker
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -22,15 +23,21 @@ func TestNVRCreateBody(t *testing.T) {
 		ExposedPorts map[string]any
 		StopTimeout  int
 		HostConfig   struct {
-			NetworkMode       string
-			Binds             []string
+			NetworkMode string
+			Binds       []string
+			Mounts      []struct {
+				Type, Source, Target string
+				ReadOnly             bool
+			}
+			CapDrop           []string
+			PidsLimit         int64
 			Tmpfs             map[string]string
 			ShmSize           int64
 			Privileged        bool
 			Devices           []struct{ PathOnHost, PathInContainer, CgroupPermissions string }
 			DeviceCgroupRules []string
 			RestartPolicy     struct{ Name string }
-			PortBindings      map[string][]struct{ HostPort string }
+			PortBindings      map[string][]struct{ HostIp, HostPort string }
 		}
 	}
 	if err := json.Unmarshal(data, &body); err != nil {
@@ -45,16 +52,30 @@ func TestNVRCreateBody(t *testing.T) {
 	if h.Privileged || h.NetworkMode != NVRName || h.RestartPolicy.Name != "no" || h.ShmSize != 384<<20 {
 		t.Errorf("%+v", h)
 	}
-	wantBinds := []string{"/mnt/tank/.titanos/nvr/config:/config:rw", "/mnt/tank/.titanos/nvr/media:/media/frigate:rw", "/etc/localtime:/etc/localtime:ro"}
-	if strings.Join(h.Binds, " ") != strings.Join(wantBinds, " ") || h.Tmpfs["/tmp/cache"] != "rw,nosuid,nodev,size=1073741824" {
-		t.Errorf("binds %v tmpfs %v", h.Binds, h.Tmpfs)
+	// Bind mounts, never "Binds": a missing folder fails the start
+	// instead of becoming an empty folder in RAM.
+	mounts := []string{}
+	for _, m := range h.Mounts {
+		mounts = append(mounts, fmt.Sprintf("%s %s>%s %v", m.Type, m.Source, m.Target, m.ReadOnly))
+	}
+	wantMounts := []string{"bind /mnt/tank/.titanos/nvr/config>/config false", "bind /mnt/tank/.titanos/nvr/media>/media/frigate false", "bind /etc/localtime>/etc/localtime true"}
+	if len(h.Binds) != 0 || strings.Join(mounts, ", ") != strings.Join(wantMounts, ", ") || h.Tmpfs["/tmp/cache"] != "rw,nosuid,nodev,size=1073741824" {
+		t.Errorf("binds %v mounts %v tmpfs %v", h.Binds, mounts, h.Tmpfs)
+	}
+	if strings.Join(h.CapDrop, ",") != "NET_RAW" || h.PidsLimit != NVRPidsLimit {
+		t.Errorf("capdrop %v pids %d", h.CapDrop, h.PidsLimit)
 	}
 	if len(h.Devices) != 2 || h.Devices[1].PathOnHost != "/dev/accel/accel0" || h.Devices[1].PathInContainer != "/dev/accel/accel0" || len(h.DeviceCgroupRules) != 0 {
 		t.Errorf("devices %+v rules %v", h.Devices, h.DeviceCgroupRules)
 	}
-	// Only WebRTC is published: never 5000, 8971 or 1984.
+	// Only WebRTC is published: never 5000, 8971 or 1984; IPv4 only.
 	if len(h.PortBindings) != 2 || h.PortBindings["8555/tcp"][0].HostPort != "8555" || h.PortBindings["8555/udp"][0].HostPort != "8555" || len(body.ExposedPorts) != 2 {
 		t.Errorf("ports %+v", h.PortBindings)
+	}
+	for key, binding := range h.PortBindings {
+		if binding[0].HostIp != "0.0.0.0" {
+			t.Errorf("%s published on %q", key, binding[0].HostIp)
+		}
 	}
 
 	// A Coral: the USB bus as a folder with its device rule.
@@ -64,8 +85,8 @@ func TestNVRCreateBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	h = body.HostConfig
-	if len(h.Binds) != 4 || h.Binds[3] != "/dev/bus/usb:/dev/bus/usb" || len(h.DeviceCgroupRules) != 1 || h.DeviceCgroupRules[0] != "c 189:* rmw" || h.Privileged {
-		t.Errorf("coral: binds %v rules %v", h.Binds, h.DeviceCgroupRules)
+	if len(h.Mounts) != 4 || h.Mounts[3].Source != "/dev/bus/usb" || h.Mounts[3].Target != "/dev/bus/usb" || len(h.DeviceCgroupRules) != 1 || h.DeviceCgroupRules[0] != "c 189:* rmw" || h.Privileged {
+		t.Errorf("coral: mounts %+v rules %v", h.Mounts, h.DeviceCgroupRules)
 	}
 }
 
