@@ -128,6 +128,50 @@ func TestNVRRealFrigate(t *testing.T) {
 		return res.StatusCode, data
 	}
 	t.Logf("Frigate at %s, secret of %d characters", address, len(secret))
+	// effective reads what Frigate made of config.yml (global record block
+	// merged into each camera field by field) and checks that the global
+	// retention is the floor for unknown cameras and that no camera
+	// inherits it: every camera sets both days itself.
+	effective := func(where string, want map[string][2]float64) {
+		t.Helper()
+		type days struct {
+			Continuous struct {
+				Days float64 `json:"days"`
+			} `json:"continuous"`
+			Motion struct {
+				Days float64 `json:"days"`
+			} `json:"motion"`
+		}
+		var cfg struct {
+			Record  days `json:"record"`
+			Cameras map[string]struct {
+				Enabled bool `json:"enabled"`
+				Record  days `json:"record"`
+			} `json:"cameras"`
+		}
+		code, body := frigate("/api/config", true)
+		if code != 200 || json.Unmarshal(body, &cfg) != nil {
+			t.Errorf("%s: Frigate's config: %d", where, code)
+			return
+		}
+		got := map[string][2]float64{}
+		for id, c := range cfg.Cameras {
+			got[id] = [2]float64{c.Record.Continuous.Days, c.Record.Motion.Days}
+		}
+		t.Logf("%s: Frigate's effective record days: global %v/%v, cameras %v", where, cfg.Record.Continuous.Days, cfg.Record.Motion.Days, got)
+		if cfg.Record.Continuous.Days < 30 || cfg.Record.Motion.Days < 30 {
+			t.Errorf("%s: global record days %v/%v, want at least 30", where, cfg.Record.Continuous.Days, cfg.Record.Motion.Days)
+		}
+		if len(got) != len(want) {
+			t.Errorf("%s: cameras %v, want %v", where, got, want)
+		}
+		for id, w := range want {
+			if got[id] != w {
+				t.Errorf("%s: camera %s keeps continuous/motion %v days, want %v (inherited the global floor?)", where, id, got[id], w)
+			}
+		}
+	}
+	effective("no camera", map[string][2]float64{})
 
 	// Nothing of Frigate answers without the secret: 5000, go2rtc's API
 	// and its RTSP server listen on the container's loopback only, 8971
@@ -184,7 +228,25 @@ func TestNVRRealFrigate(t *testing.T) {
 	if res.StatusCode != 201 {
 		t.Fatalf("add camera: %d %s", res.StatusCode, body)
 	}
+	// A second camera, switched off, recording on events: Frigate merges
+	// the global 30 days into it unless it sets both days itself.
+	res, body = ts.request("POST", "/api/v1/nvr/cameras", map[string]any{
+		"name": "Aus", "enabled": false, "source": map[string]any{"kind": "rtsp", "mainURL": stream},
+		"record": map[string]any{"mode": "events", "retainDays": 5, "preSeconds": 5, "postSeconds": 5},
+	})
+	if res.StatusCode != 201 {
+		t.Fatalf("add camera: %d %s", res.StatusCode, body)
+	}
 	started := time.Now()
+	until("Frigate runs both cameras", 5*time.Minute, func() bool {
+		code, body := frigate("/api/config", true)
+		return code == 200 && strings.Contains(string(body), `"aus":{`) && status().State == nvr.PhaseRunning
+	})
+	effective("two cameras", map[string][2]float64{"test": {1, 1}, "aus": {0, 0}})
+	// A narrower recording is asked first; nothing changes without the yes.
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/test", map[string]any{"record": map[string]any{"mode": "events", "retainDays": 1, "preSeconds": 5, "postSeconds": 5}}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "nvr_recordings_shrink" {
+		t.Errorf("continuous → events without confirmation: %d %s", res.StatusCode, body)
+	}
 	until("camera online", 5*time.Minute, func() bool {
 		var view nvr.CameraView
 		getJSON(t, ts, ts.client, "/nvr/cameras/test", &view)
@@ -451,6 +513,7 @@ func TestNVRRealFrigate(t *testing.T) {
 	} else if stub, ok := running.Cameras["test"]; !ok || stub.Enabled {
 		t.Errorf("the deleted camera in Frigate's config: %+v", running.Cameras)
 	}
+	effective("deleted camera", map[string][2]float64{"test": {1, 1}, "aus": {0, 0}})
 	if len(after.Segments) > 0 {
 		vod := "/api/v1/nvr/cameras/test/vod/" + itoa(int64(after.Segments[0].Start)) + "/" + itoa(int64(after.Segments[len(after.Segments)-1].End)+1) + "/master.m3u8"
 		if res, body := ts.request("GET", vod, nil); res.StatusCode != 200 {
@@ -461,7 +524,7 @@ func TestNVRRealFrigate(t *testing.T) {
 		Cameras []nvr.CameraView `json:"cameras"`
 	}
 	getJSON(t, ts, ts.client, "/nvr/cameras", &listed)
-	if len(listed.Cameras) != 1 || !listed.Cameras[0].Deleted {
+	if len(listed.Cameras) != 2 || listed.Cameras[1].ID != "test" || !listed.Cameras[1].Deleted {
 		t.Errorf("administrator's list: %+v", listed.Cameras)
 	}
 	guest := ts.guest("gast")
@@ -470,6 +533,29 @@ func TestNVRRealFrigate(t *testing.T) {
 	}
 	if strings.Contains(run("logs", "--tail", "3000", "titanos-nvr"), secret) {
 		t.Error("the secret is in the container's log")
+	}
+
+	// The deleted camera is noted on the stick, not on the volume: the NVR
+	// moves to tank2 and back, and both volumes' config.yml keep it (on
+	// tank its recordings are).
+	if got := manager.DeletedCameras(); len(got) != 1 || got[0].ID != "test" {
+		t.Errorf("deleted cameras: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "tank", ".titanos", "nvr", "deleted-cameras.json")); err == nil {
+		t.Error("deleted cameras noted on the volume")
+	}
+	for _, volume := range []string{"tank2", "tank"} {
+		if res, body := ts.request("PUT", "/api/v1/nvr/settings", map[string]any{"volume": volume}); res.StatusCode != 200 {
+			t.Fatalf("move to %s: %d %s", volume, res.StatusCode, body)
+		}
+		time.Sleep(5 * time.Second) // the restart begins
+		until("Frigate runs on "+volume+" with the deleted camera", 5*time.Minute, func() bool { return status().State == nvr.PhaseRunning })
+		data, err := os.ReadFile(filepath.Join(root, volume, ".titanos", "nvr", "config", "config.yml"))
+		if err != nil || !strings.Contains(string(data), "\n  test:\n    enabled: false\n") {
+			t.Errorf("the deleted camera in %s's config.yml: %v", volume, err)
+		}
+		address = run("inspect", "-f", `{{(index .NetworkSettings.Networks "titanos-nvr").IPAddress}}`, "titanos-nvr")
+		effective("deleted camera on "+volume, map[string][2]float64{"test": {1, 1}, "aus": {0, 0}})
 	}
 
 	// The storage figures move (the watch looks every five minutes); the
