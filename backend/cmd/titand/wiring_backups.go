@@ -109,6 +109,12 @@ func (w *titand) wireBackups() error {
 	if err := w.appBackups.Load(); err != nil {
 		slog.Error("application backup recovery unavailable", "err", err)
 	}
+	// The pointer to a run lies on its volume, not on the stick (PLAN
+	// 79-12): each volume is looked at once after it was mounted.
+	w.appBackups.Settled = w.volumes.Settled
+	if !w.opts.dev {
+		w.background(func() { w.appBackups.Run(w.ctx) })
+	}
 	w.backups.PrepareApplications = w.appBackups.Prepare
 	if err := w.backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
