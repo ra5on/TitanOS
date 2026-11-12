@@ -61,7 +61,10 @@ func (m ymap) MarshalYAML() (any, error) {
 // rewritten (and Frigate only restarted) when something changed. The file
 // holds the cameras' passwords: it is written 0600 into the private folder
 // of the NVR and never logged.
-func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
+//
+// deleted are the deleted cameras whose recordings are kept: each stays
+// as a stub that is switched off (deleted.go).
+func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHardware) ([]byte, error) {
 	detectors, model, err := detectorBlocks(hw.Detector)
 	if err != nil {
 		return nil, err
@@ -94,6 +97,15 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 		}
 		streams = append(streams, entries...)
 		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
+	}
+	// The longest any recording is kept, for the global retention below.
+	keep := 1
+	for _, c := range cameras {
+		keep = max(keep, c.Record.RetainDays)
+	}
+	for _, d := range stubs(deleted, cameras) {
+		cams = append(cams, yentry{d.ID, stubBlock(d, anyPlates, anyFaces)})
+		keep = max(keep, d.RetainDays)
 	}
 
 	// go2rtc's API (1984) never asks for a login: only the container's
@@ -143,6 +155,11 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	}
 	root = append(root,
 		yentry{"ffmpeg", ymap{{"hwaccel_args", hwaccel}}},
+		// The global retention is no camera's (each sets all of its own).
+		// It is what Frigate keeps of a camera that is in no config at all
+		// (it deletes those recordings within the hour by it): as long as
+		// the longest of the cameras, instead of Frigate's 0 days.
+		yentry{"record", ymap{{"continuous", ymap{{"days", keep}}}, {"motion", ymap{{"days", keep}}}}},
 		yentry{"birdseye", ymap{{"enabled", false}}},
 		yentry{"lpr", lprBlock(s, anyPlates)},
 		yentry{"face_recognition", ymap{{"enabled", anyFaces}}},
@@ -334,17 +351,56 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 	return block
 }
 
+// stubBlock is a deleted camera whose recordings are kept: switched off
+// (Frigate starts nothing for it), with its retention, an input of the
+// local restream that names no stream (go2rtc has none of that name; no
+// login anywhere). Frigate wants an input with the role detect.
+func stubBlock(d DeletedCamera, anyPlates, anyFaces bool) ymap {
+	const restream = "rtsp://127.0.0.1:8554/"
+	block := ymap{
+		{"enabled", false},
+		{"ffmpeg", ymap{{"inputs", []ymap{{{"path", restream + d.ID}, {"input_args", "preset-rtsp-restream"}, {"roles", []string{"detect"}}}}}}},
+		// A size, so that Frigate does not probe a stream that is not
+		// there when it starts (its own default size).
+		{"detect", ymap{{"enabled", false}, {"width", 1280}, {"height", 720}}},
+		{"record", keepBlock(d.RetainDays)},
+		{"snapshots", ymap{{"enabled", false}, {"retain", ymap{{"default", d.RetainDays}}}}},
+		{"audio", ymap{{"enabled", false}}},
+	}
+	if anyPlates {
+		block = append(block, yentry{"lpr", ymap{{"enabled", false}}})
+	}
+	if anyFaces {
+		block = append(block, yentry{"face_recognition", ymap{{"enabled", false}}})
+	}
+	return block
+}
+
+// keepBlock records nothing and keeps what was recorded for days:
+// Frigate's cleanup goes through every camera, recording or not, and
+// would otherwise delete the recordings with its defaults.
+func keepBlock(days int) ymap {
+	return ymap{
+		{"enabled", false},
+		{"continuous", ymap{{"days", days}}},
+		{"motion", ymap{{"days", days}}},
+		{"alerts", ymap{{"retain", ymap{{"days", days}}}}},
+		{"detections", ymap{{"retain", ymap{{"days", days}}}}},
+	}
+}
+
 // recordBlock maps the mode of a camera to Frigate's retention:
 //
 //	continuous: everything is kept for RetainDays.
 //	motion:     only segments with motion are kept.
 //	events:     only segments in which a tracked object was active.
+//	off:        nothing is recorded; what was is kept for RetainDays.
 //
 // Alerts and detections (Frigate's two classes of events) get the same
 // days and the seconds before and after.
 func recordBlock(r Record) ymap {
 	if r.Mode == RecordOff {
-		return ymap{{"enabled", false}}
+		return keepBlock(r.RetainDays)
 	}
 	continuous, motion, mode := 0, 0, "active_objects"
 	switch r.Mode {

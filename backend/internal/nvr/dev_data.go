@@ -361,8 +361,12 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		}
 		ok()
 	case path == "/api/recordings/storage":
+		// Like Frigate: the cameras of the config, switched on or not.
 		usage := map[string]any{}
 		for camera, hours := range d.hours {
+			if _, configured := f.config[camera]; f.config != nil && !configured {
+				continue
+			}
 			total := 0.0
 			for _, h := range hours {
 				total += h.MB

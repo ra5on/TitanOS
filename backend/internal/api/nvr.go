@@ -72,6 +72,20 @@ func (a nvrArea) available(w http.ResponseWriter) bool {
 	return true
 }
 
+// reaches tells whether the account may use a right on a camera: one
+// that exists, or (owners and administrators, recordings only) a deleted
+// one whose recordings are kept.
+func (a nvrArea) reaches(user auth.User, camera, right string) bool {
+	if _, ok := a.nvr.Camera(camera); ok {
+		return a.allows(user, camera, right)
+	}
+	if right != nvr.RightRecordings || !user.Role.CanAdminister() {
+		return false
+	}
+	_, ok := a.nvr.DeletedCamera(camera)
+	return ok && a.allows(user, camera, right)
+}
+
 // allows tells whether the account of the request has a right on a camera
 // now (owners and administrators: always).
 func (a nvrArea) allows(user auth.User, camera, right string) bool {
@@ -350,6 +364,10 @@ func (a nvrArea) handleCameras(w http.ResponseWriter, r *http.Request) {
 		for _, c := range a.nvr.Cameras() {
 			out = append(out, c.View(states[c.ID]))
 		}
+		// Deleted cameras whose recordings are kept, after the others.
+		for _, d := range a.nvr.DeletedCameras() {
+			out = append(out, d.View())
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"cameras": out, "objects": nvr.AllowedObjects()})
 		return
 	}
@@ -370,6 +388,12 @@ func (a nvrArea) handleCamera(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r)
 	c, ok := a.nvr.Camera(r.PathValue("id"))
+	if !ok && user.Role.CanAdminister() {
+		if d, deleted := a.nvr.DeletedCamera(r.PathValue("id")); deleted {
+			writeJSON(w, http.StatusOK, d.View())
+			return
+		}
+	}
 	if !ok || (!user.Role.CanAdminister() && !a.nvr.Access.Sees(user.Name, c.ID)) {
 		writeNVRError(w, nvr.ErrNotFound)
 		return
@@ -456,7 +480,9 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCameraRemove removes a camera and the rights on it. Its
-// recordings stay until their days are over.
+// recordings stay until their days are over (administrators find them
+// under the camera, listed as deleted). With the NVR's volume not there
+// it answers nvr_no_volume: that is where the deleted camera is noted.
 func (a nvrArea) handleCameraRemove(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return

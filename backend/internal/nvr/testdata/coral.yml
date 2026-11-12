@@ -22,6 +22,11 @@ detectors:
     device: usb
 ffmpeg:
   hwaccel_args: ""
+record:
+  continuous:
+    days: 30
+  motion:
+    days: 30
 birdseye:
   enabled: false
 lpr:
@@ -71,6 +76,16 @@ cameras:
         - person
     record:
       enabled: false
+      continuous:
+        days: 14
+      motion:
+        days: 14
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
     snapshots:
       enabled: false
       retain:
@@ -163,5 +178,35 @@ cameras:
       enabled: true
       retain:
         default: 14
+    audio:
+      enabled: false
+  schuppen:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/schuppen
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 30
+      motion:
+        days: 30
+      alerts:
+        retain:
+          days: 30
+      detections:
+        retain:
+          days: 30
+    snapshots:
+      enabled: false
+      retain:
+        default: 30
     audio:
       enabled: false

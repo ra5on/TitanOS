@@ -2,6 +2,7 @@ package nvr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http/httptest"
@@ -92,6 +93,15 @@ func (r *rig) config() string {
 		r.t.Fatalf("config.yml: %v", err)
 	}
 	return string(data)
+}
+
+func (r *rig) mustRead(name string) []byte {
+	r.t.Helper()
+	data, err := r.store.Read(name)
+	if err != nil {
+		r.t.Fatalf("%s: %v", name, err)
+	}
+	return data
 }
 
 func (r *rig) enable() {
@@ -1031,5 +1041,130 @@ func TestCameraTargetsAreChecked(t *testing.T) {
 	c.Source = Source{Kind: "onvif", Host: "cam.example", ONVIFPort: 80, MainURL: "rtsp://192.168.1.73/main"}
 	if _, err := r.m.AddCamera(ctx, c); !errors.Is(err, ErrTargetNotAllowed) {
 		t.Errorf("onvif host: %v", err)
+	}
+}
+
+// A deleted camera stays in config.yml as a stub that is switched off,
+// with its own retention, until its recordings' days are over: Frigate
+// would otherwise delete them within the hour.
+func TestDeletedCameraKeepsItsRecordings(t *testing.T) {
+	r, first := capRig(t)
+	ctx := context.Background()
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	deletedAt := r.now
+	r.look()
+	r.look()
+	// Frigate runs it as a camera of its config: the check after the
+	// restart expects it.
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	cfg := parse(t, []byte(r.config()))
+	stub := dig(t, cfg, "cameras", "einfahrt").(map[string]any)
+	if stub["enabled"] != false || dig(t, stub, "record", "continuous", "days") != 14 || dig(t, stub, "record", "motion", "days") != 14 ||
+		dig(t, stub, "snapshots", "retain", "default") != 14 || dig(t, stub, "detect", "enabled") != false {
+		t.Errorf("stub: %v", stub)
+	}
+	inputs := dig(t, stub, "ffmpeg", "inputs").([]any)
+	if len(inputs) != 1 || dig(t, inputs[0], "path") != "rtsp://127.0.0.1:8554/einfahrt" {
+		t.Errorf("stub inputs: %v", inputs)
+	}
+	// No stream, no login of the deleted camera.
+	if _, ok := dig(t, cfg, "go2rtc", "streams").(map[string]any)["einfahrt"]; ok || strings.Contains(r.config(), "192.168.1.62") {
+		t.Error("the deleted camera's stream is still in config.yml")
+	}
+	// The global retention is no longer Frigate's 0 days.
+	if dig(t, cfg, "record", "continuous", "days") != 14 {
+		t.Errorf("global record: %v", cfg["record"])
+	}
+	// Noted on the volume, not on the stick.
+	var noted []DeletedCamera
+	data, err := os.ReadFile(filepath.Join(r.dir, deletedFile))
+	if err != nil || json.Unmarshal(data, &noted) != nil || len(noted) != 1 || noted[0].ID != "einfahrt" || noted[0].Name != "Einfahrt" || noted[0].RetainDays != 14 {
+		t.Fatalf("deleted cameras on the volume: %s %v", data, err)
+	}
+	if strings.Contains(string(r.mustRead(camerasFile)), "einfahrt") {
+		t.Error("still on the stick")
+	}
+	// Its recordings count and can be shown.
+	if got := r.m.DeletedCameras(); len(got) != 1 || !got[0].ExpiresAt().Equal(deletedAt.Add(14*24*time.Hour)) {
+		t.Errorf("deleted cameras: %+v", got)
+	}
+	if days, err := r.m.RecordingsSummary(ctx, "einfahrt"); err != nil || len(days) == 0 {
+		t.Errorf("summary of the deleted camera: %v %v", days, err)
+	}
+	if st := r.storageLook(); gb(st.RecordingsBytes) != 20 {
+		t.Errorf("recordings %v GB: the deleted camera's are not counted", gb(st.RecordingsBytes))
+	}
+	_ = first
+	// A new camera never gets its ID by chance; given on purpose, the ID
+	// takes the recordings back.
+	c := NewCamera()
+	c.Name, c.Source = "Einfahrt", Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.62/main"}
+	added, err := r.m.AddCamera(ctx, c)
+	if err != nil || added.ID != "einfahrt_2" {
+		t.Fatalf("%+v %v", added, err)
+	}
+	if err := r.m.RemoveCamera(added.ID); err != nil {
+		t.Fatal(err)
+	}
+	c.ID = "einfahrt"
+	if _, err := r.m.AddCamera(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.m.DeletedCameras(); len(got) != 1 || got[0].ID != "einfahrt_2" {
+		t.Errorf("deleted after taking the ID back: %+v", got)
+	}
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	// After its days the deleted camera is no longer shown; it leaves
+	// config.yml with the next change that rewrites it anyway.
+	r.advance(15 * 24 * time.Hour)
+	if got := r.m.DeletedCameras(); len(got) != 0 {
+		t.Errorf("shown after its days: %+v", got)
+	}
+	r.look()
+	if !strings.Contains(r.config(), "einfahrt:") {
+		t.Error("left config.yml by itself")
+	}
+	r.advance(2 * 24 * time.Hour)
+	r.limit(500)
+	r.look()
+	if strings.Contains(r.config(), "einfahrt") {
+		t.Error("still in config.yml after its days")
+	}
+}
+
+// Without the NVR's volume a camera is not deleted: the stub could not be
+// noted, and Frigate would delete its recordings at the next start.
+func TestDeleteCameraNeedsTheVolume(t *testing.T) {
+	r := newRig(t, true)
+	mnt := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(mnt, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := r.m
+	m.Dev, m.MountRoot = false, mnt
+	mounted := []string{"a"}
+	m.Mounted = func() []string { return mounted }
+	if err := m.Enable(context.Background(), "a", SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	mounted = nil
+	if err := m.RemoveCamera("garten"); !errors.Is(err, ErrNoVolume) {
+		t.Fatalf("without the volume: %v", err)
+	}
+	if _, ok := m.Camera("garten"); !ok {
+		t.Fatal("deleted without its stub")
+	}
+	mounted = []string{"a"}
+	if err := m.RemoveCamera("garten"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "a", ".titanos", "nvr", deletedFile)); err != nil {
+		t.Error(err)
 	}
 }

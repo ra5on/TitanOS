@@ -133,6 +133,10 @@ type runtime struct {
 	storage storageRuntime
 	cameras map[string]*cameraRuntime
 
+	// deleted are the deleted cameras whose recordings are kept, as read
+	// from deletedVolume ("" until read; deleted.go).
+	deleted       []DeletedCamera
+	deletedVolume string
 	// exports are the records of exports.json (nil until read);
 	// exportSizes the sizes of finished exports.
 	exports     map[string]exportRecord
@@ -458,7 +462,7 @@ type plan struct {
 
 // makePlan resolves the device, renders the config and describes the
 // container.
-func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageID, dir string, candidates []string) (plan, error) {
+func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera, hw HardwareInfo, imageID, dir string, candidates []string) (plan, error) {
 	m.mu.Lock()
 	active := m.state.Active
 	m.mu.Unlock()
@@ -467,7 +471,7 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageI
 		active = chain[0]
 	}
 	nodes, usb := hw.containerDevices(active)
-	config, err := Render(s, cameras, RenderHardware{Detector: active, VAAPI: hw.VideoDecode, Candidates: candidates})
+	config, err := Render(s, cameras, deleted, RenderHardware{Detector: active, VAAPI: hw.VideoDecode, Candidates: candidates})
 	if err != nil {
 		return plan{}, err
 	}
@@ -498,6 +502,9 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageI
 	ids := []string{}
 	for _, c := range cameras {
 		ids = append(ids, c.ID)
+	}
+	for _, d := range stubs(deleted, cameras) {
+		ids = append(ids, d.ID)
 	}
 	return plan{config: config, spec: spec, active: active, cameras: ids}, nil
 }
@@ -597,7 +604,18 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 		if err != nil {
 			return err
 		}
-		p, err := m.makePlan(s, m.Cameras(), hw, imageID, dir, m.candidates())
+		// The deleted cameras whose recordings are kept: without them in
+		// config.yml Frigate deletes those recordings. Not readable: the
+		// config stays as it is. Those whose days are over go now, with a
+		// change that rewrites the config anyway.
+		if err := m.pruneDeleted(s.Volume); err != nil {
+			return err
+		}
+		deleted, err := m.deletedFor(s.Volume)
+		if err != nil {
+			return err
+		}
+		p, err := m.makePlan(s, m.Cameras(), deleted, hw, imageID, dir, m.candidates())
 		if err != nil {
 			return err
 		}

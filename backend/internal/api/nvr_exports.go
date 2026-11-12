@@ -49,7 +49,7 @@ func (a nvrArea) handleExportCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if _, ok := a.nvr.Camera(req.Camera); !ok || !a.allows(user, req.Camera, nvr.RightRecordings) {
+	if !a.reaches(user, req.Camera, nvr.RightRecordings) {
 		writeNVRError(w, nvr.ErrNotFound)
 		return
 	}

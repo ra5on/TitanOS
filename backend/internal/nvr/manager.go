@@ -140,14 +140,17 @@ type Manager struct {
 	facts   func() hostFacts
 	bootID  func() string
 
-	mu       sync.Mutex
-	loaded   bool
-	settings Settings
-	cameras  []Camera
-	state    State
-	rt       runtime
-	kick     chan struct{}
-	devDir   string
+	mu sync.Mutex
+	// deletedMu orders the changes of the deleted cameras' file
+	// (deleted.go); taken before mu, never while mu is held.
+	deletedMu sync.Mutex
+	loaded    bool
+	settings  Settings
+	cameras   []Camera
+	state     State
+	rt        runtime
+	kick      chan struct{}
+	devDir    string
 	// restored are faces a restore of /config left on the stick, until
 	// they are on the volume; backupFaces is the library as last read for
 	// the backup (backup.go).
@@ -324,6 +327,7 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		// Another volume: its state, exports and config.yml are its own.
 		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
 		m.rt.configHash, m.rt.configDir, m.rt.configCameras = "", "", nil
+		m.rt.deleted, m.rt.deletedVolume = nil, ""
 	}
 	m.rt.dirty = true
 	m.rt.retryAt = time.Time{}
@@ -476,6 +480,26 @@ func (m *Manager) AddCamera(ctx context.Context, c Camera) (Camera, error) {
 	if err := m.checkNames(ctx, c); err != nil {
 		return c, err
 	}
+	// A new ID is never one of a deleted camera whose recordings are
+	// kept; that ID given on purpose takes them back.
+	deleted := m.DeletedCameras()
+	added, err := m.addCamera(c, deleted)
+	if err != nil {
+		return added, err
+	}
+	if slices.ContainsFunc(deleted, func(d DeletedCamera) bool { return d.ID == added.ID }) {
+		volume := m.Settings().Volume
+		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
+			return slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == added.ID })
+		}); err != nil {
+			// The camera wins over its stub in config.yml anyway.
+			slog.Warn("NVR: deleted camera not taken off its list", "camera", added.ID, "err", err)
+		}
+	}
+	return added, nil
+}
+
+func (m *Manager) addCamera(c Camera, deleted []DeletedCamera) (Camera, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
@@ -487,6 +511,11 @@ func (m *Manager) AddCamera(ctx context.Context, c Camera) (Camera, error) {
 	taken := []string{}
 	for _, each := range m.cameras {
 		taken = append(taken, each.ID)
+	}
+	if c.ID == "" {
+		for _, d := range deleted {
+			taken = append(taken, d.ID)
+		}
 	}
 	if c.ID == "" {
 		c.ID = SlugID(c.Name, taken)
@@ -618,9 +647,38 @@ func streamHost(raw string) string {
 	return host
 }
 
-// RemoveCamera deletes a camera and its rights. Its recordings stay in
-// Frigate until their days are over.
+// RemoveCamera deletes a camera and its rights. Its recordings stay until
+// their days are over: the camera stays in config.yml as a stub that is
+// switched off (deleted.go). That is noted on the NVR's volume first; with
+// the volume not there the camera is not deleted (ErrNoVolume).
 func (m *Manager) RemoveCamera(id string) error {
+	m.mu.Lock()
+	loaded, volume := m.loaded, m.settings.Volume
+	at := slices.IndexFunc(m.cameras, func(each Camera) bool { return each.ID == id })
+	var gone Camera
+	if at >= 0 {
+		gone = m.cameras[at]
+	}
+	m.mu.Unlock()
+	if !loaded {
+		return ErrNotLoaded
+	}
+	if at < 0 {
+		return ErrNotFound
+	}
+	// No volume chosen: the NVR never recorded anything.
+	if volume != "" {
+		stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
+		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
+			list = slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == id })
+			return append(list, stub)
+		}); err != nil {
+			if errors.Is(err, ErrNoVolume) {
+				return ErrNoVolume
+			}
+			return fmt.Errorf("nvr: deleted camera not noted on the volume: %w", err)
+		}
+	}
 	m.mu.Lock()
 	if !m.loaded {
 		m.mu.Unlock()

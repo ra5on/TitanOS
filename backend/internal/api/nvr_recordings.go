@@ -27,7 +27,7 @@ func (a nvrArea) recorded(w http.ResponseWriter, r *http.Request) (string, bool)
 		return "", false
 	}
 	id := r.PathValue("id")
-	if _, ok := a.nvr.Camera(id); !ok || !a.allows(currentUser(r), id, nvr.RightRecordings) {
+	if !a.reaches(currentUser(r), id, nvr.RightRecordings) {
 		writeNVRError(w, nvr.ErrNotFound)
 		return "", false
 	}

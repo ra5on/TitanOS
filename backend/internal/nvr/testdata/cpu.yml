@@ -29,6 +29,11 @@ model:
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 ffmpeg:
   hwaccel_args: ""
+record:
+  continuous:
+    days: 1
+  motion:
+    days: 1
 birdseye:
   enabled: false
 lpr:

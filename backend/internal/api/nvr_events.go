@@ -35,12 +35,19 @@ func (a nvrArea) registerEvents(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/nvr/feed", g.user(a.handleFeed))
 }
 
-// camerasWith lists the cameras the account has a right on.
+// camerasWith lists the cameras the account has a right on; for owners
+// and administrators and the recordings also the deleted cameras whose
+// recordings are kept.
 func (a nvrArea) camerasWith(user auth.User, right string) []string {
 	out := []string{}
 	for _, id := range a.nvr.CameraIDs() {
 		if a.allows(user, id, right) {
 			out = append(out, id)
+		}
+	}
+	if right == nvr.RightRecordings && user.Role.CanAdminister() {
+		for _, d := range a.nvr.DeletedCameras() {
+			out = append(out, d.ID)
 		}
 	}
 	return out
@@ -124,7 +131,7 @@ func (a nvrArea) event(w http.ResponseWriter, r *http.Request) (nvr.Event, bool)
 		return nvr.Event{}, false
 	}
 	event, err := a.nvr.Event(r.Context(), r.PathValue("id"))
-	if err == nil && !a.allows(currentUser(r), event.Camera, nvr.RightRecordings) {
+	if err == nil && !a.reaches(currentUser(r), event.Camera, nvr.RightRecordings) {
 		err = nvr.ErrEventNotFound
 	}
 	if err != nil {

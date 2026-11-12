@@ -29,6 +29,11 @@ model:
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 ffmpeg:
   hwaccel_args: preset-vaapi
+record:
+  continuous:
+    days: 60
+  motion:
+    days: 60
 birdseye:
   enabled: false
 lpr:
@@ -155,3 +160,37 @@ cameras:
       enabled: false
     face_recognition:
       enabled: true
+  garage:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/garage
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 60
+      motion:
+        days: 60
+      alerts:
+        retain:
+          days: 60
+      detections:
+        retain:
+          days: 60
+    snapshots:
+      enabled: false
+      retain:
+        default: 60
+    audio:
+      enabled: false
+    lpr:
+      enabled: false
+    face_recognition:
+      enabled: false

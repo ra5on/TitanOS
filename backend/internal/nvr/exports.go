@@ -153,7 +153,7 @@ type frigateJob struct {
 
 // CreateExport starts an export of a camera's recordings for an account.
 func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, to float64, name string) (Export, error) {
-	c, ok := m.Camera(camera)
+	cameraName, ok := m.recordedCamera(camera)
 	if !ok {
 		return Export{}, ErrNotFound
 	}
@@ -161,7 +161,7 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 		return Export{}, invalid("from/to: at most 24 hours")
 	}
 	if name == "" {
-		name = fmt.Sprintf("%s %s", c.Name, time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04"))
+		name = fmt.Sprintf("%s %s", cameraName, time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04"))
 	}
 	if !exportName(name) {
 		return Export{}, invalid("name")

@@ -348,6 +348,22 @@ type CameraView struct {
 	Notify  Notify      `json:"notify"`
 	Order   int         `json:"order"`
 	State   CameraState `json:"state"`
+	// Deleted: the camera was deleted and its recordings are kept until
+	// ExpiresAt (Unix seconds, like DeletedAt); only administrators see
+	// such cameras, and only their recordings and events.
+	Deleted   bool   `json:"deleted"`
+	DeletedAt *int64 `json:"deletedAt"`
+	ExpiresAt *int64 `json:"expiresAt"`
+}
+
+// View is a deleted camera as the API lists it for administrators.
+func (d DeletedCamera) View() CameraView {
+	deleted, expires := d.DeletedAt.Unix(), d.ExpiresAt().Unix()
+	return CameraView{
+		ID: d.ID, Name: d.Name, Source: SourceView{},
+		Detect: Detect{Objects: []string{}}, Record: Record{Mode: RecordOff, RetainDays: d.RetainDays},
+		Notify: Notify{Kinds: []string{}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
+	}
 }
 
 // View is the camera without its password.

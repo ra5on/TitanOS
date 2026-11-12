@@ -98,8 +98,10 @@ func (m *Manager) exportsUsage(ctx context.Context) (uint64, error) {
 // all cameras, 0 if there is none.
 func (m *Manager) oldestRecording(ctx context.Context) float64 {
 	oldest := 0.0
-	for _, c := range m.Cameras() {
-		days, err := m.RecordingsSummary(ctx, c.ID)
+	// Deleted cameras whose recordings are kept count: Frigate deletes by
+	// time for all cameras at once.
+	for _, id := range m.recordedIDs() {
+		days, err := m.RecordingsSummary(ctx, id)
 		if err != nil {
 			continue
 		}

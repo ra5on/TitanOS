@@ -32,7 +32,7 @@ type RecordedDay struct {
 // RecordingsSummary lists the days and hours a camera has recordings of,
 // newest day first, in the time zone of the NAS.
 func (m *Manager) RecordingsSummary(ctx context.Context, camera string) ([]RecordedDay, error) {
-	if _, ok := m.Camera(camera); !ok {
+	if _, ok := m.recordedCamera(camera); !ok {
 		return nil, ErrNotFound
 	}
 	base, err := m.base()
@@ -100,7 +100,7 @@ const MaxSegmentWindow = 24 * time.Hour
 // seconds), oldest first. What is missing between two segments was not
 // recorded.
 func (m *Manager) Segments(ctx context.Context, camera string, from, to float64) ([]Segment, error) {
-	if _, ok := m.Camera(camera); !ok {
+	if _, ok := m.recordedCamera(camera); !ok {
 		return nil, ErrNotFound
 	}
 	if from <= 0 || to <= from || to-from > MaxSegmentWindow.Seconds() {

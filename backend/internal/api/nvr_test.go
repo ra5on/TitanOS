@@ -527,3 +527,65 @@ func newLocalServer(t *testing.T, handler http.Handler) string {
 	t.Cleanup(srv.Close)
 	return srv.URL
 }
+
+// A deleted camera's recordings stay until their days are over;
+// administrators find them under the camera, listed as deleted, other
+// accounts never.
+func TestNVRDeletedCameras(t *testing.T) {
+	ts, _ := nvrServer(t)
+	ts.setup()
+	nvrRunning(t, ts)
+	guest := ts.guest("gast")
+	ts.request("PUT", "/api/v1/users/gast/cameras", map[string]any{"cameras": map[string]any{"einfahrt": map[string]any{"live": true, "recordings": true}}})
+	if res, body := ts.do(guest, "GET", "/api/v1/nvr/cameras/einfahrt/recordings/summary", nil); res.StatusCode != 200 {
+		t.Fatalf("before: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/einfahrt", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", res.StatusCode, body)
+	}
+	var list struct {
+		Cameras []nvr.CameraView `json:"cameras"`
+	}
+	_, body := ts.request("GET", "/api/v1/nvr/cameras", nil)
+	json.Unmarshal(body, &list)
+	last := list.Cameras[len(list.Cameras)-1]
+	if len(list.Cameras) != 4 || last.ID != "einfahrt" || !last.Deleted || last.DeletedAt == nil || last.ExpiresAt == nil ||
+		*last.ExpiresAt-*last.DeletedAt != 14*86400 || last.Record.RetainDays != 14 || last.Source.HasPassword {
+		t.Fatalf("administrator's list: %s", body)
+	}
+	if !strings.Contains(string(body), `"deleted":false`) {
+		t.Errorf("the other cameras say deleted false: %s", body)
+	}
+	if res, body := ts.request("GET", "/api/v1/nvr/cameras/einfahrt", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"deleted":true`) {
+		t.Errorf("one deleted camera: %d %s", res.StatusCode, body)
+	}
+	for _, route := range []string{"/recordings/summary", "/recordings?from=1&to=3600"} {
+		if res, body := ts.request("GET", "/api/v1/nvr/cameras/einfahrt"+route, nil); res.StatusCode != 200 {
+			t.Errorf("administrator %s: %d %s", route, res.StatusCode, body)
+		}
+	}
+	var events eventList
+	if getJSON(t, ts, ts.client, "/nvr/events?camera=einfahrt", &events); len(events.Events) == 0 {
+		t.Error("the administrator does not find the deleted camera's events")
+	}
+	// Changing, deleting again, watching live: not for a deleted camera.
+	for _, route := range []struct{ method, path string }{{"PUT", "/nvr/cameras/einfahrt"}, {"DELETE", "/nvr/cameras/einfahrt"}, {"GET", "/nvr/cameras/einfahrt/snapshot.jpg"}} {
+		if res, body := ts.request(route.method, "/api/v1"+route.path, map[string]any{"name": "X"}); res.StatusCode != 404 {
+			t.Errorf("%s %s: %d %s", route.method, route.path, res.StatusCode, body)
+		}
+	}
+	// Another account: nothing of it.
+	_, body = ts.do(guest, "GET", "/api/v1/nvr/cameras", nil)
+	if strings.Contains(string(body), "einfahrt") {
+		t.Errorf("a user sees the deleted camera: %s", body)
+	}
+	for _, route := range []string{"/nvr/cameras/einfahrt", "/nvr/cameras/einfahrt/recordings/summary"} {
+		if res, _ := ts.do(guest, "GET", "/api/v1"+route, nil); res.StatusCode != 404 {
+			t.Errorf("user %s: %d", route, res.StatusCode)
+		}
+	}
+	var guestEvents eventList
+	if getJSON(t, ts, guest, "/nvr/events?camera=einfahrt", &guestEvents); len(guestEvents.Events) != 0 {
+		t.Errorf("a user sees the deleted camera's events: %+v", guestEvents.Events)
+	}
+}

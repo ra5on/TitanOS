@@ -30,6 +30,11 @@ model:
   labelmap_path: /labelmap/coco-80.txt
 ffmpeg:
   hwaccel_args: preset-vaapi
+record:
+  continuous:
+    days: 14
+  motion:
+    days: 14
 birdseye:
   enabled: false
 lpr:
