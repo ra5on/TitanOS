@@ -240,8 +240,10 @@ type DevFrigate struct {
 	// second (0: offline).
 	Cameras map[string]float64
 	// config are the cameras of the config.yml Frigate started with (ID →
-	// enabled); nil until a DevEngine told it.
+	// enabled); nil until a DevEngine told it. secret is its
+	// proxy.auth_secret: requests without it are refused, as on port 8971.
 	config map[string]bool
+	secret string
 	// Log are the lines of /api/logs/frigate.
 	Log []string
 	// data are events, recordings, exports and faces (dev_data.go).
@@ -277,6 +279,9 @@ func (f *DevFrigate) SetCameras(cameras []Camera) {
 // starts; a missing file is Frigate's own config without cameras.
 func (f *DevFrigate) readConfig(path string) {
 	var file struct {
+		Proxy struct {
+			Secret string `yaml:"auth_secret"`
+		} `yaml:"proxy"`
 		Cameras map[string]struct {
 			Enabled *bool `yaml:"enabled"`
 		} `yaml:"cameras"`
@@ -295,7 +300,7 @@ func (f *DevFrigate) readConfig(path string) {
 		}
 	}
 	f.mu.Lock()
-	f.config = config
+	f.config, f.secret = config, file.Proxy.Secret
 	f.mu.Unlock()
 }
 
@@ -309,7 +314,7 @@ func (f *DevFrigate) Set(edit func(*DevFrigate)) {
 // ServeHTTP answers like Frigate.
 func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
-	down, safe, noDetector := f.Down, f.SafeMode, f.NoDetector
+	down, safe, noDetector, secret := f.Down, f.SafeMode, f.NoDetector, f.secret
 	cameras := map[string]float64{}
 	for id, fps := range f.Cameras {
 		cameras[id] = fps
@@ -318,6 +323,10 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	if down {
 		http.Error(w, "down", http.StatusBadGateway)
+		return
+	}
+	if secret != "" && r.Header.Get(proxySecretHeader) != secret {
+		http.Error(w, "", http.StatusUnauthorized)
 		return
 	}
 	writeJSON := func(v any) {

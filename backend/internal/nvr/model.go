@@ -64,6 +64,12 @@ type Settings struct {
 	// RTSPPassword is made when RTSPOut is first switched on; only
 	// administrators ever see it (they type it into Home Assistant).
 	RTSPPassword string `json:"rtspPassword,omitempty"`
+	// ProxySecret is what titand shows Frigate on every request (header
+	// X-Proxy-Secret, Frigate's proxy.auth_secret): Frigate's port 8971
+	// answers nothing without it. Made when the NVR is first switched on,
+	// kept like the cameras' passwords; never in an answer of the API, a
+	// log or the diagnosis.
+	ProxySecret string `json:"proxySecret,omitempty"`
 }
 
 // KnownPlate is one entry of the known license plates.

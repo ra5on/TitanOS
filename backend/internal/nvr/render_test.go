@@ -40,7 +40,7 @@ func renderCases() map[string]struct {
 		cameras  []Camera
 		hw       RenderHardware
 	}
-	return map[string]tc{
+	cases := map[string]tc{
 		// NPU, iGPU decodes: two cameras, one with sound, talking back and PTZ.
 		"npu": {Defaults(), []Camera{
 			testCamera("haustuer", "Haustür", func(c *Camera) {
@@ -81,6 +81,21 @@ func renderCases() map[string]struct {
 		"cpu":   {Defaults(), nil, RenderHardware{Detector: DetectorCPU}},
 		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", nil)}, RenderHardware{Detector: DetectorHailo, VAAPI: true}},
 	}
+	for name, c := range cases {
+		c.settings.ProxySecret = testSecret
+		cases[name] = c
+	}
+	return cases
+}
+
+// testSecret is the secret between titand and Frigate in the golden files.
+const testSecret = "goldensecretgoldensecretgoldensecretgoldensecret0123"
+
+// secretSettings are the defaults with a secret, as an NVR that is on.
+func secretSettings() Settings {
+	s := Defaults()
+	s.ProxySecret = testSecret
+	return s
 }
 
 func TestRenderGolden(t *testing.T) {
@@ -164,13 +179,22 @@ func TestRenderFixedParts(t *testing.T) {
 		want any
 	}{
 		{[]string{"mqtt", "enabled"}, false},
+		// Frigate's proxy check: without the secret 8971 answers 401. It
+		// needs auth off (with auth on Frigate wants a login token).
 		{[]string{"auth", "enabled"}, false},
+		{[]string{"proxy", "auth_secret"}, testSecret},
+		{[]string{"proxy", "default_role"}, "admin"},
 		{[]string{"tls", "enabled"}, false},
 		{[]string{"telemetry", "version_check"}, false},
 		// Frigate treats a file without this as one of 0.13 and rewrites it.
 		{[]string{"version"}, "0.18-0"},
-		// 8971 only inside the container.
-		{[]string{"networking", "listen", "external"}, "127.0.0.1:8971"},
+		// 5000 (no check at all) only on the container's loopback; 8971
+		// (the secret) for titand.
+		{[]string{"networking", "listen", "internal"}, "127.0.0.1:5000"},
+		{[]string{"networking", "listen", "external"}, 8971},
+		// go2rtc's API and RTSP server: loopback only, no restream.
+		{[]string{"go2rtc", "api", "listen"}, "127.0.0.1:1984"},
+		{[]string{"go2rtc", "rtsp", "listen"}, "127.0.0.1:8554"},
 		{[]string{"detectors", "ov", "type"}, "openvino"},
 		{[]string{"detectors", "ov", "device"}, "NPU"},
 		{[]string{"model", "path"}, "/openvino-model/ssdlite_mobilenet_v2.xml"},
@@ -252,6 +276,9 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 		{[]string{"cameras", "einfahrt", "record", "motion", "days"}, 14},
 		{[]string{"cameras", "einfahrt", "record", "alerts", "retain", "mode"}, "motion"},
 		{[]string{"go2rtc", "rtsp", "username"}, "titanos"},
+		// The published restream listens beyond the loopback, with a login.
+		{[]string{"go2rtc", "rtsp", "listen"}, ":8554"},
+		{[]string{"go2rtc", "api", "listen"}, "127.0.0.1:1984"},
 		{[]string{"lpr", "known_plates", "Firma"}, nil},
 		{[]string{"go2rtc", "rtsp", "password"}, "abcdefgh234567"},
 	} {
@@ -320,12 +347,16 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 }
 
 func TestRenderRefusesWhatFrigateWouldMisread(t *testing.T) {
-	if _, err := Render(Defaults(), nil, RenderHardware{Detector: DetectorAuto}); err == nil {
+	if _, err := Render(secretSettings(), nil, RenderHardware{Detector: DetectorAuto}); err == nil {
 		t.Error("auto is no device")
 	}
 	bad := testCamera("a", "A", nil)
 	bad.Source.MainURL = "rtsp://192.168.1.2/{FRIGATE_X}"
-	if _, err := Render(Defaults(), []Camera{bad}, RenderHardware{Detector: DetectorCPU}); err == nil {
+	if _, err := Render(secretSettings(), []Camera{bad}, RenderHardware{Detector: DetectorCPU}); err == nil {
 		t.Error("a brace in an address must be refused")
+	}
+	// Without the secret port 8971 would answer anyone.
+	if _, err := Render(Defaults(), nil, RenderHardware{Detector: DetectorCPU}); err == nil {
+		t.Error("a config without the secret")
 	}
 }

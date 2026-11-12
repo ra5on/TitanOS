@@ -172,7 +172,7 @@ func (m *Manager) feedSession(ctx context.Context, base string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	dctx, done := context.WithTimeout(ctx, 10*time.Second)
-	conn, _, err := websocket.Dial(dctx, "ws"+strings.TrimPrefix(base, "http")+"/ws", nil)
+	conn, _, err := websocket.Dial(dctx, "ws"+strings.TrimPrefix(base, "http")+"/ws", &websocket.DialOptions{HTTPHeader: m.FrigateHeader()})
 	done()
 	if err != nil {
 		return

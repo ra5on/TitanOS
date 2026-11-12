@@ -96,11 +96,16 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
 	}
 
-	go2rtc := ymap{}
+	// go2rtc's API (1984) never asks for a login: only the container's
+	// loopback (Frigate's web server passes the live streams on, behind
+	// its check). Its RTSP server the same, unless the owner publishes the
+	// restream; then it asks for the login (Frigate's own ffmpeg reads it
+	// from 127.0.0.1 without one).
+	go2rtc := ymap{{"api", ymap{{"listen", "127.0.0.1:1984"}}}}
 	if s.RTSPOut && s.RTSPPassword != "" {
-		// Only for connections from outside the container; Frigate's own
-		// ffmpeg reads the restream from 127.0.0.1 without a login.
-		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"username", RTSPUser}, {"password", s.RTSPPassword}}})
+		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"listen", ":8554"}, {"username", RTSPUser}, {"password", s.RTSPPassword}}})
+	} else {
+		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"listen", "127.0.0.1:8554"}}})
 	}
 	// Always named: without the key Frigate adds a public STUN server.
 	candidates := slices.Clone(hw.Candidates)
@@ -109,17 +114,27 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	}
 	go2rtc = append(go2rtc, yentry{"webrtc", ymap{{"candidates", candidates}}}, yentry{"streams", streams})
 
+	if s.ProxySecret == "" {
+		// Without it port 8971 would answer anyone.
+		return nil, fmt.Errorf("%w: no secret for Frigate", ErrInvalid)
+	}
 	root := ymap{
 		// The version of the config format. Without it Frigate takes the
 		// file for one of 0.13, "migrates" it and writes it back.
 		{"version", frigateConfigVersion},
 		{"mqtt", ymap{{"enabled", false}}},
-		// titand is the only client and uses port 5000, which never asks
-		// for a login. Port 8971 (TLS, login) is bound to the container's
-		// loopback so that nothing reaches it at all.
+		// titand is the only client. Port 5000 never asks for anything:
+		// it listens on the container's loopback only (Frigate's own
+		// export job uses it there). Port 8971 is the one titand uses: its
+		// web server lets a request through only with the secret in
+		// X-Proxy-Secret (frigate/api/auth.py). That check needs auth off:
+		// with auth on, Frigate wants a login token after the secret. The
+		// role of whoever shows the secret is admin. No TLS: titand and
+		// Frigate talk on the NVR's own network.
 		{"auth", ymap{{"enabled", false}}},
+		{"proxy", ymap{{"auth_secret", s.ProxySecret}, {"default_role", "admin"}}},
 		{"tls", ymap{{"enabled", false}}},
-		{"networking", ymap{{"listen", ymap{{"external", "127.0.0.1:8971"}}}}},
+		{"networking", ymap{{"listen", ymap{{"internal", "127.0.0.1:5000"}, {"external", 8971}}}}},
 		{"telemetry", ymap{{"version_check", false}}},
 		{"detectors", detectors},
 	}

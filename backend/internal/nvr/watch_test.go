@@ -761,15 +761,51 @@ func TestVolumeGoneStopsTheContainer(t *testing.T) {
 // readyEngine is a DevEngine outside development mode.
 type readyEngine struct{ *DevEngine }
 
+// An NVR that is on without a secret (settings of an earlier build) gets
+// one, once; Frigate only runs with it.
+func TestSecretIsMadeOnce(t *testing.T) {
+	r := newRig(t, true)
+	if err := r.store.WriteJSON(settingsFile, Settings{Enabled: true, Volume: devVolume, Detector: DetectorSetting{Kind: DetectorAuto}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	secret := r.m.Settings().ProxySecret
+	var stored Settings
+	if err := r.store.ReadJSON(settingsFile, &stored); err != nil || stored.ProxySecret != secret || len(secret) < 40 || r.phase() != PhaseRunning {
+		t.Fatalf("secret %q, stored %q, phase %s", secret, stored.ProxySecret, r.phase())
+	}
+	if !strings.Contains(r.config(), "auth_secret: "+secret) {
+		t.Error("config.yml without the secret")
+	}
+	r.look()
+	if r.m.Settings().ProxySecret != secret {
+		t.Error("the secret changed")
+	}
+	// Switching off and on keeps it.
+	if err := r.m.Disable(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.enable()
+	if r.m.Settings().ProxySecret != secret {
+		t.Error("the secret changed with switching on")
+	}
+}
+
 func TestDiagnosis(t *testing.T) {
 	r := newRig(t, true)
 	r.m.KernelLog = func(context.Context) string {
 		return "usb 1-1: new device\nintel_vpu 0000:00:0b.0: [drm] Firmware: intel/vpu/vpu_40xx_v0.0.bin, version: 20250115*MTL_CLIENT_SILICON-release*1905\nintel_vpu 0000:00:0b.0: enabling device\n"
 	}
+	r.up()
+	secret := r.m.Settings().ProxySecret
 	r.frigate.Set(func(f *DevFrigate) {
 		f.Log = append(f.Log, "ffmpeg.haustuer.detect ERROR : rtsp://viewer:demo@192.168.1.61:554/sub: Connection refused")
+		f.Log = append(f.Log, "nginx: X-Proxy-Secret "+secret)
 	})
-	r.up()
 	d := r.m.Diagnosis(context.Background())
 	if d.State != PhaseRunning || d.Container.State != "running" || d.Container.StartedAt == nil || !d.ImagePresent || d.ImageVersion != FrigateVersion ||
 		!strings.Contains(d.ImageReference, FrigateDigest) || d.RunningVersion == "" {
@@ -778,12 +814,12 @@ func TestDiagnosis(t *testing.T) {
 	if d.Detector.Active != DetectorNPU || d.DetectorPID == nil || *d.DetectorPID != 4711 || d.Detector.InferenceMs == nil {
 		t.Errorf("detector: %+v pid %v", d.Detector, d.DetectorPID)
 	}
-	if d.LogSource != "frigate" || len(d.Log) != 4 || len(d.NPUFirmware) != 2 || !d.AccelDevice {
+	if d.LogSource != "frigate" || len(d.Log) != 5 || len(d.NPUFirmware) != 2 || !d.AccelDevice {
 		t.Errorf("log %d lines from %q, firmware %v", len(d.Log), d.LogSource, d.NPUFirmware)
 	}
 	// No password, wherever it comes from.
 	for _, line := range d.Log {
-		if strings.Contains(line, "demo@") {
+		if strings.Contains(line, "demo@") || strings.Contains(line, secret) {
 			t.Errorf("password in the diagnosis: %s", line)
 		}
 	}

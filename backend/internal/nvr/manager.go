@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"slices"
@@ -155,8 +156,8 @@ type Manager struct {
 
 // New makes a manager with the defaults of a NAS.
 func New(store *config.Store) *Manager {
-	return &Manager{
-		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(), feed: newFeed(), Access: NewAccess(store),
+	m := &Manager{
+		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, feed: newFeed(), Access: NewAccess(store),
 		FrigateBase:   func(address string) string { return fmt.Sprintf("http://%s:%d", address, frigatePort) },
 		Tick:          10 * time.Second,
 		HealthyWithin: 5 * time.Minute,
@@ -168,6 +169,8 @@ func New(store *config.Store) *Manager {
 		kick:          make(chan struct{}, 1),
 		rt:            runtime{phase: PhaseOff, cameras: map[string]*cameraRuntime{}},
 	}
+	m.frigate = newFrigate(m.proxySecret)
+	return m
 }
 
 func readBootID() string {
@@ -273,9 +276,12 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	if len(s.Plates) == 0 {
 		s.Plates = nil
 	}
-	s.RTSPPassword = old.RTSPPassword
+	s.RTSPPassword, s.ProxySecret = old.RTSPPassword, old.ProxySecret
 	if s.RTSPOut && s.RTSPPassword == "" {
 		s.RTSPPassword = newSecret()
+	}
+	if s.Enabled && s.ProxySecret == "" {
+		s.ProxySecret = newProxySecret()
 	}
 	if s.Volume != "" && s.Volume != old.Volume && !opts.ConfirmSleepingVolume && m.Sleeps != nil && !m.Dev {
 		if sleeping, known := m.Sleeps(ctx); known && sleeping[s.Volume] {
@@ -327,6 +333,48 @@ func newSecret() string {
 		panic(err) // crypto/rand does not fail on Linux
 	}
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))
+}
+
+// newProxySecret is the secret between titand and Frigate: 256 bits,
+// letters and digits (Frigate substitutes braces in the field).
+func newProxySecret() string {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		panic(err) // crypto/rand does not fail on Linux
+	}
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))
+}
+
+// proxySecret is the secret Frigate expects in X-Proxy-Secret.
+func (m *Manager) proxySecret() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings.ProxySecret
+}
+
+// FrigateHeader are the headers every connection to Frigate carries (the
+// API's relays of the live stream and of talking back use them).
+func (m *Manager) FrigateHeader() http.Header {
+	return http.Header{proxySecretHeader: {m.proxySecret()}}
+}
+
+// ensureSecret makes the secret of an NVR that is on without one (its
+// settings came from a build before the secret): once per start of
+// titand. If the stick cannot be written the secret stays in RAM; the
+// next start makes another one.
+func (m *Manager) ensureSecret() {
+	m.mu.Lock()
+	if m.settings.ProxySecret != "" || !m.settings.Enabled || !m.loaded {
+		m.mu.Unlock()
+		return
+	}
+	m.settings.ProxySecret = newProxySecret()
+	s := m.settings
+	m.rt.dirty = true
+	m.mu.Unlock()
+	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+		slog.Warn("NVR: the secret for Frigate is not on the stick; another one is made at the next start", "err", err)
+	}
 }
 
 // Enable switches the NVR on (volume "" keeps the chosen one).

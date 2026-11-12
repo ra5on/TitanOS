@@ -179,10 +179,11 @@ func (m *Manager) setPhase(phase string) {
 // engineError notes that the engine refused something and holds the loop
 // back for errorBackoff.
 func (m *Manager) engineError(what string, err error) {
-	slog.Warn("NVR: "+what, "err", err)
+	detail := clip(m.redact(what+": "+err.Error()), 500)
+	slog.Warn("NVR: "+what, "err", detail)
 	m.mu.Lock()
 	m.rt.phase = PhaseError
-	m.rt.lastError = &LastError{Code: "engine", Detail: clip(Redact(what+": "+err.Error()), 500), At: m.now()}
+	m.rt.lastError = &LastError{Code: "engine", Detail: detail, At: m.now()}
 	m.rt.retryAt = m.now().Add(errorBackoff)
 	m.mu.Unlock()
 }
@@ -190,6 +191,7 @@ func (m *Manager) engineError(what string, err error) {
 // reconcile is one look: it brings image, config and container to what
 // the settings ask for and checks on Frigate.
 func (m *Manager) reconcile(ctx context.Context) {
+	m.ensureSecret()
 	m.mu.Lock()
 	s, loaded, retryAt := m.settings, m.loaded, m.rt.retryAt
 	m.mu.Unlock()
@@ -1026,6 +1028,7 @@ func (m *Manager) fail(ctx context.Context, reason string, since time.Time) erro
 	setting, active := m.settings.Detector.Kind, m.activeLocked()
 	m.mu.Unlock()
 	found, detail := Classify(log, active, hw.AccelDevice)
+	detail = m.redact(detail)
 	switch {
 	case found == ReasonConfigInvalid || reason == ReasonConfigInvalid:
 		reason = ReasonConfigInvalid

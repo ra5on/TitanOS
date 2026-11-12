@@ -285,6 +285,9 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	defer cancel()
 	if running && address != "" {
 		if lines, err := m.frigate.logs(lctx, m.FrigateBase(address), diagnosisLogLines); err == nil {
+			for i := range lines {
+				lines[i] = m.redact(lines[i])
+			}
 			d.Log, d.LogSource = lines, "frigate"
 		}
 	}
@@ -292,7 +295,7 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 		if text, err := m.Engine.NVRLogs(lctx, diagnosisLogLines, time.Time{}); err == nil {
 			for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 				if line != "" {
-					d.Log = append(d.Log, Redact(line))
+					d.Log = append(d.Log, m.redact(line))
 				}
 			}
 			d.LogSource = "container"
