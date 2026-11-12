@@ -2224,7 +2224,7 @@
 	"update.confirmText": "TitanOS lädt {size} auf den Stick, in das System, das gerade nicht läuft. Das dauert einige Minuten; das NAS läuft dabei normal weiter. Aktiv wird die neue Version erst mit einem Neustart, den du selbst auslöst.",
 	"update.confirmSafe": "Geprüft wird die Signatur des Releases und die Prüfsumme jeder Datei. Die jetzige Version bleibt als Rückfall erhalten.",
 	"update.choose.title": "Version wählen",
-	"update.choose.text": "Jede veröffentlichte Version ab {floor} lässt sich installieren, auch eine ältere. Ältere Versionen kennen die neuen Signierschlüssel nicht und werden nicht angeboten.",
+	"update.choose.text": "Angeboten werden die 20 neuesten veröffentlichten Versionen ab {floor}, auch ältere als die laufende. Noch ältere Versionen kennen die neuen Signierschlüssel nicht und werden nicht angeboten.",
 	"update.choose.version": "Version",
 	"update.choose.running": "läuft",
 	"update.choose.newest": "neueste",

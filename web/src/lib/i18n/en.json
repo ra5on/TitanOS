@@ -2224,7 +2224,7 @@
 	"update.confirmText": "TitanOS loads {size} onto the stick, into the system that is not running. That takes a few minutes; the NAS keeps working meanwhile. The new version only becomes active with a restart that you trigger yourself.",
 	"update.confirmSafe": "The signature of the release and the checksum of every file are verified. The current version stays as the fallback.",
 	"update.choose.title": "Choose a version",
-	"update.choose.text": "Every published version from {floor} on can be installed, an older one too. Older versions do not know the new signing keys and are not offered.",
+	"update.choose.text": "The 20 newest published versions from {floor} on are offered, older ones than the running version too. Even older versions do not know the new signing keys and are not offered.",
 	"update.choose.version": "Version",
 	"update.choose.running": "running",
 	"update.choose.newest": "newest",
