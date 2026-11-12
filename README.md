@@ -97,7 +97,7 @@ Alles im Einzelnen – zum Aufklappen.
 - **Dateien hineinziehen:** Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den offenen Ordner hoch.
 - **Am Handy:** Startbildschirm mit dem Knopf „Menü“, Suche und App-Raster; jedes Programm und jede Docker-App öffnet im Vollbild mit „Zurück“. Ränder für Notch und Home-Leiste, keine vergrößernden Eingabefelder in Safari. TitanOS lässt sich als App installieren; unter Android nimmt sie über „Teilen › TitanOS“ Fotos und Dateien für das NAS an.
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe erklärt ein „?“ direkt daneben.
-- **Kein abgeschnittener Text:** Lange Namen und Texte brechen um, statt abgeschnitten zu werden.
+- **Kein abgeschnittener Text:** Auf den Seiten von TitanOS brechen lange Namen und Texte um, statt abgeschnitten zu werden.
 
 [![Menü mit Filtern, Programmen von A bis Z, Docker-Apps und VM-Bildschirmen, unten Konto, Systemsteuerung, Updates, App-Center, Sperren, Abmelden, Neustart und Herunterfahren; oben daneben das Suchfeld der Leiste](docs/screenshots/current/hauptmenue.png)](docs/screenshots/current/hauptmenue.png)
 
@@ -166,7 +166,7 @@ Alles im Einzelnen – zum Aufklappen.
 - **Öffnen und Speichern im NAS:** „Datei › Öffnen“ zeigt den Dateidialog von TitanOS mit deinen Freigaben, „Zuletzt geöffnet“ und „Von diesem Gerät …“. Speichern schreibt in die geöffnete Datei zurück, die vorige Fassung bleibt als `.prev`. Hat jemand anderes die Datei inzwischen geändert, fragt TitanOS nach.
 - **Sprechen nur mit dem NAS:** Die Programme laden nichts von fremden Servern und schicken nichts dorthin. Nachladbare KI-Modelle der Originale und die Online-Zusammenarbeit in T-Fig gibt es deshalb nicht.
 - **Ablage und Umstieg:** Die Programme liegen auf einem Daten-Volume; „Speicherort der Programme“ im App-Center zeigt es und zieht alle Programme mit „Verschieben …“ um. Ein noch installiertes Craft-Original ersetzt TitanOS selbst durch seine T-Fassung. Neue Versionen kommen mit TitanOS-Updates.
-- **Grenzen:** Dialoge, Einstellungen und Dateiansicht von T-Sound und T-Deck sind noch englisch.
+- **Grenzen:** Dialoge, Einstellungen und Dateiansicht von T-Sound und T-Deck sind noch englisch. In T-Film kann ein Reiter schmaler sein als sein Name, T-PDF kürzt die Namen in seiner Werkzeugliste.
 
 [Web-Apps im Fenster](docs/WEBAPPS.md)
 
@@ -200,9 +200,9 @@ Alles im Einzelnen – zum Aufklappen.
 <summary><b>NVR: Kameras, Aufnahme und Erkennung</b></summary>
 
 - **Eigenes Programm „NVR“ (ab Werk aus):** nimmt Netzwerkkameras (RTSP, ONVIF) auf und erkennt Personen, Fahrzeuge und Tiere, auf Wunsch auch Kennzeichen und Gesichter. Die Arbeit macht [Frigate](https://github.com/blakeblackshear/frigate) in einem Container, den TitanOS selbst verwaltet. Er erscheint nicht als App; eine Konfigurationsdatei schreibst du nicht.
-- **Einrichtung in Zeilen:** Volume wählen, Kameras im Heimnetz suchen oder per Adresse eintragen und prüfen. Die Frigate-Version ist je TitanOS-Release fest; das Abbild (etwa 1,5 GB) lädt TitanOS beim ersten Einschalten über Docker.
-- **Erkennung auf NPU, iGPU, Coral (USB), Hailo oder CPU:** „Automatisch“ nimmt das beste vorhandene Gerät. Fällt es aus, weicht der NVR auf das nächste aus. Die Seite Diagnose zeigt ohne Terminal, warum die Erkennung nicht läuft.
-- **Live, Aufnahmen, Ereignisse:** Kacheln frei anordnen, eine Kamera im Vollbild, die letzten Ereignisse daneben; Ton, Gegensprechen (nur über HTTPS) und Schwenken, wenn die Kamera es kann. Aufnahmen abspielen und als Datei exportieren.
+- **Einrichtung in Zeilen:** Volume für die Aufnahmen, Erkennungsgerät und Speichergrenze wählen, Kameras im Heimnetz suchen (ONVIF) oder per RTSP-Adresse eintragen und prüfen. Ist Docker aus, fragt die Einrichtung, ob es eingeschaltet werden soll; ein Volume mit schlafenden Platten nimmt der NVR nur nach Bestätigung. Die Frigate-Version ist je TitanOS-Release fest; das Abbild (etwa 1,5 GB) lädt TitanOS beim ersten Einschalten.
+- **Erkennung auf NPU, iGPU, Coral (USB), Hailo oder CPU:** „Automatisch“ nimmt das beste vorhandene Gerät. Fällt es aus, weicht der NVR auf das nächste aus (NPU → iGPU → CPU) und meldet es. Die Seite Diagnose zeigt ohne Terminal, warum die Erkennung nicht läuft.
+- **Live, Aufnahmen, Ereignisse:** Kacheln frei anordnen (je Konto gemerkt), eine Kamera groß oder im Vollbild, die letzten Ereignisse daneben; Ton, Gegensprechen (nur über HTTPS) und Schwenken, wenn die Kamera es kann. Aufnahmen auf einer Zeitleiste je Kamera und Tag abspielen und Ausschnitte exportieren. Ereignisse als Bilder oder Liste, gefiltert nach Kamera, Art und Zeitraum. Gesichter anlernen und bekannte Kennzeichen benennen (Administratoren).
 - **Aufnahme je Kamera:** Nicht aufnehmen, Bei erkannten Objekten, Bei Bewegung oder Dauerhaft, mit Aufbewahrung in Tagen. Eine Speichergrenze für alle Kameras löscht die ältesten Aufnahmen zuerst.
 - **Meldungen je Kamera:** an die Glocke, als Push, per E-Mail, an Home Assistant (eigene MQTT-Sensoren je Kamera) und an den KI-Agenten; wählbar je Art: Person, Fahrzeug, Tier, Kennzeichen, bekanntes Gesicht, Kamera offline.
 - **Rechte je Kamera:** Besitzer und Administratoren sehen alle Kameras. Ein Benutzer sieht eine Kamera nur mit Haken, getrennt für „Live ansehen“ und „Aufnahmen ansehen“. Über API-Tokens und MCP sind die Kameras nicht erreichbar.
@@ -347,10 +347,10 @@ Alles im Einzelnen – zum Aufklappen.
 
 - **Systemsteuerung:** oben das angemeldete Konto mit Rolle, darunter das Feld „Einstellung suchen“ (findet auch Stichwörter, etwa „ssh“ › Zugang) und die Bereiche Übersicht, System, Hardware und Energie, Netzwerk, Konten und Zugang, Dienste und Meldungen, KI und Smart Home, Daten und Sicherung sowie Updates. Ein Benutzer sieht nur, was er öffnen darf.
 - **Übersicht:** Zustand (Name, Version, Laufzeit, Volumes), „Zu erledigen“ aus der Einrichtungsliste und verfügbaren Updates, Dienste mit „an“ oder „aus“ und „Zuletzt geändert“.
-- **Darstellung** (Systemsteuerung › System › Darstellung) gilt für dein Konto überall – Arbeitsplatz, Fenster, Handy – sofort und ohne Speichern-Knopf:
+- **Darstellung** (Systemsteuerung › System › Darstellung) gilt für dein Konto überall – Arbeitsplatz, Fenster, Handy. Änderungen wirken sofort und speichern sich selbst; nur App-Symbol und Anmeldeseite haben einen Knopf „Übernehmen“.
   - **Farben:** Hell, Dunkel oder Automatisch; dunkle Variante Graphit, Schwarz, Mitternacht oder Eigenes; Akzentfarbe aus sechs Farben oder eigene; Regler für Glas (von Klar bis Getönt), Ecken, Schriftgröße und Farbstärke; Theme als Datei exportieren und importieren.
   - **Glas & Schrift:** Sprache, Dichte, sanfte Übergänge, Glanzkante, Leuchten, Abdunkeln hinter Dialogen und einzeln abschaltbare Effekte. „Bewegung reduzieren“ des Systems wird beachtet.
-  - **Hintergrund:** sechs gezeichnete Hintergründe (hell und dunkel) und sechs Fotos, Nordlicht und Bergsee bewegt, oder ein eigenes Bild; dazu ein eigenes App-Symbol für den Home-Bildschirm.
+  - **Hintergrund:** sechs gezeichnete Hintergründe (hell und dunkel) und sechs Fotos, Nordlicht und Bergsee bewegt, oder ein eigenes Bild. Besitzer und Administratoren wählen hier außerdem das App-Symbol des NAS für den Home-Bildschirm.
   - **Dock** mit Vorschau und der Schalter für CPU und RAM in der oberen Leiste.
 - **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS fest, welche Konten erscheinen (als Kreise oder Liste, einzeln wählbar), Theme, Hintergrund (der des Arbeitsplatzes, ein Galerie-Motiv oder ein eigenes Bild), Namen des NAS, Logo, bewegten Hintergrund, Übergang zum Arbeitsplatz und Überschrift und Begrüßung auf Deutsch und Englisch – mit Vorschau. [Einzelheiten](docs/LOGIN-APPEARANCE.md).
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung.
@@ -374,7 +374,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 - **Updates-Seite:** Ein vorhandenes Update steht in einer großen Karte mit Versionssprung, Art (mit oder ohne Neustart), Größe, Kernel und Datum. „Das ist neu in …“ klappt auf, gegliedert in Neu, Sicherheit und Behoben. Die Installation zeigt ihre Schritte.
 - **Kompatible App-Updates** ersetzen nur TitanOS mit seiner Weboberfläche, ohne Neustart des NAS. Container, VMs und Freigaben laufen weiter; die Anmeldung bleibt erhalten. Bei fehlgeschlagenem Probestart folgt der Rückfall zur vorigen App oder Systembasis.
-- **Version frei wählen:** unter Systemsteuerung › Updates eine andere veröffentlichte Version installieren, auch eine ältere (angeboten werden die 20 neuesten ab 0.46.2); Kernel „Stabil“ (Debian) oder „Neu“ (trixie-backports).
+- **Version frei wählen:** unter Systemsteuerung › Updates eine andere veröffentlichte Version installieren, auch eine ältere (angeboten werden bis zu 20 der neuesten, frühestens 0.46.2); Kernel „Stabil“ (Debian) oder „Neu“ (trixie-backports).
 - **Sicherheitsupdates von selbst:** Ein nächtlicher Lauf prüft Debian-Sicherheitsupdates und neue Kernel und baut, testet und veröffentlicht daraus ein neues Release. Mit „Von selbst installieren“ spielt das NAS Updates zur gewählten Uhrzeit ein. Ein Release, das auf diesem NAS seine Probestarts nicht bestanden hat, wird nicht mehr von selbst installiert. [Autopilot](docs/AUTOPILOT.md).
 - **Volle Systemupdates** erneuern auch Kernel und Systempakete. Sie werden in den inaktiven A/B-Slot geschrieben und starten auf Probe. Scheitert die Startprüfung wiederholt, bootet der vorherige Slot.
 - **Signatur und Integrität sind Pflicht:** nur gültig signierte Manifeste und passende Datei-Prüfsummen werden angenommen. Laufende relevante Daten- und Wartungsvorgänge blockieren die Installation bis zu ihrem Abschluss.

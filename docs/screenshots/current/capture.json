@@ -1,6 +1,6 @@
 {
-  "source": "Zweig docs/078-readme (Stand des 0.78-Arbeitszweigs feat/078-nvr-ui, Commit 052cc095)",
-  "server": "vite dev auf 127.0.0.1:5262 (Arbeitsbaum wt-078-nvr-ui, gleicher Commit)",
+  "source": "Zweig docs/078-readme, abgezweigt von feat/078-nvr-ui bei Commit 052cc095 (web/ bis e3fe8443 unverändert)",
+  "server": "vite dev auf 127.0.0.1:5262 aus dem Arbeitsbaum von feat/078-nvr-ui (HEAD e3fe8443, web/ wie 052cc095)",
   "version": "0.78.0 (in Arbeit; die Testdaten nennen 0.78 über SHOW_VERSION)",
   "captured": "2026-11-13",
   "demoData": true,

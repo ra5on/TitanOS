@@ -2,7 +2,7 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** Alle Bilder der README kommen aus `scripts/capture-readme-screenshots.mjs` und zeigen den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, gleicher Stand wie der 0.78-Arbeitszweig `feat/078-nvr-ui`, Commit `052cc095`). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
+**Aufnahmestand:** Alle Bilder der README kommen aus `scripts/capture-readme-screenshots.mjs` und zeigen den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, abgezweigt vom 0.78-Arbeitszweig `feat/078-nvr-ui` bei Commit `052cc095`; der Web-Teil ist bis `e3fe8443` unverändert). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`, für den NVR `scripts/test-ui-nvr-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen, Messwerte, Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) und VMs (Home Assistant OS, Windows 11) sind Beispiele des Skripts. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Nachgebildet sind:
 
