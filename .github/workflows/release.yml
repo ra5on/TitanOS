@@ -411,7 +411,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Several GB of release files; 15 minutes were not enough for v0.77.0.
+    timeout-minutes: 60
     # Both environments hold the signing key. release asks for an approval;
     # security-release does not and takes only what the guard allowed: a
     # release on top of a published one that changes build/debian-security.txt alone.
@@ -471,8 +472,30 @@ jobs:
           } > notes.md
           prerelease=
           if [ "$CHANNEL" = beta ]; then prerelease=--prerelease; fi
-          gh release create "$GITHUB_REF_NAME" release/* \
-            --title "TitanOS $VERSION" --notes-file notes.md --verify-tag $prerelease
+          # A draft first, the files one by one, published last: an upload
+          # that stalls (v0.77.0 on 12 Nov 2026: 48 of the files in 15 minutes,
+          # then the job's time was up) is tried again, and a second run of
+          # this job takes up the draft instead of failing on it. A release
+          # that is already published is never touched.
+          state=$(gh release view "$GITHUB_REF_NAME" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          if [ "$state" = false ]; then
+            echo "::error::$GITHUB_REF_NAME is already published; a published release is not replaced"
+            exit 1
+          fi
+          if [ "$state" = none ]; then
+            gh release create "$GITHUB_REF_NAME" --draft \
+              --title "TitanOS $VERSION" --notes-file notes.md --verify-tag $prerelease
+          fi
+          for file in release/*; do
+            for attempt in 1 2 3 4; do
+              if timeout 600 gh release upload "$GITHUB_REF_NAME" "$file" --clobber; then continue 2; fi
+              echo "upload of $file failed (attempt $attempt)"
+              sleep $((attempt * 15))
+            done
+            echo "::error::$file could not be uploaded"
+            exit 1
+          done
+          gh release edit "$GITHUB_REF_NAME" --draft=false --title "TitanOS $VERSION" --notes-file notes.md
 
   autopilot-failed:
     # A tag of the autopilot that did not make it: one issue for the owner.
