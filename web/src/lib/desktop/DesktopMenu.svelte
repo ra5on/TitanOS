@@ -9,13 +9,17 @@
 		removeIcon as dropIcon,
 		removeWidget,
 		resizeWidget,
+		setWidgetDevice,
+		toggleWidgetValue,
 		type Cell,
 		type DeskDialog,
 		type DeskMenu,
 		type IconsNow,
 	} from './desk-ops.ts';
 	import { dockPin, dockUnpin } from './Dock.svelte';
+	import { GPU_VALUES, isGpuWidget, type GpuValue } from './prefs.ts';
 	import { openProgram, openTab, type Program } from './programs.svelte.ts';
+	import { system } from '../system.svelte.ts';
 	import { desktop, requestClose, savePrefs, wm } from './wm.svelte.ts';
 
 	let {
@@ -53,6 +57,30 @@
 	} = $props();
 
 	const removeIcon = (key: string) => dropIcon(key, iconsNow);
+
+	// PLAN 79-5: the menu of a graphics widget – a check per value and, with
+	// several devices of the kind, the device. Stored with the widget.
+	const GPU_TITLE = {
+		igpu: 'desktop.widget.igpu',
+		npu: 'desktop.widget.npu',
+		gpu: 'desktop.widget.gpu',
+	} as const;
+	const GPU_VALUE_TEXT: Record<GpuValue, Parameters<typeof t>[0]> = {
+		usage: 'desktop.widget.gpuUsage',
+		history: 'desktop.widget.gpuHistory',
+		temperature: 'desktop.widget.gpuTemperature',
+		memory: 'desktop.widget.gpuMemory',
+		power: 'desktop.widget.gpuPower',
+		clock: 'desktop.widget.gpuClock',
+	};
+	const gpuWidget = $derived.by(() => {
+		if (menu?.kind !== 'widget' || !menu.key) return null;
+		const w = desktop.prefs.widgets.find((x) => x.id === menu?.key);
+		if (!w || !isGpuWidget(w.kind)) return null;
+		const devices = (system.info?.accelerators ?? []).filter((a) => a.kind === w.kind);
+		const chosen = devices.find((a) => a.address === w.device) ?? devices[0];
+		return { w, kind: w.kind, devices, chosen };
+	});
 	function dockerAction(key: string, action: 'restart' | 'stop' | 'start') {
 		menu = null;
 		return runDocker(key, action);
@@ -209,8 +237,51 @@
 					}}><span>{t('desktop.bar.size')}: {t(label)}</span></button
 				>
 			{/each}
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={desktop.prefs.barLoad}
+				onclick={() => {
+					savePrefs((p) => (p.barLoad = !p.barLoad));
+					menu = null;
+				}}><span>{t('desktop.bar.load')}</span></button
+			>
 		{:else if menu.kind === 'widget' && menu.key}
 			{@const id = menu.key}
+			{#if gpuWidget}
+				{@const g = gpuWidget}
+				<div class="menu-title">
+					{t('desktop.widget.gpuShows', { name: t(GPU_TITLE[g.kind]) })}
+				</div>
+				{#each GPU_VALUES as value (value)}
+					<!-- The menu stays open: several values can be switched one after the other. -->
+					<button
+						type="button"
+						role="menuitemcheckbox"
+						data-gpu-toggle={value}
+						aria-checked={!(g.w.hide ?? []).includes(value)}
+						onclick={() => toggleWidgetValue(id, value)}
+						><span>{t(GPU_VALUE_TEXT[value])}</span></button
+					>
+				{/each}
+				{#if g.devices.length > 1}
+					<span class="menu-rule" role="separator"></span>
+					<div class="menu-title">{t('desktop.widget.gpuDevice')}</div>
+					{#each g.devices as d (d.address)}
+						<button
+							type="button"
+							class="wrap"
+							role="menuitemradio"
+							data-gpu-device={d.address}
+							aria-checked={g.chosen?.address === d.address}
+							onclick={() => setWidgetDevice(id, d.address)}
+							><span>{d.name || d.address}</span></button
+						>
+					{/each}
+				{/if}
+				<span class="menu-rule" role="separator"></span>
+			{/if}
 			<button
 				type="button"
 				role="menuitem"
@@ -432,3 +503,13 @@
 		{/if}
 	</ContextMenu>
 {/if}
+
+<style>
+	/* A device's name may be long: it wraps instead of leaving the menu. */
+	button.wrap {
+		white-space: normal;
+		overflow-wrap: anywhere;
+		padding-top: var(--space-1-5);
+		padding-bottom: var(--space-1-5);
+	}
+</style>

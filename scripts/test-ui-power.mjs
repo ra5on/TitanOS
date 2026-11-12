@@ -57,15 +57,16 @@ async function open(width) {
   await made.ctx.route("**/api/v1/health", (r) =>
     r.fulfill({ status: 503, body: "" }),
   );
-  // The account menu: desktop's top bar, phone's home screen (PLAN 65: no classic frame).
+  // The menu: desktop's top bar, phone's home screen (PLAN 65: no classic frame).
   await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   await made.page.goto(`${base}/`);
   return { ...made, state };
 }
 
 async function startRestart(page) {
-  await page.locator(".account .trigger").first().click();
-  await page.getByRole("menuitem", { name: /NAS neu starten/ }).click();
+  // PLAN 79-10: restart sits in the one menu (second row of its buttons).
+  await page.locator("[data-menu-button]").first().click();
+  await page.locator('.launcher [data-menu-do="restart"]').click();
   const dialog = page.locator("dialog[open]");
   await dialog
     .getByRole("button", { name: "Neu starten", exact: true })
@@ -149,8 +150,8 @@ try {
       unattended: true,
       items: items("stopping"),
     };
-    await page.locator(".account .trigger").first().click();
-    await page.getByRole("menuitem", { name: /NAS neu starten/ }).click();
+    await page.locator("[data-menu-button]").first().click();
+    await page.locator('.launcher [data-menu-do="restart"]').click();
     await page
       .locator("dialog[open]")
       .getByRole("heading", { name: "Herunterfahren wird vorbereitet" })

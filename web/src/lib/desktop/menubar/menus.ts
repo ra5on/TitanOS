@@ -8,7 +8,7 @@
 //         program that program opens ("{app}" = the Docker app of the window)
 // - win:  an operation on the window in front
 // - desk: an operation on the desktop
-// - sys:  the logo menu and the help (dialogs, lock, logout, documentation)
+// - sys:  the help (documentation, shortcuts, diagnosis)
 // - cmd:  a command of the page in the window; it registers its handlers with
 //         lib/menu-commands.svelte.ts. Without a handler the entry is disabled.
 import type { Role } from '../../api.ts';
@@ -35,6 +35,7 @@ export type DeskOp =
 	| 'wallpaper'
 	| 'widgets'
 	| 'dock'
+	| 'barLoad'
 	| 'autoArrange'
 	| 'sort:name'
 	| 'sort:kind'
@@ -43,18 +44,7 @@ export type DeskOp =
 	| 'size:s'
 	| 'size:m'
 	| 'size:l';
-export type SysOp =
-	| 'about'
-	| 'settings'
-	| 'appcenter'
-	| 'updates'
-	| 'lock'
-	| 'logout'
-	| 'restart'
-	| 'shutdown'
-	| 'help'
-	| 'shortcuts'
-	| 'diagnose';
+export type SysOp = 'help' | 'shortcuts' | 'diagnose';
 
 export type MenuAction =
 	| { go: string }
@@ -658,28 +648,6 @@ export const HELP_MENU: Menu = menu('help', 'menubar.menu.help', [
 	{ id: 'help.diagnose', label: 'menubar.help.diagnose', do: { sys: 'diagnose' }, roles: ADMIN },
 ]);
 
-/** The TitanOS logo menu (always there). */
-export const LOGO_MENU: Menu = menu('logo', 'menubar.logo', [
-	{ id: 'sys.about', label: 'desktop.side.about', do: { sys: 'about' } },
-	sep,
-	{ id: 'sys.settings', label: 'desktop.app.settings', do: { sys: 'settings' } },
-	{ id: 'sys.appcenter', label: 'desktop.app.appcenter', do: { sys: 'appcenter' }, roles: ADMIN },
-	{ id: 'sys.updates', label: 'desktop.side.updates', do: { sys: 'updates' }, roles: ADMIN },
-	sep,
-	{
-		id: 'sys.desktop',
-		label: 'desktop.bar.showDesktop',
-		do: { win: 'showDesktop' },
-		keys: 'Alt+K',
-	},
-	sep,
-	{ id: 'sys.lock', label: 'desktop.menu.lock', do: { sys: 'lock' } },
-	{ id: 'sys.logout', label: 'desktop.menu.logout', do: { sys: 'logout' } },
-	sep,
-	{ id: 'sys.restart', label: 'menubar.sys.restart', do: { sys: 'restart' }, roles: ADMIN },
-	{ id: 'sys.shutdown', label: 'menubar.sys.shutdown', do: { sys: 'shutdown' }, roles: ADMIN },
-]);
-
 /** The desktop's own menus when no window is in front. */
 export const DESKTOP_MENUS: Menu[] = [
 	menu('file', 'menubar.menu.file', [
@@ -723,6 +691,8 @@ export const DESKTOP_MENUS: Menu[] = [
 		sep,
 		{ id: 'desk.widgets', label: 'desktop.widgets.show', do: { desk: 'widgets' }, mark: 'check' },
 		{ id: 'desk.dock', label: 'desktop.dock.show', do: { desk: 'dock' }, mark: 'check' },
+		// PLAN 79-10: CPU and RAM in the top bar, on unless the account switches it off.
+		{ id: 'desk.barLoad', label: 'desktop.bar.load', do: { desk: 'barLoad' }, mark: 'check' },
 	]),
 ];
 
@@ -758,10 +728,6 @@ export function menusFor(key: string, role: Role): Menu[] {
 /** The menus with no window in front. */
 export function desktopMenus(role: Role): Menu[] {
 	return forRole([...DESKTOP_MENUS, WINDOW_MENU, HELP_MENU], role);
-}
-
-export function logoMenu(role: Role): Menu {
-	return forRole([LOGO_MENU], role)[0];
 }
 
 /** Every entry of some menus, submenus included. */

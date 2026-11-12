@@ -98,6 +98,9 @@
 		clock: ['desktop.widget.clock', 'desktop.gallery.clock'],
 		homeassistant: ['desktop.widget.homeassistant', 'desktop.gallery.homeassistant'],
 		tasks: ['desktop.widget.tasks', 'desktop.gallery.tasks'],
+		igpu: ['desktop.widget.igpu', 'desktop.gallery.igpu'],
+		npu: ['desktop.widget.npu', 'desktop.gallery.npu'],
+		gpu: ['desktop.widget.gpu', 'desktop.gallery.gpu'],
 	};
 	const LOCK = [0, 5, 10, 15, 30, 60];
 	const LOCK_PHONE = [0, 5, 15, 30, 60, 240, 1440];
@@ -181,6 +184,7 @@
 			{/each}
 		</div>
 		<p class="muted small">{t('desktop.gallery.hint')}</p>
+		<p class="muted small">{t('desktop.gallery.devices')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn btn-primary" onclick={onclose}
 				>{t('desktop.widgets.done')}</button

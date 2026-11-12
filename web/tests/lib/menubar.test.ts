@@ -9,7 +9,6 @@ import {
 	entries,
 	goTarget,
 	helpUrl,
-	logoMenu,
 	menusFor,
 	programOf,
 	PROGRAM_KEYS,
@@ -53,17 +52,13 @@ test('ids are unique within a program and its submenus', () => {
 	};
 	for (const key of WINDOWS) check(menusFor(key, 'owner'), key);
 	check(desktopMenus('owner'), 'desktop');
-	check([logoMenu('owner')], 'logo');
 });
 
 test('roles: users see no administration', () => {
-	const logo = entries([logoMenu('user')]).map((e) => e.id);
-	expect(logo).not.toContain('sys.restart');
-	expect(logo).not.toContain('sys.shutdown');
-	expect(logo).not.toContain('sys.appcenter');
-	expect(logo).toContain('sys.lock');
-	expect(logo).toContain('sys.logout');
-	expect(entries([logoMenu('owner')]).map((e) => e.id)).toContain('sys.shutdown');
+	// PLAN 79-10: no logo menu any more; lock, log out and power are in the one menu (Launcher).
+	for (const role of ROLES)
+		for (const e of entries([...desktopMenus(role), ...menusFor('app:files', role)]))
+			expect(e.id.startsWith('sys.'), e.id).toBe(false);
 	const help = entries(menusFor('app:files', 'user')).map((e) => e.id);
 	expect(help).not.toContain('help.diagnose');
 	expect(entries(menusFor('app:files', 'admin')).map((e) => e.id)).toContain('help.diagnose');
@@ -82,11 +77,7 @@ test('roles: users see no administration', () => {
 test('every entry does something or opens a submenu; texts exist in both languages', () => {
 	const keys = new Set([...Object.keys(de), ...Object.keys(en)]);
 	expect(Object.keys(de).sort()).toEqual(Object.keys(en).sort());
-	const all = [
-		...WINDOWS.flatMap((k) => menusFor(k, 'owner')),
-		...desktopMenus('owner'),
-		logoMenu('owner'),
-	];
+	const all = [...WINDOWS.flatMap((k) => menusFor(k, 'owner')), ...desktopMenus('owner')];
 	for (const e of entries(all)) {
 		expect(!!e.do !== !!e.sub, e.id).toBe(true);
 		if (e.label.startsWith('menubar.')) expect(keys.has(e.label), e.label).toBe(true);

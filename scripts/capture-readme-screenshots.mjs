@@ -40,7 +40,7 @@ await shot('/storage', 'speicher');
 await shot('/settings/appearance', 'darstellung');
 await shot('/', 'handy-start', { w: 390, h: 844, max: false });
 await shot('/settings', 'systemsteuerung');
-await shot('/', 'hauptmenue', { max: false, act: async (p) => { await p.getByRole('button', { name: 'Alle Programme' }).click(); await p.waitForTimeout(800); } });
+await shot('/', 'hauptmenue', { max: false, act: async (p) => { await p.locator('.topbar [data-menu-button]').click(); await p.waitForTimeout(800); } });
 await shot('/', 'dock-bearbeiten', { max: false, act: async (p) => {
   const d = await p.locator('.dock').first().boundingBox();
   await p.mouse.click(d.x + 4, d.y + d.height / 2, { button: 'right' });

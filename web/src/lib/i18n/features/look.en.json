@@ -43,5 +43,6 @@
 	"look.dock.rightClickHint": "On the desktop too: right-click a free spot of the dock to open “Edit dock”.",
 	"look.shineHint": "Bright top edge of glass surfaces",
 	"look.glowHint": "Glow around cards, 0 = off",
-	"look.dimHint": "How much the page behind a dialog is darkened"
+	"look.dimHint": "How much the page behind a dialog is darkened",
+	"look.languageHint": "Language of the interface for this account."
 }

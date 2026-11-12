@@ -369,14 +369,9 @@ for (const [width, height, label] of [
     await page.evaluate(() => localStorage.getItem("titanos.login.wallpaper")),
     "peaks",
   );
-  // Logout from the account menu.
-  if (width < 900) await page.locator(".home .account button.trigger").click();
-  else
-    await page
-      .locator(".topbar button.trigger", { hasText: "alex" })
-      .first()
-      .click();
-  await page.getByRole("menuitem", { name: "Abmelden" }).click();
+  // Logout from the menu (PLAN 79-10: its second row of buttons).
+  await page.locator("[data-menu-button]").first().click();
+  await page.locator('.launcher [data-menu-do="logout"]').click();
   await login.waitFor({ timeout: 15000 });
   assert.ok(
     await login.locator(".card").isVisible(),

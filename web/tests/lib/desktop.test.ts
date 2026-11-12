@@ -11,7 +11,12 @@ import {
 	placeIcons,
 	placeWidget,
 	sanitizeDesktop,
+	GPU_VALUES,
+	isGpuWidget,
+	menuMove,
+	menuSorted,
 } from '#lib/desktop/prefs.ts';
+import { widgetDims } from '#lib/desktop/desk-ops.ts';
 import de from '#lib/i18n/features/desktop.de.json';
 import en from '#lib/i18n/features/desktop.en.json';
 
@@ -214,4 +219,78 @@ test('PLAN 65-10: icons keep their stored places when the window shrinks and gro
 	for (const k of keys)
 		expect(added.get(k)).toEqual(prefs.iconPos[k as keyof typeof prefs.iconPos]);
 	expect(added.get('e')).toEqual({ c: 0, r: 1 });
+});
+
+test('PLAN 79-10/79-11: bar load and the order of the menu are checked', () => {
+	expect(sanitizeDesktop({}).barLoad).toBe(true);
+	expect(sanitizeDesktop({ barLoad: false }).barLoad).toBe(false);
+	expect(sanitizeDesktop({ barLoad: 'no' }).barLoad).toBe(true);
+	expect(sanitizeDesktop({}).menuOrder).toEqual([]);
+	expect(
+		sanitizeDesktop({ menuOrder: ['app:files', 7, 'bad key', 'docker:immich', 'app:files'] })
+			.menuOrder,
+	).toEqual(['app:files', 'docker:immich']);
+});
+
+test('PLAN 79-11: the menu is sorted A–Z until the account orders it', () => {
+	const programs = [
+		{ key: 'app:vms', label: 'Virtuelle Maschinen' },
+		{ key: 'docker:immich', label: 'immich' },
+		{ key: 'app:files', label: 'Dateien' },
+		{ key: 'app:appcenter', label: 'App-Center' },
+	];
+	const keys = (order: string[]) => menuSorted(programs, order, 'de').map((p) => p.key);
+	// Capital and small letters sort together.
+	expect(keys([])).toEqual(['app:appcenter', 'app:files', 'docker:immich', 'app:vms']);
+	// An own order counts; a program it does not know follows A–Z, a vanished one is skipped.
+	expect(keys(['app:vms', 'docker:gone', 'app:files'])).toEqual([
+		'app:vms',
+		'app:files',
+		'app:appcenter',
+		'docker:immich',
+	]);
+	// Moving: in front of another program, or to the end; nothing else changes place.
+	const az = keys([]);
+	expect(menuMove(az, 'app:vms', 'app:files')).toEqual([
+		'app:appcenter',
+		'app:vms',
+		'app:files',
+		'docker:immich',
+	]);
+	expect(menuMove(az, 'app:appcenter', null)).toEqual([
+		'app:files',
+		'docker:immich',
+		'app:vms',
+		'app:appcenter',
+	]);
+	expect(menuMove(az, 'app:files', 'app:files')).toEqual(az);
+	expect(menuMove(az, 'app:nothing', 'app:files')).toEqual(az);
+});
+
+test('PLAN 79-5: graphics widgets keep their hidden values and device', () => {
+	const widget = (extra: Record<string, unknown>) =>
+		sanitizeDesktop({
+			widgets: [{ id: 'w1', kind: 'gpu', x: 0, y: 0, w: 17, h: 16, ...extra }],
+		}).widgets[0];
+	expect(widget({})).toEqual({ id: 'w1', kind: 'gpu', x: 0, y: 0, w: 17, h: 16 });
+	expect(widget({ hide: ['power', 'nonsense', 'clock'], device: '0000:01:00.0' })).toEqual({
+		id: 'w1',
+		kind: 'gpu',
+		x: 0,
+		y: 0,
+		w: 17,
+		h: 16,
+		hide: ['power', 'clock'],
+		device: '0000:01:00.0',
+	});
+	expect(widget({ device: '<script>' }).device).toBeUndefined();
+	// Other widgets carry neither.
+	const clock = sanitizeDesktop({
+		widgets: [{ id: 'w2', kind: 'clock', x: 0, y: 0, w: 12, h: 5, hide: ['usage'], device: '0' }],
+	}).widgets[0];
+	expect(clock.hide).toBeUndefined();
+	expect(clock.device).toBeUndefined();
+	expect(isGpuWidget('igpu') && isGpuWidget('npu') && !isGpuWidget('cpuram')).toBe(true);
+	expect(GPU_VALUES).toEqual(['usage', 'history', 'temperature', 'memory', 'power', 'clock']);
+	expect(widgetDims('gpu', 'm')[1]).toBeGreaterThan(widgetDims('clock', 'm')[1]);
 });
