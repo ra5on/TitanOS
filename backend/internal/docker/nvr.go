@@ -70,22 +70,47 @@ func ownNVR(labels map[string]string, name string) bool {
 	return labels[NVRLabel] == "1" && strings.TrimPrefix(name, "/") == NVRName
 }
 
+// NVRPidsLimit bounds the processes and threads of the container (a
+// runaway ffmpeg or a fork loop). Frigate runs one Python process per
+// camera and service, ffmpeg twice per camera and OpenVINO's threads;
+// threads count. The real run with one camera measured far below
+// (docs/NVR.md); 8192 leaves room for 64 cameras.
+const NVRPidsLimit = 8192
+
+// nvrMount is a bind mount. Unlike "Binds", the engine refuses a source
+// that is not there instead of making an empty folder: a volume that went
+// away between the check and the start never becomes a folder in RAM.
+func nvrMount(source, target string, readOnly bool) map[string]any {
+	return map[string]any{"Type": "bind", "Source": source, "Target": target, "ReadOnly": readOnly}
+}
+
 // nvrCreateBody is the request of POST /containers/create for a spec.
 func nvrCreateBody(spec NVRSpec) map[string]any {
 	devices := []map[string]string{}
 	for _, d := range spec.Devices {
 		devices = append(devices, map[string]string{"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rw"})
 	}
-	binds := []string{spec.Config + ":/config:rw", spec.Media + ":/media/frigate:rw", "/etc/localtime:/etc/localtime:ro"}
+	mounts := []map[string]any{
+		nvrMount(spec.Config, "/config", false),
+		nvrMount(spec.Media, "/media/frigate", false),
+		nvrMount("/etc/localtime", "/etc/localtime", true),
+	}
+	if spec.USBBus {
+		mounts = append(mounts, nvrMount("/dev/bus/usb", "/dev/bus/usb", false))
+	}
+	pids := int64(NVRPidsLimit)
 	host := map[string]any{
 		"NetworkMode": NVRName,
-		"Binds":       binds,
+		"Mounts":      mounts,
 		"Tmpfs":       map[string]string{"/tmp/cache": "rw,nosuid,nodev,size=" + strconv.FormatInt(spec.CacheBytes, 10)},
 		"ShmSize":     spec.ShmBytes,
 		"Privileged":  false,
 		"SecurityOpt": []string{"no-new-privileges"},
-		"IpcMode":     "private",
-		"Devices":     devices,
+		// Nothing in Frigate opens raw sockets (ping, packet capture).
+		"CapDrop":   []string{"NET_RAW"},
+		"PidsLimit": pids,
+		"IpcMode":   "private",
+		"Devices":   devices,
 		// titand restarts Frigate itself (nvr/watch.go): it counts the
 		// restarts and moves the detection to another device when Frigate
 		// keeps ending. Docker's own policy would hide that loop.
@@ -93,7 +118,6 @@ func nvrCreateBody(spec NVRSpec) map[string]any {
 		"LogConfig":     map[string]any{"Type": "json-file", "Config": map[string]string{"max-size": "5m", "max-file": "2"}},
 	}
 	if spec.USBBus {
-		host["Binds"] = append(binds, "/dev/bus/usb:/dev/bus/usb")
 		host["DeviceCgroupRules"] = []string{"c 189:* rmw"}
 	}
 	exposed := map[string]any{}
@@ -101,7 +125,11 @@ func nvrCreateBody(spec NVRSpec) map[string]any {
 	for _, p := range spec.Ports {
 		key := fmt.Sprintf("%d/%s", p.Port, p.Proto)
 		exposed[key] = map[string]any{}
-		bindings[key] = []map[string]string{{"HostPort": strconv.Itoa(p.Port)}}
+		// IPv4 only: without a host address Docker also listens on every
+		// IPv6 address of the NAS, global ones included. Not the home
+		// network addresses alone: one that changes (DHCP) would keep the
+		// container from starting until it is made anew.
+		bindings[key] = []map[string]string{{"HostIp": "0.0.0.0", "HostPort": strconv.Itoa(p.Port)}}
 	}
 	host["PortBindings"] = bindings
 	return map[string]any{

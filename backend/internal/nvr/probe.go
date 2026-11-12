@@ -3,7 +3,45 @@ package nvr
 import (
 	"context"
 	"slices"
+	"time"
 )
+
+// probedAudio is the sound codec a check of a main stream found.
+type probedAudio struct {
+	codec string
+	at    time.Time
+}
+
+// probedFor is how long a check counts for the camera saved after it.
+const probedFor = time.Hour
+
+// noteProbe keeps what a check found about a main stream's sound until
+// the camera is saved (AddCamera, UpdateCamera take it from there).
+func (m *Manager) noteProbe(mainURL, codec string) {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.probed == nil {
+		m.probed = map[string]probedAudio{}
+	}
+	for address, entry := range m.probed {
+		if now.Sub(entry.at) > probedFor {
+			delete(m.probed, address)
+		}
+	}
+	if len(m.probed) < 256 {
+		m.probed[mainURL] = probedAudio{codec: clip(codec, 32), at: now}
+	}
+}
+
+// probedCodecLocked is the codec a recent check found for a main stream.
+func (m *Manager) probedCodecLocked(mainURL string) (string, bool) {
+	entry, ok := m.probed[mainURL]
+	if !ok || time.Since(entry.at) > probedFor {
+		return "", false
+	}
+	return entry.codec, true
+}
 
 // ProbeRequest asks one camera before it is added or changed.
 type ProbeRequest struct {
@@ -102,7 +140,11 @@ func (m *Manager) Probe(ctx context.Context, req ProbeRequest) (ProbeResult, err
 		req.AllowPublic = req.AllowPublic || c.Source.AllowPublic
 	}
 	if m.Dev {
-		return devProbe(req), nil
+		result := devProbe(req)
+		if len(result.Streams) > 0 {
+			m.noteProbe(result.MainURL, result.Streams[0].Audio)
+		}
+		return result, nil
 	}
 	prober := &Prober{AllowPublic: req.AllowPublic}
 	switch req.Kind {
@@ -141,6 +183,9 @@ func (m *Manager) Probe(ctx context.Context, req ProbeRequest) (ProbeResult, err
 		result.Streams = append(result.Streams, ProbeStream{Role: role, URL: address, StreamInfo: info})
 		if role == "main" && req.Kind == "rtsp" {
 			result.Outcome = info.Outcome
+		}
+		if role == "main" && info.Outcome == OutcomeOK {
+			m.noteProbe(address, info.Audio)
 		}
 		// A refused login is not tried a second time on the other stream.
 		if info.Outcome == OutcomeUnauthorized || info.Outcome == OutcomeLocked {

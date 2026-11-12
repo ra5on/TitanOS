@@ -24,17 +24,38 @@ type storageRuntime struct {
 const storageEvery = 5 * time.Minute
 
 // The cap: recordings are deleted until capTarget of the cap is used,
-// in steps of capStep, at most capSteps per look.
+// in steps of capStep, at most capSteps per look. capReserve of the cap
+// stays for recordings when the exports take nearly all of it, as long as
+// that fits below the cap: exports are never deleted, and deleting every
+// recording would not bring the total further down than the exports.
 const (
-	capTarget = 0.95
-	capStep   = time.Hour
-	capSteps  = 72
+	capTarget  = 0.95
+	capReserve = 0.05
+	capStep    = time.Hour
+	capSteps   = 72
 	// capKeep is the youngest stretch the cap never deletes: what is
 	// being recorded right now.
 	capKeep = time.Hour
 	// keptMargin is left around a kept event on both sides.
 	keptMargin = 60.0
 )
+
+// recordingsTarget is how much the recordings may take after a cleanup
+// with exports of the given size below limit: what leaves capTarget of
+// the cap used, but never less than capReserve of the cap or (if that
+// does not fit) what is left below the cap.
+func recordingsTarget(limit, exports uint64) uint64 {
+	if exports >= limit {
+		return 0
+	}
+	room := limit - exports
+	reserve := min(uint64(float64(limit)*capReserve), room)
+	target := uint64(float64(limit) * capTarget)
+	if target > exports && target-exports > reserve {
+		return target - exports
+	}
+	return reserve
+}
 
 func (m *Manager) storageStatusLocked() StorageStatus {
 	st := m.rt.storage
@@ -77,8 +98,10 @@ func (m *Manager) exportsUsage(ctx context.Context) (uint64, error) {
 // all cameras, 0 if there is none.
 func (m *Manager) oldestRecording(ctx context.Context) float64 {
 	oldest := 0.0
-	for _, c := range m.Cameras() {
-		days, err := m.RecordingsSummary(ctx, c.ID)
+	// Deleted cameras whose recordings are kept count: Frigate deletes by
+	// time for all cameras at once.
+	for _, id := range m.recordedIDs() {
+		days, err := m.RecordingsSummary(ctx, id)
 		if err != nil {
 			continue
 		}
@@ -161,17 +184,25 @@ func (m *Manager) enforceCap(ctx context.Context, base string, now time.Time, li
 	if recordings+exports <= limit {
 		return CapOK, false, recordings, oldest
 	}
-	if exports > limit {
+	if exports >= limit {
+		// Exports are never deleted; deleting recordings could not bring
+		// the total below the cap.
 		return CapExportsExceed, false, recordings, oldest
 	}
-	target := uint64(float64(limit) * capTarget)
+	target := recordingsTarget(limit, exports)
 	cleaned := false
-	for step := 0; step < capSteps && recordings+exports > target; step++ {
+	for step := 0; step < capSteps && recordings > target; step++ {
 		if oldest <= 0 || oldest+capStep.Seconds() > float64(now.Add(-capKeep).Unix()) {
 			break // nothing old enough is left
 		}
 		from, to := oldest, oldest+capStep.Seconds()
-		for _, span := range m.withoutKept(ctx, base, from, to) {
+		spans, known := m.withoutKept(ctx, base, from, to)
+		if !known {
+			// Not knowing what is kept, nothing is deleted: not this hour,
+			// and not the younger ones behind it.
+			return CapCleaning, cleaned, recordings, oldest
+		}
+		for _, span := range spans {
 			path := fmt.Sprintf("/api/recordings/start/%s/end/%s", formatTime(span[0]), formatTime(span[1]))
 			if err := m.frigate.call(ctx, http.MethodDelete, base, path, nil, nil, nil); err != nil {
 				slog.Warn("NVR: oldest recordings not deleted", "err", err)
@@ -201,14 +232,14 @@ func (m *Manager) enforceCap(ctx context.Context, base string, now time.Time, li
 }
 
 // withoutKept returns the parts of [from, to) that hold no kept event
-// (Frigate: "retain indefinitely"), with a margin around each.
-func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64) [][2]float64 {
+// (Frigate: "retain indefinitely"), with a margin around each. known is
+// false when Frigate did not say which events are kept.
+func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64) (spans [][2]float64, known bool) {
 	var kept []frigateEvent
 	// An event is found by its start: look far enough back for long ones.
 	query := url.Values{"favorites": {"1"}, "after": {formatTime(from - 6*3600)}, "before": {formatTime(to + keptMargin)}, "limit": {"500"}, "include_thumbnails": {"0"}}
 	if err := m.frigate.call(ctx, http.MethodGet, base, "/api/events", query, nil, &kept); err != nil {
-		// Not knowing what is kept, nothing of this hour is deleted.
-		return nil
+		return nil, false
 	}
 	var holes [][2]float64
 	for _, e := range kept {
@@ -229,7 +260,6 @@ func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64
 		}
 		return 0
 	})
-	var spans [][2]float64
 	at := from
 	for _, hole := range holes {
 		if hole[0] > at {
@@ -240,5 +270,5 @@ func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64
 	if at < to {
 		spans = append(spans, [2]float64{at, to})
 	}
-	return spans
+	return spans, true
 }

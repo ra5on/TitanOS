@@ -75,8 +75,15 @@ type runtime struct {
 	// stateLoaded: state.json of the volume was read; stateDirty: it is
 	// to be written.
 	stateLoaded, stateDirty bool
-	// configHash is the hash of config.yml as last written or read.
-	configHash string
+	// configHash is the hash of config.yml as last written or read,
+	// configDir the folder it was written to (another volume, another
+	// file), configCameras the cameras in it (what Frigate must report).
+	configHash, configDir string
+	configCameras         []string
+	// restart: Frigate runs with other cameras than config.yml names
+	// (it read no file or another one); the next look starts it again
+	// even if the file does not change.
+	restart bool
 	// retryAt holds the loop back after the engine refused something.
 	retryAt   time.Time
 	lastError *LastError
@@ -99,10 +106,16 @@ type runtime struct {
 	// The container as last seen.
 	container docker.NVRState
 	address   string
-	// startedAt is when the watch last started the container; healthy
-	// once Frigate answered after that.
+	// startedAt is when the watch last started the container (or took
+	// over a running one); healthy once Frigate answered after that, with
+	// the cameras of config.yml.
 	startedAt time.Time
 	healthy   bool
+	// missed counts looks in a row without an answer from Frigate.
+	missed int
+	// hangs are the times a Frigate that ran stopped answering and was
+	// restarted; they count like ends, over a longer window.
+	hangs []time.Time
 	// answeredAt is when Frigate's API last answered.
 	answeredAt time.Time
 	version    string
@@ -120,14 +133,24 @@ type runtime struct {
 	storage storageRuntime
 	cameras map[string]*cameraRuntime
 
+	// deleted are the deleted cameras whose recordings are kept, as read
+	// from deletedVolume ("" until read; deleted.go).
+	deleted       []DeletedCamera
+	deletedVolume string
 	// exports are the records of exports.json (nil until read);
 	// exportSizes the sizes of finished exports.
 	exports     map[string]exportRecord
 	exportSizes map[string]int64
 	// notices is what the routing of messages remembers (routing.go).
 	notices noticeState
-	// ptzStops stop a camera that was set moving (ptz.go).
-	ptzStops map[string]*time.Timer
+	// ptzStops stop a camera that was set moving (ptz.go); ptzMoving are
+	// the cameras set moving since their last stop went through,
+	// ptzOwed those whose stop did not go through yet (since when), with
+	// the timers that try again.
+	ptzStops   map[string]*time.Timer
+	ptzMoving  map[string]bool
+	ptzOwed    map[string]time.Time
+	ptzRetries map[string]*time.Timer
 	// ptzSent are the times of the last PTZ commands per account.
 	ptzSent map[string][]time.Time
 }
@@ -142,11 +165,20 @@ const errorBackoff = time.Minute
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(m.Tick)
 	defer ticker.Stop()
-	go m.runFeed(ctx)
+	feedDone := make(chan struct{})
+	go func() {
+		m.runFeed(ctx)
+		close(feedDone)
+	}()
 	for {
 		m.reconcile(ctx)
 		select {
 		case <-ctx.Done():
+			// The feed sends the stops cameras still owe before it ends.
+			<-feedDone
+			if owed := m.owedStops(true); len(owed) > 0 {
+				slog.Warn("NVR: titand ends while cameras may still be moving; Frigate was not reached", "cameras", strings.Join(owed, " "))
+			}
 			return
 		case <-ticker.C:
 		case <-m.kick:
@@ -166,10 +198,11 @@ func (m *Manager) setPhase(phase string) {
 // engineError notes that the engine refused something and holds the loop
 // back for errorBackoff.
 func (m *Manager) engineError(what string, err error) {
-	slog.Warn("NVR: "+what, "err", err)
+	detail := clip(m.redact(what+": "+err.Error()), 500)
+	slog.Warn("NVR: "+what, "err", detail)
 	m.mu.Lock()
 	m.rt.phase = PhaseError
-	m.rt.lastError = &LastError{Code: "engine", Detail: clip(Redact(what+": "+err.Error()), 500), At: m.now()}
+	m.rt.lastError = &LastError{Code: "engine", Detail: detail, At: m.now()}
 	m.rt.retryAt = m.now().Add(errorBackoff)
 	m.mu.Unlock()
 }
@@ -177,6 +210,7 @@ func (m *Manager) engineError(what string, err error) {
 // reconcile is one look: it brings image, config and container to what
 // the settings ask for and checks on Frigate.
 func (m *Manager) reconcile(ctx context.Context) {
+	m.ensureSecret()
 	m.mu.Lock()
 	s, loaded, retryAt := m.settings, m.loaded, m.rt.retryAt
 	m.mu.Unlock()
@@ -437,11 +471,13 @@ type plan struct {
 	config []byte
 	spec   docker.NVRSpec
 	active string
+	// cameras are the cameras config names.
+	cameras []string
 }
 
 // makePlan resolves the device, renders the config and describes the
 // container.
-func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageID, dir string, candidates []string) (plan, error) {
+func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera, hw HardwareInfo, imageID, dir string, candidates []string) (plan, error) {
 	m.mu.Lock()
 	active := m.state.Active
 	m.mu.Unlock()
@@ -450,7 +486,7 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageI
 		active = chain[0]
 	}
 	nodes, usb := hw.containerDevices(active)
-	config, err := Render(s, cameras, RenderHardware{Detector: active, VAAPI: hw.VideoDecode, Candidates: candidates})
+	config, err := Render(s, cameras, deleted, RenderHardware{Detector: active, VAAPI: hw.VideoDecode, Candidates: candidates})
 	if err != nil {
 		return plan{}, err
 	}
@@ -478,7 +514,14 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, hw HardwareInfo, imageI
 	}
 	sum := sha256.Sum256(described)
 	spec.Hash = hex.EncodeToString(sum[:16])
-	return plan{config: config, spec: spec, active: active}, nil
+	ids := []string{}
+	for _, c := range cameras {
+		ids = append(ids, c.ID)
+	}
+	for _, d := range stubs(deleted, cameras) {
+		ids = append(ids, d.ID)
+	}
+	return plan{config: config, spec: spec, active: active, cameras: ids}, nil
 }
 
 func hashOf(data []byte) string {
@@ -487,27 +530,25 @@ func hashOf(data []byte) string {
 }
 
 // writeConfig makes the folders of the container and puts config.yml in
-// place (0600, atomically) if its content differs. It reports whether the
-// file changed.
-func (m *Manager) writeConfig(volume string, config []byte) (changed bool, err error) {
+// place (0600, atomically) if its content differs or it is missing. It
+// reports whether the file changed. cameras are the cameras the file
+// names.
+func (m *Manager) writeConfig(volume string, config []byte, cameras []string) (changed bool, err error) {
 	want := hashOf(config)
-	m.mu.Lock()
-	have := m.rt.configHash
-	m.mu.Unlock()
-	if have == want {
-		return false, nil
-	}
-	root, _, err := m.privateRoot(volume)
+	root, dir, err := m.privateRoot(volume)
 	if err != nil {
 		return false, err
 	}
 	defer root.Close()
-	for _, dir := range []string{"config", "media"} {
-		if err := root.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+	// The folders are made every time: on another volume (or after
+	// someone removed them) the container would otherwise mount folders
+	// that are not there.
+	for _, folder := range []string{"config", "media"} {
+		if err := root.Mkdir(folder, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return false, err
 		}
-		if info, err := root.Lstat(dir); err != nil || !info.IsDir() {
-			return false, fmt.Errorf("nvr: %s is not a folder", dir)
+		if info, err := root.Lstat(folder); err != nil || !info.IsDir() {
+			return false, fmt.Errorf("nvr: %s is not a folder", folder)
 		}
 	}
 	folder, err := root.OpenRoot("config")
@@ -515,17 +556,31 @@ func (m *Manager) writeConfig(volume string, config []byte) (changed bool, err e
 		return false, err
 	}
 	defer folder.Close()
-	// After a start of titand the hash is not known: the file may be
-	// what it should be already (Frigate then needs no restart).
-	if have == "" {
+	m.mu.Lock()
+	have, haveDir := m.rt.configHash, m.rt.configDir
+	m.mu.Unlock()
+	known := func() {
+		m.mu.Lock()
+		m.rt.configHash, m.rt.configDir, m.rt.configCameras = want, dir, slices.Clone(cameras)
+		m.mu.Unlock()
+	}
+	// The hash names what was written to this folder; the file itself
+	// must still be there.
+	if have == want && haveDir == dir {
+		if info, err := folder.Lstat("config.yml"); err == nil && info.Mode().IsRegular() {
+			return false, nil
+		}
+	}
+	// After a start of titand, or in another folder, the hash is not
+	// known: the file may be what it should be already (Frigate then needs
+	// no restart).
+	if have == "" || haveDir != dir {
 		if file, err := folder.Open("config.yml"); err == nil {
 			var current bytes.Buffer
 			_, rerr := current.ReadFrom(file)
 			file.Close()
 			if rerr == nil && bytes.Equal(current.Bytes(), config) {
-				m.mu.Lock()
-				m.rt.configHash = want
-				m.mu.Unlock()
+				known()
 				return false, nil
 			}
 		}
@@ -533,9 +588,7 @@ func (m *Manager) writeConfig(volume string, config []byte) (changed bool, err e
 	if err := volumedata.Write(folder, "config.yml", config); err != nil {
 		return false, err
 	}
-	m.mu.Lock()
-	m.rt.configHash = want
-	m.mu.Unlock()
+	known()
 	return true, nil
 }
 
@@ -566,16 +619,29 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 		if err != nil {
 			return err
 		}
-		p, err := m.makePlan(s, m.Cameras(), hw, imageID, dir, m.candidates())
+		// The deleted cameras whose recordings are kept: without them in
+		// config.yml Frigate deletes those recordings. Not readable: the
+		// config stays as it is. Those whose days are over go now, with a
+		// change that rewrites the config anyway.
+		if err := m.pruneDeleted(s.Volume); err != nil {
+			return err
+		}
+		deleted, err := m.deletedFor(s.Volume)
 		if err != nil {
 			return err
 		}
-		changed, err := m.writeConfig(s.Volume, p.config)
+		p, err := m.makePlan(s, m.Cameras(), deleted, hw, imageID, dir, m.candidates())
+		if err != nil {
+			return err
+		}
+		changed, err := m.writeConfig(s.Volume, p.config, p.cameras)
 		if err != nil {
 			return err
 		}
 		m.mu.Lock()
 		m.rt.dirty = false
+		restart := m.rt.restart
+		m.rt.restart = false
 		if m.state.Active != p.active && m.state.Failover != nil {
 			// The device of the failover is gone too; the plan chose anew.
 			m.state.Active, m.rt.stateDirty = p.active, true
@@ -584,8 +650,8 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 		switch {
 		case !st.Exists || st.Hash != p.spec.Hash || st.Image != imageID:
 			return m.recreate(ctx, p.spec)
-		case changed && st.Running:
-			slog.Info("NVR: configuration changed, restarting Frigate")
+		case (changed || restart) && st.Running:
+			slog.Info("NVR: configuration changed, restarting Frigate", "rewritten", changed)
 			m.setPhase(PhaseStarting) // the restart itself takes up to half a minute
 			rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 			defer cancel()
@@ -601,8 +667,10 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 	}
 	m.mu.Lock()
 	if m.rt.startedAt.IsZero() {
-		// Found running after a start of titand (an app update).
-		m.rt.startedAt = st.StartedAt
+		// Found running after a start of titand (an app update): it is
+		// watched from now on, as if just started. Its own start may be
+		// days ago; one missed answer must not count as "never answered".
+		m.rt.startedAt, m.rt.healthy, m.rt.missed = m.now(), false, 0
 	}
 	m.rt.address = st.Address
 	m.mu.Unlock()
@@ -672,7 +740,7 @@ func (m *Manager) recreate(ctx context.Context, spec docker.NVRSpec) error {
 // started notes a start by the watch.
 func (m *Manager) started() {
 	m.mu.Lock()
-	m.rt.startedAt, m.rt.healthy, m.rt.detectorBad, m.rt.absent = m.now(), false, 0, false
+	m.rt.startedAt, m.rt.healthy, m.rt.detectorBad, m.rt.absent, m.rt.missed = m.now(), false, 0, false, 0
 	m.rt.answeredAt = time.Time{}
 	m.rt.phase = PhaseStarting
 	m.rt.stats, m.rt.inferenceMs, m.rt.detectorPID = nil, nil, nil
@@ -722,6 +790,18 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 	return nil
 }
 
+// missLimit is how many looks in a row Frigate may not answer before a
+// start counts as failed or a running Frigate as hanging: one slow
+// answer (a busy NAS, a restart of Frigate's web server) is no fault.
+const missLimit = 3
+
+// hangWindow is how far back hangs are counted: a hang is only noticed
+// HealthyWithin after the last answer, so the window of the ends is too
+// short for CrashLimit of them.
+func (m *Manager) hangWindow() time.Duration {
+	return time.Duration(m.CrashLimit+1) * (m.HealthyWithin + m.CrashWindow)
+}
+
 // check asks Frigate how it is: up, with the config TitanOS wrote, and
 // with a living detector. It also reads what status and diagnosis show.
 func (m *Manager) check(ctx context.Context, st docker.NVRState) {
@@ -736,27 +816,18 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 	m.mu.Lock()
 	startedAt, wasHealthy, answeredAt := m.rt.startedAt, m.rt.healthy, m.rt.answeredAt
 	if err == nil {
-		m.rt.answeredAt = now
+		m.rt.answeredAt, m.rt.missed = now, 0
+	} else {
+		m.rt.missed++
 	}
+	missed := m.rt.missed
 	m.mu.Unlock()
 	if err != nil {
-		if wasHealthy && now.Sub(answeredAt) > m.HealthyWithin {
-			// Ran, and now hangs without ending: started afresh, counted
-			// like an end.
-			slog.Warn("NVR: Frigate does not answer any more, restarting it")
-			m.mu.Lock()
-			m.rt.crashes = append(m.rt.crashes, now)
-			m.mu.Unlock()
-			rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
-			defer cancel()
-			if rerr := m.Engine.NVRRestart(rctx); rerr != nil {
-				m.engineError("container of the NVR", rerr)
-				return
-			}
-			m.started()
+		if wasHealthy && now.Sub(answeredAt) > m.HealthyWithin && missed >= missLimit {
+			m.hung(ctx, now, startedAt)
 			return
 		}
-		if !wasHealthy && now.Sub(startedAt) > m.HealthyWithin {
+		if !wasHealthy && now.Sub(startedAt) > m.HealthyWithin && missed >= missLimit {
 			slog.Warn("NVR: Frigate did not answer after its start", "after", now.Sub(startedAt).Round(time.Second))
 			if ferr := m.fail(ctx, ReasonNotHealthy, startedAt); ferr != nil {
 				m.engineError("container of the NVR", ferr)
@@ -768,13 +839,31 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 		}
 		return
 	}
-	// A refused config.yml does not end Frigate: it starts empty ("safe
-	// mode") and answers. That is not the device's fault.
-	if safe, err := m.frigate.safeMode(hctx, base); err == nil && safe {
-		if ferr := m.fail(ctx, ReasonConfigInvalid, startedAt); ferr != nil {
-			m.engineError("container of the NVR", ferr)
+	// Until Frigate is healthy after a start: did it take config.yml? A
+	// refused file does not end Frigate: it starts empty ("safe mode")
+	// and answers. That is not the device's fault. Neither is a Frigate
+	// that read no file at all (it then writes its own, without cameras).
+	// Once healthy, /api/config (large, and a line in nginx's log) is not
+	// asked again until the next start.
+	if !wasHealthy {
+		running, err := m.frigate.runningConfig(hctx, base)
+		if err != nil {
+			m.setPhase(PhaseStarting)
+			return
 		}
-		return
+		if running.SafeMode {
+			if ferr := m.fail(ctx, ReasonConfigInvalid, startedAt); ferr != nil {
+				m.engineError("container of the NVR", ferr)
+			}
+			return
+		}
+		m.mu.Lock()
+		want := slices.Clone(m.rt.configCameras)
+		m.mu.Unlock()
+		if want != nil && !slices.Equal(running.cameraIDs(), sortedIDs(want)) {
+			m.otherCameras(ctx, now, startedAt, running.cameraIDs(), want)
+			return
+		}
 	}
 	stats, err := m.frigate.stats(hctx, base)
 	if err != nil {
@@ -820,6 +909,65 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 	}
 	m.watchCameras(stats, now)
 	m.watchStorage(ctx, base, now)
+}
+
+// forcedRestart notes a restart titand forced (Frigate hung, or runs
+// other cameras than config.yml names) and reports how many fell into
+// hangWindow, with the first of them.
+func (m *Manager) forcedRestart(now time.Time) (int, time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	window := m.hangWindow()
+	m.rt.hangs = slices.DeleteFunc(append(m.rt.hangs, now), func(t time.Time) bool { return now.Sub(t) > window })
+	return len(m.rt.hangs), m.rt.hangs[0]
+}
+
+// hung handles a Frigate that ran and stopped answering without ending:
+// it is restarted, and CrashLimit hangs within hangWindow fail over like
+// CrashLimit ends.
+func (m *Manager) hung(ctx context.Context, now, startedAt time.Time) {
+	hangs, first := m.forcedRestart(now)
+	if hangs >= m.CrashLimit {
+		slog.Warn("NVR: Frigate keeps hanging", "hangs", hangs)
+		if ferr := m.fail(ctx, "", first); ferr != nil {
+			m.engineError("container of the NVR", ferr)
+		}
+		return
+	}
+	slog.Warn("NVR: Frigate does not answer any more, restarting it", "hangs", hangs, "runningSince", startedAt)
+	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
+	defer cancel()
+	if rerr := m.Engine.NVRRestart(rctx); rerr != nil {
+		m.engineError("container of the NVR", rerr)
+		return
+	}
+	m.started()
+}
+
+// otherCameras handles a Frigate that answers with other cameras than
+// config.yml names: it read no file (another volume, a folder that was
+// not there) or an older one. The file is written again and Frigate
+// restarted; when that keeps happening the NVR stops (config_invalid).
+func (m *Manager) otherCameras(ctx context.Context, now, startedAt time.Time, running, want []string) {
+	slog.Warn("NVR: Frigate runs other cameras than config.yml names; writing it again and restarting", "running", len(running), "configured", len(want))
+	if times, _ := m.forcedRestart(now); times >= m.CrashLimit {
+		if ferr := m.fail(ctx, ReasonConfigInvalid, startedAt); ferr != nil {
+			m.engineError("container of the NVR", ferr)
+		}
+		return
+	}
+	m.mu.Lock()
+	m.rt.configHash, m.rt.dirty, m.rt.restart = "", true, true
+	m.rt.phase = PhaseStarting
+	m.mu.Unlock()
+	m.wake()
+}
+
+// sortedIDs is a sorted copy of ids.
+func sortedIDs(ids []string) []string {
+	out := slices.Clone(ids)
+	slices.Sort(out)
+	return out
 }
 
 // activeLocked is the device in use (m.mu held).
@@ -913,6 +1061,7 @@ func (m *Manager) fail(ctx context.Context, reason string, since time.Time) erro
 	setting, active := m.settings.Detector.Kind, m.activeLocked()
 	m.mu.Unlock()
 	found, detail := Classify(log, active, hw.AccelDevice)
+	detail = m.redact(detail)
 	switch {
 	case found == ReasonConfigInvalid || reason == ReasonConfigInvalid:
 		reason = ReasonConfigInvalid
@@ -929,7 +1078,7 @@ func (m *Manager) fail(ctx context.Context, reason string, since time.Time) erro
 		m.state.Stopped, m.state.StoppedReason, m.state.StoppedDetail = true, reason, detail
 		m.rt.stateDirty = true
 		m.rt.lastError = &LastError{Code: reason, Detail: detail, At: now}
-		m.rt.crashes = nil
+		m.rt.crashes, m.rt.hangs = nil, nil
 		m.mu.Unlock()
 		slog.Error("NVR stopped: nothing works", "reason", reason, "detector", active, "detail", detail)
 		m.removeContainer(ctx)
@@ -943,7 +1092,7 @@ func (m *Manager) fail(ctx context.Context, reason string, since time.Time) erro
 	m.state.Failover = &Failover{From: active, To: next, At: now, Reason: reason, Detail: detail}
 	m.rt.stateDirty, m.rt.dirty = true, true
 	m.rt.lastError = &LastError{Code: reason, Detail: detail, At: now}
-	m.rt.crashes, m.rt.detectorBad = nil, 0
+	m.rt.crashes, m.rt.hangs, m.rt.detectorBad = nil, nil, 0
 	m.mu.Unlock()
 	slog.Warn("NVR: detection moved to another device", "from", active, "to", next, "reason", reason, "detail", detail)
 	m.notify("warning", "nvr_failover", deviceTitle(active)+" → "+deviceTitle(next))

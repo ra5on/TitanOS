@@ -171,7 +171,8 @@ type ContainerDiagnosis struct {
 	ExitCode   int        `json:"exitCode"`
 	StartedAt  *time.Time `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
-	// RecentEnds counts the ends within the watch's window.
+	// RecentEnds counts the ends within the watch's window and the
+	// restarts it forced (Frigate hung or ran other cameras).
 	RecentEnds int `json:"recentEnds"`
 }
 
@@ -243,7 +244,7 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	if m.state.Stopped && d.LastError == nil {
 		d.LastError = &LastError{Code: m.state.StoppedReason, Detail: m.state.StoppedDetail}
 	}
-	container, crashes := m.rt.container, len(m.rt.crashes)
+	container, crashes := m.rt.container, len(m.rt.crashes)+len(m.rt.hangs)
 	address, running := m.rt.address, m.rt.phase == PhaseRunning || m.rt.phase == PhaseStarting
 	states := m.cameraStatesLocked()
 	for _, c := range m.cameras {
@@ -284,6 +285,9 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	defer cancel()
 	if running && address != "" {
 		if lines, err := m.frigate.logs(lctx, m.FrigateBase(address), diagnosisLogLines); err == nil {
+			for i := range lines {
+				lines[i] = m.redact(lines[i])
+			}
 			d.Log, d.LogSource = lines, "frigate"
 		}
 	}
@@ -291,7 +295,7 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 		if text, err := m.Engine.NVRLogs(lctx, diagnosisLogLines, time.Time{}); err == nil {
 			for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 				if line != "" {
-					d.Log = append(d.Log, Redact(line))
+					d.Log = append(d.Log, m.redact(line))
 				}
 			}
 			d.LogSource = "container"
@@ -344,6 +348,22 @@ type CameraView struct {
 	Notify  Notify      `json:"notify"`
 	Order   int         `json:"order"`
 	State   CameraState `json:"state"`
+	// Deleted: the camera was deleted and its recordings are kept until
+	// ExpiresAt (Unix seconds, like DeletedAt); only administrators see
+	// such cameras, and only their recordings and events.
+	Deleted   bool   `json:"deleted"`
+	DeletedAt *int64 `json:"deletedAt"`
+	ExpiresAt *int64 `json:"expiresAt"`
+}
+
+// View is a deleted camera as the API lists it for administrators.
+func (d DeletedCamera) View() CameraView {
+	deleted, expires := d.DeletedAt.Unix(), d.ExpiresAt().Unix()
+	return CameraView{
+		ID: d.ID, Name: d.Name, Source: SourceView{},
+		Detect: Detect{Objects: []string{}}, Record: Record{Mode: RecordOff, RetainDays: d.RetainDays},
+		Notify: Notify{Kinds: []string{}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
+	}
 }
 
 // View is the camera without its password.

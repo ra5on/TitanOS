@@ -5,11 +5,15 @@ mqtt:
   enabled: false
 auth:
   enabled: false
+proxy:
+  auth_secret: goldensecretgoldensecretgoldensecretgoldensecret0123
+  default_role: admin
 tls:
   enabled: false
 networking:
   listen:
-    external: 127.0.0.1:8971
+    internal: 127.0.0.1:5000
+    external: 8971
 telemetry:
   version_check: false
 detectors:
@@ -25,6 +29,11 @@ model:
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 ffmpeg:
   hwaccel_args: ""
+record:
+  continuous:
+    days: 1
+  motion:
+    days: 1
 birdseye:
   enabled: false
 lpr:
@@ -32,6 +41,10 @@ lpr:
 face_recognition:
   enabled: false
 go2rtc:
+  api:
+    listen: 127.0.0.1:1984
+  rtsp:
+    listen: 127.0.0.1:8554
   webrtc:
     candidates: []
   streams: {}

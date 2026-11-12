@@ -166,13 +166,16 @@ func (m *Manager) runFeed(ctx context.Context) {
 	}
 }
 
-// feedSession is one connection: it ends when Frigate closes it or the
-// NVR stops running.
-func (m *Manager) feedSession(ctx context.Context, base string) {
-	ctx, cancel := context.WithCancel(ctx)
+// feedSession is one connection: it ends when Frigate closes it, the NVR
+// stops running or ctx ends (titand ends: the stops that are owed are sent
+// first).
+func (m *Manager) feedSession(parent context.Context, base string) {
+	// Reading with a cancelled context closes the connection; it is
+	// cancelled only after the last stops are sent.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	defer cancel()
-	dctx, done := context.WithTimeout(ctx, 10*time.Second)
-	conn, _, err := websocket.Dial(dctx, "ws"+strings.TrimPrefix(base, "http")+"/ws", nil)
+	dctx, done := context.WithTimeout(parent, 10*time.Second)
+	conn, _, err := websocket.Dial(dctx, "ws"+strings.TrimPrefix(base, "http")+"/ws", &websocket.DialOptions{HTTPHeader: m.FrigateHeader()})
 	done()
 	if err != nil {
 		return
@@ -192,6 +195,9 @@ func (m *Manager) feedSession(ctx context.Context, base string) {
 	if err := f.send(ctx, "onConnect", ""); err != nil {
 		return
 	}
+	// Cameras whose stop did not go through while Frigate was not
+	// reached get it now.
+	m.sendOwedStops(conn, false)
 	f.setRunning(true)
 	// The connection ends with the NVR (a restart of Frigate closes it
 	// by itself; this catches a container that was removed).
@@ -201,6 +207,11 @@ func (m *Manager) feedSession(ctx context.Context, base string) {
 		for {
 			select {
 			case <-ctx.Done():
+				return
+			case <-parent.Done():
+				// titand ends: no camera keeps turning.
+				m.sendOwedStops(conn, true)
+				cancel()
 				return
 			case <-ticker.C:
 				if current, err := m.base(); err != nil || current != base {

@@ -96,6 +96,10 @@ func TestNVRExportsBelongToTheirAccount(t *testing.T) {
 	if res, _ := ts.do(anna, "GET", "/api/v1/nvr/exports/"+made.ID+"/download", nil); res.StatusCode != 404 {
 		t.Errorf("after losing the camera: %d", res.StatusCode)
 	}
+	// … and not listed.
+	if getJSON(t, ts, anna, "/nvr/exports", &list); len(list.Exports) != 0 {
+		t.Errorf("listed after losing the camera: %+v", list.Exports)
+	}
 	grant(t, ts, "anna", map[string]string{"haustuer": "recordings"})
 	if res, _ := ts.do(anna, "DELETE", "/api/v1/nvr/exports/"+made.ID, nil); res.StatusCode != http.StatusNoContent {
 		t.Errorf("delete: %d", res.StatusCode)

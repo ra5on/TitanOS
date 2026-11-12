@@ -66,9 +66,10 @@ func (a nvrArea) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(picture) // the browser went away; nothing to do
 }
 
-// nvrLiveDial connects to Frigate's live WebSocket; tests replace it.
-var nvrLiveDial = func(ctx context.Context, address string) (*websocket.Conn, error) {
-	conn, _, err := websocket.Dial(ctx, address, nil)
+// nvrLiveDial connects to a WebSocket of Frigate with the headers it
+// needs (the proxy secret); tests replace it.
+var nvrLiveDial = func(ctx context.Context, address string, header http.Header) (*websocket.Conn, error) {
+	conn, _, err := websocket.Dial(ctx, address, &websocket.DialOptions{HTTPHeader: header})
 	return conn, err
 }
 
@@ -114,7 +115,7 @@ func (a nvrArea) handleLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	upstream, err := nvrLiveDial(dctx, address)
+	upstream, err := nvrLiveDial(dctx, address, a.nvr.FrigateHeader())
 	cancel()
 	if err != nil {
 		slog.Warn("NVR live stream not reached", "camera", id, "err", err)

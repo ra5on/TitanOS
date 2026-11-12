@@ -61,7 +61,10 @@ func (m ymap) MarshalYAML() (any, error) {
 // rewritten (and Frigate only restarted) when something changed. The file
 // holds the cameras' passwords: it is written 0600 into the private folder
 // of the NVR and never logged.
-func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
+//
+// deleted are the deleted cameras whose recordings are kept: each stays
+// as a stub that is switched off (deleted.go).
+func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHardware) ([]byte, error) {
 	detectors, model, err := detectorBlocks(hw.Detector)
 	if err != nil {
 		return nil, err
@@ -95,12 +98,26 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 		streams = append(streams, entries...)
 		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
 	}
+	// The longest any recording is kept, for the global retention below.
+	keep := 1
+	for _, c := range cameras {
+		keep = max(keep, c.Record.RetainDays)
+	}
+	for _, d := range stubs(deleted, cameras) {
+		cams = append(cams, yentry{d.ID, stubBlock(d, anyPlates, anyFaces)})
+		keep = max(keep, d.RetainDays)
+	}
 
-	go2rtc := ymap{}
+	// go2rtc's API (1984) never asks for a login: only the container's
+	// loopback (Frigate's web server passes the live streams on, behind
+	// its check). Its RTSP server the same, unless the owner publishes the
+	// restream; then it asks for the login (Frigate's own ffmpeg reads it
+	// from 127.0.0.1 without one).
+	go2rtc := ymap{{"api", ymap{{"listen", "127.0.0.1:1984"}}}}
 	if s.RTSPOut && s.RTSPPassword != "" {
-		// Only for connections from outside the container; Frigate's own
-		// ffmpeg reads the restream from 127.0.0.1 without a login.
-		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"username", RTSPUser}, {"password", s.RTSPPassword}}})
+		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"listen", ":8554"}, {"username", RTSPUser}, {"password", s.RTSPPassword}}})
+	} else {
+		go2rtc = append(go2rtc, yentry{"rtsp", ymap{{"listen", "127.0.0.1:8554"}}})
 	}
 	// Always named: without the key Frigate adds a public STUN server.
 	candidates := slices.Clone(hw.Candidates)
@@ -109,17 +126,27 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	}
 	go2rtc = append(go2rtc, yentry{"webrtc", ymap{{"candidates", candidates}}}, yentry{"streams", streams})
 
+	if s.ProxySecret == "" {
+		// Without it port 8971 would answer anyone.
+		return nil, fmt.Errorf("%w: no secret for Frigate", ErrInvalid)
+	}
 	root := ymap{
 		// The version of the config format. Without it Frigate takes the
 		// file for one of 0.13, "migrates" it and writes it back.
 		{"version", frigateConfigVersion},
 		{"mqtt", ymap{{"enabled", false}}},
-		// titand is the only client and uses port 5000, which never asks
-		// for a login. Port 8971 (TLS, login) is bound to the container's
-		// loopback so that nothing reaches it at all.
+		// titand is the only client. Port 5000 never asks for anything:
+		// it listens on the container's loopback only (Frigate's own
+		// export job uses it there). Port 8971 is the one titand uses: its
+		// web server lets a request through only with the secret in
+		// X-Proxy-Secret (frigate/api/auth.py). That check needs auth off:
+		// with auth on, Frigate wants a login token after the secret. The
+		// role of whoever shows the secret is admin. No TLS: titand and
+		// Frigate talk on the NVR's own network.
 		{"auth", ymap{{"enabled", false}}},
+		{"proxy", ymap{{"auth_secret", s.ProxySecret}, {"default_role", "admin"}}},
 		{"tls", ymap{{"enabled", false}}},
-		{"networking", ymap{{"listen", ymap{{"external", "127.0.0.1:8971"}}}}},
+		{"networking", ymap{{"listen", ymap{{"internal", "127.0.0.1:5000"}, {"external", 8971}}}}},
 		{"telemetry", ymap{{"version_check", false}}},
 		{"detectors", detectors},
 	}
@@ -128,6 +155,11 @@ func Render(s Settings, cameras []Camera, hw RenderHardware) ([]byte, error) {
 	}
 	root = append(root,
 		yentry{"ffmpeg", ymap{{"hwaccel_args", hwaccel}}},
+		// The global retention is no camera's (each sets all of its own).
+		// It is what Frigate keeps of a camera that is in no config at all
+		// (it deletes those recordings within the hour by it): as long as
+		// the longest of the cameras, instead of Frigate's 0 days.
+		yentry{"record", ymap{{"continuous", ymap{{"days", keep}}}, {"motion", ymap{{"days", keep}}}}},
 		yentry{"birdseye", ymap{{"enabled", false}}},
 		yentry{"lpr", lprBlock(s, anyPlates)},
 		yentry{"face_recognition", ymap{{"enabled", anyFaces}}},
@@ -269,8 +301,13 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 		inputs = []ymap{input(mainStream(c.ID), "record"), input(subStream(c.ID), "detect")}
 	}
 	recordArgs := "preset-record-generic"
-	if c.Audio.Enabled {
+	switch {
+	case c.Audio.Enabled && strings.EqualFold(c.Audio.Codec, codecAAC):
 		recordArgs = "preset-record-generic-audio-copy"
+	case c.Audio.Enabled:
+		// G.711 (or a codec not known yet) does not go into an MP4 file
+		// as it is: the segments would not be written at all.
+		recordArgs = "preset-record-generic-audio-aac"
 	}
 
 	// Plates are read on vehicles and faces on persons: those must be
@@ -284,9 +321,11 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 	}
 	track, _ = cleanList(track, allowedObjects) // validated before; this only orders them
 
+	// No friendly_name: Frigate keys its storage figures by it
+	// (/api/recordings/storage), so they are keyed by the ID, which is
+	// unique; and renaming a camera does not restart Frigate.
 	block := ymap{
 		{"enabled", c.Enabled},
-		{"friendly_name", c.Name},
 		{"ffmpeg", ymap{{"output_args", ymap{{"record", recordArgs}}}, {"inputs", inputs}}},
 		{"detect", ymap{{"enabled", c.Detect.Enabled}, {"fps", 5}}},
 		{"objects", ymap{{"track", track}}},
@@ -312,17 +351,56 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 	return block
 }
 
+// stubBlock is a deleted camera whose recordings are kept: switched off
+// (Frigate starts nothing for it), with its retention, an input of the
+// local restream that names no stream (go2rtc has none of that name; no
+// login anywhere). Frigate wants an input with the role detect.
+func stubBlock(d DeletedCamera, anyPlates, anyFaces bool) ymap {
+	const restream = "rtsp://127.0.0.1:8554/"
+	block := ymap{
+		{"enabled", false},
+		{"ffmpeg", ymap{{"inputs", []ymap{{{"path", restream + d.ID}, {"input_args", "preset-rtsp-restream"}, {"roles", []string{"detect"}}}}}}},
+		// A size, so that Frigate does not probe a stream that is not
+		// there when it starts (its own default size).
+		{"detect", ymap{{"enabled", false}, {"width", 1280}, {"height", 720}}},
+		{"record", keepBlock(d.RetainDays)},
+		{"snapshots", ymap{{"enabled", false}, {"retain", ymap{{"default", d.RetainDays}}}}},
+		{"audio", ymap{{"enabled", false}}},
+	}
+	if anyPlates {
+		block = append(block, yentry{"lpr", ymap{{"enabled", false}}})
+	}
+	if anyFaces {
+		block = append(block, yentry{"face_recognition", ymap{{"enabled", false}}})
+	}
+	return block
+}
+
+// keepBlock records nothing and keeps what was recorded for days:
+// Frigate's cleanup goes through every camera, recording or not, and
+// would otherwise delete the recordings with its defaults.
+func keepBlock(days int) ymap {
+	return ymap{
+		{"enabled", false},
+		{"continuous", ymap{{"days", days}}},
+		{"motion", ymap{{"days", days}}},
+		{"alerts", ymap{{"retain", ymap{{"days", days}}}}},
+		{"detections", ymap{{"retain", ymap{{"days", days}}}}},
+	}
+}
+
 // recordBlock maps the mode of a camera to Frigate's retention:
 //
 //	continuous: everything is kept for RetainDays.
 //	motion:     only segments with motion are kept.
 //	events:     only segments in which a tracked object was active.
+//	off:        nothing is recorded; what was is kept for RetainDays.
 //
 // Alerts and detections (Frigate's two classes of events) get the same
 // days and the seconds before and after.
 func recordBlock(r Record) ymap {
 	if r.Mode == RecordOff {
-		return ymap{{"enabled", false}}
+		return keepBlock(r.RetainDays)
 	}
 	continuous, motion, mode := 0, 0, "active_objects"
 	switch r.Mode {
@@ -355,7 +433,11 @@ func lprBlock(s Settings, enabled bool) ymap {
 	slices.SortFunc(plates, func(a, b KnownPlate) int { return strings.Compare(a.Name, b.Name) })
 	known := ymap{}
 	for _, entry := range plates {
-		known = append(known, yentry{entry.Name, entry.Plates})
+		patterns := []string{}
+		for _, plate := range entry.Plates {
+			patterns = append(patterns, platePattern(plate))
+		}
+		known = append(known, yentry{entry.Name, patterns})
 	}
 	return append(block, yentry{"known_plates", known})
 }

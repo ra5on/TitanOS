@@ -35,12 +35,19 @@ func (a nvrArea) registerEvents(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/nvr/feed", g.user(a.handleFeed))
 }
 
-// camerasWith lists the cameras the account has a right on.
+// camerasWith lists the cameras the account has a right on; for owners
+// and administrators and the recordings also the deleted cameras whose
+// recordings are kept.
 func (a nvrArea) camerasWith(user auth.User, right string) []string {
 	out := []string{}
 	for _, id := range a.nvr.CameraIDs() {
 		if a.allows(user, id, right) {
 			out = append(out, id)
+		}
+	}
+	if right == nvr.RightRecordings && user.Role.CanAdminister() {
+		for _, d := range a.nvr.DeletedCameras() {
+			out = append(out, d.ID)
 		}
 	}
 	return out
@@ -124,7 +131,7 @@ func (a nvrArea) event(w http.ResponseWriter, r *http.Request) (nvr.Event, bool)
 		return nvr.Event{}, false
 	}
 	event, err := a.nvr.Event(r.Context(), r.PathValue("id"))
-	if err == nil && !a.allows(currentUser(r), event.Camera, nvr.RightRecordings) {
+	if err == nil && !a.reaches(currentUser(r), event.Camera, nvr.RightRecordings) {
 		err = nvr.ErrEventNotFound
 	}
 	if err != nil {
@@ -274,7 +281,10 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 		conn.Close(websocket.StatusPolicyViolation, "nvr_unavailable")
 		return
 	}
-	messages, cancel := a.nvr.Subscribe(func(camera string) bool { return a.allows(user, camera, nvr.RightLive) })
+	// The feed asks from its own goroutine: the account is taken once
+	// here (its rights are looked up by name, as they are now).
+	viewer := user
+	messages, cancel := a.nvr.Subscribe(func(camera string) bool { return a.allows(viewer, camera, nvr.RightLive) })
 	defer cancel()
 	// Reading notices a window that closed (and answers pings).
 	ctx := conn.CloseRead(r.Context())
@@ -285,8 +295,7 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-recheck.C:
-			current, ok := a.loginHolds(r, user)
-			if !ok {
+			if _, ok := a.loginHolds(r, user); !ok {
 				bye, _ := json.Marshal(map[string]string{"t": "bye", "reason": "logout"})
 				wctx, done := context.WithTimeout(context.Background(), 2*time.Second)
 				_ = conn.Write(wctx, websocket.MessageText, bye)
@@ -294,7 +303,6 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 				conn.Close(websocket.StatusNormalClosure, "logout")
 				return
 			}
-			user = current
 		case message := <-messages:
 			data, err := json.Marshal(message)
 			if err != nil {

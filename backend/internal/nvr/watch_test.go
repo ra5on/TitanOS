@@ -2,8 +2,11 @@ package nvr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,6 +39,7 @@ func newRig(t *testing.T, image bool) *rig {
 	r := &rig{t: t, store: config.Open(t.TempDir()), dir: t.TempDir(), now: time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)}
 	r.engine = NewDevEngine(image)
 	r.frigate = NewDevFrigate(nil)
+	r.engine.Serve(r.frigate)
 	srv := httptest.NewServer(r.frigate)
 	t.Cleanup(srv.Close)
 	r.m = r.manager(srv.URL)
@@ -89,6 +93,15 @@ func (r *rig) config() string {
 		r.t.Fatalf("config.yml: %v", err)
 	}
 	return string(data)
+}
+
+func (r *rig) mustRead(name string) []byte {
+	r.t.Helper()
+	data, err := r.store.Read(name)
+	if err != nil {
+		r.t.Fatalf("%s: %v", name, err)
+	}
+	return data
 }
 
 func (r *rig) enable() {
@@ -178,18 +191,27 @@ func TestEnableStartsFrigate(t *testing.T) {
 func TestChangesRestartOnlyWhenNeeded(t *testing.T) {
 	r := newRig(t, true)
 	r.up()
-	// A changed camera: new config, Frigate restarts in the same container.
+	// A renamed camera: the name is not in config.yml, nothing restarts.
 	c, _ := r.m.Camera("einfahrt")
 	c.Name = "Einfahrt Nord"
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
-	if r.engine.Creates != 1 || r.engine.Starts != 2 || !strings.Contains(r.config(), "Einfahrt Nord") {
+	if r.engine.Creates != 1 || r.engine.Starts != 1 || strings.Contains(r.config(), "Einfahrt") {
 		t.Errorf("rename: creates %d starts %d", r.engine.Creates, r.engine.Starts)
 	}
+	// A changed camera: new config, Frigate restarts in the same container.
+	c.Record.RetainDays = 30
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	if r.engine.Creates != 1 || r.engine.Starts != 2 || !strings.Contains(r.config(), "days: 30") {
+		t.Errorf("change: creates %d starts %d", r.engine.Creates, r.engine.Starts)
+	}
 	// Storing the same camera again changes nothing.
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -457,16 +479,84 @@ func TestDeadDetectorFailsOver(t *testing.T) {
 func TestHangingFrigateIsRestarted(t *testing.T) {
 	r := newRig(t, true)
 	r.up()
-	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
-	r.advance(time.Minute)
-	r.look()
-	if r.engine.Starts != 1 {
-		t.Fatalf("restarted after a minute of silence")
+	starts := 1
+	// hang lets Frigate stop answering for six minutes, looked at like the
+	// watch does, and answer again.
+	hang := func() {
+		t.Helper()
+		r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+		r.advance(time.Minute)
+		r.look()
+		if r.engine.Starts != starts {
+			t.Fatalf("restarted after a minute of silence")
+		}
+		// Two looks without an answer after five minutes are not enough.
+		r.advance(5 * time.Minute)
+		r.look()
+		if r.engine.Starts != starts {
+			t.Fatalf("restarted after two missed looks")
+		}
+		r.advance(10 * time.Second)
+		r.look()
+		r.frigate.Set(func(f *DevFrigate) { f.Down = false })
 	}
-	r.advance(5 * time.Minute)
+	hang()
+	starts++
+	if r.engine.Starts != starts || r.phase() != PhaseStarting {
+		t.Fatalf("starts %d phase %s", r.engine.Starts, r.phase())
+	}
 	r.look()
-	if r.engine.Starts != 2 || r.phase() != PhaseStarting {
-		t.Errorf("starts %d phase %s", r.engine.Starts, r.phase())
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	hang()
+	starts++
+	r.look()
+	// The third hang within the window counts like the third end: the
+	// detection moves on.
+	hang()
+	st := r.m.Status(context.Background())
+	if st.Detector.Active != DetectorIGPU || st.Detector.Failover == nil || r.engine.Starts != starts {
+		t.Errorf("after three hangs: starts %d, detector %+v", r.engine.Starts, st.Detector)
+	}
+	r.look()
+	if r.engine.Starts != starts+1 || !strings.Contains(r.config(), "device: GPU") {
+		t.Errorf("not moved: %d starts", r.engine.Starts)
+	}
+}
+
+// Frigate runs other cameras than config.yml names (it read no file):
+// titand writes the file again and restarts Frigate instead of calling it
+// running; when that keeps happening the NVR stops.
+func TestOtherCamerasRestartFrigate(t *testing.T) {
+	r := newRig(t, true)
+	r.enable()
+	r.look()
+	r.frigate.Set(func(f *DevFrigate) { f.config = map[string]bool{} })
+	r.look()
+	if r.phase() == PhaseRunning || r.engine.Starts != 1 {
+		t.Fatalf("Frigate without cameras counts as running: %s", r.phase())
+	}
+	r.look()
+	if r.engine.Starts != 2 {
+		t.Fatalf("not restarted: %d starts", r.engine.Starts)
+	}
+	r.look()
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s after the restart", r.phase())
+	}
+	// It keeps happening: stopped, the config is to blame, not the device.
+	r.frigate.Set(func(f *DevFrigate) { f.IgnoreConfig, f.config = true, map[string]bool{} })
+	r.m.mu.Lock()
+	r.m.rt.healthy = false
+	r.m.mu.Unlock()
+	for range 8 {
+		r.advance(10 * time.Second)
+		r.look()
+	}
+	st := r.m.Status(context.Background())
+	if st.State != PhaseStopped || st.Error == nil || st.Error.Code != ReasonConfigInvalid || st.Detector.Failover != nil {
+		t.Errorf("state %s error %+v detector %+v", st.State, st.Error, st.Detector)
 	}
 }
 
@@ -534,7 +624,7 @@ func TestOfflineCameraIsReportedOnce(t *testing.T) {
 	// einfahrt does not want the message.
 	c, _ := r.m.Camera("einfahrt")
 	c.Notify.Kinds = []string{"person"}
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -580,38 +670,50 @@ func TestCameraCRUD(t *testing.T) {
 		t.Error("demo cameras were written to /config")
 	}
 	c := NewCamera()
-	c.Name = "Haustür"
+	c.Name = "HAUSTÜR"
 	c.Source = Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.80/live", User: "u", Password: "p"}
-	added, err := r.m.AddCamera(c)
-	if err != nil || added.ID != "haustuer_2" || added.Order != 5 {
+	// Names are unique, letter case aside (people tell cameras apart by
+	// name).
+	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("a second Haustür: %v", err)
+	}
+	c.Name = "Haustür hinten"
+	added, err := r.m.AddCamera(context.Background(), c)
+	if err != nil || added.ID != "haustuer_hinten" || added.Order != 5 {
 		t.Fatalf("%+v %v", added, err)
 	}
+	if renamed := added; true {
+		renamed.Name = "garten"
+		if _, err := r.m.UpdateCamera(context.Background(), added.ID, renamed, false); !errors.Is(err, ErrNameExists) {
+			t.Errorf("renamed like another camera: %v", err)
+		}
+	}
 	c.ID = "haustuer"
-	if _, err := r.m.AddCamera(c); !errors.Is(err, ErrExists) {
+	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrExists) {
 		t.Errorf("double ID: %v", err)
 	}
 	// An edit without a password keeps it …
 	edit := added
 	edit.Source.Password = ""
 	edit.Name = "Seiteneingang"
-	got, err := r.m.UpdateCamera(added.ID, edit, false)
+	got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false)
 	if err != nil || got.Source.Password != "p" {
 		t.Errorf("%+v %v", got.Source, err)
 	}
 	// … but never sends it to another address or user.
 	edit.Source.MainURL = "rtsp://192.168.1.99/live"
-	if _, err := r.m.UpdateCamera(added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another host kept the password: %v", err)
 	}
 	edit.Source.MainURL, edit.Source.User = "rtsp://192.168.1.80/live", "other"
-	if _, err := r.m.UpdateCamera(added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another user kept the password: %v", err)
 	}
 	edit.Source.User = ""
-	if got, err := r.m.UpdateCamera(added.ID, edit, true); err != nil || got.Source.Password != "" {
+	if got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, true); err != nil || got.Source.Password != "" {
 		t.Errorf("clearing: %+v %v", got.Source, err)
 	}
-	if _, err := r.m.UpdateCamera("nope", edit, false); !errors.Is(err, ErrNotFound) {
+	if _, err := r.m.UpdateCamera(context.Background(), "nope", edit, false); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown camera: %v", err)
 	}
 	// Deleting a camera deletes its rights.
@@ -692,15 +794,51 @@ func TestVolumeGoneStopsTheContainer(t *testing.T) {
 // readyEngine is a DevEngine outside development mode.
 type readyEngine struct{ *DevEngine }
 
+// An NVR that is on without a secret (settings of an earlier build) gets
+// one, once; Frigate only runs with it.
+func TestSecretIsMadeOnce(t *testing.T) {
+	r := newRig(t, true)
+	if err := r.store.WriteJSON(settingsFile, Settings{Enabled: true, Volume: devVolume, Detector: DetectorSetting{Kind: DetectorAuto}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	secret := r.m.Settings().ProxySecret
+	var stored Settings
+	if err := r.store.ReadJSON(settingsFile, &stored); err != nil || stored.ProxySecret != secret || len(secret) < 40 || r.phase() != PhaseRunning {
+		t.Fatalf("secret %q, stored %q, phase %s", secret, stored.ProxySecret, r.phase())
+	}
+	if !strings.Contains(r.config(), "auth_secret: "+secret) {
+		t.Error("config.yml without the secret")
+	}
+	r.look()
+	if r.m.Settings().ProxySecret != secret {
+		t.Error("the secret changed")
+	}
+	// Switching off and on keeps it.
+	if err := r.m.Disable(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.enable()
+	if r.m.Settings().ProxySecret != secret {
+		t.Error("the secret changed with switching on")
+	}
+}
+
 func TestDiagnosis(t *testing.T) {
 	r := newRig(t, true)
 	r.m.KernelLog = func(context.Context) string {
 		return "usb 1-1: new device\nintel_vpu 0000:00:0b.0: [drm] Firmware: intel/vpu/vpu_40xx_v0.0.bin, version: 20250115*MTL_CLIENT_SILICON-release*1905\nintel_vpu 0000:00:0b.0: enabling device\n"
 	}
+	r.up()
+	secret := r.m.Settings().ProxySecret
 	r.frigate.Set(func(f *DevFrigate) {
 		f.Log = append(f.Log, "ffmpeg.haustuer.detect ERROR : rtsp://viewer:demo@192.168.1.61:554/sub: Connection refused")
+		f.Log = append(f.Log, "nginx: X-Proxy-Secret "+secret)
 	})
-	r.up()
 	d := r.m.Diagnosis(context.Background())
 	if d.State != PhaseRunning || d.Container.State != "running" || d.Container.StartedAt == nil || !d.ImagePresent || d.ImageVersion != FrigateVersion ||
 		!strings.Contains(d.ImageReference, FrigateDigest) || d.RunningVersion == "" {
@@ -709,12 +847,12 @@ func TestDiagnosis(t *testing.T) {
 	if d.Detector.Active != DetectorNPU || d.DetectorPID == nil || *d.DetectorPID != 4711 || d.Detector.InferenceMs == nil {
 		t.Errorf("detector: %+v pid %v", d.Detector, d.DetectorPID)
 	}
-	if d.LogSource != "frigate" || len(d.Log) != 4 || len(d.NPUFirmware) != 2 || !d.AccelDevice {
+	if d.LogSource != "frigate" || len(d.Log) != 5 || len(d.NPUFirmware) != 2 || !d.AccelDevice {
 		t.Errorf("log %d lines from %q, firmware %v", len(d.Log), d.LogSource, d.NPUFirmware)
 	}
 	// No password, wherever it comes from.
 	for _, line := range d.Log {
-		if strings.Contains(line, "demo@") {
+		if strings.Contains(line, "demo@") || strings.Contains(line, secret) {
 			t.Errorf("password in the diagnosis: %s", line)
 		}
 	}
@@ -756,5 +894,277 @@ func TestLiveAndSnapshot(t *testing.T) {
 	}
 	if live, _ := r.m.Live("haustuer", false); !strings.HasSuffix(live, "?src=haustuer") {
 		t.Errorf("main: %q", live)
+	}
+}
+
+// A titand started while Frigate briefly does not answer takes the
+// container over without moving the detection (review of 12.11.2026).
+func TestAdoptionIsNoFailover(t *testing.T) {
+	r := newRig(t, true)
+	r.up()
+	old := r.m
+	r.m = r.manager(old.FrigateBase(""))
+	if err := r.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.advance(48 * time.Hour) // the container started long before this titand
+	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+	r.look()
+	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
+	r.look()
+	r.m.mu.Lock()
+	st := r.m.state
+	r.m.mu.Unlock()
+	if st.Failover != nil || st.Stopped || r.phase() != PhaseRunning {
+		t.Errorf("one missed answer after a titand restart: phase %s, failover %+v, stopped %v", r.phase(), st.Failover, st.Stopped)
+	}
+}
+
+// Moving the NVR to another volume writes config.yml there before the new
+// container starts (review of 12.11.2026).
+func TestVolumeChangeWritesTheConfig(t *testing.T) {
+	r := newRig(t, true)
+	mnt := t.TempDir()
+	for _, v := range []string{"a", "b"} {
+		if err := os.MkdirAll(filepath.Join(mnt, v), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := r.m
+	m.Dev = false
+	m.MountRoot = mnt
+	m.Mounted = func() []string { return []string{"a", "b"} }
+	if err := m.Enable(context.Background(), "a", SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	if _, err := os.Stat(filepath.Join(mnt, "a", ".titanos", "nvr", "config", "config.yml")); err != nil {
+		t.Fatalf("volume a: %v (phase %s)", err, r.phase())
+	}
+	s := m.Settings()
+	s.Volume = "b"
+	if err := m.SetSettings(context.Background(), s, SetOptions{ConfirmSleepingVolume: true}); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	spec := r.engine.Spec()
+	if spec.Config != filepath.Join(mnt, "b", ".titanos", "nvr", "config") {
+		t.Errorf("container mounts %s", spec.Config)
+	}
+	if _, err := os.Stat(filepath.Join(spec.Config, "config.yml")); err != nil {
+		t.Errorf("after the move to volume b there is no config.yml: %v (phase %s)", err, r.phase())
+	}
+}
+
+// The sound's codec comes from titand's own check of the camera, not from
+// the page: AAC is recorded as it is, anything else turned into AAC.
+func TestAudioCodecFromTheCheck(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	main := "rtsp://192.168.1.81:554/main"
+	if _, err := r.m.Probe(ctx, ProbeRequest{Kind: "rtsp", MainURL: main}); err != nil {
+		t.Fatal(err)
+	}
+	c := NewCamera()
+	c.Name, c.Source = "Hof", Source{Kind: "rtsp", MainURL: main}
+	c.Audio = Audio{Enabled: true, Codec: "whatever the page says"}
+	added, err := r.m.AddCamera(ctx, c)
+	if err != nil || added.Audio.Codec != "MPEG4-GENERIC" {
+		t.Fatalf("%+v %v", added.Audio, err)
+	}
+	// Not checked: unknown.
+	c.Name, c.Source.MainURL = "Tor", "rtsp://192.168.1.82:554/main"
+	other, err := r.m.AddCamera(ctx, c)
+	if err != nil || other.Audio.Codec != "" {
+		t.Fatalf("%+v %v", other.Audio, err)
+	}
+	r.up()
+	cfg := parse(t, []byte(r.config()))
+	if got := dig(t, cfg, "cameras", added.ID, "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-copy" {
+		t.Errorf("AAC: %v", got)
+	}
+	if got := dig(t, cfg, "cameras", other.ID, "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("unknown: %v", got)
+	}
+	// An edit of the same stream keeps it; another stream forgets it.
+	added.Audio.Codec = ""
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "MPEG4-GENERIC" {
+		t.Errorf("same stream: %+v %v", got.Audio, err)
+	}
+	added.Source.MainURL = "rtsp://192.168.1.81:554/other"
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "" {
+		t.Errorf("other stream: %+v %v", got.Audio, err)
+	}
+}
+
+// Host names in the addresses are checked like IP addresses, the sub
+// stream like the main stream.
+func TestCameraTargetsAreChecked(t *testing.T) {
+	r := newRig(t, true)
+	r.m.Resolve = func(_ context.Context, host string) ([]netip.Addr, error) {
+		switch host {
+		case "cam.home":
+			return []netip.Addr{netip.MustParseAddr("192.168.1.70")}, nil
+		case "cam.example":
+			return []netip.Addr{netip.MustParseAddr("192.168.1.71"), netip.MustParseAddr("203.0.113.9")}, nil
+		case "nas.example":
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		}
+		return nil, errors.New("no such host")
+	}
+	ctx := context.Background()
+	c := NewCamera()
+	for i, tc := range []struct {
+		main, sub   string
+		allowPublic bool
+		want        error
+	}{
+		{"rtsp://cam.home/main", "rtsp://cam.home/sub", false, nil},
+		{"rtsp://cam.example/main", "", false, ErrTargetNotAllowed},
+		{"rtsp://cam.example/main", "", true, nil},
+		{"rtsp://nas.example/main", "", true, ErrTargetNotAllowed},
+		{"rtsp://missing.home/main", "", false, ErrInvalid},
+		{"rtsp://192.168.1.72/main", "rtsp://203.0.113.10/sub", false, ErrTargetNotAllowed},
+		{"rtsp://192.168.1.72/main", "rtsp://cam.example/sub", false, ErrTargetNotAllowed},
+	} {
+		c.ID, c.Name = fmt.Sprintf("cam_%d", i), fmt.Sprintf("Cam %d", i)
+		c.Source = Source{Kind: "rtsp", MainURL: tc.main, SubURL: tc.sub, AllowPublic: tc.allowPublic}
+		_, err := r.m.AddCamera(ctx, c)
+		if (tc.want == nil && err != nil) || (tc.want != nil && !errors.Is(err, tc.want)) {
+			t.Errorf("%s %s public %v: %v, want %v", tc.main, tc.sub, tc.allowPublic, err, tc.want)
+		}
+	}
+	// ONVIF: the host too.
+	c.ID, c.Name = "onvif_cam", "ONVIF"
+	c.Source = Source{Kind: "onvif", Host: "cam.example", ONVIFPort: 80, MainURL: "rtsp://192.168.1.73/main"}
+	if _, err := r.m.AddCamera(ctx, c); !errors.Is(err, ErrTargetNotAllowed) {
+		t.Errorf("onvif host: %v", err)
+	}
+}
+
+// A deleted camera stays in config.yml as a stub that is switched off,
+// with its own retention, until its recordings' days are over: Frigate
+// would otherwise delete them within the hour.
+func TestDeletedCameraKeepsItsRecordings(t *testing.T) {
+	r, first := capRig(t)
+	ctx := context.Background()
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	deletedAt := r.now
+	r.look()
+	r.look()
+	// Frigate runs it as a camera of its config: the check after the
+	// restart expects it.
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	cfg := parse(t, []byte(r.config()))
+	stub := dig(t, cfg, "cameras", "einfahrt").(map[string]any)
+	if stub["enabled"] != false || dig(t, stub, "record", "continuous", "days") != 14 || dig(t, stub, "record", "motion", "days") != 14 ||
+		dig(t, stub, "snapshots", "retain", "default") != 14 || dig(t, stub, "detect", "enabled") != false {
+		t.Errorf("stub: %v", stub)
+	}
+	inputs := dig(t, stub, "ffmpeg", "inputs").([]any)
+	if len(inputs) != 1 || dig(t, inputs[0], "path") != "rtsp://127.0.0.1:8554/einfahrt" {
+		t.Errorf("stub inputs: %v", inputs)
+	}
+	// No stream, no login of the deleted camera.
+	if _, ok := dig(t, cfg, "go2rtc", "streams").(map[string]any)["einfahrt"]; ok || strings.Contains(r.config(), "192.168.1.62") {
+		t.Error("the deleted camera's stream is still in config.yml")
+	}
+	// The global retention is no longer Frigate's 0 days.
+	if dig(t, cfg, "record", "continuous", "days") != 14 {
+		t.Errorf("global record: %v", cfg["record"])
+	}
+	// Noted on the volume, not on the stick.
+	var noted []DeletedCamera
+	data, err := os.ReadFile(filepath.Join(r.dir, deletedFile))
+	if err != nil || json.Unmarshal(data, &noted) != nil || len(noted) != 1 || noted[0].ID != "einfahrt" || noted[0].Name != "Einfahrt" || noted[0].RetainDays != 14 {
+		t.Fatalf("deleted cameras on the volume: %s %v", data, err)
+	}
+	if strings.Contains(string(r.mustRead(camerasFile)), "einfahrt") {
+		t.Error("still on the stick")
+	}
+	// Its recordings count and can be shown.
+	if got := r.m.DeletedCameras(); len(got) != 1 || !got[0].ExpiresAt().Equal(deletedAt.Add(14*24*time.Hour)) {
+		t.Errorf("deleted cameras: %+v", got)
+	}
+	if days, err := r.m.RecordingsSummary(ctx, "einfahrt"); err != nil || len(days) == 0 {
+		t.Errorf("summary of the deleted camera: %v %v", days, err)
+	}
+	if st := r.storageLook(); gb(st.RecordingsBytes) != 20 {
+		t.Errorf("recordings %v GB: the deleted camera's are not counted", gb(st.RecordingsBytes))
+	}
+	_ = first
+	// A new camera never gets its ID by chance; given on purpose, the ID
+	// takes the recordings back.
+	c := NewCamera()
+	c.Name, c.Source = "Einfahrt", Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.62/main"}
+	added, err := r.m.AddCamera(ctx, c)
+	if err != nil || added.ID != "einfahrt_2" {
+		t.Fatalf("%+v %v", added, err)
+	}
+	if err := r.m.RemoveCamera(added.ID); err != nil {
+		t.Fatal(err)
+	}
+	c.ID = "einfahrt"
+	if _, err := r.m.AddCamera(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.m.DeletedCameras(); len(got) != 1 || got[0].ID != "einfahrt_2" {
+		t.Errorf("deleted after taking the ID back: %+v", got)
+	}
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	// After its days the deleted camera is no longer shown; it leaves
+	// config.yml with the next change that rewrites it anyway.
+	r.advance(15 * 24 * time.Hour)
+	if got := r.m.DeletedCameras(); len(got) != 0 {
+		t.Errorf("shown after its days: %+v", got)
+	}
+	r.look()
+	if !strings.Contains(r.config(), "einfahrt:") {
+		t.Error("left config.yml by itself")
+	}
+	r.advance(2 * 24 * time.Hour)
+	r.limit(500)
+	r.look()
+	if strings.Contains(r.config(), "einfahrt") {
+		t.Error("still in config.yml after its days")
+	}
+}
+
+// Without the NVR's volume a camera is not deleted: the stub could not be
+// noted, and Frigate would delete its recordings at the next start.
+func TestDeleteCameraNeedsTheVolume(t *testing.T) {
+	r := newRig(t, true)
+	mnt := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(mnt, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := r.m
+	m.Dev, m.MountRoot = false, mnt
+	mounted := []string{"a"}
+	m.Mounted = func() []string { return mounted }
+	if err := m.Enable(context.Background(), "a", SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	mounted = nil
+	if err := m.RemoveCamera("garten"); !errors.Is(err, ErrNoVolume) {
+		t.Fatalf("without the volume: %v", err)
+	}
+	if _, ok := m.Camera("garten"); !ok {
+		t.Fatal("deleted without its stub")
+	}
+	mounted = []string{"a"}
+	if err := m.RemoveCamera("garten"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "a", ".titanos", "nvr", deletedFile)); err != nil {
+		t.Error(err)
 	}
 }

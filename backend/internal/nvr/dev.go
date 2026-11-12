@@ -17,11 +17,14 @@ import (
 	"image/jpeg"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
@@ -94,10 +97,22 @@ type DevEngine struct {
 	Starts, Creates int
 	// Prunes counts NVRPruneImages.
 	Prunes int
+	// frigate is told which config.yml the container started with.
+	frigate *DevFrigate
 }
 
 // NewDevEngine returns an engine; with image the image counts as pulled.
 func NewDevEngine(image bool) *DevEngine { return &DevEngine{image: image} }
+
+// Serve has the engine tell f, at every start of the container, which
+// cameras the config.yml in the container's config folder names: what
+// Frigate reports in /api/config. Without the file Frigate writes its own,
+// without cameras.
+func (e *DevEngine) Serve(f *DevFrigate) {
+	e.mu.Lock()
+	e.frigate = f
+	e.mu.Unlock()
+}
 
 func (e *DevEngine) EngineReady() bool { return true }
 
@@ -126,6 +141,9 @@ func (e *DevEngine) NVRStart(context.Context) error {
 	}
 	e.state.Running, e.state.StartedAt, e.state.Address = true, time.Now(), "127.0.0.1"
 	e.Starts++
+	if e.frigate != nil {
+		e.frigate.readConfig(filepath.Join(e.spec.Config, "config.yml"))
+	}
 	return nil
 }
 
@@ -214,9 +232,18 @@ type DevFrigate struct {
 	// Down makes every route fail; SafeMode answers as after a refused
 	// config; NoDetector reports a detector without a process.
 	Down, SafeMode, NoDetector bool
+	// FailKept answers the question for kept events with an error
+	// (tests of the storage cap); IgnoreConfig starts without the
+	// cameras of config.yml.
+	FailKept, IgnoreConfig bool
 	// Cameras are the cameras Frigate "runs" with their pictures per
 	// second (0: offline).
 	Cameras map[string]float64
+	// config are the cameras of the config.yml Frigate started with (ID →
+	// enabled); nil until a DevEngine told it. secret is its
+	// proxy.auth_secret: requests without it are refused, as on port 8971.
+	config map[string]bool
+	secret string
 	// Log are the lines of /api/logs/frigate.
 	Log []string
 	// data are events, recordings, exports and faces (dev_data.go).
@@ -248,6 +275,35 @@ func (f *DevFrigate) SetCameras(cameras []Camera) {
 	}
 }
 
+// readConfig takes the cameras from a config.yml as Frigate does when it
+// starts; a missing file is Frigate's own config without cameras.
+func (f *DevFrigate) readConfig(path string) {
+	var file struct {
+		Proxy struct {
+			Secret string `yaml:"auth_secret"`
+		} `yaml:"proxy"`
+		Cameras map[string]struct {
+			Enabled *bool `yaml:"enabled"`
+		} `yaml:"cameras"`
+	}
+	data, err := os.ReadFile(path)
+	if err == nil {
+		err = yaml.Unmarshal(data, &file)
+	}
+	config := map[string]bool{}
+	f.mu.Lock()
+	ignore := f.IgnoreConfig
+	f.mu.Unlock()
+	if err == nil && !ignore {
+		for id, c := range file.Cameras {
+			config[id] = c.Enabled == nil || *c.Enabled
+		}
+	}
+	f.mu.Lock()
+	f.config, f.secret = config, file.Proxy.Secret
+	f.mu.Unlock()
+}
+
 // Set changes the stand-in under its lock.
 func (f *DevFrigate) Set(edit func(*DevFrigate)) {
 	f.mu.Lock()
@@ -258,7 +314,7 @@ func (f *DevFrigate) Set(edit func(*DevFrigate)) {
 // ServeHTTP answers like Frigate.
 func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
-	down, safe, noDetector := f.Down, f.SafeMode, f.NoDetector
+	down, safe, noDetector, secret := f.Down, f.SafeMode, f.NoDetector, f.secret
 	cameras := map[string]float64{}
 	for id, fps := range f.Cameras {
 		cameras[id] = fps
@@ -269,6 +325,10 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "down", http.StatusBadGateway)
 		return
 	}
+	if secret != "" && r.Header.Get(proxySecretHeader) != secret {
+		http.Error(w, "", http.StatusUnauthorized)
+		return
+	}
 	writeJSON := func(v any) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(v) // the client went away; nothing to do
@@ -277,7 +337,16 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/version":
 		fmt.Fprint(w, FrigateVersion+"-dev")
 	case path == "/api/config":
-		writeJSON(map[string]any{"safe_mode": safe, "cameras": map[string]any{}})
+		f.mu.Lock()
+		cameras := map[string]any{}
+		for id, enabled := range f.config {
+			cameras[id] = map[string]any{"enabled": enabled}
+		}
+		f.mu.Unlock()
+		if safe {
+			cameras = map[string]any{}
+		}
+		writeJSON(map[string]any{"safe_mode": safe, "cameras": cameras})
 	case path == "/api/stats":
 		pid := any(4711)
 		if noDetector {
@@ -366,6 +435,7 @@ func (m *Manager) StartDev(ctx context.Context) error {
 	base := "http://" + listener.Addr().String()
 	m.Dev = true
 	engine := NewDevEngine(true)
+	engine.Serve(stand)
 	m.Engine = engine
 	m.FrigateBase = func(string) string {
 		// The stand-in runs what is configured now.

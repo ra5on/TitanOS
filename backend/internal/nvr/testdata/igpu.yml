@@ -5,11 +5,15 @@ mqtt:
   enabled: false
 auth:
   enabled: false
+proxy:
+  auth_secret: goldensecretgoldensecretgoldensecretgoldensecret0123
+  default_role: admin
 tls:
   enabled: false
 networking:
   listen:
-    external: 127.0.0.1:8971
+    internal: 127.0.0.1:5000
+    external: 8971
 telemetry:
   version_check: false
 detectors:
@@ -25,21 +29,30 @@ model:
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 ffmpeg:
   hwaccel_args: preset-vaapi
+record:
+  continuous:
+    days: 60
+  motion:
+    days: 60
 birdseye:
   enabled: false
 lpr:
   enabled: true
   known_plates:
     Firma:
-      - EMP-[0-9]{3}[A-Z]
-      - '[S5]LL 1234'
+      - EMP.*
+      - .*LL 12.*4
+      - ÖBB 12
     Wife's Car:
       - M-AB 1234
-      - MAB12*
+      - MAB12.*
 face_recognition:
   enabled: true
 go2rtc:
+  api:
+    listen: 127.0.0.1:1984
   rtsp:
+    listen: :8554
     username: titanos
     password: abcdefgh234567
   webrtc:
@@ -54,7 +67,6 @@ go2rtc:
 cameras:
   einfahrt:
     enabled: true
-    friendly_name: Einfahrt
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -104,7 +116,6 @@ cameras:
       enabled: false
   flur:
     enabled: true
-    friendly_name: Flur
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -149,3 +160,37 @@ cameras:
       enabled: false
     face_recognition:
       enabled: true
+  garage:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/garage
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 60
+      motion:
+        days: 60
+      alerts:
+        retain:
+          days: 60
+      detections:
+        retain:
+          days: 60
+    snapshots:
+      enabled: false
+      retain:
+        default: 60
+    audio:
+      enabled: false
+    lpr:
+      enabled: false
+    face_recognition:
+      enabled: false

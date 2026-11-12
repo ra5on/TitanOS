@@ -226,6 +226,19 @@ func (f *DevFrigate) Commands() []DevCommand {
 	return slices.Clone(f.data.commands)
 }
 
+// DropSockets closes the open WebSockets, as a restart of Frigate does.
+func (f *DevFrigate) DropSockets() {
+	f.mu.Lock()
+	sockets := make([]*websocket.Conn, 0, len(f.data.sockets))
+	for conn := range f.data.sockets {
+		sockets = append(sockets, conn)
+	}
+	f.mu.Unlock()
+	for _, conn := range sockets {
+		conn.CloseNow()
+	}
+}
+
 // Connected tells how many WebSockets are open.
 func (f *DevFrigate) Connected() int {
 	f.mu.Lock()
@@ -284,6 +297,8 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		f.mu.Unlock()
 		f.serveWebRTC(w, r)
 		f.mu.Lock()
+	case path == "/api/events" && r.Method == http.MethodGet && f.FailKept && r.URL.Query().Get("favorites") == "1":
+		writeJSONTo(w, 500, map[string]any{"success": false, "message": "database is locked"})
 	case path == "/api/events" && r.Method == http.MethodGet:
 		cameras, labels := csv(r, "cameras"), csv(r, "labels")
 		after, before := number(r, "after"), number(r, "before")
@@ -359,8 +374,12 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		}
 		ok()
 	case path == "/api/recordings/storage":
+		// Like Frigate: the cameras of the config, switched on or not.
 		usage := map[string]any{}
 		for camera, hours := range d.hours {
+			if _, configured := f.config[camera]; f.config != nil && !configured {
+				continue
+			}
 			total := 0.0
 			for _, h := range hours {
 				total += h.MB

@@ -83,6 +83,21 @@ func Redact(s string) string {
 	return secretWord.ReplaceAllString(s, "${1}${2}***")
 }
 
+// redact is Redact, and takes out the secrets TitanOS gave Frigate (the
+// proxy secret, the restream's password) wherever they show up.
+func (m *Manager) redact(s string) string {
+	s = Redact(s)
+	m.mu.Lock()
+	secrets := []string{m.settings.ProxySecret, m.settings.RTSPPassword}
+	m.mu.Unlock()
+	for _, secret := range secrets {
+		if len(secret) >= 8 {
+			s = strings.ReplaceAll(s, secret, "***")
+		}
+	}
+	return s
+}
+
 func clip(s string, n int) string {
 	if len(s) <= n {
 		return s

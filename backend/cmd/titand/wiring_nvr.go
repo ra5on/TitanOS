@@ -33,7 +33,7 @@ func (w *titand) wireNVR() error {
 		if !ok {
 			return nvr.Account{}, false
 		}
-		return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled}, true
+		return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled, Created: user.Created}, true
 	}
 	if err := w.recorder.Access.Load(); err != nil {
 		slog.Warn("camera rights not readable from /config", "err", err)

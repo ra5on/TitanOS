@@ -219,14 +219,84 @@ func TestWithoutKept(t *testing.T) {
 			{ID: "4", Camera: "haustuer", Start: 3550, Kept: true},             // still going on
 		}
 	})
-	got := r.m.withoutKept(context.Background(), base, 0, 3600)
+	got, known := r.m.withoutKept(context.Background(), base, 0, 3600)
 	want := [][2]float64{{0, 940}, {2360, 3490}}
-	if !slices.Equal(got, want) {
-		t.Errorf("%v, want %v", got, want)
+	if !slices.Equal(got, want) || !known {
+		t.Errorf("%v %v, want %v", got, known, want)
 	}
 	// Frigate does not answer: nothing of the hour is deleted.
 	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
-	if got := r.m.withoutKept(context.Background(), base, 0, 3600); got != nil {
-		t.Errorf("%v", got)
+	if got, known := r.m.withoutKept(context.Background(), base, 0, 3600); got != nil || known {
+		t.Errorf("%v %v", got, known)
+	}
+}
+
+// Exports between 95 and 100 % of the cap: only what is needed to get
+// below the cap goes, never all recordings (review of 12.11.2026).
+func TestStorageCapWithExportsNearTheCap(t *testing.T) {
+	r, first := capRig(t)
+	hours := []devHour{}
+	for h := range 10 {
+		hours = append(hours, devHour{Start: first + float64(h)*3600, Seconds: 3600, MB: 1024})
+	}
+	r.frigate.SetHours("haustuer", hours)
+	r.frigate.SetHours("einfahrt", nil)
+	r.storageLook()
+	r.m.mu.Lock()
+	for id := range r.m.rt.exportSizes {
+		r.m.rt.exportSizes[id] = 96 << 30
+	}
+	r.m.mu.Unlock()
+	r.limit(100)
+	st := r.storageLook()
+	// 96 GB of exports leave 4 GB for recordings under the cap of 100.
+	if got := gb(st.RecordingsBytes); got != 4 || st.Cap != CapOK || len(r.deleted()) != 6 {
+		t.Errorf("%v GB of recordings left (want 4), cap %s, %d spans deleted", got, st.Cap, len(r.deleted()))
+	}
+}
+
+func TestRecordingsTarget(t *testing.T) {
+	const g = 1 << 30
+	for _, tc := range []struct{ limit, exports, want float64 }{
+		{100, 0, 95},
+		{100, 50, 45},
+		{100, 90, 5}, // the 5 % that stay for recordings
+		{100, 92, 5}, // still fits below the cap
+		{100, 96, 4}, // only what is left below the cap
+		{100, 99.5, 0.5},
+		{100, 100, 0}, // exports_exceed: enforceCap deletes nothing then
+		{100, 120, 0},
+		{5, 3, 1.75},
+	} {
+		got := float64(recordingsTarget(uint64(tc.limit*g), uint64(tc.exports*g))) / g
+		if math.Abs(got-tc.want) > 0.001 {
+			t.Errorf("limit %v, exports %v: %v, want %v", tc.limit, tc.exports, got, tc.want)
+		}
+	}
+}
+
+// Exports at exactly the cap: nothing is deleted, the status says why.
+func TestStorageCapExportsAtTheCap(t *testing.T) {
+	r, _ := capRig(t)
+	r.storageLook()
+	r.m.mu.Lock()
+	for id := range r.m.rt.exportSizes {
+		r.m.rt.exportSizes[id] = 30 << 30
+	}
+	r.m.mu.Unlock()
+	r.limit(30)
+	if st := r.storageLook(); st.Cap != CapExportsExceed || len(r.deleted()) != 0 || gb(st.RecordingsBytes) != 20 {
+		t.Errorf("%+v deleted %v", st, r.deleted())
+	}
+}
+
+// Frigate does not say which events are kept: the cleanup stops instead
+// of going on with younger hours.
+func TestStorageCapStopsWithoutKeptEvents(t *testing.T) {
+	r, _ := capRig(t)
+	r.frigate.Set(func(f *DevFrigate) { f.FailKept = true })
+	r.limit(12)
+	if st := r.storageLook(); st.Cap != CapCleaning || len(r.deleted()) != 0 {
+		t.Errorf("%+v deleted %v", st, r.deleted())
 	}
 }

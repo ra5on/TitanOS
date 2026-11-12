@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -34,18 +35,20 @@ func renderCases() map[string]struct {
 	settings Settings
 	cameras  []Camera
 	hw       RenderHardware
+	deleted  []DeletedCamera
 } {
 	type tc = struct {
 		settings Settings
 		cameras  []Camera
 		hw       RenderHardware
+		deleted  []DeletedCamera
 	}
-	return map[string]tc{
+	cases := map[string]tc{
 		// NPU, iGPU decodes: two cameras, one with sound, talking back and PTZ.
 		"npu": {Defaults(), []Camera{
 			testCamera("haustuer", "Haustür", func(c *Camera) {
 				c.Order = 1
-				c.Audio = Audio{Enabled: true, TwoWay: true}
+				c.Audio = Audio{Enabled: true, TwoWay: true, Codec: "MPEG4-GENERIC"}
 				c.Detect.Objects = []string{"dog", "person"}
 			}),
 			testCamera("garten", "Garten", func(c *Camera) {
@@ -55,10 +58,10 @@ func renderCases() map[string]struct {
 				c.PTZ = true
 				c.Record = Record{Mode: RecordContinuous, RetainDays: 7, PreSeconds: 10, PostSeconds: 20}
 			}),
-		}, RenderHardware{Detector: DetectorNPU, VAAPI: true, Candidates: []string{"192.168.1.10:8555"}}},
+		}, RenderHardware{Detector: DetectorNPU, VAAPI: true, Candidates: []string{"192.168.1.10:8555"}}, nil},
 		// iGPU with plates and faces; the restream is published.
 		"igpu": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, RTSPOut: true, RTSPPassword: "abcdefgh234567",
-			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}}}}, []Camera{
+			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP*", "*LL 12*4", "ÖBB 12"}}}}, []Camera{
 			testCamera("einfahrt", "Einfahrt", func(c *Camera) {
 				c.Detect.Plates = true
 				c.Detect.Objects = []string{"person"}
@@ -70,23 +73,50 @@ func renderCases() map[string]struct {
 				c.Detect.Objects = []string{"cat"}
 				c.Source.SubURL = ""
 			}),
-		}, RenderHardware{Detector: DetectorIGPU, VAAPI: true}},
+		}, RenderHardware{Detector: DetectorIGPU, VAAPI: true}, []DeletedCamera{
+			{ID: "garage", Name: "Garage", RetainDays: 60, DeletedAt: time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)},
+		}},
 		// Coral, no GPU: a camera without login, one switched off, one that does not record.
 		"coral": {Defaults(), []Camera{
-			testCamera("hof", "Hof", func(c *Camera) { c.Source.User, c.Source.Password = "", "" }),
+			// G.711 sound is turned into AAC (an MP4 file takes no G.711).
+			testCamera("hof", "Hof", func(c *Camera) {
+				c.Source.User, c.Source.Password = "", ""
+				c.Audio = Audio{Enabled: true, Codec: "PCMA"}
+			}),
 			testCamera("keller", "Keller", func(c *Camera) { c.Enabled = false }),
 			testCamera("carport", "Carport", func(c *Camera) { c.Record.Mode = RecordOff; c.Detect.Enabled = false }),
-		}, RenderHardware{Detector: DetectorCoral}},
+		}, RenderHardware{Detector: DetectorCoral}, []DeletedCamera{
+			// Deleted: kept as a stub that is switched off; one deleted with
+			// the ID of a camera that was added again is no stub.
+			{ID: "schuppen", Name: "Schuppen", RetainDays: 30, DeletedAt: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)},
+			{ID: "hof", Name: "Hof alt", RetainDays: 3, DeletedAt: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)},
+		}},
 		// CPU and no camera yet: what Frigate first starts with.
-		"cpu":   {Defaults(), nil, RenderHardware{Detector: DetectorCPU}},
-		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", nil)}, RenderHardware{Detector: DetectorHailo, VAAPI: true}},
+		"cpu": {Defaults(), nil, RenderHardware{Detector: DetectorCPU}, nil},
+		// Sound of a codec not known yet: turned into AAC to be safe.
+		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", func(c *Camera) { c.Audio.Enabled = true })}, RenderHardware{Detector: DetectorHailo, VAAPI: true}, nil},
 	}
+	for name, c := range cases {
+		c.settings.ProxySecret = testSecret
+		cases[name] = c
+	}
+	return cases
+}
+
+// testSecret is the secret between titand and Frigate in the golden files.
+const testSecret = "goldensecretgoldensecretgoldensecretgoldensecret0123"
+
+// secretSettings are the defaults with a secret, as an NVR that is on.
+func secretSettings() Settings {
+	s := Defaults()
+	s.ProxySecret = testSecret
+	return s
 }
 
 func TestRenderGolden(t *testing.T) {
 	for name, tc := range renderCases() {
 		t.Run(name, func(t *testing.T) {
-			got, err := Render(tc.settings, tc.cameras, tc.hw)
+			got, err := Render(tc.settings, tc.cameras, tc.deleted, tc.hw)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -114,14 +144,14 @@ func TestRenderGolden(t *testing.T) {
 
 func TestRenderIsDeterministic(t *testing.T) {
 	tc := renderCases()["npu"]
-	first, err := Render(tc.settings, tc.cameras, tc.hw)
+	first, err := Render(tc.settings, tc.cameras, tc.deleted, tc.hw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reversed := slices.Clone(tc.cameras)
 	slices.Reverse(reversed)
 	for range 5 {
-		again, err := Render(tc.settings, reversed, tc.hw)
+		again, err := Render(tc.settings, reversed, tc.deleted, tc.hw)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,7 +184,7 @@ func dig(t *testing.T, v any, path ...string) any {
 
 func TestRenderFixedParts(t *testing.T) {
 	tc := renderCases()["npu"]
-	data, err := Render(tc.settings, tc.cameras, tc.hw)
+	data, err := Render(tc.settings, tc.cameras, tc.deleted, tc.hw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,13 +194,22 @@ func TestRenderFixedParts(t *testing.T) {
 		want any
 	}{
 		{[]string{"mqtt", "enabled"}, false},
+		// Frigate's proxy check: without the secret 8971 answers 401. It
+		// needs auth off (with auth on Frigate wants a login token).
 		{[]string{"auth", "enabled"}, false},
+		{[]string{"proxy", "auth_secret"}, testSecret},
+		{[]string{"proxy", "default_role"}, "admin"},
 		{[]string{"tls", "enabled"}, false},
 		{[]string{"telemetry", "version_check"}, false},
 		// Frigate treats a file without this as one of 0.13 and rewrites it.
 		{[]string{"version"}, "0.18-0"},
-		// 8971 only inside the container.
-		{[]string{"networking", "listen", "external"}, "127.0.0.1:8971"},
+		// 5000 (no check at all) only on the container's loopback; 8971
+		// (the secret) for titand.
+		{[]string{"networking", "listen", "internal"}, "127.0.0.1:5000"},
+		{[]string{"networking", "listen", "external"}, 8971},
+		// go2rtc's API and RTSP server: loopback only, no restream.
+		{[]string{"go2rtc", "api", "listen"}, "127.0.0.1:1984"},
+		{[]string{"go2rtc", "rtsp", "listen"}, "127.0.0.1:8554"},
 		{[]string{"detectors", "ov", "type"}, "openvino"},
 		{[]string{"detectors", "ov", "device"}, "NPU"},
 		{[]string{"model", "path"}, "/openvino-model/ssdlite_mobilenet_v2.xml"},
@@ -233,7 +272,7 @@ func TestRenderFixedParts(t *testing.T) {
 
 func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	tc := renderCases()["igpu"]
-	data, err := Render(tc.settings, tc.cameras, tc.hw)
+	data, err := Render(tc.settings, tc.cameras, tc.deleted, tc.hw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,13 +291,17 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 		{[]string{"cameras", "einfahrt", "record", "motion", "days"}, 14},
 		{[]string{"cameras", "einfahrt", "record", "alerts", "retain", "mode"}, "motion"},
 		{[]string{"go2rtc", "rtsp", "username"}, "titanos"},
+		// The published restream listens beyond the loopback, with a login.
+		{[]string{"go2rtc", "rtsp", "listen"}, ":8554"},
+		{[]string{"go2rtc", "api", "listen"}, "127.0.0.1:1984"},
 		{[]string{"lpr", "known_plates", "Firma"}, nil},
 		{[]string{"go2rtc", "rtsp", "password"}, "abcdefgh234567"},
 	} {
 		got := dig(t, cfg, check.path...)
 		if check.want == nil {
-			// The known plates, as lists under their names.
-			if list, ok := got.([]any); !ok || !slices.Equal(list, []any{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}) {
+			// The known plates, as lists under their names; "*" is the only
+			// wildcard and becomes ".*".
+			if list, ok := got.([]any); !ok || !slices.Equal(list, []any{"EMP.*", ".*LL 12.*4", "ÖBB 12"}) {
 				t.Errorf("%v = %#v", check.path, got)
 			}
 			continue
@@ -288,7 +331,7 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	}
 
 	coral := renderCases()["coral"]
-	data, err = Render(coral.settings, coral.cameras, coral.hw)
+	data, err = Render(coral.settings, coral.cameras, coral.deleted, coral.hw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,25 +350,36 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 		dig(t, cfg, "cameras", "carport", "detect", "enabled") != false || dig(t, cfg, "cameras", "carport", "snapshots", "enabled") != false {
 		t.Errorf("cameras = %v", cfg["cameras"])
 	}
-	if got := dig(t, cfg, "go2rtc", "streams", "hof").([]any); got[0] != "rtsp://192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0" {
+	if got := dig(t, cfg, "go2rtc", "streams", "hof").([]any); got[0] != "rtsp://192.168.1.61:554/Streaming/Channels/101#backchannel=0" {
 		t.Errorf("stream without login = %v", got)
+	}
+	// Recorded with sound: G.711 becomes AAC; a codec not known yet too.
+	if got := dig(t, cfg, "cameras", "hof", "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("G.711: %v", got)
 	}
 
 	hailo := renderCases()["hailo"]
-	data, _ = Render(hailo.settings, hailo.cameras, hailo.hw)
+	data, _ = Render(hailo.settings, hailo.cameras, hailo.deleted, hailo.hw)
 	cfg = parse(t, data)
 	if dig(t, cfg, "detectors", "hailo", "type") != "hailo8l" || dig(t, cfg, "model", "labelmap_path") != "/labelmap/coco-80.txt" || dig(t, cfg, "model", "width") != 320 {
 		t.Errorf("hailo: %v %v", cfg["detectors"], cfg["model"])
 	}
+	if got := dig(t, cfg, "cameras", "tor", "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("unknown sound: %v", got)
+	}
 }
 
 func TestRenderRefusesWhatFrigateWouldMisread(t *testing.T) {
-	if _, err := Render(Defaults(), nil, RenderHardware{Detector: DetectorAuto}); err == nil {
+	if _, err := Render(secretSettings(), nil, nil, RenderHardware{Detector: DetectorAuto}); err == nil {
 		t.Error("auto is no device")
 	}
 	bad := testCamera("a", "A", nil)
 	bad.Source.MainURL = "rtsp://192.168.1.2/{FRIGATE_X}"
-	if _, err := Render(Defaults(), []Camera{bad}, RenderHardware{Detector: DetectorCPU}); err == nil {
+	if _, err := Render(secretSettings(), []Camera{bad}, nil, RenderHardware{Detector: DetectorCPU}); err == nil {
 		t.Error("a brace in an address must be refused")
+	}
+	// Without the secret port 8971 would answer anyone.
+	if _, err := Render(Defaults(), nil, nil, RenderHardware{Detector: DetectorCPU}); err == nil {
+		t.Error("a config without the secret")
 	}
 }

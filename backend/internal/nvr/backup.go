@@ -96,12 +96,14 @@ func (m *Manager) importRestored(volume string) {
 	}
 	defer root.Close()
 	copied := 0
+	folders := map[string]bool{}
 	for _, f := range pending {
 		rel := facesFolder + strings.TrimPrefix(f.Name, backupPrefix)
 		if err := root.MkdirAll(path.Dir(rel), 0o755); err != nil {
 			slog.Warn("NVR: restored faces not put back", "err", err)
 			return
 		}
+		folders[path.Dir(rel)] = true
 		file, err := root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if errors.Is(err, fs.ErrExist) {
 			continue
@@ -111,6 +113,9 @@ func (m *Manager) importRestored(volume string) {
 			return
 		}
 		_, err = file.Write(f.Data)
+		if err == nil {
+			err = file.Sync()
+		}
 		if cerr := file.Close(); err == nil {
 			err = cerr
 		}
@@ -121,14 +126,69 @@ func (m *Manager) importRestored(volume string) {
 		}
 		copied++
 	}
-	if err := m.store.RemoveAll("volume-data/nvr"); err != nil {
-		slog.Warn("NVR: restored faces not removed from the stick", "err", err)
-		return
+	// The pictures and their folders are on the disk before anything goes
+	// from the stick.
+	folders[facesFolder] = true
+	for folder := range folders {
+		if err := syncFolder(root, folder); err != nil {
+			slog.Warn("NVR: restored faces not put back", "err", err)
+			return
+		}
+	}
+	// Only what was put back (or was there already) leaves the stick: a
+	// picture left out (beyond the limits, a name TitanOS does not take)
+	// stays, and the next start of the NVR goes on with it.
+	persons := map[string]bool{}
+	for _, f := range pending {
+		if err := m.store.Remove(f.Name); err != nil {
+			slog.Warn("NVR: restored faces not removed from the stick", "err", err)
+			return
+		}
+		persons[path.Dir(f.Name)] = true
+	}
+	left := false
+	for person := range persons {
+		left = removeEmpty(m.store, person) || left
+	}
+	left = removeEmpty(m.store, backupPrefix) || left
+	if !left {
+		removeEmpty(m.store, path.Dir(backupPrefix))
+	} else {
+		slog.Warn("NVR: some faces of the restored configuration were left on the stick (limits of the backup, or names TitanOS does not take)")
 	}
 	m.mu.Lock()
 	m.restored = nil
 	m.mu.Unlock()
 	slog.Info("NVR: faces of the restored configuration put back", "pictures", copied, "ofBackup", len(pending))
+}
+
+// syncFolder flushes a folder below root to the disk.
+func syncFolder(root *os.Root, folder string) error {
+	dir, err := root.Open(folder)
+	if err != nil {
+		return err
+	}
+	err = dir.Sync()
+	if cerr := dir.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// removeEmpty removes a folder of the stick if it is empty and reports
+// whether something is left in it.
+func removeEmpty(store interface {
+	List(string) ([]string, error)
+	Remove(string) error
+}, folder string) bool {
+	entries, err := store.List(folder)
+	if err != nil {
+		return true
+	}
+	if len(entries) > 0 {
+		return true
+	}
+	return store.Remove(folder) != nil
 }
 
 // BackupFiles returns the faces for the backup of the configuration.

@@ -8,13 +8,33 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
 
-// frigatePort is Frigate's port without a login. It is never published:
-// titand reaches it at the container's address on the NVR's own network.
-const frigatePort = 5000
+// frigatePort is Frigate's port behind its web server's check of the
+// proxy secret (proxy.auth_secret): titand reaches it at the container's
+// address on the NVR's own network and shows the secret on every
+// request. Port 5000, which never asks, listens on the container's
+// loopback only (render.go). Neither is published.
+const frigatePort = 8971
+
+// proxySecretHeader carries the secret; Frigate's nginx hands it to the
+// check of every request (proxy_trusted_headers.conf).
+const proxySecretHeader = "X-Proxy-Secret"
+
+// secretTransport puts the secret on every request to Frigate.
+type secretTransport struct {
+	base   http.RoundTripper
+	secret func() string
+}
+
+func (t secretTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set(proxySecretHeader, t.secret())
+	return t.base.RoundTrip(req)
+}
 
 // ErrNotRunning: Frigate does not run (or has no address yet).
 var ErrNotRunning = errors.New("nvr: the NVR does not run")
@@ -26,12 +46,13 @@ type frigate struct {
 	stream *http.Client
 }
 
-func newFrigate() *frigate {
+func newFrigate(secret func() string) *frigate {
 	// Frigate never sends titand elsewhere.
 	stay := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	transport := secretTransport{base: http.DefaultTransport.(*http.Transport).Clone(), secret: secret}
 	return &frigate{
-		http:   &http.Client{Timeout: 15 * time.Second, CheckRedirect: stay},
-		stream: &http.Client{CheckRedirect: stay},
+		http:   &http.Client{Timeout: 15 * time.Second, CheckRedirect: stay, Transport: transport},
+		stream: &http.Client{CheckRedirect: stay, Transport: transport},
 	}
 }
 
@@ -68,20 +89,31 @@ func (f *frigate) version(ctx context.Context, base string) (string, error) {
 	return strings.TrimSpace(string(data)), err
 }
 
-// safeMode tells whether Frigate refused config.yml: it then starts with
-// an empty configuration ("safe mode") and answers as if all were well.
-func (f *frigate) safeMode(ctx context.Context, base string) (bool, error) {
+// runningConfig is the part of GET /api/config that is used: whether
+// Frigate refused config.yml (it then starts with an empty configuration,
+// "safe mode", and answers as if all were well) and the cameras it runs.
+type runningConfig struct {
+	SafeMode bool                       `json:"safe_mode"`
+	Cameras  map[string]json.RawMessage `json:"cameras"`
+}
+
+// cameraIDs are the cameras of the configuration Frigate runs, sorted.
+func (c runningConfig) cameraIDs() []string {
+	ids := []string{}
+	for id := range c.Cameras {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func (f *frigate) runningConfig(ctx context.Context, base string) (runningConfig, error) {
+	var config runningConfig
 	data, _, err := f.get(ctx, base, "/api/config", nil, 8<<20)
 	if err != nil {
-		return false, err
+		return config, err
 	}
-	var config struct {
-		SafeMode bool `json:"safe_mode"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		return false, err
-	}
-	return config.SafeMode, nil
+	return config, json.Unmarshal(data, &config)
 }
 
 // frigateStats is the part of GET /api/stats that is used.

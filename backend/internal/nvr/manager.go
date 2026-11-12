@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"slices"
@@ -67,6 +68,8 @@ var (
 	ErrNotFound = errors.New("nvr: no such camera")
 	// ErrExists: a camera with this ID exists.
 	ErrExists = errors.New("nvr: a camera with this ID exists")
+	// ErrNameExists: another camera has this name (letter case aside).
+	ErrNameExists = errors.New("nvr: a camera with this name exists")
 	// ErrLimit: MaxCameras are configured.
 	ErrLimit = errors.New("nvr: too many cameras")
 	// ErrNotLoaded: /config could not be read at the start; nothing is
@@ -121,6 +124,8 @@ type Manager struct {
 	Timezone func() string
 	// Now is the clock; time.Now if nil.
 	Now func() time.Time
+	// Resolve looks a host name up (net.DefaultResolver if nil).
+	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
 
 	// The watch (watch.go); tests shorten them.
 	Tick          time.Duration // between two looks at the container
@@ -135,14 +140,19 @@ type Manager struct {
 	facts   func() hostFacts
 	bootID  func() string
 
-	mu       sync.Mutex
-	loaded   bool
-	settings Settings
-	cameras  []Camera
-	state    State
-	rt       runtime
-	kick     chan struct{}
-	devDir   string
+	mu sync.Mutex
+	// deletedMu orders the changes of the deleted cameras' file
+	// (deleted.go); taken before mu, never while mu is held.
+	deletedMu sync.Mutex
+	// exportsMu orders the changes of exports.json (exports.go).
+	exportsMu sync.Mutex
+	loaded    bool
+	settings  Settings
+	cameras   []Camera
+	state     State
+	rt        runtime
+	kick      chan struct{}
+	devDir    string
 	// restored are faces a restore of /config left on the stick, until
 	// they are on the volume; backupFaces is the library as last read for
 	// the backup (backup.go).
@@ -151,12 +161,15 @@ type Manager struct {
 	devFrigate *DevFrigate
 	// snapshots are the stills of the last second (status.go).
 	snapshots map[snapshotKey]cachedSnapshot
+	// probed are the sound codecs the checks of cameras found, by main
+	// stream (probe.go).
+	probed map[string]probedAudio
 }
 
 // New makes a manager with the defaults of a NAS.
 func New(store *config.Store) *Manager {
-	return &Manager{
-		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(), feed: newFeed(), Access: NewAccess(store),
+	m := &Manager{
+		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, feed: newFeed(), Access: NewAccess(store),
 		FrigateBase:   func(address string) string { return fmt.Sprintf("http://%s:%d", address, frigatePort) },
 		Tick:          10 * time.Second,
 		HealthyWithin: 5 * time.Minute,
@@ -168,6 +181,8 @@ func New(store *config.Store) *Manager {
 		kick:          make(chan struct{}, 1),
 		rt:            runtime{phase: PhaseOff, cameras: map[string]*cameraRuntime{}},
 	}
+	m.frigate = newFrigate(m.proxySecret)
+	return m
 }
 
 func readBootID() string {
@@ -273,9 +288,12 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	if len(s.Plates) == 0 {
 		s.Plates = nil
 	}
-	s.RTSPPassword = old.RTSPPassword
+	s.RTSPPassword, s.ProxySecret = old.RTSPPassword, old.ProxySecret
 	if s.RTSPOut && s.RTSPPassword == "" {
 		s.RTSPPassword = newSecret()
+	}
+	if s.Enabled && s.ProxySecret == "" {
+		s.ProxySecret = newProxySecret()
 	}
 	if s.Volume != "" && s.Volume != old.Volume && !opts.ConfirmSleepingVolume && m.Sleeps != nil && !m.Dev {
 		if sleeping, known := m.Sleeps(ctx); known && sleeping[s.Volume] {
@@ -308,7 +326,10 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		m.resetStateLocked()
 	}
 	if s.Volume != old.Volume {
+		// Another volume: its state, exports and config.yml are its own.
 		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
+		m.rt.configHash, m.rt.configDir, m.rt.configCameras = "", "", nil
+		m.rt.deleted, m.rt.deletedVolume = nil, ""
 	}
 	m.rt.dirty = true
 	m.rt.retryAt = time.Time{}
@@ -325,6 +346,48 @@ func newSecret() string {
 		panic(err) // crypto/rand does not fail on Linux
 	}
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))
+}
+
+// newProxySecret is the secret between titand and Frigate: 256 bits,
+// letters and digits (Frigate substitutes braces in the field).
+func newProxySecret() string {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		panic(err) // crypto/rand does not fail on Linux
+	}
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))
+}
+
+// proxySecret is the secret Frigate expects in X-Proxy-Secret.
+func (m *Manager) proxySecret() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings.ProxySecret
+}
+
+// FrigateHeader are the headers every connection to Frigate carries (the
+// API's relays of the live stream and of talking back use them).
+func (m *Manager) FrigateHeader() http.Header {
+	return http.Header{proxySecretHeader: {m.proxySecret()}}
+}
+
+// ensureSecret makes the secret of an NVR that is on without one (its
+// settings came from a build before the secret): once per start of
+// titand. If the stick cannot be written the secret stays in RAM; the
+// next start makes another one.
+func (m *Manager) ensureSecret() {
+	m.mu.Lock()
+	if m.settings.ProxySecret != "" || !m.settings.Enabled || !m.loaded {
+		m.mu.Unlock()
+		return
+	}
+	m.settings.ProxySecret = newProxySecret()
+	s := m.settings
+	m.rt.dirty = true
+	m.mu.Unlock()
+	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+		slog.Warn("NVR: the secret for Frigate is not on the stick; another one is made at the next start", "err", err)
+	}
 }
 
 // Enable switches the NVR on (volume "" keeps the chosen one).
@@ -365,7 +428,7 @@ func (m *Manager) RetryDetector() error {
 func (m *Manager) resetStateLocked() {
 	m.state = State{Boot: m.state.Boot, CapNoticeDay: m.state.CapNoticeDay}
 	m.rt.stateDirty = true
-	m.rt.crashes = nil
+	m.rt.crashes, m.rt.hangs = nil, nil
 	m.rt.lastError = nil
 }
 
@@ -415,7 +478,30 @@ func (m *Manager) CameraIDs() []string {
 }
 
 // AddCamera stores a new camera. An empty ID is made from the name.
-func (m *Manager) AddCamera(c Camera) (Camera, error) {
+func (m *Manager) AddCamera(ctx context.Context, c Camera) (Camera, error) {
+	if err := m.checkNames(ctx, c); err != nil {
+		return c, err
+	}
+	// A new ID is never one of a deleted camera whose recordings are
+	// kept; that ID given on purpose takes them back.
+	deleted := m.DeletedCameras()
+	added, err := m.addCamera(c, deleted)
+	if err != nil {
+		return added, err
+	}
+	if slices.ContainsFunc(deleted, func(d DeletedCamera) bool { return d.ID == added.ID }) {
+		volume := m.Settings().Volume
+		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
+			return slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == added.ID })
+		}); err != nil {
+			// The camera wins over its stub in config.yml anyway.
+			slog.Warn("NVR: deleted camera not taken off its list", "camera", added.ID, "err", err)
+		}
+	}
+	return added, nil
+}
+
+func (m *Manager) addCamera(c Camera, deleted []DeletedCamera) (Camera, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
@@ -427,6 +513,11 @@ func (m *Manager) AddCamera(c Camera) (Camera, error) {
 	taken := []string{}
 	for _, each := range m.cameras {
 		taken = append(taken, each.ID)
+	}
+	if c.ID == "" {
+		for _, d := range deleted {
+			taken = append(taken, d.ID)
+		}
 	}
 	if c.ID == "" {
 		c.ID = SlugID(c.Name, taken)
@@ -443,14 +534,74 @@ func (m *Manager) AddCamera(c Camera) (Camera, error) {
 	if err != nil {
 		return c, err
 	}
+	if err := m.uniqueNameLocked(c); err != nil {
+		return c, err
+	}
+	c.Audio.Codec, _ = m.probedCodecLocked(c.Source.MainURL)
 	return c, m.storeCamerasLocked(append(cloneCameras(m.cameras), c))
+}
+
+// uniqueNameLocked refuses a name another camera has, letter case aside:
+// people tell cameras apart by name.
+func (m *Manager) uniqueNameLocked(c Camera) error {
+	for _, other := range m.cameras {
+		if other.ID != c.ID && strings.EqualFold(other.Name, c.Name) {
+			return ErrNameExists
+		}
+	}
+	return nil
+}
+
+// checkNames checks the host names in a camera's addresses as its IP
+// addresses are checked (ValidateCamera): every address a name stands
+// for must be allowed, in the home network unless the administrator
+// allowed public addresses, never this NAS. A name that does not resolve
+// is refused. titand checks again at every connection it makes itself
+// (Prober); Frigate's connections it cannot check.
+func (m *Manager) checkNames(ctx context.Context, c Camera) error {
+	hosts := []string{}
+	if c.Source.Kind == "onvif" {
+		hosts = append(hosts, c.Source.Host)
+	}
+	for _, raw := range []string{c.Source.MainURL, c.Source.SubURL} {
+		if host, err := streamURL(raw); err == nil {
+			hosts = append(hosts, host)
+		}
+	}
+	resolve := m.Resolve
+	if resolve == nil {
+		resolve = func(ctx context.Context, host string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		}
+	}
+	prober := &Prober{AllowPublic: c.Source.AllowPublic}
+	for _, host := range hosts {
+		if _, err := netip.ParseAddr(host); err == nil || host == "" {
+			continue
+		}
+		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		addrs, err := resolve(rctx, host)
+		cancel()
+		if err != nil || len(addrs) == 0 {
+			return invalid("source: the name %s cannot be resolved", host)
+		}
+		for _, addr := range addrs {
+			if !prober.allowed(addr) {
+				return fmt.Errorf("%w: %s (%s)", ErrTargetNotAllowed, host, addr)
+			}
+		}
+	}
+	return nil
 }
 
 // UpdateCamera replaces a camera. An empty password keeps the stored one
 // as long as the camera is still reached at the same host with the same
 // user: a password is never sent to another address by an edit.
 // clearPassword drops it.
-func (m *Manager) UpdateCamera(id string, c Camera, clearPassword bool) (Camera, error) {
+func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, clearPassword bool) (Camera, error) {
+	if err := m.checkNames(ctx, c); err != nil {
+		return c, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.loaded {
@@ -478,6 +629,16 @@ func (m *Manager) UpdateCamera(id string, c Camera, clearPassword bool) (Camera,
 		}
 		c.Source.Password = was.Source.Password
 	}
+	if err := m.uniqueNameLocked(c); err != nil {
+		return c, err
+	}
+	// The sound's codec: from a check of this stream, else as it was for
+	// the same stream, else unknown.
+	codec, probed := m.probedCodecLocked(c.Source.MainURL)
+	if !probed && was.Source.MainURL == c.Source.MainURL {
+		codec = was.Audio.Codec
+	}
+	c.Audio.Codec = codec
 	list := cloneCameras(m.cameras)
 	list[at] = c
 	return c, m.storeCamerasLocked(list)
@@ -488,9 +649,38 @@ func streamHost(raw string) string {
 	return host
 }
 
-// RemoveCamera deletes a camera and its rights. Its recordings stay in
-// Frigate until their days are over.
+// RemoveCamera deletes a camera and its rights. Its recordings stay until
+// their days are over: the camera stays in config.yml as a stub that is
+// switched off (deleted.go). That is noted on the NVR's volume first; with
+// the volume not there the camera is not deleted (ErrNoVolume).
 func (m *Manager) RemoveCamera(id string) error {
+	m.mu.Lock()
+	loaded, volume := m.loaded, m.settings.Volume
+	at := slices.IndexFunc(m.cameras, func(each Camera) bool { return each.ID == id })
+	var gone Camera
+	if at >= 0 {
+		gone = m.cameras[at]
+	}
+	m.mu.Unlock()
+	if !loaded {
+		return ErrNotLoaded
+	}
+	if at < 0 {
+		return ErrNotFound
+	}
+	// No volume chosen: the NVR never recorded anything.
+	if volume != "" {
+		stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
+		if err := m.changeDeleted(volume, func(list []DeletedCamera) []DeletedCamera {
+			list = slices.DeleteFunc(slices.Clone(list), func(d DeletedCamera) bool { return d.ID == id })
+			return append(list, stub)
+		}); err != nil {
+			if errors.Is(err, ErrNoVolume) {
+				return ErrNoVolume
+			}
+			return fmt.Errorf("nvr: deleted camera not noted on the volume: %w", err)
+		}
+	}
 	m.mu.Lock()
 	if !m.loaded {
 		m.mu.Unlock()

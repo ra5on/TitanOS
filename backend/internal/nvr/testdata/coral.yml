@@ -5,11 +5,15 @@ mqtt:
   enabled: false
 auth:
   enabled: false
+proxy:
+  auth_secret: goldensecretgoldensecretgoldensecretgoldensecret0123
+  default_role: admin
 tls:
   enabled: false
 networking:
   listen:
-    external: 127.0.0.1:8971
+    internal: 127.0.0.1:5000
+    external: 8971
 telemetry:
   version_check: false
 detectors:
@@ -18,6 +22,11 @@ detectors:
     device: usb
 ffmpeg:
   hwaccel_args: ""
+record:
+  continuous:
+    days: 30
+  motion:
+    days: 30
 birdseye:
   enabled: false
 lpr:
@@ -25,6 +34,10 @@ lpr:
 face_recognition:
   enabled: false
 go2rtc:
+  api:
+    listen: 127.0.0.1:1984
+  rtsp:
+    listen: 127.0.0.1:8554
   webrtc:
     candidates: []
   streams:
@@ -33,9 +46,9 @@ go2rtc:
     carport_sub:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
     hof:
-      - rtsp://192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+      - rtsp://192.168.1.61:554/Streaming/Channels/101#backchannel=0
     hof_sub:
-      - rtsp://192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+      - rtsp://192.168.1.61:554/Streaming/Channels/102#backchannel=0
     keller:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
     keller_sub:
@@ -43,7 +56,6 @@ go2rtc:
 cameras:
   carport:
     enabled: true
-    friendly_name: Carport
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -64,6 +76,16 @@ cameras:
         - person
     record:
       enabled: false
+      continuous:
+        days: 14
+      motion:
+        days: 14
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
     snapshots:
       enabled: false
       retain:
@@ -72,10 +94,9 @@ cameras:
       enabled: false
   hof:
     enabled: true
-    friendly_name: Hof
     ffmpeg:
       output_args:
-        record: preset-record-generic
+        record: preset-record-generic-audio-aac
       inputs:
         - path: rtsp://127.0.0.1:8554/hof
           input_args: preset-rtsp-restream
@@ -117,7 +138,6 @@ cameras:
       enabled: false
   keller:
     enabled: false
-    friendly_name: Keller
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -158,5 +178,35 @@ cameras:
       enabled: true
       retain:
         default: 14
+    audio:
+      enabled: false
+  schuppen:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/schuppen
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 30
+      motion:
+        days: 30
+      alerts:
+        retain:
+          days: 30
+      detections:
+        retain:
+          days: 30
+    snapshots:
+      enabled: false
+      retain:
+        default: 30
     audio:
       enabled: false

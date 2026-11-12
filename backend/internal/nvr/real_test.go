@@ -92,7 +92,7 @@ func TestRealFrigate(t *testing.T) {
 	// Plates and faces are left out here: Frigate would download their
 	// models. The validator of Frigate took a config with both (render_test).
 	c.PTZ, c.Audio = true, Audio{Enabled: true, TwoWay: true}
-	if _, err := m.AddCamera(c); err != nil {
+	if _, err := m.AddCamera(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(3 * m.Tick)

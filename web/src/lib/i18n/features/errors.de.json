@@ -134,7 +134,7 @@
 	"error.nvr_target_public": "Diese Adresse liegt nicht im Heimnetz. Bestätige ausdrücklich, dass die Kamera dort stehen soll.",
 	"error.nvr_camera_not_found": "Diese Kamera gibt es nicht (mehr).",
 	"error.nvr_camera_exists": "Eine Kamera mit dieser Kennung gibt es schon.",
-	"error.nvr_camera_name_exists": "Eine Kamera mit diesem Namen gibt es schon (Groß- und Kleinschreibung zählen dabei nicht).",
+	"error.nvr_camera_name_exists": "Eine andere Kamera heißt schon so. Wähle einen anderen Namen.",
 	"error.nvr_camera_limit": "Mehr Kameras lassen sich nicht anlegen.",
 	"error.nvr_not_running": "Der NVR läuft gerade nicht oder die Kamera ist ausgeschaltet.",
 	"error.nvr_disabled": "Der NVR ist ausgeschaltet.",

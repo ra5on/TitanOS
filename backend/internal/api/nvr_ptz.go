@@ -105,7 +105,7 @@ func (a nvrArea) handleTalk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	upstream, err := nvrLiveDial(dctx, address)
+	upstream, err := nvrLiveDial(dctx, address, a.nvr.FrigateHeader())
 	cancel()
 	if err != nil {
 		slog.Warn("NVR talk not reached", "camera", id, "err", err)

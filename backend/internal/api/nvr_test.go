@@ -29,7 +29,7 @@ func nvrServer(t *testing.T) (*testServer, *nvr.Manager) {
 		users := opts.Users
 		manager.Access.Lookup = func(name string) (nvr.Account, bool) {
 			user, ok := users.Get(name)
-			return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled}, ok
+			return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled, Created: user.Created}, ok
 		}
 		manager.Tick = 20 * time.Millisecond
 		if err := manager.Load(); err != nil {
@@ -108,7 +108,7 @@ func TestNVRRoutesNeedTheRightRole(t *testing.T) {
 }
 
 func TestNVRStatusAndSettings(t *testing.T) {
-	ts, _ := nvrServer(t)
+	ts, manager := nvrServer(t)
 	ts.setup()
 	res, body := ts.request("GET", "/api/v1/nvr/status", nil)
 	var status nvr.Status
@@ -138,6 +138,21 @@ func TestNVRStatusAndSettings(t *testing.T) {
 	}
 	if _, body := ts.request("GET", "/api/v1/nvr/status", nil); strings.Contains(string(body), settings.RTSPPassword) {
 		t.Error("the status shows the restream password")
+	}
+	// The secret between titand and Frigate is in no answer, and no
+	// request changes it.
+	secret := manager.Settings().ProxySecret
+	if len(secret) < 40 {
+		t.Fatalf("secret %q", secret)
+	}
+	ts.request("PUT", "/api/v1/nvr/settings", map[string]any{"proxySecret": "chosen-by-the-page-0123456789"})
+	if manager.Settings().ProxySecret != secret {
+		t.Error("a request changed the secret")
+	}
+	for _, path := range []string{"/nvr/settings", "/nvr/status", "/nvr/diagnosis", "/nvr/cameras"} {
+		if _, body := ts.request("GET", "/api/v1"+path, nil); strings.Contains(string(body), secret) || strings.Contains(string(body), "proxySecret") {
+			t.Errorf("%s shows the secret: %s", path, body)
+		}
 	}
 	// A normal account sees that the NVR runs and nothing of the machine.
 	guest := ts.guest("gast")
@@ -210,6 +225,7 @@ func TestNVRCameras(t *testing.T) {
 		code         string
 	}{
 		"same id":            {"POST", "/nvr/cameras", map[string]any{"id": "carport", "name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://192.168.1.91/x"}}, 409, "nvr_camera_exists"},
+		"same name":          {"POST", "/nvr/cameras", map[string]any{"name": "HAUSTÜR", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://192.168.1.91/x"}}, 409, "nvr_camera_name_exists"},
 		"no stream":          {"POST", "/nvr/cameras", map[string]any{"name": "X"}, 400, "nvr_invalid"},
 		"public address":     {"POST", "/nvr/cameras", map[string]any{"name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://203.0.113.4/x"}}, 409, "nvr_target_public"},
 		"this NAS":           {"POST", "/nvr/cameras", map[string]any{"name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://127.0.0.1:8554/x"}}, 400, "nvr_invalid"},
@@ -377,7 +393,7 @@ func liveMessage(t *testing.T, conn *websocket.Conn, ctx context.Context) map[st
 func TestNVRLive(t *testing.T) {
 	recheck := consoleRecheck.Swap(int64(20 * time.Millisecond))
 	t.Cleanup(func() { consoleRecheck.Store(recheck) })
-	ts, _ := nvrServer(t)
+	ts, manager := nvrServer(t)
 	ts.setup()
 	guest := ts.guest("gast")
 	// The NVR is off.
@@ -398,9 +414,9 @@ func TestNVRLive(t *testing.T) {
 		t.Errorf("recordings only: %v", msg)
 	}
 	// With the right the stream of Frigate is passed through, both ways.
-	var asked string
+	var asked, secret string
 	echo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		asked = r.URL.String()
+		asked, secret = r.URL.String(), r.Header.Get("X-Proxy-Secret")
 		up, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
@@ -419,9 +435,9 @@ func TestNVRLive(t *testing.T) {
 	dial := nvrLiveDial
 	t.Cleanup(func() { nvrLiveDial = dial })
 	upstream := newLocalServer(t, echo)
-	nvrLiveDial = func(ctx context.Context, address string) (*websocket.Conn, error) {
+	nvrLiveDial = func(ctx context.Context, address string, header http.Header) (*websocket.Conn, error) {
 		u, _ := url.Parse(address)
-		return dial(ctx, "ws"+strings.TrimPrefix(upstream, "http")+u.RequestURI())
+		return dial(ctx, "ws"+strings.TrimPrefix(upstream, "http")+u.RequestURI(), header)
 	}
 	ts.request("PUT", "/api/v1/users/gast/cameras", map[string]any{"cameras": map[string]any{"haustuer": map[string]any{"live": true}}})
 	conn, ctx = liveDial(t, ts, guest, "/nvr/cameras/haustuer/live?stream=sub")
@@ -439,6 +455,10 @@ func TestNVRLive(t *testing.T) {
 	}
 	if asked != "/live/mse/api/ws?src=haustuer_sub" {
 		t.Errorf("asked Frigate for %q", asked)
+	}
+	// Frigate's port 8971 answers nothing without the secret.
+	if want := manager.Settings().ProxySecret; secret == "" || secret != want {
+		t.Errorf("secret %q sent to Frigate, want %q", secret, want)
 	}
 	// The right is taken away: the open stream ends within the recheck.
 	ts.request("PUT", "/api/v1/users/gast/cameras", map[string]any{"cameras": map[string]any{"haustuer": map[string]any{"live": false}}})
@@ -506,4 +526,66 @@ func newLocalServer(t *testing.T, handler http.Handler) string {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	return srv.URL
+}
+
+// A deleted camera's recordings stay until their days are over;
+// administrators find them under the camera, listed as deleted, other
+// accounts never.
+func TestNVRDeletedCameras(t *testing.T) {
+	ts, _ := nvrServer(t)
+	ts.setup()
+	nvrRunning(t, ts)
+	guest := ts.guest("gast")
+	ts.request("PUT", "/api/v1/users/gast/cameras", map[string]any{"cameras": map[string]any{"einfahrt": map[string]any{"live": true, "recordings": true}}})
+	if res, body := ts.do(guest, "GET", "/api/v1/nvr/cameras/einfahrt/recordings/summary", nil); res.StatusCode != 200 {
+		t.Fatalf("before: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/einfahrt", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", res.StatusCode, body)
+	}
+	var list struct {
+		Cameras []nvr.CameraView `json:"cameras"`
+	}
+	_, body := ts.request("GET", "/api/v1/nvr/cameras", nil)
+	json.Unmarshal(body, &list)
+	last := list.Cameras[len(list.Cameras)-1]
+	if len(list.Cameras) != 4 || last.ID != "einfahrt" || !last.Deleted || last.DeletedAt == nil || last.ExpiresAt == nil ||
+		*last.ExpiresAt-*last.DeletedAt != 14*86400 || last.Record.RetainDays != 14 || last.Source.HasPassword {
+		t.Fatalf("administrator's list: %s", body)
+	}
+	if !strings.Contains(string(body), `"deleted":false`) {
+		t.Errorf("the other cameras say deleted false: %s", body)
+	}
+	if res, body := ts.request("GET", "/api/v1/nvr/cameras/einfahrt", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"deleted":true`) {
+		t.Errorf("one deleted camera: %d %s", res.StatusCode, body)
+	}
+	for _, route := range []string{"/recordings/summary", "/recordings?from=1&to=3600"} {
+		if res, body := ts.request("GET", "/api/v1/nvr/cameras/einfahrt"+route, nil); res.StatusCode != 200 {
+			t.Errorf("administrator %s: %d %s", route, res.StatusCode, body)
+		}
+	}
+	var events eventList
+	if getJSON(t, ts, ts.client, "/nvr/events?camera=einfahrt", &events); len(events.Events) == 0 {
+		t.Error("the administrator does not find the deleted camera's events")
+	}
+	// Changing, deleting again, watching live: not for a deleted camera.
+	for _, route := range []struct{ method, path string }{{"PUT", "/nvr/cameras/einfahrt"}, {"DELETE", "/nvr/cameras/einfahrt"}, {"GET", "/nvr/cameras/einfahrt/snapshot.jpg"}} {
+		if res, body := ts.request(route.method, "/api/v1"+route.path, map[string]any{"name": "X"}); res.StatusCode != 404 {
+			t.Errorf("%s %s: %d %s", route.method, route.path, res.StatusCode, body)
+		}
+	}
+	// Another account: nothing of it.
+	_, body = ts.do(guest, "GET", "/api/v1/nvr/cameras", nil)
+	if strings.Contains(string(body), "einfahrt") {
+		t.Errorf("a user sees the deleted camera: %s", body)
+	}
+	for _, route := range []string{"/nvr/cameras/einfahrt", "/nvr/cameras/einfahrt/recordings/summary"} {
+		if res, _ := ts.do(guest, "GET", "/api/v1"+route, nil); res.StatusCode != 404 {
+			t.Errorf("user %s: %d", route, res.StatusCode)
+		}
+	}
+	var guestEvents eventList
+	if getJSON(t, ts, guest, "/nvr/events?camera=einfahrt", &guestEvents); len(guestEvents.Events) != 0 {
+		t.Errorf("a user sees the deleted camera's events: %+v", guestEvents.Events)
+	}
 }

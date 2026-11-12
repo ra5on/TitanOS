@@ -7,6 +7,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 )
@@ -31,6 +32,11 @@ func (a nvrArea) handleExports(w http.ResponseWriter, r *http.Request) {
 		writeNVRError(w, err)
 		return
 	}
+	// An account that lost the right on a camera's recordings no longer
+	// sees its exports of that camera (nor opens them, see export).
+	if !user.Role.CanAdminister() {
+		list = slices.DeleteFunc(list, func(e nvr.Export) bool { return !a.allows(user, e.Camera, nvr.RightRecordings) })
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"exports": list})
 }
 
@@ -49,7 +55,7 @@ func (a nvrArea) handleExportCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if _, ok := a.nvr.Camera(req.Camera); !ok || !a.allows(user, req.Camera, nvr.RightRecordings) {
+	if !a.reaches(user, req.Camera, nvr.RightRecordings) {
 		writeNVRError(w, nvr.ErrNotFound)
 		return
 	}
