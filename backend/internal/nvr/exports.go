@@ -64,6 +64,9 @@ type exportRecord struct {
 	Owner string  `json:"owner"`
 	From  float64 `json:"from"`
 	To    float64 `json:"to"`
+	// Created is when the export was asked for (Frigate's own date of
+	// an export is the beginning of what it shows).
+	Created float64 `json:"created,omitempty"`
 }
 
 const exportsFile = "exports.json"
@@ -181,12 +184,13 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 	if !ValidEventID(started.ID) {
 		return Export{}, ErrExportFailed
 	}
+	created := float64(m.now().Unix())
 	if err := m.changeExportRecords(func(records map[string]exportRecord) {
-		records[started.ID] = exportRecord{Owner: owner, From: from, To: to}
+		records[started.ID] = exportRecord{Owner: owner, From: from, To: to, Created: created}
 	}); err != nil {
 		slog.Warn("NVR: owner of the export not stored; it is shown to administrators only", "export", started.ID, "err", err)
 	}
-	return Export{ID: started.ID, Camera: camera, Name: name, From: from, To: to, Created: float64(m.now().Unix()), State: ExportRunning, Owner: owner}, nil
+	return Export{ID: started.ID, Camera: camera, Name: name, From: from, To: to, Created: created, State: ExportRunning, Owner: owner}, nil
 }
 
 // Exports lists the exports of an account (owner "" with all: every
@@ -212,6 +216,9 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 	add := func(e Export) {
 		record := records[e.ID]
 		e.Owner, e.From, e.To = record.Owner, record.From, record.To
+		if record.Created > 0 {
+			e.Created = record.Created
+		}
 		known[e.ID] = true
 		if all || (owner != "" && e.Owner == owner) {
 			out = append(out, e)
@@ -249,7 +256,11 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		if job.Status == "failed" || job.Status == "cancelled" {
 			state = ExportFailed
 		}
-		out = append(out, Export{ID: id, Camera: job.Camera, Name: job.Name, From: record.From, To: record.To, Created: record.To, State: state, Owner: record.Owner})
+		created := record.Created
+		if created == 0 {
+			created = record.To
+		}
+		out = append(out, Export{ID: id, Camera: job.Camera, Name: job.Name, From: record.From, To: record.To, Created: created, State: state, Owner: record.Owner})
 	}
 	slices.SortFunc(out, func(a, b Export) int {
 		switch {

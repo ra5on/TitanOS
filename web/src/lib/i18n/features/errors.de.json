@@ -139,5 +139,14 @@
 	"error.nvr_disabled": "Der NVR ist ausgeschaltet.",
 	"error.nvr_invalid": "Diese Angabe passt nicht. Prüfe Name, Adresse und die gewählten Werte.",
 	"error.nvr_access_admin": "Besitzer und Administratoren sehen immer alle Kameras.",
-	"error.nvr_no_picture": "Die Kamera liefert gerade kein Bild."
+	"error.nvr_no_picture": "Die Kamera liefert gerade kein Bild.",
+	"error.nvr_event_not_found": "Dieses Ereignis gibt es nicht (mehr).",
+	"error.nvr_export_not_found": "Diesen Export gibt es nicht (mehr).",
+	"error.nvr_export_running": "Der Export wird noch erstellt. Bitte warte, bis er fertig ist.",
+	"error.nvr_export_failed": "Der Export ließ sich nicht starten. Prüfe, ob in diesem Zeitraum etwas aufgenommen wurde.",
+	"error.nvr_ptz_unsupported": "Diese Kamera lässt sich nicht schwenken.",
+	"error.nvr_face_not_found": "Diese Person oder dieses Bild gibt es nicht (mehr).",
+	"error.nvr_face_exists": "Eine Person mit diesem Namen gibt es schon.",
+	"error.nvr_face_rejected": "Das Bild lässt sich nicht verwenden. Es muss genau ein gut erkennbares Gesicht zeigen.",
+	"error.nvr_faces_off": "Die Gesichtserkennung läuft nicht: Schalte sie zuerst bei mindestens einer Kamera ein."
 }

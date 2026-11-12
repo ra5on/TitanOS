@@ -287,3 +287,46 @@ func TestNVRFacesAreForAdministrators(t *testing.T) {
 		t.Errorf("plates lost: %s", body)
 	}
 }
+
+func TestNVRCamerasForHomeAssistant(t *testing.T) {
+	ts, manager := nvrServer(t)
+	ts.setup()
+	nvrRunning(t, ts)
+	// No camera chose Home Assistant: no device.
+	for _, d := range ts.server.haArea().HASnapshot(t.Context()).Telemetry {
+		if d.Group == "cameras" {
+			t.Fatalf("camera without the choice: %+v", d)
+		}
+	}
+	res, body := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"homeAssistant": true, "kinds": []string{"person"}}})
+	if res.StatusCode != 200 {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	var found bool
+	deadline := time.Now().Add(5 * time.Second)
+	for !found && time.Now().Before(deadline) {
+		for _, d := range ts.server.haArea().HASnapshot(t.Context()).Telemetry {
+			if d.Group != "cameras" {
+				continue
+			}
+			keys := map[string]string{}
+			for _, m := range d.Metrics {
+				if m.Value != nil {
+					keys[m.Key] = *m.Value
+				}
+				if m.Key != "last_event" && !m.Binary {
+					t.Errorf("%s is no binary sensor", m.Key)
+				}
+			}
+			// The front door restarted with the change; once it sends
+			// pictures again it is online, nothing was seen yet.
+			if d.ID == "haustuer" && d.Name == "Haustür" && keys["online"] == "ON" && keys["person"] == "OFF" && keys["face"] == "OFF" {
+				found = true
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !found {
+		t.Errorf("no camera for Home Assistant: %+v", manager.HACameras())
+	}
+}

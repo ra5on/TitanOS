@@ -56,7 +56,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | network | `network.go` | `networkArea`, `timezoneArea` | 0 |
 | notifications | `notifications.go` | `accountNotifyArea`, `notifyArea` | 0 |
 | nvidia | `nvidia.go` | `nvidiaArea` | 0 |
-| nvr | `nvr.go`, `nvr_live.go` | `nvrArea` | 1 |
+| nvr | `nvr.go`, `nvr_events.go`, `nvr_exports.go`, `nvr_faces.go`, `nvr_live.go`, `nvr_ptz.go`, `nvr_recordings.go` | `nvrArea` | 4 |
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
 | passkeys | `passkeys.go` | – | 1 |

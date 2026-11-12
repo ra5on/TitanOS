@@ -139,5 +139,14 @@
 	"error.nvr_disabled": "The NVR is switched off.",
 	"error.nvr_invalid": "This entry does not fit. Check the name, the address and the chosen values.",
 	"error.nvr_access_admin": "Owners and administrators always see every camera.",
-	"error.nvr_no_picture": "The camera has no picture right now."
+	"error.nvr_no_picture": "The camera has no picture right now.",
+	"error.nvr_event_not_found": "This event does not exist (any more).",
+	"error.nvr_export_not_found": "This export does not exist (any more).",
+	"error.nvr_export_running": "The export is still being made. Please wait until it is done.",
+	"error.nvr_export_failed": "The export could not be started. Check whether anything was recorded in this time.",
+	"error.nvr_ptz_unsupported": "This camera cannot be moved.",
+	"error.nvr_face_not_found": "This person or picture does not exist (any more).",
+	"error.nvr_face_exists": "A person of this name exists already.",
+	"error.nvr_face_rejected": "The picture cannot be used. It must show exactly one clearly visible face.",
+	"error.nvr_faces_off": "Face recognition does not run: switch it on for at least one camera first."
 }

@@ -212,11 +212,9 @@ func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64
 	}
 	var holes [][2]float64
 	for _, e := range kept {
-		end := e.Start
+		end := to // still going on
 		if e.End != nil {
 			end = *e.End
-		} else {
-			end = to // still going on
 		}
 		if lo, hi := e.Start-keptMargin, end+keptMargin; hi > from && lo < to {
 			holes = append(holes, [2]float64{max(lo, from), min(hi, to)})
