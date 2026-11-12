@@ -793,6 +793,30 @@ async function filesWindow(page) {
     assert.ok(put && put.size > 50, "adapter save written");
     assert.equal(put.path, "logo.vectorcraft");
     assert.equal(put.expect, "none");
+    // PLAN 79-15: the next Ctrl+S is the Save of that file: straight into
+    // it (guarded by its time), no question where.
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForTimeout(800);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(400);
+    await page.keyboard.press("Control+s");
+    const again = await waitPut(nas, 2);
+    assert.ok(again, "the second save of the adapter app written");
+    assert.equal(again.path, "logo.vectorcraft");
+    assert.equal(
+      again.expect,
+      put.answer,
+      "guarded by the time of the first save",
+    );
+    assert.equal(
+      await page
+        .getByRole("dialog", { name: /Speichern aus VectorCraft/ })
+        .count(),
+      0,
+      "no save dialog for the open file",
+    );
   }
   await made.ctx.close();
 }

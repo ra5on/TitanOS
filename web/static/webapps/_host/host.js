@@ -133,6 +133,70 @@
 		});
 	}
 
+	/** The keyboard goes to the app's canvas (the apps read their keys there). */
+	function focusCanvas() {
+		var target = canvas();
+		try {
+			window.focus();
+			var active = document.activeElement;
+			// The app's own text field (its hidden input while typing) keeps the keys.
+			if (active && active !== document.body && active !== document.documentElement) return;
+			if (target) target.focus({ preventScroll: true });
+		} catch (e) {
+			// Without focus the app still works after a click.
+		}
+	}
+
+	// PLAN 79-3: the apps scroll what lies under the pointer, and they know the
+	// pointer only from its moves. A window that opens under a resting mouse
+	// (double click in the file manager, a dialog that closed) never saw one:
+	// the wheel turned and nothing scrolled until a click. The wheel says
+	// where the pointer is, so the app is told first, as a move.
+	var pointerAt = null;
+	function notePointer(event) {
+		if (event.isTrusted) pointerAt = { x: event.clientX, y: event.clientY };
+	}
+	['pointermove', 'pointerdown', 'pointerup', 'mousemove'].forEach(function (type) {
+		window.addEventListener(type, notePointer, true);
+	});
+	window.addEventListener(
+		'wheel',
+		function (event) {
+			if (!event.isTrusted) return;
+			if (pointerAt && pointerAt.x === event.clientX && pointerAt.y === event.clientY) return;
+			pointerAt = { x: event.clientX, y: event.clientY };
+			var target = event.target instanceof Element ? event.target : canvas();
+			if (!target) return;
+			var at = {
+				bubbles: true,
+				cancelable: true,
+				composed: true,
+				view: window,
+				clientX: event.clientX,
+				clientY: event.clientY,
+				screenX: event.screenX,
+				screenY: event.screenY,
+				ctrlKey: event.ctrlKey,
+				shiftKey: event.shiftKey,
+				altKey: event.altKey,
+				metaKey: event.metaKey,
+				buttons: event.buttons,
+			};
+			try {
+				target.dispatchEvent(
+					new PointerEvent(
+						'pointermove',
+						Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, at),
+					),
+				);
+				target.dispatchEvent(new MouseEvent('mousemove', at));
+			} catch (e) {
+				// An old browser without these constructors: as before, a move first.
+			}
+		},
+		true,
+	);
+
 	// Menu commands of the TitanOS window and the Ctrl key they stand for.
 	var KEYS = {
 		save: ['s', 'KeyS', 83],
@@ -151,6 +215,10 @@
 		if (msg.type === 'webapp-open') {
 			if (!(msg.bytes instanceof ArrayBuffer)) return;
 			open({ name: cleanName(msg.name, 'document'), bytes: msg.bytes });
+		} else if (msg.type === 'webapp-focus') {
+			// PLAN 79-3: the window gave the keyboard to the app (opened, came to
+			// the front, a file arrived): its keys go to the canvas.
+			focusCanvas();
 		} else if (msg.type === 'webapp-command' && msg.command === 'save-as' && bridge === 'host') {
 			// TitanOS extension (proposed upstream as <id>:save-as): the Office key for
 			// Save As; the app then posts <id>:save with saveAs true.
