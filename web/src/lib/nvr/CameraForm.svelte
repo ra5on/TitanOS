@@ -602,7 +602,7 @@
 			{#if mode !== 'continuous'}
 				<SettingRow icon="clock" title={t('nvr.record.around')} desc={t('nvr.record.aroundHint')}>
 					{#snippet control()}
-						<label class="unit"
+						<label class="unit around"
 							><span>{t('nvr.record.before')}</span><input
 								class="field num"
 								type="number"
@@ -611,7 +611,7 @@
 								bind:value={preSeconds}
 							/></label
 						>
-						<label class="unit"
+						<label class="unit around"
 							><span>{t('nvr.record.after')}</span><input
 								class="field num"
 								type="number"
@@ -794,6 +794,10 @@
 	}
 	.port .field {
 		width: 5.5rem;
+	}
+	/* "davor" and "danach" line their fields up when they stand below each other. */
+	.around span {
+		min-width: 3.6em;
 	}
 	.bad {
 		color: var(--error-text);

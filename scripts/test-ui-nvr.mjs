@@ -869,7 +869,7 @@ try {
       data.prefs.desktop = {
         version: 1,
         customWidgets: true,
-        widgets: [{ id: "wcam", kind: "camera", x: 12, y: 2, w: 20, h: 13, camera: "garten" }],
+        widgets: [{ id: "wcam", kind: "camera", x: 34, y: 3, w: 20, h: 13, camera: "garten" }],
       };
     });
     await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
