@@ -31,6 +31,8 @@ func (w *titand) wireAccess() error {
 	w.stickBackup = configbackup.NewManager(w.store, version.Version)
 	w.stickBackup.Disabled = w.opts.dev
 	w.stickBackup.DefaultVolume = w.systemData.Default
+	// Listing the backups does not wake sleeping disks.
+	w.stickBackup.Asleep = w.volumes.VolumeAsleep
 	if err := w.stickBackup.Load(); err != nil {
 		slog.Warn("backup settings not readable from /config", "err", err)
 	}

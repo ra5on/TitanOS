@@ -20,39 +20,40 @@ import (
 // Cause codes. The interface translates them; Detail is a value (a job, an
 // account, a share, a feature), never a sentence.
 const (
-	Unknown        = "unknown"         // nothing of TitanOS: a share, an app, a VM
-	BackupJob      = "backup_job"      // data backup; detail: job
-	AppBackup      = "app_backup"      // application backup
-	ConfigBackup   = "config_backup"   // copy of the stick
-	Journal        = "journal"         // kept system journal
-	ActivityLog    = "activity_log"    //
-	Notifications  = "notifications"   // bell and held personal notifications
-	SmartHistory   = "smart_history"   //
-	Monitoring     = "monitoring"      // monitoring history
-	ShadowCopies   = "shadow_copies"   // previous versions (sync every 10 minutes)
-	RecycleSweep   = "recycle_sweep"   // emptying recycle bins
-	FileIndex      = "file_index"      // full-text index pass or search
-	Thumbnails     = "thumbnails"      // thumbnails and previews
-	SnapshotPlan   = "snapshot_plan"   // scheduled snapshot
-	Maintenance    = "maintenance"     // detail: scrub, raid_check, btrfs, plan
-	DiskTest       = "disk_test"       // SMART self-test or disk test
-	VMDisk         = "vm_disk"         // disk handed to a VM
-	DataMove       = "data_move"       // TitanOS data moved between volumes; detail: feature
-	VMStart        = "vm_start"        // detail: VM
-	ContainerStart = "container_start" // detail: app or container
-	LXCStart       = "lxc_start"       // detail: container
-	DockerData     = "docker_data"     // Docker data root on the volume
-	Replication    = "replication"     // detail: job
-	UsageScan      = "usage_scan"      // storage usage of a volume
-	QuotaScan      = "quota_scan"      // share quotas
-	FileManager    = "file_manager"    // detail: account
-	WebDAV         = "webdav"          // detail: account
-	SMBSession     = "smb_session"     // an SMB client is connected; detail: share
-	DockerRunning  = "docker_running"  // Docker runs on the volume (its containers write there)
-	Agent          = "agent"           // data of the AI agent
-	FileTransfer   = "file_transfer"   // copy/move/upload jobs of the file manager
-	Snapshot       = "snapshot"        // snapshot made, listed or restored on request
-	PrivateData    = "private_data"    // other .titanos/<feature>; detail: feature
+	Unknown             = "unknown"               // nothing of TitanOS: a share, an app, a VM
+	BackupJob           = "backup_job"            // data backup; detail: job
+	AppBackup           = "app_backup"            // application backup
+	ConfigBackup        = "config_backup"         // copy of the stick
+	ConfigBackupRequest = "config_backup_request" // backups on a sleeping volume searched on request; detail: account
+	Journal             = "journal"               // kept system journal
+	ActivityLog         = "activity_log"          //
+	Notifications       = "notifications"         // bell and held personal notifications
+	SmartHistory        = "smart_history"         //
+	Monitoring          = "monitoring"            // monitoring history
+	ShadowCopies        = "shadow_copies"         // previous versions (sync every 10 minutes)
+	RecycleSweep        = "recycle_sweep"         // emptying recycle bins
+	FileIndex           = "file_index"            // full-text index pass or search
+	Thumbnails          = "thumbnails"            // thumbnails and previews
+	SnapshotPlan        = "snapshot_plan"         // scheduled snapshot
+	Maintenance         = "maintenance"           // detail: scrub, raid_check, btrfs, plan
+	DiskTest            = "disk_test"             // SMART self-test or disk test
+	VMDisk              = "vm_disk"               // disk handed to a VM
+	DataMove            = "data_move"             // TitanOS data moved between volumes; detail: feature
+	VMStart             = "vm_start"              // detail: VM
+	ContainerStart      = "container_start"       // detail: app or container
+	LXCStart            = "lxc_start"             // detail: container
+	DockerData          = "docker_data"           // Docker data root on the volume
+	Replication         = "replication"           // detail: job
+	UsageScan           = "usage_scan"            // storage usage of a volume
+	QuotaScan           = "quota_scan"            // share quotas
+	FileManager         = "file_manager"          // detail: account
+	WebDAV              = "webdav"                // detail: account
+	SMBSession          = "smb_session"           // an SMB client is connected; detail: share
+	DockerRunning       = "docker_running"        // Docker runs on the volume (its containers write there)
+	Agent               = "agent"                 // data of the AI agent
+	FileTransfer        = "file_transfer"         // copy/move/upload jobs of the file manager
+	Snapshot            = "snapshot"              // snapshot made, listed or restored on request
+	PrivateData         = "private_data"          // other .titanos/<feature>; detail: feature
 )
 
 const (

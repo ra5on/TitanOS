@@ -178,6 +178,19 @@ type State struct {
 	LastError string     `json:"lastError"`
 	Backups   []Backup   `json:"backups"`
 	Next      *time.Time `json:"next"`
+	// Unsearched names the mounted volumes whose folder was not read for
+	// Backups, with the reason as a code. Their backups are listed as far
+	// as they were seen while the volume was awake.
+	Unsearched *Unsearched `json:"unsearched,omitempty"`
+}
+
+// UnsearchedAsleep: the disks of the volumes sleep; reading would wake them.
+const UnsearchedAsleep = "volume_asleep"
+
+// Unsearched are volumes List did not read.
+type Unsearched struct {
+	Code    string   `json:"code"`
+	Volumes []string `json:"volumes"`
 }
 
 // Manager makes, lists and restores the backups.
@@ -199,6 +212,12 @@ type Manager struct {
 	// Backups on other volumes stay listed and restorable (List reads
 	// every mounted volume), so nothing is moved.
 	DefaultVolume func() string
+	// Asleep tells whether the disks of a volume sleep (from RAM). Listing
+	// the backups does not read such a volume unless asked to (PLAN 79-6).
+	Asleep func(volume string) bool
+	// seen are the backups last read per volume, shown while it sleeps
+	// (RAM only, protected by mu).
+	seen map[string][]Backup
 	// OnResult is told how each attempt to save went (nil for success).
 	OnResult func(volume string, err error)
 	// OnNoVolume is told once when nothing could be saved for noVolumeAfter
@@ -353,6 +372,16 @@ func target(settings Settings, mounted []string) string {
 
 // State returns settings, the last result and the backups on the mounted volumes.
 func (m *Manager) State(mounted []string) State {
+	return m.state(mounted, "", false)
+}
+
+// StateSearching is State that also reads the volumes whose disks sleep,
+// which wakes them: only for an explicit request of an account.
+func (m *Manager) StateSearching(mounted []string, account string) State {
+	return m.state(mounted, account, true)
+}
+
+func (m *Manager) state(mounted []string, account string, wake bool) State {
 	m.mu.Lock()
 	state := State{Settings: m.settings, LastError: m.lastError}
 	if !m.lastCheck.IsZero() {
@@ -362,22 +391,62 @@ func (m *Manager) State(mounted []string) State {
 	m.mu.Unlock()
 	state.Next = nextScheduled(state.Settings, m.now())
 	state.Target = m.target(state.Settings, mounted)
-	state.Backups = m.List(mounted)
+	state.Backups, state.Unsearched = m.list(mounted, account, wake)
 	return state
 }
 
-// List returns the backups on the mounted volumes, the newest first.
+// List returns the backups on the mounted volumes, the newest first. It
+// reads every volume, also one whose disks sleep.
 func (m *Manager) List(mounted []string) []Backup {
+	list, _ := m.list(mounted, "", true)
+	return list
+}
+
+// list reads the backup folder of every mounted volume. A volume whose
+// disks sleep is read only with wake; otherwise it is named in the second
+// result and what was last seen on it (in RAM) is listed.
+func (m *Manager) list(mounted []string, account string, wake bool) ([]Backup, *Unsearched) {
 	list := []Backup{}
-	for _, volume := range mounted {
-		diskwake.Note(volume, diskwake.ConfigBackup, "list")
-		for _, backup := range readFolder(filepath.Join(m.mountRoot, volume, folder)) {
-			backup.Volume = volume
-			list = append(list, backup)
+	var asleep []string
+	m.mu.Lock()
+	for volume := range m.seen {
+		if !slices.Contains(mounted, volume) {
+			delete(m.seen, volume)
 		}
 	}
+	m.mu.Unlock()
+	for _, volume := range mounted {
+		sleeps := m.Asleep != nil && m.Asleep(volume)
+		if sleeps && !wake {
+			asleep = append(asleep, volume)
+			m.mu.Lock()
+			list = append(list, m.seen[volume]...)
+			m.mu.Unlock()
+			continue
+		}
+		if sleeps {
+			diskwake.Note(volume, diskwake.ConfigBackupRequest, account)
+		} else {
+			diskwake.Note(volume, diskwake.ConfigBackup, "list")
+		}
+		found := readFolder(filepath.Join(m.mountRoot, volume, folder))
+		for i := range found {
+			found[i].Volume = volume
+		}
+		m.mu.Lock()
+		if m.seen == nil {
+			m.seen = map[string][]Backup{}
+		}
+		m.seen[volume] = slices.Clone(found)
+		m.mu.Unlock()
+		list = append(list, found...)
+	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Time.After(list[j].Time) })
-	return list
+	if len(asleep) == 0 {
+		return list, nil
+	}
+	sort.Strings(asleep)
+	return list, &Unsearched{Code: UnsearchedAsleep, Volumes: asleep}
 }
 
 // readFolder lists the backups in a directory. Files that only look like

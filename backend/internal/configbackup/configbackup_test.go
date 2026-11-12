@@ -16,6 +16,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/retention"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 )
 
 // fakeSystem answers blkid and takes mount and umount without doing anything:
@@ -588,5 +589,64 @@ func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
 	}
 	if got := e.m.State(mounted).Target; got != "fast" {
 		t.Fatalf("chosen volume not respected: %q", got)
+	}
+}
+
+// Opening the page must not wake sleeping disks (PLAN 79-6): the folder of
+// a volume whose disks sleep is not read. What was seen while it was awake
+// is listed from RAM and the volume is named; only the explicit wish of an
+// account looks there, and that is noted as what woke the disks.
+func TestListDoesNotReadSleepingVolumes(t *testing.T) {
+	e := newEnv(t)
+	if err := e.store.WriteJSON("system/example.json", map[string]int{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+	mounted := []string{"fast", "tank"}
+	e.m.Create([]string{"tank"})
+	asleep := map[string]bool{}
+	e.m.Asleep = func(volume string) bool { return asleep[volume] }
+	if state := e.m.State(mounted); len(state.Backups) != 1 || state.Backups[0].Volume != "tank" || state.Unsearched != nil {
+		t.Fatalf("awake: %+v", state)
+	}
+	// The disks of tank sleep. Any read of its folder would fail now: it
+	// is moved away, as a stand-in for "must not be touched".
+	asleep["tank"] = true
+	recorder := &diskwake.Recorder{}
+	recorder.Enable(true)
+	old := diskwake.Default
+	diskwake.Default = recorder
+	defer func() { diskwake.Default = old }()
+	tank, away := filepath.Join(e.root, "mnt/tank"), filepath.Join(e.root, "mnt/tank-away")
+	if err := os.Rename(tank, away); err != nil {
+		t.Fatal(err)
+	}
+	state := e.m.State(mounted)
+	if len(state.Backups) != 1 || state.Backups[0].Volume != "tank" {
+		t.Fatalf("asleep: what was seen before is gone: %+v", state.Backups)
+	}
+	if state.Unsearched == nil || state.Unsearched.Code != UnsearchedAsleep || !slices.Equal(state.Unsearched.Volumes, []string{"tank"}) {
+		t.Fatalf("asleep: not named: %+v", state.Unsearched)
+	}
+	if noted := recorder.Recent("tank", time.Time{}, time.Now().Add(time.Hour)); len(noted) != 0 {
+		t.Fatalf("an access to the sleeping volume was noted: %+v", noted)
+	}
+	// Asked for: the folder is read (it is gone here), nothing is left
+	// unsearched and the request with its account is what woke the disks.
+	state = e.m.StateSearching(mounted, "anna")
+	if len(state.Backups) != 0 || state.Unsearched != nil {
+		t.Fatalf("searched on request: %+v", state)
+	}
+	noted := recorder.Recent("tank", time.Time{}, time.Now().Add(time.Hour))
+	if len(noted) != 1 || noted[0] != (diskwake.Cause{Code: diskwake.ConfigBackupRequest, Detail: "anna"}) {
+		t.Fatalf("noted: %+v", noted)
+	}
+	// A volume that is no longer mounted is forgotten.
+	if err := os.Rename(away, tank); err != nil {
+		t.Fatal(err)
+	}
+	asleep["tank"] = false
+	e.m.State(mounted)
+	if state := e.m.State([]string{"fast"}); len(state.Backups) != 0 || state.Unsearched != nil {
+		t.Fatalf("unmounted: %+v", state)
 	}
 }

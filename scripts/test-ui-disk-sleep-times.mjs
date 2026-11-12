@@ -450,6 +450,76 @@ try {
         .screenshot({ path: `${shots}/volumedetails-${theme}-${width}.png` });
     await volume.ctx.close();
   }
+  // The copies of the stick on a sleeping volume are not searched by
+  // opening the page; the button is the explicit wish to wake it.
+  for (const width of [1100, 390]) {
+    const { ctx, page } = await open("graphit", width, {
+      deviceScaleFactor: 2,
+    });
+    const copy = (volume, name) => ({
+      name,
+      volume,
+      time: now.toISOString(),
+      sizeBytes: 2846135,
+      hostname: "titan",
+      version: "0.77.0",
+      encrypted: true,
+    });
+    const asked = [];
+    await ctx.route("**/api/v1/config-backup**", (route) => {
+      const searched = new URL(route.request().url()).searchParams.get(
+        "search",
+      );
+      asked.push(searched);
+      const backups = [copy("Data", "config-20261112-080000-aaaaaaaa.tar.gz")];
+      if (searched === "asleep")
+        backups.push(copy("Backup", "config-20261111-080000-bbbbbbbb.tar.gz"));
+      return route.fulfill({
+        json: {
+          backup: {
+            settings: {
+              enabled: true,
+              volume: "",
+              keep: 14,
+              schedule: "",
+              time: "",
+              weekday: 1,
+              encrypt: true,
+              pace: "daily",
+            },
+            target: "Data",
+            lastCheck: now.toISOString(),
+            lastError: "",
+            backups,
+            next: null,
+            ...(searched === "asleep"
+              ? {}
+              : { unsearched: { code: "volume_asleep", volumes: ["Backup"] } }),
+          },
+          volumes: ["Backup", "Data"],
+          passwordSet: true,
+        },
+      });
+    });
+    await page.goto(`${base}/settings/backups/configuration#config-downloads`);
+    const list = page.locator("#config-downloads");
+    const notice = list.getByText(
+      "Volume Backup schläft – seine Sicherungen werden nicht durchsucht.",
+      { exact: false },
+    );
+    await notice.waitFor();
+    assert.ok(!asked.includes("asleep"), "opening the page searched it");
+    assert.equal(await list.locator("tbody tr").count(), 1);
+    if (shots)
+      await list.screenshot({
+        path: `${shots}/sicherungen-schlaeft-${width}.png`,
+      });
+    await list.getByRole("button", { name: "Trotzdem durchsuchen" }).click();
+    await list.locator("tbody tr").nth(1).waitFor();
+    assert.equal(asked.at(-1), "asleep");
+    assert.equal(await notice.count(), 0);
+    await ctx.close();
+  }
   assert.deepEqual(errors, []);
   console.log("disk sleep times: ok");
 } finally {

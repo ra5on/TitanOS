@@ -487,6 +487,7 @@ func (m *Manager) Snapshots(name string) ([]Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	diskwake.Note(name, diskwake.Snapshot, "list")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
