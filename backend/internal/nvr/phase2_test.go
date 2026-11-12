@@ -748,3 +748,102 @@ func TestKnownPlates(t *testing.T) {
 		}
 	}
 }
+
+// A camera is never left turning: a stop that does not go through is
+// tried again, sent when the connection to Frigate stands again, and
+// sent when titand ends.
+func TestPTZStopIsGuaranteed(t *testing.T) {
+	r := seeded(t)
+	r.withFeed()
+	ctx := context.Background()
+	oldAfter, oldRetry, oldTrying := PTZStopAfter, PTZStopRetry, PTZStopTrying
+	PTZStopAfter, PTZStopRetry, PTZStopTrying = 40*time.Millisecond, 10*time.Millisecond, time.Hour
+	defer func() { PTZStopAfter, PTZStopRetry, PTZStopTrying = oldAfter, oldRetry, oldTrying }()
+	stops := func() int {
+		n := 0
+		for _, c := range r.frigate.Commands() {
+			if c == (DevCommand{"garten/ptz", "STOP"}) {
+				n++
+			}
+		}
+		return n
+	}
+	// Frigate goes away while the camera turns: titand's own stop does
+	// not go through, is tried again and arrives once Frigate is back.
+	if err := r.m.PTZCommand(ctx, "anna", "garten", "move_left", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+	r.frigate.DropSockets()
+	time.Sleep(150 * time.Millisecond)
+	if stops() != 0 {
+		t.Fatal("a stop arrived while Frigate was away")
+	}
+	if owed := r.m.owedStops(false); len(owed) != 1 || owed[0] != "garten" {
+		t.Fatalf("owed: %v", owed)
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
+	r.wait(func() bool { return stops() >= 1 })
+	r.wait(func() bool { return len(r.m.owedStops(true)) == 0 })
+
+	// Tried long enough without success: sent when the connection stands
+	// again (not only by the retries).
+	PTZStopTrying = 30 * time.Millisecond
+	if err := r.m.PTZCommand(ctx, "anna", "garten", "move_right", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+	r.frigate.DropSockets()
+	time.Sleep(200 * time.Millisecond)
+	r.m.mu.Lock()
+	retrying := len(r.m.rt.ptzRetries)
+	r.m.mu.Unlock()
+	if retrying != 0 || len(r.m.owedStops(false)) != 1 {
+		t.Fatalf("still retrying after PTZStopTrying: %d, owed %v", retrying, r.m.owedStops(false))
+	}
+	before := stops()
+	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
+	r.wait(func() bool { return stops() == before+1 && len(r.m.owedStops(true)) == 0 })
+
+	// A stop from the page that does not go through is tried again too.
+	PTZStopTrying = time.Hour
+	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+	r.frigate.DropSockets()
+	r.wait(func() bool {
+		r.m.feed.mu.Lock()
+		defer r.m.feed.mu.Unlock()
+		return r.m.feed.conn == nil
+	})
+	if err := r.m.PTZCommand(ctx, "anna", "garten", "stop", ""); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("stop without Frigate: %v", err)
+	}
+	before = stops()
+	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
+	r.wait(func() bool { return stops() == before+1 })
+}
+
+// titand ends while a camera turns: the stop goes out before the
+// connection to Frigate closes.
+func TestPTZStopWhenTitandEnds(t *testing.T) {
+	r := seeded(t)
+	old, oldFeed := PTZStopAfter, feedRetry
+	PTZStopAfter, feedRetry = time.Hour, 20*time.Millisecond
+	defer func() { PTZStopAfter, feedRetry = old, oldFeed }()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { r.m.runFeed(ctx); close(done) }()
+	r.wait(func() bool {
+		r.m.feed.mu.Lock()
+		defer r.m.feed.mu.Unlock()
+		return r.m.feed.running
+	})
+	if err := r.m.PTZCommand(context.Background(), "anna", "garten", "zoom_in", ""); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	<-done
+	r.wait(func() bool { return slices.Contains(r.frigate.Commands(), DevCommand{"garten/ptz", "STOP"}) })
+	if owed := r.m.owedStops(true); len(owed) != 0 {
+		t.Errorf("still owed: %v", owed)
+	}
+}

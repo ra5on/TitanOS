@@ -143,8 +143,14 @@ type runtime struct {
 	exportSizes map[string]int64
 	// notices is what the routing of messages remembers (routing.go).
 	notices noticeState
-	// ptzStops stop a camera that was set moving (ptz.go).
-	ptzStops map[string]*time.Timer
+	// ptzStops stop a camera that was set moving (ptz.go); ptzMoving are
+	// the cameras set moving since their last stop went through,
+	// ptzOwed those whose stop did not go through yet (since when), with
+	// the timers that try again.
+	ptzStops   map[string]*time.Timer
+	ptzMoving  map[string]bool
+	ptzOwed    map[string]time.Time
+	ptzRetries map[string]*time.Timer
 	// ptzSent are the times of the last PTZ commands per account.
 	ptzSent map[string][]time.Time
 }
@@ -159,11 +165,20 @@ const errorBackoff = time.Minute
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(m.Tick)
 	defer ticker.Stop()
-	go m.runFeed(ctx)
+	feedDone := make(chan struct{})
+	go func() {
+		m.runFeed(ctx)
+		close(feedDone)
+	}()
 	for {
 		m.reconcile(ctx)
 		select {
 		case <-ctx.Done():
+			// The feed sends the stops cameras still owe before it ends.
+			<-feedDone
+			if owed := m.owedStops(true); len(owed) > 0 {
+				slog.Warn("NVR: titand ends while cameras may still be moving; Frigate was not reached", "cameras", strings.Join(owed, " "))
+			}
 			return
 		case <-ticker.C:
 		case <-m.kick:

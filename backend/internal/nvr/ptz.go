@@ -2,13 +2,17 @@ package nvr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // ErrPTZUnsupported: the camera does not pan, tilt or zoom.
@@ -53,6 +57,14 @@ type PTZInfo struct {
 // PTZStopAfter is how long a movement goes on without a new request
 // before titand stops it.
 var PTZStopAfter = 5 * time.Second
+
+// A stop that does not go through is tried again every PTZStopRetry for
+// PTZStopTrying; after that it is sent when the connection to Frigate
+// stands again, and when titand ends.
+var (
+	PTZStopRetry  = 2 * time.Second
+	PTZStopTrying = 60 * time.Second
+)
 
 // presetRE: the names of presets TitanOS passes on. Frigate reads the
 // command as "preset_<name>" in lower case.
@@ -123,6 +135,18 @@ func (m *Manager) PTZCommand(ctx context.Context, user, camera, action, preset s
 	default:
 		return invalid("action")
 	}
+	if action == "stop" {
+		m.mu.Lock()
+		if timer := m.rt.ptzStops[camera]; timer != nil {
+			timer.Stop()
+			delete(m.rt.ptzStops, camera)
+		}
+		m.mu.Unlock()
+		if !m.stopPTZ(camera) {
+			return ErrNotRunning // tried again in the background
+		}
+		return nil
+	}
 	if err := m.feed.send(ctx, camera+"/ptz", payload); err != nil {
 		return ErrNotRunning
 	}
@@ -133,16 +157,120 @@ func (m *Manager) PTZCommand(ctx context.Context, user, camera, action, preset s
 	}
 	if slices.Contains(ptzMoves, action) {
 		if m.rt.ptzStops == nil {
-			m.rt.ptzStops = map[string]*time.Timer{}
+			m.rt.ptzStops, m.rt.ptzMoving = map[string]*time.Timer{}, map[string]bool{}
 		}
-		m.rt.ptzStops[camera] = time.AfterFunc(PTZStopAfter, func() {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = m.feed.send(sctx, camera+"/ptz", "STOP") // Frigate is gone: so is the movement's sender
+		// A new movement replaces a stop that is still being tried: its
+		// own stop follows.
+		if timer := m.rt.ptzRetries[camera]; timer != nil {
+			timer.Stop()
+			delete(m.rt.ptzRetries, camera)
+		}
+		delete(m.rt.ptzOwed, camera)
+		m.rt.ptzMoving[camera] = true
+		var timer *time.Timer
+		timer = time.AfterFunc(PTZStopAfter, func() {
+			// Only the timer of the last movement stops the camera.
+			m.mu.Lock()
+			current := m.rt.ptzStops[camera] == timer
+			if current {
+				delete(m.rt.ptzStops, camera)
+			}
+			m.mu.Unlock()
+			if current {
+				m.stopPTZ(camera)
+			}
 		})
+		m.rt.ptzStops[camera] = timer
 	}
 	m.mu.Unlock()
 	return nil
+}
+
+// stopPTZ sends STOP to a camera and reports whether it went through.
+// If not, it is tried again every PTZStopRetry for PTZStopTrying, and
+// owed (ptzOwed) until it goes through: the feed sends it when its
+// connection stands again, and when titand ends.
+func (m *Manager) stopPTZ(camera string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err := m.feed.send(ctx, camera+"/ptz", "STOP")
+	cancel()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if timer := m.rt.ptzRetries[camera]; timer != nil {
+		timer.Stop()
+		delete(m.rt.ptzRetries, camera)
+	}
+	if err == nil {
+		delete(m.rt.ptzMoving, camera)
+		delete(m.rt.ptzOwed, camera)
+		return true
+	}
+	if m.rt.ptzOwed == nil {
+		m.rt.ptzOwed, m.rt.ptzRetries = map[string]time.Time{}, map[string]*time.Timer{}
+	}
+	first, owed := m.rt.ptzOwed[camera]
+	if !owed {
+		first = time.Now()
+		m.rt.ptzOwed[camera] = first
+		slog.Warn("NVR: a camera did not get its stop; trying again", "camera", camera, "err", err)
+	}
+	if time.Since(first) < PTZStopTrying {
+		m.rt.ptzRetries[camera] = time.AfterFunc(PTZStopRetry, func() { m.stopPTZ(camera) })
+	} else {
+		slog.Warn("NVR: a camera did not get its stop; it is sent when Frigate is reached again", "camera", camera)
+	}
+	return false
+}
+
+// owedStops are the cameras whose stop did not go through; with moving,
+// also those set moving whose stop is still to come (titand ends).
+func (m *Manager) owedStops(moving bool) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []string{}
+	for camera := range m.rt.ptzOwed {
+		out = append(out, camera)
+	}
+	if moving {
+		for camera := range m.rt.ptzMoving {
+			if !slices.Contains(out, camera) {
+				out = append(out, camera)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// sendOwedStops sends the stops that are owed over conn (a connection to
+// Frigate that just stood up, or the last one before titand ends).
+func (m *Manager) sendOwedStops(conn *websocket.Conn, moving bool) {
+	for _, camera := range m.owedStops(moving) {
+		data, err := json.Marshal(map[string]any{"topic": camera + "/ptz", "payload": "STOP", "retain": false})
+		if err != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = conn.Write(ctx, websocket.MessageText, data)
+		cancel()
+		if err != nil {
+			slog.Warn("NVR: stop not sent", "camera", camera, "err", err)
+			continue
+		}
+		m.mu.Lock()
+		delete(m.rt.ptzOwed, camera)
+		delete(m.rt.ptzMoving, camera)
+		if timer := m.rt.ptzRetries[camera]; timer != nil {
+			timer.Stop()
+			delete(m.rt.ptzRetries, camera)
+		}
+		if timer := m.rt.ptzStops[camera]; timer != nil && moving {
+			timer.Stop()
+			delete(m.rt.ptzStops, camera)
+		}
+		m.mu.Unlock()
+		slog.Info("NVR: owed stop sent", "camera", camera)
+	}
 }
 
 // Talk returns the address of go2rtc's WebRTC signalling for talking back

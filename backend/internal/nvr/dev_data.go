@@ -226,6 +226,19 @@ func (f *DevFrigate) Commands() []DevCommand {
 	return slices.Clone(f.data.commands)
 }
 
+// DropSockets closes the open WebSockets, as a restart of Frigate does.
+func (f *DevFrigate) DropSockets() {
+	f.mu.Lock()
+	sockets := make([]*websocket.Conn, 0, len(f.data.sockets))
+	for conn := range f.data.sockets {
+		sockets = append(sockets, conn)
+	}
+	f.mu.Unlock()
+	for _, conn := range sockets {
+		conn.CloseNow()
+	}
+}
+
 // Connected tells how many WebSockets are open.
 func (f *DevFrigate) Connected() int {
 	f.mu.Lock()
