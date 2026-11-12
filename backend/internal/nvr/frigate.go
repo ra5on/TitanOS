@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -68,20 +69,31 @@ func (f *frigate) version(ctx context.Context, base string) (string, error) {
 	return strings.TrimSpace(string(data)), err
 }
 
-// safeMode tells whether Frigate refused config.yml: it then starts with
-// an empty configuration ("safe mode") and answers as if all were well.
-func (f *frigate) safeMode(ctx context.Context, base string) (bool, error) {
+// runningConfig is the part of GET /api/config that is used: whether
+// Frigate refused config.yml (it then starts with an empty configuration,
+// "safe mode", and answers as if all were well) and the cameras it runs.
+type runningConfig struct {
+	SafeMode bool                       `json:"safe_mode"`
+	Cameras  map[string]json.RawMessage `json:"cameras"`
+}
+
+// cameraIDs are the cameras of the configuration Frigate runs, sorted.
+func (c runningConfig) cameraIDs() []string {
+	ids := []string{}
+	for id := range c.Cameras {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func (f *frigate) runningConfig(ctx context.Context, base string) (runningConfig, error) {
+	var config runningConfig
 	data, _, err := f.get(ctx, base, "/api/config", nil, 8<<20)
 	if err != nil {
-		return false, err
+		return config, err
 	}
-	var config struct {
-		SafeMode bool `json:"safe_mode"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		return false, err
-	}
-	return config.SafeMode, nil
+	return config, json.Unmarshal(data, &config)
 }
 
 // frigateStats is the part of GET /api/stats that is used.

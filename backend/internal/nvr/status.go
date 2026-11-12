@@ -171,7 +171,8 @@ type ContainerDiagnosis struct {
 	ExitCode   int        `json:"exitCode"`
 	StartedAt  *time.Time `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
-	// RecentEnds counts the ends within the watch's window.
+	// RecentEnds counts the ends within the watch's window and the
+	// restarts it forced (Frigate hung or ran other cameras).
 	RecentEnds int `json:"recentEnds"`
 }
 
@@ -243,7 +244,7 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	if m.state.Stopped && d.LastError == nil {
 		d.LastError = &LastError{Code: m.state.StoppedReason, Detail: m.state.StoppedDetail}
 	}
-	container, crashes := m.rt.container, len(m.rt.crashes)
+	container, crashes := m.rt.container, len(m.rt.crashes)+len(m.rt.hangs)
 	address, running := m.rt.address, m.rt.phase == PhaseRunning || m.rt.phase == PhaseStarting
 	states := m.cameraStatesLocked()
 	for _, c := range m.cameras {

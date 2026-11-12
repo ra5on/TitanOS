@@ -36,6 +36,7 @@ func newRig(t *testing.T, image bool) *rig {
 	r := &rig{t: t, store: config.Open(t.TempDir()), dir: t.TempDir(), now: time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)}
 	r.engine = NewDevEngine(image)
 	r.frigate = NewDevFrigate(nil)
+	r.engine.Serve(r.frigate)
 	srv := httptest.NewServer(r.frigate)
 	t.Cleanup(srv.Close)
 	r.m = r.manager(srv.URL)
@@ -457,16 +458,84 @@ func TestDeadDetectorFailsOver(t *testing.T) {
 func TestHangingFrigateIsRestarted(t *testing.T) {
 	r := newRig(t, true)
 	r.up()
-	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
-	r.advance(time.Minute)
-	r.look()
-	if r.engine.Starts != 1 {
-		t.Fatalf("restarted after a minute of silence")
+	starts := 1
+	// hang lets Frigate stop answering for six minutes, looked at like the
+	// watch does, and answer again.
+	hang := func() {
+		t.Helper()
+		r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+		r.advance(time.Minute)
+		r.look()
+		if r.engine.Starts != starts {
+			t.Fatalf("restarted after a minute of silence")
+		}
+		// Two looks without an answer after five minutes are not enough.
+		r.advance(5 * time.Minute)
+		r.look()
+		if r.engine.Starts != starts {
+			t.Fatalf("restarted after two missed looks")
+		}
+		r.advance(10 * time.Second)
+		r.look()
+		r.frigate.Set(func(f *DevFrigate) { f.Down = false })
 	}
-	r.advance(5 * time.Minute)
+	hang()
+	starts++
+	if r.engine.Starts != starts || r.phase() != PhaseStarting {
+		t.Fatalf("starts %d phase %s", r.engine.Starts, r.phase())
+	}
 	r.look()
-	if r.engine.Starts != 2 || r.phase() != PhaseStarting {
-		t.Errorf("starts %d phase %s", r.engine.Starts, r.phase())
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	hang()
+	starts++
+	r.look()
+	// The third hang within the window counts like the third end: the
+	// detection moves on.
+	hang()
+	st := r.m.Status(context.Background())
+	if st.Detector.Active != DetectorIGPU || st.Detector.Failover == nil || r.engine.Starts != starts {
+		t.Errorf("after three hangs: starts %d, detector %+v", r.engine.Starts, st.Detector)
+	}
+	r.look()
+	if r.engine.Starts != starts+1 || !strings.Contains(r.config(), "device: GPU") {
+		t.Errorf("not moved: %d starts", r.engine.Starts)
+	}
+}
+
+// Frigate runs other cameras than config.yml names (it read no file):
+// titand writes the file again and restarts Frigate instead of calling it
+// running; when that keeps happening the NVR stops.
+func TestOtherCamerasRestartFrigate(t *testing.T) {
+	r := newRig(t, true)
+	r.enable()
+	r.look()
+	r.frigate.Set(func(f *DevFrigate) { f.config = map[string]bool{} })
+	r.look()
+	if r.phase() == PhaseRunning || r.engine.Starts != 1 {
+		t.Fatalf("Frigate without cameras counts as running: %s", r.phase())
+	}
+	r.look()
+	if r.engine.Starts != 2 {
+		t.Fatalf("not restarted: %d starts", r.engine.Starts)
+	}
+	r.look()
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s after the restart", r.phase())
+	}
+	// It keeps happening: stopped, the config is to blame, not the device.
+	r.frigate.Set(func(f *DevFrigate) { f.IgnoreConfig, f.config = true, map[string]bool{} })
+	r.m.mu.Lock()
+	r.m.rt.healthy = false
+	r.m.mu.Unlock()
+	for range 8 {
+		r.advance(10 * time.Second)
+		r.look()
+	}
+	st := r.m.Status(context.Background())
+	if st.State != PhaseStopped || st.Error == nil || st.Error.Code != ReasonConfigInvalid || st.Detector.Failover != nil {
+		t.Errorf("state %s error %+v detector %+v", st.State, st.Error, st.Detector)
 	}
 }
 
@@ -756,5 +825,66 @@ func TestLiveAndSnapshot(t *testing.T) {
 	}
 	if live, _ := r.m.Live("haustuer", false); !strings.HasSuffix(live, "?src=haustuer") {
 		t.Errorf("main: %q", live)
+	}
+}
+
+// A titand started while Frigate briefly does not answer takes the
+// container over without moving the detection (review of 12.11.2026).
+func TestAdoptionIsNoFailover(t *testing.T) {
+	r := newRig(t, true)
+	r.up()
+	old := r.m
+	r.m = r.manager(old.FrigateBase(""))
+	if err := r.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.advance(48 * time.Hour) // the container started long before this titand
+	r.frigate.Set(func(f *DevFrigate) { f.Down = true })
+	r.look()
+	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
+	r.look()
+	r.m.mu.Lock()
+	st := r.m.state
+	r.m.mu.Unlock()
+	if st.Failover != nil || st.Stopped || r.phase() != PhaseRunning {
+		t.Errorf("one missed answer after a titand restart: phase %s, failover %+v, stopped %v", r.phase(), st.Failover, st.Stopped)
+	}
+}
+
+// Moving the NVR to another volume writes config.yml there before the new
+// container starts (review of 12.11.2026).
+func TestVolumeChangeWritesTheConfig(t *testing.T) {
+	r := newRig(t, true)
+	mnt := t.TempDir()
+	for _, v := range []string{"a", "b"} {
+		if err := os.MkdirAll(filepath.Join(mnt, v), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := r.m
+	m.Dev = false
+	m.MountRoot = mnt
+	m.Mounted = func() []string { return []string{"a", "b"} }
+	if err := m.Enable(context.Background(), "a", SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	if _, err := os.Stat(filepath.Join(mnt, "a", ".titanos", "nvr", "config", "config.yml")); err != nil {
+		t.Fatalf("volume a: %v (phase %s)", err, r.phase())
+	}
+	s := m.Settings()
+	s.Volume = "b"
+	if err := m.SetSettings(context.Background(), s, SetOptions{ConfirmSleepingVolume: true}); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	spec := r.engine.Spec()
+	if spec.Config != filepath.Join(mnt, "b", ".titanos", "nvr", "config") {
+		t.Errorf("container mounts %s", spec.Config)
+	}
+	if _, err := os.Stat(filepath.Join(spec.Config, "config.yml")); err != nil {
+		t.Errorf("after the move to volume b there is no config.yml: %v (phase %s)", err, r.phase())
 	}
 }

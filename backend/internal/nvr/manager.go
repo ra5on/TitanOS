@@ -308,7 +308,9 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		m.resetStateLocked()
 	}
 	if s.Volume != old.Volume {
+		// Another volume: its state, exports and config.yml are its own.
 		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
+		m.rt.configHash, m.rt.configDir, m.rt.configCameras = "", "", nil
 	}
 	m.rt.dirty = true
 	m.rt.retryAt = time.Time{}
@@ -365,7 +367,7 @@ func (m *Manager) RetryDetector() error {
 func (m *Manager) resetStateLocked() {
 	m.state = State{Boot: m.state.Boot, CapNoticeDay: m.state.CapNoticeDay}
 	m.rt.stateDirty = true
-	m.rt.crashes = nil
+	m.rt.crashes, m.rt.hangs = nil, nil
 	m.rt.lastError = nil
 }
 
