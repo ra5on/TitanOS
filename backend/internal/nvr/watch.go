@@ -81,8 +81,10 @@ type runtime struct {
 	retryAt   time.Time
 	lastError *LastError
 
-	image       ImageStatus
-	imageID     string
+	image   ImageStatus
+	imageID string
+	// pruned: older images were looked for since titand started.
+	pruned      bool
 	pulling     bool
 	pullChecked time.Time
 
@@ -114,9 +116,20 @@ type runtime struct {
 	detectorPID *int
 	stats       *frigateStats
 	statsAt     time.Time
-	usedBytes   *uint64
-	usedAt      time.Time
-	cameras     map[string]*cameraRuntime
+	// storage is what the watch knows of the space (storage.go).
+	storage storageRuntime
+	cameras map[string]*cameraRuntime
+
+	// exports are the records of exports.json (nil until read);
+	// exportSizes the sizes of finished exports.
+	exports     map[string]exportRecord
+	exportSizes map[string]int64
+	// notices is what the routing of messages remembers (routing.go).
+	notices noticeState
+	// ptzStops stop a camera that was set moving (ptz.go).
+	ptzStops map[string]*time.Timer
+	// ptzSent are the times of the last PTZ commands per account.
+	ptzSent map[string][]time.Time
 }
 
 // errorBackoff is the pause after the engine refused something.
@@ -129,6 +142,7 @@ const errorBackoff = time.Minute
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(m.Tick)
 	defer ticker.Stop()
+	go m.runFeed(ctx)
 	for {
 		m.reconcile(ctx)
 		select {
@@ -304,7 +318,7 @@ func (m *Manager) syncState(volume string) error {
 					slog.Info("NVR: the NAS was restarted, the chosen detection device is tried again", "was", stored.Active)
 					m.rt.stateDirty = true
 				}
-				stored = State{}
+				stored = State{CapNoticeDay: stored.CapNoticeDay}
 			}
 			m.state = stored
 		}
@@ -650,6 +664,7 @@ func (m *Manager) recreate(ctx context.Context, spec docker.NVRSpec) error {
 	}
 	slog.Info("NVR: container started", "devices", strings.Join(spec.Devices, " "), "shmMB", spec.ShmBytes>>20)
 	m.started()
+	m.pruneImages(ctx, spec.Image)
 	return nil
 }
 
@@ -786,6 +801,7 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 		if !m.rt.healthy {
 			m.rt.healthy = true
 			slog.Info("NVR: Frigate runs", "version", version, "detector", m.activeLocked())
+			defer m.feed.wake()
 		}
 		m.rt.phase = PhaseRunning
 	} else {
@@ -802,7 +818,7 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 		return
 	}
 	m.watchCameras(stats, now)
-	m.readUsage(hctx, base, now)
+	m.watchStorage(ctx, base, now)
 }
 
 // activeLocked is the device in use (m.mu held).
@@ -816,29 +832,10 @@ func (m *Manager) activeLocked() string {
 	return DetectorCPU
 }
 
-// usageEvery is how often the size of the recordings is asked.
-const usageEvery = 5 * time.Minute
-
-func (m *Manager) readUsage(ctx context.Context, base string, now time.Time) {
-	m.mu.Lock()
-	due := now.Sub(m.rt.usedAt) >= usageEvery
-	m.mu.Unlock()
-	if !due {
-		return
-	}
-	used, err := m.frigate.recordingsUsage(ctx, base)
-	m.mu.Lock()
-	m.rt.usedAt = now
-	if err == nil {
-		m.rt.usedBytes = &used
-	}
-	m.mu.Unlock()
-}
-
 // watchCameras notes which cameras send pictures and reports one that has
 // sent none for OfflineAfter (once, until it sends again).
 func (m *Manager) watchCameras(stats frigateStats, now time.Time) {
-	var report []string
+	var report []Camera
 	m.mu.Lock()
 	for _, c := range m.cameras {
 		entry, known := stats.Cameras[c.ID]
@@ -858,8 +855,8 @@ func (m *Manager) watchCameras(stats frigateStats, now time.Time) {
 		}
 		if !rt.reported && now.Sub(rt.offlineSince) >= m.OfflineAfter {
 			rt.reported = true
-			if c.Notify.Titan && slices.Contains(c.Notify.Kinds, "offline") {
-				report = append(report, c.Name)
+			if slices.Contains(c.Notify.Kinds, KindOffline) {
+				report = append(report, c)
 			}
 		}
 	}
@@ -870,8 +867,8 @@ func (m *Manager) watchCameras(stats frigateStats, now time.Time) {
 		}
 	}
 	m.mu.Unlock()
-	for _, name := range report {
-		m.notify("warning", "nvr_camera_offline", name)
+	for _, c := range report {
+		m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, now)
 	}
 }
 
@@ -951,4 +948,28 @@ func (m *Manager) fail(ctx context.Context, reason string, since time.Time) erro
 	m.notify("warning", "nvr_failover", deviceTitle(active)+" → "+deviceTitle(next))
 	m.wake() // the next look writes the config for the new device
 	return nil
+}
+
+// pruneImages removes the Frigate images of earlier TitanOS versions,
+// once per start of titand, after a container runs from the current one.
+// Only images the NVR pulled itself (by digest, without a tag).
+func (m *Manager) pruneImages(ctx context.Context, keep string) {
+	m.mu.Lock()
+	done := m.rt.pruned
+	m.rt.pruned = true
+	m.mu.Unlock()
+	if done {
+		return
+	}
+	go func() {
+		pctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		removed, err := m.Engine.NVRPruneImages(pctx, FrigateRepository, keep)
+		if err != nil {
+			slog.Info("NVR: older Frigate images not looked for", "err", err)
+		}
+		for _, id := range removed {
+			slog.Info("NVR: older Frigate image removed", "image", id)
+		}
+	}()
 }

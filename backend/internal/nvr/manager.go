@@ -50,6 +50,7 @@ type Engine interface {
 	NVRNetwork(ctx context.Context) error
 	NVRImageID(ctx context.Context, ref string) (string, error)
 	NVRPull(ctx context.Context, repository, digest string, progress func(done, total int64)) error
+	NVRPruneImages(ctx context.Context, repository, keep string) ([]string, error)
 }
 
 // Errors the API turns into codes.
@@ -101,6 +102,9 @@ type Manager struct {
 	DockerVolume  func() string
 	// Notify raises a message of TitanOS (notify.Manager.Notify).
 	Notify func(severity, kind, subject string)
+	// Route sends a message about a camera the ways its owner chose
+	// (routing.go); the wiring gives it notify.Manager.NotifyVia.
+	Route func(Notice)
 	// Addresses are the addresses of the NAS in the home network, for
 	// WebRTC; lanAddresses if nil.
 	Addresses func() []string
@@ -109,6 +113,9 @@ type Manager struct {
 	// FrigateBase is the address of Frigate's API for the container's
 	// address; tests and development mode put their own server there.
 	FrigateBase func(address string) string
+	// Timezone names the time zone of the NAS ("Europe/Berlin"), for the
+	// days of the recordings.
+	Timezone func() string
 	// Now is the clock; time.Now if nil.
 	Now func() time.Time
 
@@ -121,6 +128,7 @@ type Manager struct {
 
 	store   *config.Store
 	frigate *frigate
+	feed    *feed
 	facts   func() hostFacts
 	bootID  func() string
 
@@ -132,12 +140,16 @@ type Manager struct {
 	rt       runtime
 	kick     chan struct{}
 	devDir   string
+	// devFrigate is the stand-in of development mode (dev.go).
+	devFrigate *DevFrigate
+	// snapshots are the stills of the last second (status.go).
+	snapshots map[snapshotKey]cachedSnapshot
 }
 
 // New makes a manager with the defaults of a NAS.
 func New(store *config.Store) *Manager {
 	return &Manager{
-		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(), Access: NewAccess(store),
+		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(), feed: newFeed(), Access: NewAccess(store),
 		FrigateBase:   func(address string) string { return fmt.Sprintf("http://%s:%d", address, frigatePort) },
 		Tick:          10 * time.Second,
 		HealthyWithin: 5 * time.Minute,
@@ -195,7 +207,17 @@ func (m *Manager) Load() error {
 func (m *Manager) Settings() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.settings
+	s := m.settings
+	// A copy: whoever decodes a request into it must not write into the
+	// manager's own list.
+	s.Plates = make([]KnownPlate, 0, len(m.settings.Plates))
+	for _, entry := range m.settings.Plates {
+		s.Plates = append(s.Plates, KnownPlate{Name: entry.Name, Plates: slices.Clone(entry.Plates)})
+	}
+	if len(s.Plates) == 0 {
+		s.Plates = nil
+	}
+	return s
 }
 
 func (m *Manager) mounted() []string {
@@ -238,6 +260,10 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	if !loaded {
 		return ErrNotLoaded
 	}
+	s.Plates, _ = cleanPlates(s.Plates) // validated above
+	if len(s.Plates) == 0 {
+		s.Plates = nil
+	}
 	s.RTSPPassword = old.RTSPPassword
 	if s.RTSPOut && s.RTSPPassword == "" {
 		s.RTSPPassword = newSecret()
@@ -273,7 +299,7 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		m.resetStateLocked()
 	}
 	if s.Volume != old.Volume {
-		m.rt.stateLoaded = false
+		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
 	}
 	m.rt.dirty = true
 	m.rt.retryAt = time.Time{}
@@ -328,7 +354,7 @@ func (m *Manager) RetryDetector() error {
 
 // resetStateLocked forgets failover and stop; the loop stores it.
 func (m *Manager) resetStateLocked() {
-	m.state = State{Boot: m.state.Boot}
+	m.state = State{Boot: m.state.Boot, CapNoticeDay: m.state.CapNoticeDay}
 	m.rt.stateDirty = true
 	m.rt.crashes = nil
 	m.rt.lastError = nil

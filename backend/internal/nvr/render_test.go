@@ -57,7 +57,8 @@ func renderCases() map[string]struct {
 			}),
 		}, RenderHardware{Detector: DetectorNPU, VAAPI: true, Candidates: []string{"192.168.1.10:8555"}}},
 		// iGPU with plates and faces; the restream is published.
-		"igpu": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, RTSPOut: true, RTSPPassword: "abcdefgh234567"}, []Camera{
+		"igpu": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, RTSPOut: true, RTSPPassword: "abcdefgh234567",
+			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}}}}, []Camera{
 			testCamera("einfahrt", "Einfahrt", func(c *Camera) {
 				c.Detect.Plates = true
 				c.Detect.Objects = []string{"person"}
@@ -251,11 +252,23 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 		{[]string{"cameras", "einfahrt", "record", "motion", "days"}, 14},
 		{[]string{"cameras", "einfahrt", "record", "alerts", "retain", "mode"}, "motion"},
 		{[]string{"go2rtc", "rtsp", "username"}, "titanos"},
+		{[]string{"lpr", "known_plates", "Firma"}, nil},
 		{[]string{"go2rtc", "rtsp", "password"}, "abcdefgh234567"},
 	} {
-		if got := dig(t, cfg, check.path...); got != check.want {
+		got := dig(t, cfg, check.path...)
+		if check.want == nil {
+			// The known plates, as lists under their names.
+			if list, ok := got.([]any); !ok || !slices.Equal(list, []any{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}) {
+				t.Errorf("%v = %#v", check.path, got)
+			}
+			continue
+		}
+		if got != check.want {
 			t.Errorf("%v = %#v, want %#v", check.path, got, check.want)
 		}
+	}
+	if got := dig(t, cfg, "lpr", "known_plates", "Wife's Car").([]any); len(got) != 2 {
+		t.Errorf("known plates: %v", got)
 	}
 	// Plates need the car, faces the person, chosen or not.
 	if got := dig(t, cfg, "cameras", "einfahrt", "objects", "track").([]any); !slices.Equal(got, []any{"person", "car"}) {

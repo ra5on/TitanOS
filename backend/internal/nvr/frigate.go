@@ -22,14 +22,17 @@ var ErrNotRunning = errors.New("nvr: the NVR does not run")
 // frigate is the client for Frigate's API.
 type frigate struct {
 	http *http.Client
+	// stream is for answers the caller passes on: no overall timeout.
+	stream *http.Client
 }
 
 func newFrigate() *frigate {
-	return &frigate{http: &http.Client{
-		Timeout: 15 * time.Second,
-		// Frigate never sends titand elsewhere.
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}}
+	// Frigate never sends titand elsewhere.
+	stay := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &frigate{
+		http:   &http.Client{Timeout: 15 * time.Second, CheckRedirect: stay},
+		stream: &http.Client{CheckRedirect: stay},
+	}
 }
 
 func (f *frigate) get(ctx context.Context, base, path string, query url.Values, limit int64) ([]byte, http.Header, error) {
@@ -171,4 +174,96 @@ func (f *frigate) snapshot(ctx context.Context, base, camera string, height int)
 		return nil, fmt.Errorf("nvr: Frigate sent %q instead of a picture", kind)
 	}
 	return data, nil
+}
+
+// frigateError is an answer of Frigate that is no success.
+type frigateError struct {
+	Status  int
+	Message string
+}
+
+func (e *frigateError) Error() string {
+	return fmt.Sprintf("nvr: Frigate answered %d: %s", e.Status, e.Message)
+}
+
+// frigateStatus is the status of a failed call, 0 if err is something else.
+func frigateStatus(err error) int {
+	var fe *frigateError
+	if errors.As(err, &fe) {
+		return fe.Status
+	}
+	return 0
+}
+
+// call sends a request with an optional JSON body and decodes a JSON
+// answer into out (nil: the answer is dropped). An answer of 400 and more
+// is a *frigateError with Frigate's message.
+func (f *frigate) call(ctx context.Context, method, base, path string, query url.Values, body, out any) error {
+	if base == "" {
+		return ErrNotRunning
+	}
+	target := base + path
+	if len(query) > 0 {
+		target += "?" + query.Encode()
+	}
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = strings.NewReader(string(data))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	res, err := f.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))
+	if err != nil {
+		return err
+	}
+	if res.StatusCode >= 400 {
+		var problem struct {
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal(data, &problem) // an answer that is no JSON leaves the message empty
+		return &frigateError{Status: res.StatusCode, Message: clip(Redact(problem.Message), 300)}
+	}
+	if out == nil {
+		return nil
+	}
+	return json.Unmarshal(data, out)
+}
+
+// open starts a request whose answer the caller streams on (pictures,
+// video, playlists). header carries Range and the conditional headers of
+// the browser. The caller closes the body.
+func (f *frigate) open(ctx context.Context, base, path, rawQuery string, header http.Header) (*http.Response, error) {
+	if base == "" {
+		return nil, ErrNotRunning
+	}
+	target := base + path
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range []string{"Range", "If-Range", "If-None-Match", "If-Modified-Since"} {
+		if value := header.Get(name); value != "" {
+			req.Header.Set(name, value)
+		}
+	}
+	// No overall timeout: a video is as long as it is. The request ends
+	// with ctx (the browser's request).
+	return f.stream.Do(req)
 }

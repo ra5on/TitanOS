@@ -29,6 +29,13 @@ birdseye:
   enabled: false
 lpr:
   enabled: true
+  known_plates:
+    Firma:
+      - EMP-[0-9]{3}[A-Z]
+      - '[S5]LL 1234'
+    Wife's Car:
+      - M-AB 1234
+      - MAB12*
 face_recognition:
   enabled: true
 go2rtc:
