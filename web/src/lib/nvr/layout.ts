@@ -156,6 +156,29 @@ export function dragTile(start: Tile, mode: 'move' | 'size', dx: number, dy: num
 	});
 }
 
+/**
+ * Tiles never lie on each other: the tile just moved or sized stays where it
+ * was put, and every tile it would cover moves down, below what is already
+ * placed (top to bottom, so a chain of tiles moves together).
+ */
+export function settle(tiles: Tile[], fixedId: string): Tile[] {
+	const fixed = tiles.find((t) => t.id === fixedId);
+	if (!fixed) return tiles;
+	const placed: Tile[] = [fixed];
+	const rest = tiles.filter((t) => t.id !== fixedId).sort((a, b) => a.y - b.y || a.x - b.x);
+	for (const tile of rest) {
+		let next = { ...tile };
+		for (
+			let hit = placed.find((p) => overlaps(p, next));
+			hit;
+			hit = placed.find((p) => overlaps(p, next))
+		)
+			next = { ...next, y: hit.y + hit.h };
+		placed.push(next);
+	}
+	return tiles.map((t) => placed.find((p) => p.id === t.id) ?? t);
+}
+
 /** Rows the arrangement needs. */
 export function layoutRows(tiles: Tile[]): number {
 	return tiles.reduce((max, t) => Math.max(max, t.y + t.h), 0);

@@ -430,6 +430,15 @@ try {
     const by = Object.fromEntries(nvr.tiles.map((t) => [t.id, t]));
     assert.deepEqual(by.haustuer, { id: "haustuer", x: 2, y: 1, w: 8, h: 5 });
     assert.deepEqual(by.einfahrt, { id: "einfahrt", x: 12, y: 1, w: 12, h: 7 });
+    // Tiles never lie on each other: Terrasse, covered by Einfahrt, moved down.
+    assert.equal(by.terrasse.y, 8);
+    for (const a of nvr.tiles)
+      for (const b of nvr.tiles)
+        if (a !== b)
+          assert.ok(
+            !(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h),
+            `${a.id} lies on ${b.id}`,
+          );
     const after = await box("haustuer");
     assert.ok(Math.abs(after.x - before.x - cell * 2) < 3, "the tile moved");
     assert.ok(Math.abs(after.width - (cell * 8 - 6)) < 3, "the tile was sized");

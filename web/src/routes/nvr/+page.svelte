@@ -21,6 +21,7 @@
 		layoutRows,
 		LIVE_COLS,
 		phoneOrderFor,
+		settle,
 		tilesFor,
 		type NvrPrefs,
 		type Tile,
@@ -120,6 +121,8 @@
 			window.removeEventListener('pointerup', up);
 			window.removeEventListener('pointercancel', up);
 			active = null;
+			// Where it was put it stays; what it covers moves down.
+			if (draft) draft = settle(draft, tile.id);
 		};
 		active = { id: tile.id, w: tile.w, h: tile.h };
 		// The dragged tile lies on top.
@@ -141,7 +144,10 @@
 		if (!by) return;
 		event.preventDefault();
 		const next = dragTile(tile, event.shiftKey ? 'size' : 'move', by[0], by[1]);
-		draft = draft.map((other) => (other.id === tile.id ? next : other));
+		draft = settle(
+			draft.map((other) => (other.id === tile.id ? next : other)),
+			tile.id,
+		);
 	}
 	function moveInStack(id: string, by: number) {
 		const list = [...(order ?? stack)];

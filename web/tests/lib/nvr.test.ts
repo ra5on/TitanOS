@@ -15,6 +15,7 @@ import {
 	LIVE_COLS,
 	phoneOrderFor,
 	sanitizeNvrPrefs,
+	settle,
 	tilesFor,
 } from '../../src/lib/nvr/layout.ts';
 import { supportedCodecs } from '../../src/lib/nvr/mse.ts';
@@ -250,4 +251,23 @@ test('known plates are what the NAS takes: letters, digits, spaces, - and * only
 		expect(plateOk(ok), ok).toBe(true);
 	for (const bad of ['', 'M/AB 12', 'MAB.12', 'M(AB)', '[A-Z]+', 'a'.repeat(65)])
 		expect(plateOk(bad), bad).toBe(false);
+});
+
+test('a moved tile stays where it was put; tiles it covers move down', () => {
+	const tiles = gridTiles(['a', 'b', 'c', 'd']);
+	// b one row down now covers d: d moves below it, a and c stay.
+	const moved = tiles.map((t) => (t.id === 'b' ? { ...t, y: t.y + 1 } : t));
+	const done = settle(moved, 'b');
+	const by = Object.fromEntries(done.map((t) => [t.id, t]));
+	expect(by.b).toEqual({ id: 'b', x: 12, y: 1, w: 12, h: 7 });
+	expect(by.d.y).toBe(8);
+	expect(by.a).toEqual(tiles[0]);
+	expect(by.c).toEqual(tiles[2]);
+	for (const x of done)
+		for (const y of done)
+			if (x !== y)
+				expect(
+					x.x < y.x + y.w && y.x < x.x + x.w && x.y < y.y + y.h && y.y < x.y + x.h,
+					`${x.id}/${y.id}`,
+				).toBe(false);
 });
