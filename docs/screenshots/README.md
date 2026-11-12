@@ -2,11 +2,14 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** Die Bilder aus `scripts/capture-readme-screenshots.mjs` (Arbeitsplatz, Hauptmenü, Handy-Start, Systemsteuerung, Darstellung, Docker, VMs, Dateien, Freigaben, Speicher, Dock bearbeiten, Anmeldeseite) zeigen den Stand **0.77 in Arbeit** (Zweig `feat/079-systemdaten-sicherung` nach dem Merge von `main`: ein Menü, aufgeräumte obere Leiste), aufgenommen am **12. November 2026** mit Chromium/Playwright gegen `vite preview` des gebauten Frontends (`PW=… UI_URL=http://127.0.0.1:<port> OUT=<ordner> node scripts/capture-readme-screenshots.mjs`, `ONLY=name,name` für einzelne Bilder), Theme Graphit, blauer Akzent, Deutsch, Fenster maximiert. Fernansicht und KI-Agent sind unverändert vom **8. November 2026** (0.70.0). Die Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) sind Beispieldaten des Skripts mit Buchstaben-Symbolen. Die Fernansicht kommt aus `scripts/test-ui-viewer.mjs` mit `VIEWER_PICTURE=/backgrounds/kueste.webp`.
+**Aufnahmestand:** Alle Bilder der README kommen aus `scripts/capture-readme-screenshots.mjs` und zeigen den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, gleicher Stand wie der 0.78-Arbeitszweig `feat/078-nvr-ui`, Commit `052cc095`). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
 
-Ältere Bilder in `current/` (Speicher, Freigaben, Dateien, Firewall, VM erstellen, Protokoll, Dateiaufträge, KI-Agent) zeigen die **alte Oberfläche** mit Kopfzeile (0.47.1 bzw. KI-Agent 0.51.0/0.54.0). Kopfzeile und Seitennavigation sind seit 0.62.0 entfernt; diese Bilder sind nur noch in Fachdokumenten verlinkt (VM erstellen, Protokoll) bzw. als Nachweis ihrer damaligen Prüfungen und werden in der README nicht mehr eingebunden. Die Aufnahmen des alten Dashboards und der alten Navigation sind entfernt.
+Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`, für den NVR `scripts/test-ui-nvr-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen, Messwerte, Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) und VMs (Home Assistant OS, Windows 11) sind Beispiele des Skripts. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Nachgebildet sind:
 
-Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Das Bild in der **Fernansicht** ist ein nachgebildeter Strom (das mitgelieferte Foto „Küste“, im Browser selbst als Video kodiert), keine echte App. Die App-Symbole sind Buchstaben, keine Logos der Projekte ([icon-sources.json](icon-sources.json) gehört zu älteren Aufnahmen). Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
+- das Bild der **Fernansicht**: das mitgelieferte Foto „Küste“ (`/backgrounds/kueste.webp`), im Browser selbst als Video kodiert und über eine nachgestellte Verbindung gesendet, keine echte App;
+- die **Kamerabilder des NVR**: gezeichnete Farbverläufe der Testdaten, kein Video.
+
+Die App-Symbole sind Buchstaben, keine Logos der Projekte ([icon-sources.json](icon-sources.json) gehört zu älteren Aufnahmen). Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
 [capture.json](current/capture.json) nennt Quellstand, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.
 
@@ -14,74 +17,71 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/
 
 | Datei | Inhalt | Darstellung |
 |---|---|---|
-| [arbeitsplatz.png](current/arbeitsplatz.png) | Arbeitsplatz: Programmsymbole mit Abzeichen (Update, läuft/gestoppt), Widgets rechts (Zustand, CPU/RAM, Volumes, Docker-Apps), Leisten oben, Dock | Desktop 1600 × 1000 |
-| [fernansicht.png](current/fernansicht.png) | Fenster der Docker-App „immich“ in der Fernansicht mit geöffnetem Menü „…“: Lautstärke, Datei öffnen, Zwischenablage, Qualität, Zustand; Bild nachgebildet | Desktop 1600 × 1000 |
-| [hauptmenue.png](current/hauptmenue.png) | Hauptmenü mit Suche, Filtern, Programmen, Docker-Apps und VM-Bildschirm, unten Konto, Sperren, Ein/Aus | Desktop 1600 × 1000 |
-| [docker.png](current/docker.png) | Programm Docker (Fenster maximiert): Seitenleiste, Werkzeugleiste, Container-Karten | Desktop 1600 × 1000 |
-| [vms.png](current/vms.png) | Programm Virtuelle Maschinen: „Deine VMs“ in der Seitenleiste, Übersicht einer VM mit Gefahrenzone | Desktop 1600 × 1000 |
-| [systemsteuerung.png](current/systemsteuerung.png) | Systemsteuerung › Übersicht: Seitenleiste mit Suche, Zustand, Dienste, Zu erledigen | Desktop 1600 × 1000 |
-| [darstellung.png](current/darstellung.png) | Systemsteuerung › Darstellung: Theme, Variante, Akzent, Glas von Klar bis Getönt, Hintergründe | Desktop 1600 × 1000 |
+| [arbeitsplatz.png](current/arbeitsplatz.png) | Arbeitsplatz: Programmsymbole mit Abzeichen (Update, läuft/gestoppt), Widgets rechts (Zustand, CPU/RAM, Volumes, Docker-Apps), obere Leiste mit „Menü“ und Suchfeld, Dock | Desktop 1600 × 1000 |
+| [anmeldeseite.png](current/anmeldeseite.png) | Anmeldeseite nach dem Abmelden: Nordlicht, Reihe Kontobilder, Passwortfeld, Uhr, Sprache | Desktop 1600 × 1000 |
+| [dateien.png](current/dateien.png) | Dateien im Ordner „Documents“: Seitenleiste mit Freigaben, Adresszeile, Befehlsleiste, zwei markierte Dateien, Statuszeile | Desktop 1600 × 1000 |
+| [docker.png](current/docker.png) | Docker › Container: Tabelle der Apps, rechts die Einzelheiten der gewählten App „immich“, Statusleiste | Desktop 1600 × 1000 |
+| [vms.png](current/vms.png) | Virtuelle Maschinen: zwei VMs in der Seitenleiste, Übersicht der laufenden VM „Home Assistant OS“ mit Auslastung, Netzwerk, Hardware und Snapshots | Desktop 1600 × 1000 |
+| [nvr.png](current/nvr.png) | NVR › Live mit vier Beispielkameras (eine nicht erreichbar) und den Ereignissen daneben; Kamerabilder nachgebildet | Desktop 1600 × 1000 |
+| [hauptmenue.png](current/hauptmenue.png) | Das Menü: Filter, Programme A–Z mit Docker-Apps und VM-Bildschirmen, unten Konto, Systemsteuerung, Updates, App-Center, Sperren, Abmelden, Neustart, Herunterfahren; oben das Suchfeld der Leiste | Desktop 1600 × 1000 |
 | [dock-bearbeiten.png](current/dock-bearbeiten.png) | Dock bearbeiten: Größe, Deckkraft, Vergrößern, Position; Programme im Dock mit × | Desktop 1600 × 1000 |
-| [anmeldeseite.png](current/anmeldeseite.png) | Anmeldeseite nach dem Abmelden: Uhr, Glaskarte, Sprache | Desktop 1440 × 900 |
-| [handy-start.png](current/handy-start.png) | Startbildschirm am Handy: Suche, Zustand, App-Raster mit Docker-Apps | Smartphone 390 × 844 |
-| [fernansicht-mobil.png](current/fernansicht-mobil.png) | Fernansicht am Handy im Vollbild mit Lautstärke und Tastatur | Smartphone 390 × 844 |
-| [ki-agent-mobil.png](current/ki-agent-mobil.png) | KI-Agent als eigene App am Handy (0.54.0) | Smartphone 390 × 844 |
-| [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | Menü des KI-Agenten am Handy (0.54.0) | Smartphone 390 × 844 |
+| [fernansicht.png](current/fernansicht.png) | Fenster der Docker-App „immich“ in der Fernansicht, maximiert, mit geöffnetem ⋯-Menü: Datei öffnen, Heruntergeladen, Zwischenablage, Qualität, Neu verbinden, Zustand; Bild nachgebildet | Desktop 1600 × 1000 |
+| [systemdaten.png](current/systemdaten.png) | Systemsteuerung › Daten und Sicherung › Systemdaten: Ablage-Volume und eine Zeile je Art der Systemdaten | Desktop 1600 × 1000 |
+| [systemsteuerung.png](current/systemsteuerung.png) | Systemsteuerung › Übersicht: Seitenleiste mit Konto, Suche und Bereichen; Zustand, Zu erledigen, Dienste, Zuletzt geändert | Desktop 1600 × 1391 (Fenster so hoch wie die Seite) |
+| [darstellung.png](current/darstellung.png) | Systemsteuerung › Darstellung, Reiter Farben: Modus, dunkle Variante, Akzent, Glas von Klar bis Getönt, Ecken, Schriftgröße, Farbstärke, Theme als Datei | Desktop 1600 × 1254 (Fenster so hoch wie die Seite) |
+| [handy-start.png](current/handy-start.png) | Startbildschirm am Handy: Knopf „Menü“, Suche, Zustand, App-Raster mit Docker-Apps | Smartphone 390 × 844 |
+| [fernansicht-mobil.png](current/fernansicht-mobil.png) | Fernansicht am Handy im Vollbild mit Zurück, Lautstärke und Tastatur; Bild nachgebildet | Smartphone 390 × 844 |
 
-## Weitere Aufnahmen (alte Oberfläche)
+## Weitere Aufnahmen (nicht in der README)
 
 | Datei | Inhalt | Darstellung |
 |---|---|---|
-| [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln und Zusammenfassung (0.47.1) | Desktop 1600, vollständige Seite |
-| [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular gestapelt | Smartphone 390, vollständige Seite |
-| [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter | Desktop 1600, vollständige Seite |
-| [speicher.png](current/speicher.png), [shares.png](current/shares.png), [dateien.png](current/dateien.png), [dateien-mobil.png](current/dateien-mobil.png), [firewall.png](current/firewall.png) | Seiten der alten Oberfläche (0.47.1) | Desktop 1600 bzw. 390 |
-| [dateien-ersetzen.png](current/dateien-ersetzen.png), [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png), [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Ersetzen-Bestätigung, Dateiaufträge (0.47.1) | 1440 bzw. 390 |
-| [ki-agent.png](current/ki-agent.png), [ki-agent-chat.png](current/ki-agent-chat.png) | KI-Agent am Desktop neben der alten Seitennavigation (0.51.0/0.54.0) | Desktop 1440 |
+| [freigaben.png](current/freigaben.png) | Freigaben im neuen Aufbau (0.77 in Arbeit, 12.11.2026) | Desktop 1600 × 1000 |
+| [speicher.png](current/speicher.png) | Speicher › Übersicht (0.77 in Arbeit, 12.11.2026). Die Spalte „Platten“ zeigt 0, weil die Testdaten keine Mitgliedsplatten nennen; deshalb nicht in der README | Desktop 1600 × 1000 |
+| [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln und Zusammenfassung, alte Oberfläche (0.47.1) | Desktop 1600, vollständige Seite |
+| [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular gestapelt, alte Oberfläche (0.47.1) | Smartphone 390, vollständige Seite |
+| [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter, alte Oberfläche (0.47.1) | Desktop 1600, vollständige Seite |
+| [shares.png](current/shares.png), [dateien-mobil.png](current/dateien-mobil.png), [firewall.png](current/firewall.png) | Seiten der alten Oberfläche (0.47.1) | Desktop 1600 bzw. 1440, Smartphone 390 |
+| [dateien-ersetzen.png](current/dateien-ersetzen.png), [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png), [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Ersetzen-Bestätigung, Dateiaufträge, alte Oberfläche (0.47.1) | 1440 bzw. 390 |
+| [ki-agent.png](current/ki-agent.png), [ki-agent-chat.png](current/ki-agent-chat.png), [ki-agent-mobil.png](current/ki-agent-mobil.png), [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | KI-Agent mit eigenem Auftritt (0.51.0/0.54.0); dieser Auftritt ist seit 0.64.0 entfernt | Desktop 1440, Smartphone 390 |
+
+Die Bilder der alten Oberfläche (Kopfzeile und Seitennavigation, seit 0.62.0 entfernt) dienen nur noch als Nachweis ihrer damaligen Prüfungen; `vm-erstellen*.png` und `protokoll.png` verlinkt `docs/VM-CREATE-VALIDATION.md`.
 
 ## Herkunft je Bild
 
-| Skript | Ausgabe → Datei in `current/` |
+| Skript | Name im Skript (`ONLY=`) → Datei in `current/` |
 |---|---|
-| `scripts/test-ui-desktop.mjs`, Variante A | `01-arbeitsplatz.png` → `arbeitsplatz.png`, `12-handy-start.png` → `handy-start.png` |
-| `scripts/test-ui-desktop.mjs`, Variante B | `06-hauptmenue.png` → `hauptmenue.png`, `11-dock-bearbeiten.png` → `dock-bearbeiten.png` |
-| `scripts/test-ui-viewer.mjs`, Variante B | `01-fenster-fernansicht.png` → `fernansicht.png`, `07-handy-fernansicht.png` → `fernansicht-mobil.png` |
-| `scripts/test-ui-appearance.mjs` (unverändert) | `09-abgemeldet-desktop.png` → `anmeldeseite.png` |
-| Aufnahme nach Variante B, Fenster maximiert | `/settings` → `systemsteuerung.png`, `/settings/appearance` → `darstellung.png`, `/docker` → `docker.png`, `/vms` → `vms.png` |
-| `scripts/test-ui-agent.mjs` (0.54.0) | `10-phone-in-titanos.png` → `ki-agent-mobil.png`, `16-phone-menu.png` → `ki-agent-menue-mobil.png` |
+| `scripts/capture-readme-screenshots.mjs` | `arbeitsplatz`, `anmeldeseite`, `dateien`, `docker`, `vms`, `nvr`, `hauptmenue`, `dock-bearbeiten`, `fernansicht`, `fernansicht-mobil`, `systemdaten`, `systemsteuerung`, `darstellung`, `handy-start` → jeweils `<Name>.png` (13.11.2026) |
+| `scripts/capture-readme-screenshots.mjs` | `freigaben`, `speicher` → `freigaben.png`, `speicher.png` (12.11.2026, bei dieser Aufnahme nicht wiederholt) |
+| `scripts/test-ui-vm-create.mjs`, `scripts/test-ui-drive-transfers.mjs`, `scripts/test-ui-copy-confirmation.mjs`, `scripts/test-ui-firewall.mjs`, `scripts/test-ui-agent.mjs`, `docs/screenshots/capture.mjs` | die Bilder der alten Oberfläche, siehe `capture.json` |
 
-**Varianten** (Kopien der Skripte außerhalb des Repositorys, nur für die Aufnahme): **A** setzt in den Testcontainern `icon` auf `https://icons.example.test/<name>.svg` und beantwortet diese Adressen aus `out/readme-icons/` (sonst zeigen die Docker-Apps Buchstaben). **B** setzt zusätzlich `prefs.desktop = { widgetsHidden: true }`, damit keine Widgets unter halbtransparenten Fenstern durchscheinen. Die Aufnahmen „Fenster maximiert“ öffnen den Pfad wie `open()` in `test-ui-desktop.mjs` (Variante B), doppelklicken auf die Titelleiste des Fensters und nehmen nach 1,8 s auf. Die unveränderten Skripte `test-ui-desktop.mjs`, `test-ui-viewer.mjs`, `test-ui-appearance.mjs` und `test-ui-phone.mjs` liefen am selben Tag kurz vorher ohne Befund (der Arbeitsstand änderte sich dazwischen durch andere Teilarbeiten); die Variante A von `test-ui-desktop.mjs` brach erst nach den verwendeten Bildern beim Schritt „Dock bearbeiten › Fertig“ ab, Variante B beim Widget-Schritt (es gibt dort absichtlich keine Widgets).
+Was das Skript je Bild tut:
 
-`docs/screenshots/capture.mjs` nimmt noch die alte Oberfläche (Dashboard, Kopfzeile) auf und ist **veraltet**; nicht mehr für `current/` verwenden, bis es auf den Desktop-Modus umgestellt ist.
+- Jedes Bild startet einen frischen Browser-Kontext mit den Testdaten, löscht die gespeicherte Fensteranordnung, öffnet den Pfad, wartet 4 s und maximiert das Fenster per Doppelklick auf die Titelleiste.
+- `docker` klickt die Zeile „immich“ an (Einzelheiten rechts), `vms` wechselt auf den Reiter „Übersicht“, `dateien` markiert zwei Dateien, `nvr` schaltet die Ereignisse neben den Kacheln ein, `hauptmenue` öffnet das Menü, `dock-bearbeiten` öffnet „Dock bearbeiten“ per Rechtsklick auf das Dock.
+- `systemsteuerung`, `darstellung` und `systemdaten` vergrößern das Browserfenster, bis die Seite im Fenster nichts mehr zu scrollen hat. So endet das Bild unter der letzten Zeile statt mitten in einer.
+- `fernansicht` und `fernansicht-mobil` kodieren das Foto „Küste“ im Browser als Video (wie `scripts/test-ui-viewer.mjs`) und beantworten die WebSocket-Verbindung der Fernansicht selbst; das Fenster bzw. die Vollbildansicht zeigt dann diese Bilder.
+- `anmeldeseite` meldet die Sitzung als abgemeldet und liefert vier Konten mit mitgelieferten Kontobildern.
+
+`docs/screenshots/capture.mjs` nimmt noch die alte Oberfläche (Dashboard, Kopfzeile) auf und ist **veraltet**; nicht mehr für `current/` verwenden.
 
 ## Neu aufnehmen
 
-Voraussetzungen: Node.js 24, installierte Web-Abhängigkeiten, Playwright mit Chromium und ein gebautes Frontend. Aus dem Repository-Stamm:
+Voraussetzungen: Node.js 24, installierte Web-Abhängigkeiten und Playwright mit Chromium. Aus dem Repository-Stamm einen UI-Server starten, zum Beispiel:
 
 ```sh
 npm --prefix web ci
-npm --prefix web run build
-npm --prefix web run preview -- --host 127.0.0.1 --port 5187
+npm --prefix web run dev -- --host 127.0.0.1 --port 5262
 ```
 
-In einem zweiten Terminal:
+(oder `npm --prefix web run build` und `npm --prefix web run preview -- --host 127.0.0.1 --port 5262`). In einem zweiten Terminal:
 
 ```sh
-PLAYWRIGHT_MODULE=/absoluter/pfad/zu/playwright/index.mjs \
-UI_URL=http://127.0.0.1:5187 UI_OUTPUT=out/validation/desktop \
-node scripts/test-ui-desktop.mjs
+PW=/absoluter/pfad/zu/playwright/index.mjs \
+UI_URL=http://127.0.0.1:5262 OUT=docs/screenshots/current \
+node scripts/capture-readme-screenshots.mjs
 ```
 
-Bei lokal auflösbarem Playwright und dessen installiertem Chromium können die ersten beiden Variablen entfallen. Fehlende Original-Icons lädt das Skript aus den dokumentierten öffentlichen Quellen in den ignorierten Cache `out/readme-icons/`; hierfür ist einmalig Internetzugang nötig. `UI_ICON_DIR` wählt einen bereits vorhandenen Cache. Geänderte Icon-Bytes brechen die Aufnahme ab, bis Quelle und Prüfsumme bewusst geprüft wurden. Die Browseraufnahme selbst verwendet nur den lokalen UI-Server und abgefangene API-/Icon-Antworten; sonstige externe Browseranfragen werden blockiert.
+`ONLY=name,name` nimmt nur diese Bilder auf, `SHOW_VERSION` setzt die Version, die die Seiten nennen. Ohne `OUT` landen die Bilder in `out/readme-shots/`. Die Browseraufnahme verwendet nur den lokalen UI-Server und abgefangene API-Antworten.
 
-`UI_OUTPUT` kann ein anderes Ausgabeziel setzen. `UI_SOURCE_REF` setzt den tatsächlich gebauten Git-Stand für den Nachweis, standardmäßig `HEAD`. Vor Aufnahmen nach einer Produktänderung Versionsangabe, Kernel und Beispieldaten im Skript anpassen, das Frontend aus diesem Stand neu bauen und alle Bilder visuell prüfen. Die feste Beispieluhr sorgt für zusammenpassende Datums- und Laufzeitangaben.
-
-Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Reihenfolge: zuerst die Skripte aus der Tabelle oben mit eigenem `UI_OUTPUT` ausführen und ihre Ausgaben wie angegeben nach `current/` kopieren, danach `capture.json` mit Größe und SHA-256 jedes Bildes in `current/` neu schreiben (bis zur Umstellung von `capture.mjs` von Hand bzw. per kleinem Skript; `capture.mjs` selbst nicht mehr ausführen). Danach Aufnahmestand oben anpassen und jedes Bild ansehen. Ordner wie `v0.6.1/` bis `v0.7.2/` und die Bilder direkt in `docs/screenshots/` sind historische Aufnahmen und werden nirgends mehr verlinkt.
-
-Die Skripte aus der Tabelle oben laufen gegen denselben Vorschau-Server, zum Beispiel:
-
-```sh
-PLAYWRIGHT_MODULE=/absoluter/pfad/zu/playwright/index.mjs \
-UI_URL=http://127.0.0.1:5187 UI_OUTPUT=out/validation/vm-create-production \
-node scripts/test-ui-vm-create.mjs
-```
+Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Danach `capture.json` mit Größe und SHA-256 jedes neuen Bildes nachführen (von Hand bzw. per kleinem Skript), den Aufnahmestand oben anpassen und jedes Bild ansehen: kein abgeschnittener oder überlappender Text, nichts hinter dem Dock, keine leeren Zustände, keine unpassenden Beispieldaten. Ordner wie `v0.6.1/` bis `v0.7.2/` und die Bilder direkt in `docs/screenshots/` sind historische Aufnahmen und werden nirgends mehr verlinkt.
