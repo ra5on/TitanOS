@@ -15,6 +15,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -61,6 +62,9 @@ type haArea struct {
 	ups          *ups.Manager
 	notify       *notify.Manager
 	ssh          *sshd.Manager
+	// nvr gives the cameras whose owner chose Home Assistant; nil
+	// without an NVR.
+	nvr          *nvr.Manager
 	maintenance  func() *maintenance.Manager
 	applications func() *appbackup.Manager
 
@@ -85,7 +89,7 @@ func (s *Server) haArea() haArea {
 	return haArea{home: s.opts.HomeAssistant, hub: s.haHub, store: s.opts.Store, version: s.opts.Version, users: s.opts.Users,
 		monitor: s.opts.Monitor, monitoring: s.opts.Monitoring, accelerators: s.opts.Accelerators, storage: s.opts.Storage,
 		shares: s.opts.Shares, files: s.opts.Files, docker: s.opts.Docker, vms: s.opts.VMs, backup: s.opts.Backup, update: s.opts.Update,
-		ups: s.opts.UPS, notify: s.opts.Notify, ssh: s.opts.SSH,
+		ups: s.opts.UPS, notify: s.opts.Notify, ssh: s.opts.SSH, nvr: s.opts.NVR,
 		maintenance:  func() *maintenance.Manager { return s.opts.Maintenance },
 		applications: func() *appbackup.Manager { return s.opts.ApplicationBackups },
 		undo:         &s.haUndo, first: &s.haStore, stores: &s.haStores, storesMu: &s.haStoresMu,

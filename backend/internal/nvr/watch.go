@@ -229,6 +229,7 @@ func (m *Manager) reconcile(ctx context.Context) {
 	if !ok {
 		return
 	}
+	m.importRestored(s.Volume)
 	if err := m.converge(ctx, s, imageID); err != nil {
 		m.engineError("container of the NVR", err)
 	}
