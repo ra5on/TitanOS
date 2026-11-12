@@ -1,8 +1,10 @@
 <script lang="ts">
 	// PLAN 79-7: moving a camera that can pan, tilt and zoom. A movement runs
-	// while its button is held: the request is repeated every three seconds
+	// while its button is held: the request is repeated every two seconds
 	// (the NAS stops a camera it hears nothing of for five) and "stop" follows
-	// on release. Presets as a choice.
+	// on release, when the window loses the focus or the page is hidden, and
+	// when the pad goes away. At most ten commands a second (the NAS's limit):
+	// commands are spaced 100 ms apart. Presets as a choice.
 	import { api, ApiError } from '../api.ts';
 	import Icon, { type IconName } from '../components/Icon.svelte';
 	import { apiErrorText, t, type MessageKey } from '../i18n/index.svelte.ts';
@@ -27,22 +29,40 @@
 		);
 	});
 
+	/** How often a held movement is sent again; the NAS stops after 5 s of silence. */
+	const REPEAT_MS = 2000;
+	/** Commands are spaced this far apart: the NAS takes at most 10 a second. */
+	const SPACING_MS = 100;
 	let repeat: ReturnType<typeof setInterval> | undefined;
 	let moving = $state('');
-	async function send(action: string, preset?: string) {
-		try {
-			await api.post(path, preset ? { action, preset } : { action });
-			error = '';
-		} catch (err) {
-			// Too many commands at once just drop one; anything else is said.
-			if (!(err instanceof ApiError && err.code === 'rate_limited')) error = apiErrorText(err);
-		}
+	let lastSent = 0;
+	let queue: Promise<void> = Promise.resolve();
+	/** Sends one command after the previous one, never two within SPACING_MS. */
+	function send(action: string, preset?: string, tries = 1): Promise<void> {
+		queue = queue.then(async () => {
+			const wait = lastSent + SPACING_MS - Date.now();
+			if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+			lastSent = Date.now();
+			try {
+				await api.post(path, preset ? { action, preset } : { action });
+				error = '';
+			} catch (err) {
+				if (err instanceof ApiError && err.code === 'rate_limited') {
+					// A dropped "stop" would let the camera run on for five seconds.
+					if (tries < 4 && action === 'stop') {
+						await new Promise((r) => setTimeout(r, 150 * tries));
+						void send(action, preset, tries + 1);
+					}
+				} else error = apiErrorText(err);
+			}
+		});
+		return queue;
 	}
 	function start(action: string) {
 		stop(false);
 		moving = action;
 		void send(action);
-		repeat = setInterval(() => void send(action), 3000);
+		repeat = setInterval(() => void send(action), REPEAT_MS);
 	}
 	function stop(tell = true) {
 		clearInterval(repeat);
@@ -50,7 +70,21 @@
 		if (moving && tell) void send('stop');
 		moving = '';
 	}
-	$effect(() => () => stop());
+	// A held button never gets the focus (pointerdown is prevented), so its
+	// blur does not tell when the window goes to the background.
+	$effect(() => {
+		const away = () => {
+			if (document.hidden || !document.hasFocus()) stop();
+		};
+		const blur = () => stop();
+		window.addEventListener('blur', blur);
+		document.addEventListener('visibilitychange', away);
+		return () => {
+			window.removeEventListener('blur', blur);
+			document.removeEventListener('visibilitychange', away);
+			stop();
+		};
+	});
 
 	const zoom = $derived(info?.features.includes('zoom') ?? false);
 	const MOVES: { action: string; icon: IconName; label: MessageKey; area: string }[] = [
@@ -76,6 +110,7 @@
 		}}
 		onpointerup={() => stop()}
 		onpointercancel={() => stop()}
+		onlostpointercapture={() => stop()}
 		onkeydown={(e) => {
 			if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) start(action);
 		}}

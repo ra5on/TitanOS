@@ -18,6 +18,8 @@ const { chromium } = await import(
 const browser = await chromium.launch({
   headless: true,
   executablePath: process.env.BROWSER_EXECUTABLE,
+  // Talking needs a microphone: a made-up one, no question.
+  args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
 });
 const base = process.env.UI_URL || "http://127.0.0.1:5262";
 const out = process.env.NVR_SHOTS || process.env.UI_OUTPUT || "out/validation/nvr";
@@ -314,7 +316,7 @@ try {
 
   // --- Live: free arrangement like the widgets, saved per account ---
   {
-    const { ctx, page, saved, data } = await open("owner");
+    const { ctx, page, saved, data, state } = await open("owner");
     await page.goto(base + "/nvr");
     await page.locator("[data-tile]").nth(3).waitFor();
     const box = async (id) => page.locator(`[data-tile="${id}"]`).boundingBox();
@@ -331,6 +333,44 @@ try {
     await page.getByRole("button", { name: "Garten bewegen" }).click();
     await page.getByRole("group", { name: "Garten bewegen" }).getByRole("button", { name: "Nach links" }).waitFor();
     await page.getByRole("combobox", { name: "Gespeicherte Position" }).waitFor();
+    // A held direction is sent again every two seconds; "stop" follows on release.
+    const ptz = () =>
+      state.requests.filter(([m, p]) => m === "POST" && p === "/nvr/cameras/garten/ptz");
+    const actions = () => ptz().map((r) => r[2].action);
+    const hold = async (name) => {
+      const b = await page.getByRole("group", { name: "Garten bewegen" }).getByRole("button", { name }).boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.mouse.down();
+    };
+    await hold("Nach links");
+    await page.waitForTimeout(4500);
+    assert.ok(actions().filter((a) => a === "move_left").length >= 3, `repeated: ${actions()}`);
+    assert.equal(actions().includes("stop"), false, "no stop while held");
+    // A "stop" the NAS drops (429) is sent again: the camera must not run on.
+    state.ptzDropStops = 1;
+    await page.mouse.up();
+    await until(() => actions().filter((a) => a === "stop").length === 2, "stop after release, again after 429");
+    // Leaving the window while a direction is held stops it as well.
+    await hold("Nach oben");
+    await until(() => actions().at(-1) === "move_up", "moving up");
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await until(() => actions().at(-1) === "stop", "stop when the window loses the focus");
+    await page.mouse.up();
+    await page.getByRole("combobox", { name: "Gespeicherte Position" }).selectOption("tor");
+    await until(() => ptz().at(-1)[2].preset === "tor", "preset sent");
+    assert.deepEqual(ptz().at(-1)[2], { action: "preset", preset: "tor" });
+    // Never more than ten commands a second.
+    const times = ptz().map((r) => r[3]);
+    for (let i = 1; i < times.length; i++)
+      assert.ok(times[i] - times[i - 1] >= 90, `commands ${times[i] - times[i - 1]} ms apart`);
+    // Talking: the NAS's reason in plain words.
+    const talk = page.getByRole("button", { name: /Mit Haustür sprechen/ });
+    const tb = await talk.boundingBox();
+    await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+    await page.mouse.down();
+    await page.locator('[data-camera="haustuer"] .talk-note').getByText(de["nvr.talk.not_running"]).waitFor();
+    await page.mouse.up();
+    await page.locator('[data-camera="haustuer"] .talk-note').getByRole("button").click();
     await sound(page, "live");
     await shot(page, "live");
     await page.getByRole("button", { name: "Garten bewegen" }).first().click();
@@ -409,6 +449,22 @@ try {
     await shot(page, "live-gross");
     await page.keyboard.press("Escape");
     await page.locator("[data-tile]").nth(3).waitFor();
+    await ctx.close();
+  }
+
+  // --- Talking over plain http: the browser has no microphone there, said in plain words ---
+  {
+    const { ctx, page } = await open("owner");
+    await ctx.addInitScript(() =>
+      Object.defineProperty(window, "isSecureContext", { get: () => false }),
+    );
+    await page.goto(base + "/nvr");
+    const talk = page.getByRole("button", { name: /Mit Haustür sprechen/ });
+    await talk.focus();
+    await page.keyboard.down("Space");
+    await page.locator('[data-camera="haustuer"] .talk-note').getByText(de["nvr.talk.insecure"]).waitFor();
+    await page.keyboard.up("Space");
+    await sound(page, "talk over http");
     await ctx.close();
   }
 

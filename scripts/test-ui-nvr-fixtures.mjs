@@ -196,6 +196,10 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
     npuFirmware: ["intel_vpu 0000:00:0b.0: Firmware: intel/vpu/vpu_37xx_v1.bin, version: 20250415*MTL_CLIENT_SILICON-release*1900*ci_tag_ud202518_vpu_rc_20250415_1900*ae83b65d01c"],
     /** Pushed by the tests: sockets of the feed that are open. */
     feedSockets: [],
+    /** How many PTZ "stop" commands are answered with 429 rate_limited. */
+    ptzDropStops: 0,
+    /** The close reason of the talk WebSocket (docs/NVR.md "Gegensprechen"). */
+    talkClose: "nvr_not_running",
   };
 }
 
@@ -322,7 +326,7 @@ export async function installNvr(target, state = nvrState()) {
     } catch {
       body = request.postData();
     }
-    s.requests.push([method, path + url.search, body]);
+    s.requests.push([method, path + url.search, body, Date.now()]);
     const json = (value, status = 200) => route.fulfill({ status, json: value });
     const fail = (status, code) =>
       route.fulfill({ status, json: { error: { code, message: code } } });
@@ -434,7 +438,14 @@ export async function installNvr(target, state = nvrState()) {
       return image(id);
     }
     if ((m = /^\/nvr\/cameras\/([^/]+)\/ptz$/.exec(path))) {
-      if (method === "POST") return route.fulfill({ status: 204 });
+      if (method === "POST") {
+        // The NAS takes at most 10 commands a second; tests drop a "stop" this way.
+        if (body?.action === "stop" && s.ptzDropStops > 0) {
+          s.ptzDropStops--;
+          return fail(429, "rate_limited");
+        }
+        return route.fulfill({ status: 204 });
+      }
       const cam = s.cameras.find((c) => c.id === m[1]);
       return json(cam?.ptz ? s.ptz : { supported: false, features: [], presets: [] });
     }
@@ -548,8 +559,15 @@ export async function installNvr(target, state = nvrState()) {
   });
 
   // The live picture: go2rtc's protocol without video; the pages fall back to still pictures.
-  await target.routeWebSocket(/\/api\/v1\/nvr\/cameras\/[^/]+\/(live|talk)/, (ws) => {
+  await target.routeWebSocket(/\/api\/v1\/nvr\/cameras\/[^/]+\/live/, (ws) => {
     ws.onMessage(() => {});
+  });
+  // Talking: the NAS closes with the reason in `talkClose` once the offer arrives.
+  await target.routeWebSocket(/\/api\/v1\/nvr\/cameras\/[^/]+\/talk/, (ws) => {
+    ws.onMessage((message) => {
+      s.talkOffers = (s.talkOffers ?? 0) + 1;
+      if (String(message).includes("webrtc/offer")) ws.close({ code: 4000, reason: s.talkClose });
+    });
   });
   await target.routeWebSocket(/\/api\/v1\/nvr\/feed/, (ws) => {
     s.feedSockets.push(ws);

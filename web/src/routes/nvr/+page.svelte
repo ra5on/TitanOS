@@ -195,6 +195,11 @@
 		<EmptyState title={t('nvr.live.noneTitle')} text={t('nvr.live.noneAdmin')}>
 			<a class="btn btn-primary" href="/nvr/cameras?new=1">{t('nvr.add.title')}</a>
 		</EmptyState>
+	{:else if !admin && anyRecordings}
+		<EmptyState title={t('nvr.live.noneTitle')} text={t('nvr.live.onlyRecordings')}>
+			<a class="btn btn-primary" href="/nvr/recordings">{t('nvr.menu.recordings')}</a>
+			<a class="btn" href="/nvr/events">{t('nvr.menu.events')}</a>
+		</EmptyState>
 	{:else}
 		<EmptyState
 			title={t('nvr.live.noneTitle')}

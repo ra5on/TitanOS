@@ -11,7 +11,34 @@ export type TalkProblem =
 	| 'denied' // the person or the browser refused the microphone
 	| 'no_microphone'
 	| 'unsupported'
-	| 'failed'; // signalling or the connection to the NAS failed
+	| 'failed' // signalling or the connection to the NAS failed
+	// Why the NAS closed the connection (its close reason, docs/NVR.md "Gegensprechen"):
+	| 'camera_gone' // nvr_camera_not_found: no such camera, or no right to it any more
+	| 'not_running' // nvr_not_running: the NVR is not running, or the camera has no two-way sound
+	| 'no_picture' // nvr_no_picture: the camera does not answer
+	| 'unavailable' // nvr_unavailable: this NAS has no NVR
+	| 'logout' // the session ended
+	| 'forbidden'; // the right to watch the camera live was taken away
+
+/** The problem a close reason of the talk WebSocket names; 'failed' for anything else. */
+export function talkCloseProblem(reason: string): TalkProblem {
+	switch (reason) {
+		case 'nvr_camera_not_found':
+			return 'camera_gone';
+		case 'nvr_not_running':
+			return 'not_running';
+		case 'nvr_no_picture':
+			return 'no_picture';
+		case 'nvr_unavailable':
+			return 'unavailable';
+		case 'logout':
+			return 'logout';
+		case 'forbidden':
+			return 'forbidden';
+		default:
+			return 'failed';
+	}
+}
 
 /** Why talking cannot work in this browser at all; '' when it can. */
 export function talkBlocked(): TalkProblem | '' {
@@ -86,12 +113,15 @@ export async function openTalk(
 
 	await new Promise<void>((resolve, reject) => {
 		const timer = setTimeout(() => reject('failed' satisfies TalkProblem), 15000);
-		const fail = () => {
+		const fail = (problem: TalkProblem = 'failed') => {
 			clearTimeout(timer);
-			reject('failed' satisfies TalkProblem);
+			reject(problem);
 		};
-		ws.onerror = fail;
-		ws.onclose = fail;
+		ws.onerror = () => {
+			// The close that follows carries the reason; wait for it a moment.
+			setTimeout(() => fail(), 300);
+		};
+		ws.onclose = (event) => fail(talkCloseProblem(event.reason));
 		ws.onopen = async () => {
 			try {
 				const offer = await pc.createOffer();
@@ -125,8 +155,10 @@ export async function openTalk(
 		close();
 		throw problem;
 	});
-	ws.onclose = () => lost('failed');
-	ws.onerror = () => lost('failed');
+	ws.onclose = (event) => lost(talkCloseProblem(event.reason));
+	ws.onerror = () => {
+		// The close event follows with the NAS's reason.
+	};
 
 	return {
 		speak: (on) => {

@@ -1,6 +1,10 @@
 // PLAN 79-7: the NVR's pure parts – the live view's arrangement, the time
 // line's arithmetic, the friendly groups of objects and the bell group.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
+import de from '../../src/lib/i18n/de.json';
+import en from '../../src/lib/i18n/en.json';
 import { appForPath, sideFor, SYSTEM_APPS } from '../../src/lib/desktop/apps.ts';
 import { sanitizeDesktop } from '../../src/lib/desktop/prefs.ts';
 import {
@@ -14,7 +18,9 @@ import {
 	tilesFor,
 } from '../../src/lib/nvr/layout.ts';
 import { supportedCodecs } from '../../src/lib/nvr/mse.ts';
-import { groupsOf, toggleGroup } from '../../src/lib/nvr/texts.ts';
+import { nvrSideFor, rightsOf } from '../../src/lib/nvr/side.svelte.ts';
+import { talkCloseProblem } from '../../src/lib/nvr/talk.ts';
+import { faceNameProblem, groupsOf, toggleGroup } from '../../src/lib/nvr/texts.ts';
 import {
 	dayOf,
 	dayStart,
@@ -166,4 +172,75 @@ test("the NVR's notifications have a bell group of their own", () => {
 	expect(bellGroup('nvr_failover')).toBe('cameras');
 	expect(sanitizeBell({ groups: { cameras: false } }).groups.cameras).toBe(false);
 	expect(sanitizeBell({}).groups.cameras).toBe(true);
+});
+
+test('names of known faces follow the NAS: letters and digits, - and _, no spaces, not train', () => {
+	for (const ok of ['Anna', 'Jürgen_2', 'Øystein-B', '2nd', 'a'.repeat(40), 'Ägidius'])
+		expect(faceNameProblem(ok), ok).toBe('');
+	expect(faceNameProblem('')).toBe('empty');
+	expect(faceNameProblem('   ')).toBe('empty');
+	expect(faceNameProblem('Oma Erna')).toBe('space');
+	expect(faceNameProblem('a'.repeat(41))).toBe('long');
+	expect(faceNameProblem('train')).toBe('train');
+	expect(faceNameProblem('_anna')).toBe('start');
+	expect(faceNameProblem('-anna')).toBe('start');
+	expect(faceNameProblem('anna.b')).toBe('chars');
+	expect(faceNameProblem('anna/b')).toBe('chars');
+});
+
+test('talking says why the NAS closed the connection', () => {
+	expect(talkCloseProblem('nvr_camera_not_found')).toBe('camera_gone');
+	expect(talkCloseProblem('nvr_not_running')).toBe('not_running');
+	expect(talkCloseProblem('nvr_no_picture')).toBe('no_picture');
+	expect(talkCloseProblem('nvr_unavailable')).toBe('unavailable');
+	expect(talkCloseProblem('logout')).toBe('logout');
+	expect(talkCloseProblem('forbidden')).toBe('forbidden');
+	expect(talkCloseProblem('')).toBe('failed');
+	expect(talkCloseProblem('something else')).toBe('failed');
+});
+
+test("every NVR notification of titand has the UI's own title and text in both languages", () => {
+	const go = readFileSync(resolve(process.cwd(), '../backend/internal/notify/texts.go'), 'utf8');
+	const kinds = [...new Set([...go.matchAll(/"(nvr_[a-z_]+)":\s*\{/g)].map((m) => m[1]))];
+	expect(kinds).toContain('nvr_event_face_known');
+	// No notification for unknown faces: Frigate does not report them.
+	expect(kinds.some((kind) => kind.includes('unknown'))).toBe(false);
+	for (const [lang, all] of [
+		['de', de],
+		['en', en],
+	] as const) {
+		const texts = all as Record<string, string>;
+		for (const kind of kinds)
+			for (const part of ['title', 'text']) {
+				const key = `notify.kind.${kind}.${part}`;
+				expect(texts[key], `${lang} ${key}`).toBeTruthy();
+				expect(texts[key], `${lang} ${key}`).not.toContain('{s}');
+			}
+		expect(texts['ha.group.cameras'], `${lang} ha.group.cameras`).toBeTruthy();
+		expect(texts['bell.group.cameras'], `${lang} bell.group.cameras`).toBeTruthy();
+	}
+});
+
+test('an account without the admin role sees the pages of the NVR it has a right for', () => {
+	const nvrApp = SYSTEM_APPS.find((a) => a.id === 'nvr')!;
+	const side = sideFor(nvrApp.side, 'user');
+	const hrefs = (rights: { live: boolean; recordings: boolean } | null) =>
+		nvrSideFor(side, rights).map((i) => ('href' in i ? i.href : ''));
+	expect(hrefs(null)).toEqual(['/nvr', '/nvr/recordings', '/nvr/events']);
+	expect(hrefs({ live: true, recordings: false })).toEqual(['/nvr']);
+	expect(hrefs({ live: false, recordings: true })).toEqual(['/nvr/recordings', '/nvr/events']);
+	expect(hrefs({ live: true, recordings: true })).toEqual([
+		'/nvr',
+		'/nvr/recordings',
+		'/nvr/events',
+	]);
+	// Nothing shared: "Live" stays and says so.
+	expect(hrefs({ live: false, recordings: false })).toEqual(['/nvr']);
+	expect(
+		rightsOf([
+			{ rights: { live: true, recordings: false } },
+			{ rights: { live: false, recordings: true } },
+		]),
+	).toEqual({ live: true, recordings: true });
+	expect(rightsOf([])).toEqual({ live: false, recordings: false });
 });
