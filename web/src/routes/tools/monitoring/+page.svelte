@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
@@ -110,9 +111,9 @@
 		>{/snippet}</PageHead
 >
 <p class="muted">{t('ops.monitorHint')}</p>
-{#snippet problemLine(problem: Problem)}{problem.text}{#if problem.detail}<code class="detail"
-			>{problem.detail}</code
-		>{/if}{/snippet}
+{#snippet problemLine(problem: Problem)}{problem.text}<BackendDetail
+		text={problem.detail}
+	/>{/snippet}
 {#if error}<p class="notice-error" role="alert">
 		{@render problemLine(error)}
 		<button class="btn small" disabled={busy} onclick={load}>{t('ui.retry')}</button>
@@ -310,11 +311,5 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
 		gap: var(--gap);
-	}
-	.detail {
-		display: block;
-		margin-top: var(--space-1);
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
 	}
 </style>

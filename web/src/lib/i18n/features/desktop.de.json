@@ -329,6 +329,7 @@
 	"desktop.menu.arrange": "Anordnen",
 	"desktop.menu.arrangeDone": "Fertig",
 	"desktop.menu.arrangeHint": "Programme ziehen oder mit den Pfeilen verschieben. Mit der Tastatur: Strg + Umschalt + Pfeil links oder rechts auf einem Programm.",
+	"desktop.menu.arrangeHintTouch": "Programme mit den Pfeilen am Symbol verschieben.",
 	"desktop.menu.arrangeOff": "In „Zuletzt“ und während der Suche lässt sich die Reihenfolge nicht ändern.",
 	"desktop.menu.moveBack": "{name} nach vorn",
 	"desktop.menu.moveOn": "{name} nach hinten",

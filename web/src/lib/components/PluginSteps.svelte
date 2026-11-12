@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// The steps of a plugin installation, update or removal as the NAS reports
 	// them: a mark per step, the download bar and the error of a failed step.
 	import HelpTip from '#lib/components/HelpTip.svelte';
@@ -58,14 +59,16 @@
 						>
 					</div>
 				{/if}
-				{#if step.state === 'failed' && step.error}<pre>{step.error}</pre>{/if}
+				{#if step.state === 'failed'}<BackendDetail text={step.error} />{/if}
 			</li>
 		{/each}
 	</ol>
 	{#if progress.state === 'failed'}
 		<div class="notice-error" role="alert">
 			{t('plugins.stepsFailed')}
-			{#if progress.error && !progress.steps.some((step) => step.state === 'failed')}<pre>{progress.error}</pre>{/if}
+			{#if !progress.steps.some((step) => step.state === 'failed')}<BackendDetail
+					text={progress.error}
+				/>{/if}
 		</div>
 	{:else if progress.state === 'done'}
 		<p class="notice-ok">{t('plugins.stepsDone')}</p>
@@ -120,7 +123,7 @@
 		color: var(--status-error);
 	}
 	.download,
-	pre {
+	li :global(.bdetail) {
 		grid-column: 2;
 	}
 	.download {
@@ -132,15 +135,5 @@
 	.download progress {
 		width: 100%;
 		accent-color: var(--accent);
-	}
-	pre {
-		margin: var(--space-1) 0 0;
-		font-family: var(--font-mono);
-		font-size: var(--text-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-	.notice-error pre {
-		grid-column: auto;
 	}
 </style>

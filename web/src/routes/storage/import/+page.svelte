@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -126,7 +127,9 @@
 						<p>{c.disks.join(' · ')} · {formatBytes(c.size)}</p>
 						{#if c.reason === 'encrypted-partition'}<p class="notice-warn">
 								{t('crypt.importRefused')}
-							</p>{:else if c.reason}<p class="notice-warn">{c.reason}</p>{/if}{/snippet}
+							</p>{:else if c.reason}<p class="notice-warn">
+								{t('detail.importRefused')}<BackendDetail text={c.reason} />
+							</p>{/if}{/snippet}
 					{#snippet control()}<button
 							class="btn btn-primary"
 							disabled={busy || !!c.reason}

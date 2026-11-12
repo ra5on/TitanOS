@@ -15,6 +15,7 @@
 	import {
 		offeredVolumes,
 		sleepingChoices,
+		sysDataPath,
 		sysDataHint,
 		type SysDataFunction,
 		type SysDataFunctionId,
@@ -136,6 +137,7 @@
 
 	const hint = $derived(data ? sysDataHint(data) : { tone: 'none' as const });
 	const asleep = $derived(data ? sleepingChoices(data) : []);
+	const aside = $derived((data?.functions ?? []).filter((f) => f.volume && f.aside?.length));
 	const names = (list: string[]) => list.map((name) => `„${name}“`).join(', ');
 
 	function volumeNote(volume: SysDataVolume): string {
@@ -336,6 +338,24 @@
 				{/if}
 			{/each}
 		</SettingGroup>
+
+		<!-- Left next to the data in use by a move: someone should look at them. -->
+		{#each aside as f (f.id)}
+			<div class="notice-warn aside" role="status" id="sysdata-aside-{f.id}">
+				<strong
+					>{f.aside?.length === 1
+						? t('sysdata.aside.one', { function: t(`sysdata.fn.${f.id}` as MessageKey) })
+						: t('sysdata.aside.many', {
+								function: t(`sysdata.fn.${f.id}` as MessageKey),
+								count: f.aside?.length ?? 0,
+							})}</strong
+				>
+				<p>{t('sysdata.aside.text')}</p>
+				<ul class="mono">
+					{#each f.aside ?? [] as name (name)}<li>{sysDataPath(f, name)}</li>{/each}
+				</ul>
+			</div>
+		{/each}
 	</div>
 {/if}
 
@@ -347,5 +367,17 @@
 	/* A hint below the row keeps its distance from the next group. */
 	.page :global(.sgroup > p) {
 		margin: var(--space-1) 0 0;
+	}
+	.aside {
+		margin-top: var(--space-3);
+	}
+	.aside p {
+		margin: var(--space-1) 0;
+	}
+	.aside ul {
+		margin: 0;
+		padding-left: var(--space-4);
+		font-size: 0.75rem;
+		overflow-wrap: anywhere;
 	}
 </style>

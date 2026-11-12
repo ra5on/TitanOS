@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
@@ -172,7 +173,9 @@
 		)}
 	</p>{/each}
 {#if config?.backup.lastError}<p class="notice-error" role="alert">
-		<a href="/settings/backups/configuration">{t('safeguard.config')}</a>: {config.backup.lastError}
+		<a href="/settings/backups/configuration">{t('safeguard.config')}</a>: {t(
+			'sysdata.config.failed',
+		)}<BackendDetail text={config.backup.lastError} />
 	</p>{/if}
 {#if config && !config.backup.settings.enabled}<p class="notice-warn">{t('safeguard.configOff')}</p>
 {:else if config && !config.backup.target}<p class="notice-warn">{t('stick.noVolume')}</p>{/if}

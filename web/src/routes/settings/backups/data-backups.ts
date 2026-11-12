@@ -74,7 +74,13 @@ export type Job = {
 	vmDisks?: VMDisks;
 };
 /** The job's choice for the image files of running VMs. */
-export type VMDisks = { mode: 'consistent' | 'skip'; raw?: 'skip' | 'pause' };
+export type VMDisks = {
+	mode: 'consistent' | 'skip';
+	/** Disks no snapshot works for: left out (default) or the VM is paused. */
+	raw?: 'skip' | 'pause';
+	/** Allows the snapshot of the VM management for qcow2 without Btrfs; off by default. */
+	libvirtSnapshot?: boolean;
+};
 /** One image file of a VM in the sources of a job (GET /backups/vm-disks). */
 export type VMDisk = {
 	vm: string;
@@ -111,6 +117,8 @@ export function vmDisksQuery(
 	if (choice) {
 		query.set('mode', choice.mode);
 		if (choice.mode === 'consistent' && choice.raw) query.set('raw', choice.raw);
+		if (choice.mode === 'consistent' && choice.libvirtSnapshot)
+			query.set('libvirtSnapshot', 'true');
 	}
 	return query.toString();
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { api } from '#lib/api.ts';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -266,7 +267,9 @@
 							? ` · ${t('lan.hostAddress')}: ${n.hostAddress}`
 							: ''}</span
 					>
-					{#if n.error}<span class="lan-line notice-error" role="alert">{n.error}</span>{/if}
+					{#if n.error}<span class="lan-line notice-error" role="alert"
+							>{t('detail.networkProblem')}<BackendDetail text={n.error} /></span
+						>{/if}
 				{/snippet}
 				{#snippet control()}<button
 						class="btn btn-danger-outline small"

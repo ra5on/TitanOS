@@ -17,7 +17,17 @@ export type SysDataFunction = {
 	moving: boolean;
 	sizeBytes: number | null;
 	sizeAt: string | null;
+	/**
+	 * Entries a move put next to the current ones as "<name>.from-<volume>"
+	 * (both volumes held the name with other content): kept, not used.
+	 */
+	aside?: string[] | null;
 };
+
+/** Where an entry of a function's folder lies on the NAS. */
+export function sysDataPath(f: Pick<SysDataFunction, 'id' | 'volume'>, name: string): string {
+	return `/mnt/${f.volume}/.titanos/${f.id === 'config' ? 'backups' : f.id}/${name}`;
+}
 
 export type SysDataState = {
 	/** The common choice, "" for the automatic one. */

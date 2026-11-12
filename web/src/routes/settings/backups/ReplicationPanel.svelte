@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
 	import type { Keep } from '#lib/components/KeepVersions.svelte';
@@ -183,7 +184,7 @@
 							· {t('replication.next', { time: formatDateTime(new Date(job.state.next)) })}{/if}
 					</span>
 					{#if job.state.lastError && !job.state.running}<span class="notice-error small"
-							>{job.state.lastError}</span
+							>{t('detail.lastRunFailed')}<BackendDetail text={job.state.lastError} /></span
 						>{/if}
 					<span class="buttons">
 						<button

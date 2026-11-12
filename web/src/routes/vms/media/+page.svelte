@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { onDestroy } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -258,7 +259,9 @@
 					class={job.phase === 'review' ? 'notice-warn' : 'notice-error'}
 					role="status"
 				>
-					{job.error}
+					{t(job.phase === 'review' ? 'detail.jobReview' : 'detail.jobFailed')}<BackendDetail
+						text={job.error}
+					/>
 				</p>{/if}{#if job.output}<p class="mono path">{job.output}</p>
 				<details>
 					<summary>SHA-256</summary>

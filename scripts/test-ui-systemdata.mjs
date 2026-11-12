@@ -86,9 +86,17 @@ const disk = (vm, file, over = {}) => ({
   agent: false,
   ...over,
 });
+// What GET /backups/vm-disks answers for a choice: the Btrfs disk is always
+// read from a snapshot, the qcow2 disk on ext4 only with libvirtSnapshot,
+// and disks without a snapshot are left out or the VM is paused.
 const vmDisks = (choice) => {
   const skip = choice?.mode === "skip";
-  const way = (w) => (skip ? "skip" : choice ? w : "as_is");
+  const noSnapshot = (reason) =>
+    !choice
+      ? { way: "as_is" }
+      : skip
+        ? { way: "skip" }
+        : { way: choice.raw === "pause" ? "pause" : "skip", reason };
   return {
     choice: choice ?? null,
     choiceNeeded: !choice,
@@ -98,14 +106,14 @@ const vmDisks = (choice) => {
       }),
       disk("debian", "vdisk1.qcow2", {
         sizeBytes: 64 * 2 ** 30,
-        way: way("libvirt_snapshot"),
-        agent: !!choice && !skip,
+        ...(choice?.libvirtSnapshot && !skip
+          ? { way: "libvirt_snapshot", agent: true }
+          : noSnapshot("vm_disk_snapshot_unproven")),
       }),
       disk("win11", "system.img", {
         format: "raw",
         sizeBytes: 120 * 2 ** 30,
-        way: way(choice?.raw === "pause" ? "pause" : "as_is"),
-        reason: choice && !skip ? "vm_disk_raw_image" : undefined,
+        ...noSnapshot("vm_disk_raw_image"),
       }),
       disk("archiv", "alt.qcow2", {
         state: "stopped",
@@ -191,6 +199,9 @@ try {
     await page.route("**/api/v1/config-backup", (route) =>
       route.fulfill({ json: configBackup }),
     );
+    data.sysdata.functions.find((f) => f.id === "activity").aside = [
+      "2026-11-10.jsonl.from-Backup",
+    ];
     await page.goto(base + "/settings/systemdata");
     await page.getByRole("heading", { name: "Systemdaten" }).waitFor();
     await page
@@ -250,6 +261,13 @@ try {
         .getAttribute("href"),
       "/settings/backups/configuration#config-downloads",
     );
+    // Entries a move left next to the data in use are named with their path.
+    await page
+      .getByText("Aktivitätsprotokoll: 1 Eintrag beiseitegelegt")
+      .waitFor();
+    await page
+      .getByText("/mnt/nvme/.titanos/activity/2026-11-10.jsonl.from-Backup")
+      .waitFor();
     await sound(page, `systemdaten-${name}`);
     await shot(page, sysShots, `systemdaten-${name}`);
 
@@ -318,7 +336,13 @@ try {
       const mode = query.get("mode");
       return route.fulfill({
         json: vmDisks(
-          mode ? { mode, raw: query.get("raw") ?? undefined } : undefined,
+          mode
+            ? {
+                mode,
+                raw: query.get("raw") ?? undefined,
+                libvirtSnapshot: query.get("libvirtSnapshot") === "true",
+              }
+            : undefined,
         ),
       });
     });
@@ -417,15 +441,32 @@ try {
       `ausschnitt-laufende-vms-bitte-waehlen-${name}`,
     );
 
+    // "So sichern": Btrfs from a snapshot; the qcow2 disk on ext4 and the
+    // raw image have no snapshot and are left out unless the VM may pause.
     await p.locator("#backup-vm-mode").selectOption("consistent");
     await p.getByText("Btrfs-Snapshot · VM läuft weiter").waitFor();
-    await p
-      .getByText("Snapshot der VM-Verwaltung · sauber eingefroren")
-      .waitFor();
-    await p.getByText("Wird gelesen, wie sie ist", { exact: true }).waitFor();
     await p.getByText("VM ist aus · wird normal kopiert").waitFor();
-    await p.getByText(/1\d\d(,\d+)? GB · läuft · Roh-Abbild/).waitFor();
+    await p
+      .getByText(
+        /läuft · qcow2 · Snapshot der VM-Verwaltung ist nicht eingeschaltet/,
+      )
+      .waitFor();
+    await p.getByText(/1\d\d(,\d+)? GB · läuft · Roh-Abbild$/).waitFor();
+    assert.equal(
+      await p
+        .locator("#backup-vm-disks .chip", { hasText: "Wird übersprungen" })
+        .count(),
+      2,
+    );
+    assert.equal(await p.locator("#backup-vm-libvirt").isChecked(), false);
+    assert.equal(await p.locator("#backup-vm-raw").inputValue(), "skip");
+    await p
+      .getByText(
+        /in diesem Lauf nicht gelesen, die vorige Kopie am Ziel bleibt/,
+      )
+      .waitFor();
     assert.ok(asked.at(-1).includes("mode=consistent&raw=skip"), asked.at(-1));
+    assert.ok(!asked.at(-1).includes("libvirtSnapshot"), asked.at(-1));
     await sound(p, `vm-so-sichern-${name}`);
     await shot(p, vmShots, `laufende-vms-so-sichern-${name}`);
     await part(
@@ -434,8 +475,12 @@ try {
       vmShots,
       `ausschnitt-laufende-vms-so-sichern-${name}`,
     );
+    // A qcow2 disk without the snapshot can choose "Kurz anhalten" too.
     await p.locator("#backup-vm-raw").selectOption("pause");
-    await p.getByText("VM wird kurz angehalten", { exact: true }).waitFor();
+    await p
+      .locator("#backup-vm-disks .chip", { hasText: "VM wird kurz angehalten" })
+      .nth(1)
+      .waitFor();
     await shot(p, vmShots, `laufende-vms-kurz-anhalten-${name}`);
     await part(
       p,
@@ -443,6 +488,45 @@ try {
       vmShots,
       `ausschnitt-laufende-vms-kurz-anhalten-${name}`,
     );
+    // The snapshot of the VM management is a switch, off unless chosen.
+    await p
+      .getByText(/Das Verfahren ist neu und nur begrenzt erprobt/)
+      .waitFor();
+    await p.locator("#backup-vm-libvirt").check();
+    await p
+      .getByText("Snapshot der VM-Verwaltung · sauber eingefroren")
+      .waitFor();
+    assert.ok(asked.at(-1).includes("libvirtSnapshot=true"), asked.at(-1));
+    await sound(p, `vm-snapshot-${name}`);
+    await shot(p, vmShots, `laufende-vms-vm-snapshot-${name}`);
+    await part(
+      p,
+      "#backup-vm-disks",
+      vmShots,
+      `ausschnitt-laufende-vms-vm-snapshot-${name}`,
+    );
+    await Promise.all([
+      p.waitForResponse(
+        (res) =>
+          res.url().endsWith("/backups/Backup-alles") &&
+          res.request().method() === "PUT",
+      ),
+      p.getByRole("button", { name: "Speichern", exact: true }).click(),
+    ]);
+    await p
+      .getByRole("heading", { name: "Laufende VMs" })
+      .waitFor({ state: "detached" });
+    assert.deepEqual(saved.vmDisks, {
+      mode: "consistent",
+      raw: "pause",
+      libvirtSnapshot: true,
+    });
+    await p
+      .locator("button", { hasText: /^Bearbeiten$/ })
+      .first()
+      .click();
+    await p.getByRole("heading", { name: "Laufende VMs" }).waitFor();
+    assert.equal(await p.locator("#backup-vm-libvirt").isChecked(), true);
 
     await p.locator("#backup-vm-mode").selectOption("skip");
     await p.getByText(/Wahl „Überspringen“: Platten laufender VMs/).waitFor();
@@ -456,8 +540,17 @@ try {
       vmShots,
       `ausschnitt-laufende-vms-ueberspringen-${name}`,
     );
-    await p.getByRole("button", { name: "Speichern", exact: true }).click();
-    await p.getByText("Fertig mit Hinweisen", { exact: true }).waitFor();
+    await Promise.all([
+      p.waitForResponse(
+        (res) =>
+          res.url().endsWith("/backups/Backup-alles") &&
+          res.request().method() === "PUT",
+      ),
+      p.getByRole("button", { name: "Speichern", exact: true }).click(),
+    ]);
+    await p
+      .getByRole("heading", { name: "Laufende VMs" })
+      .waitFor({ state: "detached" });
     assert.deepEqual(saved.vmDisks, { mode: "skip" });
 
     // A NAS before 0.77 sends only its sentence: shown as it is.
@@ -469,6 +562,67 @@ try {
     await p.getByText(/links the drive cannot hold/).waitFor();
     assert.equal(await p.getByText("Fertig mit Hinweisen").count(), 0);
     await b.ctx.close();
+
+    // --- A VM held after an interrupted backup of its running disks -------
+    const v = await create("owner", "graphit", width, "de", {
+      deviceScaleFactor: 2,
+    });
+    let repaired = 0;
+    let held = true;
+    await v.page.route("**/api/v1/vms/source/start", (route) =>
+      held
+        ? route.fulfill({
+            status: 409,
+            json: {
+              error: {
+                code: "vm_backup_recovery",
+                message:
+                  "vm: the record of an interrupted backup is unreadable; repair the VM's disks first",
+              },
+            },
+          })
+        : route.fulfill({ status: 202 }),
+    );
+    await v.page.route("**/api/v1/vms/source/backup-recovery", (route) => {
+      repaired++;
+      held = false;
+      return route.fulfill({ status: 204 });
+    });
+    await v.page.goto(base + "/vms?vm=source");
+    await v.page
+      .getByRole("button", { name: "Starten", exact: true })
+      .first()
+      .click();
+    await v.page
+      .getByText(
+        /Platten nach unterbrochener Sicherung prüfen\. Eine Sicherung/,
+      )
+      .waitFor();
+    assert.equal(await v.page.getByText(/record of an interrupted/).count(), 0);
+    await sound(v.page, `vm-gehalten-${name}`);
+    await shot(v.page, vmShots, `vm-gehalten-${name}`);
+    await v.page
+      .getByRole("button", { name: "Platten zurückführen …", exact: true })
+      .click();
+    const dialog = v.page.getByRole("dialog");
+    await dialog.getByText(/prüft jede Zwischenschicht/).waitFor();
+    // A plain confirmation: nothing to type.
+    assert.equal(await dialog.locator("input, textarea").count(), 0);
+    await shot(v.page, vmShots, `vm-gehalten-dialog-${name}`);
+    await dialog
+      .getByRole("button", { name: "Zurückführen", exact: true })
+      .click();
+    await v.page
+      .getByText("Die Platten von Source VM sind wieder in Ordnung.")
+      .waitFor();
+    assert.equal(repaired, 1);
+    assert.equal(
+      await v.page
+        .getByText(/Platten nach unterbrochener Sicherung prüfen/)
+        .count(),
+      0,
+    );
+    await v.ctx.close();
   }
   assert.deepEqual(errors, []);
   console.log("ok: system data and backup notes");

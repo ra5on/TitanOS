@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// Updates: a new version goes into the other slot of the stick and
 	// starts on trial; the one before stays as the fallback.
 	import { poll } from '#lib/poll.ts';
@@ -550,7 +551,7 @@
 		{:else if status.progress.phase === 'failed'}
 			<div class="notice-error" role="alert">
 				{t('update.failed')}
-				<pre>{status.progress.error}</pre>
+				<BackendDetail text={status.progress.error} />
 				{#if status.progress.fallbackRemoved}<p>
 						<strong>{t('update.fallbackRemovedFailed')}</strong>
 					</p>{/if}
@@ -564,7 +565,7 @@
 		{#if !working && status.checkError}
 			<div class="notice-warn" role="status">
 				{t('update.checkFailed')}
-				<pre>{status.checkError}</pre>
+				<BackendDetail text={status.checkError} />
 			</div>
 		{/if}
 	{/if}
@@ -1154,7 +1155,7 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
-	:is(.notice-error, .notice-warn) pre {
+	.notice-error pre {
 		margin-top: var(--space-1-5);
 	}
 	/* The card of the new version: a tint of the accent, the text in the

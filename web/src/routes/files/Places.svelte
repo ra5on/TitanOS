@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import type { FileRoot, UsbDevice } from '#lib/api.ts';
 	import type { Favorite } from '#lib/file-actions.ts';
 	import Icon from '#lib/components/Icon.svelte';
@@ -260,7 +261,7 @@
 							: t('files.backupCounting')}</span
 					>
 				{:else if backup.state?.lastError}<span class="backup-error"
-						>{t('files.backupFailed')}: {backup.state.lastError}</span
+						>{t('files.backupFailed')}<BackendDetail text={backup.state.lastError} /></span
 					>
 				{:else}<span
 						>{t('files.backupLastOK', {

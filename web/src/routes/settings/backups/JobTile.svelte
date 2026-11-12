@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// One backup job as a flat surface like a row (PLAN 78-1): its state, what the last run did, and what
 	// can be done with it. The page shows the tile of the chosen job.
 	import DangerZone from '#lib/components/DangerZone.svelte';
@@ -144,7 +145,7 @@
 		>
 			{t('backup.lastError')}
 			{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
-			<pre>{state.lastError}</pre>
+			<BackendDetail text={state.lastError} />
 		</div>{/if}
 	{#if !state.running}<BackupNotes {state} id={job.id} onchoice={() => edit(view)} />{/if}
 	{#if !state.running && state.skipped}<p class="muted">
@@ -153,7 +154,7 @@
 	{#if !state.running && state.lastCheck}
 		{#if state.checkError}<div class="notice-error">
 				{t('backup.checkFailed')}
-				<pre>{state.checkError}</pre>
+				<BackendDetail text={state.checkError} />
 			</div>
 		{:else}<p class="muted">
 				{t('backup.checkOk', { at: formatDateTime(new Date(state.lastCheck)) })}
@@ -164,11 +165,13 @@
 				count: state.probe.files,
 			})} · {formatBytes(state.probe.bytes)}{#if state.probe.truncated}<span>
 					· {t('ops.truncated')}</span
-				>{/if}{#if state.probe.error}<span> · {state.probe.error}</span>{/if}
+				>{/if}{#if state.probe.error}<span> · {t('backup.probeFailed')}</span><BackendDetail
+					text={state.probe.error}
+				/>{/if}
 		</p>{/if}
 	{#if !state.running && state.restoreError}<div class="notice-error">
 			{t('backup.restoreFailed')}
-			<pre>{state.restoreError}</pre>
+			<BackendDetail text={state.restoreError} />
 		</div>
 	{:else if !state.running && state.restoredTo}<p class="notice-ok">
 			{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span>
@@ -259,13 +262,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-3) 20px;
-	}
-	pre {
-		margin: var(--space-1-5) 0 0;
-		font-family: var(--font-mono);
-		font-size: 0.75rem;
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
 	}
 	/* Only the chosen backup's tile is shown: it is the detail of the row. */
 	.hidden-job {

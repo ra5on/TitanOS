@@ -329,6 +329,7 @@
 	"desktop.menu.arrange": "Arrange",
 	"desktop.menu.arrangeDone": "Done",
 	"desktop.menu.arrangeHint": "Drag programs or move them with the arrows. With the keyboard: Ctrl + Shift + left or right arrow on a program.",
+	"desktop.menu.arrangeHintTouch": "Move programs with the arrows at the icon.",
 	"desktop.menu.arrangeOff": "The order cannot be changed in “Recent” or while searching.",
 	"desktop.menu.moveBack": "Move {name} towards the start",
 	"desktop.menu.moveOn": "Move {name} towards the end",

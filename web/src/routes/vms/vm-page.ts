@@ -5,12 +5,13 @@ import { errorText, t, type Locale, type MessageKey } from '#lib/i18n/index.svel
 import { vmLabel } from '#lib/vm-name.ts';
 import type { ScaleMode } from './VncScreen.svelte';
 
-export type Problem = { text: string; detail: string };
+export type Problem = { text: string; detail: string; code?: string };
 export type Failure = { problem: Problem; action: string };
 
 export function problem(err: unknown): Problem {
 	const code = err instanceof ApiError ? err.code : 'internal';
 	return {
+		code,
 		text: errorText(code),
 		detail: code === 'vm_failed' && err instanceof ApiError ? err.message : '',
 	};
@@ -41,6 +42,12 @@ export type Notice = {
 	text: string;
 	detail?: string;
 	retry?: boolean;
+	/**
+	 * The VM is held after an interrupted backup of its running disks
+	 * (error vm_backup_recovery): the notice explains it and offers the
+	 * way out, POST /vms/{name}/backup-recovery.
+	 */
+	repair?: boolean;
 };
 
 export function vmNotices(input: {
@@ -56,7 +63,13 @@ export function vmNotices(input: {
 	if (!current) return [];
 	const list: Notice[] = [];
 	const failure = failures[current.name];
-	if (failure)
+	if (failure?.problem.code === 'vm_backup_recovery')
+		list.push({
+			level: 'error',
+			text: `${t('vms.backupRecovery.title')}. ${t('vms.backupRecovery.text')}`,
+			repair: true,
+		});
+	else if (failure)
 		list.push({
 			level: 'error',
 			text: failure.problem.text,

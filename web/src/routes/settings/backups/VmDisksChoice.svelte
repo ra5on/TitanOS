@@ -3,7 +3,8 @@
 	// copy saves the disks of running VMs, and whether the owner wants that.
 	// The list comes from GET /backups/vm-disks for the sources chosen in the
 	// form; the group only shows when those sources hold disks of VMs.
-	// The backend knows one setting for raw images per job (not per disk).
+	// The backend knows one setting per job (not per disk) for disks without a
+	// snapshot, and the snapshot of the VM management is opt-in per job.
 	import { api } from '#lib/api.ts';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -52,14 +53,35 @@
 
 	const disks = $derived(answer?.disks ?? []);
 	const running = $derived(disks.filter((disk) => disk.state === 'running'));
-	/** Raw images of running VMs: only for them the second choice matters. */
+	/**
+	 * Disks of running VMs no snapshot is used for (raw images, and qcow2
+	 * while the snapshot of the VM management is not allowed): only for
+	 * them the choice "skip or pause" matters.
+	 */
+	const NO_SNAPSHOT = ['vm_disk_raw_image', 'vm_disk_snapshot_unproven'];
 	const raw = $derived(
-		running.some(
-			(disk) =>
-				disk.format === 'raw' || disk.reason === 'vm_disk_raw_image' || disk.way === 'pause',
-		),
+		running.some((disk) => NO_SNAPSHOT.includes(disk.reason ?? '') || disk.way === 'pause'),
 	);
-
+	/** qcow2 on a volume without Btrfs: the snapshot of the VM management is possible. */
+	const libvirt = $derived(
+		!!vmDisks?.libvirtSnapshot ||
+			running.some(
+				(disk) => disk.way === 'libvirt_snapshot' || disk.reason === 'vm_disk_snapshot_unproven',
+			),
+	);
+	function choose(change: Partial<VMDisks>) {
+		const next = { mode: 'consistent' as const, raw: vmDisks?.raw || 'skip', ...change };
+		vmDisks =
+			next.mode === 'skip'
+				? { mode: 'skip' }
+				: {
+						mode: 'consistent',
+						raw: next.raw,
+						...((change.libvirtSnapshot ?? vmDisks?.libvirtSnapshot)
+							? { libvirtSnapshot: true }
+							: {}),
+					};
+	}
 	function wayText(disk: VMDisk): string {
 		if (disk.way === 'libvirt_snapshot')
 			return t(
@@ -80,6 +102,7 @@
 		'vm_disk_no_space',
 		'vm_disk_snapshot_failed',
 		'vm_disk_raw_image',
+		'vm_disk_snapshot_unproven',
 	];
 	function reasonText(disk: VMDisk): string {
 		if (!disk.reason) return '';
@@ -97,8 +120,9 @@
 		];
 		if (disk.way === 'libvirt_snapshot' && disk.agent) parts.push(t('backup.vm.agent'));
 		const reason = reasonText(disk);
-		if (reason && disk.reason !== 'vm_disk_raw_image') parts.push(reason);
-		else if (reason && disk.format !== 'raw') parts.push(reason);
+		// "Roh-Abbild" already stands there as the format.
+		if (reason && !(disk.reason === 'vm_disk_raw_image' && disk.format === 'raw'))
+			parts.push(reason);
 		return parts.filter(Boolean).join(' · ');
 	}
 </script>
@@ -124,10 +148,7 @@
 						id="backup-vm-mode"
 						class="field"
 						value={vmDisks?.mode ?? ''}
-						onchange={(e) => {
-							const mode = e.currentTarget.value as VMDisks['mode'];
-							vmDisks = mode === 'skip' ? { mode } : { mode, raw: vmDisks?.raw || 'skip' };
-						}}
+						onchange={(e) => choose({ mode: e.currentTarget.value as VMDisks['mode'] })}
 					>
 						{#if !vmDisks}<option value="" disabled>{t('backup.vm.choose')}</option>{/if}
 						<option value="consistent">{t('backup.vm.mode.consistent')}</option>
@@ -139,6 +160,24 @@
 						{#snippet control()}<span class="chip {wayTone(disk)}">{wayText(disk)}</span>{/snippet}
 					</SettingSub>
 				{/each}
+				{#if libvirt && vmDisks?.mode === 'consistent'}
+					<SettingSub
+						title={t('backup.vm.libvirt')}
+						desc={t('backup.vm.libvirt.desc')}
+						for="backup-vm-libvirt"
+					>
+						{#snippet control()}
+							<input
+								id="backup-vm-libvirt"
+								class="switch"
+								type="checkbox"
+								role="switch"
+								checked={!!vmDisks?.libvirtSnapshot}
+								onchange={(e) => choose({ libvirtSnapshot: e.currentTarget.checked })}
+							/>
+						{/snippet}
+					</SettingSub>
+				{/if}
 				{#if raw && vmDisks?.mode === 'consistent'}
 					<SettingSub title={t('backup.vm.raw')} desc={t('backup.vm.raw.desc')} for="backup-vm-raw">
 						{#snippet control()}
@@ -146,11 +185,7 @@
 								id="backup-vm-raw"
 								class="field"
 								value={vmDisks?.raw || 'skip'}
-								onchange={(e) =>
-									(vmDisks = {
-										mode: 'consistent',
-										raw: e.currentTarget.value as VMDisks['raw'],
-									})}
+								onchange={(e) => choose({ raw: e.currentTarget.value as VMDisks['raw'] })}
 							>
 								<option value="skip">{t('backup.vm.raw.skip')}</option>
 								<option value="pause">{t('backup.vm.raw.pause')}</option>

@@ -24,6 +24,7 @@ export const PROBLEM_CODES = [
 	'vm_disk_pause_timeout',
 	'vm_disk_undo_failed',
 	'vm_disk_raw_image',
+	'vm_disk_snapshot_unproven',
 	'link_unsupported',
 	'mirror_failed',
 	'other',
