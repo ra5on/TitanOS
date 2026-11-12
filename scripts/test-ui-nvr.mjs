@@ -68,6 +68,14 @@ const sent = (state, method, path) =>
   state.requests.filter(([m, p]) => m === method && p === path).map((r) => r[2]);
 const confirmDialog = (page, title) =>
   page.getByRole("dialog", { name: title });
+/** Waits until a condition of the test holds (the desktop saves 1.5 s after a change). */
+async function until(fn, what, ms = 6000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error(`timed out: ${what}`);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 try {
   // --- Setup: rows, the plain questions for Docker and a sleeping volume ---
@@ -351,7 +359,7 @@ try {
     assert.equal(saved.length, 0, "nothing is saved while arranging");
     await page.getByRole("button", { name: "Fertig" }).click();
     await page.waitForFunction(() => !document.querySelector(".wall.arranging"));
-    assert.equal(saved.length, 1);
+    await until(() => saved.length === 1, "the arrangement is saved");
     const nvr = saved[0].nvr;
     assert.equal(nvr.custom, true);
     const by = Object.fromEntries(nvr.tiles.map((t) => [t.id, t]));
@@ -374,7 +382,7 @@ try {
     const panel = page.getByRole("complementary", { name: "Ereignisse" });
     await panel.getByText("Person · Haustür").first().waitFor();
     await panel.getByText(/Unser Auto · K-TI 2026/).waitFor();
-    assert.equal(saved.at(-1).nvr.events, true);
+    await until(() => saved.at(-1).nvr.events === true, "events are remembered");
     await sound(page, "live with events");
     await shot(page, "live-ereignisse");
 
@@ -385,13 +393,13 @@ try {
     await shot(page, "live-ansicht");
     await view.getByRole("switch", { name: "Kameranamen im Bild" }).uncheck();
     await page.waitForFunction(() => !document.querySelector("[data-tile] .name"));
-    assert.equal(saved.at(-1).nvr.names, false);
+    await until(() => saved.at(-1).nvr.names === false, "names off is remembered");
     await view.getByRole("button", { name: "Anordnung zurücksetzen" }).click();
     await page.waitForFunction(
       (x) => Math.abs(document.querySelector('[data-tile="haustuer"]').getBoundingClientRect().x - x) < 3,
       before.x,
     );
-    assert.equal(saved.at(-1).nvr.custom, false);
+    await until(() => saved.at(-1).nvr.custom === false, "the reset is saved");
     await page.keyboard.press("Escape");
 
     // One camera large and back.
@@ -455,24 +463,41 @@ try {
     // Known faces: people, pictures, faces to assign.
     await page.locator("#nvr-faces").getByRole("button", { name: /Bekannte Gesichter/ }).click();
     const faces = page.locator("#nvr-faces");
-    await faces.getByText("Patrick", { exact: true }).waitFor();
+    await faces.locator('[data-face="Patrick"] b').waitFor();
     await faces.getByText("vermutlich Patrick (62 %)").waitFor();
     await faces.getByRole("button", { name: "Zuordnen" }).first().click();
     await page.waitForFunction(() => document.querySelectorAll("#nvr-faces .attempts li").length === 1);
-    assert.deepEqual(
-      state.requests.find(([m, p]) => m === "POST" && p.endsWith("/assign"))[2],
-      { name: "Patrick" },
-    );
-    await faces.getByLabel("Name der Person").fill("Oma");
+    const assigned = state.requests.find(([m, p]) => m === "POST" && p.endsWith("/assign"));
+    assert.match(assigned[1], /^\/nvr\/face-attempts\/[^/]+\/assign$/);
+    assert.deepEqual(assigned[2], { name: "Patrick" });
+    // The library comes back with the answer: Patrick has his third picture.
+    await faces.locator('[data-face="Patrick"]').getByText("3 Bilder").waitFor();
+    // Names follow the NAS's rule; what is wrong is said under the field.
+    const newName = faces.getByLabel("Name der Person");
+    await faces.getByText(de["nvr.faces.nameRule"]).first().waitFor();
+    await newName.fill("Oma Erna");
+    await faces.getByText(de["nvr.faces.nameProblem.space"]).waitFor();
+    assert.equal(await newName.getAttribute("aria-invalid"), "true");
+    assert.equal(await faces.getByRole("button", { name: "Person anlegen" }).isDisabled(), true);
+    await newName.fill("train");
+    await faces.getByText(de["nvr.faces.nameProblem.train"]).waitFor();
+    await newName.fill("Jürgen_2");
+    await faces.getByText(de["nvr.faces.nameRule"]).first().waitFor();
     await faces.getByRole("button", { name: "Person anlegen" }).click();
-    await faces.getByText("Oma", { exact: true }).waitFor();
-    assert.deepEqual(sent(state, "POST", "/nvr/faces")[0], { name: "Oma" });
+    await faces.locator('[data-face="Jürgen_2"] b').waitFor();
+    assert.deepEqual(sent(state, "POST", "/nvr/faces"), [{ name: "Jürgen_2" }]);
+    await sound(page, "faces");
+    await faces.screenshot({ path: `${out}/gesichter-${WIDTH}.png`, animations: "disabled" });
 
     // Known plates: a read plate becomes a known one.
     await page.locator("#nvr-plates").getByRole("button", { name: /Bekannte Kennzeichen/ }).click();
     const plates = page.locator("#nvr-plates");
     await plates.getByText("B-XY 987").waitFor();
-    await plates.getByRole("button", { name: "Als bekannt übernehmen" }).click();
+    // A plate older than the newest 1000 vehicle events: nothing known, said with "–".
+    await plates.locator("li", { hasText: "HH-Q 4" }).getByText("gesehen: – · zuletzt: – · Kamera: –").waitFor();
+    await plates.getByText(de["nvr.plates.seenOld"]).waitFor();
+    await plates.locator("li", { hasText: "B-XY 987" }).getByText(/^gesehen: 1 · zuletzt: .+ · Kamera: Einfahrt$/).waitFor();
+    await plates.locator("li", { hasText: "B-XY 987" }).getByRole("button", { name: "Als bekannt übernehmen" }).click();
     await plates.getByLabel("Name", { exact: true }).last().fill("Nachbar");
     await plates.getByRole("button", { name: "Speichern" }).click();
     await page.waitForFunction(() => !!document.querySelector("#nvr-plates .seen") && document.querySelectorAll("#nvr-plates .seen .chip").length === 2);
@@ -539,6 +564,27 @@ try {
     await banner.getByRole("button", { name: "Wieder versuchen" }).click();
     await banner.waitFor({ state: "detached" });
     assert.equal(sent(state, "POST", "/nvr/detector/retry").length, 1);
+    await ctx.close();
+  }
+
+  // --- The exports alone exceed the limit: nothing is deleted, said in plain words ---
+  {
+    const { ctx, page } = await open("owner", (s) => {
+      s.storage = {
+        ...s.storage,
+        usedBytes: 250.4e9,
+        recordingsBytes: 20.4e9,
+        exportsBytes: 230e9,
+        cap: "exports_exceed",
+        lastCleanup: s.now - 3600,
+      };
+    });
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-cap-note").getByText(de["nvr.storage.capExports"]).waitFor();
+    await page.getByText("Belegt: 250 GB · Aufnahmen 20,4 GB, Exporte 230 GB · reicht etwa 12,4 Tage zurück").waitFor();
+    await page.getByText(/^Zuletzt aufgeräumt: \d\d:\d\d$/).waitFor();
+    await sound(page, "exports exceed");
+    await shot(page, "einstellungen-exporte-ueber-grenze");
     await ctx.close();
   }
 
@@ -621,10 +667,12 @@ try {
     await page.getByText("Wähle auf der Zeitleiste eine Zeit.").waitFor();
     // 07:00 of today lies inside the recorded stretch.
     const track = await page.locator(".timeline .track").boundingBox();
-    await page.mouse.click(track.x + (track.width * 7) / 24 + 1, track.y + 20);
-    await page.getByRole("status").filter({ hasText: /^07:00:\d\d$/ }).waitFor();
-    assert.ok(
-      state.requests.some(([m, p]) => m === "GET" && /^\/nvr\/cameras\/einfahrt\/vod\/\d+\/\d+\/master\.m3u8$/.test(p)),
+    // One pixel is about a minute of the day: 07:00 or the minute after.
+    await page.mouse.click(track.x + (track.width * 7) / 24 + 0.5, track.y + 20);
+    await page.getByRole("status").filter({ hasText: /^07:0[01]:\d\d$/ }).waitFor();
+    // The player asks for the HLS list of the hour (hls.js loads first where the browser has no HLS).
+    await until(
+      () => state.requests.some(([m, p]) => m === "GET" && /^\/nvr\/cameras\/einfahrt\/vod\/\d+\/\d+\/master\.m3u8$/.test(p)),
       "the player asks for the HLS list of the hour",
     );
     await page.getByRole("radio", { name: "6 h" }).click();
@@ -632,7 +680,7 @@ try {
     await page.getByRole("radio", { name: "24 h" }).click();
     await page.getByRole("button", { name: "Exportieren" }).click();
     const dialog = page.getByRole("dialog", { name: "Ausschnitt exportieren" });
-    assert.match(await dialog.getByLabel("Von").inputValue(), /^07:00:\d\d$/);
+    assert.match(await dialog.getByLabel("Von").inputValue(), /^07:0[01]:\d\d$/);
     await dialog.getByLabel("Von").fill("07:00:00");
     await dialog.getByLabel("Bis").fill("07:05:00");
     await dialog.getByLabel("Name").fill("Lieferung");
@@ -646,6 +694,11 @@ try {
       to: state.midnight + 7 * 3600 + 300,
       name: "Lieferung",
     });
+    // A failed export says why in plain words; one made outside TitanOS has no period.
+    await page.locator('[data-export="garten_ij56kl"]').getByText(de["nvr.export.failedHint"]).waitFor();
+    await page.locator('[data-export="garten_ij56kl"]').getByText("fehlgeschlagen").waitFor();
+    assert.equal(await page.locator('[data-export="garten_ij56kl"]').getByRole("link", { name: "Herunterladen" }).count(), 0);
+    await page.locator('[data-export="haustuer_frigate"]').getByText(/^Haustür · Zeitraum – · angelegt .+ · 4,2 MB$/).waitFor();
     const done = page.locator('[data-export="haustuer_ab12cd"]');
     assert.equal(
       await done.getByRole("link", { name: "Herunterladen" }).getAttribute("href"),
@@ -675,7 +728,7 @@ try {
     assert.equal(await page.locator(".grid .card").count(), 5, "the last seven days");
     await sound(page, "events");
     await shot(page, "ereignisse");
-    await page.getByLabel("Art").selectOption("vehicles");
+    await page.getByLabel("Art", { exact: true }).selectOption("vehicles");
     await page.waitForFunction(() => document.querySelectorAll(".grid .card").length === 1);
     assert.ok(state.requests.some(([, p]) => p.startsWith("/nvr/events?") && p.includes("label=car%2Cmotorcycle%2Cbicycle%2Cbus")));
     await page.getByRole("button", { name: /Auto · Einfahrt/ }).click();
@@ -695,7 +748,7 @@ try {
     await remove.getByRole("button", { name: "Löschen" }).click();
     await page.getByText("Keine Ereignisse für diese Auswahl.").waitFor();
     assert.equal(state.requests.filter(([m, p]) => m === "DELETE" && p.startsWith("/nvr/events/")).length, 1);
-    await page.getByLabel("Art").selectOption("");
+    await page.getByLabel("Art", { exact: true }).selectOption("");
     await page.getByRole("radio", { name: "Liste" }).click();
     await page.locator(".list .event-card").first().waitFor();
     await sound(page, "events list");

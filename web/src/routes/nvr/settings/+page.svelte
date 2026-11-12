@@ -15,7 +15,7 @@
 	import FacesRow from '#lib/nvr/FacesRow.svelte';
 	import { nvr, refreshNvr } from '#lib/nvr/nvr.svelte.ts';
 	import PlatesRow from '#lib/nvr/PlatesRow.svelte';
-	import { deviceName } from '#lib/nvr/texts.ts';
+	import { dayClock, deviceName } from '#lib/nvr/texts.ts';
 	import type { DetectorKind, NvrSettings } from '#lib/nvr/types.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 
@@ -126,6 +126,7 @@
 		}
 	}
 	const decimal = $derived(i18n.locale === 'de' ? ',' : '.');
+	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 </script>
 
 <PageHead title={t('nvr.menu.settings')} />
@@ -170,7 +171,13 @@
 			{#snippet description()}
 				<p>{t('nvr.storage.capHint')}</p>
 				<p>{usedText}</p>
-				{#if capNote}<p class="warn">{capNote}</p>{/if}
+				{#if capNote}<p class="warn" id="nvr-cap-note" role="status">
+						<Icon name="info" size={14} />
+						<span>{capNote}</span>
+					</p>{/if}
+				{#if store?.lastCleanup}<p>
+						{t('nvr.storage.lastCleanup', { time: dayClock(store.lastCleanup, locale) })}
+					</p>{/if}
 			{/snippet}
 			{#snippet control()}
 				<label class="unit"
@@ -395,7 +402,14 @@
 		gap: var(--space-2);
 	}
 	.warn {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-1-5);
 		color: var(--warn-text);
+	}
+	.warn :global(svg) {
+		flex: none;
+		margin-top: 3px;
 	}
 	.wrap {
 		overflow-wrap: anywhere;

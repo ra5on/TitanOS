@@ -131,14 +131,14 @@
 	<div class="filters">
 		<label
 			><span>{t('nvr.rec.camera')}</span>
-			<select class="field" bind:value={camera}>
+			<select class="field" bind:value={camera} aria-label={t('nvr.rec.camera')}>
 				<option value="">{t('nvr.events.allCameras')}</option>
 				{#each cameras as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 			</select>
 		</label>
 		<label
 			><span>{t('nvr.events.kind')}</span>
-			<select class="field" bind:value={kind}>
+			<select class="field" bind:value={kind} aria-label={t('nvr.events.kind')}>
 				<option value="">{t('nvr.events.allKinds')}</option>
 				<option value="persons">{t('nvr.detect.persons')}</option>
 				<option value="vehicles">{t('nvr.detect.vehicles')}</option>
@@ -147,7 +147,7 @@
 		</label>
 		<label
 			><span>{t('nvr.events.time')}</span>
-			<select class="field" bind:value={span}>
+			<select class="field" bind:value={span} aria-label={t('nvr.events.time')}>
 				<option value="day">{t('nvr.events.spanDay')}</option>
 				<option value="week">{t('nvr.events.spanWeek')}</option>
 				<option value="all">{t('nvr.events.spanAll')}</option>
@@ -171,6 +171,7 @@
 		/>
 	</div>
 
+	<p class="muted seen-hint">{t('nvr.events.seenHint')}</p>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if missing}
 		<p class="muted" role="status">{t('nvr.events.unavailable')}</p>
@@ -199,7 +200,11 @@
 								loading="lazy"
 							/></span
 						>
-						<b>{labelName(event.label)} · {nameOf(event.camera)}</b>
+						<b
+							>{labelName(event.label)} · {nameOf(event.camera)}{#if !event.reviewed}<span
+									class="sr-only">, {t('nvr.events.unseen')}</span
+								>{/if}</b
+						>
 						<small
 							>{dayClock(event.start, locale)}{event.subLabel
 								? ` · ${event.subLabel}`
@@ -263,6 +268,10 @@
 					<dt>{t('nvr.events.score')}</dt>
 					<dd>{Math.round(e.score * 100)} %</dd>
 				</div>
+				{#if e.kept}<div>
+						<dt>{t('nvr.events.kept')}</dt>
+						<dd>{t('nvr.events.keptText')}</dd>
+					</div>{/if}
 			</dl>
 			{#if detailError}<p class="notice-error" role="alert">{detailError}</p>{/if}
 			<div class="dialog-actions">
@@ -305,6 +314,11 @@
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
 		min-width: 0;
+	}
+	.seen-hint {
+		margin: 0;
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
 	}
 	.filters label {
 		display: inline-flex;

@@ -5,9 +5,9 @@
 	import { api, apiFetch, responseError } from '../api.ts';
 	import { apiPath } from '../cluster-node.ts';
 	import SettingRow from '../components/settings/SettingRow.svelte';
-	import { apiErrorText, i18n, t } from '../i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t, type MessageKey } from '../i18n/index.svelte.ts';
 	import Confirm from './Confirm.svelte';
-	import { dayClock } from './texts.ts';
+	import { dayClock, faceNameProblem } from './texts.ts';
 	import type { Faces } from './types.ts';
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
@@ -31,12 +31,17 @@
 		void load();
 	});
 
+	// A change answers with the library as it is now (docs/NVR.md); a 204
+	// (deleting) has no body, then the library is read again.
 	async function run(work: () => Promise<unknown>) {
 		busy = true;
 		error = '';
 		try {
-			await work();
-			await load();
+			const now = await work();
+			if (now && typeof now === 'object' && Array.isArray((now as Faces).faces)) {
+				faces = now as Faces;
+				missing = false;
+			} else await load();
 		} catch (err) {
 			error = apiErrorText(err);
 		} finally {
@@ -45,14 +50,24 @@
 	}
 	const person = (name: string) => `/nvr/faces/${encodeURIComponent(name)}`;
 
+	// Names follow the NAS's rule; what is wrong is said under the field.
+	const problemText = (name: string) => {
+		const problem = faceNameProblem(name);
+		return problem ? t(`nvr.faces.nameProblem.${problem}` as MessageKey) : '';
+	};
 	let newName = $state('');
+	let newTried = $state(false);
+	const newProblem = $derived(newName.trim() || newTried ? problemText(newName) : '');
 	function add(event: SubmitEvent) {
 		event.preventDefault();
+		newTried = true;
 		const name = newName.trim();
-		if (!name) return;
+		if (faceNameProblem(name)) return;
 		void run(async () => {
-			await api.post('/nvr/faces', { name });
+			const now = await api.post<Faces>('/nvr/faces', { name });
 			newName = '';
+			newTried = false;
+			return now;
 		});
 	}
 	function upload(name: string, input: HTMLInputElement) {
@@ -66,26 +81,30 @@
 				headers: { 'Content-Type': file.type || 'image/jpeg' },
 			});
 			if (!res.ok) throw await responseError(res);
+			return res.json().catch(() => null);
 		});
 	}
 	let renaming = $state('');
 	let renameTo = $state('');
+	const renameProblem = $derived(renaming ? problemText(renameTo) : '');
 	function rename(event: SubmitEvent) {
 		event.preventDefault();
 		const from = renaming;
 		const to = renameTo.trim();
-		if (!to || to === from) {
+		if (to === from) {
 			renaming = '';
 			return;
 		}
+		if (faceNameProblem(to)) return;
 		void run(async () => {
-			await api.put(person(from), { name: to });
+			const now = await api.put<Faces>(person(from), { name: to });
 			renaming = '';
+			return now;
 		});
 	}
 	let removing = $state('');
 	let assign = $state<Record<string, string>>({});
-	const attempt = (file: string) => `/nvr/faces/attempts/${encodeURIComponent(file)}`;
+	const attempt = (file: string) => `/nvr/face-attempts/${encodeURIComponent(file)}`;
 
 	const summary = $derived(
 		missing
@@ -127,11 +146,22 @@
 										maxlength="40"
 										bind:value={renameTo}
 										aria-label={t('nvr.faces.name')}
+										aria-invalid={renameProblem ? 'true' : undefined}
+										aria-describedby="nvr-face-rename-rule"
 										autofocus
 									/>
-									<button type="submit" class="btn" disabled={busy}>{t('common.save')}</button>
+									<button type="submit" class="btn" disabled={busy || !!renameProblem}
+										>{t('common.save')}</button
+									>
 									<button type="button" class="btn" onclick={() => (renaming = '')}
 										>{t('common.cancel')}</button
+									>
+									<small
+										id="nvr-face-rename-rule"
+										class="rule"
+										class:bad={!!renameProblem}
+										role={renameProblem ? 'alert' : undefined}
+										>{renameProblem || t('nvr.faces.nameRule')}</small
 									>
 								</form>
 							{:else}
@@ -187,17 +217,25 @@
 					</li>
 				{/each}
 			</ul>
-			<form class="inline add" onsubmit={add}>
+			<form class="inline add" onsubmit={add} novalidate>
 				<input
 					class="field"
 					type="text"
 					maxlength="40"
 					bind:value={newName}
 					aria-label={t('nvr.faces.name')}
+					aria-invalid={newProblem ? 'true' : undefined}
+					aria-describedby="nvr-face-add-rule"
 					placeholder={t('nvr.faces.name')}
 				/>
-				<button type="submit" class="btn" disabled={busy || !newName.trim()}
+				<button type="submit" class="btn" disabled={busy || !newName.trim() || !!newProblem}
 					>{t('nvr.faces.add')}</button
+				>
+				<small
+					id="nvr-face-add-rule"
+					class="rule"
+					class:bad={!!newProblem}
+					role={newProblem ? 'alert' : undefined}>{newProblem || t('nvr.faces.nameRule')}</small
 				>
 			</form>
 			<p class="muted">{t('nvr.faces.pictureHint')}</p>
@@ -229,7 +267,9 @@
 									disabled={busy || !(assign[a.file] ?? a.guess)}
 									onclick={() =>
 										run(() =>
-											api.post(`${attempt(a.file)}/assign`, { name: assign[a.file] ?? a.guess }),
+											api.post<Faces>(`${attempt(a.file)}/assign`, {
+												name: assign[a.file] ?? a.guess,
+											}),
 										)}>{t('nvr.faces.assign')}</button
 								>
 								<button
@@ -341,6 +381,15 @@
 	}
 	.add {
 		margin: var(--space-3) 0 var(--space-2);
+	}
+	.rule {
+		flex: 1 1 100%;
+		color: var(--muted);
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
+	}
+	.rule.bad {
+		color: var(--error-text);
 	}
 	.file {
 		position: relative;

@@ -266,6 +266,11 @@
 			exportBusy = false;
 		}
 	}
+	/** The period of an export; one not made through TitanOS has none (0). */
+	function exportPeriod(item: NvrExport): string {
+		if (!item.from || !item.to) return '–';
+		return `${dayClock(item.from, locale)} – ${clock(item.to, locale)}`;
+	}
 	let renaming = $state<NvrExport | null>(null);
 	let newName = $state('');
 	let removing = $state<NvrExport | null>(null);
@@ -439,12 +444,23 @@
 						<div class="srow-text">
 							<span class="srow-title">{item.name}</span>
 							<p class="srow-desc">
-								{nameOf(item.camera)} · {dayClock(item.from, locale)} – {clock(item.to, locale)}
-								{#if item.sizeBytes !== null}
-									· {formatBytes(item.sizeBytes)}{/if}
-								{#if nvrAdmin() && item.owner}
-									· {item.owner}{/if}
+								{[
+									nameOf(item.camera),
+									t('nvr.export.range', { range: exportPeriod(item) }),
+									item.created
+										? t('nvr.export.created', { time: dayClock(item.created, locale) })
+										: '',
+									item.sizeBytes !== null && item.sizeBytes !== undefined
+										? formatBytes(item.sizeBytes)
+										: '',
+									nvrAdmin() && item.owner ? item.owner : '',
+								]
+									.filter(Boolean)
+									.join(' · ')}
 							</p>
+							{#if item.state === 'failed'}<p class="srow-desc">
+									{t('nvr.export.failedHint')}
+								</p>{/if}
 						</div>
 						<div class="srow-ctl">
 							<span

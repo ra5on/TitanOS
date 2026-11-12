@@ -41,7 +41,11 @@
 			/>{/if}</span
 	>
 	<span class="what">
-		<b>{labelName(event.label)} · {camera}</b>
+		<b
+			>{labelName(event.label)} · {camera}{#if !event.reviewed}<span class="sr-only"
+					>, {t('nvr.events.unseen')}</span
+				>{/if}</b
+		>
 		<small>{dayClock(event.start, locale)}{extra ? ` · ${extra}` : ''}</small>
 	</span>
 {/snippet}

@@ -282,7 +282,13 @@ export type Faces = {
 	faces: { name: string; images: string[] }[];
 	attempts: FaceAttempt[];
 };
-export type RecognizedPlate = { plate: string; count: number; lastSeen: number; camera: string };
+/** count 0, lastSeen null and camera "": read before the newest 1000 vehicle events. */
+export type RecognizedPlate = {
+	plate: string;
+	count: number;
+	lastSeen: number | null;
+	camera: string;
+};
 
 export type UserCameras = {
 	admin: boolean;

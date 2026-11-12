@@ -118,9 +118,9 @@
 								><b class="mono">{plate.plate}</b>
 								<small
 									>{t('nvr.plates.seenInfo', {
-										count: plate.count,
-										time: dayClock(plate.lastSeen, locale),
-										camera: nameOf(plate.camera),
+										count: plate.count > 0 ? String(plate.count) : '–',
+										time: plate.lastSeen ? dayClock(plate.lastSeen, locale) : '–',
+										camera: plate.camera ? nameOf(plate.camera) : '–',
 									})}</small
 								></span
 							>
@@ -135,6 +135,9 @@
 						</li>
 					{/each}
 				</ul>
+				{#if recognized.some((p) => !p.count || !p.lastSeen || !p.camera)}
+					<p class="muted old">{t('nvr.plates.seenOld')}</p>
+				{/if}
 			{/if}
 		{/if}
 	</div>
@@ -188,5 +191,9 @@
 	}
 	p {
 		margin: 0;
+	}
+	.old {
+		margin-top: var(--space-2);
+		font-size: var(--text-sm);
 	}
 </style>

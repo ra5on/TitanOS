@@ -160,12 +160,15 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       event(2, "einfahrt", "car", 3600 * 3, { subLabel: "Unser Auto", plate: "K-TI 2026" }),
       event(3, "garten", "person", 3600 * 4),
       event(4, "garten", "cat", 3600 * 5),
-      event(5, "haustuer", "person", 3600 * 10, { hasClip: false }),
-      event(6, "haustuer", "dog", day + 3600),
+      event(5, "haustuer", "person", 3600 * 10, { hasClip: false, kept: true }),
+      event(6, "haustuer", "dog", 8 * day + 3600),
     ],
     exports: [
       { id: "haustuer_ab12cd", camera: "haustuer", name: "Paketbote", from: now - 7200, to: now - 7080, created: now - 3600, state: "done", sizeBytes: 18234567, owner: "owner" },
       { id: "einfahrt_ef34gh", camera: "einfahrt", name: "Einfahrt am Nachmittag mit einem ziemlich langen Namen", from: now - 5000, to: now - 3200, created: now - 60, state: "running", sizeBytes: null, owner: "owner" },
+      { id: "garten_ij56kl", camera: "garten", name: "Lücke", from: now - day - 3600, to: now - day - 3000, created: now - day, state: "failed", sizeBytes: null, owner: "" },
+      // Made outside TitanOS (Frigate's own export): no period known.
+      { id: "haustuer_frigate", camera: "haustuer", name: "Alter Export", from: 0, to: 0, created: now - 3 * day, state: "done", sizeBytes: 4200000, owner: "" },
     ],
     faces: {
       enabled: true,
@@ -181,6 +184,8 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
     recognized: [
       { plate: "K-TI 2026", count: 14, lastSeen: now - 3600 * 3, camera: "einfahrt" },
       { plate: "B-XY 987", count: 1, lastSeen: now - day, camera: "einfahrt" },
+      // Older than the newest 1000 vehicle events: nothing known about it.
+      { plate: "HH-Q 4", count: 0, lastSeen: null, camera: "" },
     ],
     ptz: { supported: true, features: ["pt", "zoom"], presets: ["home", "tor", "terrasse"] },
     log: [
@@ -498,28 +503,45 @@ export async function installNvr(target, state = nvrState()) {
     if (path === "/nvr/faces") {
       if (adminOnly()) return;
       if (method === "POST") {
+        if (s.faces.faces.some((f) => f.name === body.name)) return fail(409, "nvr_face_exists");
         s.faces.faces.push({ name: body.name, images: [] });
-        return json({ name: body.name, images: [] }, 201);
+        return json(s.faces, 201);
       }
       return json(s.faces);
     }
-    if ((m = /^\/nvr\/faces\/attempts\/([^/]+)(\/assign)?$/.exec(path))) {
+    // Faces seen but not assigned (docs/NVR.md: /face-attempts, not /faces/attempts).
+    if ((m = /^\/nvr\/face-attempts\/([^/]+)(\/assign)?$/.exec(path))) {
       const file = decodeURIComponent(m[1]);
       if (method === "GET") return image(file);
       s.faces.attempts = s.faces.attempts.filter((a) => a.file !== file);
-      if (m[2]) s.faces.faces.find((f) => f.name === body.name)?.images.push("neu.webp");
-      return route.fulfill({ status: 204 });
+      if (!m[2]) return route.fulfill({ status: 204 });
+      let face = s.faces.faces.find((f) => f.name === body.name);
+      if (!face) s.faces.faces.push((face = { name: body.name, images: [] }));
+      face.images.push("neu.webp");
+      return json(s.faces);
     }
     if ((m = /^\/nvr\/faces\/([^/]+)(\/images(\/[^/]+)?)?$/.exec(path))) {
       const name = decodeURIComponent(m[1]);
       const face = s.faces.faces.find((f) => f.name === name);
       if (!face) return fail(404, "nvr_face_not_found");
       if (m[3] && method === "GET") return image(name + m[3]);
-      if (m[3] && method === "DELETE") face.images = face.images.filter((f) => "/" + f !== decodeURIComponent(m[3]));
-      else if (m[2] && method === "POST") face.images.push(`neu${face.images.length}.webp`);
-      else if (method === "PUT") face.name = body.name;
-      else if (method === "DELETE") s.faces.faces = s.faces.faces.filter((f) => f !== face);
-      return route.fulfill({ status: 204 });
+      if (m[3] && method === "DELETE") {
+        face.images = face.images.filter((f) => "/" + f !== decodeURIComponent(m[3]));
+        return route.fulfill({ status: 204 });
+      }
+      if (m[2] && method === "POST") {
+        face.images.push(`neu${face.images.length}.webp`);
+        return json(s.faces, 201);
+      }
+      if (method === "PUT") {
+        face.name = body.name;
+        return json(s.faces);
+      }
+      if (method === "DELETE") {
+        s.faces.faces = s.faces.faces.filter((f) => f !== face);
+        return route.fulfill({ status: 204 });
+      }
+      return json(s.faces);
     }
     if (path === "/nvr/plates/recognized") return adminOnly() || json({ plates: s.recognized });
     return fail(404, "not_found");

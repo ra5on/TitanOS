@@ -115,3 +115,16 @@ export function dayClock(seconds: number, locale: string): string {
 				minute: '2-digit',
 			});
 }
+
+/** Why a name cannot be a person of the known faces; '' when it can (nvr/faces.go). */
+export type FaceNameProblem = '' | 'empty' | 'long' | 'space' | 'start' | 'chars' | 'train';
+export function faceNameProblem(raw: string): FaceNameProblem {
+	const name = raw.trim();
+	if (!name) return 'empty';
+	if (/\s/.test(name)) return 'space';
+	if ([...name].length > 40) return 'long';
+	if (name === 'train') return 'train';
+	if (!/^[\p{L}\p{N}]/u.test(name)) return 'start';
+	if (!/^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u.test(name)) return 'chars';
+	return '';
+}
