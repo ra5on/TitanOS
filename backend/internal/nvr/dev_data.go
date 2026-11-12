@@ -141,6 +141,9 @@ func (f *DevFrigate) Seed(cameras []Camera, now time.Time) {
 			if h == 40 {
 				entry.Seconds, entry.MB = 2700, 340
 			}
+			if entry.Seconds < 1 {
+				continue
+			}
 			d.hours[c.ID] = append(d.hours[c.ID], entry)
 		}
 		labels := c.Detect.Objects

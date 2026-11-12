@@ -302,12 +302,6 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(stats)
 	case path == "/api/logs/frigate":
 		writeJSON(map[string]any{"totalLines": len(log), "lines": log})
-	case path == "/api/recordings/storage":
-		usage := map[string]any{}
-		for id := range cameras {
-			usage[id] = map[string]any{"bandwidth": 1.2, "usage": 20480.0, "usage_percent": 4.0}
-		}
-		writeJSON(usage)
 	case strings.HasPrefix(path, "/api/") && strings.HasSuffix(path, "/latest.jpg"):
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/"), "/latest.jpg")
 		if _, ok := cameras[id]; !ok {
