@@ -271,7 +271,7 @@
 	"nvr.cameras.edit": "Ändern",
 	"nvr.cameras.remove": "Entfernen",
 	"nvr.cameras.removeTitle": "Kamera „{name}“ entfernen?",
-	"nvr.cameras.removeText": "Von dieser Kamera wird dann nichts mehr aufgenommen. Ihre bisherigen Aufnahmen bleiben, bis ihre Aufbewahrungszeit abgelaufen ist.",
+	"nvr.cameras.removeText": "Von dieser Kamera wird dann nichts mehr aufgenommen. Ihre bisherigen Aufnahmen löscht der NVR beim nächsten Aufräumen (spätestens nach einer Stunde), auch die behaltener Ereignisse; die Bilder ihrer Ereignisse nach zehn Tagen. Exporte bleiben – exportiere vorher, was du behalten willst.",
 	"nvr.cameras.removeRights": "Die Freigaben dieser Kamera für Benutzer entfallen.",
 	"nvr.events.all": "Alle Ereignisse",
 	"nvr.events.none": "Noch nichts erkannt.",

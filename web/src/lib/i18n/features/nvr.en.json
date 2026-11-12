@@ -271,7 +271,7 @@
 	"nvr.cameras.edit": "Change",
 	"nvr.cameras.remove": "Remove",
 	"nvr.cameras.removeTitle": "Remove the camera “{name}”?",
-	"nvr.cameras.removeText": "Nothing is recorded from this camera any more. Its recordings so far stay until their days to keep are over.",
+	"nvr.cameras.removeText": "Nothing more is recorded from this camera. The NVR deletes its recordings at the next cleanup (within an hour), those of kept events too; the pictures of its events after ten days. Exports stay – export first what you want to keep.",
 	"nvr.cameras.removeRights": "The shares of this camera for users are dropped.",
 	"nvr.events.all": "All events",
 	"nvr.events.none": "Nothing recognized yet.",

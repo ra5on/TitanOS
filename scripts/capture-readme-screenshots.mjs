@@ -1,6 +1,7 @@
 // README pictures of the current UI with isolated demonstration data (docs/screenshots/README.md).
 // PW=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5290 node scripts/capture-readme-screenshots.mjs
 import { fixtureFactory } from './test-ui-fixtures.mjs';
+import { installNvr } from './test-ui-nvr-fixtures.mjs';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PW || 'playwright');
 await mkdir(process.env.OUT || 'out/readme-shots', { recursive: true });
@@ -11,7 +12,7 @@ const names = [['Angebote', true], ['Rechnungen 2026', true], ['Verträge', true
 const files = names.map(([n, d, s]) => ({ name: n, dir: d, size: s ?? 0, modified: '2026-11-0' + (1 + (n.length % 7)) + 'T10:00:00Z' }));
 // ONLY=name,name captures just these pictures.
 const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
-async function shot(path, name, { w = 1600, h = 1000, max = true, act } = {}) {
+async function shot(path, name, { w = 1600, h = 1000, max = true, act, nvr = false } = {}) {
   if (only && !only.includes(name)) return;
   const made = await create('owner', 'graphit', w);
   await made.page.setViewportSize({ width: w, height: h });
@@ -21,6 +22,8 @@ async function shot(path, name, { w = 1600, h = 1000, max = true, act } = {}) {
   const app = (name, image, state, port, cpu, mem, update = false) => ({ id: name, name: name + '-server-1', image, state, since: '2026-11-08T06:00:00Z', ports: port ? [{ host: port, container: port, protocol: 'tcp' }] : [], app: name, service: 'server', managed: true, cpuPercent: cpu, memoryBytes: mem, cpuHistory: [], webui: port ? String(port) : '', publicUrl: '', icon: '', updateAvailable: update });
   made.data.dockerContainers = [app('immich', 'ghcr.io/immich-app/immich-server:release', 'running', 2283, 6, 1.2e9, true), app('jellyfin', 'jellyfin/jellyfin:latest', 'running', 8096, 3, 640e6), app('paperless', 'ghcr.io/paperless-ngx/paperless-ngx:latest', 'running', 8000, 1, 410e6), app('home-assistant', 'ghcr.io/home-assistant/home-assistant:stable', 'running', 8123, 2, 520e6), app('vaultwarden', 'vaultwarden/server:latest', 'exited', 8085, 0, 0)];
   made.data.dockerApps = ['immich', 'jellyfin', 'paperless', 'home-assistant', 'vaultwarden'];
+  // PLAN 79-7: the NVR with four sample cameras (test-ui-nvr-fixtures.mjs).
+  if (nvr) await installNvr(made.ctx);
   await made.page.goto((process.env.UI_URL || 'http://127.0.0.1:5290') + path);
   await made.page.waitForTimeout(4000);
   if (max && path !== '/') {
@@ -35,6 +38,7 @@ await shot('/', 'arbeitsplatz', { max: false });
 await shot('/docker', 'docker');
 await shot('/files?root=share/Documents', 'dateien', { act: async (p) => { const f = p.frames().find((x) => x !== p.mainFrame()); await f.locator('text=Gehäuse Deckel.3mf').click(); await f.locator('text=Kfz-Versicherung 2026.pdf').click({ modifiers: ['Control'] }); await p.waitForTimeout(300); } });
 await shot('/vms', 'vms');
+await shot('/nvr', 'nvr', { nvr: true });
 await shot('/shares', 'freigaben');
 await shot('/storage', 'speicher');
 await shot('/settings/appearance', 'darstellung');
