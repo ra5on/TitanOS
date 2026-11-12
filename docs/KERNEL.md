@@ -2,7 +2,7 @@
 
 Stand 31.10.2026 (Entscheidung des Projektinhabers zu Punkt 5a). Unter **Einstellungen › Updates › Kernel** wählt man:
 
-- **Stabil** (Standard): der Kernel von Debian 13 (`linux-image-amd64` aus trixie).
+- **Stabil** (Standard): der Kernel von Debian 13 (`linux-image-amd64` aus trixie). Einzige Ausnahme bei der Firmware: `firmware-intel-misc` (Intel-NPU, `intel/vpu`) kommt seit 0.78 auch hier aus `trixie-backports` (`build/sandbox/etc/apt`), weil der NPU-Treiber im Frigate-Abbild des NVR eine Firmware ab Juli 2025 verlangt (docs/NVR.md). Der Kernel bleibt der von trixie.
 - **Neu**: der Kernel aus `trixie-backports` (6.16 oder neuer), samt neuerer Firmware-Pakete von dort. Gedacht für sehr neue Hardware, z. B. RTL8127, Intel E610, neueste Intel/AMD-Grafik oder NPU-Funktionen von Arrow Lake.
 
 Die Wahl steht im optionalen Feld `kernel` von `/config/system/update.json` (`"new"` oder fehlend). Ältere Versionen ignorieren es und installieren die stabile Variante.
