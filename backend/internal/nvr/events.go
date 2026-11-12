@@ -35,7 +35,9 @@ type Event struct {
 	HasSnap  bool     `json:"hasSnapshot"`
 	Zones    []string `json:"zones"`
 	Reviewed bool     `json:"reviewed"`
-	// Kept: retained for good; the storage cap never deletes its recording.
+	// Kept is Frigate's "retain indefinitely" (TitanOS cannot set it): the
+	// storage cap leaves the event's recording out where it finds it, but
+	// Frigate's retention in days deletes the recording all the same.
 	Kept bool `json:"kept"`
 }
 

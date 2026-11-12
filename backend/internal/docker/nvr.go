@@ -61,7 +61,9 @@ type NVRSpec struct {
 	// USBBus passes the whole USB bus (a Coral changes its device number
 	// when its firmware is loaded, so one node is not enough).
 	USBBus bool
-	Ports  []NVRPort
+	// PidsLimit bounds processes and threads; 0 is NVRPidsLimit.
+	PidsLimit int64
+	Ports     []NVRPort
 	// Hash goes into NVRSpecLabel.
 	Hash string
 }
@@ -70,11 +72,9 @@ func ownNVR(labels map[string]string, name string) bool {
 	return labels[NVRLabel] == "1" && strings.TrimPrefix(name, "/") == NVRName
 }
 
-// NVRPidsLimit bounds the processes and threads of the container (a
-// runaway ffmpeg or a fork loop). Frigate runs one Python process per
-// camera and service, ffmpeg twice per camera and OpenVINO's threads;
-// threads count. The real run with one camera measured far below
-// (docs/NVR.md); 8192 leaves room for 64 cameras.
+// NVRPidsLimit bounds the processes and threads of the container when
+// the spec names no limit (a runaway ffmpeg or a fork loop). Threads
+// count; the NVR's own limit grows with the cameras (nvr.pidsLimit).
 const NVRPidsLimit = 8192
 
 // nvrMount is a bind mount. Unlike "Binds", the engine refuses a source
@@ -98,7 +98,10 @@ func nvrCreateBody(spec NVRSpec) map[string]any {
 	if spec.USBBus {
 		mounts = append(mounts, nvrMount("/dev/bus/usb", "/dev/bus/usb", false))
 	}
-	pids := int64(NVRPidsLimit)
+	pids := spec.PidsLimit
+	if pids <= 0 {
+		pids = NVRPidsLimit
+	}
 	host := map[string]any{
 		"NetworkMode": NVRName,
 		"Mounts":      mounts,
