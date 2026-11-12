@@ -124,7 +124,7 @@
 		</p>
 	{/if}
 	{#if prefs.names}<span class="name">{camera.name}</span>{/if}
-	{#if prefs.recDot && recording}<span class="rec" title={t('nvr.live.recording')}
+	{#if prefs.recDot && recording && !arranging}<span class="rec" title={t('nvr.live.recording')}
 			><span class="sr-only">{t('nvr.live.recording')}</span></span
 		>{/if}
 	{#if prefs.marks && seen.length}
@@ -239,9 +239,14 @@
 		overflow-wrap: anywhere;
 	}
 	.state.over {
-		inset: auto 0 44px 0;
-		padding: var(--space-1) var(--space-3);
-		background: rgb(11 15 20 / 0.7);
+		inset: 8px auto auto 8px;
+		display: block;
+		max-width: calc(100% - 40px);
+		padding: 2px 8px;
+		border-radius: 6px;
+		background: rgb(11 15 20 / 0.78);
+		color: #fff;
+		text-align: left;
 	}
 	.name,
 	.mode,

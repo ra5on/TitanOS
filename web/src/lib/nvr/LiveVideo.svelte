@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	// PLAN 79-7: the picture of one camera. Live video over MSE (mse.ts); when
 	// the browser has no MSE (iPhone before iOS 17.1), the stream cannot be
 	// played or the connection keeps failing, a still picture refreshed every
@@ -126,28 +127,41 @@
 		if (!wantsStill) return;
 		let stopped = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		const load = () => {
+		// Fetched as a blob: the answer is never cached (no-store), so handing
+		// the address to the picture would load it twice and flicker.
+		const load = async () => {
 			if (stopped) return;
-			const src = apiPath(snapshotPath(camera, px, Date.now()));
-			const img = new Image();
-			img.onload = () => {
-				if (stopped) return;
-				still = src;
-				stillFailed = false;
-				timer = setTimeout(load, stillMs);
-			};
-			img.onerror = () => {
-				if (stopped) return;
-				stillFailed = true;
-				timer = setTimeout(load, Math.max(stillMs, 5000));
-			};
-			img.src = src;
+			let ok = false;
+			try {
+				const res = await fetch(apiPath(snapshotPath(camera, px, Date.now())), {
+					credentials: 'same-origin',
+				});
+				if (res.ok && res.headers.get('content-type')?.startsWith('image/')) {
+					const url = URL.createObjectURL(await res.blob());
+					if (stopped) URL.revokeObjectURL(url);
+					else {
+						const old = still;
+						still = url;
+						// The old picture stays until the new one is painted.
+						if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
+						ok = true;
+					}
+				}
+			} catch {
+				// No connection: tried again below.
+			}
+			if (stopped) return;
+			stillFailed = !ok;
+			timer = setTimeout(load, ok ? stillMs : Math.max(stillMs, 5000));
 		};
-		load();
+		void load();
 		return () => {
 			stopped = true;
 			clearTimeout(timer);
 		};
+	});
+	$effect(() => () => {
+		if (still) URL.revokeObjectURL(untrack(() => still));
 	});
 
 	const shown = $derived<'live' | 'still' | 'none'>(

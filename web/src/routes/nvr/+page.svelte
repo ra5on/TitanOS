@@ -5,6 +5,7 @@
 	// the desktop's settings. Events beside the pictures are an option. At
 	// phone width the tiles stand below each other; their order is the
 	// account's own too.
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -36,7 +37,7 @@
 	const anyRecordings = $derived(nvr.cameras.some(mayRecordings));
 
 	$effect(() => connectNvrPrefs());
-	$effect(() => watchFeed());
+	$effect(() => untrack(() => watchFeed()));
 	const prefs = $derived<NvrPrefs>(nvrLink.prefs ?? defaultNvrPrefs());
 
 	// ---- The wall ----
@@ -202,7 +203,7 @@
 	{/if}
 {:else}
 	<div class="live" class:full class:hide-bar={full && prefs.hideBar} bind:this={root}>
-		<div class="bar" role="toolbar" aria-label={t('nvr.live.toolbar')}>
+		<div class="live-bar" role="toolbar" aria-label={t('nvr.live.toolbar')}>
 			{#if arranging}
 				<span class="hint">{stacked ? t('nvr.arrange.hintPhone') : t('nvr.arrange.hint')}</span>
 				<span class="spacer"></span>
@@ -400,23 +401,23 @@
 		background: var(--bg);
 		overflow: auto;
 	}
-	.live.hide-bar .bar {
+	.live.hide-bar .live-bar {
 		display: none;
 	}
-	.bar {
+	.live-bar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
 		min-width: 0;
 	}
-	.bar .btn {
+	.live-bar .btn {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
 		min-height: 32px;
 	}
-	.bar .btn.on {
+	.live-bar .btn.on {
 		border-color: var(--accent);
 		background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 	}
@@ -461,6 +462,7 @@
 		position: absolute;
 	}
 	.tile.row {
+		flex: none;
 		width: 100%;
 		aspect-ratio: 16 / 9;
 	}
@@ -586,6 +588,11 @@
 	@media (max-width: 760px) {
 		.body {
 			flex-direction: column;
+			align-items: stretch;
+		}
+		.wall {
+			flex: none;
+			width: 100%;
 		}
 		.events {
 			flex: none;
