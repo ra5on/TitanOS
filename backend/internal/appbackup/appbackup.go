@@ -245,6 +245,14 @@ func (m *Manager) Status() (*Operation, bool) {
 // restart must not silently permit application changes or an app downgrade.
 func (m *Manager) Busy() bool {
 	m.mu.Lock()
+	scanned := m.scanned
+	m.mu.Unlock()
+	if !scanned {
+		// Asked before the first round of Run after the volumes settled:
+		// look now instead of refusing for up to one round.
+		m.Discover()
+	}
+	m.mu.Lock()
 	defer m.mu.Unlock()
 	return !m.loaded || !m.scanned || m.pending != nil || m.active
 }

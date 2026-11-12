@@ -260,3 +260,22 @@ func onStick(store *config.Store) bool {
 	var op *Operation
 	return store.ReadJSON(pointerFile, &op) == nil && op != nil
 }
+
+// Right after a start nothing may be refused only because the first round
+// of Run has not come yet: Busy looks at the settled volumes itself.
+func TestBusyLooksItselfAfterTheVolumesSettled(t *testing.T) {
+	store, mnt := config.Open(t.TempDir()), t.TempDir()
+	m := runManager(t, store, mnt)
+	settled := false
+	m.Settled = func() bool { return settled }
+	m.mu.Lock()
+	m.scanned, m.looked = false, nil
+	m.mu.Unlock()
+	if !m.Busy() {
+		t.Fatal("not busy although the volumes are not settled")
+	}
+	settled = true
+	if m.Busy() {
+		t.Fatal("busy although the volumes are settled and hold no pointer")
+	}
+}
