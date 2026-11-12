@@ -516,6 +516,11 @@ textarea {
 	textarea.field {
 		font-size: max(16px, 1rem);
 	}
+	/* The same reason: at 16 px a long choice needs every pixel of a
+	   narrow window. */
+	select.field {
+		padding-inline: 0.5rem;
+	}
 	/* iOS Safari zooms into every field under 16 px and stays zoomed after
 	   leaving it (login, search on the phone home): no field may be smaller. */
 	input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
@@ -1452,6 +1457,12 @@ span.srow-chev {
 	}
 	.srow-head > .srow-ico ~ .srow-ctl {
 		padding-left: calc(24px + var(--space-4));
+	}
+	/* PLAN 79-14/79-16: a native select shows its chosen option in one line
+	   and cannot wrap. In a narrow window it gets the whole width of the row
+	   (no indentation under the symbol), so a long choice is not cut. */
+	.srow-head > .srow-ico ~ .srow-ctl:has(> select.field) {
+		padding-left: 0;
 	}
 	.srow-ctl :is(select.field, input.field),
 	.srow-ctl

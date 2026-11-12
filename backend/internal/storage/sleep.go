@@ -584,6 +584,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	}
 	m.mu.RUnlock()
 	next := map[string]sleepSample{}
+	volumeOf := map[string]string{}
 	var problems []DiskSleepError
 	m.mu.RLock()
 	previousTimes := m.diskSleepTimes
@@ -608,7 +609,8 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 		// Members of a volume take its value, a disk's own value comes
 		// first. Never sleeping keeps no sample: switching sleep on again
 		// starts a full idle period.
-		minutes, _ := settings.effective(ids[device.Name], classify(device, byUUID).Volume)
+		volumeOf[name] = classify(device, byUUID).Volume
+		minutes, _ := settings.effective(ids[device.Name], volumeOf[name])
 		if minutes == 0 {
 			continue
 		}
@@ -662,16 +664,30 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	}
 	m.sleepSamples = next
 	sort.Slice(problems, func(i, j int) bool { return problems[i].Disk < problems[j].Disk })
-	asleep := map[string]bool{}
+	asleep, asleepVolumes := map[string]bool{}, map[string]bool{}
 	for name, sample := range next {
 		if sample.attempted && sample.err == "" {
 			asleep[name] = true
+			if volume := volumeOf[name]; volume != "" {
+				asleepVolumes[volume] = true
+			}
 		}
 	}
 	m.mu.Lock()
-	m.diskSleepErrors, m.diskSleepAsleep, m.diskSleepTimes = problems, asleep, times
+	m.diskSleepErrors, m.diskSleepAsleep, m.diskSleepVolumes, m.diskSleepTimes = problems, asleep, asleepVolumes, times
 	m.mu.Unlock()
 	return nil
+}
+
+// VolumeAsleep tells whether a disk of the volume was sent to standby and
+// showed no activity since: reading or writing there would wake it. From
+// the RAM state of the sleep timer only; false when nothing is known.
+// Background work that can wait (emptying recycle bins) asks before it
+// touches a volume.
+func (m *Manager) VolumeAsleep(volume string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.diskSleepVolumes[volume]
 }
 
 // resetSleepSamples starts every timer afresh (caller holds actions). What
@@ -680,7 +696,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 func (m *Manager) resetSleepSamples() {
 	m.sleepSamples = nil
 	m.mu.Lock()
-	m.diskSleepAsleep = nil
+	m.diskSleepAsleep, m.diskSleepVolumes = nil, nil
 	times := map[string]sleepTimes{}
 	for name, entry := range m.diskSleepTimes {
 		if !entry.wokenAt.IsZero() {

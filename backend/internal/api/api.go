@@ -61,6 +61,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/sysdata"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
@@ -72,6 +73,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
@@ -97,6 +99,12 @@ type Options struct {
 	Startup *startup.Manager
 	Files   *files.Manager
 	Docker  *docker.Manager
+	// SystemData says where TitanOS keeps its own data while no volume is
+	// chosen; nil takes the first mounted volume by name.
+	SystemData *volumedata.Home
+	// SysData holds the choice of the volume for system data (PLAN 79-8);
+	// nil leaves the page "Systemdaten" without its routes' data.
+	SysData *sysdata.Manager
 	// SmartHistory keeps the daily SMART values per disk; nil keeps none.
 	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
@@ -346,6 +354,9 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Notify != nil {
 		s.opts.Notify.SetPersonalDataDir(s.notifyDir)
+		if home := s.opts.SystemData; home != nil {
+			s.opts.Notify.SetPersonalDataHold(func() (func(), bool) { return home.Hold("notify") })
+		}
 		s.opts.Notify.Audience = s.notifyAudience
 	}
 	s.haStore.check = make(chan struct{}, 1)

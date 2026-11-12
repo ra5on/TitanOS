@@ -30,6 +30,7 @@ func (w *titand) wireAccess() error {
 	// the configuration lives, and sticks wear out.
 	w.stickBackup = configbackup.NewManager(w.store, version.Version)
 	w.stickBackup.Disabled = w.opts.dev
+	w.stickBackup.DefaultVolume = w.systemData.Default
 	if err := w.stickBackup.Load(); err != nil {
 		slog.Warn("backup settings not readable from /config", "err", err)
 	}

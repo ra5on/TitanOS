@@ -97,6 +97,8 @@
 	"error.not_found": "This does not exist (any more).",
 	"error.note_changed": "The note was changed elsewhere in the meantime.",
 	"error.note_invalid": "The note cannot be saved like this.",
+	"error.invalid_volume": "This volume is not mounted. Choose a mounted volume.",
+	"error.vm_backup_recovery": "The disks of this VM must be checked first after an interrupted backup.",
 	"error.operation_failed": "This is not possible right now.",
 	"error.paper_failed": "Changing this entry did not work.",
 	"error.paper_off": "The paperwork autopilot is switched off for this account.",

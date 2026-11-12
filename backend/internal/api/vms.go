@@ -28,6 +28,7 @@ var vmErrors = []struct {
 	{vm.ErrServiceOff, http.StatusConflict, "service_off"},
 	{vm.ErrSnapshotBusy, http.StatusConflict, "vm_snapshot_busy"},
 	{vm.ErrSnapshotUnsupported, http.StatusConflict, "vm_snapshot_unsupported"},
+	{vm.ErrDiskBackupRecord, http.StatusConflict, "vm_backup_recovery"},
 	{vm.ErrSnapshotRecovery, http.StatusConflict, "vm_snapshot_recovery"},
 	{vm.ErrSnapshotRuntime, http.StatusConflict, "vm_snapshot_runtime"},
 	{vm.ErrSnapshotExists, http.StatusConflict, "vm_snapshot_exists"},
@@ -123,6 +124,7 @@ func (a vmsArea) registerDetails(mux *routeMux, g guards) {
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", g.heavyAppAdmin(a.handleVMSnapshotCreate))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", g.appAdmin(a.handleVMSnapshotSchedule))
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", g.heavyAppAdmin(a.handleVMSnapshotRecover))
+	mux.HandleFunc("POST /api/v1/vms/{name}/backup-recovery", g.heavyAppAdmin(a.handleVMBackupRecover))
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", g.heavyAppAdmin(a.handleVMSnapshotRestore))
 	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", g.heavyAppAdmin(a.handleVMSnapshotDelete))
 	mux.HandleFunc("POST /api/v1/vms/{name}/grow", g.heavyAppAdmin(a.handleVMGrow))

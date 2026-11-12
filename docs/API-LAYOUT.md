@@ -23,7 +23,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | area | `area_hooks.go` | – | 0 |
 | auth | `auth.go`, `auth_area.go` | `authArea` | 1 |
 | backup | `backup_coverage.go` | – | 2 |
-| backups | `backups.go` | `backupsArea` | 0 |
+| backups | `backups.go`, `backups_vmdisks.go` | `backupsArea` | 1 |
 | backuptarget | `backuptarget.go` | `backupTargetArea` | 0 |
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 2 |
 | cluster | `cluster.go` | `clusterArea` | 1 |
@@ -76,6 +76,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | snapshot | `snapshot_folders.go` | – | 1 |
 | startup | `startup.go` | `startupArea` | 0 |
 | storage | `storage.go`, `storage_crypt.go` | `storageArea`, `storageCryptArea` | 3 |
+| sysdata | `sysdata.go` | `sysDataArea` | 1 |
 | system | `system.go` | `powerArea`, `systemArea` | 0 |
 | tailscale | `tailscale.go` | `tailscaleArea` | 0 |
 | terminal | `terminal_console.go` | – | 1 |

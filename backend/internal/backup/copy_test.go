@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -68,8 +69,8 @@ func TestUSBCopyRetainsDeletedAndReplacesChanged(t *testing.T) {
 		t.Fatal("destination symlink accepted")
 	}
 	job.Destination.Folder = "backups/copy"
-	// A link or FIFO in the source is left out with a warning; the rest
-	// is still copied.
+	// A link in the source is kept as a link, never followed; a FIFO holds
+	// no data and is left out without a warning. The rest is copied.
 	os.Symlink("/etc/passwd", filepath.Join(source, "link"))
 	if err := syscall.Mkfifo(filepath.Join(source, "pipe"), 0o600); err != nil {
 		t.Fatal(err)
@@ -78,26 +79,22 @@ func TestUSBCopyRetainsDeletedAndReplacesChanged(t *testing.T) {
 	if err := m.copyUSB(context.Background(), job); err != nil {
 		t.Fatal("a link stopped the whole copy:", err)
 	}
-	for _, name := range []string{"link", "pipe"} {
-		if _, err := os.Lstat(filepath.Join(target, "backups/copy/docs", name)); !os.IsNotExist(err) {
-			t.Fatalf("%s copied", name)
-		}
+	if to, err := os.Readlink(filepath.Join(target, "backups/copy/docs/link")); err != nil || to != "/etc/passwd" {
+		t.Fatalf("link not kept as a link: %q %v", to, err)
+	}
+	if _, err := os.Lstat(filepath.Join(target, "backups/copy/docs/pipe")); !os.IsNotExist(err) {
+		t.Fatal("pipe copied")
 	}
 	if b, _ := os.ReadFile(filepath.Join(target, "backups/copy/docs/new.txt")); string(b) != "new" {
 		t.Fatal("rest not copied")
 	}
 	state := m.states[job.ID]
-	if state.Skipped != 2 || !strings.Contains(state.Warning, "docs/link") || !strings.Contains(state.Warning, "docs/pipe") {
-		t.Fatalf("not warned: %+v", state)
+	if state.Skipped != 0 || state.Warning != "" || len(state.Problems) != 0 {
+		t.Fatalf("a link or a pipe became a warning: %+v", state)
 	}
 	var saved State
-	if data, err := os.ReadFile(m.stateFile(job)); err != nil || json.Unmarshal(data, &saved) != nil || saved.Skipped != 2 {
+	if data, err := os.ReadFile(m.stateFile(job)); err != nil || json.Unmarshal(data, &saved) != nil || saved.Warning != "" {
 		t.Fatalf("state not saved: %s %v", data, err)
-	}
-	os.Remove(filepath.Join(source, "link"))
-	os.Remove(filepath.Join(source, "pipe"))
-	if err := m.copyUSB(context.Background(), job); err != nil || m.states[job.ID].Warning != "" || m.states[job.ID].Skipped != 0 {
-		t.Fatalf("warning stayed: %v %+v", err, m.states[job.ID])
 	}
 	m.WithUSB = func(context.Context, string, func(*os.Root) error) error { return errors.New("missing USB") }
 	if err := m.copyUSB(context.Background(), job); err == nil {
@@ -219,6 +216,20 @@ func TestCopySkipsProblemsAndKeepsGoing(t *testing.T) {
 			t.Errorf("warning %q lacks %q", state.Warning, want)
 		}
 	}
+	// The same as codes with paths, for the page to translate.
+	got := map[string]Problem{}
+	for _, problem := range state.Problems {
+		got[problem.Code] = problem
+	}
+	if p := got[ProblemSourceUnavailable]; p.Count != 1 || !slices.Equal(p.Paths, []string{"gone"}) {
+		t.Errorf("missing share: %+v", state.Problems)
+	}
+	if p := got[ProblemFolderUnavailable]; p.Count != 1 || !slices.Equal(p.Paths, []string{"docs/missing"}) {
+		t.Errorf("missing folder: %+v", state.Problems)
+	}
+	if p := got[ProblemReadError]; os.Geteuid() != 0 && (p.Count != 1 || !slices.Equal(p.Paths, []string{"docs/locked"})) {
+		t.Errorf("unreadable file: %+v", state.Problems)
+	}
 	if state.Percent != 100 || state.BytesTotal == 0 {
 		t.Errorf("progress %+v", state)
 	}
@@ -241,8 +252,21 @@ func TestCopyErrorsFatalOrSkipped(t *testing.T) {
 			t.Errorf("%v fatal", err)
 		}
 	}
-	if !strings.Contains(problemOf(syscall.EFBIG), "4 GB") {
+	if problemOf(syscall.EFBIG) != ProblemTooLarge || !strings.Contains(problemText[ProblemTooLarge], "4 GB") {
 		t.Error("FAT32 limit not named")
+	}
+	for err, want := range map[error]string{
+		fmt.Errorf("%w during copying: x", errSourceChanged): ProblemChanged, fmt.Errorf("%w: x", errLinkUnsupported): ProblemLinkUnsupported,
+		syscall.ENAMETOOLONG: ProblemNameNotAllowed, syscall.EACCES: ProblemReadError, errors.New("else"): ProblemOther,
+	} {
+		if got := problemOf(err); got != want {
+			t.Errorf("%v: code %q, want %q", err, got, want)
+		}
+	}
+	for _, code := range []string{ProblemSourceUnavailable, ProblemFolderUnavailable, ProblemReadError, ProblemCaseConflict, ProblemTooLarge, ProblemNameNotAllowed, ProblemChanged, ProblemVMDiskChanged, ProblemLinkUnsupported, ProblemMirrorFailed, ProblemOther} {
+		if problemText[code] == "" {
+			t.Errorf("code %s has no English text for the warning", code)
+		}
 	}
 	var p copyProblems
 	for i := range 7 {
@@ -250,6 +274,15 @@ func TestCopyErrorsFatalOrSkipped(t *testing.T) {
 	}
 	if p.total() != 7 || p.String() != "7 names: 0, 1, 2, 3, 4, …" {
 		t.Errorf("summary %q", p.String())
+	}
+	if list := p.list(); len(list) != 1 || list[0].Code != "names" || list[0].Count != 7 || len(list[0].Paths) != 7 {
+		t.Errorf("list %+v", p.list())
+	}
+	for i := range 40 {
+		p.add("names", fmt.Sprint(i))
+	}
+	if list := p.list(); list[0].Count != 47 || len(list[0].Paths) != problemPaths {
+		t.Errorf("paths not bounded: %d of %d", len(list[0].Paths), list[0].Count)
 	}
 }
 

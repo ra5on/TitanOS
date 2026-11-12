@@ -3,6 +3,8 @@ package vm
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -18,7 +20,10 @@ func (m *Manager) BackupLease(name string, mounted []string) (*BackupLease, erro
 	if m.Disabled {
 		return nil, ErrDisabled
 	}
-	lock, err := m.operation(name)
+	// What a copy of the running disks left behind is undone first.
+	check, cancel := context.WithTimeout(context.Background(), diskUndoLimit)
+	defer cancel()
+	lock, err := m.diskOperation(check, name)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +43,31 @@ func (m *Manager) BackupLease(name string, mounted []string) (*BackupLease, erro
 		}
 	}
 	return &BackupLease{manager: m, machine: v, lock: lock, Running: m.pid(name) != 0}, nil
+}
+
+// RunningDiskFiles returns the image files running (or starting) VMs write
+// to, as absolute paths: their disks that are files. Whole disks of the NAS
+// handed to a VM are left out. A backup that copies such a file while the
+// VM runs reads it from a snapshot where it can (backup.Manager.LiveFiles).
+func (m *Manager) RunningDiskFiles() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var files []string
+	if m.Disabled {
+		return files
+	}
+	for name, vm := range m.vms {
+		if !m.starting[name] && m.pid(name) == 0 {
+			continue
+		}
+		for _, disk := range vm.Disks {
+			if !m.isBlock(disk) {
+				files = append(files, filepath.Clean(m.diskPath(vm, disk)))
+			}
+		}
+	}
+	sort.Strings(files)
+	return files
 }
 func (l *BackupLease) Identity() string { return l.machine.UUID }
 func (l *BackupLease) Paths() []string {

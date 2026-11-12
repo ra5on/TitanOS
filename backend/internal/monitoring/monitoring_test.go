@@ -21,7 +21,7 @@ func TestRecordRetentionCounterResetAndCrashTail(t *testing.T) {
 	os.WriteFile(stat, []byte("10 0 100 30 20 0 200 60 0 0 0"), 0600)
 	m.Mounted = func() []string { return []string{"data"} }
 	m.Snapshot = func() (system.Info, storage.Status) { return system.Info{}, storage.Status{} }
-	if err := m.Set(Settings{true, "data", 7, 8}); err != nil {
+	if err := m.Set(Settings{Enabled: true, Volume: "data", Days: 7, MaxMiB: 8}); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Truncate(time.Minute)
@@ -56,7 +56,7 @@ func TestRecordRetentionCounterResetAndCrashTail(t *testing.T) {
 }
 func TestMonitoringRejectsInvalidSettingsAndCompleteCorruption(t *testing.T) {
 	m := New(config.Open(t.TempDir()))
-	for _, s := range []Settings{{true, "../bad", 7, 8}, {false, "", 365, 8}, {false, "", 7, 999}} {
+	for _, s := range []Settings{{Enabled: true, Volume: "../bad", Days: 7, MaxMiB: 8}, {Days: 365, MaxMiB: 8}, {Days: 7, MaxMiB: 999}} {
 		if err := m.Set(s); err == nil {
 			t.Fatal(s)
 		}

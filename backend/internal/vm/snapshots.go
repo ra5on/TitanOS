@@ -395,7 +395,7 @@ func (m *Manager) createSnapshot(ctx context.Context, name string, req SnapshotR
 	if m.Disabled {
 		return ErrDisabled
 	}
-	lock, err := m.operation(name)
+	lock, err := m.diskOperation(ctx, name)
 	if err != nil {
 		return err
 	}

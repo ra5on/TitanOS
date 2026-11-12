@@ -34,7 +34,7 @@ const (
 )
 
 // Settings choose whether and where the log is kept. An empty Volume means
-// the first mounted volume.
+// the system data volume (Manager.DefaultVolume).
 type Settings struct {
 	Enabled bool   `json:"enabled"`
 	Volume  string `json:"volume"`
@@ -98,15 +98,24 @@ type Manager struct {
 	store     *config.Store
 	MountRoot string
 	Mounted   func() []string
-	mu        sync.Mutex
-	ioMu      sync.Mutex
-	settings  Settings
-	recent    []Entry
-	pending   []Entry
-	dropped   int
-	problem   string
-	wake      chan struct{}
-	now       func() time.Time
+	// DefaultVolume is the volume for the log while none is chosen: the
+	// system data volume (one that never sleeps, else the first one), ""
+	// while there is none. Nil takes the first mounted volume by name.
+	DefaultVolume func() string
+	// HoldDefault takes the folder on the default volume for a write and
+	// returns what lets it go; ok is false while the folder is being moved
+	// to another volume, and nothing is read or written then. Nil: never
+	// moved.
+	HoldDefault func() (release func(), ok bool)
+	mu          sync.Mutex
+	ioMu        sync.Mutex
+	settings    Settings
+	recent      []Entry
+	pending     []Entry
+	dropped     int
+	problem     string
+	wake        chan struct{}
+	now         func() time.Time
 }
 
 func New(store *config.Store) *Manager {
@@ -158,6 +167,14 @@ func (m *Manager) Set(s Settings) error {
 	return nil
 }
 
+// Settings returns the stored settings alone, without asking for the
+// volume in use.
+func (m *Manager) Settings() Settings {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings
+}
+
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	s := m.settings
@@ -169,6 +186,16 @@ func (m *Manager) Status() Status {
 	return st
 }
 
+// hold keeps the folder on the default volume from being moved while it is
+// read or written. Called with ioMu held, before volume.
+func (m *Manager) hold(s Settings) (release func(), ok bool) {
+	if m.HoldDefault == nil {
+		return func() {}, true
+	}
+	// Also with a chosen volume: changing it moves the folder (PLAN 79-8).
+	return m.HoldDefault()
+}
+
 // volume is the volume entries go to, or "" if none is mounted.
 func (m *Manager) volume(s Settings) string {
 	if m.Mounted == nil {
@@ -178,6 +205,12 @@ func (m *Manager) volume(s Settings) string {
 	if s.Volume != "" {
 		if slices.Contains(mounted, s.Volume) {
 			return s.Volume
+		}
+		return ""
+	}
+	if m.DefaultVolume != nil {
+		if v := m.DefaultVolume(); naming.ValidVolume(v) && slices.Contains(mounted, v) {
+			return v
 		}
 		return ""
 	}
@@ -282,6 +315,11 @@ func (m *Manager) Flush() {
 	if len(batch) == 0 || !s.Enabled {
 		return
 	}
+	release, ok := m.hold(s)
+	if !ok {
+		return
+	}
+	defer release()
 	volume := m.volume(s)
 	if volume == "" {
 		return
@@ -466,9 +504,16 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 	recent := slices.Clone(m.recent)
 	m.mu.Unlock()
 	found := []Entry{}
+	// The volume is chosen under the lock of the writer and with the folder
+	// held: a flush or a move in between would read another place.
+	m.ioMu.Lock()
+	defer m.ioMu.Unlock()
 	volume := ""
 	if s.Enabled {
-		volume = m.volume(s)
+		if release, ok := m.hold(s); ok {
+			defer release()
+			volume = m.volume(s)
+		}
 	}
 	if volume == "" {
 		for _, e := range recent {
@@ -478,8 +523,6 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 		}
 		return finish(found, f.Limit, false)
 	}
-	m.ioMu.Lock()
-	defer m.ioMu.Unlock()
 	// Entries written while we waited for the lock are on the volume now.
 	m.mu.Lock()
 	pending := slices.Clone(m.pending)

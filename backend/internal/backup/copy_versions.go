@@ -150,14 +150,16 @@ func copyOrLink(ctx context.Context, source *os.Root, from string, target *os.Ro
 }
 
 // keepRuns removes the dated runs Keep does not keep.
-func (m *Manager) keepRuns(job Job, target *os.Root, runs []datedRun) error {
+// protected runs stay whatever Keep says (they hold the last copy of a
+// disk the newer runs left out).
+func (m *Manager) keepRuns(job Job, target *os.Root, runs []datedRun, protected map[string]bool) error {
 	versions := make([]retention.Version, len(runs))
 	for i, r := range runs {
 		versions[i] = retention.Version{ID: r.name, Time: r.at}
 	}
 	keep := retention.Select(job.Keep, versions, m.local(m.now()))
 	for _, r := range runs {
-		if !keep[r.name] {
+		if !keep[r.name] && !protected[r.name] {
 			if err := target.RemoveAll(path.Join(job.Destination.Folder, r.name)); err != nil {
 				return err
 			}
@@ -212,7 +214,7 @@ func (m *Manager) mirror(ctx context.Context, job Job, target *os.Root, sources 
 					if fatalTarget(err) {
 						return err
 					}
-					problems.add("deleted files that could not be moved aside", name+"/"+rel)
+					problems.add(ProblemMirrorFailed, name+"/"+rel)
 					return nil
 				}
 				if entry.IsDir() {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -251,7 +252,9 @@
 							? t('fileIndex.lastRun', { date: formatDateTime(new Date(index.lastRun)) })
 							: t('fileIndex.never')}
 					</p>
-					{#if index.lastError}<p class="notice-warn">{index.lastError}</p>{/if}
+					{#if index.lastError}<p class="notice-warn">
+							{t('detail.indexFailed')}<BackendDetail text={index.lastError} />
+						</p>{/if}
 					{#if index.truncated}<p class="notice-warn">{t('fileIndex.truncated')}</p>{/if}
 				{/snippet}
 				{#snippet control()}

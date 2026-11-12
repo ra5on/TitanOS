@@ -16,6 +16,7 @@ import (
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/version"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // wireBackups wires backups, the cluster, replication and unmanaged drives.
@@ -71,6 +72,38 @@ func (w *titand) wireBackups() error {
 	w.backups.OnIncomplete = func(job string) {
 		w.notifier.Notify(notify.Warning, "backup_incomplete", job)
 	}
+	// Disks of running VMs are read from a Btrfs snapshot made for the run
+	// (PLAN 79-9); on other file systems they are read as they are and
+	// reported if they changed meanwhile.
+	w.backups.LiveDisks = func() map[string]string {
+		live := map[string]string{}
+		for _, disk := range w.machines.FileDisks() {
+			if disk.Running {
+				live[disk.Path] = disk.VM
+			}
+		}
+		return live
+	}
+	// Without Btrfs and with the job's leave: a libvirt snapshot of the VM,
+	// or a pause for raw images (vm/diskbackup.go).
+	w.backups.VMDiskFiles = func() map[string]string {
+		files := map[string]string{}
+		for _, disk := range w.machines.FileDisks() {
+			files[disk.Path] = disk.VM
+		}
+		return files
+	}
+	w.backups.VMRunning = w.machines.Running
+	w.backups.BeginVMDisks = func(ctx context.Context, name string, opts backup.VMDiskOptions) (backup.VMDiskSession, error) {
+		session, err := w.machines.BeginDiskBackup(ctx, name, vm.DiskBackupOptions{Snapshot: opts.Snapshot, Pause: opts.Pause})
+		if err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+	w.backups.RecoverVMDisks = func(ctx context.Context) error { return w.machines.RecoverDiskBackups(ctx, true) }
+	w.backups.SnapshotSource = w.volumes.BackupSnapshot
+	w.backups.CleanSnapshots = w.volumes.CleanBackupSnapshots
 	w.backups.Timezone = w.settings.CurrentTimezone
 	w.appBackups = &appbackup.Manager{Store: w.store, Docker: w.containers, VMs: w.machines, Mounted: w.volumes.Mounted, MountRoot: "/mnt", Disabled: w.opts.dev}
 	if err := w.appBackups.Load(); err != nil {

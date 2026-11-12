@@ -15,7 +15,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/advisor"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
-	"github.com/ra5on/TitanOS/backend/internal/naming"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/whatif"
 )
@@ -329,17 +328,11 @@ func (s *Server) volumeAsleep(vol string) bool {
 	return false
 }
 
-// smartHistoryVolume is where internal/smarthistory keeps the history: the
-// first mounted volume by name (its own rule).
+// smartHistoryVolume is where internal/smarthistory keeps the history (the
+// system data volume, its own rule).
 func (s *Server) smartHistoryVolume() string {
-	env := s.agentEnv()
-	if env.storage == nil {
-		return ""
-	}
-	for _, v := range slices.Sorted(slices.Values(env.storage.Mounted())) {
-		if naming.ValidVolume(v) {
-			return v
-		}
+	if history := s.agentEnv().smartHistory; history != nil {
+		return history.Volume()
 	}
 	return ""
 }

@@ -147,7 +147,7 @@ func (m *Manager) Update(ctx context.Context, name string, change Change, mounte
 		}
 		defer release()
 	}
-	lock, lockErr := m.operation(name)
+	lock, lockErr := m.diskOperation(ctx, name)
 	if lockErr != nil {
 		return lockErr
 	}

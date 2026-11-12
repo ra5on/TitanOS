@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -32,32 +34,141 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 	return m.WithUSB(ctx, job.Destination.DeviceID, func(target *os.Root) error { return m.copyTo(ctx, job, target) })
 }
 
-// copyItem is one file a run wants to copy.
+// copyItem is one file or symbolic link a run wants to copy.
 type copyItem struct {
 	share, rel, dst string
 	// prev is the same file in the dated run before, if any.
 	prev string
 	size int64
+	// link is where a symbolic link points to; isLink tells it from a file.
+	link   string
+	isLink bool
 }
 
-// copyProblems collects what a run left out, by reason, for the warning.
+// Problem is one kind of thing a readable copy could not save in its last
+// run: a code the page has a text for in the language of the viewer
+// (backup.problem.<code>), how many entries it hit and the first of them.
+type Problem struct {
+	Code  string `json:"code"`
+	Count int64  `json:"count"`
+	// Paths are the first entries, "<share or Volume-name>/<path>";
+	// Count says how many there are in all.
+	Paths []string `json:"paths"`
+}
+
+// The codes of Problem.
+const (
+	ProblemSourceUnavailable = "source_unavailable" // a share or volume of the job is not there
+	ProblemFolderUnavailable = "folder_unavailable" // a chosen folder is not there
+	ProblemReadError         = "read_error"         // could not be read
+	ProblemCaseConflict      = "case_conflict"      // names that differ only in case on a drive that folds it
+	ProblemTooLarge          = "too_large"          // too large for the drive's file system (FAT32: 4 GB)
+	ProblemNameNotAllowed    = "name_not_allowed"   // a name the drive's file system does not allow
+	ProblemChanged           = "changed"            // changed while it was copied; the copy of the run before stays
+	// ProblemVMDiskChanged is the disk of a running VM that changed while
+	// it was copied and could not be read from a snapshot: it is not
+	// saved by this run.
+	ProblemVMDiskChanged = "vm_disk_changed"
+	// Disks of running VMs this run did not save, and why (see vm.Disk…):
+	// the copy of the run before stays.
+	ProblemVMDiskBusy           = "vm_disk_busy"            // another operation of the VM runs, or it is paused
+	ProblemVMDiskPassthrough    = "vm_disk_passthrough"     // the VM has a whole disk of the NAS
+	ProblemVMDiskBackingChain   = "vm_disk_backing_chain"   // the image has snapshots or a backing chain of its own
+	ProblemVMDiskNoSpace        = "vm_disk_no_space"        // no room for the overlay next to the disk
+	ProblemVMDiskSnapshotFailed = "vm_disk_snapshot_failed" // libvirt refused the snapshot
+	ProblemVMDiskPauseFailed    = "vm_disk_pause_failed"    // libvirt refused to pause the VM
+	ProblemVMDiskPauseTimeout   = "vm_disk_pause_timeout"   // the pause reached its limit before the copy was done
+	// ProblemVMDiskUndoFailed: the VM is not back to normal yet (still on
+	// the overlay, or paused); TitanOS tries again. Needs attention.
+	ProblemVMDiskUndoFailed = "vm_disk_undo_failed"
+	// ProblemVMDiskRawImage and ProblemVMDiskSnapshotUnproven are reasons,
+	// never problems of a run: such a disk is paused for the copy or left
+	// out (NoticeVMDiskSkipped), as the job says. The preview names them.
+	ProblemVMDiskRawImage         = "vm_disk_raw_image"
+	ProblemVMDiskSnapshotUnproven = "vm_disk_snapshot_unproven"
+	ProblemLinkUnsupported        = "link_unsupported" // a symbolic link the drive's file system cannot hold
+	ProblemMirrorFailed           = "mirror_failed"    // a deleted file that could not be moved aside
+	ProblemOther                  = "other"
+)
+
+// The codes of State.Notices: no failure, nothing to repair.
+const (
+	NoticeVMDiskSkipped         = "vm_disk_skipped"          // left out on purpose (job setting); the earlier copy stays untouched
+	NoticeVMDiskChoiceNeeded    = "vm_disk_choice_needed"    // the job has no setting for disks of running VMs yet
+	NoticeVMDiskCrashConsistent = "vm_disk_crash_consistent" // saved from a libvirt snapshot without the guest agent
+	NoticeVMDiskPaused          = "vm_disk_paused"           // saved while the VM was paused for the copy
+)
+
+// overlaySuffix ends the overlay a backup puts next to the disk of a
+// running VM (vm.OverlaySuffix); never copied.
+const overlaySuffix = ".titanos-overlay"
+
+// vmDiskCode is the problem code of an error of BeginVMDisks.
+func vmDiskCode(err error) string {
+	var coded interface{ ProblemCode() string }
+	if errors.As(err, &coded) && problemText[coded.ProblemCode()] != "" {
+		return coded.ProblemCode()
+	}
+	return ProblemVMDiskSnapshotFailed
+}
+
+// problemPaths is how many entries a Problem names.
+const problemPaths = 20
+
+// problemText is the English wording of each code for State.Warning,
+// which older pages and other readers (MCP, Home Assistant) show as it is.
+var problemText = map[string]string{
+	ProblemSourceUnavailable: "shares not available",
+	ProblemFolderUnavailable: "folders not available",
+	ProblemReadError:         "files that could not be read",
+	ProblemCaseConflict:      "names that differ only in upper/lower case (the drive treats them as one)",
+	ProblemTooLarge:          "files too large for the drive's file system (FAT32: 4 GB)",
+	ProblemNameNotAllowed:    "names the drive's file system does not allow",
+	ProblemChanged:           "files that changed while being copied",
+	ProblemVMDiskChanged:     "disks of running VMs that changed while being copied (not saved by this run)",
+	ProblemLinkUnsupported:   "symbolic links the drive's file system cannot hold",
+
+	ProblemVMDiskBusy:             "disks of running VMs not saved by this run: another operation of the VM was running or it was paused",
+	ProblemVMDiskPassthrough:      "disks of running VMs not saved by this run: the VM uses a whole disk of the NAS",
+	ProblemVMDiskBackingChain:     "disks of running VMs not saved by this run: the image has snapshots of its own",
+	ProblemVMDiskNoSpace:          "disks of running VMs not saved by this run: no room for the snapshot next to the disk",
+	ProblemVMDiskSnapshotFailed:   "disks of running VMs not saved by this run: the snapshot failed",
+	ProblemVMDiskPauseFailed:      "disks of running VMs not saved by this run: the VM could not be paused",
+	ProblemVMDiskPauseTimeout:     "disks of running VMs not saved by this run: the pause reached its time limit",
+	ProblemVMDiskUndoFailed:       "VMs not back to normal after the backup (TitanOS tries again; check the VM)",
+	ProblemVMDiskRawImage:         "disks of running VMs that are raw images",
+	ProblemVMDiskSnapshotUnproven: "disks of running VMs for which the job does not allow a libvirt snapshot",
+	ProblemMirrorFailed:           "deleted files that could not be moved aside",
+	ProblemOther:                  "files with other errors",
+}
+
+// copyProblems collects what a run left out, by code, for the warning.
 type copyProblems struct {
 	count    map[string]int64
 	examples map[string][]string
 	order    []string
 }
 
-func (p *copyProblems) add(reason, what string) {
+func (p *copyProblems) add(code, what string) {
 	if p.count == nil {
 		p.count, p.examples = map[string]int64{}, map[string][]string{}
 	}
-	if p.count[reason] == 0 {
-		p.order = append(p.order, reason)
+	if p.count[code] == 0 {
+		p.order = append(p.order, code)
 	}
-	p.count[reason]++
-	if len(p.examples[reason]) < 5 {
-		p.examples[reason] = append(p.examples[reason], what)
+	p.count[code]++
+	if len(p.examples[code]) < problemPaths {
+		p.examples[code] = append(p.examples[code], what)
 	}
+}
+
+// list is what the page gets: every code with its count and first entries.
+func (p *copyProblems) list() []Problem {
+	var list []Problem
+	for _, code := range p.order {
+		list = append(list, Problem{Code: code, Count: p.count[code], Paths: slices.Clone(p.examples[code])})
+	}
+	return list
 }
 
 func (p *copyProblems) total() int64 {
@@ -68,12 +179,21 @@ func (p *copyProblems) total() int64 {
 	return n
 }
 
-// String is the warning of the run: per reason the count and examples.
+// String is the warning of the run in English: per code the count and
+// the first five entries.
 func (p *copyProblems) String() string {
 	var parts []string
-	for _, reason := range p.order {
-		line := fmt.Sprintf("%d %s: %s", p.count[reason], reason, strings.Join(p.examples[reason], ", "))
-		if p.count[reason] > int64(len(p.examples[reason])) {
+	for _, code := range p.order {
+		text := problemText[code]
+		if text == "" {
+			text = code
+		}
+		examples := p.examples[code]
+		if len(examples) > 5 {
+			examples = examples[:5]
+		}
+		line := fmt.Sprintf("%d %s: %s", p.count[code], text, strings.Join(examples, ", "))
+		if p.count[code] > int64(len(examples)) {
 			line += ", …"
 		}
 		parts = append(parts, line)
@@ -89,22 +209,67 @@ func fatalTarget(err error) bool {
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
-// problemOf names why one file could not be copied, in words the page shows.
+// problemOf names why one file could not be copied: the code of its Problem.
 func problemOf(err error) string {
 	switch {
+	case errors.Is(err, errLinkUnsupported):
+		return ProblemLinkUnsupported
 	case errors.Is(err, syscall.EFBIG):
-		return "files too large for the drive's file system (FAT32: 4 GB)"
+		return ProblemTooLarge
 	case errors.Is(err, syscall.EINVAL), errors.Is(err, syscall.ENAMETOOLONG), errors.Is(err, syscall.EILSEQ):
-		return "names the drive's file system does not allow"
+		return ProblemNameNotAllowed
 	case errors.Is(err, errSourceChanged):
-		return "files that changed while being copied"
+		return ProblemChanged
 	case errors.Is(err, fs.ErrPermission):
-		return "files that could not be read"
+		return ProblemReadError
 	}
-	return "files with other errors"
+	return ProblemOther
 }
 
-var errSourceChanged = errors.New("source changed")
+var (
+	errSourceChanged = errors.New("source changed")
+	// errLinkUnsupported: the destination file system has no symbolic links.
+	errLinkUnsupported = errors.New("the destination cannot hold symbolic links")
+)
+
+// copyLink keeps a symbolic link of the source as a link: it is made anew
+// with the same target, never followed, and what it points to is not
+// copied through it. A link that is there with the same target stays; a
+// file or another link in its place is replaced. A folder in its place
+// (the source was a folder when it was copied last) is moved aside with
+// aside, never deleted: the copy may be the only place its files still
+// exist.
+func copyLink(target *os.Root, to, link string, aside func(to string) error) error {
+	info, err := target.Lstat(to)
+	switch {
+	case err == nil && info.Mode()&fs.ModeSymlink != 0:
+		if old, err := target.Readlink(to); err == nil && old == link {
+			return nil
+		}
+	case err == nil && info.IsDir():
+		if aside == nil {
+			return fmt.Errorf("copy destination %s is a directory, the source a link", to)
+		}
+		if err := aside(to); err != nil {
+			return err
+		}
+	case err != nil && !os.IsNotExist(err):
+		return err
+	}
+	temp := path.Join(path.Dir(to), ".titanos-copy-"+rand.Text())
+	if err := target.Symlink(link, temp); err != nil {
+		// FAT32, exFAT and SMB shares without Unix extensions have none.
+		if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP) || errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EACCES) {
+			return fmt.Errorf("%w: %s", errLinkUnsupported, to)
+		}
+		return err
+	}
+	if err := target.Rename(temp, to); err != nil {
+		_ = target.Remove(temp) // best effort: a leftover link is removed by the next run's rename or by hand
+		return err
+	}
+	return nil
+}
 
 // caseInsensitive finds out whether the destination folds the case of
 // names (FAT, exFAT, NTFS through some drivers).
@@ -124,10 +289,41 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	sources, names, folderOf, missing := m.copyEntries(job)
 	var problems copyProblems
 	for _, name := range missing {
-		problems.add("shares not available", name)
+		problems.add(ProblemSourceUnavailable, name)
 	}
+	// Sockets, FIFOs and device files hold no data: they are left out
+	// without a word on the page, only counted for the journal.
+	var special int64
+	// notices are what the page shows without calling the run incomplete:
+	// disks left out on purpose, how a disk was saved, a choice to make.
+	var notices copyProblems
+	// What an interrupted run left: a VM still paused, an overlay.
+	if m.RecoverVMDisks != nil {
+		if err := m.RecoverVMDisks(ctx); err != nil && ctx.Err() == nil {
+			slog.Warn("backup: a VM is not back to normal after an interrupted backup", "job", job.ID, "err", err)
+		}
+	}
+	// Disks of running VMs change while they are read. In this order: on a
+	// Btrfs volume they are read from a read-only snapshot made for this
+	// run; else, if the job says so, the VM is held still (a libvirt
+	// snapshot, or a pause for raw images); else they are read as they are
+	// and reported if they changed. A job set to skip never opens them.
+	frozen := m.frozenSources(ctx, job)
+	defer frozen.release()
 	if len(sources) == 0 {
 		return fmt.Errorf("none of the shares of this job is available")
+	}
+	// A snapshot an earlier run could not remove goes before this one reads.
+	if m.CleanSnapshots != nil {
+		cleaned := map[string]bool{}
+		for _, name := range names {
+			if volume := sources[name].Volume; volume != "" && !cleaned[volume] {
+				cleaned[volume] = true
+				if err := m.CleanSnapshots(ctx, volume); err != nil && ctx.Err() == nil {
+					slog.Warn("backup: leftover snapshot of an earlier run not removed", "job", job.ID, "volume", volume, "err", err)
+				}
+			}
+		}
 	}
 	if err := copyDirectories(target, job.Destination.Folder); err != nil {
 		return err
@@ -160,9 +356,23 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// older version is deleted for it. After a week without that volume
 	// the drive would otherwise hold nothing of those shares any more.
 	incomplete := func() bool {
-		return problems.count["shares not available"] > 0 || problems.count["folders not available"] > 0
+		return problems.count[ProblemSourceUnavailable] > 0 || problems.count[ProblemFolderUnavailable] > 0
 	}
 	seen := map[string]string{}
+	// protected are the dated runs that hold the newest copy of a disk
+	// this run does not save (left out on purpose, or not saved): they are
+	// not removed by the retention or to make room, or the last copy of
+	// that disk would go because it was skipped.
+	protected := map[string]bool{}
+	earlier := slices.Clone(runs)
+	protect := func(share, rel string) {
+		for i := len(earlier) - 1; i >= 0 && dated; i-- {
+			if info, err := target.Lstat(path.Join(job.Destination.Folder, earlier[i].name, share, rel)); err == nil && info.Mode().IsRegular() {
+				protected[earlier[i].name] = true
+				return
+			}
+		}
+	}
 
 	// First the list: what there is, how much, and what is new. It gives the
 	// page a percentage and the run a check of the free space.
@@ -175,7 +385,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		root, err := os.OpenRoot(source.Path)
 		if err != nil {
-			problems.add("shares not available", name)
+			problems.add(ProblemSourceUnavailable, name)
 			continue
 		}
 		folders := folderOf[name]
@@ -184,7 +394,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		for _, folder := range folders {
 			if info, err := root.Lstat(folder); err != nil || !info.IsDir() {
-				problems.add("folders not available", name+"/"+folder)
+				problems.add(ProblemFolderUnavailable, name+"/"+folder)
 				continue
 			}
 			err := fs.WalkDir(root.FS(), folder, func(rel string, entry fs.DirEntry, err error) error {
@@ -192,13 +402,13 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					return err
 				}
 				if err != nil {
-					problems.add("files that could not be read", name+"/"+rel)
+					problems.add(ProblemReadError, name+"/"+rel)
 					if entry != nil && entry.IsDir() {
 						return fs.SkipDir
 					}
 					return nil
 				}
-				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part")
+				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part") || strings.HasSuffix(entry.Name(), overlaySuffix)
 				for _, skip := range job.Skip {
 					full := name + "/" + rel
 					excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")
@@ -218,7 +428,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					// Foto.jpg and foto.jpg are one file there: keep the first.
 					key := strings.ToLower(dst)
 					if other, ok := seen[key]; ok && other != dst {
-						problems.add("names that differ only in upper/lower case (the drive treats them as one)", name+"/"+rel)
+						problems.add(ProblemCaseConflict, name+"/"+rel)
 						if entry.IsDir() {
 							return fs.SkipDir
 						}
@@ -231,11 +441,28 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 				}
 				info, err := entry.Info()
 				if err != nil {
-					problems.add("files that could not be read", name+"/"+rel)
+					problems.add(ProblemReadError, name+"/"+rel)
+					return nil
+				}
+				if info.Mode()&fs.ModeSymlink != 0 {
+					// Kept as a link; where it points to is never followed.
+					link, err := root.Readlink(rel)
+					if err != nil {
+						problems.add(ProblemReadError, name+"/"+rel)
+						return nil
+					}
+					items = append(items, copyItem{share: name, rel: rel, dst: dst, link: link, isLink: true})
 					return nil
 				}
 				if !info.Mode().IsRegular() {
-					problems.add("links or special files", name+"/"+rel)
+					special++
+					return nil
+				}
+				if job.VMDisks != nil && job.VMDisks.Mode == VMDisksSkip && frozen.live(source, rel) {
+					// Left out on purpose: never opened, and what the
+					// destination holds of it stays as it is.
+					notices.add(NoticeVMDiskSkipped, name+"/"+rel)
+					protect(name, rel)
 					return nil
 				}
 				item := copyItem{share: name, rel: rel, dst: dst, size: info.Size()}
@@ -271,14 +498,22 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if !ok || needed <= free {
 			break
 		}
-		if !dated || !job.Keep.DropsOldest() || len(runs) < 2 || incomplete() {
+		// The oldest run that does not hold the last copy of a skipped disk;
+		// never the newest.
+		oldest := -1
+		for i := 0; i < len(runs)-1 && oldest < 0; i++ {
+			if !protected[runs[i].name] {
+				oldest = i
+			}
+		}
+		if !dated || !job.Keep.DropsOldest() || oldest < 0 || incomplete() {
 			return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
 		}
-		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[0].name)); err != nil {
+		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[oldest].name)); err != nil {
 			return err
 		}
-		freed = append(freed, runs[0].name)
-		runs = runs[1:]
+		freed = append(freed, runs[oldest].name)
+		runs = slices.Delete(runs, oldest, oldest+1)
 	}
 	m.update(job, func(s *State) { s.BytesTotal = planned })
 
@@ -307,37 +542,188 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		m.mu.Unlock()
 	}
-	for _, item := range items {
+	// ready opens the source of an item and makes its folder at the destination.
+	ready := func(item copyItem) (*os.Root, bool, error) {
 		root := roots[item.share]
 		if root == nil {
 			var err error
 			if root, err = os.OpenRoot(sources[item.share].Path); err != nil {
-				problems.add("shares not available", item.share)
-				continue
+				problems.add(ProblemSourceUnavailable, item.share)
+				return nil, false, nil
 			}
 			roots[item.share] = root
 		}
-		if err := copyDirectories(target, path.Dir(item.dst)); err != nil {
+		if err := copyDirectoriesBelow(target, base, path.Dir(item.dst)); err != nil {
 			if fatalTarget(err) {
-				return err
+				return nil, false, err
 			}
 			problems.add(problemOf(err), item.share+"/"+item.rel)
+			return nil, false, nil
+		}
+		return root, true, nil
+	}
+	// copyOne copies one file from the root it is read from.
+	copyOne := func(ctx context.Context, from *os.Root, rel string, item copyItem, offset uint64) error {
+		if item.prev != "" && links {
+			_, err := copyOrLink(ctx, from, rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
+			return err
+		}
+		_, err := copyFilePaced(ctx, from, rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
+		return err
+	}
+	// asIs reads the disk of a running VM as it is, as before there were
+	// better ways: if it changes meanwhile, the copy of the run before
+	// stays and the run says so.
+	asIs := func(root *os.Root, item copyItem, offset uint64) error {
+		err := copyOne(ctx, root, item.rel, item, offset)
+		if err == nil {
+			return nil
+		}
+		if fatalTarget(err) {
+			return err
+		}
+		code := problemOf(err)
+		if code == ProblemChanged {
+			code = ProblemVMDiskChanged
+		}
+		problems.add(code, item.share+"/"+item.rel)
+		protect(item.share, item.rel)
+		return nil
+	}
+	// held are the disks of running VMs that need the VM itself to stand
+	// still (a libvirt snapshot, a pause): copied VM by VM after the rest,
+	// so that no VM is held for longer than its own disks take.
+	type heldItem struct {
+		item   copyItem
+		offset uint64
+	}
+	held := map[string][]heldItem{}
+	for _, item := range items {
+		root, ok, err := ready(item)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if item.isLink {
+			if err := copyLink(target, item.dst, item.link, func(to string) error { return m.moveAside(target, job, to) }); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+			}
 			continue
 		}
 		offset := total
-		var err error
-		if item.prev != "" && links {
-			_, err = copyOrLink(ctx, root, item.rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
-		} else {
-			_, err = copyFilePaced(ctx, root, item.rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
-		}
-		if err != nil {
-			if fatalTarget(err) {
-				return err
-			}
-			problems.add(problemOf(err), item.share+"/"+item.rel)
-		}
 		total += uint64(item.size)
+		source := sources[item.share]
+		if !frozen.live(source, item.rel) {
+			if err := copyOne(ctx, root, item.rel, item, offset); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+			}
+			progress(total)
+			continue
+		}
+		// The disk of a running VM. A job without a stored choice keeps to
+		// what touches no VM (a Btrfs snapshot, else reading it as it is)
+		// and tells the page that a choice is needed.
+		if job.VMDisks == nil {
+			notices.add(NoticeVMDiskChoiceNeeded, item.share+"/"+item.rel)
+		}
+		vm := frozen.vm(source, item.rel)
+		if snapshot, within, ok := frozen.file(source, item.rel); ok {
+			// Read-only and of one moment: it cannot change while it is read.
+			if err := copyOne(ctx, snapshot, within, item, offset); err != nil {
+				if fatalTarget(err) {
+					return err
+				}
+				problems.add(problemOf(err), item.share+"/"+item.rel)
+				protect(item.share, item.rel)
+			}
+		} else if job.VMDisks != nil && job.VMDisks.Mode == VMDisksConsistent && vm != "" && m.BeginVMDisks != nil {
+			held[vm] = append(held[vm], heldItem{item, offset})
+			continue
+		} else if err := asIs(root, item, offset); err != nil {
+			return err
+		}
+		progress(total)
+	}
+	for _, vm := range slices.Sorted(maps.Keys(held)) {
+		err := func() error {
+			each := func(to *copyProblems, code string) {
+				for _, h := range held[vm] {
+					to.add(code, h.item.share+"/"+h.item.rel)
+				}
+			}
+			session, err := m.BeginVMDisks(ctx, vm, job.VMDisks.options())
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				code := vmDiskCode(err)
+				if code == ProblemVMDiskRawImage || code == ProblemVMDiskSnapshotUnproven {
+					// No snapshot for these disks and no leave to pause: left
+					// out as the job says. Skipped means skipped: the disk is
+					// not read, the earlier copy stays as it is.
+					each(&notices, NoticeVMDiskSkipped)
+					for _, h := range held[vm] {
+						protect(h.item.share, h.item.rel)
+					}
+					return nil
+				}
+				slog.Warn("backup: disks of a running VM not saved by this run", "job", job.ID, "vm", vm, "reason", err)
+				each(&problems, code)
+				for _, h := range held[vm] {
+					protect(h.item.share, h.item.rel)
+				}
+				return nil
+			}
+			// Always, whatever happens below: the VM goes back to normal.
+			defer func() {
+				if err := session.End(); err != nil {
+					each(&problems, ProblemVMDiskUndoFailed)
+				}
+			}()
+			way, quiesced := session.Method()
+			for _, h := range held[vm] {
+				name := h.item.share + "/" + h.item.rel
+				err := copyOne(session.Context(), roots[h.item.share], h.item.rel, h.item, h.offset)
+				switch {
+				case err == nil && way == VMDiskWayPause:
+					notices.add(NoticeVMDiskPaused, name)
+				case err == nil && !quiesced:
+					notices.add(NoticeVMDiskCrashConsistent, name)
+				case err == nil:
+				case session.Context().Err() != nil && ctx.Err() == nil:
+					// The VM was let go before the copy was done: the pause
+					// reached its limit, or the VM is being shut down. The
+					// copy of the run before stays.
+					code := session.Stopped()
+					if problemText[code] == "" {
+						code = ProblemVMDiskBusy
+					}
+					problems.add(code, name)
+					protect(h.item.share, h.item.rel)
+				case fatalTarget(err):
+					return err
+				default:
+					code := problemOf(err)
+					if code == ProblemChanged {
+						code = ProblemVMDiskChanged
+					}
+					problems.add(code, name)
+					protect(h.item.share, h.item.rel)
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
 		progress(total)
 	}
 	if job.Copy != nil && job.Copy.Mirror && !dated {
@@ -356,7 +742,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			}
 		}
 		if !incomplete() {
-			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())); err != nil {
+			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location()), protected); err != nil {
 				return err
 			}
 		}
@@ -366,8 +752,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	if err := syncTarget(target); err != nil {
 		return err
 	}
+	if special > 0 {
+		slog.Info("backup: sockets, FIFOs and device files left out, they hold no data", "job", job.ID, "count", special)
+	}
 	m.update(job, func(s *State) {
-		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped = total, total, planned, 100, problems.String(), problems.total()
+		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped, s.Problems, s.Notices = total, total, planned, 100, problems.String(), problems.total(), problems.list(), notices.list()
 	})
 	if len(freed) > 0 && m.OnFreed != nil && job.Keep.DropsOldest() {
 		m.OnFreed(job.ID, len(freed))
@@ -425,13 +814,52 @@ func syncTarget(target *os.Root) error {
 	return unix.Syncfs(int(dir.Fd()))
 }
 
+// moveAside takes a folder of the copy out of the way of what the source
+// holds in its place now, into <folder>/_gelöscht/<date>/…, where a mirror
+// puts what is gone from the source. Nothing is deleted; with the mirror
+// option the day is removed after MirrorDays like the rest of it. The move
+// stays inside the destination and follows no link.
+func (m *Manager) moveAside(target *os.Root, job Job, to string) error {
+	rel := strings.TrimPrefix(to, job.Destination.Folder+"/")
+	bin := path.Join(job.Destination.Folder, deletedFolder, m.local(m.now()).Format("2006-01-02"), rel)
+	for i := 2; ; i++ {
+		if _, err := target.Lstat(bin); os.IsNotExist(err) {
+			break
+		} else if err != nil {
+			return err
+		}
+		bin = path.Join(job.Destination.Folder, deletedFolder, m.local(m.now()).Format("2006-01-02"), rel+"-"+itoa(i))
+	}
+	if err := copyDirectories(target, path.Dir(bin)); err != nil {
+		return err
+	}
+	slog.Info("backup: a folder of the copy is a link in the source now; the folder was moved aside", "job", job.ID, "folder", to, "to", bin)
+	return target.Rename(to, bin)
+}
+
 // Refuse destination links even when they point somewhere within the same disk.
 func copyDirectories(root *os.Root, dir string) error {
+	return copyDirectoriesBelow(root, dir, dir)
+}
+
+// copyDirectoriesBelow is copyDirectories that heals the copy below base:
+// a symbolic link there that the copy keeps for a link of the source
+// (copyLink) is removed when the source has a folder in its place now, and
+// the folder is made. Only the link itself goes, never what it points to;
+// base and everything above it stay strict (a destination folder that is
+// a link is refused).
+func copyDirectoriesBelow(root *os.Root, base, dir string) error {
 	parts := strings.Split(filepath.ToSlash(dir), "/")
 	current := ""
 	for _, part := range parts {
 		current = path.Join(current, part)
 		info, err := root.Lstat(current)
+		if err == nil && info.Mode()&fs.ModeSymlink != 0 && current != base && strings.HasPrefix(current, base+"/") {
+			if err := root.Remove(current); err != nil {
+				return err
+			}
+			err = fs.ErrNotExist
+		}
 		if os.IsNotExist(err) {
 			if err = root.Mkdir(current, 0700); err != nil {
 				return err
@@ -456,6 +884,14 @@ func copyFile(ctx context.Context, source *os.Root, from string, target *os.Root
 // and what is read back from the destination to compare.
 func copyFilePaced(ctx context.Context, source *os.Root, from string, target *os.Root, to string, pace *limiter, progress func(int64)) (int64, error) {
 	info, err := target.Lstat(to)
+	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		// What was a link when it was copied last (copyLink) is a file now:
+		// the link goes, never what it points to.
+		if err := target.Remove(to); err != nil {
+			return 0, err
+		}
+		info, err = nil, fs.ErrNotExist
+	}
 	if err == nil && !info.Mode().IsRegular() {
 		return 0, fmt.Errorf("copy destination %s is not a regular file", to)
 	}

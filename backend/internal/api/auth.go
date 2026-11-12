@@ -186,6 +186,13 @@ func (au authArea) handleSetup(w http.ResponseWriter, r *http.Request) {
 		au.recordEvent(r, user.Name, "setup", "", true)
 		au.shares.Kick()
 		au.ssh.Kick()
+		// Defaults that only new installations get (an update never
+		// changes how an existing NAS behaves).
+		if au.configBackup != nil {
+			if err := au.configBackup.NewInstall(); err != nil {
+				slog.Warn("defaults of the configuration backup for a new installation not stored", "err", err)
+			}
+		}
 		if au.startSession(w, r, user) {
 			writeJSON(w, http.StatusCreated, userOf(user))
 		}

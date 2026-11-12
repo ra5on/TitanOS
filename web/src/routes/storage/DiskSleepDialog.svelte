@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// Speicher › Ruhemodus für Festplatten: the default, then optional values
 	// per volume and per disk (disk > volume > default). Saving sends only
 	// existing volumes and disks, so overrides of removed ones go on save.
@@ -276,7 +277,7 @@
 			<div class="notice-error" role="alert">
 				<p>{t('storage.sleepFailed')}</p>
 				{#each status.errors as problem}<p>
-						<strong class="mono">{problem.disk}</strong>: {problem.message}
+						<strong class="mono">{problem.disk}</strong><BackendDetail text={problem.message} />
 					</p>{/each}
 			</div>
 		{/if}

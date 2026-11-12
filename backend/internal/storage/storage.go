@@ -241,7 +241,22 @@ type Manager struct {
 	loaded       bool
 	// settled is set once the volumes were read from /config and a first
 	// attempt to mount them was made.
-	settled    bool
+	settled bool
+	// backupSnapshots are the snapshots backups read from right now, by
+	// path (BackupSnapshot).
+	backupSnapshots map[string]bool
+	// backupCleaned are the volumes whose leftover backup snapshots were
+	// removed since the start.
+	backupCleaned map[string]bool
+	// shadowIdle are the Btrfs volumes without previous versions and
+	// without mirrors: SyncShadowCopies leaves them alone (RAM only).
+	shadowIdle map[string]bool
+	// systemDataWaiting is since when SystemDataVolume waits for the disk
+	// sleep settings; systemDataWarned that it said it gave up waiting.
+	systemDataWaiting time.Time
+	systemDataWarned  bool
+	// systemData is the last choice of SystemDataVolume.
+	systemData systemDataChoice
 	smart      map[string]*Smart // by disk path
 	smartDisks map[string]*smartEntry
 	smartTime  time.Time
@@ -253,6 +268,8 @@ type Manager struct {
 	// diskSleepAsleep are the disks sent to standby without activity
 	// since, by device name (RAM only).
 	diskSleepAsleep map[string]bool
+	// diskSleepVolumes are the volumes with such a disk (VolumeAsleep).
+	diskSleepVolumes map[string]bool
 	// diskSleepTimes are when each disk went to standby and when activity
 	// was last seen after one, by device name (RAM only, protected by mu).
 	diskSleepTimes map[string]sleepTimes
@@ -738,6 +755,8 @@ func (m *Manager) Run(ctx context.Context) {
 		if m.Settled() {
 			// Disk tests that a restart stopped, from volumes mounted since.
 			m.ResumeSavedTests(ctx)
+			// Snapshots a backup left behind when titand last stopped.
+			m.cleanBackupSnapshotsOnce(ctx)
 		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge

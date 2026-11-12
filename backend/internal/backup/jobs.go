@@ -113,6 +113,16 @@ func check(job Job, shares []Source, volumes []string) error {
 	if c := job.Copy; c != nil && (!plainCopy(job.Destination.Type) || c.MirrorDays < 0 || c.MirrorDays > 3650) {
 		return invalid("options of the readable copy")
 	}
+	if v := job.VMDisks; v != nil {
+		switch {
+		case !plainCopy(job.Destination.Type):
+			return invalid("the setting for disks of running VMs belongs to readable copies")
+		case v.Mode == VMDisksSkip && v.Raw == "" && !v.LibvirtSnapshot:
+		case v.Mode == VMDisksConsistent && slices.Contains([]string{"", VMDisksRawSkip, VMDisksRawPause}, v.Raw):
+		default:
+			return invalid("setting for disks of running VMs")
+		}
+	}
 	d := job.Destination
 	switch d.Type {
 	case "usb-copy", "smb-copy":
@@ -209,6 +219,13 @@ func (m *Manager) List() []View {
 	return views
 }
 
+// Job returns a stored job without its password.
+func (m *Manager) Job(id string) (Job, bool) {
+	job, ok := m.find(id)
+	job.Password = ""
+	return job, ok
+}
+
 func (m *Manager) find(id string) (Job, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -258,7 +275,7 @@ func copyPlaceTaken(jobs []Job, job Job) error {
 }
 
 // reservedNames are fixed routes next to /api/v1/backups/{id}.
-var reservedNames = []string{"smb", "target", "progress", "folders", "ssh-key"}
+var reservedNames = []string{"smb", "target", "progress", "folders", "ssh-key", "vm-disks"}
 
 // Create adds a job and makes the password its backups are encrypted with.
 func (m *Manager) Create(job Job, volumes []string) error {

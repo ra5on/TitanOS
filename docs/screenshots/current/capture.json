@@ -6,40 +6,40 @@
   "demoData": true,
   "theme": "Graphit / Blau (Standard der Testdaten)",
   "browser": "Playwright Chromium",
-  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden. Seit 8.11.2026: Bilder mit uiVersion 0.70.0 aus scripts/capture-readme-screenshots.mjs (feat/0.70, vite dev 127.0.0.1:5290).",
+  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden. Seit 8.11.2026: Bilder mit uiVersion 0.70.0 aus scripts/capture-readme-screenshots.mjs (feat/0.70, vite dev 127.0.0.1:5290). Seit 12.11.2026: Bilder mit uiVersion 0.77.0 (in Arbeit) aus scripts/capture-readme-screenshots.mjs (Zweig feat/079-systemdaten-sicherung nach dem Merge von main, vite preview des gebauten Frontends auf 127.0.0.1:5263).",
   "images": [
     {
       "file": "anmeldeseite.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "anmeldeseite.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 1052330,
-      "sha256": "0ae1472b64580028347e1c4928293b16881e5deef0e084b9254c74c8582ba0b8"
+      "bytes": 1053137,
+      "sha256": "dbfe3ba0953a29be6e1fcf9e312317324ed941f1541acbc1d589c62563d32c26"
     },
     {
       "file": "arbeitsplatz.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "arbeitsplatz.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 393515,
-      "sha256": "7f260abcf50c7bc1229a146461fbca7e7b98c0bf903b071f80e6e90619b95b04"
+      "bytes": 387420,
+      "sha256": "133528edc2585b952853ae0a66ec917e0476cdd4ec5e1aafc8da9053e6466a66"
     },
     {
       "file": "darstellung.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "darstellung.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 258296,
-      "sha256": "8ae16215a17102ed1a51535f934b252ee818a193d9c9a32892e8521376dd752f"
+      "bytes": 262695,
+      "sha256": "f25b0377cdb1f47d533c6742b735515be8474b545241ea449b55e2d12893dbc6"
     },
     {
       "file": "dateien-auftraege-1440.png",
@@ -84,35 +84,35 @@
     {
       "file": "dateien.png",
       "script": "scripts/capture-readme-screenshots.mjs",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 145041,
-      "sha256": "e172727960bef832b6708c58f9dbff2bddf12dc96aa23d031f792f4ac9a29879",
+      "bytes": 122511,
+      "sha256": "70d3ff13c66e65e501e66ff20c9b193a18379913a4ce1ea44d38cff20fff92ef",
       "output": "dateien.png"
     },
     {
       "file": "dock-bearbeiten.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "dock-bearbeiten.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 430339,
-      "sha256": "a39469d70935c6f71c76ecc0ce62434e7fee43317d75aadcc9a4d9322d119b73"
+      "bytes": 411906,
+      "sha256": "cb895d3dd02381f0f6804e8ff32eb54a61293e3f5a602a4de97806514e4e7d7a"
     },
     {
       "file": "docker.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "docker.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 149520,
-      "sha256": "89a0a584d3e26c0de02a86261342c6aa4abe3898a4b3e8b571c122dde7853de5"
+      "bytes": 127961,
+      "sha256": "b9ee6cb8c071202eff704ef65bd0d1c0504d4819dd8d0072533482067c0ebd85"
     },
     {
       "file": "fernansicht-mobil.png",
@@ -147,26 +147,37 @@
       "sha256": "372d1bbff980fc9b7a2803b6cceb5e2cc83be2bdf5ba90c34c9c8b7ca2efe9fc"
     },
     {
+      "file": "freigaben.png",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "bytes": 93683,
+      "sha256": "9cbf469df3ef3407a88c2441fdc20b2d9fb0fa48177cde8115205fdc271ef6ac",
+      "width": 1600,
+      "height": 1000,
+      "output": "freigaben.png"
+    },
+    {
       "file": "handy-start.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "handy-start.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 390,
       "height": 844,
-      "bytes": 142016,
-      "sha256": "9b7de84fd7018f9f4ee7921071689b7944419da76643d6dd76c265af43f5182e"
+      "bytes": 139369,
+      "sha256": "01bef5470d02fd4690d11876f15cef48fb82311686a02bf91def530e146ec86e"
     },
     {
       "file": "hauptmenue.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "hauptmenue.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 344412,
-      "sha256": "99641d1625451adb56bf06d4469cbd9fe11772336826b6ff57a573fbcbf243be"
+      "bytes": 325556,
+      "sha256": "abd2c9a16eed4826cb1f80cc92ba212591687b25dbb7bdf8b60813c1c95785ba"
     },
     {
       "file": "ki-agent-chat.png",
@@ -231,24 +242,24 @@
     {
       "file": "speicher.png",
       "script": "scripts/capture-readme-screenshots.mjs",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 137129,
-      "sha256": "affab2550403ea843a9d6fa59ca884c01022986dcd26b8454486cadf23dca02f",
+      "bytes": 121585,
+      "sha256": "6de1ef98e93cb103b1d0936dabdc768fc95db5898fc7a4749411eb2548de54c2",
       "output": "speicher.png"
     },
     {
       "file": "systemsteuerung.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "systemsteuerung.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 180798,
-      "sha256": "84821e9f644201db68878581f418938bfa0f838a1fa8c14d4a63b0a2b1c32d6b"
+      "bytes": 125894,
+      "sha256": "4a0f27d3face39093c638c27d38f942c859c78c3c1adf959e681a942db6576ef"
     },
     {
       "file": "vm-erstellen-mobil.png",
@@ -274,23 +285,12 @@
       "file": "vms.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "vms.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
+      "uiVersion": "0.77.0 (in Arbeit)",
+      "captured": "2026-11-12",
       "width": 1600,
       "height": 1000,
-      "bytes": 129529,
-      "sha256": "53ae2f789e71e1a4753d3a94bdcd9394ac1757415d09470c2d06f55ddc4244cb"
-    },
-    {
-      "file": "freigaben.png",
-      "uiVersion": "0.70.0",
-      "captured": "2026-11-08",
-      "script": "scripts/capture-readme-screenshots.mjs",
-      "bytes": 98571,
-      "sha256": "b0f707b03373e6bfc9776240f5255a076c6a1d43656e46a7743d7a18eef934ab",
-      "width": 1600,
-      "height": 1000,
-      "output": "freigaben.png"
+      "bytes": 113827,
+      "sha256": "c6d0abbead4412e487f1f84f3fcc0700c10b2ea45e50119c5884b6b6fd9e9e51"
     }
   ]
 }

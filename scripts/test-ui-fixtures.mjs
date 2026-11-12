@@ -218,6 +218,34 @@ export function fixtureFactory(browser, errors) {
       files: [],
       filePaths: [],
       backups: [],
+      // GET /system/data: an SSD volume that never sleeps and an HDD volume
+      // whose disks may sleep.
+      sysdata: {
+        volume: "",
+        resolved: "nvme",
+        sleepKnown: true,
+        volumes: [
+          { name: "Backup", mounted: true, sleeps: true },
+          { name: "nvme", mounted: true, sleeps: false },
+        ],
+        functions: [
+          ["config", 39845888, true],
+          ["logs", 222298112, true],
+          ["activity", 6291456, true],
+          ["notify", 81920, true],
+          ["smart", 3145728, true],
+          ["monitoring", null, false],
+        ].map(([id, sizeBytes, enabled]) => ({
+          id,
+          choice: "",
+          volume: "nvme",
+          source: "automatic",
+          enabled,
+          moving: false,
+          sizeBytes,
+          sizeAt: sizeBytes === null ? null : time,
+        })),
+      },
       operations: null,
       recovery: null,
       exports: 0,
@@ -1185,6 +1213,30 @@ export function fixtureFactory(browser, errors) {
         path === "/usb"
       )
         return json([]);
+      // Settings › Data and backup › System data (PLAN 79-8).
+      if (path === "/system/data") {
+        if (method === "PUT") {
+          const body = route.request().postDataJSON();
+          data.sysdataCalls = [...(data.sysdataCalls ?? []), body];
+          if (body.volume !== undefined) {
+            data.sysdata.volume = body.volume;
+            data.sysdata.resolved = body.volume || "nvme";
+          }
+          for (const f of data.sysdata.functions) {
+            if (body.functions?.[f.id] !== undefined)
+              f.choice = body.functions[f.id];
+            f.volume = f.choice || data.sysdata.resolved;
+            f.source = f.choice
+              ? "own"
+              : data.sysdata.volume
+                ? "common"
+                : "automatic";
+          }
+        }
+        return json(data.sysdata);
+      }
+      if (path === "/backups/vm-disks")
+        return json(data.vmDisks ?? { choiceNeeded: false, disks: [] });
       if (path === "/config-backup")
         return json({
           backup: {

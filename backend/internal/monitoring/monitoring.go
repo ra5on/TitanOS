@@ -33,6 +33,10 @@ type Settings struct {
 	Volume  string `json:"volume"`
 	Days    int    `json:"days"`
 	MaxMiB  int    `json:"maxMiB"`
+	// FollowSystemData keeps the history on the system data volume (PLAN
+	// 79-8). Volume then still names a volume, the one it was at the time
+	// of saving: versions before 0.77 ignore this field and use Volume.
+	FollowSystemData bool `json:"followSystemData,omitempty"`
 }
 type Disk struct {
 	Name      string   `json:"name"`
@@ -70,10 +74,16 @@ type counters struct {
 	values [5]uint64
 }
 type Manager struct {
-	store         *config.Store
-	MountRoot     string
-	Mounted       func() []string
-	Snapshot      func() (system.Info, storage.Status)
+	store     *config.Store
+	MountRoot string
+	Mounted   func() []string
+	Snapshot  func() (system.Info, storage.Status)
+	// Resolve returns the volume the history goes to, "" while there is
+	// none or its folder is being moved; nil takes Settings.Volume. Hold
+	// keeps the folder from being moved during a read or write; nil:
+	// never moved.
+	Resolve       func() string
+	Hold          func() (release func(), ok bool)
 	mu            sync.Mutex
 	ioMu          sync.Mutex
 	settings      Settings
@@ -126,6 +136,27 @@ func (m *Manager) Set(s Settings) error {
 	m.mu.Unlock()
 	return nil
 }
+
+// use takes the folder of the history for a read or write: the volume it
+// lies on and what lets it go again. Called with ioMu held.
+func (m *Manager) use(s Settings) (volume string, release func(), err error) {
+	release = func() {}
+	if m.Hold != nil {
+		var ok bool
+		if release, ok = m.Hold(); !ok {
+			return "", func() {}, volumedata.ErrUnavailable
+		}
+	}
+	volume = s.Volume
+	if m.Resolve != nil {
+		if volume = m.Resolve(); volume == "" {
+			release()
+			return "", func() {}, volumedata.ErrUnavailable
+		}
+	}
+	return volume, release, nil
+}
+
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -168,7 +199,12 @@ func (m *Manager) Record(now time.Time) error {
 	if m.Mounted == nil || m.Snapshot == nil {
 		return volumedata.ErrUnavailable
 	}
-	root, err := volumedata.Open(m.MountRoot, s.Volume, "monitoring", m.Mounted())
+	volume, release, err := m.use(s)
+	if err != nil {
+		return err
+	}
+	defer release()
+	root, err := volumedata.Open(m.MountRoot, volume, "monitoring", m.Mounted())
 	if err != nil {
 		return err
 	}
@@ -342,7 +378,12 @@ func (m *Manager) History(ctx context.Context, hours int) ([]Sample, error) {
 	if m.Mounted == nil {
 		return nil, volumedata.ErrUnavailable
 	}
-	root, err := volumedata.Open(m.MountRoot, s.Volume, "monitoring", m.Mounted())
+	volume, release, err := m.use(s)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	root, err := volumedata.Open(m.MountRoot, volume, "monitoring", m.Mounted())
 	if err != nil {
 		return nil, err
 	}

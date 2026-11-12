@@ -36,6 +36,13 @@ func (m *Manager) WaitBell() {
 func (m *Manager) keepBell() {
 	m.bellWrite.Lock()
 	defer m.bellWrite.Unlock()
+	// Not while the folder is being moved to another volume: the next
+	// message saves them all.
+	release, ok := m.holdData(false)
+	if !ok {
+		return
+	}
+	defer release()
 	dir := m.bellDir()
 	if dir == "" {
 		return

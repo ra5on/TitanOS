@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { onMount } from 'svelte';
@@ -217,9 +218,9 @@
 			>{t('ops.add')}</button
 		>{/snippet}</PageHead
 >
-{#snippet problemLine(problem: Problem)}{problem.text}{#if problem.detail}<code class="detail"
-			>{problem.detail}</code
-		>{/if}{/snippet}
+{#snippet problemLine(problem: Problem)}{problem.text}<BackendDetail
+		text={problem.detail}
+	/>{/snippet}
 {#if error && !draft && !review}<p class="notice-error" role="alert">
 		{@render problemLine(error)}
 		<button class="btn small" disabled={busy} onclick={load}>{t('ui.retry')}</button>
@@ -659,12 +660,6 @@
 	}
 	.history {
 		margin-top: var(--gap);
-	}
-	.detail {
-		display: block;
-		margin-top: var(--space-1);
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
 	}
 	.schedules {
 		margin-top: var(--gap);

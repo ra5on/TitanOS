@@ -257,3 +257,47 @@ func TestLockingTheLogVolumeTakesTheMarkerAlong(t *testing.T) {
 		t.Fatalf("reported: %+v", u)
 	}
 }
+
+// While the folder is being moved to another volume nothing is written
+// (the lines come with the next write), and after the move the marker of
+// this start is known only at the new place: sealing does not fail for a
+// folder that is gone.
+func TestHoldsTheFolderAndForgetsAMovedOne(t *testing.T) {
+	old, now := t.TempDir(), t.TempDir()
+	j := &journal{out: "2026-10-31T09:00:00+01:00 nas titand[1]: one\n-- cursor: s=1;i=1\n"}
+	m := manager(t, old, "aaa", j)
+	base, held, released := old, true, 0
+	m.Target = func() (string, bool) { return base, true }
+	m.Hold = func() (func(), bool) { return func() { released++ }, held }
+	m.flush(context.Background())
+	if released != 1 {
+		t.Fatalf("folder let go %d times after a write", released)
+	}
+	// The move runs: no write, the cursor stays.
+	held = false
+	j.out = "2026-10-31T09:01:00+01:00 nas titand[1]: two\n-- cursor: s=1;i=2\n"
+	m.flush(context.Background())
+	if data, _ := os.ReadFile(filepath.Join(old, Dir, "aaa.log")); strings.Contains(string(data), "two") || len(j.calls) != 1 {
+		t.Fatalf("written while the folder was being moved: %q", data)
+	}
+	// Moved: log and marker are at the new place, the old folder is gone.
+	if err := os.MkdirAll(filepath.Join(now, ".titanos"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(old, Dir), filepath.Join(now, Dir)); err != nil {
+		t.Fatal(err)
+	}
+	m.Forget(old)
+	base, held = now, true
+	m.flush(context.Background())
+	data, _ := os.ReadFile(filepath.Join(now, Dir, "aaa.log"))
+	if !strings.Contains(string(data), "one") || !strings.Contains(string(data), "two") {
+		t.Fatalf("log after the move: %q", data)
+	}
+	if err := m.Seal(context.Background()); err != nil {
+		t.Fatalf("sealing failed for the folder that was moved away: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(now, Dir, marker)); !os.IsNotExist(err) {
+		t.Fatal("marker left at the new place after sealing")
+	}
+}

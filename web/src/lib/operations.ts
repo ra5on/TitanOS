@@ -103,6 +103,8 @@ export type BackupView = {
 		lastRun?: string | null;
 		lastCheck?: string | null;
 		warning?: string;
+		problems?: { code: string; count: number; paths: string[] | null }[] | null;
+		notices?: { code: string; count: number; paths: string[] | null }[] | null;
 		probe?: {
 			at: string;
 			snapshot: string;

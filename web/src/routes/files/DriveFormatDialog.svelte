@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// Formatting a whole unmanaged drive: one partition with a new filesystem.
 	// Every drive is listed, also new and empty ones; protected or busy ones
 	// say why they cannot be formatted. The work runs on the NAS and goes on
@@ -151,9 +152,7 @@
 				aria-live="polite"
 			>
 				<strong>{job.name}</strong> · <span class="mono">{job.filesystem}</span>
-				— {t(`files.formatPhase.${job.phase}`)}{#if job.error}<br /><span class="mono small"
-						>{job.error}</span
-					>{/if}
+				— {t(`files.formatPhase.${job.phase}`)}<BackendDetail text={job.error} />
 			</div>
 		{/if}
 

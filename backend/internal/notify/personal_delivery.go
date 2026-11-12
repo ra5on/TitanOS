@@ -66,6 +66,31 @@ func (m *Manager) SetPersonalDataDir(dir func() (string, bool)) {
 
 var notifyAccount = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
+// SetPersonalDataHold sets what takes the folder of SetPersonalDataDir for
+// a write: release lets it go, ok is false while the folder is being moved
+// to another volume (nothing is written then). Configure before use.
+func (m *Manager) SetPersonalDataHold(hold func() (release func(), ok bool)) {
+	m.people.mu.Lock()
+	defer m.people.mu.Unlock()
+	m.people.hold = hold
+}
+
+// holdData keeps the folder from being moved while it is written.
+// Called with people.mu held or not; it only reads the function.
+func (m *Manager) holdData(locked bool) (release func(), ok bool) {
+	if !locked {
+		m.people.mu.Lock()
+	}
+	hold := m.people.hold
+	if !locked {
+		m.people.mu.Unlock()
+	}
+	if hold == nil {
+		return func() {}, true
+	}
+	return hold()
+}
+
 func (m *Manager) quietStore(user string) (*config.Store, error) {
 	if !notifyAccount.MatchString(user) || m.people.dir == nil {
 		return nil, invalid("persistent notifications unavailable")
@@ -81,6 +106,11 @@ func (m *Manager) quietStore(user string) (*config.Store, error) {
 	return config.Open(dir), nil
 }
 func (m *Manager) saveQuiet(user string, messages []PersonalMessage) error {
+	release, ok := m.holdData(true)
+	if !ok {
+		return invalid("notification volume unavailable")
+	}
+	defer release()
 	store, err := m.quietStore(user)
 	if err != nil {
 		return err

@@ -129,3 +129,78 @@ func TestCleanCutsLongTextOnRuneBoundary(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+// Without a chosen volume the log goes to the system data volume (PLAN
+// 79-6), not to the first volume by name; a chosen volume stays.
+func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
+	m := testManager(t)
+	os.Mkdir(filepath.Join(m.MountRoot, "Backup"), 0700)
+	m.Mounted = func() []string { return []string{"data", "Backup"} }
+	choice := "data"
+	m.DefaultVolume = func() string { return choice }
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "login", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Volume != "data" || st.Pending != 0 {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(m.MountRoot, "Backup", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("the first volume by name was written to")
+	}
+	// No system data volume yet: entries wait in memory.
+	choice = ""
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "logout", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Volume != "" || st.Pending != 1 {
+		t.Fatalf("%+v", st)
+	}
+	s := Defaults()
+	s.Volume = "Backup"
+	if err := m.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	m.Flush()
+	if st := m.Status(); st.Volume != "Backup" || st.Pending != 0 {
+		t.Fatalf("chosen volume not respected: %+v", st)
+	}
+}
+
+// While the folder on the default volume is being moved, nothing is
+// written or read there: entries wait in memory and come afterwards.
+func TestWaitsWhileTheFolderIsBeingMoved(t *testing.T) {
+	m := testManager(t)
+	m.DefaultVolume = func() string { return "data" }
+	held, released := false, 0
+	m.HoldDefault = func() (func(), bool) { return func() { released++ }, held }
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "login", OK: true})
+	m.Flush()
+	if _, err := os.Stat(filepath.Join(m.MountRoot, "data", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("written while the folder was being moved")
+	}
+	rows, _, stored, err := m.Query(context.Background(), Filter{Days: 7, Limit: 10})
+	if err != nil || stored || len(rows) != 1 {
+		t.Fatalf("query during the move: %v stored=%v %+v", err, stored, rows)
+	}
+	held = true
+	m.Flush()
+	if st := m.Status(); st.Pending != 0 || released != 1 {
+		t.Fatalf("not written after the move: %+v, let go %d times", st, released)
+	}
+	// A chosen volume is moved too when it changes (PLAN 79-8): the hold
+	// is asked for as well.
+	s := Defaults()
+	s.Volume = "data"
+	if err := m.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	held = false
+	m.Record(Entry{User: "anna", Via: ViaWeb, Action: "logout", OK: true})
+	m.Flush()
+	if st := m.Status(); st.Pending != 1 {
+		t.Fatalf("chosen volume written during a move: %+v", st)
+	}
+	held = true
+	m.Flush()
+	if st := m.Status(); st.Pending != 0 {
+		t.Fatalf("chosen volume not written after the move: %+v", st)
+	}
+}

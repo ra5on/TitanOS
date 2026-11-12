@@ -87,6 +87,7 @@ func (a backupsArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/backups", g.admin(a.handleBackups))
 	mux.HandleFunc("POST /api/v1/backups", g.admin(a.handleBackupCreate))
 	mux.HandleFunc("GET /api/v1/backups/folders", g.admin(a.handleBackupFolders))
+	mux.HandleFunc("GET /api/v1/backups/vm-disks", g.admin(a.handleBackupVMDisks))
 	mux.HandleFunc("POST /api/v1/backups/ssh-key", g.admin(a.handleBackupKey))
 	mux.HandleFunc("PUT /api/v1/backups/{id}", g.admin(a.handleBackupUpdate))
 	mux.HandleFunc("DELETE /api/v1/backups/{id}", g.admin(a.handleBackupDelete))

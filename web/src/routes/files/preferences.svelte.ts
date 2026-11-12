@@ -14,6 +14,15 @@ import { t } from '#lib/i18n/index.svelte.ts';
 /** The folder on screen; folder views belong to it. */
 type Place = () => { root: string; path: string };
 
+const LAST_ROOT = 'titanos.files.lastRoot';
+function lastRootHere(): string {
+	try {
+		return localStorage.getItem(LAST_ROOT) ?? '';
+	} catch {
+		return '';
+	}
+}
+
 export class FilePreferenceStore {
 	split = $state(false);
 	showHidden = $state(false);
@@ -52,7 +61,9 @@ export class FilePreferenceStore {
 			const prefs = filePreferences(result.files);
 			this.split = prefs.split;
 			this.showHidden = prefs.showHidden;
-			this.rememberedRoot = prefs.root;
+			// This browser's last place wins; the account's stored one is the
+			// start for a browser that has none yet.
+			this.rememberedRoot = lastRootHere() || prefs.root;
 			this.view = prefs.view;
 			this.sort = prefs.sort;
 			this.descending = prefs.descending;
@@ -64,6 +75,21 @@ export class FilePreferenceStore {
 			this.error = '';
 		} catch {
 			this.error = t('files.preferencesLoadFailed');
+		}
+	}
+
+	/**
+	 * Remembers the share or volume last opened, for the next visit. Only in
+	 * this browser: walking through folders must not write to the stick
+	 * (/config, PLAN 79-12). The account's preferences take it along the
+	 * next time something is changed on purpose (view, favourites).
+	 */
+	rememberRoot(id: string) {
+		this.rememberedRoot = id;
+		try {
+			localStorage.setItem(LAST_ROOT, id);
+		} catch {
+			/* private window: only for this visit */
 		}
 	}
 

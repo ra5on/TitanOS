@@ -343,6 +343,11 @@
 		['webapp', 'webapps.menu.filter'],
 		['recent', 'desktop.menu.recent'],
 	];
+	// On touch devices there is neither dragging nor a keyboard: the hint
+	// names the arrows only (PLAN 79-16).
+	const touch = $derived(
+		phone || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches),
+	);
 </script>
 
 <svelte:window ondragover={dragOverWindow} />
@@ -390,7 +395,9 @@
 		</div>
 	</div>
 	{#if arranging}<p class="hint">
-			{canOrder ? t('desktop.menu.arrangeHint') : t('desktop.menu.arrangeOff')}
+			{canOrder
+				? t(touch ? 'desktop.menu.arrangeHintTouch' : 'desktop.menu.arrangeHint')
+				: t('desktop.menu.arrangeOff')}
 		</p>{/if}
 	<div class="grid" class:gone={!shown.length && (pages.length > 0 || actions.length > 0)}>
 		{#each shown as p, i (p.key)}

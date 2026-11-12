@@ -42,6 +42,7 @@
 	"settingshome.desc.viewer": "Docker-Apps im Fenster, GPU und Ton",
 	"settingshome.desc.backups": "Daten, Apps, Stick, Wiederherstellung",
 	"settingshome.desc.files": "Dateisuche, Index, Vorschaubilder",
+	"settingshome.desc.systemdata": "Ablage-Volume, Konfigurationssicherung, Protokolle",
 	"settingshome.desc.memory": "Arbeitsspeicher, Schreibcache",
 	"settingshome.overview": "Übersicht",
 	"settingshome.sideSearch": "Einstellung suchen",

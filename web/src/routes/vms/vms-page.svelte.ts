@@ -144,6 +144,32 @@ export class VmsPage {
 			this.busyNames.delete(vm.name);
 		}
 	};
+	// The way out for a VM held after an interrupted backup of its running
+	// disks (PLAN 79-9): asked for in a plain dialog, then every overlay is
+	// checked and merged back by titand.
+	repairAsked = $state<VM | null>(null);
+	repairing = $state(false);
+	repairFailed = $state(false);
+	repair = async () => {
+		const vm = this.repairAsked;
+		if (!vm || this.repairing) return;
+		this.repairing = true;
+		this.repairFailed = false;
+		try {
+			await api.post(`/vms/${encodeURIComponent(vm.name)}/backup-recovery`);
+			// What failed before can be tried again now.
+			delete this.failures[vm.name];
+			this.feedback = t('vms.backupRecovery.done', { name: vmLabel(vm) });
+			clearTimeout(this.feedbackTimer);
+			this.feedbackTimer = setTimeout(() => (this.feedback = ''), 8000);
+			this.repairAsked = null;
+			await this.load();
+		} catch {
+			this.repairFailed = true;
+		} finally {
+			this.repairing = false;
+		}
+	};
 	notices = $derived(
 		vmNotices({
 			current: this.current,

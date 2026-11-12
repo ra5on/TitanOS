@@ -30,6 +30,8 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		if !loaded {
 			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else if !m.Disabled && !m.off.Load() {
+			// What a backup that was cut off left: a paused VM, an overlay.
+			_ = m.RecoverDiskBackups(ctx, false) // reported in the journal; tried again
 			m.runSnapshotSchedules(ctx, mounted(), time.Now())
 			m.runPowerSchedules(ctx, mounted(), time.Now())
 			m.refreshVolumeCopies(mounted())

@@ -1,10 +1,12 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// VMs: the list on the left, the chosen VM on the right with the tabs
 	// Overview, Screen and Snapshots.
 	import AdoptDialog from './AdoptDialog.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import CloneDialog from './CloneDialog.svelte';
 	import DangerZone from '#lib/components/DangerZone.svelte';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
@@ -125,6 +127,14 @@
 					>
 						<div class="notice-line">
 							<span class="notice-text">{notice.text}</span>
+							{#if notice.repair}<button
+									type="button"
+									class="btn small"
+									onclick={() => {
+										p.repairFailed = false;
+										p.repairAsked = current;
+									}}>{t('vms.backupRecovery.button')}</button
+								>{/if}
 							{#if notice.retry && p.failures[current.name]?.action}<button
 									type="button"
 									class="btn small"
@@ -200,8 +210,7 @@
 					<Snapshots vm={current} />
 				{:else}
 					{#if p.size.error}<p class="notice-error" role="alert">
-							{t('vms.size.failed')}
-							{p.size.error}
+							{t('vms.size.failed')}<BackendDetail text={p.size.error} />
 						</p>{/if}
 					<div
 						class="frame"
@@ -287,6 +296,30 @@
 		onclose={() => (p.dialog = null)}
 		onsubmit={p.submit}
 	/>
+{/if}
+{#if p.repairAsked}
+	<Dialog
+		title={t('vms.backupRecovery.title')}
+		locked={p.repairing}
+		onclose={() => (p.repairAsked = null)}
+	>
+		<p>{t('vms.backupRecovery.text')}</p>
+		<p class="muted">{t('vms.backupRecovery.confirm')}</p>
+		{#if p.repairFailed}<p class="notice-error" role="alert">
+				{t('vms.backupRecovery.failed')}
+			</p>{/if}
+		<div class="dialog-actions">
+			<button
+				type="button"
+				class="btn"
+				disabled={p.repairing}
+				onclick={() => (p.repairAsked = null)}>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" disabled={p.repairing} onclick={p.repair}
+				>{t(p.repairing ? 'vms.backupRecovery.running' : 'vms.backupRecovery.run')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#if p.adopting}<AdoptDialog

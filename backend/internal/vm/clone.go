@@ -39,7 +39,7 @@ func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, moun
 	if m.Disabled {
 		return ErrDisabled
 	}
-	lock, err := m.operation(name)
+	lock, err := m.diskOperation(ctx, name)
 	if err != nil {
 		return err
 	}

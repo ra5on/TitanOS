@@ -70,6 +70,10 @@ type Manager struct {
 	// Target returns the mount point of the volume for the logs; false
 	// while there is none (no volume mounted).
 	Target func() (string, bool)
+	// Hold takes the folder for a write and returns what lets it go; ok is
+	// false while the folder is being moved to another volume, and nothing
+	// is written then. Nil: never moved.
+	Hold func() (release func(), ok bool)
 	// OnUnclean is told once when an earlier start did not end cleanly.
 	OnUnclean func(Unclean)
 	// pstore is where systemd-pstore keeps kernel crash records.
@@ -323,10 +327,30 @@ func (m *Manager) keepCrashLocked(boot string) bool {
 	return found
 }
 
+// Forget drops what this start knows about the folder on the volume
+// mounted at base, after the folder was moved to another volume: its
+// marker went along. The next write finds the folder anew.
+func (m *Manager) Forget(base string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	dir := filepath.Join(base, Dir)
+	delete(m.marked, dir)
+	if m.dir == dir {
+		m.dir, m.checked = "", false
+	}
+}
+
 // flush appends the lines since the last write.
 func (m *Manager) flush(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.Hold != nil {
+		release, ok := m.Hold()
+		if !ok {
+			return
+		}
+		defer release()
+	}
 	dir, ok := m.folderLocked()
 	if !ok {
 		return

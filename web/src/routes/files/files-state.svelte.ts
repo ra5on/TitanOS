@@ -298,8 +298,8 @@ export class FilesState {
 			(chosen?.kind === 'share' || chosen?.kind === 'volume') &&
 			this.prefs.rememberedRoot !== id
 		) {
-			this.prefs.rememberedRoot = id;
-			if (this.rootId) this.prefs.save();
+			// Per browser, never a write to /config by walking around.
+			this.prefs.rememberRoot(id);
 		}
 		if (this.rootId !== id) this.usb.unlockedRoot = '';
 		this.rootId = id;

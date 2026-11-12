@@ -159,3 +159,31 @@ func TestKey(t *testing.T) {
 		}
 	}
 }
+
+// The history goes to the system data volume (PLAN 79-6), not to the first
+// volume by name.
+func TestDefaultVolumeIsTheSystemDataVolume(t *testing.T) {
+	r, root, reports, now := setup(t)
+	if err := os.Mkdir(filepath.Join(root, "zz"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	choice := "zz"
+	r.DefaultVolume = func() string { return choice }
+	*reports = []storage.SmartReport{hdd(*now, 35, 0)}
+	if err := r.Record(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "zz", ".titanos", Feature)); err != nil {
+		t.Fatalf("not kept on the system data volume: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "data", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("the first volume by name was written to")
+	}
+	if r.Volume() != "zz" {
+		t.Fatalf("Volume() = %q", r.Volume())
+	}
+	choice = ""
+	if r.Volume() != "" {
+		t.Fatal("a volume without a system data volume")
+	}
+}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { api, ApiError, type StorageStatus } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
@@ -23,6 +24,8 @@
 		time: string;
 		weekday: number;
 		encrypt?: boolean;
+		/** "change": after every change; "daily": at most once a day (0.77). */
+		pace?: string;
 	};
 	type Backup = {
 		name: string;
@@ -255,7 +258,7 @@
 			{:else if status.lastError}
 				<div class="notice-error" role="alert">
 					{t('stick.failed')}
-					<pre>{status.lastError}</pre>
+					<BackendDetail text={status.lastError} />
 				</div>
 			{:else if newest}
 				<p class="notice-ok" role="status">
@@ -384,6 +387,19 @@
 							>{t('stick.schedule.daily')}</option
 						><option value="weekly">{t('stick.schedule.weekly')}</option></select
 					>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="refresh"
+				title={t('stick.pace')}
+				desc={t('stick.pace.hint')}
+				for="stick-pace"
+			>
+				{#snippet control()}
+					<select id="stick-pace" class="field" bind:value={d.pace}>
+						<option value="daily">{t('sysdata.config.pace.daily')}</option>
+						<option value="change">{t('sysdata.config.pace.change')}</option>
+					</select>
 				{/snippet}
 			</SettingRow>
 			<SettingRow icon="disk" title={t('stick.volume')} for="stick-volume">

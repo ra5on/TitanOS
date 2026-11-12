@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import UsageBreakdown from '#lib/operations/UsageBreakdown.svelte';
 	import SnapshotFolderRestore from '#lib/operations/SnapshotFolderRestore.svelte';
@@ -323,7 +324,7 @@
 								>{#each usage.entries as entry (entry.id ?? entry.name)}<tr
 										><td class="mono"
 											>{entry.name}{#if entry.error}<p class="notice-warn">
-													{entry.error}
+													{t('detail.entryProblem')}<BackendDetail text={entry.error} />
 												</p>{/if}</td
 										><td>{t(`ops.usage.${entry.kind ?? 'other'}` as 'ops.usage.other')}</td><td
 											>{formatBytes(entry.bytes)}</td
@@ -352,7 +353,9 @@
 							>{/snippet}
 					</SettingRow>
 					{#if growth.error || growth.operation.error}<p class="notice-warn">
-							{growth.error || growth.operation.error}
+							{#if growth.error}{growth.error}{:else}{t('detail.failed')}<BackendDetail
+									text={growth.operation.error}
+								/>{/if}
 						</p>{/if}
 					{#if ['preparing', 'adding', 'starting', 'aborting'].includes(growth.operation.phase) && !growth.active}<SettingRow
 							icon="stop"

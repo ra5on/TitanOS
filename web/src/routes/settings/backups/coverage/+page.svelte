@@ -7,6 +7,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { operationError, type BackupView } from '#lib/operations.ts';
+	import { notesLine } from '#lib/backup-notes.ts';
 	type Coverage = {
 		kind: string;
 		name: string;
@@ -86,11 +87,11 @@
 							>{t('coverage.lastCheck')}: {date(job.state.lastCheck)}</span
 						><span>{t('coverage.lastProbe')}: {date(job.state.probe?.at)}</span>
 					</div>
-					{#if job.state.lastError || job.state.warning || job.state.checkError || job.state.probe?.error}<p
+					{#if job.state.lastError || job.state.warning || job.state.problems?.length || job.state.checkError || job.state.probe?.error}<p
 							class="notice-warn"
 						>
 							{job.state.lastError ||
-								job.state.warning ||
+								notesLine(job.state) ||
 								job.state.checkError ||
 								job.state.probe?.error}
 						</p>{/if}

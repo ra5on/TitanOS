@@ -14,6 +14,8 @@ func (w *titand) wireShares() error {
 	// services in line with accounts, shares and mounted volumes.
 	w.folders = shares.NewManager(w.store)
 	w.folders.Disabled = w.opts.dev
+	// Recycle bins on sleeping disks are emptied once the disks are awake.
+	w.folders.Asleep = w.volumes.VolumeAsleep
 	w.folders.Shadow = w.volumes.ShadowDir
 	if err := w.folders.Load(); err != nil {
 		slog.Warn("shares not readable from /config", "err", err)

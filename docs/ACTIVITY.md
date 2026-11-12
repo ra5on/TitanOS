@@ -59,7 +59,8 @@ Datei-Downloads bleiben ebenfalls außen vor.
 
 Einträge werden einige Sekunden gesammelt und dann als tägliche JSON-Zeilen
 (`JJJJ-MM-TT.jsonl`) unter `.titanos/activity/` auf einem Daten-Volume
-geschrieben, nie auf den Stick. Standard ist das erste eingebundene Volume;
+geschrieben, nie auf den Stick. Standard ist das Systemdaten-Volume (ein Volume, dessen Platten nie
+schlafen, sonst das nach Namen erste);
 ein festes Volume ist wählbar. Die Einstellungen liegen in
 `/config/system/activity.json`.
 

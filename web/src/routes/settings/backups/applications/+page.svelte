@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -269,7 +270,9 @@
 {#if result}<SettingGroup title={t(result.verified ? 'applications.done' : 'applications.failed')}>
 		<div class="panel plan">
 			<p class="mono">{result.target}</p>
-			{#if result.error}<p class="notice-error">{result.error}</p>{/if}
+			{#if result.error}<p class="notice-error">
+					{t('detail.failed')}<BackendDetail text={result.error} />
+				</p>{/if}
 			{#if result.verified}<ol>
 					<li>{t('applications.reviewFiles')}</li>
 					<li>{t('applications.reviewConfig')}</li>

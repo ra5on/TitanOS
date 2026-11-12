@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	// The partitions of one unmanaged drive: a bar of partitions and free
 	// space, a table, and an action per partition or gap. The NAS does the
 	// work in the background and checks the drive again right before it
@@ -263,9 +264,7 @@
 			? t('files.partitions.done')
 			: job.phase === 'failed'
 				? t('files.partitions.failed')
-				: t(`files.formatPhase.${job.phase}`)}{#if job.error}<br /><span class="mono small"
-				>{job.error}</span
-			>{/if}
+				: t(`files.formatPhase.${job.phase}`)}<BackendDetail text={job.error} />
 	</div>
 {/if}
 

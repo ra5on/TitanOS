@@ -475,3 +475,46 @@ func TestSweepRecycleKeepsOldFilesOfAFreshlyDeletedFolder(t *testing.T) {
 		t.Error("a file of a folder deleted 40 days ago is still in the recycle bin")
 	}
 }
+
+// The hourly look through the recycle bins waits while the disks of a
+// volume sleep and catches up once they are awake (PLAN 79-6).
+func TestRecycleSweepWaitsForSleepingDisks(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.Create(Share{Name: "fotos", Volume: "data", SMB: true, Recycle: Recycle{Enabled: true, Days: 30}, Access: map[string]string{"alex": ReadWrite}}, volumes, users)
+	start := time.Now()
+	old := filepath.Join(m.mountRoot, "data/fotos/.recycle/alex/alt.jpg")
+	os.MkdirAll(filepath.Dir(old), 0o755)
+	os.WriteFile(old, []byte("x"), 0o644)
+	os.Chtimes(old, start.Add(-40*24*time.Hour), start.Add(-40*24*time.Hour))
+	asleep, asked := true, 0
+	m.Asleep = func(volume string) bool { asked++; return asleep && volume == "data" }
+	there := func() bool { _, err := os.Stat(old); return err == nil }
+
+	m.sweepRecycleDue([]string{"data"}, start)
+	m.sweepRecycleDue([]string{"data"}, start.Add(30*time.Minute))
+	if !there() || asked != 0 {
+		t.Fatalf("looked through before an hour was over (there=%v, asked=%d)", there(), asked)
+	}
+	m.sweepRecycleDue([]string{"data"}, start.Add(61*time.Minute))
+	m.sweepRecycleDue([]string{"data"}, start.Add(61*time.Minute+10*time.Second))
+	if !there() || asked != 1 {
+		t.Fatalf("a sleeping volume was looked through, or asked more than once a minute (there=%v, asked=%d)", there(), asked)
+	}
+	asleep = false
+	m.sweepRecycleDue([]string{"data"}, start.Add(63*time.Minute))
+	if there() {
+		t.Fatal("not caught up once the disks were awake")
+	}
+	// Awake volumes keep the hourly rhythm.
+	os.MkdirAll(filepath.Dir(old), 0o755)
+	os.WriteFile(old, []byte("x"), 0o644)
+	os.Chtimes(old, start.Add(-40*24*time.Hour), start.Add(-40*24*time.Hour))
+	m.sweepRecycleDue([]string{"data"}, start.Add(100*time.Minute))
+	if !there() {
+		t.Fatal("looked through again within the hour")
+	}
+	m.sweepRecycleDue([]string{"data"}, start.Add(124*time.Minute))
+	if there() {
+		t.Fatal("not looked through after another hour")
+	}
+}

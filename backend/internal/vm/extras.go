@@ -411,7 +411,7 @@ func (m *Manager) copyDisks(ctx context.Context, vm VM) {
 // Grow makes a disk of a VM larger. The guest has to extend its partition
 // itself afterwards. Disks never shrink: that would cut data off.
 func (m *Manager) Grow(ctx context.Context, name string, index int, sizeBytes int64) error {
-	lock, lockErr := m.operation(name)
+	lock, lockErr := m.diskOperation(ctx, name)
 	if lockErr != nil {
 		return lockErr
 	}
