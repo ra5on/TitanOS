@@ -194,6 +194,146 @@ Wie bei den Apps (`appaccess`): Besitzer und Administratoren sehen immer alle Ka
 
 Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_unavailable`, `nvr_docker_off`, `nvr_no_volume`, `nvr_volume_sleeps`, `nvr_target_public`, `nvr_camera_not_found`, `nvr_camera_exists`, `nvr_camera_limit`, `nvr_not_running`, `nvr_disabled`, `nvr_invalid`, `nvr_access_admin`, `nvr_no_picture`.
 
+## API Phase 2
+
+> **Vertrag für die Oberfläche.** Routen und Formen dieses Abschnitts gelten; wo beim Bau etwas abweichen musste, steht es hier. `titand -dev` liefert für jede Route Beispieldaten (Abschnitt „Entwicklungsmodus“). Zeiten sind **Unix-Sekunden** (Zahl, UTC), `null` heißt „noch offen/unbekannt“. Alle Routen unter `/api/v1/nvr`; keine in `publicRoutes`. „Recht“ meint das Kamerarecht des Kontos; Besitzer/Administratoren haben beide. Eine Kamera oder ein Ereignis ohne Recht wird wie ein nicht vorhandenes beantwortet (`nvr_camera_not_found`, `nvr_event_not_found`). Läuft der NVR nicht: `409 nvr_not_running`.
+
+### Ereignisse
+
+| Route | Recht | |
+|---|---|---|
+| `GET /events?camera=&label=&from=&to=&limit=&before=&reviewed=` | `recordings` | Liste, neueste zuerst. `camera`/`label` mehrfach mit Komma; `limit` 1–200 (Vorgabe 50); `before` = `next` der vorigen Seite; `reviewed=0|1` filtert. Nur Kameras mit Recht. |
+| `GET /events/{id}` | `recordings` | ein Ereignis |
+| `GET /events/{id}/thumbnail.jpg` | `recordings` | kleines Bild (JPEG) |
+| `GET /events/{id}/snapshot.jpg` | `recordings` | Schnappschuss; `404 nvr_no_picture`, wenn es keinen gibt |
+| `GET /events/{id}/clip.mp4` | `recordings` | Ausschnitt; `Range` wird durchgereicht (`206`), `?download=1` setzt `Content-Disposition: attachment` |
+| `POST /events/{id}/reviewed` | `recordings` | `{reviewed: true|false}` → das Ereignis |
+| `DELETE /events/{id}` | Administrator | löscht Ereignis samt Schnappschuss; `204` |
+
+```jsonc
+// GET /events → { "events": [Event], "next": 1731400000.5 | null }
+{ "id": "1731412345.123456-abc123", "camera": "haustuer",
+  "label": "person",                 // person, car, dog, …
+  "subLabel": "Anna" ,               // erkanntes Gesicht bzw. bekannter Kennzeichen-Name; "" wenn keins
+  "plate": "M-AB 1234",              // gelesenes Kennzeichen; "" wenn keins
+  "score": 0.87,                     // 0–1
+  "start": 1731412345.1, "end": 1731412361.9,   // end null: läuft noch
+  "hasClip": true, "hasSnapshot": true,
+  "zones": [], "reviewed": false,
+  "kept": false }                    // „behalten“: wird nie von der Speichergrenze gelöscht
+```
+
+`reviewed` gilt für den NVR insgesamt, nicht je Konto (Frigate führt „gesehen“ je Review-Abschnitt; titand setzt den Abschnitt, zu dem das Ereignis gehört).
+
+**Live-Meldungen** – `GET /feed` (WebSocket, angemeldet). titand hält **eine** Verbindung zu Frigate und verteilt; jedes Fenster bekommt nur Nachrichten seiner Kameras mit Recht `live`. Endet wie eine Konsole (`{"t":"bye","reason":"logout"}`); entzogene Rechte wirken binnen Sekunden. Der Browser sendet nichts.
+
+```jsonc
+{ "t": "hello", "running": true }                                  // direkt nach dem Verbinden und bei jedem Wechsel von running
+{ "t": "event", "phase": "new" | "update" | "end", "event": Event }
+{ "t": "activity", "camera": "haustuer", "motion": true, "objects": ["person"] }   // was gerade im Bild ist; bei jeder Änderung
+```
+
+### Aufnahmen
+
+| Route | Recht | |
+|---|---|---|
+| `GET /cameras/{id}/recordings/summary` | `recordings` | Tage und Stunden mit Aufnahmen (Zeitzone des NAS) |
+| `GET /cameras/{id}/recordings?from=&to=` | `recordings` | Segmente für die Zeitleiste; Fenster höchstens 24 h (`400 nvr_invalid`) |
+| `GET /cameras/{id}/vod/{from}/{to}/master.m3u8` (und alles darunter) | `recordings` | HLS-Wiedergabe; die Wiedergabelisten verweisen relativ, der Player braucht nur die Adresse der `master.m3u8`. `from`/`to` ganze Unix-Sekunden. |
+| `GET /cameras/{id}/recordings/frame.jpg?at=&height=` | `recordings` | Standbild zum Zeitpunkt `at`; `404 nvr_no_picture` in einer Lücke |
+
+```jsonc
+// summary
+{ "days": [ { "day": "2026-11-12",
+              "hours": [ { "hour": 14, "start": 1731416400, "seconds": 3540, "motion": 812, "objects": 96, "events": 3 } ] } ] }
+// recordings?from&to  – Lücken sind Lücken zwischen den Segmenten
+{ "from": 1731412800, "to": 1731499200,
+  "segments": [ { "start": 1731416400.0, "end": 1731416410.0, "motion": 120, "objects": 2 } ] }   // motion/objects: Zähler, 0 = nichts
+```
+
+### Export
+
+Exporte gehören dem Konto, das sie angelegt hat; es sieht nur die eigenen, Administratoren alle. Anlegen braucht `recordings` auf der Kamera. Exporte zählen zur Belegung (`status.storage.exportsBytes`) und werden nie von der Speichergrenze gelöscht.
+
+| Route | |
+|---|---|
+| `POST /exports` | `{camera, from, to, name}` (höchstens 24 h, `name` 1–80 Zeichen, sonst aus Kamera und Zeit) → `201` Export |
+| `GET /exports` | `{exports: [Export]}`, neueste zuerst |
+| `GET /exports/{id}` | ein Export (für den Fortschritt abfragen) |
+| `GET /exports/{id}/download` | MP4 als Anhang, `Range` durchgereicht; `409 nvr_export_running`, solange er läuft |
+| `GET /exports/{id}/thumbnail.jpg` | Vorschaubild |
+| `PUT /exports/{id}` | `{name}` |
+| `DELETE /exports/{id}` | `204` |
+
+```jsonc
+{ "id": "haustuer_ab12cd", "camera": "haustuer", "name": "Paketbote",
+  "from": 1731412300, "to": 1731412420, "created": 1731413000,
+  "state": "running" | "done" | "failed",
+  "sizeBytes": 18234567,             // null solange running
+  "owner": "anna" }                  // "" wenn das Konto nicht mehr bekannt ist
+```
+
+Fehler: `nvr_export_not_found`, `nvr_export_running`, `nvr_export_failed` (Frigate hat den Export abgelehnt, etwa weil im Zeitraum nichts aufgenommen ist).
+
+### Schwenken (PTZ)
+
+| Route | Recht | |
+|---|---|---|
+| `GET /cameras/{id}/ptz` | `live` | `{supported, features: ["pt", "zoom", …], presets: ["home", …]}`; `supported: false`, wenn die Kamera nicht als PTZ angelegt ist oder Frigate keine Steuerung findet |
+| `POST /cameras/{id}/ptz` | `live` | `{action, preset}`; `action`: `move_up`, `move_down`, `move_left`, `move_right`, `zoom_in`, `zoom_out`, `stop`, `preset` (mit `preset`: Name). `204`. |
+
+Eine Bewegung läuft, bis `stop` kommt. titand schickt `stop` von selbst, wenn 5 Sekunden lang keine Anfrage für diese Kamera kommt – die Oberfläche wiederholt die Bewegung also spätestens alle 4 Sekunden, solange die Taste gehalten wird, und schickt beim Loslassen `stop`. Höchstens 10 Befehle je Sekunde und Konto (`429 rate_limited`). `409 nvr_ptz_unsupported`, wenn die Kamera nicht schwenkt.
+
+### Gegensprechen
+
+`GET /cameras/{id}/talk` (WebSocket, Recht `live`, nur Kameras mit `audio.twoWay`): reicht go2rtcs WebRTC-Signalisierung für den Strom `<id>_twoway` unverändert durch (`{"type":"webrtc/offer","value":sdp}` → `{"type":"webrtc/answer",…}`, `webrtc/candidate` in beide Richtungen). Fehler und Ende wie bei `…/live`. Der Browser gibt das Mikrofon nur über **https** frei (oder `localhost`); der Medienweg geht nicht durch titand, sondern direkt zum NAS auf **Port 8555 (UDP, sonst TCP)** – von unterwegs also nur über VPN/Tailscale.
+
+### Gesichter und Kennzeichen (nur Administratoren)
+
+Bilder von Gesichtern sind personenbezogene Daten: nur Administratoren, nie im Protokoll, nie im Diagnosepaket.
+
+| Route | |
+|---|---|
+| `GET /faces` | `{enabled, faces: [{name, images: ["a1.webp", …]}], attempts: [Attempt]}`; `enabled: false`, solange keine Kamera Gesichter erkennt |
+| `POST /faces` | `{name}` legt eine Person an (`201`) |
+| `PUT /faces/{name}` | `{name}` benennt um |
+| `DELETE /faces/{name}` | löscht Person und Bilder (`204`) |
+| `POST /faces/{name}/images` | Bild als Rumpf (`image/jpeg`, `image/png`, `image/webp`, höchstens 8 MB); Frigate verlangt genau ein erkennbares Gesicht (`400 nvr_face_rejected`) |
+| `GET /faces/{name}/images/{file}` | das Bild |
+| `DELETE /faces/{name}/images/{file}` | `204` |
+| `GET /faces/attempts/{file}` | Bild eines gesehenen, nicht zugeordneten Gesichts |
+| `POST /faces/attempts/{file}/assign` | `{name}` ordnet es einer Person zu (lernt es an) |
+| `DELETE /faces/attempts/{file}` | verwirft es (`204`) |
+| `GET /plates/recognized` | `{plates: [{plate, count, lastSeen, camera}]}` – gelesene Kennzeichen, häufigste zuerst |
+
+```jsonc
+// Attempt
+{ "file": "1731412345.123-abc-1731412346.5-anna-0.62.webp", "at": 1731412346.5,
+  "guess": "anna" | "",              // wen Frigate vermutet hat
+  "score": 0.62 }
+```
+
+Personennamen: 1–40 Zeichen, Buchstaben, Ziffern, Leerzeichen, `-` und `_` (`nvr_invalid` sonst); `nvr_face_not_found`, `nvr_face_exists`.
+
+Bekannte Kennzeichen sind Teil der Einstellungen (`GET/PUT /settings`), neu:
+
+```jsonc
+"plates": [ { "name": "Annas Auto", "plates": ["M-AB 1234", "MAB12*"] } ]   // Muster wie in Frigate (reguläre Ausdrücke erlaubt); höchstens 100 Namen
+```
+
+### Zustand: Speicher
+
+`status.storage` wächst (alte Felder bleiben):
+
+```jsonc
+"storage": { "usedBytes": 21474836480,        // Aufnahmen + Exporte
+             "recordingsBytes": 20401094656, "exportsBytes": 1073741824,
+             "limitGB": 200,
+             "spanDays": 12.4,                // so weit reichen die Aufnahmen zurück; null wenn keine
+             "cap": "off" | "ok" | "cleaning" | "exports_exceed",   // exports_exceed: die Exporte allein liegen über der Grenze – nichts wird gelöscht
+             "lastCleanup": 1731400000 | null }
+```
+
 ## Entwicklungsmodus
 
 `titand -dev` hat kein Docker. Der NVR läuft dort auf einem Ersatz (`nvr/dev.go`, nur dort benutzt): ein Motor, der sich einen Container merkt, und ein Ersatz für Frigates API auf einem Port von `127.0.0.1` (Version, Statistik, Protokoll, Standbilder als Farbverlauf je Kamera, ein Live-WebSocket ohne Video). Ohne Kameradatei gibt es vier Beispielkameras (nur im RAM; eine ausgeschaltet, eine „offline“), Geräte „NPU“ und „iGPU“, die Suche findet zwei Beispielkameras, die Prüfung gelingt außer mit dem Passwort `wrong`. Daten liegen in einem temporären Ordner, nie auf einem Volume.
