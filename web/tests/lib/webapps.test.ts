@@ -110,9 +110,30 @@ test('save decision: the original only for its own format', () => {
 	);
 	expect(saveTarget(doc, { name: 'Angebot.docx', saveAs: true }, word)).toBe('dialog');
 	expect(saveTarget(null, { name: 'Neu.docx', saveAs: false }, word)).toBe('dialog');
-	// Without the bridge every save asks where (the app only downloads).
+	// Without the bridge the app only downloads (host.js hands every download
+	// over as saveAs): under the name of the window's document it is its
+	// Save (PLAN 79-15), anything else asks where.
+	const vector = { bridge: 'adapter' as const, types: ['svg', 'ai'] };
+	const drawing = { root: 'share/Documents', path: 'Bilder/logo.vectorcraft' };
+	expect(saveTarget(drawing, { name: 'logo.vectorcraft', saveAs: true }, vector)).toBe('original');
+	expect(saveTarget(drawing, { name: 'Logo.VectorCraft', saveAs: true }, vector)).toBe('original');
+	expect(saveTarget(drawing, { name: 'logo.png', saveAs: true }, vector)).toBe('dialog');
+	expect(saveTarget(drawing, { name: 'logo copy.vectorcraft', saveAs: true }, vector)).toBe(
+		'dialog',
+	);
+	// Kept under another name in the dialog: the app goes on with its own.
 	expect(
-		saveTarget(doc, { name: 'Angebot.docx', saveAs: false }, { bridge: 'adapter', types: [] }),
+		saveTarget(
+			drawing,
+			{ name: 'Unbenannt.vectorcraft', saveAs: true },
+			vector,
+			'Unbenannt.vectorcraft',
+		),
+	).toBe('original');
+	expect(saveTarget(null, { name: 'logo.vectorcraft', saveAs: true }, vector)).toBe('dialog');
+	// A drawing opened as .svg and saved in the app's own format: asked where.
+	expect(
+		saveTarget({ root: 'r', path: 'logo.svg' }, { name: 'logo.vectorcraft', saveAs: true }, vector),
 	).toBe('dialog');
 });
 

@@ -156,12 +156,16 @@ export function parentDir(path: string): string {
 /**
  * Where a save of the app goes (PLAN 66):
  * - `original`: Save of the open document – it replaces the file (PUT with expect);
- * - `dialog`: Save As, an app without the bridge, nothing open yet, or the
- *   document in another format the app edits (GridCraft saves a .csv as
- *   .xlsx, WordCraft a .doc as .docx) – the save dialog, then it is the
- *   window's file;
+ * - `dialog`: Save As, nothing open yet, or the document in another format
+ *   the app edits (GridCraft saves a .csv as .xlsx, WordCraft a .doc as
+ *   .docx) – the save dialog, then it is the window's file;
  * - `created`: an export (PDF, picture) or another file of the same format
  *   under another name – never over the original; a notice offers to keep it.
+ *
+ * An app without the bridge only downloads, so it cannot say "Save" or
+ * "Save As": a download under the name of the window's document is its Save
+ * and replaces the file (PLAN 79-15: T-Vector and T-Design asked where on
+ * every Ctrl+S); every other download asks where.
  */
 export function saveTarget(
 	doc: DocRef | null,
@@ -170,19 +174,18 @@ export function saveTarget(
 	/** The name the app itself uses for the open document, if it differs from the file's. */
 	appName = '',
 ): 'original' | 'dialog' | 'created' {
-	if (app.bridge === 'adapter' || save.saveAs || !doc) return 'dialog';
+	if (!doc) return 'dialog';
+	// PLAN 76 (hands-on test): the same format is not yet the same document.
+	// A second file of that format – a backup copy next to the project, the
+	// next exported picture – must never replace the open one.
+	const same = (a: string, b: string) =>
+		a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
+	const sent = baseName(save.name);
+	const own = same(sent, baseName(doc.path)) || (appName !== '' && same(sent, baseName(appName)));
+	if (app.bridge === 'adapter') return own ? 'original' : 'dialog';
+	if (save.saveAs) return 'dialog';
 	const ext = extOf(save.name);
-	if (ext === extOf(doc.path)) {
-		// PLAN 76 (hands-on test): the same format is not yet the same
-		// document. A second file of that format – a backup copy next to the
-		// project, the next exported picture – must never replace the open one.
-		const same = (a: string, b: string) =>
-			a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
-		const sent = baseName(save.name);
-		return same(sent, baseName(doc.path)) || (appName !== '' && same(sent, baseName(appName)))
-			? 'original'
-			: 'created';
-	}
+	if (ext === extOf(doc.path)) return own ? 'original' : 'created';
 	return app.types.includes(ext) ? 'dialog' : 'created';
 }
 

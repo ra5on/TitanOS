@@ -105,10 +105,23 @@
 	function takeFocus() {
 		if (!focused || win.minimized) return;
 		const active = document.activeElement;
-		if (active instanceof HTMLIFrameElement && active !== frame) return;
-		if (section?.contains(active)) return;
+		// A frame that is no window's (a widget) keeps the keyboard; the frame of
+		// a window that is no longer in front gives it up (PLAN 79-3: a document
+		// opened from the file manager took no keys until a click).
+		if (
+			active instanceof HTMLIFrameElement &&
+			active !== frame &&
+			!section?.contains(active) &&
+			!active.closest('section.win')
+		)
+			return;
+		if (section?.contains(active) && active !== section) return;
 		if (frame) frame.focus();
-		else section?.focus();
+		else {
+			if (active !== section) section?.focus();
+			// A web app: into the app itself, once it runs.
+			view?.focusApp();
+		}
 	}
 	// PLAN 69: a page that draws the side bar itself (the file manager's tree)
 	// learns whether it is folded; folding stays one setting of the desktop.
@@ -329,6 +342,7 @@
 	style:--from-y="{(win.from?.y ?? rect.y) - rect.y}px"
 	aria-label={win.title}
 	onpointerdown={() => focus(win.id)}
+	onfocus={(e) => e.target === section && view?.focusApp()}
 	onkeydown={drag.keyResize}
 	onanimationend={() => (win.from = undefined)}
 >

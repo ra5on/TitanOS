@@ -52,8 +52,6 @@ type Status struct {
 	ClientZone    Zone    `json:"clientZone"`
 	Blocked       []Block `json:"blocked"`
 	Recent        []Drop  `json:"recent"`
-	// Blocklist is the number of entries of the v64 blocklist in use.
-	Blocklist int `json:"blocklist"`
 }
 
 // Manager keeps the rules in line with the settings.
@@ -111,10 +109,8 @@ type Manager struct {
 	dockerUser      string
 	dockerUserErr   string
 	dockerUserClean bool
-	// blocklist is the v64 blocklist (RAM only, SetBlocklist).
-	blocklist []netip.Prefix
-	lastErr   string
-	failed    bool
+	lastErr         string
+	failed          bool
 
 	attempts      map[netip.Prefix][]time.Time
 	blocks        []Block
@@ -186,7 +182,7 @@ func (m *Manager) applyLocked(ctx context.Context) error {
 	if m.Disabled {
 		return nil
 	}
-	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), blocklist: m.blocklist, networks: m.networks}
+	rs := ruleset{cfg: m.current(), web: m.Web, home: m.home, apps: m.apps, blocked: m.blockedPrefixes(), networks: m.networks}
 	if m.pending != nil {
 		rs.admin = m.admin
 	}
@@ -540,7 +536,6 @@ func (m *Manager) Status(client string) Status {
 	status.Networks = statusNetworks(m.networks, m.active, m.pending)
 	status.DockerError = m.dockerUserErr
 	status.Blocked = slices.Clone(m.blocks)
-	status.Blocklist = len(m.blocklist)
 	m.mu.Unlock()
 	if status.Apps == nil {
 		status.Apps = []App{}
@@ -565,109 +560,11 @@ func (m *Manager) ClearRecent() {
 	m.recentMu.Unlock()
 }
 
-// SetBlocklist replaces the addresses of the v64 blocklist. They only
-// take effect while the firewall is on, in the internet zone: the home
-// network and the VPN are never dropped by them. nil switches it off.
-func (m *Manager) SetBlocklist(ctx context.Context, list []netip.Prefix) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if slices.Equal(list, m.blocklist) {
-		return nil
-	}
-	m.blocklist = slices.Clone(list)
-	if m.Disabled || !m.loaded || !m.current().Enabled {
-		return nil
-	}
-	return m.applyLocked(ctx)
-}
-
 // Enabled tells whether the packet filter is on.
 func (m *Manager) Enabled() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.loaded && m.current().Enabled
-}
-
-// AppZones returns the built-in zones the published ports of an app are
-// allowed from (its policy without a source in each cell, else the
-// default).
-func (m *Manager) AppZones(key string) Zones {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return appZones(m.active, key)
-}
-
-func appZones(cfg Config, key string) Zones {
-	var z Zones
-	for _, zone := range legacyZones {
-		z.set(zone, appAllowed(cfg.Cell(zone, ToApps), key))
-	}
-	return z
-}
-
-// setAppZones sets the policy of an app in the cells of the built-in
-// zones: the first one for it without a source is changed, else one is
-// added at the end.
-func setAppZones(cfg *Config, key string, zones Zones) {
-	for _, zone := range legacyZones {
-		c := cfg.Cell(zone, ToApps)
-		c.Policies = slices.Clone(c.Policies)
-		action := Deny
-		if zones.Has(zone) {
-			action = Allow
-		}
-		if i := slices.IndexFunc(c.Policies, func(p Policy) bool { return !p.Disabled && p.App == key && p.Source == "" }); i >= 0 {
-			c.Policies[i].Action = action
-		} else {
-			c.Policies = append(c.Policies, Policy{Action: action, Protocol: "any", App: key})
-		}
-		cfg.setCell(c)
-	}
-}
-
-// SetAppZones sets the zones of one app at once and stores them, without
-// a trial: the ports of an app never carry the web UI, so this cannot lock
-// anybody out. It is refused while a change is on trial. With the firewall
-// off it does nothing (ok false).
-func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (bool, error) {
-	if m.Disabled {
-		return false, ErrDisabled
-	}
-	if !appKeyRE.MatchString(key) {
-		return false, fmt.Errorf("%w: app %q", ErrInvalid, key)
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.loaded {
-		return false, ErrNotLoaded
-	}
-	if m.pending != nil {
-		return false, ErrPending
-	}
-	if !m.active.Enabled {
-		return false, nil
-	}
-	cfg := clone(m.active)
-	setAppZones(&cfg, key, zones)
-	if err := validate(cfg); err != nil {
-		return false, err
-	}
-	// Rules first, the stick after: settings whose rules could not be
-	// loaded must not be stored, or the next start would bring them.
-	before := m.active
-	m.active = cfg
-	if err := m.applyLocked(ctx); err != nil {
-		m.active = before
-		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
-		return false, err
-	}
-	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
-		m.active = before
-		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
-		return false, err
-	}
-	slog.Info("firewall zones of an app changed", "app", key, "internet", zones.Internet)
-	return true, nil
 }
 
 // InternetHTTP tells whether the plain HTTP port of titand (where Let's

@@ -43,7 +43,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | hwcheck | `hwcheck.go` | `hwcheckArea` | 1 |
 | inprocess | `inprocess.go` | – | 0 |
 | intel | `intel_gpu.go` | `intelGucArea`, `uasQuirksArea` | 1 |
-| ipv64 | `ipv64.go`, `ipv64_area.go`, `ipv64_assign.go`, `ipv64_monitor.go`, `ipv64_public.go`, `ipv64_routes.go` | `ipv64Area` | 3 |
+| ipv64 | `ipv64.go`, `ipv64_area.go` | `ipv64Area` | 1 |
 | letsencrypt | `letsencrypt.go` | `ddnsArea`, `letsEncryptArea` | 1 |
 | lifecycle | `lifecycle.go` | – | 1 |
 | login | `login_accounts.go`, `login_appearance.go`, `login_device.go` | `loginLookArea` | 2 |

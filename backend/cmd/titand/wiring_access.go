@@ -12,9 +12,9 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
-	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
@@ -80,7 +80,7 @@ func (w *titand) wireAccess() error {
 	return nil
 }
 
-// wireRemoteAccess wires certificates from Let's Encrypt, dynamic DNS, IPv64 and WireGuard.
+// wireRemoteAccess wires certificates from Let's Encrypt, dynamic DNS and WireGuard.
 func (w *titand) wireRemoteAccess() error {
 	ctx := w.ctx
 	// Certificates from Let's Encrypt, served next to the own or
@@ -126,18 +126,11 @@ func (w *titand) wireRemoteAccess() error {
 	}
 	w.background(func() { w.dynamicDNS.Run(ctx) })
 	w.beforePowerOff = func() { w.dynamicDNS.PauseForShutdown(context.Background()) }
-	// The IPv64.net account beyond dynamic DNS: notifications from polling,
-	// the v64 blocklist for the firewall and the WireGuard tunnel into a
-	// Cloud Router; all off until switched on.
-	w.account64 = ipv64.NewManager(w.store)
-	w.account64.Disabled = w.opts.dev
-	w.account64.Fallback = func() (string, string) { return w.dynamicDNS.IPv64Key(), w.acmeCerts.IPv64Key() }
-	w.account64.Notify = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
-	w.account64.Firewall = w.packetFilter
-	if err := w.account64.Load(ctx); err != nil {
-		slog.Warn("IPv64 settings not readable from /config", "err", err)
+	// The IPv64 account area is gone (PLAN 79-2); /config/ipv64/ is neither
+	// read nor deleted. Only a tunnel an older version left up is removed.
+	if !w.opts.dev {
+		removeLeftoverIPv64Tunnel(ctx, command.Exec{}, interfaceExists)
 	}
-	w.background(func() { w.account64.Run(ctx) })
 	// The WireGuard server of the NAS, off unless switched on.
 	w.vpnServer = wgserver.New(w.store)
 	w.vpnServer.Disabled = w.opts.dev

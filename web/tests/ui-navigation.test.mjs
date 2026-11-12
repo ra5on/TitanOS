@@ -12,12 +12,10 @@ test('notifications link to existing local destinations and encode untrusted sub
 	assert.equal(noticeLink('disk_test_failed', 'sda'), '/tools/disks');
 	assert.equal(noticeLink('volume_failed', 'x/#?"'), '/storage#volume-x%2F%23%3F%22');
 	assert.equal(noticeLink('unknown', 'https://evil.example'), null);
-	assert.equal(
-		noticeLink('ipv64_check_down', 'https://evil.example'),
-		'/settings/ddns?tab=ipv64&sub=monitoring',
-	);
-	assert.equal(noticeLink('ipv64_failover', 'p'), '/settings/ddns?tab=ipv64&sub=failover');
-	assert.equal(noticeLink('ipv64_cdn_traffic', 'x'), '/settings/ddns?tab=ipv64&sub=public');
+	// Notifications of the removed IPv64 account area that are still listed
+	// lead to dynamic DNS, never to a tab that is gone.
+	assert.equal(noticeLink('ipv64_check_down', 'https://evil.example'), '/settings/ddns');
+	assert.equal(noticeLink('ipv64_failover', 'p'), '/settings/ddns');
 });
 test('settings search matches translated titles and synonyms, case and accent independently', () => {
 	for (const q of ['SSH', 'certificate', 'Zertifikat', 'schlussel'])

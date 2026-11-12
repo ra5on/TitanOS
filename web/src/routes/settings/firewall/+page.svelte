@@ -362,7 +362,7 @@
 			</SettingRow>
 			<SettingRow icon="tailnet" title={zoneLabel('vpn')}>
 				{#snippet control()}<span
-						><span class="mono">{(status!.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg</span
+						><span class="mono">{(status!.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0</span
 					>{/snippet}
 			</SettingRow>
 			<SettingRow icon="globe" title={zoneLabel('internet')} desc={t('firewall.internetText')} />

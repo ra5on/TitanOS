@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"github.com/ra5on/TitanOS/backend/internal/startup"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -18,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/startup"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
@@ -42,7 +43,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
-	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -142,10 +142,6 @@ type Options struct {
 	HealthReport *healthreport.Manager
 	// Fans drives the fans; nil makes one that only reads.
 	Fans *fans.Manager
-	// IPv64 is the account area of IPv64.net; nil makes one that is off.
-	IPv64 *ipv64.Manager
-	// IPv64Reserved are ports of titand that are never published.
-	IPv64Reserved []int
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
 	// HomeAssistants are all connections, HomeAssistant the first of them;
@@ -271,7 +267,6 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
-	ipv64       ipv64State
 
 	// ctx is the root context of the server: it ends with Close (or with
 	// the context given to Start), and with it every job the server
@@ -340,22 +335,6 @@ func New(opts Options) *Server {
 	if s.opts.WebPush == nil {
 		s.opts.WebPush = webpush.New(opts.Store)
 		s.pending = append(s.pending, func(context.Context) error { return s.opts.WebPush.Load() })
-	}
-	if s.opts.IPv64 == nil {
-		s.opts.IPv64 = ipv64.NewManager(opts.Store)
-		s.opts.IPv64.Disabled = true
-		s.opts.IPv64.Options = ipv64Options
-		s.opts.IPv64.Fallback = func() (string, string) {
-			var ddns, le string
-			if s.opts.DDNS != nil {
-				ddns = s.opts.DDNS.IPv64Key()
-			}
-			if s.opts.LetsEncrypt != nil {
-				le = s.opts.LetsEncrypt.IPv64Key()
-			}
-			return ddns, le
-		}
-		s.pending = append(s.pending, s.opts.IPv64.Load)
 	}
 	// Only now, with every stand-in in place: the areas built here take
 	// the managers as they are at this moment.
