@@ -28,7 +28,7 @@ var (
 	ErrExportFailed = errors.New("nvr: the export could not be started")
 	// ErrExportsUnreadable: exports.json on the NVR's volume could not be
 	// read; nothing is written over it (the owners of the exports would be
-	// lost), so no export is made, renamed or deleted until it is read.
+	// lost), so no export is made or deleted until it is read.
 	ErrExportsUnreadable = errors.New("nvr: the owners of the exports could not be read from the volume")
 )
 
@@ -122,6 +122,20 @@ func (m *Manager) readExportRecords() (records map[string]exportRecord, volume s
 	}
 	m.mu.Unlock()
 	return records, volume, true, nil
+}
+
+// exportsWritable tells whether exports.json may be written: it was read
+// (or is not there yet). Checked before Frigate is asked to make or
+// delete an export, so that a refused record leaves nothing half done.
+func (m *Manager) exportsWritable() error {
+	_, _, readable, err := m.readExportRecords()
+	if err != nil {
+		return err
+	}
+	if !readable {
+		return ErrExportsUnreadable
+	}
+	return nil
 }
 
 // changeExportRecords edits the records and writes them to the volume
@@ -223,10 +237,8 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 	}
 	// The owner of the export must be noted: not over a file that could
 	// not be read.
-	if _, _, readable, err := m.readExportRecords(); err != nil {
+	if err := m.exportsWritable(); err != nil {
 		return Export{}, err
-	} else if !readable {
-		return Export{}, ErrExportsUnreadable
 	}
 	var started struct {
 		ID string `json:"export_id"`
@@ -465,6 +477,11 @@ func (m *Manager) DeleteExport(ctx context.Context, id, owner string, all bool) 
 	}
 	base, err := m.base()
 	if err != nil {
+		return err
+	}
+	// Its record goes with it: not over a file that could not be read, and
+	// then Frigate keeps the export too.
+	if err := m.exportsWritable(); err != nil {
 		return err
 	}
 	if e.State == ExportDone {

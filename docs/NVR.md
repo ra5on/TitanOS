@@ -304,7 +304,7 @@ Exporte gehören dem Konto, das sie angelegt hat; es sieht nur die eigenen, Admi
 - Ein normales Konto, das das Recht `recordings` auf der Kamera verloren hat, sieht deren Exporte weder in der Liste noch einzeln.
 - Ein **fehlgeschlagener** Export bleibt als `failed` stehen (mit Kamera und Name aus dem Vermerk), bis jemand ihn löscht – auch wenn Frigate den Auftrag längst vergessen hat; Frigate wird danach nicht mehr gefragt. Ein Vermerk zu einem Export, den Frigate nirgends kennt (weder fertig noch als Auftrag), wird entfernt.
 - Änderungen an `exports.json` kommen nacheinander (eine gleichzeitige ging sonst verloren).
-- Ließ sich `exports.json` nicht lesen, sehen nur Administratoren die Exporte, und Anlegen, Umbenennen und Löschen werden abgelehnt (`503 nvr_exports_unreadable`): Die Datei wird nie mit einer leeren Liste überschrieben. titand liest sie beim nächsten Zugriff wieder.
+- Ließ sich `exports.json` nicht lesen, sehen nur Administratoren die Exporte, und Anlegen und Löschen werden abgelehnt, bevor Frigate gefragt wird (`503 nvr_exports_unreadable`): Die Datei wird nie mit einer leeren Liste überschrieben, und Frigate legt keinen Export an bzw. löscht keinen, dessen Vermerk nicht geschrieben werden kann. Umbenennen ändert nur Frigates Namen und geht weiter. titand liest die Datei beim nächsten Zugriff wieder.
 
 | Route | |
 |---|---|

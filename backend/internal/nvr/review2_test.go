@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -582,7 +583,22 @@ func TestUnreadableRightsAreNotOverwritten(t *testing.T) {
 // M1: exports.json that could not be read is never replaced by a change.
 func TestUnreadableExportsAreNotOverwritten(t *testing.T) {
 	r := newRig(t, true)
+	r.frigate.Seed(r.m.Cameras(), r.now)
 	r.up()
+	ctx := context.Background()
+	list, err := r.m.Exports(ctx, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := ""
+	for _, e := range list {
+		if e.State == ExportDone {
+			done = e.ID
+		}
+	}
+	if done == "" {
+		t.Fatalf("no finished export: %+v", list)
+	}
 	path := filepath.Join(r.dir, exportsFile)
 	if err := os.WriteFile(path, []byte(`{"x":{"owner":"anna","from":1,"to":2}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -598,10 +614,17 @@ func TestUnreadableExportsAreNotOverwritten(t *testing.T) {
 	r.m.mu.Lock()
 	r.m.rt.exports = nil
 	r.m.mu.Unlock()
-	if _, err := r.m.CreateExport(context.Background(), "ben", "haustuer", 1_700_000_000, 1_700_000_600, ""); !errors.Is(err, ErrExportsUnreadable) {
+	if _, err := r.m.CreateExport(ctx, "ben", "haustuer", 1_700_000_000, 1_700_000_600, ""); !errors.Is(err, ErrExportsUnreadable) {
 		t.Errorf("export started although its owner could not be noted: %v", err)
 	}
-	err := r.m.changeExportRecords(func(records map[string]exportRecord) {
+	// Deleting: refused before Frigate is asked, so the export stays.
+	if err := r.m.DeleteExport(ctx, done, "", true); !errors.Is(err, ErrExportsUnreadable) {
+		t.Errorf("export deleted although its record could not be: %v", err)
+	}
+	if list, _ := r.m.Exports(ctx, "", true); !slices.ContainsFunc(list, func(e Export) bool { return e.ID == done }) {
+		t.Errorf("Frigate deleted the export the request was refused for: %+v", list)
+	}
+	err = r.m.changeExportRecords(func(records map[string]exportRecord) {
 		records["y"] = exportRecord{Owner: "ben", From: 3, To: 4}
 	})
 	_ = os.Chmod(path, 0o600)
@@ -805,5 +828,17 @@ func TestDroppedPlanStillRestartsFrigate(t *testing.T) {
 	}
 	if started() == starts {
 		t.Error("config.yml changed, Frigate was never restarted to read it")
+	}
+}
+
+// M3: Frigate's own texts about faces name the person; an answer TitanOS
+// does not map loses its text before it can be logged.
+func TestFaceErrorsHoldNoName(t *testing.T) {
+	err := facesError(&frigateError{Status: 500, Message: "Successfully renamed face to Anna."})
+	if strings.Contains(err.Error(), "Anna") || frigateStatus(err) != 500 {
+		t.Errorf("%v", err)
+	}
+	if !errors.Is(facesError(&frigateError{Status: 400, Message: "Invalid name: Anna"}), ErrFaceRejected) {
+		t.Error("a refusal is not ErrFaceRejected")
 	}
 }

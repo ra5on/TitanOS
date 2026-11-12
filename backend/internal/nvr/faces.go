@@ -167,15 +167,21 @@ func (m *Manager) hasFace(ctx context.Context, base, person, file string) (bool,
 	return true, files, nil
 }
 
-// facesError maps Frigate's refusals.
+// facesError maps Frigate's refusals. Any other answer of Frigate loses
+// its message: Frigate's texts about faces name the person ("Invalid
+// name: …", "Successfully renamed face to …"), and the error may be
+// logged.
 func facesError(err error) error {
-	switch frigateStatus(err) {
+	switch status := frigateStatus(err); status {
+	case 0:
+		return err
 	case http.StatusBadRequest:
 		return ErrFaceRejected
 	case http.StatusNotFound:
 		return ErrFaceNotFound
+	default:
+		return &frigateError{Status: status, Message: "(about faces; not logged)"}
 	}
-	return err
 }
 
 // CreateFace adds a person without pictures.
