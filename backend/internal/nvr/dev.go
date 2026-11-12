@@ -214,6 +214,9 @@ type DevFrigate struct {
 	// Down makes every route fail; SafeMode answers as after a refused
 	// config; NoDetector reports a detector without a process.
 	Down, SafeMode, NoDetector bool
+	// FailKept answers the question for kept events with an error
+	// (tests of the storage cap).
+	FailKept bool
 	// Cameras are the cameras Frigate "runs" with their pictures per
 	// second (0: offline).
 	Cameras map[string]float64

@@ -284,6 +284,8 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		f.mu.Unlock()
 		f.serveWebRTC(w, r)
 		f.mu.Lock()
+	case path == "/api/events" && r.Method == http.MethodGet && f.FailKept && r.URL.Query().Get("favorites") == "1":
+		writeJSONTo(w, 500, map[string]any{"success": false, "message": "database is locked"})
 	case path == "/api/events" && r.Method == http.MethodGet:
 		cameras, labels := csv(r, "cameras"), csv(r, "labels")
 		after, before := number(r, "after"), number(r, "before")
