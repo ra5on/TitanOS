@@ -38,8 +38,6 @@
 	"error.catalog_changed": "Der Skill hat sich im Katalog geändert, seit er angezeigt wurde. Sieh ihn dir noch einmal an.",
 	"error.catalog_off": "Der Skill-Katalog ist ausgeschaltet.",
 	"error.catalog_unknown_tool": "Der Skill braucht Werkzeuge, die dieses Konto nicht hat.",
-	"error.cdn_in_use": "Das CDN dieser Domain leitet schon an einen anderen Port weiter. Eine Domain hat nur einen Port.",
-	"error.cdn_server_pending": "IPv64 hat noch keinen CDN-Server zugeteilt. Versuche es in einer Minute noch einmal.",
 	"error.direct_unreachable": "Die App lässt sich so nicht direkt öffnen: Du erreichst TitanOS gerade nicht über einen Namen, den auch die App hat.",
 	"error.docs_off": "Diese Funktion ist auf diesem NAS nicht eingeschaltet.",
 	"error.docs_running": "Die Ordner werden gerade schon eingelesen.",

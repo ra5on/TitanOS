@@ -4,9 +4,9 @@ TitanOS hält auf Wunsch Namen auf die Adressen des NAS: den **A-Eintrag** auf d
 öffentliche IPv4-Adresse des Anschlusses, den **AAAA-Eintrag** auf die globale
 IPv6-Adresse des NAS selbst. **Ab Werk aus.** Einstellungen › Netzwerk und
 Dienste › **Dynamisches DNS** (`/settings/ddns`, nur Besitzer und
-Administratoren). Die Seite hat zwei Reiter: **Dynamisches DNS** (dieser Text)
-und **IPv64** (`/settings/ddns?tab=ipv64`, Konto bei IPv64.net, siehe
-`docs/IPV64.md`).
+Administratoren). Die Seite hat keine Reiter; der Reiter „IPv64“ (Konto bei
+IPv64.net) ist mit PLAN 79-2 entfernt, alte Links `/settings/ipv64` und
+`/settings/ddns?tab=ipv64…` führen hierher (`docs/IPV64.md`).
 
 ## Bedienung
 
@@ -67,15 +67,10 @@ OpenAPI-Beschreibung `https://ipv64.net/api/v2/openapi.json` sowie
   Apps dann unter `<app>.<domain>` erreichbar).
 - **Konto, DNS-Einträge und alles Weitere** (API-Keys, Log, eigene Domains,
   Löschen/Zurücksetzen, neuer Update-Token, Überwachung, Ausfallschutz, CDN,
-  Cloud Router, Blocklist) stehen im Reiter **IPv64** dieser Seite
-  (`docs/IPV64.md`; seit 29.10.2026 dort statt als eigener Bereich, alte Links
-  `/settings/ipv64?tab=…` führen auf denselben Unterreiter). Dieselben
-  Updater-Einstellungen (mit IPv64 als festem Anbieter und dem Key des Reiters
-  IPv64) lassen sich auch unter IPv64 › DynDNS bearbeiten; beide Reiter zeigen
-  sofort dasselbe. Unter IPv64 ›
-  Zuweisungen kommen Namen einzeln dazu oder heraus (`AddHostname`/
-  `RemoveHostname`, der Rest bleibt). Erzeugt man dort einen neuen Update-Token für eine
-  Domain, deren Token dynamisches DNS benutzt, übernimmt TitanOS ihn selbst.
+  Cloud Router, Blocklist) verwaltet man auf ipv64.net; der Reiter dafür ist
+  entfernt (`docs/IPV64.md`). Einen neuen Update-Token einer Domain, deren
+  Token dynamisches DNS benutzt, trägt man hier neu ein (mit API-Key holt
+  TitanOS ihn selbst).
 - **Erreichbarkeit überwachen** (Healthcheck, **ab Werk aus**): Erst beim
   Einschalten legt TitanOS bei IPv64 einen Push-Healthcheck an (Name
   `titanos-<hostname>`, Abstand ab 20 Minuten, Vorgabe 30, wegen 72 Pings am
@@ -93,16 +88,9 @@ OpenAPI-Beschreibung `https://ipv64.net/api/v2/openapi.json` sowie
   `pending_dns` meldet, und löscht danach genau diesen Eintrag
   (`DELETE /domains/{d}/records?type=TXT&prefix=…&content=…`). Domain und
   Platzhalter verwenden denselben Namen.
-- CDN, Cloud Router, DNS-Failover, Statusseiten und die v64 Blocklist: im
-  Reiter IPv64. Der Healthcheck „Erreichbarkeit überwachen“ bleibt im Reiter
-  Dynamisches DNS (und unter IPv64 › DynDNS) und erscheint unter IPv64 ›
-  Überwachung als „dieses NAS“; „Neuer Token“ dort übernimmt TitanOS für die
-  Pings selbst.
-- **Rückkehr nach 0.34/0.35:** Diese Versionen hatten den IPv64-Bereich
-  entfernt, die Daten aber liegen lassen. `/config/ipv64/` (eigener Key,
-  Blocklist, Tunnel, Veröffentlichungen) und das Feld `heartbeat` in
-  `ddns/settings.json` werden wieder gelesen; ein früher eingeschalteter
-  Healthcheck wird nach dem Update wieder angepingt.
+- **Vorhandene Einstellungen:** Das Feld `heartbeat` in `ddns/settings.json`
+  gilt weiter. `/config/ipv64/` aus der Zeit des Reiters bleibt liegen und wird
+  bis auf die veröffentlichten Apps nicht mehr benutzt (`docs/IPV64.md`).
 
 Alle Aufrufe von IPv64 zählen zum Token-Bucket des Kontos (300, 10 je
 Sekunde); der Client von TitanOS hält ihn für alle Aufrufe gemeinsam ein und

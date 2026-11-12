@@ -158,7 +158,6 @@ const pages = [
   "/settings/firewall?tab=networks",
   "/settings/firewall?tab=policies",
   "/settings/firewall?tab=autoblock",
-  "/settings/ddns?tab=ipv64",
 ];
 const report = [];
 

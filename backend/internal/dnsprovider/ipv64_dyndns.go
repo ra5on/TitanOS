@@ -306,24 +306,3 @@ type IPv64DynDNSResult struct {
 		Result string `json:"result"`
 	} `json:"results"`
 }
-
-// UpdatePrefix sets A and AAAA of a prefix; without addresses IPv64 takes
-// the one the request comes from. Missing records are created.
-func (c *IPv64) UpdatePrefix(ctx context.Context, domain, prefix string, v4, v6 netip.Addr) (IPv64DynDNSResult, error) {
-	if !ValidHost(domain) || (prefix != "" && !validName(prefix)) {
-		return IPv64DynDNSResult{}, invalid("domain or prefix")
-	}
-	body := map[string]string{}
-	if prefix != "" {
-		body["prefix"] = prefix
-	}
-	if v4.IsValid() {
-		body["ipv4"] = v4.Unmap().String()
-	}
-	if v6.IsValid() {
-		body["ipv6"] = v6.String()
-	}
-	var result IPv64DynDNSResult
-	err := c.call(ctx, http.MethodPost, "/domains/"+url.PathEscape(domain)+"/dyndns", nil, body, &result)
-	return result, err
-}

@@ -1,8 +1,8 @@
 <script lang="ts">
 	// "Watch reachability": the push healthcheck of IPv64 the NAS pings.
 	// Nothing is created at IPv64 before it is switched on; switching off
-	// asks whether to pause, delete or only stop pinging. Shared by
-	// Settings › Dynamic DNS and Settings › IPv64 › DynDNS.
+	// asks whether to pause, delete or only stop pinging (Settings ›
+	// Dynamic DNS).
 	import { ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';

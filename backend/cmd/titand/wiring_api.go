@@ -68,8 +68,6 @@ func (w *titand) wireAPI() error {
 		Netbird:            w.mesh,
 		Network:            w.connection,
 		Firewall:           w.packetFilter,
-		IPv64:              w.account64,
-		IPv64Reserved:      reservedPorts(w.opts),
 		Notify:             w.notifier,
 		WebPush:            w.pushes,
 		WireGuard:          w.vpnServer,

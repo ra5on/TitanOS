@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,14 +35,14 @@ import (
 //
 // Tokens only ever go into the Authorization header.
 //
-// API v2 is covered field by field after its OpenAPI description, one file
-// per area: ipv64_account.go (account, log, API keys, blocklist token),
-// ipv64_domains.go (domains and records), ipv64_dyndns.go (the Provider
-// methods, updates and the public address), ipv64_checks.go (healthchecks
-// with events and statistics), ipv64_integrations.go, ipv64_failover.go
-// (DNS failover), ipv64_pages.go (status and offline pages), ipv64_cdn.go
-// (CDN with reverse proxy and portmapper) and ipv64_router.go (Cloud Router
-// with gateways and peers).
+// API v2 is covered after its OpenAPI description as far as TitanOS uses
+// it, one file per area: ipv64_account.go (account), ipv64_domains.go
+// (domains and records), ipv64_dyndns.go (the Provider methods, updates
+// and the public address), ipv64_checks.go (the healthcheck "watch
+// reachability"), ipv64_integrations.go (the integrations a check can
+// notify) and ipv64_cdn.go (CDN with reverse proxy, for an app published
+// through IPv64). Failover, status and offline pages, portmapper, Cloud
+// Router, account log and API keys went with the account area (PLAN 79-2).
 //
 // The types of the full API carry the field names of the API (snake_case),
 // so the web UI can be checked against the same description. The older,
@@ -322,21 +321,3 @@ func (b *tokenBucket) observe(header http.Header, status int) {
 }
 
 // --- helpers ---
-
-var refRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
-
-// validRef accepts the IDs and tokens of IPv64 in a path.
-func validRef(ref string) bool { return refRE.MatchString(ref) }
-
-// ValidIPv64Ref tells whether an ID or token may go into a path.
-func ValidIPv64Ref(ref string) bool { return validRef(ref) }
-
-func decodeData(data json.RawMessage, out any) error {
-	if len(data) == 0 {
-		return &APIError{Provider: "IPv64", Message: "unexpected answer"}
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return &APIError{Provider: "IPv64", Message: fmt.Sprintf("unexpected answer: %v", err)}
-	}
-	return nil
-}

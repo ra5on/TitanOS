@@ -3,7 +3,6 @@ package firewall
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/netip"
 	"slices"
 	"strings"
@@ -405,27 +404,6 @@ func TestParseForwardDrop(t *testing.T) {
 	}
 	if _, ok := parseDrop("titanos-fw evil-zone IN=x SRC=1.2.3.4"); ok {
 		t.Error("unknown zones are no drops")
-	}
-}
-
-func TestSetAppZonesKeepsOrder(t *testing.T) {
-	cfg := migrate(sampleLegacy())
-	setAppZones(&cfg, "immich", Zones{Home: true})
-	setAppZones(&cfg, "jellyfin", Zones{Home: true})
-	if z := appZones(cfg, "immich"); !z.Home || z.VPN || z.Internet {
-		t.Errorf("immich: %+v", z)
-	}
-	if z := appZones(cfg, "jellyfin"); z.Internet {
-		t.Errorf("jellyfin: %+v", z)
-	}
-	if n := len(slices.DeleteFunc(slices.Clone(cfg.Cell(Home, ToApps).Policies), func(p Policy) bool { return p.App != "jellyfin" })); n != 1 {
-		t.Errorf("jellyfin should have one policy, has %d", n)
-	}
-	if err := validate(normal(cfg)); err != nil {
-		t.Error(err)
-	}
-	if errors.Is(validate(normal(cfg)), ErrInvalid) {
-		t.Error("invalid")
 	}
 }
 

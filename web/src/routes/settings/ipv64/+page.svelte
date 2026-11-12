@@ -1,11 +1,10 @@
 <script lang="ts">
-	// Settings › IPv64 is the tab "IPv64" of Settings › Dynamic DNS since
-	// 29 Oct 2026; old links (also with ?tab=) land on the same sub-tab there.
+	// Settings › IPv64 (an area of its own until 0.33, a tab of Settings ›
+	// Dynamic DNS until 0.76) is gone (PLAN 79-2); old links land on
+	// Settings › Dynamic DNS, where IPv64 stays a provider.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
-	import { ipv64Href } from '#lib/ipv64/ipv64.ts';
 	onMount(() => {
-		void goto(ipv64Href(page.url.searchParams.get('tab')) + page.url.hash, { replaceState: true });
+		void goto('/settings/ddns', { replaceState: true });
 	});
 </script>

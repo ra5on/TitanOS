@@ -1,7 +1,6 @@
 <script lang="ts">
 	// What IPv64.net offers for the updater: picking and creating domains
-	// and the healthcheck that watches whether the NAS is reachable. Account,
-	// records and everything else are under Settings › IPv64. Every call
+	// and the healthcheck that watches whether the NAS is reachable. Every call
 	// counts against the limits of the account, so nothing is fetched by
 	// itself: each part loads on a click.
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -115,10 +114,6 @@
 	<div class="panel">
 		<p class="muted">{t('ipv64.intro')}</p>
 		{#if !keyKnown}<p class="notice-warn">{t('ipv64.needsKey')}</p>{/if}
-
-		<p class="muted hint">
-			{t('ipv64.moved')} <a href="/settings/ddns?tab=ipv64&sub=domains">{t('ipv64.movedLink')}</a>
-		</p>
 
 		<div class="part">
 			<h3>{t('ipv64.domains')}</h3>

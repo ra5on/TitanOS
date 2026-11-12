@@ -140,7 +140,7 @@ laufen als root; `docs/SCRIPTS.md`), die Bestätigung von Netzwerk- und
 Firewall-Änderungen, Firewall ein/aus, die MCP-Einstellungen selbst sowie
 Datei-Downloads als Binärdaten. Diese Routen stehen in keiner der beiden
 Listen; Routen mit Web-Sitzungspflicht (`web_session_required`, `browserOnly`,
-z. B. Volume-Passwörter, IPv64, Konsolen) lehnen In-Process-Aufrufe zusätzlich
+z. B. Volume-Passwörter, Konsolen) lehnen In-Process-Aufrufe zusätzlich
 ab. `TestMCPToolsComeOnlyFromTheExplicitLists` und
 `TestCatalogEntireToolCatalog` prüfen das.
 

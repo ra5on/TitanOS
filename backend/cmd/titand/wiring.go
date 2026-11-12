@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/ra5on/TitanOS/backend/internal/startup"
 	"io/fs"
 	"log/slog"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/startup"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/api"
@@ -34,7 +35,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
-	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
@@ -147,7 +147,6 @@ type titand struct {
 	acmeCerts       *letsencrypt.Manager
 	kickFolders     func()
 	dynamicDNS      *ddns.Manager
-	account64       *ipv64.Manager
 	vpnServer       *wgserver.Manager
 	report          *healthreport.Manager
 	reportSince     atomic.Int64 // the last report, Unix nanoseconds
