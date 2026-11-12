@@ -227,6 +227,9 @@ type size struct {
 	bytes   int64
 	at      time.Time
 	running bool
+	// aside are entries a move put next to the current ones
+	// (volumedata.Asides), found when the size was measured.
+	aside []string
 }
 
 // Size is the size of a function's folder on a volume as last measured;
@@ -264,12 +267,29 @@ func (m *Manager) measure(entry *size, volume, function string, mounted []string
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	bytes, err := volumedata.Size(ctx, m.MountRoot, volume, Folder(function), mounted)
+	aside, asideErr := volumedata.Asides(m.MountRoot, volume, Folder(function), mounted)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	entry.running = false
 	if err == nil {
 		entry.bytes, entry.at = bytes, m.now()
 	}
+	if asideErr == nil {
+		entry.aside = aside
+	}
+}
+
+// Aside are the entries of a function's folder on a volume that a move
+// put next to the current ones ("<name>.from-<volume>") because both
+// volumes held the name with other content: kept, not used. As found when
+// the size was last measured (Size starts that); never reads a disk itself.
+func (m *Manager) Aside(volume, function string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if entry := m.sizes[volume+"\x00"+function]; entry != nil {
+		return slices.Clone(entry.aside)
+	}
+	return nil
 }
 
 // Wait waits for sizes being measured (tests).

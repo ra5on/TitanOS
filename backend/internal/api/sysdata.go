@@ -61,6 +61,13 @@ type sysDataFunction struct {
 	// never measured (the disks of a sleeping volume are not woken for it).
 	SizeBytes *int64     `json:"sizeBytes"`
 	SizeAt    *time.Time `json:"sizeAt"`
+	// Aside are entries of the folder a move put next to the current ones
+	// as "<name>.from-<volume>", because both volumes held that name with
+	// other content. They are kept and not used; someone should look at
+	// them. As of the last measuring of the size.
+	Aside []string `json:"aside,omitempty"`
+	// target is the volume the function belongs on, mounted or not.
+	target string
 }
 
 type sysDataState struct {
@@ -124,6 +131,7 @@ func (a sysDataArea) state(r *http.Request) sysDataState {
 				f.Source = "common"
 			}
 		}
+		f.target = f.Volume
 		if !slices.Contains(mounted, f.Volume) {
 			f.Volume = ""
 		}
@@ -133,6 +141,7 @@ func (a sysDataArea) state(r *http.Request) sysDataState {
 		if bytes, at := a.data.Size(f.Volume, id); !at.IsZero() {
 			f.SizeBytes, f.SizeAt = &bytes, &at
 		}
+		f.Aside = a.data.Aside(f.Volume, id)
 		state.Functions = append(state.Functions, f)
 	}
 	return state
@@ -256,9 +265,10 @@ func (a sysDataArea) handleSystemDataSet(w http.ResponseWriter, r *http.Request)
 			if target == "" {
 				target = resolved
 			}
-			if from := was[id].Volume; from != "" && target != "" && from != target {
-				sysdata.AddPending(s, id, from)
-			}
+			// From the volume the function belonged on, mounted or not: the
+			// data of a volume that is away right now are moved once it
+			// is back.
+			notePending(s, id, was[id].target, target)
 		}
 	})
 	if err != nil {
@@ -275,4 +285,12 @@ func (a sysDataArea) handleSystemDataSet(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 	writeJSON(w, http.StatusOK, a.state(r))
+}
+
+// notePending notes that a function still has data on the volume it
+// belonged on (from) when it now belongs on another one (target).
+func notePending(s *sysdata.Settings, id, from, target string) {
+	if from != "" && target != "" && from != target {
+		sysdata.AddPending(s, id, from)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // vmDisksAnswer is what GET /api/v1/backups/vm-disks returns.
@@ -41,10 +42,10 @@ func (a backupsArea) handleBackupVMDisks(w http.ResponseWriter, r *http.Request)
 		job = stored
 	}
 	if mode := query.Get("mode"); mode != "" {
-		job.VMDisks = &backup.VMDisks{Mode: mode, Raw: query.Get("raw")}
+		job.VMDisks = &backup.VMDisks{Mode: mode, Raw: query.Get("raw"), LibvirtSnapshot: query.Get("libvirtSnapshot") == "true"}
 	}
 	if v := job.VMDisks; v != nil {
-		known := v.Mode == backup.VMDisksSkip && v.Raw == "" ||
+		known := v.Mode == backup.VMDisksSkip && v.Raw == "" && !v.LibvirtSnapshot ||
 			v.Mode == backup.VMDisksConsistent && (v.Raw == "" || v.Raw == backup.VMDisksRawSkip || v.Raw == backup.VMDisksRawPause)
 		if !known {
 			writeError(w, http.StatusBadRequest, "invalid_backup_job", "unknown setting for disks of running VMs")
@@ -58,8 +59,10 @@ func (a backupsArea) handleBackupVMDisks(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	btrfs := func(volume string) bool { return a.storage != nil && a.storage.FilesystemOf(volume) == "btrfs" }
-	plan := func(ctx context.Context, name string, allowPause bool) backup.VMDiskPlan {
-		p := a.vms.PlanDiskBackup(ctx, name, allowPause)
+	// Asked at most every half minute per VM, and bounded: the page may
+	// ask with every change in the editor.
+	plan := func(ctx context.Context, name string, opts backup.VMDiskOptions) backup.VMDiskPlan {
+		p := a.vms.PlanDiskBackupCached(ctx, name, vm.DiskBackupOptions{Snapshot: opts.Snapshot, Pause: opts.Pause})
 		return backup.VMDiskPlan{Way: p.Way, Agent: p.Agent, Reason: p.Reason, NeedBytes: p.NeedBytes, FreeBytes: p.FreeBytes}
 	}
 	answer := vmDisksAnswer{Choice: job.VMDisks, Disks: a.backup.PreviewVMDisks(r.Context(), job, disks, btrfs, plan)}

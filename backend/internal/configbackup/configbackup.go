@@ -114,9 +114,11 @@ type Settings struct {
 	Versions *retention.Keep `json:"versions,omitempty"`
 	// Pace says how soon a change is saved (0.77, PLAN 79-8): PaceChange
 	// a few minutes after every change, PaceDaily at most once a day when
-	// something changed. A stored file without it means PaceChange, as it
-	// was; without a file it is PaceDaily. Older versions ignore it and
-	// save after every change.
+	// something changed. Without the field (a file from before 0.77) and
+	// without a file at all it is PaceChange, as it always was: an update
+	// never makes backups rarer by itself. A new installation gets
+	// PaceDaily written when its owner account is created (NewInstall).
+	// Older versions ignore the field and save after every change.
 	Pace string `json:"pace,omitempty"`
 }
 
@@ -218,7 +220,7 @@ func NewManager(store *config.Store, version string) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, version: version,
 		mountRoot: "/mnt", scanRoot: "/run/titanos-restore", sysBlock: "/sys/block", now: time.Now,
-		settings: Settings{Enabled: true, Keep: defaultKeep, Pace: PaceDaily},
+		settings: Settings{Enabled: true, Keep: defaultKeep, Pace: PaceChange},
 	}
 }
 
@@ -229,12 +231,10 @@ func (m *Manager) Load() error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	switch {
-	case err != nil:
-		// No stored choice: the default since 0.77.
-		settings.Pace = PaceDaily
-	case settings.Pace != PaceDaily:
-		// A file from before 0.77 (or an unknown value): as it was.
+	if settings.Pace != PaceDaily {
+		// No file, a file from before 0.77, an unknown value: as it was.
+		// An existing NAS without a settings file cannot be told from a
+		// new one here, so the absence of the file never means "daily".
 		settings.Pace = PaceChange
 	}
 	if settings.Keep < 1 {
@@ -243,6 +243,30 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.settings, m.loaded = settings, true
+	return nil
+}
+
+// NewInstall gives a NAS that is being set up right now (its owner account
+// was just created) the defaults for new installations: backups of
+// changes at most once a day. A NAS that has settings keeps them. This is
+// the only place the default for new installations is told apart from an
+// existing NAS without a settings file.
+func (m *Manager) NewInstall() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	var stored Settings
+	if err := m.store.ReadJSON(settingsFile, &stored); !errors.Is(err, fs.ErrNotExist) {
+		return err // there are settings (nil), or the stick cannot be read
+	}
+	settings := m.settings
+	settings.Pace = PaceDaily
+	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+		return err
+	}
+	m.settings = settings
 	return nil
 }
 

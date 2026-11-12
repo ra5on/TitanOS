@@ -134,10 +134,30 @@ type VMDisks struct {
 	// what the destination holds of them stays untouched).
 	Mode string `json:"mode"`
 	// Raw says, with VMDisksConsistent, what happens to disks no snapshot
-	// works for (raw images): "" or VMDisksRawSkip reads them as they are
-	// and warns if they changed meanwhile (the earlier copy stays),
-	// VMDisksRawPause pauses the VM for the copy.
+	// works for (raw images, and qcow2 without LibvirtSnapshot): "" or
+	// VMDisksRawSkip leaves them out like VMDisksSkip does (never read, the
+	// earlier copy stays), VMDisksRawPause pauses the VM for the copy.
 	Raw string `json:"raw,omitempty"`
+	// LibvirtSnapshot allows, with VMDisksConsistent, the libvirt snapshot
+	// for qcow2 images on volumes without Btrfs. Off unless a job asks for
+	// it: the way is tested with a stand-in for libvirt only (not yet
+	// proven on a NAS, docs/rules/BACKUPS.md). Without it such disks are
+	// treated like raw images (Raw).
+	LibvirtSnapshot bool `json:"libvirtSnapshot,omitempty"`
+}
+
+// VMDiskOptions are what a job allows for holding a running VM still.
+type VMDiskOptions struct {
+	Snapshot bool
+	Pause    bool
+}
+
+// options are what the setting allows.
+func (v *VMDisks) options() VMDiskOptions {
+	if v == nil || v.Mode != VMDisksConsistent {
+		return VMDiskOptions{}
+	}
+	return VMDiskOptions{Snapshot: v.LibvirtSnapshot, Pause: v.Raw == VMDisksRawPause}
 }
 
 // The values of VMDisks.
@@ -158,8 +178,10 @@ type VMDiskSession interface {
 	Method() (way string, quiesced bool)
 	// Context ends when the copy must stop.
 	Context() context.Context
-	// Expired tells that a pause was ended by its time limit.
-	Expired() bool
+	// Stopped is why the VM was let go before the copy was done, as a
+	// problem code (the pause reached its limit, the room for the overlay
+	// ran low, the VM is being stopped); "" if it was not.
+	Stopped() string
 	// End brings the VM back to normal; it must always be called.
 	End() error
 }
@@ -263,10 +285,16 @@ type Manager struct {
 	// LiveDisks is LiveFiles with the name of the VM each file belongs to.
 	LiveDisks func() map[string]string
 	// BeginVMDisks holds the disks of a running VM still for the copy (a
-	// libvirt snapshot, or a pause if allowPause and nothing else works).
-	// An error carries a problem code (ProblemCode); nothing is changed
-	// then. Nil: disks are read as they are.
-	BeginVMDisks func(ctx context.Context, vm string, allowPause bool) (VMDiskSession, error)
+	// libvirt snapshot or a pause, as far as opts allow). An error carries
+	// a problem code (ProblemCode); nothing is changed then. Nil: disks
+	// are read as they are.
+	BeginVMDisks func(ctx context.Context, vm string, opts VMDiskOptions) (VMDiskSession, error)
+	// VMDiskFiles returns the image files of all VMs, running or not, with
+	// the name of their VM; VMRunning tells whether a VM runs right now.
+	// With both, a VM that is started while a run is under way is noticed
+	// before its disk is opened. Nil: only LiveDisks at the start counts.
+	VMDiskFiles func() map[string]string
+	VMRunning   func(vm string) bool
 	// RecoverVMDisks brings VMs back to normal that an interrupted run
 	// left paused or on an overlay. Nil: nothing.
 	RecoverVMDisks func(ctx context.Context) error

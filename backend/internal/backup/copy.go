@@ -81,12 +81,14 @@ const (
 	// ProblemVMDiskUndoFailed: the VM is not back to normal yet (still on
 	// the overlay, or paused); TitanOS tries again. Needs attention.
 	ProblemVMDiskUndoFailed = "vm_disk_undo_failed"
-	// ProblemVMDiskRawImage is never reported: a raw image without leave
-	// to pause is read as it is (ProblemVMDiskChanged if it changed).
-	ProblemVMDiskRawImage  = "vm_disk_raw_image"
-	ProblemLinkUnsupported = "link_unsupported" // a symbolic link the drive's file system cannot hold
-	ProblemMirrorFailed    = "mirror_failed"    // a deleted file that could not be moved aside
-	ProblemOther           = "other"
+	// ProblemVMDiskRawImage and ProblemVMDiskSnapshotUnproven are reasons,
+	// never problems of a run: such a disk is paused for the copy or left
+	// out (NoticeVMDiskSkipped), as the job says. The preview names them.
+	ProblemVMDiskRawImage         = "vm_disk_raw_image"
+	ProblemVMDiskSnapshotUnproven = "vm_disk_snapshot_unproven"
+	ProblemLinkUnsupported        = "link_unsupported" // a symbolic link the drive's file system cannot hold
+	ProblemMirrorFailed           = "mirror_failed"    // a deleted file that could not be moved aside
+	ProblemOther                  = "other"
 )
 
 // The codes of State.Notices: no failure, nothing to repair.
@@ -126,17 +128,18 @@ var problemText = map[string]string{
 	ProblemVMDiskChanged:     "disks of running VMs that changed while being copied (not saved by this run)",
 	ProblemLinkUnsupported:   "symbolic links the drive's file system cannot hold",
 
-	ProblemVMDiskBusy:           "disks of running VMs not saved by this run: another operation of the VM was running or it was paused",
-	ProblemVMDiskPassthrough:    "disks of running VMs not saved by this run: the VM uses a whole disk of the NAS",
-	ProblemVMDiskBackingChain:   "disks of running VMs not saved by this run: the image has snapshots of its own",
-	ProblemVMDiskNoSpace:        "disks of running VMs not saved by this run: no room for the snapshot next to the disk",
-	ProblemVMDiskSnapshotFailed: "disks of running VMs not saved by this run: the snapshot failed",
-	ProblemVMDiskPauseFailed:    "disks of running VMs not saved by this run: the VM could not be paused",
-	ProblemVMDiskPauseTimeout:   "disks of running VMs not saved by this run: the pause reached its time limit",
-	ProblemVMDiskUndoFailed:     "VMs not back to normal after the backup (TitanOS tries again; check the VM)",
-	ProblemVMDiskRawImage:       "disks of running VMs that are raw images",
-	ProblemMirrorFailed:         "deleted files that could not be moved aside",
-	ProblemOther:                "files with other errors",
+	ProblemVMDiskBusy:             "disks of running VMs not saved by this run: another operation of the VM was running or it was paused",
+	ProblemVMDiskPassthrough:      "disks of running VMs not saved by this run: the VM uses a whole disk of the NAS",
+	ProblemVMDiskBackingChain:     "disks of running VMs not saved by this run: the image has snapshots of its own",
+	ProblemVMDiskNoSpace:          "disks of running VMs not saved by this run: no room for the snapshot next to the disk",
+	ProblemVMDiskSnapshotFailed:   "disks of running VMs not saved by this run: the snapshot failed",
+	ProblemVMDiskPauseFailed:      "disks of running VMs not saved by this run: the VM could not be paused",
+	ProblemVMDiskPauseTimeout:     "disks of running VMs not saved by this run: the pause reached its time limit",
+	ProblemVMDiskUndoFailed:       "VMs not back to normal after the backup (TitanOS tries again; check the VM)",
+	ProblemVMDiskRawImage:         "disks of running VMs that are raw images",
+	ProblemVMDiskSnapshotUnproven: "disks of running VMs for which the job does not allow a libvirt snapshot",
+	ProblemMirrorFailed:           "deleted files that could not be moved aside",
+	ProblemOther:                  "files with other errors",
 }
 
 // copyProblems collects what a run left out, by code, for the warning.
@@ -656,19 +659,19 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					to.add(code, h.item.share+"/"+h.item.rel)
 				}
 			}
-			session, err := m.BeginVMDisks(ctx, vm, job.VMDisks.Raw == VMDisksRawPause)
+			session, err := m.BeginVMDisks(ctx, vm, job.VMDisks.options())
 			if err != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
 				code := vmDiskCode(err)
-				if code == ProblemVMDiskRawImage {
-					// Raw images and no leave to pause: as it is, with a
-					// warning if it changed.
+				if code == ProblemVMDiskRawImage || code == ProblemVMDiskSnapshotUnproven {
+					// No snapshot for these disks and no leave to pause: left
+					// out as the job says. Skipped means skipped: the disk is
+					// not read, the earlier copy stays as it is.
+					each(&notices, NoticeVMDiskSkipped)
 					for _, h := range held[vm] {
-						if err := asIs(roots[h.item.share], h.item, h.offset); err != nil {
-							return err
-						}
+						protect(h.item.share, h.item.rel)
 					}
 					return nil
 				}
@@ -699,9 +702,9 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					// The VM was let go before the copy was done: the pause
 					// reached its limit, or the VM is being shut down. The
 					// copy of the run before stays.
-					code := ProblemVMDiskBusy
-					if session.Expired() {
-						code = ProblemVMDiskPauseTimeout
+					code := session.Stopped()
+					if problemText[code] == "" {
+						code = ProblemVMDiskBusy
 					}
 					problems.add(code, name)
 					protect(h.item.share, h.item.rel)

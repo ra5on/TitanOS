@@ -252,6 +252,7 @@ type Manager struct {
 	// interrupted backup left (diskbackup.go).
 	diskBackups       map[string]*DiskBackup
 	diskBackupChecked map[string]bool
+	diskPlans         map[string]cachedPlan
 	snapshotSpaceMu   sync.Mutex
 	snapshotSpace     map[uint64]uint64
 	createMu          sync.Mutex

@@ -3,10 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/sysdata"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -71,5 +74,44 @@ func TestSystemDataIsForAdministrators(t *testing.T) {
 		if res, _ := ts.do(guest, method, "/api/v1/system/data", map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s as a plain user: %d, want 403", method, res.StatusCode)
 		}
+	}
+}
+
+// A function whose volume is changed while the old one is not mounted:
+// the old volume is still noted (from the stored choice, not from what is
+// mounted), so its data are moved once it is back.
+func TestSystemDataNotesThePreviousVolumeAlsoWhenItIsAway(t *testing.T) {
+	store := config.Open(t.TempDir())
+	if err := store.WriteJSON("storage/volumes.json", []map[string]any{
+		{"name": "alt", "level": "raid1", "filesystem": "ext4", "arrayUUID": "a", "filesystemUUID": "a"},
+		{"name": "neu", "level": "raid1", "filesystem": "ext4", "arrayUUID": "b", "filesystemUUID": "b"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	disks := loadedStorage(t, store)
+	data := sysdata.New(store)
+	data.Mounted = disks.Mounted
+	if err := data.Update(func(s *sysdata.Settings) { s.Volume = "alt"; s.Overrides["smart"] = "alt" }); err != nil {
+		t.Fatal(err)
+	}
+	home := &volumedata.Home{MountRoot: t.TempDir(), Mounted: disks.Mounted, Choose: data.Volume, Override: data.Override}
+	area := sysDataArea{data: data, home: home, storage: disks}
+	state := area.state(httptest.NewRequest("GET", "/api/v1/system/data", nil))
+	for _, f := range state.Functions {
+		if f.ID == sysdata.Config || f.ID == sysdata.Activity || f.ID == sysdata.Monitoring {
+			continue // their managers are not part of this test
+		}
+		if f.Volume != "" || f.target != "alt" {
+			t.Fatalf("%s: shown on %q, belongs on %q; want \"\" and alt (not mounted, but chosen)", f.ID, f.Volume, f.target)
+		}
+	}
+	var s sysdata.Settings
+	s.Pending = map[string][]string{}
+	notePending(&s, sysdata.Logs, "alt", "neu")
+	notePending(&s, sysdata.Smart, "alt", "alt")
+	notePending(&s, sysdata.Notify, "", "neu")
+	notePending(&s, sysdata.Activity, "alt", "")
+	if len(s.Pending) != 1 || !slices.Equal(s.Pending[sysdata.Logs], []string{"alt"}) {
+		t.Fatalf("pending %v", s.Pending)
 	}
 }

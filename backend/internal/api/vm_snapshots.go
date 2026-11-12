@@ -85,3 +85,17 @@ func (a vmsArea) handleVMSnapshotRecover(w http.ResponseWriter, r *http.Request)
 	slog.Info("VM snapshot operation recovered", "vm", r.PathValue("name"), "discardMemory", req.DiscardMemory, "by", currentUser(r).Name)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleVMBackupRecover is the way out for a VM that is held because the
+// record of an interrupted backup of its running disks cannot be used
+// (error vm_backup_recovery): the overlays a backup left next to its disks
+// are committed back, each after a check, and the record is set aside
+// (vm.RepairDiskBackup). Owners and administrators.
+func (a vmsArea) handleVMBackupRecover(w http.ResponseWriter, r *http.Request) {
+	if err := a.vms.RepairDiskBackup(r.Context(), r.PathValue("name")); err != nil {
+		writeVMError(w, err)
+		return
+	}
+	slog.Info("VM disks repaired after an interrupted backup", "vm", r.PathValue("name"), "by", currentUser(r).Name)
+	w.WriteHeader(http.StatusNoContent)
+}

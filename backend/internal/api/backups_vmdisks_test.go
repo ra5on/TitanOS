@@ -118,3 +118,23 @@ func TestBackupVMDisksPreview(t *testing.T) {
 		t.Fatalf("plain user: %d", res.StatusCode)
 	}
 }
+
+// The way out for a VM held by an unusable record of an interrupted
+// backup is for owners and administrators only, and asks the VM manager.
+func TestVMBackupRecoveryRoute(t *testing.T) {
+	ts := newTestServer(t)
+	if res, _ := ts.request("POST", "/api/v1/vms/ha/backup-recovery", map[string]any{}); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", res.StatusCode)
+	}
+	ts.setup()
+	// The VM service of the test server changes nothing (development mode).
+	if res, body := ts.request("POST", "/api/v1/vms/ha/backup-recovery", map[string]any{}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "read_only" {
+		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	if res, _ := ts.do(guest, "POST", "/api/v1/vms/ha/backup-recovery", map[string]any{}); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("plain user: %d", res.StatusCode)
+	}
+}

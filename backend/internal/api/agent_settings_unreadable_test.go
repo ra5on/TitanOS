@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -40,7 +41,12 @@ func TestAgentVolumeWriteNotRetriedEveryTick(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	ts.server.agentSettings() // loaded: no agent.json yet
-	dir := ts.store.Dir()
+	// The folder agent.json goes to: there since the setup stored the
+	// defaults of a new installation.
+	dir := filepath.Join(ts.store.Dir(), "system")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}

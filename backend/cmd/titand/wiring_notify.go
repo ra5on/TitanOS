@@ -12,6 +12,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/sysdata"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
@@ -41,6 +42,28 @@ func (w *titand) wireNotifications() error {
 		return w.volumes.MountPoint(volume), true
 	}
 	w.logs.Hold = func() (func(), bool) { return w.systemData.Hold("logs") }
+	// A chosen volume for system data that stays away: journal, activity,
+	// notifications, SMART and monitoring history wait in memory and never
+	// fall back to another volume. Said once after a quarter of an hour,
+	// and again when the volume is back.
+	w.systemData.OnMissing = func(volume string) {
+		slog.Warn("chosen volume for system data is not mounted; its data wait in memory", "volume", volume)
+		w.notifier.Notify(notify.Warning, "system_data_volume_missing", volume)
+	}
+	w.systemData.OnBack = func(volume string) {
+		w.notifier.Notify(notify.Info, "system_data_volume_back", volume)
+	}
+	if !w.opts.dev {
+		w.background(func() {
+			features := []string{}
+			for _, function := range sysdata.Functions {
+				if function != sysdata.Config {
+					features = append(features, sysdata.Folder(function))
+				}
+			}
+			w.systemData.Watch(ctx, features)
+		})
+	}
 	// The journal was moved to another volume: its marker went along.
 	w.systemData.OnMoved = func(feature, from, _ string) {
 		if feature == "logs" {

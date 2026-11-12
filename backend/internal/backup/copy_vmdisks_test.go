@@ -19,7 +19,7 @@ type fakeSession struct {
 	quiesced bool
 	ctx      context.Context
 	cancel   context.CancelFunc
-	expired  bool
+	stopped  string
 	ended    int
 	endErr   error
 	log      *[]string
@@ -28,7 +28,7 @@ type fakeSession struct {
 
 func (s *fakeSession) Method() (string, bool)   { return s.way, s.quiesced }
 func (s *fakeSession) Context() context.Context { return s.ctx }
-func (s *fakeSession) Expired() bool            { return s.expired }
+func (s *fakeSession) Stopped() string          { return s.stopped }
 func (s *fakeSession) End() error {
 	s.ended++
 	if s.ended == 1 {
@@ -83,8 +83,8 @@ func vmJob(t *testing.T, change func(*Job)) (m *Manager, disk, target string, lo
 
 func session(m *Manager, log *[]string, way string, quiesced bool) *fakeSession {
 	s := &fakeSession{way: way, quiesced: quiesced, log: log}
-	m.BeginVMDisks = func(ctx context.Context, vm string, allowPause bool) (VMDiskSession, error) {
-		*log = append(*log, "begin "+vm+" pause="+map[bool]string{true: "yes", false: "no"}[allowPause])
+	m.BeginVMDisks = func(ctx context.Context, vm string, opts VMDiskOptions) (VMDiskSession, error) {
+		*log = append(*log, "begin "+vm+" pause="+map[bool]string{true: "yes", false: "no"}[opts.Pause]+" snapshot="+map[bool]string{true: "yes", false: "no"}[opts.Snapshot])
 		s.vm = vm
 		s.ctx, s.cancel = context.WithCancel(ctx)
 		return s, nil
@@ -152,7 +152,7 @@ func TestSkipNeverReadsOrReplacesDisksOfRunningVMs(t *testing.T) {
 			// without the test noticing.
 			os.WriteFile(disk, []byte("changed while running, must not be read"), 0o600)
 			m.LiveDisks = func() map[string]string { return map[string]string{disk: "ha"} }
-			m.BeginVMDisks = func(context.Context, string, bool) (VMDiskSession, error) {
+			m.BeginVMDisks = func(context.Context, string, VMDiskOptions) (VMDiskSession, error) {
 				t.Error("skip started a snapshot or pause")
 				return nil, errors.New("no")
 			}
@@ -236,7 +236,7 @@ func TestSkipNeverReadsOrReplacesDisksOfRunningVMs(t *testing.T) {
 // is (as before) and the page is told that a choice is needed.
 func TestNoChoiceTouchesNoVMAndAsksForOne(t *testing.T) {
 	m, _, target, _, run := vmJob(t, nil)
-	m.BeginVMDisks = func(context.Context, string, bool) (VMDiskSession, error) {
+	m.BeginVMDisks = func(context.Context, string, VMDiskOptions) (VMDiskSession, error) {
 		t.Error("a VM was held still without a choice of the job")
 		return nil, errors.New("no")
 	}
@@ -255,12 +255,12 @@ func TestNoChoiceTouchesNoVMAndAsksForOne(t *testing.T) {
 // "consistent" without Btrfs: the VM is held still for its disks only,
 // after everything else, and always let go again.
 func TestConsistentHoldsTheVMOnlyForItsDisks(t *testing.T) {
-	consistent := func(j *Job) { j.VMDisks = &VMDisks{Mode: VMDisksConsistent} }
+	consistent := func(j *Job) { j.VMDisks = &VMDisks{Mode: VMDisksConsistent, LibvirtSnapshot: true} }
 	t.Run("snapshot with guest agent", func(t *testing.T) {
 		m, _, target, log, run := vmJob(t, consistent)
 		s := session(m, log, "libvirt_snapshot", true)
 		state := run()
-		if !slices.Equal(*log, []string{"recover", "begin ha pause=no", "end ha"}) || s.ended != 1 {
+		if !slices.Equal(*log, []string{"recover", "begin ha pause=no snapshot=yes", "end ha"}) || s.ended != 1 {
 			t.Fatalf("log %v, ended %d", *log, s.ended)
 		}
 		if state.Warning != "" || len(state.Notices) != 0 {
@@ -284,30 +284,40 @@ func TestConsistentHoldsTheVMOnlyForItsDisks(t *testing.T) {
 		m, _, _, log, run := vmJob(t, func(j *Job) { j.VMDisks = &VMDisks{Mode: VMDisksConsistent, Raw: VMDisksRawPause} })
 		session(m, log, VMDiskWayPause, false)
 		state := run()
-		if !slices.Contains(*log, "begin ha pause=yes") || !slices.Contains(*log, "end ha") {
+		if !slices.Contains(*log, "begin ha pause=yes snapshot=no") || !slices.Contains(*log, "end ha") {
 			t.Fatalf("log %v", *log)
 		}
 		if got := codes(state.Notices); !slices.Equal(got, []string{NoticeVMDiskPaused + ":docs/ha/disk.qcow2"}) {
 			t.Fatalf("notices %v", got)
 		}
 	})
-	t.Run("raw image without leave to pause is read as before", func(t *testing.T) {
-		m, _, target, _, run := vmJob(t, consistent)
-		m.BeginVMDisks = func(context.Context, string, bool) (VMDiskSession, error) {
-			return nil, codedError{ProblemVMDiskRawImage}
-		}
-		state := run()
-		if state.Warning != "" || len(state.Problems) != 0 {
-			t.Fatalf("%+v", state)
-		}
-		if _, err := os.Stat(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2")); err != nil {
-			t.Fatal("raw disk not copied as it is")
-		}
-	})
+	// Skipped means skipped: a raw image (or a qcow2 one the job allows no
+	// libvirt snapshot for) without leave to pause is not read at all.
+	for _, reason := range []string{ProblemVMDiskRawImage, ProblemVMDiskSnapshotUnproven} {
+		t.Run("left out: "+reason, func(t *testing.T) {
+			m, disk, target, _, run := vmJob(t, func(j *Job) { j.VMDisks = &VMDisks{Mode: VMDisksConsistent} })
+			m.BeginVMDisks = func(context.Context, string, VMDiskOptions) (VMDiskSession, error) {
+				return nil, codedError{reason}
+			}
+			if os.Geteuid() != 0 {
+				tripwire(t, disk)
+			}
+			state := run()
+			if state.Warning != "" || len(state.Problems) != 0 {
+				t.Fatalf("leaving it out became a warning (or the disk was opened): %+v", state)
+			}
+			if got := codes(state.Notices); !slices.Equal(got, []string{NoticeVMDiskSkipped + ":docs/ha/disk.qcow2"}) {
+				t.Fatalf("notices %v", got)
+			}
+			if _, err := os.Stat(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2")); !os.IsNotExist(err) {
+				t.Fatal("a disk that was to be left out was copied")
+			}
+		})
+	}
 	for _, code := range []string{ProblemVMDiskBackingChain, ProblemVMDiskPassthrough, ProblemVMDiskNoSpace, ProblemVMDiskBusy, ProblemVMDiskSnapshotFailed} {
 		t.Run(code, func(t *testing.T) {
 			m, disk, target, _, run := vmJob(t, consistent)
-			m.BeginVMDisks = func(context.Context, string, bool) (VMDiskSession, error) { return nil, codedError{code} }
+			m.BeginVMDisks = func(context.Context, string, VMDiskOptions) (VMDiskSession, error) { return nil, codedError{code} }
 			if os.Geteuid() != 0 {
 				tripwire(t, disk)
 			}
@@ -348,7 +358,7 @@ func TestVMIsAlwaysLetGo(t *testing.T) {
 		m, _, target, log, _ := vmJob(t, consistent)
 		ctx, cancel := context.WithCancel(context.Background())
 		s := &fakeSession{way: "libvirt_snapshot", log: log, vm: "ha"}
-		m.BeginVMDisks = func(parent context.Context, vm string, _ bool) (VMDiskSession, error) {
+		m.BeginVMDisks = func(parent context.Context, vm string, _ VMDiskOptions) (VMDiskSession, error) {
 			s.ctx, s.cancel = context.WithCancel(parent)
 			cancel() // the person cancels while the VM is held
 			return s, nil
@@ -368,9 +378,9 @@ func TestVMIsAlwaysLetGo(t *testing.T) {
 		os.MkdirAll(filepath.Join(target, "backup", "docs", "ha"), 0o700)
 		os.WriteFile(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2"), []byte("copy of the run before"), 0o600)
 		s := &fakeSession{way: VMDiskWayPause, log: log, vm: "ha"}
-		m.BeginVMDisks = func(parent context.Context, vm string, _ bool) (VMDiskSession, error) {
+		m.BeginVMDisks = func(parent context.Context, vm string, _ VMDiskOptions) (VMDiskSession, error) {
 			s.ctx, s.cancel = context.WithCancel(parent)
-			s.expired = true // the limit was reached at once
+			s.stopped = ProblemVMDiskPauseTimeout // the limit was reached at once
 			s.cancel()
 			return s, nil
 		}
@@ -412,6 +422,8 @@ func TestVMDisksSettingIsChecked(t *testing.T) {
 		"consistent":       {&VMDisks{Mode: "consistent"}, "usb-copy", true},
 		"consistent pause": {&VMDisks{Mode: "consistent", Raw: "pause"}, "usb-copy", true},
 		"consistent skip":  {&VMDisks{Mode: "consistent", Raw: "skip"}, "usb-copy", true},
+		"with libvirt":     {&VMDisks{Mode: "consistent", Raw: "pause", LibvirtSnapshot: true}, "usb-copy", true},
+		"skip, libvirt":    {&VMDisks{Mode: "skip", LibvirtSnapshot: true}, "usb-copy", false},
 		"unknown mode":     {&VMDisks{Mode: "always"}, "usb-copy", false},
 		"unknown raw":      {&VMDisks{Mode: "consistent", Raw: "stop"}, "usb-copy", false},
 		"skip with raw":    {&VMDisks{Mode: "skip", Raw: "pause"}, "usb-copy", false},
@@ -450,7 +462,8 @@ func TestPreviewVMDisks(t *testing.T) {
 	}
 	btrfs := func(volume string) bool { return volume == "nvme" }
 	asked := map[string]int{}
-	plan := func(_ context.Context, vm string, pause bool) VMDiskPlan {
+	plan := func(_ context.Context, vm string, opts VMDiskOptions) VMDiskPlan {
+		pause := opts.Pause
 		asked[vm]++
 		switch vm {
 		case "debian":
@@ -489,7 +502,7 @@ func TestPreviewVMDisks(t *testing.T) {
 	job.VMDisks = &VMDisks{Mode: VMDisksConsistent}
 	list := m.PreviewVMDisks(context.Background(), job, disks, btrfs, plan)
 	got = ways(list)
-	for vm, way := range map[string]string{"ha": "btrfs_snapshot/", "debian": "libvirt_snapshot/", "win": "as_is/vm_disk_raw_image", "old": "copy/", "chain": "none/vm_disk_no_space"} {
+	for vm, way := range map[string]string{"ha": "btrfs_snapshot/", "debian": "libvirt_snapshot/", "win": "skip/vm_disk_raw_image", "old": "copy/", "chain": "none/vm_disk_no_space"} {
 		if got[vm] != way {
 			t.Errorf("consistent, %s: %s, want %s", vm, got[vm], way)
 		}
@@ -528,5 +541,71 @@ func TestPreviewVMDisks(t *testing.T) {
 		if got[vm] != way {
 			t.Errorf("skip, %s: %s, want %s", vm, got[vm], way)
 		}
+	}
+}
+
+// A VM that is started while the run is under way: its disk was not live
+// when the run began, but it is asked about again before it is opened.
+func TestSkipAlsoHoldsForAVMStartedDuringTheRun(t *testing.T) {
+	m, disk, target, _, run := vmJob(t, func(j *Job) { j.VMDisks = &VMDisks{Mode: VMDisksSkip} })
+	m.LiveDisks = func() map[string]string { return nil } // nothing runs at the start
+	m.VMDiskFiles = func() map[string]string { return map[string]string{disk: "ha"} }
+	asked := 0
+	m.VMRunning = func(vm string) bool {
+		asked++
+		return vm == "ha" // started since
+	}
+	if os.Geteuid() != 0 {
+		tripwire(t, disk)
+	}
+	state := run()
+	if asked == 0 {
+		t.Fatal("the state of the VM was not asked for again")
+	}
+	if got := codes(state.Notices); !slices.Equal(got, []string{NoticeVMDiskSkipped + ":docs/ha/disk.qcow2"}) || state.Warning != "" {
+		t.Fatalf("notices %v, warning %q: the disk of a VM started during the run was opened", got, state.Warning)
+	}
+	if _, err := os.Stat(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2")); !os.IsNotExist(err) {
+		t.Fatal("disk copied")
+	}
+	// Still off: copied like any file, and only disks are asked about.
+	m.VMRunning = func(string) bool { return false }
+	if os.Geteuid() != 0 {
+		os.Chmod(disk, 0o600)
+	}
+	state = run()
+	if len(state.Notices) != 0 {
+		t.Fatalf("%+v", state.Notices)
+	}
+	if _, err := os.Stat(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2")); err != nil {
+		t.Fatal("disk of a stopped VM not copied")
+	}
+}
+
+// The VM is let go early because the room for the overlay ran low: said
+// with that code, the copy of the run before stays.
+func TestLowSpaceDuringTheCopyIsReportedAsSuch(t *testing.T) {
+	m, _, target, log, _ := vmJob(t, nil)
+	os.MkdirAll(filepath.Join(target, "backup", "docs", "ha"), 0o700)
+	os.WriteFile(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2"), []byte("copy of the run before"), 0o600)
+	s := &fakeSession{way: "libvirt_snapshot", log: log, vm: "ha"}
+	m.BeginVMDisks = func(parent context.Context, vm string, _ VMDiskOptions) (VMDiskSession, error) {
+		s.ctx, s.cancel = context.WithCancel(parent)
+		s.stopped = ProblemVMDiskNoSpace
+		s.cancel()
+		return s, nil
+	}
+	root, _ := os.OpenRoot(target)
+	defer root.Close()
+	job := Job{ID: "copy", Sources: []string{"docs"}, Destination: Destination{Type: "usb-copy", Folder: "backup"}, VMDisks: &VMDisks{Mode: VMDisksConsistent, LibvirtSnapshot: true}}
+	if err := m.copyTo(context.Background(), job, root); err != nil {
+		t.Fatal(err)
+	}
+	state := m.states["copy"]
+	if got := codes(state.Problems); !slices.Equal(got, []string{ProblemVMDiskNoSpace + ":docs/ha/disk.qcow2"}) || s.ended != 1 {
+		t.Fatalf("problems %v, ended %d", got, s.ended)
+	}
+	if data, _ := os.ReadFile(filepath.Join(target, "backup", "docs", "ha", "disk.qcow2")); string(data) != "copy of the run before" {
+		t.Fatalf("the copy of the run before was damaged: %q", data)
 	}
 }

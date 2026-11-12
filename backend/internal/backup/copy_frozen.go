@@ -24,6 +24,10 @@ type frozenSources struct {
 	// lives are the files running guests write to, with the name of their
 	// VM ("" if unknown).
 	lives map[string]string
+	// disks are the image files of all VMs, running or not, with their VM:
+	// asked afresh before such a file is opened (a VM may have been started
+	// since the run began).
+	disks map[string]string
 	// roots holds the snapshot of each volume asked for; nil if none
 	// could be made.
 	roots    map[string]*os.Root
@@ -42,16 +46,29 @@ func (m *Manager) frozenSources(ctx context.Context, job Job) *frozenSources {
 			f.lives[filepath.Clean(file)] = vm
 		}
 	}
+	if m.VMDiskFiles != nil && m.VMRunning != nil {
+		f.disks = map[string]string{}
+		for file, vm := range m.VMDiskFiles() {
+			f.disks[filepath.Clean(file)] = vm
+		}
+	}
 	return f
 }
 
 // live tells whether a file of a source is one a running guest writes to.
+//
+// Not only what ran when the run began: the disk of a VM that was started
+// since is live too, and is asked about right before it would be opened.
 func (f *frozenSources) live(source Source, rel string) bool {
-	if len(f.lives) == 0 {
-		return false
+	file := filepath.Join(source.Path, filepath.FromSlash(rel))
+	if _, live := f.lives[file]; live {
+		return true
 	}
-	_, live := f.lives[filepath.Join(source.Path, filepath.FromSlash(rel))]
-	return live
+	if vm, disk := f.disks[file]; disk && f.m.VMRunning(vm) {
+		f.lives[file] = vm
+		return true
+	}
+	return false
 }
 
 // vm is the VM a live file belongs to, "" if that is not known.

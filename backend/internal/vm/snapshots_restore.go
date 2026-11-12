@@ -19,7 +19,7 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id, confirm string,
 	if m.Disabled {
 		return ErrDisabled
 	}
-	lock, err := m.operation(name)
+	lock, err := m.diskOperation(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (m *Manager) RecoverSnapshot(ctx context.Context, name, confirm string, dis
 	if m.Disabled {
 		return ErrDisabled
 	}
-	lock, err := m.operation(name)
+	lock, err := m.diskOperation(ctx, name)
 	if err != nil {
 		return err
 	}

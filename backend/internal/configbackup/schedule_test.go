@@ -60,10 +60,27 @@ func TestChangeDueByPace(t *testing.T) {
 }
 
 func TestPaceDefaultsKeepAStoredChoice(t *testing.T) {
-	// No file: the default since 0.77.
-	m := NewManager(config.Open(t.TempDir()), "0.77.0")
-	if err := m.Load(); err != nil || m.current().Pace != PaceDaily {
+	// No file: an existing NAS that never changed its settings keeps
+	// "after every change"; an update must not make backups rarer.
+	fresh := config.Open(t.TempDir())
+	m := NewManager(fresh, "0.77.0")
+	if err := m.Load(); err != nil || m.current().Pace != PaceChange {
+		t.Fatalf("no settings file: %v %q", err, m.current().Pace)
+	}
+	// Only a NAS that is being set up gets "daily", written down so that it
+	// stays; a NAS with settings keeps them.
+	if err := m.NewInstall(); err != nil || m.current().Pace != PaceDaily {
 		t.Fatalf("new install: %v %q", err, m.current().Pace)
+	}
+	again := NewManager(fresh, "0.77.0")
+	if err := again.Load(); err != nil || again.current().Pace != PaceDaily {
+		t.Fatalf("new install after a restart: %v %q", err, again.current().Pace)
+	}
+	if err := again.SetSettings(Settings{Enabled: true, Keep: 14, Pace: PaceChange}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := again.NewInstall(); err != nil || again.current().Pace != PaceChange {
+		t.Fatalf("NewInstall changed stored settings: %v %q", err, again.current().Pace)
 	}
 	// A file from before 0.77 has no pace: every change, as it was.
 	store := config.Open(t.TempDir())

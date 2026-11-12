@@ -105,7 +105,7 @@ func (m *Manager) copyName(job Job, file string) (name, volume string, ok bool) 
 // setting (job.VMDisks; nil: no choice yet). btrfs tells whether a volume
 // has snapshots; plan is asked once per running VM and only where no Btrfs
 // snapshot does. No file of a source is opened here.
-func (m *Manager) PreviewVMDisks(ctx context.Context, job Job, disks []VMDiskInfo, btrfs func(volume string) bool, plan func(ctx context.Context, vm string, allowPause bool) VMDiskPlan) []VMDiskPreview {
+func (m *Manager) PreviewVMDisks(ctx context.Context, job Job, disks []VMDiskInfo, btrfs func(volume string) bool, plan func(ctx context.Context, vm string, opts VMDiskOptions) VMDiskPlan) []VMDiskPreview {
 	list := []VMDiskPreview{}
 	plans := map[string]VMDiskPlan{}
 	for _, disk := range disks {
@@ -127,15 +127,16 @@ func (m *Manager) PreviewVMDisks(ctx context.Context, job Job, disks []VMDiskInf
 			default:
 				p, asked := plans[disk.VM]
 				if !asked {
-					p = plan(ctx, disk.VM, job.VMDisks.Raw == VMDisksRawPause)
+					p = plan(ctx, disk.VM, job.VMDisks.options())
 					plans[disk.VM] = p
 				}
 				entry.Agent, entry.Reason, entry.NeedBytes, entry.FreeBytes = p.Agent, p.Reason, p.NeedBytes, p.FreeBytes
 				switch {
 				case p.Way != "":
 					entry.Way = p.Way
-				case p.Reason == ProblemVMDiskRawImage:
-					entry.Way = VMDiskWayAsIs
+				case p.Reason == ProblemVMDiskRawImage || p.Reason == ProblemVMDiskSnapshotUnproven:
+					// No snapshot and no leave to pause: left out, not read.
+					entry.Way = VMDiskWaySkip
 				default:
 					entry.Way = VMDiskWayNone
 				}

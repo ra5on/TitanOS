@@ -63,6 +63,22 @@ type Home struct {
 	// volume was gone through without an error. Both may be nil.
 	Pending func(feature string) []string
 	Settled func(feature, from string)
+	// RetryAfter is how long after a move that did not get through (the
+	// time limit, an error) it is tried again; zero means five minutes.
+	// Until then the feature works on its volume, and what could not be
+	// moved stays where it was.
+	RetryAfter time.Duration
+	// OnMissing is told, once, when a chosen volume has not been mounted
+	// for MissingAfter (zero: 15 minutes): everything kept there waits in
+	// memory and nothing falls back to another volume, so someone must
+	// know. OnBack is told when such a volume is there again.
+	OnMissing    func(volume string)
+	OnBack       func(volume string)
+	MissingAfter time.Duration
+	// now is the clock; nil means time.Now.
+	now func() time.Time
+	// missing are the chosen volumes that are not mounted.
+	missing map[string]*missingVolume
 	// NoLegacy names features that never lived on the first volume by
 	// default (the monitoring history): for them the rule until 0.76 does
 	// not apply.
@@ -74,6 +90,70 @@ type Home struct {
 	work sync.WaitGroup
 }
 
+type missingVolume struct {
+	since time.Time
+	told  bool
+}
+
+func (h *Home) clock() time.Time {
+	if h.now != nil {
+		return h.now()
+	}
+	return time.Now()
+}
+
+// seen notes whether a volume a feature belongs on is mounted, and tells
+// OnMissing and OnBack. Only a chosen volume can be missing: the automatic
+// choice is always one of the mounted ones.
+func (h *Home) seen(volume string, mounted bool) {
+	h.mu.Lock()
+	entry := h.missing[volume]
+	var tell func(string)
+	switch {
+	case mounted && entry != nil:
+		if entry.told {
+			tell = h.OnBack
+		}
+		delete(h.missing, volume)
+	case !mounted && entry == nil:
+		if h.missing == nil {
+			h.missing = map[string]*missingVolume{}
+		}
+		h.missing[volume] = &missingVolume{since: h.clock()}
+	case !mounted:
+		after := h.MissingAfter
+		if after <= 0 {
+			after = 15 * time.Minute
+		}
+		if !entry.told && h.clock().Sub(entry.since) >= after {
+			entry.told = true
+			tell = h.OnMissing
+		}
+	}
+	h.mu.Unlock()
+	if tell != nil {
+		tell(volume)
+	}
+}
+
+// Watch asks for the volume of each feature every minute until ctx ends,
+// so that a chosen volume that stays away is noticed and a move that is
+// due starts also while nothing is written.
+func (h *Home) Watch(ctx context.Context, features []string) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		for _, feature := range features {
+			h.Volume(feature)
+		}
+	}
+}
+
 type homeFeature struct {
 	// io: writers hold it shared around their writes, a move alone.
 	io sync.RWMutex
@@ -82,6 +162,9 @@ type homeFeature struct {
 	last    string
 	tried   map[string]bool
 	cleaned map[string]bool
+	// retry are the moves ("from\x00to") that did not get through, with
+	// the time they are tried again.
+	retry map[string]time.Time
 	// moving is closed when the running move is over; nil without one.
 	moving chan struct{}
 }
@@ -107,7 +190,7 @@ func (h *Home) feature(name string) *homeFeature {
 	}
 	state := h.features[name]
 	if state == nil {
-		state = &homeFeature{tried: map[string]bool{}, cleaned: map[string]bool{}}
+		state = &homeFeature{tried: map[string]bool{}, cleaned: map[string]bool{}, retry: map[string]time.Time{}}
 		h.features[name] = state
 	}
 	return state
@@ -157,20 +240,38 @@ func (h *Home) Volume(feature string) string {
 	state := h.feature(feature)
 	state.mu.Lock()
 	mounted := h.Mounted()
-	if !slices.Contains(mounted, volume) {
+	there := slices.Contains(mounted, volume)
+	h.seen(volume, there)
+	if !there {
 		state.mu.Unlock()
 		return ""
 	}
 	if state.moving == nil {
 		var sources []string
+		// done: tried and through, or tried and waiting for its next turn.
+		done := func(from string) bool {
+			key := from + "\x00" + volume
+			if again, waiting := state.retry[key]; waiting {
+				return h.clock().Before(again)
+			}
+			return state.tried[key]
+		}
 		if state.last != "" && state.last != volume && slices.Contains(mounted, state.last) {
 			sources = append(sources, state.last)
+		}
+		// A move that did not get through (the time limit, an error) has
+		// another turn after a while, without a restart.
+		for key, again := range state.retry {
+			from, to, _ := strings.Cut(key, "\x00")
+			if to == volume && from != volume && !h.clock().Before(again) && !slices.Contains(sources, from) && slices.Contains(mounted, from) {
+				sources = append(sources, from)
+			}
 		}
 		if h.Pending != nil {
 			// Left behind when the volume was changed and the move did not
 			// finish (restart, time limit).
 			for _, name := range h.Pending(feature) {
-				if name != volume && !slices.Contains(sources, name) && slices.Contains(mounted, name) && !state.tried[name+"\x00"+volume] {
+				if name != volume && !slices.Contains(sources, name) && slices.Contains(mounted, name) && !done(name) {
 					sources = append(sources, name)
 				}
 			}
@@ -185,7 +286,7 @@ func (h *Home) Volume(feature string) string {
 			if !naming.ValidVolume(name) {
 				continue
 			}
-			if name != volume && !slices.Contains(sources, name) && !state.tried[name+"\x00"+volume] {
+			if name != volume && !slices.Contains(sources, name) && !done(name) {
 				sources = append(sources, name)
 			}
 			break
@@ -231,7 +332,8 @@ func (h *Home) Volume(feature string) string {
 // move brings the folder of a feature from sources to volume, in the
 // background and bounded. Whatever happens, the feature then lives on
 // volume: what could not be moved stays where it is and is named in the
-// journal.
+// journal. A move that was cut off by its time limit or an error is taken
+// up again after RetryAfter (it goes on where it stopped).
 func (h *Home) move(state *homeFeature, feature string, sources []string, volume string, mounted []string) {
 	limit := h.MoveLimit
 	if limit <= 0 {
@@ -240,11 +342,13 @@ func (h *Home) move(state *homeFeature, feature string, sources []string, volume
 	ctx, cancel := context.WithTimeout(h.context(), limit)
 	defer cancel()
 	state.io.Lock() // writers in flight finish first; new ones get no volume
+	failed := map[string]bool{}
 	for _, from := range sources {
 		result, err := Adopt(ctx, h.MountRoot, from, volume, feature, mounted)
 		if err == nil && h.Settled != nil {
 			h.Settled(feature, from)
 		}
+		failed[from] = err != nil
 		switch {
 		case err != nil:
 			slog.Warn("system data of an earlier default volume not moved completely; the rest stays there", "feature", feature, "from", from, "to", volume, "moved", result.Moved, "err", err)
@@ -259,8 +363,19 @@ func (h *Home) move(state *homeFeature, feature string, sources []string, volume
 	}
 	state.io.Unlock()
 	state.mu.Lock()
+	again := h.RetryAfter
+	if again <= 0 {
+		again = 5 * time.Minute
+	}
 	for _, from := range sources {
-		state.tried[from+"\x00"+volume] = true
+		key := from + "\x00" + volume
+		if failed[from] {
+			// Not through: another turn later, without a restart.
+			state.retry[key] = h.clock().Add(again)
+			continue
+		}
+		delete(state.retry, key)
+		state.tried[key] = true
 	}
 	state.last = volume
 	state.cleaned[volume] = true
@@ -723,4 +838,32 @@ func Size(ctx context.Context, mountRoot, volume, feature string, mounted []stri
 		return nil
 	})
 	return total, err
+}
+
+// Asides lists what a move put next to the current entries of
+// .titanos/<feature> on a volume because the same name held other content
+// on both volumes ("<name>.from-<volume>", see Adopt). They are kept, not
+// used, and wait for someone to look at them. It reads the folder, so
+// callers ask first whether the disks of the volume are asleep.
+func Asides(mountRoot, volume, feature string, mounted []string) ([]string, error) {
+	root, err := openExisting(mountRoot, volume, feature, mounted)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	entries, err := readDir(root, ".")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if name, from, ok := strings.Cut(entry.Name(), ".from-"); ok && name != "" && naming.ValidVolume(from) {
+			names = append(names, entry.Name())
+		}
+	}
+	slices.Sort(names)
+	return names, nil
 }

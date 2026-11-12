@@ -20,7 +20,10 @@ func (m *Manager) BackupLease(name string, mounted []string) (*BackupLease, erro
 	if m.Disabled {
 		return nil, ErrDisabled
 	}
-	lock, err := m.operation(name)
+	// What a copy of the running disks left behind is undone first.
+	check, cancel := context.WithTimeout(context.Background(), diskUndoLimit)
+	defer cancel()
+	lock, err := m.diskOperation(check, name)
 	if err != nil {
 		return nil, err
 	}

@@ -16,6 +16,7 @@ import (
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/version"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // wireBackups wires backups, the cluster, replication and unmanaged drives.
@@ -85,8 +86,16 @@ func (w *titand) wireBackups() error {
 	}
 	// Without Btrfs and with the job's leave: a libvirt snapshot of the VM,
 	// or a pause for raw images (vm/diskbackup.go).
-	w.backups.BeginVMDisks = func(ctx context.Context, name string, allowPause bool) (backup.VMDiskSession, error) {
-		session, err := w.machines.BeginDiskBackup(ctx, name, allowPause)
+	w.backups.VMDiskFiles = func() map[string]string {
+		files := map[string]string{}
+		for _, disk := range w.machines.FileDisks() {
+			files[disk.Path] = disk.VM
+		}
+		return files
+	}
+	w.backups.VMRunning = w.machines.Running
+	w.backups.BeginVMDisks = func(ctx context.Context, name string, opts backup.VMDiskOptions) (backup.VMDiskSession, error) {
+		session, err := w.machines.BeginDiskBackup(ctx, name, vm.DiskBackupOptions{Snapshot: opts.Snapshot, Pause: opts.Pause})
 		if err != nil {
 			return nil, err
 		}

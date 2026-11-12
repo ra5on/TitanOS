@@ -480,3 +480,111 @@ func TestSizeAddsUpFiles(t *testing.T) {
 		t.Fatalf("size: %d %v", size, err)
 	}
 }
+
+// A move that was cut off (the time limit) is taken up again after a
+// while, without a restart; until then the feature works on its volume.
+func TestHomeRetriesAMoveThatDidNotGetThrough(t *testing.T) {
+	base := homeFixture(t, "Backup", "fast")
+	mounted := []string{"fast", "Backup"}
+	old := filepath.Join(base, "Backup", ".titanos", "logs")
+	put(t, filepath.Join(old, "boot.log"), "lines\n")
+	now := time.Now()
+	home := &Home{MountRoot: base, Mounted: func() []string { return mounted }, Choose: func() string { return "fast" }, RetryAfter: 5 * time.Minute}
+	home.now = func() time.Time { return now }
+	// The first move fails: the folder on the old volume cannot be trusted
+	// (writable by others) for the moment.
+	if err := os.Chmod(old, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if got := settled(t, home, "logs"); got != "fast" {
+		t.Fatalf("got %q: the feature must work on its volume after a failed move", got)
+	}
+	if _, err := os.Stat(filepath.Join(old, "boot.log")); err != nil {
+		t.Fatal("data lost by a failed move")
+	}
+	if err := os.Chmod(old, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Not before its turn.
+	settled(t, home, "logs")
+	if _, err := os.Stat(filepath.Join(old, "boot.log")); err != nil {
+		t.Fatal("tried again at once")
+	}
+	now = now.Add(6 * time.Minute)
+	if got := settled(t, home, "logs"); got != "fast" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(base, "fast", ".titanos", "logs", "boot.log")); err != nil {
+		t.Fatalf("not taken up again without a restart: %v", err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("old folder left")
+	}
+}
+
+// A chosen volume that is not mounted means "no volume", never another
+// one. That must not stay silent: said once after a while, and again when
+// the volume is back.
+func TestHomeTellsWhenAChosenVolumeStaysAway(t *testing.T) {
+	base := homeFixture(t, "Backup", "fast")
+	mounted := []string{"Backup"}
+	now := time.Now()
+	var told []string
+	home := &Home{MountRoot: base, Mounted: func() []string { return mounted }, Choose: func() string { return "fast" }, MissingAfter: 15 * time.Minute,
+		OnMissing: func(volume string) { told = append(told, "missing "+volume) }, OnBack: func(volume string) { told = append(told, "back "+volume) }}
+	home.now = func() time.Time { return now }
+	for range 3 {
+		if got := home.Volume("logs"); got != "" {
+			t.Fatalf("fell back to %q", got)
+		}
+		now = now.Add(4 * time.Minute)
+	}
+	if len(told) != 0 {
+		t.Fatalf("told too early: %v", told)
+	}
+	now = now.Add(4 * time.Minute)
+	home.Volume("logs")
+	home.Volume("smart")
+	now = now.Add(time.Hour)
+	home.Volume("logs")
+	if !slices.Equal(told, []string{"missing fast"}) {
+		t.Fatalf("told %v, want once", told)
+	}
+	if _, err := os.Stat(filepath.Join(base, "Backup", ".titanos")); !os.IsNotExist(err) {
+		t.Fatal("something was written to another volume")
+	}
+	mounted = []string{"Backup", "fast"}
+	settled(t, home, "logs")
+	settled(t, home, "logs")
+	if !slices.Equal(told, []string{"missing fast", "back fast"}) {
+		t.Fatalf("told %v", told)
+	}
+	// Away for a short time only: nobody is told, also not that it is back.
+	told = nil
+	mounted = []string{"Backup"}
+	home.Volume("logs")
+	now = now.Add(time.Minute)
+	mounted = []string{"Backup", "fast"}
+	settled(t, home, "logs")
+	if len(told) != 0 {
+		t.Fatalf("told %v for a short absence", told)
+	}
+}
+
+func TestAsidesListsWhatAMovePutNextToTheCurrentEntries(t *testing.T) {
+	base := homeFixture(t, "Backup", "fast")
+	mounted := []string{"Backup", "fast"}
+	old := filepath.Join(base, "Backup", ".titanos", "smart")
+	now := filepath.Join(base, "fast", ".titanos", "smart")
+	put(t, filepath.Join(old, "disk.json"), "old")
+	put(t, filepath.Join(now, "disk.json"), "new")
+	put(t, filepath.Join(now, "other.json"), "x")
+	adopt(t, base, "Backup", "fast", "smart", mounted)
+	names, err := Asides(base, "fast", "smart", mounted)
+	if err != nil || !slices.Equal(names, []string{"disk.json.from-Backup"}) {
+		t.Fatalf("%v %v", names, err)
+	}
+	if names, err := Asides(base, "Backup", "smart", mounted); err != nil || len(names) != 0 {
+		t.Fatalf("a folder that is gone: %v %v", names, err)
+	}
+}
