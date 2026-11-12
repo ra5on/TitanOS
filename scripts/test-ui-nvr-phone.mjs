@@ -347,7 +347,12 @@ try {
     await page.locator("#nvr-plates").getByText("HH-Q 4").waitFor();
     await sound(page, "faces and plates");
     await shot(page, "gesichter-kennzeichen");
-    await page.locator("#nvr-faces").screenshot({ path: `${out}/gesichter-${WIDTH}.png`, animations: "disabled" });
+    // The faces as the screen shows them (an element shot would stitch the sticky bar into it).
+    await page.locator("#nvr-faces").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -140);
+    });
+    await page.screenshot({ path: `${out}/gesichter-${WIDTH}.png`, animations: "disabled" });
     await ctx.close();
   }
 
