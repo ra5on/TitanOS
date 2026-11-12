@@ -801,6 +801,7 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 		if !m.rt.healthy {
 			m.rt.healthy = true
 			slog.Info("NVR: Frigate runs", "version", version, "detector", m.activeLocked())
+			defer m.feed.wake()
 		}
 		m.rt.phase = PhaseRunning
 	} else {

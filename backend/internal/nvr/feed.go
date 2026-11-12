@@ -49,10 +49,20 @@ type feed struct {
 	conn     *websocket.Conn
 	running  bool
 	activity map[string]*cameraActivity
+	// dial wakes runFeed: Frigate just came up.
+	dial chan struct{}
 }
 
 func newFeed() *feed {
-	return &feed{subs: map[*subscriber]struct{}{}, activity: map[string]*cameraActivity{}}
+	return &feed{subs: map[*subscriber]struct{}{}, activity: map[string]*cameraActivity{}, dial: make(chan struct{}, 1)}
+}
+
+// wake has the connection to Frigate tried now.
+func (f *feed) wake() {
+	select {
+	case f.dial <- struct{}{}:
+	default:
+	}
 }
 
 // feedRetry is the pause before Frigate's WebSocket is dialled again.
@@ -151,6 +161,7 @@ func (m *Manager) runFeed(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case <-time.After(feedRetry):
+		case <-m.feed.dial:
 		}
 	}
 }

@@ -207,7 +207,17 @@ func (m *Manager) Load() error {
 func (m *Manager) Settings() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.settings
+	s := m.settings
+	// A copy: whoever decodes a request into it must not write into the
+	// manager's own list.
+	s.Plates = make([]KnownPlate, 0, len(m.settings.Plates))
+	for _, entry := range m.settings.Plates {
+		s.Plates = append(s.Plates, KnownPlate{Name: entry.Name, Plates: slices.Clone(entry.Plates)})
+	}
+	if len(s.Plates) == 0 {
+		s.Plates = nil
+	}
+	return s
 }
 
 func (m *Manager) mounted() []string {
