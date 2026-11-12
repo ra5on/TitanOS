@@ -3,6 +3,7 @@ package nvr
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,10 @@ func TestRestoredFacesGoBackToTheVolume(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A picture beyond the limits of a backup is not taken.
+	if err := r.store.Write("volume-data/nvr/faces/Ben/Ben-big.webp", make([]byte, maxBackupFaceFile+1)); err != nil {
+		t.Fatal(err)
+	}
 	// One picture is on the volume already and stays as it is.
 	writeFace(t, r.dir, "Anna", "Anna-1.webp", 5)
 	r.m = r.manager(r.m.FrigateBase(""))
@@ -100,11 +105,38 @@ func TestRestoredFacesGoBackToTheVolume(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(r.dir, "media", "clips", "faces", "train")); err == nil {
 		t.Error("unassigned faces were restored")
 	}
-	// They are off the stick, and the backup reads the volume again.
-	if left, _ := r.store.List("volume-data/nvr"); len(left) != 0 {
+	// What was put back is off the stick, with the folders that are empty
+	// now; what was not taken stays there (never removed unseen).
+	if left, _ := r.store.List("volume-data/nvr/faces"); !slices.Equal(left, []string{"Ben", "train"}) {
 		t.Errorf("left on the stick: %v", left)
+	}
+	if left, _ := r.store.List("volume-data/nvr/faces/Ben"); !slices.Equal(left, []string{"Ben-big.webp"}) {
+		t.Errorf("left of Ben: %v", left)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "media", "clips", "faces", "Ben", "Ben-big.webp")); err == nil {
+		t.Error("the picture beyond the limits was put back")
 	}
 	if got := r.m.BackupFiles(); len(got) != 3 || string(got[0].Data) != "xxxxx" {
 		t.Errorf("after the import: %d", len(got))
+	}
+}
+
+// Everything was put back: the stick keeps no empty folders of it.
+func TestRestoredFacesLeaveNoFolders(t *testing.T) {
+	r := newRig(t, true)
+	if err := r.store.Write("volume-data/nvr/faces/Anna/Anna-1.webp", []byte("restored")); err != nil {
+		t.Fatal(err)
+	}
+	r.m = r.manager(r.m.FrigateBase(""))
+	if err := r.m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.enable()
+	r.look()
+	if left, _ := r.store.List("volume-data"); len(left) != 0 {
+		t.Errorf("left on the stick: %v", left)
+	}
+	if data, _ := os.ReadFile(filepath.Join(r.dir, "media", "clips", "faces", "Anna", "Anna-1.webp")); string(data) != "restored" {
+		t.Errorf("library: %q", data)
 	}
 }
