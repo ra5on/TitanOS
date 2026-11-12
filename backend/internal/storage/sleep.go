@@ -197,7 +197,9 @@ type DiskSleepDisk struct {
 	// it (newest first, at most 20), WakesToday and WakeDays how often it
 	// did today and on the last days (local time). Kept in RAM and, where
 	// a volume never sleeps, in .titanos/disksleep on the system data
-	// volume. Older interfaces ignore them.
+	// volume. Only for administrators (AddDiskWakes): the disk sleep routes
+	// and the storage status of an administrator. Older interfaces ignore
+	// them.
 	Wakes      []DiskWake    `json:"wakes,omitempty"`
 	WakesToday int           `json:"wakesToday,omitempty"`
 	WakeDays   []DiskWakeDay `json:"wakeDays,omitempty"`
@@ -287,7 +289,21 @@ func (m *Manager) DiskSleepStatus(ctx context.Context) (DiskSleepStatus, error) 
 	if err != nil {
 		return DiskSleepStatus{}, err
 	}
-	return m.diskSleepStatus(devices), nil
+	status := m.diskSleepStatus(devices)
+	m.AddDiskWakes(&status)
+	return status, nil
+}
+
+// AddDiskWakes adds to each listed disk when and by what it was last woken
+// (RAM only). The history names accounts, shares and jobs: it is for
+// administrators and is left out of Status, which every account and the
+// tools read.
+func (m *Manager) AddDiskWakes(status *DiskSleepStatus) {
+	now := m.now()
+	for i := range status.DiskStatus {
+		disk := &status.DiskStatus[i]
+		disk.Wakes, disk.WakesToday, disk.WakeDays = m.wakesOf(wakeKey(disk.ID, disk.Name), now)
+	}
 }
 
 func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
@@ -322,7 +338,6 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 	ids := sleepDiskIDs(devices)
 	byUUID := volumesByUUID(configured)
 	present := map[string]bool{}
-	now := m.now()
 	status.DiskStatus = []DiskSleepDisk{}
 	status.Listed = true
 	for _, device := range devices {
@@ -342,11 +357,9 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 		if asleep[disk.Name] {
 			state, since = "asleep", times[disk.Name].asleepSince
 		}
-		wakes, today, days := m.wakesOf(wakeKey(id, disk.Name), now)
 		status.DiskStatus = append(status.DiskStatus, DiskSleepDisk{
 			ID: id, Name: disk.Name, Model: disk.Model, Serial: disk.Serial, SizeBytes: disk.SizeBytes, Volume: disk.Volume,
-			Override: override(settings.Disks, id), Effective: minutes, Origin: origin, State: state, Since: since,
-			Wakes: wakes, WakesToday: today, WakeDays: days, Error: errorsByDisk[disk.Name],
+			Override: override(settings.Disks, id), Effective: minutes, Origin: origin, State: state, Since: since, Error: errorsByDisk[disk.Name],
 		})
 	}
 	for id := range settings.Disks {

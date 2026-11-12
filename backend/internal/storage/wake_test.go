@@ -93,6 +93,13 @@ func TestDiskWakeCause(t *testing.T) {
 	if disk.WakesToday != 1 || len(disk.WakeDays) != 1 || disk.WakeDays[0].Count != 1 {
 		t.Fatalf("count per day: %+v", disk)
 	}
+	// The general status, which every account and the tools read, names
+	// neither accounts nor jobs.
+	if status, err := m.Status(context.Background()); err != nil {
+		t.Fatal(err)
+	} else if data, _ := json.Marshal(status); strings.Contains(string(data), "wakes") || strings.Contains(string(data), "nightly") {
+		t.Fatalf("wake history in the general status: %s", data)
+	}
 	// The other member of the volume did no I/O: still asleep, no wake.
 	if other := sleepDisk(t, m, "sdg"); other.State != "asleep" || len(other.Wakes) != 0 {
 		t.Fatalf("sdg: %+v", other)

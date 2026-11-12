@@ -142,6 +142,10 @@ func (a storageArea) handleStorage(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, r, "status", err)
 		return
 	}
+	// What woke a disk names accounts, shares and jobs: administrators only.
+	if currentUser(r).Role.CanAdminister() {
+		a.storage.AddDiskWakes(&status.DiskSleep)
+	}
 	writeJSON(w, http.StatusOK, status)
 }
 
