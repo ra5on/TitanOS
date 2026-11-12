@@ -81,8 +81,8 @@ func discoverOn(ctx context.Context, conns []*net.UDPConn, target *net.UDPAddr, 
 	for _, conn := range conns {
 		go func() {
 			defer func() { done <- struct{}{} }()
-			defer conn.Close()
-			_ = conn.SetDeadline(deadline) // a connection that cannot take a deadline is closed by the caller's context
+			defer func() { _ = conn.Close() }() // a connection that is closed already is no error here
+			_ = conn.SetDeadline(deadline)      // a connection that cannot take a deadline is closed by the caller's context
 			// Twice: UDP may lose one.
 			for range 2 {
 				if _, err := conn.WriteToUDP(message, target); err != nil {

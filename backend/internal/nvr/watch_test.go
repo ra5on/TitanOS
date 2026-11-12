@@ -135,9 +135,7 @@ func TestEnableStartsFrigate(t *testing.T) {
 		t.Errorf("spec: %+v", spec)
 	}
 	// WebRTC only; never Frigate's API, its login port or go2rtc.
-	ports := []string{}
 	for _, p := range spec.Ports {
-		ports = append(ports, p.Proto+":"+string(rune('0'+p.Port/1000))+"…")
 		if p.Port != 8555 {
 			t.Errorf("published port %d/%s", p.Port, p.Proto)
 		}

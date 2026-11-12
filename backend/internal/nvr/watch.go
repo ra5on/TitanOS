@@ -88,7 +88,8 @@ type runtime struct {
 
 	hardware   HardwareInfo
 	hardwareAt time.Time
-	candidates []string
+	// leased are the devices with a VM when the container was planned.
+	leased string
 
 	// absent: the watch removed the container and did not create one
 	// since (false at the start: one may be left from before).
@@ -532,7 +533,13 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 	if err != nil {
 		return err
 	}
+	// A GPU that went to a VM (or came back) changes what Frigate may
+	// use: the container is made anew without (or with) it.
+	leased := m.leasedKey()
 	m.mu.Lock()
+	if leased != m.rt.leased {
+		m.rt.leased, m.rt.dirty = leased, true
+	}
 	dirty := m.rt.dirty || m.rt.configHash == ""
 	m.rt.container = st
 	m.rt.absent = m.rt.absent && !st.Exists
@@ -564,6 +571,7 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 			return m.recreate(ctx, p.spec)
 		case changed && st.Running:
 			slog.Info("NVR: configuration changed, restarting Frigate")
+			m.setPhase(PhaseStarting) // the restart itself takes up to half a minute
 			rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 			defer cancel()
 			if err := m.Engine.NVRRestart(rctx); err != nil {
@@ -585,6 +593,22 @@ func (m *Manager) converge(ctx context.Context, s Settings, imageID string) erro
 	m.mu.Unlock()
 	m.check(ctx, st)
 	return nil
+}
+
+// leasedKey names the devices that are with a VM right now (RAM of the
+// Docker manager, no I/O).
+func (m *Manager) leasedKey() string {
+	if m.Leased == nil || m.Dev {
+		return ""
+	}
+	var ids []string
+	for id, leased := range m.Leased() {
+		if leased {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return strings.Join(ids, ",")
 }
 
 // privateDir is privateRoot without keeping the root open.
@@ -611,6 +635,7 @@ func (m *Manager) candidates() []string {
 func (m *Manager) recreate(ctx context.Context, spec docker.NVRSpec) error {
 	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+90)*time.Second)
 	defer cancel()
+	m.setPhase(PhaseStarting) // stopping the old container takes up to half a minute
 	if err := m.Engine.NVRRemove(rctx); err != nil {
 		return err
 	}

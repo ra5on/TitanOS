@@ -78,7 +78,8 @@ var (
 // Manager runs the NVR.
 type Manager struct {
 	Engine Engine
-	// Access holds which account may see which camera.
+	// Access holds which account may see which camera (never nil; the
+	// wiring gives it the accounts and loads it).
 	Access *Access
 	// Dev: development mode. Nothing is pulled and no volume is touched:
 	// Engine is a DevEngine, data go to a temporary folder (dev.go).
@@ -136,7 +137,7 @@ type Manager struct {
 // New makes a manager with the defaults of a NAS.
 func New(store *config.Store) *Manager {
 	return &Manager{
-		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(),
+		store: store, MountRoot: "/mnt", settings: Defaults(), cameras: []Camera{}, frigate: newFrigate(), Access: NewAccess(store),
 		FrigateBase:   func(address string) string { return fmt.Sprintf("http://%s:%d", address, frigatePort) },
 		Tick:          10 * time.Second,
 		HealthyWithin: 5 * time.Minute,

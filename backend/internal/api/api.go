@@ -52,6 +52,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
@@ -117,6 +118,8 @@ type Options struct {
 	Terminal *terminal.Manager
 	// Viewer runs the remote view of Docker apps (PLAN 63); nil leaves it out.
 	Viewer *viewer.Manager
+	// NVR runs the network video recorder (PLAN 79-7); nil leaves it out.
+	NVR *nvr.Manager
 	// Webapps installs and serves the web apps (PLAN 66); nil leaves them out.
 	Webapps *webapps.Manager
 	VMs     *vm.Manager
@@ -382,6 +385,7 @@ func New(opts Options) *Server {
 	s.registerDocker(mux)
 	s.registerAppStore(mux)
 	s.registerViewer(mux)
+	s.registerNVR(mux)
 	s.registerWebapps(mux)
 	s.registerVMs(mux)
 	s.registerHardware(mux)

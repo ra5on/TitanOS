@@ -126,5 +126,18 @@
 	"error.voice_failed": "The recording could not be turned into text. Check that Whisper can be reached.",
 	"error.voice_off": "Voice input is switched off.",
 	"error.volume_not_mounted": "The volume is not mounted.",
-	"error.whatif_unavailable": "Playing this through is not possible right now."
+	"error.whatif_unavailable": "Playing this through is not possible right now.",
+	"error.nvr_unavailable": "This NAS has no NVR.",
+	"error.nvr_docker_off": "Docker is switched off. The NVR needs Docker; switch it on to use the NVR.",
+	"error.nvr_no_volume": "Choose a mounted volume for the NVR. It holds the recordings and the database.",
+	"error.nvr_volume_sleeps": "The disks of this volume may sleep. Recordings keep them awake for good; confirm that or choose another volume.",
+	"error.nvr_target_public": "This address is not in the home network. Confirm explicitly that the camera is meant to be there.",
+	"error.nvr_camera_not_found": "This camera does not exist (any more).",
+	"error.nvr_camera_exists": "A camera with this ID exists already.",
+	"error.nvr_camera_limit": "No more cameras can be added.",
+	"error.nvr_not_running": "The NVR does not run right now, or the camera is switched off.",
+	"error.nvr_disabled": "The NVR is switched off.",
+	"error.nvr_invalid": "This entry does not fit. Check the name, the address and the chosen values.",
+	"error.nvr_access_admin": "Owners and administrators always see every camera.",
+	"error.nvr_no_picture": "The camera has no picture right now."
 }

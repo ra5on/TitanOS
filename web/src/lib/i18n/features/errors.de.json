@@ -126,5 +126,18 @@
 	"error.voice_failed": "Die Aufnahme konnte nicht in Text umgewandelt werden. Prüfe, ob Whisper erreichbar ist.",
 	"error.voice_off": "Die Spracheingabe ist ausgeschaltet.",
 	"error.volume_not_mounted": "Das Volume ist nicht eingebunden.",
-	"error.whatif_unavailable": "Das Durchspielen ist gerade nicht möglich."
+	"error.whatif_unavailable": "Das Durchspielen ist gerade nicht möglich.",
+	"error.nvr_unavailable": "Auf diesem NAS gibt es keinen NVR.",
+	"error.nvr_docker_off": "Docker ist ausgeschaltet. Der NVR braucht Docker; schalte es ein, um den NVR zu nutzen.",
+	"error.nvr_no_volume": "Wähle für den NVR ein eingebundenes Volume. Dort liegen die Aufnahmen und die Datenbank.",
+	"error.nvr_volume_sleeps": "Die Platten dieses Volumes dürfen schlafen. Aufnahmen halten sie dauerhaft wach; bestätige das oder wähle ein anderes Volume.",
+	"error.nvr_target_public": "Diese Adresse liegt nicht im Heimnetz. Bestätige ausdrücklich, dass die Kamera dort stehen soll.",
+	"error.nvr_camera_not_found": "Diese Kamera gibt es nicht (mehr).",
+	"error.nvr_camera_exists": "Eine Kamera mit dieser Kennung gibt es schon.",
+	"error.nvr_camera_limit": "Mehr Kameras lassen sich nicht anlegen.",
+	"error.nvr_not_running": "Der NVR läuft gerade nicht oder die Kamera ist ausgeschaltet.",
+	"error.nvr_disabled": "Der NVR ist ausgeschaltet.",
+	"error.nvr_invalid": "Diese Angabe passt nicht. Prüfe Name, Adresse und die gewählten Werte.",
+	"error.nvr_access_admin": "Besitzer und Administratoren sehen immer alle Kameras.",
+	"error.nvr_no_picture": "Die Kamera liefert gerade kein Bild."
 }
