@@ -1,6 +1,6 @@
 # NVR – Kameras, Aufnahme und Erkennung (PLAN 79-7)
 
-Stand: **Backend vollständig** (Phasen 1 und 2 des Bauplans in PLAN 79-7): Kern, Ereignisse, Aufnahmen und Wiedergabe, Export, Schwenken, Gegensprechen, Gesichter und Kennzeichen, Speichergrenze, Meldungswege je Kamera, Sicherung. Die Oberfläche entsteht getrennt (Abschnitt „Was noch fehlt“). Ab Werk aus.
+Stand: **0.78** – Backend und Oberfläche: Programm „NVR“ (Live, Aufnahmen, Ereignisse, Kameras, Einstellungen mit Gesichtern und Kennzeichen, Diagnose, Einrichtung), Reiter „Kameras“ bei den Konten, Widget „Kamera“; dazu Ereignisse, Wiedergabe, Export, Schwenken, Gegensprechen, Speichergrenze, Meldungswege je Kamera, Sicherung. Die Oberfläche beschreiben `docs/DESKTOP.md` und `docs/rules/WEB-UI.md` (Abschnitt NVR). Ab Werk aus.
 
 Der NVR nimmt Netzwerkkameras (RTSP, ONVIF) auf und erkennt Personen, Fahrzeuge, Tiere, auf Wunsch Kennzeichen und Gesichter. Die Arbeit macht **Frigate** (MIT-Lizenz) in einem Container, den TitanOS verwaltet und nirgends als App zeigt. Der Benutzer sieht nur TitanOS: Er schreibt keine Konfigurationsdatei und öffnet nie Frigates Oberfläche.
 
@@ -496,8 +496,4 @@ Die Beispieldateien (`backend/internal/nvr/devmedia/`, zusammen rund 113 KB) sin
 
 ## Was noch fehlt
 
-- **Oberfläche:** Programm „NVR“, Einrichtungsassistent, Reiter „Kameras“ bei den Konten, Kamera-Widget (eigener Zweig).
-- **Oberfläche nach der Durchsicht vom 12.11.2026:** gelöschte Kameras (`deleted: true`) für Administratoren getrennt zeigen (nur Aufnahmen/Ereignisse/Exporte, mit „aufbewahrt bis `expiresAt`“), nie als Live-Kachel; `409 nvr_no_volume` beim Löschen einer Kamera; `409 nvr_camera_name_exists`; kein „Behalten“ für Ereignisse und kein Versprechen „wird nie gelöscht“; bekannte Kennzeichen nur mit Buchstaben, Ziffern, Leerzeichen, `-` und `*` (die Hilfe nennt keine regulären Ausdrücke mehr); `audio.codec` nur anzeigen, nie schicken.
-- **Texte der Oberfläche** für die neuen Meldungsarten `notify.kind.nvr_event_person|vehicle|animal|plate|face_known` und eine Glockengruppe für `nvr_*` in `web/src/lib/notify-groups.ts` (fällt sonst unter „System“); die Sensorgruppe `cameras` in den Home-Assistant-Einstellungen braucht ihren Namen.
-- **Abbild von 0.78:** NPU-Firmware prüfen/anheben (mindestens Stand Juli 2025), `release-kind`.
-- Nicht gebaut: Meldung bei unbekanntem Gesicht (Frigate meldet es nicht als Ereignis); Bild an Push/E-Mail; „bei Bewegung aufnehmen, solange keine Erkennung läuft“; Gesichter/Kennzeichen auf der iGPU statt der CPU; mehrere Kennzeichen-/Gesichtsmodelle.
+- Nicht gebaut: Bereiche im Bild (Zonen) zeichnen; Meldung bei unbekanntem Gesicht (Frigate meldet es nicht als Ereignis); Bild an Push/E-Mail; „bei Bewegung aufnehmen, solange keine Erkennung läuft“; Gesichter/Kennzeichen auf der iGPU statt der CPU; mehrere Kennzeichen-/Gesichtsmodelle; getrennte Aufbewahrung für Daueraufnahme und Ereignisse (es gibt eine Zahl `retainDays` je Kamera).

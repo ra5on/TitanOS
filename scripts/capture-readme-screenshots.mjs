@@ -38,7 +38,7 @@ await shot('/', 'arbeitsplatz', { max: false });
 await shot('/docker', 'docker');
 await shot('/files?root=share/Documents', 'dateien', { act: async (p) => { const f = p.frames().find((x) => x !== p.mainFrame()); await f.locator('text=Gehäuse Deckel.3mf').click(); await f.locator('text=Kfz-Versicherung 2026.pdf').click({ modifiers: ['Control'] }); await p.waitForTimeout(300); } });
 await shot('/vms', 'vms');
-await shot('/nvr', 'nvr', { nvr: true });
+await shot('/nvr', 'nvr', { nvr: true, act: async (p) => { const f = p.frames().find((x) => x !== p.mainFrame()); await f.locator('button[aria-pressed]', { hasText: 'Ereignisse' }).click(); await p.waitForTimeout(800); } });
 await shot('/shares', 'freigaben');
 await shot('/storage', 'speicher');
 await shot('/settings/appearance', 'darstellung');
