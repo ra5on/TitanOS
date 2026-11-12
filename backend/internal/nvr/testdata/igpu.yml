@@ -35,11 +35,12 @@ lpr:
   enabled: true
   known_plates:
     Firma:
-      - EMP-[0-9]{3}[A-Z]
-      - '[S5]LL 1234'
+      - EMP.*
+      - .*LL 12.*4
+      - ÖBB 12
     Wife's Car:
       - M-AB 1234
-      - MAB12*
+      - MAB12.*
 face_recognition:
   enabled: true
 go2rtc:
@@ -61,7 +62,6 @@ go2rtc:
 cameras:
   einfahrt:
     enabled: true
-    friendly_name: Einfahrt
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -111,7 +111,6 @@ cameras:
       enabled: false
   flur:
     enabled: true
-    friendly_name: Flur
     ffmpeg:
       output_args:
         record: preset-record-generic

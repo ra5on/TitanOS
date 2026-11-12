@@ -225,6 +225,7 @@ func TestNVRCameras(t *testing.T) {
 		code         string
 	}{
 		"same id":            {"POST", "/nvr/cameras", map[string]any{"id": "carport", "name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://192.168.1.91/x"}}, 409, "nvr_camera_exists"},
+		"same name":          {"POST", "/nvr/cameras", map[string]any{"name": "HAUSTÜR", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://192.168.1.91/x"}}, 409, "nvr_camera_name_exists"},
 		"no stream":          {"POST", "/nvr/cameras", map[string]any{"name": "X"}, 400, "nvr_invalid"},
 		"public address":     {"POST", "/nvr/cameras", map[string]any{"name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://203.0.113.4/x"}}, 409, "nvr_target_public"},
 		"this NAS":           {"POST", "/nvr/cameras", map[string]any{"name": "X", "source": map[string]any{"kind": "rtsp", "mainURL": "rtsp://127.0.0.1:8554/x"}}, 400, "nvr_invalid"},

@@ -75,8 +75,10 @@ type Settings struct {
 // KnownPlate is one entry of the known license plates.
 type KnownPlate struct {
 	Name string `json:"name"`
-	// Plates are plates or patterns as Frigate reads them: "*" stands
-	// for any characters, regular expressions are allowed.
+	// Plates are plates or patterns: letters, digits, spaces and "-",
+	// "*" stands for any characters (nothing else: Frigate reads each as
+	// a regular expression and one that does not compile stops the
+	// matching of all of them).
 	Plates []string `json:"plates"`
 }
 
@@ -101,13 +103,8 @@ func cleanPlates(list []KnownPlate) ([]KnownPlate, error) {
 		names[entry.Name] = true
 		plates := []string{}
 		for _, plate := range entry.Plates {
-			// A pattern must compile as the regular expression Frigate
-			// makes of it, and hold nothing that could leave its YAML line.
-			if plate == "" || len(plate) > 64 || strings.ContainsAny(plate, "\r\n\x00\"'`") || strings.TrimSpace(plate) != plate {
+			if !validPlate(plate) {
 				return nil, invalid("plates: plate of %q", entry.Name)
-			}
-			if _, err := regexp.Compile(strings.ReplaceAll(plate, "*", ".*")); err != nil {
-				return nil, invalid("plates: pattern of %q", entry.Name)
 			}
 			if !slices.Contains(plates, plate) {
 				plates = append(plates, plate)
@@ -120,6 +117,27 @@ func cleanPlates(list []KnownPlate) ([]KnownPlate, error) {
 	}
 	return out, nil
 }
+
+// validPlate: 1 to 64 characters, letters, digits, spaces and "-", "*"
+// as the wildcard; not starting or ending with a space. None of these
+// means anything in a regular expression except "*", which Render turns
+// into ".*": a plate never fails as a pattern in Frigate, and a plate
+// without "*" reaches Frigate unchanged (it also compares the plates
+// letter by letter, with match_distance).
+func validPlate(plate string) bool {
+	if plate == "" || utf8.RuneCountInString(plate) > 64 || strings.TrimSpace(plate) != plate || strings.Trim(plate, "*") == "" {
+		return false
+	}
+	for _, r := range plate {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != ' ' && r != '-' && r != '*' {
+			return false
+		}
+	}
+	return true
+}
+
+// platePattern is a plate as Frigate's regular expression.
+func platePattern(plate string) string { return strings.ReplaceAll(plate, "*", ".*") }
 
 // RTSPUser is the fixed user name of the published restream.
 const RTSPUser = "titanos"
@@ -257,7 +275,16 @@ type Audio struct {
 	Enabled bool `json:"enabled"`
 	// TwoWay offers talking back through the camera (WebRTC).
 	TwoWay bool `json:"twoWay"`
+	// Codec is the sound's codec in the main stream as the last check of
+	// the camera found it (RTSP name: "MPEG4-GENERIC" is AAC, "PCMA" and
+	// "PCMU" are G.711); "" while unknown. Set by titand, not by the page:
+	// only AAC is recorded as it is, anything else is turned into AAC
+	// (an MP4 file takes no G.711, and Frigate would record nothing).
+	Codec string `json:"codec,omitempty"`
 }
+
+// codecAAC is AAC as RTSP names it.
+const codecAAC = "MPEG4-GENERIC"
 
 // Notify is where messages about this camera go. Phase 1 raises only the
 // TitanOS message; the other ways are kept for the routing of phase 2.
@@ -447,8 +474,9 @@ func ValidateCamera(c Camera) (Camera, error) {
 	if err != nil {
 		return c, invalid("source.mainURL: %v", err)
 	}
+	subHost := ""
 	if s.SubURL != "" {
-		if _, err := streamURL(s.SubURL); err != nil {
+		if subHost, err = streamURL(s.SubURL); err != nil {
 			return c, invalid("source.subURL: %v", err)
 		}
 	}
@@ -485,7 +513,7 @@ func ValidateCamera(c Camera) (Camera, error) {
 		return c, invalid("source.kind")
 	}
 	if !s.AllowPublic {
-		for _, host := range []string{s.Host, mainHost} {
+		for _, host := range []string{s.Host, mainHost, subHost} {
 			if addr, err := netip.ParseAddr(host); err == nil && !HomeAddr(addr) {
 				return c, fmt.Errorf("%w: %s", ErrTargetNotAllowed, host)
 			}
@@ -516,6 +544,9 @@ func ValidateCamera(c Camera) (Camera, error) {
 	}
 	if c.Audio.TwoWay && !c.Audio.Enabled {
 		return c, invalid("audio.twoWay needs audio.enabled")
+	}
+	if len(c.Audio.Codec) > 32 || strings.ContainsAny(c.Audio.Codec, "\r\n\x00") {
+		return c, invalid("audio.codec")
 	}
 	if c.Notify.Kinds, err = cleanList(c.Notify.Kinds, notifyKinds); err != nil {
 		return c, invalid("notify.kinds: %v", err)

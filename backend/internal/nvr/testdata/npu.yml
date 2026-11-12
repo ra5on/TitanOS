@@ -58,7 +58,6 @@ go2rtc:
 cameras:
   haustuer:
     enabled: true
-    friendly_name: Haustür
     ffmpeg:
       output_args:
         record: preset-record-generic-audio-copy
@@ -104,7 +103,6 @@ cameras:
       enabled: false
   garten:
     enabled: true
-    friendly_name: Garten
     ffmpeg:
       output_args:
         record: preset-record-generic

@@ -41,9 +41,9 @@ go2rtc:
     carport_sub:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
     hof:
-      - rtsp://192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+      - rtsp://192.168.1.61:554/Streaming/Channels/101#backchannel=0
     hof_sub:
-      - rtsp://192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+      - rtsp://192.168.1.61:554/Streaming/Channels/102#backchannel=0
     keller:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
     keller_sub:
@@ -51,7 +51,6 @@ go2rtc:
 cameras:
   carport:
     enabled: true
-    friendly_name: Carport
     ffmpeg:
       output_args:
         record: preset-record-generic
@@ -80,10 +79,9 @@ cameras:
       enabled: false
   hof:
     enabled: true
-    friendly_name: Hof
     ffmpeg:
       output_args:
-        record: preset-record-generic
+        record: preset-record-generic-audio-aac
       inputs:
         - path: rtsp://127.0.0.1:8554/hof
           input_args: preset-rtsp-restream
@@ -125,7 +123,6 @@ cameras:
       enabled: false
   keller:
     enabled: false
-    friendly_name: Keller
     ffmpeg:
       output_args:
         record: preset-record-generic

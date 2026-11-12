@@ -3,7 +3,9 @@ package nvr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -179,18 +181,27 @@ func TestEnableStartsFrigate(t *testing.T) {
 func TestChangesRestartOnlyWhenNeeded(t *testing.T) {
 	r := newRig(t, true)
 	r.up()
-	// A changed camera: new config, Frigate restarts in the same container.
+	// A renamed camera: the name is not in config.yml, nothing restarts.
 	c, _ := r.m.Camera("einfahrt")
 	c.Name = "Einfahrt Nord"
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
-	if r.engine.Creates != 1 || r.engine.Starts != 2 || !strings.Contains(r.config(), "Einfahrt Nord") {
+	if r.engine.Creates != 1 || r.engine.Starts != 1 || strings.Contains(r.config(), "Einfahrt") {
 		t.Errorf("rename: creates %d starts %d", r.engine.Creates, r.engine.Starts)
 	}
+	// A changed camera: new config, Frigate restarts in the same container.
+	c.Record.RetainDays = 30
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	if r.engine.Creates != 1 || r.engine.Starts != 2 || !strings.Contains(r.config(), "days: 30") {
+		t.Errorf("change: creates %d starts %d", r.engine.Creates, r.engine.Starts)
+	}
 	// Storing the same camera again changes nothing.
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -603,7 +614,7 @@ func TestOfflineCameraIsReportedOnce(t *testing.T) {
 	// einfahrt does not want the message.
 	c, _ := r.m.Camera("einfahrt")
 	c.Notify.Kinds = []string{"person"}
-	if _, err := r.m.UpdateCamera("einfahrt", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, false); err != nil {
 		t.Fatal(err)
 	}
 	r.look()
@@ -649,38 +660,50 @@ func TestCameraCRUD(t *testing.T) {
 		t.Error("demo cameras were written to /config")
 	}
 	c := NewCamera()
-	c.Name = "Haustür"
+	c.Name = "HAUSTÜR"
 	c.Source = Source{Kind: "rtsp", MainURL: "rtsp://192.168.1.80/live", User: "u", Password: "p"}
-	added, err := r.m.AddCamera(c)
-	if err != nil || added.ID != "haustuer_2" || added.Order != 5 {
+	// Names are unique, letter case aside (people tell cameras apart by
+	// name).
+	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("a second Haustür: %v", err)
+	}
+	c.Name = "Haustür hinten"
+	added, err := r.m.AddCamera(context.Background(), c)
+	if err != nil || added.ID != "haustuer_hinten" || added.Order != 5 {
 		t.Fatalf("%+v %v", added, err)
 	}
+	if renamed := added; true {
+		renamed.Name = "garten"
+		if _, err := r.m.UpdateCamera(context.Background(), added.ID, renamed, false); !errors.Is(err, ErrNameExists) {
+			t.Errorf("renamed like another camera: %v", err)
+		}
+	}
 	c.ID = "haustuer"
-	if _, err := r.m.AddCamera(c); !errors.Is(err, ErrExists) {
+	if _, err := r.m.AddCamera(context.Background(), c); !errors.Is(err, ErrExists) {
 		t.Errorf("double ID: %v", err)
 	}
 	// An edit without a password keeps it …
 	edit := added
 	edit.Source.Password = ""
 	edit.Name = "Seiteneingang"
-	got, err := r.m.UpdateCamera(added.ID, edit, false)
+	got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false)
 	if err != nil || got.Source.Password != "p" {
 		t.Errorf("%+v %v", got.Source, err)
 	}
 	// … but never sends it to another address or user.
 	edit.Source.MainURL = "rtsp://192.168.1.99/live"
-	if _, err := r.m.UpdateCamera(added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another host kept the password: %v", err)
 	}
 	edit.Source.MainURL, edit.Source.User = "rtsp://192.168.1.80/live", "other"
-	if _, err := r.m.UpdateCamera(added.ID, edit, false); !errors.Is(err, ErrInvalid) {
+	if _, err := r.m.UpdateCamera(context.Background(), added.ID, edit, false); !errors.Is(err, ErrInvalid) {
 		t.Errorf("another user kept the password: %v", err)
 	}
 	edit.Source.User = ""
-	if got, err := r.m.UpdateCamera(added.ID, edit, true); err != nil || got.Source.Password != "" {
+	if got, err := r.m.UpdateCamera(context.Background(), added.ID, edit, true); err != nil || got.Source.Password != "" {
 		t.Errorf("clearing: %+v %v", got.Source, err)
 	}
-	if _, err := r.m.UpdateCamera("nope", edit, false); !errors.Is(err, ErrNotFound) {
+	if _, err := r.m.UpdateCamera(context.Background(), "nope", edit, false); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown camera: %v", err)
 	}
 	// Deleting a camera deletes its rights.
@@ -922,5 +945,91 @@ func TestVolumeChangeWritesTheConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(spec.Config, "config.yml")); err != nil {
 		t.Errorf("after the move to volume b there is no config.yml: %v (phase %s)", err, r.phase())
+	}
+}
+
+// The sound's codec comes from titand's own check of the camera, not from
+// the page: AAC is recorded as it is, anything else turned into AAC.
+func TestAudioCodecFromTheCheck(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	main := "rtsp://192.168.1.81:554/main"
+	if _, err := r.m.Probe(ctx, ProbeRequest{Kind: "rtsp", MainURL: main}); err != nil {
+		t.Fatal(err)
+	}
+	c := NewCamera()
+	c.Name, c.Source = "Hof", Source{Kind: "rtsp", MainURL: main}
+	c.Audio = Audio{Enabled: true, Codec: "whatever the page says"}
+	added, err := r.m.AddCamera(ctx, c)
+	if err != nil || added.Audio.Codec != "MPEG4-GENERIC" {
+		t.Fatalf("%+v %v", added.Audio, err)
+	}
+	// Not checked: unknown.
+	c.Name, c.Source.MainURL = "Tor", "rtsp://192.168.1.82:554/main"
+	other, err := r.m.AddCamera(ctx, c)
+	if err != nil || other.Audio.Codec != "" {
+		t.Fatalf("%+v %v", other.Audio, err)
+	}
+	r.up()
+	cfg := parse(t, []byte(r.config()))
+	if got := dig(t, cfg, "cameras", added.ID, "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-copy" {
+		t.Errorf("AAC: %v", got)
+	}
+	if got := dig(t, cfg, "cameras", other.ID, "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("unknown: %v", got)
+	}
+	// An edit of the same stream keeps it; another stream forgets it.
+	added.Audio.Codec = ""
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "MPEG4-GENERIC" {
+		t.Errorf("same stream: %+v %v", got.Audio, err)
+	}
+	added.Source.MainURL = "rtsp://192.168.1.81:554/other"
+	if got, err := r.m.UpdateCamera(ctx, added.ID, added, false); err != nil || got.Audio.Codec != "" {
+		t.Errorf("other stream: %+v %v", got.Audio, err)
+	}
+}
+
+// Host names in the addresses are checked like IP addresses, the sub
+// stream like the main stream.
+func TestCameraTargetsAreChecked(t *testing.T) {
+	r := newRig(t, true)
+	r.m.Resolve = func(_ context.Context, host string) ([]netip.Addr, error) {
+		switch host {
+		case "cam.home":
+			return []netip.Addr{netip.MustParseAddr("192.168.1.70")}, nil
+		case "cam.example":
+			return []netip.Addr{netip.MustParseAddr("192.168.1.71"), netip.MustParseAddr("203.0.113.9")}, nil
+		case "nas.example":
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		}
+		return nil, errors.New("no such host")
+	}
+	ctx := context.Background()
+	c := NewCamera()
+	for i, tc := range []struct {
+		main, sub   string
+		allowPublic bool
+		want        error
+	}{
+		{"rtsp://cam.home/main", "rtsp://cam.home/sub", false, nil},
+		{"rtsp://cam.example/main", "", false, ErrTargetNotAllowed},
+		{"rtsp://cam.example/main", "", true, nil},
+		{"rtsp://nas.example/main", "", true, ErrTargetNotAllowed},
+		{"rtsp://missing.home/main", "", false, ErrInvalid},
+		{"rtsp://192.168.1.72/main", "rtsp://203.0.113.10/sub", false, ErrTargetNotAllowed},
+		{"rtsp://192.168.1.72/main", "rtsp://cam.example/sub", false, ErrTargetNotAllowed},
+	} {
+		c.ID, c.Name = fmt.Sprintf("cam_%d", i), fmt.Sprintf("Cam %d", i)
+		c.Source = Source{Kind: "rtsp", MainURL: tc.main, SubURL: tc.sub, AllowPublic: tc.allowPublic}
+		_, err := r.m.AddCamera(ctx, c)
+		if (tc.want == nil && err != nil) || (tc.want != nil && !errors.Is(err, tc.want)) {
+			t.Errorf("%s %s public %v: %v, want %v", tc.main, tc.sub, tc.allowPublic, err, tc.want)
+		}
+	}
+	// ONVIF: the host too.
+	c.ID, c.Name = "onvif_cam", "ONVIF"
+	c.Source = Source{Kind: "onvif", Host: "cam.example", ONVIFPort: 80, MainURL: "rtsp://192.168.1.73/main"}
+	if _, err := r.m.AddCamera(ctx, c); !errors.Is(err, ErrTargetNotAllowed) {
+		t.Errorf("onvif host: %v", err)
 	}
 }

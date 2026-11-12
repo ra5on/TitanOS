@@ -45,16 +45,15 @@ go2rtc:
     candidates: []
   streams:
     tor:
-      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#backchannel=0
     tor_sub:
-      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#backchannel=0
 cameras:
   tor:
     enabled: true
-    friendly_name: Tor
     ffmpeg:
       output_args:
-        record: preset-record-generic
+        record: preset-record-generic-audio-aac
       inputs:
         - path: rtsp://127.0.0.1:8554/tor
           input_args: preset-rtsp-restream

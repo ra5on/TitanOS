@@ -475,7 +475,7 @@ func TestRoutingOfMessages(t *testing.T) {
 	set := func(id string, edit func(*Camera)) {
 		c, _ := r.m.Camera(id)
 		edit(&c)
-		if _, err := r.m.UpdateCamera(id, c, false); err != nil {
+		if _, err := r.m.UpdateCamera(context.Background(), id, c, false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -695,7 +695,7 @@ func TestFaces(t *testing.T) {
 	// No camera recognises faces: the library is off.
 	c, _ := r.m.Camera("haustuer")
 	c.Detect.Faces = false
-	if _, err := r.m.UpdateCamera("haustuer", c, false); err != nil {
+	if _, err := r.m.UpdateCamera(context.Background(), "haustuer", c, false); err != nil {
 		t.Fatal(err)
 	}
 	if faces, err := r.m.Faces(ctx); err != nil || faces.Enabled || len(faces.Faces) != 0 {
@@ -712,7 +712,7 @@ func TestFaces(t *testing.T) {
 
 func TestKnownPlates(t *testing.T) {
 	ok := Defaults()
-	ok.Plates = []KnownPlate{{Name: "Annas Auto", Plates: []string{"M-AB 1234", "MAB12*", "M-AB 1234"}}, {Name: "Firma", Plates: []string{"EMP-[0-9]{3}[A-Z]"}}}
+	ok.Plates = []KnownPlate{{Name: "Annas Auto", Plates: []string{"M-AB 1234", "MAB12*", "M-AB 1234"}}, {Name: "Firma", Plates: []string{"EMP*", "ÖBB 12"}}}
 	if err := ValidateSettings(ok, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -728,6 +728,18 @@ func TestKnownPlates(t *testing.T) {
 		"newline":     {{Name: "A", Plates: []string{"A\nlpr: x"}}},
 		"bad pattern": {{Name: "A", Plates: []string{"A[1"}}},
 		"empty plate": {{Name: "A", Plates: []string{""}}},
+		"only a star": {{Name: "A", Plates: []string{"**"}}},
+		// Nothing a regular expression would read: one bad pattern stops
+		// Frigate's matching of all plates.
+		"class":       {{Name: "A", Plates: []string{"[S5]LL 1234"}}},
+		"repeat":      {{Name: "A", Plates: []string{"EMP-[0-9]{3}"}}},
+		"dot":         {{Name: "A", Plates: []string{"M.AB"}}},
+		"group":       {{Name: "A", Plates: []string{"M(AB"}}},
+		"alternative": {{Name: "A", Plates: []string{"MA|B"}}},
+		"escape":      {{Name: "A", Plates: []string{`M\d`}}},
+		"anchor":      {{Name: "A", Plates: []string{"^MAB$"}}},
+		"question":    {{Name: "A", Plates: []string{"MA?"}}},
+		"plus":        {{Name: "A", Plates: []string{"MA+"}}},
 	} {
 		s := Defaults()
 		s.Plates = plates

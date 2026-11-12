@@ -95,6 +95,7 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrTargetNotAllowed, http.StatusConflict, "nvr_target_public", "the address is not in the home network"},
 		{nvr.ErrNotFound, http.StatusNotFound, "nvr_camera_not_found", "no such camera"},
 		{nvr.ErrExists, http.StatusConflict, "nvr_camera_exists", "a camera with this ID exists"},
+		{nvr.ErrNameExists, http.StatusConflict, "nvr_camera_name_exists", "another camera has this name"},
 		{nvr.ErrLimit, http.StatusConflict, "nvr_camera_limit", "no more cameras can be added"},
 		{nvr.ErrNotRunning, http.StatusConflict, "nvr_not_running", "the NVR does not run"},
 		{nvr.ErrDisabled, http.StatusConflict, "nvr_disabled", "the NVR is switched off"},
@@ -415,7 +416,7 @@ func (a nvrArea) handleCameraAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.tidy()
-	c, err := a.nvr.AddCamera(req.Camera)
+	c, err := a.nvr.AddCamera(r.Context(), req.Camera)
 	if err != nil {
 		writeNVRError(w, err)
 		return
@@ -444,7 +445,7 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.tidy()
-	c, err := a.nvr.UpdateCamera(id, req.Camera, req.ClearPassword)
+	c, err := a.nvr.UpdateCamera(r.Context(), id, req.Camera, req.ClearPassword)
 	if err != nil {
 		writeNVRError(w, err)
 		return

@@ -284,8 +284,13 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 		inputs = []ymap{input(mainStream(c.ID), "record"), input(subStream(c.ID), "detect")}
 	}
 	recordArgs := "preset-record-generic"
-	if c.Audio.Enabled {
+	switch {
+	case c.Audio.Enabled && strings.EqualFold(c.Audio.Codec, codecAAC):
 		recordArgs = "preset-record-generic-audio-copy"
+	case c.Audio.Enabled:
+		// G.711 (or a codec not known yet) does not go into an MP4 file
+		// as it is: the segments would not be written at all.
+		recordArgs = "preset-record-generic-audio-aac"
 	}
 
 	// Plates are read on vehicles and faces on persons: those must be
@@ -299,9 +304,11 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 	}
 	track, _ = cleanList(track, allowedObjects) // validated before; this only orders them
 
+	// No friendly_name: Frigate keys its storage figures by it
+	// (/api/recordings/storage), so they are keyed by the ID, which is
+	// unique; and renaming a camera does not restart Frigate.
 	block := ymap{
 		{"enabled", c.Enabled},
-		{"friendly_name", c.Name},
 		{"ffmpeg", ymap{{"output_args", ymap{{"record", recordArgs}}}, {"inputs", inputs}}},
 		{"detect", ymap{{"enabled", c.Detect.Enabled}, {"fps", 5}}},
 		{"objects", ymap{{"track", track}}},
@@ -370,7 +377,11 @@ func lprBlock(s Settings, enabled bool) ymap {
 	slices.SortFunc(plates, func(a, b KnownPlate) int { return strings.Compare(a.Name, b.Name) })
 	known := ymap{}
 	for _, entry := range plates {
-		known = append(known, yentry{entry.Name, entry.Plates})
+		patterns := []string{}
+		for _, plate := range entry.Plates {
+			patterns = append(patterns, platePattern(plate))
+		}
+		known = append(known, yentry{entry.Name, patterns})
 	}
 	return append(block, yentry{"known_plates", known})
 }

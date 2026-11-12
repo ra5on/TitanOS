@@ -45,7 +45,7 @@ func renderCases() map[string]struct {
 		"npu": {Defaults(), []Camera{
 			testCamera("haustuer", "Haustür", func(c *Camera) {
 				c.Order = 1
-				c.Audio = Audio{Enabled: true, TwoWay: true}
+				c.Audio = Audio{Enabled: true, TwoWay: true, Codec: "MPEG4-GENERIC"}
 				c.Detect.Objects = []string{"dog", "person"}
 			}),
 			testCamera("garten", "Garten", func(c *Camera) {
@@ -58,7 +58,7 @@ func renderCases() map[string]struct {
 		}, RenderHardware{Detector: DetectorNPU, VAAPI: true, Candidates: []string{"192.168.1.10:8555"}}},
 		// iGPU with plates and faces; the restream is published.
 		"igpu": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, RTSPOut: true, RTSPPassword: "abcdefgh234567",
-			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}}}}, []Camera{
+			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP*", "*LL 12*4", "ÖBB 12"}}}}, []Camera{
 			testCamera("einfahrt", "Einfahrt", func(c *Camera) {
 				c.Detect.Plates = true
 				c.Detect.Objects = []string{"person"}
@@ -73,13 +73,18 @@ func renderCases() map[string]struct {
 		}, RenderHardware{Detector: DetectorIGPU, VAAPI: true}},
 		// Coral, no GPU: a camera without login, one switched off, one that does not record.
 		"coral": {Defaults(), []Camera{
-			testCamera("hof", "Hof", func(c *Camera) { c.Source.User, c.Source.Password = "", "" }),
+			// G.711 sound is turned into AAC (an MP4 file takes no G.711).
+			testCamera("hof", "Hof", func(c *Camera) {
+				c.Source.User, c.Source.Password = "", ""
+				c.Audio = Audio{Enabled: true, Codec: "PCMA"}
+			}),
 			testCamera("keller", "Keller", func(c *Camera) { c.Enabled = false }),
 			testCamera("carport", "Carport", func(c *Camera) { c.Record.Mode = RecordOff; c.Detect.Enabled = false }),
 		}, RenderHardware{Detector: DetectorCoral}},
 		// CPU and no camera yet: what Frigate first starts with.
-		"cpu":   {Defaults(), nil, RenderHardware{Detector: DetectorCPU}},
-		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", nil)}, RenderHardware{Detector: DetectorHailo, VAAPI: true}},
+		"cpu": {Defaults(), nil, RenderHardware{Detector: DetectorCPU}},
+		// Sound of a codec not known yet: turned into AAC to be safe.
+		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", func(c *Camera) { c.Audio.Enabled = true })}, RenderHardware{Detector: DetectorHailo, VAAPI: true}},
 	}
 	for name, c := range cases {
 		c.settings.ProxySecret = testSecret
@@ -284,8 +289,9 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	} {
 		got := dig(t, cfg, check.path...)
 		if check.want == nil {
-			// The known plates, as lists under their names.
-			if list, ok := got.([]any); !ok || !slices.Equal(list, []any{"EMP-[0-9]{3}[A-Z]", "[S5]LL 1234"}) {
+			// The known plates, as lists under their names; "*" is the only
+			// wildcard and becomes ".*".
+			if list, ok := got.([]any); !ok || !slices.Equal(list, []any{"EMP.*", ".*LL 12.*4", "ÖBB 12"}) {
 				t.Errorf("%v = %#v", check.path, got)
 			}
 			continue
@@ -334,8 +340,12 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 		dig(t, cfg, "cameras", "carport", "detect", "enabled") != false || dig(t, cfg, "cameras", "carport", "snapshots", "enabled") != false {
 		t.Errorf("cameras = %v", cfg["cameras"])
 	}
-	if got := dig(t, cfg, "go2rtc", "streams", "hof").([]any); got[0] != "rtsp://192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0" {
+	if got := dig(t, cfg, "go2rtc", "streams", "hof").([]any); got[0] != "rtsp://192.168.1.61:554/Streaming/Channels/101#backchannel=0" {
 		t.Errorf("stream without login = %v", got)
+	}
+	// Recorded with sound: G.711 becomes AAC; a codec not known yet too.
+	if got := dig(t, cfg, "cameras", "hof", "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("G.711: %v", got)
 	}
 
 	hailo := renderCases()["hailo"]
@@ -343,6 +353,9 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	cfg = parse(t, data)
 	if dig(t, cfg, "detectors", "hailo", "type") != "hailo8l" || dig(t, cfg, "model", "labelmap_path") != "/labelmap/coco-80.txt" || dig(t, cfg, "model", "width") != 320 {
 		t.Errorf("hailo: %v %v", cfg["detectors"], cfg["model"])
+	}
+	if got := dig(t, cfg, "cameras", "tor", "ffmpeg", "output_args", "record"); got != "preset-record-generic-audio-aac" {
+		t.Errorf("unknown sound: %v", got)
 	}
 }
 
