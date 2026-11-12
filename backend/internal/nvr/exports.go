@@ -61,12 +61,19 @@ type Export struct {
 // (exports.json in .titanos/nvr on the NVR's volume): Frigate knows
 // neither accounts nor the time that was asked for.
 type exportRecord struct {
-	Owner string  `json:"owner"`
-	From  float64 `json:"from"`
-	To    float64 `json:"to"`
+	Owner string `json:"owner"`
+	// Camera and Name are what was asked for (a failed export is shown
+	// with them after Frigate forgot it).
+	Camera string  `json:"camera,omitempty"`
+	Name   string  `json:"name,omitempty"`
+	From   float64 `json:"from"`
+	To     float64 `json:"to"`
 	// Created is when the export was asked for (Frigate's own date of
 	// an export is the beginning of what it shows).
 	Created float64 `json:"created,omitempty"`
+	// Failed: Frigate said the export failed; it is shown as failed until
+	// it is deleted, without asking Frigate again.
+	Failed bool `json:"failed,omitempty"`
 }
 
 const exportsFile = "exports.json"
@@ -105,7 +112,10 @@ func (m *Manager) exportRecords() (map[string]exportRecord, error) {
 }
 
 // changeExportRecords edits the records and writes them to the volume.
+// One change at a time: two at once would lose one of them.
 func (m *Manager) changeExportRecords(edit func(map[string]exportRecord)) error {
+	m.exportsMu.Lock()
+	defer m.exportsMu.Unlock()
 	if _, err := m.exportRecords(); err != nil {
 		return err
 	}
@@ -114,16 +124,41 @@ func (m *Manager) changeExportRecords(edit func(map[string]exportRecord)) error 
 	for id, record := range m.rt.exports {
 		next[id] = record
 	}
-	edit(next)
-	m.rt.exports = next
 	volume := m.settings.Volume
 	m.mu.Unlock()
+	edit(next)
 	root, _, err := m.privateRoot(volume)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	return volumedata.WriteJSON(root, exportsFile, next)
+	if err := volumedata.WriteJSON(root, exportsFile, next); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	if m.settings.Volume == volume {
+		m.rt.exports = next
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+// owns tells whether an account made an export: its name, and the
+// account was there when the export was made (a later account of the
+// same name never inherits the exports of an earlier one, even if the
+// NVR could not note the deletion).
+func (m *Manager) owns(owner string, record exportRecord) bool {
+	if owner == "" || record.Owner != owner {
+		return false
+	}
+	if m.Access == nil {
+		return true
+	}
+	account, ok := m.Access.lookup(owner)
+	if !ok || account.Created.IsZero() {
+		return true
+	}
+	return record.Created > 0 && record.Created >= float64(account.Created.Unix())
 }
 
 // exportName checks the name of an export.
@@ -186,7 +221,7 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 	}
 	created := float64(m.now().Unix())
 	if err := m.changeExportRecords(func(records map[string]exportRecord) {
-		records[started.ID] = exportRecord{Owner: owner, From: from, To: to, Created: created}
+		records[started.ID] = exportRecord{Owner: owner, Camera: camera, Name: name, From: from, To: to, Created: created}
 	}); err != nil {
 		slog.Warn("NVR: owner of the export not stored; it is shown to administrators only", "export", started.ID, "err", err)
 	}
@@ -220,7 +255,7 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 			e.Created = record.Created
 		}
 		known[e.ID] = true
-		if all || (owner != "" && e.Owner == owner) {
+		if all || m.owns(owner, record) {
 			out = append(out, e)
 		}
 	}
@@ -242,25 +277,56 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		}
 		add(Export{ID: j.ID, Camera: j.Camera, Name: j.Name, Created: float64(m.now().Unix()), State: ExportRunning})
 	}
-	// Exports TitanOS started that Frigate lists nowhere: failed, or
-	// deleted behind its back.
+	// Exports TitanOS started that Frigate lists nowhere: failed (Frigate
+	// forgets a failed job after a while: the record keeps it, and
+	// Frigate is asked once), or gone behind its back (the record goes).
+	var gone []string
+	failed := map[string]Export{}
 	for id, record := range records {
-		if known[id] || !(all || record.Owner == owner) {
+		if known[id] || !(all || m.owns(owner, record)) {
 			continue
-		}
-		var job frigateJob
-		if err := m.frigate.call(ctx, http.MethodGet, base, "/api/jobs/export/"+url.PathEscape(id), nil, nil, &job); err != nil {
-			continue
-		}
-		state := ExportRunning
-		if job.Status == "failed" || job.Status == "cancelled" {
-			state = ExportFailed
 		}
 		created := record.Created
 		if created == 0 {
 			created = record.To
 		}
-		out = append(out, Export{ID: id, Camera: job.Camera, Name: job.Name, From: record.From, To: record.To, Created: created, State: state, Owner: record.Owner})
+		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner}
+		if !record.Failed {
+			var job frigateJob
+			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/jobs/export/"+url.PathEscape(id), nil, nil, &job); err != nil {
+				if frigateStatus(err) == http.StatusNotFound {
+					gone = append(gone, id)
+				}
+				continue
+			}
+			export.State = ExportRunning
+			if export.Camera == "" && ValidCameraID(job.Camera) {
+				export.Camera = job.Camera
+			}
+			if export.Name == "" {
+				export.Name = clip(job.Name, 200)
+			}
+			if job.Status == "failed" || job.Status == "cancelled" {
+				export.State = ExportFailed
+				failed[id] = export
+			}
+		}
+		out = append(out, export)
+	}
+	if len(failed)+len(gone) > 0 {
+		if err := m.changeExportRecords(func(records map[string]exportRecord) {
+			for id, export := range failed {
+				if record, ok := records[id]; ok {
+					record.Failed, record.Camera, record.Name = true, export.Camera, export.Name
+					records[id] = record
+				}
+			}
+			for _, id := range gone {
+				delete(records, id)
+			}
+		}); err != nil {
+			slog.Warn("NVR: records of failed or vanished exports not updated", "err", err)
+		}
 	}
 	slices.SortFunc(out, func(a, b Export) int {
 		switch {
@@ -390,12 +456,14 @@ func (m *Manager) DeleteExport(ctx context.Context, id, owner string, all bool) 
 }
 
 // ForgetExportOwner makes the exports of a deleted account ownerless:
-// administrators still see them, a new account of the same name does not.
+// administrators still see them. A new account of the same name never
+// sees them anyway (it was made after them, see owns); this tidies the
+// records where the volume can be reached, switched on or not.
 func (m *Manager) ForgetExportOwner(owner string) {
 	m.mu.Lock()
-	enabled, loaded := m.settings.Enabled, m.rt.exports != nil
+	volume := m.settings.Volume
 	m.mu.Unlock()
-	if !enabled && !loaded {
+	if volume == "" || !slices.Contains(m.mounted(), volume) {
 		return
 	}
 	err := m.changeExportRecords(func(records map[string]exportRecord) {

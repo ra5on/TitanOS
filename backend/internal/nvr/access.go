@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
@@ -37,6 +38,9 @@ type Account struct {
 	Name     string
 	Admin    bool // owner or administrator
 	Disabled bool
+	// Created is when the account was made: an export made before
+	// belonged to an earlier account of the same name.
+	Created time.Time
 }
 
 // Access decides which account may see which camera, modelled on

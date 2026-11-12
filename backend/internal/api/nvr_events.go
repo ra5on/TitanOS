@@ -281,7 +281,10 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 		conn.Close(websocket.StatusPolicyViolation, "nvr_unavailable")
 		return
 	}
-	messages, cancel := a.nvr.Subscribe(func(camera string) bool { return a.allows(user, camera, nvr.RightLive) })
+	// The feed asks from its own goroutine: the account is taken once
+	// here (its rights are looked up by name, as they are now).
+	viewer := user
+	messages, cancel := a.nvr.Subscribe(func(camera string) bool { return a.allows(viewer, camera, nvr.RightLive) })
 	defer cancel()
 	// Reading notices a window that closed (and answers pings).
 	ctx := conn.CloseRead(r.Context())
@@ -292,8 +295,7 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-recheck.C:
-			current, ok := a.loginHolds(r, user)
-			if !ok {
+			if _, ok := a.loginHolds(r, user); !ok {
 				bye, _ := json.Marshal(map[string]string{"t": "bye", "reason": "logout"})
 				wctx, done := context.WithTimeout(context.Background(), 2*time.Second)
 				_ = conn.Write(wctx, websocket.MessageText, bye)
@@ -301,7 +303,6 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 				conn.Close(websocket.StatusNormalClosure, "logout")
 				return
 			}
-			user = current
 		case message := <-messages:
 			data, err := json.Marshal(message)
 			if err != nil {

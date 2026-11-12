@@ -3,9 +3,11 @@ package nvr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -845,5 +847,97 @@ func TestPTZStopWhenTitandEnds(t *testing.T) {
 	r.wait(func() bool { return slices.Contains(r.frigate.Commands(), DevCommand{"garten/ptz", "STOP"}) })
 	if owed := r.m.owedStops(true); len(owed) != 0 {
 		t.Errorf("still owed: %v", owed)
+	}
+}
+
+// Failed exports stay failed after Frigate forgot them; records Frigate
+// knows nothing of go; a later account of the same name never inherits
+// exports; changes of the records are not lost when they come at once.
+func TestExportRecords(t *testing.T) {
+	r := seeded(t)
+	ctx := context.Background()
+	all, _ := r.m.Exports(ctx, "", true)
+	var failed Export
+	for _, e := range all {
+		if e.State == ExportFailed {
+			failed = e
+		}
+	}
+	if failed.ID == "" {
+		t.Fatalf("no failed export: %+v", all)
+	}
+	// Frigate forgets the failed job: it is still shown, with camera and
+	// name, and Frigate is not asked again.
+	r.frigate.Set(func(f *DevFrigate) {
+		f.data.exports = slices.DeleteFunc(f.data.exports, func(e devExport) bool { return e.ID == failed.ID })
+	})
+	again, err := r.m.Export(ctx, failed.ID, "", true)
+	if err != nil || again.State != ExportFailed || again.Camera != failed.Camera || again.Name == "" {
+		t.Errorf("forgotten failed export: %+v %v", again, err)
+	}
+	// A record of an export Frigate never heard of goes.
+	if err := r.m.changeExportRecords(func(records map[string]exportRecord) {
+		records["ghost_000001"] = exportRecord{Owner: "anna", Camera: "haustuer", Created: float64(r.now.Unix())}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := r.m.Exports(ctx, "anna", false); len(list) != 0 {
+		t.Errorf("the record of a vanished export: %+v", list)
+	}
+	records, _ := r.m.exportRecords()
+	if _, ok := records["ghost_000001"]; ok {
+		t.Error("the vanished export's record stays")
+	}
+	// anna makes an export; her account is deleted while the NVR cannot
+	// note it, and a new anna is made: she does not see it.
+	made, err := r.m.CreateExport(ctx, "anna", "haustuer", float64(r.now.Unix())-1800, float64(r.now.Unix())-1700, "Mine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := r.now.Add(-time.Hour)
+	r.m.Access.Lookup = func(name string) (Account, bool) { return Account{Name: name, Created: created}, true }
+	if mine, _ := r.m.Exports(ctx, "anna", false); len(mine) != 1 || mine[0].ID != made.ID {
+		t.Fatalf("anna's export: %+v", mine)
+	}
+	created = r.now.Add(time.Hour)
+	if mine, _ := r.m.Exports(ctx, "anna", false); len(mine) != 0 {
+		t.Errorf("a new anna sees the old one's export: %+v", mine)
+	}
+	if _, err := r.m.Export(ctx, made.ID, "anna", false); !errors.Is(err, ErrExportNotFound) {
+		t.Errorf("a new anna opens it: %v", err)
+	}
+	// Forgetting the owner works with the NVR switched off.
+	if err := r.m.Disable(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r.m.ForgetExportOwner("anna")
+	records, _ = r.m.exportRecords()
+	if records[made.ID].Owner != "" {
+		t.Errorf("owner kept while the NVR is off: %+v", records[made.ID])
+	}
+	// Many changes at once: none is lost.
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = r.m.changeExportRecords(func(records map[string]exportRecord) {
+				records[fmt.Sprintf("many_%02d", i)] = exportRecord{Owner: "ben"}
+			})
+		}()
+	}
+	wg.Wait()
+	r.m.mu.Lock()
+	r.m.rt.exports = nil
+	r.m.mu.Unlock()
+	records, _ = r.m.exportRecords()
+	n := 0
+	for id := range records {
+		if strings.HasPrefix(id, "many_") {
+			n++
+		}
+	}
+	if n != 20 {
+		t.Errorf("%d of 20 changes kept", n)
 	}
 }

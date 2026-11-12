@@ -67,7 +67,7 @@ func TestNVRRealFrigate(t *testing.T) {
 		users := opts.Users
 		manager.Access.Lookup = func(name string) (nvr.Account, bool) {
 			user, ok := users.Get(name)
-			return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled}, ok
+			return nvr.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled, Created: user.Created}, ok
 		}
 		if err := manager.Load(); err != nil {
 			t.Fatal(err)

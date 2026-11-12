@@ -144,6 +144,8 @@ type Manager struct {
 	// deletedMu orders the changes of the deleted cameras' file
 	// (deleted.go); taken before mu, never while mu is held.
 	deletedMu sync.Mutex
+	// exportsMu orders the changes of exports.json (exports.go).
+	exportsMu sync.Mutex
 	loaded    bool
 	settings  Settings
 	cameras   []Camera
