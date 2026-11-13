@@ -447,6 +447,8 @@ type nvrCameraRequest struct {
 	nvr.Camera
 	ClearPassword bool `json:"clearPassword"`
 	ConfirmShrink bool `json:"confirmShrink"`
+	// recipientsNull: the request named the recipients as null.
+	recipientsNull bool
 }
 
 // UnmarshalJSON decodes a request over the stored camera. Recipients in
@@ -464,6 +466,7 @@ func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	}
 	if probe.Notify != nil && probe.Notify.Recipients != nil {
 		req.Notify.Recipients = nil
+		req.recipientsNull = string(probe.Notify.Recipients) == "null"
 	}
 	type plain nvrCameraRequest
 	return json.Unmarshal(data, (*plain)(req))
@@ -523,8 +526,15 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 	// The stored password is never the starting point of an edit: an
 	// empty one in the request means "keep" and is decided by the manager.
 	current.Source.Password = ""
+	hadList := current.Notify.Recipients != nil
 	req := nvrCameraRequest{Camera: current}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	// null would turn a camera with recipients back into one of 0.78,
+	// whose old ways reach every administrator; nobody is [].
+	if hadList && req.recipientsNull {
+		writeError(w, http.StatusBadRequest, "nvr_invalid", "notify.recipients: null is not allowed for a camera with recipients; [] is nobody")
 		return
 	}
 	req.tidy()

@@ -93,7 +93,9 @@ func (m *Manager) checkRecipients(c Camera, was *Camera) (Camera, error) {
 		}
 		out = append(out, r)
 	}
-	n.Recipients = out
+	// An entry without any way is no recipient: it would only count in the
+	// overview ("bob ()"). A demotion can take its last way, the bell.
+	n.Recipients = slices.DeleteFunc(out, func(r Recipient) bool { return !r.Bell && !r.Push && !r.Email })
 	n.keepWayBack()
 	return c, nil
 }

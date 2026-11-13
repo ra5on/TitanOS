@@ -94,6 +94,13 @@ func (w *titand) wireNotifications() error {
 		slog.Warn("notification settings not readable from /config", "err", err)
 	}
 	w.notifier.Timezone = func() string { return w.settings.CurrentTimezone() }
+	w.notifier.AccountCreated = func(name string) time.Time {
+		user, ok := w.users.Get(name)
+		if !ok {
+			return time.Time{}
+		}
+		return user.Created
+	}
 	// The daily summary of the ways out, at the time in the NAS time zone.
 	w.background(func() {
 		w.notifier.RunDigest(ctx, func() *time.Location {

@@ -186,7 +186,12 @@ type Manager struct {
 	// Timezone names the time zone of the NAS as set now, for quiet hours
 	// (Go keeps the zone of the start of titand).
 	Timezone func() string
-	people   personalStore
+	// AccountCreated is when an account was made (zero if unknown): a
+	// message meant for an earlier account of the same name stays hidden
+	// from it (PLAN 82-3), also when ForgetBell could not reach the bell's
+	// file. nil hides nothing.
+	AccountCreated func(user string) time.Time
+	people         personalStore
 
 	mu       sync.Mutex
 	loaded   bool
@@ -361,7 +366,18 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 // MessagesFor returns the messages the bell of an account shows, the
 // newest first: all but those meant for other accounts (Message.To).
 func (m *Manager) MessagesFor(user string) []Message {
-	return slices.DeleteFunc(m.Messages(), func(message Message) bool { return !message.shownTo(user) })
+	var created time.Time
+	if m.AccountCreated != nil {
+		created = m.AccountCreated(user)
+	}
+	return slices.DeleteFunc(m.Messages(), func(message Message) bool {
+		if !message.shownTo(user) {
+			return true
+		}
+		// Meant for some accounts only and older than this account: it
+		// was for an earlier account of the same name.
+		return len(message.To) > 0 && !created.IsZero() && message.Time.Before(created)
+	})
 }
 
 // Messages returns every message kept for the web UI, the newest first,

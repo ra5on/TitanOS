@@ -159,3 +159,71 @@ func TestReview82PauseRace(t *testing.T) {
 	}
 	<-done
 }
+
+// Re-check of the review (13.11.2026): an entry left without any way is
+// no recipient; null does not turn a camera with recipients back into
+// one of 0.78; an account made anew does not see the bell messages of an
+// earlier one of its name even where ForgetBell could not act.
+func TestReview82WaylessEntryGoes(t *testing.T) {
+	ts, manager := nvrServer(t)
+	ts.setup()
+	if _, err := ts.users.Create("bob", testPassword, auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"recipients": []map[string]any{{"user": "bob", "bell": true, "push": true}, {"user": "alex", "bell": true}}}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	if _, err := ts.users.SetRole("bob", auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	grant(t, ts, "bob", map[string]string{"haustuer": "live"})
+	// The form shows bob with push only and unticks it.
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"recipients": []map[string]any{{"user": "bob", "bell": true}, {"user": "alex", "bell": true}}}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	c, _ := manager.Camera("haustuer")
+	if len(c.Notify.Recipients) != 1 || c.Notify.Recipients[0].User != "alex" {
+		t.Errorf("stored %+v, want alex only", c.Notify.Recipients)
+	}
+}
+
+func TestReview82NullKeepsTheList(t *testing.T) {
+	ts, manager := nvrServer(t)
+	ts.setup()
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"recipients": []map[string]any{{"user": "alex", "push": true, "email": true}}}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	res, _ := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"recipients": nil}})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("null for a camera with recipients: %d, want 400", res.StatusCode)
+	}
+	if c, _ := manager.Camera("haustuer"); c.Notify.Recipients == nil {
+		t.Error("the camera fell back to the ways of 0.78")
+	}
+	// [] is nobody and allowed.
+	if res, body := ts.request("PUT", "/api/v1/nvr/cameras/haustuer", map[string]any{"notify": map[string]any{"recipients": []map[string]any{}}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("[]: %d %s", res.StatusCode, body)
+	}
+	if c, _ := manager.Camera("haustuer"); c.Notify.Recipients == nil || len(c.Notify.Recipients) != 0 {
+		t.Errorf("[] stored as %#v", c.Notify.Recipients)
+	}
+}
+
+func TestReview82OlderBellHiddenFromNewAccount(t *testing.T) {
+	n := notify.NewManager(nil)
+	created := time.Now().Add(time.Hour)
+	n.AccountCreated = func(user string) time.Time {
+		if user == "bob" {
+			return created
+		}
+		return time.Time{}
+	}
+	n.NotifyTo(notify.Info, "nvr_event_face_known", "Anna · Haustür", []notify.Target{{User: "bob", Bell: true}}, false, "haustuer")
+	if list := n.MessagesFor("bob"); len(list) != 0 {
+		t.Errorf("an account made after the message sees it: %+v", list)
+	}
+	created = time.Time{}
+	if list := n.MessagesFor("bob"); len(list) != 1 {
+		t.Errorf("the account the message was for does not see it: %+v", list)
+	}
+}

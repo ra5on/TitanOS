@@ -561,6 +561,7 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		}
 		a.prefs.forget(name)
 		a.notify.ForgetPersonal(name)
+		a.notify.ForgetBell(name)
 		if err := a.shares.ForgetUser(name); err != nil {
 			slog.Error("remove account from shares", "user", name, "err", err)
 		}
