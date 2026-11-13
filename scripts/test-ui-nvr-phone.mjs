@@ -355,6 +355,22 @@ try {
     await second.ctx.close();
   }
 
+  // --- A camera stored by 0.78: its window has no days (the NAS of 0.79
+  // sent null; the form failed with 500, owner 13.11.2026) ---
+  {
+    const { ctx, page } = await phone("owner", (s) => {
+      const cam = s.cameras.find((c) => c.id === "garten");
+      cam.notify = { ...cam.notify, recipients: null, kinds: null, window: { on: false, days: null, from: "", to: "" } };
+      cam.detect = { ...cam.detect, objects: null };
+    });
+    await page.goto(base + "/nvr/cameras?edit=garten");
+    await page.getByRole("heading", { name: "Garten" }).waitFor();
+    await page.getByRole("switch", { name: de["nvr.notify.window"] }).tap();
+    await page.getByText(de["nvr.notify.timeHint"]).waitFor();
+    await sound(page, "camera of 0.78 without window days");
+    await ctx.close();
+  }
+
   // --- PLAN 83: messages only while Home Assistant says so ---
   {
     const { ctx, page, state } = await phone("owner", (s) => {

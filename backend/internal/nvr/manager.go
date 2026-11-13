@@ -239,6 +239,9 @@ func (m *Manager) Load() error {
 	if cameras == nil {
 		cameras = []Camera{}
 	}
+	for i := range cameras {
+		tidyLists(&cameras[i])
+	}
 	sortCameras(cameras)
 	// Without the deleted cameras config.yml would have Frigate delete
 	// their recordings, and a new camera could take one's ID: a list that
@@ -848,6 +851,21 @@ func (m *Manager) storeCamerasLocked(list []Camera) error {
 		go m.CamerasChanged()
 	}
 	return nil
+}
+
+// tidyLists turns lists a file of an older version left out into empty
+// ones, so that the API never answers null where a list is meant: the
+// form of 0.79 failed on a camera of 0.78 whose window had no days.
+func tidyLists(c *Camera) {
+	if c.Detect.Objects == nil {
+		c.Detect.Objects = []string{}
+	}
+	if c.Notify.Kinds == nil {
+		c.Notify.Kinds = []string{}
+	}
+	if c.Notify.Window.Days == nil {
+		c.Notify.Window.Days = []int{}
+	}
 }
 
 // HAWatched lists the entities of Home Assistant the cameras' conditions

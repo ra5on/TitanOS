@@ -78,10 +78,10 @@
 		initial?.notify
 			? {
 					...initial.notify,
-					kinds: [...initial.notify.kinds],
+					kinds: [...(initial.notify.kinds ?? [])],
 					recipients: initial.notify.recipients?.map((r) => ({ ...r })) ?? null,
 					window: initial.notify.window
-						? { ...initial.notify.window, days: [...initial.notify.window.days] }
+						? { ...initial.notify.window, days: [...(initial.notify.window.days ?? [])] }
 						: undefined,
 				}
 			: {
