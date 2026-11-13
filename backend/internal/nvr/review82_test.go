@@ -194,7 +194,8 @@ func TestCDIOnlyCDIErrorsMarkTheGPU(t *testing.T) {
 			t.Errorf("not a CDI error: %s", text)
 		}
 	}
-	for _, text := range []string{"context deadline exceeded", "no space left on device", "conflict: the container name is in use", "cdimage"} {
+	for _, text := range []string{"context deadline exceeded", "no space left on device", "conflict: the container name is in use", "cdimage",
+		`invalid mount config: bind source path does not exist: /mnt/cdi/frigate`} {
 		if docker.IsCDIError(errors.New(text)) {
 			t.Errorf("a CDI error: %s", text)
 		}
@@ -424,5 +425,61 @@ func TestPreloadAnswerOf64Cameras(t *testing.T) {
 	r.m.mu.Unlock()
 	if tooLong || len(puts(r.engine.Execs())) != 1 {
 		t.Errorf("a readable answer again: said %v, asked %v", tooLong, puts(r.engine.Execs()))
+	}
+}
+
+// dockerRestart is Docker's restart: a stop and a start, so that a start
+// it refuses leaves the container ended (DevEngine.NVRRestart keeps it
+// running).
+type dockerRestart struct{ *DevEngine }
+
+func (e dockerRestart) NVRRestart(ctx context.Context) error {
+	e.DevEngine.Exit(0)
+	return e.DevEngine.NVRStart(ctx)
+}
+
+// Re-check of the review: the NVIDIA card's CDI description goes stale
+// while Frigate runs with it, and a change of the configuration restarts
+// Frigate. The restart's start is refused: the CPU decodes at the next
+// look, not only after the pause of an engine error, and no crash or
+// failover is counted.
+func TestCDIRefusedOnRestartFallsBackAtOnce(t *testing.T) {
+	r, _, _ := volumeRig(t, "a")
+	r.m.Engine = dockerRestart{r.engine}
+	r.m.Devices = func(context.Context) []hardware.ContainerDevice { return []hardware.ContainerDevice{devNPU, devNV} }
+	if err := r.m.SetSettings(context.Background(), Settings{Enabled: true, Volume: "a", Detector: DetectorSetting{Kind: DetectorAuto}, Decoder: devNV.ID}, SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10 && r.phase() != PhaseRunning; i++ {
+		r.look()
+		r.advance(10 * time.Second)
+	}
+	if r.phase() != PhaseRunning || len(r.engine.Spec().CDIDevices) != 1 {
+		t.Fatalf("not running with the NVIDIA card: %s %+v", r.phase(), r.engine.Spec().CDIDevices)
+	}
+	r.engine.RefuseCDI = true
+	c, _ := r.m.Camera(r.m.Cameras()[0].ID)
+	c.Name += " x"
+	c.Source.Password = ""
+	c.Detect.Objects = []string{"person"}
+	if _, err := r.m.UpdateCamera(context.Background(), c.ID, c, CameraOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	looks := 0
+	for ; looks < 6 && (r.phase() != PhaseRunning || len(r.engine.Spec().CDIDevices) != 0); looks++ {
+		r.look()
+		r.advance(5 * time.Second)
+	}
+	if r.phase() != PhaseRunning || len(r.engine.Spec().CDIDevices) != 0 {
+		t.Fatalf("after %d looks: %s with %+v, want the CPU", looks, r.phase(), r.engine.Spec().CDIDevices)
+	}
+	if looks*5 >= int(errorBackoff/time.Second) {
+		t.Errorf("the CPU took %d s, as long as an engine error's pause", looks*5)
+	}
+	r.m.mu.Lock()
+	crashes, stopped, active := len(r.m.rt.crashes), r.m.state.Stopped, r.m.activeLocked()
+	r.m.mu.Unlock()
+	if crashes != 0 || stopped || active != DetectorNPU {
+		t.Errorf("crashes %d, stopped %v, detector %s: the refusal is no crash and no failover", crashes, stopped, active)
 	}
 }

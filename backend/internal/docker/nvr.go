@@ -295,7 +295,10 @@ func (m *Manager) NVRLogs(ctx context.Context, tail int, since time.Time) (strin
 // create succeeded), with it `unresolvable CDI devices nvidia.com/gpu=…`,
 // and an NVIDIA plugin whose descriptions went away `…nvidia.com/gpu=…: no
 // such file or directory` (as for apps, Manager.Action).
-var cdiErrorRE = regexp.MustCompile(`(?i)(\bcdi\b|nvidia\.com/gpu)`)
+// Only these forms: "cdi" alone also stands in paths (a volume named
+// "cdi") and would mark a GPU broken for an error that has nothing to do
+// with it.
+var cdiErrorRE = regexp.MustCompile(`(?i)(device driver "cdi"|\bCDI devices?\b|nvidia\.com/gpu=)`)
 
 // IsCDIError tells whether the engine refused a create or start because of
 // a CDI device: a timeout or a full disk is no such refusal.

@@ -725,6 +725,14 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 			rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 			defer cancel()
 			if err := m.Engine.NVRRestart(rctx); err != nil {
+				// A restart is a stop and a start: the start can be the one
+				// Docker refuses the GPU in (its CDI description went away).
+				m.mu.Lock()
+				gpu := m.containerGPULocked()
+				m.mu.Unlock()
+				if m.cdiRefused(err, gpu) {
+					return nil
+				}
 				return err
 			}
 			m.started()
@@ -1103,7 +1111,12 @@ func (m *Manager) hung(ctx context.Context, now, startedAt time.Time) {
 	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 	defer cancel()
 	if rerr := m.Engine.NVRRestart(rctx); rerr != nil {
-		m.engineError("container of the NVR", rerr)
+		m.mu.Lock()
+		gpu := m.containerGPULocked()
+		m.mu.Unlock()
+		if !m.cdiRefused(rerr, gpu) {
+			m.engineError("container of the NVR", rerr)
+		}
 		return
 	}
 	m.started()
