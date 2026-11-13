@@ -179,6 +179,13 @@
 		if (!video || !win) return;
 		at = mediaToWall(segments, win.from, win.to, video.currentTime);
 	}
+	// The browser's own HLS player (Safari, iPhone) reports a failure only
+	// here; hls.js reports through attachVod. Nothing loaded (stop() empties
+	// the player) and an abort by a new choice are no failure.
+	function failed() {
+		if (!win || !video?.error || video.error.code === MediaError.MEDIA_ERR_ABORTED) return;
+		if (!playError) playError = t('nvr.rec.playFailed');
+	}
 	function ended() {
 		// The next hour follows on its own.
 		if (!win) return;
@@ -397,6 +404,7 @@
 				playsinline
 				ontimeupdate={tick}
 				onended={ended}
+				onerror={failed}
 				aria-label={t('nvr.rec.videoOf', { name: nameOf(camera) })}
 			></video>
 			{#if at === null}<p class="over">{t('nvr.rec.pickHint')}</p>{/if}

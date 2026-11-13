@@ -1231,6 +1231,23 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: the browser's own HLS player (Safari, iPhone) says when it fails ---
+  {
+    const { ctx, page } = await open("owner");
+    await ctx.addInitScript(() => {
+      const own = HTMLMediaElement.prototype.canPlayType;
+      HTMLMediaElement.prototype.canPlayType = function (type) {
+        return type === "application/vnd.apple.mpegurl" ? "maybe" : own.call(this, type);
+      };
+    });
+    await page.goto(base + "/nvr/recordings?camera=einfahrt");
+    await page.locator(".timeline .piece").first().waitFor();
+    const track = await page.locator(".timeline .track").boundingBox();
+    await page.mouse.click(track.x + (track.width * 7) / 24 + 0.5, track.y + 20);
+    await page.getByRole("alert").filter({ hasText: de["nvr.rec.playFailed"] }).waitFor();
+    await ctx.close();
+  }
+
   // --- Events: filter, detail, delete ---
   {
     const { ctx, page, state } = await open("owner");
