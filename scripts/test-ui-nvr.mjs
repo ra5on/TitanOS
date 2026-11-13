@@ -1197,6 +1197,20 @@ try {
       await detail.getByRole("link", { name: "Ausschnitt herunterladen" }).getAttribute("href"),
       /\/clip\.mp4\?download=1$/,
     );
+    // PLAN 85: the event plays the recording around it over HLS, never
+    // clip.mp4 (Frigate streams it without length and Range: no iPhone plays
+    // it). This NAS has no recording: the snapshot stands in.
+    const car = state.events.find((e) => e.subLabel === "Unser Auto");
+    await until(
+      () =>
+        state.requests.some(
+          ([m, p]) =>
+            m === "GET" &&
+            p === `/nvr/cameras/einfahrt/vod/${car.start - 5}/${Math.max(car.start + 25, car.end + 5)}/master.m3u8`,
+        ),
+      "the event asks for its recording",
+    );
+    await detail.getByRole("img", { name: de["nvr.events.snapshot"] }).waitFor();
     assert.ok(state.requests.some(([m, p, b]) => m === "POST" && p.endsWith("/reviewed") && b.reviewed === true));
     await shot(page, "ereignis");
     await detail.getByRole("button", { name: "Löschen" }).click();
@@ -1209,6 +1223,11 @@ try {
     await page.getByRole("radio", { name: "Liste" }).click();
     await page.locator(".list .event-card").first().waitFor();
     await sound(page, "events list");
+    // The failure of the event before does not keep the next one from playing.
+    state.vod = true;
+    await page.locator(".list .event-card").first().click();
+    await page.waitForFunction(() => document.querySelector(".detail video")?.readyState >= 1);
+    assert.equal(state.requests.some(([m, p]) => m === "GET" && p.includes("/clip.mp4")), false, "clip.mp4 only for downloading");
     await ctx.close();
   }
 
