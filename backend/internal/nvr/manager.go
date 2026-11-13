@@ -317,15 +317,23 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		s.Volume = devVolume
 	}
 	mounted := m.mounted()
+	m.mu.Lock()
+	old, loaded := m.settings, m.loaded
+	m.mu.Unlock()
+	// The volume must be mounted only when the NVR is switched on or moves
+	// to it. The one it has stays acceptable while it is away (a locked
+	// encrypted volume after a boot, a failed disk): the NVR can still be
+	// switched off, set up anew or changed otherwise (review PLAN 85-4:
+	// "Ausschalten" answered 400 then).
+	if loaded && s.Volume != "" && s.Volume == old.Volume && (old.Enabled || !s.Enabled) && !slices.Contains(mounted, s.Volume) {
+		mounted = append(slices.Clone(mounted), s.Volume)
+	}
 	if err := ValidateSettings(s, mounted); err != nil {
 		if s.Enabled && (s.Volume == "" || !slices.Contains(mounted, s.Volume)) {
 			return ErrNoVolume
 		}
 		return err
 	}
-	m.mu.Lock()
-	old, loaded := m.settings, m.loaded
-	m.mu.Unlock()
 	if !loaded {
 		return ErrNotLoaded
 	}
