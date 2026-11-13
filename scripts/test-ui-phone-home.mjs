@@ -177,6 +177,20 @@ try {
   await page.locator(".home .dots .dot-btn").first().tap();
   await page.waitForTimeout(700);
 
+  // A program opens out of its symbol (slowed down to see it half way).
+  await cdp.send("Animation.enable");
+  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0.08 });
+  await key(page, "app:storage").tap();
+  await page.locator(".phone-zoom").waitFor({ state: "attached" });
+  await page.waitForTimeout(650);
+  await page.screenshot({ path: `${out}/programm-oeffnet.png` });
+  await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
+  await page.waitForURL(/\/storage/);
+  await page.locator(".phone-zoom").waitFor({ state: "detached" });
+  await page.goto(base + "/");
+  await page.locator(".home .pages").waitFor();
+  await page.waitForTimeout(700);
+
   // Pulling the pages down searches: programs, pages, single settings, actions.
   const pb = await page.locator(".home .pages").boundingBox();
   await touch(cdp, "touchStart", [[200, pb.y + 300]]);
@@ -344,9 +358,20 @@ try {
   await noSideways(page);
   await ctx.close();
 
-  // Reduced motion: arranging shows a ring instead of wiggling.
+  // Reduced motion: arranging shows a ring instead of wiggling; no plate grows.
   {
     const { ctx, page, cdp } = await phone({ reduced: true, theme: "hell" });
+    await page.screenshot({ path: `${out}/startbildschirm-hell.png` });
+    await key(page, "app:storage").tap();
+    await page.waitForURL(/\/storage/);
+    assert.equal(
+      await page.locator(".phone-zoom").count(),
+      0,
+      "no movement with reduced motion",
+    );
+    await page.goto(base + "/");
+    await page.locator(".home .pages").waitFor();
+    await page.waitForTimeout(700);
     await longPress(
       page,
       cdp,

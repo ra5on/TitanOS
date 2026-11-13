@@ -18,6 +18,11 @@ TitanOS ist eine installierbare Web-App (`web/static/manifest.webmanifest`, Serv
   - Danach löscht die Seite den Cache und bietet „In Dateien zeigen“. „Verwerfen“ löscht ihn ebenfalls.
 - **Ohne aktiven Service Worker** (erste Sekunden nach der Installation) erreicht der POST titand. titand liest ihn nicht und leitet auf `/share?missing=1` weiter (Hinweis „nicht angekommen“). Andere POSTs an die Oberfläche bleiben 405.
 
+## Zahl am App-Symbol (PLAN 87)
+
+- Die Zahl ungelesener Mitteilungen (wie die Glocke, unter dem Filter des Kontos) steht am Symbol der installierten App: Badging API `navigator.setAppBadge`/`clearAppBadge` (`lib/app-badge.svelte.ts`). Das bieten Chrome und Edge für installierte Apps (Android, Windows, macOS) und Safari ab iOS 16.4 für Apps auf dem Home-Bildschirm (dort nur mit erlaubten Mitteilungen). Ohne die API passiert nichts.
+- Teilen aus anderen Apps (oben) geht mit Android und Chrome/Edge; **iOS unterstützt für Web-Apps kein Teilen-Ziel** – die Karte „TitanOS als App“ sagt das auf dem iPhone. Auf dem iPhone bleiben „Hochladen“ in Dateien und WebDAV (Mein Konto, z. B. in der Dateien-App des iPhones).
+
 ## Grenzen
 
 - Nur über HTTPS (oder localhost), weil Service Worker sonst nicht laufen. Ohne Zertifikat (Let's Encrypt, `docs/LETSENCRYPT.md`) bietet der Browser weder Installieren noch Teilen an.
