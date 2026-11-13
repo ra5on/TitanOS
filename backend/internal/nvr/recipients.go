@@ -66,6 +66,12 @@ func (m *Manager) checkRecipients(c Camera, was *Camera) (Camera, error) {
 			stored, kept = before[i], true
 		}
 		earlier := kept && exists && chosenBefore(account, stored.Added)
+		if exists && !account.Admin && r.Bell && kept && stored.Bell {
+			// Chosen with the bell as an administrator, since then no
+			// longer one: the bell goes, the rest stays. The form shows
+			// such an account without a bell and could not remove it.
+			r.Bell = false
+		}
 		if kept && within(r, stored) {
 			if !earlier {
 				r.Added = stored.Added

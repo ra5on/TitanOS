@@ -7,6 +7,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -446,6 +447,26 @@ type nvrCameraRequest struct {
 	nvr.Camera
 	ClearPassword bool `json:"clearPassword"`
 	ConfirmShrink bool `json:"confirmShrink"`
+}
+
+// UnmarshalJSON decodes a request over the stored camera. Recipients in
+// the request replace the stored list as a whole: encoding/json would
+// decode them over the stored entries by position, so that an entry left
+// partly out took the ways of whoever stood there before.
+func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Notify *struct {
+			Recipients json.RawMessage `json:"recipients"`
+		} `json:"notify"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if probe.Notify != nil && probe.Notify.Recipients != nil {
+		req.Notify.Recipients = nil
+	}
+	type plain nvrCameraRequest
+	return json.Unmarshal(data, (*plain)(req))
 }
 
 func (req nvrCameraRequest) options() nvr.CameraOptions {

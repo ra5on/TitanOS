@@ -594,7 +594,10 @@ func (a clusterArea) ClusterStatus(ctx context.Context) cluster.Status {
 	}
 	since := time.Now().Add(-24 * time.Hour)
 	for _, m := range a.notify.Messages() {
-		if m.Time.Before(since) {
+		// Messages meant for some accounts only (a camera's recipients,
+		// PLAN 82-3) are theirs, not the node's: the list of another
+		// administrator would not show them.
+		if m.Time.Before(since) || len(m.To) > 0 {
 			continue
 		}
 		switch m.Severity {

@@ -515,6 +515,13 @@ func cloneCameras(list []Camera) []Camera {
 		// slices would let a refused change reach the cameras in RAM.
 		c.Notify.Recipients = slices.Clone(c.Notify.Recipients)
 		c.Notify.Window.Days = slices.Clone(c.Notify.Window.Days)
+		// encoding/json writes through a pointer that is already set: the
+		// pause of a request would land in the stored camera (and race with
+		// the watch that reads it).
+		if c.Notify.PauseSeconds != nil {
+			pause := *c.Notify.PauseSeconds
+			c.Notify.PauseSeconds = &pause
+		}
 		out[i] = c
 	}
 	return out

@@ -305,6 +305,7 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	a.nvrForgetUser(target.Name)
 	a.prefs.forget(target.Name)
 	a.notify.ForgetPersonal(target.Name)
+	a.notify.ForgetBell(target.Name)
 	if err := a.shares.ForgetUser(target.Name); err != nil {
 		slog.Error("remove account from shares", "user", target.Name, "err", err)
 	}

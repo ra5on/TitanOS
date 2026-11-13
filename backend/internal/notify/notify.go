@@ -421,6 +421,38 @@ func (m *Manager) Dismiss(user string, ids []int) {
 	}
 }
 
+// ForgetBell takes a deleted account off the messages meant for some
+// accounts only: an account made later under the same name must not find
+// them in its bell (PLAN 82-3). A message left for nobody goes; it is
+// never kept with an empty list, which would show it to everyone.
+func (m *Manager) ForgetBell(user string) {
+	// The folder first: m.mu is never held while asking for it.
+	dir := m.bellDir()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if dir != "" {
+		m.loadBellLocked(dir)
+	}
+	changed := false
+	kept := make([]Message, 0, len(m.messages))
+	for _, message := range m.messages {
+		if !slices.Contains(message.To, user) {
+			kept = append(kept, message)
+			continue
+		}
+		changed = true
+		message.To = slices.DeleteFunc(slices.Clone(message.To), func(name string) bool { return name == user })
+		if len(message.To) > 0 {
+			kept = append(kept, message)
+		}
+	}
+	if changed {
+		m.messages = kept
+		m.nextID++
+		m.goKeepBell()
+	}
+}
+
 // Loaded says whether the settings were read from /config.
 func (m *Manager) Loaded() bool {
 	m.mu.Lock()
