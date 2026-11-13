@@ -97,6 +97,15 @@
 			(document.getElementById(hash) ?? el)?.scrollIntoView({ block: 'start' }),
 		);
 	});
+	// PLAN 86: the settings search opens the row it leads to (settings-jump.ts);
+	// that is no choice of the user, so it is not remembered.
+	$effect(() => {
+		const row = el;
+		if (!row || !children) return;
+		const opener = () => (open = true);
+		row.addEventListener('titanos-open', opener);
+		return () => row.removeEventListener('titanos-open', opener);
+	});
 	function toggle() {
 		open = !open;
 		if (key) remember(key, open);

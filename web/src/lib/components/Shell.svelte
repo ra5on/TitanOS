@@ -20,6 +20,7 @@
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { afterNavigate } from '$app/navigation';
+	import { jumpToSetting } from '#lib/settings-jump.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull } from '#lib/agent-full.svelte.ts';
 	// PLAN 61: the desktop mode, the phone's home grid and pages in windows.
@@ -77,6 +78,10 @@
 	});
 	afterNavigate(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
+		// PLAN 86: a hit of the settings search leads to the row itself (tab,
+		// rows on the way opened, the setting marked).
+		if (page.url.pathname.startsWith('/settings') || page.url.hash.startsWith('#find='))
+			void jumpToSetting(page.url);
 	});
 	$effect(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
