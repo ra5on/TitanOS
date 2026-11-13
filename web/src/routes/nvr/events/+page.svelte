@@ -80,6 +80,9 @@
 	function show(event: NvrEvent) {
 		open = event;
 		detailError = '';
+		// A failure of the event before must not keep the next one from playing.
+		recordingFailed = false;
+		playMuted = false;
 		if (!event.reviewed)
 			api
 				.post<NvrEvent>(`/nvr/events/${encodeURIComponent(event.id)}/reviewed`, { reviewed: true })
@@ -102,10 +105,13 @@
 	});
 	const eventBase = $derived(open ? `/nvr/events/${encodeURIComponent(open.id)}` : '');
 
-	// PLAN 82-5: an event opened (a tap, a push) plays at once – its clip,
-	// or while that is not ready (an event still running) the recording
-	// from just before it, in this dialog; with sound where the browser
-	// allows it.
+	// PLAN 82-5: an event opened (a tap, a push) plays at once in this
+	// dialog, with sound where the browser allows it. It always plays the
+	// recording around it (HLS, from five seconds before to five seconds
+	// after; a running event up to now), never clip.mp4: Frigate streams the
+	// clip from ffmpeg without a length and ignores Range, so iPhones do not
+	// play it and seeking fails elsewhere (Frigate itself says to use HLS on
+	// iOS). The clip stays for "Ausschnitt herunterladen".
 	let player = $state<HTMLVideoElement>();
 	let playMuted = $state(false);
 	let fromRecording = $state(false);
@@ -128,10 +134,6 @@
 		const start = async () => {
 			playMuted = await autoplay(el);
 		};
-		if (e.hasClip) {
-			void start();
-			return;
-		}
 		const from = Math.floor(e.start) - 5;
 		const to = Math.max(from + 30, Math.ceil(e.end ?? Date.now() / 1000) + 5);
 		const src = apiPath(
@@ -286,17 +288,7 @@
 		onclose={() => ((open = null), (removing = false))}
 	>
 		<div class="detail">
-			{#if e.hasClip}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video
-					bind:this={player}
-					controls
-					playsinline
-					preload="auto"
-					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
-					src={apiPath(`${eventBase}/clip.mp4`)}
-				></video>
-			{:else if !recordingFailed}
+			{#if !recordingFailed}
 				<!-- svelte-ignore a11y_media_has_caption -->
 				<video
 					bind:this={player}

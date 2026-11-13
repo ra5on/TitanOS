@@ -103,6 +103,8 @@
 		});
 	}
 	let removing = $state('');
+	/** A training picture to delete after the question (one tap on × must not lose it). */
+	let removingPicture = $state<{ name: string; file: string } | null>(null);
 	let assign = $state<Record<string, string>>({});
 	const attempt = (file: string) => `/nvr/face-attempts/${encodeURIComponent(file)}`;
 
@@ -189,10 +191,7 @@
 										disabled={busy}
 										aria-label={t('nvr.faces.removePicture', { name: face.name })}
 										title={t('nvr.faces.removePictureShort')}
-										onclick={() =>
-											run(() =>
-												api.delete(`${person(face.name)}/images/${encodeURIComponent(file)}`),
-											)}>×</button
+										onclick={() => (removingPicture = { name: face.name, file })}>×</button
 									>
 								</span>
 							{/each}
@@ -309,6 +308,22 @@
 			void run(() => api.delete(person(name)));
 		}}
 		onclose={() => (removing = '')}
+	/>
+{/if}
+{#if removingPicture}
+	<Confirm
+		title={t('nvr.faces.deletePictureTitle')}
+		text={t('nvr.faces.deletePictureText', { name: removingPicture.name })}
+		confirm={t('common.delete')}
+		danger
+		{busy}
+		onconfirm={() => {
+			if (!removingPicture) return;
+			const { name, file } = removingPicture;
+			removingPicture = null;
+			void run(() => api.delete(`${person(name)}/images/${encodeURIComponent(file)}`));
+		}}
+		onclose={() => (removingPicture = null)}
 	/>
 {/if}
 

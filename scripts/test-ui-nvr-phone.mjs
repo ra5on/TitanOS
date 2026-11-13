@@ -296,7 +296,7 @@ try {
 
   // --- Events and one event ---
   {
-    const { ctx, page } = await phone("owner");
+    const { ctx, page, state } = await phone("owner", (s) => (s.vod = true));
     await page.goto(base + "/nvr/events");
     await page.getByRole("button", { name: /Auto · Einfahrt/ }).waitFor();
     await sound(page, "events");
@@ -304,12 +304,29 @@ try {
     await page.getByRole("button", { name: /Auto · Einfahrt/ }).tap();
     const detail = page.getByRole("dialog", { name: "Auto · Einfahrt" });
     await detail.getByText("K-TI 2026").waitFor();
-    // PLAN 82-5: the tapped event plays at once, with sound.
+    // PLAN 82-5: the tapped event plays at once, with sound. PLAN 85: it
+    // plays the recording around it over HLS, from 5 s before to 5 s after;
+    // iPhones do not play Frigate's clip.mp4 (no length, no Range).
     await page.waitForFunction(() => window.__plays?.length > 0);
     assert.deepEqual(
       await page.evaluate(() => window.__plays.map((p) => [p.clip, p.muted])),
-      [[true, false]],
-      "a tapped event plays its clip with sound",
+      [[false, false]],
+      "a tapped event plays its recording with sound",
+    );
+    const car = state.events.find((e) => e.subLabel === "Unser Auto");
+    assert.ok(
+      state.requests.some(
+        ([m, p]) =>
+          m === "GET" &&
+          p === `/nvr/cameras/einfahrt/vod/${car.start - 5}/${Math.max(car.start + 25, car.end + 5)}/master.m3u8`,
+      ),
+      "the recording around the event",
+    );
+    await page.waitForFunction(() => document.querySelector(".detail video")?.readyState >= 1);
+    assert.equal(state.requests.some(([m, p]) => m === "GET" && p.includes("/clip.mp4")), false, "clip.mp4 only for downloading");
+    assert.match(
+      await detail.getByRole("link", { name: de["nvr.events.clipSave"] }).getAttribute("href"),
+      /\/clip\.mp4\?download=1$/,
     );
     await sound(page, "event detail");
     await shot(page, "ereignis");
@@ -340,7 +357,7 @@ try {
     await shot(page, "ereignis-laufend");
     await ctx.close();
     // With a clip, opened from a push: plays at once without sound, and says so.
-    const second = await phone("owner");
+    const second = await phone("owner", (s) => (s.vod = true));
     await second.ctx.addInitScript(() => (window.__noSound = true));
     const withClip = second.state.events[0];
     await second.page.goto(base + "/nvr/events?event=" + encodeURIComponent(withClip.id));

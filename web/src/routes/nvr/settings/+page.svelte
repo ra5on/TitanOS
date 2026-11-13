@@ -29,10 +29,19 @@
 	let settings = $state<NvrSettings | null>(null);
 	let loadError = $state('');
 	let limit = $state(0);
+	/**
+	 * Takes the settings as the NAS has them now. The cap field keeps a value
+	 * being typed into it while another row saves or a failed save reads the
+	 * settings again; its own save (`own`) takes the NAS's value.
+	 */
+	function take(next: NvrSettings, own = false) {
+		if (own || !settings || Number(limit) === settings.storage.limitGB)
+			limit = next.storage.limitGB;
+		settings = next;
+	}
 	async function load() {
 		try {
-			settings = await api.get<NvrSettings>('/nvr/settings');
-			limit = settings.storage.limitGB;
+			take(await api.get<NvrSettings>('/nvr/settings'));
 			loadError = '';
 		} catch (err) {
 			loadError = apiErrorText(err);
@@ -51,8 +60,7 @@
 		error = '';
 		saved = '';
 		try {
-			settings = await api.put<NvrSettings>('/nvr/settings', body);
-			limit = settings.storage.limitGB;
+			take(await api.put<NvrSettings>('/nvr/settings', body), what === 'cap');
 			ask = null;
 			saved = what;
 			await refreshNvr();
@@ -333,7 +341,9 @@
 			<SettingRow icon="key" title={t('nvr.rtsp.login')} id="nvr-rtsp-login">
 				{#snippet description()}
 					<p>{t('nvr.rtsp.loginHint')}</p>
-					<p class="mono wrap">rtsp://{host}:8554/{nvr.cameras[0]?.id ?? 'kamera'}</p>
+					<p class="mono wrap">
+						rtsp://{host}:8554/{nvr.cameras[0]?.id ?? t('nvr.rtsp.cameraIdExample')}
+					</p>
 					<p>
 						{t('nvr.rtsp.user')}: <span class="mono">{s.rtspUser}</span> ·
 						{t('nvr.rtsp.password')}: <span class="mono wrap">{s.rtspPassword}</span>

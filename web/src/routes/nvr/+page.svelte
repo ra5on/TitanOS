@@ -179,6 +179,7 @@
 		}
 		if (wanted === linkedCamera || !byId.has(wanted)) return;
 		linkedCamera = wanted;
+		soloPtz = false;
 		solo = wanted;
 	});
 	/** Closes the large view; the link that opened it is spent, so it can open it again later. */
@@ -187,7 +188,8 @@
 		if (page.url.searchParams.has('camera')) {
 			const url = new URL(page.url.href);
 			url.searchParams.delete('camera');
-			void goto(url.pathname + url.search, { replaceState: true });
+			// SvelteKit 3: `reset: false` keeps scroll and focus (noScroll/keepFocus are gone).
+			void goto(url.pathname + url.search, { replace: true, reset: false });
 		}
 	}
 	let root = $state<HTMLElement>();
@@ -310,17 +312,21 @@
 				style:--cell="{cell}px"
 			>
 				{#if solo && byId.has(solo)}
-					<div class="tile solo">
-						<LiveTile
-							camera={byId.get(solo)!}
-							{running}
-							{prefs}
-							activity={feed.activity[solo]}
-							solo
-							ptzStart={soloPtz}
-							onsolo={closeSolo}
-						/>
-					</div>
+					<!-- A new camera large is a new tile: sound, pad and an open talk
+					     connection of the one before must not carry over. -->
+					{#key solo}
+						<div class="tile solo">
+							<LiveTile
+								camera={byId.get(solo)!}
+								{running}
+								{prefs}
+								activity={feed.activity[solo]}
+								solo
+								ptzStart={soloPtz}
+								onsolo={closeSolo}
+							/>
+						</div>
+					{/key}
 				{:else if stacked}
 					{#each stack as id, i (id)}
 						{@const camera = byId.get(id)}

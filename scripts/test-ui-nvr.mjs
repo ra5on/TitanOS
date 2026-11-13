@@ -614,6 +614,15 @@ try {
     assert.equal(await page.getByRole("button", { name: "Ton von Haustür" }).count(), 1);
     assert.equal(await page.getByRole("button", { name: "Ton von Einfahrt" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: /Mit Haustür sprechen/ }).count(), 1);
+    // PLAN 85: sound on and off differ in the icon (crossed out when off), not only in colour.
+    const soundButton = page.getByRole("button", { name: "Ton von Haustür" });
+    const soundIcon = () => soundButton.locator("path").getAttribute("d");
+    const muted = await soundIcon();
+    await soundButton.click();
+    assert.equal(await soundButton.getAttribute("aria-pressed"), "true");
+    assert.notEqual(await soundIcon(), muted, "the icon shows the sound is on");
+    await soundButton.click();
+    assert.equal(await soundIcon(), muted);
     await page.getByRole("button", { name: "Garten bewegen" }).click();
     await page.getByRole("group", { name: "Garten bewegen" }).getByRole("button", { name: "Nach links" }).waitFor();
     await page.getByRole("combobox", { name: "Gespeicherte Position" }).waitFor();
@@ -896,6 +905,21 @@ try {
     await faces.getByRole("button", { name: "Person anlegen" }).click();
     await faces.locator('[data-face="Jürgen_2"] b').waitFor();
     assert.deepEqual(sent(state, "POST", "/nvr/faces"), [{ name: "Jürgen_2" }]);
+    // PLAN 85: × on a picture asks first; nothing to type.
+    const patrick = faces.locator('[data-face="Patrick"]');
+    const deletedPictures = () =>
+      state.requests.filter(([m, p]) => m === "DELETE" && p.startsWith("/nvr/faces/Patrick/images/"));
+    await patrick.getByRole("button", { name: "Bild von Patrick entfernen" }).first().click();
+    const pictureQuestion = confirmDialog(page, de["nvr.faces.deletePictureTitle"]);
+    await pictureQuestion.getByText("Das Bild von Patrick wird gelöscht", { exact: false }).waitFor();
+    assert.equal(await pictureQuestion.locator("input").count(), 0);
+    await pictureQuestion.getByRole("button", { name: "Abbrechen" }).click();
+    await pictureQuestion.waitFor({ state: "detached" });
+    assert.equal(deletedPictures().length, 0, "cancel deletes nothing");
+    await patrick.getByRole("button", { name: "Bild von Patrick entfernen" }).first().click();
+    await pictureQuestion.getByRole("button", { name: "Löschen" }).click();
+    await patrick.getByText("2 Bilder").waitFor();
+    assert.equal(deletedPictures().length, 1);
     await sound(page, "faces");
     await faces.screenshot({ path: `${out}/gesichter-${WIDTH}.png`, animations: "disabled" });
 
@@ -950,6 +974,41 @@ try {
     await off.getByRole("button", { name: "NVR ausschalten" }).click();
     await page.getByRole("heading", { name: "NVR einrichten" }).waitFor();
     assert.equal(sent(state, "POST", "/nvr/disable").length, 1);
+    await ctx.close();
+  }
+
+  // --- PLAN 85: saving one row keeps what is typed in the others ---
+  {
+    const { ctx, page, state } = await open("owner");
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-cap").waitFor();
+    await page.locator("#nvr-plates").getByRole("button", { name: /Bekannte Kennzeichen/ }).click();
+    const plates = page.locator("#nvr-plates");
+    await plates.getByRole("button", { name: de["nvr.plates.add"] }).click();
+    await plates.getByLabel("Name", { exact: true }).last().fill("Lieferwagen");
+    await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().fill("D-LW 42");
+    await page.locator("#nvr-cap").fill("700");
+    // Another row saves: plates and the cap field keep their input.
+    await page.locator("#nvr-detector").selectOption("igpu");
+    await page.getByText("Gespeichert.").waitFor();
+    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { detector: { kind: "igpu" } });
+    assert.equal(await plates.getByLabel("Name", { exact: true }).last().inputValue(), "Lieferwagen");
+    assert.equal(await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().inputValue(), "D-LW 42");
+    assert.equal(await page.locator("#nvr-cap").inputValue(), "700");
+    // The plates' own save fails: the error shows, the input stays.
+    state.platesFail = "nvr_not_running";
+    await plates.getByRole("button", { name: "Speichern" }).click();
+    await page.getByRole("alert").filter({ hasText: "Der NVR läuft gerade nicht" }).waitFor();
+    await until(() => sent(state, "GET", "/nvr/settings").length >= 2, "the settings are read again");
+    await page.waitForTimeout(300);
+    assert.equal(await plates.getByLabel("Name", { exact: true }).last().inputValue(), "Lieferwagen");
+    assert.equal(await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().inputValue(), "D-LW 42");
+    // Saved after all: the list is the NAS's again.
+    state.platesFail = "";
+    await plates.getByRole("button", { name: "Speichern" }).click();
+    await until(() => sent(state, "PUT", "/nvr/settings").at(-1)?.plates?.length === 2, "the plates are saved");
+    await page.waitForFunction(() => document.querySelector("#nvr-plates button.btn-primary")?.disabled);
+    assert.equal(await page.locator("#nvr-cap").inputValue(), "700");
     await ctx.close();
   }
 
@@ -1144,6 +1203,25 @@ try {
     await page.getByRole("status").filter({ hasText: /^07:0[01]:\d\d$/ }).waitFor();
     await page.getByRole("radio", { name: "6 h" }).click();
     assert.ok(await page.locator(".timeline .inner").evaluate((el) => el.scrollWidth > el.parentElement.clientWidth * 3));
+    // PLAN 85: playback does not pull the line back while the user looks
+    // elsewhere. The player has no picture here: its position is set by hand.
+    const video = page.locator(".player video");
+    const clockText = () => page.locator(".controls .now").textContent();
+    const playTo = async (second) => {
+      const before = await clockText();
+      await video.evaluate((v, t) => {
+        v.currentTime = t;
+        v.dispatchEvent(new Event("timeupdate"));
+      }, second);
+      await page.waitForFunction((b) => document.querySelector(".controls .now")?.textContent !== b, before);
+    };
+    await playTo(5);
+    const line = page.locator(".timeline");
+    await line.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+    const scrolled = await line.evaluate((el) => el.scrollLeft);
+    assert.ok(scrolled > 0);
+    for (const second of [6, 7, 8]) await playTo(second);
+    assert.equal(await line.evaluate((el) => el.scrollLeft), scrolled, "the line stays where the user scrolled it");
     await page.getByRole("radio", { name: "24 h" }).click();
     await page.getByRole("button", { name: "Exportieren" }).click();
     const dialog = page.getByRole("dialog", { name: "Ausschnitt exportieren" });
@@ -1188,6 +1266,23 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: the browser's own HLS player (Safari, iPhone) says when it fails ---
+  {
+    const { ctx, page } = await open("owner");
+    await ctx.addInitScript(() => {
+      const own = HTMLMediaElement.prototype.canPlayType;
+      HTMLMediaElement.prototype.canPlayType = function (type) {
+        return type === "application/vnd.apple.mpegurl" ? "maybe" : own.call(this, type);
+      };
+    });
+    await page.goto(base + "/nvr/recordings?camera=einfahrt");
+    await page.locator(".timeline .piece").first().waitFor();
+    const track = await page.locator(".timeline .track").boundingBox();
+    await page.mouse.click(track.x + (track.width * 7) / 24 + 0.5, track.y + 20);
+    await page.getByRole("alert").filter({ hasText: de["nvr.rec.playFailed"] }).waitFor();
+    await ctx.close();
+  }
+
   // --- Events: filter, detail, delete ---
   {
     const { ctx, page, state } = await open("owner");
@@ -1208,6 +1303,20 @@ try {
       await detail.getByRole("link", { name: "Ausschnitt herunterladen" }).getAttribute("href"),
       /\/clip\.mp4\?download=1$/,
     );
+    // PLAN 85: the event plays the recording around it over HLS, never
+    // clip.mp4 (Frigate streams it without length and Range: no iPhone plays
+    // it). This NAS has no recording: the snapshot stands in.
+    const car = state.events.find((e) => e.subLabel === "Unser Auto");
+    await until(
+      () =>
+        state.requests.some(
+          ([m, p]) =>
+            m === "GET" &&
+            p === `/nvr/cameras/einfahrt/vod/${car.start - 5}/${Math.max(car.start + 25, car.end + 5)}/master.m3u8`,
+        ),
+      "the event asks for its recording",
+    );
+    await detail.getByRole("img", { name: de["nvr.events.snapshot"] }).waitFor();
     assert.ok(state.requests.some(([m, p, b]) => m === "POST" && p.endsWith("/reviewed") && b.reviewed === true));
     await shot(page, "ereignis");
     await detail.getByRole("button", { name: "Löschen" }).click();
@@ -1220,6 +1329,11 @@ try {
     await page.getByRole("radio", { name: "Liste" }).click();
     await page.locator(".list .event-card").first().waitFor();
     await sound(page, "events list");
+    // The failure of the event before does not keep the next one from playing.
+    state.vod = true;
+    await page.locator(".list .event-card").first().click();
+    await page.waitForFunction(() => document.querySelector(".detail video")?.readyState >= 1);
+    assert.equal(state.requests.some(([m, p]) => m === "GET" && p.includes("/clip.mp4")), false, "clip.mp4 only for downloading");
     await ctx.close();
   }
 
@@ -1297,6 +1411,33 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: a change the NAS refuses leaves its switch as it was ---
+  {
+    const { ctx, page, state } = await open("owner", (s) => {
+      s.rightsUnreadable = true;
+    });
+    await page.goto(base + "/users");
+    await page.locator('[data-account="sam"]').click();
+    const group = page.locator("section.expander", { hasText: "Kameras" }).last();
+    await group.getByRole("button", { name: /Kameras/ }).click();
+    await group.getByRole("switch", { name: "Haustür: Live ansehen" }).click();
+    await group.getByRole("alert").filter({ hasText: /Kamerarechte ließen sich beim Start nicht/ }).waitFor();
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[aria-label="Haustür: Live ansehen"]');
+      return el && !el.disabled && !el.checked;
+    });
+    assert.equal(sent(state, "PUT", "/users/sam/cameras").length, 1);
+    // The switch of a camera under Kameras, at once.
+    await page.goto(base + "/nvr/cameras");
+    const enable = page.getByRole("switch", { name: "Garten einschalten" });
+    assert.equal(await enable.isChecked(), true);
+    await enable.click();
+    await page.getByRole("alert").filter({ hasText: /Kamerarechte ließen sich beim Start nicht/ }).waitFor();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Garten einschalten"]')?.checked === true);
+    assert.deepEqual(sent(state, "PUT", "/nvr/cameras/garten"), [{ enabled: false }]);
+    await ctx.close();
+  }
+
   // --- The desktop: the program in the menu and the camera widget ---
   {
     const { ctx, page, data } = await open("owner", (_s, data) => {
@@ -1326,6 +1467,35 @@ try {
     await until(() => (data.prefs.desktop.folded ?? []).includes("app:nvr"), "folding is remembered");
     await side.getByRole("button", { name: "Seitenleiste ausklappen" }).click();
     await page.locator("section.win nav.side:not(.folded)").waitFor();
+    await ctx.close();
+  }
+
+  // --- PLAN 85: another camera large is a new tile; sound, pad and talk of
+  // the one before do not carry over ---
+  {
+    const { ctx, page } = await open("owner", (s, data) => {
+      s.cameras.find((c) => c.id === "garten").audio = { enabled: true, twoWay: false };
+      data.prefs.desktop = {
+        version: 1,
+        customWidgets: true,
+        widgets: [{ id: "wcam", kind: "camera", x: 34, y: 3, w: 20, h: 13, camera: "garten" }],
+      };
+    });
+    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+    await page.goto(base + "/");
+    await page.locator('.widget[data-widget="camera"]').getByRole("button", { name: "Garten im NVR öffnen" }).click();
+    const solo = page.frameLocator('iframe[data-app="app:nvr"]').locator(".tile.solo");
+    await solo.getByRole("button", { name: "Ton von Garten" }).click();
+    assert.equal(await solo.getByRole("button", { name: "Ton von Garten" }).getAttribute("aria-pressed"), "true");
+    // The open window is sent to another camera the way the desktop does it
+    // (wm.svelte.ts, "titanos-goto"): SvelteKit moves without loading anew.
+    await page.evaluate(() =>
+      document
+        .querySelector('iframe[data-app="app:nvr"]')
+        .contentWindow.postMessage({ type: "titanos-goto", href: "/nvr?camera=haustuer" }, location.origin),
+    );
+    await solo.getByRole("button", { name: "Ton von Haustür" }).waitFor();
+    assert.equal(await solo.getByRole("button", { name: "Ton von Haustür" }).getAttribute("aria-pressed"), "false");
     await ctx.close();
   }
 
