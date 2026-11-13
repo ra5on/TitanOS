@@ -1212,6 +1212,43 @@ try {
     await ctx.close();
   }
 
+  // --- A removed camera: delete its recordings now (owner 13.11.2026) ---
+  {
+    const { ctx, page, state } = await open("owner", (s) => {
+      s.purgeFails = true;
+    });
+    await page.goto(base + "/nvr/cameras");
+    const row = page.locator('#nvr-removed [data-camera="schuppen"]');
+    await row.getByRole("button", { name: "Aufnahmen löschen" }).click();
+    const purge = confirmDialog(page, "Aufnahmen von Schuppen jetzt löschen?");
+    await purge.getByText(de["nvr.removed.purgeText"]).waitFor();
+    await purge.getByText(de["nvr.removed.purgeExports"]).waitFor();
+    await purge.getByText(de["nvr.removed.purgeRestart"]).waitFor();
+    assert.equal(await purge.locator("input").count(), 0, "nothing to type");
+    await shot(page, "entfernte-kamera-loeschen");
+    // A failure is said in the dialog; the camera stays and can be tried again.
+    await purge.getByRole("button", { name: "Aufnahmen löschen" }).click();
+    await purge.getByText(/ließen sich nicht vollständig löschen/).waitFor();
+    assert.equal(await row.count(), 1);
+    state.purgeFails = false;
+    await purge.getByRole("button", { name: "Aufnahmen löschen" }).click();
+    await page.locator("#nvr-removed").waitFor({ state: "detached" });
+    assert.equal(sent(state, "DELETE", "/nvr/cameras/schuppen/recordings").length, 2);
+    await sound(page, "cameras after purge");
+    await ctx.close();
+  }
+  // While the NVR does not run, the button waits and says why.
+  {
+    const { ctx, page } = await open("owner", (s) => {
+      s.state = "starting";
+    });
+    await page.goto(base + "/nvr/cameras");
+    const row = page.locator('#nvr-removed [data-camera="schuppen"]');
+    await row.getByText(de["nvr.removed.purgeNeedsRunning"]).waitFor();
+    assert.ok(await row.getByRole("button", { name: "Aufnahmen löschen" }).isDisabled());
+    await ctx.close();
+  }
+
   // --- Users: the group "Kameras" beside "Apps" and "Freigaben" ---
   {
     const { ctx, page, state } = await open("owner");

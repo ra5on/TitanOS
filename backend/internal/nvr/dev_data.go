@@ -92,6 +92,8 @@ type devData struct {
 	nextID   int
 	// deleted are the spans DELETE /api/recordings got.
 	deleted [][2]float64
+	// purged are the cameras DELETE /api/cameras got, with the query.
+	purged []string
 }
 
 // Seed fills the stand-in with example data around now for the given
@@ -391,7 +393,17 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		from, _ := strconv.ParseFloat(parts[3], 64)
 		to, _ := strconv.ParseFloat(parts[5], 64)
 		d.deleted = append(d.deleted, [2]float64{from, to})
+		// ?cameras=a,b narrows the deletion as in Frigate; without it, all.
+		only := map[string]bool{}
+		if list := r.URL.Query().Get("cameras"); list != "" && list != "all" {
+			for _, c := range strings.Split(list, ",") {
+				only[c] = true
+			}
+		}
 		for camera, hours := range d.hours {
+			if len(only) > 0 && !only[camera] {
+				continue
+			}
 			kept := hours[:0]
 			for _, h := range hours {
 				// What of the hour's recording lies in [from, to) goes.
@@ -411,6 +423,14 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 			}
 			d.hours[camera] = kept
 		}
+		ok()
+	case len(parts) == 3 && parts[0] == "api" && parts[1] == "cameras" && r.Method == http.MethodDelete:
+		// Frigate's deletion of a camera: its events and what is left of
+		// its recordings' entries go, exports stay (delete_exports=false).
+		camera := parts[2]
+		d.purged = append(d.purged, camera+"?"+r.URL.RawQuery)
+		d.events = slices.DeleteFunc(d.events, func(e devEvent) bool { return e.Camera == camera })
+		delete(d.hours, camera)
 		ok()
 	case len(parts) == 4 && parts[0] == "api" && parts[2] == "recordings" && parts[3] == "summary":
 		zone := time.UTC

@@ -1,7 +1,13 @@
 package nvr
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -116,6 +122,81 @@ func (m *Manager) DeletedCamera(id string) (DeletedCamera, bool) {
 		}
 	}
 	return DeletedCamera{}, false
+}
+
+// PurgeDeletedCamera deletes the recordings of a deleted camera now
+// instead of when its days are over (owner 13.11.2026: "the old
+// recordings of removed cameras cannot be deleted"). Frigate must run:
+//
+//  1. DELETE /api/recordings/start/0/end/<now>?cameras=<id> deletes every
+//     recording of the camera, file and entry (frigate/api/record.py).
+//     Frigate's deletion of a camera alone would leave the files: they lie
+//     under recordings/<day>/<hour>/<camera>, it removes recordings/<camera>
+//     (frigate/util/camera_cleanup.py).
+//  2. DELETE /api/cameras/<id>?delete_exports=false deletes the rest:
+//     events with their pictures and clips (also kept ones), previews,
+//     the timeline, and the stub in Frigate's running configuration.
+//     Exports stay: they belong to the accounts that made them and are
+//     never deleted by the NVR itself.
+//  3. The stub leaves the list on the stick; config.yml without it
+//     restarts Frigate once, as removing a camera does.
+//
+// A failure in 1 or 2 leaves the stub, so the button stays and can be
+// pressed again; what was deleted before stays deleted.
+func (m *Manager) PurgeDeletedCamera(ctx context.Context, id string) error {
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
+	if _, ok := m.DeletedCamera(id); !ok {
+		return ErrNotFound
+	}
+	base, err := m.base()
+	if err != nil {
+		return err
+	}
+	// In steps of purgeStep from the oldest recording on, so that no single
+	// answer of Frigate takes long (it deletes file by file).
+	from, end := m.purgeFrom(ctx, id), m.now().Add(time.Hour).Unix()
+	only := url.Values{"cameras": {id}}
+	for start := from; start < end; start += int64(purgeStep / time.Second) {
+		path := "/api/recordings/start/" + strconv.FormatInt(start, 10) + "/end/" + strconv.FormatInt(min(start+int64(purgeStep/time.Second), end), 10)
+		if err := m.frigate.call(ctx, http.MethodDelete, base, path, only, nil, nil); err != nil {
+			return fmt.Errorf("nvr: recordings of the removed camera not deleted: %w", err)
+		}
+	}
+	err = m.frigate.callLong(ctx, http.MethodDelete, base, "/api/cameras/"+url.PathEscape(id), url.Values{"delete_exports": {"false"}}, nil, nil)
+	// 404: Frigate runs without the stub (it was removed already).
+	if err != nil && frigateStatus(err) != http.StatusNotFound {
+		return fmt.Errorf("nvr: events of the removed camera not deleted: %w", err)
+	}
+	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
+		return slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id })
+	}); err != nil {
+		return fmt.Errorf("nvr: removed camera not taken off the stick: %w", err)
+	}
+	slog.Info("NVR: recordings of a removed camera deleted", "camera", id)
+	return nil
+}
+
+// purgeStep is the stretch of recordings one call of PurgeDeletedCamera
+// deletes: six hours of a camera recording all the time are about 2000
+// files.
+const purgeStep = 6 * time.Hour
+
+// purgeFrom is where the recordings of a deleted camera begin: the oldest
+// hour Frigate lists, at the latest its days before it was deleted (and
+// two more for recordings older than its days that Frigate had not
+// cleaned yet).
+func (m *Manager) purgeFrom(ctx context.Context, id string) int64 {
+	d, _ := m.DeletedCamera(id)
+	from := d.DeletedAt.Add(-time.Duration(d.RetainDays+2) * 24 * time.Hour).Unix()
+	if days, err := m.RecordingsSummary(ctx, id); err == nil {
+		for _, day := range days {
+			for _, h := range day.Hours {
+				from = min(from, h.Start)
+			}
+		}
+	}
+	return from - 3600
 }
 
 // recordedCamera tells whether id has recordings to show: a camera, or a

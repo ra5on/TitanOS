@@ -580,6 +580,15 @@ export async function installNvr(target, state = nvrState()) {
     }
     if (/^\/nvr\/cameras\/[^/]+\/recordings\/summary$/.test(path))
       return json({ days: [{ day: new Date(s.now * 1000).toISOString().slice(0, 10), hours: [] }] });
+    // A removed camera's recordings deleted now (owner 13.11.2026): only removed ones, administrators.
+    if ((m = /^\/nvr\/cameras\/([^/]+)\/recordings$/.exec(path)) && method === "DELETE") {
+      if (!s.admin) return fail(403, "forbidden");
+      const index = s.cameras.findIndex((c) => c.id === m[1] && c.deleted);
+      if (index < 0) return fail(404, "nvr_camera_not_found");
+      if (s.purgeFails) return fail(502, "nvr_purge_failed");
+      s.cameras.splice(index, 1);
+      return route.fulfill({ status: 204 });
+    }
     if (/^\/nvr\/cameras\/[^/]+\/recordings$/.test(path)) {
       const from = Number(url.searchParams.get("from"));
       const to = Number(url.searchParams.get("to"));

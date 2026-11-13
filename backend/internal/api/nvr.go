@@ -60,6 +60,7 @@ func (a nvrArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}", g.user(a.handleCamera))
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}", g.admin(a.handleCameraSet))
 	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}", g.admin(a.handleCameraRemove))
+	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}/recordings", g.admin(a.handleRemovedPurge))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot.jpg", g.user(a.handleSnapshot))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", g.user(a.handleLive))
 	// Next to the apps and shares of an account (Konten und Zugang › Nutzer).
@@ -563,6 +564,32 @@ func (a nvrArea) handleCameraRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	noteTarget(r, id)
 	slog.Info("NVR camera removed", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRemovedPurge deletes the recordings, events and pictures of a
+// removed camera now instead of when its days are over (owner
+// 13.11.2026); its exports stay. Only for removed cameras: a camera
+// that exists answers 404. Frigate restarts once afterwards.
+func (a nvrArea) handleRemovedPurge(w http.ResponseWriter, r *http.Request) {
+	if !a.available(w) {
+		return
+	}
+	id := r.PathValue("id")
+	// Frigate deletes file by file; a camera that recorded for weeks takes a while.
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
+	defer cancel()
+	if err := a.nvr.PurgeDeletedCamera(ctx, id); err != nil {
+		if errors.Is(err, nvr.ErrNotFound) || errors.Is(err, nvr.ErrNotRunning) || errors.Is(err, nvr.ErrNotLoaded) {
+			writeNVRError(w, err)
+			return
+		}
+		slog.Warn("NVR: recordings of a removed camera not deleted", "camera", id, "err", err)
+		writeError(w, http.StatusBadGateway, "nvr_purge_failed", "the recordings could not be deleted completely; try again")
+		return
+	}
+	noteTarget(r, id)
+	slog.Info("NVR removed camera's recordings deleted", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 

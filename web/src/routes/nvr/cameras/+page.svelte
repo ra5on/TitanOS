@@ -27,6 +27,8 @@
 	let busy = $state('');
 	let error = $state('');
 	let removing = $state<Camera | null>(null);
+	/** A removed camera whose recordings are to be deleted now (owner 13.11.2026). */
+	let purging = $state<Camera | null>(null);
 	// One still picture per visit: the list is no live view.
 	const tick = Date.now();
 
@@ -68,6 +70,20 @@
 		try {
 			await api.delete(`/nvr/cameras/${encodeURIComponent(removing.id)}`);
 			removing = null;
+			await refreshNvr();
+		} catch (err) {
+			error = apiErrorText(err);
+		} finally {
+			busy = '';
+		}
+	}
+	async function purge() {
+		if (!purging) return;
+		busy = purging.id;
+		error = '';
+		try {
+			await api.delete(`/nvr/cameras/${encodeURIComponent(purging.id)}/recordings`);
+			purging = null;
 			await refreshNvr();
 		} catch (err) {
 			error = apiErrorText(err);
@@ -259,10 +275,20 @@
 							{#if since}<p class="srow-desc">
 									{t('nvr.removed.since', { date: dateText(since) })}
 								</p>{/if}
+							{#if !running}<p class="srow-desc">{t('nvr.removed.purgeNeedsRunning')}</p>{/if}
 						</div>
 						<div class="srow-ctl">
 							<a class="btn" href="/nvr/recordings?camera={encodeURIComponent(camera.id)}"
 								>{t('nvr.removed.show')}</a
+							>
+							<button
+								type="button"
+								class="btn btn-danger-outline"
+								disabled={!running || busy === camera.id}
+								onclick={() => {
+									error = '';
+									purging = camera;
+								}}>{t('nvr.removed.purge')}</button
 							>
 						</div>
 					</div>
@@ -270,6 +296,23 @@
 			{/each}
 		</SettingGroup>
 	{/if}
+{/if}
+
+{#if purging}
+	<Confirm
+		title={t('nvr.removed.purgeTitle', { name: purging.name })}
+		text={[
+			t('nvr.removed.purgeText'),
+			t('nvr.removed.purgeExports'),
+			t('nvr.removed.purgeRestart'),
+		]}
+		confirm={t('nvr.removed.purge')}
+		danger
+		busy={busy === purging.id}
+		{error}
+		onconfirm={purge}
+		onclose={() => (purging = null)}
+	/>
 {/if}
 
 {#if removing}
