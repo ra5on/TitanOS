@@ -264,7 +264,7 @@ func TestRenderFixedParts(t *testing.T) {
 		{[]string{"cameras", "garten", "record", "detections", "post_capture"}, 20},
 		{[]string{"cameras", "haustuer", "record", "continuous", "days"}, 0},
 		{[]string{"cameras", "haustuer", "record", "motion", "days"}, 0},
-		{[]string{"cameras", "haustuer", "record", "alerts", "retain", "mode"}, "active_objects"},
+		{[]string{"cameras", "haustuer", "record", "alerts", "retain", "mode"}, "all"},
 		{[]string{"cameras", "haustuer", "detect", "fps"}, 5},
 	} {
 		if got := dig(t, cfg, check.path...); got != check.want {
