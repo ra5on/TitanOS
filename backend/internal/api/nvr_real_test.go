@@ -417,7 +417,8 @@ func TestNVRRealFrigate(t *testing.T) {
 	}
 
 	pids := run("stats", "--no-stream", "--format", "{{.PIDs}} {{.MemUsage}}", "titanos-nvr")
-	t.Logf("container with one camera: PIDs and memory %s (limit %d)", pids, docker.NVRPidsLimit)
+	limit := run("inspect", "--format", "{{.HostConfig.PidsLimit}}", "titanos-nvr")
+	t.Logf("container with one camera: PIDs and memory %s (limit %s)", pids, limit)
 	t.Logf("published: %s", run("port", "titanos-nvr"))
 	if ss, err := exec.Command("ss", "-ltnuH").CombinedOutput(); err == nil {
 		for _, line := range strings.Split(string(ss), "\n") {

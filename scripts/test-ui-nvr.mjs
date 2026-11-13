@@ -11,10 +11,11 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
-import { installNvr, nvrState } from "./test-ui-nvr-fixtures.mjs";
+import { installNvr, nvrState, pinAfternoon } from "./test-ui-nvr-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
+pinAfternoon();
 const browser = await chromium.launch({
   headless: true,
   executablePath: process.env.BROWSER_EXECUTABLE,

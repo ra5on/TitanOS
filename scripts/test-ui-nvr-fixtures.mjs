@@ -63,6 +63,21 @@ const hardware = () => ({
   enrichmentsPossible: true,
 });
 
+/**
+ * The sample recordings run from 06:00 of the local day until now, so a run
+ * between midnight and 06:00 would find none. Unless TZ is given, the suites
+ * pin a fixed zone in which it is about 15:00 now; the browser inherits it
+ * (call before chromium.launch).
+ */
+export function pinAfternoon() {
+  if (process.env.TZ) return process.env.TZ;
+  let off = (((15 - new Date().getUTCHours()) % 24) + 24) % 24;
+  if (off > 14) off -= 24;
+  // Etc/GMT zones count the other way round: UTC+3 is Etc/GMT-3.
+  process.env.TZ = off === 0 ? "Etc/GMT" : off > 0 ? `Etc/GMT-${off}` : `Etc/GMT+${-off}`;
+  return process.env.TZ;
+}
+
 /** The data a test starts from; change it before or while the page runs. */
 export function nvrState(now = Math.floor(Date.now() / 1000)) {
   const midnight = (() => {
