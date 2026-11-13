@@ -1,6 +1,6 @@
 # TitanOS Individual Contributor License Agreement
 
-**Version 1.0 – DRAFT, review before use**
+**Version 1.0 – 13 November 2026**
 
 Thank you for contributing to TitanOS. This agreement explains the rights you give the project maintainer when you submit a contribution. It does not transfer your copyright: you remain the owner of your contribution.
 
@@ -8,7 +8,7 @@ Thank you for contributing to TitanOS. This agreement explains the rights you gi
 
 "**You**" means the individual who signs this agreement.
 
-"**Contribution**" means any code, documentation, design, translation or other material that You intentionally submit to the TitanOS project, for example through a pull request, a patch or an issue, from the date You sign this agreement.
+"**Contribution**" means any code, documentation, design, translation or other material that You intentionally submit to the TitanOS project, for example through a pull request, a patch or an issue – including material You submitted before signing this agreement, such as the pull request that asked You to sign it, and material You submit afterwards.
 
 ## 1. Copyright license
 
@@ -38,4 +38,4 @@ You agree to tell the Maintainer if You become aware of any facts that would mak
 
 ## How to sign
 
-When you open your first pull request, the CLA bot posts a comment with a link. Sign in with your GitHub account and accept this agreement. You only need to do this once per version of the agreement.
+When you open your first pull request, the CLA Assistant (cla-assistant.io) posts a comment with a link. Sign in with your GitHub account and accept this agreement. You only need to do this once per version of the agreement; the check on your pull requests then passes on its own.

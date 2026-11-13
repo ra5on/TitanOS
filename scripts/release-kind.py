@@ -83,6 +83,9 @@ ALLOWED = (
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    # The contributor agreement; checked by the hosted CLA Assistant, never
+    # part of an image.
+    "CLA.md",
     # Only git reads it; nothing of it reaches the image (PLAN 72: the
     # cleanup of 8.11.2026 made 0.67.0 and 0.68.0 full releases by mistake).
     ".gitignore",
