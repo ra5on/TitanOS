@@ -19,10 +19,11 @@ Third-party components (Linux kernel, Debian packages, noVNC, xterm.js, …) kee
 ## Contributor License Agreement (CLA)
 
 Before an external contribution can be merged, its author must sign the
-[TitanOS CLA](CLA.md). The agreement is currently a draft and the hosted CLA
-Assistant is not configured yet. The maintainer must finish that setup and
-review the agreement before accepting external code contributions. Bug reports
-and discussion do not require a CLA.
+[TitanOS CLA](CLA.md) (version 1.0). When you open your first pull request,
+the [CLA Assistant](https://cla-assistant.io/) posts a comment with a link:
+sign in with GitHub and accept the agreement once; the check "license/cla" on
+your pull requests then passes. Bug reports and discussion do not require a
+CLA.
 
 Why: the CLA lets the maintainer distribute your contribution under the FSL today, under the Apache License 2.0 when a version converts, and under separate licenses if needed. You keep the copyright to your contribution.
 
