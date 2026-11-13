@@ -786,6 +786,33 @@ try {
     await page.getByText(de["nvr.live.noneUser"]).waitFor();
     await ctx.close();
   }
+  // --- A normal account enters the address cameras may mail to (PLAN 82-3) ---
+  {
+    const { ctx, page } = await open("user");
+    const puts = [];
+    let personal = { language: "de", content: "summary", email: { enabled: false, to: "" }, events: {} };
+    await ctx.route("**/api/v1/account/notifications", (route) => {
+      const request = route.request();
+      if (request.method() === "PUT") {
+        personal = request.postDataJSON();
+        puts.push(personal);
+      }
+      return route.fulfill({ status: 200, json: { settings: personal, mailServer: false, secretSet: {}, delivery: {} } });
+    });
+    await page.goto(base + "/account");
+    const row = page.locator("#camera-mail");
+    await row.getByText(de["nvr.account.mail"]).waitFor();
+    await row.getByText(de["nvr.account.mailNoServer"]).waitFor();
+    await page.locator("#camera-mail-input").fill("sam@beispiel.de");
+    await row.getByRole("button", { name: "Speichern" }).click();
+    await row.getByText(de["nvr.account.mailSaved"]).waitFor();
+    assert.equal(puts.length, 1);
+    assert.equal(puts[0].email.to, "sam@beispiel.de");
+    assert.equal(puts[0].language, "de", "the other personal settings are sent back unchanged");
+    await sound(page, "camera mail of a user");
+    await shot(page, "konto-kamera-mail");
+    await ctx.close();
+  }
   {
     // The privacy notice: dismissed by an administrator for the NAS.
     const { ctx, page, state } = await open("owner", (s) => (s.settings.privacyNoticeDismissed = false));
