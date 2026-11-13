@@ -1376,6 +1376,33 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: a change the NAS refuses leaves its switch as it was ---
+  {
+    const { ctx, page, state } = await open("owner", (s) => {
+      s.rightsUnreadable = true;
+    });
+    await page.goto(base + "/users");
+    await page.locator('[data-account="sam"]').click();
+    const group = page.locator("section.expander", { hasText: "Kameras" }).last();
+    await group.getByRole("button", { name: /Kameras/ }).click();
+    await group.getByRole("switch", { name: "Haustür: Live ansehen" }).click();
+    await group.getByRole("alert").filter({ hasText: /Kamerarechte ließen sich beim Start nicht/ }).waitFor();
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[aria-label="Haustür: Live ansehen"]');
+      return el && !el.disabled && !el.checked;
+    });
+    assert.equal(sent(state, "PUT", "/users/sam/cameras").length, 1);
+    // The switch of a camera under Kameras, at once.
+    await page.goto(base + "/nvr/cameras");
+    const enable = page.getByRole("switch", { name: "Garten einschalten" });
+    assert.equal(await enable.isChecked(), true);
+    await enable.click();
+    await page.getByRole("alert").filter({ hasText: /Kamerarechte ließen sich beim Start nicht/ }).waitFor();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Garten einschalten"]')?.checked === true);
+    assert.deepEqual(sent(state, "PUT", "/nvr/cameras/garten"), [{ enabled: false }]);
+    await ctx.close();
+  }
+
   // --- The desktop: the program in the menu and the camera widget ---
   {
     const { ctx, page, data } = await open("owner", (_s, data) => {

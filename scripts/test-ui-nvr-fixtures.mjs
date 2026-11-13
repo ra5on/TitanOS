@@ -454,6 +454,8 @@ export async function installNvr(target, state = nvrState()) {
         admin: false,
         cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, names: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
+      // PLAN 85: the NAS could not read the camera rights at its start.
+      if (method === "PUT" && s.rightsUnreadable) return fail(503, "nvr_rights_unreadable");
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
           const row = rows.cameras.find((c) => c.id === id);
@@ -566,6 +568,7 @@ export async function installNvr(target, state = nvrState()) {
         s.cameras.splice(index, 1);
         return route.fulfill({ status: 204 });
       }
+      if (method === "PUT" && s.rightsUnreadable) return fail(503, "nvr_rights_unreadable");
       if (method === "PUT" && body.name !== undefined && nameTaken(body.name, m[1]))
         return fail(409, "nvr_camera_name_exists");
       // A narrower mode or fewer days delete recordings: the NAS asks first (manager.go, shrinks).
