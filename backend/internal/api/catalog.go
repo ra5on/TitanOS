@@ -141,7 +141,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 				schema(map[string]any{
 					"limit":       map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "description": "How many, 20 if left out."},
 					"minSeverity": enum("Leave out less severe ones.", "info", "warning", "error"),
-				}), true, s.toolNotifications),
+				}), true, s.toolNotifications(user)),
 			reading("update_status", "The running TitanOS version, the system in the other slot to fall back to, and a newer release if one was found.", nil, false, noArgs(s.toolUpdateStatus)),
 			reading("ups_status", "State of the uninterruptible power supply: on battery, charge, runtime left.", nil, false, noArgs(s.toolUPSStatus)),
 			reading("storage_overview", "Volumes (RAID level, state, size, use, rebuild or check in progress) and disks (model, size, role, SMART health, temperature, errors, wear).", nil, false, noArgs(s.toolStorage)),

@@ -64,16 +64,23 @@ func (a pushArea) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePushKinds switches what a device gets: messages of TitanOS (the
-// bell, owners and administrators) and of the KI-Agent (PLAN 59).
+// bell, owners and administrators), of the KI-Agent (PLAN 59) and of the
+// cameras that name the account (PLAN 82-3). camera may be left out (a
+// page of an older version): it then stays as it is.
 func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		NAS   bool `json:"nas"`
-		Agent bool `json:"agent"`
+		NAS    bool  `json:"nas"`
+		Agent  bool  `json:"agent"`
+		Camera *bool `json:"camera"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	device, err := a.push.SetKinds(currentUser(r).Name, r.PathValue("id"), req.NAS, req.Agent)
+	want := map[string]bool{webpush.KindNAS: req.NAS, webpush.KindAgent: req.Agent}
+	if req.Camera != nil {
+		want[webpush.KindCamera] = *req.Camera
+	}
+	device, err := a.push.SetKinds(currentUser(r).Name, r.PathValue("id"), want)
 	switch {
 	case errors.Is(err, webpush.ErrNotFound):
 		writeError(w, http.StatusNotFound, "push_device_not_found", err.Error())

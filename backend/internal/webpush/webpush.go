@@ -81,9 +81,9 @@ type Device struct {
 	Name    string    `json:"name"`
 	Service string    `json:"service"`
 	Created time.Time `json:"created"`
-	// Off are the kinds of messages this device does not want (PLAN 59):
-	// KindNAS (what the bell shows) and KindAgent (the KI-Agent's). Empty,
-	// as in older files, means both.
+	// Off are the kinds of messages this device does not want (PLAN 59,
+	// 82-3): KindNAS (what the bell shows), KindAgent (the KI-Agent's) and
+	// KindCamera (the cameras'). Empty, as in older files, means all.
 	Off []string `json:"off,omitempty"`
 }
 
@@ -91,12 +91,21 @@ type Device struct {
 const (
 	KindNAS   = "nas"
 	KindAgent = "agent"
+	// KindCamera are the messages of the NVR's cameras to the accounts a
+	// camera names (SendCamera); separate from KindAgent, so that the
+	// agent's switch never silences a camera.
+	KindCamera = "camera"
 )
+
+// kinds are all kinds, in the order Off lists them.
+var kinds = []string{KindNAS, KindAgent, KindCamera}
 
 func (d Device) wants(kind string) bool { return !slices.Contains(d.Off, kind) }
 
-// SetKinds switches the kinds of messages of a device of user.
-func (m *Manager) SetKinds(user, id string, nas, agent bool) (Device, error) {
+// SetKinds switches the kinds of messages of a device of user: want names
+// a kind and whether the device gets it; kinds left out stay as they are
+// (a page of an older version knows only nas and agent).
+func (m *Manager) SetKinds(user, id string, want map[string]bool) (Device, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	i := slices.IndexFunc(m.st.Devices, func(d stored) bool { return d.ID == id && d.User == user })
@@ -104,11 +113,14 @@ func (m *Manager) SetKinds(user, id string, nas, agent bool) (Device, error) {
 		return Device{}, ErrNotFound
 	}
 	var off []string
-	if !nas {
-		off = append(off, KindNAS)
-	}
-	if !agent {
-		off = append(off, KindAgent)
+	for _, kind := range kinds {
+		on, given := want[kind]
+		if !given {
+			on = m.st.Devices[i].wants(kind)
+		}
+		if !on {
+			off = append(off, kind)
+		}
 	}
 	next := m.st
 	next.Devices = slices.Clone(m.st.Devices)
@@ -326,6 +338,24 @@ func (m *Manager) Devices(user string) []Device {
 	return out
 }
 
+// CameraDevices counts the devices of user that take camera messages and
+// those that switched them off (the camera form says why a push would not
+// arrive).
+func (m *Manager) CameraDevices(user string) (on, off int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, d := range m.st.Devices {
+		switch {
+		case d.User != user:
+		case d.wants(KindCamera):
+			on++
+		default:
+			off++
+		}
+	}
+	return on, off
+}
+
 // Remove takes a device of user away.
 func (m *Manager) Remove(user, id string) error {
 	m.mu.Lock()
@@ -395,15 +425,29 @@ func (m *Manager) Broadcast(msg Message) {
 	}
 }
 
+// SendCamera sends a camera's message to every device of one account
+// that did not switch camera messages off (PLAN 82-3), in the background
+// like SendTo. The NVR has checked that the account may see the camera; a
+// locked or deleted account gets nothing here either (Personal). The
+// agent's switch does not count.
+func (m *Manager) SendCamera(user string, msg Message) {
+	m.send(user, KindCamera, msg)
+}
+
 // SendTo sends a message to every device of one account, in the
 // background, like Broadcast. The KI-Agent uses it for "fertig" and
 // "wartet auf dich"; the message only opens the page, it never approves.
 func (m *Manager) SendTo(user string, msg Message) {
+	m.send(user, KindAgent, msg)
+}
+
+// send sends to the devices of one account that want kind.
+func (m *Manager) send(user, kind string, msg Message) {
 	m.mu.Lock()
 	devices := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
 	for _, d := range devices {
-		if d.User != user || !m.personal(d.User) || !d.wants(KindAgent) {
+		if d.User != user || !m.personal(d.User) || !d.wants(kind) {
 			continue
 		}
 		go func() {

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -246,10 +247,10 @@ func TestDeviceKinds(t *testing.T) {
 	b := newBrowser(t)
 	m, server, _ := fixture(t, b)
 	d, _ := m.Subscribe("alex", "a", b.subscription(server.URL+"/a"))
-	if _, err := m.SetKinds("bob", d.ID, false, true); !errors.Is(err, ErrNotFound) {
+	if _, err := m.SetKinds("bob", d.ID, map[string]bool{KindNAS: false, KindAgent: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatal("changed another account's device")
 	}
-	if got, err := m.SetKinds("alex", d.ID, false, true); err != nil || len(got.Off) != 1 {
+	if got, err := m.SetKinds("alex", d.ID, map[string]bool{KindNAS: false, KindAgent: true}); err != nil || len(got.Off) != 1 {
 		t.Fatalf("kinds %+v %v", got, err)
 	}
 	m.Broadcast(Message{Title: "NAS"})
@@ -260,7 +261,7 @@ func TestDeviceKinds(t *testing.T) {
 	if n != 0 {
 		t.Fatal("NAS message to a device that switched it off")
 	}
-	m.SetKinds("alex", d.ID, true, false)
+	m.SetKinds("alex", d.ID, map[string]bool{KindNAS: true, KindAgent: false})
 	m.SendTo("alex", Message{Title: "Agent"})
 	time.Sleep(200 * time.Millisecond)
 	b.mu.Lock()
@@ -323,5 +324,63 @@ func TestDeviceLimit(t *testing.T) {
 	// Subscribing the same endpoint again renews it instead.
 	if _, err := m.Subscribe("alex", "neu", b.subscription("https://web.push.apple.com/a")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// PLAN 82-3: a camera's message goes to the devices of the one account,
+// unless the device switched camera messages off; the agent's switch does
+// not touch it, an older page that sends only nas and agent keeps it, and
+// a locked account gets nothing.
+func TestCameraKind(t *testing.T) {
+	b := newBrowser(t)
+	m, server, _ := fixture(t, b)
+	a, _ := m.Subscribe("alex", "a", b.subscription(server.URL+"/a"))
+	m.Subscribe("bob", "b", b.subscription(server.URL+"/b"))
+	m.Personal = func(user string) bool { return user != "gesperrt" }
+	count := func() int {
+		time.Sleep(200 * time.Millisecond)
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		n := len(b.got)
+		b.got = nil
+		return n
+	}
+	// The agent's switch off: cameras still arrive, only at alex's device.
+	if _, err := m.SetKinds("alex", a.ID, map[string]bool{KindNAS: true, KindAgent: false}); err != nil {
+		t.Fatal(err)
+	}
+	m.SendCamera("alex", Message{Title: "Person an Kamera Haustür"})
+	if n := count(); n != 1 {
+		t.Fatalf("sent %d, want 1 to alex's device", n)
+	}
+	if on, off := m.CameraDevices("alex"); on != 1 || off != 0 {
+		t.Fatalf("camera devices %d/%d", on, off)
+	}
+	// Camera messages off: nothing; nas and agent stay as they were.
+	d, err := m.SetKinds("alex", a.ID, map[string]bool{KindCamera: false})
+	if err != nil || !slices.Equal(d.Off, []string{KindAgent, KindCamera}) {
+		t.Fatalf("off %v %v", d.Off, err)
+	}
+	m.SendCamera("alex", Message{Title: "Person"})
+	if n := count(); n != 0 {
+		t.Fatalf("sent %d to a device that switched cameras off", n)
+	}
+	if on, off := m.CameraDevices("alex"); on != 0 || off != 1 {
+		t.Fatalf("camera devices %d/%d", on, off)
+	}
+	// An older page switches nas and agent only: cameras stay off.
+	if d, _ := m.SetKinds("alex", a.ID, map[string]bool{KindNAS: true, KindAgent: true}); !slices.Equal(d.Off, []string{KindCamera}) {
+		t.Fatalf("an older page changed the camera switch: %v", d.Off)
+	}
+	// Broadcast and SendTo do not count as camera messages, nor the reverse.
+	m.SendTo("alex", Message{Title: "Agent"})
+	if n := count(); n != 1 {
+		t.Fatalf("agent message: %d", n)
+	}
+	// A locked account gets nothing.
+	m.Subscribe("gesperrt", "g", b.subscription(server.URL+"/g"))
+	m.SendCamera("gesperrt", Message{Title: "Person"})
+	if n := count(); n != 0 {
+		t.Fatal("camera message to a locked account")
 	}
 }
