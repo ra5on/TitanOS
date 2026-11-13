@@ -135,21 +135,27 @@
 	// ---- Pointer: add, choose, drag ----
 	let drag: { sel: Sel; point: number; id: number } | null = null;
 	function stageDown(e: PointerEvent) {
-		if (e.button !== 0 || drag) return;
-		if (drawing) {
-			e.preventDefault();
-			if (drawing.points.length < MAX_POINTS) drawing.points = [...drawing.points, at(e)];
+		if (e.button !== 0 || drag || !drawing) return;
+		e.preventDefault();
+		if (drawing.points.length < MAX_POINTS) drawing.points = [...drawing.points, at(e)];
+	}
+	/**
+	 * A tap or click chooses the area under it (or none). Not on pointerdown:
+	 * a finger that starts on an area to scroll the page must not choose it
+	 * (a chosen area stops the page from scrolling over the picture).
+	 */
+	let dragged = false;
+	function stageClick(e: MouseEvent) {
+		if (drawing || dragged || (e.target as Element).closest('.handle')) {
+			dragged = false;
 			return;
 		}
 		const hit = (e.target as Element).closest('[data-area]');
 		if (hit) {
 			const [kind, index] = hit.getAttribute('data-area')!.split(':');
 			selected = { kind: kind as AreaKind, index: Number(index) };
-			pointAt = null;
-		} else {
-			selected = null;
-			pointAt = null;
-		}
+		} else selected = null;
+		pointAt = null;
 	}
 	function grab(e: PointerEvent, sel: Sel, index: number) {
 		if (e.button !== 0) return;
@@ -186,6 +192,9 @@
 	function stageUp(e: PointerEvent) {
 		if (drag && e.pointerId === drag.id) {
 			drag = null;
+			// The click that ends a drag chooses nothing.
+			dragged = true;
+			setTimeout(() => (dragged = false), 0);
 			if (stage?.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
 		}
 	}
@@ -244,10 +253,25 @@
 	};
 
 	const svgPoints = (points: AreaPoint[]) => points.map(([x, y]) => `${x},${y}`).join(' ');
-	/** Whether an edge is long enough on the screen for a "+" between its points. */
-	function roomy(a: AreaPoint, b: AreaPoint) {
-		return Math.hypot((a[0] - b[0]) * width, (a[1] - b[1]) * height) > 88;
-	}
+	/**
+	 * The edges that get a "+" in their middle: where its 44 px box covers no
+	 * point's box and no "+" before it (a finger must hit what it means).
+	 */
+	const middles = $derived.by(() => {
+		if (!current || drawing || current.points.length >= MAX_POINTS) return [];
+		const px = (p: AreaPoint) => [p[0] * width, p[1] * height];
+		const taken = current.points.map(px);
+		const out: { after: number; at: AreaPoint }[] = [];
+		current.points.forEach((p, i) => {
+			const q = current.points[(i + 1) % current.points.length];
+			const at: AreaPoint = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+			const [x, y] = px(at);
+			if (taken.some(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) < 46)) return;
+			taken.push([x, y]);
+			out.push({ after: i, at });
+		});
+		return out;
+	});
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -295,7 +319,9 @@
 	{#if picture === 'none'}
 		<p class="notice-warn note" role="status">{t('nvr.areas.noPicture')}</p>
 	{/if}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- The keyboard chooses areas in the list below and moves points with the
+	     arrow keys on their handles; the picture itself is for pointers. -->
+	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 	<div
 		class="stage"
 		class:hidden={picture === 'none'}
@@ -309,6 +335,7 @@
 		onpointermove={stageMove}
 		onpointerup={stageUp}
 		onpointercancel={stageUp}
+		onclick={stageClick}
 	>
 		<img
 			class="still"
@@ -343,7 +370,9 @@
 			</svg>
 			{#each all as area (`label-${area.kind}:${area.index}`)}
 				{@const [cx, cy] = centre(area.points)}
+				<!-- The names stand in the list below as well (for screen readers there). -->
 				<span
+					aria-hidden="true"
 					class="label {area.kind}"
 					class:sel={same(area, selected)}
 					style:left="{Math.min(88, Math.max(12, cx * 100))}%"
@@ -352,25 +381,22 @@
 			{/each}
 			{#if current && !drawing}
 				{@const sel = { kind: current.kind, index: current.index }}
-				{#each current.points as p, i (i)}
-					{@const q = current.points[(i + 1) % current.points.length]}
-					{#if current.points.length < MAX_POINTS && roomy(p, q)}
-						<button
-							type="button"
-							class="handle middle"
-							style:left="{((p[0] + q[0]) / 2) * 100}%"
-							style:top="{((p[1] + q[1]) / 2) * 100}%"
-							aria-label={t('nvr.areas.addPoint', {
-								a: i + 1,
-								b: ((i + 1) % current.points.length) + 1,
-							})}
-							onpointerdown={(e) => grabMiddle(e, sel, i)}
-							onclick={(e) => {
-								// A keyboard press (no pointer): the point goes in the middle.
-								if (e.detail === 0 && insertMiddle(sel, i)) pointAt = i + 1;
-							}}><span class="dot">+</span></button
-						>
-					{/if}
+				{#each middles as { after, at } (after)}
+					<button
+						type="button"
+						class="handle middle"
+						style:left="{at[0] * 100}%"
+						style:top="{at[1] * 100}%"
+						aria-label={t('nvr.areas.addPoint', {
+							a: after + 1,
+							b: ((after + 1) % current.points.length) + 1,
+						})}
+						onpointerdown={(e) => grabMiddle(e, sel, after)}
+						onclick={(e) => {
+							// A keyboard press (no pointer): the point goes in the middle.
+							if (e.detail === 0 && insertMiddle(sel, after)) pointAt = after + 1;
+						}}><span class="dot" aria-hidden="true">+</span></button
+					>
 				{/each}
 				{#each current.points as p, i (i)}
 					<button
@@ -389,18 +415,22 @@
 			{/if}
 			{#if drawing}
 				{#each drawing.points as p, i (i)}
+					<!-- Only the first point catches a tap (to close the area); a tap
+					     near another point sets a new one. -->
 					<button
 						type="button"
 						class="handle draft-point"
 						class:first={i === 0}
+						class:closes={i === 0 && closable(drawing.points)}
+						tabindex={i === 0 && closable(drawing.points) ? 0 : -1}
 						style:left="{p[0] * 100}%"
 						style:top="{p[1] * 100}%"
 						aria-label={i === 0 && closable(drawing.points)
 							? t('nvr.areas.closeHere')
 							: t('nvr.areas.point', { n: i + 1, area: kindName(drawing.kind) })}
-						onpointerdown={(e) => {
-							e.stopPropagation();
-							if (i === 0 && closable(drawing!.points)) finish();
+						onpointerdown={(e) => e.stopPropagation()}
+						onclick={() => {
+							if (i === 0 && drawing && closable(drawing.points)) finish();
 						}}><span class="dot"></span></button
 					>
 				{/each}
@@ -645,6 +675,12 @@
 		color: var(--accent);
 		background: rgba(255, 255, 255, 0.85);
 		border-width: 1.5px;
+	}
+	.handle.draft-point {
+		pointer-events: none;
+	}
+	.handle.draft-point.closes {
+		pointer-events: auto;
 	}
 	.handle.draft-point .dot {
 		width: 12px;

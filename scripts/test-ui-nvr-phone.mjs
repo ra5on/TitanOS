@@ -704,6 +704,115 @@ try {
     await made.ctx.close();
   }
 
+  // --- PLAN 88: zones drawn with a finger, points dragged; the page still scrolls past the picture ---
+  {
+    const { ctx, page, state } = await phone("owner");
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.waitForFunction(() => document.querySelector("#nvr-areas .stage img")?.naturalWidth > 0);
+    const stage = page.locator("#nvr-areas .stage");
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const at = async (x, y) => {
+      const b = await stage.boundingBox();
+      return [b.x + x * b.width, b.y + y * b.height];
+    };
+    const tap = async (x, y) => page.touchscreen.tap(...(await at(x, y)));
+    const cdp = await ctx.newCDPSession(page);
+    /** A finger from one point to another, in steps (CDP touch events). */
+    async function swipe([x1, y1], [x2, y2], steps = 8) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x1, y: y1 }] });
+      for (let i = 1; i <= steps; i++)
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: x1 + ((x2 - x1) * i) / steps, y: y1 + ((y2 - y1) * i) / steps }],
+        });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await page.waitForTimeout(300);
+    }
+    const tools = page.getByRole("toolbar", { name: de["nvr.areas.tools"] });
+    const list = page.getByRole("list", { name: de["nvr.areas.list"] });
+    await tools.getByRole("button", { name: "Zone", exact: true }).tap();
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    for (const [x, y] of [[0.08, 0.58], [0.55, 0.52], [0.7, 0.96], [0.04, 0.96]]) await tap(x, y);
+    await page.getByRole("button", { name: "Fertig" }).tap();
+    await page.getByLabel(de["nvr.areas.name"]).fill("Weg");
+    await tools.getByRole("button", { name: "Zone", exact: true }).tap();
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    for (const [x, y] of [[0.66, 0.12], [0.96, 0.12], [0.96, 0.46], [0.7, 0.42]]) await tap(x, y);
+    await page.getByRole("button", { name: de["nvr.areas.closeHere"] }).tap();
+    await page.getByLabel(de["nvr.areas.name"]).fill("Beet");
+    await tools.getByRole("button", { name: "Bewegungsmaske" }).tap();
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    // Its points lie more than a finger apart: a tap next to the first point would close it.
+    for (const [x, y] of [[0.02, 0.04], [0.4, 0.04], [0.4, 0.3], [0.02, 0.3]]) await tap(x, y);
+    await page.getByRole("button", { name: "Fertig" }).tap();
+    await list.getByRole("button", { name: /^Bewegungsmaske 1/ }).waitFor();
+    // Drag the second point of "Weg" with a finger: it moves, the page does not.
+    await list.getByRole("button", { name: /^Weg/ }).tap();
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const handle = await page.getByRole("button", { name: "Punkt 2 von Weg" }).boundingBox();
+    const scrolled = await page.evaluate(() => window.scrollY);
+    await swipe([handle.x + handle.width / 2, handle.y + handle.height / 2], await at(0.5, 0.7));
+    assert.equal(await page.evaluate(() => window.scrollY), scrolled, "dragging a point does not scroll the page");
+    // A finger on "+" adds a point and drags it.
+    const plus = await page.getByRole("button", { name: "Punkt zwischen Punkt 1 und 2 einfügen" }).boundingBox();
+    await swipe([plus.x + plus.width / 2, plus.y + plus.height / 2], await at(0.3, 0.45));
+    await list.getByRole("button", { name: /^Weg Zone · Punkte: 5/ }).waitFor();
+    // A tapped point is removed with the button.
+    await page.getByRole("button", { name: "Punkt 5 von Weg" }).tap();
+    await page.getByRole("button", { name: de["nvr.areas.removePoint"] }).tap();
+    await list.getByRole("button", { name: /^Weg Zone · Punkte: 4/ }).waitFor();
+    // "Weg" is still chosen (its points show).
+    assert.equal(await list.getByRole("button", { name: /^Weg/ }).getAttribute("aria-pressed"), "true");
+    await sound(page, "zones at 390 px");
+    await page.getByRole("switch", { name: de["nvr.areas.only"] }).tap();
+    await page.locator("section:has(#nvr-areas)").screenshot({ path: `${out}/bereiche-${WIDTH}.png`, animations: "disabled" });
+    // Nothing chosen: a finger on the picture (also on a zone) scrolls the
+    // page as anywhere else, and chooses nothing.
+    await list.getByRole("button", { name: /^Weg/ }).tap();
+    assert.equal(await stage.evaluate((el) => el.classList.contains("editing")), false);
+    await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const before = await page.evaluate(() => window.scrollY);
+    const [cx, cy] = await at(0.5, 0.6);
+    await swipe([cx, cy], [cx, cy - 200], 10);
+    assert.ok((await page.evaluate(() => window.scrollY)) > before + 50, "the page scrolls past the picture");
+    assert.equal(await list.getByRole("button", { name: /^Weg/ }).getAttribute("aria-pressed"), "false", "a swipe chooses nothing");
+    await page.getByRole("button", { name: "Speichern" }).tap();
+    await page.locator('[data-camera="haustuer"]').waitFor();
+    const body = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);
+    assert.deepEqual(body.zones.map((z) => [z.name, z.points.length]), [["Weg", 4], ["Beet", 4]]);
+    const moved = body.zones[0].points[2];
+    assert.ok(Math.abs(moved[0] - 0.5) < 0.03 && Math.abs(moved[1] - 0.7) < 0.03, `dragged with a finger: ${moved}`);
+    assert.equal(body.masks.motion.length, 1);
+    assert.equal(body.zonesOnly, true);
+    // The two days and the messages with unknown faces and zones.
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.getByLabel("Ereignisse aufbewahren").waitFor();
+    await sound(page, "camera form with areas at 390 px");
+    await page.locator("section:has(#nvr-event-days)").screenshot({ path: `${out}/aufbewahrung-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("group", { name: "Melden bei" }).getByRole("button", { name: "Unbekanntem Gesicht" }).tap();
+    await page.getByRole("group", { name: "Nur in Zonen melden" }).getByRole("button", { name: "Weg" }).tap();
+    await sound(page, "messages with zones at 390 px");
+    await page.locator("section:has(#nvr-notify-zones)").screenshot({ path: `${out}/meldungen-zonen-${WIDTH}.png`, animations: "disabled" });
+    await ctx.close();
+  }
+  // --- PLAN 88: keep an event on the phone ---
+  {
+    const { ctx, page, state } = await phone("owner");
+    await page.goto(base + "/nvr/events");
+    await page.getByRole("button", { name: /Person · Garten/ }).tap();
+    const detail = page.getByRole("dialog", { name: "Person · Garten" });
+    await detail.getByRole("button", { name: "Behalten", exact: true }).tap();
+    await detail.locator("#nvr-event-kept").getByText(de["nvr.events.keptText"]).waitFor();
+    assert.ok(state.requests.some(([m, p]) => m === "POST" && p.endsWith("/keep")));
+    await sound(page, "kept event at 390 px");
+    await shot(page, "ereignis-behalten");
+    await detail.getByRole("button", { name: "Nicht mehr behalten" }).tap();
+    await page.getByRole("dialog", { name: de["nvr.events.unkeepTitle"] }).waitFor();
+    await sound(page, "stop keeping at 390 px");
+    await shot(page, "ereignis-nicht-mehr-behalten");
+    await ctx.close();
+  }
+
   assert.deepEqual(errors, [], "no script errors");
   console.log("NVR phone: ok");
 } finally {

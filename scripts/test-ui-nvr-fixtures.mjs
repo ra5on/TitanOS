@@ -244,7 +244,7 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       event(2, "einfahrt", "car", 3600 * 3, { subLabel: "Unser Auto", plate: "K-TI 2026" }),
       event(3, "garten", "person", 3600 * 4),
       event(4, "garten", "cat", 3600 * 5),
-      event(5, "haustuer", "person", 3600 * 10, { hasClip: false, kept: true }),
+      event(5, "haustuer", "person", 3600 * 10, { hasClip: false, kept: true, keptExport: "haustuer_kept5", zones: ["Weg"] }),
       event(6, "haustuer", "dog", 8 * day + 3600),
     ],
     exports: [
@@ -253,6 +253,8 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       { id: "garten_ij56kl", camera: "garten", name: "Lücke", from: now - day - 3600, to: now - day - 3000, created: now - day, state: "failed", sizeBytes: null, owner: "" },
       // Made outside TitanOS (Frigate's own export): no period known.
       { id: "haustuer_frigate", camera: "haustuer", name: "Alter Export", from: 0, to: 0, created: now - 3 * day, state: "done", sizeBytes: 4200000, owner: "" },
+      // PLAN 88: the saved video of the kept event 5.
+      { id: "haustuer_kept5", camera: "haustuer", name: "Haustür (behalten)", from: now - 3600 * 10 - 5, to: now - 3600 * 10 + 19, created: now - 3600 * 9, state: "done", sizeBytes: 3100000, owner: "", event: `${now - 3600 * 10}.000000-fix5` },
     ],
     faces: {
       enabled: true,
@@ -573,16 +575,24 @@ export async function installNvr(target, state = nvrState()) {
       if (method === "PUT" && s.rightsUnreadable) return fail(503, "nvr_rights_unreadable");
       if (method === "PUT" && body.name !== undefined && nameTaken(body.name, m[1]))
         return fail(409, "nvr_camera_name_exists");
-      // A narrower mode or fewer days delete recordings: the NAS asks first (manager.go, shrinks).
+      // A narrower mode or fewer days delete recordings: the NAS asks first
+      // (manager.go, shrinks). PLAN 88: days for recordings and for events.
       const keeps = { continuous: 3, off: 3, motion: 2, events: 1 };
       const was = s.cameras[index].record;
+      const recordDays = (r) => r.recordDays || r.retainDays;
+      const eventDays = (r) => r.eventDays || r.retainDays;
       if (
         method === "PUT" &&
         body.record &&
         !body.confirmShrink &&
-        (keeps[body.record.mode] < keeps[was.mode] || body.record.retainDays < was.retainDays)
+        (keeps[body.record.mode] < keeps[was.mode] ||
+          eventDays(body.record) < eventDays(was) ||
+          (was.mode !== "events" && body.record.mode !== "events" && recordDays(body.record) < recordDays(was)))
       )
         return fail(409, "nvr_recordings_shrink");
+      // PLAN 88: zones and masks are checked on the NAS (areas.go).
+      if (method === "PUT" && (body.zones ?? []).some((z) => !z.name?.trim() || z.points.length < 3))
+        return fail(400, "nvr_invalid");
       if (method === "PUT") {
         const { source, clearPassword: _c, confirmShrink: _s, ...rest } = body;
         Object.assign(s.cameras[index], rest);
@@ -629,6 +639,11 @@ export async function installNvr(target, state = nvrState()) {
     if ((m = /\/vod\/\d+\/\d+\/(master\.m3u8|index\.m3u8|init\.mp4|seg\.m4s)$/.exec(path)) && s.vod)
       return route.fulfill({ status: 200, ...(await vodFile(m[1])) });
     if (/\/vod\//.test(path)) return fail(404, "not_found");
+    // PLAN 88: "seen" per account – all events before now for this account.
+    if (path === "/nvr/events/seen" && method === "POST") {
+      for (const e of s.events) if (e.start <= s.now) e.reviewed = true;
+      return json({ before: s.now });
+    }
     if (path === "/nvr/events") {
       const cams = url.searchParams.get("camera")?.split(",");
       const labels = url.searchParams.get("label")?.split(",");
@@ -657,6 +672,23 @@ export async function installNvr(target, state = nvrState()) {
         event.reviewed = !!body.reviewed;
         return json(event);
       }
+      // PLAN 88: keep (administrators): Frigate's flag and a saved video.
+      if (m[2] === "/keep") {
+        if (!s.admin) return fail(403, "forbidden");
+        if (method === "POST") {
+          if (event.end === null) return fail(409, "nvr_event_running");
+          event.kept = true;
+          event.keptExport = `${event.camera}_kept${s.exports.length}`;
+          s.exports.unshift({ id: event.keptExport, camera: event.camera, name: `Behalten ${event.id}`, from: event.start - 5, to: event.end + 5, created: s.now, state: "running", sizeBytes: null, owner: "", event: event.id });
+        } else {
+          event.kept = false;
+          s.exports = s.exports.filter((x) => x.id !== event.keptExport);
+          delete event.keptExport;
+        }
+        return json(event);
+      }
+      if (method === "DELETE" && event.kept && url.searchParams.get("confirmKept") !== "1")
+        return fail(409, "nvr_event_kept");
       if (method === "DELETE") {
         s.events = s.events.filter((e) => e !== event);
         return route.fulfill({ status: 204 });

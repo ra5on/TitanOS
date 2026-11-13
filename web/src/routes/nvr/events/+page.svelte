@@ -83,7 +83,8 @@
 		error = '';
 		try {
 			await api.post('/nvr/events/seen', {});
-			events = events.map((e) => (e.end === null ? e : { ...e, reviewed: true }));
+			// The NAS marks every event that began before now, running ones too.
+			events = events.map((e) => ({ ...e, reviewed: true }));
 		} catch (err) {
 			error = apiErrorText(err);
 		} finally {
