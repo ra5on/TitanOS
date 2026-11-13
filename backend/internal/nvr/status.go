@@ -395,7 +395,7 @@ func (d DeletedCamera) View() CameraView {
 	deleted, expires := d.DeletedAt.Unix(), d.ExpiresAt().Unix()
 	return CameraView{
 		ID: d.ID, Name: d.Name, Source: SourceView{},
-		Detect: Detect{Objects: []string{}}, Record: Record{Mode: RecordOff, RetainDays: d.RetainDays},
+		Detect: Detect{Objects: []string{}}, Record: d.record().WithDays(),
 		Notify: Notify{Kinds: []string{}, Recipients: []Recipient{}, Window: Window{Days: []int{}}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
 	}
 }
@@ -408,7 +408,7 @@ func (c Camera) View(state CameraState) CameraView {
 		Source: SourceView{Kind: s.Kind, Host: s.Host, Port: s.Port, User: s.User, HasPassword: s.Password != "",
 			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic,
 			MainWidth: s.MainWidth, MainHeight: s.MainHeight, SubWidth: s.SubWidth, SubHeight: s.SubHeight},
-		Streams: c.Streams, Detect: c.Detect, Record: c.Record, Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
+		Streams: c.Streams, Detect: c.Detect, Record: c.Record.WithDays(), Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
 	}
 }
 

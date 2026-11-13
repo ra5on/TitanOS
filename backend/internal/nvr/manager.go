@@ -598,13 +598,19 @@ func keepRank(mode string) int {
 
 // shrinks tells whether going from was to next lets Frigate delete
 // recordings that exist now: a narrower mode (continuous → motion →
-// events; off counts as continuous, and any mode → off keeps), or fewer
-// days. Frigate applies the new retention to what is there within a
-// minute of its restart (frigate/record/cleanup.py), and a retention that
-// protected the old segments would keep every new one
-// (frigate/record/maintainer.py: continuous.days > 0 keeps all).
+// events; off counts as continuous, and any mode → off keeps), fewer days
+// for events, or fewer days for the recordings without an event where
+// both modes keep such (an events camera has none: going from it to
+// continuous with fewer record days deletes nothing). Frigate applies the
+// new retention to what is there within a minute of its restart
+// (frigate/record/cleanup.py), and a retention that protected the old
+// segments would keep every new one (frigate/record/maintainer.py:
+// continuous.days > 0 keeps all).
 func shrinks(was, next Record) bool {
-	return next.RetainDays < was.RetainDays || keepRank(next.Mode) < keepRank(was.Mode)
+	if keepRank(next.Mode) < keepRank(was.Mode) || next.eventDays() < was.eventDays() {
+		return true
+	}
+	return usesRecordDays(was.Mode) && usesRecordDays(next.Mode) && next.recordDays() < was.recordDays()
 }
 
 // AddCamera stores a new camera. An empty ID is made from the name.
@@ -681,7 +687,7 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 	// The ID of a deleted camera takes its recordings back: they are kept
 	// from now on as the new camera keeps its own.
 	if at := slices.IndexFunc(deleted, func(d DeletedCamera) bool { return d.ID == c.ID }); at >= 0 && !opts.ConfirmShrink &&
-		shrinks(Record{Mode: RecordOff, RetainDays: deleted[at].RetainDays}, c.Record) {
+		shrinks(deleted[at].record(), c.Record) {
 		return c, ErrRecordingsShrink
 	}
 	m.streamFactsLocked(&c, nil)
@@ -830,7 +836,8 @@ func (m *Manager) RemoveCamera(id string) error {
 	if m.Access != nil && !m.Access.Readable() {
 		return ErrRightsUnreadable
 	}
-	stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
+	stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays,
+		RecordDays: gone.Record.RecordDays, EventDays: gone.Record.EventDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
 	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
 		return append(slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id }), stub)
 	}); err != nil {
