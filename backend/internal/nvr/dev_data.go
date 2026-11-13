@@ -41,11 +41,17 @@ type devEvent struct {
 	End                                *float64
 	Score                              float64
 	Kept, Reviewed, NoSnapshot         bool
+	// Zones are the keys of the zones the object entered ("z-<id>").
+	Zones []string
 }
 
 func (e devEvent) json() map[string]any {
+	zones := e.Zones
+	if zones == nil {
+		zones = []string{}
+	}
 	out := map[string]any{
-		"id": e.ID, "camera": e.Camera, "label": e.Label, "sub_label": nil, "zones": []string{},
+		"id": e.ID, "camera": e.Camera, "label": e.Label, "sub_label": nil, "zones": zones,
 		"start_time": e.Start, "end_time": e.End, "has_clip": true, "has_snapshot": !e.NoSnapshot,
 		"retain_indefinitely": e.Kept, "top_score": nil, "false_positive": nil, "plus_id": nil,
 		"data": map[string]any{"score": e.Score, "top_score": e.Score, "type": "object"},
@@ -157,7 +163,13 @@ func (f *DevFrigate) Seed(cameras []Camera, now time.Time) {
 			continue
 		}
 		for k := range 6 {
-			add(c.ID, labels[k%len(labels)], float64(900+k*7200+i*600), float64(12+k*5), func(e *devEvent) { e.Reviewed = k >= 3 })
+			add(c.ID, labels[k%len(labels)], float64(900+k*7200+i*600), float64(12+k*5), func(e *devEvent) {
+				e.Reviewed = k >= 3
+				// Every other object entered the camera's first zone.
+				if len(c.Zones) > 0 && k%2 == 0 {
+					e.Zones = []string{zoneKey(c.Zones[0].ID)}
+				}
+			})
 		}
 		if c.Detect.Faces {
 			add(c.ID, "person", 3000, 20, func(e *devEvent) { e.SubLabel = "Anna" })
@@ -342,6 +354,18 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		}
 		e := d.events[at]
 		switch parts[3] {
+		case "retain":
+			// Frigate's "retain indefinitely" (admin role).
+			switch r.Method {
+			case http.MethodPost:
+				d.events[at].Kept = true
+			case http.MethodDelete:
+				d.events[at].Kept = false
+			default:
+				notFound()
+				return true
+			}
+			ok()
 		case "thumbnail.jpg", "snapshot.jpg":
 			if parts[3] == "snapshot.jpg" && e.NoSnapshot {
 				notFound()

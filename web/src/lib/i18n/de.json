@@ -5969,6 +5969,8 @@
 	"notify.kind.nvr_event_plate.text": "Der NVR hat ein Kennzeichen gelesen ({subject}). Das Ereignis steht im NVR unter Ereignisse.",
 	"notify.kind.nvr_event_face_known.title": "Erkannt: {subject}",
 	"notify.kind.nvr_event_face_known.text": "Der NVR hat ein bekanntes Gesicht erkannt ({subject}). Das Ereignis steht im NVR unter Ereignisse.",
+	"notify.kind.nvr_event_face_unknown.title": "Unbekanntes Gesicht an Kamera {subject}",
+	"notify.kind.nvr_event_face_unknown.text": "Die Kamera {subject} hat ein Gesicht gesehen, das der NVR nicht kennt. Das Ereignis steht im NVR unter Ereignisse; zuordnen lässt sich das Gesicht unter Einstellungen › Gesichter.",
 	"activity.do.volumeUnlock": "Volume entsperrt",
 	"activity.do.volumeLock": "Volume gesperrt",
 	"activity.do.volumePasswords": "Passwort eines Volumes geändert",

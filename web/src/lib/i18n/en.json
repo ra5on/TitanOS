@@ -5969,6 +5969,8 @@
 	"notify.kind.nvr_event_plate.text": "The NVR read a license plate ({subject}). The event is in the NVR under Events.",
 	"notify.kind.nvr_event_face_known.title": "Recognised: {subject}",
 	"notify.kind.nvr_event_face_known.text": "The NVR recognised a known face ({subject}). The event is in the NVR under Events.",
+	"notify.kind.nvr_event_face_unknown.title": "Unknown face at camera {subject}",
+	"notify.kind.nvr_event_face_unknown.text": "The camera {subject} saw a face the NVR does not know. The event is in the NVR under Events; the face can be assigned under Settings › Faces.",
 	"activity.do.volumeUnlock": "Volume unlocked",
 	"activity.do.volumeLock": "Volume locked",
 	"activity.do.volumePasswords": "Password of a volume changed",

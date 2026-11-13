@@ -161,6 +161,8 @@ type runtime struct {
 	// exportSizes the sizes of finished exports.
 	exports     map[string]exportRecord
 	exportSizes map[string]int64
+	// seen is seen.json of the NVR's volume (seen.go).
+	seen seenRuntime
 	// notices is what the routing of messages remembers (routing.go).
 	notices noticeState
 	// ptzStops stop a camera that was set moving (ptz.go); ptzMoving are

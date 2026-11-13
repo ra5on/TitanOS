@@ -51,6 +51,9 @@ func demoCameras() []Camera {
 		camera(1, "haustuer", "Haustür", "192.168.1.61", func(c *Camera) {
 			c.Detect.Objects, c.Detect.Faces = []string{"person", "dog"}, true
 			c.Audio = Audio{Enabled: true, TwoWay: true}
+			// PLAN 88: a zone at the door, a motion mask over the hedge.
+			c.Zones = []Zone{{ID: "weg", Name: "Weg", Points: []Point{{0.3, 0.45}, {0.7, 0.45}, {0.85, 1}, {0.15, 1}}}}
+			c.Masks.Motion = []Mask{{Points: []Point{{0, 0}, {0.25, 0}, {0.25, 0.35}, {0, 0.35}}}}
 		}),
 		camera(2, "einfahrt", "Einfahrt", "192.168.1.62", func(c *Camera) {
 			c.Detect.Objects, c.Detect.Plates = []string{"person", "car"}, true

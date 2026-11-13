@@ -166,9 +166,11 @@ type Manager struct {
 	camerasMu, settingsMu sync.Mutex
 	// exportsMu orders the changes of exports.json (exports.go).
 	exportsMu sync.Mutex
-	loaded    bool
-	settings  Settings
-	cameras   []Camera
+	// seenMu orders the changes of seen.json (seen.go).
+	seenMu   sync.Mutex
+	loaded   bool
+	settings Settings
+	cameras  []Camera
 	// deleted are the deleted cameras whose recordings are kept, as read
 	// from the stick (deleted.go).
 	deleted []DeletedCamera
@@ -388,7 +390,7 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	}
 	if s.Volume != old.Volume {
 		// Another volume: its state, exports and config.yml are its own.
-		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
+		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes, m.rt.seen = false, nil, nil, seenRuntime{}
 		m.rt.configHash, m.rt.configDir, m.rt.configCameras = "", "", nil
 	}
 	m.changedLocked()

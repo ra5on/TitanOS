@@ -245,6 +245,16 @@ type Camera struct {
 	Notify Notify `json:"notify"`
 	// Order sorts the cameras in lists; equal values sort by ID.
 	Order int `json:"order"`
+	// Zones are named areas of the picture (PLAN 88, areas.go); a camera
+	// of 0.80 has none.
+	Zones []Zone `json:"zones,omitempty"`
+	// ZonesOnly: events only of objects that entered a zone – Frigate's
+	// alerts and detections (and so what a camera recording on events
+	// keeps), its snapshots, the list of events, the feed and the
+	// messages.
+	ZonesOnly bool `json:"zonesOnly,omitempty"`
+	// Masks are areas left out of the motion or the object detection.
+	Masks Masks `json:"masks,omitzero"`
 }
 
 // Source is where the pictures come from.
@@ -491,6 +501,14 @@ type Notify struct {
 	// one (the API decodes a change over the stored camera, so an older web
 	// UI keeps it); null or an empty list of rules removes it.
 	HA *HACondition `json:"ha,omitempty"`
+	// Zones limits the messages about events to objects that entered one
+	// of these zones (IDs of Camera.Zones, PLAN 88); none: the whole
+	// picture.
+	Zones []string `json:"zones,omitempty"`
+	// FaceUnknown reports a face that face recognition saw and did not
+	// know (PLAN 88, off by default). A field of its own, not a kind:
+	// 0.80 refuses a camera with a kind it does not know.
+	FaceUnknown bool `json:"faceUnknown,omitempty"`
 }
 
 // HACondition is the condition of a camera's messages on Home Assistant.
@@ -990,6 +1008,9 @@ func ValidateCamera(c Camera) (Camera, error) {
 		return c, invalid("streams: the camera has no second stream")
 	}
 	if c.Notify, err = validateNotify(c.Notify); err != nil {
+		return c, err
+	}
+	if c, err = validateAreas(c); err != nil {
 		return c, err
 	}
 	if c.Order < 0 || c.Order > 100000 {

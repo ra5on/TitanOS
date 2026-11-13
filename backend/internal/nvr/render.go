@@ -458,17 +458,43 @@ func cameraBlock(c Camera, anyPlates, anyFaces, gpu bool) ymap {
 	// No friendly_name: Frigate keys its storage figures by it
 	// (/api/recordings/storage), so they are keyed by the ID, which is
 	// unique; and renaming a camera does not restart Frigate.
+	objects := ymap{{"track", track}}
+	if len(c.Masks.Objects) > 0 {
+		objects = append(objects, yentry{"mask", masksBlock(c.Masks.Objects)})
+	}
+	// Snapshots belong to events: kept as long as their recordings.
+	snapshots := ymap{{"enabled", c.Detect.Enabled}, {"retain", ymap{{"default", c.Record.eventDays()}}}}
+	if c.ZonesOnly && len(c.Zones) > 0 {
+		snapshots = append(snapshots, yentry{"required_zones", zoneKeys(c.Zones)})
+	}
 	block := ymap{
 		{"enabled", c.Enabled},
 		{"ffmpeg", ymap{{"output_args", ymap{{"record", recordArgs}}}, {"inputs", inputs}}},
 		{"detect", detect},
-		{"objects", ymap{{"track", track}}},
-		{"record", recordBlock(c.Record)},
-		// Snapshots belong to events: kept as long as their recordings.
-		{"snapshots", ymap{{"enabled", c.Detect.Enabled}, {"retain", ymap{{"default", c.Record.eventDays()}}}}},
+	}
+	if len(c.Masks.Motion) > 0 {
+		block = append(block, yentry{"motion", ymap{{"mask", masksBlock(c.Masks.Motion)}}})
+	}
+	block = append(block,
+		yentry{"objects", objects},
+		yentry{"record", recordBlock(c.Record)},
+		yentry{"snapshots", snapshots},
 		// Frigate's own listening for sounds (barking, alarms) stays off;
 		// Audio.Enabled is about the sound of the picture.
-		{"audio", ymap{{"enabled", false}}},
+		yentry{"audio", ymap{{"enabled", false}}},
+	)
+	if len(c.Zones) > 0 {
+		block = append(block, yentry{"zones", zonesBlock(c.Zones)})
+	}
+	// Events only in the zones: Frigate makes alerts and detections only
+	// of objects that entered one (and a camera recording on events keeps
+	// only their segments, frigate/record/cleanup.py).
+	if c.ZonesOnly && len(c.Zones) > 0 {
+		keys := zoneKeys(c.Zones)
+		block = append(block, yentry{"review", ymap{
+			{"alerts", ymap{{"required_zones", keys}}},
+			{"detections", ymap{{"required_zones", keys}}},
+		}})
 	}
 	if anyPlates {
 		block = append(block, yentry{"lpr", ymap{{"enabled", c.Detect.Enabled && c.Detect.Plates}}})
