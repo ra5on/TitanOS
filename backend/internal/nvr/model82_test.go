@@ -198,9 +198,9 @@ func TestWindow(t *testing.T) {
 		open bool
 	}{
 		{night, at(time.Monday, 23, 0), true},
-		{night, at(time.Tuesday, 5, 59), true},  // the night that began on Monday
-		{night, at(time.Monday, 5, 0), false},   // the night that began on Sunday: Sunday is not chosen
-		{night, at(time.Saturday, 3, 0), true},  // began on Friday
+		{night, at(time.Tuesday, 5, 59), true},   // the night that began on Monday
+		{night, at(time.Monday, 5, 0), false},    // the night that began on Sunday: Sunday is not chosen
+		{night, at(time.Saturday, 3, 0), true},   // began on Friday
 		{night, at(time.Saturday, 23, 0), false}, // Saturday not chosen
 		{night, at(time.Monday, 12, 0), false},
 		{night, at(time.Tuesday, 6, 0), false},
