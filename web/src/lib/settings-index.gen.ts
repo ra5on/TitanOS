@@ -300,6 +300,20 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/appearance',
+		k: 'phone.settings.title',
+		kind: 'group',
+		tab: 'dock',
+		id: 'h-phone',
+	},
+	{
+		p: '/settings/appearance',
+		k: 'phone.settings.dock',
+		kind: 'row',
+		tab: 'dock',
+		in: ['phone.settings.title'],
+	},
+	{
+		p: '/settings/appearance',
 		k: 'loginPick.title',
 		kind: 'group',
 		tab: 'login',

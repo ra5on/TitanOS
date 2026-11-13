@@ -39,7 +39,7 @@
 	import { replaceState } from '$app/navigation';
 	import DockSettings from './DockSettings.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
-	import { barLink, connectBar, setBarLoad } from '#lib/desktop/bar-link.svelte.ts';
+	import { barLink, connectBar, setBarLoad, setPhoneDock } from '#lib/desktop/bar-link.svelte.ts';
 
 	// PLAN 79-10: CPU and RAM in the top bar of the desktop (per account).
 	onMount(() => connectBar());
@@ -604,6 +604,28 @@
 						class="switch"
 						checked={barLink.load}
 						onchange={(e) => setBarLoad(e.currentTarget.checked)}
+					/>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+	{/if}
+	<!-- PLAN 87: the phone's home screen has a dock of its own. -->
+	{#if barLink.phoneDock !== null}
+		<SettingGroup title={t('phone.settings.title')} id="h-phone">
+			<SettingRow
+				title={t('phone.settings.dock')}
+				desc={t('phone.settings.dockHint')}
+				for="phone-dock"
+				summary={barLink.phoneDock ? t('look.on') : t('look.off')}
+			>
+				{#snippet control()}
+					<input
+						id="phone-dock"
+						type="checkbox"
+						role="switch"
+						class="switch"
+						checked={barLink.phoneDock}
+						onchange={(e) => setPhoneDock(e.currentTarget.checked)}
 					/>
 				{/snippet}
 			</SettingRow>

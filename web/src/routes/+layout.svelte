@@ -145,6 +145,8 @@
 		if (!document.startViewTransition || !effectOn(appearance.current, 'transitions')) return;
 		if (navigation.from?.url.pathname === navigation.to?.url.pathname) return;
 		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		// PLAN 87: a program opening from its symbol on the phone has its own movement.
+		if (document.documentElement.dataset.phoneZoom) return;
 		// The phone's bar is named only while a transition runs: a named
 		// element is a backdrop root, and the glass of the menu in it would
 		// no longer blur the page behind it (app.css).

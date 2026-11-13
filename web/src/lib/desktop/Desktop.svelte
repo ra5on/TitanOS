@@ -806,14 +806,7 @@
 			transform: translate(-2%, 1.5%) scale(1.04);
 		}
 	}
-	/* Follows "Transparenz" and "Glaseffekt" (Settings › Appearance, PLAN 64). */
-	:global(.glass-panel) {
-		background: var(--desk-surface, color-mix(in srgb, var(--surface) 70%, transparent));
-		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		border: 1px solid color-mix(in srgb, #fff 12%, transparent);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
-	}
+	/* .glass-panel lives in app.css (PLAN 87: the phone's home screen uses it too). */
 	.desk-area {
 		position: relative;
 		flex: 1;

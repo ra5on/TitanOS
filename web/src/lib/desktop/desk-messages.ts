@@ -23,7 +23,10 @@ function sendDock(target: WindowProxy, dock: unknown) {
 /** PLAN 79-10: open settings windows follow "CPU und RAM in der Leiste" (menu Ansicht, right click). */
 export function sendBarToWindows(load: boolean) {
 	for (const f of windowFrames())
-		f.contentWindow?.postMessage({ type: 'titanos-bar', load }, location.origin);
+		f.contentWindow?.postMessage(
+			{ type: 'titanos-bar', load, phoneDock: desktop.prefs.phone.dock.show },
+			location.origin,
+		);
 }
 
 /** Open settings windows follow changes made on the dock itself (right click). */
@@ -52,9 +55,21 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		if (msg.type === 'titanos-dock-get') sendDock(source, dockNow());
 		else if (msg.type === 'titanos-prefs') savePrefs((p) => (p.dock = sanitizeDock(msg.dock)));
 		else if (msg.type === 'titanos-bar-get')
-			source.postMessage({ type: 'titanos-bar', load: desktop.prefs.barLoad }, location.origin);
+			source.postMessage(
+				{
+					type: 'titanos-bar',
+					load: desktop.prefs.barLoad,
+					phoneDock: desktop.prefs.phone.dock.show,
+				},
+				location.origin,
+			);
 		else if (msg.type === 'titanos-bar-set') savePrefs((p) => (p.barLoad = msg.load === true));
-		else if (msg.type === 'titanos-lock-get') source.postMessage(lockAnswer(), location.origin);
+		else if (msg.type === 'titanos-phone-dock-set') {
+			savePrefs(
+				(p) => (p.phone = { ...p.phone, dock: { ...p.phone.dock, show: msg.show === true } }),
+			);
+			sendBarToWindows(desktop.prefs.barLoad);
+		} else if (msg.type === 'titanos-lock-get') source.postMessage(lockAnswer(), location.origin);
 		else if (msg.type === 'titanos-lock-set') {
 			savePrefs((p) => {
 				p.lockMinutes = clampLockMinutes(msg.minutes);
