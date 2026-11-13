@@ -357,9 +357,10 @@ export const SYSTEM_APPS: SystemApp[] = [
 		gradient: 'grey',
 		href: '/settings',
 		paths: ['/settings'],
-		// PLAN 78 (owner 10.11.2026, draft 78): the menu lists the areas like
-		// Windows 11's settings; an area opens the list of its pages. The window
-		// shows only the areas the account may open (settingsMenu).
+		// PLAN 78/86: the areas. The window draws its own menu (an area opens
+		// its pages in the column, WindowSide); these entries serve the phone's
+		// ⋯ menu and the search of the menu, and like the window they show an
+		// account only the areas with a page it may open.
 		side: [
 			{ href: '/settings', label: 'desktop.side.allSettings', icon: 'home', match: ['/settings'] },
 			...settingsGroups.map((group) => ({
@@ -369,6 +370,9 @@ export const SYSTEM_APPS: SystemApp[] = [
 				match: settingsAreas
 					.filter((area) => area.group === group)
 					.map((area) => `/settings/${area.id}`),
+				roles: settingsAreas.some((area) => area.group === group && !area.admin)
+					? undefined
+					: ADMIN,
 			})),
 		],
 		kind: 'system',

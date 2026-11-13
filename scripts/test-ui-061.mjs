@@ -492,18 +492,18 @@ try {
         await frame.locator("main select, main input[type=checkbox]").count(),
         0,
       );
-      // PLAN 78: the overview and the eight areas of the menu, with the
-      // account and its real role on top.
+      // PLAN 86: the overview and the eight areas of the menu, with the
+      // account and its real role on top; an area opens in the column.
       assert.deepEqual(await items(), [
         "Übersicht",
         "System",
         "Hardware und Energie",
-        "Netzwerk",
-        "Konten und Zugang",
-        "Dienste und Meldungen",
-        "KI und Smart Home",
+        "Netzwerk und Fernzugriff",
+        "Sicherheit und Konten",
+        "Benachrichtigungen",
         "Daten und Sicherung",
-        "Updates",
+        "Cluster",
+        "Smart Home und KI",
       ]);
       assert.equal(
         (await side.locator(".side-account small").textContent()).trim(),
@@ -520,20 +520,24 @@ try {
           href,
           { timeout: 8000 },
         );
-      // An area opens the list of its pages; a row there opens the page,
-      // whose title is the path "area › page".
+      // An area opens its pages in the column (the order of the confirmed
+      // draft); a page there opens it, its title is the path "area › page".
       await side.getByRole("button", { name: "System", exact: true }).click();
-      await at("/settings?area=system");
-      await frame
-        .getByRole("heading", { name: "System", exact: true })
-        .waitFor();
+      await side.locator(".pages").waitFor();
       assert.deepEqual(
-        await frame
-          .locator("a.srow .srow-title")
-          .evaluateAll((a) => a.map((x) => x.firstChild.textContent.trim())),
-        ["Darstellung", "Datum und Uhrzeit", "Fernansicht", "Über TitanOS"],
+        await side
+          .locator(".pages .item > span:not(.new)")
+          .evaluateAll((a) => a.map((x) => x.textContent.trim())),
+        [
+          "Über TitanOS",
+          "Updates",
+          "Darstellung",
+          "Datum und Uhrzeit",
+          "Dienste",
+          "Fernansicht",
+        ],
       );
-      await frame.locator('a.srow[href="/settings/timezone"]').click();
+      await side.getByRole("button", { name: "Datum und Uhrzeit" }).click();
       await at("/settings/timezone");
       await frame
         .getByRole("heading", { name: "Datum und Uhrzeit", exact: true })
@@ -544,26 +548,26 @@ try {
       );
       assert.equal(
         await side
-          .locator('.item[aria-current="page"]')
+          .locator('.item[aria-current="page"] > span:not(.new)')
           .evaluate((x) => x.textContent.trim()),
-        "System",
+        "Datum und Uhrzeit",
       );
-      await frame.locator(".set-path a").click();
-      await at("/settings?area=system");
-      for (const [query, area, href] of [
-        ["SSH", "Zugang", "/settings/access#access-ssh"],
-        ["Zertifikat", "Zugang", "/settings/access#access-cert"],
-        ["Terminal", "Zugang", "/settings/access#access-terminal"],
-        ["DNS", "Netzwerk", "/settings/network#network-dns"],
-        ["Zeitzone", "Datum und Uhrzeit", "/settings/timezone"],
-        ["Backup", "Sicherungen", "/settings/backups/data"],
+      // The search finds single settings and leads to them (PLAN 86).
+      await page.waitForTimeout(600);
+      for (const [query, hitText, href] of [
+        ["SSH", "SSH-Zugang einschalten", "/settings/access#access-ssh"],
+        [
+          "Zertifikat",
+          "Zertifikat der Weboberfläche",
+          "/settings/access#access-cert",
+        ],
+        ["Zeitzone", "Zeitzone", "/settings/timezone#find=Zeitzone"],
+        ["Backup", "Sicherungen", "/settings/backups"],
       ]) {
-        // The page is among the results (others may match too: HTTPS names
-        // know "Zertifikat" and mDNS) and opens at the section found.
         await search.fill(query);
         const hit = side
           .locator(".items .item")
-          .filter({ hasText: new RegExp("^\\s*" + area) })
+          .filter({ hasText: new RegExp("^\\s*" + hitText) })
           .first();
         await hit.waitFor();
         await hit.click();
@@ -771,8 +775,8 @@ try {
       .getByRole("searchbox", { name: "Einstellung suchen" })
       .waitFor({ timeout: 15000 });
     await userSide.locator(".items .item").first().waitFor();
-    // PLAN 78: the overview and the areas with a page the account may open,
-    // under its real role.
+    // PLAN 86: the overview and the areas with a page the account may open,
+    // under its real role; one with a single page opens it directly.
     assert.deepEqual(
       await userSide
         .locator(".items .item")
@@ -781,8 +785,8 @@ try {
         "Übersicht",
         "System",
         "Hardware und Energie",
-        "Konten und Zugang",
-        "KI und Smart Home",
+        "Sicherheit und Konten",
+        "Smart Home und KI",
       ],
     );
     assert.equal(
@@ -791,14 +795,18 @@ try {
     );
     // An area lists only the pages the account may open.
     await userSide.getByRole("button", { name: "System", exact: true }).click();
-    const userFrame = userDesk.page.frameLocator("section.win iframe").first();
-    // The overview shown before has rows of its own: wait for the area's.
-    await userFrame.locator('a.srow[href="/settings/about"]').waitFor();
+    await userSide.locator(".pages").waitFor();
     assert.deepEqual(
-      await userFrame
-        .locator("a.srow")
-        .evaluateAll((a) => a.map((x) => x.getAttribute("href"))),
-      ["/settings/appearance", "/settings/about"],
+      await userSide
+        .locator(".pages .item > span:not(.new)")
+        .evaluateAll((a) => a.map((x) => x.textContent.trim())),
+      ["Über TitanOS", "Darstellung"],
+    );
+    assert.equal(
+      await userSide
+        .getByRole("button", { name: "Hardware und Energie" })
+        .getAttribute("aria-expanded"),
+      null,
     );
     await userDesk.ctx.close();
     const user = await context("user");

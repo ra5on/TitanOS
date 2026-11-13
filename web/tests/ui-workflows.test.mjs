@@ -7,7 +7,8 @@ import {
 	shareFilesURL,
 } from '../src/lib/share-view.ts';
 import { sanitizeDockerLayout, dockerGroups, stackPrimary } from '../src/lib/docker-layout.ts';
-import { palettePages, findPaletteEntries } from '../src/lib/command-palette.ts';
+import { palettePages, findPaletteEntries, paletteSettings } from '../src/lib/command-palette.ts';
+import { settingsIndex } from '../src/lib/settings-index.gen.ts';
 
 test('share preferences and filters accept only supported bounded values', () => {
 	assert.deepEqual(
@@ -74,10 +75,21 @@ test('palette omits privileged destinations for users and searches words without
 		user.some((e) => e.href.startsWith('/settings/access')),
 		false,
 	);
+	// PLAN 86: single settings come from the index of the control panel's search.
 	assert.equal(
-		admin.some((e) => e.href === '/settings/access#access-ssh'),
+		admin.some((e) => e.href === '/settings/access'),
 		true,
 	);
+	assert.ok(
+		paletteSettings('ssh', 'owner', translate, settingsIndex).some(
+			(e) => e.href === '/settings/access#access-ssh',
+		),
+	);
+	// A user finds the SSH keys of Mein Konto, never the admin page Zugang.
+	const userSsh = paletteSettings('ssh', 'user', translate, settingsIndex).map((e) => e.href);
+	assert.ok(userSsh.includes('/account#acc-ssh'));
+	assert.ok(!userSsh.some((href) => href.startsWith('/settings/access')));
+	assert.equal(paletteSettings('', 'owner', translate, settingsIndex).length, 0);
 	assert.deepEqual(
 		findPaletteEntries(
 			[{ label: 'Übertragung prüfen', section: 'Werkzeuge', href: '/tools' }],

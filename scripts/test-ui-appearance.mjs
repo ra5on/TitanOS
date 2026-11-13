@@ -135,12 +135,13 @@ async function desktop(path = "/", width = 1600, height = 1000) {
     "mitternacht",
   );
   // PLAN 67: the tabs of the page, the mode as three small previews.
+  // PLAN 86: language and font size on the first tab, named for it.
   for (const name of [
-    "Glas & Schrift",
+    "Feinheiten und Effekte",
     "Hintergrund",
     "Dock",
     "Anmeldeseite",
-    "Farben",
+    "Farben und Schrift",
   ]) {
     await frame2Tab(page, name);
   }

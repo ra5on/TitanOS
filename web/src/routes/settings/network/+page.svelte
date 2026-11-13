@@ -305,7 +305,7 @@
 			pending={!!status.pending}
 			bind:selected={diagnose}
 		/>
-	{:else}
+	{:else if tab === 'remote'}
 		<RemoteTab />
 	{/if}
 {/if}

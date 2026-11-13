@@ -25,7 +25,8 @@ import {
 	zoneOfNetwork,
 	zoneProblem,
 } from '../src/lib/firewall.ts';
-import { settingsAreas, settingSections, matchesSetting } from '../src/lib/settings-search.ts';
+import { settingsAreas, matchesSetting } from '../src/lib/settings-search.ts';
+import { settingsIndex } from '../src/lib/settings-index.gen.ts';
 import { activityLabel } from '../src/lib/activity.ts';
 
 const services = [
@@ -245,12 +246,13 @@ test('tabs follow ?tab= and the anchors of the settings search', () => {
 
 test('the firewall page is found and named in both languages', () => {
 	assert.ok(
-		settingsAreas.some((area) => area.id === 'firewall' && area.admin && area.group === 'network'),
+		settingsAreas.some((area) => area.id === 'firewall' && area.admin && area.group === 'security'),
 	);
 	assert.ok(matchesSetting('nftables', 'Firewall', 'firewall'));
+	// PLAN 86: the search knows every tab of the page (generated index).
 	for (const tab of ['zones', 'networks', 'policies', 'autoblock', 'recent'])
 		assert.ok(
-			settingSections.firewall.some((s) => s.href.startsWith(`/settings/firewall?tab=${tab}#`)),
+			settingsIndex.some((e) => e.p === '/settings/firewall' && e.kind === 'tab' && e.tab === tab),
 			tab,
 		);
 	assert.deepEqual(activityLabel('firewall_block'), { kind: 'named', key: 'firewallBlock' });

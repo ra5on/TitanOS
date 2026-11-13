@@ -40,6 +40,7 @@
 		saveWindows,
 		savePrefs,
 		snapRect,
+		staleReport,
 		clearOfDock,
 		toggleMax,
 		wm,
@@ -228,6 +229,7 @@
 		if (!frame || event.source !== frame.contentWindow) return;
 		const msg = frameMessage(event);
 		if (msg?.type === 'titanos-page') {
+			if (staleReport(win.id, msg.path)) return;
 			pageName = msg.title;
 			// A page chosen in the side bar while this one still loaded comes next.
 			const path = frameListening(win.id) ?? msg.path;

@@ -1,16 +1,15 @@
 <script lang="ts">
-	// The search over all settings areas and sections. Arrow keys move through
-	// the results shown next to it, Enter opens the highlighted one (its section
-	// anchor if a section matched), Escape clears.
+	// The search over all settings pages and their rows (PLAN 86). Arrow keys
+	// move through the results shown next to it, Enter opens the highlighted
+	// one (at the row it found), Escape clears.
 	import { goto } from '$app/navigation';
 	import Icon from './Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import type { SettingsEntry } from '#lib/settings-search.ts';
 	import { settingsSearch } from '#lib/settings-states.svelte.ts';
 
 	type Props = {
 		/** The results in the order they are shown. */
-		results: SettingsEntry[];
+		results: { href: string }[];
 		/** Prefix of the ids of the result links (aria-activedescendant). */
 		idPrefix: string;
 		/** Shows the label above the field instead of only to screen readers. */

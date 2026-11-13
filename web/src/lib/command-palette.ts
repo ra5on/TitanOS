@@ -1,6 +1,7 @@
 import type { MessageKey } from './i18n/index.svelte.ts';
 import type { Role } from './api.ts';
-import { settingSections, settingsAreas } from './settings-search.ts';
+import { settingsAreas, settingsKeywords } from './settings-search.ts';
+import { findSettings, type SettingsIndexEntry } from './settings-find.ts';
 
 export type PaletteEntry = { href: string; label: string; section: string; terms?: string };
 export const pages: { href: string; label: MessageKey; admin?: boolean }[] = [
@@ -39,7 +40,7 @@ export const pages: { href: string; label: MessageKey; admin?: boolean }[] = [
 	{ href: '/storage/smart', label: 'smart.title', admin: true },
 	{ href: '/account', label: 'menu.account' },
 ];
-/** Pages and settings the account may open; the settings list is shared with the settings overview. */
+/** Pages and settings pages the account may open; the settings list is shared with the settings overview. */
 export function palettePages(role: Role, translate: (key: MessageKey) => string): PaletteEntry[] {
 	const admin = role === 'owner' || role === 'admin';
 	return [
@@ -52,21 +53,31 @@ export function palettePages(role: Role, translate: (key: MessageKey) => string)
 			})),
 		...settingsAreas
 			.filter((s) => !s.admin || admin)
-			.flatMap((s) => [
-				{
-					href: `/settings/${s.id}`,
-					label: translate(s.label),
-					section: translate('nav.settings'),
-					terms: s.id,
-				},
-				...(settingSections[s.id] ?? []).map((p) => ({
-					href: p.href,
-					label: `${translate(s.label)} › ${translate(p.label)}`,
-					section: translate('nav.settings'),
-					terms: p.id,
-				})),
-			]),
+			.map((s) => ({
+				href: `/settings/${s.id}`,
+				label: translate(s.label),
+				section: translate('nav.settings'),
+				terms: `${s.id} ${settingsKeywords(s.id)}`,
+			})),
 	];
+}
+
+/**
+ * PLAN 86: the single settings a query finds – tabs, groups, rows and parts
+ * of rows from the same index as the control panel's search (only with a
+ * query: hundreds of rows would bury the pages).
+ */
+export function paletteSettings(
+	query: string,
+	role: Role,
+	translate: (key: MessageKey) => string,
+	index: SettingsIndexEntry[] | null,
+): PaletteEntry[] {
+	if (!query.trim()) return [];
+	const admin = role === 'owner' || role === 'admin';
+	return findSettings(query, admin, translate, index, 40)
+		.filter((hit) => hit.kind !== 'page')
+		.map((hit) => ({ href: hit.href, label: hit.label, section: hit.where }));
 }
 export function findPaletteEntries(entries: PaletteEntry[], query: string): PaletteEntry[] {
 	const normalize = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();

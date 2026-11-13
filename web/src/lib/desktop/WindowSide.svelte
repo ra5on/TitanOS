@@ -1,19 +1,29 @@
 <script lang="ts">
 	// PLAN 61: the side bar of a window – the program's pages, for virtual
 	// machines the machines themselves, and at the bottom the fold button.
-	// For Systemsteuerung (PLAN 78) the account, the search and the areas.
+	// For Systemsteuerung (PLAN 78, PLAN 86) the account, the search and the
+	// areas, which open their pages right in the column.
 	import { tick } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import { session } from '../session.svelte.ts';
 	import {
-		settingsEntries,
+		settingsAreaOf,
 		settingsGroupOf,
 		settingsMenu,
-		type SettingsEntry,
+		type SettingsGroup,
 	} from '../settings-search.ts';
-	import { sideActive, type SideItem } from './apps.ts';
+	import {
+		findSettings,
+		loadSettingsIndex,
+		settingsIndexNow,
+		type SettingsHit,
+		type SettingsIndexEntry,
+	} from '../settings-find.ts';
+	import { showsNew } from '../settings-seen.svelte.ts';
+	import { appForPath, sideActive, type SideItem } from './apps.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
+	import { openProgram } from './programs.svelte.ts';
 	import { navigateWindow, type Win } from './wm.svelte.ts';
 
 	let {
@@ -37,30 +47,40 @@
 	} = $props();
 
 	// PLAN 71 (owner's decision "Variante C"): Systemsteuerung has one menu,
-	// its side bar. A search above it filters the entries by name and the
-	// keywords of the settings search ("ssh" → Zugang); a hit in a section
-	// shows its area and opens the section. Accounts with the role "user" see
-	// only the areas they may open. Other programs keep their side bar as is.
+	// its side bar, with a search above it. PLAN 86 (owner 13.11.2026): the
+	// search finds every page, tab, group, row and part of a row
+	// (settings-find.ts) and a hit leads to the row itself. Accounts with the
+	// role "user" see only what they may open. Other programs keep their bar.
 	const searchable = $derived(win.app === 'app:settings');
 	let query = $state('');
 	let hit = $state(0);
 	let searchEl = $state<HTMLInputElement>();
+	let index = $state<SettingsIndexEntry[] | null>(settingsIndexNow());
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	// PLAN 78 (owner 10.11.2026, draft 78): on top the signed-in account with
-	// its real role, then the search, then the areas. An area opens the list
-	// of its pages; a search lists the pages (and sections) it finds instead.
+	// PLAN 78: on top the signed-in account with its real role, then the
+	// search, then the overview and the areas.
 	const account = $derived(session.data?.user);
 	const areas = $derived(searchable ? settingsMenu(admin) : []);
 	const area = $derived(searchable ? settingsGroupOf(win.href) : undefined);
-	const links = $derived<SettingsEntry[]>(
-		searchable && query.trim()
-			? settingsEntries(query, admin, t).flatMap((group) => group.entries)
-			: [],
+	const pageId = $derived(searchable ? settingsAreaOf(path) : '');
+	const links = $derived<SettingsHit[]>(
+		searchable && query.trim() ? findSettings(query, admin, t, index) : [],
 	);
 	const searching = $derived(searchable && query.trim() !== '');
 	const current = $derived(links.length ? Math.min(hit, links.length - 1) : -1);
-	function openHit(entry: SettingsEntry) {
-		navigateWindow(win.id, entry.href);
+	/** The index comes with the first search, not with the desktop. */
+	function wantIndex() {
+		if (!index) void loadSettingsIndex().then((loaded) => (index = loaded));
+	}
+	function openHit(entry: SettingsHit) {
+		// Settings pages open in this window (also those another program shows
+		// too, like Zugang in Benutzer); a page of another program (Mein Konto)
+		// opens in that program.
+		const program = entry.href.startsWith('/settings')
+			? undefined
+			: appForPath(entry.href.split(/[?#]/)[0]);
+		if (program) void openProgram(`app:${program.id}`, { href: entry.href });
+		else navigateWindow(win.id, entry.href);
 		query = '';
 		hit = 0;
 	}
@@ -89,9 +109,50 @@
 		searchEl?.focus();
 		searchEl?.select();
 	}
+
+	// PLAN 86 (variant A): an area opens its pages in the column, one area at
+	// a time; the area of the page shown is open by itself. A choice holds
+	// while the window shows the page it was made on.
+	let choice = $state<{ href: string; group: SettingsGroup | null } | null>(null);
+	const openGroup = $derived(choice && choice.href === win.href ? choice.group : (area ?? null));
+	function toggleArea(group: SettingsGroup) {
+		choice = { href: win.href, group: openGroup === group ? null : group };
+	}
+	let itemsEl = $state<HTMLElement>();
+	/** Arrow keys in the menu: up/down move, right opens or goes in, left closes or goes up. */
+	async function menuKey(e: KeyboardEvent) {
+		const target = e.target as HTMLElement;
+		if (!itemsEl || !target.matches('[data-nav]')) return;
+		const all = [...itemsEl.querySelectorAll<HTMLElement>('[data-nav]')];
+		const at = all.indexOf(target);
+		const group = target.dataset.group as SettingsGroup | undefined;
+		const move = (to: HTMLElement | undefined) => {
+			if (!to) return;
+			e.preventDefault();
+			to.focus();
+		};
+		if (e.key === 'ArrowDown') move(all[at + 1]);
+		else if (e.key === 'ArrowUp') move(all[at - 1]);
+		else if (e.key === 'Home') move(all[0]);
+		else if (e.key === 'End') move(all.at(-1));
+		else if (e.key === 'ArrowRight' && target.dataset.kind === 'area' && group) {
+			e.preventDefault();
+			if (openGroup !== group) toggleArea(group);
+			else move(all[at + 1]);
+		} else if (e.key === 'ArrowLeft' && group) {
+			e.preventDefault();
+			if (target.dataset.kind === 'area') {
+				if (openGroup === group) toggleArea(group);
+			} else {
+				choice = { href: win.href, group: null };
+				await tick();
+				itemsEl.querySelector<HTMLElement>(`[data-kind="area"][data-group="${group}"]`)?.focus();
+			}
+		}
+	}
 </script>
 
-<nav class="side" class:folded aria-label={win.title}>
+<nav class="side" class:folded class:settings={searchable} aria-label={win.title}>
 	{#if searchable && account}
 		<!-- PLAN 78: who is signed in, with the role the session reports. -->
 		<div
@@ -131,27 +192,32 @@
 					aria-controls="side-{win.id}"
 					aria-activedescendant={current >= 0 ? `side-${win.id}-${current}` : undefined}
 					bind:value={query}
-					oninput={() => (hit = 0)}
+					onfocus={wantIndex}
+					oninput={() => {
+						hit = 0;
+						wantIndex();
+					}}
 					onkeydown={searchKey}
 				/>
 			</div>
-			{#if searching && !links.length}<p class="side-none" role="status">
-					{t('settingshome.sideNone')}
+			{#if searching}<p class="side-none" role="status">
+					{links.length ? t('ui.results', { count: links.length }) : t('settingshome.sideNone')}
 				</p>{/if}
 		{/if}
 	{/if}
-	<div class="items" id="side-{win.id}">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="items" id="side-{win.id}" bind:this={itemsEl} onkeydown={menuKey}>
 		{#if searching}
-			{#each links as entry, n (entry.href)}
+			{#each links as entry, n (entry.href + '\n' + entry.label + '\n' + entry.where)}
 				<button
 					type="button"
-					class="item"
+					class="item result"
 					id="side-{win.id}-{n}"
 					class:hit={n === current}
 					onclick={() => openHit(entry)}
 				>
 					<Icon name={entry.icon} size={17} />
-					<span>{entry.label}</span>
+					<span class="two"><span>{entry.label}</span><small>{entry.where}</small></span>
 				</button>
 			{/each}
 		{:else if searchable}
@@ -160,6 +226,7 @@
 				type="button"
 				class="item"
 				class:on={start}
+				data-nav
 				title={folded ? t('desktop.side.allSettings') : undefined}
 				aria-current={start ? 'page' : undefined}
 				onclick={() => navigateWindow(win.id, '/settings')}
@@ -168,17 +235,71 @@
 				{#if !folded}<span>{t('desktop.side.allSettings')}</span>{/if}
 			</button>
 			{#each areas as entry (entry.group)}
-				<button
-					type="button"
-					class="item"
-					class:on={area === entry.group}
-					title={folded ? t(entry.label) : undefined}
-					aria-current={area === entry.group ? 'page' : undefined}
-					onclick={() => navigateWindow(win.id, entry.href)}
-				>
-					<Icon name={entry.icon} size={17} />
-					{#if !folded}<span>{t(entry.label)}</span>{/if}
-				</button>
+				{@const single = entry.pages.length === 1}
+				{@const isOpen = !single && !folded && openGroup === entry.group}
+				{@const here = area === entry.group}
+				{#if single || folded}
+					<!-- One page (Benachrichtigungen, Cluster) opens directly; in the
+					     folded column an area opens its first page. -->
+					<button
+						type="button"
+						class="item"
+						class:on={here}
+						data-nav
+						data-kind="page"
+						title={folded ? t(entry.label) : undefined}
+						aria-current={here ? 'page' : undefined}
+						onclick={() => navigateWindow(win.id, entry.href)}
+					>
+						<Icon name={entry.icon} size={17} />
+						{#if !folded}<span>{t(entry.label)}</span>{/if}
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="item area"
+						class:here={here && !isOpen}
+						data-nav
+						data-kind="area"
+						data-group={entry.group}
+						aria-expanded={isOpen}
+						aria-controls="side-{win.id}-{entry.group}"
+						aria-current={here && !isOpen ? 'true' : undefined}
+						onclick={() => toggleArea(entry.group)}
+					>
+						<Icon name={entry.icon} size={17} />
+						<span>{t(entry.label)}</span>
+						<span class="chev" class:open={isOpen} aria-hidden="true"
+							><Icon name="chevronRight" size={14} /></span
+						>
+					</button>
+					{#if isOpen}
+						<div
+							class="pages"
+							id="side-{win.id}-{entry.group}"
+							role="group"
+							aria-label={t(entry.label)}
+						>
+							{#each entry.pages as p (p.id)}
+								{@const on = pageId === p.id}
+								<button
+									type="button"
+									class="item page"
+									class:on
+									data-nav
+									data-kind="page"
+									data-group={entry.group}
+									aria-current={on ? 'page' : undefined}
+									onclick={() => navigateWindow(win.id, `/settings/${p.id}`)}
+								>
+									<Icon name={p.icon} size={15} />
+									<span>{t(p.label)}</span>
+									{#if showsNew(p)}<span class="chip info new">{t('settings.new')}</span>{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
 			{/each}
 		{:else}
 			{#each side as item, i (i)}
@@ -422,5 +543,66 @@
 	.fold {
 		color: var(--muted);
 		margin-top: var(--space-1-5);
+	}
+	/* PLAN 86: the control panel's column keeps one width whichever area is
+	   open (the entries wrap instead of widening the column). */
+	.side.settings:not(.folded) {
+		width: 264px;
+	}
+	.item > span:not(.chev, .two, .new) {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.area .chev {
+		display: flex;
+		margin-left: auto;
+		color: var(--muted);
+		transition: transform 0.15s ease;
+	}
+	.area .chev.open {
+		transform: rotate(90deg);
+	}
+	.item.here {
+		font-weight: 600;
+	}
+	.item.here :global(svg) {
+		color: var(--accent);
+	}
+	.pages {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 0 0 var(--space-1) var(--space-3);
+		padding-left: var(--space-2);
+		border-left: 1px solid var(--border);
+	}
+	.item.page {
+		min-height: 32px;
+		padding-block: var(--space-1);
+	}
+	.item .new {
+		margin-left: auto;
+		flex: none;
+	}
+	.item.result {
+		align-items: flex-start;
+	}
+	.item.result :global(svg) {
+		margin-top: 2px;
+	}
+	.two {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.two small {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.area .chev {
+			transition: none;
+		}
 	}
 </style>

@@ -423,18 +423,27 @@ try {
         await page.waitForTimeout(500);
       };
       await search.waitFor({ timeout: 15000 });
+      // PLAN 86: the search lists single settings with their place, best first.
+      const label = () =>
+        side
+          .locator(".items .item.result .two > span")
+          .evaluateAll((a) => a.map((x) => x.textContent.trim()));
       await search.fill("SSH");
-      // PLAN 78: the search lists the pages and sections it finds.
-      assert.deepEqual(await items(), ["Zugang › SSH"]);
+      await side.locator(".items .item.result").first().waitFor();
+      assert.equal((await label())[0], "SSH-Zugang einschalten");
       await search.fill("DNS");
       assert.ok(
         (await items()).some((name) => name.startsWith("Netzwerk")),
         "DNS finds Netzwerk",
       );
       await search.fill("Zeitzone");
-      assert.deepEqual(await items(), ["Datum und Uhrzeit"]);
+      assert.deepEqual((await label()).slice(0, 2), [
+        "Zeitzone",
+        "Datum und Uhrzeit",
+      ]);
       await side
-        .getByRole("button", { name: "Datum und Uhrzeit", exact: true })
+        .locator(".items .item.result")
+        .filter({ hasText: /^\s*Datum und Uhrzeit/ })
         .click();
       await timezone();
       await frame.locator("select").selectOption("UTC");
@@ -575,7 +584,16 @@ try {
       name: "Einstellung suchen",
     });
     await userSearch.waitFor({ timeout: 15000 });
+    // PLAN 86: a user finds the SSH keys of Mein Konto, never Zugang.
     await userSearch.fill("SSH");
+    await userSide.locator(".items .item.result").first().waitFor();
+    assert.deepEqual(
+      await userSide
+        .locator(".items .item.result small")
+        .evaluateAll((a) => a.map((x) => x.textContent.trim())),
+      ["Mein Konto › Anmeldung"],
+    );
+    await userSearch.fill("xyzzy");
     await userSide.getByText("Nichts gefunden", { exact: true }).waitFor();
     assert.equal(await userSide.locator(".items .item").count(), 0);
     await user.page.getByRole("button", { name: /Laufende Aufgaben/ }).click();

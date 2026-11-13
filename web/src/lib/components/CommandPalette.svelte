@@ -4,7 +4,17 @@
 	import { api, type DockerStatus, type FileRoot, type VM } from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { findPaletteEntries, palettePages, type PaletteEntry } from '#lib/command-palette.ts';
+	import {
+		findPaletteEntries,
+		palettePages,
+		paletteSettings,
+		type PaletteEntry,
+	} from '#lib/command-palette.ts';
+	import {
+		loadSettingsIndex,
+		settingsIndexNow,
+		type SettingsIndexEntry,
+	} from '#lib/settings-find.ts';
 	import { recentPages, rememberPage } from '#lib/palette.svelte.ts';
 	import { containerLabel, type LXCList } from '#lib/lxc.ts';
 	import Dialog from './Dialog.svelte';
@@ -26,11 +36,17 @@
 					.filter((e): e is PaletteEntry => !!e)
 					.map((e) => ({ ...e, section: t('palette.recent') })),
 	);
+	// PLAN 86: single settings from the index of the control panel's search.
+	let settingsIndex = $state<SettingsIndexEntry[] | null>(settingsIndexNow());
+	onMount(() => {
+		if (!settingsIndex) void loadSettingsIndex().then((loaded) => (settingsIndex = loaded));
+	});
 	const entries = $derived(
 		[
 			...recent,
 			...findPaletteEntries(all, query).filter((e) => !recent.some((r) => r.href === e.href)),
-		].slice(0, 60),
+			...paletteSettings(query, role, t, settingsIndex),
+		].slice(0, 80),
 	);
 	const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 	onMount(() => {
@@ -131,7 +147,7 @@
 			<button class="btn" disabled={loading} onclick={load}>{t('common.retry')}</button>
 		</p>{/if}
 	<div id="palette-results" class="results" role="listbox" aria-label={t('palette.results')}>
-		{#each entries as entry, i (entry.section + entry.href)}<div
+		{#each entries as entry, i (entry.section + entry.href + entry.label)}<div
 				id={'palette-result-' + i}
 				role="option"
 				tabindex="-1"

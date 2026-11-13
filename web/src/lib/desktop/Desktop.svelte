@@ -184,9 +184,11 @@
 
 	// A link clicked on the desktop itself (the bell's "Details öffnen", the
 	// tasks dialog …) changes the address without a reload: open its window
-	// too. Only clicked links – the desktop's own address updates never come here.
+	// too; so does a page chosen in the command palette (Strg+K, PLAN 86: a
+	// single setting, with its tab and row). The desktop's own address
+	// updates (replaceState) never come here.
 	afterNavigate((nav) => {
-		if (nav.type !== 'link' || !nav.to) return;
+		if ((nav.type !== 'link' && nav.type !== 'goto') || !nav.to) return;
 		const url = nav.to.url;
 		if (url.pathname === '/') return;
 		const app = appForPath(url.pathname);
