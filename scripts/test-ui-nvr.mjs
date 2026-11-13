@@ -998,6 +998,15 @@ try {
       "Nicht mehr da: 0000:05:00.0",
     );
     await sound(page, "decoder gone");
+    // "Automatisch" never takes an NVIDIA card: a NAS with only one
+    // decodes on the CPU, and the row says how to choose it.
+    state.settings.decoder = "auto";
+    state.hardware.decoders = [{ id: "0000:01:00.0", title: "NVIDIA RTX A2000", kind: "nvidia", available: true }];
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-decoder-row").getByText("Entschlüsselt gerade: CPU").waitFor();
+    await page.locator("#nvr-decoder-row").getByText(de["nvr.decoder.hint"]).waitFor();
+    assert.equal(await page.locator("#nvr-decoder").inputValue(), "auto");
+    assert.equal(await page.locator("#nvr-decoder option[value='0000:01:00.0']").isDisabled(), false);
     await ctx.close();
   }
 
