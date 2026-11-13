@@ -107,12 +107,12 @@ async function sound(page, what) {
 }
 
 /** A phone with the NVR's data; the desktop settings it saves are kept in `saved`. */
-async function phone(role, change = () => {}) {
-  const made = await create(role, "hell", WIDTH, "de", {
+async function phone(role, change = () => {}, width = WIDTH) {
+  const made = await create(role, "hell", width, "de", {
     isMobile: true,
     hasTouch: true,
     deviceScaleFactor: 2,
-    viewport: { width: WIDTH, height: 844 },
+    viewport: { width, height: 844 },
   });
   await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   made.data.prefs.desktop = { version: 1 };
@@ -325,6 +325,72 @@ try {
     await page.getByRole("heading", { name: "Haustür" }).waitFor();
     await sound(page, "edit camera");
     await shot(page, "kamera-aendern");
+    await ctx.close();
+  }
+
+  // --- PLAN 82: the stream rows and the decoder on the narrowest phone (375 px) ---
+  {
+    const narrow = 375;
+    const { ctx, page } = await phone("owner", (s) => (s.settings.decoder = "0000:01:00.0"), narrow);
+    /** Every radio of the stream choices lies inside the screen (they wrap, never run out). */
+    const inside = async (what) => {
+      const outside = await page.evaluate((w) => {
+        const out = [];
+        for (const el of document.querySelectorAll('[role="radiogroup"] [role="radio"], select.field'))
+          if (el.getBoundingClientRect().right > w + 0.5) out.push(el.textContent.trim().slice(0, 30));
+        return out;
+      }, narrow);
+      assert.deepEqual(outside, [], `${what}: controls run out of the screen`);
+    };
+    await page.goto(base + "/nvr/cameras?new=1");
+    await page.getByRole("button", { name: "Suchen", exact: true }).tap();
+    await page.getByRole("button", { name: /Reolink RLC-810A/ }).tap();
+    await page.getByLabel("Benutzer", { exact: true }).fill("admin");
+    await page.getByLabel("Passwort", { exact: true }).fill("geheim");
+    await page.getByRole("button", { name: "Prüfen" }).tap();
+    await page.getByLabel("Hochauflösender Stream").waitFor();
+    await page.getByRole("radiogroup", { name: "Live-Bild" }).getByRole("radio", { name: "Niedrigauflösend" }).waitFor();
+    await sound(page, "stream rows (375 px)");
+    await inside("stream rows");
+    await page.getByRole("radiogroup", { name: "Erkennung" }).getByRole("radio", { name: "Hochauflösend" }).tap();
+    await page.getByText(de["nvr.stream.detectHighHint"]).waitFor();
+    await page.getByRole("switch", { name: "Streams offen halten" }).tap();
+    await page.getByText(de["nvr.stream.keepOpenOffHint"]).waitFor();
+    await page.getByLabel("Niedrigauflösender Stream").selectOption("");
+    await page.locator("#nvr-stream-record").getByText(de["nvr.stream.single"]).waitFor();
+    await sound(page, "stream rows, one stream (375 px)");
+    await inside("stream rows, one stream");
+    await page.getByLabel("Niedrigauflösender Stream").selectOption({ label: "640 × 360 · H264" });
+    await page.locator('[id$="-streams"]').first().evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -160);
+    });
+    await page.screenshot({ path: `${out}/kamera-streams-${narrow}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/cameras?edit=garten");
+    await page.locator("#nvr-stream-current").getByText(/2560 × 1440/).waitFor();
+    await sound(page, "stored streams (375 px)");
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-decoder-reason").getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    // Known before PLAN 82 and outside it: at 375 px the detector's select
+    // ("Automatisch (empfohlen) – nimmt NPU") lacks 2 px; the suite's 390 px
+    // pass it. Everything else on the page, the decoder row included, must.
+    const cut = (await page.evaluate(cutTextIn)).filter((line) => !line.startsWith("select#nvr-detector."));
+    assert.deepEqual(cut, [], "decoder (375 px): cut text");
+    assert.deepEqual(await page.evaluate(overlapsIn), [], "decoder (375 px): overlapping text");
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 0,
+      true,
+      "decoder (375 px): the page scrolls sideways",
+    );
+    await inside("decoder");
+    await page.locator("#nvr-decoder-row").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -160);
+    });
+    await page.screenshot({ path: `${out}/entschluesseln-${narrow}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/diagnosis");
+    await page.locator("#nvr-diag-decoder").getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    await sound(page, "diagnosis decoder (375 px)");
     await ctx.close();
   }
 

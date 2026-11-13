@@ -101,25 +101,27 @@ func TestChains(t *testing.T) {
 }
 
 func TestContainerDevices(t *testing.T) {
+	// The decoder is the iGPU ("auto"); the AMD GPU is not passed.
 	h := probeHardware([]hardware.ContainerDevice{devIGPU, devNPU, devCoral, devAMD}, nil, hostFacts{hailo: true})
+	dec, _ := h.decoder(DecoderAuto)
 	for _, tc := range []struct {
 		detector string
 		nodes    []string
 		usb      bool
 	}{
-		{"npu", []string{"/dev/accel/accel0", "/dev/dri/renderD128", "/dev/dri/renderD129"}, false},
-		{"igpu", []string{"/dev/dri/renderD128", "/dev/dri/renderD129"}, false},
-		{"cpu", []string{"/dev/dri/renderD128", "/dev/dri/renderD129"}, false},
-		{"coral", []string{"/dev/dri/renderD128", "/dev/dri/renderD129"}, true},
-		{"hailo", []string{"/dev/dri/renderD128", "/dev/dri/renderD129", "/dev/hailo0"}, false},
+		{"npu", []string{"/dev/accel/accel0", "/dev/dri/renderD128"}, false},
+		{"igpu", []string{"/dev/dri/renderD128"}, false},
+		{"cpu", []string{"/dev/dri/renderD128"}, false},
+		{"coral", []string{"/dev/dri/renderD128"}, true},
+		{"hailo", []string{"/dev/dri/renderD128", "/dev/hailo0"}, false},
 	} {
-		nodes, usb := h.containerDevices(tc.detector)
-		if !slices.Equal(nodes, tc.nodes) || usb != tc.usb {
-			t.Errorf("%s: %v usb=%v", tc.detector, nodes, usb)
+		nodes, cdi, usb, decode := h.containerDevices(tc.detector, dec)
+		if !slices.Equal(nodes, tc.nodes) || usb != tc.usb || len(cdi) != 0 || decode != (Decode{Kind: DecodeVAAPI}) {
+			t.Errorf("%s: %v cdi %v usb=%v decode %+v", tc.detector, nodes, cdi, usb, decode)
 		}
 	}
-	if nodes, _ := probeHardware(nil, nil, hostFacts{}).containerDevices("cpu"); len(nodes) != 0 {
-		t.Errorf("no GPU: %v", nodes)
+	if nodes, cdi, _, decode := probeHardware(nil, nil, hostFacts{}).containerDevices("cpu", nil); len(nodes) != 0 || len(cdi) != 0 || decode != (Decode{}) {
+		t.Errorf("no GPU: %v %v %+v", nodes, cdi, decode)
 	}
 }
 

@@ -17,8 +17,10 @@ import (
 	"image/jpeg"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -67,12 +69,19 @@ func demoCameras() []Camera {
 }
 
 // devHardware is the hardware of development mode: a NAS with NPU and
-// iGPU, no stick.
+// iGPU, no stick; the iGPU decodes, an NVIDIA card without its driver is
+// offered but cannot.
 func devHardware() HardwareInfo {
-	return probeHardware(nil, nil, hostFacts{accel: true, avx2: true, memory: 16 << 30}).with(
+	h := probeHardware(nil, nil, hostFacts{accel: true, avx2: true, memory: 16 << 30}).with(
 		Device{Kind: DetectorNPU, Title: "Intel NPU (Demo)", Present: true, Available: true},
-		Device{Kind: DetectorIGPU, Title: "Intel iGPU (Demo)", Present: true, Available: true},
+		Device{Kind: DetectorIGPU, Title: "Intel iGPU (Demo)", Present: true, Available: true, nodes: []string{"/dev/dri/renderD128"}},
 	)
+	h.Decoders = []Decoder{
+		{ID: "0000:00:02.0", Title: "Intel · 0000:00:02.0", Kind: "igpu", Available: true, nodes: []string{"/dev/dri/renderD128"}},
+		{ID: "0000:01:00.0", Title: "NVIDIA · 0000:01:00.0", Kind: "nvidia", Reason: "driver"},
+	}
+	h.VideoDecode = true
+	return h
 }
 
 // with puts devices in front of the CPU (development mode and tests).
@@ -97,12 +106,21 @@ type DevEngine struct {
 	Starts, Creates int
 	// Prunes counts NVRPruneImages.
 	Prunes int
+	// RefuseCDI makes NVRCreate fail for a spec with CDI devices, as
+	// Docker does when it lacks the NVIDIA plugin's descriptions.
+	RefuseCDI bool
 	// frigate is told which config.yml the container started with.
 	frigate *DevFrigate
 	// engineStarted is when the engine started (zero: long ago);
 	// engineStartedErr what NVREngineStarted says instead.
 	engineStarted    time.Time
 	engineStartedErr error
+	// preloads are the streams go2rtc keeps open: those of config.yml's
+	// preload from the start of the container on, and those asked for
+	// again (NVRExec); away are streams of cameras that do not answer.
+	preloads, away map[string]bool
+	// execs are the commands run in the container.
+	execs [][]string
 }
 
 // NewDevEngine returns an engine; with image the image counts as pulled.
@@ -132,6 +150,9 @@ func (e *DevEngine) NVRCreate(_ context.Context, spec docker.NVRSpec) error {
 	if e.state.Exists {
 		return errors.New("dev engine: the container exists")
 	}
+	if e.RefuseCDI && len(spec.CDIDevices) > 0 {
+		return errors.New(`dev engine: could not select device driver "cdi" with capabilities: [[gpu]]`)
+	}
 	e.spec, e.Creates = spec, e.Creates+1
 	e.state = docker.NVRState{Exists: true, ID: "dev", Hash: spec.Hash, Image: spec.Image}
 	return nil
@@ -148,7 +169,94 @@ func (e *DevEngine) NVRStart(context.Context) error {
 	if e.frigate != nil {
 		e.frigate.readConfig(filepath.Join(e.spec.Config, "config.yml"))
 	}
+	// go2rtc connects to the streams of its preload, except those whose
+	// camera does not answer; it never tries those again by itself.
+	e.preloads = map[string]bool{}
+	var file struct {
+		Go2RTC struct {
+			Preload map[string]string `yaml:"preload"`
+		} `yaml:"go2rtc"`
+	}
+	if data, err := os.ReadFile(filepath.Join(e.spec.Config, "config.yml")); err == nil && yaml.Unmarshal(data, &file) == nil {
+		for name := range file.Go2RTC.Preload {
+			if !e.away[name] {
+				e.preloads[name] = true
+			}
+		}
+	}
 	return nil
+}
+
+// NVRExec answers the questions the watch asks go2rtc in the container:
+// the open streams (GET /api/preload) and to open one again (PUT).
+func (e *DevEngine) NVRExec(_ context.Context, cmd []string, limit int) (string, int, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.state.Running {
+		return "", 0, docker.ErrNVRNotRunning
+	}
+	e.execs = append(e.execs, slices.Clone(cmd))
+	target := cmd[len(cmd)-1]
+	if !strings.HasPrefix(target, go2rtcAPI) {
+		return "", 127, nil
+	}
+	if slices.Contains(cmd, "PUT") {
+		if src, err := url.ParseQuery(strings.TrimPrefix(target, go2rtcAPI+"?")); err == nil && !e.away[src.Get("src")] {
+			e.preloads[src.Get("src")] = true
+		}
+		return "", 0, nil
+	}
+	open := map[string]map[string]string{}
+	for name := range e.preloads {
+		open[name] = map[string]string{"query": ""}
+	}
+	data, _ := json.Marshal(open) // a map of strings always marshals
+	if len(data) > limit {
+		data = data[:limit]
+	}
+	return string(data), 0, nil
+}
+
+// Away stands for cameras that do not answer: go2rtc loses the streams
+// and does not open them again until they answer (Back).
+func (e *DevEngine) Away(streams ...string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.away == nil {
+		e.away = map[string]bool{}
+	}
+	for _, name := range streams {
+		e.away[name] = true
+		delete(e.preloads, name)
+	}
+}
+
+// Back lets the streams' cameras answer again.
+func (e *DevEngine) Back(streams ...string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, name := range streams {
+		delete(e.away, name)
+	}
+}
+
+// Execs are the commands NVRExec ran.
+func (e *DevEngine) Execs() [][]string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.execs)
+}
+
+// Preloads are the streams go2rtc keeps open now, sorted.
+func (e *DevEngine) Preloads() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := []string{}
+	for name := range e.preloads {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (e *DevEngine) NVRRestart(ctx context.Context) error { return e.NVRStart(ctx) }

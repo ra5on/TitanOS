@@ -77,6 +77,9 @@ type Status struct {
 	// FrigateVersion is the pinned version.
 	FrigateVersion string       `json:"frigateVersion"`
 	Hardware       HardwareInfo `json:"hardware"`
+	// Decoder is the GPU that decodes the streams as the setting resolves
+	// now, with the reason when a chosen GPU cannot (PLAN 82-4).
+	Decoder DecoderStatus `json:"decoder"`
 }
 
 // CameraState is what the watch knows of a camera.
@@ -125,13 +128,14 @@ func (m *Manager) Status(ctx context.Context) Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.settings
+	hw, decoder := m.decoderLocked(hw)
 	st := Status{
 		Enabled: s.Enabled, State: m.rt.phase, Error: m.rt.lastError, Image: m.imageLocked(),
 		Volume: s.Volume, VolumeMounted: s.Volume != "" && slices.Contains(mounted, s.Volume),
 		Detector:               DetectorStatus{Kind: s.Detector.Kind, Active: m.activeLocked(), Failover: m.state.Failover, InferenceMs: m.rt.inferenceMs},
 		Storage:                m.storageStatusLocked(),
 		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut,
-		FrigateVersion: FrigateVersion, Hardware: hw,
+		FrigateVersion: FrigateVersion, Hardware: hw, Decoder: decoder,
 	}
 	if m.state.Stopped && st.Error == nil {
 		st.Error = &LastError{Code: m.state.StoppedReason, Detail: m.state.StoppedDetail}
@@ -147,6 +151,18 @@ func (m *Manager) Status(ctx context.Context) Status {
 		}
 	}
 	return st
+}
+
+// decoderLocked resolves the decoder of the settings on hw (m.mu held)
+// and returns hw with VideoDecode telling whether a GPU decodes.
+func (m *Manager) decoderLocked(hw HardwareInfo) (HardwareInfo, DecoderStatus) {
+	hw = hw.withBroken(m.rt.brokenDecoders)
+	_, decoder := hw.decoder(m.settings.Decoder)
+	hw.VideoDecode = decoder.Active != DecoderCPU
+	if hw.Decoders == nil {
+		hw.Decoders = []Decoder{}
+	}
+	return hw, decoder
 }
 
 func (m *Manager) imageLocked() ImageStatus {
@@ -223,6 +239,9 @@ type Diagnosis struct {
 	Cameras  []CameraDiagnosis          `json:"cameras"`
 	Shm      ShmDiagnosis               `json:"shm"`
 	Hardware HardwareInfo               `json:"hardware"`
+	// Decoder is the GPU that decodes the streams: the one the container
+	// was made with, as the setting resolves while there is none.
+	Decoder DecoderStatus `json:"decoder"`
 }
 
 // diagnosisLogLines is how much of the log the diagnosis shows.
@@ -232,13 +251,18 @@ const diagnosisLogLines = 200
 func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	hw := m.hardwareCached(ctx, true)
 	m.mu.Lock()
+	hw, decoder := m.decoderLocked(hw)
+	if m.rt.decoder.Active != "" && m.rt.container.Exists {
+		decoder = m.rt.decoder
+		hw.VideoDecode = decoder.Active != DecoderCPU
+	}
 	d := Diagnosis{
 		State: m.rt.phase, ImageReference: frigateImage, ImageVersion: FrigateVersion, ImagePresent: m.rt.imageID != "",
 		RunningVersion: m.rt.version,
 		Detector:       DetectorStatus{Kind: m.settings.Detector.Kind, Active: m.activeLocked(), Failover: m.state.Failover, InferenceMs: m.rt.inferenceMs},
 		DetectorPID:    m.rt.detectorPID, LastError: m.rt.lastError,
 		Log: []string{}, NPUFirmware: []string{}, Cameras: []CameraDiagnosis{},
-		AccelDevice: hw.AccelDevice, Hardware: hw,
+		AccelDevice: hw.AccelDevice, Hardware: hw, Decoder: decoder,
 		GPUUsage: map[string]json.RawMessage{}, NPUUsage: map[string]json.RawMessage{},
 	}
 	if m.state.Stopped && d.LastError == nil {

@@ -200,7 +200,21 @@ try {
     await page.getByText("Verbindung steht.").waitFor();
     await page.getByText("Hauptstrom: 3840 × 2160 · H265 · mit Ton").waitFor();
     await page.getByText("Nebenstrom: 640 × 360 · H264 · ohne Ton").waitFor();
+    // A further profile's stream (two profiles share the main stream: listed once).
+    await page.getByText("extStream: 1280 × 720 · H264 · ohne Ton").waitFor();
+    assert.equal(await page.locator("#nvr-probe .streams li").count(), 6);
     await page.getByText(de["nvr.probe.ptzYes"]).waitFor();
+    // PLAN 82-2: high and low stream from the profiles, the NAS's choice preset.
+    assert.deepEqual(
+      (await page.getByLabel("Hochauflösender Stream").locator("option").allTextContents()).map((o) => o.trim()),
+      ["3840 × 2160 · H265", "640 × 360 · H264", "1280 × 720 · H264"],
+    );
+    assert.equal(await page.getByLabel("Hochauflösender Stream").inputValue(), "rtsp://192.168.10.41:554/h265Preview_01_main");
+    assert.deepEqual(
+      (await page.getByLabel("Niedrigauflösender Stream").locator("option").allTextContents()).map((o) => o.trim()),
+      ["Keiner", "640 × 360 · H264", "1280 × 720 · H264"],
+    );
+    assert.equal(await page.getByLabel("Niedrigauflösender Stream").inputValue(), "rtsp://192.168.10.41:554/h264Preview_01_sub");
     // A name is unique, upper and lower case aside: said under the field, nothing sent.
     await page.getByLabel("Name", { exact: true }).fill("haustür");
     await page.getByText(de["nvr.camera.nameExists"]).waitFor();
@@ -240,6 +254,7 @@ try {
         subURL: "rtsp://192.168.10.41:554/h264Preview_01_sub",
         allowPublic: false,
       },
+      streams: { record: "main", detect: "sub", live: "auto", noPreload: false },
       detect: {
         enabled: true,
         objects: ["person", "bicycle", "car", "motorcycle", "bus"],
@@ -319,6 +334,80 @@ try {
       faces: true,
     });
     assert.equal("enabled" in change, false);
+    await ctx.close();
+  }
+
+  // --- PLAN 82-1/82-2: which stream records, detects and shows live; keep them open ---
+  {
+    const { ctx, page, state } = await open("owner");
+    await page.goto(base + "/nvr/cameras?new=1");
+    await page.getByRole("heading", { name: "Kamera hinzufügen" }).waitFor();
+    // Before a check there is one stream at most: the choices wait, said why.
+    const record = page.getByRole("radiogroup", { name: "Aufnahme" });
+    const detect = page.getByRole("radiogroup", { name: "Erkennung" });
+    const live = page.getByRole("radiogroup", { name: "Live-Bild" });
+    await page.locator("#nvr-stream-record").getByText(de["nvr.stream.single"]).waitFor();
+    for (const group of [record, detect, live])
+      assert.equal(await group.getByRole("radio").first().isDisabled(), true);
+    // Kept open by default, with what it means.
+    const keep = page.getByRole("switch", { name: "Streams offen halten" });
+    assert.equal(await keep.isChecked(), true);
+    await page.locator("#nvr-stream-open").getByText(de["nvr.stream.keepOpenHint"]).waitFor();
+    await page.getByLabel("Adresse der Kamera").fill("192.168.10.44");
+    await page.getByLabel("Benutzer", { exact: true }).fill("admin");
+    await page.getByLabel("Passwort", { exact: true }).fill("geheim");
+    await page.getByRole("button", { name: "Prüfen" }).click();
+    await page.getByText("Verbindung steht.").waitFor();
+    // The defaults: high records, low detects, live chooses by itself.
+    const checked = async (group) => (await group.getByRole("radio", { checked: true }).textContent()).trim();
+    assert.equal(await checked(record), "Hochauflösend");
+    assert.equal(await checked(detect), "Niedrigauflösend");
+    assert.equal(await checked(live), "Automatisch");
+    await page.locator("#nvr-stream-detect").getByText(de["nvr.stream.detectHint"]).waitFor();
+    // No low stream: everything on the high one, the choices disabled.
+    await live.getByRole("radio", { name: "Niedrigauflösend" }).click();
+    await record.getByRole("radio", { name: "Niedrigauflösend" }).click();
+    await page.getByLabel("Niedrigauflösender Stream").selectOption("");
+    await page.locator("#nvr-stream-live").getByText(de["nvr.stream.single"]).waitFor();
+    assert.equal(await checked(record), "Hochauflösend", "nothing records a stream that is not there");
+    assert.equal(await checked(live), "Automatisch");
+    assert.equal(await record.getByRole("radio").first().isDisabled(), true);
+    // The 720p profile as the low stream; the low one is never also the high one.
+    await page.getByLabel("Niedrigauflösender Stream").selectOption({ label: "1280 × 720 · H264" });
+    await page.getByLabel("Hochauflösender Stream").selectOption({ label: "1280 × 720 · H264" });
+    assert.equal(await page.getByLabel("Niedrigauflösender Stream").inputValue(), "");
+    await page.getByLabel("Hochauflösender Stream").selectOption({ label: "3840 × 2160 · H265" });
+    await page.getByLabel("Niedrigauflösender Stream").selectOption({ label: "1280 × 720 · H264" });
+    await record.getByRole("radio", { name: "Niedrigauflösend" }).click();
+    await detect.getByRole("radio", { name: "Hochauflösend" }).click();
+    // Detection on the high stream: it costs much more, said in plain words.
+    await page.locator("#nvr-stream-detect").getByText(de["nvr.stream.detectHighHint"]).waitFor();
+    await live.getByRole("radio", { name: "Hochauflösend" }).click();
+    await keep.uncheck();
+    await page.locator("#nvr-stream-open").getByText(de["nvr.stream.keepOpenOffHint"]).waitFor();
+    // The probe list no longer claims detection uses the sub stream.
+    assert.equal(await page.getByText(de["nvr.probe.subUsed"]).count(), 0);
+    await page.getByLabel("Name", { exact: true }).fill("Garage");
+    await sound(page, "camera streams");
+    await page.locator('[id$="-streams"]').first().screenshot({ path: `${out}/kamera-streams-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Kamera hinzufügen" }).click();
+    await page.locator('[data-camera="garage"]').waitFor();
+    const body = sent(state, "POST", "/nvr/cameras")[0];
+    assert.equal(body.source.mainURL, "rtsp://192.168.10.44:554/h265Preview_01_main");
+    assert.equal(body.source.subURL, "rtsp://192.168.10.44:554/h264Preview_01_ext");
+    assert.deepEqual(body.streams, { record: "sub", detect: "main", live: "main", noPreload: true });
+
+    // A stored ONVIF camera without a new check keeps its streams, shown with their sizes.
+    await page.goto(base + "/nvr/cameras?edit=garten");
+    await page.getByRole("heading", { name: "Garten" }).waitFor();
+    await page.locator("#nvr-stream-current").getByText("Hochauflösend: 2560 × 1440 · Niedrigauflösend: 640 × 360").waitFor();
+    assert.equal(await page.getByLabel("Hochauflösender Stream").count(), 0);
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="garten"]').waitFor();
+    const kept = sent(state, "PUT", "/nvr/cameras/garten").at(-1);
+    assert.equal(kept.source.mainURL, "rtsp://192.168.1.63:554/main");
+    assert.equal(kept.source.subURL, "rtsp://192.168.1.63:554/sub");
+    assert.deepEqual(kept.streams, { record: "main", detect: "sub", live: "auto", noPreload: false });
     await ctx.close();
   }
 
@@ -598,6 +687,26 @@ try {
     await page.locator("#nvr-detector").selectOption("igpu");
     await page.waitForFunction(() => document.querySelector("#nvr-detector").value === "igpu");
     assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { detector: { kind: "igpu" } });
+    // PLAN 82-4: which GPU decodes the videos; one with a VM cannot be chosen.
+    const decoderRow = page.locator("#nvr-decoder-row");
+    await decoderRow.getByText("Entschlüsselt gerade: iGPU (Intel Arc)").waitFor();
+    assert.deepEqual(
+      (await page.locator("#nvr-decoder option").allTextContents()).map((o) => o.trim()),
+      [
+        "Automatisch (iGPU)",
+        "iGPU (Intel Arc)",
+        "NVIDIA RTX A2000 – an eine VM vergeben",
+        "CPU",
+      ],
+    );
+    assert.equal(await page.locator("#nvr-decoder option[value='0000:01:00.0']").isDisabled(), true);
+    await page.locator("#nvr-decoder").selectOption("cpu");
+    await page.waitForFunction(() => document.querySelector("#nvr-decoder").value === "cpu");
+    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { decoder: "cpu" });
+    await decoderRow.getByText("Entschlüsselt gerade: CPU").waitFor();
+    await page.locator("#nvr-decoder").selectOption("0000:00:02.0");
+    await page.waitForFunction(() => document.querySelector("#nvr-decoder").value === "0000:00:02.0");
+    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { decoder: "0000:00:02.0" });
 
     // Known faces: people, pictures, faces to assign.
     await page.locator("#nvr-faces").getByRole("button", { name: /Bekannte Gesichter/ }).click();
@@ -711,6 +820,36 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 82-4: the chosen GPU went to a VM or is gone: the CPU decodes, said why ---
+  {
+    const { ctx, page, state } = await open("owner", (s) => (s.settings.decoder = "0000:01:00.0"));
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-decoder-reason").getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    await page.locator("#nvr-decoder-row").getByText("Entschlüsselt gerade: CPU").waitFor();
+    // The chosen one stays selected (not disabled) while it is away; its
+    // name alone, the row says why.
+    assert.equal(await page.locator("#nvr-decoder").inputValue(), "0000:01:00.0");
+    assert.equal((await page.locator("#nvr-decoder option:checked").textContent()).trim(), "NVIDIA RTX A2000");
+    assert.equal(await page.locator("#nvr-decoder option[value='0000:01:00.0']").isDisabled(), false);
+    await sound(page, "decoder with a VM");
+    await page.locator("#nvr-decoder-row").screenshot({ path: `${out}/entschluesseln-vm-${WIDTH}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/diagnosis");
+    const diag = page.locator("#nvr-diag-decoder");
+    await diag.getByText("CPU", { exact: true }).waitFor();
+    await diag.getByText("Gewählt: NVIDIA RTX A2000").waitFor();
+    await diag.getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    // A GPU that left the NAS: named by its address, the CPU decodes.
+    state.settings.decoder = "0000:05:00.0";
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-decoder-reason").getByText(de["nvr.decoder.reason.gone"]).waitFor();
+    assert.equal(
+      (await page.locator("#nvr-decoder option:checked").textContent()).trim(),
+      "Nicht mehr da: 0000:05:00.0",
+    );
+    await sound(page, "decoder gone");
+    await ctx.close();
+  }
+
   // --- The exports alone exceed the limit: nothing is deleted, said in plain words ---
   {
     const { ctx, page } = await open("owner", (s) => {
@@ -783,6 +922,8 @@ try {
     await page.getByText("vorhanden", { exact: true }).waitFor();
     await page.getByText(/vpu_37xx_v1\.bin/).waitFor();
     await page.getByText("143 von 384 MB belegt").waitFor();
+    await page.locator("#nvr-diag-decoder").getByText("iGPU (Intel Arc)", { exact: true }).waitFor();
+    await page.locator("#nvr-diag-decoder").getByText("Gewählt: Automatisch (iGPU)").waitFor();
     await page.getByText("Kamera 15 Bilder/s · Erkennung 1,2 · ausgewertet 5 · übersprungen 0").first().waitFor();
     assert.equal(await page.locator("#nvr-diag-cause").count(), 0);
     // The log wraps: it never scrolls sideways and nothing is cut.

@@ -13,9 +13,34 @@ export type NvrDevice = {
 	reason?: string;
 };
 
+/** A GPU that can decode the camera streams (PLAN 82-4). */
+export type NvrDecoder = {
+	/** PCI address, what the setting `decoder` names. */
+	id: string;
+	title: string;
+	kind: 'igpu' | 'gpu' | 'nvidia' | string;
+	available: boolean;
+	/** Why it cannot decode: driver, vm. */
+	reason?: string;
+};
+
+/** The GPU that decodes, as the setting resolves now. */
+export type NvrDecoderStatus = {
+	/** 'auto', 'cpu' or a PCI address. */
+	setting: string;
+	/** PCI address of the GPU that decodes, or 'cpu'. */
+	active: string;
+	kind: string;
+	title: string;
+	/** Why a chosen GPU does not decode: gone, vm, driver. */
+	reason?: string;
+};
+
 export type NvrHardware = {
 	devices: NvrDevice[];
 	auto: string;
+	/** Absent from a NAS before PLAN 82. */
+	decoders?: NvrDecoder[];
 	videoDecode: boolean;
 	accelDevice: boolean;
 	avx2: boolean;
@@ -78,6 +103,7 @@ export type NvrStatus = {
 	rtspOut?: boolean;
 	frigateVersion?: string;
 	hardware?: NvrHardware;
+	decoder?: NvrDecoderStatus;
 };
 
 export type PlateEntry = { name: string; plates: string[] };
@@ -198,8 +224,11 @@ export type Discovered = {
 };
 
 export type ProbeStream = {
-	role: 'main' | 'sub';
+	/** main and sub: the streams the NAS would take; other: a further ONVIF profile. */
+	role: 'main' | 'sub' | 'other';
 	url: string;
+	/** Name of the ONVIF profile. */
+	profile?: string;
 	outcome: string;
 	codec: string;
 	audio: string;
@@ -254,6 +283,7 @@ export type Diagnosis = {
 	}[];
 	shm: { totalMB: number | null; usedMB: number | null; freeMB: number | null };
 	hardware: NvrHardware;
+	decoder?: NvrDecoderStatus;
 };
 
 // ---- Phase 2 ----
