@@ -792,5 +792,6 @@
 	"nvr.events.unkeepConfirm": "Nicht mehr behalten",
 	"nvr.events.deleteKeptTitle": "Behaltenes Ereignis löschen?",
 	"nvr.events.deleteKeptText": "Das Ereignis, sein Schnappschuss und das gesicherte Video werden gelöscht. Das lässt sich nicht rückgängig machen.",
-	"nvr.export.keptMark": "Video eines behaltenen Ereignisses"
+	"nvr.export.keptMark": "Video eines behaltenen Ereignisses",
+	"nvr.areas.messagesWidened": "Meldungen kamen nur aus der Zone „{zone}“. Ohne sie meldet die Kamera nach dem Speichern für das ganze Bild – unter „Nur in Zonen melden“ lässt sich eine andere Zone wählen, solange eine gezeichnet ist."
 }

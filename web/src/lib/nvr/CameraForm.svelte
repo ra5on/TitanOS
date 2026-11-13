@@ -330,10 +330,16 @@
 	);
 	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '' && !nameTaken && zonesValid);
 	/** A zone was removed: messages limited to it forget it, "only in zones" needs one. */
-	function zoneGone(id: string) {
-		notify.zones = (notify.zones ?? []).filter((z) => z !== id);
+	// Removing the only zone the messages were limited to widens them to the
+	// whole picture once saved: said where it happens, not only in a hint.
+	let widenedFrom = $state('');
+	function zoneGone(id: string, name: string) {
+		const before = notify.zones ?? [];
+		notify.zones = before.filter((z) => z !== id);
+		if (before.includes(id) && notify.zones.length === 0) widenedFrom = name;
 		if (zones.length === 0) zonesOnly = false;
 	}
+	const widened = $derived(widenedFrom !== '' && (notify.zones ?? []).length === 0);
 	/** The NAS asked before deleting recordings that exist (a narrower mode, fewer days). */
 	let askShrink = $state<{ body: Record<string, unknown>; lines: string[] } | null>(null);
 	function shrinkLines(next: Kept): string[] {
@@ -981,6 +987,9 @@
 			<div class="areas-block" id="nvr-areas">
 				<ZoneEditor camera={initial!.id} bind:zones bind:masks onzonegone={zoneGone} />
 			</div>
+			{#if widened}<p class="notice-warn note" role="status" id="nvr-zones-widened">
+					{t('nvr.areas.messagesWidened', { zone: widenedFrom })}
+				</p>{/if}
 		{/if}
 	</SettingGroup>
 

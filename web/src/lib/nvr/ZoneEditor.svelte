@@ -36,7 +36,7 @@
 		zones: CameraZone[];
 		masks: CameraMasks;
 		/** A zone was removed (messages limited to it must forget it). */
-		onzonegone?: (id: string) => void;
+		onzonegone?: (id: string, name: string) => void;
 	} = $props();
 	const uid = $props.id();
 
@@ -232,9 +232,9 @@
 	}
 	function removeArea(sel: Sel) {
 		if (sel.kind === 'zone') {
-			const gone = zones[sel.index]?.id;
+			const gone = zones[sel.index];
 			zones = zones.filter((_, i) => i !== sel.index);
-			if (gone) onzonegone?.(gone);
+			if (gone?.id) onzonegone?.(gone.id, gone.name);
 		} else
 			masks = withMasks(
 				masks,

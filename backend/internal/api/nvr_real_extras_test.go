@@ -236,13 +236,38 @@ func TestNVRRealExtras(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/nvr/events/"+created.ID+"/reviewed", map[string]any{"reviewed": true}); res.StatusCode != 200 {
 		t.Errorf("seen: %d %s", res.StatusCode, body)
 	}
-	code, data = frigate("GET", "/api/review/event/"+created.ID, nil)
-	var review struct {
-		Reviewed bool `json:"has_been_reviewed"`
+	// Frigate's list of review items carries its own flag (joined per user,
+	// api/review.py); titand no longer sets it. It must be there and false.
+	window := "?cameras=hof&after=" + strconv.FormatFloat(event.Start-60, 'f', 0, 64) + "&before=" + strconv.FormatFloat(*event.End+60, 'f', 0, 64)
+	code, data = frigate("GET", "/api/review"+window, nil)
+	var reviews []map[string]any
+	if code != 200 || json.Unmarshal(data, &reviews) != nil {
+		t.Fatalf("Frigate's review list: %d %s", code, data)
 	}
-	t.Logf("Frigate's review of the event: %d %s", code, data)
-	if code == 200 && json.Unmarshal(data, &review) == nil && review.Reviewed {
-		t.Error("titand set Frigate's NVR-wide review flag")
+	found := false
+	for _, r := range reviews {
+		// A manual event's review item carries the event's ID as its own
+		// (seen in the first run), a tracked object's in its detections.
+		detections, _ := r["data"].(map[string]any)["detections"].([]any)
+		for _, d := range append(detections, r["id"]) {
+			if d == created.ID && !found {
+				found = true
+				flag, present := r["has_been_reviewed"]
+				t.Logf("Frigate's review item of the event: has_been_reviewed %v (present %v)", flag, present)
+				if !present || flag != false {
+					t.Errorf("Frigate's review flag after \"gesehen\": %v (present %v)", flag, present)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no review item of the event in Frigate's list: %s", data)
+	}
+	// And titand reads that flag back for events before its own start (the
+	// NVR-wide "seen" of 0.80): the list answers without error.
+	var listed eventList
+	if getJSON(t, ts, ts.client, "/nvr/events?camera=hof&limit=5", &listed) != 200 {
+		t.Error("events with Frigate's review list")
 	}
 	// Un-keep: the flag goes, the saved video goes.
 	if res, body := ts.request("DELETE", "/api/v1/nvr/events/"+created.ID+"/keep", nil); res.StatusCode != 200 {

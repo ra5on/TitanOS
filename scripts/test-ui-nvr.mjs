@@ -533,17 +533,17 @@ try {
     const hb = await handle.boundingBox();
     await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
     await page.mouse.down();
-    await page.mouse.move(...(await at(0.45, 0.62)), { steps: 5 });
+    await page.mouse.move(...(await at(0.56, 0.48)), { steps: 5 });
     await page.mouse.up();
     const plus = page.getByRole("button", { name: "Punkt zwischen Punkt 1 und 2 einfügen" });
     const pb = await plus.boundingBox();
     await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
     await page.mouse.down();
-    await page.mouse.move(...(await at(0.25, 0.5)), { steps: 5 });
+    await page.mouse.move(...(await at(0.3, 0.47)), { steps: 5 });
     await page.mouse.up();
     await list.getByRole("button", { name: /^Weg Zone · Punkte: 5/ }).waitFor();
     // The keyboard: an arrow moves the chosen point, Entf removes it.
-    await page.getByRole("button", { name: "Punkt 5 von Weg" }).focus();
+    await page.getByRole("button", { name: "Punkt 2 von Weg" }).focus();
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Delete");
     await list.getByRole("button", { name: /^Weg Zone · Punkte: 4/ }).waitFor();
@@ -573,7 +573,7 @@ try {
         for (const v of [x, y]) assert.ok(v >= 0 && v <= 1 && Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, `point ${v}`);
     for (const z of body.zones) assert.match(z.id, /^[a-z][a-z0-9_]{0,31}$/);
     const weg = body.zones[0];
-    assert.ok(Math.abs(weg.points[2][0] - 0.45) < 0.02 && Math.abs(weg.points[2][1] - 0.62) < 0.02, `dragged point ${weg.points[2]}`);
+    assert.ok(Math.abs(weg.points[1][0] - 0.56) < 0.02 && Math.abs(weg.points[1][1] - 0.48) < 0.02, `dragged point ${weg.points[1]}`);
     assert.equal(body.zonesOnly, true);
     assert.deepEqual(body.notify.zones, [weg.id]);
     assert.equal(body.notify.faceUnknown, true);
@@ -583,6 +583,9 @@ try {
     await list.getByRole("button", { name: /^Weg/ }).click();
     await page.getByRole("button", { name: de["nvr.areas.remove"] }).click();
     assert.deepEqual(await page.getByRole("group", { name: "Nur in Zonen melden" }).getByRole("button").allInnerTexts(), ["Beet"]);
+    // The messages now cover the whole picture: said where it happens.
+    await page.locator("#nvr-zones-widened").getByText(de["nvr.areas.messagesWidened"].replace("{zone}", "Weg")).waitFor();
+    await sound(page, "messages widened");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.locator('[data-camera="haustuer"]').waitFor();
     const after = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);

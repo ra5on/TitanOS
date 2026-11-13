@@ -751,14 +751,14 @@ try {
     await stage.evaluate((el) => el.scrollIntoView({ block: "center" }));
     const handle = await page.getByRole("button", { name: "Punkt 2 von Weg" }).boundingBox();
     const scrolled = await page.evaluate(() => window.scrollY);
-    await swipe([handle.x + handle.width / 2, handle.y + handle.height / 2], await at(0.5, 0.7));
+    await swipe([handle.x + handle.width / 2, handle.y + handle.height / 2], await at(0.62, 0.45));
     assert.equal(await page.evaluate(() => window.scrollY), scrolled, "dragging a point does not scroll the page");
     // A finger on "+" adds a point and drags it.
     const plus = await page.getByRole("button", { name: "Punkt zwischen Punkt 1 und 2 einfügen" }).boundingBox();
-    await swipe([plus.x + plus.width / 2, plus.y + plus.height / 2], await at(0.3, 0.45));
+    await swipe([plus.x + plus.width / 2, plus.y + plus.height / 2], await at(0.32, 0.44));
     await list.getByRole("button", { name: /^Weg Zone · Punkte: 5/ }).waitFor();
     // A tapped point is removed with the button.
-    await page.getByRole("button", { name: "Punkt 5 von Weg" }).tap();
+    await page.getByRole("button", { name: "Punkt 2 von Weg" }).tap();
     await page.getByRole("button", { name: de["nvr.areas.removePoint"] }).tap();
     await list.getByRole("button", { name: /^Weg Zone · Punkte: 4/ }).waitFor();
     // "Weg" is still chosen (its points show).
@@ -780,8 +780,8 @@ try {
     await page.locator('[data-camera="haustuer"]').waitFor();
     const body = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);
     assert.deepEqual(body.zones.map((z) => [z.name, z.points.length]), [["Weg", 4], ["Beet", 4]]);
-    const moved = body.zones[0].points[2];
-    assert.ok(Math.abs(moved[0] - 0.5) < 0.03 && Math.abs(moved[1] - 0.7) < 0.03, `dragged with a finger: ${moved}`);
+    const moved = body.zones[0].points[1];
+    assert.ok(Math.abs(moved[0] - 0.62) < 0.03 && Math.abs(moved[1] - 0.45) < 0.03, `dragged with a finger: ${moved}`);
     assert.equal(body.masks.motion.length, 1);
     assert.equal(body.zonesOnly, true);
     // The two days and the messages with unknown faces and zones.

@@ -792,5 +792,6 @@
 	"nvr.events.unkeepConfirm": "Stop keeping",
 	"nvr.events.deleteKeptTitle": "Delete the kept event?",
 	"nvr.events.deleteKeptText": "The event, its snapshot and the saved video are deleted. This cannot be undone.",
-	"nvr.export.keptMark": "Video of a kept event"
+	"nvr.export.keptMark": "Video of a kept event",
+	"nvr.areas.messagesWidened": "Messages came only from the zone “{zone}”. Without it the camera reports for the whole picture once saved – another zone can be chosen under “Report only in zones” while one is drawn."
 }
