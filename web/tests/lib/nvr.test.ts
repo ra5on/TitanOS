@@ -204,8 +204,9 @@ test("every NVR notification of titand has the UI's own title and text in both l
 	const go = readFileSync(resolve(process.cwd(), '../backend/internal/notify/texts.go'), 'utf8');
 	const kinds = [...new Set([...go.matchAll(/"(nvr_[a-z_]+)":\s*\{/g)].map((m) => m[1]))];
 	expect(kinds).toContain('nvr_event_face_known');
-	// No notification for unknown faces: Frigate does not report them.
-	expect(kinds.some((kind) => kind.includes('unknown'))).toBe(false);
+	// PLAN 88: unknown faces have their own message (from Frigate's tries
+	// of the face recognition, routing.go).
+	expect(kinds).toContain('nvr_event_face_unknown');
 	for (const [lang, all] of [
 		['de', de],
 		['en', en],

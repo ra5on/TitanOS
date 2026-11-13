@@ -29,6 +29,9 @@ var (
 	// read; nothing is written over it (the owners of the exports would be
 	// lost), so no export is made or deleted until it is read.
 	ErrExportsUnreadable = errors.New("nvr: the owners of the exports could not be read from the volume")
+	// ErrExportKept: the video of a kept event; only administrators
+	// rename or delete it (accounts see it like the event).
+	ErrExportKept = errors.New("nvr: the video of a kept event; only administrators change it")
 )
 
 // The states of an export.
@@ -53,6 +56,10 @@ type Export struct {
 	SizeBytes *int64 `json:"sizeBytes"`
 	// Owner is the account that made it; "" if that is not known.
 	Owner string `json:"owner"`
+	// Event is the kept event whose video this export holds (PLAN 88,
+	// keep.go): every account that may see the camera's recordings sees
+	// it, like the event.
+	Event string `json:"event,omitempty"`
 
 	// file is the name of the video below /exports/.
 	file string
@@ -77,6 +84,17 @@ type exportRecord struct {
 	// Failed: Frigate said the export failed; it is shown as failed until
 	// it is deleted, without asking Frigate again.
 	Failed bool `json:"failed,omitempty"`
+	// Event is the kept event whose video it holds (keep.go); Owner is
+	// then "" and the administrator who kept it is KeptBy.
+	Event  string `json:"event,omitempty"`
+	KeptBy string `json:"keptBy,omitempty"`
+}
+
+// visible tells whether an account sees an export (all: an
+// administrator). The video of a kept event is seen like the event, by
+// every account with the right on the camera (the API checks that).
+func (m *Manager) visible(owner string, all bool, record exportRecord) bool {
+	return all || record.Event != "" || m.owns(owner, record)
 }
 
 const exportsFile = "exports.json"
@@ -218,6 +236,13 @@ type frigateJob struct {
 
 // CreateExport starts an export of a camera's recordings for an account.
 func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, to float64, name string) (Export, error) {
+	return m.createExport(ctx, exportRecord{Owner: owner}, camera, from, to, name)
+}
+
+// createExport starts an export; record names whose it is (Owner, or the
+// kept Event).
+func (m *Manager) createExport(ctx context.Context, record exportRecord, camera string, from, to float64, name string) (Export, error) {
+	owner := record.Owner
 	cameraName, ok := m.recordedCamera(camera)
 	if !ok {
 		return Export{}, ErrNotFound
@@ -262,12 +287,13 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 		return Export{}, ErrExportFailed
 	}
 	created := float64(m.now().Unix())
+	record.Camera, record.Name, record.From, record.To, record.Created = camera, name, from, to, created
 	if err := m.changeExportRecords(func(records map[string]exportRecord) {
-		records[started.ID] = exportRecord{Owner: owner, Camera: camera, Name: name, From: from, To: to, Created: created}
+		records[started.ID] = record
 	}); err != nil {
 		slog.Warn("NVR: owner of the export not stored; it is shown to administrators only", "export", started.ID, "err", err)
 	}
-	return Export{ID: started.ID, Camera: camera, Name: name, From: from, To: to, Created: created, State: ExportRunning, Owner: owner}, nil
+	return Export{ID: started.ID, Camera: camera, Name: name, From: from, To: to, Created: created, State: ExportRunning, Owner: owner, Event: record.Event}, nil
 }
 
 // Exports lists the exports of an account (owner "" with all: every
@@ -292,12 +318,12 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 	known := map[string]bool{}
 	add := func(e Export) {
 		record := records[e.ID]
-		e.Owner, e.From, e.To = record.Owner, record.From, record.To
+		e.Owner, e.From, e.To, e.Event = record.Owner, record.From, record.To, record.Event
 		if record.Created > 0 {
 			e.Created = record.Created
 		}
 		known[e.ID] = true
-		if all || m.owns(owner, record) {
+		if m.visible(owner, all, record) {
 			out = append(out, e)
 		}
 	}
@@ -329,14 +355,14 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 	var gone []string
 	failed := map[string]Export{}
 	for id, record := range records {
-		if known[id] || !(all || m.owns(owner, record)) {
+		if known[id] || !m.visible(owner, all, record) {
 			continue
 		}
 		created := record.Created
 		if created == 0 {
 			created = record.To
 		}
-		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner}
+		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner, Event: record.Event}
 		if !record.Failed {
 			var stored frigateExport
 			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/exports/"+url.PathEscape(id), nil, nil, &stored); err == nil && stored.ID == id && !stored.InProgress {
@@ -470,6 +496,9 @@ func (m *Manager) RenameExport(ctx context.Context, id, owner string, all bool, 
 	if err != nil {
 		return e, err
 	}
+	if e.Event != "" && !all {
+		return e, ErrExportKept
+	}
 	if e.State != ExportDone {
 		return e, ErrExportRunning
 	}
@@ -489,6 +518,9 @@ func (m *Manager) DeleteExport(ctx context.Context, id, owner string, all bool) 
 	e, err := m.Export(ctx, id, owner, all)
 	if err != nil {
 		return err
+	}
+	if e.Event != "" && !all {
+		return ErrExportKept
 	}
 	if e.State == ExportRunning {
 		return ErrExportRunning

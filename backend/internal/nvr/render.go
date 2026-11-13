@@ -153,11 +153,11 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 	// global retention below.
 	keep := unknownDays
 	for _, c := range cameras {
-		keep = max(keep, c.Record.RetainDays)
+		keep = max(keep, c.Record.RetainDays, c.Record.recordDays(), c.Record.eventDays())
 	}
 	for _, d := range stubs(deleted, cameras) {
 		cams = append(cams, yentry{d.ID, stubBlock(d, anyPlates, anyFaces)})
-		keep = max(keep, d.RetainDays)
+		keep = max(keep, d.RetainDays, d.record().recordDays(), d.record().eventDays())
 	}
 
 	// go2rtc's API (1984) never asks for a login: only the container's
@@ -458,16 +458,43 @@ func cameraBlock(c Camera, anyPlates, anyFaces, gpu bool) ymap {
 	// No friendly_name: Frigate keys its storage figures by it
 	// (/api/recordings/storage), so they are keyed by the ID, which is
 	// unique; and renaming a camera does not restart Frigate.
+	objects := ymap{{"track", track}}
+	if len(c.Masks.Objects) > 0 {
+		objects = append(objects, yentry{"mask", masksBlock(c.Masks.Objects)})
+	}
+	// Snapshots belong to events: kept as long as their recordings.
+	snapshots := ymap{{"enabled", c.Detect.Enabled}, {"retain", ymap{{"default", c.Record.eventDays()}}}}
+	if c.ZonesOnly && len(c.Zones) > 0 {
+		snapshots = append(snapshots, yentry{"required_zones", zoneKeys(c.Zones)})
+	}
 	block := ymap{
 		{"enabled", c.Enabled},
 		{"ffmpeg", ymap{{"output_args", ymap{{"record", recordArgs}}}, {"inputs", inputs}}},
 		{"detect", detect},
-		{"objects", ymap{{"track", track}}},
-		{"record", recordBlock(c.Record)},
-		{"snapshots", ymap{{"enabled", c.Detect.Enabled}, {"retain", ymap{{"default", c.Record.RetainDays}}}}},
+	}
+	if len(c.Masks.Motion) > 0 {
+		block = append(block, yentry{"motion", ymap{{"mask", masksBlock(c.Masks.Motion)}}})
+	}
+	block = append(block,
+		yentry{"objects", objects},
+		yentry{"record", recordBlock(c.Record)},
+		yentry{"snapshots", snapshots},
 		// Frigate's own listening for sounds (barking, alarms) stays off;
 		// Audio.Enabled is about the sound of the picture.
-		{"audio", ymap{{"enabled", false}}},
+		yentry{"audio", ymap{{"enabled", false}}},
+	)
+	if len(c.Zones) > 0 {
+		block = append(block, yentry{"zones", zonesBlock(c.Zones)})
+	}
+	// Events only in the zones: Frigate makes alerts and detections only
+	// of objects that entered one (and a camera recording on events keeps
+	// only their segments, frigate/record/cleanup.py).
+	if c.ZonesOnly && len(c.Zones) > 0 {
+		keys := zoneKeys(c.Zones)
+		block = append(block, yentry{"review", ymap{
+			{"alerts", ymap{{"required_zones", keys}}},
+			{"detections", ymap{{"required_zones", keys}}},
+		}})
 	}
 	if anyPlates {
 		block = append(block, yentry{"lpr", ymap{{"enabled", c.Detect.Enabled && c.Detect.Plates}}})
@@ -497,8 +524,8 @@ func stubBlock(d DeletedCamera, anyPlates, anyFaces bool) ymap {
 		// A size, so that Frigate does not probe a stream that is not
 		// there when it starts (its own default size).
 		{"detect", ymap{{"enabled", false}, {"width", 1280}, {"height", 720}}},
-		{"record", keepBlock(d.RetainDays)},
-		{"snapshots", ymap{{"enabled", false}, {"retain", ymap{{"default", d.RetainDays}}}}},
+		{"record", keepBlock(d.record().recordDays(), d.record().eventDays())},
+		{"snapshots", ymap{{"enabled", false}, {"retain", ymap{{"default", d.record().eventDays()}}}}},
 		{"audio", ymap{{"enabled", false}}},
 	}
 	if anyPlates {
@@ -510,16 +537,17 @@ func stubBlock(d DeletedCamera, anyPlates, anyFaces bool) ymap {
 	return block
 }
 
-// keepBlock records nothing and keeps what was recorded for days:
+// keepBlock records nothing and keeps what was recorded: the recordings
+// without an event for recordDays, those of events for eventDays.
 // Frigate's cleanup goes through every camera, recording or not, and
 // would otherwise delete the recordings with its defaults.
-func keepBlock(days int) ymap {
+func keepBlock(recordDays, eventDays int) ymap {
 	return ymap{
 		{"enabled", false},
-		{"continuous", ymap{{"days", days}}},
-		{"motion", ymap{{"days", days}}},
-		{"alerts", ymap{{"retain", ymap{{"days", days}}}}},
-		{"detections", ymap{{"retain", ymap{{"days", days}}}}},
+		{"continuous", ymap{{"days", recordDays}}},
+		{"motion", ymap{{"days", recordDays}}},
+		{"alerts", ymap{{"retain", ymap{{"days", eventDays}}}}},
+		{"detections", ymap{{"retain", ymap{{"days", eventDays}}}}},
 	}
 }
 
@@ -532,24 +560,27 @@ func keepBlock(days int) ymap {
 //	            "active_objects" Frigate dropped every segment without a
 //	            moving object, so the seconds before and after were lost and
 //	            a person standing still dropped out, review PLAN 85-4).
-//	off:        nothing is recorded; what was is kept for RetainDays.
+//	off:        nothing is recorded; what was is kept for its days.
 //
-// Alerts and detections (Frigate's two classes of events) get the same
-// days and the seconds before and after.
+// The days (PLAN 88): continuous and motion recordings are kept for
+// recordDays, everything that touches an event for eventDays (Frigate
+// keeps a segment while it overlaps a review item that has not expired,
+// frigate/record/cleanup.py). Alerts and detections (Frigate's two
+// classes of events) get the same days and the seconds before and after.
 func recordBlock(r Record) ymap {
 	if r.Mode == RecordOff {
-		return keepBlock(r.RetainDays)
+		return keepBlock(r.recordDays(), r.eventDays())
 	}
 	continuous, motion, mode := 0, 0, "all"
 	switch r.Mode {
 	case RecordContinuous:
-		continuous, motion, mode = r.RetainDays, r.RetainDays, "all"
+		continuous, motion, mode = r.recordDays(), r.recordDays(), "all"
 	case RecordMotion:
-		motion, mode = r.RetainDays, "motion"
+		motion, mode = r.recordDays(), "motion"
 	}
 	events := ymap{
 		{"pre_capture", r.PreSeconds}, {"post_capture", r.PostSeconds},
-		{"retain", ymap{{"days", r.RetainDays}, {"mode", mode}}},
+		{"retain", ymap{{"days", r.eventDays()}, {"mode", mode}}},
 	}
 	return ymap{
 		{"enabled", true},

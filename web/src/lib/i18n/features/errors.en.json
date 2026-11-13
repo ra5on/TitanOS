@@ -156,5 +156,9 @@
 	"error.nvr_faces_off": "Face recognition does not run: switch it on for at least one camera first.",
 	"error.nvr_recipient_invalid": "A chosen recipient does not exist (any more) or is locked. Reload the page and choose the recipients again.",
 	"error.nvr_recipient_no_right": "A chosen recipient may not see this camera. Give the account the right to the camera first (at the account, under \"Cameras\").",
-	"error.nvr_recipient_bell": "Only owners and administrators have the bell. Choose push or e-mail for this account."
+	"error.nvr_recipient_bell": "Only owners and administrators have the bell. Choose push or e-mail for this account.",
+	"error.nvr_event_running": "The event is still going on or its recording is not complete yet. It can be kept right afterwards.",
+	"error.nvr_event_kept": "The event is kept. Deleting it takes its saved video along and needs a confirmation.",
+	"error.nvr_export_kept": "This is the video of a kept event; only administrators can change or delete it.",
+	"error.nvr_seen_unreadable": "What was seen could not be read from the NVR’s volume. “Seen” cannot be changed until a restart."
 }

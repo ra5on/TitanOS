@@ -29,6 +29,9 @@ func (a nvrArea) registerEvents(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/nvr/events/{id}", g.user(a.handleEvent))
 	mux.HandleFunc("DELETE /api/v1/nvr/events/{id}", g.admin(a.handleEventDelete))
 	mux.HandleFunc("POST /api/v1/nvr/events/{id}/reviewed", g.user(a.handleEventReviewed))
+	mux.HandleFunc("POST /api/v1/nvr/events/seen", g.user(a.handleEventsSeen))
+	mux.HandleFunc("POST /api/v1/nvr/events/{id}/keep", g.admin(a.handleEventKeep(true)))
+	mux.HandleFunc("DELETE /api/v1/nvr/events/{id}/keep", g.admin(a.handleEventKeep(false)))
 	mux.HandleFunc("GET /api/v1/nvr/events/{id}/thumbnail.jpg", g.user(a.handleEventMedia("thumbnail.jpg", "image/")))
 	mux.HandleFunc("GET /api/v1/nvr/events/{id}/snapshot.jpg", g.user(a.handleEventMedia("snapshot.jpg", "image/")))
 	mux.HandleFunc("GET /api/v1/nvr/events/{id}/clip.mp4", g.user(a.handleEventMedia("clip.mp4", "video/")))
@@ -84,7 +87,7 @@ func (a nvrArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, query := currentUser(r), r.URL.Query()
-	filter := nvr.EventFilter{Cameras: a.camerasWith(user, nvr.RightRecordings), Limit: 50}
+	filter := nvr.EventFilter{Cameras: a.camerasWith(user, nvr.RightRecordings), Limit: 50, Account: user.Name}
 	if raw := query.Get("camera"); raw != "" {
 		// Only what the account may see anyway.
 		wanted := strings.Split(raw, ",")
@@ -145,7 +148,7 @@ func (a nvrArea) event(w http.ResponseWriter, r *http.Request) (nvr.Event, bool)
 	if !a.available(w) {
 		return nvr.Event{}, false
 	}
-	event, err := a.nvr.Event(r.Context(), r.PathValue("id"))
+	event, err := a.nvr.Event(r.Context(), r.PathValue("id"), currentUser(r).Name)
 	if err == nil && !a.reaches(currentUser(r), event.Camera, nvr.RightRecordings) {
 		err = nvr.ErrEventNotFound
 	}
@@ -162,13 +165,15 @@ func (a nvrArea) handleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleEventDelete removes an event with its snapshot.
+// handleEventDelete removes an event with its snapshot. A kept event
+// (and its saved video) only with ?confirmKept=1: the page asked first
+// (409 nvr_event_kept otherwise).
 func (a nvrArea) handleEventDelete(w http.ResponseWriter, r *http.Request) {
 	event, ok := a.event(w, r)
 	if !ok {
 		return
 	}
-	if err := a.nvr.DeleteEvent(r.Context(), event.ID); err != nil {
+	if err := a.nvr.DeleteEvent(r.Context(), event.ID, r.URL.Query().Get("confirmKept") == "1"); err != nil {
 		writeNVRError(w, err)
 		return
 	}
@@ -177,7 +182,35 @@ func (a nvrArea) handleEventDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleEventReviewed marks an event as seen or not: {reviewed}.
+// handleEventKeep keeps an event for good or gives it back to the
+// camera's days (PLAN 88, administrators): Frigate keeps the event and
+// its snapshot, titand saves its video as an export.
+func (a nvrArea) handleEventKeep(keep bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		event, ok := a.event(w, r)
+		if !ok {
+			return
+		}
+		user := currentUser(r)
+		var err error
+		if keep {
+			event, err = a.nvr.KeepEvent(r.Context(), event.ID, user.Name)
+		} else {
+			event, err = a.nvr.UnkeepEvent(r.Context(), event.ID)
+		}
+		if err != nil {
+			writeNVRError(w, err)
+			return
+		}
+		noteTarget(r, event.Camera)
+		slog.Info("NVR event kept", "keep", keep, "camera", event.Camera, "by", user.Name, "ip", remoteIP(r))
+		event.Reviewed = a.nvr.Seen(user.Name, event)
+		writeJSON(w, http.StatusOK, a.shown(user, event))
+	}
+}
+
+// handleEventReviewed marks an event as seen or not for the account that
+// asks (PLAN 88: "seen" is per account): {reviewed}.
 func (a nvrArea) handleEventReviewed(w http.ResponseWriter, r *http.Request) {
 	event, ok := a.event(w, r)
 	if !ok {
@@ -189,12 +222,35 @@ func (a nvrArea) handleEventReviewed(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := a.nvr.SetReviewed(r.Context(), event.ID, req.Reviewed); err != nil {
+	if err := a.nvr.MarkSeen(currentUser(r).Name, event, req.Reviewed); err != nil {
 		writeNVRError(w, err)
 		return
 	}
 	event.Reviewed = req.Reviewed
 	writeJSON(w, http.StatusOK, a.shown(currentUser(r), event))
+}
+
+// handleEventsSeen marks every event that began before a time (now if
+// the request names none) as seen for the account that asks: {before}.
+func (a nvrArea) handleEventsSeen(w http.ResponseWriter, r *http.Request) {
+	if !a.available(w) {
+		return
+	}
+	req := struct {
+		Before float64 `json:"before"`
+	}{}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	now := float64(time.Now().Unix())
+	if req.Before <= 0 || req.Before > now {
+		req.Before = now
+	}
+	if err := a.nvr.MarkAllSeen(currentUser(r).Name, req.Before); err != nil {
+		writeNVRError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"before": req.Before})
 }
 
 // handleEventMedia passes a picture or the clip of an event on.
@@ -333,8 +389,10 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if message.Event != nil {
-				// Every window gets the same event: change a copy.
+				// Every window gets the same event: change a copy, with
+				// "seen" of this account.
 				event := a.shown(viewer, *message.Event)
+				event.Reviewed = a.nvr.Seen(viewer.Name, event)
 				message.Event = &event
 			}
 			data, err := json.Marshal(message)

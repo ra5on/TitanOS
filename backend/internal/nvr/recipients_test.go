@@ -113,7 +113,7 @@ var eventNo int
 // event lets Frigate report a new event at a camera.
 func (r *noticeRig) event(camera, label, subLabel, plate string) {
 	eventNo++
-	r.m.routeEvent(Event{ID: "1731412345." + strconv.Itoa(eventNo) + "-test", Camera: camera, Label: label, SubLabel: subLabel, Plate: plate})
+	r.m.routeEvent(Event{ID: "1731412345." + strconv.Itoa(eventNo) + "-test", Camera: camera, Label: label, SubLabel: subLabel, Plate: plate}, "new")
 }
 
 func (r *noticeRig) offline(camera string) {

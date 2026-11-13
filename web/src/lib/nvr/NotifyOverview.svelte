@@ -50,12 +50,20 @@
 	function lines(camera: Camera): string[] {
 		const n = camera.notify!;
 		const out: string[] = [];
-		const kinds = kindPillsOf(n.kinds).map((pill) => t(`nvr.notify.kind.${pill}` as MessageKey));
+		const kinds = [
+			...kindPillsOf(n.kinds).map((pill) => t(`nvr.notify.kind.${pill}` as MessageKey)),
+			...(n.faceUnknown ? [t('nvr.notify.kind.faceUnknown')] : []),
+		];
 		out.push(
 			kinds.length
 				? t('nvr.notify.overviewKinds', { kinds: kinds.join(', ') })
 				: t('nvr.notify.overviewNoKinds'),
 		);
+		// PLAN 88: messages limited to zones name them.
+		const zoneNames = (n.zones ?? [])
+			.map((id) => camera.zones?.find((z) => z.id === id)?.name)
+			.filter(Boolean);
+		if (zoneNames.length) out.push(t('nvr.notify.overviewZones', { zones: zoneNames.join(', ') }));
 		if (n.recipients == null) {
 			// A camera of 0.78: its old ways to every administrator.
 			const ways = [
@@ -85,7 +93,7 @@
 								why: t(why === 'gone' ? 'nvr.notify.overviewGone' : 'nvr.notify.overviewNoRight'),
 							}),
 						);
-					else if (account && missesNames(account, camera.id, n.kinds))
+					else if (account && missesNames(account, camera.id, n.kinds, n.faceUnknown))
 						out.push(t('nvr.notify.overviewNoNames', { name: entry.user }));
 				}
 		}

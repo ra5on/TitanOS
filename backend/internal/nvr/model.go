@@ -245,6 +245,16 @@ type Camera struct {
 	Notify Notify `json:"notify"`
 	// Order sorts the cameras in lists; equal values sort by ID.
 	Order int `json:"order"`
+	// Zones are named areas of the picture (PLAN 88, areas.go); a camera
+	// of 0.80 has none.
+	Zones []Zone `json:"zones,omitempty"`
+	// ZonesOnly: events only of objects that entered a zone – Frigate's
+	// alerts and detections (and so what a camera recording on events
+	// keeps), its snapshots, the list of events, the feed and the
+	// messages.
+	ZonesOnly bool `json:"zonesOnly,omitempty"`
+	// Masks are areas left out of the motion or the object detection.
+	Masks Masks `json:"masks,omitzero"`
 }
 
 // Source is where the pictures come from.
@@ -297,11 +307,77 @@ const (
 )
 
 // Record is when the camera records and how long recordings are kept.
+//
+// Since 0.81 the days are two (PLAN 88): RecordDays for what is recorded
+// without an event (continuous and motion recordings) and EventDays for
+// the recordings of events (Frigate's alerts and detections). A camera of
+// 0.80 has RetainDays only: both are it. Both equal is stored as 0.80
+// stores it (RetainDays alone), so 0.80 reads and edits such a camera as
+// before. Apart, RetainDays is the larger (ValidateCamera): 0.80 reads
+// only RetainDays, and a way back to it then keeps everything longer
+// instead of deleting anything.
 type Record struct {
-	Mode        string `json:"mode"`
-	RetainDays  int    `json:"retainDays"`
-	PreSeconds  int    `json:"preSeconds"`
-	PostSeconds int    `json:"postSeconds"`
+	Mode       string `json:"mode"`
+	RetainDays int    `json:"retainDays"`
+	// RecordDays and EventDays are 0 when they equal RetainDays.
+	RecordDays  int `json:"recordDays,omitempty"`
+	EventDays   int `json:"eventDays,omitempty"`
+	PreSeconds  int `json:"preSeconds"`
+	PostSeconds int `json:"postSeconds"`
+}
+
+// recordDays is how long recordings without an event are kept
+// (continuous and motion; no meaning for RecordEvents).
+func (r Record) recordDays() int {
+	if r.RecordDays > 0 {
+		return r.RecordDays
+	}
+	return r.RetainDays
+}
+
+// eventDays is how long the recordings of events are kept.
+func (r Record) eventDays() int {
+	if r.EventDays > 0 {
+		return r.EventDays
+	}
+	return r.RetainDays
+}
+
+// usesRecordDays tells whether the mode keeps recordings without an event
+// (off keeps what was recorded, continuous and motion record such).
+func usesRecordDays(mode string) bool { return mode != RecordEvents }
+
+// WithDays is the record block as the pages read it: both days named.
+func (r Record) WithDays() Record {
+	r.RecordDays, r.EventDays = r.recordDays(), r.eventDays()
+	return r
+}
+
+// maxRetainDays bounds every number of days.
+const maxRetainDays = 365
+
+// normalizeDays checks the days and stores them: both equal as RetainDays
+// alone (as 0.80 does), else both and RetainDays the larger. An events
+// camera keeps nothing but events: its record days are its event days.
+func normalizeDays(r Record) (Record, error) {
+	if r.RecordDays < 0 || r.EventDays < 0 {
+		return r, invalid("record: days")
+	}
+	rd, ed := r.recordDays(), r.eventDays()
+	if r.Mode == RecordEvents {
+		rd = ed
+	}
+	for _, days := range []int{rd, ed} {
+		if days < 1 || days > maxRetainDays {
+			return r, invalid("record.retainDays")
+		}
+	}
+	if rd == ed {
+		r.RetainDays, r.RecordDays, r.EventDays = rd, 0, 0
+	} else {
+		r.RetainDays, r.RecordDays, r.EventDays = max(rd, ed), rd, ed
+	}
+	return r, nil
 }
 
 // Audio is the sound of the camera.
@@ -425,6 +501,14 @@ type Notify struct {
 	// one (the API decodes a change over the stored camera, so an older web
 	// UI keeps it); null or an empty list of rules removes it.
 	HA *HACondition `json:"ha,omitempty"`
+	// Zones limits the messages about events to objects that entered one
+	// of these zones (IDs of Camera.Zones, PLAN 88); none: the whole
+	// picture.
+	Zones []string `json:"zones,omitempty"`
+	// FaceUnknown reports a face that face recognition saw and did not
+	// know (PLAN 88, off by default). A field of its own, not a kind:
+	// 0.80 refuses a camera with a kind it does not know.
+	FaceUnknown bool `json:"faceUnknown,omitempty"`
 }
 
 // HACondition is the condition of a camera's messages on Home Assistant.
@@ -889,9 +973,10 @@ func ValidateCamera(c Camera) (Camera, error) {
 	if r.Mode == RecordEvents && !c.Detect.Enabled {
 		return c, invalid("record.mode: events need the detection")
 	}
-	if r.RetainDays < 1 || r.RetainDays > 365 {
-		return c, invalid("record.retainDays")
+	if r, err = normalizeDays(r); err != nil {
+		return c, err
 	}
+	c.Record = r
 	// Frigate takes at most 60 seconds before an event.
 	if r.PreSeconds < 0 || r.PreSeconds > 60 || r.PostSeconds < 0 || r.PostSeconds > 60 {
 		return c, invalid("record.preSeconds or record.postSeconds")
@@ -923,6 +1008,9 @@ func ValidateCamera(c Camera) (Camera, error) {
 		return c, invalid("streams: the camera has no second stream")
 	}
 	if c.Notify, err = validateNotify(c.Notify); err != nil {
+		return c, err
+	}
+	if c, err = validateAreas(c); err != nil {
 		return c, err
 	}
 	if c.Order < 0 || c.Order > 100000 {
