@@ -207,11 +207,19 @@ type nvrSettingsView struct {
 	// 8554 ("" while it was never switched on).
 	RTSPUser     string `json:"rtspUser"`
 	RTSPPassword string `json:"rtspPassword"`
+	// NotifyOff silences the messages of every camera (PLAN 82-3).
+	NotifyOff bool `json:"notifyOff"`
+	// Decoder is the GPU that decodes the streams (PLAN 82-4).
+	Decoder string `json:"decoder"`
 }
 
 func settingsView(s nvr.Settings) nvrSettingsView {
 	view := nvrSettingsView{Enabled: s.Enabled, Volume: s.Volume, Detector: s.Detector, Storage: s.Storage,
-		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut, Plates: s.Plates}
+		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut, Plates: s.Plates,
+		NotifyOff: s.NotifyOff, Decoder: s.Decoder}
+	if view.Decoder == "" {
+		view.Decoder = nvr.DecoderAuto
+	}
 	if view.Plates == nil {
 		view.Plates = []nvr.KnownPlate{}
 	}
@@ -243,7 +251,8 @@ func (c nvrConfirmations) options() nvr.SetOptions {
 }
 
 // handleSettingsSet stores {enabled, volume, detector: {kind}, storage:
-// {limitGB}, privacyNoticeDismissed, rtspOut}; fields left out stay.
+// {limitGB}, privacyNoticeDismissed, rtspOut, plates, notifyOff, decoder};
+// fields left out stay.
 func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
@@ -259,6 +268,7 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	next := current
 	next.Enabled, next.Volume, next.Detector, next.Storage = req.Enabled, req.Volume, req.Detector, req.Storage
 	next.PrivacyNoticeDismissed, next.RTSPOut, next.Plates = req.PrivacyNoticeDismissed, req.RTSPOut, req.Plates
+	next.NotifyOff, next.Decoder = req.NotifyOff, req.Decoder
 	if err := a.nvr.SetSettings(r.Context(), next, req.options()); err != nil {
 		writeNVRError(w, err)
 		return

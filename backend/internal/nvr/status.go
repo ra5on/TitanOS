@@ -333,6 +333,11 @@ type SourceView struct {
 	SubURL      string `json:"subURL"`
 	ONVIFPort   int    `json:"onvifPort"`
 	AllowPublic bool   `json:"allowPublic"`
+	// The pictures' sizes as the last check found them (0: unknown).
+	MainWidth  int `json:"mainWidth"`
+	MainHeight int `json:"mainHeight"`
+	SubWidth   int `json:"subWidth"`
+	SubHeight  int `json:"subHeight"`
 }
 
 // CameraView is a camera as the API answers it to administrators.
@@ -341,6 +346,7 @@ type CameraView struct {
 	Name    string      `json:"name"`
 	Enabled bool        `json:"enabled"`
 	Source  SourceView  `json:"source"`
+	Streams StreamUse   `json:"streams"`
 	Detect  Detect      `json:"detect"`
 	Record  Record      `json:"record"`
 	Audio   Audio       `json:"audio"`
@@ -362,7 +368,7 @@ func (d DeletedCamera) View() CameraView {
 	return CameraView{
 		ID: d.ID, Name: d.Name, Source: SourceView{},
 		Detect: Detect{Objects: []string{}}, Record: Record{Mode: RecordOff, RetainDays: d.RetainDays},
-		Notify: Notify{Kinds: []string{}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
+		Notify: Notify{Kinds: []string{}, Recipients: []Recipient{}, Window: Window{Days: []int{}}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
 	}
 }
 
@@ -372,8 +378,9 @@ func (c Camera) View(state CameraState) CameraView {
 	return CameraView{
 		ID: c.ID, Name: c.Name, Enabled: c.Enabled,
 		Source: SourceView{Kind: s.Kind, Host: s.Host, Port: s.Port, User: s.User, HasPassword: s.Password != "",
-			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic},
-		Detect: c.Detect, Record: c.Record, Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
+			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic,
+			MainWidth: s.MainWidth, MainHeight: s.MainHeight, SubWidth: s.SubWidth, SubHeight: s.SubHeight},
+		Streams: c.Streams, Detect: c.Detect, Record: c.Record, Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
 	}
 }
 
