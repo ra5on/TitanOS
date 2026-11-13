@@ -210,9 +210,7 @@ try {
     assert.deepEqual(
       // PLAN 78-1: the overview below has group headings of its own.
       (
-        await main
-          .locator(".sgroup-title:not(.overview *)")
-          .allTextContents()
+        await main.locator(".sgroup-title:not(.overview *)").allTextContents()
       ).map((s) => s.trim()),
       // PLAN 86: the areas of the confirmed draft.
       [
@@ -268,8 +266,9 @@ try {
     await search.fill("SSH");
     await page.waitForFunction(
       () =>
-        document.querySelector(".settings-shell a.srow")?.getAttribute("href") ===
-        "/settings/access#access-ssh",
+        document
+          .querySelector(".settings-shell a.srow")
+          ?.getAttribute("href") === "/settings/access#access-ssh",
       null,
       { timeout: 8000 },
     );
