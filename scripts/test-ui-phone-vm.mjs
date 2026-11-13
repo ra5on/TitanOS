@@ -123,6 +123,31 @@ try {
       box.width >= 43.5 && box.height >= 43.5 && box.right <= 390.5,
       `key ≥ 44 px on the screen (${JSON.stringify(box)})`,
     );
+  // Nothing lies over the key bar (the page's fixed line of figures stays away).
+  const covered = async () => {
+    await bar.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    return bar.locator("button").evaluateAll((els) =>
+      els
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            r.left + r.width / 2,
+            r.top + r.height / 2,
+          );
+          return !hit || !(hit === el || el.contains(hit));
+        })
+        .map(
+          (el) => el.dataset.key ?? el.dataset.pointer ?? el.textContent.trim(),
+        ),
+    );
+  };
+  assert.deepEqual(await covered(), [], "no key of the bar is covered");
+  assert.equal(
+    await page.locator("footer.statusbar").count(),
+    0,
+    "no fixed line over the bar",
+  );
   // The canvas belongs to the VM, not to the page's scrolling.
   assert.equal(
     await page
@@ -214,6 +239,7 @@ try {
     [0xff1b, 0xff09, 0xff51, 0xff52, 0xff54, 0xff53],
   );
   await bar.locator('[data-key="fkeys"]').tap();
+  assert.deepEqual(await covered(), [], "no key covered with F1–F12 open");
   await bar.locator('[data-key="f5"]').tap();
   await bar.locator('[data-key="f12"]').tap();
   assert.deepEqual(downs(await keys(page)), [0xffc2, 0xffc9], "F5, F12");
@@ -305,6 +331,8 @@ try {
     ),
     "none",
   );
+  await bar.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
   await page.screenshot({ path: `${out}/vm-trackpad-390.png` });
 
   // Direct: the finger clicks where it lands (noVNC's own gestures).

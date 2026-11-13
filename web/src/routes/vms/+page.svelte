@@ -284,7 +284,9 @@
 	</div>
 {/if}
 
-{#if status && p.vms.length > 0}
+<!-- PLAN 87: on a touch screen the key bar ends the screen tab; the fixed line of
+     figures would lie over it, so it stays away while the screen is shown. -->
+{#if status && p.vms.length > 0 && !(p.touch && p.tab === 'screen')}
 	{@const memory = p.vms
 		.filter((vm) => vm.state === 'running')
 		.reduce((sum, vm) => sum + vm.memoryMiB, 0)}
