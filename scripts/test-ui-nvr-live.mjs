@@ -13,7 +13,7 @@
 //   and comes back by itself.
 //
 // The test browser has no H.264, so the stream is VP9:
-// scripts/fixtures/nvr-live-vp9.mp4, 12 s of ffmpeg's testsrc2, 320×180,
+// scripts/test-ui-media/nvr-live-vp9.mp4, 12 s of ffmpeg's testsrc2, 320×180,
 // 15 frames/s, a key frame every 6 s, one fragment per frame, made with the
 // ffmpeg of the pinned Frigate image:
 //   ffmpeg -f lavfi -i testsrc2=size=320x180:rate=15 -t 12 -c:v libvpx-vp9
@@ -32,7 +32,7 @@ const { chromium } = await import(
 );
 
 // ---- The stream: init segment and one fragment (moof + mdat) per frame ----
-const file = await readFile(new URL("./fixtures/nvr-live-vp9.mp4", import.meta.url));
+const file = await readFile(new URL("./test-ui-media/nvr-live-vp9.mp4", import.meta.url));
 const boxes = [];
 for (let at = 0; at < file.length; ) {
   const size = file.readUInt32BE(at);

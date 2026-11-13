@@ -134,8 +134,11 @@ jobs:
           fi
           if [ "$AUTO" = true ]; then
             # One automatic run at a time; it signs every set it finds.
+            # Not counting this run itself: started by hand on main, it is a
+            # workflow_dispatch in progress too (13.11.2026: it found itself
+            # and started no signing).
             for state in queued in_progress; do
-              if [ "$(gh run list --workflow plugin-sign.yml --event workflow_dispatch --status "$state" --json databaseId --jq length)" != 0 ]; then
+              if [ "$(gh run list --workflow plugin-sign.yml --event workflow_dispatch --status "$state" --json databaseId --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID)] | length")" != 0 ]; then
                 echo "A signing run is $state already."
                 exit 0
               fi
