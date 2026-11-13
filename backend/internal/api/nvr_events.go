@@ -280,11 +280,14 @@ func nvrFileName(name string) string {
 
 // handleFeed sends what happens at the cameras to a window (WebSocket):
 // {"t":"hello","running":…}, {"t":"event",…}, {"t":"activity",…}. titand
-// keeps one connection to Frigate for all windows; each window gets only
-// the messages of cameras the account may watch live, checked for every
-// message; an event without the names and plates the account may not
-// see (right "names", PLAN 82-3). Like a console the connection ends with
-// the login.
+// keeps one connection to Frigate for all windows; checked for every
+// message, a window gets what is in the picture right now ("activity")
+// of the cameras the account may watch live, and the events of those
+// whose recordings it may see – as the list of events and their pictures
+// need (an event of a live-only camera could not be opened, and one of a
+// recordings-only camera never came live); an event without the names
+// and plates the account may not see (right "names", PLAN 82-3). Like a
+// console the connection ends with the login.
 func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	// Accept checks that the page asking is this site, not another one.
@@ -301,7 +304,9 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 	// The feed asks from its own goroutine: the account is taken once
 	// here (its rights are looked up by name, as they are now).
 	viewer := user
-	messages, cancel := a.nvr.Subscribe(func(camera string) bool { return a.allows(viewer, camera, nvr.RightLive) })
+	messages, cancel := a.nvr.Subscribe(func(camera string) bool {
+		return a.allows(viewer, camera, nvr.RightLive) || a.allows(viewer, camera, nvr.RightRecordings)
+	})
 	defer cancel()
 	// Reading notices a window that closed (and answers pings).
 	ctx := conn.CloseRead(r.Context())
@@ -321,6 +326,12 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case message := <-messages:
+			if message.T == "activity" && !a.allows(viewer, message.Camera, nvr.RightLive) {
+				continue
+			}
+			if message.Event != nil && !a.allows(viewer, message.Event.Camera, nvr.RightRecordings) {
+				continue
+			}
 			if message.Event != nil {
 				// Every window gets the same event: change a copy.
 				event := a.shown(viewer, *message.Event)

@@ -6,6 +6,7 @@
 	// phone width the tiles stand below each other; their order is the
 	// account's own too.
 	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -166,11 +167,29 @@
 		soloPtz = ptz;
 		solo = id;
 	}
+	// A link from the desktop's widget or an event: /nvr?camera=<id>. It
+	// opens the camera large once per link: byId is new with every poll of
+	// the NVR, and the large view came back 6 s after it was closed.
+	let linkedCamera = '';
 	$effect(() => {
-		// A link from the desktop's widget or an event: /nvr?camera=<id>.
 		const wanted = page.url.searchParams.get('camera');
-		if (wanted && byId.has(wanted)) solo = wanted;
+		if (!wanted) {
+			linkedCamera = '';
+			return;
+		}
+		if (wanted === linkedCamera || !byId.has(wanted)) return;
+		linkedCamera = wanted;
+		solo = wanted;
 	});
+	/** Closes the large view; the link that opened it is spent, so it can open it again later. */
+	function closeSolo() {
+		solo = '';
+		if (page.url.searchParams.has('camera')) {
+			const url = new URL(page.url);
+			url.searchParams.delete('camera');
+			void goto(url.pathname + url.search, { replaceState: true, noScroll: true, keepFocus: true });
+		}
+	}
 	let root = $state<HTMLElement>();
 	let full = $state(false);
 	$effect(() => {
@@ -183,7 +202,7 @@
 		else void root?.requestFullscreen?.().catch(() => {});
 	}
 	function keys(event: KeyboardEvent) {
-		if (event.key === 'Escape' && solo && !document.fullscreenElement) solo = '';
+		if (event.key === 'Escape' && solo && !document.fullscreenElement) closeSolo();
 	}
 
 	const OPTIONS: { key: 'events' | 'names' | 'marks' | 'recDot' | 'hideBar'; label: MessageKey }[] =
@@ -299,7 +318,7 @@
 							activity={feed.activity[solo]}
 							solo
 							ptzStart={soloPtz}
-							onsolo={() => (solo = '')}
+							onsolo={closeSolo}
 						/>
 					</div>
 				{:else if stacked}
@@ -313,7 +332,7 @@
 									{prefs}
 									activity={feed.activity[id]}
 									{arranging}
-									small={admin && !!camera.source?.subURL}
+									small
 									onsolo={() => showSolo(id)}
 									onptz={() => showSolo(id, true)}
 								/>
@@ -363,7 +382,7 @@
 									{prefs}
 									activity={feed.activity[tile.id]}
 									{arranging}
-									small={admin && !!camera.source?.subURL && tile.w * cell < 520}
+									small={tile.w * cell < 520}
 									onsolo={() => showSolo(tile.id)}
 									onptz={() => showSolo(tile.id, true)}
 								/>

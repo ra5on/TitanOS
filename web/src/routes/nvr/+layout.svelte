@@ -20,6 +20,10 @@
 	const path = $derived(page.url.pathname.replace(/\/$/, ''));
 	const adminPage = $derived(/^\/nvr\/(cameras|settings|diagnosis)$/.test(path));
 	const live = $derived(path === '/nvr');
+	// "No NVR on this NAS" only when it is not there at all: a normal account
+	// also gets "unavailable" while a switched-on NVR is down (stopped,
+	// failed, Docker starting after a boot) – then the page and its banner
+	// say that it does not run right now.
 	const status = $derived(nvr.status);
 
 	// The privacy notice: administrators dismiss it for the NAS (settings),
@@ -61,7 +65,7 @@
 
 {#if !nvr.loaded}
 	<p class="muted" role="status">{t('common.loading')}</p>
-{:else if !status || status.state === 'unavailable'}
+{:else if !status || (status.state === 'unavailable' && !status.enabled)}
 	<p class="notice-error" role="alert">{nvr.error || t('error.nvr_unavailable')}</p>
 {:else if adminPage && !admin}
 	<p class="notice-error" role="alert">{t('error.forbidden')}</p>

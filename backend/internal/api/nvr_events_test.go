@@ -231,7 +231,7 @@ func itoa(n int64) string {
 func TestNVRFeed(t *testing.T) {
 	recheck := consoleRecheck.Swap(int64(20 * time.Millisecond))
 	t.Cleanup(func() { consoleRecheck.Store(recheck) })
-	ts, _ := nvrServer(t)
+	ts, manager := nvrServer(t)
 	ts.setup()
 	nvrRunning(t, ts)
 	guest := ts.guest("gast")
@@ -260,21 +260,38 @@ func TestNVRFeed(t *testing.T) {
 	if !sawHello || !sawDoor {
 		t.Fatalf("owner's feed: hello %v, front door %v", sawHello, sawDoor)
 	}
-	// The guest: hello, then only the drive.
+	// The guest: hello, then what is in the picture only of the drive
+	// (live), and the events only of the front door (recordings: the list
+	// of events and their pictures need that right).
 	for {
 		msg := read(conn, ctx)
 		if msg["t"] == "hello" && msg["running"] == true {
 			break
 		}
-		if msg["camera"] == "haustuer" {
+		if msg["t"] == "activity" && msg["camera"] == "haustuer" {
 			t.Fatalf("guest got %v", msg)
+		}
+	}
+	now := float64(time.Now().Unix())
+	manager.DevStandIn().AddEvent("1731412345.7-drive", "einfahrt", "car", "", "", now)
+	manager.DevStandIn().AddEvent("1731412345.8-door", "haustuer", "person", "", "", now)
+	for door := false; !door; {
+		msg := read(conn, ctx)
+		if msg["t"] == "activity" && msg["camera"] == "haustuer" {
+			t.Fatalf("guest got %v", msg)
+		}
+		if event, ok := msg["event"].(map[string]any); ok {
+			if event["camera"] == "einfahrt" {
+				t.Fatalf("guest got an event of a live-only camera: %v", msg)
+			}
+			door = event["camera"] == "haustuer"
 		}
 	}
 	// Logging out ends the feed.
 	ts.do(guest, "POST", "/api/v1/logout", nil)
 	for {
 		msg := read(conn, ctx)
-		if msg["camera"] == "haustuer" || (msg["event"] != nil && msg["event"].(map[string]any)["camera"] == "haustuer") {
+		if (msg["t"] == "activity" && msg["camera"] == "haustuer") || (msg["event"] != nil && msg["event"].(map[string]any)["camera"] == "einfahrt") {
 			t.Fatalf("guest got %v", msg)
 		}
 		if msg["t"] == "bye" {
