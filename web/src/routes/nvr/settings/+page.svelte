@@ -341,7 +341,9 @@
 			<SettingRow icon="key" title={t('nvr.rtsp.login')} id="nvr-rtsp-login">
 				{#snippet description()}
 					<p>{t('nvr.rtsp.loginHint')}</p>
-					<p class="mono wrap">rtsp://{host}:8554/{nvr.cameras[0]?.id ?? 'kamera'}</p>
+					<p class="mono wrap">
+						rtsp://{host}:8554/{nvr.cameras[0]?.id ?? t('nvr.rtsp.cameraIdExample')}
+					</p>
 					<p>
 						{t('nvr.rtsp.user')}: <span class="mono">{s.rtspUser}</span> ·
 						{t('nvr.rtsp.password')}: <span class="mono wrap">{s.rtspPassword}</span>

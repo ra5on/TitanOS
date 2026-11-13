@@ -505,6 +505,7 @@
 	"nvr.rtsp.hint": "Opens port 8554: Home Assistant then fetches the pictures from the NAS instead of from each camera. With a login of its own; off by default.",
 	"nvr.rtsp.login": "Login for Home Assistant",
 	"nvr.rtsp.loginHint": "Enter address, user and password in Home Assistant. The last part of the address is the camera's id.",
+	"nvr.rtsp.cameraIdExample": "camera-id",
 	"nvr.rtsp.user": "User",
 	"nvr.rtsp.password": "Password",
 	"nvr.rtsp.copy": "Copy password",

@@ -505,6 +505,7 @@
 	"nvr.rtsp.hint": "Öffnet Port 8554: Home Assistant holt die Bilder dann vom NAS statt von jeder Kamera einzeln. Mit eigener Anmeldung; ab Werk aus.",
 	"nvr.rtsp.login": "Anmeldung für Home Assistant",
 	"nvr.rtsp.loginHint": "Trage Adresse, Benutzer und Passwort in Home Assistant ein. Der letzte Teil der Adresse ist die Kennung der Kamera.",
+	"nvr.rtsp.cameraIdExample": "kennung-der-kamera",
 	"nvr.rtsp.user": "Benutzer",
 	"nvr.rtsp.password": "Passwort",
 	"nvr.rtsp.copy": "Passwort kopieren",
