@@ -219,15 +219,21 @@ try {
       });
       await search.waitFor({ timeout: 15000 });
       await search.fill("mcp");
-      assert.deepEqual(
-        await side
-          .locator(".items .item")
-          .evaluateAll((a) => a.map((x) => x.textContent.trim())),
-        ["MCP-Server"],
-      );
-      await side
-        .getByRole("button", { name: "MCP-Server", exact: true })
-        .click();
+      // PLAN 86: the page first, then single settings of pages a user may
+      // open – none of an admin page.
+      await side.locator(".items .item.result").first().waitFor();
+      const found = await side
+        .locator(".items .item.result")
+        .evaluateAll((a) =>
+          a.map((x) => [
+            x.querySelector(".two > span").textContent.trim(),
+            x.querySelector(".two > small").textContent.trim(),
+          ]),
+        );
+      assert.deepEqual(found[0], ["MCP-Server", "Smart Home und KI"]);
+      for (const [, where] of found)
+        assert.match(where, /^(Smart Home und KI|MCP-Server|API und CLI)/);
+      await side.locator(".items .item.result").first().click();
       await desk.page.waitForFunction(
         () => {
           const loc =

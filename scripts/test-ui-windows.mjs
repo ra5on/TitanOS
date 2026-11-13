@@ -644,12 +644,20 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
     side
       .locator(".items .item")
       .evaluateAll((a) => a.map((x) => x.textContent.trim()));
-  const all = (await items()).length;
+  // The overview and the areas (an open area adds its pages below it).
+  const areas = () => side.locator(".items > .item").count();
+  const all = await areas();
   const search = side.getByRole("searchbox", { name: "Einstellung suchen" });
+  // PLAN 86: hits are single settings with their place below the name.
+  const labels = () =>
+    side
+      .locator(".items .item.result .two > span")
+      .evaluateAll((a) => a.map((x) => x.textContent.trim()));
   await search.fill("ssh");
+  await side.locator(".items .item.result").first().waitFor();
   check(
-    JSON.stringify(await items()) === JSON.stringify(["Zugang › SSH"]),
-    `side bar search "ssh" finds Zugang (${await items()})`,
+    (await labels())[0] === "SSH-Zugang einschalten",
+    `side bar search "ssh" finds Zugang › SSH first (${await labels()})`,
   );
   // By keyboard: the window's page loads after Enter (no wait for it here).
   await search.focus();
@@ -663,16 +671,16 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   );
   await search.fill("zeitzone");
   check(
-    (await items()).includes("Datum und Uhrzeit"),
+    (await labels()).includes("Datum und Uhrzeit"),
     "side bar search finds Zeitzone",
   );
   await search.fill("platten-ruhe");
   check(
-    (await items()).includes("Energie"),
+    (await labels()).includes("Energie"),
     "side bar search finds Platten-Ruhe",
   );
   await search.press("Escape");
-  check((await items()).length === all, "Escape clears the side bar search");
+  check((await areas()) === all, "Escape clears the side bar search");
   // Ablage › Einstellungen suchen puts the cursor in the side bar's search.
   await page.locator('[data-menu="file"]').first().click();
   await page.getByRole("menuitem", { name: /Einstellungen suchen/ }).click();

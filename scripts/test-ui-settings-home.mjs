@@ -214,15 +214,16 @@ try {
           .locator(".sgroup-title:not(.overview *)")
           .allTextContents()
       ).map((s) => s.trim()),
+      // PLAN 86: the areas of the confirmed draft.
       [
         "System",
         "Hardware und Energie",
-        "Netzwerk",
-        "Konten und Zugang",
-        "Dienste und Meldungen",
-        "KI und Smart Home",
+        "Netzwerk und Fernzugriff",
+        "Sicherheit und Konten",
+        "Benachrichtigungen",
         "Daten und Sicherung",
-        "Updates",
+        "Cluster",
+        "Smart Home und KI",
       ],
     );
     assert.equal(
@@ -260,14 +261,17 @@ try {
       "/settings/timezone",
     );
     assert.ok(!(await main.locator(".recent").textContent()).includes("sam"));
-    // Search in the page jumps to a section.
+    // Search in the page finds single settings and jumps to them (PLAN 86).
     const search = main.getByRole("searchbox", {
       name: "Einstellungen suchen",
     });
     await search.fill("SSH");
-    assert.equal(
-      await main.locator("a.srow").first().getAttribute("href"),
-      "/settings/access#access-ssh",
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".settings-shell a.srow")?.getAttribute("href") ===
+        "/settings/access#access-ssh",
+      null,
+      { timeout: 8000 },
     );
     assert.equal(
       await main.locator(".recent").count(),
