@@ -185,9 +185,9 @@
 	function closeSolo() {
 		solo = '';
 		if (page.url.searchParams.has('camera')) {
-			const url = new URL(page.url);
+			const url = new URL(page.url.href);
 			url.searchParams.delete('camera');
-			void goto(url.pathname + url.search, { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(url.pathname + url.search, { replaceState: true });
 		}
 	}
 	let root = $state<HTMLElement>();

@@ -745,6 +745,17 @@ try {
     await shot(page, "live-gross");
     await page.keyboard.press("Escape");
     await page.locator("[data-tile]").nth(3).waitFor();
+
+    // A link opens a camera large once (the camera widget): closed, it
+    // stays closed across the next polls of the NVR (every 6 s; it came
+    // back before, review PLAN 85-4), and the link is spent.
+    await page.goto(base + "/nvr?camera=garten");
+    await page.locator('.tile.solo [data-camera="garten"]').waitFor();
+    await page.keyboard.press("Escape");
+    await page.locator("[data-tile]").nth(3).waitFor();
+    await page.waitForTimeout(7000);
+    assert.equal(await page.locator(".tile.solo").count(), 0, "the large view came back after a poll");
+    assert.ok(!page.url().includes("camera="), `the link is spent: ${page.url()}`);
     await ctx.close();
   }
 
