@@ -19,7 +19,8 @@
 	import Problem from '#lib/pages/Problem.svelte';
 	import Setup from '#lib/pages/Setup.svelte';
 	import LoginPreview from '#lib/login/LoginPreview.svelte';
-	import { loadLoginLook } from '#lib/login/state.svelte.ts';
+	import { loginBackgroundURL } from '#lib/login/look.ts';
+	import { loadLoginLook, loginLook } from '#lib/login/state.svelte.ts';
 	import { rememberLoginWallpaper } from '#lib/login/wallpaper.ts';
 	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
@@ -41,8 +42,13 @@
 		if (session.data?.user && !inWindow)
 			rememberLoginWallpaper(sanitizeDesktop(session.desktop).wallpaper);
 	});
-	// The lock screen shows the desktop's wallpaper (PLAN 61).
+	// The lock screen asks for the password like the login page, so it shows
+	// the picture the owner chose for the login page (owner 13.11.2026: the
+	// chosen picture was missing there); without one the desktop's wallpaper
+	// (PLAN 61).
 	const lockBackground = $derived.by(() => {
+		const chosen = loginBackgroundURL(loginLook.value);
+		if (chosen) return `url("${chosen}") center / cover`;
 		const wp = desktop.prefs.wallpaper;
 		if (wp.source === 'custom') return `url("/api/v1/background?v=${wp.version}") center / cover`;
 		const light = THEMES[appearance.current.theme as keyof typeof THEMES]?.dark === false;

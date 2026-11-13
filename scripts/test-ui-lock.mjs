@@ -93,6 +93,9 @@ async function open(width, options = {}) {
         },
       });
     if (path === "/logout") return route.fallback();
+    // The look of the login page needs no login, also while locked.
+    if (path === "/login-appearance" && method === "GET" && options.loginLook)
+      return route.fulfill({ json: { configured: true, ...options.loginLook } });
     if (nas.locked) {
       nas.refused++;
       return route.fulfill({
@@ -312,6 +315,27 @@ try {
         path: `${out}/locked-390.png`,
         animations: "disabled",
       });
+    await ctx.close();
+  }
+
+  // 4a. The picture the owner chose for the login page shows on the lock
+  //     screen too (owner 13.11.2026); without one the desktop's wallpaper.
+  for (const chosen of [true, false]) {
+    const { ctx, page } = await open(1440, {
+      locked: true,
+      ...(chosen ? { loginLook: { background: { source: "builtin", id: "kueste" } } } : {}),
+    });
+    await screen(page).waitFor();
+    const wanted = chosen ? "/backgrounds/kueste.webp" : "";
+    const end = Date.now() + 5000;
+    let shown = "";
+    do {
+      shown = await page.locator(".lockscreen").evaluate((el) => el.style.getPropertyValue("--lock-background"));
+      if (chosen ? shown.includes(wanted) : shown) break;
+      await new Promise((r) => setTimeout(r, 100));
+    } while (Date.now() < end);
+    if (chosen) assert.ok(shown.includes(wanted), `lock screen shows the login page's picture: ${shown}`);
+    else assert.ok(shown && !shown.includes("kueste"), `lock screen shows the desktop's wallpaper: ${shown}`);
     await ctx.close();
   }
 
