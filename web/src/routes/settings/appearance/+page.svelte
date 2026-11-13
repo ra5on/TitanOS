@@ -220,7 +220,7 @@
 		loginEditor?.discard();
 		extraMessage = null;
 	}
-	/** PLAN 73: where "Transparenz" lies on the slider from clear (0) to tinted (100). */
+	/** PLAN 73/80-1: where "Transparenz" lies on the slider from see-through (0) to opaque (100). */
 	const liquidOf = (glass: number) =>
 		Math.max(0, Math.min(100, Math.round((80 - glass) / 0.75 / 5) * 5));
 </script>
@@ -380,10 +380,11 @@
 	</SettingGroup>
 
 	<SettingGroup title={t('look.sliders')} id="h-sliders">
-		<!-- PLAN 73 (owner 8.11.2026, like iOS "Liquid Glass"): one slider from
-		     clear to tinted instead of "Transparenz" and "Glaseffekt"; it sets
-		     both stored values (older apps read them as before). The live
-		     preview stands above its row. -->
+		<!-- PLAN 73: one slider from see-through to opaque instead of
+		     "Transparenz" and "Glaseffekt"; it sets both stored values (older
+		     apps read them as before). PLAN 80-1: named "Deckkraft" since the
+		     glass frame was dropped (10.11.2026). The live preview stands above
+		     its row. -->
 		<div class="liquid-preview" aria-hidden="true">
 			<span
 				class="pane"

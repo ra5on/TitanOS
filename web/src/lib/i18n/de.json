@@ -115,7 +115,7 @@
 	"placeholder.title": "Seite nicht gefunden",
 	"placeholder.text": "Diese Adresse gehört zu keiner Seite von TitanOS. Öffne ein Programm über den Startbildschirm.",
 	"settings.title": "Einstellungen",
-	"settings.appearanceDesc": "Themes, Farben, Glas-Effekt, Ecken, Schriftgröße und Hintergrund.",
+	"settings.appearanceDesc": "Themes, Farben, Deckkraft, Ecken, Schriftgröße und Hintergrund.",
 	"appearance.title": "Darstellung",
 	"appearance.export": "Theme exportieren",
 	"appearance.import": "Theme importieren",

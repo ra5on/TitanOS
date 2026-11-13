@@ -115,7 +115,7 @@
 	"placeholder.title": "Page not found",
 	"placeholder.text": "This address does not match a TitanOS page. Open a program from the home screen.",
 	"settings.title": "Settings",
-	"settings.appearanceDesc": "Themes, colors, glass effect, corners, font size and background.",
+	"settings.appearanceDesc": "Themes, colors, opacity, corners, font size and background.",
 	"appearance.title": "Appearance",
 	"appearance.export": "Export theme",
 	"appearance.import": "Import theme",
