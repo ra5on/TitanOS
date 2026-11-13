@@ -209,6 +209,8 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
     rights: { haustuer: { live: true, recordings: false } },
     /** What GET /users/{name}/cameras answers per account. */
     userCameras: {},
+    // PLAN 83: Home Assistant for the cameras' conditions; null: none set up.
+    ha: null,
     discovered: [
       { address: "192.168.10.41", onvifPort: 8000, name: "Reolink RLC-810A", hardware: "RLC-810A", id: "uuid-1", known: false },
       { address: "192.168.10.44", onvifPort: 80, name: "Tapo C320WS", hardware: "C320WS", id: "uuid-2", known: false },
@@ -395,6 +397,14 @@ function segments(s, from, to) {
  */
 export async function installNvr(target, state = nvrState()) {
   const s = state;
+  // PLAN 83: the connections and entities the condition of a camera offers.
+  await target.route(/\/api\/v1\/homeassistant\/(connection-names|entities)/, (route) => {
+    const url = new URL(route.request().url());
+    if (!s.ha) return route.fulfill({ status: 404, json: { error: { code: "ha_off", message: "ha_off" } } });
+    if (url.pathname.endsWith("/connection-names")) return route.fulfill({ json: { connections: s.ha.connections } });
+    const connection = url.searchParams.get("connection") || "main";
+    return route.fulfill({ json: { entities: s.ha.entities[connection] ?? [] } });
+  });
   await target.route(/\/api\/v1\/(nvr(\/|$|\?)|users\/[^/]+\/cameras)/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());

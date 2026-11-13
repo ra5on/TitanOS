@@ -185,7 +185,12 @@ export type CameraNotify = {
 	/** Least seconds between two messages of one kind; absent is 60. */
 	pauseSeconds?: number;
 	window?: NotifyWindow;
+	/** PLAN 83: only while Home Assistant says so; no rules (or null) is no condition. */
+	ha?: HACondition | null;
 };
+/** One entity of Home Assistant and the states in which messages come. */
+export type HARule = { connection: string; entity: string; states: string[] };
+export type HACondition = { mode: 'all' | 'any'; rules: HARule[] };
 
 /** A camera as administrators get it; other accounts get the first block only. */
 export type Camera = {

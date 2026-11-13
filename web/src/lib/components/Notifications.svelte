@@ -13,6 +13,7 @@
 		loadNotifications,
 		markSeen,
 		notifications,
+		noticeOwnLink,
 		noticeText,
 		unreadCount,
 		visibleNotices,
@@ -175,7 +176,7 @@
 				<ul>
 					{#each shown as notice (notice.id)}
 						{@const text = noticeText(notice)}
-						{@const href = noticeLink(notice.kind, notice.subject)}
+						{@const href = noticeOwnLink(notice) || noticeLink(notice.kind, notice.subject)}
 						<li class:fresh={Date.parse(notice.time) > newSince}>
 							<div class="line">
 								<span class="chip {CHIP[notice.severity]}">{t(SEVERITY[notice.severity])}</span>

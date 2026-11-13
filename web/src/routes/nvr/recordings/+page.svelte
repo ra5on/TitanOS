@@ -34,6 +34,7 @@
 		RecordingSummary,
 		Segment,
 	} from '#lib/nvr/types.ts';
+	import { attachVod } from '#lib/nvr/vod.ts';
 	import { poll } from '#lib/poll.ts';
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
@@ -153,32 +154,10 @@
 			el.playbackRate = Number(speed);
 			if (play) void el.play().catch(() => {});
 		};
-		// Chrome, Edge and Safari play HLS themselves; Firefox needs hls.js.
-		if (el.canPlayType('application/vnd.apple.mpegurl')) {
-			el.src = src;
-			el.addEventListener('loadedmetadata', begin, { once: true });
-			return;
-		}
-		try {
-			const { default: Hls } = await import('hls.js');
-			if (!Hls.isSupported()) {
-				playError = t('nvr.rec.unsupported');
-				return;
-			}
-			const player = new Hls();
-			hls = player;
-			player.on(Hls.Events.ERROR, (_event, data) => {
-				// A browser without the camera's codec (H.264/H.265) says so in plain words.
-				if (data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR)
-					playError = t('nvr.rec.unsupported');
-				else if (data.fatal) playError = t('nvr.rec.playFailed');
-			});
-			player.on(Hls.Events.MANIFEST_PARSED, begin);
-			player.loadSource(src);
-			player.attachMedia(el);
-		} catch {
-			playError = t('nvr.rec.playFailed');
-		}
+		const stop = await attachVod(el, src, begin, (unsupported) => {
+			playError = t(unsupported ? 'nvr.rec.unsupported' : 'nvr.rec.playFailed');
+		});
+		hls = { destroy: stop };
 	}
 	function pick(wall: number) {
 		const limit = Math.min(from + DAY, Math.floor(Date.now() / 1000));

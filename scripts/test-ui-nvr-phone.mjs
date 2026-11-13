@@ -116,6 +116,17 @@ async function phone(role, change = () => {}, width = WIDTH) {
     viewport: { width, height: 844 },
   });
   await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+  // PLAN 82-5: what the page asks to play; with __noSound set, the
+  // browser refuses sound as after a push (no tap yet).
+  await made.ctx.addInitScript(() => {
+    window.__plays = [];
+    HTMLMediaElement.prototype.play = function () {
+      window.__plays.push({ clip: /clip\.mp4/.test(this.currentSrc || this.src), muted: this.muted });
+      if (window.__noSound && !this.muted)
+        return Promise.reject(new DOMException("no tap yet", "NotAllowedError"));
+      return Promise.resolve();
+    };
+  });
   made.data.prefs.desktop = { version: 1 };
   const state = nvrState();
   state.admin = role !== "user";
@@ -293,8 +304,102 @@ try {
     await page.getByRole("button", { name: /Auto · Einfahrt/ }).tap();
     const detail = page.getByRole("dialog", { name: "Auto · Einfahrt" });
     await detail.getByText("K-TI 2026").waitFor();
+    // PLAN 82-5: the tapped event plays at once, with sound.
+    await page.waitForFunction(() => window.__plays?.length > 0);
+    assert.deepEqual(
+      await page.evaluate(() => window.__plays.map((p) => [p.clip, p.muted])),
+      [[true, false]],
+      "a tapped event plays its clip with sound",
+    );
     await sound(page, "event detail");
     await shot(page, "ereignis");
+    await ctx.close();
+  }
+
+  // --- PLAN 82-5: a push opens its event; a running one plays its recording ---
+  {
+    let running;
+    const { ctx, page, state } = await phone("owner", (s) => {
+      running = { ...s.events[0], id: `${s.now - 20}.000000-running`, start: s.now - 20, end: null, hasClip: false, reviewed: false };
+      s.events.unshift(running);
+    });
+    // Opened from a push: no tap yet, so the browser refuses sound.
+    await ctx.addInitScript(() => (window.__noSound = true));
+    await page.goto(base + "/nvr/events?event=" + encodeURIComponent(running.id));
+    const detail = page.getByRole("dialog");
+    await detail.waitFor();
+    // The recording from five seconds before the event is asked for (the
+    // test NAS has none: the dialog falls back to the snapshot).
+    await until(
+      () => state.requests.some(([m, p]) => m === "GET" && p.startsWith(`/nvr/cameras/${running.camera}/vod/${running.start - 5}/`)),
+      "the recording of the running event",
+    );
+    await detail.getByRole("img", { name: de["nvr.events.snapshot"] }).waitFor();
+    assert.equal(page.url().includes("/nvr/recordings"), false, "stays on the event");
+    await sound(page, "running event from a push");
+    await shot(page, "ereignis-laufend");
+    await ctx.close();
+    // With a clip, opened from a push: plays at once without sound, and says so.
+    const second = await phone("owner");
+    await second.ctx.addInitScript(() => (window.__noSound = true));
+    const withClip = second.state.events[0];
+    await second.page.goto(base + "/nvr/events?event=" + encodeURIComponent(withClip.id));
+    await second.page.getByText(de["nvr.events.autoplayMuted"]).waitFor();
+    assert.deepEqual(
+      await second.page.evaluate(() => window.__plays.map((p) => p.muted)),
+      [false, true],
+      "tried with sound first, then without",
+    );
+    await sound(second.page, "event from a push, muted");
+    await shot(second.page, "ereignis-push");
+    await second.ctx.close();
+  }
+
+  // --- PLAN 83: messages only while Home Assistant says so ---
+  {
+    const { ctx, page, state } = await phone("owner", (s) => {
+      s.ha = {
+        connections: [{ id: "main", name: "Home Assistant" }],
+        entities: {
+          main: [
+            { id: "alarm_control_panel.alarmanlage_erdgeschoss", name: "Alarmanlage Erdgeschoss mit langem Namen", area: "Flur", state: "disarmed", domain: "alarm_control_panel" },
+            { id: "person.alex", name: "Alex", state: "home", domain: "person" },
+            { id: "input_boolean.urlaub", name: "Urlaub", state: "off", domain: "input_boolean" },
+            { id: "sensor.temperatur", name: "Temperatur", state: "21.5", domain: "sensor" },
+          ],
+        },
+      };
+    });
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.getByRole("heading", { name: "Haustür" }).waitFor();
+    await page.getByRole("switch", { name: de["nvr.ha.title"] }).tap();
+    // The first alarm system, chosen while armed.
+    const rule1 = page.locator('[data-ha-rule="0"]');
+    await rule1.getByText(/Alarmanlage Erdgeschoss mit langem Namen: Scharf – zu Hause/).first().waitFor();
+    await page.getByRole("button", { name: de["nvr.ha.add"] }).tap();
+    const rule2 = page.locator('[data-ha-rule="1"]');
+    await rule2.getByLabel(de["nvr.ha.search"]).fill("ale");
+    await rule2.getByRole("button", { name: /Alex person\.alex/ }).tap();
+    await rule2.getByRole("button", { name: "Abwesend" }).waitFor();
+    await page.getByLabel(de["nvr.ha.mode"]).selectOption("any");
+    await sound(page, "Home Assistant condition");
+    await rule1.evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -120);
+    });
+    await page.screenshot({ path: `${out}/kamera-ha-bedingung-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Speichern" }).tap();
+    await until(() => sent(state, "PUT", "/nvr/cameras/haustuer").length > 0, "saved");
+    const ha = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1).notify.ha;
+    assert.equal(ha.mode, "any");
+    assert.deepEqual(
+      ha.rules.map((r) => [r.connection, r.entity, r.states.length > 0]),
+      [
+        ["main", "alarm_control_panel.alarmanlage_erdgeschoss", true],
+        ["main", "person.alex", true],
+      ],
+    );
+    assert.deepEqual(ha.rules[1].states, ["not_home"]);
     await ctx.close();
   }
 
