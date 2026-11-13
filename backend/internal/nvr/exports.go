@@ -312,9 +312,13 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		}
 		add(Export{ID: j.ID, Camera: j.Camera, Name: j.Name, Created: float64(m.now().Unix()), State: ExportRunning})
 	}
-	// Exports TitanOS started that Frigate lists nowhere: failed (Frigate
-	// forgets a failed job after a while: the record keeps it, and
-	// Frigate is asked once), or gone behind its back (the record goes).
+	// Exports TitanOS started that Frigate lists nowhere: of a camera
+	// Frigate no longer runs (its /api/exports lists only the cameras of
+	// its config: a removed camera whose stub expired or was purged, PLAN
+	// 85-3 – the export itself is still there and asked for by its ID),
+	// failed (Frigate forgets a failed job after a while: the record keeps
+	// it, and Frigate is asked once), or gone behind its back (the record
+	// goes).
 	var gone []string
 	failed := map[string]Export{}
 	for id, record := range records {
@@ -327,6 +331,13 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		}
 		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner}
 		if !record.Failed {
+			var stored frigateExport
+			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/exports/"+url.PathEscape(id), nil, nil, &stored); err == nil && stored.ID == id && !stored.InProgress {
+				kept := Export{ID: id, Camera: stored.Camera, Name: stored.Name, Created: stored.Date, State: ExportDone, file: path.Base(stored.VideoPath), thumb: stored.ThumbPath}
+				kept.SizeBytes = m.exportSize(ctx, base, kept)
+				add(kept)
+				continue
+			}
 			var job frigateJob
 			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/jobs/export/"+url.PathEscape(id), nil, nil, &job); err != nil {
 				if frigateStatus(err) == http.StatusNotFound {

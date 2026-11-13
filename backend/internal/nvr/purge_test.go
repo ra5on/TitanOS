@@ -20,6 +20,16 @@ func TestPurgeDeletedCamera(t *testing.T) {
 	if err := r.m.PurgeDeletedCamera(ctx, "einfahrt"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("purge of a camera that exists: %v", err)
 	}
+	// An export of the camera, made by an account, finished.
+	made, err := r.m.CreateExport(ctx, "anna", "einfahrt", first, first+600, "Lieferung")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if _, err := r.m.Exports(ctx, "anna", false); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := r.m.RemoveCamera("einfahrt"); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +74,22 @@ func TestPurgeDeletedCamera(t *testing.T) {
 	}
 	if got := r.exportCount(); got != exportsBefore {
 		t.Errorf("exports %d, before %d", got, exportsBefore)
+	}
+	// Frigate lists exports only of the cameras in its config: the export
+	// is asked for by its ID and stays the account's, done and with its
+	// file (it vanished and lost its owner before, review PLAN 85-4).
+	for range 2 {
+		list, err := r.m.Exports(ctx, "anna", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := slices.IndexFunc(list, func(e Export) bool { return e.ID == made.ID })
+		if at < 0 || list[at].State != ExportDone || list[at].Owner != "anna" || list[at].Camera != "einfahrt" {
+			t.Fatalf("the export after the purge: %+v", list)
+		}
+		if video, _, err := list[at].ExportMedia(); err != nil || video == "" {
+			t.Errorf("its file: %q %v", video, err)
+		}
 	}
 
 	// Gone from the list, the stick and, after the next look, config.yml.
