@@ -63,7 +63,8 @@ export function vmNotices(input: {
 	if (!current) return [];
 	const list: Notice[] = [];
 	const failure = failures[current.name];
-	if (failure?.problem.code === 'vm_backup_recovery')
+	// PLAN 80-2: the list says the VM is held, without a refused start first.
+	if (failure?.problem.code === 'vm_backup_recovery' || (current.backupHeld && !failure))
 		list.push({
 			level: 'error',
 			text: `${t('vms.backupRecovery.title')}. ${t('vms.backupRecovery.text')}`,

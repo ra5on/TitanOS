@@ -2503,6 +2503,8 @@
 	"vms.backupRecovery.running": "Merging back …",
 	"vms.backupRecovery.done": "The disks of {name} are in order again.",
 	"vms.backupRecovery.failed": "Merging back did not work; nothing was changed. The overlays still lie next to the disks.",
+	"vms.backupHeld": "held",
+	"vms.backupHeldHint": "Starts again only once its disks are brought back after an interrupted backup. Open the VM for the explanation.",
 	"backup.note.source_unavailable.one": "1 source not available",
 	"backup.note.source_unavailable.many": "{count} sources not available",
 	"backup.note.source_unavailable.text": "The share or volume was not there during the run and was not saved.",

@@ -2503,6 +2503,8 @@
 	"vms.backupRecovery.running": "Wird zurückgeführt …",
 	"vms.backupRecovery.done": "Die Platten von {name} sind wieder in Ordnung.",
 	"vms.backupRecovery.failed": "Das Zurückführen ist nicht gelungen; es wurde nichts geändert. Die Zwischenschichten liegen weiter neben den Platten.",
+	"vms.backupHeld": "gesperrt",
+	"vms.backupHeldHint": "Startet erst wieder, wenn die Platten nach einer unterbrochenen Sicherung zurückgeführt sind. Öffne die VM für die Erklärung.",
 	"backup.note.source_unavailable.one": "1 Quelle nicht erreichbar",
 	"backup.note.source_unavailable.many": "{count} Quellen nicht erreichbar",
 	"backup.note.source_unavailable.text": "Die Freigabe oder das Volume war beim Lauf nicht da und wurde nicht gesichert.",

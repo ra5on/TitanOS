@@ -736,6 +736,8 @@ export type VM = {
 	cpuPercent: number;
 	/** Paused by QEMU after a disk error on the NAS; "resume" goes on. */
 	ioError?: boolean;
+	/** Held after an interrupted backup until its disks are repaired (PLAN 80-2). */
+	backupHeld?: boolean;
 	/** RAM of the NAS the VM occupies right now. */
 	memoryBytes: number;
 	since: string;
