@@ -115,6 +115,7 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrDisabled, http.StatusConflict, "nvr_disabled", "the NVR is switched off"},
 		{nvr.ErrRecordingsShrink, http.StatusConflict, "nvr_recordings_shrink", "the change deletes recordings that exist now; confirm it"},
 		{nvr.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable", "the configuration could not be read from the stick"},
+		{nvr.ErrRightsUnreadable, http.StatusServiceUnavailable, "nvr_rights_unreadable", "the camera rights could not be read from the stick; they and the cameras are not changed until a start reads them"},
 		{nvr.ErrEventNotFound, http.StatusNotFound, "nvr_event_not_found", "no such event"},
 		{nvr.ErrExportNotFound, http.StatusNotFound, "nvr_export_not_found", "no such export"},
 		{nvr.ErrExportRunning, http.StatusConflict, "nvr_export_running", "the export is still being made"},

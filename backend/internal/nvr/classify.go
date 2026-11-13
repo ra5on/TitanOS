@@ -73,13 +73,21 @@ var errorLine = regexp.MustCompile(`(?i)\b(error|exception|traceback|fatal|criti
 var (
 	urlCredentials = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]*:[^/\s@]*@`)
 	secretWord     = regexp.MustCompile(`(?i)\b(password|passwd|pwd)(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
+	// facePath is the rest of a path below faces/ (Frigate's API and its
+	// clips folder): a person's name, or a file named after it.
+	facePath = regexp.MustCompile(`(/faces/)[^\s?#"'<>]+`)
+	// nameQuery are query values that hold a person's name or a plate.
+	nameQuery = regexp.MustCompile(`(?i)([?&](?:sub_labels?|recognized_license_plates?|license_plates?|plates?|names?|new_name)=)[^&\s"'#]*`)
 )
 
 // Redact takes passwords out of a line of Frigate's log before it is
 // shown or stored: Frigate hides most itself, ffmpeg and go2rtc do not
-// always.
+// always. It also takes out the names of persons and plates in paths and
+// queries: nginx in the container writes every request line to the log.
 func Redact(s string) string {
 	s = urlCredentials.ReplaceAllString(s, "${1}***:***@")
+	s = facePath.ReplaceAllString(s, "${1}***")
+	s = nameQuery.ReplaceAllString(s, "${1}***")
 	return secretWord.ReplaceAllString(s, "${1}${2}***")
 }
 

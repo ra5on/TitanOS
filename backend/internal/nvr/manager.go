@@ -52,6 +52,9 @@ type Engine interface {
 	NVRImageID(ctx context.Context, ref string) (string, error)
 	NVRPull(ctx context.Context, repository, digest string, progress func(done, total int64)) error
 	NVRPruneImages(ctx context.Context, repository, keep string) ([]string, error)
+	// NVREngineStarted tells when Docker's engine started: a container
+	// that ended before was stopped with it, not by a fault of Frigate.
+	NVREngineStarted(ctx context.Context) (time.Time, error)
 }
 
 // Errors the API turns into codes.
@@ -744,8 +747,10 @@ func streamHost(raw string) string {
 // RemoveCamera deletes a camera and its rights. Its recordings stay until
 // their days are over: the camera stays in config.yml as a stub that is
 // switched off (deleted.go). That is noted on the stick first, whatever
-// volume is mounted or chosen; if the stick cannot be written the camera
-// is not deleted.
+// volume is mounted or chosen; then its rights go. If the stick cannot be
+// written, or the rights could not be read at the start
+// (ErrRightsUnreadable: a camera added later with its ID would inherit
+// them), the camera is not deleted.
 func (m *Manager) RemoveCamera(id string) error {
 	m.camerasMu.Lock()
 	defer m.camerasMu.Unlock()
@@ -763,25 +768,27 @@ func (m *Manager) RemoveCamera(id string) error {
 	if at < 0 {
 		return ErrNotFound
 	}
+	if m.Access != nil && !m.Access.Readable() {
+		return ErrRightsUnreadable
+	}
 	stub := DeletedCamera{ID: gone.ID, Name: gone.Name, RetainDays: gone.Record.RetainDays, DeletedAt: m.now().UTC().Truncate(time.Second)}
 	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
 		return append(slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id }), stub)
 	}); err != nil {
 		return fmt.Errorf("nvr: deleted camera not noted on the stick: %w", err)
 	}
+	// The rights go before the camera: a camera whose rights stay is not
+	// deleted (its stub is harmless while it is a camera).
+	if m.Access != nil {
+		if err := m.Access.ForgetCamera(id); err != nil {
+			return fmt.Errorf("nvr: rights of the camera not removed: %w", err)
+		}
+	}
 	m.mu.Lock()
 	list := slices.DeleteFunc(cloneCameras(m.cameras), func(each Camera) bool { return each.ID == id })
 	err := m.storeCamerasLocked(list)
 	m.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	if m.Access != nil {
-		if err := m.Access.ForgetCamera(id); err != nil {
-			slog.Warn("rights of the deleted camera not removed", "camera", id, "err", err)
-		}
-	}
-	return nil
+	return err
 }
 
 // storeCamerasLocked writes the cameras and has them applied.

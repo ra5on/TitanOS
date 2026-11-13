@@ -99,6 +99,10 @@ type DevEngine struct {
 	Prunes int
 	// frigate is told which config.yml the container started with.
 	frigate *DevFrigate
+	// engineStarted is when the engine started (zero: long ago);
+	// engineStartedErr what NVREngineStarted says instead.
+	engineStarted    time.Time
+	engineStartedErr error
 }
 
 // NewDevEngine returns an engine; with image the image counts as pulled.
@@ -209,6 +213,24 @@ func (e *DevEngine) Exit(code int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.state.Running, e.state.ExitCode, e.state.FinishedAt, e.state.Address = false, code, time.Now(), ""
+}
+
+// NVREngineStarted tells when the engine started.
+func (e *DevEngine) NVREngineStarted(context.Context) (time.Time, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.engineStarted, e.engineStartedErr
+}
+
+// RestartEngine stands for a restart of Docker's engine: it stops the
+// container, as dockerd does when it ends, and starts anew.
+func (e *DevEngine) RestartEngine() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.state.Running {
+		e.state.Running, e.state.ExitCode, e.state.FinishedAt, e.state.Address = false, 0, time.Now(), ""
+	}
+	e.engineStarted = time.Now()
 }
 
 // Spec is what the container was last created from.

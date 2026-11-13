@@ -3,6 +3,7 @@ package nvr
 import (
 	"errors"
 	"io/fs"
+	"maps"
 	"reflect"
 	"slices"
 	"sort"
@@ -30,6 +31,11 @@ type CameraAccess struct {
 // accessSettings are the content of nvr/camera-access.json.
 type accessSettings struct {
 	Cameras map[string]CameraAccess `json:"cameras"`
+	// Given is when the ticks of each account were last given (SetUser):
+	// they belong to the account that existed then. An account made later
+	// under the same name gets none of them, even when the deletion of the
+	// earlier one could not be noted (the file was unreadable then).
+	Given map[string]time.Time `json:"given,omitempty"`
 }
 
 // Account is what the rights need to know of an account right now (as in
@@ -59,13 +65,20 @@ type Access struct {
 
 	mu      sync.RWMutex
 	cameras map[string]CameraAccess
+	given   map[string]time.Time
 	// unreadable: Load could not read the file.
 	unreadable bool
 }
 
+// ErrRightsUnreadable: camera-access.json could not be read at the start;
+// nothing is written over it, and no camera is deleted (its ticks could
+// not be removed, and a camera added later with its ID would inherit
+// them).
+var ErrRightsUnreadable = errors.New("nvr: the camera rights could not be read from /config")
+
 // NewAccess returns rights with nothing stored; Load reads them.
 func NewAccess(store *config.Store) *Access {
-	return &Access{store: store, cameras: map[string]CameraAccess{}}
+	return &Access{store: store, cameras: map[string]CameraAccess{}, given: map[string]time.Time{}}
 }
 
 // Load reads the rights from /config. A missing file means none.
@@ -81,10 +94,32 @@ func (a *Access) Load() error {
 	if s.Cameras == nil {
 		s.Cameras = map[string]CameraAccess{}
 	}
+	if s.Given == nil {
+		s.Given = map[string]time.Time{}
+	}
 	a.mu.Lock()
-	a.cameras, a.unreadable = s.Cameras, false
+	a.cameras, a.given, a.unreadable = s.Cameras, s.Given, false
 	a.mu.Unlock()
 	return nil
+}
+
+// Readable tells whether the rights were read at the start (or there were
+// none): only then may they be changed.
+func (a *Access) Readable() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return !a.unreadable
+}
+
+// ownsTicksLocked tells whether the ticks noted for an account's name are
+// the account's own: given after it was made (a.mu held). An account
+// without a known creation time (tests, accounts of old builds) owns them.
+func (a *Access) ownsTicksLocked(user string, account Account) bool {
+	if account.Created.IsZero() {
+		return true
+	}
+	given, ok := a.given[user]
+	return ok && !account.Created.After(given)
 }
 
 func (a *Access) lookup(name string) (Account, bool) {
@@ -106,6 +141,9 @@ func (a *Access) Allows(user, camera, right string) bool {
 	}
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+	if !a.ownsTicksLocked(user, account) {
+		return false // the ticks of an earlier account of that name
+	}
 	entry := a.cameras[camera]
 	switch right {
 	case RightLive:
@@ -124,12 +162,19 @@ func (a *Access) Sees(user, camera string) bool {
 // UserRights are the ticks of one account: camera → rights.
 type UserRights map[string]struct{ Live, Recordings bool }
 
-// User returns the ticks of an account for the given cameras.
+// User returns the ticks of an account for the given cameras (none of
+// ticks given to an earlier account of the same name).
 func (a *Access) User(user string, cameras []string) UserRights {
+	account, known := a.lookup(user)
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	out := UserRights{}
+	own := !known || a.ownsTicksLocked(user, account)
 	for _, id := range cameras {
+		if !own {
+			out[id] = struct{ Live, Recordings bool }{}
+			continue
+		}
 		entry := a.cameras[id]
 		out[id] = struct{ Live, Recordings bool }{slices.Contains(entry.Live, user), slices.Contains(entry.Recordings, user)}
 	}
@@ -152,45 +197,63 @@ func (a *Access) SetUser(user string, rights UserRights, cameras []string) error
 			return invalid("no camera %q", id)
 		}
 	}
-	return a.change(func(next map[string]CameraAccess) {
+	return a.change(func(next map[string]CameraAccess, given map[string]time.Time) {
+		// Ticks under this name that an earlier account was given go first:
+		// cameras left out keep only the account's own.
+		own := a.ownsTicksLocked(user, account)
+		if !own {
+			for id, entry := range next {
+				entry.Live = tick(entry.Live, user, false)
+				entry.Recordings = tick(entry.Recordings, user, false)
+				next[id] = entry
+			}
+		}
 		for id, want := range rights {
 			entry := next[id]
 			entry.Live = tick(entry.Live, user, want.Live)
 			entry.Recordings = tick(entry.Recordings, user, want.Recordings)
 			next[id] = entry
 		}
+		// The ticks are this account's from now on (the time stays while
+		// they were its own already: an unchanged answer writes nothing).
+		if _, known := given[user]; !own || !known {
+			given[user] = time.Now().UTC()
+		}
 	})
 }
 
 // ForgetUser removes a deleted account from every camera.
 func (a *Access) ForgetUser(user string) error {
-	return a.change(func(next map[string]CameraAccess) {
+	return a.change(func(next map[string]CameraAccess, given map[string]time.Time) {
 		for id, entry := range next {
 			entry.Live = tick(entry.Live, user, false)
 			entry.Recordings = tick(entry.Recordings, user, false)
 			next[id] = entry
 		}
+		delete(given, user)
 	})
 }
 
 // ForgetCamera removes the rights of a deleted camera.
 func (a *Access) ForgetCamera(camera string) error {
-	return a.change(func(next map[string]CameraAccess) { delete(next, camera) })
+	return a.change(func(next map[string]CameraAccess, _ map[string]time.Time) { delete(next, camera) })
 }
 
 // change applies edit to a copy of the rights and stores the result if it
-// differs. Entries without any tick are dropped.
-func (a *Access) change(edit func(map[string]CameraAccess)) error {
+// differs. Entries without any tick are dropped, and the times of accounts
+// without any tick. The file is written only by the owner's changes.
+func (a *Access) change(edit func(map[string]CameraAccess, map[string]time.Time)) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.unreadable {
-		return ErrNotLoaded
+		return ErrRightsUnreadable
 	}
 	next := make(map[string]CameraAccess, len(a.cameras))
 	for id, entry := range a.cameras {
 		next[id] = CameraAccess{Live: slices.Clone(entry.Live), Recordings: slices.Clone(entry.Recordings)}
 	}
-	edit(next)
+	given := maps.Clone(a.given)
+	edit(next, given)
 	for id, entry := range next {
 		if len(entry.Live) == 0 && len(entry.Recordings) == 0 {
 			delete(next, id)
@@ -205,13 +268,22 @@ func (a *Access) change(edit func(map[string]CameraAccess)) error {
 		}
 		next[id] = entry
 	}
-	if reflect.DeepEqual(next, a.cameras) {
+	for user := range given {
+		ticked := false
+		for _, entry := range next {
+			ticked = ticked || slices.Contains(entry.Live, user) || slices.Contains(entry.Recordings, user)
+		}
+		if !ticked {
+			delete(given, user)
+		}
+	}
+	if reflect.DeepEqual(next, a.cameras) && reflect.DeepEqual(given, a.given) {
 		return nil
 	}
-	if err := a.store.WriteJSON(accessFile, accessSettings{Cameras: next}); err != nil {
+	if err := a.store.WriteJSON(accessFile, accessSettings{Cameras: next, Given: given}); err != nil {
 		return err
 	}
-	a.cameras = next
+	a.cameras, a.given = next, given
 	return nil
 }
 

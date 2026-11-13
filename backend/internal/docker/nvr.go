@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -362,6 +364,65 @@ func readPull(body io.Reader, progress func(done, total int64)) error {
 		}
 		progress(done, total)
 	}
+}
+
+// enginePIDFile is where dockerd notes its process (its default
+// --pidfile; TitanOS runs it as docker.service without another).
+const enginePIDFile = "/run/docker.pid"
+
+// NVREngineStarted tells when Docker's engine (dockerd) started: a
+// container that ended before that was stopped with the engine (Docker
+// restarted by hand, after a crash of dockerd, or by titand for another
+// data folder), not by a fault of its own. Read from /proc (RAM), never a
+// disk.
+func (m *Manager) NVREngineStarted(context.Context) (time.Time, error) {
+	return processStarted("/proc", enginePIDFile, time.Now())
+}
+
+// userHZ is the unit of the start time in /proc/<pid>/stat (USER_HZ):
+// 100 on every Linux TitanOS runs on (amd64).
+const userHZ = 100
+
+// processStarted is when the process named in pidFile started, from field
+// 22 of <proc>/<pid>/stat (clock ticks since boot) and the time since boot
+// (<proc>/uptime), as of now.
+func processStarted(proc, pidFile string, now time.Time) (time.Time, error) {
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		return time.Time{}, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 {
+		return time.Time{}, fmt.Errorf("docker: no process in %s", pidFile)
+	}
+	stat, err := os.ReadFile(filepath.Join(proc, strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return time.Time{}, err
+	}
+	// "pid (comm) state …": comm may hold spaces and parentheses.
+	at := strings.LastIndexByte(string(stat), ')')
+	if at < 0 {
+		return time.Time{}, errors.New("docker: unreadable process status")
+	}
+	fields := strings.Fields(string(stat[at+1:]))
+	if len(fields) < 20 {
+		return time.Time{}, errors.New("docker: short process status")
+	}
+	ticks, err := strconv.ParseUint(fields[19], 10, 64) // field 22; fields[0] is field 3
+	if err != nil {
+		return time.Time{}, err
+	}
+	uptime, err := os.ReadFile(filepath.Join(proc, "uptime"))
+	if err != nil {
+		return time.Time{}, err
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(uptime)), " ")
+	up, err := strconv.ParseFloat(first, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	boot := now.Add(-time.Duration(up * float64(time.Second)))
+	return boot.Add(time.Duration(ticks) * time.Second / userHZ), nil
 }
 
 // EngineReady tells whether Docker is switched on and its engine was

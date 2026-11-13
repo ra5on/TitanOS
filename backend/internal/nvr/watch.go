@@ -808,10 +808,24 @@ func (m *Manager) started() {
 // CrashWindow are a loop and move the detection to the next device.
 func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 	now := m.now()
+	// Docker's engine started after the container did: it stopped the
+	// container with itself (Docker restarted by hand, after a crash of
+	// dockerd, or by titand for another data folder). An engine that
+	// cannot tell counts the end.
+	engineAfter := false
+	ectx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if started, err := m.Engine.NVREngineStarted(ectx); err == nil && !st.StartedAt.IsZero() && started.After(st.StartedAt) {
+		engineAfter = true
+	}
+	cancel()
 	m.mu.Lock()
-	if m.rt.startedAt.IsZero() {
-		// Not started by this titand: left stopped by a restart of the
-		// NAS or of Docker. No fault of Frigate.
+	if m.rt.startedAt.IsZero() || engineAfter {
+		// Not started by this titand, or stopped with Docker's engine:
+		// left stopped by a restart of the NAS or of Docker. No fault of
+		// Frigate.
+		if engineAfter && !m.rt.startedAt.IsZero() {
+			slog.Info("NVR: Docker's engine was restarted; starting Frigate again (no crash)")
+		}
 		m.mu.Unlock()
 		sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
