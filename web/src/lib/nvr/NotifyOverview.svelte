@@ -11,6 +11,7 @@
 	import { t, type MessageKey } from '../i18n/index.svelte.ts';
 	import {
 		kindPillsOf,
+		missesNames,
 		pauseText,
 		recipientText,
 		staleReason,
@@ -76,6 +77,7 @@
 			if (accounts)
 				for (const entry of n.recipients) {
 					const why = staleReason(entry.user, accounts, camera.id);
+					const account = accounts.find((a) => a.name === entry.user);
 					if (why)
 						out.push(
 							t('nvr.notify.overviewNothing', {
@@ -83,6 +85,8 @@
 								why: t(why === 'gone' ? 'nvr.notify.overviewGone' : 'nvr.notify.overviewNoRight'),
 							}),
 						);
+					else if (account && missesNames(account, camera.id, n.kinds))
+						out.push(t('nvr.notify.overviewNoNames', { name: entry.user }));
 				}
 		}
 		const also = [

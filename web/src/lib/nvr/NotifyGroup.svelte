@@ -20,6 +20,7 @@
 		kindMembers,
 		kindPillsOf,
 		legacyRecipients,
+		missesNames,
 		PAUSE_CHOICES,
 		staleReason,
 		toggleWay,
@@ -110,6 +111,7 @@
 			out.push(t(account.pushDevicesOff > 0 ? 'nvr.notify.devicesOff' : 'nvr.notify.noDevice'));
 		if (!mailServer) out.push(t('nvr.notify.noMailServer'));
 		else if (!account.email) out.push(t('nvr.notify.noAddress'));
+		if (missesNames(account, camera, notify.kinds)) out.push(t('nvr.notify.noNames'));
 		return out;
 	}
 

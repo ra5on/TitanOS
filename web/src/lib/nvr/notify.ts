@@ -18,6 +18,8 @@ export type RecipientAccount = {
 	pushDevicesOff: number;
 	/** IDs of the cameras it may see now. */
 	cameras: string[];
+	/** IDs of the cameras whose recognised names and plates it may see (plate and face messages). */
+	names?: string[];
 };
 export type RecipientsAnswer = { accounts: RecipientAccount[]; mailServer: boolean };
 
@@ -45,6 +47,19 @@ export function staleReason(
 	const account = accounts.find((a) => a.name === user);
 	if (!account) return 'gone';
 	return eligible(account, camera) ? '' : 'noRight';
+}
+
+/**
+ * Whether an account would get no plate or face messages of a camera that
+ * reports them: it lacks the right "Namen und Kennzeichen" there.
+ */
+export function missesNames(
+	account: RecipientAccount,
+	camera: string | undefined,
+	kinds: string[],
+) {
+	if (account.admin || !kinds.some((k) => k === 'plate' || k === 'face')) return false;
+	return !camera || !(account.names ?? []).includes(camera);
 }
 
 /** The ways an account can have: the bell only as an administrator. */

@@ -486,6 +486,22 @@ try {
       window.scrollBy(0, -80);
     });
     await page.screenshot({ path: `${out}/einstellungen-meldungen-${narrow}.png`, animations: "disabled" });
+    // The account's camera rights with the third switch "Namen und Kennzeichen".
+    state.userCameras.sam = {
+      admin: false,
+      cameras: state.cameras
+        .filter((c) => !c.deleted)
+        .map((c) => ({ id: c.id, name: c.name, live: true, recordings: c.id !== "garten", names: c.id === "haustuer" })),
+    };
+    await page.goto(base + "/users");
+    await page.locator('[data-account="sam"]').tap();
+    const group = page.locator("section.expander", { hasText: "Kameras" }).last();
+    await group.getByRole("button", { name: /Kameras/ }).tap();
+    await group.getByRole("switch", { name: "Haustür mit Vordach und Briefkasten: Namen und Kennzeichen sehen" }).waitFor();
+    assert.equal(await group.getByRole("switch", { name: "Garten: Namen und Kennzeichen sehen" }).isDisabled(), true);
+    await sound(page, "camera rights at 375 px");
+    await group.evaluate((el) => el.scrollIntoView({ block: "start" }));
+    await page.screenshot({ path: `${out}/benutzer-kameras-${narrow}.png`, animations: "disabled" });
     await made.ctx.close();
   }
 

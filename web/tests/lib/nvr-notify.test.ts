@@ -7,6 +7,7 @@ import {
 	daysText,
 	eligible,
 	legacyRecipients,
+	missesNames,
 	pauseText,
 	staleReason,
 	toggleWay,
@@ -102,4 +103,13 @@ test('switching the window on gives every day and the night unless chosen', () =
 		to: '18:00',
 	});
 	expect(windowOn({ on: true, days: [6], from: '08:00', to: '18:00' }, false).on).toBe(false);
+});
+
+test('plate and face messages need the right "Namen und Kennzeichen" of the camera', () => {
+	const sam = { ...account('sam', false, ['haustuer', 'einfahrt']), names: ['einfahrt'] };
+	expect(missesNames(sam, 'haustuer', ['person'])).toBe(false);
+	expect(missesNames(sam, 'haustuer', ['person', 'face'])).toBe(true);
+	expect(missesNames(sam, 'einfahrt', ['plate'])).toBe(false);
+	expect(missesNames(accounts[0], 'haustuer', ['plate'])).toBe(false);
+	expect(missesNames(sam, undefined, ['plate'])).toBe(true);
 });

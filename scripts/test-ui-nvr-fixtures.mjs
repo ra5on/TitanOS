@@ -192,9 +192,10 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
     recipients: {
       mailServer: true,
       accounts: [
-        { name: "alex", admin: true, email: true, pushDevices: 1, pushDevicesOff: 0, cameras: null },
-        { name: "mara", admin: true, email: false, pushDevices: 0, pushDevicesOff: 0, cameras: null },
-        { name: "sam", admin: false, email: true, pushDevices: 0, pushDevicesOff: 1, cameras: ["haustuer"] },
+        { name: "alex", admin: true, email: true, pushDevices: 1, pushDevicesOff: 0, cameras: null, names: null },
+        { name: "mara", admin: true, email: false, pushDevices: 0, pushDevicesOff: 0, cameras: null, names: null },
+        // sam has no right "Namen und Kennzeichen" anywhere.
+        { name: "sam", admin: false, email: true, pushDevices: 0, pushDevicesOff: 1, cameras: ["haustuer"], names: [] },
       ],
     },
     /** Rights of the signed-in account when it is no administrator. */
@@ -303,7 +304,7 @@ function visible(s) {
       audio: c.audio,
       ptz: c.ptz,
       state: c.state,
-      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings },
+      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings, names: !!s.rights[c.id]?.names },
     }));
 }
 
@@ -390,12 +391,14 @@ export async function installNvr(target, state = nvrState()) {
       const name = decodeURIComponent(m[1]);
       const rows = (s.userCameras[name] ??= {
         admin: false,
-        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, ...(c.deleted ? { deleted: true } : {}) })),
+        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, names: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
           const row = rows.cameras.find((c) => c.id === id);
-          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings });
+          // Names count only with recordings (PLAN 82-3); left out, they stay.
+          const names = (rights.names ?? row?.names) === true && !!rights.recordings;
+          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings, names });
         }
       return json(rows);
     }
@@ -406,7 +409,7 @@ export async function installNvr(target, state = nvrState()) {
       const all = s.cameras.filter((c) => !c.deleted).map((c) => c.id);
       return json({
         mailServer: s.recipients.mailServer,
-        accounts: s.recipients.accounts.map((a) => ({ ...a, cameras: a.cameras ?? all })),
+        accounts: s.recipients.accounts.map((a) => ({ ...a, cameras: a.cameras ?? all, names: a.names ?? all })),
       });
     }
     if (path === "/nvr/settings") {

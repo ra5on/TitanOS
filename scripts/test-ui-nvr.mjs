@@ -413,6 +413,12 @@ try {
     await rows.getByText(de["nvr.notify.devicesOff"]).waitFor();
     await rows.getByText(de["nvr.notify.noDevice"]).waitFor();
     await rows.getByText(de["nvr.notify.noAddress"]).waitFor();
+    // The front door reports no plates or faces: nothing said about names yet.
+    assert.equal(await rows.getByText(de["nvr.notify.noNames"]).count(), 0);
+    await pill("Melden bei", "Bekanntem Gesicht").click();
+    await rows.getByText(de["nvr.notify.noNames"]).waitFor();
+    assert.equal(await rows.getByText(de["nvr.notify.noNames"]).count(), 1, "said for sam only, administrators see names");
+    await pill("Melden bei", "Bekanntem Gesicht").click();
     await pill("Wege für sam", "Push").click();
     await pill("Wege für mara", "Glocke").click();
     await page.getByLabel(de["nvr.notify.pauseTitle"]).selectOption("300");
@@ -462,6 +468,11 @@ try {
     await overview.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
     await overview.locator("#nvr-notify-einfahrt").getByText("Pause: 5 Minuten · Nur Mo–Fr, 22:00–06:00").waitFor();
     await overview.locator("#nvr-notify-einfahrt").getByText("Außerdem: Home Assistant").waitFor();
+    // sam lacks the right "Namen und Kennzeichen" there; the drive reports plates.
+    state.recipients.accounts[2].cameras.push("einfahrt");
+    await page.reload();
+    await overview.locator("#nvr-notify-einfahrt").getByText("sam bekommt keine Meldungen zu Kennzeichen und Gesichtern (kein Recht „Namen und Kennzeichen“)").waitFor();
+    assert.equal(await overview.getByText("sam bekommt zurzeit nichts").count(), 0);
     await overview.locator("#nvr-notify-garten").getByText("Wie bisher an alle Administratoren: Glocke").waitFor();
     await overview.locator("#nvr-notify-garten").getByText("Pause: 1 Minute · Meldet jederzeit").waitFor();
     assert.equal(await overview.locator("#nvr-notify-schuppen").count(), 0, "a removed camera is not listed");
@@ -1034,12 +1045,28 @@ try {
     await group.getByText("Live: 0 von 4 · Aufnahmen: 0 von 4").waitFor();
     await group.getByRole("switch", { name: "Haustür: Live ansehen" }).check();
     await group.getByText("Live: 1 von 4 · Aufnahmen: 0 von 4").waitFor();
+    // "Namen und Kennzeichen" (PLAN 82-3) only with "Aufnahmen".
+    const names = group.getByRole("switch", { name: "Garten: Namen und Kennzeichen sehen" });
+    assert.equal(await names.isDisabled(), true, "names without recordings");
+    await group.getByText(de["nvr.rights.namesHint"]).waitFor();
     await group.getByRole("switch", { name: "Garten: Aufnahmen ansehen" }).check();
     await group.getByText("Live: 1 von 4 · Aufnahmen: 1 von 4").waitFor();
+    await page.waitForFunction(() => !document.querySelector('[aria-label="Garten: Namen und Kennzeichen sehen"]')?.disabled);
+    await names.check();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Garten: Namen und Kennzeichen sehen"]')?.checked);
+    // Taking the recordings takes the names along.
+    await group.getByRole("switch", { name: "Garten: Aufnahmen ansehen" }).uncheck();
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[aria-label="Garten: Namen und Kennzeichen sehen"]');
+      return el && el.disabled && !el.checked;
+    });
     assert.deepEqual(sent(state, "PUT", "/users/sam/cameras"), [
-      { cameras: { haustuer: { live: true, recordings: false } } },
-      { cameras: { garten: { live: false, recordings: true } } },
+      { cameras: { haustuer: { live: true, recordings: false, names: false } } },
+      { cameras: { garten: { live: false, recordings: true, names: false } } },
+      { cameras: { garten: { live: false, recordings: true, names: true } } },
+      { cameras: { garten: { live: false, recordings: false, names: true } } },
     ]);
+    await group.getByRole("switch", { name: "Garten: Aufnahmen ansehen" }).check();
     await sound(page, "user cameras");
     await shot(page, "benutzer-kameras");
     await ctx.close();
