@@ -39,6 +39,10 @@ type Event struct {
 	// storage cap leaves the event's recording out where it finds it, but
 	// Frigate's retention in days deletes the recording all the same.
 	Kept bool `json:"kept"`
+	// stood: the object never moved since it was first seen (Frigate's
+	// position_changes is 0; Frigate makes no review item of it,
+	// review/maintainer.py). Unknown counts as moved.
+	stood bool
 }
 
 // eventIDRE is the form of Frigate's event IDs ("1731412345.123456-abc123").
@@ -80,8 +84,11 @@ type frigateEvent struct {
 	TopScore *float64        `json:"top_score"`
 	Score    *float64        `json:"score"`
 	Retain   bool            `json:"retain_indefinitely"`
-	Plate    json.RawMessage `json:"recognized_license_plate"`
-	Data     struct {
+	// PositionChanges counts how often the object moved; 0: it stood still
+	// since it was first seen (a parked car after a restart of Frigate).
+	PositionChanges *int            `json:"position_changes"`
+	Plate           json.RawMessage `json:"recognized_license_plate"`
+	Data            struct {
 		Score    *float64        `json:"score"`
 		TopScore *float64        `json:"top_score"`
 		Plate    json.RawMessage `json:"recognized_license_plate"`
@@ -90,7 +97,7 @@ type frigateEvent struct {
 
 func (e frigateEvent) event() Event {
 	out := Event{ID: e.ID, Camera: e.Camera, Label: clip(e.Label, 40), SubLabel: clip(textOrFirst(e.SubLabel), 100), Start: e.Start, End: e.End,
-		HasClip: e.HasClip, HasSnap: e.HasSnap, Zones: e.Zones, Kept: e.Retain}
+		HasClip: e.HasClip, HasSnap: e.HasSnap, Zones: e.Zones, Kept: e.Retain, stood: e.PositionChanges != nil && *e.PositionChanges == 0}
 	if out.Zones == nil {
 		out.Zones = e.Entered
 	}

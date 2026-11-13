@@ -448,7 +448,7 @@ Jede Kamera wählt Arten (`notify.kinds`: Objektnamen wie `person`, `car`, `dog`
 
 | Art | Wann | Meldung |
 |---|---|---|
-| Person | ein Ereignis mit `person` beginnt | `nvr_event_person` |
+| Person | ein Ereignis mit `person` beginnt und das Objekt hat sich bewegt | `nvr_event_person` |
 | Fahrzeug | `car`, `motorcycle`, `bus`, `bicycle` | `nvr_event_vehicle` |
 | Tier | `bird`, `cat`, `dog`, `horse`, `sheep`, `cow`, `bear` | `nvr_event_animal` |
 | Kennzeichen | Frigate hat ein Kennzeichen gelesen (einmal je Ereignis); ein bekanntes mit seinem Namen | `nvr_event_plate` |
@@ -456,6 +456,7 @@ Jede Kamera wählt Arten (`notify.kinds`: Objektnamen wie `person`, `car`, `dog`
 | Offline | 5 Minuten kein Bild | `nvr_camera_offline` |
 
 - Gemeldet wird ein Objekt nur, wenn sein Name in `kinds` steht (also `car`, nicht „Fahrzeug“); die Gruppe bestimmt nur den Text und die Pause.
+- **Nur Objekte, die sich bewegt haben** (seit 0.80, Durchsicht PLAN 85-4): Frigate verfolgt nach jedem Neustart (Kamera geändert, Update, Löschen) alles neu; ein geparktes Auto kam so jedes Mal als neues „Fahrzeug“. Gemeldet wird ein Objekt (und sein Kennzeichen, sein Gesicht) erst, wenn Frigate eine Bewegung zählt (`position_changes` > 0) – dieselbe Regel, nach der Frigate selbst Alarme und Erkennungen bildet (`review/maintainer.py`). Ein Ereignis ohne die Angabe zählt als bewegt. Die Sensoren für Home Assistant sehen auch das stehende Objekt. Ereignisse, die mehr als eine Minute vor dem ersten Ereignis dieses titand begannen, meldete schon der titand davor (App-Update) und werden nicht noch einmal gemeldet.
 - **Hauptschalter:** NVR › Einstellungen › Benachrichtigungen › „Meldungen der Kameras“ (`notifyOff` in `GET`/`PUT /api/v1/nvr/settings`, gespeichert als „aus“-Feld, damit eine Datei von 0.78 ohne das Feld meldet). Aus: keine Kamera meldet etwas – keine Glocke, kein Push, keine E-Mail, nichts an den KI-Agenten; jede Kamera behält ihre Wahl. Die Sensoren für Home Assistant sind Zustände, keine Mitteilungen, und laufen weiter. Darunter steht je Kamera, wer was bekommt (Arten, Empfänger mit Wegen, ein gewähltes Konto, das zurzeit nichts bekommt, und warum, Home Assistant/KI-Agent, Pause, Zeitfenster), mit „Ändern“ in die Zeilen der Kamera (`/nvr/cameras?edit=<id>#nvr-notify-recipients`).
 - **Pause** (`notify.pauseSeconds`): keine, 1, 5, 15, 30 oder 60 Minuten je Kamera und Art; ohne Angabe (Kamera von 0.78) 60 Sekunden. Eine Meldung, die Hauptschalter, Zeitfenster oder Empfänger zurückhalten, startet keine Pause. Hat ein Empfänger nur Wege, die ihn gerade nicht erreichen (E-Mail ohne eigene Adresse oder ohne Mailserver, Push ohne Gerät oder mit ausgeschaltetem Schalter „Kameras“), startet die Pause trotzdem; das Kameraformular zeigt solche Wege mit Hinweis.
 - **Zeitfenster** (`notify.window`: `on`, `days` 1 = Montag … 7 = Sonntag, `from`, `to` als HH:MM in der Zeitzone des NAS): Ereignisse (Person, Fahrzeug, Tier, Kennzeichen, Gesicht) nur im Fenster. Liegt `to` vor `from`, läuft das Fenster über Mitternacht in den nächsten Tag (es gehört zum Tag seines Beginns); gleiche Zeiten heißen den ganzen Tag. „Kamera nicht erreichbar“ meldet immer: Eine Kamera, die nachts ausfällt, darf das Fenster nicht verstecken. Ohne Fenster meldet die Kamera jederzeit.

@@ -2,9 +2,13 @@ package nvr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -76,5 +80,45 @@ func TestExportNames(t *testing.T) {
 	}
 	if _, err := r.m.CreateExport(ctx, "anna", cam.ID, first, first+60, long+" Abend"); err != nil {
 		t.Errorf("an own name of %d characters: %v", utf8.RuneCountInString(long+" Abend"), err)
+	}
+}
+
+// Review PLAN 85-4: Frigate tracks anew after every restart; a parked car
+// that never moved came as a new "Fahrzeug" each time. As Frigate's own
+// review items, only objects that moved are told; Home Assistant still
+// sees the car. An event that began well before this titand started was
+// told by the one before (an app update) and is not told again.
+func TestNotifyOnlyObjectsThatMoved(t *testing.T) {
+	recipients := func(n *Notify) {
+		n.HomeAssistant = true
+		n.Recipients = []Recipient{{User: "alex", Bell: true, Added: created.Add(time.Hour)}}
+	}
+	r := newNoticeRig(t)
+	r.set("haustuer", recipients)
+	feed := func(id string, changes int, start float64) {
+		r.m.feedMessage("events", json.RawMessage(strconv.Quote(fmt.Sprintf(
+			`{"type":"new","after":{"id":%q,"camera":"haustuer","label":"car","start_time":%v,"position_changes":%d}}`, id, start, changes))))
+	}
+	now := float64(r.m.now().Unix())
+	feed("1731412345.1-parked", 0, now)
+	if got := r.take(); len(got) != 0 {
+		t.Fatalf("a parked car was told: %+v", got)
+	}
+	if ha := r.m.HACameras(); len(ha) == 0 || !ha[0].Active[KindVehicle] {
+		t.Errorf("Home Assistant does not see the car: %+v", ha)
+	}
+	// It drives off: told once.
+	feed("1731412345.1-parked", 1, now)
+	feed("1731412345.1-parked", 2, now)
+	if got := r.take(); len(got) != 1 {
+		t.Fatalf("the car that moved: %+v", got)
+	}
+	// An event that began ten minutes before this titand routed anything.
+	r2 := newNoticeRig(t)
+	r2.set("haustuer", recipients)
+	r2.m.feedMessage("events", json.RawMessage(strconv.Quote(fmt.Sprintf(
+		`{"type":"update","after":{"id":"1731412345.2-old","camera":"haustuer","label":"person","start_time":%v,"position_changes":5}}`, float64(r2.m.now().Unix())-600))))
+	if got := r2.take(); len(got) != 0 {
+		t.Fatalf("an event of the titand before was told again: %+v", got)
 	}
 }

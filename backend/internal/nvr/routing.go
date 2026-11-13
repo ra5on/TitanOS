@@ -78,17 +78,38 @@ type noticeState struct {
 	// Home Assistant), and what it was.
 	seen     map[string]time.Time
 	lastText map[string]string
+	// since is when this titand routed its first event.
+	since time.Time
 }
 
 // routeEvent decides what an event of the feed is worth telling: its
-// object when the event begins, a plate or a recognised face once per
-// event when Frigate has read it.
+// object once it moved, a plate or a recognised face once per event when
+// Frigate has read it.
+//
+// An object that never moved is not told (as Frigate makes no review
+// item of it): Frigate starts tracking anew with every restart (a camera
+// changed, an update), and a parked car came as a new "Fahrzeug" each
+// time (review PLAN 85-4). Events that began well before this titand
+// started were told by the one before it.
 func (m *Manager) routeEvent(e Event) {
 	c, ok := m.Camera(e.Camera)
 	if !ok {
 		return
 	}
 	now := m.now()
+	m.mu.Lock()
+	if m.rt.notices.since.IsZero() {
+		m.rt.notices.since = now
+	}
+	earlier := e.Start > 0 && e.Start < float64(m.rt.notices.since.Add(-time.Minute).Unix())
+	m.mu.Unlock()
+	if e.stood || earlier {
+		// Seen for Home Assistant all the same: the car is there.
+		if kind := kindOf(e.Label); kind != "" {
+			m.noteSeen(c.ID, kind, e.Label, now)
+		}
+		return
+	}
 	if kind := kindOf(e.Label); kind != "" {
 		m.noteSeen(c.ID, kind, e.Label, now)
 		if slices.Contains(c.Notify.Kinds, e.Label) && m.once(e.ID, kind, now) {
