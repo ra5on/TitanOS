@@ -614,6 +614,15 @@ try {
     assert.equal(await page.getByRole("button", { name: "Ton von Haustür" }).count(), 1);
     assert.equal(await page.getByRole("button", { name: "Ton von Einfahrt" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: /Mit Haustür sprechen/ }).count(), 1);
+    // PLAN 85: sound on and off differ in the icon (crossed out when off), not only in colour.
+    const soundButton = page.getByRole("button", { name: "Ton von Haustür" });
+    const soundIcon = () => soundButton.locator("path").getAttribute("d");
+    const muted = await soundIcon();
+    await soundButton.click();
+    assert.equal(await soundButton.getAttribute("aria-pressed"), "true");
+    assert.notEqual(await soundIcon(), muted, "the icon shows the sound is on");
+    await soundButton.click();
+    assert.equal(await soundIcon(), muted);
     await page.getByRole("button", { name: "Garten bewegen" }).click();
     await page.getByRole("group", { name: "Garten bewegen" }).getByRole("button", { name: "Nach links" }).waitFor();
     await page.getByRole("combobox", { name: "Gespeicherte Position" }).waitFor();

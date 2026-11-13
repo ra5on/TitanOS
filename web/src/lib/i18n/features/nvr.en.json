@@ -113,6 +113,8 @@
 	"nvr.view.reset": "Reset the arrangement",
 	"nvr.talk.hold": "Talk to {name} (hold)",
 	"nvr.talk.holdHint": "Hold and talk",
+	"nvr.talk.opening": "Connecting the microphone",
+	"nvr.talk.speaking": "Microphone on: you are speaking",
 	"nvr.talk.insecure": "Talking needs a secure connection: open TitanOS with https:// – without it the browser does not hand out the microphone.",
 	"nvr.talk.denied": "The browser did not hand out the microphone. Allow it for this page in the address bar.",
 	"nvr.talk.no_microphone": "No microphone was found on this device.",

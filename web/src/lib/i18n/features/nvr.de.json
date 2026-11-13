@@ -113,6 +113,8 @@
 	"nvr.view.reset": "Anordnung zurücksetzen",
 	"nvr.talk.hold": "Mit {name} sprechen (gedrückt halten)",
 	"nvr.talk.holdHint": "Gedrückt halten und sprechen",
+	"nvr.talk.opening": "Mikrofon wird verbunden",
+	"nvr.talk.speaking": "Mikrofon an: Du sprichst",
 	"nvr.talk.insecure": "Sprechen geht nur über eine sichere Verbindung: Öffne TitanOS mit https:// – ohne sie gibt der Browser das Mikrofon nicht frei.",
 	"nvr.talk.denied": "Der Browser hat das Mikrofon nicht freigegeben. Erlaube es in der Adresszeile für diese Seite.",
 	"nvr.talk.no_microphone": "An diesem Gerät wurde kein Mikrofon gefunden.",

@@ -165,6 +165,12 @@
 				{#if ptzOpen && camera.ptz}<div class="ptz-pop">
 						<PtzPad camera={camera.id} name={camera.name} />
 					</div>{/if}
+				{#if talkState === 'opening' || talking}
+					<!-- The talk button's state in words, not only in its colour. -->
+					<p class="talk-note" role="status">
+						{t(talking ? 'nvr.talk.speaking' : 'nvr.talk.opening')}
+					</p>
+				{/if}
 				{#if talkProblem}
 					<p class="talk-note" role="alert">
 						{t(`nvr.talk.${talkProblem}` as MessageKey)}
@@ -185,7 +191,8 @@
 							aria-pressed={sound}
 							aria-label={t('nvr.live.sound', { name: camera.name })}
 							title={t(sound ? 'nvr.live.soundOff' : 'nvr.live.soundOn')}
-							onclick={() => (sound = !sound)}><Icon name="volume" size={16} /></button
+							onclick={() => (sound = !sound)}
+							><Icon name={sound ? 'volume' : 'volumeOff'} size={16} /></button
 						>
 					{/if}
 					{#if camera.audio.twoWay}
