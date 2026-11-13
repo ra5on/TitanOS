@@ -110,8 +110,10 @@ async function phone({ ua, theme = "graphit" } = {}) {
   await ctx.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(7);
-    if (path === "/notifications")
+    if (path === "/notifications") {
+      data.noticeLoads = (data.noticeLoads ?? 0) + 1;
       return route.fulfill({ json: { messages: data.notices } });
+    }
     if (path === "/notifications/dismiss") {
       const { ids } = route.request().postDataJSON();
       data.dismissed.push(...ids);
@@ -234,6 +236,7 @@ try {
     "marked read",
   );
   // Swiped far to the left: deleted.
+  await sheet.locator("[data-notice='1']").scrollIntoViewIfNeeded();
   b = await sheet.locator("[data-notice='1']").boundingBox();
   await swipe(
     page,
@@ -246,6 +249,7 @@ try {
   );
   assert.deepEqual(data.dismissed, [1], "deleted on the NAS");
   // Half way: the action shows, nothing is deleted yet.
+  await sheet.locator("[data-notice='3']").scrollIntoViewIfNeeded();
   b = await sheet.locator("[data-notice='3']").boundingBox();
   await swipe(
     page,
@@ -258,6 +262,33 @@ try {
     .waitFor();
   assert.deepEqual(data.dismissed, [1]);
   await page.screenshot({ path: `${out}/mitteilung-gewischt.png` });
+  // Pulling the list down loads it anew; the sheet stays.
+  await sheet.locator("h2").tap();
+  const loads = data.noticeLoads;
+  const lb = await sheet.locator("[data-notices]").boundingBox();
+  await swipe(
+    page,
+    cdp,
+    [lb.x + lb.width / 2, lb.y + 20],
+    [lb.x + lb.width / 2, lb.y + 170],
+  );
+  await page.waitForTimeout(400);
+  assert.equal(
+    await page.locator("dialog[open] [data-notices]").count(),
+    1,
+    "the sheet stays",
+  );
+  assert.ok(data.noticeLoads > loads, "pulled down: the list loads anew");
+  // Without swiping: each message has its own buttons.
+  assert.equal(
+    await sheet.locator("[data-notice-delete]").count(),
+    await sheet.locator("[data-notice]").count(),
+    "a delete button per message",
+  );
+  for (const b of await sheet
+    .locator("[data-notice-delete], [data-notice-read]")
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON())))
+    assert.ok(b.width >= 43.5 && b.height >= 43.5, "row buttons ≥ 44 px");
   // The sheet goes with a swipe down.
   const head = await sheet.locator("h2").boundingBox();
   await swipe(
@@ -299,6 +330,11 @@ try {
     ["share", "delete"],
   );
   await page.screenshot({ path: `${out}/liste-gewischt.png` });
+  // "Teilen" without swiping: the entry's ⋯ menu.
+  await page.locator("[data-file-name='Notizen.txt'] .entry-more").tap();
+  await page.locator("[data-menu-share]").waitFor();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
   await page
     .locator("[data-swipe-row].open [data-swipe-action='delete']")
     .tap();

@@ -65,5 +65,6 @@
 	"phone.files.sharing": "Loading “{name}” …",
 	"phone.files.shareFailed": "The file could not be shared.",
 	"phone.search.settings": "Settings",
-	"phone.files.pdfFirstPage": "The first page as a picture – zoom with two fingers. The whole document: open or download it."
+	"phone.files.pdfFirstPage": "The first page as a picture – zoom with two fingers. The whole document: open or download it.",
+	"phone.notices.readOne": "Mark “{title}” as read"
 }

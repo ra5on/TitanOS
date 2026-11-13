@@ -40,10 +40,18 @@ export function swipeDown(node: HTMLElement, options: Options) {
 	};
 
 	function start(e: TouchEvent) {
-		if (e.touches.length !== 1 || opts.enabled?.() === false) return;
+		// A second finger (zooming) is never a swipe of the sheet.
+		if (e.touches.length !== 1) {
+			if (active) {
+				active = false;
+				node.style.transform = '';
+			}
+			return;
+		}
+		if (opts.enabled?.() === false) return;
 		const target = e.target as HTMLElement;
-		// Fields, sliders and lists that scroll sideways keep their own gestures.
-		if (target.closest('input[type=range], textarea, [data-no-sheet-swipe]')) return;
+		// Fields, sliders, lists with their own pull and zoomable pictures keep their gestures.
+		if (target.closest('input[type=range], textarea, [data-no-sheet-swipe], [data-pinch]')) return;
 		if (!scrolledAtTop(target)) return;
 		startY = e.touches[0].clientY;
 		startX = e.touches[0].clientX;

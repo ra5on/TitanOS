@@ -65,5 +65,6 @@
 	"phone.files.sharing": "„{name}“ wird geladen …",
 	"phone.files.shareFailed": "Die Datei ließ sich nicht teilen.",
 	"phone.search.settings": "Einstellungen",
-	"phone.files.pdfFirstPage": "Die erste Seite als Bild – mit zwei Fingern zoomen. Das ganze Dokument: Öffnen oder Herunterladen."
+	"phone.files.pdfFirstPage": "Die erste Seite als Bild – mit zwei Fingern zoomen. Das ganze Dokument: Öffnen oder Herunterladen.",
+	"phone.notices.readOne": "„{title}“ als gelesen markieren"
 }

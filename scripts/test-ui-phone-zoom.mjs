@@ -169,6 +169,19 @@ try {
     assert.ok(s > 2, `two fingers zoom the picture (${s})`);
     assert.equal(await zoom.getAttribute("data-zoomed"), "true");
     await page.screenshot({ path: `${out}/vorschau-gezoomt.png` });
+    // Moving the zoomed picture down moves the picture, not the sheet.
+    await touch(cdp, "touchStart", [[box.x + box.width / 2, box.y + 20]]);
+    for (let i = 1; i <= 10; i++)
+      await touch(cdp, "touchMove", [
+        [box.x + box.width / 2, box.y + 20 + i * 20],
+      ]);
+    await touch(cdp, "touchEnd", []);
+    await page.waitForTimeout(400);
+    assert.equal(
+      await page.locator("dialog[open] [data-pinch]").count(),
+      1,
+      "the preview stays open",
+    );
     await doubleTap(page, box);
     assert.equal(await scaleOf(img), 1, "a double tap zooms back");
     await page.keyboard.press("Escape");

@@ -200,6 +200,7 @@
 			class="list"
 			bind:this={list}
 			data-notices
+			data-no-sheet-swipe
 			ontouchstart={pullStart}
 			ontouchmove={pullMove}
 			ontouchend={pullEnd}
@@ -240,9 +241,30 @@
 							</div>
 							<b>{text.title}</b>
 							<span class="muted">{text.text}</span>
-							{#if href}<button type="button" class="as-link" onclick={() => follow(href)}
-									>{t('ui.open')}</button
-								>{/if}
+							<!-- The same without swiping: open, read, delete. -->
+							<span class="row-actions">
+								{#if href}<button type="button" class="as-link" onclick={() => follow(href)}
+										>{t('ui.open')}</button
+									>{/if}
+								<span class="grow"></span>
+								{#if fresh}<button
+										type="button"
+										class="icon-btn"
+										data-notice-read
+										aria-label={t('phone.notices.readOne', { title: text.title })}
+										title={t('phone.notices.read')}
+										onclick={() => markRead(notice.id)}><Icon name="check" size={18} /></button
+									>{/if}
+								<button
+									type="button"
+									class="icon-btn"
+									data-notice-delete
+									disabled={busy}
+									aria-label={t('notify.deleteOne', { title: text.title })}
+									title={t('common.delete')}
+									onclick={() => dismiss([notice.id])}><Icon name="trash" size={18} /></button
+								>
+							</span>
 						</div>
 					</SwipeRow>
 				</li>
@@ -353,6 +375,25 @@
 	time {
 		margin-left: auto;
 		font-size: var(--text-sm);
+	}
+	.row-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.grow {
+		flex: 1;
+	}
+	.icon-btn {
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--chip);
+		color: var(--text);
+		cursor: pointer;
 	}
 	.as-link {
 		align-self: flex-start;

@@ -132,6 +132,7 @@
 	dir={p.dir}
 	onopenwith={(entry, app, always) => p.choose(() => void p.openWith(entry, app, always))}
 	oncommand={(action, entry) => p.choose(() => p.command(action, entry))}
+	onshare={p.phone ? (entry) => void p.shareEntry(entry) : undefined}
 	onclose={() => {
 		p.menu = null;
 		p.backgroundMenu = null;
