@@ -71,14 +71,25 @@
 	});
 	const active = $derived(visible && !hidden);
 
+	// The props as plain values. A tile passes `camera.id`, and the NVR's
+	// poller hands over new camera objects every few seconds: an effect that
+	// read the prop itself would follow the object and start the stream anew
+	// with every poll (the picture went black every 6 s, owner 13.11.2026).
+	// A derived only passes on a value that really changed.
+	const cameraId = $derived(id);
+	const small = $derived(sub);
+	const stillOnlyNow = $derived(stillOnly);
+	const stillEvery = $derived(stillMs);
+	const stillHeight = $derived(height);
+
 	// ---- Live video ----
 	let failures = 0;
 	$effect(() => {
 		// Read here so that a change starts the stream anew.
-		const camera = id;
-		const small = sub;
+		const camera = cameraId;
+		const sub = small;
 		const el = video;
-		if (!active || stillOnly || !el) return;
+		if (!active || stillOnlyNow || !el) return;
 		let session: MseSession | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let stopped = false;
@@ -87,13 +98,13 @@
 			if (stopped) return;
 			session = startMse(
 				el,
-				apiSocket(`/nvr/cameras/${encodeURIComponent(camera)}/live${small ? '?stream=sub' : ''}`),
+				apiSocket(`/nvr/cameras/${encodeURIComponent(camera)}/live${sub ? '?stream=sub' : ''}`),
 				() => {
 					failures = 0;
 					reason = '';
 					mode = 'live';
 				},
-				(end: MseEnd) => {
+				(end: MseEnd, frame?: HTMLCanvasElement) => {
 					session = null;
 					if (stopped) return;
 					if (end.kind === 'bye') {
@@ -101,6 +112,15 @@
 						mode = 'still';
 						return;
 					}
+					// The last picture stays until a new still or the video is back:
+					// never an empty tile in between.
+					frame?.toBlob(
+						(blob) => {
+							if (blob && !stopped && mode !== 'live') showStill(URL.createObjectURL(blob));
+						},
+						'image/jpeg',
+						0.85,
+					);
 					failures++;
 					if (end.kind === 'error') reason = end.code;
 					// Still pictures stand in after the first failure; live video is
@@ -123,10 +143,18 @@
 	});
 
 	// ---- Still pictures ----
-	const wantsStill = $derived(active && (stillOnly || mode !== 'live'));
+	/** Shows a picture; the old one stays until the new one is painted. */
+	function showStill(url: string) {
+		const old = untrack(() => still);
+		still = url;
+		stillFailed = false;
+		if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
+	}
+	const wantsStill = $derived(active && (stillOnlyNow || mode !== 'live'));
 	$effect(() => {
-		const camera = id;
-		const px = height;
+		const camera = cameraId;
+		const px = stillHeight;
+		const every = stillEvery;
 		if (!wantsStill) return;
 		let stopped = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -143,10 +171,7 @@
 					const url = URL.createObjectURL(await res.blob());
 					if (stopped) URL.revokeObjectURL(url);
 					else {
-						const old = still;
-						still = url;
-						// The old picture stays until the new one is painted.
-						if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
+						showStill(url);
 						ok = true;
 					}
 				}
@@ -155,7 +180,7 @@
 			}
 			if (stopped) return;
 			stillFailed = !ok;
-			timer = setTimeout(load, ok ? stillMs : Math.max(stillMs, 5000));
+			timer = setTimeout(load, ok ? every : Math.max(every, 5000));
 		};
 		void load();
 		return () => {

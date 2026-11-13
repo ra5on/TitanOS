@@ -46,22 +46,52 @@ export type MseEnd =
 
 export type MseSession = { close: () => void };
 
-/** Seconds of video kept behind the live edge. */
-const KEEP_SECONDS = 5;
+/** The widest picture kept of the last frame (a 4K frame would take 33 MB). */
+const FRAME_WIDTH = 1280;
+
+/** The picture on the screen, for the caller to show while the stream comes back. */
+function grabFrame(video: HTMLVideoElement): HTMLCanvasElement | undefined {
+	if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return undefined;
+	try {
+		const scale = Math.min(1, FRAME_WIDTH / video.videoWidth);
+		const canvas = document.createElement('canvas');
+		canvas.width = Math.round(video.videoWidth * scale);
+		canvas.height = Math.round(video.videoHeight * scale);
+		canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+		return canvas;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Seconds of video kept behind what is shown. More than the longest key
+ * frame interval of a camera: removing the key frame of the picture on the
+ * screen removes everything up to the next key frame (MSE's coded frame
+ * removal), and the picture stops until that key frame comes.
+ */
+const KEEP_BEHIND = 30;
+/** Old video is removed in steps of at least this many seconds, not with every fragment. */
+const TRIM_STEP = 10;
+/** Further behind the live edge than this, the picture jumps to it (a hidden tab, a stall). */
+const JUMP_BEHIND = 5;
 /** Without a fragment for this long the connection counts as stalled. */
 const STALL_MS = 8000;
 /** Fragments waiting for the SourceBuffer; more than this means the tab cannot keep up. */
 const MAX_PENDING = 8 * 1024 * 1024;
 
 /**
- * Plays a live stream into a video element. `onplaying` fires with the first
- * fragment, `onend` once when the stream is over for any reason.
+ * Plays a live stream into a video element. `onplaying` fires once the
+ * first picture plays (until then the element shows nothing: the caller
+ * keeps its still picture), `onend` once when the stream is over for any
+ * reason – with the last picture shown, if there was one, so that the
+ * caller never shows an empty element while the stream comes back.
  */
 export function startMse(
 	video: HTMLVideoElement,
 	url: string,
 	onplaying: () => void,
-	onend: (end: MseEnd) => void,
+	onend: (end: MseEnd, frame?: HTMLCanvasElement) => void,
 ): MseSession {
 	const found = mediaSourceClass();
 	let done = false;
@@ -69,11 +99,27 @@ export function startMse(
 	let objectURL = '';
 	let stall: ReturnType<typeof setTimeout> | undefined;
 	let started = false;
+	let shown = false;
+
+	const playing = () => {
+		if (done || shown) return;
+		shown = true;
+		onplaying();
+	};
+	// A picture the browser cannot decode after all ends the stream.
+	const broken = () => {
+		if (video.error) finish({ kind: 'lost' });
+	};
+	video.addEventListener('playing', playing);
+	video.addEventListener('error', broken);
 
 	function finish(end: MseEnd | null) {
 		if (done) return;
 		done = true;
 		clearTimeout(stall);
+		video.removeEventListener('playing', playing);
+		video.removeEventListener('error', broken);
+		const frame = end && shown ? grabFrame(video) : undefined;
 		if (ws) {
 			ws.onclose = ws.onerror = ws.onmessage = ws.onopen = null;
 			try {
@@ -92,7 +138,7 @@ export function startMse(
 		} catch {
 			/* the element is gone */
 		}
-		if (end) onend(end);
+		if (end) onend(end, frame);
 	}
 
 	if (!found) {
@@ -127,22 +173,39 @@ export function startMse(
 		}
 	}
 
-	function trim() {
-		if (!sb || sb.updating || !sb.buffered.length) return;
-		const end = sb.buffered.end(sb.buffered.length - 1);
-		const start = end - KEEP_SECONDS;
-		const first = sb.buffered.start(0);
+	/** Stays at the live edge: catches up gently, jumps when far behind. */
+	function catchUp() {
+		if (!sb || !sb.buffered.length) return;
+		const last = sb.buffered.length - 1;
+		const edge = sb.buffered.end(last);
+		const from = sb.buffered.start(last);
 		try {
-			if (start > first) {
-				sb.remove(first, start);
-				if (ms.readyState === 'open') ms.setLiveSeekableRange(start, end);
-			}
-			// Stay at the live edge: catch up gently, jump when far behind.
-			if (video.currentTime < start) video.currentTime = start;
-			const gap = end - video.currentTime;
+			if (ms.readyState === 'open')
+				ms.setLiveSeekableRange(Math.max(from, edge - KEEP_BEHIND), edge);
+			if (video.currentTime < from || edge - video.currentTime > JUMP_BEHIND)
+				video.currentTime = Math.max(from, edge - 1);
+			const gap = edge - video.currentTime;
 			video.playbackRate = gap > 2 ? 1.5 : gap > 0.6 ? 1.1 : 1;
 		} catch {
-			/* a remove that overlaps an append: the next update trims */
+			/* the source closed meanwhile */
+		}
+	}
+
+	/**
+	 * Removes video long played, KEEP_BEHIND seconds behind the picture and
+	 * at least TRIM_STEP at once. True: a removal runs, appending waits for
+	 * its end.
+	 */
+	function trim(): boolean {
+		if (!sb || sb.updating || !sb.buffered.length) return false;
+		const first = sb.buffered.start(0);
+		const upTo = video.currentTime - KEEP_BEHIND;
+		if (upTo - first < TRIM_STEP) return false;
+		try {
+			sb.remove(first, upTo);
+			return true;
+		} catch {
+			return false;
 		}
 	}
 
@@ -183,8 +246,9 @@ export function startMse(
 							sb = ms.addSourceBuffer(msg.value);
 							sb.mode = 'segments';
 							sb.addEventListener('updateend', () => {
-								flush();
-								trim();
+								if (done) return;
+								catchUp();
+								if (!trim()) flush();
 							});
 							flush();
 						} catch {
@@ -204,8 +268,16 @@ export function startMse(
 				flush();
 				if (!started) {
 					started = true;
-					void video.play().catch(() => {});
-					onplaying();
+					// With sound the browser may refuse to start without a tap:
+					// then without sound, and if even that fails, the element is
+					// shown anyway (its controls are the page's own).
+					void video
+						.play()
+						.catch(() => {
+							video.muted = true;
+							return video.play();
+						})
+						.catch(playing);
 				}
 			};
 			ws.onerror = () => finish({ kind: 'lost' });
