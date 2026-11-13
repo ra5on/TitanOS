@@ -532,15 +532,12 @@ try {
     await page.screenshot({ path: `${out}/kamera-meldungen-${narrow}.png`, animations: "disabled" });
     await page.goto(base + "/nvr/settings");
     await page.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
-    // Checked for the new group only: the select of the detection device
-    // (outside PLAN 82-3) cuts "Automatisch (empfohlen) – nimmt NPU" by a
-    // few pixels at 375 px; that is known and left to its own change.
     const wide = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     assert.ok(wide <= 0, `notification overview at 375 px: the page scrolls sideways by ${wide}px`);
     assert.deepEqual(
-      (await page.evaluate(cutTextIn)).filter((cut) => !cut.startsWith("select#nvr-detector")),
+      await page.evaluate(cutTextIn),
       [],
       "notification overview at 375 px: cut text",
     );
