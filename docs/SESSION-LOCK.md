@@ -14,7 +14,7 @@ aber bis zum Entsperren ist nichts zu sehen und nichts zu bedienen.
   Berührung (am Computer ab Werk 15 Minuten, am Handy nie; jeweils auch „nie“).
   Gezählt wird die letzte Benutzung in irgendeinem Tab oder Fenster des NAS in
   diesem Browser. Einstellbar je Konto in den Arbeitsplatz-Einstellungen und
-  seit 0.80 unter Systemsteuerung › Konten und Zugang › Zugang › „Sperren bei
+  seit 0.80 unter Systemsteuerung › Sicherheit und Konten › Zugang › „Sperren bei
   Leerlauf“, neben „Angemeldet bleiben“ (PLAN 84-2; im Fenster des
   Arbeitsplatzes speichert der Arbeitsplatz, `lock-link.svelte.ts`,
   Nachrichten `titanos-lock-get|-set`).
