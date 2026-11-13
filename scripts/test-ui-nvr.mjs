@@ -1168,6 +1168,25 @@ try {
     await page.getByRole("status").filter({ hasText: /^07:0[01]:\d\d$/ }).waitFor();
     await page.getByRole("radio", { name: "6 h" }).click();
     assert.ok(await page.locator(".timeline .inner").evaluate((el) => el.scrollWidth > el.parentElement.clientWidth * 3));
+    // PLAN 85: playback does not pull the line back while the user looks
+    // elsewhere. The player has no picture here: its position is set by hand.
+    const video = page.locator(".player video");
+    const clockText = () => page.locator(".controls .now").textContent();
+    const playTo = async (second) => {
+      const before = await clockText();
+      await video.evaluate((v, t) => {
+        v.currentTime = t;
+        v.dispatchEvent(new Event("timeupdate"));
+      }, second);
+      await page.waitForFunction((b) => document.querySelector(".controls .now")?.textContent !== b, before);
+    };
+    await playTo(5);
+    const line = page.locator(".timeline");
+    await line.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+    const scrolled = await line.evaluate((el) => el.scrollLeft);
+    assert.ok(scrolled > 0);
+    for (const second of [6, 7, 8]) await playTo(second);
+    assert.equal(await line.evaluate((el) => el.scrollLeft), scrolled, "the line stays where the user scrolled it");
     await page.getByRole("radio", { name: "24 h" }).click();
     await page.getByRole("button", { name: "Exportieren" }).click();
     const dialog = page.getByRole("dialog", { name: "Ausschnitt exportieren" });
