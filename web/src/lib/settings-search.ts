@@ -21,7 +21,7 @@ const keywords: Record<string, string> = {
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access:
-		'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session',
+		'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session dauerhaft eingeloggt abmelden ausgeloggt logout sperren sperre leerlauf lock idle',
 	backups:
 		'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
@@ -94,6 +94,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'ssh', label: 'access.ssh', href: '/settings/access#access-ssh' },
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
 		{ id: 'stay', label: 'stay.title', href: '/settings/access#access-stay' },
+		{ id: 'idle-lock', label: 'idleLock.title', href: '/settings/access#access-idle-lock' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],

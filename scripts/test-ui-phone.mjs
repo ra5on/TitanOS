@@ -183,7 +183,6 @@ for (const [width, height] of [
       "settings",
       "updates",
       "appcenter",
-      "lock",
       "logout",
       "restart",
       "shutdown",

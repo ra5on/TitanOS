@@ -1,5 +1,6 @@
 // What the desktop hears from its windows and from the browser: messages of
 // the pages in windows, files dragged in from this PC, and leaving the page.
+import { applyLockSoon, clampLockMinutes, lockAnswer } from './lock-link.svelte.ts';
 import { setWindowDrag } from '../file-drag.ts';
 import { loadWebApps } from '../webapps/webapps.svelte.ts';
 import { sanitizeNvrPrefs } from '../nvr/layout.ts';
@@ -53,7 +54,14 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		else if (msg.type === 'titanos-bar-get')
 			source.postMessage({ type: 'titanos-bar', load: desktop.prefs.barLoad }, location.origin);
 		else if (msg.type === 'titanos-bar-set') savePrefs((p) => (p.barLoad = msg.load === true));
-		else if (msg.type === 'titanos-nvr-get')
+		else if (msg.type === 'titanos-lock-get') source.postMessage(lockAnswer(), location.origin);
+		else if (msg.type === 'titanos-lock-set') {
+			savePrefs((p) => {
+				p.lockMinutes = clampLockMinutes(msg.minutes);
+				p.lockMinutesPhone = clampLockMinutes(msg.phone);
+			});
+			applyLockSoon();
+		} else if (msg.type === 'titanos-nvr-get')
 			source.postMessage(
 				{ type: 'titanos-nvr', prefs: JSON.parse(JSON.stringify(desktop.prefs.nvr)) },
 				location.origin,

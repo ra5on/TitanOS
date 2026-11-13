@@ -782,7 +782,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     "Zuletzt",
   ]);
   assert.deepEqual(fromBar.row1, ["account", "settings", "updates", "appcenter"]);
-  assert.deepEqual(fromBar.row2, ["lock", "logout", "restart", "shutdown"]);
+  assert.deepEqual(fromBar.row2, ["logout", "restart", "shutdown"]);
   const sorted = [...fromBar.programs].sort((a, b) =>
     a.localeCompare(b, "de", { sensitivity: "base", numeric: true }),
   );
@@ -915,7 +915,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const dos = await user.page
     .locator(".launcher [data-menu-do]")
     .evaluateAll((els) => els.map((el) => el.dataset.menuDo));
-  assert.deepEqual(dos, ["account", "settings", "lock", "logout"], "user's buttons");
+  assert.deepEqual(dos, ["account", "settings", "logout"], "user's buttons");
   await user.ctx.close();
 }
 

@@ -8,7 +8,7 @@
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5232 node scripts/test-ui-lock.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
-import { fixtureFactory } from "./test-ui-fixtures.mjs";
+import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -168,12 +168,13 @@ try {
   // 1. Lock from the account menu, wrong and right password.
   {
     const { ctx, page, nas } = await open(1440);
-    // PLAN 79-10: "Sperren" is a button of the one menu; its tooltip names the shortcut.
+    // PLAN 84-3 (owner 13.11.2026): the menu has no "Sperren" any more – it
+    // did what "Abmelden" does; the shortcut and the lock when idle stay.
     await page.locator("header [data-menu-button]").click();
-    const item = page.locator('.launcher [data-menu-do="lock"]');
-    await item.waitFor();
-    assert.match(await item.getAttribute("title"), /Strg\+Alt\+L|⌘/);
-    await item.click();
+    await page.locator('.launcher [data-menu-do="logout"]').waitFor();
+    assert.equal(await page.locator('.launcher [data-menu-do="lock"]').count(), 0, "no lock in the menu");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+Alt+KeyL");
     await screen(page).waitFor();
     assert.deepEqual(nas.calls[0], ["lock"]);
     const field = page.getByLabel("Passwort", { exact: true });
@@ -379,6 +380,65 @@ try {
       await page.locator(".lockscreen .quiet").textContent(),
       /5 Min/,
     );
+    await ctx.close();
+  }
+
+  // 7. PLAN 84-2: the lock when idle is set under Settings › Access too,
+  // next to "Angemeldet bleiben", for the computer and the phone.
+  // In its own tab (not a window of the desktop): the page saves itself.
+  for (const width of [1440, 390]) {
+    const { ctx, page } = await create(
+      "owner",
+      "graphit",
+      width,
+      "de",
+      width < 640 ? { isMobile: true, hasTouch: true, viewport: { width, height: 844 } } : {},
+    );
+    const saved = [];
+    page.on("request", (req) => {
+      if (req.method() === "PUT" && req.url().endsWith("/api/v1/preferences/desktop")) saved.push(req.postDataJSON());
+    });
+    await page.goto(`${base}/settings/access#access-idle-lock`);
+    const pc = page.getByLabel("Automatisch sperren am Computer");
+    await pc.waitFor();
+    assert.equal(await pc.inputValue(), "15");
+    await pc.selectOption("0");
+    await page.getByLabel("Automatisch sperren am Handy").selectOption("30");
+    const end = Date.now() + 6000;
+    while (!saved.some((b) => b.lockMinutes === 0 && b.lockMinutesPhone === 30) && Date.now() < end)
+      await new Promise((r) => setTimeout(r, 100));
+    assert.ok(
+      saved.some((b) => b.lockMinutes === 0 && b.lockMinutesPhone === 30),
+      `saved ${JSON.stringify(saved.map((b) => [b.lockMinutes, b.lockMinutesPhone]))}`,
+    );
+    await page.locator("#access-idle-lock").getByText("Computer nie · Handy nach 30 Minuten").waitFor();
+    assert.deepEqual(await page.evaluate(cutTextIn), [], `idle lock row (${width}): cut text`);
+    await page.locator("#access-idle-lock").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/zugang-sperren-${width}.png` });
+    await ctx.close();
+  }
+
+  // In a window of the desktop the desktop saves it (one writer).
+  {
+    const { ctx, page } = await create("owner", "graphit", 1440);
+    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+    const saved = [];
+    page.on("request", (req) => {
+      if (req.method() === "PUT" && req.url().endsWith("/api/v1/preferences/desktop")) saved.push(req.postDataJSON());
+    });
+    await page.goto(`${base}/settings/access`);
+    let frame;
+    const until = Date.now() + 10000;
+    while (!frame && Date.now() < until) {
+      frame = page.frames().find((f) => f !== page.mainFrame() && f.url().includes("/settings/access"));
+      if (!frame) await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.ok(frame, "the access page opens in a window");
+    await frame.getByText("Sperren bei Leerlauf", { exact: true }).click();
+    await frame.getByLabel("Automatisch sperren am Computer").selectOption("5");
+    const end = Date.now() + 6000;
+    while (!saved.some((b) => b.lockMinutes === 5) && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(saved.some((b) => b.lockMinutes === 5), "the desktop saved the window's choice");
     await ctx.close();
   }
 

@@ -2,6 +2,7 @@
 	import { poll } from '#lib/poll.ts';
 	import TerminalSettings from '#lib/components/TerminalSettings.svelte';
 	import WebDavSettings from '#lib/components/WebDavSettings.svelte';
+	import IdleLockSettings from '#lib/components/IdleLockSettings.svelte';
 	import StayLoggedInSettings from '#lib/components/StayLoggedInSettings.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -506,6 +507,7 @@
 		{/snippet}
 	</SettingRow>
 	<StayLoggedInSettings />
+	<IdleLockSettings />
 </SettingGroup>
 
 {#if netConfirm && ssh}
