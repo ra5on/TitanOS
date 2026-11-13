@@ -1,6 +1,10 @@
 <script lang="ts">
 	// A modal window. Escape and "Cancel" close it unless `locked` (work in progress).
+	// PLAN 87: on the phone it comes up from the bottom as a sheet with large
+	// targets; a swipe down closes it like Escape.
 	import type { Snippet } from 'svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { swipeDown } from './sheet.ts';
 
 	type Props = {
 		title: string;
@@ -26,6 +30,14 @@
 
 	let dialog: HTMLDialogElement;
 	const id = $props.id();
+	const sheet = phoneView();
+
+	/** The swipe down asks like Escape: a locked dialog stays, a page with its own question is asked. */
+	function swipedAway() {
+		if (locked) return;
+		if (onrequestclose) onrequestclose();
+		else dialog.close();
+	}
 
 	$effect(() => {
 		dialog.showModal();
@@ -56,12 +68,15 @@
 	class="tile"
 	class:wide
 	class:as-menu={surface === 'menu'}
+	class:sheet
 	style:max-width={maxWidth ? `${Math.max(320, Math.min(1400, maxWidth))}px` : undefined}
 	aria-labelledby="{id}-title"
 	{onclose}
 	oncancel={cancel}
 	onkeydown={keydown}
+	use:swipeDown={{ close: swipedAway, enabled: () => sheet && !locked }}
 >
+	{#if sheet}<span class="grip" aria-hidden="true"></span>{/if}
 	<h2 id="{id}-title">{title}</h2>
 	{@render children()}
 </dialog>
@@ -128,6 +143,47 @@
 		height: 18px;
 		flex: none;
 		margin: 2px 0 0;
+	}
+	/* PLAN 87: the phone's sheet – at the bottom, across the width, large targets. */
+	dialog.sheet {
+		width: 100%;
+		max-width: 640px !important;
+		max-height: 90dvh;
+		margin: auto auto 0;
+		padding: var(--space-2) var(--tile-pad) calc(var(--tile-pad) + env(safe-area-inset-bottom));
+		border-radius: 20px 20px 0 0;
+		border-bottom: 0;
+		overscroll-behavior: contain;
+	}
+	/* Comes up from the bottom with the effect "Knopfdruck und Menüs" (micro), never with reduced motion. */
+	dialog.sheet[open] {
+		animation: none;
+	}
+	:global(:root[data-fx-micro='on']) dialog.sheet[open] {
+		animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	@keyframes sheet-up {
+		from {
+			transform: translateY(100%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(:root[data-fx-micro='on']) dialog.sheet[open] {
+			animation: none;
+		}
+	}
+	.grip {
+		align-self: center;
+		flex: none;
+		width: 40px;
+		height: 5px;
+		margin-bottom: calc(-1 * var(--space-2));
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--text) 35%, transparent);
+	}
+	dialog.sheet :global(.dialog-actions > *) {
+		flex: 1 1 auto;
+		min-height: 48px;
 	}
 	@media (max-width: 760px) {
 		dialog {
