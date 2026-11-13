@@ -942,6 +942,41 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: saving one row keeps what is typed in the others ---
+  {
+    const { ctx, page, state } = await open("owner");
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-cap").waitFor();
+    await page.locator("#nvr-plates").getByRole("button", { name: /Bekannte Kennzeichen/ }).click();
+    const plates = page.locator("#nvr-plates");
+    await plates.getByRole("button", { name: de["nvr.plates.add"] }).click();
+    await plates.getByLabel("Name", { exact: true }).last().fill("Lieferwagen");
+    await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().fill("D-LW 42");
+    await page.locator("#nvr-cap").fill("700");
+    // Another row saves: plates and the cap field keep their input.
+    await page.locator("#nvr-detector").selectOption("igpu");
+    await page.getByText("Gespeichert.").waitFor();
+    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { detector: { kind: "igpu" } });
+    assert.equal(await plates.getByLabel("Name", { exact: true }).last().inputValue(), "Lieferwagen");
+    assert.equal(await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().inputValue(), "D-LW 42");
+    assert.equal(await page.locator("#nvr-cap").inputValue(), "700");
+    // The plates' own save fails: the error shows, the input stays.
+    state.platesFail = "nvr_not_running";
+    await plates.getByRole("button", { name: "Speichern" }).click();
+    await page.getByRole("alert").filter({ hasText: "Der NVR läuft gerade nicht" }).waitFor();
+    await until(() => sent(state, "GET", "/nvr/settings").length >= 2, "the settings are read again");
+    await page.waitForTimeout(300);
+    assert.equal(await plates.getByLabel("Name", { exact: true }).last().inputValue(), "Lieferwagen");
+    assert.equal(await plates.getByLabel("Kennzeichen, mit Komma getrennt").last().inputValue(), "D-LW 42");
+    // Saved after all: the list is the NAS's again.
+    state.platesFail = "";
+    await plates.getByRole("button", { name: "Speichern" }).click();
+    await until(() => sent(state, "PUT", "/nvr/settings").at(-1)?.plates?.length === 2, "the plates are saved");
+    await page.waitForFunction(() => document.querySelector("#nvr-plates button.btn-primary")?.disabled);
+    assert.equal(await page.locator("#nvr-cap").inputValue(), "700");
+    await ctx.close();
+  }
+
   // --- The detection moved to another device: banner, reason, "Wieder versuchen" ---
   {
     const { ctx, page, state } = await open("owner", (s) => {

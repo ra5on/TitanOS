@@ -476,6 +476,8 @@ export async function installNvr(target, state = nvrState()) {
     if (path === "/nvr/settings") {
       if (adminOnly()) return;
       if (method === "PUT") {
+        // PLAN 85: saving the known plates fails with this code.
+        if (s.platesFail && body.plates) return fail(503, s.platesFail);
         if (body.volume && s.sleepingVolumes.includes(body.volume) && !body.confirmSleepingVolume)
           return fail(409, "nvr_volume_sleeps");
         const { enableDocker: _d, confirmSleepingVolume: _s, ...rest } = body;

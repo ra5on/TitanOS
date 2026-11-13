@@ -26,7 +26,15 @@
 	const used = $derived(nvr.cameras.some((c) => c.detect?.plates));
 	type Draft = { name: string; plates: string };
 	let draft = $state<Draft[]>([]);
+	// The draft follows the saved plates only when they really change (this
+	// row's own save, a change elsewhere). The page hands in a new but equal
+	// list after every save of another row and after a failed save reads the
+	// settings again: neither may wipe what is being typed.
+	let synced = '';
 	$effect(() => {
+		const now = JSON.stringify(plates);
+		if (now === synced) return;
+		synced = now;
 		draft = plates.map((p) => ({ name: p.name, plates: p.plates.join(', ') }));
 	});
 	const clean = (rows: Draft[]): PlateEntry[] =>
