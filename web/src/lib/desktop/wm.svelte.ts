@@ -514,10 +514,30 @@ export function frameListening(id: string): string | undefined {
 	return href;
 }
 
+// PLAN 86: the page a window is leaving while it moves to another. Until the
+// new page reports, the old one may still report itself (its title loads
+// late); that report must not take the window back (the menu of
+// Systemsteuerung follows the window's address).
+const leaving = new Map<string, { from: string; to: string }>();
+const pageOf = (href: string) => href.split('#')[0];
+
+/** Whether a page's report comes from the page its window is leaving. */
+export function staleReport(id: string, path: string): boolean {
+	const move = leaving.get(id);
+	if (!move) return false;
+	if (pageOf(path) === pageOf(move.to)) {
+		leaving.delete(id);
+		return false;
+	}
+	return pageOf(path) === pageOf(move.from);
+}
+
 /** Shows another page of the program in its window. */
 export function navigateWindow(id: string, href: string) {
 	const win = wm.windows.find((w) => w.id === id);
 	if (!win) return;
+	if (pageOf(win.href) !== pageOf(href)) leaving.set(id, { from: win.href, to: href });
+	else leaving.delete(id);
 	win.href = href;
 	if (frames.has(id) && !listening.has(id)) waiting.set(id, href);
 	sendGoto(id, href);
