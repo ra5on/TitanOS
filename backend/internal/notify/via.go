@@ -154,6 +154,11 @@ func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, age
 		if !t.Email || address == "" || settings.Email.Host == "" {
 			continue
 		}
+		// The bell forwards this message to the account's own e-mail
+		// already (tellPeople): one mail, not two.
+		if t.Bell && slices.Contains(bell, t.User) && m.Audience != nil && slices.Contains(m.Audience(), t.User) && m.forwardsMail(t.User, severity, kind) {
+			continue
+		}
 		server := settings.Email
 		server.To = address
 		body := ownText

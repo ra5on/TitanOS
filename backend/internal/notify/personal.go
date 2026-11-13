@@ -312,6 +312,32 @@ func (m *Manager) personalMail(user string) (address, language, content string) 
 	return to, p.Language, p.Content
 }
 
+// forwardsMail tells whether a bell message of severity and kind reaches
+// user's own e-mail through tellPeople anyway: the event and e-mail are
+// switched on in its settings, the mail server is set, the address is
+// valid. NotifyTo then sends no second mail (review PLAN 85-4: an
+// administrator with bell and e-mail got "Kamera nicht erreichbar" twice).
+func (m *Manager) forwardsMail(user, severity, kind string) bool {
+	event := eventOf(kind)
+	if rank[severity] < rank[Warning] && event != EventUpdates {
+		return false
+	}
+	m.mu.Lock()
+	mailServer := m.settings.Email.Host != ""
+	m.mu.Unlock()
+	m.people.mu.Lock()
+	defer m.people.mu.Unlock()
+	state, err := m.personalLocked(user)
+	if err != nil {
+		return false
+	}
+	p := state.settings
+	if _, err := mail.ParseAddress(strings.TrimSpace(p.Email.To)); err != nil {
+		return false
+	}
+	return p.Events[event] && p.Email.Enabled && mailServer
+}
+
 // PersonalMail tells whether an account has an e-mail address of its own
 // for NotifyTo (the same rule the delivery uses).
 func (m *Manager) PersonalMail(user string) bool {

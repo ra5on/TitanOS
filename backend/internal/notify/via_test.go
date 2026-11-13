@@ -213,3 +213,45 @@ func TestNotifyCarriesLinkAndNote(t *testing.T) {
 		t.Fatalf("bell %+v", bell)
 	}
 }
+
+// Review PLAN 85-4: an administrator with bell and e-mail for a camera got
+// "Kamera nicht erreichbar" twice – directly and through the bell's
+// forwarding to the own channels. One mail now.
+func TestNotifyToOneMailWithBellAndEmail(t *testing.T) {
+	m, _ := newManager(t)
+	var mu sync.Mutex
+	var mailed []string
+	m.sendMail = func(cfg Email, message []byte) error {
+		mu.Lock()
+		defer mu.Unlock()
+		mailed = append(mailed, cfg.To)
+		return nil
+	}
+	m.Audience = func() []string { return []string{"alex"} }
+	m.settings.Email = Email{Host: "mail.example.org", Port: 587, Security: "starttls", From: "nas@example.org", To: "nas-admin@example.org"}
+	p := defaultPersonal("de")
+	p.Email = PersonalEmail{Enabled: true, To: "alex@example.org"}
+	for event := range p.Events {
+		p.Events[event] = true
+	}
+	if err := m.SetPersonal("alex", p); err != nil {
+		t.Fatal(err)
+	}
+	m.NotifyTo(Warning, "nvr_camera_offline", "Haustür", []Target{{User: "alex", Bell: true, Email: true}}, false, About{Ref: "haustuer"})
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(mailed)
+		mu.Unlock()
+		if n >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(mailed) != 1 || mailed[0] != "alex@example.org" {
+		t.Errorf("mailed %v, want one mail to alex", mailed)
+	}
+}
