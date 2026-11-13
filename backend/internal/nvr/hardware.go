@@ -286,17 +286,19 @@ func renderNodes(nodes []string) []string {
 
 // decoder resolves the setting of the decoder (Settings.Decoder) on this
 // NAS: "" or auto takes the first free iGPU, else the first free other
-// Intel/AMD GPU, else the first free NVIDIA GPU, else the CPU; cpu is the
-// CPU; a PCI address is that GPU while it is free, else the CPU with the
-// reason – never another GPU: the owner chose this one, and a GPU picked
-// behind his back might be the one he keeps for a VM or an app. The
-// decoder is nil for the CPU.
+// Intel/AMD GPU, else the CPU – never an NVIDIA GPU (owner 13.11.2026:
+// "Standard iGPU"; an NVIDIA-only NAS decodes on the CPU as with 0.78, and
+// a card the owner hands to VMs is not held by Frigate unasked); cpu is
+// the CPU; a PCI address is that GPU while it is free (NVIDIA only so),
+// else the CPU with the reason – never another GPU: the owner chose this
+// one, and a GPU picked behind his back might be the one he keeps for a
+// VM or an app. The decoder is nil for the CPU.
 func (h HardwareInfo) decoder(setting string) (*Decoder, DecoderStatus) {
 	cpu := DecoderStatus{Setting: setting, Active: DecoderCPU, Kind: DecoderCPU, Title: "CPU"}
 	switch setting {
 	case "", DecoderAuto:
 		cpu.Setting = DecoderAuto
-		for _, kind := range []string{"igpu", "gpu", "nvidia"} {
+		for _, kind := range []string{"igpu", "gpu"} {
 			for i, d := range h.Decoders {
 				if d.Kind == kind && d.Available {
 					return &h.Decoders[i], DecoderStatus{Setting: DecoderAuto, Active: d.ID, Kind: d.Kind, Title: d.Title}
@@ -346,7 +348,8 @@ func (h HardwareInfo) withBroken(broken map[string]bool) HardwareInfo {
 // another GPU, so that Frigate cannot pick one by itself. usb says that
 // the USB bus is passed (Coral). decode is the decoder as Render needs it.
 func (h HardwareInfo) containerDevices(detector string, dec *Decoder) (nodes, cdi []string, usb bool, decode Decode) {
-	nodes = []string{}
+	// nodes stays nil without any: "Devices":null in the spec's hash, as
+	// 0.78 had it, so that a NAS without them keeps its container.
 	if dec != nil {
 		nodes = append(nodes, dec.nodes...)
 		cdi = slices.Clone(dec.cdi)

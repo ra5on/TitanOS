@@ -268,14 +268,14 @@ const picture = (seed, label = "") => {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h} 30% 34%)"/><stop offset="1" stop-color="hsl(${(h + 40) % 360} 28% 14%)"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><rect y="250" width="640" height="110" fill="hsl(${h} 20% 10%)" opacity=".55"/>${label ? `<text x="20" y="40" font-family="sans-serif" font-size="20" fill="#fff" opacity=".5">${label}</text>` : ""}</svg>`;
 };
 
-/** PLAN 82-4: the decoder as the setting resolves (nvr/hardware.go). */
+/** PLAN 82-4: the decoder as the setting resolves (nvr/hardware.go); "auto" never takes NVIDIA. */
 function decoderStatus(s) {
   const setting = s.settings.decoder || "auto";
   const cpu = { setting, active: "cpu", kind: "cpu", title: "CPU" };
   const list = s.hardware.decoders ?? [];
   if (setting === "cpu") return cpu;
   if (setting === "auto") {
-    for (const kind of ["igpu", "gpu", "nvidia"]) {
+    for (const kind of ["igpu", "gpu"]) {
       const d = list.find((g) => g.kind === kind && g.available);
       if (d) return { setting, active: d.id, kind: d.kind, title: d.title };
     }

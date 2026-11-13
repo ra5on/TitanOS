@@ -55,9 +55,12 @@ go2rtc:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#backchannel=0
     haustuer_twoway:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101
+    hof:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#backchannel=0
   preload:
     haustuer: ""
     haustuer_sub: ""
+    hof: ""
 cameras:
   haustuer:
     enabled: true
@@ -70,6 +73,50 @@ cameras:
           roles:
             - record
         - path: rtsp://127.0.0.1:8554/haustuer_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  hof:
+    enabled: true
+    ffmpeg:
+      output_args:
+        record: preset-record-generic-audio-aac
+      inputs:
+        - path: rtsp://127.0.0.1:8554/hof
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/hof
           input_args: preset-rtsp-restream
           roles:
             - detect

@@ -799,21 +799,13 @@ func (m *Manager) recreate(ctx context.Context, p plan, volume string) error {
 	if err := m.Engine.NVRNetwork(rctx); err != nil {
 		return err
 	}
+	// The GPU whose CDI device the container gets ("" without one).
+	cdiGPU := ""
+	if len(spec.CDIDevices) > 0 {
+		cdiGPU = p.decoder.Active
+	}
 	if err := m.Engine.NVRCreate(rctx, spec); err != nil {
-		if len(spec.CDIDevices) > 0 && p.decoder.Active != DecoderCPU {
-			// The engine does not know the NVIDIA GPU's CDI device (the
-			// plugin's descriptions are missing or stale). A decoder must
-			// never keep the cameras from recording: the next look plans
-			// at once with the CPU decoding, the page says "driver".
-			m.mu.Lock()
-			if m.rt.brokenDecoders == nil {
-				m.rt.brokenDecoders = map[string]bool{}
-			}
-			m.rt.brokenDecoders[p.decoder.Active] = true
-			m.changedLocked()
-			m.mu.Unlock()
-			slog.Warn("NVR: the GPU for decoding was refused by Docker; the CPU decodes", "gpu", p.decoder.Active, "err", clip(m.redact(err.Error()), 300))
-			m.wake()
+		if m.cdiRefused(err, cdiGPU) {
 			return nil
 		}
 		return err
@@ -822,12 +814,56 @@ func (m *Manager) recreate(ctx context.Context, p plan, volume string) error {
 	m.rt.volume = volume
 	m.mu.Unlock()
 	if err := m.Engine.NVRStart(rctx); err != nil {
+		// Docker 26 creates a container with an unknown CDI device and
+		// refuses only its start.
+		if m.cdiRefused(err, cdiGPU) {
+			return nil
+		}
 		return err
 	}
 	slog.Info("NVR: container started", "devices", strings.Join(append(slices.Clone(spec.Devices), spec.CDIDevices...), " "), "decoder", p.decoder.Active, "shmMB", spec.ShmBytes>>20)
 	m.started()
 	m.pruneImages(ctx, spec.Image)
 	return nil
+}
+
+// cdiRefused handles a create or start the engine refused because of the
+// CDI device of the NVIDIA GPU that decodes (gpu; "" when the container
+// has none): the plugin's descriptions are missing or stale, or Docker
+// lacks its CDI support. A decoder must never keep the cameras from
+// recording, and it is neither a crash of Frigate nor a fault of the
+// detector: the GPU counts as without driver and the next look, at once,
+// makes the container with the CPU decoding; the page says "driver". It
+// stays so until the owner chooses another decoder (and then this GPU
+// again) or titand starts again; "Wieder versuchen" (RetryDetector,
+// offered after a failover or a stop) forgets it too. It reports whether err was such a
+// refusal; any other error (a timeout, a full disk) is not.
+func (m *Manager) cdiRefused(err error, gpu string) bool {
+	if gpu == "" || gpu == DecoderCPU || !docker.IsCDIError(err) {
+		return false
+	}
+	m.mu.Lock()
+	if m.rt.brokenDecoders == nil {
+		m.rt.brokenDecoders = map[string]bool{}
+	}
+	m.rt.brokenDecoders[gpu] = true
+	m.changedLocked()
+	m.rt.retryAt = time.Time{}
+	m.mu.Unlock()
+	slog.Warn("NVR: Docker refused the GPU for decoding; the CPU decodes", "gpu", gpu, "err", clip(m.redact(err.Error()), 300))
+	m.wake()
+	return true
+}
+
+// containerGPULocked is the NVIDIA GPU whose CDI device the container
+// has, "" if none (m.mu held). rt.decoder is of the container: every
+// first look after a start of titand plans, and a plan whose container
+// differs makes it anew.
+func (m *Manager) containerGPULocked() string {
+	if m.rt.decoder.Kind == "nvidia" {
+		return m.rt.decoder.Active
+	}
+	return ""
 }
 
 // started notes a start by the watch.
@@ -863,19 +899,28 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 		if engineAfter && !m.rt.startedAt.IsZero() {
 			slog.Info("NVR: Docker's engine was restarted; starting Frigate again (no crash)")
 		}
+		gpu := m.containerGPULocked()
 		m.mu.Unlock()
 		sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		if err := m.Engine.NVRStart(sctx); err != nil {
+			// After a restart of the NAS the NVIDIA plugin may not have
+			// written its descriptions (or the driver is gone).
+			if m.cdiRefused(err, gpu) {
+				return nil
+			}
 			return err
 		}
 		m.started()
 		return nil
 	}
+	gpu := m.containerGPULocked()
 	// The same end is counted once.
+	counted := false
 	if !st.FinishedAt.Equal(m.rt.lastCrash) || st.FinishedAt.IsZero() {
 		m.rt.lastCrash = st.FinishedAt
 		m.rt.crashes = append(m.rt.crashes, now)
+		counted = true
 	}
 	m.rt.crashes = slices.DeleteFunc(m.rt.crashes, func(t time.Time) bool { return now.Sub(t) > m.CrashWindow })
 	crashes, first := len(m.rt.crashes), now
@@ -891,6 +936,18 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 	sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	if err := m.Engine.NVRStart(sctx); err != nil {
+		if m.cdiRefused(err, gpu) {
+			// The GPU, not Frigate: this end does not count towards
+			// moving the detection.
+			if counted {
+				m.mu.Lock()
+				if n := len(m.rt.crashes); n > 0 {
+					m.rt.crashes = m.rt.crashes[:n-1]
+				}
+				m.mu.Unlock()
+			}
+			return nil
+		}
 		return err
 	}
 	m.started()

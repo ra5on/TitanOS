@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -286,6 +287,20 @@ func (m *Manager) NVRLogs(ctx context.Context, tail int, since time.Time) (strin
 	}
 	defer res.Body.Close()
 	return demux(bufio.NewReader(io.LimitReader(res.Body, 2<<20)))
+}
+
+// cdiErrorRE matches the engine's answers about CDI devices: without
+// Docker's CDI support `could not select device driver "cdi" with
+// capabilities: []` (Docker 26.1.5 answers it at the start, after the
+// create succeeded), with it `unresolvable CDI devices nvidia.com/gpu=…`,
+// and an NVIDIA plugin whose descriptions went away `…nvidia.com/gpu=…: no
+// such file or directory` (as for apps, Manager.Action).
+var cdiErrorRE = regexp.MustCompile(`(?i)(\bcdi\b|nvidia\.com/gpu)`)
+
+// IsCDIError tells whether the engine refused a create or start because of
+// a CDI device: a timeout or a full disk is no such refusal.
+func IsCDIError(err error) bool {
+	return err != nil && cdiErrorRE.MatchString(err.Error())
 }
 
 // ErrNVRNotRunning: the NVR's container is there but does not run.

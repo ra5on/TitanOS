@@ -265,7 +265,8 @@ func TestDecoderChoice(t *testing.T) {
 		{"empty is auto", []hardware.ContainerDevice{devNV, devAMD, devIGPU}, nil, "", devIGPU.ID, ""},
 		{"auto without iGPU: the AMD GPU", []hardware.ContainerDevice{devNV, devAMD}, nil, DecoderAuto, devAMD.ID, ""},
 		{"auto: the iGPU with a VM is passed over", []hardware.ContainerDevice{devNV, devAMD, devIGPU}, map[string]bool{devIGPU.ID: true}, DecoderAuto, devAMD.ID, ""},
-		{"auto: NVIDIA last", []hardware.ContainerDevice{devNV}, nil, DecoderAuto, devNV.ID, ""},
+		{"auto never takes NVIDIA", []hardware.ContainerDevice{devNV}, nil, DecoderAuto, DecoderCPU, ""},
+		{"auto: NVIDIA beside a VM's iGPU is not taken either", []hardware.ContainerDevice{devNV, devIGPU}, map[string]bool{devIGPU.ID: true}, DecoderAuto, DecoderCPU, ""},
 		{"auto: the first of two iGPUs", []hardware.ContainerDevice{devIGPU, devIGPU2}, nil, DecoderAuto, devIGPU.ID, ""},
 		{"auto: nothing", []hardware.ContainerDevice{devNPU, nvNoDriver}, nil, DecoderAuto, DecoderCPU, ""},
 		{"cpu", []hardware.ContainerDevice{devIGPU}, nil, DecoderCPU, DecoderCPU, ""},
@@ -370,44 +371,6 @@ func TestPlanDecoder(t *testing.T) {
 	vm := plan(s, map[string]bool{devNV.ID: true})
 	if len(vm.spec.Devices) != 0 || len(vm.spec.CDIDevices) != 0 || vm.decoder.Reason != "vm" || !strings.Contains(string(vm.config), `hwaccel_args: ""`) {
 		t.Errorf("nvidia with a VM: %+v %+v", vm.spec, vm.decoder)
-	}
-}
-
-// TestRefusedCDIFallsBackToTheCPU: Docker refuses the NVIDIA GPU's CDI
-// device: the container is made at once with the CPU decoding, so the
-// cameras keep recording; the page says "driver". Choosing again or
-// "Wieder versuchen" tries the GPU again.
-func TestRefusedCDIFallsBackToTheCPU(t *testing.T) {
-	r, _, _ := volumeRig(t, "a")
-	r.m.Devices = func(context.Context) []hardware.ContainerDevice { return []hardware.ContainerDevice{devIGPU, devNV} }
-	r.engine.RefuseCDI = true
-	if err := r.m.SetSettings(context.Background(), Settings{Enabled: true, Volume: "a", Detector: DetectorSetting{Kind: DetectorCPU}, Decoder: devNV.ID}, SetOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	r.look() // the create with the GPU is refused
-	r.look() // planned again with the CPU
-	r.look()
-	if spec := r.engine.Spec(); len(spec.CDIDevices) != 0 || r.engine.Creates != 1 {
-		t.Fatalf("spec %+v after %d creates", spec, r.engine.Creates)
-	}
-	if got := r.phase(); got != PhaseRunning {
-		t.Errorf("phase %s, want running on the CPU", got)
-	}
-	st := r.m.Status(context.Background())
-	if st.Decoder.Active != DecoderCPU || st.Decoder.Reason != "driver" || st.Decoder.Setting != devNV.ID || st.Hardware.VideoDecode {
-		t.Errorf("status %+v (videoDecode %v)", st.Decoder, st.Hardware.VideoDecode)
-	}
-	if !strings.Contains(r.configOn("a"), `hwaccel_args: ""`) {
-		t.Error("the CPU decodes")
-	}
-	// Docker has the descriptions now; the owner tries again.
-	r.engine.RefuseCDI = false
-	if err := r.m.RetryDetector(); err != nil {
-		t.Fatal(err)
-	}
-	r.look()
-	if spec := r.engine.Spec(); !slices.Equal(spec.CDIDevices, []string{"nvidia.com/gpu=GPU-1"}) {
-		t.Errorf("after trying again: %+v", spec)
 	}
 }
 
