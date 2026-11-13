@@ -24,6 +24,8 @@ import type menubarDe from './features/menubar.de.json';
 import type designDe from './features/design.de.json';
 // PLAN 76 (F-12-17): the texts of the error codes that had none.
 import type errorsDe from './features/errors.de.json';
+// PLAN 79-7: the NVR.
+import type nvrDe from './features/nvr.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -40,7 +42,8 @@ type Messages = typeof deBase &
 	typeof webappsDe &
 	typeof designDe &
 	typeof menubarDe &
-	typeof errorsDe;
+	typeof errorsDe &
+	typeof nvrDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -62,6 +65,7 @@ const FILES = {
 			import('./features/menubar.de.json'),
 			import('./features/design.de.json'),
 			import('./features/errors.de.json'),
+			import('./features/nvr.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -81,6 +85,7 @@ const FILES = {
 			import('./features/menubar.en.json'),
 			import('./features/design.en.json'),
 			import('./features/errors.en.json'),
+			import('./features/nvr.en.json'),
 		]),
 };
 

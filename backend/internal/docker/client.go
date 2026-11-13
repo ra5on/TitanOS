@@ -176,11 +176,11 @@ func (c *client) version(ctx context.Context) (string, error) {
 func (c *client) containers(ctx context.Context) ([]apiContainer, error) {
 	var list []apiContainer
 	err := c.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}}, &list)
-	// The agent's sandboxes and the viewers of the remote view are no
-	// apps: never listed, updated or stopped.
+	// The agent's sandboxes, the viewers of the remote view and the
+	// container of the NVR are no apps: never listed, updated or stopped.
 	kept := list[:0]
 	for _, item := range list {
-		if item.Labels[sandboxLabel] == "" && item.Labels[ViewerLabel] == "" {
+		if item.Labels[sandboxLabel] == "" && item.Labels[ViewerLabel] == "" && item.Labels[NVRLabel] == "" {
 			kept = append(kept, item)
 		}
 	}

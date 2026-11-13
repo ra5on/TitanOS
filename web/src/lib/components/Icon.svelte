@@ -79,6 +79,8 @@
 		sidebar: 'M4 5h16v14H4ZM9 5v14',
 		maximize: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
 		camera: 'M4 8h3l2-3h6l2 3h3v11H4ZM12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+		// PLAN 79-7: moving a camera (pan, tilt) – arrows to all four sides.
+		move: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3',
 		terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
 		keyboard: 'M3 7h18v10H3ZM7 10h.01M11 10h.01M15 10h.01M8 14h8',
 		monitor: 'M3 4h18v12H3ZM8 20h8M12 16v4',

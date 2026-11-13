@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope" xmlns:tds="http://www.onvif.org/ver10/device/wsdl"><env:Body><tds:GetDeviceInformationResponse><tds:Manufacturer>HIKVISION</tds:Manufacturer><tds:Model>DS-2CD2143G2-I</tds:Model><tds:FirmwareVersion>V5.7.3</tds:FirmwareVersion><tds:SerialNumber>DS-2CD2143G2-I20210101AAWRG00000000</tds:SerialNumber><tds:HardwareId>88</tds:HardwareId></tds:GetDeviceInformationResponse></env:Body></env:Envelope>

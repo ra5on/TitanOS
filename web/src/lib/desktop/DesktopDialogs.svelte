@@ -101,6 +101,7 @@
 		igpu: ['desktop.widget.igpu', 'desktop.gallery.igpu'],
 		npu: ['desktop.widget.npu', 'desktop.gallery.npu'],
 		gpu: ['desktop.widget.gpu', 'desktop.gallery.gpu'],
+		camera: ['desktop.widget.camera', 'desktop.gallery.camera'],
 	};
 	const LOCK = [0, 5, 10, 15, 30, 60];
 	const LOCK_PHONE = [0, 5, 15, 30, 60, 240, 1440];

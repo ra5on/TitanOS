@@ -1,6 +1,6 @@
 # Eigene Skripte
 
-Unter **Werkzeuge › Skripte** legst du eigene Shell-Skripte an und lässt sie
+Unter **Aufgabenplaner › Skripte** (`/tools/scripts`) legst du eigene Shell-Skripte an und lässt sie
 auf dem NAS laufen: per Knopf, nach Zeitplan, einmal beim Start oder beim
 Herunterfahren. Die Seite sehen nur Besitzer und Administratoren
 (Entscheidung des Projektinhabers vom 4.11.2026).

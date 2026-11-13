@@ -13,6 +13,7 @@
 		windowCommandState,
 	} from '../../menu-commands.svelte.ts';
 	import { session } from '../../session.svelte.ts';
+	import { desktopNvrRights, nvrPageAllowed } from '../../nvr/side.svelte.ts';
 	import { findProgram, openProgram, openTab } from '../programs.svelte.ts';
 	import {
 		desktop,
@@ -149,7 +150,10 @@
 		if ('cmd' in action) return cmdState(action.cmd);
 		if ('go' in action)
 			return {
-				enabled: !!goTarget(action.go, front?.app ?? '', role, session.services),
+				enabled:
+					!!goTarget(action.go, front?.app ?? '', role, session.services) &&
+					// PLAN 79-7: the NVR's pages the account has no right for.
+					(!action.go.startsWith('/nvr') || nvrPageAllowed(action.go, desktopNvrRights(role))),
 			};
 		if ('win' in action) {
 			if (action.win === 'showDesktop') return { enabled: wm.windows.length > 0 };

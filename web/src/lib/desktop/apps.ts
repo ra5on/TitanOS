@@ -24,6 +24,8 @@ export type SideItem =
 			page?: true;
 			/** PLAN 74: a command of the program (e.g. "Neue Freigabe"), never the current page. */
 			action?: true;
+			/** PLAN 79-7: only these roles see the entry (the NVR's cameras, settings, diagnosis). */
+			roles?: Role[];
 	  }
 	/** One thing of the program by name (a VM), with its state as a dot. */
 	| { href: string; text: string; state: 'on' | 'off' };
@@ -216,6 +218,25 @@ export const SYSTEM_APPS: SystemApp[] = [
 		kind: 'system',
 	},
 	{
+		// PLAN 79-7: cameras, recordings and detection. Every account sees the
+		// program; which cameras it shows is set per account (Benutzer › Kameras).
+		id: 'nvr',
+		label: 'desktop.app.nvr',
+		glyph: 'nvr',
+		gradient: 'red',
+		href: '/nvr',
+		paths: ['/nvr'],
+		side: [
+			{ href: '/nvr', label: 'nvr.menu.live', icon: 'grid', match: ['/nvr'] },
+			{ href: '/nvr/recordings', label: 'nvr.menu.recordings', icon: 'play' },
+			{ href: '/nvr/events', label: 'nvr.menu.events', icon: 'clock' },
+			{ href: '/nvr/cameras', label: 'nvr.menu.cameras', icon: 'camera', roles: ADMIN },
+			{ href: '/nvr/settings', label: 'nvr.menu.settings', icon: 'gear', roles: ADMIN },
+			{ href: '/nvr/diagnosis', label: 'nvr.menu.diagnosis', icon: 'activity', roles: ADMIN },
+		],
+		kind: 'system',
+	},
+	{
 		id: 'agent',
 		label: 'desktop.app.agent',
 		glyph: 'agent',
@@ -359,6 +380,11 @@ export function appAllowed(app: SystemApp, role: Role, services: Record<string, 
 	if (app.roles && !app.roles.includes(role)) return false;
 	if (app.optIn) return services[app.id] === true;
 	return !app.service || services[app.service] !== false;
+}
+
+/** The entries of a side bar an account sees (entries with `roles` only for those roles). */
+export function sideFor(side: SideItem[], role: Role): SideItem[] {
+	return side.filter((item) => !('roles' in item) || !item.roles || item.roles.includes(role));
 }
 
 /** The program a page belongs to: the longest matching path prefix. */

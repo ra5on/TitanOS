@@ -283,8 +283,8 @@ func userOf(c rawContainer) ResourceUser {
 		name = strings.TrimPrefix(c.Names[0], "/")
 	}
 	app := c.Labels[composeProjectLabel]
-	if c.Labels[ViewerLabel] != "" || c.Labels[sandboxLabel] != "" {
-		app = "" // viewers and sandboxes are no apps
+	if c.Labels[ViewerLabel] != "" || c.Labels[sandboxLabel] != "" || c.Labels[NVRLabel] != "" {
+		app = "" // viewers, sandboxes and the NVR are no apps
 	}
 	return ResourceUser{App: app, Container: name, Running: c.State == "running"}
 }

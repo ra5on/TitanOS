@@ -6,6 +6,8 @@ export const bellGroups = [
 	'updates',
 	'ups',
 	'usb',
+	// PLAN 79-7: what the NVR reports (camera offline, detection moved, storage cap).
+	'cameras',
 	'system',
 ] as const;
 export type BellGroup = (typeof bellGroups)[number];
@@ -21,6 +23,7 @@ const prefixes: [string, BellGroup][] = [
 	['update_', 'updates'],
 	['ups_', 'ups'],
 	['usb_', 'usb'],
+	['nvr_', 'cameras'],
 ];
 
 /** The group of a kind of notification; unknown kinds belong to system. */

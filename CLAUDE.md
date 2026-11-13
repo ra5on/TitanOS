@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.77** (Tag v0.77.0, App-Release auf Basis 0.75; Release-Prüfstand siehe docs/releases/v0.77.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.78** (Tag v0.78.0, volles Release mit dem NVR; Release-Prüfstand siehe docs/releases/v0.78.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -109,6 +109,7 @@ titanos/
 │       ├── files/, backup/, configbackup/, backuptarget/
 │       ├── plugins/, hardware/, tailscale/, netbird/, usb/, ups/
 │       ├── homeassistant/  # REST, WebSocket-Beobachter, MQTT-Sensoren
+│       ├── nvr/            # NVR: Frigate-Container, Kameras, Erkennungsgerät (docs/NVR.md)
 │       └── system/, network/ # Systemeinstellungen, Netzwerk, Dienste
 ├── web/                    # Svelte + TypeScript
 ├── scripts/
@@ -197,7 +198,7 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 | `docs/rules/SHARES-FILES.md` | Shares, Freigabe samt Daten löschen, Kontingente, Dateimanager, Datei-Editor, USB-Uploads, Namensregeln, Vorschau/Suche, Link-Downloads |
 | `docs/rules/CLUSTER.md` | Cluster (Beitritt, Proxy, Kontenabgleich, Backups) |
 | `docs/rules/API.md` | Öffentliche API/Tokens, titanosctl, MCP-Server und Werkzeugkatalog, VM-Medien-Import, Plugin-Aufräumen |
-| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout |
+| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout, NVR (Frigate-Container, `docs/NVR.md`) |
 | `docs/rules/VMS-LXC.md` | VMs (Erstellen, Firmware, Konsole, Snapshots), App-Vorlagen, Hardware-Durchreichung, LXC-Systemcontainer |
 | `docs/rules/PLUGINS.md` | Plugins, Community-Plugins, NVIDIA-Treiberbau |
 | `docs/rules/HOME-ASSISTANT.md` | Home-Assistant-Anbindung |

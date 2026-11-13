@@ -2,6 +2,8 @@
 // NAS, written only when something changes). Open windows stay in this
 // browser (wm.svelte.ts): they change all the time and must not wear the stick.
 
+import { defaultNvrPrefs, sanitizeNvrPrefs, type NvrPrefs } from '../nvr/layout.ts';
+
 export type WidgetKind =
 	| 'status'
 	| 'cpuram'
@@ -16,7 +18,9 @@ export type WidgetKind =
 	| 'tasks'
 	| 'igpu'
 	| 'npu'
-	| 'gpu';
+	| 'gpu'
+	/** PLAN 79-7: the picture of one camera of the NVR. */
+	| 'camera';
 
 export const WIDGET_KINDS: WidgetKind[] = [
 	'status',
@@ -33,6 +37,7 @@ export const WIDGET_KINDS: WidgetKind[] = [
 	'igpu',
 	'npu',
 	'gpu',
+	'camera',
 ];
 
 /** PLAN 79-5: the widgets of the graphics devices; their kind is the kind of the device. */
@@ -57,6 +62,8 @@ export type Widget = {
 	hide?: GpuValue[];
 	/** PLAN 79-5, graphics widgets: the PCI address of the chosen device (none: the first). */
 	device?: string;
+	/** PLAN 79-7, camera widget: the id of the chosen camera (none: the first). */
+	camera?: string;
 };
 
 export type Folder = { id: string; name: string; apps: string[] };
@@ -102,6 +109,8 @@ export type DesktopPrefs = {
 	barLoad: boolean;
 	/** PLAN 79-11: the account's own order of the programs in the menu; empty = A–Z. */
 	menuOrder: string[];
+	/** PLAN 79-7: the live view of the NVR – the account's arrangement of the cameras and what it shows. */
+	nvr: NvrPrefs;
 };
 
 export type DockPosition = 'bottom' | 'left' | 'right';
@@ -196,6 +205,7 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	barSize: 'm',
 	barLoad: true,
 	menuOrder: [],
+	nvr: defaultNvrPrefs(),
 });
 
 function strings(value: unknown, max = 200): string[] {
@@ -251,6 +261,9 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 						if (hide.length) widget.hide = hide;
 						const device = text(w.device, 40);
 						if (/^[0-9a-f:.]+$/i.test(device)) widget.device = device;
+					}
+					if (widget.kind === 'camera' && typeof w.camera === 'string') {
+						if (/^[a-z][a-z0-9_]{0,31}$/.test(w.camera)) widget.camera = w.camera;
 					}
 					return widget;
 				})
@@ -342,6 +355,7 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 			: 'm',
 		barLoad: v.barLoad !== false,
 		menuOrder: strings(v.menuOrder, 300),
+		nvr: sanitizeNvrPrefs(v.nvr),
 	};
 }
 

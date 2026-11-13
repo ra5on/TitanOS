@@ -10,6 +10,8 @@ import {
 	type Widget,
 	type WidgetKind,
 } from './prefs.ts';
+import { desktopNvrRights, nvrSideFor } from '../nvr/side.svelte.ts';
+import { session } from '../session.svelte.ts';
 import type { Program } from './programs.svelte.ts';
 import { sources } from './sources.svelte.ts';
 import { desktop, focus, minimize, savePrefs, wm } from './wm.svelte.ts';
@@ -116,9 +118,11 @@ export const CELL = 20;
 export const WIDGET_DIMS = { s: [12, 5], m: [17, 8], l: [24, 12] } as const;
 // PLAN 79-5: the graphics widgets hold a headline, a line and up to four tiles.
 const GPU_DIMS = { s: [15, 17], m: [17, 17], l: [24, 18] } as const;
+// PLAN 79-7: a camera's picture is 16:9 under its name.
+const CAMERA_DIMS = { s: [14, 10], m: [20, 13], l: [30, 19] } as const;
 /** Width and height in cells a widget of this kind gets for a size. */
 export function widgetDims(kind: WidgetKind, size: 's' | 'm' | 'l'): readonly [number, number] {
-	return (isGpuWidget(kind) ? GPU_DIMS : WIDGET_DIMS)[size];
+	return (isGpuWidget(kind) ? GPU_DIMS : kind === 'camera' ? CAMERA_DIMS : WIDGET_DIMS)[size];
 }
 
 export function widgetLeft(w: Widget, columns: number) {
@@ -168,6 +172,14 @@ export function setWidgetDevice(id: string, device: string) {
 	});
 }
 
+/** PLAN 79-7: the camera a camera widget shows. */
+export function setWidgetCamera(id: string, camera: string) {
+	savePrefs((p) => {
+		p.widgets = p.widgets.map((w) => (w.id === id ? { ...w, camera } : w));
+		p.customWidgets = true;
+	});
+}
+
 export function resetWidgets() {
 	savePrefs((p) => {
 		p.widgets = defaultWidgets();
@@ -183,6 +195,9 @@ export function showDesktop() {
 
 // PLAN 62-3: the VMs window lists every machine below its pages (saves the page's own list).
 export function sideOf(app: string, side: Program['side']): Program['side'] {
+	// PLAN 79-7: an account without the admin role sees the NVR's pages it has a right for.
+	if (app === 'app:nvr')
+		return nvrSideFor(side, desktopNvrRights(session.data?.user?.role ?? 'user'));
 	if (app !== 'app:vms' || !sources.vms.length) return side;
 	return [
 		...side,

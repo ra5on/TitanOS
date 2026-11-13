@@ -87,6 +87,8 @@
 			kind={w.kind}
 			hide={w.hide}
 			device={w.device}
+			camera={w.camera}
+			large={w.w * CELL >= 520}
 			onopen={(key, href) => open(key, undefined, href)}
 		/>
 		{#if editWidgets}

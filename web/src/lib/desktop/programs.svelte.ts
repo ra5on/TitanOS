@@ -3,7 +3,7 @@
 import { api } from '../api.ts';
 import { t } from '../i18n/index.svelte.ts';
 import { session } from '../session.svelte.ts';
-import { appAllowed, SYSTEM_APPS, type SideItem } from './apps.ts';
+import { sideFor, appAllowed, SYSTEM_APPS, type SideItem } from './apps.ts';
 import { dockerPrograms, dockerUpdates, sources } from './sources.svelte.ts';
 import { openWindow } from './wm.svelte.ts';
 import { storage } from '../storage.svelte.ts';
@@ -36,7 +36,7 @@ export function programs(): Program[] {
 		gradient: a.gradient,
 		image: '',
 		href: a.href,
-		side: a.side,
+		side: sideFor(a.side, role),
 		multi: !!a.multi,
 		external: false,
 		badge: null,

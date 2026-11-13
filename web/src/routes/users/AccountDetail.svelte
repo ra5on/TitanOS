@@ -8,6 +8,8 @@
 	import Expander from '#lib/components/explorer/Expander.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 
+	import type { UserCameras } from '#lib/nvr/types.ts';
+
 	type UserApp = { app: string; icon: string; allowed: boolean };
 	type UserApps = { admin: boolean; newApps: boolean; apps: UserApp[] };
 
@@ -96,6 +98,63 @@
 		for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
 		return h;
 	}
+
+	// ---- Cameras (PLAN 79-7) ----
+	// Which cameras of the NVR the account may watch live and whose
+	// recordings it may see. A new account sees none.
+	let cams = $state<UserCameras | null>(null);
+	let camsError = $state('');
+	let camsBusy = $state(false);
+	/** This NAS has no NVR (or an older version): the group is left out. */
+	let camsMissing = $state(false);
+	$effect(() => {
+		const name = account.name;
+		cams = null;
+		camsError = '';
+		api.get<UserCameras>(`/users/${encodeURIComponent(name)}/cameras`).then(
+			(res) => {
+				if (name !== account.name) return;
+				// An answer without the list is no NVR's answer: leave the group out.
+				camsMissing = !Array.isArray(res?.cameras);
+				cams = camsMissing ? null : res;
+			},
+			() => {
+				if (name === account.name) camsMissing = true;
+			},
+		);
+	});
+	async function saveCamera(id: string, right: 'live' | 'recordings', on: boolean) {
+		const row = cams?.cameras.find((c) => c.id === id);
+		if (!row) return;
+		camsBusy = true;
+		camsError = '';
+		try {
+			const next = await api.put<UserCameras>(
+				`/users/${encodeURIComponent(account.name)}/cameras`,
+				{ cameras: { [id]: { live: row.live, recordings: row.recordings, [right]: on } } },
+			);
+			if (Array.isArray(next?.cameras)) cams = next;
+		} catch (err) {
+			camsError = apiErrorText(err);
+		} finally {
+			camsBusy = false;
+		}
+	}
+	// A removed camera shows nowhere for other accounts: no switches for it.
+	const camRows = $derived((cams?.cameras ?? []).filter((c) => !c.deleted));
+	const camsSummary = $derived(
+		!cams
+			? ''
+			: cams.admin
+				? t('nvr.rights.adminAll')
+				: camRows.length === 0
+					? t('nvr.rights.noCameras')
+					: t('nvr.rights.count', {
+							live: camRows.filter((c) => c.live).length,
+							recordings: camRows.filter((c) => c.recordings).length,
+							total: camRows.length,
+						}),
+	);
 
 	// ---- Shares ----
 	const reach = $derived(
@@ -278,6 +337,54 @@
 		{/if}
 	</Expander>
 
+	{#if !camsMissing}
+		<Expander
+			icon="camera"
+			title={t('nvr.rights.title')}
+			summary={camsSummary}
+			id="account-cameras"
+		>
+			{#if camsError}<p class="notice-error part" role="alert">{camsError}</p>{/if}
+			{#if !cams}
+				<p class="muted part" role="status">{t('common.loading')}</p>
+			{:else if cams.admin}
+				<p class="muted part">{t('nvr.rights.adminHint')}</p>
+			{:else if camRows.length === 0}
+				<p class="muted part">{t('nvr.rights.noCameras')}</p>
+			{:else}
+				<p class="muted part">{t('nvr.rights.hint')}</p>
+				{#each camRows as c (c.id)}
+					<div class="part cam" data-camera={c.id}>
+						<span class="t">{c.name}</span>
+						<span class="cam-rights">
+							<label
+								><input
+									type="checkbox"
+									role="switch"
+									class="switch"
+									checked={c.live}
+									disabled={camsBusy || !(manageable || admin)}
+									aria-label={t('nvr.rights.liveFor', { camera: c.name })}
+									onchange={(event) => saveCamera(c.id, 'live', event.currentTarget.checked)}
+								/><span>{t('nvr.rights.live')}</span></label
+							>
+							<label
+								><input
+									type="checkbox"
+									role="switch"
+									class="switch"
+									checked={c.recordings}
+									disabled={camsBusy || !(manageable || admin)}
+									aria-label={t('nvr.rights.recordingsFor', { camera: c.name })}
+									onchange={(event) => saveCamera(c.id, 'recordings', event.currentTarget.checked)}
+								/><span>{t('nvr.rights.recordings')}</span></label
+							>
+						</span>
+					</div>
+				{/each}
+			{/if}
+		</Expander>
+	{/if}
 	<Expander
 		icon="key"
 		title={t('users.login')}
@@ -338,6 +445,27 @@
 	}
 	.small {
 		font-size: var(--text-sm);
+	}
+	/* PLAN 79-7: the camera's name keeps its width; the two switches wrap
+	   below it on a phone instead of squeezing the name letter by letter. */
+	.cam {
+		flex-wrap: wrap;
+	}
+	.cam .t {
+		flex: 1 1 9rem;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.cam-rights {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2) var(--space-4);
+	}
+	.cam-rights label {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		white-space: nowrap;
 	}
 	.acts {
 		display: flex;

@@ -37,7 +37,7 @@ die Apps dieses NAS nicht im Fenster zeigen („In eigenem Tab öffnen“).
 
 ## Programme: Rechte je Konto
 
-Einstellungen › Programme (`/settings/programs`, nur Besitzer/Administratoren). Paket
+Benutzer › Konto › Apps und die Seite der App (nur Besitzer/Administratoren; `/settings/programs` leitet auf `/users` um). Paket
 `appaccess`, Datei `/config/docker/app-access.json` (`newApps`, `apps` → `{users, noGate}`),
 beim Start einmal gelesen und im RAM gehalten, geschrieben nur bei Änderung.
 

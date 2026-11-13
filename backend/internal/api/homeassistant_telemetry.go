@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/nvr"
 )
 
 // Only use values already sampled by the NAS. No SMART, repository, history or
@@ -93,6 +94,30 @@ func (hass haArea) haAdditional(snap *homeassistant.Snapshot) {
 					metric("engine_"+e.Name, e.Name, e.UsagePercent, "%", "", "measurement"))
 			}
 			add(group, d.Address, d.Name, metrics...)
+		}
+	}
+	// The cameras of the NVR whose owner chose Home Assistant for them
+	// (group "cameras"): whether the camera sends pictures, one binary
+	// sensor per kind of event (on for a minute and a half after it
+	// happened) and the last event as text. From the NVR's RAM only.
+	if hass.nvr != nil {
+		for _, c := range hass.nvr.HACameras() {
+			var online any
+			if c.Online != nil {
+				online = *c.Online
+			}
+			var last any
+			if c.LastEvent != "" {
+				last = c.LastEvent
+			}
+			add("cameras", c.ID, c.Name,
+				metric("online", "Online", online, "", "connectivity", ""),
+				metric("person", "Person", c.Active[nvr.KindPerson], "", "occupancy", ""),
+				metric("vehicle", "Vehicle", c.Active[nvr.KindVehicle], "", "occupancy", ""),
+				metric("animal", "Animal", c.Active[nvr.KindAnimal], "", "occupancy", ""),
+				metric("plate", "License plate", c.Active[nvr.KindPlate], "", "occupancy", ""),
+				metric("face", "Known face", c.Active[nvr.KindFace], "", "occupancy", ""),
+				metric("last_event", "Last event", last, "", "", ""))
 		}
 	}
 	if hass.maintenance() != nil {

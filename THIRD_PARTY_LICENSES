@@ -60,6 +60,7 @@ go.yaml.in/yaml           MIT and Apache-2.0      https://github.com/yaml/go-yam
 yaml (JavaScript)         ISC                     https://github.com/eemeli/yaml
 noVNC                     MPL-2.0                 https://github.com/novnc/noVNC
 xterm.js                  MIT                     https://github.com/xtermjs/xterm.js
+hls.js                    Apache-2.0              https://github.com/video-dev/hls.js
 qrcode-generator          MIT                     https://github.com/kazuhikoarase/qrcode-generator
 IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 
@@ -86,6 +87,16 @@ webapps/<id>-<version>/; sources.txt links the tagged source of each app.
 WordCraft, GridCraft, PdfCraft, DeckCraft, CADCraft, FigCraft, FilmCraft,
 LightCraft, VectorCraft, DesignCraft, EffectCraft, SoundCraft,
 TextureCraft, MaterialCraft: https://github.com/storytold/<name in lower case>
+
+NVR (docs/NVR.md): TitanOS neither contains nor distributes Frigate. When
+the owner switches the NVR on, Docker on the NAS pulls the image
+ghcr.io/blakeblackshear/frigate (one fixed version per TitanOS release,
+pinned by digest; 0.18.2 for this one) from its publisher's registry.
+Frigate is MIT licensed (https://github.com/blakeblackshear/frigate); the
+image carries further components under their own licenses, among them
+go2rtc (MIT), FFmpeg (GPL/LGPL), nginx (BSD-2-Clause), OpenVINO
+(Apache-2.0), the Edge TPU and Hailo runtimes and detection models. Their
+notices are inside that image.
 
 Optional plugins (separate downloads) keep their own licenses, e.g. the
 NVIDIA driver plugin (NVIDIA license terms for the user-space libraries).

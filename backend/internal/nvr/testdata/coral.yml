@@ -1,0 +1,212 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+proxy:
+  auth_secret: goldensecretgoldensecretgoldensecretgoldensecret0123
+  default_role: admin
+tls:
+  enabled: false
+networking:
+  listen:
+    internal: 127.0.0.1:5000
+    external: 8971
+telemetry:
+  version_check: false
+detectors:
+  coral:
+    type: edgetpu
+    device: usb
+ffmpeg:
+  hwaccel_args: ""
+record:
+  continuous:
+    days: 30
+  motion:
+    days: 30
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: false
+go2rtc:
+  api:
+    listen: 127.0.0.1:1984
+  rtsp:
+    listen: 127.0.0.1:8554
+  webrtc:
+    candidates: []
+  streams:
+    carport:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    carport_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+    hof:
+      - rtsp://192.168.1.61:554/Streaming/Channels/101#backchannel=0
+    hof_sub:
+      - rtsp://192.168.1.61:554/Streaming/Channels/102#backchannel=0
+    keller:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    keller_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+cameras:
+  carport:
+    enabled: true
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/carport
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/carport_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: false
+      continuous:
+        days: 14
+      motion:
+        days: 14
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
+    snapshots:
+      enabled: false
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  hof:
+    enabled: true
+    ffmpeg:
+      output_args:
+        record: preset-record-generic-audio-aac
+      inputs:
+        - path: rtsp://127.0.0.1:8554/hof
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/hof_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  keller:
+    enabled: false
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/keller
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/keller_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+  schuppen:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/schuppen
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 30
+      motion:
+        days: 30
+      alerts:
+        retain:
+          days: 30
+      detections:
+        retain:
+          days: 30
+    snapshots:
+      enabled: false
+      retain:
+        default: 30
+    audio:
+      enabled: false

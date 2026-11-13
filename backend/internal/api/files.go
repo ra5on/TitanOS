@@ -236,7 +236,7 @@ func (a filesArea) trashRoot(w http.ResponseWriter, r *http.Request, id, bin str
 // stickHidden are folders of the stick that hold password hashes, keys
 // and tokens. stickShown below already leaves them out; the list stays as
 // a second fence and marks the root as one with secrets (files.Root.Hide).
-var stickHidden = []string{"users", "tls", "ssh", "notify", "backup", "ddns", "wireguard", "ipv64", "assistant", "sessions", "cluster", "homeassistant"}
+var stickHidden = []string{"users", "tls", "ssh", "notify", "backup", "ddns", "wireguard", "ipv64", "assistant", "sessions", "cluster", "homeassistant", "nvr"}
 
 // stickShown is all of the stick that the file manager shows: settings
 // without secrets. A folder ("apps/") is shown with everything in it, apart

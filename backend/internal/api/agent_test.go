@@ -109,6 +109,9 @@ func agentServer(t *testing.T, fake *agentOllama, policy agent.Policy) *testServ
 	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
 		t.Fatalf("settings: %d %s", res.StatusCode, body)
 	}
+	// The settings start a sync of the agent's share in the background;
+	// it reads the server's options, which tests change after this.
+	ts.server.shareSyncs.Wait()
 	return ts
 }
 

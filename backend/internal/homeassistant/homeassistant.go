@@ -101,7 +101,7 @@ type MQTT struct {
 // SensorGroups and CommandGroups are the choices in MQTT.
 var (
 	legacySensorGroups = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
-	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity")
+	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity", "cameras")
 	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power", "agent"}
 )
 

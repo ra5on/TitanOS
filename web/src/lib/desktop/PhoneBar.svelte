@@ -6,7 +6,9 @@
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import { appForPath, sideActive } from './apps.ts';
+	import { sideFor, appForPath, sideActive } from './apps.ts';
+	import { nvr } from '../nvr/nvr.svelte.ts';
+	import { nvrPageAllowed, nvrSideFor, rightsOf } from '../nvr/side.svelte.ts';
 	import { activeNode } from '../cluster-node.ts';
 	import { clusterNodes } from '../cluster.svelte.ts';
 	import { session } from '../session.svelte.ts';
@@ -14,10 +16,17 @@
 	import { entries, goTarget, menusFor, type MenuEntry } from './menubar/menus.ts';
 
 	const app = $derived(appForPath(page.url.pathname));
-	const items = $derived((app?.side ?? []).filter((i) => 'href' in i));
+	const role = $derived(session.data?.user?.role ?? 'user');
+	// PLAN 79-7: entries only some roles see (the NVR's settings) are left out,
+	// and an account without the admin role sees the NVR's pages it has a right for.
+	const nvrRights = $derived(
+		app?.id === 'nvr' && role === 'user' && nvr.loaded ? rightsOf(nvr.cameras) : null,
+	);
+	const items = $derived(
+		nvrSideFor(sideFor(app?.side ?? [], role), nvrRights).filter((i) => 'href' in i),
+	);
 	let open = $state(false);
 	// PLAN 67-1: the program's menus of the desktop's menu bar, as groups in the ⋯ menu.
-	const role = $derived(session.data?.user?.role ?? 'user');
 	const pageHrefs = $derived(
 		new Set(items.length > 1 ? items.map((i) => ('href' in i ? i.href : '')) : []),
 	);
@@ -32,7 +41,9 @@
 								e.do &&
 								('cmd' in e.do ||
 									// A page already listed above is not repeated.
-									('go' in e.do && !pageHrefs.has(e.do.go))),
+									('go' in e.do &&
+										!pageHrefs.has(e.do.go) &&
+										(!e.do.go.startsWith('/nvr') || nvrPageAllowed(e.do.go, nvrRights)))),
 						),
 					}))
 					.filter((g) => g.items.length)

@@ -3,7 +3,7 @@ import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
 	users:
-		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen apps app programme programs docker rechte rights erlauben allow freigaben shares',
+		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen apps app programme programs docker rechte rights erlauben allow freigaben shares kamera kameras camera cameras nvr live aufnahmen recordings',
 	appearance:
 		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
@@ -27,7 +27,7 @@ const keywords: Record<string, string> = {
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
 	ups: 'usv ups batterie battery strom power',
 	homeassistant:
-		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation verbindungen connections intervall interval',
+		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation verbindungen connections intervall interval kamera kameras camera cameras nvr',
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'intel-guc': 'intel igpu grafik graphics guc huc firmware quick sync qsv i915 xe',
 	'power-button': 'power button taste knopf ausschalten shutdown',
