@@ -37,7 +37,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ## Offene Punkte
 
-- **CLA:** `CLA.md` Version 1.0 gilt seit 13.11.2026 (Lizenzeinräumung ohne Übertragung des Urheberrechts, Recht zur Unterlizenzierung inkl. kommerziell und Apache-2.0, Patentlizenz; erfasst auch Beiträge vor der Unterschrift). Entscheidung des Inhabers vom 13.11.2026, ohne anwaltliche Prüfung in Betrieb genommen – vor größeren fremden Beiträgen oder einem kommerziellen Lizenzgeschäft prüfen lassen. Bot: gehosteter CLA Assistant (cla-assistant.io) mit dem CLA-Text als öffentlichem GitHub-Gist; Prüfung „license/cla“ an jedem PR; Ausnahmeliste für den Inhaber und Bots (dependabot[bot], github-actions[bot]). Eine neue CLA-Version heißt: Gist aktualisieren, Version und Datum in `CLA.md`. Die „Lite“-GitHub-Action (contributor-assistant/github-action) ist seit März 2026 archiviert – nicht verwenden.
+- **CLA:** `CLA.md` Version 1.0 gilt seit 13.11.2026 (Lizenzeinräumung ohne Übertragung des Urheberrechts, Recht zur Unterlizenzierung inkl. kommerziell und Apache-2.0, Patentlizenz; erfasst auch Beiträge vor der Unterschrift). Entscheidung des Inhabers vom 13.11.2026, ohne anwaltliche Prüfung in Betrieb genommen – vor größeren fremden Beiträgen oder einem kommerziellen Lizenzgeschäft prüfen lassen. Bot: gehosteter CLA Assistant (cla-assistant.io) mit dem CLA-Text als öffentlichem GitHub-Gist; Prüfung „license/cla“ an jedem PR; der Inhaber hat unterschrieben. Eine Ausnahmeliste für Bots ließ sich auf cla-assistant.io nicht einstellen: Dependabot-PRs zeigen „license/cla“ dauerhaft ausstehend, deshalb ist die Prüfung keine Pflicht für `main`. Eine neue CLA-Version heißt: Gist aktualisieren, Version und Datum in `CLA.md`. Die „Lite“-GitHub-Action (contributor-assistant/github-action) ist seit März 2026 archiviert – nicht verwenden.
 - Initramfs: Debian `live-boot` ist im Einsatz und in QEMU getestet (`toram=filesystem.squashfs`, `live-media-path=` pro A/B-Eintrag, `overlay-size=512M`). Ein initramfs-Skript wartet bis zu 90 Sekunden auf den Stick (alle 10 Sekunden eine Meldung auf der Konsole), damit live-boot ihn beim ersten Versuch findet und nicht alle anderen Platten durchsucht. Nur wenn der Stick gar nicht auftaucht, sucht live-boot weiter und bindet dabei fremde Dateisysteme lesend ein.
 
 ## Funktionsumfang und offene Vorhaben
@@ -87,7 +87,7 @@ titanos/
 ├── LICENSE.md              # FSL-1.1-ALv2
 ├── THIRD_PARTY_LICENSES
 ├── CONTRIBUTING.md         # inkl. CLA-Hinweis
-├── CLA.md                  # Contributor License Agreement (Entwurf)
+├── CLA.md                  # Contributor License Agreement (Version 1.0)
 ├── SECURITY.md             # Sicherheitslücken privat melden
 ├── .gitignore
 ├── build/                  # mkosi-Konfiguration (Pakete, mkosi.extra/, Postinst)

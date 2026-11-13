@@ -129,8 +129,13 @@ async function open(role) {
   await search.fill("starten");
   await page.waitForTimeout(300);
   assert.equal(await menu.locator(".action").count(), 0, "no admin actions");
+  // Since 0.80 (PLAN 84-3) there is no "lock" action any more: logging
+  // out is the account's own action.
   await search.fill("sperren");
-  await menu.getByRole("button", { name: "NAS-Sitzung sperren" }).waitFor();
+  await page.waitForTimeout(300);
+  assert.equal(await menu.getByRole("button", { name: "NAS-Sitzung sperren" }).count(), 0, "no lock action");
+  await search.fill("abmelden");
+  await menu.locator(".action").first().waitFor();
   await ctx.close();
 }
 
