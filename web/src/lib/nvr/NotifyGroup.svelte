@@ -100,7 +100,8 @@
 	);
 
 	function setWay(user: string, way: Way, on: boolean) {
-		notify.recipients = toggleWay(list, user, way, on);
+		const admin = (accounts ?? []).find((a) => a.name === user)?.admin ?? false;
+		notify.recipients = toggleWay(list, user, way, on, admin);
 	}
 	function remove(entry: NotifyRecipient) {
 		notify.recipients = list.filter((r) => r.user !== entry.user);

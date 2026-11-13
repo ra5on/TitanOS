@@ -71,6 +71,13 @@ test('a way switches per account; without any way the account leaves the list', 
 	list = toggleWay(list, 'sam', 'push', false);
 	list = toggleWay(list, 'sam', 'email', false);
 	expect(list.map((r) => r.user)).toEqual(['alex']);
+	// A plain account chosen with the bell as an administrator loses it with
+	// the next change; with nothing else ticked it leaves the list.
+	const demoted = [{ user: 'bob', bell: true, push: true, email: false }];
+	expect(toggleWay(demoted, 'bob', 'email', true, false)).toEqual([
+		{ user: 'bob', bell: false, push: true, email: true },
+	]);
+	expect(toggleWay(demoted, 'bob', 'push', false, false)).toEqual([]);
 });
 
 test('days, pause and window as words', () => {

@@ -87,12 +87,17 @@ export function legacyRecipients(
 		.map((a) => ({ user: a.name, bell: notify.titan, push: notify.push, email: false }));
 }
 
-/** Switches one way of one account; an account left without any way leaves the list. */
+/**
+ * Switches one way of one account; an account left without any way leaves
+ * the list. A plain account (admin false) never keeps a bell: one chosen
+ * while it was an administrator goes with the next change.
+ */
 export function toggleWay(
 	list: NotifyRecipient[],
 	user: string,
 	way: Way,
 	on: boolean,
+	admin = true,
 ): NotifyRecipient[] {
 	const entry = list.find((r) => r.user === user) ?? {
 		user,
@@ -101,6 +106,7 @@ export function toggleWay(
 		email: false,
 	};
 	const next = { ...entry, [way]: on };
+	if (!admin) next.bell = false;
 	const rest = list.filter((r) => r.user !== user);
 	if (!next.bell && !next.push && !next.email) return rest;
 	return [...rest, next].sort((a, b) => a.user.localeCompare(b.user));
