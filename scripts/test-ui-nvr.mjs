@@ -1459,6 +1459,35 @@ try {
     await ctx.close();
   }
 
+  // --- PLAN 85: another camera large is a new tile; sound, pad and talk of
+  // the one before do not carry over ---
+  {
+    const { ctx, page } = await open("owner", (s, data) => {
+      s.cameras.find((c) => c.id === "garten").audio = { enabled: true, twoWay: false };
+      data.prefs.desktop = {
+        version: 1,
+        customWidgets: true,
+        widgets: [{ id: "wcam", kind: "camera", x: 34, y: 3, w: 20, h: 13, camera: "garten" }],
+      };
+    });
+    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+    await page.goto(base + "/");
+    await page.locator('.widget[data-widget="camera"]').getByRole("button", { name: "Garten im NVR öffnen" }).click();
+    const solo = page.frameLocator('iframe[data-app="app:nvr"]').locator(".tile.solo");
+    await solo.getByRole("button", { name: "Ton von Garten" }).click();
+    assert.equal(await solo.getByRole("button", { name: "Ton von Garten" }).getAttribute("aria-pressed"), "true");
+    // The open window is sent to another camera the way the desktop does it
+    // (wm.svelte.ts, "titanos-goto"): SvelteKit moves without loading anew.
+    await page.evaluate(() =>
+      document
+        .querySelector('iframe[data-app="app:nvr"]')
+        .contentWindow.postMessage({ type: "titanos-goto", href: "/nvr?camera=haustuer" }, location.origin),
+    );
+    await solo.getByRole("button", { name: "Ton von Haustür" }).waitFor();
+    assert.equal(await solo.getByRole("button", { name: "Ton von Haustür" }).getAttribute("aria-pressed"), "false");
+    await ctx.close();
+  }
+
   // --- Every page in a maximized window of the desktop (what the owner sees at 1280 px) ---
   const windowShots = [
     ["einrichtung", "/nvr", (s) => ((s.settings.enabled = false), (s.settings.privacyNoticeDismissed = false))],
