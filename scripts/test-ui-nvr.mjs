@@ -894,6 +894,21 @@ try {
     await faces.getByRole("button", { name: "Person anlegen" }).click();
     await faces.locator('[data-face="Jürgen_2"] b').waitFor();
     assert.deepEqual(sent(state, "POST", "/nvr/faces"), [{ name: "Jürgen_2" }]);
+    // PLAN 85: × on a picture asks first; nothing to type.
+    const patrick = faces.locator('[data-face="Patrick"]');
+    const deletedPictures = () =>
+      state.requests.filter(([m, p]) => m === "DELETE" && p.startsWith("/nvr/faces/Patrick/images/"));
+    await patrick.getByRole("button", { name: "Bild von Patrick entfernen" }).first().click();
+    const pictureQuestion = confirmDialog(page, de["nvr.faces.deletePictureTitle"]);
+    await pictureQuestion.getByText("Das Bild von Patrick wird gelöscht", { exact: false }).waitFor();
+    assert.equal(await pictureQuestion.locator("input").count(), 0);
+    await pictureQuestion.getByRole("button", { name: "Abbrechen" }).click();
+    await pictureQuestion.waitFor({ state: "detached" });
+    assert.equal(deletedPictures().length, 0, "cancel deletes nothing");
+    await patrick.getByRole("button", { name: "Bild von Patrick entfernen" }).first().click();
+    await pictureQuestion.getByRole("button", { name: "Löschen" }).click();
+    await patrick.getByText("2 Bilder").waitFor();
+    assert.equal(deletedPictures().length, 1);
     await sound(page, "faces");
     await faces.screenshot({ path: `${out}/gesichter-${WIDTH}.png`, animations: "disabled" });
 

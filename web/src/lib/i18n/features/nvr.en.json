@@ -534,6 +534,8 @@
 	"nvr.faces.pictureHint": "A picture has to show exactly one clearly visible face (JPEG, PNG or WebP, 8 MB at most). Several pictures per person improve recognition.",
 	"nvr.faces.removePicture": "Remove picture of {name}",
 	"nvr.faces.removePictureShort": "Remove picture",
+	"nvr.faces.deletePictureTitle": "Delete the picture?",
+	"nvr.faces.deletePictureText": "The picture of {name} is deleted and no longer counts for recognition.",
 	"nvr.faces.rename": "Rename",
 	"nvr.faces.deleteTitle": "Delete “{name}”?",
 	"nvr.faces.deleteText": "The person and all their pictures are deleted. The NVR no longer recognizes them.",

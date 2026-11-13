@@ -534,6 +534,8 @@
 	"nvr.faces.pictureHint": "Ein Bild muss genau ein gut erkennbares Gesicht zeigen (JPEG, PNG oder WebP, höchstens 8 MB). Mehrere Bilder je Person verbessern die Erkennung.",
 	"nvr.faces.removePicture": "Bild von {name} entfernen",
 	"nvr.faces.removePictureShort": "Bild entfernen",
+	"nvr.faces.deletePictureTitle": "Bild löschen?",
+	"nvr.faces.deletePictureText": "Das Bild von {name} wird gelöscht und zählt nicht mehr für die Erkennung.",
 	"nvr.faces.rename": "Umbenennen",
 	"nvr.faces.deleteTitle": "„{name}“ löschen?",
 	"nvr.faces.deleteText": "Die Person und alle ihre Bilder werden gelöscht. Der NVR erkennt sie dann nicht mehr.",
