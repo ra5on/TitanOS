@@ -371,10 +371,8 @@ try {
     await sound(page, "stored streams (375 px)");
     await page.goto(base + "/nvr/settings");
     await page.locator("#nvr-decoder-reason").getByText(de["nvr.decoder.reason.vm"]).waitFor();
-    // Known before PLAN 82 and outside it: at 375 px the detector's select
-    // ("Automatisch (empfohlen) – nimmt NPU") lacks 2 px; the suite's 390 px
-    // pass it. Everything else on the page, the decoder row included, must.
-    const cut = (await page.evaluate(cutTextIn)).filter((line) => !line.startsWith("select#nvr-detector."));
+    // The whole page, the detector's and the decoder's selects included.
+    const cut = await page.evaluate(cutTextIn);
     assert.deepEqual(cut, [], "decoder (375 px): cut text");
     assert.deepEqual(await page.evaluate(overlapsIn), [], "decoder (375 px): overlapping text");
     assert.equal(

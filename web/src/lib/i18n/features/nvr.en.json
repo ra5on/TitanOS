@@ -55,7 +55,7 @@
 	"nvr.device.reason.other": "not usable right now",
 	"nvr.detector.title": "Detection runs on",
 	"nvr.detector.found": "Found: {devices}",
-	"nvr.detector.auto": "Automatic (recommended) – uses {device}",
+	"nvr.detector.auto": "Automatic – uses {device}",
 	"nvr.detector.active": "Running on: {device}",
 	"nvr.detector.cpuHint": "The CPU is the slowest way: it gets noticeably loaded and detection reacts more slowly.",
 	"nvr.detector.coralPlugin": "Coral stick found – plugin missing",

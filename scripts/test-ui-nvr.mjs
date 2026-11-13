@@ -108,7 +108,7 @@ try {
         (o) => o.trim(),
       ),
       [
-        "Automatisch (empfohlen) – nimmt NPU",
+        "Automatisch – nimmt NPU",
         "NPU (Intel AI Boost)",
         "iGPU (Intel Arc)",
         "Coral USB (Google Coral) – Plugin fehlt",
