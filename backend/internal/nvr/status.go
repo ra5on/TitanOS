@@ -77,8 +77,9 @@ type Status struct {
 	// FrigateVersion is the pinned version.
 	FrigateVersion string       `json:"frigateVersion"`
 	Hardware       HardwareInfo `json:"hardware"`
-	// Decoder is the GPU that decodes the streams as the setting resolves
-	// now, with the reason when a chosen GPU cannot (PLAN 82-4).
+	// Decoder is the GPU that decodes the streams (PLAN 82-4): the one the
+	// container was made with, as the setting resolves while there is
+	// none; with the reason when a chosen GPU does not decode.
 	Decoder DecoderStatus `json:"decoder"`
 }
 
@@ -153,11 +154,16 @@ func (m *Manager) Status(ctx context.Context) Status {
 	return st
 }
 
-// decoderLocked resolves the decoder of the settings on hw (m.mu held)
-// and returns hw with VideoDecode telling whether a GPU decodes.
+// decoderLocked is the decoder in use (m.mu held): the one the container
+// was made with (a GPU Docker refused shows as the CPU with "driver" once
+// the container is made anew), else the settings' resolved on hw. It
+// returns hw with VideoDecode telling whether a GPU decodes.
 func (m *Manager) decoderLocked(hw HardwareInfo) (HardwareInfo, DecoderStatus) {
 	hw = hw.withBroken(m.rt.brokenDecoders)
 	_, decoder := hw.decoder(m.settings.Decoder)
+	if m.rt.decoder.Active != "" && m.rt.container.Exists {
+		decoder = m.rt.decoder
+	}
 	hw.VideoDecode = decoder.Active != DecoderCPU
 	if hw.Decoders == nil {
 		hw.Decoders = []Decoder{}
@@ -252,10 +258,6 @@ func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	hw := m.hardwareCached(ctx, true)
 	m.mu.Lock()
 	hw, decoder := m.decoderLocked(hw)
-	if m.rt.decoder.Active != "" && m.rt.container.Exists {
-		decoder = m.rt.decoder
-		hw.VideoDecode = decoder.Active != DecoderCPU
-	}
 	d := Diagnosis{
 		State: m.rt.phase, ImageReference: frigateImage, ImageVersion: FrigateVersion, ImagePresent: m.rt.imageID != "",
 		RunningVersion: m.rt.version,

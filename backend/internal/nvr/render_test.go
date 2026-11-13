@@ -118,10 +118,18 @@ func renderCases() map[string]struct {
 			}),
 		}, RenderHardware{Detector: DetectorIGPU, Decode: Decode{Kind: DecodeVAAPI, Node: "/dev/dri/renderD129"}}, nil},
 		// An NVIDIA GPU decodes; the camera with talking back keeps only its
-		// two streams open, never the one for talking back.
+		// two streams open, never the one for talking back. A camera with one
+		// stream gets it twice, record and detect apart: its recording never
+		// runs in the ffmpeg with the GPU.
 		"nvidia": {Settings{Detector: DetectorSetting{Kind: DetectorCPU}, Decoder: "0000:01:00.0"}, []Camera{
 			testCamera("haustuer", "Haustür", func(c *Camera) {
+				c.Order = 1
 				c.Audio = Audio{Enabled: true, TwoWay: true, Codec: "MPEG4-GENERIC"}
+			}),
+			testCamera("hof", "Hof", func(c *Camera) {
+				c.Order = 2
+				c.Source.SubURL = ""
+				c.Audio = Audio{Enabled: true, Codec: "PCMA"}
 			}),
 		}, RenderHardware{Detector: DetectorCPU, Decode: Decode{Kind: DecodeNVIDIA}}, nil},
 	}
@@ -349,9 +357,11 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	if got := dig(t, cfg, "cameras", "flur", "objects", "track").([]any); !slices.Equal(got, []any{"person", "cat"}) {
 		t.Errorf("flur tracks %v", got)
 	}
-	// One stream: it records and detects.
+	// One stream records and detects; the iGPU decodes, so it is two
+	// inputs of the same restream: the recording runs without the GPU.
 	inputs := dig(t, cfg, "cameras", "flur", "ffmpeg", "inputs").([]any)
-	if len(inputs) != 1 || !slices.Equal(dig(t, inputs[0], "roles").([]any), []any{"record", "detect"}) {
+	if len(inputs) != 2 || !slices.Equal(dig(t, inputs[0], "roles").([]any), []any{"record"}) || !slices.Equal(dig(t, inputs[1], "roles").([]any), []any{"detect"}) ||
+		dig(t, inputs[0], "path") != dig(t, inputs[1], "path") {
 		t.Errorf("inputs = %v", inputs)
 	}
 	// An empty list, never missing: Frigate would add a public STUN server.

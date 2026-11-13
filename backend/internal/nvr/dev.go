@@ -106,9 +106,13 @@ type DevEngine struct {
 	Starts, Creates int
 	// Prunes counts NVRPruneImages.
 	Prunes int
-	// RefuseCDI makes NVRCreate fail for a spec with CDI devices, as
-	// Docker does when it lacks the NVIDIA plugin's descriptions.
+	// RefuseCDI makes the start of a container with CDI devices fail, as
+	// Docker 26.1.5 does (measured) without the NVIDIA plugin's
+	// descriptions: the create succeeds, the start answers 500.
 	RefuseCDI bool
+	// CreateError, if set, is asked before each create: what it returns
+	// for the spec NVRCreate answers instead of creating (nil: it creates).
+	CreateError func(docker.NVRSpec) error
 	// frigate is told which config.yml the container started with.
 	frigate *DevFrigate
 	// engineStarted is when the engine started (zero: long ago);
@@ -150,8 +154,10 @@ func (e *DevEngine) NVRCreate(_ context.Context, spec docker.NVRSpec) error {
 	if e.state.Exists {
 		return errors.New("dev engine: the container exists")
 	}
-	if e.RefuseCDI && len(spec.CDIDevices) > 0 {
-		return errors.New(`dev engine: could not select device driver "cdi" with capabilities: [[gpu]]`)
+	if e.CreateError != nil {
+		if err := e.CreateError(spec); err != nil {
+			return err
+		}
 	}
 	e.spec, e.Creates = spec, e.Creates+1
 	e.state = docker.NVRState{Exists: true, ID: "dev", Hash: spec.Hash, Image: spec.Image}
@@ -163,6 +169,9 @@ func (e *DevEngine) NVRStart(context.Context) error {
 	defer e.mu.Unlock()
 	if !e.state.Exists {
 		return docker.ErrNotFound
+	}
+	if e.RefuseCDI && len(e.spec.CDIDevices) > 0 {
+		return errors.New(`docker: could not select device driver "cdi" with capabilities: [] (HTTP 500)`)
 	}
 	e.state.Running, e.state.StartedAt, e.state.Address = true, time.Now(), "127.0.0.1"
 	e.Starts++

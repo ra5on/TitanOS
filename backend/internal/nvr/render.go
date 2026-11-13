@@ -27,9 +27,13 @@ type RenderHardware struct {
 }
 
 // Decode is the GPU that decodes, as Frigate's ffmpeg needs to know it.
-// Frigate gives its hwaccel_args only to inputs with the role detect
-// (frigate/config/camera/camera.py): a GPU that fails to decode never
-// stops a recording.
+// Frigate gives its hwaccel_args to every input with the role detect
+// (frigate/config/camera/camera.py), and an input with the roles record
+// and detect is one ffmpeg: its recording would stop with a GPU that fails
+// to decode. So with a GPU decoding, a stream that is recorded and
+// detected becomes two inputs of the same restream, one per role
+// (cameraBlock); go2rtc serves both from its one connection to the camera.
+// Then no recording depends on the GPU.
 type Decode struct {
 	// Kind is DecodeCPU, DecodeVAAPI (Intel, AMD) or DecodeNVIDIA.
 	Kind string
@@ -143,7 +147,7 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 			return nil, fmt.Errorf("camera %s: %w", c.ID, err)
 		}
 		streams = append(streams, entries...)
-		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
+		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces, hw.Decode.Kind != DecodeCPU)})
 	}
 	// The longest any recording is kept, at least unknownDays, for the
 	// global retention below.
@@ -397,25 +401,30 @@ func frigateBraces(s string) string {
 	return strings.NewReplacer("{", "{{", "}", "}}").Replace(s)
 }
 
-func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
+// cameraBlock is a camera in config.yml; gpu: a GPU decodes (hwaccel_args
+// is not empty).
+func cameraBlock(c Camera, anyPlates, anyFaces, gpu bool) ymap {
 	const restream = "rtsp://127.0.0.1:8554/"
 	input := func(stream string, roles ...string) ymap {
 		return ymap{{"path", restream + stream}, {"input_args", "preset-rtsp-restream"}, {"roles", roles}}
 	}
 	// Each stream the camera's choice (Streams) names, with its roles: by
-	// default the main stream records and the sub stream detects. One
-	// stream that does both is one input; the main stream comes first.
+	// default the main stream records and the sub stream detects; the main
+	// stream comes first. One stream that does both is one input while the
+	// CPU decodes, two (record, then detect) while a GPU decodes: the
+	// recording never runs in the ffmpeg that has the GPU (Decode).
 	inputs := []ymap{}
 	for _, stream := range []string{StreamMain, StreamSub} {
-		roles := []string{}
-		if c.recordStream() == stream {
-			roles = append(roles, "record")
-		}
-		if c.detectStream() == stream {
-			roles = append(roles, "detect")
-		}
-		if len(roles) > 0 {
-			inputs = append(inputs, input(streamName(c.ID, stream), roles...))
+		record, detect := c.recordStream() == stream, c.detectStream() == stream
+		switch {
+		case record && detect && gpu:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record"), input(streamName(c.ID, stream), "detect"))
+		case record && detect:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record", "detect"))
+		case record:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record"))
+		case detect:
+			inputs = append(inputs, input(streamName(c.ID, stream), "detect"))
 		}
 	}
 	// The sound of the recording follows the codec of the stream that is
