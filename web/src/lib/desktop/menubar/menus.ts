@@ -516,7 +516,8 @@ const PROGRAMS: Record<string, Menu[]> = {
 		]),
 		menu('view', 'menubar.menu.view', [
 			go('settings.go.all', 'desktop.side.allSettings', '/settings'),
-			// PLAN 78: the areas of the menu; one the account may not open is left out.
+			// PLAN 78/86: the areas of the menu (each opens its first page with
+			// the area open in the column); one the account may not open is left out.
 			sub(
 				'settings.groups',
 				'menubar.settings.groups',
