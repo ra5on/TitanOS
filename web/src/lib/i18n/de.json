@@ -7134,6 +7134,8 @@
 	"activity.via.homeassistant": "Home Assistant",
 	"activity.via.agent": "per KI-Agent",
 	"tools.harmless": "Bekannt harmlos: Der Router hat PCP ausgeschaltet; Tailscale verbindet trotzdem über UPnP oder ein Relais. Wer die Meldung loswerden will, schaltet PCP im Router ein.",
+	"tools.harmlessFirmware": "Bekannt harmlos: Meldung der Firmware (BIOS) dieses Mainboards, kommt bei jedem Start. TitanOS kann sie nicht ändern; ein BIOS-Update des Herstellers vielleicht.",
+	"tools.noText": "(ohne Text)",
 	"notify.kind.unclean_shutdown.title": "Das NAS wurde nicht ordnungsgemäß heruntergefahren",
 	"notify.kind.unclean_shutdown.text": "Der vorige Start endete ohne sauberes Herunterfahren (Stromausfall, Absturz oder Reset); letzte Spur {subject}. Prüfe den Zustand der Volumes; das Protokoll des vorigen Starts gibt es unter Werkzeuge › Protokolle.",
 	"tools.exportPrevious": "Vorigen Start herunterladen",

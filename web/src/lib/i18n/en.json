@@ -7134,6 +7134,8 @@
 	"activity.via.homeassistant": "Home Assistant",
 	"activity.via.agent": "via AI agent",
 	"tools.harmless": "Known to be harmless: the router has PCP switched off; Tailscale still connects through UPnP or a relay. Switch PCP on in the router to get rid of the message.",
+	"tools.harmlessFirmware": "Known to be harmless: a message of this mainboard's firmware (BIOS) at every start. TitanOS cannot change it; a BIOS update of the maker may.",
+	"tools.noText": "(no text)",
 	"notify.kind.unclean_shutdown.title": "The NAS was not shut down properly",
 	"notify.kind.unclean_shutdown.text": "The previous start ended without a clean shutdown (power cut, crash or reset); last trace {subject}. Check the state of the volumes; the log of the previous start is under Tools › Logs.",
 	"tools.exportPrevious": "Download previous start",

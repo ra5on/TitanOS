@@ -1,6 +1,11 @@
 package api
 
 import (
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"syscall"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
@@ -74,5 +79,17 @@ func TestNVRRequestListsReplaceAsAWhole(t *testing.T) {
 	getJSON(t, ts, ts.client, "/nvr/settings", &settings)
 	if len(settings.Plates) != 1 || settings.Plates[0].Name != "Annas Auto" || settings.Plates[0].Plates[0] != "M-AB 1234" {
 		t.Errorf("plates after the refused change: %+v", settings.Plates)
+	}
+}
+
+// Owner's log 13.11.2026: "write response … broken pipe" from a client
+// that went away stood as an error. It is not one.
+func TestClientGoneIsNoError(t *testing.T) {
+	gone := &net.OpError{Op: "write", Net: "tcp", Err: os.NewSyscallError("write", syscall.EPIPE)}
+	if !clientGone(gone) || !clientGone(fmt.Errorf("wrapped: %w", gone)) || !clientGone(net.ErrClosed) {
+		t.Error("a closed connection counts as an error")
+	}
+	if clientGone(errors.New("json: unsupported value: NaN")) {
+		t.Error("an encoding error is not a gone client")
 	}
 }

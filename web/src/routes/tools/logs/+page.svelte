@@ -8,7 +8,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	const SOURCES = [
 		'',
@@ -177,8 +177,18 @@
 	}
 
 	// Messages known to be harmless: shown, but quiet, with a note why.
-	const HARMLESS = [/portmapper: failed to get PCP mapping/, /PCP is implemented but not enabled/];
-	const harmless = (entry: Entry) => HARMLESS.some((pattern) => pattern.test(entry.message));
+	// Firmware of many Intel boards reports the last three at every start
+	// (owner's log 13.11.2026); TitanOS cannot change them, a BIOS update may.
+	const HARMLESS: [RegExp, MessageKey][] = [
+		[/portmapper: failed to get PCP mapping/, 'tools.harmless'],
+		[/PCP is implemented but not enabled/, 'tools.harmless'],
+		[/^vmd [0-9a-f:.]+: Unknown Bus Offset Setting/, 'tools.harmlessFirmware'],
+		[/^ACPI BIOS Error \(bug\)/, 'tools.harmlessFirmware'],
+		[/^ACPI Error: .*AE_NOT_FOUND/, 'tools.harmlessFirmware'],
+	];
+	const harmlessNote = (entry: Entry): MessageKey | undefined =>
+		HARMLESS.find(([pattern]) => pattern.test(entry.message))?.[1];
+	const harmless = (entry: Entry) => harmlessNote(entry) !== undefined;
 
 	function level(priority: number): 'error' | 'warn' | '' {
 		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
@@ -320,7 +330,7 @@
 				<div
 					class="line {level(entry.priority)}"
 					class:harmless={harmless(entry)}
-					title={harmless(entry) ? t('tools.harmless') : undefined}
+					title={harmless(entry) ? t(harmlessNote(entry)!) : undefined}
 				>
 					<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
 					<span class="source">{entry.source}</span>
@@ -330,7 +340,7 @@
 									entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning',
 								)}</span
 							>
-						{/if}{entry.message}</span
+						{/if}{entry.message.trim() || t('tools.noText')}</span
 					>
 				</div>
 			{:else}
