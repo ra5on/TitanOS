@@ -368,11 +368,14 @@ type nvrCameraBrief struct {
 type nvrCameraRights struct {
 	Live       bool `json:"live"`
 	Recordings bool `json:"recordings"`
+	// Names: recognised faces' names and plates of this camera (PLAN
+	// 82-3); only with Recordings.
+	Names bool `json:"names"`
 }
 
 func (a nvrArea) brief(user auth.User, c nvr.Camera, state nvr.CameraState) nvrCameraBrief {
 	return nvrCameraBrief{ID: c.ID, Name: c.Name, Enabled: c.Enabled, Order: c.Order, Audio: c.Audio, PTZ: c.PTZ, State: state,
-		Rights: nvrCameraRights{Live: a.allows(user, c.ID, nvr.RightLive), Recordings: a.allows(user, c.ID, nvr.RightRecordings)}}
+		Rights: nvrCameraRights{Live: a.allows(user, c.ID, nvr.RightLive), Recordings: a.allows(user, c.ID, nvr.RightRecordings), Names: a.allows(user, c.ID, nvr.RightNames)}}
 }
 
 // handleCameras lists the cameras: {cameras: […]}. Owners and
@@ -605,6 +608,8 @@ type nvrUserCamera struct {
 	Name       string `json:"name"`
 	Live       bool   `json:"live"`
 	Recordings bool   `json:"recordings"`
+	// Names: recognised faces' names and plates (PLAN 82-3).
+	Names bool `json:"names"`
 }
 
 func (a nvrArea) userCameras(target auth.User) nvrUserCameras {
@@ -615,7 +620,8 @@ func (a nvrArea) userCameras(target auth.User) nvrUserCameras {
 	cameras := a.nvr.Cameras()
 	rights := a.nvr.Access.User(target.Name, a.nvr.CameraIDs())
 	for _, c := range cameras {
-		entry := nvrUserCamera{ID: c.ID, Name: c.Name, Live: view.Admin || rights[c.ID].Live, Recordings: view.Admin || rights[c.ID].Recordings}
+		entry := nvrUserCamera{ID: c.ID, Name: c.Name, Live: view.Admin || rights[c.ID].Live, Recordings: view.Admin || rights[c.ID].Recordings,
+			Names: view.Admin || rights[c.ID].Names}
 		view.Cameras = append(view.Cameras, entry)
 	}
 	return view
@@ -632,9 +638,11 @@ func (a nvrArea) handleUserCameras(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUserCamerasSet changes the cameras of one normal account:
-// {cameras: {"haustuer": {live: true, recordings: false}, …}}; cameras
-// left out stay as they are. Open live views of the account end within
-// a few seconds when their right is gone.
+// {cameras: {"haustuer": {live: true, recordings: true, names: false}, …}};
+// cameras left out stay as they are. names may be left out (a page of
+// 0.78): it then stays as it is; it counts only with recordings. Open
+// live views of the account end within a few seconds when their right is
+// gone.
 func (a nvrArea) handleUserCamerasSet(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
@@ -649,14 +657,23 @@ func (a nvrArea) handleUserCamerasSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Cameras map[string]nvrCameraRights `json:"cameras"`
+		Cameras map[string]struct {
+			Live       bool  `json:"live"`
+			Recordings bool  `json:"recordings"`
+			Names      *bool `json:"names"`
+		} `json:"cameras"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
+	current := a.nvr.Access.User(target.Name, a.nvr.CameraIDs())
 	rights := nvr.UserRights{}
 	for id, want := range req.Cameras {
-		rights[id] = struct{ Live, Recordings bool }{want.Live, want.Recordings}
+		names := current[id].Names
+		if want.Names != nil {
+			names = *want.Names
+		}
+		rights[id] = nvr.Rights{Live: want.Live, Recordings: want.Recordings, Names: names}
 	}
 	if err := a.nvr.Access.SetUser(target.Name, rights, a.nvr.CameraIDs()); err != nil {
 		writeNVRError(w, err)
@@ -695,8 +712,10 @@ type nvrRecipient struct {
 	// PushDevicesOff those that switched them off.
 	PushDevices    int `json:"pushDevices"`
 	PushDevicesOff int `json:"pushDevicesOff"`
-	// Cameras are the IDs of the cameras it may see now.
+	// Cameras are the IDs of the cameras it may see now; Names those whose
+	// recognised names and plates it may see (plate and face messages).
 	Cameras []string `json:"cameras"`
+	Names   []string `json:"names"`
 }
 
 // handleRecipients lists the accounts that are not locked, with how they
@@ -712,10 +731,13 @@ func (a nvrArea) handleRecipients(w http.ResponseWriter, r *http.Request) {
 		if user.Disabled {
 			continue
 		}
-		entry := nvrRecipient{Name: user.Name, Admin: user.Role.CanAdminister(), Cameras: []string{}}
+		entry := nvrRecipient{Name: user.Name, Admin: user.Role.CanAdminister(), Cameras: []string{}, Names: []string{}}
 		for _, id := range ids {
 			if entry.Admin || a.allows(user, id, nvr.RightLive) || a.allows(user, id, nvr.RightRecordings) {
 				entry.Cameras = append(entry.Cameras, id)
+			}
+			if entry.Admin || a.allows(user, id, nvr.RightNames) {
+				entry.Names = append(entry.Names, id)
 			}
 		}
 		if a.notify != nil {

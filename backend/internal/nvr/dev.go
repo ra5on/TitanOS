@@ -441,6 +441,10 @@ func demoPicture(id string) []byte {
 	return out.Bytes()
 }
 
+// DevStandIn is the stand-in for Frigate of development mode (nil
+// otherwise); tests let it raise events.
+func (m *Manager) DevStandIn() *DevFrigate { return m.devFrigate }
+
 // StartDev makes m a manager of development mode: a DevEngine with the
 // image "pulled" and a DevFrigate on a port of 127.0.0.1 that ends with
 // ctx. Call it before Load.

@@ -286,17 +286,42 @@ func TestNotifyRecipientsAtSendTime(t *testing.T) {
 	if !slices.Equal(got[0].Targets, want) {
 		t.Fatalf("targets %+v, want %+v", got[0].Targets, want)
 	}
-	// A plate and a face: administrators only.
-	r.event("haustuer", "car", "Unser Auto", "K-TI 2026")
-	r.event("haustuer", "person", "Anna", "")
-	for _, n := range r.take() {
-		if n.Kind != KindPlate && n.Kind != KindFace {
-			continue
+	// A plate and a face: administrators and accounts with the right
+	// "names" on the camera only (sam watches live, nothing more).
+	namesTo := func(want ...string) {
+		t.Helper()
+		r.advance(time.Hour)
+		r.event("haustuer", "car", "Unser Auto", "K-TI 2026")
+		r.event("haustuer", "person", "Anna", "")
+		seen := 0
+		for _, n := range r.take() {
+			if n.Kind != KindPlate && n.Kind != KindFace {
+				continue
+			}
+			seen++
+			if !slices.Equal(users(n.Targets), want) {
+				t.Errorf("%s went to %v, want %v", n.Kind, users(n.Targets), want)
+			}
 		}
-		if !slices.Equal(users(n.Targets), []string{"alex"}) {
-			t.Errorf("%s went to %v", n.Kind, users(n.Targets))
+		if seen != 2 {
+			t.Errorf("%d plate and face messages, want 2", seen)
 		}
 	}
+	namesTo("alex")
+	cameras := []string{"haustuer", "garten"}
+	// Recordings alone do not give the names.
+	if err := r.m.Access.SetUser("sam", UserRights{"haustuer": {Live: true, Recordings: true}}, cameras); err != nil {
+		t.Fatal(err)
+	}
+	namesTo("alex")
+	if err := r.m.Access.SetUser("sam", UserRights{"haustuer": {Live: true, Recordings: true, Names: true}}, cameras); err != nil {
+		t.Fatal(err)
+	}
+	namesTo("alex", "sam")
+	if err := r.m.Access.SetUser("sam", UserRights{"haustuer": {Live: true}}, cameras); err != nil {
+		t.Fatal(err)
+	}
+	namesTo("alex")
 	// The rights could not be read at the start: nobody but administrators.
 	r.m.Access.mu.Lock()
 	r.m.Access.unreadable = true

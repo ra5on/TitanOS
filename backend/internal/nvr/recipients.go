@@ -108,18 +108,21 @@ func (n *Notify) keepWayBack() {
 // now, with the ways they may have: the account exists, is not locked, is
 // the one that was chosen (not made later under the same name), and may
 // see the camera (owners and administrators always; others by their tick,
-// none while the rights could not be read). Plates and faces go to owners
-// and administrators only, as only they see them in the NVR; the bell
-// only to them, as only they have one.
+// none while the rights could not be read). Plates and faces name what
+// the NVR recognised: they go to owners and administrators and to
+// accounts with the right "names" on the camera, as only they see names
+// and plates in the NVR (PLAN 82-3). The bell only to owners and
+// administrators, as only they have one.
 func (m *Manager) targets(c Camera, kind string) []Target {
-	adminOnly := kind == KindPlate || kind == KindFace
+	names := kind == KindPlate || kind == KindFace
 	out := []Target{}
 	for _, r := range c.Notify.Recipients {
 		account, ok := m.Access.lookup(r.User)
 		if !ok || account.Disabled || chosenBefore(account, r.Added) {
 			continue
 		}
-		if !account.Admin && (adminOnly || !m.Access.Readable() || !m.Access.Sees(r.User, c.ID)) {
+		if !account.Admin && (!m.Access.Readable() || !m.Access.Sees(r.User, c.ID) ||
+			names && !m.Access.Allows(r.User, c.ID, RightNames)) {
 			continue
 		}
 		t := Target{User: r.User, Bell: r.Bell && account.Admin, Push: r.Push, Email: r.Email}
