@@ -63,5 +63,6 @@
 	"phone.files.shareTitle": "Share “{name}”",
 	"phone.files.shareReady": "The file is loaded. Tap “Share” to hand it to another app.",
 	"phone.files.sharing": "Loading “{name}” …",
-	"phone.files.shareFailed": "The file could not be shared."
+	"phone.files.shareFailed": "The file could not be shared.",
+	"phone.search.settings": "Settings"
 }

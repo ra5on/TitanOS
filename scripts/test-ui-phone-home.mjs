@@ -177,6 +177,37 @@ try {
   await page.locator(".home .dots .dot-btn").first().tap();
   await page.waitForTimeout(700);
 
+  // Pulling the pages down searches: programs, pages, single settings, actions.
+  const pb = await page.locator(".home .pages").boundingBox();
+  await touch(cdp, "touchStart", [[200, pb.y + 300]]);
+  for (let i = 1; i <= 10; i++)
+    await touch(cdp, "touchMove", [[202, pb.y + 300 + i * 12]]);
+  await page.locator(".home .pull-hint").waitFor();
+  await touch(cdp, "touchEnd", []);
+  const launcher = page.locator(".launcher.phone");
+  await launcher.waitFor();
+  assert.ok(
+    await page.evaluate(() =>
+      document.activeElement?.matches(".home .search input"),
+    ),
+    "the search field has the keyboard",
+  );
+  await page.locator(".home .search input").fill("sprache");
+  const hit = launcher
+    .locator("[data-settings-hit]", { hasText: "Sprache" })
+    .first();
+  await hit.waitFor();
+  await page.locator(".home .search input").fill("speicher");
+  await launcher.locator(".prog", { hasText: "Speicher" }).first().waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${out}/suche-heruntergezogen.png` });
+  await page.locator(".home .search input").fill("sprache");
+  await hit.tap();
+  await page.waitForURL(/\/settings\/appearance/);
+  await page.goto(base + "/");
+  await page.locator(".home .pages").waitFor();
+  await page.waitForTimeout(700);
+
   // A long press starts arranging.
   const shares = key(page, "app:shares");
   await longPress(page, cdp, await center(shares.locator(".icon-box")));
