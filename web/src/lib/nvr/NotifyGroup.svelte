@@ -151,7 +151,6 @@
 		desc={camera ? t('nvr.notify.recipientsHint') : t('nvr.notify.recipientsNewHint')}
 		id="nvr-notify-recipients"
 		{summary}
-		open
 	>
 		{#if legacy}
 			<div class="srow-block">

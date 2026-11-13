@@ -72,6 +72,11 @@ async function open(role, change = () => {}, theme = "hell", width = WIDTH) {
 }
 const sent = (state, method, path) =>
   state.requests.filter(([m, p]) => m === method && p === path).map((r) => r[2]);
+/** Opens a row of the settings style unless the browser remembered it open. */
+async function openRow(page, id) {
+  const chevron = page.locator(`#${id} > .srow-head .srow-chev`);
+  if ((await chevron.getAttribute("aria-expanded")) !== "true") await chevron.click();
+}
 const confirmDialog = (page, title) =>
   page.getByRole("dialog", { name: title });
 /** Waits until a condition of the test holds (the desktop saves 1.5 s after a change). */
@@ -221,6 +226,7 @@ try {
     );
     // A new camera starts with the administrator who adds it (bell and
     // push); other administrators can be chosen, plain accounts not yet.
+    await openRow(page, "nvr-notify-recipients");
     await page.locator("#nvr-notify-recipients").getByText("alex (du)").waitFor();
     assert.equal(await pill("Wege für alex", "Glocke").getAttribute("aria-pressed"), "true");
     assert.equal(await pill("Wege für alex", "Push").getAttribute("aria-pressed"), "true");
@@ -390,6 +396,9 @@ try {
     await page.goto(base + "/nvr/cameras?edit=haustuer");
     await page.getByRole("heading", { name: "Haustür" }).waitFor();
     const rows = page.locator("#nvr-notify-recipients");
+    // Closed at first, saying how many accounts get the messages.
+    await rows.getByText("2 Konten").waitFor();
+    await openRow(page, "nvr-notify-recipients");
     await rows.getByText(de["nvr.notify.legacy"]).waitFor();
     for (const name of ["alex", "mara"]) {
       assert.equal(await pill(`Wege für ${name}`, "Glocke").getAttribute("aria-pressed"), "true");
@@ -433,6 +442,7 @@ try {
     // A chosen account that may no longer see the camera: said, and it can be removed.
     await page.goto(base + "/nvr/cameras?edit=einfahrt");
     await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
+    await openRow(page, "nvr-notify-recipients");
     await rows.getByText(de["nvr.notify.stale.noRight"]).waitFor();
     assert.equal(await page.getByLabel(de["nvr.notify.pauseTitle"]).inputValue(), "300");
     assert.equal(await page.getByLabel("von", { exact: true }).inputValue(), "22:00");
