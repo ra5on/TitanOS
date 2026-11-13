@@ -1,0 +1,22 @@
+{
+	"vms.touch.keyboardField": "Input for the VM",
+	"vms.touch.bar": "Keys for the VM",
+	"vms.touch.keyboard": "Keyboard",
+	"vms.touch.keyboardHint": "Opens the phone's keyboard; what you type goes to the VM.",
+	"vms.touch.esc": "Esc",
+	"vms.touch.tab": "Tab",
+	"vms.touch.fkeys": "F1–F12",
+	"vms.touch.fkeysHint": "Shows the function keys F1 to F12",
+	"vms.touch.left": "Arrow left",
+	"vms.touch.up": "Arrow up",
+	"vms.touch.down": "Arrow down",
+	"vms.touch.right": "Arrow right",
+	"vms.touch.held": "held",
+	"vms.touch.mode": "Finger on the picture",
+	"vms.touch.trackpad": "Trackpad",
+	"vms.touch.direct": "Direct",
+	"vms.touch.trackpadHint": "Trackpad: a finger moves the pointer, a tap clicks, a two-finger tap is a right click, two fingers drag to scroll, tap and drag at once to drag with the button held.",
+	"vms.touch.directHint": "Direct: a tap clicks where it lands, a two-finger tap is a right click, two fingers drag to scroll, a long press is a right click.",
+	"vms.touch.full": "Large screen",
+	"vms.touch.fullClose": "Close large screen"
+}

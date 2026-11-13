@@ -94,7 +94,10 @@
 			class="tool icon-tool strong"
 			aria-label={t('vms.fullscreen')}
 			title={t('vms.fullscreen')}
-			onclick={() => p.size.frame?.requestFullscreen()}><Icon name="maximize" size={16} /></button
+			onclick={() =>
+				// PLAN 87: iPhones have no full screen for a page: the screen fills it by itself.
+				p.touch ? (p.touchFull = !p.touchFull) : p.size.frame?.requestFullscreen()}
+			><Icon name="maximize" size={16} /></button
 		>
 	{:else}<span class="grow"></span>
 		{#if !inWindow}<button

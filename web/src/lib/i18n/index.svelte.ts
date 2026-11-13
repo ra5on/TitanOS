@@ -26,6 +26,8 @@ import type designDe from './features/design.de.json';
 import type errorsDe from './features/errors.de.json';
 // PLAN 79-7: the NVR.
 import type nvrDe from './features/nvr.de.json';
+// PLAN 87: the phone (home screen, gestures, VM screen by touch).
+import type phoneDe from './features/phone.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -43,7 +45,8 @@ type Messages = typeof deBase &
 	typeof designDe &
 	typeof menubarDe &
 	typeof errorsDe &
-	typeof nvrDe;
+	typeof nvrDe &
+	typeof phoneDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -66,6 +69,7 @@ const FILES = {
 			import('./features/design.de.json'),
 			import('./features/errors.de.json'),
 			import('./features/nvr.de.json'),
+			import('./features/phone.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -86,6 +90,7 @@ const FILES = {
 			import('./features/design.en.json'),
 			import('./features/errors.en.json'),
 			import('./features/nvr.en.json'),
+			import('./features/phone.en.json'),
 		]),
 };
 

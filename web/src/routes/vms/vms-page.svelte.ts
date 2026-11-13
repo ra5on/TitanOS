@@ -17,7 +17,8 @@ import type Overview from './Overview.svelte';
 import type { VmDialogDraft, VmDialogKind } from './VmActionDialog.svelte';
 import type { RowChoice } from './VmRowMenu.svelte';
 import type VncScreen from './VncScreen.svelte';
-import type { ScaleMode, ConnectionPhase } from './VncScreen.svelte';
+import type { ScaleMode, ConnectionPhase, Modifiers, PointerMode } from './VncScreen.svelte';
+import { keepPointerMode, readPointerMode, touchScreen } from './vnc-input.ts';
 import {
 	lowSpaceVolumes,
 	problem,
@@ -293,6 +294,13 @@ export class VmsPage {
 	};
 	// PLAN 64: the phone's full-screen view keeps only the buttons in the bar.
 	phone = $derived(phoneView());
+	// PLAN 87: the screen by touch – key bar, phone keyboard, finger as mouse.
+	touch = $derived(touchScreen(this.phone));
+	pointer = $state<PointerMode>(readPointerMode());
+	mods = $state<Modifiers>({ ctrl: false, alt: false });
+	keyboard = $state(false);
+	/** The screen with its key bar fills the phone (iPhones have no full screen for a page). */
+	touchFull = $state(false);
 
 	overview = $state<ReturnType<typeof Overview>>();
 	/** The CD drive lives in the hardware part: shown first if another tab is open. */
@@ -325,6 +333,7 @@ export class VmsPage {
 		});
 
 		$effect(() => this.size.observe());
+		$effect(() => keepPointerMode(this.pointer));
 		$effect(() => {
 			const current = (this.poller = poll(this.fetchStatus, { interval: 3000 }));
 			return () => {

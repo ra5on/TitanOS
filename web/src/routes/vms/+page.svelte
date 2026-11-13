@@ -27,6 +27,7 @@
 	import VmRowMenu from './VmRowMenu.svelte';
 	import VmXmlDialog from './VmXmlDialog.svelte';
 	import VncScreen from './VncScreen.svelte';
+	import VncKeyBar from './VncKeyBar.svelte';
 	import { noticeClass } from './vm-page.ts';
 	import { registerVmsMenu } from './vms-menu.ts';
 	import { TABS, VmsPage } from './vms-page.svelte.ts';
@@ -212,26 +213,46 @@
 					{#if p.size.error}<p class="notice-error" role="alert">
 							{t('vms.size.failed')}<BackendDetail text={p.size.error} />
 						</p>{/if}
-					<div
-						class="frame"
-						style:height={p.size.fullscreen ? null : `${p.size.fitted}px`}
-						style:width={p.size.fullscreen || p.size.width === null ? null : `${p.size.width}px`}
-						style:max-height={p.size.fullscreen || p.size.room <= 0
-							? null
-							: `${Math.max(VNC_HEIGHT.min, Math.floor(p.size.room))}px`}
-						class:fullscreen={p.size.fullscreen}
-						bind:this={p.size.frame}
-					>
-						{#if current.state === 'running'}
-							{#key current.name}
-								<VncScreen
-									bind:this={p.screen}
-									vm={current.name}
-									mode={p.mode}
-									resizable={current.template === 'linux'}
-									onstatus={(phase) => (p.connectionPhase = phase)}
-								/>
-							{/key}
+					<!-- PLAN 87: on a touch screen the key bar follows the picture in one box,
+					     which can fill the phone ("Bildschirm groß"). -->
+					<div class="screen-area" class:touch={p.touch} class:full={p.touchFull}>
+						<div
+							class="frame"
+							style:height={p.size.fullscreen || p.touchFull ? null : `${p.size.fitted}px`}
+							style:width={p.size.fullscreen || p.touchFull || p.size.width === null
+								? null
+								: `${p.size.width}px`}
+							style:max-height={p.size.fullscreen || p.touchFull || p.size.room <= 0
+								? null
+								: `${Math.max(VNC_HEIGHT.min, Math.floor(p.size.room))}px`}
+							class:fullscreen={p.size.fullscreen}
+							bind:this={p.size.frame}
+						>
+							{#if current.state === 'running'}
+								{#key current.name}
+									<VncScreen
+										bind:this={p.screen}
+										vm={current.name}
+										mode={p.mode}
+										resizable={current.template === 'linux'}
+										onstatus={(phase) => (p.connectionPhase = phase)}
+										touch={p.touch}
+										pointer={p.pointer}
+										bind:mods={p.mods}
+										onkeyboard={(open) => (p.keyboard = open)}
+									/>
+								{/key}
+							{/if}
+						</div>
+						{#if p.touch && current.state === 'running'}
+							<VncKeyBar
+								screen={p.screen}
+								bind:mods={p.mods}
+								bind:pointer={p.pointer}
+								keyboard={p.keyboard}
+								full={p.touchFull}
+								onfull={() => (p.touchFull = !p.touchFull)}
+							/>
 						{/if}
 					</div>
 					<div class="screen-footer">
@@ -460,6 +481,33 @@
 		border-radius: var(--radius-tile);
 		overflow: hidden;
 		resize: both;
+	}
+	/* PLAN 87: picture and key bar in one box; "groß" it fills the phone. */
+	.screen-area {
+		display: contents;
+	}
+	.screen-area.touch {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+	.screen-area.touch .frame {
+		resize: none;
+		border-bottom-left-radius: 0;
+		border-bottom-right-radius: 0;
+	}
+	.screen-area.full {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		padding-top: env(safe-area-inset-top);
+		background: var(--screen-bg);
+	}
+	.screen-area.full .frame {
+		flex: 1 1 auto;
+		min-height: 0;
+		border: 0;
+		border-radius: 0;
 	}
 	.frame.fullscreen {
 		width: 100%;

@@ -1,0 +1,22 @@
+{
+	"vms.touch.keyboardField": "Eingabe für die VM",
+	"vms.touch.bar": "Tasten für die VM",
+	"vms.touch.keyboard": "Tastatur",
+	"vms.touch.keyboardHint": "Öffnet die Tastatur des Handys; was du tippst, geht an die VM.",
+	"vms.touch.esc": "Esc",
+	"vms.touch.tab": "Tab",
+	"vms.touch.fkeys": "F1–F12",
+	"vms.touch.fkeysHint": "Zeigt die Funktionstasten F1 bis F12",
+	"vms.touch.left": "Pfeil links",
+	"vms.touch.up": "Pfeil hoch",
+	"vms.touch.down": "Pfeil runter",
+	"vms.touch.right": "Pfeil rechts",
+	"vms.touch.held": "gehalten",
+	"vms.touch.mode": "Finger auf dem Bild",
+	"vms.touch.trackpad": "Trackpad",
+	"vms.touch.direct": "Direkt",
+	"vms.touch.trackpadHint": "Trackpad: Finger bewegt den Zeiger, Tippen klickt, zwei Finger tippen = Rechtsklick, zwei Finger ziehen = Scrollen, Tippen und gleich wieder ziehen = Ziehen mit gedrückter Taste.",
+	"vms.touch.directHint": "Direkt: Tippen klickt an der Stelle, zwei Finger tippen = Rechtsklick, zwei Finger ziehen = Scrollen, lange drücken = Rechtsklick.",
+	"vms.touch.full": "Bildschirm groß",
+	"vms.touch.fullClose": "Groß schließen"
+}
