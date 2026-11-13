@@ -280,8 +280,9 @@
 	</p>
 </div>
 
-<!-- Farben: mode, variant, accent and the sliders (approved draft 7.11.2026;
-     PLAN 78-1: groups are plain headings, every setting a row). -->
+<!-- Farben und Schrift: mode, variant, accent, language and font size, the
+     sliders (approved draft 7.11.2026; PLAN 78-1: groups are plain headings,
+     every setting a row; PLAN 86: language and font size on this tab). -->
 <div class="tab-panel" hidden={tab !== 'colors'} data-tab-panel="colors">
 	<SettingGroup title={t('look.colors')} id="h-colors">
 		<SettingRow title={t('look.mode')}>
@@ -379,6 +380,26 @@
 		</SettingRow>
 	</SettingGroup>
 
+	<!-- PLAN 86 (owner 13.11.2026): language and font size where one looks
+	     for them – on the first tab, together, instead of under "Glas &
+	     Schrift" and among the glass sliders. -->
+	<SettingGroup title={t('look.langText')} id="h-lang">
+		<SettingRow title={t('lang.label')} desc={t('look.languageHint')}>
+			{#snippet control()}
+				<LanguageSwitch />
+			{/snippet}
+		</SettingRow>
+		{@render slider(
+			'look-font',
+			t('appearance.fontSize'),
+			t('look.fontHint'),
+			draft.font,
+			LIMITS.font,
+			'%',
+			(v) => (draft.font = v),
+		)}
+	</SettingGroup>
+
 	<SettingGroup title={t('look.sliders')} id="h-sliders">
 		<!-- PLAN 73: one slider from see-through to opaque instead of
 		     "Transparenz" and "Glaseffekt"; it sets both stored values (older
@@ -423,15 +444,6 @@
 			(v) => (draft = withCorners(draft, v)),
 		)}
 		{@render slider(
-			'look-font',
-			t('appearance.fontSize'),
-			t('look.fontHint'),
-			draft.font,
-			LIMITS.font,
-			'%',
-			(v) => (draft.font = v),
-		)}
-		{@render slider(
 			'look-saturation',
 			t('look.saturation'),
 			t('look.saturationHint'),
@@ -466,15 +478,9 @@
 	</SettingGroup>
 </div>
 
-<!-- Glas & Schrift: the finer settings (spacing, edges, glow, motion). -->
+<!-- Feinheiten und Effekte: the finer settings (spacing, edges, glow, motion). -->
 <div class="tab-panel" hidden={tab !== 'glass'} data-tab-panel="glass">
 	<SettingGroup title={t('look.details')} id="h-details" desc={t('look.detailsHint')}>
-		<!-- PLAN 79-10: the language was in the menu of the account's avatar, which is gone. -->
-		<SettingRow title={t('lang.label')} desc={t('look.languageHint')}>
-			{#snippet control()}
-				<LanguageSwitch />
-			{/snippet}
-		</SettingRow>
 		<SettingRow title={t('appearance.density')} desc={t('look.densityHint')}>
 			{#snippet control()}
 				<Segments
