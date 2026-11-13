@@ -80,7 +80,8 @@
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
 		// PLAN 86: a hit of the settings search leads to the row itself (tab,
 		// rows on the way opened, the setting marked).
-		if (page.url.pathname.startsWith('/settings') || page.url.hash.startsWith('#find='))
+		const path = page.url.pathname;
+		if (path.startsWith('/settings') || path === '/account' || page.url.hash.startsWith('#find='))
 			void jumpToSetting(page.url);
 	});
 	$effect(() => {

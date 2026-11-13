@@ -6,6 +6,8 @@ import JumpProbe from '../components/fixtures/JumpProbe.svelte';
 import { jumpToSetting } from '#lib/settings-jump.ts';
 
 beforeAll(() => {
+	// The page has the keyboard (the search on the same page, as on the phone).
+	document.hasFocus = () => true;
 	// jsdom has neither scrolling nor media queries.
 	Element.prototype.scrollIntoView = () => {};
 	window.matchMedia ??= ((query: string) => ({
@@ -53,4 +55,20 @@ test('a plain anchor marks its element; a tab alone only chooses the tab', async
 	const el = await jumpToSetting(at('/settings/x?tab=b#row-parts'), container);
 	expect(el?.id).toBe('row-parts');
 	expect(el?.classList.contains('found')).toBe(true);
+});
+
+test('a search in another document (the side bar of a window) keeps the keyboard', async () => {
+	document.hasFocus = () => false;
+	try {
+		const { container } = render(JumpProbe);
+		const before = document.activeElement;
+		const el = await jumpToSetting(
+			at(`/settings/x?tab=b#${findHash(['Verbindung', 'Mit Teilen', 'Ein Teil'])}`),
+			container,
+		);
+		expect(el?.classList.contains('found')).toBe(true);
+		expect(document.activeElement).toBe(before);
+	} finally {
+		document.hasFocus = () => true;
+	}
 });

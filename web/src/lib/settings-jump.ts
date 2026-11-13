@@ -4,13 +4,15 @@
 // own (`#find=Farben%20und%20Schrift|Sprache`, see findHash). After the
 // page has drawn – its data may come later – the tab is chosen, every row
 // on the way is opened, and the setting is scrolled into view, marked for
-// a moment and given the keyboard.
+// a moment and – when the search is on the same page – given the keyboard.
 //
 // It works on what the page shows (SettingGroup, SettingRow, SettingSub and
 // Tabs), so no page needs code of its own for it.
 
 const WAIT_MS = 6000;
 const MARK_MS = 4000;
+/** How long after the jump began its control may still take the keyboard. */
+const KEYS_MS = 2000;
 
 /** The titles of a "find=" anchor, or null for a plain one. */
 export function findTitles(hash: string): string[] | null {
@@ -72,7 +74,14 @@ function chooseTab(root: ParentNode, tab: string | null): void {
 
 let marked: HTMLElement | null = null;
 let unmark: ReturnType<typeof setTimeout> | undefined;
-function mark(el: HTMLElement) {
+/**
+ * Marks the place; `keys` gives its control the keyboard. That happens only
+ * when this page had the keyboard when the jump began (the search on the
+ * same page: phone, own tab) and the place came quickly: a search in a
+ * window's side bar keeps its keyboard, and a row that appears seconds
+ * later must not pull the keyboard away from what the user does meanwhile.
+ */
+function mark(el: HTMLElement, keys = false) {
 	marked?.classList.remove('found');
 	clearTimeout(unmark);
 	marked = el;
@@ -84,7 +93,7 @@ function mark(el: HTMLElement) {
 	const control = el.querySelector<HTMLElement>(
 		':scope > .srow-head .srow-ctl :is(input, select, textarea, button, a[href]), :scope > .srow-ctl :is(input, select, textarea, button, a[href]), :scope > .srow-head > .srow-chev',
 	);
-	control?.focus({ preventScroll: true });
+	if (keys) control?.focus({ preventScroll: true });
 }
 
 let run = 0;
@@ -100,6 +109,9 @@ export async function jumpToSetting(
 	root: ParentNode = document,
 ): Promise<HTMLElement | null> {
 	const mine = ++run;
+	const begun = Date.now();
+	const hadKeys = document.hasFocus();
+	const keys = () => hadKeys && document.hasFocus() && Date.now() - begun < KEYS_MS;
 	const titles = findTitles(url.hash);
 	const id = !titles && url.hash.length > 1 ? decodeURIComponent(url.hash.slice(1)) : '';
 	const tab = url.searchParams.get('tab');
@@ -114,7 +126,7 @@ export async function jumpToSetting(
 			if (el) {
 				await frame();
 				if (mine !== run) return null;
-				mark(el);
+				mark(el, keys());
 				return el;
 			}
 		} else if (titles) {
@@ -132,7 +144,7 @@ export async function jumpToSetting(
 				scope = el;
 			}
 			if (found === titles.length && !waiting) {
-				if (deepest) mark(deepest);
+				if (deepest) mark(deepest, keys());
 				return deepest;
 			}
 		}
@@ -141,6 +153,6 @@ export async function jumpToSetting(
 	}
 	// The page never showed it (a part that appears only with data): the
 	// nearest place found instead.
-	if (mine === run && deepest) mark(deepest);
+	if (mine === run && deepest) mark(deepest, keys());
 	return mine === run ? deepest : null;
 }

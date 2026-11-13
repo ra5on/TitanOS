@@ -44,8 +44,11 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const searching = $derived(settingsSearch.query.trim() !== '');
 	let index = $state<SettingsIndexEntry[] | null>(settingsIndexNow());
+	// "Alle Einstellungen" is the search page of the phone: its index comes
+	// with it, so the first letters already find rows.
 	$effect(() => {
-		if (searching && !index) void loadSettingsIndex().then((loaded) => (index = loaded));
+		if ((searching || !inWindow) && !index)
+			void loadSettingsIndex().then((loaded) => (index = loaded));
 	});
 	const hits = $derived(searching ? findSettings(settingsSearch.query, admin, t, index) : []);
 	// Without a search: every page under its area, in the order of the menu.

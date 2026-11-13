@@ -235,6 +235,8 @@ export function findSettings(
 		const tabEntry = entry.tab
 			? index!.find((e) => e.kind === 'tab' && e.p === entry.p && e.tab === entry.tab)
 			: undefined;
+		// A group named like its tab ("Fernzugriff") is the tab: found once.
+		if (entry.kind === 'group' && tabEntry?.k && translate(tabEntry.k) === label) return;
 		// A tab and its one group often share a name ("Fernzugriff"): once.
 		const path = [
 			pageLabel,
