@@ -781,7 +781,7 @@
 	"nvr.events.keptBadge": "Kept",
 	"nvr.events.keptNoVideo": "yes – event and picture stay until you delete them; there is no recording of this time",
 	"nvr.events.notKept": "no – deleted after {days} days",
-	"nvr.events.keptVideo": "The recording of this time is deleted; the video is the saved copy of the kept event.",
+	"nvr.events.keptVideo": "The recording of this time cannot be played (for example because its days are over); the video is the saved copy of the kept event.",
 	"nvr.events.zones": "Zones",
 	"nvr.events.keep": "Keep",
 	"nvr.events.keepRunning": "Keeping is possible once the event is over and its recording is complete.",

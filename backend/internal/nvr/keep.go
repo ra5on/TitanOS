@@ -114,7 +114,7 @@ func (m *Manager) KeepEvent(ctx context.Context, id, by string) (Event, error) {
 		return Event{}, ErrEventRunning
 	}
 	if _, saved := m.keptExports()[id]; saved && raw.Retain {
-		return m.Event(ctx, id, "")
+		return m.settled(ctx, id, true)
 	}
 	// The video's record must be written: not over a file that could not
 	// be read.
@@ -146,7 +146,22 @@ func (m *Manager) KeepEvent(ctx context.Context, id, by string) (Event, error) {
 			return Event{}, err
 		}
 	}
-	return m.Event(ctx, id, "")
+	return m.settled(ctx, id, true)
+}
+
+// settled is the event as it is after a change of its flag. Frigate
+// writes through a queue (SqliteVecQueueDatabase): read at once, the event
+// may still show the flag as it was – the answer says what was set.
+func (m *Manager) settled(ctx context.Context, id string, kept bool) (Event, error) {
+	e, err := m.Event(ctx, id, "")
+	if err != nil {
+		return e, err
+	}
+	e.Kept = kept
+	if !kept {
+		e.KeptExport = ""
+	}
+	return e, nil
 }
 
 // UnkeepEvent gives a kept event back to the camera's days and deletes
@@ -178,7 +193,7 @@ func (m *Manager) UnkeepEvent(ctx context.Context, id string) (Event, error) {
 			return Event{}, err
 		}
 	}
-	return m.Event(ctx, id, "")
+	return m.settled(ctx, id, false)
 }
 
 // forgetKeptVideo deletes the saved video of an event that is gone.

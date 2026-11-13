@@ -781,7 +781,7 @@
 	"nvr.events.keptBadge": "Behalten",
 	"nvr.events.keptNoVideo": "ja – Ereignis und Bild bleiben, bis du sie löschst; zu dieser Zeit gibt es keine Aufnahme",
 	"nvr.events.notKept": "nein – wird nach {days} Tagen gelöscht",
-	"nvr.events.keptVideo": "Die Aufnahme dieser Zeit ist gelöscht; das Video ist die gesicherte Kopie des behaltenen Ereignisses.",
+	"nvr.events.keptVideo": "Die Aufnahme dieser Zeit lässt sich nicht abspielen (etwa weil sie nach ihren Tagen gelöscht ist); das Video ist die gesicherte Kopie des behaltenen Ereignisses.",
 	"nvr.events.zones": "Zonen",
 	"nvr.events.keep": "Behalten",
 	"nvr.events.keepRunning": "Behalten geht, sobald das Ereignis vorbei und seine Aufnahme fertig ist.",
