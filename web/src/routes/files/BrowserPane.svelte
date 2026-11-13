@@ -209,6 +209,8 @@
 			onmenubutton={p.menuFromButton}
 			ondragentry={p.dragEntry}
 			ondropon={(event, path) => p.reviewDrop(event, p.rootId, path)}
+			onshare={p.phone ? p.shareEntry : undefined}
+			ondelete={p.phone ? p.deleteEntry : undefined}
 		/>
 
 		{#if p.writable}<DropHint dragging={p.dragging} path={join(p.root?.name ?? '', p.dir)} />{/if}

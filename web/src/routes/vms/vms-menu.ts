@@ -13,6 +13,8 @@ export function registerVmsMenu(p: VmsPage) {
 	const vmFree = () => !!p.current && !p.isBusy(p.current);
 	const screenOn = () => p.tab === 'screen' && vmOn() && !!p.screen;
 	registerMenuCommands({
+		// PLAN 87: pulling the list down on the phone (PhoneGestures); not on the screen.
+		'vms.refresh': { run: () => void p.load(), enabled: () => p.tab !== 'screen' },
 		'vms.start': {
 			run: () => p.current && p.act(p.current, 'start'),
 			enabled: () => vmFree() && !vmOn() && !!p.current && p.canStart(p.current),

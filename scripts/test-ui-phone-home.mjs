@@ -28,9 +28,19 @@ const W = 390,
   H = 844;
 
 export const mine = [
-  { app: "immich", title: "Immich", url: "https://immich.nas.local", running: true },
+  {
+    app: "immich",
+    title: "Immich",
+    url: "https://immich.nas.local",
+    running: true,
+  },
   { app: "jellyfin", url: "", webui: "8096", running: true },
-  { app: "paperless", url: "", webui: "http://[IP]:[PORT:8000]/", running: false },
+  {
+    app: "paperless",
+    url: "",
+    webui: "http://[IP]:[PORT:8000]/",
+    running: false,
+  },
 ];
 
 async function phone({ theme = "graphit", reduced = false, desktop } = {}) {
@@ -125,7 +135,11 @@ try {
     .evaluate((el) => getComputedStyle(el).backdropFilter);
   assert.match(glass, /blur/, "dock in glass like the desktop");
   await page.locator(".home .widget").first().waitFor();
-  assert.equal(await page.locator(".home .dock .app").count(), 4, "dock: four programs");
+  assert.equal(
+    await page.locator(".home .dock .app").count(),
+    4,
+    "dock: four programs",
+  );
   // Every target of the home screen is at least 44 px.
   for (const b of await page
     .locator(".home .app, .home .menu-btn, .home .search, .home .dot-btn")
@@ -134,19 +148,29 @@ try {
         .filter((e) => e.getBoundingClientRect().width > 0)
         .map((e) => e.getBoundingClientRect().toJSON()),
     ))
-    assert.ok(b.height >= 27.5 && (b.height >= 43.5 || b.width <= 30), `target ${JSON.stringify(b)}`);
+    assert.ok(
+      b.height >= 27.5 && (b.height >= 43.5 || b.width <= 30),
+      `target ${JSON.stringify(b)}`,
+    );
   const pages = await page.locator(".home .page").count();
   assert.ok(pages >= 2, `programs on more than one page (${pages})`);
-  assert.equal(await page.locator(".home .dots [aria-current=page]").count(), 1);
+  assert.equal(
+    await page.locator(".home .dots [aria-current=page]").count(),
+    1,
+  );
   await noSideways(page);
   await page.screenshot({ path: `${out}/startbildschirm.png` });
 
   // Swiping goes to the next page; the dot says which.
   const pagesBox = await page.locator(".home .pages").boundingBox();
-  await drag(page, cdp, [W - 40, pagesBox.y + 200], [40, pagesBox.y + 210], { steps: 8 });
+  await drag(page, cdp, [W - 40, pagesBox.y + 200], [40, pagesBox.y + 210], {
+    steps: 8,
+  });
   await page.waitForTimeout(700);
   assert.equal(
-    await page.locator(".home .dots [aria-current=page]").getAttribute("aria-label"),
+    await page
+      .locator(".home .dots [aria-current=page]")
+      .getAttribute("aria-label"),
     `Seite 2 von ${pages}`,
     "swiped to page 2",
   );
@@ -194,7 +218,10 @@ try {
   await sheet.locator("h2", { hasText: "Werkzeuge" }).waitFor();
   // The sheet comes from the bottom (PLAN 87).
   const sb = await sheet.boundingBox();
-  assert.ok(Math.abs(sb.y + sb.height - H) <= 1, `folder sheet at the bottom (${JSON.stringify(sb)})`);
+  assert.ok(
+    Math.abs(sb.y + sb.height - H) <= 1,
+    `folder sheet at the bottom (${JSON.stringify(sb)})`,
+  );
   await page.screenshot({ path: `${out}/ordner-offen.png` });
   // Dragging the folder sheet down closes it.
   const grip = await center(sheet.locator("h2"));
@@ -204,7 +231,10 @@ try {
   await page.locator("dialog[open] [data-folder-out='app:storage']").tap();
   await page.waitForTimeout(200);
   // One program left: the folder dissolves by itself.
-  assert.equal(await page.locator('.home .pages [data-home-key^="folder:"]').count(), 0);
+  assert.equal(
+    await page.locator('.home .pages [data-home-key^="folder:"]').count(),
+    0,
+  );
   assert.equal(await key(page, "app:storage").count(), 1);
   assert.equal(await key(page, "app:shares").count(), 1);
 
@@ -214,7 +244,10 @@ try {
   const order = await page
     .locator(".home .page[data-page='0'] [data-home-key]")
     .evaluateAll((els) => els.map((e) => e.dataset.homeKey));
-  assert.ok(order.indexOf("app:shares") > order.indexOf("app:storage"), `moved on (${order})`);
+  assert.ok(
+    order.indexOf("app:shares") > order.indexOf("app:storage"),
+    `moved on (${order})`,
+  );
   await page.locator(".edit-bar [data-step='page-on']").tap();
   await page.waitForTimeout(500);
   assert.equal(await pageOf(page, "app:shares"), 1, "to the next page");
@@ -245,7 +278,11 @@ try {
   assert.equal(await page.locator(".home .widget").count(), 2);
 
   // The dock goes into the dock by the bar too.
-  await longPress(page, cdp, await center(key(page, "app:storage").locator(".icon-box")));
+  await longPress(
+    page,
+    cdp,
+    await center(key(page, "app:storage").locator(".icon-box")),
+  );
   await page.locator(".home.editing").waitFor();
   await page.locator(".home .dock [data-home-key='app:files']").tap();
   await page.locator(".edit-bar [data-step='dock']").tap();
@@ -267,7 +304,11 @@ try {
   await page.waitForTimeout(900);
   assert.equal(await page.locator(".home .dock").count(), 0, "dock off");
   for (const k of ["app:docker", "app:monitor", "app:settings"])
-    assert.equal(await key(page, k).count(), 1, `${k} on the pages without a dock`);
+    assert.equal(
+      await key(page, k).count(),
+      1,
+      `${k} on the pages without a dock`,
+    );
   await page.screenshot({ path: `${out}/dock-aus.png` });
   await noSideways(page);
   await ctx.close();
@@ -275,11 +316,21 @@ try {
   // Reduced motion: arranging shows a ring instead of wiggling.
   {
     const { ctx, page, cdp } = await phone({ reduced: true, theme: "hell" });
-    await longPress(page, cdp, await center(key(page, "app:shares").locator(".icon-box")));
+    await longPress(
+      page,
+      cdp,
+      await center(key(page, "app:shares").locator(".icon-box")),
+    );
     await page.locator(".home.editing").waitFor();
     const wrap = key(page, "app:shares").locator(".wrap");
-    assert.equal(await wrap.evaluate((el) => getComputedStyle(el).animationName), "none");
-    assert.match(await wrap.evaluate((el) => getComputedStyle(el).outlineStyle), /dashed/);
+    assert.equal(
+      await wrap.evaluate((el) => getComputedStyle(el).animationName),
+      "none",
+    );
+    assert.match(
+      await wrap.evaluate((el) => getComputedStyle(el).outlineStyle),
+      /dashed/,
+    );
     await page.screenshot({ path: `${out}/anordnen-hell-ruhig.png` });
     await ctx.close();
   }
@@ -288,7 +339,9 @@ try {
   process.exitCode = 1;
 }
 await browser.close();
-const relevant = errors.filter((e) => !/Failed to load resource|net::ERR/.test(e));
+const relevant = errors.filter(
+  (e) => !/Failed to load resource|net::ERR/.test(e),
+);
 assert.deepEqual(relevant, [], "no script errors");
 if (!process.exitCode)
   console.log(

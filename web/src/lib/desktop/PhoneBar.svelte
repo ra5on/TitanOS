@@ -14,6 +14,33 @@
 	import { session } from '../session.svelte.ts';
 	import { localCommandStates, runLocalCommand } from '../menu-commands.svelte.ts';
 	import { entries, goTarget, menusFor, type MenuEntry } from './menubar/menus.ts';
+	import { unreadCount } from '../notifications.svelte.ts';
+
+	// PLAN 87: the bell, and pulling the bar down shows the notifications.
+	const unread = $derived(unreadCount());
+	const notices = () => window.dispatchEvent(new CustomEvent('titanos-phone-notices'));
+	let pullFrom: { x: number; y: number } | null = null;
+	let pulled = $state(0);
+	function pullStart(e: TouchEvent) {
+		pullFrom = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+		pulled = 0;
+	}
+	function pullMove(e: TouchEvent) {
+		if (!pullFrom) return;
+		const dy = e.touches[0].clientY - pullFrom.y;
+		const dx = e.touches[0].clientX - pullFrom.x;
+		if (Math.abs(dx) > Math.abs(dy) || dy < -10) {
+			pullFrom = null;
+			return;
+		}
+		pulled = Math.max(0, dy);
+		if (pulled > 10 && e.cancelable) e.preventDefault();
+	}
+	function pullEnd() {
+		if (pullFrom && pulled > 60) notices();
+		pullFrom = null;
+		pulled = 0;
+	}
 
 	const app = $derived(appForPath(page.url.pathname));
 	const role = $derived(session.data?.user?.role ?? 'user');
@@ -70,7 +97,15 @@
 	const node = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : undefined);
 </script>
 
-<header class="phone-bar">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<header
+	class="phone-bar"
+	ontouchstart={pullStart}
+	ontouchmove={pullMove}
+	ontouchend={pullEnd}
+	ontouchcancel={pullEnd}
+	style:--pulled="{Math.min(pulled, 80)}px"
+>
 	<button type="button" class="back" onclick={() => goto('/')} aria-label={t('desktop.phone.home')}
 		><Icon name="chevronLeft" size={22} /></button
 	>
@@ -87,6 +122,17 @@
 			title={t('cluster.managing', { name: node.name })}
 			aria-label={t('cluster.managing', { name: node.name })}>{node.name}</span
 		>{/if}
+	<button
+		type="button"
+		class="back bell"
+		data-phone-bell
+		aria-label={unread ? t('phone.bellUnread', { count: unread }) : t('phone.bell')}
+		title={t('phone.bell')}
+		onclick={notices}
+		><Icon name="bell" size={20} />{#if unread}<span class="count"
+				>{unread > 9 ? '9+' : unread}</span
+			>{/if}</button
+	>
 	{#if items.length > 1 || groups.length}
 		<button
 			type="button"
@@ -173,6 +219,27 @@
 		flex: none;
 		overflow-wrap: break-word;
 		hyphens: auto;
+	}
+	.bell {
+		position: relative;
+	}
+	.count {
+		position: absolute;
+		top: 4px;
+		right: 2px;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 4px;
+		border-radius: 9px;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: 11px;
+		font-weight: 700;
+		display: grid;
+		place-items: center;
+	}
+	.phone-bar {
+		touch-action: pan-x;
 	}
 	.back {
 		width: 44px;

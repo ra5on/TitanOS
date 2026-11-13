@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SwipeRow from '#lib/components/SwipeRow.svelte';
 	import type { FileEntry, FileRoot } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -53,6 +54,9 @@
 		ondragentry: (event: DragEvent, entry: FileEntry) => void;
 		/** Something was dropped onto a folder of the list; `path` is that folder. */
 		ondropon: (event: DragEvent, path: string) => void;
+		/** PLAN 87, phone: a row swiped to the left offers these (share a file, delete with the usual question). */
+		onshare?: (entry: FileEntry) => void;
+		ondelete?: (entry: FileEntry) => void;
 	};
 	let {
 		checks = true,
@@ -85,6 +89,8 @@
 		onmenubutton,
 		ondragentry,
 		ondropon,
+		onshare,
+		ondelete,
 	}: Props = $props();
 
 	const join = (...parts: string[]) => parts.filter(Boolean).join('/');
@@ -101,6 +107,81 @@
 			: name;
 	}
 </script>
+
+{#snippet row(entry: FileEntry)}
+	<!-- The whole row is a larger target for the mouse. Keyboards and screen
+			     readers use the checkbox and the buttons inside it, so the row
+			     itself is no control: one nested in another is announced badly. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div
+		class="row"
+		tabindex="-1"
+		draggable={root?.kind !== 'stick'}
+		ondragstart={(event) => ondragentry(event, entry)}
+		ondragend={endFileDrag}
+		ondragover={(event) => {
+			if (entry.dir && writable && hasFileDrag(event)) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+		}}
+		ondrop={(event) => {
+			if (entry.dir) ondropon(event, join(dir, entry.name));
+		}}
+		data-file-name={entry.name}
+		class:picked={selectedNames.has(entry.name)}
+		onclick={(event) => onrowclick(entry, event)}
+		ondblclick={(event) => onrowdblclick(entry, event)}
+		oncontextmenu={(event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			onmenu(entry, event.clientX, event.clientY);
+		}}
+	>
+		<input
+			type="checkbox"
+			aria-label={t('files.select', { name: entry.name })}
+			checked={selectedNames.has(entry.name)}
+			onclick={(event) => {
+				if (event.shiftKey) onrange(entry.name, event.ctrlKey || event.metaKey);
+				else ontoggle(entry.name, event.currentTarget.checked);
+			}}
+		/>
+		{#if entry.dir}
+			<button type="button" class="entry" onclick={(event) => onfolderclick(entry, event)}
+				><FileIcon
+					name={entry.name}
+					dir
+					size={view === 'large' ? 48 : view === 'small' ? 24 : 18}
+				/><span>{entry.name}</span></button
+			>
+		{:else}
+			<span class="entry"
+				>{#if view === 'large' && thumbnailKind(entry.name) && root?.kind !== 'stick'}<FileThumbnail
+						root={rootId}
+						path={join(dir, entry.name)}
+						modified={entry.modified}
+					/>{:else}<FileIcon
+						name={entry.name}
+						dir={false}
+						size={view === 'large' ? 48 : view === 'small' ? 24 : 18}
+					/>{/if}<span>{entry.name}</span></span
+			>
+		{/if}
+		<span class="mono num muted">{entry.dir ? '–' : formatBytes(entry.size)}</span>
+		<span class="num muted">{date.format(new Date(entry.modified))}</span>
+		<button
+			type="button"
+			class="entry-more"
+			aria-label={t('files.actionsFor', { name: entry.name })}
+			title={t('files.actionsFor', { name: entry.name })}
+			aria-haspopup="menu"
+			aria-expanded={menuName === entry.name}
+			onclick={(event) => onmenubutton(entry, event.currentTarget)}
+			><Icon name="more" size={16} /></button
+		>
+	</div>
+{/snippet}
 
 <div
 	class="file-entries"
@@ -145,78 +226,33 @@
 		reset={`${rootId}/${dir}/${search}/${view}/${sort}/${descending}`}
 	>
 		{#snippet children(entry)}
-			<!-- The whole row is a larger target for the mouse. Keyboards and screen
-			     readers use the checkbox and the buttons inside it, so the row
-			     itself is no control: one nested in another is announced badly. -->
-			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				tabindex="-1"
-				draggable={root?.kind !== 'stick'}
-				ondragstart={(event) => ondragentry(event, entry)}
-				ondragend={endFileDrag}
-				ondragover={(event) => {
-					if (entry.dir && writable && hasFileDrag(event)) {
-						event.preventDefault();
-						event.stopPropagation();
-					}
-				}}
-				ondrop={(event) => {
-					if (entry.dir) ondropon(event, join(dir, entry.name));
-				}}
-				data-file-name={entry.name}
-				class:picked={selectedNames.has(entry.name)}
-				onclick={(event) => onrowclick(entry, event)}
-				ondblclick={(event) => onrowdblclick(entry, event)}
-				oncontextmenu={(event) => {
-					event.preventDefault();
-					event.stopPropagation();
-					onmenu(entry, event.clientX, event.clientY);
-				}}
-			>
-				<input
-					type="checkbox"
-					aria-label={t('files.select', { name: entry.name })}
-					checked={selectedNames.has(entry.name)}
-					onclick={(event) => {
-						if (event.shiftKey) onrange(entry.name, event.ctrlKey || event.metaKey);
-						else ontoggle(entry.name, event.currentTarget.checked);
-					}}
-				/>
-				{#if entry.dir}
-					<button type="button" class="entry" onclick={(event) => onfolderclick(entry, event)}
-						><FileIcon
-							name={entry.name}
-							dir
-							size={view === 'large' ? 48 : view === 'small' ? 24 : 18}
-						/><span>{entry.name}</span></button
-					>
-				{:else}
-					<span class="entry"
-						>{#if view === 'large' && thumbnailKind(entry.name) && root?.kind !== 'stick'}<FileThumbnail
-								root={rootId}
-								path={join(dir, entry.name)}
-								modified={entry.modified}
-							/>{:else}<FileIcon
-								name={entry.name}
-								dir={false}
-								size={view === 'large' ? 48 : view === 'small' ? 24 : 18}
-							/>{/if}<span>{entry.name}</span></span
-					>
-				{/if}
-				<span class="mono num muted">{entry.dir ? '–' : formatBytes(entry.size)}</span>
-				<span class="num muted">{date.format(new Date(entry.modified))}</span>
-				<button
-					type="button"
-					class="entry-more"
-					aria-label={t('files.actionsFor', { name: entry.name })}
-					title={t('files.actionsFor', { name: entry.name })}
-					aria-haspopup="menu"
-					aria-expanded={menuName === entry.name}
-					onclick={(event) => onmenubutton(entry, event.currentTarget)}
-					><Icon name="more" size={16} /></button
+			{#if onshare || ondelete}
+				<SwipeRow
+					actions={[
+						...(onshare && !entry.dir
+							? [
+									{
+										id: 'share',
+										label: t('phone.files.share'),
+										icon: 'external' as const,
+										run: () => onshare(entry),
+									},
+								]
+							: []),
+						...(ondelete && writable
+							? [
+									{
+										id: 'delete',
+										label: t('common.delete'),
+										icon: 'trash' as const,
+										danger: true,
+										run: () => ondelete(entry),
+									},
+								]
+							: []),
+					]}>{@render row(entry)}</SwipeRow
 				>
-			</div>
+			{:else}{@render row(entry)}{/if}
 		{/snippet}
 	</VirtualEntries>
 	{#if !items.length}

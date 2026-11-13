@@ -46,5 +46,22 @@
 	"phone.widgets.remove": "Remove “{name}”",
 	"phone.settings.title": "Phone",
 	"phone.settings.dock": "Dock on the phone",
-	"phone.settings.dockHint": "At the bottom of the phone's home screen, with programs of its own (press long to arrange). Off: its programs are on the pages."
+	"phone.settings.dockHint": "At the bottom of the phone's home screen, with programs of its own (press long to arrange). Off: its programs are on the pages.",
+	"phone.refresh.pull": "Pull further to refresh",
+	"phone.refresh.release": "Let go to refresh",
+	"phone.refresh.running": "Refreshing …",
+	"phone.notices.quick": "Quick switches",
+	"phone.notices.dark": "Dark",
+	"phone.notices.live": "Moving wallpaper",
+	"phone.notices.allRead": "All read",
+	"phone.notices.read": "Read",
+	"phone.notices.new": "New",
+	"phone.notices.swipeHint": "Swipe left to delete a notification, right to mark it read. Pull down to load the list anew.",
+	"phone.bell": "Notifications",
+	"phone.bellUnread": "Notifications, {count} unread",
+	"phone.files.share": "Share",
+	"phone.files.shareTitle": "Share “{name}”",
+	"phone.files.shareReady": "The file is loaded. Tap “Share” to hand it to another app.",
+	"phone.files.sharing": "Loading “{name}” …",
+	"phone.files.shareFailed": "The file could not be shared."
 }

@@ -54,6 +54,7 @@
 	import { loadWidgetCameras, widgetCameras } from '../nvr/widget.svelte.ts';
 	import { motionOK } from '../components/sheet.ts';
 	import { closeIntoSymbol, markOpening } from './phone-motion.ts';
+	import { unreadCount } from '../notifications.svelte.ts';
 
 	onMount(() => {
 		loadDesktop();
@@ -91,6 +92,7 @@
 		...all.map((p) => p.key).filter((k) => !standard.includes(k)),
 	]);
 	const phone = $derived(desktop.prefs.phone);
+	const unread = $derived(unreadCount());
 
 	// How many cells a page holds: four columns, as many rows as fit.
 	const ROW = 112;
@@ -606,6 +608,17 @@
 					aria-label={t('desktop.menu.search')}
 				/>
 			</label>
+			<button
+				type="button"
+				class="bell-btn glass-panel"
+				data-phone-bell
+				aria-label={unread ? t('phone.bellUnread', { count: unread }) : t('phone.bell')}
+				title={t('phone.bell')}
+				onclick={() => window.dispatchEvent(new CustomEvent('titanos-phone-notices'))}
+				><Icon name="bell" size={19} />{#if unread}<span class="bell-count"
+						>{unread > 9 ? '9+' : unread}</span
+					>{/if}</button
+			>
 			{#if clusterNodes.nodes.length > 1}<span class="node"><NodeMenu variant="phone" /></span>{/if}
 		{/if}
 	</header>
@@ -1051,6 +1064,32 @@
 		border-color: var(--accent);
 		color: var(--on-accent);
 		font-weight: 600;
+	}
+	.bell-btn {
+		position: relative;
+		flex: none;
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		border-radius: calc(14px * min(var(--radius-scale, 1), 1.6));
+		color: var(--text);
+		cursor: pointer;
+	}
+	.bell-count {
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		min-width: 20px;
+		height: 20px;
+		padding: 0 5px;
+		border-radius: 10px;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: 11px;
+		font-weight: 700;
+		display: grid;
+		place-items: center;
 	}
 	.menu-btn.on {
 		background: color-mix(in srgb, var(--accent) 30%, var(--surface));

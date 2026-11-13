@@ -276,7 +276,8 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="areas" id="{uid}-areas">
+<!-- PLAN 87: drawing at the left edge is no "Zurück". -->
+<div class="areas" id="{uid}-areas" data-no-edge-swipe>
 	<div class="tools" role="toolbar" aria-label={t('nvr.areas.tools')}>
 		<span class="muted">{t('nvr.areas.new')}</span>
 		{#each AREA_KINDS as kind (kind)}

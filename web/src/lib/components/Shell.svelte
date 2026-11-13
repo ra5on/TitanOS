@@ -30,6 +30,10 @@
 	import type Desktop from '#lib/desktop/Desktop.svelte';
 	import type PhoneHome from '#lib/desktop/PhoneHome.svelte';
 	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
+	// PLAN 87: gestures (edge = back, pull = refresh) and the notifications pulled down.
+	import PhoneGestures from '#lib/desktop/PhoneGestures.svelte';
+	import PhoneNotices from '#lib/desktop/PhoneNotices.svelte';
+	import { watchAppBadge } from '#lib/app-badge.svelte.ts';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
 	import { frameFor, mode } from '#lib/desktop/mode.svelte.ts';
@@ -204,6 +208,10 @@
 	}
 
 	$effect(() => watchSystem());
+	// PLAN 87: the number of unread messages on the app's symbol (where the system offers it).
+	$effect(() => {
+		if (!inWindow) return watchAppBadge();
+	});
 	$effect(() => watchStorage());
 </script>
 
@@ -242,6 +250,8 @@
 			{@render children()}
 		</main>
 	{/if}
+	<PhoneGestures />
+	<PhoneNotices />
 	<!-- PLAN 66: a web app full screen (opened from the home grid or the file manager). -->
 	{#if page.state.webapp || phoneApp}
 		{#await import('#lib/webapps/WebAppPhone.svelte') then { default: WebAppPhone }}

@@ -46,5 +46,22 @@
 	"phone.widgets.remove": "„{name}“ entfernen",
 	"phone.settings.title": "Handy",
 	"phone.settings.dock": "Dock am Handy",
-	"phone.settings.dockHint": "Unten auf dem Startbildschirm des Handys, eigene Programme (lange drücken zum Anordnen). Aus: seine Programme stehen auf den Seiten."
+	"phone.settings.dockHint": "Unten auf dem Startbildschirm des Handys, eigene Programme (lange drücken zum Anordnen). Aus: seine Programme stehen auf den Seiten.",
+	"phone.refresh.pull": "Weiter ziehen zum Aktualisieren",
+	"phone.refresh.release": "Loslassen zum Aktualisieren",
+	"phone.refresh.running": "Wird aktualisiert …",
+	"phone.notices.quick": "Schnellschalter",
+	"phone.notices.dark": "Dunkel",
+	"phone.notices.live": "Bewegter Hintergrund",
+	"phone.notices.allRead": "Alle gelesen",
+	"phone.notices.read": "Gelesen",
+	"phone.notices.new": "Neu",
+	"phone.notices.swipeHint": "Nach links wischen löscht eine Mitteilung, nach rechts markiert sie als gelesen. Herunterziehen lädt die Liste neu.",
+	"phone.bell": "Mitteilungen",
+	"phone.bellUnread": "Mitteilungen, {count} ungelesen",
+	"phone.files.share": "Teilen",
+	"phone.files.shareTitle": "„{name}“ teilen",
+	"phone.files.shareReady": "Die Datei ist geladen. Tippe auf „Teilen“, um sie an eine andere App zu geben.",
+	"phone.files.sharing": "„{name}“ wird geladen …",
+	"phone.files.shareFailed": "Die Datei ließ sich nicht teilen."
 }

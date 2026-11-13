@@ -412,7 +412,8 @@
 	});
 </script>
 
-<div class="vnc" bind:this={root}>
+<!-- PLAN 87: a touch at the left edge belongs to the VM, not to "Zurück". -->
+<div class="vnc" bind:this={root} data-no-edge-swipe>
 	<div class="screen" class:full={effective === 'full'} class:touch bind:this={target}></div>
 	{#if trackpad}
 		<!-- A touch here moves the cursor; tap = click, two fingers = right click or scroll. -->
