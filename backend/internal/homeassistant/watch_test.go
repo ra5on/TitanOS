@@ -22,9 +22,22 @@ type fakeWS struct {
 	conns      []*websocket.Conn
 	triggerIDs []int
 	eventIDs   map[string]int
+	// states answer GET /api/states/<entity> (PLAN 83).
+	states map[string]string
 }
 
 func (f *fakeWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if entity, ok := strings.CutPrefix(r.URL.Path, "/api/states/"); ok {
+		f.mu.Lock()
+		state, known := f.states[entity]
+		f.mu.Unlock()
+		if !known {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"entity_id": entity, "state": state, "attributes": map[string]any{}})
+		return
+	}
 	if r.URL.Path != "/api/websocket" {
 		http.NotFound(w, r)
 		return
@@ -207,4 +220,52 @@ func TestMatch(t *testing.T) {
 			t.Errorf("%+v: %v", c, got)
 		}
 	}
+}
+
+// PLAN 83: the watcher knows the state of watched entities from the start
+// (an alarm armed for days has no transition), keeps it with every change,
+// forgets it when the connection ends, and the lists of agent and NVR do
+// not replace each other.
+func TestWatcherKnowsCurrentStatesPerSource(t *testing.T) {
+	fake := &fakeWS{states: map[string]string{"alarm_control_panel.home": "armed_away", "person.alex": "home"}}
+	srv := httptest.NewServer(fake)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "good-token"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, ok := m.Current("alarm_control_panel.home"); ok {
+		t.Fatal("known before any connection")
+	}
+	go m.Run(ctx)
+	m.SetWatchedFor(WatchNVR, []string{"alarm_control_panel.home", "sensor.gone"})
+	m.SetWatched([]string{"person.alex"})
+	eventually(t, "both subscribed", func() bool {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		return len(fake.subscribed) > 0 && fake.subscribed[len(fake.subscribed)-1] == `["alarm_control_panel.home","person.alex","sensor.gone"]`
+	})
+	eventually(t, "current state read", func() bool { s, ok := m.Current("alarm_control_panel.home"); return ok && s == "armed_away" })
+	if _, ok := m.Current("sensor.gone"); ok {
+		t.Fatal("an entity Home Assistant does not have counts as known")
+	}
+	fake.change(t, "alarm_control_panel.home", "armed_away", "disarmed")
+	eventually(t, "change kept", func() bool { s, _ := m.Current("alarm_control_panel.home"); return s == "disarmed" })
+	// The agent's refresh does not drop the NVR's entities.
+	m.SetWatched(nil)
+	eventually(t, "agent's entity gone, NVR's kept", func() bool {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		return fake.subscribed[len(fake.subscribed)-1] == `["alarm_control_panel.home","sensor.gone"]`
+	})
+	// Connection gone: nothing is known.
+	defer srv.Close()
+	fake.mu.Lock()
+	for _, conn := range fake.conns {
+		conn.CloseNow()
+	}
+	fake.mu.Unlock()
+	eventually(t, "unknown after the connection ended", func() bool { _, ok := m.Current("alarm_control_panel.home"); return !ok })
 }
