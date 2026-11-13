@@ -2,9 +2,10 @@
 // isMobile, deviceScaleFactor 2): every page of the program and what a tap
 // opens (setup, live stacked with its own order, one camera large with the
 // PTZ pad, events beside the pictures, recordings with export, events with
-// their detail, cameras, adding and changing a camera, settings with faces
-// and plates, the failover banner, the diagnosis, Benutzer › Kameras, an
-// account that may only watch live). On every one: nothing scrolls sideways,
+// their detail, cameras, adding and changing a camera with whom it tells,
+// settings with faces, plates and the overview of the cameras' messages,
+// the failover banner, the diagnosis, Benutzer › Kameras, an account that
+// may only watch live). On every one: nothing scrolls sideways,
 // no text is cut (cutTextIn of test-ui-fixtures.mjs, which also finds a word
 // broken over lines – the bug that once set share names one letter per
 // line) and no text or control lies on another. Real screenshots (light
@@ -325,6 +326,18 @@ try {
     await page.getByRole("heading", { name: "Haustür" }).waitFor();
     await sound(page, "edit camera");
     await shot(page, "kamera-aendern");
+    // PLAN 82-3: the recipients with their ways and hints, the pause and
+    // the window with days and times – long texts wrap, pills wrap.
+    await page.locator("#nvr-notify-recipients").getByText(de["nvr.notify.legacy"]).waitFor();
+    await page.locator("#nvr-notify-recipients").getByText(de["nvr.notify.devicesOff"]).waitFor();
+    await page.getByRole("switch", { name: de["nvr.notify.window"] }).tap();
+    await page.getByText(de["nvr.notify.timeHint"]).waitFor();
+    await sound(page, "camera notifications");
+    await page.locator("#nvr-notify-recipients").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/kamera-meldungen-${WIDTH}.png`, animations: "disabled" });
     await ctx.close();
   }
 
@@ -338,8 +351,15 @@ try {
     });
     await page.goto(base + "/nvr/settings");
     await page.locator("#nvr-cap-note").waitFor();
+    // PLAN 82-3: the overview of who gets what; its lines wrap.
+    await page.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
     await sound(page, "settings");
     await shot(page, "einstellungen");
+    await page.locator("#nvr-notify").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/einstellungen-meldungen-${WIDTH}.png`, animations: "disabled" });
     await page.locator("#nvr-faces").getByRole("button", { name: /Bekannte Gesichter/ }).tap();
     await page.locator('#nvr-faces [data-face="Patrick"] b').waitFor();
     await page.locator("#nvr-faces").getByLabel("Name der Person").fill("Oma Erna");

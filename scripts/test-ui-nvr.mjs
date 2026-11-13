@@ -219,7 +219,14 @@ try {
       false,
       "talk stays off",
     );
-    await pill("Melden an", "Push aufs Handy").click();
+    // A new camera starts with the administrator who adds it (bell and
+    // push); other administrators can be chosen, plain accounts not yet.
+    await page.locator("#nvr-notify-recipients").getByText("alex (du)").waitFor();
+    assert.equal(await pill("Wege für alex", "Glocke").getAttribute("aria-pressed"), "true");
+    assert.equal(await pill("Wege für alex", "Push").getAttribute("aria-pressed"), "true");
+    assert.equal(await page.getByRole("group", { name: "Wege für sam" }).count(), 0);
+    await page.getByText(de["nvr.notify.recipientsNewHint"]).waitFor();
+    await pill("Wege für mara", "E-Mail").click();
     await pill("Melden bei", "Bekanntem Kennzeichen").click();
     await sound(page, "add camera");
     await shot(page, "kamera-hinzufuegen");
@@ -251,11 +258,15 @@ try {
       ptz: true,
       notify: {
         titan: true,
-        push: true,
+        push: false,
         email: false,
         homeAssistant: false,
         agent: false,
         kinds: ["person", "offline", "plate"],
+        recipients: [
+          { user: "alex", bell: true, push: true, email: false },
+          { user: "mara", bell: false, push: false, email: true },
+        ],
       },
       enabled: true,
     });
@@ -367,6 +378,98 @@ try {
     await page.locator('[data-camera="einfahrt"]').waitFor();
     assert.equal(sent(state, "PUT", "/nvr/cameras/einfahrt").at(-1).confirmShrink, undefined);
     assert.equal(await confirmDialog(page, de["nvr.shrink.title"]).count(), 0);
+    await ctx.close();
+  }
+
+  // --- Whom a camera tells (PLAN 82-3): recipients, ways, pause, window, the overview ---
+  {
+    const { ctx, page, state } = await open("owner");
+    const pill = (group, name) =>
+      page.getByRole("group", { name: group }).getByRole("button", { name, exact: true });
+    // A camera of 0.78 (no list): the administrators chosen as it told them.
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.getByRole("heading", { name: "Haustür" }).waitFor();
+    const rows = page.locator("#nvr-notify-recipients");
+    await rows.getByText(de["nvr.notify.legacy"]).waitFor();
+    for (const name of ["alex", "mara"]) {
+      assert.equal(await pill(`Wege für ${name}`, "Glocke").getAttribute("aria-pressed"), "true");
+      assert.equal(await pill(`Wege für ${name}`, "Push").getAttribute("aria-pressed"), "false");
+    }
+    // sam may see the front door: a plain account, no bell, and the reasons a way would not arrive.
+    await rows.getByText(de["nvr.notify.userNoBell"]).waitFor();
+    assert.deepEqual(
+      (await page.getByRole("group", { name: "Wege für sam" }).getByRole("button").allInnerTexts()).map((t) => t.trim()),
+      ["Push", "E-Mail"],
+    );
+    await rows.getByText(de["nvr.notify.devicesOff"]).waitFor();
+    await rows.getByText(de["nvr.notify.noDevice"]).waitFor();
+    await rows.getByText(de["nvr.notify.noAddress"]).waitFor();
+    await pill("Wege für sam", "Push").click();
+    await pill("Wege für mara", "Glocke").click();
+    await page.getByLabel(de["nvr.notify.pauseTitle"]).selectOption("300");
+    await page.getByRole("switch", { name: de["nvr.notify.window"] }).check();
+    await page.getByText(de["nvr.notify.timeHint"]).waitFor();
+    assert.deepEqual(
+      (await page.getByRole("group", { name: "Tage" }).locator("[aria-pressed=true]").allInnerTexts()).map((t) => t.trim()),
+      ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+    );
+    await pill("Tage", "Sa").click();
+    await pill("Tage", "So").click();
+    await page.getByLabel("von", { exact: true }).fill("21:30");
+    await page.getByRole("switch", { name: "KI-Agent" }).check();
+    await sound(page, "camera notifications");
+    await page.locator("#nvr-notify-recipients").screenshot({ path: `${out}/kamera-empfaenger-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="haustuer"]').waitFor();
+    const notify = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1).notify;
+    assert.deepEqual(notify.recipients, [
+      { user: "alex", bell: true, push: false, email: false },
+      { user: "sam", bell: false, push: true, email: false },
+    ]);
+    assert.equal(notify.pauseSeconds, 300);
+    assert.equal(notify.agent, true);
+    assert.deepEqual(notify.window, { on: true, days: [1, 2, 3, 4, 5], from: "21:30", to: "06:00" });
+
+    // A chosen account that may no longer see the camera: said, and it can be removed.
+    await page.goto(base + "/nvr/cameras?edit=einfahrt");
+    await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
+    await rows.getByText(de["nvr.notify.stale.noRight"]).waitFor();
+    assert.equal(await page.getByLabel(de["nvr.notify.pauseTitle"]).inputValue(), "300");
+    assert.equal(await page.getByLabel("von", { exact: true }).inputValue(), "22:00");
+    await rows.getByRole("button", { name: "Entfernen" }).click();
+    await rows.getByText(de["nvr.notify.stale.noRight"]).waitFor({ state: "detached" });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="einfahrt"]').waitFor();
+    assert.deepEqual(sent(state, "PUT", "/nvr/cameras/einfahrt").at(-1).notify.recipients, [
+      { user: "alex", bell: true, push: true, email: false },
+    ]);
+
+    // The overview in the settings: who gets what, the main switch.
+    state.cameras[1].notify.recipients.push({ user: "sam", bell: false, push: true, email: false });
+    await page.goto(base + "/nvr/settings");
+    const overview = page.locator("#nvr-notify");
+    await overview.locator("#nvr-notify-einfahrt").getByText("Empfänger: alex (Glocke, Push), sam (Push)").waitFor();
+    await overview.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
+    await overview.locator("#nvr-notify-einfahrt").getByText("Pause: 5 Minuten · Nur Mo–Fr, 22:00–06:00").waitFor();
+    await overview.locator("#nvr-notify-einfahrt").getByText("Außerdem: Home Assistant").waitFor();
+    await overview.locator("#nvr-notify-garten").getByText("Wie bisher an alle Administratoren: Glocke").waitFor();
+    await overview.locator("#nvr-notify-garten").getByText("Pause: 1 Minute · Meldet jederzeit").waitFor();
+    assert.equal(await overview.locator("#nvr-notify-schuppen").count(), 0, "a removed camera is not listed");
+    await page.getByText(de["nvr.notify.mainOnHint"]).waitFor();
+    await sound(page, "notification overview");
+    await overview.screenshot({ path: `${out}/einstellungen-meldungen-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("switch", { name: de["nvr.notify.main"] }).uncheck();
+    await page.getByText(de["nvr.notify.mainOffHint"]).waitFor();
+    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { notifyOff: true });
+    // "Ändern" opens the camera's rows at its recipients; the form says the switch is off.
+    await overview.getByRole("link", { name: "Meldungen von Einfahrt ändern" }).click();
+    await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
+    assert.equal(new URL(page.url()).hash, "#nvr-notify-recipients");
+    await page.getByText(de["nvr.notify.mainOff"]).waitFor();
+    await page.waitForFunction(() => {
+      const r = document.querySelector("#nvr-notify-recipients")?.getBoundingClientRect();
+      return r && r.top >= 0 && r.top < window.innerHeight;
+    });
     await ctx.close();
   }
 

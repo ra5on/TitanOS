@@ -12,16 +12,10 @@
 	import SettingSub from '../components/settings/SettingSub.svelte';
 	import { apiErrorText, t, type MessageKey } from '../i18n/index.svelte.ts';
 	import Confirm from './Confirm.svelte';
+	import NotifyGroup from './NotifyGroup.svelte';
 	import Pills from './Pills.svelte';
 	import { shrinks } from './shrink.ts';
-	import {
-		groupsOf,
-		labelName,
-		OBJECT_GROUP_IDS,
-		OBJECT_GROUPS,
-		toggleGroup,
-		type ObjectGroup,
-	} from './texts.ts';
+	import { groupsOf, labelName, OBJECT_GROUP_IDS, toggleGroup, type ObjectGroup } from './texts.ts';
 	import type {
 		Camera,
 		CameraNotify,
@@ -78,9 +72,18 @@
 	let audio = $state(initial?.audio.enabled ?? false);
 	let twoWay = $state(initial?.audio.twoWay ?? false);
 	let ptz = $state(initial?.ptz ?? false);
+	// Whom it tells (PLAN 82-3, NotifyGroup.svelte): copies, so that the
+	// list of cameras is not changed by what is being chosen.
 	let notify = $state<CameraNotify>(
 		initial?.notify
-			? { ...initial.notify, kinds: [...initial.notify.kinds] }
+			? {
+					...initial.notify,
+					kinds: [...initial.notify.kinds],
+					recipients: initial.notify.recipients?.map((r) => ({ ...r })) ?? null,
+					window: initial.notify.window
+						? { ...initial.notify.window, days: [...initial.notify.window.days] }
+						: undefined,
+				}
 			: {
 					titan: true,
 					push: false,
@@ -230,26 +233,6 @@
 			if (mode === 'events') mode = 'motion';
 		}
 	}
-	// ---- Notifications ----
-	const WAYS = ['titan', 'push', 'email', 'homeAssistant', 'agent'] as const;
-	type Way = (typeof WAYS)[number];
-	const waysChosen = $derived(WAYS.filter((way) => notify[way]));
-	type KindPill = ObjectGroup | 'plate' | 'face' | 'offline';
-	const KIND_PILLS: KindPill[] = [...OBJECT_GROUP_IDS, 'plate', 'face', 'offline'];
-	const kindMembers = (pill: KindPill): readonly string[] =>
-		pill === 'plate' || pill === 'face' || pill === 'offline' ? [pill] : OBJECT_GROUPS[pill];
-	const kindsChosen = $derived(
-		KIND_PILLS.filter((pill) => kindMembers(pill).some((k) => notify.kinds.includes(k))),
-	);
-	function toggleKind(pill: KindPill, on: boolean) {
-		const members = kindMembers(pill);
-		const rest = notify.kinds.filter((k) => !members.includes(k));
-		const add = members.filter(
-			(k) => ['plate', 'face', 'offline'].includes(k) || !objects.length || objects.includes(k),
-		);
-		notify.kinds = on ? [...rest, ...add] : rest;
-	}
-
 	// ---- Save ----
 	let saving = $state(false);
 	let error = $state('');
@@ -715,35 +698,7 @@
 		</SettingRow>
 	</SettingGroup>
 
-	<SettingGroup title={t('nvr.camera.notifications')} id="{uid}-notify">
-		<SettingRow icon="bell" title={t('nvr.notify.ways')} desc={t('nvr.notify.waysHint')}>
-			{#snippet control()}
-				<Pills
-					label={t('nvr.notify.ways')}
-					options={WAYS.map((way) => ({
-						value: way as Way,
-						label: t(`nvr.notify.way.${way}` as MessageKey),
-					}))}
-					chosen={waysChosen}
-					ontoggle={(way, on) => (notify[way] = on)}
-				/>
-			{/snippet}
-		</SettingRow>
-		<SettingRow icon="info" title={t('nvr.notify.kinds')} desc={t('nvr.notify.kindsHint')}>
-			{#snippet control()}
-				<Pills
-					label={t('nvr.notify.kinds')}
-					options={KIND_PILLS.map((pill) => ({
-						value: pill,
-						label: t(`nvr.notify.kind.${pill}` as MessageKey),
-					}))}
-					chosen={kindsChosen}
-					disabled={waysChosen.length === 0}
-					ontoggle={toggleKind}
-				/>
-			{/snippet}
-		</SettingRow>
-	</SettingGroup>
+	<NotifyGroup bind:notify camera={initial?.id} {objects} id="{uid}-notify" />
 
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if !mainURL.trim() && kind === 'onvif'}<p class="muted note">
