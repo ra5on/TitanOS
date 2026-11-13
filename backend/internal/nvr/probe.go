@@ -6,41 +6,90 @@ import (
 	"time"
 )
 
-// probedAudio is the sound codec a check of a main stream found.
-type probedAudio struct {
-	codec string
-	at    time.Time
+// probedStream is what a check found about one stream: the sound's codec
+// ("" is no sound) and the picture's size (0 while the camera did not
+// say).
+type probedStream struct {
+	audio         string
+	width, height int
+	at            time.Time
 }
 
 // probedFor is how long a check counts for the camera saved after it.
 const probedFor = time.Hour
 
-// noteProbe keeps what a check found about a main stream's sound until
-// the camera is saved (AddCamera, UpdateCamera take it from there).
-func (m *Manager) noteProbe(mainURL, codec string) {
-	now := time.Now()
+// maxProbed bounds the remembered streams (a check of an ONVIF camera
+// notes up to maxProbeStreams).
+const maxProbed = 256
+
+// noteProbe keeps what a check found about a stream that answered until
+// the camera is saved (AddCamera, UpdateCamera take it from there), by the
+// stream's address without credentials.
+func (m *Manager) noteProbe(address string, info StreamInfo) {
+	if address == "" || info.Outcome != OutcomeOK {
+		return
+	}
+	now := m.now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.probed == nil {
-		m.probed = map[string]probedAudio{}
+		m.probed = map[string]probedStream{}
 	}
-	for address, entry := range m.probed {
+	for each, entry := range m.probed {
 		if now.Sub(entry.at) > probedFor {
-			delete(m.probed, address)
+			delete(m.probed, each)
 		}
 	}
-	if len(m.probed) < 256 {
-		m.probed[mainURL] = probedAudio{codec: clip(codec, 32), at: now}
+	if _, known := m.probed[address]; known || len(m.probed) < maxProbed {
+		m.probed[address] = probedStream{audio: clip(info.Audio, 32), width: info.Width, height: info.Height, at: now}
 	}
 }
 
-// probedCodecLocked is the codec a recent check found for a main stream.
-func (m *Manager) probedCodecLocked(mainURL string) (string, bool) {
-	entry, ok := m.probed[mainURL]
-	if !ok || time.Since(entry.at) > probedFor {
-		return "", false
+// probedLocked is what a recent check found for a stream.
+func (m *Manager) probedLocked(address string) (probedStream, bool) {
+	entry, ok := m.probed[address]
+	if !ok || address == "" || m.now().Sub(entry.at) > probedFor {
+		return probedStream{}, false
 	}
-	return entry.codec, true
+	return entry, true
+}
+
+// clearStreamFacts drops what a request said about codecs and sizes: they
+// are titand's (streamFactsLocked).
+func clearStreamFacts(c *Camera) {
+	c.Audio.Codec, c.Audio.SubCodec = "", ""
+	c.Source.MainWidth, c.Source.MainHeight, c.Source.SubWidth, c.Source.SubHeight = 0, 0, 0, 0
+}
+
+// streamFactsLocked sets the sounds' codecs (Audio.Codec, Audio.SubCodec)
+// and the pictures' sizes (Source.Main…, Source.Sub…) of a camera being
+// saved, per stream: from a recent check of that address, else as the
+// camera had them for that address (was, nil for a new camera; the main
+// and the sub stream may have swapped places), else unknown. A check that
+// did not learn the size leaves a stored one of the same address.
+func (m *Manager) streamFactsLocked(c *Camera, was *Camera) {
+	facts := func(address string) (audio string, width, height int) {
+		if address == "" {
+			return "", 0, 0
+		}
+		if was != nil {
+			switch address {
+			case was.Source.MainURL:
+				audio, width, height = was.Audio.Codec, was.Source.MainWidth, was.Source.MainHeight
+			case was.Source.SubURL:
+				audio, width, height = was.Audio.SubCodec, was.Source.SubWidth, was.Source.SubHeight
+			}
+		}
+		if probed, ok := m.probedLocked(address); ok {
+			audio = probed.audio
+			if probed.width > 0 && probed.height > 0 {
+				width, height = probed.width, probed.height
+			}
+		}
+		return audio, width, height
+	}
+	c.Audio.Codec, c.Source.MainWidth, c.Source.MainHeight = facts(c.Source.MainURL)
+	c.Audio.SubCodec, c.Source.SubWidth, c.Source.SubHeight = facts(c.Source.SubURL)
 }
 
 // ProbeRequest asks one camera before it is added or changed.
@@ -63,11 +112,21 @@ type ProbeRequest struct {
 
 // ProbeStream is one stream that was asked.
 type ProbeStream struct {
-	// Role is "main" or "sub"; URL has no credentials.
+	// Role is "main" or "sub" (the streams TitanOS would take: MainURL,
+	// SubURL), or "other" (a further profile of an ONVIF camera); URL has
+	// no credentials.
 	Role string `json:"role"`
 	URL  string `json:"url"`
+	// Profile is the name of the ONVIF profile ("" for kind rtsp). Width,
+	// Height and Codec come from the profile where the stream's
+	// description does not name them.
+	Profile string `json:"profile,omitempty"`
 	StreamInfo
 }
+
+// maxProbeStreams bounds the streams one check asks: each costs a login
+// at the camera.
+const maxProbeStreams = 6
 
 // ProbeDevice is who the camera says it is (ONVIF).
 type ProbeDevice struct {
@@ -88,7 +147,9 @@ type ProbeResult struct {
 	// MainURL and SubURL are the streams TitanOS would take.
 	MainURL string `json:"mainURL"`
 	SubURL  string `json:"subURL"`
-	// Streams are MainURL and SubURL as they answered.
+	// Streams are MainURL and SubURL as they answered, for kind onvif
+	// followed by the streams of the other profiles (each address once, at
+	// most maxProbeStreams), so that the page can offer each.
 	Streams   []ProbeStream `json:"streams"`
 	PTZ       bool          `json:"ptz"`
 	ONVIFPort int           `json:"onvifPort"`
@@ -141,8 +202,8 @@ func (m *Manager) Probe(ctx context.Context, req ProbeRequest) (ProbeResult, err
 	}
 	if m.Dev {
 		result := devProbe(req)
-		if len(result.Streams) > 0 {
-			m.noteProbe(result.MainURL, result.Streams[0].Audio)
+		for _, s := range result.Streams {
+			m.noteProbe(s.URL, s.StreamInfo)
 		}
 		return result, nil
 	}
@@ -171,28 +232,69 @@ func (m *Manager) Probe(ctx context.Context, req ProbeRequest) (ProbeResult, err
 	default:
 		return result, invalid("kind")
 	}
-	for _, stream := range [][2]string{{"main", result.MainURL}, {"sub", result.SubURL}} {
-		role, address := stream[0], stream[1]
-		if address == "" {
-			continue
-		}
-		info, err := prober.ProbeRTSP(ctx, address, req.User, req.Password)
+	for _, target := range probeTargets(result.MainURL, result.SubURL, result.Profiles) {
+		info, err := prober.ProbeRTSP(ctx, target.URL, req.User, req.Password)
 		if err != nil {
 			return result, err
 		}
-		result.Streams = append(result.Streams, ProbeStream{Role: role, URL: address, StreamInfo: info})
-		if role == "main" && req.Kind == "rtsp" {
+		target.StreamInfo = withProfile(info, target.profile)
+		result.Streams = append(result.Streams, target.ProbeStream)
+		if target.Role == "main" && req.Kind == "rtsp" {
 			result.Outcome = info.Outcome
 		}
-		if role == "main" && info.Outcome == OutcomeOK {
-			m.noteProbe(address, info.Audio)
-		}
-		// A refused login is not tried a second time on the other stream.
+		m.noteProbe(target.URL, target.StreamInfo)
+		// A refused login is not tried a second time on another stream:
+		// cameras lock the account after a few.
 		if info.Outcome == OutcomeUnauthorized || info.Outcome == OutcomeLocked {
 			break
 		}
 	}
 	return result, nil
+}
+
+// probeTarget is a stream a check asks, with the ONVIF profile it is of.
+type probeTarget struct {
+	ProbeStream
+	profile *Profile
+}
+
+// probeTargets are the streams a check asks: the main and the sub stream
+// TitanOS would take, then the streams of the other profiles in their
+// order; each address once, at most maxProbeStreams.
+func probeTargets(mainURL, subURL string, profiles []Profile) []probeTarget {
+	out := []probeTarget{}
+	add := func(role, address string) {
+		if address == "" || len(out) >= maxProbeStreams || slices.ContainsFunc(out, func(t probeTarget) bool { return t.URL == address }) {
+			return
+		}
+		target := probeTarget{ProbeStream: ProbeStream{Role: role, URL: address}}
+		if at := slices.IndexFunc(profiles, func(p Profile) bool { return p.URL == address }); at >= 0 {
+			target.profile = &profiles[at]
+			target.Profile = profiles[at].Name
+		}
+		out = append(out, target)
+	}
+	add("main", mainURL)
+	add("sub", subURL)
+	for _, p := range profiles {
+		add("other", p.URL)
+	}
+	return out
+}
+
+// withProfile fills in what a stream's description did not name from its
+// ONVIF profile: many cameras leave the size out of the description.
+func withProfile(info StreamInfo, profile *Profile) StreamInfo {
+	if profile == nil || info.Outcome != OutcomeOK {
+		return info
+	}
+	if (info.Width == 0 || info.Height == 0) && profile.Width > 0 && profile.Height > 0 {
+		info.Width, info.Height = profile.Width, profile.Height
+	}
+	if info.Codec == "" {
+		info.Codec = profile.Codec
+	}
+	return info
 }
 
 // devProbe is the answer of development mode: a camera that is there
@@ -205,22 +307,32 @@ func devProbe(req ProbeRequest) ProbeResult {
 	}
 	if req.Kind == "rtsp" {
 		result.MainURL, result.SubURL = req.MainURL, req.SubURL
-	} else {
-		host := req.Host
-		result.ONVIFPort = max(req.ONVIFPort, 80)
-		result.Device = &ProbeDevice{Manufacturer: "Demo", Model: "DEMO-4K", Firmware: "1.0"}
-		result.MainURL, result.SubURL = "rtsp://"+host+":554/main", "rtsp://"+host+":554/sub"
-		result.Profiles = []Profile{
-			{Token: "main", Name: "mainStream", Width: 3840, Height: 2160, Codec: "H265", URL: result.MainURL, PTZ: true},
-			{Token: "sub", Name: "subStream", Width: 640, Height: 360, Codec: "H264", URL: result.SubURL},
+		if result.MainURL != "" {
+			result.Streams = append(result.Streams, ProbeStream{Role: "main", URL: result.MainURL, StreamInfo: StreamInfo{Outcome: OutcomeOK, Codec: "H265", Audio: "MPEG4-GENERIC", Width: 3840, Height: 2160}})
 		}
-		result.PTZ = true
+		if result.SubURL != "" {
+			result.Streams = append(result.Streams, ProbeStream{Role: "sub", URL: result.SubURL, StreamInfo: StreamInfo{Outcome: OutcomeOK, Codec: "H264", Width: 640, Height: 360}})
+		}
+		return result
 	}
-	if result.MainURL != "" {
-		result.Streams = append(result.Streams, ProbeStream{Role: "main", URL: result.MainURL, StreamInfo: StreamInfo{Outcome: OutcomeOK, Codec: "H265", Audio: "MPEG4-GENERIC", Width: 3840, Height: 2160}})
+	// Three streams in four profiles (two share the main stream, as on
+	// many cameras), so that the page offers a choice.
+	host := req.Host
+	result.ONVIFPort = max(req.ONVIFPort, 80)
+	result.Device = &ProbeDevice{Manufacturer: "Demo", Model: "DEMO-4K", Firmware: "1.0"}
+	base := "rtsp://" + host + ":554/"
+	result.Profiles = []Profile{
+		{Token: "main", Name: "mainStream", Width: 3840, Height: 2160, Codec: "H265", URL: base + "main", PTZ: true},
+		{Token: "sub", Name: "subStream", Width: 640, Height: 360, Codec: "H264", URL: base + "sub"},
+		{Token: "third", Name: "thirdStream", Width: 1280, Height: 720, Codec: "H264", URL: base + "third"},
+		{Token: "main2", Name: "mainStream (PTZ)", Width: 3840, Height: 2160, Codec: "H265", URL: base + "main", PTZ: true},
 	}
-	if result.SubURL != "" {
-		result.Streams = append(result.Streams, ProbeStream{Role: "sub", URL: result.SubURL, StreamInfo: StreamInfo{Outcome: OutcomeOK, Codec: "H264", Width: 640, Height: 360}})
+	result.PTZ = true
+	result.MainURL, result.SubURL = PickStreams(result.Profiles)
+	audio := map[string]string{base + "main": "MPEG4-GENERIC", base + "third": "PCMA"}
+	for _, target := range probeTargets(result.MainURL, result.SubURL, result.Profiles) {
+		target.StreamInfo = withProfile(StreamInfo{Outcome: OutcomeOK, Audio: audio[target.URL]}, target.profile)
+		result.Streams = append(result.Streams, target.ProbeStream)
 	}
 	return result
 }

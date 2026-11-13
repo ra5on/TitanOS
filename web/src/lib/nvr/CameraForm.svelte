@@ -12,16 +12,10 @@
 	import SettingSub from '../components/settings/SettingSub.svelte';
 	import { apiErrorText, t, type MessageKey } from '../i18n/index.svelte.ts';
 	import Confirm from './Confirm.svelte';
+	import NotifyGroup from './NotifyGroup.svelte';
 	import Pills from './Pills.svelte';
 	import { shrinks } from './shrink.ts';
-	import {
-		groupsOf,
-		labelName,
-		OBJECT_GROUP_IDS,
-		OBJECT_GROUPS,
-		toggleGroup,
-		type ObjectGroup,
-	} from './texts.ts';
+	import { groupsOf, labelName, OBJECT_GROUP_IDS, toggleGroup, type ObjectGroup } from './texts.ts';
 	import type {
 		Camera,
 		CameraNotify,
@@ -78,9 +72,18 @@
 	let audio = $state(initial?.audio.enabled ?? false);
 	let twoWay = $state(initial?.audio.twoWay ?? false);
 	let ptz = $state(initial?.ptz ?? false);
+	// Whom it tells (PLAN 82-3, NotifyGroup.svelte): copies, so that the
+	// list of cameras is not changed by what is being chosen.
 	let notify = $state<CameraNotify>(
 		initial?.notify
-			? { ...initial.notify, kinds: [...initial.notify.kinds] }
+			? {
+					...initial.notify,
+					kinds: [...initial.notify.kinds],
+					recipients: initial.notify.recipients?.map((r) => ({ ...r })) ?? null,
+					window: initial.notify.window
+						? { ...initial.notify.window, days: [...initial.notify.window.days] }
+						: undefined,
+				}
 			: {
 					titan: true,
 					push: false,
@@ -167,7 +170,9 @@
 	}
 	const streamText = (s: ProbeResult['streams'][number]) =>
 		[
-			t(s.role === 'main' ? 'nvr.probe.main' : 'nvr.probe.sub'),
+			s.role === 'other'
+				? s.profile || t('nvr.stream.other')
+				: t(s.role === 'main' ? 'nvr.probe.main' : 'nvr.probe.sub'),
 			s.outcome === 'ok'
 				? [
 						s.width && s.height ? `${s.width} × ${s.height}` : '',
@@ -180,6 +185,61 @@
 		].join(': ');
 	// The sound a check found: a stream with an audio track.
 	const probedSound = $derived(probe?.outcome === 'ok' ? probe.streams.some((s) => s.audio) : null);
+
+	// ---- Streams (PLAN 82-1, 82-2) ----
+	// Which stream records, detects and shows the live picture, and whether
+	// the NAS keeps them open. "main" is the high-resolution stream (mainURL),
+	// "sub" the low-resolution one (subURL).
+	let streamRecord = $state<'main' | 'sub'>(initial?.streams?.record === 'sub' ? 'sub' : 'main');
+	let streamDetect = $state<'main' | 'sub'>(initial?.streams?.detect === 'main' ? 'main' : 'sub');
+	let streamLive = $state<'auto' | 'main' | 'sub'>(
+		initial?.streams?.live === 'main' || initial?.streams?.live === 'sub'
+			? initial.streams.live
+			: 'auto',
+	);
+	let keepOpen = $state(!initial?.streams?.noPreload);
+	const hasSub = $derived(subURL.trim() !== '');
+	// After a check of an ONVIF camera: every stream that answered, to
+	// choose the high- and the low-resolution one from.
+	const choosable = $derived(
+		kind === 'onvif' && probe?.outcome === 'ok'
+			? probe.streams.filter((s) => s.outcome === 'ok')
+			: [],
+	);
+	const sizeText = (width?: number, height?: number) =>
+		width && height ? `${width} × ${height}` : t('nvr.stream.unknownSize');
+	function choiceText(s: ProbeResult['streams'][number]) {
+		const label = [sizeText(s.width, s.height), s.codec].filter(Boolean).join(' · ');
+		// Two streams alike are told apart by their profile's name.
+		const alike = choosable.filter(
+			(o) => o.width === s.width && o.height === s.height && o.codec === s.codec,
+		);
+		return alike.length > 1 ? `${label} · ${s.profile || alike.indexOf(s) + 1}` : label;
+	}
+	function chooseHigh(url: string) {
+		mainURL = url;
+		if (subURL === url) subURL = '';
+	}
+	// Without a second stream (none chosen, a camera with one, the field
+	// emptied) nothing records or shows the low-resolution one: the NAS
+	// would refuse the camera.
+	$effect(() => {
+		if (hasSub) return;
+		untrack(() => {
+			streamRecord = 'main';
+			if (streamLive === 'sub') streamLive = 'auto';
+		});
+	});
+	// A camera being changed without a fresh check: its streams as stored.
+	const storedStreams = $derived.by(() => {
+		const source = initial?.source;
+		if (!source || kind !== 'onvif' || choosable.length > 0 || source.mainURL !== mainURL)
+			return '';
+		const high = sizeText(source.mainWidth, source.mainHeight);
+		return source.subURL && source.subURL === subURL
+			? t('nvr.stream.currentBoth', { high, low: sizeText(source.subWidth, source.subHeight) })
+			: t('nvr.stream.currentHigh', { high });
+	});
 
 	// ---- Detection ----
 	const enrich = $derived(hardware?.enrichmentsPossible !== false);
@@ -230,26 +290,6 @@
 			if (mode === 'events') mode = 'motion';
 		}
 	}
-	// ---- Notifications ----
-	const WAYS = ['titan', 'push', 'email', 'homeAssistant', 'agent'] as const;
-	type Way = (typeof WAYS)[number];
-	const waysChosen = $derived(WAYS.filter((way) => notify[way]));
-	type KindPill = ObjectGroup | 'plate' | 'face' | 'offline';
-	const KIND_PILLS: KindPill[] = [...OBJECT_GROUP_IDS, 'plate', 'face', 'offline'];
-	const kindMembers = (pill: KindPill): readonly string[] =>
-		pill === 'plate' || pill === 'face' || pill === 'offline' ? [pill] : OBJECT_GROUPS[pill];
-	const kindsChosen = $derived(
-		KIND_PILLS.filter((pill) => kindMembers(pill).some((k) => notify.kinds.includes(k))),
-	);
-	function toggleKind(pill: KindPill, on: boolean) {
-		const members = kindMembers(pill);
-		const rest = notify.kinds.filter((k) => !members.includes(k));
-		const add = members.filter(
-			(k) => ['plate', 'face', 'offline'].includes(k) || !objects.length || objects.includes(k),
-		);
-		notify.kinds = on ? [...rest, ...add] : rest;
-	}
-
 	// ---- Save ----
 	let saving = $state(false);
 	let error = $state('');
@@ -286,6 +326,12 @@
 				mainURL: mainURL.trim(),
 				subURL: subURL.trim(),
 				allowPublic,
+			},
+			streams: {
+				record: hasSub ? streamRecord : 'main',
+				detect: streamDetect,
+				live: hasSub ? streamLive : 'auto',
+				noPreload: !keepOpen,
 			},
 			detect: { enabled: detectOn, objects: detectOn ? detectObjects : [], plates, faces },
 			record: {
@@ -499,11 +545,12 @@
 							{#if probe.device}<li>
 									{[probe.device.manufacturer, probe.device.model].filter(Boolean).join(' ')}
 								</li>{/if}
-							{#each probe.streams as s (s.role)}<li>{streamText(s)}</li>{/each}
+							{#each probe.streams as s (s.url)}<li>{streamText(s)}</li>{/each}
 							{#if kind === 'onvif'}<li>
 									{probe.ptz ? t('nvr.probe.ptzYes') : t('nvr.probe.ptzNo')}
 								</li>{/if}
-							{#if probe.streams.some((s) => s.role === 'sub' && s.outcome === 'ok')}<li>
+							{#if streamDetect === 'sub' && hasSub && probe.streams.some((s) => s.url === subURL && s.outcome === 'ok')}<li
+								>
 									{t('nvr.probe.subUsed')}
 								</li>{/if}
 						</ul>
@@ -535,6 +582,129 @@
 					aria-invalid={nameTaken || nameError ? 'true' : undefined}
 					aria-describedby={nameTaken || nameError ? `${uid}-name-taken` : undefined}
 					oninput={() => (nameError = false)}
+				/>
+			{/snippet}
+		</SettingRow>
+	</SettingGroup>
+
+	<SettingGroup title={t('nvr.stream.group')} id="{uid}-streams">
+		{#if choosable.length > 0}
+			<SettingRow
+				icon="video"
+				title={t('nvr.stream.high')}
+				desc={t('nvr.stream.highHint')}
+				for="{uid}-high"
+				id="nvr-stream-high"
+			>
+				{#snippet control()}
+					<select
+						id="{uid}-high"
+						class="field stream"
+						value={mainURL}
+						onchange={(e) => chooseHigh(e.currentTarget.value)}
+					>
+						{#each choosable as s (s.url)}
+							<option value={s.url}>{choiceText(s)}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+			<SettingRow
+				icon="video"
+				title={t('nvr.stream.low')}
+				desc={t('nvr.stream.lowHint')}
+				for="{uid}-low"
+				id="nvr-stream-low"
+			>
+				{#snippet control()}
+					<select id="{uid}-low" class="field stream" bind:value={subURL}>
+						<option value="">{t('nvr.stream.none')}</option>
+						{#each choosable.filter((s) => s.url !== mainURL) as s (s.url)}
+							<option value={s.url}>{choiceText(s)}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+		{:else if storedStreams}
+			<SettingRow
+				icon="video"
+				title={t('nvr.stream.current')}
+				desc="{storedStreams}. {t('nvr.stream.currentHint')}"
+				id="nvr-stream-current"
+			/>
+		{/if}
+		<SettingRow
+			icon="archive"
+			title={t('nvr.stream.record')}
+			desc={hasSub ? t('nvr.stream.recordHint') : t('nvr.stream.single')}
+			id="nvr-stream-record"
+		>
+			{#snippet control()}
+				<Segments
+					options={[
+						{ value: 'main', label: t('nvr.stream.highShort') },
+						{ value: 'sub', label: t('nvr.stream.lowShort') },
+					]}
+					bind:value={streamRecord}
+					label={t('nvr.stream.record')}
+					disabled={!hasSub}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			icon="eye"
+			title={t('nvr.stream.detect')}
+			desc={!hasSub
+				? t('nvr.stream.single')
+				: streamDetect === 'main'
+					? t('nvr.stream.detectHighHint')
+					: t('nvr.stream.detectHint')}
+			id="nvr-stream-detect"
+		>
+			{#snippet control()}
+				<Segments
+					options={[
+						{ value: 'sub', label: t('nvr.stream.lowShort') },
+						{ value: 'main', label: t('nvr.stream.highShort') },
+					]}
+					bind:value={streamDetect}
+					label={t('nvr.stream.detect')}
+					disabled={!hasSub}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			icon="image"
+			title={t('nvr.stream.live')}
+			desc={hasSub ? t('nvr.stream.liveHint') : t('nvr.stream.single')}
+			id="nvr-stream-live"
+		>
+			{#snippet control()}
+				<Segments
+					options={[
+						{ value: 'auto', label: t('nvr.stream.auto') },
+						{ value: 'main', label: t('nvr.stream.highShort') },
+						{ value: 'sub', label: t('nvr.stream.lowShort') },
+					]}
+					bind:value={streamLive}
+					label={t('nvr.stream.live')}
+					disabled={!hasSub}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			icon="play"
+			title={t('nvr.stream.keepOpen')}
+			desc={keepOpen ? t('nvr.stream.keepOpenHint') : t('nvr.stream.keepOpenOffHint')}
+			id="nvr-stream-open"
+		>
+			{#snippet control()}
+				<input
+					type="checkbox"
+					role="switch"
+					class="switch"
+					aria-label={t('nvr.stream.keepOpen')}
+					bind:checked={keepOpen}
 				/>
 			{/snippet}
 		</SettingRow>
@@ -715,35 +885,7 @@
 		</SettingRow>
 	</SettingGroup>
 
-	<SettingGroup title={t('nvr.camera.notifications')} id="{uid}-notify">
-		<SettingRow icon="bell" title={t('nvr.notify.ways')} desc={t('nvr.notify.waysHint')}>
-			{#snippet control()}
-				<Pills
-					label={t('nvr.notify.ways')}
-					options={WAYS.map((way) => ({
-						value: way as Way,
-						label: t(`nvr.notify.way.${way}` as MessageKey),
-					}))}
-					chosen={waysChosen}
-					ontoggle={(way, on) => (notify[way] = on)}
-				/>
-			{/snippet}
-		</SettingRow>
-		<SettingRow icon="info" title={t('nvr.notify.kinds')} desc={t('nvr.notify.kindsHint')}>
-			{#snippet control()}
-				<Pills
-					label={t('nvr.notify.kinds')}
-					options={KIND_PILLS.map((pill) => ({
-						value: pill,
-						label: t(`nvr.notify.kind.${pill}` as MessageKey),
-					}))}
-					chosen={kindsChosen}
-					disabled={waysChosen.length === 0}
-					ontoggle={toggleKind}
-				/>
-			{/snippet}
-		</SettingRow>
-	</SettingGroup>
+	<NotifyGroup bind:notify camera={initial?.id} {objects} id="{uid}-notify" />
 
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if !mainURL.trim() && kind === 'onvif'}<p class="muted note">
@@ -819,6 +961,9 @@
 	.url {
 		width: min(26rem, 100%);
 	}
+	.stream {
+		width: min(16rem, 100%);
+	}
 	.cred {
 		width: 9.5rem;
 	}
@@ -876,7 +1021,8 @@
 		.host,
 		.url,
 		.cred,
-		.name {
+		.name,
+		.stream {
 			width: 100%;
 		}
 	}

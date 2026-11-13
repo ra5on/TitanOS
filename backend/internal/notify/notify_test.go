@@ -39,18 +39,18 @@ func TestDismissKeepsNewArrivalsAndRefreshesOtherBrowsers(t *testing.T) {
 	first := m.Messages()[0].ID
 	m.Notify(Warning, "test", "second")
 	revision := m.Latest()
-	m.Dismiss([]int{first, first, 999})
+	m.Dismiss("alex", []int{first, first, 999})
 	if messages := m.Messages(); len(messages) != 1 || messages[0].Subject != "second" {
 		t.Fatalf("new arrival lost: %+v", messages)
 	}
 	if m.Latest() <= revision {
 		t.Fatal("other browsers will not refresh")
 	}
-	m.Dismiss([]int{first})
+	m.Dismiss("alex", []int{first})
 	if m.Latest() != revision+1 {
 		t.Fatal("no-op changed revision")
 	}
-	m.Dismiss([]int{m.Messages()[0].ID})
+	m.Dismiss("alex", []int{m.Messages()[0].ID})
 	if len(m.Messages()) != 0 {
 		t.Fatal("last message retained")
 	}

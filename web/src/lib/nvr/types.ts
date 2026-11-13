@@ -13,9 +13,34 @@ export type NvrDevice = {
 	reason?: string;
 };
 
+/** A GPU that can decode the camera streams (PLAN 82-4). */
+export type NvrDecoder = {
+	/** PCI address, what the setting `decoder` names. */
+	id: string;
+	title: string;
+	kind: 'igpu' | 'gpu' | 'nvidia' | string;
+	available: boolean;
+	/** Why it cannot decode: driver, vm. */
+	reason?: string;
+};
+
+/** The GPU that decodes, as the setting resolves now. */
+export type NvrDecoderStatus = {
+	/** 'auto', 'cpu' or a PCI address. */
+	setting: string;
+	/** PCI address of the GPU that decodes, or 'cpu'. */
+	active: string;
+	kind: string;
+	title: string;
+	/** Why a chosen GPU does not decode: gone, vm, driver. */
+	reason?: string;
+};
+
 export type NvrHardware = {
 	devices: NvrDevice[];
 	auto: string;
+	/** Absent from a NAS before PLAN 82. */
+	decoders?: NvrDecoder[];
 	videoDecode: boolean;
 	accelDevice: boolean;
 	avx2: boolean;
@@ -78,6 +103,7 @@ export type NvrStatus = {
 	rtspOut?: boolean;
 	frigateVersion?: string;
 	hardware?: NvrHardware;
+	decoder?: NvrDecoderStatus;
 };
 
 export type PlateEntry = { name: string; plates: string[] };
@@ -92,6 +118,10 @@ export type NvrSettings = {
 	rtspUser: string;
 	rtspPassword: string;
 	plates?: PlateEntry[];
+	/** Main switch of the cameras' messages (PLAN 82-3); absent is on. */
+	notifyOff?: boolean;
+	/** GPU that decodes the streams (PLAN 82-4): '' / 'auto', 'cpu' or a PCI address. */
+	decoder?: string;
 };
 
 export type RecordMode = 'off' | 'events' | 'motion' | 'continuous';
@@ -116,6 +146,21 @@ export type CameraSource = {
 	mainURL: string;
 	subURL: string;
 	allowPublic: boolean;
+	/** Picture sizes from the last check (set by the NAS; 0 while unknown). */
+	mainWidth?: number;
+	mainHeight?: number;
+	subWidth?: number;
+	subHeight?: number;
+};
+
+/** Which stream serves what (PLAN 82-2); '' is the default of each. */
+export type StreamChoice = '' | 'main' | 'sub';
+export type CameraStreams = {
+	record?: StreamChoice;
+	detect?: StreamChoice;
+	live?: StreamChoice | 'auto';
+	/** go2rtc opens the streams only while something reads them (default: kept open). */
+	noPreload?: boolean;
 };
 
 export type CameraDetect = { enabled: boolean; objects: string[]; plates: boolean; faces: boolean };
@@ -125,13 +170,21 @@ export type CameraRecord = {
 	preSeconds: number;
 	postSeconds: number;
 };
+export type NotifyRecipient = { user: string; bell: boolean; push: boolean; email: boolean };
+export type NotifyWindow = { on: boolean; days: number[]; from: string; to: string };
 export type CameraNotify = {
+	/** Ways of 0.78; with recipients they only say whether some recipient has the way. */
 	titan: boolean;
 	push: boolean;
 	email: boolean;
 	homeAssistant: boolean;
 	agent: boolean;
 	kinds: string[];
+	/** null: a camera of 0.78 (old ways, to the administrators); [] is nobody. */
+	recipients?: NotifyRecipient[] | null;
+	/** Least seconds between two messages of one kind; absent is 60. */
+	pauseSeconds?: number;
+	window?: NotifyWindow;
 };
 
 /** A camera as administrators get it; other accounts get the first block only. */
@@ -140,10 +193,11 @@ export type Camera = {
 	name: string;
 	enabled: boolean;
 	order: number;
-	audio: { enabled: boolean; twoWay: boolean };
+	audio: { enabled: boolean; twoWay: boolean; codec?: string; subCodec?: string };
 	ptz: boolean;
 	state: CameraState;
-	rights?: { live: boolean; recordings: boolean };
+	/** names: recognised names and plates of this camera (PLAN 82-3). */
+	rights?: { live: boolean; recordings: boolean; names?: boolean };
 	/**
 	 * A removed camera (administrators only): it records nothing and has no
 	 * live picture; its recordings and events stay until `expiresAt`.
@@ -153,6 +207,7 @@ export type Camera = {
 	deletedAt?: number | string | null;
 	expiresAt?: number | string | null;
 	source?: CameraSource;
+	streams?: CameraStreams;
 	detect?: CameraDetect;
 	record?: CameraRecord;
 	notify?: CameraNotify;
@@ -170,8 +225,11 @@ export type Discovered = {
 };
 
 export type ProbeStream = {
-	role: 'main' | 'sub';
+	/** main and sub: the streams the NAS would take; other: a further ONVIF profile. */
+	role: 'main' | 'sub' | 'other';
 	url: string;
+	/** Name of the ONVIF profile. */
+	profile?: string;
 	outcome: string;
 	codec: string;
 	audio: string;
@@ -226,6 +284,7 @@ export type Diagnosis = {
 	}[];
 	shm: { totalMB: number | null; usedMB: number | null; freeMB: number | null };
 	hardware: NvrHardware;
+	decoder?: NvrDecoderStatus;
 };
 
 // ---- Phase 2 ----
@@ -301,5 +360,13 @@ export type RecognizedPlate = {
 export type UserCameras = {
 	admin: boolean;
 	/** `deleted`: a removed camera (rights do not matter for it any more; left out). */
-	cameras: { id: string; name: string; live: boolean; recordings: boolean; deleted?: boolean }[];
+	/** `names`: recognised faces' names and plates (PLAN 82-3), only with `recordings`. */
+	cameras: {
+		id: string;
+		name: string;
+		live: boolean;
+		recordings: boolean;
+		names?: boolean;
+		deleted?: boolean;
+	}[];
 };

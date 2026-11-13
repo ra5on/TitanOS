@@ -77,6 +77,10 @@ type Status struct {
 	// FrigateVersion is the pinned version.
 	FrigateVersion string       `json:"frigateVersion"`
 	Hardware       HardwareInfo `json:"hardware"`
+	// Decoder is the GPU that decodes the streams (PLAN 82-4): the one the
+	// container was made with, as the setting resolves while there is
+	// none; with the reason when a chosen GPU does not decode.
+	Decoder DecoderStatus `json:"decoder"`
 }
 
 // CameraState is what the watch knows of a camera.
@@ -125,13 +129,14 @@ func (m *Manager) Status(ctx context.Context) Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.settings
+	hw, decoder := m.decoderLocked(hw)
 	st := Status{
 		Enabled: s.Enabled, State: m.rt.phase, Error: m.rt.lastError, Image: m.imageLocked(),
 		Volume: s.Volume, VolumeMounted: s.Volume != "" && slices.Contains(mounted, s.Volume),
 		Detector:               DetectorStatus{Kind: s.Detector.Kind, Active: m.activeLocked(), Failover: m.state.Failover, InferenceMs: m.rt.inferenceMs},
 		Storage:                m.storageStatusLocked(),
 		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut,
-		FrigateVersion: FrigateVersion, Hardware: hw,
+		FrigateVersion: FrigateVersion, Hardware: hw, Decoder: decoder,
 	}
 	if m.state.Stopped && st.Error == nil {
 		st.Error = &LastError{Code: m.state.StoppedReason, Detail: m.state.StoppedDetail}
@@ -147,6 +152,23 @@ func (m *Manager) Status(ctx context.Context) Status {
 		}
 	}
 	return st
+}
+
+// decoderLocked is the decoder in use (m.mu held): the one the container
+// was made with (a GPU Docker refused shows as the CPU with "driver" once
+// the container is made anew), else the settings' resolved on hw. It
+// returns hw with VideoDecode telling whether a GPU decodes.
+func (m *Manager) decoderLocked(hw HardwareInfo) (HardwareInfo, DecoderStatus) {
+	hw = hw.withBroken(m.rt.brokenDecoders)
+	_, decoder := hw.decoder(m.settings.Decoder)
+	if m.rt.decoder.Active != "" && m.rt.container.Exists {
+		decoder = m.rt.decoder
+	}
+	hw.VideoDecode = decoder.Active != DecoderCPU
+	if hw.Decoders == nil {
+		hw.Decoders = []Decoder{}
+	}
+	return hw, decoder
 }
 
 func (m *Manager) imageLocked() ImageStatus {
@@ -223,6 +245,9 @@ type Diagnosis struct {
 	Cameras  []CameraDiagnosis          `json:"cameras"`
 	Shm      ShmDiagnosis               `json:"shm"`
 	Hardware HardwareInfo               `json:"hardware"`
+	// Decoder is the GPU that decodes the streams: the one the container
+	// was made with, as the setting resolves while there is none.
+	Decoder DecoderStatus `json:"decoder"`
 }
 
 // diagnosisLogLines is how much of the log the diagnosis shows.
@@ -232,13 +257,14 @@ const diagnosisLogLines = 200
 func (m *Manager) Diagnosis(ctx context.Context) Diagnosis {
 	hw := m.hardwareCached(ctx, true)
 	m.mu.Lock()
+	hw, decoder := m.decoderLocked(hw)
 	d := Diagnosis{
 		State: m.rt.phase, ImageReference: frigateImage, ImageVersion: FrigateVersion, ImagePresent: m.rt.imageID != "",
 		RunningVersion: m.rt.version,
 		Detector:       DetectorStatus{Kind: m.settings.Detector.Kind, Active: m.activeLocked(), Failover: m.state.Failover, InferenceMs: m.rt.inferenceMs},
 		DetectorPID:    m.rt.detectorPID, LastError: m.rt.lastError,
 		Log: []string{}, NPUFirmware: []string{}, Cameras: []CameraDiagnosis{},
-		AccelDevice: hw.AccelDevice, Hardware: hw,
+		AccelDevice: hw.AccelDevice, Hardware: hw, Decoder: decoder,
 		GPUUsage: map[string]json.RawMessage{}, NPUUsage: map[string]json.RawMessage{},
 	}
 	if m.state.Stopped && d.LastError == nil {
@@ -333,6 +359,11 @@ type SourceView struct {
 	SubURL      string `json:"subURL"`
 	ONVIFPort   int    `json:"onvifPort"`
 	AllowPublic bool   `json:"allowPublic"`
+	// The pictures' sizes as the last check found them (0: unknown).
+	MainWidth  int `json:"mainWidth"`
+	MainHeight int `json:"mainHeight"`
+	SubWidth   int `json:"subWidth"`
+	SubHeight  int `json:"subHeight"`
 }
 
 // CameraView is a camera as the API answers it to administrators.
@@ -341,6 +372,7 @@ type CameraView struct {
 	Name    string      `json:"name"`
 	Enabled bool        `json:"enabled"`
 	Source  SourceView  `json:"source"`
+	Streams StreamUse   `json:"streams"`
 	Detect  Detect      `json:"detect"`
 	Record  Record      `json:"record"`
 	Audio   Audio       `json:"audio"`
@@ -362,7 +394,7 @@ func (d DeletedCamera) View() CameraView {
 	return CameraView{
 		ID: d.ID, Name: d.Name, Source: SourceView{},
 		Detect: Detect{Objects: []string{}}, Record: Record{Mode: RecordOff, RetainDays: d.RetainDays},
-		Notify: Notify{Kinds: []string{}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
+		Notify: Notify{Kinds: []string{}, Recipients: []Recipient{}, Window: Window{Days: []int{}}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
 	}
 }
 
@@ -372,8 +404,9 @@ func (c Camera) View(state CameraState) CameraView {
 	return CameraView{
 		ID: c.ID, Name: c.Name, Enabled: c.Enabled,
 		Source: SourceView{Kind: s.Kind, Host: s.Host, Port: s.Port, User: s.User, HasPassword: s.Password != "",
-			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic},
-		Detect: c.Detect, Record: c.Record, Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
+			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic,
+			MainWidth: s.MainWidth, MainHeight: s.MainHeight, SubWidth: s.SubWidth, SubHeight: s.SubHeight},
+		Streams: c.Streams, Detect: c.Detect, Record: c.Record, Audio: c.Audio, PTZ: c.PTZ, Notify: c.Notify, Order: c.Order, State: state,
 	}
 }
 

@@ -26,6 +26,7 @@ export function camera(id, name, order, over = {}) {
       subURL: `rtsp://192.168.1.${60 + order}:554/sub`,
       allowPublic: false,
     },
+    streams: {},
     detect: { enabled: true, objects: ["person"], plates: false, faces: false },
     record: { mode: "events", retainDays: 14, preSeconds: 5, postSeconds: 5 },
     audio: { enabled: false, twoWay: false },
@@ -56,6 +57,11 @@ const hardware = () => ({
     { kind: "cpu", title: "CPU", present: true, available: true },
   ],
   auto: "npu",
+  // PLAN 82-4: the GPUs that can decode (the NVIDIA card is with a VM).
+  decoders: [
+    { id: "0000:00:02.0", title: "Intel Arc", kind: "igpu", available: true },
+    { id: "0000:01:00.0", title: "NVIDIA RTX A2000", kind: "nvidia", available: false, reason: "vm" },
+  ],
   videoDecode: true,
   accelDevice: true,
   avx2: true,
@@ -116,6 +122,7 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       rtspUser: "",
       rtspPassword: "",
       plates: [{ name: "Unser Auto", plates: ["K-TI 2026"] }],
+      decoder: "auto",
     },
     state: "running",
     error: null,
@@ -141,10 +148,25 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       camera("einfahrt", "Einfahrt", 2, {
         detect: { enabled: true, objects: ["person", "car"], plates: true, faces: false },
         record: { mode: "continuous", retainDays: 7, preSeconds: 5, postSeconds: 5 },
+        // PLAN 82-3: chosen accounts (sam may not see this camera), a pause and a window.
+        notify: {
+          titan: true,
+          push: true,
+          email: false,
+          homeAssistant: true,
+          agent: false,
+          kinds: ["car", "plate", "offline"],
+          recipients: [
+            { user: "alex", bell: true, push: true, email: false },
+            { user: "sam", bell: false, push: true, email: false },
+          ],
+          pauseSeconds: 300,
+          window: { on: true, days: [1, 2, 3, 4, 5], from: "22:00", to: "06:00" },
+        },
       }),
       camera("garten", "Garten", 3, {
         ptz: true,
-        source: { ...camera("garten", "Garten", 3).source, kind: "onvif", onvifPort: 8000 },
+        source: { ...camera("garten", "Garten", 3).source, kind: "onvif", onvifPort: 8000, mainWidth: 2560, mainHeight: 1440, subWidth: 640, subHeight: 360 },
         record: { mode: "motion", retainDays: 14, preSeconds: 5, postSeconds: 5 },
       }),
       camera("terrasse", "Terrasse", 4, {
@@ -169,6 +191,20 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       "person", "bicycle", "car", "motorcycle", "bus", "bird",
       "cat", "dog", "horse", "sheep", "cow", "bear",
     ],
+    /**
+     * What GET /nvr/recipients answers (PLAN 82-3): alex is signed in, mara
+     * has neither an address nor a device, sam (Benutzer) may see the front
+     * door and switched camera messages off on his device.
+     */
+    recipients: {
+      mailServer: true,
+      accounts: [
+        { name: "alex", admin: true, email: true, pushDevices: 1, pushDevicesOff: 0, cameras: null, names: null },
+        { name: "mara", admin: true, email: false, pushDevices: 0, pushDevicesOff: 0, cameras: null, names: null },
+        // sam has no right "Namen und Kennzeichen" anywhere.
+        { name: "sam", admin: false, email: true, pushDevices: 0, pushDevicesOff: 1, cameras: ["haustuer"], names: [] },
+      ],
+    },
     /** Rights of the signed-in account when it is no administrator. */
     rights: { haustuer: { live: true, recordings: false } },
     /** What GET /users/{name}/cameras answers per account. */
@@ -232,6 +268,25 @@ const picture = (seed, label = "") => {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h} 30% 34%)"/><stop offset="1" stop-color="hsl(${(h + 40) % 360} 28% 14%)"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><rect y="250" width="640" height="110" fill="hsl(${h} 20% 10%)" opacity=".55"/>${label ? `<text x="20" y="40" font-family="sans-serif" font-size="20" fill="#fff" opacity=".5">${label}</text>` : ""}</svg>`;
 };
 
+/** PLAN 82-4: the decoder as the setting resolves (nvr/hardware.go); "auto" never takes NVIDIA. */
+function decoderStatus(s) {
+  const setting = s.settings.decoder || "auto";
+  const cpu = { setting, active: "cpu", kind: "cpu", title: "CPU" };
+  const list = s.hardware.decoders ?? [];
+  if (setting === "cpu") return cpu;
+  if (setting === "auto") {
+    for (const kind of ["igpu", "gpu"]) {
+      const d = list.find((g) => g.kind === kind && g.available);
+      if (d) return { setting, active: d.id, kind: d.kind, title: d.title };
+    }
+    return cpu;
+  }
+  const d = list.find((g) => g.id === setting);
+  if (!d) return { ...cpu, reason: "gone" };
+  if (!d.available) return { ...cpu, reason: d.reason || "driver" };
+  return { setting, active: d.id, kind: d.kind, title: d.title };
+}
+
 function status(s) {
   const mine = visible(s).filter((c) => !c.deleted);
   const counts = {
@@ -260,6 +315,7 @@ function status(s) {
     rtspOut: s.settings.rtspOut,
     frigateVersion: "0.18.2",
     hardware: s.hardware,
+    decoder: decoderStatus(s),
   };
 }
 
@@ -275,7 +331,7 @@ function visible(s) {
       audio: c.audio,
       ptz: c.ptz,
       state: c.state,
-      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings },
+      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings, names: !!s.rights[c.id]?.names },
     }));
 }
 
@@ -311,6 +367,7 @@ function diagnosis(s) {
     })),
     shm: { totalMB: 384, usedMB: 143.2, freeMB: 240.8 },
     hardware: s.hardware,
+    decoder: decoderStatus(s),
   };
 }
 
@@ -362,16 +419,27 @@ export async function installNvr(target, state = nvrState()) {
       const name = decodeURIComponent(m[1]);
       const rows = (s.userCameras[name] ??= {
         admin: false,
-        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, ...(c.deleted ? { deleted: true } : {}) })),
+        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, names: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
           const row = rows.cameras.find((c) => c.id === id);
-          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings });
+          // Names count only with recordings (PLAN 82-3); left out, they stay.
+          const names = (rights.names ?? row?.names) === true && !!rights.recordings;
+          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings, names });
         }
       return json(rows);
     }
     if (path === "/nvr/status") return json(status(s));
+    if (path === "/nvr/recipients") {
+      if (adminOnly()) return;
+      // Administrators see every camera (null in the state: all of them).
+      const all = s.cameras.filter((c) => !c.deleted).map((c) => c.id);
+      return json({
+        mailServer: s.recipients.mailServer,
+        accounts: s.recipients.accounts.map((a) => ({ ...a, cameras: a.cameras ?? all, names: a.names ?? all })),
+      });
+    }
     if (path === "/nvr/settings") {
       if (adminOnly()) return;
       if (method === "PUT") {
@@ -409,17 +477,29 @@ export async function installNvr(target, state = nvrState()) {
       if (body.password === "wrong")
         return json({ outcome: "unauthorized", device: null, profiles: [], mainURL: "", subURL: "", streams: [], ptz: false, onvifPort: 0, clockOffsetSeconds: 0 });
       const host = body.host || new URL(body.mainURL.replace(/^rtsp/, "http")).hostname;
-      const main = body.kind === "onvif" ? `rtsp://${host}:554/h265Preview_01_main` : body.mainURL;
-      const sub = body.kind === "onvif" ? `rtsp://${host}:554/h264Preview_01_sub` : body.subURL;
+      const onvif = body.kind === "onvif";
+      const main = onvif ? `rtsp://${host}:554/h265Preview_01_main` : body.mainURL;
+      const sub = onvif ? `rtsp://${host}:554/h264Preview_01_sub` : body.subURL;
+      const third = `rtsp://${host}:554/h264Preview_01_ext`;
+      // ONVIF: four profiles, three streams (two profiles share the main stream).
+      const profiles = onvif
+        ? [
+            { token: "p0", name: "mainStream", width: 3840, height: 2160, codec: "H265", url: main },
+            { token: "p1", name: "subStream", width: 640, height: 360, codec: "H264", url: sub },
+            { token: "p2", name: "extStream", width: 1280, height: 720, codec: "H264", url: third },
+            { token: "p3", name: "mainStream PTZ", width: 3840, height: 2160, codec: "H265", url: main },
+          ]
+        : [];
       return json({
         outcome: "ok",
-        device: body.kind === "onvif" ? { manufacturer: "Reolink", model: "RLC-810A", firmware: "3.1" } : null,
-        profiles: [],
+        device: onvif ? { manufacturer: "Reolink", model: "RLC-810A", firmware: "3.1" } : null,
+        profiles,
         mainURL: main,
         subURL: sub,
         streams: [
-          { role: "main", url: main, outcome: "ok", codec: "H265", audio: "AAC", width: 3840, height: 2160 },
-          ...(sub ? [{ role: "sub", url: sub, outcome: "ok", codec: "H264", audio: "", width: 640, height: 360 }] : []),
+          { role: "main", url: main, ...(onvif ? { profile: "mainStream" } : {}), outcome: "ok", codec: "H265", audio: "AAC", width: 3840, height: 2160 },
+          ...(sub ? [{ role: "sub", url: sub, ...(onvif ? { profile: "subStream" } : {}), outcome: "ok", codec: "H264", audio: "", width: 640, height: 360 }] : []),
+          ...(onvif ? [{ role: "other", url: third, profile: "extStream", outcome: "ok", codec: "H264", audio: "", width: 1280, height: 720 }] : []),
         ],
         ptz: body.kind === "onvif",
         onvifPort: body.onvifPort || 0,

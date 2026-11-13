@@ -252,8 +252,23 @@ func TestNVRCameras(t *testing.T) {
 	res, body = ts.request("POST", "/api/v1/nvr/cameras/probe", map[string]any{"kind": "onvif", "host": "192.168.1.65", "user": "admin", "password": "x"})
 	var probe nvr.ProbeResult
 	json.Unmarshal(body, &probe)
-	if res.StatusCode != 200 || probe.Outcome != "ok" || probe.MainURL == "" || len(probe.Streams) != 2 || !probe.PTZ || probe.Device == nil {
+	// Every profile's stream once (PLAN 82-2): the main and the sub stream
+	// TitanOS would take, then the others, to choose from.
+	if res.StatusCode != 200 || probe.Outcome != "ok" || probe.MainURL == "" || len(probe.Streams) != 3 || !probe.PTZ || probe.Device == nil ||
+		probe.Streams[0].Role != "main" || probe.Streams[1].Role != "sub" || probe.Streams[2].Role != "other" || probe.Streams[2].Width != 1280 {
 		t.Errorf("probe: %d %s", res.StatusCode, body)
+	}
+	// Saved after the check: the streams' roles as chosen; codecs and sizes
+	// from the check, never from the request.
+	res, body = ts.request("POST", "/api/v1/nvr/cameras", map[string]any{"name": "Hof neu",
+		"source":  map[string]any{"kind": "onvif", "host": "192.168.1.65", "user": "admin", "password": "x", "mainURL": probe.Streams[2].URL, "subURL": probe.Streams[1].URL, "mainWidth": 7, "mainHeight": 7},
+		"streams": map[string]any{"record": "sub", "detect": "main", "live": "main", "noPreload": true},
+		"audio":   map[string]any{"enabled": true, "codec": "PCMU", "subCodec": "PCMU"}})
+	var fromCheck nvr.CameraView
+	json.Unmarshal(body, &fromCheck)
+	if res.StatusCode != 201 || fromCheck.Streams != (nvr.StreamUse{Record: "sub", Detect: "main", Live: "main", NoPreload: true}) ||
+		fromCheck.Audio.Codec != "PCMA" || fromCheck.Audio.SubCodec != "" || fromCheck.Source.MainWidth != 1280 || fromCheck.Source.MainHeight != 720 || fromCheck.Source.SubWidth != 640 {
+		t.Errorf("camera from the check: %d %s", res.StatusCode, body)
 	}
 	if _, body := ts.request("POST", "/api/v1/nvr/cameras/probe", map[string]any{"kind": "rtsp", "mainURL": "rtsp://192.168.1.65/x", "user": "admin", "password": "wrong"}); !strings.Contains(string(body), `"outcome":"unauthorized"`) {
 		t.Errorf("wrong password: %s", body)

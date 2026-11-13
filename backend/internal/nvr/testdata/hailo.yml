@@ -53,6 +53,9 @@ go2rtc:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#backchannel=0
     tor_sub:
       - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#backchannel=0
+  preload:
+    tor: ""
+    tor_sub: ""
 cameras:
   tor:
     enabled: true

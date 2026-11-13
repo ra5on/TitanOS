@@ -3,6 +3,7 @@ package nvr
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strings"
@@ -17,12 +18,61 @@ type RenderHardware struct {
 	// Detector is the device in use: npu, igpu, coral, hailo or cpu
 	// (never auto: the manager resolved it).
 	Detector string
-	// VAAPI: a render node of an Intel or AMD GPU is passed to the
-	// container, so ffmpeg decodes on it.
-	VAAPI bool
+	// Decode is how ffmpeg decodes the stream the detection reads (the
+	// decoder the manager resolved, PLAN 82-4).
+	Decode Decode
 	// Candidates are the addresses browsers reach WebRTC at
 	// ("192.168.1.10:8555"), for talking back through a camera.
 	Candidates []string
+}
+
+// Decode is the GPU that decodes, as Frigate's ffmpeg needs to know it.
+// Frigate gives its hwaccel_args to every input with the role detect
+// (frigate/config/camera/camera.py), and an input with the roles record
+// and detect is one ffmpeg: its recording would stop with a GPU that fails
+// to decode. So with a GPU decoding, a stream that is recorded and
+// detected becomes two inputs of the same restream, one per role
+// (cameraBlock); go2rtc serves both from its one connection to the camera.
+// Then no recording depends on the GPU.
+type Decode struct {
+	// Kind is DecodeCPU, DecodeVAAPI (Intel, AMD) or DecodeNVIDIA.
+	Kind string
+	// Node is the render node of the VA-API GPU when the container has
+	// another render node too (the iGPU of an OpenVINO detection): Frigate's
+	// preset takes a node by its place in /dev/dri, and that order inside a
+	// container is not the order of the devices (measured: the reverse).
+	// "" while the GPU's node is the only one.
+	Node string
+}
+
+// The kinds of Decode.
+const (
+	DecodeCPU    = ""
+	DecodeVAAPI  = "vaapi"
+	DecodeNVIDIA = "nvidia"
+)
+
+// hwaccelArgs is ffmpeg.hwaccel_args for a decoder.
+func hwaccelArgs(d Decode) any {
+	switch {
+	case d.Kind == DecodeNVIDIA:
+		// The container is given this one GPU only: it is CUDA device 0,
+		// Frigate's default ffmpeg.gpu.
+		return "preset-nvidia"
+	case d.Kind == DecodeVAAPI && d.Node != "":
+		// preset-vaapi without its choice of the node. No
+		// -hwaccel_output_format vaapi: with arguments of its own Frigate
+		// scales in software (parse_preset_hardware_acceleration_scale), so
+		// the decoded frames must come back to the CPU.
+		return []string{"-hwaccel_flags", "allow_profile_mismatch", "-hwaccel", "vaapi", "-hwaccel_device", d.Node}
+	case d.Kind == DecodeVAAPI:
+		// preset-vaapi finds the codec itself; the QSV presets Frigate
+		// suggests for newer Intel chips are per codec (h264/h265), which
+		// TitanOS does not know before the camera answers.
+		return "preset-vaapi"
+	}
+	// Named empty: Frigate's default "auto" would look for a GPU itself.
+	return ""
 }
 
 // unknownDays is the least global retention: how long Frigate keeps the
@@ -79,13 +129,7 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 	cameras = slices.Clone(cameras)
 	sortCameras(cameras)
 
-	hwaccel := ""
-	if hw.VAAPI {
-		// preset-vaapi finds the codec itself; the QSV presets Frigate
-		// suggests for newer Intel chips are per codec (h264/h265), which
-		// TitanOS does not know before the camera answers.
-		hwaccel = "preset-vaapi"
-	}
+	hwaccel := hwaccelArgs(hw.Decode)
 	anyPlates, anyFaces := false, false
 	for _, c := range cameras {
 		anyPlates = anyPlates || (c.Enabled && c.Detect.Enabled && c.Detect.Plates)
@@ -103,7 +147,7 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 			return nil, fmt.Errorf("camera %s: %w", c.ID, err)
 		}
 		streams = append(streams, entries...)
-		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces)})
+		cams = append(cams, yentry{c.ID, cameraBlock(c, anyPlates, anyFaces, hw.Decode.Kind != DecodeCPU)})
 	}
 	// The longest any recording is kept, at least unknownDays, for the
 	// global retention below.
@@ -133,6 +177,17 @@ func Render(s Settings, cameras []Camera, deleted []DeletedCamera, hw RenderHard
 		candidates = []string{}
 	}
 	go2rtc = append(go2rtc, yentry{"webrtc", ymap{{"candidates", candidates}}}, yentry{"streams", streams})
+	// go2rtc connects to these at its start and keeps them open (PLAN
+	// 82-1): the live picture stands at once, also while Frigate reads
+	// another stream. go2rtc 1.9 takes "" as all of a stream's tracks;
+	// Frigate passes the key on unchanged.
+	if names := preloadStreams(cameras); len(names) > 0 {
+		preload := ymap{}
+		for _, name := range names {
+			preload = append(preload, yentry{name, ""})
+		}
+		go2rtc = append(go2rtc, yentry{"preload", preload})
+	}
 
 	if s.ProxySecret == "" {
 		// Without it port 8971 would answer anyone.
@@ -285,13 +340,59 @@ func cameraStreams(c Camera) (ymap, error) {
 	return out, nil
 }
 
-// LiveStream is the go2rtc stream a live view of a camera uses: the sub
-// stream for small tiles if the camera has one, else the main stream.
-func LiveStream(c Camera, sub bool) string {
-	if sub && c.Source.SubURL != "" {
-		return subStream(c.ID)
+// streamName is the go2rtc name of a stream of a camera (StreamMain or
+// StreamSub).
+func streamName(id, stream string) string {
+	if stream == StreamSub {
+		return subStream(id)
 	}
-	return mainStream(c.ID)
+	return mainStream(id)
+}
+
+// preloadStreams are the go2rtc streams kept open (PLAN 82-1): the main
+// and the sub stream of every enabled camera that does not say otherwise
+// (Streams.NoPreload), in the order of the cameras. Never the stream for
+// talking back (it would hold the camera's audio output for nothing),
+// never a switched-off camera and never a deleted one (it has no stream).
+func preloadStreams(cameras []Camera) []string {
+	out := []string{}
+	for _, c := range cameras {
+		if !c.Enabled || c.Streams.NoPreload {
+			continue
+		}
+		out = append(out, mainStream(c.ID))
+		if c.Source.SubURL != "" {
+			out = append(out, subStream(c.ID))
+		}
+	}
+	return out
+}
+
+// LiveStream is the go2rtc stream a live view of a camera uses (small: a
+// small tile); the camera's choice (Streams.Live) decides, by default the
+// sub stream for small tiles and the main stream for a large picture.
+func LiveStream(c Camera, small bool) string {
+	return streamName(c.ID, c.liveStream(small))
+}
+
+// detectCap is the widest picture the detection works on when it reads
+// the main stream: Frigate decodes every frame of the detect stream into
+// /dev/shm and scales it down for the model; a 4K frame costs nine times a
+// 720p one for little gain.
+const detectCap = 1280
+
+// detectSize is the size the detection of a camera works in: set only
+// when it reads the main stream and that stream is known to be wider than
+// detectCap; scaled to detectCap keeping the aspect, the height even
+// (ffmpeg's scaler of YUV 4:2:0 wants it). Without a known size Frigate
+// asks the stream itself.
+func detectSize(c Camera) (width, height int, ok bool) {
+	w, h := c.Source.MainWidth, c.Source.MainHeight
+	if c.detectStream() != StreamMain || w <= detectCap || h <= 0 {
+		return 0, 0, false
+	}
+	height = 2 * int(math.Round(float64(detectCap)*float64(h)/float64(w)/2))
+	return detectCap, max(height, 2), true
 }
 
 // frigateBraces escapes braces for the fields Frigate substitutes
@@ -300,20 +401,37 @@ func frigateBraces(s string) string {
 	return strings.NewReplacer("{", "{{", "}", "}}").Replace(s)
 }
 
-func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
+// cameraBlock is a camera in config.yml; gpu: a GPU decodes (hwaccel_args
+// is not empty).
+func cameraBlock(c Camera, anyPlates, anyFaces, gpu bool) ymap {
 	const restream = "rtsp://127.0.0.1:8554/"
 	input := func(stream string, roles ...string) ymap {
 		return ymap{{"path", restream + stream}, {"input_args", "preset-rtsp-restream"}, {"roles", roles}}
 	}
-	// Detection runs on the small stream when there is one; the main
-	// stream is what gets recorded.
-	inputs := []ymap{input(mainStream(c.ID), "record", "detect")}
-	if c.Source.SubURL != "" {
-		inputs = []ymap{input(mainStream(c.ID), "record"), input(subStream(c.ID), "detect")}
+	// Each stream the camera's choice (Streams) names, with its roles: by
+	// default the main stream records and the sub stream detects; the main
+	// stream comes first. One stream that does both is one input while the
+	// CPU decodes, two (record, then detect) while a GPU decodes: the
+	// recording never runs in the ffmpeg that has the GPU (Decode).
+	inputs := []ymap{}
+	for _, stream := range []string{StreamMain, StreamSub} {
+		record, detect := c.recordStream() == stream, c.detectStream() == stream
+		switch {
+		case record && detect && gpu:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record"), input(streamName(c.ID, stream), "detect"))
+		case record && detect:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record", "detect"))
+		case record:
+			inputs = append(inputs, input(streamName(c.ID, stream), "record"))
+		case detect:
+			inputs = append(inputs, input(streamName(c.ID, stream), "detect"))
+		}
 	}
+	// The sound of the recording follows the codec of the stream that is
+	// recorded.
 	recordArgs := "preset-record-generic"
-	switch {
-	case c.Audio.Enabled && strings.EqualFold(c.Audio.Codec, codecAAC):
+	switch codec := c.recordCodec(); {
+	case c.Audio.Enabled && strings.EqualFold(codec, codecAAC):
 		recordArgs = "preset-record-generic-audio-copy"
 	case c.Audio.Enabled:
 		// G.711 (or a codec not known yet) does not go into an MP4 file
@@ -332,13 +450,18 @@ func cameraBlock(c Camera, anyPlates, anyFaces bool) ymap {
 	}
 	track, _ = cleanList(track, allowedObjects) // validated before; this only orders them
 
+	detect := ymap{{"enabled", c.Detect.Enabled}, {"fps", 5}}
+	if width, height, ok := detectSize(c); ok {
+		detect = append(detect, yentry{"width", width}, yentry{"height", height})
+	}
+
 	// No friendly_name: Frigate keys its storage figures by it
 	// (/api/recordings/storage), so they are keyed by the ID, which is
 	// unique; and renaming a camera does not restart Frigate.
 	block := ymap{
 		{"enabled", c.Enabled},
 		{"ffmpeg", ymap{{"output_args", ymap{{"record", recordArgs}}}, {"inputs", inputs}}},
-		{"detect", ymap{{"enabled", c.Detect.Enabled}, {"fps", 5}}},
+		{"detect", detect},
 		{"objects", ymap{{"track", track}}},
 		{"record", recordBlock(c.Record)},
 		{"snapshots", ymap{{"enabled", c.Detect.Enabled}, {"retain", ymap{{"default", c.Record.RetainDays}}}}},

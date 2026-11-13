@@ -84,6 +84,15 @@ type runtime struct {
 	// file), configCameras the cameras in it (what Frigate must report).
 	configHash, configDir string
 	configCameras         []string
+	// configPreload are the go2rtc streams config.yml keeps open, preload
+	// what the watch knows of them (preload.go).
+	configPreload []string
+	preload       preloadState
+	// decoder is the decoder the container was planned with; brokenDecoders
+	// are GPUs whose CDI device the engine refused (they count as without
+	// driver until the setting changes or the owner tries again).
+	decoder        DecoderStatus
+	brokenDecoders map[string]bool
 	// restart: Frigate runs with other cameras than config.yml names
 	// (it read no file or another one); the next look starts it again
 	// even if the file does not change.
@@ -506,8 +515,11 @@ type plan struct {
 	config []byte
 	spec   docker.NVRSpec
 	active string
-	// cameras are the cameras config names.
-	cameras []string
+	// decoder is the GPU that decodes (or the CPU).
+	decoder DecoderStatus
+	// cameras are the cameras config names, preload the streams it keeps
+	// open.
+	cameras, preload []string
 }
 
 // makePlan resolves the device, renders the config and describes the
@@ -515,6 +527,7 @@ type plan struct {
 func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera, hw HardwareInfo, imageID, dir string, candidates []string) (plan, error) {
 	m.mu.Lock()
 	active := m.state.Active
+	hw = hw.withBroken(m.rt.brokenDecoders)
 	m.mu.Unlock()
 	chain := hw.chain(s.Detector.Kind)
 	switch {
@@ -526,8 +539,11 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera
 		// again when it is back (state.Active stays).
 		active = hw.after(s.Detector.Kind, active)
 	}
-	nodes, usb := hw.containerDevices(active)
-	config, err := Render(s, cameras, deleted, RenderHardware{Detector: active, VAAPI: hw.VideoDecode, Candidates: candidates})
+	// The decoder: only the GPU the setting resolves to is passed (with the
+	// detector's own nodes), so Frigate cannot take another by itself.
+	dec, decoder := hw.decoder(s.Decoder)
+	nodes, cdi, usb, decode := hw.containerDevices(active, dec)
+	config, err := Render(s, cameras, deleted, RenderHardware{Detector: active, Decode: decode, Candidates: candidates})
 	if err != nil {
 		return plan{}, err
 	}
@@ -539,7 +555,7 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera
 	}
 	spec := docker.NVRSpec{
 		Image: imageID, Config: filepath.Join(dir, "config"), Media: filepath.Join(dir, "media"),
-		ShmBytes: shmBytes(enabled), CacheBytes: cacheBytes, Devices: nodes, USBBus: usb, PidsLimit: pidsLimit(enabled),
+		ShmBytes: shmBytes(enabled), CacheBytes: cacheBytes, Devices: nodes, CDIDevices: cdi, USBBus: usb, PidsLimit: pidsLimit(enabled),
 		// WebRTC (talking back) needs a port browsers reach directly; the
 		// restream only when the owner switched it on. Frigate's API
 		// (5000), its login port (8971) and go2rtc (1984) are never
@@ -562,7 +578,9 @@ func (m *Manager) makePlan(s Settings, cameras []Camera, deleted []DeletedCamera
 	for _, d := range stubs(deleted, cameras) {
 		ids = append(ids, d.ID)
 	}
-	return plan{config: config, spec: spec, active: active, cameras: ids}, nil
+	sorted := slices.Clone(cameras)
+	sortCameras(sorted)
+	return plan{config: config, spec: spec, active: active, decoder: decoder, cameras: ids, preload: preloadStreams(sorted)}, nil
 }
 
 func hashOf(data []byte) string {
@@ -573,8 +591,8 @@ func hashOf(data []byte) string {
 // writeConfig makes the folders of the container and puts config.yml in
 // place (0600, atomically) if its content differs or it is missing. It
 // reports whether the file changed. cameras are the cameras the file
-// names.
-func (m *Manager) writeConfig(volume string, config []byte, cameras []string) (changed bool, err error) {
+// names, preload the streams it keeps open.
+func (m *Manager) writeConfig(volume string, config []byte, cameras, preload []string) (changed bool, err error) {
 	want := hashOf(config)
 	root, dir, err := m.privateRoot(volume)
 	if err != nil {
@@ -603,6 +621,7 @@ func (m *Manager) writeConfig(volume string, config []byte, cameras []string) (c
 	known := func() {
 		m.mu.Lock()
 		m.rt.configHash, m.rt.configDir, m.rt.configCameras = want, dir, slices.Clone(cameras)
+		m.rt.configPreload = slices.Clone(preload)
 		m.mu.Unlock()
 	}
 	// The hash names what was written to this folder; the file itself
@@ -667,7 +686,7 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 		if err != nil {
 			return err
 		}
-		changed, err := m.writeConfig(s.Volume, p.config, p.cameras)
+		changed, err := m.writeConfig(s.Volume, p.config, p.cameras, p.preload)
 		if err != nil {
 			return err
 		}
@@ -687,6 +706,7 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 		restart := m.rt.restart
 		m.rt.restart = false
 		m.rt.active = p.active
+		m.rt.decoder = p.decoder
 		m.mu.Unlock()
 		recreate := !st.Exists || st.Hash != p.spec.Hash || st.Image != imageID
 		if !recreate {
@@ -698,13 +718,21 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 		}
 		switch {
 		case recreate:
-			return m.recreate(ctx, p.spec, s.Volume)
+			return m.recreate(ctx, p, s.Volume)
 		case (changed || restart) && st.Running:
 			slog.Info("NVR: configuration changed, restarting Frigate", "rewritten", changed)
 			m.setPhase(PhaseStarting) // the restart itself takes up to half a minute
 			rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 			defer cancel()
 			if err := m.Engine.NVRRestart(rctx); err != nil {
+				// A restart is a stop and a start: the start can be the one
+				// Docker refuses the GPU in (its CDI description went away).
+				m.mu.Lock()
+				gpu := m.containerGPULocked()
+				m.mu.Unlock()
+				if m.cdiRefused(err, gpu) {
+					return nil
+				}
 				return err
 			}
 			m.started()
@@ -763,9 +791,10 @@ func (m *Manager) candidates() []string {
 	return out
 }
 
-// recreate replaces the container by one made from spec (with the folders
-// of volume) and starts it.
-func (m *Manager) recreate(ctx context.Context, spec docker.NVRSpec, volume string) error {
+// recreate replaces the container by one made from the plan's spec (with
+// the folders of volume) and starts it.
+func (m *Manager) recreate(ctx context.Context, p plan, volume string) error {
+	spec := p.spec
 	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+90)*time.Second)
 	defer cancel()
 	m.setPhase(PhaseStarting) // stopping the old container takes up to half a minute
@@ -778,19 +807,71 @@ func (m *Manager) recreate(ctx context.Context, spec docker.NVRSpec, volume stri
 	if err := m.Engine.NVRNetwork(rctx); err != nil {
 		return err
 	}
+	// The GPU whose CDI device the container gets ("" without one).
+	cdiGPU := ""
+	if len(spec.CDIDevices) > 0 {
+		cdiGPU = p.decoder.Active
+	}
 	if err := m.Engine.NVRCreate(rctx, spec); err != nil {
+		if m.cdiRefused(err, cdiGPU) {
+			return nil
+		}
 		return err
 	}
 	m.mu.Lock()
 	m.rt.volume = volume
 	m.mu.Unlock()
 	if err := m.Engine.NVRStart(rctx); err != nil {
+		// Docker 26 creates a container with an unknown CDI device and
+		// refuses only its start.
+		if m.cdiRefused(err, cdiGPU) {
+			return nil
+		}
 		return err
 	}
-	slog.Info("NVR: container started", "devices", strings.Join(spec.Devices, " "), "shmMB", spec.ShmBytes>>20)
+	slog.Info("NVR: container started", "devices", strings.Join(append(slices.Clone(spec.Devices), spec.CDIDevices...), " "), "decoder", p.decoder.Active, "shmMB", spec.ShmBytes>>20)
 	m.started()
 	m.pruneImages(ctx, spec.Image)
 	return nil
+}
+
+// cdiRefused handles a create or start the engine refused because of the
+// CDI device of the NVIDIA GPU that decodes (gpu; "" when the container
+// has none): the plugin's descriptions are missing or stale, or Docker
+// lacks its CDI support. A decoder must never keep the cameras from
+// recording, and it is neither a crash of Frigate nor a fault of the
+// detector: the GPU counts as without driver and the next look, at once,
+// makes the container with the CPU decoding; the page says "driver". It
+// stays so until the owner chooses another decoder (and then this GPU
+// again) or titand starts again; "Wieder versuchen" (RetryDetector,
+// offered after a failover or a stop) forgets it too. It reports whether err was such a
+// refusal; any other error (a timeout, a full disk) is not.
+func (m *Manager) cdiRefused(err error, gpu string) bool {
+	if gpu == "" || gpu == DecoderCPU || !docker.IsCDIError(err) {
+		return false
+	}
+	m.mu.Lock()
+	if m.rt.brokenDecoders == nil {
+		m.rt.brokenDecoders = map[string]bool{}
+	}
+	m.rt.brokenDecoders[gpu] = true
+	m.changedLocked()
+	m.rt.retryAt = time.Time{}
+	m.mu.Unlock()
+	slog.Warn("NVR: Docker refused the GPU for decoding; the CPU decodes", "gpu", gpu, "err", clip(m.redact(err.Error()), 300))
+	m.wake()
+	return true
+}
+
+// containerGPULocked is the NVIDIA GPU whose CDI device the container
+// has, "" if none (m.mu held). rt.decoder is of the container: every
+// first look after a start of titand plans, and a plan whose container
+// differs makes it anew.
+func (m *Manager) containerGPULocked() string {
+	if m.rt.decoder.Kind == "nvidia" {
+		return m.rt.decoder.Active
+	}
+	return ""
 }
 
 // started notes a start by the watch.
@@ -826,19 +907,28 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 		if engineAfter && !m.rt.startedAt.IsZero() {
 			slog.Info("NVR: Docker's engine was restarted; starting Frigate again (no crash)")
 		}
+		gpu := m.containerGPULocked()
 		m.mu.Unlock()
 		sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		if err := m.Engine.NVRStart(sctx); err != nil {
+			// After a restart of the NAS the NVIDIA plugin may not have
+			// written its descriptions (or the driver is gone).
+			if m.cdiRefused(err, gpu) {
+				return nil
+			}
 			return err
 		}
 		m.started()
 		return nil
 	}
+	gpu := m.containerGPULocked()
 	// The same end is counted once.
+	counted := false
 	if !st.FinishedAt.Equal(m.rt.lastCrash) || st.FinishedAt.IsZero() {
 		m.rt.lastCrash = st.FinishedAt
 		m.rt.crashes = append(m.rt.crashes, now)
+		counted = true
 	}
 	m.rt.crashes = slices.DeleteFunc(m.rt.crashes, func(t time.Time) bool { return now.Sub(t) > m.CrashWindow })
 	crashes, first := len(m.rt.crashes), now
@@ -854,6 +944,18 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 	sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	if err := m.Engine.NVRStart(sctx); err != nil {
+		if m.cdiRefused(err, gpu) {
+			// The GPU, not Frigate: this end does not count towards
+			// moving the detection.
+			if counted {
+				m.mu.Lock()
+				if n := len(m.rt.crashes); n > 0 {
+					m.rt.crashes = m.rt.crashes[:n-1]
+				}
+				m.mu.Unlock()
+			}
+			return nil
+		}
 		return err
 	}
 	m.started()
@@ -979,6 +1081,7 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 	}
 	m.watchCameras(stats, now)
 	m.watchStorage(ctx, base, now)
+	m.watchPreload(ctx, now)
 }
 
 // forcedRestart notes a restart titand forced (Frigate hung, or runs
@@ -1008,7 +1111,12 @@ func (m *Manager) hung(ctx context.Context, now, startedAt time.Time) {
 	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+60)*time.Second)
 	defer cancel()
 	if rerr := m.Engine.NVRRestart(rctx); rerr != nil {
-		m.engineError("container of the NVR", rerr)
+		m.mu.Lock()
+		gpu := m.containerGPULocked()
+		m.mu.Unlock()
+		if !m.cdiRefused(rerr, gpu) {
+			m.engineError("container of the NVR", rerr)
+		}
 		return
 	}
 	m.started()

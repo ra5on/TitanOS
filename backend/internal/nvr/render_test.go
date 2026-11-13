@@ -58,7 +58,7 @@ func renderCases() map[string]struct {
 				c.PTZ = true
 				c.Record = Record{Mode: RecordContinuous, RetainDays: 7, PreSeconds: 10, PostSeconds: 20}
 			}),
-		}, RenderHardware{Detector: DetectorNPU, VAAPI: true, Candidates: []string{"192.168.1.10:8555"}}, nil},
+		}, RenderHardware{Detector: DetectorNPU, Decode: Decode{Kind: DecodeVAAPI}, Candidates: []string{"192.168.1.10:8555"}}, nil},
 		// iGPU with plates and faces; the restream is published.
 		"igpu": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, RTSPOut: true, RTSPPassword: "abcdefgh234567",
 			Plates: []KnownPlate{{Name: "Wife's Car", Plates: []string{"M-AB 1234", "MAB12*"}}, {Name: "Firma", Plates: []string{"EMP*", "*LL 12*4", "ÖBB 12"}}}}, []Camera{
@@ -73,7 +73,7 @@ func renderCases() map[string]struct {
 				c.Detect.Objects = []string{"cat"}
 				c.Source.SubURL = ""
 			}),
-		}, RenderHardware{Detector: DetectorIGPU, VAAPI: true}, []DeletedCamera{
+		}, RenderHardware{Detector: DetectorIGPU, Decode: Decode{Kind: DecodeVAAPI}}, []DeletedCamera{
 			{ID: "garage", Name: "Garage", RetainDays: 60, DeletedAt: time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)},
 		}},
 		// Coral, no GPU: a camera without login, one switched off, one that does not record.
@@ -94,7 +94,44 @@ func renderCases() map[string]struct {
 		// CPU and no camera yet: what Frigate first starts with.
 		"cpu": {Defaults(), nil, RenderHardware{Detector: DetectorCPU}, nil},
 		// Sound of a codec not known yet: turned into AAC to be safe.
-		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", func(c *Camera) { c.Audio.Enabled = true })}, RenderHardware{Detector: DetectorHailo, VAAPI: true}, nil},
+		"hailo": {Defaults(), []Camera{testCamera("tor", "Tor", func(c *Camera) { c.Audio.Enabled = true })}, RenderHardware{Detector: DetectorHailo, Decode: Decode{Kind: DecodeVAAPI}}, nil},
+		// PLAN 82: the streams swapped (the sub stream records with its AAC
+		// sound, the 4K main stream detects at 1280 wide), one camera that
+		// does not keep its streams open, and an AMD GPU decoding beside the
+		// iGPU that detects (two render nodes: the node is named).
+		"streams": {Settings{Detector: DetectorSetting{Kind: DetectorIGPU}, Decoder: "0000:03:00.0"}, []Camera{
+			testCamera("einfahrt", "Einfahrt", func(c *Camera) {
+				c.Order = 1
+				c.Streams = StreamUse{Record: StreamSub, Detect: StreamMain, Live: StreamMain}
+				c.Audio = Audio{Enabled: true, Codec: "PCMA", SubCodec: "MPEG4-GENERIC"}
+				c.Source.MainWidth, c.Source.MainHeight, c.Source.SubWidth, c.Source.SubHeight = 3840, 2160, 640, 360
+			}),
+			testCamera("hof", "Hof", func(c *Camera) {
+				c.Order = 2
+				c.Streams = StreamUse{NoPreload: true}
+			}),
+			// One stream for everything; 2592×1944 (4:3) detects at 1280×960.
+			testCamera("tor", "Tor", func(c *Camera) {
+				c.Order = 3
+				c.Source.SubURL = ""
+				c.Source.MainWidth, c.Source.MainHeight = 2592, 1944
+			}),
+		}, RenderHardware{Detector: DetectorIGPU, Decode: Decode{Kind: DecodeVAAPI, Node: "/dev/dri/renderD129"}}, nil},
+		// An NVIDIA GPU decodes; the camera with talking back keeps only its
+		// two streams open, never the one for talking back. A camera with one
+		// stream gets it twice, record and detect apart: its recording never
+		// runs in the ffmpeg with the GPU.
+		"nvidia": {Settings{Detector: DetectorSetting{Kind: DetectorCPU}, Decoder: "0000:01:00.0"}, []Camera{
+			testCamera("haustuer", "Haustür", func(c *Camera) {
+				c.Order = 1
+				c.Audio = Audio{Enabled: true, TwoWay: true, Codec: "MPEG4-GENERIC"}
+			}),
+			testCamera("hof", "Hof", func(c *Camera) {
+				c.Order = 2
+				c.Source.SubURL = ""
+				c.Audio = Audio{Enabled: true, Codec: "PCMA"}
+			}),
+		}, RenderHardware{Detector: DetectorCPU, Decode: Decode{Kind: DecodeNVIDIA}}, nil},
 	}
 	for name, c := range cases {
 		c.settings.ProxySecret = testSecret
@@ -320,9 +357,11 @@ func TestRenderEnrichmentsAndDevices(t *testing.T) {
 	if got := dig(t, cfg, "cameras", "flur", "objects", "track").([]any); !slices.Equal(got, []any{"person", "cat"}) {
 		t.Errorf("flur tracks %v", got)
 	}
-	// One stream: it records and detects.
+	// One stream records and detects; the iGPU decodes, so it is two
+	// inputs of the same restream: the recording runs without the GPU.
 	inputs := dig(t, cfg, "cameras", "flur", "ffmpeg", "inputs").([]any)
-	if len(inputs) != 1 || !slices.Equal(dig(t, inputs[0], "roles").([]any), []any{"record", "detect"}) {
+	if len(inputs) != 2 || !slices.Equal(dig(t, inputs[0], "roles").([]any), []any{"record"}) || !slices.Equal(dig(t, inputs[1], "roles").([]any), []any{"detect"}) ||
+		dig(t, inputs[0], "path") != dig(t, inputs[1], "path") {
 		t.Errorf("inputs = %v", inputs)
 	}
 	// An empty list, never missing: Frigate would add a public STUN server.

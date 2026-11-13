@@ -61,7 +61,9 @@ func (w *titand) wireMaintenance() error {
 			d.UPS = &healthreport.UPS{Connected: u.Connected, OnBattery: u.OnBattery, Charge: u.Charge}
 		}
 		for _, message := range w.notifier.Messages() {
-			if message.Time.Before(d.Since) {
+			// Messages for some accounts only (camera recipients) are not
+			// the NAS's warnings.
+			if message.Time.Before(d.Since) || len(message.To) > 0 {
 				continue
 			}
 			switch message.Severity {

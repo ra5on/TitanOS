@@ -28,8 +28,8 @@ func kindOf(label string) string {
 	return ""
 }
 
-// Notice is one message about a camera, with the ways the owner chose for
-// that camera (Camera.Notify).
+// Notice is one message about a camera, with whom and how it goes
+// (Camera.Notify, checked when it is sent).
 type Notice struct {
 	// Kind is one of the kinds above; Message the kind of the text
 	// (notify/texts.go: nvr_event_person, nvr_camera_offline, …).
@@ -40,14 +40,25 @@ type Notice struct {
 	// "<plate or name> · <camera>".
 	Subject string
 	Camera  string
-	// Titan, Push, Email and Agent are the ways; Home Assistant gets its
+	// Legacy is a camera of 0.78 without a list of recipients: Titan,
+	// Push and Email are its ways, to the administrators as in 0.78.
+	Legacy bool
+	// Titan, Push and Email are the ways of a Legacy camera.
+	Titan, Push, Email bool
+	// Agent hands the message to the KI-Agent; Home Assistant gets its
 	// state from HACameras.
-	Titan, Push, Email, Agent bool
+	Agent bool
+	// Targets are the recipients that may get the message now, each with
+	// its ways (not Legacy). Empty is nobody.
+	Targets []Target
 }
 
-// NoticePause is the least time between two messages of one kind for one
-// camera.
-var NoticePause = 60 * time.Second
+// Target is one account a Notice goes to.
+type Target struct {
+	User string
+	// Bell only for owners and administrators.
+	Bell, Push, Email bool
+}
 
 // noticeState is what the routing remembers (guarded by Manager.mu).
 type noticeState struct {
@@ -129,12 +140,39 @@ func (m *Manager) noteSeen(camera, kind, text string, now time.Time) {
 	n.lastText[camera] = kind + ": " + text
 }
 
-// report hands a message to Route unless the same kind was reported for
-// this camera within NoticePause, or the camera wants no way at all.
+// report hands a message to Route, unless
+//   - the main switch silences the cameras (Settings.NotifyOff),
+//   - an event happens outside the camera's window (offline is reported at
+//     any time: a camera that goes dark at night is what the window must
+//     not hide),
+//   - nobody may get it (no way, or no recipient may see the camera now),
+//   - or the same kind was reported for this camera within its pause.
+//
+// The checks run in this order: a message held back by the switch, the
+// window or the recipients does not start the pause.
 func (m *Manager) report(c Camera, kind, message, severity, subject string, now time.Time) {
-	n := c.Notify
-	if !n.Titan && !n.Push && !n.Email && !n.Agent {
+	m.mu.Lock()
+	off := m.settings.NotifyOff
+	m.mu.Unlock()
+	if off {
 		return
+	}
+	n := c.Notify
+	if kind != KindOffline && !n.Window.Open(now.In(m.zone())) {
+		return
+	}
+	notice := Notice{Kind: kind, Message: message, Severity: severity, Subject: subject, Camera: c.ID, Agent: n.Agent}
+	if n.legacyWays() {
+		if !n.Titan && !n.Push && !n.Email && !n.Agent {
+			return
+		}
+		notice.Legacy, notice.Titan, notice.Push, notice.Email = true, n.Titan, n.Push, n.Email
+	} else {
+		// Asked outside m.mu: the accounts live in package auth.
+		notice.Targets = m.targets(c, kind)
+		if len(notice.Targets) == 0 && !n.Agent {
+			return
+		}
 	}
 	m.mu.Lock()
 	state := &m.rt.notices
@@ -142,15 +180,14 @@ func (m *Manager) report(c Camera, kind, message, severity, subject string, now 
 		state.last = map[string]time.Time{}
 	}
 	key := c.ID + "/" + kind
-	if last, ok := state.last[key]; ok && now.Sub(last) < NoticePause {
+	if last, ok := state.last[key]; ok && now.Sub(last) < n.pause() {
 		m.mu.Unlock()
 		return
 	}
 	state.last[key] = now
 	m.mu.Unlock()
 	if m.Route != nil {
-		m.Route(Notice{Kind: kind, Message: message, Severity: severity, Subject: subject, Camera: c.ID,
-			Titan: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent})
+		m.Route(notice)
 	}
 }
 

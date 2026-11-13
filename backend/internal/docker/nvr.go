@@ -2,6 +2,7 @@ package docker
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -60,6 +62,10 @@ type NVRSpec struct {
 	ShmBytes, CacheBytes int64
 	// Devices are host device nodes passed in unchanged.
 	Devices []string
+	// CDIDevices are CDI names (nvidia.com/gpu=<UUID>) of an NVIDIA GPU
+	// that decodes the streams. Left out of the hash while empty, so that
+	// a container made before the field is not made anew for it.
+	CDIDevices []string `json:",omitempty"`
 	// USBBus passes the whole USB bus (a Coral changes its device number
 	// when its firmware is loaded, so one node is not enough).
 	USBBus bool
@@ -124,6 +130,11 @@ func nvrCreateBody(spec NVRSpec) map[string]any {
 	}
 	if spec.USBBus {
 		host["DeviceCgroupRules"] = []string{"c 189:* rmw"}
+	}
+	if len(spec.CDIDevices) > 0 {
+		// As for Docker apps and the remote view: Docker's own CDI support
+		// (features.cdi) with the descriptions the NVIDIA plugin writes.
+		host["DeviceRequests"] = []map[string]any{{"Driver": "cdi", "DeviceIDs": spec.CDIDevices}}
 	}
 	exposed := map[string]any{}
 	bindings := map[string]any{}
@@ -276,6 +287,117 @@ func (m *Manager) NVRLogs(ctx context.Context, tail int, since time.Time) (strin
 	}
 	defer res.Body.Close()
 	return demux(bufio.NewReader(io.LimitReader(res.Body, 2<<20)))
+}
+
+// cdiErrorRE matches the engine's answers about CDI devices: without
+// Docker's CDI support `could not select device driver "cdi" with
+// capabilities: []` (Docker 26.1.5 answers it at the start, after the
+// create succeeded), with it `unresolvable CDI devices nvidia.com/gpu=…`,
+// and an NVIDIA plugin whose descriptions went away `…nvidia.com/gpu=…: no
+// such file or directory` (as for apps, Manager.Action).
+// Only these forms: "cdi" alone also stands in paths (a volume named
+// "cdi") and would mark a GPU broken for an error that has nothing to do
+// with it.
+var cdiErrorRE = regexp.MustCompile(`(?i)(device driver "cdi"|\bCDI devices?\b|nvidia\.com/gpu=)`)
+
+// IsCDIError tells whether the engine refused a create or start because of
+// a CDI device: a timeout or a full disk is no such refusal.
+func IsCDIError(err error) bool {
+	return err != nil && cdiErrorRE.MatchString(err.Error())
+}
+
+// ErrNVRNotRunning: the NVR's container is there but does not run.
+var ErrNVRNotRunning = errors.New("docker: the container of the NVR does not run")
+
+// NVRExec runs a command in the NVR's own running container – argv, no
+// shell, no terminal, no input – and returns what it printed (stdout and
+// stderr together, at most limit bytes) and its exit code (-1 while it
+// still runs, e.g. when the output was cut). The output is the caller's to
+// keep out of logs: what runs there may print addresses with passwords.
+func (m *Manager) NVRExec(ctx context.Context, cmd []string, limit int) (string, int, error) {
+	if len(cmd) == 0 || limit <= 0 {
+		return "", 0, errors.New("docker: no command for the NVR")
+	}
+	st, err := m.nvrOwn(ctx)
+	if err != nil {
+		return "", 0, err
+	}
+	if !st.Running {
+		return "", 0, ErrNVRNotRunning
+	}
+	var created struct {
+		ID string `json:"Id"`
+	}
+	request := map[string]any{"AttachStdin": false, "AttachStdout": true, "AttachStderr": true, "Tty": false, "Cmd": cmd}
+	if err := m.api.sendJSON(ctx, http.MethodPost, "/containers/"+st.ID+"/exec", request, &created); err != nil {
+		return "", 0, err
+	}
+	if created.ID == "" {
+		return "", 0, errors.New("docker: the engine named no exec")
+	}
+	// Without "Upgrade" the engine answers 200 and then the output as
+	// frames of the multiplexed stream until the command ends and closes
+	// the connection.
+	res, err := m.api.stream(ctx, http.MethodPost, "/exec/"+url.PathEscape(created.ID)+"/start", map[string]any{"Detach": false, "Tty": false})
+	if err != nil {
+		return "", 0, err
+	}
+	// Each frame has an 8-byte header; a little more than the limit is read
+	// so that short frames do not cut the output early.
+	out, rerr := demux(bufio.NewReader(io.LimitReader(res.Body, int64(limit)+64<<10)))
+	res.Body.Close()
+	if rerr != nil {
+		return "", 0, rerr
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	// The engine notes the exit code a moment after the stream ends.
+	code := -1
+	for range 10 {
+		var inspect struct {
+			Running  bool
+			ExitCode int
+		}
+		if err := m.api.getJSON(ctx, "/exec/"+url.PathEscape(created.ID)+"/json", nil, &inspect); err != nil {
+			return out, -1, err
+		}
+		if !inspect.Running {
+			code = inspect.ExitCode
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, -1, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return out, code, nil
+}
+
+// stream sends a JSON body and returns the answer for the caller to read
+// as it comes and to close; an error answer is an error.
+func (c *client) stream(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v1.43"+path, bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode >= 400 {
+		defer res.Body.Close()
+		var problem struct{ Message string }
+		_ = json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&problem) // a value that cannot be read leaves the zero value, which the code handles
+		return nil, &apiError{Status: res.StatusCode, Message: problem.Message}
+	}
+	return res, nil
 }
 
 // NVRNetwork makes sure the NVR's bridge network exists. It is not

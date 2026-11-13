@@ -561,6 +561,7 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		}
 		a.prefs.forget(name)
 		a.notify.ForgetPersonal(name)
+		a.notify.ForgetBell(name)
 		if err := a.shares.ForgetUser(name); err != nil {
 			slog.Error("remove account from shares", "user", name, "err", err)
 		}
@@ -594,7 +595,10 @@ func (a clusterArea) ClusterStatus(ctx context.Context) cluster.Status {
 	}
 	since := time.Now().Add(-24 * time.Hour)
 	for _, m := range a.notify.Messages() {
-		if m.Time.Before(since) {
+		// Messages meant for some accounts only (a camera's recipients,
+		// PLAN 82-3) are theirs, not the node's: the list of another
+		// administrator would not show them.
+		if m.Time.Before(since) || len(m.To) > 0 {
 			continue
 		}
 		switch m.Severity {

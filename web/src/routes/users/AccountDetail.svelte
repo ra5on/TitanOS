@@ -123,7 +123,9 @@
 			},
 		);
 	});
-	async function saveCamera(id: string, right: 'live' | 'recordings', on: boolean) {
+	// "Namen und Kennzeichen" (PLAN 82-3) belong to the events: only with
+	// "Aufnahmen"; the NAS drops them with the recordings.
+	async function saveCamera(id: string, right: 'live' | 'recordings' | 'names', on: boolean) {
 		const row = cams?.cameras.find((c) => c.id === id);
 		if (!row) return;
 		camsBusy = true;
@@ -131,7 +133,11 @@
 		try {
 			const next = await api.put<UserCameras>(
 				`/users/${encodeURIComponent(account.name)}/cameras`,
-				{ cameras: { [id]: { live: row.live, recordings: row.recordings, [right]: on } } },
+				{
+					cameras: {
+						[id]: { live: row.live, recordings: row.recordings, names: !!row.names, [right]: on },
+					},
+				},
 			);
 			if (Array.isArray(next?.cameras)) cams = next;
 		} catch (err) {
@@ -353,6 +359,7 @@
 				<p class="muted part">{t('nvr.rights.noCameras')}</p>
 			{:else}
 				<p class="muted part">{t('nvr.rights.hint')}</p>
+				<p class="muted part">{t('nvr.rights.namesHint')}</p>
 				{#each camRows as c (c.id)}
 					<div class="part cam" data-camera={c.id}>
 						<span class="t">{c.name}</span>
@@ -378,6 +385,17 @@
 									aria-label={t('nvr.rights.recordingsFor', { camera: c.name })}
 									onchange={(event) => saveCamera(c.id, 'recordings', event.currentTarget.checked)}
 								/><span>{t('nvr.rights.recordings')}</span></label
+							>
+							<label
+								><input
+									type="checkbox"
+									role="switch"
+									class="switch"
+									checked={c.recordings && !!c.names}
+									disabled={camsBusy || !(manageable || admin) || !c.recordings}
+									aria-label={t('nvr.rights.namesFor', { camera: c.name })}
+									onchange={(event) => saveCamera(c.id, 'names', event.currentTarget.checked)}
+								/><span>{t('nvr.rights.names')}</span></label
 							>
 						</span>
 					</div>
@@ -446,7 +464,7 @@
 	.small {
 		font-size: var(--text-sm);
 	}
-	/* PLAN 79-7: the camera's name keeps its width; the two switches wrap
+	/* PLAN 79-7: the camera's name keeps its width; the switches wrap
 	   below it on a phone instead of squeezing the name letter by letter. */
 	.cam {
 		flex-wrap: wrap;

@@ -55,6 +55,10 @@ type Engine interface {
 	// NVREngineStarted tells when Docker's engine started: a container
 	// that ended before was stopped with it, not by a fault of Frigate.
 	NVREngineStarted(ctx context.Context) (time.Time, error)
+	// NVRExec runs a command (argv) in the NVR's running container and
+	// returns what it printed (at most limit bytes; never logged, it may
+	// hold a camera's password) and its exit code (preload.go).
+	NVRExec(ctx context.Context, cmd []string, limit int) (string, int, error)
 }
 
 // Errors the API turns into codes.
@@ -173,9 +177,9 @@ type Manager struct {
 	devFrigate *DevFrigate
 	// snapshots are the stills of the last second (status.go).
 	snapshots map[snapshotKey]cachedSnapshot
-	// probed are the sound codecs the checks of cameras found, by main
-	// stream (probe.go).
-	probed map[string]probedAudio
+	// probed is what the checks of cameras found, by stream address
+	// (probe.go).
+	probed map[string]probedStream
 }
 
 // New makes a manager with the defaults of a NAS.
@@ -360,6 +364,10 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	if s.Detector.Kind != old.Detector.Kind || s.Volume != old.Volume || (s.Enabled && !old.Enabled) {
 		m.resetStateLocked()
 	}
+	if s.Decoder != old.Decoder {
+		// Another decoder: a GPU Docker refused before is tried again.
+		m.rt.brokenDecoders = nil
+	}
 	if s.Volume != old.Volume {
 		// Another volume: its state, exports and config.yml are its own.
 		m.rt.stateLoaded, m.rt.exports, m.rt.exportSizes = false, nil, nil
@@ -456,6 +464,8 @@ func (m *Manager) RetryDetector() error {
 		return ErrDisabled
 	}
 	m.resetStateLocked()
+	// "Wieder versuchen" also tries a decoding GPU Docker refused.
+	m.rt.brokenDecoders = nil
 	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.mu.Unlock()
@@ -501,6 +511,17 @@ func cloneCameras(list []Camera) []Camera {
 	for i, c := range list {
 		c.Detect.Objects = slices.Clone(c.Detect.Objects)
 		c.Notify.Kinds = slices.Clone(c.Notify.Kinds)
+		// A request is decoded into a copy of the stored camera: shared
+		// slices would let a refused change reach the cameras in RAM.
+		c.Notify.Recipients = slices.Clone(c.Notify.Recipients)
+		c.Notify.Window.Days = slices.Clone(c.Notify.Window.Days)
+		// encoding/json writes through a pointer that is already set: the
+		// pause of a request would land in the stored camera (and race with
+		// the watch that reads it).
+		if c.Notify.PauseSeconds != nil {
+			pause := *c.Notify.PauseSeconds
+			c.Notify.PauseSeconds = &pause
+		}
 		out[i] = c
 	}
 	return out
@@ -612,11 +633,17 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 		}
 		c.Order++
 	}
+	// Codecs and sizes are titand's (streamFactsLocked), never the request's.
+	clearStreamFacts(&c)
 	c, err := ValidateCamera(c)
 	if err != nil {
 		return c, err
 	}
 	if err := m.uniqueNameLocked(c); err != nil {
+		return c, err
+	}
+	// Only now is the ID known that the rights of the recipients are on.
+	if c, err = m.checkRecipients(c, nil); err != nil {
 		return c, err
 	}
 	// The ID of a deleted camera takes its recordings back: they are kept
@@ -625,7 +652,7 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 		shrinks(Record{Mode: RecordOff, RetainDays: deleted[at].RetainDays}, c.Record) {
 		return c, ErrRecordingsShrink
 	}
-	c.Audio.Codec, _ = m.probedCodecLocked(c.Source.MainURL)
+	m.streamFactsLocked(&c, nil)
 	return c, m.storeCamerasLocked(append(cloneCameras(m.cameras), c))
 }
 
@@ -704,6 +731,7 @@ func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, opts Ca
 	}
 	was := m.cameras[at]
 	c.ID = id
+	clearStreamFacts(&c)
 	c, err := ValidateCamera(c)
 	if err != nil {
 		return c, err
@@ -723,13 +751,12 @@ func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, opts Ca
 	if err := m.uniqueNameLocked(c); err != nil {
 		return c, err
 	}
-	// The sound's codec: from a check of this stream, else as it was for
-	// the same stream, else unknown.
-	codec, probed := m.probedCodecLocked(c.Source.MainURL)
-	if !probed && was.Source.MainURL == c.Source.MainURL {
-		codec = was.Audio.Codec
+	if c, err = m.checkRecipients(c, &was); err != nil {
+		return c, err
 	}
-	c.Audio.Codec = codec
+	// The sounds' codecs and the pictures' sizes: from a check of each
+	// stream, else as they were for the same stream, else unknown.
+	m.streamFactsLocked(&c, &was)
 	// Asked last: a change that is refused anyway needs no confirmation.
 	if !opts.ConfirmShrink && shrinks(was.Record, c.Record) {
 		return c, ErrRecordingsShrink

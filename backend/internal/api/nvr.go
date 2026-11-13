@@ -7,13 +7,18 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
 
 // nvrArea is the NVR; an area with narrow dependencies (PLAN 8a, see
@@ -24,11 +29,15 @@ type nvrArea struct {
 	nvr        *nvr.Manager
 	users      *auth.Users
 	loginHolds func(r *http.Request, user auth.User) (auth.User, bool)
+	// notify and push tell how the recipients of a camera can be reached
+	// (e-mail address, mail server, devices); nil reaches nobody.
+	notify *notify.Manager
+	push   *webpush.Manager
 }
 
 // nvrArea is the area of the server.
 func (s *Server) nvrArea() nvrArea {
-	return nvrArea{nvr: s.opts.NVR, users: s.opts.Users, loginHolds: s.loginHolds}
+	return nvrArea{nvr: s.opts.NVR, users: s.opts.Users, loginHolds: s.loginHolds, notify: s.opts.Notify, push: s.opts.WebPush}
 }
 
 // registerNVR registers the routes of the NVR.
@@ -56,6 +65,8 @@ func (a nvrArea) register(mux *routeMux, g guards) {
 	// Next to the apps and shares of an account (Konten und Zugang › Nutzer).
 	mux.HandleFunc("GET /api/v1/users/{name}/cameras", g.admin(a.handleUserCameras))
 	mux.HandleFunc("PUT /api/v1/users/{name}/cameras", g.admin(a.handleUserCamerasSet))
+	// Whom a camera can tell (PLAN 82-3), for the camera's form.
+	mux.HandleFunc("GET /api/v1/nvr/recipients", g.admin(a.handleRecipients))
 	a.registerEvents(mux, g)
 	a.registerRecordings(mux, g)
 	a.registerExports(mux, g)
@@ -127,6 +138,9 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrFaceExists, http.StatusConflict, "nvr_face_exists", "a person of this name exists"},
 		{nvr.ErrFaceRejected, http.StatusBadRequest, "nvr_face_rejected", "the picture cannot be used: it must show exactly one face"},
 		{nvr.ErrFacesOff, http.StatusConflict, "nvr_faces_off", "no camera recognises faces"},
+		{nvr.ErrRecipientUnknown, http.StatusBadRequest, "nvr_recipient_invalid", "a chosen recipient does not exist or is locked"},
+		{nvr.ErrRecipientNoRight, http.StatusBadRequest, "nvr_recipient_no_right", "a chosen recipient may not see this camera"},
+		{nvr.ErrRecipientBell, http.StatusBadRequest, "nvr_recipient_bell", "only owners and administrators have a bell"},
 	} {
 		if errors.Is(err, known.err) {
 			writeError(w, known.status, known.code, known.message)
@@ -158,7 +172,8 @@ func (a nvrArea) handleStatus(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	if a.nvr == nil {
 		if user.Role.CanAdminister() {
-			writeJSON(w, http.StatusOK, nvr.Status{State: nvr.PhaseOff, Image: nvr.ImageStatus{State: "missing"}, Hardware: nvr.HardwareInfo{Devices: []nvr.Device{}}})
+			writeJSON(w, http.StatusOK, nvr.Status{State: nvr.PhaseOff, Image: nvr.ImageStatus{State: "missing"}, Hardware: nvr.HardwareInfo{Devices: []nvr.Device{}, Decoders: []nvr.Decoder{}},
+				Decoder: nvr.DecoderStatus{Setting: nvr.DecoderAuto, Active: nvr.DecoderCPU, Kind: nvr.DecoderCPU, Title: "CPU"}})
 		} else {
 			writeJSON(w, http.StatusOK, nvrStatusView{State: nvr.PhaseOff})
 		}
@@ -207,11 +222,19 @@ type nvrSettingsView struct {
 	// 8554 ("" while it was never switched on).
 	RTSPUser     string `json:"rtspUser"`
 	RTSPPassword string `json:"rtspPassword"`
+	// NotifyOff silences the messages of every camera (PLAN 82-3).
+	NotifyOff bool `json:"notifyOff"`
+	// Decoder is the GPU that decodes the streams (PLAN 82-4).
+	Decoder string `json:"decoder"`
 }
 
 func settingsView(s nvr.Settings) nvrSettingsView {
 	view := nvrSettingsView{Enabled: s.Enabled, Volume: s.Volume, Detector: s.Detector, Storage: s.Storage,
-		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut, Plates: s.Plates}
+		PrivacyNoticeDismissed: s.PrivacyNoticeDismissed, RTSPOut: s.RTSPOut, Plates: s.Plates,
+		NotifyOff: s.NotifyOff, Decoder: s.Decoder}
+	if view.Decoder == "" {
+		view.Decoder = nvr.DecoderAuto
+	}
 	if view.Plates == nil {
 		view.Plates = []nvr.KnownPlate{}
 	}
@@ -243,7 +266,8 @@ func (c nvrConfirmations) options() nvr.SetOptions {
 }
 
 // handleSettingsSet stores {enabled, volume, detector: {kind}, storage:
-// {limitGB}, privacyNoticeDismissed, rtspOut}; fields left out stay.
+// {limitGB}, privacyNoticeDismissed, rtspOut, plates, notifyOff, decoder};
+// fields left out stay.
 func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
@@ -259,6 +283,7 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	next := current
 	next.Enabled, next.Volume, next.Detector, next.Storage = req.Enabled, req.Volume, req.Detector, req.Storage
 	next.PrivacyNoticeDismissed, next.RTSPOut, next.Plates = req.PrivacyNoticeDismissed, req.RTSPOut, req.Plates
+	next.NotifyOff, next.Decoder = req.NotifyOff, req.Decoder
 	if err := a.nvr.SetSettings(r.Context(), next, req.options()); err != nil {
 		writeNVRError(w, err)
 		return
@@ -345,11 +370,14 @@ type nvrCameraBrief struct {
 type nvrCameraRights struct {
 	Live       bool `json:"live"`
 	Recordings bool `json:"recordings"`
+	// Names: recognised faces' names and plates of this camera (PLAN
+	// 82-3); only with Recordings.
+	Names bool `json:"names"`
 }
 
 func (a nvrArea) brief(user auth.User, c nvr.Camera, state nvr.CameraState) nvrCameraBrief {
 	return nvrCameraBrief{ID: c.ID, Name: c.Name, Enabled: c.Enabled, Order: c.Order, Audio: c.Audio, PTZ: c.PTZ, State: state,
-		Rights: nvrCameraRights{Live: a.allows(user, c.ID, nvr.RightLive), Recordings: a.allows(user, c.ID, nvr.RightRecordings)}}
+		Rights: nvrCameraRights{Live: a.allows(user, c.ID, nvr.RightLive), Recordings: a.allows(user, c.ID, nvr.RightRecordings), Names: a.allows(user, c.ID, nvr.RightNames)}}
 }
 
 // handleCameras lists the cameras: {cameras: […]}. Owners and
@@ -419,6 +447,29 @@ type nvrCameraRequest struct {
 	nvr.Camera
 	ClearPassword bool `json:"clearPassword"`
 	ConfirmShrink bool `json:"confirmShrink"`
+	// recipientsNull: the request named the recipients as null.
+	recipientsNull bool
+}
+
+// UnmarshalJSON decodes a request over the stored camera. Recipients in
+// the request replace the stored list as a whole: encoding/json would
+// decode them over the stored entries by position, so that an entry left
+// partly out took the ways of whoever stood there before.
+func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Notify *struct {
+			Recipients json.RawMessage `json:"recipients"`
+		} `json:"notify"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if probe.Notify != nil && probe.Notify.Recipients != nil {
+		req.Notify.Recipients = nil
+		req.recipientsNull = string(probe.Notify.Recipients) == "null"
+	}
+	type plain nvrCameraRequest
+	return json.Unmarshal(data, (*plain)(req))
 }
 
 func (req nvrCameraRequest) options() nvr.CameraOptions {
@@ -475,8 +526,15 @@ func (a nvrArea) handleCameraSet(w http.ResponseWriter, r *http.Request) {
 	// The stored password is never the starting point of an edit: an
 	// empty one in the request means "keep" and is decided by the manager.
 	current.Source.Password = ""
+	hadList := current.Notify.Recipients != nil
 	req := nvrCameraRequest{Camera: current}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	// null would turn a camera with recipients back into one of 0.78,
+	// whose old ways reach every administrator; nobody is [].
+	if hadList && req.recipientsNull {
+		writeError(w, http.StatusBadRequest, "nvr_invalid", "notify.recipients: null is not allowed for a camera with recipients; [] is nobody")
 		return
 	}
 	req.tidy()
@@ -582,6 +640,8 @@ type nvrUserCamera struct {
 	Name       string `json:"name"`
 	Live       bool   `json:"live"`
 	Recordings bool   `json:"recordings"`
+	// Names: recognised faces' names and plates (PLAN 82-3).
+	Names bool `json:"names"`
 }
 
 func (a nvrArea) userCameras(target auth.User) nvrUserCameras {
@@ -592,7 +652,8 @@ func (a nvrArea) userCameras(target auth.User) nvrUserCameras {
 	cameras := a.nvr.Cameras()
 	rights := a.nvr.Access.User(target.Name, a.nvr.CameraIDs())
 	for _, c := range cameras {
-		entry := nvrUserCamera{ID: c.ID, Name: c.Name, Live: view.Admin || rights[c.ID].Live, Recordings: view.Admin || rights[c.ID].Recordings}
+		entry := nvrUserCamera{ID: c.ID, Name: c.Name, Live: view.Admin || rights[c.ID].Live, Recordings: view.Admin || rights[c.ID].Recordings,
+			Names: view.Admin || rights[c.ID].Names}
 		view.Cameras = append(view.Cameras, entry)
 	}
 	return view
@@ -609,9 +670,11 @@ func (a nvrArea) handleUserCameras(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUserCamerasSet changes the cameras of one normal account:
-// {cameras: {"haustuer": {live: true, recordings: false}, …}}; cameras
-// left out stay as they are. Open live views of the account end within
-// a few seconds when their right is gone.
+// {cameras: {"haustuer": {live: true, recordings: true, names: false}, …}};
+// cameras left out stay as they are. names may be left out (a page of
+// 0.78): it then stays as it is; it counts only with recordings. Open
+// live views of the account end within a few seconds when their right is
+// gone.
 func (a nvrArea) handleUserCamerasSet(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
@@ -626,14 +689,23 @@ func (a nvrArea) handleUserCamerasSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Cameras map[string]nvrCameraRights `json:"cameras"`
+		Cameras map[string]struct {
+			Live       bool  `json:"live"`
+			Recordings bool  `json:"recordings"`
+			Names      *bool `json:"names"`
+		} `json:"cameras"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
+	current := a.nvr.Access.User(target.Name, a.nvr.CameraIDs())
 	rights := nvr.UserRights{}
 	for id, want := range req.Cameras {
-		rights[id] = struct{ Live, Recordings bool }{want.Live, want.Recordings}
+		names := current[id].Names
+		if want.Names != nil {
+			names = *want.Names
+		}
+		rights[id] = nvr.Rights{Live: want.Live, Recordings: want.Recordings, Names: names}
 	}
 	if err := a.nvr.Access.SetUser(target.Name, rights, a.nvr.CameraIDs()); err != nil {
 		writeNVRError(w, err)
@@ -654,4 +726,60 @@ func (a nvrArea) nvrForgetUser(name string) {
 	if err := a.nvr.Access.ForgetUser(name); err != nil {
 		slog.Error("remove account from the cameras", "user", name, "err", err)
 	}
+	if err := a.nvr.ForgetRecipient(name); err != nil {
+		slog.Error("remove account from the recipients of the cameras", "user", name, "err", err)
+	}
+}
+
+// nvrRecipient is an account a camera can tell (GET /api/v1/nvr/recipients).
+type nvrRecipient struct {
+	Name string `json:"name"`
+	// Admin: an owner or administrator, the only ones with a bell; they
+	// see every camera, plates and faces.
+	Admin bool `json:"admin"`
+	// Email: the account has an e-mail address of its own (its
+	// notification settings); it also needs the mail server (mailServer).
+	Email bool `json:"email"`
+	// PushDevices are its devices that take camera messages,
+	// PushDevicesOff those that switched them off.
+	PushDevices    int `json:"pushDevices"`
+	PushDevicesOff int `json:"pushDevicesOff"`
+	// Cameras are the IDs of the cameras it may see now; Names those whose
+	// recognised names and plates it may see (plate and face messages).
+	Cameras []string `json:"cameras"`
+	Names   []string `json:"names"`
+}
+
+// handleRecipients lists the accounts that are not locked, with how they
+// can be reached and which cameras they may see: {accounts: […],
+// mailServer}. The form of a camera offers those that may see it.
+func (a nvrArea) handleRecipients(w http.ResponseWriter, r *http.Request) {
+	ids := []string{}
+	if a.nvr != nil {
+		ids = a.nvr.CameraIDs()
+	}
+	out := []nvrRecipient{}
+	for _, user := range a.users.List() {
+		if user.Disabled {
+			continue
+		}
+		entry := nvrRecipient{Name: user.Name, Admin: user.Role.CanAdminister(), Cameras: []string{}, Names: []string{}}
+		for _, id := range ids {
+			if entry.Admin || a.allows(user, id, nvr.RightLive) || a.allows(user, id, nvr.RightRecordings) {
+				entry.Cameras = append(entry.Cameras, id)
+			}
+			if entry.Admin || a.allows(user, id, nvr.RightNames) {
+				entry.Names = append(entry.Names, id)
+			}
+		}
+		if a.notify != nil {
+			entry.Email = a.notify.PersonalMail(user.Name)
+		}
+		if a.push != nil {
+			entry.PushDevices, entry.PushDevicesOff = a.push.CameraDevices(user.Name)
+		}
+		out = append(out, entry)
+	}
+	slices.SortFunc(out, func(x, y nvrRecipient) int { return strings.Compare(x.Name, y.Name) })
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": out, "mailServer": a.notify != nil && a.notify.MailServer()})
 }

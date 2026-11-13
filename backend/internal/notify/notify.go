@@ -70,6 +70,16 @@ type Message struct {
 	// it is sent out.
 	Title string `json:"title"`
 	Text  string `json:"text"`
+	// To are the accounts whose bell shows the message (the recipients a
+	// camera names, NotifyTo); empty is every owner and administrator, as
+	// for all other messages. Kept in bell.json; an older titand ignores it
+	// and shows the message to every administrator.
+	To []string `json:"to,omitempty"`
+}
+
+// shownTo tells whether the bell of an account shows the message.
+func (message Message) shownTo(user string) bool {
+	return len(message.To) == 0 || slices.Contains(message.To, user)
 }
 
 // Email is where and how mail is sent.
@@ -158,6 +168,10 @@ type Manager struct {
 	ha HASender
 	// Push sends to subscribed browsers (package webpush); nil without.
 	Push func(message Message, title string)
+	// PushTo sends a message of NotifyTo to the devices of one account
+	// (the cameras' own kind of push message); ref names the camera. nil
+	// sends none.
+	PushTo func(user, ref string, message Message, title string)
 	// Urgent is told about every warning and error, so that the kept
 	// journal is written soon (package logkeep); nil without.
 	Urgent func()
@@ -172,7 +186,12 @@ type Manager struct {
 	// Timezone names the time zone of the NAS as set now, for quiet hours
 	// (Go keeps the zone of the start of titand).
 	Timezone func() string
-	people   personalStore
+	// AccountCreated is when an account was made (zero if unknown): a
+	// message meant for an earlier account of the same name stays hidden
+	// from it (PLAN 82-3), also when ForgetBell could not reach the bell's
+	// file. nil hides nothing.
+	AccountCreated func(user string) time.Time
+	people         personalStore
 
 	mu       sync.Mutex
 	loaded   bool
@@ -344,7 +363,26 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 	return nil
 }
 
-// Messages returns the messages kept for the web UI, the newest first.
+// MessagesFor returns the messages the bell of an account shows, the
+// newest first: all but those meant for other accounts (Message.To).
+func (m *Manager) MessagesFor(user string) []Message {
+	var created time.Time
+	if m.AccountCreated != nil {
+		created = m.AccountCreated(user)
+	}
+	return slices.DeleteFunc(m.Messages(), func(message Message) bool {
+		if !message.shownTo(user) {
+			return true
+		}
+		// Meant for some accounts only and older than this account: it
+		// was for an earlier account of the same name.
+		return len(message.To) > 0 && !created.IsZero() && message.Time.Before(created)
+	})
+}
+
+// Messages returns every message kept for the web UI, the newest first,
+// also those meant for some accounts only: for counts, never to show to
+// one account (MessagesFor).
 func (m *Manager) Messages() []Message {
 	// The folder first: m.mu is never held while asking for it.
 	dir := m.bellDir()
@@ -368,14 +406,65 @@ func (m *Manager) Latest() int {
 	return m.nextID - 1
 }
 
-// Dismiss removes only the messages the caller has seen. New arrivals are kept.
-func (m *Manager) Dismiss(ids []int) {
+// Dismiss removes only the messages the account has seen. New arrivals are
+// kept, and so are messages its bell does not show. A message for every
+// administrator goes for all of them, as before; a message for some
+// accounts (Message.To) only leaves the bell of this one.
+func (m *Manager) Dismiss(user string, ids []int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	before := len(m.messages)
-	m.messages = slices.DeleteFunc(m.messages, func(message Message) bool { return slices.Contains(ids, message.ID) })
-	if len(m.messages) != before {
+	changed := false
+	kept := make([]Message, 0, len(m.messages))
+	for _, message := range m.messages {
+		if !slices.Contains(ids, message.ID) || !message.shownTo(user) {
+			kept = append(kept, message)
+			continue
+		}
+		changed = true
+		if len(message.To) == 0 {
+			continue
+		}
+		// Never kept with an empty list: that would show it to everyone.
+		message.To = slices.DeleteFunc(slices.Clone(message.To), func(name string) bool { return name == user })
+		if len(message.To) > 0 {
+			kept = append(kept, message)
+		}
+	}
+	if changed {
+		m.messages = kept
 		m.nextID++ // Also refresh the list in other open browsers.
+		m.goKeepBell()
+	}
+}
+
+// ForgetBell takes a deleted account off the messages meant for some
+// accounts only: an account made later under the same name must not find
+// them in its bell (PLAN 82-3). A message left for nobody goes; it is
+// never kept with an empty list, which would show it to everyone.
+func (m *Manager) ForgetBell(user string) {
+	// The folder first: m.mu is never held while asking for it.
+	dir := m.bellDir()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if dir != "" {
+		m.loadBellLocked(dir)
+	}
+	changed := false
+	kept := make([]Message, 0, len(m.messages))
+	for _, message := range m.messages {
+		if !slices.Contains(message.To, user) {
+			kept = append(kept, message)
+			continue
+		}
+		changed = true
+		message.To = slices.DeleteFunc(slices.Clone(message.To), func(name string) bool { return name == user })
+		if len(message.To) > 0 {
+			kept = append(kept, message)
+		}
+	}
+	if changed {
+		m.messages = kept
+		m.nextID++
 		m.goKeepBell()
 	}
 }

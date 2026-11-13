@@ -8,7 +8,7 @@ export type PushDevice = {
 	name: string;
 	service: string;
 	created: string;
-	/** Kinds switched off: 'nas' (TitanOS), 'agent' (KI-Agent), PLAN 59. */
+	/** Kinds switched off: 'nas' (TitanOS), 'agent' (KI-Agent), PLAN 59; 'camera' (the cameras' messages), PLAN 82-3. */
 	off?: string[];
 };
 

@@ -19,6 +19,11 @@ const (
 	RightLive = "live"
 	// RightRecordings is watching recordings and events.
 	RightRecordings = "recordings"
+	// RightNames is seeing what the NVR recognised at the camera: the
+	// names of known faces and of known plates and the plates it read (in
+	// events, the live feed and the messages of the camera). It counts
+	// only together with RightRecordings (PLAN 82-3, owner 13.11.2026).
+	RightNames = "names"
 )
 
 // CameraAccess are the normal accounts with a tick for one camera.
@@ -26,6 +31,8 @@ const (
 type CameraAccess struct {
 	Live       []string `json:"live"`
 	Recordings []string `json:"recordings"`
+	// Names have RightNames; missing in files of 0.78: nobody.
+	Names []string `json:"names"`
 }
 
 // accessSettings are the content of nvr/camera-access.json.
@@ -97,6 +104,14 @@ func (a *Access) Load() error {
 	if s.Given == nil {
 		s.Given = map[string]time.Time{}
 	}
+	// A file of 0.78 has no names: nobody has them. The empty list keeps an
+	// unchanged answer from writing the file again (change compares).
+	for id, entry := range s.Cameras {
+		if entry.Names == nil {
+			entry.Names = []string{}
+			s.Cameras[id] = entry
+		}
+	}
 	a.mu.Lock()
 	a.cameras, a.given, a.unreadable = s.Cameras, s.Given, false
 	a.mu.Unlock()
@@ -150,6 +165,9 @@ func (a *Access) Allows(user, camera, right string) bool {
 		return slices.Contains(entry.Live, user)
 	case RightRecordings:
 		return slices.Contains(entry.Recordings, user)
+	case RightNames:
+		// Names belong to the events: never without the recordings.
+		return slices.Contains(entry.Names, user) && slices.Contains(entry.Recordings, user)
 	}
 	return false
 }
@@ -159,8 +177,11 @@ func (a *Access) Sees(user, camera string) bool {
 	return a.Allows(user, camera, RightLive) || a.Allows(user, camera, RightRecordings)
 }
 
+// Rights are the ticks of one account on one camera.
+type Rights struct{ Live, Recordings, Names bool }
+
 // UserRights are the ticks of one account: camera → rights.
-type UserRights map[string]struct{ Live, Recordings bool }
+type UserRights map[string]Rights
 
 // User returns the ticks of an account for the given cameras (none of
 // ticks given to an earlier account of the same name).
@@ -172,17 +193,19 @@ func (a *Access) User(user string, cameras []string) UserRights {
 	own := !known || a.ownsTicksLocked(user, account)
 	for _, id := range cameras {
 		if !own {
-			out[id] = struct{ Live, Recordings bool }{}
+			out[id] = Rights{}
 			continue
 		}
 		entry := a.cameras[id]
-		out[id] = struct{ Live, Recordings bool }{slices.Contains(entry.Live, user), slices.Contains(entry.Recordings, user)}
+		recordings := slices.Contains(entry.Recordings, user)
+		out[id] = Rights{Live: slices.Contains(entry.Live, user), Recordings: recordings, Names: recordings && slices.Contains(entry.Names, user)}
 	}
 	return out
 }
 
 // SetUser changes the ticks of one normal account; cameras left out stay
 // as they are. cameras are the cameras that exist: others are refused.
+// Names without Recordings are not given (they belong to the events).
 // The file is only written when something changed.
 func (a *Access) SetUser(user string, rights UserRights, cameras []string) error {
 	account, ok := a.lookup(user)
@@ -205,6 +228,7 @@ func (a *Access) SetUser(user string, rights UserRights, cameras []string) error
 			for id, entry := range next {
 				entry.Live = tick(entry.Live, user, false)
 				entry.Recordings = tick(entry.Recordings, user, false)
+				entry.Names = tick(entry.Names, user, false)
 				next[id] = entry
 			}
 		}
@@ -212,6 +236,7 @@ func (a *Access) SetUser(user string, rights UserRights, cameras []string) error
 			entry := next[id]
 			entry.Live = tick(entry.Live, user, want.Live)
 			entry.Recordings = tick(entry.Recordings, user, want.Recordings)
+			entry.Names = tick(entry.Names, user, want.Names && want.Recordings)
 			next[id] = entry
 		}
 		// The ticks are this account's from now on (the time stays while
@@ -228,6 +253,7 @@ func (a *Access) ForgetUser(user string) error {
 		for id, entry := range next {
 			entry.Live = tick(entry.Live, user, false)
 			entry.Recordings = tick(entry.Recordings, user, false)
+			entry.Names = tick(entry.Names, user, false)
 			next[id] = entry
 		}
 		delete(given, user)
@@ -250,12 +276,12 @@ func (a *Access) change(edit func(map[string]CameraAccess, map[string]time.Time)
 	}
 	next := make(map[string]CameraAccess, len(a.cameras))
 	for id, entry := range a.cameras {
-		next[id] = CameraAccess{Live: slices.Clone(entry.Live), Recordings: slices.Clone(entry.Recordings)}
+		next[id] = CameraAccess{Live: slices.Clone(entry.Live), Recordings: slices.Clone(entry.Recordings), Names: slices.Clone(entry.Names)}
 	}
 	given := maps.Clone(a.given)
 	edit(next, given)
 	for id, entry := range next {
-		if len(entry.Live) == 0 && len(entry.Recordings) == 0 {
+		if len(entry.Live) == 0 && len(entry.Recordings) == 0 && len(entry.Names) == 0 {
 			delete(next, id)
 			continue
 		}
@@ -266,12 +292,15 @@ func (a *Access) change(edit func(map[string]CameraAccess, map[string]time.Time)
 		if entry.Recordings == nil {
 			entry.Recordings = []string{}
 		}
+		if entry.Names == nil {
+			entry.Names = []string{}
+		}
 		next[id] = entry
 	}
 	for user := range given {
 		ticked := false
 		for _, entry := range next {
-			ticked = ticked || slices.Contains(entry.Live, user) || slices.Contains(entry.Recordings, user)
+			ticked = ticked || slices.Contains(entry.Live, user) || slices.Contains(entry.Recordings, user) || slices.Contains(entry.Names, user)
 		}
 		if !ticked {
 			delete(given, user)

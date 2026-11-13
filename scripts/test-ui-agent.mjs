@@ -1354,7 +1354,7 @@ try {
       await nasBox.uncheck();
       await page.waitForTimeout(300);
       assert.deepEqual(puts, [
-        { id: "dev00000000000001", body: { nas: false, agent: true } },
+        { id: "dev00000000000001", body: { nas: false, agent: true, camera: true } },
       ]);
       assert.equal(await nasBox.isChecked(), false);
       await noOverflow(page, "push devices");

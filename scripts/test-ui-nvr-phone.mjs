@@ -2,9 +2,10 @@
 // isMobile, deviceScaleFactor 2): every page of the program and what a tap
 // opens (setup, live stacked with its own order, one camera large with the
 // PTZ pad, events beside the pictures, recordings with export, events with
-// their detail, cameras, adding and changing a camera, settings with faces
-// and plates, the failover banner, the diagnosis, Benutzer › Kameras, an
-// account that may only watch live). On every one: nothing scrolls sideways,
+// their detail, cameras, adding and changing a camera with whom it tells,
+// settings with faces, plates and the overview of the cameras' messages,
+// the failover banner, the diagnosis, Benutzer › Kameras, an account that
+// may only watch live). On every one: nothing scrolls sideways,
 // no text is cut (cutTextIn of test-ui-fixtures.mjs, which also finds a word
 // broken over lines – the bug that once set share names one letter per
 // line) and no text or control lies on another. Real screenshots (light
@@ -107,12 +108,12 @@ async function sound(page, what) {
 }
 
 /** A phone with the NVR's data; the desktop settings it saves are kept in `saved`. */
-async function phone(role, change = () => {}) {
-  const made = await create(role, "hell", WIDTH, "de", {
+async function phone(role, change = () => {}, width = WIDTH) {
+  const made = await create(role, "hell", width, "de", {
     isMobile: true,
     hasTouch: true,
     deviceScaleFactor: 2,
-    viewport: { width: WIDTH, height: 844 },
+    viewport: { width, height: 844 },
   });
   await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   made.data.prefs.desktop = { version: 1 };
@@ -325,6 +326,84 @@ try {
     await page.getByRole("heading", { name: "Haustür" }).waitFor();
     await sound(page, "edit camera");
     await shot(page, "kamera-aendern");
+    // PLAN 82-3: the recipients with their ways and hints, the pause and
+    // the window with days and times – long texts wrap, pills wrap.
+    const chevron = page.locator("#nvr-notify-recipients > .srow-head .srow-chev");
+    if ((await chevron.getAttribute("aria-expanded")) !== "true") await chevron.tap();
+    await page.locator("#nvr-notify-recipients").getByText(de["nvr.notify.legacy"]).waitFor();
+    await page.locator("#nvr-notify-recipients").getByText(de["nvr.notify.devicesOff"]).waitFor();
+    await page.getByRole("switch", { name: de["nvr.notify.window"] }).tap();
+    await page.getByText(de["nvr.notify.timeHint"]).waitFor();
+    await sound(page, "camera notifications");
+    await page.locator("#nvr-notify-recipients").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/kamera-meldungen-${WIDTH}.png`, animations: "disabled" });
+    await ctx.close();
+  }
+
+  // --- PLAN 82: the stream rows and the decoder on the narrowest phone (375 px) ---
+  {
+    const narrow = 375;
+    const { ctx, page } = await phone("owner", (s) => (s.settings.decoder = "0000:01:00.0"), narrow);
+    /** Every radio of the stream choices lies inside the screen (they wrap, never run out). */
+    const inside = async (what) => {
+      const outside = await page.evaluate((w) => {
+        const out = [];
+        for (const el of document.querySelectorAll('[role="radiogroup"] [role="radio"], select.field'))
+          if (el.getBoundingClientRect().right > w + 0.5) out.push(el.textContent.trim().slice(0, 30));
+        return out;
+      }, narrow);
+      assert.deepEqual(outside, [], `${what}: controls run out of the screen`);
+    };
+    await page.goto(base + "/nvr/cameras?new=1");
+    await page.getByRole("button", { name: "Suchen", exact: true }).tap();
+    await page.getByRole("button", { name: /Reolink RLC-810A/ }).tap();
+    await page.getByLabel("Benutzer", { exact: true }).fill("admin");
+    await page.getByLabel("Passwort", { exact: true }).fill("geheim");
+    await page.getByRole("button", { name: "Prüfen" }).tap();
+    await page.getByLabel("Hochauflösender Stream").waitFor();
+    await page.getByRole("radiogroup", { name: "Live-Bild" }).getByRole("radio", { name: "Niedrigauflösend" }).waitFor();
+    await sound(page, "stream rows (375 px)");
+    await inside("stream rows");
+    await page.getByRole("radiogroup", { name: "Erkennung" }).getByRole("radio", { name: "Hochauflösend" }).tap();
+    await page.getByText(de["nvr.stream.detectHighHint"]).waitFor();
+    await page.getByRole("switch", { name: "Streams offen halten" }).tap();
+    await page.getByText(de["nvr.stream.keepOpenOffHint"]).waitFor();
+    await page.getByLabel("Niedrigauflösender Stream").selectOption("");
+    await page.locator("#nvr-stream-record").getByText(de["nvr.stream.single"]).waitFor();
+    await sound(page, "stream rows, one stream (375 px)");
+    await inside("stream rows, one stream");
+    await page.getByLabel("Niedrigauflösender Stream").selectOption({ label: "640 × 360 · H264" });
+    await page.locator('[id$="-streams"]').first().evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -160);
+    });
+    await page.screenshot({ path: `${out}/kamera-streams-${narrow}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/cameras?edit=garten");
+    await page.locator("#nvr-stream-current").getByText(/2560 × 1440/).waitFor();
+    await sound(page, "stored streams (375 px)");
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-decoder-reason").getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    // The whole page, the detector's and the decoder's selects included.
+    const cut = await page.evaluate(cutTextIn);
+    assert.deepEqual(cut, [], "decoder (375 px): cut text");
+    assert.deepEqual(await page.evaluate(overlapsIn), [], "decoder (375 px): overlapping text");
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 0,
+      true,
+      "decoder (375 px): the page scrolls sideways",
+    );
+    await inside("decoder");
+    await page.locator("#nvr-decoder-row").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -160);
+    });
+    await page.screenshot({ path: `${out}/entschluesseln-${narrow}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/diagnosis");
+    await page.locator("#nvr-diag-decoder").getByText(de["nvr.decoder.reason.vm"]).waitFor();
+    await sound(page, "diagnosis decoder (375 px)");
     await ctx.close();
   }
 
@@ -338,8 +417,15 @@ try {
     });
     await page.goto(base + "/nvr/settings");
     await page.locator("#nvr-cap-note").waitFor();
+    // PLAN 82-3: the overview of who gets what; its lines wrap.
+    await page.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
     await sound(page, "settings");
     await shot(page, "einstellungen");
+    await page.locator("#nvr-notify").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/einstellungen-meldungen-${WIDTH}.png`, animations: "disabled" });
     await page.locator("#nvr-faces").getByRole("button", { name: /Bekannte Gesichter/ }).tap();
     await page.locator('#nvr-faces [data-face="Patrick"] b').waitFor();
     await page.locator("#nvr-faces").getByLabel("Name der Person").fill("Oma Erna");
@@ -415,6 +501,69 @@ try {
     await group.evaluate((el) => el.scrollIntoView({ block: "end" }));
     await page.screenshot({ path: `${out}/benutzer-kameras-${WIDTH}.png`, animations: "disabled" });
     await ctx.close();
+  }
+
+  // --- PLAN 82-3 at 375 px, the narrowest phone asked for: whom a camera tells, the overview ---
+  {
+    const narrow = 375;
+    const made = await create("owner", "hell", narrow, "de", {
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: 2,
+      viewport: { width: narrow, height: 812 },
+    });
+    made.data.prefs.desktop = { version: 1 };
+    const state = nvrState();
+    // A long account name and a long camera name must wrap, never be cut.
+    state.recipients.accounts.push({ name: "hausmeister_nebengebaeude", admin: false, email: false, pushDevices: 0, pushDevicesOff: 0, cameras: ["haustuer"] });
+    state.cameras[0].name = "Haustür mit Vordach und Briefkasten";
+    await installNvr(made.ctx, state);
+    const page = made.page;
+    await page.goto(base + "/nvr/cameras?edit=haustuer#nvr-notify-recipients");
+    await page.locator("#nvr-notify-recipients").getByText(de["nvr.notify.legacy"]).waitFor();
+    await page.locator("#nvr-notify-recipients").getByText("hausmeister_nebengebaeude").waitFor();
+    await page.getByRole("switch", { name: de["nvr.notify.window"] }).tap();
+    await page.getByText(de["nvr.notify.timeHint"]).waitFor();
+    await sound(page, "camera notifications at 375 px");
+    await page.locator("#nvr-notify-recipients").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/kamera-meldungen-${narrow}.png`, animations: "disabled" });
+    await page.goto(base + "/nvr/settings");
+    await page.locator("#nvr-notify-einfahrt").getByText("sam bekommt zurzeit nichts: kein Recht auf die Kamera").waitFor();
+    const wide = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    assert.ok(wide <= 0, `notification overview at 375 px: the page scrolls sideways by ${wide}px`);
+    assert.deepEqual(
+      await page.evaluate(cutTextIn),
+      [],
+      "notification overview at 375 px: cut text",
+    );
+    assert.deepEqual(await page.evaluate(overlapsIn), [], "notification overview at 375 px: overlapping text");
+    await page.locator("#nvr-notify").evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -80);
+    });
+    await page.screenshot({ path: `${out}/einstellungen-meldungen-${narrow}.png`, animations: "disabled" });
+    // The account's camera rights with the third switch "Namen und Kennzeichen".
+    state.userCameras.sam = {
+      admin: false,
+      cameras: state.cameras
+        .filter((c) => !c.deleted)
+        .map((c) => ({ id: c.id, name: c.name, live: true, recordings: c.id !== "garten", names: c.id === "haustuer" })),
+    };
+    await page.goto(base + "/users");
+    await page.locator('[data-account="sam"]').tap();
+    const group = page.locator("section.expander", { hasText: "Kameras" }).last();
+    await group.getByRole("button", { name: /Kameras/ }).tap();
+    await group.getByRole("switch", { name: "Haustür mit Vordach und Briefkasten: Namen und Kennzeichen sehen" }).waitFor();
+    assert.equal(await group.getByRole("switch", { name: "Garten: Namen und Kennzeichen sehen" }).isDisabled(), true);
+    await sound(page, "camera rights at 375 px");
+    await group.evaluate((el) => el.scrollIntoView({ block: "start" }));
+    await page.screenshot({ path: `${out}/benutzer-kameras-${narrow}.png`, animations: "disabled" });
+    await made.ctx.close();
   }
 
   assert.deepEqual(errors, [], "no script errors");

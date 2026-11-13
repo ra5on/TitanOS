@@ -292,6 +292,42 @@ func (m *Manager) ForgetPersonal(user string) {
 	delete(m.people.users, user)
 }
 
+// personalMail is an account's own e-mail address as its notification
+// settings name it ("" if there is none, it is no address or the file
+// cannot be read), with the language and content it wants. Whether the
+// e-mail channel is switched on for messages of the NAS does not matter:
+// an administrator chose e-mail for this account at a camera.
+func (m *Manager) personalMail(user string) (address, language, content string) {
+	m.people.mu.Lock()
+	defer m.people.mu.Unlock()
+	state, err := m.personalLocked(user)
+	if err != nil {
+		return "", "", ""
+	}
+	p := state.settings
+	to := strings.TrimSpace(p.Email.To)
+	if _, err := mail.ParseAddress(to); err != nil {
+		to = ""
+	}
+	return to, p.Language, p.Content
+}
+
+// PersonalMail tells whether an account has an e-mail address of its own
+// for NotifyTo (the same rule the delivery uses).
+func (m *Manager) PersonalMail(user string) bool {
+	address, _, _ := m.personalMail(user)
+	return address != ""
+}
+
+// MailServer tells whether a mail server is set up under Settings ›
+// Notifications: personal e-mail goes through it, switched on there for
+// the shared address or not.
+func (m *Manager) MailServer() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings.Email.Host != ""
+}
+
 // Reachable says whether an account has a channel and wants an event.
 func (m *Manager) Reachable(user, event string) bool {
 	m.people.mu.Lock()
@@ -546,7 +582,8 @@ func (m *Manager) personalSenders(user string, p Personal, message PersonalMessa
 }
 
 // tellPeople sends a notification of the NAS to the accounts that want its
-// kind (Audience: owners and administrators). Warnings and errors always;
+// kind (Audience: owners and administrators; of a message for some
+// accounts only those among them). Warnings and errors always;
 // information only for updates.
 func (m *Manager) tellPeople(message Message) {
 	if m.Audience == nil || message.Kind == "test" {
@@ -557,6 +594,10 @@ func (m *Manager) tellPeople(message Message) {
 		return
 	}
 	for _, user := range m.Audience() {
+		// A message for some accounts goes only to their own channels.
+		if !message.shownTo(user) {
+			continue
+		}
 		personal := PersonalMessage{Event: event, Severity: message.Severity, Title: message.Title, Text: message.Text, Path: pathOf(event)}
 		if err := m.SendPersonal(user, "", personal); err != nil && !errors.Is(err, ErrUnreachable) {
 			slog.Warn("personal notification not sent", "user", user, "kind", message.Kind, "err", err)

@@ -70,7 +70,27 @@ type Settings struct {
 	// kept like the cameras' passwords; never in an answer of the API, a
 	// log or the diagnosis.
 	ProxySecret string `json:"proxySecret,omitempty"`
+	// NotifyOff is the main switch of the cameras' messages (PLAN 82-3):
+	// true silences every camera, each keeps its own choices. Named "off"
+	// so that a file of 0.78, which has no such field, keeps its messages.
+	NotifyOff bool `json:"notifyOff,omitempty"`
+	// Decoder is the GPU that decodes the camera streams (PLAN 82-4):
+	// "" or DecoderAuto picks an iGPU, else the first free GPU, else the
+	// CPU; DecoderCPU decodes on the CPU; anything else is the PCI address
+	// of a GPU (hardware.ContainerDevice.ID, never a device node: their
+	// numbers change between boots). A chosen GPU that is gone or with a
+	// VM is not replaced by another: the CPU decodes and the page says why.
+	Decoder string `json:"decoder,omitempty"`
 }
+
+// The choices of Settings.Decoder besides a PCI address.
+const (
+	DecoderAuto = "auto"
+	DecoderCPU  = "cpu"
+)
+
+// pciAddressRE is a PCI address as the hardware manager names devices.
+var pciAddressRE = regexp.MustCompile(`^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$`)
 
 // KnownPlate is one entry of the known license plates.
 type KnownPlate struct {
@@ -191,6 +211,9 @@ func ValidateSettings(s Settings, mounted []string) error {
 	if _, err := cleanPlates(s.Plates); err != nil {
 		return err
 	}
+	if s.Decoder != "" && s.Decoder != DecoderAuto && s.Decoder != DecoderCPU && !pciAddressRE.MatchString(s.Decoder) {
+		return invalid("decoder")
+	}
 	if s.Volume == "" {
 		if s.Enabled {
 			return invalid("volume")
@@ -211,9 +234,12 @@ type Camera struct {
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
 	Source  Source `json:"source"`
-	Detect  Detect `json:"detect"`
-	Record  Record `json:"record"`
-	Audio   Audio  `json:"audio"`
+	// Streams is which stream serves what (PLAN 82-2) and whether go2rtc
+	// keeps them open (82-1).
+	Streams StreamUse `json:"streams"`
+	Detect  Detect    `json:"detect"`
+	Record  Record    `json:"record"`
+	Audio   Audio     `json:"audio"`
 	// PTZ: the camera pans and tilts over ONVIF.
 	PTZ    bool   `json:"ptz"`
 	Notify Notify `json:"notify"`
@@ -233,10 +259,19 @@ type Source struct {
 	User string `json:"user"`
 	// Password never leaves titand: the API answers hasPassword instead.
 	Password string `json:"password,omitempty"`
-	// MainURL and SubURL are the streams without credentials. The main
-	// stream is recorded, the sub stream (if any) is used for detection.
+	// MainURL and SubURL are the streams without credentials: the main
+	// stream in high resolution, the sub stream (optional) in low. What
+	// each serves is Camera.Streams. In go2rtc they are always "<id>" and
+	// "<id>_sub" (Home Assistant reads them under these names).
 	MainURL string `json:"mainURL"`
 	SubURL  string `json:"subURL"`
+	// MainWidth … SubHeight are the pictures' sizes as the last check of
+	// the camera found them; set by titand like Audio.Codec, 0 while
+	// unknown.
+	MainWidth  int `json:"mainWidth,omitempty"`
+	MainHeight int `json:"mainHeight,omitempty"`
+	SubWidth   int `json:"subWidth,omitempty"`
+	SubHeight  int `json:"subHeight,omitempty"`
 	// ONVIFPort is the port of the ONVIF service (kind "onvif"; 0 for rtsp).
 	ONVIFPort int `json:"onvifPort"`
 	// AllowPublic: the administrator confirmed an address outside the home
@@ -281,22 +316,251 @@ type Audio struct {
 	// only AAC is recorded as it is, anything else is turned into AAC
 	// (an MP4 file takes no G.711, and Frigate would record nothing).
 	Codec string `json:"codec,omitempty"`
+	// SubCodec is the same for the sub stream: the recording follows the
+	// codec of the stream that is recorded (Streams.Record).
+	SubCodec string `json:"subCodec,omitempty"`
+}
+
+// The streams of a camera as Streams names them.
+const (
+	StreamMain = "main"
+	StreamSub  = "sub"
+	StreamAuto = "auto"
+)
+
+// StreamUse is which stream serves what. "" is the default of each field,
+// so a camera of 0.78 (no field at all) works as before: the main stream
+// is recorded, the sub stream (if any) detects, the live view takes the
+// sub stream for small tiles and the main stream for a large picture, and
+// go2rtc keeps the streams open.
+type StreamUse struct {
+	// Record is StreamMain (default) or StreamSub.
+	Record string `json:"record,omitempty"`
+	// Detect is StreamSub (default; the main stream when there is no sub
+	// stream) or StreamMain.
+	Detect string `json:"detect,omitempty"`
+	// Live is StreamAuto (default), StreamMain or StreamSub.
+	Live string `json:"live,omitempty"`
+	// NoPreload: go2rtc opens the streams only while something reads them.
+	// Off (default): it keeps them open, so that the live view stands at
+	// once even when Frigate does not read a stream. Named "no" so that a
+	// camera of 0.78 keeps them open.
+	NoPreload bool `json:"noPreload,omitempty"`
+}
+
+// recordStream is the stream that is recorded: StreamMain or StreamSub.
+func (c Camera) recordStream() string {
+	if c.Streams.Record == StreamSub && c.Source.SubURL != "" {
+		return StreamSub
+	}
+	return StreamMain
+}
+
+// detectStream is the stream the detection reads: StreamMain or StreamSub.
+func (c Camera) detectStream() string {
+	if c.Streams.Detect != StreamMain && c.Source.SubURL != "" {
+		return StreamSub
+	}
+	return StreamMain
+}
+
+// liveStream is the stream a live view shows; small: a small tile.
+func (c Camera) liveStream(small bool) string {
+	if c.Source.SubURL == "" {
+		return StreamMain
+	}
+	switch c.Streams.Live {
+	case StreamMain:
+		return StreamMain
+	case StreamSub:
+		return StreamSub
+	}
+	if small {
+		return StreamSub
+	}
+	return StreamMain
+}
+
+// recordCodec is the sound's codec of the stream that is recorded.
+func (c Camera) recordCodec() string {
+	if c.recordStream() == StreamSub {
+		return c.Audio.SubCodec
+	}
+	return c.Audio.Codec
 }
 
 // codecAAC is AAC as RTSP names it.
 const codecAAC = "MPEG4-GENERIC"
 
-// Notify is where messages about this camera go. Phase 1 raises only the
-// TitanOS message; the other ways are kept for the routing of phase 2.
+// Notify is whom and how this camera tells (routing.go).
 type Notify struct {
-	Titan         bool `json:"titan"`
-	Push          bool `json:"push"`
-	Email         bool `json:"email"`
+	// Titan, Push and Email are the ways of 0.78: the bell, the push to
+	// the administrators' devices and the e-mail address of the NAS. They
+	// count only while Recipients is nil; with a list they are kept as
+	// "some recipient has this way", for a way back to 0.78.
+	Titan bool `json:"titan"`
+	Push  bool `json:"push"`
+	Email bool `json:"email"`
+	// HomeAssistant and Agent are ways of the camera, not of an account.
 	HomeAssistant bool `json:"homeAssistant"`
 	Agent         bool `json:"agent"`
 	// Kinds are what is reported: labels of allowedObjects, "plate",
 	// "face" and "offline".
 	Kinds []string `json:"kinds"`
+	// Recipients are the accounts that get the messages, each with its own
+	// ways (PLAN 82-3, chosen by an administrator per camera). nil is a
+	// camera of 0.78: the ways above, to the administrators. An empty
+	// list (not nil) is nobody. Rights are checked again for every
+	// message: an account that may no longer see the camera, is disabled
+	// or was made anew under the same name gets nothing.
+	Recipients []Recipient `json:"recipients"`
+	// PauseSeconds is the least time between two messages of one kind of
+	// this camera: one of pauseChoices; nil (a camera of 0.78) is 60.
+	PauseSeconds *int `json:"pauseSeconds,omitempty"`
+	// Window limits the messages about events to some hours.
+	Window Window `json:"window"`
+}
+
+// Recipient is one account a camera tells, with its ways.
+type Recipient struct {
+	User string `json:"user"`
+	// Bell is the bell of TitanOS; only administrators have one.
+	Bell bool `json:"bell"`
+	// Push goes to the account's own subscribed browsers and phones.
+	Push bool `json:"push"`
+	// Email goes to the account's own address (its notification
+	// settings), through the mail server of the NAS.
+	Email bool `json:"email"`
+	// Added is when an administrator chose this account here, set by
+	// titand (never taken from a request): an account made later under the
+	// same name, administrator or not, gets nothing of this entry.
+	Added time.Time `json:"added,omitzero"`
+}
+
+// MaxRecipients bounds the accounts of one camera.
+const MaxRecipients = 50
+
+// pauseChoices are the pauses offered: none, 1, 5, 15, 30 and 60 minutes.
+var pauseChoices = []int{0, 60, 300, 900, 1800, 3600}
+
+// defaultPause is the pause of a camera that names none (0.78: fixed).
+const defaultPause = 60
+
+// pause is the camera's least time between two messages of one kind.
+func (n Notify) pause() time.Duration {
+	if n.PauseSeconds == nil {
+		return defaultPause * time.Second
+	}
+	return time.Duration(*n.PauseSeconds) * time.Second
+}
+
+// Window is when a camera reports events (persons, vehicles, animals,
+// plates, faces). "Kamera offline" is reported at any time: a camera that
+// goes dark at night is what the window must not hide.
+type Window struct {
+	// On: only within the window; off: at any time.
+	On bool `json:"on"`
+	// Days are the days the window starts on: 1 Monday … 7 Sunday.
+	Days []int `json:"days"`
+	// From and To are HH:MM in the time zone of the NAS. To before From
+	// runs across midnight into the next day; From equal to To is the
+	// whole day.
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// accountRE is an account name as auth allows it (auth/users.go).
+var accountRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+var clockRE = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
+// minutes is HH:MM as minutes after midnight (valid by clockRE).
+func minutes(hhmm string) int { return atoi(hhmm[:2])*60 + atoi(hhmm[3:]) }
+
+// Open tells whether the window lets an event at t (local time) through.
+func (w Window) Open(t time.Time) bool {
+	if !w.On {
+		return true
+	}
+	day := int(t.Weekday())
+	if day == 0 {
+		day = 7
+	}
+	from, to, now := minutes(w.From), minutes(w.To), t.Hour()*60+t.Minute()
+	switch {
+	case from == to:
+		return slices.Contains(w.Days, day)
+	case from < to:
+		return slices.Contains(w.Days, day) && now >= from && now < to
+	}
+	// Across midnight: the part after From belongs to today, the part
+	// before To to the window that started yesterday.
+	yesterday := day - 1
+	if yesterday == 0 {
+		yesterday = 7
+	}
+	return (slices.Contains(w.Days, day) && now >= from) || (slices.Contains(w.Days, yesterday) && now < to)
+}
+
+// legacyWays tells whether the camera still uses the ways of 0.78.
+func (n Notify) legacyWays() bool { return n.Recipients == nil }
+
+// validateNotify checks the ways, recipients, pause and window and returns
+// them in their stored form.
+func validateNotify(n Notify) (Notify, error) {
+	var err error
+	if n.Kinds, err = cleanList(n.Kinds, notifyKinds); err != nil {
+		return n, invalid("notify.kinds: %v", err)
+	}
+	if n.Recipients != nil {
+		if len(n.Recipients) > MaxRecipients {
+			return n, invalid("notify.recipients: at most %d", MaxRecipients)
+		}
+		seen := map[string]bool{}
+		list := make([]Recipient, 0, len(n.Recipients))
+		for _, r := range n.Recipients {
+			if !accountRE.MatchString(r.User) || seen[r.User] {
+				return n, invalid("notify.recipients: account %q", r.User)
+			}
+			seen[r.User] = true
+			list = append(list, r)
+		}
+		slices.SortFunc(list, func(a, b Recipient) int { return strings.Compare(a.User, b.User) })
+		n.Recipients = list
+		// Kept for a way back to 0.78, which reads only these.
+		n.Titan, n.Push, n.Email = false, false, false
+		for _, r := range list {
+			n.Titan, n.Push, n.Email = n.Titan || r.Bell, n.Push || r.Push, n.Email || r.Email
+		}
+	}
+	if n.PauseSeconds != nil && !slices.Contains(pauseChoices, *n.PauseSeconds) {
+		return n, invalid("notify.pauseSeconds")
+	}
+	w := &n.Window
+	if w.On || len(w.Days) > 0 || w.From != "" || w.To != "" {
+		days := []int{}
+		for d := 1; d <= 7; d++ {
+			if slices.Contains(w.Days, d) {
+				days = append(days, d)
+			}
+		}
+		for _, d := range w.Days {
+			if d < 1 || d > 7 {
+				return n, invalid("notify.window.days")
+			}
+		}
+		w.Days = days
+		if !clockRE.MatchString(w.From) || !clockRE.MatchString(w.To) {
+			return n, invalid("notify.window.from or notify.window.to")
+		}
+		if w.On && len(w.Days) == 0 {
+			return n, invalid("notify.window.days: none chosen")
+		}
+	}
+	if w.Days == nil {
+		w.Days = []int{}
+	}
+	return n, nil
 }
 
 // allowedObjects are the labels offered for detection: the ones the
@@ -545,11 +809,31 @@ func ValidateCamera(c Camera) (Camera, error) {
 	if c.Audio.TwoWay && !c.Audio.Enabled {
 		return c, invalid("audio.twoWay needs audio.enabled")
 	}
-	if len(c.Audio.Codec) > 32 || strings.ContainsAny(c.Audio.Codec, "\r\n\x00") {
-		return c, invalid("audio.codec")
+	for _, codec := range []string{c.Audio.Codec, c.Audio.SubCodec} {
+		if len(codec) > 32 || strings.ContainsAny(codec, "\r\n\x00") {
+			return c, invalid("audio.codec")
+		}
 	}
-	if c.Notify.Kinds, err = cleanList(c.Notify.Kinds, notifyKinds); err != nil {
-		return c, invalid("notify.kinds: %v", err)
+	for _, size := range []int{s.MainWidth, s.MainHeight, s.SubWidth, s.SubHeight} {
+		if size < 0 || size > 16384 {
+			return c, invalid("source: picture size")
+		}
+	}
+	st := c.Streams
+	if !slices.Contains([]string{"", StreamMain, StreamSub}, st.Record) {
+		return c, invalid("streams.record")
+	}
+	if !slices.Contains([]string{"", StreamMain, StreamSub}, st.Detect) {
+		return c, invalid("streams.detect")
+	}
+	if !slices.Contains([]string{"", StreamAuto, StreamMain, StreamSub}, st.Live) {
+		return c, invalid("streams.live")
+	}
+	if s.SubURL == "" && (st.Record == StreamSub || st.Live == StreamSub) {
+		return c, invalid("streams: the camera has no second stream")
+	}
+	if c.Notify, err = validateNotify(c.Notify); err != nil {
+		return c, err
 	}
 	if c.Order < 0 || c.Order > 100000 {
 		return c, invalid("order")

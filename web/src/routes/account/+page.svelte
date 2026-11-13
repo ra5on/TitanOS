@@ -13,6 +13,7 @@
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import PersonalNotifications from '#lib/components/PersonalNotifications.svelte';
 	import BellSettings from '#lib/components/BellSettings.svelte';
+	import CameraMailRow from '#lib/nvr/CameraMailRow.svelte';
 	// One's own account: password, second factor, logged-in devices.
 	import qrcode from 'qrcode-generator';
 	import { api } from '#lib/api.ts';
@@ -446,6 +447,7 @@
 			<SettingRow id="push" icon="bell" title={t('push.title')} desc={t('push.introPersonal')} open>
 				<div class="srow-block"><PushDevices bare personal /></div>
 			</SettingRow>
+			<CameraMailRow />
 		{/if}
 		{#if admin}<BellSettings />{/if}
 		<SoundSettings />
