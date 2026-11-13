@@ -56,6 +56,9 @@ type preloadState struct {
 	// missing are the streams found missing (each logged once).
 	tried   map[string]time.Time
 	missing map[string]bool
+	// tooLong: go2rtc's answer reached preloadOutputLimit (said once,
+	// until an answer is read again).
+	tooLong bool
 }
 
 // watchPreload starts a round when one is due: Frigate runs and answered,
@@ -99,7 +102,13 @@ func (m *Manager) preloadRound(ctx context.Context, want []string) {
 	var open map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(out), &open); err != nil {
 		if len(out) >= preloadOutputLimit {
-			slog.Warn("NVR: go2rtc's answer about its open streams is too long; streams are not asked for again", "bytes", len(out))
+			m.mu.Lock()
+			said := m.rt.preload.tooLong
+			m.rt.preload.tooLong = true
+			m.mu.Unlock()
+			if !said {
+				slog.Warn("NVR: go2rtc's answer about its open streams is too long; streams are not asked for again", "bytes", len(out))
+			}
 		} else {
 			slog.Debug("NVR: go2rtc's open streams not readable")
 		}
@@ -109,6 +118,7 @@ func (m *Manager) preloadRound(ctx context.Context, want []string) {
 	var due, lost, back []string
 	m.mu.Lock()
 	p := &m.rt.preload
+	p.tooLong = false
 	if p.tried == nil {
 		p.tried, p.missing = map[string]time.Time{}, map[string]bool{}
 	}

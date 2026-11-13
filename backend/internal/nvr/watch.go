@@ -834,8 +834,9 @@ func (m *Manager) recreate(ctx context.Context, p plan, volume string) error {
 // recording, and it is neither a crash of Frigate nor a fault of the
 // detector: the GPU counts as without driver and the next look, at once,
 // makes the container with the CPU decoding; the page says "driver". It
-// stays so until the owner chooses another decoder, presses "Wieder
-// versuchen" or titand starts again. It reports whether err was such a
+// stays so until the owner chooses another decoder (and then this GPU
+// again) or titand starts again; "Wieder versuchen" (RetryDetector,
+// offered after a failover or a stop) forgets it too. It reports whether err was such a
 // refusal; any other error (a timeout, a full disk) is not.
 func (m *Manager) cdiRefused(err error, gpu string) bool {
 	if gpu == "" || gpu == DecoderCPU || !docker.IsCDIError(err) {

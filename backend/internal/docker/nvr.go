@@ -294,7 +294,7 @@ func (m *Manager) NVRLogs(ctx context.Context, tail int, since time.Time) (strin
 // capabilities: []` (Docker 26.1.5 answers it at the start, after the
 // create succeeded), with it `unresolvable CDI devices nvidia.com/gpu=…`,
 // and an NVIDIA plugin whose descriptions went away `…nvidia.com/gpu=…: no
-// such file or directory` (as for apps, Manager.containerAction).
+// such file or directory` (as for apps, Manager.Action).
 var cdiErrorRE = regexp.MustCompile(`(?i)(\bcdi\b|nvidia\.com/gpu)`)
 
 // IsCDIError tells whether the engine refused a create or start because of

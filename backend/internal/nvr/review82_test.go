@@ -388,10 +388,41 @@ func TestPreloadEveryMissingStreamGetsItsTurn(t *testing.T) {
 	}
 }
 
+// longAnswer answers the question for the open streams with more than
+// the limit (cut, no JSON).
+type longAnswer struct{ *DevEngine }
+
+func (e longAnswer) NVRExec(ctx context.Context, cmd []string, limit int) (string, int, error) {
+	if !slices.Contains(cmd, "PUT") {
+		return `{"cam":` + strings.Repeat(" ", limit), 0, nil
+	}
+	return e.DevEngine.NVRExec(ctx, cmd, limit)
+}
+
 // The answer about the open streams may be long (64 cameras): it is read
-// whole.
+// whole; one that reaches the limit anyway is said once, not every round,
+// and asks for nothing.
 func TestPreloadAnswerOf64Cameras(t *testing.T) {
 	if preloadOutputLimit < 64*2*1500 {
 		t.Errorf("limit %d bytes is too close to 128 streams of go2rtc's answer", preloadOutputLimit)
+	}
+	r := newRig(t, true)
+	r.up()
+	r.engine.Away("haustuer")
+	r.m.Engine = longAnswer{r.engine}
+	r.m.preloadRound(context.Background(), []string{"haustuer"})
+	r.m.mu.Lock()
+	tooLong := r.m.rt.preload.tooLong
+	r.m.mu.Unlock()
+	if !tooLong || len(puts(r.engine.Execs())) != 0 {
+		t.Errorf("too long: said %v, asked %v", tooLong, puts(r.engine.Execs()))
+	}
+	r.m.Engine = r.engine
+	r.m.preloadRound(context.Background(), []string{"haustuer"})
+	r.m.mu.Lock()
+	tooLong = r.m.rt.preload.tooLong
+	r.m.mu.Unlock()
+	if tooLong || len(puts(r.engine.Execs())) != 1 {
+		t.Errorf("a readable answer again: said %v, asked %v", tooLong, puts(r.engine.Execs()))
 	}
 }
