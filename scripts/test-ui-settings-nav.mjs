@@ -393,6 +393,28 @@ async function sound(page, name, frame) {
   // Nothing found says so.
   await search.fill("xyzzy");
   await side.getByText("Nichts gefunden").waitFor();
+  await search.fill("");
+  // The command palette (Strg+K) knows the same settings and leads there too.
+  // The keyboard back on the desktop (a click on the account in the column).
+  await side.locator(".side-account").click();
+  await page.keyboard.press("Control+k");
+  const palette = page.locator("#palette-results");
+  await page.getByRole("combobox").waitFor();
+  await page.keyboard.type("Schriftgröße");
+  await palette
+    .locator('[role="option"]')
+    .filter({ hasText: "Sprache und Schrift" })
+    .first()
+    .waitFor();
+  await page.keyboard.press("Enter");
+  await at(
+    page,
+    "/settings/appearance?tab=colors#find=Sprache%20und%20Schrift|Schriftgr%C3%B6%C3%9Fe",
+  );
+  await frame
+    .locator(".srow.found")
+    .filter({ hasText: "Schriftgröße" })
+    .waitFor({ timeout: 10000 });
   await ctx.close();
 }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The frame around every page once someone is logged in.
 	import type { Snippet } from 'svelte';
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
 	import { session } from '#lib/session.svelte.ts';
@@ -78,11 +79,20 @@
 	});
 	afterNavigate(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
-		// PLAN 86: a hit of the settings search leads to the row itself (tab,
-		// rows on the way opened, the setting marked).
-		const path = page.url.pathname;
-		if (path.startsWith('/settings') || path === '/account' || page.url.hash.startsWith('#find='))
-			void jumpToSetting(page.url);
+	});
+	// PLAN 86: a hit of the settings search leads to the row itself (tab,
+	// rows on the way opened, the setting marked) – after every navigation
+	// and also on a page loaded fresh with such an address (a new window).
+	let jumped = '';
+	$effect(() => {
+		const url = page.url;
+		if (url.href === jumped) return;
+		// The desktop itself shows no settings page (its window does).
+		if (frame === 'desktop') return;
+		jumped = url.href;
+		const path = url.pathname;
+		if (path.startsWith('/settings') || path === '/account' || url.hash.startsWith('#find='))
+			untrack(() => void jumpToSetting(url));
 	});
 	$effect(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
