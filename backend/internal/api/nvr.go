@@ -158,7 +158,8 @@ func (a nvrArea) handleStatus(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	if a.nvr == nil {
 		if user.Role.CanAdminister() {
-			writeJSON(w, http.StatusOK, nvr.Status{State: nvr.PhaseOff, Image: nvr.ImageStatus{State: "missing"}, Hardware: nvr.HardwareInfo{Devices: []nvr.Device{}}})
+			writeJSON(w, http.StatusOK, nvr.Status{State: nvr.PhaseOff, Image: nvr.ImageStatus{State: "missing"}, Hardware: nvr.HardwareInfo{Devices: []nvr.Device{}, Decoders: []nvr.Decoder{}},
+				Decoder: nvr.DecoderStatus{Setting: nvr.DecoderAuto, Active: nvr.DecoderCPU, Kind: nvr.DecoderCPU, Title: "CPU"}})
 		} else {
 			writeJSON(w, http.StatusOK, nvrStatusView{State: nvr.PhaseOff})
 		}

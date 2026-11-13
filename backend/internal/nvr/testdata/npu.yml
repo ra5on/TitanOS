@@ -60,6 +60,11 @@ go2rtc:
       - rtsp://admin:p%40ss%2Fw%3Ard%20%7Bx%7D@192.168.1.63:554/main#media=video#backchannel=0
     garten_sub:
       - rtsp://admin:p%40ss%2Fw%3Ard%20%7Bx%7D@192.168.1.63:554/sub#media=video#backchannel=0
+  preload:
+    haustuer: ""
+    haustuer_sub: ""
+    garten: ""
+    garten_sub: ""
 cameras:
   haustuer:
     enabled: true
