@@ -92,6 +92,12 @@ type devData struct {
 	nextID   int
 	// deleted are the spans DELETE /api/recordings got.
 	deleted [][2]float64
+	// purged are the cameras DELETE /api/cameras got, with the query.
+	purged []string
+	// holdPurge, if set, holds the answer to DELETE /api/cameras until it
+	// is closed; failPurge answers it with 500 (tests).
+	holdPurge chan struct{}
+	failPurge bool
 }
 
 // Seed fills the stand-in with example data around now for the given
@@ -391,7 +397,17 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		from, _ := strconv.ParseFloat(parts[3], 64)
 		to, _ := strconv.ParseFloat(parts[5], 64)
 		d.deleted = append(d.deleted, [2]float64{from, to})
+		// ?cameras=a,b narrows the deletion as in Frigate; without it, all.
+		only := map[string]bool{}
+		if list := r.URL.Query().Get("cameras"); list != "" && list != "all" {
+			for _, c := range strings.Split(list, ",") {
+				only[c] = true
+			}
+		}
 		for camera, hours := range d.hours {
+			if len(only) > 0 && !only[camera] {
+				continue
+			}
 			kept := hours[:0]
 			for _, h := range hours {
 				// What of the hour's recording lies in [from, to) goes.
@@ -411,6 +427,25 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 			}
 			d.hours[camera] = kept
 		}
+		ok()
+	case len(parts) == 3 && parts[0] == "api" && parts[1] == "cameras" && r.Method == http.MethodDelete:
+		// Frigate's deletion of a camera: its events and what is left of
+		// its recordings' entries go, exports stay (delete_exports=false).
+		camera := parts[2]
+		if hold := d.holdPurge; hold != nil {
+			f.mu.Unlock()
+			<-hold
+			f.mu.Lock()
+			d = &f.data
+		}
+		if d.failPurge {
+			writeJSONTo(w, 500, map[string]any{"success": false, "message": "Error updating config"})
+			break
+		}
+		d.purged = append(d.purged, camera+"?"+r.URL.RawQuery)
+		d.events = slices.DeleteFunc(d.events, func(e devEvent) bool { return e.Camera == camera })
+		delete(d.hours, camera)
+		delete(f.config, camera)
 		ok()
 	case len(parts) == 4 && parts[0] == "api" && parts[2] == "recordings" && parts[3] == "summary":
 		zone := time.UTC
@@ -517,6 +552,10 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 	case path == "/api/exports":
 		out := []map[string]any{}
 		for i, e := range d.exports {
+			// As Frigate: only exports of the cameras in its config.
+			if _, configured := f.config[e.Camera]; len(f.config) > 0 && !configured {
+				continue
+			}
 			switch e.State {
 			case "queued":
 				d.exports[i].State = "started"
@@ -530,6 +569,16 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 				"video_path": "/media/frigate/exports/" + e.ID + ".mp4", "thumb_path": "/media/frigate/clips/export/" + e.ID + ".webp", "in_progress": e.State == "running"})
 		}
 		writeJSONTo(w, 200, out)
+	case len(parts) == 3 && parts[0] == "api" && parts[1] == "exports" && r.Method == http.MethodGet:
+		// One export by its ID, whatever camera (an administrator may).
+		at := slices.IndexFunc(d.exports, func(e devExport) bool { return e.ID == parts[2] && e.State == "done" })
+		if at < 0 {
+			notFound()
+			break
+		}
+		e := d.exports[at]
+		writeJSONTo(w, 200, map[string]any{"id": e.ID, "camera": e.Camera, "name": e.Name, "date": e.Date,
+			"video_path": "/media/frigate/exports/" + e.ID + ".mp4", "thumb_path": "/media/frigate/clips/export/" + e.ID + ".webp", "in_progress": false})
 	case path == "/api/jobs/export":
 		out := []map[string]any{}
 		for _, e := range d.exports {

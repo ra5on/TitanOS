@@ -1,7 +1,14 @@
 package nvr
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -116,6 +123,159 @@ func (m *Manager) DeletedCamera(id string) (DeletedCamera, bool) {
 		}
 	}
 	return DeletedCamera{}, false
+}
+
+// PurgeDeletedCamera deletes the recordings of a deleted camera now
+// instead of when its days are over (owner 13.11.2026: "the old
+// recordings of removed cameras cannot be deleted"). Frigate must run:
+//
+//  1. DELETE /api/recordings/start/0/end/<now>?cameras=<id> deletes every
+//     recording of the camera, file and entry (frigate/api/record.py).
+//     Frigate's deletion of a camera alone would leave the files: they lie
+//     under recordings/<day>/<hour>/<camera>, it removes recordings/<camera>
+//     (frigate/util/camera_cleanup.py).
+//  2. DELETE /api/cameras/<id>?delete_exports=false deletes the rest:
+//     events with their pictures and clips (also kept ones), previews,
+//     the timeline, and the stub in Frigate's running configuration.
+//     Exports stay: they belong to the accounts that made them and are
+//     never deleted by the NVR itself.
+//  3. The stub leaves the list on the stick; config.yml without it
+//     restarts Frigate once, as removing a camera does.
+//
+// A failure in 1 or 2 leaves the stub, so the button stays and can be
+// pressed again; what was deleted before stays deleted.
+//
+// The cameras' lock is held only to check and to take the stub off, not
+// while Frigate deletes (minutes for weeks of recordings): adding,
+// changing and removing cameras go on meanwhile; a camera added with the
+// ID being purged is refused until the purge is over (it would take the
+// recordings back that are being deleted).
+func (m *Manager) PurgeDeletedCamera(ctx context.Context, id string) error {
+	base, err := m.beginPurge(id)
+	if err != nil {
+		return err
+	}
+	defer m.endPurge(id)
+	return m.purge(ctx, base, id)
+}
+
+// StartPurge checks like PurgeDeletedCamera and then deletes in the
+// background (owner 13.11.2026: weeks of recordings take minutes – a
+// closed window or a phone going to sleep must not stop it halfway). The
+// camera is listed with purging: true until it is gone; a failure is told
+// to the administrators (nvr_purge_failed) and leaves the stub.
+func (m *Manager) StartPurge(id string) error {
+	base, err := m.beginPurge(id)
+	if err != nil {
+		return err
+	}
+	name := id
+	if d, ok := m.DeletedCamera(id); ok {
+		name = d.Name
+	}
+	go func() {
+		defer m.endPurge(id)
+		ctx, cancel := context.WithTimeout(context.Background(), purgeLimit)
+		defer cancel()
+		if err := m.purge(ctx, base, id); err != nil {
+			slog.Warn("NVR: recordings of a removed camera not deleted", "camera", id, "err", err)
+			m.notify("warning", "nvr_purge_failed", name)
+		}
+	}()
+	return nil
+}
+
+// purgeLimit bounds a purge in the background.
+const purgeLimit = time.Hour
+
+// ErrPurgeRunning: the recordings of this removed camera are being deleted.
+var ErrPurgeRunning = errors.New("nvr: the recordings of this camera are being deleted")
+
+// beginPurge checks that id is a removed camera with recordings, Frigate
+// runs and no purge of it runs, and marks it as being purged.
+func (m *Manager) beginPurge(id string) (string, error) {
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
+	if _, ok := m.DeletedCamera(id); !ok {
+		return "", ErrNotFound
+	}
+	base, err := m.base()
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.rt.purging[id] {
+		return "", ErrPurgeRunning
+	}
+	if m.rt.purging == nil {
+		m.rt.purging = map[string]bool{}
+	}
+	m.rt.purging[id] = true
+	return base, nil
+}
+
+func (m *Manager) endPurge(id string) {
+	m.mu.Lock()
+	delete(m.rt.purging, id)
+	m.mu.Unlock()
+}
+
+// Purging tells whether the recordings of a removed camera are being deleted.
+func (m *Manager) Purging(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.rt.purging[id]
+}
+
+// purge does the deleting of PurgeDeletedCamera.
+func (m *Manager) purge(ctx context.Context, base, id string) error {
+	// In steps of purgeStep from the oldest recording on, so that no single
+	// answer of Frigate takes long (it deletes file by file).
+	from, end := m.purgeFrom(ctx, id), m.now().Add(time.Hour).Unix()
+	only := url.Values{"cameras": {id}}
+	for start := from; start < end; start += int64(purgeStep / time.Second) {
+		path := "/api/recordings/start/" + strconv.FormatInt(start, 10) + "/end/" + strconv.FormatInt(min(start+int64(purgeStep/time.Second), end), 10)
+		if err := m.frigate.call(ctx, http.MethodDelete, base, path, only, nil, nil); err != nil {
+			return fmt.Errorf("nvr: recordings of the removed camera not deleted: %w", err)
+		}
+	}
+	err := m.frigate.callLong(ctx, http.MethodDelete, base, "/api/cameras/"+url.PathEscape(id), url.Values{"delete_exports": {"false"}}, nil, nil)
+	// 404: Frigate runs without the stub (it was removed already).
+	if err != nil && frigateStatus(err) != http.StatusNotFound {
+		return fmt.Errorf("nvr: events of the removed camera not deleted: %w", err)
+	}
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
+	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
+		return slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id })
+	}); err != nil {
+		return fmt.Errorf("nvr: removed camera not taken off the stick: %w", err)
+	}
+	slog.Info("NVR: recordings of a removed camera deleted", "camera", id)
+	return nil
+}
+
+// purgeStep is the stretch of recordings one call of PurgeDeletedCamera
+// deletes: six hours of a camera recording all the time are about 2000
+// files.
+const purgeStep = 6 * time.Hour
+
+// purgeFrom is where the recordings of a deleted camera begin: the oldest
+// hour Frigate lists, at the latest its days before it was deleted (and
+// two more for recordings older than its days that Frigate had not
+// cleaned yet).
+func (m *Manager) purgeFrom(ctx context.Context, id string) int64 {
+	d, _ := m.DeletedCamera(id)
+	from := d.DeletedAt.Add(-time.Duration(d.RetainDays+2) * 24 * time.Hour).Unix()
+	if days, err := m.RecordingsSummary(ctx, id); err == nil {
+		for _, day := range days {
+			for _, h := range day.Hours {
+				from = min(from, h.Start)
+			}
+		}
+	}
+	return from - 3600
 }
 
 // recordedCamera tells whether id has recordings to show: a camera, or a

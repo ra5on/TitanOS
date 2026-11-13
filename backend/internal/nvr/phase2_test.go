@@ -598,17 +598,22 @@ func TestPTZ(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// More than ten a second from one account are refused; another
-	// account is not held up by it.
+	// More than ten movements a second from one account are refused;
+	// another account is not held up by it. A stop always goes through
+	// (review PLAN 85-4: refused, the camera turned on until the
+	// automatic stop).
 	time.Sleep(1100 * time.Millisecond)
 	limited := 0
 	for range 15 {
-		if errors.Is(r.m.PTZCommand(ctx, "anna", "garten", "stop", ""), ErrRateLimited) {
+		if errors.Is(r.m.PTZCommand(ctx, "anna", "garten", "move_left", ""), ErrRateLimited) {
 			limited++
 		}
 	}
 	if limited != 5 {
 		t.Errorf("%d of 15 refused", limited)
+	}
+	if err := r.m.PTZCommand(ctx, "anna", "garten", "stop", ""); err != nil {
+		t.Errorf("stop after the limit: %v", err)
 	}
 	if err := r.m.PTZCommand(ctx, "ben", "garten", "stop", ""); err != nil {
 		t.Errorf("ben: %v", err)

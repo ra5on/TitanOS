@@ -4,7 +4,7 @@
 	// each opens full screen with a way back (PhoneBar). PLAN 79-10: the bar
 	// starts with the button "Menü" and the search next to it; the menu
 	// (Launcher.svelte, the same as on the desktop) opens across the width.
-	// The account's avatar is gone: account, lock, log out and power are in
+	// The account's avatar is gone: account, log out and power are in
 	// the menu.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -16,7 +16,6 @@
 	import { system } from '../system.svelte.ts';
 	import { storage } from '../storage.svelte.ts';
 	import { formatPercent } from '../format.ts';
-	import { lock } from '../lock.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import Launcher from './Launcher.svelte';
 	import PowerDialog from '../components/PowerDialog.svelte';
@@ -159,10 +158,6 @@
 			onpower={(action) => {
 				menu = false;
 				power = action;
-			}}
-			onlock={() => {
-				menu = false;
-				void lock();
 			}}
 		/>
 	{/if}

@@ -118,7 +118,7 @@ func (r *noticeRig) event(camera, label, subLabel, plate string) {
 
 func (r *noticeRig) offline(camera string) {
 	c, _ := r.m.Camera(camera)
-	r.m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, r.m.now())
+	r.m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, "", r.m.now())
 }
 
 func users(targets []Target) []string {

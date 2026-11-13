@@ -231,6 +231,16 @@ func frigateStatus(err error) int {
 // answer into out (nil: the answer is dropped). An answer of 400 and more
 // is a *frigateError with Frigate's message.
 func (f *frigate) call(ctx context.Context, method, base, path string, query url.Values, body, out any) error {
+	return f.callWith(f.http, ctx, method, base, path, query, body, out)
+}
+
+// callLong is call without the client's 15 s: for work of Frigate that
+// can take minutes (deleting all of a camera); ctx bounds it.
+func (f *frigate) callLong(ctx context.Context, method, base, path string, query url.Values, body, out any) error {
+	return f.callWith(f.stream, ctx, method, base, path, query, body, out)
+}
+
+func (f *frigate) callWith(client *http.Client, ctx context.Context, method, base, path string, query url.Values, body, out any) error {
 	if base == "" {
 		return ErrNotRunning
 	}
@@ -253,7 +263,7 @@ func (f *frigate) call(ctx context.Context, method, base, path string, query url
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	res, err := f.http.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return withoutURL(err)
 	}

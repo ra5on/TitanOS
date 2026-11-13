@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -191,9 +190,10 @@ func (m *Manager) owns(owner string, record exportRecord) bool {
 	return record.Created > 0 && record.Created >= float64(account.Created.Unix())
 }
 
-// exportName checks the name of an export.
+// exportName checks the name of an export: up to 80 characters (a
+// camera's name has 64; the default name adds the time to it).
 func exportName(name string) bool {
-	return validName(name) && utf8.RuneCountInString(name) <= 80
+	return validText(name, 80)
 }
 
 // frigateExport is an export as /api/exports gives it.
@@ -226,7 +226,14 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 		return Export{}, invalid("from/to: at most 24 hours")
 	}
 	if name == "" {
-		name = fmt.Sprintf("%s %s", cameraName, time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04"))
+		// Camera name and time; a long camera name is shortened to fit 80
+		// (it failed for names over 47 characters, review PLAN 85-4).
+		when := time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04")
+		short := []rune(cameraName)
+		if most := 80 - 1 - len(when); len(short) > most {
+			short = short[:most]
+		}
+		name = strings.TrimSpace(string(short)) + " " + when
 	}
 	if !exportName(name) {
 		return Export{}, invalid("name")
@@ -312,9 +319,13 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		}
 		add(Export{ID: j.ID, Camera: j.Camera, Name: j.Name, Created: float64(m.now().Unix()), State: ExportRunning})
 	}
-	// Exports TitanOS started that Frigate lists nowhere: failed (Frigate
-	// forgets a failed job after a while: the record keeps it, and
-	// Frigate is asked once), or gone behind its back (the record goes).
+	// Exports TitanOS started that Frigate lists nowhere: of a camera
+	// Frigate no longer runs (its /api/exports lists only the cameras of
+	// its config: a removed camera whose stub expired or was purged, PLAN
+	// 85-3 – the export itself is still there and asked for by its ID),
+	// failed (Frigate forgets a failed job after a while: the record keeps
+	// it, and Frigate is asked once), or gone behind its back (the record
+	// goes).
 	var gone []string
 	failed := map[string]Export{}
 	for id, record := range records {
@@ -327,6 +338,13 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		}
 		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner}
 		if !record.Failed {
+			var stored frigateExport
+			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/exports/"+url.PathEscape(id), nil, nil, &stored); err == nil && stored.ID == id && !stored.InProgress {
+				kept := Export{ID: id, Camera: stored.Camera, Name: stored.Name, Created: stored.Date, State: ExportDone, file: path.Base(stored.VideoPath), thumb: stored.ThumbPath}
+				kept.SizeBytes = m.exportSize(ctx, base, kept)
+				add(kept)
+				continue
+			}
 			var job frigateJob
 			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/jobs/export/"+url.PathEscape(id), nil, nil, &job); err != nil {
 				if frigateStatus(err) == http.StatusNotFound {

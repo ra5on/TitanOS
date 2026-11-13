@@ -51,6 +51,13 @@ type Notice struct {
 	// Targets are the recipients that may get the message now, each with
 	// its ways (not Legacy). Empty is nobody.
 	Targets []Target
+	// Event is the ID of the event the message is about ("" for "Kamera
+	// offline"): a tap on the push opens it (PLAN 82-5).
+	Event string
+	// HAUnknown says the camera's condition on Home Assistant could not be
+	// checked (not reachable, state unknown): the message goes out anyway
+	// and says so (PLAN 83).
+	HAUnknown bool
 }
 
 // Target is one account a Notice goes to.
@@ -71,21 +78,42 @@ type noticeState struct {
 	// Home Assistant), and what it was.
 	seen     map[string]time.Time
 	lastText map[string]string
+	// since is when this titand routed its first event.
+	since time.Time
 }
 
 // routeEvent decides what an event of the feed is worth telling: its
-// object when the event begins, a plate or a recognised face once per
-// event when Frigate has read it.
+// object once it moved, a plate or a recognised face once per event when
+// Frigate has read it.
+//
+// An object that never moved is not told (as Frigate makes no review
+// item of it): Frigate starts tracking anew with every restart (a camera
+// changed, an update), and a parked car came as a new "Fahrzeug" each
+// time (review PLAN 85-4). Events that began well before this titand
+// started were told by the one before it.
 func (m *Manager) routeEvent(e Event) {
 	c, ok := m.Camera(e.Camera)
 	if !ok {
 		return
 	}
 	now := m.now()
+	m.mu.Lock()
+	if m.rt.notices.since.IsZero() {
+		m.rt.notices.since = now
+	}
+	earlier := e.Start > 0 && e.Start < float64(m.rt.notices.since.Add(-time.Minute).Unix())
+	m.mu.Unlock()
+	if e.stood || earlier {
+		// Seen for Home Assistant all the same: the car is there.
+		if kind := kindOf(e.Label); kind != "" {
+			m.noteSeen(c.ID, kind, e.Label, now)
+		}
+		return
+	}
 	if kind := kindOf(e.Label); kind != "" {
 		m.noteSeen(c.ID, kind, e.Label, now)
 		if slices.Contains(c.Notify.Kinds, e.Label) && m.once(e.ID, kind, now) {
-			m.report(c, kind, "nvr_event_"+kind, "info", c.Name, now)
+			m.report(c, kind, "nvr_event_"+kind, "info", c.Name, e.ID, now)
 		}
 	}
 	if e.Plate != "" {
@@ -96,13 +124,13 @@ func (m *Manager) routeEvent(e Event) {
 			if e.SubLabel != "" && e.Label != "person" {
 				text = e.SubLabel + " (" + e.Plate + ")"
 			}
-			m.report(c, KindPlate, "nvr_event_plate", "info", text+" · "+c.Name, now)
+			m.report(c, KindPlate, "nvr_event_plate", "info", text+" · "+c.Name, e.ID, now)
 		}
 	}
 	if e.Label == "person" && e.SubLabel != "" {
 		m.noteSeen(c.ID, KindFace, e.SubLabel, now)
 		if slices.Contains(c.Notify.Kinds, KindFace) && m.once(e.ID, KindFace, now) {
-			m.report(c, KindFace, "nvr_event_face_known", "info", e.SubLabel+" · "+c.Name, now)
+			m.report(c, KindFace, "nvr_event_face_known", "info", e.SubLabel+" · "+c.Name, e.ID, now)
 		}
 	}
 }
@@ -149,8 +177,9 @@ func (m *Manager) noteSeen(camera, kind, text string, now time.Time) {
 //   - or the same kind was reported for this camera within its pause.
 //
 // The checks run in this order: a message held back by the switch, the
-// window or the recipients does not start the pause.
-func (m *Manager) report(c Camera, kind, message, severity, subject string, now time.Time) {
+// window, the condition on Home Assistant or the recipients does not start
+// the pause.
+func (m *Manager) report(c Camera, kind, message, severity, subject, event string, now time.Time) {
 	m.mu.Lock()
 	off := m.settings.NotifyOff
 	m.mu.Unlock()
@@ -161,7 +190,15 @@ func (m *Manager) report(c Camera, kind, message, severity, subject string, now 
 	if kind != KindOffline && !n.Window.Open(now.In(m.zone())) {
 		return
 	}
-	notice := Notice{Kind: kind, Message: message, Severity: severity, Subject: subject, Camera: c.ID, Agent: n.Agent}
+	haUnknown := false
+	if kind != KindOffline && n.HA != nil {
+		allow, unknown := m.haAllows(*n.HA)
+		if !allow {
+			return
+		}
+		haUnknown = unknown
+	}
+	notice := Notice{Kind: kind, Message: message, Severity: severity, Subject: subject, Camera: c.ID, Agent: n.Agent, Event: event, HAUnknown: haUnknown}
 	if n.legacyWays() {
 		if !n.Titan && !n.Push && !n.Email && !n.Agent {
 			return
@@ -189,6 +226,43 @@ func (m *Manager) report(c Camera, kind, message, severity, subject string, now 
 	if m.Route != nil {
 		m.Route(notice)
 	}
+}
+
+// haUnknownStates are states Home Assistant gives an entity it cannot
+// tell: they count as not known, not as a state that was chosen or not.
+var haUnknownStates = []string{"unavailable", "unknown"}
+
+// haAllows checks a camera's condition on Home Assistant with the states
+// the watcher knows now (never asking Home Assistant on the way of an
+// event). A rule whose state is not known can neither hold a message back
+// nor let it through on its own: if the known rules do not decide, the
+// message goes out with unknown set (owner 13.11.2026: "trotzdem melden").
+func (m *Manager) haAllows(c HACondition) (allow, unknown bool) {
+	holds, fails, missing := 0, 0, 0
+	for _, r := range c.Rules {
+		state, known := "", false
+		if m.HAState != nil {
+			state, known = m.HAState(r.Connection, r.Entity)
+		}
+		switch {
+		case !known || slices.Contains(haUnknownStates, state):
+			missing++
+		case slices.Contains(r.States, state):
+			holds++
+		default:
+			fails++
+		}
+	}
+	if c.Mode == HAModeAny {
+		if holds > 0 {
+			return true, false
+		}
+		return missing > 0, missing > 0
+	}
+	if fails > 0 {
+		return false, false
+	}
+	return true, missing > 0
 }
 
 // HAHold is how long a kind counts as "on" for Home Assistant after it

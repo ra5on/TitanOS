@@ -60,6 +60,7 @@ func (a nvrArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}", g.user(a.handleCamera))
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}", g.admin(a.handleCameraSet))
 	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}", g.admin(a.handleCameraRemove))
+	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}/recordings", g.admin(a.handleRemovedPurge))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot.jpg", g.user(a.handleSnapshot))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", g.user(a.handleLive))
 	// Next to the apps and shares of an account (Konten und Zugang › Nutzer).
@@ -141,6 +142,7 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrRecipientUnknown, http.StatusBadRequest, "nvr_recipient_invalid", "a chosen recipient does not exist or is locked"},
 		{nvr.ErrRecipientNoRight, http.StatusBadRequest, "nvr_recipient_no_right", "a chosen recipient may not see this camera"},
 		{nvr.ErrRecipientBell, http.StatusBadRequest, "nvr_recipient_bell", "only owners and administrators have a bell"},
+		{nvr.ErrPurgeRunning, http.StatusConflict, "nvr_purge_running", "the recordings of this camera are being deleted"},
 	} {
 		if errors.Is(err, known.err) {
 			writeError(w, known.status, known.code, known.message)
@@ -265,6 +267,30 @@ func (c nvrConfirmations) options() nvr.SetOptions {
 	return nvr.SetOptions{EnableDocker: c.EnableDocker, ConfirmSleepingVolume: c.ConfirmSleepingVolume}
 }
 
+// nvrSettingsRequest is a change of the settings, decoded over the stored
+// ones: fields left out stay.
+type nvrSettingsRequest struct {
+	nvrSettingsView
+	nvrConfirmations
+}
+
+// UnmarshalJSON lets known plates in the request replace the stored list
+// as a whole, not entry by entry over the stored ones (an entry without
+// its name took the name that stood there, review PLAN 85-4).
+func (req *nvrSettingsRequest) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Plates json.RawMessage `json:"plates"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if probe.Plates != nil {
+		req.Plates = nil
+	}
+	type plain nvrSettingsRequest
+	return json.Unmarshal(data, (*plain)(req))
+}
+
 // handleSettingsSet stores {enabled, volume, detector: {kind}, storage:
 // {limitGB}, privacyNoticeDismissed, rtspOut, plates, notifyOff, decoder};
 // fields left out stay.
@@ -273,10 +299,7 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := a.nvr.Settings()
-	req := struct {
-		nvrSettingsView
-		nvrConfirmations
-	}{nvrSettingsView: settingsView(current)}
+	req := nvrSettingsRequest{nvrSettingsView: settingsView(current)}
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -397,7 +420,9 @@ func (a nvrArea) handleCameras(w http.ResponseWriter, r *http.Request) {
 		}
 		// Deleted cameras whose recordings are kept, after the others.
 		for _, d := range a.nvr.DeletedCameras() {
-			out = append(out, d.View())
+			view := d.View()
+			view.Purging = a.nvr.Purging(d.ID)
+			out = append(out, view)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"cameras": out, "objects": nvr.AllowedObjects()})
 		return
@@ -451,14 +476,19 @@ type nvrCameraRequest struct {
 	recipientsNull bool
 }
 
-// UnmarshalJSON decodes a request over the stored camera. Recipients in
-// the request replace the stored list as a whole: encoding/json would
+// UnmarshalJSON decodes a request over the stored camera. Lists of
+// entries in the request – recipients, the rules of the condition on
+// Home Assistant – replace the stored list as a whole: encoding/json would
 // decode them over the stored entries by position, so that an entry left
-// partly out took the ways of whoever stood there before.
+// partly out took the values of whatever stood there before (for rules
+// review PLAN 85-4).
 func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	var probe struct {
 		Notify *struct {
 			Recipients json.RawMessage `json:"recipients"`
+			HA         *struct {
+				Rules json.RawMessage `json:"rules"`
+			} `json:"ha"`
 		} `json:"notify"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
@@ -467,6 +497,12 @@ func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	if probe.Notify != nil && probe.Notify.Recipients != nil {
 		req.Notify.Recipients = nil
 		req.recipientsNull = string(probe.Notify.Recipients) == "null"
+	}
+	if probe.Notify != nil && probe.Notify.HA != nil && probe.Notify.HA.Rules != nil && req.Notify.HA != nil {
+		// A copy of the condition: the stored camera's is not written into.
+		ha := *req.Notify.HA
+		ha.Rules = nil
+		req.Notify.HA = &ha
 	}
 	type plain nvrCameraRequest
 	return json.Unmarshal(data, (*plain)(req))
@@ -564,6 +600,27 @@ func (a nvrArea) handleCameraRemove(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, id)
 	slog.Info("NVR camera removed", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRemovedPurge starts deleting the recordings, events and pictures
+// of a removed camera now instead of when its days are over (owner
+// 13.11.2026); its exports stay. Only for removed cameras: a camera
+// that exists answers 404. The NAS deletes in the background (weeks of
+// recordings take minutes; a closed window must not stop it): 202, the
+// camera is listed with purging: true until it is gone; a failure goes to
+// the bell. Frigate restarts once afterwards.
+func (a nvrArea) handleRemovedPurge(w http.ResponseWriter, r *http.Request) {
+	if !a.available(w) {
+		return
+	}
+	id := r.PathValue("id")
+	if err := a.nvr.StartPurge(id); err != nil {
+		writeNVRError(w, err)
+		return
+	}
+	noteTarget(r, id)
+	slog.Info("NVR: deleting a removed camera's recordings", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // handleDiscover searches the home network for ONVIF cameras (three

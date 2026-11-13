@@ -125,7 +125,12 @@
 	});
 	// "Namen und Kennzeichen" (PLAN 82-3) belong to the events: only with
 	// "Aufnahmen"; the NAS drops them with the recordings.
-	async function saveCamera(id: string, right: 'live' | 'recordings' | 'names', on: boolean) {
+	async function saveCamera(
+		id: string,
+		right: 'live' | 'recordings' | 'names',
+		input: HTMLInputElement,
+	) {
+		const on = input.checked;
 		const row = cams?.cameras.find((c) => c.id === id);
 		if (!row) return;
 		camsBusy = true;
@@ -142,6 +147,9 @@
 			if (Array.isArray(next?.cameras)) cams = next;
 		} catch (err) {
 			camsError = apiErrorText(err);
+			// The NAS kept the right as it was (e.g. 503 nvr_rights_unreadable):
+			// so does the switch. Its state is unchanged, Svelte would not reset it.
+			input.checked = !on;
 		} finally {
 			camsBusy = false;
 		}
@@ -372,7 +380,7 @@
 									checked={c.live}
 									disabled={camsBusy || !(manageable || admin)}
 									aria-label={t('nvr.rights.liveFor', { camera: c.name })}
-									onchange={(event) => saveCamera(c.id, 'live', event.currentTarget.checked)}
+									onchange={(event) => saveCamera(c.id, 'live', event.currentTarget)}
 								/><span>{t('nvr.rights.live')}</span></label
 							>
 							<label
@@ -383,7 +391,7 @@
 									checked={c.recordings}
 									disabled={camsBusy || !(manageable || admin)}
 									aria-label={t('nvr.rights.recordingsFor', { camera: c.name })}
-									onchange={(event) => saveCamera(c.id, 'recordings', event.currentTarget.checked)}
+									onchange={(event) => saveCamera(c.id, 'recordings', event.currentTarget)}
 								/><span>{t('nvr.rights.recordings')}</span></label
 							>
 							<label
@@ -394,7 +402,7 @@
 									checked={c.recordings && !!c.names}
 									disabled={camsBusy || !(manageable || admin) || !c.recordings}
 									aria-label={t('nvr.rights.namesFor', { camera: c.name })}
-									onchange={(event) => saveCamera(c.id, 'names', event.currentTarget.checked)}
+									onchange={(event) => saveCamera(c.id, 'names', event.currentTarget)}
 								/><span>{t('nvr.rights.names')}</span></label
 							>
 						</span>

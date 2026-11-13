@@ -14,7 +14,7 @@ export type QuickAction = {
 	icon: string;
 	/** POST route, or a local step ("lock", "logout", "restart", "shutdown"). */
 	post?: string;
-	local?: 'lock' | 'logout' | 'restart' | 'shutdown';
+	local?: 'logout' | 'restart' | 'shutdown';
 	/** Ask before doing it (stops, shuts down, logs out). */
 	confirm?: boolean;
 };
@@ -27,7 +27,6 @@ export function quickActions(
 	data: { containers: DockerContainer[]; vms: VM[]; backups: string[] },
 ): QuickAction[] {
 	const out: QuickAction[] = [
-		{ id: 'lock', label: t('quick.lock'), words: 'sperren lock', icon: 'lock', local: 'lock' },
 		{
 			id: 'logout',
 			label: t('quick.logout'),

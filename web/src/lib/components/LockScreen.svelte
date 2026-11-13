@@ -25,7 +25,7 @@
 		tasks = 0,
 		note = '',
 	}: {
-		/** CSS background of the screen (the desktop's picture); a calm gradient without. */
+		/** CSS background of the screen (the login page's or the desktop's picture); a calm gradient without. */
 		background?: string;
 		/** Tasks that keep running, for the quiet line at the bottom. */
 		tasks?: number;

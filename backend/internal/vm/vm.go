@@ -176,6 +176,11 @@ type Status struct {
 	// IOError says QEMU paused the VM after a read or write error of one
 	// of its disks on the NAS; "resume" lets it go on once that is fixed.
 	IOError bool `json:"ioError,omitempty"`
+	// BackupHeld says the VM does not start until its disks are repaired
+	// after an interrupted backup (ErrDiskBackupRecord, PLAN 80-2): known
+	// from the look at its volume after a boot, a refused start or a
+	// repair, without reading the volume for the list.
+	BackupHeld bool `json:"backupHeld,omitempty"`
 	// Schedule says when the power schedule starts and stops the VM next.
 	Schedule *PowerView `json:"schedule,omitempty"`
 }
@@ -252,15 +257,19 @@ type Manager struct {
 	// interrupted backup left (diskbackup.go).
 	diskBackups       map[string]*DiskBackup
 	diskBackupChecked map[string]bool
-	diskPlans         map[string]cachedPlan
-	snapshotSpaceMu   sync.Mutex
-	snapshotSpace     map[uint64]uint64
-	createMu          sync.Mutex
-	mu                sync.Mutex
-	loaded            bool
-	vms               map[string]VM
-	samples           map[string]*sample
-	autostarted       map[string]bool
+	// diskHeld are the VMs (by UUID) held after an interrupted backup
+	// until someone repairs their disks (ErrDiskBackupRecord), as the last
+	// look found them; the list shows it (PLAN 80-2).
+	diskHeld        map[string]bool
+	diskPlans       map[string]cachedPlan
+	snapshotSpaceMu sync.Mutex
+	snapshotSpace   map[uint64]uint64
+	createMu        sync.Mutex
+	mu              sync.Mutex
+	loaded          bool
+	vms             map[string]VM
+	samples         map[string]*sample
+	autostarted     map[string]bool
 	// ioPaused are the running VMs paused after a disk error; ioChecked
 	// is when that was last looked at.
 	ioPaused  map[string]bool
@@ -461,7 +470,7 @@ func (m *Manager) List(mounted []string) []Status {
 	defer m.mu.Unlock()
 	list := make([]Status, 0, len(m.vms))
 	for name, vm := range m.vms {
-		status := Status{VM: vm, State: "stopped", Available: m.available(vm, mounted), Schedule: m.powerView(vm, loc, now)}
+		status := Status{VM: vm, State: "stopped", Available: m.available(vm, mounted), Schedule: m.powerView(vm, loc, now), BackupHeld: m.diskHeld[vm.UUID]}
 		if job := m.jobs[name]; job != nil {
 			copied := *job
 			status.Job = &copied

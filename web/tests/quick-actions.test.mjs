@@ -15,10 +15,11 @@ const data = {
 	backups: ['nightly'],
 };
 
-test('an account without admin rights gets only lock and log out', () => {
+// PLAN 84-3: no "Sperren" any more – it did what "Abmelden" does.
+test('an account without admin rights gets only log out', () => {
 	assert.deepEqual(
 		quickActions(t, false, data).map((a) => a.id),
-		['lock', 'logout'],
+		['logout'],
 	);
 });
 

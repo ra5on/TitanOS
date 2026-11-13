@@ -150,13 +150,13 @@ cameras:
         post_capture: 5
         retain:
           days: 14
-          mode: active_objects
+          mode: all
       detections:
         pre_capture: 5
         post_capture: 5
         retain:
           days: 14
-          mode: active_objects
+          mode: all
     snapshots:
       enabled: true
       retain:

@@ -37,8 +37,16 @@ type Transition struct {
 const keepTransitions = 20
 
 type watchState struct {
-	mu               sync.Mutex
-	entities         []string
+	mu sync.Mutex
+	// entities are what is watched: the union of sources, each a part of
+	// TitanOS with its own list (the agent's automations, the NVR's
+	// conditions), so that one does not drop the other's (PLAN 83).
+	entities []string
+	sources  map[string][]string
+	// current is the last known state of each watched entity while the
+	// connection stands: read once when it opens, then every change. Empty
+	// while not connected: a state that may be old counts as unknown.
+	current          map[string]string
 	events           map[string][]func(json.RawMessage)
 	transitions      map[string][]Transition
 	boot             int64
@@ -59,6 +67,8 @@ func (w *watchState) init() {
 	if w.transitions == nil {
 		w.transitions = map[string][]Transition{}
 		w.events = map[string][]func(json.RawMessage){}
+		w.sources = map[string][]string{}
+		w.current = map[string]string{}
 		w.boot = time.Now().UnixNano()
 		w.wake = make(chan struct{})
 	}
@@ -69,17 +79,62 @@ func (w *watchState) changed() {
 	w.wake = make(chan struct{})
 }
 
-// SetWatched sets the entities whose state changes are recorded.
-func (m *Manager) SetWatched(entities []string) {
+// SetWatched sets the entities the agent's automations watch.
+func (m *Manager) SetWatched(entities []string) { m.SetWatchedFor(WatchAgent, entities) }
+
+// Sources of watched entities.
+const (
+	WatchAgent = "agent"
+	WatchNVR   = "nvr"
+)
+
+// SetWatchedFor sets the entities one part of TitanOS watches; the watcher
+// follows all parts' entities together.
+func (m *Manager) SetWatchedFor(source string, entities []string) {
 	entities = slices.Compact(slices.Sorted(slices.Values(slices.DeleteFunc(slices.Clone(entities), func(e string) bool { return !ValidEntity(e) }))))
 	m.watch.mu.Lock()
 	defer m.watch.mu.Unlock()
 	m.watch.init()
-	if slices.Equal(entities, m.watch.entities) {
+	if len(entities) == 0 {
+		delete(m.watch.sources, source)
+	} else {
+		m.watch.sources[source] = entities
+	}
+	var all []string
+	for _, list := range m.watch.sources {
+		all = append(all, list...)
+	}
+	all = slices.Compact(slices.Sorted(slices.Values(all)))
+	if slices.Equal(all, m.watch.entities) {
 		return
 	}
-	m.watch.entities = entities
+	m.watch.entities = all
 	m.watch.changed()
+}
+
+// Current returns the state of a watched entity as Home Assistant has it
+// now; ok is false while the connection is down or the entity was not
+// read yet (or is not watched, or gone in Home Assistant).
+func (m *Manager) Current(entity string) (state string, ok bool) {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	if !m.watch.connected {
+		return "", false
+	}
+	state, ok = m.watch.current[entity]
+	return state, ok
+}
+
+// setCurrent keeps the state of an entity; "" (gone) forgets it.
+func (m *Manager) setCurrent(entity, state string) {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	m.watch.init()
+	if state == "" {
+		delete(m.watch.current, entity)
+		return
+	}
+	m.watch.current[entity] = state
 }
 
 // OnEvent calls handle for every Home Assistant event of a type, e.g.
@@ -195,6 +250,10 @@ func (m *Manager) setConnected(connected bool, lastError string) {
 	if !connected && m.watch.connected {
 		m.watch.lastDisconnected = time.Now()
 	}
+	if !connected {
+		// What was read over the connection that ended may be old by now.
+		clear(m.watch.current)
+	}
 	m.watch.connected, m.watch.lastError = connected, lastError
 }
 
@@ -232,6 +291,17 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 		}
 	}
 	m.setConnected(true, "")
+	// The states as they are now, read after subscribing: a change in
+	// between comes as an event after this and wins (PLAN 83). An entity
+	// that cannot be read stays unknown.
+	for _, entity := range entities {
+		readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		state, err := m.State(readCtx, entity)
+		cancel()
+		if err == nil {
+			m.setCurrent(entity, state.State)
+		}
+	}
 
 	// Reading happens on its own goroutine; this one waits for changes and
 	// keeps the connection alive.
@@ -313,6 +383,9 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 					}
 					if tr.ToState != nil {
 						to = tr.ToState.State
+					}
+					if tr.EntityID != "" {
+						m.setCurrent(tr.EntityID, to)
 					}
 					// Only real state changes, not attribute updates.
 					if tr.EntityID != "" && from != to {

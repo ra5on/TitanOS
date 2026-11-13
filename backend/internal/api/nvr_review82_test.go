@@ -106,7 +106,7 @@ func TestReview82DeletedAccountLeavesTheBell(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := ts.server.opts.Notify
-	n.NotifyTo(notify.Info, "nvr_event_face_known", "Anna · Haustür", []notify.Target{{User: "bob", Bell: true}, {User: "alex", Bell: true}}, false, "haustuer")
+	n.NotifyTo(notify.Info, "nvr_event_face_known", "Anna · Haustür", []notify.Target{{User: "bob", Bell: true}, {User: "alex", Bell: true}}, false, notify.About{Ref: "haustuer"})
 	if res, body := ts.request("DELETE", "/api/v1/users/bob", nil); res.StatusCode >= 300 {
 		t.Fatalf("delete: %d %s", res.StatusCode, body)
 	}
@@ -218,7 +218,7 @@ func TestReview82OlderBellHiddenFromNewAccount(t *testing.T) {
 		}
 		return time.Time{}
 	}
-	n.NotifyTo(notify.Info, "nvr_event_face_known", "Anna · Haustür", []notify.Target{{User: "bob", Bell: true}}, false, "haustuer")
+	n.NotifyTo(notify.Info, "nvr_event_face_known", "Anna · Haustür", []notify.Target{{User: "bob", Bell: true}}, false, notify.About{Ref: "haustuer"})
 	if list := n.MessagesFor("bob"); len(list) != 0 {
 		t.Errorf("an account made after the message sees it: %+v", list)
 	}

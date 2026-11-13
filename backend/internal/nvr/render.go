@@ -527,7 +527,11 @@ func keepBlock(days int) ymap {
 //
 //	continuous: everything is kept for RetainDays.
 //	motion:     only segments with motion are kept.
-//	events:     only segments in which a tracked object was active.
+//	events:     only segments that touch an event, with the seconds before
+//	            and after it ("all" for alerts and detections: with
+//	            "active_objects" Frigate dropped every segment without a
+//	            moving object, so the seconds before and after were lost and
+//	            a person standing still dropped out, review PLAN 85-4).
 //	off:        nothing is recorded; what was is kept for RetainDays.
 //
 // Alerts and detections (Frigate's two classes of events) get the same
@@ -536,7 +540,7 @@ func recordBlock(r Record) ymap {
 	if r.Mode == RecordOff {
 		return keepBlock(r.RetainDays)
 	}
-	continuous, motion, mode := 0, 0, "active_objects"
+	continuous, motion, mode := 0, 0, "all"
 	switch r.Mode {
 	case RecordContinuous:
 		continuous, motion, mode = r.RetainDays, r.RetainDays, "all"

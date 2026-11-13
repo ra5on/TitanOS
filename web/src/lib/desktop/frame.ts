@@ -36,6 +36,12 @@ export type FrameMessage =
 	| { type: 'titanos-bar'; load: boolean }
 	/** A window switches CPU and RAM in the top bar on or off; the desktop saves it. */
 	| { type: 'titanos-bar-set'; load: boolean }
+	/** PLAN 84-2, Settings › Access: a window asks for the automatic lock (answer: titanos-lock). */
+	| { type: 'titanos-lock-get' }
+	/** The answer, and after every change on the desktop: minutes, 0 = never. */
+	| { type: 'titanos-lock'; minutes: number; phone: number }
+	/** A window changes the automatic lock; the desktop checks and saves it. */
+	| { type: 'titanos-lock-set'; minutes: number; phone: number }
 	/** PLAN 79-7, NVR live view: a window asks for the account's arrangement (answer: titanos-nvr). */
 	| { type: 'titanos-nvr-get' }
 	/** The answer; the page checks it (nvr/layout.ts). */

@@ -16,6 +16,8 @@
 	import { cameraName, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
 	import { clock, dayClock, labelName, OBJECT_GROUPS } from '#lib/nvr/texts.ts';
 	import type { EventList, NvrEvent } from '#lib/nvr/types.ts';
+	import { attachVod, autoplay } from '#lib/nvr/vod.ts';
+	import { untrack } from 'svelte';
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const admin = $derived(nvrAdmin());
@@ -78,6 +80,9 @@
 	function show(event: NvrEvent) {
 		open = event;
 		detailError = '';
+		// A failure of the event before must not keep the next one from playing.
+		recordingFailed = false;
+		playMuted = false;
 		if (!event.reviewed)
 			api
 				.post<NvrEvent>(`/nvr/events/${encodeURIComponent(event.id)}/reviewed`, { reviewed: true })
@@ -99,6 +104,51 @@
 		});
 	});
 	const eventBase = $derived(open ? `/nvr/events/${encodeURIComponent(open.id)}` : '');
+
+	// PLAN 82-5: an event opened (a tap, a push) plays at once in this
+	// dialog, with sound where the browser allows it. It always plays the
+	// recording around it (HLS, from five seconds before to five seconds
+	// after; a running event up to now), never clip.mp4: Frigate streams the
+	// clip from ffmpeg without a length and ignores Range, so iPhones do not
+	// play it and seeking fails elsewhere (Frigate itself says to use HLS on
+	// iOS). The clip stays for "Ausschnitt herunterladen".
+	let player = $state<HTMLVideoElement>();
+	let playMuted = $state(false);
+	let fromRecording = $state(false);
+	let recordingFailed = $state(false);
+	let stopRecording: (() => void) | null = null;
+	$effect(() => {
+		const e = open;
+		const el = player;
+		if (!e || !el) return;
+		untrack(() => void play(e, el));
+		return () => {
+			stopRecording?.();
+			stopRecording = null;
+		};
+	});
+	async function play(e: NvrEvent, el: HTMLVideoElement) {
+		playMuted = false;
+		fromRecording = !e.hasClip;
+		recordingFailed = false;
+		const start = async () => {
+			playMuted = await autoplay(el);
+		};
+		const from = Math.floor(e.start) - 5;
+		const to = Math.max(from + 30, Math.ceil(e.end ?? Date.now() / 1000) + 5);
+		const src = apiPath(
+			`/nvr/cameras/${encodeURIComponent(e.camera)}/vod/${from}/${to}/master.m3u8`,
+		);
+		el.addEventListener('error', () => (recordingFailed = true), { once: true });
+		const stop = await attachVod(
+			el,
+			src,
+			() => void start(),
+			() => (recordingFailed = true),
+		);
+		if (open?.id === e.id) stopRecording = stop;
+		else stop();
+	}
 
 	let removing = $state(false);
 	let removeBusy = $state(false);
@@ -238,20 +288,26 @@
 		onclose={() => ((open = null), (removing = false))}
 	>
 		<div class="detail">
-			{#if e.hasClip}
+			{#if !recordingFailed}
 				<!-- svelte-ignore a11y_media_has_caption -->
 				<video
+					bind:this={player}
 					controls
 					playsinline
-					preload="metadata"
+					preload="auto"
 					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
-					src={apiPath(`${eventBase}/clip.mp4`)}
 				></video>
 			{:else if e.hasSnapshot}
 				<img src={apiPath(`${eventBase}/snapshot.jpg`)} alt={t('nvr.events.snapshot')} />
 			{:else}
 				<p class="muted">{t('nvr.events.noMedia')}</p>
 			{/if}
+			{#if fromRecording && !recordingFailed}<p class="muted play-note">
+					{t('nvr.events.fromRecording')}
+				</p>{/if}
+			{#if playMuted}<p class="muted play-note" role="status">
+					{t('nvr.events.autoplayMuted')}
+				</p>{/if}
 			<dl>
 				<div>
 					<dt>{t('nvr.events.when')}</dt>
@@ -321,6 +377,9 @@
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
 		min-width: 0;
+	}
+	.play-note {
+		margin: 0;
 	}
 	.links {
 		display: flex;

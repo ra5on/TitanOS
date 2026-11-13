@@ -32,6 +32,7 @@
 		type RecipientsAnswer,
 		type Way,
 	} from './notify.ts';
+	import HAConditionRows from './HAConditionRows.svelte';
 	import Pills from './Pills.svelte';
 	import type { CameraNotify, NotifyRecipient } from './types.ts';
 
@@ -299,6 +300,7 @@
 			{/snippet}
 		</SettingRow>
 	{/if}
+	<HAConditionRows bind:notify {id} />
 </SettingGroup>
 
 <style>

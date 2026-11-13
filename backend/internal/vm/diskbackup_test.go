@@ -1010,6 +1010,19 @@ func TestLeftoverRecordAndDiskOperations(t *testing.T) {
 		if !slices.Contains(told, "vm_backup_undo_failed:ha") {
 			t.Fatalf("nobody was told: %v", told)
 		}
+		// PLAN 80-2: the list shows the hold without another start.
+		held := func() bool {
+			for _, s := range m.List([]string{"data", "fast"}) {
+				if s.Name == "ha" {
+					return s.BackupHeld
+				}
+			}
+			t.Fatal("VM missing from the list")
+			return false
+		}
+		if !held() {
+			t.Fatal("the list does not show the VM as held")
+		}
 		// The repair checks that each overlay builds on its disk.
 		r.backing = map[string]bool{}
 		if err := m.RepairDiskBackup(ctx, "ha"); !errors.Is(err, ErrDiskBackupRecord) || len(overlays(m)) != 2 {
@@ -1024,6 +1037,9 @@ func TestLeftoverRecordAndDiskOperations(t *testing.T) {
 		}
 		if r.ran("qemu-img commit -d -f qcow2") != 2 || len(overlays(m)) != 0 {
 			t.Fatalf("not repaired: %v", r.lines)
+		}
+		if held() {
+			t.Fatal("the list still shows the VM as held after the repair")
 		}
 		if _, err := os.Stat(record(m, vm)); !os.IsNotExist(err) {
 			t.Fatal("unusable record still in the way")

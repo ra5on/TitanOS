@@ -909,7 +909,8 @@ func (m *Manager) setDiskBackupAside(vm VM) error {
 // and ends on the VM page): it is set aside and the VM is free. With
 // overlays there, the VM is held (ErrDiskBackupRecord) until an owner or
 // administrator repairs it (RepairDiskBackup).
-func (m *Manager) finishDiskBackupOf(ctx context.Context, vm VM) error {
+func (m *Manager) finishDiskBackupOf(ctx context.Context, vm VM) (err error) {
+	defer func() { m.noteHeld(vm.UUID, err) }()
 	if _, err := os.Lstat(m.diskBackupRecordPath(vm)); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -947,6 +948,24 @@ func (m *Manager) finishDiskBackupOf(ctx context.Context, vm VM) error {
 	return nil
 }
 
+// noteHeld keeps what the last look at a VM's leftovers of a backup said
+// (PLAN 80-2): held while the record is unusable and overlays lie next to
+// the disks, free once nothing is left. Other errors (busy, undecided)
+// leave it as it was.
+func (m *Manager) noteHeld(uuid string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch {
+	case errors.Is(err, ErrDiskBackupRecord):
+		if m.diskHeld == nil {
+			m.diskHeld = map[string]bool{}
+		}
+		m.diskHeld[uuid] = true
+	case err == nil:
+		delete(m.diskHeld, uuid)
+	}
+}
+
 // RepairDiskBackup is the way out when the record of an interrupted backup
 // is unusable (ErrDiskBackupRecord): asked for by an owner or
 // administrator, it commits back the overlays of backups found next to the
@@ -958,7 +977,7 @@ func (m *Manager) finishDiskBackupOf(ctx context.Context, vm VM) error {
 // it builds on; then it is committed into the image and removed. Anything
 // else is refused and nothing is changed for that disk: the files stay
 // where they are for someone to look at.
-func (m *Manager) RepairDiskBackup(ctx context.Context, name string) error {
+func (m *Manager) RepairDiskBackup(ctx context.Context, name string) (err error) {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -971,6 +990,11 @@ func (m *Manager) RepairDiskBackup(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err == nil {
+			m.noteHeld(vm.UUID, nil)
+		}
+	}()
 	m.mu.Lock()
 	active := m.diskBackups[vm.UUID]
 	m.mu.Unlock()

@@ -39,7 +39,7 @@ async function read(signal?: AbortSignal) {
 			api.get<CameraList>('/nvr/cameras', signal),
 		]);
 		nvr.status = status;
-		const all = [...(list.cameras ?? [])].sort(byOrder);
+		const all = (list.cameras ?? []).map(tidyCamera).sort(byOrder);
 		nvr.cameras = all.filter((c) => !c.deleted);
 		nvr.removed = all.filter((c) => c.deleted);
 		nvr.objects = list.objects ?? [];
@@ -97,4 +97,28 @@ export function unixOf(value: number | string | null | undefined): number | null
 /** The address of a camera's still picture; `tick` makes the browser ask again. */
 export function snapshotPath(id: string, height: number, tick: number): string {
 	return `/nvr/cameras/${encodeURIComponent(id)}/snapshot.jpg?height=${height}&t=${tick}`;
+}
+
+/**
+ * Lists a NAS of 0.79 sends as null for a camera stored by 0.78 (a window
+ * without days, owner 13.11.2026: the camera form failed with 500) become
+ * empty lists, so that no view has to guard each of them.
+ */
+export function tidyCamera(camera: Camera): Camera {
+	const n = camera.notify;
+	return {
+		...camera,
+		...(camera.detect
+			? { detect: { ...camera.detect, objects: camera.detect.objects ?? [] } }
+			: {}),
+		...(n
+			? {
+					notify: {
+						...n,
+						kinds: n.kinds ?? [],
+						...(n.window ? { window: { ...n.window, days: n.window.days ?? [] } } : {}),
+					},
+				}
+			: {}),
+	};
 }

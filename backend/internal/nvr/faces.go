@@ -118,6 +118,20 @@ func (m *Manager) Faces(ctx context.Context) (Faces, error) {
 		}
 	}
 	slices.SortFunc(out.Faces, func(a, b Face) int { return strings.Compare(a.Name, b.Name) })
+	// Frigate writes a guessed name with "_" for "-" into the file's name
+	// (frigate/data_processing/real_time/face.py): "Anna_Lena" is the
+	// known person "Anna-Lena" (review PLAN 85-4).
+	for i, a := range out.Attempts {
+		if a.Guess == "" || slices.ContainsFunc(out.Faces, func(f Face) bool { return f.Name == a.Guess }) {
+			continue
+		}
+		for _, f := range out.Faces {
+			if strings.ReplaceAll(f.Name, "-", "_") == a.Guess {
+				out.Attempts[i].Guess = f.Name
+				break
+			}
+		}
+	}
 	// Newest first.
 	slices.SortFunc(out.Attempts, func(a, b FaceAttempt) int {
 		switch {

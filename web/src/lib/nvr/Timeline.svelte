@@ -47,10 +47,15 @@
 		const box = track.getBoundingClientRect();
 		return from + Math.max(0, Math.min(1, (clientX - box.left) / box.width)) * DAY;
 	}
+	let shownZoom = 0;
+	let lastAt: number | null = null;
+	/** The keys chose a time: show it even after a scroll elsewhere. */
+	let chosen = false;
 	function key(event: KeyboardEvent) {
 		const step = event.shiftKey ? 600 : 30;
 		if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
 			event.preventDefault();
+			chosen = true;
 			onpick(
 				Math.max(
 					from,
@@ -59,13 +64,31 @@
 			);
 		}
 	}
-	// A wider line keeps the playhead in view.
+	// A wider line keeps the playhead in view: after a new zoom, a time chosen
+	// with the keys, a jump of more than a minute ("next event") and when
+	// playback carries the head out of the visible part. Playback alone never
+	// pulls the line back while the user has scrolled elsewhere: then the head
+	// was out of view before this step already (timeupdate comes several
+	// times a second).
 	$effect(() => {
-		void zoom;
-		if (!frame || !track || at === null) return;
-		const x = ((at - from) / DAY) * track.clientWidth;
-		if (x < frame.scrollLeft || x > frame.scrollLeft + frame.clientWidth)
-			frame.scrollLeft = Math.max(0, x - frame.clientWidth / 2);
+		const now = at;
+		const wide = zoom;
+		const box = frame;
+		const line = track;
+		if (!box || !line || now === null) {
+			lastAt = now;
+			return;
+		}
+		const xOf = (time: number) => ((time - from) / DAY) * line.clientWidth;
+		const inView = (x: number) => x >= box.scrollLeft && x <= box.scrollLeft + box.clientWidth;
+		const x = xOf(now);
+		const jumped = lastAt === null || Math.abs(now - lastAt) > 60;
+		const carried = lastAt !== null && inView(xOf(lastAt));
+		if (!inView(x) && (wide !== shownZoom || chosen || jumped || carried))
+			box.scrollLeft = Math.max(0, x - box.clientWidth / 2);
+		shownZoom = wide;
+		lastAt = now;
+		chosen = false;
 	});
 </script>
 

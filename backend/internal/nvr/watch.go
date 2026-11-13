@@ -68,6 +68,10 @@ type cameraRuntime struct {
 // runtime is the state of the watch, guarded by Manager.mu. Only the loop
 // (Run) changes the container; requests set dirty and wake it.
 type runtime struct {
+	// purging are the removed cameras whose recordings are being deleted
+	// (deleted.go).
+	purging map[string]bool
+
 	phase string
 	// dirty: settings, cameras or the device changed; config and
 	// container are compared with what they should be. gen counts the
@@ -1200,7 +1204,7 @@ func (m *Manager) watchCameras(stats frigateStats, now time.Time) {
 	}
 	m.mu.Unlock()
 	for _, c := range report {
-		m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, now)
+		m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, "", now)
 	}
 }
 

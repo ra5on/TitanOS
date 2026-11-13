@@ -155,12 +155,16 @@ func TestNVRPTZNeedsLive(t *testing.T) {
 	}
 	limited := 0
 	for range 20 {
-		if res, body := ts.do(guest, "POST", "/api/v1/nvr/cameras/garten/ptz", map[string]any{"action": "stop"}); res.StatusCode == http.StatusTooManyRequests && errorCode(t, body) == "rate_limited" {
+		if res, body := ts.do(guest, "POST", "/api/v1/nvr/cameras/garten/ptz", map[string]any{"action": "move_left"}); res.StatusCode == http.StatusTooManyRequests && errorCode(t, body) == "rate_limited" {
 			limited++
 		}
 	}
 	if limited == 0 {
 		t.Error("no limit on PTZ commands")
+	}
+	// A stop always goes through (review PLAN 85-4).
+	if res, body := ts.do(guest, "POST", "/api/v1/nvr/cameras/garten/ptz", map[string]any{"action": "stop"}); res.StatusCode >= 300 {
+		t.Errorf("stop after the limit: %d %s", res.StatusCode, body)
 	}
 	// Talking back: the right "live" and a camera set up for it.
 	conn, ctx := liveDial(t, ts, guest, "/nvr/cameras/haustuer/talk")

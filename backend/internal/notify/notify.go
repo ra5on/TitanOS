@@ -75,6 +75,12 @@ type Message struct {
 	// for all other messages. Kept in bell.json; an older titand ignores it
 	// and shows the message to every administrator.
 	To []string `json:"to,omitempty"`
+	// Link is the page of TitanOS the message is about, opened by a tap on
+	// its push (PLAN 82-5: a camera's event); empty is the start page.
+	Link string `json:"link,omitempty"`
+	// Note adds a sentence after the text (NoteHAUnknown); the web UI
+	// shows it in the viewer's language. An older titand ignores both.
+	Note string `json:"note,omitempty"`
 }
 
 // shownTo tells whether the bell of an account shows the message.

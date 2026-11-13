@@ -12,7 +12,15 @@ export type Notice = {
 	/** Title and text as they are sent out, in the language of the settings. */
 	title: string;
 	text: string;
+	/** The page the message is about (a camera's event, PLAN 82-5). */
+	link?: string;
+	/** A sentence after the text, e.g. ha_unknown (PLAN 83). */
+	note?: string;
 };
+
+/** A page of TitanOS a message may open: never another site. */
+export const noticeOwnLink = (notice: Notice) =>
+	notice.link?.startsWith('/') && !notice.link.startsWith('//') ? notice.link : '';
 
 const SEEN_KEY = 'titanos.notifications.seen';
 
@@ -80,8 +88,11 @@ export function markSeen() {
 /** Title and text of a message in the language of whoever looks at it. */
 export function noticeText(notice: Notice): { title: string; text: string } {
 	const fill = (text: string) => text.replaceAll('{subject}', notice.subject);
+	const translated = tOr(`notify.kind.${notice.kind}.text`, '');
+	// The NAS's text carries the note already; a translated one gets it here.
+	const note = translated && notice.note ? tOr(`notify.note.${notice.note}`, '') : '';
 	return {
 		title: fill(tOr(`notify.kind.${notice.kind}.title`, notice.title)),
-		text: fill(tOr(`notify.kind.${notice.kind}.text`, notice.text)),
+		text: translated ? fill(translated) + (note ? ` ${note}` : '') : fill(notice.text),
 	};
 }

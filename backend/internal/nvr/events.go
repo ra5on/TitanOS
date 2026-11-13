@@ -39,6 +39,10 @@ type Event struct {
 	// storage cap leaves the event's recording out where it finds it, but
 	// Frigate's retention in days deletes the recording all the same.
 	Kept bool `json:"kept"`
+	// stood: the object never moved since it was first seen (Frigate's
+	// position_changes is 0; Frigate makes no review item of it,
+	// review/maintainer.py). Unknown counts as moved.
+	stood bool
 }
 
 // eventIDRE is the form of Frigate's event IDs ("1731412345.123456-abc123").
@@ -80,8 +84,11 @@ type frigateEvent struct {
 	TopScore *float64        `json:"top_score"`
 	Score    *float64        `json:"score"`
 	Retain   bool            `json:"retain_indefinitely"`
-	Plate    json.RawMessage `json:"recognized_license_plate"`
-	Data     struct {
+	// PositionChanges counts how often the object moved; 0: it stood still
+	// since it was first seen (a parked car after a restart of Frigate).
+	PositionChanges *int            `json:"position_changes"`
+	Plate           json.RawMessage `json:"recognized_license_plate"`
+	Data            struct {
 		Score    *float64        `json:"score"`
 		TopScore *float64        `json:"top_score"`
 		Plate    json.RawMessage `json:"recognized_license_plate"`
@@ -90,7 +97,7 @@ type frigateEvent struct {
 
 func (e frigateEvent) event() Event {
 	out := Event{ID: e.ID, Camera: e.Camera, Label: clip(e.Label, 40), SubLabel: clip(textOrFirst(e.SubLabel), 100), Start: e.Start, End: e.End,
-		HasClip: e.HasClip, HasSnap: e.HasSnap, Zones: e.Zones, Kept: e.Retain}
+		HasClip: e.HasClip, HasSnap: e.HasSnap, Zones: e.Zones, Kept: e.Retain, stood: e.PositionChanges != nil && *e.PositionChanges == 0}
 	if out.Zones == nil {
 		out.Zones = e.Entered
 	}
@@ -137,7 +144,14 @@ type EventFilter struct {
 }
 
 // Events lists events, newest first. next is the cursor for the page
-// after this one, 0 at the end.
+// after this one, 0 at the end: the next page lists the events that began
+// before it (Frigate's "before" is strict).
+//
+// Events that began at the very same moment (two objects of one frame)
+// are never split by a page: the rest of such a group would fall between
+// two pages (review PLAN 85-4). Frigate is asked for tieRoom more than a
+// page, the page ends after a group that is complete in what was read,
+// else before it.
 func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, next float64, err error) {
 	events = []Event{}
 	if len(f.Cameras) == 0 {
@@ -148,14 +162,20 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 		return nil, 0, err
 	}
 	limit := min(max(f.Limit, 1), 200)
+	ask := limit + tieRoom
 	before := f.To
 	if f.Before > 0 && (before == 0 || f.Before < before) {
 		before = f.Before
 	}
+	// A round after the first goes on from the start of the last event
+	// read, that moment included (its group may go on); IDs read already
+	// are skipped.
+	inclusive, more := false, false
+	read := map[string]bool{}
 	// With a filter on "seen" pages are read until the list is full; a
 	// few at most, the next page goes on from there.
 	for range 5 {
-		query := url.Values{"cameras": {strings.Join(f.Cameras, ",")}, "limit": {strconv.Itoa(limit)}, "include_thumbnails": {"0"}}
+		query := url.Values{"cameras": {strings.Join(f.Cameras, ",")}, "limit": {strconv.Itoa(ask)}, "include_thumbnails": {"0"}}
 		if len(f.Labels) > 0 {
 			query.Set("labels", strings.Join(f.Labels, ","))
 		}
@@ -163,7 +183,11 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 			query.Set("after", formatTime(f.From))
 		}
 		if before > 0 {
-			query.Set("before", formatTime(before))
+			b := before
+			if inclusive {
+				b += 1e-6
+			}
+			query.Set("before", formatTime(b))
 		}
 		var page []frigateEvent
 		if err := m.frigate.call(ctx, http.MethodGet, base, "/api/events", query, nil, &page); err != nil {
@@ -172,7 +196,8 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 		list := make([]Event, 0, len(page))
 		for _, e := range page {
 			// Frigate is asked for the cameras; this is the second fence.
-			if slices.Contains(f.Cameras, e.Camera) && ValidEventID(e.ID) {
+			if slices.Contains(f.Cameras, e.Camera) && ValidEventID(e.ID) && !read[e.ID] {
+				read[e.ID] = true
 				list = append(list, e.event())
 			}
 		}
@@ -182,21 +207,50 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 				events = append(events, e)
 			}
 		}
-		if len(page) < limit {
-			return events, 0, nil
+		more = len(page) >= ask
+		if !more || len(list) == 0 {
+			break
 		}
-		next = page[len(page)-1].Start
-		before = next
-		if len(events) >= limit || f.Reviewed == nil {
+		before, inclusive = page[len(page)-1].Start, true
+		if len(events) > limit || f.Reviewed == nil {
 			break
 		}
 	}
-	if len(events) > limit {
-		next = events[limit-1].Start
-		events = events[:limit]
+	total := len(events)
+	cut := total
+	if cut > limit {
+		cut = limit
+		// The group of the page's last event goes along whole.
+		for cut < total && events[cut].Start == events[cut-1].Start {
+			cut++
+		}
 	}
-	return events, next, nil
+	if more && cut == total && cut > 0 {
+		// Up to the end of what was read: its last group may go on in
+		// Frigate. It goes to the next page whole (unless it is all there is).
+		last := events[cut-1].Start
+		for cut > 0 && events[cut-1].Start == last {
+			cut--
+		}
+		if cut == 0 {
+			cut = total
+		}
+	}
+	events = events[:cut]
+	switch {
+	case cut > 0 && (cut < total || more):
+		return events, events[cut-1].Start, nil
+	case cut == 0 && more && before > 0:
+		// Nothing of what was read passed the filter on "seen": the next
+		// page goes on from there (that moment included).
+		return events, before + 1e-6, nil
+	}
+	return events, 0, nil
 }
+
+// tieRoom is how many events beyond a page Frigate is asked for, so that
+// a group of events of one moment is seen whole.
+const tieRoom = 20
 
 func formatTime(t float64) string { return strconv.FormatFloat(t, 'f', 6, 64) }
 

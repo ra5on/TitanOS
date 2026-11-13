@@ -23,7 +23,6 @@
 	let {
 		onopen,
 		onclose,
-		onlock,
 		onpower,
 		onsearch,
 		query = '',
@@ -32,7 +31,6 @@
 	}: {
 		onopen: (key: string, href?: string) => void;
 		onclose: () => void;
-		onlock?: () => void;
 		/**
 		 * Restart or shut down: the desktop shows the dialog, so that it stays
 		 * while the NAS prepares, whatever becomes of the menu.
@@ -119,11 +117,6 @@
 	}
 	async function run(action: QuickAction) {
 		asking = null;
-		if (action.local === 'lock') {
-			onclose();
-			onlock?.();
-			return;
-		}
 		if (action.local === 'logout') {
 			void logout();
 			return;
@@ -493,7 +486,7 @@
 			{actionNote.text}
 		</p>{/if}
 	<!-- Two rows of buttons of one size: the account and the places of the
-	     system; below, fixed: lock, log out, restart, shut down. -->
+	     system; below, fixed: log out, restart, shut down ("Sperren" left the menu, owner 13.11.2026: it did what "Abmelden" does). -->
 	<div class="foot">
 		<div class="row" data-menu-row="1">
 			<button
@@ -535,14 +528,6 @@
 			{/if}
 		</div>
 		<div class="row" data-menu-row="2">
-			{#if onlock}<button
-					type="button"
-					class="fb"
-					data-menu-do="lock"
-					title={t('lock.menu') + ' (' + (mac ? t('lock.shortcutMac') : t('lock.shortcut')) + ')'}
-					onclick={onlock}
-					><Icon name="lock" size={16} /><span>{t('desktop.menu.lock')}</span></button
-				>{/if}
 			<button type="button" class="fb" data-menu-do="logout" onclick={() => void logout()}
 				><Icon name="logout" size={16} /><span>{t('desktop.menu.logout')}</span></button
 			>

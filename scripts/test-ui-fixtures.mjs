@@ -1377,6 +1377,8 @@ export function fixtureFactory(browser, errors) {
               cpuPercent: 0,
               memoryBytes: 0,
               since: "",
+              // PLAN 80-2: held after an interrupted backup.
+              ...(data.vmBackupHeld ? { backupHeld: true } : {}),
             },
           ],
           kvm: true,

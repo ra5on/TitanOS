@@ -5,7 +5,7 @@ const keywords: Record<string, string> = {
 	users:
 		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen apps app programme programs docker rechte rights erlauben allow freigaben shares kamera kameras camera cameras nvr live aufnahmen recordings',
 	appearance:
-		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
+		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt deckkraft opacity durchsichtig deckend ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
 		'ip dns gateway bridge vlan bonding netzwerk network hostname name nas-name rechnername umbenennen rename',
 	firewall:
@@ -21,7 +21,7 @@ const keywords: Record<string, string> = {
 	notifications: 'email e-mail ntfy telegram discord push meldungen notifications',
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access:
-		'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session',
+		'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session dauerhaft eingeloggt abmelden ausgeloggt logout sperren sperre leerlauf lock idle',
 	backups:
 		'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
@@ -94,6 +94,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'ssh', label: 'access.ssh', href: '/settings/access#access-ssh' },
 		{ id: 'certificate', label: 'access.cert', href: '/settings/access#access-cert' },
 		{ id: 'stay', label: 'stay.title', href: '/settings/access#access-stay' },
+		{ id: 'idle-lock', label: 'idleLock.title', href: '/settings/access#access-idle-lock' },
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],

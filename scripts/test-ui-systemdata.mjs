@@ -586,9 +586,25 @@ try {
     await v.page.route("**/api/v1/vms/source/backup-recovery", (route) => {
       repaired++;
       held = false;
+      v.data.vmBackupHeld = false;
       return route.fulfill({ status: 204 });
     });
+    // PLAN 80-2: the list says so before anyone tries to start the VM.
+    v.data.vmBackupHeld = true;
     await v.page.goto(base + "/vms?vm=source");
+    const listRow = v.page.locator(".vm").filter({ hasText: "Source VM" });
+    // On a phone the list folds away behind the VM's name.
+    if (width < 640)
+      await v.page.locator("button.picker[aria-expanded]").click();
+    await listRow.getByText("gesperrt", { exact: true }).waitFor();
+    await v.page
+      .getByText(
+        /Platten nach unterbrochener Sicherung prüfen\. Eine Sicherung/,
+      )
+      .waitFor();
+    await shot(v.page, vmShots, `vm-gesperrt-liste-${name}`);
+    if (width < 640)
+      await v.page.locator("button.picker[aria-expanded]").click();
     await v.page
       .getByRole("button", { name: "Starten", exact: true })
       .first()
@@ -616,6 +632,11 @@ try {
       .getByText("Die Platten von Source VM sind wieder in Ordnung.")
       .waitFor();
     assert.equal(repaired, 1);
+    if (width < 640)
+      await v.page.locator("button.picker[aria-expanded]").click();
+    await listRow
+      .getByText("gesperrt", { exact: true })
+      .waitFor({ state: "detached" });
     assert.equal(
       await v.page
         .getByText(/Platten nach unterbrochener Sicherung prüfen/)

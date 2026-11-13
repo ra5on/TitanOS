@@ -419,6 +419,88 @@ type Notify struct {
 	PauseSeconds *int `json:"pauseSeconds,omitempty"`
 	// Window limits the messages about events to some hours.
 	Window Window `json:"window"`
+	// HA lets messages about events through only while entities of Home
+	// Assistant are in chosen states (PLAN 83), e.g. only while the alarm
+	// is armed. nil is no condition. A request without it keeps the stored
+	// one (the API decodes a change over the stored camera, so an older web
+	// UI keeps it); null or an empty list of rules removes it.
+	HA *HACondition `json:"ha,omitempty"`
+}
+
+// HACondition is the condition of a camera's messages on Home Assistant.
+// "Kamera offline" is reported whatever it says, like the window. A state
+// that cannot be read (Home Assistant not reachable, entity unknown or
+// unavailable) never holds a message back: it goes out with a note.
+type HACondition struct {
+	// Mode is "all" (every rule holds) or "any" (one is enough).
+	Mode  string   `json:"mode"`
+	Rules []HARule `json:"rules"`
+}
+
+// HARule is one entity and the states in which it lets messages through.
+type HARule struct {
+	// Connection is the ID of the Home Assistant connection; "" the first.
+	Connection string   `json:"connection"`
+	Entity     string   `json:"entity"`
+	States     []string `json:"states"`
+}
+
+// Limits of a condition.
+const (
+	MaxHARules  = 10
+	maxHAStates = 20
+)
+
+// Modes of a condition.
+const (
+	HAModeAll = "all"
+	HAModeAny = "any"
+)
+
+var (
+	haEntityRE     = regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`)
+	haConnectionRE = regexp.MustCompile(`^[a-z0-9_-]{0,64}$`)
+)
+
+// validateHA checks a condition and returns it in its stored form; no
+// rules is no condition (nil).
+func validateHA(c *HACondition) (*HACondition, error) {
+	if c == nil || len(c.Rules) == 0 {
+		return nil, nil
+	}
+	out := HACondition{Mode: c.Mode, Rules: make([]HARule, 0, len(c.Rules))}
+	if out.Mode == "" {
+		out.Mode = HAModeAll
+	}
+	if out.Mode != HAModeAll && out.Mode != HAModeAny {
+		return nil, invalid("notify.ha.mode")
+	}
+	if len(c.Rules) > MaxHARules {
+		return nil, invalid("notify.ha.rules: at most %d", MaxHARules)
+	}
+	for i, r := range c.Rules {
+		if !haConnectionRE.MatchString(r.Connection) {
+			return nil, invalid("notify.ha.rules[%d].connection", i)
+		}
+		if len(r.Entity) > 255 || !haEntityRE.MatchString(r.Entity) {
+			return nil, invalid("notify.ha.rules[%d].entity", i)
+		}
+		states := []string{}
+		for _, s := range r.States {
+			s = strings.TrimSpace(s)
+			if s == "" || len(s) > 255 || strings.ContainsFunc(s, unicode.IsControl) {
+				return nil, invalid("notify.ha.rules[%d].states", i)
+			}
+			if !slices.Contains(states, s) {
+				states = append(states, s)
+			}
+		}
+		if len(states) == 0 || len(states) > maxHAStates {
+			return nil, invalid("notify.ha.rules[%d].states: 1 to %d", i, maxHAStates)
+		}
+		out.Rules = append(out.Rules, HARule{Connection: r.Connection, Entity: r.Entity, States: states})
+	}
+	return &out, nil
 }
 
 // Recipient is one account a camera tells, with its ways.
@@ -560,6 +642,10 @@ func validateNotify(n Notify) (Notify, error) {
 	if w.Days == nil {
 		w.Days = []int{}
 	}
+	var err2 error
+	if n.HA, err2 = validateHA(n.HA); err2 != nil {
+		return n, err2
+	}
 	return n, nil
 }
 
@@ -640,8 +726,12 @@ func SlugID(name string, taken []string) string {
 
 // validName: a display name of 1 to 64 characters without control
 // characters, not starting or ending with a space.
-func validName(name string) bool {
-	if name == "" || utf8.RuneCountInString(name) > 64 || strings.TrimSpace(name) != name || !utf8.ValidString(name) {
+func validName(name string) bool { return validText(name, 64) }
+
+// validText is a name of at most most characters: not empty, no spaces
+// around it, no control characters.
+func validText(name string, most int) bool {
+	if name == "" || utf8.RuneCountInString(name) > most || strings.TrimSpace(name) != name || !utf8.ValidString(name) {
 		return false
 	}
 	for _, r := range name {

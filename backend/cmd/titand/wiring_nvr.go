@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
@@ -71,24 +74,65 @@ func (w *titand) wireNVR() error {
 	// goes its old ways to the administrators. Home Assistant reads its
 	// sensors from the NVR (api/homeassistant_mqtt.go).
 	w.recorder.Route = func(n nvr.Notice) {
+		link, note := nvrLink(n), ""
+		if n.HAUnknown {
+			note = notify.NoteHAUnknown
+		}
 		if n.Legacy {
-			w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent, Ref: n.Camera})
+			w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent, Ref: n.Camera, Link: link, Note: note})
 			return
 		}
 		targets := make([]notify.Target, 0, len(n.Targets))
 		for _, t := range n.Targets {
 			targets = append(targets, notify.Target{User: t.User, Bell: t.Bell, Push: t.Push, Email: t.Email})
 		}
-		w.notifier.NotifyTo(n.Severity, n.Message, n.Subject, targets, n.Agent, n.Camera)
+		w.notifier.NotifyTo(n.Severity, n.Message, n.Subject, targets, n.Agent, notify.About{Ref: n.Camera, Link: link, Note: note})
 	}
 	// A camera's push goes to the account's own devices that take camera
-	// messages; tapping it opens the NVR.
+	// messages; tapping it opens its event (PLAN 82-5), else the NVR. An
+	// account with only the live right on the camera cannot open events
+	// (they need "recordings"): its push opens the live view (review PLAN
+	// 85-4: it ended in "not found").
 	w.notifier.PushTo = func(user, ref string, message notify.Message, title string) {
-		w.pushes.SendCamera(user, webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + ref, URL: "/nvr"})
+		url := cameraPushURL(message.Link, user, ref, w.recorder.Access.Allows)
+		w.pushes.SendCamera(user, webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + ref, URL: url})
+	}
+	// PLAN 83: the entities of the cameras' conditions on Home Assistant
+	// are watched, the states read from the watcher (never asked on the way
+	// of an event).
+	w.recorder.HAState = func(connection, entity string) (string, bool) {
+		m := w.homes.Get(connection)
+		if m == nil || !m.Active() {
+			return "", false
+		}
+		return m.Current(entity)
+	}
+	w.recorder.CamerasChanged = func() {
+		want := w.recorder.HAWatched()
+		for _, m := range w.homes.All() {
+			list := want[m.ID()]
+			if m.ID() == homeassistant.PrimaryID {
+				list = append(list, want[""]...)
+			}
+			m.SetWatchedFor(homeassistant.WatchNVR, list)
+		}
 	}
 	if err := w.recorder.Load(); err != nil {
 		slog.Warn("NVR settings not readable from /config", "err", err)
 	}
+	w.recorder.CamerasChanged()
+	// A connection added or removed later gets its entities too.
+	w.background(func() {
+		for {
+			changed := w.homes.Changed()
+			select {
+			case <-ctx.Done():
+				return
+			case <-changed:
+				w.recorder.CamerasChanged()
+			}
+		}
+	})
 	// The faces the NVR knows go into the backup of /config (they live on
 	// the NVR's volume; sleeping disks are not woken for it).
 	if w.stickBackup != nil {
@@ -102,4 +146,23 @@ func (w *titand) wireNVR() error {
 	}
 	w.background(func() { w.recorder.Run(ctx) })
 	return nil
+}
+
+// cameraPushURL is the page a camera's push opens for user: the event of
+// the message if the account may see the camera's recordings (events
+// need that right), else the NVR's live view.
+func cameraPushURL(link, user, camera string, allows func(user, camera, right string) bool) string {
+	if link == "" || (strings.HasPrefix(link, "/nvr/events") && !allows(user, camera, nvr.RightRecordings)) {
+		return "/nvr"
+	}
+	return link
+}
+
+// nvrLink is the page a camera's message opens: its event, else the NVR
+// (PLAN 82-5).
+func nvrLink(n nvr.Notice) string {
+	if n.Event == "" {
+		return ""
+	}
+	return "/nvr/events?event=" + url.QueryEscape(n.Event)
 }

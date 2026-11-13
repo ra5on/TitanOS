@@ -6,10 +6,18 @@ aber bis zum Entsperren ist nichts zu sehen und nichts zu bedienen.
 
 ## Bedienung
 
-- **Sperren:** Konto-Menü › „Sperren“ oder Strg+Alt+L (Mac: ⌘+⌥+L).
+- **Sperren:** Strg+Alt+L (Mac: ⌘+⌥+L). Einen Knopf „Sperren“ im Menü gibt es
+  seit 0.80 nicht mehr (Entscheidung des Projektinhabers vom 13.11.2026, PLAN
+  84-3: er tat für ihn dasselbe wie „Abmelden“); auch die Suche im Menü bietet
+  ihn nicht mehr an.
 - **Automatisch:** nach einer einstellbaren Zeit ohne Tastatur, Maus oder
-  Berührung (ab Werk 15 Minuten, 0 = nie). Gezählt wird die letzte Benutzung
-  in irgendeinem Tab oder Fenster des NAS in diesem Browser.
+  Berührung (am Computer ab Werk 15 Minuten, am Handy nie; jeweils auch „nie“).
+  Gezählt wird die letzte Benutzung in irgendeinem Tab oder Fenster des NAS in
+  diesem Browser. Einstellbar je Konto in den Arbeitsplatz-Einstellungen und
+  seit 0.80 unter Systemsteuerung › Konten und Zugang › Zugang › „Sperren bei
+  Leerlauf“, neben „Angemeldet bleiben“ (PLAN 84-2; im Fenster des
+  Arbeitsplatzes speichert der Arbeitsplatz, `lock-link.svelte.ts`,
+  Nachrichten `titanos-lock-get|-set`).
 - **Sperrbildschirm:** Uhr und Datum, Anfangsbuchstabe und Name des Kontos,
   Passwortfeld mit Pfeil-Knopf, bei Zwei-Faktor-Anmeldung zusätzlich das
   Code-Feld, „Mit Passkey entsperren“, wenn das Konto einen Passkey für diese

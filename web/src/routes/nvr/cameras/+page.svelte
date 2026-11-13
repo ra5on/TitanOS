@@ -27,17 +27,23 @@
 	let busy = $state('');
 	let error = $state('');
 	let removing = $state<Camera | null>(null);
+	/** A removed camera whose recordings are to be deleted now (owner 13.11.2026). */
+	let purging = $state<Camera | null>(null);
 	// One still picture per visit: the list is no live view.
 	const tick = Date.now();
 
-	async function change(camera: Camera, body: Record<string, unknown>) {
+	async function switchCamera(camera: Camera, input: HTMLInputElement) {
+		const on = input.checked;
 		busy = camera.id;
 		error = '';
 		try {
-			await api.put(`/nvr/cameras/${encodeURIComponent(camera.id)}`, body);
+			await api.put(`/nvr/cameras/${encodeURIComponent(camera.id)}`, { enabled: on });
 			await refreshNvr();
 		} catch (err) {
 			error = apiErrorText(err);
+			// Refused: the camera stays as it was, and so does its switch at
+			// once (camera.enabled did not change, Svelte would not reset it).
+			input.checked = !on;
 		} finally {
 			busy = '';
 		}
@@ -68,6 +74,21 @@
 		try {
 			await api.delete(`/nvr/cameras/${encodeURIComponent(removing.id)}`);
 			removing = null;
+			await refreshNvr();
+		} catch (err) {
+			error = apiErrorText(err);
+		} finally {
+			busy = '';
+		}
+	}
+	async function purge() {
+		if (!purging) return;
+		busy = purging.id;
+		error = '';
+		try {
+			// 202: the NAS deletes in the background; the row says so until the camera is gone.
+			await api.delete(`/nvr/cameras/${encodeURIComponent(purging.id)}/recordings`);
+			purging = null;
 			await refreshNvr();
 		} catch (err) {
 			error = apiErrorText(err);
@@ -206,7 +227,7 @@
 								aria-label={t('nvr.cameras.enable', { name: camera.name })}
 								checked={camera.enabled}
 								disabled={busy === camera.id}
-								onchange={(e) => change(camera, { enabled: e.currentTarget.checked })}
+								onchange={(e) => switchCamera(camera, e.currentTarget)}
 							/>
 							<button
 								type="button"
@@ -251,18 +272,33 @@
 						<div class="srow-text">
 							<span class="srow-title"
 								>{camera.name}<span class="chip info"
-									>{until
-										? t('nvr.removed.until', { date: dateText(until) })
-										: t('nvr.removed.untilUnknown')}</span
+									>{camera.purging
+										? t('nvr.removed.purging')
+										: until
+											? t('nvr.removed.until', { date: dateText(until) })
+											: t('nvr.removed.untilUnknown')}</span
 								></span
 							>
 							{#if since}<p class="srow-desc">
 									{t('nvr.removed.since', { date: dateText(since) })}
 								</p>{/if}
+							{#if camera.purging}<p class="srow-desc" role="status">
+									{t('nvr.removed.purgingHint')}
+								</p>
+							{:else if !running}<p class="srow-desc">{t('nvr.removed.purgeNeedsRunning')}</p>{/if}
 						</div>
 						<div class="srow-ctl">
 							<a class="btn" href="/nvr/recordings?camera={encodeURIComponent(camera.id)}"
 								>{t('nvr.removed.show')}</a
+							>
+							<button
+								type="button"
+								class="btn btn-danger-outline"
+								disabled={!running || busy === camera.id || camera.purging}
+								onclick={() => {
+									error = '';
+									purging = camera;
+								}}>{t('nvr.removed.purge')}</button
 							>
 						</div>
 					</div>
@@ -270,6 +306,23 @@
 			{/each}
 		</SettingGroup>
 	{/if}
+{/if}
+
+{#if purging}
+	<Confirm
+		title={t('nvr.removed.purgeTitle', { name: purging.name })}
+		text={[
+			t('nvr.removed.purgeText'),
+			t('nvr.removed.purgeExports'),
+			t('nvr.removed.purgeRestart'),
+		]}
+		confirm={t('nvr.removed.purge')}
+		danger
+		busy={busy === purging.id}
+		{error}
+		onconfirm={purge}
+		onclose={() => (purging = null)}
+	/>
 {/if}
 
 {#if removing}

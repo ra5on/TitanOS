@@ -78,6 +78,9 @@
 						<span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"></span>{t(
 							`vms.state.${vm.state}`,
 						)}
+						{#if vm.backupHeld}<span class="held" title={t('vms.backupHeldHint')}
+								><Icon name="lock" size={12} />{t('vms.backupHeld')}</span
+							><span class="sr-only">{t('vms.backupHeldHint')}</span>{/if}
 						{#if vm.autostart}<span class="autostart" title={t('vms.autostart')}
 								><Icon name="power" size={12} /><span class="sr-only">{t('vms.autostart')}</span
 								></span
@@ -234,6 +237,18 @@
 	.autostart {
 		display: inline-flex;
 		color: var(--muted);
+	}
+	/* PLAN 80-2: a VM held after an interrupted backup says so in words. */
+	.held {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0 0.35rem;
+		border-radius: var(--radius-ctl);
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
+		color: var(--error-text);
+		font-weight: 500;
 	}
 	.vm-actions {
 		display: flex;

@@ -13,7 +13,6 @@
 	import { session } from '../session.svelte.ts';
 	import { appearance } from '../theme/appearance.svelte.ts';
 	import { THEMES } from '../theme/themes.ts';
-	import { lock } from '../lock.svelte.ts';
 	import { appForPath, appAllowed } from './apps.ts';
 	import Launcher from './Launcher.svelte';
 	import PowerDialog from '../components/PowerDialog.svelte';
@@ -77,8 +76,6 @@
 	} from './wm.svelte.ts';
 	import { deskKey, menuKeyDown, menuKeyReset, menuKeyUp, screenOwnsKeys } from './menubar/keys.ts';
 	import type { DeskOp } from './menubar/menus.ts';
-
-	const onlock = () => void lock();
 
 	let area = $state<HTMLElement>();
 	let launcher = $state(false);
@@ -679,7 +676,6 @@
 					launcher = false;
 					power = action;
 				}}
-				{onlock}
 			/>{/if}
 
 		<AppSwitcher {programOf} />

@@ -152,7 +152,7 @@ func TestBellAudience(t *testing.T) {
 	}
 	n := ts.server.opts.Notify
 	n.Notify(notify.Warning, "volume_degraded", "tank")
-	n.NotifyTo(notify.Info, "nvr_event_person", "Haustür", []notify.Target{{User: "alex", Bell: true}}, false, "haustuer")
+	n.NotifyTo(notify.Info, "nvr_event_person", "Haustür", []notify.Target{{User: "alex", Bell: true}}, false, notify.About{Ref: "haustuer"})
 	kinds := func(client *http.Client, method, path string, body any) []string {
 		_, data := ts.do(client, method, path, body)
 		var res struct{ Messages []notify.Message }

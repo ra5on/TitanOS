@@ -386,6 +386,8 @@ type CameraView struct {
 	Deleted   bool   `json:"deleted"`
 	DeletedAt *int64 `json:"deletedAt"`
 	ExpiresAt *int64 `json:"expiresAt"`
+	// Purging: the recordings of this removed camera are being deleted.
+	Purging bool `json:"purging,omitempty"`
 }
 
 // View is a deleted camera as the API lists it for administrators.

@@ -73,7 +73,7 @@ async function desktop(path = "/", width = 1600, height = 1000) {
   await frame.locator("#look-liquid").waitFor({ timeout: 15000 });
   await shot(page, "01-darstellung");
   const before = await rootVar(page, "--desk-surface");
-  // PLAN 73: one slider "Klar ↔ Getönt" sets transparency and blur together.
+  // PLAN 73: one slider "Durchsichtig ↔ Deckend" (PLAN 80-1) sets transparency and blur together.
   await frame.locator("#look-liquid").fill("0");
   await frame.locator("#look-corners").fill("28");
   await frame.locator("#look-saturation").fill("140");

@@ -122,6 +122,13 @@ type Manager struct {
 	// Route sends a message about a camera the ways its owner chose
 	// (routing.go); the wiring gives it notify.Manager.NotifyVia.
 	Route func(Notice)
+	// HAState is the state of an entity of Home Assistant as the watcher
+	// knows it now (connection "" is the first one); known is false while
+	// it cannot be told (PLAN 83). nil: never known.
+	HAState func(connection, entity string) (state string, known bool)
+	// CamerasChanged is called (on its own goroutine) after the cameras
+	// were saved; the wiring has the entities of the conditions watched.
+	CamerasChanged func()
 	// Addresses are the addresses of the NAS in the home network, for
 	// WebRTC; lanAddresses if nil.
 	Addresses func() []string
@@ -232,6 +239,9 @@ func (m *Manager) Load() error {
 	if cameras == nil {
 		cameras = []Camera{}
 	}
+	for i := range cameras {
+		tidyLists(&cameras[i])
+	}
 	sortCameras(cameras)
 	// Without the deleted cameras config.yml would have Frigate delete
 	// their recordings, and a new camera could take one's ID: a list that
@@ -307,15 +317,23 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 		s.Volume = devVolume
 	}
 	mounted := m.mounted()
+	m.mu.Lock()
+	old, loaded := m.settings, m.loaded
+	m.mu.Unlock()
+	// The volume must be mounted only when the NVR is switched on or moves
+	// to it. The one it has stays acceptable while it is away (a locked
+	// encrypted volume after a boot, a failed disk): the NVR can still be
+	// switched off, set up anew or changed otherwise (review PLAN 85-4:
+	// "Ausschalten" answered 400 then).
+	if loaded && s.Volume != "" && s.Volume == old.Volume && (old.Enabled || !s.Enabled) && !slices.Contains(mounted, s.Volume) {
+		mounted = append(slices.Clone(mounted), s.Volume)
+	}
 	if err := ValidateSettings(s, mounted); err != nil {
 		if s.Enabled && (s.Volume == "" || !slices.Contains(mounted, s.Volume)) {
 			return ErrNoVolume
 		}
 		return err
 	}
-	m.mu.Lock()
-	old, loaded := m.settings, m.loaded
-	m.mu.Unlock()
 	if !loaded {
 		return ErrNotLoaded
 	}
@@ -522,6 +540,15 @@ func cloneCameras(list []Camera) []Camera {
 			pause := *c.Notify.PauseSeconds
 			c.Notify.PauseSeconds = &pause
 		}
+		// The same for the condition on Home Assistant (PLAN 83).
+		if c.Notify.HA != nil {
+			ha := *c.Notify.HA
+			ha.Rules = slices.Clone(ha.Rules)
+			for j := range ha.Rules {
+				ha.Rules[j].States = slices.Clone(ha.Rules[j].States)
+			}
+			c.Notify.HA = &ha
+		}
 		out[i] = c
 	}
 	return out
@@ -611,6 +638,11 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 	defer m.mu.Unlock()
 	if !m.loaded {
 		return c, ErrNotLoaded
+	}
+	// A camera with the ID of a removed one whose recordings are being
+	// deleted would take back what is being deleted.
+	if m.rt.purging[c.ID] {
+		return c, ErrPurgeRunning
 	}
 	if len(m.cameras) >= MaxCameras {
 		return c, ErrLimit
@@ -828,7 +860,44 @@ func (m *Manager) storeCamerasLocked(list []Camera) error {
 	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.wake()
+	if m.CamerasChanged != nil {
+		go m.CamerasChanged()
+	}
 	return nil
+}
+
+// tidyLists turns lists a file of an older version left out into empty
+// ones, so that the API never answers null where a list is meant: the
+// form of 0.79 failed on a camera of 0.78 whose window had no days.
+func tidyLists(c *Camera) {
+	if c.Detect.Objects == nil {
+		c.Detect.Objects = []string{}
+	}
+	if c.Notify.Kinds == nil {
+		c.Notify.Kinds = []string{}
+	}
+	if c.Notify.Window.Days == nil {
+		c.Notify.Window.Days = []int{}
+	}
+}
+
+// HAWatched lists the entities of Home Assistant the cameras' conditions
+// name, by connection ("" is the first one).
+func (m *Manager) HAWatched() map[string][]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string][]string{}
+	for _, c := range m.cameras {
+		if c.Notify.HA == nil {
+			continue
+		}
+		for _, r := range c.Notify.HA.Rules {
+			if !slices.Contains(out[r.Connection], r.Entity) {
+				out[r.Connection] = append(out[r.Connection], r.Entity)
+			}
+		}
+	}
+	return out
 }
 
 // Hardware probes what the NAS has for the NVR.

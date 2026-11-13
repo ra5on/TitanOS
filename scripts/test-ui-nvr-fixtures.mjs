@@ -6,7 +6,30 @@
 // sends no video (the pages then show still pictures) and the feed says what
 // `state.activity` holds.
 
+import { readFile } from "node:fs/promises";
+
 const day = 86400;
+
+// PLAN 85: the recordings' HLS with `state.vod` set – a real chain around the
+// live suite's test video (VP9: the test Chromium has no H.264). Its ftyp and
+// moov are the init segment, the fragments after them one media segment.
+let media = null;
+async function vodFile(name) {
+  if (!media) {
+    const file = await readFile(new URL("./test-ui-media/nvr-live-vp9.mp4", import.meta.url));
+    let end = 0;
+    while (end < file.length && file.toString("latin1", end + 4, end + 8) !== "moof") end += file.readUInt32BE(end);
+    media = { init: file.subarray(0, end), segment: file.subarray(end) };
+  }
+  if (name === "master.m3u8")
+    return { contentType: "application/vnd.apple.mpegurl", body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=300000,RESOLUTION=320x180,CODECS="vp09.00.10.08"\nindex.m3u8\n' };
+  if (name === "index.m3u8")
+    return {
+      contentType: "application/vnd.apple.mpegurl",
+      body: '#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:12\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:12.0,\nseg.m4s\n#EXT-X-ENDLIST\n',
+    };
+  return { contentType: "video/mp4", body: name === "init.mp4" ? media.init : media.segment };
+}
 
 /** A camera as administrators get it. */
 export function camera(id, name, order, over = {}) {
@@ -209,6 +232,8 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
     rights: { haustuer: { live: true, recordings: false } },
     /** What GET /users/{name}/cameras answers per account. */
     userCameras: {},
+    // PLAN 83: Home Assistant for the cameras' conditions; null: none set up.
+    ha: null,
     discovered: [
       { address: "192.168.10.41", onvifPort: 8000, name: "Reolink RLC-810A", hardware: "RLC-810A", id: "uuid-1", known: false },
       { address: "192.168.10.44", onvifPort: 80, name: "Tapo C320WS", hardware: "C320WS", id: "uuid-2", known: false },
@@ -395,6 +420,14 @@ function segments(s, from, to) {
  */
 export async function installNvr(target, state = nvrState()) {
   const s = state;
+  // PLAN 83: the connections and entities the condition of a camera offers.
+  await target.route(/\/api\/v1\/homeassistant\/(connection-names|entities)/, (route) => {
+    const url = new URL(route.request().url());
+    if (!s.ha) return route.fulfill({ status: 404, json: { error: { code: "ha_off", message: "ha_off" } } });
+    if (url.pathname.endsWith("/connection-names")) return route.fulfill({ json: { connections: s.ha.connections } });
+    const connection = url.searchParams.get("connection") || "main";
+    return route.fulfill({ json: { entities: s.ha.entities[connection] ?? [] } });
+  });
   await target.route(/\/api\/v1\/(nvr(\/|$|\?)|users\/[^/]+\/cameras)/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -421,6 +454,8 @@ export async function installNvr(target, state = nvrState()) {
         admin: false,
         cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, names: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
+      // PLAN 85: the NAS could not read the camera rights at its start.
+      if (method === "PUT" && s.rightsUnreadable) return fail(503, "nvr_rights_unreadable");
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
           const row = rows.cameras.find((c) => c.id === id);
@@ -443,6 +478,8 @@ export async function installNvr(target, state = nvrState()) {
     if (path === "/nvr/settings") {
       if (adminOnly()) return;
       if (method === "PUT") {
+        // PLAN 85: saving the known plates fails with this code.
+        if (s.platesFail && body.plates) return fail(503, s.platesFail);
         if (body.volume && s.sleepingVolumes.includes(body.volume) && !body.confirmSleepingVolume)
           return fail(409, "nvr_volume_sleeps");
         const { enableDocker: _d, confirmSleepingVolume: _s, ...rest } = body;
@@ -522,6 +559,8 @@ export async function installNvr(target, state = nvrState()) {
         s.cameras.push(made);
         return json(made, 201);
       }
+      // A camera being purged is listed twice more as purging, then it is gone.
+      for (const c of s.cameras.filter((c) => c.purging)) if (++c.purgeReads > 2) s.cameras.splice(s.cameras.indexOf(c), 1);
       return json({ cameras: visible(s), ...(s.admin ? { objects: s.objects } : {}) });
     }
     if ((m = /^\/nvr\/cameras\/([^/]+)$/.exec(path))) {
@@ -531,6 +570,7 @@ export async function installNvr(target, state = nvrState()) {
         s.cameras.splice(index, 1);
         return route.fulfill({ status: 204 });
       }
+      if (method === "PUT" && s.rightsUnreadable) return fail(503, "nvr_rights_unreadable");
       if (method === "PUT" && body.name !== undefined && nameTaken(body.name, m[1]))
         return fail(409, "nvr_camera_name_exists");
       // A narrower mode or fewer days delete recordings: the NAS asks first (manager.go, shrinks).
@@ -570,11 +610,24 @@ export async function installNvr(target, state = nvrState()) {
     }
     if (/^\/nvr\/cameras\/[^/]+\/recordings\/summary$/.test(path))
       return json({ days: [{ day: new Date(s.now * 1000).toISOString().slice(0, 10), hours: [] }] });
+    // A removed camera's recordings deleted now (owner 13.11.2026): only removed ones, administrators.
+    if ((m = /^\/nvr\/cameras\/([^/]+)\/recordings$/.exec(path)) && method === "DELETE") {
+      if (!s.admin) return fail(403, "forbidden");
+      const index = s.cameras.findIndex((c) => c.id === m[1] && c.deleted);
+      if (index < 0) return fail(404, "nvr_camera_not_found");
+      if (s.purgeFails) return fail(409, "nvr_purge_running");
+      // The NAS deletes in the background: listed as purging once, then gone.
+      s.cameras[index].purging = true;
+      s.cameras[index].purgeReads = 0;
+      return route.fulfill({ status: 202 });
+    }
     if (/^\/nvr\/cameras\/[^/]+\/recordings$/.test(path)) {
       const from = Number(url.searchParams.get("from"));
       const to = Number(url.searchParams.get("to"));
       return json({ from, to, segments: segments(s, from, to) });
     }
+    if ((m = /\/vod\/\d+\/\d+\/(master\.m3u8|index\.m3u8|init\.mp4|seg\.m4s)$/.exec(path)) && s.vod)
+      return route.fulfill({ status: 200, ...(await vodFile(m[1])) });
     if (/\/vod\//.test(path)) return fail(404, "not_found");
     if (path === "/nvr/events") {
       const cams = url.searchParams.get("camera")?.split(",");

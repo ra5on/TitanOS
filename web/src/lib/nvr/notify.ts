@@ -147,7 +147,7 @@ export function pauseText(seconds: number | undefined): string {
 export function windowText(window: NotifyWindow | undefined): string {
 	if (!window?.on) return t('nvr.notify.always');
 	return t('nvr.notify.windowShort', {
-		days: daysText(window.days),
+		days: daysText(window.days ?? []),
 		from: window.from,
 		to: window.to,
 	});
@@ -159,7 +159,7 @@ export function windowOn(window: NotifyWindow | undefined, on: boolean): NotifyW
 	if (!on) return { ...w, on };
 	return {
 		on,
-		days: w.days.length ? w.days : [...DAYS],
+		days: w.days?.length ? w.days : [...DAYS],
 		from: w.from || '22:00',
 		to: w.to || '06:00',
 	};

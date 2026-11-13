@@ -117,7 +117,9 @@ func (m *Manager) PTZCommand(ctx context.Context, user, camera, action, preset s
 	if !ok {
 		return ErrNotFound
 	}
-	if !m.ptzAllowed(user) {
+	// A stop always goes through: refused, the camera would turn on until
+	// the automatic stop (review PLAN 85-4).
+	if action != "stop" && !m.ptzAllowed(user) {
 		return ErrRateLimited
 	}
 	if !c.PTZ || !c.Enabled {
