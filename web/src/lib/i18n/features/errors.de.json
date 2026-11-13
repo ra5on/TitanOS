@@ -156,5 +156,9 @@
 	"error.nvr_faces_off": "Die Gesichtserkennung läuft nicht: Schalte sie zuerst bei mindestens einer Kamera ein.",
 	"error.nvr_recipient_invalid": "Ein gewählter Empfänger existiert nicht (mehr) oder ist gesperrt. Lade die Seite neu und wähle die Empfänger noch einmal.",
 	"error.nvr_recipient_no_right": "Ein gewählter Empfänger darf diese Kamera nicht sehen. Gib dem Konto zuerst das Recht auf die Kamera (beim Konto unter „Kameras“).",
-	"error.nvr_recipient_bell": "Die Glocke gibt es nur für Besitzer und Administratoren. Wähle für dieses Konto Push oder E-Mail."
+	"error.nvr_recipient_bell": "Die Glocke gibt es nur für Besitzer und Administratoren. Wähle für dieses Konto Push oder E-Mail.",
+	"error.nvr_event_running": "Das Ereignis läuft noch oder seine Aufnahme ist noch nicht fertig. Behalten geht gleich danach.",
+	"error.nvr_event_kept": "Das Ereignis ist behalten. Löschen nimmt sein gesichertes Video mit und muss bestätigt werden.",
+	"error.nvr_export_kept": "Das ist das Video eines behaltenen Ereignisses; ändern oder löschen können es nur Administratoren.",
+	"error.nvr_seen_unreadable": "Was schon angesehen wurde, ließ sich vom Volume des NVR nicht lesen. Bis zum Neustart lässt sich „gesehen“ nicht ändern."
 }

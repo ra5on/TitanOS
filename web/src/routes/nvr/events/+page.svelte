@@ -1,7 +1,9 @@
 <script lang="ts">
 	// PLAN 79-7: what the cameras saw – filtered by camera, kind and time, as
 	// pictures or as a list; an event opens with its clip, its snapshot, the
-	// recognized face or plate, download and (administrators) delete.
+	// recognized face or plate, download and (administrators) delete. PLAN
+	// 88: "seen" is per account; administrators keep an event for good
+	// ("Behalten": the NAS saves its video) and give it back.
 	import { page } from '$app/state';
 	import { api } from '#lib/api.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
@@ -15,7 +17,7 @@
 	import EventCard from '#lib/nvr/EventCard.svelte';
 	import { cameraName, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
 	import { clock, dayClock, labelName, OBJECT_GROUPS } from '#lib/nvr/texts.ts';
-	import type { EventList, NvrEvent } from '#lib/nvr/types.ts';
+	import type { Camera, EventList, NvrEvent } from '#lib/nvr/types.ts';
 	import { attachVod, autoplay } from '#lib/nvr/vod.ts';
 	import { untrack } from 'svelte';
 
@@ -73,6 +75,22 @@
 		void query;
 		void load();
 	});
+
+	// ---- Seen (per account, PLAN 88) ----
+	let seenBusy = $state(false);
+	async function allSeen() {
+		seenBusy = true;
+		error = '';
+		try {
+			await api.post('/nvr/events/seen', {});
+			events = events.map((e) => (e.end === null ? e : { ...e, reviewed: true }));
+		} catch (err) {
+			error = apiErrorText(err);
+		} finally {
+			seenBusy = false;
+		}
+	}
+	const anyUnseen = $derived(events.some((e) => !e.reviewed));
 
 	// ---- One event ----
 	let open = $state<NvrEvent | null>(null);
@@ -150,6 +168,47 @@
 		else stop();
 	}
 
+	// A kept event whose recording is gone plays the video the NAS saved.
+	const keptSrc = $derived(
+		open?.keptExport ? apiPath(`/nvr/exports/${encodeURIComponent(open.keptExport)}/download`) : '',
+	);
+
+	// ---- Keep (administrators, PLAN 88) ----
+	/** Whether an event's video is complete (the NAS waits its seconds after and 20 s). */
+	function settled(e: NvrEvent) {
+		if (e.end === null) return false;
+		const post = cameraOf(e.camera)?.record?.postSeconds ?? 5;
+		return Date.now() / 1000 > e.end + post + 25;
+	}
+	const cameraOf = (id: string): Camera | undefined =>
+		nvr.cameras.find((c) => c.id === id) ?? nvr.removed.find((c) => c.id === id);
+	const eventDaysOf = (id: string) => {
+		const r = cameraOf(id)?.record;
+		return r ? r.eventDays || r.retainDays : 0;
+	};
+	let unkeeping = $state(false);
+	let keepBusy = $state(false);
+	async function keep(on: boolean) {
+		if (!open) return;
+		keepBusy = true;
+		detailError = '';
+		try {
+			const changed = on
+				? await api.post<NvrEvent>(`${eventBase}/keep`, {})
+				: await api.delete<NvrEvent>(`${eventBase}/keep`);
+			open = { ...open, kept: changed.kept, keptExport: changed.keptExport };
+			const id = open.id;
+			events = events.map((e) =>
+				e.id === id ? { ...e, kept: changed.kept, keptExport: changed.keptExport } : e,
+			);
+			unkeeping = false;
+		} catch (err) {
+			detailError = apiErrorText(err);
+		} finally {
+			keepBusy = false;
+		}
+	}
+
 	let removing = $state(false);
 	let removeBusy = $state(false);
 	async function remove() {
@@ -157,7 +216,8 @@
 		removeBusy = true;
 		detailError = '';
 		try {
-			await api.delete(eventBase);
+			// A kept event: the dialog said that its saved video goes too.
+			await api.delete(open.kept ? `${eventBase}?confirmKept=1` : eventBase);
 			const id = open.id;
 			events = events.filter((e) => e.id !== id);
 			removing = false;
@@ -226,7 +286,12 @@
 		/>
 	</div>
 
-	<p class="muted seen-hint">{t('nvr.events.seenHint')}</p>
+	<div class="seen-row">
+		<p class="muted seen-hint">{t('nvr.events.seenHint')}</p>
+		<button type="button" class="btn" disabled={seenBusy || !anyUnseen} onclick={allSeen}
+			><Icon name="check" size={15} />{t('nvr.events.allSeen')}</button
+		>
+	</div>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if missing}
 		<p class="muted" role="status">{t('nvr.events.unavailable')}</p>
@@ -267,6 +332,9 @@
 								? ` · ${event.plate}`
 								: ''}</small
 						>
+						{#if event.kept}<span class="kept"
+								><Icon name="pin" size={13} />{t('nvr.events.keptBadge')}</span
+							>{/if}
 					</button>
 				</li>
 			{/each}
@@ -297,6 +365,16 @@
 					preload="auto"
 					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
 				></video>
+			{:else if keptSrc}
+				<!-- svelte-ignore a11y_media_has_caption -->
+				<video
+					src={keptSrc}
+					controls
+					playsinline
+					preload="auto"
+					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
+				></video>
+				<p class="muted play-note">{t('nvr.events.keptVideo')}</p>
 			{:else if e.hasSnapshot}
 				<img src={apiPath(`${eventBase}/snapshot.jpg`)} alt={t('nvr.events.snapshot')} />
 			{:else}
@@ -329,10 +407,18 @@
 					<dt>{t('nvr.events.score')}</dt>
 					<dd>{Math.round(e.score * 100)} %</dd>
 				</div>
-				{#if e.kept}<div>
-						<dt>{t('nvr.events.kept')}</dt>
-						<dd>{t('nvr.events.keptText')}</dd>
+				{#if e.zones?.length}<div>
+						<dt>{t('nvr.events.zones')}</dt>
+						<dd>{e.zones.join(', ')}</dd>
 					</div>{/if}
+				<div>
+					<dt>{t('nvr.events.kept')}</dt>
+					<dd id="nvr-event-kept">
+						{#if e.kept}<Icon name="pin" size={14} />
+							{e.keptExport ? t('nvr.events.keptText') : t('nvr.events.keptNoVideo')}
+						{:else}{t('nvr.events.notKept', { days: eventDaysOf(e.camera) || '–' })}{/if}
+					</dd>
+				</div>
 			</dl>
 			<div class="links">
 				<a
@@ -348,19 +434,51 @@
 					>{/if}
 			</div>
 			{#if detailError}<p class="notice-error" role="alert">{detailError}</p>{/if}
+			{#if admin && !e.kept && !settled(e)}<p class="muted">
+					{t('nvr.events.keepRunning')}
+				</p>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" onclick={() => (open = null)}>{t('common.close')}</button>
-				{#if admin}<button type="button" class="btn btn-danger" onclick={() => (removing = true)}
+				{#if admin}
+					{#if e.kept}
+						<button type="button" class="btn" disabled={keepBusy} onclick={() => (unkeeping = true)}
+							>{t('nvr.events.unkeep')}</button
+						>
+					{:else}
+						<button
+							type="button"
+							class="btn"
+							disabled={keepBusy || !settled(e)}
+							onclick={() => keep(true)}><Icon name="pin" size={15} />{t('nvr.events.keep')}</button
+						>
+					{/if}
+					<button type="button" class="btn btn-danger" onclick={() => (removing = true)}
 						>{t('common.delete')}</button
-					>{/if}
+					>
+				{/if}
 			</div>
 		</div>
 	</Dialog>
 {/if}
+{#if open && unkeeping}
+	<Confirm
+		title={t('nvr.events.unkeepTitle')}
+		text={[
+			t('nvr.events.unkeepText', { days: eventDaysOf(open.camera) || '–' }),
+			...(open.keptExport ? [t('nvr.events.unkeepVideo')] : []),
+		]}
+		confirm={t('nvr.events.unkeepConfirm')}
+		danger
+		busy={keepBusy}
+		error={detailError}
+		onconfirm={() => keep(false)}
+		onclose={() => (unkeeping = false)}
+	/>
+{/if}
 {#if open && removing}
 	<Confirm
-		title={t('nvr.events.deleteTitle')}
-		text={t('nvr.events.deleteText')}
+		title={open.kept ? t('nvr.events.deleteKeptTitle') : t('nvr.events.deleteTitle')}
+		text={open.kept ? t('nvr.events.deleteKeptText') : t('nvr.events.deleteText')}
 		confirm={t('common.delete')}
 		danger
 		busy={removeBusy}
@@ -395,6 +513,29 @@
 		margin: 0;
 		font-size: var(--text-sm);
 		overflow-wrap: break-word;
+		flex: 1 1 16rem;
+	}
+	.seen-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+	}
+	.seen-row .btn {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+	}
+	/* PLAN 88: a kept event says so in words, not only with a mark. */
+	.kept {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	dd :global(svg) {
+		vertical-align: -2px;
 	}
 	.filters label {
 		display: inline-flex;

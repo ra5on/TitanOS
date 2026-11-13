@@ -119,4 +119,8 @@ test('plate and face messages need the right "Namen und Kennzeichen" of the came
 	expect(missesNames(sam, 'einfahrt', ['plate'])).toBe(false);
 	expect(missesNames(accounts[0], 'haustuer', ['plate'])).toBe(false);
 	expect(missesNames(sam, undefined, ['plate'])).toBe(true);
+	// PLAN 88: unknown faces need the right too.
+	expect(missesNames(sam, 'haustuer', ['person'], true)).toBe(true);
+	expect(missesNames(sam, 'einfahrt', ['person'], true)).toBe(false);
+	expect(missesNames(accounts[0], 'haustuer', ['person'], true)).toBe(false);
 });

@@ -14,11 +14,14 @@
 	import Confirm from './Confirm.svelte';
 	import NotifyGroup from './NotifyGroup.svelte';
 	import Pills from './Pills.svelte';
-	import { shrinks } from './shrink.ts';
+	import { eventDaysOf, recordDaysOf, shrinks, type Kept } from './shrink.ts';
 	import { groupsOf, labelName, OBJECT_GROUP_IDS, toggleGroup, type ObjectGroup } from './texts.ts';
+	import ZoneEditor from './ZoneEditor.svelte';
 	import type {
 		Camera,
+		CameraMasks,
 		CameraNotify,
+		CameraZone,
 		Discovered,
 		NvrHardware,
 		ProbeResult,
@@ -66,12 +69,37 @@
 	let plates = $state(initial?.detect?.plates ?? false);
 	let faces = $state(initial?.detect?.faces ?? false);
 	let mode = $state<RecordMode>(initial?.record?.mode ?? 'events');
-	let retainDays = $state(initial?.record?.retainDays ?? 14);
+	// PLAN 88: days for recordings without an event and for events, apart
+	// (a camera of 0.80 has one number for both).
+	let recordDays = $state(initial?.record ? recordDaysOf(initial.record) : 14);
+	let eventDays = $state(initial?.record ? eventDaysOf(initial.record) : 14);
 	let preSeconds = $state(initial?.record?.preSeconds ?? 5);
 	let postSeconds = $state(initial?.record?.postSeconds ?? 5);
 	let audio = $state(initial?.audio.enabled ?? false);
 	let twoWay = $state(initial?.audio.twoWay ?? false);
 	let ptz = $state(initial?.ptz ?? false);
+	// Areas drawn into the picture (PLAN 88, ZoneEditor.svelte): copies.
+	let zones = $state<CameraZone[]>(
+		(initial?.zones ?? []).map((z) => ({ ...z, points: z.points.map((p) => [p[0], p[1]]) })),
+	);
+	let masks = $state<CameraMasks>({
+		motion: (initial?.masks?.motion ?? []).map((m) => ({
+			points: m.points.map((p) => [p[0], p[1]]),
+		})),
+		objects: (initial?.masks?.objects ?? []).map((m) => ({
+			points: m.points.map((p) => [p[0], p[1]]),
+		})),
+	});
+	let zonesOnly = $state(initial?.zonesOnly ?? false);
+	const zonesValid = $derived(
+		zones.every(
+			(z, i) =>
+				z.name.trim() !== '' &&
+				!zones.some(
+					(o, j) => j !== i && o.name.trim().toLowerCase() === z.name.trim().toLowerCase(),
+				),
+		),
+	);
 	// Whom it tells (PLAN 82-3, NotifyGroup.svelte): copies, so that the
 	// list of cameras is not changed by what is being chosen.
 	let notify = $state<CameraNotify>(
@@ -80,6 +108,7 @@
 					...initial.notify,
 					kinds: [...(initial.notify.kinds ?? [])],
 					recipients: initial.notify.recipients?.map((r) => ({ ...r })) ?? null,
+					zones: [...(initial.notify.zones ?? [])],
 					window: initial.notify.window
 						? { ...initial.notify.window, days: [...(initial.notify.window.days ?? [])] }
 						: undefined,
@@ -299,14 +328,21 @@
 		name.trim() !== '' &&
 			taken.some((other) => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()),
 	);
-	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '' && !nameTaken);
+	const ready = $derived(name.trim() !== '' && mainURL.trim() !== '' && !nameTaken && zonesValid);
+	/** A zone was removed: messages limited to it forget it, "only in zones" needs one. */
+	function zoneGone(id: string) {
+		notify.zones = (notify.zones ?? []).filter((z) => z !== id);
+		if (zones.length === 0) zonesOnly = false;
+	}
 	/** The NAS asked before deleting recordings that exist (a narrower mode, fewer days). */
 	let askShrink = $state<{ body: Record<string, unknown>; lines: string[] } | null>(null);
-	function shrinkLines(next: { mode: RecordMode; retainDays: number }): string[] {
+	function shrinkLines(next: Kept): string[] {
 		const lines = shrinks(initial?.record, next).map((what) =>
 			what === 'days'
-				? t('nvr.shrink.days', { days: String(next.retainDays) })
-				: t(`nvr.shrink.${what}` as MessageKey),
+				? t('nvr.shrink.days', { days: String(recordDaysOf(next)) })
+				: what === 'eventDays'
+					? t('nvr.shrink.eventDays', { days: String(eventDaysOf(next)) })
+					: t(`nvr.shrink.${what}` as MessageKey),
 		);
 		if (lines.length === 0) lines.push(t('nvr.shrink.generic'));
 		lines.push(t('nvr.shrink.when'));
@@ -334,18 +370,29 @@
 				noPreload: !keepOpen,
 			},
 			detect: { enabled: detectOn, objects: detectOn ? detectObjects : [], plates, faces },
-			record: {
-				mode,
-				retainDays: Number(retainDays) || 14,
-				preSeconds: Number(preSeconds) || 0,
-				postSeconds: Number(postSeconds) || 0,
-			},
+			record: recordBody(),
 			audio: { enabled: audio, twoWay: audio && twoWay },
 			ptz: kind === 'onvif' && ptz,
 			notify: $state.snapshot(notify),
+			zones: $state.snapshot(zones).map((z) => ({ ...z, name: z.name.trim() })),
+			zonesOnly: zonesOnly && zones.length > 0,
+			masks: $state.snapshot(masks),
 		};
 		if (adding) body.enabled = true;
 		await send(body);
+	}
+	function recordBody(): Kept & { preSeconds: number; postSeconds: number } {
+		const events = Number(eventDays) || 14;
+		// Events keep nothing but events: their days are the only ones.
+		const record = mode === 'events' ? events : Number(recordDays) || 14;
+		return {
+			mode,
+			retainDays: Math.max(record, events),
+			recordDays: record,
+			eventDays: events,
+			preSeconds: Number(preSeconds) || 0,
+			postSeconds: Number(postSeconds) || 0,
+		};
 	}
 	async function send(body: Record<string, unknown>) {
 		saving = true;
@@ -360,7 +407,7 @@
 			if (err instanceof ApiError && err.code === 'nvr_recordings_shrink' && !body.confirmShrink) {
 				askShrink = {
 					body,
-					lines: shrinkLines(body.record as { mode: RecordMode; retainDays: number }),
+					lines: shrinkLines(body.record as Kept),
 				};
 				return;
 			}
@@ -776,21 +823,46 @@
 			{/snippet}
 		</SettingRow>
 		{#if mode !== 'off'}
+			{#if mode !== 'events'}
+				<SettingRow
+					icon="clock"
+					title={t('nvr.record.recordDays')}
+					desc={t(
+						mode === 'continuous' ? 'nvr.record.recordDaysHint' : 'nvr.record.recordDaysMotionHint',
+					)}
+					for="{uid}-days"
+					id="nvr-record-days"
+				>
+					{#snippet control()}
+						<label class="unit"
+							><input
+								id="{uid}-days"
+								class="field num"
+								type="number"
+								min="1"
+								max="365"
+								bind:value={recordDays}
+							/><span>{t('nvr.record.days')}</span></label
+						>
+					{/snippet}
+				</SettingRow>
+			{/if}
 			<SettingRow
 				icon="clock"
-				title={t('nvr.record.retain')}
-				desc={t('nvr.record.retainHint')}
-				for="{uid}-days"
+				title={t('nvr.record.eventDays')}
+				desc={t(mode === 'events' ? 'nvr.record.eventDaysOnlyHint' : 'nvr.record.eventDaysHint')}
+				for="{uid}-event-days"
+				id="nvr-event-days"
 			>
 				{#snippet control()}
 					<label class="unit"
 						><input
-							id="{uid}-days"
+							id="{uid}-event-days"
 							class="field num"
 							type="number"
 							min="1"
 							max="365"
-							bind:value={retainDays}
+							bind:value={eventDays}
 						/><span>{t('nvr.record.days')}</span></label
 					>
 				{/snippet}
@@ -885,7 +957,41 @@
 		</SettingRow>
 	</SettingGroup>
 
-	<NotifyGroup bind:notify camera={initial?.id} {objects} id="{uid}-notify" />
+	<SettingGroup title={t('nvr.areas.group')} desc={t('nvr.areas.hint')} id="{uid}-areas">
+		{#if adding}
+			<p class="muted note" id="nvr-areas-new">{t('nvr.areas.newCamera')}</p>
+		{:else}
+			<SettingRow
+				icon="grid"
+				title={t('nvr.areas.only')}
+				desc={zones.length ? t('nvr.areas.onlyHint') : t('nvr.areas.onlyNeedsZone')}
+				id="nvr-zones-only"
+			>
+				{#snippet control()}
+					<input
+						type="checkbox"
+						role="switch"
+						class="switch"
+						aria-label={t('nvr.areas.only')}
+						bind:checked={zonesOnly}
+						disabled={zones.length === 0}
+					/>
+				{/snippet}
+			</SettingRow>
+			<div class="areas-block" id="nvr-areas">
+				<ZoneEditor camera={initial!.id} bind:zones bind:masks onzonegone={zoneGone} />
+			</div>
+		{/if}
+	</SettingGroup>
+
+	<NotifyGroup
+		bind:notify
+		camera={initial?.id}
+		{objects}
+		zones={zones.filter((z) => z.id && z.name.trim())}
+		faces={detectOn && faces}
+		id="{uid}-notify"
+	/>
 
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if !mainURL.trim() && kind === 'onvif'}<p class="muted note">
@@ -1005,6 +1111,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
+	}
+	.areas-block {
+		min-width: 0;
 	}
 	.form-actions {
 		display: flex;

@@ -388,6 +388,26 @@ type CameraView struct {
 	ExpiresAt *int64 `json:"expiresAt"`
 	// Purging: the recordings of this removed camera are being deleted.
 	Purging bool `json:"purging,omitempty"`
+	// Zones, ZonesOnly and Masks are the areas drawn into the picture
+	// (PLAN 88); lists are never null.
+	Zones     []Zone `json:"zones"`
+	ZonesOnly bool   `json:"zonesOnly"`
+	Masks     Masks  `json:"masks"`
+}
+
+// areasView are a camera's areas with empty lists for none.
+func areasView(c Camera) ([]Zone, Masks) {
+	zones, masks := c.Zones, c.Masks
+	if zones == nil {
+		zones = []Zone{}
+	}
+	if masks.Motion == nil {
+		masks.Motion = []Mask{}
+	}
+	if masks.Objects == nil {
+		masks.Objects = []Mask{}
+	}
+	return zones, masks
 }
 
 // View is a deleted camera as the API lists it for administrators.
@@ -397,13 +417,16 @@ func (d DeletedCamera) View() CameraView {
 		ID: d.ID, Name: d.Name, Source: SourceView{},
 		Detect: Detect{Objects: []string{}}, Record: d.record().WithDays(),
 		Notify: Notify{Kinds: []string{}, Recipients: []Recipient{}, Window: Window{Days: []int{}}}, Deleted: true, DeletedAt: &deleted, ExpiresAt: &expires,
+		Zones: []Zone{}, Masks: Masks{Motion: []Mask{}, Objects: []Mask{}},
 	}
 }
 
 // View is the camera without its password.
 func (c Camera) View(state CameraState) CameraView {
 	s := c.Source
+	zones, masks := areasView(c)
 	return CameraView{
+		Zones: zones, ZonesOnly: c.ZonesOnly, Masks: masks,
 		ID: c.ID, Name: c.Name, Enabled: c.Enabled,
 		Source: SourceView{Kind: s.Kind, Host: s.Host, Port: s.Port, User: s.User, HasPassword: s.Password != "",
 			MainURL: s.MainURL, SubURL: s.SubURL, ONVIFPort: s.ONVIFPort, AllowPublic: s.AllowPublic,

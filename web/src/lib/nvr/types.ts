@@ -166,10 +166,21 @@ export type CameraStreams = {
 export type CameraDetect = { enabled: boolean; objects: string[]; plates: boolean; faces: boolean };
 export type CameraRecord = {
 	mode: RecordMode;
+	/** The longest anything is kept (0.80 reads only this). */
 	retainDays: number;
+	/** PLAN 88: continuous and motion recordings; absent (0.80) is retainDays. */
+	recordDays?: number;
+	/** PLAN 88: recordings of events; absent (0.80) is retainDays. */
+	eventDays?: number;
 	preSeconds: number;
 	postSeconds: number;
 };
+/** PLAN 88: a place in the camera's picture, [x, y], each 0 to 1. */
+export type AreaPoint = [number, number];
+/** PLAN 88: a named area of the picture; id is made by the NAS from the name. */
+export type CameraZone = { id?: string; name: string; points: AreaPoint[] };
+export type CameraMask = { points: AreaPoint[] };
+export type CameraMasks = { motion: CameraMask[]; objects: CameraMask[] };
 export type NotifyRecipient = { user: string; bell: boolean; push: boolean; email: boolean };
 export type NotifyWindow = { on: boolean; days: number[]; from: string; to: string };
 export type CameraNotify = {
@@ -187,6 +198,10 @@ export type CameraNotify = {
 	window?: NotifyWindow;
 	/** PLAN 83: only while Home Assistant says so; no rules (or null) is no condition. */
 	ha?: HACondition | null;
+	/** PLAN 88: messages about events only in these zones (IDs); none is the whole picture. */
+	zones?: string[];
+	/** PLAN 88: tell a face the recognition does not know (off by default). */
+	faceUnknown?: boolean;
 };
 /** One entity of Home Assistant and the states in which messages come. */
 export type HARule = { connection: string; entity: string; states: string[] };
@@ -218,6 +233,11 @@ export type Camera = {
 	detect?: CameraDetect;
 	record?: CameraRecord;
 	notify?: CameraNotify;
+	/** PLAN 88: areas drawn into the picture. */
+	zones?: CameraZone[];
+	/** Events only of objects that entered a zone. */
+	zonesOnly?: boolean;
+	masks?: CameraMasks;
 };
 
 export type CameraList = { cameras: Camera[]; objects?: string[] };
@@ -307,9 +327,14 @@ export type NvrEvent = {
 	end: number | null;
 	hasClip: boolean;
 	hasSnapshot: boolean;
+	/** Names of the camera's zones the object entered. */
 	zones: string[];
+	/** Seen by this account (PLAN 88: per account). */
 	reviewed: boolean;
+	/** Kept for good (PLAN 88): never deleted by the NAS. */
 	kept: boolean;
+	/** The export holding the kept event's video; absent without one. */
+	keptExport?: string;
 };
 export type EventList = { events: NvrEvent[]; next: number | null };
 
@@ -346,6 +371,8 @@ export type NvrExport = {
 	state: 'running' | 'done' | 'failed';
 	sizeBytes: number | null;
 	owner: string;
+	/** PLAN 88: the kept event whose video this is. */
+	event?: string;
 };
 
 export type PtzInfo = { supported: boolean; features: string[]; presets: string[] };
