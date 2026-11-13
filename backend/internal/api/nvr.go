@@ -267,6 +267,30 @@ func (c nvrConfirmations) options() nvr.SetOptions {
 	return nvr.SetOptions{EnableDocker: c.EnableDocker, ConfirmSleepingVolume: c.ConfirmSleepingVolume}
 }
 
+// nvrSettingsRequest is a change of the settings, decoded over the stored
+// ones: fields left out stay.
+type nvrSettingsRequest struct {
+	nvrSettingsView
+	nvrConfirmations
+}
+
+// UnmarshalJSON lets known plates in the request replace the stored list
+// as a whole, not entry by entry over the stored ones (an entry without
+// its name took the name that stood there, review PLAN 85-4).
+func (req *nvrSettingsRequest) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Plates json.RawMessage `json:"plates"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if probe.Plates != nil {
+		req.Plates = nil
+	}
+	type plain nvrSettingsRequest
+	return json.Unmarshal(data, (*plain)(req))
+}
+
 // handleSettingsSet stores {enabled, volume, detector: {kind}, storage:
 // {limitGB}, privacyNoticeDismissed, rtspOut, plates, notifyOff, decoder};
 // fields left out stay.
@@ -275,10 +299,7 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := a.nvr.Settings()
-	req := struct {
-		nvrSettingsView
-		nvrConfirmations
-	}{nvrSettingsView: settingsView(current)}
+	req := nvrSettingsRequest{nvrSettingsView: settingsView(current)}
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -455,14 +476,19 @@ type nvrCameraRequest struct {
 	recipientsNull bool
 }
 
-// UnmarshalJSON decodes a request over the stored camera. Recipients in
-// the request replace the stored list as a whole: encoding/json would
+// UnmarshalJSON decodes a request over the stored camera. Lists of
+// entries in the request – recipients, the rules of the condition on
+// Home Assistant – replace the stored list as a whole: encoding/json would
 // decode them over the stored entries by position, so that an entry left
-// partly out took the ways of whoever stood there before.
+// partly out took the values of whatever stood there before (for rules
+// review PLAN 85-4).
 func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	var probe struct {
 		Notify *struct {
 			Recipients json.RawMessage `json:"recipients"`
+			HA         *struct {
+				Rules json.RawMessage `json:"rules"`
+			} `json:"ha"`
 		} `json:"notify"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
@@ -471,6 +497,12 @@ func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	if probe.Notify != nil && probe.Notify.Recipients != nil {
 		req.Notify.Recipients = nil
 		req.recipientsNull = string(probe.Notify.Recipients) == "null"
+	}
+	if probe.Notify != nil && probe.Notify.HA != nil && probe.Notify.HA.Rules != nil && req.Notify.HA != nil {
+		// A copy of the condition: the stored camera's is not written into.
+		ha := *req.Notify.HA
+		ha.Rules = nil
+		req.Notify.HA = &ha
 	}
 	type plain nvrCameraRequest
 	return json.Unmarshal(data, (*plain)(req))

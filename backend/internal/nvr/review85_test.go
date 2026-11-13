@@ -122,3 +122,82 @@ func TestNotifyOnlyObjectsThatMoved(t *testing.T) {
 		t.Fatalf("an event of the titand before was told again: %+v", got)
 	}
 }
+
+// Review PLAN 85-4: events of the very same moment (two objects of one
+// frame) were split by a page and the rest of the group was lost (Frigate's
+// "before" is strict). Paged through with small pages, every event comes
+// exactly once, newest first.
+func TestEventPagesKeepGroupsOfOneMoment(t *testing.T) {
+	r, _ := capRig(t)
+	base := float64(r.now.Unix()) - 3600
+	starts := []float64{100, 90, 90, 90, 80, 70, 70, 60, 50, 50, 50, 50, 40}
+	var events []devEvent
+	for i, s := range starts {
+		events = append(events, devEvent{ID: fmt.Sprintf("%.6f-e%02d", base+s, i), Camera: "haustuer", Label: "person", Start: base + s})
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.data.events = events })
+	for _, limit := range []int{1, 2, 3, 4} {
+		seen := map[string]int{}
+		var order []float64
+		before := 0.0
+		for pages := 0; ; pages++ {
+			if pages > 20 {
+				t.Fatalf("limit %d: no end", limit)
+			}
+			list, next, err := r.m.Events(context.Background(), EventFilter{Cameras: []string{"haustuer"}, Limit: limit, Before: before})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range list {
+				seen[e.ID]++
+				order = append(order, e.Start)
+			}
+			if next == 0 {
+				break
+			}
+			before = next
+		}
+		for _, e := range events {
+			if seen[e.ID] != 1 {
+				t.Errorf("limit %d: %s came %d times", limit, e.ID, seen[e.ID])
+			}
+		}
+		for i := 1; i < len(order); i++ {
+			if order[i] > order[i-1] {
+				t.Errorf("limit %d: not newest first: %v", limit, order)
+				break
+			}
+		}
+	}
+}
+
+// Review PLAN 85-4: Frigate writes a guess "Anna-Lena" as "Anna_Lena"
+// into the file of an unassigned face; the list names the known person.
+func TestFaceGuessWithHyphen(t *testing.T) {
+	r, _ := capRig(t)
+	cam := r.m.Cameras()[0]
+	cam.Detect.Faces = true
+	if _, err := r.m.UpdateCamera(context.Background(), cam.ID, cam, CameraOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r.frigate.Set(func(f *DevFrigate) {
+		f.data.faces = map[string][]string{
+			"Anna-Lena": {"a.webp"},
+			"train":     {"1731412345.5-ab12-1731412399.25-Anna_Lena-0.82.webp", "1731412345.6-cd34-1731412400.5-Unbekannt_X-0.70.webp"},
+		}
+	})
+	faces, err := r.m.Faces(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	guesses := map[string]string{}
+	for _, a := range faces.Attempts {
+		guesses[a.File] = a.Guess
+	}
+	if got := guesses["1731412345.5-ab12-1731412399.25-Anna_Lena-0.82.webp"]; got != "Anna-Lena" {
+		t.Errorf("guess %q", got)
+	}
+	if got := guesses["1731412345.6-cd34-1731412400.5-Unbekannt_X-0.70.webp"]; got != "Unbekannt_X" {
+		t.Errorf("a guess without a known person stays: %q", got)
+	}
+}
