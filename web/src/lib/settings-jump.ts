@@ -63,13 +63,19 @@ function openRow(el: HTMLElement): boolean {
 	return true;
 }
 
-/** Chooses the tab of `?tab=` if the page shows tabs and another is chosen. */
-function chooseTab(root: ParentNode, tab: string | null): void {
-	if (!tab) return;
+/**
+ * Chooses the tab of `?tab=` if the page shows tabs and another is chosen.
+ * True once done (or nothing to do): a jump chooses the tab once, never
+ * again over a tab the user picked while it waits for a row.
+ */
+function chooseTab(root: ParentNode, tab: string | null): boolean {
+	if (!tab) return true;
 	const button = root.querySelector<HTMLElement>(
 		`[role="tablist"] [role="tab"][data-tab="${CSS.escape(tab)}"]`,
 	);
-	if (button && button.getAttribute('aria-selected') !== 'true') button.click();
+	if (!button) return false;
+	if (button.getAttribute('aria-selected') !== 'true') button.click();
+	return true;
 }
 
 let marked: HTMLElement | null = null;
@@ -118,8 +124,12 @@ export async function jumpToSetting(
 	if (!titles && !id && !tab) return null;
 	const until = Date.now() + WAIT_MS;
 	let deepest: HTMLElement | null = null;
+	// The page of the new address draws first.
+	await frame();
+	if (mine !== run) return null;
+	let tabDone = false;
 	while (mine === run && Date.now() < until) {
-		chooseTab(root, tab);
+		if (!tabDone) tabDone = chooseTab(root, tab);
 		if (!titles && !id) return null;
 		if (id) {
 			const el = document.getElementById(id);

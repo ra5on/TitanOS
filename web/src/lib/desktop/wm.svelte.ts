@@ -517,26 +517,29 @@ export function frameListening(id: string): string | undefined {
 // PLAN 86: the page a window is leaving while it moves to another. Until the
 // new page reports, the old one may still report itself (its title loads
 // late); that report must not take the window back (the menu of
-// Systemsteuerung follows the window's address).
-const leaving = new Map<string, { from: string; to: string }>();
+// Systemsteuerung follows the window's address). Only a report of the old
+// page shortly after the move counts as late; any other report ends the
+// watch (the new page, or the page a redirect led to).
+const leaving = new Map<string, { from: string; to: string; at: number }>();
 const pageOf = (href: string) => href.split('#')[0];
+const LATE_MS = 2500;
 
-/** Whether a page's report comes from the page its window is leaving. */
-export function staleReport(id: string, path: string): boolean {
+/** Whether a page's report comes late from the page its window is leaving. */
+export function staleReport(id: string, path: string, now = Date.now()): boolean {
 	const move = leaving.get(id);
 	if (!move) return false;
-	if (pageOf(path) === pageOf(move.to)) {
-		leaving.delete(id);
-		return false;
-	}
-	return pageOf(path) === pageOf(move.from);
+	const old = pageOf(path) === pageOf(move.from) && pageOf(path) !== pageOf(move.to);
+	if (old && now - move.at < LATE_MS) return true;
+	leaving.delete(id);
+	return false;
 }
 
 /** Shows another page of the program in its window. */
 export function navigateWindow(id: string, href: string) {
 	const win = wm.windows.find((w) => w.id === id);
 	if (!win) return;
-	if (pageOf(win.href) !== pageOf(href)) leaving.set(id, { from: win.href, to: href });
+	if (pageOf(win.href) !== pageOf(href))
+		leaving.set(id, { from: win.href, to: href, at: Date.now() });
 	else leaving.delete(id);
 	win.href = href;
 	if (frames.has(id) && !listening.has(id)) waiting.set(id, href);
