@@ -196,7 +196,8 @@ export type Camera = {
 	audio: { enabled: boolean; twoWay: boolean; codec?: string; subCodec?: string };
 	ptz: boolean;
 	state: CameraState;
-	rights?: { live: boolean; recordings: boolean };
+	/** names: recognised names and plates of this camera (PLAN 82-3). */
+	rights?: { live: boolean; recordings: boolean; names?: boolean };
 	/**
 	 * A removed camera (administrators only): it records nothing and has no
 	 * live picture; its recordings and events stay until `expiresAt`.
@@ -359,5 +360,13 @@ export type RecognizedPlate = {
 export type UserCameras = {
 	admin: boolean;
 	/** `deleted`: a removed camera (rights do not matter for it any more; left out). */
-	cameras: { id: string; name: string; live: boolean; recordings: boolean; deleted?: boolean }[];
+	/** `names`: recognised faces' names and plates (PLAN 82-3), only with `recordings`. */
+	cameras: {
+		id: string;
+		name: string;
+		live: boolean;
+		recordings: boolean;
+		names?: boolean;
+		deleted?: boolean;
+	}[];
 };

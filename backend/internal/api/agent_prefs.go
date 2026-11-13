@@ -101,7 +101,7 @@ func (s *Server) handleAgentSuggestions(w http.ResponseWriter, r *http.Request) 
 	if (currentUser(r).Role == auth.RoleOwner || currentUser(r).Role == auth.RoleAdmin) && env.notify != nil {
 		since := time.Now().Add(-48 * time.Hour)
 		seen := map[string]bool{}
-		msgs := env.notify.Messages()
+		msgs := env.notify.MessagesFor(currentUser(r).Name)
 		slices.SortFunc(msgs, func(a, b notify.Message) int { return b.Time.Compare(a.Time) })
 		for _, m := range msgs {
 			if m.Time.Before(since) || m.Severity == "info" && m.Kind != "update_available" {

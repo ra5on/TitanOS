@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
@@ -56,7 +57,15 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 	return res, nil
 }
 
-func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (any, error) {
+// toolNotifications lists what the bell of the token's account shows (a
+// camera's message only to its recipients).
+func (s *Server) toolNotifications(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+	return func(ctx context.Context, args json.RawMessage) (any, error) {
+		return s.notificationsFor(user, args)
+	}
+}
+
+func (s *Server) notificationsFor(user auth.User, args json.RawMessage) (any, error) {
 	env := s.toolEnv()
 	var req struct {
 		Limit       int    `json:"limit"`
@@ -82,7 +91,7 @@ func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (a
 		Text     string    `json:"text"`
 	}
 	list := []message{}
-	for _, m := range env.notify.Messages() {
+	for _, m := range env.notify.MessagesFor(user.Name) {
 		if rank[m.Severity] < least {
 			continue
 		}

@@ -431,6 +431,10 @@ type Recipient struct {
 	// Email goes to the account's own address (its notification
 	// settings), through the mail server of the NAS.
 	Email bool `json:"email"`
+	// Added is when an administrator chose this account here, set by
+	// titand (never taken from a request): an account made later under the
+	// same name, administrator or not, gets nothing of this entry.
+	Added time.Time `json:"added,omitzero"`
 }
 
 // MaxRecipients bounds the accounts of one camera.

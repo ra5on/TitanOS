@@ -3,6 +3,7 @@ package notify
 import (
 	"log/slog"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -57,5 +58,101 @@ func (m *Manager) NotifyVia(severity, kind, subject string, ways Ways) {
 	}
 	if ways.Push && m.Push != nil {
 		m.Push(message, "["+hostname+"] "+title)
+	}
+}
+
+// Target is one account a message of NotifyTo goes to, with its ways.
+// The caller has checked that the account may get it now.
+type Target struct {
+	User string
+	// Bell puts the message into this account's bell; only owners and
+	// administrators have one (the caller leaves it out for others).
+	Bell bool
+	// Push sends it to the account's own devices (PushTo).
+	Push bool
+	// Email sends it to the account's own address (its notification
+	// settings) through the mail server of the NAS; without an address or
+	// a mail server nothing is sent.
+	Email bool
+}
+
+// NotifyTo records and sends an event to some accounts, each through its
+// own ways (PLAN 82-3: the recipients of a camera). Like NotifyVia it
+// neither looks at the least severity nor collects for the summary.
+//
+//   - Bell: one message for the bell whose audience (Message.To) are the
+//     accounts with Bell; only their bells and their personal channels
+//     (tellPeople) get it. Without any such account nothing goes into the
+//     bell: a message without an audience would be shown to everyone.
+//   - Push: PushTo, to that account's devices only.
+//   - Email: to the account's own address, in its language.
+//   - agent: the KI-Agent (Observer), as for NotifyVia.
+//
+// The log names kind, ref and how many accounts got which way, never the
+// subject (it may hold a recognised person's name or a plate).
+func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, agent bool, ref string) {
+	var bell []string
+	pushes, mails := 0, 0
+	for _, t := range targets {
+		if t.Bell && !slices.Contains(bell, t.User) {
+			bell = append(bell, t.User)
+		}
+		if t.Push {
+			pushes++
+		}
+		if t.Email {
+			mails++
+		}
+	}
+	slices.Sort(bell)
+	m.mu.Lock()
+	settings := m.settings
+	title, text := wording(settings.Language, kind, subject)
+	message := Message{Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text, To: bell}
+	if len(bell) > 0 {
+		message.ID = m.nextID
+		m.nextID++
+		m.messages = append(m.messages, message)
+		if len(m.messages) > keep {
+			m.messages = m.messages[len(m.messages)-keep:]
+		}
+	}
+	m.mu.Unlock()
+	slog.Info("notification", "severity", severity, "kind", kind, "ref", ref, "bell", len(bell), "push", pushes, "email", mails, "agent", agent)
+	if len(bell) > 0 {
+		go m.tellPeople(message)
+		m.goKeepBell()
+	}
+	if agent && m.Observer != nil {
+		go m.Observer(message)
+	}
+	hostname, _ := os.Hostname()
+	for _, t := range targets {
+		if !t.Push && !t.Email {
+			continue
+		}
+		// Read without m.mu: the personal settings take it themselves.
+		address, language, content := m.personalMail(t.User)
+		ownTitle, ownText := wording(language, kind, subject)
+		if t.Push && m.PushTo != nil {
+			own := message
+			own.Title, own.Text = ownTitle, ownText
+			m.PushTo(t.User, ref, own, "["+hostname+"] "+ownTitle)
+		}
+		if !t.Email || address == "" || settings.Email.Host == "" {
+			continue
+		}
+		server := settings.Email
+		server.To = address
+		body := ownText
+		if content == "none" {
+			body = ownTitle
+		}
+		user, subjectLine := t.User, "["+hostname+"] "+ownTitle
+		go func() {
+			if !m.deliverPersonal(user, "email", func() error { return m.mail(server, subjectLine, body) }) {
+				slog.Warn("notification not delivered", "channel", "email", "kind", kind, "ref", ref, "user", user)
+			}
+		}()
 	}
 }

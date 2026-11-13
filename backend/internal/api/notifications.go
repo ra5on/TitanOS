@@ -28,8 +28,10 @@ func (a notifyArea) register(mux *routeMux, admin func(http.HandlerFunc) http.Ha
 	mux.HandleFunc("PUT /api/v1/notifications/temperatures", admin(a.handleTemperatureAlarmsChange))
 }
 
+// handleNotifications lists what the bell of this account shows: every
+// message but those meant for other accounts (a camera's recipients).
 func (a notifyArea) handleNotifications(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"messages": a.notify.Messages()})
+	writeJSON(w, http.StatusOK, map[string]any{"messages": a.notify.MessagesFor(currentUser(r).Name)})
 }
 
 func (a notifyArea) handleDismissNotifications(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +51,7 @@ func (a notifyArea) handleDismissNotifications(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	a.notify.Dismiss(req.IDs)
+	a.notify.Dismiss(currentUser(r).Name, req.IDs)
 	a.handleNotifications(w, r)
 }
 

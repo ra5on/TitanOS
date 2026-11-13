@@ -152,5 +152,8 @@
 	"error.nvr_face_not_found": "This person or picture does not exist (any more).",
 	"error.nvr_face_exists": "A person of this name exists already.",
 	"error.nvr_face_rejected": "The picture cannot be used. It must show exactly one clearly visible face.",
-	"error.nvr_faces_off": "Face recognition does not run: switch it on for at least one camera first."
+	"error.nvr_faces_off": "Face recognition does not run: switch it on for at least one camera first.",
+	"error.nvr_recipient_invalid": "A chosen recipient does not exist (any more) or is locked. Reload the page and choose the recipients again.",
+	"error.nvr_recipient_no_right": "A chosen recipient may not see this camera. Give the account the right to the camera first (at the account, under \"Cameras\").",
+	"error.nvr_recipient_bell": "Only owners and administrators have the bell. Choose push or e-mail for this account."
 }

@@ -24,7 +24,7 @@
 	// component brings its own plain heading (the agent's settings).
 	let { personal = false, bare = false }: { personal?: boolean; bare?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
-	async function setKinds(device: PushDevice, kind: 'nas' | 'agent', on: boolean) {
+	async function setKinds(device: PushDevice, kind: 'nas' | 'agent' | 'camera', on: boolean) {
 		const off = new Set(device.off ?? []);
 		if (on) off.delete(kind);
 		else off.add(kind);
@@ -33,6 +33,7 @@
 			const next = await api.put<PushDevice>(`/notifications/push/${device.id}`, {
 				nas: !off.has('nas'),
 				agent: !off.has('agent'),
+				camera: !off.has('camera'),
 			});
 			devices = (devices ?? []).map((d) => (d.id === next.id ? next : d));
 		} catch (err) {
@@ -183,6 +184,15 @@
 								disabled={busy}
 								onchange={(e) => setKinds(device, 'agent', e.currentTarget.checked)}
 							/><span>{t('push.kindAgent')}</span></label
+						>
+						<!-- PLAN 82-3: messages of cameras that name this account. -->
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={!device.off?.includes('camera')}
+								disabled={busy}
+								onchange={(e) => setKinds(device, 'camera', e.currentTarget.checked)}
+							/><span>{t('push.kindCamera')}</span></label
 						>
 					</span>
 					<span class="row-actions">

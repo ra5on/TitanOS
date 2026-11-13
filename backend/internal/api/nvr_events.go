@@ -53,6 +53,18 @@ func (a nvrArea) camerasWith(user auth.User, right string) []string {
 	return out
 }
 
+// shown is an event as the account may see it: without what the NVR
+// recognised (the name of a known face or plate, the plate it read)
+// unless the account has the right "names" on the camera (PLAN 82-3;
+// owners and administrators always). The pictures Frigate hands out
+// draw no names into them (only the kind of object, frigate/util/file.py).
+func (a nvrArea) shown(user auth.User, e nvr.Event) nvr.Event {
+	if !a.allows(user, e.Camera, nvr.RightNames) {
+		e.SubLabel, e.Plate = "", ""
+	}
+	return e
+}
+
 // queryTime reads a time in Unix seconds from the query; 0 if missing.
 func queryTime(r *http.Request, name string) (float64, bool) {
 	raw := r.URL.Query().Get(name)
@@ -117,6 +129,9 @@ func (a nvrArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 		writeNVRError(w, err)
 		return
 	}
+	for i := range events {
+		events[i] = a.shown(user, events[i])
+	}
 	out := map[string]any{"events": events, "next": nil}
 	if next > 0 {
 		out["next"] = next
@@ -143,7 +158,7 @@ func (a nvrArea) event(w http.ResponseWriter, r *http.Request) (nvr.Event, bool)
 
 func (a nvrArea) handleEvent(w http.ResponseWriter, r *http.Request) {
 	if event, ok := a.event(w, r); ok {
-		writeJSON(w, http.StatusOK, event)
+		writeJSON(w, http.StatusOK, a.shown(currentUser(r), event))
 	}
 }
 
@@ -179,7 +194,7 @@ func (a nvrArea) handleEventReviewed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event.Reviewed = req.Reviewed
-	writeJSON(w, http.StatusOK, event)
+	writeJSON(w, http.StatusOK, a.shown(currentUser(r), event))
 }
 
 // handleEventMedia passes a picture or the clip of an event on.
@@ -267,7 +282,9 @@ func nvrFileName(name string) string {
 // {"t":"hello","running":…}, {"t":"event",…}, {"t":"activity",…}. titand
 // keeps one connection to Frigate for all windows; each window gets only
 // the messages of cameras the account may watch live, checked for every
-// message. Like a console the connection ends with the login.
+// message; an event without the names and plates the account may not
+// see (right "names", PLAN 82-3). Like a console the connection ends with
+// the login.
 func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	// Accept checks that the page asking is this site, not another one.
@@ -304,6 +321,11 @@ func (a nvrArea) handleFeed(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case message := <-messages:
+			if message.Event != nil {
+				// Every window gets the same event: change a copy.
+				event := a.shown(viewer, *message.Event)
+				message.Event = &event
+			}
 			data, err := json.Marshal(message)
 			if err != nil {
 				continue

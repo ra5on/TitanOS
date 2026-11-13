@@ -2,8 +2,8 @@
 	// PLAN 79-7 (drawing 79-nvr/entwurf, part 4): the NVR's settings as rows –
 	// where recordings go and how much room they may take, which device
 	// detects, known faces and plates, the RTSP output for Home Assistant,
-	// the privacy notice again and the switch for the whole NVR. Every row
-	// saves its own change.
+	// the cameras' messages (PLAN 82-3), the privacy notice again and the
+	// switch for the whole NVR. Every row saves its own change.
 	import { api, ApiError } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -13,6 +13,7 @@
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Confirm from '#lib/nvr/Confirm.svelte';
 	import FacesRow from '#lib/nvr/FacesRow.svelte';
+	import NotifyOverview from '#lib/nvr/NotifyOverview.svelte';
 	import { nvr, refreshNvr } from '#lib/nvr/nvr.svelte.ts';
 	import PlatesRow from '#lib/nvr/PlatesRow.svelte';
 	import { dayClock, decoderName, decoderReason, deviceName } from '#lib/nvr/texts.ts';
@@ -348,6 +349,13 @@
 			</SettingRow>
 		{/if}
 	</SettingGroup>
+
+	<NotifyOverview
+		cameras={nvr.cameras}
+		off={!!s.notifyOff}
+		{busy}
+		onswitch={(on) => save({ notifyOff: !on }, 'notify')}
+	/>
 
 	<SettingGroup title={t('nvr.settings.general')} id="nvr-general">
 		<SettingRow

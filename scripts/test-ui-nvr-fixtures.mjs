@@ -148,6 +148,21 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       camera("einfahrt", "Einfahrt", 2, {
         detect: { enabled: true, objects: ["person", "car"], plates: true, faces: false },
         record: { mode: "continuous", retainDays: 7, preSeconds: 5, postSeconds: 5 },
+        // PLAN 82-3: chosen accounts (sam may not see this camera), a pause and a window.
+        notify: {
+          titan: true,
+          push: true,
+          email: false,
+          homeAssistant: true,
+          agent: false,
+          kinds: ["car", "plate", "offline"],
+          recipients: [
+            { user: "alex", bell: true, push: true, email: false },
+            { user: "sam", bell: false, push: true, email: false },
+          ],
+          pauseSeconds: 300,
+          window: { on: true, days: [1, 2, 3, 4, 5], from: "22:00", to: "06:00" },
+        },
       }),
       camera("garten", "Garten", 3, {
         ptz: true,
@@ -176,6 +191,20 @@ export function nvrState(now = Math.floor(Date.now() / 1000)) {
       "person", "bicycle", "car", "motorcycle", "bus", "bird",
       "cat", "dog", "horse", "sheep", "cow", "bear",
     ],
+    /**
+     * What GET /nvr/recipients answers (PLAN 82-3): alex is signed in, mara
+     * has neither an address nor a device, sam (Benutzer) may see the front
+     * door and switched camera messages off on his device.
+     */
+    recipients: {
+      mailServer: true,
+      accounts: [
+        { name: "alex", admin: true, email: true, pushDevices: 1, pushDevicesOff: 0, cameras: null, names: null },
+        { name: "mara", admin: true, email: false, pushDevices: 0, pushDevicesOff: 0, cameras: null, names: null },
+        // sam has no right "Namen und Kennzeichen" anywhere.
+        { name: "sam", admin: false, email: true, pushDevices: 0, pushDevicesOff: 1, cameras: ["haustuer"], names: [] },
+      ],
+    },
     /** Rights of the signed-in account when it is no administrator. */
     rights: { haustuer: { live: true, recordings: false } },
     /** What GET /users/{name}/cameras answers per account. */
@@ -302,7 +331,7 @@ function visible(s) {
       audio: c.audio,
       ptz: c.ptz,
       state: c.state,
-      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings },
+      rights: { live: !!s.rights[c.id]?.live, recordings: !!s.rights[c.id]?.recordings, names: !!s.rights[c.id]?.names },
     }));
 }
 
@@ -390,16 +419,27 @@ export async function installNvr(target, state = nvrState()) {
       const name = decodeURIComponent(m[1]);
       const rows = (s.userCameras[name] ??= {
         admin: false,
-        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, ...(c.deleted ? { deleted: true } : {}) })),
+        cameras: s.cameras.map((c) => ({ id: c.id, name: c.name, live: false, recordings: false, names: false, ...(c.deleted ? { deleted: true } : {}) })),
       });
       if (method === "PUT")
         for (const [id, rights] of Object.entries(body?.cameras ?? {})) {
           const row = rows.cameras.find((c) => c.id === id);
-          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings });
+          // Names count only with recordings (PLAN 82-3); left out, they stay.
+          const names = (rights.names ?? row?.names) === true && !!rights.recordings;
+          if (row) Object.assign(row, { live: !!rights.live, recordings: !!rights.recordings, names });
         }
       return json(rows);
     }
     if (path === "/nvr/status") return json(status(s));
+    if (path === "/nvr/recipients") {
+      if (adminOnly()) return;
+      // Administrators see every camera (null in the state: all of them).
+      const all = s.cameras.filter((c) => !c.deleted).map((c) => c.id);
+      return json({
+        mailServer: s.recipients.mailServer,
+        accounts: s.recipients.accounts.map((a) => ({ ...a, cameras: a.cameras ?? all, names: a.names ?? all })),
+      });
+    }
     if (path === "/nvr/settings") {
       if (adminOnly()) return;
       if (method === "PUT") {

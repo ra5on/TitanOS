@@ -40,3 +40,29 @@ Glocke und gehen über die eingeschalteten Wege hinaus.
 Jede Meldung kommt einmal je Ereignisfolge, nicht bei jeder Prüfung erneut.
 Eine Notabschaltung bei Hitze gibt es nicht; die Hardware schaltet bei
 kritischer Temperatur selbst ab.
+
+## Meldungen an gewählte Konten (seit 0.79)
+
+Bisher gingen alle Meldungen an dieselben Stellen: die gemeinsame Glocke der
+Besitzer und Administratoren, die eingerichteten Wege und die Geräte der
+Administratoren. Die Kameras des NVR können ihre Meldungen jetzt an
+einzelne Konten schicken, je Konto über eigene Wege (NVR › Kameras ›
+Ändern › Meldungen; Einzelheiten in `docs/NVR.md`, „Meldungen je Kamera“):
+
+- **Glocke:** Die Meldung erscheint nur in der Glocke der gewählten Konten
+  (nur Besitzer und Administratoren haben eine). „Entfernen“ nimmt sie nur
+  aus der eigenen Glocke; die anderen Empfänger sehen sie weiter. Die
+  persönlichen Wege (Konto › Meine Benachrichtigungen) bekommen sie nur bei
+  diesen Konten.
+- **Push:** an die Geräte des Kontos, auch eines Benutzers. Jedes Gerät hat
+  dafür den eigenen Schalter „Kameras“ neben „Meldungen von TitanOS“ und
+  „KI-Agent“.
+- **E-Mail:** an die eigene Adresse des Kontos aus seinen persönlichen
+  Benachrichtigungen, über den Mailserver unter Einstellungen ›
+  Benachrichtigungen. Ohne eigene Adresse oder ohne Mailserver geht keine
+  E-Mail; das Formular der Kamera sagt es.
+
+Diese Meldungen richten sich nicht nach „Verschicken ab“ und werden nicht
+gesammelt (tägliche Sammelmitteilung); der Text im Systemprotokoll nennt nie
+erkannte Personen oder Kennzeichen. Nach einem Rückweg auf 0.78 zeigt die
+Glocke solche Meldungen allen Administratoren.
