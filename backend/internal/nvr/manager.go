@@ -501,6 +501,10 @@ func cloneCameras(list []Camera) []Camera {
 	for i, c := range list {
 		c.Detect.Objects = slices.Clone(c.Detect.Objects)
 		c.Notify.Kinds = slices.Clone(c.Notify.Kinds)
+		// A request is decoded into a copy of the stored camera: shared
+		// slices would let a refused change reach the cameras in RAM.
+		c.Notify.Recipients = slices.Clone(c.Notify.Recipients)
+		c.Notify.Window.Days = slices.Clone(c.Notify.Window.Days)
 		out[i] = c
 	}
 	return out
@@ -619,6 +623,10 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 	if err := m.uniqueNameLocked(c); err != nil {
 		return c, err
 	}
+	// Only now is the ID known that the rights of the recipients are on.
+	if c, err = m.checkRecipients(c, nil); err != nil {
+		return c, err
+	}
 	// The ID of a deleted camera takes its recordings back: they are kept
 	// from now on as the new camera keeps its own.
 	if at := slices.IndexFunc(deleted, func(d DeletedCamera) bool { return d.ID == c.ID }); at >= 0 && !opts.ConfirmShrink &&
@@ -721,6 +729,9 @@ func (m *Manager) UpdateCamera(ctx context.Context, id string, c Camera, opts Ca
 		c.Source.Password = was.Source.Password
 	}
 	if err := m.uniqueNameLocked(c); err != nil {
+		return c, err
+	}
+	if c, err = m.checkRecipients(c, &was); err != nil {
 		return c, err
 	}
 	// The sound's codec: from a check of this stream, else as it was for

@@ -9,6 +9,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
+	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
 
 // wireNVR wires the network video recorder (PLAN 79-7, docs/NVR.md):
@@ -65,10 +66,25 @@ func (w *titand) wireNVR() error {
 	}
 	w.recorder.Notify = w.notifier.Notify
 	w.recorder.Timezone = w.settings.CurrentTimezone
-	// Messages about a camera go the ways its owner chose for it; Home
-	// Assistant reads its sensors from the NVR (api/homeassistant_mqtt.go).
+	// Messages about a camera go to the accounts chosen at the camera, each
+	// its own ways (PLAN 82-3); a camera of 0.78 without such a list still
+	// goes its old ways to the administrators. Home Assistant reads its
+	// sensors from the NVR (api/homeassistant_mqtt.go).
 	w.recorder.Route = func(n nvr.Notice) {
-		w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent, Ref: n.Camera})
+		if n.Legacy {
+			w.notifier.NotifyVia(n.Severity, n.Message, n.Subject, notify.Ways{Bell: n.Titan, Push: n.Push, Email: n.Email, Agent: n.Agent, Ref: n.Camera})
+			return
+		}
+		targets := make([]notify.Target, 0, len(n.Targets))
+		for _, t := range n.Targets {
+			targets = append(targets, notify.Target{User: t.User, Bell: t.Bell, Push: t.Push, Email: t.Email})
+		}
+		w.notifier.NotifyTo(n.Severity, n.Message, n.Subject, targets, n.Agent, n.Camera)
+	}
+	// A camera's push goes to the account's own devices that take camera
+	// messages; tapping it opens the NVR.
+	w.notifier.PushTo = func(user, ref string, message notify.Message, title string) {
+		w.pushes.SendCamera(user, webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + ref, URL: "/nvr"})
 	}
 	if err := w.recorder.Load(); err != nil {
 		slog.Warn("NVR settings not readable from /config", "err", err)
