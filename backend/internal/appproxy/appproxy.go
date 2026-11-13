@@ -170,8 +170,12 @@ type Manager struct {
 	// unreadable: Load could not read the routes from /config (see Load).
 	unreadable bool
 	proxies    map[string]*appHandler
-	// published is the content last written to the avahi hosts file.
+	// published is the address and names published last (mdns.go).
 	published string
+	// mdns publishes the names; hostsCleared: /etc/avahi/hosts holds no
+	// names of an older titand any more.
+	mdns         namePublisher
+	hostsCleared bool
 	// hostsFile and reload are replaced in tests.
 	hostsFile string
 	reload    func() error
@@ -192,7 +196,7 @@ type Manager struct {
 
 // NewManager returns a manager with no routes; Load reads them.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", kick: make(chan struct{}, 1), Tailnet: newTailnet(), tailnetKick: make(chan struct{}, 1)}
+	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", mdns: &avahiBus{}, kick: make(chan struct{}, 1), Tailnet: newTailnet(), tailnetKick: make(chan struct{}, 1)}
 }
 
 // Load reads the routes from /config. A missing file means none.
