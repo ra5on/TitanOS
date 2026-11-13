@@ -316,6 +316,41 @@ try {
   );
   await page.screenshot({ path: `${out}/loeschen-frage-unten.png` });
   await confirm.getByRole("button", { name: "Abbrechen" }).tap();
+
+  // Menus are sheets from the bottom: the ⋯ menu of a program, a button's menu.
+  await page.goto(base + "/settings/appearance");
+  await page.locator("header.phone-bar").waitFor();
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "Seiten des Programms" }).tap();
+  const more = page.locator("header.phone-bar .pages");
+  await more.waitFor();
+  await page.waitForTimeout(350);
+  let mb = await more.boundingBox();
+  assert.ok(
+    mb.x === 0 && mb.width === W && Math.abs(mb.y + mb.height - H) <= 1,
+    `⋯ menu as a sheet (${JSON.stringify(mb)})`,
+  );
+  for (const h of await more
+    .locator("[role^=menuitem]")
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
+    assert.ok(h >= 47.5, `menu entry ≥ 48 px (${h})`);
+  await page.screenshot({ path: `${out}/menue-unten.png` });
+  await swipe(page, cdp, [200, mb.y + 12], [200, mb.y + 400]);
+  await more.waitFor({ state: "detached" });
+  // A menu of a button (Dropdown) on the files page.
+  await page.goto(base + "/files?root=share%2FDocuments");
+  await page.locator("[data-file-name='Urlaub']").waitFor();
+  await page.getByRole("button", { name: "Neu" }).first().tap();
+  const drop = page.locator(".dropdown-panel:popover-open");
+  await drop.waitFor();
+  await page.waitForTimeout(350);
+  mb = await drop.boundingBox();
+  assert.ok(
+    mb.x === 0 && mb.width === W && Math.abs(mb.y + mb.height - H) <= 1,
+    `button menu as a sheet (${JSON.stringify(mb)})`,
+  );
+  await swipe(page, cdp, [200, mb.y + 10], [200, mb.y + 300]);
+  await drop.waitFor({ state: "detached" });
   await ctx.close();
 
   // iOS Safari has its own swipe from the edge: TitanOS leaves it alone.

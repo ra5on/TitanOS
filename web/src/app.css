@@ -1566,3 +1566,55 @@ fieldset.srows {
 	border: 1px solid color-mix(in srgb, #fff 12%, transparent);
 	box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
 }
+
+/* PLAN 87: on the phone (Shell sets data-phone on <html>) menus come up from
+   the bottom as a sheet across the width – the ⋯ menu of a program, the
+   menus of buttons (Dropdown) and of rows (ContextMenu) – with large
+   targets and a grip; a swipe down closes them (lib/components/sheet.ts).
+   Pages in a window of the desktop never get it. */
+:root[data-phone] .dropdown-panel.floating-menu {
+	position: fixed !important;
+	inset: auto 0 0 0 !important;
+	width: 100% !important;
+	min-width: 0 !important;
+	max-width: none !important;
+	max-height: 78dvh !important;
+	margin: 0 !important;
+	padding: var(--space-2) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom)) !important;
+	border-radius: 20px 20px 0 0 !important;
+	border-bottom: 0;
+	overscroll-behavior: contain;
+	z-index: 70;
+}
+:root[data-phone] .dropdown-panel.floating-menu::before {
+	content: '';
+	flex: none;
+	align-self: center;
+	width: 40px;
+	height: 5px;
+	margin: 0 0 var(--space-2);
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--text) 35%, transparent);
+}
+:root[data-phone] .dropdown-panel.floating-menu:popover-open::backdrop {
+	background: var(--overlay);
+}
+:root[data-phone] .dropdown-panel [role^='menuitem'] {
+	min-height: 48px;
+	white-space: normal;
+	overflow-wrap: break-word;
+	font-size: var(--text-md);
+}
+:root[data-phone][data-fx-micro='on'] .dropdown-panel.floating-menu {
+	animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sheet-up {
+	from {
+		transform: translateY(100%);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	:root[data-phone][data-fx-micro='on'] .dropdown-panel.floating-menu {
+		animation: none;
+	}
+}

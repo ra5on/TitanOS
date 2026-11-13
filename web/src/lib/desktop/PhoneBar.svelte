@@ -15,6 +15,7 @@
 	import { localCommandStates, runLocalCommand } from '../menu-commands.svelte.ts';
 	import { entries, goTarget, menusFor, type MenuEntry } from './menubar/menus.ts';
 	import { unreadCount } from '../notifications.svelte.ts';
+	import { swipeDown } from '../components/sheet.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -143,7 +144,16 @@
 			aria-label={t('desktop.phone.pages')}><Icon name="more" size={20} /></button
 		>
 		{#if open}
-			<div class="pages dropdown-panel floating-menu" role="menu">
+			<!-- PLAN 87: a sheet from the bottom (app.css); a touch beside it or a swipe down closes it. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+			<div class="sheet-back" onclick={() => (open = false)}></div>
+			<div
+				class="pages dropdown-panel floating-menu"
+				role="menu"
+				tabindex="-1"
+				use:swipeDown={{ close: () => (open = false) }}
+				onkeydown={(e) => e.key === 'Escape' && (open = false)}
+			>
 				{#if items.length > 1}<div class="menu-title">{t('menubar.phone.pages')}</div>{/if}
 				{#each items.length > 1 ? items : [] as item, i (i)}
 					{#if 'label' in item}
@@ -259,6 +269,12 @@
 	}
 	.space {
 		flex: 1;
+	}
+	.sheet-back {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		background: var(--overlay);
 	}
 	.menu-sub {
 		padding: var(--space-1-5) var(--space-2-5) 2px;

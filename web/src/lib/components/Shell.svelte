@@ -135,6 +135,13 @@
 			window.removeEventListener('keydown', key);
 		};
 	});
+	// PLAN 87: menus become sheets from the bottom on the phone (app.css).
+	$effect(() => {
+		const root = document.documentElement;
+		if (frame === 'phone') root.dataset.phone = '';
+		else delete root.dataset.phone;
+		return () => delete root.dataset.phone;
+	});
 	// Only the phone's bar sticks above a page.
 	$effect(() => {
 		const root = document.documentElement.style;
