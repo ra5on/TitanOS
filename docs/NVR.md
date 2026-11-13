@@ -1,6 +1,6 @@
 # NVR – Kameras, Aufnahme und Erkennung (PLAN 79-7)
 
-Stand: **0.78** – Backend und Oberfläche: Programm „NVR“ (Live, Aufnahmen, Ereignisse, Kameras, Einstellungen mit Gesichtern und Kennzeichen, Diagnose, Einrichtung), Reiter „Kameras“ bei den Konten, Widget „Kamera“; dazu Ereignisse, Wiedergabe, Export, Schwenken, Gegensprechen, Speichergrenze, Meldungswege je Kamera, Sicherung. Die Oberfläche beschreiben `docs/DESKTOP.md` und `docs/rules/WEB-UI.md` (Abschnitt NVR). Ab Werk aus.
+Stand: **0.78** – Backend und Oberfläche: Programm „NVR“ (Live, Aufnahmen, Ereignisse, Kameras, Einstellungen mit Gesichtern und Kennzeichen, Diagnose, Einrichtung), Reiter „Kameras“ bei den Konten, Widget „Kamera“; dazu Ereignisse, Wiedergabe, Export, Schwenken, Gegensprechen, Speichergrenze, Meldungen je Kamera mit Empfängern, Pause und Zeitfenster (0.79), Sicherung. Die Oberfläche beschreiben `docs/DESKTOP.md` und `docs/rules/WEB-UI.md` (Abschnitt NVR). Ab Werk aus.
 
 Der NVR nimmt Netzwerkkameras (RTSP, ONVIF) auf und erkennt Personen, Fahrzeuge, Tiere, auf Wunsch Kennzeichen und Gesichter. Die Arbeit macht **Frigate** (MIT-Lizenz) in einem Container, den TitanOS verwaltet und nirgends als App zeigt. Der Benutzer sieht nur TitanOS: Er schreibt keine Konfigurationsdatei und öffnet nie Frigates Oberfläche.
 
@@ -70,6 +70,7 @@ Eine feste, geprüfte Version je TitanOS-Release: **0.18.2**, Abbild `ghcr.io/bl
   "privacyNoticeDismissed": false,
   "rtspOut": false, "rtspUser": "", "rtspPassword": "" }   // die letzten beiden nur lesen
 // Das Geheimnis zwischen titand und Frigate (proxySecret) steht nie in einer Antwort; eine Anfrage ändert es nicht.
+// Seit 0.79 auch "notifyOff": false – der Hauptschalter der Meldungen aller Kameras (Abschnitt „Meldungen je Kamera“).
 ```
 
 ```jsonc
@@ -86,7 +87,10 @@ Eine feste, geprüfte Version je TitanOS-Release: **0.18.2**, Abbild `ghcr.io/bl
   "audio": { "enabled": false, "twoWay": false,
              "codec": "MPEG4-GENERIC" },     // nur lesen: Ton-Codec des Hauptstroms, wie titands Prüfung ihn fand; fehlt, solange unbekannt
   "ptz": false,
-  "notify": { "titan": true, "push": false, "email": false, "homeAssistant": false, "agent": false, "kinds": ["person", "offline"] },
+  "notify": { "titan": true, "push": false, "email": false, "homeAssistant": false, "agent": false, "kinds": ["person", "offline"],
+              "recipients": [{ "user": "alex", "bell": true, "push": true, "email": false, "added": "2026-11-13T07:00:00Z" }],   // null: Kamera von 0.78; "added" setzt titand
+              "pauseSeconds": 60,                                                   // 0, 60, 300, 900, 1800, 3600; fehlt: 60
+              "window": { "on": false, "days": [], "from": "", "to": "" } },        // siehe „Meldungen je Kamera“
   "state": { "online": true, "known": true, "fps": 15, "detectionFps": 1.2, "offlineSince": null },
   "deleted": false, "deletedAt": null, "expiresAt": null }   // siehe „Gelöschte Kameras“
 ```
@@ -233,10 +237,13 @@ Frigate löscht die Aufnahmen einer Kamera, die nicht mehr in `config.yml` steht
 | `GET /api/v1/nvr/cameras/{id}/snapshot.jpg` | Recht `live` | Standbild |
 | `GET /api/v1/nvr/cameras/{id}/live` | Recht `live` | Live (WebSocket) |
 | `GET`, `PUT /api/v1/users/{name}/cameras` | Administrator | Kamerarechte eines Kontos |
+| `GET /api/v1/nvr/recipients` | Administrator | Konten, die eine Kamera benachrichtigen kann, mit E-Mail-Adresse ja/nein, Geräten und sichtbaren Kameras (PLAN 82-3) |
 
 Dazu die Routen des Abschnitts „API Phase 2“ (Ereignisse, Feed, Aufnahmen, Wiedergabe, Export, PTZ, Gegensprechen, Gesichter, Kennzeichen).
 
 Fehlercodes (Texte in `web/src/lib/i18n/features/errors.{de,en}.json`): `nvr_event_not_found`, `nvr_export_not_found`, `nvr_export_running`, `nvr_export_failed`, `nvr_ptz_unsupported`, `nvr_face_not_found`, `nvr_face_exists`, `nvr_face_rejected`, `nvr_faces_off`, `rate_limited`, `nvr_unavailable`, `nvr_docker_off`, `nvr_no_volume`, `nvr_volume_sleeps`, `nvr_recordings_shrink`, `nvr_exports_unreadable`, `nvr_rights_unreadable`, `nvr_target_public`, `nvr_camera_not_found`, `nvr_camera_exists`, `nvr_camera_name_exists`, `nvr_camera_limit`, `nvr_not_running`, `nvr_disabled`, `nvr_invalid`, `nvr_access_admin`, `nvr_no_picture`.
+
+Empfänger einer Kamera (PLAN 82-3): `nvr_recipient_invalid` (Konto gibt es nicht oder gesperrt), `nvr_recipient_no_right` (darf die Kamera nicht sehen), `nvr_recipient_bell` (Glocke für einen Benutzer), jeweils `400`.
 
 ## API Phase 2
 
@@ -406,7 +413,7 @@ Ein Kennzeichen: 1–64 Zeichen aus Buchstaben (auch Umlaute), Ziffern, Leerzeic
 
 ## Meldungen je Kamera
 
-Jede Kamera wählt Wege (`notify.titan`, `push`, `email`, `homeAssistant`, `agent`) und Arten (`notify.kinds`: Objektnamen wie `person`, `car`, `dog`, dazu `plate`, `face`, `offline`). Ausgewertet wird, was Frigate über seinen WebSocket meldet (`nvr/routing.go`):
+Jede Kamera wählt Arten (`notify.kinds`: Objektnamen wie `person`, `car`, `dog`, dazu `plate`, `face`, `offline`), ihre Empfänger mit deren Wegen, Home Assistant und KI-Agent, eine Pause und ein Zeitfenster (PLAN 82-3, seit 0.79). Ausgewertet wird, was Frigate über seinen WebSocket meldet (`nvr/routing.go`, `nvr/recipients.go`):
 
 | Art | Wann | Meldung |
 |---|---|---|
@@ -417,9 +424,20 @@ Jede Kamera wählt Wege (`notify.titan`, `push`, `email`, `homeAssistant`, `agen
 | Gesicht | Frigate hat ein **bekanntes** Gesicht erkannt (einmal je Ereignis) | `nvr_event_face_known` |
 | Offline | 5 Minuten kein Bild | `nvr_camera_offline` |
 
-- Gemeldet wird ein Objekt nur, wenn sein Name in `kinds` steht (also `car`, nicht „Fahrzeug“); die Gruppe bestimmt nur den Text und die Sperrzeit.
-- **Sperrzeit:** höchstens eine Meldung je Kamera und Art in 60 Sekunden (`nvr.NoticePause`).
-- **Wege:** Glocke und persönliche Meldungen (`titan`), Push an angemeldete Geräte (`push`), E-Mail über den eingerichteten Mailweg (`email`, nur wenn E-Mail in den Benachrichtigungen an ist), KI-Agent (`agent`: die Meldung geht an denselben Beobachter wie alle TitanOS-Meldungen). `notify.Manager.NotifyVia` schickt genau über die gewählten Wege – unabhängig von der Mindeststufe und der Sammelzustellung der allgemeinen Benachrichtigungen. Ein Bild hängt nicht an (die vorhandenen Wege tragen keins). Ins Systemprotokoll schreibt `NotifyVia` nur Art und Kennung der Kamera (`ref`), nie den Text: Der nennt erkannte Personen und Kennzeichen („Anna · Haustür“), und das Protokoll landet im Diagnosepaket und auf dem Protokoll-Volume. Ebenso tragen Fehler von Anfragen an Frigate keinen Pfad (der eines Gesichts enthält den Namen der Person).
+- Gemeldet wird ein Objekt nur, wenn sein Name in `kinds` steht (also `car`, nicht „Fahrzeug“); die Gruppe bestimmt nur den Text und die Pause.
+- **Hauptschalter:** NVR › Einstellungen › Benachrichtigungen › „Meldungen der Kameras“ (`notifyOff` in `GET`/`PUT /api/v1/nvr/settings`, gespeichert als „aus“-Feld, damit eine Datei von 0.78 ohne das Feld meldet). Aus: keine Kamera meldet etwas – keine Glocke, kein Push, keine E-Mail, nichts an den KI-Agenten; jede Kamera behält ihre Wahl. Die Sensoren für Home Assistant sind Zustände, keine Mitteilungen, und laufen weiter. Darunter steht je Kamera, wer was bekommt (Arten, Empfänger mit Wegen, ein gewähltes Konto, das zurzeit nichts bekommt, und warum, Home Assistant/KI-Agent, Pause, Zeitfenster), mit „Ändern“ in die Zeilen der Kamera (`/nvr/cameras?edit=<id>#nvr-notify-recipients`).
+- **Pause** (`notify.pauseSeconds`): keine, 1, 5, 15, 30 oder 60 Minuten je Kamera und Art; ohne Angabe (Kamera von 0.78) 60 Sekunden. Eine Meldung, die Hauptschalter, Zeitfenster oder Empfänger zurückhalten, startet keine Pause.
+- **Zeitfenster** (`notify.window`: `on`, `days` 1 = Montag … 7 = Sonntag, `from`, `to` als HH:MM in der Zeitzone des NAS): Ereignisse (Person, Fahrzeug, Tier, Kennzeichen, Gesicht) nur im Fenster. Liegt `to` vor `from`, läuft das Fenster über Mitternacht in den nächsten Tag (es gehört zum Tag seines Beginns); gleiche Zeiten heißen den ganzen Tag. „Kamera nicht erreichbar“ meldet immer: Eine Kamera, die nachts ausfällt, darf das Fenster nicht verstecken. Ohne Fenster meldet die Kamera jederzeit.
+- **Empfänger** (`notify.recipients`: `[{user, bell, push, email}]`, Entscheidung des Inhabers 13.11.2026 „Admin je Kamera“): Ein Administrator wählt bei der Kamera Konten, die die Kamera sehen dürfen, und je Konto die Wege. Bei jeder Meldung prüft titand neu: Das Konto gibt es, es ist nicht gesperrt, es ist das gewählte (`added`, die Zeit der Wahl, setzt titand und nimmt sie nie aus der Anfrage: ein später unter demselben Namen angelegtes Konto, auch ein Administrator, bekommt nichts) und es darf die Kamera sehen (Besitzer und Administratoren immer; andere über ihr Kamerarecht samt dessen Zeitstempel, siehe „Rechte“; sind die Rechte unlesbar, nur Administratoren). **Kennzeichen und Gesichter** gehen nur an Administratoren, wie nur sie sie im NVR sehen. Die Wege:
+  - **Glocke** nur für Besitzer und Administratoren (Benutzer haben keine): eine Meldung mit Empfängerliste (`notify.Message.To`); nur deren Glocken zeigen sie (`GET /api/v1/notifications`, auch das MCP-Werkzeug `notifications` und die Vorschläge des KI-Agenten), nur deren persönliche Wege bekommen sie, „Entfernen“ nimmt sie aus der eigenen Glocke, bei den anderen bleibt sie.
+  - **Push** an die Geräte des Kontos über die eigene Art „Kameras“ (`webpush.KindCamera`): je Gerät abschaltbar wie „Meldungen von TitanOS“ und „KI-Agent“ (Konto › Mitteilungen auf diesem Gerät), unabhängig vom Schalter des KI-Agenten.
+  - **E-Mail** an die eigene Adresse des Kontos (seine persönlichen Benachrichtigungen, `email.to`; ob dort E-Mail für Meldungen des NAS an ist, zählt nicht) über den Mailserver unter Einstellungen › Benachrichtigungen. Ohne Adresse oder ohne Mailserver geht nichts; das Formular sagt es beim Konto. Text in der Sprache des Kontos, mit „nur Titel“, wenn das Konto das gewählt hat.
+- **Speichern prüft** die Empfänger gegen die Konten: ein Konto, das es nicht gibt oder das gesperrt ist (`400 nvr_recipient_invalid`), das die Kamera nicht sehen darf (`nvr_recipient_no_right`; eine neue Kamera sieht noch kein Benutzer), oder die Glocke für einen Benutzer (`nvr_recipient_bell`). Ein Eintrag, wie er gespeichert war, oder mit weniger Wegen bleibt ohne diese Prüfung (sonst ließe sich eine Kamera nicht mehr ausschalten oder umsortieren, wenn ein Empfänger sein Recht verlor; er bekommt ohnehin nichts); ein unveränderter Eintrag eines früheren Kontos gleichen Namens fällt weg. Wird ein Konto gelöscht, verschwindet es aus den Empfängern aller Kameras.
+- `GET /api/v1/nvr/recipients` (Administratoren): je Konto, das nicht gesperrt ist, `{name, admin, email (eigene Adresse), pushDevices, pushDevicesOff (Geräte mit bzw. ohne Kameramitteilungen), cameras (IDs, die es sehen darf)}` und `mailServer`. Das Formular bietet daraus die Konten an, die die Kamera sehen dürfen (bei einer neuen Kamera nur Administratoren), und sagt beim Konto, warum ein Weg nicht ankäme.
+- **Kameras von 0.78** (ohne `recipients`, `null`): melden genau wie bisher über `notify.titan`, `push`, `email` an die Administratoren (`notify.Manager.NotifyVia`: die gemeinsame Glocke, Push an alle Geräte der Administratoren, E-Mail an die Adresse des NAS). Das Formular zeigt sie mit allen Administratoren vorgewählt, wie die Kamera meldete (Glocke, Push), wählt E-Mail nicht vor (die ging an die Adresse des NAS, nicht an die eigene) und sagt das; gespeichert wird von da an eine Liste. Eine leere Liste ist niemand, nie die alten Wege. Mit einer Liste hält titand `titan`/`push`/`email` als „irgendein Empfänger hat diesen Weg“ für einen Rückweg auf 0.78.
+- **Neue Kamera:** der anlegende Administrator mit Glocke und Push vorgewählt.
+- **Protokoll:** `NotifyVia` und `NotifyTo` schreiben Art, Kennung der Kamera (`ref`) und die Zahl der Empfänger je Weg ins Systemprotokoll, nie den Text: Der nennt erkannte Personen und Kennzeichen („Anna · Haustür“), und das Protokoll landet im Diagnosepaket und auf dem Protokoll-Volume. Ebenso tragen Fehler von Anfragen an Frigate keinen Pfad (der eines Gesichts enthält den Namen der Person). Ein Bild hängt nicht an (die vorhandenen Wege tragen keins). Wie `NotifyVia` sieht `NotifyTo` weder die Mindeststufe noch die Sammelzustellung der allgemeinen Benachrichtigungen an.
+- **KI-Agent** (`agent`): die Meldung geht an denselben Beobachter wie alle TitanOS-Meldungen, Kennzeichen und Gesichter eingeschlossen.
 - **Home Assistant** (`homeAssistant`): keine eigene Verbindung. Ist MQTT in der Home-Assistant-Anbindung eingerichtet und dort die neue Sensorgruppe **`cameras`** gewählt, erscheint je Kamera ein Gerät mit `Online` (Verbindung), je einem Binärsensor `Person`, `Vehicle`, `Animal`, `License plate`, `Known face` (an für 90 Sekunden nach dem Ereignis; veröffentlicht wird im MQTT-Takt, ab Werk 30 s) und `Last event` (Text). Nur Kameras mit `notify.homeAssistant`.
 - **Unbekannte Gesichter** meldet Frigate nicht als Ereignis; sie erscheinen nur in der Bibliothek unter „nicht zugeordnet“. Eine Meldung dafür gibt es deshalb nicht.
 - Ausweichen, Anhalten und die Speichergrenze melden weiter über alle eingerichteten Wege (`notify.Manager.Notify`), unabhängig von den Kameras.
@@ -520,6 +538,7 @@ Die Beispieldateien (`backend/internal/nvr/devmedia/`, zusammen rund 113 KB) sin
 - **Neuer Stick ohne Sicherung:** Die gelöschten Kameras stehen auf dem Stick (`deleted-cameras.json`); ein neuer Stick ohne Sicherung kennt sie nicht mehr – ihre Aufnahmen gelten Frigate dann als die einer unbekannten Kamera (30 Tage, siehe „Globales `record`“).
 - **Aufnahmen unbekannter Kameras:** Steht eine Kamera in keiner `config.yml` (neuer Stick ohne Sicherung, Konfiguration von vor ihr), behält Frigate ihre Aufnahmen 30 Tage (bzw. so lange wie die längste Kamera); TitanOS zeigt sie nicht, und die Speicherzahlen und die Speichergrenze zählen und löschen sie nicht.
 - **Örtlich gebaute Abbilder:** Ein Bau aus dem örtlichen mkosi-Zwischenspeicher behält die NPU-Firmware von trixie, weil `sandbox_trees` nicht in dessen Prüfsumme eingeht; ein frischer Bau (CI, `make-zip --force`) nimmt die aus trixie-backports.
+- **Meldungen an gewählte Konten (PLAN 82-3, 0.79):** Geprüft mit Go-Tests (`nvr/recipients_test.go`: Hauptschalter samt Home-Assistant-Zustand, Pausen, Zeitfenster über Mitternacht in der Zeitzone des NAS und „offline“ außerhalb, Empfänger bei jeder Meldung – gesperrt, ohne Recht, gelöscht und neu angelegt nach der Vergabe des Rechts, Administrator neu angelegt nach der Wahl, Rechte unlesbar –, Kennzeichen/Gesichter nur an Administratoren, Glocke nur für sie, Kameras von 0.78 unverändert, Prüfung beim Speichern; `notify/via_test.go`: Glocke mit Empfängerliste in Liste, Entfernen und persönlichen Wegen, Push und E-Mail an die eigene Adresse, Protokoll ohne Namen; `webpush`: Art „Kameras“; `api/nvr_notify_test.go`: Empfängerliste, Fehlercodes, abgelehnte Änderung lässt die Kamera im RAM unverändert, Umsortieren nach Rechteverlust, Glocke je Konto über die API) und den UI-Suiten (1280 px und 390 px). **Nicht geprüft:** echte Zustellung von Push und E-Mail an ein Konto; ein Benutzer kann seine eigene E-Mail-Adresse bisher nur über die API eintragen (die Seite „Meine Benachrichtigungen“ zeigt die Oberfläche nur Besitzern und Administratoren), das Formular sagt dann „keine eigene E-Mail-Adresse“. Ein Administrator, der Glocke und E-Mail gewählt hat, bekommt „Kamera nicht erreichbar“ (eine Warnung) unter Umständen zweimal per E-Mail: über seine persönlichen Wege der Glocke und direkt. Nach einem Rückweg auf 0.78 kennt die Glocke die Empfängerliste nicht mehr und zeigt solche Meldungen allen Administratoren.
 
 ## Was noch fehlt
 

@@ -39,6 +39,12 @@ Dieselben Meldungen wie in der Glocke, ab der Stufe unter „Verschicken ab“
 hoher Dringlichkeit geschickt. Ein Tippen öffnet TitanOS. Jedes Gerät hat
 „Testmitteilung“ und „Entfernen“; die Liste zeigt nur die eigenen Geräte.
 
+Dazu die Mitteilungen des KI-Agenten und seit 0.79 die Meldungen der
+Kameras, bei denen ein Administrator das Konto als Empfänger mit „Push“
+gewählt hat (auch für Benutzer; ein Tippen öffnet den NVR). Jedes Gerät
+schaltet die drei Arten einzeln ab: „Meldungen von TitanOS“, „KI-Agent“,
+„Kameras“ (`docs/NVR.md`, „Meldungen je Kamera“).
+
 ## App-Symbol
 
 Einstellungen › Darstellung › **App-Symbol** (nur Besitzer und Administratoren,
