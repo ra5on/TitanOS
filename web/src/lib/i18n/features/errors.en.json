@@ -146,7 +146,7 @@
 	"error.nvr_export_not_found": "This export does not exist (any more).",
 	"error.nvr_export_running": "The export is still being made. Please wait until it is done.",
 	"error.nvr_export_failed": "The export could not be started. Check whether anything was recorded in this time.",
-	"error.nvr_purge_failed": "The recordings could not be deleted completely. Try again; what was deleted stays deleted.",
+	"error.nvr_purge_running": "The recordings of this camera are being deleted right now.",
 	"error.nvr_exports_unreadable": "The owners of the exports could not be read from the NVR’s volume. Until that works again, no export is made or deleted.",
 	"error.nvr_rights_unreadable": "The camera rights could not be read from the stick at the start. Until a restart reads them, rights cannot be changed and no camera can be removed.",
 	"error.nvr_ptz_unsupported": "This camera cannot be moved.",

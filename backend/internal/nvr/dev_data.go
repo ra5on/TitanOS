@@ -94,6 +94,10 @@ type devData struct {
 	deleted [][2]float64
 	// purged are the cameras DELETE /api/cameras got, with the query.
 	purged []string
+	// holdPurge, if set, holds the answer to DELETE /api/cameras until it
+	// is closed; failPurge answers it with 500 (tests).
+	holdPurge chan struct{}
+	failPurge bool
 }
 
 // Seed fills the stand-in with example data around now for the given
@@ -428,6 +432,16 @@ func (f *DevFrigate) serveData(w http.ResponseWriter, r *http.Request) bool {
 		// Frigate's deletion of a camera: its events and what is left of
 		// its recordings' entries go, exports stay (delete_exports=false).
 		camera := parts[2]
+		if hold := d.holdPurge; hold != nil {
+			f.mu.Unlock()
+			<-hold
+			f.mu.Lock()
+			d = &f.data
+		}
+		if d.failPurge {
+			writeJSONTo(w, 500, map[string]any{"success": false, "message": "Error updating config"})
+			break
+		}
 		d.purged = append(d.purged, camera+"?"+r.URL.RawQuery)
 		d.events = slices.DeleteFunc(d.events, func(e devEvent) bool { return e.Camera == camera })
 		delete(d.hours, camera)

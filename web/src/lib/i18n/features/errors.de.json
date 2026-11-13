@@ -146,7 +146,7 @@
 	"error.nvr_export_not_found": "Diesen Export gibt es nicht (mehr).",
 	"error.nvr_export_running": "Der Export wird noch erstellt. Bitte warte, bis er fertig ist.",
 	"error.nvr_export_failed": "Der Export ließ sich nicht starten. Prüfe, ob in diesem Zeitraum etwas aufgenommen wurde.",
-	"error.nvr_purge_failed": "Die Aufnahmen ließen sich nicht vollständig löschen. Versuche es noch einmal; was schon gelöscht ist, bleibt gelöscht.",
+	"error.nvr_purge_running": "Die Aufnahmen dieser Kamera werden gerade gelöscht.",
 	"error.nvr_exports_unreadable": "Die Besitzer der Exporte ließen sich nicht vom Volume des NVR lesen. Bis das wieder geht, werden keine Exporte angelegt oder gelöscht.",
 	"error.nvr_rights_unreadable": "Die Kamerarechte ließen sich beim Start nicht vom Stick lesen. Bis ein Neustart sie liest, lassen sich Rechte nicht ändern und keine Kamera entfernen.",
 	"error.nvr_ptz_unsupported": "Diese Kamera lässt sich nicht schwenken.",

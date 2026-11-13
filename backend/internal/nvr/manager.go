@@ -639,6 +639,11 @@ func (m *Manager) addCamera(c Camera, deleted []DeletedCamera, opts CameraOption
 	if !m.loaded {
 		return c, ErrNotLoaded
 	}
+	// A camera with the ID of a removed one whose recordings are being
+	// deleted would take back what is being deleted.
+	if m.rt.purging[c.ID] {
+		return c, ErrPurgeRunning
+	}
 	if len(m.cameras) >= MaxCameras {
 		return c, ErrLimit
 	}

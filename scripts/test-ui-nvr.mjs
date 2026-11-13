@@ -1351,13 +1351,18 @@ try {
     await purge.getByText(de["nvr.removed.purgeRestart"]).waitFor();
     assert.equal(await purge.locator("input").count(), 0, "nothing to type");
     await shot(page, "entfernte-kamera-loeschen");
-    // A failure is said in the dialog; the camera stays and can be tried again.
+    // A refusal is said in the dialog; the camera stays and can be tried again.
     await purge.getByRole("button", { name: "Aufnahmen löschen" }).click();
-    await purge.getByText(/ließen sich nicht vollständig löschen/).waitFor();
+    await purge.getByText("Die Aufnahmen dieser Kamera werden gerade gelöscht.").waitFor();
     assert.equal(await row.count(), 1);
     state.purgeFails = false;
     await purge.getByRole("button", { name: "Aufnahmen löschen" }).click();
-    await page.locator("#nvr-removed").waitFor({ state: "detached" });
+    // The NAS deletes in the background: the row says so, its button waits,
+    // then the camera is gone.
+    await row.getByText(de["nvr.removed.purging"]).waitFor();
+    await row.getByText(de["nvr.removed.purgingHint"]).waitFor();
+    assert.ok(await row.getByRole("button", { name: "Aufnahmen löschen" }).isDisabled());
+    await page.locator("#nvr-removed").waitFor({ state: "detached", timeout: 20000 });
     assert.equal(sent(state, "DELETE", "/nvr/cameras/schuppen/recordings").length, 2);
     await sound(page, "cameras after purge");
     await ctx.close();

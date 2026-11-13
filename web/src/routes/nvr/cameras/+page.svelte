@@ -86,6 +86,7 @@
 		busy = purging.id;
 		error = '';
 		try {
+			// 202: the NAS deletes in the background; the row says so until the camera is gone.
 			await api.delete(`/nvr/cameras/${encodeURIComponent(purging.id)}/recordings`);
 			purging = null;
 			await refreshNvr();
@@ -271,15 +272,20 @@
 						<div class="srow-text">
 							<span class="srow-title"
 								>{camera.name}<span class="chip info"
-									>{until
-										? t('nvr.removed.until', { date: dateText(until) })
-										: t('nvr.removed.untilUnknown')}</span
+									>{camera.purging
+										? t('nvr.removed.purging')
+										: until
+											? t('nvr.removed.until', { date: dateText(until) })
+											: t('nvr.removed.untilUnknown')}</span
 								></span
 							>
 							{#if since}<p class="srow-desc">
 									{t('nvr.removed.since', { date: dateText(since) })}
 								</p>{/if}
-							{#if !running}<p class="srow-desc">{t('nvr.removed.purgeNeedsRunning')}</p>{/if}
+							{#if camera.purging}<p class="srow-desc" role="status">
+									{t('nvr.removed.purgingHint')}
+								</p>
+							{:else if !running}<p class="srow-desc">{t('nvr.removed.purgeNeedsRunning')}</p>{/if}
 						</div>
 						<div class="srow-ctl">
 							<a class="btn" href="/nvr/recordings?camera={encodeURIComponent(camera.id)}"
@@ -288,7 +294,7 @@
 							<button
 								type="button"
 								class="btn btn-danger-outline"
-								disabled={!running || busy === camera.id}
+								disabled={!running || busy === camera.id || camera.purging}
 								onclick={() => {
 									error = '';
 									purging = camera;

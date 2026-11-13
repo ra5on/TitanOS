@@ -142,6 +142,7 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrRecipientUnknown, http.StatusBadRequest, "nvr_recipient_invalid", "a chosen recipient does not exist or is locked"},
 		{nvr.ErrRecipientNoRight, http.StatusBadRequest, "nvr_recipient_no_right", "a chosen recipient may not see this camera"},
 		{nvr.ErrRecipientBell, http.StatusBadRequest, "nvr_recipient_bell", "only owners and administrators have a bell"},
+		{nvr.ErrPurgeRunning, http.StatusConflict, "nvr_purge_running", "the recordings of this camera are being deleted"},
 	} {
 		if errors.Is(err, known.err) {
 			writeError(w, known.status, known.code, known.message)
@@ -398,7 +399,9 @@ func (a nvrArea) handleCameras(w http.ResponseWriter, r *http.Request) {
 		}
 		// Deleted cameras whose recordings are kept, after the others.
 		for _, d := range a.nvr.DeletedCameras() {
-			out = append(out, d.View())
+			view := d.View()
+			view.Purging = a.nvr.Purging(d.ID)
+			out = append(out, view)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"cameras": out, "objects": nvr.AllowedObjects()})
 		return
@@ -567,30 +570,25 @@ func (a nvrArea) handleCameraRemove(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRemovedPurge deletes the recordings, events and pictures of a
-// removed camera now instead of when its days are over (owner
+// handleRemovedPurge starts deleting the recordings, events and pictures
+// of a removed camera now instead of when its days are over (owner
 // 13.11.2026); its exports stay. Only for removed cameras: a camera
-// that exists answers 404. Frigate restarts once afterwards.
+// that exists answers 404. The NAS deletes in the background (weeks of
+// recordings take minutes; a closed window must not stop it): 202, the
+// camera is listed with purging: true until it is gone; a failure goes to
+// the bell. Frigate restarts once afterwards.
 func (a nvrArea) handleRemovedPurge(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
 	}
 	id := r.PathValue("id")
-	// Frigate deletes file by file; a camera that recorded for weeks takes a while.
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
-	defer cancel()
-	if err := a.nvr.PurgeDeletedCamera(ctx, id); err != nil {
-		if errors.Is(err, nvr.ErrNotFound) || errors.Is(err, nvr.ErrNotRunning) || errors.Is(err, nvr.ErrNotLoaded) {
-			writeNVRError(w, err)
-			return
-		}
-		slog.Warn("NVR: recordings of a removed camera not deleted", "camera", id, "err", err)
-		writeError(w, http.StatusBadGateway, "nvr_purge_failed", "the recordings could not be deleted completely; try again")
+	if err := a.nvr.StartPurge(id); err != nil {
+		writeNVRError(w, err)
 		return
 	}
 	noteTarget(r, id)
-	slog.Info("NVR removed camera's recordings deleted", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
-	w.WriteHeader(http.StatusNoContent)
+	slog.Info("NVR: deleting a removed camera's recordings", "camera", id, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // handleDiscover searches the home network for ONVIF cameras (three

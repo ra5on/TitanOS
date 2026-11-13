@@ -400,6 +400,8 @@
 	"nvr.removed.purgeText": "Alle Aufnahmen, Ereignisse und Bilder dieser Kamera werden jetzt gelöscht, auch behaltene Ereignisse. Das lässt sich nicht rückgängig machen; danach steht die Kamera hier nicht mehr.",
 	"nvr.removed.purgeExports": "Exporte dieser Kamera bleiben.",
 	"nvr.removed.purgeRestart": "Der NVR startet danach einmal neu: Die anderen Kameras nehmen dabei etwa eine halbe Minute nicht auf.",
+	"nvr.removed.purging": "Aufnahmen werden gelöscht …",
+	"nvr.removed.purgingHint": "Das NAS löscht im Hintergrund, auch wenn du das Fenster schließt; bei vielen Aufnahmen dauert das einige Minuten. Klappt etwas nicht, meldet es die Glocke.",
 	"nvr.removed.optgroup": "Entfernte Kameras",
 	"nvr.cameras.removeRights": "Die Freigaben dieser Kamera für Benutzer entfallen.",
 	"nvr.events.all": "Alle Ereignisse",

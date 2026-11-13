@@ -5957,6 +5957,8 @@
 	"notify.kind.nvr_camera_offline.text": "Die Kamera {subject} liefert seit fünf Minuten kein Bild. Solange wird von ihr nichts aufgenommen. Prüfe Strom und Netzwerk der Kamera.",
 	"notify.kind.nvr_storage_cap.title": "NVR: älteste Aufnahmen gelöscht",
 	"notify.kind.nvr_storage_cap.text": "Die Aufnahmen haben die eingestellte Obergrenze erreicht ({subject}). TitanOS hat die ältesten gelöscht, wie im NVR eingestellt.",
+	"notify.kind.nvr_purge_failed.title": "NVR: Aufnahmen von {subject} nicht ganz gelöscht",
+	"notify.kind.nvr_purge_failed.text": "Die Aufnahmen der entfernten Kamera {subject} ließen sich nicht vollständig löschen. Was gelöscht ist, bleibt gelöscht; unter NVR › Kameras › Entfernte Kameras kannst du es noch einmal versuchen.",
 	"notify.kind.nvr_event_person.title": "Person an Kamera {subject}",
 	"notify.kind.nvr_event_person.text": "Die Kamera {subject} hat eine Person erkannt. Das Ereignis steht im NVR unter Ereignisse.",
 	"notify.kind.nvr_event_vehicle.title": "Fahrzeug an Kamera {subject}",

@@ -148,9 +148,22 @@ func TestNVRRealPurge(t *testing.T) {
 	}
 
 	started := time.Now()
-	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/weg/recordings", nil); res.StatusCode != http.StatusNoContent {
+	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/weg/recordings", nil); res.StatusCode != http.StatusAccepted {
 		t.Fatalf("delete the removed camera's recordings: %d %s", res.StatusCode, body)
 	}
+	// It runs in the background; the camera is listed until it is done.
+	until("the removed camera is gone", 5*time.Minute, func() bool {
+		var list struct {
+			Cameras []nvr.CameraView `json:"cameras"`
+		}
+		getJSON(t, ts, ts.client, "/nvr/cameras", &list)
+		for _, c := range list.Cameras {
+			if c.ID == "weg" {
+				return false
+			}
+		}
+		return true
+	})
 	t.Logf("deleted in %v", time.Since(started).Round(time.Millisecond))
 	if n := files("weg"); n != 0 {
 		t.Errorf("files of the removed camera left on the volume: %d", n)

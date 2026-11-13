@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Owner 13.11.2026: "the old recordings of removed cameras cannot be
@@ -148,4 +149,68 @@ func (r *rig) exportCount() int {
 	r.frigate.mu.Lock()
 	defer r.frigate.mu.Unlock()
 	return len(r.frigate.data.exports)
+}
+
+// The purge runs in the background (a closed window must not stop it):
+// StartPurge returns at once, the camera is listed as purging, a second
+// start and a camera with its ID are refused meanwhile, and in the end the
+// camera is gone. A failure goes to the bell and leaves the stub.
+func TestStartPurgeInTheBackground(t *testing.T) {
+	r, _ := capRig(t)
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	// Frigate holds its answer to the camera's deletion until released.
+	release := make(chan struct{})
+	r.frigate.Set(func(f *DevFrigate) { f.data.holdPurge = release })
+	if err := r.m.StartPurge("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	if !r.m.Purging("einfahrt") {
+		t.Fatal("not marked as purging")
+	}
+	if err := r.m.StartPurge("einfahrt"); !errors.Is(err, ErrPurgeRunning) {
+		t.Errorf("second start: %v", err)
+	}
+	c := r.m.Cameras()[0]
+	c.ID, c.Name = "einfahrt", "Einfahrt neu"
+	if _, err := r.m.AddCamera(context.Background(), c, CameraOptions{}); !errors.Is(err, ErrPurgeRunning) {
+		t.Errorf("a camera with the purged ID: %v", err)
+	}
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for r.m.Purging("einfahrt") || len(r.m.DeletedCameras()) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("purge did not end: purging %v, listed %v", r.m.Purging("einfahrt"), r.m.DeletedCameras())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestStartPurgeFailureGoesToTheBell(t *testing.T) {
+	r, _ := capRig(t)
+	if err := r.m.RemoveCamera("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	r.look()
+	r.look()
+	r.frigate.Set(func(f *DevFrigate) { f.data.failPurge = true })
+	if err := r.m.StartPurge("einfahrt"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for r.m.Purging("einfahrt") {
+		if time.Now().After(deadline) {
+			t.Fatal("purge did not end")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := r.noted(); !slices.Contains(got, "warning nvr_purge_failed Einfahrt") {
+		t.Errorf("messages: %v", got)
+	}
+	if len(r.m.DeletedCameras()) != 1 {
+		t.Errorf("the stub left: %v", r.m.DeletedCameras())
+	}
 }

@@ -2,6 +2,7 @@ package nvr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -143,16 +144,92 @@ func (m *Manager) DeletedCamera(id string) (DeletedCamera, bool) {
 //
 // A failure in 1 or 2 leaves the stub, so the button stays and can be
 // pressed again; what was deleted before stays deleted.
+//
+// The cameras' lock is held only to check and to take the stub off, not
+// while Frigate deletes (minutes for weeks of recordings): adding,
+// changing and removing cameras go on meanwhile; a camera added with the
+// ID being purged is refused until the purge is over (it would take the
+// recordings back that are being deleted).
 func (m *Manager) PurgeDeletedCamera(ctx context.Context, id string) error {
-	m.camerasMu.Lock()
-	defer m.camerasMu.Unlock()
-	if _, ok := m.DeletedCamera(id); !ok {
-		return ErrNotFound
-	}
-	base, err := m.base()
+	base, err := m.beginPurge(id)
 	if err != nil {
 		return err
 	}
+	defer m.endPurge(id)
+	return m.purge(ctx, base, id)
+}
+
+// StartPurge checks like PurgeDeletedCamera and then deletes in the
+// background (owner 13.11.2026: weeks of recordings take minutes – a
+// closed window or a phone going to sleep must not stop it halfway). The
+// camera is listed with purging: true until it is gone; a failure is told
+// to the administrators (nvr_purge_failed) and leaves the stub.
+func (m *Manager) StartPurge(id string) error {
+	base, err := m.beginPurge(id)
+	if err != nil {
+		return err
+	}
+	name := id
+	if d, ok := m.DeletedCamera(id); ok {
+		name = d.Name
+	}
+	go func() {
+		defer m.endPurge(id)
+		ctx, cancel := context.WithTimeout(context.Background(), purgeLimit)
+		defer cancel()
+		if err := m.purge(ctx, base, id); err != nil {
+			slog.Warn("NVR: recordings of a removed camera not deleted", "camera", id, "err", err)
+			m.notify("warning", "nvr_purge_failed", name)
+		}
+	}()
+	return nil
+}
+
+// purgeLimit bounds a purge in the background.
+const purgeLimit = time.Hour
+
+// ErrPurgeRunning: the recordings of this removed camera are being deleted.
+var ErrPurgeRunning = errors.New("nvr: the recordings of this camera are being deleted")
+
+// beginPurge checks that id is a removed camera with recordings, Frigate
+// runs and no purge of it runs, and marks it as being purged.
+func (m *Manager) beginPurge(id string) (string, error) {
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
+	if _, ok := m.DeletedCamera(id); !ok {
+		return "", ErrNotFound
+	}
+	base, err := m.base()
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.rt.purging[id] {
+		return "", ErrPurgeRunning
+	}
+	if m.rt.purging == nil {
+		m.rt.purging = map[string]bool{}
+	}
+	m.rt.purging[id] = true
+	return base, nil
+}
+
+func (m *Manager) endPurge(id string) {
+	m.mu.Lock()
+	delete(m.rt.purging, id)
+	m.mu.Unlock()
+}
+
+// Purging tells whether the recordings of a removed camera are being deleted.
+func (m *Manager) Purging(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.rt.purging[id]
+}
+
+// purge does the deleting of PurgeDeletedCamera.
+func (m *Manager) purge(ctx context.Context, base, id string) error {
 	// In steps of purgeStep from the oldest recording on, so that no single
 	// answer of Frigate takes long (it deletes file by file).
 	from, end := m.purgeFrom(ctx, id), m.now().Add(time.Hour).Unix()
@@ -163,11 +240,13 @@ func (m *Manager) PurgeDeletedCamera(ctx context.Context, id string) error {
 			return fmt.Errorf("nvr: recordings of the removed camera not deleted: %w", err)
 		}
 	}
-	err = m.frigate.callLong(ctx, http.MethodDelete, base, "/api/cameras/"+url.PathEscape(id), url.Values{"delete_exports": {"false"}}, nil, nil)
+	err := m.frigate.callLong(ctx, http.MethodDelete, base, "/api/cameras/"+url.PathEscape(id), url.Values{"delete_exports": {"false"}}, nil, nil)
 	// 404: Frigate runs without the stub (it was removed already).
 	if err != nil && frigateStatus(err) != http.StatusNotFound {
 		return fmt.Errorf("nvr: events of the removed camera not deleted: %w", err)
 	}
+	m.camerasMu.Lock()
+	defer m.camerasMu.Unlock()
 	if err := m.storeDeletedLocked(func(list []DeletedCamera) []DeletedCamera {
 		return slices.DeleteFunc(list, func(d DeletedCamera) bool { return d.ID == id })
 	}); err != nil {

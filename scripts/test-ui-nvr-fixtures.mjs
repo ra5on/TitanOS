@@ -559,6 +559,8 @@ export async function installNvr(target, state = nvrState()) {
         s.cameras.push(made);
         return json(made, 201);
       }
+      // A camera being purged is listed twice more as purging, then it is gone.
+      for (const c of s.cameras.filter((c) => c.purging)) if (++c.purgeReads > 2) s.cameras.splice(s.cameras.indexOf(c), 1);
       return json({ cameras: visible(s), ...(s.admin ? { objects: s.objects } : {}) });
     }
     if ((m = /^\/nvr\/cameras\/([^/]+)$/.exec(path))) {
@@ -613,9 +615,11 @@ export async function installNvr(target, state = nvrState()) {
       if (!s.admin) return fail(403, "forbidden");
       const index = s.cameras.findIndex((c) => c.id === m[1] && c.deleted);
       if (index < 0) return fail(404, "nvr_camera_not_found");
-      if (s.purgeFails) return fail(502, "nvr_purge_failed");
-      s.cameras.splice(index, 1);
-      return route.fulfill({ status: 204 });
+      if (s.purgeFails) return fail(409, "nvr_purge_running");
+      // The NAS deletes in the background: listed as purging once, then gone.
+      s.cameras[index].purging = true;
+      s.cameras[index].purgeReads = 0;
+      return route.fulfill({ status: 202 });
     }
     if (/^\/nvr\/cameras\/[^/]+\/recordings$/.test(path)) {
       const from = Number(url.searchParams.get("from"));

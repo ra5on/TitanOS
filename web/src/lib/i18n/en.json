@@ -5957,6 +5957,8 @@
 	"notify.kind.nvr_camera_offline.text": "The camera {subject} has sent no picture for five minutes. Nothing is recorded from it meanwhile. Check the camera's power and network.",
 	"notify.kind.nvr_storage_cap.title": "NVR: oldest recordings deleted",
 	"notify.kind.nvr_storage_cap.text": "The recordings reached the set limit ({subject}). TitanOS deleted the oldest ones, as set in the NVR.",
+	"notify.kind.nvr_purge_failed.title": "NVR: recordings of {subject} not fully deleted",
+	"notify.kind.nvr_purge_failed.text": "The recordings of the removed camera {subject} could not be deleted completely. What was deleted stays deleted; you can try again under NVR › Cameras › Removed cameras.",
 	"notify.kind.nvr_event_person.title": "Person at camera {subject}",
 	"notify.kind.nvr_event_person.text": "The camera {subject} detected a person. The event is in the NVR under Events.",
 	"notify.kind.nvr_event_vehicle.title": "Vehicle at camera {subject}",

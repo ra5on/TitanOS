@@ -211,6 +211,8 @@ export type Camera = {
 	deleted?: boolean;
 	deletedAt?: number | string | null;
 	expiresAt?: number | string | null;
+	/** A removed camera whose recordings the NAS is deleting right now (PLAN 85-3). */
+	purging?: boolean;
 	source?: CameraSource;
 	streams?: CameraStreams;
 	detect?: CameraDetect;

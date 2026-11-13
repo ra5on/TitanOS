@@ -400,6 +400,8 @@
 	"nvr.removed.purgeText": "All recordings, events and pictures of this camera are deleted now, kept events too. This cannot be undone; the camera then leaves this list.",
 	"nvr.removed.purgeExports": "Exports of this camera stay.",
 	"nvr.removed.purgeRestart": "The NVR restarts once afterwards: the other cameras record nothing for about half a minute.",
+	"nvr.removed.purging": "Deleting recordings …",
+	"nvr.removed.purgingHint": "The NAS deletes in the background, also when you close the window; with many recordings this takes a few minutes. If something fails, the bell says so.",
 	"nvr.removed.optgroup": "Removed cameras",
 	"nvr.cameras.removeRights": "The shares of this camera for users are dropped.",
 	"nvr.events.all": "All events",
