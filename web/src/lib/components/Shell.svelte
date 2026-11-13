@@ -91,8 +91,10 @@
 		// The side bar of the window moves the frame to another page of its program.
 		const message = (event: MessageEvent) => {
 			const msg = frameMessage(event);
+			// A page may send it on at once (an area's old address, PLAN 86):
+			// the first navigation then ends as "aborted", which is no error.
 			if (msg?.type === 'titanos-goto' && event.source === window.parent && ownPath(msg.href))
-				void goto(msg.href);
+				goto(msg.href).catch(() => {});
 		};
 		// Keys of the desktop (Alt+Q, Alt+W, Alt+arrows, Ctrl+Space) also work inside a window.
 		const key = (event: KeyboardEvent) => {

@@ -108,7 +108,7 @@ export const settingsGroupIcons: Record<SettingsGroup, IconName> = {
 	notifications: 'bell',
 	data: 'archive',
 	cluster: 'tailnet',
-	smarthome: 'home',
+	smarthome: 'bulb',
 };
 
 /** The title of a settings group in the page language. */

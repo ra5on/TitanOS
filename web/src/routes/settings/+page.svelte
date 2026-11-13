@@ -12,6 +12,7 @@
 	// the phone's ⋯ menu) opens the area's first page in a window, and
 	// scrolls "Alle Einstellungen" to the area's heading elsewhere.
 	import { goto } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import SettingsOverview from './SettingsOverview.svelte';
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
@@ -32,7 +33,7 @@
 	} from '#lib/settings-find.ts';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingsSearch from '#lib/components/SettingsSearch.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -70,19 +71,35 @@
 
 	// "?area=": in a window the area's first page the account may open (the
 	// overview when it may open none); elsewhere its heading in the list.
+	// Once the navigation that brought it has ended (a goto during it would
+	// abort it); also when the page appears only after it (session, texts).
 	const wanted = $derived(page.url.searchParams.has('area') ? page.url.search : '');
+	let handled = '';
 	$effect(() => {
-		if (!wanted) return;
+		const href = page.url.href;
+		if (!wanted || navigating.to || handled === href) return;
+		handled = href;
+		const search = wanted;
+		untrack(() => toArea(search));
+	});
+	function toArea(search: string) {
 		if (inWindow) {
-			void goto(settingsAreaTarget(wanted, admin) ?? '/settings', { replaceState: true });
+			goto(settingsAreaTarget(search, admin) ?? '/settings', { replaceState: true }).catch(
+				() => {},
+			);
 			return;
 		}
-		const group = settingsGroupOf(`/settings${wanted}`);
-		if (group)
-			requestAnimationFrame(() =>
-				document.getElementById(`${prefix}-group-${group}`)?.scrollIntoView({ block: 'start' }),
-			);
-	});
+		const group = settingsGroupOf(`/settings${search}`);
+		if (!group) return;
+		// The list comes with the session and the texts; look for it a while.
+		const until = Date.now() + 5000;
+		const find = () => {
+			const heading = document.getElementById(`${prefix}-group-${group}`);
+			if (heading) requestAnimationFrame(() => heading.scrollIntoView({ block: 'start' }));
+			else if (Date.now() < until) setTimeout(find, 100);
+		};
+		find();
+	}
 
 	function clear() {
 		settingsSearch.query = '';
@@ -194,6 +211,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
+	}
+	/* "?area=" scrolls to a heading: below the phone's bar, not under it. */
+	.groups :global(.sgroup) {
+		scroll-margin-top: calc(var(--header-height, 0px) + var(--space-3));
 	}
 	.hit {
 		border-radius: var(--srow-radius);

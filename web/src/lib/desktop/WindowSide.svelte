@@ -73,10 +73,13 @@
 		if (!index) void loadSettingsIndex().then((loaded) => (index = loaded));
 	}
 	function openHit(entry: SettingsHit) {
-		// A setting of another program (Mein Konto) opens in that program.
-		const program = appForPath(entry.href.split(/[?#]/)[0]);
-		if (program && program.id !== 'settings')
-			void openProgram(`app:${program.id}`, { href: entry.href });
+		// Settings pages open in this window (also those another program shows
+		// too, like Zugang in Benutzer); a page of another program (Mein Konto)
+		// opens in that program.
+		const program = entry.href.startsWith('/settings')
+			? undefined
+			: appForPath(entry.href.split(/[?#]/)[0]);
+		if (program) void openProgram(`app:${program.id}`, { href: entry.href });
 		else navigateWindow(win.id, entry.href);
 		query = '';
 		hit = 0;
