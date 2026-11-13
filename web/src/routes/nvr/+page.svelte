@@ -186,9 +186,10 @@
 	function closeSolo() {
 		solo = '';
 		if (page.url.searchParams.has('camera')) {
-			const url = new URL(page.url);
+			const url = new URL(page.url.href);
 			url.searchParams.delete('camera');
-			void goto(url.pathname + url.search, { replaceState: true, noScroll: true, keepFocus: true });
+			// SvelteKit 3: `reset: false` keeps scroll and focus (noScroll/keepFocus are gone).
+			void goto(url.pathname + url.search, { replace: true, reset: false });
 		}
 	}
 	let root = $state<HTMLElement>();
