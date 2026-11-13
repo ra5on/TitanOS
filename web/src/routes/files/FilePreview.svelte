@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { pinchZoom } from '#lib/components/pinch-zoom.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { apiFetch } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -161,14 +163,17 @@
 			role="alert"
 		>
 			{t('files.previewFailed')}
-		</p>{:else if kind === 'image'}<img
-			src={url}
-			alt={path}
-			onerror={(e) => {
-				// A picture of the previous file (its address already freed) does not count.
-				if ((e.currentTarget as HTMLImageElement).src === url) failed = true;
-			}}
-		/>{:else if kind === 'audio'}<audio
+		</p>{:else if kind === 'image'}<!-- PLAN 87: two fingers zoom. -->
+		<div class="zoom" use:pinchZoom data-pinch>
+			<img
+				src={url}
+				alt={path}
+				onerror={(e) => {
+					// A picture of the previous file (its address already freed) does not count.
+					if ((e.currentTarget as HTMLImageElement).src === url) failed = true;
+				}}
+			/>
+		</div>{:else if kind === 'audio'}<audio
 			controls
 			preload="metadata"
 			src={stream}
@@ -179,17 +184,30 @@
 		</p>{:else if kind === 'video'}<!-- Native media controls provide keyboard access; no invented subtitle track. -->
 		<!-- svelte-ignore a11y_media_has_caption -->
 		<video controls preload="metadata" src={stream} onerror={() => (failed = true)}></video>
-		<p class="muted">{t('files.mediaHint')}</p>{:else if kind === 'pdf'}<object
+		<p class="muted">
+			{t('files.mediaHint')}
+		</p>{:else if kind === 'pdf' && phoneView()}<!-- PLAN 87:
+		     phones show no PDF in a page; the first page as a picture, zoomed with two fingers. -->
+		<div class="zoom" use:pinchZoom data-pinch>
+			<img
+				class="ql-page pdf-page"
+				src={thumbnailURL(root, path, 1280, modified)}
+				alt={t('files.quickPage', { name })}
+			/>
+		</div>
+		<p class="muted">{t('phone.files.pdfFirstPage')}</p>{:else if kind === 'pdf'}<object
 			data={url}
 			type="application/pdf"
 			aria-label={path}><p>{t('files.pdfFallback')}</p></object
 		>{:else if kind === 'text'}<pre>{text}</pre>{:else}<div class="ql-info">
-			{#if office && !officeFailed}<img
-					class="ql-page"
-					src={thumbnailURL(root, path, 640, modified)}
-					alt={t('files.quickPage', { name })}
-					onerror={() => (officeFailed = true)}
-				/>{:else}<span class="ql-icon"><FileIcon {name} dir={false} size={72} /></span>{/if}
+			{#if office && !officeFailed}<div class="zoom" use:pinchZoom data-pinch>
+					<img
+						class="ql-page"
+						src={thumbnailURL(root, path, 640, modified)}
+						alt={t('files.quickPage', { name })}
+						onerror={() => (officeFailed = true)}
+					/>
+				</div>{:else}<span class="ql-icon"><FileIcon {name} dir={false} size={72} /></span>{/if}
 			<p class="muted">
 				{office
 					? officeFailed
@@ -205,6 +223,19 @@
 </Dialog>
 
 <style>
+	.zoom {
+		overflow: hidden;
+		max-width: 100%;
+	}
+	.zoom img {
+		display: block;
+		max-width: 100%;
+		margin: 0 auto;
+	}
+	.pdf-page {
+		width: 100%;
+		height: auto;
+	}
 	video {
 		width: 100%;
 		max-height: 65vh;

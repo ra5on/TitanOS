@@ -270,6 +270,11 @@
 	.space {
 		flex: 1;
 	}
+	/* The ⋯ button stays above the dimmed page: a second tap closes the sheet. */
+	.back[aria-expanded='true'] {
+		position: relative;
+		z-index: 61;
+	}
 	.sheet-back {
 		position: fixed;
 		inset: 0;

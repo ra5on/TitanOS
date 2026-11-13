@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { pinchZoom } from '#lib/components/pinch-zoom.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	// Photo view of one folder: a grid of thumbnails made by titand, ordered by
 	// the date taken (EXIF) or by name, and a full-screen viewer with arrow keys
@@ -59,11 +60,20 @@
 		}
 	}
 	let start: { x: number; y: number } | null = null;
+	// PLAN 87: two fingers zoom the picture; while it is zoomed, a swipe moves it, not to the next one.
+	let zoomed = $state(false);
+	let fingers = 0;
 	function pointerdown(event: PointerEvent) {
-		if (event.pointerType !== 'mouse') start = { x: event.clientX, y: event.clientY };
+		if (event.pointerType === 'mouse') return;
+		fingers++;
+		start = fingers === 1 && !zoomed ? { x: event.clientX, y: event.clientY } : null;
 	}
 	function pointerup(event: PointerEvent) {
-		if (!start) return;
+		if (event.pointerType !== 'mouse') fingers = Math.max(0, fingers - 1);
+		if (!start || zoomed) {
+			start = null;
+			return;
+		}
 		const direction = swipeDirection(event.clientX - start.x, event.clientY - start.y);
 		start = null;
 		if (direction) step(-direction);
@@ -116,6 +126,10 @@
 				aria-label={shown.name}
 				onpointerdown={pointerdown}
 				onpointerup={pointerup}
+				onpointercancel={() => {
+					fingers = 0;
+					start = null;
+				}}
 			>
 				{#if shown.kind === 'video' && streamableVideo(shown.name)}
 					<!-- svelte-ignore a11y_media_has_caption -->
@@ -129,7 +143,14 @@
 						)}
 					></video>
 				{:else}
-					<img src={thumbnailURL(root, join(shown.name), 1280, shown.modified)} alt={shown.name} />
+					{#key shown.name}
+						<div class="zoom" use:pinchZoom={{ onzoom: (s) => (zoomed = s > 1) }} data-pinch>
+							<img
+								src={thumbnailURL(root, join(shown.name), 1280, shown.modified)}
+								alt={shown.name}
+							/>
+						</div>
+					{/key}
 				{/if}
 				<div class="controls">
 					<button
@@ -216,6 +237,9 @@
 		gap: var(--space-3);
 		background: var(--surface);
 		touch-action: pan-y;
+	}
+	.zoom {
+		overflow: hidden;
 	}
 	.viewer img,
 	.viewer video {

@@ -515,11 +515,7 @@
 		class:mark-after={mark?.key === key && mark.side === 'after'}
 		class:chosen={selected === key}
 		data-home-key={key}
-		aria-label={f
-			? t('phone.folder.label', { name: f.name, count: f.apps.length })
-			: inDock
-				? label
-				: undefined}
+		aria-label={f ? t('phone.folder.label', { name: f.name, count: f.apps.length }) : undefined}
 		aria-pressed={editing ? selected === key : undefined}
 		onpointerdown={(e) => pressStart(e, key)}
 		onpointermove={pressMove}
@@ -528,7 +524,7 @@
 		onclick={(e) => activate(e, key)}
 	>
 		<span class="wrap">{@render symbol(key, inDock ? 54 : 58)}</span>
-		{#if !inDock}<span class="label">{label}</span>{/if}
+		{#if !inDock}<span class="label">{label}</span>{:else}<span class="sr-only">{label}</span>{/if}
 	</button>
 {/snippet}
 
@@ -1482,6 +1478,13 @@
 	}
 	.muted {
 		color: var(--muted);
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.live .paper {
