@@ -122,6 +122,13 @@ type Manager struct {
 	// Route sends a message about a camera the ways its owner chose
 	// (routing.go); the wiring gives it notify.Manager.NotifyVia.
 	Route func(Notice)
+	// HAState is the state of an entity of Home Assistant as the watcher
+	// knows it now (connection "" is the first one); known is false while
+	// it cannot be told (PLAN 83). nil: never known.
+	HAState func(connection, entity string) (state string, known bool)
+	// CamerasChanged is called (on its own goroutine) after the cameras
+	// were saved; the wiring has the entities of the conditions watched.
+	CamerasChanged func()
 	// Addresses are the addresses of the NAS in the home network, for
 	// WebRTC; lanAddresses if nil.
 	Addresses func() []string
@@ -522,6 +529,15 @@ func cloneCameras(list []Camera) []Camera {
 			pause := *c.Notify.PauseSeconds
 			c.Notify.PauseSeconds = &pause
 		}
+		// The same for the condition on Home Assistant (PLAN 83).
+		if c.Notify.HA != nil {
+			ha := *c.Notify.HA
+			ha.Rules = slices.Clone(ha.Rules)
+			for j := range ha.Rules {
+				ha.Rules[j].States = slices.Clone(ha.Rules[j].States)
+			}
+			c.Notify.HA = &ha
+		}
 		out[i] = c
 	}
 	return out
@@ -828,7 +844,29 @@ func (m *Manager) storeCamerasLocked(list []Camera) error {
 	m.changedLocked()
 	m.rt.retryAt = time.Time{}
 	m.wake()
+	if m.CamerasChanged != nil {
+		go m.CamerasChanged()
+	}
 	return nil
+}
+
+// HAWatched lists the entities of Home Assistant the cameras' conditions
+// name, by connection ("" is the first one).
+func (m *Manager) HAWatched() map[string][]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string][]string{}
+	for _, c := range m.cameras {
+		if c.Notify.HA == nil {
+			continue
+		}
+		for _, r := range c.Notify.HA.Rules {
+			if !slices.Contains(out[r.Connection], r.Entity) {
+				out[r.Connection] = append(out[r.Connection], r.Entity)
+			}
+		}
+	}
+	return out
 }
 
 // Hardware probes what the NAS has for the NVR.

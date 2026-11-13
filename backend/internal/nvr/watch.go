@@ -1200,7 +1200,7 @@ func (m *Manager) watchCameras(stats frigateStats, now time.Time) {
 	}
 	m.mu.Unlock()
 	for _, c := range report {
-		m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, now)
+		m.report(c, KindOffline, "nvr_camera_offline", "warning", c.Name, "", now)
 	}
 }
 

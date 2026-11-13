@@ -222,6 +222,30 @@ var texts = map[string]map[string][2]string{
 }
 
 // wording returns title and text of an event in a language.
+// notes are sentences a message can carry after its text (Message.Note).
+var notes = map[string]map[string]string{
+	"de": {NoteHAUnknown: "Die Bedingung in Home Assistant ließ sich nicht prüfen (nicht erreichbar oder Zustand unbekannt), deshalb kommt die Meldung trotzdem."},
+	"en": {NoteHAUnknown: "The condition in Home Assistant could not be checked (not reachable or state unknown), so the message comes anyway."},
+}
+
+// NoteHAUnknown: a camera's condition on Home Assistant could not be
+// checked; the message went out anyway (PLAN 83).
+const NoteHAUnknown = "ha_unknown"
+
+// withNote adds the sentence of a note to a message's text.
+func withNote(language, note, text string) string {
+	if note == "" {
+		return text
+	}
+	sentence, known := notes[language][note]
+	if !known {
+		if sentence, known = notes["en"][note]; !known {
+			return text
+		}
+	}
+	return text + " " + sentence
+}
+
 func wording(language, kind, subject string) (string, string) {
 	entry, known := texts[language][kind]
 	if !known {

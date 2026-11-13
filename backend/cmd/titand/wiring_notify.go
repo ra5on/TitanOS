@@ -127,7 +127,12 @@ func (w *titand) wireNotifications() error {
 		slog.Warn("web push settings not readable from /config", "err", err)
 	}
 	w.notifier.Push = func(message notify.Message, title string) {
-		w.pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: "/", Urgent: message.Severity == notify.Error})
+		// A message about a page (a camera's event, PLAN 82-5) opens it.
+		link := message.Link
+		if link == "" {
+			link = "/"
+		}
+		w.pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: link, Urgent: message.Severity == notify.Error})
 	}
 	// Once per plugin and kind of device; installing stays a click.
 	w.extensions.Notify = func(title string) { w.notifier.Notify(notify.Info, "plugin_recommended", title) }

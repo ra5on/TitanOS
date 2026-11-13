@@ -44,7 +44,7 @@ func TestNotifyToBellAudience(t *testing.T) {
 	s := personalSink(t, m, "bob", Quiet{})
 	m.Audience = func() []string { return []string{"alex", "bob"} }
 	m.Notify(Warning, "volume_degraded", "tank")
-	m.NotifyTo(Warning, "nvr_camera_offline", "Haustür", []Target{{User: "alex", Bell: true}, {User: "carl", Bell: true}}, false, "haustuer")
+	m.NotifyTo(Warning, "nvr_camera_offline", "Haustür", []Target{{User: "alex", Bell: true}, {User: "carl", Bell: true}}, false, About{Ref: "haustuer"})
 	shown := func(user string) []string {
 		var kinds []string
 		for _, message := range m.MessagesFor(user) {
@@ -94,7 +94,7 @@ func TestNotifyToBellAudience(t *testing.T) {
 		}
 	}
 	// Without a bell recipient nothing goes into the bell at all.
-	m.NotifyTo(Info, "nvr_event_person", "Garten", []Target{{User: "alex", Push: true}}, false, "garten")
+	m.NotifyTo(Info, "nvr_event_person", "Garten", []Target{{User: "alex", Push: true}}, false, About{Ref: "garten"})
 	if n := len(m.Messages()); n != 1 {
 		t.Fatalf("a message without bell recipients went into the bell: %d", n)
 	}
@@ -131,12 +131,12 @@ func TestNotifyToPushAndOwnEmail(t *testing.T) {
 	}
 	// alex has no address of his own; without a mail server nobody gets mail.
 	targets := []Target{{User: "sam", Push: true, Email: true}, {User: "alex", Email: true}}
-	m.NotifyTo(Info, "nvr_event_face_known", "Anna Beispiel · Haustür", targets, true, "haustuer")
+	m.NotifyTo(Info, "nvr_event_face_known", "Anna Beispiel · Haustür", targets, true, About{Ref: "haustuer"})
 	if !m.PersonalMail("sam") || m.PersonalMail("alex") || m.MailServer() {
 		t.Fatal("PersonalMail or MailServer")
 	}
 	m.settings.Email = Email{Host: "mail.example.org", Port: 587, Security: "starttls", From: "nas@example.org", To: "nas-admin@example.org"}
-	m.NotifyTo(Info, "nvr_event_face_known", "Anna Beispiel · Haustür", targets, false, "haustuer")
+	m.NotifyTo(Info, "nvr_event_face_known", "Anna Beispiel · Haustür", targets, false, About{Ref: "haustuer"})
 	if !m.MailServer() {
 		t.Fatal("MailServer")
 	}
@@ -174,5 +174,42 @@ func TestNotifyToPushAndOwnEmail(t *testing.T) {
 		if strings.Contains(log.String(), secret) {
 			t.Errorf("the log names %q: %s", secret, log.String())
 		}
+	}
+}
+
+// PLAN 82-5/83: a camera's message carries the page of its event and, if
+// the condition on Home Assistant could not be checked, a sentence saying
+// so: in the push (both ways) and in the bell.
+func TestNotifyCarriesLinkAndNote(t *testing.T) {
+	m, _ := newManager(t)
+	var mu sync.Mutex
+	var pushed []Message
+	m.PushTo = func(user, ref string, message Message, title string) {
+		mu.Lock()
+		defer mu.Unlock()
+		pushed = append(pushed, message)
+	}
+	m.Push = func(message Message, title string) {
+		mu.Lock()
+		defer mu.Unlock()
+		pushed = append(pushed, message)
+	}
+	link := "/nvr/events?event=1731412345.1-abc"
+	m.NotifyTo(Info, "nvr_event_person", "Haustür", []Target{{User: "alex", Bell: true, Push: true}}, false, About{Ref: "haustuer", Link: link, Note: NoteHAUnknown})
+	m.NotifyVia(Info, "nvr_event_person", "Garten", Ways{Push: true, Ref: "garten", Link: link})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(pushed) != 2 || pushed[0].Link != link || pushed[1].Link != link {
+		t.Fatalf("pushed %+v", pushed)
+	}
+	if !strings.Contains(pushed[0].Text, "Home Assistant") || pushed[0].Note != NoteHAUnknown {
+		t.Fatalf("note missing in the push: %q", pushed[0].Text)
+	}
+	if strings.Contains(pushed[1].Text, "Home Assistant") {
+		t.Fatalf("a note without cause: %q", pushed[1].Text)
+	}
+	bell := m.MessagesFor("alex")
+	if len(bell) != 1 || bell[0].Link != link || bell[0].Note != NoteHAUnknown {
+		t.Fatalf("bell %+v", bell)
 	}
 }

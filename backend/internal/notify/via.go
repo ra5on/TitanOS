@@ -23,6 +23,14 @@ type Ways struct {
 	// ID): the subject may hold a recognised person's name or a plate and
 	// is never logged.
 	Ref string
+	// Link and Note go into the Message.
+	Link, Note string
+}
+
+// About is what a message of NotifyTo is about: Ref for the system log,
+// Link and Note for the Message (see Ways).
+type About struct {
+	Ref, Link, Note string
 }
 
 // NotifyVia records and sends an event through the given ways only. kind
@@ -34,7 +42,8 @@ func (m *Manager) NotifyVia(severity, kind, subject string, ways Ways) {
 	m.mu.Lock()
 	settings := m.settings
 	title, text := wording(settings.Language, kind, subject)
-	message := Message{Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text}
+	text = withNote(settings.Language, ways.Note, text)
+	message := Message{Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text, Link: ways.Link, Note: ways.Note}
 	if ways.Bell {
 		message.ID = m.nextID
 		m.nextID++
@@ -90,7 +99,8 @@ type Target struct {
 //
 // The log names kind, ref and how many accounts got which way, never the
 // subject (it may hold a recognised person's name or a plate).
-func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, agent bool, ref string) {
+func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, agent bool, about About) {
+	ref := about.Ref
 	var bell []string
 	pushes, mails := 0, 0
 	for _, t := range targets {
@@ -108,7 +118,8 @@ func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, age
 	m.mu.Lock()
 	settings := m.settings
 	title, text := wording(settings.Language, kind, subject)
-	message := Message{Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text, To: bell}
+	text = withNote(settings.Language, about.Note, text)
+	message := Message{Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text, To: bell, Link: about.Link, Note: about.Note}
 	if len(bell) > 0 {
 		message.ID = m.nextID
 		m.nextID++
@@ -134,6 +145,7 @@ func (m *Manager) NotifyTo(severity, kind, subject string, targets []Target, age
 		// Read without m.mu: the personal settings take it themselves.
 		address, language, content := m.personalMail(t.User)
 		ownTitle, ownText := wording(language, kind, subject)
+		ownText = withNote(language, about.Note, ownText)
 		if t.Push && m.PushTo != nil {
 			own := message
 			own.Title, own.Text = ownTitle, ownText
