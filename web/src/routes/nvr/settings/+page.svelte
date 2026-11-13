@@ -15,7 +15,7 @@
 	import FacesRow from '#lib/nvr/FacesRow.svelte';
 	import { nvr, refreshNvr } from '#lib/nvr/nvr.svelte.ts';
 	import PlatesRow from '#lib/nvr/PlatesRow.svelte';
-	import { dayClock, deviceName } from '#lib/nvr/texts.ts';
+	import { dayClock, decoderName, decoderReason, deviceName } from '#lib/nvr/texts.ts';
 	import type { DetectorKind, NvrSettings } from '#lib/nvr/types.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 
@@ -114,6 +114,8 @@
 				? t('nvr.storage.capExports')
 				: '',
 	);
+	// PLAN 82-4: the GPUs that can decode.
+	const decoders = $derived(hardware?.decoders ?? []);
 	const reasonText = (reason?: string) =>
 		t(
 			`nvr.device.reason.${['driver', 'vm', 'plugin'].includes(reason ?? '') ? reason : 'other'}` as MessageKey,
@@ -248,6 +250,40 @@
 					{#if s.detector.kind !== 'auto' && !devices.some((d) => d.kind === s.detector.kind)}
 						<option value={s.detector.kind}>{deviceName(s.detector.kind)}</option>
 					{/if}
+				</select>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="gpu" title={t('nvr.decoder.title')} for="nvr-decoder" id="nvr-decoder-row">
+			{#snippet description()}
+				<p>{t('nvr.decoder.hint')}</p>
+				{#if status?.decoder}
+					<p>{t('nvr.decoder.active', { gpu: decoderName(status.decoder.active, decoders) })}</p>
+					{#if status.decoder.reason}<p class="warn" id="nvr-decoder-reason" role="status">
+							<Icon name="info" size={14} />
+							<span>{decoderReason(status.decoder.reason)}</span>
+						</p>{/if}
+				{/if}
+			{/snippet}
+			{#snippet control()}
+				<select
+					id="nvr-decoder"
+					class="field"
+					value={s.decoder || 'auto'}
+					disabled={busy}
+					onchange={(e) => save({ decoder: e.currentTarget.value }, 'decoder')}
+				>
+					<option value="auto">{t('nvr.decoder.auto')}</option>
+					{#each decoders as d (d.id)}
+						<option value={d.id} disabled={!d.available && s.decoder !== d.id}
+							>{decoderName(d.id, decoders)}{d.available || s.decoder === d.id
+								? ''
+								: ` – ${reasonText(d.reason)}`}</option
+						>
+					{/each}
+					{#if s.decoder && !['auto', 'cpu'].includes(s.decoder) && !decoders.some((d) => d.id === s.decoder)}
+						<option value={s.decoder}>{t('nvr.decoder.goneOption', { id: s.decoder })}</option>
+					{/if}
+					<option value="cpu">{t('nvr.decoder.cpu')}</option>
 				</select>
 			{/snippet}
 		</SettingRow>

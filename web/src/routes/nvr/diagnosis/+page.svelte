@@ -14,6 +14,8 @@
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { nvr, refreshNvr } from '#lib/nvr/nvr.svelte.ts';
 	import {
+		decoderName,
+		decoderReason,
 		deviceName,
 		reasonAdvice,
 		reasonMeaning,
@@ -50,6 +52,7 @@
 	}
 
 	const devices = $derived(d?.hardware.devices ?? []);
+	const decoders = $derived(d?.hardware.decoders ?? []);
 	const cause = $derived(d?.detector.failover?.reason ?? d?.lastError?.code ?? '');
 	const causeDetail = $derived(d?.detector.failover?.detail || d?.lastError?.detail || '');
 	const when = (iso: string | null | undefined) => (iso ? sinceText(iso, locale) : '–');
@@ -139,6 +142,25 @@
 			})}
 			summary={deviceName(d.detector.active, devices)}
 		/>
+		{#if d.decoder}
+			{@const dec = d.decoder}
+			<SettingRow
+				icon="gpu"
+				title={t('nvr.decoder.title')}
+				summary={decoderName(dec.active, decoders)}
+				id="nvr-diag-decoder"
+			>
+				{#snippet description()}
+					<p>
+						{t('nvr.decoder.chosen', {
+							choice:
+								dec.setting === 'auto' ? t('nvr.decoder.auto') : decoderName(dec.setting, decoders),
+						})}
+					</p>
+					{#if dec.reason}<p>{decoderReason(dec.reason)}</p>{/if}
+				{/snippet}
+			</SettingRow>
+		{/if}
 		<SettingRow
 			icon="clock"
 			title={t('nvr.diag.inference')}
@@ -179,9 +201,19 @@
 								)}
 					</p>
 				{/each}
-				<p>
-					{d?.hardware.videoDecode ? t('nvr.diag.decodeYes') : t('nvr.diag.decodeNo')}
-				</p>
+				{#each decoders as gpu (gpu.id)}
+					<p>
+						{decoderName(gpu.id, decoders)}:
+						{gpu.available
+							? t('nvr.diag.usable')
+							: t(
+									`nvr.device.reason.${['driver', 'vm'].includes(gpu.reason ?? '') ? gpu.reason : 'other'}` as MessageKey,
+								)}
+					</p>
+				{/each}
+				{#if !d?.decoder}<p>
+						{d?.hardware.videoDecode ? t('nvr.diag.decodeYes') : t('nvr.diag.decodeNo')}
+					</p>{/if}
 				<p>
 					{d?.hardware.enrichmentsPossible ? t('nvr.diag.enrichYes') : t('nvr.setup.enrichNo')}
 				</p>

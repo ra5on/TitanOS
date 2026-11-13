@@ -1,7 +1,7 @@
 // PLAN 79-7: names and sentences the NVR's pages share – what a camera can
 // look for, the detection devices, why the detection moved or stopped.
 import { tOr, t, type MessageKey } from '../i18n/index.svelte.ts';
-import type { Camera, NvrDevice } from './types.ts';
+import type { Camera, NvrDecoder, NvrDevice } from './types.ts';
 
 /** The friendly groups of what a camera looks for (drawing 79-nvr). */
 export const OBJECT_GROUPS = {
@@ -132,4 +132,23 @@ export function faceNameProblem(raw: string): FaceNameProblem {
 /** A known plate as the NAS takes it: 1–64 letters, digits, spaces, "-" and "*" (any characters). */
 export function plateOk(plate: string): boolean {
 	return /^[\p{L}\p{N} *-]{1,64}$/u.test(plate) && [...plate].length <= 64;
+}
+
+/**
+ * PLAN 82-4: a GPU that decodes, by its PCI address, as the pages name it:
+ * the NAS's own title ("NVIDIA · 0000:01:00.0"), "iGPU (…)" for the iGPU;
+ * "cpu" is the CPU. Short, so that a select shows it whole on a phone.
+ */
+export function decoderName(id: string, decoders: NvrDecoder[] = []): string {
+	const d = decoders.find((each) => each.id === id);
+	if (!d) return id === 'cpu' ? t('nvr.decoder.cpu') : id;
+	const title = d.title || d.id;
+	return d.kind === 'igpu' ? `${t('nvr.decoder.kind.igpu')} (${title})` : title;
+}
+
+/** Why a chosen GPU does not decode: gone, vm, driver. */
+export function decoderReason(reason: string): string {
+	return t(
+		`nvr.decoder.reason.${['gone', 'vm', 'driver'].includes(reason) ? reason : 'driver'}` as MessageKey,
+	);
 }
