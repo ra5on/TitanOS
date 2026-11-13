@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
@@ -88,12 +89,12 @@ func (w *titand) wireNVR() error {
 		w.notifier.NotifyTo(n.Severity, n.Message, n.Subject, targets, n.Agent, notify.About{Ref: n.Camera, Link: link, Note: note})
 	}
 	// A camera's push goes to the account's own devices that take camera
-	// messages; tapping it opens its event (PLAN 82-5), else the NVR.
+	// messages; tapping it opens its event (PLAN 82-5), else the NVR. An
+	// account with only the live right on the camera cannot open events
+	// (they need "recordings"): its push opens the live view (review PLAN
+	// 85-4: it ended in "not found").
 	w.notifier.PushTo = func(user, ref string, message notify.Message, title string) {
-		url := message.Link
-		if url == "" {
-			url = "/nvr"
-		}
+		url := cameraPushURL(message.Link, user, ref, w.recorder.Access.Allows)
 		w.pushes.SendCamera(user, webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + ref, URL: url})
 	}
 	// PLAN 83: the entities of the cameras' conditions on Home Assistant
@@ -145,6 +146,16 @@ func (w *titand) wireNVR() error {
 	}
 	w.background(func() { w.recorder.Run(ctx) })
 	return nil
+}
+
+// cameraPushURL is the page a camera's push opens for user: the event of
+// the message if the account may see the camera's recordings (events
+// need that right), else the NVR's live view.
+func cameraPushURL(link, user, camera string, allows func(user, camera, right string) bool) string {
+	if link == "" || (strings.HasPrefix(link, "/nvr/events") && !allows(user, camera, nvr.RightRecordings)) {
+		return "/nvr"
+	}
+	return link
 }
 
 // nvrLink is the page a camera's message opens: its event, else the NVR

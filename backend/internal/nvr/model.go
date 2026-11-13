@@ -726,8 +726,12 @@ func SlugID(name string, taken []string) string {
 
 // validName: a display name of 1 to 64 characters without control
 // characters, not starting or ending with a space.
-func validName(name string) bool {
-	if name == "" || utf8.RuneCountInString(name) > 64 || strings.TrimSpace(name) != name || !utf8.ValidString(name) {
+func validName(name string) bool { return validText(name, 64) }
+
+// validText is a name of at most most characters: not empty, no spaces
+// around it, no control characters.
+func validText(name string, most int) bool {
+	if name == "" || utf8.RuneCountInString(name) > most || strings.TrimSpace(name) != name || !utf8.ValidString(name) {
 		return false
 	}
 	for _, r := range name {

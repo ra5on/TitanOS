@@ -3,7 +3,9 @@ package nvr
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // Review PLAN 85-4: while the NVR's volume is away (a locked encrypted
@@ -47,5 +49,32 @@ func TestSettingsWhileTheVolumeIsAway(t *testing.T) {
 	s.Volume = "other"
 	if err := r.m.SetSettings(ctx, s, SetOptions{ConfirmSleepingVolume: true}); err != nil {
 		t.Errorf("move to a mounted volume: %v", err)
+	}
+}
+
+// Review PLAN 85-4: export names may have 80 characters (they were held
+// to a camera name's 64), and the default name of a camera with a long
+// name fits.
+func TestExportNames(t *testing.T) {
+	long := strings.Repeat("Kamera ", 9) + "Hof" // 66 characters
+	if !exportName(strings.Repeat("x", 80)) || exportName(strings.Repeat("x", 81)) {
+		t.Error("80 characters")
+	}
+	r, first := capRig(t)
+	ctx := context.Background()
+	cam := r.m.Cameras()[0]
+	cam.Name = strings.Repeat("Ä", 64)
+	if _, err := r.m.UpdateCamera(ctx, cam.ID, cam, CameraOptions{}); err != nil {
+		t.Fatalf("camera name of 64 characters: %v", err)
+	}
+	made, err := r.m.CreateExport(ctx, "anna", cam.ID, first, first+60, "")
+	if err != nil {
+		t.Fatalf("default name of a camera with 64 characters: %v", err)
+	}
+	if n := utf8.RuneCountInString(made.Name); n != 80 || !strings.HasPrefix(made.Name, strings.Repeat("Ä", 63)+" ") {
+		t.Errorf("name %q (%d)", made.Name, n)
+	}
+	if _, err := r.m.CreateExport(ctx, "anna", cam.ID, first, first+60, long+" Abend"); err != nil {
+		t.Errorf("an own name of %d characters: %v", utf8.RuneCountInString(long+" Abend"), err)
 	}
 }

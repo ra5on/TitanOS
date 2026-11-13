@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -191,9 +190,10 @@ func (m *Manager) owns(owner string, record exportRecord) bool {
 	return record.Created > 0 && record.Created >= float64(account.Created.Unix())
 }
 
-// exportName checks the name of an export.
+// exportName checks the name of an export: up to 80 characters (a
+// camera's name has 64; the default name adds the time to it).
 func exportName(name string) bool {
-	return validName(name) && utf8.RuneCountInString(name) <= 80
+	return validText(name, 80)
 }
 
 // frigateExport is an export as /api/exports gives it.
@@ -226,7 +226,14 @@ func (m *Manager) CreateExport(ctx context.Context, owner, camera string, from, 
 		return Export{}, invalid("from/to: at most 24 hours")
 	}
 	if name == "" {
-		name = fmt.Sprintf("%s %s", cameraName, time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04"))
+		// Camera name and time; a long camera name is shortened to fit 80
+		// (it failed for names over 47 characters, review PLAN 85-4).
+		when := time.Unix(int64(from), 0).In(m.zone()).Format("2006-01-02 15.04")
+		short := []rune(cameraName)
+		if most := 80 - 1 - len(when); len(short) > most {
+			short = short[:most]
+		}
+		name = strings.TrimSpace(string(short)) + " " + when
 	}
 	if !exportName(name) {
 		return Export{}, invalid("name")
