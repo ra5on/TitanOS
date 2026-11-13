@@ -1349,9 +1349,11 @@
 		justify-content: center;
 		gap: 0;
 	}
+	/* 44 px to tap, the row itself stays low. */
 	.dot-btn {
-		width: 28px;
-		height: 28px;
+		width: 44px;
+		height: 44px;
+		margin: -8px 0;
 		display: grid;
 		place-items: center;
 		padding: 0;

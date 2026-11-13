@@ -149,8 +149,8 @@ try {
         .map((e) => e.getBoundingClientRect().toJSON()),
     ))
     assert.ok(
-      b.height >= 27.5 && (b.height >= 43.5 || b.width <= 30),
-      `target ${JSON.stringify(b)}`,
+      b.height >= 43.5 && b.width >= 43.5,
+      `target ≥ 44 px ${JSON.stringify(b)}`,
     );
   const pages = await page.locator(".home .page").count();
   assert.ok(pages >= 2, `programs on more than one page (${pages})`);
