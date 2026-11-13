@@ -46,6 +46,10 @@ type clusterArea struct {
 	sessionToken   func(r *http.Request) string
 	reconfirmProof func(w http.ResponseWriter, user auth.User, p proof) bool
 	forgetWebDAV   func(name string)
+	// nvrForgetUser takes an account another node deleted off the cameras
+	// of the NVR, as the deletion here does (docs/NVR.md "auch über den
+	// Cluster"; it was missing, review PLAN 85-4).
+	nvrForgetUser func(name string)
 }
 
 // clusterArea is the area of the server; New wires its callbacks into the
@@ -53,7 +57,8 @@ type clusterArea struct {
 func (s *Server) clusterArea() clusterArea {
 	return clusterArea{cluster: s.opts.Cluster, version: s.opts.Version, monitor: s.opts.Monitor, storage: s.opts.Storage,
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
-		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV}
+		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
+		nvrForgetUser: s.nvrArea().nvrForgetUser}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -564,6 +569,9 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		a.notify.ForgetBell(name)
 		if err := a.shares.ForgetUser(name); err != nil {
 			slog.Error("remove account from shares", "user", name, "err", err)
+		}
+		if a.nvrForgetUser != nil {
+			a.nvrForgetUser(name)
 		}
 	case existed && (before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret ||
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):
