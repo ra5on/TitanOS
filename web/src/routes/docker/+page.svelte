@@ -27,6 +27,8 @@
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	const ready = () => !!p.status?.running && !p.globalBusy;
 	registerMenuCommands({
+		// PLAN 87: pulling the list down on the phone (PhoneGestures).
+		'docker.refresh': () => void p.load(),
 		'docker.import': { run: () => p.open('import'), enabled: () => !!p.status?.running },
 		'docker.startAll': {
 			run: p.startAll,

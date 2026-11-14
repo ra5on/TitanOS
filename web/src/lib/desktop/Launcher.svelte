@@ -19,6 +19,7 @@
 	import { apiErrorText } from '../i18n/index.svelte.ts';
 	import { dockerUpdates, sources } from './sources.svelte.ts';
 	import { matchActions, quickActions, type QuickAction } from './quick-actions.ts';
+	import { findSettings, loadSettingsIndex, type SettingsHit } from '../settings-find.ts';
 
 	let {
 		onopen,
@@ -82,6 +83,18 @@
 		if (filter === 'recent')
 			list = desktop.prefs.recent.flatMap((k) => list.filter((p) => p.key === k));
 		return list;
+	});
+	// PLAN 87: on the phone the search also finds single settings (PLAN 86's
+	// index, loaded with the first search).
+	let settingsIndexReady = $state(false);
+	$effect(() => {
+		if (phone && query.trim() && !settingsIndexReady)
+			void loadSettingsIndex().then(() => (settingsIndexReady = true));
+	});
+	const settingsHits = $derived.by((): SettingsHit[] => {
+		void settingsIndexReady;
+		if (!phone || !query.trim()) return [];
+		return findSettings(query, admin, (key) => t(key)).slice(0, 8);
 	});
 	// PLAN 70: quick actions. The backup jobs are asked for only while the menu
 	// is open and something is typed; containers and VMs the desktop has anyway.
@@ -465,6 +478,22 @@
 			{/each}
 		</div>
 	{/if}
+	{#if settingsHits.length}
+		<div class="pages settings-hits" role="group" aria-label={t('phone.search.settings')}>
+			<span class="group-title">{t('phone.search.settings')}</span>
+			{#each settingsHits as hit (hit.href + hit.label)}
+				<button
+					type="button"
+					class="page"
+					data-settings-hit
+					onclick={() => onopen('app:settings', hit.href)}
+					><Icon name={hit.icon} size={17} /><span
+						>{hit.label}<span class="muted small where">{hit.where}</span></span
+					></button
+				>
+			{/each}
+		</div>
+	{/if}
 	{#if actions.length}
 		<div class="pages actions" role="group" aria-label={t('quick.title')}>
 			<span class="group-title">{t('quick.title')}</span>
@@ -571,6 +600,11 @@
 		opacity: 0;
 		pointer-events: none;
 	}
+	.where {
+		display: block;
+		overflow-wrap: break-word;
+	}
+	.settings-hits .group-title,
 	.actions .group-title {
 		display: block;
 		padding: 2px var(--space-1) var(--space-1);

@@ -32,11 +32,43 @@ function readSeen(): number {
 	}
 }
 
-/** What happened on the NAS, the newest first; `seen` is the time up to which it was looked at in this browser. */
-export const notifications = $state<{ list: Notice[]; seen: number }>({
+const READ_KEY = 'titanos.notifications.read';
+
+function readIds(): number[] {
+	try {
+		const list = JSON.parse(localStorage.getItem(READ_KEY) ?? '[]');
+		return Array.isArray(list) ? list.filter((id) => Number.isInteger(id)).slice(-200) : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * What happened on the NAS, the newest first; `seen` is the time up to which
+ * it was looked at in this browser, `read` single messages marked read
+ * (PLAN 87: a swipe in the phone's list).
+ */
+export const notifications = $state<{ list: Notice[]; seen: number; read: number[] }>({
 	list: [],
 	seen: readSeen(),
+	read: readIds(),
 });
+
+/** PLAN 87: one message counts as read (kept in this browser, like `seen`). */
+export function markRead(id: number) {
+	if (notifications.read.includes(id)) return;
+	notifications.read = [...notifications.read, id].slice(-200);
+	try {
+		localStorage.setItem(READ_KEY, JSON.stringify(notifications.read));
+	} catch {
+		// Without storage it counts as new again after a reload.
+	}
+}
+
+/** Whether a message is new to this browser. */
+export function isUnread(notice: Notice): boolean {
+	return Date.parse(notice.time) > notifications.seen && !notifications.read.includes(notice.id);
+}
 
 /** What this account wants to see in its bell; the NAS keeps every message. */
 export const bell = $state<{ settings: BellSettings }>({ settings: sanitizeBell(null) });
@@ -70,7 +102,7 @@ export async function dismissNotifications(ids: number[]) {
 }
 
 export function unreadCount(): number {
-	return visibleNotices().filter((notice) => Date.parse(notice.time) > notifications.seen).length;
+	return visibleNotices().filter(isUnread).length;
 }
 
 /** Marks everything in the list as looked at. */

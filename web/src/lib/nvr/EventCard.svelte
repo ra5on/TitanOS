@@ -2,6 +2,7 @@
 	// PLAN 79-7: one event as a small card – its picture, what was seen, where
 	// and when; a recognized face or plate as a second line.
 	import { apiPath } from '../cluster-node.ts';
+	import Icon from '../components/Icon.svelte';
 	import { i18n, t } from '../i18n/index.svelte.ts';
 	import { dayClock, labelName } from './texts.ts';
 	import type { NvrEvent } from './types.ts';
@@ -47,6 +48,9 @@
 				>{/if}</b
 		>
 		<small>{dayClock(event.start, locale)}{extra ? ` · ${extra}` : ''}</small>
+		{#if event.kept}<span class="kept"
+				><Icon name="pin" size={13} />{t('nvr.events.keptBadge')}</span
+			>{/if}
 	</span>
 {/snippet}
 
@@ -117,5 +121,15 @@
 	.what small {
 		color: var(--muted);
 		font-size: var(--text-sm);
+	}
+	/* PLAN 88: a kept event says so in words, not only with a mark. */
+	.kept {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		align-self: flex-start;
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 600;
 	}
 </style>

@@ -4,6 +4,8 @@
 	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
 	import './menu.css';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { swipeDown } from './sheet.ts';
 
 	type Props = {
 		/** Accessible name of the button and of the panel. */
@@ -118,6 +120,7 @@
 			aria-label={label}
 			tabindex="-1"
 			onkeydown={keys}
+			use:swipeDown={{ close: () => close(true), enabled: phoneView }}
 		>
 			{@render children(() => close())}
 		</div>

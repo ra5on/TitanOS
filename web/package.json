@@ -16,6 +16,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run format:check",
+		"settings-index": "node scripts/settings-index.mjs",
 		"format": "prettier --write src tests vite.config.ts vitest.config.ts",
 		"format:check": "prettier --check src tests vite.config.ts vitest.config.ts",
 		"format:workflows": "npm run format",

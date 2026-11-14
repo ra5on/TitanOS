@@ -293,7 +293,8 @@ for (const [width, height] of [
 // Managing another node: its name stays in the program bar.
 {
   const { ctx, page } = await phone(390, 844, { node: "n2" });
-  await page.locator(".grid .app", { hasText: "Docker" }).first().tap();
+  // PLAN 87: Docker sits in the phone's dock (no label there, its name is the button's).
+  await page.locator('.home [data-home-key="app:docker"]').first().tap();
   const chip = page.locator("header.phone-bar .node");
   await chip.waitFor();
   assert.equal((await chip.textContent()).trim(), "thor");

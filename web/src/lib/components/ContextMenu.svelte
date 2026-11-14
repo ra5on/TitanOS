@@ -3,6 +3,8 @@
 	import { onMount, tick } from 'svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
 	import './menu.css';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { swipeDown } from './sheet.ts';
 
 	type Props = {
 		label: string;
@@ -64,6 +66,7 @@
 	style:top="{top}px"
 	onkeydown={keys}
 	oncontextmenu={(event) => event.preventDefault()}
+	use:swipeDown={{ close: onclose, enabled: phoneView }}
 >
 	{@render children()}
 </div>

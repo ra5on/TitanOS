@@ -268,8 +268,16 @@ func (m *Manager) feedMessage(topic string, payload json.RawMessage) {
 			phase = "update"
 		}
 		event := change.After.event()
-		m.feed.broadcast(event.Camera, FeedMessage{T: "event", Phase: phase, Event: &event})
-		m.routeEvent(event)
+		if m.placeEvent(&event) {
+			// A camera that shows only events in its zones: an object
+			// that entered none is not shown (yet; an update may follow).
+			m.feed.broadcast(event.Camera, FeedMessage{T: "event", Phase: phase, Event: &event})
+		}
+		m.routeEvent(event, phase)
+		return
+	}
+	if topic == "tracked_object_update" {
+		m.objectUpdate(text)
 		return
 	}
 	camera, rest, ok := strings.Cut(topic, "/")

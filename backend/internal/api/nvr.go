@@ -126,6 +126,10 @@ func writeNVRError(w http.ResponseWriter, err error) {
 		{nvr.ErrNotRunning, http.StatusConflict, "nvr_not_running", "the NVR does not run"},
 		{nvr.ErrDisabled, http.StatusConflict, "nvr_disabled", "the NVR is switched off"},
 		{nvr.ErrRecordingsShrink, http.StatusConflict, "nvr_recordings_shrink", "the change deletes recordings that exist now; confirm it"},
+		{nvr.ErrSeenUnreadable, http.StatusServiceUnavailable, "nvr_seen_unreadable", "what was seen could not be read from the NVR's volume"},
+		{nvr.ErrEventRunning, http.StatusConflict, "nvr_event_running", "the event is still going on; it can be kept when it is over"},
+		{nvr.ErrEventKept, http.StatusConflict, "nvr_event_kept", "the event is kept; confirm deleting it with its saved video"},
+		{nvr.ErrExportKept, http.StatusForbidden, "nvr_export_kept", "the video of a kept event; only administrators change it"},
 		{nvr.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable", "the configuration could not be read from the stick"},
 		{nvr.ErrRightsUnreadable, http.StatusServiceUnavailable, "nvr_rights_unreadable", "the camera rights could not be read from the stick; they and the cameras are not changed until a start reads them"},
 		{nvr.ErrEventNotFound, http.StatusNotFound, "nvr_event_not_found", "no such event"},
@@ -489,7 +493,13 @@ func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 			HA         *struct {
 				Rules json.RawMessage `json:"rules"`
 			} `json:"ha"`
+			Zones json.RawMessage `json:"zones"`
 		} `json:"notify"`
+		Zones json.RawMessage `json:"zones"`
+		Masks *struct {
+			Motion  json.RawMessage `json:"motion"`
+			Objects json.RawMessage `json:"objects"`
+		} `json:"masks"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return err
@@ -497,6 +507,22 @@ func (req *nvrCameraRequest) UnmarshalJSON(data []byte) error {
 	if probe.Notify != nil && probe.Notify.Recipients != nil {
 		req.Notify.Recipients = nil
 		req.recipientsNull = string(probe.Notify.Recipients) == "null"
+	}
+	// Zones and masks (PLAN 88) are drawn as a whole: a zone left out of
+	// the request is gone, and no point of a stored polygon stays behind.
+	if probe.Zones != nil {
+		req.Zones = nil
+	}
+	if probe.Notify != nil && probe.Notify.Zones != nil {
+		req.Notify.Zones = nil
+	}
+	if probe.Masks != nil {
+		if probe.Masks.Motion != nil {
+			req.Masks.Motion = nil
+		}
+		if probe.Masks.Objects != nil {
+			req.Masks.Objects = nil
+		}
 	}
 	if probe.Notify != nil && probe.Notify.HA != nil && probe.Notify.HA.Rules != nil && req.Notify.HA != nil {
 		// A copy of the condition: the stored camera's is not written into.
@@ -780,6 +806,7 @@ func (a nvrArea) nvrForgetUser(name string) {
 		return
 	}
 	a.nvr.ForgetExportOwner(name)
+	a.nvr.ForgetSeen(name)
 	if err := a.nvr.Access.ForgetUser(name); err != nil {
 		slog.Error("remove account from the cameras", "user", name, "err", err)
 	}

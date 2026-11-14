@@ -3,6 +3,7 @@
 // browser (wm.svelte.ts): they change all the time and must not wear the stick.
 
 import { defaultNvrPrefs, sanitizeNvrPrefs, type NvrPrefs } from '../nvr/layout.ts';
+import { defaultPhone, sanitizePhone, type PhonePrefs } from './phone-home.ts';
 
 export type WidgetKind =
 	| 'status'
@@ -111,6 +112,8 @@ export type DesktopPrefs = {
 	menuOrder: string[];
 	/** PLAN 79-7: the live view of the NVR – the account's arrangement of the cameras and what it shows. */
 	nvr: NvrPrefs;
+	/** PLAN 87: the phone's home screen (pages, folders, widgets, dock), apart from the desktop's icons. */
+	phone: PhonePrefs;
 };
 
 export type DockPosition = 'bottom' | 'left' | 'right';
@@ -206,6 +209,7 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	barLoad: true,
 	menuOrder: [],
 	nvr: defaultNvrPrefs(),
+	phone: defaultPhone(),
 });
 
 function strings(value: unknown, max = 200): string[] {
@@ -356,6 +360,7 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 		barLoad: v.barLoad !== false,
 		menuOrder: strings(v.menuOrder, 300),
 		nvr: sanitizeNvrPrefs(v.nvr),
+		phone: sanitizePhone(v.phone),
 	};
 }
 

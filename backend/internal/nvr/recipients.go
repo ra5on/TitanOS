@@ -122,7 +122,7 @@ func (n *Notify) keepWayBack() {
 // and plates in the NVR (PLAN 82-3). The bell only to owners and
 // administrators, as only they have one.
 func (m *Manager) targets(c Camera, kind string) []Target {
-	names := kind == KindPlate || kind == KindFace
+	names := kind == KindPlate || kind == KindFace || kind == KindFaceUnknown
 	out := []Target{}
 	for _, r := range c.Notify.Recipients {
 		account, ok := m.Access.lookup(r.User)

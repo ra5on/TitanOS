@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -48,8 +47,8 @@ func TestLocalNameAndMDNS(t *testing.T) {
 		t.Errorf("info %+v", info)
 	}
 	m.Publish(context.Background())
-	if data, _ := os.ReadFile(m.hostsFile); !strings.Contains(string(data), "192.168.1.20 immich.apps.local\n") {
-		t.Errorf("hosts file:\n%s", data)
+	if p := published(m); p.ip != "192.168.1.20" || !slices.Contains(p.names, "immich.apps.local") {
+		t.Errorf("published %s %v", p.ip, p.names)
 	}
 	for _, bad := range []string{"a b", "local", "a.b.c.d", "-x"} {
 		if err := m.SetGeneral(General{LocalName: ptr(bad)}); !errors.Is(err, ErrInvalid) {
@@ -69,8 +68,8 @@ func TestLocalNameAndMDNS(t *testing.T) {
 	if len(m.Suffixes()) != 0 || m.Publishing() || m.URL("immich") != "" || status(m, "immich.nas.local", "") != 299 {
 		t.Error("names left without mDNS")
 	}
-	if m.hostsContent() != "# Made by TitanOS from /config/docker/proxy.json; changes are overwritten.\n" {
-		t.Errorf("hosts without mDNS:\n%s", m.hostsContent())
+	if _, names := m.mdnsNames(); len(names) != 0 {
+		t.Errorf("names without mDNS: %v", names)
 	}
 	// The domain still works; it and the other fields are kept when only one is sent.
 	m.SetGeneral(General{Domain: ptr("home.example.org")})
@@ -105,10 +104,10 @@ func TestShortNamesAndAliases(t *testing.T) {
 	if got := m.Info().Apps[0].URLs; strings.Join(got, ",") != "https://immich.nas.local,https://immich.local" {
 		t.Errorf("urls %v", got)
 	}
-	hosts := m.hostsContent()
-	for _, want := range []string{"192.168.1.20 fotos.local\n", "192.168.1.20 fotos.nas.local\n", "192.168.1.20 immich.local\n", "192.168.1.20 immich.nas.local\n"} {
-		if !strings.Contains(hosts, want) {
-			t.Errorf("hosts lacks %q:\n%s", want, hosts)
+	ip, hosts := m.mdnsNames()
+	for _, want := range []string{"fotos.local", "fotos.nas.local", "immich.local", "immich.nas.local"} {
+		if ip != "192.168.1.20" || !slices.Contains(hosts, want) {
+			t.Errorf("names lack %q: %s %v", want, ip, hosts)
 		}
 	}
 

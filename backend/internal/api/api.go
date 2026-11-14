@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/startup"
@@ -489,8 +490,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// A client that went away before the answer (a closed window, a
+		// container's request that timed out) is no error of the NAS: it
+		// stood as "Fehler" in the owner's log (13.11.2026).
+		if clientGone(err) {
+			slog.Debug("write response: client gone", "err", err)
+			return
+		}
 		slog.Error("write response", "err", err)
 	}
+}
+
+// clientGone tells whether writing failed because the other side closed
+// the connection.
+func clientGone(err error) bool {
+	return errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, context.Canceled)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

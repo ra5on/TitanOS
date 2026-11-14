@@ -158,15 +158,30 @@ Platzhalterzertifikat oder vertraut dem App-Zertifikat im Betriebssystem.
 
 ## Namen im Netz
 
-- **`.local` (mDNS):** titand schreibt `/etc/avahi/hosts` (im RAM, bei jedem
-  Start aus `/config` neu) mit einer Zeile `<IPv4> <name>.<hostname>.local` je
-  eingeschalteter App und lässt avahi neu lesen
-  (`systemctl try-reload-or-restart avahi-daemon.service`), nur wenn sich Inhalt
-  oder NAS-Adresse ändern (Prüfung alle 30 Sekunden ohne `/config`-Zugriff,
-  sofort nach Änderungen). Die Adresse ist die Quelladresse der Route ins
-  Internet, sonst die erste private IPv4 einer physischen Schnittstelle oder
-  Bridge. Gibt es eingeschaltete App-Namen, läuft avahi auch ohne SMB-Freigabe
-  (`shares.State.Discovery`). IPv6 wird nicht veröffentlicht.
+- **`.local` (mDNS):** titand meldet die Namen `<name>.<hostname>.local` je
+  eingeschalteter App (und Kurznamen) über avahis D-Bus-Schnittstelle an –
+  eine Eintragsgruppe mit Adress-Einträgen **ohne Rückwärts-Eintrag**
+  (`AVAHI_PUBLISH_NO_REVERSE`, wie `avahi-publish -a -R`; `internal/appproxy/mdns.go`,
+  Go-Modul `godbus/dbus`). Bis 0.80 schrieb titand die Namen nach
+  `/etc/avahi/hosts`; avahi legt dort zu jeder Zeile den Rückwärts-Eintrag
+  „Adresse → Name“ an, und den hält schon der NAS-Name: **jeder App-Name auf
+  der NAS-Adresse scheiterte mit „Local name collision“ und wurde nie
+  veröffentlicht** (Protokoll von titan, 13.11.2026; nachgestellt mit avahi
+  0.8-16 aus trixie). Seit 0.81 bleibt die Hosts-Datei leer; eine Datei mit
+  Namen eines älteren titand wird einmal geleert und avahi liest sie neu. Die
+  Gruppe gehört der D-Bus-Verbindung von titand: alle 30 Sekunden (ohne
+  `/config`-Zugriff) und sofort nach Änderungen prüft titand, ob avahi sie noch
+  hält (nach einem Neustart von avahi ist sie weg) und ob Adresse oder Namen
+  sich geändert haben, und meldet dann neu an; ein Fehler steht einmal im
+  Protokoll, nicht alle 30 Sekunden. Die Adresse ist die Quelladresse der
+  Route ins Internet, sonst die erste private IPv4 einer physischen
+  Schnittstelle oder Bridge. Gibt es eingeschaltete App-Namen, läuft avahi auch
+  ohne SMB-Freigabe (`shares.State.Discovery`). IPv6 wird nicht veröffentlicht.
+  **Echter Lauf** (`TestAvahiBusReal`, nur mit `TITANOS_AVAHI_REAL=<Adresse>`,
+  14.11.2026 in einem trixie-Container mit dbus und avahi-daemon 0.8-16): drei
+  Namen auf der Adresse des „NAS“ (`host-name=titan`) – alle lösen per
+  `avahi-resolve` auf die Adresse auf, die Adresse löst weiter auf `titan.local`
+  zurück, keine Kollision.
 - **Eigene Domain:** TitanOS veröffentlicht nichts. Im DNS des Routers (z. B.
   dnsmasq, Pi-hole, AdGuard, Fritz!Box mit eigenem DNS) muss
   `*.home.example.org` auf die NAS-Adresse zeigen. Eine `.local`-Domain wird
@@ -356,8 +371,9 @@ Zertifikat beim ersten Aufruf, Zugriffsregeln zwischen NAS und App-Gerät, die
 echte HTTPS-Prüfung über `tailscale0`) und der Dialog im Browser gegen ein
 echtes NAS.
 
-Nicht geprüft: echtes avahi (Neuladen von `/etc/avahi/hosts`, Namenskonflikte im
-Netz, ein von avahi umbenannter NAS-Name wie `nas-2.local`), Browser mit echten
+Nicht geprüft: Namenskonflikte mit einem anderen Gerät im Netz, ein von avahi
+umbenannter NAS-Name wie `nas-2.local`, das erneute Anmelden nach einem Neustart
+von avahi gegen echtes avahi (nur mit nachgebautem Anmelder), Browser mit echten
 Apps (Immich, Nextcloud, Vaultwarden) hinter dem Proxy, eigene Domain mit
 Router-DNS und das Verhalten bei mehreren Netzwerkschnittstellen. Apps, die
 einen bestimmten Unterpfad oder feste Ursprungsnamen erwarten, brauchen ggf.

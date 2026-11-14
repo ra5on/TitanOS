@@ -12,6 +12,8 @@ import { beginFileDrag, hasFileDrag, takeFileDrag } from '#lib/file-drag.ts';
 import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 import { isEditableText } from '#lib/text-files.ts';
 import { saveFile } from '#lib/save-file.ts';
+import { phoneView } from '#lib/desktop/mode.svelte.ts';
+import { shareFile, shareLoaded } from './share-file.ts';
 import { enqueue } from '#lib/uploads.svelte.ts';
 import type { FileCommand } from './commands.ts';
 import { droppedFiles, type PickedFile } from './drop-files.ts';
@@ -291,6 +293,33 @@ export class FilesPage extends FilesState {
 			),
 			(code) => (this.error = errorText(code)),
 		);
+	};
+	// PLAN 87: a row swiped on the phone – share a file, delete with the usual question.
+	phone = $derived(phoneView());
+	/** A file loaded for sharing that needs one more tap (the browser's rule). */
+	shareAgain = $state<File | null>(null);
+	sharing = $state('');
+	shareEntry = async (entry: FileEntry) => {
+		if (entry.dir) return;
+		this.sharing = entry.name;
+		this.error = '';
+		const path = join(this.dir, entry.name);
+		const url = apiPath('/files/download?' + new URLSearchParams({ root: this.rootId, path }));
+		const { result, file } = await shareFile(url, entry.name, entry.size, () =>
+			saveFile(url, (code) => (this.error = errorText(code))),
+		);
+		this.sharing = '';
+		if (result === 'again' && file) this.shareAgain = file;
+		else if (result === 'failed') this.error = t('phone.files.shareFailed');
+	};
+	shareNow = async () => {
+		const file = this.shareAgain;
+		this.shareAgain = null;
+		if (file && (await shareLoaded(file)) === 'failed') this.error = t('phone.files.shareFailed');
+	};
+	deleteEntry = (entry: FileEntry) => {
+		this.selected = [entry.name];
+		this.show('delete');
 	};
 	show = (kind: 'mkdir' | 'rename' | 'delete') => {
 		if (!this.writable || this.dialogBusy) return;

@@ -322,3 +322,42 @@
 			: undefined}
 		onclose={() => (p.preview = null)}
 	/>{/if}
+
+<!-- PLAN 87: a file swiped "Teilen" on the phone. -->
+{#if p.sharing}
+	<p class="sharing" role="status">{t('phone.files.sharing', { name: p.sharing })}</p>
+{/if}
+{#if p.shareAgain}
+	<Dialog
+		title={t('phone.files.shareTitle', { name: p.shareAgain.name })}
+		onclose={() => (p.shareAgain = null)}
+	>
+		<p>{t('phone.files.shareReady')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (p.shareAgain = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={p.shareNow}
+				>{t('phone.files.share')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
+<style>
+	.sharing {
+		position: fixed;
+		left: 50%;
+		bottom: calc(16px + env(safe-area-inset-bottom));
+		z-index: 60;
+		transform: translateX(-50%);
+		margin: 0;
+		padding: var(--space-2) var(--space-4);
+		border-radius: 999px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		box-shadow: var(--menu-shadow);
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+</style>

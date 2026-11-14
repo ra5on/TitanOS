@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,8 +28,31 @@ func newTestManager(t *testing.T) (*Manager, *config.Store) {
 	m.Reserved = []int{443, 80}
 	m.hostsFile = filepath.Join(t.TempDir(), "avahi", "hosts")
 	m.address = func() string { return "192.168.1.20" }
+	m.mdns = &fakePublisher{alive: true}
 	return m, store
 }
+
+// fakePublisher stands in for avahi's D-Bus interface.
+type fakePublisher struct {
+	ip    string
+	names []string
+	calls int
+	alive bool
+	err   error
+}
+
+func (f *fakePublisher) Publish(_ context.Context, ip string, names []string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.calls++
+	f.ip, f.names, f.alive = ip, slices.Clone(names), true
+	return nil
+}
+
+func (f *fakePublisher) Alive(context.Context) bool { return f.alive }
+
+func published(m *Manager) *fakePublisher { return m.mdns.(*fakePublisher) }
 
 // upstreamPort starts an app that answers with what it received.
 func upstreamPort(t *testing.T, handler http.HandlerFunc) int {
@@ -333,23 +357,41 @@ func TestPublishAvahiHosts(t *testing.T) {
 	if err := m.Publish(ctx); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(m.hostsFile)
-	if err != nil {
-		t.Fatal(err)
+	// Over D-Bus, all names on the NAS's address (no hosts file: there
+	// every name on that address failed with "Local name collision").
+	p := published(m)
+	if p.ip != "192.168.1.20" || strings.Join(p.names, ",") != "immich.nas.local,media.nas.local" {
+		t.Errorf("published %s %v", p.ip, p.names)
 	}
-	want := "192.168.1.20 immich.nas.local\n192.168.1.20 media.nas.local\n"
-	if !strings.HasSuffix(string(data), want) || strings.Contains(string(data), "off.") || strings.Contains(string(data), "example") {
-		t.Errorf("hosts file:\n%s", data)
+	if _, err := os.Stat(m.hostsFile); !os.IsNotExist(err) || reloads != 0 {
+		t.Errorf("hosts file written (%v) or avahi reloaded (%d) without an old file", err, reloads)
 	}
-	// Unchanged content: avahi is not bothered again.
+	// Unchanged and still held: avahi is not asked again.
 	m.Publish(ctx)
-	if reloads != 1 {
-		t.Errorf("%d reloads", reloads)
+	if p.calls != 1 {
+		t.Errorf("%d publications", p.calls)
+	}
+	// avahi restarted (the group is gone): published again.
+	p.alive = false
+	m.Publish(ctx)
+	if p.calls != 2 {
+		t.Errorf("after avahi's restart: %d publications", p.calls)
 	}
 	m.address = func() string { return "192.168.1.21" }
 	m.Publish(ctx)
-	if reloads != 2 {
-		t.Errorf("new address: %d reloads", reloads)
+	if p.calls != 3 || p.ip != "192.168.1.21" {
+		t.Errorf("new address: %d publications, %s", p.calls, p.ip)
+	}
+	// A failure leaves the names to be published at the next look.
+	p.err = errors.New("no bus")
+	m.SetRoute("off", Route{Enabled: true, Name: "off", Port: 8097})
+	if err := m.Publish(ctx); err == nil {
+		t.Error("failure not reported")
+	}
+	p.err = nil
+	m.Publish(ctx)
+	if !slices.Contains(p.names, "off.nas.local") {
+		t.Errorf("after the failure: %v", p.names)
 	}
 
 	// Development mode leaves avahi alone.
@@ -357,12 +399,36 @@ func TestPublishAvahiHosts(t *testing.T) {
 	dev.Disabled = true
 	dev.reload = func() error { t.Error("reload in development mode"); return nil }
 	dev.SetRoute("immich", Route{Enabled: true, Name: "immich", Port: 2283})
-	if dev.Publishing() || dev.Publish(ctx) != nil {
+	if dev.Publishing() || dev.Publish(ctx) != nil || published(dev).calls != 0 {
 		t.Error("development mode publishes")
 	}
-	if _, err := os.Stat(dev.hostsFile); !os.IsNotExist(err) {
-		t.Errorf("hosts file written in development mode: %v", err)
+}
+
+// The hosts file of an older titand (names that all failed) is emptied
+// once and avahi reads it again; a file without names is left alone.
+func TestOldAvahiHostsFileIsEmptied(t *testing.T) {
+	m, _ := newTestManager(t)
+	reloads := 0
+	m.reload = func() error { reloads++; return nil }
+	if err := os.MkdirAll(filepath.Dir(m.hostsFile), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	old := "# Made by TitanOS from /config/docker/proxy.json; changes are overwritten.\n192.168.1.20 immich.nas.local\n"
+	if err := os.WriteFile(m.hostsFile, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	m.Publish(ctx)
+	m.Publish(ctx)
+	data, _ := os.ReadFile(m.hostsFile)
+	if hasHostLines(string(data)) || reloads != 1 {
+		t.Errorf("hosts file %q, %d reloads", data, reloads)
+	}
+	quiet, _ := newTestManager(t)
+	quiet.reload = func() error { t.Error("reload without names in the file"); return nil }
+	os.MkdirAll(filepath.Dir(quiet.hostsFile), 0o755)
+	os.WriteFile(quiet.hostsFile, []byte("# just a comment\n"), 0o644)
+	quiet.Publish(ctx)
 }
 
 func TestClientCannotClaimRealIP(t *testing.T) {

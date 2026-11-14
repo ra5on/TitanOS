@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -14,19 +13,26 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
-// Run publishes the .local names of the apps over mDNS until ctx is done.
-// avahi reads them from /etc/avahi/hosts (in RAM, made again from /config
-// after every start); titand rewrites it when the routes or the address of
-// the NAS change and has avahi read it again.
+// Run publishes the .local names of the apps over mDNS until ctx is done:
+// over avahi's D-Bus interface (mdns.go), looked at again every 30 s and
+// when the routes or the address of the NAS change. A failure is logged
+// when it is new, not every 30 s.
 func (m *Manager) Run(ctx context.Context) {
 	if m.Disabled {
 		return
 	}
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	said := ""
 	for {
-		if err := m.Publish(ctx); err != nil {
+		err := m.Publish(ctx)
+		switch {
+		case err != nil && err.Error() != said:
 			slog.Warn("app names not published over mDNS", "err", err)
+			said = err.Error()
+		case err == nil && said != "":
+			slog.Info("app names published over mDNS again")
+			said = ""
 		}
 		select {
 		case <-ctx.Done():
@@ -37,52 +43,89 @@ func (m *Manager) Run(ctx context.Context) {
 	}
 }
 
-// Publish brings the avahi hosts file up to date; it does nothing if the
-// content did not change.
+// Publish brings the published names up to date: nothing happens when
+// address and names are the same and avahi still holds them.
 func (m *Manager) Publish(ctx context.Context) error {
 	if m.Disabled {
 		return nil
 	}
-	content := m.hostsContent()
+	if err := m.clearHostsFile(ctx); err != nil {
+		return err
+	}
+	ip, names := m.mdnsNames()
+	key := ip + " " + strings.Join(names, " ")
 	m.mu.RLock()
-	same := content == m.published
+	same := key == m.published
 	m.mu.RUnlock()
-	if same {
+	if same && (len(names) == 0 || m.mdns.Alive(ctx)) {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(m.hostsFile), 0o755); err != nil {
-		return err
-	}
-	tmp := m.hostsFile + ".titanos-new"
-	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, m.hostsFile); err != nil {
-		return err
-	}
-	reload := m.reload
-	if reload == nil {
-		reload = func() error {
-			// Only a running avahi is told; the shares start it when needed.
-			_, err := (run.Exec{}).Run(ctx, "", "systemctl", "try-reload-or-restart", "avahi-daemon.service")
-			return err
-		}
-	}
-	if err := reload(); err != nil {
+	if err := m.mdns.Publish(ctx, ip, names); err != nil {
 		return err
 	}
 	m.mu.Lock()
-	m.published = content
+	m.published = key
 	m.mu.Unlock()
 	return nil
 }
 
-// hostsContent is the avahi hosts file: one line "address name" for each
-// name of an enabled route, under the local name and, if chosen, as short
-// name. Without an address or with mDNS off it names nothing.
-func (m *Manager) hostsContent() string {
-	var b strings.Builder
-	b.WriteString("# Made by TitanOS from /config/docker/proxy.json; changes are overwritten.\n")
+// hostsHeader is all /etc/avahi/hosts holds now. Up to 0.80 titand wrote
+// the names there (in RAM, made after every start); each failed with
+// "Local name collision" (mdns.go). A file with names of an older titand
+// is emptied once and avahi reads it again, so that its log stops.
+const hostsHeader = "# The .local names of apps are published by titand over D-Bus (not here).\n"
+
+func (m *Manager) clearHostsFile(ctx context.Context) error {
+	m.mu.RLock()
+	done := m.hostsCleared
+	m.mu.RUnlock()
+	if done {
+		return nil
+	}
+	data, err := os.ReadFile(m.hostsFile)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if hasHostLines(string(data)) {
+		tmp := m.hostsFile + ".titanos-new"
+		if err := os.WriteFile(tmp, []byte(hostsHeader), 0o644); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, m.hostsFile); err != nil {
+			return err
+		}
+		reload := m.reload
+		if reload == nil {
+			reload = func() error {
+				// Only a running avahi is told; the shares start it when needed.
+				_, err := (run.Exec{}).Run(ctx, "", "systemctl", "try-reload-or-restart", "avahi-daemon.service")
+				return err
+			}
+		}
+		if err := reload(); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	m.hostsCleared = true
+	m.mu.Unlock()
+	return nil
+}
+
+// hasHostLines tells whether an avahi hosts file names a host.
+func hasHostLines(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			return true
+		}
+	}
+	return false
+}
+
+// mdnsNames are the address of the NAS and the names published on it:
+// each name of an enabled route under the local name and, if chosen, as
+// short name. Without an address or with mDNS off, none.
+func (m *Manager) mdnsNames() (string, []string) {
 	address := m.address
 	if address == nil {
 		address = primaryIPv4
@@ -92,7 +135,7 @@ func (m *Manager) hostsContent() string {
 	m.mu.RUnlock()
 	ip := address()
 	if ip == "" || local == "" {
-		return b.String()
+		return ip, nil
 	}
 	hosts := m.shortNames()
 	for _, e := range m.enabled() {
@@ -101,10 +144,7 @@ func (m *Manager) hostsContent() string {
 		}
 	}
 	sort.Strings(hosts)
-	for _, name := range slices.Compact(hosts) {
-		b.WriteString(ip + " " + name + "\n")
-	}
-	return b.String()
+	return ip, slices.Compact(hosts)
 }
 
 // virtual are interfaces whose addresses are not the NAS's in the home

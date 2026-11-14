@@ -132,6 +132,39 @@ func renderCases() map[string]struct {
 				c.Audio = Audio{Enabled: true, Codec: "PCMA"}
 			}),
 		}, RenderHardware{Detector: DetectorCPU, Decode: Decode{Kind: DecodeNVIDIA}}, nil},
+		// PLAN 88: zones (one at the picture's edges: 0 and 1), motion and
+		// object masks, events only in the zones, days apart. The first
+		// camera detects on its known 4K main stream (Frigate builds the
+		// zones' contours in 1280×720), the second on a sub stream of
+		// unknown size.
+		"extras": {secretSettings(), []Camera{
+			testCamera("einfahrt", "Einfahrt", func(c *Camera) {
+				c.Order = 1
+				c.Streams = StreamUse{Detect: StreamMain}
+				c.Source.MainWidth, c.Source.MainHeight = 3840, 2160
+				c.Detect.Faces = true
+				c.Record = Record{Mode: RecordContinuous, RecordDays: 7, EventDays: 30, PreSeconds: 5, PostSeconds: 5}
+				c.Zones = []Zone{
+					{Name: "Einfahrt", Points: []Point{{0, 0.5}, {0.6, 0.45}, {1, 1}, {0, 1}}},
+					{ID: "tor", Name: "Tor & Weg", Points: []Point{{0.7, 0.1}, {0.95, 0.1}, {0.95, 0.4}, {0.7, 0.4}}},
+				}
+				c.ZonesOnly = true
+				c.Masks = Masks{
+					Motion:  []Mask{{Points: []Point{{0, 0}, {0.3, 0}, {0.3, 0.06}, {0, 0.06}}}},
+					Objects: []Mask{{Points: []Point{{0.5, 0}, {1, 0}, {1, 0.2}}}},
+				}
+				c.Notify.Zones = []string{"tor"}
+				c.Notify.FaceUnknown = true
+			}),
+			testCamera("garten", "Garten", func(c *Camera) {
+				c.Order = 2
+				c.Record = Record{Mode: RecordMotion, RecordDays: 3, EventDays: 14, PreSeconds: 5, PostSeconds: 5}
+				c.Zones = []Zone{{Name: "Beet", Points: []Point{{0.1, 0.6}, {0.4, 0.6}, {0.4, 0.9}, {0.1, 0.9}}}}
+				c.Masks.Motion = []Mask{{Points: []Point{{0.8, 0}, {1, 0}, {1, 0.3}, {0.8, 0.3}}}, {Points: []Point{{0, 0}, {0.2, 0}, {0.2, 0.2}}}}
+			}),
+		}, RenderHardware{Detector: DetectorCPU}, []DeletedCamera{
+			{ID: "schuppen", Name: "Schuppen", RetainDays: 21, RecordDays: 4, EventDays: 21, DeletedAt: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)},
+		}},
 	}
 	for name, c := range cases {
 		c.settings.ProxySecret = testSecret

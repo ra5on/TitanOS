@@ -57,8 +57,10 @@ export function missesNames(
 	account: RecipientAccount,
 	camera: string | undefined,
 	kinds: string[],
+	faceUnknown = false,
 ) {
-	if (account.admin || !kinds.some((k) => k === 'plate' || k === 'face')) return false;
+	if (account.admin || !(faceUnknown || kinds.some((k) => k === 'plate' || k === 'face')))
+		return false;
 	return !camera || !(account.names ?? []).includes(camera);
 }
 

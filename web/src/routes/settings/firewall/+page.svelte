@@ -409,7 +409,7 @@
 		<PoliciesTab bind:draft {services} {apps} {zoneLabel} {locked} />
 	{:else if tab === 'autoblock'}
 		<AutoBlockTab {status} ontake={take} />
-	{:else}
+	{:else if tab === 'recent'}
 		<RecentTab {status} {zoneLabel} onreload={load} ontake={take} />
 	{/if}
 

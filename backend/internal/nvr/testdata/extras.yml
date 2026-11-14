@@ -1,0 +1,223 @@
+# Written by TitanOS (NVR). Do not edit: every change of the settings
+# or cameras in TitanOS replaces this file.
+version: 0.18-0
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+proxy:
+  auth_secret: goldensecretgoldensecretgoldensecretgoldensecret0123
+  default_role: admin
+tls:
+  enabled: false
+networking:
+  listen:
+    internal: 127.0.0.1:5000
+    external: 8971
+telemetry:
+  version_check: false
+detectors:
+  ov:
+    type: openvino
+    device: CPU
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+ffmpeg:
+  hwaccel_args: ""
+record:
+  continuous:
+    days: 30
+  motion:
+    days: 30
+birdseye:
+  enabled: false
+lpr:
+  enabled: false
+face_recognition:
+  enabled: true
+go2rtc:
+  api:
+    listen: 127.0.0.1:1984
+  rtsp:
+    listen: 127.0.0.1:8554
+  webrtc:
+    candidates: []
+  streams:
+    einfahrt:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    einfahrt_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+    garten:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/101#media=video#backchannel=0
+    garten_sub:
+      - rtsp://viewer:geheim@192.168.1.61:554/Streaming/Channels/102#media=video#backchannel=0
+  preload:
+    einfahrt: ""
+    einfahrt_sub: ""
+    garten: ""
+    garten_sub: ""
+cameras:
+  einfahrt:
+    enabled: true
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/einfahrt
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+      width: 1280
+      height: 720
+    motion:
+      mask:
+        mask_1:
+          coordinates: 0,0,0.3,0,0.3,0.06,0,0.06
+    objects:
+      track:
+        - person
+      mask:
+        mask_1:
+          coordinates: 0.5,0,1,0,1,0.2
+    record:
+      enabled: true
+      continuous:
+        days: 7
+      motion:
+        days: 7
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 30
+          mode: all
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 30
+          mode: all
+    snapshots:
+      enabled: true
+      retain:
+        default: 30
+      required_zones:
+        - z-einfahrt
+        - z-tor
+    audio:
+      enabled: false
+    zones:
+      z-einfahrt:
+        friendly_name: Einfahrt
+        coordinates: 0,0.5,0.6,0.45,1,1,0,1
+      z-tor:
+        friendly_name: Tor & Weg
+        coordinates: 0.7,0.1,0.95,0.1,0.95,0.4,0.7,0.4
+    review:
+      alerts:
+        required_zones:
+          - z-einfahrt
+          - z-tor
+      detections:
+        required_zones:
+          - z-einfahrt
+          - z-tor
+    face_recognition:
+      enabled: true
+  garten:
+    enabled: true
+    ffmpeg:
+      output_args:
+        record: preset-record-generic
+      inputs:
+        - path: rtsp://127.0.0.1:8554/garten
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/garten_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      fps: 5
+    motion:
+      mask:
+        mask_1:
+          coordinates: 0.8,0,1,0,1,0.3,0.8,0.3
+        mask_2:
+          coordinates: 0,0,0.2,0,0.2,0.2
+    objects:
+      track:
+        - person
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 3
+      alerts:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: motion
+      detections:
+        pre_capture: 5
+        post_capture: 5
+        retain:
+          days: 14
+          mode: motion
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    audio:
+      enabled: false
+    zones:
+      z-beet:
+        friendly_name: Beet
+        coordinates: 0.1,0.6,0.4,0.6,0.4,0.9,0.1,0.9
+    face_recognition:
+      enabled: false
+  schuppen:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/schuppen
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+    record:
+      enabled: false
+      continuous:
+        days: 4
+      motion:
+        days: 4
+      alerts:
+        retain:
+          days: 21
+      detections:
+        retain:
+          days: 21
+    snapshots:
+      enabled: false
+      retain:
+        default: 21
+    audio:
+      enabled: false
+    face_recognition:
+      enabled: false

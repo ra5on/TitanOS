@@ -296,7 +296,8 @@ try {
     await sound(page, `systemdaten-ruhemodus-${name}`);
     await shot(page, sysShots, `systemdaten-ruhemodus-${name}`);
 
-    // The search of the control panel and the area page find it.
+    // The search of the control panel and the list under its area find it
+    // (PLAN 86: "?area=" shows "Alle Einstellungen" at the area).
     await page.goto(base + "/settings?area=data");
     await page.getByRole("link", { name: /Systemdaten/ }).waitFor();
     await sound(page, `bereich-${name}`);

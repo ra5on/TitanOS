@@ -146,25 +146,25 @@ func TestEvents(t *testing.T) {
 		t.Errorf("reviewed filter: %d, want %d", len(seen), reviewed)
 	}
 	// One event, marking it, deleting it.
-	one, err := r.m.Event(ctx, first.ID)
+	one, err := r.m.Event(ctx, first.ID, "admin")
 	if err != nil || one.ID != first.ID || one.Reviewed {
 		t.Fatalf("%+v %v", one, err)
 	}
-	if err := r.m.SetReviewed(ctx, first.ID, true); err != nil {
+	if err := r.m.MarkSeen("admin", one, true); err != nil {
 		t.Fatal(err)
 	}
-	if one, _ := r.m.Event(ctx, first.ID); !one.Reviewed {
+	if one, _ := r.m.Event(ctx, first.ID, "admin"); !one.Reviewed {
 		t.Error("not marked as seen")
 	}
-	if err := r.m.DeleteEvent(ctx, first.ID); err != nil {
+	if err := r.m.DeleteEvent(ctx, first.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	for name, err := range map[string]error{
-		"deleted":   func() error { _, err := r.m.Event(ctx, first.ID); return err }(),
-		"path":      func() error { _, err := r.m.Event(ctx, "../config"); return err }(),
-		"slash":     r.m.DeleteEvent(ctx, "a/b"),
-		"dots":      r.m.SetReviewed(ctx, "a..b", true),
-		"not there": r.m.SetReviewed(ctx, "1.5-nope", true),
+		"deleted":   func() error { _, err := r.m.Event(ctx, first.ID, "admin"); return err }(),
+		"path":      func() error { _, err := r.m.Event(ctx, "../config", "admin"); return err }(),
+		"slash":     r.m.DeleteEvent(ctx, "a/b", false),
+		"dots":      func() error { _, err := r.m.Event(ctx, "a..b", "admin"); return err }(),
+		"not there": func() error { _, err := r.m.Event(ctx, "1.5-nope", "admin"); return err }(),
 	} {
 		if !errors.Is(err, ErrEventNotFound) {
 			t.Errorf("%s: %v", name, err)

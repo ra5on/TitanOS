@@ -469,6 +469,9 @@
 									.filter(Boolean)
 									.join(' · ')}
 							</p>
+							{#if item.event}<p class="srow-desc kept-mark">
+									<Icon name="pin" size={13} />{t('nvr.export.keptMark')}
+								</p>{/if}
 							{#if item.state === 'failed'}<p class="srow-desc">
 									{t('nvr.export.failedHint')}
 								</p>{/if}
@@ -488,23 +491,26 @@
 									download>{t('nvr.export.download')}</a
 								>
 							{/if}
-							<button
-								type="button"
-								class="btn"
-								onclick={() => {
-									renaming = item;
-									newName = item.name;
-									listError = '';
-								}}>{t('nvr.export.rename')}</button
-							>
-							<button
-								type="button"
-								class="btn btn-danger-outline"
-								onclick={() => {
-									removing = item;
-									listError = '';
-								}}>{t('common.delete')}</button
-							>
+							<!-- PLAN 88: the video of a kept event is changed by administrators only. -->
+							{#if !item.event || nvrAdmin()}
+								<button
+									type="button"
+									class="btn"
+									onclick={() => {
+										renaming = item;
+										newName = item.name;
+										listError = '';
+									}}>{t('nvr.export.rename')}</button
+								>
+								<button
+									type="button"
+									class="btn btn-danger-outline"
+									onclick={() => {
+										removing = item;
+										listError = '';
+									}}>{t('common.delete')}</button
+								>
+							{/if}
 						</div>
 					</div>
 				</div>
@@ -581,6 +587,11 @@
 {/if}
 
 <style>
+	.kept-mark {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+	}
 	.pick,
 	.controls {
 		display: flex;

@@ -184,9 +184,11 @@
 
 	// A link clicked on the desktop itself (the bell's "Details öffnen", the
 	// tasks dialog …) changes the address without a reload: open its window
-	// too. Only clicked links – the desktop's own address updates never come here.
+	// too; so does a page chosen in the command palette (Strg+K, PLAN 86: a
+	// single setting, with its tab and row). The desktop's own address
+	// updates (replaceState) never come here.
 	afterNavigate((nav) => {
-		if (nav.type !== 'link' || !nav.to) return;
+		if ((nav.type !== 'link' && nav.type !== 'goto') || !nav.to) return;
 		const url = nav.to.url;
 		if (url.pathname === '/') return;
 		const app = appForPath(url.pathname);
@@ -804,14 +806,7 @@
 			transform: translate(-2%, 1.5%) scale(1.04);
 		}
 	}
-	/* Follows "Transparenz" and "Glaseffekt" (Settings › Appearance, PLAN 64). */
-	:global(.glass-panel) {
-		background: var(--desk-surface, color-mix(in srgb, var(--surface) 70%, transparent));
-		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		border: 1px solid color-mix(in srgb, #fff 12%, transparent);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
-	}
+	/* .glass-panel lives in app.css (PLAN 87: the phone's home screen uses it too). */
 	.desk-area {
 		position: relative;
 		flex: 1;

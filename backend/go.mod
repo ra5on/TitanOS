@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/HugoSmits86/nativewebp v1.3.0
 	github.com/coder/websocket v1.8.15
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
 	go.etcd.io/bbolt v1.5.0
 	go.yaml.in/yaml/v3 v3.0.6

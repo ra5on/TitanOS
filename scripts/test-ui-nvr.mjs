@@ -231,7 +231,11 @@ try {
     // Plates need a vehicle: the vehicles come along.
     assert.equal(await pill("Erkennen", "Fahrzeuge").getAttribute("aria-pressed"), "true");
     await page.getByLabel("Aufnehmen", { exact: true }).selectOption("continuous");
-    await page.getByLabel("Aufbewahren").fill("30");
+    // PLAN 88: days for recordings and for events, apart.
+    await page.getByLabel("Aufnahmen aufbewahren").fill("30");
+    await page.getByLabel("Ereignisse aufbewahren").fill("60");
+    // A new camera has no picture yet: areas come after saving.
+    await page.getByText(de["nvr.areas.newCamera"]).waitFor();
     await page.getByRole("switch", { name: "Ton", exact: true }).check();
     assert.equal(
       await page.getByRole("switch", { name: "Gegensprechen" }).isChecked(),
@@ -274,7 +278,7 @@ try {
         plates: true,
         faces: false,
       },
-      record: { mode: "continuous", retainDays: 30, preSeconds: 5, postSeconds: 5 },
+      record: { mode: "continuous", retainDays: 60, recordDays: 30, eventDays: 60, preSeconds: 5, postSeconds: 5 },
       audio: { enabled: true, twoWay: false },
       ptz: true,
       notify: {
@@ -289,6 +293,9 @@ try {
           { user: "mara", bell: false, push: false, email: true },
         ],
       },
+      zones: [],
+      zonesOnly: false,
+      masks: { motion: [], objects: [] },
       enabled: true,
     });
     const probes = sent(state, "POST", "/nvr/cameras/probe");
@@ -433,13 +440,15 @@ try {
     const { ctx, page, state } = await open("owner", () => {}, "hell", width);
     await page.goto(base + "/nvr/cameras?edit=einfahrt");
     await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
-    // Continuous for 7 days → on detected objects for 3 days.
+    // Continuous for 7 days → on detected objects for 3 days: events keep
+    // only events, so only their days are asked (PLAN 88).
     await page.getByLabel("Aufnehmen", { exact: true }).selectOption("events");
-    await page.getByLabel("Aufbewahren", { exact: true }).fill("3");
+    assert.equal(await page.getByLabel("Aufnahmen aufbewahren").count(), 0);
+    await page.getByLabel("Ereignisse aufbewahren").fill("3");
     await page.getByRole("button", { name: "Speichern" }).click();
     const ask = confirmDialog(page, de["nvr.shrink.title"]);
     await ask.waitFor();
-    for (const line of [de["nvr.shrink.events"], de["nvr.shrink.days"].replace("{days}", "3"), de["nvr.shrink.when"]])
+    for (const line of [de["nvr.shrink.events"], de["nvr.shrink.eventDays"].replace("{days}", "3"), de["nvr.shrink.when"]])
       await ask.getByText(line).waitFor();
     assert.equal(await ask.locator("input").count(), 0, "nothing to type");
     assert.equal(
@@ -468,11 +477,136 @@ try {
     await page.goto(base + "/nvr/cameras?edit=einfahrt");
     await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
     await page.getByLabel("Aufnehmen", { exact: true }).selectOption("continuous");
-    await page.getByLabel("Aufbewahren", { exact: true }).fill("30");
+    await page.getByLabel("Aufnahmen aufbewahren").fill("30");
+    await page.getByLabel("Ereignisse aufbewahren").fill("30");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.locator('[data-camera="einfahrt"]').waitFor();
     assert.equal(sent(state, "PUT", "/nvr/cameras/einfahrt").at(-1).confirmShrink, undefined);
     assert.equal(await confirmDialog(page, de["nvr.shrink.title"]).count(), 0);
+    await ctx.close();
+  }
+
+  // --- PLAN 88: zones and masks drawn over the still picture (mouse and keyboard) ---
+  {
+    const { ctx, page, state } = await open("owner");
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.getByRole("heading", { name: "Haustür" }).waitFor();
+    await page.waitForFunction(() => document.querySelector("#nvr-areas .stage img")?.naturalWidth > 0);
+    const stage = page.locator("#nvr-areas .stage");
+    await stage.scrollIntoViewIfNeeded();
+    const at = async (x, y) => {
+      const b = await stage.boundingBox();
+      return [b.x + x * b.width, b.y + y * b.height];
+    };
+    const click = async (x, y) => page.mouse.click(...(await at(x, y)));
+    const tools = page.getByRole("toolbar", { name: de["nvr.areas.tools"] });
+    const list = page.getByRole("list", { name: de["nvr.areas.list"] });
+    // A zone of four points, closed with "Fertig" (not before three).
+    await tools.getByRole("button", { name: "Zone", exact: true }).click();
+    await page.getByText(de["nvr.areas.drawing"].replace("{kind}", "Zone"), { exact: false }).waitFor();
+    await click(0.05, 0.6);
+    await click(0.5, 0.55);
+    assert.equal(await page.getByRole("button", { name: "Fertig" }).isDisabled(), true, "two points are no area");
+    await click(0.66, 0.97);
+    await click(0.03, 0.97);
+    await page.getByRole("button", { name: "Fertig" }).click();
+    await page.getByLabel(de["nvr.areas.name"]).fill("Weg");
+    // A second zone, closed with a click on its first point.
+    await tools.getByRole("button", { name: "Zone", exact: true }).click();
+    for (const [x, y] of [[0.68, 0.18], [0.95, 0.18], [0.95, 0.5], [0.7, 0.46]]) await click(x, y);
+    await page.getByRole("button", { name: de["nvr.areas.closeHere"] }).click();
+    await page.getByLabel(de["nvr.areas.name"]).fill("Beet");
+    // A motion mask (the clock in the picture) and an object mask (the street).
+    await tools.getByRole("button", { name: "Bewegungsmaske" }).click();
+    for (const [x, y] of [[0.02, 0.03], [0.36, 0.03], [0.36, 0.1], [0.02, 0.1]]) await click(x, y);
+    await page.getByRole("button", { name: "Fertig" }).click();
+    await tools.getByRole("button", { name: "Objektmaske" }).click();
+    for (const [x, y] of [[0.4, 0.3], [0.65, 0.28], [0.65, 0.42], [0.4, 0.44]]) await click(x, y);
+    await page.getByRole("button", { name: "Fertig" }).click();
+    assert.deepEqual(
+      (await list.getByRole("button").allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim()),
+      ["Weg Zone · Punkte: 4", "Beet Zone · Punkte: 4", "Bewegungsmaske 1 Bewegungsmaske · Punkte: 4", "Objektmaske 1 Objektmaske · Punkte: 4"],
+    );
+    // Drag a point of "Weg"; "+" on an edge adds one and drags it.
+    await list.getByRole("button", { name: /^Weg/ }).click();
+    const handle = page.getByRole("button", { name: "Punkt 2 von Weg" });
+    const hb = await handle.boundingBox();
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(...(await at(0.56, 0.48)), { steps: 5 });
+    await page.mouse.up();
+    const plus = page.getByRole("button", { name: "Punkt zwischen Punkt 1 und 2 einfügen" });
+    const pb = await plus.boundingBox();
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(...(await at(0.3, 0.47)), { steps: 5 });
+    await page.mouse.up();
+    await list.getByRole("button", { name: /^Weg Zone · Punkte: 5/ }).waitFor();
+    // The keyboard: an arrow moves the chosen point, Entf removes it.
+    await page.getByRole("button", { name: "Punkt 2 von Weg" }).focus();
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Delete");
+    await list.getByRole("button", { name: /^Weg Zone · Punkte: 4/ }).waitFor();
+    // Two zones of one name: said at the field, nothing saved.
+    await list.getByRole("button", { name: /^Beet/ }).click();
+    await page.getByLabel(de["nvr.areas.name"]).fill("weg");
+    await page.getByText(de["nvr.areas.nameTaken"]).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Speichern" }).isDisabled(), true);
+    await page.getByLabel(de["nvr.areas.name"]).fill("Beet");
+    // Events only in zones; messages for unknown faces and only in "Weg".
+    await page.getByRole("switch", { name: de["nvr.areas.only"] }).check();
+    const pill = (group, name) => page.getByRole("group", { name: group }).getByRole("button", { name, exact: true });
+    await pill("Melden bei", "Unbekanntem Gesicht").click();
+    await pill("Nur in Zonen melden", "Weg").click();
+    await list.getByRole("button", { name: /^Weg/ }).click();
+    await sound(page, "zones and masks");
+    await page.locator("section:has(#nvr-areas)").screenshot({ path: `${out}/bereiche-${WIDTH}.png`, animations: "disabled" });
+    await page.locator("section:has(#nvr-notify-zones)").screenshot({ path: `${out}/meldungen-zonen-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="haustuer"]').waitFor();
+    const body = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);
+    assert.deepEqual(body.zones.map((z) => z.name), ["Weg", "Beet"]);
+    assert.deepEqual(body.zones.map((z) => z.points.length), [4, 4]);
+    assert.deepEqual([body.masks.motion.length, body.masks.objects.length], [1, 1]);
+    for (const area of [...body.zones, ...body.masks.motion, ...body.masks.objects])
+      for (const [x, y] of area.points)
+        for (const v of [x, y]) assert.ok(v >= 0 && v <= 1 && Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, `point ${v}`);
+    for (const z of body.zones) assert.match(z.id, /^[a-z][a-z0-9_]{0,31}$/);
+    const weg = body.zones[0];
+    assert.ok(Math.abs(weg.points[1][0] - 0.56) < 0.02 && Math.abs(weg.points[1][1] - 0.48) < 0.02, `dragged point ${weg.points[1]}`);
+    assert.equal(body.zonesOnly, true);
+    assert.deepEqual(body.notify.zones, [weg.id]);
+    assert.equal(body.notify.faceUnknown, true);
+    // Removing the zone the messages are limited to takes it out of them too.
+    await page.goto(base + "/nvr/cameras?edit=haustuer");
+    await page.waitForFunction(() => document.querySelector("#nvr-areas .stage img")?.naturalWidth > 0);
+    await list.getByRole("button", { name: /^Weg/ }).click();
+    await page.getByRole("button", { name: de["nvr.areas.remove"] }).click();
+    assert.deepEqual(await page.getByRole("group", { name: "Nur in Zonen melden" }).getByRole("button").allInnerTexts(), ["Beet"]);
+    // The messages now cover the whole picture: said where it happens.
+    await page.locator("#nvr-zones-widened").getByText(de["nvr.areas.messagesWidened"].replace("{zone}", "Weg")).waitFor();
+    await sound(page, "messages widened");
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="haustuer"]').waitFor();
+    const after = sent(state, "PUT", "/nvr/cameras/haustuer").at(-1);
+    assert.deepEqual([after.zones.map((z) => z.name), after.notify.zones], [["Beet"], []]);
+    // A camera without a picture: said, nothing to draw on.
+    await page.goto(base + "/nvr/cameras?edit=terrasse");
+    await page.getByText(de["nvr.areas.noPicture"]).waitFor();
+    assert.equal(await tools.getByRole("button", { name: "Zone", exact: true }).isDisabled(), true);
+    // The two days of a camera that records continuously.
+    await page.goto(base + "/nvr/cameras?edit=einfahrt");
+    await page.getByLabel("Aufnahmen aufbewahren").waitFor();
+    assert.equal(await page.getByLabel("Aufnahmen aufbewahren").inputValue(), "7");
+    assert.equal(await page.getByLabel("Ereignisse aufbewahren").inputValue(), "7");
+    await page.getByLabel("Ereignisse aufbewahren").fill("30");
+    await page.locator("section:has(#nvr-event-days)").scrollIntoViewIfNeeded();
+    await page.locator("section:has(#nvr-event-days)").screenshot({ path: `${out}/aufbewahrung-${WIDTH}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator('[data-camera="einfahrt"]').waitFor();
+    assert.deepEqual(sent(state, "PUT", "/nvr/cameras/einfahrt").at(-1).record, {
+      mode: "continuous", retainDays: 30, recordDays: 7, eventDays: 30, preSeconds: 5, postSeconds: 5,
+    });
     await ctx.close();
   }
 
@@ -1334,6 +1468,75 @@ try {
     await page.locator(".list .event-card").first().click();
     await page.waitForFunction(() => document.querySelector(".detail video")?.readyState >= 1);
     assert.equal(state.requests.some(([m, p]) => m === "GET" && p.includes("/clip.mp4")), false, "clip.mp4 only for downloading");
+    await ctx.close();
+  }
+
+  // --- PLAN 88: keep an event for good, give it back, delete a kept one; "seen" per account ---
+  {
+    const { ctx, page, state } = await open("owner");
+    await page.goto(base + "/nvr/events");
+    const keptCard = page.locator(".grid .card", { hasText: "Person · Haustür" }).filter({ hasText: "Behalten" });
+    await keptCard.waitFor();
+    // Kept in words, not only with a mark.
+    assert.equal(await page.locator(".grid .card .kept").count(), 1);
+    await page.getByRole("button", { name: /Person · Garten/ }).click();
+    const detail = page.getByRole("dialog", { name: "Person · Garten" });
+    await detail.locator("#nvr-event-kept").getByText("nein – wird nach 14 Tagen gelöscht").waitFor();
+    await detail.getByRole("button", { name: "Behalten", exact: true }).click();
+    await detail.locator("#nvr-event-kept").getByText(de["nvr.events.keptText"]).waitFor();
+    const garden = state.events.find((e) => e.camera === "garten" && e.label === "person");
+    assert.ok(state.requests.some(([m, p]) => m === "POST" && p === `/nvr/events/${garden.id}/keep`));
+    await sound(page, "kept event");
+    await shot(page, "ereignis-behalten");
+    // Giving it back asks first: its saved video goes.
+    await detail.getByRole("button", { name: "Nicht mehr behalten" }).click();
+    const back = confirmDialog(page, de["nvr.events.unkeepTitle"]);
+    await back.getByText(de["nvr.events.unkeepVideo"]).waitFor();
+    assert.equal(await back.locator("input").count(), 0, "nothing to type");
+    assert.equal(await back.getByRole("button", { name: "Abbrechen" }).evaluate((b) => b === document.activeElement), true);
+    await back.getByRole("button", { name: "Abbrechen" }).click();
+    assert.equal(state.requests.some(([m, p]) => m === "DELETE" && p.endsWith("/keep")), false, "cancel sends nothing");
+    await detail.getByRole("button", { name: "Nicht mehr behalten" }).click();
+    await confirmDialog(page, de["nvr.events.unkeepTitle"]).getByRole("button", { name: de["nvr.events.unkeepConfirm"] }).click();
+    await detail.getByRole("button", { name: "Behalten", exact: true }).waitFor();
+    assert.ok(state.requests.some(([m, p]) => m === "DELETE" && p === `/nvr/events/${garden.id}/keep`));
+    await detail.getByRole("button", { name: "Schließen" }).click();
+    // An event that goes on is kept once it is over.
+    await page.getByRole("button", { name: /Person · Haustür/ }).first().click();
+    const running = page.getByRole("dialog", { name: "Person · Haustür" });
+    await running.getByText(de["nvr.events.keepRunning"]).waitFor();
+    assert.equal(await running.getByRole("button", { name: "Behalten", exact: true }).isDisabled(), true);
+    await running.getByRole("button", { name: "Schließen" }).click();
+    // Deleting a kept event asks with its own words and confirms to the NAS.
+    await keptCard.click();
+    const kept = page.getByRole("dialog", { name: "Person · Haustür" });
+    await kept.getByText("Weg").waitFor();
+    await kept.getByRole("button", { name: "Löschen" }).click();
+    const remove = confirmDialog(page, de["nvr.events.deleteKeptTitle"]);
+    await remove.getByText(de["nvr.events.deleteKeptText"]).waitFor();
+    await remove.getByRole("button", { name: "Löschen" }).click();
+    await remove.waitFor({ state: "detached" });
+    assert.ok(state.requests.some(([m, p]) => m === "DELETE" && /\/nvr\/events\/[^/]+-fix5\?confirmKept=1$/.test(p)));
+    // "Seen" is the account's own: all seen at once.
+    await page.getByText(de["nvr.events.seenHint"]).waitFor();
+    await page.getByRole("button", { name: de["nvr.events.allSeen"] }).click();
+    await until(() => state.requests.some(([m, p]) => m === "POST" && p === "/nvr/events/seen"), "all seen sent");
+    await page.waitForFunction(() => document.querySelectorAll(".grid .card.new").length === 0, null, { timeout: 5000 });
+    assert.equal(await page.getByRole("button", { name: de["nvr.events.allSeen"] }).isDisabled(), true);
+    await ctx.close();
+  }
+  // --- PLAN 88: an account sees kept events and their video, keeps nothing itself ---
+  {
+    const { ctx, page } = await open("user", (s) => {
+      s.rights = { haustuer: { live: true, recordings: true } };
+    });
+    await page.goto(base + "/nvr/events");
+    const keptCard = page.locator(".grid .card", { hasText: "Behalten" });
+    await keptCard.click();
+    const dialog = page.getByRole("dialog", { name: "Person · Haustür" });
+    await dialog.locator("#nvr-event-kept").getByText(de["nvr.events.keptText"]).waitFor();
+    assert.equal(await dialog.getByRole("button", { name: /Behalten/ }).count(), 0);
+    assert.equal(await dialog.getByRole("button", { name: "Löschen" }).count(), 0);
     await ctx.close();
   }
 

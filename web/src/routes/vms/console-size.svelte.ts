@@ -31,10 +31,9 @@ export class ConsoleSize {
 	measure = () => {
 		const frame = this.frame;
 		if (!frame || this.fullscreen) return;
-		const below =
-			frame.nextElementSibling instanceof HTMLElement
-				? frame.nextElementSibling.offsetHeight + 24
-				: 16;
+		// PLAN 87: on a touch screen the key bar follows inside the same box.
+		const next = frame.nextElementSibling ?? frame.parentElement?.nextElementSibling;
+		const below = next instanceof HTMLElement ? next.offsetHeight + 24 : 16;
 		// Fit where the frame actually starts, keeping the heading and tabs visible.
 		const top = Math.max(above(frame), frame.getBoundingClientRect().top);
 		this.room = Math.max(1, window.innerHeight - top - below);

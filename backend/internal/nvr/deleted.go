@@ -43,10 +43,20 @@ const pruneAfter = 24 * time.Hour
 // DeletedCamera is a camera that was deleted while its recordings are
 // kept.
 type DeletedCamera struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// RetainDays is the longest the camera kept anything (0.80 reads only
+	// this); RecordDays and EventDays are its two days since 0.81 (PLAN
+	// 88), 0 when they equal RetainDays (as Record stores them).
 	RetainDays int       `json:"retainDays"`
+	RecordDays int       `json:"recordDays,omitempty"`
+	EventDays  int       `json:"eventDays,omitempty"`
 	DeletedAt  time.Time `json:"deletedAt"`
+}
+
+// record is what the stub keeps, as a camera that records nothing.
+func (d DeletedCamera) record() Record {
+	return Record{Mode: RecordOff, RetainDays: d.RetainDays, RecordDays: d.RecordDays, EventDays: d.EventDays}
 }
 
 // ExpiresAt is when the last recordings of the camera are deleted.
@@ -60,7 +70,9 @@ func (d DeletedCamera) rendered(now time.Time) bool {
 }
 
 func validDeleted(d DeletedCamera) bool {
-	return ValidCameraID(d.ID) && validName(d.Name) && d.RetainDays >= 1 && d.RetainDays <= 365 && !d.DeletedAt.IsZero()
+	inRange := func(days int) bool { return days >= 0 && days <= d.RetainDays }
+	return ValidCameraID(d.ID) && validName(d.Name) && d.RetainDays >= 1 && d.RetainDays <= maxRetainDays &&
+		inRange(d.RecordDays) && inRange(d.EventDays) && !d.DeletedAt.IsZero()
 }
 
 // deletedList is the list as read from the stick (m.mu held by the

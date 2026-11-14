@@ -13,6 +13,8 @@ export function registerFilesMenu(p: FilesPage) {
 	const canWrite = () => !!p.root && p.writable && !p.trash;
 	const some = () => p.selected.length > 0 && !p.trash;
 	registerMenuCommands({
+		// PLAN 87: pulling the list down on the phone (PhoneGestures).
+		'files.refresh': { run: () => void p.load(), enabled: () => !!p.root },
 		'files.mkdir': { run: () => p.command('mkdir'), enabled: canWrite },
 		'files.newFile': { run: () => p.command('newFile'), enabled: canWrite },
 		'files.upload': { run: () => p.command('upload'), enabled: canWrite },

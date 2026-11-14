@@ -1,6 +1,7 @@
 package nvr
 
 import (
+	"encoding/json"
 	"slices"
 	"time"
 )
@@ -13,6 +14,9 @@ const (
 	KindPlate   = "plate"
 	KindFace    = "face"
 	KindOffline = "offline"
+	// KindFaceUnknown is a face the recognition saw and did not know (PLAN
+	// 88); chosen by Notify.FaceUnknown, not by a kind in the list.
+	KindFaceUnknown = "face_unknown"
 )
 
 // kindOf is the kind of a label: vehicles and animals are groups.
@@ -80,7 +84,32 @@ type noticeState struct {
 	lastText map[string]string
 	// since is when this titand routed its first event.
 	since time.Time
+	// faces follows the face recognition of each person event (PLAN 88):
+	// how often Frigate tried a face, and the event as last seen.
+	faces map[string]*faceTrack
 }
+
+// faceTrack is what the routing knows of the faces of one event.
+type faceTrack struct {
+	// attempts counts Frigate's tries on a face of the event
+	// (tracked_object_update of type "face").
+	attempts int
+	// event is the event as Frigate last told it; known false until then.
+	event Event
+	known bool
+	// earlier: the event began before this titand (told by the one
+	// before it, if at all).
+	earlier bool
+	at      time.Time
+}
+
+// maxFaceAttempts is Frigate's MAX_FACE_ATTEMPTS
+// (data_processing/real_time/face.py): after so many tries without a known
+// face it stops trying – the face stays unknown.
+const maxFaceAttempts = 12
+
+// maxFaceTracks bounds faceTrack entries (events that never ended).
+const maxFaceTracks = 500
 
 // routeEvent decides what an event of the feed is worth telling: its
 // object once it moved, a plate or a recognised face once per event when
@@ -91,7 +120,13 @@ type noticeState struct {
 // changed, an update), and a parked car came as a new "Fahrzeug" each
 // time (review PLAN 85-4). Events that began well before this titand
 // started were told by the one before it.
-func (m *Manager) routeEvent(e Event) {
+//
+// Zones (PLAN 88): a camera that shows only events in its zones tells
+// nothing of an object that entered none, and messages limited to zones
+// wait for an object to enter one of them. These checks come before
+// once(): an object may enter a zone with a later update, and must then
+// still be told.
+func (m *Manager) routeEvent(e Event, phase string) {
 	c, ok := m.Camera(e.Camera)
 	if !ok {
 		return
@@ -103,22 +138,29 @@ func (m *Manager) routeEvent(e Event) {
 	}
 	earlier := e.Start > 0 && e.Start < float64(m.rt.notices.since.Add(-time.Minute).Unix())
 	m.mu.Unlock()
+	shown, told := shownInZones(c, e.zoneIDs), toldInZones(c, e.zoneIDs)
+	if e.Label == "person" {
+		m.followFaces(c, e, phase, earlier, now)
+	}
 	if e.stood || earlier {
 		// Seen for Home Assistant all the same: the car is there.
-		if kind := kindOf(e.Label); kind != "" {
+		if kind := kindOf(e.Label); kind != "" && shown {
 			m.noteSeen(c.ID, kind, e.Label, now)
 		}
 		return
 	}
+	if !shown {
+		return
+	}
 	if kind := kindOf(e.Label); kind != "" {
 		m.noteSeen(c.ID, kind, e.Label, now)
-		if slices.Contains(c.Notify.Kinds, e.Label) && m.once(e.ID, kind, now) {
+		if told && slices.Contains(c.Notify.Kinds, e.Label) && m.once(e.ID, kind, now) {
 			m.report(c, kind, "nvr_event_"+kind, "info", c.Name, e.ID, now)
 		}
 	}
 	if e.Plate != "" {
 		m.noteSeen(c.ID, KindPlate, e.Plate, now)
-		if slices.Contains(c.Notify.Kinds, KindPlate) && m.once(e.ID, KindPlate, now) {
+		if told && slices.Contains(c.Notify.Kinds, KindPlate) && m.once(e.ID, KindPlate, now) {
 			text := e.Plate
 			// A known plate carries its name as the sub label of the vehicle.
 			if e.SubLabel != "" && e.Label != "person" {
@@ -129,9 +171,110 @@ func (m *Manager) routeEvent(e Event) {
 	}
 	if e.Label == "person" && e.SubLabel != "" {
 		m.noteSeen(c.ID, KindFace, e.SubLabel, now)
-		if slices.Contains(c.Notify.Kinds, KindFace) && m.once(e.ID, KindFace, now) {
+		if told && slices.Contains(c.Notify.Kinds, KindFace) && m.once(e.ID, KindFace, now) {
 			m.report(c, KindFace, "nvr_event_face_known", "info", e.SubLabel+" · "+c.Name, e.ID, now)
 		}
+	}
+}
+
+// followFaces keeps the latest state of a person event for the unknown
+// faces, and tells one when the event ends with a face Frigate tried and
+// did not know.
+func (m *Manager) followFaces(c Camera, e Event, phase string, earlier bool, now time.Time) {
+	m.mu.Lock()
+	t := m.faceTrackLocked(e.ID, now)
+	t.event, t.known, t.earlier, t.at = e, true, earlier, now
+	m.mu.Unlock()
+	if phase == "end" {
+		m.tellUnknownFace(c, e.ID, now)
+		m.mu.Lock()
+		delete(m.rt.notices.faces, e.ID)
+		m.mu.Unlock()
+	}
+}
+
+// faceTrackLocked returns the track of an event, made if missing; old
+// tracks go (m.mu held).
+func (m *Manager) faceTrackLocked(id string, now time.Time) *faceTrack {
+	n := &m.rt.notices
+	if n.faces == nil {
+		n.faces = map[string]*faceTrack{}
+	}
+	if t := n.faces[id]; t != nil {
+		return t
+	}
+	for key, t := range n.faces {
+		if now.Sub(t.at) > 6*time.Hour {
+			delete(n.faces, key)
+		}
+	}
+	if len(n.faces) >= maxFaceTracks {
+		oldest := ""
+		for key, t := range n.faces {
+			if oldest == "" || t.at.Before(n.faces[oldest].at) {
+				oldest = key
+			}
+		}
+		delete(n.faces, oldest)
+	}
+	t := &faceTrack{at: now}
+	n.faces[id] = t
+	return t
+}
+
+// objectUpdate reads Frigate's tracked_object_update: each try of the
+// face recognition on a person ({"type":"face","name":…,"id":…}; name is
+// null while no known face stands out). Frigate never makes "unknown" a
+// sub label: an unknown face shows only as tries without one.
+func (m *Manager) objectUpdate(text string) {
+	var u struct {
+		Type   string  `json:"type"`
+		ID     string  `json:"id"`
+		Camera string  `json:"camera"`
+		Name   *string `json:"name"`
+	}
+	if json.Unmarshal([]byte(text), &u) != nil || u.Type != "face" || !ValidEventID(u.ID) {
+		return
+	}
+	c, ok := m.Camera(u.Camera)
+	if !ok {
+		return
+	}
+	now := m.now()
+	m.mu.Lock()
+	t := m.faceTrackLocked(u.ID, now)
+	t.attempts++
+	t.at = now
+	// The last try without any candidate name: Frigate stops trying and
+	// the face stays unknown. With a candidate the name may still come
+	// (as the sub label of the event, after this message): the end of the
+	// event decides.
+	final := t.attempts >= maxFaceAttempts && (u.Name == nil || *u.Name == "")
+	m.mu.Unlock()
+	if final {
+		m.tellUnknownFace(c, u.ID, now)
+	}
+}
+
+// tellUnknownFace reports an unknown face of an event: Frigate tried a
+// face and gave the person no name. Like every message about an object:
+// not for one that never moved, nor outside the zones the messages are
+// limited to; only to accounts that may see names (recipients.go), once
+// per event.
+func (m *Manager) tellUnknownFace(c Camera, id string, now time.Time) {
+	m.mu.Lock()
+	t := m.rt.notices.faces[id]
+	var e Event
+	ok := t != nil && t.known && !t.earlier && t.attempts > 0
+	if ok {
+		e = t.event
+	}
+	m.mu.Unlock()
+	if !ok || !c.Notify.FaceUnknown || e.SubLabel != "" || e.stood || !toldInZones(c, e.zoneIDs) {
+		return
+	}
+	if m.once(id, KindFaceUnknown, now) {
+		m.report(c, KindFaceUnknown, "nvr_event_face_unknown", "info", c.Name, id, now)
 	}
 }
 

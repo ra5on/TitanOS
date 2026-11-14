@@ -34,12 +34,14 @@
 	} from './notify.ts';
 	import HAConditionRows from './HAConditionRows.svelte';
 	import Pills from './Pills.svelte';
-	import type { CameraNotify, NotifyRecipient } from './types.ts';
+	import type { CameraNotify, CameraZone, NotifyRecipient } from './types.ts';
 
 	let {
 		notify = $bindable(),
 		camera,
 		objects,
+		zones = [],
+		faces = false,
 		id,
 	}: {
 		/** The camera's choices; the form sends them as they are. */
@@ -48,6 +50,10 @@
 		camera?: string;
 		/** The objects the NAS allows. */
 		objects: string[];
+		/** PLAN 88: the camera's zones (messages can be limited to some). */
+		zones?: CameraZone[];
+		/** The camera recognises faces (unknown faces need it). */
+		faces?: boolean;
 		/** The id of the group (the form's `{uid}-notify`). */
 		id: string;
 	} = $props();
@@ -113,12 +119,23 @@
 			out.push(t(account.pushDevicesOff > 0 ? 'nvr.notify.devicesOff' : 'nvr.notify.noDevice'));
 		if (!mailServer) out.push(t('nvr.notify.noMailServer'));
 		else if (!account.email) out.push(t('nvr.notify.noAddress'));
-		if (missesNames(account, camera, notify.kinds)) out.push(t('nvr.notify.noNames'));
+		if (missesNames(account, camera, notify.kinds, notify.faceUnknown))
+			out.push(t('nvr.notify.noNames'));
 		return out;
 	}
 
-	const kindsChosen = $derived(kindPillsOf(notify.kinds));
-	function toggleKind(pill: KindPill, on: boolean) {
+	// PLAN 88: "Unbekanntem Gesicht" stands among the kinds; the NAS keeps
+	// it as a field of its own (faceUnknown).
+	type Pill = KindPill | 'faceUnknown';
+	const kindsChosen = $derived<Pill[]>([
+		...kindPillsOf(notify.kinds),
+		...(notify.faceUnknown ? (['faceUnknown'] as const) : []),
+	]);
+	function toggleKind(pill: Pill, on: boolean) {
+		if (pill === 'faceUnknown') {
+			notify.faceUnknown = on;
+			return;
+		}
 		const members = kindMembers(pill);
 		const rest = notify.kinds.filter((k) => !members.includes(k));
 		const add = members.filter(
@@ -140,15 +157,45 @@
 		{#snippet control()}
 			<Pills
 				label={t('nvr.notify.kinds')}
-				options={KIND_PILLS.map((pill) => ({
-					value: pill,
-					label: t(`nvr.notify.kind.${pill}` as MessageKey),
-				}))}
+				options={[
+					...KIND_PILLS.map((pill) => ({
+						value: pill as Pill,
+						label: t(`nvr.notify.kind.${pill}` as MessageKey),
+					})),
+					{
+						value: 'faceUnknown' as Pill,
+						label: t('nvr.notify.kind.faceUnknown'),
+						disabled: !faces && !notify.faceUnknown,
+						why: faces ? undefined : t('nvr.notify.faceUnknownNeedsFaces'),
+					},
+				]}
 				chosen={kindsChosen}
 				ontoggle={toggleKind}
 			/>
 		{/snippet}
 	</SettingRow>
+	{#if zones.length > 0}
+		<SettingRow
+			icon="grid"
+			title={t('nvr.notify.zones')}
+			desc={(notify.zones ?? []).length
+				? t('nvr.notify.zonesHint')
+				: `${t('nvr.notify.zonesHint')} ${t('nvr.notify.zonesWhole')}`}
+			id="nvr-notify-zones"
+		>
+			{#snippet control()}
+				<Pills
+					label={t('nvr.notify.zones')}
+					options={zones.map((zone) => ({ value: zone.id!, label: zone.name }))}
+					chosen={notify.zones ?? []}
+					ontoggle={(zone, on) =>
+						(notify.zones = on
+							? [...(notify.zones ?? []), zone]
+							: (notify.zones ?? []).filter((z) => z !== zone))}
+				/>
+			{/snippet}
+		</SettingRow>
+	{/if}
 	<SettingRow
 		icon="users"
 		title={t('nvr.notify.recipients')}

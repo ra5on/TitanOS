@@ -29,16 +29,28 @@ type Event struct {
 	Plate string  `json:"plate"`
 	Score float64 `json:"score"`
 	// Start and End are Unix seconds; End is null while the event goes on.
-	Start    float64  `json:"start"`
-	End      *float64 `json:"end"`
-	HasClip  bool     `json:"hasClip"`
-	HasSnap  bool     `json:"hasSnapshot"`
-	Zones    []string `json:"zones"`
-	Reviewed bool     `json:"reviewed"`
-	// Kept is Frigate's "retain indefinitely" (TitanOS cannot set it): the
-	// storage cap leaves the event's recording out where it finds it, but
-	// Frigate's retention in days deletes the recording all the same.
+	Start   float64  `json:"start"`
+	End     *float64 `json:"end"`
+	HasClip bool     `json:"hasClip"`
+	HasSnap bool     `json:"hasSnapshot"`
+	// Zones are the names of the camera's zones the object entered
+	// (PLAN 88; zones no longer drawn are left out).
+	Zones []string `json:"zones"`
+	// Reviewed is "seen" for the account that asks (PLAN 88: per account,
+	// seen.go).
+	Reviewed bool `json:"reviewed"`
+	// Kept is Frigate's "retain indefinitely" (PLAN 88: set by "Behalten",
+	// keep.go): Frigate never deletes the event and its snapshot, and
+	// titand saved its video as an export.
 	Kept bool `json:"kept"`
+	// KeptExport is the export that holds the video of a kept event; ""
+	// when there is none (not kept, or nothing was recorded).
+	KeptExport string `json:"keptExport,omitempty"`
+	// legacySeen is Frigate's own flag of the event: the NVR-wide "seen"
+	// of 0.80 (counts only before the cutover, seen.go).
+	legacySeen bool
+	// zoneIDs are the IDs of the zones in Zones.
+	zoneIDs []string
 	// stood: the object never moved since it was first seen (Frigate's
 	// position_changes is 0; Frigate makes no review item of it,
 	// review/maintainer.py). Unknown counts as moved.
@@ -139,8 +151,10 @@ type EventFilter struct {
 	From, To, Before float64
 	// Limit is 1 to 200.
 	Limit int
-	// Reviewed filters by "seen": nil for both.
+	// Reviewed filters by "seen" of Account: nil for both.
 	Reviewed *bool
+	// Account is whose "seen" the events carry (PLAN 88).
+	Account string
 }
 
 // Events lists events, newest first. next is the cursor for the page
@@ -172,8 +186,16 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 	// are skipped.
 	inclusive, more := false, false
 	read := map[string]bool{}
-	// With a filter on "seen" pages are read until the list is full; a
-	// few at most, the next page goes on from there.
+	judge := m.judge(f.Account)
+	// With a filter on "seen", or cameras that show only events in their
+	// zones, pages are read until the list is full; a few at most, the
+	// next page goes on from there.
+	filtered := f.Reviewed != nil
+	for _, id := range f.Cameras {
+		if c, ok := m.Camera(id); ok && c.ZonesOnly {
+			filtered = true
+		}
+	}
 	for range 5 {
 		query := url.Values{"cameras": {strings.Join(f.Cameras, ",")}, "limit": {strconv.Itoa(ask)}, "include_thumbnails": {"0"}}
 		if len(f.Labels) > 0 {
@@ -198,21 +220,29 @@ func (m *Manager) Events(ctx context.Context, f EventFilter) (events []Event, ne
 			// Frigate is asked for the cameras; this is the second fence.
 			if slices.Contains(f.Cameras, e.Camera) && ValidEventID(e.ID) && !read[e.ID] {
 				read[e.ID] = true
-				list = append(list, e.event())
+				event := e.event()
+				if m.placeEvent(&event) {
+					list = append(list, event)
+				}
 			}
 		}
-		m.markReviewed(ctx, base, f.Cameras, list)
+		if judge.needsLegacy(list) {
+			m.legacySeen(ctx, base, f.Cameras, list)
+		}
+		kept := m.keptExports()
 		for _, e := range list {
+			e.Reviewed = judge.seen(e, e.legacySeen)
+			e.KeptExport = kept[e.ID]
 			if f.Reviewed == nil || *f.Reviewed == e.Reviewed {
 				events = append(events, e)
 			}
 		}
 		more = len(page) >= ask
-		if !more || len(list) == 0 {
+		if !more || len(page) == 0 {
 			break
 		}
 		before, inclusive = page[len(page)-1].Start, true
-		if len(events) > limit || f.Reviewed == nil {
+		if len(events) > limit || !filtered {
 			break
 		}
 	}
@@ -266,9 +296,11 @@ type frigateReview struct {
 	} `json:"data"`
 }
 
-// markReviewed sets Reviewed on events from the review segments of their
-// time. An event without a segment counts as not seen.
-func (m *Manager) markReviewed(ctx context.Context, base string, cameras []string, events []Event) {
+// legacySeen sets Frigate's own flag on events from the review segments
+// of their time (the NVR-wide "seen" of 0.80, which counts for events
+// before the cutover, seen.go). An event without a segment counts as not
+// seen.
+func (m *Manager) legacySeen(ctx context.Context, base string, cameras []string, events []Event) {
 	if len(events) == 0 {
 		return
 	}
@@ -289,12 +321,32 @@ func (m *Manager) markReviewed(ctx context.Context, base string, cameras []strin
 		}
 	}
 	for i := range events {
-		events[i].Reviewed = seen[events[i].ID]
+		events[i].legacySeen = seen[events[i].ID]
 	}
 }
 
-// Event returns one event.
-func (m *Manager) Event(ctx context.Context, id string) (Event, error) {
+// placeEvent names the zones of an event by the camera's zones and tells
+// whether the event is shown (a camera that shows only events in its
+// zones hides objects that entered none).
+func (m *Manager) placeEvent(e *Event) bool {
+	c, ok := m.Camera(e.Camera)
+	if !ok {
+		// A deleted camera draws no zones any more.
+		e.zoneIDs, e.Zones = []string{}, []string{}
+		return true
+	}
+	e.zoneIDs, e.Zones = eventZones(c, e.Zones)
+	return shownInZones(c, e.zoneIDs)
+}
+
+// Seen tells whether an account has seen an event of the feed (one that
+// began after the cutover, or whose Frigate flag was read).
+func (m *Manager) Seen(account string, e Event) bool {
+	return m.judge(account).seen(e, e.legacySeen)
+}
+
+// Event returns one event as an account sees it ("seen" is the account's).
+func (m *Manager) Event(ctx context.Context, id, account string) (Event, error) {
 	if !ValidEventID(id) {
 		return Event{}, ErrEventNotFound
 	}
@@ -302,30 +354,39 @@ func (m *Manager) Event(ctx context.Context, id string) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
-	var raw frigateEvent
-	if err := m.frigate.call(ctx, http.MethodGet, base, "/api/events/"+url.PathEscape(id), nil, nil, &raw); err != nil {
-		if frigateStatus(err) == http.StatusNotFound {
-			return Event{}, ErrEventNotFound
-		}
+	raw, err := m.rawEvent(ctx, base, id)
+	if err != nil {
 		return Event{}, err
 	}
-	if raw.ID != id {
-		return Event{}, ErrEventNotFound
-	}
 	event := raw.event()
+	m.placeEvent(&event)
+	judge := m.judge(account)
 	list := []Event{event}
-	m.markReviewed(ctx, base, []string{event.Camera}, list)
+	if judge.needsLegacy(list) {
+		m.legacySeen(ctx, base, []string{event.Camera}, list)
+	}
+	list[0].Reviewed = judge.seen(list[0], list[0].legacySeen)
+	list[0].KeptExport = m.keptExports()[id]
 	return list[0], nil
 }
 
-// DeleteEvent removes an event with its snapshot.
-func (m *Manager) DeleteEvent(ctx context.Context, id string) error {
+// DeleteEvent removes an event with its snapshot. A kept event (PLAN
+// 88) needs confirmKept and takes its saved video with it.
+func (m *Manager) DeleteEvent(ctx context.Context, id string, confirmKept bool) error {
 	if !ValidEventID(id) {
 		return ErrEventNotFound
 	}
 	base, err := m.base()
 	if err != nil {
 		return err
+	}
+	raw, err := m.rawEvent(ctx, base, id)
+	if err != nil {
+		return err
+	}
+	_, saved := m.keptExports()[id]
+	if (raw.Retain || saved) && !confirmKept {
+		return ErrEventKept
 	}
 	if err := m.frigate.call(ctx, http.MethodDelete, base, "/api/events/"+url.PathEscape(id), nil, nil, nil); err != nil {
 		if frigateStatus(err) == http.StatusNotFound {
@@ -333,30 +394,8 @@ func (m *Manager) DeleteEvent(ctx context.Context, id string) error {
 		}
 		return err
 	}
+	m.forgetKeptVideo(ctx, id)
 	return nil
-}
-
-// SetReviewed marks the stretch of activity an event belongs to as seen
-// or not. "Seen" is one flag for the NVR, not one per account.
-func (m *Manager) SetReviewed(ctx context.Context, id string, reviewed bool) error {
-	if !ValidEventID(id) {
-		return ErrEventNotFound
-	}
-	base, err := m.base()
-	if err != nil {
-		return err
-	}
-	var review frigateReview
-	if err := m.frigate.call(ctx, http.MethodGet, base, "/api/review/event/"+url.PathEscape(id), nil, nil, &review); err != nil {
-		if frigateStatus(err) == http.StatusNotFound {
-			return ErrEventNotFound
-		}
-		return err
-	}
-	if !ValidEventID(review.ID) {
-		return ErrEventNotFound
-	}
-	return m.frigate.call(ctx, http.MethodPost, base, "/api/reviews/viewed", nil, map[string]any{"ids": []string{review.ID}, "reviewed": reviewed}, nil)
 }
 
 // Media opens a picture or video of Frigate for the API to pass on:

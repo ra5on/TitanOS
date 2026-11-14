@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.80** (Tag v0.80.0, App-Update auf Basis 0.78: NVR-Meldungen nur bei Zustand in Home Assistant, Ereignis direkt aus der Mitteilung, VM-Sperre in der Liste, Regler „Deckkraft“, T-Programme 1.6.0; Release-Prüfstand siehe docs/releases/v0.80.0.md, NVR-Nachträge 0.79 in docs/releases/v0.79.0.md, NVR-Release 0.78 in docs/releases/v0.78.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.81** (Tag v0.81.0, App-Update auf Basis 0.78: Systemsteuerung mit aufklappbaren Bereichen und Suche über jede Einstellung, Handy-Oberfläche wie am Desktop mit Gesten und VM-Bedienung per Touch, NVR-Zonen/Masken, Ereignisse behalten, getrennte Aufbewahrung, „gesehen“ je Konto, T-PDF am Handy mit Office 1.7.0; Release-Prüfstand siehe docs/releases/v0.81.0.md, 0.80 in docs/releases/v0.80.0.md, NVR-Release 0.78 in docs/releases/v0.78.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -37,7 +37,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ## Offene Punkte
 
-- **CLA:** `CLA.md` Version 1.0 gilt seit 13.11.2026 (Lizenzeinräumung ohne Übertragung des Urheberrechts, Recht zur Unterlizenzierung inkl. kommerziell und Apache-2.0, Patentlizenz; erfasst auch Beiträge vor der Unterschrift). Entscheidung des Inhabers vom 13.11.2026, ohne anwaltliche Prüfung in Betrieb genommen – vor größeren fremden Beiträgen oder einem kommerziellen Lizenzgeschäft prüfen lassen. Bot: gehosteter CLA Assistant (cla-assistant.io) mit dem CLA-Text als öffentlichem GitHub-Gist; Prüfung „license/cla“ an jedem PR; Ausnahmeliste für den Inhaber und Bots (dependabot[bot], github-actions[bot]). Eine neue CLA-Version heißt: Gist aktualisieren, Version und Datum in `CLA.md`. Die „Lite“-GitHub-Action (contributor-assistant/github-action) ist seit März 2026 archiviert – nicht verwenden.
+- **CLA:** `CLA.md` Version 1.0 gilt seit 13.11.2026 (Lizenzeinräumung ohne Übertragung des Urheberrechts, Recht zur Unterlizenzierung inkl. kommerziell und Apache-2.0, Patentlizenz; erfasst auch Beiträge vor der Unterschrift). Entscheidung des Inhabers vom 13.11.2026, ohne anwaltliche Prüfung in Betrieb genommen – vor größeren fremden Beiträgen oder einem kommerziellen Lizenzgeschäft prüfen lassen. Bot: gehosteter CLA Assistant (cla-assistant.io) mit dem CLA-Text als öffentlichem GitHub-Gist; Prüfung „license/cla“ an jedem PR; der Inhaber hat unterschrieben. Eine Ausnahmeliste für Bots ließ sich auf cla-assistant.io nicht einstellen: Dependabot-PRs zeigen „license/cla“ dauerhaft ausstehend, deshalb ist die Prüfung keine Pflicht für `main`. Eine neue CLA-Version heißt: Gist aktualisieren, Version und Datum in `CLA.md`. Die „Lite“-GitHub-Action (contributor-assistant/github-action) ist seit März 2026 archiviert – nicht verwenden.
 - Initramfs: Debian `live-boot` ist im Einsatz und in QEMU getestet (`toram=filesystem.squashfs`, `live-media-path=` pro A/B-Eintrag, `overlay-size=512M`). Ein initramfs-Skript wartet bis zu 90 Sekunden auf den Stick (alle 10 Sekunden eine Meldung auf der Konsole), damit live-boot ihn beim ersten Versuch findet und nicht alle anderen Platten durchsucht. Nur wenn der Stick gar nicht auftaucht, sucht live-boot weiter und bindet dabei fremde Dateisysteme lesend ein.
 
 ## Funktionsumfang und offene Vorhaben
@@ -87,7 +87,7 @@ titanos/
 ├── LICENSE.md              # FSL-1.1-ALv2
 ├── THIRD_PARTY_LICENSES
 ├── CONTRIBUTING.md         # inkl. CLA-Hinweis
-├── CLA.md                  # Contributor License Agreement (Entwurf)
+├── CLA.md                  # Contributor License Agreement (Version 1.0)
 ├── SECURITY.md             # Sicherheitslücken privat melden
 ├── .gitignore
 ├── build/                  # mkosi-Konfiguration (Pakete, mkosi.extra/, Postinst)

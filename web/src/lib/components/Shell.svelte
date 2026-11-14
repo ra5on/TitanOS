@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The frame around every page once someone is logged in.
 	import type { Snippet } from 'svelte';
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
 	import { session } from '#lib/session.svelte.ts';
@@ -20,6 +21,7 @@
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { afterNavigate } from '$app/navigation';
+	import { jumpToSetting } from '#lib/settings-jump.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull } from '#lib/agent-full.svelte.ts';
 	// PLAN 61: the desktop mode, the phone's home grid and pages in windows.
@@ -28,6 +30,10 @@
 	import type Desktop from '#lib/desktop/Desktop.svelte';
 	import type PhoneHome from '#lib/desktop/PhoneHome.svelte';
 	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
+	// PLAN 87: gestures (edge = back, pull = refresh) and the notifications pulled down.
+	import PhoneGestures from '#lib/desktop/PhoneGestures.svelte';
+	import PhoneNotices from '#lib/desktop/PhoneNotices.svelte';
+	import { watchAppBadge } from '#lib/app-badge.svelte.ts';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
 	import { frameFor, mode } from '#lib/desktop/mode.svelte.ts';
@@ -78,6 +84,20 @@
 	afterNavigate(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
 	});
+	// PLAN 86: a hit of the settings search leads to the row itself (tab,
+	// rows on the way opened, the setting marked) – after every navigation
+	// and also on a page loaded fresh with such an address (a new window).
+	let jumped = '';
+	$effect(() => {
+		const url = page.url;
+		if (url.href === jumped) return;
+		// The desktop itself shows no settings page (its window does).
+		if (frame === 'desktop') return;
+		jumped = url.href;
+		const path = url.pathname;
+		if (path.startsWith('/settings') || path === '/account' || url.hash.startsWith('#find='))
+			untrack(() => void jumpToSetting(url));
+	});
 	$effect(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
 	});
@@ -86,8 +106,10 @@
 		// The side bar of the window moves the frame to another page of its program.
 		const message = (event: MessageEvent) => {
 			const msg = frameMessage(event);
+			// A page may send it on at once (an area's old address, PLAN 86):
+			// the first navigation then ends as "aborted", which is no error.
 			if (msg?.type === 'titanos-goto' && event.source === window.parent && ownPath(msg.href))
-				void goto(msg.href);
+				goto(msg.href).catch(() => {});
 		};
 		// Keys of the desktop (Alt+Q, Alt+W, Alt+arrows, Ctrl+Space) also work inside a window.
 		const key = (event: KeyboardEvent) => {
@@ -112,6 +134,13 @@
 			window.removeEventListener('message', message);
 			window.removeEventListener('keydown', key);
 		};
+	});
+	// PLAN 87: menus become sheets from the bottom on the phone (app.css).
+	$effect(() => {
+		const root = document.documentElement;
+		if (frame === 'phone') root.dataset.phone = '';
+		else delete root.dataset.phone;
+		return () => delete root.dataset.phone;
 	});
 	// Only the phone's bar sticks above a page.
 	$effect(() => {
@@ -186,6 +215,10 @@
 	}
 
 	$effect(() => watchSystem());
+	// PLAN 87: the number of unread messages on the app's symbol (where the system offers it).
+	$effect(() => {
+		if (!inWindow) return watchAppBadge();
+	});
 	$effect(() => watchStorage());
 </script>
 
@@ -224,6 +257,8 @@
 			{@render children()}
 		</main>
 	{/if}
+	<PhoneGestures />
+	<PhoneNotices />
 	<!-- PLAN 66: a web app full screen (opened from the home grid or the file manager). -->
 	{#if page.state.webapp || phoneApp}
 		{#await import('#lib/webapps/WebAppPhone.svelte') then { default: WebAppPhone }}

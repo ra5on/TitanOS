@@ -5,7 +5,15 @@
 	import { page } from '$app/state';
 	import { api, type VMStatus } from '#lib/api.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
-	import VncScreen, { type ScaleMode, type ConnectionPhase } from '../VncScreen.svelte';
+	import VncScreen, {
+		type ScaleMode,
+		type ConnectionPhase,
+		type Modifiers,
+		type PointerMode,
+	} from '../VncScreen.svelte';
+	import VncKeyBar from '../VncKeyBar.svelte';
+	import { keepPointerMode, readPointerMode, touchScreen } from '../vnc-input.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 
 	const name = $derived(page.url.searchParams.get('vm') ?? '');
 	let running = $state<boolean | null>(null);
@@ -16,6 +24,12 @@
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
+	// PLAN 87: by touch – key bar, phone keyboard, finger as mouse.
+	const touch = touchScreen(phoneView());
+	let pointer = $state<PointerMode>(readPointerMode());
+	let mods = $state<Modifiers>({ ctrl: false, alt: false });
+	let keyboard = $state(false);
+	$effect(() => keepPointerMode(pointer));
 
 	$effect(() => {
 		const vmName = name;
@@ -88,9 +102,16 @@
 					{mode}
 					{resizable}
 					onstatus={(phase) => (connectionPhase = phase)}
+					{touch}
+					{pointer}
+					bind:mods
+					onkeyboard={(open) => (keyboard = open)}
 				/>{/key}
 		{/if}
 	</div>
+	{#if touch && running}
+		<VncKeyBar {screen} bind:mods bind:pointer {keyboard} />
+	{/if}
 	<div class="screen-bar">
 		<span class="mono">{displayName || name}</span>
 		{#if error}<span class="muted" role="alert">{error}</span>

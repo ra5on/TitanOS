@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { pinchZoom } from '#lib/components/pinch-zoom.ts';
 	// PLAN 79-7 (drawing 79-nvr/live2, approved): the live view. Every camera
 	// lies where the account put it, in the size it was given – moved and
 	// sized like the desktop's widgets ("Anordnen"), stored per account with
@@ -206,6 +207,35 @@
 	function keys(event: KeyboardEvent) {
 		if (event.key === 'Escape' && solo && !document.fullscreenElement) closeSolo();
 	}
+	// PLAN 87: the large camera on a touch screen – two fingers zoom the
+	// picture; a swipe to the side (not zoomed) shows the next camera.
+	let soloZoomed = $state(false);
+	let swipeFrom: { x: number; y: number; id: number } | null = null;
+	let soloFingers = 0;
+	function soloDown(event: PointerEvent) {
+		if (event.pointerType === 'mouse') return;
+		soloFingers++;
+		const onControl = (event.target as HTMLElement).closest('button, input, a, [role=slider]');
+		swipeFrom =
+			soloFingers === 1 && !soloZoomed && !onControl
+				? { x: event.clientX, y: event.clientY, id: event.pointerId }
+				: null;
+	}
+	function soloUp(event: PointerEvent) {
+		if (event.pointerType === 'mouse') return;
+		soloFingers = Math.max(0, soloFingers - 1);
+		const from = swipeFrom;
+		swipeFrom = null;
+		if (!from || from.id !== event.pointerId || soloZoomed) return;
+		const dx = event.clientX - from.x;
+		const dy = event.clientY - from.y;
+		if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+		const list = (stacked ? stack : ids).filter((id) => byId.has(id));
+		const at = list.indexOf(solo);
+		if (at < 0 || list.length < 2) return;
+		soloPtz = false;
+		solo = list[(at + (dx < 0 ? 1 : -1) + list.length) % list.length];
+	}
 
 	const OPTIONS: { key: 'events' | 'names' | 'marks' | 'recDot' | 'hideBar'; label: MessageKey }[] =
 		[
@@ -315,7 +345,24 @@
 					<!-- A new camera large is a new tile: sound, pad and an open talk
 					     connection of the one before must not carry over. -->
 					{#key solo}
-						<div class="tile solo">
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="tile solo"
+							data-pinch
+							data-solo={solo}
+							use:pinchZoom={{
+								target: () => wall?.querySelector<HTMLElement>('.tile.solo .live-video') ?? null,
+								onzoom: (s) => (soloZoomed = s > 1),
+								// A swipe to the side is the next camera.
+								idle: 'pan-y',
+							}}
+							onpointerdown={soloDown}
+							onpointerup={soloUp}
+							onpointercancel={() => {
+								soloFingers = 0;
+								swipeFrom = null;
+							}}
+						>
 							<LiveTile
 								camera={byId.get(solo)!}
 								{running}

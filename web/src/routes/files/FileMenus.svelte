@@ -30,6 +30,8 @@
 		onopenwith?: (entry: FileEntry, app: string, always: boolean) => void;
 		/** Runs a command; the entry is the one the menu was opened on. */
 		oncommand: (command: FileCommand, entry?: FileEntry) => void;
+		/** PLAN 87, phone: hand a copy of the file to another app (same as swiping the row). */
+		onshare?: (entry: FileEntry) => void;
 		onclose: () => void;
 	};
 	let {
@@ -45,6 +47,7 @@
 		dir = '',
 		onopenwith,
 		oncommand,
+		onshare,
 		onclose,
 	}: Props = $props();
 
@@ -245,6 +248,15 @@
 		<button type="button" role="menuitem" onclick={() => oncommand('download', entry)}
 			><Icon name="download" size={16} /><span>{t('files.download')}</span></button
 		>
+		{#if onshare && one && !entry.dir}<button
+				type="button"
+				role="menuitem"
+				data-menu-share
+				onclick={() => {
+					onclose();
+					onshare(entry);
+				}}><Icon name="external" size={16} /><span>{t('phone.files.share')}</span></button
+			>{/if}
 		{#if one && !entry.dir && /\.zip$/i.test(entry.name)}<button
 				type="button"
 				role="menuitem"
