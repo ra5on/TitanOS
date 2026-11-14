@@ -35,15 +35,21 @@
 	let pub = $state<FeaturesPublic | null>(null);
 	let error = $state('');
 
+	// The two loads do not depend on each other (PLAN 90-6): the switches of
+	// the NAS come from titand's memory and also load for an administrator who
+	// may not use the agent or while the agent's volume is missing; before,
+	// every switch then showed "off" whatever was set.
 	async function load() {
-		try {
-			const m = await loadMine();
-			mine = m.mine;
-			pub = m.nas;
-			if (admin) nas = await loadFeatures();
-		} catch (e) {
-			error = apiErrorText(e);
-		}
+		const [n, m] = await Promise.allSettled([
+			admin ? loadFeatures() : Promise.resolve(null),
+			loadMine(),
+		]);
+		if (n.status === 'fulfilled') nas = n.value;
+		else error = apiErrorText(n.reason);
+		if (m.status === 'fulfilled') {
+			mine = m.value.mine;
+			pub = m.value.nas;
+		} else if (!error) error = apiErrorText(m.reason);
 	}
 	void load();
 
@@ -51,10 +57,15 @@
 		error = '';
 		try {
 			nas = await saveFeatures(next);
-			pub = (await loadMine()).nas;
 		} catch (e) {
 			error = apiErrorText(e);
 			throw e;
+		}
+		// Saved. What the accounts see of it is only a second look.
+		try {
+			pub = (await loadMine()).nas;
+		} catch (e) {
+			error = apiErrorText(e);
 		}
 	}
 	async function savemine(next: FeaturesMine) {

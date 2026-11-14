@@ -1,6 +1,6 @@
 // Browser checks against isolated API fixtures. No NAS operations or real disks.
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-061.mjs
-// README_SCREENSHOTS=1 UI_OUTPUT=docs/screenshots/v0.6.1 captures the README gallery.
+// README_SCREENSHOTS=1 UI_OUTPUT=<folder> captures the README gallery.
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 const { chromium } = await import(

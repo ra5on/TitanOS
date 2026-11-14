@@ -341,9 +341,12 @@ const PROGRAMS: Record<string, Menu[]> = {
 			list('agent.projects', 'menubar.agent.inProject'),
 		]),
 		menu('view', 'menubar.menu.view', [
-			cmd('agent.notes', 'menubar.agent.notes'),
-			cmd('agent.knowledge', 'menubar.agent.knowledge'),
+			// PLAN 90-4: the pages of the agent, in the order of its side bar.
 			cmd('agent.inbox', 'menubar.agent.inbox'),
+			cmd('agent.planned', 'menubar.agent.planned'),
+			cmd('agent.knowledge', 'menubar.agent.knowledge'),
+			cmd('agent.know', 'menubar.agent.know'),
+			cmd('agent.notes', 'menubar.agent.notes'),
 		]),
 		menu('agent', 'menubar.menu.agent', [
 			list('agent.model', 'menubar.agent.model'),

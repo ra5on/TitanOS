@@ -583,6 +583,40 @@ async function open(
           },
         ],
       });
+    // PLAN 90-4: the start page (state of the NAS, what waits) and the
+    // settings of the memory on its page.
+    if (p === "/agent/home")
+      return json({
+        state: {
+          at: at(14, 40),
+          volumes: [
+            {
+              name: "Data",
+              state: "active",
+              mounted: true,
+              percent: 71,
+              daysLeft: 23,
+            },
+          ],
+          backups: { jobs: 5, failing: 0, running: 0, lastOK: at(3) },
+          apps: { running: 12, stopped: 1 },
+        },
+      });
+    if (p === "/agent/inbox" && method === "GET")
+      return json({
+        items: [
+          {
+            id: "i1",
+            kind: "fade",
+            title: "Der Zigbee-Stick hängt hinten links.",
+            body: "Das hast du dir vor langer Zeit gemerkt. Stimmt es noch, oder soll es weg?",
+            data: { memory: "m9" },
+            created: at(3, 10),
+          },
+        ],
+      });
+    if (p === "/agent/initiative" && method === "GET")
+      return json({ level: "suggest", fadeMonths: 6 });
     if (method === "POST") {
       seen.posts.push(p);
       return json({ ok: true }, 202);
@@ -598,14 +632,14 @@ async function phoneSettings(page) {
   await page.getByRole("menuitem", { name: "Einstellungen" }).click();
 }
 
-// A row of the agent's settings panel by its exact title.
-function settingsRow(panel, title) {
-  return panel
-    .locator(".row")
+// A row of the agent's pages (settings list, Gedächtnis, Wissen) by its
+// exact title (PLAN 90-4: SettingRow, a link or a row that opens downward).
+function settingsRow(scope, title) {
+  const page = typeof scope.page === "function" ? scope.page() : scope;
+  return scope
+    .locator(".srow")
     .filter({
-      has: panel
-        .page()
-        .locator("strong", { hasText: new RegExp(`^${title}$`) }),
+      has: page.locator(".srow-title", { hasText: new RegExp(`^\\s*${title}\\s*$`) }),
     })
     .first();
 }
@@ -766,19 +800,25 @@ async function plan55() {
       "agent reaches under the status bar",
     );
     assert.match(metas[1], /viewport-fit=cover/);
-    await page
-      .locator(".panel .row", { hasText: "Darstellung" })
-      .first()
-      .click();
-    const moving = await page
-      .locator(".panel .pane")
-      .evaluate(
-        (el) => el.getAnimations().length + getComputedStyle(el).transform,
-      );
-    assert.ok(/1|matrix/.test(moving), "the sub-item slides in");
-    await page.waitForTimeout(400);
+    // PLAN 90-4: the settings are a page; a part is a page of its own
+    // (/agent?page=settings&part=…) with the way back in the head.
+    await page.waitForURL(/[?&]page=settings/);
+    await settingsRow(page, "Darstellung").click();
+    await page.waitForURL(/[?&]part=look/);
+    await page.locator(".sub").getByText("Schriftgröße").first().waitFor();
+    assert.ok(
+      await page.locator("a.back", { hasText: "Einstellungen" }).isVisible(),
+      "the part has a link back to the settings",
+    );
+    await noOverflow(page, "settings part on the phone");
     await page.getByRole("button", { name: "Zurück" }).click();
-    await page.getByRole("button", { name: /Alle Chats löschen/ }).click();
+    await page.waitForURL((u) => !u.searchParams.has("part"));
+    const delRow = page
+      .locator(".sgroup", {
+        has: page.locator(".sgroup-title", { hasText: /^Daten$/ }),
+      })
+      .locator(".srow", { hasText: "Alle Chats löschen" });
+    await delRow.getByRole("button", { name: "Löschen …" }).click();
     const dlg = page.getByRole("dialog", { name: "Alle Chats löschen?" });
     await dlg.waitFor();
     assert.ok(
@@ -946,7 +986,8 @@ async function plan55() {
     );
     await page.goto(base + "/agent?app=1");
     await phoneSettings(page);
-    await page.getByRole("button", { name: /Mitteilungen/ }).click();
+    await settingsRow(page, "Mitteilungen").click();
+    await page.waitForURL(/[?&]part=push/);
     await page.getByText("Auf dem iPhone ist der Agent").waitFor();
     await page.waitForTimeout(400);
     await noOverflow(page, "agent push");
@@ -1220,9 +1261,9 @@ try {
     await page.goto(base + "/agent");
     await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
     // The suggestions are chosen at random: take the first one shown.
-    const sugg = page.locator(".sugg button").first();
+    const sugg = page.locator(".ideas button.srow").first();
     await sugg.waitFor();
-    const suggTitle = (await sugg.locator("strong").innerText()).trim();
+    const suggTitle = (await sugg.locator(".srow-title").innerText()).trim();
     await sugg.click();
     assert.ok(
       (await page.locator(".composer textarea").inputValue()).trim().length > 0,
@@ -1230,14 +1271,17 @@ try {
     );
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/3-desktop-new.png` });
-    // Look, memory and map: rows of the settings panel (PLAN 59).
+    // Look, memory and map: pages in the place of the chat (PLAN 90-4).
     await menu.getByRole("button", { name: "Einstellungen" }).click();
-    const settingsPanel = page.locator(".panel[role=dialog]");
-    await settingsPanel.waitFor();
-    await settingsPanel
-      .locator(".row", { hasText: "Darstellung" })
-      .first()
-      .click();
+    await page.waitForURL(/[?&]page=settings/);
+    const settingsPanel = page.locator("section.main");
+    await page
+      .getByRole("heading", { name: /KI-Agent.*Einstellungen/ })
+      .waitFor();
+    await noOverflow(page, "desktop settings");
+    await page.screenshot({ path: `${out}/4-desktop-settings.png` });
+    await settingsRow(settingsPanel, "Darstellung").click();
+    await page.waitForURL(/[?&]part=look/);
     await page.waitForTimeout(400);
     // PLAN 68: no colors, background or glass of the agent's own any more.
     for (const gone of [
@@ -1253,52 +1297,94 @@ try {
         "look option removed: " + gone,
       );
     await settingsPanel.getByText("Schriftgröße").first().waitFor();
+    await noOverflow(page, "desktop look");
     await page.screenshot({ path: `${out}/4-desktop-look.png` });
-    await settingsPanel.getByRole("button", { name: "Zurück" }).click();
-    await settingsRow(settingsPanel, "Gedächtnis").click();
-    await page
-      .locator("dialog[open]")
-      .getByText("Telekom-Rechnungen liegen")
-      .waitFor();
+    // The way back: "KI-Agent › Einstellungen › Darstellung" in the heading.
+    await settingsPanel
+      .locator("h1")
+      .getByRole("link", { name: "Einstellungen" })
+      .click();
+    await page.waitForURL((u) => !u.searchParams.has("part"));
+    await settingsRow(settingsPanel, "Darstellung").waitFor();
+    await menu.getByRole("button", { name: "Gedächtnis", exact: true }).click();
+    await page.waitForURL(/[?&]page=memory/);
+    await settingsPanel.getByText("Telekom-Rechnungen liegen").waitFor();
+    // PLAN 90-4: the settings of the memory are on its page.
+    const how = settingsPanel.locator(".sgroup", {
+      has: page.locator(".sgroup-title", { hasText: "So merkt er sich etwas" }),
+    });
+    for (const title of [
+      "Selbst merken",
+      "Widersprüche",
+      "Altes verblassen lassen",
+      "Gedächtnis leeren",
+    ])
+      assert.ok(
+        await how.locator(".srow-title", { hasText: title }).count(),
+        "memory setting on the page Gedächtnis: " + title,
+      );
     await page.waitForTimeout(300);
+    await noOverflow(page, "desktop memory");
     await page.screenshot({ path: `${out}/5-desktop-memory.png` });
-    await page.keyboard.press("Escape");
-    await page.locator("dialog[open]").waitFor({ state: "detached" });
-    await settingsRow(settingsPanel, "NAS-Landkarte").click();
-    await page
-      .locator("dialog[open]")
-      .getByText("Eingescannte Briefe")
-      .waitFor();
+    await menu.getByRole("button", { name: "Wissen", exact: true }).click();
+    await page.waitForURL(/[?&]page=knowledge/);
+    const mapRow = settingsRow(settingsPanel, "NAS-Landkarte");
+    await mapRow.locator("button.srow-chev").click();
+    await mapRow.getByText("Eingescannte Briefe").waitFor();
+    for (const title of ["Meine Anweisung", "Dokumente", "Protokoll"])
+      assert.ok(
+        await settingsRow(settingsPanel, title).count(),
+        "row on the page Wissen: " + title,
+      );
+    assert.ok(
+      await settingsPanel
+        .locator(".srow-title", { hasText: "Rechnungen einsortieren" })
+        .count(),
+      "skills on the page Wissen",
+    );
     await page.waitForTimeout(300);
+    await noOverflow(page, "desktop knowledge");
     await page.screenshot({ path: `${out}/14-desktop-map.png` });
     await ctx.close();
   }
-  // PLAN 59: a window opened from the settings lies over them; closing it
-  // brings back the settings, Escape once more closes them.
+  // PLAN 90-4 (was PLAN 59: a window opened from the settings lay over
+  // them): the pages have an address, so "back" of the browser leads from
+  // Gedächtnis to the settings again and a loaded address opens its page.
   {
     const { ctx, page } = await open(1440, 1000);
     await page.goto(base + "/agent?app=1");
     await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
-    await page.getByRole("button", { name: "Einstellungen" }).first().click();
-    const panel = page.locator(".panel[role=dialog]");
-    await panel.waitFor();
-    await settingsRow(panel, "Gedächtnis").click();
-    const knowledge = page.locator("dialog[open]");
-    await knowledge.getByText("Telekom-Rechnungen liegen").waitFor();
-    assert.ok(
-      await panel.isVisible(),
-      "settings stay beneath the memory window",
+    const menu = page.getByRole("navigation", { name: "Menü des KI-Agenten" });
+    await menu.getByRole("button", { name: "Einstellungen" }).click();
+    await page.waitForURL(/[?&]page=settings/);
+    const main = page.locator("section.main");
+    await settingsRow(main, "Modelle").waitFor();
+    assert.equal(
+      await menu
+        .getByRole("button", { name: "Einstellungen" })
+        .getAttribute("aria-current"),
+      "page",
+      "the settings are marked in the side bar",
     );
-    await page.keyboard.press("Escape");
-    await knowledge.waitFor({ state: "detached" });
-    await page.waitForTimeout(200);
-    assert.ok(
-      await panel.isVisible(),
-      "settings still open after closing the window",
+    assert.equal(
+      await page.locator(".dock").count(),
+      0,
+      "no input on a page of the agent",
     );
-    await panel.focus().catch(() => {});
-    await page.keyboard.press("Escape");
-    await panel.waitFor({ state: "detached" });
+    await menu.getByRole("button", { name: "Gedächtnis", exact: true }).click();
+    await main.getByText("Telekom-Rechnungen liegen").waitFor();
+    assert.equal(
+      await settingsRow(main, "Modelle").count(),
+      0,
+      "the memory replaces the settings",
+    );
+    await page.goBack();
+    await page.waitForURL(/[?&]page=settings/);
+    await settingsRow(main, "Modelle").waitFor();
+    await page.goto(base + "/agent?app=1&page=settings&part=gestures");
+    await main.locator(".sub").getByText("Wischgesten").first().waitFor();
+    await page.goto(base + "/agent?app=1&page=planned");
+    await main.getByRole("heading", { name: "Jeden Tag" }).waitFor();
     await ctx.close();
   }
   // PLAN 59: Mitteilungen in the agent's settings, per device which
@@ -1341,8 +1427,9 @@ try {
     await page.goto(base + "/agent?app=1");
     await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
     await phoneSettings(page);
-    const panel = page.locator(".panel[role=dialog]");
-    await settingsRow(panel, "Mitteilungen").click();
+    await page.waitForURL(/[?&]page=settings/);
+    await settingsRow(page, "Mitteilungen").click();
+    const panel = page.locator("section.main .sub");
     const agentBox = panel.getByRole("checkbox", { name: "KI-Agent" });
     await agentBox.waitFor();
     assert.ok(await agentBox.isChecked(), "agent messages on");
@@ -1480,30 +1567,71 @@ try {
     await page.screenshot({ path: `${out}/7-phone-home${suffix}.png` });
     await noOverflow(page, "phone home");
     if (!suffix) {
-      await page
-        .locator(".chips .chip-p", { hasText: "Home Assistant" })
-        .click();
-      await page.locator("dialog[open]").waitFor();
+      // PLAN 90-4: the start page shows what waits (a chat with an open
+      // approval, a question of the inbox), what runs and the NAS state.
+      const main = page.locator("section.main");
+      for (const title of [
+        "Wartet auf dich",
+        "Läuft gerade",
+        "NAS-Zustand",
+        "Zuletzt erledigt",
+      ])
+        assert.ok(
+          await main.locator(".sgroup-title", { hasText: title }).isVisible(),
+          "group of the start page: " + title,
+        );
+      assert.ok(
+        await main
+          .locator(".srow-title", {
+            hasText: "Freigabe nötig: Status Home Assistant",
+          })
+          .isVisible(),
+        "the chat that waits for an approval is on the start page",
+      );
+      assert.ok(
+        await main
+          .locator(".srow-title", { hasText: "Der Zigbee-Stick hängt" })
+          .isVisible(),
+        "the question of the inbox is on the start page",
+      );
+      assert.ok(
+        await main
+          .locator(".srow-title", { hasText: "Telekom-Rechnungen einsortieren" })
+          .isVisible(),
+        "the running chat is on the start page",
+      );
+      assert.equal(
+        await page.locator(".start, .chip-p").count(),
+        0,
+        "the old start with project chips is gone",
+      );
+      // The project of a new chat: the sheet behind the title (the old
+      // project sheet of the start page is gone).
+      await page.locator("header.top .p-title").click();
+      const head = page.getByRole("dialog", {
+        name: "Projekt, Modell und Denkstufe",
+      });
+      await head.waitFor();
       await page.waitForTimeout(300);
+      await noOverflow(page, "phone head sheet");
       await page.screenshot({ path: `${out}/8-phone-project.png` });
+      await head.getByRole("button", { name: /Home Assistant/ }).click();
+      await head.waitFor({ state: "detached" });
       await page
-        .locator("dialog[open]")
-        .getByRole("tab", { name: "Dateien" })
-        .click();
-      await page
-        .locator("dialog[open]")
-        .getByText("haos-2026-11-05.tar")
-        .first()
+        .locator("header.top .p-title small", { hasText: "Home Assistant" })
         .waitFor();
-      await page.screenshot({ path: `${out}/15-phone-project-files.png` });
-      await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Menü öffnen" }).click();
       const drawer = page.locator("aside.drawer");
       await drawer.waitFor();
-      await drawer
-        .getByRole("button", { name: /Home Assistant/ })
-        .first()
-        .click();
+      // The project chosen in the sheet is open in the side bar already.
+      assert.equal(
+        await drawer
+          .getByRole("button", { name: /Home Assistant/ })
+          .first()
+          .getAttribute("aria-expanded"),
+        "true",
+        "the chosen project is open in the side bar",
+      );
       await drawer
         .getByRole("button", { name: /Status Home Assistant/ })
         .click();
@@ -1533,21 +1661,42 @@ try {
     assert.ok(size >= 16, `input font ${size}px zooms on iOS`);
     await page.screenshot({ path: `${out}/10-phone-in-titanos.png` });
     await noOverflow(page, "phone in TitanOS");
-    // Model and thinking level as a sheet from the bottom.
-    await page
-      .getByRole("button", { name: "Modell und Denkstufe wählen" })
-      .click();
+    // PLAN 90-4: the head is one line; a tap on the title opens project,
+    // model and thinking level as a sheet from the bottom.
+    const headBox = await page.locator("header.top").boundingBox();
+    assert.ok(
+      headBox && headBox.height <= 60,
+      `the phone head is one line: ${JSON.stringify(headBox)}`,
+    );
+    assert.equal(
+      await page.locator(".chat-head, .app-name").count(),
+      0,
+      "no second head line on the phone",
+    );
+    assert.ok(
+      await page
+        .locator("header.top .p-title small", { hasText: "gpt-oss:20b" })
+        .isVisible(),
+      "the model stands under the title",
+    );
+    await page.locator("header.top .p-title").click();
     const sheet = page.getByRole("dialog", {
-      name: "Modell und Denkstufe wählen",
+      name: "Projekt, Modell und Denkstufe",
     });
     await sheet.waitFor();
     await page.waitForTimeout(300);
+    await noOverflow(page, "phone model sheet");
     await page.screenshot({ path: `${out}/23-phone-model.png` });
-    await sheet.getByRole("button", { name: /Niedrig/ }).click();
-    await page
-      .getByRole("button", { name: "Modell und Denkstufe wählen" })
-      .filter({ hasText: "Niedrig" })
-      .waitFor();
+    await sheet.locator(".seg label", { hasText: "Niedrig" }).click();
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached" });
+    await page.locator("header.top .p-title").click();
+    assert.ok(
+      await sheet.getByRole("radio", { name: /Niedrig/ }).isChecked(),
+      "the thinking level stays chosen",
+    );
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached" });
     // The menu: pinned first, unread marked, search, back to TitanOS.
     await page.getByRole("button", { name: "Menü öffnen" }).click();
     const drawer = page.locator("aside.drawer");
@@ -1566,11 +1715,35 @@ try {
     );
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/16-phone-menu.png` });
-    // PLAN 68: "Suchen" is a row of the side bar that opens the field.
-    await drawer.getByRole("button", { name: "Suchen" }).click();
-    await drawer
-      .getByRole("searchbox", { name: "Chats durchsuchen" })
-      .fill("CPU");
+    // PLAN 90-4: the search is always on top of the side bar, above
+    // "Neuer Chat"; the "Vorschläge" entry is gone (start page).
+    const search = drawer.getByRole("searchbox", {
+      name: "Chats und Gemerktes suchen",
+    });
+    const order = await drawer.evaluate((d) => {
+      const y = (sel) => d.querySelector(sel)?.getBoundingClientRect().top;
+      return [y("label.search"), y("button.item.new-chat"), y(".scroll .item")];
+    });
+    assert.ok(
+      order[0] < order[1] && order[1] < order[2],
+      `search, new chat, then the entries: ${order}`,
+    );
+    for (const name of ["Start", "Geplant", "Gedächtnis", "Wissen", "Notizen"])
+      assert.ok(
+        await drawer
+          .locator(".item .name", { hasText: new RegExp(`^${name}$`) })
+          .count(),
+        "entry of the side bar: " + name,
+      );
+    for (const name of ["Suchen", "Vorschläge"])
+      assert.equal(
+        await drawer
+          .locator(".item .name", { hasText: new RegExp(`^${name}$`) })
+          .count(),
+        0,
+        "entry of the side bar gone: " + name,
+      );
+    await search.fill("CPU");
     assert.equal(
       await drawer.locator(".item", { hasText: "Warum ist die CPU" }).count(),
       1,
@@ -1581,7 +1754,7 @@ try {
       0,
       "search filters",
     );
-    await drawer.getByRole("searchbox", { name: "Chats durchsuchen" }).fill("");
+    await search.fill("");
     await drawer.getByRole("button", { name: "Zurück zu TitanOS" }).waitFor();
     await page.locator("button.scrim").click({ position: { x: 370, y: 400 } });
     await drawer.waitFor({ state: "detached" });
@@ -1733,7 +1906,10 @@ try {
       .getByRole("navigation", { name: "Menü des KI-Agenten" })
       .getByRole("button", { name: "Geplant" })
       .click();
-    const dlg = page.locator("dialog[open]");
+    await page.waitForURL(/[?&]page=planned/);
+    const dlg = page.locator("section.main");
+    await dlg.getByRole("heading", { name: "Jeden Tag" }).waitFor();
+    await dlg.getByRole("heading", { name: "Aufträge und Erinnerungen" }).waitFor();
     await dlg.getByRole("heading", { name: "Morgenbericht" }).waitFor();
     await dlg
       .getByText("Mülltonne")
@@ -1752,6 +1928,7 @@ try {
       "next run shown",
     );
     await page.waitForTimeout(300);
+    await noOverflow(page, "planned");
     await page.screenshot({ path: `${out}/24-planned.png` });
     await dlg.getByLabel("Home Assistant").check();
     await dlg.getByRole("button", { name: "Speichern" }).first().click();

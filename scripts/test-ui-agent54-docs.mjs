@@ -475,9 +475,10 @@ async function full(page, name) {
   await page.getByRole("button", { name: "Papierkram" }).first().click();
   await page.locator(".sheet").getByText("Ausgaben im November").waitFor();
   const box = await page.locator(".sheet").boundingBox();
-  // The page fills the main area; the side bar stays visible and usable.
+  // The page fills the main area; the side bar (264 px wide since PLAN
+  // 90-4) stays visible and usable.
   assert.ok(
-    box && box.x >= 200 && box.x <= 240 && box.width > 1100,
+    box && box.x >= 260 && box.x <= 268 && box.width > 1100,
     `page next to the side bar: ${JSON.stringify(box)}`,
   );
   await page.getByRole("button", { name: "Neuer Chat" }).first().click();

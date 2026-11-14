@@ -10,10 +10,9 @@ VM-Ordner, Firmware, Größenvorgaben, Datenträgerhinweise, Geräte und NAS-Ord
 sind im passenden Bereich aufklappbar. Bestehende Plattenvarianten,
 Kernreservierungen und die Einschränkungen laufender VMs bleiben erhalten.
 Die Pfadvorschau berücksichtigt einen ausdrücklich gewählten VM-Ordner.
-Aktuelle echte [Desktop-](screenshots/current/vm-erstellen.png) und
-[Mobilaufnahmen](screenshots/current/vm-erstellen-mobil.png) sowie das
-[Protokoll](screenshots/current/protokoll.png) sind mit isolierten Beispieldaten
-erstellt; Herkunft und Prüfsummen stehen im Screenshot-Verzeichnis.
+Die damaligen Aufnahmen (Desktop, Handy, Protokoll; alte Oberfläche 0.47.1,
+isolierte Beispieldaten) sind seit dem 14.11.2026 aus dem Repository entfernt
+und stehen nur noch in der Git-Historie.
 
 Der VM-Zeilenmenüfehler wurde vor der Korrektur mit einem echten Klick auf
 „Starten“ reproduziert: Nach `rowMenu = null` war die reaktive `@const vm`

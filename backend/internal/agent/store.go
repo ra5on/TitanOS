@@ -225,6 +225,13 @@ type Memory struct {
 	At      time.Time `json:"at"`
 	// Untrusted: the chat had read outside content when it was saved.
 	Untrusted bool `json:"untrusted,omitempty"`
+	// PLAN 90-4: Topic groups the memory on its page (the project names it
+	// otherwise), a Pinned one never fades and survives "Gedächtnis leeren",
+	// Used is the last day a message of the person touched it. Older
+	// versions read the file without these fields.
+	Topic  string     `json:"topic,omitempty"`
+	Pinned bool       `json:"pinned,omitempty"`
+	Used   *time.Time `json:"used,omitempty"`
 }
 
 // Skill is a procedure the agent follows for a kind of task.

@@ -293,6 +293,7 @@ func main() {
 	combo := flag.String("combo", "", "phase keys: shortcuts like ctrl+KeyU,F12 (comma separated), each followed by 1.5 s")
 	typeText := flag.String("text", "", "phase keys: text typed after the shortcuts")
 	clickAt := flag.String("click", "", "phase keys: x,y clicked after the text")
+	taps := flag.String("taps", "", "phase keys: keys as code:key pairs like KeyY:z,Semicolon:ö (space separated; a keyboard that is not US), each held 80 ms, sent after the click")
 	flag.Parse()
 	ctx := context.Background()
 	httpc := &http.Client{Timeout: 10 * time.Second}
@@ -361,6 +362,20 @@ func main() {
 			}
 			s.click(x, y)
 			time.Sleep(1500 * time.Millisecond)
+		}
+		for _, pair := range strings.Fields(*taps) {
+			code, key, ok := strings.Cut(pair, ":")
+			if !ok {
+				fmt.Fprintf(os.Stderr, "-taps wants code:key, got %q\n", pair)
+				os.Exit(2)
+			}
+			s.key(code, key, true, proto.Mods{})
+			time.Sleep(80 * time.Millisecond)
+			s.key(code, key, false, proto.Mods{})
+			time.Sleep(200 * time.Millisecond)
+		}
+		if *taps != "" {
+			time.Sleep(time.Second)
 		}
 		exit()
 	case "big":
