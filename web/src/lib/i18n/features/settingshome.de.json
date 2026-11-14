@@ -35,6 +35,7 @@
 	"settingshome.desc.notifications": "E-Mail, Push, Messenger",
 	"settingshome.desc.homeassistant": "Verbindungen, MQTT, Speicher",
 	"settingshome.desc.agent": "Modelle, Rechte, Gedächtnis",
+	"settingshome.desc.speech": "Whisper und Piper für Home Assistant und den Agenten",
 	"settingshome.desc.mcp": "KI-Clients, Werkzeuge",
 	"settingshome.desc.api": "Tokens, CLI, OpenAPI",
 	"settingshome.desc.cluster": "Mehrere NAS im Verbund",

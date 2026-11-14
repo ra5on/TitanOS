@@ -48,7 +48,10 @@
 		onarchive,
 		onfold,
 		ontitanos,
+		profile = '',
 	}: {
+		/** PLAN 91: the profile of Home Assistant is shown instead of the account. */
+		profile?: '' | 'assist';
 		chats: ChatInfo[];
 		projects: Project[];
 		current?: string;
@@ -189,6 +192,14 @@
 			<DesktopIcon glyph="agent" gradient="violet" size={28} name={t('nav.agent')} />
 			<strong class="brand">{t('nav.agent')}</strong>
 		</div>{/if}
+	{#if profile}
+		<!-- PLAN 91: whose chats and memory these are, and the way back. -->
+		<div class="profile">
+			<strong><Icon name="home" size={15} />{t('agent.profile.assist')}</strong>
+			<p>{t('agent.profile.assistHint')}</p>
+			<a class="btn" href="/agent" data-sveltekit-reload>{t('agent.profile.leave')}</a>
+		</div>
+	{/if}
 	<!-- PLAN 90-4: like the column of the control panel – the search on top. -->
 	<label class="search">
 		<Icon name="search" size={15} />
@@ -340,16 +351,19 @@
 		{/if}
 	</div>
 	<div class="foot">
-		<button
-			type="button"
-			class="item"
-			class:on={view === 'settings'}
-			aria-current={view === 'settings' ? 'page' : undefined}
-			onclick={() => onshow('settings')}
-			><span class="em"><Icon name="gear" size={16} /></span><span class="name"
-				>{t('agent.set.title')}</span
-			></button
-		>
+		<!-- The settings are those of the account, not of the profile. -->
+		{#if !profile}
+			<button
+				type="button"
+				class="item"
+				class:on={view === 'settings'}
+				aria-current={view === 'settings' ? 'page' : undefined}
+				onclick={() => onshow('settings')}
+				><span class="em"><Icon name="gear" size={16} /></span><span class="name"
+					>{t('agent.set.title')}</span
+				></button
+			>
+		{/if}
 		{#if onfold}
 			<button type="button" class="item add" onclick={onfold}
 				><span class="em"><Icon name="sidebar" size={16} /></span><span class="name"
@@ -388,6 +402,32 @@
 		font-weight: 600;
 		overflow-wrap: break-word;
 		hyphens: auto;
+	}
+	.profile {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1-5);
+		margin-bottom: var(--space-2-5);
+		padding: var(--space-2-5);
+		border: 1px solid var(--info-border, var(--border));
+		border-radius: var(--radius-ctl);
+		background: var(--info-bg, var(--chip));
+		font-size: var(--text-sm);
+		flex: none;
+	}
+	.profile strong {
+		display: flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		font-size: var(--text-base);
+	}
+	.profile p {
+		margin: 0;
+		color: var(--muted);
+	}
+	.profile .btn {
+		justify-content: center;
+		min-height: 34px;
 	}
 	.new-chat {
 		justify-content: center;

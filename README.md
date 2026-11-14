@@ -215,6 +215,18 @@ Alles im Einzelnen – zum Aufklappen.
 </details>
 
 <details>
+<summary><b>Sprachdienste: Sprache zu Text und Text zu Sprache</b></summary>
+
+- **Eigene Seite „Sprachdienste“ (ab Werk aus):** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) schreibt mit, was gesprochen wird, [Piper](https://github.com/rhasspy/piper) spricht Text – in zwei Containern, die TitanOS selbst verwaltet. Was gesprochen wird, verlässt das NAS nicht.
+- **Für Home Assistant:** beide Dienste sprechen das Wyoming-Protokoll (Ports 10300 und 10200). Die Seite nennt Host und Port und die Schritte in Home Assistant. Ab Werk erreicht nur das eingetragene Home Assistant die Dienste, auf Wunsch das ganze Heimnetz.
+- **Für den KI-Agenten:** das Mikrofon im Eingabefeld und „Vorlesen“ nutzen dieselben Dienste.
+- **Modelle und Stimmen wählen:** Whisper von `tiny` bis `large-v3` und alle Piper-Stimmen des Katalogs (auch deutsche) lassen sich herunterladen, aktivieren, wechseln und löschen; TitanOS prüft Größe und Prüfsumme. Mit Hörprobe und „Ausprobieren“ fürs Mikrofon.
+- **Grafikkarte wählbar:** Sprache zu Text rechnet auf einer NVIDIA-Karte (Treiber-Plugin) oder auf dem Prozessor; die Seite zeigt den freien Grafikspeicher. Text zu Sprache läuft auf dem Prozessor.
+- **Prüfstand:** Geprüft mit den echten Abbildern auf einer Entwicklungsmaschine ohne Grafikkarte (kleinstes Modell, eine deutsche Stimme). Nicht geprüft sind eine NVIDIA-Karte, die großen Modelle und echtes Home Assistant.
+
+</details>
+
+<details>
 <summary><b>Virtuelle Maschinen</b></summary>
 
 - **KVM/QEMU und libvirt:** VMs anlegen, starten, sauber herunterfahren und automatisch starten. UEFI als Standard, optional Legacy-BIOS für passende Gäste; Windows 11 mit TPM 2.0 und Secure Boot im Gast.
@@ -394,6 +406,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 | Netzwerk | Kabelgebunden, beim ersten Start DHCP |
 | Virtualisierung | Für VMs aktivierte Hardware-Virtualisierung; Passthrough benötigt passende IOMMU-/Geräteunterstützung |
 | Kameras (NVR) | Docker eingeschaltet und ein Daten-Volume; das Frigate-Abbild lädt etwa 1,5 GB. Kennzeichen und Gesichter brauchen eine CPU mit AVX2 und 4 GB RAM |
+| Sprachdienste | Docker eingeschaltet und ein Daten-Volume; die Abbilder laden etwa 0,4 GB (mit NVIDIA-Karte etwa 1,9 GB), dazu Modelle von 0,1 bis 3,1 GB. Eine Grafikkarte ist freiwillig; große Modelle sind ohne sie langsam |
 
 RAID ersetzt kein Backup. Unterstützung und Messwerte hängen von Kernel, Firmware und konkreter Hardware ab; das gilt auch für GPUs, NPUs, Kameras, USVs und externe Backupziele. Die Release-Prüfungen umfassen automatisierte Tests und virtuelle NAS-Systeme, keine vollständige Abnahme aller Geräte und Dienste. Der NVR ist mit nachgestellter Kamera geprüft, nicht mit echten Kameras und nicht mit NPU, iGPU, Coral oder Hailo auf echter Hardware. Die genauen Ergebnisse stehen in den [Release-Berichten](docs/releases/).
 

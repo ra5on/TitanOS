@@ -73,7 +73,7 @@ func (s *Server) agentTick(now time.Time) {
 	// The entities of triggers, per connection.
 	watched := map[string][]string{}
 	for _, name := range store.ScheduleAccounts() {
-		user, ok := env.users.Get(name)
+		user, ok := s.agentUserNamed(name)
 		if !ok || !s.agentAllowed(user) {
 			continue
 		}
@@ -426,7 +426,7 @@ func (s *Server) agentButtons() []homeassistant.AgentTaskValues {
 	store := s.agentStore()
 	var out []homeassistant.AgentTaskValues
 	for _, name := range store.ScheduleAccounts() {
-		user, ok := env.users.Get(name)
+		user, ok := s.agentUserNamed(name)
 		if !ok || !s.agentAllowed(user) {
 			continue
 		}
@@ -445,12 +445,11 @@ func (s *Server) agentButtons() []homeassistant.AgentTaskValues {
 
 // agentButton runs the task behind a button pressed in Home Assistant.
 func (s *Server) agentButton(key, action string) error {
-	env := s.agentEnv()
 	name, id, ok := strings.Cut(key, "/")
 	if !ok || action != "run" {
 		return fmt.Errorf("unknown agent command")
 	}
-	user, found := env.users.Get(name)
+	user, found := s.agentUserNamed(name)
 	if !found || !s.agentAllowed(user) {
 		return fmt.Errorf("account may not use the agent")
 	}

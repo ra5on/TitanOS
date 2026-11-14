@@ -15,6 +15,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { apiFetch, responseError } from '#lib/api.ts';
+	import { toWav16k } from '#lib/speech-audio.ts';
 
 	let {
 		micHold = false,
@@ -27,6 +28,7 @@
 		onpicknas,
 		onerror,
 		voice = false,
+		voiceNas = false,
 		commands = [],
 		oncommand,
 	}: {
@@ -48,6 +50,8 @@
 		onerror?: (message: string) => void;
 		/** Speech input through Whisper is switched on (PLAN 49). */
 		voice?: boolean;
+		/** Speech input goes to the speech services of the NAS (PLAN 92). */
+		voiceNas?: boolean;
 	} = $props();
 
 	// Speech input: record in the browser, the NAS passes it to Whisper and
@@ -76,11 +80,19 @@
 				if (!blob.size) return;
 				transcribing = true;
 				try {
-					const res = await apiFetch(`/agent/transcribe?lang=${i18n.locale}`, {
-						method: 'POST',
-						headers: { 'Content-Type': blob.type },
-						body: blob,
-					});
+					// PLAN 92: the NAS's own speech to text takes a WAV file; the
+					// Whisper service set up by address takes the recording.
+					const res = voiceNas
+						? await apiFetch(`/agent/speech/hear?lang=${i18n.locale}`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'audio/wav' },
+								body: await toWav16k(blob),
+							})
+						: await apiFetch(`/agent/transcribe?lang=${i18n.locale}`, {
+								method: 'POST',
+								headers: { 'Content-Type': blob.type },
+								body: blob,
+							});
 					if (!res.ok) throw await responseError(res);
 					const { text: said } = (await res.json()) as { text: string };
 					if (said) fill(text.trim() ? `${text.trim()} ${said}` : said);

@@ -32,10 +32,11 @@
 	import FeatureView from '#lib/components/agent/features/FeatureView.svelte';
 	import FeatureHost from '#lib/components/agent/features/FeatureHost.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
-	import { api } from '#lib/api.ts';
+	import { agentProfilePath, api } from '#lib/api.ts';
 	import { apiErrorText, i18n } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
+	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
@@ -201,12 +202,15 @@
 						></button
 					>
 					<hr />
-					<a role="menuitem" href={`/api/v1/agent/chats/${info.id}/export`} download onclick={close}
-						><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
+					<a
+						role="menuitem"
+						href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export`)}
+						download
+						onclick={close}><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
 					>
 					<a
 						role="menuitem"
-						href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
+						href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export?format=pdf`)}
 						download
 						onclick={close}><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
 					>
@@ -528,7 +532,8 @@
 							busy={ag.busy}
 							bind:attachments={ag.attachments}
 							disabled={!!ag.current?.pending || !!ag.readOnlyBy}
-							voice={!!ag.status.voice}
+							voice={!!ag.status.voice || nasSpeech.hear}
+							voiceNas={nasSpeech.hear}
 							placeholder={ag.readOnlyBy
 								? t('agent.readOnlyChat', { name: ag.readOnlyBy })
 								: ag.current?.pending

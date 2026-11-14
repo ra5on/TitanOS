@@ -31,7 +31,22 @@ type Body = Record<string, unknown> | Blob | FormData | undefined;
  * returned as it is, see responseError.
  */
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	return fetch(apiPath(path), { credentials: 'same-origin', ...init });
+	return fetch(apiPath(agentProfilePath(path)), { credentials: 'same-origin', ...init });
+}
+
+// PLAN 91: owners and administrators look after the agent's profile of Home
+// Assistant with the agent's own page. While that is open, every request
+// to the agent names the profile; titand then answers for the profile
+// instead of the account (requireAgent).
+let agentProfile = '';
+/** '' is the account itself, 'assist' the profile of Home Assistant. */
+export function setAgentProfile(profile: '' | 'assist') {
+	agentProfile = profile;
+}
+/** The path with the open profile of the agent, for requests and links. */
+export function agentProfilePath(path: string): string {
+	if (!agentProfile || !/(^|\/)agent\//.test(path)) return path;
+	return `${path}${path.includes('?') ? '&' : '?'}profile=${agentProfile}`;
 }
 
 // A 423 "locked" answer means the session is locked (lock.svelte.ts, which

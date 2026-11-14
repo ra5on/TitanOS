@@ -355,7 +355,7 @@ async function open(
     },
     [appearance, look],
   );
-  const seen = { puts: [], posts: [] };
+  const seen = { puts: [], posts: [], profile: [] };
   await made.ctx.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname.slice(7);
@@ -448,6 +448,8 @@ async function open(
         truncated: false,
       });
     if (!p.startsWith("/agent")) return route.fallback();
+    // PLAN 91: requests that name the profile of Home Assistant.
+    if (url.searchParams.get("profile") === "assist") seen.profile.push(p);
     if (p === "/agent/status") return json(status);
     if (p === "/agent/cluster")
       return json(cluster ?? { member: false, admin: false });
@@ -582,6 +584,38 @@ async function open(
             created: at(1),
           },
         ],
+      });
+    // PLAN 91: Assist – key, addresses, last request, what it may use.
+    if (p === "/agent/assist/key") {
+      if (method === "POST") seen.posts.push(p);
+      return json({ key: "tos-assist-TESTKEY000000000000000000000k3Pq" });
+    }
+    if (p === "/agent/assist")
+      return json({
+        keySet: seen.posts.includes("/agent/assist/key"),
+        addresses: [
+          { kind: "lan", url: "http://192.168.10.20/agent-ollama" },
+          { kind: "tailscale", url: "https://titan.tail1a2b3.ts.net/agent-ollama" },
+        ],
+        areas: [
+          "home", "system", "storage", "backups", "docker", "vms", "files",
+          "shares", "accounts", "network", "updates", "plugins", "web",
+          "memory", "plan", "code",
+        ],
+        levels: {
+          home: "change", system: "read", storage: "read", backups: "read",
+          docker: "read", vms: "deny", files: "deny", shares: "deny",
+          accounts: "deny", network: "deny", updates: "deny", plugins: "deny",
+          web: "deny", memory: "read", plan: "change", code: "deny",
+        },
+        last: {
+          at: at(14, 32),
+          from: "192.168.10.40",
+          ok: false,
+          reason: "key",
+        },
+        memories: 12,
+        chats: 48,
       });
     // PLAN 90-4: the start page (state of the NAS, what waits) and the
     // settings of the memory on its page.
@@ -2145,9 +2179,19 @@ try {
       .getByRole("button", { name: "Geräte aus Home Assistant laden" })
       .click();
     await page.getByText("Haustür").waitFor();
-    await page.getByText("Geräte für den Agenten").scrollIntoViewIfNeeded();
+    await page.getByRole("heading", { name: "Geräte für den Agenten" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/13-settings-ha-release.png` });
+    // Nothing changed, nothing to save (before PLAN 91 the select "Assist
+    // als" made the page look changed right after loading).
+    assert.equal(
+      await page.getByRole("button", { name: "Speichern" }).count(),
+      0,
+      "an unchanged page offers no saving",
+    );
+    await page
+      .locator("#ag-ha-notify")
+      .fill("notify.mobile_app_iphone, notify.tablet");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.getByRole("status").waitFor();
     assert.equal(seen.puts.length, 1);
@@ -2228,6 +2272,128 @@ try {
       path: `${out}/22-settings-cluster-admin.png`,
     });
     await admin.ctx.close();
+  }
+  // PLAN 91: Assist under Settings › KI-Agent › Home Assistant.
+  {
+    const { ctx, page, seen } = await open(1280, 1700, { theme: "hell" });
+    await page.goto(base + "/settings/agent?tab=ha");
+    const card = page.locator("section.sgroup", {
+      has: page.getByRole("heading", { name: "Gespräche aus Home Assistant (Assist)" }),
+    });
+    await card.getByText("http://192.168.10.20/agent-ollama").waitFor();
+    assert.ok(
+      await card.getByText("https://titan.tail1a2b3.ts.net/agent-ollama").isVisible(),
+      "the address with a valid certificate",
+    );
+    // No key yet: the page says what counts until then and offers to make one.
+    assert.ok(
+      await card.getByText(/Noch kein Schlüssel/).isVisible(),
+      "without a key",
+    );
+    // The last try was refused, with its reason in words.
+    assert.ok(
+      await card
+        .getByText(/von 192\.168\.10\.40 · abgelehnt: Schlüssel fehlt oder ist falsch/)
+        .isVisible(),
+      "refused request",
+    );
+    assert.equal((await card.locator(".chip.warn").textContent()).trim(), "Abgelehnt");
+    await card.getByRole("button", { name: "Schlüssel erzeugen" }).click();
+    // The new key is shown right away, to copy it; then it can be hidden.
+    await card.getByText(/tos-assist-TESTKEY/).waitFor();
+    assert.ok(seen.posts.includes("/agent/assist/key"), "key made");
+    await card.getByRole("button", { name: "Verbergen" }).click();
+    await card.getByRole("button", { name: "Zeigen" }).waitFor();
+    assert.equal(
+      await card.getByText(/tos-assist-TESTKEY/).count(),
+      0,
+      "hidden again",
+    );
+    // A new key asks first.
+    await card.getByRole("button", { name: "Neu erzeugen …" }).click();
+    const ask = page.getByRole("dialog", { name: "Neuen Schlüssel erzeugen?" });
+    await ask.waitFor();
+    await ask.getByRole("button", { name: "Abbrechen" }).click();
+    await ask.waitFor({ state: "detached" });
+    assert.equal(seen.posts.filter((x) => x === "/agent/assist/key").length, 1);
+    assert.equal(
+      await card.locator("a.srow", { hasText: "Eigenes Profil" }).getAttribute("href"),
+      "/agent?profile=assist",
+    );
+
+    // What Home Assistant may ask: every area on its own, the internet too.
+    const rights = page.locator("section.sgroup", {
+      has: page.getByRole("heading", { name: "Was Home Assistant fragen darf" }),
+    });
+    const row = (name) =>
+      rights.locator(".srow", {
+        has: page.locator(".srow-title", { hasText: new RegExp(`^${name}$`) }),
+      });
+    const chosen = async (name) =>
+      (
+        await row(name).locator('[role="radio"][aria-checked="true"]').textContent()
+      ).trim();
+    assert.equal(await rights.locator(".srow").count(), 16, "sixteen areas");
+    assert.equal(await chosen("Dateien"), "Verboten");
+    assert.equal(await chosen("Internet"), "Verboten");
+    assert.equal(await chosen("Geräte in Home Assistant"), "Auch ändern");
+    assert.equal(await chosen("System und Status"), "Nur lesen");
+    assert.deepEqual(
+      (await row("Internet").getByRole("radio").allTextContents()).map((x) => x.trim()),
+      ["Verboten", "Erlaubt"],
+    );
+    await row("Internet").getByRole("radio", { name: "Erlaubt" }).click();
+    await row("Dateien").getByRole("radio", { name: "Nur lesen" }).click();
+    await noOverflow(page, "assist card");
+    await page.screenshot({ path: `${out}/23-settings-assist.png`, fullPage: true });
+    await page.getByRole("button", { name: "Speichern" }).first().click();
+    await page.waitForTimeout(400);
+    assert.deepEqual(seen.puts.at(-1).homeassistant.assistAreas, {
+      web: "change",
+      files: "read",
+    });
+    assert.equal(
+      "assistKey" in seen.puts.at(-1).homeassistant,
+      false,
+      "the key never travels with the settings",
+    );
+    await rights.getByRole("button", { name: "Alles verbieten" }).click();
+    assert.equal(await chosen("Geräte in Home Assistant"), "Verboten");
+    await rights.getByRole("button", { name: "Zurück auf ab Werk" }).click();
+    assert.equal(await chosen("Geräte in Home Assistant"), "Auch ändern");
+    await ctx.close();
+  }
+
+  // PLAN 91: the profile of Home Assistant in the agent's own page.
+  {
+    const { ctx, page, seen } = await open(1280, 900, { theme: "hell" });
+    await page.goto(base + "/agent?profile=assist");
+    const note = page.locator("nav .profile");
+    await note.getByText("Profil „Home Assistant“").waitFor();
+    await page.waitForTimeout(600);
+    for (const path of ["/agent/chats", "/agent/projects", "/agent/inbox"])
+      assert.ok(seen.profile.includes(path), `${path} names the profile`);
+    assert.equal(
+      await page.locator("nav .foot .item", { hasText: "Einstellungen" }).isVisible(),
+      false,
+      "the settings belong to the account",
+    );
+    // Moving on keeps the profile in the address and in the requests.
+    await page.locator("nav .item", { hasText: "Gedächtnis" }).first().click();
+    await page.waitForURL(/page=memory.*profile=assist|profile=assist.*page=memory/);
+    await page.waitForTimeout(400);
+    assert.ok(seen.profile.includes("/agent/memory"), "the profile's memory");
+    await page.screenshot({ path: `${out}/24-profile-assist.png` });
+    assert.equal(await note.getByRole("link", { name: "Zurück zu meinem Agenten" }).getAttribute("href"), "/agent");
+    await ctx.close();
+    // Without the profile nothing names it.
+    const own = await open(1280, 900, { theme: "hell" });
+    await own.page.goto(base + "/agent");
+    await own.page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
+    await own.page.waitForTimeout(500);
+    assert.deepEqual(own.seen.profile, [], "no profile for the own agent");
+    assert.equal(await own.page.locator("nav .profile").count(), 0);
+    await own.ctx.close();
   }
   noConsoleErrors();
   console.log("KI-Agent UI ok:", out);

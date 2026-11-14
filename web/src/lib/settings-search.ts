@@ -271,6 +271,14 @@ export const settingsAreas: SettingsArea[] = [
 		newSince: { version: '0.48.0', date: '2026-11-05' },
 	},
 	{
+		id: 'speech',
+		label: 'speech.title',
+		group: 'smarthome',
+		icon: 'mic',
+		admin: true,
+		newSince: { version: '0.84.0', date: '2026-11-14' },
+	},
+	{
 		id: 'mcp',
 		label: 'mcp.pageTitle',
 		group: 'smarthome',

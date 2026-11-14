@@ -64,7 +64,7 @@ test('PLAN 86: the eight areas and their pages in the confirmed order, filtered 
 			['notifications', ['notifications']],
 			['data', ['backups', 'systemdata', 'files']],
 			['cluster', ['cluster']],
-			['smarthome', ['homeassistant', 'agent', 'mcp']],
+			['smarthome', ['homeassistant', 'agent', 'speech', 'mcp']],
 		],
 	);
 	const fresh = admin
@@ -79,6 +79,7 @@ test('PLAN 86: the eight areas and their pages in the confirmed order, filtered 
 		'letsencrypt',
 		'mcp',
 		'services',
+		'speech',
 		'systemdata',
 		'users',
 		'viewer',

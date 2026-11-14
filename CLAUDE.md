@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.83** (Tag v0.83.0, App-Update auf Basis 0.82 – 0.82 war das erste Sicherheits-Release des Autopiloten vom 14.11.2026 –: KI-Agent aufgebaut wie die Systemsteuerung – Seiten statt Dialoge, Startseite mit NAS-Zustand, Gedächtnis mit Anheften, Bearbeiten/Neu erzeugen/Suche/„/“-Befehle im Chat, einzeiliger Kopf am Handy –, Ransomware-Wächter repariert, Tasten der Fernansicht, siehe docs/releases/v0.83.0.md; davor 0.81: Systemsteuerung mit aufklappbaren Bereichen und Suche über jede Einstellung, Handy-Oberfläche wie am Desktop mit Gesten und VM-Bedienung per Touch, NVR-Zonen/Masken, Ereignisse behalten, getrennte Aufbewahrung, „gesehen“ je Konto, T-PDF am Handy mit Office 1.7.0; Prüfstand von 0.81 in docs/releases/v0.81.0.md, 0.80 in docs/releases/v0.80.0.md, NVR-Release 0.78 in docs/releases/v0.78.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.84** (Tag v0.84.0, App-Update auf Basis 0.82: Sprachdienste – Whisper und Piper in verwalteten Containern für Home Assistant und den Agenten, `docs/SPEECH.md` –, Assist mit Schlüssel, eigenen Rechten je Bereich und eigenem Profil, siehe docs/releases/v0.84.0.md; davor 0.83, App-Update auf Basis 0.82 – 0.82 war das erste Sicherheits-Release des Autopiloten vom 14.11.2026 –: KI-Agent aufgebaut wie die Systemsteuerung – Seiten statt Dialoge, Startseite mit NAS-Zustand, Gedächtnis mit Anheften, Bearbeiten/Neu erzeugen/Suche/„/“-Befehle im Chat, einzeiliger Kopf am Handy –, Ransomware-Wächter repariert, Tasten der Fernansicht, siehe docs/releases/v0.83.0.md; davor 0.81: Systemsteuerung mit aufklappbaren Bereichen und Suche über jede Einstellung, Handy-Oberfläche wie am Desktop mit Gesten und VM-Bedienung per Touch, NVR-Zonen/Masken, Ereignisse behalten, getrennte Aufbewahrung, „gesehen“ je Konto, T-PDF am Handy mit Office 1.7.0; Prüfstand von 0.81 in docs/releases/v0.81.0.md, 0.80 in docs/releases/v0.80.0.md, NVR-Release 0.78 in docs/releases/v0.78.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -110,6 +110,7 @@ titanos/
 │       ├── plugins/, hardware/, tailscale/, netbird/, usb/, ups/
 │       ├── homeassistant/  # REST, WebSocket-Beobachter, MQTT-Sensoren
 │       ├── nvr/            # NVR: Frigate-Container, Kameras, Erkennungsgerät (docs/NVR.md)
+│       ├── speech/         # Sprachdienste: Whisper/Piper-Container, Modelle, Wyoming (docs/SPEECH.md)
 │       └── system/, network/ # Systemeinstellungen, Netzwerk, Dienste
 ├── web/                    # Svelte + TypeScript
 ├── scripts/
@@ -198,7 +199,7 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 | `docs/rules/SHARES-FILES.md` | Shares, Freigabe samt Daten löschen, Kontingente, Dateimanager, Datei-Editor, USB-Uploads, Namensregeln, Vorschau/Suche, Link-Downloads |
 | `docs/rules/CLUSTER.md` | Cluster (Beitritt, Proxy, Kontenabgleich, Backups) |
 | `docs/rules/API.md` | Öffentliche API/Tokens, titanosctl, MCP-Server und Werkzeugkatalog, VM-Medien-Import, Plugin-Aufräumen |
-| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout, NVR (Frigate-Container, `docs/NVR.md`) |
+| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout, NVR (Frigate-Container, `docs/NVR.md`), Sprachdienste (Whisper/Piper, `docs/SPEECH.md`) |
 | `docs/rules/VMS-LXC.md` | VMs (Erstellen, Firmware, Konsole, Snapshots), App-Vorlagen, Hardware-Durchreichung, LXC-Systemcontainer |
 | `docs/rules/PLUGINS.md` | Plugins, Community-Plugins, NVIDIA-Treiberbau |
 | `docs/rules/HOME-ASSISTANT.md` | Home-Assistant-Anbindung |

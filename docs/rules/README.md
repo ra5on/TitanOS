@@ -24,7 +24,7 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 | `docs/rules/SHARES-FILES.md` | Shares, Freigabe samt Daten löschen, Kontingente, Dateimanager, Datei-Editor, USB-Uploads, Namensregeln, Vorschau/Suche, Link-Downloads |
 | `docs/rules/CLUSTER.md` | Cluster (Beitritt, Proxy, Kontenabgleich, Backups) |
 | `docs/rules/API.md` | Öffentliche API/Tokens, titanosctl, MCP-Server und Werkzeugkatalog, VM-Medien-Import, Plugin-Aufräumen |
-| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout, Fernansicht, NVR (`docs/NVR.md`) |
+| `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout, Fernansicht, NVR (`docs/NVR.md`), Sprachdienste (`docs/SPEECH.md`) |
 | `docs/rules/VMS-LXC.md` | VMs (Erstellen, Firmware, Konsole, Snapshots), App-Vorlagen, Hardware-Durchreichung, LXC-Systemcontainer |
 | `docs/rules/PLUGINS.md` | Plugins, Community-Plugins, NVIDIA-Treiberbau |
 | `docs/rules/HOME-ASSISTANT.md` | Home-Assistant-Anbindung |

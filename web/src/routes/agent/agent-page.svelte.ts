@@ -4,9 +4,9 @@
 // that load and keep everything current. Built on agent-chats.svelte.ts.
 import { page } from '$app/state';
 import { untrack } from 'svelte';
-import { api } from '#lib/api.ts';
+import { api, setAgentProfile } from '#lib/api.ts';
 import type { IconName } from '#lib/components/Icon.svelte';
-import { speechPrefs } from '#lib/agent-speech.svelte.ts';
+import { nasSpeech, speechPrefs } from '#lib/agent-speech.svelte.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 import { pageTitle } from '#lib/page-title.svelte.ts';
 import { loadMine, type FeatureViewId } from '#lib/agent-features.ts';
@@ -296,6 +296,7 @@ export class AgentPage extends AgentChats {
 			else if (action === 'menu') this.dialog = { kind: 'actions', chat };
 		},
 		ontitanos: this.phone || this.installed ? this.toTitanOS : undefined,
+		profile: this.profile,
 	});
 
 	constructor() {
@@ -328,6 +329,16 @@ export class AgentPage extends AgentChats {
 			if (id && known.includes(id) && this.status && (this.status.enabled || always.includes(id)))
 				this.dialog = { kind: 'feature', id };
 		});
+		// PLAN 92: the speech services of the NAS, when the agent may use them.
+		$effect(() => {
+			if (!this.status?.enabled || !this.status.allowed) return;
+			api
+				.get<{ say: boolean; hear: boolean }>('/agent/speech')
+				.then((r) => ((nasSpeech.say = !!r.say), (nasSpeech.hear = !!r.hear)))
+				.catch(() => ((nasSpeech.say = false), (nasSpeech.hear = false)));
+		});
+		// PLAN 91: leaving the page ends the profile for other pages' requests.
+		$effect(() => () => setAgentProfile(''));
 		// PLAN 90-4: the address names the page.
 		$effect(() => {
 			const name = page.url.searchParams.get('page') as AgentView | null;

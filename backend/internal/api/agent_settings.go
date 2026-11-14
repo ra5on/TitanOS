@@ -109,6 +109,15 @@ type agentHASettings struct {
 	Assist   bool                             `json:"assist,omitempty"`
 	// AssistAs is the account questions from Home Assistant run as.
 	AssistAs string `json:"assistAs,omitempty"`
+	// PLAN 91: AssistKey is what Home Assistant sends as the API key of its
+	// Ollama integration; with one set, the sender's address no longer
+	// counts. It never leaves titand with the settings (AssistKeySet says
+	// whether there is one). AssistAreas is what a question from Home
+	// Assistant may use, per area: "deny", "read" or "change"; an area
+	// without an entry has its default (assistDefault).
+	AssistKey    string            `json:"assistKey,omitempty"`
+	AssistKeySet bool              `json:"assistKeySet,omitempty"`
+	AssistAreas  map[string]string `json:"assistAreas,omitempty"`
 }
 
 const (
@@ -167,6 +176,12 @@ func (s *Server) agentAllowed(user auth.User) bool {
 	if user.Name == "" || user.Disabled {
 		return false
 	}
+	// The profile of Home Assistant (PLAN 91) is no account; it exists
+	// while an owner or administrator can act for it.
+	if user.Name == agent.AssistProfile {
+		_, ok := s.assistActor()
+		return ok
+	}
 	if user.Role == auth.RoleOwner {
 		return true
 	}
@@ -176,6 +191,7 @@ func (s *Server) agentAllowed(user auth.User) bool {
 func (s *Server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
 	out := s.agentSettings()
 	out.Features = out.Features.view() // no secrets to the page
+	out.HA.AssistKeySet, out.HA.AssistKey = out.HA.AssistKey != "", ""
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -221,6 +237,8 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Shared = a.settings.Shared
 	req.Features = a.settings.Features
+	// The key of Assist changes only through its own route (agent_assist.go).
+	req.HA.AssistKey, req.HA.AssistKeySet = a.settings.HA.AssistKey, false
 	if err := env.store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -229,6 +247,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	s.agentClient.Store(nil)
 	// The share of the agent follows (made, accounts updated).
 	s.shareSyncs.Go(s.agentSyncShare)
+	req.HA.AssistKeySet, req.HA.AssistKey = req.HA.AssistKey != "", ""
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -321,6 +340,11 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 		}
 		if u, ok := env.users.Get(name); !ok || !u.Role.CanAdminister() {
 			return errors.New("acting account must be an owner or administrator")
+		}
+	}
+	for area, level := range req.HA.AssistAreas {
+		if !slices.Contains(assistAreas, area) || !slices.Contains([]string{assistDeny, assistRead, assistChange}, level) {
+			return errors.New("invalid Assist area")
 		}
 	}
 	for key, mode := range req.HA.Entities {

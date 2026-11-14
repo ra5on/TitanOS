@@ -98,6 +98,27 @@ Formular; „Zuletzt gelaufen“ zeigt die Chats der Läufe. Prüfung
 `scripts/test-ui-agent90.mjs` und `scripts/test-ui-agent.mjs`. Beschreibung
 `docs/AGENT.md` („Seiten und Chat-Bedienung“).
 
+### Assist und Sprachdienste (0.84, PLAN 91 und 92)
+
+Vom Projektinhaber nach Entwurfsbildern freigegeben (14. November 2026,
+„kannst loslegen“; Bilder in `Entwuerfe/91-assist/` und `Entwuerfe/92-sprache/`).
+**Assist** (Einstellungen › KI-Agent › Home Assistant): Schalter, eigenes
+Profil „Home Assistant“, Adressen (http im Heimnetz, https mit gültigem
+Zertifikat), Schlüssel, letzte Anfrage, darunter „Was Home Assistant fragen
+darf“ mit einer Zeile je Bereich (Verboten · Nur lesen · Auch ändern; Internet,
+Planen, Code: Verboten · Erlaubt). Abweichungen: 16 statt 14 Zeilen (Freigaben
+und Konten getrennt, Plugins dazu); „Letzte Anfrage“ mit Aktualisieren-Knopf.
+**Sprachdienste** (eigene Seite): Dienst (Schalter mit Zustand je Dienst,
+Grafikkarte oder Prozessor, Volume), Whisper-Modelle und Piper-Stimmen mit
+Herunterladen, Aktivieren, Löschen, Hörprobe und Ausprobieren, Einrichtung in
+Home Assistant mit Host und Port, wer die Dienste erreichen darf, Schalter für
+den KI-Agenten. Abweichungen: Die Seite heißt „Sprachdienste“ statt „Sprache“
+(die Suche nach „Sprache“ führt weiter zuerst zur Sprache der Oberfläche); alle
+Stimmen des Katalogs nach Sprache statt einer festen Auswahl; die Grafikkarte
+gilt nur für Sprache zu Text; kein eigener „Verbunden“-Hinweis, die letzte
+Verbindung steht je Dienst. Prüfung `scripts/test-ui-agent.mjs`,
+`scripts/test-ui-speech.mjs`. Beschreibung `docs/AGENT.md`, `docs/SPEECH.md`.
+
 ### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)
 
 Vom Projektinhaber am 1. November 2026 nach Screenshots bestätigt („Los“,

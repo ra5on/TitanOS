@@ -61,6 +61,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
+	"github.com/ra5on/TitanOS/backend/internal/speech"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/sysdata"
@@ -121,6 +122,8 @@ type Options struct {
 	Viewer *viewer.Manager
 	// NVR runs the network video recorder (PLAN 79-7); nil leaves it out.
 	NVR *nvr.Manager
+	// Speech runs speech to text and text to speech (PLAN 92); nil leaves it out.
+	Speech *speech.Manager
 	// Webapps installs and serves the web apps (PLAN 66); nil leaves them out.
 	Webapps *webapps.Manager
 	VMs     *vm.Manager
@@ -387,6 +390,7 @@ func New(opts Options) *Server {
 	s.registerAppStore(mux)
 	s.registerViewer(mux)
 	s.registerNVR(mux)
+	s.registerSpeech(mux)
 	s.registerWebapps(mux)
 	s.registerVMs(mux)
 	s.registerHardware(mux)

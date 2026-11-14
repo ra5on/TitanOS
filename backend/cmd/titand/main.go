@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
@@ -289,7 +290,10 @@ func run(opts options) error {
 		serve(https, true)
 		if opts.httpAddr != "" {
 			// Port 80 also answers the HTTP challenge of Let's Encrypt.
-			serve(newServer(opts.httpAddr, w.acmeCerts.HTTPHandler(redirectToHTTPS(opts.httpsAddr))), false)
+			// PLAN 91: Assist is also answered here without the redirect –
+			// Home Assistant's Ollama integration refuses the self-signed
+			// certificate. The handler lets only Home Assistant in (key).
+			serve(newServer(opts.httpAddr, w.acmeCerts.HTTPHandler(assistOverHTTP(site, redirectToHTTPS(opts.httpsAddr)))), false)
 		}
 		slog.Info("titand started", "version", version.Version, "https", opts.httpsAddr, "http", opts.httpAddr, "config", opts.configDir, "webui", webui.Embedded)
 	}
@@ -525,6 +529,18 @@ func newServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          newServerLog(),
 	}
+}
+
+// assistOverHTTP answers the routes of Assist (/agent-ollama/) on the plain
+// HTTP port and hands everything else to next.
+func assistOverHTTP(site, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if api.AssistPath(r.URL.Path) {
+			site.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // redirectToHTTPS sends every plain HTTP request to the same path on the

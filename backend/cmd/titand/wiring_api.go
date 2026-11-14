@@ -65,6 +65,7 @@ func (w *titand) wireAPI() error {
 		Terminal:           w.shells,
 		Viewer:             w.remoteView,
 		NVR:                w.recorder,
+		Speech:             w.voices,
 		Webapps:            w.webApps,
 		VMs:                w.machines,
 		LXC:                w.systemContainers,
