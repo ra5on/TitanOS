@@ -614,6 +614,10 @@ func (m *Manager) tick(ctx context.Context) {
 		return
 	}
 
+	// The services read the models as the user titand is (root on the NAS):
+	// the folder is private to it (.titanos, 0700).
+	owner := [2]string{"PUID=" + strconv.Itoa(os.Geteuid()), "PGID=" + strconv.Itoa(os.Getegid())}
+
 	// Speech to text.
 	if s.WhisperModel == "" || !slices.Contains(models, s.WhisperModel) {
 		m.remove(ctx, whisperService, "model")
@@ -625,7 +629,7 @@ func (m *Manager) tick(ctx context.Context) {
 		if len(names) > 0 {
 			digest = WhisperGPUDigest
 		}
-		env := []string{"PUID=0", "PGID=0", "LOCAL_ONLY=1", "WHISPER_MODEL=/config/" + s.WhisperModel, "WHISPER_LANG=" + s.Language, "WHISPER_BEAM=1"}
+		env := []string{owner[0], owner[1], "LOCAL_ONLY=1", "WHISPER_MODEL=/config/" + s.WhisperModel, "WHISPER_LANG=" + s.Language, "WHISPER_BEAM=1"}
 		m.ensure(ctx, docker.SpeechSpec{Name: whisperService, Data: m.hostPath(whisperDir), Env: env, CDIDevices: names}, WhisperRepository, digest)
 	}
 
@@ -636,7 +640,7 @@ func (m *Manager) tick(ctx context.Context) {
 	} else {
 		// Piper's length scale is the inverse of the speed.
 		length := strconv.FormatFloat(1/s.Speed, 'f', 2, 64)
-		env := []string{"PUID=0", "PGID=0", "LOCAL_ONLY=1", "PIPER_VOICE=" + s.Voice, "PIPER_LENGTH=" + length}
+		env := []string{owner[0], owner[1], "LOCAL_ONLY=1", "PIPER_VOICE=" + s.Voice, "PIPER_LENGTH=" + length}
 		m.ensure(ctx, docker.SpeechSpec{Name: piperService, Data: m.hostPath(piperDir), Env: env}, PiperRepository, PiperDigest)
 	}
 }

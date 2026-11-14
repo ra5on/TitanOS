@@ -52,6 +52,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
+	"github.com/ra5on/TitanOS/backend/internal/speech"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -95,6 +96,7 @@ type titand struct {
 	appRights    *appaccess.Manager
 	remoteView   *viewer.Manager
 	recorder     *nvr.Manager
+	voices       *speech.Manager
 	webApps      *webapps.Manager
 	devices      *hardware.Manager
 	containers   *docker.Manager
@@ -260,7 +262,7 @@ func (w *titand) wireBase() error {
 func (w *titand) wire() error {
 	for _, step := range []func() error{
 		w.wireBase, w.wireShares, w.wireApplications, w.wireNotifications, w.wireAccess, w.wireUpdates,
-		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireWebapps, w.wireMaintenance, w.wireAPI,
+		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireSpeech, w.wireWebapps, w.wireMaintenance, w.wireAPI,
 	} {
 		if err := step(); err != nil {
 			return err
