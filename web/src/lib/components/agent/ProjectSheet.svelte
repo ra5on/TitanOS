@@ -1,5 +1,6 @@
 <script lang="ts">
-	// A project of the KI-Agent on the phone (PLAN 44, Bild 8): its chats,
+	// A project of the KI-Agent (PLAN 44, Bild 8; since PLAN 90-4 opened from
+	// the page Wissen › Projekt-Anweisungen): its chats,
 	// its instructions, the files the agent made in it and what it
 	// remembered for it.
 	import Dialog from '#lib/components/Dialog.svelte';

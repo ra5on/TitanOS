@@ -44,13 +44,19 @@ Browser → Agent:
 - `{"t":"size","width":1280,"height":800,"scale":2}` – sichtbare Fläche in CSS-Pixeln und Gerätefaktor; der Agent stellt den Bildschirm darauf ein (gerundet auf gerade Zahlen, 320–3840 × 240–2160).
 - `{"t":"mouse","x":100,"y":50,"buttons":1}` – absolute Lage in Bildpunkten des Bildschirms und gedrückte Tasten (Bitmaske wie `MouseEvent.buttons`).
 - `{"t":"wheel","dx":0,"dy":-120}`.
-- `{"t":"key","code":"KeyA","key":"a","down":true,"mods":{"shift":false,"ctrl":false,"alt":false,"meta":false}}` – druckbare Zeichen ohne Strg/Alt/Meta werden über `key` getippt (unabhängig vom Tastaturlayout), alles andere über `code`.
+- `{"t":"key","code":"KeyA","key":"a","down":true,"mods":{"shift":false,"ctrl":false,"alt":false,"meta":false}}` – beide Felder gehen immer mit. Der Viewer drückt für ein Zeichen die **Taste der US-Belegung, die es trägt** (unabhängig von der Tastatur des Nutzers: deutsches „z“ ist dort die Taste `KeyY`, im Viewer `KeyZ`), als echte Taste mit Drücken und Loslassen; braucht das Zeichen dort eine andere Umschalt-Stellung („/“, „#“, „+“), wird es mit passender Umschalttaste angetippt. Mit Strg/Alt/Meta zählt bei Buchstaben ebenfalls der Buchstabe auf der Taste (Strg+Z bleibt Strg+Z). Zeichen ohne US-Taste: ä ö ü Ä Ö Ü ß € § ° µ haben vom Start an eine eigene Taste; alle übrigen (é, ñ, …) werden über eine nachträglich umbelegte Taste getippt. Alles andere geht über `code`.
 - `{"t":"text","text":"Hallo"}` – Text tippen (Handy-Tastatur, Einfügen).
 - `{"t":"clipboard","text":"…"}` – Zwischenablage des Nutzers in den NAS-Browser legen.
 - `{"t":"keyframe"}` – Schlüsselbild anfordern (nach Fehler im Decoder).
 - `{"t":"quality","mode":"auto"|"high"|"balanced"|"low","fps":30|60,"transport":"auto"|"video"}` (`transport` seit 0.68, darf fehlen).
 - `{"t":"upload","id":1,"name":"a.pdf","size":123}` → danach Teile `0x03`, Agent antwortet `{"t":"uploaded","id":1}`; die Datei liegt im NAS-Browser unter „Hochgeladen“ zur Auswahl im Dateidialog.
 - `{"t":"touch", …}` gibt es nicht: das Handy schickt `mouse`/`wheel` (Tippen = Klick, Wischen = Rad, langes Tippen = Rechtsklick).
+
+### Tasten in Programmen, die selbst mitlesen (seit PLAN 90-3)
+
+Bis 0.81 wurden alle Zeichen, deren Taste auf der US-Belegung ein anderes Zeichen trägt (deutsche Tastatur: z, y, ö, ä, ü, ß, #, +, - und die meisten Umschalt-Zeichen), über eine nachträglich umbelegte Taste getippt. Chromium liest die Tastenbelegung nur beim Start: so eine Taste liefert zwar das Zeichen (Textfelder gewöhnlicher Webseiten nahmen es), der Tastendruck selbst kommt aber ohne Namen an (`key ""`, `keyCode 0`). Programme, die den Tastendruck selbst auswerten und weiterschicken – **Selkies** in den linuxserver-Apps (Bambu Studio, OrcaSlicer …), andere Fernsteuerungen, Spiele – verwarfen ihn; gemeldet vom Inhaber am 14.11.2026 („Bambu Lab unterstützt nicht alle Tasten, z. B. z“). Nachgestellt mit einer Seite, die jeden Tastendruck protokolliert, und am Web-Client aus `lscr.io/linuxserver/bambustudio` nachgelesen (er wertet nur `keydown` aus).
+
+Grenze: Zeichen ohne US-Taste außerhalb der elf oben (z. B. é, ñ, å) kommen in solchen Programmen weiterhin nicht an; in gewöhnlichen Textfeldern schon. `viewer/test-integration.sh` prüft die deutschen Tasten gegen den echten Viewer; mit Bambu Studio selbst ist es nicht durchgespielt.
 
 ## Einstellungen
 

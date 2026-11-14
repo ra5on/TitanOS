@@ -1,7 +1,7 @@
 // Browser checks of the VM page against isolated API fixtures. No VMs are started.
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-vms.mjs
 // UI_URL picks the dev server (default http://127.0.0.1:5179), UI_OUTPUT the screenshot folder.
-// README_SCREENSHOTS=docs/screenshots/v0.7.2 also captures the README pictures there.
+// README_SCREENSHOTS=<folder> also captures the README pictures there.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 const { chromium } = await import(

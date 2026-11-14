@@ -1,9 +1,11 @@
 <script lang="ts">
-	// Initiative, memory care and personality of the agent (PLAN 53), each
+	// Initiative and personality of the agent (PLAN 53), each
 	// person for themselves: GET/PUT /agent/initiative, kept on the NAS in the
 	// person's agent folder. Background work never wakes a sleeping disk; the
 	// choice "Wecken / Erst fragen / Nie" is only for the person's own tasks.
-	import { api, type FileRoot } from '#lib/api.ts';
+	// Since PLAN 90-4 the settings of the memory are on the page "Gedächtnis"
+	// and the places to look things up in on the page "Wissen".
+	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { defaultInitiative, sanitizeInitiative, type Initiative } from '#lib/agent.ts';
 
@@ -12,7 +14,6 @@
 	let value = $state<Initiative>(defaultInitiative());
 	let loaded = $state(false);
 	let error = $state('');
-	let roots = $state<FileRoot[]>([]);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		api
@@ -24,10 +25,6 @@
 				loaded = true;
 			})
 			.catch((e) => (error = apiErrorText(e)));
-		api
-			.get<FileRoot[]>('/files/roots')
-			.then((r) => (roots = r.filter((x) => x.kind !== 'stick')))
-			.catch(() => (roots = []));
 	});
 	$effect(() => {
 		const body = $state.snapshot(value);
@@ -41,20 +38,6 @@
 		}, 500);
 	});
 	const levels = ['quiet', 'hints', 'suggest', 'act'] as const;
-	const searched = (id: string) => value.search.some((s) => s.root === id && !s.path);
-	function toggleRoot(id: string, on: boolean) {
-		value.search = on
-			? [...value.search.filter((s) => s.root !== id), { root: id, path: '' }]
-			: value.search.filter((s) => s.root !== id);
-	}
-	async function clearMemory() {
-		try {
-			await api.delete('/agent/memory');
-		} catch (e) {
-			error = apiErrorText(e);
-		}
-	}
-	let confirmClear = $state(false);
 </script>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -178,23 +161,6 @@
 		</div>
 	</div>
 
-	<p class="cap">{t('agent.init.search')}</p>
-	<div class="grp">
-		<div class="row"><span class="t"><small>{t('agent.init.searchHint')}</small></span></div>
-		{#each roots as r (r.id)}
-			<label class="row">
-				<span class="t"><strong>{r.name}</strong></span>
-				<input
-					type="checkbox"
-					class="switch"
-					role="switch"
-					checked={searched(r.id)}
-					onchange={(e) => toggleRoot(r.id, e.currentTarget.checked)}
-				/>
-			</label>
-		{/each}
-	</div>
-
 	<p class="cap">{t('agent.init.limits')}</p>
 	<div class="grp">
 		<div class="row">
@@ -230,54 +196,6 @@
 		</label>
 	</div>
 {:else}
-	<p class="cap">{t('agent.memory')}</p>
-	<div class="grp">
-		<label class="row">
-			<span class="t"
-				><strong>{t('agent.init.memoryAuto')}</strong><small>{t('agent.init.memoryAutoHint')}</small
-				></span
-			>
-			<input type="checkbox" class="switch" role="switch" bind:checked={value.memoryAuto} />
-		</label>
-		<label class="row">
-			<span class="t"
-				><strong>{t('agent.init.conflicts')}</strong><small>{t('agent.init.conflictsHint')}</small
-				></span
-			>
-			<input type="checkbox" class="switch" role="switch" bind:checked={value.conflicts} />
-		</label>
-		<label class="row">
-			<span class="t"
-				><strong>{t('agent.init.fade')}</strong><small
-					>{value.fadeMonths
-						? t('agent.init.fadeHint', { months: value.fadeMonths })
-						: t('agent.init.fadeOff')}</small
-				></span
-			>
-			<input type="range" min="0" max="24" step="1" bind:value={value.fadeMonths} />
-		</label>
-		{#if confirmClear}
-			<div class="row">
-				<span class="t"><strong>{t('agent.init.clearSure')}</strong></span>
-				<button
-					type="button"
-					class="btn btn-danger"
-					onclick={() => {
-						confirmClear = false;
-						void clearMemory();
-					}}>{t('agent.init.clear')}</button
-				>
-				<button type="button" class="btn" onclick={() => (confirmClear = false)}
-					>{t('common.cancel')}</button
-				>
-			</div>
-		{:else}
-			<button type="button" class="row danger" onclick={() => (confirmClear = true)}
-				><span class="t"><strong>{t('agent.init.clear')}</strong></span></button
-			>
-		{/if}
-	</div>
-
 	<p class="cap">{t('agent.init.skillsAndInbox')}</p>
 	<div class="grp">
 		<label class="row">
@@ -374,9 +292,6 @@
 	}
 	.row.col > .seg {
 		flex-basis: 100%;
-	}
-	.row.danger strong {
-		color: var(--error-text);
 	}
 	.t {
 		flex: 1;

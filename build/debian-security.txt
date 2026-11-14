@@ -1,0 +1,5 @@
+Debian updates for the image of TitanOS 0.78.0 (latest release 0.81.0).
+A full release (not an app release) brings them.
+Checked on 2026-11-14.
+
+linux-image-amd64: 6.12.116-1 -> 6.12.117-1

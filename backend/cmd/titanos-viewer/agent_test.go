@@ -121,32 +121,53 @@ func TestKeyMapping(t *testing.T) {
 		t.Fatal("unknown code")
 	}
 	plain := proto.Mods{}
+	ctrl := proto.Mods{Ctrl: true}
 	cases := []struct {
 		m     proto.ClientMsg
 		shift bool
 		act   keyAction
 		code  string
+		press string
 		r     rune
 	}{
-		{proto.ClientMsg{Code: "KeyA", Key: "a", Down: true}, false, keyPhysical, "KeyA", 'a'},
-		{proto.ClientMsg{Code: "KeyA", Key: "A", Down: true, Mods: proto.Mods{Shift: true}}, true, keyPhysical, "KeyA", 'A'},
-		{proto.ClientMsg{Code: "KeyA", Key: "A", Down: true}, false, keyType, "KeyA", 'A'}, // caps lock on client
-		{proto.ClientMsg{Code: "KeyY", Key: "z", Down: true}, false, keyType, "KeyY", 'z'}, // German layout
-		{proto.ClientMsg{Code: "Digit7", Key: "/", Down: true, Mods: proto.Mods{Shift: true}}, true, keyType, "Digit7", '/'},
-		{proto.ClientMsg{Code: "Quote", Key: "ä", Down: true}, false, keyType, "Quote", 'ä'},
-		{proto.ClientMsg{Code: "KeyE", Key: "€", Down: true, Mods: proto.Mods{Ctrl: true, Alt: true}}, false, keyType, "KeyE", '€'}, // AltGr on Windows
-		{proto.ClientMsg{Code: "KeyC", Key: "c", Down: true, Mods: proto.Mods{Ctrl: true}}, false, keyPhysical, "KeyC", 0},
-		{proto.ClientMsg{Code: "Enter", Key: "Enter", Down: true}, false, keyPhysical, "Enter", 0},
-		{proto.ClientMsg{Code: "", Key: "Backspace", Down: true}, false, keyPhysical, "Backspace", 0},
-		{proto.ClientMsg{Code: "ShiftLeft", Key: "Shift", Down: true}, false, keyPhysical, "ShiftLeft", 0},
-		{proto.ClientMsg{Code: "", Key: "Unidentified", Down: true}, false, keyIgnore, "", 0},
-		{proto.ClientMsg{Code: "Space", Key: " ", Down: true}, false, keyPhysical, "Space", ' '},
-		{proto.ClientMsg{Code: "Space", Key: " ", Down: true, Mods: plain}, true, keyPhysical, "Space", ' '},
+		{proto.ClientMsg{Code: "KeyA", Key: "a", Down: true}, false, keyPhysical, "KeyA", "KeyA", 'a'},
+		{proto.ClientMsg{Code: "KeyA", Key: "A", Down: true, Mods: proto.Mods{Shift: true}}, true, keyPhysical, "KeyA", "KeyA", 'A'},
+		{proto.ClientMsg{Code: "KeyA", Key: "A", Down: true}, false, keyTap, "KeyA", "KeyA", 'A'}, // caps lock on client
+		// German layout (PLAN 90-3): z and y are real keys that can be held.
+		{proto.ClientMsg{Code: "KeyY", Key: "z", Down: true}, false, keyPhysical, "KeyY", "KeyZ", 'z'},
+		{proto.ClientMsg{Code: "KeyZ", Key: "y", Down: true}, false, keyPhysical, "KeyZ", "KeyY", 'y'},
+		{proto.ClientMsg{Code: "KeyY", Key: "Z", Down: true, Mods: proto.Mods{Shift: true}}, true, keyPhysical, "KeyY", "KeyZ", 'Z'},
+		{proto.ClientMsg{Code: "Slash", Key: "-", Down: true}, false, keyPhysical, "Slash", "Minus", '-'},
+		{proto.ClientMsg{Code: "BracketRight", Key: "+", Down: true}, false, keyTap, "BracketRight", "Equal", '+'},
+		{proto.ClientMsg{Code: "Backslash", Key: "#", Down: true}, false, keyTap, "Backslash", "Digit3", '#'},
+		{proto.ClientMsg{Code: "Digit7", Key: "/", Down: true, Mods: proto.Mods{Shift: true}}, true, keyTap, "Digit7", "Slash", '/'},
+		{proto.ClientMsg{Code: "Quote", Key: "ä", Down: true}, false, keyType, "Quote", "", 'ä'},
+		{proto.ClientMsg{Code: "KeyE", Key: "€", Down: true, Mods: proto.Mods{Ctrl: true, Alt: true}}, false, keyType, "KeyE", "", '€'}, // AltGr on Windows
+		{proto.ClientMsg{Code: "KeyQ", Key: "@", Down: true, Mods: proto.Mods{Ctrl: true, Alt: true}}, false, keyTap, "KeyQ", "Digit2", '@'},
+		{proto.ClientMsg{Code: "KeyC", Key: "c", Down: true, Mods: ctrl}, false, keyPhysical, "KeyC", "KeyC", 0},
+		// Ctrl+Z on a German keyboard is Ctrl+Z, not Ctrl+Y.
+		{proto.ClientMsg{Code: "KeyY", Key: "z", Down: true, Mods: ctrl}, false, keyPhysical, "KeyY", "KeyZ", 0},
+		{proto.ClientMsg{Code: "KeyY", Key: "Z", Down: true, Mods: proto.Mods{Ctrl: true, Shift: true}}, true, keyPhysical, "KeyY", "KeyZ", 0},
+		// A layout without Latin letters keeps the key of the shortcut.
+		{proto.ClientMsg{Code: "KeyZ", Key: "я", Down: true, Mods: ctrl}, false, keyPhysical, "KeyZ", "KeyZ", 0},
+		{proto.ClientMsg{Code: "Enter", Key: "Enter", Down: true}, false, keyPhysical, "Enter", "Enter", 0},
+		{proto.ClientMsg{Code: "", Key: "Backspace", Down: true}, false, keyPhysical, "Backspace", "Backspace", 0},
+		{proto.ClientMsg{Code: "ShiftLeft", Key: "Shift", Down: true}, false, keyPhysical, "ShiftLeft", "ShiftLeft", 0},
+		{proto.ClientMsg{Code: "", Key: "Unidentified", Down: true}, false, keyIgnore, "", "", 0},
+		{proto.ClientMsg{Code: "Space", Key: " ", Down: true}, false, keyPhysical, "Space", "Space", ' '},
+		{proto.ClientMsg{Code: "Space", Key: " ", Down: true, Mods: plain}, true, keyPhysical, "Space", "Space", ' '},
+		// Letting go without a character (held keys released at once).
+		{proto.ClientMsg{Code: "KeyY", Key: ""}, false, keyPhysical, "KeyY", "KeyY", 0},
 	}
 	for i, c := range cases {
-		act, code, r := decideKey(c.m, c.shift)
-		if act != c.act || code != c.code || r != c.r {
-			t.Errorf("case %d: got %v %q %q, want %v %q %q", i, act, code, r, c.act, c.code, c.r)
+		act, code, press, r := decideKey(c.m, c.shift)
+		if act != c.act || code != c.code || press != c.press || r != c.r {
+			t.Errorf("case %d: got %v %q %q %q, want %v %q %q %q", i, act, code, press, r, c.act, c.code, c.press, c.r)
+		}
+	}
+	for _, r := range fixedRunes {
+		if _, ok := usByRune[r]; ok {
+			t.Errorf("fixed character %q has a US key", r)
 		}
 	}
 	if keysymFor('a') != 'a' || keysymFor('ä') != 0xe4 || keysymFor('€') != 0x010020ac || keysymFor('😀') != 0x0101f600 {

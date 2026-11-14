@@ -12,7 +12,8 @@
 # through a CGI), clipboard, downloads, uploads and the file dialog, the
 # URL policy (second server never contacted), screenshots, no way out of
 # the network, RAM, bye on SIGTERM, persistent cookies across a new
-# container, and the CPU fallback of the GPU encoders.
+# container, the keys of a German keyboard (PLAN 90-3), and the CPU
+# fallback of the GPU encoders.
 # Everything it creates is named fern63-test-* and removed at the end.
 # shellcheck disable=SC2015,SC2016 # "test && ok || bad" is intended; the CGI lines must not expand
 set -euo pipefail
@@ -23,7 +24,7 @@ WORK=$(mktemp -d)
 NET=fern63-test-net
 KEY=fern63-test-key-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 FAIL=0
-CONTAINERS="fern63-test-viewer fern63-test-viewer2 fern63-test-gpu fern63-test-web fern63-test-other fern63-test-client"
+CONTAINERS="fern63-test-viewer fern63-test-viewer2 fern63-test-gpu fern63-test-web fern63-test-other fern63-test-client fern63-test-keys"
 
 cleanup() {
 	# shellcheck disable=SC2086
@@ -65,6 +66,7 @@ printf '%s\n' '#!/bin/sh' \
 	'case "$QUERY_STRING" in' \
 	'probe=*) echo "cookie=$HTTP_COOKIE" >>/log/probe.txt ;;' \
 	'file=*) echo "$QUERY_STRING" >>/log/file.txt ;;' \
+	'keys=*) echo "$QUERY_STRING" >>/log/keys.txt ;;' \
 	'*) echo "$QUERY_STRING" >>/log/query.txt ;;' \
 	'esac' \
 	'printf "Content-Type: text/html\r\n\r\n<html><body>submitted</body></html>\n"' >"$WORK/www/cgi-bin/submit"
@@ -80,6 +82,17 @@ cat >"$WORK/www/motion.html" <<'EOF'
 const c=document.getElementById('c'),x=c.getContext('2d');let run=true,n=0;
 function f(){c.width=innerWidth;c.height=innerHeight;if(run){for(let i=0;i<400;i++){x.fillStyle='hsl('+((n*7+i*13)%360)+',80%,50%)';x.fillRect(Math.random()*c.width,Math.random()*c.height,120,120)}}else{x.fillStyle='#204060';x.fillRect(0,0,c.width,c.height)}n++;requestAnimationFrame(f)}
 addEventListener('mousedown',()=>{run=false});f();
+</script></body></html>
+EOF
+
+# PLAN 90-3: what a program that reads the keys itself gets (keydown only,
+# like Selkies in Bambu Studio): the key's name and code of every keydown
+cat >"$WORK/www/keys.html" <<'EOF'
+<!doctype html><html><head><meta charset="utf-8"><title>keys</title></head>
+<body style="margin:0;height:100vh"><input id="q" autofocus style="font-size:24px;width:600px;margin:40px">
+<script>
+document.getElementById('q').focus();
+addEventListener('keydown',e=>{fetch('/cgi-bin/submit?keys='+encodeURIComponent(e.key+'|'+e.code))},true);
 </script></body></html>
 EOF
 
@@ -294,6 +307,25 @@ client -addr "$(ip_of fern63-test-motion):7300" -key "$KEY" -phase motion >"$WOR
 grep -E '^(PASS|FAIL)' "$WORK/motion.log" | grep -v 'auth' | sed 's/^/[motion] /'
 docker logs fern63-test-motion 2>&1 | grep -E 'tiles:|video:' | head -6 | sed 's/^/[motion] /'
 docker rm -f fern63-test-motion >/dev/null
+
+echo "== keys of a German keyboard arrive as named keys (PLAN 90-3)"
+viewer fern63-test-keys -e VIEWER_URL="http://$WEBIP:80/keys.html"
+sleep 5 # Chromium starts at most 3 s after the agent, then loads the page
+client -addr "$(ip_of fern63-test-keys):7300" -key "$KEY" -phase keys -click 300,60 \
+	-taps "KeyA:a KeyY:z KeyZ:y Semicolon:ö Minus:ß BracketRight:+ Backslash:#" >/dev/null || FAIL=1
+keydown() { # keydown <name> <key|code as the page sent it, URL-encoded>
+	grep -qxF "keys=$2" "$WORK/log/keys.txt" 2>/dev/null && ok "keys: $1" || bad "keys: $1 not as $2 ($(tr '\n' ' ' <"$WORK/log/keys.txt" 2>/dev/null))"
+}
+keydown "a stays the key KeyA" 'a%7CKeyA'
+keydown "German z is the key KeyZ" 'z%7CKeyZ'
+keydown "German y is the key KeyY" 'y%7CKeyY'
+keydown "+ is the key Equal with Shift" '%2B%7CEqual'
+keydown "# is the key Digit3 with Shift" '%23%7CDigit3'
+# ö and ß have no US key: a keycode of their own, the keydown names the character
+grep -q '^keys=%C3%B6%7C' "$WORK/log/keys.txt" 2>/dev/null && ok "keys: ö named in keydown" || bad "keys: ö not named in keydown"
+grep -q '^keys=%C3%9F%7C' "$WORK/log/keys.txt" 2>/dev/null && ok "keys: ß named in keydown" || bad "keys: ß not named in keydown"
+grep -q '^keys=%7C' "$WORK/log/keys.txt" 2>/dev/null && bad "keys: a keydown without a name" || ok "keys: no keydown without a name"
+docker rm -f fern63-test-keys >/dev/null
 
 echo "== GPU encoders fall back to the CPU"
 for gpu in vaapi nvenc; do

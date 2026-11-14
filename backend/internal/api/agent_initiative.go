@@ -447,11 +447,84 @@ func (s *Server) applyAgentInbox(user string, item agentInboxItem) error {
 }
 
 func (s *Server) handleAgentMemoryClear(w http.ResponseWriter, r *http.Request) {
-	if err := s.agentStore().SaveMemories(currentUser(r).Name, []agent.Memory{}); err != nil {
+	// PLAN 90-4: what the person pinned stays.
+	store, user := s.agentStore(), currentUser(r).Name
+	list, err := store.Memories(user)
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"memory": []agent.Memory{}})
+	kept := []agent.Memory{}
+	for _, m := range list {
+		if m.Pinned {
+			kept = append(kept, m)
+		}
+	}
+	if err := store.SaveMemories(user, kept); err != nil {
+		agentStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"memory": kept})
+}
+
+// maxMemoryTopic bounds the topic of a memory (bytes).
+const maxMemoryTopic = 60
+
+// lastUserText is the last message of the person in a chat.
+func lastUserText(chat *agent.Chat) string {
+	for i := len(chat.Entries) - 1; i >= 0; i-- {
+		if chat.Entries[i].Role == "user" {
+			return chat.Entries[i].Content
+		}
+	}
+	return ""
+}
+
+// memoryTouch notes which memories a message touches (PLAN 90-4, "zuletzt
+// genutzt"): two longer words in common, or the only one of a short memory.
+// It reports whether a day changed, so the file is written at most once a
+// day per memory. Only memories this chat was given count: the general
+// ones and those of its project.
+func memoryTouch(list []agent.Memory, project, text string, now time.Time) bool {
+	said := map[string]bool{}
+	for _, w := range memoryWord.FindAllString(strings.ToLower(text), -1) {
+		said[w] = true
+	}
+	if len(said) == 0 {
+		return false
+	}
+	changed := false
+	for i := range list {
+		if list[i].Project != "" && list[i].Project != project {
+			continue
+		}
+		words := map[string]bool{}
+		for _, w := range memoryWord.FindAllString(strings.ToLower(list[i].Text), -1) {
+			words[w] = true
+		}
+		shared := 0
+		for w := range words {
+			if said[w] {
+				shared++
+			}
+		}
+		if shared < min(2, len(words)) || shared == 0 {
+			continue
+		}
+		if u := list[i].Used; u == nil || u.Format("2006-01-02") != now.Format("2006-01-02") {
+			at := now
+			list[i].Used, changed = &at, true
+		}
+	}
+	return changed
+}
+
+// memoryFresh is when a memory was last written or used.
+func memoryFresh(m agent.Memory) time.Time {
+	if m.Used != nil && m.Used.After(m.At) {
+		return *m.Used
+	}
+	return m.At
 }
 
 // ---------- memory care ----------

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -153,10 +154,18 @@ type agentMessage struct {
 	Project string `json:"project,omitempty"`
 	Model   string `json:"model,omitempty"`
 	Think   string `json:"think,omitempty"`
+	// Replace names a message of the person in this chat (PLAN 90-4): it
+	// and everything after it leave the chat, then Message is asked instead
+	// ("Bearbeiten und erneut senden"). Without a Message the same one is
+	// asked again ("Neu erzeugen").
+	Replace string `json:"replace,omitempty"`
 }
 
 func (m *agentMessage) check() error {
 	m.Message = strings.TrimSpace(m.Message)
+	if m.Message == "" && m.Replace != "" {
+		return nil
+	}
 	if m.Message == "" || len(m.Message) > maxAgentMessage || !utf8.ValidString(m.Message) {
 		return errors.New("the message is empty or too long")
 	}
@@ -194,6 +203,7 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	if req.Draft && strings.TrimSpace(req.Message) == "" {
 		req.Message = "-"
 	}
+	req.Replace = "" // only in a chat that exists
 	if err := req.check(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_message", err.Error())
 		return
@@ -258,6 +268,19 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Think != "" {
 		chat.Think = req.Think
+	}
+	if req.Replace != "" {
+		// What the steps after it changed on the NAS stays changed; only
+		// the chat forgets them. A waiting step is dropped unanswered.
+		at := slices.IndexFunc(chat.Entries, func(e agent.Entry) bool { return e.ID == req.Replace && e.Role == "user" })
+		if at < 0 {
+			writeError(w, http.StatusNotFound, "not_found", "no such message in this chat")
+			return
+		}
+		if req.Message == "" {
+			req.Message = chat.Entries[at].Content
+		}
+		chat.Entries, chat.Pending, chat.Plan = chat.Entries[:at:at], nil, nil
 	}
 	// A new message answers a waiting step with "no".
 	if chat.Pending != nil {

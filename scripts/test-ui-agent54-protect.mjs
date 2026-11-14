@@ -180,7 +180,7 @@ const emergency = {
   ],
 };
 
-async function open(width, height) {
+async function open(width, height, alerts = [alert]) {
   const made = await create("owner", "graphit", width);
   await made.page.setViewportSize({ width, height });
   const seen = { posts: [] };
@@ -244,7 +244,7 @@ async function open(width, height) {
         watching: true,
         error: "",
         overflows: 0,
-        alerts: [alert],
+        alerts,
       });
     if (p.startsWith("/agent/protect/guard/") && method === "POST") {
       seen.posts.push(p);
@@ -285,6 +285,29 @@ async function noOverflow(page, label) {
     ).length;
   });
   assert.equal(out, 0, `${label}: text outside the sheet`);
+}
+
+// PLAN 90-1: a NAS that never had an alarm. An older titand answers
+// `alerts: null` there; the page shows the calm card either way.
+for (const [alerts, tag] of [
+  [[], "leer"],
+  [null, "null"],
+]) {
+  const { page, ctx } = await open(1440, 900, alerts);
+  await page
+    .getByRole("button", { name: /Ransomware-Wächter/ })
+    .first()
+    .click();
+  await page.getByText("Keine Auffälligkeiten").waitFor({ timeout: 5000 });
+  assert.ok(
+    await page
+      .getByText("Der Wächter beobachtet die Freigaben", { exact: false })
+      .first()
+      .isVisible(),
+    `guard without alarms (${tag}) says it is watching`,
+  );
+  await page.screenshot({ path: `${out}/06-ransomware-ruhig-${tag}.png` });
+  await ctx.close();
 }
 
 for (const [width, height, tag] of [
@@ -476,10 +499,11 @@ for (const [width, height, tag] of [
   // PLAN 68: on the phone the settings are in the ⋯ menu of the top bar.
   await page.getByRole("button", { name: "Weitere Aktionen" }).first().click();
   await page.getByRole("menuitem", { name: "Einstellungen" }).click();
-  await page
-    .getByRole("button", { name: /Funktionen/ })
-    .first()
-    .click();
+  // PLAN 90-4: the settings are a page; "Funktionen" is a row that leads
+  // to its own page (/agent?page=settings&part=features).
+  await page.waitForURL(/[?&]page=settings/);
+  await page.locator("a.srow", { hasText: "Funktionen" }).first().click();
+  await page.waitForURL(/[?&]part=features/);
   await page
     .getByRole("button", { name: /Notfallzugang/ })
     .first()

@@ -59,9 +59,24 @@ var usChars = map[string][2]rune{
 	"Comma": {',', '<'}, "Period": {'.', '>'}, "Slash": {'/', '?'}, "Space": {' ', ' '},
 }
 
+// usRune is where a character sits on the US layout.
+type usRune struct {
+	code  string
+	shift bool
+}
+
+// usByRune is usChars the other way round: the key of a character.
+var usByRune = map[rune]usRune{}
+
 func init() {
 	for c := 'a'; c <= 'z'; c++ {
 		usChars["Key"+string(c-32)] = [2]rune{c, c - 32}
+	}
+	for code, chars := range usChars {
+		usByRune[chars[0]] = usRune{code: code}
+		if code != "Space" {
+			usByRune[chars[1]] = usRune{code: code, shift: true}
+		}
 	}
 }
 

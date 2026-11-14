@@ -373,6 +373,19 @@ try {
     (await page.evaluate(() => document.documentElement.scrollWidth)) <= 390,
     "nothing wider than the screen",
   );
+  // PLAN 90-5: on the phone the line of figures (VMs, running, RAM) is not
+  // shown on any tab; in a window it ends the page.
+  await page.goto(base + "/vms?vm=vm1&tab=overview");
+  await page.locator("header.phone-bar").waitFor();
+  // The page has its data (otherwise there is no line anyway).
+  await page.getByText("Arbeitsspeicher").first().waitFor();
+  await page.waitForTimeout(1000);
+  assert.equal(
+    await page.locator("footer.statusbar").count(),
+    0,
+    "no line of figures on the phone",
+  );
+  await page.screenshot({ path: `${out}/vm-uebersicht-390.png` });
   await ctx.close();
 
   // The screen in a window of its own (/vms/screen) has the bar as well.

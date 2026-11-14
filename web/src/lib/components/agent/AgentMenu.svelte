@@ -11,7 +11,13 @@
 	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { groupChats, type ChatInfo, type Project, type Swipe } from '#lib/agent.ts';
+	import {
+		groupChats,
+		type AgentView,
+		type ChatInfo,
+		type Project,
+		type Swipe,
+	} from '#lib/agent.ts';
 
 	let {
 		chats: allChats,
@@ -24,8 +30,10 @@
 		onproject,
 		onnewproject,
 		oneditproject,
-		onknowledge,
-		onplanned,
+		view = 'chat',
+		onshow,
+		onsearchmemory,
+		waitingCount = 0,
 		onnotes,
 		features = [],
 		onfeature,
@@ -36,12 +44,8 @@
 		swipeLeft = 'none',
 		swipeRight = 'none',
 		onaction,
-		onsettings,
-		inboxCount = 0,
-		oninbox,
 		plannedCount = 0,
 		onarchive,
-		settingsOn = false,
 		onfold,
 		ontitanos,
 	}: {
@@ -57,9 +61,14 @@
 		onproject: (id: string) => void;
 		onnewproject: () => void;
 		oneditproject: (p: Project) => void;
-		onknowledge: () => void;
-		/** Opens the planned tasks, reminders and the morning report. */
-		onplanned: () => void;
+		/** PLAN 90-4: the page that is shown ('start': no chat is open). */
+		view?: AgentView | 'start';
+		/** Opens a page; 'chat' is the start page. */
+		onshow: (view: AgentView) => void;
+		/** Looks for the words of the search in the memory. */
+		onsearchmemory?: (query: string) => void;
+		/** Approvals and suggestions that wait for the person. */
+		waitingCount?: number;
 		/** Opens the notes (PLAN 57). */
 		onnotes?: () => void;
 		/** Views of the functions that are on for this account (PLAN 54). */
@@ -73,17 +82,10 @@
 		swipeLeft?: Swipe;
 		swipeRight?: Swipe;
 		onaction?: (chat: ChatInfo, action: Swipe) => void;
-		/** Opens the settings of the agent (PLAN 53). */
-		onsettings: () => void;
-		/** PLAN 53: open suggestions of the agent. */
-		inboxCount?: number;
-		oninbox?: () => void;
 		/** Planned tasks and reminders of the account. */
 		plannedCount?: number;
 		/** PLAN 72: opens the archived chats (the entry shows while there are some). */
 		onarchive?: () => void;
-		/** The settings are open (their row is marked). */
-		settingsOn?: boolean;
 		/** Folds the side bar away (desktop). */
 		onfold?: () => void;
 		/** Back to TitanOS (phone, installed app). */
@@ -95,10 +97,6 @@
 	const archivedCount = $derived(allChats.filter((c) => c.archived && !c.author).length);
 
 	let query = $state('');
-	let searching = $state(false);
-	function searchInput(node: HTMLInputElement) {
-		node.focus();
-	}
 	const found = $derived(
 		query.trim()
 			? chats.filter((c) =>
@@ -155,9 +153,9 @@
 			type="button"
 			class="item"
 			class:sub
-			class:on={chat.id === current}
+			class:on={chat.id === current && view === 'chat'}
 			class:unread={chat.unread}
-			aria-current={chat.id === current ? 'page' : undefined}
+			aria-current={chat.id === current && view === 'chat' ? 'page' : undefined}
 			title={chat.author ? t('agent.chatBy', { name: chat.author }) : undefined}
 			onclick={() => onopen(chat.id, chat.author)}
 		>
@@ -168,7 +166,7 @@
 						/>{:else if chat.origin === 'event'}<Icon
 							name="bell"
 							size={14}
-						/>{:else if chat.origin === 'reminder'}<span class="emoji">⏰</span>{:else}<Icon
+						/>{:else if chat.origin === 'reminder'}<Icon name="bell" size={14} />{:else}<Icon
 							name="chat"
 							size={14}
 						/>{/if}</span
@@ -191,9 +189,21 @@
 			<DesktopIcon glyph="agent" gradient="violet" size={28} name={t('nav.agent')} />
 			<strong class="brand">{t('nav.agent')}</strong>
 		</div>{/if}
-	<button type="button" class="btn new-chat" onclick={onnew}
-		><Icon name="plus" size={16} /><span>{t('agent.newChat')}</span></button
+	<!-- PLAN 90-4: like the column of the control panel – the search on top. -->
+	<label class="search">
+		<Icon name="search" size={15} />
+		<input
+			type="search"
+			bind:value={query}
+			placeholder={t('agent.searchAll')}
+			aria-label={t('agent.searchAll')}
+			onkeydown={(e) => e.key === 'Escape' && (query = '')}
+		/>
+	</label>
+	<button type="button" class="item new-chat" onclick={onnew}
+		><Icon name="newChat" size={17} /><span>{t('agent.newChat')}</span></button
 	>
+	<div class="rule"></div>
 	<!-- Pull to refresh is an extra; the list can also be reloaded by reopening. -->
 	<div
 		class="scroll"
@@ -216,57 +226,37 @@
 					? t('agent.pullRelease')
 					: t('agent.pullDown')}
 			</p>{/if}
-		<button
-			type="button"
-			class="item"
-			class:on={searching}
-			aria-expanded={searching}
-			onclick={() => {
-				searching = !searching;
-				if (!searching) query = '';
-			}}
-			><span class="em"><Icon name="search" size={16} /></span><span class="name"
-				>{t('agent.sideSearch')}</span
-			></button
-		>
-		{#if searching}
-			<label class="search">
-				<input
-					type="search"
-					bind:value={query}
-					use:searchInput
-					placeholder={t('agent.searchChats')}
-					aria-label={t('agent.searchChats')}
-					onkeydown={(e) => {
-						if (e.key === 'Escape') {
-							query = '';
-							searching = false;
-						}
-					}}
-				/>
-			</label>
+		{#snippet nav(id: AgentView, on: boolean, icon: IconName, label: string, n = 0)}
+			<button
+				type="button"
+				class="item"
+				class:on
+				aria-current={on ? 'page' : undefined}
+				onclick={() => onshow(id)}
+				><span class="em"><Icon name={icon} size={17} /></span><span class="name">{label}</span
+				>{#if n}<span class="n">{n}</span>{/if}</button
+			>
+		{/snippet}
+		{#if !found}
+			{@render nav('chat', view === 'start', 'home', t('agent.home'), waitingCount)}
+			{@render nav('planned', view === 'planned', 'clock', t('agent.planned'), plannedCount)}
+			{@render nav('memory', view === 'memory', 'bulb', t('agent.memory'))}
+			{@render nav('knowledge', view === 'knowledge', 'fileText', t('agent.knowledge'))}
 		{/if}
-		{#if oninbox}<button type="button" class="item" onclick={oninbox}
-				><span class="em"><Icon name="bulb" size={16} /></span><span class="name"
-					>{t('agent.inbox.title')}</span
-				>{#if inboxCount}<span class="n">{inboxCount}</span>{/if}</button
-			>{/if}
-		<button type="button" class="item" onclick={onplanned}
-			><span class="em"><Icon name="clock" size={16} /></span><span class="name"
-				>{t('agent.planned')}</span
-			>{#if plannedCount}<span class="n">{plannedCount}</span>{/if}</button
-		>
-		{#if onnotes}<button type="button" class="item" onclick={onnotes}
-				><span class="em"><Icon name="fileText" size={16} /></span><span class="name"
+		{#if onnotes && !found}<button type="button" class="item" onclick={onnotes}
+				><span class="em"><Icon name="edit" size={17} /></span><span class="name"
 					>{t('agent.notes.title')}</span
 				></button
 			>{/if}
-		{#if onarchive && archivedCount}<button type="button" class="item" onclick={onarchive}
+		{#if onarchive && archivedCount && !found}<button type="button" class="item" onclick={onarchive}
 				><span class="em"><Icon name="archive" size={16} /></span><span class="name"
 					>{t('agent.archive.title')}</span
 				><span class="n">{archivedCount}</span></button
 			>{/if}
-		{#each features as f (f.id)}<button type="button" class="item" onclick={() => onfeature?.(f.id)}
+		{#each found ? [] : features as f (f.id)}<button
+				type="button"
+				class="item"
+				onclick={() => onfeature?.(f.id)}
 				><span class="em"><Icon name={f.icon} size={16} /></span><span class="name">{f.label}</span
 				>{#if f.count}<span class="n">{f.count}</span>{/if}</button
 			>{/each}
@@ -275,6 +265,13 @@
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}
 				<p class="muted empty">{t('agent.searchNone')}</p>
 			{/each}
+			{#if onsearchmemory}
+				<button type="button" class="item" onclick={() => onsearchmemory(query.trim())}
+					><span class="em"><Icon name="bulb" size={17} /></span><span class="name"
+						>{t('agent.searchMemory', { query: query.trim() })}</span
+					></button
+				>
+			{/if}
 		{:else}
 			<div class="group">{t('agent.projects')}</div>
 			{#each projects as p (p.id)}
@@ -346,9 +343,9 @@
 		<button
 			type="button"
 			class="item"
-			class:on={settingsOn}
-			aria-current={settingsOn ? 'page' : undefined}
-			onclick={onsettings}
+			class:on={view === 'settings'}
+			aria-current={view === 'settings' ? 'page' : undefined}
+			onclick={() => onshow('settings')}
 			><span class="em"><Icon name="gear" size={16} /></span><span class="name"
 				>{t('agent.set.title')}</span
 			></button
@@ -394,29 +391,46 @@
 	}
 	.new-chat {
 		justify-content: center;
-		gap: var(--space-1-5);
-		margin: 0 var(--space-1) var(--space-2-5);
-		min-height: 36px;
+		border: 1px solid var(--border);
+		flex: none;
+	}
+	.new-chat :global(svg) {
+		color: var(--text);
+	}
+	.rule {
+		height: 1px;
+		margin: var(--space-2) var(--space-1-5);
+		background: var(--border);
+		flex: none;
 	}
 	.search {
 		display: flex;
-		margin: 2px var(--space-1) var(--space-1);
+		align-items: center;
+		gap: var(--space-2);
+		min-height: 34px;
+		margin-bottom: var(--space-2);
+		padding: 0 var(--space-2-5);
+		border-radius: var(--radius-ctl);
+		border: 1px solid var(--border);
+		background: var(--bg);
+		color: var(--muted);
+		flex: none;
+	}
+	.search:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: -1px;
 	}
 	.search input {
 		flex: 1;
 		min-width: 0;
-		min-height: 34px;
-		padding: 0 var(--space-2-5);
-		border-radius: var(--radius-ctl);
-		border: 1px solid var(--border);
-		background: var(--surface);
+		min-height: 32px;
+		padding: 0;
+		border: 0;
+		outline: 0;
+		background: none;
 		color: var(--text);
 		font: inherit;
 		font-size: var(--text-base);
-	}
-	.search input:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -1px;
 	}
 	.scroll {
 		flex: 1;
@@ -506,9 +520,6 @@
 		border-radius: 999px;
 		background: var(--chip);
 		color: var(--muted);
-	}
-	.emoji {
-		font-size: 13px;
 	}
 	.n {
 		margin-left: auto;

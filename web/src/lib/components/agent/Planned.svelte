@@ -5,6 +5,7 @@
 	// line or on a state in Home Assistant – with the next run, pause,
 	// change, run now and delete. Times are those of the NAS.
 	import Icon from '#lib/components/Icon.svelte';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -25,6 +26,7 @@
 	let error = $state('');
 	let busy = $state(false);
 	let editing = $state<string | null>(null);
+	let removing = $state<View | null>(null);
 	let draft = $state<Record<string, string>>({});
 	let days = $state<number[]>([]);
 	let haConns = $state<{ id: string; name: string }[]>([]);
@@ -220,19 +222,24 @@
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
+<!-- PLAN 90-4: groups of flat rows like a page of the control panel. -->
+<h2 class="sgroup-title">{t('agent.plan.daily')}</h2>
 <section class="card morning" aria-labelledby="morning-title">
 	<header>
-		<span class="ic" aria-hidden="true">☀️</span>
+		<span class="ic" aria-hidden="true"><Icon name="bell" size={19} /></span>
 		<div class="grow">
 			<h3 id="morning-title">{t('agent.morning')}</h3>
 			<p class="muted small">{t('agent.morningIntro')}</p>
 		</div>
 		{#if morning}
-			<label class="switch"
-				><input type="checkbox" bind:checked={mOn} onchange={saveMorning} /><span
-					>{mOn ? t('agent.on') : t('agent.off')}</span
-				></label
-			>
+			<input
+				type="checkbox"
+				class="switch"
+				role="switch"
+				aria-label={t('agent.morning')}
+				bind:checked={mOn}
+				onchange={saveMorning}
+			/>
 		{/if}
 	</header>
 	{#if morning}
@@ -306,12 +313,20 @@
 	{/if}
 </section>
 
-<p class="muted">{t('agent.schedulesIntro')}</p>
+<div class="group-head">
+	<h2 class="sgroup-title">{t('agent.plan.tasks')}</h2>
+	{#if !editing}<button type="button" class="btn" onclick={() => edit()}
+			>{t('agent.scheduleAdd')}</button
+		>{/if}
+</div>
 <ul class="rows">
 	{#each others as s (s.id)}
 		<li class:off={!s.enabled}>
 			<span class="ic" aria-hidden="true"
-				>{s.kind === 'reminder' ? '⏰' : s.trigger ? '🏠' : '▶️'}</span
+				><Icon
+					name={s.kind === 'reminder' ? 'bell' : s.trigger ? 'home' : 'play'}
+					size={19}
+				/></span
 			>
 			<span class="grow">
 				<strong>{s.name}</strong>
@@ -331,15 +346,16 @@
 				>
 			</span>
 			<span class="acts">
-				<label class="switch" title={s.enabled ? t('agent.pause') : t('agent.resume')}
-					><input
-						type="checkbox"
-						checked={s.enabled}
-						disabled={busy}
-						aria-label={s.enabled ? t('agent.pause') : t('agent.resume')}
-						onchange={() => toggle(s)}
-					/></label
-				>
+				<input
+					type="checkbox"
+					class="switch"
+					role="switch"
+					checked={s.enabled}
+					disabled={busy}
+					title={s.enabled ? t('agent.pause') : t('agent.resume')}
+					aria-label={s.enabled ? t('agent.pause') : t('agent.resume')}
+					onchange={() => toggle(s)}
+				/>
 				{#if s.chat}<button
 						type="button"
 						class="btn"
@@ -368,8 +384,7 @@
 					class="btn btn-danger-outline"
 					title={t('common.delete')}
 					aria-label={t('common.delete')}
-					onclick={() => run(() => api.delete(`/agent/schedules/${s.id}`), false)}
-					><Icon name="trash" size={15} /></button
+					onclick={() => (removing = s)}><Icon name="trash" size={15} /></button
 				>
 			</span>
 		</li>
@@ -387,13 +402,13 @@
 					type="button"
 					role="radio"
 					aria-checked={draft.kind !== 'reminder'}
-					onclick={() => (draft.kind = '')}>▶️ {t('agent.task')}</button
+					onclick={() => (draft.kind = '')}>{t('agent.task')}</button
 				>
 				<button
 					type="button"
 					role="radio"
 					aria-checked={draft.kind === 'reminder'}
-					onclick={() => (draft.kind = 'reminder')}>⏰ {t('agent.reminder')}</button
+					onclick={() => (draft.kind = 'reminder')}>{t('agent.reminder')}</button
 				>
 			</div>
 			<label class="label" for="plan-name">{t('agent.scheduleName')}</label>
@@ -568,23 +583,53 @@
 			>
 		</div>
 	</div>
-{:else}
-	<div class="row-actions">
-		<button type="button" class="btn" onclick={() => edit()}>{t('agent.scheduleAdd')}</button>
-	</div>
+{/if}
+
+{#if removing}
+	{@const s = removing}
+	<Dialog title={t('agent.plan.delete')} onclose={() => (removing = null)}>
+		<p>„{s.name}“</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				onclick={() => {
+					const id = s.id;
+					removing = null;
+					void run(() => api.delete(`/agent/schedules/${id}`), false);
+				}}>{t('common.delete')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 <style>
 	.card {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		padding: var(--space-3);
-		margin-bottom: var(--space-3);
-		background: var(--surface);
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		padding: var(--space-3) var(--space-4);
+		margin-bottom: var(--space-4);
+		background: var(--srow-bg);
 	}
-	.morning {
-		background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	.sgroup-title {
+		margin: 0 0 var(--space-2);
+	}
+	.group-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+		margin-bottom: var(--space-2);
+	}
+	.group-head .sgroup-title {
+		margin: 0;
+	}
+	.group-head .btn {
+		gap: var(--space-1-5);
 	}
 	header {
 		display: flex;
@@ -596,7 +641,8 @@
 		font-size: var(--text-md);
 	}
 	.ic {
-		font-size: 20px;
+		display: flex;
+		color: var(--muted);
 		flex: none;
 	}
 	.grow {
@@ -675,15 +721,21 @@
 	}
 	.rows {
 		list-style: none;
-		margin: 0 0 var(--space-3);
+		margin: 0 0 var(--space-4);
 		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 	}
 	.rows li {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: var(--space-2) 0;
-		border-bottom: 1px solid var(--border);
+		min-height: 52px;
+		padding: var(--space-2) var(--space-4);
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		background: var(--srow-bg);
 	}
 	.rows li.off .grow strong {
 		color: var(--muted);
@@ -702,16 +754,8 @@
 		display: grid;
 		place-items: center;
 	}
-	.switch {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		cursor: pointer;
-	}
-	.switch input {
-		width: 34px;
-		height: 20px;
-		accent-color: var(--accent);
+	.acts .switch {
+		margin-right: var(--space-1);
 	}
 	@media (max-width: 760px) {
 		.grid {
@@ -726,6 +770,10 @@
 		.acts {
 			width: 100%;
 			justify-content: flex-end;
+		}
+		.acts .btn {
+			width: 44px;
+			height: 44px;
 		}
 	}
 </style>

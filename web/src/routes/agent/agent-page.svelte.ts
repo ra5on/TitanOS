@@ -20,8 +20,10 @@ import {
 	type Suggestion,
 	type Swipe,
 	type NasHint,
+	AGENT_VIEWS,
+	type AgentView,
 } from '#lib/agent.ts';
-import { AgentChats, LOOK_KEY, type AgentDialog } from './agent-chats.svelte.ts';
+import { AgentChats, LOOK_KEY } from './agent-chats.svelte.ts';
 
 export class AgentPage extends AgentChats {
 	featureItems = $derived.by(() => {
@@ -54,20 +56,8 @@ export class AgentPage extends AgentChats {
 		if (f.catalog) out.push({ id: 'catalog', label: t('agent.f.menu.catalog'), icon: 'zap' });
 		return out;
 	});
-	/** The settings beneath a window opened from them. */
-	under = $state<Extract<NonNullable<AgentDialog>, { kind: 'settings' }> | null>(null);
-	settingsShown = $derived(
-		this.dialog?.kind === 'settings'
-			? this.dialog
-			: this.under?.kind === 'settings'
-				? this.under
-				: null,
-	);
-	/** The chat's action sheet takes the focus and gives it back (PLAN 59). */
-	openOver = (next: NonNullable<AgentDialog>) => {
-		if (this.dialog?.kind === 'settings') this.under = this.dialog;
-		this.dialog = next;
-	};
+	/** A page beside the chat is shown (not the chat or the start page). */
+	onPage = $derived(this.view !== 'chat');
 
 	keyboard = $state(false);
 
@@ -97,7 +87,7 @@ export class AgentPage extends AgentChats {
 			this.buzz(8);
 		} else if (!this.menuOpen && dx < -50) {
 			this.swipeStart = null;
-			this.dialog = { kind: 'settings' };
+			this.show('settings');
 			this.buzz(8);
 		} else if (this.menuOpen && dx < -50) {
 			this.swipeStart = null;
@@ -255,6 +245,13 @@ export class AgentPage extends AgentChats {
 		current: this.current?.id,
 		project: this.project,
 		admin: this.status?.admin ?? false,
+		view: this.current || this.onPage ? this.view : ('start' as const),
+		onshow: (view: AgentView) => {
+			if (view === 'chat') this.newChat('');
+			else this.show(view);
+		},
+		onsearchmemory: (query: string) => this.show('memory', query),
+		waitingCount: this.inboxCount + this.chats.filter((c) => c.state === 'waiting').length,
 		onopen: (id: string, author?: string) => {
 			if (this.dialog?.kind === 'feature') this.dialog = null;
 			this.open(id, true, author ?? '');
@@ -270,8 +267,6 @@ export class AgentPage extends AgentChats {
 		},
 		onnewproject: () => (this.dialog = { kind: 'project', project: null }),
 		oneditproject: (p: Project) => (this.dialog = { kind: 'project', project: p }),
-		onknowledge: () => (this.dialog = { kind: 'knowledge', tab: 'memory' }),
-		onplanned: () => (this.dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
 		features: this.featureItems,
 		onfeature: (id: FeatureViewId) => {
 			this.menuOpen = false;
@@ -281,16 +276,12 @@ export class AgentPage extends AgentChats {
 			this.menuOpen = false;
 			this.dialog = { kind: 'notes' };
 		},
-		onsettings: () => (this.dialog = { kind: 'settings' }),
-		settingsOn: !!this.settingsShown,
 		plannedCount: this.plannedCount,
 		onarchive: () => {
 			this.menuOpen = false;
 			this.dialog = { kind: 'archive' };
 		},
 		onfold: this.phone ? undefined : () => this.setFolded(true),
-		inboxCount: this.inboxCount,
-		oninbox: () => (this.dialog = { kind: 'inbox' }),
 		gestures: this.look.gestures,
 		pull: this.look.pull,
 		compact: this.look.compact,
@@ -332,14 +323,16 @@ export class AgentPage extends AgentChats {
 				'buddy',
 				'catalog',
 			];
-			if (id && known.includes(id) && this.status?.enabled) this.dialog = { kind: 'feature', id };
+			// The views of "Schutz" work without the agent (it may be off).
+			const always: FeatureViewId[] = ['guard', 'handbook', 'emergency'];
+			if (id && known.includes(id) && this.status && (this.status.enabled || always.includes(id)))
+				this.dialog = { kind: 'feature', id };
 		});
-		// Closing the window on top brings the settings back.
+		// PLAN 90-4: the address names the page.
 		$effect(() => {
-			if (this.dialog === null && this.under) {
-				this.dialog = this.under;
-				this.under = null;
-			}
+			const name = page.url.searchParams.get('page') as AgentView | null;
+			this.view = name && AGENT_VIEWS.includes(name) ? name : 'chat';
+			this.part = page.url.searchParams.get('part') ?? '';
 		});
 		// PLAN 59: on the phone the app follows the visible part of the screen.
 		// With the keyboard open iOS keeps the page height and pans instead; the
@@ -381,6 +374,16 @@ export class AgentPage extends AgentChats {
 		});
 		$effect(() => {
 			// In a window the title bar names the program already.
+			const names = {
+				planned: t('agent.planned'),
+				memory: t('agent.memory'),
+				knowledge: t('agent.knowledge'),
+				settings: t('agent.set.title'),
+			};
+			if (this.view !== 'chat') {
+				pageTitle.value = inWindow ? names[this.view] : `${names[this.view]} · ${t('nav.agent')}`;
+				return () => (pageTitle.value = '');
+			}
 			pageTitle.value = this.current?.title
 				? inWindow
 					? this.current.title
@@ -444,7 +447,11 @@ export class AgentPage extends AgentChats {
 					void this.loadLocations();
 					const id = page.url.searchParams.get('chat');
 					if (id) void this.open(id, false, page.url.searchParams.get('author') ?? '');
-					else if (!page.url.searchParams.has('ask') && !page.url.searchParams.has('attach')) {
+					else if (
+						!page.url.searchParams.has('ask') &&
+						!page.url.searchParams.has('attach') &&
+						!page.url.searchParams.has('page')
+					) {
 						// PLAN 53: what opens first is a setting of the account.
 						const saved = await api
 							.get<{ start?: string }>('/agent/prefs')

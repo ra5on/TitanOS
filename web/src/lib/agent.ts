@@ -102,7 +102,23 @@ export type Memory = {
 	chat?: string;
 	at: string;
 	untrusted?: boolean;
+	/** PLAN 90-4: groups it on the page; pinned ones never fade; last day it was used. */
+	topic?: string;
+	pinned?: boolean;
+	used?: string;
 };
+
+/** The state of the NAS on the start page (GET /agent/home, PLAN 90-4). */
+export type HomeState = {
+	at: string;
+	volumes: { name: string; state: string; mounted: boolean; percent: number; daysLeft?: number }[];
+	backups?: { jobs: number; failing: number; running: number; lastOK?: string };
+	apps?: { running: number; stopped: number };
+};
+
+/** The pages of the agent beside the chat (PLAN 90-4). */
+export const AGENT_VIEWS = ['chat', 'planned', 'memory', 'knowledge', 'settings'] as const;
+export type AgentView = (typeof AGENT_VIEWS)[number];
 
 export type Skill = {
 	id: string;

@@ -8,9 +8,11 @@
 
 	let { children, label }: { children: Snippet; label?: string } = $props();
 
-	// Pinned to the lower edge in a window and on the phone (PLAN 76: there it
-	// stood in the middle of a short page, with empty room below).
-	const pinned = $derived(inWindow || phoneView());
+	// Pinned to the lower edge in a window. On the phone the line is not
+	// shown at all (PLAN 90-5, owner 14.11.2026: the figures at the bottom of
+	// the small screen are of no use there and take room from the page).
+	const phone = $derived(phoneView());
+	const pinned = $derived(inWindow && !phone);
 	let bar = $state<HTMLElement>();
 
 	// The page ends above the bar, however many rows its figures take in a
@@ -36,9 +38,11 @@
 	});
 </script>
 
-<footer class="statusbar" class:pinned bind:this={bar} aria-label={label}>
-	{@render children()}
-</footer>
+{#if !phone}
+	<footer class="statusbar" class:pinned bind:this={bar} aria-label={label}>
+		{@render children()}
+	</footer>
+{/if}
 
 <style>
 	.statusbar {
