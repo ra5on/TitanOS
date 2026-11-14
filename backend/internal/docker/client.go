@@ -180,7 +180,7 @@ func (c *client) containers(ctx context.Context) ([]apiContainer, error) {
 	// container of the NVR are no apps: never listed, updated or stopped.
 	kept := list[:0]
 	for _, item := range list {
-		if item.Labels[sandboxLabel] == "" && item.Labels[ViewerLabel] == "" && item.Labels[NVRLabel] == "" {
+		if item.Labels[sandboxLabel] == "" && item.Labels[ViewerLabel] == "" && item.Labels[NVRLabel] == "" && item.Labels[SpeechLabel] == "" {
 			kept = append(kept, item)
 		}
 	}
