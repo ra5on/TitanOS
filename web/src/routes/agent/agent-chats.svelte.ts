@@ -4,7 +4,7 @@
 // suggestions on top of this are in agent-page.svelte.ts.
 import { page } from '$app/state';
 import { goto } from '$app/navigation';
-import { api, apiFetch, responseError } from '#lib/api.ts';
+import { api, apiFetch, responseError, setAgentProfile } from '#lib/api.ts';
 import { agentAppMode } from '#lib/agent-app.ts';
 import { agentFull } from '#lib/agent-full.svelte.ts';
 import { clearAgentNotifications } from '#lib/web-push.ts';
@@ -82,14 +82,27 @@ export class AgentChats {
 	// the place of the chat ('chat' without an open chat is the start page).
 	// The address names the page (/agent?page=memory&part=…), so "back"
 	// works and a window comes back where it was.
+	/**
+	 * PLAN 91: the profile of Home Assistant instead of the own account
+	 * (/agent?profile=assist, owners and administrators). Set before the
+	 * first request; every address of the page keeps it.
+	 */
+	profile: '' | 'assist' = (() => {
+		const p = page.url.searchParams.get('profile') === 'assist' ? 'assist' : '';
+		setAgentProfile(p);
+		return p;
+	})();
+	go = (path: string) =>
+		goto(this.profile ? `${path}${path.includes('?') ? '&' : '?'}profile=${this.profile}` : path);
 	view = $state<AgentView>('chat');
 	part = $state('');
 	show = (view: AgentView, part = '') => {
 		this.menuOpen = false;
 		if (this.dialog?.kind === 'feature') this.dialog = null;
 		const chat = this.current && !this.readOnlyBy ? `&chat=${this.current.id}` : '';
-		if (view === 'chat') void goto(chat ? `/agent?${chat.slice(1)}` : '/agent');
-		else void goto(`/agent?page=${view}${part ? `&part=${encodeURIComponent(part)}` : ''}${chat}`);
+		if (view === 'chat') void this.go(chat ? `/agent?${chat.slice(1)}` : '/agent');
+		else
+			void this.go(`/agent?page=${view}${part ? `&part=${encodeURIComponent(part)}` : ''}${chat}`);
 	};
 	/** A short confirmation above the input ("Gemerkt."), gone after a while. */
 	notice = $state('');
@@ -234,13 +247,13 @@ export class AgentChats {
 			this.current = fetched;
 			if (this.readOnlyBy) {
 				if (fetched.project) this.project = fetched.project;
-				if (push) void goto(`/agent?chat=${id}&author=${encodeURIComponent(this.readOnlyBy)}`);
+				if (push) void this.go(`/agent?chat=${id}&author=${encodeURIComponent(this.readOnlyBy)}`);
 				return;
 			}
 			if (this.current.model) this.model = this.current.model;
 			if (this.current.think) this.think = this.current.think;
 			if (this.current.project) this.project = this.current.project;
-			if (push) void goto(`/agent?chat=${id}`);
+			if (push) void this.go(`/agent?chat=${id}`);
 			const listed = this.chats.find((c) => c.id === id);
 			if (this.current.state === 'running' || listed?.state === 'running') this.watch(id);
 		} catch (e) {
@@ -258,7 +271,7 @@ export class AgentChats {
 		this.busy = false;
 		this.project = inProject;
 		this.live = { thinking: '', content: '', step: null };
-		void goto('/agent');
+		void this.go('/agent');
 	};
 
 	watch = (id: string) => {
@@ -396,7 +409,7 @@ export class AgentChats {
 				});
 				this.current = chat;
 				if (!this.chats.some((c) => c.id === chat.id)) this.chats = [chat, ...this.chats];
-				void goto(`/agent?chat=${chat.id}`);
+				void this.go(`/agent?chat=${chat.id}`);
 				this.watch(chat.id);
 			} else {
 				const chat = await api.post<Chat>('/agent/chats', {
@@ -407,7 +420,7 @@ export class AgentChats {
 				});
 				this.current = chat;
 				this.chats = [chat, ...this.chats];
-				void goto(`/agent?chat=${chat.id}`);
+				void this.go(`/agent?chat=${chat.id}`);
 				this.watch(chat.id);
 			}
 		} catch (e) {

@@ -8,6 +8,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { Mode, Settings } from '#lib/agent.ts';
 	import AgentHARelease from './AgentHARelease.svelte';
+	import AssistCard from './AssistCard.svelte';
 
 	let {
 		settings = $bindable(),
@@ -41,38 +42,10 @@
 			/>
 		{/snippet}
 	</SettingRow>
-	<SettingRow
-		icon="mic"
-		title={t('agent.haAssist')}
-		desc={t('agent.haAssistHint')}
-		for="ag-ha-assist"
-	>
-		{#snippet control()}
-			<input
-				id="ag-ha-assist"
-				type="checkbox"
-				class="switch"
-				role="switch"
-				bind:checked={settings.homeassistant.assist}
-			/>
-		{/snippet}
-	</SettingRow>
-	{#if settings.homeassistant.assist}
-		<SettingRow icon="users" title={t('agent.haAssistAs')} for="ag-ha-assist-as">
-			{#snippet control()}
-				<select id="ag-ha-assist-as" class="field" bind:value={settings.homeassistant.assistAs}>
-					<option value="">{t('agent.firstOwner')}</option>
-					{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
-				</select>
-			{/snippet}
-		</SettingRow>
-		<p class="notice-ok">
-			{t('agent.haAssistSetup', {
-				url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
-			})}
-		</p>
-	{/if}
 </SettingGroup>
+
+<!-- PLAN 91: Assist with its key, its profile and its own rights. -->
+<AssistCard bind:settings />
 
 {#if settings}<AgentHARelease bind:settings />{/if}
 

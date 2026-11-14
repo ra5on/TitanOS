@@ -273,6 +273,10 @@ export type Settings = {
 		notify?: string[];
 		assist?: boolean;
 		assistAs?: string;
+		/** PLAN 91: a key exists (it never comes with the settings). */
+		assistKeySet?: boolean;
+		/** What a question from Home Assistant may use: deny, read or change per area. */
+		assistAreas?: Record<string, string>;
 	};
 	/** Speech to text with a Whisper service on the Ollama computer (PLAN 49). */
 	voice?: { enabled?: boolean; url?: string; model?: string };
