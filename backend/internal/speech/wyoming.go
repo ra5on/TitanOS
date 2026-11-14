@@ -211,7 +211,7 @@ func Transcribe(ctx context.Context, addr string, audio Audio, language string) 
 // WAV wraps PCM in a WAV file a browser plays.
 func (a Audio) WAV() []byte {
 	var b bytes.Buffer
-	le := func(v any) { binary.Write(&b, binary.LittleEndian, v) }
+	le := func(v any) { _ = binary.Write(&b, binary.LittleEndian, v) } // a buffer in memory takes fixed-size values without error
 	b.WriteString("RIFF")
 	le(uint32(36 + len(a.PCM)))
 	b.WriteString("WAVEfmt ")

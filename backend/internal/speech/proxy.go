@@ -125,10 +125,10 @@ func (g *gate) handle(conn net.Conn) {
 	defer up.Close()
 	done := make(chan struct{}, 2)
 	pipe := func(dst, src net.Conn) {
-		io.Copy(dst, src)
+		_, _ = io.Copy(dst, src) // a connection that broke simply ends
 		// Half-close, so the other side reads to its end.
 		if c, ok := dst.(*net.TCPConn); ok {
-			c.CloseWrite()
+			_ = c.CloseWrite() // already closed by the other side
 		}
 		done <- struct{}{}
 	}

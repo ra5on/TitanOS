@@ -607,7 +607,10 @@ func (m *Manager) tick(ctx context.Context) {
 		for _, name := range []string{whisperService, piperService} {
 			if m.Engine.EngineReady() {
 				rctx, cancel := context.WithTimeout(ctx, 40*time.Second)
-				m.Engine.SpeechRemove(rctx, name) // the models went away with the volume; a container must not keep the folder
+				// The models went away with the volume; a container must not keep the folder.
+				if err := m.Engine.SpeechRemove(rctx, name); err != nil {
+					slog.Warn("speech: container not removed", "name", name, "err", err)
+				}
 				cancel()
 			}
 			m.set(name, "error", message, "")
