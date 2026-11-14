@@ -91,14 +91,17 @@ type Manager struct {
 	loaded   bool
 	voices   []Voice
 	voicesAt time.Time
-	jobs     map[string]*job
-	services map[string]*service
-	pulls    map[string]*pull
-	ha       []net.IP
-	haAt     time.Time
-	kick     chan struct{}
-	whisper  *gate
-	piper    *gate
+	// voicesFailed is why the catalog could not be read at voicesTried.
+	voicesFailed error
+	voicesTried  time.Time
+	jobs         map[string]*job
+	services     map[string]*service
+	pulls        map[string]*pull
+	ha           []net.IP
+	haAt         time.Time
+	kick         chan struct{}
+	whisper      *gate
+	piper        *gate
 }
 
 type job struct {
@@ -249,7 +252,17 @@ func (m *Manager) Voices(ctx context.Context) ([]Voice, error) {
 	if list != nil && time.Since(at) < 24*time.Hour {
 		return list, nil
 	}
+	// Without the internet the page must not wait for it every time.
+	m.mu.Lock()
+	failed, tried := m.voicesFailed, m.voicesTried
+	m.mu.Unlock()
+	if list == nil && failed != nil && time.Since(tried) < 5*time.Minute {
+		return nil, failed
+	}
 	fresh, raw, err := m.hub.voices(ctx)
+	m.mu.Lock()
+	m.voicesFailed, m.voicesTried = err, time.Now()
+	m.mu.Unlock()
 	if err == nil {
 		if root, rerr := m.root(); rerr == nil {
 			// The copy lets the list show while the internet is away.
