@@ -65,7 +65,13 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	// Requests of the tools come from titand itself.
 	r, _ := http.NewRequest(http.MethodPost, "/agent", nil)
 	r.RemoteAddr = "127.0.0.1:0"
-	b.session = &mcpSession{user: user, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
+	// The profile of Home Assistant is no account: its tools ask titand in
+	// the name of the acting account (PLAN 91).
+	acting := user
+	if user.Name == agent.AssistProfile {
+		acting, _ = s.assistActor()
+	}
+	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
 	on := env.servicesOn()
 	off := func(area string) bool {
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
@@ -161,7 +167,12 @@ func withoutProps(params map[string]any, names ...string) map[string]any {
 }
 
 func (b *agentToolbox) mode(t *agentTool, kind string) string {
-	return b.settings.Policy.Mode(t.name, t.area, kind)
+	mode := b.settings.Policy.Mode(t.name, t.area, kind)
+	// PLAN 91: a question from Home Assistant may use less, never more.
+	if b.user.Name == agent.AssistProfile {
+		return b.settings.HA.assistMode(t.name, t.area, kind, mode)
+	}
+	return mode
 }
 
 // Specs are the tools the model is offered: all but those set to

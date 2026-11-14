@@ -2,26 +2,45 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
-// Assist (PLAN 44, Runde 4): Home Assistant talks to the KI-Agent through
-// its built-in Ollama integration, so no integration of our own is needed.
-// TitanOS answers the few Ollama routes that integration uses under
-// /agent-ollama, only when Assist is switched on and only to the address of
-// the Home Assistant set up under Settings › Home Assistant (that
-// integration sends no credentials). A question runs as the account chosen
-// for it, with the agent's permissions, in the chat "Home Assistant
-// (Assist)" of that account; an answer that takes long is cut short and
-// the result follows as a message.
+// Assist (PLAN 44, Runde 4; PLAN 91): Home Assistant talks to the KI-Agent
+// through its built-in Ollama integration, so no integration of our own is
+// needed. TitanOS answers the few Ollama routes that integration uses under
+// /agent-ollama, only when Assist is switched on. Home Assistant shows who
+// it is with the key made here, entered there as the API key of the
+// integration (Authorization: Bearer). An installation from before PLAN 91
+// has no key: until one is made, the address of the Home Assistant set up
+// under Settings › Home Assistant counts, as before.
+//
+// The integration checks certificates, and TitanOS's own one is self
+// signed: /agent-ollama is therefore also answered on the plain HTTP port
+// (cmd/titand), and over HTTPS under a name with a valid certificate
+// (Tailscale, Let's Encrypt).
+//
+// A question runs in the profile "Home Assistant" (agent.AssistProfile):
+// its own chats, memory, instruction and reminders, apart from every
+// account; owners and administrators look after it (?profile=assist). Tools
+// run with the rights of the first owner, limited by the general rights of
+// the agent and, on top, by what Home Assistant may ask (assist rights
+// below). An answer that takes long is cut short and the result follows as
+// a message.
 
 const (
 	assistPrefix = "/agent-ollama"
@@ -31,23 +50,129 @@ const (
 	assistChatGap = 10 * time.Minute
 )
 
-// assistAllowed reports whether a request may use Assist.
-func (s *Server) assistAllowed(r *http.Request) bool {
+// AssistPath reports whether a request path belongs to Assist; titand
+// answers those on the plain HTTP port instead of redirecting to HTTPS.
+func AssistPath(path string) bool { return strings.HasPrefix(path, assistPrefix+"/") }
+
+// What Home Assistant may use of an area.
+const (
+	assistDeny   = "deny"
+	assistRead   = "read"
+	assistChange = "change"
+	// Parts of the agent's own area (agent.AreaAgent), set apart here.
+	assistAreaMemory = "memory"
+	assistAreaPlan   = "plan"
+)
+
+// assistAreas are the areas that can be set, in the order of the page.
+var assistAreas = []string{
+	toolcatalog.AreaHome, toolcatalog.AreaSystem, toolcatalog.AreaStorage, toolcatalog.AreaBackups, toolcatalog.AreaDocker,
+	toolcatalog.AreaVMs, toolcatalog.AreaFiles, toolcatalog.AreaShares, toolcatalog.AreaAccounts, toolcatalog.AreaNetwork,
+	toolcatalog.AreaUpdates, toolcatalog.AreaPlugins, agent.AreaWeb, assistAreaMemory, assistAreaPlan, agent.AreaCode,
+}
+
+// assistDefault is what an area allows until it is set (owner 14.11.2026:
+// "nur Home Assistant und Lesen"): devices in Home Assistant, reading the
+// state of the NAS, reminders; no files, no internet, no changes.
+func assistDefault(area string) string {
+	switch area {
+	case toolcatalog.AreaHome, assistAreaPlan:
+		return assistChange
+	case toolcatalog.AreaSystem, toolcatalog.AreaStorage, toolcatalog.AreaBackups, toolcatalog.AreaDocker, assistAreaMemory:
+		return assistRead
+	}
+	return assistDeny
+}
+
+// assistLevel is what a question from Home Assistant may use of an area.
+func (h agentHASettings) assistLevel(area string) string {
+	if l, ok := h.AssistAreas[area]; ok {
+		return l
+	}
+	return assistDefault(area)
+}
+
+// assistMode narrows the mode the general rights give a tool for a run in
+// the profile of Home Assistant: never more than those rights allow.
+func (h agentHASettings) assistMode(tool, area, kind, mode string) string {
+	if area == agent.AreaAgent {
+		switch tool {
+		case "memory_save", "skill_save":
+			area, kind = assistAreaMemory, agent.KindChange
+		case "schedule_create":
+			area, kind = assistAreaPlan, agent.KindChange
+		case "schedule_list":
+			area, kind = assistAreaPlan, agent.KindRead
+		default:
+			return mode // asking back, named locations
+		}
+	}
+	if strings.HasPrefix(tool, "note_") || strings.HasPrefix(tool, "notes_") {
+		area = assistAreaMemory
+	}
+	switch h.assistLevel(area) {
+	case assistChange:
+		return mode
+	case assistRead:
+		if kind == agent.KindRead {
+			return mode
+		}
+	}
+	return agent.ModeDeny
+}
+
+// assistSeen is the last request of Home Assistant, kept in memory only.
+type assistSeen struct {
+	At   time.Time `json:"at"`
+	From string    `json:"from"`
+	OK   bool      `json:"ok"`
+	// Reason when refused: "off", "key", "address".
+	Reason   string `json:"reason,omitempty"`
+	Question string `json:"question,omitempty"`
+	Millis   int64  `json:"millis,omitempty"`
+}
+
+var assistLast struct {
+	sync.Mutex
+	seen *assistSeen
+}
+
+func assistNote(seen assistSeen) {
+	assistLast.Lock()
+	defer assistLast.Unlock()
+	// A refused try does not hide the question answered just before for long
+	// lists; the page shows the newest either way.
+	assistLast.seen = &seen
+}
+
+// assistAllowed reports whether a request may use Assist, and why not.
+func (s *Server) assistAllowed(r *http.Request) (bool, string) {
 	settings := s.agentSettings()
-	if !settings.Enabled || !settings.HA.Assist || s.haHub() == nil {
-		return false
+	if !settings.Enabled || !settings.HA.Assist {
+		return false, "off"
+	}
+	if key := settings.HA.AssistKey; key != "" {
+		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if ok && subtle.ConstantTimeCompare([]byte(strings.TrimSpace(got)), []byte(key)) == 1 {
+			return true, ""
+		}
+		return false, "key"
+	}
+	// Without a key (set up before PLAN 91): the address of a Home
+	// Assistant set up as a connection.
+	if s.haHub() == nil {
+		return false, "address"
 	}
 	remote := net.ParseIP(remoteIP(r))
 	if remote == nil {
-		return false
+		return false, "address"
 	}
-	// Any Home Assistant set up as a connection may ask.
 	for _, conn := range s.haHub().All() {
 		if ha, _ := conn.Settings(); s.assistFrom(r, ha.URL, remote) {
-			return true
+			return true, ""
 		}
 	}
-	return false
+	return false, "address"
 }
 
 // assistFrom says whether remote is the Home Assistant at address.
@@ -79,8 +204,17 @@ func (s *Server) assistFrom(r *http.Request, address string, remote net.IP) bool
 }
 
 func (s *Server) handleAgentOllama(w http.ResponseWriter, r *http.Request) {
-	if !s.assistAllowed(r) {
-		writeError(w, http.StatusForbidden, "assist_not_allowed", "Assist is off or this is not the Home Assistant set up in TitanOS")
+	if ok, reason := s.assistAllowed(r); !ok {
+		if reason != "off" {
+			assistNote(assistSeen{At: time.Now(), From: remoteIP(r), Reason: reason})
+		}
+		// The Ollama integration of Home Assistant reads 401 as "the key is
+		// wrong"; a plain refusal would look like a broken server there.
+		status := http.StatusForbidden
+		if reason == "key" {
+			status = http.StatusUnauthorized
+		}
+		writeError(w, status, "assist_not_allowed", "Assist is off, or the key of TitanOS is missing or wrong")
 		return
 	}
 	switch strings.TrimPrefix(r.URL.Path, assistPrefix) {
@@ -120,7 +254,13 @@ func (s *Server) assistChat(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	started := time.Now()
 	answer := s.assistAnswer(r.Context(), question)
+	short := question
+	if r := []rune(short); len(r) > 120 {
+		short = string(r[:119]) + "…"
+	}
+	assistNote(assistSeen{At: started, From: remoteIP(r), OK: true, Question: short, Millis: time.Since(started).Milliseconds()})
 	stream := req.Stream == nil || *req.Stream
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	msg := map[string]any{"role": "assistant", "content": answer}
@@ -136,17 +276,11 @@ func (s *Server) assistChat(w http.ResponseWriter, r *http.Request) {
 
 // assistAnswer runs a question and waits for the answer, at most a while.
 func (s *Server) assistAnswer(ctx context.Context, question string) string {
-	env := s.agentEnv()
 	if question == "" || len(question) > maxAgentMessage {
 		return "Ich habe keine Frage verstanden."
 	}
-	settings := s.agentSettings()
-	as := settings.HA.AssistAs
-	if as == "" {
-		as = s.firstOwner()
-	}
-	user, ok := env.users.Get(as)
-	if !ok || user.Disabled || !s.agentAllowed(user) {
+	user, ok := s.assistProfile()
+	if !ok {
 		return "Der KI-Agent ist für Home Assistant nicht eingerichtet."
 	}
 	store := s.agentStore()
@@ -201,6 +335,42 @@ func (s *Server) assistAnswer(ctx context.Context, question string) string {
 	return "Fertig."
 }
 
+// assistActor is the account whose rights a run in the profile of Home
+// Assistant has: the one chosen before PLAN 91 if it still administers,
+// else the first owner.
+func (s *Server) assistActor() (auth.User, bool) {
+	env := s.agentEnv()
+	if env.users == nil {
+		return auth.User{}, false
+	}
+	for _, name := range []string{s.agentSettings().HA.AssistAs, s.firstOwner()} {
+		if u, ok := env.users.Get(name); ok && name != "" && !u.Disabled && u.Role.CanAdminister() && s.agentAllowed(u) {
+			return u, true
+		}
+	}
+	return auth.User{}, false
+}
+
+// assistProfile is the profile of Home Assistant as the "account" a run
+// and the store work with: its name is agent.AssistProfile, its role that
+// of the acting account. It cannot log in and is no account.
+func (s *Server) assistProfile() (auth.User, bool) {
+	actor, ok := s.assistActor()
+	if !ok {
+		return auth.User{}, false
+	}
+	return auth.User{Name: agent.AssistProfile, Role: actor.Role}, true
+}
+
+// agentUserNamed is the account of that name, or the profile of Home
+// Assistant for agent.AssistProfile.
+func (s *Server) agentUserNamed(name string) (auth.User, bool) {
+	if name == agent.AssistProfile {
+		return s.assistProfile()
+	}
+	return s.agentEnv().users.Get(name)
+}
+
 // assistProject is the project named "Home Assistant", if the account has one.
 func (s *Server) assistProject(user string) string {
 	list, err := s.agentStore().Projects(user)
@@ -239,4 +409,72 @@ func plainSpeech(s string) string {
 		out = append(out, strings.TrimSpace(strings.TrimLeft(line, "-*")))
 	}
 	return strings.Join(out, " ")
+}
+
+// ---------- the page: key, addresses, last request ----------
+
+// assistInfo is what Settings › KI-Agent › Home Assistant shows of Assist.
+func (s *Server) handleAgentAssist(w http.ResponseWriter, r *http.Request) {
+	settings := s.agentSettings()
+	type address struct {
+		Kind string `json:"kind"`
+		URL  string `json:"url"`
+	}
+	addrs := []address{}
+	for _, a := range s.agentAddresses(r) {
+		host := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(a.URL, "https://"), "http://"), "/agent")
+		switch {
+		case a.Kind == "lan":
+			// In the home network without a certificate: plain HTTP.
+			addrs = append(addrs, address{Kind: "lan", URL: "http://" + host + assistPrefix})
+		case a.HTTPS:
+			addrs = append(addrs, address{Kind: a.Kind, URL: "https://" + host + assistPrefix})
+		}
+	}
+	levels := map[string]string{}
+	for _, area := range assistAreas {
+		levels[area] = settings.HA.assistLevel(area)
+	}
+	assistLast.Lock()
+	last := assistLast.seen
+	assistLast.Unlock()
+	out := map[string]any{"keySet": settings.HA.AssistKey != "", "addresses": addrs, "areas": assistAreas, "levels": levels, "last": last}
+	if store := s.agentStore(); store != nil {
+		if mem, err := store.Memories(agent.AssistProfile); err == nil {
+			out["memories"] = len(mem)
+		}
+		if chats, err := store.Chats(agent.AssistProfile); err == nil {
+			out["chats"] = len(chats)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleAgentAssistKey shows the key (GET) or makes a new one (POST); the
+// old one stops working at once.
+func (s *Server) handleAgentAssistKey(w http.ResponseWriter, r *http.Request) {
+	a := &s.agentConf
+	s.agentSettings()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.loaded {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "agent.json is not readable; nothing was changed")
+		return
+	}
+	if r.Method == http.MethodPost {
+		raw := make([]byte, 24)
+		if _, err := rand.Read(raw); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal", "no random numbers")
+			return
+		}
+		next := a.settings
+		next.HA.AssistKey = "tos-assist-" + base64.RawURLEncoding.EncodeToString(raw)
+		if err := s.agentEnv().store.WriteJSON(agentSettingsFile, next); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+			return
+		}
+		a.settings = next
+		slog.Info("a new key for Assist was made", "by", currentUser(r).Name)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"key": a.settings.HA.AssistKey})
 }

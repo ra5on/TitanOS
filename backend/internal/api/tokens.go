@@ -64,8 +64,9 @@ func (a tokensArea) bearerAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
 		// WebDAV checks its own Basic sign-in (webdav.go), the MCP server
-		// its token (mcp.go).
-		if header == "" || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == mcpPath {
+		// its token (mcp.go), Assist the key of Home Assistant
+		// (agent_assist.go).
+		if header == "" || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == mcpPath || AssistPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

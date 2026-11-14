@@ -86,9 +86,21 @@ func (s *Server) agentWeb() *agent.Web {
 // requireAgent lets an account through that may use the agent.
 func (s *Server) requireAgent(next http.HandlerFunc) http.HandlerFunc {
 	return s.requireUser(func(w http.ResponseWriter, r *http.Request) {
-		if !s.agentAllowed(currentUser(r)) {
+		user := currentUser(r)
+		if !s.agentAllowed(user) {
 			writeError(w, http.StatusForbidden, "agent_not_allowed", "this account may not use the KI-Agent")
 			return
+		}
+		// PLAN 91: owners and administrators look after the profile of Home
+		// Assistant (its chats, memory, instruction, reminders) through the
+		// same routes with ?profile=assist: the handlers then work on the
+		// profile instead of the account. It keeps the role of who asks.
+		if r.URL.Query().Get("profile") == "assist" {
+			if !user.Role.CanAdminister() {
+				writeError(w, http.StatusForbidden, "forbidden", "owners and administrators only")
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), contextKey{}, auth.User{Name: agent.AssistProfile, Role: user.Role}))
 		}
 		next(w, r)
 	})
@@ -601,6 +613,19 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	}
 	if r := []rune(body); len(r) > 180 {
 		body = string(r[:179]) + "…"
+	}
+	if user.Name == agent.AssistProfile {
+		// The profile of Home Assistant has no devices: only a step that
+		// waits goes out, to those who can approve it.
+		if chat.State != agent.StateWaiting || env.users == nil {
+			return
+		}
+		for _, u := range env.users.List() {
+			if !u.Disabled && u.Role.CanAdminister() && s.agentAllowed(u) {
+				env.webPush.SendTo(u.Name, webpush.Message{Title: "KI-Agent (Home Assistant)", Body: body, URL: "/agent?profile=assist&chat=" + chat.ID, Tag: "agent-" + chat.ID})
+			}
+		}
+		return
 	}
 	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.Title, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 }

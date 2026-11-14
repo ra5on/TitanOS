@@ -430,9 +430,13 @@ func TestAgentAssistForHomeAssistantOnly(t *testing.T) {
 	if res.StatusCode != 200 || !reply.Done || reply.Message.Content != "Das Licht ist aus. a, b. x, y." {
 		t.Fatalf("chat: %d %s", res.StatusCode, body)
 	}
-	list, _ := ts.server.agentStore().Chats("alex")
+	// PLAN 91: the question is in the profile of Home Assistant, not in an account.
+	list, _ := ts.server.agentStore().Chats(agent.AssistProfile)
 	if len(list) != 1 || list[0].Origin != "homeassistant" {
 		t.Fatalf("assist chat: %+v", list)
+	}
+	if own, _ := ts.server.agentStore().Chats("alex"); len(own) != 0 {
+		t.Fatalf("the owner's chats: %+v", own)
 	}
 }
 

@@ -17,6 +17,10 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/check", s.requireAdmin(s.handleAgentCheck))
 	mux.HandleFunc("POST /api/v1/agent/voice/check", s.requireAdmin(s.handleAgentVoiceCheck))
 	mux.HandleFunc("GET /api/v1/agent/tools", s.requireAdmin(s.handleAgentTools))
+	// Assist (PLAN 91): key, addresses and the last request of Home Assistant.
+	mux.HandleFunc("GET /api/v1/agent/assist", s.requireAdmin(s.handleAgentAssist))
+	mux.HandleFunc("GET /api/v1/agent/assist/key", s.requireAdmin(s.handleAgentAssistKey))
+	mux.HandleFunc("POST /api/v1/agent/assist/key", s.requireAdmin(s.handleAgentAssistKey))
 	// The volume of the agent's data, chosen when it is switched on, and
 	// moving it (PLAN 58).
 	mux.HandleFunc("GET /api/v1/agent/volumes", s.requireAdmin(s.handleAgentVolumes))

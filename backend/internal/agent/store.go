@@ -216,6 +216,11 @@ func preview(s string, n int) string {
 	return s
 }
 
+// AssistProfile names the profile of questions from Home Assistant (PLAN
+// 91): its own chats, memory, instruction and reminders, apart from every
+// account. No account can have this name (accountPattern).
+const AssistProfile = "@assist"
+
 // Memory is something the agent remembered, with where it came from.
 type Memory struct {
 	ID      string    `json:"id"`
@@ -332,7 +337,7 @@ type Store struct {
 }
 
 func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
-	if !accountPattern.MatchString(user) {
+	if user != AssistProfile && !accountPattern.MatchString(user) {
 		return nil, nil, ErrNotFound
 	}
 	if s.Open == nil {
@@ -759,7 +764,7 @@ func (s *Store) Accounts() []string {
 	names, _ := dir.Readdirnames(-1)
 	var out []string
 	for _, n := range names {
-		if accountPattern.MatchString(n) {
+		if accountPattern.MatchString(n) || n == AssistProfile {
 			out = append(out, n)
 		}
 	}
