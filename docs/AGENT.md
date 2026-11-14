@@ -77,7 +77,7 @@ Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig, 
 - Mitteilungen gelesener Chats verschwinden, sobald TitanOS oder der Agent auf dem Gerät geöffnet wird (Service Worker, `getNotifications`). Sofort beim Lesen auf einem anderen Gerät geht das nicht: iOS erlaubt keinen stillen Push.
 - Die Chat-Liste liefert `unread`. Gelesen-Stände liegen in `.titanos/agent/<konto>/seen.json` und werden nur geschrieben, wenn sich der Chat seit dem letzten Ansehen geändert hat; den letzten Stand der Chats hält titand im RAM, die 15-Sekunden-Meldung greift ohne Änderung nicht auf die Platte zu (Ruhemodus). Chats von vor dem Update gelten als gelesen.
 
-## Seiten und Chat-Bedienung (PLAN 90-4, ab 0.82)
+## Seiten und Chat-Bedienung (PLAN 90-4, ab 0.83)
 
 Entscheidung des Inhabers vom 14.11.2026 (Fragerunde in `PLAN.md` §90, Entwurfsbilder abgenommen): der Agent ist aufgebaut wie die Systemsteuerung 0.81 – Gruppen aus flachen Zeilen (`SettingGroup`/`SettingRow`), nichts doppelt.
 

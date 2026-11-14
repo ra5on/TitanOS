@@ -74,7 +74,7 @@ Schalter „Freigaben per Mitteilung“ der Skizze gibt es bei den Rechten nicht
 (Mitteilungen des Agenten schaltet man je Gerät); dort steht „Nie erlaubt“. Wartende Freigaben zeigen „▲ n“ (Form und Zahl, nicht nur Farbe). Prüfung
 `scripts/test-ui-agent.mjs`. Beschreibung `docs/AGENT.md` („Aussehen“).
 
-### KI-Agent wie die Systemsteuerung (0.82, PLAN 90-4)
+### KI-Agent wie die Systemsteuerung (0.83, PLAN 90-4)
 
 Vom Projektinhaber nach Entwurfsbildern freigegeben (14. November 2026,
 Fragerunde in `PLAN.md` §90; Bilder und Entwurfsseite in
