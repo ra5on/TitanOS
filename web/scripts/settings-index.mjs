@@ -40,7 +40,11 @@ const KNOWN_VALUES = {
 	'item.key': ['governor', 'preference', 'platform', 'diskSleep'],
 };
 /** Template keys over data that are lists, not settings (MCP: tools by area). */
-const DATA_TEMPLATES = ['t(`mcp.area.${group.area}` as MessageKey)'];
+const DATA_TEMPLATES = [
+	't(`mcp.area.${group.area}` as MessageKey)',
+	// PLAN 91: the areas Home Assistant may ask about (a list titand names).
+	't(`agent.assist.area.${area}` as MessageKey)',
+];
 
 /**
  * Whether a title the parser could not read is a translation it should have

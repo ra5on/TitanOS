@@ -36,6 +36,7 @@
 	import { apiErrorText, i18n } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
+	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
@@ -531,7 +532,8 @@
 							busy={ag.busy}
 							bind:attachments={ag.attachments}
 							disabled={!!ag.current?.pending || !!ag.readOnlyBy}
-							voice={!!ag.status.voice}
+							voice={!!ag.status.voice || nasSpeech.hear}
+							voiceNas={nasSpeech.hear}
 							placeholder={ag.readOnlyBy
 								? t('agent.readOnlyChat', { name: ag.readOnlyBy })
 								: ag.current?.pending
