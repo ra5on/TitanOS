@@ -842,12 +842,17 @@ func (s *Server) guardStatusFor(limit int) map[string]any {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	s.guardLoadLocked(ps)
-	list := slices.Clone(ps.alerts)
+	// Never nil: the page reads a list ("alerts": null broke it on every
+	// NAS that never had an alarm).
+	list := append([]guardAlert{}, ps.alerts...)
 	slices.Reverse(list)
 	if len(list) > limit {
 		list = list[:limit]
 	}
 	for i := range list {
+		if list[i].Files == nil {
+			list[i].Files = []protect.Affected{}
+		}
 		list[i].Restorable = len(list[i].Files)
 		if len(list[i].Files) > 500 {
 			list[i].More += len(list[i].Files) - 500

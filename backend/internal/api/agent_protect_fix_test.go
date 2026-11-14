@@ -246,3 +246,22 @@ func TestEmergencyRevokeKeepsAdminChange(t *testing.T) {
 		t.Fatal("own grant not taken back")
 	}
 }
+
+// PLAN 90-1: without any alarm the page gets a list, never null. The page
+// calls find/some/filter on it and did not load on a NAS that never had
+// an alarm.
+func TestGuardStatusWithoutAlarmsIsAList(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	for _, on := range []bool{false, true} {
+		if on {
+			if res, body := ts.request("PUT", "/api/v1/agent/features", map[string]any{"guard": map[string]any{"enabled": true}}); res.StatusCode != http.StatusOK {
+				t.Fatalf("switching the guard on: %d %s", res.StatusCode, body)
+			}
+		}
+		res, body := ts.request("GET", "/api/v1/agent/protect/guard", nil)
+		if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"alerts":[]`) {
+			t.Fatalf("guard on=%v: %d %s", on, res.StatusCode, body)
+		}
+	}
+}

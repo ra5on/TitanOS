@@ -6,7 +6,7 @@
   "demoData": true,
   "theme": "Graphit / Blau (Standard der Testdaten)",
   "browser": "Playwright Chromium",
-  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden. Seit 8.11.2026: Bilder mit uiVersion 0.70.0 aus scripts/capture-readme-screenshots.mjs (feat/0.70, vite dev 127.0.0.1:5290). Seit 12.11.2026: Bilder mit uiVersion 0.77.0 (in Arbeit) aus scripts/capture-readme-screenshots.mjs (Zweig feat/079-systemdaten-sicherung nach dem Merge von main, vite preview des gebauten Frontends auf 127.0.0.1:5263). Seit 13.11.2026: die Bilder der README (uiVersion 0.78.0) aus scripts/capture-readme-screenshots.mjs, auch Fernansicht und Systemdaten; freigaben.png und speicher.png sind unverändert vom 12.11.2026.",
+  "note": "Seit 12.11.2026: freigaben.png und speicher.png (uiVersion 0.77.0 in Arbeit) aus scripts/capture-readme-screenshots.mjs. Seit 13.11.2026: die Bilder der README (uiVersion 0.78.0) aus demselben Skript. Aufnahmen der alten Oberfläche und des früheren Agent-Auftritts sind seit dem 14.11.2026 entfernt.",
   "images": [
     {
       "file": "anmeldeseite.png",
@@ -40,46 +40,6 @@
       "height": 1254,
       "bytes": 281650,
       "sha256": "6b3ee55030487e046c6677921de2c9c98ba003054d475f12fbd93abf8d694e9e"
-    },
-    {
-      "file": "dateien-auftraege-1440.png",
-      "script": "scripts/test-ui-drive-transfers.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1440,
-      "height": 1251,
-      "bytes": 353110,
-      "sha256": "0b31392a0278c85dcb3f1543f4307807215dcaa441c50c2107b8dc1dac1a99b2"
-    },
-    {
-      "file": "dateien-auftraege-390.png",
-      "script": "scripts/test-ui-drive-transfers.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 390,
-      "height": 2045,
-      "bytes": 228416,
-      "sha256": "4a15f2bb429f4afab25acf9a43a8b45d2855ab5280afd4d159ca6d470d77acae"
-    },
-    {
-      "file": "dateien-ersetzen.png",
-      "script": "scripts/test-ui-copy-confirmation.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1440,
-      "height": 1000,
-      "bytes": 197005,
-      "sha256": "709075dbb4c331b78fe488c7a6f3a497456e9a65df45ceb2656afb811312b274"
-    },
-    {
-      "file": "dateien-mobil.png",
-      "script": "docs/screenshots/capture.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 390,
-      "height": 844,
-      "bytes": 92808,
-      "sha256": "667b6269f965ff75d19d96aaf451e1ce297af62db68987eb12af3219ddbea5ce"
     },
     {
       "file": "dateien.png",
@@ -137,16 +97,6 @@
       "sha256": "ae7b215341d0c156b37d8df4f78a30791cdd8bc5e218ea1d16d1ca44e08cad25"
     },
     {
-      "file": "firewall.png",
-      "script": "scripts/test-ui-firewall.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1440,
-      "height": 1561,
-      "bytes": 474623,
-      "sha256": "372d1bbff980fc9b7a2803b6cceb5e2cc83be2bdf5ba90c34c9c8b7ca2efe9fc"
-    },
-    {
       "file": "freigaben.png",
       "uiVersion": "0.77.0 (in Arbeit)",
       "captured": "2026-11-12",
@@ -180,46 +130,6 @@
       "sha256": "8ce9fab11f6eb9246c99317d5032d53250ea97db07f3edd38f8a46363a691e78"
     },
     {
-      "file": "ki-agent-chat.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "uiVersion": "0.51.0 bzw. 0.54.0 (alte Oberfläche)",
-      "captured": "2026-11-05",
-      "width": 1440,
-      "height": 1000,
-      "bytes": 431986,
-      "sha256": "d21bc3867d1f9f0fd75290cf0e3cc8cecdc7f8ff31f2eedbe115c18fa33f80b5"
-    },
-    {
-      "file": "ki-agent-menue-mobil.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "uiVersion": "0.51.0 bzw. 0.54.0 (alte Oberfläche)",
-      "captured": "2026-11-05",
-      "width": 390,
-      "height": 844,
-      "bytes": 106339,
-      "sha256": "4d6bf0bf077d8f78349a290c0bccdf32a88ffb1abed601305c42908bc3ab85b2"
-    },
-    {
-      "file": "ki-agent-mobil.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "uiVersion": "0.51.0 bzw. 0.54.0 (alte Oberfläche)",
-      "captured": "2026-11-05",
-      "width": 390,
-      "height": 844,
-      "bytes": 218436,
-      "sha256": "8cd5ccf9e2cfb99105d0d74a57302aa5a40af5057eeb0517d29d067a5701d4d5"
-    },
-    {
-      "file": "ki-agent.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "uiVersion": "0.51.0 bzw. 0.54.0 (alte Oberfläche)",
-      "captured": "2026-11-05",
-      "width": 1440,
-      "height": 900,
-      "bytes": 441651,
-      "sha256": "b3245c35d3e198826b03017bb3f28bd07910ea330f9f7e05acd31a94f23ece30"
-    },
-    {
       "file": "nvr.png",
       "script": "scripts/capture-readme-screenshots.mjs",
       "output": "nvr.png",
@@ -229,26 +139,6 @@
       "height": 1000,
       "bytes": 311690,
       "sha256": "5f8ea2d2b1c5be7c1b120b0a51e57768ac01dee1efca93ffb5e47a8a0c95f87a"
-    },
-    {
-      "file": "protokoll.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1600,
-      "height": 1050,
-      "bytes": 127964,
-      "sha256": "d67229e20e51e3a5959ce5882e65decbabcd82ac3b05e0fd7c50dfdac3a493ab"
-    },
-    {
-      "file": "shares.png",
-      "script": "docs/screenshots/capture.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1600,
-      "height": 780,
-      "bytes": 484622,
-      "sha256": "62474c011d4602ba0ecdb4b3accc3cf5d82edb6e8f7a9feb5a73eca651c776de"
     },
     {
       "file": "speicher.png",
@@ -282,26 +172,6 @@
       "height": 1391,
       "bytes": 148666,
       "sha256": "a7aa5774d2de0f54e6fdf8578a8449134c1a713dd56cb78f94ac8c9c5d256673"
-    },
-    {
-      "file": "vm-erstellen-mobil.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 390,
-      "height": 3093,
-      "bytes": 273253,
-      "sha256": "3e66a06da799d98a22acebcd7a24c0830d13d0c6716f4a39ebaabc8787edf16b"
-    },
-    {
-      "file": "vm-erstellen.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
-      "width": 1600,
-      "height": 1410,
-      "bytes": 424397,
-      "sha256": "521d039697d4bb6bebff5987dda1b87778b963770040e654930d12fc244e0463"
     },
     {
       "file": "vms.png",

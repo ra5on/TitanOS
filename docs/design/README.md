@@ -74,6 +74,30 @@ Schalter „Freigaben per Mitteilung“ der Skizze gibt es bei den Rechten nicht
 (Mitteilungen des Agenten schaltet man je Gerät); dort steht „Nie erlaubt“. Wartende Freigaben zeigen „▲ n“ (Form und Zahl, nicht nur Farbe). Prüfung
 `scripts/test-ui-agent.mjs`. Beschreibung `docs/AGENT.md` („Aussehen“).
 
+### KI-Agent wie die Systemsteuerung (0.82, PLAN 90-4)
+
+Vom Projektinhaber nach Entwurfsbildern freigegeben (14. November 2026,
+Fragerunde in `PLAN.md` §90; Bilder und Entwurfsseite in
+`Entwuerfe/90-ki-agent/`, 11 Arbeitsplatz, 12 Handy). Ersetzt beim Aufbau der
+Seite den Stand von PLAN 68 oben; Farben, Chat-Spalte (760 px), Freigabe-Banner
+und Eingabekarte bleiben. Neu: Spalte wie die der Systemsteuerung (264 px,
+Suche oben, Start, Geplant, Gedächtnis, Wissen, Notizen); Geplant, Gedächtnis,
+Wissen und Einstellungen als Seiten aus Gruppen flacher Zeilen statt Dialog
+und Seitenblatt; Startseite mit „Wartet auf dich“, NAS-Zustand, nächsten
+Aufträgen, letzten Ergebnissen und Vorschlägen; Einstellungen neu gruppiert,
+nichts doppelt; im Chat Bearbeiten, Neu erzeugen, Suche und „/“-Befehle; am
+Handy ein einzeiliger Kopf mit Blatt von unten, Tabellen als Karten, Ziele
+mindestens 44 px. Abweichungen vom Entwurf: Eine Freigabe wird auf der
+Startseite nur angesehen, nicht ausgeführt (ausgeführt wird im Chat, wo der
+Schritt ganz zu sehen ist). Karten einer Tabelle entstehen je Zeile, nicht je
+Spalte. „Beim Öffnen“ behält seine drei Werte (Start, Letzter Chat,
+Übersicht). Die Herkunft eines Merksatzes nennt nur den Chat, wenn es einen
+gibt („von dir angelegt“/„nachts gelernt“ wird nicht gespeichert). „Mitteilungen“
+ist eine Unterseite, kein Schalter. Auf der Seite Geplant bleibt das bisherige
+Formular; „Zuletzt gelaufen“ zeigt die Chats der Läufe. Prüfung
+`scripts/test-ui-agent90.mjs` und `scripts/test-ui-agent.mjs`. Beschreibung
+`docs/AGENT.md` („Seiten und Chat-Bedienung“).
+
 ### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)
 
 Vom Projektinhaber am 1. November 2026 nach Screenshots bestätigt („Los“,

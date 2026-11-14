@@ -26,6 +26,7 @@ import {
 	type Pending,
 	type Project,
 	type Status,
+	type AgentView,
 } from '#lib/agent.ts';
 import type { ChatSheet } from './chat-sheets.ts';
 
@@ -67,20 +68,39 @@ export class AgentChats {
 	look = $state<Look>(this.readLook());
 	dialog = $state<
 		| { kind: 'project'; project: Project | null }
-		| {
-				kind: 'knowledge';
-				tab: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
-				only?: boolean;
-		  }
-		| { kind: 'settings'; section?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' }
-		| { kind: 'inbox' }
 		| { kind: 'notes' }
+		/** A project: its chats, files and memory (from the page Wissen). */
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
+		/** Project, model and thinking level of the chat (PLAN 90-4). */
+		| { kind: 'head' }
 		| { kind: 'feature'; id: FeatureViewId }
 		| ChatSheet
 		| null
 	>(null);
+	// PLAN 90-4: Geplant, Gedächtnis, Wissen and Einstellungen are pages in
+	// the place of the chat ('chat' without an open chat is the start page).
+	// The address names the page (/agent?page=memory&part=…), so "back"
+	// works and a window comes back where it was.
+	view = $state<AgentView>('chat');
+	part = $state('');
+	show = (view: AgentView, part = '') => {
+		this.menuOpen = false;
+		if (this.dialog?.kind === 'feature') this.dialog = null;
+		const chat = this.current && !this.readOnlyBy ? `&chat=${this.current.id}` : '';
+		if (view === 'chat') void goto(chat ? `/agent?${chat.slice(1)}` : '/agent');
+		else void goto(`/agent?page=${view}${part ? `&part=${encodeURIComponent(part)}` : ''}${chat}`);
+	};
+	/** A short confirmation above the input ("Gemerkt."), gone after a while. */
+	notice = $state('');
+	noticeTimer: ReturnType<typeof setTimeout> | undefined;
+	say = (text: string) => {
+		this.notice = text;
+		clearTimeout(this.noticeTimer);
+		this.noticeTimer = setTimeout(() => (this.notice = ''), 4000);
+	};
+	/** The search in the open chat (PLAN 90-4); null: closed. */
+	find = $state<string | null>(null);
 	// PLAN 54: which functions are there for this account, and their views
 	// in the menu (only what is on; the others stay under Funktionen).
 	features = $state<FeaturesPublic | null>(null);
@@ -125,13 +145,19 @@ export class AgentChats {
 		if (this.look.vibrate && !this.calm && 'vibrate' in navigator) navigator.vibrate(pattern);
 	};
 
+	/** The agent's own page is shown (on, this account may use it, volume there). */
+	ready = $derived(!!this.status?.enabled && this.status.allowed && this.status.volume);
+	/** The state could not be read: the page offers to try again. */
+	statusFailed = $state(false);
 	loadStatus = async () => {
 		try {
 			this.status = await api.get<Status>('/agent/status');
+			this.statusFailed = false;
 			if (!this.model) this.model = this.status.model || this.usable[0]?.name || '';
 			if (!this.think) this.think = this.status.think || '';
 		} catch (e) {
 			this.error = apiErrorText(e);
+			this.statusFailed = true;
 		}
 	};
 	loadLists = async () => {
@@ -193,6 +219,7 @@ export class AgentChats {
 	listsReady = $state(false);
 	open = async (id: string, push = true, author = '') => {
 		this.menuOpen = false;
+		this.find = null;
 		stopSpeaking();
 		this.stream?.abort();
 		this.busy = false;
@@ -226,6 +253,7 @@ export class AgentChats {
 		this.readOnlyBy = '';
 		stopSpeaking();
 		this.stream?.abort();
+		this.find = null;
 		this.current = null;
 		this.busy = false;
 		this.project = inProject;
@@ -308,6 +336,29 @@ export class AgentChats {
 			// The list reload below shows the state.
 		}
 		void this.loadLists();
+	};
+
+	/**
+	 * Asks a message of the open chat again (PLAN 90-4): with a text it is
+	 * changed first ("Bearbeiten"), without one the same is asked ("Neu
+	 * erzeugen"). The chat forgets everything after it.
+	 */
+	resend = async (entry: Entry, text = '') => {
+		if (!this.current || this.busy) return;
+		this.error = '';
+		stopSpeaking();
+		try {
+			const chat = await api.post<Chat>(`/agent/chats/${this.current.id}/messages`, {
+				message: text,
+				replace: entry.id,
+				model: this.model,
+				think: this.think,
+			});
+			this.current = chat;
+			this.watch(chat.id);
+		} catch (e) {
+			this.error = apiErrorText(e);
+		}
 	};
 
 	send = async (text: string) => {

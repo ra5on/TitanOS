@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
@@ -45,7 +46,7 @@ func (b *agentToolbox) ownTools() []*agentTool {
 			schema(map[string]any{"question": str("The question, one or two sentences."), "choices": map[string]any{"type": "array", "minItems": 2, "maxItems": 6, "items": map[string]any{"type": "string"}, "description": "Short answers, e.g. [\"Docker-App\", \"VM HAOS\", \"Beide\"]."}}, "question", "choices"),
 			false, b.askUser),
 		own("memory_save", agent.AreaAgent, "Remember a lasting fact for later chats: a correction of the person, where something lives, what they prefer. One short sentence. Not for passwords or secrets.",
-			schema(map[string]any{"text": str("The fact, one sentence."), "project": map[string]any{"type": "boolean", "description": "Only for this project."}}, "text"),
+			schema(map[string]any{"text": str("The fact, one sentence."), "project": map[string]any{"type": "boolean", "description": "Only for this project."}, "topic": str("One or two words that group it, in the person's language, e.g. \"Home Assistant\", \"Dateien\", \"Über dich\". Reuse a topic you used before.")}, "text"),
 			false, b.memorySave),
 		own("skill_save", agent.AreaAgent, "Save or update a skill: a procedure you worked out for a kind of task, so you can follow it next time.",
 			schema(map[string]any{"name": str("Short name."), "when": str("When to use it."), "steps": str("The steps, numbered, with the tools to use.")}, "name", "when", "steps"),
@@ -106,6 +107,7 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 	var req struct {
 		Text    string `json:"text"`
 		Project bool   `json:"project"`
+		Topic   string `json:"topic"`
 	}
 	if err := json.Unmarshal(args, &req); err != nil {
 		return agent.Outcome{}, toolcatalog.Errorf("invalid arguments")
@@ -134,6 +136,9 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 		b.s.addAgentInbox(b.user.Name, agentInboxItem{Kind: "conflict", Title: old.Text, Body: "Neu gemerkt: „" + text + "“. Stimmt das Alte noch, oder soll es weg?", Data: map[string]string{"memory": old.ID}})
 	}
 	m := agent.Memory{ID: agent.NewID(), Text: text, At: time.Now()}
+	if topic := strings.Join(strings.Fields(req.Topic), " "); len(topic) <= maxMemoryTopic && utf8.ValidString(topic) {
+		m.Topic = topic
+	}
 	if chat != nil {
 		m.Chat, m.Untrusted = chat.ID, chat.Tainted
 		if req.Project {
@@ -142,7 +147,15 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 	}
 	list = append(list, m)
 	if len(list) > maxMemories {
-		list = list[len(list)-maxMemories:]
+		// The oldest go first, pinned ones stay (PLAN 90-4).
+		over := len(list) - maxMemories
+		list = slices.DeleteFunc(list, func(x agent.Memory) bool {
+			if over > 0 && !x.Pinned {
+				over--
+				return true
+			}
+			return false
+		})
 	}
 	if err := store.SaveMemories(b.user.Name, list); err != nil {
 		return agent.Outcome{}, err

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -165,15 +166,34 @@ func (s *Server) handleAgentMemory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentMemorySet(w http.ResponseWriter, r *http.Request) {
+	// PLAN 90-4: pinned and topic can change on their own; the text is then
+	// left out.
 	var req struct {
-		Text string `json:"text"`
+		Text   *string `json:"text"`
+		Pinned *bool   `json:"pinned"`
+		Topic  *string `json:"topic"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	text := strings.Join(strings.Fields(req.Text), " ")
-	if text == "" || len(text) > maxMemory {
+	text, topic := "", ""
+	if req.Text != nil {
+		text = strings.Join(strings.Fields(*req.Text), " ")
+	}
+	if req.Topic != nil {
+		topic = strings.Join(strings.Fields(*req.Topic), " ")
+	}
+	isNew := r.PathValue("id") == "new"
+	if (req.Text != nil || isNew) && (text == "" || len(text) > maxMemory) {
 		writeError(w, http.StatusBadRequest, "invalid_memory", "1 to 500 characters")
+		return
+	}
+	if len(topic) > maxMemoryTopic || !utf8.ValidString(topic) {
+		writeError(w, http.StatusBadRequest, "invalid_memory", "the topic is too long")
+		return
+	}
+	if req.Text == nil && req.Pinned == nil && req.Topic == nil {
+		writeError(w, http.StatusBadRequest, "invalid_memory", "nothing to change")
 		return
 	}
 	user := currentUser(r).Name
@@ -187,16 +207,25 @@ func (s *Server) handleAgentMemorySet(w http.ResponseWriter, r *http.Request) {
 	found := false
 	for i := range list {
 		if list[i].ID == id {
-			// Written by the person now: no longer from outside content.
-			list[i].Text, list[i].Untrusted, list[i].At, found = text, false, time.Now(), true
+			found = true
+			if req.Text != nil && list[i].Text != text {
+				// Written by the person now: no longer from outside content.
+				list[i].Text, list[i].Untrusted, list[i].At = text, false, time.Now()
+			}
+			if req.Pinned != nil {
+				list[i].Pinned = *req.Pinned
+			}
+			if req.Topic != nil {
+				list[i].Topic = topic
+			}
 		}
 	}
-	if id == "new" {
+	if isNew {
 		if len(list) >= maxMemories {
 			writeError(w, http.StatusBadRequest, "too_many", "memory is full")
 			return
 		}
-		list, found = append(list, agent.Memory{ID: agent.NewID(), Text: text, At: time.Now()}), true
+		list, found = append(list, agent.Memory{ID: agent.NewID(), Text: text, At: time.Now(), Topic: topic, Pinned: req.Pinned != nil && *req.Pinned}), true
 	}
 	if !found {
 		agentStoreError(w, agent.ErrNotFound)
@@ -458,9 +487,22 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 				in.Memories = append(in.Memories, m)
 			}
 		}
-		// The newest count most; keep the prompt small.
+		// The newest count most; keep the prompt small. Pinned ones stay.
 		if len(in.Memories) > 60 {
-			in.Memories = in.Memories[len(in.Memories)-60:]
+			cut := len(in.Memories) - 60
+			kept := in.Memories[:0:0]
+			for i, m := range in.Memories {
+				if i >= cut || m.Pinned {
+					kept = append(kept, m)
+				}
+			}
+			in.Memories = kept
+		}
+		// PLAN 90-4: what the person's message touches counts as used today.
+		if chat != nil && memoryTouch(mems, chat.Project, lastUserText(chat), time.Now()) {
+			if err := store.SaveMemories(user.Name, mems); err != nil {
+				slog.Warn("memory use not noted", "err", err)
+			}
 		}
 		// A memory saved after reading outside content (web page, file of
 		// a stranger) may carry what that content wanted remembered. It

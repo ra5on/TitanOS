@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xfixes"
@@ -24,7 +25,23 @@ type spareSlot struct {
 	kc   xproto.Keycode
 	r    rune
 	used time.Time
+	// fixed slots get their character once, before Chromium starts, and
+	// keep it (fixedRunes).
+	fixed bool
 }
+
+// fixedRunes are characters no US key carries that get a keycode of their
+// own at the start. Chromium reads the keyboard mapping when it starts: a
+// keycode remapped later still types its character, but the keydown event
+// names no key (key "", keyCode 0), and programs that collect the keys
+// themselves (Selkies in Bambu Studio, remote desktops, games) drop it.
+// A key mapped from the start is an ordinary key: it can be held, repeats
+// and has a name. German first (PLAN 90-3); the other characters keep
+// the remapped keycodes.
+var fixedRunes = []rune{'ä', 'ö', 'ü', 'Ä', 'Ö', 'Ü', 'ß', '€', '§', '°', 'µ'}
+
+// dynamicSpare is how many spare keycodes stay free for remapping.
+const dynamicSpare = 4
 
 // xctl injects input via XTest and manages windows and the cursor.
 type xctl struct {
@@ -100,8 +117,26 @@ func (x *xctl) findSpare(minKC, maxKC xproto.Keycode) error {
 	if a := 38 - int(minKC); a >= 0 && a < count && rep.Keysyms[a*per] != 'a' {
 		log.Printf("warning: X keymap is not evdev based (keycode 38 = %#x)", rep.Keysyms[a*per])
 	}
-	log.Printf("input: %d spare keycodes", len(x.spare))
+	fixed := 0
+	for i := 0; i < len(fixedRunes) && i < len(x.spare)-dynamicSpare; i++ {
+		ks := xproto.Keysym(keysymFor(fixedRunes[i]))
+		xproto.ChangeKeyboardMapping(x.conn, 1, x.spare[i].kc, 2, []xproto.Keysym{ks, ks})
+		x.spare[i].r, x.spare[i].fixed = fixedRunes[i], true
+		fixed++
+	}
+	x.sync()
+	log.Printf("input: %d spare keycodes, %d with a fixed character", len(x.spare), fixed)
 	return nil
+}
+
+// fixedKeycode is the keycode that carries r from the start.
+func (x *xctl) fixedKeycode(r rune) (xproto.Keycode, bool) {
+	for _, s := range x.spare {
+		if s.fixed && s.r == r {
+			return s.kc, true
+		}
+	}
+	return 0, false
 }
 
 func (x *xctl) sync() {
@@ -187,14 +222,24 @@ type keyAction int
 
 const (
 	keyIgnore   keyAction = iota
-	keyPhysical           // press/release the keycode of code
+	keyPhysical           // press/release the keycode of the returned key
+	keyTap                // tap the US key of the rune with the Shift it needs (on down)
 	keyType               // type the rune via a spare keycode (on down)
 )
 
 // decideKey picks how to deliver a key message. shiftHeld is the X-side
-// shift state.
-func decideKey(m proto.ClientMsg, shiftHeld bool) (keyAction, string, rune) {
-	code := m.Code
+// shift state. code is the key of the user's keyboard (what is held and
+// released later), press the key of the US layout that goes to X.
+//
+// A character goes over as the US key that carries it wherever there is
+// one, also when it sits elsewhere on the user's keyboard (German z is the
+// key KeyY there and the key KeyZ here): the remote program then gets an
+// ordinary key with a name that can be held. Only characters no US key
+// carries are typed via a spare keycode. With Ctrl, Alt or Meta the
+// letter on the key counts too, so Ctrl+Z stays Ctrl+Z on a German
+// keyboard instead of becoming Ctrl+Y.
+func decideKey(m proto.ClientMsg, shiftHeld bool) (act keyAction, code, press string, r rune) {
+	code = m.Code
 	if code == "" || xKeycode(code) == 0 {
 		if c, ok := keyNameCodes[m.Key]; ok {
 			code = c
@@ -211,15 +256,26 @@ func decideKey(m proto.ClientMsg, shiftHeld bool) (keyAction, string, rune) {
 				want = chars[1]
 			}
 			if want == r {
-				return keyPhysical, code, r
+				return keyPhysical, code, code, r
 			}
 		}
-		return keyType, code, r
+		if us, ok := usByRune[r]; ok {
+			if plain && us.shift == shiftHeld {
+				return keyPhysical, code, us.code, r
+			}
+			return keyTap, code, us.code, r
+		}
+		return keyType, code, "", r
+	}
+	if printable && !altGr && !modifierCodes[code] {
+		if l := unicode.ToLower(r); l >= 'a' && l <= 'z' {
+			return keyPhysical, code, "Key" + string(unicode.ToUpper(l)), 0
+		}
 	}
 	if xKeycode(code) == 0 {
-		return keyIgnore, code, 0
+		return keyIgnore, code, "", 0
 	}
-	return keyPhysical, code, 0
+	return keyPhysical, code, code, 0
 }
 
 func (x *xctl) shiftHeldLocked() bool {
@@ -231,27 +287,69 @@ func (x *xctl) shiftHeldLocked() bool {
 func (x *xctl) key(m proto.ClientMsg) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	act, code, r := decideKey(m, x.shiftHeldLocked())
+	act, code, press, r := decideKey(m, x.shiftHeldLocked())
+	if !m.Down {
+		// Whatever went down for this key of the user's keyboard goes up,
+		// also when the character changed meanwhile (Shift let go first).
+		if kc, ok := x.pressed[code]; ok {
+			x.fake(xproto.KeyRelease, byte(kc), 0, 0)
+			delete(x.pressed, code)
+		} else if act == keyPhysical {
+			if kc := xKeycode(press); kc != 0 {
+				x.fake(xproto.KeyRelease, kc, 0, 0)
+			}
+		}
+		return
+	}
+	hold := func(kc xproto.Keycode) {
+		if old, ok := x.pressed[code]; ok && old != kc {
+			x.fake(xproto.KeyRelease, byte(old), 0, 0)
+		}
+		x.fake(xproto.KeyPress, byte(kc), 0, 0)
+		x.pressed[code] = kc
+	}
 	switch act {
 	case keyType:
-		if m.Down {
-			x.typeRuneLocked(r)
-		} else if kc, ok := x.pressed[code]; ok { // released after a physical press
-			x.fake(xproto.KeyRelease, byte(kc), 0, 0)
-			delete(x.pressed, code)
+		plain := !m.Mods.Ctrl && !m.Mods.Alt && !m.Mods.Meta
+		if kc, ok := x.fixedKeycode(r); ok && plain {
+			hold(kc)
+			return
 		}
+		x.typeRuneLocked(r)
+	case keyTap:
+		x.tapShiftedLocked(xproto.Keycode(xKeycode(press)), usByRune[r].shift)
 	case keyPhysical:
-		kc := xproto.Keycode(xKeycode(code))
-		if m.Down {
-			x.fake(xproto.KeyPress, byte(kc), 0, 0)
-			x.pressed[code] = kc
-		} else {
-			if pkc, ok := x.pressed[code]; ok {
-				kc = pkc
-			}
-			x.fake(xproto.KeyRelease, byte(kc), 0, 0)
-			delete(x.pressed, code)
+		if kc := xKeycode(press); kc != 0 {
+			hold(xproto.Keycode(kc))
 		}
+	}
+}
+
+// tapShiftedLocked taps a key with Shift as the character needs it,
+// whatever is held: German Shift+7 is "/", a key without Shift here;
+// German "#" has a key of its own and is Shift+3 here. Held Ctrl, Alt and
+// Meta are let go meanwhile (AltGr characters must not become shortcuts).
+func (x *xctl) tapShiftedLocked(kc xproto.Keycode, shift bool) {
+	var held []xproto.Keycode
+	for code, pkc := range x.pressed {
+		if !modifierCodes[code] {
+			continue
+		}
+		if isShift := strings.HasPrefix(code, "Shift"); !isShift || !shift {
+			held = append(held, pkc)
+			x.fake(xproto.KeyRelease, byte(pkc), 0, 0)
+		}
+	}
+	need := shift && !x.shiftHeldLocked()
+	if need {
+		x.fake(xproto.KeyPress, xKeycode("ShiftLeft"), 0, 0)
+	}
+	x.tapLocked(kc)
+	if need {
+		x.fake(xproto.KeyRelease, xKeycode("ShiftLeft"), 0, 0)
+	}
+	for _, pkc := range held {
+		x.fake(xproto.KeyPress, byte(pkc), 0, 0)
 	}
 }
 
@@ -293,15 +391,11 @@ func (x *xctl) text(ctx context.Context, s string) {
 // usKey finds the physical key (and whether Shift is needed) for a rune
 // on the US layout.
 func usKey(r rune) (kc byte, shift bool, ok bool) {
-	for code, chars := range usChars {
-		if chars[0] == r {
-			return xKeycode(code), false, true
-		}
-		if chars[1] == r && code != "Space" {
-			return xKeycode(code), true, true
-		}
+	us, ok := usByRune[r]
+	if !ok {
+		return 0, false, false
 	}
-	return 0, false, false
+	return xKeycode(us.code), us.shift, true
 }
 
 func (x *xctl) tapLocked(kc xproto.Keycode) {
@@ -316,13 +410,13 @@ func (x *xctl) tapLocked(kc xproto.Keycode) {
 // key with the earlier mapping.
 func (x *xctl) typeRuneLocked(r rune) {
 	idx := -1
-	oldest := 0
+	oldest := -1
 	for i, s := range x.spare {
 		if s.r == r {
 			idx = i
 			break
 		}
-		if s.used.Before(x.spare[oldest].used) {
+		if !s.fixed && (oldest < 0 || s.used.Before(x.spare[oldest].used)) {
 			oldest = i
 		}
 	}

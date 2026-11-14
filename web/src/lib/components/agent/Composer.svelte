@@ -1,8 +1,16 @@
+<script lang="ts" module>
+	import type { IconName } from '#lib/components/Icon.svelte';
+	/** A "/" command of the input (PLAN 90-4); `arg`: words follow it. */
+	export type Command = { name: string; label: string; icon: IconName; arg?: boolean };
+</script>
+
 <script lang="ts">
 	// The input of the KI-Agent (PLAN 48, card of PLAN 68): the clip, the
 	// task, the microphone and the send button in the accent. Enter sends,
 	// Shift+Enter a new line; while a run works the round button stops it.
 	// Model and thinking level sit at the top of the chat (ModelPicker).
+	// PLAN 90-4: "/" at the start opens the commands (arrow keys, Enter or a
+	// tap choose one); the field grows with its text up to 220 px.
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -19,7 +27,12 @@
 		onpicknas,
 		onerror,
 		voice = false,
+		commands = [],
+		oncommand,
 	}: {
+		/** The "/" commands on offer and what runs them (name, words after it). */
+		commands?: Command[];
+		oncommand?: (name: string, arg: string) => void;
 		/** PLAN 53: record while the button is held instead of tap on / tap off. */
 		micHold?: boolean;
 		busy?: boolean;
@@ -106,14 +119,61 @@
 		if (big.length) onerror?.(t('agent.attachTooBig', { names: big.join(', ') }));
 		(event.currentTarget as HTMLInputElement).value = '';
 	}
+	// ----- "/" commands -----
+	const typed = $derived(oncommand ? /^\/(\S*)$/.exec(text)?.[1]?.toLowerCase() : undefined);
+	let dismissed = $state('');
+	const offered = $derived(
+		typed === undefined || dismissed === text
+			? []
+			: commands.filter((c) => c.name.startsWith(typed)),
+	);
+	let pickedCmd = $state(0);
+	$effect(() => {
+		void offered.length;
+		pickedCmd = 0;
+	});
+	function choose(c: Command) {
+		if (c.arg) fill(`/${c.name} `);
+		else {
+			text = '';
+			queueMicrotask(grow);
+			oncommand?.(c.name, '');
+		}
+	}
 	function send() {
 		const value = text.trim() || (attachments.length ? t('agent.attachDefault') : '');
+		const cmd = oncommand ? /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) : null;
+		const known = cmd && commands.find((c) => c.name === cmd[1].toLowerCase());
+		if (known) {
+			text = '';
+			queueMicrotask(grow);
+			oncommand?.(known.name, (cmd[2] ?? '').trim());
+			return;
+		}
 		if (!value || busy || disabled) return;
 		onsend(value);
 		text = '';
 		queueMicrotask(grow);
 	}
 	function key(event: KeyboardEvent) {
+		if (offered.length) {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault();
+				pickedCmd =
+					(pickedCmd + (event.key === 'ArrowDown' ? 1 : -1) + offered.length) % offered.length;
+				return;
+			}
+			if ((event.key === 'Enter' && !event.isComposing) || event.key === 'Tab') {
+				event.preventDefault();
+				choose(offered[pickedCmd]);
+				return;
+			}
+			if (event.key === 'Escape') {
+				event.stopPropagation();
+				dismissed = text;
+				return;
+			}
+		}
 		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
 			event.preventDefault();
 			send();
@@ -129,6 +189,24 @@
 	}
 </script>
 
+{#if offered.length}
+	<div class="cmds" role="listbox" id="agent-cmds" aria-label={t('agent.cmd.title')}>
+		<div class="cmds-head" aria-hidden="true">{t('agent.cmd.title')}</div>
+		{#each offered as c, i (c.name)}
+			<button
+				type="button"
+				class="cmd"
+				class:on={i === pickedCmd}
+				role="option"
+				id="agent-cmd-{c.name}"
+				aria-selected={i === pickedCmd}
+				onmousedown={(e) => e.preventDefault()}
+				onclick={() => choose(c)}
+				><Icon name={c.icon} size={16} /><b>/{c.name}</b><span>{c.label}</span></button
+			>
+		{/each}
+	</div>
+{/if}
 <form
 	class="composer"
 	onsubmit={(e) => {
@@ -204,6 +282,8 @@
 			rows="1"
 			{disabled}
 			aria-label={t('agent.input')}
+			aria-controls={offered.length ? 'agent-cmds' : undefined}
+			aria-activedescendant={offered.length ? `agent-cmd-${offered[pickedCmd]?.name}` : undefined}
 			placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
 		{#if voice && !busy}
 			<button
@@ -245,6 +325,62 @@
 </form>
 
 <style>
+	/* PLAN 90-4: the "/" commands open above the input. */
+	.cmds {
+		margin-bottom: var(--space-1-5);
+		padding: var(--space-1-5);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+		box-shadow: var(--shadow-menu, 0 12px 30px rgb(0 0 0 / 0.35));
+		max-height: 46dvh;
+		overflow-y: auto;
+	}
+	.cmds-head {
+		padding: var(--space-1) var(--space-2-5) var(--space-1-5);
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--muted);
+	}
+	.cmd {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		width: 100%;
+		min-height: 36px;
+		padding: var(--space-1-5) var(--space-2-5);
+		border: 0;
+		border-radius: 8px;
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.cmd :global(svg) {
+		flex: none;
+	}
+	.cmd b {
+		flex: none;
+		min-width: 84px;
+		color: var(--text);
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-weight: 500;
+	}
+	.cmd span {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.cmd.on,
+	.cmd:hover {
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+	}
+	@media (max-width: 760px) {
+		.cmd {
+			min-height: 44px;
+		}
+	}
 	/* PLAN 68: a card at the bottom – 📎, text, 🎙 and the send button in
 	   the accent, like the rest of TitanOS (no glass, no glow). */
 	.composer {

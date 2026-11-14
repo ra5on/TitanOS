@@ -34,7 +34,11 @@
 
 	async function toggle(id: Id, on: boolean) {
 		if (!nas) return;
-		await savenas({ ...nas, [id]: { ...nas[id], enabled: on } });
+		try {
+			await savenas({ ...nas, [id]: { ...nas[id], enabled: on } });
+		} catch {
+			// The panel shows the error; the row puts the switch back.
+		}
 	}
 	const guardSub = $derived(
 		t(`agent.f.protect.g.mode.${nas?.guard.mode ?? 'lock'}` as MessageKey) +

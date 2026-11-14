@@ -130,7 +130,13 @@ export type ProtectMe = {
 };
 
 export const loadProtectMe = () => api.get<ProtectMe>('/agent/protect/me');
-export const loadGuard = () => api.get<GuardStatus>('/agent/protect/guard');
+/** The guard's state. An older titand (cluster member) answers `alerts: null`
+ * without alarms and `files: null` in an alarm without files: always lists here. */
+export async function loadGuard(): Promise<GuardStatus> {
+	const status = await api.get<GuardStatus>('/agent/protect/guard');
+	const alerts = (status.alerts ?? []).map((a) => ({ ...a, files: a.files ?? [] }));
+	return { ...status, alerts };
+}
 export const guardAction = (id: string, action: 'restore' | 'reopen' | 'dismiss') =>
 	api.post<GuardAlert>(`/agent/protect/guard/${encodeURIComponent(id)}/${action}`);
 export const loadHandbook = (lang: string) =>

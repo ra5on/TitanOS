@@ -245,7 +245,8 @@ func (s *Server) reflectFade(user string, in agentInitiative, now time.Time) {
 	}
 	limit := now.AddDate(0, -in.FadeMonths, 0)
 	for _, m := range list {
-		if m.At.Before(limit) {
+		// PLAN 90-4: pinned ones never fade; use counts like writing.
+		if !m.Pinned && memoryFresh(m).Before(limit) {
 			s.addAgentInbox(user, agentInboxItem{Kind: "fade", Title: m.Text, Body: "Das hast du dir vor langer Zeit gemerkt. Stimmt es noch, oder soll es weg?", Data: map[string]string{"memory": m.ID}})
 		}
 	}

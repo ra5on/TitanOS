@@ -9,7 +9,7 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/
 - das Bild der **Fernansicht**: das mitgelieferte Foto „Küste“ (`/backgrounds/kueste.webp`), im Browser selbst als Video kodiert und über eine nachgestellte Verbindung gesendet, keine echte App;
 - die **Kamerabilder des NVR**: gezeichnete Farbverläufe der Testdaten, kein Video.
 
-Die App-Symbole sind Buchstaben, keine Logos der Projekte ([icon-sources.json](icon-sources.json) gehört zu älteren Aufnahmen). Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
+Die App-Symbole sind Buchstaben, keine Logos der Projekte. Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
 [capture.json](current/capture.json) nennt Quellstand, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.
 
@@ -38,14 +38,6 @@ Die App-Symbole sind Buchstaben, keine Logos der Projekte ([icon-sources.json](i
 |---|---|---|
 | [freigaben.png](current/freigaben.png) | Freigaben im neuen Aufbau (0.77 in Arbeit, 12.11.2026) | Desktop 1600 × 1000 |
 | [speicher.png](current/speicher.png) | Speicher › Übersicht (0.77 in Arbeit, 12.11.2026). Die Spalte „Platten“ zeigt 0, weil die Testdaten keine Mitgliedsplatten nennen; deshalb nicht in der README | Desktop 1600 × 1000 |
-| [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln und Zusammenfassung, alte Oberfläche (0.47.1) | Desktop 1600, vollständige Seite |
-| [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular gestapelt, alte Oberfläche (0.47.1) | Smartphone 390, vollständige Seite |
-| [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter, alte Oberfläche (0.47.1) | Desktop 1600, vollständige Seite |
-| [shares.png](current/shares.png), [dateien-mobil.png](current/dateien-mobil.png), [firewall.png](current/firewall.png) | Seiten der alten Oberfläche (0.47.1) | Desktop 1600 bzw. 1440, Smartphone 390 |
-| [dateien-ersetzen.png](current/dateien-ersetzen.png), [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png), [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Ersetzen-Bestätigung, Dateiaufträge, alte Oberfläche (0.47.1) | 1440 bzw. 390 |
-| [ki-agent.png](current/ki-agent.png), [ki-agent-chat.png](current/ki-agent-chat.png), [ki-agent-mobil.png](current/ki-agent-mobil.png), [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | KI-Agent mit eigenem Auftritt (0.51.0/0.54.0); dieser Auftritt ist seit 0.64.0 entfernt | Desktop 1440, Smartphone 390 |
-
-Die Bilder der alten Oberfläche (Kopfzeile und Seitennavigation, seit 0.62.0 entfernt) dienen nur noch als Nachweis ihrer damaligen Prüfungen; `vm-erstellen*.png` und `protokoll.png` verlinkt `docs/VM-CREATE-VALIDATION.md`.
 
 ## Herkunft je Bild
 
@@ -53,7 +45,6 @@ Die Bilder der alten Oberfläche (Kopfzeile und Seitennavigation, seit 0.62.0 en
 |---|---|
 | `scripts/capture-readme-screenshots.mjs` | `arbeitsplatz`, `anmeldeseite`, `dateien`, `docker`, `vms`, `nvr`, `hauptmenue`, `dock-bearbeiten`, `fernansicht`, `fernansicht-mobil`, `systemdaten`, `systemsteuerung`, `darstellung`, `handy-start` → jeweils `<Name>.png` (13.11.2026) |
 | `scripts/capture-readme-screenshots.mjs` | `freigaben`, `speicher` → `freigaben.png`, `speicher.png` (12.11.2026, bei dieser Aufnahme nicht wiederholt) |
-| `scripts/test-ui-vm-create.mjs`, `scripts/test-ui-drive-transfers.mjs`, `scripts/test-ui-copy-confirmation.mjs`, `scripts/test-ui-firewall.mjs`, `scripts/test-ui-agent.mjs`, `docs/screenshots/capture.mjs` | die Bilder der alten Oberfläche, siehe `capture.json` |
 
 Was das Skript je Bild tut:
 
@@ -62,8 +53,6 @@ Was das Skript je Bild tut:
 - `systemsteuerung`, `darstellung` und `systemdaten` vergrößern das Browserfenster, bis die Seite im Fenster nichts mehr zu scrollen hat. So endet das Bild unter der letzten Zeile statt mitten in einer.
 - `fernansicht` und `fernansicht-mobil` kodieren das Foto „Küste“ im Browser als Video (wie `scripts/test-ui-viewer.mjs`) und beantworten die WebSocket-Verbindung der Fernansicht selbst; das Fenster bzw. die Vollbildansicht zeigt dann diese Bilder.
 - `anmeldeseite` meldet die Sitzung als abgemeldet und liefert vier Konten mit mitgelieferten Kontobildern.
-
-`docs/screenshots/capture.mjs` nimmt noch die alte Oberfläche (Dashboard, Kopfzeile) auf und ist **veraltet**; nicht mehr für `current/` verwenden.
 
 ## Neu aufnehmen
 
@@ -84,4 +73,4 @@ node scripts/capture-readme-screenshots.mjs
 
 `ONLY=name,name` nimmt nur diese Bilder auf, `SHOW_VERSION` setzt die Version, die die Seiten nennen. Ohne `OUT` landen die Bilder in `out/readme-shots/`. Die Browseraufnahme verwendet nur den lokalen UI-Server und abgefangene API-Antworten.
 
-Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Danach `capture.json` mit Größe und SHA-256 jedes neuen Bildes nachführen (von Hand bzw. per kleinem Skript), den Aufnahmestand oben anpassen und jedes Bild ansehen: kein abgeschnittener oder überlappender Text, nichts hinter dem Dock, keine leeren Zustände, keine unpassenden Beispieldaten. Ordner wie `v0.6.1/` bis `v0.7.2/` und die Bilder direkt in `docs/screenshots/` sind historische Aufnahmen und werden nirgends mehr verlinkt.
+Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Danach `capture.json` mit Größe und SHA-256 jedes neuen Bildes nachführen (von Hand bzw. per kleinem Skript), den Aufnahmestand oben anpassen und jedes Bild ansehen: kein abgeschnittener oder überlappender Text, nichts hinter dem Dock, keine leeren Zustände, keine unpassenden Beispieldaten. Aufnahmen der alten Oberfläche (bis 0.62) und des früheren Agent-Auftritts sind seit dem 14.11.2026 entfernt; sie stehen nur noch in der Git-Historie.

@@ -9,7 +9,7 @@
 		on?: boolean;
 		/** Without a switch (e.g. for accounts that cannot change it). */
 		toggle?: boolean;
-		ontoggle?: (on: boolean) => void;
+		ontoggle?: (on: boolean) => void | Promise<void>;
 		onopen?: () => void;
 	};
 	// PLAN 68: colors from the theme only; `color` is kept for the callers.
@@ -33,7 +33,15 @@
 				role="switch"
 				checked={on}
 				aria-label={title}
-				onchange={(e) => ontoggle?.(e.currentTarget.checked)}
+				onchange={async (e) => {
+					// The switch shows what is saved: a refused change goes back.
+					const el = e.currentTarget;
+					try {
+						await ontoggle?.(el.checked);
+					} finally {
+						el.checked = on;
+					}
+				}}
 			/>
 		{/if}
 	</div>

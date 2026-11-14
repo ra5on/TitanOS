@@ -5,6 +5,7 @@
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
 	import Icon from '#lib/components/Icon.svelte';
+	import BottomSheet from './BottomSheet.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
@@ -32,7 +33,24 @@
 		readonly = false,
 		showSteps = false,
 		onplanned,
+		onresend,
+		onremember,
+		find = $bindable(null),
+		phone = false,
+		calm = false,
 	}: {
+		/**
+		 * PLAN 90-4: asks a message of the person again – with a text it was
+		 * changed ("Bearbeiten und erneut senden"), without one the same is
+		 * asked again ("Neu erzeugen"). Everything after it leaves the chat.
+		 */
+		onresend?: (entry: Entry, text?: string) => void;
+		/** "Das merken": writes the text into the memory. */
+		onremember?: (text: string) => void;
+		/** The search in this chat: null is closed, else what is looked for. */
+		find?: string | null;
+		phone?: boolean;
+		calm?: boolean;
 		/** Opens the overview of planned tasks (from a confirmation). */
 		onplanned?: () => void;
 		/** Another account's chat in a shared project: nothing to answer. */
@@ -57,6 +75,192 @@
 				.map((e) => (e.tool ?? '') + '|' + (e.content ?? '')),
 		),
 	);
+
+	// ----- PLAN 90-4: change a message, ask again -----
+	const canChange = $derived(!!onresend && !readonly && !busy);
+	const lastUser = $derived(chat.entries.findLast((e) => e.role === 'user'));
+	let editing = $state<{ id: string; text: string } | null>(null);
+	function resend(entry: Entry) {
+		const text = editing?.text.trim() ?? '';
+		if (!text) return;
+		editing = null;
+		onresend?.(entry, text);
+	}
+	function editArea(node: HTMLTextAreaElement) {
+		node.focus();
+		node.setSelectionRange(node.value.length, node.value.length);
+	}
+	// On the phone a long press on the own message opens its actions.
+	let sheet = $state<Entry | null>(null);
+	function hold(node: HTMLElement, entry: Entry) {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let at = { x: 0, y: 0 };
+		const clear = () => clearTimeout(timer);
+		const down = (e: PointerEvent) => {
+			if (e.pointerType !== 'touch') return;
+			at = { x: e.clientX, y: e.clientY };
+			clear();
+			timer = setTimeout(() => (sheet = entry), 500);
+		};
+		const move = (e: PointerEvent) => {
+			if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) clear();
+		};
+		const menu = (e: Event) => {
+			if (!phone) return;
+			e.preventDefault();
+			clear();
+			sheet = entry;
+		};
+		node.addEventListener('pointerdown', down);
+		node.addEventListener('pointermove', move);
+		node.addEventListener('pointerup', clear);
+		node.addEventListener('pointercancel', clear);
+		node.addEventListener('contextmenu', menu);
+		return {
+			destroy() {
+				clear();
+				node.removeEventListener('pointerdown', down);
+				node.removeEventListener('pointermove', move);
+				node.removeEventListener('pointerup', clear);
+				node.removeEventListener('pointercancel', clear);
+				node.removeEventListener('contextmenu', menu);
+			},
+		};
+	}
+
+	// ----- PLAN 90-4: search in this chat -----
+	// The hits are marked with the CSS Custom Highlight API, which leaves the
+	// page's elements alone. A browser without it still counts the hits and
+	// scrolls to them, only without the marks.
+	let column = $state<HTMLDivElement>();
+	let hits = $state.raw<Range[]>([]);
+	let hit = $state(0);
+	type Highlights = { set: (name: string, value: unknown) => void; delete: (name: string) => void };
+	const highlights = (): Highlights | null =>
+		typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined'
+			? (CSS as unknown as { highlights: Highlights }).highlights
+			: null;
+	$effect(() => {
+		const q = (find ?? '').trim().toLowerCase();
+		void chat.entries.length;
+		const found: Range[] = [];
+		if (q && column) {
+			for (const part of column.querySelectorAll('.user > span, .answer > .md')) {
+				const walker = document.createTreeWalker(part, NodeFilter.SHOW_TEXT);
+				for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+					const text = (node.nodeValue ?? '').toLowerCase();
+					for (let i = text.indexOf(q); i >= 0; i = text.indexOf(q, i + q.length)) {
+						const range = document.createRange();
+						range.setStart(node, i);
+						range.setEnd(node, i + q.length);
+						found.push(range);
+					}
+				}
+			}
+		}
+		hits = found;
+		hit = found.length ? found.length - 1 : 0;
+		return () => {
+			highlights()?.delete('agent-find');
+			highlights()?.delete('agent-find-current');
+		};
+	});
+	$effect(() => {
+		const all = hits;
+		const current = all[hit];
+		const h = highlights();
+		if (h && current) {
+			h.set('agent-find', new Highlight(...all.filter((r) => r !== current)));
+			h.set('agent-find-current', new Highlight(current));
+		} else {
+			h?.delete('agent-find');
+			h?.delete('agent-find-current');
+		}
+		if (current && scroller) {
+			const box = current.getBoundingClientRect();
+			const frame = scroller.getBoundingClientRect();
+			if (box.top < frame.top + 70 || box.bottom > frame.bottom - 20)
+				scroller.scrollBy({ top: box.top - frame.top - frame.height / 3 });
+		}
+	});
+	const step = (by: number) => hits.length && (hit = (hit + by + hits.length) % hits.length);
+	function findInput(node: HTMLInputElement) {
+		node.focus();
+		node.select();
+	}
+
+	// ----- PLAN 90-4: tables – a button that copies one, cards on the phone -----
+	// A table of three or more columns becomes cards to swipe on the phone:
+	// one per row, named by its first cell. The cells are the ones
+	// chatMarkdown made (escaped there).
+	function tableText(table: HTMLTableElement): string {
+		return [...table.rows]
+			.map((r) => [...r.cells].map((c) => (c.textContent ?? '').trim()).join('\t'))
+			.join('\n');
+	}
+	$effect(() => {
+		void list;
+		if (!column) return;
+		for (const wrap of column.querySelectorAll<HTMLElement>(
+			'.answer > .md .table:not([data-done])',
+		)) {
+			const table = wrap.querySelector('table');
+			if (!table) continue;
+			wrap.dataset.done = 'true';
+			const heads = [...(table.tHead?.rows[0]?.cells ?? [])].map((c) => c.innerHTML);
+			const rows = [...(table.tBodies[0]?.rows ?? [])];
+			if (phone && heads.length >= 3 && rows.length) {
+				const cards = document.createElement('div');
+				cards.className = 'cards';
+				cards.tabIndex = 0;
+				cards.setAttribute('role', 'group');
+				cards.setAttribute('aria-label', t('agent.tableCards'));
+				for (const row of rows) {
+					const card = document.createElement('div');
+					card.className = 'card';
+					const title = document.createElement('strong');
+					title.innerHTML = row.cells[0]?.innerHTML ?? '';
+					const dl = document.createElement('dl');
+					[...row.cells].slice(1).forEach((cell, n) => {
+						const dt = document.createElement('dt');
+						dt.innerHTML = heads[n + 1] ?? '';
+						const dd = document.createElement('dd');
+						dd.innerHTML = cell.innerHTML;
+						dl.append(dt, dd);
+					});
+					card.append(title, dl);
+					cards.append(card);
+				}
+				const where = document.createElement('p');
+				where.className = 'cards-where';
+				const say = () => {
+					const n = Math.round(cards.scrollLeft / Math.max(1, cards.scrollWidth / rows.length));
+					where.textContent = t('agent.tableCardsWhere', {
+						n: Math.min(rows.length, n + 1),
+						count: rows.length,
+					});
+				};
+				cards.addEventListener('scroll', say, { passive: true });
+				say();
+				wrap.classList.add('as-cards');
+				wrap.after(cards, where);
+			} else {
+				const foot = document.createElement('div');
+				foot.className = 'table-foot';
+				const button = document.createElement('button');
+				button.type = 'button';
+				button.textContent = t('agent.tableCopy');
+				button.addEventListener('click', () => {
+					void copy('table', tableText(table)).then(() => {
+						button.textContent = copied?.ok ? t('agent.copiedShort') : t('agent.copyFailed');
+						setTimeout(() => (button.textContent = t('agent.tableCopy')), 1800);
+					});
+				});
+				foot.append(button);
+				wrap.after(foot);
+			}
+		}
+	});
 
 	let scroller = $state<HTMLDivElement>();
 	let pinned = $state(true);
@@ -210,10 +414,122 @@
 </script>
 
 <div class="messages" bind:this={scroller} onscroll={scrolled}>
-	<div class="column">
+	{#if find !== null}
+		<div class="find" role="search">
+			<Icon name="search" size={16} />
+			<input
+				type="search"
+				bind:value={find}
+				use:findInput
+				placeholder={t('agent.findInChat')}
+				aria-label={t('agent.findInChat')}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						step(e.shiftKey ? -1 : 1);
+					} else if (e.key === 'Escape') {
+						e.stopPropagation();
+						find = null;
+					}
+				}}
+			/>
+			<span class="find-n" role="status"
+				>{!find.trim()
+					? ''
+					: hits.length
+						? t('agent.findCount', { n: hit + 1, count: hits.length })
+						: t('agent.findNone')}</span
+			>
+			<button
+				type="button"
+				class="find-btn"
+				disabled={!hits.length}
+				aria-label={t('agent.findPrev')}
+				title={t('agent.findPrev')}
+				onclick={() => step(-1)}><Icon name="arrowUp" size={16} /></button
+			>
+			<button
+				type="button"
+				class="find-btn"
+				disabled={!hits.length}
+				aria-label={t('agent.findNext')}
+				title={t('agent.findNext')}
+				onclick={() => step(1)}><Icon name="arrowDown" size={16} /></button
+			>
+			<button
+				type="button"
+				class="find-btn"
+				aria-label={t('agent.findClose')}
+				title={t('agent.findClose')}
+				onclick={() => (find = null)}><Icon name="close" size={16} /></button
+			>
+		</div>
+	{/if}
+	<div class="column" bind:this={column}>
 		{#each list as block, i (block.kind === 'steps' ? `s${i}` : block.entry.id)}
 			{#if block.kind === 'user'}
-				<div class="user"><span>{block.entry.content}</span></div>
+				{@const entry = block.entry}
+				{#if editing?.id === entry.id}
+					<form
+						class="editing"
+						onsubmit={(e) => {
+							e.preventDefault();
+							resend(entry);
+						}}
+					>
+						<textarea
+							rows="3"
+							maxlength="20000"
+							bind:value={editing.text}
+							use:editArea
+							aria-label={t('agent.editMessage')}
+							onkeydown={(e) => {
+								if (e.key === 'Escape') editing = null;
+								else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+									e.preventDefault();
+									resend(entry);
+								}
+							}}></textarea>
+						<div class="edit-foot">
+							<span>{t('agent.editHint')}</span>
+							<button type="button" class="btn" onclick={() => (editing = null)}
+								>{t('common.cancel')}</button
+							>
+							<button type="submit" class="btn btn-primary" disabled={!editing.text.trim()}
+								>{t('agent.resend')}</button
+							>
+						</div>
+					</form>
+				{:else}
+					<div class="me">
+						<div class="user" use:hold={entry}><span>{entry.content}</span></div>
+						{#if !phone}
+							{@const done = copied?.id === entry.id ? copied : null}
+							<div class="acts">
+								{#if canChange}
+									<button
+										type="button"
+										class="act"
+										onclick={() => (editing = { id: entry.id, text: entry.content ?? '' })}
+										><Icon name="edit" size={14} /><span>{t('agent.edit')}</span></button
+									>
+								{/if}
+								<button
+									type="button"
+									class="act"
+									onclick={() => copy(entry.id, entry.content ?? '')}
+									><Icon name={done?.ok ? 'check' : 'copy'} size={14} /><span
+										>{done
+											? done.ok
+												? t('agent.copiedShort')
+												: t('agent.copyFailed')
+											: t('agent.copy')}</span
+									></button
+								>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{:else if block.kind === 'steps'}
 				{@const tools = block.steps.filter((s) => s.role === 'tool').length}
 				{#if block.steps.length || block.thinking}
@@ -311,6 +627,11 @@
 								{#if done}<span class="sr-only" role="status"
 										>{done.ok ? t('agent.copiedShort') : t('agent.copyFailed')}</span
 									>{/if}
+							{/if}
+							{#if canChange && lastUser && block.entry.id === lastAnswer && block.entry.content}
+								<button type="button" class="act" onclick={() => onresend?.(lastUser)}
+									><Icon name="refresh" size={14} /><span>{t('agent.regenerate')}</span></button
+								>
 							{/if}
 							{#each learned as n (n.id)}
 								<span class="learned">✦ {t(noteText[n.note ?? 'memory'])}: {n.content}</span>
@@ -465,6 +786,70 @@
 	</div>
 </div>
 
+{#if sheet}
+	{@const shown = sheet}
+	<BottomSheet label={t('agent.messageActions')} {calm} onclose={() => (sheet = null)}>
+		<p class="sh-quote">„{shown.content}“</p>
+		{#if canChange}
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					const entry = sheet!;
+					sheet = null;
+					editing = { id: entry.id, text: entry.content ?? '' };
+				}}
+				><Icon name="edit" size={18} /><span class="sh-text">{t('agent.editResend')}</span></button
+			>
+		{/if}
+		<button
+			type="button"
+			class="sh-item"
+			onclick={() => {
+				const entry = sheet!;
+				sheet = null;
+				void copy(entry.id, entry.content ?? '');
+			}}><Icon name="copy" size={18} /><span class="sh-text">{t('agent.copy')}</span></button
+		>
+		{#if canChange && shown.id === lastUser?.id}
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					const entry = sheet!;
+					sheet = null;
+					onresend?.(entry);
+				}}
+				><Icon name="refresh" size={18} /><span class="sh-text">{t('agent.regenerateAnswer')}</span
+				></button
+			>
+		{/if}
+		<button
+			type="button"
+			class="sh-item"
+			onclick={() => {
+				const entry = sheet!;
+				sheet = null;
+				find = '';
+			}}
+			><Icon name="search" size={18} /><span class="sh-text">{t('agent.findInChat')}</span></button
+		>
+		{#if onremember}
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					const entry = sheet!;
+					sheet = null;
+					onremember(entry.content ?? '');
+				}}
+				><Icon name="bulb" size={18} /><span class="sh-text">{t('agent.rememberThis')}</span
+				></button
+			>
+		{/if}
+	</BottomSheet>
+{/if}
+
 <style>
 	/* PLAN 68: the chat in the design language of TitanOS – at most 760 px
 	   wide in the middle, the person's message a bubble on the right tinted
@@ -483,10 +868,171 @@
 		flex-direction: column;
 		gap: var(--space-3);
 	}
+	.me {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 2px;
+		margin: var(--space-1) 0;
+	}
+	.me .acts {
+		margin: 0;
+	}
 	.user {
 		display: flex;
 		justify-content: flex-end;
-		margin: var(--space-1) 0;
+		width: 100%;
+	}
+	/* Changing an own message: a field in its place. */
+	.editing {
+		padding: var(--space-3);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+	}
+	.editing textarea {
+		display: block;
+		width: 100%;
+		min-height: 64px;
+		border: 0;
+		outline: 0;
+		resize: vertical;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		line-height: 1.5;
+	}
+	.edit-foot {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.edit-foot span {
+		flex: 1;
+		min-width: 160px;
+	}
+	/* The search in the chat stays at the top while the chat scrolls. */
+	.find {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		max-width: 760px;
+		margin: 0 auto var(--space-3);
+		padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-3);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-ctl);
+		background: var(--surface);
+		color: var(--muted);
+		box-shadow: var(--shadow-menu, 0 6px 18px rgb(0 0 0 / 0.25));
+	}
+	.find input {
+		flex: 1;
+		min-width: 0;
+		min-height: 32px;
+		border: 0;
+		outline: 0;
+		padding: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+	}
+	.find-n {
+		flex: none;
+		font-size: var(--text-sm);
+	}
+	.find-btn {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		flex: none;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.find-btn:disabled {
+		color: var(--muted);
+		cursor: default;
+	}
+	.find-btn:focus-visible {
+		outline: 2px solid var(--accent);
+	}
+	:global(::highlight(agent-find)) {
+		background-color: color-mix(in srgb, var(--status-warn) 40%, transparent);
+		color: inherit;
+	}
+	:global(::highlight(agent-find-current)) {
+		background-color: var(--status-warn);
+		color: var(--on-warn, #000);
+	}
+	/* Under a table: copy it. On the phone a wide table is cards to swipe. */
+	.md :global(.table-foot) {
+		display: flex;
+		justify-content: flex-end;
+		margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+	}
+	.md :global(.table-foot button) {
+		min-height: 28px;
+		padding: 0 var(--space-1);
+		border: 0;
+		border-radius: var(--radius-small, 6px);
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-sm);
+		cursor: pointer;
+	}
+	.md :global(.table-foot button:hover) {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.md :global(.table.as-cards) {
+		display: none;
+	}
+	.md :global(.cards) {
+		display: flex;
+		gap: var(--space-2-5);
+		margin: var(--space-1) -14px 0 0;
+		padding: 0 14px var(--space-1) 0;
+		overflow-x: auto;
+		scroll-snap-type: x mandatory;
+		scrollbar-width: none;
+	}
+	.md :global(.card) {
+		flex: 0 0 82%;
+		scroll-snap-align: start;
+		padding: var(--space-3) 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+		overflow-wrap: anywhere;
+	}
+	.md :global(.card dl) {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--space-1-5) 14px;
+		margin: var(--space-2) 0 0;
+		font-size: 0.875rem;
+	}
+	.md :global(.card dt) {
+		color: var(--muted);
+	}
+	.md :global(.card dd) {
+		margin: 0;
+	}
+	.md :global(.cards-where) {
+		margin: var(--space-1) 0 var(--space-3);
+		color: var(--muted);
+		font-size: var(--text-sm);
 	}
 	.user span {
 		max-width: 78%;
@@ -937,6 +1483,26 @@
 		}
 		.user span {
 			max-width: 86%;
+			/* A long press opens the actions, it does not select text. */
+			user-select: none;
+			-webkit-user-select: none;
+			-webkit-touch-callout: none;
+		}
+		.act,
+		.find-btn {
+			min-height: 44px;
+			min-width: 44px;
+		}
+		.find input {
+			min-height: 44px;
+			font-size: max(16px, 1rem);
+		}
+		.find {
+			gap: 2px;
+			padding-left: var(--space-2-5);
+		}
+		.edit-foot .btn {
+			min-height: 44px;
 		}
 		.gist {
 			display: none;
