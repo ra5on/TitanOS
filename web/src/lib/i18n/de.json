@@ -8799,7 +8799,7 @@
 	"speech.copyHost": "Host kopieren",
 	"speech.otherHosts": "Andere Adressen dieses NAS",
 	"speech.otherHostsApp": "Home Assistant als App auf diesem NAS nimmt die Adresse des NAS im Heimnetz (oben).",
-	"speech.otherHostsTailscale": "über Tailscale:",
+	"speech.otherHostsTailscale": "Über Tailscale:",
 	"speech.seenNever": "Seit dem Start von TitanOS hat sich noch niemand verbunden.",
 	"speech.seenOk": "Zuletzt verbunden {when} von {from}",
 	"speech.seenRefused": "Zuletzt abgelehnt {when} von {from} – der Absender darf die Dienste nicht erreichen",

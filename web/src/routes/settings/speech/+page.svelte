@@ -599,7 +599,7 @@
 						>{t(
 							'speech.otherHostsApp',
 						)}{#each data.hosts.filter((h) => h.kind === 'tailscale') as h (h.host)}
-							· {t('speech.otherHostsTailscale')} <code>{h.host}</code>{/each}</small
+							{' '}{t('speech.otherHostsTailscale')} <code>{h.host}</code>{/each}</small
 					></span
 				>
 			</div>

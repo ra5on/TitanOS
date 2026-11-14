@@ -75,6 +75,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | share | `share_data.go` | – | 2 |
 | shares | `shares.go` | `sharesArea` | 1 |
 | snapshot | `snapshot_folders.go` | – | 1 |
+| speech | `speech.go` | – | 1 |
 | startup | `startup.go` | `startupArea` | 0 |
 | storage | `storage.go`, `storage_crypt.go` | `storageArea`, `storageCryptArea` | 3 |
 | sysdata | `sysdata.go` | `sysDataArea` | 1 |
