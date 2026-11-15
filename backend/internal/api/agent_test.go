@@ -523,7 +523,7 @@ func TestAgentHomeAssistantRules(t *testing.T) {
 	box := &agentToolbox{settings: agentSettings{Policy: agent.Policy{Preset: agent.PresetAll}}}
 	call := func(name string, args any) string {
 		data, _ := json.Marshal(args)
-		return box.haMode(name, data, agent.ModeAllow)
+		return box.haMode(name, agent.KindChange, data, agent.ModeAllow)
 	}
 	// Locks ask, also inside ha_call's list and deep inside an automation.
 	if got := call("ha_call", map[string]any{"domain": "lock", "service": "unlock", "entities": []string{"lock.haustuer"}}); got != agent.ModeAsk {
@@ -554,6 +554,32 @@ func TestAgentHomeAssistantRules(t *testing.T) {
 	}
 	if got := call("ha_call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}}); got != agent.ModeAllow {
 		t.Fatalf("other room: %s", got)
+	}
+}
+
+// Owner 15.11.2026: asking for the state of the alarm panel wanted an
+// approval. Reading never asks because of the device rules; only a rule
+// that forbids a device keeps it from being read.
+func TestAgentHomeAssistantReadingNeverAsks(t *testing.T) {
+	box := &agentToolbox{settings: agentSettings{Policy: agent.Policy{Preset: agent.PresetStandard}}}
+	read := func(args any) string {
+		data, _ := json.Marshal(args)
+		return box.haMode("ha_state", agent.KindRead, data, agent.ModeAllow)
+	}
+	for _, e := range []string{"alarm_control_panel.haus", "lock.haustuer"} {
+		if got := read(map[string]any{"entity": e}); got != agent.ModeAllow {
+			t.Fatalf("reading %s: %s", e, got)
+		}
+	}
+	if got := read(map[string]any{"domain": "alarm_control_panel"}); got != agent.ModeAllow {
+		t.Fatalf("listing alarm panels: %s", got)
+	}
+	box.settings.HA.Entities = map[string]string{"domain:lock": agent.ModeAsk, "entity:lock.keller": agent.ModeDeny}
+	if got := read(map[string]any{"entity": "lock.haustuer"}); got != agent.ModeAllow {
+		t.Fatalf("an ask rule is about switching: %s", got)
+	}
+	if got := read(map[string]any{"entity": "lock.keller"}); got != agent.ModeDeny {
+		t.Fatalf("a forbidden device: %s", got)
 	}
 }
 

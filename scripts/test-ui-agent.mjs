@@ -2227,10 +2227,33 @@ try {
     // every device and keeps the list for the way back.
     await sees.getByRole("radio", { name: "Alles" }).click();
     assert.equal(await page.getByText("Haustür").count(), 0, "no list with Alles");
+    // Every kind of device is a row: looking, and switching Ja / Nachfragen
+    // / Nein (owner 15 Nov 2026: locks may be read but not switched).
+    const kinds = page.locator("#ag-ha-kinds");
+    await kinds.locator('[data-domain="lock"]').waitFor();
+    assert.equal(
+      await kinds
+        .getByRole("radiogroup", { name: "Schlösser: Schalten" })
+        .getByRole("radio", { name: "Nachfragen" })
+        .getAttribute("aria-checked"),
+      "true",
+      "locks ask until set otherwise",
+    );
+    await kinds
+      .getByRole("radiogroup", { name: "Schlösser: Schalten" })
+      .getByRole("radio", { name: "Nein" })
+      .click();
+    await kinds
+      .getByRole("radiogroup", { name: "Beleuchtung: Schalten" })
+      .getByRole("radio", { name: "Ja" })
+      .click();
+    await page.screenshot({ path: `${out}/13b-settings-ha-kinds.png`, fullPage: true });
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.getByRole("status").waitFor();
     assert.equal(seen.puts.length, 1);
     assert.equal(seen.puts[0].homeassistant.release.all, true);
+    assert.equal(seen.puts[0].homeassistant.entities["domain:lock"], "deny");
+    assert.equal(seen.puts[0].homeassistant.entities["domain:light"], "allow");
     assert.equal(seen.puts[0].ollama, "http://192.168.10.5:11434");
     assert.deepEqual(seen.puts[0].homeassistant.release.entities, [
       "light.flur",

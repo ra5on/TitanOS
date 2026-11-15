@@ -6,8 +6,12 @@
 	// in two rows what is allowed (looking, switching – the tools of the area
 	// "Home Assistant" under Rechte) and offers "Nichts / Auswahl / Alles"
 	// for the devices; the lists load by themselves.
+	// Owner 15 Nov 2026, later that day: "filigran einstellen – Schlösser
+	// ansehen ja, schalten nein; Beleuchtung schalten ja; alles auflisten".
+	// So every kind of device (domain) is one row: a switch for looking and
+	// Ja / Nachfragen / Nein for switching (a rule "domain:<d>").
 	import { api } from '#lib/api.ts';
-	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { toolMode, type Mode, type Settings, type ToolView } from '#lib/agent.ts';
 	import Segments from '#lib/components/Segments.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -17,8 +21,10 @@
 		settings = $bindable(),
 		tools,
 		modeOptions,
+		haRules = $bindable(),
 	}: {
 		settings: Settings;
+		haRules: { key: string; mode: Mode }[];
 		tools: ToolView[];
 		modeOptions: { value: Mode; label: string }[];
 	} = $props();
@@ -109,7 +115,7 @@
 	}
 	// The lists come by themselves once a selection is wanted.
 	$effect(() => {
-		if (scope === 'some' && haEntities === null && !loading && !haError) void loadHA();
+		if (scope !== 'none' && haEntities === null && !loading && !haError) void loadHA();
 	});
 	function toggleRelease(kind: 'domains' | 'entities', value: string) {
 		const r = release();
@@ -123,10 +129,75 @@
 		for (const e of haEntities ?? []) out[e.domain] = (out[e.domain] ?? 0) + 1;
 		return out;
 	});
-	// Only domains this Home Assistant has devices of.
-	const domainsShown = $derived(
-		haDomains.filter((d) => perDomain[d] || haRelease?.domains?.includes(d)),
-	);
+	// Only domains this Home Assistant has devices of. With "Alles" also
+	// those TitanOS has no services for: they can only be looked at.
+	const domainsShown = $derived([
+		...haDomains.filter((d) => perDomain[d] || haRelease?.domains?.includes(d)),
+		...(scope === 'all'
+			? Object.keys(perDomain)
+					.filter((d) => !haDomains.includes(d))
+					.sort()
+			: []),
+	]);
+	// Domains without services worth calling (homeassistant.domainLevels).
+	const readOnly = new Set([
+		'sensor',
+		'binary_sensor',
+		'weather',
+		'person',
+		'device_tracker',
+		'sun',
+		'zone',
+	]);
+	const named = new Set([
+		'alarm_control_panel',
+		'binary_sensor',
+		'button',
+		'climate',
+		'cover',
+		'device_tracker',
+		'fan',
+		'humidifier',
+		'input_boolean',
+		'input_button',
+		'input_number',
+		'input_select',
+		'light',
+		'lock',
+		'media_player',
+		'person',
+		'scene',
+		'script',
+		'sensor',
+		'sun',
+		'switch',
+		'vacuum',
+		'valve',
+		'water_heater',
+		'weather',
+		'zone',
+	]);
+	const domainName = (d: string) => (named.has(d) ? t(`agent.haDomain.${d}` as MessageKey) : d);
+	const sees = (d: string) => !!haRelease?.all || !!haRelease?.domains?.includes(d);
+	const canSwitch = (d: string) => haDomains.includes(d) && !readOnly.has(d);
+	// Without a rule a kind follows "Geräte schalten" above; locks and alarm
+	// systems ask at least.
+	function switchMode(d: string): Mode {
+		const rule = haRules.find((r) => r.key.trim() === `domain:${d}`);
+		if (rule) return rule.mode;
+		const base = (modeOf(switching) || 'ask') as Mode;
+		return base === 'allow' && (d === 'lock' || d === 'alarm_control_panel') ? 'ask' : base;
+	}
+	function setSwitch(d: string, mode: Mode) {
+		const rule = haRules.find((r) => r.key.trim() === `domain:${d}`);
+		if (rule) rule.mode = mode;
+		else haRules.push({ key: `domain:${d}`, mode });
+	}
+	const switchOptions = $derived<{ value: Mode; label: string }[]>([
+		{ value: 'allow', label: t('agent.haYes') },
+		{ value: 'ask', label: t('agent.modeAsk') },
+		{ value: 'deny', label: t('agent.haNo') },
+	]);
 	const haShown = $derived(
 		(haEntities ?? [])
 			.filter((e) => {
@@ -214,7 +285,7 @@
 		{/snippet}
 	</SettingRow>
 	{#if scope === 'none'}<p class="notice-warn">{t('agent.haScopeNoneWarn')}</p>{/if}
-	{#if scope === 'some'}
+	{#if scope !== 'none'}
 		{#if haError}
 			<p class="notice-warn">
 				{haError}
@@ -225,69 +296,120 @@
 		{:else}
 			<div class="srow">
 				<div class="srow-block wide">
-					<strong>{t('agent.haDomains')}</strong>
-					<div class="domains">
-						{#each domainsShown as d (d)}
-							<label class="pick"
-								><span class="pick-text"
-									><code>{d}</code><span class="muted small"
-										>{t('agent.haDomainCount', { count: perDomain[d] ?? 0 })}</span
-									></span
-								><input
-									type="checkbox"
-									class="switch"
-									role="switch"
-									checked={haRelease?.domains?.includes(d)}
-									onchange={() => toggleRelease('domains', d)}
-								/></label
-							>
-						{/each}
-					</div>
+					<strong>{t('agent.haKinds')}</strong>
+					<span class="muted small">{t('agent.haKindsHint')}</span>
 				</div>
-			</div>
-			<div class="srow">
-				<div class="srow-block wide">
-					<strong>{t('agent.haSingle')}</strong>
-					<input
-						class="field"
-						type="search"
-						bind:value={haQuery}
-						placeholder={t('agent.haSearch')}
-						aria-label={t('agent.haSearch')}
-					/>
-				</div>
-				<div class="entities">
-					{#each haShown as e (e.id)}
-						{@const viaDomain = haRelease?.domains?.includes(e.domain)}
-						<label class="pick"
-							><span class="pick-text"
-								>{e.name}<span class="muted small"
-									><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
+				<div class="kinds" id="ag-ha-kinds">
+					{#each domainsShown as d (d)}
+						<div class="kind" data-domain={d}>
+							<span class="pick-text"
+								>{domainName(d)}<span class="muted small"
+									><code>{d}</code> · {t('agent.haDomainCount', { count: perDomain[d] ?? 0 })}</span
 								></span
-							><input
-								type="checkbox"
-								class="switch"
-								role="switch"
-								checked={viaDomain || haRelease?.entities?.includes(e.id)}
-								disabled={viaDomain}
-								onchange={() => toggleRelease('entities', e.id)}
-							/></label
-						>
+							>
+							<span class="kind-ctl">
+								<label class="see"
+									><span>{t('agent.haSee')}</span><input
+										type="checkbox"
+										class="switch"
+										role="switch"
+										aria-label={`${domainName(d)}: ${t('agent.haSee')}`}
+										checked={sees(d)}
+										disabled={scope === 'all'}
+										onchange={() => toggleRelease('domains', d)}
+									/></label
+								>
+								{#if !canSwitch(d)}
+									<span class="muted small only">{t('agent.haReadOnly')}</span>
+								{:else}
+									<Segments
+										compact
+										label={`${domainName(d)}: ${t('agent.haSwitchShort')}`}
+										value={switchMode(d)}
+										options={switchOptions}
+										disabled={!sees(d)}
+										onchange={(v) => setSwitch(d, v)}
+									/>
+								{/if}
+							</span>
+						</div>
 					{:else}
 						<p class="muted small none">{t('agent.haNoEntities')}</p>
 					{/each}
 				</div>
 			</div>
+			{#if scope === 'some'}
+				<div class="srow">
+					<div class="srow-block wide">
+						<strong>{t('agent.haSingle')}</strong>
+						<input
+							class="field"
+							type="search"
+							bind:value={haQuery}
+							placeholder={t('agent.haSearch')}
+							aria-label={t('agent.haSearch')}
+						/>
+					</div>
+					<div class="entities">
+						{#each haShown as e (e.id)}
+							{@const viaDomain = haRelease?.domains?.includes(e.domain)}
+							<label class="pick"
+								><span class="pick-text"
+									>{e.name}<span class="muted small"
+										><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
+									></span
+								><input
+									type="checkbox"
+									class="switch"
+									role="switch"
+									checked={viaDomain || haRelease?.entities?.includes(e.id)}
+									disabled={viaDomain}
+									onchange={() => toggleRelease('entities', e.id)}
+								/></label
+							>
+						{:else}
+							<p class="muted small none">{t('agent.haNoEntities')}</p>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		{/if}
 	{/if}
 </SettingGroup>
 
 <style>
-	/* Home Assistant: domains in two columns, the devices in a scroll box. */
-	.domains {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0 32px;
+	/* Home Assistant: one row per kind of device, the devices in a scroll box. */
+	.kinds {
+		border-top: 1px solid var(--srow-line);
+	}
+	.kind {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2) var(--space-4);
+		padding: var(--space-2) var(--space-4);
+		font-size: var(--text-md);
+	}
+	.kind + .kind {
+		border-top: 1px solid var(--srow-line);
+	}
+	.kind-ctl {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--space-4);
+		margin-left: auto;
+	}
+	.see {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--text-sm);
+	}
+	.only {
+		min-width: 11rem;
+		text-align: right;
 	}
 	.pick {
 		display: flex;
@@ -339,8 +461,12 @@
 		min-width: 9rem;
 	}
 	@media (max-width: 760px) {
-		.domains {
-			grid-template-columns: minmax(0, 1fr);
+		.kind-ctl {
+			width: 100%;
+			justify-content: space-between;
+		}
+		.only {
+			min-width: 0;
 		}
 	}
 </style>

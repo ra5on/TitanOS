@@ -27,41 +27,48 @@
 	} = $props();
 </script>
 
-{#if settings}<AgentHARelease bind:settings {tools} {modeOptions} />{/if}
+{#if settings}<AgentHARelease bind:settings bind:haRules {tools} {modeOptions} />{/if}
 
 <!-- PLAN 91: Assist with its key, its profile and its own rights. -->
 <AssistCard bind:settings />
 
 <SettingGroup title={t('agent.haRules')}>
 	{#snippet tools()}
-		<button type="button" class="btn" onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
+		<button type="button" class="btn" onclick={() => haRules.push({ key: 'entity:', mode: 'ask' })}
 			><Icon name="plus" size={15} />{t('agent.haRuleAdd')}</button
 		>
 	{/snippet}
 	{#each haRules as r, i (i)}
 		<!-- A rule is a row without a name: what it is for, then what applies. -->
-		<div class="srow plain">
-			<div class="srow-head frule">
-				<span class="frule-where">
-					<input
-						class="field"
-						bind:value={r.key}
-						placeholder="domain:lock · entity:light.flur · area:kueche"
-						aria-label={t('agent.haRules')}
-					/>
-				</span>
-				<div class="srow-ctl">
-					<Segments compact label={t('agent.haRules')} bind:value={r.mode} options={modeOptions} />
-					<button
-						type="button"
-						class="btn"
-						aria-label={t('common.delete')}
-						title={t('common.delete')}
-						onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
-					>
+		{#if !r.key.startsWith('domain:')}
+			<div class="srow plain">
+				<div class="srow-head frule">
+					<span class="frule-where">
+						<input
+							class="field"
+							bind:value={r.key}
+							placeholder="entity:light.flur · area:kueche"
+							aria-label={t('agent.haRules')}
+						/>
+					</span>
+					<div class="srow-ctl">
+						<Segments
+							compact
+							label={t('agent.haRules')}
+							bind:value={r.mode}
+							options={modeOptions}
+						/>
+						<button
+							type="button"
+							class="btn"
+							aria-label={t('common.delete')}
+							title={t('common.delete')}
+							onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
+						>
+					</div>
 				</div>
 			</div>
-		</div>
+		{/if}
 	{/each}
 	<p class="muted">{t('agent.haRulesHint')}</p>
 </SettingGroup>

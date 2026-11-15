@@ -714,6 +714,23 @@
 			),
 			color-mix(in srgb, var(--surface) 88%, var(--bg));
 	}
+	/* Owner 15 Nov 2026: no blur in the agent on the phone. Menus, sheets
+	   and cards are solid there – the glass let the chat shine through the
+	   menus and made the page restless. */
+	:global(:root:has(.agent.phone)) {
+		--panel-bg: var(--surface);
+		--panel-border: var(--border);
+		--panel-backdrop: none;
+		--panel-shadow: 0 0 0 transparent;
+		--menu-bg: var(--surface);
+		--menu-border: var(--border);
+		--menu-backdrop: none;
+		--menu-shadow: var(--shadow-menu);
+		--dialog-bg: var(--surface);
+		--dialog-border: var(--border);
+		--dialog-backdrop: none;
+		--dialog-shadow: var(--shadow-menu);
+	}
 	/* Text size of the app (PLAN 53) through the root font size. */
 	:global(html:has(.agent[data-size='s'])) {
 		font-size: calc(16px * var(--font-scale) * 0.93);
