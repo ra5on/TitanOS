@@ -250,7 +250,7 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	// The answer is the chat as it starts: the run changes it right away
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
-	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
+	if err := s.agentStart(user, chat, s.agentWork(chat)); err != nil {
 		agentStartError(w, err)
 		return
 	}
@@ -315,7 +315,7 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	// The answer is the chat as it starts: the run changes it right away
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
-	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
+	if err := s.agentStart(user, chat, s.agentWork(chat)); err != nil {
 		agentStartError(w, err)
 		return
 	}

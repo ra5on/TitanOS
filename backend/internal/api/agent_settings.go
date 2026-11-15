@@ -56,6 +56,9 @@ type agentSettings struct {
 	Locations []agent.Location `json:"locations,omitempty"`
 	// WeeklyReport sends on Monday what the agent changed in the week.
 	WeeklyReport bool `json:"weeklyReport,omitempty"`
+	// QuickOff switches the quick commands off (0.95): then every message
+	// goes to the model, also "Wohnzimmerlicht an".
+	QuickOff bool `json:"quickOff,omitempty"`
 	// React lets the agent act on notifications of the NAS as ReactAs.
 	React   bool   `json:"react,omitempty"`
 	ReactAs string `json:"reactAs,omitempty"`
