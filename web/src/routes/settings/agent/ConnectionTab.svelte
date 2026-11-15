@@ -126,7 +126,7 @@
 	// the name or number this page was opened under (owner 15 Nov 2026: the
 	// field should say what belongs in it, http and port included).
 	const searxExample = $derived(
-		`http://${typeof location === 'undefined' || !location.hostname ? '192.168.1.5' : location.hostname}:8580`
+		`http://${typeof location === 'undefined' || !location.hostname ? '192.168.1.5' : location.hostname}:8580`,
 	);
 </script>
 
@@ -527,7 +527,12 @@
 	{/if}
 	<!-- The own web search (0.92): a SearXNG, usually the Docker app on this
 	     NAS; empty, the agent asks DuckDuckGo's page. -->
-	<SettingRow icon="search" title={t('agent.searx')} desc={t('agent.searxHint', { example: searxExample })} for="ag-searx-url">
+	<SettingRow
+		icon="search"
+		title={t('agent.searx')}
+		desc={t('agent.searxHint', { example: searxExample })}
+		for="ag-searx-url"
+	>
 		{#snippet control()}
 			<input
 				id="ag-searx-url"
