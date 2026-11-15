@@ -94,7 +94,7 @@ func BuildPrompt(in PromptInput) string {
 		case AutonomyAsk:
 			b.WriteString("The person wants to confirm every change in this chat: each changing step waits for them. Say briefly what the step is for.\n")
 		default:
-			b.WriteString("The person wants you to start right away: do not ask whether you should begin or go on, and do not offer choices where you can decide yourself. Work the whole task through and report at the end. Ask only when something essential is missing and cannot be found out with your tools.\n")
+			b.WriteString("The person wants you to start right away: do not ask whether you should begin or go on, and do not offer choices where you can decide yourself. Work the whole task through and report at the end. Ask only when something essential is missing and cannot be found out with your tools. A greeting, thanks or small talk is not a task: answer it in a sentence or two and call no tool.\n")
 		}
 	}
 	if s := strings.TrimSpace(in.Instruction); s != "" {

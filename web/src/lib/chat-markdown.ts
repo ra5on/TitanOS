@@ -79,16 +79,33 @@ function table(lines: string[]): string {
 	return `<div class="table table-wrap"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function block(paragraph: string): string {
+// While an answer streams in (0.94, owner 15 Nov 2026: the screen flickered
+// between table and raw text), the last line of a table is usually half a
+// row and the line under the head half a rule. Both count as what they
+// are about to become, so the table stands from its head row on and grows
+// row by row.
+const OPEN_ROW = /^\s*\|/;
+const OPEN_RULE = /^\s*\|?[\s:|-]*$/;
+
+function block(paragraph: string, live = false): string {
 	const lines = paragraph.split('\n').filter((line) => line.trim() !== '');
 	if (lines.length === 0) return '';
 	if (
 		lines.length >= 2 &&
 		ROW.test(lines[0]) &&
 		RULE.test(lines[1]) &&
-		lines.slice(2).every((l) => ROW.test(l))
+		lines
+			.slice(2)
+			.every((l, i, rest) => ROW.test(l) || (live && i === rest.length - 1 && OPEN_ROW.test(l)))
 	)
 		return table(lines);
+	if (
+		live &&
+		ROW.test(lines[0]) &&
+		lines[0].split('|').length > 3 &&
+		(lines.length === 1 || (lines.length === 2 && OPEN_RULE.test(lines[1])))
+	)
+		return table([lines[0], '']);
 	const out: string[] = [];
 	const open: { list: { tag: 'ul' | 'ol'; items: string[] } | null } = { list: null };
 	let text: string[] = [];
@@ -128,7 +145,8 @@ function block(paragraph: string): string {
 	return out.join('');
 }
 
-export function chatMarkdown(text: string): string {
+/** live: the text is still streaming in (its last table row may be half). */
+export function chatMarkdown(text: string, live = false): string {
 	// Text and code take turns; a fence names the language of its block,
 	// which stands in the head of the block (ChatView adds "Kopieren").
 	const parts = escapeHtml(text).split(/```([A-Za-z0-9_+-]*)\n?/);
@@ -145,7 +163,9 @@ export function chatMarkdown(text: string): string {
 		} else
 			out += part
 				.split(/\n{2,}/)
-				.map(block)
+				.map((paragraph, n, all) =>
+					block(paragraph, live && n === all.length - 1 && i === parts.length - 1),
+				)
 				.join('');
 	}
 	return out;

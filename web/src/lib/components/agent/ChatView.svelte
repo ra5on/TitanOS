@@ -4,7 +4,8 @@
 	// the answers (safe Markdown, tables in a card) with Vorlesen, Kopieren
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
-	import { fly } from 'svelte/transition';
+	import { untrack } from 'svelte';
+	import { fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
@@ -15,6 +16,7 @@
 	import {
 		approvalTitle,
 		blocks,
+		busyKind,
 		stepDetail,
 		stepFailed,
 		stepWord,
@@ -248,18 +250,56 @@
 		}
 	});
 
-	// ----- while the agent thinks: a word that changes (owner 15 Nov 2026) -----
-	// Eight short words of our own take turns every few seconds, so the line
-	// lives while nothing else can be said; a running step names itself
-	// instead. Still with "Animationen: Aus".
-	const BUSY_WORDS = 8;
-	let busyTurn = $state(Math.floor(Math.random() * BUSY_WORDS));
+	// ----- while the agent works: words and a figure for what it does -----
+	// (owner 15 Nov 2026) Thinking, a dozen words of our own take turns; a
+	// running step has words of its kind ("Stöbert im Netz …") and the dots
+	// form a figure for it. At night two more words join, after twenty
+	// seconds words of patience and the time. When the answer stands, the
+	// dots become a tick for a moment. Still with "Animationen: Aus".
+	const WORDS = { '': 12, web: 4, files: 4, write: 4, home: 3, switch: 2, code: 4 } as const;
+	const key = (k: string) => t(`agent.busy.${k}` as MessageKey);
+	let busyTurn = $state(Math.floor(Math.random() * 12));
+	let elapsed = $state(0);
 	$effect(() => {
-		if (!busy || calm) return;
-		const timer = setInterval(() => (busyTurn += 1), 2800);
-		return () => clearInterval(timer);
+		if (!busy) return;
+		const start = Date.now();
+		elapsed = 0;
+		const clock = setInterval(() => (elapsed = Math.floor((Date.now() - start) / 1000)), 1000);
+		const words = calm ? undefined : setInterval(() => (busyTurn += 1), 2800);
+		return () => {
+			clearInterval(clock);
+			clearInterval(words);
+		};
 	});
-	const busyWord = $derived(t(`agent.busy.${(busyTurn % BUSY_WORDS) + 1}` as MessageKey));
+	const kind = $derived(busyKind(live.step?.tool));
+	const busyWord = $derived.by(() => {
+		if (kind) return key(`${kind}.${(busyTurn % WORDS[kind]) + 1}`);
+		const hour = new Date().getHours();
+		if (elapsed >= 20 && busyTurn % 3 === 0)
+			return key(`long.${(Math.floor(busyTurn / 3) % 3) + 1}`);
+		if ((hour >= 23 || hour < 5) && busyTurn % 4 === 1)
+			return key(`night.${(Math.floor(busyTurn / 4) % 2) + 1}`);
+		return key(String((busyTurn % WORDS['']) + 1));
+	});
+	// The tick: only after a run this view saw end with an answer.
+	let done = $state(false);
+	let wasBusy = false;
+	let doneTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const ended = wasBusy && !busy;
+		wasBusy = busy;
+		if (busy) {
+			clearTimeout(doneTimer);
+			done = false;
+		}
+		if (!ended) return;
+		untrack(() => {
+			const last = chat.entries.at(-1);
+			if (calm || chat.pending || last?.role !== 'assistant' || !last.content) return;
+			done = true;
+			doneTimer = setTimeout(() => (done = false), 1700);
+		});
+	});
 
 	// ----- the steps of a turn: one line, a sheet with each step -----
 	type StepsBlock = { steps: Entry[]; thinking: string };
@@ -779,25 +819,40 @@
 		{/if}
 
 		{#if busy}
-			<!-- What happens right now: three dots and a line a light runs over. -->
-			{#if live.step}
-				<p class="live-line">
-					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-					<span class="sweep"
-						>{stepLabel(live.step)}{#if stepDetail(live.step.args)}
-							· {stepDetail(live.step.args)}{/if}</span
-					>
-				</p>
-			{:else if !live.content}
-				<p class="live-line">
-					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-					<span class="busy-word">{busyWord}</span>
-				</p>
-			{/if}
+			<!-- What happens right now: the dots in the figure of what is done,
+			     and its word; over a named step a light runs. -->
 			{#if live.content}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
-				<div class="answer md">{@html chatMarkdown(live.content)}</div>
+				<div class="answer md">{@html chatMarkdown(live.content, true)}</div>
 			{/if}
+			<p class="live-line" class:quiet={!!live.content && !live.step}>
+				{#key live.content && !live.step ? 'write' : kind}
+					<span
+						class="dots"
+						data-kind={live.content && !live.step ? 'write' : kind}
+						aria-hidden="true"><i></i><i></i><i></i></span
+					>
+				{/key}
+				{#if live.step}
+					<span class="sweep"
+						>{kind ? busyWord : stepLabel(live.step)}{#if stepDetail(live.step.args)}
+							· {stepDetail(live.step.args)}{/if}</span
+					>
+				{:else if !live.content}
+					{#key busyWord}<span class="busy-word">{busyWord}</span>{/key}
+				{/if}
+				{#if elapsed >= 20 && !live.content}
+					<span class="took">{t('agent.busy.seconds', { n: elapsed })}</span>
+				{/if}
+			</p>
+		{:else if done}
+			<p class="live-line done" out:slide={{ duration: 260, easing: quintOut }}>
+				<svg class="tick" viewBox="0 0 18 18" aria-hidden="true">
+					<circle cx="9" cy="9" r="7.5" />
+					<path d="M5.4 9.4l2.5 2.5 4.7-5" />
+				</svg>
+				<span>{t('agent.busy.done')}</span>
+			</p>
 		{/if}
 
 		{#if chat.pending && !busy && !readonly}
@@ -1854,6 +1909,306 @@
 			transform: translate(4.5px, 3.5px) scale(1);
 		}
 	}
+	/* A figure per kind of step (0.94). Each sets where the dots stand, so
+	   that the still figure (calm, less motion) says the same thing. */
+	.dots {
+		animation: figure 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	@keyframes figure {
+		from {
+			opacity: 0;
+			transform: scale(0.5);
+		}
+	}
+	/* web: a core two dots circle, like something being looked for */
+	.dots[data-kind='web'] i:nth-child(1) {
+		transform: rotate(0deg) translateX(6.6px) scale(0.9);
+		animation: orbit 1.5s linear infinite;
+	}
+	.dots[data-kind='web'] i:nth-child(2) {
+		transform: scale(1.5);
+		border-radius: 50%;
+		animation: core 1.5s ease-in-out infinite;
+	}
+	.dots[data-kind='web'] i:nth-child(3) {
+		transform: rotate(180deg) translateX(6.6px) scale(0.6);
+		animation: orbit-far 2.3s linear infinite;
+	}
+	@keyframes orbit {
+		to {
+			transform: rotate(360deg) translateX(6.6px) scale(0.9);
+		}
+	}
+	@keyframes orbit-far {
+		to {
+			transform: rotate(-180deg) translateX(6.6px) scale(0.6);
+		}
+	}
+	@keyframes core {
+		50% {
+			transform: scale(1.15);
+		}
+	}
+	/* files: three sheets, leafed through one after the other */
+	.dots[data-kind='files'] i {
+		border-radius: 1.5px;
+	}
+	.dots[data-kind='files'] i:nth-child(1) {
+		transform: translateX(-5.5px) scaleY(2.4);
+		animation: leaf-a 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+	}
+	.dots[data-kind='files'] i:nth-child(2) {
+		transform: translateX(0) scaleY(2.4);
+		animation: leaf-b 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+	}
+	.dots[data-kind='files'] i:nth-child(3) {
+		transform: translateX(5.5px) scaleY(2.4);
+		animation: leaf-c 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+	}
+	@keyframes leaf-a {
+		0%,
+		60%,
+		100% {
+			transform: translateX(-5.5px) scaleY(2.4);
+			opacity: 0.45;
+		}
+		20% {
+			transform: translate(-5.5px, -2.5px) scaleY(2.9);
+			opacity: 1;
+		}
+	}
+	@keyframes leaf-b {
+		0%,
+		20%,
+		80%,
+		100% {
+			transform: translateX(0) scaleY(2.4);
+			opacity: 0.45;
+		}
+		40% {
+			transform: translate(0, -2.5px) scaleY(2.9);
+			opacity: 1;
+		}
+	}
+	@keyframes leaf-c {
+		0%,
+		40%,
+		100% {
+			transform: translateX(5.5px) scaleY(2.4);
+			opacity: 0.45;
+		}
+		60% {
+			transform: translate(5.5px, -2.5px) scaleY(2.9);
+			opacity: 1;
+		}
+	}
+	/* write: three keys, pressed in turn */
+	.dots[data-kind='write'] i:nth-child(1) {
+		transform: translateX(-6px);
+		animation: key-a 1.05s ease-in-out infinite;
+	}
+	.dots[data-kind='write'] i:nth-child(2) {
+		transform: translateX(0);
+		border-radius: 50%;
+		animation: key-b 1.05s ease-in-out infinite;
+	}
+	.dots[data-kind='write'] i:nth-child(3) {
+		transform: translateX(6px);
+		animation: key-c 1.05s ease-in-out infinite;
+	}
+	@keyframes key-a {
+		0%,
+		40%,
+		100% {
+			transform: translate(-6px, 0);
+			opacity: 1;
+		}
+		20% {
+			transform: translate(-6px, 3.5px);
+			opacity: 0.5;
+		}
+	}
+	@keyframes key-b {
+		0%,
+		20%,
+		60%,
+		100% {
+			transform: translate(0, 0);
+			opacity: 1;
+		}
+		40% {
+			transform: translate(0, 3.5px);
+			opacity: 0.5;
+		}
+	}
+	@keyframes key-c {
+		0%,
+		40%,
+		80%,
+		100% {
+			transform: translate(6px, 0);
+			opacity: 1;
+		}
+		60% {
+			transform: translate(6px, 3.5px);
+			opacity: 0.5;
+		}
+	}
+	/* home and switch: the triangle is a roof, its lights go on in turn */
+	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(1) {
+		transform: translate(0, -5px);
+		animation: lamp-a 1.5s ease-in-out infinite;
+	}
+	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(2) {
+		transform: translate(-5px, 3.5px);
+		border-radius: 50%;
+		animation: lamp-b 1.5s ease-in-out infinite;
+	}
+	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(3) {
+		transform: translate(5px, 3.5px);
+		animation: lamp-c 1.5s ease-in-out infinite;
+	}
+	.dots[data-kind='switch'] i:nth-child(n) {
+		animation-duration: 0.8s;
+	}
+	@keyframes lamp-a {
+		0%,
+		45%,
+		100% {
+			transform: translate(0, -5px) scale(0.8);
+			opacity: 0.35;
+		}
+		18% {
+			transform: translate(0, -5px) scale(1.35);
+			opacity: 1;
+		}
+	}
+	@keyframes lamp-b {
+		0%,
+		25%,
+		75%,
+		100% {
+			transform: translate(-5px, 3.5px) scale(0.8);
+			opacity: 0.35;
+		}
+		50% {
+			transform: translate(-5px, 3.5px) scale(1.35);
+			opacity: 1;
+		}
+	}
+	@keyframes lamp-c {
+		0%,
+		55%,
+		100% {
+			transform: translate(5px, 3.5px) scale(0.8);
+			opacity: 0.35;
+		}
+		82% {
+			transform: translate(5px, 3.5px) scale(1.35);
+			opacity: 1;
+		}
+	}
+	/* code: three bars that rise and fall, each in its own time */
+	.dots[data-kind='code'] i {
+		border-radius: 1.5px;
+		transform-origin: 50% 100%;
+	}
+	.dots[data-kind='code'] i:nth-child(1) {
+		transform: translate(-5.5px, 5px) scaleY(2);
+		animation: bar-a 0.9s ease-in-out infinite alternate;
+	}
+	.dots[data-kind='code'] i:nth-child(2) {
+		transform: translate(0, 5px) scaleY(3.2);
+		animation: bar-b 0.7s ease-in-out infinite alternate;
+	}
+	.dots[data-kind='code'] i:nth-child(3) {
+		transform: translate(5.5px, 5px) scaleY(1.4);
+		animation: bar-c 1.1s ease-in-out infinite alternate;
+	}
+	@keyframes bar-a {
+		from {
+			transform: translate(-5.5px, 5px) scaleY(1);
+		}
+		to {
+			transform: translate(-5.5px, 5px) scaleY(3.2);
+		}
+	}
+	@keyframes bar-b {
+		from {
+			transform: translate(0, 5px) scaleY(3.4);
+		}
+		to {
+			transform: translate(0, 5px) scaleY(1.2);
+		}
+	}
+	@keyframes bar-c {
+		from {
+			transform: translate(5.5px, 5px) scaleY(1.6);
+		}
+		to {
+			transform: translate(5.5px, 5px) scaleY(3);
+		}
+	}
+	/* Under an answer that streams in, the dots stay, smaller and alone. */
+	.live-line.quiet {
+		min-height: 22px;
+		opacity: 0.8;
+	}
+	.took {
+		font-size: 0.86em;
+		font-variant-numeric: tabular-nums;
+		color: var(--muted);
+		opacity: 0.8;
+	}
+	/* The word rolls in from below when it changes. */
+	.busy-word {
+		display: inline-block;
+		animation: roll 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	@keyframes roll {
+		from {
+			opacity: 0;
+			transform: translateY(0.55em);
+		}
+	}
+	/* The end of a run: a ring closes, the tick is drawn. */
+	.live-line.done {
+		overflow: hidden;
+		animation: none;
+	}
+	.tick {
+		flex: none;
+		width: 18px;
+		height: 18px;
+		fill: none;
+		stroke: var(--ag-warm, var(--accent));
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+	}
+	.tick circle {
+		stroke-dasharray: 48;
+		stroke-dashoffset: 48;
+		opacity: 0.55;
+		animation: draw 0.45s ease-out forwards;
+	}
+	.tick path {
+		stroke-dasharray: 12;
+		stroke-dashoffset: 12;
+		animation: draw 0.3s 0.3s ease-out forwards;
+	}
+	@keyframes draw {
+		to {
+			stroke-dashoffset: 0;
+		}
+	}
+	@keyframes pop {
+		from {
+			transform: scale(0.4);
+			opacity: 0;
+		}
+	}
 	.busy-word {
 		color: var(--ag-warm, var(--accent));
 	}
@@ -1886,7 +2241,9 @@
 		}
 	}
 	:global(.agent.calm) .sweep,
-	:global(.agent.calm) .dots i {
+	:global(.agent.calm) .dots,
+	:global(.agent.calm) .busy-word,
+	:global(.agent.calm) .dots i:nth-child(n) {
 		animation: none;
 	}
 	:global(.agent.calm) .sweep {
@@ -1894,13 +2251,20 @@
 		background: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.dots i:nth-child(n),
+		.dots,
+		.busy-word,
+		.tick,
+		.tick *,
+		.dots[data-kind] i:nth-child(n),
 		.sweep {
 			animation: none;
 		}
 		.sweep {
 			color: var(--sweep);
 			background: none;
+		}
+		.tick * {
+			stroke-dashoffset: 0;
 		}
 	}
 	/* The step that waits for approval: one banner card. */

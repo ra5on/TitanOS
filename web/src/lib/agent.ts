@@ -264,6 +264,8 @@ export type Settings = {
 		areas?: Record<string, Mode>;
 		tools?: Record<string, Mode>;
 		folders?: FolderRule[];
+		/** Web tools do not ask again after outside content was read. */
+		webFree?: boolean;
 	};
 	locations?: Location[];
 	react?: boolean;
@@ -514,6 +516,23 @@ const STEP_WORDS: Record<string, string> = {
 /** The word key of a tool for agent.step.<word>, or '' to show the name. */
 export function stepWord(tool: string | undefined): string {
 	return (tool && STEP_WORDS[tool]) || '';
+}
+
+/** What a running step is about, for the figure of the working dots and its
+ *  words (0.94): '' leaves the dots thinking and the step named as it is. */
+export type BusyKind = '' | 'web' | 'files' | 'write' | 'home' | 'switch' | 'code';
+export function busyKind(tool: string | undefined): BusyKind {
+	if (!tool) return '';
+	if (tool === 'web_search' || tool === 'web_read') return 'web';
+	if (tool === 'code_run') return 'code';
+	if (tool === 'ha_call' || tool === 'ha_automation_save') return 'switch';
+	if (tool.startsWith('ha_')) return 'home';
+	if (
+		/^(file_write|files_write_text|document_(create|edit|write)|memory_save|skill_save)$/.test(tool)
+	)
+		return 'write';
+	if (/^(files?_|document_)/.test(tool)) return 'files';
+	return '';
 }
 
 /** A short text of the arguments of a step (root and path, query, name). */

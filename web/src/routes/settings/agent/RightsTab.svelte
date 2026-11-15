@@ -39,7 +39,11 @@
 	const preset = $derived(settings ? presetOf(settings.policy) : 'standard');
 	function setPreset(p: Preset | 'custom') {
 		if (!settings || p === 'custom') return;
-		settings.policy = { preset: p, folders: settings.policy.folders ?? [] };
+		settings.policy = {
+			preset: p,
+			folders: settings.policy.folders ?? [],
+			webFree: settings.policy.webFree,
+		};
 	}
 	function setArea(area: string, mode: Mode) {
 		if (!settings) return;
@@ -94,6 +98,25 @@
 					onchange={(v) => setPreset(v as Preset | 'custom')}
 				/>
 			</div>
+		{/snippet}
+	</SettingRow>
+	<!-- 0.94: the web tools ask once a chat has read files, devices or pages;
+	     the person can take that guard away knowingly. -->
+	<SettingRow
+		icon="globe"
+		title={t('agent.webFree')}
+		desc={t('agent.webFreeHint')}
+		for="ag-web-free"
+	>
+		{#snippet control()}
+			<input
+				id="ag-web-free"
+				type="checkbox"
+				class="switch"
+				role="switch"
+				checked={!!settings.policy.webFree}
+				onchange={(e) => (settings!.policy.webFree = e.currentTarget.checked)}
+			/>
 		{/snippet}
 	</SettingRow>
 	<SettingRow icon="lock" title={t('agent.alwaysDeniedLabel')} desc={t('agent.alwaysDenied')} />

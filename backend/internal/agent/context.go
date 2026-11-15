@@ -342,7 +342,7 @@ func (r *Runner) builtin(ctx context.Context, chat *Chat, name string, args json
 // delegate runs a subtask: a fresh chat with only the task, reading tools
 // only (it cannot wait for approval), its steps count for the parent.
 func (r *Runner) delegate(ctx context.Context, parent *Chat, task string) (string, error) {
-	sub := &Chat{ID: NewID(), Origin: parent.Origin, Tainted: parent.Tainted, Areas: slices.Clone(parent.Areas), State: StateIdle,
+	sub := &Chat{ID: NewID(), Origin: parent.Origin, Tainted: parent.Tainted, WebOnly: parent.WebOnly, Areas: slices.Clone(parent.Areas), State: StateIdle,
 		Entries: []Entry{{ID: NewID(), At: r.now(), Role: "user", Content: task + "\n\nOnly read and look; you cannot change anything. End with a short report of what you found (with names and paths)."}}}
 	budget := 12
 	if left := r.MaxSteps - r.extra; r.MaxSteps > 0 && left < budget {
@@ -361,6 +361,7 @@ func (r *Runner) delegate(ctx context.Context, parent *Chat, task string) (strin
 	}
 	err := child.Run(ctx, sub)
 	if sub.Tainted {
+		parent.WebOnly = sub.WebOnly && (!parent.Tainted || parent.WebOnly)
 		parent.Tainted = true
 	}
 	n := 0

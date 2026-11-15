@@ -90,3 +90,23 @@ test('code blocks are colored and stay safe', () => {
 	// A language without rules stays plain.
 	assert.ok(chatMarkdown('```brainfuck\n+[>+<-]\n```').includes('<code>+[&gt;+&lt;-]</code>'));
 });
+
+test('a table that streams in stays a table from its head row on', () => {
+	const head = '| Name | Status |';
+	const start =
+		'<div class="table table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody>';
+	const end = '</tbody></table></div>';
+	// The head alone, then half a rule: already a table without rows.
+	assert.equal(chatMarkdown(head, true), start + end);
+	assert.equal(chatMarkdown(head + '\n|---', true), start + end);
+	// Half a row is a row; it grows with every piece.
+	assert.equal(
+		chatMarkdown(head + '\n|---|---|\n| ollama | laufend |\n| immich | lau', true),
+		start + '<tr><td>ollama</td><td>laufend</td></tr><tr><td>immich</td><td>lau</td></tr>' + end,
+	);
+	// A finished text is read as before: half a row is no table there.
+	assert.ok(!chatMarkdown(head + '\n|---|---|\n| immich | lau').includes('<table'));
+	assert.ok(!chatMarkdown(head).includes('<table'));
+	// Only the last paragraph of a streaming text is still open.
+	assert.ok(!chatMarkdown(head + '\n\nText', true).includes('<table'));
+});
