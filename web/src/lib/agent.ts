@@ -234,6 +234,10 @@ export type Status = {
 	voice?: boolean;
 	/** The model that looks at pictures, '' for none. */
 	vision?: string;
+	/** '' Ollama, 'openai' or 'claude' (0.96). */
+	provider?: string;
+	/** What the agent reads leaves the home network. */
+	cloud?: boolean;
 };
 
 export type Location = { name: string; root: string; path: string; note?: string };
@@ -256,6 +260,9 @@ export type Settings = {
 	context?: number;
 	keepAlive?: string;
 	instruction?: string;
+	/** An outside provider instead of the Ollama server (0.96); the key
+	 *  never comes to the page, keySet says whether one is stored. */
+	provider?: { kind?: string; url?: string; key?: string; keySet?: boolean; clearKey?: boolean };
 	weeklyReport?: boolean;
 	/** Quick commands off: every message goes to the model. */
 	quickOff?: boolean;

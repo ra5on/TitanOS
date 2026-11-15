@@ -125,6 +125,12 @@
 	// The address to enter for the SearXNG app of this NAS, written out with
 	// the name or number this page was opened under (owner 15 Nov 2026: the
 	// field should say what belongs in it, http and port included).
+	// The outside provider (0.96): '' is Ollama.
+	const providerKind = $derived(settings.provider?.kind ?? '');
+	function setProvider(kind: string) {
+		// Another provider never inherits a typed key or address.
+		settings!.provider = kind ? { kind } : undefined;
+	}
 	const searxExample = $derived(
 		`http://${typeof location === 'undefined' || !location.hostname ? '192.168.1.5' : location.hostname}:8580`,
 	);
@@ -151,7 +157,68 @@
 			{/snippet}
 		</SettingRow>
 	{/if}
-	{#if settings.source === 'cluster'}
+	<!-- 0.96: where the model runs. An outside provider is off from the
+	     factory; with one, what the agent reads leaves the NAS. -->
+	<SettingRow
+		icon="sparkle"
+		title={t('agent.provider')}
+		desc={t('agent.providerHint')}
+		for="ag-provider"
+	>
+		{#snippet control()}
+			<select
+				id="ag-provider"
+				class="field"
+				value={providerKind}
+				onchange={(e) => setProvider(e.currentTarget.value)}
+			>
+				<option value="">{t('agent.provider.ollama')}</option>
+				<option value="openai">{t('agent.provider.openai')}</option>
+				<option value="claude">{t('agent.provider.claude')}</option>
+			</select>
+		{/snippet}
+	</SettingRow>
+	{#if providerKind}
+		<p class="notice-warn">{t('agent.providerWarn')}</p>
+		{#if providerKind === 'openai'}
+			<SettingRow
+				icon="globe"
+				title={t('agent.providerUrl')}
+				desc={t('agent.providerUrlHint')}
+				for="ag-provider-url"
+			>
+				{#snippet control()}
+					<input
+						id="ag-provider-url"
+						class="field"
+						value={settings.provider?.url ?? ''}
+						placeholder="https://api.openai.com/v1"
+						oninput={(e) =>
+							(settings!.provider = { ...settings!.provider, url: e.currentTarget.value.trim() })}
+					/>
+				{/snippet}
+			</SettingRow>
+		{/if}
+		<SettingRow
+			icon="lock"
+			title={t('agent.providerKey')}
+			desc={t(providerKind === 'claude' ? 'agent.providerKeyClaude' : 'agent.providerKeyHint')}
+			for="ag-provider-key"
+		>
+			{#snippet control()}
+				<input
+					id="ag-provider-key"
+					class="field"
+					type="password"
+					autocomplete="off"
+					value={settings.provider?.key ?? ''}
+					placeholder={settings.provider?.keySet ? t('agent.providerKeySet') : ''}
+					oninput={(e) =>
+						(settings!.provider = { ...settings!.provider, key: e.currentTarget.value.trim() })}
+				/>
+			{/snippet}
+		</SettingRow>
+	{:else if settings.source === 'cluster'}
 		<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
 			{shareState
 				? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
@@ -185,7 +252,7 @@
 		<p class="muted state">
 			<span class="dot {status.reachable ? 'ok' : 'error'}"></span>
 			{status.reachable
-				? t('agent.connected', {
+				? t(status.provider ? 'agent.connectedProvider' : 'agent.connected', {
 						version: status.version ?? '',
 						models: status.models?.length ?? 0,
 					})
@@ -274,23 +341,28 @@
 			{/snippet}
 		</SettingRow>
 	{/if}
-	<SettingRow icon="memory" title={t('agent.context')} for="ag-context">
-		{#snippet description()}
-			{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
-			{#if runningContext}{t('agent.contextNow', {
-					tokens: tokens(runningContext),
-				})}{:else}{t('agent.contextUnknown')}{/if}
-			{t('agent.contextHint')}
-			{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
-		{/snippet}
-		{#snippet control()}
-			<select id="ag-context" class="field" bind:value={settings.context}>
-				{#each contexts as c (c)}<option value={c}
-						>{c === 0 ? t('agent.contextOllama') : tokens(c) + ' ' + t('agent.tokensWord')}</option
-					>{/each}
-			</select>
-		{/snippet}
-	</SettingRow>
+	<!-- Only an Ollama server has a context length to set and a model to keep loaded. -->
+	{#if !providerKind}
+		<SettingRow icon="memory" title={t('agent.context')} for="ag-context">
+			{#snippet description()}
+				{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
+				{#if runningContext}{t('agent.contextNow', {
+						tokens: tokens(runningContext),
+					})}{:else}{t('agent.contextUnknown')}{/if}
+				{t('agent.contextHint')}
+				{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
+			{/snippet}
+			{#snippet control()}
+				<select id="ag-context" class="field" bind:value={settings.context}>
+					{#each contexts as c (c)}<option value={c}
+							>{c === 0
+								? t('agent.contextOllama')
+								: tokens(c) + ' ' + t('agent.tokensWord')}</option
+						>{/each}
+				</select>
+			{/snippet}
+		</SettingRow>
+	{/if}
 	<SettingRow icon="list" title={t('agent.maxSteps')} desc={t('agent.maxStepsHint')} for="ag-steps">
 		{#snippet control()}
 			<input
@@ -354,22 +426,24 @@
 			/>
 		{/snippet}
 	</SettingRow>
-	<SettingRow
-		icon="pause"
-		title={t('agent.keepAlive')}
-		desc={t('agent.keepAliveHint')}
-		for="ag-keep"
-	>
-		{#snippet control()}
-			<select id="ag-keep" class="field" bind:value={settings.keepAlive}>
-				<option value="">{t('agent.keepAliveOllama')}</option>
-				{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
-						>{t(`agent.keepAlive.${k}` as MessageKey)}</option
-					>{/each}
-			</select>
-		{/snippet}
-	</SettingRow>
-	{#if settings.source !== 'cluster'}
+	{#if !providerKind}
+		<SettingRow
+			icon="pause"
+			title={t('agent.keepAlive')}
+			desc={t('agent.keepAliveHint')}
+			for="ag-keep"
+		>
+			{#snippet control()}
+				<select id="ag-keep" class="field" bind:value={settings.keepAlive}>
+					<option value="">{t('agent.keepAliveOllama')}</option>
+					{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
+							>{t(`agent.keepAlive.${k}` as MessageKey)}</option
+						>{/each}
+				</select>
+			{/snippet}
+		</SettingRow>
+	{/if}
+	{#if settings.source !== 'cluster' && !providerKind}
 		<SettingRow icon="download" title={t('agent.pull')} for="ag-pull">
 			{#snippet description()}
 				{t('agent.pullHint')}

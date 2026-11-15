@@ -1500,6 +1500,27 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.provider',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
+		k: 'agent.providerUrl',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
+		k: 'agent.providerKey',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.ollamaServer',
 		kind: 'row',
 		tab: 'connection',

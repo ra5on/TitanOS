@@ -1047,6 +1047,45 @@ async function plan55() {
     await page.screenshot({ path: `${out}/32-phone-agent-push.png` });
     await ctx.close();
   }
+  // 0.96: an outside provider instead of Ollama – chosen, warned about,
+  // saved with its key; the Ollama rows give way.
+  {
+    const { ctx, page, seen } = await open(1440, 2400);
+    await page.goto(base + "/settings/agent?tab=connection");
+    const where = page.getByLabel("Wo läuft das Modell?");
+    await where.waitFor();
+    assert.equal(await where.inputValue(), "", "Ollama from the factory");
+    assert.equal(await page.getByLabel("API-Schlüssel").count(), 0);
+    await where.selectOption("openai");
+    await page.getByText("verlässt alles, was der Agent liest, dein NAS").waitFor();
+    assert.equal(await page.getByLabel("Ollama-Server").count(), 0);
+    await page
+      .getByLabel("Adresse des Dienstes")
+      .fill("https://openrouter.ai/api/v1");
+    await page.getByLabel("API-Schlüssel").fill("sk-test-key");
+    assert.equal(
+      await page.getByLabel("API-Schlüssel").getAttribute("type"),
+      "password",
+    );
+    await noOverflow(page, "provider settings");
+    await where.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/96-settings-provider.png` });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.getByRole("status").first().waitFor();
+    const put = seen.puts.at(-1);
+    assert.deepEqual(put.provider, {
+      kind: "openai",
+      url: "https://openrouter.ai/api/v1",
+      key: "sk-test-key",
+    });
+    // Claude has no address; another provider starts without the typed key.
+    await where.selectOption("claude");
+    assert.equal(await page.getByLabel("Adresse des Dienstes").count(), 0);
+    assert.equal(await page.getByLabel("API-Schlüssel").inputValue(), "");
+    await where.selectOption("");
+    await page.getByLabel("Ollama-Server").waitFor();
+    await ctx.close();
+  }
   // PLAN 55: working like an agent and code in a sandbox, in the settings.
   {
     const { ctx, page, seen } = await open(1440, 2400);

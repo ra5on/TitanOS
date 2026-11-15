@@ -62,9 +62,12 @@ func checkAgentMCP(req *agentSettings, stored []agentMCPServer) error {
 	if len(req.MCP) > agentMCPMax {
 		return fmt.Errorf("at most %d connections", agentMCPMax)
 	}
-	kept := map[string]string{}
+	// A stored token is kept only for the address it was given for: a
+	// changed address must bring its token again, or the token would be
+	// sent somewhere it was never meant for.
+	kept := map[string]agentMCPServer{}
 	for _, s := range stored {
-		kept[s.ID] = s.Token
+		kept[s.ID] = s
 	}
 	seen := map[string]bool{}
 	for i := range req.MCP {
@@ -96,8 +99,8 @@ func checkAgentMCP(req *agentSettings, stored []agentMCPServer) error {
 		switch {
 		case c.Clear:
 			c.Token = ""
-		case c.Token == "":
-			c.Token = kept[c.ID]
+		case c.Token == "" && kept[c.ID].URL == c.URL:
+			c.Token = kept[c.ID].Token
 		}
 		c.Clear, c.TokenSet = false, false
 	}
