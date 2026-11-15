@@ -91,7 +91,7 @@ func TestAgentQuickFindAndPlan(t *testing.T) {
 // model and plans the reminder; with the quick commands switched off the
 // same message goes to the model.
 func TestAgentQuickInChat(t *testing.T) {
-	fake := &agentOllama{replies: []string{"Vom Modell."}}
+	fake := &agentOllama{replies: []string{`{"role":"assistant","content":"Vom Modell."}`}}
 	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
 	ask := func() agent.Chat {
 		t.Helper()

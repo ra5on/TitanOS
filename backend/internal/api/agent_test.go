@@ -1033,7 +1033,7 @@ func TestAgentReminder(t *testing.T) {
 		toolCall("schedule_create", map[string]any{"name": "Müll", "task": "Mülltonne rausstellen", "kind": "reminder", "every": "once", "in_minutes": 120}),
 		`{"role":"assistant","content":"Mache ich."}`,
 	}
-	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Erinnere mich in 2 Stunden an die Mülltonne"})
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Denk bitte für mich in 2 Stunden an die Mülltonne"})
 	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("new: %d %s", res.StatusCode, body)
 	}
