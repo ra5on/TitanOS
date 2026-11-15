@@ -149,7 +149,7 @@ const haChat = {
       at: at(10, 42),
       role: "assistant",
       content:
-        "| | Docker-App homeassistant | VM HAOS |\n|---|---|---|\n| Zustand | läuft seit 6 Tagen | läuft seit 2 Tagen |\n| Version | 2026.10.4 (aktuell) | 2026.10.1 · **Update auf 2026.10.4** |\n| Adresse | 192.168.1.20:8124 | 192.168.1.40:8123 |\n| Letzte Sicherung | heute 03:00 | vor 9 Tagen |\n| Auffällig | – | 2× „Zigbee-Stick nicht erreichbar“ |\n\nDie VM ist deine Haupt-Installation. Ich spiele das Update ein, sobald du es freigibst – vorher lege ich eine Sicherung bei den Home-Assistant-Backups ab.",
+        "| | Docker-App homeassistant | VM HAOS |\n|---|---|---|\n| Zustand | läuft seit 6 Tagen | läuft seit 2 Tagen |\n| Version | 2026.10.4 (aktuell) | 2026.10.1 · **Update auf 2026.10.4** |\n| Adresse | 192.168.1.20:8124 | 192.168.1.40:8123 |\n| Letzte Sicherung | heute 03:00 | vor 9 Tagen |\n| Auffällig | – | 2× „Zigbee-Stick nicht erreichbar“ |\n\nDie VM ist deine Haupt-Installation. Ich spiele das Update ein, sobald du es freigibst – vorher lege ich eine Sicherung bei den Home-Assistant-Backups ab.\n\n| Bereich | Was ich tun kann |\n|---|---|\n| Docker-Apps | Container-Status prüfen, Logs einsehen, Updates holen, Neustarts bzw. Neustart-Routinen |\n| System-Übersicht | CPU, RAM, Temperatur, Laufzeit, Versionen von OS, Docker, Apps |\n| VMs & LXC-Container | Laufenden Status, IP-Adressen, Start/Stop, Neustarts |",
     },
   ],
 };
@@ -1698,6 +1698,30 @@ try {
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${out}/9-phone-chat.png` });
       await noOverflow(page, "phone chat");
+      // Owner 15 Nov 2026: in a table of two columns words broke in the
+      // middle ("Docker-Ap / ps", "System-Ü / bersicht"). A word stays on
+      // one line; it may break at its hyphen.
+      const cell = page.locator(".md .table td", { hasText: "System-Übersicht" });
+      await cell.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${out}/9b-phone-chat-table.png` });
+      const broken = await page.evaluate(() => {
+        const bad = [];
+        for (const td of document.querySelectorAll(".md .table:not(.as-cards) td")) {
+          const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+          for (let node; (node = walker.nextNode()); ) {
+            for (const m of node.textContent.matchAll(/[^\s-]+/g)) {
+              const range = document.createRange();
+              range.setStart(node, m.index);
+              range.setEnd(node, m.index + m[0].length);
+              const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+              if (tops.size > 1) bad.push(m[0]);
+            }
+          }
+        }
+        return bad;
+      });
+      assert.deepEqual(broken, [], "no word of a table breaks in the middle");
+      await noOverflow(page, "phone chat table");
     }
     await ctx.close();
   }

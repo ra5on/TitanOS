@@ -1062,9 +1062,16 @@
 		width: 100%;
 		overflow-wrap: normal;
 	}
+	/* Words stay whole in a table (owner 15 Nov 2026: "Docker-Ap / ps",
+	   "System-Ü / bersicht" in a narrow first column): the readable page
+	   lets cells break anywhere, here a word only breaks at a hyphen or
+	   when it alone is wider than the table. */
 	.md :global(.table :is(th, td)) {
 		padding: 9px 14px;
 		font-size: var(--text-base);
+		overflow-wrap: break-word;
+		word-break: normal;
+		hyphens: manual;
 	}
 	.md :global(.table th) {
 		font-size: var(--text-sm);
