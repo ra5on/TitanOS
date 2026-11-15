@@ -429,10 +429,17 @@
 		justify-content: center;
 		min-height: 34px;
 	}
+	/* The one filled button of the menu, a capsule like in the chat apps. */
 	.new-chat {
 		justify-content: center;
-		border: 1px solid var(--border);
+		min-height: 40px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 9%, transparent);
+		font-weight: 500;
 		flex: none;
+	}
+	.new-chat:hover {
+		background: color-mix(in srgb, var(--text) 15%, transparent);
 	}
 	.new-chat :global(svg) {
 		color: var(--text);
@@ -447,7 +454,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		min-height: 34px;
+		border-radius: 999px;
+		min-height: 36px;
 		margin-bottom: var(--space-2);
 		padding: 0 var(--space-2-5);
 		border-radius: var(--radius-ctl);

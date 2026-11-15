@@ -56,13 +56,19 @@
 	}
 	const ms = $derived(calm ? 0 : 220);
 	let trigger = $state<HTMLElement>();
-	let at = $state({ top: 0, left: 0 });
+	let at = $state({ top: 0, bottom: 0, left: 0, up: false });
 	function toggle() {
 		if (!open && trigger) {
 			const r = trigger.getBoundingClientRect();
-			// Centered below the chip, but never past the edge of the window.
+			// Centered at the chip, but never past the edge of the window; above
+			// it when the chip sits low (in the input at the bottom of the chat).
 			const mid = r.left + r.width / 2;
-			at = { top: r.bottom + 8, left: Math.max(172, Math.min(mid, innerWidth - 172)) };
+			at = {
+				top: r.bottom + 8,
+				bottom: innerHeight - r.top + 8,
+				left: Math.max(172, Math.min(mid, innerWidth - 172)),
+				up: innerHeight - r.bottom < 360,
+			};
 		}
 		open = !open;
 	}
@@ -89,14 +95,20 @@
 			aria-label={t('agent.modelPick')}
 			bind:this={trigger}
 			onclick={toggle}
-			><strong>{model || '–'}</strong>{#if think}<span>· {levelLabel(think, i18n.locale)}</span
+			><strong>{model || '–'}</strong>{#if think}<span>{levelLabel(think, i18n.locale)}</span
 				>{/if}<Icon name="chevronDown" size={14} /></button
 		>
 	{:else}
 		<span class="trigger static"><strong>{model || '–'}</strong></span>
 	{/if}
 	{#if open}
-		<div class="layer" use:portal style:--top="{at.top}px" style:--left="{at.left}px">
+		<div
+			class="layer"
+			use:portal
+			style:--top="{at.top}px"
+			style:--bottom="{at.bottom}px"
+			style:--left="{at.left}px"
+		>
 			<button
 				type="button"
 				class="scrim"
@@ -106,6 +118,7 @@
 			></button>
 			<div
 				class="panel floating-menu"
+				class:up={at.up && !phone}
 				role="dialog"
 				aria-label={t('agent.modelPick')}
 				transition:fly={phone ? { y: 320, duration: ms, opacity: 1 } : { y: -8, duration: ms }}
@@ -167,11 +180,11 @@
 		align-items: center;
 		gap: 5px;
 		max-width: 100%;
-		min-height: 30px;
-		padding: var(--space-1) var(--space-2-5);
+		min-height: 36px;
+		padding: var(--space-1) var(--space-3);
 		border-radius: 999px;
 		border: 0;
-		background: var(--chip);
+		background: color-mix(in srgb, var(--text) 8%, transparent);
 		color: var(--text);
 		font: inherit;
 		font-size: var(--text-sm);
@@ -179,7 +192,7 @@
 		white-space: nowrap;
 	}
 	.trigger:hover:not(.static) {
-		background: color-mix(in srgb, var(--text) 12%, var(--chip));
+		background: color-mix(in srgb, var(--text) 14%, transparent);
 	}
 	.trigger:focus-visible {
 		outline: 2px solid var(--accent);
@@ -191,7 +204,7 @@
 		hyphens: auto;
 	}
 	.trigger span {
-		color: var(--text);
+		color: var(--muted);
 	}
 	.trigger :global(svg) {
 		color: var(--muted);
@@ -220,6 +233,11 @@
 		overflow-y: auto;
 		padding: var(--space-2) var(--space-3) var(--space-2-5);
 		text-align: left;
+	}
+	.panel.up {
+		top: auto;
+		bottom: var(--bottom);
+		max-height: min(70dvh, calc(100dvh - var(--bottom) - 16px));
 	}
 	h3 {
 		margin: var(--space-2) var(--space-1) 2px;

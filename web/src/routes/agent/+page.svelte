@@ -25,6 +25,7 @@
 	import NotesPanel from '#lib/components/agent/NotesPanel.svelte';
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
+	import ProjectList from '#lib/components/agent/ProjectList.svelte';
 	import ChatSheets from './ChatSheets.svelte';
 	import { isChatSheet } from './chat-sheets.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
@@ -85,6 +86,24 @@
 		knowledge: t('agent.knowledge'),
 		settings: t('agent.set.title'),
 	});
+
+	// The phone's bar at the bottom (15 Nov 2026): Chat, Projekte, Aufträge
+	// and Notizen. The projects are a list in the place of the chat; opening
+	// a chat or a page leaves it.
+	let projectsTab = $state(false);
+	// Set by the tab while the page still changes back to the chat.
+	let wantProjects = false;
+	$effect(() => {
+		void ag.view;
+		void ag.current?.id;
+		void ag.fresh;
+		projectsTab = wantProjects && ag.view === 'chat';
+		if (ag.view === 'chat') wantProjects = false;
+	});
+	const tabsShown = $derived(
+		ag.phone && !ag.keyboard && (ag.view === 'chat' || ag.view === 'planned'),
+	);
+	const floating = $derived(ag.phone && !ag.onPage);
 
 	// PLAN 90-4: the "/" commands of the input. The names follow the language.
 	const commands: (Command & { id: string })[] = $derived(
@@ -235,6 +254,33 @@
 		</span>{/if}
 {/snippet}
 
+<!-- Model and thinking level in the input: a chip that opens the sheet on
+     the phone and the panel on the desktop. -->
+{#snippet modelChip()}
+	{#if !ag.status}
+		<!-- nothing to choose yet -->
+	{:else if ag.phone}
+		<button
+			type="button"
+			class="m-chip"
+			aria-haspopup="dialog"
+			aria-label={t('agent.modelPick')}
+			onclick={() => (ag.dialog = { kind: 'head' })}
+			><strong>{ag.model || '–'}</strong>{#if ag.think}<span
+					>{levelLabel(ag.think, i18n.locale)}</span
+				>{/if}</button
+		>
+	{:else}
+		<ModelPicker
+			models={ag.status.models}
+			bind:model={ag.model}
+			bind:think={ag.think}
+			small
+			calm={ag.calm}
+		/>
+	{/if}
+{/snippet}
+
 <div
 	class="agent"
 	class:app={ag.app}
@@ -293,7 +339,7 @@
 			{#if !ag.phone && !ag.folded}
 				<aside class="side"><AgentMenu {...ag.menuProps} /></aside>
 			{/if}
-			<section class="main" aria-label={ag.current?.title ?? t('agent.newChat')}>
+			<section class="main" class:floating aria-label={ag.current?.title ?? t('agent.newChat')}>
 				{#if ag.dialog?.kind === 'feature' && !ag.phone}
 					<!-- PLAN 72: a function's view as a page here, the side bar stays. -->
 					<FeatureHost id={ag.dialog.id} calm={ag.calm} onclose={() => (ag.dialog = null)} />
@@ -301,7 +347,7 @@
 				{#if ag.phone}
 					<!-- PLAN 90-4: one line – menu or back, the title (a tap opens
 					     project, model and thinking level), new chat, more. -->
-					<header class="top">
+					<header class="top" class:float={floating}>
 						{#if ag.onPage}
 							<button
 								type="button"
@@ -327,27 +373,27 @@
 										aria-hidden="true"
 									></span>{/if}</button
 							>
-							<button
-								type="button"
-								class="p-title"
-								aria-haspopup="dialog"
-								aria-label={t('agent.head.open', {
-									title: ag.current?.title || t('nav.agent'),
-								})}
-								onclick={() => (ag.dialog = { kind: 'head' })}
-							>
-								<span class="p-text">
-									<strong class="p-name" role="heading" aria-level="1"
-										>{ag.current?.title || t('nav.agent')}</strong
-									>
-									<small
-										>{ag.currentProject
-											? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-											: ''}{ag.model || '–'}</small
-									>
-								</span>
-								<Icon name="chevronDown" size={16} />
-							</button>
+							{#if projectsTab}<span class="fill"></span>{:else}<button
+									type="button"
+									class="p-title"
+									aria-haspopup="dialog"
+									aria-label={t('agent.head.open', {
+										title: ag.current?.title || t('nav.agent'),
+									})}
+									onclick={() => (ag.dialog = { kind: 'head' })}
+								>
+									<span class="p-text">
+										<strong class="p-name" role="heading" aria-level="1"
+											>{ag.current?.title || t('nav.agent')}</strong
+										>
+										<small
+											>{ag.currentProject
+												? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
+												: ''}{ag.model || '–'}</small
+										>
+									</span>
+									<Icon name="chevronDown" size={16} />
+								</button>{/if}
 							<button
 								type="button"
 								class="icon-btn"
@@ -374,13 +420,6 @@
 								>{ag.currentProject.icon ?? ''} {ag.currentProject.name}</span
 							>{/if}
 						<span class="fill"></span>
-						<ModelPicker
-							models={ag.status.models}
-							bind:model={ag.model}
-							bind:think={ag.think}
-							small
-							calm={ag.calm}
-						/>
 						<button
 							type="button"
 							class="tool-btn"
@@ -429,7 +468,14 @@
 						</p>
 					{/if}
 				{/if}
-				{#if ag.view === 'planned'}
+				{#if projectsTab && ag.phone}
+					<ProjectList
+						projects={ag.projects}
+						chats={ag.listedChats}
+						onopen={(p) => (ag.dialog = { kind: 'sheet', project: p })}
+						onnew={() => (ag.dialog = { kind: 'project', project: null })}
+					/>
+				{:else if ag.view === 'planned'}
 					<PlannedPage
 						projects={ag.projects}
 						chats={ag.listedChats}
@@ -519,7 +565,7 @@
 						oncount={(n) => (ag.inboxCount = n)}
 					/>
 				{/if}
-				{#if !ag.onPage}
+				{#if !ag.onPage && !projectsTab}
 					<div class="dock">
 						{#if ag.notice}<p class="said" role="status">{ag.notice}</p>{/if}
 						<Composer
@@ -538,25 +584,58 @@
 										? t('agent.inputShort')
 										: t('agent.inputCommands')}
 							{commands}
+							phone={ag.phone}
+							calm={ag.calm}
+							chip={modelChip}
+							onhead={() => (ag.dialog = { kind: 'head' })}
+							projectName={ag.currentProject?.name ?? ''}
 							oncommand={ag.readOnlyBy ? undefined : command}
 							onsend={ag.send}
 							onstop={() => ag.stop()}
 							onpicknas={() => (ag.dialog = { kind: 'nas' })}
 							onerror={(m) => (ag.error = m)}
 						/>
-						<p class="where">
-							{#if !ag.current && !ag.phone}<button
-									type="button"
-									class="where-model"
-									onclick={() => (ag.dialog = { kind: 'head' })}
-									>{ag.currentProject
-										? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-										: ''}{ag.model || '–'}{ag.think
-										? ` · ${levelLabel(ag.think, i18n.locale)}`
-										: ''}<Icon name="chevronDown" size={12} /></button
-								>{' · '}{/if}{ag.whereText}
-						</p>
+						<p class="where">{ag.whereText}</p>
 					</div>
+				{/if}
+				{#if tabsShown}
+					<nav class="tabs" aria-label={t('agent.tabs.label')}>
+						<button
+							type="button"
+							class="tab"
+							class:on={ag.view === 'chat' && !projectsTab}
+							aria-current={ag.view === 'chat' && !projectsTab ? 'page' : undefined}
+							onclick={() => {
+								projectsTab = false;
+								if (ag.view !== 'chat') ag.show('chat');
+							}}><Icon name="chat" size={21} /><span>{t('agent.tabs.chat')}</span></button
+						>
+						<button
+							type="button"
+							class="tab"
+							class:on={projectsTab}
+							aria-current={projectsTab ? 'page' : undefined}
+							onclick={() => {
+								if (ag.view === 'chat') projectsTab = true;
+								else {
+									wantProjects = true;
+									ag.show('chat');
+								}
+							}}><Icon name="folder" size={21} /><span>{t('agent.projects')}</span></button
+						>
+						<button
+							type="button"
+							class="tab"
+							class:on={ag.view === 'planned'}
+							aria-current={ag.view === 'planned' ? 'page' : undefined}
+							onclick={() => ag.show('planned')}
+							><Icon name="clock" size={21} /><span>{t('agent.tabs.planned')}</span
+							>{#if ag.plannedCount}<span class="sr-only">{ag.plannedCount}</span>{/if}</button
+						>
+						<button type="button" class="tab" onclick={() => (ag.dialog = { kind: 'notes' })}
+							><Icon name="edit" size={21} /><span>{t('agent.notes.title')}</span></button
+						>
+					</nav>
 				{/if}
 			</section>
 		</div>
@@ -669,6 +748,11 @@
 		flex-direction: column;
 		background: var(--bg);
 		color: var(--text);
+		/* Owner 15 Nov 2026: a warm orange for what the agent does (send, the
+		   line while it works) and a calmer blue for its links. Mixed with the
+		   text color, so both stay readable on a light and a dark theme. */
+		--ag-warm: #d9734a;
+		--ag-link: color-mix(in srgb, #5b8fe0 78%, var(--text));
 	}
 	:global(main:has(> .agent:not(.phone))) {
 		display: flex;
@@ -762,7 +846,6 @@
 		gap: var(--space-2);
 		min-height: 56px;
 		padding: var(--space-2-5) 20px;
-		border-bottom: 1px solid var(--border);
 		min-width: 0;
 	}
 	.top h1 {
@@ -799,10 +882,10 @@
 		height: 36px;
 		min-height: 36px;
 		padding: 0;
-		border-radius: var(--radius-ctl);
+		border-radius: 50%;
 		display: grid;
 		place-items: center;
-		border: 1px solid var(--border);
+		border: 0;
 		background: none;
 		color: var(--text);
 		cursor: pointer;
@@ -814,7 +897,7 @@
 	}
 	.tool-btn.on {
 		color: var(--accent);
-		border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
 	}
 	.icon-btn {
 		position: relative;
@@ -833,19 +916,49 @@
 	.icon-btn:hover {
 		background: color-mix(in srgb, var(--text) 8%, transparent);
 	}
-	/* PLAN 90-4: the phone's head is one line of 52 px with 44 px targets. */
+	/* The phone's head (15 Nov 2026, like the chat apps): no bar – round
+	   buttons and the title in a capsule float over the chat, which scrolls
+	   below them. They start under the status bar (--agent-top). On a page
+	   (Geplant, Einstellungen …) the head is a plain row with the way back. */
 	.agent.phone .top {
-		min-height: 52px;
-		padding: var(--agent-top) var(--space-1) 0;
-		gap: 2px;
-		background: var(--header, var(--bg));
+		min-height: 48px;
+		padding: calc(var(--agent-top) + 4px) var(--space-3) 0;
+		gap: var(--space-2);
+	}
+	.agent.phone .top.float {
+		position: absolute;
+		z-index: 6;
+		top: 0;
+		left: 0;
+		right: 0;
+		pointer-events: none;
+	}
+	.agent.phone .top.float > :global(*) {
+		pointer-events: auto;
+	}
+	/* The chat fades out behind the buttons instead of running through them. */
+	.agent.phone .top.float::before {
+		content: '';
+		position: absolute;
+		z-index: -1;
+		inset: 0 0 -18px;
+		background: linear-gradient(
+			to bottom,
+			var(--bg) 0%,
+			color-mix(in srgb, var(--bg) 82%, transparent) 62%,
+			transparent 100%
+		);
+		pointer-events: none;
 	}
 	.agent.phone .icon-btn,
 	.agent.phone .top .more :global(.btn) {
-		border: 0;
 		width: 44px;
 		height: 44px;
 		min-height: 44px;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: color-mix(in srgb, var(--text) 7%, var(--surface));
+		box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
 	}
 	.p-title {
 		flex: 1;
@@ -853,14 +966,16 @@
 		min-height: 44px;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: var(--space-1-5);
-		padding: 2px var(--space-1);
-		border: 0;
-		border-radius: var(--radius-ctl);
-		background: none;
+		padding: 2px var(--space-3) 2px var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 7%, var(--surface));
+		box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
 		color: var(--text);
 		font: inherit;
-		text-align: left;
+		text-align: center;
 		cursor: pointer;
 	}
 	.p-title :global(svg) {
@@ -871,7 +986,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		line-height: 1.2;
+		line-height: 1.15;
 	}
 	/* One line each: a long title ends in "…" instead of growing the head. */
 	.p-name,
@@ -909,22 +1024,6 @@
 		color: var(--muted);
 		text-align: center;
 	}
-	.where-model {
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-		min-height: 24px;
-		padding: 0 var(--space-1);
-		border: 0;
-		border-radius: var(--radius-small, 6px);
-		background: none;
-		color: var(--text);
-		font: inherit;
-		cursor: pointer;
-	}
-	.where-model:hover {
-		background: color-mix(in srgb, var(--text) 7%, transparent);
-	}
 	.badge {
 		position: absolute;
 		top: 8px;
@@ -955,13 +1054,88 @@
 		color: var(--muted);
 	}
 	.agent.phone .dock {
-		padding: var(--space-2) var(--space-3) calc(env(safe-area-inset-bottom, 0px) + var(--space-2));
+		padding: var(--space-1-5) var(--space-3) var(--space-1-5);
+	}
+	.agent.phone .where {
+		display: none;
+	}
+	/* Without the bar below it (keyboard open, a page) the input keeps the
+	   space of the home indicator itself. */
+	.agent.phone .dock:last-child {
+		padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-2));
+	}
+	.main.floating > :global(.scroll.phone > .page) {
+		padding-top: calc(var(--agent-top) + 64px);
+	}
+	.main.floating > .notice-warn {
+		margin-top: calc(var(--agent-top) + 60px);
+	}
+	/* The chip of the model in the input on the phone. */
+	.m-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		max-width: 100%;
+		min-height: 44px;
+		padding: 0 var(--space-3-5, 14px);
+		border: 0;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.m-chip strong {
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.m-chip span {
+		color: var(--muted);
+		flex: none;
+	}
+	/* The bar at the bottom of the phone: four places in one capsule. */
+	.tabs {
+		flex: none;
+		display: flex;
+		gap: 2px;
+		margin: 0 var(--space-3) max(var(--space-2), calc(env(safe-area-inset-bottom, 0px) - 12px));
+		padding: var(--space-1);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 6%, var(--surface));
+	}
+	.tab {
+		flex: 1;
+		min-width: 0;
+		min-height: 50px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		border: 0;
+		border-radius: 999px;
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-xs);
+		cursor: pointer;
+	}
+	.tab.on {
+		background: var(--bg);
+		color: var(--text);
+	}
+	.tab:focus-visible,
+	.m-chip:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.agent.phone.keyboard .dock {
 		padding-bottom: var(--space-1-5);
-	}
-	.agent.phone.keyboard .where {
-		display: none;
 	}
 	.scrim {
 		position: fixed;

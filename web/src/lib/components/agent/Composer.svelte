@@ -5,14 +5,18 @@
 </script>
 
 <script lang="ts">
-	// The input of the KI-Agent (PLAN 48, card of PLAN 68): the clip, the
-	// task, the microphone and the send button in the accent. Enter sends,
+	// The input of the KI-Agent (PLAN 48; shape of 15 Nov 2026, like the
+	// chat apps): one rounded field. Closed on the phone it is a single row –
+	// plus, the task, microphone, send. With the cursor in it, with text or
+	// on the desktop the task stands on top and below it the plus, the model
+	// (the `chip` of the page), the microphone and send. Enter sends,
 	// Shift+Enter a new line; while a run works the round button stops it.
-	// Model and thinking level sit at the top of the chat (ModelPicker).
 	// PLAN 90-4: "/" at the start opens the commands (arrow keys, Enter or a
 	// tap choose one); the field grows with its text up to 220 px.
+	import type { Snippet } from 'svelte';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import BottomSheet from './BottomSheet.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { apiFetch, responseError } from '#lib/api.ts';
 	import { toWav16k } from '#lib/speech-audio.ts';
@@ -31,7 +35,20 @@
 		voiceNas = false,
 		commands = [],
 		oncommand,
+		phone = false,
+		calm = false,
+		chip,
+		onhead,
+		projectName = '',
 	}: {
+		phone?: boolean;
+		calm?: boolean;
+		/** Model and thinking level, shown in the row of buttons. */
+		chip?: Snippet;
+		/** Opens project, model and thinking level (a row of the plus sheet). */
+		onhead?: () => void;
+		/** The project the chat belongs to, named in the plus sheet. */
+		projectName?: string;
 		/** The "/" commands on offer and what runs them (name, words after it). */
 		commands?: Command[];
 		oncommand?: (name: string, arg: string) => void;
@@ -111,6 +128,13 @@
 
 	let text = $state('');
 	let area = $state<HTMLTextAreaElement>();
+	// The phone's field opens with the cursor and closes again when it is
+	// left empty. A tap on a button inside must not close it under the finger.
+	let focused = $state(false);
+	let form = $state<HTMLFormElement>();
+	let blurTimer: ReturnType<typeof setTimeout> | undefined;
+	const open = $derived(!phone || focused || !!text || attachments.length > 0);
+	let plusOpen = $state(false);
 
 	function grow() {
 		if (!area) return;
@@ -221,6 +245,18 @@
 {/if}
 <form
 	class="composer"
+	class:open
+	bind:this={form}
+	onfocusin={() => {
+		clearTimeout(blurTimer);
+		focused = true;
+	}}
+	onfocusout={() => {
+		clearTimeout(blurTimer);
+		blurTimer = setTimeout(() => {
+			if (!form?.contains(document.activeElement) && !plusOpen) focused = false;
+		}, 180);
+	}}
 	onsubmit={(e) => {
 		e.preventDefault();
 		send();
@@ -241,13 +277,22 @@
 		</div>
 	{/if}
 
-	<div class="tools">
-		<input bind:this={picker} type="file" multiple hidden onchange={picked} />
-		<!-- Photos: on the phone this offers the camera and the photo library. -->
-		<input bind:this={photoPicker} type="file" accept="image/*" multiple hidden onchange={picked} />
-		{#if onpicknas}
+	<input bind:this={picker} type="file" multiple hidden onchange={picked} />
+	<!-- Photos: on the phone this offers the camera and the photo library. -->
+	<input bind:this={photoPicker} type="file" accept="image/*" multiple hidden onchange={picked} />
+	<span class="plus">
+		{#if phone}
+			<button
+				type="button"
+				class="round attach"
+				aria-label={t('agent.attach')}
+				aria-haspopup="dialog"
+				disabled={busy || disabled}
+				onclick={() => (plusOpen = true)}><Icon name="plus" size={20} /></button
+			>
+		{:else if onpicknas}
 			<span class="attach-menu">
-				<Dropdown label={t('agent.attach')} icon="clip" disabled={busy || disabled}>
+				<Dropdown label={t('agent.attach')} icon="plus" disabled={busy || disabled}>
 					{#snippet children(close)}
 						<button
 							type="button"
@@ -283,58 +328,118 @@
 				aria-label={t('agent.attach')}
 				title={t('agent.attach')}
 				disabled={busy || disabled}
-				onclick={() => picker?.click()}><Icon name="clip" size={16} /></button
+				onclick={() => picker?.click()}><Icon name="plus" size={18} /></button
 			>
 		{/if}
-		<textarea
-			bind:this={area}
-			bind:value={text}
-			oninput={grow}
-			onkeydown={key}
-			rows="1"
-			{disabled}
-			aria-label={t('agent.input')}
-			aria-controls={offered.length ? 'agent-cmds' : undefined}
-			aria-activedescendant={offered.length ? `agent-cmd-${offered[pickedCmd]?.name}` : undefined}
-			placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
-		{#if voice && !busy}
-			<button
-				type="button"
-				class="round mic"
-				class:on={recording}
-				disabled={disabled || transcribing}
-				aria-pressed={recording}
-				aria-label={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
-				title={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
-				onclick={() => micHold || toggleVoice()}
-				onpointerdown={() => micHold && !recording && toggleVoice()}
-				onpointerup={() => micHold && recording && toggleVoice()}
-				onpointerleave={() => micHold && recording && toggleVoice()}
-				>{#if transcribing}<span class="dots" aria-hidden="true">…</span>{:else}<Icon
-						name={recording ? 'stop' : 'mic'}
-						size={17}
-					/>{/if}</button
-			>
-		{/if}
-		{#if busy}
-			<button
-				type="button"
-				class="round stop"
-				onclick={() => onstop?.()}
-				aria-label={t('agent.stop')}
-				title={t('agent.stop')}><Icon name="stop" size={14} /></button
-			>
-		{:else}
-			<button
-				type="submit"
-				class="round send"
-				disabled={disabled || (!text.trim() && !attachments.length)}
-				aria-label={t('agent.send')}
-				title={t('agent.send')}><Icon name="arrowUp" size={18} /></button
-			>
-		{/if}
-	</div>
+	</span>
+	<textarea
+		bind:this={area}
+		bind:value={text}
+		oninput={grow}
+		onkeydown={key}
+		rows="1"
+		{disabled}
+		aria-label={t('agent.input')}
+		aria-controls={offered.length ? 'agent-cmds' : undefined}
+		aria-activedescendant={offered.length ? `agent-cmd-${offered[pickedCmd]?.name}` : undefined}
+		placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
+	<span class="chip-slot"
+		>{#if chip}{@render chip()}{/if}</span
+	>
+	{#if voice && !busy}
+		<button
+			type="button"
+			class="round mic"
+			class:on={recording}
+			disabled={disabled || transcribing}
+			aria-pressed={recording}
+			aria-label={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
+			title={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
+			onclick={() => micHold || toggleVoice()}
+			onpointerdown={() => micHold && !recording && toggleVoice()}
+			onpointerup={() => micHold && recording && toggleVoice()}
+			onpointerleave={() => micHold && recording && toggleVoice()}
+			>{#if transcribing}<span class="dots" aria-hidden="true">…</span>{:else}<Icon
+					name={recording ? 'stop' : 'mic'}
+					size={18}
+				/>{/if}</button
+		>
+	{/if}
+	{#if busy}
+		<button
+			type="button"
+			class="round stop"
+			onclick={() => onstop?.()}
+			aria-label={t('agent.stop')}
+			title={t('agent.stop')}><Icon name="stop" size={14} /></button
+		>
+	{:else}
+		<button
+			type="submit"
+			class="round send"
+			disabled={disabled || (!text.trim() && !attachments.length)}
+			aria-label={t('agent.send')}
+			title={t('agent.send')}><Icon name="arrowUp" size={19} /></button
+		>
+	{/if}
 </form>
+
+{#if plusOpen}
+	<BottomSheet
+		label={t('agent.plus.title')}
+		{calm}
+		onclose={() => {
+			plusOpen = false;
+			focused = !!text;
+		}}
+	>
+		<h3 class="sh-group">{t('agent.plus.title')}</h3>
+		<button
+			type="button"
+			class="sh-item"
+			onclick={() => {
+				plusOpen = false;
+				photoPicker?.click();
+			}}
+			><Icon name="camera" size={20} /><span class="sh-text">{t('agent.attachPhoto')}</span></button
+		>
+		<button
+			type="button"
+			class="sh-item"
+			onclick={() => {
+				plusOpen = false;
+				picker?.click();
+			}}
+			><Icon name="upload" size={20} /><span class="sh-text">{t('agent.attachDevice')}</span
+			></button
+		>
+		{#if onpicknas}
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					plusOpen = false;
+					onpicknas();
+				}}
+				><Icon name="folder" size={20} /><span class="sh-text">{t('agent.attachNas')}</span></button
+			>
+		{/if}
+		{#if onhead}
+			<hr class="sh-rule" />
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					plusOpen = false;
+					onhead();
+				}}
+				><Icon name="chip" size={20} /><span class="sh-text"
+					>{t('agent.head.title')}<small>{projectName || t('agent.noProject')}</small></span
+				><Icon name="chevronRight" size={16} /></button
+			>
+		{/if}
+	</BottomSheet>
+{/if}
 
 <style>
 	/* PLAN 90-4: the "/" commands open above the input. */
@@ -393,48 +498,83 @@
 			min-height: 44px;
 		}
 	}
-	/* PLAN 68: a card at the bottom – 📎, text, 🎙 and the send button in
-	   the accent, like the rest of TitanOS (no glass, no glow). */
+	/* One rounded field (owner 15 Nov 2026). The parts sit on a grid: open,
+	   the task is the first row and the buttons the second; closed on the
+	   phone everything is one row and the model is not shown. */
 	.composer {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
+		grid-template-areas: 'plus text mic send';
+		align-items: center;
 		gap: var(--space-1-5);
-		padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2-5);
-		border-radius: var(--radius-tile);
+		padding: var(--space-1-5);
+		border-radius: 28px;
 		border: 1px solid var(--border);
-		background: var(--surface);
+		background: color-mix(in srgb, var(--text) 5%, var(--surface));
+	}
+	.composer.open {
+		grid-template-areas:
+			'files files files files'
+			'text text text text'
+			'plus chip mic send';
+		padding: var(--space-2);
+		border-radius: 24px;
 	}
 	.composer:focus-within {
-		border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+		border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+	}
+	.files {
+		grid-area: files;
+	}
+	.composer:not(.open) .files {
+		display: none;
+	}
+	.plus {
+		grid-area: plus;
+		display: flex;
+	}
+	.chip-slot {
+		grid-area: chip;
+		min-width: 0;
+		display: flex;
+		justify-content: flex-start;
+	}
+	.composer:not(.open) .chip-slot {
+		display: none;
+	}
+	.mic {
+		grid-area: mic;
+	}
+	.send,
+	.stop {
+		grid-area: send;
 	}
 	textarea {
-		flex: 1;
+		grid-area: text;
 		min-width: 0;
-		align-self: center;
+		width: 100%;
 		resize: none;
 		border: 0;
 		outline: none;
 		background: transparent;
 		color: var(--text);
 		font: inherit;
-		font-size: var(--text-md);
+		font-size: var(--text-lg);
 		line-height: 1.45;
 		min-height: 24px;
 		max-height: 220px;
-		padding: 5px var(--space-1);
+		padding: 5px var(--space-2);
+	}
+	.composer.open textarea {
+		padding: var(--space-1-5) var(--space-2) var(--space-1);
 	}
 	textarea::placeholder {
 		color: var(--muted);
 	}
-	.tools {
-		display: flex;
-		align-items: flex-end;
-		gap: var(--space-1-5);
-	}
 	.round {
-		width: 32px;
-		height: 32px;
-		border-radius: var(--radius-ctl);
+		width: 38px;
+		height: 38px;
+		border-radius: 50%;
 		display: grid;
 		place-items: center;
 		border: 0;
@@ -443,19 +583,19 @@
 	}
 	.attach,
 	.attach-menu :global(.btn) {
-		width: 32px;
-		height: 32px;
-		min-height: 32px;
+		width: 38px;
+		height: 38px;
+		min-height: 38px;
 		padding: 0;
-		border-radius: var(--radius-ctl);
+		border-radius: 50%;
 		border: 0;
-		background: none;
-		color: var(--muted);
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
 	}
 	.attach:hover,
 	.attach-menu :global(.btn:hover),
 	.mic:hover {
-		background: color-mix(in srgb, var(--text) 8%, transparent);
+		background: color-mix(in srgb, var(--text) 14%, transparent);
 		color: var(--text);
 	}
 	.round:focus-visible,
@@ -473,8 +613,8 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		padding: 2px var(--space-1) 2px var(--space-2);
-		border-radius: 999px;
+		padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2-5);
+		border-radius: 12px;
 		background: var(--chip);
 		font-size: var(--text-sm);
 		max-width: 100%;
@@ -489,8 +629,8 @@
 		display: grid;
 	}
 	.send {
-		background: var(--accent);
-		color: var(--on-accent);
+		background: var(--ag-warm, var(--accent));
+		color: #fff;
 	}
 	.send:disabled {
 		opacity: 0.45;
@@ -501,8 +641,8 @@
 		color: var(--bg);
 	}
 	.mic {
-		background: none;
-		color: var(--muted);
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
 	}
 	.mic.on {
 		background: var(--error-bg);
@@ -527,6 +667,13 @@
 	@media (max-width: 760px), (pointer: coarse) {
 		textarea {
 			font-size: max(16px, 1rem);
+		}
+		.round,
+		.attach,
+		.attach-menu :global(.btn) {
+			width: 44px;
+			height: 44px;
+			min-height: 44px;
 		}
 	}
 </style>
