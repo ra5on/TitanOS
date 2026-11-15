@@ -7551,6 +7551,8 @@
 	"agent.accountsHint": "Owners may always use the agent. Choose further accounts here; each has its own chats and sees only its own shares.",
 	"agent.accountsNone": "There are no other accounts.",
 	"agent.alwaysDenied": "Always denied, cannot be switched on: passwords, tokens, 2FA, consoles and the settings of the agent and MCP.",
+	"agent.webFree": "Internet without asking also after content was read",
+	"agent.webFreeHint": "Off from the factory: once a chat has read files, devices of Home Assistant, logs or attachments, the agent asks before every web search and every web page – content it read could tell it to send something out. Switched on, what is set under “Internet” applies then too. Research that only reads the web no longer asks at every step either way.",
 	"agent.approvalTitle": "Approval needed",
 	"agent.approve": "Run it",
 	"agent.builtIn": "built in",

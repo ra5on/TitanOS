@@ -571,6 +571,7 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 	step.Duration = time.Since(start).Milliseconds()
 	step.Level, step.Summary, step.Kind = p.Level, p.Summary, p.Kind
 	if p.Untrusted {
+		chat.WebOnly = p.Area == AreaWeb && (!chat.Tainted || chat.WebOnly)
 		chat.Tainted = true
 	}
 	if err != nil {

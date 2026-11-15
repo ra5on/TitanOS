@@ -7551,6 +7551,8 @@
 	"agent.accountsHint": "Besitzer dürfen den Agenten immer nutzen. Hier wählst du weitere Konten; jedes hat eigene Chats und sieht nur seine Freigaben.",
 	"agent.accountsNone": "Es gibt keine weiteren Konten.",
 	"agent.alwaysDenied": "Immer verboten, nicht abschaltbar: Passwörter, Tokens, 2FA, Konsolen und die Einstellungen von Agent und MCP.",
+	"agent.webFree": "Internet auch nach gelesenen Inhalten ohne Nachfrage",
+	"agent.webFreeHint": "Ab Werk aus: Hat ein Chat Dateien, Geräte aus Home Assistant, Protokolle oder Anhänge gelesen, fragt der Agent vor jeder Websuche und jeder Webseite – ein gelesener Inhalt könnte ihn anweisen, etwas nach außen zu schicken. Eingeschaltet gilt auch dann, was unter „Internet“ eingestellt ist. Reine Recherchen im Web fragen so oder so nicht mehr bei jedem Schritt.",
 	"agent.approvalTitle": "Freigabe nötig",
 	"agent.approve": "Ausführen",
 	"agent.builtIn": "mitgeliefert",

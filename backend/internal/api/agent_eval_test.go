@@ -136,6 +136,19 @@ func agentEvalTasks() []agentEvalTask {
 		return ""
 	}
 	return []agentEvalTask{
+		// 0.94: a greeting is no task (owner 15 Nov 2026: "Hallo" ran nas_map,
+		// ha_state and web_search).
+		{name: "hello", ask: "Hallo", check: func(_, answer string, chat *agent.Chat) string {
+			for _, e := range chat.Entries {
+				if e.Role == "tool" {
+					return "a greeting called " + e.Tool
+				}
+			}
+			if strings.TrimSpace(answer) == "" {
+				return "no answer"
+			}
+			return ""
+		}},
 		// 0.92: documents – a new workbook, a cell of an existing one and a
 		// word in an existing letter (file_write, document_edit).
 		{name: "newxlsx", ask: "Erstelle in Docs eine Excel-Datei ausgaben.xlsx mit den Spalten Posten und Betrag und den Zeilen Miete 900, Strom 80 und Internet 40.",

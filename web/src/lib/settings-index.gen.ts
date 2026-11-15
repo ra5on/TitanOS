@@ -1675,6 +1675,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	{ p: '/settings/agent', k: 'agent.sectionLocations', kind: 'group', tab: 'accounts' },
 	{ p: '/settings/agent', k: 'agent.preset', kind: 'group', tab: 'rights' },
 	{ p: '/settings/agent', k: 'agent.presetRow', kind: 'row', tab: 'rights', in: ['agent.preset'] },
+	{ p: '/settings/agent', k: 'agent.webFree', kind: 'row', tab: 'rights', in: ['agent.preset'] },
 	{
 		p: '/settings/agent',
 		k: 'agent.alwaysDeniedLabel',

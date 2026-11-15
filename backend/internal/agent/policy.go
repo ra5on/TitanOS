@@ -88,6 +88,12 @@ type Policy struct {
 	Areas   map[string]string `json:"areas,omitempty"`
 	Tools   map[string]string `json:"tools,omitempty"`
 	Folders []FolderRule      `json:"folders,omitempty"`
+	// WebFree: the web tools keep the mode of their rights also after the
+	// chat has read content from outside (files, devices, pages, a notice
+	// of the NAS). Off from the factory: then they ask, because such
+	// content could tell the model to send data out. The person switches
+	// it on knowingly (0.94, owner 15 Nov 2026).
+	WebFree bool `json:"webFree,omitempty"`
 }
 
 // ValidMode reports whether m is one of the three modes.

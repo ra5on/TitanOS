@@ -264,6 +264,8 @@ export type Settings = {
 		areas?: Record<string, Mode>;
 		tools?: Record<string, Mode>;
 		folders?: FolderRule[];
+		/** Web tools do not ask again after outside content was read. */
+		webFree?: boolean;
 	};
 	locations?: Location[];
 	react?: boolean;

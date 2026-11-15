@@ -270,7 +270,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	}
 	// After outside content was read, nothing goes out to the web without
 	// the person: a page or file could have told the model to send data.
-	if t.area == agent.AreaWeb && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+	// A chat that has only read the web so far holds nothing of the NAS a
+	// page could ask for: it may search on, and read a page whose address
+	// was already there (0.94, owner 15 Nov 2026: research asked at every
+	// step although the web was allowed without asking).
+	if t.area == agent.AreaWeb && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.name == "code_run" {
@@ -697,4 +701,57 @@ func sameArea(rule, area string) bool {
 		return strings.NewReplacer("ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss", " ", "_", "-", "_").Replace(s)
 	}
 	return norm(rule) == norm(area)
+}
+
+// webStaysFree reports whether a web step in a chat that has read outside
+// content needs no extra approval: the chat has read nothing but the web,
+// no outside skill is in the prompt, and the step is a search or reads an
+// address the model did not write itself – one that stands in a message of
+// the person or in what an earlier search or page of this chat returned.
+// Such an address existed before, so it cannot carry data out. Results of
+// other tools do not count: they may repeat what the model gave them.
+//
+// With "Internet auch nach gelesenen Inhalten ohne Nachfrage" of the rights
+// (Policy.WebFree) the person has taken that risk for every chat; a skill
+// from outside in the prompt still asks.
+func (b *agentToolbox) webStaysFree(chat *agent.Chat, name string, args json.RawMessage) bool {
+	if chat.OutsideSkill {
+		return false
+	}
+	if b.settings.Policy.WebFree {
+		return true
+	}
+	if !chat.WebOnly {
+		return false
+	}
+	switch name {
+	case "web_search":
+		return true
+	case "web_read":
+	default:
+		return false
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(args, &req) != nil {
+		return false
+	}
+	address := strings.TrimSpace(req.URL)
+	if len(address) < 12 {
+		return false
+	}
+	for _, e := range chat.Entries {
+		text := ""
+		switch {
+		case e.Role == "user":
+			text = e.Content
+		case e.Role == "tool" && (e.Tool == "web_search" || e.Tool == "web_read") && !strings.HasPrefix(e.Result, "Error:"):
+			text = e.Result
+		}
+		if text != "" && strings.Contains(text, address) {
+			return true
+		}
+	}
+	return false
 }

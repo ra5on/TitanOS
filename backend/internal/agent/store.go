@@ -168,6 +168,14 @@ type Chat struct {
 	// Tainted: the chat has read content from outside TitanOS (files,
 	// logs, web pages). Web tools then need the person's approval.
 	Tainted bool `json:"tainted,omitempty"`
+	// WebOnly: all outside content this chat has read came from the web
+	// tools (search results, pages) – nothing of the NAS, no attachment,
+	// no code. Then a web search and a page whose address was already in
+	// the chat need no extra approval (0.94): there is nothing of the NAS
+	// a page could ask to send out, and an address that was there before
+	// cannot carry anything. The first other outside content clears it
+	// for good.
+	WebOnly bool `json:"webOnly,omitempty"`
 	// OutsideSkill: a skill from outside (catalog, or saved after outside
 	// content) is in the prompt (PLAN 54-G); web tools ask first, like after
 	// outside content, but what the person says is not marked for it.
