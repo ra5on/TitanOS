@@ -85,6 +85,10 @@ func BuildPrompt(in PromptInput) string {
 	case "homeassistant":
 		b.WriteString("This question comes from Home Assistant (voice or app): answer in one or two short spoken sentences without Markdown.\n")
 	}
+	// The page shows some results itself (0.95).
+	if in.Origin == "" || in.Origin == "web" {
+		b.WriteString("Under your answer the chat shows a card with all containers (state, memory, buttons) after docker_list, and a card of the device after ha_state. Do not repeat those as a table or list: say in a sentence or two what stands out (what is stopped, what has an update, what is wrong).\n")
+	}
 	// How the person wants this chat to work (only where someone watches:
 	// a scheduled or started run never waits for an answer).
 	if in.Origin == "" || in.Origin == "web" {

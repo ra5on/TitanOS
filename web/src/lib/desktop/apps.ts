@@ -31,7 +31,17 @@ export type SideItem =
 	| { href: string; text: string; state: 'on' | 'off' };
 
 export type Gradient =
-	'blue' | 'teal' | 'green' | 'orange' | 'violet' | 'grey' | 'dark' | 'red' | 'yellow' | 'pink';
+	| 'blue'
+	| 'teal'
+	| 'green'
+	| 'orange'
+	| 'violet'
+	| 'grey'
+	| 'dark'
+	| 'red'
+	| 'yellow'
+	| 'pink'
+	| 'ember';
 
 export type SystemApp = {
 	id: string;
@@ -240,7 +250,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 		id: 'agent',
 		label: 'desktop.app.agent',
 		glyph: 'agent',
-		gradient: 'violet',
+		gradient: 'ember',
 		href: '/agent',
 		paths: ['/agent', '/settings/agent', '/settings/mcp'],
 		side: [],

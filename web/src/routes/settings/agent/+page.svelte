@@ -562,6 +562,19 @@
 					/>
 				{/snippet}
 			</SettingRow>
+			<!-- 0.95: "Wohnzimmerlicht an" is switched without the model. -->
+			<SettingRow icon="zap" title={t('agent.quick')} desc={t('agent.quickHint')} for="ag-quick">
+				{#snippet control()}
+					<input
+						id="ag-quick"
+						type="checkbox"
+						class="switch"
+						role="switch"
+						checked={!settings!.quickOff}
+						onchange={(e) => (settings!.quickOff = !e.currentTarget.checked)}
+					/>
+				{/snippet}
+			</SettingRow>
 			<SettingRow icon="fileText" title={t('agent.weeklyReport')} for="ag-weekly">
 				{#snippet control()}
 					<input

@@ -39,6 +39,7 @@
 	import { levelLabel, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
+	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
@@ -596,6 +597,7 @@
 							onsend={ag.send}
 							onstop={() => ag.stop()}
 							onpicknas={() => (ag.dialog = { kind: 'nas' })}
+							ontalk={ag.readOnlyBy ? undefined : () => (ag.dialog = { kind: 'talk' })}
 							onerror={(m) => (ag.error = m)}
 						/>
 						<p class="where">{ag.whereText}</p>
@@ -703,6 +705,15 @@
 	/>
 {:else if ag.dialog?.kind === 'notes'}
 	<NotesPanel calm={ag.calm} onclose={() => (ag.dialog = null)} />
+{:else if ag.dialog?.kind === 'talk'}
+	<VoiceMode
+		chat={ag.current}
+		busy={ag.busy}
+		voiceNas={nasSpeech.hear}
+		calm={ag.calm}
+		onsend={ag.send}
+		onclose={() => (ag.dialog = null)}
+	/>
 {:else if ag.dialog?.kind === 'nas'}
 	<NasPicker
 		onclose={() => (ag.dialog = null)}

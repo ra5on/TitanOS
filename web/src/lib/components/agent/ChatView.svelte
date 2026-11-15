@@ -4,11 +4,14 @@
 	// the answers (safe Markdown, tables in a card) with Vorlesen, Kopieren
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
+	import ResultCards from './ResultCards.svelte';
+	import { appForFile, loadWebApps, webAppById } from '#lib/webapps/webapps.svelte.ts';
+	import { openInWebApp } from '#lib/webapps/open.ts';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
@@ -313,6 +316,32 @@
 	let scroller = $state<HTMLDivElement>();
 	let pinned = $state(true);
 	const list = $derived(blocks(chat.entries));
+	// The web app set for a file type, if one is installed (0.95): a
+	// document the agent wrote opens there with one tap.
+	onMount(() => void loadWebApps().catch(() => {}));
+	function fileApp(name: string): { key: string; name: string } | null {
+		const key = appForFile(name);
+		if (!key?.startsWith('webapp:')) return null;
+		const app = webAppById(key.slice(7));
+		return app ? { key, name: app.name } : null;
+	}
+	// The cards of a turn stand under its last answer: all steps since the
+	// person's message.
+	function turnEnds(i: number): boolean {
+		for (let j = i + 1; j < list.length; j++) {
+			if (list[j].kind === 'user') return true;
+			if (list[j].kind === 'answer') return false;
+		}
+		return true;
+	}
+	function turnSteps(i: number): Entry[] {
+		const steps: Entry[] = [];
+		for (let j = i - 1; j >= 0 && list[j].kind !== 'user'; j--) {
+			const b = list[j];
+			if (b.kind === 'steps') steps.unshift(...b.steps);
+		}
+		return steps;
+	}
 	// Only the last answer offers its buttons; older questions are answered.
 	const lastAnswer = $derived.by(() => {
 		for (let i = list.length - 1; i >= 0; i--) {
@@ -674,6 +703,13 @@
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 						<div class="md">{@html chatMarkdown(block.entry.content)}</div>
 					{/if}
+					{#if turnEnds(i)}
+						<ResultCards
+							steps={turnSteps(i)}
+							active={block.entry.id === lastAnswer && !busy && !readonly}
+							onask={onchoice}
+						/>
+					{/if}
 					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
 						<div class="choices">
 							{#each block.entry.choices as choice, n (choice)}
@@ -785,17 +821,31 @@
 
 		{#each chat.entries.filter((e) => e.role === 'tool' && e.files?.length) as step (step.id)}
 			{#each step.files ?? [] as file (file.root + file.path)}
-				<a
-					class="file"
-					href={`/files?root=${encodeURIComponent(file.root)}&path=${encodeURIComponent(file.path.split('/').slice(0, -1).join('/'))}`}
-				>
+				{@const name = file.path.split('/').pop() ?? ''}
+				{@const app = fileApp(name)}
+				<div class="file">
 					<span class="doc" aria-hidden="true">{file.path.split('.').pop()?.toUpperCase()}</span>
 					<span class="meta">
-						<strong>{file.path.split('/').pop()}</strong>
+						<strong>{name}</strong>
 						<span class="muted">{file.root.replace(/^share\//, '')} › {file.path}</span>
 					</span>
-					<span class="btn">{t('agent.openInFiles')}</span>
-				</a>
+					<span class="file-acts">
+						<!-- 0.95: straight into the app of the file type (T-Word, T-Excel …). -->
+						{#if app}
+							<button
+								type="button"
+								class="btn btn-primary"
+								onclick={() => openInWebApp(app.key, file.root, file.path)}
+								>{t('agent.openInApp', { app: app.name })}</button
+							>
+						{/if}
+						<a
+							class="btn"
+							href={`/files?root=${encodeURIComponent(file.root)}&path=${encodeURIComponent(file.path.split('/').slice(0, -1).join('/'))}`}
+							>{t('agent.openInFiles')}</a
+						>
+					</span>
+				</div>
 			{/each}
 		{/each}
 
@@ -1633,6 +1683,17 @@
 		text-decoration: none;
 		color: var(--text);
 	}
+	.file {
+		flex-wrap: wrap;
+	}
+	.file-acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.file-acts .btn {
+		text-decoration: none;
+	}
 	.file .doc {
 		width: 36px;
 		height: 42px;
@@ -1649,7 +1710,7 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		flex: 1;
+		flex: 1 1 12em;
 	}
 	.file .meta .muted {
 		font-size: var(--text-sm);
@@ -1782,21 +1843,26 @@
 		height: 4.5px;
 		border-radius: 50%;
 		background: var(--ag-warm, var(--accent));
-		animation: 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 		will-change: transform;
 	}
 	/* Standing still (calm, less motion) they are the triangle. */
 	.dots i:nth-child(1) {
 		transform: translate(0, -5px) scale(1);
-		animation-name: dot-a;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-a 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.dots i:nth-child(2) {
 		transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
-		animation-name: dot-b;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-b 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.dots i:nth-child(3) {
 		transform: translate(4.5px, 3.5px) scale(1);
-		animation-name: dot-c;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-c 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	@keyframes dot-a {
 		0%,

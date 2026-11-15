@@ -12,6 +12,11 @@ const { chromium } = await import(
 );
 const browser = await chromium.launch({
   headless: true,
+  // A microphone that exists (the Sprechmodus, 0.95): Chromium's own beeps.
+  args: [
+    "--use-fake-device-for-media-stream",
+    "--use-fake-ui-for-media-stream",
+  ],
   executablePath: process.env.BROWSER_EXECUTABLE,
 });
 const base = process.env.UI_URL || "http://127.0.0.1:5191";
@@ -2107,6 +2112,56 @@ try {
     assert.equal(added.body.every, "once");
     assert.equal(added.body.date, "2026-11-10");
     assert.equal(added.body.at, "09:00");
+    await ctx.close();
+  }
+  // 0.95: the Sprechmodus opens from the plus, listens, sends what was
+  // said (a tap on the figure ends the sentence: Chromium's microphone
+  // beeps every second and never pauses) and closes again.
+  {
+    const { ctx, page } = await open(390, 844);
+    await ctx.grantPermissions(["microphone"]);
+    await page.route("**/api/v1/agent/status", (route) =>
+      route.fulfill({ json: { ...status, voice: true } }),
+    );
+    await page.route("**/api/v1/agent/transcribe**", (route) =>
+      route.fulfill({ json: { text: "Wie geht es dem NAS?" } }),
+    );
+    // The answer takes a while: the figure thinks.
+    await page.route("**/api/v1/agent/chats", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await new Promise((r) => setTimeout(r, 5000));
+      return route.fallback();
+    });
+    await page.goto(base + "/agent?app=1");
+    await page
+      .getByRole("button", { name: "Datei anhängen", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Sprechmodus" }).click();
+    const talk = page.getByRole("dialog", { name: "Sprechmodus" });
+    await talk.waitFor();
+    const state = (text) =>
+      talk.locator(".state").filter({ hasText: text }).waitFor();
+    await state(/Ich höre zu|Ich höre dich/);
+    await page.waitForTimeout(400);
+    await noOverflow(page, "talk mode");
+    await page.screenshot({ path: `${out}/95-phone-talk.png` });
+    // End the sentence by hand if the beeps have not paused by themselves;
+    // a tap in the first third of a second counts as a noise, so try again.
+    for (let i = 0; i < 60; i++) {
+      const now = await talk.locator(".state").textContent();
+      if (/Denkt nach/.test(now)) break;
+      if (/Ich höre dich/.test(now)) {
+        await page.waitForTimeout(500);
+        await talk.locator(".orb").click();
+      }
+      await page.waitForTimeout(150);
+    }
+    await state("Denkt nach");
+    await talk.getByText("Wie geht es dem NAS?").waitFor();
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${out}/95-phone-talk-think.png` });
+    await talk.getByRole("button", { name: "Beenden" }).last().click();
+    await talk.waitFor({ state: "detached" });
     await ctx.close();
   }
   // PLAN 49/51: microphone, a project shared by another account, read-only chat.
