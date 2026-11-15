@@ -99,6 +99,7 @@ export class AgentChats {
 		/** A project: its chats, files and memory (from the page Wissen). */
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
+		| { kind: 'talk' }
 		/** Project, model and thinking level of the chat (PLAN 90-4). */
 		| { kind: 'head' }
 		| { kind: 'feature'; id: FeatureViewId }
@@ -373,6 +374,8 @@ export class AgentChats {
 			// Read the new answer aloud if wished (Darstellung, PLAN 51).
 			if (
 				this.look.read &&
+				// The Sprechmodus reads the answer itself.
+				this.dialog?.kind !== 'talk' &&
 				this.current?.id === id &&
 				document.visibilityState === 'visible' &&
 				canSpeak()

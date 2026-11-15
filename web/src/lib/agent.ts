@@ -257,6 +257,8 @@ export type Settings = {
 	keepAlive?: string;
 	instruction?: string;
 	weeklyReport?: boolean;
+	/** Quick commands off: every message goes to the model. */
+	quickOff?: boolean;
 	maxSteps?: number;
 	users?: string[];
 	policy: {

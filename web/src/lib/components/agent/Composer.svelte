@@ -30,6 +30,7 @@
 		onsend,
 		onstop,
 		onpicknas,
+		ontalk,
 		onerror,
 		voice = false,
 		voiceNas = false,
@@ -68,6 +69,8 @@
 		onstop?: () => void;
 		/** Opens the choice of files on the NAS (shares of the account). */
 		onpicknas?: () => void;
+		/** Opens the Sprechmodus (only offered where speech input works). */
+		ontalk?: () => void;
 		/** A file could not be taken, e.g. too large. */
 		onerror?: (message: string) => void;
 		/** Speech input through Whisper is switched on (PLAN 49). */
@@ -324,6 +327,17 @@
 								onpicknas?.();
 							}}><Icon name="folder" size={16} /><span>{t('agent.attachNas')}</span></button
 						>
+						{#if ontalk && voice}
+							<hr />
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									ontalk();
+								}}><Icon name="mic" size={16} /><span>{t('agent.talk.open')}</span></button
+							>
+						{/if}
 						{#if onautonomy}
 							<hr />
 							{#each WAYS as way (way)}
@@ -445,6 +459,17 @@
 					onpicknas();
 				}}
 				><Icon name="folder" size={20} /><span class="sh-text">{t('agent.attachNas')}</span></button
+			>
+		{/if}
+		{#if ontalk && voice}
+			<hr class="sh-rule" />
+			<button
+				type="button"
+				class="sh-item"
+				onclick={() => {
+					plusOpen = false;
+					ontalk();
+				}}><Icon name="mic" size={20} /><span class="sh-text">{t('agent.talk.open')}</span></button
 			>
 		{/if}
 		{#if onhead}

@@ -1695,6 +1695,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.quick',
+		kind: 'row',
+		tab: 'initiative',
+		in: ['agent.sectionInitiative'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.weeklyReport',
 		kind: 'row',
 		tab: 'initiative',
