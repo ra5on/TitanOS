@@ -217,6 +217,11 @@ func (hass haArea) handleHACall(w http.ResponseWriter, r *http.Request) {
 
 // haTools are the assistant's tools for Home Assistant, only for owners and
 // administrators and only while a server is set up.
+// haNothingReleased is what the KI-Agent reads when its own list of
+// devices is empty: without it the model only sees "no entities" and
+// tells the person there are none.
+const haNothingReleased = "No Home Assistant device is released for the KI-Agent yet. Tell the person to release devices under Einstellungen › KI-Agent › Home Assistant › Geräte für den Agenten (\"Alles\" or a selection)."
+
 func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 	hub := hass.hub()
 	if hub == nil || len(hub.Active()) == 0 || !user.Role.CanAdminister() {
@@ -308,6 +313,9 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				if end < total {
 					result["cut"], result["nextOffset"] = true, end
 				}
+				if total == 0 && ha.ReleasesNothing(ctx) {
+					result["note"] = haNothingReleased
+				}
 				return result, nil
 			})),
 		reading("ha_state", "One released Home Assistant entity with all attributes (brightness, temperature, …).",
@@ -318,6 +326,9 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					return nil, err
 				}
 				if !ha.AllowedCtx(ctx, q.Entity) {
+					if ha.ReleasesNothing(ctx) {
+						return nil, toolcatalog.Errorf("%s", haNothingReleased)
+					}
 					return nil, homeassistant.ErrNotAllowed
 				}
 				return ha.State(ctx, q.Entity)

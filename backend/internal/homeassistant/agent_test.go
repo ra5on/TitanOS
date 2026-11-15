@@ -25,3 +25,23 @@ func TestAgentReleaseIsItsOwn(t *testing.T) {
 		t.Fatal("agent called an entity it has not released")
 	}
 }
+
+// "Alles" releases every entity; a single entity can be released whatever
+// its domain. Calling stays with the domains that have services here.
+func TestAgentReleaseAllAndAnyDomain(t *testing.T) {
+	m := &Manager{loaded: true}
+	all := WithRelease(context.Background(), Release{All: true})
+	if !m.AllowedCtx(all, "light.flur") || !m.AllowedCtx(all, "number.ladestrom") || m.AllowedCtx(all, "not an entity") {
+		t.Fatal("all")
+	}
+	if m.ReleasesNothing(all) || !m.ReleasesNothing(WithRelease(context.Background(), Release{})) || m.ReleasesNothing(context.Background()) {
+		t.Fatal("ReleasesNothing")
+	}
+	one := WithRelease(context.Background(), Release{Entities: []string{"number.ladestrom"}})
+	if !m.AllowedCtx(one, "number.ladestrom") || m.AllowedCtx(one, "number.other") {
+		t.Fatal("a single entity of a domain without services can be read")
+	}
+	if _, err := m.Call(all, "number", "set_value", []string{"number.ladestrom"}, nil); err == nil {
+		t.Fatal("a domain without services here was called")
+	}
+}

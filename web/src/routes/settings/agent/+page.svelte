@@ -590,6 +590,7 @@
 			bind:haNotify
 			bind:haRules
 			{admins}
+			{tools}
 			{modeOptions}
 		/>
 	{/if}

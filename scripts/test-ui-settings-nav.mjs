@@ -454,9 +454,11 @@ for (const role of ["owner", "user"]) {
   await page.goto(base + "/settings");
   await page.locator(".home .sgroup").first().waitFor({ timeout: 20000 });
   await fonts(page);
+  // The phone lists the areas, one row each; an area opens to its pages.
   const headings = await page
-    .locator(".groups .sgroup-title")
+    .locator("#settings-home-areas .srow-title")
     .evaluateAll((h) => h.map((x) => x.textContent.trim()));
+  assert.equal(await page.locator(".home .overview").count(), 0, "no overview cards on the phone");
   assert.deepEqual(
     headings,
     role === "owner"
@@ -527,16 +529,28 @@ for (const role of ["owner", "user"]) {
   await page.waitForURL("**/settings/appearance?tab=colors#find=*");
   await page.locator(".srow.found").waitFor();
   if (role === "owner") await shot(page, "12-handy-treffer-sprache");
-  // "?area=" scrolls the list to its area.
-  await page.goto(base + "/settings?area=data");
-  if (role === "owner") {
-    await page.locator("#settings-home-group-data").waitFor();
-    await page.waitForTimeout(300);
-    const top = await page
-      .locator("#settings-home-group-data")
-      .evaluate((el) => el.getBoundingClientRect().top);
-    assert.ok(top < 200, `area heading at ${top}`);
-  }
+  // "?area=" shows the pages of that area only, and the arrow of the bar
+  // goes up one level at a time: page › area › areas › home screen.
+  await page.goto(base + "/settings");
+  // An area with one page for this account opens that page directly.
+  const area = page.locator('#settings-home-areas a.srow[href*="?area="]').first();
+  const areaHref = await area.getAttribute("href");
+  const group = areaHref.split("=")[1];
+  await area.click();
+  await page.waitForURL("**" + areaHref);
+  await page.locator(`#settings-home-group-${group} a.srow`).first().waitFor();
+  assert.equal(await page.locator(".groups .sgroup").count(), 1, "one area open");
+  const back = page.locator(".phone-bar button.back").first();
+  if (role === "owner") await shot(page, "14-handy-bereich");
+  await page.locator(`#settings-home-group-${group} a.srow`).first().click();
+  await page.waitForURL(/\/settings\/[a-z-]+$/);
+  await back.click();
+  await page.waitForURL("**" + areaHref);
+  await back.click();
+  await page.waitForURL(/\/settings$/);
+  await page.locator("#settings-home-areas").waitFor();
+  await back.click();
+  await page.waitForURL((url) => url.pathname === "/");
   await ctx.close();
 }
 

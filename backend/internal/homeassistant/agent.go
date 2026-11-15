@@ -76,10 +76,20 @@ func (m *Manager) SaveConfig(ctx context.Context, kind, id string, config map[st
 // MCP freigeben"). A context carrying one is checked against it instead of
 // the MCP release; the policies of MCP (read-only, service lists) do not
 // apply then, the agent has rules of its own.
+//
+// All releases every entity of the connection (owner 15.11.2026: a way to
+// let the agent see everything without picking each device). A single
+// entity can be released whatever its domain; it can then be read. What
+// can be called stays the domains titand knows services for (Level), and
+// the agent's rules still decide whether it asks first.
 type Release struct {
+	All      bool     `json:"all,omitempty"`
 	Domains  []string `json:"domains,omitempty"`
 	Entities []string `json:"entities,omitempty"`
 }
+
+// Empty reports whether the list releases nothing at all.
+func (r Release) Empty() bool { return !r.All && len(r.Domains) == 0 && len(r.Entities) == 0 }
 
 type releaseKey struct{}
 
@@ -111,10 +121,15 @@ func (r Release) allows(entity string) bool {
 	if !ValidEntity(entity) {
 		return false
 	}
-	if _, known := domainLevels[domainOf(entity)]; !known {
-		return false
-	}
-	return slices.Contains(r.Domains, domainOf(entity)) || slices.Contains(r.Entities, entity)
+	return r.All || slices.Contains(r.Domains, domainOf(entity)) || slices.Contains(r.Entities, entity)
+}
+
+// ReleasesNothing reports whether the context carries a release list of
+// its own for this connection and that list is empty: then no entity is
+// visible, and the answer should say where to change that.
+func (m *Manager) ReleasesNothing(ctx context.Context) bool {
+	r, ok := releaseOf(ctx, m.id)
+	return ok && r.Empty()
 }
 
 // AllowedCtx is Allowed with the release of the context, if it has one.

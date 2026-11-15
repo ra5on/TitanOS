@@ -4,8 +4,10 @@
 	// window's menu with its search lists the areas, so the page shows only
 	// the overview cards. On the phone and in a tab of its own there is no
 	// menu: there it is "Alle Einstellungen" – a search and every page as a
-	// row under the heading of its area (PLAN 78, PLAN 86) – and the same
-	// overview cards below.
+	// row under the heading of its area (PLAN 78, PLAN 86) and the overview
+	// cards below. On the phone that was too much at once (owner 15 Nov
+	// 2026): there it is one row per area, and an area opens to its pages
+	// ("?area=<area>").
 	//
 	// PLAN 86 (variant A): an area has no page of its own any more; the menu
 	// opens its pages in the column. "?area=<area>" (old links, the menu bar,
@@ -14,14 +16,17 @@
 	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
+	import { mode } from '#lib/desktop/mode.svelte.ts';
 	import SettingsOverview from './SettingsOverview.svelte';
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
 	import {
 		settingsAreaTarget,
 		settingsEntries,
 		settingsGroupLabel,
+		settingsGroupIcons,
 		settingsGroupOf,
 		settingsGroups,
+		settingsMenu,
 		type SettingsEntry,
 	} from '#lib/settings-search.ts';
 	import {
@@ -51,8 +56,20 @@
 			void loadSettingsIndex().then((loaded) => (index = loaded));
 	});
 	const hits = $derived(searching ? findSettings(settingsSearch.query, admin, t, index) : []);
-	// Without a search: every page under its area, in the order of the menu.
-	const groups = $derived(searching ? [] : settingsEntries('', admin, t));
+	// The phone shows the areas first and an area's pages on "?area="; a
+	// wide tab of its own has the room for every page under its area.
+	const drill = $derived(!mode.wide);
+	const areas = $derived(settingsMenu(admin));
+	const openGroup = $derived(
+		drill && page.url.searchParams.has('area')
+			? settingsGroupOf(`/settings${page.url.search}`)
+			: undefined,
+	);
+	const groups = $derived(
+		searching
+			? []
+			: settingsEntries('', admin, t).filter((group) => (drill ? group.group === openGroup : true)),
+	);
 	// With a search: the hits under the heading of their area, pages of other
 	// programs (Mein Konto) after them.
 	const hitGroups = $derived.by(() => {
@@ -92,6 +109,7 @@
 			);
 			return;
 		}
+		if (drill) return; // the page shows the area's pages itself
 		const group = settingsGroupOf(`/settings${search}`);
 		if (!group) return;
 		// The list comes with the session and the texts; look for it a while.
@@ -154,7 +172,9 @@
 	<PageHead title={t('settingshome.overview')} />
 	<SettingsOverview {admin} />
 {:else}
-	<PageHead title={t('settingshome.all')} />
+	<PageHead
+		title={openGroup && !searching ? t(settingsGroupLabel(openGroup)) : t('settingshome.all')}
+	/>
 
 	<div class="home">
 		<div class="home-search">
@@ -177,19 +197,31 @@
 						{/each}
 					</SettingGroup>
 				{/each}
-			{:else}
+			{:else if openGroup || !drill}
 				{#each groups as group (group.group)}
 					<SettingGroup
-						title={t(settingsGroupLabel(group.group))}
+						title={drill ? undefined : t(settingsGroupLabel(group.group))}
 						id="{prefix}-group-{group.group}"
 					>
 						{#each group.entries as entry (entry.href)}{@render row(entry)}{/each}
 					</SettingGroup>
 				{/each}
+			{:else}
+				<SettingGroup id="{prefix}-areas">
+					{#each areas as area (area.group)}
+						<SettingRow
+							href={area.pages.length > 1 ? `/settings?area=${area.group}` : area.href}
+							icon={settingsGroupIcons[area.group]}
+							title={t(area.label)}
+							desc={area.pages.map((p) => t(p.label)).join(' · ')}
+						/>
+					{/each}
+				</SettingGroup>
 			{/if}
 		</div>
 
-		{#if !searching}<SettingsOverview {admin} prefix="{prefix}-overview" />{/if}
+		<!-- The overview cards only where there is room: not on the phone. -->
+		{#if !searching && !drill}<SettingsOverview {admin} prefix="{prefix}-overview" />{/if}
 	</div>
 {/if}
 

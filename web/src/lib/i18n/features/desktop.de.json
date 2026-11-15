@@ -361,5 +361,6 @@
 	"desktop.widget.gpuPower": "Leistung",
 	"desktop.widget.gpuClock": "Takt",
 	"desktop.widget.gpuShows": "{name} zeigt",
-	"desktop.widget.gpuDevice": "Gerät"
+	"desktop.widget.gpuDevice": "Gerät",
+	"desktop.phone.up": "Eine Ebene zurück"
 }

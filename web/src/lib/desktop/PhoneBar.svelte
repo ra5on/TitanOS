@@ -16,6 +16,7 @@
 	import { entries, goTarget, menusFor, type MenuEntry } from './menubar/menus.ts';
 	import { unreadCount } from '../notifications.svelte.ts';
 	import { swipeDown } from '../components/sheet.ts';
+	import { settingsGroupOf, settingsMenu } from '../settings-search.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -44,6 +45,18 @@
 	}
 
 	const app = $derived(appForPath(page.url.pathname));
+	// The arrow goes one level up: in the settings from a page to its area,
+	// from an area to the list of areas, and only from there (and from every
+	// other program) to the home screen.
+	const up = $derived.by(() => {
+		const path = page.url.pathname.replace(/\/$/, '');
+		if (path !== '/settings' && !path.startsWith('/settings/')) return '/';
+		if (path === '/settings') return page.url.searchParams.has('area') ? '/settings' : '/';
+		const group = settingsGroupOf(path);
+		const admin = ['owner', 'admin'].includes(session.data?.user?.role ?? '');
+		const area = settingsMenu(admin).find((entry) => entry.group === group);
+		return area && area.pages.length > 1 ? `/settings?area=${area.group}` : '/settings';
+	});
 	const role = $derived(session.data?.user?.role ?? 'user');
 	// PLAN 79-7: entries only some roles see (the NVR's settings) are left out,
 	// and an account without the admin role sees the NVR's pages it has a right for.
@@ -107,7 +120,11 @@
 	ontouchcancel={pullEnd}
 	style:--pulled="{Math.min(pulled, 80)}px"
 >
-	<button type="button" class="back" onclick={() => goto('/')} aria-label={t('desktop.phone.home')}
+	<button
+		type="button"
+		class="back"
+		onclick={() => goto(up)}
+		aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
 		><Icon name="chevronLeft" size={22} /></button
 	>
 	{#if app}<DesktopIcon
