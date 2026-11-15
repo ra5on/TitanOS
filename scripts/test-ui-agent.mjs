@@ -4,6 +4,9 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
+// The greeting changes with the time of day and from visit to visit.
+const GREETING =
+  /Guten|Hallo|Morgen|dran|steht|Start|Schön|Feierabend|Na,|wach|Schicht|Wochenende/;
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -951,7 +954,11 @@ async function plan55() {
         .getByRole("button", { name: /Menü|Chats/ })
         .first()
         .click();
-    await page.getByRole("button", { name: "Notizen", exact: true }).click();
+    // On the phone the notes are in the menu and in the bar at the bottom.
+    await page
+      .getByRole("navigation", { name: "Menü des KI-Agenten" })
+      .getByRole("button", { name: "Notizen", exact: true })
+      .click();
     const panel = page.getByRole("dialog", { name: "Notizen" });
     await panel.getByText("Einkauf").waitFor();
     await panel.evaluate((d) =>
@@ -1202,10 +1209,17 @@ async function plan58() {
     });
     await page.goto(base + "/agent?chat=" + docChat.id);
     await page.getByRole("heading", { name: docChat.title }).waitFor();
+    // The bar with the four places is the last thing on the screen, the
+    // composer sits right above it.
     const box = await page.locator(".dock").boundingBox();
+    const tabs = await page.locator("nav.tabs").boundingBox();
     assert.ok(
-      box && Math.abs(box.y + box.height - 844) <= 2,
-      `composer at the bottom: ${JSON.stringify(box)}`,
+      tabs && 844 - (tabs.y + tabs.height) <= 12,
+      `bar at the bottom: ${JSON.stringify(tabs)}`,
+    );
+    assert.ok(
+      box && Math.abs(box.y + box.height - tabs.y) <= 2,
+      `composer above the bar: ${JSON.stringify(box)}`,
     );
     const top = await page.locator("header.top").boundingBox();
     assert.ok(top && top.y <= 1, `header at the top: ${JSON.stringify(top)}`);
@@ -1261,6 +1275,19 @@ try {
     );
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${out}/1-desktop-chat.png` });
+    // The steps of a turn are one line; it opens "Zusammenfassung" with each
+    // step, and a step shows what went in and what came out.
+    await page.locator(".steps-line").first().click();
+    const summary = page.getByRole("dialog", { name: "Zusammenfassung" });
+    await summary.locator("button.step").first().waitFor();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${out}/1b-desktop-steps.png` });
+    await summary.locator("button.step").first().click();
+    await summary.getByRole("button", { name: "Zurück" }).waitFor();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${out}/1c-desktop-step.png` });
+    await page.keyboard.press("Escape");
+    await summary.waitFor({ state: "detached" });
     await noOverflow(page, "desktop");
     assert.ok(
       seen.posts.some((x) => x === `/agent/chats/${haChat.id}/seen`),
@@ -1300,7 +1327,7 @@ try {
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/2-desktop-document.png` });
     await page.goto(base + "/agent");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     // The suggestions are chosen at random: take the first one shown.
     const sugg = page.locator(".ideas button.srow").first();
     await sugg.waitFor();
@@ -1394,7 +1421,7 @@ try {
   {
     const { ctx, page } = await open(1440, 1000);
     await page.goto(base + "/agent?app=1");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     const menu = page.getByRole("navigation", { name: "Menü des KI-Agenten" });
     await menu.getByRole("button", { name: "Einstellungen" }).click();
     await page.waitForURL(/[?&]page=settings/);
@@ -1466,7 +1493,7 @@ try {
       });
     });
     await page.goto(base + "/agent?app=1");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     await phoneSettings(page);
     await page.waitForURL(/[?&]page=settings/);
     await settingsRow(page, "Mitteilungen").click();
@@ -1503,7 +1530,7 @@ try {
     );
     await page.evaluate(() => (window.__same = true));
     await followLink(page, "/agent");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     assert.equal(
       await page.evaluate(() => window.__same ?? false),
       false,
@@ -1525,7 +1552,7 @@ try {
     await page.waitForTimeout(500);
     assert.equal(new URL(page.url()).pathname, "/", "back stays on TitanOS");
     await page.goForward();
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     await page.waitForFunction(
       () =>
         document.querySelector("link[rel=manifest]")?.getAttribute("href") ===
@@ -1585,7 +1612,7 @@ try {
       },
     });
     await page.goto(base + "/agent?app=1");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     // A stored look of an older version (aurora, glass) is read without
     // error and changes nothing: the agent has the theme's background.
     assert.deepEqual(
@@ -1730,7 +1757,7 @@ try {
   {
     const { ctx, page } = await open(390, 844);
     await page.goto(base + "/agent");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     await page.waitForTimeout(300);
     assert.equal(
       await page.locator(".desktop, .phone-bar, .home").count(),
@@ -1840,9 +1867,12 @@ try {
     await drawer.getByRole("button", { name: "Zurück zu TitanOS" }).waitFor();
     await page.locator("button.scrim").click({ position: { x: 370, y: 400 } });
     await drawer.waitFor({ state: "detached" });
-    // Files from the NAS through the clip menu.
+    // Files from the NAS through the plus of the input: a sheet on the phone.
     await page.getByRole("button", { name: "Datei anhängen" }).click();
-    await page.getByRole("menuitem", { name: "Vom NAS wählen" }).click();
+    await page
+      .getByRole("dialog", { name: "Zum Chat hinzufügen" })
+      .getByRole("button", { name: "Vom NAS wählen" })
+      .click();
     const picker = page.locator("dialog[open]");
     await picker.getByRole("button", { name: /Documents/ }).click();
     await picker.getByRole("button", { name: /Post/ }).click();
@@ -1983,7 +2013,7 @@ try {
       return route.fallback();
     });
     await page.goto(base + "/agent");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     await page
       .getByRole("navigation", { name: "Menü des KI-Agenten" })
       .getByRole("button", { name: "Geplant" })
@@ -2102,7 +2132,7 @@ try {
       }),
     );
     await page.goto(base + "/agent");
-    await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    await page.getByRole("heading", { name: GREETING }).waitFor();
     assert.ok(
       await page.getByRole("button", { name: "Sprechen" }).isVisible(),
       "microphone with speech input on",
@@ -2110,7 +2140,8 @@ try {
     await page.getByRole("button", { name: "Datei anhängen" }).click();
     assert.ok(
       await page
-        .getByRole("menuitem", { name: "Foto oder Kamera" })
+        .getByRole("dialog", { name: "Zum Chat hinzufügen" })
+        .getByRole("button", { name: "Foto oder Kamera" })
         .isVisible(),
       "photo button",
     );

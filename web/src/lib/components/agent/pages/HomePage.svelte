@@ -83,13 +83,22 @@
 	});
 	$effect(() => oncount?.(items.length));
 
-	const hour = new Date().getHours();
+	// The greeting changes with the time of day and from visit to visit
+	// (owner 15 Nov 2026): four sentences per part of the day, two more at
+	// the weekend; late at night it is the one for night owls.
+	const now = new Date();
+	const hour = now.getHours();
+	const slot =
+		hour >= 23 || hour < 5 ? 'night' : hour < 11 ? 'morning' : hour < 18 ? 'day' : 'evening';
+	const weekend = [0, 6].includes(now.getDay()) && slot === 'day';
+	const pick = Math.floor(Math.random() * (weekend ? 6 : 4));
 	const hello = $derived(
-		hour < 11
-			? t('agent.helloMorning', { name: user })
-			: hour < 18
-				? t('agent.helloDay', { name: user })
-				: t('agent.helloEvening', { name: user }),
+		t(
+			(pick >= 4
+				? `agent.greet.weekend.${pick - 3}`
+				: `agent.greet.${slot}.${pick + 1}`) as MessageKey,
+			{ name: user },
+		),
 	);
 	const today = new Intl.DateTimeFormat(undefined, {
 		weekday: 'long',
@@ -301,6 +310,7 @@
 <PageShell
 	title={fresh ? t('agent.freshTitle') : hello}
 	plain
+	center={brief}
 	lead={brief ? undefined : lead}
 	{phone}
 	{onunfold}
@@ -588,7 +598,7 @@
 		min-height: 32px;
 		border: 0;
 		background: none;
-		color: var(--accent);
+		color: var(--ag-link, var(--accent));
 		font: inherit;
 		font-size: var(--text-sm);
 		cursor: pointer;

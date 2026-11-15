@@ -189,78 +189,55 @@
 		node.select();
 	}
 
-	// ----- PLAN 90-4: tables – a button that copies one, cards on the phone -----
-	// A table of three or more columns becomes cards to swipe on the phone:
-	// one per row, named by its first cell. The cells are the ones
-	// chatMarkdown made (escaped there).
+	// ----- tables and code: a button that copies them -----
+	// A table stays a table on the phone too (owner 15 Nov 2026: like the
+	// chat apps); one that is wider than the screen scrolls sideways.
 	function tableText(table: HTMLTableElement): string {
 		return [...table.rows]
 			.map((r) => [...r.cells].map((c) => (c.textContent ?? '').trim()).join('\t'))
 			.join('\n');
 	}
+	function copyButton(label: string, text: () => string): HTMLButtonElement {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.textContent = label;
+		button.addEventListener('click', () => {
+			void copy('block', text()).then(() => {
+				button.textContent = copied?.ok ? t('agent.copiedShort') : t('agent.copyFailed');
+				setTimeout(() => (button.textContent = label), 1800);
+			});
+		});
+		return button;
+	}
 	$effect(() => {
 		void list;
+		void live.content;
 		if (!column) return;
-		for (const wrap of column.querySelectorAll<HTMLElement>(
-			'.answer > .md .table:not([data-done])',
-		)) {
+		for (const wrap of column.querySelectorAll<HTMLElement>('.md .table:not([data-done])')) {
 			const table = wrap.querySelector('table');
 			if (!table) continue;
 			wrap.dataset.done = 'true';
-			const heads = [...(table.tHead?.rows[0]?.cells ?? [])].map((c) => c.innerHTML);
-			const rows = [...(table.tBodies[0]?.rows ?? [])];
-			if (phone && heads.length >= 3 && rows.length) {
-				const cards = document.createElement('div');
-				cards.className = 'cards';
-				cards.tabIndex = 0;
-				cards.setAttribute('role', 'group');
-				cards.setAttribute('aria-label', t('agent.tableCards'));
-				for (const row of rows) {
-					const card = document.createElement('div');
-					card.className = 'card';
-					const title = document.createElement('strong');
-					title.innerHTML = row.cells[0]?.innerHTML ?? '';
-					const dl = document.createElement('dl');
-					[...row.cells].slice(1).forEach((cell, n) => {
-						const dt = document.createElement('dt');
-						dt.innerHTML = heads[n + 1] ?? '';
-						const dd = document.createElement('dd');
-						dd.innerHTML = cell.innerHTML;
-						dl.append(dt, dd);
-					});
-					card.append(title, dl);
-					cards.append(card);
-				}
-				const where = document.createElement('p');
-				where.className = 'cards-where';
-				const say = () => {
-					const n = Math.round(cards.scrollLeft / Math.max(1, cards.scrollWidth / rows.length));
-					where.textContent = t('agent.tableCardsWhere', {
-						n: Math.min(rows.length, n + 1),
-						count: rows.length,
-					});
-				};
-				cards.addEventListener('scroll', say, { passive: true });
-				say();
-				wrap.classList.add('as-cards');
-				wrap.after(cards, where);
-			} else {
-				const foot = document.createElement('div');
-				foot.className = 'table-foot';
-				const button = document.createElement('button');
-				button.type = 'button';
-				button.textContent = t('agent.tableCopy');
-				button.addEventListener('click', () => {
-					void copy('table', tableText(table)).then(() => {
-						button.textContent = copied?.ok ? t('agent.copiedShort') : t('agent.copyFailed');
-						setTimeout(() => (button.textContent = t('agent.tableCopy')), 1800);
-					});
-				});
-				foot.append(button);
-				wrap.after(foot);
-			}
+			const foot = document.createElement('div');
+			foot.className = 'table-foot';
+			foot.append(copyButton(t('agent.tableCopy'), () => tableText(table)));
+			wrap.after(foot);
+		}
+		for (const head of column.querySelectorAll<HTMLElement>('.md .code-head:not([data-done])')) {
+			const code = head.parentElement?.querySelector('code');
+			if (!code) continue;
+			head.dataset.done = 'true';
+			head.append(copyButton(t('agent.copy'), () => code.textContent ?? ''));
 		}
 	});
+
+	// ----- the steps of a turn: one line, a sheet with each step -----
+	type StepsBlock = { steps: Entry[]; thinking: string };
+	let stepsOpen = $state<StepsBlock | null>(null);
+	let stepShown = $state<Entry | 'thinking' | null>(null);
+	function stepOutput(step: Entry): string {
+		const text = step.result || step.summary || '';
+		return text.length > 6000 ? text.slice(0, 5999) + '…' : text;
+	}
 
 	let scroller = $state<HTMLDivElement>();
 	let pinned = $state(true);
@@ -414,6 +391,62 @@
 	}
 </script>
 
+{#snippet stepBody(step: Entry | null, chevron: boolean)}
+	<span class="mark"
+		><Icon
+			name={!step ? 'bulb' : stepFailed(step) ? 'close' : step.role === 'note' ? 'shield' : 'check'}
+			size={16}
+		/></span
+	>
+	<span class="what"
+		>{step ? stepLabel(step) : t('agent.thoughts')}{#if step && stepDetail(step.args)}<small
+				>{stepDetail(step.args)}</small
+			>{/if}</span
+	>
+	{#if step && stepFailed(step)}<span class="sr-only">{t('agent.stepFailed')}</span>{/if}
+	{#if step && (step.durationMs ?? 0) >= 100}<span class="time"
+			>{((step.durationMs ?? 0) / 1000).toFixed(1).replace('.', ',')} s</span
+		>{/if}
+	{#if chevron}<Icon name="chevronRight" size={15} />{/if}
+{/snippet}
+
+{#snippet stepList(block: StepsBlock, tappable: boolean)}
+	<ol class="step-list">
+		{#if block.thinking}
+			<li>
+				{#if tappable}
+					<button type="button" class="step" onclick={() => (stepShown = 'thinking')}
+						>{@render stepBody(null, true)}</button
+					>
+				{:else}
+					<div class="step">{@render stepBody(null, false)}</div>
+				{/if}
+			</li>
+		{/if}
+		{#each block.steps as step (step.id)}
+			<li class:failed={stepFailed(step)}>
+				{#if tappable}
+					<button type="button" class="step" onclick={() => (stepShown = step)}
+						>{@render stepBody(step, true)}</button
+					>
+				{:else}
+					<div class="step">{@render stepBody(step, false)}</div>
+				{/if}
+				{#if onundo && step.ok && step.tool && UNDOABLE.includes(step.tool) && !undone.has(step.tool + '|' + (step.summary ?? '')) && !busy}
+					<button
+						type="button"
+						class="undo"
+						onclick={() => {
+							stepsOpen = null;
+							onundo(step);
+						}}>{t('agent.undo')}</button
+					>
+				{/if}
+			</li>
+		{/each}
+	</ol>
+{/snippet}
+
 <div class="messages" bind:this={scroller} onscroll={scrolled}>
 	{#if find !== null}
 		<div class="find" role="search">
@@ -534,47 +567,24 @@
 			{:else if block.kind === 'steps'}
 				{@const tools = block.steps.filter((s) => s.role === 'tool').length}
 				{#if block.steps.length || block.thinking}
-					<details class="steps" open={showSteps}>
-						<summary>
-							{#if block.steps.length}
-								<span class="ok" aria-hidden="true">✓</span>
-								<span class="count">{t('agent.steps', { count: tools })}{seconds(block.steps)}</span
-								>
-								{#if stepsGist(block.steps)}<span class="gist">· {stepsGist(block.steps)}</span
-									>{/if}
-							{:else}
-								<Icon name="bulb" size={14} />
-								<span class="count">{t('agent.thoughts')}</span>
-							{/if}
-							<span class="toggle"
-								><span class="show">{t('agent.stepsShow')}</span><span class="hide"
-									>{t('agent.stepsHide')}</span
-								><Icon name="chevronDown" size={14} /></span
-							>
-						</summary>
-						{#if block.thinking}
-							<div class="thinking">
-								<strong>{t('agent.thoughts')}</strong>
-								<p>{block.thinking}</p>
-							</div>
-						{/if}
-						{#each block.steps as step (step.id)}
-							<div class="step" class:failed={stepFailed(step)}>
-								<span class="mark" aria-hidden="true">{stepFailed(step) ? '!' : '✓'}</span>
-								<span class="what">{stepLabel(step)}</span>
-								{#if stepDetail(step.args)}<code>{stepDetail(step.args)}</code>{/if}
-								{#if stepFailed(step)}<span class="sr-only">{t('agent.stepFailed')}</span>{/if}
-								{#if (step.durationMs ?? 0) >= 100}<span class="time"
-										>{((step.durationMs ?? 0) / 1000).toFixed(1).replace('.', ',')} s</span
-									>{/if}
-								{#if onundo && step.ok && step.tool && UNDOABLE.includes(step.tool) && !undone.has(step.tool + '|' + (step.summary ?? '')) && !busy}
-									<button type="button" class="undo" onclick={() => onundo(step)}
-										>{t('agent.undo')}</button
-									>
-								{/if}
-							</div>
-						{/each}
-					</details>
+					<button
+						type="button"
+						class="steps-line"
+						aria-haspopup="dialog"
+						onclick={() => {
+							stepShown = null;
+							stepsOpen = block;
+						}}
+					>
+						<span class="count"
+							>{block.steps.length
+								? t('agent.steps', { count: tools }) + seconds(block.steps)
+								: t('agent.thoughts')}</span
+						>
+						{#if stepsGist(block.steps)}<span class="gist">· {stepsGist(block.steps)}</span>{/if}
+						<Icon name="chevronRight" size={14} />
+					</button>
+					{#if showSteps}{@render stepList(block, false)}{/if}
 				{/if}
 			{:else if block.kind === 'answer'}
 				{@const prev = list[i - 1]}
@@ -606,7 +616,8 @@
 									class:on={reading}
 									aria-pressed={reading}
 									onclick={() => speak(block.entry.id, block.entry.content ?? '', i18n.locale)}
-									><Icon name={reading ? 'stop' : 'volume'} size={14} /><span
+									title={reading ? t('agent.readStop') : t('agent.readAloud')}
+									><Icon name={reading ? 'stop' : 'volume'} size={17} /><span class="sr-only"
 										>{reading ? t('agent.readStop') : t('agent.readAloud')}</span
 									></button
 								>
@@ -616,8 +627,9 @@
 								<button
 									type="button"
 									class="act"
+									title={t('agent.copy')}
 									onclick={() => copy(block.entry.id, block.entry.content ?? '')}
-									><Icon name={done?.ok ? 'check' : 'copy'} size={14} /><span
+									><Icon name={done?.ok ? 'check' : 'copy'} size={17} /><span class="sr-only"
 										>{done
 											? done.ok
 												? t('agent.copiedShort')
@@ -630,8 +642,14 @@
 									>{/if}
 							{/if}
 							{#if canChange && lastUser && block.entry.id === lastAnswer && block.entry.content}
-								<button type="button" class="act" onclick={() => onresend?.(lastUser)}
-									><Icon name="refresh" size={14} /><span>{t('agent.regenerate')}</span></button
+								<button
+									type="button"
+									class="act"
+									title={t('agent.regenerate')}
+									onclick={() => onresend?.(lastUser)}
+									><Icon name="refresh" size={17} /><span class="sr-only"
+										>{t('agent.regenerate')}</span
+									></button
 								>
 							{/if}
 							{#each learned as n (n.id)}
@@ -721,27 +739,34 @@
 		{/if}
 
 		{#if busy}
-			{#if live.thinking && !live.content}
-				<p class="shimmer">{t('agent.thinking')}</p>
-			{/if}
+			<!-- What happens right now: three dots and a line a light runs over. -->
 			{#if live.step}
-				<div class="live-step">
-					<span class="spin" aria-hidden="true"></span>
-					{stepLabel(live.step)}
-					{#if stepDetail(live.step.args)}<code>{stepDetail(live.step.args)}</code>{/if}
-				</div>
+				<p class="live-line">
+					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+					<span class="sweep"
+						>{stepLabel(live.step)}{#if stepDetail(live.step.args)}
+							· {stepDetail(live.step.args)}{/if}</span
+					>
+				</p>
+			{:else if !live.content}
+				<p class="live-line">
+					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+					<span class="sweep">{live.thinking ? t('agent.thinking') : t('agent.working')}</span>
+				</p>
 			{/if}
 			{#if live.content}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 				<div class="answer md">{@html chatMarkdown(live.content)}</div>
-			{:else if !live.thinking && !live.step}
-				<p class="shimmer">{t('agent.working')}</p>
 			{/if}
 		{/if}
 
 		{#if chat.pending && !busy && !readonly}
 			{@const p = chat.pending}
 			{@const lines = argLines(p.args)}
+			<!-- Not working, waiting: a ring instead of the running dots. -->
+			<p class="live-line wait">
+				<span class="ring" aria-hidden="true"></span>{t('agent.waitsForYou')}
+			</p>
 			<!-- PLAN 68: one banner card. The level is written out, not only a
 			     color; nothing here takes the focus or reacts to Enter. -->
 			<div
@@ -851,6 +876,60 @@
 	</BottomSheet>
 {/if}
 
+{#if stepsOpen}
+	{@const shown = stepShown}
+	<BottomSheet
+		label={t('agent.stepsSummary')}
+		{calm}
+		onclose={() => {
+			stepsOpen = null;
+			stepShown = null;
+		}}
+	>
+		<div class="sum-head">
+			<button
+				type="button"
+				class="sum-x"
+				aria-label={shown ? t('agent.set.back') : t('common.close')}
+				onclick={() => {
+					if (shown) stepShown = null;
+					else stepsOpen = null;
+				}}><Icon name={shown ? 'chevronLeft' : 'close'} size={18} /></button
+			>
+			<strong
+				>{shown === 'thinking'
+					? t('agent.thoughts')
+					: shown
+						? stepLabel(shown)
+						: t('agent.stepsSummary')}</strong
+			>
+		</div>
+		{#if shown === 'thinking'}
+			<div class="sum-box"><pre>{stepsOpen.thinking}</pre></div>
+		{:else if shown}
+			{@const lines = argLines(shown.args)}
+			{#if lines.length || preview(shown.args)}
+				<h3 class="sum-group">{t('agent.stepInput')}</h3>
+				<div class="sum-box">
+					{#if lines.length}
+						<dl>
+							{#each lines as [k, v] (k)}<dt>{k}</dt>
+								<dd>{v}</dd>{/each}
+						</dl>
+					{/if}
+					{#if preview(shown.args)}<pre>{preview(shown.args)}</pre>{/if}
+				</div>
+			{/if}
+			{#if stepOutput(shown)}
+				<h3 class="sum-group">{t('agent.stepOutput')}</h3>
+				<div class="sum-box"><pre>{stepOutput(shown)}</pre></div>
+			{/if}
+		{:else}
+			{@render stepList(stepsOpen, true)}
+		{/if}
+	</BottomSheet>
+{/if}
+
 <style>
 	/* PLAN 68: the chat in the design language of TitanOS – at most 760 px
 	   wide in the middle, the person's message a bubble on the right tinted
@@ -868,6 +947,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
+		font-size: 0.9375rem;
 	}
 	.me {
 		display: flex;
@@ -975,7 +1055,7 @@
 		background-color: var(--status-warn);
 		color: var(--on-warn, #000);
 	}
-	/* Under a table: copy it. On the phone a wide table is cards to swipe. */
+	/* Under a table: copy it. */
 	.md :global(.table-foot) {
 		display: flex;
 		justify-content: flex-end;
@@ -996,66 +1076,37 @@
 		color: var(--text);
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
-	.md :global(.table.as-cards) {
-		display: none;
-	}
-	.md :global(.cards) {
-		display: flex;
-		gap: var(--space-2-5);
-		margin: var(--space-1) -14px 0 0;
-		padding: 0 14px var(--space-1) 0;
-		overflow-x: auto;
-		scroll-snap-type: x mandatory;
-		scrollbar-width: none;
-	}
-	.md :global(.card) {
-		flex: 0 0 82%;
-		scroll-snap-align: start;
-		padding: var(--space-3) 14px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-tile);
-		background: var(--surface);
-		overflow-wrap: anywhere;
-	}
-	.md :global(.card dl) {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: var(--space-1-5) 14px;
-		margin: var(--space-2) 0 0;
-		font-size: 0.875rem;
-	}
-	.md :global(.card dt) {
-		color: var(--muted);
-	}
-	.md :global(.card dd) {
-		margin: 0;
-	}
-	.md :global(.cards-where) {
-		margin: var(--space-1) 0 var(--space-3);
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
+
 	.user span {
 		max-width: 78%;
-		padding: 9px 14px;
-		border-radius: 14px 14px 4px 14px;
-		background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+		padding: 10px 16px;
+		border-radius: 20px;
+		background: color-mix(in srgb, var(--text) 9%, var(--surface));
 		color: var(--text);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
 	.answer {
-		line-height: 1.55;
+		line-height: 1.6;
 		overflow-wrap: anywhere;
 	}
 	.md :global(p) {
-		margin: 0 0 0.6em;
+		margin: 0 0 0.75em;
+	}
+	.md :global(a) {
+		color: var(--ag-link, var(--accent));
+	}
+	.md :global(li) {
+		margin: 0.4em 0;
+	}
+	.md :global(li::marker) {
+		color: var(--muted);
 	}
 	.md :global(.table) {
 		margin: var(--space-1) 0 var(--space-3);
 		border: 1px solid var(--border);
-		border-radius: var(--radius-tile);
-		background: var(--surface);
+		border-radius: 14px;
+		background: none;
 		overflow-x: auto;
 	}
 	.md :global(.table table) {
@@ -1074,17 +1125,64 @@
 		hyphens: manual;
 	}
 	.md :global(.table th) {
-		font-size: var(--text-sm);
+		font-size: inherit;
 		font-weight: 600;
+		background: color-mix(in srgb, var(--text) 4%, transparent);
 	}
 	.md :global(.table tr:last-child td) {
 		border-bottom: 0;
 	}
-	.md :global(.table td:first-child) {
-		color: var(--muted);
+	/* A block of code: its language and "Kopieren" in the head; a long
+	   line scrolls sideways instead of breaking. */
+	.md :global(.code) {
+		margin: var(--space-1) 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--surface);
+		overflow: hidden;
 	}
-	.md :global(code),
-	code {
+	.md :global(.code-head) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		min-height: 38px;
+		padding: 0 var(--space-1-5) 0 14px;
+		border-bottom: 1px solid var(--border);
+		color: var(--muted);
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: var(--text-sm);
+	}
+	.md :global(.code-head button) {
+		min-height: 30px;
+		padding: 0 var(--space-2);
+		border: 0;
+		border-radius: 8px;
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-family: var(--font-sans, inherit);
+		cursor: pointer;
+	}
+	.md :global(.code-head button:hover) {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.md :global(.code pre) {
+		margin: 0;
+		padding: var(--space-3) 14px;
+		overflow-x: auto;
+		white-space: pre;
+		line-height: 1.5;
+		font-size: var(--text-base);
+	}
+	.md :global(.code pre code) {
+		padding: 0;
+		background: none;
+		font-size: inherit;
+		overflow-wrap: normal;
+	}
+	.md :global(code) {
 		font-family: var(--font-mono, ui-monospace, monospace);
 		font-size: 0.9em;
 		background: var(--chip);
@@ -1103,107 +1201,209 @@
 		font-size: var(--text-md);
 		margin: 0.6em 0 0.3em;
 	}
-	/* Steps and thoughts of a turn: one line, opened on demand. */
-	.steps {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		background: var(--surface);
-		font-size: var(--text-sm);
-		overflow: hidden;
-	}
-	.steps > summary {
-		list-style: none;
-		cursor: pointer;
-		display: flex;
+	/* Steps and thoughts of a turn: one quiet line; a tap opens the sheet
+	   "Zusammenfassung" with every step, its input and its output. */
+	.steps-line {
+		align-self: flex-start;
+		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
-		min-height: 34px;
-		padding: var(--space-1-5) var(--space-3);
+		max-width: 100%;
+		min-height: 32px;
+		padding: 0 var(--space-1);
+		margin-left: calc(-1 * var(--space-1));
+		border: 0;
+		border-radius: 8px;
+		background: none;
 		color: var(--muted);
-		min-width: 0;
+		font: inherit;
+		font-size: 0.9em;
+		text-align: left;
+		cursor: pointer;
 	}
-	.steps > summary::-webkit-details-marker {
-		display: none;
+	.steps-line:hover {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 6%, transparent);
 	}
-	.steps > summary:focus-visible {
+	.steps-line:focus-visible,
+	.step:focus-visible,
+	.sum-x:focus-visible {
 		outline: 2px solid var(--accent);
-		outline-offset: -2px;
+		outline-offset: 1px;
+	}
+	.steps-line :global(svg) {
+		flex: none;
 	}
 	.count {
 		flex: none;
-		color: var(--text);
 	}
 	.gist {
 		min-width: 0;
-		overflow-wrap: anywhere;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
-	.toggle {
-		margin-left: auto;
-		flex: none;
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		padding-left: var(--space-2);
+	.step-list {
+		list-style: none;
+		margin: 0;
+		padding: 0 var(--space-3);
 	}
-	.steps .hide,
-	.steps[open] .show {
-		display: none;
+	.column > .step-list {
+		padding: 0;
+		font-size: 0.9em;
 	}
-	.steps[open] .hide {
-		display: inline;
-	}
-	.steps[open] .toggle :global(svg) {
-		transform: rotate(180deg);
-	}
-	.thinking {
-		padding: var(--space-2) var(--space-3);
-		border-top: 1px solid var(--border);
-	}
-	.thinking strong {
-		font-weight: 600;
-		font-size: var(--text-xs);
-		color: var(--muted);
-	}
-	.thinking p {
-		margin: 2px 0 0;
-		color: var(--muted);
-		white-space: pre-wrap;
-		max-height: 260px;
-		overflow-y: auto;
-	}
-	.step {
+	.step-list li {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		padding: var(--space-1-5) var(--space-3);
-		border-top: 1px solid var(--border);
-		flex-wrap: wrap;
+	}
+	/* The steps hang on one fine line. */
+	.step-list li + li::before {
+		content: '';
+		position: absolute;
+		left: 21px;
+		top: -7px;
+		height: 14px;
+		width: 1px;
+		background: var(--border);
+	}
+	.step {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		min-height: 52px;
+		padding: var(--space-1-5) var(--space-2-5);
+		border: 0;
+		border-radius: 12px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+	}
+	button.step {
+		cursor: pointer;
+	}
+	button.step:hover {
+		background: color-mix(in srgb, var(--text) 6%, transparent);
+	}
+	.column > .step-list .step {
+		min-height: 34px;
+		padding-left: 0;
+	}
+	.column > .step-list li + li::before {
+		left: 8px;
+		top: -4px;
+		height: 8px;
+	}
+	.step :global(svg) {
+		flex: none;
+		color: var(--muted);
+	}
+	.mark {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 22px;
+	}
+	.what {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		line-height: 1.3;
+		overflow-wrap: anywhere;
+	}
+	.what small {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.step .time {
+		flex: none;
+		color: var(--muted);
+		font-size: var(--text-xs);
+	}
+	.failed .mark :global(svg),
+	.failed .what {
+		color: var(--warn-text);
 	}
 	.undo {
+		flex: none;
+		min-height: 30px;
 		border: 1px solid var(--border);
 		background: none;
 		color: var(--text);
 		border-radius: 999px;
-		padding: 1px var(--space-2);
+		padding: 0 var(--space-2-5);
 		font: inherit;
-		font-size: var(--text-xs);
+		font-size: var(--text-sm);
 		cursor: pointer;
 	}
-	.step .time {
-		margin-left: auto;
+	.sum-head {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 48px;
+		padding: 0 64px;
+		margin-bottom: var(--space-1-5);
+		text-align: center;
+	}
+	.sum-head strong {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.sum-x {
+		position: absolute;
+		left: var(--space-4);
+		top: 2px;
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--border);
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--text) 6%, var(--surface));
+		color: var(--text);
+		cursor: pointer;
+	}
+	.sum-group {
+		margin: var(--space-3) 22px var(--space-1-5);
 		color: var(--muted);
-		font-size: var(--text-xs);
+		font-size: var(--text-md);
+		font-weight: 400;
 	}
-	.ok,
-	.mark {
-		color: var(--ok-text);
+	.sum-box {
+		margin: 0 var(--space-4);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: 16px;
+		background: color-mix(in srgb, var(--text) 4%, var(--surface));
 	}
-	.failed .mark {
-		color: var(--warn-text);
-		font-weight: 700;
+	.sum-box dl {
+		margin: 0;
+		display: grid;
+		gap: 2px;
 	}
-	.failed .what {
-		color: var(--warn-text);
+	.sum-box dt {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.sum-box dd {
+		margin: 0 0 var(--space-1-5);
+		overflow-wrap: anywhere;
+	}
+	.sum-box pre {
+		margin: 0;
+		max-height: 46dvh;
+		overflow: auto;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		font-family: inherit;
+		font-size: var(--text-md);
+		line-height: 1.5;
 	}
 	.choices {
 		display: flex;
@@ -1216,8 +1416,9 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: var(--space-1) 14px;
+		gap: var(--space-1) var(--space-1-5);
 		margin-top: 2px;
+		margin-left: calc(-1 * var(--space-1-5));
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -1225,10 +1426,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		min-height: 28px;
-		padding: 0 var(--space-1);
+		justify-content: center;
+		min-height: 32px;
+		min-width: 32px;
+		padding: 0 var(--space-1-5);
 		border: 0;
-		border-radius: var(--radius-small, 6px);
+		border-radius: 8px;
 		background: none;
 		color: var(--muted);
 		font: inherit;
@@ -1373,51 +1576,105 @@
 		flex: 1;
 		min-width: 0;
 	}
-	.live-step {
+	/* While the agent works: three dots, and a light that runs over the
+	   line from left to right (owner 15 Nov 2026). "Animationen: Aus" and
+	   "Weniger Bewegung" leave the line still. */
+	.live-line {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-base);
-		color: var(--muted);
-	}
-	.spin {
-		width: 13px;
-		height: 13px;
-		border-radius: 50%;
-		border: 2px solid var(--border);
-		border-top-color: var(--accent);
-		animation: spin 0.9s linear infinite;
-		flex: none;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	.shimmer {
+		gap: var(--space-2-5);
 		margin: 0;
+		min-height: 32px;
+		font-size: 0.95em;
 		color: var(--muted);
-		animation: pulse 1.6s ease-in-out infinite;
 	}
-	@keyframes pulse {
-		50% {
-			opacity: 0.55;
+	.dots {
+		flex: none;
+		display: inline-flex;
+		gap: 3px;
+	}
+	.ring {
+		flex: none;
+		width: 14px;
+		height: 14px;
+		box-sizing: border-box;
+		border-radius: 50%;
+		border: 2px solid var(--status-warn, var(--ag-warm));
+		background: radial-gradient(circle, var(--status-warn, var(--ag-warm)) 38%, transparent 44%);
+	}
+	.dots i {
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+		background: var(--ag-warm, var(--accent));
+		animation: dot 1.2s ease-in-out infinite;
+	}
+	.dots i:nth-child(2) {
+		animation-delay: 0.15s;
+	}
+	.dots i:nth-child(3) {
+		animation-delay: 0.3s;
+	}
+	@keyframes dot {
+		0%,
+		60%,
+		100% {
+			opacity: 0.35;
+		}
+		30% {
+			opacity: 1;
 		}
 	}
-	:global(.agent.calm) .shimmer,
-	:global(.agent.calm) .spin {
+	.sweep {
+		/* Grey like in the chat apps: the orange dots say that something runs,
+		   the light over the grey line says that it is still running. */
+		--sweep: var(--muted);
+		min-width: 0;
+		overflow-wrap: anywhere;
+		color: transparent;
+		background: linear-gradient(
+			90deg,
+			var(--sweep) 0%,
+			var(--sweep) 38%,
+			color-mix(in srgb, var(--sweep) 30%, transparent) 50%,
+			var(--sweep) 62%,
+			var(--sweep) 100%
+		);
+		background-size: 220% 100%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		animation: sweep 1.7s linear infinite;
+	}
+	@keyframes sweep {
+		from {
+			background-position: 100% 0;
+		}
+		to {
+			background-position: 0% 0;
+		}
+	}
+	:global(.agent.calm) .sweep,
+	:global(.agent.calm) .dots i {
 		animation: none;
 	}
+	:global(.agent.calm) .sweep {
+		color: var(--sweep);
+		background: none;
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.shimmer,
-		.spin {
+		.dots i,
+		.sweep {
 			animation: none;
+		}
+		.sweep {
+			color: var(--sweep);
+			background: none;
 		}
 	}
 	/* The step that waits for approval: one banner card. */
 	.approval {
 		border: 1px solid var(--warn-border);
-		border-radius: var(--radius-tile);
+		border-radius: 20px;
 		background: var(--surface);
 		overflow: hidden;
 	}
@@ -1441,8 +1698,14 @@
 		gap: 2px;
 	}
 	.ask-text strong {
+		font-size: 1.05em;
 		font-weight: 600;
 		overflow-wrap: anywhere;
+	}
+	.ask-acts .btn {
+		border-radius: 999px;
+		padding-left: var(--space-4);
+		padding-right: var(--space-4);
 	}
 	.ask-text span {
 		color: var(--muted);
@@ -1486,8 +1749,23 @@
 		white-space: pre-wrap;
 	}
 	@media (max-width: 760px) {
+		/* The round buttons of the head float over the chat. */
 		.messages {
-			padding: var(--space-3) 14px;
+			padding: calc(var(--agent-top, 0px) + 64px) var(--space-4) var(--space-3);
+		}
+		.column {
+			font-size: 1rem;
+			gap: var(--space-3-5, 14px);
+		}
+		.find {
+			top: calc(var(--agent-top, 0px) + 56px);
+		}
+		.act {
+			min-height: 44px;
+			min-width: 44px;
+		}
+		.steps-line {
+			min-height: 44px;
 		}
 		.user span {
 			max-width: 86%;
@@ -1496,7 +1774,6 @@
 			-webkit-user-select: none;
 			-webkit-touch-callout: none;
 		}
-		.act,
 		.find-btn {
 			min-height: 44px;
 			min-width: 44px;
@@ -1516,7 +1793,7 @@
 			display: none;
 		}
 		.md :global(.table :is(th, td)) {
-			padding: var(--space-2) var(--space-2);
+			padding: var(--space-2-5) var(--space-2-5);
 		}
 		.ask-acts {
 			width: 100%;

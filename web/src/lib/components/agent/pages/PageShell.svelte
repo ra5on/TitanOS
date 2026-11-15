@@ -12,6 +12,7 @@
 		crumbs = [],
 		lead = '',
 		plain = false,
+		center = false,
 		phone = false,
 		onunfold,
 		children,
@@ -22,6 +23,8 @@
 		lead?: string;
 		/** The title alone, without "KI-Agent ›" (the start page greets). */
 		plain?: boolean;
+		/** The greeting of a new chat: in the middle of the page. */
+		center?: boolean;
 		phone?: boolean;
 		/** The side bar is folded away: a button brings it back. */
 		onunfold?: () => void;
@@ -30,7 +33,7 @@
 </script>
 
 <div class="scroll" class:phone>
-	<div class="page">
+	<div class="page" class:center>
 		{#if !phone || plain}
 			<div class="head">
 				{#if onunfold}
@@ -76,6 +79,23 @@
 	.phone .page {
 		padding: var(--space-4) var(--space-3) calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
 		gap: var(--space-3);
+	}
+	/* A new chat greets in the middle, like the chat apps. */
+	.page.center {
+		box-sizing: border-box;
+		min-height: 100%;
+		justify-content: center;
+	}
+	.center .head {
+		justify-content: center;
+		text-align: center;
+		margin-bottom: var(--space-2);
+	}
+	.center h1,
+	.phone .center h1 {
+		font-size: 1.7rem;
+		font-weight: 500;
+		letter-spacing: -0.01em;
 	}
 	.head {
 		display: flex;

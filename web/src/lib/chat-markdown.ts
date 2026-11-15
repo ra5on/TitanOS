@@ -120,15 +120,21 @@ function block(paragraph: string): string {
 }
 
 export function chatMarkdown(text: string): string {
-	return escapeHtml(text)
-		.split(/```[A-Za-z0-9_+-]*\n?/)
-		.map((part, index) =>
-			index % 2 === 1
-				? `<pre><code>${part.replace(/\n$/, '')}</code></pre>`
-				: part
-						.split(/\n{2,}/)
-						.map(block)
-						.join(''),
-		)
-		.join('');
+	// Text and code take turns; a fence names the language of its block,
+	// which stands in the head of the block (ChatView adds "Kopieren").
+	const parts = escapeHtml(text).split(/```([A-Za-z0-9_+-]*)\n?/);
+	let out = '';
+	for (let i = 0; i < parts.length; i += 2) {
+		const part = parts[i];
+		// parts: text, lang, code, lang (of the closing fence, empty), text …
+		if ((i / 2) % 2 === 1) {
+			const lang = parts[i - 1] ?? '';
+			out += `<div class="code"><div class="code-head"><span>${lang || 'text'}</span></div><pre><code>${part.replace(/\n$/, '')}</code></pre></div>`;
+		} else
+			out += part
+				.split(/\n{2,}/)
+				.map(block)
+				.join('');
+	}
+	return out;
 }

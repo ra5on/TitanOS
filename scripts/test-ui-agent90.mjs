@@ -752,12 +752,13 @@ const sent = (seen, method, path) =>
     await head.locator(".p-title").textContent(),
     /Status Home Assistant.*Home Assistant · gpt-oss:20b/s,
   );
-  // A table of four columns is cards to swipe; the answer's buttons are 44 px.
-  const cards = page.locator(".cards .card");
-  assert.equal(await cards.count(), 2);
-  assert.match(await cards.first().textContent(), /Docker-App.*Zustand.*läuft/s);
-  assert.ok(await page.getByText("Karte 1 von 2 · zur Seite wischen").isVisible());
-  assert.equal(await page.locator(".table.as-cards").isVisible(), false);
+  // A table stays a table on the phone (four columns here); the answer's
+  // buttons are 44 px.
+  const table = page.locator(".md .table table");
+  assert.equal(await table.count(), 1);
+  assert.equal(await table.locator("th").count(), 4);
+  assert.match(await table.textContent(), /Zustand.*Docker-App.*läuft/s);
+  assert.equal(await page.locator(".cards").count(), 0);
   for (const b of await page.locator(".answer .act").all())
     assert.ok((await b.boundingBox()).height >= 44, "44 px under an answer");
   await noOverflow(page, "phone chat");

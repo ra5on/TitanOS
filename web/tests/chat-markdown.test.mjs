@@ -13,7 +13,15 @@ test('answers become safe HTML', () => {
 	);
 	assert.equal(chatMarkdown('1. a\n2. b'), '<ol><li>a</li><li>b</li></ol>');
 	assert.equal(chatMarkdown('a\nb\n\nc'), '<p>a<br>b</p><p>c</p>');
-	assert.equal(chatMarkdown('```\nmdadm --detail\n```'), '<pre><code>mdadm --detail</code></pre>');
+	assert.equal(
+		chatMarkdown('```\nmdadm --detail\n```'),
+		'<div class="code"><div class="code-head"><span>text</span></div><pre><code>mdadm --detail</code></pre></div>',
+	);
+	// The language of the fence stands in the head of the block.
+	assert.equal(
+		chatMarkdown('So:\n\n```yaml\na: 1\n```\n\nFertig.'),
+		'<p>So:</p><div class="code"><div class="code-head"><span>yaml</span></div><pre><code>a: 1</code></pre></div><p>Fertig.</p>',
+	);
 });
 
 test('nothing from a model becomes markup of its own', () => {
