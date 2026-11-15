@@ -4,6 +4,8 @@
 	// the answers (safe Markdown, tables in a card) with Vorlesen, Kopieren
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
@@ -245,6 +247,19 @@
 			head.append(tools);
 		}
 	});
+
+	// ----- while the agent thinks: a word that changes (owner 15 Nov 2026) -----
+	// Eight short words of our own take turns every few seconds, so the line
+	// lives while nothing else can be said; a running step names itself
+	// instead. Still with "Animationen: Aus".
+	const BUSY_WORDS = 8;
+	let busyTurn = $state(Math.floor(Math.random() * BUSY_WORDS));
+	$effect(() => {
+		if (!busy || calm) return;
+		const timer = setInterval(() => (busyTurn += 1), 2800);
+		return () => clearInterval(timer);
+	});
+	const busyWord = $derived(t(`agent.busy.${(busyTurn % BUSY_WORDS) + 1}` as MessageKey));
 
 	// ----- the steps of a turn: one line, a sheet with each step -----
 	type StepsBlock = { steps: Entry[]; thinking: string };
@@ -776,7 +791,7 @@
 			{:else if !live.content}
 				<p class="live-line">
 					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-					<span class="sweep">{live.thinking ? t('agent.thinking') : t('agent.working')}</span>
+					<span class="busy-word">{busyWord}</span>
 				</p>
 			{/if}
 			{#if live.content}
@@ -929,29 +944,36 @@
 						: t('agent.stepsSummary')}</strong
 			>
 		</div>
-		{#if shown === 'thinking'}
-			<div class="sum-box"><pre>{stepsOpen.thinking}</pre></div>
-		{:else if shown}
-			{@const lines = argLines(shown.args)}
-			{#if lines.length || preview(shown.args)}
-				<h3 class="sum-group">{t('agent.stepInput')}</h3>
-				<div class="sum-box">
-					{#if lines.length}
-						<dl>
-							{#each lines as [k, v] (k)}<dt>{k}</dt>
-								<dd>{v}</dd>{/each}
-						</dl>
+		{#key shown}
+			<div
+				class="sum-body"
+				in:fly={{ x: shown ? 36 : -36, duration: calm ? 0 : 300, easing: quintOut }}
+			>
+				{#if shown === 'thinking'}
+					<div class="sum-box"><pre>{stepsOpen.thinking}</pre></div>
+				{:else if shown}
+					{@const lines = argLines(shown.args)}
+					{#if lines.length || preview(shown.args)}
+						<h3 class="sum-group">{t('agent.stepInput')}</h3>
+						<div class="sum-box">
+							{#if lines.length}
+								<dl>
+									{#each lines as [k, v] (k)}<dt>{k}</dt>
+										<dd>{v}</dd>{/each}
+								</dl>
+							{/if}
+							{#if preview(shown.args)}<pre>{preview(shown.args)}</pre>{/if}
+						</div>
 					{/if}
-					{#if preview(shown.args)}<pre>{preview(shown.args)}</pre>{/if}
-				</div>
-			{/if}
-			{#if stepOutput(shown)}
-				<h3 class="sum-group">{t('agent.stepOutput')}</h3>
-				<div class="sum-box"><pre>{stepOutput(shown)}</pre></div>
-			{/if}
-		{:else}
-			{@render stepList(stepsOpen, true)}
-		{/if}
+					{#if stepOutput(shown)}
+						<h3 class="sum-group">{t('agent.stepOutput')}</h3>
+						<div class="sum-box"><pre>{stepOutput(shown)}</pre></div>
+					{/if}
+				{:else}
+					{@render stepList(stepsOpen, true)}
+				{/if}
+			</div>
+		{/key}
 	</BottomSheet>
 {/if}
 
@@ -1646,6 +1668,27 @@
 	/* While the agent works: three dots, and a light that runs over the
 	   line from left to right (owner 15 Nov 2026). "Animationen: Aus" and
 	   "Weniger Bewegung" leave the line still. */
+	.live-line,
+	.approval,
+	.steps-line {
+		animation: come 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	@keyframes come {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+	:global(.agent.calm) :is(.live-line, .approval, .steps-line) {
+		animation: none;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.live-line,
+		.approval,
+		.steps-line {
+			animation: none;
+		}
+	}
 	.live-line {
 		display: flex;
 		align-items: center;
@@ -1655,10 +1698,14 @@
 		font-size: 0.95em;
 		color: var(--muted);
 	}
+	/* Three dots at the corners of a small triangle that turns a third at a
+	   time and rests in between – the dots seem to change places. */
 	.dots {
 		flex: none;
-		display: inline-flex;
-		gap: 3px;
+		position: relative;
+		width: 16px;
+		height: 16px;
+		animation: turn 2.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.ring {
 		flex: none;
@@ -1670,27 +1717,43 @@
 		background: radial-gradient(circle, var(--status-warn, var(--ag-warm)) 38%, transparent 44%);
 	}
 	.dots i {
-		width: 4px;
-		height: 4px;
+		position: absolute;
+		width: 4.5px;
+		height: 4.5px;
 		border-radius: 50%;
 		background: var(--ag-warm, var(--accent));
-		animation: dot 1.2s ease-in-out infinite;
+	}
+	.dots i:nth-child(1) {
+		left: 5.75px;
+		top: 1px;
 	}
 	.dots i:nth-child(2) {
-		animation-delay: 0.15s;
+		left: 1px;
+		top: 10px;
 	}
 	.dots i:nth-child(3) {
-		animation-delay: 0.3s;
+		left: 10.5px;
+		top: 10px;
 	}
-	@keyframes dot {
+	@keyframes turn {
 		0%,
-		60%,
+		12% {
+			transform: rotate(0deg);
+		}
+		33%,
+		45% {
+			transform: rotate(120deg);
+		}
+		66%,
+		78% {
+			transform: rotate(240deg);
+		}
 		100% {
-			opacity: 0.35;
+			transform: rotate(360deg);
 		}
-		30% {
-			opacity: 1;
-		}
+	}
+	.busy-word {
+		color: var(--ag-warm, var(--accent));
 	}
 	.sweep {
 		/* Grey like in the chat apps: the orange dots say that something runs,
@@ -1721,7 +1784,7 @@
 		}
 	}
 	:global(.agent.calm) .sweep,
-	:global(.agent.calm) .dots i {
+	:global(.agent.calm) .dots {
 		animation: none;
 	}
 	:global(.agent.calm) .sweep {
@@ -1729,7 +1792,7 @@
 		background: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.dots i,
+		.dots,
 		.sweep {
 			animation: none;
 		}

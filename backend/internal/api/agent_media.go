@@ -31,6 +31,13 @@ type agentVoice struct {
 	Model   string `json:"model,omitempty"`
 }
 
+// agentSearch is the web search of one's own (owner 15.11.2026): the
+// address of a SearXNG, usually the Docker app on this NAS. With it the
+// agent asks that instead of DuckDuckGo's page.
+type agentSearch struct {
+	URL string `json:"url,omitempty"`
+}
+
 type agentVision struct {
 	Enabled bool   `json:"enabled,omitempty"`
 	Model   string `json:"model,omitempty"`
@@ -53,6 +60,13 @@ func checkAgentMedia(req *agentSettings) error {
 	}
 	if v.Enabled && v.URL == "" {
 		return errors.New("speech input needs the address of a Whisper service")
+	}
+	if req.Search.URL = strings.TrimSpace(req.Search.URL); req.Search.URL != "" {
+		u, err := url.Parse(req.Search.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(req.Search.URL) > 200 {
+			return errors.New("the SearXNG address is like http://192.168.1.5:8580")
+		}
+		req.Search.URL = strings.TrimRight(u.String(), "/")
 	}
 	if len(v.Model) > 120 || len(req.Vision.Model) > 200 {
 		return errors.New("model name too long")

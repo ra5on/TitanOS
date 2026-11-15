@@ -362,5 +362,13 @@
 	"desktop.widget.gpuClock": "Clock",
 	"desktop.widget.gpuShows": "{name} shows",
 	"desktop.widget.gpuDevice": "Device",
-	"desktop.phone.up": "Up one level"
+	"desktop.phone.up": "Up one level",
+	"desktop.widget.agent": "AI agent",
+	"desktop.gallery.agent": "Ask questions, see what waits and what runs",
+	"desktop.widget.agentAsk": "Ask the agent …",
+	"desktop.widget.agentOpen": "Open the AI agent",
+	"desktop.widget.agentOff": "The AI agent is not switched on or not allowed for this account.",
+	"desktop.widget.agentWaits": "waits for you",
+	"desktop.widget.agentRuns": "working",
+	"desktop.widget.agentIdle": "Nothing open. Ask a question."
 }

@@ -1630,6 +1630,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.searx',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionMedia'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.snapshots',
 		kind: 'row',
 		tab: 'connection',
@@ -1656,6 +1663,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 		tab: 'connection',
 		in: ['agent.sectionMedia'],
 	},
+	{ p: '/settings/agent', k: 'agent.mcp.title', kind: 'group', tab: 'connection', id: 'ag-mcp' },
 	{
 		p: '/settings/agent',
 		k: 'agent.sectionInstruction',

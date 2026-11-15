@@ -82,6 +82,19 @@
 	let mAt = $state('07:00');
 	let mDays = $state<number[]>([1, 2, 3, 4, 5]);
 	let mOn = $state(true);
+	// Owner 15 Nov 2026: the morning report took the whole first screen. It
+	// is one row now – switch, when it comes – and opens to be set.
+	let mOpen = $state(false);
+	const mWhen = $derived.by(() => {
+		const days = order.filter((d) => mDays.includes(d));
+		const text =
+			days.length === 7
+				? t('agent.morningDaily')
+				: days.join() === '1,2,3,4,5'
+					? `${short(1)}–${short(5)}`
+					: days.map(short).join(', ');
+		return t('agent.morningAt', { days: text, time: mAt });
+	});
 	$effect(() => {
 		if (morning) {
 			report = { ...(morning.report ?? {}) };
@@ -229,9 +242,23 @@
 		<span class="ic" aria-hidden="true"><Icon name="bell" size={19} /></span>
 		<div class="grow">
 			<h3 id="morning-title">{t('agent.morning')}</h3>
-			<p class="muted small">{t('agent.morningIntro')}</p>
+			<p class="muted small">
+				{#if !morning}{t('agent.morningIntro')}{:else if mOn}{mWhen}{#if morning.next}{' · '}{t(
+							'agent.nextRun',
+							{ when: formatDateTime(new Date(morning.next)) },
+						)}{/if}{:else}{t('agent.morningOff')}{/if}
+			</p>
 		</div>
 		{#if morning}
+			<button
+				type="button"
+				class="m-open"
+				aria-expanded={mOpen}
+				aria-controls="morning-body"
+				aria-label={t('agent.morningEdit')}
+				title={t('agent.morningEdit')}
+				onclick={() => (mOpen = !mOpen)}><Icon name="chevronDown" size={18} /></button
+			>
 			<input
 				type="checkbox"
 				class="switch"
@@ -242,8 +269,8 @@
 			/>
 		{/if}
 	</header>
-	{#if morning}
-		<div class="grid">
+	{#if morning && mOpen}
+		<div class="grid" id="morning-body">
 			<span class="label">{t('agent.time')}</span>
 			<input class="field small-in" type="time" bind:value={mAt} aria-label={t('agent.time')} />
 			<span class="label">{t('agent.days')}</span>
@@ -300,11 +327,8 @@
 				onclick={() => run(() => api.post(`/agent/schedules/${morning.id}/run`), false)}
 				>{t('agent.morningNow')}</button
 			>
-			{#if morning.next && morning.enabled}<span class="muted small"
-					>{t('agent.nextRun', { when: formatDateTime(new Date(morning.next)) })}</span
-				>{/if}
 		</div>
-	{:else}
+	{:else if !morning}
 		<div class="row-actions">
 			<button type="button" class="btn btn-primary" disabled={busy} onclick={saveMorning}
 				>{t('agent.morningSetUp')}</button
@@ -607,6 +631,32 @@
 {/if}
 
 <style>
+	.m-open {
+		flex: none;
+		width: 40px;
+		height: 40px;
+		display: grid;
+		place-items: center;
+		border: 0;
+		border-radius: 50%;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.m-open:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+		color: var(--text);
+	}
+	.m-open:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.m-open :global(svg) {
+		transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+	.m-open[aria-expanded='true'] :global(svg) {
+		transform: rotate(180deg);
+	}
 	.card {
 		border: 1px solid var(--srow-line);
 		border-radius: var(--srow-radius);

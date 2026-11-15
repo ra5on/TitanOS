@@ -255,7 +255,18 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.getByRole("menuitem", { name: "Widgets bearbeiten" }).click();
   await page.getByRole("button", { name: "Widget hinzufügen" }).click();
   await page.getByRole("button", { name: "Uhr in Größe M hinzufügen" }).click();
+  // 0.92: the widget of the KI-Agent is in the gallery like the others.
+  const agentWidget = page.getByRole("button", {
+    name: "KI-Agent in Größe M hinzufügen",
+  });
+  if (!(await agentWidget.isVisible().catch(() => false)))
+    await page.getByRole("button", { name: "Widget hinzufügen" }).click();
+  await agentWidget.click();
   await page.getByRole("button", { name: "Fertig" }).last().click();
+  await page
+    .locator(".widget", { hasText: "KI-Agent" })
+    .first()
+    .waitFor();
   await page.waitForTimeout(1800);
   await shot(page, "09-widgets-bearbeiten");
   await ctx.close();

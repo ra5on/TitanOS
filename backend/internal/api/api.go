@@ -262,6 +262,10 @@ type Server struct {
 	agentOpen   func() (*os.Root, error)
 	// viewerOpen replaces viewer.Manager.Open in tests.
 	viewerOpen viewerOpener
+	// agentMCP holds the clients of the agent's MCP connections.
+	agentMCP agentMCPState
+	// agentSearx replaces the request to the SearXNG in tests.
+	agentSearx func(ctx context.Context, address, query string) ([]agent.SearchResult, error)
 	// agentSandbox replaces the Docker sandbox of code_run in tests.
 	agentSandbox    func(context.Context, docker.SandboxRequest) (docker.SandboxResult, error)
 	agentWebFactory func() *agent.Web

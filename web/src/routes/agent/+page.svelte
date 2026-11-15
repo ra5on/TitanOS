@@ -9,6 +9,7 @@
 	// the left, with the way back to TitanOS. Installed from here it is an
 	// app of its own too (/agent.webmanifest, start /agent?app=1).
 	import { fade, fly } from 'svelte/transition';
+	import { dim, slideIn } from '#lib/agent-motion.ts';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NasPicker from '#lib/components/agent/NasPicker.svelte';
@@ -589,6 +590,8 @@
 							chip={modelChip}
 							onhead={() => (ag.dialog = { kind: 'head' })}
 							projectName={ag.currentProject?.name ?? ''}
+							autonomy={ag.autonomy}
+							onautonomy={ag.readOnlyBy ? undefined : ag.setAutonomy}
 							oncommand={ag.readOnlyBy ? undefined : command}
 							onsend={ag.send}
 							onstop={() => ag.stop()}
@@ -644,14 +647,10 @@
 				type="button"
 				class="scrim"
 				aria-label={t('common.close')}
-				transition:fade={{ duration: ag.calm ? 0 : 200 }}
+				transition:fade={dim(ag.calm)}
 				onclick={() => (ag.menuOpen = false)}
 			></button>
-			<aside
-				class="drawer"
-				aria-label={t('agent.menu')}
-				transition:fly={{ x: -340, duration: ag.calm ? 0 : 260, opacity: 1 }}
-			>
+			<aside class="drawer" aria-label={t('agent.menu')} transition:fly={slideIn(ag.calm, -340)}>
 				<AgentMenu {...ag.menuProps} />
 			</aside>
 		{/if}
@@ -1192,6 +1191,7 @@
 		width: min(84%, 320px);
 		padding-top: var(--agent-top);
 		background: var(--bg);
+		will-change: transform;
 		border-right: 1px solid var(--border);
 		box-shadow: var(--shadow-menu, 0 18px 44px rgb(0 0 0 / 0.5));
 	}
@@ -1220,7 +1220,7 @@
 	   the right like the settings (PLAN 56); "Animationen: Aus" and "Weniger
 	   Bewegung" leave them still. Only on /agent: TitanOS keeps its look. */
 	:global(body:has(.agent:not(.calm)) dialog.tile[open]) {
-		animation: ag-slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+		animation: ag-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 	}
 	:global(body:has(.agent.phone:not(.calm)) dialog.tile[open]) {
 		animation-name: ag-slide-in-far;

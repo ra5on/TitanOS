@@ -37,6 +37,17 @@ const FOLD_KEY = 'titanos.agent.side';
 /** The window on top of the chat: a dialog, a panel or a sheet. */
 export type AgentDialog = AgentChats['dialog'];
 
+export type Autonomy = 'direct' | 'plan' | 'ask';
+const AUTONOMY_KEY = 'titanos.agent.autonomy';
+function savedAutonomy(): Autonomy {
+	try {
+		const v = localStorage.getItem(AUTONOMY_KEY);
+		return v === 'plan' || v === 'ask' ? v : 'direct';
+	} catch {
+		return 'direct';
+	}
+}
+
 export class AgentChats {
 	readLook = (): Look => {
 		try {
@@ -67,6 +78,20 @@ export class AgentChats {
 	});
 	model = $state('');
 	think = $state('');
+	/** How the agent works in this chat (owner 15 Nov 2026): start right
+	 *  away, show the plan first, or ask before every change. A new chat
+	 *  takes what was chosen last on this device. */
+	autonomy = $state<Autonomy>(savedAutonomy());
+	setAutonomy = (value: Autonomy) => {
+		this.autonomy = value;
+		try {
+			localStorage.setItem(AUTONOMY_KEY, value);
+		} catch {
+			// private mode: the choice holds for this visit
+		}
+		const info = this.chats.find((c) => c.id === this.current?.id && !c.author);
+		if (info && !this.readOnlyBy) void this.patch(info, { autonomy: value });
+	};
 	look = $state<Look>(this.readLook());
 	dialog = $state<
 		| { kind: 'project'; project: Project | null }
@@ -256,6 +281,7 @@ export class AgentChats {
 			}
 			if (this.current.model) this.model = this.current.model;
 			if (this.current.think) this.think = this.current.think;
+			this.autonomy = (this.current.autonomy as Autonomy) || 'direct';
 			if (this.current.project) this.project = this.current.project;
 			if (push) void this.go(`/agent?chat=${id}`);
 			const listed = this.chats.find((c) => c.id === id);
@@ -378,6 +404,7 @@ export class AgentChats {
 				replace: entry.id,
 				model: this.model,
 				think: this.think,
+				autonomy: this.autonomy,
 			});
 			this.current = chat;
 			this.watch(chat.id);
@@ -399,6 +426,7 @@ export class AgentChats {
 					project: this.project,
 					model: this.model,
 					think: this.think,
+					autonomy: this.autonomy,
 				});
 			}
 			for (const a of uploads) {
@@ -418,6 +446,7 @@ export class AgentChats {
 					message,
 					model: this.model,
 					think: this.think,
+					autonomy: this.autonomy,
 				});
 				this.current = chat;
 				if (!this.chats.some((c) => c.id === chat.id)) this.chats = [chat, ...this.chats];
@@ -429,6 +458,7 @@ export class AgentChats {
 					project: this.project,
 					model: this.model,
 					think: this.think,
+					autonomy: this.autonomy,
 				});
 				this.current = chat;
 				this.chats = [chat, ...this.chats];

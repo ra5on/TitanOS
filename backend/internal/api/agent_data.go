@@ -469,7 +469,7 @@ func (s *Server) handleAgentScheduleRun(w http.ResponseWriter, r *http.Request) 
 // agentPrompt builds the system prompt of a run.
 func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agentSettings, chat *agent.Chat, box *agentToolbox) string {
 	env := s.agentEnv()
-	in := agent.PromptInput{Account: user.Name, Admin: user.Role.CanAdminister(), Version: env.version, Now: time.Now(), Locations: settings.Locations, Origin: chat.Origin}
+	in := agent.PromptInput{Account: user.Name, Admin: user.Role.CanAdminister(), Version: env.version, Now: time.Now(), Locations: settings.Locations, Origin: chat.Origin, Autonomy: chat.Autonomy}
 	if env.monitor != nil {
 		in.Host = env.monitor.Info().Hostname
 	}

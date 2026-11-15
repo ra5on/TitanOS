@@ -455,6 +455,7 @@ const sent = (seen, method, path) =>
     replace: "u2",
     model: "gpt-oss:20b",
     think: "medium",
+    autonomy: "direct",
   });
 
   // Bearbeiten: the message becomes a field; sending replaces it.

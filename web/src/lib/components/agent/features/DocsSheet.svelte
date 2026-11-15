@@ -4,6 +4,7 @@
 	// button. Escape closes it.
 	import type { Snippet } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { slideIn } from '#lib/agent-motion.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { featurePage } from './page-mode.ts';
 
@@ -43,7 +44,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="{id}-t"
-			transition:fly={{ x: 380, duration: calm ? 0 : 240, opacity: 1 }}
+			transition:fly={slideIn(calm)}
 		>
 			<header>
 				<button type="button" class="back" aria-label={t('agent.f.docs.back')} onclick={onclose}

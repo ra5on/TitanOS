@@ -1053,6 +1053,21 @@ async function plan55() {
       await page.getByLabel("Werkzeuge nach Bedarf laden").isChecked(),
       "tools by area on by default",
     );
+    // The own web search and the connections to MCP servers (0.92/0.93).
+    await page.getByLabel("Eigene Websuche (SearXNG)").waitFor();
+    const mcp = page.locator("#ag-mcp");
+    await mcp
+      .getByRole("heading", { name: "Verbindungen zu anderen Programmen (MCP)" })
+      .waitFor();
+    assert.equal(await mcp.locator(".mcp").count(), 0, "no connection yet");
+    await mcp.getByRole("button", { name: "Verbindung hinzufügen" }).click();
+    await mcp.getByLabel("Name", { exact: true }).fill("n8n");
+    await mcp.getByLabel("Adresse des MCP-Servers").fill("https://n8n.example/mcp");
+    assert.ok(await mcp.getByRole("switch", { name: "n8n eingeschaltet" }).isChecked());
+    await mcp.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/29b-settings-mcp.png` });
+    await mcp.getByRole("button", { name: "n8n entfernen" }).click();
+    assert.equal(await mcp.locator(".mcp").count(), 0, "connection removed again");
     assert.ok(
       await page.getByLabel("Helfer für Unteraufträge").isChecked(),
       "helper on by default",
@@ -1867,6 +1882,27 @@ try {
     await drawer.getByRole("button", { name: "Zurück zu TitanOS" }).waitFor();
     await page.locator("button.scrim").click({ position: { x: 370, y: 400 } });
     await drawer.waitFor({ state: "detached" });
+    // The way of working is chosen in the same sheet and kept on the device.
+    await page.getByRole("button", { name: "Datei anhängen" }).click();
+    const plus = page.getByRole("dialog", { name: "Zum Chat hinzufügen" });
+    assert.equal(
+      await plus
+        .getByRole("button", { name: /Direkt loslegen/ })
+        .getAttribute("aria-pressed"),
+      "true",
+      "starts right away by default",
+    );
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${out}/17a-phone-plus-sheet.png` });
+    await plus.getByRole("button", { name: /Jeden Schritt fragen/ }).click();
+    await plus.waitFor({ state: "detached" });
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem("titanos.agent.autonomy")),
+      "ask",
+    );
+    await page.getByRole("button", { name: "Datei anhängen" }).click();
+    await plus.getByRole("button", { name: /Direkt loslegen/ }).click();
+    await plus.waitFor({ state: "detached" });
     // Files from the NAS through the plus of the input: a sheet on the phone.
     await page.getByRole("button", { name: "Datei anhängen" }).click();
     await page
@@ -2042,6 +2078,9 @@ try {
     await page.waitForTimeout(300);
     await noOverflow(page, "planned");
     await page.screenshot({ path: `${out}/24-planned.png` });
+    // The morning report is one row; it opens to be set.
+    assert.equal(await dlg.getByLabel("Home Assistant").count(), 0, "closed");
+    await dlg.getByRole("button", { name: "Morgenbericht einstellen" }).click();
     await dlg.getByLabel("Home Assistant").check();
     await dlg.getByRole("button", { name: "Speichern" }).first().click();
     await page.waitForTimeout(300);

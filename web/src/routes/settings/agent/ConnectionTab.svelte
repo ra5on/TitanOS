@@ -4,13 +4,15 @@
 	import Segments from '#lib/components/Segments.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
-	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import Icon from '#lib/components/Icon.svelte';
+	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { api } from '#lib/api.ts';
 	import {
 		gb,
 		levelLabel,
 		tokens,
 		type ClusterInfo,
+		type McpConnection,
 		type Settings,
 		type ShareState,
 		type Status,
@@ -56,6 +58,31 @@
 		checkVoice: () => void;
 		useWhisperApp: () => void;
 	} = $props();
+
+	// ----- connections to MCP servers (0.93) -----
+	type McpCheck = { reachable: boolean; tools?: string[]; error?: string };
+	let mcpChecks = $state<Record<number, McpCheck | 'busy'>>({});
+	const connections = $derived(settings.mcp ?? []);
+	function setConnection(i: number, patch: Partial<McpConnection>) {
+		settings!.mcp = connections.map((c, n) => (n === i ? { ...c, ...patch } : c));
+	}
+	async function checkConnection(i: number) {
+		const c = connections[i];
+		mcpChecks = { ...mcpChecks, [i]: 'busy' };
+		try {
+			mcpChecks = {
+				...mcpChecks,
+				[i]: await api.post<McpCheck>('/agent/mcp/check', {
+					id: c.id,
+					name: c.name,
+					url: c.url,
+					token: c.token,
+				}),
+			};
+		} catch (e) {
+			mcpChecks = { ...mcpChecks, [i]: { reachable: false, error: apiErrorText(e) } };
+		}
+	}
 
 	const shareText: Record<ShareState, MessageKey> = {
 		allowed: 'agent.shareAllowed',
@@ -492,6 +519,19 @@
 			{/if}
 		{/if}
 	{/if}
+	<!-- The own web search (0.92): a SearXNG, usually the Docker app on this
+	     NAS; empty, the agent asks DuckDuckGo's page. -->
+	<SettingRow icon="search" title={t('agent.searx')} desc={t('agent.searxHint')} for="ag-searx-url">
+		{#snippet control()}
+			<input
+				id="ag-searx-url"
+				class="field"
+				value={settings.search?.url ?? ''}
+				placeholder="http://192.168.1.5:8580"
+				oninput={(e) => (settings!.search = { url: e.currentTarget.value.trim() })}
+			/>
+		{/snippet}
+	</SettingRow>
 	<SettingRow
 		icon="camera"
 		title={t('agent.snapshots')}
@@ -555,7 +595,125 @@
 	{/if}
 </SettingGroup>
 
+<!-- Connections to MCP servers (0.93): other programs and agents whose
+     tools the agent may use, e.g. n8n. The token stays on the NAS. -->
+<SettingGroup id="ag-mcp" title={t('agent.mcp.title')} desc={t('agent.mcp.hint')}>
+	{#each connections as c, i (i)}
+		{@const checked = mcpChecks[i]}
+		<div class="srow mcp">
+			<div class="mcp-head">
+				<input
+					class="field"
+					value={c.name}
+					maxlength="60"
+					placeholder={t('agent.mcp.name')}
+					aria-label={t('agent.mcp.name')}
+					oninput={(e) => setConnection(i, { name: e.currentTarget.value })}
+				/>
+				<input
+					type="checkbox"
+					class="switch"
+					role="switch"
+					checked={!!c.enabled}
+					aria-label={t('agent.mcp.on', { name: c.name || t('agent.mcp.name') })}
+					onchange={(e) => setConnection(i, { enabled: e.currentTarget.checked })}
+				/>
+			</div>
+			<input
+				class="field"
+				value={c.url}
+				maxlength="300"
+				placeholder="https://n8n.example/mcp"
+				aria-label={t('agent.mcp.url')}
+				oninput={(e) => setConnection(i, { url: e.currentTarget.value.trim() })}
+			/>
+			<input
+				class="field"
+				type="password"
+				autocomplete="off"
+				value={c.token ?? ''}
+				placeholder={c.tokenSet && !c.clearToken ? t('agent.mcp.tokenKept') : t('agent.mcp.token')}
+				aria-label={t('agent.mcp.token')}
+				oninput={(e) => setConnection(i, { token: e.currentTarget.value, clearToken: false })}
+			/>
+			<div class="mcp-acts">
+				<button
+					type="button"
+					class="btn"
+					disabled={!c.url || checked === 'busy'}
+					onclick={() => checkConnection(i)}>{t('agent.mcp.check')}</button
+				>
+				{#if c.tokenSet && !c.clearToken && !c.token}
+					<button type="button" class="btn" onclick={() => setConnection(i, { clearToken: true })}
+						>{t('agent.mcp.tokenClear')}</button
+					>
+				{/if}
+				<button
+					type="button"
+					class="btn"
+					aria-label={t('agent.mcp.remove', { name: c.name || t('agent.mcp.name') })}
+					onclick={() => {
+						settings!.mcp = connections.filter((_, n) => n !== i);
+						mcpChecks = {};
+					}}><Icon name="trash" size={15} /></button
+				>
+			</div>
+			{#if checked && checked !== 'busy'}
+				<p class={checked.reachable ? 'notice-ok' : 'notice-error'} role="status">
+					{checked.reachable
+						? t('agent.mcp.ok', {
+								count: (checked.tools ?? []).length,
+								tools: (checked.tools ?? []).slice(0, 12).join(', ') || '–',
+							})
+						: t('agent.mcp.down', { error: checked.error ?? '' })}
+				</p>
+			{/if}
+		</div>
+	{/each}
+	{#if connections.length < 8}
+		<button
+			type="button"
+			class="btn mcp-add"
+			onclick={() => (settings!.mcp = [...connections, { name: '', url: '', enabled: true }])}
+			><Icon name="plus" size={15} />{t('agent.mcp.add')}</button
+		>
+	{/if}
+</SettingGroup>
+
 <style>
+	.mcp {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-4);
+	}
+	.mcp-head {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.mcp-head .field {
+		flex: 1;
+		min-width: 0;
+	}
+	.mcp .field {
+		width: 100%;
+	}
+	.mcp-acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.mcp p {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.mcp-add {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+	}
 	.state {
 		margin: 0;
 	}

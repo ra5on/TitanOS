@@ -362,5 +362,13 @@
 	"desktop.widget.gpuClock": "Takt",
 	"desktop.widget.gpuShows": "{name} zeigt",
 	"desktop.widget.gpuDevice": "Gerät",
-	"desktop.phone.up": "Eine Ebene zurück"
+	"desktop.phone.up": "Eine Ebene zurück",
+	"desktop.widget.agent": "KI-Agent",
+	"desktop.gallery.agent": "Fragen stellen, sehen, was wartet und was läuft",
+	"desktop.widget.agentAsk": "Frag den Agenten …",
+	"desktop.widget.agentOpen": "KI-Agent öffnen",
+	"desktop.widget.agentOff": "Der KI-Agent ist nicht eingeschaltet oder für dieses Konto nicht freigegeben.",
+	"desktop.widget.agentWaits": "wartet auf dich",
+	"desktop.widget.agentRuns": "arbeitet",
+	"desktop.widget.agentIdle": "Nichts offen. Stell eine Frage."
 }

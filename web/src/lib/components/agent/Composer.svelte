@@ -40,7 +40,12 @@
 		chip,
 		onhead,
 		projectName = '',
+		autonomy,
+		onautonomy,
 	}: {
+		/** How the agent works in this chat, and what changes it. */
+		autonomy?: 'direct' | 'plan' | 'ask';
+		onautonomy?: (value: 'direct' | 'plan' | 'ask') => void;
 		phone?: boolean;
 		calm?: boolean;
 		/** Model and thinking level, shown in the row of buttons. */
@@ -135,6 +140,7 @@
 	let blurTimer: ReturnType<typeof setTimeout> | undefined;
 	const open = $derived(!phone || focused || !!text || attachments.length > 0);
 	let plusOpen = $state(false);
+	const WAYS = ['direct', 'plan', 'ask'] as const;
 
 	function grow() {
 		if (!area) return;
@@ -318,6 +324,23 @@
 								onpicknas?.();
 							}}><Icon name="folder" size={16} /><span>{t('agent.attachNas')}</span></button
 						>
+						{#if onautonomy}
+							<hr />
+							{#each WAYS as way (way)}
+								<button
+									type="button"
+									role="menuitemradio"
+									aria-checked={autonomy === way}
+									onclick={() => {
+										close();
+										onautonomy(way);
+									}}
+									><Icon name={autonomy === way ? 'check' : 'zap'} size={16} /><span
+										>{t(`agent.autonomy.${way}`)}</span
+									></button
+								>
+							{/each}
+						{/if}
 					{/snippet}
 				</Dropdown>
 			</span>
@@ -437,6 +460,27 @@
 					>{t('agent.head.title')}<small>{projectName || t('agent.noProject')}</small></span
 				><Icon name="chevronRight" size={16} /></button
 			>
+		{/if}
+		{#if onautonomy}
+			<hr class="sh-rule" />
+			<h3 class="sh-group">{t('agent.autonomy.title')}</h3>
+			{#each WAYS as way (way)}
+				<button
+					type="button"
+					class="sh-item"
+					aria-pressed={autonomy === way}
+					onclick={() => {
+						plusOpen = false;
+						onautonomy(way);
+					}}
+					><Icon
+						name={way === 'direct' ? 'zap' : way === 'plan' ? 'list' : 'shield'}
+						size={20}
+					/><span class="sh-text"
+						>{t(`agent.autonomy.${way}`)}<small>{t(`agent.autonomy.${way}Hint`)}</small></span
+					>{#if autonomy === way}<span class="sh-check" aria-hidden="true">✓</span>{/if}</button
+				>
+			{/each}
 		{/if}
 	</BottomSheet>
 {/if}

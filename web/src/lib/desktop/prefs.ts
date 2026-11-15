@@ -17,6 +17,8 @@ export type WidgetKind =
 	| 'clock'
 	| 'homeassistant'
 	| 'tasks'
+	/** 0.92: the KI-Agent – what waits, what runs, a field to ask. */
+	| 'agent'
 	| 'igpu'
 	| 'npu'
 	| 'gpu'
@@ -35,6 +37,7 @@ export const WIDGET_KINDS: WidgetKind[] = [
 	'clock',
 	'homeassistant',
 	'tasks',
+	'agent',
 	'igpu',
 	'npu',
 	'gpu',

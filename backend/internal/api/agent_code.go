@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 )
 
 // code_run (PLAN 55 point 8, decision of the owner of 5.11.2026: the
@@ -29,7 +31,7 @@ func (b *agentToolbox) codeTool() *agentTool {
 		return nil
 	}
 	return &agentTool{name: "code_run", area: agent.AreaCode, kind: agent.KindChange, untrusted: true,
-		description: "Run a short program in a sandbox without network: Python 3 (standard library only) or sh (busybox). Your folder of the share KI-Agent is the working folder /work (read and write); nothing else of the NAS is visible. Use it to calculate, convert, sort or check data; print the result. Limits: " + fmt.Sprint(b.settings.Code.Timeout) + " s, " + fmt.Sprint(b.settings.Code.Memory) + " MiB.",
+		description: "Run a short program in a sandbox without network: Python 3 or sh (busybox). Besides the standard library Python has " + docker.SandboxLibsList + " to read and change Word, Excel and PDF files. Your folder of the share KI-Agent is the working folder /work (read and write); nothing else of the NAS is visible: copy a file of another share there first (file_copy), change it, and copy the result back. Use it to calculate, convert, sort or check data and for changes to documents that document_edit cannot do (insert rows, formulas, merge PDFs); print the result. Limits: " + fmt.Sprint(b.settings.Code.Timeout) + " s, " + fmt.Sprint(b.settings.Code.Memory) + " MiB.",
 		params: schema(map[string]any{
 			"language": enum("python (default) or sh.", "python", "sh"),
 			"code":     str("The program. Print what you need to see."),
@@ -87,12 +89,18 @@ func (b *agentToolbox) codeRun(ctx context.Context, _ *agent.Chat, args json.Raw
 	if run == nil {
 		run = env.docker.Sandbox
 	}
+	// The libraries are loaded by the first run that finds none; a run
+	// goes on without them when that fails (no internet) and says so.
+	libs, libsErr := b.s.sandboxLibs(ctx, sh)
 	res, err := run(ctx, docker.SandboxRequest{Language: req.Language, Code: req.Code, Work: env.shares.UserFolder(sh, b.user.Name),
-		UID: b.user.UID, GID: b.s.usersGID(), Timeout: time.Duration(b.settings.Code.Timeout) * time.Second, MemoryMB: b.settings.Code.Memory, User: b.user.Name})
+		UID: b.user.UID, GID: b.s.usersGID(), Timeout: time.Duration(b.settings.Code.Timeout) * time.Second, MemoryMB: b.settings.Code.Memory, User: b.user.Name, Libs: libs})
 	if err != nil {
 		return agent.Outcome{}, err
 	}
 	var out strings.Builder
+	if libsErr != nil {
+		fmt.Fprintf(&out, "Note: the libraries for Word, Excel and PDF are not there (%v); only the standard library works.\n", libsErr)
+	}
 	switch {
 	case res.TimedOut:
 		fmt.Fprintf(&out, "Stopped after %d s (time limit).\n", b.settings.Code.Timeout)
@@ -105,6 +113,23 @@ func (b *agentToolbox) codeRun(ctx context.Context, _ *agent.Chat, args json.Raw
 		out.WriteString(res.Output)
 	}
 	return agent.Outcome{Text: out.String()}, nil
+}
+
+// sandboxLibs returns the folder with the libraries of the sandbox on the
+// volume of the share KI-Agent (.titanos/agent/sandbox-libs-<n>), loading
+// them on the first call.
+func (s *Server) sandboxLibs(ctx context.Context, sh shares.Share) (string, error) {
+	env := s.agentEnv()
+	if env.shares == nil {
+		return "", nil
+	}
+	dir := filepath.Join(filepath.Dir(env.shares.Path(sh)), ".titanos", "agent", "sandbox-libs-"+docker.SandboxLibsVersion)
+	if s.agentSandbox != nil || env.docker == nil {
+		// Tests replace the sandbox; they see the libraries only when a
+		// test laid them there.
+		return docker.SandboxLibsReady(dir), nil
+	}
+	return env.docker.SandboxLibs(ctx, dir)
 }
 
 // codeSummary is the short form for notifications and the note in the

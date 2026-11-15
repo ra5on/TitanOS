@@ -10,6 +10,7 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, type Model } from '#lib/agent.ts';
+	import { dim, panelIn, sheetUp } from '#lib/agent-motion.ts';
 
 	let {
 		models = [],
@@ -54,7 +55,6 @@
 			.filter(Boolean)
 			.join(' · ');
 	}
-	const ms = $derived(calm ? 0 : 220);
 	let trigger = $state<HTMLElement>();
 	let at = $state({ top: 0, bottom: 0, left: 0, up: false });
 	function toggle() {
@@ -113,7 +113,7 @@
 				type="button"
 				class="scrim"
 				aria-label={t('common.close')}
-				transition:fade={{ duration: ms }}
+				transition:fade={dim(calm)}
 				onclick={() => (open = false)}
 			></button>
 			<div
@@ -121,7 +121,7 @@
 				class:up={at.up && !phone}
 				role="dialog"
 				aria-label={t('agent.modelPick')}
-				transition:fly={phone ? { y: 320, duration: ms, opacity: 1 } : { y: -8, duration: ms }}
+				transition:fly={phone ? sheetUp(calm) : panelIn(calm, at.up ? 10 : -10)}
 			>
 				{#if phone}<span class="grab" aria-hidden="true"></span>{/if}
 				{#if usable.length > 1}

@@ -14,12 +14,15 @@ func TestBuiltInSkillsNameRealTools(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{})
 	u, _ := ts.users.Get("alex")
 	box := ts.server.newAgentToolbox(u, ts.server.agentSettings())
-	known := map[string]bool{"ha_state": true, "ha_call": true, "ha_diagnostics": true, "ha_statistics": true, "ha_history": true, "ha_entities": true}
+	// code_run comes only with the sandbox switched on, plan_update is the
+	// runner's own tool (agent/context.go).
+	known := map[string]bool{"ha_state": true, "ha_call": true, "ha_diagnostics": true, "ha_statistics": true, "ha_history": true, "ha_entities": true, "ha_automation_save": true,
+		"code_run": true, "plan_update": true}
 	for _, x := range box.ordered {
 		known[x.name] = true
 	}
 	word := regexp.MustCompile(`\b[a-z]+_[a-z_]+\b`)
-	if len(agent.BuiltInSkills) < 28 {
+	if len(agent.BuiltInSkills) < 34 {
 		t.Fatalf("only %d built-in skills", len(agent.BuiltInSkills))
 	}
 	seen := map[string]bool{}

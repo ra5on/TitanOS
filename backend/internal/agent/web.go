@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -307,3 +308,63 @@ func (w *Web) Read(ctx context.Context, version, address string) (Page, error) {
 	page.Text = text
 	return page, nil
 }
+
+// SearxSearch asks a SearXNG (GET /search?format=json). Its address comes
+// from the settings of the owner and may lie in the home network – it is
+// usually the Docker app on this NAS –, so the guarded client of the web
+// tools is not used: only this one address is contacted, redirects are
+// not followed, and what comes back are titles, addresses and snippets.
+// The SearXNG must offer the JSON format (search.formats in its settings).
+func SearxSearch(ctx context.Context, address, query string) ([]SearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" || len(query) > 300 {
+		return nil, toolcatalog.Errorf("the search text must have 1 to 300 characters")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(address, "/")+"/search?"+url.Values{"q": {query}, "format": {"json"}}.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusForbidden {
+		return nil, errors.New("the JSON format is switched off there (search.formats in settings.yml)")
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("answered %d", res.StatusCode)
+	}
+	var body struct {
+		Results []struct {
+			Title   string `json:"title"`
+			URL     string `json:"url"`
+			Content string `json:"content"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, MaxPageBytes)).Decode(&body); err != nil {
+		return nil, errors.New("did not answer with JSON")
+	}
+	results := []SearchResult{}
+	for _, r := range body.Results {
+		u, err := url.Parse(r.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || strings.TrimSpace(r.Title) == "" {
+			continue
+		}
+		snippet := strings.Join(strings.Fields(r.Content), " ")
+		if rs := []rune(snippet); len(rs) > 400 {
+			snippet = string(rs[:400]) + "…"
+		}
+		results = append(results, SearchResult{Title: strings.TrimSpace(r.Title), URL: r.URL, Snippet: snippet})
+		if len(results) == MaxSearxResults {
+			break
+		}
+	}
+	return results, nil
+}
+
+// MaxSearxResults is how many results of the own search the model gets:
+// more than from DuckDuckGo's page, a research reads several of them.
+const MaxSearxResults = 12
