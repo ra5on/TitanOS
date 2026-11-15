@@ -480,6 +480,17 @@ const sent = (seen, method, path) =>
     edits[1].body.message,
     "Wie ist der Status von Home Assistant und Zigbee?",
   );
+  // The chat stayed on screen through both sends: the page never said
+  // "no longer visible" (that raced with "visible", and the NAS then sent
+  // a push message for an answer the person was looking at).
+  await page.waitForTimeout(300);
+  const looks = sent(seen, "POST", `/agent/chats/${chat.id}/seen`);
+  assert.ok(looks.length >= 1, "the chat is reported as visible");
+  assert.equal(
+    looks.filter((l) => l.body?.visible === false).length,
+    0,
+    "visible all the time",
+  );
 
   // "/" opens the commands; arrows and Enter choose.
   const input = page.locator(".composer textarea");

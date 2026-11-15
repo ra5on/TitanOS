@@ -505,11 +505,17 @@ export class AgentPage extends AgentChats {
 		});
 
 		$effect(() => {
-			const id = this.current?.id;
+			// The id alone: the chat itself is replaced with every message and
+			// answer. Running again for the same chat said "no longer visible"
+			// and "visible" at once; the NAS could take them the other way
+			// round and then sent a push message for an answer on screen.
+			const id = this.currentId;
 			if (!id || this.readOnlyBy) return;
 			const visible = () => document.visibilityState === 'visible';
 			const ping = () => this.seen(id, visible());
-			ping();
+			// Untracked: seen() reads the list of chats, which changes with
+			// every message – that must not run this again either.
+			untrack(ping);
 			const timer = setInterval(() => visible() && this.seen(id, true), 15000);
 			document.addEventListener('visibilitychange', ping);
 			// iOS may close the app without a visibility change (swiped away).

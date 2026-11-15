@@ -52,6 +52,8 @@ export class AgentChats {
 	projects = $state<Project[]>([]);
 	locations = $state<Location[]>([]);
 	current = $state<Chat | null>(null);
+	/** The open chat's id; changes only when another chat is opened. */
+	currentId = $derived(this.current?.id ?? '');
 	/** The author when the open chat belongs to another account (read-only). */
 	readOnlyBy = $state('');
 	project = $state('');
