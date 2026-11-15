@@ -28,6 +28,7 @@
 		suggestions,
 		hints = [],
 		show = true,
+		fresh = false,
 		phone = false,
 		onunfold,
 		onopen,
@@ -45,6 +46,8 @@
 		hints?: NasHint[];
 		/** Suggestions switched on (Einstellungen › Darstellung). */
 		show?: boolean;
+		/** A new chat: only the question and up to three things to ask. */
+		fresh?: boolean;
 		phone?: boolean;
 		onunfold?: () => void;
 		onopen: (id: string) => void;
@@ -290,10 +293,16 @@
 	});
 </script>
 
-<PageShell title={hello} plain {lead} {phone} {onunfold}>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+<PageShell
+	title={fresh ? t('agent.freshTitle') : hello}
+	plain
+	lead={fresh ? undefined : lead}
+	{phone}
+	{onunfold}
+>
+	{#if error && !fresh}<p class="notice-error" role="alert">{error}</p>{/if}
 
-	{#if open}
+	{#if open && !fresh}
 		<SettingGroup title={t('agent.home.waiting')}>
 			{#each waiting as chat (chat.id)}
 				<div class="srow">
@@ -356,7 +365,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if running.length}
+	{#if running.length && !fresh}
 		<SettingGroup title={t('agent.home.running')}>
 			{#each running as chat (chat.id)}
 				<div class="srow">
@@ -383,83 +392,83 @@
 		</SettingGroup>
 	{/if}
 
-	<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
-		{#if rows.length && nas}
-			<SettingGroup title={t('agent.home.state')}>
-				{#snippet tools()}<span class="when"
-						>{t('agent.home.asOf', { time: formatTime(new Date(nas!.at)) })}</span
-					>{/snippet}
-				{#each rows as r (r.id)}
-					<a class="srow" href={r.href}>
-						<div class="srow-head">
-							<span class="srow-ico {r.tone === 'warn' || r.tone === 'error' ? r.tone : ''}"
-								><Icon name={r.icon} size={19} /></span
-							>
-							<div class="srow-text">
-								<span class="srow-title">{r.title}</span>
-								<p class="srow-desc">{r.desc}</p>
+	{#if !fresh}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
+			{#if rows.length && nas}
+				<SettingGroup title={t('agent.home.state')}>
+					{#snippet tools()}<span class="when"
+							>{t('agent.home.asOf', { time: formatTime(new Date(nas!.at)) })}</span
+						>{/snippet}
+					{#each rows as r (r.id)}
+						<a class="srow" href={r.href}>
+							<div class="srow-head">
+								<span class="srow-ico {r.tone === 'warn' || r.tone === 'error' ? r.tone : ''}"
+									><Icon name={r.icon} size={19} /></span
+								>
+								<div class="srow-text">
+									<span class="srow-title">{r.title}</span>
+									<p class="srow-desc">{r.desc}</p>
+								</div>
+								<span class="srow-ctl"><span class="chip {r.tone}">{r.chip}</span></span>
+								<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
 							</div>
-							<span class="srow-ctl"><span class="chip {r.tone}">{r.chip}</span></span>
-							<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-						</div>
-					</a>
-				{/each}
-			</SettingGroup>
-		{/if}
-		{#if next.length || done.length}
-			<div class="stack">
-				{#if next.length}
-					<SettingGroup title={t('agent.home.next')}>
-						{#snippet tools()}<button type="button" class="more" onclick={() => onshow('planned')}
-								>{t('agent.home.all', { count: planned.length })}</button
-							>{/snippet}
-						{#each next as s (s.id)}
-							<button type="button" class="srow" onclick={() => onshow('planned')}>
-								<div class="srow-head">
-									<span class="srow-ico"
-										><Icon name={s.kind === 'reminder' ? 'bell' : 'clock'} size={19} /></span
-									>
-									<div class="srow-text">
-										<span class="srow-title"
-											>{s.kind === 'morning' ? t('agent.morning') : s.name}</span
+						</a>
+					{/each}
+				</SettingGroup>
+			{/if}
+			{#if next.length || done.length}
+				<div class="stack">
+					{#if next.length}
+						<SettingGroup title={t('agent.home.next')}>
+							{#snippet tools()}<button type="button" class="more" onclick={() => onshow('planned')}
+									>{t('agent.home.all', { count: planned.length })}</button
+								>{/snippet}
+							{#each next as s (s.id)}
+								<button type="button" class="srow" onclick={() => onshow('planned')}>
+									<div class="srow-head">
+										<span class="srow-ico"
+											><Icon name={s.kind === 'reminder' ? 'bell' : 'clock'} size={19} /></span
 										>
-										<p class="srow-desc">
-											{s.kind === 'reminder'
-												? t('agent.home.reminder')
-												: s.kind === 'morning'
-													? t('agent.home.report')
-													: t('agent.home.task')} · {formatDateTime(new Date(s.next!))}
-										</p>
+										<div class="srow-text">
+											<span class="srow-title"
+												>{s.kind === 'morning' ? t('agent.morning') : s.name}</span
+											>
+											<p class="srow-desc">
+												{s.kind === 'reminder'
+													? t('agent.home.reminder')
+													: s.kind === 'morning'
+														? t('agent.home.report')
+														: t('agent.home.task')} · {formatDateTime(new Date(s.next!))}
+											</p>
+										</div>
+										<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
 									</div>
-									<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-								</div>
-							</button>
-						{/each}
-					</SettingGroup>
-				{/if}
-				{#if done.length}
-					<SettingGroup title={t('agent.home.done')}>
-						{#each done as chat (chat.id)}
-							<button type="button" class="srow" onclick={() => onopen(chat.id)}>
-								<div class="srow-head">
-									<span class="srow-ico ok"><Icon name="check" size={19} /></span>
-									<div class="srow-text">
-										<span class="srow-title">{chat.title}</span>
-										<p class="srow-desc">
-											{formatDateTime(new Date(chat.updated))}{chat.preview
-												? ' · ' + chat.preview
-												: ''}
-										</p>
+								</button>
+							{/each}
+						</SettingGroup>
+					{/if}
+					{#if done.length}
+						<SettingGroup title={t('agent.home.done')}>
+							{#each done as chat (chat.id)}
+								<button type="button" class="srow" onclick={() => onopen(chat.id)}>
+									<div class="srow-head">
+										<span class="srow-ico ok"><Icon name="check" size={19} /></span>
+										<div class="srow-text">
+											<span class="srow-title">{chat.title}</span>
+											<p class="srow-desc">
+												{formatDateTime(new Date(chat.updated))}{chat.preview
+													? ' · ' + chat.preview
+													: ''}
+											</p>
+										</div>
+										<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
 									</div>
-									<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-								</div>
-							</button>
-						{/each}
-					</SettingGroup>
-				{/if}
-			</div>
-		{/if}
-	</div>
+								</button>
+							{/each}
+						</SettingGroup>
+					{/if}
+				</div>
+			{/if}
+		</div>{/if}
 
 	{#if show && suggestions.length}
 		<SettingGroup title={t('agent.fitsNow')}>

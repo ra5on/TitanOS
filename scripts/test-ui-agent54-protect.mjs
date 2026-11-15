@@ -497,8 +497,11 @@ for (const [width, height, tag] of [
   });
   await page.goto(base + "/agent");
   // PLAN 68: on the phone the settings are in the ⋯ menu of the top bar.
-  await page.getByRole("button", { name: "Weitere Aktionen" }).first().click();
-  await page.getByRole("menuitem", { name: "Einstellungen" }).click();
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  await page
+    .locator("aside.drawer")
+    .getByRole("button", { name: "Einstellungen" })
+    .click();
   // PLAN 90-4: the settings are a page; "Funktionen" is a row that leads
   // to its own page (/agent?page=settings&part=features).
   await page.waitForURL(/[?&]page=settings/);

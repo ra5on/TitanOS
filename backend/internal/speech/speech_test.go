@@ -337,6 +337,19 @@ func TestManagerDownloadsAndServices(t *testing.T) {
 	}
 	defer m.whisper.close()
 	defer m.piper.close()
+	// A container that runs but does not take connections yet (it loads its
+	// model) is "starting", and nothing is handed through to it.
+	up := false
+	m.Answers = func(string) bool { return up }
+	for i := 0; i < 100 && m.Status().Piper.Phase != "starting"; i++ {
+		m.tick(ctx)
+		time.Sleep(10 * time.Millisecond)
+	}
+	m.tick(ctx)
+	if st := m.Status(); st.Whisper.Phase != "starting" || st.Piper.Phase != "starting" || m.target(whisperService, WhisperPort) != "" {
+		t.Fatalf("before the services answer: %+v", st)
+	}
+	up = true
 	for i := 0; i < 100 && m.Status().Piper.Phase != "running"; i++ {
 		m.tick(ctx)
 		time.Sleep(10 * time.Millisecond)
@@ -418,5 +431,51 @@ func TestDownloadRefusesWrongChecksum(t *testing.T) {
 	entries, _ := os.ReadDir(m.hostPath(whisperDir))
 	if len(entries) != 0 {
 		t.Fatalf("parts left behind: %v", entries)
+	}
+}
+
+// Assist with the key of TitanOS needs no connection under Settings › Home
+// Assistant: the address that asked with the key is Home Assistant for the
+// Wyoming ports, also after a restart of titand.
+func TestKnownHomeAssistant(t *testing.T) {
+	store := config.Open(t.TempDir())
+	m := New(store)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	ha, other := net.ParseIP("192.0.2.10"), net.ParseIP("192.0.2.168")
+	if m.allowed(ha) {
+		t.Fatal("an unknown address of the home network got in with \"only Home Assistant\"")
+	}
+	m.KnownHomeAssistant(ha)
+	m.KnownHomeAssistant(ha)
+	m.KnownHomeAssistant(net.ParseIP("127.0.0.1"))
+	m.KnownHomeAssistant(nil)
+	if !m.allowed(ha) || m.allowed(other) {
+		t.Fatalf("after Assist: Home Assistant %v, another machine %v", m.allowed(ha), m.allowed(other))
+	}
+	var saved []string
+	if err := store.ReadJSON(peersFile, &saved); err != nil || !slices.Equal(saved, []string{"192.0.2.10"}) {
+		t.Fatalf("saved: %v %v", saved, err)
+	}
+	// The NAS under its own address (Home Assistant in the host's network).
+	if addrs, _ := net.InterfaceAddrs(); len(addrs) > 0 {
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !m.allowed(n.IP) {
+				t.Fatalf("the NAS's own address %s was refused", n.IP)
+			}
+		}
+	}
+	// A restart keeps it.
+	again := New(store)
+	if err := again.Load(); err != nil || !again.allowed(ha) {
+		t.Fatalf("after a restart: %v", err)
+	}
+	// The list is bounded; the oldest goes first, the newest stays.
+	for i := range maxPeers {
+		again.KnownHomeAssistant(net.IPv4(10, 0, 0, byte(i+1)))
+	}
+	if again.allowed(ha) || !again.allowed(net.IPv4(10, 0, 0, 1)) || !again.allowed(net.IPv4(10, 0, 0, maxPeers)) {
+		t.Fatal("the list of addresses is not bounded to the newest")
 	}
 }

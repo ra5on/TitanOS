@@ -16,6 +16,7 @@
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
+	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 
 	const PARTS = [
 		'models',
@@ -211,12 +212,16 @@
 					<div class="row">
 						<span class="t"
 							><strong>{t('agent.set.whisper')}</strong><small
-								>{status.voice ? t('agent.set.whisperOn') : t('agent.set.whisperOff')}</small
+								>{nasSpeech.hear
+									? t('agent.set.whisperNas')
+									: status.voice
+										? t('agent.set.whisperOn')
+										: t('agent.set.whisperOff')}</small
 							></span
 						>
-						{#if !status.voice && status.admin}<a
+						{#if !status.voice && !nasSpeech.hear && status.admin}<a
 								class="btn btn-primary small"
-								href="/settings/agent?tab=connection#voice">{t('agent.set.setup')}</a
+								href="/settings/speech">{t('agent.set.setup')}</a
 							>{/if}
 					</div>
 					<div class="row col">

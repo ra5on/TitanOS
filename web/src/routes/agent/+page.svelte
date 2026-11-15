@@ -46,7 +46,7 @@
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	const agentOn = () => !!ag.status?.enabled && !!ag.status.allowed;
 	registerMenuCommands({
-		'agent.newChat': { run: () => ag.newChat(''), enabled: agentOn },
+		'agent.newChat': { run: () => ag.freshChat(''), enabled: agentOn },
 		'agent.project': {
 			run: () => (ag.dialog = { kind: 'project', project: null }),
 			enabled: agentOn,
@@ -122,7 +122,7 @@
 	}
 	function command(name: string, arg: string) {
 		const id = commands.find((c) => c.name === name)?.id;
-		if (id === 'new') ag.newChat();
+		if (id === 'new') ag.freshChat();
 		else if (id === 'project') {
 			const wanted = arg && ag.projects.find((p) => p.name.toLowerCase() === arg.toLowerCase());
 			if (wanted) setProject(wanted.id);
@@ -148,98 +148,91 @@
 
 <svelte:window ontouchstart={ag.touchStart} ontouchmove={ag.touchMove} />
 
+<!-- The actions of the open chat. The settings are in the menu, not here
+     a second time; without a chat there is nothing to show. -->
 {#snippet chatMenu(info: ChatInfo | null)}
-	<span class="more">
-		<Dropdown label={t('ui.more')} icon="more" align="right">
-			{#snippet children(close)}
-				{#if info}
-					{#if ag.phone}
+	{#if info}<span class="more">
+			<Dropdown label={t('ui.more')} icon="more" align="right">
+				{#snippet children(close)}
+					{#if info}
+						{#if ag.phone}
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									void ag.patch(info, { pinned: !info.pinned });
+								}}
+								><Icon name="pin" size={16} /><span
+									>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
+								></button
+							>
+						{/if}
 						<button
 							type="button"
 							role="menuitem"
 							onclick={() => {
 								close();
-								void ag.patch(info, { pinned: !info.pinned });
+								ag.find = '';
+							}}><Icon name="search" size={16} /><span>{t('agent.findInChat')}</span></button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								ag.dialog = { kind: 'rename', chat: info, title: info.title };
+							}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								ag.dialog = { kind: 'move', chat: info };
+							}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								void ag.patch(info, { archived: !info.archived });
 							}}
-							><Icon name="pin" size={16} /><span
-								>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
+							><Icon name="archive" size={16} /><span
+								>{info.archived ? t('agent.archive.restore') : t('agent.archive.do')}</span
 							></button
 						>
+						<hr />
+						<a
+							role="menuitem"
+							href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export`)}
+							download
+							onclick={close}
+							><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
+						>
+						<a
+							role="menuitem"
+							href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export?format=pdf`)}
+							download
+							onclick={close}
+							><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
+						>
+						<hr />
+						<button
+							type="button"
+							role="menuitem"
+							class="danger"
+							disabled={ag.busy}
+							onclick={() => {
+								close();
+								ag.dialog = { kind: 'delete', chat: info };
+							}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
+						>
 					{/if}
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							close();
-							ag.find = '';
-						}}><Icon name="search" size={16} /><span>{t('agent.findInChat')}</span></button
-					>
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							close();
-							ag.dialog = { kind: 'rename', chat: info, title: info.title };
-						}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
-					>
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							close();
-							ag.dialog = { kind: 'move', chat: info };
-						}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
-					>
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							close();
-							void ag.patch(info, { archived: !info.archived });
-						}}
-						><Icon name="archive" size={16} /><span
-							>{info.archived ? t('agent.archive.restore') : t('agent.archive.do')}</span
-						></button
-					>
-					<hr />
-					<a
-						role="menuitem"
-						href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export`)}
-						download
-						onclick={close}><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
-					>
-					<a
-						role="menuitem"
-						href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export?format=pdf`)}
-						download
-						onclick={close}><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
-					>
-					<hr />
-				{/if}
-				<button
-					type="button"
-					role="menuitem"
-					onclick={() => {
-						close();
-						ag.show('settings');
-					}}><Icon name="gear" size={16} /><span>{t('agent.set.title')}</span></button
-				>
-				{#if info}
-					<hr />
-					<button
-						type="button"
-						role="menuitem"
-						class="danger"
-						disabled={ag.busy}
-						onclick={() => {
-							close();
-							ag.dialog = { kind: 'delete', chat: info };
-						}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
-					>
-				{/if}
-			{/snippet}
-		</Dropdown>
-	</span>
+				{/snippet}
+			</Dropdown>
+		</span>{/if}
 {/snippet}
 
 <div
@@ -358,7 +351,7 @@
 								class="icon-btn"
 								aria-label={t('agent.newChat')}
 								title={t('agent.newChat')}
-								onclick={() => ag.newChat('')}><Icon name="newChat" size={22} /></button
+								onclick={() => ag.freshChat('')}><Icon name="newChat" size={22} /></button
 							>
 							{@render chatMenu(currentInfo ?? null)}
 						{/if}
@@ -504,6 +497,7 @@
 					/>
 				{:else}
 					<HomePage
+						fresh={ag.fresh}
 						user={ag.user}
 						chats={ag.listedChats}
 						suggestions={ag.suggestions}
@@ -853,10 +847,16 @@
 		flex-direction: column;
 		line-height: 1.2;
 	}
+	/* One line each: a long title ends in "…" instead of growing the head. */
+	.p-text h1,
+	.p-text small {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
 	.p-text small {
 		color: var(--muted);
 		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
 	}
 	.top h1.plain {
 		flex: 1;

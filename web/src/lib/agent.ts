@@ -483,6 +483,7 @@ const STEP_WORDS: Record<string, string> = {
 	shares_list: 'shares',
 	my_shares: 'shares',
 	system_status: 'system',
+	hardware_status: 'hardware',
 	backup_status: 'backups',
 	notifications: 'notifications',
 	web_search: 'web',

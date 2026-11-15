@@ -217,6 +217,11 @@ func (s *Server) handleAgentOllama(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, "assist_not_allowed", "Assist is off, or the key of TitanOS is missing or wrong")
 		return
 	}
+	// This address is Home Assistant: the speech services let it in with
+	// "only Home Assistant" (speech/manager.go).
+	if s.opts.Speech != nil {
+		s.opts.Speech.KnownHomeAssistant(net.ParseIP(remoteIP(r)))
+	}
 	switch strings.TrimPrefix(r.URL.Path, assistPrefix) {
 	case "/api/version":
 		writeJSON(w, http.StatusOK, map[string]string{"version": "0.40.0"})

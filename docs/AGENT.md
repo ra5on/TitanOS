@@ -254,7 +254,7 @@ Von 0.54.0 bis 0.63.0 hatte der Agent einen eigenen Auftritt (Polarlicht hinter 
 - Darstellung und Gesten:
   - Wischgesten an oder aus;
   - was Wischen nach rechts oder links an einem Chat tut: Anheften, Archivieren, Löschen, Menü, Nichts;
-  - vom Rand wischen: links Chats, rechts Einstellungen;
+  - vom linken Rand wischen: Chats (die Einstellungen haben einen Weg, das Menü; das Wischen vom rechten Rand dorthin entfiel mit 0.85);
   - Ziehen zum Aktualisieren;
   - Vibration;
   - Animationen voll, reduziert oder aus; `prefers-reduced-motion` gilt immer;

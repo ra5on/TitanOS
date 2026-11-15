@@ -149,6 +149,20 @@ func homeNetwork(ip net.IP) bool {
 	return cgnat.Contains(ip)
 }
 
+// ownAddress reports whether an address is one of this NAS's own.
+func ownAddress(ip net.IP) bool {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // dockerNetworks are the networks of Docker's bridges on this NAS: a
 // connection from one of them is an app of this NAS (Home Assistant as a
 // Docker app).

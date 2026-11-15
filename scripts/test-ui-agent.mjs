@@ -660,10 +660,14 @@ async function open(
   return { ...made, seen };
 }
 
-// PLAN 68: on the phone the agent's settings are in the ⋯ menu of the top bar.
+// On the phone the agent's settings are in the menu, once (not a second
+// time in the ⋯ menu, which holds the actions of the open chat only).
 async function phoneSettings(page) {
-  await page.getByRole("button", { name: "Weitere Aktionen" }).first().click();
-  await page.getByRole("menuitem", { name: "Einstellungen" }).click();
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  await page
+    .locator("aside.drawer")
+    .getByRole("button", { name: "Einstellungen" })
+    .click();
 }
 
 // A row of the agent's pages (settings list, Gedächtnis, Wissen) by its
@@ -840,12 +844,15 @@ async function plan55() {
     await settingsRow(page, "Darstellung").click();
     await page.waitForURL(/[?&]part=look/);
     await page.locator(".sub").getByText("Schriftgröße").first().waitFor();
-    assert.ok(
-      await page.locator("a.back", { hasText: "Einstellungen" }).isVisible(),
-      "the part has a link back to the settings",
+    // One way back: the button in the head, no second link in the page.
+    assert.equal(
+      await page.locator("a.back").count(),
+      0,
+      "the part has no second way back",
     );
     await noOverflow(page, "settings part on the phone");
-    await page.getByRole("button", { name: "Zurück" }).click();
+    // Exact: the menu closing behind has "Zurück zu TitanOS".
+    await page.getByRole("button", { name: "Zurück", exact: true }).click();
     await page.waitForURL((u) => !u.searchParams.has("part"));
     const delRow = page
       .locator(".sgroup", {
@@ -2081,10 +2088,13 @@ try {
       await input.getAttribute("placeholder"),
       "Chat von maria – nur lesen",
     );
-    // PLAN 68: the ⋯ menu stays (it holds the settings), but without the
-    // chat's own actions.
-    await page.getByRole("button", { name: "Weitere Aktionen" }).click();
-    await page.getByRole("menuitem", { name: "Einstellungen" }).waitFor();
+    // A foreign chat has no actions of its own: no ⋯ menu (the settings
+    // are in the menu).
+    assert.equal(
+      await page.getByRole("button", { name: "Weitere Aktionen" }).count(),
+      0,
+      "no ⋯ menu for a foreign chat",
+    );
     for (const name of ["Umbenennen", "Löschen", "In Projekt verschieben"])
       assert.equal(
         await page.getByRole("menuitem", { name }).count(),
