@@ -280,6 +280,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if p.Summary == "" && t.kind != agent.KindRead && t.kind != agent.KindAgent {
 		p.Summary = t.name + " " + compactArgs(args)
 	}
+	// "Jeden Schritt fragen" in this chat: every change waits for the
+	// person, whatever the rights allow without asking.
+	if chat != nil && chat.Autonomy == agent.AutonomyAsk && mode == agent.ModeAllow && kind != agent.KindRead && kind != agent.KindAgent {
+		mode = agent.ModeAsk
+	}
 	p.Mode, p.Kind = mode, kind
 	return p, nil
 }

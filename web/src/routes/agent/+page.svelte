@@ -589,6 +589,8 @@
 							chip={modelChip}
 							onhead={() => (ag.dialog = { kind: 'head' })}
 							projectName={ag.currentProject?.name ?? ''}
+							autonomy={ag.autonomy}
+							onautonomy={ag.readOnlyBy ? undefined : ag.setAutonomy}
 							oncommand={ag.readOnlyBy ? undefined : command}
 							onsend={ag.send}
 							onstop={() => ag.stop()}

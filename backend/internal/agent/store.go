@@ -155,6 +155,11 @@ type Chat struct {
 	// Model and Think as chosen in the chat; empty uses the settings.
 	Model string `json:"model,omitempty"`
 	Think string `json:"think,omitempty"`
+	// Autonomy is how the person wants this chat to work (owner 15.11.2026):
+	// "" starts right away and asks only where the rights of the NAS ask,
+	// "plan" shows the plan first and works through it after a yes, "ask"
+	// asks before every change. It only tightens, never loosens the rights.
+	Autonomy string `json:"autonomy,omitempty"`
 	// Origin: "web", "schedule", "event", "homeassistant".
 	Origin  string   `json:"origin,omitempty"`
 	State   string   `json:"state"`
@@ -893,4 +898,16 @@ func (s *Store) NotesMeta(user string) (NotesMeta, error) {
 // SaveNotesMeta writes notes.json.
 func (s *Store) SaveNotesMeta(user string, m NotesMeta) error {
 	return s.write(user, "notes.json", m)
+}
+
+// Autonomy of a chat.
+const (
+	AutonomyDirect = ""
+	AutonomyPlan   = "plan"
+	AutonomyAsk    = "ask"
+)
+
+// ValidAutonomy reports whether a is one of the three ways to work.
+func ValidAutonomy(a string) bool {
+	return a == AutonomyDirect || a == AutonomyPlan || a == AutonomyAsk
 }

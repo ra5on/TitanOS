@@ -166,6 +166,9 @@ type agentMessage struct {
 	Project string `json:"project,omitempty"`
 	Model   string `json:"model,omitempty"`
 	Think   string `json:"think,omitempty"`
+	// Autonomy sets how the chat works ("direct", "plan", "ask"); left
+	// out, the chat keeps what it has.
+	Autonomy string `json:"autonomy,omitempty"`
 	// Replace names a message of the person in this chat (PLAN 90-4): it
 	// and everything after it leave the chat, then Message is asked instead
 	// ("Bearbeiten und erneut senden"). Without a Message the same one is
@@ -229,7 +232,7 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now()
-	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Model: req.Model, Think: req.Think, Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
+	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Model: req.Model, Think: req.Think, Autonomy: autonomyOf(req.Autonomy, ""), Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
 	if req.Draft {
 		chat.Title = ""
 		if err := store.SaveChat(user.Name, chat); err != nil {
@@ -281,6 +284,7 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	if req.Think != "" {
 		chat.Think = req.Think
 	}
+	chat.Autonomy = autonomyOf(req.Autonomy, chat.Autonomy)
 	if req.Replace != "" {
 		// What the steps after it changed on the NAS stays changed; only
 		// the chat forgets them. A waiting step is dropped unanswered.
@@ -382,6 +386,7 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 		Archived *bool   `json:"archived"`
 		Model    *string `json:"model"`
 		Think    *string `json:"think"`
+		Autonomy *string `json:"autonomy"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -425,6 +430,9 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Think != nil && len(*req.Think) <= 40 {
 		chat.Think = *req.Think
+	}
+	if req.Autonomy != nil {
+		chat.Autonomy = autonomyOf(*req.Autonomy, chat.Autonomy)
 	}
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		agentStoreError(w, err)
@@ -902,4 +910,16 @@ func agentStartError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+}
+
+// autonomyOf reads the way to work a request names: "direct" (or ""
+// stored), "plan" or "ask"; anything else keeps what the chat has.
+func autonomyOf(asked, kept string) string {
+	switch asked {
+	case "direct":
+		return agent.AutonomyDirect
+	case agent.AutonomyPlan, agent.AutonomyAsk:
+		return asked
+	}
+	return kept
 }

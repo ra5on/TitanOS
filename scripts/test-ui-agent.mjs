@@ -1867,6 +1867,27 @@ try {
     await drawer.getByRole("button", { name: "Zurück zu TitanOS" }).waitFor();
     await page.locator("button.scrim").click({ position: { x: 370, y: 400 } });
     await drawer.waitFor({ state: "detached" });
+    // The way of working is chosen in the same sheet and kept on the device.
+    await page.getByRole("button", { name: "Datei anhängen" }).click();
+    const plus = page.getByRole("dialog", { name: "Zum Chat hinzufügen" });
+    assert.equal(
+      await plus
+        .getByRole("button", { name: /Direkt loslegen/ })
+        .getAttribute("aria-pressed"),
+      "true",
+      "starts right away by default",
+    );
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${out}/17a-phone-plus-sheet.png` });
+    await plus.getByRole("button", { name: /Jeden Schritt fragen/ }).click();
+    await plus.waitFor({ state: "detached" });
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem("titanos.agent.autonomy")),
+      "ask",
+    );
+    await page.getByRole("button", { name: "Datei anhängen" }).click();
+    await plus.getByRole("button", { name: /Direkt loslegen/ }).click();
+    await plus.waitFor({ state: "detached" });
     // Files from the NAS through the plus of the input: a sheet on the phone.
     await page.getByRole("button", { name: "Datei anhängen" }).click();
     await page

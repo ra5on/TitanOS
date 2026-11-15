@@ -59,6 +59,8 @@ export type Chat = {
 	updated: string;
 	model?: string;
 	think?: string;
+	/** How the chat works: left out starts right away, "plan" or "ask". */
+	autonomy?: string;
 	origin?: string;
 	state: ChatState;
 	error?: string;

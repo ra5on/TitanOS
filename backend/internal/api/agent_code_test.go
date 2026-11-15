@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -77,6 +78,28 @@ func TestAgentCodeRun(t *testing.T) {
 	req := got[0]
 	if req.Work != filepath.Join(mnt, "tank", agentShareName, "alex") || req.UID != user.UID || req.Timeout != 30*time.Second || req.MemoryMB != 512 || req.Language != "python" {
 		t.Fatalf("request %+v", req)
+	}
+	// Without the libraries on the volume the run has none; once they lie
+	// there (docker.SandboxLibs loads them on the NAS), it sees them
+	// read-only and the tool names them.
+	if req.Libs != "" {
+		t.Fatalf("libraries without a folder: %q", req.Libs)
+	}
+	libs := filepath.Join(mnt, "tank", ".titanos", "agent", "sandbox-libs-"+docker.SandboxLibsVersion)
+	if err := os.MkdirAll(filepath.Join(libs, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(libs, ".ready"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := box.Execute(context.Background(), chat, p); err != nil {
+		t.Fatal(err)
+	}
+	if got[1].Libs != filepath.Join(libs, "pkg") {
+		t.Fatalf("libraries: %q", got[1].Libs)
+	}
+	if d := box.tools["code_run"].description; !strings.Contains(d, "openpyxl") || !strings.Contains(d, "file_copy") {
+		t.Fatalf("description %q", d)
 	}
 
 	// Allowed by name it runs without asking; denied it is gone.

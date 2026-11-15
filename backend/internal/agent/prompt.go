@@ -36,6 +36,8 @@ type PromptInput struct {
 	Web bool
 	// Origin of the chat: "schedule", "event", "homeassistant" or "".
 	Origin string
+	// Autonomy of the chat: "" (start right away), "plan" or "ask".
+	Autonomy string
 	// Folder: the account has its folder in the share KI-Agent (root
 	// share/KI-Agent); Notes are the person's own notes and guides there.
 	Folder bool
@@ -82,6 +84,18 @@ func BuildPrompt(in PromptInput) string {
 		b.WriteString("This run was started by a notification of the NAS: find out what happened, fix it if your permissions allow, and report briefly what you found and did.\n")
 	case "homeassistant":
 		b.WriteString("This question comes from Home Assistant (voice or app): answer in one or two short spoken sentences without Markdown.\n")
+	}
+	// How the person wants this chat to work (only where someone watches:
+	// a scheduled or started run never waits for an answer).
+	if in.Origin == "" || in.Origin == "web" {
+		switch in.Autonomy {
+		case AutonomyPlan:
+			b.WriteString("The person wants to see your plan first: before you change anything, write the plan in a few short points and ask whether to start. After a yes, work through all of it without asking again.\n")
+		case AutonomyAsk:
+			b.WriteString("The person wants to confirm every change in this chat: each changing step waits for them. Say briefly what the step is for.\n")
+		default:
+			b.WriteString("The person wants you to start right away: do not ask whether you should begin or go on, and do not offer choices where you can decide yourself. Work the whole task through and report at the end. Ask only when something essential is missing and cannot be found out with your tools.\n")
+		}
 	}
 	if s := strings.TrimSpace(in.Instruction); s != "" {
 		b.WriteString("\n# Instructions of the owner of this NAS (follow them)\n")
