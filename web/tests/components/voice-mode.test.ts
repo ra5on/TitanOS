@@ -117,3 +117,45 @@ test('speech after a pause is sent, the answer shown, then it listens again', as
 	unmount();
 	expect(stopped).toHaveBeenCalled();
 }, 15000);
+
+test('with a wake word only a sentence that begins with it is sent', async () => {
+	vi.stubGlobal('AudioContext', FakeContext);
+	vi.stubGlobal('MediaRecorder', FakeRecorder);
+	vi.stubGlobal('requestAnimationFrame', (f: () => void) => setTimeout(f, 10));
+	vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+	Object.defineProperty(navigator, 'mediaDevices', {
+		configurable: true,
+		value: { getUserMedia: async () => ({ getTracks: () => [{ stop: stopped }] }) },
+	});
+	localStorage.setItem('titanos.agent.talk.wake', 'Titan');
+	let text = 'Mach mal jemand das Fenster zu';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => reply(200, { text })),
+	);
+	const onsend = vi.fn();
+	const { container, unmount } = render(VoiceMode, {
+		chat: chat([]),
+		busy: false,
+		onsend,
+		onclose: () => {},
+	});
+	const say = async () => {
+		loud = 0.3;
+		await wait(500);
+		loud = 0;
+		await wait(1600);
+	};
+	await wait(60);
+	// Talk in the room: heard, understood, not sent.
+	await say();
+	expect(onsend).not.toHaveBeenCalled();
+	expect(container.querySelector('.state')?.textContent).toBe('Listening');
+	// With the word in front (written the way speech to text likes): sent
+	// without it.
+	text = 'Hey Titan, Stehlampe an';
+	await say();
+	expect(onsend).toHaveBeenCalledWith('Stehlampe an');
+	localStorage.removeItem('titanos.agent.talk.wake');
+	unmount();
+}, 15000);

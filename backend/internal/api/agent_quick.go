@@ -38,7 +38,7 @@ func (e quickEntity) domain() string {
 
 // quickDomains are the kinds of devices a quick command may touch, per
 // intent. Locks, alarms and scripts stay with the model. Scenes and the
-// target temperature of a room came with 0.96 (owner 15 Nov 2026); the
+// target temperature of a room came with 0.95 (owner 15 Nov 2026); the
 // rules per kind of device still decide whether they run without asking.
 var quickDomains = map[string][]string{
 	agent.QuickScene: {"scene"},
