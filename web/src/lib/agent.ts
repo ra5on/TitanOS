@@ -285,6 +285,8 @@ export type Settings = {
 	};
 	/** Speech to text with a Whisper service on the Ollama computer (PLAN 49). */
 	voice?: { enabled?: boolean; url?: string; model?: string };
+	/** The own web search: the address of a SearXNG (0.92). */
+	search?: { url?: string };
 	/** A model of its own for pictures, when the main model sees none. */
 	vision?: { enabled?: boolean; model?: string };
 	/** Switches off the Btrfs snapshot before changes (PLAN 51). */

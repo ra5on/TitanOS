@@ -71,6 +71,7 @@ type agentSettings struct {
 	// a model of its own for pictures when the main model sees none
 	// (PLAN 49, agent_media.go).
 	Voice  agentVoice  `json:"voice"`
+	Search agentSearch `json:"search"`
 	Vision agentVision `json:"vision"`
 	// NoSnapshots switches off the Btrfs snapshot before changes that
 	// can lose data (PLAN 51, agent_snapshot.go); on by default.

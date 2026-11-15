@@ -1630,6 +1630,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.searx',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionMedia'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.snapshots',
 		kind: 'row',
 		tab: 'connection',
