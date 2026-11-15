@@ -764,7 +764,7 @@ const sent = (seen, method, path) =>
   await page.screenshot({ path: `${out}/10-phone-chat.png` });
   // A long title stays one line and ends in "…"; the head does not grow.
   await page.evaluate(() => {
-    document.querySelector("header.top .p-text h1").textContent =
+    document.querySelector("header.top .p-name").textContent =
       "Wie viel Strom braucht das NAS heute, und schlafen die Platten?";
   });
   assert.ok(
@@ -772,7 +772,7 @@ const sent = (seen, method, path) =>
     "one line with a long title",
   );
   await page.evaluate(() => {
-    document.querySelector("header.top .p-text h1").textContent =
+    document.querySelector("header.top .p-name").textContent =
       "Status Home Assistant";
   });
 
@@ -860,6 +860,8 @@ const sent = (seen, method, path) =>
     .getByRole("button", { name: /^Start/ })
     .click();
   await page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
+  // Since 0.87 the phone's start page is short; the overview is one tap away.
+  await page.getByRole("button", { name: "Übersicht anzeigen" }).click();
   assert.ok(
     (await page.locator(".sgroup-title").allTextContents()).includes(
       "NAS-Zustand",

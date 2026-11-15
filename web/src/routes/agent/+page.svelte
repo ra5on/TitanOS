@@ -337,7 +337,9 @@
 								onclick={() => (ag.dialog = { kind: 'head' })}
 							>
 								<span class="p-text">
-									<h1>{ag.current?.title || t('nav.agent')}</h1>
+									<strong class="p-name" role="heading" aria-level="1"
+										>{ag.current?.title || t('nav.agent')}</strong
+									>
 									<small
 										>{ag.currentProject
 											? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
@@ -865,15 +867,28 @@
 		line-height: 1.2;
 	}
 	/* One line each: a long title ends in "…" instead of growing the head. */
-	.p-text h1,
+	.p-name,
 	.p-text small {
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
 	}
+	/* Owner 15 Nov 2026: the title was blurred and hard to read on the
+	   iPhone while the line below it was sharp. It was a heading with
+	   automatic hyphenation inside the button; it is now plain text like
+	   that line, only bolder. */
+	.p-name {
+		font-size: var(--text-md);
+		font-weight: 600;
+		color: var(--text);
+		hyphens: manual;
+	}
 	.p-text small {
 		color: var(--muted);
 		font-size: var(--text-sm);
+	}
+	.agent.phone .top h1 {
+		hyphens: manual;
 	}
 	.top h1.plain {
 		flex: 1;
