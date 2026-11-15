@@ -128,6 +128,7 @@
 {#if open}
 	<Dialog
 		title={t('notify.title')}
+		dismiss
 		onclose={() => {
 			open = false;
 			confirmAll = null;
@@ -309,8 +310,8 @@
 		justify-content: center;
 		gap: 2px;
 		padding: var(--space-2) var(--space-2-5);
-		border: 1px solid var(--border);
-		border-radius: 14px;
+		border: 1px solid transparent;
+		border-radius: 18px;
 		background: var(--chip);
 		color: var(--text);
 		font: inherit;
@@ -327,14 +328,24 @@
 	.switch-tile small {
 		color: var(--muted);
 	}
+	/* Two equal buttons for the messages, the way to the settings below
+	   them as a quiet link (owner 16 Nov 2026: three uneven buttons). */
 	.head {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
 		gap: var(--space-2);
 	}
 	.head .btn {
-		flex: 1 1 auto;
-		min-height: 44px;
+		min-height: 46px;
+		border-radius: 999px;
+		text-align: center;
+	}
+	.head a.btn {
+		grid-column: 1 / -1;
+		min-height: 40px;
+		border-color: transparent;
+		background: none;
+		color: var(--accent);
 	}
 	.list {
 		margin: 0;
@@ -343,7 +354,7 @@
 		max-height: 55dvh;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		border-radius: 12px;
+		border-radius: 18px;
 		border: 1px solid var(--border);
 		--swipe-bg: var(--dialog-bg, var(--surface));
 	}

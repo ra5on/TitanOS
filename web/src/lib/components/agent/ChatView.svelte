@@ -5,7 +5,7 @@
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
 	import { onMount, untrack } from 'svelte';
-	import { fly, slide } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
@@ -284,6 +284,24 @@
 			return key(`night.${(Math.floor(busyTurn / 4) % 2) + 1}`);
 		return key(String((busyTurn % WORDS['']) + 1));
 	});
+	// How the tick leaves (owner 16 Nov 2026: it went away with a jolt): it
+	// fades first, then its room closes – the height and, with it, the gap
+	// the column keeps between its lines, so nothing below or above jumps
+	// when the line is gone.
+	function leave(node: HTMLElement) {
+		const height = node.offsetHeight;
+		const gap = parseFloat(getComputedStyle(node.parentElement ?? node).rowGap) || 0;
+		return {
+			duration: 620,
+			easing: (t: number) => t,
+			css: (t: number) => {
+				// t runs from 1 to 0: fade in the first 45 %, close in the rest.
+				const fade = Math.max(0, (t - 0.55) / 0.45);
+				const room = quintOut(Math.min(1, t / 0.55));
+				return `overflow:hidden;min-height:0;height:${room * height}px;margin-top:${-(1 - room) * gap}px;opacity:${fade}`;
+			},
+		};
+	}
 	// The tick: only after a run this view saw end with an answer.
 	let done = $state(false);
 	let wasBusy = false;
@@ -896,7 +914,7 @@
 				{/if}
 			</p>
 		{:else if done}
-			<p class="live-line done" out:slide={{ duration: 260, easing: quintOut }}>
+			<p class="live-line done" out:leave>
 				<svg class="tick" viewBox="0 0 18 18" aria-hidden="true">
 					<circle cx="9" cy="9" r="7.5" />
 					<path d="M5.4 9.4l2.5 2.5 4.7-5" />
@@ -2240,7 +2258,18 @@
 	/* The end of a run: a ring closes, the tick is drawn. */
 	.live-line.done {
 		overflow: hidden;
-		animation: none;
+		/* It takes the place of the working line: no step in, only a fade. */
+		animation: settle 0.3s ease-out both;
+	}
+	@keyframes settle {
+		from {
+			opacity: 0;
+		}
+	}
+	/* What comes with a finished answer (copy, read aloud) fades in instead
+	   of popping up under it. */
+	.acts {
+		animation: settle 0.35s ease-out both;
 	}
 	.tick {
 		flex: none;
@@ -2331,6 +2360,10 @@
 		}
 		.tick * {
 			stroke-dashoffset: 0;
+		}
+		.acts,
+		.live-line.done {
+			animation: none;
 		}
 	}
 	/* The step that waits for approval: one banner card. */

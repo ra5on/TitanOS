@@ -734,14 +734,31 @@
 	{/if}
 
 	<SettingGroup title={t('update.nas')} id="nas">
-		{#if status.canVerify && !working && !status.available && !status.kernelMissing && !status.checkError && (checked || status.lastCheck)}
+		<!-- Owner 16 Nov 2026: searching for an update was a small button far
+		     down under "Automatik". It stands first now, as the main action of
+		     the page, whenever no update is waiting to be installed. -->
+		{#if status.canVerify && !working && !status.available}
+			{@const current =
+				!status.kernelMissing && !status.checkError && (checked || !!status.lastCheck)}
 			<SettingRow
-				icon="check"
-				title={t('update.upToDate')}
+				icon={current ? 'check' : 'search'}
+				title={current ? t('update.upToDate') : t('update.check')}
 				desc={status.lastCheck
 					? t('update.lastCheck', { time: formatDateTime(new Date(status.lastCheck)) })
 					: undefined}
-			/>
+			>
+				{#snippet control()}
+					<button
+						type="button"
+						class="btn btn-primary search-now"
+						disabled={!canCheck || busy !== ''}
+						onclick={() => act('check')}
+						><Icon name="search" size={18} /><span
+							>{t(busy === 'check' ? 'update.checking' : 'update.check')}</span
+						></button
+					>
+				{/snippet}
+			</SettingRow>
 		{/if}
 		<SettingRow
 			id="installed"
@@ -1309,6 +1326,20 @@
 		/* Two columns of steps, as in the draft. */
 		.steps {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	.search-now {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-2);
+		min-height: 46px;
+		padding-inline: var(--space-5);
+		font-weight: 600;
+	}
+	@media (max-width: 700px) {
+		.search-now {
+			width: 100%;
 		}
 	}
 </style>
