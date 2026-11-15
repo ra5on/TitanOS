@@ -1594,6 +1594,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.voiceNas',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionMedia'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.voiceOn',
 		kind: 'row',
 		tab: 'connection',
