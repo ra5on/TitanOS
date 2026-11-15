@@ -213,7 +213,7 @@ Ist der Agent eingeschaltet, legt TitanOS auf seinem Volume die Freigabe **„KI
 - **Zeiten:** einmalig (Datum und Uhrzeit oder „in N Minuten“), alle N Minuten (ab 5), Stunden (1–168) oder Tage (1–365), stündlich, täglich, an Wochentagen, wöchentlich, monatlich (Tag 1–28), freie Cron-Zeile (fünf Felder) oder Zustand in Home Assistant. Zeitzone des NAS.
 - **Verpasst** (NAS aus, titand neu gestartet): wiederkehrende Aufträge laufen nach dem Start einmal nach, wenn der Termin höchstens 12 Stunden her ist, einmalige bis 7 Tage; der Chat heißt dann „… (nachgeholt)“.
 - **Seite „Geplant“** im Agent-Menü (`/agent?page=planned`): nächster Lauf, Pausieren, Ändern, Jetzt ausführen, Löschen, letztes Ergebnis; Formular mit allen Arten.
-- **Morgenbericht** (ab Werk aus, je Konto): oben in „Geplant“ mit Uhrzeit, Wochentagen und Inhalt per Häkchen (NAS-Zustand und Speicher, Backups und Updates, Erinnerungen und Aufträge des Tages, Home Assistant) und eigenem Wunschtext. Er liest nur und ändert nichts. Der Agent legt ihn nicht im Chat an.
+- **Morgenbericht** (ab Werk aus, je Konto): oben in „Geplant“ als eine Zeile mit Schalter und Zusammenfassung (seit 0.92; der Pfeil klappt die Einstellungen auf) mit Uhrzeit, Wochentagen und Inhalt per Häkchen (NAS-Zustand und Speicher, Backups und Updates, Erinnerungen und Aufträge des Tages, Home Assistant) und eigenem Wunschtext. Er liest nur und ändert nichts. Der Agent legt ihn nicht im Chat an.
 - Ältere Versionen ignorieren die neuen Arten (Feld `every` mit unbekanntem Wert); beim Rückweg laufen sie nicht.
 - **Schlafende Platten je Auftrag** (seit 0.69, PLAN 53/72):
   - Jeder Auftrag hat die Wahl „Wie unter Eigeninitiative“ (ab Werk), „Wecken“, „Vorher fragen“ oder „Nie wecken“ (Feld `wake` des Auftrags).

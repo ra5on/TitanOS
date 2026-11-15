@@ -2078,6 +2078,9 @@ try {
     await page.waitForTimeout(300);
     await noOverflow(page, "planned");
     await page.screenshot({ path: `${out}/24-planned.png` });
+    // The morning report is one row; it opens to be set.
+    assert.equal(await dlg.getByLabel("Home Assistant").count(), 0, "closed");
+    await dlg.getByRole("button", { name: "Morgenbericht einstellen" }).click();
     await dlg.getByLabel("Home Assistant").check();
     await dlg.getByRole("button", { name: "Speichern" }).first().click();
     await page.waitForTimeout(300);
