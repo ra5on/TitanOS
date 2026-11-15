@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/office"
 )
 
 // TestAgentEval is the measuring stand of the agent (PLAN 55 point 9): a
@@ -111,7 +112,52 @@ func agentEvalTasks() []agentEvalTask {
 		}
 		return ""
 	}
+	// docHas reads a Word or Excel file as text: every want must be in it,
+	// no not may be.
+	docHas := func(path string, want, not []string) string {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "file missing: " + filepath.Base(path)
+		}
+		text, err := office.Text(filepath.Base(path), data)
+		if err != nil {
+			return "unreadable " + filepath.Base(path) + ": " + err.Error()
+		}
+		for _, w := range want {
+			if !strings.Contains(text, w) {
+				return fmt.Sprintf("%s lacks %q: %.300s", filepath.Base(path), w, text)
+			}
+		}
+		for _, w := range not {
+			if strings.Contains(text, w) {
+				return fmt.Sprintf("%s still has %q: %.300s", filepath.Base(path), w, text)
+			}
+		}
+		return ""
+	}
 	return []agentEvalTask{
+		// 0.92: documents – a new workbook, a cell of an existing one and a
+		// word in an existing letter (file_write, document_edit).
+		{name: "newxlsx", ask: "Erstelle in Docs eine Excel-Datei ausgaben.xlsx mit den Spalten Posten und Betrag und den Zeilen Miete 900, Strom 80 und Internet 40.",
+			check: func(d, _ string, _ *agent.Chat) string {
+				return docHas(filepath.Join(d, "ausgaben.xlsx"), []string{"Posten", "Betrag", "Miete", "900", "Strom", "80", "Internet", "40"}, nil)
+			}},
+		{name: "editxlsx", ask: "Ändere in Docs/haushalt.xlsx den Betrag für Strom auf 95. Der Rest bleibt, wie er ist.",
+			setup: func(d string) {
+				data, _ := office.XLSX([]office.Sheet{{Name: "Haushalt", Header: true, Rows: [][]any{{"Posten", "Betrag"}, {"Miete", 900}, {"Strom", 80}, {"Internet", 40}}}})
+				write(d, "haushalt.xlsx", string(data))
+			},
+			check: func(d, _ string, _ *agent.Chat) string {
+				return docHas(filepath.Join(d, "haushalt.xlsx"), []string{"Miete", "900", "Strom", "95", "Internet", "40"}, []string{"80"})
+			}},
+		{name: "editdocx", ask: "Im Brief Docs/brief.docx steht der falsche Name: ersetze Meier durch Schulze.",
+			setup: func(d string) {
+				data, _ := office.DOCX("# Einladung\n\nSehr geehrte Frau Meier,\n\nwir laden Sie herzlich zum Sommerfest am 12. Juli ein.\n\nMit freundlichen Grüßen", "Einladung")
+				write(d, "brief.docx", string(data))
+			},
+			check: func(d, _ string, _ *agent.Chat) string {
+				return docHas(filepath.Join(d, "brief.docx"), []string{"Schulze", "Sommerfest", "12. Juli"}, []string{"Meier"})
+			}},
 		{name: "shares", ask: "Welche Freigaben gibt es auf dem NAS?",
 			check: func(_, a string, _ *agent.Chat) string { return has(a, "Docs") }},
 		{name: "find", ask: "Wie hoch war die Rechnung der Stadtwerke im März? Sie liegt irgendwo in Docs.",

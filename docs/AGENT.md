@@ -399,7 +399,7 @@ Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 
 ## Messen (PLAN 55)
 
-`TestAgentEval` ist ein fester Satz typischer Aufträge mit Testdaten gegen ein echtes Ollama: Freigaben nennen, Rechnung finden, Datei anlegen, zählen und schreiben, Wort suchen, umbenennen, Ordner sortieren, Beträge zusammenzählen, größte Datei unter 400 Dateien, langer Chat bei 8k Kontext. Geprüft wird nur, was am Ende dasteht (Antwort oder Datei).
+`TestAgentEval` ist ein fester Satz typischer Aufträge mit Testdaten gegen ein echtes Ollama: Freigaben nennen, Rechnung finden, Datei anlegen, zählen und schreiben, Wort suchen, umbenennen, Ordner sortieren, Beträge zusammenzählen, größte Datei unter 400 Dateien, langer Chat bei 8k Kontext, und seit 0.92 drei mit Dokumenten (neue Excel-Datei, Zelle einer Excel-Datei ändern, Wort in einem Word-Brief ersetzen). Geprüft wird nur, was am Ende dasteht (Antwort oder Datei).
 
 ```bash
 TITANOS_OLLAMA=http://192.168.10.5:11434 TITANOS_OLLAMA_MODEL=gemma4:12b TITANOS_EVAL_RUNS=2 \
