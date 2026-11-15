@@ -14,6 +14,7 @@ export const WIDGET_TEXT: Record<WidgetKind, [MessageKey, MessageKey]> = {
 	clock: ['desktop.widget.clock', 'desktop.gallery.clock'],
 	homeassistant: ['desktop.widget.homeassistant', 'desktop.gallery.homeassistant'],
 	tasks: ['desktop.widget.tasks', 'desktop.gallery.tasks'],
+	agent: ['desktop.widget.agent', 'desktop.gallery.agent'],
 	igpu: ['desktop.widget.igpu', 'desktop.gallery.igpu'],
 	npu: ['desktop.widget.npu', 'desktop.gallery.npu'],
 	gpu: ['desktop.widget.gpu', 'desktop.gallery.gpu'],

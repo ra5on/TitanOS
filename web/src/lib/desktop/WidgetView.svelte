@@ -95,6 +95,48 @@
 		);
 	});
 
+	// 0.92: the KI-Agent – its chats that wait for the person or run, the
+	// last answer, and a field whose question opens the agent with it. Asked
+	// every 20 seconds while the widget is there; titand answers the list of
+	// chats from the RAM, no disk wakes for it.
+	type AgentChat = {
+		id: string;
+		title: string;
+		state: string;
+		preview?: string;
+		updated: string;
+		archived?: boolean;
+		author?: string;
+	};
+	let agent = $state<{ on: boolean; chats: AgentChat[] } | null>(null);
+	let agentAsk = $state('');
+	$effect(() => {
+		if (kind !== 'agent') return;
+		const load = async () => {
+			try {
+				const st = await api.get<{ enabled?: boolean; allowed?: boolean }>('/agent/status');
+				if (!st.enabled || !st.allowed) {
+					agent = { on: false, chats: [] };
+					return;
+				}
+				const r = await api.get<{ chats?: AgentChat[] }>('/agent/chats');
+				agent = { on: true, chats: (r.chats ?? []).filter((c) => !c.archived && !c.author) };
+			} catch {
+				agent = { on: false, chats: [] };
+			}
+		};
+		void load();
+		const timer = setInterval(load, 20000);
+		return () => clearInterval(timer);
+	});
+	const agentWaiting = $derived((agent?.chats ?? []).filter((c) => c.state === 'waiting'));
+	const agentRunning = $derived((agent?.chats ?? []).filter((c) => c.state === 'running'));
+	const agentLast = $derived(
+		[...(agent?.chats ?? [])]
+			.filter((c) => c.preview && c.state !== 'running' && c.state !== 'waiting')
+			.sort((a, b) => b.updated.localeCompare(a.updated))[0],
+	);
+
 	type Entity = { id: string; name: string; state: string; domain: string; area?: string };
 	let entities = $state<Entity[] | null>(null);
 	$effect(() => {
@@ -442,6 +484,70 @@
 			{widgetCameras.loaded ? t('desktop.widget.cameraNone') : t('common.loading')}
 		</p>
 	{/if}
+{:else if kind === 'agent'}
+	<h4>{t('desktop.widget.agent')}</h4>
+	{#if !agent}
+		<p class="muted small">{t('common.loading')}</p>
+	{:else if !agent.on}
+		<p class="muted small">{t('desktop.widget.agentOff')}</p>
+		<button type="button" class="btn small-btn" onclick={() => onopen('app:agent', '/agent')}
+			>{t('desktop.widget.agentOpen')}</button
+		>
+	{:else}
+		<form
+			class="ag-ask"
+			onsubmit={(e) => {
+				e.preventDefault();
+				const text = agentAsk.trim();
+				agentAsk = '';
+				onopen('app:agent', text ? '/agent?ask=' + encodeURIComponent(text) : '/agent');
+			}}
+		>
+			<input
+				bind:value={agentAsk}
+				maxlength="2000"
+				placeholder={t('desktop.widget.agentAsk')}
+				aria-label={t('desktop.widget.agentAsk')}
+			/>
+			<button type="submit" aria-label={t('desktop.widget.agentOpen')}>↑</button>
+		</form>
+		{#each agentWaiting.slice(0, 2) as c (c.id)}
+			<button
+				type="button"
+				class="list-row"
+				onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(c.id))}
+			>
+				<span class="ag-ring" aria-hidden="true"></span>
+				<span class="ellipsis grow">{c.title}</span>
+				<span class="state">{t('desktop.widget.agentWaits')}</span>
+			</button>
+		{/each}
+		{#each agentRunning.slice(0, 2) as c (c.id)}
+			<button
+				type="button"
+				class="list-row"
+				onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(c.id))}
+			>
+				<span class="ag-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+				<span class="ellipsis grow">{c.title}</span>
+				<span class="state on">{t('desktop.widget.agentRuns')}</span>
+			</button>
+		{/each}
+		{#if !agentWaiting.length && !agentRunning.length}
+			{#if agentLast}
+				<button
+					type="button"
+					class="ag-last"
+					onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(agentLast.id))}
+				>
+					<strong class="ellipsis">{agentLast.title}</strong>
+					<span>{agentLast.preview}</span>
+				</button>
+			{:else}
+				<p class="muted small">{t('desktop.widget.agentIdle')}</p>
+			{/if}
+		{/if}
+	{/if}
 {:else if kind === 'tasks'}
 	<h4>{t('desktop.widget.tasks')}</h4>
 	<button type="button" class="btn small-btn" onclick={() => onopen('app:monitor', '/tools/tasks')}
@@ -450,6 +556,126 @@
 {/if}
 
 <style>
+	/* The agent's widget: a rounded field to ask, then what waits or runs. */
+	.ag-ask {
+		display: flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		margin-bottom: var(--space-1-5);
+		padding: 3px 3px 3px var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+	.ag-ask input {
+		flex: 1;
+		min-width: 0;
+		min-height: 30px;
+		border: 0;
+		outline: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+	}
+	.ag-ask button {
+		flex: none;
+		width: 30px;
+		height: 30px;
+		border: 0;
+		border-radius: 50%;
+		background: #d9734a;
+		color: #fff;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.ag-ask:focus-within {
+		border-color: color-mix(in srgb, var(--text) 25%, var(--border));
+	}
+	.ag-ring {
+		flex: none;
+		width: 12px;
+		height: 12px;
+		box-sizing: border-box;
+		margin: 0 6px;
+		border-radius: 50%;
+		border: 2px solid var(--status-warn, #d9734a);
+	}
+	.ag-dots {
+		flex: none;
+		position: relative;
+		width: 16px;
+		height: 16px;
+		margin: 0 4px;
+		animation: ag-turn 2.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+	}
+	.ag-dots i {
+		position: absolute;
+		width: 4.5px;
+		height: 4.5px;
+		border-radius: 50%;
+		background: #d9734a;
+	}
+	.ag-dots i:nth-child(1) {
+		left: 5.75px;
+		top: 1px;
+	}
+	.ag-dots i:nth-child(2) {
+		left: 1px;
+		top: 10px;
+	}
+	.ag-dots i:nth-child(3) {
+		left: 10.5px;
+		top: 10px;
+	}
+	@keyframes ag-turn {
+		0%,
+		12% {
+			transform: rotate(0deg);
+		}
+		33%,
+		45% {
+			transform: rotate(120deg);
+		}
+		66%,
+		78% {
+			transform: rotate(240deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ag-dots {
+			animation: none;
+		}
+	}
+	.ag-last {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		width: 100%;
+		padding: var(--space-1-5) var(--space-2);
+		border: 0;
+		border-radius: var(--radius-ctl);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.ag-last:hover {
+		background: color-mix(in srgb, var(--text) 6%, transparent);
+	}
+	.ag-last span {
+		color: var(--muted);
+		font-size: var(--text-sm);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
 	.cam {
 		position: absolute;
 		inset: 0;

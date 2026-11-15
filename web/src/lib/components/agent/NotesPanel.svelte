@@ -9,7 +9,8 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
+	import { quintOut } from 'svelte/easing';
+	import { slideIn } from '#lib/agent-motion.ts';
 	import { onDestroy, onMount } from 'svelte';
 	import { noteMove, notePath, applyFormat, type Format, type NoteInfo } from '#lib/agent-notes.ts';
 
@@ -242,7 +243,7 @@
 	role="dialog"
 	aria-modal="true"
 	aria-label={t('agent.notes.title')}
-	transition:fly={{ x: 420, duration: calm ? 0 : 280, opacity: 1, easing: cubicOut }}
+	transition:fly={slideIn(calm, 420)}
 >
 	<section class="list" aria-label={t('agent.notes.title')}>
 		<header>
@@ -409,7 +410,7 @@
 			<section
 				class="editor"
 				aria-label={open.title}
-				in:fly={{ x: 140, duration: calm ? 0 : 280, opacity: 0, easing: cubicOut }}
+				in:fly={{ x: 120, duration: calm ? 0 : 360, opacity: 0, easing: quintOut }}
 			>
 				<header>
 					<button

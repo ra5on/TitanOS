@@ -7,6 +7,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { swipeDown } from '#lib/components/sheet.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { dim, panelIn, sheetUp } from '#lib/agent-motion.ts';
 
 	let {
 		label,
@@ -14,6 +15,8 @@
 		onclose,
 		children,
 	}: { label: string; calm?: boolean; onclose: () => void; children: Snippet } = $props();
+
+	const phone = matchMedia('(max-width: 760px)').matches;
 
 	function focus(node: HTMLElement) {
 		const before = document.activeElement as HTMLElement | null;
@@ -29,7 +32,7 @@
 	class="scrim"
 	aria-label={t('common.close')}
 	tabindex="-1"
-	transition:fade={{ duration: calm ? 0 : 180 }}
+	transition:fade={dim(calm)}
 	onclick={onclose}
 ></button>
 <div
@@ -40,7 +43,7 @@
 	tabindex="-1"
 	use:focus
 	use:swipeDown={{ close: onclose }}
-	transition:fly={{ y: 360, duration: calm ? 0 : 240, opacity: 1 }}
+	transition:fly={phone ? sheetUp(calm) : panelIn(calm)}
 >
 	<div class="grab" aria-hidden="true"></div>
 	{@render children()}
@@ -66,6 +69,7 @@
 		overflow-y: auto;
 		padding: var(--space-2) 0 calc(env(safe-area-inset-bottom, 0px) + 18px);
 		border-radius: 22px 22px 0 0;
+		will-change: transform;
 		border-top: 1px solid var(--glass-border, var(--border));
 		background: var(--surface);
 		color: var(--text);

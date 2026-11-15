@@ -6,6 +6,7 @@
 	// settings of the function can follow below (extra).
 	import type { Snippet } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { slideIn } from '#lib/agent-motion.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { FeatureViewId } from '#lib/agent-features.ts';
@@ -61,7 +62,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-label={titles[id]}
-			transition:fly={{ x: 380, duration: calm ? 0 : 240, opacity: 1 }}
+			transition:fly={slideIn(calm)}
 		>
 			<header>
 				<button type="button" class="back" aria-label={t('agent.f.protect.back')} onclick={onclose}

@@ -4,6 +4,8 @@
 	// the answers (safe Markdown, tables in a card) with Vorlesen, Kopieren
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
@@ -942,29 +944,36 @@
 						: t('agent.stepsSummary')}</strong
 			>
 		</div>
-		{#if shown === 'thinking'}
-			<div class="sum-box"><pre>{stepsOpen.thinking}</pre></div>
-		{:else if shown}
-			{@const lines = argLines(shown.args)}
-			{#if lines.length || preview(shown.args)}
-				<h3 class="sum-group">{t('agent.stepInput')}</h3>
-				<div class="sum-box">
-					{#if lines.length}
-						<dl>
-							{#each lines as [k, v] (k)}<dt>{k}</dt>
-								<dd>{v}</dd>{/each}
-						</dl>
+		{#key shown}
+			<div
+				class="sum-body"
+				in:fly={{ x: shown ? 36 : -36, duration: calm ? 0 : 300, easing: quintOut }}
+			>
+				{#if shown === 'thinking'}
+					<div class="sum-box"><pre>{stepsOpen.thinking}</pre></div>
+				{:else if shown}
+					{@const lines = argLines(shown.args)}
+					{#if lines.length || preview(shown.args)}
+						<h3 class="sum-group">{t('agent.stepInput')}</h3>
+						<div class="sum-box">
+							{#if lines.length}
+								<dl>
+									{#each lines as [k, v] (k)}<dt>{k}</dt>
+										<dd>{v}</dd>{/each}
+								</dl>
+							{/if}
+							{#if preview(shown.args)}<pre>{preview(shown.args)}</pre>{/if}
+						</div>
 					{/if}
-					{#if preview(shown.args)}<pre>{preview(shown.args)}</pre>{/if}
-				</div>
-			{/if}
-			{#if stepOutput(shown)}
-				<h3 class="sum-group">{t('agent.stepOutput')}</h3>
-				<div class="sum-box"><pre>{stepOutput(shown)}</pre></div>
-			{/if}
-		{:else}
-			{@render stepList(stepsOpen, true)}
-		{/if}
+					{#if stepOutput(shown)}
+						<h3 class="sum-group">{t('agent.stepOutput')}</h3>
+						<div class="sum-box"><pre>{stepOutput(shown)}</pre></div>
+					{/if}
+				{:else}
+					{@render stepList(stepsOpen, true)}
+				{/if}
+			</div>
+		{/key}
 	</BottomSheet>
 {/if}
 
@@ -1659,6 +1668,27 @@
 	/* While the agent works: three dots, and a light that runs over the
 	   line from left to right (owner 15 Nov 2026). "Animationen: Aus" and
 	   "Weniger Bewegung" leave the line still. */
+	.live-line,
+	.approval,
+	.steps-line {
+		animation: come 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	@keyframes come {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+	:global(.agent.calm) :is(.live-line, .approval, .steps-line) {
+		animation: none;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.live-line,
+		.approval,
+		.steps-line {
+			animation: none;
+		}
+	}
 	.live-line {
 		display: flex;
 		align-items: center;
