@@ -17,7 +17,7 @@ import (
 
 // Reach is who may connect to the Wyoming ports, which carry no password.
 const (
-	ReachHA  = "ha"  // the Home Assistant set up in TitanOS, and apps on this NAS
+	ReachHA  = "ha"  // the Home Assistant set up in TitanOS or known by the Assist key, and apps on this NAS
 	ReachLAN = "lan" // every address of the home network
 )
 

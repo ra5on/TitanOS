@@ -97,6 +97,7 @@ export class AgentChats {
 	view = $state<AgentView>('chat');
 	part = $state('');
 	show = (view: AgentView, part = '') => {
+		if (view !== 'chat') this.fresh = false;
 		this.menuOpen = false;
 		if (this.dialog?.kind === 'feature') this.dialog = null;
 		const chat = this.current && !this.readOnlyBy ? `&chat=${this.current.id}` : '';
@@ -231,6 +232,7 @@ export class AgentChats {
 
 	listsReady = $state(false);
 	open = async (id: string, push = true, author = '') => {
+		this.fresh = false;
 		this.menuOpen = false;
 		this.find = null;
 		stopSpeaking();
@@ -261,7 +263,15 @@ export class AgentChats {
 		}
 	};
 
+	/** "Neuer Chat" was asked for: an empty chat to write in, not the start
+	 *  page with the state of the NAS and everything that is planned. */
+	fresh = $state(false);
+	freshChat = (inProject = this.project) => {
+		this.newChat(inProject);
+		this.fresh = true;
+	};
 	newChat = (inProject = this.project) => {
+		this.fresh = false;
 		this.menuOpen = false;
 		this.readOnlyBy = '';
 		stopSpeaking();

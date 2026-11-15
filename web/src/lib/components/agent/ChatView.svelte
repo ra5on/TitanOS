@@ -303,7 +303,8 @@
 	}
 	function seconds(steps: Entry[]): string {
 		const ms = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
-		if (!ms) return '';
+		// "0,0 s" says nothing: below a tenth of a second no time is shown.
+		if (ms < 100) return '';
 		const n = (ms / 1000).toLocaleString(i18n.locale, {
 			minimumFractionDigits: 1,
 			maximumFractionDigits: 1,
@@ -533,7 +534,7 @@
 			{:else if block.kind === 'steps'}
 				{@const tools = block.steps.filter((s) => s.role === 'tool').length}
 				{#if block.steps.length || block.thinking}
-					<details class="steps" open={showSteps || (i === list.length - 1 && busy)}>
+					<details class="steps" open={showSteps}>
 						<summary>
 							{#if block.steps.length}
 								<span class="ok" aria-hidden="true">✓</span>
@@ -563,8 +564,8 @@
 								<span class="what">{stepLabel(step)}</span>
 								{#if stepDetail(step.args)}<code>{stepDetail(step.args)}</code>{/if}
 								{#if stepFailed(step)}<span class="sr-only">{t('agent.stepFailed')}</span>{/if}
-								{#if step.durationMs}<span class="time"
-										>{(step.durationMs / 1000).toFixed(1).replace('.', ',')} s</span
+								{#if (step.durationMs ?? 0) >= 100}<span class="time"
+										>{((step.durationMs ?? 0) / 1000).toFixed(1).replace('.', ',')} s</span
 									>{/if}
 								{#if onundo && step.ok && step.tool && UNDOABLE.includes(step.tool) && !undone.has(step.tool + '|' + (step.summary ?? '')) && !busy}
 									<button type="button" class="undo" onclick={() => onundo(step)}

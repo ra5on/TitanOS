@@ -64,15 +64,15 @@ export class AgentPage extends AgentChats {
 	// On the phone a swipe from the left edge opens the menu, a swipe to
 	// the left closes it again.
 	swipeStart: { x: number; y: number } | null = null;
-	// Swipes from the edge (PLAN 53, Einstellungen › Darstellung und Gesten):
-	// from the left the chats, from the right the settings; back again.
+	// A swipe from the left edge (PLAN 53, Einstellungen › Gesten) opens the
+	// chats; back again. The settings have one way in, the menu: a swipe
+	// from the right opened them by accident while reading.
 	touchStart = (e: TouchEvent) => {
 		const p = e.touches[0];
 		const edges = this.look.gestures && this.look.edge;
 		const left = p.clientX <= 24;
-		const right = p.clientX >= innerWidth - 24;
 		this.swipeStart =
-			this.phone && !this.dialog && (this.menuOpen || (edges && (left || right)))
+			this.phone && !this.dialog && (this.menuOpen || (edges && left))
 				? { x: p.clientX, y: p.clientY }
 				: null;
 	};
@@ -84,10 +84,6 @@ export class AgentPage extends AgentChats {
 		else if (!this.menuOpen && dx > 50) {
 			this.swipeStart = null;
 			this.menuOpen = true;
-			this.buzz(8);
-		} else if (!this.menuOpen && dx < -50) {
-			this.swipeStart = null;
-			this.show('settings');
 			this.buzz(8);
 		} else if (this.menuOpen && dx < -50) {
 			this.swipeStart = null;
@@ -245,7 +241,7 @@ export class AgentPage extends AgentChats {
 		current: this.current?.id,
 		project: this.project,
 		admin: this.status?.admin ?? false,
-		view: this.current || this.onPage ? this.view : ('start' as const),
+		view: this.current || this.onPage || this.fresh ? this.view : ('start' as const),
 		onshow: (view: AgentView) => {
 			if (view === 'chat') this.newChat('');
 			else this.show(view);
@@ -258,7 +254,7 @@ export class AgentPage extends AgentChats {
 		},
 		onnew: () => {
 			if (this.dialog?.kind === 'feature') this.dialog = null;
-			this.newChat('');
+			this.freshChat('');
 		},
 		onproject: (id: string) => {
 			this.project = id;

@@ -5,6 +5,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
 	import {
 		gb,
 		levelLabel,
@@ -85,6 +86,15 @@
 			(c) => c === 0 || !modelContext || c <= modelContext || c === settings?.context,
 		),
 	);
+
+	// PLAN 92: whether the speech services of this NAS hear for the agent.
+	let nasHear = $state(false);
+	$effect(() => {
+		api
+			.get<{ hear?: boolean }>('/agent/speech')
+			.then((r) => (nasHear = !!r.hear))
+			.catch(() => (nasHear = false));
+	});
 </script>
 
 <!-- PLAN 78-1: plain headings with one row per setting (they were cards). -->
@@ -404,74 +414,82 @@
 			{/snippet}
 		</SettingRow>
 	{/if}
-	<SettingRow icon="mic" title={t('agent.voiceOn')} desc={t('agent.voiceHint')} for="ag-voice-on">
-		{#snippet control()}
-			<input
-				id="ag-voice-on"
-				type="checkbox"
-				class="switch"
-				role="switch"
-				checked={!!settings.voice?.enabled}
-				onchange={(e) =>
-					(settings!.voice = {
-						...(settings!.voice ?? {}),
-						enabled: e.currentTarget.checked,
-					})}
-			/>
-		{/snippet}
-	</SettingRow>
-	{#if !settings.voice?.url}
-		<SettingRow
-			id="voice"
-			icon="mic"
-			title={t('agent.voice')}
-			desc={whisperApp ? undefined : t('agent.whisperSetupHint')}
-		>
+	{#if nasHear}
+		<!-- The speech services of this NAS (Settings › Sprachdienste) hear for
+		     the agent: a Whisper service of one's own is not asked for here. -->
+		<SettingRow icon="mic" title={t('agent.voiceNas')} desc={t('agent.voiceNasHint')}>
 			{#snippet control()}
-				{#if whisperApp}
-					<button type="button" class="btn btn-primary" onclick={useWhisperApp}
-						>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
-					>
-				{:else}
-					<a class="btn btn-primary" href="/apps/install/titanos/whisper"
-						>{t('agent.whisperSetup')}</a
-					>
-				{/if}
+				<a class="btn" href="/settings/speech">{t('agent.voiceNasOpen')}</a>
 			{/snippet}
 		</SettingRow>
-	{/if}
-	{#if settings.voice?.enabled}
-		<SettingRow icon="globe" title={t('agent.voiceUrl')} for="ag-voice-url">
+	{:else}
+		<SettingRow icon="mic" title={t('agent.voiceOn')} desc={t('agent.voiceHint')} for="ag-voice-on">
 			{#snippet control()}
 				<input
-					id="ag-voice-url"
-					class="field"
-					value={settings.voice?.url ?? ''}
-					placeholder="http://192.168.1.5:8000"
-					oninput={(e) =>
-						(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
-				/>
-				<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
-			{/snippet}
-		</SettingRow>
-		<SettingRow icon="mic" title={t('agent.voiceModel')} for="ag-voice-model">
-			{#snippet control()}
-				<input
-					id="ag-voice-model"
-					class="field"
-					value={settings.voice?.model ?? ''}
-					placeholder="Systran/faster-whisper-large-v3"
-					oninput={(e) =>
-						(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
+					id="ag-voice-on"
+					type="checkbox"
+					class="switch"
+					role="switch"
+					checked={!!settings.voice?.enabled}
+					onchange={(e) =>
+						(settings!.voice = {
+							...(settings!.voice ?? {}),
+							enabled: e.currentTarget.checked,
+						})}
 				/>
 			{/snippet}
 		</SettingRow>
-		{#if voiceCheck}
-			<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
-				{voiceCheck.reachable
-					? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
-					: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
-			</p>
+		{#if !settings.voice?.url}
+			<SettingRow
+				id="voice"
+				icon="mic"
+				title={t('agent.voice')}
+				desc={whisperApp ? undefined : t('agent.whisperSetupHint')}
+			>
+				{#snippet control()}
+					{#if whisperApp}
+						<button type="button" class="btn btn-primary" onclick={useWhisperApp}
+							>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
+						>
+					{:else}
+						<a class="btn btn-primary" href="/settings/speech">{t('agent.whisperSetup')}</a>
+					{/if}
+				{/snippet}
+			</SettingRow>
+		{/if}
+		{#if settings.voice?.enabled}
+			<SettingRow icon="globe" title={t('agent.voiceUrl')} for="ag-voice-url">
+				{#snippet control()}
+					<input
+						id="ag-voice-url"
+						class="field"
+						value={settings.voice?.url ?? ''}
+						placeholder="http://192.168.1.5:8000"
+						oninput={(e) =>
+							(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
+					/>
+					<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="mic" title={t('agent.voiceModel')} for="ag-voice-model">
+				{#snippet control()}
+					<input
+						id="ag-voice-model"
+						class="field"
+						value={settings.voice?.model ?? ''}
+						placeholder="Systran/faster-whisper-large-v3"
+						oninput={(e) =>
+							(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
+					/>
+				{/snippet}
+			</SettingRow>
+			{#if voiceCheck}
+				<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
+					{voiceCheck.reachable
+						? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
+						: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
+				</p>
+			{/if}
 		{/if}
 	{/if}
 	<SettingRow

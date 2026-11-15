@@ -27,7 +27,7 @@
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
-	import { frameFor, inWindow } from '#lib/desktop/mode.svelte.ts';
+	import { frameFor, inWindow, mode } from '#lib/desktop/mode.svelte.ts';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { desktop } from '#lib/desktop/wm.svelte.ts';
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
@@ -161,16 +161,21 @@
 		});
 	});
 
-	// The desktop (PLAN 61) draws its own wallpaper; windows show the page on the theme's colour.
+	// The desktop (PLAN 61) and the phone's home screen draw their own
+	// wallpaper; windows show the page on the theme's colour. A page on the
+	// phone is such a window, full screen: no shapes or picture behind it,
+	// so nothing shines through its cards (the phone follows the desktop).
+	const pageFrame = $derived(
+		frameFor({
+			known: page.url.pathname === '/' || !!appForPath(page.url.pathname),
+			agentApp: false,
+			agentAppMode: false,
+		}),
+	);
 	const ownBackground = $derived(
 		inWindow ||
 			(!!session.data?.user &&
-				!agentRoute &&
-				frameFor({
-					known: page.url.pathname === '/' || !!appForPath(page.url.pathname),
-					agentApp: false,
-					agentAppMode: false,
-				}) === 'desktop'),
+				((pageFrame === 'desktop' && !agentRoute) || pageFrame === 'phone' || !mode.wide)),
 	);
 	const documentTitle = $derived.by(() => {
 		const host = session.data?.hostname;

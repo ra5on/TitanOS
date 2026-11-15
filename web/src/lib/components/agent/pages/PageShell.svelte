@@ -50,11 +50,9 @@
 					{title}
 				</h1>
 			</div>
-		{:else if crumbs.length}
-			<a class="back" href={crumbs[crumbs.length - 1].href}
-				><Icon name="chevronLeft" size={16} />{crumbs[crumbs.length - 1].label}</a
-			>
 		{/if}
+		<!-- On the phone the head of the agent has "back" and the page's name;
+		     a second way back in the page would be the same button twice. -->
 		{#if lead}<p class="lead">{lead}</p>{/if}
 		{@render children()}
 	</div>
@@ -124,15 +122,5 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-	}
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		min-height: 44px;
-		margin: calc(-1 * var(--space-2)) 0;
-		color: var(--accent);
-		text-decoration: none;
-		align-self: flex-start;
 	}
 </style>

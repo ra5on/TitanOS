@@ -751,6 +751,19 @@ const sent = (seen, method, path) =>
     assert.ok((await b.boundingBox()).height >= 44, "44 px under an answer");
   await noOverflow(page, "phone chat");
   await page.screenshot({ path: `${out}/10-phone-chat.png` });
+  // A long title stays one line and ends in "…"; the head does not grow.
+  await page.evaluate(() => {
+    document.querySelector("header.top .p-text h1").textContent =
+      "Wie viel Strom braucht das NAS heute, und schlafen die Platten?";
+  });
+  assert.ok(
+    (await head.boundingBox()).height <= 56,
+    "one line with a long title",
+  );
+  await page.evaluate(() => {
+    document.querySelector("header.top .p-text h1").textContent =
+      "Status Home Assistant";
+  });
 
   // A tap on the title: project, model and thinking level from the bottom.
   await head.locator(".p-title").click();
@@ -814,6 +827,39 @@ const sent = (seen, method, path) =>
   await page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
   await noOverflow(page, "phone start");
   await page.screenshot({ path: `${out}/14-phone-start.png` });
+  // Without a chat there is no ⋯ menu: the settings are in the menu only.
+  assert.equal(
+    await page.getByRole("button", { name: "Weitere Aktionen" }).count(),
+    0,
+  );
+  // "Neuer Chat" is an empty chat with a few things to ask – not the start
+  // page with the state of the NAS and everything planned.
+  await page.getByRole("button", { name: "Neuer Chat" }).click();
+  await page
+    .getByRole("heading", { level: 1, name: "Womit kann ich helfen?" })
+    .waitFor();
+  assert.deepEqual(await page.locator(".sgroup-title").allTextContents(), [
+    "Passt gerade",
+  ]);
+  await page.screenshot({ path: `${out}/16-phone-new-chat.png` });
+  // "Start" in the menu brings the start page back.
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  await page
+    .locator("aside.drawer")
+    .getByRole("button", { name: /^Start/ })
+    .click();
+  await page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
+  assert.ok(
+    (await page.locator(".sgroup-title").allTextContents()).includes(
+      "NAS-Zustand",
+    ),
+  );
+  // A part of the settings has one way back: the button in the head.
+  await page.goto(base + "/agent?page=settings&part=models");
+  await page.getByText("Chat-Modell", { exact: true }).waitFor();
+  assert.equal(await page.locator("a.back").count(), 0);
+  await head.getByRole("button", { name: "Zurück", exact: true }).click();
+  await page.waitForURL((u) => !u.search.includes("part="));
   await page.goto(base + "/agent?page=settings");
   await page.locator(".sgroup-title", { hasText: "Dieses Gerät" }).waitFor();
   await noOverflow(page, "phone settings");

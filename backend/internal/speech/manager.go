@@ -25,7 +25,11 @@ import (
 
 const (
 	settingsFile = "system/speech.json"
-	feature      = "speech"
+	// peersFile holds the addresses that proved to be Home Assistant.
+	peersFile = "system/speech-peers.json"
+	// maxPeers bounds that list; the oldest goes first.
+	maxPeers = 8
+	feature  = "speech"
 	// Folders below .titanos/speech on the volume.
 	whisperDir = "whisper"
 	piperDir   = "piper"
@@ -82,6 +86,9 @@ type Manager struct {
 	Devices func(context.Context) []hardware.ContainerDevice
 	// HomeAssistant are the addresses of the Home Assistants set up.
 	HomeAssistant func(context.Context) []net.IP
+	// Answers says whether a service takes connections at its address
+	// (host:port); nil asks the address itself.
+	Answers func(address string) bool
 
 	store *config.Store
 	hub   *hub
@@ -99,9 +106,11 @@ type Manager struct {
 	pulls        map[string]*pull
 	ha           []net.IP
 	haAt         time.Time
-	kick         chan struct{}
-	whisper      *gate
-	piper        *gate
+	// peers are addresses that asked Assist with the key of TitanOS, newest last.
+	peers   []string
+	kick    chan struct{}
+	whisper *gate
+	piper   *gate
 }
 
 type job struct {
@@ -128,6 +137,8 @@ type service struct {
 	// starts counts the starts of a container that keeps ending.
 	starts  int
 	lastTry time.Time
+	// ready names the start of the container that answered already.
+	ready string
 }
 
 // New makes a manager; Load reads its settings.
@@ -149,8 +160,13 @@ func (m *Manager) Load() error {
 	if err := s.Check(); err != nil {
 		return err
 	}
+	// Without the file, or with one that does not read, nobody is known yet.
+	var peers []string
+	if err := m.store.ReadJSON(peersFile, &peers); err != nil {
+		peers = nil
+	}
 	m.mu.Lock()
-	m.settings, m.loaded = s, true
+	m.settings, m.loaded, m.peers = s, true, peers
 	m.mu.Unlock()
 	return nil
 }
@@ -494,6 +510,38 @@ func (m *Manager) Remove(kind, id string) error {
 
 // ---------- who may connect ----------
 
+// KnownHomeAssistant remembers an address that proved to be Home Assistant:
+// it asked Assist with the key of TitanOS. Assist with a key needs no
+// connection under Settings › Home Assistant, so without this "only Home
+// Assistant" would refuse the very Home Assistant that talks to the agent.
+// The list survives a restart of titand.
+func (m *Manager) KnownHomeAssistant(ip net.IP) {
+	if ip == nil || ip.IsLoopback() {
+		return
+	}
+	addr := ip.String()
+	m.mu.Lock()
+	if n := len(m.peers); n > 0 && m.peers[n-1] == addr {
+		m.mu.Unlock()
+		return
+	}
+	known := slices.Contains(m.peers, addr)
+	peers := append(slices.DeleteFunc(slices.Clone(m.peers), func(p string) bool { return p == addr }), addr)
+	if len(peers) > maxPeers {
+		peers = peers[len(peers)-maxPeers:]
+	}
+	m.peers = peers
+	loaded := m.loaded
+	m.mu.Unlock()
+	// Only the order changed: nothing to keep on the stick.
+	if known || !loaded {
+		return
+	}
+	if err := m.store.WriteJSON(peersFile, peers); err != nil {
+		slog.Warn("speech: address of Home Assistant not saved; it counts until the next start", "err", err)
+	}
+}
+
 func (m *Manager) allowed(ip net.IP) bool {
 	if ip.IsLoopback() {
 		return true
@@ -506,9 +554,19 @@ func (m *Manager) allowed(ip net.IP) bool {
 			return true
 		}
 	}
+	// The NAS itself under its own address: Home Assistant as an app in the
+	// host's network asks 192.168.x.y:10300, not localhost.
+	if ownAddress(ip) {
+		return true
+	}
 	m.mu.Lock()
-	list, at := m.ha, m.haAt
+	list, at, peers := m.ha, m.haAt, m.peers
 	m.mu.Unlock()
+	for _, p := range peers {
+		if a := net.ParseIP(p); a != nil && a.Equal(ip) {
+			return true
+		}
+	}
 	if m.HomeAssistant != nil && time.Since(at) > time.Minute {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		list = m.HomeAssistant(ctx)
@@ -661,6 +719,19 @@ func (m *Manager) tick(ctx context.Context) {
 	}
 }
 
+// answers reports whether a service takes connections at address.
+func (m *Manager) answers(address string) bool {
+	if m.Answers != nil {
+		return m.Answers(address)
+	}
+	conn, err := net.DialTimeout("tcp", address, time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 func (m *Manager) remove(ctx context.Context, name, phase string) {
 	rctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
@@ -716,6 +787,27 @@ func (m *Manager) ensure(ctx context.Context, spec docker.SpeechSpec, repository
 		if time.Since(st.StartedAt) > 2*time.Minute {
 			m.mu.Lock()
 			svc.starts = 0
+			m.mu.Unlock()
+		}
+		// A container that runs still loads its model for a while (large
+		// ones for many seconds); until it takes connections Home Assistant
+		// could not add it. "running" means: it answers.
+		port := WhisperPort
+		if spec.Name == piperService {
+			port = PiperPort
+		}
+		start := st.ID + "@" + st.StartedAt.Format(time.RFC3339Nano)
+		m.mu.Lock()
+		ready := svc.ready == start
+		m.mu.Unlock()
+		if !ready {
+			if !m.answers(net.JoinHostPort(st.Address, strconv.Itoa(port))) {
+				m.set(spec.Name, "starting", "", "")
+				time.AfterFunc(2*time.Second, m.Kick)
+				return
+			}
+			m.mu.Lock()
+			svc.ready = start
 			m.mu.Unlock()
 		}
 		m.set(spec.Name, "running", "", st.Address)
