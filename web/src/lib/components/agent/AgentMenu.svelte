@@ -189,7 +189,7 @@
 <nav class="menu" class:compact aria-label={t('agent.menu')}>
 	<!-- PLAN 74: in a window the title bar and the menu bar name the program already. -->
 	{#if !inWindow}<div class="top">
-			<DesktopIcon glyph="agent" gradient="violet" size={28} name={t('nav.agent')} />
+			<DesktopIcon glyph="agent" gradient="ember" size={28} name={t('nav.agent')} />
 			<strong class="brand">{t('nav.agent')}</strong>
 		</div>{/if}
 	{#if profile}

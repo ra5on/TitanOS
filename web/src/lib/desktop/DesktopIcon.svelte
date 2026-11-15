@@ -17,8 +17,11 @@
 			'<path d="M12 3a9 9 0 1 1-8.5 6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M2.5 3.8v5.6h5.6Z" fill="#fff"/><path d="M12 7.5V12l3.2 2" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/>',
 		store:
 			'<rect x="3" y="3" width="8" height="8" rx="2.4" fill="#fff"/><rect x="13" y="3" width="8" height="8" rx="2.4" fill="#fff" fill-opacity=".7"/><rect x="3" y="13" width="8" height="8" rx="2.4" fill="#fff" fill-opacity=".7"/><path d="M17 13.5v7M13.5 17h7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>',
+		// 0.95 (owner 15 Nov 2026, "Kern und Ringe"): the core of the
+		// Sprechmodus with two arcs around it, in the agent's orange on its
+		// own dark ground (gradient "ember").
 		agent:
-			'<path d="M11 2.5l2.2 5.6 5.6 2.2-5.6 2.2L11 18.1l-2.2-5.6L3.2 10.3l5.6-2.2Z" fill="#fff"/><path d="M18.5 14.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1Z" fill="#fff" fill-opacity=".75"/>',
+			'<circle cx="12" cy="12" r="3.7" fill="#f2915f"/><circle cx="10.8" cy="10.7" r="1.3" fill="#ffd9bf" fill-opacity=".8"/><path d="M12 5.2a6.8 6.8 0 0 1 6.4 4.5M12 18.8a6.8 6.8 0 0 1-6.4-4.5" stroke="#e07a4c" stroke-width="1.9" fill="none" stroke-linecap="round"/><path d="M20.3 12a8.3 8.3 0 0 1-2.4 5.9M3.7 12a8.3 8.3 0 0 1 2.4-5.9" stroke="#e07a4c" stroke-opacity=".6" stroke-width="1" fill="none" stroke-linecap="round"/>',
 		monitor:
 			'<rect x="2.5" y="3.5" width="19" height="17" rx="3" fill="#fff" fill-opacity=".25"/><path d="M5 16l3.5-5 3 2.5L16 7l3 5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
 		logs: '<path d="M6 2.5h8.5L19 7v13a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6 2.5Z" fill="#fff"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4" stroke="var(--c)" stroke-width="1.8" stroke-linecap="round"/>',
@@ -52,6 +55,7 @@
 		red: ['#ff7a7a', '#e0393e'],
 		yellow: ['#ffd84d', '#f0a91a'],
 		pink: ['#ff8fc7', '#e0479a'],
+		ember: ['#2c1f18', '#0d0f14'],
 	};
 </script>
 
