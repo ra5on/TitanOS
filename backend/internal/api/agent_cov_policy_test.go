@@ -118,17 +118,21 @@ func TestCovAgentPrepareTaintedWebAsks(t *testing.T) {
 	}
 }
 
-// Home Assistant rules on top of the tool mode: an entity rule that allows
-// never loosens what the preset asks for, a deny beats preset all, a lock
-// asks unless the person allowed it.
+// Home Assistant rules on top of the tool mode: the person's rule for a
+// device decides how it is switched (owner 15.11.2026: "Beleuchtung
+// schalten ja" also where the area asks), a deny beats preset all, a lock
+// asks unless the person allowed it, a denied area stays denied.
 func TestCovAgentHARulesCombineWithPolicy(t *testing.T) {
 	call := func(policy agent.Policy, rules map[string]string, name string, args any) string {
 		box := &agentToolbox{settings: agentSettings{Policy: policy}}
 		box.settings.HA.Entities = rules
 		data, _ := json.Marshal(args)
 		base := policy.Mode(name, "home", agent.KindChange)
-		// As Prepare combines them.
-		return agent.Stricter(base, box.haMode(name, data, base))
+		// As Prepare combines them: a denied tool never gets to the rules.
+		if base == agent.ModeDeny {
+			return base
+		}
+		return box.haMode(name, agent.KindChange, data, base)
 	}
 	light := map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}}
 	lock := map[string]any{"domain": "lock", "service": "unlock", "entities": []string{"lock.haustuer"}}
@@ -140,7 +144,10 @@ func TestCovAgentHARulesCombineWithPolicy(t *testing.T) {
 		want   string
 	}{
 		{"standard light asks", agent.Policy{Preset: agent.PresetStandard}, nil, light, agent.ModeAsk},
-		{"entity allow does not loosen standard", agent.Policy{Preset: agent.PresetStandard}, map[string]string{"entity:light.flur": agent.ModeAllow}, light, agent.ModeAsk},
+		{"entity allow switches without asking", agent.Policy{Preset: agent.PresetStandard}, map[string]string{"entity:light.flur": agent.ModeAllow}, light, agent.ModeAllow},
+		{"domain allow switches without asking", agent.Policy{Preset: agent.PresetStandard}, map[string]string{"domain:light": agent.ModeAllow}, light, agent.ModeAllow},
+		{"lock asks under standard", agent.Policy{Preset: agent.PresetStandard}, nil, lock, agent.ModeAsk},
+		{"allow rule does not open a denied area", agent.Policy{Preset: agent.PresetAll, Areas: map[string]string{"home": agent.ModeDeny}}, map[string]string{"domain:light": agent.ModeAllow}, light, agent.ModeDeny},
 		{"all light free", agent.Policy{Preset: agent.PresetAll}, nil, light, agent.ModeAllow},
 		{"entity deny beats all", agent.Policy{Preset: agent.PresetAll}, map[string]string{"entity:light.flur": agent.ModeDeny}, light, agent.ModeDeny},
 		{"domain deny beats all", agent.Policy{Preset: agent.PresetAll}, map[string]string{"domain:light": agent.ModeDeny}, light, agent.ModeDeny},
@@ -171,7 +178,7 @@ func TestCovAgentHAEntityExceptionInDeniedDomain(t *testing.T) {
 	box := &agentToolbox{settings: agentSettings{Policy: agent.Policy{Preset: agent.PresetAll}}}
 	box.settings.HA.Entities = map[string]string{"domain:light": agent.ModeDeny, "entity:light.flur": agent.ModeAsk}
 	data, _ := json.Marshal(map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}})
-	if got := box.haMode("ha_call", data, agent.ModeAllow); got != agent.ModeAsk {
+	if got := box.haMode("ha_call", agent.KindChange, data, agent.ModeAllow); got != agent.ModeAsk {
 		t.Fatalf("entity exception: %s", got)
 	}
 }

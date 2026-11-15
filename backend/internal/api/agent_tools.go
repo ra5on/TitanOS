@@ -248,6 +248,14 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if mode == agent.ModeDeny {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
+	// The person's rules for devices come first: they may also switch
+	// without asking; everything after this only tightens.
+	if t.area == toolcatalog.AreaHome {
+		b.loadAreas(ctx)
+		if mode = b.haMode(name, kind, args, mode); mode == agent.ModeDeny {
+			return agent.Prepared{}, errors.New("the person has not allowed this device for the agent (Einstellungen › KI-Agent › Home Assistant)")
+		}
+	}
 	if fm := b.folderMode(args); fm != "" {
 		if fm == agent.ModeDeny {
 			return agent.Prepared{}, errors.New("this folder is locked for the agent / dieser Ordner ist für den Agenten gesperrt")
@@ -261,13 +269,6 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// the person: a page or file could have told the model to send data.
 	if t.area == agent.AreaWeb && chat != nil && (chat.Tainted || chat.OutsideSkill) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
-	}
-	if t.area == toolcatalog.AreaHome {
-		b.loadAreas(ctx)
-		mode = agent.Stricter(mode, b.haMode(name, args, mode))
-		if mode == agent.ModeDeny {
-			return agent.Prepared{}, errors.New("this device is not allowed for the agent")
-		}
 	}
 	if t.name == "code_run" {
 		if _, err := parseCode(args); err != nil {
@@ -534,10 +535,18 @@ func (b *agentToolbox) filterHidden(text string) string {
 
 // haMode applies the Home Assistant rules of the agent to a call: every
 // entity it names anywhere in its arguments (ha_call's entities, the
-// targets inside an automation) and the domain of a service. Locks and
-// alarm systems ask unless the person decided otherwise; saving an
-// automation or script whose devices cannot be told asks as well.
-func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) string {
+// targets inside an automation) and the domain of a service.
+//
+// Owner 15.11.2026: the rules are about switching. Reading a device never
+// asks because of them (asking for the state of the alarm panel wanted an
+// approval); only a rule that forbids a device keeps it from being read.
+// For a change the person's rule for a device decides: "allow" switches
+// without asking even where the area asks, "ask" and "deny" tighten. A
+// device without a rule follows the area; locks and alarm systems then ask
+// at least. Several devices: the strictest. Saving an automation or script
+// whose devices cannot be told asks. mode is what the general rights give
+// the tool and is never "deny" here.
+func (b *agentToolbox) haMode(name, kind string, args json.RawMessage, mode string) string {
 	rules := b.settings.HA.Entities
 	var fields any
 	if json.Unmarshal(args, &fields) != nil {
@@ -573,6 +582,7 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 		}
 	}
 	walk("", fields)
+	// ruleFor is the person's rule for a device or a domain, "" without one.
 	ruleFor := func(entity, domain string) string {
 		if entity != "" {
 			if v := rules["entity:"+entity]; agent.ValidMode(v) {
@@ -589,15 +599,22 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 		if v := rules["domain:"+domain]; agent.ValidMode(v) {
 			return v
 		}
-		if domain == "lock" || domain == "alarm_control_panel" {
-			return agent.ModeAsk
-		}
 		return ""
 	}
+	read := kind == agent.KindRead
 	out := ""
-	stricter := func(m string) {
-		if m == "" {
-			return
+	add := func(entity, domain string) {
+		m := ruleFor(entity, domain)
+		switch {
+		case read:
+			if m != agent.ModeDeny {
+				m = mode
+			}
+		case m == "":
+			m = mode
+			if domain == "lock" || domain == "alarm_control_panel" {
+				m = agent.Stricter(m, agent.ModeAsk)
+			}
 		}
 		if out == "" {
 			out = m
@@ -607,21 +624,21 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 	}
 	for _, id := range ids {
 		domain, _, _ := strings.Cut(id, ".")
-		stricter(ruleFor(id, domain))
+		add(id, domain)
 	}
 	// The call's own domain counts where it names no device of that domain
 	// (e.g. "all lights"); with named devices their rules decide, so an
 	// exception for one device works inside a denied domain (PLAN 59).
 	for _, d := range domains {
 		if !slices.ContainsFunc(ids, func(id string) bool { return strings.HasPrefix(id, d+".") }) {
-			stricter(ruleFor("", d))
+			add("", d)
 		}
 	}
-	if (name == "ha_automation_save" || name == "ha_script_save") && len(ids) == 0 {
-		stricter(agent.ModeAsk)
-	}
 	if out == "" {
-		return mode
+		out = mode
+	}
+	if (name == "ha_automation_save" || name == "ha_script_save") && len(ids) == 0 {
+		out = agent.Stricter(out, agent.ModeAsk)
 	}
 	return out
 }
