@@ -824,6 +824,43 @@
 		--dialog-backdrop: none;
 		--dialog-shadow: var(--shadow-menu);
 	}
+	/* The pages of the agent in the shape of its chat (owner 15 Nov 2026:
+	   Geplant, Gedächtnis, Wissen, Einstellungen, the overview, the dialogs
+	   and sheets follow the new design): rounder rows and cards, buttons as
+	   capsules, softer fields, the headings of the groups quiet and grey.
+	   Only where the agent is; TitanOS keeps its shapes. */
+	:global(body:has(.agent) :is(.agent, dialog, .sheet)) {
+		--srow-radius: 16px;
+		--radius-tile: 20px;
+		--radius-ctl: 12px;
+	}
+	:global(body:has(.agent) :is(.agent, dialog, .sheet) .btn) {
+		border-radius: 999px;
+	}
+	:global(body:has(.agent) :is(.agent, dialog, .sheet) :is(input, select).field) {
+		border-radius: 12px;
+	}
+	:global(body:has(.agent) :is(.agent, dialog, .sheet) textarea.field) {
+		border-radius: 14px;
+	}
+	.agent :global(.sgroup-title) {
+		color: var(--muted);
+		font-size: var(--text-md);
+		font-weight: 500;
+	}
+	.agent :global(.srow-title) {
+		font-weight: 500;
+	}
+	.agent :global(.scroll > .page > .head h1) {
+		font-weight: 500;
+		letter-spacing: -0.01em;
+	}
+	.agent :global(.srow-ico) {
+		border-radius: 12px;
+	}
+	.agent :global(.chip) {
+		border-radius: 999px;
+	}
 	/* Text size of the app (PLAN 53) through the root font size. */
 	:global(html:has(.agent[data-size='s'])) {
 		font-size: calc(16px * var(--font-scale) * 0.93);

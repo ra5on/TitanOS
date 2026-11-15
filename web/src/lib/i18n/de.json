@@ -7819,6 +7819,8 @@
 	"agent.step.homeCall": "In Home Assistant geschaltet",
 	"agent.stepFailed": "fehlgeschlagen",
 	"agent.steps": "{count} Schritte",
+	"agent.codeGrow": "Vergrößern",
+	"agent.codeShrink": "Verkleinern",
 	"agent.waitsForYou": "Wartet auf deine Freigabe",
 	"agent.greet.morning.1": "Guten Morgen, {name}",
 	"agent.greet.morning.2": "Früh dran heute, {name}",

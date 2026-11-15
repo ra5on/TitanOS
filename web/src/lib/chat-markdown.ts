@@ -4,10 +4,19 @@
 // fixed list; nothing a model writes can become another link, an image or
 // a script.
 
+import { highlight } from './code-highlight.ts';
+
 export function escapeHtml(text: string): string {
 	return text.replace(
 		/[&<>"']/g,
 		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+	);
+}
+
+function unescapeHtml(text: string): string {
+	return text.replace(
+		/&(amp|lt|gt|quot|#39);/g,
+		(_, name: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[name]!,
 	);
 }
 
@@ -129,7 +138,10 @@ export function chatMarkdown(text: string): string {
 		// parts: text, lang, code, lang (of the closing fence, empty), text …
 		if ((i / 2) % 2 === 1) {
 			const lang = parts[i - 1] ?? '';
-			out += `<div class="code"><div class="code-head"><span>${lang || 'text'}</span></div><pre><code>${part.replace(/\n$/, '')}</code></pre></div>`;
+			// The colors are made from the code as written (highlight escapes
+			// every piece itself).
+			const code = unescapeHtml(part.replace(/\n$/, ''));
+			out += `<div class="code"><div class="code-head"><span>${lang || 'text'}</span></div><pre><code>${highlight(code, lang)}</code></pre></div>`;
 		} else
 			out += part
 				.split(/\n{2,}/)
