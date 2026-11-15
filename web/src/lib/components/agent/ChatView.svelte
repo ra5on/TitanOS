@@ -823,7 +823,7 @@
 			     and its word; over a named step a light runs. -->
 			{#if live.content}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
-				<div class="answer md">{@html chatMarkdown(live.content)}</div>
+				<div class="answer md">{@html chatMarkdown(live.content, true)}</div>
 			{/if}
 			<p class="live-line" class:quiet={!!live.content && !live.step}>
 				{#key live.content && !live.step ? 'write' : kind}
