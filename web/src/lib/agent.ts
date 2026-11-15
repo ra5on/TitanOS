@@ -287,6 +287,8 @@ export type Settings = {
 	voice?: { enabled?: boolean; url?: string; model?: string };
 	/** The own web search: the address of a SearXNG (0.92). */
 	search?: { url?: string };
+	/** Connections to MCP servers (0.93); the token never comes back. */
+	mcp?: McpConnection[];
 	/** A model of its own for pictures, when the main model sees none. */
 	vision?: { enabled?: boolean; model?: string };
 	/** Switches off the Btrfs snapshot before changes (PLAN 51). */
@@ -972,3 +974,15 @@ export function approvalTitle(p: Pick<Pending, 'tool' | 'args' | 'summary'>): {
 	if (!name && !nameless.includes(card)) return null;
 	return { key: card as (typeof ASK_CARDS)[number], name };
 }
+
+/** A connection of the agent to an MCP server. */
+export type McpConnection = {
+	id?: string;
+	name: string;
+	url: string;
+	/** Only sent when the person typed a new one. */
+	token?: string;
+	tokenSet?: boolean;
+	clearToken?: boolean;
+	enabled?: boolean;
+};

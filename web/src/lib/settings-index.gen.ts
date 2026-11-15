@@ -1663,6 +1663,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 		tab: 'connection',
 		in: ['agent.sectionMedia'],
 	},
+	{ p: '/settings/agent', k: 'agent.mcp.title', kind: 'group', tab: 'connection', id: 'ag-mcp' },
 	{
 		p: '/settings/agent',
 		k: 'agent.sectionInstruction',

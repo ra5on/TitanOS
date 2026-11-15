@@ -47,6 +47,9 @@ const AreaAgent = "agent"
 // AreaCode is the area of running code in the sandbox (PLAN 55).
 const AreaCode = "code"
 
+// AreaMCP is the area of the tools of connected MCP servers (0.93).
+const AreaMCP = "mcp"
+
 // createTools only add something new; the standard preset runs them
 // without asking ("neue Dateien legt er frei an").
 var createTools = map[string]bool{
@@ -207,7 +210,7 @@ func cleanPath(p string) string {
 
 // Areas of the agent in the order the settings show them, with the tool
 // areas of the catalog first.
-var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaWeb, AreaCode}
+var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaWeb, AreaCode, AreaMCP}
 
 // ValidArea reports whether a is one of the areas.
 func ValidArea(a string) bool { return slices.Contains(AgentAreas, a) }

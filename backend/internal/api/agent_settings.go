@@ -72,7 +72,9 @@ type agentSettings struct {
 	// (PLAN 49, agent_media.go).
 	Voice  agentVoice  `json:"voice"`
 	Search agentSearch `json:"search"`
-	Vision agentVision `json:"vision"`
+	// MCP are the connections to MCP servers (agent_mcp.go).
+	MCP    []agentMCPServer `json:"mcp,omitempty"`
+	Vision agentVision      `json:"vision"`
 	// NoSnapshots switches off the Btrfs snapshot before changes that
 	// can lose data (PLAN 51, agent_snapshot.go); on by default.
 	NoSnapshots bool `json:"noSnapshots,omitempty"`
@@ -193,6 +195,7 @@ func (s *Server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
 	out := s.agentSettings()
 	out.Features = out.Features.view() // no secrets to the page
 	out.HA.AssistKeySet, out.HA.AssistKey = out.HA.AssistKey != "", ""
+	out.MCP = mcpView(out.MCP)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -203,6 +206,12 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.checkAgentSettings(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_agent_settings", err.Error())
+		return
+	}
+	// The tokens of the connections stay on the NAS: an empty one in the
+	// request keeps what is stored.
+	if err := checkAgentMCP(&req, s.agentSettings().MCP); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_agent_settings", err.Error())
 		return
 	}
@@ -249,6 +258,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	// The share of the agent follows (made, accounts updated).
 	s.shareSyncs.Go(s.agentSyncShare)
 	req.HA.AssistKeySet, req.HA.AssistKey = req.HA.AssistKey != "", ""
+	req.MCP = mcpView(req.MCP)
 	writeJSON(w, http.StatusOK, req)
 }
 

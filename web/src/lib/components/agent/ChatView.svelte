@@ -246,6 +246,19 @@
 		}
 	});
 
+	// ----- while the agent thinks: a word that changes (owner 15 Nov 2026) -----
+	// Eight short words of our own take turns every few seconds, so the line
+	// lives while nothing else can be said; a running step names itself
+	// instead. Still with "Animationen: Aus".
+	const BUSY_WORDS = 8;
+	let busyTurn = $state(Math.floor(Math.random() * BUSY_WORDS));
+	$effect(() => {
+		if (!busy || calm) return;
+		const timer = setInterval(() => (busyTurn += 1), 2800);
+		return () => clearInterval(timer);
+	});
+	const busyWord = $derived(t(`agent.busy.${(busyTurn % BUSY_WORDS) + 1}` as MessageKey));
+
 	// ----- the steps of a turn: one line, a sheet with each step -----
 	type StepsBlock = { steps: Entry[]; thinking: string };
 	let stepsOpen = $state<StepsBlock | null>(null);
@@ -776,7 +789,7 @@
 			{:else if !live.content}
 				<p class="live-line">
 					<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-					<span class="sweep">{live.thinking ? t('agent.thinking') : t('agent.working')}</span>
+					<span class="busy-word">{busyWord}</span>
 				</p>
 			{/if}
 			{#if live.content}
@@ -1655,10 +1668,14 @@
 		font-size: 0.95em;
 		color: var(--muted);
 	}
+	/* Three dots at the corners of a small triangle that turns a third at a
+	   time and rests in between – the dots seem to change places. */
 	.dots {
 		flex: none;
-		display: inline-flex;
-		gap: 3px;
+		position: relative;
+		width: 16px;
+		height: 16px;
+		animation: turn 2.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.ring {
 		flex: none;
@@ -1670,27 +1687,43 @@
 		background: radial-gradient(circle, var(--status-warn, var(--ag-warm)) 38%, transparent 44%);
 	}
 	.dots i {
-		width: 4px;
-		height: 4px;
+		position: absolute;
+		width: 4.5px;
+		height: 4.5px;
 		border-radius: 50%;
 		background: var(--ag-warm, var(--accent));
-		animation: dot 1.2s ease-in-out infinite;
+	}
+	.dots i:nth-child(1) {
+		left: 5.75px;
+		top: 1px;
 	}
 	.dots i:nth-child(2) {
-		animation-delay: 0.15s;
+		left: 1px;
+		top: 10px;
 	}
 	.dots i:nth-child(3) {
-		animation-delay: 0.3s;
+		left: 10.5px;
+		top: 10px;
 	}
-	@keyframes dot {
+	@keyframes turn {
 		0%,
-		60%,
+		12% {
+			transform: rotate(0deg);
+		}
+		33%,
+		45% {
+			transform: rotate(120deg);
+		}
+		66%,
+		78% {
+			transform: rotate(240deg);
+		}
 		100% {
-			opacity: 0.35;
+			transform: rotate(360deg);
 		}
-		30% {
-			opacity: 1;
-		}
+	}
+	.busy-word {
+		color: var(--ag-warm, var(--accent));
 	}
 	.sweep {
 		/* Grey like in the chat apps: the orange dots say that something runs,
@@ -1721,7 +1754,7 @@
 		}
 	}
 	:global(.agent.calm) .sweep,
-	:global(.agent.calm) .dots i {
+	:global(.agent.calm) .dots {
 		animation: none;
 	}
 	:global(.agent.calm) .sweep {
@@ -1729,7 +1762,7 @@
 		background: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.dots i,
+		.dots,
 		.sweep {
 			animation: none;
 		}

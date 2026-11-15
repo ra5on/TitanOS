@@ -125,6 +125,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.clusterTools() {
 		add(t)
 	}
+	for _, t := range b.remoteTools() {
+		add(t)
+	}
 	add(b.attachmentTool())
 	add(b.imageTool())
 	if t := b.codeTool(); t != nil {

@@ -1053,6 +1053,21 @@ async function plan55() {
       await page.getByLabel("Werkzeuge nach Bedarf laden").isChecked(),
       "tools by area on by default",
     );
+    // The own web search and the connections to MCP servers (0.92/0.93).
+    await page.getByLabel("Eigene Websuche (SearXNG)").waitFor();
+    const mcp = page.locator("#ag-mcp");
+    await mcp
+      .getByRole("heading", { name: "Verbindungen zu anderen Programmen (MCP)" })
+      .waitFor();
+    assert.equal(await mcp.locator(".mcp").count(), 0, "no connection yet");
+    await mcp.getByRole("button", { name: "Verbindung hinzufügen" }).click();
+    await mcp.getByLabel("Name", { exact: true }).fill("n8n");
+    await mcp.getByLabel("Adresse des MCP-Servers").fill("https://n8n.example/mcp");
+    assert.ok(await mcp.getByRole("switch", { name: "n8n eingeschaltet" }).isChecked());
+    await mcp.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/29b-settings-mcp.png` });
+    await mcp.getByRole("button", { name: "n8n entfernen" }).click();
+    assert.equal(await mcp.locator(".mcp").count(), 0, "connection removed again");
     assert.ok(
       await page.getByLabel("Helfer für Unteraufträge").isChecked(),
       "helper on by default",
