@@ -7846,7 +7846,7 @@
 	"agent.mcp.ok": "Erreichbar. {count} Werkzeuge: {tools}",
 	"agent.mcp.down": "Nicht erreichbar: {error}",
 	"agent.searx": "Eigene Websuche (SearXNG)",
-	"agent.searxHint": "Adresse eines SearXNG, zum Beispiel der Docker-App „SearXNG“ auf diesem NAS. Der Agent sucht dann dort statt über die Seite von DuckDuckGo; antwortet sie nicht, nimmt er DuckDuckGo. Leer lassen für DuckDuckGo.",
+	"agent.searxHint": "Die ganze Adresse deines SearXNG eintragen, mit http:// am Anfang und dem Port am Ende – für die Docker-App „SearXNG“ auf diesem NAS ist das {example} (Port 8580). Nichts dahinter anhängen, auch kein /search. Der Agent sucht dann dort statt über die Seite von DuckDuckGo; antwortet die Adresse nicht, nimmt er DuckDuckGo. Leer lassen für DuckDuckGo.",
 	"agent.autonomy.title": "Arbeitsweise",
 	"agent.autonomy.direct": "Direkt loslegen",
 	"agent.autonomy.directHint": "Arbeitet den Auftrag durch und fragt nur, wo die Rechte des NAS es verlangen",

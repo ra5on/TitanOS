@@ -1698,14 +1698,17 @@
 		font-size: 0.95em;
 		color: var(--muted);
 	}
-	/* Three dots at the corners of a small triangle that turns a third at a
-	   time and rests in between – the dots seem to change places. */
+	/* Three dots that never do the same thing for long (owner 15 Nov 2026:
+	   "die sich nur langweilig drehen"): a triangle that turns a third, a
+	   row the dots hop along one after the other, one dot that swallows the
+	   other two, becomes a small square and turns over, a column, and back
+	   to the triangle. Each dot has its own path; all three share the time
+	   so they stay together. */
 	.dots {
 		flex: none;
 		position: relative;
-		width: 16px;
-		height: 16px;
-		animation: turn 2.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+		width: 18px;
+		height: 18px;
 	}
 	.ring {
 		flex: none;
@@ -1718,38 +1721,137 @@
 	}
 	.dots i {
 		position: absolute;
+		left: 6.75px;
+		top: 6.75px;
 		width: 4.5px;
 		height: 4.5px;
 		border-radius: 50%;
 		background: var(--ag-warm, var(--accent));
+		animation: 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+		will-change: transform;
 	}
+	/* Standing still (calm, less motion) they are the triangle. */
 	.dots i:nth-child(1) {
-		left: 5.75px;
-		top: 1px;
+		transform: translate(0, -5px) scale(1);
+		animation-name: dot-a;
 	}
 	.dots i:nth-child(2) {
-		left: 1px;
-		top: 10px;
+		transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
+		animation-name: dot-b;
 	}
 	.dots i:nth-child(3) {
-		left: 10.5px;
-		top: 10px;
+		transform: translate(4.5px, 3.5px) scale(1);
+		animation-name: dot-c;
 	}
-	@keyframes turn {
+	@keyframes dot-a {
 		0%,
-		12% {
-			transform: rotate(0deg);
+		9% {
+			transform: translate(0, -5px) scale(1);
 		}
-		33%,
-		45% {
-			transform: rotate(120deg);
+		19%,
+		25% {
+			transform: translate(4.5px, 3.5px) scale(1);
 		}
-		66%,
-		78% {
-			transform: rotate(240deg);
+		34%,
+		44% {
+			transform: translate(6px, 0) scale(1);
+		}
+		48% {
+			transform: translate(6px, -4.5px) scale(1);
+		}
+		52%,
+		54% {
+			transform: translate(6px, 0) scale(1);
+		}
+		61%,
+		76% {
+			transform: translate(0, 0) scale(0.3);
+		}
+		84%,
+		91% {
+			transform: translate(0, -6px) scale(1);
 		}
 		100% {
-			transform: rotate(360deg);
+			transform: translate(0, -5px) scale(1);
+		}
+	}
+	@keyframes dot-b {
+		0%,
+		9% {
+			transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
+			border-radius: 50%;
+		}
+		19%,
+		25% {
+			transform: translate(0, -5px) rotate(0deg) scale(1);
+		}
+		34%,
+		40% {
+			transform: translate(0, 0) rotate(0deg) scale(1);
+		}
+		44% {
+			transform: translate(0, -4.5px) rotate(0deg) scale(1);
+		}
+		48%,
+		54% {
+			transform: translate(0, 0) rotate(0deg) scale(1);
+		}
+		61% {
+			transform: translate(0, 0) rotate(0deg) scale(2.3);
+			border-radius: 50%;
+		}
+		65% {
+			transform: translate(0, 0) rotate(0deg) scale(2.1);
+			border-radius: 26%;
+		}
+		72% {
+			transform: translate(0, 0) rotate(180deg) scale(2.1);
+			border-radius: 26%;
+		}
+		76% {
+			transform: translate(0, 0) rotate(180deg) scale(2.3);
+			border-radius: 50%;
+		}
+		84%,
+		91% {
+			transform: translate(0, 0) rotate(180deg) scale(1);
+			border-radius: 50%;
+		}
+		100% {
+			transform: translate(-4.5px, 3.5px) rotate(180deg) scale(1);
+			border-radius: 50%;
+		}
+	}
+	@keyframes dot-c {
+		0%,
+		9% {
+			transform: translate(4.5px, 3.5px) scale(1);
+		}
+		19%,
+		25% {
+			transform: translate(-4.5px, 3.5px) scale(1);
+		}
+		34%,
+		36% {
+			transform: translate(-6px, 0) scale(1);
+		}
+		40% {
+			transform: translate(-6px, -4.5px) scale(1);
+		}
+		44%,
+		54% {
+			transform: translate(-6px, 0) scale(1);
+		}
+		61%,
+		76% {
+			transform: translate(0, 0) scale(0.3);
+		}
+		84%,
+		91% {
+			transform: translate(0, 6px) scale(1);
+		}
+		100% {
+			transform: translate(4.5px, 3.5px) scale(1);
 		}
 	}
 	.busy-word {
@@ -1784,7 +1886,7 @@
 		}
 	}
 	:global(.agent.calm) .sweep,
-	:global(.agent.calm) .dots {
+	:global(.agent.calm) .dots i {
 		animation: none;
 	}
 	:global(.agent.calm) .sweep {
@@ -1792,7 +1894,7 @@
 		background: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.dots,
+		.dots i:nth-child(n),
 		.sweep {
 			animation: none;
 		}
