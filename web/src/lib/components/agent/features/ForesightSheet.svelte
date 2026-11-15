@@ -90,7 +90,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2-5);
-		padding: calc(env(safe-area-inset-top, 0px) + 14px) var(--space-4) var(--space-2-5);
+		padding: calc(var(--agent-top) + 14px) var(--space-4) var(--space-2-5);
 	}
 	h2 {
 		flex: 1;

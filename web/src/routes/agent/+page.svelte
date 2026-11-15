@@ -719,6 +719,13 @@
 	/* Owner 15 Nov 2026: no blur in the agent on the phone. Menus, sheets
 	   and cards are solid there – the glass let the chat shine through the
 	   menus and made the page restless. */
+	/* A web app on the iPhone's home screen reaches under the status bar,
+	   and iOS blurs what lies there a little further down than the safe
+	   area says. The heads start 40 % lower, so their titles stay sharp;
+	   without a status bar above the page the inset is 0 and nothing moves. */
+	:global(:root) {
+		--agent-top: calc(env(safe-area-inset-top, 0px) * 1.4);
+	}
 	:global(:root:has(.agent.phone)) {
 		--panel-bg: var(--surface);
 		--panel-border: var(--border);
@@ -829,7 +836,7 @@
 	/* PLAN 90-4: the phone's head is one line of 52 px with 44 px targets. */
 	.agent.phone .top {
 		min-height: 52px;
-		padding: env(safe-area-inset-top, 0px) var(--space-1) 0;
+		padding: var(--agent-top) var(--space-1) 0;
 		gap: 2px;
 		background: var(--header, var(--bg));
 	}
@@ -972,7 +979,7 @@
 		bottom: 0;
 		left: 0;
 		width: min(84%, 320px);
-		padding-top: env(safe-area-inset-top, 0px);
+		padding-top: var(--agent-top);
 		background: var(--bg);
 		border-right: 1px solid var(--border);
 		box-shadow: var(--shadow-menu, 0 18px 44px rgb(0 0 0 / 0.5));
