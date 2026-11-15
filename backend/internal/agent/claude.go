@@ -177,7 +177,7 @@ func (p *claude) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 	}
 
 	stream := p.client.Messages.NewStreaming(ctx, params)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	var message anthropic.Message
 	size := 0
 	for stream.Next() {
