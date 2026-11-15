@@ -19,6 +19,10 @@ func TestAgentQuickFindAndPlan(t *testing.T) {
 		{"id":"switch.kaffee2","name":"Kaffeemaschine","area":"Büro","state":"off","policy":{}},
 		{"id":"media_player.tv","name":"Fernseher","area":"Wohnzimmer","state":"playing","policy":{}},
 		{"id":"cover.markise","name":"Markise","area":"Terrasse","state":"closed","policy":{}},
+		{"id":"scene.filmabend","name":"Filmabend","area":"Wohnzimmer","state":"2026-11-01T20:00:00","policy":{}},
+		{"id":"climate.wohnzimmer","name":"Thermostat","area":"Wohnzimmer","state":"heat","policy":{}},
+		{"id":"climate.bad","name":"Bad Heizung","area":"Bad","state":"heat","policy":{}},
+		{"id":"light.spot1","name":"Spot 1","area":"Flur","state":"off","policy":{}},
 		{"id":"lock.haustuer","name":"Haustür","area":"Flur","state":"locked","policy":{}},
 		{"id":"light.nur_lesen","name":"Flurlicht","area":"Flur","state":"on","policy":{"readOnly":true}}
 	]`), &all); err != nil {
@@ -29,7 +33,15 @@ func TestAgentQuickFindAndPlan(t *testing.T) {
 	}{
 		{"Stehlampe an", "ha_call", `"service":"turn_on"`, "Stehlampe ist an."},
 		{"Schalte die Leselampe aus", "ha_call", `"entities":["light.stehlampe"]`, "Stehlampe ist aus."},
-		{"Küchenlicht an", "", "", ""}, // "Küche Licht" is not "Küchenlicht": the model decides
+		{"Küchenlicht an", "ha_call", `"entities":["light.kueche"]`, "Küche Licht ist an."}, // nearly the name
+		{"Stehlampen an", "ha_call", `"entities":["light.stehlampe"]`, "Stehlampe ist an."},
+		{"Spot 2 an", "", "", ""}, // a number never matches another
+		{"Aktiviere Filmabend", "ha_call", `"domain":"scene"`, "Filmabend ist aktiviert."},
+		{"Filmabend an", "ha_call", `"entities":["scene.filmabend"]`, "Filmabend ist aktiviert."},
+		{"Filmabend aus", "", "", ""},
+		{"Wohnzimmer auf 21,5 Grad", "ha_call", `"temperature":21.5`, "Thermostat steht auf 21,5 °C."},
+		{"Stelle die Heizung im Bad auf 22 Grad", "ha_call", `"entities":["climate.bad"]`, "Bad Heizung steht auf 22 °C."},
+		{"Küche auf 20 Grad", "", "", ""}, // no thermostat there
 		{"Küche Licht an", "ha_call", `"entities":["light.kueche"]`, "Küche Licht ist an."},
 		{"Schalte das Licht im Wohnzimmer aus", "ha_call", `"entities":["light.wohnzimmer_decke","light.stehlampe"]`, "2 Lichter in Wohnzimmer sind aus."},
 		{"Stehlampe auf 40 Prozent", "ha_call", `"brightness_pct":40`, "Stehlampe steht auf 40 %."},

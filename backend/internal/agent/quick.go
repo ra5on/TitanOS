@@ -24,6 +24,8 @@ const (
 	QuickClose  = "close"
 	QuickState  = "state"
 	QuickRemind = "remind"
+	QuickScene  = "scene" // activate a scene
+	QuickTemp   = "temp"  // target temperature, Value in tenths of a degree
 )
 
 // QuickIntent is what a message asks for, as far as words can tell. Name
@@ -49,6 +51,11 @@ var (
 		kind string
 	}{
 		// Questions first: "Ist der Fernseher an" must not read as "… an".
+		{regexp.MustCompile(`^(?:stelle?|setze?|mache?|drehe?|heize)\s+(?:bitte\s+)?(.+?)\s+auf\s+(\d{1,2}(?:\.\d)?)\s*(?:grad|°c|°)$`), QuickTemp},
+		{regexp.MustCompile(`^(.+?)\s+auf\s+(\d{1,2}(?:\.\d)?)\s*(?:grad|°c|°)$`), QuickTemp},
+		{regexp.MustCompile(`^(?:aktiviere|starte)\s+(?:die\s+)?(?:szene\s+)?(.+)$`), QuickScene},
+		{regexp.MustCompile(`^szene\s+(.+?)(?:\s+(?:an|ein|aktivieren|starten))?$`), QuickScene},
+		{regexp.MustCompile(`^(.+?)\s+(?:aktivieren|starten)$`), QuickScene},
 		{regexp.MustCompile(`^(?:ist|sind|läuft|laufen)\s+(.+?)\s+(?:an|aus|ein|eingeschaltet|ausgeschaltet|offen|auf|zu|geschlossen|geöffnet)$`), QuickState},
 		{regexp.MustCompile(`^(?:ist|sind|läuft|laufen)\s+(.+)$`), QuickState},
 		{regexp.MustCompile(`^(?:schalte?|mache?|stelle?|drehe?|dimme)\s+(?:bitte\s+)?(.+?)\s+auf\s+(\d{1,3})\s*(?:prozent|%)$`), QuickLevel},
@@ -69,6 +76,10 @@ var (
 		kind string
 	}{
 		{regexp.MustCompile(`^(?:is|are)\s+(.+?)\s+(?:on|off|open|closed|running)$`), QuickState},
+		{regexp.MustCompile(`^(?:set|turn|heat)\s+(.+?)\s+to\s+(\d{1,2}(?:\.\d)?)\s*(?:degrees|°c|°)$`), QuickTemp},
+		{regexp.MustCompile(`^(.+?)\s+to\s+(\d{1,2}(?:\.\d)?)\s*(?:degrees|°c|°)$`), QuickTemp},
+		{regexp.MustCompile(`^(?:activate|start)\s+(?:the\s+)?(?:scene\s+)?(.+)$`), QuickScene},
+		{regexp.MustCompile(`^scene\s+(.+)$`), QuickScene},
 		{regexp.MustCompile(`^(?:set|dim|turn)\s+(.+?)\s+to\s+(\d{1,3})\s*(?:percent|%)$`), QuickLevel},
 		{regexp.MustCompile(`^(.+?)\s+to\s+(\d{1,3})\s*(?:percent|%)$`), QuickLevel},
 		{regexp.MustCompile(`^(?:turn|switch)\s+on\s+(.+)$`), QuickOn},
@@ -90,6 +101,8 @@ var (
 // ParseQuick reads a message as a quick command, or returns nil. It only
 // looks at the words; a device of that name must still be found.
 func ParseQuick(message string) *QuickIntent {
+	// "21,5 Grad" is a number, not a second clause.
+	message = quickDecimal.ReplaceAllString(message, "$1.$2")
 	text := strings.ToLower(strings.TrimSpace(message))
 	// One short line, no second sentence: anything longer is for the model.
 	if text == "" || len([]rune(text)) > 90 || strings.ContainsAny(text, "\n,;:") {
@@ -97,7 +110,7 @@ func ParseQuick(message string) *QuickIntent {
 	}
 	raw := strings.TrimSpace(quickTail.ReplaceAllString(strings.TrimSpace(message), ""))
 	text = quickTail.ReplaceAllString(text, "")
-	if strings.ContainsAny(text, ".!?") {
+	if strings.ContainsAny(quickDecimal2.ReplaceAllString(text, "$1$2"), ".!?") {
 		return nil
 	}
 	cut := len(quickPolite.FindString(text))
@@ -158,6 +171,14 @@ func ParseQuick(message string) *QuickIntent {
 					return nil
 				}
 			}
+			if p.kind == QuickTemp {
+				f, _ := strconv.ParseFloat(m[2], 64)
+				in.Value = int(f*10 + 0.5)
+				// What a room is heated to; anything else is for the model.
+				if in.Value < 50 || in.Value > 300 {
+					return nil
+				}
+			}
 			if len(QuickWords(in.Name)) == 0 {
 				return nil
 			}
@@ -165,6 +186,31 @@ func ParseQuick(message string) *QuickIntent {
 		}
 	}
 	return nil
+}
+
+var (
+	quickDecimal  = regexp.MustCompile(`(\d),(\d)`)
+	quickDecimal2 = regexp.MustCompile(`(\d)\.(\d)`)
+	quickAnd      = regexp.MustCompile(`(?i)\s+(?:und|and)\s+(?:dann\s+|then\s+)?`)
+)
+
+// ParseQuickAll reads a message as two or three quick commands joined by
+// "und" ("Stehlampe an und Rollladen runter"). Every part must be one;
+// reminders are not joined. A polite start counts for the first part only.
+func ParseQuickAll(message string) []*QuickIntent {
+	parts := quickAnd.Split(strings.TrimSpace(message), -1)
+	if len(parts) < 2 || len(parts) > 3 {
+		return nil
+	}
+	var all []*QuickIntent
+	for _, part := range parts {
+		in := ParseQuick(part)
+		if in == nil || in.Kind == QuickRemind || in.Kind == QuickState {
+			return nil
+		}
+		all = append(all, in)
+	}
+	return all
 }
 
 // quickFill are words that say nothing about which device is meant.
@@ -197,36 +243,48 @@ type QuickStep struct {
 	Say func(result string) string
 }
 
-// Direct runs the step of a quick command and answers, without the model.
-// It reports false, with the chat untouched, when the rights do not let
-// the step run without asking – then the model takes the message and the
-// person is asked as usual. A step that fails stays in the chat as a
-// failed step and the model goes on from there.
-func (r *Runner) Direct(ctx context.Context, chat *Chat, q QuickStep) (bool, error) {
-	p, err := r.Tools.Prepare(ctx, chat, q.Tool, q.Args)
-	if err != nil || p.Mode != ModeAllow {
+// Direct runs the steps of a quick command and answers, without the
+// model. It reports false, with the chat untouched, when the rights do not
+// let every step run without asking – then the model takes the message and
+// the person is asked as usual. A step that fails stays in the chat as a
+// failed step (with those that ran before it) and the model goes on from
+// there.
+func (r *Runner) Direct(ctx context.Context, chat *Chat, steps ...QuickStep) (bool, error) {
+	if len(steps) == 0 {
 		return false, nil
+	}
+	ready := make([]Prepared, len(steps))
+	for i, q := range steps {
+		p, err := r.Tools.Prepare(ctx, chat, q.Tool, q.Args)
+		if err != nil || p.Mode != ModeAllow {
+			return false, nil
+		}
+		ready[i] = p
 	}
 	r.setState(chat, StateRunning, "")
 	if r.start.IsZero() {
 		r.start = r.now()
 	}
-	step := Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: q.Tool, Args: q.Args}
-	r.emit(Event{Type: "step", Step: &step})
-	before := len(chat.Entries)
-	done, err := r.execute(ctx, chat, p, step)
-	if err != nil || done {
-		return done, err
+	var answers []string
+	for i, q := range steps {
+		step := Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: q.Tool, Args: q.Args}
+		r.emit(Event{Type: "step", Step: &step})
+		before := len(chat.Entries)
+		done, err := r.execute(ctx, chat, ready[i], step)
+		if err != nil || done {
+			return done, err
+		}
+		ran := chat.Entries[before]
+		if !ran.OK {
+			return false, nil
+		}
+		answer := q.Say(ran.Result)
+		if answer == "" {
+			return false, nil
+		}
+		answers = append(answers, answer)
 	}
-	ran := chat.Entries[before]
-	if !ran.OK {
-		return false, nil
-	}
-	answer := q.Say(ran.Result)
-	if answer == "" {
-		return false, nil
-	}
-	if err := r.add(chat, Entry{Role: "assistant", Content: answer}); err != nil {
+	if err := r.add(chat, Entry{Role: "assistant", Content: strings.Join(answers, " ")}); err != nil {
 		return false, err
 	}
 	r.setState(chat, StateIdle, "")

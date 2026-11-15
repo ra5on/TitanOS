@@ -33,6 +33,14 @@ func TestParseQuick(t *testing.T) {
 		{"Stelle einen Timer auf 1 Stunde", QuickRemind, "", 60, ""},
 		{"remind me in 20 minutes to call Anna", QuickRemind, "", 20, "call Anna"},
 		{"set a timer for 3 minutes", QuickRemind, "", 3, ""},
+		{"Wohnzimmer auf 21,5 Grad", QuickTemp, "wohnzimmer", 215, ""},
+		{"Stelle die Heizung im Bad auf 22 Grad", QuickTemp, "die heizung im bad", 220, ""},
+		{"set the bedroom to 19.5 degrees", QuickTemp, "the bedroom", 195, ""},
+		{"Wohnzimmer auf 45 Grad", "", "", 0, ""},
+		{"Aktiviere die Szene Filmabend", QuickScene, "filmabend", 0, ""},
+		{"Szene Filmabend", QuickScene, "filmabend", 0, ""},
+		{"Filmabend starten", QuickScene, "filmabend", 0, ""},
+		{"activate movie night", QuickScene, "movie night", 0, ""},
 		// Not commands: for the model.
 		{"Hallo", "", "", 0, ""},
 		{"Wie laufen meine Apps?", "", "", 0, ""},
@@ -53,6 +61,18 @@ func TestParseQuick(t *testing.T) {
 		}
 		if in.Kind != c.kind || in.Name != c.name || in.Value != c.value || in.Text != c.text {
 			t.Errorf("%q: %+v, want %s %q %d %q", c.say, *in, c.kind, c.name, c.value, c.text)
+		}
+	}
+	// Two or three commands joined by "und"; one part that is none spoils it.
+	if all := ParseQuickAll("Schalte die Stehlampe aus und fahre die Markise runter"); len(all) != 2 || all[0].Kind != QuickOff || all[1].Kind != QuickClose || all[1].Name != "die markise" {
+		t.Errorf("joined: %+v", all)
+	}
+	if all := ParseQuickAll("Stehlampe an, Deckenlicht aus und Wohnzimmer auf 21 Grad"); all != nil {
+		t.Errorf("a comma list is for the model: %+v", all)
+	}
+	for _, say := range []string{"Stehlampe an und erzähl mir einen Witz", "Stehlampe an", "Stehlampe an und Timer 5 Minuten"} {
+		if all := ParseQuickAll(say); all != nil {
+			t.Errorf("%q: joined as %d commands", say, len(all))
 		}
 	}
 	if w := QuickWords("das Licht im Wohnzimmer"); len(w) != 2 || w[0] != "licht" || w[1] != "wohnzimmer" {

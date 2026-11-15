@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,9 +37,13 @@ func (e quickEntity) domain() string {
 }
 
 // quickDomains are the kinds of devices a quick command may touch, per
-// intent. Locks, alarms, climate and scenes stay with the model.
+// intent. Locks, alarms and scripts stay with the model. Scenes and the
+// target temperature of a room came with 0.96 (owner 15 Nov 2026); the
+// rules per kind of device still decide whether they run without asking.
 var quickDomains = map[string][]string{
-	agent.QuickOn:    {"light", "switch", "fan", "input_boolean", "media_player"},
+	agent.QuickScene: {"scene"},
+	agent.QuickTemp:  {"climate"},
+	agent.QuickOn:    {"light", "switch", "fan", "input_boolean", "media_player", "scene"},
 	agent.QuickOff:   {"light", "switch", "fan", "input_boolean", "media_player"},
 	agent.QuickLevel: {"light"},
 	agent.QuickOpen:  {"cover"},
@@ -98,7 +103,102 @@ func quickFind(in *agent.QuickIntent, all []quickEntity) []quickEntity {
 	if len(found) > 1 {
 		return nil
 	}
-	// "das Licht im Wohnzimmer": every light of the room named.
+	// "Wohnzimmer auf 21 Grad", "Heizung im Wohnzimmer …": the one
+	// thermostat of the room named.
+	if in.Kind == agent.QuickTemp {
+		var room []string
+		for _, w := range said {
+			if !quickHeat[w] {
+				room = append(room, w)
+			}
+		}
+		for _, e := range all {
+			if e.domain() == "climate" && e.Area != "" && sameWords(room, agent.QuickWords(e.Area)) {
+				found = append(found, e)
+			}
+		}
+		if len(found) == 1 {
+			return found
+		}
+		found = nil
+	}
+	if group := quickRoomLights(domains, said, all); len(group) > 0 {
+		return group
+	}
+	// Nearly the name: "Küchenlicht" for "Küche Licht". One letter may
+	// differ (two in long names), numbers never, and only one device may
+	// come that close.
+	want := strings.Join(said, "")
+	limit := 0
+	switch n := len([]rune(want)); {
+	case n >= 11:
+		limit = 2
+	case n >= 6:
+		limit = 1
+	}
+	if limit == 0 {
+		return nil
+	}
+	for _, e := range all {
+		if !slices.Contains(domains, e.domain()) {
+			continue
+		}
+		for _, n := range append([]string{e.Name}, e.Policy.Aliases...) {
+			name := strings.Join(agent.QuickWords(n), "")
+			if quickDigits(name) == quickDigits(want) && quickDistance(want, name, limit) <= limit {
+				found = append(found, e)
+				break
+			}
+		}
+	}
+	if len(found) == 1 {
+		return found
+	}
+	return nil
+}
+
+// quickHeat are the words for "the heating" of a room.
+var quickHeat = map[string]bool{"heizung": true, "thermostat": true, "heizkörper": true, "temperatur": true, "heating": true, "temperature": true, "radiator": true}
+
+func quickDigits(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, s)
+}
+
+// quickDistance is how many letters must change to make b of a; more than
+// limit is reported as limit+1.
+func quickDistance(a, b string, limit int) int {
+	x, y := []rune(a), []rune(b)
+	if d := len(x) - len(y); d > limit || -d > limit {
+		return limit + 1
+	}
+	prev := make([]int, len(y)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(x); i++ {
+		cur := make([]int, len(y)+1)
+		cur[0] = i
+		for j := 1; j <= len(y); j++ {
+			cost := 1
+			if x[i-1] == y[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return min(prev[len(y)], limit+1)
+}
+
+// quickRoomLights: "das Licht im Wohnzimmer" is every light of the room
+// named.
+func quickRoomLights(domains, said []string, all []quickEntity) []quickEntity {
+	var found []quickEntity
 	if !slices.Contains(domains, "light") {
 		return nil
 	}
@@ -169,7 +269,20 @@ func quickPlan(in *agent.QuickIntent, found []quickEntity) (agent.QuickStep, boo
 		return mustJSON(args)
 	}
 	switch in.Kind {
+	case agent.QuickScene:
+		return agent.QuickStep{Tool: "ha_call", Args: call("turn_on", nil), Say: say("ist aktiviert.", "is activated.")}, true
+	case agent.QuickTemp:
+		if len(found) != 1 {
+			return agent.QuickStep{}, false
+		}
+		degrees := float64(in.Value) / 10
+		de := strings.Replace(strconv.FormatFloat(degrees, 'f', -1, 64), ".", ",", 1)
+		return agent.QuickStep{Tool: "ha_call", Args: call("set_temperature", map[string]any{"temperature": degrees}),
+			Say: say("steht auf "+de+" °C.", "is set to "+strconv.FormatFloat(degrees, 'f', -1, 64)+" °C.")}, true
 	case agent.QuickOn:
+		if domain == "scene" {
+			return agent.QuickStep{Tool: "ha_call", Args: call("turn_on", nil), Say: say("ist aktiviert.", "is activated.")}, true
+		}
 		return agent.QuickStep{Tool: "ha_call", Args: call("turn_on", nil), Say: say(pick("ist an.", "sind an."), pick("is on.", "are on."))}, true
 	case agent.QuickOff:
 		return agent.QuickStep{Tool: "ha_call", Args: call("turn_off", nil), Say: say(pick("ist aus.", "sind aus."), pick("is off.", "are off."))}, true
@@ -259,24 +372,43 @@ func quickEntities(ctx context.Context, tools agent.Toolbox, chat *agent.Chat) [
 	return all
 }
 
-// agentQuick is the step for the last message of the chat, if it is a
-// quick command that can be read for certain.
-func agentQuick(ctx context.Context, tools agent.Toolbox, chat *agent.Chat) (agent.QuickStep, bool) {
+// agentQuick are the steps for the last message of the chat, if it is a
+// quick command – or two or three joined by "und" – that can be read for
+// certain. One part that cannot be read hands the whole message to the
+// model.
+func agentQuick(ctx context.Context, tools agent.Toolbox, chat *agent.Chat) []agent.QuickStep {
 	if chat.Autonomy != "" || len(chat.Entries) == 0 || chat.Pending != nil {
-		return agent.QuickStep{}, false
+		return nil
 	}
 	last := chat.Entries[len(chat.Entries)-1]
 	if last.Role != "user" {
-		return agent.QuickStep{}, false
+		return nil
 	}
-	in := agent.ParseQuick(last.Content)
-	if in == nil {
-		return agent.QuickStep{}, false
+	var all []quickEntity
+	read := false
+	plan := func(in *agent.QuickIntent) (agent.QuickStep, bool) {
+		if !read {
+			all, read = quickEntities(ctx, tools, chat), true
+		}
+		return quickPlan(in, quickFind(in, all))
 	}
-	if in.Kind == agent.QuickRemind {
-		return quickReminder(in), true
+	if in := agent.ParseQuick(last.Content); in != nil {
+		if in.Kind == agent.QuickRemind {
+			return []agent.QuickStep{quickReminder(in)}
+		}
+		if step, ok := plan(in); ok {
+			return []agent.QuickStep{step}
+		}
 	}
-	return quickPlan(in, quickFind(in, quickEntities(ctx, tools, chat)))
+	var steps []agent.QuickStep
+	for _, in := range agent.ParseQuickAll(last.Content) {
+		step, ok := plan(in)
+		if !ok {
+			return nil
+		}
+		steps = append(steps, step)
+	}
+	return steps
 }
 
 func quickReminder(in *agent.QuickIntent) agent.QuickStep {
@@ -335,8 +467,8 @@ func quickSpan(minutes int, english bool) string {
 func (s *Server) agentWork(chat *agent.Chat) func(*agent.Runner, context.Context) error {
 	return func(rn *agent.Runner, ctx context.Context) error {
 		if !s.agentSettings().QuickOff {
-			if step, ok := agentQuick(ctx, rn.Tools, chat); ok {
-				done, err := rn.Direct(ctx, chat, step)
+			if steps := agentQuick(ctx, rn.Tools, chat); len(steps) > 0 {
+				done, err := rn.Direct(ctx, chat, steps...)
 				if err != nil || done {
 					return err
 				}
