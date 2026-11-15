@@ -1782,21 +1782,26 @@
 		height: 4.5px;
 		border-radius: 50%;
 		background: var(--ag-warm, var(--accent));
-		animation: 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 		will-change: transform;
 	}
 	/* Standing still (calm, less motion) they are the triangle. */
 	.dots i:nth-child(1) {
 		transform: translate(0, -5px) scale(1);
-		animation-name: dot-a;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-a 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.dots i:nth-child(2) {
 		transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
-		animation-name: dot-b;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-b 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	.dots i:nth-child(3) {
 		transform: translate(4.5px, 3.5px) scale(1);
-		animation-name: dot-c;
+		/* With its name: the minifier makes "none" of a shorthand without one
+		   (0.93 stood still). */
+		animation: dot-c 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
 	}
 	@keyframes dot-a {
 		0%,
