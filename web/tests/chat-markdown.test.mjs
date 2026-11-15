@@ -20,7 +20,7 @@ test('answers become safe HTML', () => {
 	// The language of the fence stands in the head of the block.
 	assert.equal(
 		chatMarkdown('So:\n\n```yaml\na: 1\n```\n\nFertig.'),
-		'<p>So:</p><div class="code"><div class="code-head"><span>yaml</span></div><pre><code>a: 1</code></pre></div><p>Fertig.</p>',
+		'<p>So:</p><div class="code"><div class="code-head"><span>yaml</span></div><pre><code><span class="t-a">a</span>: <span class="t-n">1</span></code></pre></div><p>Fertig.</p>',
 	);
 });
 
@@ -72,4 +72,21 @@ test('links only to pages of the web UI', () => {
 		assert.ok(!internalPage(bad), bad);
 	}
 	assert.ok(!chatMarkdown('[<b>x</b>](/storage)').includes('<b>'));
+});
+
+test('code blocks are colored and stay safe', () => {
+	const html = chatMarkdown(
+		'```bash\n# <b>Kommentar</b>\ndocker compose up -d "$HOME" && echo \'<script>\'\n```',
+	);
+	assert.ok(html.includes('<span class="t-c"># &lt;b&gt;Kommentar&lt;/b&gt;</span>'), html);
+	assert.ok(html.includes('<span class="t-k">docker</span>'), html);
+	assert.ok(html.includes('<span class="t-s">&#39;&lt;script&gt;&#39;</span>'), html);
+	assert.ok(!/<(?!\/?(?:div|span|pre|code)\b)/.test(html), 'only the known tags: ' + html);
+	// A URL in YAML is no comment; the key and the string keep their colors.
+	const yaml = chatMarkdown('```yaml\nurl: "http://nas.local" # hier\n```');
+	assert.ok(yaml.includes('<span class="t-a">url</span>'), yaml);
+	assert.ok(yaml.includes('<span class="t-s">&quot;http://nas.local&quot;</span>'), yaml);
+	assert.ok(yaml.includes('<span class="t-c"># hier</span>'), yaml);
+	// A language without rules stays plain.
+	assert.ok(chatMarkdown('```brainfuck\n+[>+<-]\n```').includes('<code>+[&gt;+&lt;-]</code>'));
 });

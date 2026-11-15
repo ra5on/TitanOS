@@ -7819,6 +7819,8 @@
 	"agent.step.homeCall": "Switched in Home Assistant",
 	"agent.stepFailed": "failed",
 	"agent.steps": "{count} steps",
+	"agent.codeGrow": "Enlarge",
+	"agent.codeShrink": "Shrink",
 	"agent.waitsForYou": "Waits for your approval",
 	"agent.greet.morning.1": "Good morning, {name}",
 	"agent.greet.morning.2": "Up early today, {name}",

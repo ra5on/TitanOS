@@ -226,7 +226,23 @@
 			const code = head.parentElement?.querySelector('code');
 			if (!code) continue;
 			head.dataset.done = 'true';
-			head.append(copyButton(t('agent.copy'), () => code.textContent ?? ''));
+			// "Vergrößern" lays the block over the whole chat, "Verkleinern"
+			// (or Escape) puts it back.
+			const box = head.parentElement!;
+			const grow = document.createElement('button');
+			grow.type = 'button';
+			grow.textContent = t('agent.codeGrow');
+			grow.addEventListener('click', () => {
+				const full = box.classList.toggle('full');
+				grow.textContent = full ? t('agent.codeShrink') : t('agent.codeGrow');
+			});
+			const tools = document.createElement('span');
+			tools.className = 'code-tools';
+			tools.append(
+				copyButton(t('agent.copy'), () => code.textContent ?? ''),
+				grow,
+			);
+			head.append(tools);
 		}
 	});
 
@@ -446,6 +462,15 @@
 		{/each}
 	</ol>
 {/snippet}
+
+<svelte:window
+	onkeydown={(e) => {
+		const full = e.key === 'Escape' ? column?.querySelector('.code.full') : null;
+		if (!full) return;
+		e.stopPropagation();
+		full.querySelector<HTMLButtonElement>('.code-tools button:last-child')?.click();
+	}}
+/>
 
 <div class="messages" bind:this={scroller} onscroll={scrolled}>
 	{#if find !== null}
@@ -1175,6 +1200,48 @@
 		white-space: pre;
 		line-height: 1.5;
 		font-size: var(--text-base);
+	}
+	.md :global(.code-tools) {
+		display: inline-flex;
+		gap: 2px;
+	}
+	/* Enlarged: over the whole chat, with larger text; lines still scroll. */
+	.md :global(.code.full) {
+		position: fixed;
+		z-index: 70;
+		inset: 0;
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		display: flex;
+		flex-direction: column;
+		padding-top: var(--agent-top, 0px);
+		background: var(--bg);
+	}
+	.md :global(.code.full pre) {
+		flex: 1;
+		overflow: auto;
+		font-size: var(--text-md);
+		padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
+	}
+	/* The colors of the code (lib/code-highlight.ts), mixed with the text
+	   color so they hold on a light and a dark theme. */
+	.md :global(.t-c) {
+		color: var(--muted);
+		font-style: italic;
+	}
+	.md :global(.t-a) {
+		color: color-mix(in srgb, #d9905f 82%, var(--text));
+	}
+	.md :global(.t-s) {
+		color: color-mix(in srgb, #6fae6c 82%, var(--text));
+	}
+	.md :global(.t-k) {
+		color: color-mix(in srgb, #6f9ff0 82%, var(--text));
+	}
+	.md :global(.t-n),
+	.md :global(.t-v) {
+		color: color-mix(in srgb, #b98ae6 80%, var(--text));
 	}
 	.md :global(.code pre code) {
 		padding: 0;
