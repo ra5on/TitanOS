@@ -63,7 +63,7 @@ func checkAgentProvider(req *agentSettings, stored agentProvider) error {
 	}
 	p.ClearKey, p.KeySet = false, false
 	if p.Kind == agent.ProviderClaude && p.Key == "" && req.Enabled {
-		return errors.New("Claude needs an API key")
+		return errors.New("the provider Claude needs an API key")
 	}
 	return nil
 }
