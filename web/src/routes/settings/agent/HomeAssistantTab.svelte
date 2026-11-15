@@ -6,7 +6,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import type { Mode, Settings } from '#lib/agent.ts';
+	import type { Mode, Settings, ToolView } from '#lib/agent.ts';
 	import AgentHARelease from './AgentHARelease.svelte';
 	import AssistCard from './AssistCard.svelte';
 
@@ -15,8 +15,10 @@
 		haNotify = $bindable(),
 		haRules = $bindable(),
 		admins,
+		tools,
 		modeOptions,
 	}: {
+		tools: ToolView[];
 		settings: Settings;
 		haNotify: string;
 		haRules: { key: string; mode: Mode }[];
@@ -25,29 +27,10 @@
 	} = $props();
 </script>
 
-<!-- PLAN 78-1: plain headings with one row per setting (they were cards). -->
-<SettingGroup title={t('agent.sectionHA')} desc={t('agent.haIntro')}>
-	<SettingRow
-		icon="bell"
-		title={t('agent.haNotify')}
-		desc={t('agent.haNotifyHint')}
-		for="ag-ha-notify"
-	>
-		{#snippet control()}
-			<input
-				id="ag-ha-notify"
-				class="field"
-				bind:value={haNotify}
-				placeholder="notify.mobile_app_iphone"
-			/>
-		{/snippet}
-	</SettingRow>
-</SettingGroup>
+{#if settings}<AgentHARelease bind:settings {tools} {modeOptions} />{/if}
 
 <!-- PLAN 91: Assist with its key, its profile and its own rights. -->
 <AssistCard bind:settings />
-
-{#if settings}<AgentHARelease bind:settings />{/if}
 
 <SettingGroup title={t('agent.haRules')}>
 	{#snippet tools()}
@@ -81,6 +64,25 @@
 		</div>
 	{/each}
 	<p class="muted">{t('agent.haRulesHint')}</p>
+</SettingGroup>
+
+<!-- PLAN 78-1: plain headings with one row per setting (they were cards). -->
+<SettingGroup title={t('agent.sectionHA')}>
+	<SettingRow
+		icon="bell"
+		title={t('agent.haNotify')}
+		desc={t('agent.haNotifyHint')}
+		for="ag-ha-notify"
+	>
+		{#snippet control()}
+			<input
+				id="ag-ha-notify"
+				class="field"
+				bind:value={haNotify}
+				placeholder="notify.mobile_app_iphone"
+			/>
+		{/snippet}
+	</SettingRow>
 </SettingGroup>
 
 <style>

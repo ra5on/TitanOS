@@ -1611,6 +1611,23 @@ try {
       // PLAN 90-4: the start page shows what waits (a chat with an open
       // approval, a question of the inbox), what runs and the NAS state.
       const main = page.locator("section.main");
+      // The phone starts short: one row for what waits, the questions, and
+      // the overview only on request (owner 15 Nov 2026).
+      assert.equal(
+        await main.locator(".sgroup-title", { hasText: "NAS-Zustand" }).count(),
+        0,
+        "the phone's start page does not open with the overview",
+      );
+      assert.ok(
+        await main
+          .locator("button.srow .srow-title", { hasText: /wartet auf dich|warten auf dich/ })
+          .isVisible(),
+        "one row says that something waits",
+      );
+      await main.getByRole("button", { name: "Übersicht anzeigen" }).click();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${out}/7b-phone-home-overview.png` });
+      await noOverflow(page, "phone home overview");
       for (const title of [
         "Wartet auf dich",
         "Läuft gerade",
@@ -2185,10 +2202,14 @@ try {
       .click();
     await page.getByText("files_delete").waitFor();
     await page.goto(base + "/settings/agent?tab=ha");
-    await page
-      .getByRole("button", { name: "Geräte aus Home Assistant laden" })
-      .click();
+    // The devices of a selection load by themselves (there was a button).
     await page.getByText("Haustür").waitFor();
+    const sees = page.getByRole("radiogroup", { name: "Der Agent sieht" });
+    assert.equal(
+      await sees.getByRole("radio", { name: "Auswahl" }).getAttribute("aria-checked"),
+      "true",
+      "a list with devices is a selection",
+    );
     await page.getByRole("heading", { name: "Geräte für den Agenten" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/13-settings-ha-release.png` });
@@ -2202,9 +2223,14 @@ try {
     await page
       .locator("#ag-ha-notify")
       .fill("notify.mobile_app_iphone, notify.tablet");
+    // "Nichts" says that the agent then sees no device; "Alles" releases
+    // every device and keeps the list for the way back.
+    await sees.getByRole("radio", { name: "Alles" }).click();
+    assert.equal(await page.getByText("Haustür").count(), 0, "no list with Alles");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.getByRole("status").waitFor();
     assert.equal(seen.puts.length, 1);
+    assert.equal(seen.puts[0].homeassistant.release.all, true);
     assert.equal(seen.puts[0].ollama, "http://192.168.10.5:11434");
     assert.deepEqual(seen.puts[0].homeassistant.release.entities, [
       "light.flur",

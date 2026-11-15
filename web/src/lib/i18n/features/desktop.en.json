@@ -361,5 +361,6 @@
 	"desktop.widget.gpuPower": "Power",
 	"desktop.widget.gpuClock": "Clock",
 	"desktop.widget.gpuShows": "{name} shows",
-	"desktop.widget.gpuDevice": "Device"
+	"desktop.widget.gpuDevice": "Device",
+	"desktop.phone.up": "Up one level"
 }

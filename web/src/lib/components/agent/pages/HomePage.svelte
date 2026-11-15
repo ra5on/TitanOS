@@ -96,6 +96,11 @@
 		day: 'numeric',
 		month: 'long',
 	}).format(new Date());
+	// The phone starts short (owner 15 Nov 2026: the whole page at once was
+	// too much): the greeting, one row when something waits or runs, and the
+	// questions; the overview opens on request.
+	let more = $state(false);
+	const brief = $derived(fresh || (phone && !more));
 	const waiting = $derived(chats.filter((c) => c.state === 'waiting' && !c.author));
 	const running = $derived(chats.filter((c) => c.state === 'running' && !c.author));
 	const open = $derived(waiting.length + items.length);
@@ -296,13 +301,38 @@
 <PageShell
 	title={fresh ? t('agent.freshTitle') : hello}
 	plain
-	lead={fresh ? undefined : lead}
+	lead={brief ? undefined : lead}
 	{phone}
 	{onunfold}
 >
-	{#if error && !fresh}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if error && !brief}<p class="notice-error" role="alert">{error}</p>{/if}
 
-	{#if open && !fresh}
+	{#if brief && !fresh && (open || running.length)}
+		<SettingGroup>
+			<button type="button" class="srow" onclick={() => (more = true)}>
+				<div class="srow-head">
+					<span class="srow-ico {open ? 'warn' : 'live'}"
+						><Icon name={open ? 'shield' : 'activity'} size={19} /></span
+					>
+					<div class="srow-text">
+						<span class="srow-title"
+							>{open === 0
+								? t('agent.home.runningCount', { count: running.length })
+								: open === 1
+									? t('agent.home.openOne')
+									: t('agent.home.open', { count: open })}</span
+						>
+						{#if open && running.length}<p class="srow-desc">
+								{t('agent.home.runningCount', { count: running.length })}
+							</p>{/if}
+					</div>
+					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
+				</div>
+			</button>
+		</SettingGroup>
+	{/if}
+
+	{#if open && !brief}
 		<SettingGroup title={t('agent.home.waiting')}>
 			{#each waiting as chat (chat.id)}
 				<div class="srow">
@@ -365,7 +395,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if running.length && !fresh}
+	{#if running.length && !brief}
 		<SettingGroup title={t('agent.home.running')}>
 			{#each running as chat (chat.id)}
 				<div class="srow">
@@ -392,7 +422,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if !fresh}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
+	{#if !brief}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
 			{#if rows.length && nas}
 				<SettingGroup title={t('agent.home.state')}>
 					{#snippet tools()}<span class="when"
@@ -495,9 +525,19 @@
 			</div>
 		</SettingGroup>
 	{/if}
+
+	{#if phone && !fresh}
+		<button type="button" class="more overview" onclick={() => (more = !more)}
+			>{more ? t('agent.home.less') : t('agent.home.overview')}</button
+		>
+	{/if}
 </PageShell>
 
 <style>
+	.overview {
+		align-self: center;
+		min-height: 44px;
+	}
 	.two {
 		display: grid;
 		grid-template-columns: 1fr 1fr;

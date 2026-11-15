@@ -237,6 +237,9 @@ export type Status = {
 export type Location = { name: string; root: string; path: string; note?: string };
 export type FolderRule = { root: string; path: string; mode: Mode };
 
+/** Devices of Home Assistant the agent sees: everything, or domains and single ones. */
+export type HARelease = { all?: boolean; domains?: string[]; entities?: string[] };
+
 export type Settings = {
 	enabled: boolean;
 	/** The volume of the agent's data (PLAN 58). */
@@ -266,9 +269,9 @@ export type Settings = {
 	skillsOff?: string[];
 	homeassistant: {
 		/** The agent's own list of released devices (apart from MCP). */
-		release?: { domains?: string[]; entities?: string[] };
+		release?: HARelease;
 		// Releases of further Home Assistant connections by their ID.
-		releases?: Record<string, { domains?: string[]; entities?: string[] }>;
+		releases?: Record<string, HARelease>;
 		entities?: Record<string, Mode>;
 		notify?: string[];
 		assist?: boolean;

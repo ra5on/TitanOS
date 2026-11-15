@@ -1,21 +1,49 @@
 <script lang="ts">
-	// Settings › KI-Agent › Home Assistant: which domains and devices the
-	// agent may see and use, per connection (split from +page.svelte, PLAN 75-12).
+	// Settings › KI-Agent › Home Assistant: what the agent may do there and
+	// which devices it sees, per connection (split from +page.svelte, PLAN
+	// 75-12). Owner 15 Nov 2026: the rights were spread over three places and
+	// nothing said that an empty list hides every device. So this page says
+	// in two rows what is allowed (looking, switching – the tools of the area
+	// "Home Assistant" under Rechte) and offers "Nichts / Auswahl / Alles"
+	// for the devices; the lists load by themselves.
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import type { Settings } from '#lib/agent.ts';
+	import { toolMode, type Mode, type Settings, type ToolView } from '#lib/agent.ts';
+	import Segments from '#lib/components/Segments.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 
-	let { settings = $bindable() }: { settings: Settings } = $props();
+	let {
+		settings = $bindable(),
+		tools,
+		modeOptions,
+	}: {
+		settings: Settings;
+		tools: ToolView[];
+		modeOptions: { value: Mode; label: string }[];
+	} = $props();
 
-	// Home Assistant: domains and entities for the agent's own release list.
+	// ----- what the agent may do: the tools of the area, by kind -----
+	const homeTools = $derived(tools.filter((x) => x.area === 'home'));
+	const looking = $derived(homeTools.filter((x) => x.kind === 'read'));
+	const switching = $derived(homeTools.filter((x) => x.kind !== 'read'));
+	function modeOf(list: ToolView[]): Mode | '' {
+		const modes = new Set(list.map((x) => toolMode(settings.policy, x)));
+		return modes.size === 1 ? [...modes][0] : '';
+	}
+	function setMode(list: ToolView[], mode: Mode) {
+		const next = { ...(settings.policy.tools ?? {}) };
+		for (const tool of list) next[tool.name] = mode;
+		settings.policy.tools = next;
+	}
+
+	// ----- which devices: the agent's own release list -----
 	let haDomains = $state<string[]>([]);
-	let haEntities = $state<{ id: string; name: string; area?: string; domain: string }[] | null>(
-		null,
-	);
+	type Entity = { id: string; name: string; area?: string; domain: string };
+	let haEntities = $state<Entity[] | null>(null);
 	let haQuery = $state('');
 	let haError = $state('');
+	let loading = $state(false);
 	// Several Home Assistant connections (PLAN §45): one release list each.
 	let haConn = $state('main');
 	let haConns = $state<{ id: string; name: string }[]>([]);
@@ -34,35 +62,71 @@
 			? settings?.homeassistant.release
 			: settings?.homeassistant.releases?.[haConn],
 	);
+	type Scope = 'none' | 'some' | 'all';
+	// "Auswahl" was chosen and nothing is picked yet.
+	let picking = $state(false);
+	const scope = $derived<Scope>(
+		haRelease?.all
+			? 'all'
+			: picking || haRelease?.domains?.length || haRelease?.entities?.length
+				? 'some'
+				: 'none',
+	);
+	function release() {
+		const ha = settings.homeassistant;
+		return haConn === 'main' ? (ha.release ??= {}) : ((ha.releases ??= {})[haConn] ??= {});
+	}
+	function setScope(next: Scope) {
+		const r = release();
+		picking = next === 'some';
+		if (next === 'all') r.all = true;
+		else delete r.all;
+		if (next === 'none') {
+			r.domains = [];
+			r.entities = [];
+		}
+	}
 	function chooseHA(id: string) {
 		haConn = id;
 		haEntities = null;
 		haError = '';
+		picking = false;
 	}
 	async function loadHA() {
 		haError = '';
+		loading = true;
 		const query = haConn === 'main' ? '' : `?connection=${encodeURIComponent(haConn)}`;
 		try {
 			const s = await api.get<{ domains: string[] }>(`/homeassistant/settings${query}`);
 			haDomains = s.domains ?? [];
-			haEntities = (
-				await api.get<{ entities: { id: string; name: string; area?: string; domain: string }[] }>(
-					`/homeassistant/entities${query}`,
-				)
-			).entities;
+			haEntities = (await api.get<{ entities: Entity[] }>(`/homeassistant/entities${query}`))
+				.entities;
 		} catch (e) {
 			haError = apiErrorText(e);
+		} finally {
+			loading = false;
 		}
 	}
+	// The lists come by themselves once a selection is wanted.
+	$effect(() => {
+		if (scope === 'some' && haEntities === null && !loading && !haError) void loadHA();
+	});
 	function toggleRelease(kind: 'domains' | 'entities', value: string) {
-		if (!settings) return;
-		const ha = settings.homeassistant;
-		const r = haConn === 'main' ? (ha.release ??= {}) : ((ha.releases ??= {})[haConn] ??= {});
+		const r = release();
 		const list = new Set(r[kind] ?? []);
 		if (list.has(value)) list.delete(value);
 		else list.add(value);
 		r[kind] = [...list].sort();
 	}
+	const perDomain = $derived.by(() => {
+		const out: Record<string, number> = {};
+		for (const e of haEntities ?? []) out[e.domain] = (out[e.domain] ?? 0) + 1;
+		return out;
+	});
+	// Only domains this Home Assistant has devices of.
+	const domainsShown = $derived(
+		haDomains.filter((d) => perDomain[d] || haRelease?.domains?.includes(d)),
+	);
 	const haShown = $derived(
 		(haEntities ?? [])
 			.filter((e) => {
@@ -72,6 +136,38 @@
 			.slice(0, 200),
 	);
 </script>
+
+<SettingGroup title={t('agent.haRights')} desc={t('agent.haRightsHint')}>
+	{#if !homeTools.length}
+		<p class="notice-warn">
+			{t('agent.haNoConnection')}
+			<a href="/settings/homeassistant">{t('agent.haOpenConnection')}</a>
+		</p>
+	{:else}
+		<SettingRow icon="eye" title={t('agent.haLook')} desc={t('agent.haLookHint')}>
+			{#snippet control()}
+				<Segments
+					compact
+					label={t('agent.haLook')}
+					value={modeOf(looking) as Mode}
+					options={modeOptions}
+					onchange={(v) => setMode(looking, v)}
+				/>
+			{/snippet}
+		</SettingRow>
+		<SettingRow icon="power" title={t('agent.haSwitch')} desc={t('agent.haSwitchHint')}>
+			{#snippet control()}
+				<Segments
+					compact
+					label={t('agent.haSwitch')}
+					value={modeOf(switching) as Mode}
+					options={modeOptions}
+					onchange={(v) => setMode(switching, v)}
+				/>
+			{/snippet}
+		</SettingRow>
+	{/if}
+</SettingGroup>
 
 <!-- PLAN 78-1: a plain heading; the domains and the devices are a tool of
      their own (a grid of switches, a list to search) on a row's surface. -->
@@ -91,70 +187,98 @@
 			>
 		{/if}
 	{/snippet}
-	{#if haEntities === null}
-		<SettingRow
-			icon="home"
-			title={t('agent.haReleased', {
-				domains: haRelease?.domains?.length ?? 0,
-				entities: haRelease?.entities?.length ?? 0,
-			})}
-		>
-			{#snippet control()}
+	<SettingRow
+		icon="home"
+		title={t('agent.haScope')}
+		desc={scope === 'all'
+			? t('agent.haScopeAllHint')
+			: scope === 'none'
+				? t('agent.haScopeNoneHint')
+				: t('agent.haReleased', {
+						domains: haRelease?.domains?.length ?? 0,
+						entities: haRelease?.entities?.length ?? 0,
+					})}
+	>
+		{#snippet control()}
+			<Segments
+				compact
+				label={t('agent.haScope')}
+				value={scope}
+				options={[
+					{ value: 'none', label: t('agent.haScopeNone') },
+					{ value: 'some', label: t('agent.haScopeSome') },
+					{ value: 'all', label: t('agent.haScopeAll') },
+				]}
+				onchange={(v) => setScope(v as Scope)}
+			/>
+		{/snippet}
+	</SettingRow>
+	{#if scope === 'none'}<p class="notice-warn">{t('agent.haScopeNoneWarn')}</p>{/if}
+	{#if scope === 'some'}
+		{#if haError}
+			<p class="notice-warn">
+				{haError}
 				<button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
-			{/snippet}
-		</SettingRow>
-		{#if haError}<p class="notice-warn">{haError}</p>{/if}
-	{:else}
-		<div class="srow">
-			<div class="srow-block wide">
-				<strong>{t('agent.haDomains')}</strong>
-				<div class="domains">
-					{#each haDomains as d (d)}
+			</p>
+		{:else if haEntities === null}
+			<p class="muted" role="status">{t('common.loading')}</p>
+		{:else}
+			<div class="srow">
+				<div class="srow-block wide">
+					<strong>{t('agent.haDomains')}</strong>
+					<div class="domains">
+						{#each domainsShown as d (d)}
+							<label class="pick"
+								><span class="pick-text"
+									><code>{d}</code><span class="muted small"
+										>{t('agent.haDomainCount', { count: perDomain[d] ?? 0 })}</span
+									></span
+								><input
+									type="checkbox"
+									class="switch"
+									role="switch"
+									checked={haRelease?.domains?.includes(d)}
+									onchange={() => toggleRelease('domains', d)}
+								/></label
+							>
+						{/each}
+					</div>
+				</div>
+			</div>
+			<div class="srow">
+				<div class="srow-block wide">
+					<strong>{t('agent.haSingle')}</strong>
+					<input
+						class="field"
+						type="search"
+						bind:value={haQuery}
+						placeholder={t('agent.haSearch')}
+						aria-label={t('agent.haSearch')}
+					/>
+				</div>
+				<div class="entities">
+					{#each haShown as e (e.id)}
+						{@const viaDomain = haRelease?.domains?.includes(e.domain)}
 						<label class="pick"
-							><code>{d}</code><input
+							><span class="pick-text"
+								>{e.name}<span class="muted small"
+									><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
+								></span
+							><input
 								type="checkbox"
 								class="switch"
 								role="switch"
-								checked={haRelease?.domains?.includes(d)}
-								onchange={() => toggleRelease('domains', d)}
+								checked={viaDomain || haRelease?.entities?.includes(e.id)}
+								disabled={viaDomain}
+								onchange={() => toggleRelease('entities', e.id)}
 							/></label
 						>
+					{:else}
+						<p class="muted small none">{t('agent.haNoEntities')}</p>
 					{/each}
 				</div>
 			</div>
-		</div>
-		<div class="srow">
-			<div class="srow-block wide">
-				<input
-					class="field"
-					type="search"
-					bind:value={haQuery}
-					placeholder={t('agent.haSearch')}
-					aria-label={t('agent.haSearch')}
-				/>
-			</div>
-			<div class="entities">
-				{#each haShown as e (e.id)}
-					{@const viaDomain = haRelease?.domains?.includes(e.domain)}
-					<label class="pick"
-						><span class="pick-text"
-							>{e.name}<span class="muted small"
-								><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
-							></span
-						><input
-							type="checkbox"
-							class="switch"
-							role="switch"
-							checked={viaDomain || haRelease?.entities?.includes(e.id)}
-							disabled={viaDomain}
-							onchange={() => toggleRelease('entities', e.id)}
-						/></label
-					>
-				{:else}
-					<p class="muted small none">{t('agent.haNoEntities')}</p>
-				{/each}
-			</div>
-		</div>
+		{/if}
 	{/if}
 </SettingGroup>
 
