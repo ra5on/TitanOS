@@ -199,14 +199,19 @@ func Project(path string) (uint32, bool, error) {
 
 // Assign gives the directory and everything below it the project ID, so
 // existing files count and new ones inherit it. It stays on the file
-// system of dir, skips symlinks and special files and stops at the first
-// error; running it again continues where it stopped.
+// system of dir, skips symlinks and special files and entries that are
+// gone by the time it gets to them (temporary files of a busy share), and
+// stops at any other error; running it again goes through it all again,
+// leaving alone what is right already.
 func Assign(dir string, id uint32) error {
 	var top syscall.Stat_t
 	if err := syscall.Lstat(dir, &top); err != nil {
 		return err
 	}
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil && path != dir && errors.Is(err, fs.ErrNotExist) {
+			return nil // removed meanwhile
+		}
 		if err != nil {
 			return err
 		}
@@ -214,7 +219,9 @@ func Assign(dir string, id uint32) error {
 			return nil
 		}
 		var st syscall.Stat_t
-		if err := syscall.Lstat(path, &st); err != nil {
+		if err := syscall.Lstat(path, &st); errors.Is(err, fs.ErrNotExist) {
+			return nil
+		} else if err != nil {
 			return err
 		}
 		if st.Dev != top.Dev {
@@ -228,6 +235,9 @@ func Assign(dir string, id uint32) error {
 			flags |= syscall.O_DIRECTORY
 		}
 		f, err := os.OpenFile(path, flags, 0)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
