@@ -318,6 +318,10 @@ func (m *Manager) DeleteWithUndo(root Root, paths []string, user string, permane
 			result = ErrInvalid
 			break
 		}
+		if root.secret(cleaned) {
+			result = ErrNotFound
+			break
+		}
 		if m.protected(root, cleaned) {
 			result = ErrProtected
 			break
