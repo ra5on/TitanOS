@@ -722,9 +722,22 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 			m.rt.volume = s.Volume
 			m.mu.Unlock()
 		}
+		// A change the engine refused is applied at the next look; the
+		// file is written already, so only these flags remember it.
+		// A new container reads the file anyway; a restart has to be asked
+		// for again.
+		again := func(restart bool) {
+			m.mu.Lock()
+			m.rt.dirty, m.rt.restart = true, m.rt.restart || restart
+			m.mu.Unlock()
+		}
 		switch {
 		case recreate:
-			return m.recreate(ctx, p, s.Volume)
+			if err := m.recreate(ctx, p, s.Volume); err != nil {
+				again(false)
+				return err
+			}
+			return nil
 		case (changed || restart) && st.Running:
 			slog.Info("NVR: configuration changed, restarting Frigate", "rewritten", changed)
 			m.setPhase(PhaseStarting) // the restart itself takes up to half a minute
@@ -739,6 +752,7 @@ func (m *Manager) converge(ctx context.Context, s Settings, gen uint64, imageID 
 				if m.cdiRefused(err, gpu) {
 					return nil
 				}
+				again(true)
 				return err
 			}
 			m.started()

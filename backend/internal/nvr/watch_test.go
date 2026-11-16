@@ -1222,3 +1222,52 @@ func TestImageGoneIsFetchedAgain(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// A restart or a new container the engine refused once is done at the next
+// look: the change is not forgotten while Frigate keeps the old one.
+func TestRefusedChangeIsAppliedLater(t *testing.T) {
+	r := newRig(t, true)
+	r.up()
+	once := func() func() error {
+		done := false
+		return func() error {
+			if done {
+				return nil
+			}
+			done = true
+			return errors.New("docker: timeout (HTTP 500)")
+		}
+	}
+	// A changed camera: Frigate has to read the new file.
+	r.engine.mu.Lock()
+	r.engine.RestartError = once()
+	r.engine.mu.Unlock()
+	c, _ := r.m.Camera("einfahrt")
+	c.Record.RetainDays = 30
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	starts := r.engine.Starts
+	r.look()
+	r.advance(2 * time.Minute)
+	r.look()
+	if r.engine.Starts != starts+1 {
+		t.Fatalf("restart after a refused one: starts %d, was %d", r.engine.Starts, starts)
+	}
+	// The restream changes the container: removing the old one fails once.
+	r.engine.mu.Lock()
+	r.engine.RemoveError = once()
+	r.engine.mu.Unlock()
+	s := r.m.Settings()
+	s.RTSPOut = true
+	if err := r.m.SetSettings(context.Background(), s, SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	creates := r.engine.Creates
+	r.look()
+	r.advance(2 * time.Minute)
+	r.look()
+	if spec := r.engine.Spec(); r.engine.Creates != creates+1 || len(spec.Ports) != 3 {
+		t.Fatalf("new container after a refused removal: creates %d, ports %+v", r.engine.Creates, spec.Ports)
+	}
+}
