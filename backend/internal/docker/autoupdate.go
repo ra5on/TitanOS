@@ -119,7 +119,10 @@ func (u updater) run(ctx context.Context, app string) AutoUpdateResult {
 // it returns what went wrong, or "".
 func (u updater) rollback(ctx context.Context, app string, before []imageOf) string {
 	for _, c := range before {
-		if c.id == "" || c.ref == "" || strings.HasPrefix(c.ref, "sha256:") {
+		// An image ID or a reference pinned by digest needs no tag back
+		// (an update cannot move it), and the engine refuses a tag that
+		// holds a digest.
+		if c.id == "" || c.ref == "" || strings.HasPrefix(c.ref, "sha256:") || strings.Contains(c.ref, "@") {
 			continue
 		}
 		if err := u.tag(ctx, c.id, c.ref); err != nil {
@@ -383,10 +386,11 @@ func (m *Manager) realUpdater() updater {
 				found = true
 				var info struct {
 					State struct {
-						Running  bool
-						ExitCode int
-						Status   string
-						Health   *struct{ Status string }
+						Running    bool
+						Restarting bool
+						ExitCode   int
+						Status     string
+						Health     *struct{ Status string }
 					}
 					HostConfig struct {
 						RestartPolicy struct{ Name string }
@@ -405,6 +409,12 @@ func (m *Manager) realUpdater() updater {
 				}
 				if !info.State.Running {
 					return false, name + " is not running"
+				}
+				// The engine counts a container that ended and waits for its
+				// next start under its restart policy as running too: a new
+				// image that crashes at once would pass the watch.
+				if info.State.Restarting || info.State.Status == "restarting" {
+					return false, name + " keeps restarting"
 				}
 				if info.State.Health != nil {
 					switch info.State.Health.Status {
