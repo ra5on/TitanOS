@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -69,5 +70,26 @@ func TestStoreUpdatesDoNotLoseChanges(t *testing.T) {
 	}
 	if schedules, _ := s.Schedules("alex"); len(schedules) != n {
 		t.Fatalf("ErrUnchanged wrote: %d schedules", len(schedules))
+	}
+}
+
+func TestNumberedName(t *testing.T) {
+	long := strings.Repeat("ä", 99) + ".pdf"
+	for _, c := range []struct {
+		name string
+		n    int
+		want string
+	}{
+		{"image.jpg", 1, "image.jpg"},
+		{"image.jpg", 2, "image (2).jpg"},
+		{"archiv.tar.gz", 3, "archiv.tar (3).gz"},
+		{"README", 2, "README (2)"},
+	} {
+		if got := numberedName(c.name, c.n); got != c.want {
+			t.Errorf("numberedName(%q, %d) = %q", c.name, c.n, got)
+		}
+	}
+	if got := numberedName(long, 12); len(got) > 200 || !strings.HasSuffix(got, " (12).pdf") || !attachmentName.MatchString(got) {
+		t.Errorf("long name: %q (%d bytes)", got, len(got))
 	}
 }

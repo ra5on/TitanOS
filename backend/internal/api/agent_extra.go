@@ -194,7 +194,9 @@ func (s *Server) handleAgentAttach(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "at most 20 MB")
 		return
 	}
-	if err := s.agentStore().SaveAttachment(user.Name, id, name, data); err != nil {
+	// The name it is kept under: another one with this name stays (1.01).
+	name, err = s.agentStore().SaveAttachment(user.Name, id, name, data)
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}

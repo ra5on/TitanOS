@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -936,28 +938,68 @@ func (s *Store) SaveProfile(user string, p Profile) error {
 
 var attachmentName = regexp.MustCompile(`^[^/\\\x00-\x1f.][^/\\\x00-\x1f]{0,199}$`)
 
-// SaveAttachment keeps a file uploaded into a chat.
-func (s *Store) SaveAttachment(user, chat, name string, data []byte) error {
+// SaveAttachment keeps a file uploaded into a chat and returns the name it
+// is kept under: a file of the same name that is there already stays, the
+// new one gets "name (2).ext" (1.01: the second upload of "image.jpg" took
+// the place of the first, and an earlier message then showed the wrong file).
+func (s *Store) SaveAttachment(user, chat, name string, data []byte) (string, error) {
 	if !ValidID(chat) || !attachmentName.MatchString(name) {
-		return ErrNotFound
+		return "", ErrNotFound
 	}
 	root, done, err := s.userRoot(user, true)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer done()
 	dir := "files/" + chat
 	for _, d := range []string{"files", dir} {
 		if err := root.Mkdir(d, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
-			return err
+			return "", err
 		}
 	}
 	sub, err := root.OpenRoot(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer sub.Close()
-	return volumedata.Write(sub, name, data)
+	// The name is taken by creating the file, so two uploads at the same
+	// time cannot pick the same one.
+	for n := 1; n <= 999; n++ {
+		try := numberedName(name, n)
+		f, err := sub.OpenFile(try, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		f.Close()
+		if err := volumedata.Write(sub, try, data); err != nil {
+			_ = sub.Remove(try)
+			return "", err
+		}
+		return try, nil
+	}
+	return "", errors.New("agent: too many attachments with this name")
+}
+
+// numberedName is name for n = 1 and "stem (n).ext" after that, within the
+// 200 bytes of an attachment's name.
+func numberedName(name string, n int) string {
+	if n <= 1 {
+		return name
+	}
+	ext := path.Ext(name)
+	if ext == name || len(ext) > 20 {
+		ext = ""
+	}
+	stem := strings.TrimSuffix(name, ext)
+	suffix := fmt.Sprintf(" (%d)", n)
+	for len(stem)+len(suffix)+len(ext) > 200 {
+		r := []rune(stem)
+		stem = string(r[:len(r)-1])
+	}
+	return stem + suffix + ext
 }
 
 // Attachment reads a file of a chat.

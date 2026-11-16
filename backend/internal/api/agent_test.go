@@ -762,6 +762,25 @@ func TestAgentUndoAttachExport(t *testing.T) {
 	if err != nil || !strings.Contains(out.Text, "Notiz") {
 		t.Fatalf("attachment read: %v %+v", err, out)
 	}
+	// A second file of the same name is kept beside the first (1.01: it
+	// took its place); the answer names it.
+	req, _ = http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+chat.ID+"/attachments?name=notiz.md", strings.NewReader("# Zweite\nAndere Notiz."))
+	req.Header.Set("Origin", ts.url)
+	second, err := ts.client.Do(req)
+	if err != nil || second.StatusCode != http.StatusCreated {
+		t.Fatalf("second upload: %v %v", err, second)
+	}
+	var kept struct{ Name string }
+	json.NewDecoder(second.Body).Decode(&kept)
+	second.Body.Close()
+	if kept.Name != "notiz (2).md" {
+		t.Fatalf("second upload kept as %q", kept.Name)
+	}
+	first, _ := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz.md"}`))
+	other, _ := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz (2).md"}`))
+	if !strings.Contains(first.Text, "Geheimzahl") || !strings.Contains(other.Text, "Andere Notiz") {
+		t.Fatalf("attachments of the same name: %q / %q", first.Text, other.Text)
+	}
 	// Export as Markdown and PDF.
 	res, body = ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export", nil)
 	if res.StatusCode != 200 || !strings.Contains(string(body), "Ersetze und lösche") || !strings.Contains(string(body), "Erledigt.") {
