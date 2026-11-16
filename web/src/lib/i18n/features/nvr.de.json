@@ -25,6 +25,7 @@
 	"nvr.privacy.title": "Hinweis zum Datenschutz",
 	"nvr.privacy.text": "Richte Kameras nur auf dein eigenes Grundstück, nicht auf die Straße oder zu den Nachbarn. Wer gefilmt wird, sollte davon wissen – etwa durch ein Schild. Gesichter und Kennzeichen sind personenbezogene Daten: Erkenne sie nur, wo du es darfst, und bewahre Aufnahmen nicht länger auf als nötig.",
 	"nvr.privacy.dismiss": "Verstanden",
+	"nvr.privacy.failed": "Der Hinweis ließ sich nicht ausblenden: {reason}",
 	"nvr.privacy.read": "Gelesen",
 	"nvr.privacy.showAgain": "Wieder oben anzeigen",
 	"nvr.state.userDown": "Der NVR läuft gerade nicht. Live-Bilder und Aufnahmen sind erst wieder da, wenn er läuft.",
