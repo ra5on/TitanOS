@@ -960,6 +960,21 @@ const sent = (seen, method, path) =>
     await title.evaluate((el) => el === document.activeElement),
     "the focus is back on the title",
   );
+  // What a sheet opens keeps the focus while the sheet slides away: the
+  // search of the chat from the actions of a message.
+  await page
+    .locator(".user", { hasText: "Beide, mit Update" })
+    .dispatchEvent("contextmenu");
+  const acts = page.getByRole("dialog", { name: "Aktionen der Nachricht" });
+  await acts.waitFor();
+  await acts.getByRole("button", { name: "In diesem Chat suchen" }).click();
+  await acts.waitFor({ state: "detached" });
+  await page.waitForTimeout(200);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("type")),
+    "search",
+    "the search field has the focus",
+  );
   await ctx.close();
 }
 

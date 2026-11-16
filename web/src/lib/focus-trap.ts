@@ -50,7 +50,9 @@ export function trapFocus(node: HTMLElement, options: TrapOptions = {}) {
 	let opts = options;
 	const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	stack.push(node);
-	const top = () => stack[stack.length - 1] === node;
+	// A sheet that is closing (Svelte makes it inert during its transition
+	// out) no longer holds the focus: what it opened may take it.
+	const top = () => stack[stack.length - 1] === node && !node.closest('[inert]');
 	const enter = () => {
 		const first = controls(node)[0];
 		if (opts.initial !== 'first' && node.hasAttribute('tabindex')) node.focus();

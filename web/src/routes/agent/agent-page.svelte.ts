@@ -507,7 +507,12 @@ export class AgentPage extends AgentChats {
 			named = id;
 			if (!this.listsReady) return;
 			if (!id) {
-				if (before && !page.url.searchParams.has('page') && untrack(() => !!this.current))
+				// Only the bare start page: a page of the agent, a view opened by a
+				// notification (?feature=) or a question to fill in keep the chat.
+				const start = !['page', 'feature', 'ask', 'attach'].some((k) =>
+					page.url.searchParams.has(k),
+				);
+				if (before && start && untrack(() => !!this.current))
 					untrack(() => this.newChat(this.project, false));
 				return;
 			}
