@@ -1351,6 +1351,14 @@ async function plan58() {
     assert.deepEqual(seen.posts.at(-1), { to: "Fast" });
     await noOverflow(page, "volume move");
     await page.screenshot({ path: `${out}/42-phone-volume-moving.png` });
+    // 1.01: the NAS switched the volume itself; that is no unsaved change.
+    state = { ...state, state: "done", files: 812, bytes: 3.9e9 };
+    await page.waitForTimeout(2500);
+    assert.equal(
+      await page.getByText("Ungespeicherte Änderungen").count(),
+      0,
+      "a finished move is no unsaved change",
+    );
     await ctx.close();
   }
   // Opened from a notification without ?app=1, the installed app stays the
@@ -2642,6 +2650,25 @@ try {
       .waitFor();
     await admin.page.getByRole("button", { name: "Freigeben" }).click();
     await admin.page.getByRole("button", { name: "Entziehen" }).waitFor();
+    // 1.01: the NAS saved the release itself; nothing is unsaved. A change
+    // typed before stays unsaved through another release.
+    await admin.page.waitForTimeout(300);
+    assert.equal(
+      await admin.page.getByText("Ungespeicherte Änderungen").count(),
+      0,
+      "a released node is no unsaved change",
+    );
+    await admin.page
+      .getByLabel("Ollama-Server")
+      .fill("http://192.168.1.9:11434");
+    await admin.page.getByText("Ungespeicherte Änderungen").waitFor();
+    await admin.page.getByRole("button", { name: "Entziehen" }).click();
+    await admin.page.waitForTimeout(300);
+    assert.equal(
+      await admin.page.getByText("Ungespeicherte Änderungen").count(),
+      1,
+      "a typed change stays unsaved",
+    );
     await admin.page
       .getByRole("heading", { name: "Andere Knoten im Cluster" })
       .scrollIntoViewIfNeeded();
