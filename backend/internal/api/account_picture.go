@@ -216,8 +216,14 @@ func (au authArea) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
 	for _, name := range au.shownAccounts(r) {
 		allowed = allowed || pictures[name].Photo == id
 	}
+	// Only a photo the list would show is looked up: a guessed name must
+	// not make the stick be read for it.
+	if !allowed {
+		notFound()
+		return
+	}
 	data, ok := au.photo(id)
-	if !allowed || !ok {
+	if !ok {
 		notFound()
 		return
 	}
