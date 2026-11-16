@@ -54,6 +54,12 @@
 		};
 	});
 	const kind = $derived(busyKind(live.step?.tool));
+	/** The line of a running step: a word of its kind or its name, and what it is about. */
+	const sweepText = $derived.by(() => {
+		if (!live.step) return '';
+		const detail = stepDetail(live.step.args);
+		return (kind ? busyWord : stepLabel(live.step)) + (detail ? ` · ${detail}` : '');
+	});
 	const busyWord = $derived.by(() => {
 		if (kind) return key(`${kind}.${(busyTurn % WORDS[kind]) + 1}`);
 		const hour = new Date().getHours();
@@ -118,19 +124,17 @@
 		<Markdown text={live.content} streaming answer />
 	{/if}
 	<p class="live-line" class:quiet={!!live.content && !live.step}>
-		<!-- 0.100: the figure in space, one per kind of work (BusyFigure). -->
-		{#key live.content && !live.step ? 'write' : kind}
-			<BusyFigure
-				kind={live.content && !live.step ? 'write' : kind}
-				size={live.content && !live.step ? 20 : 26}
-				{calm}
-			/>
-		{/key}
+		<!-- 0.100: the figure in space, one per kind of work (BusyFigure). It
+		     stays and glides into its new movement and size itself (1.01:
+		     soft changes, owner 16 Nov 2026), so it is not made anew. -->
+		<BusyFigure
+			kind={live.content && !live.step ? 'write' : kind}
+			size={live.content && !live.step ? 20 : 26}
+			{calm}
+		/>
 		{#if live.step}
-			<span class="sweep"
-				>{kind ? busyWord : stepLabel(live.step)}{#if stepDetail(live.step.args)}
-					· {stepDetail(live.step.args)}{/if}</span
-			>
+			<!-- A new text fades in, as the word does; the figure is not keyed. -->
+			{#key sweepText}<span class="sweep">{sweepText}</span>{/key}
 		{:else if !live.content}
 			{#key busyWord}<span class="busy-word">{busyWord}</span>{/key}
 		{/if}
@@ -187,11 +191,13 @@
 		color: var(--muted);
 		opacity: 0.8;
 	}
-	/* The word rolls in from below when it changes. */
+	/* The word rolls in from below when it changes. Grey like the rest of
+	   the line (1.01, owner 16 Nov 2026: no changing text colour); only the
+	   spheres and the tick are orange. */
 	.busy-word {
 		display: inline-block;
 		animation: roll 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
-		color: var(--ag-warm, var(--accent));
+		color: var(--muted);
 	}
 	@keyframes roll {
 		from {
@@ -261,7 +267,10 @@
 		background-size: 220% 100%;
 		-webkit-background-clip: text;
 		background-clip: text;
-		animation: sweep 1.7s linear infinite;
+		/* It fades in like the word when a step begins (1.01), then the light runs. */
+		animation:
+			settle 0.36s ease-out both,
+			sweep 1.7s linear infinite;
 	}
 	@keyframes sweep {
 		from {
