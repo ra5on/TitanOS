@@ -1101,3 +1101,53 @@ func TestPlanDiskBackupCachedAndOptIn(t *testing.T) {
 		t.Fatal("Running")
 	}
 }
+
+// A VM with a disk on a second volume that is not mounted after a crash:
+// the undo waits for that volume instead of committing one overlay and
+// forgetting the other, which would leave the guest's writes to the second
+// disk in an overlay nothing ever takes back.
+func TestDiskBackupUndoWaitsForEveryVolume(t *testing.T) {
+	ctx := context.Background()
+	m, r, vm := diskFixture(t)
+	second := filepath.Join(m.mountRoot, "data", "vms", "ha")
+	if err := os.MkdirAll(second, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.Rename(filepath.Join(m.mountRoot, "fast", "vms", "ha", vm.Disks[1].File), filepath.Join(second, vm.Disks[1].File))
+	vm.Disks[1].Volume = "data"
+	m.mu.Lock()
+	m.vms["ha"] = vm
+	m.mu.Unlock()
+	b, err := m.BeginDiskBackup(ctx, "ha", DiskBackupOptions{Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	abandon(m, b)
+	// The NAS went down; after the start only "fast" is there.
+	os.Remove(filepath.Join(m.pidDir, "ha.pid"))
+	r.overlay = map[string]string{}
+	away := filepath.Join(m.mountRoot, "data-away")
+	if err := os.Rename(filepath.Join(m.mountRoot, "data"), away); err != nil {
+		t.Fatal(err)
+	}
+	m.Mounted = func() []string { return []string{"fast"} }
+	_ = m.RecoverDiskBackups(ctx, true)
+	if n := r.ran("qemu-img commit"); n != 0 {
+		t.Fatalf("committed %d overlays with a volume missing: %v", n, r.lines)
+	}
+	if _, err := os.Stat(record(m, vm)); err != nil {
+		t.Fatal("record removed while an overlay could not be seen")
+	}
+	// The volume is back: both overlays go into their images.
+	os.Rename(away, filepath.Join(m.mountRoot, "data"))
+	m.Mounted = func() []string { return []string{"data", "fast"} }
+	if err := m.RecoverDiskBackups(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.ran("qemu-img commit"); n != 2 {
+		t.Fatalf("commits: %d: %v", n, r.lines)
+	}
+	if _, err := os.Stat(record(m, vm)); !os.IsNotExist(err) {
+		t.Fatal("record left")
+	}
+}
