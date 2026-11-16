@@ -2,8 +2,10 @@ package homeassistant
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,5 +42,26 @@ func TestHistoryFiltersAndRange(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatal("invalid requests reached HA")
+	}
+}
+
+// An hour without states is an empty list in JSON, not null.
+func TestEmptyHistoryIsAList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	if err := m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "test", Entities: []string{"sensor.room"}}); err != nil {
+		t.Fatal(err)
+	}
+	end := time.Now()
+	r, err := m.History(context.Background(), "sensor.room", end.Add(-time.Hour), end, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := json.Marshal(r); !strings.Contains(string(data), `"states":[]`) {
+		t.Fatalf("%s", data)
 	}
 }
