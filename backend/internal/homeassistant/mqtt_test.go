@@ -26,8 +26,8 @@ type fakeBroker struct {
 	// cleared counts empty retained messages per topic (removals).
 	cleared map[string]int
 	states  map[string]string
-	subs     []string
-	conn     net.Conn
+	subs    []string
+	conn    net.Conn
 	// connects counts logins; the first deaf ones never get a PINGRESP,
 	// like a half-open connection. online records which logins announced
 	// availability.

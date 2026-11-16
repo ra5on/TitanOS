@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"testing"
+	"time"
 )
 
 const sample = "# Bericht März\n\nDas NAS läuft **gut**, die Platten sind *kühl* und `tank` ist voll – 90 € Rest.\n\n" +
