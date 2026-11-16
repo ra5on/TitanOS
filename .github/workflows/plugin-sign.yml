@@ -56,6 +56,9 @@ jobs:
   dispatch:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-24.04
+    # Runs every 15 minutes, one at a time: a hung call must not hold back
+    # the next runs for hours.
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: write
@@ -85,7 +88,10 @@ jobs:
           TAGS: ${{ steps.drafts.outputs.tags }}
           GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
         run: |
-          pending=$(python3 scripts/autopilot.py pending | sed -n 's/^pending=//p')
+          # Not in a pipe: a failed look at the releases fails the step
+          # instead of reading as "nothing pending".
+          answer=$(python3 scripts/autopilot.py pending)
+          pending=$(sed -n 's/^pending=//p' <<<"$answer")
           # Driver updates in the drafts keep the approval for all of them.
           if jq -e 'any(.[]; startswith("pending-nvidia-"))' <<<"$TAGS" >/dev/null; then
             echo "auto=false" >> "$GITHUB_OUTPUT"

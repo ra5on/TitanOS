@@ -235,8 +235,10 @@ jobs:
           # 31.10.2026). variant is "" or "new".
           sets() {
             image=$1; dest=$2; variant=$3
-            kernel=$(cat "$image/kernel-version")
-            package=$(python3 scripts/plugin-set.py package "$image")
+            # The function runs in "sets … || status=$?", where bash does not
+            # stop at a failed command: each one returns by itself.
+            kernel=$(cat "$image/kernel-version") || return 1
+            package=$(python3 scripts/plugin-set.py package "$image") || return 1
             fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest "$dest"; }
             status=0; fetch || status=$?
             if [ "$status" = 3 ] && [ "$REAL_TAG" = true ]; then
@@ -250,7 +252,7 @@ jobs:
               gh api repos/ra5on/TitanOS-Plugins/dispatches -f event_type=titanos-release \
                 -f "client_payload[version]=$VERSION" -f "client_payload[ref]=$GITHUB_SHA" \
                 -f "client_payload[kernel]=$kernel" -f "client_payload[kernelPackage]=$package" \
-                -f "client_payload[kernelVariant]=$variant"
+                -f "client_payload[kernelVariant]=$variant" || return 1
               echo "Waiting for the plugin set of $kernel ($package)"
               until [ "$status" = 0 ]; do
                 sleep 120
