@@ -794,6 +794,17 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 				return fmt.Errorf("record of %s names %q, which is no overlay of a backup", rec.VM, disk.Overlay)
 			}
 		}
+		// An overlay on a volume that is not mounted cannot be seen: it would
+		// count as gone, the record would go, and what the guest wrote to
+		// that disk would stay in the overlay for good. Wait for the volume.
+		if m.Mounted != nil {
+			mounted := m.Mounted()
+			for _, disk := range rec.Disks {
+				if volume, ok := m.volumeOf(disk.Overlay); ok && !containsString(mounted, volume) {
+					return fmt.Errorf("%w: volume %s of %s is not mounted", ErrUnknownVolume, volume, disk.Target)
+				}
+			}
+		}
 		settled := certain || m.clock().Sub(rec.Started) >= snapshotSettle
 		for _, disk := range rec.Disks {
 			exists := func() bool {
@@ -858,6 +869,16 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 		}
 	}
 	return m.removeDiskBackup(volume, rec.UUID)
+}
+
+// volumeOf names the volume a path under the mount root lies on.
+func (m *Manager) volumeOf(path string) (string, bool) {
+	rel, err := filepath.Rel(m.mountRoot, path)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	volume, _, _ := strings.Cut(rel, string(filepath.Separator))
+	return volume, true
 }
 
 // ErrDiskBackupRecord: the record of an interrupted backup of a VM cannot

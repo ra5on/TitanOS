@@ -89,10 +89,16 @@ func (m *Manager) removeBackupLeftovers(ctx context.Context, volume, dir string)
 // Snapshots a running backup reads from stay. A volume without such a
 // folder, or one that is not Btrfs, is left untouched.
 func (m *Manager) CleanBackupSnapshots(ctx context.Context, volume string) error {
+	return m.cleanBackupSnapshots(ctx, ctx, volume)
+}
+
+// cleanBackupSnapshots is CleanBackupSnapshots with one context for the
+// wait for other storage work and one for the deleting.
+func (m *Manager) cleanBackupSnapshots(wait, ctx context.Context, volume string) error {
 	if m.ReadOnly {
 		return nil
 	}
-	if err := m.lockActions(ctx); err != nil {
+	if err := m.lockActions(wait); err != nil {
 		return err
 	}
 	defer m.actions.Unlock()
@@ -120,9 +126,14 @@ func (m *Manager) cleanBackupSnapshotsOnce(ctx context.Context) {
 		if done {
 			continue
 		}
+		// Only the wait for other storage work is short; deleting a
+		// snapshot gets the time a run's release gets, else a slow delete
+		// was cut off and the volume still counted as looked at.
 		wait, cancel := context.WithTimeout(ctx, 2*time.Second)
-		err := m.CleanBackupSnapshots(wait, volume.Name)
+		work, stop := context.WithTimeout(ctx, backupReleaseLimit)
+		err := m.cleanBackupSnapshots(wait, work, volume.Name)
 		cancel()
+		stop()
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			continue // storage work is running: the next round tries again
 		}

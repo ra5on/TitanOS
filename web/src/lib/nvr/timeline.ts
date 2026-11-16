@@ -94,11 +94,6 @@ export function wallToMedia(segments: Segment[], from: number, to: number, wall:
 	return position;
 }
 
-/** Whether a recording covers this time. */
-export function recordedAt(segments: Segment[], wall: number): boolean {
-	return segments.some((s) => wall >= s.start && wall < s.end);
-}
-
 /** The start of the first recording at or after a time; null when none follows. */
 export function nextRecorded(segments: Segment[], wall: number): number | null {
 	let best: number | null = null;

@@ -62,10 +62,15 @@
 		{:else if kind === 'poweroff'}
 			<p class="text">{t('vms.poweroffText')}</p>
 		{:else if kind === 'paste'}
-			<p class="text">{t('vms.pasteText')}</p>
+			<p class="text" id="vm-paste-text">{t('vms.pasteText')}</p>
 			<!-- svelte-ignore a11y_autofocus -->
-			<textarea class="field mono" rows="5" bind:value={draft.text} spellcheck="false" autofocus
-			></textarea>
+			<textarea
+				class="field mono"
+				rows="5"
+				bind:value={draft.text}
+				spellcheck="false"
+				autofocus
+				aria-labelledby="vm-paste-text"></textarea>
 		{/if}
 		{#if error}
 			<div class="notice-error" role="alert">

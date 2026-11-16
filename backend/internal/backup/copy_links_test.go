@@ -181,10 +181,10 @@ func TestCopyHealsLinkThatBecameFolderAndFolderThatBecameLink(t *testing.T) {
 	os.Symlink(t.TempDir(), filepath.Join(target, "escape"))
 	root, _ := os.OpenRoot(target)
 	defer root.Close()
-	if err := copyDirectoriesBelow(root, "escape", "escape/docs"); err == nil {
+	if err := copyDirectoriesBelow(root, "escape", "escape/docs", nil); err == nil {
 		t.Fatal("a destination folder that is a link was accepted")
 	}
-	if err := copyDirectoriesBelow(root, "backup", "escape/docs"); err == nil {
+	if err := copyDirectoriesBelow(root, "backup", "escape/docs", nil); err == nil {
 		t.Fatal("a link outside the job's folder was replaced")
 	}
 }

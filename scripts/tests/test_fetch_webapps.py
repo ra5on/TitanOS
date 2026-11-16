@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import shutil
 import stat
 import tempfile
 import unittest
@@ -40,6 +41,7 @@ GOOD = [
 class FetchWebappsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
         self.source = self.tmp / "source"
         self.source.mkdir()
 

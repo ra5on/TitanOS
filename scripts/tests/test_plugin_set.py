@@ -37,6 +37,7 @@ class PluginSetTest(unittest.TestCase):
         handler.log_message = lambda *a: None
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.source = f"http://127.0.0.1:{self.server.server_port}"
 
@@ -142,6 +143,7 @@ class DownloadRetryTest(unittest.TestCase):
 
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         return f"http://127.0.0.1:{server.server_address[1]}/asset", calls
 

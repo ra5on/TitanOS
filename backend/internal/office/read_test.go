@@ -56,3 +56,53 @@ func TestXLSXColumnBeyondExcel(t *testing.T) {
 		t.Fatal("columnIndex")
 	}
 }
+
+// A small workbook whose cells all name one large shared string gives at
+// most MaxText of text, not that string once per cell.
+func TestXLSXSharedStringRepeatedStaysWithinMaxText(t *testing.T) {
+	big := strings.Repeat("x", 1<<20)
+	cells := strings.Repeat(`<c t="s"><v>0</v></c>`, 64)
+	text, err := XLSXText(pack(t, map[string]string{
+		"xl/workbook.xml":          `<workbook><sheets><sheet name="S" r:id="rId1" xmlns:r="r"/></sheets></workbook>`,
+		"xl/sharedStrings.xml":     `<sst><si><t>` + big + `</t></si></sst>`,
+		"xl/worksheets/sheet1.xml": `<worksheet><sheetData><row>` + cells + `</row></sheetData></worksheet>`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text) > MaxText+1024 {
+		t.Fatalf("text of %d bytes", len(text))
+	}
+}
+
+// A row of millions of empty cells is read cell by cell and never longer
+// than a row of Excel can be.
+func TestXLSXRowOfMillionsOfCells(t *testing.T) {
+	cells := strings.Repeat(`<c/>`, 2_000_000)
+	text, err := XLSXText(pack(t, map[string]string{
+		"xl/workbook.xml":          `<workbook><sheets><sheet name="S" r:id="rId1" xmlns:r="r"/></sheets></workbook>`,
+		"xl/worksheets/sheet1.xml": `<worksheet><sheetData><row>` + cells + `</row><row><c t="inlineStr"><is><t>after</t></is></c></row></sheetData></worksheet>`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text) > (maxColumn+1)*2+1024 || !strings.Contains(text, "after") {
+		t.Fatalf("text of %d bytes, ends %q", len(text), text[max(0, len(text)-40):])
+	}
+}
+
+// Many sheets that name the same part read it once.
+func TestXLSXSamePartForManySheets(t *testing.T) {
+	sheets := strings.Repeat(`<sheet name="S" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>`, 50)
+	text, err := XLSXText(pack(t, map[string]string{
+		"xl/workbook.xml":            `<workbook><sheets>` + sheets + `</sheets></workbook>`,
+		"xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+		"xl/worksheets/sheet1.xml":   `<worksheet><sheetData><row><c t="inlineStr"><is><t>once</t></is></c></row></sheetData></worksheet>`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(text, "once"); n != 1 {
+		t.Fatalf("part read %d times", n)
+	}
+}

@@ -151,12 +151,6 @@ type xlsxCell struct {
 	Formula string `xml:"f"`
 }
 
-type xlsxSheet struct {
-	Rows []struct {
-		Cells []xlsxCell `xml:"c"`
-	} `xml:"sheetData>row"`
-}
-
 // maxColumn is the last column a workbook can have (XFD).
 const maxColumn = 16383
 
@@ -176,7 +170,133 @@ func columnIndex(ref string) int {
 	return n - 1
 }
 
-// XLSXText returns every sheet of a workbook as CSV under "## <name>".
+// maxShared bounds the shared strings kept: a part of millions of empty
+// entries must not become millions of strings. A cell naming one beyond
+// keeps its number.
+const maxShared = 1 << 20
+
+// sharedStrings reads xl/sharedStrings.xml entry by entry.
+func sharedStrings(part []byte) []string {
+	var shared []string
+	d := xml.NewDecoder(bytes.NewReader(part))
+	for len(shared) < maxShared {
+		token, err := d.Token()
+		if err != nil {
+			break
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok || start.Name.Local != "si" {
+			continue
+		}
+		var item struct {
+			Text string `xml:"t"`
+			Rich []struct {
+				Text string `xml:"t"`
+			} `xml:"r"`
+		}
+		if d.DecodeElement(&item, &start) != nil {
+			break
+		}
+		text := item.Text
+		for _, r := range item.Rich {
+			text += r.Text
+		}
+		shared = append(shared, text)
+	}
+	return shared
+}
+
+// eachRow gives the rows of a worksheet part to row one at a time, each
+// with at most as many cells as a row of Excel has, until row returns
+// false. The part is read as a stream: millions of cells never become
+// millions of values at once.
+func eachRow(part []byte, row func([]xlsxCell) bool) error {
+	d := xml.NewDecoder(bytes.NewReader(part))
+	inData := false
+	for {
+		token, err := d.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "sheetData" {
+				inData = true
+			} else if inData && t.Name.Local == "row" {
+				cells, err := readRow(d)
+				if err != nil {
+					return err
+				}
+				if !row(cells) {
+					return nil
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "sheetData" {
+				inData = false
+			}
+		}
+	}
+}
+
+// readRow reads the cells of a row up to its end element.
+func readRow(d *xml.Decoder) ([]xlsxCell, error) {
+	var cells []xlsxCell
+	for {
+		token, err := d.Token()
+		if err != nil {
+			return nil, err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			if t.Name.Local != "c" || len(cells) > maxColumn {
+				if err := d.Skip(); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			var c xlsxCell
+			if err := d.DecodeElement(&c, &t); err != nil {
+				return nil, err
+			}
+			cells = append(cells, c)
+		case xml.EndElement:
+			return cells, nil
+		}
+	}
+}
+
+// cellValue is the text of a cell as the sheet shows it.
+func cellValue(c xlsxCell, shared []string) string {
+	value := c.Value
+	switch c.Type {
+	case "s":
+		if n, err := strconv.Atoi(c.Value); err == nil && n >= 0 && n < len(shared) {
+			value = shared[n]
+		}
+	case "inlineStr":
+		value = ""
+		for _, t := range c.Inline {
+			value += t.Text
+		}
+		for _, t := range c.Rich {
+			value += t.Text
+		}
+	case "b":
+		value = map[string]string{"1": "TRUE", "0": "FALSE"}[c.Value]
+	}
+	if value == "" && c.Formula != "" {
+		value = "=" + c.Formula
+	}
+	return value
+}
+
+// XLSXText returns every sheet of a workbook as CSV under "## <name>",
+// MaxText at most: the budget is checked for every cell, since a small file
+// can name one large shared string from many cells.
 func XLSXText(data []byte) (string, error) {
 	z, err := openZip(data)
 	if err != nil {
@@ -184,23 +304,7 @@ func XLSXText(data []byte) (string, error) {
 	}
 	var shared []string
 	if part, err := readPart(z, "xl/sharedStrings.xml"); err == nil {
-		var sst struct {
-			Items []struct {
-				Text string `xml:"t"`
-				Rich []struct {
-					Text string `xml:"t"`
-				} `xml:"r"`
-			} `xml:"si"`
-		}
-		if xml.Unmarshal(part, &sst) == nil {
-			for _, item := range sst.Items {
-				text := item.Text
-				for _, r := range item.Rich {
-					text += r.Text
-				}
-				shared = append(shared, text)
-			}
-		}
+		shared = sharedStrings(part)
 	}
 	part, err := readPart(z, "xl/workbook.xml")
 	if err != nil {
@@ -224,56 +328,52 @@ func XLSXText(data []byte) (string, error) {
 		}
 	}
 	var out strings.Builder
+	full := false
+	read := map[string]bool{}
 	for i, s := range wb.Sheets {
+		if full {
+			break
+		}
 		target := targets[s.RID]
 		if target == "" {
 			target = fmt.Sprintf("xl/worksheets/sheet%d.xml", i+1)
 		}
+		// Every part once, however many sheets name it.
+		if read[target] {
+			continue
+		}
+		read[target] = true
 		part, err := readPart(z, target)
 		if err != nil {
 			continue
 		}
-		var sheet xlsxSheet
-		if xml.Unmarshal(part, &sheet) != nil {
-			continue
-		}
 		fmt.Fprintf(&out, "## %s\n", s.Name)
 		w := csv.NewWriter(&out)
-		for _, row := range sheet.Rows {
+		// A sheet that breaks off keeps the rows read before.
+		_ = eachRow(part, func(cells []xlsxCell) bool {
+			sort.SliceStable(cells, func(a, b int) bool { return columnIndex(cells[a].Ref) < columnIndex(cells[b].Ref) })
 			var record []string
-			sort.SliceStable(row.Cells, func(a, b int) bool { return columnIndex(row.Cells[a].Ref) < columnIndex(row.Cells[b].Ref) })
-			for _, c := range row.Cells {
+			size := out.Len()
+			for _, c := range cells {
 				col := columnIndex(c.Ref)
 				for len(record) < col {
 					record = append(record, "")
+					size++
 				}
-				value := c.Value
-				switch c.Type {
-				case "s":
-					if n, err := strconv.Atoi(c.Value); err == nil && n >= 0 && n < len(shared) {
-						value = shared[n]
-					}
-				case "inlineStr":
-					value = ""
-					for _, t := range c.Inline {
-						value += t.Text
-					}
-					for _, t := range c.Rich {
-						value += t.Text
-					}
-				case "b":
-					value = map[string]string{"1": "TRUE", "0": "FALSE"}[c.Value]
-				}
-				if value == "" && c.Formula != "" {
-					value = "=" + c.Formula
+				value := cellValue(c, shared)
+				if size += len(value) + 1; size > MaxText {
+					full = true
+					break
 				}
 				record = append(record, value)
 			}
-			_ = w.Write(record)
+			_ = w.Write(record) // a strings.Builder takes everything
+			w.Flush()
 			if out.Len() > MaxText {
-				break
+				full = true
 			}
-		}
+			return !full
+		})
 		w.Flush()
 		out.WriteString("\n")
 	}

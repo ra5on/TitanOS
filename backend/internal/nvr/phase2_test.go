@@ -893,6 +893,23 @@ func TestExportRecords(t *testing.T) {
 	if _, ok := records["ghost_000001"]; ok {
 		t.Error("the vanished export's record stays")
 	}
+	// Frigate busy when asked for the export (its job long forgotten): the
+	// record stays until Frigate says it does not know the export.
+	if err := r.m.changeExportRecords(func(records map[string]exportRecord) {
+		records["ghost_000002"] = exportRecord{Owner: "anna", Camera: "haustuer", Created: float64(r.now.Unix())}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.FailPath = "/api/exports/ghost_000002" })
+	r.m.Exports(ctx, "anna", false)
+	if records, _ := r.m.exportRecords(); records["ghost_000002"].Owner != "anna" {
+		t.Error("the record went for an answer that said nothing")
+	}
+	r.frigate.Set(func(f *DevFrigate) { f.FailPath = "" })
+	r.m.Exports(ctx, "anna", false)
+	if records, _ := r.m.exportRecords(); records["ghost_000002"].Owner != "" {
+		t.Error("the record of a vanished export stays")
+	}
 	// anna makes an export; her account is deleted while the NVR cannot
 	// note it, and a new anna is made: she does not see it.
 	made, err := r.m.CreateExport(ctx, "anna", "haustuer", float64(r.now.Unix())-1800, float64(r.now.Unix())-1700, "Mine")

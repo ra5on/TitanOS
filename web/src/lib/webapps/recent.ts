@@ -37,12 +37,3 @@ export function rememberDoc(user: string, app: string, doc: DocRef) {
 		/* private window: not remembered */
 	}
 }
-
-export function forgetDoc(user: string, app: string, doc: DocRef) {
-	const list = recentDocs(user, app).filter((d) => d.root !== doc.root || d.path !== doc.path);
-	try {
-		localStorage.setItem(key(user, app), JSON.stringify(list));
-	} catch {
-		/* not remembered */
-	}
-}

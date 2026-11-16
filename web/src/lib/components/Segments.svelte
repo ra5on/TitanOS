@@ -87,4 +87,11 @@
 		cursor: default;
 		opacity: 0.6;
 	}
+	/* Every target on the phone and by touch is at least 44 px (PLAN 87);
+	   compact ones were 26 px, the others 38 px (Durchsicht 102). */
+	@media (max-width: 760px), (pointer: coarse) {
+		.segments button {
+			min-height: 44px;
+		}
+	}
 </style>

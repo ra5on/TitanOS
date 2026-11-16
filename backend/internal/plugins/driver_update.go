@@ -493,6 +493,11 @@ func (m *Manager) runDriverUpdates(ctx context.Context, mounted func() []string)
 func (m *Manager) SelectDriver(hash string, mounted []string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
+	return m.selectDriver(hash, mounted)
+}
+
+// selectDriver is SelectDriver; the caller holds m.actions.
+func (m *Manager) selectDriver(hash string, mounted []string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}

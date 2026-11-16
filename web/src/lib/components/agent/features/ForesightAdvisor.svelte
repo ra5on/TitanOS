@@ -42,6 +42,13 @@
 		}
 	}
 	void load();
+	// A run of the night may be going when the page opens: it is asked
+	// again until it is done, so "Prüft gerade" ends by itself.
+	$effect(() => {
+		if (!view?.running) return;
+		const timer = setTimeout(() => void load(), 3000);
+		return () => clearTimeout(timer);
+	});
 	void whatIfOn().then((s) => (whatIf = s.enabled));
 
 	async function run() {
@@ -136,7 +143,7 @@
 	{#if view && !view.saved}
 		<p class="fmuted">{tk('empty')}</p>
 	{/if}
-	{#each failing as f (f.subject)}
+	{#each failing as f, i (i)}
 		<div class="fnote bad" data-testid="advisor-fail">
 			<b>💽 {tk('failHead', { disk: f.subject })}</b>
 			<small>{subOf(f)}</small>
@@ -162,7 +169,7 @@
 	{/each}
 	{#if rows.length}
 		<div class="fgrp2" data-testid="advisor-rows">
-			{#each rows as f (f.area + f.subject)}
+			{#each rows as f, i (i)}
 				<div class="frow2">
 					<span class="fic" style:--c="#22c55e" aria-hidden="true">{icon[f.area]}</span>
 					<span class="ft"><b>{titleOf(f)}</b><small>{subOf(f)}</small></span>

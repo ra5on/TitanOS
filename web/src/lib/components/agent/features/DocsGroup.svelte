@@ -23,7 +23,7 @@
 	} from '#lib/features/docs.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 
 	type Props = {
 		admin: boolean;
@@ -79,12 +79,19 @@
 	}
 
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// An answer that comes after the group is gone asks no more (a run may
+	// take two hours).
+	let gone = false;
+	onDestroy(() => {
+		gone = true;
+		clearTimeout(timer);
+	});
 	async function refresh() {
 		clearTimeout(timer);
-		if (!pub?.docs || (page !== 'memory' && page !== 'paper')) return;
+		if (gone || !pub?.docs || (page !== 'memory' && page !== 'paper')) return;
 		try {
 			status = await docsStatus();
-			if (status.running) timer = setTimeout(refresh, 2000);
+			if (status.running && !gone) timer = setTimeout(refresh, 2000);
 		} catch (e) {
 			error = apiErrorText(e);
 		}
@@ -118,7 +125,8 @@
 		note = '';
 		try {
 			await docsRun();
-			setTimeout(refresh, 400);
+			clearTimeout(timer);
+			timer = setTimeout(refresh, 400);
 		} catch (e) {
 			error = apiErrorText(e);
 		}
@@ -183,7 +191,8 @@
 		try {
 			await paperRun();
 			note = t('agent.f.docs.paperLooking');
-			setTimeout(refresh, 1500);
+			clearTimeout(timer);
+			timer = setTimeout(refresh, 1500);
 		} catch (e) {
 			error = apiErrorText(e);
 		}

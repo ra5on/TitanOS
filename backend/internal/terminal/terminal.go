@@ -72,6 +72,12 @@ func NewManager(store *config.Store) *Manager {
 	return &Manager{store: store, command: []string{"/bin/bash", "--login"}, enabled: true, off: make(chan struct{})}
 }
 
+// SetCommandForTest replaces what a session runs, for tests of other
+// packages that need a console that stays open.
+func (m *Manager) SetCommandForTest(command []string) {
+	m.command = command
+}
+
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
 	settings := Settings{Enabled: true}

@@ -204,8 +204,16 @@ func (m *Manager) syncWakes(sleeping map[string]bool, now time.Time) {
 	if !loaded {
 		var stored wakeState
 		err := volumedata.ReadJSON(root, wakeFile, &stored, wakeLimit)
+		var pathErr *fs.PathError
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && errors.As(err, &pathErr) {
+			// Not damaged, only not readable now (permissions, I/O): a
+			// write would replace the stored history with this start's.
+			slog.Warn("history of disk wakes not readable, tried again later", "volume", volume, "err", err)
+			m.diskWakesTried = now
+			return
+		}
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			slog.Warn("history of disk wakes not readable, starting afresh", "volume", volume, "err", err)
+			slog.Warn("history of disk wakes damaged, starting afresh", "volume", volume, "err", err)
 		}
 		m.mu.Lock()
 		m.diskWakes = mergeWakes(m.diskWakes, stored.Disks)
@@ -243,6 +251,9 @@ func mergeWakes(current, stored map[string]wakeLog) map[string]wakeLog {
 			continue
 		}
 		log := current[key]
+		// A copy: wakesOf hands out the slice without the lock, appending
+		// to it in place would write under a reader.
+		log.Wakes = slices.Clone(log.Wakes)
 		for _, wake := range old.Wakes {
 			if len(log.Wakes) >= wakeHistory {
 				break

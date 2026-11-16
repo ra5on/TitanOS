@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"io/fs"
 	"maps"
 	"regexp"
 	"time"
@@ -162,6 +163,24 @@ func (s *Store) ReadPrivateLimit(user, name string, v any, limit int64) error {
 		return ErrNotFound
 	}
 	return s.read(user, name, v, limit)
+}
+
+// RemovePrivate removes a small file of the account's private folder.
+func (s *Store) RemovePrivate(user, name string) error {
+	if !privateName.MatchString(name) {
+		return ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return err
+	}
+	defer done()
+	if err := root.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // WritePrivate writes a small file of the account's private folder.

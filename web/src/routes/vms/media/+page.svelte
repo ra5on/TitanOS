@@ -144,6 +144,9 @@
 				);
 				verifyProgress = '';
 			}
+			// Paused, cancelled or left during the check: no resume, or the NAS
+			// would wait for data nobody sends (Durchsicht 102).
+			if (paused.has(job.id)) return;
 			if (['paused', 'failed'].includes(job.phase))
 				await api.post(`/vms/imports/${job.id}/resume`, {});
 			for (let at = job.bytes; at < file.size; at += chunk) {

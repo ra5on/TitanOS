@@ -197,6 +197,32 @@ func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 	return current, true
 }
 
+// whileLoginHolds returns a context of r that ends once the login behind r
+// no longer holds (loginHolds, checked every consoleRecheck), and a
+// function that stops watching. For answers that stay open but are not
+// served here, such as a console of another node through the cluster
+// proxy: that node cannot see the session of this one.
+func (s *Server) whileLoginHolds(r *http.Request, user auth.User) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(r.Context())
+	go func() {
+		recheck := time.NewTicker(time.Duration(consoleRecheck.Load()))
+		defer recheck.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-recheck.C:
+				if _, ok := s.loginHolds(r, user); !ok {
+					slog.Info("stream ended with its login", "path", r.URL.Path, "user", user.Name, "ip", remoteIP(r))
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return ctx, cancel
+}
+
 // vncInput tells someone at the keyboard or mouse of a VM screen from the
 // viewer asking for the next picture. noVNC sends a FramebufferUpdateRequest
 // (RFB message type 3, ten bytes) after every update on its own; a message

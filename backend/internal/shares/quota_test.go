@@ -174,3 +174,66 @@ func TestShareQuotaCountingFailureWaits(t *testing.T) {
 		t.Fatalf("retried %d times at once", kernel.assigns)
 	}
 }
+
+// halfAssign marks the share folder and then fails, as a count does that
+// stops half way (the walk goes top down).
+type halfAssign struct{ *fakeQuota }
+
+func (h halfAssign) Assign(dir string, id uint32) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.assigns++
+	h.projects[dir] = id
+	if h.failing != nil {
+		return h.failing
+	}
+	return nil
+}
+
+// A count of the files that stopped half way is tried again, although the
+// share folder itself already carries the project; until then the quota
+// is not reported active.
+func TestHalfDoneCountIsTriedAgain(t *testing.T) {
+	m, _ := newTestManager(t)
+	k := halfAssign{newFakeQuota()}
+	k.failing = errors.New("input/output error")
+	m.quotaKernel = k
+	vq := func(string) (string, bool, bool) { return m.mountRoot + "/data", true, true }
+	m.Create(Share{Name: "fotos", Volume: "data", Quota: 1 << 30}, volumes, users)
+	os.MkdirAll(m.Path(m.List()[0]), 0o755)
+	failed := func() bool {
+		m.quota.mu.Lock()
+		defer m.quota.mu.Unlock()
+		_, ok := m.quota.failed["fotos"]
+		return ok
+	}
+	m.ApplyQuotas(vq, []string{"data"})
+	waitFor(t, failed)
+	m.ApplyQuotas(vq, []string{"data"})
+	if st, _ := m.Quota("fotos"); st.State == QuotaActive {
+		t.Fatalf("half counted share reported %q", st.State)
+	}
+	// Once the retry is due, the count runs again and gets through.
+	k.mu.Lock()
+	k.failing = nil
+	k.mu.Unlock()
+	m.quota.mu.Lock()
+	m.quota.failed["fotos"] = assignFailure{errors.New("input/output error"), time.Now().Add(-time.Hour)}
+	m.quota.mu.Unlock()
+	m.ApplyQuotas(vq, []string{"data"})
+	waitFor(t, func() bool { return !failed() })
+	m.ApplyQuotas(vq, []string{"data"})
+	if st, _ := m.Quota("fotos"); st.State != QuotaActive || k.assigns != 2 {
+		t.Fatalf("after the retry: %q, %d counts", st.State, k.assigns)
+	}
+}
+
+func waitFor(t *testing.T, done func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		if done() {
+			return
+		}
+	}
+	t.Fatal("timed out")
+}

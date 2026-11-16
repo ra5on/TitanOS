@@ -212,9 +212,13 @@
 		title={t('backup.targetCodeTitle', { name: pairing.name })}
 		onclose={() => (pairing = null)}
 	>
-		<p>{t('backup.targetCodeText')}</p>
-		<textarea class="field mono" rows="5" readonly onfocus={(event) => event.currentTarget.select()}
-			>{pairing.code}</textarea
+		<p id="target-code-text">{t('backup.targetCodeText')}</p>
+		<textarea
+			class="field mono"
+			rows="5"
+			readonly
+			aria-labelledby="target-code-text"
+			onfocus={(event) => event.currentTarget.select()}>{pairing.code}</textarea
 		>
 		<p class="notice-warn">{t('backup.targetCodeOnce')}</p>
 		<div class="dialog-actions">

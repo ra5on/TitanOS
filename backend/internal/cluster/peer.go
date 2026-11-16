@@ -224,6 +224,12 @@ func (m *Manager) peerPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.mu.Lock()
+	// The cluster may have been left since managing() looked.
+	if m.state == nil {
+		m.mu.Unlock()
+		writePeerError(w, ErrNoCluster)
+		return
+	}
 	res := previewResponse{Name: m.state.Name, Version: m.Version, Protocol: Protocol, Nodes: []string{}, Accounts: []string{}}
 	for _, n := range m.state.Nodes {
 		res.Nodes = append(res.Nodes, n.Name)

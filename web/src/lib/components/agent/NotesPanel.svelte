@@ -123,10 +123,19 @@
 			await save();
 		}
 	}
-	async function save() {
+	// Saves go one after another: a save sent while the one before is still
+	// on its way would carry the old time of the file, and titand would
+	// answer "changed elsewhere" for a change made here.
+	let queue: Promise<void> = Promise.resolve();
+	function save(): Promise<void> {
 		timer = undefined;
 		const note = open;
-		if (!note) return;
+		if (!note) return queue;
+		const next = queue.then(() => send(note));
+		queue = next;
+		return next;
+	}
+	async function send(note: NonNullable<typeof open>) {
 		try {
 			const r = await api.put<{ modified: string }>('/agent/notes/file', {
 				path: note.path,
@@ -218,6 +227,8 @@
 		return run(async () => {
 			if (timer) clearTimeout(timer);
 			timer = undefined;
+			// A save still on its way would write the note anew.
+			await queue;
 			await api.delete(`/agent/notes?path=${encodeURIComponent(d.path)}`);
 			if (open && (open.path === d.path || open.path.startsWith(d.path + '/'))) open = null;
 			if (folder === d.path || folder.startsWith(d.path + '/')) folder = '';

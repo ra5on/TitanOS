@@ -60,7 +60,17 @@ type font struct {
 }
 
 func (f font) width(text string) float64 {
-	total := 0.0
+	return f.scale(f.units(text))
+}
+
+// scale turns units of the font (thousandths of its size) into points.
+func (f font) scale(units int) float64 {
+	return float64(units) * f.size / 1000
+}
+
+// units is the width of text in thousandths of the font size.
+func (f font) units(text string) int {
+	total := 0
 	for _, b := range encode(text) {
 		w := 556
 		switch {
@@ -72,9 +82,9 @@ func (f font) width(text string) float64 {
 		if f.name == "F2" {
 			w = w * 105 / 100
 		}
-		total += float64(w)
+		total += w
 	}
-	return total * f.size / 1000
+	return total
 }
 
 type segment struct {
@@ -173,17 +183,36 @@ func wrap(spans []Span, size float64, bold bool, width float64) [][]segment {
 			line, used = nil, 0
 			text = w.text
 		}
-		// A word longer than the line is cut.
-		for w.font.width(text) > width && len([]rune(text)) > 1 {
+		// A word longer than the line is cut: as much as fits, at least one
+		// character, the rest on the next lines. In one pass over the word;
+		// trying ever shorter pieces took hours for a word of 100 000
+		// characters (a minified line, base64).
+		if w.font.width(text) > width {
 			r := []rune(text)
-			cut := len(r) - 1
-			for cut > 1 && w.font.width(string(r[:cut])) > width {
-				cut--
+			units := make([]int, len(r))
+			total := 0
+			for i, c := range r {
+				units[i] = w.font.units(string(c))
+				total += units[i]
 			}
-			add(w.font, string(r[:cut]))
-			lines = append(lines, line)
-			line, used = nil, 0
-			text = string(r[cut:])
+			start := 0
+			for w.font.scale(total) > width && len(r)-start > 1 {
+				cut, taken := start, 0
+				for cut < len(r)-1 && w.font.scale(taken+units[cut]) <= width {
+					taken += units[cut]
+					cut++
+				}
+				if cut == start {
+					taken += units[cut]
+					cut++
+				}
+				add(w.font, string(r[start:cut]))
+				lines = append(lines, line)
+				line, used = nil, 0
+				total -= taken
+				start = cut
+			}
+			text = string(r[start:])
 		}
 		add(w.font, text)
 	}

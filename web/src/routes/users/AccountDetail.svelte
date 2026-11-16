@@ -72,12 +72,16 @@
 		);
 	});
 	async function saveApps(body: { newApps?: boolean; apps?: Record<string, boolean> }) {
+		// The answer belongs to this account: another one may be shown by then
+		// (Durchsicht 102, its rights showed under the other name).
+		const name = account.name;
 		appsBusy = true;
 		appsError = '';
 		try {
-			apps = await api.put<UserApps>(`/users/${encodeURIComponent(account.name)}/apps`, body);
+			const next = await api.put<UserApps>(`/users/${encodeURIComponent(name)}/apps`, body);
+			if (name === account.name) apps = next;
 		} catch (err) {
-			appsError = apiErrorText(err);
+			if (name === account.name) appsError = apiErrorText(err);
 		} finally {
 			appsBusy = false;
 		}
@@ -133,19 +137,20 @@
 		const on = input.checked;
 		const row = cams?.cameras.find((c) => c.id === id);
 		if (!row) return;
+		// Only this account takes the answer: with another account shown by
+		// then, its switches would carry these rights into its next change.
+		const name = account.name;
 		camsBusy = true;
 		camsError = '';
 		try {
-			const next = await api.put<UserCameras>(
-				`/users/${encodeURIComponent(account.name)}/cameras`,
-				{
-					cameras: {
-						[id]: { live: row.live, recordings: row.recordings, names: !!row.names, [right]: on },
-					},
+			const next = await api.put<UserCameras>(`/users/${encodeURIComponent(name)}/cameras`, {
+				cameras: {
+					[id]: { live: row.live, recordings: row.recordings, names: !!row.names, [right]: on },
 				},
-			);
-			if (Array.isArray(next?.cameras)) cams = next;
+			});
+			if (name === account.name && Array.isArray(next?.cameras)) cams = next;
 		} catch (err) {
+			if (name !== account.name) return;
 			camsError = apiErrorText(err);
 			// The NAS kept the right as it was (e.g. 503 nvr_rights_unreadable):
 			// so does the switch. Its state is unchanged, Svelte would not reset it.

@@ -199,14 +199,15 @@ func (m *Manager) StartExtract(src Root, archive, version string, selected []str
 		defer m.jobs.mu.Unlock()
 		job.Finished = m.now()
 		switch {
+		case err == nil:
+			// Published: done, also if cancelled a moment too late.
+			job.State = JobDone
+			job.Current = ""
 		case ctx.Err() != nil:
 			job.State = JobCancelled
 		case err != nil:
 			job.State = JobFailed
 			job.Error = err.Error()
-		default:
-			job.State = JobDone
-			job.Current = ""
 		}
 		m.pruneJobs()
 	}()

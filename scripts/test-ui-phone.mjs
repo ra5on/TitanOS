@@ -334,9 +334,11 @@ for (const [width, height] of [
   // PLAN 71: the phone has no side bar, so it keeps the search and a row
   // for every page; the overview cards follow below, inside the screen.
   await page.getByRole("searchbox", { name: "Einstellungen suchen" }).waitFor();
+  // Since 0.87 the phone shows the control panel in levels: the first
+  // level lists the areas, their pages come one level down.
   assert.ok(
-    (await page.locator("a.srow").count()) >= 20,
-    "every area as a tile",
+    (await page.locator("a.srow").count()) >= 5,
+    "the areas as rows",
   );
   const card = page.locator(".overview .health");
   await card.waitFor();

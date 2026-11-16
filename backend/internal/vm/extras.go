@@ -445,6 +445,14 @@ func (m *Manager) Grow(ctx context.Context, name string, index int, sizeBytes in
 	if _, err := m.runner.Run(ctx, "", "qemu-img", "resize", "-q", "-f", disk.Format, path, strconv.FormatInt(sizeBytes, 10)); err != nil {
 		return err
 	}
+	// The VM as it is now, with a disk list of its own: the one of get is
+	// shared with m.vms, and settings changed meanwhile stay.
+	m.mu.Lock()
+	if current, ok := m.vms[name]; ok && len(current.Disks) == len(vm.Disks) {
+		vm = current
+	}
+	vm.Disks = slices.Clone(vm.Disks)
+	m.mu.Unlock()
 	vm.Disks[index].SizeBytes = sizeBytes
 	if err := m.persistVM(vm); err != nil {
 		return err

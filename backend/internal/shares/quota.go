@@ -198,7 +198,9 @@ func (m *Manager) ApplyQuotas(volumes VolumeQuotas, mounted []string) {
 		if limit > 0 {
 			if id, inherit, err := kernel.Project(dir); err != nil {
 				st = QuotaStatus{State: QuotaError, Limit: limit, Error: err.Error()}
-			} else if id != share.QuotaID || !inherit {
+			} else if id != share.QuotaID || !inherit || m.assignFailed(share.Name) {
+				// A count that stopped half way leaves the share folder
+				// itself marked: it is not done until a count got through.
 				st.State = QuotaApplying
 				if err := m.assignLater(kernel, share.Name, dir, share.QuotaID); err != nil {
 					st = QuotaStatus{State: QuotaError, Limit: limit, Error: err.Error()}
@@ -238,6 +240,14 @@ func (m *Manager) ApplyQuotas(volumes VolumeQuotas, mounted []string) {
 	m.quota.where = where
 	m.quota.kernel = kernel
 	m.quota.mu.Unlock()
+}
+
+// assignFailed tells whether the last count of a share's files failed.
+func (m *Manager) assignFailed(name string) bool {
+	m.quota.mu.Lock()
+	defer m.quota.mu.Unlock()
+	_, failed := m.quota.failed[name]
+	return failed
 }
 
 // assignLater counts the files of a share in the background. It returns

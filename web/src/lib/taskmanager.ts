@@ -64,12 +64,6 @@ export function sortProcesses(
 	);
 }
 
-/** A command line cut to `most` characters with an ellipsis. */
-export function shortCommand(command: string, most = 90): string {
-	const text = command.trim();
-	return text.length > most ? `${text.slice(0, most - 1).trimEnd()}…` : text;
-}
-
 /** The history with a new value at the end, at most `capacity` long. */
 export function pushHistory(history: readonly number[], value: number, capacity = 40): number[] {
 	const next = [...history, Number.isFinite(value) ? Math.max(0, value) : 0];

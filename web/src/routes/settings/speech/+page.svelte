@@ -12,7 +12,8 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api, apiFetch, responseError } from '#lib/api.ts';
-	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { poll } from '#lib/poll.ts';
+	import { formatBytes, formatDateTime, formatDecimal } from '#lib/format.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { record, toWav16k } from '#lib/speech-audio.ts';
 
@@ -76,6 +77,9 @@
 
 	let data = $state<Page | null>(null);
 	let error = $state('');
+	// The error of the last look at the NAS; it goes with the next good answer
+	// and never covers the error of a save (Durchsicht 102).
+	let loadError = $state('');
 	let busy = $state(false);
 	let removing = $state<{ kind: 'model' | 'voice'; id: string; title: string } | null>(null);
 	let voiceLanguage = $state(i18n.locale === 'de' ? 'de' : 'en');
@@ -88,14 +92,19 @@
 
 	async function load() {
 		try {
-			data = await api.get<Page>('/speech');
+			const answer = await api.get<Page>('/speech');
+			// An answer without the parts the page shows is no answer (the page fell over on it).
+			if (!answer?.status?.whisper || !answer.status.piper || !answer.settings || !answer.jobs)
+				throw new Error('invalid_response');
+			data = answer;
+			loadError = '';
 		} catch (e) {
-			error = apiErrorText(e);
+			loadError =
+				e instanceof Error && e.message === 'invalid_response'
+					? t('error.invalid_response')
+					: apiErrorText(e);
 		}
 	}
-	$effect(() => {
-		void load();
-	});
 	// While something moves (a download, an image, a start) the page follows.
 	const moving = $derived(
 		!!data &&
@@ -103,10 +112,8 @@
 				['pulling', 'starting'].includes(data.status.whisper.phase) ||
 				['pulling', 'starting'].includes(data.status.piper.phase)),
 	);
-	$effect(() => {
-		const timer = setInterval(load, moving ? 2000 : 15000);
-		return () => clearInterval(timer);
-	});
+	// One look at a time, none while the tab is hidden (lib/poll.ts).
+	$effect(() => poll(load, { interval: () => (moving ? 2000 : 15000) }));
 
 	async function save(change: Partial<Settings>) {
 		if (!data) return;
@@ -324,7 +331,7 @@
 	<p class="muted">{t('speech.intro')}</p>
 </PageHead>
 
-{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
+{#if error || loadError}<div class="notice-error" role="alert">{error || loadError}</div>{/if}
 
 {#if data}
 	{@const s = data.settings}
@@ -556,10 +563,10 @@
 					step="0.1"
 					value={s.speed}
 					disabled={busy}
-					aria-valuetext={`${s.speed.toFixed(1)}×`}
+					aria-valuetext={`${formatDecimal(s.speed, 1)}×`}
 					onchange={(e) => save({ speed: Number(e.currentTarget.value) })}
 				/>
-				<span class="pct">{s.speed.toFixed(1).replace('.', ',')}×</span>
+				<span class="pct">{formatDecimal(s.speed, 1)}×</span>
 			{/snippet}
 		</SettingRow>
 	</SettingGroup>

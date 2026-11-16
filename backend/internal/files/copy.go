@@ -164,6 +164,9 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 		if err != nil || p == "." {
 			return Job{}, ErrInvalid
 		}
+		if src.secret(p) {
+			return Job{}, ErrNotFound
+		}
 		if m.protected(src, p) {
 			return Job{}, ErrProtected
 		}
@@ -314,10 +317,10 @@ func (m *Manager) planEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 		}
 		var inner error
 		_ = eachChild(sr, rel, func(entry fs.DirEntry) error { // an unreadable folder is reported when the job gets there
-			if hidden(entry.Name()) {
+			p := path.Join(rel, entry.Name())
+			if hidden(entry.Name()) || job.sourceRoot.secret(p) {
 				return nil
 			}
-			p := path.Join(rel, entry.Name())
 			child, err := sr.Lstat(p)
 			if err != nil {
 				return nil

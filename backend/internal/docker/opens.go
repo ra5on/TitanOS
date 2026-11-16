@@ -595,7 +595,9 @@ func editVolumes(compose, service string, edit func(list *yaml.Node) error) (str
 }
 
 // SetOpener replaces x-titanos.opens of an app (Docker › Bearbeiten).
-// Only the template block changes; the containers stay as they are.
+// Only the template block changes. It is saved through SetCompose, whose
+// "up" keeps running containers of unchanged services but starts those of
+// the app that were stopped.
 func (m *Manager) SetOpener(ctx context.Context, app string, op Opener) error {
 	entry := m.opener(app)
 	if entry.err != nil && !errors.Is(entry.err, ErrInvalid) {

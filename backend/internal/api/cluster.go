@@ -50,6 +50,8 @@ type clusterArea struct {
 	// of the NVR, as the deletion here does (docs/NVR.md "auch über den
 	// Cluster"; it was missing, review PLAN 85-4).
 	nvrForgetUser func(name string)
+	// whileLoginHolds ends a proxied stream with the login it came with.
+	whileLoginHolds func(r *http.Request, user auth.User) (context.Context, context.CancelFunc)
 }
 
 // clusterArea is the area of the server; New wires its callbacks into the
@@ -58,7 +60,7 @@ func (s *Server) clusterArea() clusterArea {
 	return clusterArea{cluster: s.opts.Cluster, version: s.opts.Version, monitor: s.opts.Monitor, storage: s.opts.Storage,
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
-		nvrForgetUser: s.nvrArea().nvrForgetUser}
+		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -540,7 +542,14 @@ func (a clusterArea) handleClusterProxy(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusForbidden, "cross_origin", "this page may not open a connection to another node")
 		return
 	}
-	a.cluster.Proxy(w, r, r.PathValue("id"), currentUser(r).Name, r.PathValue("path"))
+	// A console, log or event stream of the other node stays open for as
+	// long as it runs. That node trusts this one with the session
+	// (loginHolds skips the cookie for cluster requests), so it ends here
+	// once the login no longer holds: logged out, ended under "Angemeldete
+	// Geräte", locked or the account gone, as the consoles of this node do.
+	ctx, stop := a.whileLoginHolds(r, currentUser(r))
+	defer stop()
+	a.cluster.Proxy(w, r.WithContext(ctx), r.PathValue("id"), currentUser(r).Name, r.PathValue("path"))
 }
 
 // sameOrigin reports whether the page that sent the request is this site:

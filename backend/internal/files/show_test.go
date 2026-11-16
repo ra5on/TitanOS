@@ -1,6 +1,12 @@
 package files
 
-import "testing"
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 // Show lists all a root shows; everything else is a secret.
 func TestRootShowIsAPositiveList(t *testing.T) {
@@ -32,5 +38,77 @@ func TestMachineRootHidesInternalFiles(t *testing.T) {
 		if person.secret(rel) {
 			t.Errorf("a person in the web interface must still see %q", rel)
 		}
+	}
+}
+
+// What a machine root hides cannot be renamed, deleted or copied under
+// another name either: a token could otherwise rename an .env into sight
+// and read it, or destroy it.
+func TestMachineRootCannotMoveHiddenFiles(t *testing.T) {
+	m, root, _ := newRoot(t)
+	root.Machine = true
+	env := filepath.Join(root.Dir, "urlaub/.env")
+	os.WriteFile(env, []byte("DB_PASSWORD=hunter2"), 0o600)
+	if err := m.Rename(root, "urlaub/.env", "urlaub/env.txt"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("rename: %v", err)
+	}
+	if err := m.Rename(root, "notiz.txt", "urlaub/.env"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("rename onto a hidden name: %v", err)
+	}
+	if err := m.Delete(root, []string{"urlaub/.env"}, "alex", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("delete for good: %v", err)
+	}
+	if _, err := m.DeleteWithUndo(root, []string{"urlaub/.env"}, "alex", false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("delete into the bin: %v", err)
+	}
+	if _, err := m.StartCopyChoices(root, []string{"urlaub/.env"}, root, "", false, ConflictRename, "alex", os.Getuid(), map[string]CopyChoice{"urlaub/.env": {Action: "copy", Name: "leak.txt"}}); err == nil {
+		t.Error("copy of a hidden file started")
+	}
+	// Inside a folder that is copied, the hidden file stays behind, also
+	// with a choice that names it.
+	if _, err := m.StartCopyChoices(root, []string{"urlaub"}, root, "", false, ConflictRename, "alex", os.Getuid(), map[string]CopyChoice{"urlaub/.env": {Action: "copy", Name: "leak.txt"}}); err == nil {
+		t.Error("choice for a hidden file accepted")
+	}
+	job, err := m.StartCopy(root, []string{"urlaub"}, root, "", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && m.Busy() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(root.Dir, "urlaub (2)", "strand.jpg")); err != nil {
+		t.Fatalf("copy %s did not run: %v", job.ID, err)
+	}
+	if _, err := os.Stat(filepath.Join(root.Dir, "urlaub (2)", ".env")); err == nil {
+		t.Error("the hidden file was copied along")
+	}
+	if data, _ := os.ReadFile(env); string(data) != "DB_PASSWORD=hunter2" {
+		t.Errorf("the .env changed: %q", data)
+	}
+}
+
+// Moving a folder to another root for a token leaves its hidden file where
+// it was, with its content, and the folder that still holds it.
+func TestMachineMoveLeavesHiddenFilesBehind(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	src.Machine, dst.Machine = true, true
+	env := filepath.Join(src.Dir, "urlaub/.env")
+	os.WriteFile(env, []byte("DB_PASSWORD=hunter2"), 0o600)
+	if _, err := m.StartCopy(src, []string{"urlaub"}, dst, "ziel", true, ConflictRename, "alex", os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && m.Busy() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")); err != nil {
+		t.Fatalf("not moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst.Dir, "ziel/urlaub/.env")); err == nil {
+		t.Error("the hidden file was moved along")
+	}
+	if data, err := os.ReadFile(env); err != nil || string(data) != "DB_PASSWORD=hunter2" {
+		t.Fatalf("the hidden file at the source: %q %v", data, err)
 	}
 }

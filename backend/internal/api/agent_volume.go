@@ -177,7 +177,9 @@ func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
 	s.agentRT.mu.Lock()
 	busy := len(s.agentRT.runs) > 0
 	s.agentRT.mu.Unlock()
-	if busy {
+	// A run of "Dokumente" writes its index and log at the end, into the
+	// old volume's copy (1.02: those move along now).
+	if busy || s.docsBusy() {
 		writeError(w, http.StatusConflict, "agent_busy", "a task of the agent is running; stop it or let it finish first")
 		return
 	}
@@ -210,11 +212,14 @@ func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"move": s.agentMoveView()})
 }
 
-// agentMoveParts are the two places of the agent on a volume, relative to
-// the volume's root.
+// agentMoveParts are the places of the agent on a volume, relative to the
+// volume's root: its own data, the share and the data of "Dokumente"
+// (index, paperwork log; up to 1.01 left behind on the old volume).
 func (s *Server) agentMoveParts() []string {
-	return []string{filepath.Join(".titanos", "agent"), agentShareName}
+	return []string{filepath.Join(".titanos", "agent"), agentShareName, docsPart}
 }
+
+var docsPart = filepath.Join(".titanos", "docs")
 
 type agentMovePlan struct {
 	from, to string
@@ -222,6 +227,9 @@ type agentMovePlan struct {
 	total    int64
 	// parts are the places that exist on the old volume.
 	parts []string
+	// docsAside: the target keeps the documents of an earlier move (up to
+	// 1.01 they stayed behind); they are set aside, never used again.
+	docsAside bool
 }
 
 type errMoveSpace struct{ need, free uint64 }
@@ -270,11 +278,18 @@ func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan
 	defer dst.Close()
 	if _, err := dst.Lstat(moveMarker); err == nil {
 		for _, part := range s.agentMoveParts() {
+			if part == docsPart {
+				continue // set aside below, not removed: maybe not from that move
+			}
 			if err := dst.RemoveAll(part); err != nil {
 				return plan, err
 			}
 		}
 		_ = dst.Remove(moveMarker)
+	}
+	// Even when the old volume has none: they would count as the agent's.
+	if _, err := dst.Lstat(docsPart); err == nil {
+		plan.docsAside = true
 	}
 	for _, part := range s.agentMoveParts() {
 		if _, err := src.Lstat(part); errors.Is(err, fs.ErrNotExist) {
@@ -286,6 +301,9 @@ func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan
 		}
 		plan.total += size
 		plan.parts = append(plan.parts, part)
+		if part == docsPart {
+			continue // see docsAside
+		}
 		if _, files, err := treeSize(dst, part); err == nil && files > 0 {
 			return plan, fmt.Errorf("%w: %s", errMoveNotEmpty, part)
 		}
@@ -361,6 +379,17 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 	if err := dst.WriteFile(moveMarker, []byte(plan.from+"\n"), 0o600); err != nil {
 		fail(err)
 		return
+	}
+	if plan.docsAside {
+		aside := moveOld + "/" + time.Now().UTC().Format("20060102-150405") + "-left"
+		if err := dst.MkdirAll(aside, 0o700); err != nil {
+			fail(err)
+			return
+		}
+		if err := dst.Rename(docsPart, aside+"/docs"); err != nil {
+			fail(err)
+			return
+		}
 	}
 	// Every error inside a part fails the move: a file that vanished
 	// during the copy (an SMB client) must not count as copied.
@@ -577,4 +606,23 @@ func fileHash(root *os.Root, path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
+}
+
+// docsBusy tells whether a run of "Dokumente" (index or paperwork) goes.
+func (s *Server) docsBusy() bool {
+	if _, ok := docsIndexing.Load(s); ok {
+		return true
+	}
+	busy := false
+	docsRuntimes.Range(func(k, v any) bool {
+		if k.(docsKey).s != s {
+			return true
+		}
+		rt := v.(*docsRuntime)
+		rt.mu.Lock()
+		busy = rt.paperRun
+		rt.mu.Unlock()
+		return !busy
+	})
+	return busy
 }

@@ -185,8 +185,10 @@ try {
   await page.keyboard.press("Control+k");
   await page.getByRole("dialog").waitFor();
   await page.getByRole("dialog").getByRole("combobox").fill("SSH");
-  await page.getByRole("option", { name: /Zugang › SSH/ }).click();
-  await page.waitForURL(/settings\/access#access-ssh/);
+  // Since PLAN 86 the palette finds single settings with their place
+  // ("SSH-Zugang einschalten – Zugang › Fernzugriff").
+  await page.getByRole("option", { name: /SSH-Zugang einschalten/ }).click();
+  await page.waitForURL(/settings\/access/);
   await page.goto(base + "/shares");
   await page.getByRole("button", { name: "Projects", exact: true }).waitFor();
   await page.screenshot({ path: out + "/shares-desktop.png", fullPage: true });

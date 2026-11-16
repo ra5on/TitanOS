@@ -42,6 +42,9 @@ type ApplicationRestorePlan struct {
 	CurrentSelection     bool                  `json:"currentSelection"`
 }
 
+// operationJournal is the path of the journal of an application backup in a snapshot.
+var operationJournal = regexp.MustCompile(`^/[^\x00\r\n]+/\.titanos/appbackups/[a-f0-9]{24}/operation\.json$`)
+
 func (m *Manager) PreviewApplicationRestore(ctx context.Context, id, snapshot, volume string) (ApplicationRestorePlan, error) {
 	plan := ApplicationRestorePlan{}
 	job, ok := m.find(id)
@@ -80,7 +83,7 @@ func (m *Manager) PreviewApplicationRestore(ctx context.Context, id, snapshot, v
 	plan.Applications = slices.Clone(job.Applications)
 	plan.CurrentSelection = true
 	for _, p := range plan.Snapshot.Paths {
-		if !regexp.MustCompile(`^/[^\x00\r\n]+/\.titanos/appbackups/[a-f0-9]{24}/operation\.json$`).MatchString(p) {
+		if !operationJournal.MatchString(p) {
 			continue
 		}
 		_, base, env, cleanup, err := m.repository(job)

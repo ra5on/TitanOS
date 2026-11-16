@@ -28,7 +28,6 @@
 	import {
 		pushHistory,
 		scaleToPeak,
-		shortCommand,
 		sortProcesses,
 		volumeRates,
 		type ProcessList,
@@ -424,7 +423,8 @@
 					<li class="proc tile">
 						<div class="proc-main">
 							<span class="name">{p.name}</span>
-							<span class="muted mono cmd" title={p.command}>{shortCommand(p.command)}</span>
+							<!-- Whole, scrolling sideways: no text is cut (PLAN 76). -->
+							<span class="muted mono cmd">{p.command.trim()}</span>
 						</div>
 						<dl class="proc-facts">
 							<div>

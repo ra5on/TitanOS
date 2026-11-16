@@ -2,6 +2,9 @@ package homeassistant
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -112,5 +115,56 @@ func TestHubRunFollowsConnections(t *testing.T) {
 	// Buttons of all connections share one runner and its limits.
 	if primary.commandRunnerFor(nil) != second.commandRunnerFor(nil) {
 		t.Fatal("two runners")
+	}
+}
+
+// A list or a connection that cannot be read is never written over: the
+// other connections stay listed when one is added or removed.
+func TestHubKeepsWhatItCouldNotRead(t *testing.T) {
+	dir := t.TempDir()
+	store := config.Open(dir)
+	primary := NewManager(store)
+	primary.Load()
+	hub := NewHub(store, primary)
+	hub.Load()
+	a, err := hub.Add("A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := hub.Add("B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// After a restart, the file of B does not read.
+	if err := os.WriteFile(filepath.Join(dir, "homeassistant", "connections", b.ID()+".json"), []byte("{kaputt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hub = NewHub(store, NewManager(store))
+	hub.Load()
+	c, err := hub.Add("C")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hub.Remove(c.ID()); err != nil {
+		t.Fatal(err)
+	}
+	var list connectionList
+	if err := store.ReadJSON(connectionsFile, &list); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(list.Connections, []string{a.ID(), b.ID()}) {
+		t.Fatalf("list: %v, want %s and %s", list.Connections, a.ID(), b.ID())
+	}
+	// The list itself does not read: nothing is added or removed over it.
+	os.WriteFile(filepath.Join(dir, "homeassistant", "connections.json"), []byte("{kaputt"), 0o600)
+	hub = NewHub(store, NewManager(store))
+	if err := hub.Load(); err == nil {
+		t.Fatal("an unreadable list was taken for none")
+	}
+	if _, err := hub.Add("D"); err == nil {
+		t.Fatal("added over an unreadable list")
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "homeassistant", "connections.json")); string(data) != "{kaputt" {
+		t.Fatalf("list written over: %s", data)
 	}
 }

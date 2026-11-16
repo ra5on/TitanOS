@@ -112,3 +112,36 @@ func TestRestoreConsoleOnlyGivesBackWhatItTook(t *testing.T) {
 		t.Fatalf("a console detached by someone else was rebound: %q", bound(t, fb))
 	}
 }
+
+// A console that cannot be detached does not leave the ones before it
+// detached: the handoff is refused and the local console stays.
+func TestFailedHandoffGivesTheConsoleBack(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes a read-only file")
+	}
+	root := t.TempDir()
+	sys, proc, state := filepath.Join(root, "sys"), filepath.Join(root, "proc"), filepath.Join(root, "run")
+	os.MkdirAll(proc, 0o755)
+	dev := filepath.Join(sys, "bus/pci/devices/0000:00:02.0")
+	os.MkdirAll(dev, 0o755)
+	os.WriteFile(filepath.Join(dev, "class"), []byte("0x030000"), 0o644)
+	os.WriteFile(filepath.Join(dev, "vendor"), []byte("0x8086"), 0o644)
+	os.WriteFile(filepath.Join(dev, "device"), []byte("0x4680"), 0o644)
+	os.WriteFile(filepath.Join(dev, "boot_vga"), []byte("1"), 0o644)
+	for i, writable := range []bool{true, false} {
+		c := filepath.Join(sys, "class/vtconsole", "vtcon"+string(rune('0'+i)))
+		os.MkdirAll(c, 0o755)
+		os.WriteFile(filepath.Join(c, "name"), []byte("(M) frame buffer device"), 0o644)
+		os.WriteFile(filepath.Join(c, "bind"), []byte("1"), 0o644)
+		if !writable {
+			os.Chmod(filepath.Join(c, "bind"), 0o444)
+		}
+	}
+	m := &Manager{sys: sys, proc: proc, state: state}
+	if _, err := m.PrepareHandoff([]string{"0000:00:02.0"}); err == nil {
+		t.Fatal("handoff went through with a console that stayed")
+	}
+	if data, _ := os.ReadFile(filepath.Join(sys, "class/vtconsole/vtcon0/bind")); string(data) != "1" {
+		t.Fatalf("first console left at %q", data)
+	}
+}

@@ -144,9 +144,17 @@ func (m *Manager) secureBuildDir(volume string) error {
 	}
 	return nil
 }
+
+// sdkManifestTimeout bounds asking for the release manifest that names the
+// SDK: a connection that stalls would otherwise keep the driver worker, and
+// with it Busy, for ever. A variable for tests.
+var sdkManifestTimeout = time.Minute
+
 func (m *Manager) fetchBuildSDK(ctx context.Context) (buildSDK, error) {
 	var sdk buildSDK
-	data, err := m.ReleaseManifest(ctx, m.Release)
+	meta, cancel := context.WithTimeout(ctx, sdkManifestTimeout)
+	defer cancel()
+	data, err := m.ReleaseManifest(meta, m.Release)
 	if err != nil {
 		return sdk, err
 	}

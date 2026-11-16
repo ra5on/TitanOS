@@ -24,10 +24,25 @@ func listenUevents(ctx context.Context, event func(action, subsystem string)) er
 	if err := unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &timeout); err != nil {
 		return err
 	}
+	return readUevents(ctx, func(buffer []byte) (int, error) {
+		n, _, err := unix.Recvfrom(fd, buffer, 0)
+		return n, err
+	}, event)
+}
+
+// readUevents reads messages with receive until ctx is done.
+func readUevents(ctx context.Context, receive func([]byte) (int, error), event func(action, subsystem string)) error {
 	buffer := make([]byte, 16*1024)
 	for ctx.Err() == nil {
-		n, _, err := unix.Recvfrom(fd, buffer, 0)
+		n, err := receive(buffer)
 		if err == unix.EAGAIN || err == unix.EINTR {
+			continue
+		}
+		if err == unix.ENOBUFS {
+			// The kernel dropped events while many came at once (a hub,
+			// udevadm trigger). The socket stays usable; what was lost may
+			// have been a device, so look at the devices again.
+			event("add", "pci")
 			continue
 		}
 		if err != nil {

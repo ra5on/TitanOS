@@ -165,3 +165,41 @@ func TestBackupSnapshotHonoursTheContext(t *testing.T) {
 		t.Fatalf("leftover kept: %v", entries)
 	}
 }
+
+// slowDelete makes "btrfs subvolume delete" take a while and, like
+// run.Exec, reports a kill as a plain command error.
+type slowDelete struct {
+	Runner
+	takes time.Duration
+}
+
+func (s slowDelete) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "btrfs" && len(args) > 1 && args[0] == "subvolume" && args[1] == "delete" {
+		select {
+		case <-ctx.Done():
+			return "", &CommandError{Command: "btrfs subvolume delete", Err: errors.New("signal: killed")}
+		case <-time.After(s.takes):
+		}
+	}
+	return s.Runner.Run(ctx, stdin, name, args...)
+}
+
+// The cleanup after the start waits only briefly for other storage work;
+// a leftover snapshot that takes longer to delete is deleted all the same,
+// not cut off while the volume counts as looked at.
+func TestStartCleanupGivesASlowDeleteItsTime(t *testing.T) {
+	m, runner, point := shadowManager(t)
+	m.runner = slowDelete{runner, 2500 * time.Millisecond}
+	m.settled = true
+	left := filepath.Join(point, ".titanos", backupSourceFolder, "20261101T000000-AAAAAAAA")
+	if err := os.MkdirAll(left, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m.cleanBackupSnapshotsOnce(context.Background())
+	m.mu.Lock()
+	done := m.backupCleaned["pool"]
+	m.mu.Unlock()
+	if _, err := os.Stat(left); err == nil || !done {
+		t.Fatalf("leftover there: %v, volume looked at: %v", err == nil, done)
+	}
+}

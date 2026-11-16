@@ -75,8 +75,8 @@ func validDeleted(d DeletedCamera) bool {
 		inRange(d.RecordDays) && inRange(d.EventDays) && !d.DeletedAt.IsZero()
 }
 
-// deletedList is the list as read from the stick (m.mu held by the
-// caller or not needed: it is replaced, never changed in place).
+// deletedList is a copy of the list as read from the stick. It takes m.mu
+// itself: never call it with m.mu held.
 func (m *Manager) deletedList() []DeletedCamera {
 	m.mu.Lock()
 	defer m.mu.Unlock()

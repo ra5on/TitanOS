@@ -361,11 +361,16 @@
 	}
 	.windowed .crumbs {
 		flex: 1 1 11rem;
-		flex-wrap: nowrap;
-		overflow: hidden;
+		/* Durchsicht 102: a deep path in a narrow window wraps; hidden overflow
+		   took away the current folder and the edit button (PLAN 76). */
+		flex-wrap: wrap;
 		min-height: 2rem;
 		border-color: var(--border);
 		background: color-mix(in srgb, var(--bg) 60%, transparent);
+	}
+	.windowed .crumbs button {
+		overflow-wrap: anywhere;
+		text-align: left;
 	}
 	.windowed .crumbs button:last-of-type:not(.edit-path) {
 		font-weight: 600;

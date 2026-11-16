@@ -316,6 +316,7 @@
 							id="repl-enabled"
 							type="checkbox"
 							class="switch"
+							role="switch"
 							bind:checked={editing.enabled}
 						/></span
 					>

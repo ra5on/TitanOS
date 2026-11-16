@@ -341,7 +341,10 @@
 													<td class="num mono">{a.value}</td>
 													<td class="num mono">{a.worst}</td>
 													<td class="num mono">{a.threshold}</td>
-													<td class="num mono" class:bad={a.warn}>{a.raw}</td>
+													<td class="num mono" class:bad={a.warn}
+														>{a.raw}{#if a.warn}<span class="sub bad">{t('smart.attrWatch')}</span
+															>{/if}</td
+													>
 													<td>{a.prefailure ? t('smart.attrPrefail') : t('smart.attrOldAge')}</td>
 												</tr>
 											{/each}

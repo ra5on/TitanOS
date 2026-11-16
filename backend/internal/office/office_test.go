@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const sample = "# Bericht März\n\nDas NAS läuft **gut**, die Platten sind *kühl* und `tank` ist voll – 90 € Rest.\n\n" +
@@ -107,5 +108,47 @@ func TestPDF(t *testing.T) {
 				t.Fatalf("pdftotext lacks %q:\n%s", want, out[:min(len(out), 600)])
 			}
 		}
+	}
+}
+
+// A very long word (a minified line, base64) is cut in one pass: each line
+// as full as fits, nothing lost, and fast even for 100 000 characters.
+func TestWrapCutsALongWordInOnePass(t *testing.T) {
+	for _, c := range []struct {
+		word  string
+		width float64
+	}{
+		{strings.Repeat("abcdefghij", 30), 100},
+		{strings.Repeat("Wi.", 101), 37},
+		{strings.Repeat("x", 50), 1}, // narrower than a character: one per line
+	} {
+		lines := wrap([]Span{{Text: c.word}}, 10, false, c.width)
+		var joined strings.Builder
+		f := font{"F1", 10}
+		for i, line := range lines {
+			text := ""
+			for _, seg := range line {
+				text += seg.text
+			}
+			joined.WriteString(text)
+			if len([]rune(text)) > 1 && f.width(text) > c.width {
+				t.Fatalf("line %d too wide: %q", i, text)
+			}
+			// Every line but the last is as full as it can be.
+			if i < len(lines)-1 {
+				next := []rune(lines[i+1][0].text)[0]
+				if f.width(text+string(next)) <= c.width {
+					t.Fatalf("line %d could take %q: %q", i, next, text)
+				}
+			}
+		}
+		if joined.String() != c.word {
+			t.Fatalf("text changed: %q", joined.String())
+		}
+	}
+	start := time.Now()
+	lines := wrap([]Span{{Text: strings.Repeat("Zq", 50_000)}}, 10, false, 60)
+	if len(lines) < 100 || time.Since(start) > 3*time.Second {
+		t.Fatalf("%d lines in %v", len(lines), time.Since(start))
 	}
 }

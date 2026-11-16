@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -106,6 +108,25 @@ func TestFirewallRoutes(t *testing.T) {
 			if scope := publicScope(method, path); scope != "" {
 				t.Errorf("%s %s open to tokens: %s", method, path, scope)
 			}
+		}
+	}
+}
+
+// Confirming a network or firewall change shows that a person still
+// reaches the web UI: requests titand makes in-process as an account (MCP
+// tools, Home Assistant buttons) are refused like API tokens.
+func TestConfirmationsNeedTheWebSession(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	owner, _ := ts.users.Get("alex")
+	for _, route := range []string{"/api/v1/firewall/confirm", "/api/v1/network/confirm"} {
+		code, body := ts.server.internalAs(context.Background(), owner, "POST", route, nil)
+		if code != http.StatusForbidden || !strings.Contains(body, "browser_session_required") {
+			t.Errorf("%s in-process: %d %s", route, code, body)
+		}
+		// The web UI still gets through to the check of the change itself.
+		if res, body := ts.request("POST", route, nil); res.StatusCode == http.StatusForbidden {
+			t.Errorf("%s from the web UI: %d %s", route, res.StatusCode, body)
 		}
 	}
 }

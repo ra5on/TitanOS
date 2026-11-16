@@ -343,12 +343,14 @@ func (m *Manager) snapshotIdentity(ctx context.Context, volume, name string) (st
 	}
 	for _, line := range strings.Split(out, "\n") {
 		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
-		if ok && key == "UUID" && regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`).MatchString(strings.TrimSpace(value)) {
+		if ok && key == "UUID" && snapshotUUID.MatchString(strings.TrimSpace(value)) {
 			return strings.ToLower(strings.TrimSpace(value)), nil
 		}
 	}
 	return "", errors.New("snapshot UUID is unavailable")
 }
+
+var snapshotUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
 
 // ScheduledSnapshot takes a snapshot for a maintenance job and removes the
 // oldest beyond keep, or, with versions, those the rules by day, week and

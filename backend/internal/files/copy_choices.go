@@ -28,7 +28,7 @@ func validateChoices(src, dst Root, paths []string, choices map[string]CopyChoic
 				included = true
 			}
 		}
-		if !included {
+		if !included || src.secret(p) {
 			return ErrInvalid
 		}
 		if c.Action != "skip" && c.Action != "replace" && c.Action != "rename" && c.Action != "copy" {

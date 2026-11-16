@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"golang.org/x/sys/unix"
 )
 
 func TestMatchLikeFnmatch(t *testing.T) {
@@ -222,5 +224,32 @@ func TestManifestChecksumIsLowercase(t *testing.T) {
 	}
 	if manifest.SHA256 != strings.ToLower(sum) {
 		t.Fatalf("checksum %q", manifest.SHA256)
+	}
+}
+
+// Lost events (ENOBUFS when many come at once) do not end the listener:
+// the devices are looked at again and later events still arrive.
+func TestUeventsGoOnAfterLostEvents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	steps := []func([]byte) (int, error){
+		func([]byte) (int, error) { return 0, unix.ENOBUFS },
+		func(b []byte) (int, error) { return copy(b, "add@/x\x00ACTION=add\x00SUBSYSTEM=usb\x00"), nil },
+	}
+	var got []string
+	err := readUevents(ctx, func(b []byte) (int, error) {
+		if len(steps) == 0 {
+			cancel()
+			return 0, unix.EAGAIN
+		}
+		step := steps[0]
+		steps = steps[1:]
+		return step(b)
+	}, func(action, subsystem string) { got = append(got, action+" "+subsystem) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"add pci", "add usb"}) {
+		t.Fatalf("events: %v", got)
 	}
 }

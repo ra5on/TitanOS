@@ -342,7 +342,7 @@
 	}
 	.head a.btn {
 		grid-column: 1 / -1;
-		min-height: 40px;
+		min-height: 44px;
 		border-color: transparent;
 		background: none;
 		color: var(--accent);

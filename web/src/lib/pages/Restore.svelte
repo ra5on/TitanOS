@@ -50,7 +50,7 @@
 		async function look() {
 			try {
 				const res = await api.get<{ backups: Found[] }>('/setup/backups');
-				found = res.backups.slice(0, 10);
+				found = res.backups;
 				searchError = '';
 			} catch (err) {
 				searchError = apiErrorText(err);

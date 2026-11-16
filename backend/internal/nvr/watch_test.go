@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
@@ -1182,5 +1183,91 @@ func TestDeleteCameraNeedsTheStick(t *testing.T) {
 	}
 	if got := m.DeletedCameras(); len(got) != 1 || got[0].ID != "garten" {
 		t.Errorf("deleted cameras: %+v", got)
+	}
+}
+
+// Frigate's image gone from the engine (cleaned up while the NVR was off,
+// Docker moved to another volume): the NVR fetches it again instead of
+// creating the container from an image that is not there for ever.
+func TestImageGoneIsFetchedAgain(t *testing.T) {
+	r := newRig(t, true)
+	r.enable()
+	r.look()
+	r.look()
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	r.engine.mu.Lock()
+	r.engine.image = false
+	r.engine.state = docker.NVRState{}
+	r.engine.CreateError = func(docker.NVRSpec) error {
+		return errors.New("docker: No such image: " + "sha256:" + strings.Repeat("d", 64) + " (HTTP 404)")
+	}
+	r.engine.mu.Unlock()
+	for range 3 {
+		r.look()
+		r.advance(2 * time.Minute)
+	}
+	// Fetched again: the engine has the image once more.
+	deadline := time.Now().Add(5 * time.Second)
+	pulled := func() bool {
+		r.engine.mu.Lock()
+		defer r.engine.mu.Unlock()
+		return r.engine.image
+	}
+	for !pulled() {
+		if time.Now().After(deadline) {
+			t.Fatalf("not fetched again: image %+v, phase %s", r.m.Status(context.Background()).Image, r.phase())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A restart or a new container the engine refused once is done at the next
+// look: the change is not forgotten while Frigate keeps the old one.
+func TestRefusedChangeIsAppliedLater(t *testing.T) {
+	r := newRig(t, true)
+	r.up()
+	once := func() func() error {
+		done := false
+		return func() error {
+			if done {
+				return nil
+			}
+			done = true
+			return errors.New("docker: timeout (HTTP 500)")
+		}
+	}
+	// A changed camera: Frigate has to read the new file.
+	r.engine.mu.Lock()
+	r.engine.RestartError = once()
+	r.engine.mu.Unlock()
+	c, _ := r.m.Camera("einfahrt")
+	c.Record.RetainDays = 30
+	if _, err := r.m.UpdateCamera(context.Background(), "einfahrt", c, CameraOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	starts := r.engine.Starts
+	r.look()
+	r.advance(2 * time.Minute)
+	r.look()
+	if r.engine.Starts != starts+1 {
+		t.Fatalf("restart after a refused one: starts %d, was %d", r.engine.Starts, starts)
+	}
+	// The restream changes the container: removing the old one fails once.
+	r.engine.mu.Lock()
+	r.engine.RemoveError = once()
+	r.engine.mu.Unlock()
+	s := r.m.Settings()
+	s.RTSPOut = true
+	if err := r.m.SetSettings(context.Background(), s, SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	creates := r.engine.Creates
+	r.look()
+	r.advance(2 * time.Minute)
+	r.look()
+	if spec := r.engine.Spec(); r.engine.Creates != creates+1 || len(spec.Ports) != 3 {
+		t.Fatalf("new container after a refused removal: creates %d, ports %+v", r.engine.Creates, spec.Ports)
 	}
 }

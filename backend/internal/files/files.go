@@ -358,6 +358,9 @@ func (m *Manager) Rename(root Root, from, to string) error {
 	if strings.HasPrefix(to+"/", from+"/") {
 		return ErrInvalid // a folder cannot move into itself
 	}
+	if root.secret(from) || root.secret(to) {
+		return ErrNotFound // does not exist for this root (.env for a token)
+	}
 	if m.protected(root, from) || m.protected(root, to) {
 		return ErrProtected
 	}
@@ -398,6 +401,9 @@ func (m *Manager) Delete(root Root, paths []string, user string, permanent bool)
 	for _, p := range paths {
 		if m.protected(root, p) {
 			return ErrProtected
+		}
+		if cleaned, err := clean(p); err == nil && root.secret(cleaned) {
+			return ErrNotFound
 		}
 		if cleaned, err := clean(p); !permanent && (err != nil || !root.recyclable(cleaned)) {
 			if err != nil {

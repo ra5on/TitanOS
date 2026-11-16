@@ -51,7 +51,9 @@ func (a networkArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("PUT /api/v1/network", g.admin(g.clusterLocal(a.handleNetworkChange)))
 	mux.HandleFunc("PUT /api/v1/network/options", g.admin(g.clusterLocal(a.handleNetworkOptions)))
 	mux.HandleFunc("POST /api/v1/network/bridge", g.admin(g.clusterLocal(a.handleNetworkBridge)))
-	mux.HandleFunc("POST /api/v1/network/confirm", g.admin(g.clusterLocal(a.handleNetworkConfirm)))
+	// Confirming shows that a person still reaches the web UI over the new
+	// settings: never an API token, MCP, the KI-Agent or another node.
+	mux.HandleFunc("POST /api/v1/network/confirm", g.admin(g.clusterLocal(g.browserOnly(a.handleNetworkConfirm))))
 	mux.HandleFunc("POST /api/v1/network/revert", g.admin(a.handleNetworkRevert))
 }
 

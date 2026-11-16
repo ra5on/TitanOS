@@ -365,7 +365,8 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 		export := Export{ID: id, Camera: record.Camera, Name: record.Name, From: record.From, To: record.To, Created: created, State: ExportFailed, Owner: record.Owner, Event: record.Event}
 		if !record.Failed {
 			var stored frigateExport
-			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/exports/"+url.PathEscape(id), nil, nil, &stored); err == nil && stored.ID == id && !stored.InProgress {
+			asked := m.frigate.call(ctx, http.MethodGet, base, "/api/exports/"+url.PathEscape(id), nil, nil, &stored)
+			if err := asked; err == nil && stored.ID == id && !stored.InProgress {
 				kept := Export{ID: id, Camera: stored.Camera, Name: stored.Name, Created: stored.Date, State: ExportDone, file: path.Base(stored.VideoPath), thumb: stored.ThumbPath}
 				kept.SizeBytes = m.exportSize(ctx, base, kept)
 				add(kept)
@@ -373,7 +374,9 @@ func (m *Manager) Exports(ctx context.Context, owner string, all bool) ([]Export
 			}
 			var job frigateJob
 			if err := m.frigate.call(ctx, http.MethodGet, base, "/api/jobs/export/"+url.PathEscape(id), nil, nil, &job); err != nil {
-				if frigateStatus(err) == http.StatusNotFound {
+				// Gone only when Frigate knows neither the export nor its
+				// job; a busy or slow answer says nothing about it.
+				if frigateStatus(err) == http.StatusNotFound && frigateStatus(asked) == http.StatusNotFound {
 					gone = append(gone, id)
 				}
 				continue

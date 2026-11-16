@@ -661,6 +661,18 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
       .evaluateAll((a) => a.map((x) => x.textContent.trim()));
   await search.fill("ssh");
   await side.locator(".items .item.result").first().waitFor();
+  // The hits settle a moment after the first one shows (1.02: read too
+  // early, the test saw the list of the half-typed word).
+  await page
+    .waitForFunction(
+      () =>
+        document
+          .querySelector(".items .item.result .two > span")
+          ?.textContent?.trim() === "SSH-Zugang einschalten",
+      null,
+      { timeout: 5000 },
+    )
+    .catch(() => {});
   check(
     (await labels())[0] === "SSH-Zugang einschalten",
     `side bar search "ssh" finds Zugang › SSH first (${await labels()})`,
@@ -704,6 +716,27 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
       .getByRole("searchbox")
       .evaluate((el) => el === document.activeElement),
     "the magnifier of the folded side bar opens the search",
+  );
+  await made.ctx.close();
+}
+
+// Durchsicht 102: a console asked for by another window (/terminal?open=…)
+// stays closed once its tab is ended, and a new tab keeps the focus.
+if (!allOnly) {
+  const made = await create("owner", "graphit", 1280);
+  const { page } = made;
+  const request = { kind: "ct", container: "immich", title: "immich" };
+  await page.goto(
+    base + "/terminal?open=" + encodeURIComponent(JSON.stringify(request)),
+  );
+  const tab = page.getByRole("tab", { name: /immich/ });
+  await tab.waitFor();
+  // A container console ends without asking.
+  await page.getByRole("button", { name: "Sitzung immich beenden" }).click();
+  await page.waitForTimeout(600);
+  check(
+    (await tab.count()) === 0,
+    "an ended console of a request does not open again",
   );
   await made.ctx.close();
 }

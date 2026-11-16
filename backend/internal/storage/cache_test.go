@@ -618,3 +618,31 @@ func TestCacheCleanerChangesNothingInDevelopmentMode(t *testing.T) {
 		t.Fatalf("cache touched in development mode: %+v %v\n%s", cfg.Cache, *zeroed, runner.dm())
 	}
 }
+
+// A write cache whose SSD is missing keeps its volume unmounted. Switching
+// it to a read cache is refused: saved as one, the array would be mounted
+// without the blocks only the SSD holds, and the SSD zeroed when it is back.
+func TestWriteCacheThatIsNotRunningStaysAWriteCache(t *testing.T) {
+	ctx := context.Background()
+	m, _ := cacheManager(t)
+	m.volumes[0].Cache = &CacheConfig{Mode: "writeback", MetaUUID: testMetaUUID, DataUUID: testDataUUID}
+	m.saveVolumes(m.volumes)
+	cachedArray(t, m) // SSD absent
+	if _, err := m.mountSource(ctx, m.volumes[0]); err == nil {
+		t.Fatal("write cache without SSD mounted")
+	}
+	if err := m.SetCacheMode(ctx, "tank", "writethrough"); !errors.Is(err, ErrNotPossible) {
+		t.Fatalf("switch while not running: %v", err)
+	}
+	cfg, _ := m.find("tank")
+	if cfg.Cache.Mode != "writeback" {
+		t.Fatalf("saved mode %q", cfg.Cache.Mode)
+	}
+	now := time.Now()
+	m.clock = func() time.Time { return now }
+	_, _ = m.mountSource(ctx, cfg)
+	now = now.Add(3 * time.Minute)
+	if src, err := m.mountSource(ctx, cfg); err == nil {
+		t.Fatalf("mounted %q without the write cache SSD", src)
+	}
+}

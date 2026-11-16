@@ -17,7 +17,8 @@ func (m *Manager) wsOpen(ctx context.Context) (*websocket.Conn, error) {
 	m.mu.Lock()
 	s, client := m.settings, m.client
 	m.mu.Unlock()
-	if s.URL == "" || s.Token == "" {
+	// A connection switched off is not used, as for REST (do).
+	if !s.Enabled || s.URL == "" || s.Token == "" {
 		return nil, ErrOff
 	}
 	address := "ws" + strings.TrimPrefix(s.URL, "http") + "/api/websocket"

@@ -191,8 +191,16 @@
 			: job.state === 'done'
 				? 100
 				: 0;
-	const cancel = (job: CopyJob) =>
-		api.post(`/files/jobs/${job.id}/cancel`).then(fetchJobs, fetchJobs);
+	// A refused cancel says why, like the other actions (it went by unseen).
+	async function cancel(job: CopyJob) {
+		retryError = '';
+		try {
+			await api.post(`/files/jobs/${job.id}/cancel`);
+		} catch (err) {
+			retryError = apiErrorText(err);
+		}
+		await fetchJobs();
+	}
 </script>
 
 {#each notices as notice (notice.id)}<div class="notice" role="status">

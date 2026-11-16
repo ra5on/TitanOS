@@ -341,9 +341,16 @@ func (m *Manager) SetCacheMode(ctx context.Context, name, mode string) error {
 	if !slices.Contains(cacheModes, mode) || volume.Cache.Removing {
 		return ErrInvalidLevel
 	}
-	if volume.Cache.Mode == "writeback" && mode == "writethrough" && m.cacheActive(ctx, volume) {
+	if volume.Cache.Mode == "writeback" && mode == "writethrough" {
 		// A read cache is mounted without its SSD, so the switch is only
-		// saved once no block lives on the SSD alone.
+		// saved once no block lives on the SSD alone. A write cache that is
+		// not running (SSD missing, volume locked) cannot write back: saved
+		// as a read cache, the array would be mounted without its blocks and
+		// the SSD's metadata zeroed when it is back. DisableCache is the way
+		// for an SSD that is gone for good.
+		if !m.cacheActive(ctx, volume) {
+			return fmt.Errorf("%w: the write cache of %s is not running; mount the volume first so that its blocks can be written back", ErrNotPossible, name)
+		}
 		if err := m.flushCache(ctx, volume, cacheFlushWait); err != nil {
 			_ = m.reloadCache(context.WithoutCancel(ctx), volume, "writeback", cachePolicy) // going back to write-back; the flush error is returned
 			if errors.Is(err, errCacheDirty) {

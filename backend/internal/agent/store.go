@@ -1041,6 +1041,24 @@ func (s *Store) NotesMeta(user string) (NotesMeta, error) {
 
 // SaveNotesMeta writes notes.json.
 func (s *Store) SaveNotesMeta(user string, m NotesMeta) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "notes.json", m)
+}
+
+// UpdateNotesMeta changes notes.json in one step under the store's lock,
+// like UpdateMemories: two pins at once (two devices, the page and a
+// rename) both arrive. change returns false to leave the file as it is.
+func (s *Store) UpdateNotesMeta(user string, change func(*NotesMeta) bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var m NotesMeta
+	if err := s.read(user, "notes.json", &m, 1<<20); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if !change(&m) {
+		return nil
+	}
 	return s.write(user, "notes.json", m)
 }
 

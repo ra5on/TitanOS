@@ -20,6 +20,8 @@ func (s *Server) haHub() *homeassistant.Hub {
 	s.haHubOnce.Do(func() {
 		if s.opts.HomeAssistants == nil && s.opts.HomeAssistant != nil {
 			s.opts.HomeAssistants = homeassistant.NewHub(s.opts.Store, s.opts.HomeAssistant)
+			// A hub refuses changes until it has read its list.
+			_ = s.opts.HomeAssistants.Load() // a list that does not read keeps the hub refusing, which is what it is for
 		}
 	})
 	return s.opts.HomeAssistants

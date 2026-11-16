@@ -287,3 +287,74 @@ func TestDiskWakeOffNotesNothing(t *testing.T) {
 		t.Fatal("accesses noted although no disk may sleep")
 	}
 }
+
+// A history file that cannot be read for now (permissions, I/O) is not
+// damaged: the next wake must not replace it with this start's wakes.
+func TestUnreadableWakeHistoryIsNotOverwritten(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	m, _, _, now := wakeManager(t)
+	file := filepath.Join(m.mountRoot, "fast", ".titanos", "disksleep", "wakes.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"version":1,"disks":{"serial:OLD":{"wakes":[{"at":"2026-11-01T00:00:00Z","causes":[{"code":"unknown"}]}]}}}`
+	if err := os.WriteFile(file, []byte(old), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.diskWakes, m.diskWakesLoaded, m.diskWakesDirty = nil, false, false
+	m.mu.Unlock()
+	m.diskWakesTried = time.Time{}
+	wakeIO(t, m, "sde", 2)
+	wakeTicks(t, m, now, 0)
+	os.Chmod(file, 0o600)
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "serial:OLD") {
+		t.Fatalf("stored history replaced after a failed read: %s", data)
+	}
+}
+
+// Merging the stored history does not write into the slice of wakes the
+// status reads without the lock (go test -race).
+func TestMergingWakesLeavesTheStatusAlone(t *testing.T) {
+	m, _, _, now := wakeManager(t)
+	key := "serial:E1"
+	wakes := make([]DiskWake, 2, 25)
+	wakes[0] = DiskWake{At: time.Unix(1_700_000_100, 0), Causes: []diskwake.Cause{{Code: "unknown"}}}
+	wakes[1] = DiskWake{At: time.Unix(1_700_000_000, 0), Causes: []diskwake.Cause{{Code: "unknown"}}}
+	file := filepath.Join(m.mountRoot, "fast", ".titanos", "disksleep", "wakes.json")
+	os.MkdirAll(filepath.Dir(file), 0o700)
+	os.WriteFile(file, []byte(`{"version":1,"disks":{"serial:E1":{"wakes":[{"at":"2030-01-01T00:00:00Z","causes":[{"code":"unknown"}]}]}}}`), 0o600)
+	m.mu.Lock()
+	m.diskWakes = map[string]wakeLog{key: {Wakes: wakes}}
+	m.diskWakesLoaded, m.diskWakesDirty = false, false
+	m.mu.Unlock()
+	m.diskWakesTried = time.Time{}
+	held, _, _ := m.wakesOf(key, *now)
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				m.wakesOf(key, *now)
+			}
+		}
+	}()
+	time.Sleep(time.Millisecond)
+	m.actions.Lock()
+	m.syncWakes(map[string]bool{}, *now)
+	m.actions.Unlock()
+	close(stop)
+	<-done
+	if !wakes[0].At.Equal(time.Unix(1_700_000_100, 0)) || len(held) != 2 {
+		t.Fatalf("the wakes in RAM were changed in place: %v", wakes)
+	}
+	if got, _, _ := m.wakesOf(key, *now); len(got) != 3 || got[0].At.Year() != 2030 {
+		t.Fatalf("merged history %v", got)
+	}
+}
