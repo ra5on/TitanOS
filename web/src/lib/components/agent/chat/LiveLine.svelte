@@ -159,7 +159,8 @@
 		margin: 0;
 		min-height: 32px;
 		font-size: 0.95em;
-		color: var(--muted);
+		/* The text's colour can be chosen (Einstellungen › Darstellung). */
+		color: var(--ag-busy-text, var(--muted));
 		animation: come 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 	@keyframes come {
@@ -184,7 +185,7 @@
 	.took {
 		font-size: 0.86em;
 		font-variant-numeric: tabular-nums;
-		color: var(--muted);
+		color: var(--ag-busy-text, var(--muted));
 		opacity: 0.8;
 	}
 	/* The word rolls in from below when it changes. Grey like the rest of
@@ -193,7 +194,7 @@
 	.busy-word {
 		display: inline-block;
 		animation: roll 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
-		color: var(--muted);
+		color: var(--ag-busy-text, var(--muted));
 	}
 	@keyframes roll {
 		from {
@@ -217,7 +218,7 @@
 		width: 18px;
 		height: 18px;
 		fill: none;
-		stroke: var(--ag-warm, var(--accent));
+		stroke: var(--ag-dots, var(--ag-warm, var(--accent)));
 		stroke-width: 1.8;
 		stroke-linecap: round;
 		stroke-linejoin: round;
@@ -248,7 +249,7 @@
 	.sweep {
 		/* Grey like in the chat apps: the orange dots say that something runs,
 		   the light over the grey line says that it is still running. */
-		--sweep: var(--muted);
+		--sweep: var(--ag-busy-text, var(--muted));
 		min-width: 0;
 		overflow-wrap: anywhere;
 		color: transparent;

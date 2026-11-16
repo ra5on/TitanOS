@@ -701,6 +701,11 @@ export type Look = {
 	motion: 'full' | 'reduced' | 'off';
 	rate: number;
 	mic: 'tap' | 'hold';
+	/** Colour of the working dots, "#rrggbb"; empty: the agent's orange
+	 *  (owner 16 Nov 2026: "die Farbe für die Punkte und den Text aussuchen"). */
+	dotColor: string;
+	/** Colour of the text beside the dots, "#rrggbb"; empty: the theme's grey. */
+	textColor: string;
 };
 
 /** Settings that belong to the device, not the account. */
@@ -725,6 +730,8 @@ export const defaultLook = (): Look => ({
 	motion: 'full',
 	rate: 1,
 	mic: 'tap',
+	dotColor: '',
+	textColor: '',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -734,6 +741,8 @@ export function sanitizeLook(v: unknown): Look {
 	const pick = <T extends string>(x: unknown, list: readonly T[], def: T): T =>
 		list.includes(x as T) ? (x as T) : def;
 	const bool = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def);
+	const color = (x: unknown) =>
+		typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x) ? x.toLowerCase() : '';
 	const num = (x: unknown, min: number, max: number, def: number) =>
 		typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def;
 	return {
@@ -755,6 +764,8 @@ export function sanitizeLook(v: unknown): Look {
 		motion: pick(o.motion, ['full', 'reduced', 'off'], d.motion),
 		rate: num(o.rate, 0.5, 2, d.rate),
 		mic: pick(o.mic, ['tap', 'hold'], d.mic),
+		dotColor: color(o.dotColor),
+		textColor: color(o.textColor),
 	};
 }
 

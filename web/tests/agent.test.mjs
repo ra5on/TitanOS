@@ -248,3 +248,14 @@ test('a waiting step gets a plain title (PLAN 68)', () => {
 	// Unknown: the page shows the summary.
 	assert.equal(approvalTitle({ tool: 'code_run', args: {}, summary: 'print(1)' }), null);
 });
+
+test('the colours of the working line are "#rrggbb" or empty (owner, 16 Nov 2026)', () => {
+	const d = sanitizeLook({});
+	assert.equal(d.dotColor, '');
+	assert.equal(d.textColor, '');
+	const ok = sanitizeLook({ dotColor: '#3E63DD', textColor: '#30a46c' });
+	assert.equal(ok.dotColor, '#3e63dd');
+	assert.equal(ok.textColor, '#30a46c');
+	for (const bad of ['red', '#fff', 'url(x)', 'var(--x)', '#12345g', 42, null])
+		assert.equal(sanitizeLook({ dotColor: bad, textColor: bad }).dotColor, '', String(bad));
+});

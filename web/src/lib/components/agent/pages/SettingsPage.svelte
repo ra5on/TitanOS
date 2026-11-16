@@ -16,6 +16,8 @@
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
+	import ColorPick from '../ColorPick.svelte';
+	import BusyFigure from '../BusyFigure.svelte';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 
 	const PARTS = [
@@ -343,6 +345,38 @@
 						<input type="checkbox" class="switch" bind:checked={look.compact} />
 					</label>
 				</div>
+				<!-- 1.01 (owner 16 Nov 2026): the colours of the working dots and of
+				     the text beside them; empty is the agent's orange and the
+				     theme's grey. -->
+				<div class="grp">
+					<div class="row col">
+						<span class="t"><strong>{t('agent.set.dotColor')}</strong></span>
+						<ColorPick
+							bind:value={look.dotColor}
+							label={t('agent.set.dotColor')}
+							autoKey="agent.set.colorAutoDots"
+						/>
+					</div>
+					<div class="row col">
+						<span class="t"><strong>{t('agent.set.textColor')}</strong></span>
+						<ColorPick
+							bind:value={look.textColor}
+							label={t('agent.set.textColor')}
+							autoKey="agent.set.colorAutoText"
+							text
+						/>
+					</div>
+					<div
+						class="row busy-preview"
+						role="img"
+						aria-label={t('agent.set.colorPreview')}
+						style:--ag-dots={look.dotColor || null}
+						style:--ag-busy-text={look.textColor || null}
+					>
+						<BusyFigure kind="" calm={look.motion === 'off'} />
+						<span class="word">{t('agent.busy.1')}</span>
+					</div>
+				</div>
 
 				<p class="cap">{t('agent.set.inChat')}</p>
 				<div class="grp">
@@ -495,5 +529,11 @@
 	}
 	.field {
 		max-width: 46%;
+	}
+	.busy-preview {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		color: var(--ag-busy-text, var(--muted));
 	}
 </style>

@@ -302,6 +302,8 @@
 	class:framed={inWindow}
 	data-size={ag.look.fontSize}
 	style:--agent-head={ag.phone && headH ? `${headH}px` : null}
+	style:--ag-dots={ag.look.dotColor || null}
+	style:--ag-busy-text={ag.look.textColor || null}
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 
