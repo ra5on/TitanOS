@@ -28,6 +28,8 @@ import type errorsDe from './features/errors.de.json';
 import type nvrDe from './features/nvr.de.json';
 // PLAN 87: the phone (home screen, gestures, VM screen by touch).
 import type phoneDe from './features/phone.de.json';
+// 1.01: the runs of the KI-Agent (several chats at once).
+import type runsDe from './features/runs.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -46,7 +48,8 @@ type Messages = typeof deBase &
 	typeof menubarDe &
 	typeof errorsDe &
 	typeof nvrDe &
-	typeof phoneDe;
+	typeof phoneDe &
+	typeof runsDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -70,6 +73,7 @@ const FILES = {
 			import('./features/errors.de.json'),
 			import('./features/nvr.de.json'),
 			import('./features/phone.de.json'),
+			import('./features/runs.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -91,6 +95,7 @@ const FILES = {
 			import('./features/errors.en.json'),
 			import('./features/nvr.en.json'),
 			import('./features/phone.en.json'),
+			import('./features/runs.en.json'),
 		]),
 };
 

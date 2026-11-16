@@ -315,10 +315,19 @@
 	// The tick: only after a run this view saw end with an answer.
 	let done = $state(false);
 	let wasBusy = false;
+	let busyChat = '';
 	let doneTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
-		const ended = wasBusy && !busy;
+		// Another chat opened while one ran (1.01: runs per chat): its run
+		// did not end here.
+		const same = chat.id === busyChat;
+		busyChat = chat.id;
+		const ended = same && wasBusy && !busy;
 		wasBusy = busy;
+		if (!same) {
+			clearTimeout(doneTimer);
+			done = false;
+		}
 		if (busy) {
 			clearTimeout(doneTimer);
 			done = false;

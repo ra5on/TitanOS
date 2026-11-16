@@ -5,6 +5,7 @@ import {
 	blocks,
 	groupChats,
 	levelLabel,
+	mergeEntries,
 	parseEvent,
 	presetOf,
 	sanitizeLook,
@@ -23,6 +24,34 @@ test('server-sent events of a running chat', () => {
 	assert.deepEqual(parseEvent('event: end\ndata: {}'), { type: 'end' });
 	assert.equal(parseEvent(': keep-alive'), null);
 	assert.equal(parseEvent('event: entry\ndata: {broken'), null);
+});
+
+test('a snapshot of the run: parsed, and its entries take their place by id (1.01)', () => {
+	const snap = parseEvent(
+		'event: snapshot\ndata: {"type":"snapshot","entries":[{"id":"a1","role":"assistant"}],"content":"Hal","state":"running"}',
+	);
+	assert.equal(snap?.type, 'snapshot');
+	assert.equal(snap?.content, 'Hal');
+	const e = (id, role = 'tool') => ({ id, role, at: '' });
+	// The page had the question and an older copy of the first line.
+	assert.deepEqual(
+		mergeEntries([e('u1', 'user'), e('a1', 'assistant')], [e('a1', 'assistant'), e('t1')]).map(
+			(x) => x.id,
+		),
+		['u1', 'a1', 't1'],
+	);
+	// A step that waited: its answer stands before the calls not made yet.
+	assert.deepEqual(
+		mergeEntries([e('u1', 'user'), e('skip1'), e('skip2')], [e('ok'), e('skip1'), e('skip2')]).map(
+			(x) => x.id,
+		),
+		['u1', 'ok', 'skip1', 'skip2'],
+	);
+	// Nothing new: the chat stays as it is.
+	assert.deepEqual(
+		mergeEntries([e('u1', 'user')], []).map((x) => x.id),
+		['u1'],
+	);
 });
 
 test('chats are grouped by day, pinned first', () => {

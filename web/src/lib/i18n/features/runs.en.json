@@ -1,0 +1,10 @@
+{
+	"agent.runs.limitOne": "A chat is already running. The setting “Runs at once per account” allows no more at the same time. Wait until it is done, or stop it.",
+	"agent.runs.limitMany": "{n} chats are already running. The setting “Runs at once per account” allows no more at the same time. Wait until one is done, or stop one.",
+	"agent.runs.setting": "Runs at once per account",
+	"agent.runs.settingHint": "How many chats of one account may work at the same time. A chat always has only one run. Planned tasks, reactions to notifications and questions from Home Assistant do not count and always start.",
+	"agent.runs.one": "1 chat",
+	"agent.runs.many": "{n} chats",
+	"agent.runs.ollamaHint": "For {n} runs to really work at once, Ollama must run with OLLAMA_NUM_PARALLEL={n} or more, otherwise they wait for each other. A single answer does not get faster, and every run takes memory of its own for its context. TitanOS does not manage Ollama and does not set this there itself.",
+	"agent.runs.providerHint": "The same limit applies with a provider. Every run sends its own requests; the provider's limits and costs apply to each of them."
+}
