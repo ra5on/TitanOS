@@ -96,13 +96,16 @@ type usersArea struct {
 	nvrForgetUser func(name string)
 	// goJob runs the clearing in the background; Close waits for it.
 	goJob jobFunc
+	// agentForgetUser removes the agent's settings and documents of the account.
+	agentForgetUser func(name string)
 }
 
 // usersArea is the area of the server.
 func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
-		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob}
+		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
+		agentForgetUser: s.docsForgetUser}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -302,6 +305,7 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
 	a.goJob(func(context.Context) { a.viewerForgetUser(target.Name) })
+	a.goJob(func(context.Context) { a.agentForgetUser(target.Name) })
 	a.nvrForgetUser(target.Name)
 	a.prefs.forget(target.Name)
 	a.notify.ForgetPersonal(target.Name)

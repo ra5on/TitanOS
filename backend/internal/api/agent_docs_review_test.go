@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,5 +160,51 @@ func TestDocsBillDueOfferedOnce(t *testing.T) {
 	}
 	if items := ts.server.agentInbox("alex"); len(items) != 1 {
 		t.Fatalf("deadline offered %d times: %+v", len(items), items)
+	}
+}
+
+// Review 1.02: deleting an account left its own settings of the agent
+// (with the password of its mailbox) and its document memory; a new
+// account of the same name took them over, and the paperwork fetched the
+// former person's mail into the new person's folder.
+func TestDeletedAccountLeavesNoDocuments(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	ts.users.Create("gast", testPassword, "user")
+	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
+	var settings map[string]any
+	json.Unmarshal(body, &settings)
+	settings["users"] = []string{"gast"}
+	ts.request("PUT", "/api/v1/agent/settings", settings)
+	ts.server.agentSyncShare()
+	gastHome := filepath.Join(filepath.Dir(home), "gast")
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	docsMine(t, ts, guest, map[string]any{"docs": map[string]any{"on": true}, "paper": map[string]any{"on": true, "mail": map[string]any{"enabled": true, "host": "imap.example.org", "user": "gast", "password": "alt-geheim-1"}}})
+	os.MkdirAll(filepath.Join(gastHome, "Dokumente"), 0o755)
+	os.WriteFile(filepath.Join(gastHome, "Dokumente", "Arzt.txt"), []byte("Befund Diagnose Zahnarzt vertraulich"), 0o644)
+	g, _ := ts.users.Get("gast")
+	m, _ := ts.server.agentFeaturesOf("gast")
+	if err := ts.server.docsRun(context.Background(), g, m.Docs, true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/users/gast", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", res.StatusCode, body)
+	}
+	// The clearing runs in the background.
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if m, _ := ts.server.agentFeaturesOf("gast"); m.Paper.Mail.Password == "" {
+			break
+		}
+	}
+	ts.users.Create("gast", testPassword, "user")
+	m2, _ := ts.server.agentFeaturesOf("gast")
+	if m2.Paper.Mail.Password != "" || m2.Paper.On || m2.Docs.On {
+		t.Fatalf("settings taken over: %+v", m2)
+	}
+	var idx docindex.Index
+	ts.server.docsRead("gast", docsIndexFile, &idx, maxDocsIndex)
+	if _, kept := idx.Get("share/KI-Agent", "Dokumente/Arzt.txt"); kept {
+		t.Fatal("document memory taken over")
 	}
 }
