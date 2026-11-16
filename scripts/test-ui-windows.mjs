@@ -741,6 +741,33 @@ if (!allOnly) {
   await made.ctx.close();
 }
 
+// 1.03 (owner 16 Nov 2026): the last NAS shell closed in the terminal stays
+// closed; "Neue Shell" opens the next one.
+if (!allOnly) {
+  const made = await create("owner", "graphit", 1280);
+  const { page, ctx } = made;
+  await ctx.route("**/api/v1/terminal", (route) =>
+    route.fulfill({ json: { enabled: true, nasShell: true } }),
+  );
+  await page.goto(base + "/terminal");
+  const tab = page.getByRole("tab", { name: /nas/ });
+  await tab.waitFor();
+  check((await tab.count()) === 1, "an empty terminal opens one NAS shell");
+  await page.getByRole("button", { name: "Sitzung nas beenden" }).click();
+  const again = page.getByRole("button", { name: "Neue Shell" });
+  await again.waitFor();
+  await page.waitForTimeout(600);
+  check((await tab.count()) === 0, "the closed last shell does not open again");
+  check(
+    (await again.boundingBox()).height >= 44,
+    "Neue Shell is a full touch target",
+  );
+  await again.click();
+  await tab.waitFor();
+  check((await tab.count()) === 1, "Neue Shell opens a NAS shell");
+  await made.ctx.close();
+}
+
 // Script errors of the checked pages; the visual pass below also opens pages
 // whose data the shared fixtures do not have (they have scripts of their own).
 // A reload of the dev server while a page loads is no error of the page.

@@ -30,5 +30,7 @@
 	"agent.f.protect.e.declineConfirm": "{name} gets no access to {shares} and the emergency handbook. The person sees that the request was declined and can ask again later.",
 	"agent.f.protect.e.endTitle": "End the emergency access of {name}?",
 	"agent.f.protect.e.endConfirm": "{name} loses the read access to {shares} and the emergency handbook at once. Exactly what the emergency access gave is taken back.",
-	"agent.f.protect.e.endNow": "End access"
+	"agent.f.protect.e.endNow": "End access",
+	"terminal.newShell": "New shell",
+	"terminal.lastClosed": "The last NAS shell has ended."
 }

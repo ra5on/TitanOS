@@ -30,5 +30,7 @@
 	"agent.f.protect.e.declineConfirm": "{name} bekommt keinen Zugang auf {shares} und das Notfallhandbuch. Die Person sieht, dass der Antrag abgelehnt wurde, und kann später einen neuen stellen.",
 	"agent.f.protect.e.endTitle": "Notfallzugang für {name} beenden?",
 	"agent.f.protect.e.endConfirm": "{name} verliert sofort den lesenden Zugang auf {shares} und das Notfallhandbuch. Zurückgenommen wird genau das, was der Notfallzugang gegeben hat.",
-	"agent.f.protect.e.endNow": "Zugang beenden"
+	"agent.f.protect.e.endNow": "Zugang beenden",
+	"terminal.newShell": "Neue Shell",
+	"terminal.lastClosed": "Die letzte NAS-Shell ist beendet."
 }
