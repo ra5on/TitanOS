@@ -293,35 +293,52 @@ func (m *Manager) Remove(name string, deleteData bool) error {
 // View returns the settings with what each source stores.
 func (m *Manager) View() View {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	view := View{Enabled: m.settings.Enabled, Volume: m.settings.Volume, Port: m.port(), Sources: []SourceView{}, Listening: []string{}, Problem: m.problem}
 	for address := range m.servers {
 		view.Listening = append(view.Listening, address)
 	}
 	slices.Sort(view.Listening)
+	stats := map[string]stat{}
+	var stale []string
 	for _, source := range m.settings.Sources {
-		item := SourceView{Name: source.Name, Created: source.Created}
-		if m.settings.Volume != "" {
-			st := m.measure(source.Name)
-			item.Bytes = st.bytes
-			if !st.last.IsZero() {
-				last := st.last
-				item.Last = &last
-			}
+		view.Sources = append(view.Sources, SourceView{Name: source.Name, Created: source.Created})
+		if cached, ok := m.statCache[source.Name]; ok && time.Since(cached.at) < time.Minute {
+			stats[source.Name] = cached
+		} else {
+			stale = append(stale, source.Name)
 		}
-		view.Sources = append(view.Sources, item)
+	}
+	m.mu.Unlock()
+	if view.Volume == "" {
+		return view
+	}
+	// Walking a repository of a few hundred thousand packs takes a while;
+	// the server does not wait for it (authorize takes the same lock).
+	for _, name := range stale {
+		st := measure(m.repoDir(view.Volume, name))
+		stats[name] = st
+		m.mu.Lock()
+		if m.settings.Volume == view.Volume && slices.ContainsFunc(m.settings.Sources, func(s Source) bool { return s.Name == name }) {
+			m.statCache[name] = st
+		}
+		m.mu.Unlock()
+	}
+	for i, item := range view.Sources {
+		st := stats[item.Name]
+		view.Sources[i].Bytes = st.bytes
+		if !st.last.IsZero() {
+			last := st.last
+			view.Sources[i].Last = &last
+		}
 	}
 	return view
 }
 
-// measure adds up what a source stores; the result is kept for a minute.
-// The caller holds the lock.
-func (m *Manager) measure(name string) stat {
-	if cached, ok := m.statCache[name]; ok && time.Since(cached.at) < time.Minute {
-		return cached
-	}
+// measure adds up what the repository in dir stores. The caller keeps the
+// result for a minute.
+func measure(dir string) stat {
 	st := stat{at: time.Now()}
-	_ = filepath.WalkDir(m.repoDir(m.settings.Volume, name), func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
+	_ = walkDir(dir, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 		if err != nil || entry.IsDir() {
 			return nil
 		}
@@ -333,9 +350,11 @@ func (m *Manager) measure(name string) stat {
 		}
 		return nil
 	})
-	m.statCache[name] = st
 	return st
 }
+
+// walkDir walks a repository; a variable so that tests can hold it.
+var walkDir = filepath.WalkDir
 
 // authorize returns the source a request belongs to, or "".
 func (m *Manager) authorize(r *http.Request) (name, volume string) {
@@ -545,23 +564,55 @@ func (m *Manager) list(w http.ResponseWriter, r *http.Request, repo *os.Root, ki
 		Size int64  `json:"size"`
 	}
 	items := []item{}
-	collect := func(folder string) {
-		entries, _ := fs.ReadDir(repo.FS(), folder)
+	// A folder that is not there holds nothing. One that cannot be read is
+	// an error, never an empty list: a sender would take it for a
+	// repository without snapshots, index or packs and upload or prune
+	// accordingly.
+	readDir := func(folder string) ([]fs.DirEntry, error) {
+		entries, err := fs.ReadDir(repo.FS(), folder)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return entries, err
+	}
+	collect := func(folder string) error {
+		entries, err := readDir(folder)
+		if err != nil {
+			return err
+		}
 		for _, entry := range entries {
-			if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && blobForm.MatchString(entry.Name()) {
+			if !blobForm.MatchString(entry.Name()) {
+				continue
+			}
+			info, err := entry.Info()
+			if errors.Is(err, fs.ErrNotExist) {
+				continue // removed meanwhile
+			}
+			if err != nil {
+				return err
+			}
+			if info.Mode().IsRegular() {
 				items = append(items, item{entry.Name(), info.Size()})
 			}
 		}
+		return nil
 	}
+	var err error
 	if kind == "data" {
-		subs, _ := fs.ReadDir(repo.FS(), "data")
+		var subs []fs.DirEntry
+		subs, err = readDir("data")
 		for _, sub := range subs {
-			if sub.IsDir() {
-				collect(filepath.Join("data", sub.Name()))
+			if err == nil && sub.IsDir() {
+				err = collect(filepath.Join("data", sub.Name()))
 			}
 		}
 	} else {
-		collect(kind)
+		err = collect(kind)
+	}
+	if err != nil {
+		slog.Warn("backup target: cannot list a repository folder", "kind", kind, "err", err)
+		http.Error(w, "cannot list", http.StatusInternalServerError)
+		return
 	}
 	if strings.Contains(r.Header.Get("Accept"), "application/vnd.x.restic.rest.v2") {
 		w.Header().Set("Content-Type", "application/vnd.x.restic.rest.v2")
