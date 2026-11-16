@@ -203,6 +203,10 @@ type Manager struct {
 	purge       purgeState
 
 	guard guardState
+	// closeAfterApply are shares the guard locked whose open connections
+	// are closed again once smb.conf without their write access is
+	// loaded (guard.go).
+	closeAfterApply map[string]bool
 	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has
 	// none (not Btrfs). Set by titand from the storage manager.
 	Shadow func(volume string) string

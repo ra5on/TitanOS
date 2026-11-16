@@ -138,6 +138,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	if err := m.service(ctx, smb, "smbd.service", "reload-or-restart"); err != nil {
 		return err
 	}
+	m.closeLockedShares(ctx, shares)
 	// Discovery: wsdd2 for the Windows network view, avahi for macOS and Linux.
 	for _, unit := range []string{"wsdd2.service", "avahi-daemon.service"} {
 		if err := m.service(ctx, smb || (unit == "avahi-daemon.service" && state.Discovery), unit, "start"); err != nil {

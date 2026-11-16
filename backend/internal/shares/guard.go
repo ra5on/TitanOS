@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"os/exec"
 	"path"
 	"slices"
@@ -80,6 +81,18 @@ type guardState struct {
 	events map[string][]auditEvent // share|user
 }
 
+// forget drops the renames counted for a share (all accounts): after an
+// unlock, a new lock counts only what happens from then on.
+func (g *guardState) forget(share string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for key := range g.events {
+		if strings.HasPrefix(key, share+"|") {
+			delete(g.events, key)
+		}
+	}
+}
+
 // observe adds an event and reports a reason when the share must be locked.
 func (g *guardState) observe(e auditEvent) (reason string, files int) {
 	if e.op != "renameat" || e.to == "" {
@@ -124,15 +137,21 @@ func (m *Manager) FollowAudit(ctx context.Context, onLock func(Share)) {
 		return
 	}
 	for ctx.Err() == nil {
-		cmd := exec.CommandContext(ctx, "journalctl", "--follow", "--lines=0", "--output=json", "SYSLOG_IDENTIFIER=smbd_audit")
+		// Its own context: when reading stops while journalctl still runs
+		// (a line too long for the scanner), Wait would wait for ever and
+		// the guard would be gone without a word.
+		follow, stop := context.WithCancel(ctx)
+		cmd := exec.CommandContext(follow, "journalctl", "--follow", "--lines=0", "--output=json", "SYSLOG_IDENTIFIER=smbd_audit")
 		out, err := cmd.StdoutPipe()
 		if err == nil {
 			err = cmd.Start()
 		}
 		if err == nil {
 			err = m.readAudit(ctx, out, onLock)
-			cmd.Wait()
+			stop()
+			_ = cmd.Wait() // killed above; how it ended says nothing more than err
 		}
+		stop()
 		if ctx.Err() != nil {
 			return
 		}
@@ -184,11 +203,40 @@ func (m *Manager) observeAudit(ctx context.Context, event auditEvent, onLock fun
 	}
 	slog.Error("ransomware guard locked a share", "share", share.Name, "user", event.user, "reason", reason, "files", files)
 	// Connections that are open keep their write access until they end.
-	if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", share.Name); err != nil {
-		slog.Warn("open connections to a locked share not closed", "share", share.Name, "err", err)
-	}
+	// Closed at once, and again once Apply has loaded smb.conf without the
+	// write access: a client that connects again before that gets the old
+	// configuration (closeLockedShares).
+	m.closeShare(ctx, share.Name)
 	if onLock != nil {
 		onLock(share)
+	}
+}
+
+// closeShare closes the open SMB connections to a share.
+func (m *Manager) closeShare(ctx context.Context, name string) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", name); err != nil {
+		slog.Warn("open connections to a locked share not closed", "share", name, "err", err)
+	}
+}
+
+// closeLockedShares closes the connections to the shares the guard locked
+// since the last Apply, now that smbd runs with them read-only. applied
+// are the shares smb.conf was made of: a lock that came after it waits for
+// the next Apply.
+func (m *Manager) closeLockedShares(ctx context.Context, applied []Share) {
+	var names []string
+	m.mu.Lock()
+	for _, name := range slices.Sorted(maps.Keys(m.closeAfterApply)) {
+		if slices.ContainsFunc(applied, func(s Share) bool { return s.Name == name && s.GuardLocked != nil }) {
+			names = append(names, name)
+			delete(m.closeAfterApply, name)
+		}
+	}
+	m.mu.Unlock()
+	for _, name := range names {
+		m.closeShare(ctx, name)
 	}
 }
 
@@ -205,6 +253,10 @@ func (m *Manager) lockGuard(name string, lock GuardLock) (Share, bool) {
 	shares[i].GuardLocked = &lock
 	err := m.save(shares)
 	share := shares[i]
+	if m.closeAfterApply == nil {
+		m.closeAfterApply = map[string]bool{}
+	}
+	m.closeAfterApply[name] = true
 	m.mu.Unlock()
 	if err != nil {
 		// Not saved on the stick: still locked until titand restarts.
@@ -235,6 +287,9 @@ func (m *Manager) UnlockGuard(name string) error {
 	if err := m.save(shares); err != nil {
 		return err
 	}
+	delete(m.closeAfterApply, name)
+	// A new lock counts the renames after the unlock only.
+	m.guard.forget(name)
 	go m.Kick()
 	return nil
 }

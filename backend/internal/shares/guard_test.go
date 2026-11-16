@@ -133,3 +133,63 @@ func TestGuardLocksAndUnlocks(t *testing.T) {
 		t.Fatal("not unlocked", err)
 	}
 }
+
+// A client that connects again right after close-share gets the smb.conf
+// that is loaded at that moment, still with write access: the connections
+// are closed again once Apply has loaded the read-only configuration.
+func TestGuardClosesConnectionsAgainAfterTheReload(t *testing.T) {
+	m, runner := newTestManager(t)
+	m.Create(Share{Name: "Fotos", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite}, Guard: true}, volumes, users)
+	ctx := context.Background()
+	if err := m.Apply(ctx, State{Mounted: []string{"data"}}); err != nil {
+		t.Fatal(err)
+	}
+	runner.commands = nil
+	for i := range guardKnown {
+		m.observeAudit(ctx, auditEvent{at: time.Now(), user: "alex", share: "Fotos", op: "renameat", from: fmt.Sprintf("f%d", i), to: fmt.Sprintf("f%d.crypt", i)}, nil)
+	}
+	if err := m.Apply(ctx, State{Mounted: []string{"data"}}); err != nil {
+		t.Fatal(err)
+	}
+	reload, closed := -1, -1
+	for i, command := range runner.commands {
+		switch {
+		case strings.HasPrefix(command, "systemctl reload-or-restart smbd"):
+			reload = i
+		case command == "smbcontrol smbd close-share Fotos":
+			closed = i
+		}
+	}
+	if reload < 0 || closed < reload {
+		t.Fatalf("connections not closed after the reload: %v", runner.commands)
+	}
+	// Once only: the next Apply has nothing to close.
+	runner.commands = nil
+	m.applied = [32]byte{}
+	if err := m.Apply(ctx, State{Mounted: []string{"data"}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(runner.commands, "\n"), "close-share") {
+		t.Fatalf("closed again: %v", runner.commands)
+	}
+}
+
+// Renames counted before an unlock do not lock the share again at once.
+func TestUnlockForgetsTheCountedRenames(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.Create(Share{Name: "Fotos", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite}, Guard: true}, volumes, users)
+	at := time.Now()
+	for i := range guardKnown {
+		m.observeAudit(context.Background(), auditEvent{at: at, user: "alex", share: "Fotos", op: "renameat", from: fmt.Sprintf("f%d", i), to: fmt.Sprintf("f%d.crypt", i)}, nil)
+	}
+	if m.List()[0].GuardLocked == nil {
+		t.Fatal("not locked")
+	}
+	if err := m.UnlockGuard("Fotos"); err != nil {
+		t.Fatal(err)
+	}
+	m.observeAudit(context.Background(), auditEvent{at: at.Add(time.Second), user: "alex", share: "Fotos", op: "renameat", from: "brief.txt", to: "brief.crypt"}, nil)
+	if m.List()[0].GuardLocked != nil {
+		t.Fatal("one rename after the unlock locked the share again")
+	}
+}
