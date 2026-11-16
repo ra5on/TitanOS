@@ -5824,6 +5824,7 @@
 	"error.lxc_incomplete": "Das Anlegen dieses Containers wurde nicht fertig. Er lässt sich nicht starten; entferne ihn und lege ihn neu an.",
 	"lxc.jobCode.interrupted": "Das Anlegen wurde nicht fertig, weil TitanOS zwischendurch beendet wurde. Entferne den Container und lege ihn neu an.",
 	"lxc.jobCode.delete_failed": "Die Daten des Containers wurden nicht vollständig gelöscht. Er lässt sich nicht mehr starten; entferne ihn noch einmal.",
+	"lxc.jobCode.timeout": "Abgebrochen: Das Herunterladen und Entpacken des Abbilds ist nicht innerhalb von 30 Minuten fertig geworden. Entferne den Container und versuche es noch einmal.",
 	"error.vm_libvirt_timeout": "libvirt hat nicht rechtzeitig geantwortet (Grenze 2 Minuten). Versuche es gleich noch einmal; hilft das nicht, starte das NAS neu.",
 	"error.docker_compose_timeout": "Docker Compose wurde nach Ablauf seiner Zeitgrenze beendet. Versuche es erneut; hängt es weiter, prüfe Docker und die Netzverbindung.",
 	"error.docker_remove_needs_engine": "Zum Entfernen muss Docker laufen: Die Container der App liegen noch in Docker und kämen sonst später ohne Verwaltung zurück. Schalte Docker ein (bzw. entsperre sein Volume) und entferne die App dann.",
