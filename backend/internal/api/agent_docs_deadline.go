@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -144,10 +145,8 @@ func (s *Server) docsRemind(user string, item agentInboxItem, lead []int, now ti
 			return toolcatalog.Errorf("the deadline %s has passed already", date.Format("02.01.2006"))
 		}
 	}
-	name := "Frist: " + item.Title
-	if r := []rune(name); len(r) > 80 {
-		name = string(r[:79]) + "…"
-	}
+	// A schedule takes 80 bytes of name; the whole title is in the task.
+	name := clipUTF8("Frist: "+item.Title, 80)
 	var add []agent.Schedule
 	for i, t := range times {
 		task := item.Title
@@ -162,9 +161,7 @@ func (s *Server) docsRemind(user string, item agentInboxItem, lead []int, now ti
 		if item.Body != "" {
 			task += "\n" + item.Body
 		}
-		if r := []rune(task); len(r) > 4000 {
-			task = string(r[:3999]) + "…"
-		}
+		task = clipUTF8(task, 4000)
 		sc := agent.Schedule{ID: agent.NewID(), Name: name, Task: task, Kind: "reminder", Every: "once", Date: t.Format("2006-01-02"), At: t.Format("15:04"), Enabled: true, Created: now}
 		if err := checkSchedule(&sc); err != nil {
 			return err
@@ -177,4 +174,17 @@ func (s *Server) docsRemind(user string, item agentInboxItem, lead []int, now ti
 		}
 		return append(list, add...), nil
 	})
+}
+
+// clipUTF8 cuts s to at most n bytes at a character boundary (and before
+// trailing spaces, which checkSchedule would trim anyway).
+func clipUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := n
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return strings.TrimRight(s[:cut], " ·–-")
 }
