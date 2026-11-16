@@ -1047,6 +1047,49 @@ async function plan55() {
     await page.screenshot({ path: `${out}/32-phone-agent-push.png` });
     await ctx.close();
   }
+  // 0.97: back in the app after it was away (a home-screen app that iOS
+  // kept in memory): the state, the lists and the open chat are read again.
+  {
+    const { ctx, page } = await open(390, 844);
+    const asked = { chat: 0, status: 0, lists: 0 };
+    page.on("request", (r) => {
+      const path = new URL(r.url()).pathname;
+      if (path.endsWith("/agent/chats/" + docChat.id)) asked.chat++;
+      if (path.endsWith("/agent/status")) asked.status++;
+      if (path.endsWith("/agent/chats")) asked.lists++;
+    });
+    await page.goto(base + "/agent?app=1&chat=" + docChat.id);
+    await page.locator(".composer textarea").waitFor();
+    await page.waitForTimeout(600);
+    const before = { ...asked };
+    const away = (seconds) =>
+      page.evaluate((ms) => {
+        let state = "hidden";
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => state,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        const real = Date.now.bind(Date);
+        const shifted = () => real() + ms;
+        Date.now = shifted;
+        state = "visible";
+        document.dispatchEvent(new Event("visibilitychange"));
+        Date.now = real;
+      }, seconds * 1000);
+    // A glance at another app: nothing is read again.
+    await away(5);
+    await page.waitForTimeout(500);
+    assert.deepEqual(asked, before, "a short absence reloads nothing");
+    await away(90);
+    await page.waitForFunction(() => true);
+    for (let i = 0; i < 40 && asked.chat === before.chat; i++)
+      await page.waitForTimeout(100);
+    assert.ok(asked.status > before.status, "the state is read again");
+    assert.ok(asked.lists > before.lists, "the lists are read again");
+    assert.ok(asked.chat > before.chat, "the open chat is read again");
+    await ctx.close();
+  }
   // 0.96: an outside provider instead of Ollama – chosen, warned about,
   // saved with its key; the Ollama rows give way.
   {

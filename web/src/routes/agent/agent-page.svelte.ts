@@ -2,7 +2,7 @@
 // the settings beneath a window, the phone's keyboard and edge swipes, the
 // suggestions of the start page, what the side bar gets, and the effects
 // that load and keep everything current. Built on agent-chats.svelte.ts.
-import { page } from '$app/state';
+import { page, updated } from '$app/state';
 import { untrack } from 'svelte';
 import { api, setAgentProfile } from '#lib/api.ts';
 import type { IconName } from '#lib/components/Icon.svelte';
@@ -502,6 +502,55 @@ export class AgentPage extends AgentChats {
 			const author = page.url.searchParams.get('author') ?? '';
 			if (!this.listsReady || !id || id === untrack(() => this.current?.id)) return;
 			untrack(() => void this.open(id, false, author));
+		});
+
+		// Back in the app after it was away (0.97, owner 16 Nov 2026: opened
+		// again from the home screen, the agent showed what it had shown
+		// before). iOS keeps an app of the home screen in memory and brings
+		// the old page back as it was – nothing loads by itself, and a run
+		// that went on meanwhile lost its connection. So after more than
+		// twenty seconds away: a new version of TitanOS loads the page anew
+		// (unless something is being written), otherwise the state, the
+		// lists and the open chat are read again.
+		$effect(() => {
+			let away = 0;
+			const back = async () => {
+				if (document.visibilityState !== 'visible') {
+					away ||= Date.now();
+					return;
+				}
+				if (!away || Date.now() - away < 20000) {
+					away = 0;
+					return;
+				}
+				away = 0;
+				const writing =
+					!!document.querySelector<HTMLTextAreaElement>('.composer textarea')?.value.trim() ||
+					this.attachments.length > 0 ||
+					this.dialog !== null;
+				if (!writing && (await updated.check().catch(() => false))) {
+					location.reload();
+					return;
+				}
+				await this.loadStatus();
+				if (!this.status?.allowed || !this.status.enabled) return;
+				await this.loadLists();
+				const id = this.current?.id;
+				if (id && this.dialog?.kind !== 'talk') await this.open(id, false, this.readOnlyBy);
+			};
+			const shown = (event: PageTransitionEvent) => {
+				// Brought back whole from the browser's memory: as if it had been away.
+				if (event.persisted) {
+					away = 1;
+					void back();
+				}
+			};
+			document.addEventListener('visibilitychange', back);
+			window.addEventListener('pageshow', shown);
+			return () => {
+				document.removeEventListener('visibilitychange', back);
+				window.removeEventListener('pageshow', shown);
+			};
 		});
 
 		$effect(() => {

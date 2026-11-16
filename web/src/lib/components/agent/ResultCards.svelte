@@ -75,7 +75,9 @@
 
 <script lang="ts">
 	import { formatBytes } from '#lib/format.ts';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { slide } from 'svelte/transition';
+	import Icon from '#lib/components/Icon.svelte';
+	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	let {
 		steps,
@@ -92,6 +94,24 @@
 	const devices = $derived(deviceCards(steps));
 	const running = $derived(apps.filter((a) => a.state === 'running').length);
 	let all = $state(false);
+	// The one row that shows its actions.
+	let opened = $state('');
+	type Act = { key: string; label: MessageKey; ask: MessageKey };
+	/** What can be asked for a container, in the order it is offered. Each
+	 *  one is a message to the agent, so its rights decide as always. */
+	function actions(a: AppRow): Act[] {
+		const act = (key: string): Act => ({
+			key,
+			label: `agent.card.${key}` as MessageKey,
+			ask: `agent.card.ask.${key}` as MessageKey,
+		});
+		const list =
+			a.state === 'running'
+				? [act('restart'), act('stop'), act('logs'), act('details'), act('errors')]
+				: [act('start'), act('logs'), act('details'), act('why')];
+		if (a.update) list.unshift(act('updateNow'));
+		return list;
+	}
 	const shown = $derived(all ? apps : apps.slice(0, 8));
 
 	const STATES: Record<string, MessageKey> = {
@@ -114,36 +134,49 @@
 		</header>
 		<ul>
 			{#each shown as a (a.name)}
-				<li>
-					<span class="lamp" data-state={a.state === 'running' ? 'good' : 'off'} aria-hidden="true"
-					></span>
-					<span class="what">
-						<span class="name">{a.name}</span>
-						<span class="muted"
-							>{stateWord(a.state)}{#if a.state === 'running' && a.memory}
-								· {formatBytes(a.memory)}{/if}{#if a.update}
-								· {t('agent.card.update')}{/if}</span
-						>
-					</span>
-					{#if active}
-						<span class="do">
-							<button
-								type="button"
-								class="btn"
-								onclick={() =>
-									onask(
-										t(a.state === 'running' ? 'agent.card.askRestart' : 'agent.card.askStart', {
-											name: a.name,
-										}),
-									)}>{t(a.state === 'running' ? 'agent.card.restart' : 'agent.card.start')}</button
-							>
-							<button
-								type="button"
-								class="btn"
-								onclick={() => onask(t('agent.card.askLogs', { name: a.name }))}
-								>{t('agent.card.logs')}</button
+				{@const on = a.state === 'running'}
+				<li class:open={opened === a.name}>
+					<!-- A row is one line; a tap opens what can be done with it
+					     (owner 16 Nov 2026: more than restart and log, and the
+					     list was long with two buttons under every name). -->
+					{#snippet line()}
+						<span class="lamp" data-state={on ? 'good' : 'off'} aria-hidden="true"></span>
+						<span class="what">
+							<span class="name">{a.name}</span>
+							<span class="muted"
+								>{stateWord(a.state)}{#if on && a.memory}
+									· {formatBytes(a.memory)}{/if}{#if on && a.cpu >= 0.1}
+									· {t('agent.card.cpu', {
+										percent: a.cpu.toLocaleString(i18n.locale),
+									})}{/if}{#if a.update}
+									· {t('agent.card.update')}{/if}</span
 							>
 						</span>
+						{#if active}<span class="chev" aria-hidden="true"
+								><Icon name="chevronDown" size={16} /></span
+							>{/if}
+					{/snippet}
+					{#if active}
+						<button
+							type="button"
+							class="row"
+							aria-expanded={opened === a.name}
+							onclick={() => (opened = opened === a.name ? '' : a.name)}>{@render line()}</button
+						>
+					{:else}
+						<div class="row">{@render line()}</div>
+					{/if}
+					{#if active && opened === a.name}
+						<div class="do" transition:slide={{ duration: 220 }}>
+							{#each actions(a) as act (act.key)}
+								<button
+									type="button"
+									class="btn"
+									class:btn-primary={act.key === 'updateNow'}
+									onclick={() => onask(t(act.ask, { name: a.name }))}>{t(act.label)}</button
+								>
+							{/each}
+						</div>
 					{/if}
 				</li>
 			{/each}
@@ -202,7 +235,6 @@
 		padding: 0;
 		list-style: none;
 	}
-	li,
 	.device {
 		display: flex;
 		flex-wrap: wrap;
@@ -212,6 +244,30 @@
 	}
 	li {
 		border-top: 1px solid var(--border);
+	}
+	.row {
+		width: 100%;
+		min-height: 52px;
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-4);
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+	}
+	button.row {
+		cursor: pointer;
+	}
+	.chev {
+		flex: none;
+		color: var(--muted);
+		transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+	li.open .chev {
+		transform: rotate(180deg);
 	}
 	.device {
 		padding-block: var(--space-3);
@@ -251,6 +307,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
+		padding: 0 var(--space-4) var(--space-3);
 	}
 	.btn {
 		min-height: 36px;
