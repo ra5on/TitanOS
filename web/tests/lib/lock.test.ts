@@ -5,6 +5,7 @@ const calls = vi.hoisted(() => ({
 	handler: null as null | (() => void),
 	prefs: {} as Record<string, unknown>,
 	fail: null as null | Error,
+	session: undefined as unknown,
 }));
 
 vi.mock('#lib/api.ts', () => {
@@ -22,6 +23,7 @@ vi.mock('#lib/api.ts', () => {
 		calls.list.push([method, path, body]);
 		if (calls.fail) throw calls.fail;
 		if (method === 'GET' && path === '/preferences') return calls.prefs;
+		if (method === 'GET' && path === '/session') return calls.session;
 		return undefined;
 	};
 	return {
@@ -44,6 +46,7 @@ const {
 	lockState,
 	isLocked,
 	lock,
+	recheckLock,
 	unlock,
 	unlockWithPasskey,
 	readLockMinutes,
@@ -58,6 +61,7 @@ const { ApiError } = await import('#lib/api.ts');
 beforeEach(() => {
 	calls.list = [];
 	calls.fail = null;
+	calls.session = undefined;
 	lockState.locked = false;
 	session.data = { user: { name: 'alex', role: 'owner', twoFactor: false }, lockMinutes: 15 };
 });
@@ -118,6 +122,33 @@ test('lock() asks the NAS once and shows the screen at once', async () => {
 	expect(lockState.locked).toBe(true);
 	await lock();
 	expect(calls.list).toEqual([['POST', '/session/lock', undefined]]);
+});
+
+test('a lock the NAS has not taken never unlocks without a password', async () => {
+	// The lock request fails (network gone, titand restarting): the NAS still
+	// says "not locked", which must not open the screen.
+	calls.fail = new ApiError(503, 'unavailable');
+	await lock();
+	expect(isLocked()).toBe(true);
+	calls.fail = null;
+	calls.session = { user: { name: 'alex' }, locked: false };
+	calls.list = [];
+	await recheckLock();
+	expect(isLocked()).toBe(true);
+	expect(calls.list).toEqual([['POST', '/session/lock', undefined]]);
+	// Once the NAS holds the lock, an unlock in another window is followed.
+	await recheckLock();
+	expect(isLocked()).toBe(false);
+});
+
+test('while locked, an unlock in another window is followed', async () => {
+	await lock();
+	calls.session = { user: { name: 'alex' }, locked: true };
+	await recheckLock();
+	expect(isLocked()).toBe(true);
+	calls.session = { user: { name: 'alex' }, locked: false };
+	await recheckLock();
+	expect(isLocked()).toBe(false);
 });
 
 test('unlock() sends password and code and clears the lock', async () => {
