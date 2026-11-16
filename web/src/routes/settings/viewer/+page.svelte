@@ -146,9 +146,14 @@
 		const progress = image.size
 			? `${formatPercent(100 * image.progress)} (${formatBytes(image.bytes)} / ${formatBytes(image.size)})`
 			: '…';
-		if (image.state === 'downloading') return t('viewer.settings.imageDownloading', { progress });
-		if (image.state === 'loading') return t('viewer.settings.imageLoading', { progress });
-		if (image.state === 'error') return t('viewer.settings.imageError', { error: image.error });
+		// 0.98: the earlier program goes on working meanwhile.
+		const meanwhile = image.usable ? ' ' + t('viewer.settings.imageMeanwhile') : '';
+		if (image.state === 'downloading')
+			return t('viewer.settings.imageDownloading', { progress }) + meanwhile;
+		if (image.state === 'loading')
+			return t('viewer.settings.imageLoading', { progress }) + meanwhile;
+		if (image.state === 'error')
+			return t('viewer.settings.imageError', { error: image.error }) + meanwhile;
 		return t('viewer.settings.imageMissing');
 	});
 	const idleText = $derived(

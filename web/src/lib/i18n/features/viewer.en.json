@@ -82,6 +82,7 @@
 	"viewer.settings.idleText": "like consoles: {value}",
 	"viewer.settings.image": "Remote view program",
 	"viewer.settings.imageDownloading": "Downloading: {progress}",
+	"viewer.settings.imageMeanwhile": "Until then the remote view goes on with the program it had.",
 	"viewer.settings.imageError": "Loading failed: {error}",
 	"viewer.settings.imageLoading": "Loading: {progress}",
 	"viewer.settings.imageMissing": "Not loaded yet – comes automatically with the first remote view.",

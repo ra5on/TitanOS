@@ -82,6 +82,7 @@
 	"viewer.settings.idleText": "wie Konsolen: {value}",
 	"viewer.settings.image": "Programm der Fernansicht",
 	"viewer.settings.imageDownloading": "Wird heruntergeladen: {progress}",
+	"viewer.settings.imageMeanwhile": "Die Fernansicht läuft solange mit dem bisherigen Programm weiter.",
 	"viewer.settings.imageError": "Laden fehlgeschlagen: {error}",
 	"viewer.settings.imageLoading": "Wird geladen: {progress}",
 	"viewer.settings.imageMissing": "Noch nicht geladen – kommt bei der ersten Fernansicht automatisch.",

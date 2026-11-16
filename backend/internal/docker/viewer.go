@@ -558,6 +558,8 @@ func ownImage(labels map[string]string) bool {
 type ViewerImage struct {
 	ID   string
 	Tags []string
+	// Created is when the image was built (seconds since 1970).
+	Created int64
 }
 
 // ViewerImages lists the images that carry ViewerImageLabel.
@@ -566,6 +568,7 @@ func (m *Manager) ViewerImages(ctx context.Context) ([]ViewerImage, error) {
 		ID       string `json:"Id"`
 		RepoTags []string
 		Labels   map[string]string
+		Created  int64
 	}
 	filters := `{"label":["` + ViewerImageLabel + `=1"]}`
 	if err := m.api.getJSON(ctx, "/images/json", url.Values{"filters": {filters}}, &list); err != nil {
@@ -574,7 +577,7 @@ func (m *Manager) ViewerImages(ctx context.Context) ([]ViewerImage, error) {
 	out := []ViewerImage{}
 	for _, img := range list {
 		if ownImage(img.Labels) {
-			out = append(out, ViewerImage{ID: img.ID, Tags: slices.DeleteFunc(img.RepoTags, func(t string) bool { return t == "<none>:<none>" })})
+			out = append(out, ViewerImage{ID: img.ID, Created: img.Created, Tags: slices.DeleteFunc(img.RepoTags, func(t string) bool { return t == "<none>:<none>" })})
 		}
 	}
 	return out, nil
