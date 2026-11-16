@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,5 +44,31 @@ func TestAdvisorKeepsTheReportWhenDisksAreNotReadable(t *testing.T) {
 	saved, _ := ts.server.advisorReport()
 	if len(saved.Report.Findings) != 1 || saved.Report.Findings[0].Level != advisor.LevelFail {
 		t.Fatalf("warning gone: %+v", saved.Report)
+	}
+}
+
+// Review 1.02: another member of a shared project read the arguments of
+// an undone step (a path in a private folder), errors, and the titles of
+// the author's private notes from the chat's notes.
+func TestForeignChatKeepsTheAuthorsSteps(t *testing.T) {
+	c := &agent.Chat{ID: "x", Entries: []agent.Entry{
+		{Role: "user", Content: "Räum auf"},
+		{Role: "tool", Tool: "files_delete", Args: []byte(`{"path":"/Privat/Steuer.pdf"}`), Result: "ok", Summary: "files_delete path=/Privat/Steuer.pdf"},
+		{Role: "note", Note: "undone", Tool: "files_delete", Content: "files_delete path=/Privat/Steuer.pdf"},
+		{Role: "note", Note: "badcall", Content: "open /Privat/Steuer.pdf: no such file"},
+		{Role: "note", Note: "note", Content: "Arzttermine"},
+		{Role: "note", Note: "homeassistant", Content: "switch switch.schlafzimmer"},
+		{Role: "note", Note: "stopped"},
+		{Role: "assistant", Content: "Erledigt."},
+	}}
+	out := foreignChat(c)
+	data, _ := json.Marshal(out)
+	for _, secret := range []string{"Privat", "Arzttermine", "schlafzimmer"} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("%q reached another member: %s", secret, data)
+		}
+	}
+	if !strings.Contains(string(data), `"stopped"`) || !strings.Contains(string(data), "Erledigt.") {
+		t.Fatalf("too much gone: %s", data)
 	}
 }

@@ -174,7 +174,13 @@ func foreignChat(c *agent.Chat) *agent.Chat {
 			if e.Note == "edited" || e.Note == "snapshot" || e.Note == "error" || e.Note == "summary" || e.Note == "memory" {
 				continue
 			}
-			e.Args, e.Result, e.Summary = nil, "", ""
+			// These carry what a step did in their text (1.02): an undone
+			// step's arguments (paths), an error, the title of a private
+			// note, a skill, a schedule, a device of Home Assistant.
+			if e.Note == "undone" || e.Note == "badcall" || e.Note == "note" || e.Note == "skill" || e.Note == "schedule" || e.Note == "homeassistant" {
+				continue
+			}
+			e.Args, e.Result, e.Summary, e.Content = nil, "", "", ""
 		default:
 			continue
 		}
