@@ -265,7 +265,7 @@ func copyLink(target *os.Root, to, link string, aside func(to string) error) err
 		return err
 	}
 	if err := target.Rename(temp, to); err != nil {
-		_ = target.Remove(temp) // best effort: a leftover link is removed by the next run's rename or by hand
+		_ = target.Remove(temp) // best effort: a leftover .titanos-copy- link stays until removed by hand
 		return err
 	}
 	return nil
