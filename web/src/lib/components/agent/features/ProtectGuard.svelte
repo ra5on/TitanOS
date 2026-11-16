@@ -17,7 +17,10 @@
 	let status = $state<GuardStatus | null>(null);
 	let error = $state('');
 	let busy = $state('');
-	let confirm = $state<'restore' | 'reopen' | 'dismiss' | null>(null);
+	// The dialog keeps the alarm it was opened for: the poll may bring a
+	// newer one to the top while it is open.
+	let confirm = $state<{ action: 'restore' | 'reopen' | 'dismiss'; id: string } | null>(null);
+	const target = $derived(confirm && status?.alerts.find((a) => a.id === confirm?.id));
 	let all = $state(false);
 
 	async function load() {
@@ -29,8 +32,14 @@
 	}
 	void load();
 	$effect(() => {
+		// While an attack goes on or files come back (also by themselves in
+		// mode auto), the page follows.
 		const timer = setInterval(() => {
-			if (status?.alerts.some((a) => a.state === 'active')) void load();
+			const follow = (a: GuardAlert) =>
+				a.state === 'active' ||
+				a.state === 'restoring' ||
+				(a.state === 'stopped' && a.mode === 'auto');
+			if (status?.alerts.some(follow)) void load();
 		}, 5000);
 		return () => clearInterval(timer);
 	});
@@ -191,8 +200,12 @@
 						<button
 							type="button"
 							class="btn btn-primary"
-							disabled={alert.state === 'active' || !!busy || alert.state === 'restored'}
-							onclick={() => (confirm = 'restore')}>{t('agent.f.protect.g.restoreBtn')}</button
+							disabled={alert.state === 'active' ||
+								!!busy ||
+								alert.state === 'restored' ||
+								alert.state === 'restoring'}
+							onclick={() => (confirm = { action: 'restore', id: alert.id })}
+							>{t('agent.f.protect.g.restoreBtn')}</button
 						>
 					</div>
 				{:else}
@@ -220,7 +233,8 @@
 							type="button"
 							class="btn"
 							disabled={alert.state === 'active' || !!busy}
-							onclick={() => (confirm = 'reopen')}>{t('agent.f.protect.g.reopenBtn')}</button
+							onclick={() => (confirm = { action: 'reopen', id: alert.id })}
+							>{t('agent.f.protect.g.reopenBtn')}</button
 						>
 					</div>
 				{/if}
@@ -236,7 +250,8 @@
 							type="button"
 							class="btn"
 							disabled={!!busy}
-							onclick={() => (confirm = 'dismiss')}>{t('agent.f.protect.g.falseAlarm')}</button
+							onclick={() => (confirm = { action: 'dismiss', id: alert.id })}
+							>{t('agent.f.protect.g.falseAlarm')}</button
 						>
 					</div>
 				{/if}
@@ -262,15 +277,15 @@
 	{/if}
 {/if}
 
-{#if confirm && alert}
+{#if confirm && target}
 	<Dialog
-		title={t(`agent.f.protect.g.confirm.${confirm}` as MessageKey)}
+		title={t(`agent.f.protect.g.confirm.${confirm.action}` as MessageKey)}
 		onclose={() => (confirm = null)}
 	>
 		<p>
-			{t(`agent.f.protect.g.confirmText.${confirm}` as MessageKey, {
-				share: alert.share,
-				count: formatNumber(alert.restorable ?? total(alert)),
+			{t(`agent.f.protect.g.confirmText.${confirm.action}` as MessageKey, {
+				share: target.share,
+				count: formatNumber(target.restorable ?? total(target)),
 			})}
 		</p>
 		<div class="dialog-actions">
@@ -279,9 +294,9 @@
 			>
 			<button
 				type="button"
-				class={confirm === 'restore' ? 'btn btn-danger' : 'btn btn-primary'}
-				onclick={() => confirm && act(alert, confirm)}
-				>{t(`agent.f.protect.g.confirmBtn.${confirm}` as MessageKey)}</button
+				class={confirm.action === 'restore' ? 'btn btn-danger' : 'btn btn-primary'}
+				onclick={() => confirm && act(target, confirm.action)}
+				>{t(`agent.f.protect.g.confirmBtn.${confirm.action}` as MessageKey)}</button
 			>
 		</div>
 	</Dialog>
