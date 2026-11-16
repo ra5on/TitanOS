@@ -134,7 +134,7 @@ export type Operations = {
 	maintenance?: MaintenanceStatus;
 	transfers: CopyJob[];
 	backups?: BackupView[];
-	docker?: Record<string, { state: string; output: string }>;
+	docker?: Record<string, { state: string; output: string; code?: string }>;
 	vms?: VM[];
 	growth?: GrowthStatus;
 	diskTests?: { disk: string; phase: string; result: string; percent: number }[];

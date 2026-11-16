@@ -43,6 +43,8 @@ export type TaskItem = {
 	progress?: number;
 	actions?: TaskAction[];
 	wait?: string;
+	/** A known cause of a failed Docker job (lib/job-code.ts), put into the detail. */
+	dockerCode?: string;
 	/** The running or failed step of a stepped operation. */
 	stepKey?: MessageKey;
 };
@@ -227,6 +229,8 @@ export function taskItems(data: Operations): TaskItem[] {
 			state: job.state === 'running' ? 'running' : job.state === 'failed' ? 'failed' : 'done',
 			href: '/docker',
 			detail: job.state === 'failed' ? job.output : undefined,
+			// 1.03: the row puts the text of a known cause in titand's last line.
+			dockerCode: job.state === 'failed' ? job.code : undefined,
 		});
 	for (const machine of data.vms ?? []) {
 		if (!machine.job) continue;

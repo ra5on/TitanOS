@@ -60,5 +60,6 @@ export function bellShows(
 ): boolean {
 	const group = bellGroup(notice.kind);
 	if (notice.severity === 'error' && (group === 'storage' || group === 'disks')) return true;
-	return settings.groups[group] && rank[notice.severity] >= rank[settings.minSeverity];
+	// A severity this page does not know (a newer NAS) counts as info, never as nothing.
+	return settings.groups[group] && (rank[notice.severity] ?? 0) >= rank[settings.minSeverity];
 }

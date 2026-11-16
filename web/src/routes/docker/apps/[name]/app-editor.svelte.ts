@@ -20,11 +20,12 @@ import {
 	type DockerStatus,
 } from '#lib/api.ts';
 import { stackPrimary, sanitizeDockerLayout } from '#lib/docker-layout.ts';
-import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+import { apiErrorText, errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 import { session } from '#lib/session.svelte.ts';
 import { system } from '#lib/system.svelte.ts';
 import { isRunning, webLinks } from '../../container.ts';
 import { inTailnet } from '#lib/app-proxy.ts';
+import { dockerJobOutput } from '#lib/job-code.ts';
 import {
 	check,
 	readService,
@@ -322,7 +323,11 @@ export class AppEditor {
 						void goto(this.pendingURL);
 					}
 				} else {
-					this.result = { ok: false, text: t('editor.failed'), detail: job.output };
+					this.result = {
+						ok: false,
+						text: t('editor.failed'),
+						detail: dockerJobOutput(job, (key) => tOr(key, '')),
+					};
 				}
 				break;
 			}

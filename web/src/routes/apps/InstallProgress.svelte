@@ -1,10 +1,11 @@
 <script lang="ts">
 	// After "Install": the log of the job until the app runs, and what to do then.
 	import { formatBytesOf } from '#lib/format.ts';
-	import { i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import type { InstallForm } from '#lib/compose/template.ts';
 	import type { Installer } from './install-form.svelte.ts';
+	import { jobCodeText } from '#lib/job-code.ts';
 
 	let { ins, form }: { ins: Installer; form: InstallForm } = $props();
 </script>
@@ -73,6 +74,8 @@
 			<p class="ok">{t('appform.logSuccess')}</p>
 		{:else if ins.phase === 'failed'}
 			<p class="bad">{t('appform.logFailed')}</p>
+			{@const why = jobCodeText('docker', ins.job?.code, (key) => tOr(key, ''))}
+			{#if why}<p class="bad">{why}</p>{/if}
 		{/if}
 	</div>
 	<div class="foot">

@@ -10,7 +10,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { api } from '#lib/api.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -25,6 +25,8 @@
 
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the toolbar.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { dockerJobOutput } from '#lib/job-code.ts';
+	const jobText = (key: string) => tOr(key, '');
 	const ready = () => !!p.status?.running && !p.globalBusy;
 	registerMenuCommands({
 		// PLAN 87: pulling the list down on the phone (PhoneGestures).
@@ -176,7 +178,7 @@
 	{#each p.jobs as [app, job] (app)}
 		<div class={job.state === 'failed' ? 'notice-error' : 'notice-warn'} role="status">
 			{t(job.state === 'failed' ? 'docker.jobFailed' : 'docker.jobRunning', { app })}
-			{#if job.state === 'failed' && job.output}<pre>{job.output}</pre>{/if}
+			{#if job.state === 'failed' && job.output}<pre>{dockerJobOutput(job, jobText)}</pre>{/if}
 			{#if job.state === 'failed'}
 				<div class="buttons job-actions">
 					<button
