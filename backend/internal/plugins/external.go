@@ -358,12 +358,21 @@ type ExternalRequest struct {
 	Activate *bool  `json:"activate"`
 }
 
+// externalMetaTimeout bounds reading a source or link again before an
+// install or update, as when it was added. A variable for tests.
+var externalMetaTimeout = time.Minute
+
 // externalEntry fetches the manifest again at install time; what the page
 // showed is not trusted.
 func (m *Manager) externalEntry(ctx context.Context, req ExternalRequest) (catalogEntry, error) {
 	if req.URL != "" && req.Source != "" {
 		return catalogEntry{}, fmt.Errorf("%w: a link or a source, not both", ErrInvalid)
 	}
+	// Install and update run detached from the request; a server that
+	// stalls must not keep them (and the claim on the plugin's download)
+	// for ever. The download itself has its own stall timeout.
+	ctx, cancel := context.WithTimeout(ctx, externalMetaTimeout)
+	defer cancel()
 	if req.URL != "" {
 		return m.fetchExternal(ctx, req.URL, false)
 	}

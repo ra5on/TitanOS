@@ -354,3 +354,48 @@ func TestRemovedSourceStaysRemovedAfterARunningRefresh(t *testing.T) {
 		}
 	}
 }
+
+// A source that stalls when a plugin of it is installed or updated ends
+// the request instead of holding it for ever.
+func TestStalledSourceEndsTheInstall(t *testing.T) {
+	f, dir, base := community(t)
+	m := f.m
+	ctx := context.Background()
+	plugin(t, dir, "werkzeug", nil)
+	data, _ := json.Marshal(map[string]any{"plugins": []map[string]string{{"name": "werkzeug"}}})
+	os.WriteFile(filepath.Join(dir, "plugins.json"), data, 0o644)
+	state, err := m.AddSource(ctx, base+"plugins.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := make(chan struct{})
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-stop:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() { close(stop); hang.Close() })
+	m.publicClient = m.client
+	m.mu.Lock()
+	m.sources[0].URL = hang.URL + "/plugins.json"
+	m.mu.Unlock()
+	old := externalMetaTimeout
+	externalMetaTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { externalMetaTimeout = old })
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.externalEntry(ctx, ExternalRequest{Source: state.ID, Name: "werkzeug"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a stalled source answered")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("still waiting for the source")
+	}
+}
