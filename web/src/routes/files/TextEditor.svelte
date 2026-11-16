@@ -58,7 +58,11 @@
 		const to = navigation.to?.url;
 		const delta = navigation.type === 'popstate' ? (navigation.delta ?? 0) : 0;
 		leave = () => {
+			// The editor closes first: a way that stays in the file manager
+			// (Back to another folder) must not leave it open with the
+			// discarded text and no question any more.
 			leaving = true;
+			onclose();
 			if (delta) history.go(delta);
 			else if (to) void goto(to);
 		};

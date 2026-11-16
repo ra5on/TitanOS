@@ -39,6 +39,7 @@ test('a navigation with changes asks in the dialog and goes on after discarding'
 	tryNavigate('/docker');
 	await fireEvent.click(await screen.findByRole('button', { name: 'Änderungen verwerfen' }));
 	expect(gotoCalls).toEqual(['http://nas.test/docker']);
-	expect(onclose).not.toHaveBeenCalled();
+	// The editor closes too (a way inside the file manager would keep it open).
+	expect(onclose).toHaveBeenCalledTimes(1);
 	expect(tryNavigate('/docker')).toBe(false);
 });
