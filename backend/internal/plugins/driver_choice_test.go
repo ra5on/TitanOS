@@ -111,3 +111,33 @@ func TestChosenDriverIsRebuiltOncePerRelease(t *testing.T) {
 		t.Errorf("without a choice: %v", built)
 	}
 }
+
+// A build that ends after the owner went back to the shipped driver (or chose
+// another version) does not select itself for the next restart.
+func TestBuiltDriverIsNotSelectedAfterTheChoiceChanged(t *testing.T) {
+	f, p, _ := localFixture(t)
+	m := f.m
+	m.LocalBuilds = true
+	settings := m.current()
+	settings.NvidiaDriver = ""
+	if err := m.save(settings); err != nil {
+		t.Fatal(err)
+	}
+	if chosen, err := m.selectChoice(driverOf(p.Version), p.SHA256, []string{"data"}); err != nil || chosen {
+		t.Fatalf("selected after going back: %v %v", chosen, err)
+	}
+	if pending := m.current().PendingDriver; pending != nil {
+		t.Fatalf("pending: %+v", pending)
+	}
+	// Still the chosen one: selected.
+	settings.NvidiaDriver = driverOf(p.Version)
+	if err := m.save(settings); err != nil {
+		t.Fatal(err)
+	}
+	if chosen, err := m.selectChoice(driverOf(p.Version), p.SHA256, []string{"data"}); err != nil || !chosen {
+		t.Fatalf("not selected: %v %v", chosen, err)
+	}
+	if pending := m.current().PendingDriver; pending == nil || pending.Version != p.Version {
+		t.Fatalf("pending: %+v", pending)
+	}
+}

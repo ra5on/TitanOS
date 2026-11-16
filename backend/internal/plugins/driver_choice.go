@@ -111,7 +111,12 @@ func (m *Manager) buildChoice(ctx context.Context, mounted []string, version str
 		m.mu.Lock()
 		hash := m.driverStatus.SHA256
 		m.mu.Unlock()
-		err = m.SelectDriver(hash, mounted)
+		var chosen bool
+		if chosen, err = m.selectChoice(version, hash, mounted); err == nil && !chosen {
+			// The owner chose another driver while this one was built: the
+			// build stays in the cache, the other choice decides.
+			return
+		}
 	}
 	if err != nil {
 		m.mu.Lock()
@@ -121,6 +126,18 @@ func (m *Manager) buildChoice(ctx context.Context, mounted []string, version str
 	if m.DriverBuilt != nil {
 		m.DriverBuilt(version, err)
 	}
+}
+
+// selectChoice selects a built driver for the next restart only while it is
+// still the chosen one; ChooseDriver may have changed the choice (or failed
+// to save it) during the build. chosen is false when nothing was selected.
+func (m *Manager) selectChoice(version, hash string, mounted []string) (chosen bool, err error) {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	if m.current().NvidiaDriver != version {
+		return false, nil
+	}
+	return true, m.selectDriver(hash, mounted)
 }
 
 // rebuildChoice builds the chosen version again when the running driver is
