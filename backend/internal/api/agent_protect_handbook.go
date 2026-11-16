@@ -193,11 +193,26 @@ func (s *Server) handbookRefresh(ctx context.Context, force bool) (handbookDoc, 
 }
 
 // handbookCurrent is the stored handbook, made now if there is none.
+// Contacts and probe results follow the settings at once: the stored
+// handbook is made again only at night, and a contact switched off or a
+// number changed must not be read until then.
 func (s *Server) handbookCurrent(ctx context.Context) (handbookDoc, error) {
-	if doc, ok := s.handbookStored(); ok {
-		return doc, nil
+	doc, ok := s.handbookStored()
+	if !ok {
+		var err error
+		if doc, err = s.handbookRefresh(ctx, false); err != nil {
+			return doc, err
+		}
 	}
-	return s.handbookRefresh(ctx, false)
+	h := s.agentSettings().Features.Handbook
+	doc.Facts.Contacts = nil
+	if h.WithContacts {
+		doc.Facts.Contacts = h.Contacts
+	}
+	if !h.Probes {
+		doc.Facts.Probes = nil
+	}
+	return doc, nil
 }
 
 func (s *Server) handbookTick(h agentHandbook, now time.Time) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,5 +144,27 @@ func TestEmergencyFollowsNarrowedShares(t *testing.T) {
 	}
 	if got, _ := ts.server.emergencyLatest("lena"); got.State != protect.StateGranted {
 		t.Fatalf("the rest of the grant ended: %+v", got)
+	}
+}
+
+// Review 1.02: the handbook kept contacts after the owner switched them off
+// (or changed a number) until it was made again at night; a person with
+// the emergency access read them in the meantime.
+func TestHandbookFollowsContactSettings(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	env.features(t, map[string]any{"handbook": map[string]any{"enabled": true, "withContacts": true, "contacts": []map[string]any{{"name": "Onkel Peter", "phone": "0171 123456"}}}})
+	if _, body := ts.request("GET", "/api/v1/agent/protect/handbook", nil); !strings.Contains(string(body), "0171 123456") {
+		t.Fatalf("no contact: %s", body)
+	}
+	env.features(t, map[string]any{"handbook": map[string]any{"enabled": true, "withContacts": true, "contacts": []map[string]any{{"name": "Onkel Peter", "phone": "0171 999999"}}}})
+	if _, body := ts.request("GET", "/api/v1/agent/protect/handbook", nil); strings.Contains(string(body), "0171 123456") || !strings.Contains(string(body), "0171 999999") {
+		t.Fatalf("old number: %s", body)
+	}
+	env.features(t, map[string]any{"handbook": map[string]any{"enabled": true, "withContacts": false, "contacts": []map[string]any{{"name": "Onkel Peter", "phone": "0171 999999"}}}})
+	for _, p := range []string{"/api/v1/agent/protect/handbook", "/api/v1/agent/protect/handbook/download?format=md"} {
+		if _, body := ts.request("GET", p, nil); strings.Contains(string(body), "Onkel Peter") {
+			t.Fatalf("%s: contact after switching off: %s", p, body)
+		}
 	}
 }
