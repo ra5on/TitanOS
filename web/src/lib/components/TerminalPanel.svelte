@@ -20,6 +20,7 @@
 	import type TerminalScreen from './TerminalScreen.svelte';
 	import Dialog from './Dialog.svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
+	import { tabKeys } from '#lib/radio-group.ts';
 	import { tick } from 'svelte';
 
 	type TerminalInfo = { enabled: boolean; nasShell: boolean };
@@ -246,13 +247,22 @@
 	{/if}
 
 	<div class="toolbar">
-		<div class="tabs" role="tablist" aria-label={t('terminal.sessions')} bind:this={menuRoot}>
+		<!-- Arrow keys, Home and End between the sessions (1.03); one Tab stop for them. -->
+		<!-- svelte-ignore a11y_interactive_supports_focus -->
+		<div
+			class="tabs"
+			role="tablist"
+			aria-label={t('terminal.sessions')}
+			bind:this={menuRoot}
+			onkeydown={tabKeys}
+		>
 			{#each terminal.sessions as session (session.id)}
 				<div class="tab" class:on={session.id === terminal.active}>
 					<button
 						type="button"
 						role="tab"
 						aria-selected={session.id === terminal.active}
+						tabindex={session.id === terminal.active ? 0 : -1}
 						onclick={() => (terminal.active = session.id)}
 					>
 						<span

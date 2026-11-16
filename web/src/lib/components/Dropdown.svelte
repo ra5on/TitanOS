@@ -39,7 +39,7 @@
 	let left = $state(0),
 		top = $state(0);
 
-	async function toggle() {
+	async function toggle(last = false) {
 		if (open) return close();
 		open = true;
 		await tick();
@@ -48,6 +48,7 @@
 		panel?.showPopover();
 		place();
 		if (kind === 'menu') focusFirstItem(panel);
+		if (kind === 'menu' && last) moveFocus(panel, new KeyboardEvent('keydown', { key: 'End' }));
 	}
 	// Under the button, or above it when there is no room below; always on screen.
 	function place() {
@@ -71,9 +72,16 @@
 			window.removeEventListener('resize', follow);
 		};
 	});
-	function close(focus = false) {
+	/**
+	 * `inside`: back to the button when the focus was in the panel (a chosen
+	 * item, 1.03) – it would fall to nothing when the panel goes. A dialog
+	 * the item opens takes it from there and gives it back to the button.
+	 */
+	function close(focus: boolean | 'inside' = false) {
+		const active = document.activeElement;
+		const inside = !!panel && (panel.contains(active) || active === document.body || !active);
 		open = false;
-		if (focus) button?.focus();
+		if (focus === true || (focus === 'inside' && inside)) button?.focus({ preventScroll: true });
 	}
 	function keys(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
@@ -81,7 +89,15 @@
 			event.stopPropagation();
 			return close(true);
 		}
+		// WAI-ARIA menu button: Tab leaves the menu and goes on from the button.
+		if (event.key === 'Tab' && kind === 'menu') return close(true);
 		if (kind === 'menu') moveFocus(panel, event);
+	}
+	// Arrow down or up on the closed button opens the menu at its first or last item.
+	function buttonKeys(event: KeyboardEvent) {
+		if (kind !== 'menu' || open || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
+		event.preventDefault();
+		void toggle(event.key === 'ArrowUp');
 	}
 </script>
 
@@ -101,7 +117,8 @@
 		title={label}
 		aria-haspopup={kind === 'menu' ? 'menu' : 'true'}
 		aria-expanded={open}
-		onclick={toggle}
+		onclick={() => toggle()}
+		onkeydown={buttonKeys}
 	>
 		{#if icon}<Icon name={icon} size={16} />{/if}
 		{#if text}<span class="text">{text}</span><span class="chevron"
@@ -122,7 +139,7 @@
 			onkeydown={keys}
 			use:swipeDown={{ close: () => close(true), enabled: phoneView }}
 		>
-			{@render children(() => close())}
+			{@render children(() => close('inside'))}
 		</div>
 	{/if}
 </div>
