@@ -822,6 +822,12 @@ func (m *Manager) recreate(ctx context.Context, p plan, volume string) error {
 		if m.cdiRefused(err, cdiGPU) {
 			return nil
 		}
+		// The image may be gone (cleaned up while the NVR was off, Docker
+		// on another volume): the next look asks the engine again and
+		// fetches it if need be, instead of using the remembered ID.
+		m.mu.Lock()
+		m.rt.imageID = ""
+		m.mu.Unlock()
 		return err
 	}
 	m.mu.Lock()

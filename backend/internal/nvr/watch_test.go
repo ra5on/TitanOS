@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
@@ -1182,5 +1183,42 @@ func TestDeleteCameraNeedsTheStick(t *testing.T) {
 	}
 	if got := m.DeletedCameras(); len(got) != 1 || got[0].ID != "garten" {
 		t.Errorf("deleted cameras: %+v", got)
+	}
+}
+
+// Frigate's image gone from the engine (cleaned up while the NVR was off,
+// Docker moved to another volume): the NVR fetches it again instead of
+// creating the container from an image that is not there for ever.
+func TestImageGoneIsFetchedAgain(t *testing.T) {
+	r := newRig(t, true)
+	r.enable()
+	r.look()
+	r.look()
+	if r.phase() != PhaseRunning {
+		t.Fatalf("phase %s", r.phase())
+	}
+	r.engine.mu.Lock()
+	r.engine.image = false
+	r.engine.state = docker.NVRState{}
+	r.engine.CreateError = func(docker.NVRSpec) error {
+		return errors.New("docker: No such image: " + "sha256:" + strings.Repeat("d", 64) + " (HTTP 404)")
+	}
+	r.engine.mu.Unlock()
+	for range 3 {
+		r.look()
+		r.advance(2 * time.Minute)
+	}
+	// Fetched again: the engine has the image once more.
+	deadline := time.Now().Add(5 * time.Second)
+	pulled := func() bool {
+		r.engine.mu.Lock()
+		defer r.engine.mu.Unlock()
+		return r.engine.image
+	}
+	for !pulled() {
+		if time.Now().After(deadline) {
+			t.Fatalf("not fetched again: image %+v, phase %s", r.m.Status(context.Background()).Image, r.phase())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
