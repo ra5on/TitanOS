@@ -307,12 +307,12 @@ func (m *Manager) WholeDisks() []WholeDisk {
 // Images looks for disk images on the mounted volumes.
 func (m *Manager) Images(ctx context.Context, mounted []string) []Image {
 	images := []Image{}
-	visited := 0
 	for _, volume := range mounted {
+		visited := 0 // each volume has its own walkLimit
 		root := filepath.Join(m.mountRoot, volume)
 		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 			visited++
-			if err != nil || visited > 50000 || len(images) >= 100 {
+			if err != nil || visited > walkLimit || len(images) >= 100 {
 				return fs.SkipDir
 			}
 			if entry.IsDir() {
