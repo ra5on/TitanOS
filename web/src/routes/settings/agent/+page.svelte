@@ -20,6 +20,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { onDestroy } from 'svelte';
 	import { api, type DockerStatus, type FileRoot } from '#lib/api.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -229,10 +230,14 @@
 		error?: string;
 		running?: boolean;
 	} | null>(null);
+	// One poll of the download at a time, and none once the page is gone.
+	let pullTimer: ReturnType<typeof setInterval> | undefined;
+	onDestroy(() => clearInterval(pullTimer));
 	async function startPull() {
 		try {
 			await api.post('/agent/models/pull', { model: pullName.trim() });
 			pull = { model: pullName.trim(), status: 'starting', running: true };
+			clearInterval(pullTimer);
 			const timer = setInterval(async () => {
 				try {
 					pull = await api.get<typeof pull>('/agent/models/pull');
@@ -244,6 +249,7 @@
 					clearInterval(timer);
 				}
 			}, 1500);
+			pullTimer = timer;
 		} catch (e) {
 			pull = { model: pullName, error: apiErrorText(e) };
 		}
