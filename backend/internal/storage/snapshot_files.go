@@ -206,6 +206,13 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 	if err := volumedata.SameMount(volumeRoot, target); err != nil {
 		return out, err
 	}
+	// Held until the staging folder is published or gone: the sweep after
+	// a start (cleanRestores) leaves the folder alone meanwhile.
+	release, err := volumedata.Share(target)
+	if err != nil {
+		return out, err
+	}
+	defer release()
 	var id [12]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return out, err
