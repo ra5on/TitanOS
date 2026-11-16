@@ -97,3 +97,24 @@ func TestHardwareAdviceWithoutPricesHasNoOffers(t *testing.T) {
 		t.Fatalf("offer without prices: %s", out.Text)
 	}
 }
+
+// Review 1.02: a run while the agent's volume slept kept its report in
+// RAM; reading the older file later replaced it.
+func TestAdvisorLoadKeepsANewerRun(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	old := advisorSaved{LastRun: time.Now().Add(-48 * time.Hour)}
+	if err := ts.server.agentStore().WriteShared(advisorFile, old); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Second)
+	st := ts.server.foresight()
+	st.mu.Lock()
+	st.loaded, st.saved = false, advisorSaved{LastRun: now, LastMonthly: now.Format("2006-01")}
+	st.mu.Unlock()
+	ts.server.advisorLoad()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !st.saved.LastRun.Equal(now) || st.saved.LastMonthly == "" {
+		t.Fatalf("newer run replaced: %+v", st.saved)
+	}
+}

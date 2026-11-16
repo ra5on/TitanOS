@@ -64,7 +64,11 @@ func (s *Server) advisorLoad() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.loaded = true
-	st.saved = saved
+	// A run while the volume slept kept its report in RAM only; the file
+	// is older then and must not replace it (nor its monthly mark).
+	if saved.LastRun.After(st.saved.LastRun) || st.saved.LastRun.IsZero() {
+		st.saved = saved
+	}
 	st.vols = mergeSamples(saved.Volumes, st.vols)
 	for k, v := range saved.Measured {
 		if _, ok := st.measured[k]; !ok {
