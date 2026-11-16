@@ -62,6 +62,18 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(tag, "v0.60.0")
 
 
+class AgeTest(unittest.TestCase):
+    def test_an_unpublished_tag_does_not_end_the_chain(self):
+        # Review 1.02: v0.67.0 and v0.68.0 are tags that were never
+        # published; the search for the oldest release of a reused image
+        # stopped there and took the image for younger than it was.
+        image = "sha256:" + "b" * 64
+        manifests = {"v0.66.0": {"viewer": {"imageId": image}}, "v0.69.0": {"viewer": {"imageId": image}}}
+        tags = ["v0.66.0", "v0.67.0", "v0.68.0", "v0.69.0"]
+        times = {"v0.66.0": 1, "v0.67.0": 2, "v0.68.0": 3, "v0.69.0": 4}
+        self.assertEqual(reuse.image_built_at("v0.69.0", tags, manifests.get, times.get), 1)
+
+
 class ModulesTest(unittest.TestCase):
     @staticmethod
     def go(deps, version="1.27.0"):

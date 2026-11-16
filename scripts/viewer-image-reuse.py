@@ -221,7 +221,9 @@ def image_built_at(tag, tags, manifest_of, tag_time):
                      key=lambda t: release_kind.key(t[1:]), reverse=True)
     for t in earlier:
         m = manifest_of(t)
-        if not m or not isinstance(m.get("viewer"), dict) or m["viewer"].get("imageId") != image:
+        if m is None:
+            continue  # a tag never published (0.67.0, 0.68.0) carries no image
+        if not isinstance(m.get("viewer"), dict) or m["viewer"].get("imageId") != image:
             break
         oldest = t
     return tag_time(oldest)
@@ -304,7 +306,7 @@ def main():
 
     tags = release_kind.git("tag", "-l", "v*").split()
     tag, manifest = decide(args.version, tags, manifest_of,
-                           lambda t: release_kind.git("diff", "--name-only", f"{t}..HEAD").split(), modules_differ)
+                           release_kind.changed_files, modules_differ)
     if not tag:
         print(f"building the viewer image: {manifest}", file=sys.stderr)
         sys.exit(BUILD)

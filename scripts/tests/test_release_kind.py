@@ -1,5 +1,8 @@
 """Which tags become app releases."""
 import importlib.util
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -114,6 +117,38 @@ class ReleaseKindTest(unittest.TestCase):
         self.assertLess(kind.key("0.8.0-beta.10"), kind.key("0.8.0"))
         self.assertLess(kind.key("0.8.0"), kind.key("0.8.1"))
         self.assertIsNone(kind.key("latest"))
+
+
+class ChangedFilesTest(unittest.TestCase):
+    """Review 1.02: git's rename detection listed only the new path of a
+    moved file; a file moved out of the image into docs/ made an app
+    release."""
+
+    def test_a_moved_file_lists_both_paths(self):
+        env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+               "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        with tempfile.TemporaryDirectory() as tmp:
+            def git(*args):
+                subprocess.run(["git", *args], cwd=tmp, env=env, check=True, capture_output=True)
+            git("init", "-q")
+            Path(tmp, "build/mkosi.extra/etc").mkdir(parents=True)
+            Path(tmp, "docs").mkdir()
+            Path(tmp, "build/mkosi.extra/etc/foo.conf").write_text("a\nb\nc\n")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            git("tag", "v0.1.0")
+            git("mv", "build/mkosi.extra/etc/foo.conf", "docs/foo.conf")
+            git("commit", "-qm", "move")
+            cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                changed = kind.changed_files("v0.1.0")
+                result = kind.decide("0.2.0", "", "https://example", changed_since=kind.changed_files,
+                                     fetch=lambda _s, _t: {"app": {"base": "0.1.0"}}, tags=["v0.1.0"])
+            finally:
+                os.chdir(cwd)
+        self.assertEqual(sorted(changed), ["build/mkosi.extra/etc/foo.conf", "docs/foo.conf"])
+        self.assertEqual(result[0], "system")
 
 
 if __name__ == "__main__":
