@@ -8,7 +8,7 @@
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
 	import { api } from '#lib/api.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system, watchSystem } from '#lib/system.svelte.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import TasksPanel from './TasksPanel.svelte';
@@ -223,12 +223,16 @@
 
 	const pendingSeconds = $derived(system.info?.networkPendingSeconds ?? 0);
 	let settling = $state(false);
+	// A refused "keep" says why (Durchsicht 102: it went by unseen, and the
+	// change went back when the time ran out).
+	let settleError = $state('');
 	async function settle(action: 'confirm' | 'revert') {
 		settling = true;
+		settleError = '';
 		try {
 			await api.post(`/network/${action}`);
-		} catch {
-			// The next look at the system says what became of it.
+		} catch (err) {
+			settleError = apiErrorText(err);
 		}
 		settling = false;
 	}
@@ -256,6 +260,7 @@
 		<button type="button" class="btn" onclick={() => settle('revert')} disabled={settling}
 			>{t('netcfg.back')}</button
 		>
+		{#if settleError}<span class="settle-error">{settleError}</span>{/if}
 	</div>
 {/if}
 {#snippet failed()}
@@ -314,6 +319,10 @@
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 
 <style>
+	.settle-error {
+		flex-basis: 100%;
+		font-weight: 600;
+	}
 	.view-failed {
 		max-width: 32rem;
 		margin: 20vh auto 0;
