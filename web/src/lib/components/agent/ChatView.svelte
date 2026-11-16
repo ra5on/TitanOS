@@ -159,24 +159,37 @@
 		ownSent = sent;
 	});
 	// Stay at the bottom while text streams in, unless the person scrolled up.
+	function toEnd() {
+		if (!pinned || !scroller) return;
+		// A move upwards whose scroll event has not come yet (a fast
+		// stream) is the person's too: do not pull back over it.
+		const below = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+		if (scroller.scrollTop < lastTop - 1 && below > 2) {
+			pinned = false;
+			lastTop = scroller.scrollTop;
+			return;
+		}
+		scroller.scrollTo({ top: scroller.scrollHeight });
+	}
 	$effect(() => {
 		void chat.entries.length;
 		void live.content;
 		void live.thinking;
+		void live.step;
+		void busy;
 		void chat.pending;
-		if (pinned && scroller)
-			queueMicrotask(() => {
-				if (!pinned || !scroller) return;
-				// A move upwards whose scroll event has not come yet (a fast
-				// stream) is the person's too: do not pull back over it.
-				const below = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-				if (scroller.scrollTop < lastTop - 1 && below > 2) {
-					pinned = false;
-					lastTop = scroller.scrollTop;
-					return;
-				}
-				scroller.scrollTo({ top: scroller.scrollHeight });
-			});
+		if (pinned && scroller) queueMicrotask(toEnd);
+	});
+	// 1.01 (owner 16 Nov 2026: after a follow-up question the working line
+	// stood half under the edge): whatever makes the chat taller – the
+	// working line coming in after one's own message, a card, an image that
+	// loads, an animation – brings the end into view while it is followed.
+	$effect(() => {
+		const el = column;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+		const watch = new ResizeObserver(() => toEnd());
+		watch.observe(el);
+		return () => watch.disconnect();
 	});
 
 	// What the agent remembered right before an answer goes into the small

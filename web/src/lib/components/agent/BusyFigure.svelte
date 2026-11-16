@@ -7,10 +7,20 @@
 	// 1.01 (owner 16 Nov 2026: "teilweise keine sanften Übergänge", "alle
 	// drei Punkte gleich groß"): the three spheres always have one size; the
 	// figure stays when the kind of work or its size changes and glides into
-	// the new motion and size instead of being built anew.
+	// the new motion and size instead of being built anew. One clock runs
+	// on across every change ("wird die immer wieder von vorne neu
+	// geladen"): a new word or a kind with the same figure only changes the
+	// pace, never starts the motion again; only another figure glides.
 	import { untrack } from 'svelte';
 	import type { BusyKind } from '#lib/agent.ts';
-	import { FIGURES, SPHERE, blendSpots, figureSpots, type Spot } from '#lib/agent-figures.ts';
+	import {
+		FIGURES,
+		SPHERE,
+		blendSpots,
+		figureAt,
+		sameFigure,
+		type Spot,
+	} from '#lib/agent-figures.ts';
 
 	let {
 		kind = '',
@@ -31,7 +41,10 @@
 	const shadow = $derived((FIGURES[kind] ?? FIGURES['']).shadow);
 
 	// The figure and size the spheres come from while they glide.
-	let from: { kind: BusyKind; size: number; at: number; spots: Spot[] | null } | null = null;
+	let from: { size: number; at: number; spots: Spot[] } | null = null;
+	// Units of motion so far (seconds × the figure's speed) and seconds.
+	let clock = 0;
+	let seconds = 0;
 	const first = untrack(() => size);
 	let shownKind: BusyKind = untrack(() => kind);
 	let shownSize = first;
@@ -57,47 +70,54 @@
 		last = spots;
 	}
 
-	function draw(t: number, glide: boolean) {
+	/** One frame: dt seconds since the last one; glide = animate changes. */
+	function draw(dt: number, glide: boolean) {
+		seconds += dt;
+		clock += dt * (FIGURES[kind] ?? FIGURES['']).speed;
 		if (kind !== shownKind || size !== shownSize) {
-			// Start from where the spheres stand now, also in the middle of
-			// another change.
-			from = glide
-				? { kind: shownKind, size: lastSize, at: t, spots: last.length ? last : null }
-				: null;
+			// Another figure or size glides from where the spheres stand now,
+			// also in the middle of another change; the same figure at another
+			// pace goes straight on.
+			const other = !sameFigure(kind, shownKind) || size !== shownSize;
+			from = glide && other && last.length ? { size: lastSize, at: seconds, spots: last } : null;
 			shownKind = kind;
 			shownSize = size;
 		}
-		const target = figureSpots(kind, t);
+		const target = figureAt(kind, clock);
 		if (!from) {
 			place(target, size);
 			return;
 		}
-		const k = (t - from.at) / GLIDE;
+		const k = (seconds - from.at) / GLIDE;
 		if (k >= 1) {
 			from = null;
 			place(target, size);
 			return;
 		}
-		const start = from.spots ?? figureSpots(from.kind, t);
 		const e = k * k * (3 - 2 * k);
-		place(blendSpots(start, target, k), from.size + (size - from.size) * e);
+		place(blendSpots(from.spots, target, k), from.size + (size - from.size) * e);
 	}
 
+	// Standing still: drawn again whenever what it shows changes.
+	const still = $derived(
+		calm ||
+			typeof requestAnimationFrame === 'undefined' ||
+			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
+	);
 	$effect(() => {
 		void kind;
 		void size;
-		const still =
-			calm ||
-			typeof requestAnimationFrame === 'undefined' ||
-			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
-		if (still) {
-			draw(0.6, false);
-			return;
-		}
+		if (still) untrack(() => draw(0, false));
+	});
+	// Moving: one loop for the life of the figure. It reads kind and size
+	// every frame, so a change never restarts it.
+	$effect(() => {
+		if (still) return;
 		let frame = 0;
-		const start = performance.now();
+		let before = performance.now();
 		const step = (now: number) => {
-			draw((now - start) / 1000, true);
+			draw(Math.min(0.1, Math.max(0, (now - before) / 1000)), true);
+			before = now;
 			frame = requestAnimationFrame(step);
 		};
 		frame = requestAnimationFrame(step);
