@@ -266,7 +266,8 @@
 						onclick={async () => {
 							let jobError = '';
 							const ok = await run(async () => {
-								jobError = (await buddyPair(address, code, quotaBytes(quotaGB), shares)).jobError ?? '';
+								jobError =
+									(await buddyPair(address, code, quotaBytes(quotaGB), shares)).jobError ?? '';
 							});
 							if (jobError) error = tk('agent.f.family.buddy.jobError', { error: jobError });
 							if (ok) {
@@ -319,7 +320,8 @@
 					disabled={busy}
 					onclick={async () => {
 						const p = editing!;
-						if (await run(() => buddyPartnerSet(p.id, quotaEdited(editQuota, p.quota), editShares))) editing = null;
+						if (await run(() => buddyPartnerSet(p.id, quotaEdited(editQuota, p.quota), editShares)))
+							editing = null;
 					}}>{t('agent.f.family.save')}</button
 				>
 			</div>
