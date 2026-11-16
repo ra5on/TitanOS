@@ -2,13 +2,12 @@
 // their commands for the menu bar are registered by their window (not by a
 // frame); Systemsteuerung registers the search of its side bar.
 import { untrack } from 'svelte';
-import { api } from '../api.ts';
 import { registerWindowCommands } from '../menu-commands.svelte.ts';
 import type { WebApp } from '../webapps/protocol.ts';
 import type WebAppView from '../webapps/WebAppView.svelte';
+import { dockerAction } from './desk-ops.ts';
 import { openProgram } from './programs.svelte.ts';
 import type RemoteViewType from './RemoteView.svelte';
-import { sources } from './sources.svelte.ts';
 import type { Win } from './wm.svelte.ts';
 
 /** What the commands need from the window. */
@@ -25,11 +24,8 @@ export type WindowMenuHost = {
 
 /** Registers the window's commands; call while the window's component starts. */
 export function registerWindowMenu(host: WindowMenuHost) {
-	async function restartDockerApp() {
-		const app = host.win().app.slice('docker:'.length);
-		for (const c of sources.containers.filter((x) => (x.app || x.name) === app))
-			await api.post(`/docker/containers/${encodeURIComponent(c.id)}/restart`).catch(() => {});
-	}
+	// Like the desktop's context menu: a refusal shows a short notice (1.03).
+	const restartDockerApp = () => dockerAction(host.win().app, 'restart');
 	if (untrack(() => host.win().app.startsWith('webapp:')))
 		registerWindowCommands(
 			untrack(() => host.win().id),

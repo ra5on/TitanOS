@@ -2,7 +2,8 @@
 // to its windows: the steps behind the context menus, the menu bar and the
 // icons themselves. The components of the desktop share them.
 import { api } from '../api.ts';
-import { t } from '../i18n/index.svelte.ts';
+import { apiErrorText, t } from '../i18n/index.svelte.ts';
+import { showToast } from '../toast.svelte.ts';
 import {
 	defaultWidgets,
 	isGpuWidget,
@@ -12,7 +13,7 @@ import {
 } from './prefs.ts';
 import { desktopNvrRights, nvrSideFor } from '../nvr/side.svelte.ts';
 import { session } from '../session.svelte.ts';
-import type { Program } from './programs.svelte.ts';
+import { findProgram, type Program } from './programs.svelte.ts';
 import { sources } from './sources.svelte.ts';
 import { desktop, focus, minimize, savePrefs, wm } from './wm.svelte.ts';
 
@@ -203,10 +204,24 @@ export function sideOf(app: string, side: Program['side']): Program['side'] {
 	];
 }
 
-/** Restart, stop or start every container of a Docker app, like the Docker page does it. */
+/**
+ * Restart, stop or start every container of a Docker app, like the Docker
+ * page does it. A refusal shows a short notice with the reason (1.03); the
+ * dot at the icon follows with the next look at Docker.
+ */
 export async function dockerAction(key: string, action: 'restart' | 'stop' | 'start') {
 	const app = key.slice('docker:'.length);
 	const group = sources.containers.filter((c) => (c.app || c.name) === app);
+	let failed: unknown = null;
 	for (const c of group)
-		await api.post(`/docker/containers/${encodeURIComponent(c.id)}/${action}`).catch(() => {});
+		await api
+			.post(`/docker/containers/${encodeURIComponent(c.id)}/${action}`)
+			.catch((err) => (failed ??= err));
+	if (failed !== null)
+		showToast(
+			t(`desktop.toast.${action}`, {
+				name: findProgram(key)?.label ?? app,
+				reason: apiErrorText(failed),
+			}),
+		);
 }

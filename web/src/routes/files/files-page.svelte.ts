@@ -567,15 +567,26 @@ export class FilesPage extends FilesState {
 	constructor() {
 		super();
 		onMount(() => {
+			const takenDrops = new Set<string>();
 			const take = (event: MessageEvent) => {
 				const msg = frameMessage(event);
 				if (msg?.type !== 'titanos-upload' || event.source !== window.parent) return;
 				const files = (msg as unknown as { files: unknown[] }).files.filter(
 					(f): f is File => f instanceof File,
 				);
-				window.parent.postMessage({ type: 'titanos-upload-ok' }, location.origin);
-				if (!this.fromDesktop.length)
-					this.fromDesktop = files.map((file) => ({ file, path: file.name }));
+				// The desktop sends a drop again until this answer arrives: each
+				// drop counts once. A second drop while the first still waits
+				// joins it (before, it was confirmed and then dropped).
+				const drop = (msg as unknown as { drop?: unknown }).drop;
+				window.parent.postMessage({ type: 'titanos-upload-ok', drop }, location.origin);
+				if (typeof drop === 'string') {
+					if (takenDrops.has(drop)) return;
+					takenDrops.add(drop);
+				} else if (this.fromDesktop.length) return;
+				this.fromDesktop = [
+					...this.fromDesktop,
+					...files.map((file) => ({ file, path: file.name })),
+				];
 			};
 			window.addEventListener('message', take);
 			return () => window.removeEventListener('message', take);

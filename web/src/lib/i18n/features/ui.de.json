@@ -1,0 +1,8 @@
+{
+	"toast.close": "Hinweis schließen",
+	"desktop.toast.start": "{name} ließ sich nicht starten: {reason}",
+	"desktop.toast.stop": "{name} ließ sich nicht stoppen: {reason}",
+	"desktop.toast.restart": "{name} ließ sich nicht neu starten: {reason}",
+	"desktop.toast.prefs": "Die Einstellungen des Arbeitsplatzes ließen sich nicht speichern: {reason} Sie gelten nur bis zum Neuladen; die nächste Änderung versucht es erneut.",
+	"desktop.toast.drop": "Der Dateimanager hat die abgelegten Dateien ({count}) nicht angenommen. Ziehe sie noch einmal auf den Arbeitsplatz oder lade sie im Dateimanager hoch."
+}

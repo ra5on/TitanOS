@@ -1,0 +1,8 @@
+{
+	"toast.close": "Close notice",
+	"desktop.toast.start": "{name} could not be started: {reason}",
+	"desktop.toast.stop": "{name} could not be stopped: {reason}",
+	"desktop.toast.restart": "{name} could not be restarted: {reason}",
+	"desktop.toast.prefs": "The desktop's settings could not be saved: {reason} They hold only until the page is reloaded; the next change tries again.",
+	"desktop.toast.drop": "The file manager did not take the dropped files ({count}). Drop them on the desktop again or upload them in the file manager."
+}

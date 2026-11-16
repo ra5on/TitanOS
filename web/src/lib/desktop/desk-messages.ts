@@ -5,6 +5,8 @@ import { setWindowDrag } from '../file-drag.ts';
 import { loadWebApps } from '../webapps/webapps.svelte.ts';
 import { sanitizeNvrPrefs } from '../nvr/layout.ts';
 import { frameMessage } from './frame.ts';
+import { t } from '../i18n/index.svelte.ts';
+import { showToast } from '../toast.svelte.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
 import { anyUnsaved, desktop, savePrefs, wm } from './wm.svelte.ts';
@@ -144,18 +146,28 @@ export function sendFilesToFileManager(files: File[]) {
 	// The file manager takes them once it has loaded (routes/files: titanos-upload) and says so.
 	let tries = 0;
 	let done = false;
+	// Names this drop: the file manager takes each drop once, however often it is sent.
+	const drop = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 	const ack = (e: MessageEvent) => {
-		if (e.origin === location.origin && e.data?.type === 'titanos-upload-ok') done = true;
+		// An older file manager answers without the drop's name.
+		if (
+			e.origin === location.origin &&
+			e.data?.type === 'titanos-upload-ok' &&
+			(e.data.drop === drop || e.data.drop === undefined)
+		)
+			done = true;
 	};
 	window.addEventListener('message', ack);
 	const timer = setInterval(() => {
 		if (done || ++tries > 20) {
 			clearInterval(timer);
 			window.removeEventListener('message', ack);
+			// Not taken in 14 s: said instead of losing the files quietly (1.03).
+			if (!done) showToast(t('desktop.toast.drop', { count: files.length }));
 			return;
 		}
 		const id = wm.windows.find((w) => w.app === 'app:files')?.id;
 		const frame = document.querySelector<HTMLIFrameElement>(`iframe[data-window="${id}"]`);
-		frame?.contentWindow?.postMessage({ type: 'titanos-upload', files }, location.origin);
+		frame?.contentWindow?.postMessage({ type: 'titanos-upload', files, drop }, location.origin);
 	}, 700);
 }

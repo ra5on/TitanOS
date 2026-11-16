@@ -30,6 +30,8 @@ import type nvrDe from './features/nvr.de.json';
 import type phoneDe from './features/phone.de.json';
 // 1.01: the runs of the KI-Agent (several chats at once).
 import type runsDe from './features/runs.de.json';
+// 1.03: shared parts of the interface (short notices, keyboard, dialogs).
+import type uiDe from './features/ui.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -49,7 +51,8 @@ type Messages = typeof deBase &
 	typeof errorsDe &
 	typeof nvrDe &
 	typeof phoneDe &
-	typeof runsDe;
+	typeof runsDe &
+	typeof uiDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -74,6 +77,7 @@ const FILES = {
 			import('./features/nvr.de.json'),
 			import('./features/phone.de.json'),
 			import('./features/runs.de.json'),
+			import('./features/ui.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -96,6 +100,7 @@ const FILES = {
 			import('./features/nvr.en.json'),
 			import('./features/phone.en.json'),
 			import('./features/runs.en.json'),
+			import('./features/ui.en.json'),
 		]),
 };
 
