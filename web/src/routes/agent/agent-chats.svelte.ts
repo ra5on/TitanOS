@@ -344,8 +344,10 @@ export class AgentChats {
 		void follow(
 			id,
 			(e) => {
-				// The stream delivers: the next break starts counting anew.
-				this.retries = 0;
+				// The stream delivers: the next break starts counting anew. Its
+				// bare end does not count – a chat that says "running" while no
+				// run answers would otherwise be asked twice a second for ever.
+				if (e.type !== 'end') this.retries = 0;
 				this.onEvent(id, e);
 			},
 			controller.signal,

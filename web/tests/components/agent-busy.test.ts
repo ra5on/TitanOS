@@ -29,7 +29,9 @@ test('each kind of step has its figure, the rest keeps thinking', () => {
 	expect(busyKind('ha_state')).toBe('home');
 	expect(busyKind('ha_call')).toBe('switch');
 	expect(busyKind('code_run')).toBe('code');
-	expect(busyKind('docker_list')).toBe('');
+	expect(busyKind('docker_list')).toBe('system');
+	expect(busyKind('storage_overview')).toBe('system');
+	expect(busyKind('tailscale_status')).toBe('');
 	expect(busyKind(undefined)).toBe('');
 });
 
@@ -40,7 +42,8 @@ test('a running web search shows the web figure and a word of its kind', () => {
 		busy: true,
 		live: { thinking: '', content: '', step: step('web_search') as never },
 	});
-	expect(container.querySelector('.dots')?.getAttribute('data-kind')).toBe('web');
+	expect(container.querySelector('.fig')?.getAttribute('data-kind')).toBe('web');
+	expect(container.querySelectorAll('.fig i').length).toBe(3);
 	const line = container.querySelector('.live-line .sweep')?.textContent ?? '';
 	expect(line).toContain('titanos');
 	expect(line).not.toContain('agent.busy');
@@ -52,9 +55,9 @@ test('an unknown step keeps its name, thinking shows a word', () => {
 		...base,
 		chat: chat([]),
 		busy: true,
-		live: { thinking: '', content: '', step: step('docker_list') as never },
+		live: { thinking: '', content: '', step: step('tailscale_status') as never },
 	});
-	expect(container.querySelector('.dots')?.getAttribute('data-kind')).toBe('');
+	expect(container.querySelector('.fig')?.getAttribute('data-kind')).toBe('');
 	expect(container.querySelector('.sweep')?.textContent).not.toMatch(/ …/);
 	void rerender({ live: { thinking: '', content: '', step: null } });
 	flushSync();

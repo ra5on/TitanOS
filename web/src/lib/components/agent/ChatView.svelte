@@ -10,6 +10,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import BottomSheet from './BottomSheet.svelte';
 	import ResultCards from './ResultCards.svelte';
+	import BusyFigure from './BusyFigure.svelte';
 	import { appForFile, loadWebApps, webAppById } from '#lib/webapps/webapps.svelte.ts';
 	import { openInWebApp } from '#lib/webapps/open.ts';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
@@ -259,7 +260,16 @@
 	// form a figure for it. At night two more words join, after twenty
 	// seconds words of patience and the time. When the answer stands, the
 	// dots become a tick for a moment. Still with "Animationen: Aus".
-	const WORDS = { '': 12, web: 4, files: 4, write: 4, home: 3, switch: 2, code: 4 } as const;
+	const WORDS = {
+		'': 18,
+		web: 8,
+		files: 8,
+		write: 8,
+		home: 6,
+		switch: 3,
+		code: 8,
+		system: 4,
+	} as const;
 	const key = (k: string) => t(`agent.busy.${k}` as MessageKey);
 	let busyTurn = $state(Math.floor(Math.random() * 12));
 	let elapsed = $state(0);
@@ -279,7 +289,7 @@
 		if (kind) return key(`${kind}.${(busyTurn % WORDS[kind]) + 1}`);
 		const hour = new Date().getHours();
 		if (elapsed >= 20 && busyTurn % 3 === 0)
-			return key(`long.${(Math.floor(busyTurn / 3) % 3) + 1}`);
+			return key(`long.${(Math.floor(busyTurn / 3) % 6) + 1}`);
 		if ((hour >= 23 || hour < 5) && busyTurn % 4 === 1)
 			return key(`night.${(Math.floor(busyTurn / 4) % 2) + 1}`);
 		return key(String((busyTurn % WORDS['']) + 1));
@@ -352,6 +362,9 @@
 		}
 		return true;
 	}
+	/** A message sent a moment ago: it comes in like the line that follows
+	 *  it instead of standing there at once (0.100, look through the chat). */
+	const fresh = (e: Entry) => Date.now() - Date.parse(e.at) < 4000;
 	function turnSteps(i: number): Entry[] {
 		const steps: Entry[] = [];
 		for (let j = i - 1; j >= 0 && list[j].kind !== 'user'; j--) {
@@ -702,7 +715,9 @@
 					</form>
 				{:else}
 					<div class="me">
-						<div class="user" use:hold={entry}><span>{entry.content}</span></div>
+						<div class="user" class:fresh={fresh(entry)} use:hold={entry}>
+							<span>{entry.content}</span>
+						</div>
 						{#if !phone}
 							{@const done = copied?.id === entry.id ? copied : null}
 							<div class="acts">
@@ -933,12 +948,13 @@
 				<div class="answer md">{@html chatMarkdown(live.content, true)}</div>
 			{/if}
 			<p class="live-line" class:quiet={!!live.content && !live.step}>
+				<!-- 0.100: the figure in space, one per kind of work (BusyFigure). -->
 				{#key live.content && !live.step ? 'write' : kind}
-					<span
-						class="dots"
-						data-kind={live.content && !live.step ? 'write' : kind}
-						aria-hidden="true"><i></i><i></i><i></i></span
-					>
+					<BusyFigure
+						kind={live.content && !live.step ? 'write' : kind}
+						size={live.content && !live.step ? 20 : 26}
+						{calm}
+					/>
 				{/key}
 				{#if live.step}
 					<span class="sweep"
@@ -1843,7 +1859,8 @@
 	   "Weniger Bewegung" leave the line still. */
 	.live-line,
 	.approval,
-	.steps-line {
+	.steps-line,
+	.user.fresh {
 		animation: come 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 	@keyframes come {
@@ -1852,15 +1869,32 @@
 			transform: translateY(6px);
 		}
 	}
-	:global(.agent.calm) :is(.live-line, .approval, .steps-line) {
+	:global(.agent.calm) :is(.live-line, .approval, .steps-line, .user.fresh) {
 		animation: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.live-line,
 		.approval,
-		.steps-line {
+		.steps-line,
+		.user.fresh {
 			animation: none;
 		}
+	}
+	/* What can be pressed changes colour softly, not at once (0.100: the
+	   chat had no transition on any of its buttons). */
+	.act,
+	.steps-line,
+	button.step,
+	.choices :global(.btn),
+	.md :global(.code-head button),
+	.md :global(.table-foot button) {
+		transition:
+			background-color 0.16s ease,
+			color 0.16s ease,
+			border-color 0.16s ease;
+	}
+	:global(.agent.calm) :is(.act, .steps-line, button.step) {
+		transition: none;
 	}
 	.live-line {
 		display: flex;
@@ -1871,18 +1905,6 @@
 		font-size: 0.95em;
 		color: var(--muted);
 	}
-	/* Three dots that never do the same thing for long (owner 15 Nov 2026:
-	   "die sich nur langweilig drehen"): a triangle that turns a third, a
-	   row the dots hop along one after the other, one dot that swallows the
-	   other two, becomes a small square and turns over, a column, and back
-	   to the triangle. Each dot has its own path; all three share the time
-	   so they stay together. */
-	.dots {
-		flex: none;
-		position: relative;
-		width: 18px;
-		height: 18px;
-	}
 	.ring {
 		flex: none;
 		width: 14px;
@@ -1892,387 +1914,7 @@
 		border: 2px solid var(--status-warn, var(--ag-warm));
 		background: radial-gradient(circle, var(--status-warn, var(--ag-warm)) 38%, transparent 44%);
 	}
-	.dots i {
-		position: absolute;
-		left: 6.75px;
-		top: 6.75px;
-		width: 4.5px;
-		height: 4.5px;
-		border-radius: 50%;
-		background: var(--ag-warm, var(--accent));
-		will-change: transform;
-	}
-	/* Standing still (calm, less motion) they are the triangle. */
-	.dots i:nth-child(1) {
-		transform: translate(0, -5px) scale(1);
-		/* With its name: the minifier makes "none" of a shorthand without one
-		   (0.93 stood still). */
-		animation: dot-a 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	.dots i:nth-child(2) {
-		transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
-		/* With its name: the minifier makes "none" of a shorthand without one
-		   (0.93 stood still). */
-		animation: dot-b 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	.dots i:nth-child(3) {
-		transform: translate(4.5px, 3.5px) scale(1);
-		/* With its name: the minifier makes "none" of a shorthand without one
-		   (0.93 stood still). */
-		animation: dot-c 5.6s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	@keyframes dot-a {
-		0%,
-		9% {
-			transform: translate(0, -5px) scale(1);
-		}
-		19%,
-		25% {
-			transform: translate(4.5px, 3.5px) scale(1);
-		}
-		34%,
-		44% {
-			transform: translate(6px, 0) scale(1);
-		}
-		48% {
-			transform: translate(6px, -4.5px) scale(1);
-		}
-		52%,
-		54% {
-			transform: translate(6px, 0) scale(1);
-		}
-		61%,
-		76% {
-			transform: translate(0, 0) scale(0.3);
-		}
-		84%,
-		91% {
-			transform: translate(0, -6px) scale(1);
-		}
-		100% {
-			transform: translate(0, -5px) scale(1);
-		}
-	}
-	@keyframes dot-b {
-		0%,
-		9% {
-			transform: translate(-4.5px, 3.5px) rotate(0deg) scale(1);
-			border-radius: 50%;
-		}
-		19%,
-		25% {
-			transform: translate(0, -5px) rotate(0deg) scale(1);
-		}
-		34%,
-		40% {
-			transform: translate(0, 0) rotate(0deg) scale(1);
-		}
-		44% {
-			transform: translate(0, -4.5px) rotate(0deg) scale(1);
-		}
-		48%,
-		54% {
-			transform: translate(0, 0) rotate(0deg) scale(1);
-		}
-		61% {
-			transform: translate(0, 0) rotate(0deg) scale(2.3);
-			border-radius: 50%;
-		}
-		65% {
-			transform: translate(0, 0) rotate(0deg) scale(2.1);
-			border-radius: 26%;
-		}
-		72% {
-			transform: translate(0, 0) rotate(180deg) scale(2.1);
-			border-radius: 26%;
-		}
-		76% {
-			transform: translate(0, 0) rotate(180deg) scale(2.3);
-			border-radius: 50%;
-		}
-		84%,
-		91% {
-			transform: translate(0, 0) rotate(180deg) scale(1);
-			border-radius: 50%;
-		}
-		100% {
-			transform: translate(-4.5px, 3.5px) rotate(180deg) scale(1);
-			border-radius: 50%;
-		}
-	}
-	@keyframes dot-c {
-		0%,
-		9% {
-			transform: translate(4.5px, 3.5px) scale(1);
-		}
-		19%,
-		25% {
-			transform: translate(-4.5px, 3.5px) scale(1);
-		}
-		34%,
-		36% {
-			transform: translate(-6px, 0) scale(1);
-		}
-		40% {
-			transform: translate(-6px, -4.5px) scale(1);
-		}
-		44%,
-		54% {
-			transform: translate(-6px, 0) scale(1);
-		}
-		61%,
-		76% {
-			transform: translate(0, 0) scale(0.3);
-		}
-		84%,
-		91% {
-			transform: translate(0, 6px) scale(1);
-		}
-		100% {
-			transform: translate(4.5px, 3.5px) scale(1);
-		}
-	}
-	/* A figure per kind of step (0.94). Each sets where the dots stand, so
-	   that the still figure (calm, less motion) says the same thing. */
-	.dots {
-		animation: figure 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-	}
-	@keyframes figure {
-		from {
-			opacity: 0;
-			transform: scale(0.5);
-		}
-	}
-	/* web: a core two dots circle, like something being looked for */
-	.dots[data-kind='web'] i:nth-child(1) {
-		transform: rotate(0deg) translateX(6.6px) scale(0.9);
-		animation: orbit 1.5s linear infinite;
-	}
-	.dots[data-kind='web'] i:nth-child(2) {
-		transform: scale(1.5);
-		border-radius: 50%;
-		animation: core 1.5s ease-in-out infinite;
-	}
-	.dots[data-kind='web'] i:nth-child(3) {
-		transform: rotate(180deg) translateX(6.6px) scale(0.6);
-		animation: orbit-far 2.3s linear infinite;
-	}
-	@keyframes orbit {
-		to {
-			transform: rotate(360deg) translateX(6.6px) scale(0.9);
-		}
-	}
-	@keyframes orbit-far {
-		to {
-			transform: rotate(-180deg) translateX(6.6px) scale(0.6);
-		}
-	}
-	@keyframes core {
-		50% {
-			transform: scale(1.15);
-		}
-	}
-	/* files: three sheets, leafed through one after the other */
-	.dots[data-kind='files'] i {
-		border-radius: 1.5px;
-	}
-	.dots[data-kind='files'] i:nth-child(1) {
-		transform: translateX(-5.5px) scaleY(2.4);
-		animation: leaf-a 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	.dots[data-kind='files'] i:nth-child(2) {
-		transform: translateX(0) scaleY(2.4);
-		animation: leaf-b 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	.dots[data-kind='files'] i:nth-child(3) {
-		transform: translateX(5.5px) scaleY(2.4);
-		animation: leaf-c 1.5s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	@keyframes leaf-a {
-		0%,
-		60%,
-		100% {
-			transform: translateX(-5.5px) scaleY(2.4);
-			opacity: 0.45;
-		}
-		20% {
-			transform: translate(-5.5px, -2.5px) scaleY(2.9);
-			opacity: 1;
-		}
-	}
-	@keyframes leaf-b {
-		0%,
-		20%,
-		80%,
-		100% {
-			transform: translateX(0) scaleY(2.4);
-			opacity: 0.45;
-		}
-		40% {
-			transform: translate(0, -2.5px) scaleY(2.9);
-			opacity: 1;
-		}
-	}
-	@keyframes leaf-c {
-		0%,
-		40%,
-		100% {
-			transform: translateX(5.5px) scaleY(2.4);
-			opacity: 0.45;
-		}
-		60% {
-			transform: translate(5.5px, -2.5px) scaleY(2.9);
-			opacity: 1;
-		}
-	}
-	/* write: three keys, pressed in turn */
-	.dots[data-kind='write'] i:nth-child(1) {
-		transform: translateX(-6px);
-		animation: key-a 1.05s ease-in-out infinite;
-	}
-	.dots[data-kind='write'] i:nth-child(2) {
-		transform: translateX(0);
-		border-radius: 50%;
-		animation: key-b 1.05s ease-in-out infinite;
-	}
-	.dots[data-kind='write'] i:nth-child(3) {
-		transform: translateX(6px);
-		animation: key-c 1.05s ease-in-out infinite;
-	}
-	@keyframes key-a {
-		0%,
-		40%,
-		100% {
-			transform: translate(-6px, 0);
-			opacity: 1;
-		}
-		20% {
-			transform: translate(-6px, 3.5px);
-			opacity: 0.5;
-		}
-	}
-	@keyframes key-b {
-		0%,
-		20%,
-		60%,
-		100% {
-			transform: translate(0, 0);
-			opacity: 1;
-		}
-		40% {
-			transform: translate(0, 3.5px);
-			opacity: 0.5;
-		}
-	}
-	@keyframes key-c {
-		0%,
-		40%,
-		80%,
-		100% {
-			transform: translate(6px, 0);
-			opacity: 1;
-		}
-		60% {
-			transform: translate(6px, 3.5px);
-			opacity: 0.5;
-		}
-	}
-	/* home and switch: the triangle is a roof, its lights go on in turn */
-	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(1) {
-		transform: translate(0, -5px);
-		animation: lamp-a 1.5s ease-in-out infinite;
-	}
-	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(2) {
-		transform: translate(-5px, 3.5px);
-		border-radius: 50%;
-		animation: lamp-b 1.5s ease-in-out infinite;
-	}
-	.dots:is([data-kind='home'], [data-kind='switch']) i:nth-child(3) {
-		transform: translate(5px, 3.5px);
-		animation: lamp-c 1.5s ease-in-out infinite;
-	}
-	.dots[data-kind='switch'] i:nth-child(n) {
-		animation-duration: 0.8s;
-	}
-	@keyframes lamp-a {
-		0%,
-		45%,
-		100% {
-			transform: translate(0, -5px) scale(0.8);
-			opacity: 0.35;
-		}
-		18% {
-			transform: translate(0, -5px) scale(1.35);
-			opacity: 1;
-		}
-	}
-	@keyframes lamp-b {
-		0%,
-		25%,
-		75%,
-		100% {
-			transform: translate(-5px, 3.5px) scale(0.8);
-			opacity: 0.35;
-		}
-		50% {
-			transform: translate(-5px, 3.5px) scale(1.35);
-			opacity: 1;
-		}
-	}
-	@keyframes lamp-c {
-		0%,
-		55%,
-		100% {
-			transform: translate(5px, 3.5px) scale(0.8);
-			opacity: 0.35;
-		}
-		82% {
-			transform: translate(5px, 3.5px) scale(1.35);
-			opacity: 1;
-		}
-	}
-	/* code: three bars that rise and fall, each in its own time */
-	.dots[data-kind='code'] i {
-		border-radius: 1.5px;
-		transform-origin: 50% 100%;
-	}
-	.dots[data-kind='code'] i:nth-child(1) {
-		transform: translate(-5.5px, 5px) scaleY(2);
-		animation: bar-a 0.9s ease-in-out infinite alternate;
-	}
-	.dots[data-kind='code'] i:nth-child(2) {
-		transform: translate(0, 5px) scaleY(3.2);
-		animation: bar-b 0.7s ease-in-out infinite alternate;
-	}
-	.dots[data-kind='code'] i:nth-child(3) {
-		transform: translate(5.5px, 5px) scaleY(1.4);
-		animation: bar-c 1.1s ease-in-out infinite alternate;
-	}
-	@keyframes bar-a {
-		from {
-			transform: translate(-5.5px, 5px) scaleY(1);
-		}
-		to {
-			transform: translate(-5.5px, 5px) scaleY(3.2);
-		}
-	}
-	@keyframes bar-b {
-		from {
-			transform: translate(0, 5px) scaleY(3.4);
-		}
-		to {
-			transform: translate(0, 5px) scaleY(1.2);
-		}
-	}
-	@keyframes bar-c {
-		from {
-			transform: translate(5.5px, 5px) scaleY(1.6);
-		}
-		to {
-			transform: translate(5.5px, 5px) scaleY(3);
-		}
-	}
-	/* Under an answer that streams in, the dots stay, smaller and alone. */
+	/* Under an answer that streams in, the figure stays, smaller and alone. */
 	.live-line.quiet {
 		min-height: 22px;
 		opacity: 0.8;
@@ -2375,9 +2017,7 @@
 		}
 	}
 	:global(.agent.calm) .sweep,
-	:global(.agent.calm) .dots,
-	:global(.agent.calm) .busy-word,
-	:global(.agent.calm) .dots i:nth-child(n) {
+	:global(.agent.calm) .busy-word {
 		animation: none;
 	}
 	:global(.agent.calm) .sweep {
@@ -2385,11 +2025,9 @@
 		background: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.dots,
 		.busy-word,
 		.tick,
 		.tick *,
-		.dots[data-kind] i:nth-child(n),
 		.sweep {
 			animation: none;
 		}
