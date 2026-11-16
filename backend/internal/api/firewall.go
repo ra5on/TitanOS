@@ -46,10 +46,12 @@ type firewallArea struct {
 	firewall *firewall.Manager
 }
 
-func (a firewallArea) register(mux *routeMux, admin, clusterLocal func(http.HandlerFunc) http.HandlerFunc) {
+func (a firewallArea) register(mux *routeMux, admin, clusterLocal, browserOnly func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/v1/firewall", admin(a.handleFirewall))
 	mux.HandleFunc("PUT /api/v1/firewall", admin(clusterLocal(a.handleFirewallChange)))
-	mux.HandleFunc("POST /api/v1/firewall/confirm", admin(clusterLocal(a.handleFirewallConfirm)))
+	// Confirming shows that a person still reaches the web UI: never an
+	// API token, MCP, the KI-Agent, Home Assistant or another node.
+	mux.HandleFunc("POST /api/v1/firewall/confirm", admin(clusterLocal(browserOnly(a.handleFirewallConfirm))))
 	mux.HandleFunc("POST /api/v1/firewall/revert", admin(a.handleFirewallRevert))
 	mux.HandleFunc("PUT /api/v1/firewall/autoblock", admin(a.handleFirewallAutoBlock))
 	mux.HandleFunc("POST /api/v1/firewall/unblock", admin(a.handleFirewallUnblock))
@@ -89,7 +91,8 @@ func (a firewallArea) handleFirewallChange(w http.ResponseWriter, r *http.Reques
 }
 
 // handleFirewallConfirm keeps the change on trial. Only a person in the
-// web UI may do it: API tokens and MCP never reach this route.
+// web UI may do it (browserOnly, clusterLocal; tokens are not let in by
+// publicRoutes).
 func (a firewallArea) handleFirewallConfirm(w http.ResponseWriter, r *http.Request) {
 	if err := a.firewall.Confirm(r.Context()); err != nil {
 		writeFirewallError(w, err)

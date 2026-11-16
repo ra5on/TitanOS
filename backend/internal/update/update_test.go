@@ -807,3 +807,26 @@ func TestNewerReleaseReplacesTheWaitingUpdate(t *testing.T) {
 		t.Errorf("slot a changed: %q", data)
 	}
 }
+
+// A newer release that cannot be installed (here: it needs a newer running
+// version first) must leave the waiting update as it was: the check comes
+// before the waiting switch is taken back.
+func TestRefusedNewerReleaseKeepsTheWaitingUpdate(t *testing.T) {
+	e := newEnv(t)
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	e.install(t)
+	before := entries(e)
+	e.publish(t, "1.2.0", ChannelStable, func(m *Manifest) { m.MinVersion = "1.1.0" })
+	if err := e.m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Install(context.Background()); !errors.Is(err, ErrTooOld) {
+		t.Fatalf("install: %v", err)
+	}
+	if status := e.m.Status(); status.Pending == nil || status.Pending.Version != "1.1.0" {
+		t.Fatalf("the waiting update was taken back: %+v", status.Pending)
+	}
+	if got := entries(e); got != before {
+		t.Errorf("entries: %s, before %s", got, before)
+	}
+}

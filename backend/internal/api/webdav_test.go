@@ -126,3 +126,65 @@ func TestWebDAV(t *testing.T) {
 		t.Fatal("no limit on wrong passwords")
 	}
 }
+
+// A WebDAV client sends its password with every request; the stick is read
+// once for it, not for each request (no reads of /config in what a client
+// repeats). Changes made through titand still count at once, and a new
+// account of the same name never takes the password of the old one.
+func TestWebDAVPasswordIsReadOnce(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.withShare()
+	ts.request("PUT", "/api/v1/system/webdav", map[string]any{"enabled": true})
+	newPassword := func() string {
+		_, body := ts.request("POST", "/api/v1/account/webdav", map[string]any{"password": testPassword})
+		var created struct{ Password string }
+		json.Unmarshal(body, &created)
+		return created.Password
+	}
+	first := newPassword()
+	if res, _ := ts.dav("PROPFIND", "/dav/", "alex", first, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("first: %d", res.StatusCode)
+	}
+	// Taken away behind titand's back: the answer comes from RAM.
+	file := filepath.Join(ts.store.Dir(), "users", "alex", "webdav.json")
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := ts.dav("PROPFIND", "/dav/", "alex", first, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("the stick was read again: %d", res.StatusCode)
+	}
+	// A new password replaces the old one at once.
+	second := newPassword()
+	if res, _ := ts.dav("PROPFIND", "/dav/", "alex", first, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old password after a new one: %d", res.StatusCode)
+	}
+	if res, _ := ts.dav("PROPFIND", "/dav/", "alex", second, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("new password: %d", res.StatusCode)
+	}
+	// Deleting it under "Mein Konto" ends it at once.
+	ts.request("DELETE", "/api/v1/account/webdav", nil)
+	if res, _ := ts.dav("PROPFIND", "/dav/", "alex", second, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("deleted password: %d", res.StatusCode)
+	}
+
+	// An account deleted and made again under the same name does not get
+	// the WebDAV password of the old one.
+	ts.request("POST", "/api/v1/users", map[string]any{"name": "carol", "password": testPassword, "role": "user"})
+	carol := ts.newClient()
+	ts.do(carol, "POST", "/api/v1/login", credentials{Name: "carol", Password: testPassword})
+	_, body := ts.do(carol, "POST", "/api/v1/account/webdav", map[string]any{"password": testPassword})
+	var created struct{ Password string }
+	json.Unmarshal(body, &created)
+	if res, _ := ts.dav("PROPFIND", "/dav/", "carol", created.Password, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("carol: %d", res.StatusCode)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/users/carol", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete carol: %d %s", res.StatusCode, body)
+	}
+	// Made again at once, mostly within the same second.
+	ts.request("POST", "/api/v1/users", map[string]any{"name": "carol", "password": testPassword, "role": "user"})
+	if res, _ := ts.dav("PROPFIND", "/dav/", "carol", created.Password, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("password of the deleted carol: %d", res.StatusCode)
+	}
+}
