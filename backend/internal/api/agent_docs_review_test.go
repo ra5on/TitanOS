@@ -70,3 +70,59 @@ func TestDocsCancelledRunKeepsTheIndex(t *testing.T) {
 		}
 	}
 }
+
+// Review 1.02: a question ("Zuordnen") about a file that was deleted in
+// the file manager stayed for good and kept every later file of the same
+// name (scan.pdf of a scanner) from being read; so did a file replaced
+// under the same name.
+func TestPaperQuestionAboutAGoneFile(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	docsMine(t, ts, ts.client, map[string]any{"paper": map[string]any{"on": true}})
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	inbox := filepath.Join(home, paperInbox)
+	os.MkdirAll(inbox, 0o755)
+	letter, err := os.ReadFile("../docindex/testdata/briefe/stadtwerke.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unclear := func(at time.Time) {
+		os.WriteFile(filepath.Join(inbox, "scan.txt"), []byte("Bitte bringen Sie die Unterlagen mit."), 0o644)
+		os.Chtimes(filepath.Join(inbox, "scan.txt"), at, at)
+	}
+	clear := func(at time.Time) {
+		os.WriteFile(filepath.Join(inbox, "scan.txt"), letter, 0o644)
+		os.Chtimes(filepath.Join(inbox, "scan.txt"), at, at)
+	}
+	asks := func() int {
+		lg, _ := ts.server.paperLoad("alex")
+		n := 0
+		for _, e := range lg.Entries {
+			if e.State == "ask" {
+				n++
+			}
+		}
+		return n
+	}
+	old := time.Now().Add(-10 * time.Minute)
+	// Deleted, then a clear letter under the same name.
+	unclear(old)
+	ts.server.paperRun(context.Background(), alex, m, false, time.Now())
+	if asks() != 1 {
+		t.Fatal("no question")
+	}
+	os.Remove(filepath.Join(inbox, "scan.txt"))
+	ts.server.paperRun(context.Background(), alex, m, false, time.Now())
+	if n := asks(); n != 0 {
+		t.Fatalf("question about a gone file stayed: %d", n)
+	}
+	// Replaced between two runs: read anew.
+	unclear(old)
+	ts.server.paperRun(context.Background(), alex, m, false, time.Now())
+	clear(old.Add(time.Minute))
+	ts.server.paperRun(context.Background(), alex, m, false, time.Now())
+	if _, err := os.Stat(filepath.Join(inbox, "scan.txt")); err == nil {
+		t.Fatal("the new scan.txt was never read")
+	}
+}

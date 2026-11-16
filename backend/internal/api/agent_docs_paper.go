@@ -57,6 +57,9 @@ type paperEntry struct {
 	Error    string        `json:"error,omitempty"`
 	// Offered: the due date went to the deadline watcher once.
 	Offered bool `json:"offered,omitempty"`
+	// Modified is the time of the file in Eingang when it was read (1.02):
+	// a new file under the same name is read anew.
+	Modified time.Time `json:"modified,omitzero"`
 }
 
 type paperHint struct {
@@ -185,6 +188,20 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 	if err != nil {
 		return err
 	}
+	// A question about a file that is gone from Eingang (deleted or moved
+	// in the file manager) waits for nothing; it would also keep a new
+	// file of the same name (scan.pdf) from ever being read.
+	inInbox := map[string]time.Time{}
+	for _, e := range entries {
+		inInbox[path.Join(paperInbox, e.Name)] = e.Modified
+	}
+	lg.Entries = slices.DeleteFunc(lg.Entries, func(x paperEntry) bool {
+		if x.Root != root.ID || (x.State != "ask" && x.State != "waiting") || path.Dir(x.Path) != paperInbox {
+			return false
+		}
+		mod, ok := inInbox[x.Path]
+		return !ok || (!x.Modified.IsZero() && !x.Modified.Equal(mod))
+	})
 	nas := s.agentSettings().Features.Docs
 	scans := docsMaxScans
 	for _, e := range entries {
@@ -210,6 +227,7 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 		if i >= 0 {
 			entry = lg.Entries[i]
 		}
+		entry.Modified = e.Modified
 		data, err := s.docsReadFile(root, p)
 		if err != nil {
 			continue
