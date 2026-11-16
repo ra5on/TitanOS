@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { FIGURES, figureSpots } from '../src/lib/agent-figures.ts';
+import { FIGURES, SPHERE, blendSpots, figureSpots } from '../src/lib/agent-figures.ts';
 
 const kinds = Object.keys(FIGURES);
 
@@ -14,9 +14,10 @@ test('every kind of work has a figure that moves and stays inside its box', () =
 			const spots = figureSpots(kind, t);
 			assert.equal(spots.length, 3);
 			for (const [n, p] of spots.entries()) {
-				for (const v of [p.x, p.y, p.z, p.s]) assert.ok(Number.isFinite(v), `${kind} ${t}`);
-				// The sphere with its size stays inside the figure (a little air for the nearest).
-				const r = 0.42 * p.s * (1 + p.z * 0.28);
+				for (const v of [p.x, p.y, p.z]) assert.ok(Number.isFinite(v), `${kind} ${t}`);
+				assert.equal(p.s, undefined, `${kind}: no sphere has a size of its own`);
+				// The sphere stays inside the figure (a little air).
+				const r = SPHERE;
 				assert.ok(Math.abs(p.x) + r <= 1.12, `${kind}: sphere ${n} leaves sideways at ${t}`);
 				assert.ok(Math.abs(p.y) + r <= 1.12, `${kind}: sphere ${n} leaves up or down at ${t}`);
 				assert.ok(p.z >= -1 && p.z <= 1, `${kind}: depth ${p.z}`);
@@ -25,6 +26,28 @@ test('every kind of work has a figure that moves and stays inside its box', () =
 		}
 		assert.ok(moved, `${kind}: the figure stands still`);
 	}
+});
+
+test('a change of figure glides: it starts where the spheres stand and ends in the new figure', () => {
+	for (const a of kinds)
+		for (const b of kinds) {
+			const from = figureSpots(a, 3);
+			const to = figureSpots(b, 3);
+			const at = (spots) => spots.map((p) => [p.x, p.y, p.z].map((v) => Math.round(v * 1e9)));
+			assert.deepEqual(at(blendSpots(from, to, 0)), at(from));
+			assert.deepEqual(at(blendSpots(from, to, 1)), at(to));
+			// No jump on the way: small steps make small moves.
+			let before = blendSpots(from, to, 0);
+			for (let k = 0.02; k <= 1; k += 0.02) {
+				const now = blendSpots(from, to, k);
+				for (const n of [0, 1, 2])
+					assert.ok(
+						Math.abs(now[n].x - before[n].x) + Math.abs(now[n].y - before[n].y) < 0.2,
+						`${a} → ${b} jumps at ${k}`,
+					);
+				before = now;
+			}
+		}
 });
 
 test('the words of every kind exist in German and English, numbered without a gap', () => {
