@@ -708,6 +708,27 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   await made.ctx.close();
 }
 
+// Durchsicht 102: a console asked for by another window (/terminal?open=…)
+// stays closed once its tab is ended, and a new tab keeps the focus.
+if (!allOnly) {
+  const made = await create("owner", "graphit", 1280);
+  const { page } = made;
+  const request = { kind: "ct", container: "immich", title: "immich" };
+  await page.goto(
+    base + "/terminal?open=" + encodeURIComponent(JSON.stringify(request)),
+  );
+  const tab = page.getByRole("tab", { name: /immich/ });
+  await tab.waitFor();
+  // A container console ends without asking.
+  await page.getByRole("button", { name: "Sitzung immich beenden" }).click();
+  await page.waitForTimeout(600);
+  check(
+    (await tab.count()) === 0,
+    "an ended console of a request does not open again",
+  );
+  await made.ctx.close();
+}
+
 // Script errors of the checked pages; the visual pass below also opens pages
 // whose data the shared fixtures do not have (they have scripts of their own).
 // A reload of the dev server while a page loads is no error of the page.
