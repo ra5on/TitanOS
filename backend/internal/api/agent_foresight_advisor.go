@@ -124,13 +124,15 @@ func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
 	go func() {
 		ctx, cancel := context.WithTimeout(s.agentBase(), 5*time.Minute)
 		defer cancel()
-		s.runAdvisor(ctx, a, now, true)
+		if _, err := s.runAdvisor(ctx, a, now, true); err != nil {
+			slog.Warn("hardware adviser did not run; the last report stays", "err", err)
+		}
 	}()
 }
 
 // runAdvisor judges now and keeps the report. nightly runs also send the
 // monthly report.
-func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, nightly bool) advisorSaved {
+func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, nightly bool) (advisorSaved, error) {
 	env := s.agentEnv()
 	st := s.foresight()
 	defer func() {
@@ -140,7 +142,12 @@ func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, 
 	}()
 	s.advisorLoad()
 	history := env.smartHistory != nil && !s.volumeAsleep(s.smartHistoryVolume())
-	in := s.advisorInput(ctx, a, now, history)
+	in, err := s.advisorInput(ctx, a, now, history)
+	if err != nil {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return st.saved, err
+	}
 	report := advisor.Judge(in)
 	var offers map[string][]advisorOffer
 	if a.Prices && s.agentWebAllowed() {
@@ -167,7 +174,7 @@ func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, 
 	st.mu.Lock()
 	st.saved = saved
 	st.mu.Unlock()
-	return saved
+	return saved, nil
 }
 
 // agentWebAllowed: the agent's policy lets it search the web.
@@ -336,7 +343,7 @@ func (s *Server) advisorRunNow(ctx context.Context, a agentAdvisor) (advisorSave
 	st.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	return s.runAdvisor(ctx, a, time.Now().In(s.agentLocation()), false), nil
+	return s.runAdvisor(ctx, a, time.Now().In(s.agentLocation()), false)
 }
 
 func (s *Server) handleAdvisorRun(w http.ResponseWriter, r *http.Request) {
@@ -345,8 +352,11 @@ func (s *Server) handleAdvisorRun(w http.ResponseWriter, r *http.Request) {
 		featureOff(w)
 		return
 	}
-	if _, err := s.advisorRunNow(r.Context(), a); err != nil {
+	if _, err := s.advisorRunNow(r.Context(), a); errors.Is(err, errAdvisorRunning) {
 		writeError(w, http.StatusConflict, "advisor_running", err.Error())
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage_failed", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, s.advisorView())
