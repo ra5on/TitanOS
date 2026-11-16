@@ -31,7 +31,11 @@
 			});
 	});
 
+	// Only the answer for the folder shown counts: going on quickly could
+	// list the subfolders of an earlier one under the new path.
+	let asked = 0;
 	async function go(next: FileRoot | null, path = '') {
+		const n = ++asked;
 		error = '';
 		root = next;
 		dir = path;
@@ -41,12 +45,13 @@
 			const list = await api.get<FileEntry[]>(
 				`/files/list?root=${encodeURIComponent(next.id)}&path=${encodeURIComponent(path)}`,
 			);
+			if (n !== asked) return;
 			dirs = list
 				.filter((e) => e.dir && !e.name.startsWith('.'))
 				.map((e) => e.name)
 				.sort((a, b) => a.localeCompare(b));
 		} catch (e) {
-			error = apiErrorText(e);
+			if (n === asked) error = apiErrorText(e);
 		}
 	}
 	const up = () => {

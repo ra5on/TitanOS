@@ -136,6 +136,13 @@ def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
 
 
+def changed_files(since, until="HEAD"):
+    """The paths changed between two commits. A rename lists both of its
+    paths: with git's rename detection only the new one came out, and a
+    file moved out of the image counted as a change to docs/."""
+    return git("diff", "--name-only", "--no-renames", f"{since}..{until}").split()
+
+
 GITHUB_DOWNLOAD = re.compile(r"^https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)/([^/?#]+)$")
 
 
@@ -255,7 +262,7 @@ def decide(version, message, source, changed_since=None, fetch=manifest, tags=No
     base = previous["app"]["base"]
     if key(base) is None:
         raise ValueError(f"odd base version in {previous['tag']}: {base}")
-    changed = changed_since(f"v{base}") if changed_since else git("diff", "--name-only", f"v{base}..HEAD").split()
+    changed = changed_since(f"v{base}") if changed_since else changed_files(f"v{base}")
     outside = [path for path in changed if not path.startswith(ALLOWED)]
     # A newer Go or Node only rebuilds titand (a security fix of the standard
     # library, say); a change to any other pinned tool is one to the image.

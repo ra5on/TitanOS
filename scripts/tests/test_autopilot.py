@@ -147,8 +147,10 @@ class GitTest(unittest.TestCase):
     """The commands of plan, pending and guard on a real repository."""
 
     def git(self, *args):
+        # Without the developer's git settings (signed commits and tags).
         subprocess.run(["git", *args], cwd=self.dir, check=True, capture_output=True,
-                       env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+                            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -178,9 +180,23 @@ class GitTest(unittest.TestCase):
     def test_guard_reads_parent_tag_and_change(self):
         parents = autopilot.git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
         tags = autopilot.git("tag", "--points-at", parents[0]).split()
-        changed = autopilot.git("diff", "--name-only", "HEAD^", "HEAD").split()
+        changed = autopilot.head_change()
         self.assertEqual((tags, changed), (["v0.45.1"], ["build/debian-security.txt"]))
         self.assertTrue(autopilot.guard("0.45.2", parents, tags, changed, published("v0.45.1"))[0])
+
+    def test_a_file_renamed_to_the_marker_is_no_security_update(self):
+        # Review 1.02: git's rename detection listed only the marker, and
+        # the guard let a moved build file through without approval.
+        self.git("rm", "-q", "build/debian-security.txt")
+        self.git("commit", "-qm", "again")
+        self.git("tag", "-a", "v0.45.3", "-m", "Ein volles Systemupdate")
+        self.git("mv", "build/mkosi.conf", "build/debian-security.txt")
+        self.git("commit", "-qm", "moved")
+        parents = autopilot.git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+        tags = autopilot.git("tag", "--points-at", parents[0]).split()
+        changed = autopilot.head_change()
+        self.assertIn("build/mkosi.conf", changed)
+        self.assertFalse(autopilot.guard("0.45.4", parents, tags, changed, published("v0.45.3"))[0])
 
 
 if __name__ == "__main__":

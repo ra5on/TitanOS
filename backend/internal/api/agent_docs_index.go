@@ -51,10 +51,26 @@ var docsUserName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // docsRoot opens .titanos/docs/<account> on the agent's volume (root,
 // 0700). In tests the agent's own test folder holds it.
 func (s *Server) docsRoot(user string) (*os.Root, error) {
-	env := s.agentEnv()
 	if !docsUserName.MatchString(user) {
 		return nil, errors.New("invalid account name")
 	}
+	base, err := s.docsBase()
+	if err != nil {
+		return nil, err
+	}
+	defer base.Close()
+	if err := base.Mkdir(user, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+	if st, err := base.Lstat(user); err != nil || !st.IsDir() {
+		return nil, errors.New("docs folder is no folder")
+	}
+	return base.OpenRoot(user)
+}
+
+// docsBase opens .titanos/docs on the agent's volume.
+func (s *Server) docsBase() (*os.Root, error) {
+	env := s.agentEnv()
 	var base *os.Root
 	if s.agentOpen != nil {
 		r, err := s.agentOpen()
@@ -82,14 +98,30 @@ func (s *Server) docsRoot(user string) (*os.Root, error) {
 			return nil, err
 		}
 	}
+	return base, nil
+}
+
+// docsForgetUser removes what "Dokumente" keeps of a deleted account: its
+// own settings of the agent (with the password of its mailbox), the index
+// and the paperwork log. A new account of the same name starts without
+// them (1.02). Chats, memory and the folder in KI-Agent stay as before.
+func (s *Server) docsForgetUser(user string) {
+	docsRuntimes.Delete(docsKey{s, user})
+	if !docsUserName.MatchString(user) {
+		return
+	}
+	if err := s.agentStore().RemovePrivate(user, agentFeaturesFile); err != nil && !errors.Is(err, agent.ErrNotFound) {
+		slog.Warn("own agent settings of a deleted account not removed", "account", user, "err", err)
+	}
+	base, err := s.docsBase()
+	if err != nil {
+		slog.Warn("documents of a deleted account not removed", "account", user, "err", err)
+		return
+	}
 	defer base.Close()
-	if err := base.Mkdir(user, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
-		return nil, err
+	if err := base.RemoveAll(user); err != nil {
+		slog.Warn("documents of a deleted account not removed", "account", user, "err", err)
 	}
-	if st, err := base.Lstat(user); err != nil || !st.IsDir() {
-		return nil, errors.New("docs folder is no folder")
-	}
-	return base.OpenRoot(user)
 }
 
 func (s *Server) docsRead(user, name string, v any, limit int64) error {
@@ -414,6 +446,9 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 	scans := docsMaxScans
 	asleep := map[string]bool{}
 	var changed []docindex.Doc
+	// A run that ends early (its time limit, titand stops) takes nothing out
+	// of the index and marks no folder as read: the next slot goes on.
+folders:
 	for _, f := range folders {
 		key := folderKey(f)
 		fst := st.Folders[key]
@@ -433,6 +468,9 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 			continue // later, when the disk is awake anyway
 		}
 		list, err := s.docsWalk(ctx, root, f.Path)
+		if ctx.Err() != nil {
+			break // the list may be cut short
+		}
 		if err != nil {
 			fst.Error = "unreadable"
 			continue
@@ -445,7 +483,7 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 		size := idx.TextSize()
 		for i, file := range list {
 			if ctx.Err() != nil {
-				break
+				break folders
 			}
 			present[file.path] = true
 			rt.mu.Lock()

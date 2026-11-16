@@ -58,6 +58,13 @@ def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
 
 
+def head_change():
+    """The paths the commit of the tag changed. A rename lists both of its
+    paths: with git's rename detection a file moved to the marker's name
+    showed as a change to the marker alone."""
+    return git("diff", "--name-only", "--no-renames", "HEAD^", "HEAD").split()
+
+
 def published(source, tag):
     """Whether a release of this tag has a manifest, i.e. was published."""
     url = f"{source}/releases/download/{tag}/manifest.json"
@@ -241,7 +248,7 @@ def main():
         return
     parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
     parent_tags = git("tag", "--points-at", parents[0]).split() if len(parents) == 1 else []
-    changed = git("diff", "--name-only", "HEAD^", "HEAD").split() if len(parents) == 1 else []
+    changed = head_change() if len(parents) == 1 else []
     allowed, reason = guard(args.version, parents, parent_tags, changed, check)
     print(f"autopilot {'allowed' if allowed else 'not allowed'}: {reason}", file=sys.stderr)
     print(f"autopilot={'true' if allowed else 'false'}")

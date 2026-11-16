@@ -21,6 +21,7 @@
 		type PaperType,
 	} from '#lib/features/docs.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { untrack } from 'svelte';
 
 	type Props = { id: FeatureViewId; onclose: () => void; calm?: boolean };
 	let { id, onclose, calm = false }: Props = $props();
@@ -30,17 +31,25 @@
 	// ---------- Papierkram ----------
 	let sum = $state<PaperSummary | null>(null);
 	let month = $state('');
+	// Only the answer to the last question counts: clicking two months
+	// quickly could leave the first one shown.
+	let asked = 0;
 	async function loadPaper() {
+		const n = ++asked;
 		error = '';
 		try {
-			sum = await paperSummary(month);
-			month = sum.month;
+			const r = await paperSummary(month);
+			if (n !== asked) return;
+			sum = r;
+			month = r.month;
 		} catch (e) {
-			error = apiErrorText(e);
+			if (n === asked) error = apiErrorText(e);
 		}
 	}
+	// Loads when the view opens; the month is chosen by its buttons (the
+	// effect does not follow it, or every choice asked twice).
 	$effect(() => {
-		if (id === 'paper') void loadPaper();
+		if (id === 'paper') untrack(() => void loadPaper());
 	});
 	const loc = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const monthName = (m: string, year = false) =>

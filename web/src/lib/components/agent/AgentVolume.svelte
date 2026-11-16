@@ -59,11 +59,17 @@
 		}
 	}
 	void load();
-	onDestroy(() => clearTimeout(timer));
+	// An answer that comes after the page is gone asks no more.
+	let gone = false;
+	onDestroy(() => {
+		gone = true;
+		clearTimeout(timer);
+	});
 
 	const finished = (m: Move) => m.state === 'done' || m.state === 'failed';
 	function poll() {
 		clearTimeout(timer);
+		if (gone) return;
 		timer = setTimeout(async () => {
 			try {
 				const r = await api.get<{ move: Move | null }>('/agent/volume/move');

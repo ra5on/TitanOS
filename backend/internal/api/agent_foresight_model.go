@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"sort"
@@ -352,25 +353,33 @@ func sampleOfValues(day string, v *storage.SmartValues) advisor.Sample {
 
 // advisorInput collects what the adviser judges. withHistory reads the
 // kept SMART history (callers check that its volume is awake).
-func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time, withHistory bool) advisor.Input {
+// A failed read of the disks is an error, not a NAS without disks: a
+// report without them would replace one that warned of a failing disk.
+func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time, withHistory bool) (advisor.Input, error) {
 	env := s.agentEnv()
 	st := s.foresight()
 	if st.input != nil {
 		in := st.input(ctx)
 		in.Predict, in.Bottlenecks = a.predict(), a.bottlenecks()
-		return in
+		return in, nil
 	}
 	in := advisor.Input{Now: now, Predict: a.predict(), Bottlenecks: a.bottlenecks()}
 	var status storage.Status
 	if env.storage != nil {
-		status, _ = env.storage.Status(ctx)
+		var err error
+		if status, err = env.storage.Status(ctx); err != nil {
+			return in, fmt.Errorf("disks not readable: %w", err)
+		}
 	}
 	sizes := map[string]storage.Disk{}
 	for _, d := range status.Disks {
 		sizes[d.Name] = d
 	}
 	if env.storage != nil {
-		reports, _ := env.storage.SmartReports(ctx, false)
+		reports, err := env.storage.SmartReports(ctx, false)
+		if err != nil {
+			return in, fmt.Errorf("SMART values not readable: %w", err)
+		}
 		for _, r := range reports {
 			if r.Role == storage.RoleStick || r.State == storage.SmartUnavailable {
 				continue
@@ -423,7 +432,7 @@ func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time
 			in.GPUs = append(in.GPUs, g)
 		}
 	}
-	return in
+	return in, nil
 }
 
 // ollamaVRAM is what the loaded models of the agent take of the graphics

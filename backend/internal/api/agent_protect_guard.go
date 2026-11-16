@@ -98,6 +98,16 @@ func (s *Server) guardLoadLocked(ps *protectState) {
 		slog.Warn("ransomware guard state not readable", "err", err)
 		return
 	}
+	// The incidents lived in the RAM of the titand that wrote the file: an
+	// alert still "active" (or a restore a restart broke off) would refuse
+	// restore and reopen for good. The attack is over as far as this
+	// titand knows; a new one makes a new alert. A restore runs again
+	// safely (the current files go to the recycle bin).
+	for i := range list {
+		if a := &list[i]; a.State == "active" || a.State == "restoring" {
+			a.State = "stopped"
+		}
+	}
 	ps.alerts, ps.loaded = list, true
 }
 
@@ -108,8 +118,14 @@ func (s *Server) guardSaveLocked(ps *protectState) {
 		slog.Error("ransomware guard state not saved: the stored state was not readable")
 		return
 	}
-	if len(ps.alerts) > maxGuardAlerts {
-		ps.alerts = ps.alerts[len(ps.alerts)-maxGuardAlerts:]
+	// The oldest closed alerts go first; an open or locked one stays (it
+	// holds the access the share had before the lock).
+	for i := 0; len(ps.alerts) > maxGuardAlerts && i < len(ps.alerts); {
+		if a := ps.alerts[i]; a.open() || a.Locked {
+			i++
+			continue
+		}
+		ps.alerts = slices.Delete(ps.alerts, i, i+1)
 	}
 	// Closed alerts keep a sample of their files, so the file stays far
 	// below what the store reads back (4 MiB).
@@ -184,8 +200,8 @@ func (s *Server) guardTick(g agentGuard, now time.Time) {
 	ps.mu.Unlock()
 
 	// Incidents that are still going get their files; stopped ones end.
-	s.guardRefresh(det)
-	for _, inc := range det.Tick(now) {
+	ended := s.guardRefresh(det)
+	for _, inc := range append(ended, det.Tick(now)...) {
 		s.guardStopped(inc, g)
 	}
 }
@@ -649,19 +665,26 @@ func (s *Server) guardUnlockShare(a *guardAlert) error {
 }
 
 // guardRefresh copies the files of running incidents into their alerts.
-func (s *Server) guardRefresh(det *protect.Detector) {
+// It returns the incidents of active alerts the detector no longer has
+// (it ended them before the alert was written, a slow lock): they end too.
+func (s *Server) guardRefresh(det *protect.Detector) []protect.Incident {
 	ps := s.protect()
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	s.guardLoadLocked(ps)
 	changed := false
+	var ended []protect.Incident
 	for i := range ps.alerts {
 		a := &ps.alerts[i]
 		if a.State != "active" {
 			continue
 		}
 		inc, ok := det.Snapshot(a.Share)
-		if !ok || inc.Count == a.Count {
+		if !ok {
+			ended = append(ended, protect.Incident{Share: a.Share, Count: a.Count, Last: a.Last, Files: a.Files, More: a.More})
+			continue
+		}
+		if inc.Count == a.Count {
 			continue
 		}
 		a.Count, a.Last, a.Files, a.More = inc.Count, inc.Last.UTC(), trimFiles(inc.Files), inc.More+max(0, len(inc.Files)-maxStoredFiles)
@@ -670,6 +693,7 @@ func (s *Server) guardRefresh(det *protect.Detector) {
 	if changed {
 		s.guardSaveLocked(ps)
 	}
+	return ended
 }
 
 func trimFiles(f []protect.Affected) []protect.Affected {
