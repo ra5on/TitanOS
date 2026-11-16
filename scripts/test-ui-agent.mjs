@@ -477,6 +477,25 @@ async function open(
     if (p === "/agent/projects") return json({ projects });
     if (p === "/agent/chats" && method === "GET") return json({ chats });
     if (p === "/agent/chats/" + haChat.id) return json(haChat);
+    // 0.100: a chat whose run still works (its stream ends at once here, so
+    // the page keeps following it for a while): the working figure shows.
+    if (p === "/agent/chats/c1aaaaaaaaaa0003")
+      return json({
+        id: "c1aaaaaaaaaa0003",
+        title: "Telekom-Rechnungen einsortieren",
+        created: at(11),
+        updated: at(11, 2),
+        state: "running",
+        origin: "web",
+        entries: [
+          {
+            id: "e3aaaaaaaaaa0001",
+            at: at(11),
+            role: "user",
+            content: "Sortiere die Telekom-Rechnungen nach Jahr.",
+          },
+        ],
+      });
     if (p === "/agent/chats/" + docChat.id) return json(docChat);
     if (p.endsWith("/events"))
       return route.fulfill({
@@ -603,18 +622,46 @@ async function open(
         keySet: seen.posts.includes("/agent/assist/key"),
         addresses: [
           { kind: "lan", url: "http://192.168.10.20/agent-ollama" },
-          { kind: "tailscale", url: "https://titan.tail1a2b3.ts.net/agent-ollama" },
+          {
+            kind: "tailscale",
+            url: "https://titan.tail1a2b3.ts.net/agent-ollama",
+          },
         ],
         areas: [
-          "home", "system", "storage", "backups", "docker", "vms", "files",
-          "shares", "accounts", "network", "updates", "plugins", "web",
-          "memory", "plan", "code",
+          "home",
+          "system",
+          "storage",
+          "backups",
+          "docker",
+          "vms",
+          "files",
+          "shares",
+          "accounts",
+          "network",
+          "updates",
+          "plugins",
+          "web",
+          "memory",
+          "plan",
+          "code",
         ],
         levels: {
-          home: "change", system: "read", storage: "read", backups: "read",
-          docker: "read", vms: "deny", files: "deny", shares: "deny",
-          accounts: "deny", network: "deny", updates: "deny", plugins: "deny",
-          web: "deny", memory: "read", plan: "change", code: "deny",
+          home: "change",
+          system: "read",
+          storage: "read",
+          backups: "read",
+          docker: "read",
+          vms: "deny",
+          files: "deny",
+          shares: "deny",
+          accounts: "deny",
+          network: "deny",
+          updates: "deny",
+          plugins: "deny",
+          web: "deny",
+          memory: "read",
+          plan: "change",
+          code: "deny",
         },
         last: {
           at: at(14, 32),
@@ -685,7 +732,9 @@ function settingsRow(scope, title) {
   return scope
     .locator(".srow")
     .filter({
-      has: page.locator(".srow-title", { hasText: new RegExp(`^\\s*${title}\\s*$`) }),
+      has: page.locator(".srow-title", {
+        hasText: new RegExp(`^\\s*${title}\\s*$`),
+      }),
     })
     .first();
 }
@@ -1100,7 +1149,9 @@ async function plan55() {
     assert.equal(await where.inputValue(), "", "Ollama from the factory");
     assert.equal(await page.getByLabel("API-Schlüssel").count(), 0);
     await where.selectOption("openai");
-    await page.getByText("verlässt alles, was der Agent liest, dein NAS").waitFor();
+    await page
+      .getByText("verlässt alles, was der Agent liest, dein NAS")
+      .waitFor();
     assert.equal(await page.getByLabel("Ollama-Server").count(), 0);
     await page
       .getByLabel("Adresse des Dienstes")
@@ -1144,17 +1195,27 @@ async function plan55() {
     await page.getByLabel("Eigene Websuche (SearXNG)").waitFor();
     const mcp = page.locator("#ag-mcp");
     await mcp
-      .getByRole("heading", { name: "Verbindungen zu anderen Programmen (MCP)" })
+      .getByRole("heading", {
+        name: "Verbindungen zu anderen Programmen (MCP)",
+      })
       .waitFor();
     assert.equal(await mcp.locator(".mcp").count(), 0, "no connection yet");
     await mcp.getByRole("button", { name: "Verbindung hinzufügen" }).click();
     await mcp.getByLabel("Name", { exact: true }).fill("n8n");
-    await mcp.getByLabel("Adresse des MCP-Servers").fill("https://n8n.example/mcp");
-    assert.ok(await mcp.getByRole("switch", { name: "n8n eingeschaltet" }).isChecked());
+    await mcp
+      .getByLabel("Adresse des MCP-Servers")
+      .fill("https://n8n.example/mcp");
+    assert.ok(
+      await mcp.getByRole("switch", { name: "n8n eingeschaltet" }).isChecked(),
+    );
     await mcp.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${out}/29b-settings-mcp.png` });
     await mcp.getByRole("button", { name: "n8n entfernen" }).click();
-    assert.equal(await mcp.locator(".mcp").count(), 0, "connection removed again");
+    assert.equal(
+      await mcp.locator(".mcp").count(),
+      0,
+      "connection removed again",
+    );
     assert.ok(
       await page.getByLabel("Helfer für Unteraufträge").isChecked(),
       "helper on by default",
@@ -1611,7 +1672,10 @@ try {
       await nasBox.uncheck();
       await page.waitForTimeout(300);
       assert.deepEqual(puts, [
-        { id: "dev00000000000001", body: { nas: false, agent: true, camera: true } },
+        {
+          id: "dev00000000000001",
+          body: { nas: false, agent: true, camera: true },
+        },
       ]);
       assert.equal(await nasBox.isChecked(), false);
       await noOverflow(page, "push devices");
@@ -1749,7 +1813,9 @@ try {
       );
       assert.ok(
         await main
-          .locator("button.srow .srow-title", { hasText: /wartet auf dich|warten auf dich/ })
+          .locator("button.srow .srow-title", {
+            hasText: /wartet auf dich|warten auf dich/,
+          })
           .isVisible(),
         "one row says that something waits",
       );
@@ -1783,7 +1849,9 @@ try {
       );
       assert.ok(
         await main
-          .locator(".srow-title", { hasText: "Telekom-Rechnungen einsortieren" })
+          .locator(".srow-title", {
+            hasText: "Telekom-Rechnungen einsortieren",
+          })
           .isVisible(),
         "the running chat is on the start page",
       );
@@ -1830,19 +1898,25 @@ try {
       // Owner 15 Nov 2026: in a table of two columns words broke in the
       // middle ("Docker-Ap / ps", "System-Ü / bersicht"). A word stays on
       // one line; it may break at its hyphen.
-      const cell = page.locator(".md .table td", { hasText: "System-Übersicht" });
+      const cell = page.locator(".md .table td", {
+        hasText: "System-Übersicht",
+      });
       await cell.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `${out}/9b-phone-chat-table.png` });
       const broken = await page.evaluate(() => {
         const bad = [];
-        for (const td of document.querySelectorAll(".md .table:not(.as-cards) td")) {
+        for (const td of document.querySelectorAll(
+          ".md .table:not(.as-cards) td",
+        )) {
           const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
-          for (let node; (node = walker.nextNode()); ) {
+          for (let node; (node = walker.nextNode());) {
             for (const m of node.textContent.matchAll(/[^\s-]+/g)) {
               const range = document.createRange();
               range.setStart(node, m.index);
               range.setEnd(node, m.index + m[0].length);
-              const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+              const tops = new Set(
+                [...range.getClientRects()].map((r) => Math.round(r.top)),
+              );
               if (tops.size > 1) bad.push(m[0]);
             }
           }
@@ -2144,7 +2218,9 @@ try {
     await page.waitForURL(/[?&]page=planned/);
     const dlg = page.locator("section.main");
     await dlg.getByRole("heading", { name: "Jeden Tag" }).waitFor();
-    await dlg.getByRole("heading", { name: "Aufträge und Erinnerungen" }).waitFor();
+    await dlg
+      .getByRole("heading", { name: "Aufträge und Erinnerungen" })
+      .waitFor();
     await dlg.getByRole("heading", { name: "Morgenbericht" }).waitFor();
     await dlg
       .getByText("Mülltonne")
@@ -2437,11 +2513,15 @@ try {
     await page.getByText("Haustür").waitFor();
     const sees = page.getByRole("radiogroup", { name: "Der Agent sieht" });
     assert.equal(
-      await sees.getByRole("radio", { name: "Auswahl" }).getAttribute("aria-checked"),
+      await sees
+        .getByRole("radio", { name: "Auswahl" })
+        .getAttribute("aria-checked"),
       "true",
       "a list with devices is a selection",
     );
-    await page.getByRole("heading", { name: "Geräte für den Agenten" }).scrollIntoViewIfNeeded();
+    await page
+      .getByRole("heading", { name: "Geräte für den Agenten" })
+      .scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/13-settings-ha-release.png` });
     // Nothing changed, nothing to save (before PLAN 91 the select "Assist
@@ -2457,7 +2537,11 @@ try {
     // "Nichts" says that the agent then sees no device; "Alles" releases
     // every device and keeps the list for the way back.
     await sees.getByRole("radio", { name: "Alles" }).click();
-    assert.equal(await page.getByText("Haustür").count(), 0, "no list with Alles");
+    assert.equal(
+      await page.getByText("Haustür").count(),
+      0,
+      "no list with Alles",
+    );
     // Every kind of device is a row: looking, and switching Ja / Nachfragen
     // / Nein (owner 15 Nov 2026: locks may be read but not switched).
     const kinds = page.locator("#ag-ha-kinds");
@@ -2478,7 +2562,10 @@ try {
       .getByRole("radiogroup", { name: "Beleuchtung: Schalten" })
       .getByRole("radio", { name: "Ja" })
       .click();
-    await page.screenshot({ path: `${out}/13b-settings-ha-kinds.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/13b-settings-ha-kinds.png`,
+      fullPage: true,
+    });
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.getByRole("status").waitFor();
     assert.equal(seen.puts.length, 1);
@@ -2568,11 +2655,15 @@ try {
     const { ctx, page, seen } = await open(1280, 1700, { theme: "hell" });
     await page.goto(base + "/settings/agent?tab=ha");
     const card = page.locator("section.sgroup", {
-      has: page.getByRole("heading", { name: "Gespräche aus Home Assistant (Assist)" }),
+      has: page.getByRole("heading", {
+        name: "Gespräche aus Home Assistant (Assist)",
+      }),
     });
     await card.getByText("http://192.168.10.20/agent-ollama").waitFor();
     assert.ok(
-      await card.getByText("https://titan.tail1a2b3.ts.net/agent-ollama").isVisible(),
+      await card
+        .getByText("https://titan.tail1a2b3.ts.net/agent-ollama")
+        .isVisible(),
       "the address with a valid certificate",
     );
     // No key yet: the page says what counts until then and offers to make one.
@@ -2583,11 +2674,16 @@ try {
     // The last try was refused, with its reason in words.
     assert.ok(
       await card
-        .getByText(/von 192\.168\.10\.40 · abgelehnt: Schlüssel fehlt oder ist falsch/)
+        .getByText(
+          /von 192\.168\.10\.40 · abgelehnt: Schlüssel fehlt oder ist falsch/,
+        )
         .isVisible(),
       "refused request",
     );
-    assert.equal((await card.locator(".chip.warn").textContent()).trim(), "Abgelehnt");
+    assert.equal(
+      (await card.locator(".chip.warn").textContent()).trim(),
+      "Abgelehnt",
+    );
     await card.getByRole("button", { name: "Schlüssel erzeugen" }).click();
     // The new key is shown right away, to copy it; then it can be hidden.
     await card.getByText(/tos-assist-TESTKEY/).waitFor();
@@ -2607,13 +2703,17 @@ try {
     await ask.waitFor({ state: "detached" });
     assert.equal(seen.posts.filter((x) => x === "/agent/assist/key").length, 1);
     assert.equal(
-      await card.locator("a.srow", { hasText: "Eigenes Profil" }).getAttribute("href"),
+      await card
+        .locator("a.srow", { hasText: "Eigenes Profil" })
+        .getAttribute("href"),
       "/agent?profile=assist",
     );
 
     // What Home Assistant may ask: every area on its own, the internet too.
     const rights = page.locator("section.sgroup", {
-      has: page.getByRole("heading", { name: "Was Home Assistant fragen darf" }),
+      has: page.getByRole("heading", {
+        name: "Was Home Assistant fragen darf",
+      }),
     });
     const row = (name) =>
       rights.locator(".srow", {
@@ -2621,7 +2721,9 @@ try {
       });
     const chosen = async (name) =>
       (
-        await row(name).locator('[role="radio"][aria-checked="true"]').textContent()
+        await row(name)
+          .locator('[role="radio"][aria-checked="true"]')
+          .textContent()
       ).trim();
     assert.equal(await rights.locator(".srow").count(), 16, "sixteen areas");
     assert.equal(await chosen("Dateien"), "Verboten");
@@ -2629,13 +2731,18 @@ try {
     assert.equal(await chosen("Geräte in Home Assistant"), "Auch ändern");
     assert.equal(await chosen("System und Status"), "Nur lesen");
     assert.deepEqual(
-      (await row("Internet").getByRole("radio").allTextContents()).map((x) => x.trim()),
+      (await row("Internet").getByRole("radio").allTextContents()).map((x) =>
+        x.trim(),
+      ),
       ["Verboten", "Erlaubt"],
     );
     await row("Internet").getByRole("radio", { name: "Erlaubt" }).click();
     await row("Dateien").getByRole("radio", { name: "Nur lesen" }).click();
     await noOverflow(page, "assist card");
-    await page.screenshot({ path: `${out}/23-settings-assist.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/23-settings-assist.png`,
+      fullPage: true,
+    });
     await page.getByRole("button", { name: "Speichern" }).first().click();
     await page.waitForTimeout(400);
     assert.deepEqual(seen.puts.at(-1).homeassistant.assistAreas, {
@@ -2664,17 +2771,26 @@ try {
     for (const path of ["/agent/chats", "/agent/projects", "/agent/inbox"])
       assert.ok(seen.profile.includes(path), `${path} names the profile`);
     assert.equal(
-      await page.locator("nav .foot .item", { hasText: "Einstellungen" }).isVisible(),
+      await page
+        .locator("nav .foot .item", { hasText: "Einstellungen" })
+        .isVisible(),
       false,
       "the settings belong to the account",
     );
     // Moving on keeps the profile in the address and in the requests.
     await page.locator("nav .item", { hasText: "Gedächtnis" }).first().click();
-    await page.waitForURL(/page=memory.*profile=assist|profile=assist.*page=memory/);
+    await page.waitForURL(
+      /page=memory.*profile=assist|profile=assist.*page=memory/,
+    );
     await page.waitForTimeout(400);
     assert.ok(seen.profile.includes("/agent/memory"), "the profile's memory");
     await page.screenshot({ path: `${out}/24-profile-assist.png` });
-    assert.equal(await note.getByRole("link", { name: "Zurück zu meinem Agenten" }).getAttribute("href"), "/agent");
+    assert.equal(
+      await note
+        .getByRole("link", { name: "Zurück zu meinem Agenten" })
+        .getAttribute("href"),
+      "/agent",
+    );
     await ctx.close();
     // Without the profile nothing names it.
     const own = await open(1280, 900, { theme: "hell" });
@@ -2684,6 +2800,47 @@ try {
     assert.deepEqual(own.seen.profile, [], "no profile for the own agent");
     assert.equal(await own.page.locator("nav .profile").count(), 0);
     await own.ctx.close();
+  }
+  // 0.100: the working figure – three spheres in space that really move,
+  // at 26 px beside its word, on the desktop and on the phone.
+  for (const [name, width, height] of [
+    ["desktop", 1280, 900],
+    ["phone", 390, 800],
+  ]) {
+    const { ctx, page } = await open(width, height);
+    await page.goto(base + "/agent?chat=c1aaaaaaaaaa0003");
+    const fig = page.locator(".live-line .fig");
+    await fig.waitFor({ timeout: 40000 });
+    // It grows in for a third of a second; measured once it stands.
+    await page.waitForTimeout(600);
+    const box = await fig.boundingBox();
+    assert.ok(
+      Math.abs(box.width - 26) < 1 && Math.abs(box.height - 26) < 1,
+      `${name}: the figure is 26 px (${box.width}×${box.height})`,
+    );
+    const places = () =>
+      fig
+        .locator("i")
+        .evaluateAll((list) => list.map((el) => el.style.transform));
+    const before = await places();
+    assert.equal(before.length, 3, `${name}: three spheres`);
+    await page.waitForTimeout(400);
+    const after = await places();
+    assert.ok(
+      before.some((p, n) => p && p !== after[n]),
+      `${name}: the spheres move (${before} → ${after})`,
+    );
+    assert.ok(
+      (await page.locator(".live-line .busy-word").innerText()).trim().length >
+        3,
+      `${name}: a word stands beside the figure`,
+    );
+    await page.screenshot({ path: `${out}/100-${name}-figure.png` });
+    await fig.screenshot({
+      path: `${out}/100-${name}-figure-close.png`,
+      scale: "device",
+    });
+    await ctx.close();
   }
   noConsoleErrors();
   console.log("KI-Agent UI ok:", out);

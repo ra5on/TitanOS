@@ -535,7 +535,7 @@ export function stepWord(tool: string | undefined): string {
 
 /** What a running step is about, for the figure of the working dots and its
  *  words (0.94): '' leaves the dots thinking and the step named as it is. */
-export type BusyKind = '' | 'web' | 'files' | 'write' | 'home' | 'switch' | 'code';
+export type BusyKind = '' | 'web' | 'files' | 'write' | 'home' | 'switch' | 'code' | 'system';
 export function busyKind(tool: string | undefined): BusyKind {
 	if (!tool) return '';
 	if (tool === 'web_search' || tool === 'web_read') return 'web';
@@ -547,6 +547,13 @@ export function busyKind(tool: string | undefined): BusyKind {
 	)
 		return 'write';
 	if (/^(files?_|document_)/.test(tool)) return 'files';
+	// The NAS itself: its state, disks, containers, machines, logs (0.100).
+	if (
+		/^(docker_|container_|app_|vm_|lxc_|storage_|system_|hardware_|backup_|logs_|shares_|updates?_|plugins?_|network_)/.test(
+			tool,
+		)
+	)
+		return 'system';
 	return '';
 }
 

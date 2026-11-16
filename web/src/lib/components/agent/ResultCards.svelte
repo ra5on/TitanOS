@@ -76,6 +76,7 @@
 <script lang="ts">
 	import { formatBytes } from '#lib/format.ts';
 	import { slide } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
@@ -167,7 +168,7 @@
 						<div class="row">{@render line()}</div>
 					{/if}
 					{#if active && opened === a.name}
-						<div class="do" transition:slide={{ duration: 220 }}>
+						<div class="do" transition:slide={{ duration: 260, easing: quintOut }}>
 							{#each actions(a) as act (act.key)}
 								<button
 									type="button"
