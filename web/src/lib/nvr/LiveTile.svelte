@@ -77,6 +77,11 @@
 	let talkProblem = $state<TalkProblem | ''>('');
 	let idle: ReturnType<typeof setTimeout> | undefined;
 	let wants = false;
+	// A connection on its way (microphone prompt, signalling): a second press
+	// waits for it instead of opening another one, and a tile that is gone by
+	// then closes it (Durchsicht 102: the microphone stayed open).
+	let opening = false;
+	let gone = false;
 	function endTalk() {
 		clearTimeout(idle);
 		talk?.close();
@@ -89,21 +94,34 @@
 		talkProblem = talkBlocked();
 		if (talkProblem) return;
 		clearTimeout(idle);
+		if (opening) return;
 		if (!talk) {
 			talkState = 'opening';
+			opening = true;
+			let opened: Talk | null = null;
 			try {
-				talk = await openTalk(camera.id, (problem) => {
+				opened = await openTalk(camera.id, (problem) => {
+					if (talk !== opened) return;
 					talk = null;
 					talking = false;
 					talkState = '';
 					talkProblem = problem;
 				});
-				talkState = 'ready';
 			} catch (problem) {
+				opening = false;
+				if (gone) return;
 				talkState = '';
 				talkProblem = (typeof problem === 'string' ? problem : 'failed') as TalkProblem;
 				return;
 			}
+			opening = false;
+			if (!opened) return;
+			if (gone) {
+				opened.close();
+				return;
+			}
+			talk = opened;
+			talkState = 'ready';
 		}
 		// Released while the connection was still opening: stay quiet.
 		if (wants) {
@@ -120,7 +138,10 @@
 		clearTimeout(idle);
 		idle = setTimeout(endTalk, 30000);
 	}
-	$effect(() => () => endTalk());
+	$effect(() => () => {
+		gone = true;
+		endTalk();
+	});
 </script>
 
 <div class="tile-view" class:solo data-camera={camera.id} bind:clientHeight={tileHeight}>
