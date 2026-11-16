@@ -95,6 +95,11 @@
 	 */
 	const successorOf = (a: WebApp) =>
 		a.successor ? webapps.apps.find((x) => x.id === a.successor) : undefined;
+	// Set when the list is gone: a replacement on its way stops asking and deletes nothing.
+	let gone = false;
+	$effect(() => () => {
+		gone = true;
+	});
 	async function replaceBy(a: WebApp) {
 		const next = successorOf(a);
 		if (!next) return;
@@ -102,12 +107,23 @@
 		error = '';
 		try {
 			if (!next.installed) await api.post(`/webapps/${encodeURIComponent(next.id)}/install`);
-			for (let i = 0; i < 600; i++) {
+			// The original goes only once its successor is ready (Durchsicht 102:
+			// after 15 minutes of a slow download it was deleted anyway).
+			let ready = false;
+			for (let i = 0; i < 600 && !gone; i++) {
 				await loadWebApps();
 				const now = webapps.apps.find((x) => x.id === next.id);
-				if (now?.installed && now.state === 'ready') break;
+				if (now?.installed && now.state === 'ready') {
+					ready = true;
+					break;
+				}
 				if (now?.state === 'error') throw new Error(stateText(now));
 				await new Promise((ok) => setTimeout(ok, 1500));
+			}
+			if (gone) return;
+			if (!ready) {
+				error = t('webapps.successorNotReady', { name: next.name });
+				return;
 			}
 			await api.delete(`/webapps/${encodeURIComponent(a.id)}`);
 			await loadWebApps();

@@ -171,5 +171,6 @@
 	"welcome.officeLater": "More programs, and removing them, are in the App Center under “Programs for the browser”.",
 	"welcome.officeNoVolume": "They are installed as soon as the first volume exists (they are kept on the volume, not on the stick).",
 	"welcome.officeText": "T-Word, T-Exel and T-PDF open Word, Excel and PDF files right in the browser, in a TitanOS window: double-click in the file manager, saving writes the original file. They run on your device, not on the NAS, and come checked with TitanOS updates.",
-	"welcome.officeUnavailable": "This NAS does not offer programs for the browser yet."
+	"welcome.officeUnavailable": "This NAS does not offer programs for the browser yet.",
+	"webapps.successorNotReady": "“{name}” is not ready yet. The current program stays; try again later."
 }
