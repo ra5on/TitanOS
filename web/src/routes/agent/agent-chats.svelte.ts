@@ -316,7 +316,8 @@ export class AgentChats {
 		this.newChat(inProject);
 		this.fresh = true;
 	};
-	newChat = (inProject = this.project) => {
+	/** navigate: false when the address already says it ("back", 1.01). */
+	newChat = (inProject = this.project, navigate = true) => {
 		this.fresh = false;
 		this.menuOpen = false;
 		this.readOnlyBy = '';
@@ -328,7 +329,7 @@ export class AgentChats {
 		this.busy = false;
 		this.project = inProject;
 		this.live = { thinking: '', content: '', step: null };
-		void this.go('/agent');
+		if (navigate) void this.go('/agent');
 	};
 
 	private retries = 0;
