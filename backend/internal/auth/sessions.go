@@ -82,8 +82,8 @@ type Sessions struct {
 	lockWantMap map[string]lockMark
 	lockKept    []byte
 	wantGen     uint64
-	writing bool
-	idle    *sync.Cond
+	writing     bool
+	idle        *sync.Cond
 	// stay is the setting "stay logged in": days after the login, 0 = off,
 	// StayForever = no end.
 	stay int
