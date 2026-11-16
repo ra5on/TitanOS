@@ -162,7 +162,10 @@ for (const [width, height] of [
   const mb = await menuButton.boundingBox();
   const sb = await page.locator(".home .search").boundingBox();
   assert.equal((await menuButton.innerText()).trim(), "Menü");
-  assert.ok(mb.x < 24 && mb.height >= 44, "menu button top left, a touch target");
+  assert.ok(
+    mb.x < 24 && mb.height >= 44,
+    "menu button top left, a touch target",
+  );
   assert.ok(sb.x >= mb.x + mb.width, "search right of the menu button");
   assert.ok(sb.width >= 90, `search wide enough to type (${sb.width})`);
   await menuButton.tap();
@@ -188,19 +191,21 @@ for (const [width, height] of [
       "shutdown",
     ],
   );
-  const buttons = await launcher.locator(".fb, .chip, .link").evaluateAll((els) =>
-    els.map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        text: el.textContent.trim(),
-        l: r.left,
-        r: r.right,
-        t: r.top,
-        b: r.bottom,
-        cut: el.scrollWidth > el.clientWidth + 1,
-      };
-    }),
-  );
+  const buttons = await launcher
+    .locator(".fb, .chip, .link")
+    .evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          text: el.textContent.trim(),
+          l: r.left,
+          r: r.right,
+          t: r.top,
+          b: r.bottom,
+          cut: el.scrollWidth > el.clientWidth + 1,
+        };
+      }),
+    );
   for (const b of buttons) {
     assert.ok(!b.cut, `not cut off: ${b.text}`);
     assert.ok(b.l >= lb.x && b.r <= lb.x + lb.width + 1, `inside: ${b.text}`);
@@ -220,7 +225,9 @@ for (const [width, height] of [
     await launcher
       .locator(".prog")
       .evaluateAll((els) =>
-        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+        els.map((el) =>
+          el.querySelector(":scope > span:last-child").textContent.trim(),
+        ),
       ),
     ["Speicher"],
   );
@@ -231,12 +238,18 @@ for (const [width, height] of [
       await launcher
         .locator(".prog")
         .evaluateAll((els) =>
-        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
-      )
+          els.map((el) =>
+            el.querySelector(":scope > span:last-child").textContent.trim(),
+          ),
+        )
     ).slice(0, 2);
   const start = await firstTwo();
   await launcher.locator(".cell").nth(1).locator('[data-move="back"]').tap();
-  assert.deepEqual(await firstTwo(), [start[1], start[0]], "reordered by touch");
+  assert.deepEqual(
+    await firstTwo(),
+    [start[1], start[0]],
+    "reordered by touch",
+  );
   await launcher.locator("[data-menu-reset]").tap();
   assert.deepEqual(await firstTwo(), start);
   // A touch beside the menu closes it.
@@ -314,8 +327,10 @@ for (const [width, height] of [
   await ctx.close();
 }
 
-// PLAN 69/78: the control panel on a phone lists every page as a row in one
-// column, so long names like "Benachrichtigungen" stay whole.
+// PLAN 69/78, since 0.87 in levels: the control panel on a phone lists the
+// areas as rows in one column (no overview cards there), an area opens one
+// level down to its pages, and the arrow of the bar goes one level back.
+// Long names like "Benachrichtigungen" stay whole, nothing leaves the screen.
 {
   const { ctx, page } = await phone(390, 844, { cluster: false });
   await page.goto(base + "/settings");
@@ -323,30 +338,28 @@ for (const [width, height] of [
     .locator("a.srow", { hasText: "Benachrichtigungen" })
     .first();
   await tile.waitFor({ timeout: 15000 });
-  const lefts = await page
-    .locator("a.srow")
-    .evaluateAll((items) => [
-      ...new Set(
-        items.map((li) => Math.round(li.getBoundingClientRect().left)),
-      ),
-    ]);
-  assert.equal(lefts.length, 1, `one column: ${lefts}`);
-  // PLAN 71: the phone has no side bar, so it keeps the search and a row
-  // for every page; the overview cards follow below, inside the screen.
+  const column = async (what) => {
+    const boxes = await page.locator("a.srow").evaluateAll((items) =>
+      items.map((li) => {
+        const r = li.getBoundingClientRect();
+        return { l: Math.round(r.left), r: r.right };
+      }),
+    );
+    assert.equal(
+      new Set(boxes.map((b) => b.l)).size,
+      1,
+      `${what}: one column (${boxes.map((b) => b.l)})`,
+    );
+    for (const b of boxes)
+      assert.ok(b.r <= 391, `${what}: rows inside the screen (${b.r})`);
+    return boxes.length;
+  };
+  // The phone has no side bar: it keeps the search, then the areas.
   await page.getByRole("searchbox", { name: "Einstellungen suchen" }).waitFor();
-  // Since 0.87 the phone shows the control panel in levels: the first
-  // level lists the areas, their pages come one level down.
-  assert.ok(
-    (await page.locator("a.srow").count()) >= 5,
-    "the areas as rows",
-  );
-  const card = page.locator(".overview .health");
-  await card.waitFor();
-  const box = await card.boundingBox();
-  assert.ok(
-    box.x >= 0 && box.x + box.width <= 391,
-    `overview card fits (${box.x}, ${box.width})`,
-  );
+  assert.ok((await column("areas")) >= 5, "the areas as rows");
+  // The overview cards only where there is room: not on the phone.
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator(".overview").count(), 0, "no overview cards");
   const name = tile.locator(".srow-title");
   const lines = await name.evaluate((el) =>
     Math.round(
@@ -355,7 +368,30 @@ for (const [width, height] of [
     ),
   );
   assert.ok(lines <= 1, `name on one line (${lines})`);
+  await noSideways(page, 390, "settings areas");
   await page.screenshot({ path: `${out}/settings-one-column.png` });
+  // One level down: the pages of an area, under its name.
+  await page
+    .locator("a.srow", { hasText: "Netzwerk und Fernzugriff" })
+    .first()
+    .tap();
+  await page.waitForURL(/[?&]area=network/);
+  await page.locator("a.srow", { hasText: "WireGuard" }).first().waitFor();
+  assert.ok((await column("pages of an area")) >= 3, "the area's pages");
+  assert.equal(
+    await page.locator("a.srow", { hasText: "Benachrichtigungen" }).count(),
+    0,
+    "only the area's pages",
+  );
+  await noSideways(page, 390, "settings area");
+  await page.screenshot({ path: `${out}/settings-area.png` });
+  // The arrow of the bar goes one level back, to the areas.
+  await page
+    .locator("header.phone-bar")
+    .getByRole("button", { name: "Eine Ebene zurück" })
+    .tap();
+  await tile.waitFor();
+  assert.ok(!/[?&]area=/.test(page.url()), "back at the areas");
   await ctx.close();
 }
 
