@@ -166,6 +166,11 @@ func TestStateFilesAreNoChangeOfTheConfiguration(t *testing.T) {
 	if want := uint64(2 * (len(State) + 2)); s.Writes() != want {
 		t.Fatalf("writes=%d, want %d", s.Writes(), want)
 	}
+	// The marks of locked logins (1.03) are state like the logins: a lock
+	// must not start a backup of /config.
+	if !IsState("sessions/locked.json") {
+		t.Fatal("sessions/locked.json counts as configuration")
+	}
 	for _, name := range []string{"users/alex/account.json", "system/backup.json", "sessions/other.json", "firewall/settings.json"} {
 		if IsState(name) {
 			t.Fatalf("%s is configuration, not state", name)

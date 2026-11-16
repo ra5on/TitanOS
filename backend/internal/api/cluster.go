@@ -52,6 +52,12 @@ type clusterArea struct {
 	nvrForgetUser func(name string)
 	// whileLoginHolds ends a proxied stream with the login it came with.
 	whileLoginHolds func(r *http.Request, user auth.User) (context.Context, context.CancelFunc)
+	// The KI-Agent's data of an account another node deleted goes as for
+	// one deleted here (agent_forget.go, 1.03); an account taken over anew
+	// does not inherit what an earlier one of its name left.
+	agentForgetSettings, agentForgetLeftovers func(name string)
+	agentForgetUser                           func(name string)
+	goJob                                     jobFunc
 }
 
 // clusterArea is the area of the server; New wires its callbacks into the
@@ -60,7 +66,8 @@ func (s *Server) clusterArea() clusterArea {
 	return clusterArea{cluster: s.opts.Cluster, version: s.opts.Version, monitor: s.opts.Monitor, storage: s.opts.Storage,
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
-		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds}
+		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds,
+		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -581,6 +588,19 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		}
 		if a.nvrForgetUser != nil {
 			a.nvrForgetUser(name)
+		}
+		if a.agentForgetSettings != nil {
+			a.agentForgetSettings(name)
+			a.goJob(func(context.Context) { a.agentForgetUser(name) })
+		}
+	case a.agentForgetLeftovers != nil && (!existed || !before.Created.Equal(after.Created)):
+		// A new account of this name (or one that replaced it elsewhere):
+		// nothing of an earlier one goes to it. Runs in the sync of the
+		// cluster, before the account can use the agent here.
+		a.agentForgetLeftovers(name)
+		if existed {
+			a.sessions().DeleteUser(name, "")
+			a.forgetWebDAV(name)
 		}
 	case existed && (before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret ||
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):

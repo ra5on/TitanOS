@@ -168,3 +168,42 @@ func TestHandbookFollowsContactSettings(t *testing.T) {
 		}
 	}
 }
+
+// A-7 (1.03): a changed waiting time holds for a request that is already
+// waiting, shorter and longer, counted from the request.
+func TestEmergencyWaitingTimeFollowsTheSetting(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	person := func(days int) map[string]any {
+		return map[string]any{"enabled": true, "persons": []map[string]any{{"account": "lena", "waitDays": days, "shares": []string{"Documents"}}}}
+	}
+	env.features(t, map[string]any{"emergency": person(7)})
+	lena := env.login(t, "lena")
+	res, body := ts.do(lena, "POST", "/api/v1/agent/protect/emergency/request", map[string]any{"reason": "Notfall"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("request: %d %s", res.StatusCode, body)
+	}
+	var req protect.Request
+	json.Unmarshal(body, &req)
+	tick := func() {
+		ts.server.emergencyTick(ts.server.agentSettings().Features.Emergency, env.clock())
+	}
+	// Longer: after 2 days of 7 the owner sets 10; day 8 still waits.
+	env.features(t, map[string]any{"emergency": person(10)})
+	tick()
+	if got, _ := ts.server.emergencyLatest("lena"); !got.Due.Equal(req.Created.Add(10*24*time.Hour)) || got.State != protect.StateWaiting {
+		t.Fatalf("longer: %+v", got)
+	}
+	env.set(req.Created.Add(8 * 24 * time.Hour))
+	tick()
+	if got, _ := ts.server.emergencyLatest("lena"); got.State != protect.StateWaiting {
+		t.Fatalf("granted before the longer time: %+v", got)
+	}
+	// Shorter: 1 day; the time is over already, so the next tick grants.
+	env.features(t, map[string]any{"emergency": person(1)})
+	tick()
+	tick()
+	if got, _ := ts.server.emergencyLatest("lena"); got.State != protect.StateGranted {
+		t.Fatalf("not granted after the shorter time: %+v", got)
+	}
+}

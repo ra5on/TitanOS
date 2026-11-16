@@ -252,6 +252,14 @@ func (s *Server) emergencyReconcile(e agentEmergency, now time.Time) {
 		user, ok := env.users.Get(r.Account)
 		gone := !e.Enabled || p == nil || !ok || user.Disabled
 		if !gone {
+			// A changed waiting time holds for the waiting request too
+			// (A-7, 1.03), shorter or longer; the tick after this one grants
+			// it when the new time is over.
+			if r.State == protect.StateWaiting {
+				if moved, ok, err := ps.emergency.Reschedule(*p); err == nil && ok {
+					s.emergencyRecord(r.Account, "emergency access: waiting time changed", fmt.Sprintf("%s: %s", r.Account, moved.Due.In(s.agentLocation()).Format("02.01.2006 15:04")))
+				}
+			}
 			// A share the owner took out of the person's entry ends now;
 			// the rest of the grant stays (a waiting request gets only the
 			// current shares in emergencyGrant).

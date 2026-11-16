@@ -17,6 +17,10 @@ export type Features = {
 	advisor: Advisor;
 	buddy: Buddy;
 	catalog: Catalog;
+	/** Version of the stored settings (1.03). Sent back with a save, an older
+	 *  one gives 409 agent_features_changed; without it the save replaces as
+	 *  before. */
+	rev?: string;
 };
 export type FeaturesMine = { docs: DocsMine; paper: PaperMine };
 /** Which functions are there for every account of the agent. */

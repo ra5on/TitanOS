@@ -96,8 +96,15 @@ type usersArea struct {
 	nvrForgetUser func(name string)
 	// goJob runs the clearing in the background; Close waits for it.
 	goJob jobFunc
-	// agentForgetUser removes the agent's settings and documents of the account.
-	agentForgetUser func(name string)
+	// agentForgetUser removes the agent's data of a deleted account
+	// (agent_forget.go); agentForgetSettings takes it out of agent.json at
+	// once, before the answer. agentForgetLeftovers clears what a deletion
+	// left for a new account of the same name, agentDataOf counts what a
+	// deletion takes along.
+	agentForgetUser      func(name string)
+	agentForgetSettings  func(name string)
+	agentForgetLeftovers func(name string)
+	agentDataOf          func(name string) agentAccountData
 }
 
 // usersArea is the area of the server.
@@ -105,7 +112,8 @@ func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
-		agentForgetUser: s.docsForgetUser}
+		agentForgetUser: s.agentForgetAccount, agentForgetSettings: s.agentForgetSettings,
+		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -113,10 +121,13 @@ func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) ht
 	mux.HandleFunc("POST /api/v1/users", admin(a.handleCreateUser))
 	mux.HandleFunc("PUT /api/v1/users/{name}", admin(a.handleUpdateUser))
 	mux.HandleFunc("DELETE /api/v1/users/{name}", admin(a.handleDeleteUser))
+	// What the KI-Agent deletes with the account, for the question before.
+	mux.HandleFunc("GET /api/v1/users/{name}/agent-data", admin(a.handleUserAgentData))
 	mux.HandleFunc("POST /api/v1/users/{name}/lock", admin(a.handleLockUser(true)))
 	mux.HandleFunc("POST /api/v1/users/{name}/unlock", admin(a.handleLockUser(false)))
 	// Everyone may change their own password.
-	mux.HandleFunc("POST /api/v1/users/{name}/password", user(a.handleSetPassword))
+	// Passwords never go over MCP, the agent or a token (Z-11, 1.03).
+	mux.HandleFunc("POST /api/v1/users/{name}/password", user(browserOnly(a.handleSetPassword)))
 }
 
 func (a usersArea) handleListUsers(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +158,9 @@ func (a usersArea) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
+	// What a deletion of an earlier account of this name could not remove
+	// (the agent's volume was missing) does not go to the new one.
+	a.agentForgetLeftovers(user.Name)
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	a.shares.Kick()
 	a.ssh.Kick()
@@ -181,6 +195,11 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// request that then fails.
 	if req.Role != auth.RoleOwner && req.Role != auth.RoleAdmin && req.Role != auth.RoleUser {
 		writeAccountError(w, auth.ErrInvalidRole)
+		return
+	}
+	// Resetting a second factor is for a person at a web session; the
+	// catalog's account tool only changes roles (Z-11, 1.03).
+	if req.ResetTwoFactor && !refuseOutsideBrowser(w, r) {
 		return
 	}
 	if req.ResetTwoFactor && target.Name == actor.Name && !a.reconfirmProof(w, actor, req.proof) {
@@ -281,6 +300,22 @@ func (a usersArea) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleUserAgentData counts what the KI-Agent deletes with an account
+// (1.03): the page names it in the question before the deletion.
+func (a usersArea) handleUserAgentData(w http.ResponseWriter, r *http.Request) {
+	actor := currentUser(r)
+	target, ok := a.users.Get(r.PathValue("name"))
+	if !ok {
+		writeAccountError(w, auth.ErrNotFound)
+		return
+	}
+	if !mayManage(actor, target.Role) {
+		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
+		return
+	}
+	writeJSON(w, http.StatusOK, a.agentDataOf(target.Name))
+}
+
 func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	actor := currentUser(r)
 	target, ok := a.users.Get(r.PathValue("name"))
@@ -305,6 +340,9 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
 	a.goJob(func(context.Context) { a.viewerForgetUser(target.Name) })
+	// Nothing of the agent's settings may name the account once the answer
+	// is out: a new account of the same name would inherit it.
+	a.agentForgetSettings(target.Name)
 	a.goJob(func(context.Context) { a.agentForgetUser(target.Name) })
 	a.nvrForgetUser(target.Name)
 	a.prefs.forget(target.Name)

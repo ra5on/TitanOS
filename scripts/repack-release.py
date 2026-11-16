@@ -24,6 +24,7 @@ the Go toolchain and web/node_modules that built backend/bin/titand.
 """
 import argparse
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
@@ -32,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -57,11 +59,38 @@ def sudo(*args):
     run(*prefix, *args)
 
 
-def download(url, target):
+# A connection that breaks off in the middle of a file: the server closed it
+# early, reset it or stopped sending.
+BROKEN = (http.client.IncompleteRead, ConnectionError, TimeoutError)
+
+
+def check_length(response, got):
+    """Raises IncompleteRead when fewer bytes came than the server announced:
+    read(n) of http.client returns an early end of the connection as the end
+    of the file instead of raising."""
+    announced = response.headers.get("Content-Length")
+    if announced and announced.isdigit() and got < int(announced):
+        raise http.client.IncompleteRead(b"", int(announced) - got)
+
+
+def download(url, target, attempts=3, pause=10):
     """Downloads url to target, through release_kind.open_release (tried
-    again, then the GitHub API)."""
-    with release_kind.open_release(url) as response, open(target, "wb") as out:
-        shutil.copyfileobj(response, out, 1 << 20)
+    again, then the GitHub API). A download that breaks off in the middle
+    starts again from the beginning, the partial file removed first (B-11:
+    one dropped connection in the base image of several GB ended the app
+    release)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with release_kind.open_release(url) as response, open(target, "wb") as out:
+                shutil.copyfileobj(response, out, 1 << 20)
+                check_length(response, out.tell())
+            return
+        except BROKEN as error:
+            Path(target).unlink(missing_ok=True)
+            if attempt == attempts:
+                raise
+            print(f"{url}: download broke off ({error!r}), again in {pause * attempt} s", flush=True)
+            time.sleep(pause * attempt)
 
 def sha256(path):
     with open(path, "rb") as stream:

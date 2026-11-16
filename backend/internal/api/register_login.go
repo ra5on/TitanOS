@@ -34,6 +34,7 @@ func (s *Server) registerLogin(mux *routeMux) {
 	// The MCP server checks its own token (mcp.go).
 	mux.HandleFunc(mcpPath, s.handleMCP)
 	mux.HandleFunc("GET /api/v1/system/mcp", s.requireUser(s.handleMCPSettings))
-	mux.HandleFunc("PUT /api/v1/system/mcp", s.requireAdmin(s.handleMCPSettingsSet))
+	// The settings of MCP never go over MCP itself, a token or the agent.
+	mux.HandleFunc("PUT /api/v1/system/mcp", s.requireAdmin(s.browserOnly(s.handleMCPSettingsSet)))
 	startupArea{startup: s.opts.Startup}.register(mux, s.requireAdmin)
 }

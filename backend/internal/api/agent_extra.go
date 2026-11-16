@@ -58,12 +58,32 @@ func (b *agentToolbox) clusterTools() []*agentTool {
 			description: "Read the state of another node of the cluster: status, storage, docker, vms, lxc, notifications or backups.",
 			params:      schema(map[string]any{"node": str("Node id from cluster_nodes."), "what": enum("What to read.", "status", "storage", "docker", "vms", "lxc", "notifications", "backups")}, "node", "what"),
 			own:         b.clusterRead},
-		{name: "cluster_action", area: "vms", kind: agent.KindChange,
-			description: "Start, stop or restart a container, VM or system container on another node of the cluster.",
-			params: schema(map[string]any{"node": str("Node id from cluster_nodes."), "kind": enum("What it is.", "container", "vm", "lxc"),
-				"name": str("Name (for containers the id or name from cluster_read docker)."), "action": enum("What to do.", "start", "stop", "restart")}, "node", "kind", "name", "action"),
-			own: b.clusterAction},
+		b.clusterActionTool(),
 	}
+}
+
+// clusterActionTool starts, stops or restarts something on another node.
+func (b *agentToolbox) clusterActionTool() *agentTool {
+	return &agentTool{name: "cluster_action", area: toolcatalog.AreaVMs, kind: agent.KindChange,
+		// Each kind under the area of the same action on this node
+		// (A-41, 1.03): containers under Docker, VMs and system
+		// containers under VMs (where lxc_action is). With Docker
+		// forbidden and VMs without asking, a container on another node
+		// stays forbidden.
+		areas: []string{toolcatalog.AreaDocker}, areaOf: clusterActionArea,
+		description: "Start, stop or restart a container, VM or system container on another node of the cluster.",
+		params: schema(map[string]any{"node": str("Node id from cluster_nodes."), "kind": enum("What it is.", "container", "vm", "lxc"),
+			"name": str("Name (for containers the id or name from cluster_read docker)."), "action": enum("What to do.", "start", "stop", "restart")}, "node", "kind", "name", "action"),
+		own: b.clusterAction}
+}
+
+// clusterActionArea is the area of the rights a cluster_action falls
+// under: the one of the same action on this node (docker_container_*,
+// vm_action, lxc_action).
+func clusterActionArea(args json.RawMessage) string {
+	var req struct{ Kind string }
+	_ = json.Unmarshal(args, &req)
+	return map[string]string{"container": toolcatalog.AreaDocker, "vm": toolcatalog.AreaVMs, "lxc": toolcatalog.AreaVMs}[req.Kind]
 }
 
 func (b *agentToolbox) clusterCall(ctx context.Context, node, method, p string, body any) (string, error) {

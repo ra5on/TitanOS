@@ -1,6 +1,9 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -66,22 +69,60 @@ func (s *Server) checkAgentFeaturesMine(user string, m *agentFeaturesMine, old a
 	return s.checkPaperMine(user, &m.Paper, old.Paper)
 }
 
+// agentFeaturesRevised is the NAS-wide settings as the page gets and sends
+// them, with the version they were read in (A-30, 1.03). The version is
+// not stored: it is a hash of what is stored, so every write – also by the
+// routes of a group, or by an older titand – gives a new one, and a restart
+// of titand keeps it.
+type agentFeaturesRevised struct {
+	agentFeatures
+	Rev string `json:"rev"`
+}
+
+// agentFeaturesPut is the body of PUT /agent/features. Rev is optional:
+// without it the save replaces the settings as before 1.03.
+type agentFeaturesPut struct {
+	agentFeatures
+	Rev *string `json:"rev"`
+}
+
+// featuresRev is the version of the stored settings: the start of the
+// SHA-256 of their JSON. Only owners and administrators see it, who may
+// read agent.json anyway.
+func featuresRev(f agentFeatures) string {
+	data, _ := json.Marshal(f)
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:8])
+}
+
+func revised(f agentFeatures) agentFeaturesRevised {
+	return agentFeaturesRevised{agentFeatures: f.view(), Rev: featuresRev(f)}
+}
+
 func (s *Server) handleAgentFeatures(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.agentSettings().Features.view())
+	writeJSON(w, http.StatusOK, revised(s.agentSettings().Features))
 }
 
 func (s *Server) handleAgentFeaturesSet(w http.ResponseWriter, r *http.Request) {
 	env := s.agentEnv()
-	var req agentFeatures
-	if !readJSON(w, r, &req) {
+	var put agentFeaturesPut
+	if !readJSON(w, r, &put) {
 		return
 	}
+	req := put.agentFeatures
 	a := &s.agentConf
 	s.agentSettings() // loaded
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !a.loaded {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "agent.json is not readable; nothing was changed")
+		return
+	}
+	// Saved from a page that read an older state: another tab or another
+	// administrator changed the functions in between. Without the check
+	// the whole block would silently set their change back.
+	if put.Rev != nil && *put.Rev != featuresRev(a.settings.Features) {
+		writeError(w, http.StatusConflict, "agent_features_changed", "the functions were changed elsewhere in the meantime; load them again")
 		return
 	}
 	if err := s.checkAgentFeatures(&req, a.settings.Features); err != nil {
@@ -95,7 +136,7 @@ func (s *Server) handleAgentFeaturesSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	a.settings = next
-	writeJSON(w, http.StatusOK, req.view())
+	writeJSON(w, http.StatusOK, revised(req))
 }
 
 // agentFeaturesOf reads an account's own settings (empty when none yet).

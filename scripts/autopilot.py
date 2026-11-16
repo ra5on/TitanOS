@@ -26,6 +26,7 @@ Usage:
   autopilot.py verify <list> <components.json> [<components.json of the image with the newer kernel>]
 """
 import argparse
+import http.client
 import json
 import re
 import subprocess
@@ -65,17 +66,30 @@ def head_change():
     return git("diff", "--name-only", "--no-renames", "HEAD^", "HEAD").split()
 
 
-def published(source, tag):
-    """Whether a release of this tag has a manifest, i.e. was published."""
+def published(source, tag, attempts=4, pause=10):
+    """Whether a release of this tag has a manifest, i.e. was published.
+    A server error (5xx), a connection that fails or breaks off in the
+    middle, or a timeout is tried again (B-11); a 404 answers at once, any
+    other answer of the server raises as before."""
     url = f"{source}/releases/download/{tag}/manifest.json"
-    try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS autopilot"}), timeout=60) as response:
-            json.load(response)
-            return True
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return False
-        raise
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS autopilot"}), timeout=60) as response:
+                json.load(response)
+                return True
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return False
+            if error.code < 500 or attempt == attempts:
+                raise
+            error.close()  # the answer's connection; it is not read
+            failure = error
+        except (urllib.error.URLError, http.client.IncompleteRead, ConnectionError, TimeoutError) as error:
+            if attempt == attempts:
+                raise
+            failure = error
+        print(f"{url}: try {attempt} failed ({failure!r}), again in {pause * attempt} s", file=sys.stderr, flush=True)
+        time.sleep(pause * attempt)
 
 
 def local_tags():

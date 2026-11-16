@@ -605,15 +605,25 @@ type agentToolView struct {
 func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 	settings := s.agentSettings()
 	box := s.newAgentToolbox(currentUser(r), settings)
+	writeJSON(w, http.StatusOK, map[string]any{"tools": box.views(), "areas": agent.AgentAreas})
+}
+
+// views are the rows of the tools on the page of the rights.
+func (b *agentToolbox) views() []agentToolView {
+	settings := b.settings
 	views := []agentToolView{}
-	for _, t := range box.ordered {
+	for _, t := range b.ordered {
 		if t.kind == agent.KindAgent {
 			continue
 		}
 		_, set := settings.Policy.Tools[t.name]
-		views = append(views, agentToolView{Name: t.name, Area: t.area, Kind: t.kind, Dangerous: mcpDangerous[t.name], Mode: settings.Policy.Mode(t.name, t.area, t.kind), Set: set})
+		// A tool acting in several areas is listed under each (A-41,
+		// 1.03); its own setting, if any, holds for all of them.
+		for _, area := range append([]string{t.area}, t.areas...) {
+			views = append(views, agentToolView{Name: t.name, Area: area, Kind: t.kind, Dangerous: mcpDangerous[t.name], Mode: settings.Policy.Mode(t.name, area, t.kind), Set: set})
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"tools": views, "areas": agent.AgentAreas})
+	return views
 }
 
 // agentVolume is the volume the chats live on: the one chosen before, or

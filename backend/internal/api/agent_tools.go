@@ -42,6 +42,12 @@ type agentTool struct {
 	own              func(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error)
 	// kindOf decides the kind from the arguments (note_write: new or not).
 	kindOf func(json.RawMessage) string
+	// areaOf decides the area from the arguments, for a tool that works on
+	// things of several areas (cluster_action: a container is Docker, a VM
+	// VMs, a system container LXC; A-41, 1.03). areas are all it can give;
+	// area stays the one for arguments that name none of them.
+	areaOf func(json.RawMessage) string
+	areas  []string
 }
 
 type agentToolbox struct {
@@ -170,12 +176,38 @@ func withoutProps(params map[string]any, names ...string) map[string]any {
 }
 
 func (b *agentToolbox) mode(t *agentTool, kind string) string {
-	mode := b.settings.Policy.Mode(t.name, t.area, kind)
+	return b.modeIn(t, t.area, kind)
+}
+
+// modeIn is the mode of a tool for a call in an area (see areaOf).
+func (b *agentToolbox) modeIn(t *agentTool, area, kind string) string {
+	mode := b.settings.Policy.Mode(t.name, area, kind)
 	// PLAN 91: a question from Home Assistant may use less, never more.
 	if b.user.Name == agent.AssistProfile {
-		return b.settings.HA.assistMode(t.name, t.area, kind, mode)
+		return b.settings.HA.assistMode(t.name, area, kind, mode)
 	}
 	return mode
+}
+
+// areaFor is the area a call of the tool falls under.
+func (t *agentTool) areaFor(args json.RawMessage) string {
+	if t.areaOf != nil {
+		if a := t.areaOf(args); a != "" {
+			return a
+		}
+	}
+	return t.area
+}
+
+// offered reports whether the model gets the tool: not when it is
+// forbidden in every area it can act in.
+func (b *agentToolbox) offered(t *agentTool) bool {
+	for _, area := range append([]string{t.area}, t.areas...) {
+		if b.modeIn(t, area, t.kind) != agent.ModeDeny {
+			return true
+		}
+	}
+	return false
 }
 
 // Specs are the tools the model is offered: all but those set to
@@ -183,7 +215,7 @@ func (b *agentToolbox) mode(t *agentTool, kind string) string {
 func (b *agentToolbox) Specs(chat *agent.Chat) []agent.ToolSpec {
 	specs := []agent.ToolSpec{}
 	for _, t := range b.ordered {
-		if b.mode(t, t.kind) == agent.ModeDeny {
+		if !b.offered(t) {
 			continue
 		}
 		var spec agent.ToolSpec
@@ -203,7 +235,8 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if !ok {
 		return agent.Prepared{}, fmt.Errorf("there is no tool %q", name)
 	}
-	if b.mode(t, t.kind) == agent.ModeDeny && t.kind != agent.KindCreate && !(t.name == "file_write") {
+	area := t.areaFor(args)
+	if b.modeIn(t, area, t.kind) == agent.ModeDeny && t.kind != agent.KindCreate && !(t.name == "file_write") {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
 	if t.own == nil {
@@ -211,7 +244,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 			return agent.Prepared{}, err
 		}
 	}
-	p := agent.Prepared{Tool: name, Args: args, Area: t.area, Untrusted: t.untrusted}
+	p := agent.Prepared{Tool: name, Args: args, Area: area, Untrusted: t.untrusted}
 	ctx = b.haContext(ctx, t)
 	kind := t.kind
 	if t.kindOf != nil {
@@ -247,7 +280,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		p.Summary = t.name + " " + compactArgs(args)
 	}
-	mode := b.mode(t, kind)
+	mode := b.modeIn(t, area, kind)
 	if mode == agent.ModeDeny {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
