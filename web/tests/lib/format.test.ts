@@ -74,7 +74,13 @@ test('formatDateTime: in a given zone, an unknown zone falls back', () => {
 describe('osVersion (PLAN 75-20)', () => {
 	it('shows releases since 0.72 in two parts', () => {
 		expect(osVersion('0.72.0')).toBe('0.72');
-		expect(osVersion('1.3.0')).toBe('1.3');
+		expect(osVersion('0.100.0')).toBe('0.100');
+	});
+	it('shows two digits after the point from 1.0 on', () => {
+		expect(osVersion('1.0.0')).toBe('1.00');
+		expect(osVersion('1.3.0')).toBe('1.03');
+		expect(osVersion('1.12.0')).toBe('1.12');
+		expect(osVersion('1.0.1')).toBe('1.0.1');
 	});
 	it('keeps older versions with a third number and pre-releases', () => {
 		expect(osVersion('0.71.1')).toBe('0.71.1');

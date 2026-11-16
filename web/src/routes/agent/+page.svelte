@@ -106,6 +106,9 @@
 		ag.phone && !ag.keyboard && (ag.view === 'chat' || ag.view === 'planned'),
 	);
 	const floating = $derived(ag.phone && !ag.onPage);
+	// Height of the floating head on the phone; a title on two or three
+	// lines makes it taller, and the chat keeps its first line below it.
+	let headH = $state(0);
 
 	// PLAN 90-4: the "/" commands of the input. The names follow the language.
 	const commands: (Command & { id: string })[] = $derived(
@@ -297,6 +300,7 @@
 	class:calm={ag.calm}
 	class:framed={inWindow}
 	data-size={ag.look.fontSize}
+	style:--agent-head={ag.phone && headH ? `${headH}px` : null}
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 
@@ -355,7 +359,7 @@
 				{#if ag.phone}
 					<!-- PLAN 90-4: one line – menu or back, the title (a tap opens
 					     project, model and thinking level), new chat, more. -->
-					<header class="top" class:float={floating}>
+					<header class="top" class:float={floating} bind:offsetHeight={headH}>
 						{#if ag.onPage}
 							<button
 								type="button"
@@ -397,7 +401,7 @@
 										<small
 											>{ag.currentProject
 												? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-												: ''}{modelShown(ag.status?.models, ag.model) || '–'}</small
+												: ''}<span>{modelShown(ag.status?.models, ag.model) || '–'}</span></small
 										>
 									</span>
 									<Icon name="chevronDown" size={16} />
@@ -1054,12 +1058,20 @@
 		flex-direction: column;
 		line-height: 1.15;
 	}
-	/* One line each: a long title ends in "…" instead of growing the head. */
-	.p-name,
+	/* Owner 16 Nov 2026 and WEB-UI rule: no cut-off text in the head – a
+	   long title wraps instead of ending in "…", with no line limit, and the
+	   pill and the space above the chat grow with it (--agent-head). A title
+	   made from the first question has at most 60 characters, three lines
+	   next to the buttons on an iPhone. The line below wraps between project
+	   and model, never inside a name. */
+	.p-name {
+		overflow-wrap: break-word;
+	}
 	.p-text small {
-		overflow: hidden;
+		overflow-wrap: break-word;
+	}
+	.p-text small span {
 		white-space: nowrap;
-		text-overflow: ellipsis;
 	}
 	/* Owner 15 Nov 2026: the title was blurred and hard to read on the
 	   iPhone while the line below it was sharp. It was a heading with
@@ -1131,10 +1143,10 @@
 		padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-2));
 	}
 	.main.floating > :global(.scroll.phone > .page) {
-		padding-top: calc(var(--agent-top) + 64px);
+		padding-top: max(calc(var(--agent-top) + 64px), calc(var(--agent-head, 0px) + 8px));
 	}
 	.main.floating > .notice-warn {
-		margin-top: calc(var(--agent-top) + 60px);
+		margin-top: max(calc(var(--agent-top) + 60px), calc(var(--agent-head, 0px) + 8px));
 	}
 	/* The chip of the model in the input on the phone. */
 	.m-chip {
@@ -1154,10 +1166,14 @@
 		overflow: hidden;
 		white-space: nowrap;
 	}
+	/* A long model name or alias wraps inside the chip instead of ending
+	   in "…" (owner 16 Nov 2026: no cut-off text). */
 	.m-chip strong {
 		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		text-align: left;
+		line-height: 1.2;
 	}
 	.m-chip span {
 		color: var(--muted);

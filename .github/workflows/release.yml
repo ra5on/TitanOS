@@ -470,6 +470,9 @@ jobs:
             echo
             echo "**Third-party components:** \`titanos-$VERSION-sources.txt\` links the exact packages; \`titanos-$VERSION-licenses.tar.gz\` contains the original notices and version inventory. This includes Debian, firmware, Go, frontend libraries and fonts."
           } > notes.md
+          # The title shows the version as people read it: 0.99, 1.00, 1.01
+          # (backend/internal/version Display; owner 16 Nov 2026: "x.xx").
+          shown=$(python3 -c 'import re,sys; v=sys.argv[1]; m=re.fullmatch(r"(\d+)\.(\d+)\.0", v); print(v if not m else (f"0.{m[2]}" if m[1] == "0" else f"{int(m[1])}.{int(m[2]):02d}"))' "$VERSION")
           prerelease=
           if [ "$CHANNEL" = beta ]; then prerelease=--prerelease; fi
           # A draft first, the files one by one, published last: an upload
@@ -484,7 +487,7 @@ jobs:
           fi
           if [ "$state" = none ]; then
             gh release create "$GITHUB_REF_NAME" --draft \
-              --title "TitanOS $VERSION" --notes-file notes.md --verify-tag $prerelease
+              --title "TitanOS $shown" --notes-file notes.md --verify-tag $prerelease
           fi
           for file in release/*; do
             for attempt in 1 2 3 4; do
@@ -495,7 +498,7 @@ jobs:
             echo "::error::$file could not be uploaded"
             exit 1
           done
-          gh release edit "$GITHUB_REF_NAME" --draft=false --title "TitanOS $VERSION" --notes-file notes.md
+          gh release edit "$GITHUB_REF_NAME" --draft=false --title "TitanOS $shown" --notes-file notes.md
 
   autopilot-failed:
     # A tag of the autopilot that did not make it: one issue for the owner.

@@ -55,7 +55,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		padding: calc(var(--agent-top, 0px) + 64px) var(--space-3) var(--space-4);
+		padding: max(calc(var(--agent-top, 0px) + 64px), calc(var(--agent-head, 0px) + 8px))
+			var(--space-3) var(--space-4);
 	}
 	h1 {
 		margin: 0 var(--space-1-5) var(--space-2);

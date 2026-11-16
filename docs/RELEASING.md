@@ -285,6 +285,7 @@ Angezeigt wird ab 0.72 nur noch `0.72`, `0.73` … (Inhaber 9.11.2026). Jedes Re
 
 - **Technisch bleibt die Version dreiteilig mit `.0`:** Tag `v0.72.0`, Manifest `"version": "0.72.0"`, Notizen `docs/releases/v0.72.0.md`, Dateinamen. titand bis 0.71.1 erkennt nur dreiteilige Versionen als Update; mit `0.72` käme das Update dort nie an.
 - Oberfläche, Statusbericht, Handbuch und KI-Agent zeigen ohne `.0` (`osVersion` in `web/src/lib/format.ts`, `version.Display` in Go). Der Titel der Release-Notizen heißt „TitanOS 0.72 — …“.
+- **Ab 1.00: immer x.xx** (Inhaber 16.11.2026: „Versionen sollen künftig so aussehen x.xx“). Nach 0.100 kam 1.00; danach 1.01 … 1.99, dann 2.00 – die zweite Zahl geht nie über 99. Tags bleiben gültiges Semver ohne führende Null: `v1.0.0` wird als „1.00“ angezeigt, `v1.1.0` als „1.01“, `v1.12.0` als „1.12“. Die Anzeige macht `version.Display`/`osVersion`, der Titel des GitHub-Release (`release.yml`) dasselbe; die Release-Notizen heißen „TitanOS 1.01 — …“. 0.72 … 0.100 bleiben angezeigt, wie sie waren.
 - Ältere Versionen mit dritter Zahl (0.71.1) bleiben so, wie sie sind.
 - **Autopilot:** Auch ein Sicherheits-Release des Autopiloten erhöht die zweite Zahl (nach 0.74 kommt 0.75; vergebene Nummern werden übersprungen). Sein Wächter (`scripts/autopilot.py guard`) verlangt ab 0.72: direkter Nachfolger eines veröffentlichten Releases, gleiche Hauptzahl, höhere zweite Zahl, dritte Zahl 0, nur `build/debian-security.txt` geändert (Entscheidung des Inhabers vom 10.11.2026, PLAN 76 F-13-17).
 

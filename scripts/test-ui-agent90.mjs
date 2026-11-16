@@ -764,15 +764,31 @@ const sent = (seen, method, path) =>
     assert.ok((await b.boundingBox()).height >= 44, "44 px under an answer");
   await noOverflow(page, "phone chat");
   await page.screenshot({ path: `${out}/10-phone-chat.png` });
-  // A long title stays one line and ends in "…"; the head does not grow.
+  // A long title wraps onto a second line instead of ending in "…"
+  // (owner 16 Nov 2026); the whole title is visible and the head stays
+  // above the chat's first line.
+  const oneLine = (await head.locator(".p-name").boundingBox()).height;
+  // 60 characters: the longest title made from a first question.
   await page.evaluate(() => {
     document.querySelector("header.top .p-name").textContent =
-      "Wie viel Strom braucht das NAS heute, und schlafen die Platten?";
+      "Wie viel Strom braucht das NAS heute, und schlafen die Platten";
   });
-  assert.ok(
-    (await head.boundingBox()).height <= 56,
-    "one line with a long title",
-  );
+  await page.waitForTimeout(100);
+  const name = await head.locator(".p-name").evaluate((e) => ({
+    h: e.getBoundingClientRect().height,
+    cut: e.scrollHeight > e.clientHeight + 1,
+  }));
+  assert.ok(name.h > oneLine * 1.6, `two lines: ${name.h} vs ${oneLine}`);
+  assert.ok(!name.cut, "the long title is not cut off");
+  const hb = await head.boundingBox();
+  assert.ok(hb.height <= 96, `the head stays small: ${hb.height}`);
+  // The chat's first line starts below the taller head.
+  const first = await page.locator(".messages .column > *").first().boundingBox();
+  assert.ok(first.y >= hb.y + hb.height - 1, `first line below the head: ${first.y} < ${hb.y + hb.height}`);
+  // The model name in the line below is not broken in the middle.
+  const model = await head.locator(".p-text small span").evaluate((e) => e.getClientRects().length);
+  assert.equal(model, 1, "the model name stays on one line");
+  await page.screenshot({ path: `${out}/10b-phone-long-title.png` });
   await page.evaluate(() => {
     document.querySelector("header.top .p-name").textContent =
       "Status Home Assistant";
