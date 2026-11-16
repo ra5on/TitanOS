@@ -280,6 +280,9 @@ type Manager struct {
 	// cpuRetryAt: a failed reservation is not tried again by the loop
 	// before then.
 	cpuRetryAt time.Time
+	// snapshotRetry: a scheduled snapshot that found its VM busy is not
+	// tried again before then (RAM only).
+	snapshotRetry map[string]time.Time
 	// borrowed are whole disks whose device node was opened to QEMU.
 	borrowed map[string][]string
 	// starting are the VMs libvirt is bringing up right now. They do not
