@@ -63,6 +63,10 @@ ALLOWED = (
     # an image (9 Nov 2026: retries for GitHub's 504 on release downloads).
     "scripts/repack-release.py",
     "scripts/third-party-licenses.py",
+    # Verbatim license texts for the few npm packages that ship without one;
+    # data of third-party-licenses.py only, never in an image (1.00: vite
+    # 8.3.8 brought the rolldown binding 1.2.19 without its LICENSE).
+    "scripts/licenses/",
     "scripts/verify-release.py",
     "scripts/tests/test_release.py",
     ".github/workflows/build.yml",
