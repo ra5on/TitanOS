@@ -406,3 +406,37 @@ func TestMQTTSettingsChangeKeepsTheEntities(t *testing.T) {
 	}
 	eventually(t, "removal", func() bool { return broker.get(func(b *fakeBroker) bool { return b.cleared[cfg] > 0 }) })
 }
+
+// A group switched off with the same broker still goes from Home
+// Assistant: the next session reads the retained configs back and clears
+// those it no longer wants (the broker's replay is played here by hand).
+func TestMQTTGroupSwitchedOffIsRemovedBySameBroker(t *testing.T) {
+	broker := startBroker(t)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	q := MQTT{Enabled: true, Host: "127.0.0.1", Port: broker.port(), Groups: []string{"system", "volumes"}, ID: "abc123"}
+	if err := m.SetSettings(Settings{MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	used := 42.0
+	source := func(context.Context) Snapshot {
+		return Snapshot{Host: "nas", Version: "1.01", System: &SystemValues{CPUPercent: 1}, Volumes: []VolumeValues{{Name: "data", State: "ok", UsedPercent: &used}}}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.RunMQTT(ctx, source, nil); close(done) }()
+	defer func() { cancel(); <-done }()
+	volume := "homeassistant/sensor/titanos_abc123/volume_data_used/config"
+	eventually(t, "discovery", func() bool { return broker.get(func(b *fakeBroker) bool { return b.retained[volume] != "" }) })
+	var payload string
+	broker.get(func(b *fakeBroker) bool { payload = b.retained[volume]; return true })
+	q.Groups = []string{"system"}
+	if err := m.SetSettings(Settings{MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "new session", func() bool {
+		return broker.get(func(b *fakeBroker) bool { return b.connects >= 2 && len(b.subs) >= 4 })
+	})
+	broker.send(volume, payload)
+	eventually(t, "removal", func() bool { return broker.get(func(b *fakeBroker) bool { return b.cleared[volume] > 0 }) })
+}
