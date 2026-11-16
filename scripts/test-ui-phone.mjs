@@ -327,6 +327,41 @@ for (const [width, height] of [
   await ctx.close();
 }
 
+// 1.03: a setting of the home screen the NAS could not save is a short
+// notice at the bottom, also on the phone: on the screen, whole, its close
+// button a 44 px target.
+{
+  const { ctx, page } = await phone(390, 844, { cluster: false });
+  await ctx.route("**/api/v1/preferences/desktop", (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 500,
+          json: { error: { code: "config_write_failed", message: "x" } },
+        })
+      : route.fallback(),
+  );
+  await page.locator(".home [data-menu-button]").tap();
+  const launcher = page.locator(".launcher.phone");
+  await launcher.waitFor();
+  await launcher.locator("[data-menu-arrange]").tap();
+  await launcher.locator(".cell").nth(1).locator('[data-move="back"]').tap();
+  const toast = page.locator('[role="alert"][data-toast="error"]');
+  await toast.waitFor({ timeout: 5000 });
+  await page.waitForTimeout(400);
+  assert.match(
+    await toast.innerText(),
+    /Einstellungen des Arbeitsplatzes ließen sich nicht speichern/,
+  );
+  const box = await toast.boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= 390, "notice on the screen");
+  assert.ok(box.y + box.height <= 844, "notice above the lower edge");
+  const close = await toast.getByRole("button").boundingBox();
+  assert.ok(close.width >= 44 && close.height >= 44, "close is 44 px");
+  await noSideways(page, 390, "notice");
+  await page.screenshot({ path: `${out}/hinweis-unten-handy.png` });
+  await ctx.close();
+}
+
 // PLAN 69/78, since 0.87 in levels: the control panel on a phone lists the
 // areas as rows in one column (no overview cards there), an area opens one
 // level down to its pages, and the arrow of the bar goes one level back.
