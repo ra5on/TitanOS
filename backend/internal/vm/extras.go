@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // imageFormats are the disk images TitanOS reads, by file extension, with
@@ -539,8 +540,10 @@ func (m *Manager) release() {
 		}
 		delete(m.borrowed, name)
 	}
-	if m.reserved != "" && m.exclusiveCPUs() == "" {
-		m.setAllowed(context.Background(), "")
+	if rest := m.exclusiveCPUs(); rest != m.reserved && !time.Now().Before(m.cpuRetryAt) {
+		// Gives back what VMs that stopped held, and tries again a
+		// reservation that failed before (see setAllowed).
+		m.setAllowed(context.Background(), rest)
 	}
 }
 
@@ -579,16 +582,29 @@ func (m *Manager) reserve(ctx context.Context) {
 // setAllowed limits the system, logins and containers to a set of CPUs;
 // an empty set lifts the limit. VMs live in a slice of their own and are
 // not affected. Nothing is written to disk: after a restart all is as before.
+// The caller holds the lock, so each systemctl has systemctlLimit. Only a
+// set that went through for every slice counts as reserved; otherwise the
+// loop of the VMs (release) tries again after cpuRetryWait.
 func (m *Manager) setAllowed(ctx context.Context, cpus string) {
 	if cpus == "" && m.reserved == "" {
 		return
 	}
+	failed := false
 	for _, slice := range []string{"system.slice", "user.slice", "init.scope"} {
-		if _, err := m.runner.Run(ctx, "", "systemctl", "set-property", "--runtime", slice, "AllowedCPUs="+cpus); err != nil {
+		cctx, cancel := context.WithTimeout(ctx, systemctlLimit)
+		_, err := m.runner.Run(cctx, "", "systemctl", "set-property", "--runtime", slice, "AllowedCPUs="+cpus)
+		cancel()
+		if err != nil {
 			slog.Warn("CPUs not reserved", "slice", slice, "err", err)
+			failed = true
 		}
 	}
+	if failed {
+		m.cpuRetryAt = time.Now().Add(cpuRetryWait)
+		return
+	}
 	m.reserved = cpus
+	m.cpuRetryAt = time.Time{}
 	slog.Info("CPUs for everything but exclusive VMs", "cpus", map[bool]string{true: "all", false: cpus}[cpus == ""])
 }
 

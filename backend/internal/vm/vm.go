@@ -277,6 +277,9 @@ type Manager struct {
 	jobs      map[string]*Job
 	// reserved is the set of CPUs kept free for exclusive VMs right now.
 	reserved string
+	// cpuRetryAt: a failed reservation is not tried again by the loop
+	// before then.
+	cpuRetryAt time.Time
 	// borrowed are whole disks whose device node was opened to QEMU.
 	borrowed map[string][]string
 	// starting are the VMs libvirt is bringing up right now. They do not
