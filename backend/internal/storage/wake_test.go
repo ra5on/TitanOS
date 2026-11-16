@@ -358,3 +358,32 @@ func TestMergingWakesLeavesTheStatusAlone(t *testing.T) {
 		t.Fatalf("merged history %v", got)
 	}
 }
+
+// Disks of one volume that woke in the same round ask who is connected to
+// it once, under the storage lock, not once per disk.
+func TestDiskWakeProbeOncePerVolumeAndRound(t *testing.T) {
+	m, _, _, now := wakeManager(t)
+	asked := map[string]int{}
+	m.WakeProbe = func(_ context.Context, volume string) []diskwake.Cause {
+		asked[volume]++
+		return []diskwake.Cause{{Code: diskwake.SMBSession, Detail: "Fotos"}}
+	}
+	for _, name := range []string{"sde", "sdf", "sdg"} {
+		wakeIO(t, m, name, 2)
+	}
+	wakeTicks(t, m, now, 0)
+	probed := 0
+	for _, name := range []string{"sde", "sdf", "sdg"} {
+		if disk := sleepDisk(t, m, name); len(disk.Wakes) == 1 && causeCodes(disk.Wakes[0]) == "smb_session:Fotos" {
+			probed++
+		}
+	}
+	if probed < 2 {
+		t.Fatalf("fixture: want two disks of one volume woken, got %d", probed)
+	}
+	for volume, n := range asked {
+		if n != 1 {
+			t.Fatalf("volume %s asked %d times in one round", volume, n)
+		}
+	}
+}

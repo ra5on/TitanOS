@@ -84,8 +84,10 @@ func wakeKey(id, name string) string {
 // between idle (the last sample without activity) and now. asleepSince
 // bounds the window: what was noted before the disk went to sleep did not
 // wake it. busy is why the disk is exempt from sleeping now (a test, a VM,
-// RAID or Btrfs maintenance), if it is.
-func (m *Manager) wakeCausesFor(ctx context.Context, volume string, asleepSince, idle, now time.Time, busy *diskwake.Cause) []diskwake.Cause {
+// RAID or Btrfs maintenance), if it is. probes keeps the answers of
+// WakeProbe of this round: disks of one volume that woke together ask once
+// (each probe runs smbstatus, up to seconds, under the storage lock).
+func (m *Manager) wakeCausesFor(ctx context.Context, volume string, asleepSince, idle, now time.Time, busy *diskwake.Cause, probes map[string][]diskwake.Cause) []diskwake.Cause {
 	from := idle.Add(-wakeLead)
 	if from.Before(asleepSince) {
 		from = asleepSince
@@ -99,7 +101,12 @@ func (m *Manager) wakeCausesFor(ctx context.Context, volume string, asleepSince,
 	}
 	if len(causes) == 0 && volume != "" && m.WakeProbe != nil {
 		// Only when TitanOS itself was not it: who else is on the volume.
-		causes = m.WakeProbe(ctx, volume)
+		probed, ok := probes[volume]
+		if !ok {
+			probed = m.WakeProbe(ctx, volume)
+			probes[volume] = probed
+		}
+		causes = slices.Clone(probed)
 	}
 	if len(causes) == 0 {
 		return []diskwake.Cause{{Code: diskwake.Unknown}}
