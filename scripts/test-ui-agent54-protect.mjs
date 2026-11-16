@@ -177,6 +177,17 @@ const emergency = {
       state: "waiting",
       shares: ["Documents"],
     },
+    {
+      id: "r2",
+      account: "max",
+      reason: "Unterlagen für die Steuer",
+      created: ago(60 * 24 * 5),
+      due: ago(60 * 24 * 2),
+      state: "granted",
+      shares: ["Fotos"],
+      added: ["Fotos"],
+      ends: inDays(25),
+    },
   ],
 };
 
@@ -427,12 +438,115 @@ for (const [width, height, tag] of [
     .locator("dialog[open]")
     .getByRole("button", { name: "Abbrechen" })
     .click();
+  // 1.03: declining and ending ask first with the usual dialog: Cancel
+  // sends nothing, the warning button stands left of Cancel.
+  const ask = page.locator("dialog[open]");
+  const postsBefore = seen.posts.length;
   await page.getByRole("button", { name: "Ablehnen" }).click();
+  await ask.getByText("Antrag von lena ablehnen?").waitFor();
+  await ask.getByText("lena bekommt keinen Zugang auf Documents").waitFor();
+  await ask.getByRole("button", { name: "Abbrechen" }).click();
+  await ask.waitFor({ state: "detached" });
+  assert.equal(seen.posts.length, postsBefore, "Cancel sends nothing");
+  await page.getByRole("button", { name: "Ablehnen" }).click();
+  {
+    const warn = await ask.locator(".btn-warn").boundingBox();
+    const cancel = await ask
+      .getByRole("button", { name: "Abbrechen" })
+      .boundingBox();
+    assert.ok(warn.x < cancel.x || warn.y > cancel.y, "warning left of Cancel");
+    assert.equal(
+      await ask.evaluate((d) => document.activeElement?.textContent?.trim()),
+      "Abbrechen",
+      "Cancel has the focus",
+    );
+  }
+  await ask.locator(".btn-warn").click();
   await page.waitForTimeout(200);
   assert.ok(
     seen.posts.some((p) => p.endsWith("/r1/decline")),
     "decline was sent",
   );
+  await page.getByRole("button", { name: "Beenden", exact: true }).click();
+  await ask.getByText("Notfallzugang für max beenden?").waitFor();
+  await ask
+    .getByText("max verliert sofort den lesenden Zugang auf Fotos")
+    .waitFor();
+  await page.screenshot({ path: `${out}/08e-zugang-beenden-${tag}.png` });
+  await ask.getByRole("button", { name: "Zugang beenden" }).click();
+  await page.waitForTimeout(200);
+  assert.ok(
+    seen.posts.some((p) => p.endsWith("/r2/end")),
+    "end was sent",
+  );
+  await ctx.close();
+}
+
+// 1.03: a save that another tab overtook (409 agent_features_changed). A
+// change to another function is put on the new state and saved with its
+// rev; one to the same function is not saved, and the page says so.
+for (const sameFunction of [false, true]) {
+  const { page, ctx } = await open(1440, 900);
+  let stored = { ...features, rev: "r1" };
+  const puts = [];
+  await ctx.route("**/api/v1/agent/features", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: stored });
+    const body = route.request().postDataJSON();
+    puts.push(body);
+    if (puts.length === 1) {
+      // Meanwhile, elsewhere: the handbook off, or the guard's mode changed.
+      stored = sameFunction
+        ? { ...stored, rev: "r2", guard: { ...stored.guard, mode: "report" } }
+        : {
+            ...stored,
+            rev: "r2",
+            handbook: { ...stored.handbook, enabled: false },
+          };
+    }
+    if (body.rev !== stored.rev)
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: "agent_features_changed", message: "x" } },
+      });
+    stored = { ...body, rev: "r3" };
+    return route.fulfill({ json: stored });
+  });
+  await page.reload();
+  const guard = page.getByRole("switch", { name: "Ransomware-Wächter" });
+  await guard.waitFor();
+  assert.equal(await guard.isChecked(), true);
+  await guard.click();
+  if (!sameFunction) {
+    await page
+      .locator("[data-features-notice]")
+      .getByText("Inzwischen anderswo geändert – neu geladen.", {
+        exact: false,
+      })
+      .waitFor();
+    assert.equal(puts.length, 2, "saved again on the new state");
+    assert.equal(puts[1].rev, "r2", "with the new rev");
+    assert.equal(puts[1].guard.enabled, false, "the own change kept");
+    assert.equal(puts[1].handbook.enabled, false, "the other change kept");
+    assert.equal(await guard.isChecked(), false);
+  } else {
+    await page
+      .getByRole("alert")
+      .getByText("deshalb ist deine Änderung nicht gespeichert", {
+        exact: false,
+      })
+      .waitFor();
+    assert.equal(puts.length, 1, "nothing saved over the other change");
+    assert.equal(
+      await guard.isChecked(),
+      true,
+      "the switch shows what is stored",
+    );
+    assert.equal(stored.guard.mode, "report");
+  }
+  await page.screenshot({
+    path: `${out}/09-funktionen-ueberholt-${sameFunction ? "gleich" : "anders"}.png`,
+  });
   await ctx.close();
 }
 
