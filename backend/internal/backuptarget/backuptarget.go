@@ -46,6 +46,10 @@ const (
 	targetDir   = ".titanos/backup-target"
 	maxSources  = 20
 	maxBlob     = 1 << 30
+	// stallLimit is how long a request may go without a byte moving before
+	// its connection is closed. There is no limit on the whole request: a
+	// pack of up to 1 GiB over a slow uplink takes as long as it takes.
+	stallLimit = 2 * time.Minute
 	// CodePrefix starts a pairing code.
 	CodePrefix = "titanos-backup:"
 )
@@ -124,6 +128,8 @@ type Manager struct {
 	servers   map[string]*http.Server
 	problem   string
 	statCache map[string]stat
+	// stall replaces stallLimit in tests.
+	stall time.Duration
 }
 
 type stat struct {
@@ -631,6 +637,13 @@ func (m *Manager) list(w http.ResponseWriter, r *http.Request, repo *os.Root, ki
 // written under a hidden name and linked to its name when it is whole; one
 // that exists is never overwritten, also not by two uploads at once.
 func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Root, path string, isConfig bool) {
+	// The deadlines moved on below stay on the connection; the next request
+	// on it must not inherit them.
+	rc := http.NewResponseController(w)
+	defer func() {
+		_ = rc.SetReadDeadline(time.Time{})  // see stallingReader
+		_ = rc.SetWriteDeadline(time.Time{}) // see stallingWriter
+	}()
 	switch r.Method {
 	case http.MethodHead, http.MethodGet:
 		file, err := repo.Open(path)
@@ -645,7 +658,7 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Roo
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		http.ServeContent(w, r, "", time.Time{}, file)
+		http.ServeContent(stallingWriter{w, rc, m.stallLimit()}, r, "", time.Time{}, file)
 	case http.MethodPost:
 		if err := repo.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			fail(w, err)
@@ -664,7 +677,14 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Roo
 			return
 		}
 		defer repo.Remove(temp)
-		_, err = io.Copy(out, io.LimitReader(r.Body, maxBlob+1))
+		hash := sha256.New()
+		body := stallingReader{r.Body, rc, m.stallLimit()}
+		_, err = io.Copy(io.MultiWriter(out, hash), io.LimitReader(body, maxBlob+1))
+		if err != nil {
+			// The rest of the body is not read: the connection ends with
+			// the answer instead of the server waiting to drain it.
+			w.Header().Set("Connection", "close")
+		}
 		if err == nil {
 			err = out.Sync()
 		}
@@ -675,6 +695,13 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Roo
 			if info, statErr := repo.Stat(temp); statErr == nil && info.Size() > maxBlob {
 				err = errors.New("blob too large")
 			}
+		}
+		// Every file but the config is named after the SHA-256 of its
+		// content (rest-server checks the same): one that arrived changed
+		// is not stored under a name that promises otherwise.
+		if err == nil && !isConfig && hex.EncodeToString(hash.Sum(nil)) != filepath.Base(path) {
+			http.Error(w, "content does not match its name", http.StatusBadRequest)
+			return
 		}
 		if err == nil {
 			// A link fails if the name exists; a rename would replace it.
@@ -713,6 +740,41 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Roo
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (m *Manager) stallLimit() time.Duration {
+	if m.stall > 0 {
+		return m.stall
+	}
+	return stallLimit
+}
+
+// stallingReader moves the read deadline of the connection on with every
+// read: a sender that stops in the middle of an upload is cut off after the
+// limit instead of holding the request, its part file and the pinned
+// volume open for ever.
+type stallingReader struct {
+	io.Reader
+	rc    *http.ResponseController
+	limit time.Duration
+}
+
+func (s stallingReader) Read(p []byte) (int, error) {
+	_ = s.rc.SetReadDeadline(time.Now().Add(s.limit)) // without deadlines (tests over other transports) it just reads
+	return s.Reader.Read(p)
+}
+
+// stallingWriter does the same for a download: a receiver that stops
+// reading is cut off after the limit.
+type stallingWriter struct {
+	http.ResponseWriter
+	rc    *http.ResponseController
+	limit time.Duration
+}
+
+func (s stallingWriter) Write(p []byte) (int, error) {
+	_ = s.rc.SetWriteDeadline(time.Now().Add(s.limit)) // as above
+	return s.ResponseWriter.Write(p)
 }
 
 func fail(w http.ResponseWriter, err error) {
