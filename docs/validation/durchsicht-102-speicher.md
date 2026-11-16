@@ -69,3 +69,13 @@ Nicht doppelt gemeldet: alles aus `docs/validation/durchsicht-076.md`.
 
 ## Prüfungen
 
+- 16.11.2026 nach allen Änderungen: `go vet ./...` grün; `go test` für `internal/api` (98 s) und `cmd/...` grün; `go test -race` für `storage`, `files`, `shares`, `backup`, `configbackup`, `backuptarget`, `config`, `usb`, `quota` grün. Jeder neue Test wurde gegen den Code vor der Korrektur ausgeführt und schlug dort fehl (außer S-17, S-24 und S-25, die ohne eigenen Test sind).
+- Nur Unit-Tests mit nachgebauten Befehlen und Wegwerf-Ordnern; kein echtes Samba, restic, cryptsetup, dm-cache oder Btrfs, keine Hardware, kein QEMU. Die Oberfläche ist unverändert (keine Browser-Tests nötig).
+- Alle Änderungen liegen unter `backend/` und `docs/`: nach `scripts/release-kind.py` bleibt das nächste Release ein App-Update. Neue Konfigurationsfelder gibt es keine.
+
+## Nicht oder nur teilweise gelesen
+
+- `storage`: `grow.go`, `import.go`, `actions.go`, `replace.go`, `reuse.go`, `disktest*.go`, `smart.go`, `probe.go` (076 hat sie gelesen); `crypt.go` und `cache.go` nur in Teilen.
+- `files`: `transfers.go`, `transfer_store.go`, `transfer_log.go`, `download.go`, `usage.go` (Wiederaufnahme von Übertragungen nach Absturz, Link-Downloads).
+- `backup`: `schedule.go`, `retention.go`, `probe.go`, `inspect.go`, `bandwidth.go`, `watch.go`, `state.go`, `selection.go`, Rest von `smb.go`; `configbackup/restore.go`; `api/backup_coverage.go`, `api/backuptarget.go`, Rest von `api/backups.go`.
+- `config/backupsecrets.go`.
