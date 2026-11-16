@@ -72,3 +72,28 @@ func TestForeignChatKeepsTheAuthorsSteps(t *testing.T) {
 		t.Fatalf("too much gone: %s", data)
 	}
 }
+
+// Review 1.02: offers found while prices were on stayed in the kept
+// report; with prices off the tool gave them to the model without marking
+// the chat as having read foreign content.
+func TestHardwareAdviceWithoutPricesHasNoOffers(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	setFeatures(t, ts, map[string]any{"advisor": map[string]any{"enabled": true}})
+	st := ts.server.foresight()
+	st.mu.Lock()
+	st.loaded = true
+	st.saved = advisorSaved{LastRun: time.Now(), Offers: map[string][]advisorOffer{"sda": {{Title: "WD Red", URL: "https://shop.example/wd80"}}}}
+	st.mu.Unlock()
+	owner, _ := ts.users.Get(ownerName(t, ts))
+	tool := toolNames(ts, owner)["hardware_advice"]
+	if tool == nil || tool.untrusted {
+		t.Fatal("tool")
+	}
+	out, err := tool.own(t.Context(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.Text, "shop.example") {
+		t.Fatalf("offer without prices: %s", out.Text)
+	}
+}

@@ -180,6 +180,12 @@ func (b *agentToolbox) foresightTools() []*agentTool {
 					}
 				}
 				saved.Volumes, saved.Measured = nil, nil
+				// Offers are from foreign web pages: only while prices are
+				// on, which marks the tool's result as foreign content.
+				// Kept ones of a run before they were switched off stay out.
+				if !f.Advisor.Prices {
+					saved.Offers = nil
+				}
 				data, _ := json.Marshal(saved)
 				return agent.Outcome{Text: string(data)}, nil
 			},
