@@ -135,15 +135,6 @@ func (s *Server) agentRelease(run *agentRun) {
 	}
 }
 
-// agentLimitReached says whether the person may start no further chat now
-// (checked before a message is written; agentClaim decides).
-func (s *Server) agentLimitReached(user string) bool {
-	limit := s.agentSettings().maxRuns()
-	s.agentRT.mu.Lock()
-	defer s.agentRT.mu.Unlock()
-	return s.agentRT.countLocked(user) >= limit
-}
-
 // emitLocked hands an event to the pages and keeps what a snapshot needs.
 // The caller holds agentRT.mu.
 func (run *agentRun) emitLocked(e agent.Event) {

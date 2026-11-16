@@ -294,14 +294,14 @@ export class AgentChats {
 	};
 
 	listsReady = $state(false);
-	/** A run no longer followed: its stream is gone, its retries and what
-	 *  streamed in with it; it goes on on the NAS. */
+	/** A run no longer followed: its stream and its retries are gone; it goes
+	 *  on on the NAS. What streamed in stays until it is followed again (the
+	 *  snapshot then replaces it). */
 	private rest(id: string) {
 		const run = this.runs.get(id);
 		if (!run) return;
 		clearTimeout(run.retryTimer);
 		run.retries = 0;
-		run.live = idle();
 	}
 	/** Lets go of the followed stream so that its end does nothing more
 	 *  (0.99: the old stream's end read the last answer aloud again and wrote
@@ -405,11 +405,16 @@ export class AgentChats {
 		old?.controller.abort();
 		clearTimeout(run.retryTimer);
 		run.busy = true;
-		run.live = idle();
 		this.listState(id, 'running');
+		// What streamed in before stays until the stream says more: a snapshot
+		// replaces it (no flicker when the page follows the run again); a
+		// titand without snapshots, or the end, clears it first.
+		let first = true;
 		void follow(
 			id,
 			(e) => {
+				if (first && e.type !== 'snapshot') run.live = idle();
+				first = false;
 				// The stream delivers: the next break starts counting anew. Its
 				// bare end does not count – a chat that says "running" while no
 				// run answers would otherwise be asked twice a second for ever.
@@ -501,7 +506,6 @@ export class AgentChats {
 			if (fresh.state === 'running') {
 				if (this.current?.id === id && run.retries < 8) {
 					run.retries++;
-					run.live = idle();
 					again(Math.min(500 * 2 ** (run.retries - 1), 8000));
 					return;
 				}
@@ -548,6 +552,8 @@ export class AgentChats {
 		void this.loadLists();
 	};
 
+	/** Chats the NAS named as running in an earlier answer of /agent/runs. */
+	private seenRunning = new Set<string>();
 	/** The chats of the account that run on the NAS, while one runs that
 	 *  this page does not follow (1.01): its end updates the list, and its
 	 *  chat shows the answer when opened. Only the RAM of titand is asked.
@@ -557,7 +563,8 @@ export class AgentChats {
 		try {
 			now = new Set((await api.get<{ runs?: string[] }>('/agent/runs')).runs ?? []);
 		} catch {
-			return true;
+			// No answer counts as a quiet one: the asking ends after a while.
+			return false;
 		}
 		const followed = this.stream?.id;
 		let ended = false;
@@ -573,8 +580,13 @@ export class AgentChats {
 		}
 		for (const c of this.chats) {
 			if (c.author || c.id === followed || c.state !== 'running') continue;
-			if (now.has(c.id)) still = true;
-			else ended = true;
+			if (now.has(c.id)) {
+				still = true;
+				this.seenRunning.add(c.id);
+			} else if (this.seenRunning.delete(c.id)) ended = true;
+			// A chat that says "running" without ever having a run here is
+			// not read again and again (the stored state of a run titand did
+			// not finish; it is marked "interrupted" at the next start).
 		}
 		// Started elsewhere (another device, a planned task): shown as running.
 		for (const id of now) if (id !== followed) this.listState(id, 'running');
