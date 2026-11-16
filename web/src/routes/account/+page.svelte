@@ -232,11 +232,7 @@
 	function browser(agent: string): string {
 		const name = /Firefox\/|Edg\/|Chrome\/|Safari\//.exec(agent)?.[0].replace(/\/$/, '') ?? '';
 		const system = /Windows|Android|iPhone|iPad|Mac OS X|Linux/.exec(agent)?.[0] ?? '';
-		return (
-			[name === 'Edg' ? 'Edge' : name, system].filter(Boolean).join(' · ') ||
-			agent.slice(0, 60) ||
-			'–'
-		);
+		return [name === 'Edg' ? 'Edge' : name, system].filter(Boolean).join(' · ') || agent || '–';
 	}
 
 	// PLAN 67-1: the menu bar of the desktop (Konto): the dialogs, or the section on the page.

@@ -541,7 +541,8 @@
 					onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(agentLast.id))}
 				>
 					<strong class="ellipsis">{agentLast.title}</strong>
-					<span>{agentLast.preview}</span>
+					<!-- The start of the chat; the whole one opens with a click (PLAN 76 exception). -->
+					<span data-cut="excerpt">{agentLast.preview}</span>
 				</button>
 			{:else}
 				<p class="muted small">{t('desktop.widget.agentIdle')}</p>

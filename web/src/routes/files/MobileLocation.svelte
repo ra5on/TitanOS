@@ -68,7 +68,10 @@
 			flex: 1;
 			min-width: 0;
 			width: auto;
-			height: 44px;
+			/* Grows with a deep path instead of letting it run out (Durchsicht 102). */
+			min-height: 44px;
+			height: auto;
+			white-space: normal;
 			background: var(--panel-bg);
 			border-color: var(--panel-border);
 			backdrop-filter: var(--panel-backdrop);
@@ -79,7 +82,6 @@
 		}
 		.mobile-location .places-toggle > span .muted {
 			display: inline;
-			white-space: nowrap;
 		}
 		.mobile-back {
 			display: inline-flex;
