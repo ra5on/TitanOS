@@ -452,7 +452,7 @@ func (m *Manager) BeginDiskBackup(ctx context.Context, name string, opts DiskBac
 	if plan.Way == "" {
 		return fail(plan.Reason, nil)
 	}
-	state, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domstate", name)
+	state, err := m.virsh(ctx, "--quiet", "domstate", name)
 	if err != nil || !strings.HasPrefix(strings.TrimSpace(state), "running") {
 		// Paused by its owner, by an I/O error, shutting down: left alone.
 		return fail(DiskBusy, err)
@@ -551,7 +551,7 @@ func (m *Manager) BeginDiskBackup(ctx context.Context, name string, opts DiskBac
 		b.watching = make(chan struct{})
 		go b.watchSpace()
 	case DiskWayPause:
-		if _, err := m.runner.Run(context.WithoutCancel(ctx), "", "virsh", "--quiet", "suspend", name); err != nil {
+		if _, err := m.virsh(context.WithoutCancel(ctx), "--quiet", "suspend", name); err != nil {
 			return abort(DiskPauseFailed, err)
 		}
 		b.timer = time.AfterFunc(pauseLimit, func() {
@@ -666,7 +666,7 @@ var errUndecided = errors.New("vm: cannot tell yet whether the snapshot was take
 // blockList is the live block chain of a running VM as "virsh domblklist"
 // prints it: target and source per line.
 func (m *Manager) blockList(ctx context.Context, name string) (map[string]string, error) {
-	out, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domblklist", name)
+	out, err := m.virsh(ctx, "--quiet", "domblklist", name)
 	if err != nil {
 		return nil, err
 	}
@@ -687,7 +687,7 @@ func (m *Manager) blockJobActive(ctx context.Context, name, target string) (acti
 	// --raw: the plain form goes to stderr as a progress line (seen with
 	// libvirt 11.3); raw prints type, bandwidth, cur and end to stdout, and
 	// nothing at all without a job.
-	out, err := m.runner.Run(ctx, "", "virsh", "blockjob", name, target, "--info", "--raw")
+	out, err := m.virsh(ctx, "blockjob", name, target, "--info", "--raw")
 	if err != nil {
 		return false, false, err
 	}
@@ -717,7 +717,7 @@ func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDi
 		return err
 	}
 	if !active {
-		_, err := m.runner.Run(ctx, "", "virsh", "--quiet", "blockcommit", name, disk.Target, "--active", "--wait", "--pivot")
+		_, err := m.virshWithin(ctx, diskUndoLimit, "--quiet", "blockcommit", name, disk.Target, "--active", "--wait", "--pivot")
 		if err == nil {
 			return m.offOverlay(ctx, name, disk)
 		}
@@ -749,7 +749,7 @@ func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDi
 			return m.offOverlay(ctx, name, disk)
 		}
 	}
-	if _, err := m.runner.Run(ctx, "", "virsh", "--quiet", "blockjob", name, disk.Target, "--pivot"); err != nil {
+	if _, err := m.virsh(ctx, "--quiet", "blockjob", name, disk.Target, "--pivot"); err != nil {
 		return err
 	}
 	return m.offOverlay(ctx, name, disk)
@@ -778,12 +778,12 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 	switch rec.Way {
 	case DiskWayPause:
 		if running {
-			state, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domstate", rec.VM)
+			state, err := m.virsh(ctx, "--quiet", "domstate", rec.VM)
 			if err != nil {
 				return err
 			}
 			if strings.HasPrefix(strings.TrimSpace(state), "paused") {
-				if _, err := m.runner.Run(ctx, "", "virsh", "--quiet", "resume", rec.VM); err != nil {
+				if _, err := m.virsh(ctx, "--quiet", "resume", rec.VM); err != nil {
 					return err
 				}
 			}
@@ -856,12 +856,12 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 		if rec.LowSpace && m.pid(rec.VM) != 0 {
 			// The overlays are gone and with them what filled the volume. If
 			// QEMU paused the VM for the full disk meanwhile, it goes on now.
-			state, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domstate", rec.VM, "--reason")
+			state, err := m.virsh(ctx, "--quiet", "domstate", rec.VM, "--reason")
 			if err != nil {
 				return err
 			}
 			if lower := strings.ToLower(state); strings.HasPrefix(strings.TrimSpace(lower), "paused") && (strings.Contains(lower, "i/o error") || strings.Contains(lower, "ioerror")) {
-				if _, err := m.runner.Run(ctx, "", "virsh", "--quiet", "resume", rec.VM); err != nil {
+				if _, err := m.virsh(ctx, "--quiet", "resume", rec.VM); err != nil {
 					return err
 				}
 				slog.Warn("VM resumed: it was paused because the snapshot of a backup filled the volume", "vm", rec.VM)

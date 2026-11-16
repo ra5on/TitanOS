@@ -50,6 +50,7 @@ var vmErrors = []struct {
 	{vm.ErrBadFolder, http.StatusBadRequest, "invalid_folder"},
 	{vm.ErrBadImage, http.StatusBadRequest, "invalid_image"},
 	{vm.ErrNoCopy, http.StatusNotFound, "vm_copy_not_found"},
+	{vm.ErrLibvirtTimeout, http.StatusGatewayTimeout, "vm_libvirt_timeout"},
 	{hardware.ErrUnknown, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrNotPassable, http.StatusBadRequest, "device_unavailable"},
 	{hardware.ErrIncompleteGroup, http.StatusBadRequest, "hardware_incomplete_group"},
