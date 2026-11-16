@@ -52,6 +52,7 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
 
 ## USB-Kopie, Konfigurationssicherung und Meldungstöne
 
+- Seit 1.03 liegt während eines Laufs der lesbaren Kopie (USB, SMB, Volume) `.titanos-copy-run` im Zielordner und wird an jedem Ende entfernt. Findet ein Lauf sie (Stromausfall, Absturz, Laufwerk gezogen), entfernt er vorher im Ziel genau die temporären Dateien/Links `.titanos-copy-<rand.Text>`; keine Ordner, keine Links verfolgt, nie `.titanos-part` des Dateimanagers.
 - USB-Kopie-Backups: `backup/copy.go`, Ziel `usb-copy` mit Dateisystem-UUID.
   Keine Löschweitergabe und keine Versionierung/Verschlüsselung; ausschließlich
   Freigaben, reguläre Dateien, symbolische Verknüpfungen und einfache
