@@ -13,7 +13,14 @@
 	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
-	import { formatBytes, formatDate, formatDateTime, osVersion } from '#lib/format.ts';
+	import {
+		formatBytes,
+		formatDate,
+		formatDateTime,
+		formatMegabytesPerSecond,
+		formatPercent,
+		osVersion,
+	} from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import Changelog from '#lib/update/Changelog.svelte';
 	import {
@@ -494,9 +501,9 @@
 
 {#snippet percent()}
 	{#if status}<span class="mono"
-			>{status.progress.percent.toFixed(0)} % · {(
-				status.progress.speedBytesPerSecond / 1e6
-			).toFixed(1)} MB/s</span
+			>{formatPercent(status.progress.percent)} · {formatMegabytesPerSecond(
+				status.progress.speedBytesPerSecond,
+			)} MB/s</span
 		>{/if}
 {/snippet}
 {#snippet devChip()}

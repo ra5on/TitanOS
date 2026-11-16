@@ -6,6 +6,7 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { formatDecimal } from '#lib/format.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	// own: the limit comes from the chip's critical value, else from the
@@ -112,7 +113,7 @@
 									})}{/snippet}
 				{#snippet control()}
 					<span class="mono value"
-						>{sensor.celsius === null ? '–' : `${sensor.celsius.toFixed(1)} °C`}</span
+						>{sensor.celsius === null ? '–' : `${formatDecimal(sensor.celsius, 1)} °C`}</span
 					>
 					<label class="check"
 						><input
