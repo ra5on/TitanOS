@@ -33,8 +33,9 @@ func (m *Manager) History(ctx context.Context, entity string, start, end time.Ti
 	if err := m.do(ctx, http.MethodGet, "/api/history/period/"+url.PathEscape(start.UTC().Format(time.RFC3339))+"?"+query.Encode(), nil, &groups); err != nil {
 		return out, err
 	}
-	// Minimal responses may omit entity_id on subsequent states.
-	var states []State
+	// Minimal responses may omit entity_id on subsequent states. Never nil:
+	// a quiet hour is an empty list, not null.
+	states := []State{}
 	for _, group := range groups {
 		if len(group) == 0 || group[0].EntityID != entity {
 			continue

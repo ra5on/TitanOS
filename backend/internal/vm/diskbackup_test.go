@@ -1101,3 +1101,87 @@ func TestPlanDiskBackupCachedAndOptIn(t *testing.T) {
 		t.Fatal("Running")
 	}
 }
+
+// A VM with a disk on a second volume that is not mounted after a crash:
+// the undo waits for that volume instead of committing one overlay and
+// forgetting the other, which would leave the guest's writes to the second
+// disk in an overlay nothing ever takes back.
+func TestDiskBackupUndoWaitsForEveryVolume(t *testing.T) {
+	ctx := context.Background()
+	m, r, vm := diskFixture(t)
+	second := filepath.Join(m.mountRoot, "data", "vms", "ha")
+	if err := os.MkdirAll(second, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.Rename(filepath.Join(m.mountRoot, "fast", "vms", "ha", vm.Disks[1].File), filepath.Join(second, vm.Disks[1].File))
+	vm.Disks[1].Volume = "data"
+	m.mu.Lock()
+	m.vms["ha"] = vm
+	m.mu.Unlock()
+	b, err := m.BeginDiskBackup(ctx, "ha", DiskBackupOptions{Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	abandon(m, b)
+	// The NAS went down; after the start only "fast" is there.
+	os.Remove(filepath.Join(m.pidDir, "ha.pid"))
+	r.overlay = map[string]string{}
+	away := filepath.Join(m.mountRoot, "data-away")
+	if err := os.Rename(filepath.Join(m.mountRoot, "data"), away); err != nil {
+		t.Fatal(err)
+	}
+	m.Mounted = func() []string { return []string{"fast"} }
+	_ = m.RecoverDiskBackups(ctx, true)
+	if n := r.ran("qemu-img commit"); n != 0 {
+		t.Fatalf("committed %d overlays with a volume missing: %v", n, r.lines)
+	}
+	if _, err := os.Stat(record(m, vm)); err != nil {
+		t.Fatal("record removed while an overlay could not be seen")
+	}
+	// The volume is back: both overlays go into their images.
+	os.Rename(away, filepath.Join(m.mountRoot, "data"))
+	m.Mounted = func() []string { return []string{"data", "fast"} }
+	if err := m.RecoverDiskBackups(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.ran("qemu-img commit"); n != 2 {
+		t.Fatalf("commits: %d: %v", n, r.lines)
+	}
+	if _, err := os.Stat(record(m, vm)); !os.IsNotExist(err) {
+		t.Fatal("record left")
+	}
+}
+
+// Growing a disk changes the VM's own list only once the new size is
+// stored: readers of the VM meanwhile see either size, never a half
+// written one (go test -race).
+func TestGrowKeepsTheListOfTheVM(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := diskFixture(t)
+	os.Remove(filepath.Join(m.pidDir, "ha.pid"))
+	stop := make(chan struct{})
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			for _, s := range m.List([]string{"data", "fast"}) {
+				for _, d := range s.Disks {
+					_ = d.SizeBytes
+				}
+			}
+		}
+	}()
+	if err := m.Grow(ctx, "ha", 0, 40*gib); err != nil {
+		t.Fatal(err)
+	}
+	close(stop)
+	<-read
+	if v, _ := m.get("ha"); v.Disks[0].SizeBytes != 40*gib {
+		t.Fatalf("size %d", v.Disks[0].SizeBytes)
+	}
+}

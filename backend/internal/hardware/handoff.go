@@ -96,17 +96,22 @@ func (m *Manager) PrepareHandoff(pci []string) (bool, error) {
 	if !primary {
 		return false, nil
 	}
-	detached := false
+	var taken []string
 	for _, console := range m.framebufferConsoles() {
 		if m.read(console, "bind") != "1" {
 			continue
 		}
 		if err := os.WriteFile(filepath.Join(console, "bind"), []byte("0"), 0); err != nil {
-			m.RestoreConsole()
+			// Give back what this call took: the note that RestoreConsole
+			// goes by is only written once all are detached.
+			for _, done := range taken {
+				_ = os.WriteFile(filepath.Join(done, "bind"), []byte("1"), 0) // as far as it goes; the error below is what counts
+			}
 			return false, fmt.Errorf("%w: detach the console from %s: %v", ErrInUse, strings.Join(graphics, ", "), err)
 		}
-		detached = true
+		taken = append(taken, console)
 	}
+	detached := len(taken) > 0
 	if detached {
 		// Only what TitanOS took is given back later.
 		if err := os.MkdirAll(m.state, 0o755); err == nil {

@@ -738,6 +738,7 @@ func (m *Manager) CheckUpdates(ctx context.Context) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
+	asked := ctx
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	containers, err := m.api.containers(ctx)
@@ -770,6 +771,11 @@ func (m *Manager) CheckUpdates(ctx context.Context) error {
 		if len(local[c.ImageID]) == 0 && problems[c.Image] == "" {
 			problems[c.Image] = "local image has no comparable digest"
 		}
+	}
+	// A check whose asker went away (the page was closed) found nothing:
+	// it must not replace the last result with "context canceled".
+	if err := asked.Err(); err != nil {
+		return err
 	}
 	m.mu.Lock()
 	m.remote, m.local, m.updatesChecked = remote, local, time.Now()

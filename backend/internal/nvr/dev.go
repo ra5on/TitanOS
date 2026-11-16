@@ -116,6 +116,9 @@ type DevEngine struct {
 	// CreateError, if set, is asked before each create: what it returns
 	// for the spec NVRCreate answers instead of creating (nil: it creates).
 	CreateError func(docker.NVRSpec) error
+	// RestartError and RemoveError, if set, answer NVRRestart and
+	// NVRRemove instead when they return an error.
+	RestartError, RemoveError func() error
 	// frigate is told which config.yml the container started with.
 	frigate *DevFrigate
 	// engineStarted is when the engine started (zero: long ago);
@@ -271,11 +274,26 @@ func (e *DevEngine) Preloads() []string {
 	return out
 }
 
-func (e *DevEngine) NVRRestart(ctx context.Context) error { return e.NVRStart(ctx) }
+func (e *DevEngine) NVRRestart(ctx context.Context) error {
+	e.mu.Lock()
+	refuse := e.RestartError
+	e.mu.Unlock()
+	if refuse != nil {
+		if err := refuse(); err != nil {
+			return err
+		}
+	}
+	return e.NVRStart(ctx)
+}
 
 func (e *DevEngine) NVRRemove(context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.RemoveError != nil {
+		if err := e.RemoveError(); err != nil {
+			return err
+		}
+	}
 	e.state = docker.NVRState{}
 	return nil
 }
@@ -378,6 +396,8 @@ type DevFrigate struct {
 	// (tests of the storage cap); IgnoreConfig starts without the
 	// cameras of config.yml.
 	FailKept, IgnoreConfig bool
+	// FailPath, if set, is a path answered with 500 (a busy Frigate).
+	FailPath string
 	// Cameras are the cameras Frigate "runs" with their pictures per
 	// second (0: offline).
 	Cameras map[string]float64
@@ -457,6 +477,9 @@ func (f *DevFrigate) Set(edit func(*DevFrigate)) {
 func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	down, safe, noDetector, secret := f.Down, f.SafeMode, f.NoDetector, f.secret
+	if f.FailPath != "" && r.URL.Path == f.FailPath {
+		down = true
+	}
 	cameras := map[string]float64{}
 	for id, fps := range f.Cameras {
 		cameras[id] = fps

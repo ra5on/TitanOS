@@ -31,7 +31,7 @@ func (m *Manager) Capabilities(ctx context.Context, entity string) (any, error) 
 		}
 		names := []string{}
 		for name := range domain.Services {
-			if m.CanCall(entity, name) {
+			if m.CanCallCtx(ctx, entity, name) {
 				names = append(names, name)
 			}
 		}
@@ -40,5 +40,5 @@ func (m *Manager) Capabilities(ctx context.Context, entity string) (any, error) 
 			services = append(services, map[string]any{"service": name, "schema": domain.Services[name]})
 		}
 	}
-	return map[string]any{"entity": state, "policy": m.Policy(entity), "services": services, "notice": "Service schemas describe domain capabilities. Check supported_features, supported_color_modes, min/max and current availability before choosing parameters."}, nil
+	return map[string]any{"entity": state, "policy": m.PolicyCtx(ctx, entity), "services": services, "notice": "Service schemas describe domain capabilities. Check supported_features, supported_color_modes, min/max and current availability before choosing parameters."}, nil
 }

@@ -3,6 +3,7 @@ package nvr
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -147,5 +148,27 @@ func TestKeepEventEdges(t *testing.T) {
 	}
 	if _, err := r.m.KeepEvent(ctx, "1.9-nope", "admin"); !errors.Is(err, ErrEventNotFound) {
 		t.Errorf("no such event: %v", err)
+	}
+}
+
+// Two presses of "Behalten" at once (a double click, two tabs) save the
+// event's video once.
+func TestKeepEventTwiceAtOnceSavesOneVideo(t *testing.T) {
+	r, e := keptRig(t)
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() { _, _ = r.m.KeepEvent(ctx, e.ID, "admin") })
+	}
+	wg.Wait()
+	records, _ := r.m.exportRecords()
+	n := 0
+	for _, record := range records {
+		if record.Event == e.ID {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d videos saved for one event", n)
 	}
 }

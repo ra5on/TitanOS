@@ -23,7 +23,9 @@ type fakeBroker struct {
 	mu       sync.Mutex
 	connect  []byte
 	retained map[string]string
-	states   map[string]string
+	// cleared counts empty retained messages per topic (removals).
+	cleared map[string]int
+	states  map[string]string
 	subs     []string
 	conn     net.Conn
 	// connects counts logins; the first deaf ones never get a PINGRESP,
@@ -39,7 +41,7 @@ func startBroker(t *testing.T) *fakeBroker {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := &fakeBroker{ln: ln, retained: map[string]string{}, states: map[string]string{}, online: map[int]bool{}}
+	b := &fakeBroker{ln: ln, retained: map[string]string{}, cleared: map[string]int{}, states: map[string]string{}, online: map[int]bool{}}
 	t.Cleanup(func() { ln.Close() })
 	go func() {
 		for {
@@ -78,6 +80,9 @@ func (b *fakeBroker) serve(conn net.Conn) {
 			topic, payload := string(body[2:2+n]), string(body[2+n:])
 			if header&1 == 1 {
 				b.retained[topic] = payload
+				if payload == "" {
+					b.cleared[topic]++
+				}
 			}
 			if strings.Contains(topic, "/state/") || strings.HasSuffix(topic, "/status") {
 				b.states[topic] = payload
@@ -142,8 +147,10 @@ func TestMQTTDiscoveryStatesAndCommands(t *testing.T) {
 	mqttInterval = 50 * time.Millisecond
 	defer func() { mqttInterval = old }()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go m.RunMQTT(ctx, source, commands)
+	ended := make(chan struct{})
+	// The loop ends before the interval is set back.
+	defer func() { cancel(); <-ended }()
+	go func() { m.RunMQTT(ctx, source, commands); close(ended) }()
 
 	cfg := "homeassistant/sensor/titanos_abc123/cpu/config"
 	eventually(t, "discovery", func() bool {
@@ -362,4 +369,74 @@ func TestMQTTCommandFloodBounded(t *testing.T) {
 	if !r.submit(ctx, "container", "c0", "restart") {
 		t.Error("target still blocked after completion")
 	}
+}
+
+// A change of settings that keeps the broker (a name, the devices for MCP)
+// does not remove the entities from Home Assistant, where renames, areas and
+// disabled flags hang on them. Switching MQTT off does.
+func TestMQTTSettingsChangeKeepsTheEntities(t *testing.T) {
+	broker := startBroker(t)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	q := MQTT{Enabled: true, Host: "127.0.0.1", Port: broker.port(), Groups: []string{"system"}, ID: "abc123"}
+	if err := m.SetSettings(Settings{Name: "Haus", MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	source := func(context.Context) Snapshot {
+		return Snapshot{Host: "nas", Version: "1.01", System: &SystemValues{CPUPercent: 1}}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.RunMQTT(ctx, source, nil); close(done) }()
+	defer func() { cancel(); <-done }()
+	cfg := "homeassistant/sensor/titanos_abc123/cpu/config"
+	eventually(t, "discovery", func() bool { return broker.get(func(b *fakeBroker) bool { return b.retained[cfg] != "" }) })
+	if err := m.SetSettings(Settings{Name: "Ferienhaus", MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "new session", func() bool {
+		return broker.get(func(b *fakeBroker) bool { return b.connects >= 2 && b.retained[cfg] != "" })
+	})
+	if n := broker.get(func(b *fakeBroker) bool { return b.cleared[cfg] == 0 }); !n {
+		t.Fatal("entities removed for a change that kept the broker")
+	}
+	q.Enabled = false
+	if err := m.SetSettings(Settings{Name: "Ferienhaus", MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "removal", func() bool { return broker.get(func(b *fakeBroker) bool { return b.cleared[cfg] > 0 }) })
+}
+
+// A group switched off with the same broker still goes from Home
+// Assistant: the next session reads the retained configs back and clears
+// those it no longer wants (the broker's replay is played here by hand).
+func TestMQTTGroupSwitchedOffIsRemovedBySameBroker(t *testing.T) {
+	broker := startBroker(t)
+	m := NewManager(config.Open(t.TempDir()))
+	m.Load()
+	q := MQTT{Enabled: true, Host: "127.0.0.1", Port: broker.port(), Groups: []string{"system", "volumes"}, ID: "abc123"}
+	if err := m.SetSettings(Settings{MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	used := 42.0
+	source := func(context.Context) Snapshot {
+		return Snapshot{Host: "nas", Version: "1.01", System: &SystemValues{CPUPercent: 1}, Volumes: []VolumeValues{{Name: "data", State: "ok", UsedPercent: &used}}}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.RunMQTT(ctx, source, nil); close(done) }()
+	defer func() { cancel(); <-done }()
+	volume := "homeassistant/sensor/titanos_abc123/volume_data_used/config"
+	eventually(t, "discovery", func() bool { return broker.get(func(b *fakeBroker) bool { return b.retained[volume] != "" }) })
+	var payload string
+	broker.get(func(b *fakeBroker) bool { payload = b.retained[volume]; return true })
+	q.Groups = []string{"system"}
+	if err := m.SetSettings(Settings{MQTT: q}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "new session", func() bool {
+		return broker.get(func(b *fakeBroker) bool { return b.connects >= 2 && len(b.subs) >= 4 })
+	})
+	broker.send(volume, payload)
+	eventually(t, "removal", func() bool { return broker.get(func(b *fakeBroker) bool { return b.cleared[volume] > 0 }) })
 }

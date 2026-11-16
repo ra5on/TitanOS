@@ -89,8 +89,10 @@ func TestMQTTUnknownRemovedAndBirth(t *testing.T) {
 	mqttInterval = 40 * time.Millisecond
 	defer func() { mqttInterval = old }()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go m.RunMQTT(ctx, source, nil)
+	ended := make(chan struct{})
+	// The loop ends before the interval is set back.
+	defer func() { cancel(); <-ended }()
+	go func() { m.RunMQTT(ctx, source, nil); close(ended) }()
 	key := telemetryEntities(snapshot.Telemetry, MQTT{Groups: []string{"gpu"}})[0].key
 	topic := "homeassistant/sensor/titanos_telemetry/" + key + "/config"
 	avail := "titanos/telemetry/available/" + key
@@ -214,11 +216,13 @@ func TestMQTTFilteredReconnectKeepsSelectedUnavailableDiscovery(t *testing.T) {
 		return Snapshot{}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	old := mqttInterval
 	mqttInterval = 40 * time.Millisecond
 	defer func() { mqttInterval = old }()
-	go m.RunMQTT(ctx, source, nil)
+	ended := make(chan struct{})
+	// The loop ends before the interval is set back.
+	defer func() { cancel(); <-ended }()
+	go func() { m.RunMQTT(ctx, source, nil); close(ended) }()
 	eventually(t, "discovery subscription", func() bool { return b.get(func(b *fakeBroker) bool { return len(b.subs) == 2 }) })
 	devices := []DeviceValues{{Group: "gpu", ID: "selected", Metrics: []MetricValue{{Key: "load"}}}, {Group: "gpu", ID: "other", Metrics: []MetricValue{{Key: "load"}}}}
 	list := telemetryEntities(devices, MQTT{Groups: []string{"gpu"}})

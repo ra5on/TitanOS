@@ -19,12 +19,16 @@ Administratoren). Ab Werk aktualisiert sich keine App von selbst.
    Images werden angefasst, eine nach der anderen.
 2. Laufende Images je Dienst merken, `docker compose pull`, dann `up` ohne
    weiteren Pull.
-3. **Drei Minuten beobachten:** Jeder Container der App muss laufen; einer mit
-   Healthcheck darf nicht „unhealthy“ sein (bei „starting“ wartet TitanOS bis
-   zum Ende der drei Minuten).
+3. **Drei Minuten beobachten:** Jeder Container der App muss laufen; einer,
+   den Docker gerade unter seiner Neustart-Regel wieder startet
+   (Neustartschleife), gilt nicht als laufend; einer mit Healthcheck darf
+   nicht „unhealthy“ sein (bei „starting“ wartet TitanOS bis zum Ende der drei
+   Minuten).
 4. **Rückweg:** Andernfalls (oder wenn Pull/Start scheitert) werden die
    vorigen Images mit `docker image tag <alte ID> <Name:Tag>` zurückgesetzt und
-   die App mit ihnen gestartet. Die alten Images bleiben dafür liegen, bis sie
+   die App mit ihnen gestartet. Dienste, deren Image per Digest festgelegt ist
+   (`name:tag@sha256:…`), brauchen das nicht (Docker lehnt so ein Tag ab) und
+   werden übersprungen. Die alten Images bleiben dafür liegen, bis sie
    jemand entfernt.
 
 Meldungen: `docker_auto_updated` (Hinweis), `docker_update_rolled_back`
@@ -40,6 +44,7 @@ arbeiten – für wichtige Apps vorher eine Anwendungssicherung einrichten.
 Ergebnisse nur im RAM. API: `GET`/`PUT /api/v1/docker/auto-update`.
 
 Geprüft mit nachgebautem Ablauf (`autoupdate_test.go`): behaltenes Update,
-Rückweg bei „unhealthy“, zu langem „starting“ und gescheitertem Pull, nichts
+Rückweg bei „unhealthy“, zu langem „starting“, Neustartschleife und
+gescheitertem Pull, Rückweg mit per Digest festgelegten Diensten, nichts
 Neues, Zeitfenster und nächster Termin. **Nicht geprüft:** echte Registries und
 Container.

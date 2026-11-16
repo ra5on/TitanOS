@@ -100,6 +100,8 @@ func (m *Manager) retain(ctx context.Context, base, id string, on bool) error {
 // (ErrEventRunning); one without a recording of its time (the camera did
 // not record) is kept without a video (KeptExport "").
 func (m *Manager) KeepEvent(ctx context.Context, id, by string) (Event, error) {
+	m.keepMu.Lock()
+	defer m.keepMu.Unlock()
 	base, err := m.base()
 	if err != nil {
 		return Event{}, err
@@ -168,6 +170,8 @@ func (m *Manager) settled(ctx context.Context, id string, kept bool) (Event, err
 // its saved video. A video still being made is waited for
 // (ErrExportRunning): the event stays kept.
 func (m *Manager) UnkeepEvent(ctx context.Context, id string) (Event, error) {
+	m.keepMu.Lock()
+	defer m.keepMu.Unlock()
 	base, err := m.base()
 	if err != nil {
 		return Event{}, err

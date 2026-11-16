@@ -142,18 +142,23 @@ func (m *Manager) AddSource(ctx context.Context, raw string) (SourceState, error
 	if err != nil {
 		return SourceState{}, err
 	}
-	m.mu.Lock()
-	if len(m.sources) >= maxSources {
-		m.mu.Unlock()
-		return SourceState{}, fmt.Errorf("%w: at most %d sources", ErrInvalid, maxSources)
-	}
-	for _, source := range m.sources {
-		if source.URL == u.String() {
-			m.mu.Unlock()
-			return SourceState{}, ErrExists
+	// Checked before the list is read and again before it is kept: two
+	// adds at once (a double click) must not keep the source twice.
+	addable := func() error {
+		if len(m.sources) >= maxSources {
+			return fmt.Errorf("%w: at most %d sources", ErrInvalid, maxSources)
 		}
+		if slices.ContainsFunc(m.sources, func(s Source) bool { return s.URL == u.String() }) {
+			return ErrExists
+		}
+		return nil
 	}
+	m.mu.Lock()
+	err = addable()
 	m.mu.Unlock()
+	if err != nil {
+		return SourceState{}, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	index, entries, err := m.fetchSource(ctx, u.String())
@@ -168,6 +173,9 @@ func (m *Manager) AddSource(ctx context.Context, raw string) (SourceState, error
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := addable(); err != nil {
+		return SourceState{}, err
+	}
 	sources := append(slices.Clone(m.sources), source)
 	if err := m.store.WriteJSON(sourcesPath, map[string]any{"sources": sources}); err != nil {
 		return SourceState{}, err
@@ -239,7 +247,10 @@ func (m *Manager) refreshSources(ctx context.Context) {
 				entries[i].plugin.Source = source.ID
 			}
 			m.mu.Lock()
-			m.setSourceEntries(source.ID, entries, err)
+			// A source removed while it was read does not come back.
+			if slices.ContainsFunc(m.sources, func(s Source) bool { return s.ID == source.ID }) {
+				m.setSourceEntries(source.ID, entries, err)
+			}
 			m.mu.Unlock()
 		})
 	}
@@ -355,12 +366,21 @@ type ExternalRequest struct {
 	Activate *bool  `json:"activate"`
 }
 
+// externalMetaTimeout bounds reading a source or link again before an
+// install or update, as when it was added. A variable for tests.
+var externalMetaTimeout = time.Minute
+
 // externalEntry fetches the manifest again at install time; what the page
 // showed is not trusted.
 func (m *Manager) externalEntry(ctx context.Context, req ExternalRequest) (catalogEntry, error) {
 	if req.URL != "" && req.Source != "" {
 		return catalogEntry{}, fmt.Errorf("%w: a link or a source, not both", ErrInvalid)
 	}
+	// Install and update run detached from the request; a server that
+	// stalls must not keep them (and the claim on the plugin's download)
+	// for ever. The download itself has its own stall timeout.
+	ctx, cancel := context.WithTimeout(ctx, externalMetaTimeout)
+	defer cancel()
 	if req.URL != "" {
 		return m.fetchExternal(ctx, req.URL, false)
 	}

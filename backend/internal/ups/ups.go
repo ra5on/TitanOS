@@ -126,6 +126,10 @@ type Manager struct {
 	// is made anew at every start and never leaves the NAS.
 	localPassword string
 	status        Status
+	// applyError is why the settings could not be put in place, "" when
+	// they were: the page shows it while NUT does not answer, instead of
+	// only upsc's "Connection refused".
+	applyError string
 }
 
 // NewManager returns a manager working on the real system.
@@ -495,6 +499,12 @@ func (m *Manager) look(ctx context.Context) {
 		if status.Error == "" && err != nil {
 			status.Error = err.Error()
 		}
+		// NUT not set up says more than its not answering.
+		m.mu.Lock()
+		if m.applyError != "" {
+			status.Error = m.applyError
+		}
+		m.mu.Unlock()
 	} else {
 		status.Connected = true
 		status.Raw = values["ups.status"]
@@ -584,29 +594,41 @@ func firstOf(values map[string]string, keys ...string) string {
 	return ""
 }
 
+// applyNow puts the settings in place and notes why it failed.
+func (m *Manager) applyNow(ctx context.Context) bool {
+	err := m.Apply(ctx)
+	m.mu.Lock()
+	m.applyError = ""
+	if err != nil {
+		m.applyError = err.Error()
+	}
+	m.mu.Unlock()
+	if err != nil {
+		slog.Warn("UPS not set up", "err", err)
+	}
+	return err == nil
+}
+
 // Run applies the settings at the start and when they change, and looks at
 // the UPS every ten seconds, until ctx is done.
 func (m *Manager) Run(ctx context.Context) {
 	if m.Disabled {
 		return
 	}
-	apply := func() bool {
-		err := m.Apply(ctx)
-		if err != nil {
-			slog.Warn("UPS not set up", "err", err)
-			m.mu.Lock()
-			m.status.Error = err.Error()
-			m.mu.Unlock()
-		}
-		return err == nil
-	}
-	// At boot the UPS may answer late (USB): try again every minute for
-	// the first ten minutes instead of staying unprotected until the
+	// At boot or after a change the UPS may answer late (USB): try again
+	// every minute for ten minutes instead of staying unprotected until the
 	// settings are saved again.
 	retryUntil, nextTry := time.Time{}, time.Time{}
-	if !apply() {
-		retryUntil, nextTry = time.Now().Add(10*time.Minute), time.Now().Add(time.Minute)
+	apply := func() bool {
+		ok := m.applyNow(ctx)
+		if ok {
+			retryUntil = time.Time{}
+		} else if retryUntil.IsZero() {
+			retryUntil, nextTry = time.Now().Add(10*time.Minute), time.Now().Add(time.Minute)
+		}
+		return ok
 	}
+	apply()
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -618,9 +640,7 @@ func (m *Manager) Run(ctx context.Context) {
 			apply()
 		case <-ticker.C:
 			if now := time.Now(); now.Before(retryUntil) && !now.Before(nextTry) {
-				if apply() {
-					retryUntil = time.Time{}
-				}
+				apply()
 				nextTry = now.Add(time.Minute)
 			}
 		}

@@ -374,6 +374,13 @@ func (m *Manager) MQTTStatus() (bool, string) {
 }
 
 // mqttSession publishes until the settings change (nil) or the connection fails.
+// sameBroker tells whether a session with next would talk to the same
+// broker under the same names as one with q.
+func sameBroker(q, next MQTT) bool {
+	return next.Enabled && next.Host != "" && q.Host == next.Host && q.Port == next.Port && q.TLS == next.TLS &&
+		q.Username == next.Username && q.Prefix == next.Prefix && q.ID == next.ID
+}
+
 func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Source, commands *commandRunner, changed <-chan struct{}) error {
 	base := "titanos/" + id
 	availability := base + "/status"
@@ -533,8 +540,17 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 			_ = client.Publish(availability, []byte("offline"), true) // the broker marks the device offline by its last will anyway
 			return nil
 		case <-changed:
-			// Entities of groups switched off go away; the new session sends
-			// what is still wanted.
+			// With the same broker, prefix and ID the next session removes
+			// what is no longer wanted itself (it reads the retained
+			// configs back). Removing everything here would make Home
+			// Assistant forget the entities with their names, areas and
+			// switches for every change of a name or an MCP release.
+			m.mu.Lock()
+			next := m.settings.MQTT
+			m.mu.Unlock()
+			if sameBroker(q, next) {
+				return nil
+			}
 			for topic := range published {
 				_ = client.Publish(topic, nil, true) // the new session publishes again; stale entities expire
 			}

@@ -3,6 +3,9 @@ package docker
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -113,5 +116,90 @@ func TestUpdateWindow(t *testing.T) {
 	}
 	if next := nextWindow(s, wed); !next.Equal(time.Date(2026, 11, 1, 4, 0, 0, 0, berlin)) {
 		t.Fatalf("next %v", next)
+	}
+}
+
+// A container in a restart loop (the engine says Running and Restarting
+// between two crashes) is no healthy update; one that runs is.
+func TestAutoUpdateWatchSeesARestartLoop(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	state := `{"Running":true,"Restarting":true,"ExitCode":1,"Status":"restarting"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/containers/json") {
+			fmt.Fprint(w, `[{"Id":"c1","Labels":{"com.docker.compose.project":"app","com.docker.compose.service":"web"}}]`)
+			return
+		}
+		fmt.Fprintf(w, `{"State":%s,"HostConfig":{"RestartPolicy":{"Name":"unless-stopped"}}}`, state)
+	}))
+	t.Cleanup(server.Close)
+	m.api = &client{http: &http.Client{Transport: rewriteTransport{server.URL}}}
+	healthy := m.realUpdater().healthy
+	if ok, why := healthy(context.Background(), "app"); ok || !strings.Contains(why, "restarting") {
+		t.Fatalf("restart loop: %v %q", ok, why)
+	}
+	state = `{"Running":true,"ExitCode":0,"Status":"running"}`
+	if ok, why := healthy(context.Background(), "app"); !ok {
+		t.Fatalf("running: %q", why)
+	}
+}
+
+// A service pinned by digest (redis:7@sha256:…) does not stop the way back
+// of the others: the engine refuses to tag such a reference.
+func TestAutoUpdateRollbackSkipsDigestPinnedImages(t *testing.T) {
+	var steps []string
+	u := updater{
+		pullUp: func(ctx context.Context, app string, pull bool) error {
+			steps = append(steps, "up")
+			return nil
+		},
+		tag: func(ctx context.Context, id, ref string) error {
+			if strings.Contains(ref, "@") {
+				return errors.New("refusing to create a tag with a digest reference")
+			}
+			steps = append(steps, "tag "+id+" "+ref)
+			return nil
+		},
+	}
+	before := []imageOf{
+		{service: "redis", ref: "redis:7-alpine@sha256:" + strings.Repeat("a", 64), id: "r1"},
+		{service: "web", ref: "example/web:latest", id: "old"},
+	}
+	if back := u.rollback(context.Background(), "photos", before); back != "" {
+		t.Fatalf("rollback: %s", back)
+	}
+	if strings.Join(steps, "|") != "tag old example/web:latest|up" {
+		t.Fatalf("steps: %v", steps)
+	}
+}
+
+// "Check for updates" from a page that is closed meanwhile keeps the last
+// result instead of marking every image as failed.
+func TestCancelledUpdateCheckKeepsTheLastResult(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			fmt.Fprint(w, `[{"Id":"c1","Image":"example/web:latest","ImageID":"sha256:1"}]`)
+		case strings.Contains(r.URL.Path, "/distribution/"):
+			cancel() // the page goes away while the registry is asked
+			http.Error(w, `{"message":"gone"}`, http.StatusInternalServerError)
+		default:
+			fmt.Fprint(w, `{"RepoDigests":["example/web@sha256:aaa"]}`)
+		}
+	}))
+	t.Cleanup(server.Close)
+	m.api = &client{http: &http.Client{Transport: rewriteTransport{server.URL}}}
+	checked := time.Now().Add(-time.Hour)
+	m.mu.Lock()
+	m.updatesChecked, m.updateErrors = checked, map[string]string{}
+	m.mu.Unlock()
+	if err := m.CheckUpdates(ctx); err == nil {
+		t.Fatal("a cancelled check counted as done")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.updatesChecked.Equal(checked) || len(m.updateErrors) != 0 {
+		t.Fatalf("result replaced: %v %v", m.updatesChecked, m.updateErrors)
 	}
 }

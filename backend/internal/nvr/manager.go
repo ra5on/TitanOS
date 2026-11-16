@@ -167,7 +167,10 @@ type Manager struct {
 	// exportsMu orders the changes of exports.json (exports.go).
 	exportsMu sync.Mutex
 	// seenMu orders the changes of seen.json (seen.go).
-	seenMu   sync.Mutex
+	seenMu sync.Mutex
+	// keepMu orders keeping and giving back events (keep.go), so that two
+	// presses at once save one video; taken before every other lock.
+	keepMu   sync.Mutex
 	loaded   bool
 	settings Settings
 	cameras  []Camera

@@ -5,10 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func localFixture(t *testing.T) (*catalogFixture, Manifest, string) {
@@ -229,5 +232,38 @@ func TestBuildRootRejectsWritableOrRedirectedParents(t *testing.T) {
 	}
 	if err := m.secureBuildDir("data"); err != nil {
 		t.Fatal("reuse", err)
+	}
+}
+
+// A release server that stalls does not keep the driver worker (and Busy,
+// which holds back app updates and maintenance) for ever.
+func TestStalledReleaseManifestEndsTheCheck(t *testing.T) {
+	f, _ := driverFixture(t)
+	m := f.m
+	m.LocalBuilds = true
+	stop := make(chan struct{})
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-stop:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() { close(stop); hang.Close() })
+	m.releaseSource = hang.URL
+	old := sdkManifestTimeout
+	sdkManifestTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { sdkManifestTimeout = old })
+	done := make(chan error, 1)
+	go func() { done <- m.checkLocalDriver(context.Background(), []string{"data"}, true, false, "") }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a stalled release counted as checked")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("still waiting, Busy()=%v", m.Busy())
+	}
+	if m.Busy() {
+		t.Fatal("still busy after the check ended")
 	}
 }

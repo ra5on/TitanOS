@@ -48,9 +48,15 @@ type Hub struct {
 	store   *config.Store
 	primary *Manager
 
-	mu      sync.Mutex
-	extra   []*Manager
-	changed chan struct{}
+	mu    sync.Mutex
+	extra []*Manager
+	// unread are listed connections whose file could not be read: they
+	// stay in the list, so that fixing the file brings them back.
+	unread []string
+	// listRead is false while connections.json could not be read; nothing
+	// is written over it then.
+	listRead bool
+	changed  chan struct{}
 	// runner carries out buttons of all connections: at most two at a time
 	// and one per target, whichever Home Assistant pressed them.
 	runner     *commandRunner
@@ -67,26 +73,30 @@ func NewHub(store *config.Store, primary *Manager) *Hub {
 func connectionFile(id string) string { return "homeassistant/connections/" + id + ".json" }
 
 // Load reads the further connections; the primary is loaded on its own.
-// A connection whose file cannot be read is left out and logged.
+// A connection whose file cannot be read is left out and logged, but stays
+// listed. While the list itself cannot be read, connections can be neither
+// added nor removed: writing it would drop every connection in it.
 func (h *Hub) Load() error {
 	var list connectionList
 	if err := h.store.ReadJSON(connectionsFile, &list); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	var extra []*Manager
+	var unread []string
 	for _, id := range list.Connections {
-		if !connID.MatchString(id) || slices.ContainsFunc(extra, func(m *Manager) bool { return m.id == id }) || len(extra)+1 >= MaxConnections {
+		if !connID.MatchString(id) || slices.Contains(unread, id) || slices.ContainsFunc(extra, func(m *Manager) bool { return m.id == id }) || len(extra)+len(unread)+1 >= MaxConnections {
 			continue
 		}
 		m := h.newManager(id)
 		if err := m.Load(); err != nil {
 			slog.Warn("Home Assistant connection not readable", "connection", id, "err", err)
+			unread = append(unread, id)
 			continue
 		}
 		extra = append(extra, m)
 	}
 	h.mu.Lock()
-	h.extra = extra
+	h.extra, h.unread, h.listRead = extra, unread, true
 	h.notify()
 	h.mu.Unlock()
 	return nil
@@ -140,11 +150,17 @@ func (h *Hub) Active() []*Manager {
 	return slices.DeleteFunc(h.All(), func(m *Manager) bool { return !m.Active() })
 }
 
+// saveList writes the list of extra plus the connections that could not be
+// read; the caller holds h.mu.
 func (h *Hub) saveList(extra []*Manager) error {
+	if !h.listRead {
+		return ErrNotLoaded
+	}
 	list := connectionList{Connections: []string{}}
 	for _, m := range extra {
 		list.Connections = append(list.Connections, m.id)
 	}
+	list.Connections = append(list.Connections, h.unread...)
 	return h.store.WriteJSON(connectionsFile, list)
 }
 
@@ -153,7 +169,10 @@ func (h *Hub) saveList(extra []*Manager) error {
 func (h *Hub) Add(name string) (*Manager, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.extra)+1 >= MaxConnections {
+	if !h.listRead {
+		return nil, ErrNotLoaded
+	}
+	if len(h.extra)+len(h.unread)+1 >= MaxConnections {
 		return nil, ErrTooMany
 	}
 	b := make([]byte, 4)
@@ -161,7 +180,7 @@ func (h *Hub) Add(name string) (*Manager, error) {
 	for {
 		_, _ = rand.Read(b)
 		id = hex.EncodeToString(b)
-		if !slices.ContainsFunc(h.extra, func(m *Manager) bool { return m.id == id }) {
+		if !slices.ContainsFunc(h.extra, func(m *Manager) bool { return m.id == id }) && !slices.Contains(h.unread, id) {
 			break
 		}
 	}

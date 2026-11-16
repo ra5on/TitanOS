@@ -329,3 +329,28 @@ func TestMissedAnswersDoNotRestartTheTimeOnBattery(t *testing.T) {
 		t.Fatalf("upsmon failed and the NAS was not switched off directly: powered=%v %+v", powered, status)
 	}
 }
+
+// When the settings cannot be put in place, the page says why, not only
+// that NUT does not answer.
+func TestFailedApplyIsShown(t *testing.T) {
+	m, system, _ := newManager(t)
+	if err := m.SetSettings(Settings{Mode: "local", ShutdownAfter: 5}); err != nil {
+		t.Fatal(err)
+	}
+	system.failing = "systemctl start nut-server"
+	if m.applyNow(context.Background()) {
+		t.Fatal("apply went through")
+	}
+	m.look(context.Background())
+	if st := m.Status(); !strings.Contains(st.Error, "exit status 1") || strings.Contains(st.Error, "Connection refused") {
+		t.Fatalf("status error %q", st.Error)
+	}
+	system.failing = ""
+	if !m.applyNow(context.Background()) {
+		t.Fatal("apply failed")
+	}
+	m.look(context.Background())
+	if st := m.Status(); !strings.Contains(st.Error, "Connection refused") {
+		t.Fatalf("status error after a good apply %q", st.Error)
+	}
+}
