@@ -2,6 +2,8 @@ package vm
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"testing"
@@ -67,5 +69,38 @@ func TestHangingSystemctlEndsAfterItsLimit(t *testing.T) {
 	}
 	if m.reserved != "" {
 		t.Errorf("a reservation cut off counts as done: %q", m.reserved)
+	}
+}
+
+// The part file of a disk copy that a crash cut off goes with the VM,
+// with or without its disks: it is never a disk of its own.
+func TestCutOffDiskCopyGoesWithTheVM(t *testing.T) {
+	for _, withDisks := range []bool{false, true} {
+		m, _ := newTestManager(t)
+		vm := VM{Name: "copy", UUID: "22222222-2222-3333-4444-555555555555", Volume: "fast", Template: "linux",
+			Disks: []Disk{{File: "vdisk1.qcow2", Format: "qcow2", Volume: "fast", Source: filepath.Join(m.mountRoot, "data", "media", "base.qcow2")}}}
+		if err := m.persistVM(vm); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Load(); err != nil {
+			t.Fatal(err)
+		}
+		partial := m.diskPath(vm, vm.Disks[0]) + ".partial"
+		if err := os.MkdirAll(filepath.Dir(partial), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(partial, []byte("half"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		confirm := ""
+		if withDisks {
+			confirm = "copy"
+		}
+		if err := m.Delete("copy", withDisks, confirm); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(partial); !os.IsNotExist(err) {
+			t.Errorf("with disks %v: part file of the copy left: %v", withDisks, err)
+		}
 	}
 }
