@@ -75,11 +75,20 @@
 	const frame = $derived(frameFor({ known, agentApp, agentAppMode: agentAppMode(page.url) }));
 	let DesktopView = $state<typeof Desktop | null>(null);
 	let PhoneHomeView = $state<typeof PhoneHome | null>(null);
+	// Durchsicht 102: after an app update the old file names are gone; the
+	// screen said nothing and stayed empty. Now it says so, with a way out.
+	let viewFailed = $state(false);
 	$effect(() => {
 		if (frame === 'desktop' && !DesktopView)
-			void import('#lib/desktop/Desktop.svelte').then((m) => (DesktopView = m.default));
+			void import('#lib/desktop/Desktop.svelte').then(
+				(m) => (DesktopView = m.default),
+				() => (viewFailed = true),
+			);
 		if (frame === 'phone' && page.url.pathname === '/' && !PhoneHomeView)
-			void import('#lib/desktop/PhoneHome.svelte').then((m) => (PhoneHomeView = m.default));
+			void import('#lib/desktop/PhoneHome.svelte').then(
+				(m) => (PhoneHomeView = m.default),
+				() => (viewFailed = true),
+			);
 	});
 	afterNavigate(() => {
 		if (inWindow)
@@ -249,16 +258,22 @@
 		>
 	</div>
 {/if}
+{#snippet failed()}
+	<div class="view-failed" role="alert">
+		<p>{t('desktop.window.loadFailed')}</p>
+		<button type="button" class="btn" onclick={() => location.reload()}>{t('common.retry')}</button>
+	</div>
+{/snippet}
 {#if frame === 'window'}
 	<main class="in-window" class:readable={!dockerPage}>
 		{#if !dockerPage}<ConnectionBanner />{/if}
 		{@render children()}
 	</main>
 {:else if frame === 'desktop'}
-	{#if DesktopView}<DesktopView />{/if}
+	{#if DesktopView}<DesktopView />{:else if viewFailed}{@render failed()}{/if}
 {:else if frame === 'phone'}
 	{#if page.url.pathname === '/'}
-		{#if PhoneHomeView}<PhoneHomeView />{/if}
+		{#if PhoneHomeView}<PhoneHomeView />{:else if viewFailed}{@render failed()}{/if}
 	{:else}
 		<PhoneBar />
 		<main class="phone-page" class:readable={!dockerPage}>
@@ -299,6 +314,17 @@
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 
 <style>
+	.view-failed {
+		max-width: 32rem;
+		margin: 20vh auto 0;
+		padding: var(--tile-pad);
+		display: grid;
+		gap: var(--space-3);
+		justify-items: start;
+		border-radius: var(--radius);
+		background: var(--panel-bg);
+		color: var(--text);
+	}
 	/* PLAN 61: a page alone in a window of the desktop, or full screen on the phone. */
 	.in-window,
 	.phone-page {
