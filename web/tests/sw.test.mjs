@@ -89,3 +89,73 @@ test('a NAS message uses any TitanOS window', async () => {
 	await click(sw, '/');
 	assert.deepEqual(JSON.parse(JSON.stringify(files.sent)), [{ type: 'open', url: '/' }]);
 });
+
+// Durchsicht 102: a share that cannot be stored completely (quota) leaves
+// nothing half-stored behind, and a file without a name gets no German
+// name from the worker (the share page names it in the user's language).
+function shareWorker(failAt) {
+	const handlers = {};
+	const store = new Map();
+	const deleted = [];
+	let puts = 0;
+	const caches = {
+		delete: async (name) => {
+			deleted.push(name);
+			store.clear();
+			return true;
+		},
+		open: async () => ({
+			put: async (key, res) => {
+				if (++puts === failAt) throw new Error('QuotaExceededError');
+				store.set(key, await res.text());
+			},
+		}),
+	};
+	const self = {
+		location: { origin: 'https://nas.local' },
+		addEventListener: (t, fn) => (handlers[t] = fn),
+	};
+	vm.runInNewContext(readFileSync(new URL('../static/sw.js', import.meta.url), 'utf8'), {
+		self,
+		URL,
+		console,
+		caches,
+		// Node resolves no relative redirect (a worker resolves it against its own address).
+		Response: class extends Response {
+			static redirect(url, status) {
+				return new Response(null, { status, headers: { Location: url } });
+			}
+		},
+		File,
+	});
+	async function share(files) {
+		const form = new FormData();
+		for (const f of files) form.append('files', f);
+		let answer;
+		handlers.fetch({
+			request: {
+				method: 'POST',
+				url: 'https://nas.local/share-target',
+				formData: async () => form,
+			},
+			respondWith: (p) => (answer = p),
+		});
+		return answer;
+	}
+	return { share, store, deleted };
+}
+
+test('a share that cannot be stored completely leaves nothing behind', async () => {
+	const sw = shareWorker(2);
+	const res = await sw.share([new File(['a'], 'a.txt'), new File(['b'], 'b.txt')]);
+	assert.equal(res.headers.get('Location'), '/share?missing=1');
+	assert.equal(sw.store.size, 0);
+	assert.equal(sw.deleted.length, 2);
+});
+
+test('a shared file without a name is named by the page, not the worker', async () => {
+	const sw = shareWorker(0);
+	await sw.share([new File(['a'], '')]);
+	const list = JSON.parse(sw.store.get('/share-target/list'));
+	assert.equal(list.files[0].name, '');
+});

@@ -47,7 +47,19 @@
 	}
 
 	$effect(() => {
+		// Durchsicht 102: most dialogs close by leaving the page (`{#if}`), not
+		// with dialog.close(); the browser then gives the focus back to nothing.
+		// What had it before gets it back, unless something else took it.
+		const opener = document.activeElement;
 		dialog.showModal();
+		return () => {
+			if (!(opener instanceof HTMLElement)) return;
+			queueMicrotask(() => {
+				const now = document.activeElement;
+				if (opener.isConnected && (!now || now === document.body))
+					opener.focus({ preventScroll: true });
+			});
+		};
 	});
 
 	// Beside the window is the backdrop: a click there reaches the dialog

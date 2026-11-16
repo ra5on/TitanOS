@@ -57,9 +57,12 @@
 	// "wird verschoben" follow; never longer than two minutes.
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let polls = 0;
+	// An answer that comes after leaving the page starts no new round (Durchsicht 102).
+	let left = false;
 	function take(state: SysDataState) {
 		data = state;
 		clearTimeout(timer);
+		if (left) return;
 		const waiting = state.functions.some(
 			(f) => f.moving || (f.volume !== '' && f.sizeBytes === null),
 		);
@@ -75,7 +78,10 @@
 			/* the next visit asks again */
 		}
 	}
-	onDestroy(() => clearTimeout(timer));
+	onDestroy(() => {
+		left = true;
+		clearTimeout(timer);
+	});
 
 	async function load() {
 		error = '';

@@ -111,7 +111,14 @@ function markLocked(tellOthers: boolean) {
 	if (tellOthers && !was) tell('locked');
 }
 
+// Durchsicht 102: true from locking until the NAS has taken the lock. While
+// it is, a "not locked" answer of the NAS only means the lock has not
+// arrived there yet (request still on its way, network gone, titand
+// restarting) and never unlocks the screen without a password.
+let lockPending = false;
+
 async function markUnlocked(tellOthers: boolean) {
+	lockPending = false;
 	lockState.locked = false;
 	if (session.data) session.data = { ...session.data, locked: false };
 	if (tellOthers) tell('unlocked');
@@ -128,12 +135,37 @@ setLockedHandler(() => markLocked(true));
 export async function lock(): Promise<void> {
 	if (!session.data?.user || isLocked()) return;
 	markLocked(true);
+	lockPending = true;
+	await sendLock();
+}
+
+async function sendLock() {
 	try {
 		await api.post('/session/lock');
+		lockPending = false;
 	} catch (err) {
 		// Logged out meanwhile: the login page follows from the session.
-		if (err instanceof ApiError && err.status === 401) await refreshSession();
+		if (err instanceof ApiError && err.status === 401) {
+			lockPending = false;
+			await refreshSession();
+		}
+		// Otherwise the next check sends the lock again.
 	}
+}
+
+/**
+ * While the screen is locked (every few seconds): a lock the NAS has not
+ * taken yet is sent again; else the screen follows an unlock made in a
+ * window that could not tell this one.
+ */
+export async function recheckLock(): Promise<void> {
+	if (!isLocked()) return;
+	if (lockPending) {
+		await sendLock();
+		return;
+	}
+	const s = await api.get<{ locked?: boolean; user: unknown }>('/session');
+	if (s?.user && !s.locked && isLocked() && !lockPending) await markUnlocked(false);
 }
 
 export type UnlockProof = { password: string; code?: string };
@@ -252,12 +284,7 @@ export function startLock(): () => void {
 				// Unlocked in a window that could not tell us?
 				if (now - lockedPoll >= LOCKED_POLL_MS) {
 					lockedPoll = now;
-					void api
-						.get<{ locked?: boolean; user: unknown }>('/session')
-						.then((s) => {
-							if (s.user && !s.locked && isLocked()) void markUnlocked(false);
-						})
-						.catch(() => {});
+					void recheckLock().catch(() => {});
 				}
 				return;
 			}

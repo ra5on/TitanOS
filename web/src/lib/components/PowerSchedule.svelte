@@ -117,6 +117,8 @@
 						aria-pressed={entry.days.includes(day)}
 						disabled={busy || !entry.enabled}
 						onclick={() => toggleDay(entry, day)}
+						aria-label={t(`common.day${day}` as MessageKey)}
+						title={t(`common.day${day}` as MessageKey)}
 						>{t(`common.day${day}` as MessageKey).slice(0, 2)}</button
 					>
 				{/each}

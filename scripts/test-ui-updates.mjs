@@ -855,7 +855,7 @@ try {
     assert.equal(await steps.locator("li").count(), 5);
     assert.deepEqual(await done(), []);
     assert.ok(await page.getByText("TitanOS 0.9 wird installiert").isVisible());
-    assert.ok(await page.getByText("62 % · 18.0 MB/s").isVisible());
+    assert.ok(await page.getByText("62 % · 18 MB/s").isVisible());
     assert.equal(
       await page.getByRole("progressbar").getAttribute("aria-valuenow"),
       "62",
@@ -881,7 +881,7 @@ try {
       ),
     );
     assert.equal(await steps.locator("li.done svg").count(), 2);
-    assert.equal(await page.getByText("62 % · 18.0 MB/s").count(), 0);
+    assert.equal(await page.getByText("62 % · 18 MB/s").count(), 0);
     state = {
       ...state,
       progress: { ...progress("done"), percent: 100 },

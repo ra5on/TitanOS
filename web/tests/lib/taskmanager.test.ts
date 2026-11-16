@@ -5,7 +5,6 @@ import {
 	memberDisk,
 	pushHistory,
 	scaleToPeak,
-	shortCommand,
 	sortProcesses,
 	volumeRates,
 	type ProcessRow,
@@ -65,13 +64,6 @@ test('histories and sparkline scaling', () => {
 	expect(pushHistory([], Number.NaN)).toEqual([0]);
 	expect(scaleToPeak([0, 5, 10])).toEqual([0, 50, 100]);
 	expect(scaleToPeak([0, 0])).toEqual([0, 0]);
-});
-
-test('commands are shortened', () => {
-	expect(shortCommand('a b')).toBe('a b');
-	const long = shortCommand('x'.repeat(200), 20);
-	expect(long).toHaveLength(20);
-	expect(long.endsWith('…')).toBe(true);
 });
 
 test('volume throughput sums member disks', () => {

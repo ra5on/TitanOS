@@ -8,7 +8,7 @@
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
 	import { api } from '#lib/api.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system, watchSystem } from '#lib/system.svelte.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import TasksPanel from './TasksPanel.svelte';
@@ -75,11 +75,20 @@
 	const frame = $derived(frameFor({ known, agentApp, agentAppMode: agentAppMode(page.url) }));
 	let DesktopView = $state<typeof Desktop | null>(null);
 	let PhoneHomeView = $state<typeof PhoneHome | null>(null);
+	// Durchsicht 102: after an app update the old file names are gone; the
+	// screen said nothing and stayed empty. Now it says so, with a way out.
+	let viewFailed = $state(false);
 	$effect(() => {
 		if (frame === 'desktop' && !DesktopView)
-			void import('#lib/desktop/Desktop.svelte').then((m) => (DesktopView = m.default));
+			void import('#lib/desktop/Desktop.svelte').then(
+				(m) => (DesktopView = m.default),
+				() => (viewFailed = true),
+			);
 		if (frame === 'phone' && page.url.pathname === '/' && !PhoneHomeView)
-			void import('#lib/desktop/PhoneHome.svelte').then((m) => (PhoneHomeView = m.default));
+			void import('#lib/desktop/PhoneHome.svelte').then(
+				(m) => (PhoneHomeView = m.default),
+				() => (viewFailed = true),
+			);
 	});
 	afterNavigate(() => {
 		if (inWindow)
@@ -214,12 +223,16 @@
 
 	const pendingSeconds = $derived(system.info?.networkPendingSeconds ?? 0);
 	let settling = $state(false);
+	// A refused "keep" says why (Durchsicht 102: it went by unseen, and the
+	// change went back when the time ran out).
+	let settleError = $state('');
 	async function settle(action: 'confirm' | 'revert') {
 		settling = true;
+		settleError = '';
 		try {
 			await api.post(`/network/${action}`);
-		} catch {
-			// The next look at the system says what became of it.
+		} catch (err) {
+			settleError = apiErrorText(err);
 		}
 		settling = false;
 	}
@@ -247,18 +260,25 @@
 		<button type="button" class="btn" onclick={() => settle('revert')} disabled={settling}
 			>{t('netcfg.back')}</button
 		>
+		{#if settleError}<span class="settle-error">{settleError}</span>{/if}
 	</div>
 {/if}
+{#snippet failed()}
+	<div class="view-failed" role="alert">
+		<p>{t('desktop.window.loadFailed')}</p>
+		<button type="button" class="btn" onclick={() => location.reload()}>{t('common.retry')}</button>
+	</div>
+{/snippet}
 {#if frame === 'window'}
 	<main class="in-window" class:readable={!dockerPage}>
 		{#if !dockerPage}<ConnectionBanner />{/if}
 		{@render children()}
 	</main>
 {:else if frame === 'desktop'}
-	{#if DesktopView}<DesktopView />{/if}
+	{#if DesktopView}<DesktopView />{:else if viewFailed}{@render failed()}{/if}
 {:else if frame === 'phone'}
 	{#if page.url.pathname === '/'}
-		{#if PhoneHomeView}<PhoneHomeView />{/if}
+		{#if PhoneHomeView}<PhoneHomeView />{:else if viewFailed}{@render failed()}{/if}
 	{:else}
 		<PhoneBar />
 		<main class="phone-page" class:readable={!dockerPage}>
@@ -299,6 +319,21 @@
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 
 <style>
+	.settle-error {
+		flex-basis: 100%;
+		font-weight: 600;
+	}
+	.view-failed {
+		max-width: 32rem;
+		margin: 20vh auto 0;
+		padding: var(--tile-pad);
+		display: grid;
+		gap: var(--space-3);
+		justify-items: start;
+		border-radius: var(--radius);
+		background: var(--panel-bg);
+		color: var(--text);
+	}
 	/* PLAN 61: a page alone in a window of the desktop, or full screen on the phone. */
 	.in-window,
 	.phone-page {

@@ -191,20 +191,23 @@
 	let keepBusy = $state(false);
 	async function keep(on: boolean) {
 		if (!open) return;
+		const id = open.id;
+		const base = eventBase;
 		keepBusy = true;
 		detailError = '';
 		try {
 			const changed = on
-				? await api.post<NvrEvent>(`${eventBase}/keep`, {})
-				: await api.delete<NvrEvent>(`${eventBase}/keep`);
-			open = { ...open, kept: changed.kept, keptExport: changed.keptExport };
-			const id = open.id;
+				? await api.post<NvrEvent>(`${base}/keep`, {})
+				: await api.delete<NvrEvent>(`${base}/keep`);
+			// The dialog may have been closed or show another event by now:
+			// only the event that is still open takes the answer.
+			if (open?.id === id) open = { ...open, kept: changed.kept, keptExport: changed.keptExport };
 			events = events.map((e) =>
 				e.id === id ? { ...e, kept: changed.kept, keptExport: changed.keptExport } : e,
 			);
 			unkeeping = false;
 		} catch (err) {
-			detailError = apiErrorText(err);
+			if (open?.id === id) detailError = apiErrorText(err);
 		} finally {
 			keepBusy = false;
 		}

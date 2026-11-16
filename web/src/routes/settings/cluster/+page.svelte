@@ -461,7 +461,7 @@
 				{#snippet description()}
 					<span class="line">
 						{#if node.self}
-							<span class="mono">{node.addresses.slice(0, 4).join(' · ')}</span>
+							<span class="mono">{node.addresses.join(' · ')}</span>
 						{:else if node.online && node.way}
 							<span
 								>{t('cluster.via', { way: wayLabel(node.way) }) +
@@ -475,7 +475,7 @@
 								>{/if}
 						{:else if node.error}
 							<span>{errorText(node.error)}</span>
-							<span class="mono">{node.addresses.slice(0, 3).join(' · ')}</span>
+							<span class="mono">{node.addresses.join(' · ')}</span>
 						{/if}
 					</span>
 					{#if node.clockSkew}<span class="line warn-text"

@@ -26,6 +26,14 @@
 	let target = $state<{ root: string; rootName: string; dir: string } | null>(null);
 	let choosing = $state(false);
 	let sent = $state<File[]>([]);
+	// Durchsicht 102: each shared item keeps its own upload (rows were paired by
+	// position, so one missing file shifted every later row); `preparing`
+	// keeps a second tap from sending everything twice.
+	let sentFor = $state<Record<string, File>>({});
+	let gone = $state<string[]>([]);
+	let preparing = $state(false);
+	const nameOf = (item: { name: string }, i: number) =>
+		item.name || t('share.fileName', { n: i + 1 });
 	let error = $state('');
 
 	onMount(() => {
@@ -71,20 +79,30 @@
 	}
 
 	async function upload() {
-		if (!target || !shared) return;
+		if (!target || !shared || preparing || sent.length) return;
 		error = '';
+		preparing = true;
 		try {
 			const cache = await caches.open(CACHE);
 			const files: File[] = [];
-			for (const item of shared) {
+			const byKey: Record<string, File> = {};
+			const missing: string[] = [];
+			for (const [i, item] of shared.entries()) {
 				const res = await cache.match(item.key);
-				if (!res) continue;
-				files.push(new File([await res.blob()], item.name, { type: item.type }));
+				if (!res) {
+					missing.push(item.key);
+					continue;
+				}
+				const file = new File([await res.blob()], nameOf(item, i), { type: item.type });
+				byKey[item.key] = file;
+				files.push(file);
 			}
 			if (text && saveText) {
 				const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-				files.push(new File([text + '\n'], `geteilt-${stamp}.txt`, { type: 'text/plain' }));
+				files.push(new File([text + '\n'], t('share.textFile', { stamp }), { type: 'text/plain' }));
 			}
+			gone = missing;
+			sentFor = byKey;
 			sent = files;
 			enqueue(
 				files.map((file) => ({ file, dir: target!.dir, conflict: 'rename' as const })),
@@ -92,6 +110,8 @@
 			);
 		} catch {
 			error = t('share.readFailed');
+		} finally {
+			preparing = false;
 		}
 	}
 
@@ -130,9 +150,11 @@
 		<SettingGroup title={t('share.files')} id="share-files">
 			{#snippet tools()}<span class="muted small">{formatBytes(total)}</span>{/snippet}
 			{#each shared as f, i (f.key)}
-				{@const u = mine.find((x) => x.file === sent[i])}
-				<SettingRow icon="file" title={f.name} desc={formatBytes(f.size)}>
-					{#snippet control()}{#if u}{u.state === 'done'
+				{@const u = mine.find((x) => x.file === sentFor[f.key])}
+				<SettingRow icon="file" title={nameOf(f, i)} desc={formatBytes(f.size)}>
+					{#snippet control()}{#if gone.includes(f.key)}{t(
+								'share.fileGone',
+							)}{:else if u}{u.state === 'done'
 								? t('share.done')
 								: u.state === 'failed'
 									? u.error || t('share.failed')
@@ -187,7 +209,7 @@
 					<button
 						type="button"
 						class="btn btn-primary"
-						disabled={!target || sent.length > 0}
+						disabled={!target || sent.length > 0 || preparing}
 						onclick={upload}>{t('share.upload')}</button
 					>
 				{/if}

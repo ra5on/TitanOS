@@ -8,7 +8,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Segments from '#lib/components/Segments.svelte';
-	import { api } from '#lib/api.ts';
+	import { api, apiFetch } from '#lib/api.ts';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { appearance, useAppearance } from '#lib/theme/appearance.svelte.ts';
 	import {
@@ -129,7 +129,9 @@
 		untrack(() => useAppearance(value));
 		state_ = 'saving';
 		clearTimeout(timer);
+		pending = value;
 		timer = setTimeout(async () => {
+			pending = null;
 			try {
 				await api.put('/preferences/appearance', value);
 				state_ = 'saved';
@@ -140,7 +142,30 @@
 			}
 		}, 700);
 	});
-	onMount(() => () => clearTimeout(timer));
+	// A change made just before leaving the page is still sent (Durchsicht 102:
+	// the screen showed it, the NAS never got it, the next start brought the
+	// old look back).
+	let pending: Appearance | null = null;
+	function flush() {
+		clearTimeout(timer);
+		if (!pending) return;
+		const body = JSON.stringify(pending);
+		pending = null;
+		// keepalive: the request outlives a closed window or tab.
+		void apiFetch('/preferences/appearance', {
+			method: 'PUT',
+			body,
+			headers: { 'Content-Type': 'application/json' },
+			keepalive: true,
+		}).catch(() => {});
+	}
+	onMount(() => {
+		window.addEventListener('pagehide', flush);
+		return () => {
+			window.removeEventListener('pagehide', flush);
+			flush();
+		};
+	});
 
 	function reset() {
 		// The uploaded image stays on the NAS; only the settings go back.

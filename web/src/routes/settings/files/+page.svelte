@@ -34,14 +34,19 @@
 	let confirm = $state<{ kind: 'index' | 'thumbs'; volume: string } | null>(null);
 
 	// The status is RAM in titand: reading it touches neither disks nor the stick.
+	// A save starts a new round: an answer asked for before it would put the
+	// old settings back into the form (Durchsicht 102).
+	let round = 0;
 	async function refresh() {
+		const mine = round;
 		try {
 			const next = await api.get<Answer>('/files/index', AbortSignal.timeout(10000));
+			if (mine !== round) return;
 			answer = next;
 			if (!dirty) draft = indexSettings(next.status);
 			loadError = '';
 		} catch (err) {
-			loadError = apiErrorText(err);
+			if (mine === round) loadError = apiErrorText(err);
 		}
 	}
 	onMount(() => poll(refresh, { interval: 5000, skip: () => busy }));
@@ -58,6 +63,7 @@
 		busy = true;
 		error = '';
 		saved = false;
+		round++;
 		try {
 			const status = await api.put<IndexStatus>('/files/index', draft);
 			if (answer) answer.status = status;

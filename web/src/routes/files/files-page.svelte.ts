@@ -556,7 +556,8 @@ export class FilesPage extends FilesState {
 		if (failed.length)
 			this.error = t('files.dropUnreadable', {
 				count: failed.length,
-				names: failed.slice(0, 5).join(', ') + (failed.length > 5 ? ' …' : ''),
+				// Every name: none is left out with "…" (PLAN 76).
+				names: failed.join(', '),
 			});
 		this.upload(files);
 	};

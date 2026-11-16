@@ -110,9 +110,17 @@ const loading: Partial<Record<Locale, Promise<void>>> = {};
 /** Loads the texts of a language once; the UI waits for `i18n.ready`. */
 export function loadLocale(locale: Locale): Promise<void> {
 	if (messages[locale]) return Promise.resolve();
-	loading[locale] ??= FILES[locale]().then((parts) => {
-		messages[locale] = Object.assign({}, ...parts.map((part) => part.default));
-	});
+	loading[locale] ??= FILES[locale]().then(
+		(parts) => {
+			messages[locale] = Object.assign({}, ...parts.map((part) => part.default));
+		},
+		(err) => {
+			// A failed load (network, files of an older version gone after an
+			// update) may be tried again instead of failing for good.
+			delete loading[locale];
+			throw err;
+		},
+	);
 	return loading[locale];
 }
 
@@ -133,7 +141,40 @@ export const i18n = $state<{ locale: Locale; ready: boolean }>({
 	locale: detectLocale(),
 	ready: false,
 });
-void loadLocale(i18n.locale).then(() => (i18n.ready = true));
+// Durchsicht 102: without its texts the page shows nothing at all, so a failed
+// load is tried again; after an app update the old file names are gone and
+// only a reload brings the new ones (once per tab).
+const RELOADED_KEY = 'titanos.i18n.reloaded';
+function startTexts(attempt = 0) {
+	loadLocale(i18n.locale).then(
+		() => {
+			i18n.ready = true;
+			try {
+				sessionStorage.removeItem(RELOADED_KEY);
+			} catch {
+				// Nothing remembered.
+			}
+		},
+		() => {
+			if (attempt === 2 && typeof location !== 'undefined') {
+				try {
+					if (!sessionStorage.getItem(RELOADED_KEY)) {
+						sessionStorage.setItem(RELOADED_KEY, '1');
+						location.reload();
+						return;
+					}
+				} catch {
+					// No storage: keep trying without a reload.
+				}
+			}
+			setTimeout(() => startTexts(attempt + 1), Math.min(30_000, 1000 * 2 ** attempt));
+		},
+	);
+}
+startTexts();
+
+// The language asked for last: a slower load of an earlier choice does not switch back.
+let wanted: Locale = i18n.locale;
 
 /** Switches the language; the texts of a language not used yet load first. */
 export function setLocale(locale: Locale) {
@@ -142,8 +183,17 @@ export function setLocale(locale: Locale) {
 	} catch {
 		// It just will not be remembered in this browser.
 	}
+	wanted = locale;
 	if (messages[locale]) i18n.locale = locale;
-	else void loadLocale(locale).then(() => (i18n.locale = locale));
+	else
+		void loadLocale(locale).then(
+			() => {
+				if (wanted === locale) i18n.locale = locale;
+			},
+			() => {
+				// Stays in the language shown; choosing again tries once more.
+			},
+		);
 }
 
 function table(): Record<string, string> {

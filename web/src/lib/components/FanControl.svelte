@@ -9,6 +9,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
+	import { takeFans } from '#lib/fan-drafts.ts';
 
 	type Point = { celsius: number; percent: number };
 	type Control = {
@@ -35,7 +36,12 @@
 	let readOnly = $state(false);
 	let busy = $state(false);
 	let error = $state('');
+	let loadError = $state('');
 	let saved = $state(false);
+	// The settings each draft started from; a save starts a new round, so an
+	// answer asked for before it cannot put the old settings back.
+	let base: Record<string, string> = {};
+	let round = 0;
 
 	const defaultPoints: Point[] = [
 		{ celsius: 35, percent: 30 },
@@ -44,20 +50,28 @@
 		{ celsius: 80, percent: 100 },
 	];
 
-	function take(answer: { fans: Fan[]; readOnly: boolean }) {
+	function take(answer: { fans: Fan[]; readOnly: boolean }, fresh = false) {
 		fans = answer.fans;
 		readOnly = answer.readOnly;
-		const next: Record<string, Control> = {};
-		for (const fan of answer.fans)
-			next[fan.id] = drafts[fan.id] && !saved ? drafts[fan.id] : structuredClone(fan.control);
-		drafts = next;
+		const next = takeFans(
+			{ drafts: $state.snapshot(drafts) as Record<string, Control>, base },
+			answer.fans,
+			fresh,
+		);
+		drafts = next.drafts;
+		base = next.base;
+		if (next.edited) saved = false;
 	}
 
 	async function load() {
+		const mine = round;
 		try {
-			take(await api.get<{ fans: Fan[]; readOnly: boolean }>('/system/fans'));
+			const answer = await api.get<{ fans: Fan[]; readOnly: boolean }>('/system/fans');
+			if (mine !== round) return;
+			take(answer);
+			loadError = '';
 		} catch (err) {
-			error = apiErrorText(err);
+			if (mine === round) loadError = apiErrorText(err);
 		}
 	}
 	onMount(() => poll(load, { interval: 5000, skip: () => busy }));
@@ -77,9 +91,10 @@
 		busy = true;
 		error = '';
 		saved = false;
+		round++;
 		try {
 			const body = { fans: Object.values(drafts).filter((d) => d.mode !== 'bios') };
-			take(await api.put<{ fans: Fan[]; readOnly: boolean }>('/system/fans', body));
+			take(await api.put<{ fans: Fan[]; readOnly: boolean }>('/system/fans', body), true);
 			saved = true;
 		} catch (err) {
 			error =
@@ -211,7 +226,7 @@
 		{/if}
 	{/each}
 	<p class="muted small">{t('fans.safety')}</p>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if error || loadError}<p class="notice-error" role="alert">{error || loadError}</p>{/if}
 	{#if fans?.length}
 		<div class="row-actions">
 			<button type="button" class="btn btn-primary" disabled={busy || readOnly} onclick={save}

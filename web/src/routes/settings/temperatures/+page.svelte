@@ -5,6 +5,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { formatDecimal } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import FanControl from '#lib/components/FanControl.svelte';
 	import TempAlarms from './TempAlarms.svelte';
@@ -24,7 +25,7 @@
 		<SettingRow icon="chip" title={sensor.label}>
 			{#snippet description()}<span class="mono">{sensor.chip} · {sensor.device}</span>{/snippet}
 			{#snippet control()}<span class="mono value"
-					>{sensor.celsius === null ? '–' : `${sensor.celsius.toFixed(1)} °C`}</span
+					>{sensor.celsius === null ? '–' : `${formatDecimal(sensor.celsius, 1)} °C`}</span
 				>{/snippet}
 		</SettingRow>
 	{/each}

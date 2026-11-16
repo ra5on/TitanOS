@@ -370,5 +370,8 @@
 	"desktop.widget.agentOff": "The AI agent is not switched on or not allowed for this account.",
 	"desktop.widget.agentWaits": "waits for you",
 	"desktop.widget.agentRuns": "working",
-	"desktop.widget.agentIdle": "Nothing open. Ask a question."
+	"desktop.widget.agentIdle": "Nothing open. Ask a question.",
+	"share.fileGone": "No longer in the browser – share the file again.",
+	"share.textFile": "shared-{stamp}.txt",
+	"share.fileName": "File {n}"
 }
