@@ -204,16 +204,25 @@ async function sound(page, name, frame) {
     "  Dienste",
     "  Fernansicht",
   ]);
-  // A page in two clicks; the path above it names the area.
+  // A page in two clicks; the window's title bar shows the path with the
+  // area, the page has no second path of its own (owner 16 Nov 2026).
   await side.getByRole("button", { name: "Datum und Uhrzeit" }).click();
   await at(page, "/settings/timezone");
   await frame
     .getByRole("heading", { name: "Datum und Uhrzeit", exact: true })
     .waitFor();
+  await page
+    .locator("section.win .titlebar .titles", {
+      hasText: "Datum und Uhrzeit",
+    })
+    .waitFor();
   assert.equal(
-    (await frame.locator(".set-path").innerText()).replace(/\s+/g, " ").trim(),
-    "System › Datum und Uhrzeit",
+    (await page.locator("section.win .titlebar .titles").innerText())
+      .replace(/\s*›\s*/g, " › ")
+      .trim(),
+    "Systemsteuerung › System › Datum und Uhrzeit",
   );
+  assert.equal(await frame.locator(".set-path").count(), 0);
   assert.equal(
     await side.locator('.item[aria-current="page"]').innerText(),
     "Datum und Uhrzeit",
@@ -458,7 +467,11 @@ for (const role of ["owner", "user"]) {
   const headings = await page
     .locator("#settings-home-areas .srow-title")
     .evaluateAll((h) => h.map((x) => x.textContent.trim()));
-  assert.equal(await page.locator(".home .overview").count(), 0, "no overview cards on the phone");
+  assert.equal(
+    await page.locator(".home .overview").count(),
+    0,
+    "no overview cards on the phone",
+  );
   assert.deepEqual(
     headings,
     role === "owner"
@@ -533,13 +546,19 @@ for (const role of ["owner", "user"]) {
   // goes up one level at a time: page › area › areas › home screen.
   await page.goto(base + "/settings");
   // An area with one page for this account opens that page directly.
-  const area = page.locator('#settings-home-areas a.srow[href*="?area="]').first();
+  const area = page
+    .locator('#settings-home-areas a.srow[href*="?area="]')
+    .first();
   const areaHref = await area.getAttribute("href");
   const group = areaHref.split("=")[1];
   await area.click();
   await page.waitForURL("**" + areaHref);
   await page.locator(`#settings-home-group-${group} a.srow`).first().waitFor();
-  assert.equal(await page.locator(".groups .sgroup").count(), 1, "one area open");
+  assert.equal(
+    await page.locator(".groups .sgroup").count(),
+    1,
+    "one area open",
+  );
   const back = page.locator(".phone-bar button.back").first();
   if (role === "owner") await shot(page, "14-handy-bereich");
   await page.locator(`#settings-home-group-${group} a.srow`).first().click();

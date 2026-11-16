@@ -712,14 +712,16 @@ func sameArea(rule, area string) bool {
 // other tools do not count: they may repeat what the model gave them.
 //
 // With "Internet auch nach gelesenen Inhalten ohne Nachfrage" of the rights
-// (Policy.WebFree) the person has taken that risk for every chat; a skill
-// from outside in the prompt still asks.
+// (Policy.WebFree) the person has taken that risk for every chat. That
+// holds also with a skill from outside or a marked memory in the prompt
+// (owner 16 Nov 2026: the switch was on and the agent still asked before
+// every search, because one memory had been saved after a web search).
 func (b *agentToolbox) webStaysFree(chat *agent.Chat, name string, args json.RawMessage) bool {
-	if chat.OutsideSkill {
-		return false
-	}
 	if b.settings.Policy.WebFree {
 		return true
+	}
+	if chat.OutsideSkill {
+		return false
 	}
 	if !chat.WebOnly {
 		return false

@@ -39,7 +39,7 @@
 	import { frameFor, mode } from '#lib/desktop/mode.svelte.ts';
 	import { deskKey } from '#lib/desktop/menubar/keys.ts';
 	import { goto } from '$app/navigation';
-	import { pageTitle } from '#lib/page-title.svelte.ts';
+	import { pagePath, pageTitle } from '#lib/page-title.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 	// PLAN 66: once a web app was full screen on the phone it stays mounted (it guards unsaved work on Back).
@@ -82,7 +82,12 @@
 			void import('#lib/desktop/PhoneHome.svelte').then((m) => (PhoneHomeView = m.default));
 	});
 	afterNavigate(() => {
-		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
+		if (inWindow)
+			announcePage(
+				page.url.pathname + page.url.search,
+				pageTitle.value,
+				$state.snapshot(pagePath.value),
+			);
 	});
 	// PLAN 86: a hit of the settings search leads to the row itself (tab,
 	// rows on the way opened, the setting marked) – after every navigation
@@ -99,7 +104,12 @@
 			untrack(() => void jumpToSetting(url));
 	});
 	$effect(() => {
-		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
+		if (inWindow)
+			announcePage(
+				page.url.pathname + page.url.search,
+				pageTitle.value,
+				$state.snapshot(pagePath.value),
+			);
 	});
 	$effect(() => {
 		if (!inWindow) return;

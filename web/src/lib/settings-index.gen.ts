@@ -1538,6 +1538,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/agent',
+		k: 'agent.modelName',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionModel'],
+	},
+	{
+		p: '/settings/agent',
 		k: 'agent.thinkDefault',
 		kind: 'row',
 		tab: 'connection',

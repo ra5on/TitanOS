@@ -492,15 +492,21 @@ for (const w of allOnly ? [] : [800, 1100]) {
       .locator("section.win")
       .screenshot({ path: `${out}/${w}-${slug(path)}.png` });
     const where = `${path} @${w}`;
-    // PLAN 78-1: a page of the control panel shows its title large, as a
-    // path; every other page leaves its name to the title bar.
-    if (path.startsWith("/settings"))
-      check(res.h1.length === 1, `${where}: one path title (${res.h1})`);
-    else
+    // Owner 16 Nov 2026: the path of a page of the control panel stands in
+    // the title bar too; no page shows a heading of its own in a window.
+    check(
+      !res.h1.length,
+      `${where}: no big heading inside the window (${res.h1})`,
+    );
+    if (path.startsWith("/settings")) {
+      const bar = (
+        await page.locator("section.win .titlebar .titles").innerText()
+      ).replace(/\u00ad/g, "");
       check(
-        !res.h1.length,
-        `${where}: no big heading inside the window (${res.h1})`,
+        bar.includes("›"),
+        `${where}: the title bar shows the path (${bar})`,
       );
+    }
     if (hasBar) check(res.toolbar, `${where}: tool bar under the title bar`);
     check(
       res.overflowX <= 1,

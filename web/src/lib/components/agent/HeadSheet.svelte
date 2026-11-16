@@ -84,7 +84,8 @@
 			class="sh-item"
 			aria-pressed={m.name === model}
 			onclick={() => (model = m.name)}
-			><Icon name="chip" size={18} /><span class="sh-text">{m.name}<small>{caps(m)}</small></span
+			><Icon name="chip" size={18} /><span class="sh-text"
+				>{m.label || m.name}<small>{m.label ? `${m.name} · ${caps(m)}` : caps(m)}</small></span
 			>{#if m.name === model}<span class="sh-check" aria-hidden="true">✓</span>{/if}</button
 		>
 	{:else}

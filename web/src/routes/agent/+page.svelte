@@ -36,7 +36,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { agentProfilePath, api } from '#lib/api.ts';
 	import { apiErrorText, i18n } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, tokens, type ChatInfo } from '#lib/agent.ts';
+	import { levelLabel, modelShown, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
@@ -70,7 +70,7 @@
 			items: () =>
 				(ag.status?.models ?? []).map((m) => ({
 					id: m.name,
-					text: m.name,
+					text: m.label || m.name,
 					checked: ag.model === m.name,
 				})),
 			run: (id) => {
@@ -268,8 +268,8 @@
 			aria-haspopup="dialog"
 			aria-label={t('agent.modelPick')}
 			onclick={() => (ag.dialog = { kind: 'head' })}
-			><strong>{ag.model || '–'}</strong>{#if ag.status.cloud}<span class="cloud-tag"
-					>{t('agent.cloud')}</span
+			><strong>{modelShown(ag.status.models, ag.model) || '–'}</strong>{#if ag.status.cloud}<span
+					class="cloud-tag">{t('agent.cloud')}</span
 				>{/if}{#if ag.think}<span>{levelLabel(ag.think, i18n.locale)}</span>{/if}</button
 		>
 	{:else}
@@ -394,7 +394,7 @@
 										<small
 											>{ag.currentProject
 												? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-												: ''}{ag.model || '–'}</small
+												: ''}{modelShown(ag.status?.models, ag.model) || '–'}</small
 										>
 									</span>
 									<Icon name="chevronDown" size={16} />

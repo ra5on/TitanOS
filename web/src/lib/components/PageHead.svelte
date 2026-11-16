@@ -10,7 +10,7 @@
 	// full-screen view does the same, with the page's name at the left of the
 	// bar (the bar above it names only the program).
 	import type { Snippet } from 'svelte';
-	import { pageTitle } from '#lib/page-title.svelte.ts';
+	import { pagePath, pageTitle, type PathCrumb } from '#lib/page-title.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { page } from '$app/state';
@@ -27,8 +27,13 @@
 		actions?: Snippet;
 		/** The places above this page, for the large path title ("Area › Page"). */
 		path?: { label: string; href?: string }[];
+		/**
+		 * The part of the page that is open ("Verbindung und Modelle" of
+		 * KI-Agent): the last place of the path; the page's name leads back.
+		 */
+		section?: string;
 	};
-	let { title, id, children, actions, path }: Props = $props();
+	let { title, id, children, actions, path, section }: Props = $props();
 
 	// The browser tab shows the title of the page; the last head that leaves clears it.
 	$effect(() => {
@@ -77,6 +82,27 @@
 		return crumbs.filter((crumb) => crumb.label !== title);
 	});
 	const crumbLinks = $derived(!inWindow || windowApp() === 'app:settings' || !settingsPage);
+	// Owner 16 Nov 2026: the path stands once. In a window the title bar shows
+	// it (Window.svelte), every place above the page a link, and the page has
+	// no visible heading; elsewhere it is the one line at the top of the page.
+	const ownHref = $derived(page.url.pathname);
+	const trail = $derived.by((): PathCrumb[] => {
+		if (!pathHead) return [];
+		const above = shownCrumbs.map((c) => ({
+			label: c.label,
+			href: crumbLinks ? c.href : undefined,
+		}));
+		return section
+			? [...above, { label: title, href: ownHref }, { label: section }]
+			: [...above, { label: title }];
+	});
+	$effect(() => {
+		const shown = trail;
+		pagePath.value = shown;
+		return () => {
+			if (pagePath.value === shown) pagePath.value = [];
+		};
+	});
 	const hasBar = $derived(!!actions || (phone && ownName && !pathHead));
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
@@ -223,19 +249,23 @@
 	</div>
 {/snippet}
 
-{#if pathHead}
+{#if pathHead && inWindow}
+	<!-- The window's title bar shows the path; the page keeps its name for screen readers. -->
+	<h1 class="sr-only set-mark" {id}>{section ?? title}</h1>
+	{#if hasBar}<div class="set-head">{@render toolbar()}</div>{/if}
+	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
+{:else if pathHead}
 	<!-- PLAN 78-1: the path title; the page's actions stand at its right (below it when narrow). -->
 	<div class="set-head">
 		<div class="set-path">
-			{#if shownCrumbs.length}<nav aria-label={t('settings.path')}>
-					{#each shownCrumbs as crumb (crumb.label + (crumb.href ?? ''))}{#if crumb.href && crumbLinks}<a
-								href={crumb.href}>{crumb.label}</a
-							>{:else}<span class="sep">{crumb.label}</span>{/if}<span
-							class="sep"
-							aria-hidden="true">›</span
-						>{/each}
-				</nav>{/if}
-			<h1 {id}>{title}</h1>
+			<nav aria-label={t('settings.path')}>
+				{#each trail.slice(0, -1) as crumb (crumb.label + (crumb.href ?? ''))}{#if crumb.href}<a
+							href={crumb.href}>{crumb.label}</a
+						>{:else}<span class="sep">{crumb.label}</span>{/if}<span class="sep" aria-hidden="true"
+						>›</span
+					>{/each}
+			</nav>
+			<h1 {id}>{section ?? title}</h1>
 		</div>
 		{#if hasBar}{@render toolbar()}{/if}
 	</div>

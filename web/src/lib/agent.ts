@@ -190,6 +190,8 @@ export type Schedule = {
 
 export type Model = {
 	name: string;
+	/** The owner's own name for the model, shown instead of `name` (0.98). */
+	label?: string;
 	size: number;
 	family?: string;
 	parameters?: string;
@@ -221,6 +223,8 @@ export type Status = {
 	allowed: boolean;
 	admin: boolean;
 	model: string;
+	/** The owner's own name for `model`, '' or missing for none (0.98). */
+	modelLabel?: string;
 	think: string;
 	context: number;
 	volume: boolean;
@@ -256,6 +260,8 @@ export type Settings = {
 	/** On the admin node: the nodes that asked for its model. */
 	shared?: AgentShare[];
 	model?: string;
+	/** Names of the owner's own for models, shown in the chat (0.98). */
+	modelNames?: Record<string, string>;
 	think?: string;
 	context?: number;
 	keepAlive?: string;
@@ -1014,3 +1020,8 @@ export type McpConnection = {
 	clearToken?: boolean;
 	enabled?: boolean;
 };
+
+/** The name a model is shown by: the owner's own name for it, else its real one. */
+export function modelShown(models: Model[] | undefined, name: string): string {
+	return (models ?? []).find((m) => m.name === name)?.label || name;
+}

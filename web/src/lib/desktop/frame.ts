@@ -18,7 +18,12 @@ export function windowApp(): string {
 }
 
 export type FrameMessage =
-	| { type: 'titanos-page'; path: string; title: string }
+	| {
+			type: 'titanos-page';
+			path: string;
+			title: string;
+			crumbs?: { label: string; href?: string }[];
+	  }
 	| { type: 'titanos-goto'; href: string }
 	| { type: 'titanos-open'; href: string }
 	| { type: 'titanos-upload'; files: File[] }
@@ -77,10 +82,14 @@ export type FrameMessage =
 	  };
 
 /** Tells the window which page the frame shows now. */
-export function announcePage(path: string, title: string) {
+export function announcePage(
+	path: string,
+	title: string,
+	crumbs: { label: string; href?: string }[] = [],
+) {
 	if (!inWindow) return;
 	window.parent.postMessage(
-		{ type: 'titanos-page', path, title } satisfies FrameMessage,
+		{ type: 'titanos-page', path, title, crumbs } satisfies FrameMessage,
 		location.origin,
 	);
 }

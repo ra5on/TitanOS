@@ -1477,7 +1477,7 @@ span.srow-chev {
 }
 /* The path title stands above a page's tool bar: the page keeps its top
    padding there (a window without the path starts with the bar). */
-:is(main.in-window, main.phone-page):has(.set-path) {
+:is(main.in-window, main.phone-page):has(.set-path, .set-mark) {
 	padding-top: var(--page-pad);
 }
 
