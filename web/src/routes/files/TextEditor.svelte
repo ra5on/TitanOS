@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import TextDiff from './TextDiff.svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -46,10 +46,30 @@
 			disposed = true;
 		};
 	});
+	// Leaving the page with changes asks in this dialog (1.03, before with
+	// window.confirm): the navigation stops, "Verwerfen" goes on with it.
+	let leave = $state<(() => void) | null>(null);
+	let leaving = false;
 	beforeNavigate((navigation) => {
-		if (busy || (dirty && !navigation.willUnload && !window.confirm(t('files.editDiscard'))))
-			navigation.cancel();
+		if (leaving || navigation.willUnload) return;
+		if (busy) return navigation.cancel();
+		if (!dirty) return;
+		navigation.cancel();
+		const to = navigation.to?.url;
+		const delta = navigation.type === 'popstate' ? (navigation.delta ?? 0) : 0;
+		leave = () => {
+			leaving = true;
+			if (delta) history.go(delta);
+			else if (to) void goto(to);
+		};
+		discard = true;
 	});
+	function discardChanges() {
+		const next = leave;
+		leave = null;
+		if (next) next();
+		else onclose();
+	}
 	function beforeUnload(event: BeforeUnloadEvent) {
 		if (dirty || busy) {
 			event.preventDefault();
@@ -58,6 +78,7 @@
 	}
 	function close() {
 		if (busy) return;
+		leave = null;
 		if (dirty) discard = true;
 		else onclose();
 	}
@@ -173,10 +194,17 @@
 		{#if discard}
 			<p class="notice-warn">{t('files.editDiscard')}</p>
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (discard = false)}
-					>{t('files.editContinue')}</button
+				<button
+					type="button"
+					class="btn"
+					onclick={() => {
+						discard = false;
+						leave = null;
+					}}>{t('files.editContinue')}</button
 				>
-				<button type="button" class="btn" onclick={onclose}>{t('files.editDiscardButton')}</button>
+				<button type="button" class="btn btn-warn" onclick={discardChanges}
+					>{t('files.editDiscardButton')}</button
+				>
 			</div>
 		{:else}
 			<div class="dialog-actions">
