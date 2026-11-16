@@ -95,6 +95,10 @@ type agentSettings struct {
 	MaxMinutes int  `json:"maxMinutes,omitempty"`
 	AllTools   bool `json:"allTools,omitempty"`
 	NoDelegate bool `json:"noDelegate,omitempty"`
+	// MaxRuns is how many chats one account may run at once (1.01, owner
+	// 16 Nov 2026): 1 to 4; missing or 0 is 1, which older versions read
+	// without knowing the field (agent_runs.go).
+	MaxRuns int `json:"maxRuns,omitempty"`
 	// Code runs Python or sh in a sandbox container (agent_code.go), off by
 	// default (decision of the owner 5.11.2026: the middle way).
 	Code agentCode `json:"code"`
@@ -333,6 +337,9 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	if req.MaxMinutes < 0 || req.MaxMinutes > agentMaxMinutes {
 		return errors.New("minutes per task: 1 to 600")
 	}
+	if req.MaxRuns < 0 || req.MaxRuns > agentRunsMax {
+		return errors.New("chats at once: 1 to 4")
+	}
 	if req.Code.Timeout < 0 || req.Code.Timeout > 600 || req.Code.Memory < 0 || (req.Code.Memory != 0 && (req.Code.Memory < 64 || req.Code.Memory > 8192)) {
 		return errors.New("code: 1 to 600 seconds, 64 to 8192 MiB")
 	}
@@ -498,6 +505,8 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 		"model": settings.Model, "modelLabel": settings.ModelNames[settings.Model], "think": settings.Think, "context": settings.Context,
 		"volume": s.agentStore().Available() == nil,
 		"web":    settings.Policy.Mode("web_search", agent.AreaWeb, agent.KindRead) != agent.ModeDeny,
+		// How many chats the account may run at once (1.01).
+		"maxRuns": settings.maxRuns(),
 	}
 	if !settings.Enabled || !s.agentAllowed(user) {
 		writeJSON(w, http.StatusOK, out)

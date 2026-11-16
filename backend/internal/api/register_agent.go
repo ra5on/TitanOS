@@ -47,6 +47,8 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/decide", s.requireAgent(s.handleAgentDecide))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/stop", s.requireAgent(s.handleAgentStop))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/events", s.requireAgent(s.handleAgentEvents))
+	// The chats of the account that run now, from the RAM (1.01).
+	mux.HandleFunc("GET /api/v1/agent/runs", s.requireAgent(s.handleAgentRuns))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/attachments", s.requireAgent(s.handleAgentAttach))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/export", s.requireAgent(s.handleAgentExport))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/undo", s.requireAgent(s.handleAgentUndo))
