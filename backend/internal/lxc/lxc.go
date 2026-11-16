@@ -61,6 +61,7 @@ var (
 	ErrNotRunning         = errors.New("lxc: the container is not running")
 	ErrNotConfirmed       = errors.New("lxc: deleting the data was not confirmed")
 	ErrCreating           = errors.New("lxc: the container is still being created")
+	ErrIncomplete         = errors.New("lxc: creating the container did not finish; remove it and create it again")
 	ErrBusy               = errors.New("lxc: another action on this container is running")
 	ErrNoBridge           = errors.New("lxc: the network bridge is not set up")
 	ErrBadFolder          = errors.New("lxc: the folder is not a folder on a volume")
@@ -115,6 +116,11 @@ type Container struct {
 	// makes snapshots possible. Fixed at creation.
 	Btrfs   bool      `json:"btrfs,omitempty"`
 	Created time.Time `json:"created"`
+	// Incomplete is set while the root filesystem is being made and stays
+	// set if that never finished (it failed, or titand stopped halfway):
+	// such a container is shown as failed and cannot be started, only
+	// removed. Versions before 1.03 ignore the field.
+	Incomplete bool `json:"incomplete,omitempty"`
 }
 
 // Label is what the web UI shows for a container.
@@ -130,8 +136,11 @@ type Job struct {
 	// State is running or failed.
 	State string `json:"state"`
 	// Phase is prepare, download or configure.
-	Phase   string    `json:"phase"`
-	Text    string    `json:"text,omitempty"`
+	Phase string `json:"phase"`
+	Text  string `json:"text,omitempty"`
+	// Code names a known cause for the page: "interrupted" when titand
+	// stopped while the container was being created.
+	Code    string    `json:"code,omitempty"`
 	Started time.Time `json:"started"`
 }
 
@@ -254,6 +263,14 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.containers, m.loaded = containers, true
+	for name, c := range containers {
+		// Its creation was cut off by a stop of titand (or failed before):
+		// the root filesystem may be half there.
+		if c.Incomplete && m.jobs[name] == nil {
+			m.jobs[name] = &Job{State: "failed", Phase: "prepare", Code: "interrupted", Started: c.Created,
+				Text: "Creating the container did not finish (TitanOS stopped meanwhile). Remove it and create it again."}
+		}
+	}
 	if data, err := os.ReadFile(m.autostartFile); err == nil {
 		for _, name := range strings.Fields(string(data)) {
 			m.autostarted[name] = true

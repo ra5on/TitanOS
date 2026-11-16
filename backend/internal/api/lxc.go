@@ -36,6 +36,7 @@ var lxcErrors = []struct {
 	{lxc.ErrNotRunning, http.StatusConflict, "lxc_not_running"},
 	{lxc.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{lxc.ErrCreating, http.StatusConflict, "lxc_creating"},
+	{lxc.ErrIncomplete, http.StatusConflict, "lxc_incomplete"},
 	{lxc.ErrBusy, http.StatusConflict, "lxc_busy"},
 	{lxc.ErrNoBridge, http.StatusConflict, "lxc_no_bridge"},
 	{lxc.ErrBadFolder, http.StatusBadRequest, "invalid_folder"},
