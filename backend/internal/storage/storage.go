@@ -228,6 +228,10 @@ type Manager struct {
 	OnSnapshotRestoreDone func(SnapshotFolderJob)
 	restoreMu             sync.Mutex
 	restores              []*SnapshotFolderJob
+	// fileRestores are the restores of single files from a snapshot that
+	// copy right now (without holding actions).
+	fileRestores   []fileRestore
+	fileRestoreSeq uint64
 	// restoreStep is called before each file of a folder restore (tests).
 	restoreStep func(name string)
 

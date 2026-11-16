@@ -154,9 +154,28 @@ func (m *Manager) SnapshotFiles(ctx context.Context, volume, name, folder string
 	}
 	return out, nil
 }
+
+// fileRestore is a running restore of single files: it reads from
+// snapshot of volume and writes to target.
+type fileRestore struct {
+	id                       uint64
+	volume, snapshot, target string
+}
+
+// RestoreSnapshotFiles copies files from a snapshot into a new folder
+// restored/snapshot-<token> on the target volume. The checks and making
+// the copy visible hold actions; the copy itself (up to 10 GiB) does not:
+// it is registered as a running restore instead, so that the snapshot is
+// not deleted and neither volume locked or unmounted meanwhile, and app
+// updates and maintenance wait (SnapshotRestoresRunning).
 func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string, req SnapshotRestore) (out SnapshotRestored, result error) {
 	m.actions.Lock()
-	defer m.actions.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			m.actions.Unlock()
+		}
+	}()
 	if len(req.Paths) == 0 || len(req.Paths) > 200 {
 		return out, ErrNotPossible
 	}
@@ -192,6 +211,9 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 		return out, err
 	}
 	token := hex.EncodeToString(id[:])
+	// Registered before its staging folder exists and ended after a failed
+	// one is removed again (defers run in reverse).
+	defer m.beginFileRestore(volume, name, req.TargetVolume)()
 	if err := target.Mkdir(token, 0700); err != nil {
 		return out, err
 	}
@@ -205,6 +227,8 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 		return out, err
 	}
 	defer stage.Close()
+	m.actions.Unlock()
+	locked = false
 	for _, value := range req.Paths {
 		if value == "" || value == "." {
 			return out, ErrNotPossible
@@ -283,6 +307,8 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 		out.Bytes += copied
 	}
 	// Only a complete selection becomes visible. The destination name is unpredictable and never reused.
+	m.actions.Lock()
+	locked = true
 	if !slices.Contains(m.Mounted(), req.TargetVolume) {
 		return out, volumedata.ErrUnavailable
 	}
@@ -520,4 +546,19 @@ func (m *Manager) PreviewSnapshotRestore(ctx context.Context, volume, name strin
 		return out, errors.New("insufficient restore space")
 	}
 	return out, nil
+}
+
+// beginFileRestore registers a running file restore; the function it
+// returns ends it.
+func (m *Manager) beginFileRestore(volume, snapshot, target string) func() {
+	m.restoreMu.Lock()
+	defer m.restoreMu.Unlock()
+	m.fileRestoreSeq++
+	entry := fileRestore{id: m.fileRestoreSeq, volume: volume, snapshot: snapshot, target: target}
+	m.fileRestores = append(m.fileRestores, entry)
+	return func() {
+		m.restoreMu.Lock()
+		defer m.restoreMu.Unlock()
+		m.fileRestores = slices.DeleteFunc(m.fileRestores, func(f fileRestore) bool { return f.id == entry.id })
+	}
 }

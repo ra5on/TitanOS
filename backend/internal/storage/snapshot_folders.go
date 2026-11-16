@@ -311,6 +311,9 @@ func (m *Manager) ForgetSnapshotRestore(id string) error {
 func (m *Manager) SnapshotRestoresRunning() bool {
 	m.restoreMu.Lock()
 	defer m.restoreMu.Unlock()
+	if len(m.fileRestores) > 0 {
+		return true
+	}
 	for _, job := range m.restores {
 		if job.State == RestoreRunning {
 			return true
@@ -324,6 +327,12 @@ func (m *Manager) SnapshotRestoresRunning() bool {
 func (m *Manager) restoreUses(volume, snapshot string) bool {
 	m.restoreMu.Lock()
 	defer m.restoreMu.Unlock()
+	for _, f := range m.fileRestores {
+		// A file restore also writes to its target volume.
+		if f.volume == volume && (snapshot == "" || f.snapshot == snapshot) || snapshot == "" && f.target == volume {
+			return true
+		}
+	}
 	for _, job := range m.restores {
 		if job.State == RestoreRunning && job.Volume == volume && (snapshot == "" || job.Snapshot == snapshot) {
 			return true
