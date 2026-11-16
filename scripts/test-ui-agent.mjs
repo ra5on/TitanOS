@@ -3119,6 +3119,37 @@ try {
         3,
       `${name}: a word stands beside the figure`,
     );
+    // 1.01 (owner 16 Nov 2026): the three dots are of one size, the working
+    // line stands fully above the edge of the chat, and the figure is not
+    // made anew when its word changes – it runs on.
+    const sizes = await fig
+      .locator("i")
+      .evaluateAll((list) => list.map((el) => el.getBoundingClientRect().width));
+    assert.ok(
+      Math.max(...sizes) - Math.min(...sizes) < 0.5,
+      `${name}: three dots of one size (${sizes})`,
+    );
+    const seenLine = await page.evaluate(() => {
+      const line = document.querySelector(".live-line").getBoundingClientRect();
+      const view = document.querySelector(".messages").getBoundingClientRect();
+      return { bottom: line.bottom, edge: view.bottom };
+    });
+    assert.ok(
+      seenLine.bottom <= seenLine.edge + 1,
+      `${name}: the working line is fully in view (${seenLine.bottom} > ${seenLine.edge})`,
+    );
+    await fig.evaluate((el) => (el.dataset.mark = "same"));
+    const word = await page.locator(".live-line .busy-word").innerText();
+    await page.waitForFunction(
+      (w) => document.querySelector(".live-line .busy-word")?.textContent?.trim() !== w.trim(),
+      word,
+      { timeout: 8000 },
+    );
+    assert.equal(
+      await page.locator('.live-line .fig[data-mark="same"]').count(),
+      1,
+      `${name}: the figure runs on while its word changes`,
+    );
     await page.screenshot({ path: `${out}/100-${name}-figure.png` });
     await fig.screenshot({
       path: `${out}/100-${name}-figure-close.png`,

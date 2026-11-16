@@ -28,6 +28,14 @@ test('every kind of work has a figure that moves and stays inside its box', () =
 	}
 });
 
+test('every kind of work shows the same three dots at one pace (owner, 16 Nov 2026)', () => {
+	const one = FIGURES[''];
+	for (const kind of kinds) {
+		assert.equal(FIGURES[kind].figure, one.figure, kind);
+		assert.equal(FIGURES[kind].speed, one.speed, kind);
+	}
+});
+
 test('a change of figure glides: it starts where the spheres stand and ends in the new figure', () => {
 	for (const a of kinds)
 		for (const b of kinds) {
