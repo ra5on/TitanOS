@@ -242,7 +242,7 @@ export type Status = {
 	provider?: string;
 	/** What the agent reads leaves the home network. */
 	cloud?: boolean;
-	/** How many chats the account may run at once (1.01; missing is 1). */
+	/** How many chats the account may run at once (1.01; 0 or missing: no limit). */
 	maxRuns?: number;
 };
 
@@ -318,7 +318,7 @@ export type Settings = {
 	allTools?: boolean;
 	/** Switch off the helper for subtasks (task_delegate). */
 	noDelegate?: boolean;
-	/** Chats one account may run at once, 1 to 4 (1.01; missing is 1). */
+	/** Chats one account may run at once, 1 to 4 (1.01; 0 or missing: no limit). */
 	maxRuns?: number;
 	/** code_run in a sandbox container (PLAN 55, off by default). */
 	code?: { enabled?: boolean; timeout?: number; memory?: number };

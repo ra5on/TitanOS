@@ -418,25 +418,32 @@
 			/>
 		{/snippet}
 	</SettingRow>
-	<!-- 1.01 (owner 16 Nov 2026): chats of one account at once; Ollama runs
-	     them side by side only with OLLAMA_NUM_PARALLEL, which TitanOS does
-	     not manage – so only a hint. -->
+	<!-- 1.01 (owner 16 Nov 2026): chats of one account at once, from the
+	     factory without a limit as in 1.00. Ollama runs them side by side
+	     only with OLLAMA_NUM_PARALLEL, which TitanOS does not manage – so
+	     only a hint. -->
 	<SettingRow icon="chat" title={t('agent.runs.setting')} for="ag-runs">
 		{#snippet description()}
 			{t('agent.runs.settingHint')}
-			{#if (settings.maxRuns ?? 1) > 1}<br />{providerKind
+			{#if (settings.maxRuns ?? 0) !== 1}<br />{providerKind
 					? t('agent.runs.providerHint')
-					: t('agent.runs.ollamaHint', { n: settings.maxRuns ?? 1 })}{/if}
+					: (settings.maxRuns ?? 0) > 1
+						? t('agent.runs.ollamaHint', { n: settings.maxRuns ?? 0 })
+						: t('agent.runs.ollamaHintAny')}{/if}
 		{/snippet}
 		{#snippet control()}
 			<select
 				id="ag-runs"
 				class="field"
-				value={settings.maxRuns ?? 1}
+				value={settings.maxRuns ?? 0}
 				onchange={(e) => (settings!.maxRuns = Number(e.currentTarget.value))}
 			>
-				{#each [1, 2, 3, 4] as n (n)}<option value={n}
-						>{n === 1 ? t('agent.runs.one') : t('agent.runs.many', { n })}</option
+				{#each [0, 1, 2, 3, 4] as n (n)}<option value={n}
+						>{n === 0
+							? t('agent.runs.none')
+							: n === 1
+								? t('agent.runs.one')
+								: t('agent.runs.many', { n })}</option
 					>{/each}
 			</select>
 		{/snippet}

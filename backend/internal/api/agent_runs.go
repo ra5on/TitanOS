@@ -21,17 +21,16 @@ import (
 // and lacked steps until the run ended. A page that reads too slowly gets
 // a new snapshot instead of silent gaps. Older pages ignore the event.
 //
-// Owner 16 Nov 2026 ("Ja, einstellbar"): an account may run 1 to 4 chats
-// at once (maxRuns, 1 from the factory). Only runs the person starts in the
-// chat count and are refused at the limit – a new chat, a message, "Neu
+// Owner 16 Nov 2026 ("Ja, einstellbar"): an account may be limited to 1 to
+// 4 chats at once (maxRuns). From the factory there is no limit, as in
+// 1.00: 1.01 takes nothing away. Only runs the person starts in the chat
+// count and are refused at the limit – a new chat, a message, "Neu
 // erzeugen", an approval. Planned tasks, the look into a notification and
 // questions from Home Assistant start as before and do not count: in 1.00
 // they ran beside the chats, and a limit of 1 must not make them fail.
 
-const (
-	agentRunsDefault = 1
-	agentRunsMax     = 4
-)
+// agentRunsMax is the highest limit that can be set.
+const agentRunsMax = 4
 
 // agentSubBuffer is how many events wait for a slow page before it gets a
 // new snapshot instead (a variable for tests).
@@ -73,10 +72,10 @@ type agentSnapshot struct {
 	Plan     *[]agent.PlanStep `json:"plan,omitempty"`
 }
 
-// maxRuns is the number of chats an account may run at once.
+// maxRuns is the number of chats an account may run at once; 0 is no limit.
 func (a agentSettings) maxRuns() int {
 	if a.MaxRuns < 1 {
-		return agentRunsDefault
+		return 0
 	}
 	return min(a.MaxRuns, agentRunsMax)
 }
@@ -97,7 +96,7 @@ func (s *Server) agentClaim(user, chat string, byPerson bool) (*agentRun, error)
 	if _, busy := rt.runs[key]; busy {
 		return nil, agent.ErrBusy
 	}
-	if byPerson && rt.countLocked(user) >= limit {
+	if byPerson && limit > 0 && rt.countLocked(user) >= limit {
 		return nil, errAgentLimit
 	}
 	ctx, cancel := context.WithCancel(s.agentBase())

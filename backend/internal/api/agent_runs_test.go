@@ -285,12 +285,12 @@ func TestAgentSlowPageGetsASnapshot(t *testing.T) {
 	}
 }
 
-// The limit of runs at once (owner 16 Nov 2026): 1 from the factory, 2 and
-// more as set; a refused message changes nothing; tasks of the NAS do not
-// count and still start.
+// The limit of runs at once (owner 16 Nov 2026) set to 1: a second chat is
+// refused, a refused message changes nothing; tasks of the NAS do not count
+// and still start.
 func TestAgentRunLimit(t *testing.T) {
 	fake := &blockingOllama{hold: true}
-	ts := runsServer(t, fake, nil)
+	ts := runsServer(t, fake, map[string]any{"maxRuns": 1})
 	a, res, body := startChat(t, ts, "Erster")
 	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("first: %d %s", res.StatusCode, body)
@@ -349,8 +349,36 @@ func TestAgentRunLimit(t *testing.T) {
 }
 
 // With a limit of 2 or more, as many chats run side by side; one more is
-// refused. 5 is no valid setting.
+// refused. Without the setting there is no limit, as in 1.00. 5 is no valid
+// setting.
 func TestAgentRunsSideBySide(t *testing.T) {
+	t.Run("no limit", func(t *testing.T) {
+		fake := &blockingOllama{hold: true}
+		ts := runsServer(t, fake, nil)
+		ids := []string{}
+		for n := range agentRunsMax + 1 {
+			chat, res, body := startChat(t, ts, "Chat "+string(rune('A'+n)))
+			if res.StatusCode != http.StatusCreated {
+				t.Fatalf("chat %d without a limit: %d %s", n+1, res.StatusCode, body)
+			}
+			ids = append(ids, chat.ID)
+		}
+		waitFor(t, "every chat streams", func() bool {
+			for _, id := range ids {
+				if content, _, _ := runView(ts, "alex", id); content != "Hal" {
+					return false
+				}
+			}
+			return true
+		})
+		if _, body := ts.request("GET", "/api/v1/agent/status", nil); !strings.Contains(string(body), `"maxRuns":0`) {
+			t.Fatalf("status without a limit: %s", body)
+		}
+		close(fake.release)
+		for _, id := range ids {
+			waitChat(t, ts, ts.client, id)
+		}
+	})
 	for _, limit := range []int{2, 4} {
 		t.Run(strings.Repeat("n", limit), func(t *testing.T) {
 			fake := &blockingOllama{hold: true}
@@ -404,7 +432,7 @@ func TestAgentRunsSideBySide(t *testing.T) {
 			t.Errorf("maxRuns %d accepted: %d", bad, res.StatusCode)
 		}
 	}
-	if (agentSettings{}).maxRuns() != 1 || (agentSettings{MaxRuns: 3}).maxRuns() != 3 {
+	if (agentSettings{}).maxRuns() != 0 || (agentSettings{MaxRuns: 3}).maxRuns() != 3 {
 		t.Fatal("maxRuns")
 	}
 }

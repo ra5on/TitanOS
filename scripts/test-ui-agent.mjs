@@ -481,7 +481,7 @@ async function open(
     if (p === "/agent/runs")
       return json({
         runs: chats.filter((c) => c.state === "running").map((c) => c.id),
-        max: status.maxRuns ?? 1,
+        max: status.maxRuns ?? 0,
       });
     // 0.100: a chat whose run still works (its stream ends at once here, so
     // the page keeps following it for a while): the working figure shows.

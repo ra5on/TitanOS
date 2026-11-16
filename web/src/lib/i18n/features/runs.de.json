@@ -2,9 +2,11 @@
 	"agent.runs.limitOne": "Es läuft schon ein Chat. Mehr gleichzeitig erlaubt die Einstellung „Gleichzeitige Läufe je Konto“ nicht. Warte, bis er fertig ist, oder halte ihn an.",
 	"agent.runs.limitMany": "Es laufen schon {n} Chats. Mehr gleichzeitig erlaubt die Einstellung „Gleichzeitige Läufe je Konto“ nicht. Warte, bis einer fertig ist, oder halte einen an.",
 	"agent.runs.setting": "Gleichzeitige Läufe je Konto",
-	"agent.runs.settingHint": "Wie viele Chats eines Kontos zugleich arbeiten dürfen. Ein Chat hat immer nur einen Lauf. Geplante Aufträge, Reaktionen auf Meldungen und Fragen aus Home Assistant zählen nicht mit und starten immer.",
+	"agent.runs.none": "Ohne Grenze",
+	"agent.runs.settingHint": "Wie viele Chats eines Kontos zugleich arbeiten dürfen. Ab Werk gibt es keine Grenze, wie bis 1.00. Ein Chat hat immer nur einen Lauf. Geplante Aufträge, Reaktionen auf Meldungen und Fragen aus Home Assistant zählen nicht mit und starten immer.",
 	"agent.runs.one": "1 Chat",
 	"agent.runs.many": "{n} Chats",
 	"agent.runs.ollamaHint": "Damit {n} Läufe wirklich zugleich arbeiten, muss Ollama mit OLLAMA_NUM_PARALLEL={n} oder mehr laufen, sonst warten sie aufeinander. Eine einzelne Antwort wird dadurch nicht schneller, und jeder Lauf belegt eigenen Speicher für seinen Kontext. TitanOS verwaltet Ollama nicht und stellt das dort nicht selbst ein.",
+	"agent.runs.ollamaHintAny": "Mehrere Chats arbeiten in Ollama nur gleichzeitig, wenn es mit OLLAMA_NUM_PARALLEL in passender Höhe läuft, sonst warten sie dort aufeinander. Eine einzelne Antwort wird dadurch nicht schneller, und jeder Lauf belegt eigenen Speicher für seinen Kontext. TitanOS verwaltet Ollama nicht und stellt das dort nicht selbst ein.",
 	"agent.runs.providerHint": "Beim Anbieter gilt dieselbe Grenze. Jeder Lauf schickt seine eigenen Anfragen; die Grenzen und Kosten des Anbieters gelten für jede davon."
 }
