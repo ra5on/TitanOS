@@ -342,19 +342,35 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	if err != nil {
 		return UploadStatus{}, mapError(err)
 	}
+	final := u.name
 	if u.conflict == ConflictReplace {
-		err = r.Rename(u.part, u.name)
+		err = r.Rename(u.part, final)
 	} else {
-		err = publishNewFile(r, u.part, u.name)
+		err = publishNewFile(r, u.part, final)
+		// "Keep both": the free name was chosen when the upload began. One
+		// that was taken meanwhile (SMB, a second upload) is never
+		// replaced, and the upload does not fail for it for good either:
+		// it takes the next free name, as a copy does.
+		for range 5 {
+			if u.conflict != ConflictRename || !errors.Is(err, fs.ErrExist) {
+				break
+			}
+			free, nameErr := freeName(r, final)
+			if nameErr != nil {
+				return UploadStatus{}, mapError(nameErr)
+			}
+			final = free
+			err = publishNewFile(r, u.part, final)
+		}
 	}
 	if err != nil {
 		return UploadStatus{}, mapError(err)
 	}
-	m.own(r, u.name, u.uid, false)
+	m.own(r, final, u.uid, false)
 	_ = r.Remove(u.part + ".json")
 	m.forgetUpload(u.root, u.id)
 	// Persist the directory entry as well as the file data.
-	parent, err := r.Open(path.Dir(u.name))
+	parent, err := r.Open(path.Dir(final))
 	if err == nil {
 		err = parent.Sync()
 		err = errors.Join(err, parent.Close())
@@ -363,7 +379,9 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	if err != nil {
 		return UploadStatus{}, mapError(err)
 	}
-	return u.status(), nil
+	status := u.status()
+	status.Name = path.Base(final)
+	return status, nil
 }
 func (m *Manager) AbortUpload(id, user string) error {
 	u, err := m.claim(id, user)

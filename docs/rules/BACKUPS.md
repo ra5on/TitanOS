@@ -83,7 +83,13 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   (nie ihr Ziel) und der Ordner angelegt; aus einem Ordner wurde eine
   Verknüpfung → der Ordner der Kopie wird nach `<Ordner>/_gelöscht/<Datum>/…`
   verschoben, nie gelöscht (mit Spiegel-Option wie dessen Inhalt nach
-  `mirrorDays` entfernt). Der Zielordner des Auftrags selbst darf weiterhin
+  `mirrorDays` entfernt); ebenso, wenn aus einer Datei ein Ordner wurde oder
+  umgekehrt (Datei bzw. Ordner der Kopie nach `_gelöscht/<Datum>/…`, seit
+  1.01). Bei datierten Ordnern bleibt der Lauf mit der letzten Kopie einer
+  Datei oder eines Ordners, den ein Lauf nicht lesen konnte (`read_error`,
+  `changed`), von Aufbewahrung und Platzschaffen ausgenommen; Platz wird nie
+  mit dem Lauf geschaffen, der die letzte Kopie einer VM-Platte hält, solange
+  noch offen ist, ob der laufende Lauf sie sichert (seit 1.01). Der Zielordner des Auftrags selbst darf weiterhin
   keine Verknüpfung sein. Kann das Ziel-Dateisystem
   keine halten (FAT32, exFAT, SMB ohne Unix-Erweiterungen), steht sie unter
   `link_unsupported`. Sockets, FIFOs und Gerätedateien sind keine Daten: Sie

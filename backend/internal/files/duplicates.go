@@ -41,11 +41,13 @@ func (m *Manager) Duplicates(ctx context.Context, root Root, dir string, showHid
 		versions := map[string]string{}
 		for _, p := range paths {
 			v, e := m.Properties(ctx, root, p, true)
-			if e != nil {
-				return result, e
+			if ctx.Err() != nil {
+				return result, ctx.Err()
 			}
-			if v.Size != size {
-				return result, ErrTextConflict
+			if e != nil || v.Size != size {
+				// Unreadable, gone or changed since the list was made
+				// (logs, downloads): not a candidate, the rest still is.
+				continue
 			}
 			hashes[v.SHA256] = append(hashes[v.SHA256], p)
 			result.Hashed++

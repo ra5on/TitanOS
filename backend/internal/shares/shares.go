@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -202,6 +203,10 @@ type Manager struct {
 	purge       purgeState
 
 	guard guardState
+	// closeAfterApply are shares the guard locked whose open connections
+	// are closed again once smb.conf without their write access is
+	// loaded (guard.go).
+	closeAfterApply map[string]bool
 	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has
 	// none (not Btrfs). Set by titand from the storage manager.
 	Shadow func(volume string) string
@@ -234,22 +239,32 @@ func (m *Manager) Load() error {
 	var shares []Share
 	err := m.store.ReadJSON(configFile, &shares)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		m.notLoaded()
 		return err
+	}
+	for i := range shares {
+		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, shares[i].NFS.Mode) {
+			// Nothing of it is taken: what is not understood must not be
+			// offered, and saved over by a change, either.
+			m.notLoaded()
+			return ErrInvalidOption
+		}
+		if shares[i].NFS.Mode == ReadOnly {
+			shares[i].NFS.Enabled = true
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.shares = shares
-	for i := range m.shares {
-		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, m.shares[i].NFS.Mode) {
-			m.loaded = false
-			return ErrInvalidOption
-		}
-		if m.shares[i].NFS.Mode == ReadOnly {
-			m.shares[i].NFS.Enabled = true
-		}
-	}
 	m.loaded = true
 	return nil
+}
+
+// notLoaded marks the shares as not read: none is offered or saved.
+func (m *Manager) notLoaded() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.shares, m.loaded = nil, false
 }
 
 // List returns the shares sorted by name.
@@ -262,6 +277,11 @@ func (m *Manager) List() []Share {
 }
 
 func (m *Manager) save(shares []Share) error {
+	if !m.loaded {
+		// The file on the stick could not be read: a save would replace
+		// the shares it holds with what is known in RAM.
+		return ErrNotLoaded
+	}
 	if shares == nil {
 		shares = []Share{}
 	}
@@ -641,55 +661,17 @@ func (m *Manager) sweepRecycleOn(mounted []string, only map[string]bool, now tim
 		if !share.Recycle.Enabled || !slices.Contains(mounted, share.Volume) || only != nil && !only[share.Volume] {
 			continue
 		}
-		bin := filepath.Join(m.Path(share), recycleDir)
 		cutoff := now.AddDate(0, 0, -share.Recycle.Days)
-		removed := 0
 		diskwake.Note(share.Volume, diskwake.RecycleSweep, share.Name)
-		var dirs []string
-		// When a folder was deleted: the file manager notes it on the
-		// folder and leaves the dates of the files inside alone
-		// (files.rememberTrash). A file counts from the newest of its own
-		// date, its own note and the notes of the folders above it, so
-		// old photos in a folder deleted yesterday stay their full time.
-		// WalkDir visits a folder before what is in it.
-		since := map[string]time.Time{}
-		_ = filepath.WalkDir(bin, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
-			if err != nil {
-				return nil
-			}
-			if entry.IsDir() {
-				m.repairBinFolder(path, entry)
-			}
-			if path == bin {
-				return nil
-			}
-			deleted := since[filepath.Dir(path)]
-			if noted := trashNote(path); noted.After(deleted) {
-				deleted = noted
-			}
-			if entry.IsDir() {
-				since[path] = deleted
-				dirs = append(dirs, path)
-				return nil
-			}
-			info, err := entry.Info()
-			if err != nil {
-				return nil
-			}
-			if info.ModTime().After(deleted) {
-				deleted = info.ModTime()
-			}
-			if deleted.Before(cutoff) {
-				if os.Remove(path) == nil {
-					removed++
+		removed := m.sweepBin(m.Path(share), recycleDir, cutoff)
+		if share.PerUser {
+			// Samba's path is the folder of the account there, and the bin
+			// lies inside it (recycle:repository is relative to the path).
+			for _, user := range slices.Sorted(maps.Keys(share.Access)) {
+				if user != "" && !strings.ContainsAny(user, "/\\") && user != "." && user != ".." {
+					removed += m.sweepBin(m.Path(share), filepath.Join(user, recycleDir), cutoff)
 				}
 			}
-			return nil
-		})
-		// Deepest first; a directory that still holds something stays.
-		slices.Reverse(dirs)
-		for _, dir := range dirs {
-			os.Remove(dir)
 		}
 		if removed > 0 {
 			slog.Info("recycle bin emptied", "share", share.Name, "files", removed)
@@ -697,17 +679,94 @@ func (m *Manager) sweepRecycleOn(mounted []string, only map[string]bool, now tim
 	}
 }
 
+// sweepBin deletes what has been in the recycle bin rel of a share folder
+// since before cutoff and returns how many files went.
+//
+// Accounts write into the bin (SMB, NFS, apps with the share mounted), and
+// the sweep runs as root: it works through an os.Root of the bin opened
+// inside the share, so that a folder swapped for a link while it runs
+// never leads it out of the bin. The bin itself must be a folder, not a
+// link.
+func (m *Manager) sweepBin(shareDir, rel string, cutoff time.Time) int {
+	share, err := os.OpenRoot(shareDir)
+	if err != nil {
+		return 0
+	}
+	defer share.Close()
+	before, err := share.Lstat(rel)
+	if err != nil || !before.IsDir() {
+		return 0
+	}
+	root, err := share.OpenRoot(rel)
+	if err != nil {
+		return 0
+	}
+	defer root.Close()
+	bin := filepath.Join(shareDir, rel)
+	if opened, err := root.Stat("."); err != nil || !os.SameFile(before, opened) {
+		return 0 // swapped meanwhile
+	}
+	removed := 0
+	var dirs []string
+	// When a folder was deleted: the file manager notes it on the folder
+	// and leaves the dates of the files inside alone (files.rememberTrash).
+	// A file counts from the newest of its own date, its own note and the
+	// notes of the folders above it, so old photos in a folder deleted
+	// yesterday stay their full time. WalkDir visits a folder before what
+	// is in it.
+	since := map[string]time.Time{}
+	_ = fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			m.repairBinFolder(root, rel, entry)
+		}
+		if rel == "." {
+			return nil
+		}
+		deleted := since[filepath.Dir(rel)]
+		if noted := trashNote(filepath.Join(bin, filepath.FromSlash(rel))); noted.After(deleted) {
+			deleted = noted
+		}
+		if entry.IsDir() {
+			since[rel] = deleted
+			dirs = append(dirs, rel)
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+		if info.ModTime().After(deleted) {
+			deleted = info.ModTime()
+		}
+		if deleted.Before(cutoff) {
+			if root.Remove(rel) == nil {
+				removed++
+			}
+		}
+		return nil
+	})
+	// Deepest first; a directory that still holds something stays.
+	slices.Reverse(dirs)
+	for _, dir := range dirs {
+		_ = root.Remove(dir) // only empty folders go
+	}
+	return removed
+}
+
 // repairBinFolder makes a folder of the recycle bin writable for the group
 // of the shares. Versions before 0.75 let the file manager make them for
 // root only; Samba, working as the account, could then not move a deleted
 // file there and deleted it for good.
-func (m *Manager) repairBinFolder(path string, entry fs.DirEntry) {
+func (m *Manager) repairBinFolder(root *os.Root, rel string, entry fs.DirEntry) {
 	info, err := entry.Info()
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0o020 != 0 {
 		return
 	}
-	_ = os.Lchown(path, -1, m.gid)          // best effort, the next sweep tries again
-	_ = os.Chmod(path, 0o770|os.ModeSetgid) // see above
+	_ = root.Lchown(rel, -1, m.gid)          // best effort, the next sweep tries again
+	_ = root.Chmod(rel, 0o770|os.ModeSetgid) // see above
 }
 
 // trashAttribute is where the file manager notes when and from where an

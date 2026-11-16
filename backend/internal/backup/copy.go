@@ -64,7 +64,7 @@ const (
 	ProblemCaseConflict      = "case_conflict"      // names that differ only in case on a drive that folds it
 	ProblemTooLarge          = "too_large"          // too large for the drive's file system (FAT32: 4 GB)
 	ProblemNameNotAllowed    = "name_not_allowed"   // a name the drive's file system does not allow
-	ProblemChanged           = "changed"            // changed while it was copied; the copy of the run before stays
+	ProblemChanged           = "changed"            // changed while it was copied; the copy of the run before stays (dated: that run is kept)
 	// ProblemVMDiskChanged is the disk of a running VM that changed while
 	// it was copied and could not be read from a snapshot: it is not
 	// saved by this run.
@@ -265,7 +265,7 @@ func copyLink(target *os.Root, to, link string, aside func(to string) error) err
 		return err
 	}
 	if err := target.Rename(temp, to); err != nil {
-		_ = target.Remove(temp) // best effort: a leftover link is removed by the next run's rename or by hand
+		_ = target.Remove(temp) // best effort: a leftover .titanos-copy- link stays until removed by hand
 		return err
 	}
 	return nil
@@ -359,20 +359,37 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		return problems.count[ProblemSourceUnavailable] > 0 || problems.count[ProblemFolderUnavailable] > 0
 	}
 	seen := map[string]string{}
-	// protected are the dated runs that hold the newest copy of a disk
-	// this run does not save (left out on purpose, or not saved): they are
-	// not removed by the retention or to make room, or the last copy of
-	// that disk would go because it was skipped.
+	// protected are the dated runs that hold the newest copy of a file or
+	// folder this run does not save (a disk left out on purpose or not
+	// saved, a file it could not read): they are not removed by the
+	// retention or to make room, or the last copy would go because this run
+	// has none.
 	protected := map[string]bool{}
 	earlier := slices.Clone(runs)
-	protect := func(share, rel string) {
+	newest := func(share, rel string, dir bool) string {
 		for i := len(earlier) - 1; i >= 0 && dated; i-- {
-			if info, err := target.Lstat(path.Join(job.Destination.Folder, earlier[i].name, share, rel)); err == nil && info.Mode().IsRegular() {
-				protected[earlier[i].name] = true
-				return
+			info, err := target.Lstat(path.Join(job.Destination.Folder, earlier[i].name, share, rel))
+			if err == nil && (dir && info.IsDir() || !dir && info.Mode().IsRegular()) {
+				return earlier[i].name
 			}
 		}
+		return ""
 	}
+	protect := func(share, rel string) {
+		if name := newest(share, rel, false); name != "" {
+			protected[name] = true
+		}
+	}
+	protectDir := func(share, rel string) {
+		if name := newest(share, rel, true); name != "" {
+			protected[name] = true
+		}
+	}
+	// pending are the dated runs that hold the newest copy of a VM disk:
+	// whether this run saves it is known only when it is copied, after the
+	// room is made. Making room leaves them alone; the retention at the end
+	// goes by protected, which knows by then.
+	pending := map[string]bool{}
 
 	// First the list: what there is, how much, and what is new. It gives the
 	// page a percentage and the run a check of the free space.
@@ -403,6 +420,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 				}
 				if err != nil {
 					problems.add(ProblemReadError, name+"/"+rel)
+					if entry == nil || entry.IsDir() {
+						protectDir(name, rel)
+					} else {
+						protect(name, rel)
+					}
 					if entry != nil && entry.IsDir() {
 						return fs.SkipDir
 					}
@@ -442,6 +464,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 				info, err := entry.Info()
 				if err != nil {
 					problems.add(ProblemReadError, name+"/"+rel)
+					protect(name, rel)
 					return nil
 				}
 				if info.Mode()&fs.ModeSymlink != 0 {
@@ -477,6 +500,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					}
 				}
 				items = append(items, item)
+				if frozen.vmDisk(source, rel) {
+					if run := newest(name, rel, false); run != "" {
+						pending[run] = true
+					}
+				}
 				planned += uint64(info.Size())
 				if old, err := target.Lstat(compare); compare == "" || err != nil || old.Size() != info.Size() || !sameTime(old.ModTime(), info.ModTime()) {
 					needed += uint64(info.Size())
@@ -498,11 +526,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if !ok || needed <= free {
 			break
 		}
-		// The oldest run that does not hold the last copy of a skipped disk;
-		// never the newest.
+		// The oldest run that does not hold the last copy of something this
+		// run may not save; never the newest.
 		oldest := -1
 		for i := 0; i < len(runs)-1 && oldest < 0; i++ {
-			if !protected[runs[i].name] {
+			if !protected[runs[i].name] && !pending[runs[i].name] {
 				oldest = i
 			}
 		}
@@ -542,6 +570,13 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		m.mu.Unlock()
 	}
+	// aside takes what is in the way of a folder or file of the source out
+	// of it, when the kind changed in the source since the last run. Dated
+	// runs start from an empty folder: nothing can be in the way there.
+	var aside func(to string) error
+	if !dated {
+		aside = func(to string) error { return m.moveAside(target, job, to) }
+	}
 	// ready opens the source of an item and makes its folder at the destination.
 	ready := func(item copyItem) (*os.Root, bool, error) {
 		root := roots[item.share]
@@ -553,11 +588,12 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			}
 			roots[item.share] = root
 		}
-		if err := copyDirectoriesBelow(target, base, path.Dir(item.dst)); err != nil {
+		if err := copyDirectoriesBelow(target, base, path.Dir(item.dst), aside); err != nil {
 			if fatalTarget(err) {
 				return nil, false, err
 			}
 			problems.add(problemOf(err), item.share+"/"+item.rel)
+			protect(item.share, item.rel)
 			return nil, false, nil
 		}
 		return root, true, nil
@@ -607,7 +643,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			continue
 		}
 		if item.isLink {
-			if err := copyLink(target, item.dst, item.link, func(to string) error { return m.moveAside(target, job, to) }); err != nil {
+			if err := copyLink(target, item.dst, item.link, aside); err != nil {
 				if fatalTarget(err) {
 					return err
 				}
@@ -618,13 +654,35 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		offset := total
 		total += uint64(item.size)
 		source := sources[item.share]
+		if aside != nil {
+			// A folder of the copy that is a file in the source now.
+			if info, err := target.Lstat(item.dst); err == nil && info.IsDir() {
+				if err := aside(item.dst); err != nil {
+					if fatalTarget(err) {
+						return err
+					}
+					problems.add(problemOf(err), item.share+"/"+item.rel)
+					progress(total)
+					continue
+				}
+			}
+		}
 		if !frozen.live(source, item.rel) {
 			if err := copyOne(ctx, root, item.rel, item, offset); err != nil {
 				if fatalTarget(err) {
 					return err
 				}
 				problems.add(problemOf(err), item.share+"/"+item.rel)
+				protect(item.share, item.rel)
 			}
+			progress(total)
+			continue
+		}
+		if job.VMDisks != nil && job.VMDisks.Mode == VMDisksSkip {
+			// The VM was started after the list was made: left out all the
+			// same, as the job says.
+			notices.add(NoticeVMDiskSkipped, item.share+"/"+item.rel)
+			protect(item.share, item.rel)
 			progress(total)
 			continue
 		}
@@ -814,11 +872,12 @@ func syncTarget(target *os.Root) error {
 	return unix.Syncfs(int(dir.Fd()))
 }
 
-// moveAside takes a folder of the copy out of the way of what the source
-// holds in its place now, into <folder>/_gelöscht/<date>/…, where a mirror
-// puts what is gone from the source. Nothing is deleted; with the mirror
-// option the day is removed after MirrorDays like the rest of it. The move
-// stays inside the destination and follows no link.
+// moveAside takes a folder or file of the copy out of the way of what the
+// source holds in its place now (a link or file for a folder, a folder for
+// a file), into <folder>/_gelöscht/<date>/…, where a mirror puts what is
+// gone from the source. Nothing is deleted; with the mirror option the day
+// is removed after MirrorDays like the rest of it. The move stays inside
+// the destination and follows no link.
 func (m *Manager) moveAside(target *os.Root, job Job, to string) error {
 	rel := strings.TrimPrefix(to, job.Destination.Folder+"/")
 	bin := path.Join(job.Destination.Folder, deletedFolder, m.local(m.now()).Format("2006-01-02"), rel)
@@ -833,22 +892,24 @@ func (m *Manager) moveAside(target *os.Root, job Job, to string) error {
 	if err := copyDirectories(target, path.Dir(bin)); err != nil {
 		return err
 	}
-	slog.Info("backup: a folder of the copy is a link in the source now; the folder was moved aside", "job", job.ID, "folder", to, "to", bin)
+	slog.Info("backup: an entry of the copy is of another kind in the source now; it was moved aside", "job", job.ID, "path", to, "to", bin)
 	return target.Rename(to, bin)
 }
 
 // Refuse destination links even when they point somewhere within the same disk.
 func copyDirectories(root *os.Root, dir string) error {
-	return copyDirectoriesBelow(root, dir, dir)
+	return copyDirectoriesBelow(root, dir, dir, nil)
 }
 
 // copyDirectoriesBelow is copyDirectories that heals the copy below base:
 // a symbolic link there that the copy keeps for a link of the source
 // (copyLink) is removed when the source has a folder in its place now, and
-// the folder is made. Only the link itself goes, never what it points to;
-// base and everything above it stay strict (a destination folder that is
-// a link is refused).
-func copyDirectoriesBelow(root *os.Root, base, dir string) error {
+// the folder is made. Only the link itself goes, never what it points to.
+// A file there (the source had a file in its place when it was copied
+// last) is moved out of the way with aside, never deleted; without aside it
+// is an error. base and everything above it stay strict (a destination
+// folder that is a link is refused).
+func copyDirectoriesBelow(root *os.Root, base, dir string, aside func(to string) error) error {
 	parts := strings.Split(filepath.ToSlash(dir), "/")
 	current := ""
 	for _, part := range parts {
@@ -856,6 +917,11 @@ func copyDirectoriesBelow(root *os.Root, base, dir string) error {
 		info, err := root.Lstat(current)
 		if err == nil && info.Mode()&fs.ModeSymlink != 0 && current != base && strings.HasPrefix(current, base+"/") {
 			if err := root.Remove(current); err != nil {
+				return err
+			}
+			err = fs.ErrNotExist
+		} else if err == nil && info.Mode().IsRegular() && aside != nil && strings.HasPrefix(current, base+"/") {
+			if err := aside(current); err != nil {
 				return err
 			}
 			err = fs.ErrNotExist

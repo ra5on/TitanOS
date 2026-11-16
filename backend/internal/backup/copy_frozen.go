@@ -71,6 +71,15 @@ func (f *frozenSources) live(source Source, rel string) bool {
 	return false
 }
 
+// vmDisk tells whether a file of a source is the disk of a VM, running or
+// not, or one a running guest writes to; it asks nothing.
+func (f *frozenSources) vmDisk(source Source, rel string) bool {
+	file := filepath.Join(source.Path, filepath.FromSlash(rel))
+	_, live := f.lives[file]
+	_, disk := f.disks[file]
+	return live || disk
+}
+
 // vm is the VM a live file belongs to, "" if that is not known.
 func (f *frozenSources) vm(source Source, rel string) string {
 	return f.lives[filepath.Join(source.Path, filepath.FromSlash(rel))]
