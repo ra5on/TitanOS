@@ -27,6 +27,7 @@
 	"error.password_too_long": "Das Passwort ist zu lang.",
 	"error.setup_done": "Das Besitzerkonto gibt es schon. Bitte melde dich an.",
 	"error.config_unavailable": "Der Stick mit der Konfiguration ist nicht erreichbar.",
+	"error.agent_features_changed": "Die Funktionen wurden inzwischen an anderer Stelle geändert (anderer Tab oder anderer Administrator). Bitte neu laden und die Änderung noch einmal machen.",
 	"error.config_write_failed": "Das konnte nicht auf den Stick gespeichert werden.",
 	"error.unreachable": "Das NAS ist gerade nicht erreichbar.",
 	"error.unauthorized": "Du bist nicht mehr angemeldet.",

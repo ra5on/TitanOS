@@ -3,7 +3,9 @@
 	// (owner rule: ordered like the other settings, no wizards). Owners and
 	// administrators switch them on for the NAS; every account sets its own
 	// parts (folders, mailbox, sources).
+	import { ApiError } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { rebaseFeatures } from '#lib/features-rebase.ts';
 	import {
 		loadFeatures,
 		loadMine,
@@ -34,6 +36,8 @@
 	let mine = $state<FeaturesMine | null>(null);
 	let pub = $state<FeaturesPublic | null>(null);
 	let error = $state('');
+	// What happened to a save another tab overtook (1.03).
+	let notice = $state('');
 
 	// The two loads do not depend on each other (PLAN 90-6): the switches of
 	// the NAS come from titand's memory and also load for an administrator who
@@ -54,18 +58,48 @@
 	void load();
 
 	async function savenas(next: Features) {
-		error = '';
+		error = notice = '';
+		const base = nas;
 		try {
 			nas = await saveFeatures(next);
 		} catch (e) {
-			error = apiErrorText(e);
-			throw e;
+			if (!(e instanceof ApiError && e.code === 'agent_features_changed') || !base) {
+				error = apiErrorText(e);
+				throw e;
+			}
+			// 1.03: overtaken by another tab or administrator. Load the new
+			// state; a change to another function is saved on top of it, one
+			// to the same function is not, and the page says which.
+			await rebase(base, next, e);
 		}
 		// Saved. What the accounts see of it is only a second look.
 		try {
 			pub = (await loadMine()).nas;
 		} catch (e) {
 			error = apiErrorText(e);
+		}
+	}
+	async function rebase(base: Features, next: Features, conflict: unknown) {
+		let fresh: Features;
+		try {
+			fresh = await loadFeatures();
+		} catch (e) {
+			error = apiErrorText(conflict);
+			throw e;
+		}
+		const merged = rebaseFeatures(base, next, fresh);
+		if (!merged) {
+			nas = fresh;
+			error = t('agent.f.changedLost');
+			throw conflict;
+		}
+		try {
+			nas = merged === fresh ? fresh : await saveFeatures(merged);
+			notice = t('agent.f.changedKept');
+		} catch (e) {
+			nas = fresh;
+			error = apiErrorText(e);
+			throw e;
 		}
 	}
 	async function savemine(next: FeaturesMine) {
@@ -98,6 +132,7 @@
 		{#if !admin}<p class="muted intro">{t('agent.f.adminOnly')}</p>{/if}
 	{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if notice}<p class="notice-ok" role="status" data-features-notice>{notice}</p>{/if}
 	{#each groups as g (g.id)}
 		<SettingGroup title={t(g.label)} id="f-{g.id}">
 			<g.part {...groupProps} />

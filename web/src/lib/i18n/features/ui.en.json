@@ -23,5 +23,12 @@
 	"users.agentData.part.schedules": "Scheduled tasks",
 	"users.agentData.part.notes": "Notes",
 	"users.agentData.part.folder": "The account's folder in the share “KI-Agent”",
-	"users.agentData.part.shared": "Shared projects go to a member and are kept."
+	"users.agentData.part.shared": "Shared projects go to a member and are kept.",
+	"agent.f.changedKept": "Changed elsewhere in the meantime – reloaded. Your change was about something else and is saved on the new state.",
+	"agent.f.changedLost": "Changed elsewhere in the meantime – reloaded. The same function was changed there too, so your change is not saved. Check the new state and make it again if needed.",
+	"agent.f.protect.e.declineTitle": "Decline the request of {name}?",
+	"agent.f.protect.e.declineConfirm": "{name} gets no access to {shares} and the emergency handbook. The person sees that the request was declined and can ask again later.",
+	"agent.f.protect.e.endTitle": "End the emergency access of {name}?",
+	"agent.f.protect.e.endConfirm": "{name} loses the read access to {shares} and the emergency handbook at once. Exactly what the emergency access gave is taken back.",
+	"agent.f.protect.e.endNow": "End access"
 }

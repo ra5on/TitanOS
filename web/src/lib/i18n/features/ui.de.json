@@ -23,5 +23,12 @@
 	"users.agentData.part.schedules": "Geplante Aufträge",
 	"users.agentData.part.notes": "Notizen",
 	"users.agentData.part.folder": "Der Ordner des Kontos in der Freigabe „KI-Agent“",
-	"users.agentData.part.shared": "Geteilte Projekte gehen an ein Mitglied und bleiben erhalten."
+	"users.agentData.part.shared": "Geteilte Projekte gehen an ein Mitglied und bleiben erhalten.",
+	"agent.f.changedKept": "Inzwischen anderswo geändert – neu geladen. Deine Änderung betraf etwas anderes und ist auf dem neuen Stand gespeichert.",
+	"agent.f.changedLost": "Inzwischen anderswo geändert – neu geladen. Dieselbe Funktion wurde dort auch geändert, deshalb ist deine Änderung nicht gespeichert. Prüfe den neuen Stand und mach sie bei Bedarf noch einmal.",
+	"agent.f.protect.e.declineTitle": "Antrag von {name} ablehnen?",
+	"agent.f.protect.e.declineConfirm": "{name} bekommt keinen Zugang auf {shares} und das Notfallhandbuch. Die Person sieht, dass der Antrag abgelehnt wurde, und kann später einen neuen stellen.",
+	"agent.f.protect.e.endTitle": "Notfallzugang für {name} beenden?",
+	"agent.f.protect.e.endConfirm": "{name} verliert sofort den lesenden Zugang auf {shares} und das Notfallhandbuch. Zurückgenommen wird genau das, was der Notfallzugang gegeben hat.",
+	"agent.f.protect.e.endNow": "Zugang beenden"
 }
