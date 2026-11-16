@@ -6,6 +6,7 @@
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import { agentDataText, sanitizeAgentData, type AgentData } from '#lib/account-agent-data.ts';
 	import {
 		ACCOUNT_STATUS_FILTERS,
 		filterAccounts,
@@ -91,6 +92,32 @@
 			.sort((a, b) => a.name.localeCompare(b.name, i18n.locale));
 	$effect(() => {
 		load();
+	});
+
+	// 1.03: the delete dialog names what goes with the account of the
+	// KI-Agent. Asked when it opens; an answer for another account (a
+	// dialog closed and opened again) does not count. A NAS without the
+	// route (404) or any other failure: the dialog without this list.
+	let agentData = $state<{ name: string; data: AgentData | null; loading: boolean } | null>(null);
+	$effect(() => {
+		const name = dialog?.kind === 'delete' ? dialog.name : '';
+		if (!name) {
+			agentData = null;
+			return;
+		}
+		let gone = false;
+		agentData = { name, data: null, loading: true };
+		api.get<unknown>(`/users/${encodeURIComponent(name)}/agent-data`).then(
+			(raw) => {
+				if (!gone) agentData = { name, data: sanitizeAgentData(raw), loading: false };
+			},
+			() => {
+				if (!gone) agentData = { name, data: null, loading: false };
+			},
+		);
+		return () => {
+			gone = true;
+		};
 	});
 
 	/** Making someone an owner gives full rights over everything, so it is asked first. */
@@ -449,6 +476,21 @@
 		{#if reached.length}<p class="text">
 				{t('users.deleteShares', { shares: reached.map((entry) => entry.name).join(', ') })}
 			</p>{/if}
+		{#if agentData?.name === name && agentData.loading}
+			<p class="text muted" role="status">{t('users.agentData.loading')}</p>
+		{:else if agentData?.name === name && agentData.data}
+			{@const parts = agentDataText(agentData.data)}
+			<div class="agent-data" data-agent-data>
+				{#if parts.deleted.length}
+					<p class="text">{t('users.agentData.title')}</p>
+					<ul class="text">
+						{#each parts.deleted as line (line)}<li>{line}</li>{/each}
+					</ul>
+				{/if}
+				{#if parts.kept}<p class="text">{parts.kept}</p>{/if}
+				{#if parts.note}<p class="text muted">{parts.note}</p>{/if}
+			</div>
+		{/if}
 		{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" disabled={working} onclick={() => (dialog = null)}
@@ -667,5 +709,17 @@
 	}
 	.text {
 		font-size: var(--text-md);
+	}
+	.agent-data {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1-5);
+	}
+	.agent-data p,
+	.agent-data ul {
+		margin: 0;
+	}
+	.agent-data ul {
+		padding-left: 1.25rem;
 	}
 </style>
