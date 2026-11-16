@@ -890,6 +890,32 @@ export function fixtureFactory(browser, errors) {
           disks: [],
           diskSleep: { idleMinutes: 0, available: true, errors: [] },
         });
+      // 1.03: what deleting an account takes along of the KI-Agent. "sam"
+      // has data; any other name answers like a NAS before 1.03 (404).
+      {
+        const m = path.match(/^\/users\/([^/]+)\/agent-data$/);
+        if (m) {
+          const known = (data.agentData ?? {
+            sam: {
+              available: true,
+              chats: 12,
+              projects: 3,
+              handedOver: 1,
+              memories: 7,
+              skills: 0,
+              schedules: 2,
+              notes: 4,
+              folder: true,
+            },
+          })[decodeURIComponent(m[1])];
+          return known
+            ? json(known)
+            : route.fulfill({
+                status: 404,
+                json: { error: { code: "not_found", message: "fixture" } },
+              });
+        }
+      }
       if (path === "/users")
         return json([
           { name: "alex", role: "owner" },

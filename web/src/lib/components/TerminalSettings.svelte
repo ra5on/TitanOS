@@ -9,13 +9,18 @@
 	const IDLE = [5, 15, 30, 60, 120, 0];
 	let idleState = $state<'' | 'saving' | 'saved'>('');
 	let idleError = $state('');
+	// One timer for "gespeichert": a second save starts it again instead of
+	// the first one taking the hint away early (1.03, D102-48).
+	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+	onMount(() => () => clearTimeout(idleTimer));
 	async function saveIdle(minutes: number) {
+		clearTimeout(idleTimer);
 		idleState = 'saving';
 		idleError = '';
 		try {
 			value = await api.put<Settings>('/terminal', { idleMinutes: minutes });
 			idleState = 'saved';
-			setTimeout(() => (idleState = ''), 5000);
+			idleTimer = setTimeout(() => (idleState = ''), 5000);
 		} catch (err) {
 			idleState = '';
 			idleError = apiErrorText(err);

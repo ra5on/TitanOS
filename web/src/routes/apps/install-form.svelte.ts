@@ -78,7 +78,7 @@ export class Installer {
 
 	// After "Install": the job of the app until it runs.
 	phase = $state<'form' | 'installing' | 'done' | 'failed'>('form');
-	job = $state<{ state: string; output: string } | null>(null);
+	job = $state<{ state: string; output: string; code?: string } | null>(null);
 	started = 0;
 	elapsed = $state(0);
 	httpsResult = $state<{ ok: boolean; text: string } | null>(null);

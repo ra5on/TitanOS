@@ -28,6 +28,8 @@ export type LXCJob = {
 	state: 'running' | 'failed';
 	phase: 'prepare' | 'download' | 'configure';
 	text?: string;
+	/** 1.03: a known cause, e.g. "interrupted" (lib/job-code.ts). */
+	code?: string;
 	started: string;
 };
 

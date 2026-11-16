@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { t, tOr, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { dockerJobOutput } from '#lib/job-code.ts';
 	import type { TaskItem, TaskAction } from './tasks.ts';
 	let {
 		task,
@@ -31,7 +32,9 @@
 			{#if task.kind === 'upload'}<p class="muted">{t('tasks.uploadHint')}</p>{/if}
 			{#if task.detail}<details>
 					<summary>{t('ops.details')}</summary>
-					<pre>{task.detail}</pre>
+					<pre>{dockerJobOutput({ output: task.detail, code: task.dockerCode }, (key) =>
+							tOr(key, ''),
+						)}</pre>
 				</details>{/if}
 			{#if task.progress !== undefined && ['running', 'paused', 'waiting'].includes(task.state)}<progress
 					max="100"

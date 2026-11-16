@@ -27,7 +27,10 @@
 	let busy = $state(false);
 	let reason = $state('');
 	let code = $state('');
-	let confirmGrant = $state<EmergencyRequest | null>(null);
+	// Granting, declining and ending ask first (1.03: declining and ending too).
+	let confirming = $state<{ req: EmergencyRequest; action: 'grant' | 'decline' | 'end' } | null>(
+		null,
+	);
 	let printed = $state<{ account: string; code: string } | null>(null);
 	let showBook = $state(false);
 	let now = $state(new Date());
@@ -53,7 +56,7 @@
 	async function act(req: EmergencyRequest, action: 'decline' | 'grant' | 'end' | 'cancel') {
 		busy = true;
 		error = '';
-		confirmGrant = null;
+		confirming = null;
 		try {
 			await emergencyAction(req.id, action);
 			await load();
@@ -147,9 +150,14 @@
 						type="button"
 						class="btn btn-warn"
 						disabled={busy}
-						onclick={() => act(r, 'decline')}>{t('agent.f.protect.e.decline')}</button
+						onclick={() => (confirming = { req: r, action: 'decline' })}
+						>{t('agent.f.protect.e.decline')}</button
 					>
-					<button type="button" class="btn" disabled={busy} onclick={() => (confirmGrant = r)}
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => (confirming = { req: r, action: 'grant' })}
 						>{t('agent.f.protect.e.grantNow')}</button
 					>
 				{/if}
@@ -166,7 +174,11 @@
 				})}
 			</p>
 			<div class="acts">
-				<button type="button" class="btn" disabled={busy} onclick={() => act(r, 'end')}
+				<button
+					type="button"
+					class="btn"
+					disabled={busy}
+					onclick={() => (confirming = { req: r, action: 'end' })}
 					>{t('agent.f.protect.e.end')}</button
 				>
 			</div>
@@ -275,23 +287,45 @@
 	<p class="muted small">{t('agent.f.protect.e.footer')}</p>
 {/if}
 
-{#if confirmGrant}
-	<Dialog title={t('agent.f.protect.e.grantNow')} onclose={() => (confirmGrant = null)}>
+{#if confirming}
+	{@const { req, action } = confirming}
+	{@const shares = (action === 'end' && req.added?.length ? req.added : req.shares).join(', ')}
+	<Dialog
+		title={action === 'grant'
+			? t('agent.f.protect.e.grantNow')
+			: t(action === 'decline' ? 'agent.f.protect.e.declineTitle' : 'agent.f.protect.e.endTitle', {
+					name: req.account,
+				})}
+		onclose={() => (confirming = null)}
+	>
 		<p>
-			{t('agent.f.protect.e.grantConfirm', {
-				name: confirmGrant.account,
-				shares: confirmGrant.shares.join(', '),
-			})}
+			{t(
+				action === 'grant'
+					? 'agent.f.protect.e.grantConfirm'
+					: action === 'decline'
+						? 'agent.f.protect.e.declineConfirm'
+						: 'agent.f.protect.e.endConfirm',
+				{ name: req.account, shares },
+			)}
 		</p>
+		<!-- Cancel first: it takes the focus; the dialog puts the warning
+		     button to its left (WEB-UI.md), only a click sends it. -->
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (confirmGrant = null)}
+			<button type="button" class="btn" onclick={() => (confirming = null)}
 				>{t('common.cancel')}</button
 			>
 			<button
 				type="button"
-				class="btn btn-primary"
-				onclick={() => confirmGrant && act(confirmGrant, 'grant')}
-				>{t('agent.f.protect.e.grantNow')}</button
+				class={action === 'grant' ? 'btn btn-primary' : 'btn btn-warn'}
+				disabled={busy}
+				onclick={() => act(req, action)}
+				>{t(
+					action === 'grant'
+						? 'agent.f.protect.e.grantNow'
+						: action === 'decline'
+							? 'agent.f.protect.e.decline'
+							: 'agent.f.protect.e.endNow',
+				)}</button
 			>
 		</div>
 	</Dialog>

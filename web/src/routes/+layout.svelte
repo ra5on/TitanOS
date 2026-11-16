@@ -214,7 +214,13 @@
 		<link rel="apple-touch-icon" href="/icons/agent2-180.png" />
 		<meta name="apple-mobile-web-app-title" content="TitanOS Agent" />
 	{:else}
-		<link rel="manifest" href="/manifest.webmanifest" />
+		<!-- The manifest in the language of the page (1.03): the shortcuts
+		     and the description; /manifest.webmanifest stays the German one
+		     for older pages. Same id, start and share target: one app. -->
+		<link
+			rel="manifest"
+			href={i18n.locale === 'en' ? '/manifest.en.webmanifest' : '/manifest.webmanifest'}
+		/>
 		<link rel="apple-touch-icon" href="/icons/app-180.png" />
 		<meta name="apple-mobile-web-app-title" content="TitanOS" />
 	{/if}

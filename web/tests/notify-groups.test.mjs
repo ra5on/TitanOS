@@ -35,3 +35,22 @@ test('filters by group and severity, but never hides storage errors', () => {
 		true,
 	);
 });
+
+// 1.03: kinds this page has no group for (share_account_skipped of the
+// share setup, or one of a newer NAS) are not swallowed: they are "system"
+// and show unless the account hid that group; an unknown severity counts
+// as info.
+test('unknown kinds and severities still reach the bell', () => {
+	const all = sanitizeBell(undefined);
+	assert.equal(bellGroup('share_account_skipped'), 'system');
+	assert.equal(bellShows(all, { kind: 'share_account_skipped', severity: 'error' }), true);
+	assert.equal(bellShows(all, { kind: 'something_new_2027', severity: 'info' }), true);
+	assert.equal(bellShows(all, { kind: 'something_new_2027', severity: 'notice' }), true);
+	assert.equal(
+		bellShows(sanitizeBell({ groups: { system: false } }), {
+			kind: 'share_account_skipped',
+			severity: 'error',
+		}),
+		false,
+	);
+});

@@ -74,9 +74,14 @@
 		}
 	}
 
+	// A look sent before a save may answer after it: it would show the old
+	// state (password set, status) until the next look (1.03, D102-46).
+	let round = 0;
 	async function load() {
+		const mine = round;
 		try {
-			take(await api.get<Answer>('/ups'), true);
+			const res = await api.get<Answer>('/ups');
+			if (mine === round) take(res, true);
 		} catch (err) {
 			if (!answer) problem(err);
 		}
@@ -106,6 +111,7 @@
 		busy = true;
 		error = null;
 		saved = false;
+		round++;
 		try {
 			take(
 				await api.put<Answer>('/ups', {
@@ -117,6 +123,8 @@
 		} catch (err) {
 			problem(err);
 		}
+		// Looks sent while the save was on its way do not count either.
+		round++;
 		busy = false;
 	}
 

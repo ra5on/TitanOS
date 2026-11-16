@@ -968,6 +968,65 @@ try {
     await plain.ctx.close();
     versions = listed;
   }
+  // 1.03 (D102-46): a look at the state sent before "Nach Updates suchen"
+  // that answers after it does not bring the old state back.
+  {
+    reset();
+    state = { ...state, available: null, kind: "" };
+    const { ctx, page } = await context("graphit", 1280);
+    await page.clock.install();
+    let held = null;
+    await ctx.route("**/api/v1/update", async (route) => {
+      if (route.request().method() !== "GET" || !held) return route.fallback();
+      held.routes.push(route);
+    });
+    const newer = "2026-11-17T09:15:00Z";
+    await ctx.route("**/api/v1/update/check", (route) => {
+      state = { ...state, lastCheck: newer };
+      return route.fulfill({ json: state });
+    });
+    await page.goto(`${base}/settings/updates`);
+    await page
+      .getByRole("button", { name: /^(Nach Updates suchen|Jetzt suchen)$/ })
+      .first()
+      .waitFor();
+    // The next look starts and waits (an old answer on its way).
+    held = { routes: [], old: structuredClone(state) };
+    await page.clock.runFor(16_000);
+    for (let i = 0; i < 50 && !held.routes.length; i++)
+      await page.waitForTimeout(100);
+    assert.ok(held.routes.length, "a look is on its way");
+    await page
+      .getByRole("button", { name: /^(Nach Updates suchen|Jetzt suchen)$/ })
+      .first()
+      .click();
+    const shown = (stamp) =>
+      new Intl.DateTimeFormat("de", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(stamp));
+    await page
+      .getByText(`Zuletzt gesucht: ${shown(newer)}`)
+      .first()
+      .waitFor();
+    const { routes: late, old } = held;
+    held = null;
+    assert.equal(old.lastCheck, time);
+    for (const route of late) await route.fulfill({ json: old });
+    await page.waitForTimeout(500);
+    assert.ok(
+      await page
+        .getByText(`Zuletzt gesucht: ${shown(newer)}`)
+        .first()
+        .isVisible(),
+      "the late old answer does not bring the old state back",
+    );
+    assert.equal(
+      await page.getByText(`Zuletzt gesucht: ${shown(time)}`).count(),
+      0,
+    );
+    await ctx.close();
+  }
   assert.deepEqual(errors, []);
   console.log(`ok – screenshots in ${out}`);
 } finally {
