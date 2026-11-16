@@ -73,13 +73,6 @@ export function removeIcon(key: string, iconsNow: IconsNow) {
 	});
 }
 
-export function addIcon(key: string, iconsNow: IconsNow) {
-	savePrefs((d) => {
-		d.icons = [...iconsNow(), key];
-		d.customIcons = true;
-	});
-}
-
 /** A new folder on the desktop; returns its key. */
 export function newFolder(iconsNow: IconsNow): string {
 	const id = 'f' + Date.now().toString(36);
