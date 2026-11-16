@@ -90,6 +90,12 @@ func viewerEngine(t *testing.T) (*Manager, *[]string) {
 		switch r.PathValue("id") {
 		case "v1":
 			w.Write([]byte(`{"Id":"v1","Name":"/titanos-viewer-1","State":{"Running":true},"Config":{"Labels":{"titanos.viewer":"1"}}}`))
+		case "aaaa0000000a":
+			w.Write([]byte(`{"Id":"aaaa0000000a","Name":"/other","Config":{"Labels":{"titanos.viewer":"1"}}}`))
+		case "bbbb0000000b":
+			w.Write([]byte(`{"Id":"bbbb0000000b","Name":"/titanos-speech-piper","Config":{"Labels":{"titanos.speech":"1"}}}`))
+		case "cccc0000000c":
+			w.Write([]byte(`{"Id":"cccc0000000c","Name":"/titanos-sandbox-x","Config":{"Labels":{"titanos.sandbox":"1"}}}`))
 		case "fake0000000a":
 			// The label without the name: not the viewer's own, yet no app.
 			w.Write([]byte(`{"Id":"fake0000000a","Name":"/other","Config":{"Labels":{"titanos.viewer":"1"}}}`))
@@ -204,7 +210,9 @@ func TestAppRoutesRefuseViewers(t *testing.T) {
 	m, log := viewerEngine(t)
 	m.Disabled = false
 	ctx := t.Context()
-	for _, id := range []string{"fake0000000a"} {
+	// Neither are the speech services and the agent's sandboxes apps: tokens
+	// and MCP reach the app routes, not those containers.
+	for _, id := range []string{"fake0000000a", "aaaa0000000a", "bbbb0000000b", "cccc0000000c"} {
 		if err := m.Remove(ctx, id); !errors.Is(err, ErrNotFound) {
 			t.Errorf("remove: %v", err)
 		}

@@ -49,16 +49,18 @@ func (m *Manager) ownViewer(labels map[string]string, name string) bool {
 	return labels[ViewerLabel] == "1" && strings.HasPrefix(strings.TrimPrefix(name, "/"), m.viewerPrefix())
 }
 
-// isViewerContainer tells whether a container is part of the remote view
-// or the container of the NVR (label OR name): the routes for apps refuse
-// those.
+// isViewerContainer tells whether a container is one TitanOS manages
+// itself (label OR name): part of the remote view, the NVR, a speech
+// service or a sandbox of the agent. The routes for apps refuse those.
 func (m *Manager) isViewerContainer(ctx context.Context, id string) bool {
 	info, err := m.inspectAny(ctx, id)
 	if err != nil {
 		return false
 	}
 	name := strings.TrimPrefix(info.Name, "/")
-	return info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(name, ViewerPrefix) || info.Config.Labels[NVRLabel] != "" || name == NVRName
+	labels := info.Config.Labels
+	return labels[ViewerLabel] != "" || strings.HasPrefix(name, ViewerPrefix) || labels[NVRLabel] != "" || name == NVRName ||
+		labels[SpeechLabel] != "" || speechName(name) || labels[sandboxLabel] != ""
 }
 
 // ViewerSpec is one viewer container.
