@@ -206,6 +206,11 @@ func TestClusterThroughTheAPI(t *testing.T) {
 func TestClusterProxyEndsWithTheLogin(t *testing.T) {
 	recheck := consoleRecheck.Swap(int64(20 * time.Millisecond))
 	t.Cleanup(func() { consoleRecheck.Store(recheck) })
+	probe, err := terminal.Start([]string{"/bin/cat"})
+	if err != nil {
+		t.Skipf("no pseudo terminal here: %v", err)
+	}
+	probe.Close()
 
 	a, _ := clusterTestServer(t, "nas-a")
 	// B has a console that stays open: cat behind a pseudo terminal.
