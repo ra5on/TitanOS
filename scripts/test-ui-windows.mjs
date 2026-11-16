@@ -731,8 +731,19 @@ if (!allOnly) {
   );
   const tab = page.getByRole("tab", { name: /immich/ });
   await tab.waitFor();
-  // A container console ends without asking.
-  await page.getByRole("button", { name: "Sitzung immich beenden" }).click();
+  // Durchsicht 102 (D102-49): only the sessions are in the tab list; "+"
+  // stands beside it.
+  check(
+    (await page.locator('[role="tablist"] button[aria-haspopup="menu"]').count()) === 0,
+    "the button for a new session is not inside the tab list",
+  );
+  check(
+    (await page.getByRole("button", { name: "Neue Sitzung" }).count()) === 1,
+    "the button for a new session is there",
+  );
+  // A container console ends without asking; Delete on its tab ends it.
+  await tab.focus();
+  await page.keyboard.press("Delete");
   await page.waitForTimeout(600);
   check(
     (await tab.count()) === 0,

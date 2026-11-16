@@ -134,6 +134,18 @@
 		else closeSession(id);
 	}
 
+	function sessionKeys(event: KeyboardEvent) {
+		const id = Number((event.target as HTMLElement).dataset?.session);
+		if (event.key === 'Delete' && id) {
+			const session = terminal.sessions.find((x) => x.id === id);
+			if (!session) return;
+			event.preventDefault();
+			end(session.id, session.title, session.kind);
+			return;
+		}
+		tabKeys(event);
+	}
+
 	function choose(action: () => void) {
 		menu = false;
 		action();
@@ -247,48 +259,54 @@
 	{/if}
 
 	<div class="toolbar">
-		<!-- Arrow keys, Home and End between the sessions (1.03); one Tab stop for them. -->
-		<!-- svelte-ignore a11y_interactive_supports_focus -->
-		<div
-			class="tabs"
-			role="tablist"
-			aria-label={t('terminal.sessions')}
-			bind:this={menuRoot}
-			onkeydown={tabKeys}
-		>
-			{#each terminal.sessions as session (session.id)}
-				<div class="tab" class:on={session.id === terminal.active}>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={session.id === terminal.active}
-						tabindex={session.id === terminal.active ? 0 : -1}
-						onclick={() => (terminal.active = session.id)}
-					>
-						<span
-							class="kind"
-							class:ct={session.kind === 'ct'}
-							class:vm={session.kind === 'vm'}
-							class:lxc={session.kind === 'lxc'}
-							aria-hidden="true"
-							>{session.kind === 'nas'
-								? 'NAS'
-								: session.kind === 'vm'
-									? 'VM'
-									: session.kind === 'lxc'
-										? 'LXC'
-										: 'CT'}</span
+		<div class="tabs" bind:this={menuRoot}>
+			<!-- Arrow keys, Home and End between the sessions (1.03); one Tab stop for them.
+			     Delete ends the focused session (WAI-ARIA tabs pattern); "+" and its menu
+			     stand beside the tab list, not in it (Durchsicht 102, D102-49). -->
+			<!-- svelte-ignore a11y_interactive_supports_focus -->
+			<div
+				class="tablist"
+				role="tablist"
+				aria-label={t('terminal.sessions')}
+				onkeydown={sessionKeys}
+			>
+				{#each terminal.sessions as session (session.id)}
+					<div class="tab" class:on={session.id === terminal.active}>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={session.id === terminal.active}
+							aria-keyshortcuts="Delete"
+							tabindex={session.id === terminal.active ? 0 : -1}
+							data-session={session.id}
+							onclick={() => (terminal.active = session.id)}
 						>
-						<span class="mono">{session.title}</span>
-					</button>
-					<button
-						type="button"
-						class="x"
-						aria-label={t('terminal.end', { name: session.title })}
-						onclick={() => end(session.id, session.title, session.kind)}>✕</button
-					>
-				</div>
-			{/each}
+							<span
+								class="kind"
+								class:ct={session.kind === 'ct'}
+								class:vm={session.kind === 'vm'}
+								class:lxc={session.kind === 'lxc'}
+								aria-hidden="true"
+								>{session.kind === 'nas'
+									? 'NAS'
+									: session.kind === 'vm'
+										? 'VM'
+										: session.kind === 'lxc'
+											? 'LXC'
+											: 'CT'}</span
+							>
+							<span class="mono">{session.title}</span>
+						</button>
+						<button
+							type="button"
+							class="x"
+							aria-label={t('terminal.end', { name: session.title })}
+							title={t('terminal.endKey', { name: session.title })}
+							onclick={() => end(session.id, session.title, session.kind)}>✕</button
+						>
+					</div>
+				{/each}
+			</div>
 			<button
 				type="button"
 				class="plus"
@@ -550,6 +568,13 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-1);
+	}
+	.tablist {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-1);
+		min-width: 0;
 	}
 	.tab {
 		display: flex;

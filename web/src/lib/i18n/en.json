@@ -1179,6 +1179,7 @@
 	"terminal.newContainer": "Console of a container",
 	"terminal.noContainers": "No container is running.",
 	"terminal.end": "End session {name}",
+	"terminal.endKey": "End session {name} (Delete while the tab has focus)",
 	"terminal.shell": "Shell",
 	"terminal.shellAuto": "automatic",
 	"terminal.search": "Search the scrollback",

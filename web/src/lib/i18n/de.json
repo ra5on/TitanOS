@@ -1179,6 +1179,7 @@
 	"terminal.newContainer": "Konsole eines Containers",
 	"terminal.noContainers": "Kein Container läuft.",
 	"terminal.end": "Sitzung {name} beenden",
+	"terminal.endKey": "Sitzung {name} beenden (Entf, wenn der Reiter den Fokus hat)",
 	"terminal.shell": "Shell",
 	"terminal.shellAuto": "automatisch",
 	"terminal.search": "Im Verlauf suchen",
