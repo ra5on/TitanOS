@@ -661,6 +661,18 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
       .evaluateAll((a) => a.map((x) => x.textContent.trim()));
   await search.fill("ssh");
   await side.locator(".items .item.result").first().waitFor();
+  // The hits settle a moment after the first one shows (1.02: read too
+  // early, the test saw the list of the half-typed word).
+  await page
+    .waitForFunction(
+      () =>
+        document
+          .querySelector(".items .item.result .two > span")
+          ?.textContent?.trim() === "SSH-Zugang einschalten",
+      null,
+      { timeout: 5000 },
+    )
+    .catch(() => {});
   check(
     (await labels())[0] === "SSH-Zugang einschalten",
     `side bar search "ssh" finds Zugang › SSH first (${await labels()})`,
