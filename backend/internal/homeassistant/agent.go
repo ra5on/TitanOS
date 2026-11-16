@@ -148,6 +148,15 @@ func (m *Manager) CanCallCtx(ctx context.Context, entity, service string) bool {
 	return m.CanCall(entity, service)
 }
 
+// PolicyCtx is Policy, except for a context with a release of its own (the
+// agent): the policies of MCP do not apply there.
+func (m *Manager) PolicyCtx(ctx context.Context, entity string) EntityPolicy {
+	if _, ok := releaseOf(ctx, m.id); ok {
+		return EntityPolicy{}
+	}
+	return m.Policy(entity)
+}
+
 // Areas maps entity IDs to the name of their area (room).
 func (m *Manager) Areas(ctx context.Context) (map[string]string, error) {
 	return m.areas(ctx)

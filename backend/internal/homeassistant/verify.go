@@ -141,7 +141,7 @@ func (m *Manager) Verify(ctx context.Context, domain, service string, entities [
 				continue
 			}
 			o.ObservedAt = time.Now()
-			if !m.Allowed(o.Entity) {
+			if !m.AllowedCtx(ctx, o.Entity) {
 				o.Status, o.Error = "not_verified", "entity access revoked"
 				continue
 			}

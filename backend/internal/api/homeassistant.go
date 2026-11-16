@@ -300,11 +300,11 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					domain, _, _ := strings.Cut(st.EntityID, ".")
 					search := strings.ToLower(q.Search)
 					if q.Domain != "" && domain != q.Domain || q.Area != "" && !strings.Contains(strings.ToLower(st.Area), strings.ToLower(q.Area)) ||
-						search != "" && !strings.Contains(strings.ToLower(st.EntityID+" "+st.Name()+" "+strings.Join(ha.Policy(st.EntityID).Aliases, " ")), search) {
+						search != "" && !strings.Contains(strings.ToLower(st.EntityID+" "+st.Name()+" "+strings.Join(ha.PolicyCtx(ctx, st.EntityID).Aliases, " ")), search) {
 						continue
 					}
 					unit, _ := st.Attributes["unit_of_measurement"].(string)
-					list = append(list, entity{ha.Policy(st.EntityID), st.Attributes, st.LastChanged, st.EntityID, st.Name(), st.State, st.Area, unit})
+					list = append(list, entity{ha.PolicyCtx(ctx, st.EntityID), st.Attributes, st.LastChanged, st.EntityID, st.Name(), st.State, st.Area, unit})
 				}
 				total := len(list)
 				start := min(q.Offset, total)
