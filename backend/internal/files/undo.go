@@ -217,6 +217,11 @@ func (m *Manager) Undo(ctx context.Context, user, id string, roots map[string]Ro
 		if errors.Is(e, syscall.EXDEV) {
 			e = m.undoAcrossFilesystems(ctx, sr, dr, move, uid)
 		}
+		if e == nil && record.Kind == "trash" {
+			// Back from the bin, as TrashRestore does: a note left on it
+			// would date and place a later deletion wrongly.
+			forgetTrash(dr, move.Original)
+		}
 		sr.Close()
 		dr.Close()
 		if e != nil {

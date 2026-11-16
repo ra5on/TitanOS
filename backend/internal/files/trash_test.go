@@ -2,6 +2,7 @@ package files
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"golang.org/x/sys/unix"
 	"os"
@@ -182,6 +183,24 @@ func TestRestoreForgetsTheDeletionNote(t *testing.T) {
 	}
 	if _, err := unix.Lgetxattr(filepath.Join(root.Dir, "notiz.txt"), trashAttribute, make([]byte, 512)); err == nil {
 		t.Fatal("the restored file still carries the note of its deletion")
+	}
+}
+
+// Undoing a deletion into the bin forgets its note too, as a restore does.
+func TestUndoOfADeletionForgetsTheNote(t *testing.T) {
+	m, root, _ := newRoot(t)
+	id, err := m.DeleteWithUndo(root, []string{"notiz.txt"}, "alex", false)
+	if err != nil || id == "" {
+		t.Fatalf("delete: %q %v", id, err)
+	}
+	if _, err := unix.Lgetxattr(filepath.Join(root.Dir, ".recycle/alex/notiz.txt"), trashAttribute, make([]byte, 512)); err != nil {
+		t.Skipf("no extended attributes here: %v", err)
+	}
+	if err := m.Undo(context.Background(), "alex", id, map[string]Root{root.ID: root}, os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Lgetxattr(filepath.Join(root.Dir, "notiz.txt"), trashAttribute, make([]byte, 512)); err == nil {
+		t.Fatal("the file back from the bin still carries the note of its deletion")
 	}
 }
 
