@@ -116,7 +116,8 @@ func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) ht
 	mux.HandleFunc("POST /api/v1/users/{name}/lock", admin(a.handleLockUser(true)))
 	mux.HandleFunc("POST /api/v1/users/{name}/unlock", admin(a.handleLockUser(false)))
 	// Everyone may change their own password.
-	mux.HandleFunc("POST /api/v1/users/{name}/password", user(a.handleSetPassword))
+	// Passwords never go over MCP, the agent or a token (Z-11, 1.03).
+	mux.HandleFunc("POST /api/v1/users/{name}/password", user(browserOnly(a.handleSetPassword)))
 }
 
 func (a usersArea) handleListUsers(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +182,11 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// request that then fails.
 	if req.Role != auth.RoleOwner && req.Role != auth.RoleAdmin && req.Role != auth.RoleUser {
 		writeAccountError(w, auth.ErrInvalidRole)
+		return
+	}
+	// Resetting a second factor is for a person at a web session; the
+	// catalog's account tool only changes roles (Z-11, 1.03).
+	if req.ResetTwoFactor && !refuseOutsideBrowser(w, r) {
 		return
 	}
 	if req.ResetTwoFactor && target.Name == actor.Name && !a.reconfirmProof(w, actor, req.proof) {
