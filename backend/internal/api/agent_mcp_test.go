@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 )
@@ -121,5 +123,98 @@ func TestAgentMCPConnection(t *testing.T) {
 	ts.request("PUT", "/api/v1/agent/settings", settings)
 	if box = ts.server.newAgentToolbox(owner, ts.server.agentSettings()); box.tools[tool.name] != nil {
 		t.Fatal("a switched-off connection offers tools")
+	}
+}
+
+// mcpFake is an MCP server whose tools/list waits for hold (nil: answers at
+// once) and counts how often it was asked.
+func mcpFake(t *testing.T, hold chan struct{}, asked *atomic.Int32, started chan<- struct{}) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+		}
+		json.NewDecoder(r.Body).Decode(&msg)
+		if msg.ID == nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		result := `{"protocolVersion":"2025-06-18"}`
+		if msg.Method == "tools/list" {
+			asked.Add(1)
+			if started != nil {
+				started <- struct{}{}
+			}
+			if hold != nil {
+				<-hold
+			}
+			result = `{"tools":[{"name":"ping","inputSchema":{"type":"object"}}]}`
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%d,"result":%s}`, *msg.ID, result)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// A server that does not answer slows only its own connection (1.01: the
+// lock over the list held every other chat up to 12 s), and a second chat
+// waits for the one question already on its way instead of asking again.
+func TestAgentMCPSlowServerHoldsNoOne(t *testing.T) {
+	hold := make(chan struct{})
+	started := make(chan struct{}, 4)
+	var slowAsked, fastAsked atomic.Int32
+	slow := mcpFake(t, hold, &slowAsked, started)
+	fast := mcpFake(t, nil, &fastAsked, nil)
+	s := &Server{}
+	a := agentMCPServer{ID: "slow", URL: slow.URL}
+	b := agentMCPServer{ID: "fast", URL: fast.URL}
+
+	type answer struct {
+		tools int
+		err   error
+	}
+	first, second := make(chan answer, 1), make(chan answer, 1)
+	go func() {
+		_, tools, err := s.mcpRemoteTools(context.Background(), a)
+		first <- answer{len(tools), err}
+	}()
+	<-started
+	go func() {
+		_, tools, err := s.mcpRemoteTools(context.Background(), a)
+		second <- answer{len(tools), err}
+	}()
+	other := make(chan answer, 1)
+	go func() {
+		_, tools, err := s.mcpRemoteTools(context.Background(), b)
+		other <- answer{len(tools), err}
+	}()
+	select {
+	case got := <-other:
+		if got.err != nil || got.tools != 1 {
+			t.Fatalf("fast server: %+v", got)
+		}
+	case <-time.After(time.Second):
+		close(hold)
+		t.Fatal("the fast server waited for the slow one")
+	}
+	close(hold)
+	for _, ch := range []chan answer{first, second} {
+		select {
+		case got := <-ch:
+			if got.err != nil || got.tools != 1 {
+				t.Fatalf("slow server: %+v", got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no answer from the slow server")
+		}
+	}
+	if slowAsked.Load() != 1 {
+		t.Fatalf("the slow server was asked %d times", slowAsked.Load())
+	}
+	// Asked again within five minutes: from the kept list.
+	if _, tools, err := s.mcpRemoteTools(context.Background(), a); err != nil || len(tools) != 1 || slowAsked.Load() != 1 {
+		t.Fatalf("kept list: %d %v asked %d", len(tools), err, slowAsked.Load())
 	}
 }

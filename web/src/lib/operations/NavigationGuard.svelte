@@ -3,12 +3,21 @@
 	import { beforeNavigate, goto } from '$app/navigation';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	let { dirty }: { dirty: boolean } = $props();
+	/**
+	 * samePath: going to another part of the same page (another ?tab= of
+	 * it) keeps the changes and does not ask.
+	 */
+	let {
+		dirty,
+		samePath = false,
+		hint,
+	}: { dirty: boolean; samePath?: boolean; hint?: string } = $props();
 	guardWindowClose(() => dirty);
 	let destination = $state<URL | null>(null),
 		bypass = false;
 	beforeNavigate((navigation) => {
 		if (!dirty || bypass || navigation.willUnload) return;
+		if (samePath && navigation.to?.url.pathname === navigation.from?.url.pathname) return;
 		navigation.cancel();
 		destination = navigation.to?.url ?? null;
 	});
@@ -29,7 +38,7 @@
 
 <svelte:window onbeforeunload={unload} />
 {#if destination}<Dialog title={t('ops.unsaved')} onclose={() => (destination = null)}
-		><p>{t('ops.unsavedHint')}</p>
+		><p>{hint ?? t('ops.unsavedHint')}</p>
 		<div class="dialog-actions">
 			<button class="btn" onclick={() => (destination = null)}>{t('common.cancel')}</button><button
 				class="btn btn-warn"

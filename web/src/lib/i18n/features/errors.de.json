@@ -3,6 +3,7 @@
 	"error.agent_busy": "Der KI-Agent arbeitet gerade noch. Halte ihn an oder warte, bis er fertig ist.",
 	"error.agent_cluster": "Modelle werden auf dem Admin-Knoten heruntergeladen, nicht auf diesem NAS.",
 	"error.agent_feature_off": "Diese Funktion des KI-Agenten ist ausgeschaltet.",
+	"error.agent_limit": "Es laufen schon so viele Chats gleichzeitig, wie die Einstellungen des KI-Agenten erlauben. Warte, bis einer fertig ist, oder halte einen an.",
 	"error.agent_move": "Der Umzug der Daten des KI-Agenten konnte nicht vorbereitet werden.",
 	"error.agent_moving": "Die Daten des KI-Agenten ziehen gerade auf ein anderes Volume um. Bitte warte, bis das fertig ist.",
 	"error.agent_no_volume": "Der KI-Agent braucht ein eingebundenes Volume für seine Daten.",

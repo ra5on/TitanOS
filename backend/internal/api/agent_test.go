@@ -494,7 +494,9 @@ func TestAgentEventStream(t *testing.T) {
 	buf := make([]byte, 64<<10)
 	var got strings.Builder
 	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(got.String(), `"text":"Hal"`) {
+	// The piece comes as an event, or in the snapshot when it streamed in
+	// before the page subscribed (1.01).
+	for !strings.Contains(got.String(), `"text":"Hal"`) && !strings.Contains(got.String(), `"content":"Hal"`) {
 		if time.Now().After(deadline) {
 			t.Fatalf("no streamed piece before the end: %s", got.String())
 		}
@@ -761,6 +763,25 @@ func TestAgentUndoAttachExport(t *testing.T) {
 	out, err := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz.md"}`))
 	if err != nil || !strings.Contains(out.Text, "Notiz") {
 		t.Fatalf("attachment read: %v %+v", err, out)
+	}
+	// A second file of the same name is kept beside the first (1.01: it
+	// took its place); the answer names it.
+	req, _ = http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+chat.ID+"/attachments?name=notiz.md", strings.NewReader("# Zweite\nAndere Notiz."))
+	req.Header.Set("Origin", ts.url)
+	second, err := ts.client.Do(req)
+	if err != nil || second.StatusCode != http.StatusCreated {
+		t.Fatalf("second upload: %v %v", err, second)
+	}
+	var kept struct{ Name string }
+	json.NewDecoder(second.Body).Decode(&kept)
+	second.Body.Close()
+	if kept.Name != "notiz (2).md" {
+		t.Fatalf("second upload kept as %q", kept.Name)
+	}
+	first, _ := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz.md"}`))
+	other, _ := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz (2).md"}`))
+	if !strings.Contains(first.Text, "Geheimzahl") || !strings.Contains(other.Text, "Andere Notiz") {
+		t.Fatalf("attachments of the same name: %q / %q", first.Text, other.Text)
 	}
 	// Export as Markdown and PDF.
 	res, body = ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export", nil)

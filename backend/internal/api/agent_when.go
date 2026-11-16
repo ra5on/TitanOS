@@ -56,7 +56,7 @@ func agentNext(sc agent.Schedule, after time.Time, loc *time.Location) (time.Tim
 		}
 		return time.Date(d.Year(), d.Month(), d.Day(), hh, mm, 0, 0, loc), true
 	case "hourly":
-		return after.Truncate(time.Hour).Add(time.Hour), true
+		return nextFullHour(after, loc), true
 	case "minutes":
 		return after.Truncate(time.Minute).Add(time.Duration(max(sc.Interval, agentMinMinutes)) * time.Minute), true
 	case "hours":
@@ -82,6 +82,23 @@ func agentNext(sc agent.Schedule, after time.Time, loc *time.Location) (time.Tim
 		return next, err == nil
 	}
 	return time.Time{}, false
+}
+
+// nextFullHour is the first full hour of loc after `after`. Truncate works
+// on UTC: in a zone half an hour or 45 minutes off UTC (Asia/Kolkata,
+// Asia/Kathmandu) its "full hour" was :30 or :45 there (1.01). Every zone
+// is a multiple of 15 minutes off UTC, so the quarters after `after` are
+// tried until one is :00 in loc; an hour that a change of summer time
+// skips is left out, and an hour that comes twice runs twice, an hour apart.
+func nextFullHour(after time.Time, loc *time.Location) time.Time {
+	t := after.Truncate(15 * time.Minute)
+	for range 12 {
+		t = t.Add(15 * time.Minute)
+		if t.After(after) && t.In(loc).Minute() == 0 {
+			return t
+		}
+	}
+	return after.Truncate(time.Minute).Add(time.Hour)
 }
 
 // agentDue reports whether a schedule should run at now, and whether that

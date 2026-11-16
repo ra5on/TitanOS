@@ -13,6 +13,7 @@
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { speak, speech, speakable, stopSpeaking } from '#lib/agent-speech.svelte.ts';
 	import { toWav16k } from '#lib/speech-audio.ts';
+	import { trapFocus } from '#lib/focus-trap.ts';
 	import type { Chat } from '#lib/agent.ts';
 
 	let {
@@ -342,8 +343,6 @@
 	);
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
-
 <div
 	class="talk"
 	class:calm
@@ -351,6 +350,7 @@
 	aria-modal="true"
 	aria-label={t('agent.talk.title')}
 	transition:fade={{ duration: calm ? 0 : 220 }}
+	use:trapFocus={{ initial: 'first', onescape: onclose }}
 >
 	<button type="button" class="end" onclick={onclose} aria-label={t('agent.talk.end')}>
 		<Icon name="close" size={20} />

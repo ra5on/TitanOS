@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,12 @@ import (
 )
 
 // Projects, memory, skills and recurring tasks of an account, and the
-// system prompt with the short state report of the NAS.
+// system prompt with the short state report of the NAS. Every change of a
+// list is one step under the store's lock (Update…, 1.01): read, change and
+// write, so two requests do not write over each other's change.
+
+// errAgentListFull: a list of the account is at its limit.
+var errAgentListFull = errors.New("the list is full")
 
 func (s *Server) agentProject(user, id string) (*agent.Project, error) {
 	if strings.Contains(id, ":") {
@@ -64,19 +70,18 @@ func (s *Server) handleAgentProjectNew(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
-	store := s.agentStore()
-	list, err := store.Projects(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
-	if len(list) >= maxProjects {
+	p.ID, p.Created = agent.NewID(), time.Now()
+	err := s.agentStore().UpdateProjects(user, func(list []agent.Project) ([]agent.Project, error) {
+		if len(list) >= maxProjects {
+			return nil, errAgentListFull
+		}
+		return append(list, p), nil
+	})
+	if errors.Is(err, errAgentListFull) {
 		writeError(w, http.StatusBadRequest, "too_many_projects", "at most 100 projects")
 		return
 	}
-	p.ID, p.Created = agent.NewID(), time.Now()
-	list = append(list, p)
-	if err := store.SaveProjects(user, list); err != nil {
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
@@ -97,25 +102,21 @@ func (s *Server) handleAgentProjectSet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_project", err.Error())
 		return
 	}
-	store := s.agentStore()
-	list, err := store.Projects(user)
+	err := s.agentStore().UpdateProjects(user, func(list []agent.Project) ([]agent.Project, error) {
+		for i := range list {
+			if list[i].ID == r.PathValue("id") {
+				p.ID, p.Created = list[i].ID, list[i].Created
+				list[i] = p
+				return list, nil
+			}
+		}
+		return nil, agent.ErrNotFound
+	})
 	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
-	for i := range list {
-		if list[i].ID == r.PathValue("id") {
-			p.ID, p.Created = list[i].ID, list[i].Created
-			list[i] = p
-			if err := store.SaveProjects(user, list); err != nil {
-				agentStoreError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, p)
-			return
-		}
-	}
-	agentStoreError(w, agent.ErrNotFound)
+	writeJSON(w, http.StatusOK, p)
 }
 
 // handleAgentProjectDelete removes a project; its chats stay, without one.
@@ -123,18 +124,15 @@ func (s *Server) handleAgentProjectDelete(w http.ResponseWriter, r *http.Request
 	user := currentUser(r).Name
 	id := r.PathValue("id")
 	store := s.agentStore()
-	list, err := store.Projects(user)
+	err := store.UpdateProjects(user, func(list []agent.Project) ([]agent.Project, error) {
+		n := len(list)
+		list = slices.DeleteFunc(list, func(p agent.Project) bool { return p.ID == id })
+		if len(list) == n {
+			return nil, agent.ErrNotFound
+		}
+		return list, nil
+	})
 	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
-	n := len(list)
-	list = slices.DeleteFunc(list, func(p agent.Project) bool { return p.ID == id })
-	if len(list) == n {
-		agentStoreError(w, agent.ErrNotFound)
-		return
-	}
-	if err := store.SaveProjects(user, list); err != nil {
 		agentStoreError(w, err)
 		return
 	}
@@ -194,67 +192,84 @@ func (s *Server) handleAgentMemorySet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
-	store := s.agentStore()
-	list, err := store.Memories(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
 	id := r.PathValue("id")
-	found := false
-	for i := range list {
-		if list[i].ID == id {
-			found = true
-			if req.Text != nil && list[i].Text != text {
-				// Written by the person now: no longer from outside content.
-				list[i].Text, list[i].Untrusted, list[i].At = text, false, time.Now()
-			}
-			if req.Pinned != nil {
-				list[i].Pinned = *req.Pinned
-			}
-			if req.Topic != nil {
-				list[i].Topic = topic
+	var list []agent.Memory
+	err := updateMemories(s.agentStore(), user, func(now []agent.Memory) ([]agent.Memory, error) {
+		found := false
+		for i := range now {
+			if now[i].ID == id {
+				found = true
+				if req.Text != nil && now[i].Text != text {
+					// Written by the person now: no longer from outside content.
+					now[i].Text, now[i].Untrusted, now[i].At = text, false, time.Now()
+				}
+				if req.Pinned != nil {
+					now[i].Pinned = *req.Pinned
+				}
+				if req.Topic != nil {
+					now[i].Topic = topic
+				}
 			}
 		}
-	}
-	if isNew {
-		if len(list) >= maxMemories {
-			writeError(w, http.StatusBadRequest, "too_many", "memory is full")
-			return
+		if isNew {
+			if len(now) >= maxMemories {
+				return nil, errAgentListFull
+			}
+			now, found = append(now, agent.Memory{ID: agent.NewID(), Text: text, At: time.Now(), Topic: topic, Pinned: req.Pinned != nil && *req.Pinned}), true
 		}
-		list, found = append(list, agent.Memory{ID: agent.NewID(), Text: text, At: time.Now(), Topic: topic, Pinned: req.Pinned != nil && *req.Pinned}), true
-	}
-	if !found {
-		agentStoreError(w, agent.ErrNotFound)
+		if !found {
+			return nil, agent.ErrNotFound
+		}
+		list = now
+		return now, nil
+	})
+	if errors.Is(err, errAgentListFull) {
+		writeError(w, http.StatusBadRequest, "too_many", "memory is full")
 		return
 	}
-	if err := store.SaveMemories(user, list); err != nil {
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"memory": list})
 }
 
+// updateMemories is Store.UpdateMemories with a change that may fail: an
+// error leaves the file as it is and comes back.
+func updateMemories(store *agent.Store, user string, change func([]agent.Memory) ([]agent.Memory, error)) error {
+	var failed error
+	err := store.UpdateMemories(user, func(list []agent.Memory) ([]agent.Memory, bool) {
+		next, err := change(list)
+		if err != nil {
+			failed = err
+			return nil, false
+		}
+		return next, true
+	})
+	if err != nil {
+		return err
+	}
+	if errors.Is(failed, agent.ErrUnchanged) {
+		return nil
+	}
+	return failed
+}
+
 func (s *Server) handleAgentMemoryDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r).Name
-	store := s.agentStore()
-	list, err := store.Memories(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
 	id := r.PathValue("id")
-	n := len(list)
-	if id == "all" {
-		list = []agent.Memory{}
-	} else {
+	err := updateMemories(s.agentStore(), user, func(list []agent.Memory) ([]agent.Memory, error) {
+		if id == "all" {
+			return []agent.Memory{}, nil
+		}
+		n := len(list)
 		list = slices.DeleteFunc(list, func(m agent.Memory) bool { return m.ID == id })
-	}
-	if len(list) == n && id != "all" {
-		agentStoreError(w, agent.ErrNotFound)
-		return
-	}
-	if err := store.SaveMemories(user, list); err != nil {
+		if len(list) == n {
+			return nil, agent.ErrNotFound
+		}
+		return list, nil
+	})
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
@@ -301,27 +316,26 @@ func (s *Server) handleAgentSkillSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
-	store := s.agentStore()
-	own, err := store.Skills(user)
-	if err != nil {
-		agentStoreError(w, err)
+	id := r.PathValue("id")
+	builtIn := strings.HasPrefix(id, "builtin-")
+	if builtIn && !slices.ContainsFunc(agent.BuiltInSkills, func(b agent.Skill) bool { return b.ID == id }) {
+		agentStoreError(w, agent.ErrNotFound)
 		return
 	}
-	id := r.PathValue("id")
-	if strings.HasPrefix(id, "builtin-") {
-		if !slices.ContainsFunc(agent.BuiltInSkills, func(b agent.Skill) bool { return b.ID == id }) {
-			agentStoreError(w, agent.ErrNotFound)
-			return
-		}
-		own = slices.DeleteFunc(own, func(sk agent.Skill) bool { return sk.ID == id })
-		if req.Disabled {
-			own = append(own, agent.Skill{ID: id, Disabled: true, BuiltIn: true})
-		}
-	} else {
+	if !builtIn {
 		req.Name, req.When, req.Steps = strings.TrimSpace(req.Name), strings.TrimSpace(req.When), strings.TrimSpace(req.Steps)
 		if req.Name == "" || len(req.Name) > 80 || req.Steps == "" || len(req.Steps)+len(req.When) > maxSkillText {
 			writeError(w, http.StatusBadRequest, "invalid_skill", "name, when and steps")
 			return
+		}
+	}
+	err := s.agentStore().UpdateSkills(user, func(own []agent.Skill) ([]agent.Skill, error) {
+		if builtIn {
+			own = slices.DeleteFunc(own, func(sk agent.Skill) bool { return sk.ID == id })
+			if req.Disabled {
+				own = append(own, agent.Skill{ID: id, Disabled: true, BuiltIn: true})
+			}
+			return own, nil
 		}
 		found := false
 		for i := range own {
@@ -331,17 +345,20 @@ func (s *Server) handleAgentSkillSet(w http.ResponseWriter, r *http.Request) {
 		}
 		if id == "new" {
 			if len(own) >= maxSkills {
-				writeError(w, http.StatusBadRequest, "too_many", "too many skills")
-				return
+				return nil, errAgentListFull
 			}
 			own, found = append(own, agent.Skill{ID: agent.NewID(), Name: req.Name, When: req.When, Steps: req.Steps, Updated: time.Now()}), true
 		}
 		if !found {
-			agentStoreError(w, agent.ErrNotFound)
-			return
+			return nil, agent.ErrNotFound
 		}
+		return own, nil
+	})
+	if errors.Is(err, errAgentListFull) {
+		writeError(w, http.StatusBadRequest, "too_many", "too many skills")
+		return
 	}
-	if err := store.SaveSkills(user, own); err != nil {
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
@@ -351,20 +368,16 @@ func (s *Server) handleAgentSkillSet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAgentSkillDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r).Name
-	store := s.agentStore()
-	own, err := store.Skills(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
 	id := r.PathValue("id")
-	n := len(own)
-	own = slices.DeleteFunc(own, func(sk agent.Skill) bool { return sk.ID == id && !strings.HasPrefix(id, "builtin-") })
-	if len(own) == n {
-		agentStoreError(w, agent.ErrNotFound)
-		return
-	}
-	if err := store.SaveSkills(user, own); err != nil {
+	err := s.agentStore().UpdateSkills(user, func(own []agent.Skill) ([]agent.Skill, error) {
+		n := len(own)
+		own = slices.DeleteFunc(own, func(sk agent.Skill) bool { return sk.ID == id && !strings.HasPrefix(id, "builtin-") })
+		if len(own) == n {
+			return nil, agent.ErrNotFound
+		}
+		return own, nil
+	})
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
@@ -390,69 +403,74 @@ func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	user := currentUser(r).Name
-	store := s.agentStore()
-	list, err := store.Schedules(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
 	id := r.PathValue("id")
-	found := false
-	for i := range list {
-		if list[i].ID == id {
-			req.ID, req.Created, req.LastRun, req.LastOK, req.Chat = list[i].ID, list[i].Created, list[i].LastRun, list[i].LastOK, list[i].Chat
-			// A one-off task with a new time runs again.
-			if req.Every == "once" && (req.Date != list[i].Date || req.At != list[i].At) {
-				req.LastRun = time.Time{}
+	var list []agent.Schedule
+	err := s.agentStore().UpdateSchedules(user, func(now []agent.Schedule) ([]agent.Schedule, error) {
+		sc := req
+		found := false
+		for i := range now {
+			if now[i].ID == id {
+				// What the NAS keeps comes from the list as it is now, not from
+				// what the page read (a run stamped meanwhile stays stamped).
+				sc.ID, sc.Created, sc.LastRun, sc.LastOK, sc.Chat = now[i].ID, now[i].Created, now[i].LastRun, now[i].LastOK, now[i].Chat
+				// A one-off task with a new time runs again.
+				if sc.Every == "once" && (sc.Date != now[i].Date || sc.At != now[i].At) {
+					sc.LastRun = time.Time{}
+				}
+				// Switched on again or given another time: it counts from now.
+				old := now[i]
+				sc.Since = old.Since
+				if (sc.Enabled && !old.Enabled) || sc.Every != old.Every || sc.At != old.At || sc.Date != old.Date ||
+					sc.Interval != old.Interval || sc.Cron != old.Cron || sc.Weekday != old.Weekday || sc.Day != old.Day || !slices.Equal(sc.Weekdays, old.Weekdays) {
+					sc.Since = time.Now()
+				}
+				now[i], found = sc, true
 			}
-			// Switched on again or given another time: it counts from now.
-			old := list[i]
-			req.Since = old.Since
-			if (req.Enabled && !old.Enabled) || req.Every != old.Every || req.At != old.At || req.Date != old.Date ||
-				req.Interval != old.Interval || req.Cron != old.Cron || req.Weekday != old.Weekday || req.Day != old.Day || !slices.Equal(req.Weekdays, old.Weekdays) {
-				req.Since = time.Now()
+		}
+		if id == "new" {
+			if len(now) >= maxSchedules {
+				return nil, errAgentListFull
 			}
-			list[i], found = req, true
+			if sc.Kind == "morning" && slices.ContainsFunc(now, func(x agent.Schedule) bool { return x.Kind == "morning" }) {
+				return nil, errMorningExists
+			}
+			sc.ID, sc.Created = agent.NewID(), time.Now()
+			now, found = append(now, sc), true
 		}
-	}
-	if id == "new" {
-		if len(list) >= maxSchedules {
-			writeError(w, http.StatusBadRequest, "too_many", "too many recurring tasks")
-			return
+		if !found {
+			return nil, agent.ErrNotFound
 		}
-		if req.Kind == "morning" && slices.ContainsFunc(list, func(sc agent.Schedule) bool { return sc.Kind == "morning" }) {
-			writeError(w, http.StatusConflict, "morning_exists", "there is a morning report already")
-			return
-		}
-		req.ID, req.Created = agent.NewID(), time.Now()
-		list, found = append(list, req), true
-	}
-	if !found {
-		agentStoreError(w, agent.ErrNotFound)
+		list = now
+		return now, nil
+	})
+	switch {
+	case errors.Is(err, errAgentListFull):
+		writeError(w, http.StatusBadRequest, "too_many", "too many recurring tasks")
 		return
-	}
-	if err := store.SaveSchedules(user, list); err != nil {
+	case errors.Is(err, errMorningExists):
+		writeError(w, http.StatusConflict, "morning_exists", "there is a morning report already")
+		return
+	case err != nil:
 		agentStoreError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"schedules": s.agentScheduleViews(list)})
 }
 
+// errMorningExists: an account has one morning report.
+var errMorningExists = errors.New("there is a morning report already")
+
 func (s *Server) handleAgentScheduleDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r).Name
-	store := s.agentStore()
-	list, err := store.Schedules(user)
+	err := s.agentStore().UpdateSchedules(user, func(list []agent.Schedule) ([]agent.Schedule, error) {
+		n := len(list)
+		list = slices.DeleteFunc(list, func(sc agent.Schedule) bool { return sc.ID == r.PathValue("id") })
+		if len(list) == n {
+			return nil, agent.ErrNotFound
+		}
+		return list, nil
+	})
 	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
-	n := len(list)
-	list = slices.DeleteFunc(list, func(sc agent.Schedule) bool { return sc.ID == r.PathValue("id") })
-	if len(list) == n {
-		agentStoreError(w, agent.ErrNotFound)
-		return
-	}
-	if err := store.SaveSchedules(user, list); err != nil {
 		agentStoreError(w, err)
 		return
 	}

@@ -36,10 +36,12 @@ var coreAreas = []string{AreaAgent, AreaWeb, "files", "system"}
 const lazyFrom = 30
 
 // compactAt is the share of the window from which older parts are
-// summarised; keepShare what stays word for word.
+// summarised; keepShare what stays word for word; minSummarised the least
+// part (tokens) worth a summary.
 const (
-	compactAt = 0.70
-	keepShare = 0.35
+	compactAt     = 0.70
+	keepShare     = 0.35
+	minSummarised = 400
 )
 
 // tokens estimates the tokens of a request. German text with JSON is about
@@ -79,7 +81,9 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 		return
 	}
 	limit := r.resultLimit()
-	if tokens(buildMessages(r.System, chat, limit), r.offered(chat)) < int(float64(r.Window)*compactAt) {
+	tools := r.offered(chat)
+	threshold := int(float64(r.Window) * compactAt)
+	if tokens(buildMessages(r.System, chat, limit), tools) < threshold {
 		return
 	}
 	from := 0
@@ -89,6 +93,24 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 			from, prev = i+1, e.Content
 			break
 		}
+	}
+	// What no summary makes smaller: the rules, the tools, the plan, the
+	// summary so far and the task of the running turn. When that alone
+	// fills the window, summarising cannot make the request fit; it is done
+	// once in a run (the earlier chat goes into it) and not again before
+	// every round (1.01: a small window asked for a summary each round).
+	floor := &Chat{Plan: chat.Plan}
+	if from > 0 {
+		floor.Entries = append(floor.Entries, chat.Entries[from-1])
+	}
+	if i := lastUserIndex(chat); i >= 0 {
+		floor.Entries = append(floor.Entries, chat.Entries[i])
+	}
+	if tokens(buildMessages(r.System, floor, limit), tools) >= threshold {
+		if r.squeezed {
+			return
+		}
+		r.squeezed = true
 	}
 	// Cut where a round begins (never between a call and its result), as
 	// late as needed for the rest to fit keepShare of the window.
@@ -115,6 +137,15 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 		}
 	}
 	if cut <= from {
+		return
+	}
+	// A part that is small saves less than it costs: a request to the model
+	// and a summary that is not much shorter than the part itself.
+	part := 0
+	for _, e := range chat.Entries[from:cut] {
+		part += (len(e.Content) + len(e.Thinking) + min(len(e.Result), limit) + len(e.Args)) / 3
+	}
+	if part < max(r.Window/10, minSummarised) {
 		return
 	}
 	text := r.summarise(ctx, prev, chat.Entries[from:cut])

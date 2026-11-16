@@ -48,6 +48,12 @@
 		let turn = 0;
 		let speed = 1;
 		let glow = 0.5;
+		// 1.01 (owner 16 Nov 2026: "teilweise keine sanften Übergänge"): the
+		// sparks fade in and out, and the core's beat keeps its phase while
+		// its pace eases, instead of jumping when the state changes.
+		let sparks = 0;
+		let pace = 1.6;
+		let phase = 0;
 		let shown = '';
 
 		function size() {
@@ -89,6 +95,9 @@
 			const k = still ? 1 : 1 - Math.pow(0.001, dt);
 			speed += (wantSpeed - speed) * k;
 			glow += (wantGlow - glow) * k;
+			sparks += ((fig === 'think' ? 1 : 0) - sparks) * k;
+			pace += ((fig === 'think' ? 5 : 1.6) - pace) * k;
+			if (!still) phase += dt * pace;
 			if (!still) turn += dt * speed;
 
 			// The bars.
@@ -178,7 +187,7 @@
 			}
 
 			// The core.
-			const beat = still ? 0 : Math.sin(t * (fig === 'think' ? 5 : 1.6)) * 0.03;
+			const beat = still ? 0 : Math.sin(phase) * 0.03;
 			const core = (38 + energy * 12) * u * (1 + beat);
 			g!.shadowBlur = (26 + energy * 30) * u;
 			const fill = g!.createRadialGradient(
@@ -203,12 +212,13 @@
 			g!.arc(c, c, core + 5 * u, 0, Math.PI * 2);
 			g!.stroke();
 
-			// Thinking: three sparks circle the core, each with a tail.
-			if (fig === 'think') {
+			// Thinking: three sparks circle the core, each with a tail; they
+			// fade in and out with the state.
+			if (sparks > 0.01) {
 				for (let s = 0; s < 3; s++) {
 					for (let q = 0; q < 10; q++) {
 						const a = turn * 1.5 + (s / 3) * Math.PI * 2 - q * 0.07;
-						g!.fillStyle = light((1 - q / 10) * 0.9);
+						g!.fillStyle = light((1 - q / 10) * 0.9 * sparks);
 						g!.beginPath();
 						g!.arc(
 							c + Math.cos(a) * 52 * u,

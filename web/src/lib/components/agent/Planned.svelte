@@ -10,6 +10,7 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import type { Project, Report, Schedule } from '#lib/agent.ts';
+	import { morningForm, morningKey } from './morning-form.ts';
 
 	let {
 		projects = [],
@@ -95,18 +96,19 @@
 					: days.map(short).join(', ');
 		return t('agent.morningAt', { days: text, time: mAt });
 	});
+	// The form takes the saved report only when that changed (1.01: reading
+	// the list again, e.g. after switching another task, reset the form).
+	let seeded = '';
 	$effect(() => {
-		if (morning) {
-			report = { ...(morning.report ?? {}) };
-			mAt = morning.at ?? '07:00';
-			mDays =
-				morning.every === 'weekdays'
-					? [...(morning.weekdays ?? [])]
-					: morning.every === 'daily'
-						? [0, 1, 2, 3, 4, 5, 6]
-						: [1, 2, 3, 4, 5];
-			mOn = morning.enabled;
-		}
+		if (!morning) return;
+		const key = morningKey(morning);
+		if (key === seeded) return;
+		seeded = key;
+		const form = morningForm(morning);
+		report = form.report;
+		mAt = form.at;
+		mDays = form.days;
+		mOn = form.on;
 	});
 	function saveMorning() {
 		const all = mDays.length === 7;

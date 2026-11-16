@@ -242,6 +242,8 @@ export type Status = {
 	provider?: string;
 	/** What the agent reads leaves the home network. */
 	cloud?: boolean;
+	/** How many chats the account may run at once (1.01; 0 or missing: no limit). */
+	maxRuns?: number;
 };
 
 export type Location = { name: string; root: string; path: string; note?: string };
@@ -316,6 +318,8 @@ export type Settings = {
 	allTools?: boolean;
 	/** Switch off the helper for subtasks (task_delegate). */
 	noDelegate?: boolean;
+	/** Chats one account may run at once, 1 to 4 (1.01; 0 or missing: no limit). */
+	maxRuns?: number;
 	/** code_run in a sandbox container (PLAN 55, off by default). */
 	code?: { enabled?: boolean; timeout?: number; memory?: number };
 };
@@ -347,8 +351,25 @@ export const AREAS = [
 	'code',
 ] as const;
 
+/** What a run did so far: the first event a page gets when it follows a
+ *  run, and again when it was too slow for the events (1.01). Entries are
+ *  those the run wrote; the text is what streamed in since its last line. */
+export type RunSnapshot = {
+	type: 'snapshot';
+	entries: Entry[];
+	thinking?: string;
+	content?: string;
+	step?: Entry | null;
+	state: ChatState;
+	error?: string;
+	pending?: Pending | null;
+	/** Only when the run changed the plan; left out keeps the chat's. */
+	plan?: PlanStep[];
+};
+
 /** Events of a running chat (server-sent events). */
 export type AgentEvent =
+	| RunSnapshot
 	| { type: 'thinking'; text: string }
 	| { type: 'content'; text: string }
 	| { type: 'entry'; entry: Entry }
@@ -392,6 +413,16 @@ export async function follow(
 		}
 	}
 	onEvent({ type: 'end' });
+}
+
+/**
+ * The entries of a chat with those of a snapshot: the run's entries take
+ * their place by id and stand at the end in the run's order (a step that
+ * waited is answered before the calls of its round that were not made).
+ */
+export function mergeEntries(entries: Entry[], from: Entry[]): Entry[] {
+	const ids = new Set(from.map((e) => e.id));
+	return [...entries.filter((e) => !ids.has(e.id)), ...from];
 }
 
 /** Parses one block of a server-sent event stream. */
@@ -670,6 +701,11 @@ export type Look = {
 	motion: 'full' | 'reduced' | 'off';
 	rate: number;
 	mic: 'tap' | 'hold';
+	/** Colour of the working dots, "#rrggbb"; empty: the agent's orange
+	 *  (owner 16 Nov 2026: "die Farbe für die Punkte und den Text aussuchen"). */
+	dotColor: string;
+	/** Colour of the text beside the dots, "#rrggbb"; empty: the theme's grey. */
+	textColor: string;
 };
 
 /** Settings that belong to the device, not the account. */
@@ -694,6 +730,8 @@ export const defaultLook = (): Look => ({
 	motion: 'full',
 	rate: 1,
 	mic: 'tap',
+	dotColor: '',
+	textColor: '',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -703,6 +741,8 @@ export function sanitizeLook(v: unknown): Look {
 	const pick = <T extends string>(x: unknown, list: readonly T[], def: T): T =>
 		list.includes(x as T) ? (x as T) : def;
 	const bool = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def);
+	const color = (x: unknown) =>
+		typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x) ? x.toLowerCase() : '';
 	const num = (x: unknown, min: number, max: number, def: number) =>
 		typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def;
 	return {
@@ -724,6 +764,8 @@ export function sanitizeLook(v: unknown): Look {
 		motion: pick(o.motion, ['full', 'reduced', 'off'], d.motion),
 		rate: num(o.rate, 0.5, 2, d.rate),
 		mic: pick(o.mic, ['tap', 'hold'], d.mic),
+		dotColor: color(o.dotColor),
+		textColor: color(o.textColor),
 	};
 }
 

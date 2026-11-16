@@ -14,6 +14,7 @@
 	import ProtectHandbook from './ProtectHandbook.svelte';
 	import ProtectEmergency from './ProtectEmergency.svelte';
 	import { featurePage } from './page-mode.ts';
+	import { inDialog, trapFocus } from '#lib/focus-trap.ts';
 
 	type Props = { id: FeatureViewId; onclose: () => void; calm?: boolean; extra?: Snippet };
 	let { id, onclose, calm = false, extra }: Props = $props();
@@ -33,7 +34,12 @@
 	});
 </script>
 
-<svelte:window onkeydown={(e) => mine && e.key === 'Escape' && onclose()} />
+<!-- As a page Escape goes back; as a sheet the trap below answers it
+     (1.01: one Escape closed the sheet and the dialog above it). -->
+<svelte:window
+	onkeydown={(e) =>
+		mine && page && e.key === 'Escape' && !e.defaultPrevented && !inDialog(e.target) && onclose()}
+/>
 
 {#if mine && page}
 	<section class="sheet page" aria-label={titles[id]}>
@@ -63,6 +69,7 @@
 			aria-modal="true"
 			aria-label={titles[id]}
 			transition:fly={slideIn(calm)}
+			use:trapFocus={{ initial: 'first', onescape: onclose }}
 		>
 			<header>
 				<button type="button" class="back" aria-label={t('agent.f.protect.back')} onclick={onclose}

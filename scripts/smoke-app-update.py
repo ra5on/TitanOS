@@ -174,6 +174,26 @@ def smoke(archive, release, key, timeout, log, force_tcg=False):
             except (OSError, http.client.HTTPException):
                 pass
 
+        def install_when_free(patience=300):
+            """Starts the install like a person would: titand refuses it with
+            409 update_working while work runs that a restart would break off
+            (after a restart of the NAS it fetches the web apps' catalogue),
+            and the test waits and asks again instead of swallowing that
+            (1.00: the refusal went unseen and the test waited for an update
+            that never started)."""
+            deadline = time.monotonic() + patience
+            while True:
+                try:
+                    request("/api/v1/update/install", {})
+                    return
+                except urllib.error.HTTPError as error:
+                    body = error.read().decode(errors="replace")
+                    if error.code != 409 or "update_working" not in body or time.monotonic() > deadline:
+                        raise AssertionError(f"install refused: {error.code} {body}") from error
+                    time.sleep(5)
+                except (OSError, http.client.HTTPException):
+                    return  # titand went down for the restart before it answered
+
         def notified(kind, subject):
             messages = request("/api/v1/notifications")["messages"]
             return any(m["kind"] == kind and m["subject"] == subject for m in messages)
@@ -220,7 +240,7 @@ def smoke(archive, release, key, timeout, log, force_tcg=False):
                 status = check()
                 if status["kind"] != "app" or status["available"]["version"] != good:
                     raise AssertionError(f"not offered as an app update: kind={status['kind']} available={status['available']}")
-                restarting("/api/v1/update/install")
+                install_when_free()
                 status = wait("app update running and confirmed", lambda: (s := update_status())["version"] == good and not s["app"]["trial"] and s, 420)
                 if status["app"]["current"] != good or status["slots"][0]["version"] != base or status["pending"]:
                     raise AssertionError(f"wrong state after the app update: {status}")
@@ -241,7 +261,7 @@ def smoke(archive, release, key, timeout, log, force_tcg=False):
                 status = check()
                 if status["kind"] != "app" or status["available"]["version"] != bad:
                     raise AssertionError(f"broken app not offered: {status['available']}")
-                restarting("/api/v1/update/install")
+                install_when_free()
                 status = wait("back on the app before", lambda: (s := update_status())["version"] == good and not s["app"]["trial"] and s["app"]["current"] == good and s, 420)
                 wait("message about the failed app", lambda: notified("update_failed", bad), 120)
                 print(f"App {bad} that does not start: back on {good} by itself", flush=True)

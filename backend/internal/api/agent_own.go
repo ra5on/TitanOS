@@ -182,29 +182,27 @@ func (b *agentToolbox) skillSave(_ context.Context, chat *agent.Chat, args json.
 	if secretish.MatchString(req.Name + "\n" + req.When + "\n" + req.Steps) {
 		return agent.Outcome{}, toolcatalog.Errorf("skills never hold passwords, keys or secrets")
 	}
-	store := b.s.agentStore()
-	list, err := store.Skills(b.user.Name)
-	if err != nil {
-		return agent.Outcome{}, err
-	}
 	sk := agent.Skill{ID: agent.NewID(), Name: req.Name, When: strings.TrimSpace(req.When), Steps: strings.TrimSpace(req.Steps), Updated: time.Now()}
 	if chat != nil {
 		sk.Chat, sk.Untrusted = chat.ID, chat.Tainted
 	}
-	updated := false
-	for i := range list {
-		if strings.EqualFold(list[i].Name, req.Name) {
-			sk.ID = list[i].ID
-			list[i], updated = sk, true
+	err := b.s.agentStore().UpdateSkills(b.user.Name, func(list []agent.Skill) ([]agent.Skill, error) {
+		updated := false
+		for i := range list {
+			if strings.EqualFold(list[i].Name, req.Name) {
+				sk.ID = list[i].ID
+				list[i], updated = sk, true
+			}
 		}
-	}
-	if !updated {
-		if len(list) >= maxSkills {
-			return agent.Outcome{}, toolcatalog.Errorf("there are already %d skills", maxSkills)
+		if !updated {
+			if len(list) >= maxSkills {
+				return nil, toolcatalog.Errorf("there are already %d skills", maxSkills)
+			}
+			list = append(list, sk)
 		}
-		list = append(list, sk)
-	}
-	if err := store.SaveSkills(b.user.Name, list); err != nil {
+		return list, nil
+	})
+	if err != nil {
 		return agent.Outcome{}, err
 	}
 	return agent.Outcome{Text: "Skill saved.", Note: "skill", NoteText: req.Name}, nil
@@ -413,16 +411,13 @@ func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args 
 	if sc.Every == "once" && (!ok || !next.After(now)) {
 		return agent.Outcome{}, toolcatalog.Errorf("that time has passed already; it is now %s", now.Format("2006-01-02 15:04"))
 	}
-	store := b.s.agentStore()
-	list, err := store.Schedules(b.user.Name)
+	err := b.s.agentStore().UpdateSchedules(b.user.Name, func(list []agent.Schedule) ([]agent.Schedule, error) {
+		if len(list) >= maxSchedules {
+			return nil, toolcatalog.Errorf("there are already %d planned tasks", maxSchedules)
+		}
+		return append(list, sc), nil
+	})
 	if err != nil {
-		return agent.Outcome{}, err
-	}
-	if len(list) >= maxSchedules {
-		return agent.Outcome{}, toolcatalog.Errorf("there are already %d planned tasks", maxSchedules)
-	}
-	list = append(list, sc)
-	if err := store.SaveSchedules(b.user.Name, list); err != nil {
 		return agent.Outcome{}, err
 	}
 	what := "Auftrag"

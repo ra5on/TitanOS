@@ -158,17 +158,15 @@ func (s *Server) handleCatalogInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Where it came from, for "installed" and an update.
-	own, err = store.Skills(user.Name)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
-	for i := range own {
-		if strings.EqualFold(own[i].Name, strings.TrimSpace(e.Name)) {
-			own[i].Untrusted, own[i].Description = true, catalogMarker+key
+	err = store.UpdateSkills(user.Name, func(own []agent.Skill) ([]agent.Skill, error) {
+		for i := range own {
+			if strings.EqualFold(own[i].Name, strings.TrimSpace(e.Name)) {
+				own[i].Untrusted, own[i].Description = true, catalogMarker+key
+			}
 		}
-	}
-	if err := store.SaveSkills(user.Name, own); err != nil {
+		return own, nil
+	})
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}

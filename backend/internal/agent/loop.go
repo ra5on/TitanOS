@@ -112,6 +112,9 @@ type Runner struct {
 	start time.Time
 	// extra are steps of subtasks, counted against the limit.
 	extra int
+	// squeezed: the chat was summarised once in this run although the
+	// fixed part (rules, tools, task) fills the window by itself (context.go).
+	squeezed bool
 }
 
 func (r *Runner) now() time.Time {

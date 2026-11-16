@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -634,6 +636,45 @@ func (s *Store) SaveProjects(user string, list []Project) error {
 	return s.write(user, "projects.json", list)
 }
 
+// UpdateProjects changes the projects of an account in one step, like
+// UpdateMemories: read, changed and written under the store's lock, so two
+// requests (two pages, the page and the agent) do not write over each
+// other's change (1.01). change returns the new list or an error; with
+// ErrUnchanged nothing is written and UpdateProjects reports nil.
+func (s *Store) UpdateProjects(user string, change func([]Project) ([]Project, error)) error {
+	return updateList(s, user, "projects.json", change)
+}
+
+// UpdateSkills changes the skills of an account in one step (UpdateProjects).
+func (s *Store) UpdateSkills(user string, change func([]Skill) ([]Skill, error)) error {
+	return updateList(s, user, "skills.json", change)
+}
+
+// ErrUnchanged, returned by the change of an Update…, leaves the list as it is.
+var ErrUnchanged = errors.New("agent: nothing to change")
+
+// updateList reads a list of an account, changes it and writes it, all under
+// the store's lock.
+func updateList[T any](s *Store, user, name string, change func([]T) ([]T, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := []T{}
+	if err := s.read(user, name, &list, maxIndexFile); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if list == nil {
+		list = []T{}
+	}
+	next, err := change(list)
+	if errors.Is(err, ErrUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.write(user, name, next)
+}
+
 // Memories of an account.
 func (s *Store) Memories(user string) ([]Memory, error) {
 	var list []Memory
@@ -755,6 +796,35 @@ func (s *Store) UpdateSchedule(user, id string, change func(*Schedule)) error {
 	return nil
 }
 
+// UpdateSchedules changes the list of schedules of an account in one step
+// (adding, changing or removing from the page or by the agent): the list as
+// it is now is changed and written under the store's lock (1.01: the page
+// wrote back the list it had read, and a run the minute tick had stamped in
+// between ran again). change returns the new list or an error; with
+// ErrUnchanged nothing is written.
+func (s *Store) UpdateSchedules(user string, change func([]Schedule) ([]Schedule, error)) error {
+	if _, err := s.Schedules(user); err != nil { // fills the RAM copy
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next, err := change(slices.Clone(s.schedules[user]))
+	if errors.Is(err, ErrUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if next == nil {
+		next = []Schedule{}
+	}
+	if err := s.write(user, "schedules.json", next); err != nil {
+		return err
+	}
+	s.schedules[user] = slices.Clone(next)
+	return nil
+}
+
 // ScheduleAccounts are the accounts with recurring tasks. The volume is
 // read once; after that the list comes from RAM.
 func (s *Store) ScheduleAccounts() []string {
@@ -868,28 +938,68 @@ func (s *Store) SaveProfile(user string, p Profile) error {
 
 var attachmentName = regexp.MustCompile(`^[^/\\\x00-\x1f.][^/\\\x00-\x1f]{0,199}$`)
 
-// SaveAttachment keeps a file uploaded into a chat.
-func (s *Store) SaveAttachment(user, chat, name string, data []byte) error {
+// SaveAttachment keeps a file uploaded into a chat and returns the name it
+// is kept under: a file of the same name that is there already stays, the
+// new one gets "name (2).ext" (1.01: the second upload of "image.jpg" took
+// the place of the first, and an earlier message then showed the wrong file).
+func (s *Store) SaveAttachment(user, chat, name string, data []byte) (string, error) {
 	if !ValidID(chat) || !attachmentName.MatchString(name) {
-		return ErrNotFound
+		return "", ErrNotFound
 	}
 	root, done, err := s.userRoot(user, true)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer done()
 	dir := "files/" + chat
 	for _, d := range []string{"files", dir} {
 		if err := root.Mkdir(d, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
-			return err
+			return "", err
 		}
 	}
 	sub, err := root.OpenRoot(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer sub.Close()
-	return volumedata.Write(sub, name, data)
+	// The name is taken by creating the file, so two uploads at the same
+	// time cannot pick the same one.
+	for n := 1; n <= 999; n++ {
+		try := numberedName(name, n)
+		f, err := sub.OpenFile(try, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		f.Close()
+		if err := volumedata.Write(sub, try, data); err != nil {
+			_ = sub.Remove(try)
+			return "", err
+		}
+		return try, nil
+	}
+	return "", errors.New("agent: too many attachments with this name")
+}
+
+// numberedName is name for n = 1 and "stem (n).ext" after that, within the
+// 200 bytes of an attachment's name.
+func numberedName(name string, n int) string {
+	if n <= 1 {
+		return name
+	}
+	ext := path.Ext(name)
+	if ext == name || len(ext) > 20 {
+		ext = ""
+	}
+	stem := strings.TrimSuffix(name, ext)
+	suffix := fmt.Sprintf(" (%d)", n)
+	for len(stem)+len(suffix)+len(ext) > 200 {
+		r := []rune(stem)
+		stem = string(r[:len(r)-1])
+	}
+	return stem + suffix + ext
 }
 
 // Attachment reads a file of a chat.
