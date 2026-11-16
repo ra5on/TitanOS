@@ -5823,6 +5823,7 @@
 	"error.lxc_creating": "The container is still being created.",
 	"error.lxc_incomplete": "Creating this container did not finish. It cannot be started; remove it and create it again.",
 	"lxc.jobCode.interrupted": "Creating did not finish because TitanOS stopped meanwhile. Remove the container and create it again.",
+	"lxc.jobCode.delete_failed": "The data of the container were not deleted completely. It can no longer be started; remove it again.",
 	"error.vm_libvirt_timeout": "libvirt did not answer in time (limit 2 minutes). Try again in a moment; if that does not help, restart the NAS.",
 	"error.docker_compose_timeout": "Docker Compose was stopped at its time limit. Try again; if it keeps hanging, check Docker and the network connection.",
 	"error.docker_remove_needs_engine": "Docker must run to remove the app: its containers are still in Docker and would come back unmanaged later. Switch Docker on (or unlock its volume) and remove the app then.",
