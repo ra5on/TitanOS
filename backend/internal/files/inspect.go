@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -154,12 +155,14 @@ func (m *Manager) Inspect(ctx context.Context, src Root, paths []string, dst *Ro
 		}
 		return nil
 	}
-	last := ""
+	// A path inside another selected one is counted with that one. Sorted,
+	// "a.zip" comes between "a" and "a/b": compare with every kept path.
+	var kept []string
 	for _, rel := range selectedPaths {
-		if last != "" && (rel == last || strings.HasPrefix(rel, last+"/")) {
+		if slices.ContainsFunc(kept, func(top string) bool { return rel == top || strings.HasPrefix(rel, top+"/") }) {
 			continue
 		}
-		last = rel
+		kept = append(kept, rel)
 		info, e := sr.Lstat(rel)
 		if e != nil {
 			return result, mapError(e)

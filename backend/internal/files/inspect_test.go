@@ -41,3 +41,17 @@ func TestInspectSelectionAndNestedConflicts(t *testing.T) {
 		t.Fatal("accepted traversal")
 	}
 }
+
+// A path inside a selected folder counts once, also when a name sorts
+// between the folder and it ("urlaub", "urlaub.zip", "urlaub/strand.jpg").
+func TestInspectCountsANestedSelectionOnce(t *testing.T) {
+	m, root, _ := newRoot(t)
+	os.WriteFile(filepath.Join(root.Dir, "urlaub.zip"), []byte("zip"), 0o644)
+	result, err := m.Inspect(context.Background(), root, []string{"urlaub", "urlaub.zip", "urlaub/strand.jpg"}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Files != 2 || result.Bytes != int64(len("strandzip")) {
+		t.Fatalf("files %d, bytes %d", result.Files, result.Bytes)
+	}
+}
