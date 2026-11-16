@@ -188,3 +188,39 @@ func TestAgentDataNeedsTheRightToManage(t *testing.T) {
 		t.Fatalf("unknown account: %d", res.StatusCode)
 	}
 }
+
+// An account another node of the cluster deleted takes its agent data
+// along here too; one taken over anew from the cluster inherits nothing.
+func TestClusterDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	ts.users.Create("maria", testPassword, auth.RoleUser)
+	store := ts.server.agentStore()
+	c := &agent.Chat{ID: agent.NewID(), Title: "Chat", State: agent.StateIdle}
+	if err := store.SaveChat("maria", c); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := ts.users.Get("maria")
+	if _, _, err := ts.users.Forget("maria"); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.clusterArea().clusterApplied(before, true, auth.User{}, true)
+	ts.server.jobs.Wait()
+	if slices.Contains(store.Accounts(), "maria") {
+		t.Fatal("agent data of an account deleted in the cluster kept")
+	}
+	// Left over (the volume was away at the deletion): an account of the
+	// name taken over from the cluster does not get it.
+	store.Unforget("maria")
+	if err := store.SaveChat("maria", c); err != nil {
+		t.Fatal(err)
+	}
+	ts.users.Create("maria", testPassword, auth.RoleUser)
+	after, _ := ts.users.Get("maria")
+	ts.server.clusterArea().clusterApplied(auth.User{}, false, after, false)
+	if list, _ := store.Chats("maria"); len(list) != 0 {
+		t.Fatalf("new account from the cluster inherits chats: %+v", list)
+	}
+	if err := store.SaveChat("maria", c); err != nil {
+		t.Fatalf("new account cannot keep files: %v", err)
+	}
+}
