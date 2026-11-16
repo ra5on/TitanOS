@@ -925,8 +925,14 @@ func (m *Manager) ended(ctx context.Context, st docker.NVRState) error {
 		engineAfter = true
 	}
 	cancel()
+	// A container Docker never started (its start was refused: a port of
+	// Frigate taken by an app, a device that is gone) did not crash. It
+	// is started again without counting; a refusal reaches the page as
+	// Docker's own error (engineError) instead of moving the detection
+	// to the next device.
+	neverRan := st.StartedAt.IsZero()
 	m.mu.Lock()
-	if m.rt.startedAt.IsZero() || engineAfter {
+	if m.rt.startedAt.IsZero() || engineAfter || neverRan {
 		// Not started by this titand, or stopped with Docker's engine:
 		// left stopped by a restart of the NAS or of Docker. No fault of
 		// Frigate.

@@ -220,6 +220,12 @@ func (m *Manager) StartSnapshotFolderRestore(ctx context.Context, user, volume, 
 		r.close()
 		return SnapshotFolderJob{}, err
 	}
+	// Noted on the volume first: if titand stops halfway, the next start
+	// removes the temporary entries below that folder (cleanRestores).
+	if err := r.note(m, volume, hex.EncodeToString(raw[:])); err != nil {
+		r.close()
+		return SnapshotFolderJob{}, err
+	}
 	work, cancel := context.WithCancel(context.Background())
 	job := &SnapshotFolderJob{
 		ID: hex.EncodeToString(raw[:]), User: user, Volume: volume, Snapshot: name, Path: req.Path,
@@ -231,6 +237,7 @@ func (m *Manager) StartSnapshotFolderRestore(ctx context.Context, user, volume, 
 		if other.State == RestoreRunning {
 			m.restoreMu.Unlock()
 			cancel()
+			r.forget()
 			r.close()
 			return SnapshotFolderJob{}, fmt.Errorf("%w: another snapshot restore is running", ErrBusy)
 		}
@@ -311,6 +318,9 @@ func (m *Manager) ForgetSnapshotRestore(id string) error {
 func (m *Manager) SnapshotRestoresRunning() bool {
 	m.restoreMu.Lock()
 	defer m.restoreMu.Unlock()
+	if len(m.fileRestores) > 0 {
+		return true
+	}
 	for _, job := range m.restores {
 		if job.State == RestoreRunning {
 			return true
@@ -324,6 +334,12 @@ func (m *Manager) SnapshotRestoresRunning() bool {
 func (m *Manager) restoreUses(volume, snapshot string) bool {
 	m.restoreMu.Lock()
 	defer m.restoreMu.Unlock()
+	for _, f := range m.fileRestores {
+		// A file restore also writes to its target volume.
+		if f.volume == volume && (snapshot == "" || f.snapshot == snapshot) || snapshot == "" && f.target == volume {
+			return true
+		}
+	}
 	for _, job := range m.restores {
 		if job.State == RestoreRunning && job.Volume == volume && (snapshot == "" || job.Snapshot == snapshot) {
 			return true
@@ -340,6 +356,8 @@ func (m *Manager) updateRestore(job *SnapshotFolderJob, change func(*SnapshotFol
 
 func (m *Manager) runRestore(ctx context.Context, r *folderRestore) {
 	defer r.close()
+	// Whatever the end: the entries of this run are in place or removed.
+	defer r.forget()
 	job := r.job
 	var c restoreCount
 	err := r.count(ctx, r.src(), nil, job.Path, &c)
@@ -384,6 +402,11 @@ type folderRestore struct {
 	// deepest existing level).
 	srcDirs, liveDirs []*os.File
 	mount             uint64
+	// journal is the private folder "restores" of the volume, held shared
+	// while the job runs; journalName its note there.
+	journal        *os.Root
+	journalName    string
+	releaseJournal func()
 }
 
 func (r *folderRestore) close() {
@@ -663,4 +686,52 @@ func (r *folderRestore) progress(change func(*SnapshotFolderJob)) {
 	if r.m != nil && r.job != nil {
 		r.m.updateRestore(r.job, change)
 	}
+}
+
+// restoreJournal is the note of a running folder restore on its volume:
+// Base is the deepest folder that existed when it started (relative to
+// the volume, "" for the volume itself). Every temporary entry of the job
+// lies in or below it.
+type restoreJournal struct {
+	ID   string `json:"id"`
+	Base string `json:"base"`
+}
+
+// note writes the journal of a folder restore and holds the folder of the
+// journals shared until forget.
+func (r *folderRestore) note(m *Manager, volume, id string) (result error) {
+	root, err := volumedata.Open(m.mountRoot, volume, restoresFeature, m.Mounted())
+	if err != nil {
+		return err
+	}
+	release, err := volumedata.Share(root)
+	if err != nil {
+		root.Close()
+		if errors.Is(err, volumedata.ErrHeld) {
+			return fmt.Errorf("%w: %v", ErrBusy, err)
+		}
+		return err
+	}
+	name := folderJournalPrefix + id + ".json"
+	base := strings.Join(r.parts[:len(r.liveDirs)-1], "/")
+	if err := volumedata.WriteJSON(root, name, restoreJournal{ID: id, Base: base}); err != nil {
+		release()
+		root.Close()
+		return err
+	}
+	r.journal, r.journalName, r.releaseJournal = root, name, release
+	return nil
+}
+
+// forget removes the journal once the job ended.
+func (r *folderRestore) forget() {
+	if r.journal == nil {
+		return
+	}
+	if err := r.journal.Remove(r.journalName); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("note of a folder restore not removed", "note", r.journalName, "err", err)
+	}
+	r.releaseJournal()
+	r.journal.Close()
+	r.journal = nil
 }

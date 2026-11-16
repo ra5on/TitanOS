@@ -216,7 +216,7 @@ func (m *Manager) observeAudit(ctx context.Context, event auditEvent, onLock fun
 func (m *Manager) closeShare(ctx context.Context, name string) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", name); err != nil {
+	if _, err := m.run(ctx, "smbcontrol", "smbd", "close-share", name); err != nil {
 		slog.Warn("open connections to a locked share not closed", "share", name, "err", err)
 	}
 }

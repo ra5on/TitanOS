@@ -5,6 +5,7 @@ import (
 
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
@@ -240,12 +240,19 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		}
 		var err error
 		if pull {
-			_, err = run.CombinedLines(ctx, m.runner, progress, "docker", m.compose(volume, name, "pull", "--quiet")...)
+			_, err = withLimit(ctx, composePullLimit, "pull", func(ctx context.Context) (string, error) {
+				return run.CombinedLines(ctx, m.runner, progress, "docker", m.compose(volume, name, "pull", "--quiet")...)
+			})
 		} else {
 			args := m.compose(volume, name, "pull", "--policy", "missing", "--ignore-buildable", "--ignore-pull-failures")
 			args = slices.Insert(args, 1, "--progress", "plain")
 			// Best effort: "up" pulls what is left and says why it cannot.
-			_, _ = run.CombinedLines(ctx, m.runner, progress, "docker", args...)
+			// A pull that hangs would hang in "up" as well: that ends the job.
+			if _, e := withLimit(ctx, composePullLimit, "pull", func(ctx context.Context) (string, error) {
+				return run.CombinedLines(ctx, m.runner, progress, "docker", args...)
+			}); errors.Is(e, ErrComposeTimeout) {
+				err = e
+			}
 		}
 		if err == nil {
 			// Resolve hardware against the leases under hardwareMu, but run
@@ -258,7 +265,9 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 			if err == nil {
 				args := m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")
 				args[4] = path
-				_, err = run.CombinedLines(ctx, m.runner, progress, "docker", args...)
+				_, err = withLimit(ctx, composeUpLimit, "up", func(ctx context.Context) (string, error) {
+					return run.CombinedLines(ctx, m.runner, progress, "docker", args...)
+				})
 				cleanup()
 				m.endCompose(name)
 			}
@@ -269,6 +278,11 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
+		if errors.Is(err, ErrComposeTimeout) {
+			// The last line of the output says why the job ended.
+			log.add(timeoutText(err))
+			job.Code = JobCodeTimeout
+		}
 		job.Output = log.String()
 		if err != nil {
 			job.State = "failed"
@@ -493,8 +507,9 @@ func (m *Manager) Compose(name string) (string, error) {
 	return string(data), nil
 }
 
-// removeTimeout bounds the "docker compose down" calls of RemoveApp.
-const removeTimeout = 10 * time.Minute
+// ErrRemoveNeedsEngine: an app is removed only while Docker's engine runs,
+// else its containers would come back unmanaged. It is an ErrNotRunning.
+var ErrRemoveNeedsEngine = fmt.Errorf("%w: start Docker to remove the app; its containers are still in Docker's data", ErrNotRunning)
 
 // RemoveApp stops and removes the containers of an app and forgets its
 // compose file. The app's data folder on the volume stays, unless purge is
@@ -505,6 +520,14 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		return ErrDisabled
 	}
 	settings := m.current()
+	// Docker switched off keeps its containers in its data folder on the
+	// volume; they start again with the engine.
+	engineData := false
+	if settings.Volume != "" {
+		if info, err := os.Lstat(m.dataRoot(settings.Volume)); err == nil && info.IsDir() {
+			engineData = true
+		}
+	}
 	m.mu.Lock()
 	known := slices.Contains(m.knownApps(), name)
 	job := m.jobs[name]
@@ -522,13 +545,16 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		m.mu.Unlock()
 		return errBackupRunning
 	}
-	// With its data: only while the engine runs. Without it (the volume is
-	// locked or not there) nothing could be taken down or deleted, the app
-	// would be reported as removed and come back unmanaged, with all its
-	// data, once the volume is there again.
-	if purge && !running && settings.Enabled {
+	// Only while the engine runs, with or without the app's data: without
+	// it nothing could be taken down, the app would be reported as removed
+	// and its containers would come back unmanaged once the engine runs
+	// again (the volume unlocked, Docker switched on). With Docker switched
+	// off this holds as long as the engine's data are on its volume; where
+	// there are none (never switched on, the volume gone for good) there is
+	// nothing to take down, and the app is only forgotten.
+	if !running && (settings.Enabled || engineData) {
 		m.mu.Unlock()
-		return ErrNotRunning
+		return ErrRemoveNeedsEngine
 	}
 	// The removal is a job of the app like any other: an update, a change
 	// or an automatic update that comes meanwhile is refused as busy
@@ -554,21 +580,25 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 	}()
 	if running {
 		// Removing goes on when the page that asked is closed: a "down"
-		// killed halfway leaves the app half removed.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), removeTimeout)
-		defer cancel()
+		// killed halfway leaves the app half removed. Each "down" has
+		// composeDownLimit.
+		ctx := context.WithoutCancel(ctx)
 		down := []string{"down", "--remove-orphans"}
 		if purge {
 			down = append(down, "--volumes")
 		}
-		if out, err := run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, down...)...); err != nil {
-			slog.Error("app removal failed", "app", name, "output", tail(out, 2000))
+		if out, err := withLimit(ctx, composeDownLimit, "down", func(ctx context.Context) (string, error) {
+			return run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, down...)...)
+		}); err != nil {
+			slog.Error("app removal failed", "app", name, "output", tail(out, 2000), "err", err)
 			return err
 		}
 		if purge {
 			// Separately and without failing: an image another app uses
 			// stays, and Compose would give up on the first one.
-			if out, err := run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, "down", "--rmi", "all")...); err != nil {
+			if out, err := withLimit(ctx, composeDownLimit, "down", func(ctx context.Context) (string, error) {
+				return run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, "down", "--rmi", "all")...)
+			}); err != nil {
 				slog.Warn("images of a removed app kept", "app", name, "output", tail(out, 2000))
 			}
 		}

@@ -435,7 +435,7 @@ func (m *Manager) SMBConnected(ctx context.Context, volume string) []string {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := m.runner.Run(ctx, "", "smbstatus", "--shares", "--json")
+	out, err := m.run(ctx, "smbstatus", "--shares", "--json")
 	if err != nil {
 		return nil
 	}
@@ -453,7 +453,7 @@ func (m *Manager) smbSessions(ctx context.Context, share Share) ([]Usage, error)
 	if m.Disabled || !share.SMB {
 		return nil, nil
 	}
-	out, err := m.runner.Run(ctx, "", "smbstatus", "--shares", "--json")
+	out, err := m.run(ctx, "smbstatus", "--shares", "--json")
 	if err != nil {
 		return nil, err
 	}
@@ -752,7 +752,7 @@ func (m *Manager) release(ctx context.Context, share Share, gen uint64) error {
 	}
 	if share.SMB {
 		// Connections to a share no longer in smb.conf are closed.
-		if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", share.Name); err != nil {
+		if _, err := m.run(ctx, "smbcontrol", "smbd", "close-share", share.Name); err != nil {
 			slog.Debug("close SMB share", "share", share.Name, "err", err)
 		}
 	}

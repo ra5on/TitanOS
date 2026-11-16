@@ -73,8 +73,16 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	if err != nil {
 		return err
 	}
-	if m.creating(name) {
+	m.mu.Lock()
+	job := m.jobs[name]
+	m.mu.Unlock()
+	switch {
+	case job != nil && job.State == "running":
 		return ErrCreating
+	case job != nil || c.Incomplete:
+		// Creating it failed or was cut off: its root filesystem may be
+		// half there. It can only be removed.
+		return ErrIncomplete
 	}
 	if !available(c, mounted) {
 		return ErrUnknownVolume

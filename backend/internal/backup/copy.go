@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -328,6 +329,18 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	if err := copyDirectories(target, job.Destination.Folder); err != nil {
 		return err
 	}
+	// A run that did not end (power cut, titand stopped, drive pulled)
+	// left its marker and perhaps temporary files of the size of what it
+	// copied: they go before this run writes anything.
+	marker := path.Join(job.Destination.Folder, copyRunMarker)
+	if _, err := target.Lstat(marker); err == nil {
+		removeCopyLeftovers(ctx, target, job.Destination.Folder)
+	}
+	if f, err := target.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600); err == nil {
+		_ = f.Close() // only its name counts
+	}
+	// Any end of this function: the files of this run went with it.
+	defer func() { _ = target.Remove(marker) }() // a drive gone keeps it: the next run looks
 	folding := caseInsensitive(target, job.Destination.Folder)
 	// With dated folders each run gets a folder of its own; unchanged
 	// files are hard links to the run before, where the drive allows it.
@@ -1208,4 +1221,45 @@ func (m *Manager) holdTarget(job Job) (dir string, release func(), err error) {
 			<-done
 		})
 	}, nil
+}
+
+// copyRunMarker lies in the destination folder while a run writes there.
+// Found at the start of a run, it says the last run did not end.
+const copyRunMarker = ".titanos-copy-run"
+
+// copyTemp is the name of a file or link a run writes before it takes its
+// real name (".titanos-copy-" and rand.Text). Not the parts of the file
+// manager's copies (.titanos-copy-<hex>.titanos-part): those may be
+// resumed and are never touched here.
+var copyTemp = regexp.MustCompile(`^\.titanos-copy-[A-Z2-7]{26,64}$`)
+
+// removeCopyLeftovers removes the temporary files and links an interrupted
+// run left below folder. It walks the destination once, follows no link
+// and removes only files and links of exactly that name.
+func removeCopyLeftovers(ctx context.Context, target *os.Root, folder string) {
+	removed := 0
+	err := fs.WalkDir(target.FS(), folder, func(at string, entry fs.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err != nil || entry.IsDir() || !copyTemp.MatchString(entry.Name()) {
+			return nil
+		}
+		if t := entry.Type(); t != 0 && t != fs.ModeSymlink {
+			return nil
+		}
+		if err := target.Remove(at); err == nil {
+			removed++
+		} else if fatalTarget(err) {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("backup: leftovers of an interrupted copy not all removed", "folder", folder, "removed", removed, "err", err)
+		return
+	}
+	if removed > 0 {
+		slog.Info("backup: leftovers of an interrupted copy removed", "folder", folder, "files", removed)
+	}
 }

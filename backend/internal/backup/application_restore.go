@@ -167,6 +167,13 @@ func (m *Manager) restoreVerifiedCopy(job Job, snapshot, volume string, includes
 			return err
 		}
 		defer root.Close()
+		// Held while the staging folder exists: the sweep of interrupted
+		// restores after a start of titand (storage) leaves it alone.
+		release, err := volumedata.Share(root)
+		if err != nil {
+			return err
+		}
+		defer release()
 		if err := root.Mkdir(token, 0700); err != nil {
 			return err
 		}

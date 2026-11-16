@@ -36,6 +36,8 @@ type diskRunner struct {
 	ioError      bool
 	// backingOf names the image an overlay builds on (qemu-img info).
 	backingOf func(file string) string
+	// afterCommit runs (with mu held) after a blockcommit went through.
+	afterCommit func()
 }
 
 func (r *diskRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
@@ -119,6 +121,9 @@ func (r *diskRunner) Run(ctx context.Context, stdin, name string, args ...string
 			return "", errors.New("virsh was cut off")
 		}
 		delete(r.overlay, args[3])
+		if r.afterCommit != nil {
+			r.afterCommit()
+		}
 		return "", nil
 	case name == "virsh" && has("blockjob") && has("--info"):
 		percent, running := r.job[args[2]]

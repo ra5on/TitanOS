@@ -20,6 +20,11 @@ import (
 
 // Start boots a VM.
 func (m *Manager) Start(ctx context.Context, name string, mounted []string) error {
+	// A page that is closed while libvirt creates the VM must not cut off
+	// virsh: libvirt may create the VM all the same, and titand would then
+	// count it as not started (devices back to containers, no CPU
+	// reservation). Each command has its own time limit instead.
+	ctx = context.WithoutCancel(ctx)
 	if m.off.Load() {
 		return ErrServiceOff
 	}
@@ -53,7 +58,13 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	// A backup that was cut off left the guest's last writes in an overlay:
 	// they go back into the image before the VM starts from the image.
 	if slices.Contains(mounted, vm.Volume) {
-		if err := m.finishDiskBackupOf(ctx, vm); err != nil {
+		// Bounded like the undo of a backup: the start is no longer cut
+		// off with the request, and a block job that never gets ready must
+		// not hold the VM for good.
+		undo, cancel := context.WithTimeout(ctx, diskUndoLimit)
+		err := m.finishDiskBackupOf(undo, vm)
+		cancel()
+		if err != nil {
 			if errors.Is(err, ErrDiskBackupRecord) {
 				return err
 			}
@@ -169,7 +180,7 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	if err := os.WriteFile(file, []byte(description), 0o600); err != nil {
 		return err
 	}
-	if _, err := m.runner.Run(ctx, "", "virsh", "--quiet", "create", "--file", file); err != nil {
+	if _, err := m.virsh(ctx, "--quiet", "create", "--file", file); err != nil {
 		m.mu.Lock()
 		delete(m.starting, name)
 		m.release()
@@ -264,7 +275,7 @@ func (m *Manager) Action(ctx context.Context, name, action string) error {
 	if m.pid(name) == 0 {
 		return ErrNotRunning
 	}
-	_, err := m.runner.Run(ctx, "", "virsh", "--quiet", command, name)
+	_, err := m.virsh(ctx, "--quiet", command, name)
 	return err
 }
 

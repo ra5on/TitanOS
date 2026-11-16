@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -333,16 +334,25 @@ func (m *Manager) recreateLegacyCDI(ctx context.Context, id string) (bool, error
 	if err != nil {
 		return true, err
 	}
+	// Not cut off with the request that asked to start the container: a
+	// recreate killed halfway leaves the service without its container.
+	ctx = context.WithoutCancel(ctx)
 	path, cleanup, err := m.hardwareCompose(ctx, app)
 	var output string
 	if err == nil {
 		args := m.compose(volume, app, "up", "--detach", "--no-deps", "--force-recreate", "--pull", "never", service)
 		args[4] = path
-		output, err = run.Combined(ctx, m.runner, "", "docker", args...)
+		output, err = withLimit(ctx, composeUpLimit, "up", func(ctx context.Context) (string, error) {
+			return run.Combined(ctx, m.runner, "", "docker", args...)
+		})
 		cleanup()
 	}
 	m.mu.Lock()
 	job.State, job.Output = "done", tail(output, 4000)
+	if errors.Is(err, ErrComposeTimeout) {
+		job.Code = JobCodeTimeout
+		job.Output = tail(strings.TrimSpace(output+"\n"+timeoutText(err)), 4000)
+	}
 	if err != nil {
 		job.State = "failed"
 		if job.Output == "" {
