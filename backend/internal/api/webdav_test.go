@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func (ts *testServer) dav(method, path, user, password, body string, header map[string]string) (*http.Response, string) {
@@ -183,7 +182,7 @@ func TestWebDAVPasswordIsReadOnce(t *testing.T) {
 	if res, body := ts.request("DELETE", "/api/v1/users/carol", nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete carol: %d %s", res.StatusCode, body)
 	}
-	time.Sleep(1100 * time.Millisecond) // a new account, a new second
+	// Made again at once, mostly within the same second.
 	ts.request("POST", "/api/v1/users", map[string]any{"name": "carol", "password": testPassword, "role": "user"})
 	if res, _ := ts.dav("PROPFIND", "/dav/", "carol", created.Password, "", map[string]string{"Depth": "1"}); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("password of the deleted carol: %d", res.StatusCode)

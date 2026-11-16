@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -55,11 +56,14 @@ type davState struct {
 }
 
 // davKnown is the WebDAV password of an account as read from the stick.
-// account is the creation time of the account it was read for: a new
-// account of the same name reads its own. sum is nil when there is none.
+// account and passwordHash name the account it was read for: a new
+// account of the same name (made within the same second, too: its
+// password hash has a salt of its own) reads its own. sum is nil when
+// there is none.
 type davKnown struct {
-	account time.Time
-	sum     []byte
+	account      time.Time
+	passwordHash string
+	sum          []byte
 }
 
 func davPasswordFile(user string) string { return "users/" + user + "/webdav.json" }
@@ -233,15 +237,20 @@ func (a davArea) davPasswordOf(user auth.User) []byte {
 	d := a.state
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if known, ok := d.passwords[user.Name]; ok && known.account.Equal(user.Created) {
+	if known, ok := d.passwords[user.Name]; ok && known.account.Equal(user.Created) && known.passwordHash == user.PasswordHash {
 		return known.sum
 	}
 	var stored davPassword
-	err := a.store.ReadJSON(davPasswordFile(user.Name), &stored)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	data, err := a.store.Read(davPasswordFile(user.Name))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
 		// Not readable now (stick away): no sign-in, and asked again next time.
 		slog.Warn("WebDAV password not readable", "user", user.Name, "err", err)
 		return nil
+	case json.Unmarshal(data, &stored) != nil:
+		// Damaged: no password, until a new one is made.
+		slog.Warn("WebDAV password damaged", "user", user.Name)
 	}
 	sum, _ := hex.DecodeString(stored.SHA256)
 	if len(sum) == 0 {
@@ -250,7 +259,7 @@ func (a davArea) davPasswordOf(user auth.User) []byte {
 	if d.passwords == nil {
 		d.passwords = map[string]davKnown{}
 	}
-	d.passwords[user.Name] = davKnown{account: user.Created, sum: sum}
+	d.passwords[user.Name] = davKnown{account: user.Created, passwordHash: user.PasswordHash, sum: sum}
 	return sum
 }
 
