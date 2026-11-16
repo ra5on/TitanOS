@@ -27,6 +27,7 @@
 	"error.password_too_long": "The password is too long.",
 	"error.setup_done": "The owner account already exists. Log in instead.",
 	"error.config_unavailable": "The stick with the configuration is not reachable.",
+	"error.agent_features_changed": "The functions were changed elsewhere in the meantime (another tab or another administrator). Please reload and make the change again.",
 	"error.config_write_failed": "That could not be saved to the stick.",
 	"error.unreachable": "The NAS is not reachable right now.",
 	"error.unauthorized": "You are no longer logged in.",

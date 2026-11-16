@@ -496,7 +496,7 @@ Ergebnisse stehen in den Release-Notizen.
 
 ## Funktionen (PLAN 54)
 
-Neun Funktionen in vier Gruppen, jede **ab Werk aus** und einzeln einstellbar: Einstellungen des Agenten › Funktionen bzw. Einstellungen › KI-Agent › Funktionen. Was das ganze NAS betrifft, schalten Besitzer und Administratoren ein (`features` in `agent.json`, `GET`/`PUT /api/v1/agent/features`); was ein Konto für sich einstellt (Ordner, Postfach, Quellen), liegt in `features.json` im privaten Agent-Ordner (`GET`/`PUT /api/v1/agent/features/me`). Eingeschaltete Funktionen erscheinen im Agent-Menü; Mitteilungen öffnen sie mit `/agent?feature=<id>`.
+Neun Funktionen in vier Gruppen, jede **ab Werk aus** und einzeln einstellbar: Einstellungen des Agenten › Funktionen bzw. Einstellungen › KI-Agent › Funktionen. Was das ganze NAS betrifft, schalten Besitzer und Administratoren ein (`features` in `agent.json`, `GET`/`PUT /api/v1/agent/features`); was ein Konto für sich einstellt (Ordner, Postfach, Quellen), liegt in `features.json` im privaten Agent-Ordner (`GET`/`PUT /api/v1/agent/features/me`). Seit 1.03 (Fund A-30) liefern `GET` und `PUT /agent/features` ein Feld `rev` (Version des gespeicherten Stands, ein Hash, nicht gespeichert); schickt die Seite es beim Speichern mit und hat inzwischen jemand anderes (anderer Tab, anderer Administrator, eine Route der Gruppen) die Funktionen geändert, antwortet titand 409 `agent_features_changed` und ändert nichts. Ohne `rev` speichert `PUT` wie bisher. Eingeschaltete Funktionen erscheinen im Agent-Menü; Mitteilungen öffnen sie mit `/agent?feature=<id>`.
 
 | Gruppe | Funktionen | Einzelheiten |
 |---|---|---|
