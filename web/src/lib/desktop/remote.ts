@@ -483,6 +483,9 @@ export type ImageStatus = {
 	size: number;
 	progress: number;
 	error: string;
+	/** A window can open now: this release's image is ready, or an earlier
+	 *  one stands in while it is fetched (0.98). */
+	usable: boolean;
 };
 export type ViewerGpu = {
 	id: string;
@@ -538,6 +541,8 @@ export function sanitizeImage(v: unknown): ImageStatus {
 		size,
 		progress: Math.min(1, Math.max(0, num(o.progress, size > 0 ? bytes / size : 0))),
 		error: str(o.error),
+		// An older NAS does not say: there only "ready" could open a window.
+		usable: typeof o.usable === 'boolean' ? o.usable : o.state === 'ready',
 	};
 }
 

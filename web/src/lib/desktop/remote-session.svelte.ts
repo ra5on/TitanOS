@@ -126,7 +126,7 @@ export class RemoteSession extends RemoteMedia {
 		try {
 			const status = sanitizeStatus(await api.get('/viewer/status', AbortSignal.timeout(8000)));
 			if (this.gone) return;
-			if (status.image.state !== 'ready') return this.refuse('viewer_image');
+			if (!status.image.usable) return this.refuse('viewer_image');
 		} catch {
 			// No status (older NAS, no right): the generic message.
 		}
@@ -142,7 +142,8 @@ export class RemoteSession extends RemoteMedia {
 			// The window was closed while the answer was on its way: nothing connects any more.
 			if (this.gone) return;
 			this.image = status.image;
-			if (status.image.state === 'ready') {
+			// Ready, or an earlier program stands in while the new one loads.
+			if (status.image.usable) {
 				this.image = undefined;
 				return this.connect();
 			}

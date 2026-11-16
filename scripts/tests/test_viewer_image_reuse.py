@@ -46,6 +46,51 @@ class DecideTest(unittest.TestCase):
     def test_without_an_earlier_image_it_is_built(self):
         self.assertIsNone(self.decide("0.60.0", [])[0])
 
+    def test_go_modules_count_only_if_the_agent_uses_them(self):
+        changed = ["backend/go.mod", "backend/go.sum", "backend/internal/agent/claude.go"]
+        # A library for titand alone: the agent is built from the same modules.
+        tag, manifest = reuse.decide("0.61.0", TAGS, MANIFESTS.get, lambda tag: changed, lambda tag: "")
+        self.assertEqual(tag, "v0.60.0")
+        self.assertEqual(manifest["viewer"]["imageId"], IMAGE_ID)
+        # One of the agent's own modules moved, or they cannot be compared.
+        for why in ["modules of the agent: golang.org/x/image v0.48.0", "modules of the agent cannot be compared: no go"]:
+            tag, reason = reuse.decide("0.61.0", TAGS, MANIFESTS.get, lambda tag: changed, lambda tag: why)
+            self.assertIsNone(tag)
+            self.assertIn(why, reason)
+        # Not asked at all when the files did not change.
+        tag, _ = reuse.decide("0.61.0", TAGS, MANIFESTS.get, lambda tag: ["web/src/x.ts"], lambda tag: self.fail("asked"))
+        self.assertEqual(tag, "v0.60.0")
+
+
+class ModulesTest(unittest.TestCase):
+    @staticmethod
+    def go(deps, version="1.27.0"):
+        def run(cmd, **kwargs):
+            out = version + "\n" if "-m" in cmd else deps
+            return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+        return run
+
+    def test_agent_modules(self):
+        deps = "\ngithub.com/coder/websocket v1.8.15\ngolang.org/x/sys v0.49.0\ngolang.org/x/sys v0.49.0\n\n"
+        self.assertEqual(reuse.agent_modules("backend", self.go(deps)),
+                         {"go 1.27.0", "github.com/coder/websocket v1.8.15", "golang.org/x/sys v0.49.0"})
+        self.assertNotEqual(reuse.agent_modules("backend", self.go(deps)), reuse.agent_modules("backend", self.go(deps, "1.28.0")))
+
+    def test_a_failing_go_is_an_error(self):
+        def run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="go: no such tool")
+        with self.assertRaises(RuntimeError):
+            reuse.agent_modules("backend", run)
+
+    def test_real_tree(self):
+        # The agent in this tree: a handful of modules, none of titand's alone.
+        try:
+            modules = reuse.agent_modules(REPO / "backend")
+        except (OSError, RuntimeError) as error:
+            self.skipTest(f"no Go here: {error}")
+        self.assertTrue(any(m.startswith("github.com/coder/websocket ") for m in modules), modules)
+        self.assertFalse(any("anthropic" in m for m in modules), modules)
+
 
 PACKAGES = """chromium 156.0.8078.79-1~deb13u1 chromium 156.0.8078.79-1~deb13u1
 chromium-common 156.0.8078.79-1~deb13u1 chromium 156.0.8078.79-1~deb13u1
