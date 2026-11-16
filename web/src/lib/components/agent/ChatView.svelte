@@ -385,6 +385,16 @@
 		else if (below < 24) pinned = true;
 		lastTop = top;
 	}
+	// Another chat starts at its end, whatever was scrolled in the last one.
+	let shownChat = '';
+	$effect(() => {
+		const id = chat.id;
+		if (id === untrack(() => shownChat)) return;
+		shownChat = id;
+		pinned = true;
+		lastTop = 0;
+		ownSent = untrack(() => chat.entries.filter((e) => e.role === 'user').length);
+	});
 	// A message of one's own shows at the end again.
 	let ownSent = 0;
 	$effect(() => {
@@ -400,7 +410,16 @@
 		void chat.pending;
 		if (pinned && scroller)
 			queueMicrotask(() => {
-				if (pinned && scroller) scroller.scrollTo({ top: scroller.scrollHeight });
+				if (!pinned || !scroller) return;
+				// A move upwards whose scroll event has not come yet (a fast
+				// stream) is the person's too: do not pull back over it.
+				const below = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+				if (scroller.scrollTop < lastTop - 1 && below > 2) {
+					pinned = false;
+					lastTop = scroller.scrollTop;
+					return;
+				}
+				scroller.scrollTo({ top: scroller.scrollHeight });
 			});
 	});
 
@@ -744,11 +763,11 @@
 					{#if turnEnds(i)}
 						<ResultCards
 							steps={turnSteps(i)}
-							active={block.entry.id === lastAnswer && !busy && !readonly}
+							active={block.entry.id === lastAnswer && !busy && !readonly && !chat.pending}
 							onask={onchoice}
 						/>
 					{/if}
-					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
+					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly && !chat.pending}
 						<div class="choices">
 							{#each block.entry.choices as choice, n (choice)}
 								<button

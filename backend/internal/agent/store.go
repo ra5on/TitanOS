@@ -180,6 +180,9 @@ type Chat struct {
 	// content) is in the prompt (PLAN 54-G); web tools ask first, like after
 	// outside content, but what the person says is not marked for it.
 	OutsideSkill bool `json:"outsideSkill,omitempty"`
+	// Helper: the chat of a delegated subtask. Its first message is the
+	// task the model wrote, not words of the person; never saved.
+	Helper bool `json:"-"`
 	// Plan is the plan the agent keeps for the current task (plan_update).
 	Plan []PlanStep `json:"plan,omitempty"`
 	// Areas of tools loaded in this chat (tools_load, PLAN 55).
@@ -302,6 +305,10 @@ type Schedule struct {
 	// as the account chose (Eigeninitiative), "wake", "ask" or "never".
 	Wake    string    `json:"wake,omitempty"`
 	Created time.Time `json:"created"`
+	// Since: when the task was last switched on or given another time.
+	// Times before it are not caught up: a daily task switched on again at
+	// ten does not run at once for the seven o'clock it "missed" (0.99).
+	Since time.Time `json:"since,omitzero"`
 }
 
 // Report is what the morning report of an account contains (PLAN 49);
@@ -646,6 +653,26 @@ func (s *Store) SaveMemories(user string, list []Memory) error {
 	return s.write(user, "memory.json", list)
 }
 
+// UpdateMemories changes the memory of an account in one step: the list is
+// read, changed and written under the store's lock, so that two chats (or
+// a chat and the page) do not write over each other's change. change
+// returns the new list, or false to leave the file as it is (0.99: every
+// start of a run wrote the list it had read back, and a memory saved by
+// another chat in between was gone).
+func (s *Store) UpdateMemories(user string, change func([]Memory) ([]Memory, bool)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var list []Memory
+	if err := s.read(user, "memory.json", &list, maxIndexFile); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	next, write := change(list)
+	if !write {
+		return nil
+	}
+	return s.write(user, "memory.json", next)
+}
+
 // Skills the account added or the agent wrote (built-in ones are not
 // stored, see skills.go).
 func (s *Store) Skills(user string) ([]Skill, error) {
@@ -668,12 +695,13 @@ func (s *Store) SaveSkills(user string, list []Skill) error {
 
 // Schedules of an account, from RAM once read.
 func (s *Store) Schedules(user string) ([]Schedule, error) {
+	// The file is read under the lock: a list saved while it was being read
+	// must not be replaced in RAM by the older one from the file.
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if list, ok := s.schedules[user]; ok {
-		s.mu.Unlock()
 		return slices.Clone(list), nil
 	}
-	s.mu.Unlock()
 	var list []Schedule
 	if err := s.read(user, "schedules.json", &list, maxIndexFile); err != nil {
 		if !errors.Is(err, ErrNotFound) {
@@ -681,12 +709,10 @@ func (s *Store) Schedules(user string) ([]Schedule, error) {
 		}
 		list = []Schedule{}
 	}
-	s.mu.Lock()
 	if s.schedules == nil {
 		s.schedules = map[string][]Schedule{}
 	}
 	s.schedules[user] = list
-	s.mu.Unlock()
 	return slices.Clone(list), nil
 }
 

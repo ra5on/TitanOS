@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -336,8 +337,35 @@ func TestAgentFolderRuleFollowsLinks(t *testing.T) {
 		"Private/tax.pdf": agent.ModeDeny, "Open/link/tax.pdf": agent.ModeDeny, "Open/link/new-file.txt": agent.ModeDeny,
 		"Open/note.txt": "", "Open/new/deeper/file.txt": "",
 	} {
-		if got := b.realFolderMode("share/Docs", p); got != want {
+		if got := b.realFolderMode("share/Docs", p, false); got != want {
 			t.Errorf("%s: mode %q, want %q", p, got, want)
+		}
+	}
+}
+
+// 0.99: a call that copies, moves, renames or deletes a folder takes what
+// lies in it along, so a rule on a folder inside it counts; reading the
+// parent, creating beside the locked folder and the target of a copy do not.
+func TestAgentFolderRuleCoversWholeFolders(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "Docs/Finanzen/Privat"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b := &agentToolbox{dirs: map[string]string{"share/Docs": filepath.Join(dir, "Docs"), "share/Public": filepath.Join(dir, "Public")}}
+	b.settings.Policy.Folders = []agent.FolderRule{{Root: "share/Docs", Path: "Finanzen/Privat", Mode: agent.ModeDeny}}
+	for _, c := range []struct{ args, kind, want string }{
+		{`{"root":"share/Docs","paths":["Finanzen"],"toRoot":"share/Public","toDir":"x"}`, agent.KindCreate, agent.ModeDeny},
+		{`{"root":"share/Docs","path":"Finanzen","name":"Alt"}`, agent.KindChange, agent.ModeDeny},
+		{`{"root":"share/Docs","path":"Finanzen"}`, agent.KindChange, agent.ModeDeny},
+		{`{"root":"share/Docs","moves":[{"from":"Finanzen","to":"Archiv/Finanzen"}]}`, agent.KindChange, agent.ModeDeny},
+		{`{"root":"share/Docs","path":"Finanzen"}`, agent.KindRead, ""},
+		{`{"root":"share/Docs","path":"Finanzen","name":"Neu"}`, agent.KindCreate, ""},
+		{`{"root":"share/Docs","path":"Finanzen/2026.txt"}`, agent.KindChange, ""},
+		{`{"root":"share/Public","paths":["a.txt"],"toRoot":"share/Docs","toDir":"Finanzen"}`, agent.KindCreate, ""},
+		{`{"root":"share/Public","paths":["a.txt"],"toRoot":"share/Docs","toDir":"Finanzen/Privat"}`, agent.KindCreate, agent.ModeDeny},
+	} {
+		if got := b.folderMode(json.RawMessage(c.args), c.kind); got != c.want {
+			t.Errorf("%s (%s): mode %q, want %q", c.args, c.kind, got, c.want)
 		}
 	}
 }

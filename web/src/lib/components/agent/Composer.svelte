@@ -27,6 +27,7 @@
 		disabled = false,
 		placeholder = '',
 		attachments = $bindable([]),
+		text = $bindable(''),
 		onsend,
 		onstop,
 		onpicknas,
@@ -65,7 +66,12 @@
 		placeholder?: string;
 		/** Files to send with the message: uploads or files of the NAS. */
 		attachments?: { name: string; file?: File; ref?: string }[];
-		onsend: (text: string) => void;
+		/** What is typed; kept by the page, so a look at another page of the
+		 *  agent does not lose a half-written message (0.99). */
+		text?: string;
+		/** Sends the text; resolving false means nothing was sent – the
+		 *  text then comes back into the field (0.99). */
+		onsend: (text: string) => void | boolean | Promise<void | boolean>;
 		onstop?: () => void;
 		/** Opens the choice of files on the NAS (shares of the account). */
 		onpicknas?: () => void;
@@ -85,13 +91,39 @@
 	let transcribing = $state(false);
 	let recorder: MediaRecorder | null = null;
 	let chunks: Blob[] = [];
+	// 0.99: the microphone never stays on. `starting`: the browser still
+	// asks for it; a release in that time (hold to talk) or the field going
+	// away ends the recording as soon as it would begin.
+	let starting = false;
+	let wantStop = false;
+	let gone = false;
+	$effect(() => () => {
+		gone = true;
+		if (recorder?.state === 'recording') {
+			recorder.onstop = null;
+			recorder.stream.getTracks().forEach((track) => track.stop());
+			recorder.stop();
+		}
+	});
+	function releaseVoice() {
+		if (!micHold) return;
+		if (recording) void toggleVoice();
+		else if (starting) wantStop = true;
+	}
 	async function toggleVoice() {
 		if (recording) {
 			recorder?.stop();
 			return;
 		}
+		if (starting) return;
+		starting = true;
+		wantStop = false;
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			if (gone || wantStop) {
+				stream.getTracks().forEach((track) => track.stop());
+				return;
+			}
 			const type = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(
 				(t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t),
 			);
@@ -131,10 +163,11 @@
 			recording = true;
 		} catch {
 			onerror?.(t('agent.voiceNoMic'));
+		} finally {
+			starting = false;
 		}
 	}
 
-	let text = $state('');
 	let area = $state<HTMLTextAreaElement>();
 	// The phone's field opens with the cursor and closes again when it is
 	// left empty. A tap on a button inside must not close it under the finger.
@@ -190,15 +223,27 @@
 		const cmd = oncommand ? /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) : null;
 		const known = cmd && commands.find((c) => c.name === cmd[1].toLowerCase());
 		if (known) {
+			// While a run works, a command that would send a message keeps
+			// its text instead of losing it to "busy".
+			if (busy && cmd && (cmd[2] ?? '').trim() !== '') return;
 			text = '';
 			queueMicrotask(grow);
 			oncommand?.(known.name, (cmd[2] ?? '').trim());
 			return;
 		}
 		if (!value || busy || disabled) return;
-		onsend(value);
+		const typed = text;
+		const sent = onsend(value);
 		text = '';
 		queueMicrotask(grow);
+		// Not sent (NAS not reachable, a failed upload): the text is back,
+		// unless something new was typed meanwhile.
+		void Promise.resolve(sent).then((ok) => {
+			if (ok === false && text === '') {
+				text = typed;
+				queueMicrotask(grow);
+			}
+		});
 	}
 	function key(event: KeyboardEvent) {
 		if (offered.length) {
@@ -383,7 +428,7 @@
 	<span class="chip-slot"
 		>{#if chip}{@render chip()}{/if}</span
 	>
-	{#if voice && !busy}
+	{#if voice && (!busy || recording)}
 		<button
 			type="button"
 			class="round mic"
@@ -394,8 +439,8 @@
 			title={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
 			onclick={() => micHold || toggleVoice()}
 			onpointerdown={() => micHold && !recording && toggleVoice()}
-			onpointerup={() => micHold && recording && toggleVoice()}
-			onpointerleave={() => micHold && recording && toggleVoice()}
+			onpointerup={releaseVoice}
+			onpointerleave={releaseVoice}
 			>{#if transcribing}<span class="dots" aria-hidden="true">…</span>{:else}<Icon
 					name={recording ? 'stop' : 'mic'}
 					size={18}

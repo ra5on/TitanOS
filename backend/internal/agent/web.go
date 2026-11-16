@@ -288,7 +288,9 @@ func (w *Web) Read(ctx context.Context, version, address string) (Page, error) {
 		return Page{}, toolcatalog.Errorf("the page could not be loaded: %v", err)
 	}
 	if !utf8.Valid(body) {
-		body = []byte(strings.ToValidUTF8(string(body), "�"))
+		// Older pages (many German ones) are Windows-1252 or ISO-8859-1;
+		// read as such they keep their umlauts (0.99).
+		body = []byte(fromWindows1252(body))
 	}
 	page := Page{URL: res.Request.URL.String()}
 	text := string(body)
@@ -368,3 +370,27 @@ func SearxSearch(ctx context.Context, address, query string) ([]SearchResult, er
 // MaxSearxResults is how many results of the own search the model gets:
 // more than from DuckDuckGo's page, a research reads several of them.
 const MaxSearxResults = 12
+
+// windows1252High are the characters of Windows-1252 from 0x80 to 0x9F;
+// everything else there equals ISO-8859-1, whose bytes are code points.
+var windows1252High = [32]rune{
+	'€', 0x81, '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', 0x8D, 'Ž', 0x8F,
+	0x90, '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', 0x9D, 'ž', 'Ÿ',
+}
+
+// fromWindows1252 reads bytes that are no valid UTF-8 as Windows-1252.
+func fromWindows1252(body []byte) string {
+	var b strings.Builder
+	b.Grow(len(body) + len(body)/8)
+	for _, c := range body {
+		switch {
+		case c < 0x80:
+			b.WriteByte(c)
+		case c < 0xA0:
+			b.WriteRune(windows1252High[c-0x80])
+		default:
+			b.WriteRune(rune(c))
+		}
+	}
+	return b.String()
+}

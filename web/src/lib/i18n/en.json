@@ -7894,6 +7894,8 @@
 	"agent.talk.end": "End",
 	"agent.talk.hint": "Just start talking. After a short pause it is sent, the answer is read aloud, then the agent listens again. You can talk over it at any time.",
 	"agent.talk.pending": "A step waits for your approval. End talk mode and decide in the chat.",
+	"agent.talk.notSent": "That did not get through. Please say it again.",
+	"agent.busyWait": "The agent is still working. Wait until it is done.",
 	"agent.talk.starting": "Opening the microphone …",
 	"agent.talk.listening": "Listening",
 	"agent.talk.hearing": "I hear you …",

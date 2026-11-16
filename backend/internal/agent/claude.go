@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
@@ -56,13 +55,7 @@ func claudeError(ctx context.Context, err error) error {
 		if r := []rune(text); len(r) > 400 {
 			text = string(r[:400])
 		}
-		switch api.StatusCode {
-		case http.StatusUnauthorized, http.StatusForbidden:
-			return fmt.Errorf("the provider refused the key (%d): %s", api.StatusCode, text)
-		case http.StatusTooManyRequests:
-			return fmt.Errorf("the provider's limit is reached (429): %s", text)
-		}
-		return fmt.Errorf("the provider answered %d: %s", api.StatusCode, text)
+		return providerStatus(api.StatusCode, text)
 	}
 	return fmt.Errorf("%w: %v", ErrUnreachable, err)
 }

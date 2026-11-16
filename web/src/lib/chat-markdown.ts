@@ -107,7 +107,12 @@ function block(paragraph: string, live = false): string {
 	)
 		return table([lines[0], '']);
 	const out: string[] = [];
-	const open: { list: { tag: 'ul' | 'ol'; items: string[] } | null } = { list: null };
+	// `start`: the number the model gave the first item. A list the model
+	// split by empty lines or a nested bullet goes on counting instead of
+	// starting at 1 again each time (0.99).
+	const open: { list: { tag: 'ul' | 'ol'; items: string[]; start: number } | null } = {
+		list: null,
+	};
 	let text: string[] = [];
 	const flushText = () => {
 		if (text.length) out.push(`<p>${text.map(inline).join('<br>')}</p>`);
@@ -117,7 +122,7 @@ function block(paragraph: string, live = false): string {
 		const list = open.list;
 		if (list)
 			out.push(
-				`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`,
+				`<${list.tag}${list.tag === 'ol' && list.start > 1 ? ` start="${list.start}"` : ''}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`,
 			);
 		open.list = null;
 	};
@@ -131,7 +136,11 @@ function block(paragraph: string, live = false): string {
 		} else if (tag) {
 			flushText();
 			if (open.list?.tag !== tag) flushList();
-			open.list ??= { tag, items: [] };
+			open.list ??= {
+				tag,
+				items: [],
+				start: tag === 'ol' ? Math.min(parseInt(/\d+/.exec(line)?.[0] ?? '1', 10) || 1, 9999) : 1,
+			};
 			open.list.items.push(line.replace(tag === 'ul' ? ITEM : NUMBERED, ''));
 		} else if (open.list && /^\s{2,}\S/.test(line)) {
 			open.list.items[open.list.items.length - 1] += ' ' + line.trim();

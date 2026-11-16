@@ -28,7 +28,7 @@
 		/** Speech to text of the NAS itself (WAV) instead of the Whisper address. */
 		voiceNas?: boolean;
 		calm?: boolean;
-		onsend: (text: string) => void | Promise<void>;
+		onsend: (text: string) => void | boolean | Promise<void | boolean>;
 		onclose: () => void;
 	} = $props();
 
@@ -236,7 +236,12 @@
 			problem = '';
 			asked = chat?.entries.length ?? 0;
 			phase = 'thinking';
-			await onsend(text);
+			// Nothing sent (the NAS or the model does not answer): listen
+			// again instead of thinking for ever (0.99).
+			if ((await onsend(text)) === false && !closed) {
+				problem = t('agent.talk.notSent');
+				phase = 'listening';
+			}
 		} catch (e) {
 			if (closed) return;
 			problem = apiErrorText(e);

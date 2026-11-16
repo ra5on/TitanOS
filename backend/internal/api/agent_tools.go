@@ -259,7 +259,19 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 			return agent.Prepared{}, errors.New("the person has not allowed this device for the agent (Einstellungen › KI-Agent › Home Assistant)")
 		}
 	}
-	if fm := b.folderMode(args); fm != "" {
+	// Looking at a picture on the NAS reads a file: what the person set for
+	// reading files holds, not the free pass of the agent's own tools (0.99).
+	if t.name == "image_view" && argString(args, "root") != "" {
+		read := b.settings.Policy.Mode("file_read", toolcatalog.AreaFiles, agent.KindRead)
+		if ft := b.tools["file_read"]; ft != nil {
+			read = b.mode(ft, agent.KindRead)
+		}
+		if read == agent.ModeDeny {
+			return agent.Prepared{}, errors.New("the person has not allowed reading files for the agent (Einstellungen › KI-Agent)")
+		}
+		mode = agent.Stricter(mode, read)
+	}
+	if fm := b.folderMode(args, kind); fm != "" {
 		if fm == agent.ModeDeny {
 			return agent.Prepared{}, errors.New("this folder is locked for the agent / dieser Ordner ist für den Agenten gesperrt")
 		}
@@ -274,7 +286,9 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// page could ask for: it may search on, and read a page whose address
 	// was already there (0.94, owner 15 Nov 2026: research asked at every
 	// step although the web was allowed without asking).
-	if t.area == agent.AreaWeb && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
+	// The same holds for the tools of connected MCP servers: they send
+	// what the model gives them to a server outside TitanOS (0.99).
+	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.name == "code_run" {
@@ -326,8 +340,22 @@ func compactArgs(args json.RawMessage) string {
 	return s
 }
 
+// argString is a text argument of a call, "" when it is missing.
+func argString(args json.RawMessage, key string) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(args, &fields) != nil {
+		return ""
+	}
+	var v string
+	_ = json.Unmarshal(fields[key], &v)
+	return v
+}
+
 // folderMode is the strictest folder rule any path of the call touches.
-func (b *agentToolbox) folderMode(args json.RawMessage) string {
+// What a call copies, moves, renames or deletes as a whole also counts
+// when a rule's folder lies inside it: copying "Finanzen" must not carry
+// the locked "Finanzen/Privat" to an open place (0.99).
+func (b *agentToolbox) folderMode(args json.RawMessage, kind string) string {
 	if len(b.settings.Policy.Folders) == 0 {
 		return ""
 	}
@@ -336,7 +364,12 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 		return ""
 	}
 	str := func(k string) string { v, _ := fields[k].(string); return v }
-	type target struct{ root, path string }
+	type target struct {
+		root, path string
+		// whole: the call takes this path with everything below it.
+		whole bool
+	}
+	whole := kind != agent.KindRead
 	var targets []target
 	root, toRoot := str("root"), str("toRoot")
 	if toRoot == "" {
@@ -344,18 +377,21 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 	}
 	for _, k := range []string{"path", "from", "name", "oldPath"} {
 		if v := str(k); v != "" || k == "path" {
-			targets = append(targets, target{root, v})
+			// "path" of a tool that creates is the folder it creates in;
+			// "name" is the new name there.
+			taken := whole && v != "" && k != "name" && (k != "path" || kind == agent.KindChange)
+			targets = append(targets, target{root, v, taken})
 		}
 	}
 	for _, k := range []string{"to", "toDir", "toPath", "newPath", "destination"} {
 		if v := str(k); v != "" {
-			targets = append(targets, target{toRoot, v})
+			targets = append(targets, target{toRoot, v, false})
 		}
 	}
 	if list, ok := fields["paths"].([]any); ok {
 		for _, v := range list {
 			if s, ok := v.(string); ok {
-				targets = append(targets, target{root, s})
+				targets = append(targets, target{root, s, whole && s != ""})
 			}
 		}
 	}
@@ -364,7 +400,7 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 			if mm, ok := m.(map[string]any); ok {
 				from, _ := mm["from"].(string)
 				to, _ := mm["to"].(string)
-				targets = append(targets, target{root, from}, target{root, to})
+				targets = append(targets, target{root, from, whole && from != ""}, target{root, to, false})
 			}
 		}
 	}
@@ -373,7 +409,7 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 		if t.root == "" {
 			continue
 		}
-		if m := b.realFolderMode(t.root, t.path); m != "" {
+		if m := b.realFolderMode(t.root, t.path, t.whole); m != "" {
 			if mode == "" {
 				mode = m
 			} else {
@@ -408,7 +444,7 @@ func (b *agentToolbox) rootDir(id string) string {
 // realFolderMode applies the folder rules to the real directory a path
 // lies in, so that a rule on share/Documents also holds when the same
 // folder is reached through volume/tank/Documents.
-func (b *agentToolbox) realFolderMode(root, p string) string {
+func (b *agentToolbox) realFolderMode(root, p string, whole bool) string {
 	dir := b.rootDir(root)
 	if dir == "" {
 		return b.settings.Policy.FolderMode(root, p)
@@ -423,7 +459,8 @@ func (b *agentToolbox) realFolderMode(root, p string) string {
 			continue
 		}
 		rule := resolveLinks(filepath.Join(base, filepath.FromSlash(path.Clean("/"+f.Path))))
-		if target == rule || strings.HasPrefix(target, rule+string(filepath.Separator)) {
+		inside := whole && f.Mode != agent.ModeAllow && strings.HasPrefix(rule, target+string(filepath.Separator))
+		if target == rule || strings.HasPrefix(target, rule+string(filepath.Separator)) || inside {
 			if mode == "" {
 				mode = f.Mode
 			} else {
@@ -533,7 +570,7 @@ func (b *agentToolbox) filterHidden(text string) string {
 			name, _ := m["name"].(string)
 			p = strings.Trim(base+"/"+name, "/")
 		}
-		if b.realFolderMode(root, p) != agent.ModeDeny {
+		if b.realFolderMode(root, p, false) != agent.ModeDeny {
 			kept = append(kept, e)
 		}
 	}
@@ -716,6 +753,8 @@ func sameArea(rule, area string) bool {
 // holds also with a skill from outside or a marked memory in the prompt
 // (owner 16 Nov 2026: the switch was on and the agent still asked before
 // every search, because one memory had been saved after a web search).
+var jsonPlain = strings.NewReplacer(`\u0026`, "&", `\u003c`, "<", `\u003e`, ">")
+
 func (b *agentToolbox) webStaysFree(chat *agent.Chat, name string, args json.RawMessage) bool {
 	if b.settings.Policy.WebFree {
 		return true
@@ -746,10 +785,12 @@ func (b *agentToolbox) webStaysFree(chat *agent.Chat, name string, args json.Raw
 	for _, e := range chat.Entries {
 		text := ""
 		switch {
-		case e.Role == "user":
+		case e.Role == "user" && !chat.Helper:
 			text = e.Content
 		case e.Role == "tool" && (e.Tool == "web_search" || e.Tool == "web_read") && !strings.HasPrefix(e.Result, "Error:"):
-			text = e.Result
+			// Results are kept as JSON, which writes "&" as \u0026: an
+			// address with two parameters was never found again (0.99).
+			text = jsonPlain.Replace(e.Result)
 		}
 		if text != "" && strings.Contains(text, address) {
 			return true

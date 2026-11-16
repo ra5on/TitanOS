@@ -65,7 +65,7 @@ func TestScheduleWakeChoice(t *testing.T) {
 		}
 	}
 	// A run of the task carries it in its chat.
-	chatID, err := ts.server.agentRunSchedule(mustUser(t, ts, "alex"), id, time.Now(), false)
+	chatID, err := ts.server.agentRunSchedule(mustUser(t, ts, "alex"), id, time.Now(), false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestScheduleThatCannotStartIsRecorded(t *testing.T) {
 	ts.server.agentConf.mu.Lock()
 	ts.server.agentConf.settings.Enabled = false
 	ts.server.agentConf.mu.Unlock()
-	chatID, err := ts.server.agentRunSchedule(mustUser(t, ts, "alex"), id, time.Now(), false)
+	chatID, err := ts.server.agentRunSchedule(mustUser(t, ts, "alex"), id, time.Now(), false, false)
 	if err == nil {
 		t.Fatal("a run with the agent off started")
 	}

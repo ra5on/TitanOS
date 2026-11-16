@@ -92,11 +92,13 @@ func ParseProviderURL(address string) (*url.URL, error) {
 // or a name without a public ending.
 func homeHost(host string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	// An address first: an IPv6 address has no dot either, and a public
+	// one is not the home network (0.99).
+	if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
 	if host == "localhost" || !strings.Contains(host, ".") {
 		return true
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 	}
 	for _, end := range []string{".local", ".lan", ".home", ".internal", ".fritz.box", ".home.arpa"} {
 		if strings.HasSuffix(host, end) {
@@ -328,13 +330,29 @@ func providerError(status int, body []byte) error {
 	if r := []rune(text); len(r) > 400 {
 		text = string(r[:400])
 	}
+	return providerStatus(status, text)
+}
+
+// ProviderError is an answer of an outside provider with an HTTP error
+// status. The run tries again after a failure of the provider's server
+// (5xx, overloaded), as it does with Ollama (0.99).
+type ProviderError struct {
+	Status int
+	Text   string
+}
+
+func (e *ProviderError) Error() string { return e.Text }
+
+func providerStatus(status int, text string) error {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("the provider refused the key (%d): %s", status, text)
+		text = fmt.Sprintf("the provider refused the key (%d): %s", status, text)
 	case http.StatusTooManyRequests:
-		return fmt.Errorf("the provider's limit is reached (429): %s", text)
+		text = fmt.Sprintf("the provider's limit is reached (429): %s", text)
+	default:
+		text = fmt.Sprintf("the provider answered %d: %s", status, text)
 	}
-	return fmt.Errorf("the provider answered %d: %s", status, text)
+	return &ProviderError{Status: status, Text: text}
 }
 
 func (p *openAI) models(ctx context.Context) ([]Model, error) {
@@ -415,6 +433,9 @@ func (p *openAI) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 	}
 	var calls []*building
 	size := 0
+	// How the answer ended: "[DONE]" or a finish_reason. Without either the
+	// connection closed in the middle; half an answer is no answer (0.99).
+	ended, finish := false, ""
 	scan := bufio.NewScanner(res.Body)
 	scan.Buffer(make([]byte, 64<<10), 4<<20)
 	for scan.Scan() {
@@ -424,11 +445,13 @@ func (p *openAI) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 		}
 		data := strings.TrimSpace(line[5:])
 		if data == "[DONE]" {
+			ended = true
 			break
 		}
 		var chunk struct {
 			Choices []struct {
-				Delta struct {
+				FinishReason string `json:"finish_reason"`
+				Delta        struct {
 					Content          string `json:"content"`
 					Reasoning        string `json:"reasoning"`
 					ReasoningContent string `json:"reasoning_content"`
@@ -457,6 +480,9 @@ func (p *openAI) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 			stats.PromptTokens, stats.OutputTokens = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
 		}
 		for _, choice := range chunk.Choices {
+			if choice.FinishReason != "" {
+				ended, finish = true, choice.FinishReason
+			}
 			d := choice.Delta
 			thinking := d.Reasoning + d.ReasoningContent
 			size += len(d.Content) + len(thinking)
@@ -493,13 +519,25 @@ func (p *openAI) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 		}
 		return Message{}, Stats{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
+	if !ended {
+		return Message{}, Stats{}, fmt.Errorf("%w: the provider's answer ended in the middle", ErrUnreachable)
+	}
+	if finish == "length" {
+		// A call cut off at the provider's limit cannot be run.
+		calls = nil
+		out.Content += "\n\n[The answer was cut off at the provider's limit for one answer.]"
+	}
 	for _, b := range calls {
 		if b.name == "" {
 			continue
 		}
 		args := strings.TrimSpace(b.args.String())
-		if args == "" || !json.Valid([]byte(args)) {
+		if args == "" {
 			args = "{}"
+		}
+		if !json.Valid([]byte(args)) {
+			// Never run a call with other arguments than the model wrote.
+			return Message{}, Stats{}, fmt.Errorf("invalid tool call: the arguments of %s could not be parsed", b.name)
 		}
 		var call ToolCall
 		call.Function.Name, call.Function.Arguments = b.name, json.RawMessage(args)

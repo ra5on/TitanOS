@@ -81,3 +81,10 @@ func TestWebSearchAndRead(t *testing.T) {
 		t.Fatal("redirect into a blocked network followed")
 	}
 }
+
+// 0.99: a page that is not UTF-8 keeps its umlauts.
+func TestFromWindows1252(t *testing.T) {
+	if got := fromWindows1252([]byte("Gr\xfc\xdfe \x84so\x93 \x80 5")); got != "Grüße „so“ € 5" {
+		t.Fatalf("got %q", got)
+	}
+}

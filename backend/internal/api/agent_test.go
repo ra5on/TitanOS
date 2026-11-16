@@ -1064,7 +1064,7 @@ func TestAgentReminder(t *testing.T) {
 	fake.mu.Lock()
 	calls := len(fake.got)
 	fake.mu.Unlock()
-	id, err := ts.server.agentRunSchedule(auth.User{Name: "alex", Role: auth.RoleOwner}, list.Schedules[0].ID, time.Now(), false)
+	id, err := ts.server.agentRunSchedule(auth.User{Name: "alex", Role: auth.RoleOwner}, list.Schedules[0].ID, time.Now(), false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
