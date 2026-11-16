@@ -142,18 +142,23 @@ func (m *Manager) AddSource(ctx context.Context, raw string) (SourceState, error
 	if err != nil {
 		return SourceState{}, err
 	}
-	m.mu.Lock()
-	if len(m.sources) >= maxSources {
-		m.mu.Unlock()
-		return SourceState{}, fmt.Errorf("%w: at most %d sources", ErrInvalid, maxSources)
-	}
-	for _, source := range m.sources {
-		if source.URL == u.String() {
-			m.mu.Unlock()
-			return SourceState{}, ErrExists
+	// Checked before the list is read and again before it is kept: two
+	// adds at once (a double click) must not keep the source twice.
+	addable := func() error {
+		if len(m.sources) >= maxSources {
+			return fmt.Errorf("%w: at most %d sources", ErrInvalid, maxSources)
 		}
+		if slices.ContainsFunc(m.sources, func(s Source) bool { return s.URL == u.String() }) {
+			return ErrExists
+		}
+		return nil
 	}
+	m.mu.Lock()
+	err = addable()
 	m.mu.Unlock()
+	if err != nil {
+		return SourceState{}, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	index, entries, err := m.fetchSource(ctx, u.String())
@@ -168,6 +173,9 @@ func (m *Manager) AddSource(ctx context.Context, raw string) (SourceState, error
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := addable(); err != nil {
+		return SourceState{}, err
+	}
 	sources := append(slices.Clone(m.sources), source)
 	if err := m.store.WriteJSON(sourcesPath, map[string]any{"sources": sources}); err != nil {
 		return SourceState{}, err

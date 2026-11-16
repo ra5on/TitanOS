@@ -399,3 +399,23 @@ func TestStalledSourceEndsTheInstall(t *testing.T) {
 		t.Fatal("still waiting for the source")
 	}
 }
+
+// The same source added twice at once is kept once.
+func TestSourceAddedTwiceAtOnceIsKeptOnce(t *testing.T) {
+	f, dir, base := community(t)
+	m := f.m
+	plugin(t, dir, "werkzeug", nil)
+	data, _ := json.Marshal(map[string]any{"plugins": []map[string]string{{"name": "werkzeug"}}})
+	os.WriteFile(filepath.Join(dir, "plugins.json"), data, 0o644)
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() { _, _ = m.AddSource(context.Background(), base+"plugins.json") })
+	}
+	wg.Wait()
+	m.mu.Lock()
+	n := len(m.sources)
+	m.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("%d sources kept", n)
+	}
+}
