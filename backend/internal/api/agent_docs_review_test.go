@@ -126,3 +126,37 @@ func TestPaperQuestionAboutAGoneFile(t *testing.T) {
 		t.Fatal("the new scan.txt was never read")
 	}
 }
+
+// Review 1.02: a bill the paperwork filed offered its due date, and the
+// index offered it a second time once it read the filed letter (the
+// default filing folder lies inside the default index folder).
+func TestDocsBillDueOfferedOnce(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "deadlines": true, "paper": true})
+	docsMine(t, ts, ts.client, map[string]any{"docs": map[string]any{"on": true, "deadlines": true}, "paper": map[string]any{"on": true}})
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	inbox := filepath.Join(home, paperInbox)
+	os.MkdirAll(inbox, 0o755)
+	letter, err := os.ReadFile("../docindex/testdata/briefe/stadtwerke.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().AddDate(0, 0, 9).Format("02.01.2006")
+	letter = []byte(strings.Replace(string(letter), "15.11.2026", due, 1))
+	old := time.Now().Add(-5 * time.Minute)
+	os.WriteFile(filepath.Join(inbox, "scan1.txt"), letter, 0o644)
+	os.Chtimes(filepath.Join(inbox, "scan1.txt"), old, old)
+	if err := ts.server.paperRun(context.Background(), alex, m, false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(ts.server.agentInbox("alex")); n != 1 {
+		t.Fatalf("paperwork offered %d", n)
+	}
+	if err := ts.server.docsRun(context.Background(), alex, m.Docs, true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if items := ts.server.agentInbox("alex"); len(items) != 1 {
+		t.Fatalf("deadline offered %d times: %+v", len(items), items)
+	}
+}

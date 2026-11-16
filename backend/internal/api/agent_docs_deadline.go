@@ -76,8 +76,27 @@ func deadlineItem(root, p string, page int, d docindex.Deadline, sender, paperID
 
 // docsDeadlinesFound offers (or plans) the deadlines of changed documents.
 func (s *Server) docsDeadlinesFound(u auth.User, mine agentDocsMine, st *docsState, changed []docindex.Doc, now time.Time) {
+	// A bill the paperwork filed has offered its due date already
+	// (paperDue); filed into a folder the index reads (Dokumente/Ablage
+	// below Dokumente, as set by default) it would come a second time.
+	var paid map[string]bool
 	for _, doc := range changed {
 		for _, d := range docindex.Deadlines(doc.Pages, now) {
+			if d.Kind == docindex.KindPayment {
+				if paid == nil {
+					paid = map[string]bool{}
+					if lg, err := s.paperLoad(u.Name); err == nil {
+						for _, e := range lg.Entries {
+							if e.State == "filed" && e.Offered {
+								paid[e.Root+"|"+e.Path] = true
+							}
+						}
+					}
+				}
+				if paid[doc.Root+"|"+doc.Path] {
+					continue
+				}
+			}
 			s.docsOffer(u, mine, st, deadlineItem(doc.Root, doc.Path, d.Page, d, "", ""))
 		}
 	}
