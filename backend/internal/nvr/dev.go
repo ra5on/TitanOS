@@ -396,6 +396,8 @@ type DevFrigate struct {
 	// (tests of the storage cap); IgnoreConfig starts without the
 	// cameras of config.yml.
 	FailKept, IgnoreConfig bool
+	// FailPath, if set, is a path answered with 500 (a busy Frigate).
+	FailPath string
 	// Cameras are the cameras Frigate "runs" with their pictures per
 	// second (0: offline).
 	Cameras map[string]float64
@@ -475,6 +477,9 @@ func (f *DevFrigate) Set(edit func(*DevFrigate)) {
 func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	down, safe, noDetector, secret := f.Down, f.SafeMode, f.NoDetector, f.secret
+	if f.FailPath != "" && r.URL.Path == f.FailPath {
+		down = true
+	}
 	cameras := map[string]float64{}
 	for id, fps := range f.Cameras {
 		cameras[id] = fps
