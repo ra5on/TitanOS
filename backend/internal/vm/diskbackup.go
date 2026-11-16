@@ -334,7 +334,16 @@ type diskBackupDisk struct {
 	Target  string `json:"target"`
 	Base    string `json:"base"`
 	Overlay string `json:"overlay"`
+	// Phase is diskCommitted once the overlay was committed back into the
+	// image and the guest switched over (pivot): the overlay is stale from
+	// then on and only removed, never committed again. Empty (records of
+	// older versions, or not committed yet): the undo decides as before.
+	Phase string `json:"phase,omitempty"`
 }
+
+// diskCommitted: the overlay of a disk is committed back and no longer in
+// use; what the guest wrote since is in the image only.
+const diskCommitted = "committed"
 
 var diskBackupFile = regexp.MustCompile(`^[0-9a-f-]{36}\.json$`)
 
@@ -710,8 +719,11 @@ func (m *Manager) blockJobActive(ctx context.Context, name, target string) (acti
 // limit) is not started again, which QEMU would refuse: it is waited for
 // and then finished. It is never aborted. When ctx ends first, the job
 // runs on and the next attempt takes it up. The overlay counts as gone
-// only when the live block chain no longer names it.
-func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDisk) error {
+// only when the live block chain no longer names it. pivoted is called
+// as soon as the guest is known to write to the image again (the pivot
+// went through), before anything else is asked: from then on the overlay
+// must never be committed again.
+func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDisk, pivoted func() error) error {
 	active, ready, err := m.blockJobActive(ctx, name, disk.Target)
 	if err != nil {
 		return err
@@ -719,19 +731,24 @@ func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDi
 	if !active {
 		_, err := m.virshWithin(ctx, diskUndoLimit, "--quiet", "blockcommit", name, disk.Target, "--active", "--wait", "--pivot")
 		if err == nil {
+			if err := pivoted(); err != nil {
+				return err
+			}
 			return m.offOverlay(ctx, name, disk)
 		}
 		// Refused, or cut off: is there a job now?
 		look, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		active, ready, _ = m.blockJobActive(look, name, disk.Target)
-		cancel()
 		if !active {
 			// Perhaps it went through all the same.
 			if m.offOverlay(look, name, disk) == nil {
-				return nil
+				cancel()
+				return pivoted()
 			}
+			cancel()
 			return err
 		}
+		cancel()
 	}
 	ticker := time.NewTicker(blockJobPoll)
 	defer ticker.Stop()
@@ -746,10 +763,16 @@ func (m *Manager) commitLive(ctx context.Context, name string, disk diskBackupDi
 		}
 		if !active {
 			// Ended by itself (a commit that was started with --pivot).
-			return m.offOverlay(ctx, name, disk)
+			if err := m.offOverlay(ctx, name, disk); err != nil {
+				return err
+			}
+			return pivoted()
 		}
 	}
 	if _, err := m.virsh(ctx, "--quiet", "blockjob", name, disk.Target, "--pivot"); err != nil {
+		return err
+	}
+	if err := pivoted(); err != nil {
 		return err
 	}
 	return m.offOverlay(ctx, name, disk)
@@ -806,10 +829,23 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 			}
 		}
 		settled := certain || m.clock().Sub(rec.Started) >= snapshotSettle
-		for _, disk := range rec.Disks {
+		for i, disk := range rec.Disks {
 			exists := func() bool {
 				info, err := os.Lstat(disk.Overlay)
 				return err == nil && info.Mode().IsRegular()
+			}
+			committed := disk.Phase == diskCommitted
+			// Noted on the volume before the overlay goes: titand may stop
+			// (or libvirt fail to answer) between the pivot and the removal,
+			// and a VM stopped meanwhile must not get the stale overlay
+			// committed over what the guest wrote since.
+			pivoted := func() error {
+				rec.Disks[i].Phase = diskCommitted
+				committed = true
+				if err := m.writeDiskBackup(volume, rec); err != nil {
+					return fmt.Errorf("note that %s is committed back: %w", disk.Target, err)
+				}
+				return nil
 			}
 			if running {
 				// Only libvirt knows what the guest writes to; asked anew for
@@ -819,8 +855,13 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 					return err
 				}
 				switch {
+				case committed && sources[disk.Target] == disk.Overlay:
+					// Committed back, yet named again: something else switched
+					// the guest onto it. Nothing is decided here.
+					return fmt.Errorf("%s runs on the overlay of %s that was committed back already", rec.VM, disk.Target)
+				case committed:
 				case sources[disk.Target] == disk.Overlay:
-					if err := m.commitLive(ctx, rec.VM, disk); err != nil {
+					if err := m.commitLive(ctx, rec.VM, disk, pivoted); err != nil {
 						return err
 					}
 				case !settled:
@@ -839,10 +880,10 @@ func (m *Manager) undoDiskBackup(ctx context.Context, volume string, rec diskBac
 					running = false // it stopped meanwhile: the other way
 				}
 			}
-			if !running && exists() {
+			if !running && !committed && exists() {
 				// The VM stopped on the overlay (or the NAS went down): what
 				// it wrote there goes into the image before it starts again.
-				// Committing what is committed already changes nothing.
+				// An overlay committed back live is stale and only removed.
 				if _, err := m.runner.Run(ctx, "", "qemu-img", "commit", "-d", "-f", "qcow2", disk.Overlay); err != nil {
 					return err
 				}
@@ -1037,7 +1078,7 @@ func (m *Manager) RepairDiskBackup(ctx context.Context, name string) (err error)
 		}
 		for i, files := range overlays {
 			if source := sources[targets[i]]; slices.Contains(files, source) {
-				if err := m.commitLive(ctx, name, diskBackupDisk{Target: targets[i], Base: m.diskPath(vm, vm.Disks[i]), Overlay: source}); err != nil {
+				if err := m.commitLive(ctx, name, diskBackupDisk{Target: targets[i], Base: m.diskPath(vm, vm.Disks[i]), Overlay: source}, func() error { return nil }); err != nil {
 					return err
 				}
 			}
