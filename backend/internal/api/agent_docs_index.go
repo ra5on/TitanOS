@@ -414,6 +414,9 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 	scans := docsMaxScans
 	asleep := map[string]bool{}
 	var changed []docindex.Doc
+	// A run that ends early (its time limit, titand stops) takes nothing out
+	// of the index and marks no folder as read: the next slot goes on.
+folders:
 	for _, f := range folders {
 		key := folderKey(f)
 		fst := st.Folders[key]
@@ -433,6 +436,9 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 			continue // later, when the disk is awake anyway
 		}
 		list, err := s.docsWalk(ctx, root, f.Path)
+		if ctx.Err() != nil {
+			break // the list may be cut short
+		}
 		if err != nil {
 			fst.Error = "unreadable"
 			continue
@@ -445,7 +451,7 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 		size := idx.TextSize()
 		for i, file := range list {
 			if ctx.Err() != nil {
-				break
+				break folders
 			}
 			present[file.path] = true
 			rt.mu.Lock()

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +35,38 @@ func TestDocsRemindLongName(t *testing.T) {
 	for _, sc := range list {
 		if len(sc.Name) > 80 || strings.Contains(sc.Name, "…") || !strings.HasPrefix(sc.Name, "Frist: ") {
 			t.Fatalf("name %q", sc.Name)
+		}
+	}
+}
+
+// Review 1.02: a run that hit its time limit (2 h, a large first run, a
+// slow picture model) took every file it had not reached out of the index
+// and marked the folders as read; the next night skipped them.
+func TestDocsCancelledRunKeepsTheIndex(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true})
+	docsMine(t, ts, ts.client, map[string]any{"docs": map[string]any{"on": true}})
+	os.WriteFile(filepath.Join(home, "Dokumente", "Vertrag.txt"), []byte("Kfz-Versicherung HUK"), 0o644)
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	at := time.Now()
+	if err := ts.server.docsRun(context.Background(), alex, m.Docs, true, at); err != nil {
+		t.Fatal(err)
+	}
+	if hits, _ := ts.server.docsSearch(alex, "Kfz-Versicherung", 10, nil); len(hits) != 1 {
+		t.Fatalf("not indexed: %d", len(hits))
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = ts.server.docsRun(ctx, alex, m.Docs, true, at.Add(time.Hour))
+	if hits, _ := ts.server.docsSearch(alex, "Kfz-Versicherung", 10, nil); len(hits) != 1 {
+		t.Fatalf("index lost by a cancelled run: %d hits", len(hits))
+	}
+	var st docsState
+	ts.server.docsRead("alex", docsStateFile, &st, maxDocsState)
+	for k, f := range st.Folders {
+		if f.LastRun.After(at) {
+			t.Fatalf("%s marked as read by a cancelled run: %+v", k, *f)
 		}
 	}
 }
