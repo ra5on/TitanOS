@@ -59,6 +59,7 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 	wanted := map[string]Manifest{}
 	if slices.Contains(mounted, settings.Volume) {
 		m.undoInterruptedUpdate(m.dir(settings.Volume))
+		m.sweepDownloads(settings.Volume)
 		for name, manifest := range m.installed(settings.Volume) {
 			if slices.Contains(settings.Enabled, name) && m.compatible(manifest) {
 				wanted[name] = manifest

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -247,6 +248,53 @@ func (m *Manager) undoInterruptedUpdate(dir string) {
 			}
 		case strings.HasPrefix(e.Name(), ".update-"):
 			_ = os.RemoveAll(path) // a copy of files that lie elsewhere
+		}
+	}
+}
+
+// downloadStage is the name os.MkdirTemp gives the private folder a
+// download is written to (catalog.go, external.go, driver_update.go).
+var downloadStage = regexp.MustCompile(`^\.download-[0-9]+$`)
+
+// sweepDownloads removes the folders of downloads a restart of titand
+// cut off (an app update, a power cut): they are never taken up again
+// and can be gigabytes. Once per volume and run of titand, and only while
+// no download runs: a download is noted under m.mu before its folder is
+// made, so none of this run is touched. The caller holds actions.
+func (m *Manager) sweepDownloads(volume string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.swept[volume] || m.busyLocked() {
+		return
+	}
+	if m.swept == nil {
+		m.swept = map[string]bool{}
+	}
+	m.swept[volume] = true
+	base := m.baseDir(volume)
+	dirs := []string{base}
+	if keys, err := os.ReadDir(filepath.Join(base, "driver-updates")); err == nil {
+		for _, key := range keys {
+			if key.IsDir() {
+				dirs = append(dirs, filepath.Join(base, "driver-updates", key.Name()))
+			}
+		}
+	}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			// Only real folders of that name; a link is never followed.
+			if e.Type()&fs.ModeType != fs.ModeDir || !downloadStage.MatchString(e.Name()) {
+				continue
+			}
+			if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+				slog.Warn("rest of an interrupted plugin download not removed", "folder", filepath.Join(dir, e.Name()), "err", err)
+			} else {
+				slog.Info("rest of an interrupted plugin download removed", "folder", filepath.Join(dir, e.Name()))
+			}
 		}
 	}
 }
