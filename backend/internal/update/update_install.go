@@ -33,8 +33,25 @@ func (m *Manager) Install(ctx context.Context) error {
 		return ErrDisabled
 	}
 	m.mu.Lock()
-	manifest, pending, phase, appTrial := m.available, m.pending, m.progress.Phase, m.appTrial
-	raw, signature := m.availableRaw, m.availableSig
+	o := offer{manifest: m.available, raw: m.availableRaw, signature: m.availableSig}
+	m.mu.Unlock()
+	return m.installOffer(ctx, o, false)
+}
+
+// offer is a release to install: its manifest with the bytes and the
+// signature it came with.
+type offer struct {
+	manifest       *Manifest
+	raw, signature []byte
+}
+
+// installOffer installs o. chosen: the person picked this version (Versions);
+// a check that finds another release meanwhile does not take its place
+// (Z-8, 1.04).
+func (m *Manager) installOffer(ctx context.Context, o offer, chosen bool) error {
+	manifest, raw, signature := o.manifest, o.raw, o.signature
+	m.mu.Lock()
+	pending, phase, appTrial := m.pending, m.progress.Phase, m.appTrial
 	m.mu.Unlock()
 	// PLAN 74: a newer release found while an update waits for the restart
 	// takes its place (the owner need not update twice): the waiting switch
@@ -64,11 +81,11 @@ func (m *Manager) Install(ctx context.Context) error {
 	m.mu.Lock()
 	variant := m.wantedVariant()
 	m.mu.Unlock()
-	chosen, ok := manifest.forVariant(variant)
+	forVariant, ok := manifest.forVariant(variant)
 	if !ok {
 		return fmt.Errorf("%w: the release has no system with the chosen kernel", ErrNothing)
 	}
-	manifest = &chosen
+	manifest = &forVariant
 	if manifest.MinVersion != "" {
 		minimum, _ := parseVersion(manifest.MinVersion)
 		if running, ok := parseVersion(m.version); ok && running.compare(minimum) < 0 {
@@ -93,13 +110,14 @@ func (m *Manager) Install(ctx context.Context) error {
 	}
 	// What was read above may have changed while another action (a step
 	// back, a cancelled switch, an app update) held the lock: look again.
+	// A chosen version stays what was chosen, whatever a check offers now.
 	m.mu.Lock()
 	again := m.available
 	busy := m.pending != nil || m.appTrial || m.progress.Phase == "download" || m.progress.Phase == "switch" || m.progress.Phase == "restart"
 	m.mu.Unlock()
-	if busy || again == nil || again.Version != manifest.Version {
+	if busy || !chosen && (again == nil || again.Version != manifest.Version) {
 		m.work.Unlock()
-		if again == nil {
+		if again == nil && !chosen {
 			return ErrNothing
 		}
 		return ErrBusy
