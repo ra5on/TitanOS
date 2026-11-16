@@ -210,18 +210,24 @@
 	});
 
 	async function load() {
+		const root = toRoot;
+		const at = dir;
+		// Only the answer for the folder still shown counts (Durchsicht 102):
+		// a slow one for a folder left meanwhile would offer its children
+		// under another path, and the copy would go there.
+		const current = () => root === toRoot && at === dir;
 		try {
 			const entries = await api.get<FileEntry[]>(
-				`/files/list?root=${encodeURIComponent(toRoot)}&path=${encodeURIComponent(dir)}`,
+				`/files/list?root=${encodeURIComponent(root)}&path=${encodeURIComponent(at)}`,
 			);
+			if (!current()) return;
 			// A folder cannot go into itself.
 			folders = entries
-				.filter(
-					(entry) => entry.dir && !(toRoot === from.id && paths.includes(join(dir, entry.name))),
-				)
+				.filter((entry) => entry.dir && !(root === from.id && paths.includes(join(at, entry.name))))
 				.map((entry) => entry.name);
 			error = '';
 		} catch (err) {
+			if (!current()) return;
 			folders = [];
 			error = apiErrorText(err);
 		}

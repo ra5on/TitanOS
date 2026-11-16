@@ -37,14 +37,19 @@
 	async function load() {
 		folders = null;
 		error = '';
-		if (!volume) return;
+		const vol = volume;
+		const dir = path;
+		if (!vol) return;
+		// Only the answer for the folder still shown counts: a slow answer for a
+		// folder left meanwhile would list its children under another path.
+		const current = () => vol === volume && dir === path;
 		try {
-			folders = (
-				await api.get<{ folders: string[] }>(
-					`/backups/folders?volume=${encodeURIComponent(volume)}&dir=${encodeURIComponent(path)}`,
-				)
-			).folders;
+			const answer = await api.get<{ folders: string[] }>(
+				`/backups/folders?volume=${encodeURIComponent(vol)}&dir=${encodeURIComponent(dir)}`,
+			);
+			if (current()) folders = answer.folders;
 		} catch (e) {
+			if (!current()) return;
 			error = apiErrorText(e);
 			folders = [];
 		}
