@@ -92,6 +92,9 @@ func (m *Manager) loadApp(ctx context.Context, manifest Manifest, raw, signature
 		return err
 	}
 	if err := m.Apps.Install(manifest.Version, raw, signature, dest); err != nil {
+		// Install moves the file only when it takes the app; a refused one
+		// would stay on the stick until the next app update.
+		os.Remove(dest)
 		return err
 	}
 	m.settleApp()

@@ -307,3 +307,25 @@ func TestInstallDueHasAWindowAndRunsOncePerDay(t *testing.T) {
 		t.Error("no install time set")
 	}
 }
+
+// An app update that is downloaded but then refused leaves no download on
+// the stick: nothing else would remove it before the next app update.
+func TestRefusedAppUpdateLeavesNoDownload(t *testing.T) {
+	e := newAppEnv(t)
+	e.publishApp(t, "1.1.0", "1.0.0")
+	if err := e.m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// The stick refuses it (here: it takes the app for another system).
+	e.m.Apps.Base = "0.9.0"
+	if err := e.m.Install(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if progress := e.waitPhase(t, "failed", "restart"); progress.Phase != "failed" {
+		t.Fatalf("progress: %+v", progress)
+	}
+	left, _ := filepath.Glob(filepath.Join(e.m.Apps.Dir, "*"))
+	if len(left) > 0 {
+		t.Fatalf("left on the stick: %v", left)
+	}
+}
