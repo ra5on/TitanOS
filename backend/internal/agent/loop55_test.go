@@ -431,3 +431,81 @@ func TestChatAnswerIsBounded(t *testing.T) {
 		t.Fatal("too many tool calls accepted")
 	}
 }
+
+// A window so small that the rules and tools alone fill it: summarising
+// cannot make the request fit, so it happens at most once per run instead
+// of before every round (1.01: every round asked the model for a summary).
+func TestCompactAtMostOnceWhenTheWindowIsTooSmall(t *testing.T) {
+	summaries := 0
+	s := &scripted{next: func(n int, body map[string]any) (int, []string) {
+		if body["tools"] == nil && strings.Contains(systemOf(body), "You summarise") {
+			summaries++
+			return 200, []string{answer("- Bisher: Protokolle gelesen.")}
+		}
+		msgs := body["messages"].([]any)
+		if len(msgs) < 12 {
+			return 200, []string{call("see", fmt.Sprintf(`{"n":%d}`, n))}
+		}
+		return 200, []string{answer("Fertig.")}
+	}}
+	chat := &Chat{ID: NewID()}
+	for i := 0; i < 4; i++ {
+		chat.Entries = append(chat.Entries,
+			Entry{ID: NewID(), Role: "user", Content: fmt.Sprintf("Frage %d: %s", i, strings.Repeat("lang ", 60))},
+			Entry{ID: NewID(), Role: "assistant", Content: strings.Repeat("Antwort ", 60)})
+	}
+	chat.Entries = append(chat.Entries, Entry{ID: NewID(), Role: "user", Content: "Sieh die Protokolle durch."})
+	// The rules alone are about 900 tokens, more than 70 % of the window.
+	r := &Runner{Ollama: s.serve(t), Model: "m", Tools: &kindTools{}, System: strings.Repeat("RULE ", 540), Window: 1024, MaxSteps: 8}
+	if err := r.Run(context.Background(), chat); err != nil {
+		t.Fatal(err)
+	}
+	notes := 0
+	for _, e := range chat.Entries {
+		if e.Note == "summary" {
+			notes++
+		}
+	}
+	if summaries > 1 || notes > 1 {
+		t.Fatalf("summarised %d times (%d notes) in one run", summaries, notes)
+	}
+	if chat.State != StateIdle || chat.Entries[len(chat.Entries)-1].Content != "Fertig." {
+		t.Fatalf("run did not end: %s %+v", chat.State, chat.Entries[len(chat.Entries)-1])
+	}
+}
+
+// With a normal window a long run may still summarise more than once: each
+// time a good part of the window has filled again.
+func TestCompactAgainWhenTheChatGrew(t *testing.T) {
+	summaries := 0
+	big := strings.Repeat("Zeile ohne Befund. ", 300)
+	s := &scripted{next: func(n int, body map[string]any) (int, []string) {
+		if body["tools"] == nil && strings.Contains(systemOf(body), "You summarise") {
+			summaries++
+			return 200, []string{answer("- Teile gelesen.")}
+		}
+		if n < 30 {
+			return 200, []string{call("see", fmt.Sprintf(`{"n":%d}`, n))}
+		}
+		return 200, []string{answer("Fertig.")}
+	}}
+	tools := &bigTools{text: big}
+	r := &Runner{Ollama: s.serve(t), Model: "m", Tools: tools, System: "RULES", Window: 8192, MaxSteps: 40}
+	chat := newChat("Lies alles")
+	if err := r.Run(context.Background(), chat); err != nil {
+		t.Fatal(err)
+	}
+	if summaries < 2 {
+		t.Fatalf("summarised %d times in a long run", summaries)
+	}
+}
+
+// bigTools answers every call with a long text.
+type bigTools struct {
+	kindTools
+	text string
+}
+
+func (b *bigTools) Execute(_ context.Context, _ *Chat, p Prepared) (Outcome, error) {
+	return Outcome{Text: b.text}, nil
+}
