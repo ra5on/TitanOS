@@ -518,3 +518,30 @@ func TestRecycleSweepWaitsForSleepingDisks(t *testing.T) {
 		t.Fatal("not looked through after another hour")
 	}
 }
+
+// shares.json that cannot be taken as it is (an NFS mode this version does
+// not know, written by a newer one before a way back) is not half used:
+// nothing of it is offered, and no change saves over it.
+func TestSharesThatCannotBeReadAreNeitherOfferedNorSavedOver(t *testing.T) {
+	m, _ := newTestManager(t)
+	stored := []Share{{Name: "Fotos", Volume: "data", SMB: true, Guard: true, NFS: NFS{Mode: "future"}}}
+	m.store.WriteJSON(configFile, stored)
+	if err := m.Load(); err == nil {
+		t.Fatal("unknown mode taken")
+	}
+	if n := len(m.List()); n != 0 {
+		t.Fatalf("%d shares listed after a failed read", n)
+	}
+	m.mu.Lock()
+	m.shares = slices.Clone(stored) // as a version that kept them in RAM
+	m.mu.Unlock()
+	if err := m.Update("Fotos", Share{Name: "Fotos", Volume: "data", SMB: true}, volumes, users); !errors.Is(err, ErrNotLoaded) {
+		t.Fatalf("update: %v", err)
+	}
+	m.lockGuard("Fotos", GuardLock{User: "alex"}) // locks in RAM only
+	var onStick []Share
+	m.store.ReadJSON(configFile, &onStick)
+	if len(onStick) != 1 || onStick[0].NFS.Mode != "future" {
+		t.Fatalf("stick: %+v", onStick)
+	}
+}

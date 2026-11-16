@@ -239,22 +239,32 @@ func (m *Manager) Load() error {
 	var shares []Share
 	err := m.store.ReadJSON(configFile, &shares)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		m.notLoaded()
 		return err
+	}
+	for i := range shares {
+		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, shares[i].NFS.Mode) {
+			// Nothing of it is taken: what is not understood must not be
+			// offered, and saved over by a change, either.
+			m.notLoaded()
+			return ErrInvalidOption
+		}
+		if shares[i].NFS.Mode == ReadOnly {
+			shares[i].NFS.Enabled = true
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.shares = shares
-	for i := range m.shares {
-		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, m.shares[i].NFS.Mode) {
-			m.loaded = false
-			return ErrInvalidOption
-		}
-		if m.shares[i].NFS.Mode == ReadOnly {
-			m.shares[i].NFS.Enabled = true
-		}
-	}
 	m.loaded = true
 	return nil
+}
+
+// notLoaded marks the shares as not read: none is offered or saved.
+func (m *Manager) notLoaded() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.shares, m.loaded = nil, false
 }
 
 // List returns the shares sorted by name.
@@ -267,6 +277,11 @@ func (m *Manager) List() []Share {
 }
 
 func (m *Manager) save(shares []Share) error {
+	if !m.loaded {
+		// The file on the stick could not be read: a save would replace
+		// the shares it holds with what is known in RAM.
+		return ErrNotLoaded
+	}
 	if shares == nil {
 		shares = []Share{}
 	}

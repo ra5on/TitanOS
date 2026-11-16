@@ -38,13 +38,21 @@ type State struct {
 func (m *Manager) Run(ctx context.Context, state func() State) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+	// A file that cannot be read is tried again less and less often (up to
+	// every five minutes), not every round: no cyclic reads of the stick.
+	retry, wait := time.Time{}, 5*time.Second
 	for {
 		m.mu.Lock()
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			if err := m.Load(); err == nil {
-				slog.Info("shares read from /config")
+			if now := time.Now(); !now.Before(retry) {
+				if err := m.Load(); err == nil {
+					slog.Info("shares read from /config")
+				} else {
+					slog.Error("shares not readable from /config; no share is offered", "err", err, "retry", wait)
+					retry, wait = now.Add(wait), min(2*wait, 5*time.Minute)
+				}
 			}
 		} else {
 			current := state()
