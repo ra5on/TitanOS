@@ -32,7 +32,8 @@ Zusammenfassung für die Versionshinweise. Einzelheiten, Tests und offene Punkte
 
 **Plugins und Hardware**
 - Gehst du während eines NVIDIA-Baus zum mitgelieferten Treiber zurück, wählt sich der fertige Bau nicht mehr selbst für den nächsten Neustart.
-- Ein hängender Download-Server blockiert nicht mehr App-Updates und Wartung bis zum Neustart. Betroffen waren die NVIDIA-Bauumgebung und Community-Quellen.
+- Hängt der Server beim Laden der NVIDIA-Bauumgebung, blockiert das nicht mehr App-Updates und Wartung bis zum nächsten Neustart.
+- Hängt eine Community-Quelle beim Installieren oder Aktualisieren, bricht der Vorgang nach einer Minute ab. Bisher ließ sich das Plugin dann bis zum Neustart nicht erneut installieren.
 - Eine entfernte Community-Quelle kommt nicht mehr zurück, und eine doppelt angeklickte Quelle wird nur einmal angelegt.
 - Neue Hardware wird auch dann erkannt, wenn sehr viele Geräte gleichzeitig dazukommen.
 - Scheitert die Übergabe einer Grafikkarte an eine VM, bekommt das NAS seine Textkonsole zurück.
