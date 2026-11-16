@@ -146,6 +146,18 @@ type VMDisks struct {
 	LibvirtSnapshot bool `json:"libvirtSnapshot,omitempty"`
 }
 
+// Known reports whether the setting is one TitanOS knows: the job check and
+// the preview of the job editor ask the same.
+func (v VMDisks) Known() bool {
+	switch {
+	case v.Mode == VMDisksSkip && v.Raw == "" && !v.LibvirtSnapshot:
+		return true
+	case v.Mode == VMDisksConsistent && slices.Contains([]string{"", VMDisksRawSkip, VMDisksRawPause}, v.Raw):
+		return true
+	}
+	return false
+}
+
 // VMDiskOptions are what a job allows for holding a running VM still.
 type VMDiskOptions struct {
 	Snapshot bool
