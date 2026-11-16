@@ -398,3 +398,33 @@ func TestParsers(t *testing.T) {
 		}
 	}
 }
+
+// A share of the same name made again on the same volume while the job
+// waited for Samba and NFS uses the folder: its data is not deleted.
+func TestPurgeKeepsTheFolderOfAShareMadeAgainMeanwhile(t *testing.T) {
+	m, _, dir := purgeSetup(t)
+	calls := 0
+	var mu sync.Mutex
+	_, err := m.StartPurge(context.Background(), PurgeRequest{Name: "Fotos", Path: dir, Mounted: mounted, Check: func(context.Context, string) []Usage {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		if calls > 1 {
+			// The share is gone from the configuration by now.
+			if err := m.Create(Share{Name: "Fotos", Volume: "data", SMB: true}, volumes, users); err != nil {
+				t.Error(err)
+			}
+		}
+		return nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := waitPurge(t, m)
+	if result.Phase != "failed" || !result.DataKept || !slices.ContainsFunc(result.Blockers, func(u Usage) bool { return u.Kind == UseShare && u.Name == "Fotos" }) {
+		t.Fatalf("%+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "2025/b.jpg")); err != nil {
+		t.Fatal("the folder of the share made again was deleted")
+	}
+}
