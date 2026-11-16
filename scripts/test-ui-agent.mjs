@@ -907,6 +907,34 @@ async function plan55() {
     await settingsRow(page, "Darstellung").click();
     await page.waitForURL(/[?&]part=look/);
     await page.locator(".sub").getByText("Schriftgröße").first().waitFor();
+    // 1.01 (owner 16 Nov 2026): the colours of the dots and of the text,
+    // with a preview; a ready colour reaches the preview's dots.
+    const dotsPick = page.getByRole("radiogroup", { name: "Farbe der Punkte" });
+    await dotsPick.getByRole("radio", { name: "Blau" }).check();
+    await page
+      .getByRole("radiogroup", { name: "Farbe des Textes neben den Punkten" })
+      .getByRole("radio", { name: "Grün" })
+      .check();
+    const preview = page.locator(".busy-preview");
+    await preview.scrollIntoViewIfNeeded();
+    assert.equal(
+      await preview.evaluate((el) =>
+        getComputedStyle(el).getPropertyValue("--ag-dots").trim(),
+      ),
+      "#3e63dd",
+      "the preview takes the chosen colour of the dots",
+    );
+    assert.equal(
+      await preview
+        .locator(".word")
+        .evaluate((el) => getComputedStyle(el).color),
+      "rgb(48, 164, 108)",
+      "the preview's text takes the chosen colour",
+    );
+    for (const b of await dotsPick.locator(".sw").all())
+      assert.ok((await b.boundingBox()).height >= 44, "44 px colour buttons");
+    await noOverflow(page, "colours on the phone");
+    await page.screenshot({ path: `${out}/101-colours-phone.png` });
     // One way back: the button in the head, no second link in the page.
     assert.equal(
       await page.locator("a.back").count(),
@@ -3124,7 +3152,9 @@ try {
     // made anew when its word changes – it runs on.
     const sizes = await fig
       .locator("i")
-      .evaluateAll((list) => list.map((el) => el.getBoundingClientRect().width));
+      .evaluateAll((list) =>
+        list.map((el) => el.getBoundingClientRect().width),
+      );
     assert.ok(
       Math.max(...sizes) - Math.min(...sizes) < 0.5,
       `${name}: three dots of one size (${sizes})`,
@@ -3141,7 +3171,9 @@ try {
     await fig.evaluate((el) => (el.dataset.mark = "same"));
     const word = await page.locator(".live-line .busy-word").innerText();
     await page.waitForFunction(
-      (w) => document.querySelector(".live-line .busy-word")?.textContent?.trim() !== w.trim(),
+      (w) =>
+        document.querySelector(".live-line .busy-word")?.textContent?.trim() !==
+        w.trim(),
       word,
       { timeout: 8000 },
     );

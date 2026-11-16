@@ -9088,5 +9088,20 @@
 	"agent.haDomain.valve": "Valves",
 	"agent.haDomain.water_heater": "Water heaters",
 	"agent.haDomain.weather": "Weather",
-	"agent.haDomain.zone": "Zones"
+	"agent.haDomain.zone": "Zones",
+	"agent.set.dotColor": "Colour of the dots",
+	"agent.set.textColor": "Colour of the text beside the dots",
+	"agent.set.colorAutoDots": "The agent's orange",
+	"agent.set.colorAutoText": "The theme's grey",
+	"agent.set.colorCustom": "Own colour",
+	"agent.set.colorLowContrast": "⚠ Hard to read: too little contrast to the background.",
+	"agent.set.colorPreview": "Preview",
+	"agent.color.orange": "Orange",
+	"agent.color.red": "Red",
+	"agent.color.pink": "Pink",
+	"agent.color.violet": "Violet",
+	"agent.color.blue": "Blue",
+	"agent.color.teal": "Teal",
+	"agent.color.green": "Green",
+	"agent.color.yellow": "Yellow"
 }

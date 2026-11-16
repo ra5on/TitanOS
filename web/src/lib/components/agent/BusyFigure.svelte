@@ -64,8 +64,9 @@
 			el.style.width = el.style.height = `${d}px`;
 			el.style.margin = `${-d / 2}px 0 0 ${-d / 2}px`;
 			el.style.transform = `translate(${p.x * half}px, ${p.y * half}px) scaleY(${p.squash ?? 1})`;
+			// Depth shows in what covers what; all three keep one tone (owner
+			// 16 Nov 2026: "alle in dem gleich Farbton").
 			el.style.zIndex = String(Math.round(p.z * 10) + 10);
-			el.style.filter = `brightness(${0.78 + (p.z + 1) * 0.2})`;
 		});
 		last = spots;
 	}
@@ -156,9 +157,9 @@
 		border-radius: 50%;
 		background: radial-gradient(
 			circle at 34% 28%,
-			color-mix(in srgb, var(--ag-warm, var(--accent)) 45%, white) 0,
-			var(--ag-warm, var(--accent)) 46%,
-			color-mix(in srgb, var(--ag-warm, var(--accent)) 58%, black) 100%
+			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 45%, white) 0,
+			var(--ag-dots, var(--ag-warm, var(--accent))) 46%,
+			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 58%, black) 100%
 		);
 		will-change: transform;
 	}
@@ -171,7 +172,7 @@
 		width: 70%;
 		height: 12%;
 		border-radius: 50%;
-		background: color-mix(in srgb, var(--ag-warm, var(--accent)) 35%, black);
+		background: color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 35%, black);
 		filter: blur(2px);
 		opacity: 0.4;
 		transition: opacity 0.45s ease;

@@ -1,6 +1,7 @@
 // The working figure of the KI-Agent: three shaded spheres (0.100, owner
 // 16 Nov 2026: "3 dimensional"). Since 1.01 one motion for every kind of
-// work – three dots hopping in a row (see FIGURES).
+// work – three spheres circling in space, drawing together and apart (see
+// swirl and FIGURES).
 //
 // A figure gives, for a time and a sphere, a place in units of half the
 // figure's width (-1 … 1) and a depth (-1 back … 1 front). The component
@@ -25,20 +26,41 @@ type Figure = (t: number, n: number, speed: number) => Spot;
 /** Diameter of every sphere as a share of the figure's width. */
 export const SPHERE = 0.24;
 
-/** A row whose spheres hop one after the other. */
-const hop: Figure = (t, n, k) => {
-	const p = (((t * k * 1.5 - n * 0.22) % 1.4) + 1.4) % 1.4;
-	const up = p < 1 ? Math.sin(p * Math.PI) : 0;
-	return { x: (n - 1) * 0.62, y: 0.4 - up * 0.75, z: up * 0.4, squash: p < 1 ? 1 : 0.86 };
+/** Three spheres circling in space (owner 16 Nov 2026: "Kreisen 3
+ *  dimensional, zb auch drehend, zusammenlaufend und wieder auseinander"):
+ *  a ring whose tilt rocks slowly and which turns in the plane of the
+ *  screen, while the spheres draw together to the middle and spread out
+ *  again. Every part is a smooth periodic function of the clock, so the
+ *  motion never jumps. */
+const swirl: Figure = (t, n, k) => {
+	const c = t * k;
+	// Together and apart: the ring's radius breathes between 0.3 (the
+	// spheres just touch, three stay three) and 0.7.
+	const r = 0.3 + 0.4 * (0.5 + 0.5 * Math.cos(c * 0.85));
+	// Round the ring, a little faster while the spheres are close.
+	const a = c * 2.1 + Math.sin(c * 0.85) * 0.9 + (n * 2 * Math.PI) / 3;
+	// A point on the ring, then the ring tilted about the x axis (rocking)
+	// and turned about the z axis (the whole figure revolves).
+	const px = Math.cos(a) * r;
+	const pz0 = Math.sin(a) * r;
+	const tilt = 1.05 + Math.sin(c * 0.55) * 0.35;
+	const py = -pz0 * Math.cos(tilt);
+	const pz = pz0 * Math.sin(tilt);
+	const spin = c * 0.45;
+	return {
+		x: px * Math.cos(spin) - py * Math.sin(spin),
+		y: px * Math.sin(spin) + py * Math.cos(spin),
+		z: Math.max(-1, Math.min(1, pz / 0.7)),
+	};
 };
 
 /** Which figure a kind of work shows, how fast, and whether it casts a
  *  shadow. Owner 16 Nov 2026: "nur bei den 3 Punkten bleiben und nichts
  *  anderes noch mit reinholen, dann hätten wir immer eine flüssige
- *  Animation" – every kind shows the same three dots hopping in a row at
- *  one pace; only the word beside them tells what is done. (0.100 to 1.00
- *  had four figures, one per kind.) */
-const DOTS = { figure: hop, speed: 1.2, shadow: true };
+ *  Animation" – every kind shows the same three spheres at one pace (the
+ *  circling swirl above); only the word beside them tells what is done.
+ *  (0.100 to 1.00 had four figures, one per kind.) */
+const DOTS = { figure: swirl, speed: 1, shadow: true };
 export const FIGURES: Record<BusyKind, { figure: Figure; speed: number; shadow: boolean }> = {
 	'': DOTS,
 	system: DOTS,
