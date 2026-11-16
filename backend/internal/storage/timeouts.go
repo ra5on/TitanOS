@@ -12,7 +12,8 @@ import (
 // command hanging on a broken disk (umount or mdadm --stop in D state)
 // would then keep every later action waiting for ever. Each command gets a
 // time limit fitting what it does; commands whose duration grows with the
-// size of the volume (mkfs, resize, btrfs device work, discard) get none.
+// size of the volume (mkfs, resize, btrfs device work, replace and
+// balance, discard) get none.
 // run.Exec gives up on a process that does not end after being killed.
 
 // commandTimeout is the time limit of a command, 0 for none.
@@ -39,6 +40,24 @@ func commandTimeout(name string, args []string) time.Duration {
 			return 10 * time.Minute
 		}
 		return 2 * time.Minute
+	case "btrfs":
+		switch first {
+		case "subvolume":
+			// Making and deleting a snapshot waits for a transaction
+			// commit, which a busy file system may hold back a while; a
+			// stalled one (failing member) must not hold every later
+			// action. Removing the extents happens later in the kernel.
+			return 10 * time.Minute
+		case "filesystem", "device":
+			if len(args) > 1 && (args[1] == "show" || args[1] == "df" || args[1] == "usage" || args[1] == "scan") {
+				return 2 * time.Minute
+			}
+		case "balance", "replace", "scrub":
+			if len(args) > 1 && args[1] == "status" {
+				return 2 * time.Minute
+			}
+		}
+		return 0 // device add/remove, replace and balance grow with the data
 	case "tune2fs":
 		if first == "-l" {
 			return time.Minute
