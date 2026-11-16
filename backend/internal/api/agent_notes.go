@@ -252,22 +252,16 @@ func (s *Server) moveNote(user auth.User, from, to string) error {
 }
 
 func (s *Server) renamePinned(user, from, to string) error {
-	store := s.agentStore()
-	meta, err := store.NotesMeta(user)
-	if err != nil {
-		return nil
-	}
-	changed := false
-	for i, p := range meta.Pinned {
-		if p == from || strings.HasPrefix(p, from+"/") {
-			meta.Pinned[i] = to + strings.TrimPrefix(p, from)
-			changed = true
+	return s.agentStore().UpdateNotesMeta(user, func(meta *agent.NotesMeta) bool {
+		changed := false
+		for i, p := range meta.Pinned {
+			if p == from || strings.HasPrefix(p, from+"/") {
+				meta.Pinned[i] = to + strings.TrimPrefix(p, from)
+				changed = true
+			}
 		}
-	}
-	if !changed {
-		return nil
-	}
-	return store.SaveNotesMeta(user, meta)
+		return changed
+	})
 }
 
 func (s *Server) deleteNote(user auth.User, rel string) error {
@@ -289,11 +283,11 @@ func (s *Server) deleteNote(user auth.User, rel string) error {
 	if err != nil {
 		return err
 	}
-	store := s.agentStore()
-	if meta, err := store.NotesMeta(user.Name); err == nil {
-		kept := slices.DeleteFunc(meta.Pinned, func(x string) bool { return x == rel || strings.HasPrefix(x, rel+"/") })
-		_ = store.SaveNotesMeta(user.Name, agent.NotesMeta{Pinned: kept})
-	}
+	_ = s.agentStore().UpdateNotesMeta(user.Name, func(meta *agent.NotesMeta) bool {
+		n := len(meta.Pinned)
+		meta.Pinned = slices.DeleteFunc(meta.Pinned, func(x string) bool { return x == rel || strings.HasPrefix(x, rel+"/") })
+		return len(meta.Pinned) != n
+	})
 	return nil
 }
 
@@ -432,17 +426,14 @@ func (s *Server) handleAgentNotePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	store := s.agentStore()
-	meta, err := store.NotesMeta(user.Name)
+	err = s.agentStore().UpdateNotesMeta(user.Name, func(meta *agent.NotesMeta) bool {
+		meta.Pinned = slices.DeleteFunc(meta.Pinned, func(p string) bool { return p == rel })
+		if req.Pinned {
+			meta.Pinned = append(meta.Pinned, rel)
+		}
+		return true
+	})
 	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
-	meta.Pinned = slices.DeleteFunc(meta.Pinned, func(p string) bool { return p == rel })
-	if req.Pinned {
-		meta.Pinned = append(meta.Pinned, rel)
-	}
-	if err := store.SaveNotesMeta(user.Name, meta); err != nil {
 		agentStoreError(w, err)
 		return
 	}
