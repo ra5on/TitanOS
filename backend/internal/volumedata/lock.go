@@ -7,8 +7,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// ErrHeld: a sweep holds the folder right now (TryExclusive); the work
+// that asked can be tried again shortly.
+var ErrHeld = errors.New("volumedata: leftovers in the folder are being removed; try again shortly")
+
 // Share takes a shared lock (flock) on the folder of root until the
-// returned function is called. Work that leaves files of its own in a
+// returned function is called. It never waits: while a sweep holds the
+// folder it returns ErrHeld, so that a caller holding other locks is not
+// held up by the walk of a sweep. Work that leaves files of its own in a
 // private folder holds one while it runs; a sweep of what interrupted work
 // left takes the folder exclusively (TryExclusive) and so never removes
 // what running work writes. The lock belongs to its own descriptor, so it
@@ -18,8 +24,11 @@ func Share(root *os.Root) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH); err != nil {
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil {
 		f.Close()
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return nil, ErrHeld
+		}
 		return nil, err
 	}
 	return func() { f.Close() }, nil

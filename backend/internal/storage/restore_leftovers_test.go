@@ -2,10 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -75,6 +77,32 @@ func TestLeftoversOfInterruptedRestoresAreRemoved(t *testing.T) {
 	}
 	release()
 	safeRoot.Close()
+
+	// While a sweep holds the folder, a restore is refused at once instead
+	// of waiting with the storage lock held.
+	sweep, err := volumedata.Open(m.mountRoot, "safe", restoresFeature, m.Mounted())
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, ok, err := volumedata.TryExclusive(sweep)
+	if err != nil || !ok {
+		t.Fatalf("exclusive: %v %v", ok, err)
+	}
+	refused := make(chan error, 1)
+	go func() {
+		_, err := m.RestoreSnapshotFiles(context.Background(), "data", "manual", SnapshotRestore{Paths: []string{"photos/a.jpg"}, TargetVolume: "safe"})
+		refused <- err
+	}()
+	select {
+	case err := <-refused:
+		if !errors.Is(err, ErrBusy) {
+			t.Fatalf("restore during a sweep: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a restore waits for the sweep while holding the storage lock")
+	}
+	held()
+	sweep.Close()
 
 	for _, volume := range []string{"safe", "data"} {
 		if !m.cleanRestores(volume) {

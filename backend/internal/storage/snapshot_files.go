@@ -209,6 +209,9 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 	// Held until the staging folder is published or gone: the sweep after
 	// a start (cleanRestores) leaves the folder alone meanwhile.
 	release, err := volumedata.Share(target)
+	if errors.Is(err, volumedata.ErrHeld) {
+		return out, fmt.Errorf("%w: %v", ErrBusy, err)
+	}
 	if err != nil {
 		return out, err
 	}

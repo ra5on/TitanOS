@@ -707,6 +707,9 @@ func (r *folderRestore) note(m *Manager, volume, id string) (result error) {
 	release, err := volumedata.Share(root)
 	if err != nil {
 		root.Close()
+		if errors.Is(err, volumedata.ErrHeld) {
+			return fmt.Errorf("%w: %v", ErrBusy, err)
+		}
 		return err
 	}
 	name := folderJournalPrefix + id + ".json"

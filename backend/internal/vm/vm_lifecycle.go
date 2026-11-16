@@ -58,7 +58,13 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	// A backup that was cut off left the guest's last writes in an overlay:
 	// they go back into the image before the VM starts from the image.
 	if slices.Contains(mounted, vm.Volume) {
-		if err := m.finishDiskBackupOf(ctx, vm); err != nil {
+		// Bounded like the undo of a backup: the start is no longer cut
+		// off with the request, and a block job that never gets ready must
+		// not hold the VM for good.
+		undo, cancel := context.WithTimeout(ctx, diskUndoLimit)
+		err := m.finishDiskBackupOf(undo, vm)
+		cancel()
+		if err != nil {
 			if errors.Is(err, ErrDiskBackupRecord) {
 				return err
 			}
