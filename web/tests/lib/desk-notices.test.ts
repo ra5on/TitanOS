@@ -15,6 +15,10 @@ vi.mock('../../src/lib/api.ts', async (original) => {
 	};
 	return {
 		...real,
+		apiFetch: async (path: string, init: RequestInit = {}) => {
+			nas.calls.push(`${init.method} ${path}${init.keepalive ? ' keepalive' : ''}`);
+			return new Response(null, { status: nas.refuse && path.includes(nas.refuse) ? 409 : 204 });
+		},
 		api: {
 			get: (path: string) => answer('GET', path),
 			post: (path: string) => answer('POST', path),
@@ -26,7 +30,7 @@ vi.mock('../../src/lib/api.ts', async (original) => {
 import { dockerAction } from '#lib/desktop/desk-ops.ts';
 import { sendFilesToFileManager } from '#lib/desktop/desk-messages.ts';
 import { sources } from '#lib/desktop/sources.svelte.ts';
-import { desktop, savePrefs } from '#lib/desktop/wm.svelte.ts';
+import { desktop, flushPrefs, savePrefs } from '#lib/desktop/wm.svelte.ts';
 import { i18n } from '#lib/i18n/index.svelte.ts';
 import { dismissToast, toasts } from '#lib/toast.svelte.ts';
 
@@ -78,6 +82,39 @@ test('a desktop setting that could not be saved is said', async () => {
 	savePrefs((p) => (p.lockMinutes = 8));
 	await vi.advanceTimersByTimeAsync(1600);
 	expect(toasts.list).toHaveLength(1);
+});
+
+test('other tabs get a desktop setting only once the NAS has kept it', async () => {
+	vi.useFakeTimers();
+	const told = vi.spyOn(BroadcastChannel.prototype, 'postMessage');
+	desktop.from = 1;
+	nas.refuse = '/preferences/desktop';
+	savePrefs((p) => (p.lockMinutes = 9));
+	await vi.advanceTimersByTimeAsync(1600);
+	expect(nas.calls).toContain('PUT /preferences/desktop');
+	expect(told).not.toHaveBeenCalled();
+	nas.refuse = '';
+	savePrefs((p) => (p.lockMinutes = 10));
+	await vi.advanceTimersByTimeAsync(1600);
+	expect(told).toHaveBeenCalledTimes(1);
+	expect(told.mock.calls[0][0]).toMatchObject({ prefs: { lockMinutes: 10 } });
+	told.mockRestore();
+});
+
+test('a desktop setting changed just before a reload is still sent', async () => {
+	vi.useFakeTimers();
+	desktop.from = 1;
+	savePrefs((p) => (p.lockMinutes = 11));
+	// The page goes before the timer ran out.
+	await vi.advanceTimersByTimeAsync(300);
+	flushPrefs();
+	expect(nas.calls).toEqual(['PUT /preferences/desktop keepalive']);
+	// It is sent once, not again by the timer.
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(nas.calls).toEqual(['PUT /preferences/desktop keepalive']);
+	// Nothing waiting: nothing is sent.
+	flushPrefs();
+	expect(nas.calls).toHaveLength(1);
 });
 
 test('files dropped on the desktop that the file manager never takes are said', async () => {
