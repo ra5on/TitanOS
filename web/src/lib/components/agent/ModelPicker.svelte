@@ -11,6 +11,7 @@
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, modelShown, type Model } from '#lib/agent.ts';
 	import { dim, panelIn, sheetUp } from '#lib/agent-motion.ts';
+	import { trapFocus } from '#lib/focus-trap.ts';
 
 	let {
 		models = [],
@@ -79,12 +80,6 @@
 	}
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (open && e.key === 'Escape') open = false;
-	}}
-/>
-
 <span class="picker" class:small>
 	{#if choice}
 		<button
@@ -123,6 +118,7 @@
 				role="dialog"
 				aria-label={t('agent.modelPick')}
 				transition:fly={phone ? sheetUp(calm) : panelIn(calm, at.up ? 10 : -10)}
+				use:trapFocus={{ initial: 'first', onescape: () => (open = false) }}
 			>
 				{#if phone}<span class="grab" aria-hidden="true"></span>{/if}
 				{#if usable.length > 1}

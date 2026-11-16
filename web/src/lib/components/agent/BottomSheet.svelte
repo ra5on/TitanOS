@@ -8,6 +8,7 @@
 	import { swipeDown } from '#lib/components/sheet.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { dim, panelIn, sheetUp } from '#lib/agent-motion.ts';
+	import { trapFocus } from '#lib/focus-trap.ts';
 
 	let {
 		label,
@@ -17,15 +18,7 @@
 	}: { label: string; calm?: boolean; onclose: () => void; children: Snippet } = $props();
 
 	const phone = matchMedia('(max-width: 760px)').matches;
-
-	function focus(node: HTMLElement) {
-		const before = document.activeElement as HTMLElement | null;
-		node.focus();
-		return { destroy: () => before?.focus?.() };
-	}
 </script>
-
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
 <button
 	type="button"
@@ -41,7 +34,7 @@
 	aria-modal="true"
 	aria-label={label}
 	tabindex="-1"
-	use:focus
+	use:trapFocus={{ onescape: onclose }}
 	use:swipeDown={{ close: onclose }}
 	transition:fly={phone ? sheetUp(calm) : panelIn(calm)}
 >

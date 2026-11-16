@@ -11,6 +11,7 @@
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { slideIn } from '#lib/agent-motion.ts';
+	import { trapFocus } from '#lib/focus-trap.ts';
 	import { onDestroy, onMount } from 'svelte';
 	import { noteMove, notePath, applyFormat, type Format, type NoteInfo } from '#lib/agent-notes.ts';
 
@@ -226,16 +227,6 @@
 	const leaf = (f: string) => f.slice(f.lastIndexOf('/') + 1);
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !dialog) {
-			if (menuFor) menuFor = null;
-			else if (open) void flush().then(() => (open = null));
-			else onclose();
-		}
-	}}
-/>
-
 <div class="scrim" role="presentation" onclick={onclose}></div>
 <div
 	class="notes"
@@ -244,6 +235,16 @@
 	aria-modal="true"
 	aria-label={t('agent.notes.title')}
 	transition:fly={slideIn(calm, 420)}
+	use:trapFocus={{
+		initial: 'first',
+		// Escape closes what is on top: the menu, the open note, the notes.
+		onescape: () => {
+			if (dialog) return;
+			if (menuFor) menuFor = null;
+			else if (open) void flush().then(() => (open = null));
+			else onclose();
+		},
+	}}
 >
 	<section class="list" aria-label={t('agent.notes.title')}>
 		<header>
