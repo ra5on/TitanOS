@@ -83,7 +83,8 @@ self.addEventListener('fetch', (event) => {
 							headers: { 'Content-Type': file.type || 'application/octet-stream' },
 						}),
 					);
-					list.push({ key, name: file.name || `datei-${i + 1}`, size: file.size, type: file.type });
+					// Without a name the share page names it in the user's language.
+					list.push({ key, name: file.name || '', size: file.size, type: file.type });
 				}
 				const text = ['title', 'text', 'url']
 					.map((k) => form.get(k))
@@ -97,6 +98,8 @@ self.addEventListener('fetch', (event) => {
 				);
 				return Response.redirect('/share', 303);
 			} catch {
+				// Nothing half-stored stays behind (e.g. the browser's quota ran out).
+				await caches.delete(SHARE_CACHE).catch(() => {});
 				return Response.redirect('/share?missing=1', 303);
 			}
 		})(),

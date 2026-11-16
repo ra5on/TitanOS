@@ -370,5 +370,8 @@
 	"desktop.widget.agentOff": "Der KI-Agent ist nicht eingeschaltet oder für dieses Konto nicht freigegeben.",
 	"desktop.widget.agentWaits": "wartet auf dich",
 	"desktop.widget.agentRuns": "arbeitet",
-	"desktop.widget.agentIdle": "Nichts offen. Stell eine Frage."
+	"desktop.widget.agentIdle": "Nichts offen. Stell eine Frage.",
+	"share.fileGone": "Nicht mehr im Browser – teile die Datei noch einmal.",
+	"share.textFile": "geteilt-{stamp}.txt",
+	"share.fileName": "Datei {n}"
 }
