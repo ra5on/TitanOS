@@ -154,6 +154,8 @@ export class AgentChats {
 		requests?: number;
 	} | null>(null);
 	composer = $state<{ fill: (text: string) => void }>();
+	/** The message being typed: it outlives the input field. */
+	draft = $state('');
 	attachments = $state<{ name: string; file?: File; ref?: string }[]>([]);
 	phone = $state(matchMedia('(max-width: 760px)').matches);
 	stream: AbortController | null = null;
@@ -259,12 +261,26 @@ export class AgentChats {
 	};
 
 	listsReady = $state(false);
+	/** Lets go of the running stream so that its end does nothing more (0.99:
+	 *  the old stream's end read the last answer aloud again and wrote an
+	 *  older copy of the chat over the new one). */
+	private drop() {
+		const old = this.stream;
+		this.stream = null;
+		this.retries = 0;
+		clearTimeout(this.retryTimer);
+		old?.abort();
+	}
+	/** Counts the chats asked for: an answer that comes late for a chat
+	 *  left in the meantime is dropped (two quick taps showed the first). */
+	private opened = 0;
 	open = async (id: string, push = true, author = '') => {
+		const turn = ++this.opened;
 		this.fresh = false;
 		this.menuOpen = false;
 		this.find = null;
 		stopSpeaking();
-		this.stream?.abort();
+		this.drop();
 		this.busy = false;
 		this.live = { thinking: '', content: '', step: null };
 		this.error = '';
@@ -273,6 +289,7 @@ export class AgentChats {
 			const fetched = await api.get<Chat & { author?: string; readOnly?: boolean }>(
 				`/agent/chats/${id}` + (author ? `?author=${encodeURIComponent(author)}` : ''),
 			);
+			if (turn !== this.opened) return;
 			this.readOnlyBy = fetched.readOnly ? (fetched.author ?? author) : '';
 			this.current = fetched;
 			if (this.readOnlyBy) {
@@ -288,7 +305,7 @@ export class AgentChats {
 			const listed = this.chats.find((c) => c.id === id);
 			if (this.current.state === 'running' || listed?.state === 'running') this.watch(id);
 		} catch (e) {
-			this.error = apiErrorText(e);
+			if (turn === this.opened) this.error = apiErrorText(e);
 		}
 	};
 
@@ -303,8 +320,9 @@ export class AgentChats {
 		this.fresh = false;
 		this.menuOpen = false;
 		this.readOnlyBy = '';
+		this.opened++;
 		stopSpeaking();
-		this.stream?.abort();
+		this.drop();
 		this.find = null;
 		this.current = null;
 		this.busy = false;
@@ -313,16 +331,28 @@ export class AgentChats {
 		void this.go('/agent');
 	};
 
+	private retries = 0;
+	private retryTimer: ReturnType<typeof setTimeout> | undefined;
 	watch = (id: string) => {
-		this.stream?.abort();
+		const old = this.stream;
 		const controller = new AbortController();
 		this.stream = controller;
+		old?.abort();
+		clearTimeout(this.retryTimer);
 		this.busy = true;
 		this.live = { thinking: '', content: '', step: null };
-		void follow(id, (e) => this.onEvent(id, e), controller.signal)
+		void follow(
+			id,
+			(e) => {
+				// The stream delivers: the next break starts counting anew.
+				this.retries = 0;
+				this.onEvent(id, e);
+			},
+			controller.signal,
+		)
 			.catch(() => {})
 			.finally(() => {
-				if (this.stream === controller) this.finish(id);
+				if (this.stream === controller) void this.finish(id);
 			});
 	};
 
@@ -363,13 +393,33 @@ export class AgentChats {
 		}
 	};
 
+	/** The stream ended. The chat is read first and shown, then the working
+	 *  state goes: who waits for the end finds the answer there. A run that
+	 *  still works (the connection broke) is followed again (0.99: the page
+	 *  stood still until it was loaded anew). */
 	finish = async (id: string) => {
-		this.busy = false;
 		this.stream = null;
-		this.live = { thinking: '', content: '', step: null };
+		const again = (ms: number) => {
+			clearTimeout(this.retryTimer);
+			this.retryTimer = setTimeout(() => {
+				if (this.current?.id !== id || this.stream) return;
+				if (this.busy) this.watch(id);
+				else void this.finish(id);
+			}, ms);
+		};
 		try {
 			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
+			if (this.stream) return; // followed again in the meantime
 			if (this.current?.id === id) this.current = fresh;
+			if (fresh.state === 'running' && this.current?.id === id && this.retries < 8) {
+				this.retries++;
+				this.live = { thinking: '', content: '', step: null };
+				again(Math.min(500 * 2 ** (this.retries - 1), 8000));
+				return;
+			}
+			this.retries = 0;
+			this.busy = false;
+			this.live = { thinking: '', content: '', step: null };
 			if (fresh.state === 'idle') this.buzz(40);
 			// Read the new answer aloud if wished (Darstellung, PLAN 51).
 			if (
@@ -387,7 +437,16 @@ export class AgentChats {
 			}
 			if (this.current?.id === id) this.seen(id, true);
 		} catch {
-			// The list reload below shows the state.
+			// The NAS did not answer: the state is not known. Ask again a few
+			// times; after that the chat shows what it has, not working.
+			if (this.current?.id === id && this.retries < 8) {
+				this.retries++;
+				again(Math.min(1000 * 2 ** (this.retries - 1), 10000));
+				return;
+			}
+			this.retries = 0;
+			this.busy = false;
+			this.live = { thinking: '', content: '', step: null };
 		}
 		void this.loadLists();
 	};
@@ -398,27 +457,46 @@ export class AgentChats {
 	 * erzeugen"). The chat forgets everything after it.
 	 */
 	resend = async (entry: Entry, text = '') => {
-		if (!this.current || this.busy) return;
+		if (!this.current || this.busy || this.sending) return;
+		this.sending = true;
 		this.error = '';
 		stopSpeaking();
+		const id = this.current.id;
 		try {
-			const chat = await api.post<Chat>(`/agent/chats/${this.current.id}/messages`, {
+			const chat = await api.post<Chat>(`/agent/chats/${id}/messages`, {
 				message: text,
 				replace: entry.id,
 				model: this.model,
 				think: this.think,
 				autonomy: this.autonomy,
 			});
+			if (this.current?.id !== id) return;
 			this.current = chat;
 			this.watch(chat.id);
 		} catch (e) {
 			this.error = apiErrorText(e);
+		} finally {
+			this.sending = false;
 		}
 	};
 
-	send = async (text: string) => {
+	/** A message is on its way to the NAS: a second tap sends nothing
+	 *  (two chats with the same question, or an error for the second). */
+	sending = $state(false);
+	/**
+	 * Sends a message; false when nothing was sent (the text stays in the
+	 * input then). While one is on its way or a run works, nothing is sent.
+	 */
+	send = async (text: string): Promise<boolean> => {
+		if (this.sending || this.busy) return false;
+		this.sending = true;
 		this.error = '';
 		const files = this.attachments;
+		// The chat the message belongs to; the person may open another one
+		// while it is sent (a slow upload) – the view then stays there.
+		const from = this.current?.id ?? null;
+		const turn = this.opened;
+		const here = () => (this.current?.id ?? null) === from && turn === this.opened;
 		try {
 			let target = this.current;
 			const uploads = files.filter((a) => a.file);
@@ -451,10 +529,12 @@ export class AgentChats {
 					think: this.think,
 					autonomy: this.autonomy,
 				});
-				this.current = chat;
 				if (!this.chats.some((c) => c.id === chat.id)) this.chats = [chat, ...this.chats];
-				void this.go(`/agent?chat=${chat.id}`);
-				this.watch(chat.id);
+				if (here()) {
+					this.current = chat;
+					void this.go(`/agent?chat=${chat.id}`);
+					this.watch(chat.id);
+				}
 			} else {
 				const chat = await api.post<Chat>('/agent/chats', {
 					message,
@@ -463,23 +543,31 @@ export class AgentChats {
 					think: this.think,
 					autonomy: this.autonomy,
 				});
-				this.current = chat;
 				this.chats = [chat, ...this.chats];
-				void this.go(`/agent?chat=${chat.id}`);
-				this.watch(chat.id);
+				if (here()) {
+					this.current = chat;
+					void this.go(`/agent?chat=${chat.id}`);
+					this.watch(chat.id);
+				}
 			}
+			return true;
 		} catch (e) {
 			this.attachments = files;
 			this.error = apiErrorText(e);
+			return false;
+		} finally {
+			this.sending = false;
 		}
 	};
 
 	undo = async (step: Entry) => {
 		if (!this.current) return;
 		this.error = '';
+		const id = this.current.id;
 		try {
-			await api.post(`/agent/chats/${this.current.id}/undo`, { step: step.id });
-			this.current = await api.get<Chat>(`/agent/chats/${this.current.id}`);
+			await api.post(`/agent/chats/${id}/undo`, { step: step.id });
+			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
+			if (this.current?.id === id) this.current = fresh;
 		} catch (e) {
 			this.error = apiErrorText(e);
 		}
@@ -503,15 +591,26 @@ export class AgentChats {
 	};
 
 	decide = async (p: Pending, approve: boolean) => {
-		if (!this.current) return;
+		if (!this.current || this.deciding) return;
 		this.deciding = true;
 		this.error = '';
+		const id = this.current.id;
 		try {
-			await api.post(`/agent/chats/${this.current.id}/decide`, { id: p.id, approve });
+			await api.post(`/agent/chats/${id}/decide`, { id: p.id, approve });
+			// The answer belongs to the chat it was given in, also when
+			// another one was opened while it was on its way.
+			if (this.current?.id !== id) return;
 			this.current.pending = null;
-			this.watch(this.current.id);
+			this.watch(id);
 		} catch (e) {
 			this.error = apiErrorText(e);
+			// Decided on another device meanwhile: show the chat as it is.
+			try {
+				const fresh = await api.get<Chat>(`/agent/chats/${id}`);
+				if (this.current?.id === id) this.current = fresh;
+			} catch {
+				// The error above stays.
+			}
 		} finally {
 			this.deciding = false;
 		}
@@ -530,8 +629,10 @@ export class AgentChats {
 		try {
 			await api.patch(`/agent/chats/${chat.id}`, body);
 			await this.loadLists();
-			if (this.current?.id === chat.id)
-				this.current = await api.get<Chat>(`/agent/chats/${chat.id}`);
+			if (this.current?.id === chat.id) {
+				const fresh = await api.get<Chat>(`/agent/chats/${chat.id}`);
+				if (this.current?.id === chat.id) this.current = fresh;
+			}
 		} catch (e) {
 			this.error = apiErrorText(e);
 		}

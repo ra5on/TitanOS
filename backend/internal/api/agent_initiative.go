@@ -581,7 +581,7 @@ func (s *Server) agentAsleep(ctx context.Context, user auth.User, rootID string)
 	return slices.ContainsFunc(st.DiskStatus, func(d storage.DiskSleepDisk) bool { return d.Volume == root.Volume && d.State == "asleep" })
 }
 
-var agentFileTools = []string{"files_search", "files_list", "file_read", "document_read", "files_read_text", "backup_files"}
+var agentFileTools = []string{"files_search", "files_list", "file_read", "document_read", "files_read_text", "backup_files", "image_view"}
 
 // initiativeCheck applies the account's choices to a file tool: whether it
 // may wake a sleeping disk (background chats never do) and where it searches.

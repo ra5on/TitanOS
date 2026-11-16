@@ -747,7 +747,7 @@ func (b *agentToolbox) documentsSearch(_ context.Context, _ *agent.Chat, args js
 	}
 	hits, err := b.s.docsSearch(b.user, q, 8, func(d docindex.Doc) bool {
 		a, _ := json.Marshal(map[string]string{"root": d.Root, "path": d.Path})
-		return b.folderMode(a) != agent.ModeDeny
+		return b.folderMode(a, agent.KindRead) != agent.ModeDeny
 	})
 	if err != nil {
 		return agent.Outcome{}, err

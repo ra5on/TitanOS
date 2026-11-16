@@ -81,9 +81,7 @@
 	async function load() {
 		error = '';
 		try {
-			const s = await api.get<Settings>('/agent/settings');
-			s.policy ??= { preset: 'standard' };
-			s.homeassistant ??= {};
+			const s = filled(await api.get<Settings>('/agent/settings'));
 			settings = s;
 			haNotify = (s.homeassistant.notify ?? []).join(', ');
 			haRules = Object.entries(s.homeassistant.entities ?? {}).map(([key, mode]) => ({
@@ -120,8 +118,42 @@
 
 	// PLAN 73: the save bar shows only when something was changed.
 	let base = $state('');
+	// Compared without what is empty: the NAS leaves empty fields out, and a
+	// choice field writes its empty first option into a field that was
+	// missing. That alone is no change (0.99: opening "Verbindung und
+	// Modelle" showed "Ungespeicherte Änderungen" with nothing changed).
+	function lean(value: unknown): unknown {
+		if (Array.isArray(value)) return value.map(lean);
+		if (value && typeof value === 'object') {
+			const out: Record<string, unknown> = {};
+			for (const [k, v] of Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) {
+				const kept = lean(v);
+				const empty =
+					kept === undefined ||
+					kept === null ||
+					kept === '' ||
+					kept === 0 ||
+					kept === false ||
+					(Array.isArray(kept) && kept.length === 0) ||
+					(typeof kept === 'object' && !Array.isArray(kept) && Object.keys(kept).length === 0);
+				if (!empty) out[k] = kept;
+			}
+			return out;
+		}
+		return value;
+	}
+	/** The fields of choice lists always have a value the list knows. */
+	function filled(s: Settings): Settings {
+		s.policy ??= { preset: 'standard' };
+		s.homeassistant ??= {};
+		s.model ??= '';
+		s.context ??= 0;
+		s.keepAlive ??= '';
+		s.reactAs ??= '';
+		return s;
+	}
 	const current = () =>
-		JSON.stringify([$state.snapshot(settings), haNotify, $state.snapshot(haRules)]);
+		JSON.stringify(lean([$state.snapshot(settings), haNotify, $state.snapshot(haRules)]));
 	const dirty = $derived(!!settings && base !== '' && current() !== base);
 
 	async function save() {
@@ -137,7 +169,7 @@
 			haRules.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.mode]),
 		);
 		try {
-			settings = await api.put<Settings>('/agent/settings', $state.snapshot(settings));
+			settings = filled(await api.put<Settings>('/agent/settings', $state.snapshot(settings)));
 			saved = true;
 			base = current();
 			void api.get<Status>('/agent/status').then((s) => (status = s));

@@ -7894,6 +7894,8 @@
 	"agent.talk.end": "Beenden",
 	"agent.talk.hint": "Sprich einfach los. Nach einer kurzen Pause wird gesendet, die Antwort wird vorgelesen, danach hört der Agent wieder zu. Du kannst ihm jederzeit ins Wort fallen.",
 	"agent.talk.pending": "Ein Schritt wartet auf deine Bestätigung. Beende den Sprechmodus und entscheide im Chat.",
+	"agent.talk.notSent": "Das ist nicht angekommen. Sag es bitte noch einmal.",
+	"agent.busyWait": "Der Agent arbeitet noch. Warte, bis er fertig ist.",
 	"agent.talk.starting": "Mikrofon wird geöffnet …",
 	"agent.talk.listening": "Ich höre zu",
 	"agent.talk.hearing": "Ich höre dich …",

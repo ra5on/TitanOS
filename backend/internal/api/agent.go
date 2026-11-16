@@ -300,7 +300,11 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A new message answers a waiting step with "no".
 	if chat.Pending != nil {
+		// The "no" stands where the step's result would: before the calls
+		// of that round that were not made.
+		skipped := chat.TakeSkipped()
 		chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: time.Now(), Role: "note", Note: "declined", Tool: chat.Pending.Tool, Summary: chat.Pending.Summary})
+		chat.Entries = append(chat.Entries, skipped...)
 		chat.Pending = nil
 	}
 	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: time.Now(), Role: "user", Content: req.Message})
@@ -607,7 +611,10 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	var body string
 	switch chat.State {
 	case agent.StateWaiting:
-		body = "Wartet auf deine Freigabe: " + chat.Pending.Summary
+		body = "Wartet auf deine Freigabe"
+		if chat.Pending != nil {
+			body += ": " + chat.Pending.Summary
+		}
 	case agent.StateError:
 		body = "Fehler: " + chat.Error
 	default:

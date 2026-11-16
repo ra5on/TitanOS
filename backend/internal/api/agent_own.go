@@ -145,19 +145,26 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 			m.Project = chat.Project
 		}
 	}
-	list = append(list, m)
-	if len(list) > maxMemories {
-		// The oldest go first, pinned ones stay (PLAN 90-4).
-		over := len(list) - maxMemories
-		list = slices.DeleteFunc(list, func(x agent.Memory) bool {
-			if over > 0 && !x.Pinned {
-				over--
-				return true
-			}
-			return false
-		})
-	}
-	if err := store.SaveMemories(b.user.Name, list); err != nil {
+	// Added to the list as it is now: another chat or the page may have
+	// changed it since it was read above.
+	if err := store.UpdateMemories(b.user.Name, func(list []agent.Memory) ([]agent.Memory, bool) {
+		if slices.ContainsFunc(list, func(x agent.Memory) bool { return strings.EqualFold(x.Text, text) }) {
+			return list, false
+		}
+		list = append(list, m)
+		if len(list) > maxMemories {
+			// The oldest go first, pinned ones stay (PLAN 90-4).
+			over := len(list) - maxMemories
+			list = slices.DeleteFunc(list, func(x agent.Memory) bool {
+				if over > 0 && !x.Pinned {
+					over--
+					return true
+				}
+				return false
+			})
+		}
+		return list, true
+	}); err != nil {
 		return agent.Outcome{}, err
 	}
 	return agent.Outcome{Text: "Remembered.", Note: "memory", NoteText: text}, nil

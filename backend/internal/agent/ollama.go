@@ -1,7 +1,7 @@
 // Package agent is the AI agent of TitanOS (PLAN 44): it takes a task in a
 // chat, works through it in several steps with the tools of the catalog and
-// answers. The model runs on an Ollama server the owner names; nothing here
-// talks to other providers.
+// answers. The model runs on an Ollama server the owner names or, since
+// 0.96, at an outside provider the owner set up (remote.go, claude.go).
 //
 // The package holds what does not need the web API: the Ollama client, the
 // rules about what the agent may do (policy.go), the run of one task

@@ -106,7 +106,7 @@ func (s *Server) agentTick(now time.Time) {
 }
 
 func (s *Server) agentStartSchedule(user auth.User, id string, now time.Time, late bool) {
-	if _, err := s.agentRunSchedule(user, id, now, late); err != nil {
+	if _, err := s.agentRunSchedule(user, id, now, late, false); err != nil {
 		slog.Warn("recurring agent task not started", "account", user.Name, "schedule", id, "err", err)
 	}
 }
@@ -175,7 +175,9 @@ func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) b
 // agentRunSchedule starts a planned task in a chat of its own. A reminder
 // only becomes a chat entry and a push message; late marks a missed run
 // that is caught up after a start of the NAS.
-func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late bool) (string, error) {
+// manual: started by the person ("Jetzt ausführen", the button in Home
+// Assistant). A one-off task tried out that way still runs at its time.
+func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late, manual bool) (string, error) {
 	store := s.agentStore()
 	list, err := store.Schedules(user.Name)
 	if err != nil {
@@ -205,7 +207,10 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 		return "", err
 	}
 	if err := store.UpdateSchedule(user.Name, id, func(current *agent.Schedule) {
-		current.LastRun, current.Chat = now, chat.ID
+		current.Chat = chat.ID
+		if !manual || current.Every != "once" {
+			current.LastRun = now
+		}
 		if sc.Kind == "reminder" {
 			current.LastOK = true
 		}
@@ -459,7 +464,7 @@ func (s *Server) agentButton(key, action string) error {
 	}
 	for _, sc := range list {
 		if sc.ID == id && sc.Enabled && sc.Button {
-			_, err := s.agentRunSchedule(user, id, time.Now(), false)
+			_, err := s.agentRunSchedule(user, id, time.Now(), false, true)
 			return err
 		}
 	}

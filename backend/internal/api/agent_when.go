@@ -107,8 +107,13 @@ func agentDueAt(sc agent.Schedule, now time.Time) (bool, bool) {
 	catch := agentCatchUp
 	if sc.Every == "once" {
 		catch = agentCatchUpOnce
-	} else if base.Before(now.Add(-catch)) {
-		base = now.Add(-catch)
+	} else {
+		if sc.Since.After(base) {
+			base = sc.Since
+		}
+		if base.Before(now.Add(-catch)) {
+			base = now.Add(-catch)
+		}
 	}
 	next, ok := agentNext(sc, base, loc)
 	if !ok || next.After(now) || next.Before(now.Add(-catch)) {

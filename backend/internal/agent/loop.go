@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -352,7 +353,7 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 				// calls of this round are not made.
 				if chat.State == StateWaiting {
 					for _, rest := range msg.ToolCalls[i+1:] {
-						chat.Entries = append(chat.Entries, Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: rest.Function.Name, Args: rest.Function.Arguments, Result: "Not run: an earlier step of this round waits for the person. Call again later if still needed."})
+						chat.Entries = append(chat.Entries, Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: rest.Function.Name, Args: rest.Function.Arguments, Result: skippedWaiting})
 					}
 				}
 				return r.save(chat)
@@ -404,6 +405,10 @@ func transient(err error) bool {
 	}
 	var se *StatusError
 	if errors.As(err, &se) && se.Status >= 500 && !isBadCall(err) {
+		return true
+	}
+	var pe *ProviderError
+	if errors.As(err, &pe) && pe.Status >= 500 {
 		return true
 	}
 	// The model runner of Ollama died in the middle of the answer.
@@ -576,6 +581,11 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 	}
 	if err != nil {
 		if ctx.Err() != nil {
+			// The step stays in the chat: what it started may have happened.
+			step.Result = "Stopped by the person while this step was running; whether it took effect is not known. Check before repeating it."
+			if err := r.add(chat, step); err != nil {
+				return true, err
+			}
 			return true, r.stopped(chat)
 		}
 		step.Result = "Error: " + err.Error()
@@ -600,6 +610,26 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 	return false, nil
 }
 
+// skippedWaiting is the result of the calls of a round that were not made
+// because an earlier call of the same round waits for the person.
+const skippedWaiting = "Not run: an earlier step of this round waits for the person. Call again later if still needed."
+
+// TakeSkipped cuts the entries of the calls that were not made off the end
+// of a waiting chat and returns them. Whoever answers the waiting step
+// adds its result (or the note of the "no") first and these after it: the
+// model gets the results in the order of its calls. With two calls of the
+// same tool it otherwise took "not run" for the result of the first and
+// the real result for the second (0.99).
+func (c *Chat) TakeSkipped() []Entry {
+	at := len(c.Entries)
+	for at > 0 && c.Entries[at-1].Role == "tool" && c.Entries[at-1].Result == skippedWaiting {
+		at--
+	}
+	skipped := slices.Clone(c.Entries[at:])
+	c.Entries = c.Entries[:at:at]
+	return skipped
+}
+
 // Decide answers a pending step: approve runs exactly what was planned,
 // decline tells the model. Then the run goes on.
 func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool) error {
@@ -607,22 +637,33 @@ func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool
 	if p == nil || p.ID != id {
 		return ErrNotFound
 	}
-	chat.Pending = nil
-	if !approve {
-		if err := r.add(chat, Entry{Role: "note", Note: "declined", Tool: p.Tool, Summary: p.Summary}); err != nil {
-			return err
-		}
-		return r.Run(ctx, chat)
+	skipped := chat.TakeSkipped()
+	note := "declined"
+	if approve {
+		note = "approved"
 	}
-	if err := r.add(chat, Entry{Role: "note", Note: "approved", Tool: p.Tool, Summary: p.Summary}); err != nil {
+	// The step stops waiting only once the answer is saved: a failed save
+	// leaves the chat as it was, still waiting with its step.
+	chat.Pending = nil
+	if err := r.add(chat, Entry{Role: "note", Note: note, Tool: p.Tool, Summary: p.Summary}); err != nil {
+		chat.Entries = append(chat.Entries[:len(chat.Entries)-1], skipped...)
+		chat.Pending = p
 		return err
+	}
+	if !approve {
+		chat.Entries = append(chat.Entries, skipped...)
+		return r.Run(ctx, chat)
 	}
 	r.setState(chat, StateRunning, "")
 	step := Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: p.Tool, Args: p.Args}
 	r.emit(Event{Type: "step", Step: &step})
 	done, err := r.execute(ctx, chat, Prepared{Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, Mode: ModeAllow}, step)
-	if err != nil || done {
+	chat.Entries = append(chat.Entries, skipped...)
+	if err != nil {
 		return err
+	}
+	if done {
+		return r.save(chat)
 	}
 	return r.Run(ctx, chat)
 }

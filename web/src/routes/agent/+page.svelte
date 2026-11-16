@@ -158,7 +158,10 @@
 		} else if (id === 'find') {
 			if (ag.current) ag.find = arg;
 			else ag.say(t('agent.cmd.findNoChat'));
-		} else if (id === 'status') void ag.send(t('agent.suggestHealth'));
+		} else if (id === 'status') {
+			if (ag.busy) ag.say(t('agent.busyWait'));
+			else void ag.send(t('agent.suggestHealth'));
+		}
 	}
 	/** The project of the open chat, or the one a new chat goes to. */
 	function setProject(id: string) {
@@ -578,6 +581,7 @@
 							bind:this={ag.composer}
 							busy={ag.busy}
 							bind:attachments={ag.attachments}
+							bind:text={ag.draft}
 							disabled={!!ag.current?.pending || !!ag.readOnlyBy}
 							voice={!!ag.status.voice || nasSpeech.hear}
 							voiceNas={nasSpeech.hear}

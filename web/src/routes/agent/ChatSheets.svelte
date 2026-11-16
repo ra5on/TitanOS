@@ -5,6 +5,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { agentProfilePath } from '#lib/api.ts';
 	import type { ChatInfo, Project } from '#lib/agent.ts';
 	import type { ChatSheet } from './chat-sheets.ts';
 
@@ -104,10 +105,16 @@
 					? t('agent.archive.restore')
 					: t('agent.archive.do')}</button
 			>
-			<a href={`/api/v1/agent/chats/${chat.id}/export`} download onclick={() => close()}
+			<a
+				href={agentProfilePath(`/api/v1/agent/chats/${chat.id}/export`)}
+				download
+				onclick={() => close()}
 				><span class="sq"><Icon name="download" size={17} /></span>{t('agent.exportMd')}</a
 			>
-			<a href={`/api/v1/agent/chats/${chat.id}/export?format=pdf`} download onclick={() => close()}
+			<a
+				href={agentProfilePath(`/api/v1/agent/chats/${chat.id}/export?format=pdf`)}
+				download
+				onclick={() => close()}
 				><span class="sq"><Icon name="fileText" size={17} /></span>{t('agent.exportPdf')}</a
 			>
 			<button type="button" class="danger" onclick={() => set({ kind: 'delete', chat })}
