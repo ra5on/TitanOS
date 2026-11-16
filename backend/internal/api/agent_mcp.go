@@ -118,6 +118,9 @@ func mcpView(list []agentMCPServer) []agentMCPServer {
 }
 
 // agentMCPState keeps one client and the last list of tools per connection.
+// The lock guards the map and the entries only; the list is asked for
+// outside of it (1.01: a server that did not answer held the lock for up to
+// agentMCPListTime, and every other chat waited for it).
 type agentMCPState struct {
 	mu      sync.Mutex
 	clients map[string]*mcpEntry
@@ -129,15 +132,18 @@ type mcpEntry struct {
 	tools  []mcpclient.Tool
 	at     time.Time
 	err    error
+	// asking is open while the list is being asked for; closed when the
+	// answer is in the entry.
+	asking chan struct{}
 }
 
 // mcpRemoteTools returns the tools of a connection, asked at most once in five
 // minutes (a failure is kept for one minute, so a server that is down
-// does not slow every chat).
+// does not slow every chat). While the list is asked for, others get the
+// last list; without one they wait for that answer instead of asking again.
 func (s *Server) mcpRemoteTools(ctx context.Context, c agentMCPServer) (*mcpclient.Client, []mcpclient.Tool, error) {
 	st := &s.agentMCP
 	st.mu.Lock()
-	defer st.mu.Unlock()
 	if st.clients == nil {
 		st.clients = map[string]*mcpEntry{}
 	}
@@ -152,13 +158,41 @@ func (s *Server) mcpRemoteTools(ctx context.Context, c agentMCPServer) (*mcpclie
 		hold = time.Minute
 	}
 	if !e.at.IsZero() && time.Since(e.at) < hold {
+		defer st.mu.Unlock()
 		return e.client, e.tools, e.err
 	}
+	if wait := e.asking; wait != nil {
+		if !e.at.IsZero() {
+			// An older list is better than waiting for a slow server.
+			defer st.mu.Unlock()
+			return e.client, e.tools, e.err
+		}
+		st.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return e.client, nil, ctx.Err()
+		}
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return e.client, e.tools, e.err
+	}
+	done := make(chan struct{})
+	e.asking = done
+	client := e.client
+	st.mu.Unlock()
+
 	lctx, cancel := context.WithTimeout(ctx, agentMCPListTime)
-	defer cancel()
-	e.tools, e.err = e.client.Tools(lctx)
-	e.at = time.Now()
-	return e.client, e.tools, e.err
+	tools, err := client.Tools(lctx)
+	cancel()
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	// A connection changed meanwhile has a new entry; this one still gets
+	// its answer for those who wait on it.
+	e.tools, e.err, e.at, e.asking = tools, err, time.Now(), nil
+	close(done)
+	return client, tools, err
 }
 
 // mcpToolName is the name the model sees: mcp_<server>_<tool>, at most 64
