@@ -1,6 +1,7 @@
 package files
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -216,5 +217,30 @@ func TestUploadResumesLegacyPartNames(t *testing.T) {
 	}
 	if read(t, filepath.Join(root.Dir, "legacy.txt")) != "hello" {
 		t.Fatal("legacy recovery")
+	}
+}
+
+// "Keep both" picked a free name when the upload began. One taken by the
+// time it ends is not replaced, and the upload does not fail for good: it
+// takes the next free name.
+func TestUploadKeepsBothWhenItsNameWasTakenMeanwhile(t *testing.T) {
+	m, root, _ := newRoot(t)
+	st, err := m.StartUpload(root, "", "notiz.txt", 3, ConflictRename, "alex", os.Getuid())
+	if err != nil || st.Name != "notiz (2).txt" {
+		t.Fatalf("start: %+v %v", st, err)
+	}
+	if _, err := m.WriteChunk(st.ID, "alex", 0, bytes.NewReader([]byte("abc"))); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(root.Dir, "notiz (2).txt"), []byte("other"), 0o644)
+	done, err := m.FinishUpload(st.ID, "alex")
+	if err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, "notiz (2).txt")); string(data) != "other" {
+		t.Fatalf("the file that took the name was replaced: %q", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, done.Name)); string(data) != "abc" || done.Name == "notiz (2).txt" {
+		t.Fatalf("upload under %q: %q", done.Name, data)
 	}
 }
