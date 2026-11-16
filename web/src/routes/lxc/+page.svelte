@@ -74,6 +74,8 @@
 		if (snapshotFor !== c.name) {
 			snapshotFor = c.name;
 			config = '';
+			// Not the rows of the container shown before (their buttons act on this one).
+			snapshots = null;
 			loadSnapshots(c.name);
 		}
 	});
@@ -132,10 +134,11 @@
 
 	async function showConfig(c: LXCStatus) {
 		try {
-			config = (await api.get<{ config: string }>(`/lxc/${encodeURIComponent(c.name)}/config`))
-				.config;
+			const answer = await api.get<{ config: string }>(`/lxc/${encodeURIComponent(c.name)}/config`);
+			// Only for the container still shown (Durchsicht 102).
+			if (configFor === c.name) config = answer.config;
 		} catch (err) {
-			actionError = problem(err);
+			if (configFor === c.name) actionError = problem(err);
 		}
 	}
 
