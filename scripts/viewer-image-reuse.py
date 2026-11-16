@@ -28,6 +28,7 @@ Usage: viewer-image-reuse.py <version> <out-dir> [--keys DIR] [--source URL]
 """
 import argparse
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
@@ -67,15 +68,46 @@ release_kind = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release_kind)
 
 
+# A connection that breaks off in the middle of a file: the server closed it
+# early, reset it or stopped sending.
+BROKEN = (http.client.IncompleteRead, ConnectionError, TimeoutError)
+# How often a download that broke off in the middle starts again (B-11).
+BODY_ATTEMPTS = 3
+
+
+def check_length(response, got):
+    """Raises IncompleteRead when fewer bytes came than the server announced:
+    read(n) of http.client returns an early end of the connection as the end
+    of the file instead of raising."""
+    announced = response.headers.get("Content-Length")
+    if announced and announced.isdigit() and got < int(announced):
+        raise http.client.IncompleteRead(b"", int(announced) - got)
+
+
+def broke_off(url, attempt, error, pause):
+    """Raises on the last attempt, else waits before the next one."""
+    if attempt == BODY_ATTEMPTS:
+        raise error
+    print(f"{url}: download broke off ({error!r}), again in {pause * attempt} s", flush=True)
+    time.sleep(pause * attempt)
+
+
 def fetch(url, limit, pause=10):
     # Through release_kind.open_release: tried again, then the GitHub API.
-    try:
-        with release_kind.open_release(url, pause=pause) as response:
-            data = response.read(limit + 1)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return None
-        raise
+    # A body that breaks off is read again from the start.
+    for attempt in range(1, BODY_ATTEMPTS + 1):
+        try:
+            with release_kind.open_release(url, pause=pause) as response:
+                data = response.read(limit + 1)
+                if len(data) <= limit:
+                    check_length(response, len(data))
+            break
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise
+        except BROKEN as error:
+            broke_off(url, attempt, error, pause)
     if len(data) > limit:
         raise ValueError(f"{url} is larger than expected")
     return data
@@ -260,7 +292,7 @@ def previous_packages(tag, source, keys):
         return archive.extractfile("viewer/packages.txt").read()
 
 
-def reuse(version, out, tag, manifest, source, keys, packages=None):
+def reuse(version, out, tag, manifest, source, keys, packages=None, pause=10):
     base = f"{source}/releases/download/{tag}/"
     viewer = manifest["viewer"]
     old_version = tag[1:]
@@ -270,16 +302,25 @@ def reuse(version, out, tag, manifest, source, keys, packages=None):
         packages = previous_packages(tag, source, keys)
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"titanos-viewer-{version}.tar.zst"
-    digest, size = hashlib.sha256(), 0
     # Tried again on a server error (PLAN 76, F-13-13): one 5xx from GitHub
-    # on this large file must not end the release run.
-    with release_kind.open_release(base + viewer["asset"], timeout=600) as response, target.open("wb") as f:
-        for block in iter(lambda: response.read(1 << 20), b""):
-            size += len(block)
-            if size > viewer["size"]:
-                raise ValueError("viewer archive larger than its manifest says")
-            digest.update(block)
-            f.write(block)
+    # on this large file must not end the release run. A download that
+    # breaks off in the middle starts again from the beginning, the partial
+    # file removed first (B-11).
+    for attempt in range(1, BODY_ATTEMPTS + 1):
+        digest, size = hashlib.sha256(), 0
+        try:
+            with release_kind.open_release(base + viewer["asset"], timeout=600, pause=pause) as response, target.open("wb") as f:
+                for block in iter(lambda: response.read(1 << 20), b""):
+                    size += len(block)
+                    if size > viewer["size"]:
+                        raise ValueError("viewer archive larger than its manifest says")
+                    digest.update(block)
+                    f.write(block)
+                check_length(response, size)
+            break
+        except BROKEN as error:
+            target.unlink(missing_ok=True)
+            broke_off(base + viewer["asset"], attempt, error, pause)
     if size != viewer["size"] or digest.hexdigest() != viewer["sha256"]:
         target.unlink()
         raise ValueError(f"viewer archive of {tag} does not match its signed manifest")
