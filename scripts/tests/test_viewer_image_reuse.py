@@ -231,6 +231,7 @@ class ReuseTest(unittest.TestCase):
         handler.log_message = lambda *a: None
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.source = f"http://127.0.0.1:{server.server_port}"
 
@@ -289,6 +290,7 @@ class FetchRetries(unittest.TestCase):
 
         server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         return f"http://127.0.0.1:{server.server_address[1]}/m", calls
 
