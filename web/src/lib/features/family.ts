@@ -77,6 +77,23 @@ export type CatalogSkill = {
 };
 
 export const GiB = 1 << 30;
+/** The quota is typed in GB as every size of TitanOS shows it (1000³, like
+ *  formatBytes, decision of 31 Oct 2026); until 1.02 the field said "GB"
+ *  but stored GiB, so 500 came back as "537 GB" (A-33). Not taken from
+ *  format.ts, which needs the Svelte runtime. */
+export const GB = 1e9;
+
+/** Bytes for a quota typed in GB. */
+export const quotaBytes = (gb: number) => Math.round(gb * GB);
+
+/** The GB shown in the field for a stored quota. */
+export const quotaField = (bytes: number) => Math.round(bytes / GB);
+
+/** Bytes to save from the edit field: the stored value as it is when the
+ *  field still shows it unchanged, so opening and saving changes nothing
+ *  (quotas saved before 1.03 are whole GiB, not whole GB). */
+export const quotaEdited = (gb: number, stored: number) =>
+	gb === quotaField(stored) ? stored : quotaBytes(gb);
 
 export const loadBuddy = () => api.get<BuddyView>('/agent/buddy');
 export const buddyCode = (quota: number, shares: string[]) =>
