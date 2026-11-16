@@ -239,7 +239,10 @@ func (m *Manager) refreshSources(ctx context.Context) {
 				entries[i].plugin.Source = source.ID
 			}
 			m.mu.Lock()
-			m.setSourceEntries(source.ID, entries, err)
+			// A source removed while it was read does not come back.
+			if slices.ContainsFunc(m.sources, func(s Source) bool { return s.ID == source.ID }) {
+				m.setSourceEntries(source.ID, entries, err)
+			}
 			m.mu.Unlock()
 		})
 	}

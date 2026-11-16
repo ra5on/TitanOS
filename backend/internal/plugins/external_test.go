@@ -307,3 +307,50 @@ func TestSlowSourceDoesNotHoldBackTheCatalog(t *testing.T) {
 		t.Fatalf("source states %+v", states)
 	}
 }
+
+// A source removed while the catalog refresh reads it does not come back
+// with what it offered.
+func TestRemovedSourceStaysRemovedAfterARunningRefresh(t *testing.T) {
+	f, dir, base := community(t)
+	m := f.m
+	ctx := context.Background()
+	plugin(t, dir, "werkzeug", nil)
+	data, _ := json.Marshal(map[string]any{"plugins": []map[string]string{{"name": "werkzeug"}}})
+	os.WriteFile(filepath.Join(dir, "plugins.json"), data, 0o644)
+	asked, release := make(chan struct{}), make(chan struct{})
+	m.publicClient = m.client
+	list, _ := json.Marshal(map[string]any{"plugins": []map[string]string{{"name": "werkzeug", "url": base + "werkzeug.plugin.json"}}})
+	var once sync.Once
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() {
+			close(asked)
+			<-release
+		})
+		w.Write(list)
+	}))
+	t.Cleanup(slow.Close)
+	state, err := m.AddSource(ctx, base+"plugins.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.sources[0].URL = slow.URL + "/plugins.json"
+	m.mu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- m.RefreshCatalog(ctx, true) }()
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the source was not read")
+	}
+	if err := m.RemoveSource(state.ID); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	for _, p := range m.Status([]string{"data"}).Plugins {
+		if p.Name == "werkzeug" {
+			t.Fatalf("plugin of the removed source offered: %+v", p)
+		}
+	}
+}
