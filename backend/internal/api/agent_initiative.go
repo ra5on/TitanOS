@@ -218,27 +218,22 @@ func (s *Server) handleAgentInitiativeSet(w http.ResponseWriter, r *http.Request
 // agentWeeklySchedule keeps the weekly review of an account as an ordinary
 // planned task (Sunday 18:00), so it can be moved or changed like any other.
 func (s *Server) agentWeeklySchedule(user string, on bool) {
-	store := s.agentStore()
-	list, err := store.Schedules(user)
-	if err != nil {
-		return
-	}
 	const id = "weeklyreview0001"
-	i := slices.IndexFunc(list, func(sc agent.Schedule) bool { return sc.ID == id })
-	switch {
-	case on && i < 0:
-		sc := agent.Schedule{ID: id, Name: "Wochenrückblick", Every: "weekly", Weekday: 0, At: "18:00", Enabled: true, Created: time.Now().UTC(),
-			Task: "Wochenrückblick: Was lief auf dem NAS diese Woche (Backups, Meldungen, Updates, Speicher), was hast du als Agent getan, und was steht nächste Woche an? Kurz und mit Tabelle; ändere nichts."}
-		if checkSchedule(&sc) != nil {
-			return
-		}
-		list = append(list, sc)
-	case !on && i >= 0:
-		list = slices.Delete(list, i, i+1)
-	default:
+	sc := agent.Schedule{ID: id, Name: "Wochenrückblick", Every: "weekly", Weekday: 0, At: "18:00", Enabled: true, Created: time.Now().UTC(),
+		Task: "Wochenrückblick: Was lief auf dem NAS diese Woche (Backups, Meldungen, Updates, Speicher), was hast du als Agent getan, und was steht nächste Woche an? Kurz und mit Tabelle; ändere nichts."}
+	if checkSchedule(&sc) != nil {
 		return
 	}
-	_ = store.SaveSchedules(user, list)
+	_ = s.agentStore().UpdateSchedules(user, func(list []agent.Schedule) ([]agent.Schedule, error) {
+		i := slices.IndexFunc(list, func(sc agent.Schedule) bool { return sc.ID == id })
+		switch {
+		case on && i < 0:
+			return append(list, sc), nil
+		case !on && i >= 0:
+			return slices.Delete(list, i, i+1), nil
+		}
+		return nil, agent.ErrUnchanged
+	})
 }
 
 // agentStyle turns personality and memory settings into instructions for
@@ -408,36 +403,29 @@ func (s *Server) applyAgentInbox(user string, item agentInboxItem) error {
 	store := s.agentStore()
 	switch item.Kind {
 	case "memory":
-		list, err := store.Memories(user)
-		if err != nil {
-			return err
-		}
-		if old := item.Data["replace"]; old != "" {
-			list = slices.DeleteFunc(list, func(m agent.Memory) bool { return m.ID == old })
-		}
-		if !slices.ContainsFunc(list, func(m agent.Memory) bool { return strings.EqualFold(m.Text, item.Title) }) {
-			list = append(list, agent.Memory{ID: agent.NewID(), Text: item.Title, At: time.Now().UTC(), Chat: item.Data["chat"], Untrusted: item.Data["untrusted"] == "1"})
-		}
-		if len(list) > maxMemories {
-			list = list[len(list)-maxMemories:]
-		}
-		return store.SaveMemories(user, list)
+		return updateMemories(store, user, func(list []agent.Memory) ([]agent.Memory, error) {
+			if old := item.Data["replace"]; old != "" {
+				list = slices.DeleteFunc(list, func(m agent.Memory) bool { return m.ID == old })
+			}
+			if !slices.ContainsFunc(list, func(m agent.Memory) bool { return strings.EqualFold(m.Text, item.Title) }) {
+				list = append(list, agent.Memory{ID: agent.NewID(), Text: item.Title, At: time.Now().UTC(), Chat: item.Data["chat"], Untrusted: item.Data["untrusted"] == "1"})
+			}
+			if len(list) > maxMemories {
+				list = list[len(list)-maxMemories:]
+			}
+			return list, nil
+		})
 	case "fade", "conflict":
-		list, err := store.Memories(user)
-		if err != nil {
-			return err
-		}
-		return store.SaveMemories(user, slices.DeleteFunc(list, func(m agent.Memory) bool { return m.ID == item.Data["memory"] }))
+		return updateMemories(store, user, func(list []agent.Memory) ([]agent.Memory, error) {
+			return slices.DeleteFunc(list, func(m agent.Memory) bool { return m.ID == item.Data["memory"] }), nil
+		})
 	case "skill":
-		list, err := store.Skills(user)
-		if err != nil {
-			return err
-		}
-		if len(list) >= maxSkills {
-			return errors.New("too many skills")
-		}
-		list = append(list, agent.Skill{ID: agent.NewID(), Name: item.Title, When: item.Data["when"], Steps: item.Data["steps"], Chat: item.Data["chat"], Updated: time.Now().UTC()})
-		return store.SaveSkills(user, list)
+		return store.UpdateSkills(user, func(list []agent.Skill) ([]agent.Skill, error) {
+			if len(list) >= maxSkills {
+				return nil, errors.New("too many skills")
+			}
+			return append(list, agent.Skill{ID: agent.NewID(), Name: item.Title, When: item.Data["when"], Steps: item.Data["steps"], Chat: item.Data["chat"], Updated: time.Now().UTC()}), nil
+		})
 	case "deadline":
 		// PLAN 54-D: a deadline becomes reminders (agent_docs_deadline.go).
 		return s.docsAcceptDeadline(user, item)
@@ -449,18 +437,17 @@ func (s *Server) applyAgentInbox(user string, item agentInboxItem) error {
 func (s *Server) handleAgentMemoryClear(w http.ResponseWriter, r *http.Request) {
 	// PLAN 90-4: what the person pinned stays.
 	store, user := s.agentStore(), currentUser(r).Name
-	list, err := store.Memories(user)
-	if err != nil {
-		agentStoreError(w, err)
-		return
-	}
 	kept := []agent.Memory{}
-	for _, m := range list {
-		if m.Pinned {
-			kept = append(kept, m)
+	err := updateMemories(store, user, func(list []agent.Memory) ([]agent.Memory, error) {
+		kept = []agent.Memory{}
+		for _, m := range list {
+			if m.Pinned {
+				kept = append(kept, m)
+			}
 		}
-	}
-	if err := store.SaveMemories(user, kept); err != nil {
+		return kept, nil
+	})
+	if err != nil {
 		agentStoreError(w, err)
 		return
 	}

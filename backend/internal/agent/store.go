@@ -634,6 +634,45 @@ func (s *Store) SaveProjects(user string, list []Project) error {
 	return s.write(user, "projects.json", list)
 }
 
+// UpdateProjects changes the projects of an account in one step, like
+// UpdateMemories: read, changed and written under the store's lock, so two
+// requests (two pages, the page and the agent) do not write over each
+// other's change (1.01). change returns the new list or an error; with
+// ErrUnchanged nothing is written and UpdateProjects reports nil.
+func (s *Store) UpdateProjects(user string, change func([]Project) ([]Project, error)) error {
+	return updateList(s, user, "projects.json", change)
+}
+
+// UpdateSkills changes the skills of an account in one step (UpdateProjects).
+func (s *Store) UpdateSkills(user string, change func([]Skill) ([]Skill, error)) error {
+	return updateList(s, user, "skills.json", change)
+}
+
+// ErrUnchanged, returned by the change of an Update…, leaves the list as it is.
+var ErrUnchanged = errors.New("agent: nothing to change")
+
+// updateList reads a list of an account, changes it and writes it, all under
+// the store's lock.
+func updateList[T any](s *Store, user, name string, change func([]T) ([]T, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := []T{}
+	if err := s.read(user, name, &list, maxIndexFile); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if list == nil {
+		list = []T{}
+	}
+	next, err := change(list)
+	if errors.Is(err, ErrUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.write(user, name, next)
+}
+
 // Memories of an account.
 func (s *Store) Memories(user string) ([]Memory, error) {
 	var list []Memory
@@ -752,6 +791,35 @@ func (s *Store) UpdateSchedule(user, id string, change func(*Schedule)) error {
 		return err
 	}
 	s.schedules[user] = list
+	return nil
+}
+
+// UpdateSchedules changes the list of schedules of an account in one step
+// (adding, changing or removing from the page or by the agent): the list as
+// it is now is changed and written under the store's lock (1.01: the page
+// wrote back the list it had read, and a run the minute tick had stamped in
+// between ran again). change returns the new list or an error; with
+// ErrUnchanged nothing is written.
+func (s *Store) UpdateSchedules(user string, change func([]Schedule) ([]Schedule, error)) error {
+	if _, err := s.Schedules(user); err != nil { // fills the RAM copy
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next, err := change(slices.Clone(s.schedules[user]))
+	if errors.Is(err, ErrUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if next == nil {
+		next = []Schedule{}
+	}
+	if err := s.write(user, "schedules.json", next); err != nil {
+		return err
+	}
+	s.schedules[user] = slices.Clone(next)
 	return nil
 }
 
