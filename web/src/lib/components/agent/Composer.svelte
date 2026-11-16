@@ -20,6 +20,7 @@
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { apiFetch, responseError } from '#lib/api.ts';
 	import { toWav16k } from '#lib/speech-audio.ts';
+	import { freeName, sameFile } from '#lib/agent-attach.ts';
 
 	let {
 		micHold = false,
@@ -190,8 +191,18 @@
 		const big: string[] = [];
 		for (const file of files ?? []) {
 			if (file.size > 20 * 1024 * 1024) big.push(file.name);
-			else if (!attachments.some((a) => a.name === file.name))
-				attachments = [...attachments, { name: file.name, file }];
+			// 1.01: another file of the same name is kept as "name (2)".
+			else if (!attachments.some((a) => a.file && sameFile(a.file, file)))
+				attachments = [
+					...attachments,
+					{
+						name: freeName(
+							file.name,
+							attachments.filter((a) => a.file).map((a) => a.name),
+						),
+						file,
+					},
+				];
 		}
 		// Larger files are chosen from the NAS instead (nothing is copied).
 		if (big.length) onerror?.(t('agent.attachTooBig', { names: big.join(', ') }));
@@ -318,7 +329,7 @@
 >
 	{#if attachments.length}
 		<div class="files">
-			{#each attachments as a (a.name)}
+			{#each attachments as a (a.ref ? 'nas:' + a.ref : 'up:' + a.name)}
 				<span class="file"
 					><Icon name={a.file ? 'clip' : 'file'} size={13} />{a.name}<button
 						type="button"

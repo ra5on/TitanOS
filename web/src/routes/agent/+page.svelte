@@ -40,6 +40,7 @@
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
+	import { trapFocus } from '#lib/focus-trap.ts';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
@@ -663,7 +664,18 @@
 				transition:fade={dim(ag.calm)}
 				onclick={() => (ag.menuOpen = false)}
 			></button>
-			<aside class="drawer" aria-label={t('agent.menu')} transition:fly={slideIn(ag.calm, -340)}>
+			<!-- 1.01: the menu over the chat holds the focus; Escape closes it.
+			     It stays an <aside> (the menu of the agent) that acts as a modal. -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+			<aside
+				class="drawer"
+				role="dialog"
+				aria-modal="true"
+				aria-label={t('agent.menu')}
+				tabindex="-1"
+				transition:fly={slideIn(ag.calm, -340)}
+				use:trapFocus={{ onescape: () => (ag.menuOpen = false) }}
+			>
 				<AgentMenu {...ag.menuProps} />
 			</aside>
 		{/if}
@@ -1229,6 +1241,7 @@
 		cursor: default;
 	}
 	.drawer {
+		outline: 0;
 		position: fixed;
 		z-index: 51;
 		top: 0;

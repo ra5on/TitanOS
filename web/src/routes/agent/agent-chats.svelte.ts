@@ -316,7 +316,8 @@ export class AgentChats {
 		this.newChat(inProject);
 		this.fresh = true;
 	};
-	newChat = (inProject = this.project) => {
+	/** navigate: false when the address already says it ("back", 1.01). */
+	newChat = (inProject = this.project, navigate = true) => {
 		this.fresh = false;
 		this.menuOpen = false;
 		this.readOnlyBy = '';
@@ -328,7 +329,7 @@ export class AgentChats {
 		this.busy = false;
 		this.project = inProject;
 		this.live = { thinking: '', content: '', step: null };
-		void this.go('/agent');
+		if (navigate) void this.go('/agent');
 	};
 
 	private retries = 0;
@@ -512,15 +513,22 @@ export class AgentChats {
 					autonomy: this.autonomy,
 				});
 			}
+			// 1.01: the NAS keeps a file under another name when the chat has
+			// one of that name already; the message names the one it kept.
+			const kept = new Map<object, string>();
 			for (const a of uploads) {
 				const res = await apiFetch(
 					`/agent/chats/${target!.id}/attachments?name=${encodeURIComponent(a.name)}`,
 					{ method: 'POST', body: a.file },
 				);
 				if (!res.ok) throw await responseError(res);
+				const saved = (await res.json().catch(() => null)) as { name?: string } | null;
+				if (saved?.name) kept.set(a, saved.name);
 			}
 			const refs = files.map((a) =>
-				a.file ? `[Anhang: ${a.name}]` : `[Datei: ${(a.ref ?? '').replace(':', '/')}]`,
+				a.file
+					? `[Anhang: ${kept.get(a) ?? a.name}]`
+					: `[Datei: ${(a.ref ?? '').replace(':', '/')}]`,
 			);
 			const message = refs.length ? `${refs.join('\n')}\n\n${text}` : text;
 			this.attachments = [];

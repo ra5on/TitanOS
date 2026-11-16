@@ -7,6 +7,7 @@
 	import { slideIn } from '#lib/agent-motion.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { featurePage } from './page-mode.ts';
+	import { inDialog, trapFocus } from '#lib/focus-trap.ts';
 
 	type Props = { title: string; onclose: () => void; calm?: boolean; children: Snippet };
 	let { title, onclose, calm = false, children }: Props = $props();
@@ -22,7 +23,12 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<!-- As a page Escape goes back; as a sheet the trap below answers it
+     (1.01: one Escape closed the sheet and the dialog above it). -->
+<svelte:window
+	onkeydown={(e) =>
+		page && e.key === 'Escape' && !e.defaultPrevented && !inDialog(e.target) && onclose()}
+/>
 
 {#if page}
 	<section class="sheet page" aria-labelledby="{id}-t">
@@ -45,6 +51,7 @@
 			aria-modal="true"
 			aria-labelledby="{id}-t"
 			transition:fly={slideIn(calm)}
+			use:trapFocus={{ initial: 'first', onescape: onclose }}
 		>
 			<header>
 				<button type="button" class="back" aria-label={t('agent.f.docs.back')} onclick={onclose}

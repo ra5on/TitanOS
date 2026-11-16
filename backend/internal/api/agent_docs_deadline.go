@@ -144,18 +144,11 @@ func (s *Server) docsRemind(user string, item agentInboxItem, lead []int, now ti
 			return toolcatalog.Errorf("the deadline %s has passed already", date.Format("02.01.2006"))
 		}
 	}
-	store := s.agentStore()
-	list, err := store.Schedules(user)
-	if err != nil {
-		return err
-	}
-	if len(list)+len(times) > maxSchedules {
-		return toolcatalog.Errorf("there are already %d planned tasks; delete some under Geplant", len(list))
-	}
 	name := "Frist: " + item.Title
 	if r := []rune(name); len(r) > 80 {
 		name = string(r[:79]) + "…"
 	}
+	var add []agent.Schedule
 	for i, t := range times {
 		task := item.Title
 		switch {
@@ -176,7 +169,12 @@ func (s *Server) docsRemind(user string, item agentInboxItem, lead []int, now ti
 		if err := checkSchedule(&sc); err != nil {
 			return err
 		}
-		list = append(list, sc)
+		add = append(add, sc)
 	}
-	return store.SaveSchedules(user, list)
+	return s.agentStore().UpdateSchedules(user, func(list []agent.Schedule) ([]agent.Schedule, error) {
+		if len(list)+len(add) > maxSchedules {
+			return nil, toolcatalog.Errorf("there are already %d planned tasks; delete some under Geplant", len(list))
+		}
+		return append(list, add...), nil
+	})
 }

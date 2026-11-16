@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -332,4 +333,80 @@ func TestOpenAIReal(t *testing.T) {
 		t.Fatalf("answer without the value: %q", second.Content)
 	}
 	t.Logf("%d models, call %s, answer %q, %d pieces streamed, prompt %d tokens", len(models), first.ToolCalls[0].Function.Arguments, second.Content, streamed, stats.PromptTokens)
+}
+
+// claudeText answers /v1/messages with a short streamed text.
+func claudeText(w http.ResponseWriter, text string) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	for _, e := range [][2]string{
+		{"message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"m","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1}}}`},
+		{"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`},
+		{"content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"` + text + `"}}`},
+		{"content_block_stop", `{"type":"content_block_stop","index":0}`},
+		{"message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":3}}`},
+		{"message_stop", `{"type":"message_stop"}`},
+	} {
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e[0], e[1])
+	}
+}
+
+// A model that writes less than claudeMaxTokens is asked for its own limit
+// (1.01: a fixed 64000 was refused by models with a smaller one); without a
+// readable limit a refused request is tried once with claudeLeastTokens.
+func TestClaudeAnswerRoomPerModel(t *testing.T) {
+	var mu sync.Mutex
+	var sent []float64
+	lookups := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/models/claude-small":
+			mu.Lock()
+			lookups++
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"id":"claude-small","type":"model","display_name":"Small","created_at":"2026-01-01T00:00:00Z","max_input_tokens":200000,"max_tokens":8192}`)
+		case strings.HasPrefix(r.URL.Path, "/v1/models/"):
+			http.NotFound(w, r)
+		case r.URL.Path == "/v1/messages":
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			n := body["max_tokens"].(float64)
+			mu.Lock()
+			sent = append(sent, n)
+			mu.Unlock()
+			if body["model"] == "claude-old" && n > 4096 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprintf(w, `{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: %d > 4096, which is the maximum allowed number of output tokens for claude-old"}}`, int(n))
+				return
+			}
+			claudeText(w, "ok")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c, err := newClaude("sk-ant-test", srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := func(model string) {
+		t.Helper()
+		msg, _, err := c.Chat(context.Background(), ChatRequest{Model: model, Messages: remoteChat()}, nil)
+		if err != nil || msg.Content != "ok" {
+			t.Fatalf("%s: %q %v", model, msg.Content, err)
+		}
+	}
+	ask("claude-small")
+	ask("claude-small")
+	ask("claude-big")
+	ask("claude-old")
+	mu.Lock()
+	defer mu.Unlock()
+	// small: its own limit twice, asked for once; big: the default (no
+	// limit to read); old: refused at the default, then the least.
+	want := []float64{8192, 8192, claudeMaxTokens, claudeMaxTokens, claudeLeastTokens}
+	if fmt.Sprint(sent) != fmt.Sprint(want) || lookups != 1 {
+		t.Fatalf("max_tokens sent %v (want %v), lookups %d", sent, want, lookups)
+	}
 }

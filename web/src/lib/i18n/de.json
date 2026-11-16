@@ -8367,6 +8367,7 @@
 	"agent.heroStateOn": "Eingeschaltet",
 	"agent.heroStateOff": "Ausgeschaltet",
 	"agent.unsaved": "Ungespeicherte Änderungen",
+	"agent.unsavedLeave": "Die Änderungen an den Einstellungen des KI-Agenten sind noch nicht gespeichert. Verwirfst du sie, bleibt alles, wie es war.",
 	"agent.summaryAccounts": "{count} Konten",
 	"agent.summaryOn": "an",
 	"agent.summaryOff": "aus",

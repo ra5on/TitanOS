@@ -497,10 +497,26 @@ export class AgentPage extends AgentChats {
 		// PLAN 75-16: a notification tapped while the agent is already open moves
 		// it to its chat (/agent?chat=…); the effect above reads the address only
 		// once, after its awaits.
+		// 1.01: "back" of the browser from a chat to the start page takes the
+		// chat out of the address; the view follows (it kept the chat).
+		let named: string | null = null;
 		$effect(() => {
 			const id = page.url.searchParams.get('chat');
 			const author = page.url.searchParams.get('author') ?? '';
-			if (!this.listsReady || !id || id === untrack(() => this.current?.id)) return;
+			const before = named;
+			named = id;
+			if (!this.listsReady) return;
+			if (!id) {
+				// Only the bare start page: a page of the agent, a view opened by a
+				// notification (?feature=) or a question to fill in keep the chat.
+				const start = !['page', 'feature', 'ask', 'attach'].some((k) =>
+					page.url.searchParams.has(k),
+				);
+				if (before && start && untrack(() => !!this.current))
+					untrack(() => this.newChat(this.project, false));
+				return;
+			}
+			if (id === untrack(() => this.current?.id)) return;
 			untrack(() => void this.open(id, false, author));
 		});
 

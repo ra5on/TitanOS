@@ -898,6 +898,127 @@ const sent = (seen, method, path) =>
   await ctx.close();
 }
 
+// ---------- 1.01: back to the start page, focus in sheets ----------
+{
+  const { ctx, page } = await open(390, 844, "graphit");
+  await page.goto(base + "/agent");
+  await page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
+  // The menu over the chat holds the focus; Escape closes it and the focus
+  // goes back to the button that opened it.
+  const menuButton = page.getByRole("button", { name: "Menü öffnen" });
+  await menuButton.click();
+  const drawer = page.locator("aside.drawer");
+  await drawer.waitFor();
+  for (let i = 0; i < 40; i++) await page.keyboard.press("Tab");
+  assert.ok(
+    await drawer.evaluate((el) => el.contains(document.activeElement)),
+    "Tab stays in the menu",
+  );
+  await page.keyboard.press("Escape");
+  await drawer.waitFor({ state: "detached" });
+  assert.ok(
+    await menuButton.evaluate((el) => el === document.activeElement),
+    "the focus is back on the menu button",
+  );
+  // A chat opened within the page (a link, as from a notification); "back"
+  // of the browser shows the start page again, "forward" the chat.
+  await page.evaluate((id) => {
+    const a = document.createElement("a");
+    a.href = "/agent?chat=" + id;
+    a.id = "go-chat";
+    a.textContent = "chat";
+    document.body.append(a);
+  }, chat.id);
+  await page.locator("#go-chat").evaluate((a) => a.click());
+  await page.getByText("Beide, mit Update").waitFor();
+  await page.goBack();
+  await page.waitForURL((u) => !u.search.includes("chat="));
+  await page.getByRole("heading", { level: 1, name: /alex/ }).waitFor();
+  assert.equal(
+    await page.getByText("Beide, mit Update").count(),
+    0,
+    "the chat left the screen with the address",
+  );
+  await page.goForward();
+  await page.getByText("Beide, mit Update").waitFor();
+  // The sheet of the title: focus inside, Tab stays, Escape closes it and
+  // gives the focus back to the title.
+  const title = page.locator("header.top .p-title");
+  await title.click();
+  const sheet = page.getByRole("dialog", {
+    name: "Projekt, Modell und Denkstufe",
+  });
+  await sheet.waitFor();
+  for (let i = 0; i < 30; i++) await page.keyboard.press("Tab");
+  assert.ok(
+    await sheet.evaluate((el) => el.contains(document.activeElement)),
+    "Tab stays in the sheet",
+  );
+  await page.keyboard.press("Escape");
+  await sheet.waitFor({ state: "detached" });
+  assert.ok(
+    await title.evaluate((el) => el === document.activeElement),
+    "the focus is back on the title",
+  );
+  // What a sheet opens keeps the focus while the sheet slides away: the
+  // search of the chat from the actions of a message.
+  await page
+    .locator(".user", { hasText: "Beide, mit Update" })
+    .dispatchEvent("contextmenu");
+  const acts = page.getByRole("dialog", { name: "Aktionen der Nachricht" });
+  await acts.waitFor();
+  await acts.getByRole("button", { name: "In diesem Chat suchen" }).click();
+  await acts.waitFor({ state: "detached" });
+  await page.waitForTimeout(200);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("type")),
+    "search",
+    "the search field has the focus",
+  );
+  await ctx.close();
+}
+
+// ---------- 1.01: leaving Settings › KI-Agent with unsaved changes ----------
+{
+  const { ctx, page } = await open(1280, 900);
+  await page.goto(base + "/settings/agent?tab=instruction");
+  const field = page.getByRole("textbox").first();
+  await field.waitFor();
+  await field.fill("Antworte immer kurz.");
+  await page.getByText("Ungespeicherte Änderungen").first().waitFor();
+  // Another area of the same page keeps the change and does not ask.
+  await page.evaluate(() => {
+    const a = document.createElement("a");
+    a.href = "/settings/agent?tab=initiative";
+    a.id = "go-area";
+    a.textContent = "area";
+    document.body.append(a);
+  });
+  await page.locator("#go-area").evaluate((a) => a.click());
+  await page.waitForURL(/tab=initiative/);
+  assert.equal(await page.getByRole("dialog").count(), 0, "no question");
+  // Another page asks; "Abbrechen" stays, "verwerfen" goes.
+  await page.evaluate(() => {
+    const a = document.createElement("a");
+    a.href = "/settings/updates";
+    a.id = "go-away";
+    a.textContent = "away";
+    document.body.append(a);
+  });
+  await page.locator("#go-away").evaluate((a) => a.click());
+  const ask = page.getByRole("dialog", { name: "Ungespeicherte Änderungen" });
+  await ask.waitFor();
+  await ask.getByText("Einstellungen des KI-Agenten").waitFor();
+  await page.screenshot({ path: `${out}/20-settings-leave.png` });
+  await ask.getByRole("button", { name: "Abbrechen" }).click();
+  await ask.waitFor({ state: "detached" });
+  assert.match(page.url(), /settings\/agent/);
+  await page.locator("#go-away").evaluate((a) => a.click());
+  await ask.getByRole("button", { name: "Änderungen verwerfen" }).click();
+  await page.waitForURL(/settings\/updates/);
+  await ctx.close();
+}
+
 assert.deepEqual(errors, [], "console errors");
 await browser.close();
 console.log("KI-Agent PLAN 90-4: ok");
