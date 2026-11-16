@@ -42,10 +42,20 @@ Anmeldung so lange keine Anfrage gestellt, wie die automatische Sperre
 eingestellt ist (Browser geschlossen, Gerät im Ruhezustand), sperrt das NAS sie
 beim nächsten Zugriff selbst.
 
-Die Sperre steht nur im Arbeitsspeicher (und in `/run`, damit sie einen
-Neustart von titand übersteht), nie auf dem Stick. Eine Anmeldung mit
-„Angemeldet bleiben“ kommt nach einem Neustart des NAS ungesperrt zurück, wird
-aber beim ersten Zugriff nach der eingestellten Zeit sofort gesperrt.
+Die Sperre steht im Arbeitsspeicher (und in `/run`, damit sie einen
+Neustart von titand übersteht). Für eine Anmeldung mit „Angemeldet bleiben“
+schreibt titand seit 1.03 (Entscheidung des Inhabers vom 16.11.2026, Fund Z-9)
+zusätzlich einen kleinen Vermerk auf den Stick (`/config/sessions/locked.json`:
+SHA-256 des Tokens und Zeitpunkt der Sperre), atomar und nur in dem Moment, in
+dem sie gesperrt oder entsperrt wird, nie beim Benutzen, nie beim Start und
+nie zyklisch. Beim Start kommt eine so gesperrte Anmeldung gesperrt zurück,
+auch am Handy ohne automatische Sperre. Ist der Vermerk nicht lesbar, kommen
+alle Anmeldungen vom Stick gesperrt zurück. Der Vermerk zählt wie
+`remembered.json` als Zustand, nicht als Änderung der Konfiguration (keine
+Sicherung des Sticks deswegen). Ältere Versionen kennen die Datei nicht und
+lassen solche Anmeldungen nach einem Neustart des NAS ungesperrt; die
+automatische Sperre greift dann wie bisher beim ersten Zugriff nach der
+eingestellten Zeit.
 
 Im Aktivitätsprotokoll stehen Sperren, automatisches Sperren, Entsperren
 (mit Passwort oder Passkey) und Fehlversuche.

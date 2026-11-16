@@ -82,8 +82,7 @@ func TestLockIfIdle(t *testing.T) {
 }
 
 // A remembered login that comes back after a restart of the NAS starts
-// from its login time, so the automatic lock catches it: the lock itself
-// was never written to the stick.
+// from its login time, so the automatic lock catches it.
 func TestRememberedSessionLocksAfterRestart(t *testing.T) {
 	stick := &memKeeper{files: map[string][]byte{}}
 	first := NewSessions()
@@ -92,11 +91,7 @@ func TestRememberedSessionLocksAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	token, _ := first.Create("alex", "192.0.2.1", "test")
-	first.Lock(token)
 	first.Flush()
-	if strings.Contains(string(stick.files[RememberFile]), "Locked") {
-		t.Fatal("the lock was written to the stick")
-	}
 	second := NewSessions()
 	second.now = func() time.Time { return time.Now().Add(time.Hour) }
 	if err := second.Remember(stick); err != nil {
@@ -128,5 +123,91 @@ func TestLockedSessionStillRunsOut(t *testing.T) {
 		if _, ok := sessions.Get(token); !ok {
 			t.Fatal("a used session ran out")
 		}
+	}
+}
+
+// Z-9 (owner 16 Nov 2026): a remembered login locked by hand stays locked
+// over a restart of the NAS, also on a phone without an automatic lock. A
+// small mark on the stick is written when it is locked or unlocked, never
+// else; remembered.json itself does not change.
+func TestLockedRememberedSessionStaysLockedAfterRestart(t *testing.T) {
+	stick := &memKeeper{files: map[string][]byte{}}
+	first := NewSessions()
+	first.Remember(stick)
+	if err := first.SetStay(30); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := first.Create("alex", "192.0.2.1", "iPhone Mobile")
+	other, _ := first.Create("alex", "192.0.2.2", "Firefox")
+	first.Flush()
+	writes, remembered := stick.writes, string(stick.files[RememberFile])
+	first.Get(token)
+	first.Flush()
+	if stick.writes != writes {
+		t.Fatal("using a login wrote to the stick")
+	}
+	first.Lock(token)
+	first.Flush()
+	if stick.writes != writes+1 || string(stick.files[RememberFile]) != remembered {
+		t.Fatalf("lock: %d writes (want %d), remembered.json changed: %v", stick.writes, writes+1, string(stick.files[RememberFile]) != remembered)
+	}
+	if strings.Contains(string(stick.files[LockedFile]), token) || !strings.Contains(string(stick.files[LockedFile]), "lockedAt") {
+		t.Fatalf("mark: %s", stick.files[LockedFile])
+	}
+	first.Lock(token)
+	first.Flush()
+	if stick.writes != writes+1 {
+		t.Fatal("locking a locked login wrote again")
+	}
+
+	// The NAS restarts: the locked login comes back locked, the other not.
+	second := NewSessions()
+	if err := second.Remember(stick); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := second.Peek(token); !ok || !s.Locked {
+		t.Fatalf("locked login after the restart: %+v %v", s, ok)
+	}
+	if s, ok := second.Peek(other); !ok || s.Locked {
+		t.Fatalf("other login after the restart: %+v %v", s, ok)
+	}
+	second.Flush()
+	if stick.writes != writes+1 {
+		t.Fatal("the start wrote to the stick")
+	}
+	// Unlocked, it comes back unlocked.
+	second.Unlock(token)
+	second.Flush()
+	if stick.writes != writes+2 {
+		t.Fatalf("unlock: %d writes", stick.writes)
+	}
+	third := NewSessions()
+	third.Remember(stick)
+	if s, _ := third.Peek(token); s.Locked {
+		t.Fatal("an unlocked login came back locked")
+	}
+
+	// A mark that cannot be read locks every login taken over from the
+	// stick rather than letting a locked one in.
+	stick.files[LockedFile] = []byte("{broken")
+	fourth := NewSessions()
+	fourth.Remember(stick)
+	if s, _ := fourth.Peek(other); !s.Locked {
+		t.Fatal("unreadable marks: a login came back unlocked")
+	}
+}
+
+// Without "stay logged in" nothing is written for a lock: the session ends
+// with the restart anyway.
+func TestLockOfAPlainSessionWritesNothing(t *testing.T) {
+	stick := &memKeeper{files: map[string][]byte{}}
+	sessions := NewSessions()
+	sessions.Remember(stick)
+	token, _ := sessions.Create("alex", "192.0.2.1", "test")
+	sessions.Lock(token)
+	sessions.Unlock(token)
+	sessions.Flush()
+	if stick.writes != 0 {
+		t.Fatalf("%d writes for the lock of a plain session", stick.writes)
 	}
 }
