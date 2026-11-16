@@ -238,3 +238,15 @@ func TestScheduledRetentionNeverEnrollsManualNames(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Restoring single files from a snapshot waits for a RAID expansion like
+// the folder restore does: it writes to a volume while the array is reshaped.
+func TestSnapshotFileRestoreWaitsForAnExpansion(t *testing.T) {
+	m, _ := snapshotFilesFixture(t)
+	m.mu.Lock()
+	m.growth = &GrowthPointer{ID: "0123456789abcdef01234567", Volume: "data", RecoveryVolume: "safe"}
+	m.mu.Unlock()
+	if _, err := m.RestoreSnapshotFiles(context.Background(), "data", "manual", SnapshotRestore{Paths: []string{"photos/a.jpg"}, TargetVolume: "safe"}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("restore during an expansion: %v", err)
+	}
+}
