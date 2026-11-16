@@ -1504,11 +1504,12 @@
 	.count {
 		flex: none;
 	}
+	/* The short summary of the steps wraps instead of ending in "…"
+	   (owner 16 Nov 2026: no cut-off text). */
 	.gist {
 		min-width: 0;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
+		text-align: left;
 	}
 	.step-list {
 		list-style: none;
@@ -2123,14 +2124,16 @@
 	@media (max-width: 760px) {
 		/* The round buttons of the head float over the chat. */
 		.messages {
-			padding: calc(var(--agent-top, 0px) + 64px) var(--space-4) var(--space-3);
+			/* A title on two or three lines makes the head taller (--agent-head). */
+			padding: max(calc(var(--agent-top, 0px) + 64px), calc(var(--agent-head, 0px) + 8px))
+				var(--space-4) var(--space-3);
 		}
 		.column {
 			font-size: 1rem;
 			gap: var(--space-3-5, 14px);
 		}
 		.find {
-			top: calc(var(--agent-top, 0px) + 56px);
+			top: max(calc(var(--agent-top, 0px) + 56px), var(--agent-head, 0px));
 		}
 		.act {
 			min-height: 44px;

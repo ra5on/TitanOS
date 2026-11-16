@@ -43,15 +43,19 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 # What goes into the image: its recipe, the agent and the protocol it shares
-# with titand, and the build script. Go dependencies change the agent too.
+# with titand, and the build script.
 INPUTS = (
     "viewer/",
     "backend/cmd/titanos-viewer/",
     "backend/internal/viewer/proto/",
     "scripts/build-viewer-image.sh",
-    "backend/go.mod",
-    "backend/go.sum",
 )
+# Go dependencies change the agent too – but only those it is built from.
+# 0.96 added a library for titand alone and every NAS loaded 320 MB again
+# (owner 16 Nov 2026). When these files changed, the modules of the agent
+# are compared (agent_modules); only a difference there builds the image.
+MODULE_FILES = ("backend/go.mod", "backend/go.sum")
+AGENT = "./cmd/titanos-viewer"
 BUILD = 3
 # An image is rebuilt after this long even without changes (security updates).
 MAX_AGE = 7 * 24 * 3600
@@ -102,15 +106,64 @@ def previous(version, tags, manifest_of):
     return None, None
 
 
-def decide(version, tags, manifest_of, changed_since):
-    """Returns (tag, manifest) to reuse, or (None, reason)."""
+def decide(version, tags, manifest_of, changed_since, modules_differ=None):
+    """Returns (tag, manifest) to reuse, or (None, reason).
+
+    modules_differ(tag) says why the Go modules of the agent differ from
+    those at tag ("" when they are the same); without it, any change to
+    go.mod or go.sum builds the image.
+    """
     tag, manifest = previous(version, tags, manifest_of)
     if not tag:
         return None, "no earlier release with a viewer image"
-    changed = [p for p in changed_since(tag) if p.startswith(INPUTS)]
+    paths = changed_since(tag)
+    changed = [p for p in paths if p.startswith(INPUTS)]
     if changed:
         return None, f"changed since {tag}: " + ", ".join(changed[:10])
+    modules = [p for p in paths if p in MODULE_FILES]
+    if modules:
+        reason = modules_differ(tag) if modules_differ else "not compared"
+        if reason:
+            return None, f"changed since {tag}: " + ", ".join(modules) + f" ({reason})"
     return tag, manifest
+
+
+def agent_modules(backend, run=subprocess.run):
+    """The Go version and the modules the agent of the image is built from."""
+    result = run(["go", "list", "-deps", "-f",
+                  "{{with .Module}}{{.Path}} {{.Version}}{{with .Replace}} => {{.Path}} {{.Version}}{{end}}{{end}}", AGENT],
+                 cwd=backend, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        raise RuntimeError(f"go list failed: {result.stderr.strip()[-300:]}")
+    modules = {line for line in result.stdout.splitlines() if line.strip()}
+    # The module of TitanOS itself has no version; its Go version counts.
+    version = run(["go", "list", "-m", "-f", "{{.GoVersion}}"], cwd=backend, capture_output=True, text=True, timeout=120)
+    if version.returncode != 0:
+        raise RuntimeError(f"go list -m failed: {version.stderr.strip()[-300:]}")
+    return {"go " + version.stdout.strip()} | modules
+
+
+def modules_differ(tag, run=subprocess.run):
+    """Why the agent's modules differ from those at tag, or "".
+
+    The tree of the tag is checked out beside this one. Whatever cannot be
+    compared counts as a difference: the image is built rather than reused
+    by mistake.
+    """
+    try:
+        now = agent_modules(REPO / "backend", run)
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "tree"
+            release_kind.git("worktree", "add", "--detach", str(tree), tag)
+            try:
+                then = agent_modules(tree / "backend", run)
+            finally:
+                release_kind.git("worktree", "remove", "--force", str(tree))
+    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+        return f"modules of the agent cannot be compared: {error}"
+    if now == then:
+        return ""
+    return "modules of the agent: " + ", ".join(sorted(now ^ then)[:6])
 
 
 def pinned_base():
@@ -251,7 +304,7 @@ def main():
 
     tags = release_kind.git("tag", "-l", "v*").split()
     tag, manifest = decide(args.version, tags, manifest_of,
-                           lambda t: release_kind.git("diff", "--name-only", f"{t}..HEAD").split())
+                           lambda t: release_kind.git("diff", "--name-only", f"{t}..HEAD").split(), modules_differ)
     if not tag:
         print(f"building the viewer image: {manifest}", file=sys.stderr)
         sys.exit(BUILD)

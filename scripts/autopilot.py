@@ -84,6 +84,9 @@ def local_tags():
 # Versions are two-part from here on (owner, 9 Nov 2026): 0.72, 0.73 …,
 # written x.y.0 in tags and manifests.
 TWO_PART = (0, 72, 0)
+# Versions are shown as x.xx from 1.00 on (owner 16 Nov 2026): the second
+# number never goes past 99; the release after x.99 is the next major one.
+MAX_MINOR = 99
 
 
 def follows(own, release):
@@ -93,6 +96,10 @@ def follows(own, release):
     if release >= own:
         return False
     if own >= TWO_PART:
+        if own[0] == release[0] + 1:
+            # x.xx (owner 16 Nov 2026): after 0.99/0.100 comes 1.0.0, after
+            # 1.99 comes 2.0.0.
+            return own[1:] == (0, 0) and release[1] >= MAX_MINOR
         return own[0] == release[0] and own[2] == 0
     return own[:2] == release[:2]
 
@@ -115,9 +122,13 @@ def plan(latest, tags, is_published, now):
     if own >= TWO_PART:
         # From 0.72 every release raises the second number, a security
         # release too: after 0.74 comes 0.75, never 0.74.1 (docs/RELEASING.md).
+        # From 1.00 on two digits (x.xx): after x.99 comes the next major one.
         minor, patch = minor + 1, 0
-        while (major, minor, patch) in taken:
-            minor += 1
+        while (major, minor, patch) in taken or minor > MAX_MINOR:
+            if minor > MAX_MINOR:
+                major, minor = major + 1, 0
+            else:
+                minor += 1
         return "tag", f"v{major}.{minor}.{patch}", f"next free version after {latest}"
     patch += 1
     while (major, minor, patch) in taken:

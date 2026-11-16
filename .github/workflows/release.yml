@@ -428,13 +428,30 @@ jobs:
           name: release
           path: release
 
+      - name: Install minisign
+        timeout-minutes: 15
+        run: |
+          # A mirror that stops answering hung this step for over 30 minutes
+          # (0.100 on 16 Nov 2026: apt-get update after noble-security
+          # InRelease). Every attempt has a time limit; three attempts.
+          opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          for attempt in 1 2 3; do
+            if timeout 240 sudo apt-get "${opts[@]}" update &&
+              timeout 240 sudo apt-get "${opts[@]}" install -y --no-install-recommends minisign; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt-get did not finish in three attempts"
+              exit 1
+            fi
+            sleep 20
+          done
+
       - name: Sign manifest, installation ZIP and checksums
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends minisign
           if [ -z "$MINISIGN_SECRET_KEY" ]; then
             echo "the environment of this job holds no MINISIGN_SECRET_KEY" >&2
             exit 1
@@ -470,6 +487,9 @@ jobs:
             echo
             echo "**Third-party components:** \`titanos-$VERSION-sources.txt\` links the exact packages; \`titanos-$VERSION-licenses.tar.gz\` contains the original notices and version inventory. This includes Debian, firmware, Go, frontend libraries and fonts."
           } > notes.md
+          # The title shows the version as people read it: 0.99, 1.00, 1.01
+          # (backend/internal/version Display; owner 16 Nov 2026: "x.xx").
+          shown=$(python3 -c 'import re,sys; v=sys.argv[1]; m=re.fullmatch(r"(\d+)\.(\d+)\.0", v); print(v if not m else (f"0.{m[2]}" if m[1] == "0" else f"{int(m[1])}.{int(m[2]):02d}"))' "$VERSION")
           prerelease=
           if [ "$CHANNEL" = beta ]; then prerelease=--prerelease; fi
           # A draft first, the files one by one, published last: an upload
@@ -484,7 +504,7 @@ jobs:
           fi
           if [ "$state" = none ]; then
             gh release create "$GITHUB_REF_NAME" --draft \
-              --title "TitanOS $VERSION" --notes-file notes.md --verify-tag $prerelease
+              --title "TitanOS $shown" --notes-file notes.md --verify-tag $prerelease
           fi
           for file in release/*; do
             for attempt in 1 2 3 4; do
@@ -495,7 +515,7 @@ jobs:
             echo "::error::$file could not be uploaded"
             exit 1
           done
-          gh release edit "$GITHUB_REF_NAME" --draft=false --title "TitanOS $VERSION" --notes-file notes.md
+          gh release edit "$GITHUB_REF_NAME" --draft=false --title "TitanOS $shown" --notes-file notes.md
 
   autopilot-failed:
     # A tag of the autopilot that did not make it: one issue for the owner.

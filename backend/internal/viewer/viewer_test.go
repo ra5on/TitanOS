@@ -404,6 +404,63 @@ func TestLostImageIsFetchedAgainAndErrorsBackOff(t *testing.T) {
 	}
 }
 
+// 0.98: after an update the remote view keeps working with the image that
+// is still loaded – while the new one is fetched, and when the release
+// cannot be asked at all. Once the new one is ready it takes over and the
+// old one is removed.
+func TestEarlierImageStandsIn(t *testing.T) {
+	const older = "sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	const oldest = "sha256:" + "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+	engine := newFakeEngine()
+	m := testManager(t, engine)
+	m.image = imageState{}
+	delete(engine.images, testImageID)
+	engine.images[older], engine.images[oldest] = older, oldest
+	engine.imageList = []docker.ViewerImage{{ID: oldest, Created: 100}, {ID: older, Created: 200}}
+	m.Release = fakeRelease{manifestErr: errors.New("lookup github.com: i/o timeout")}
+	// The very first window still has to wait a moment: the look into
+	// Docker runs beside it.
+	m.Open(t.Context(), "anna", "immich")
+	st := waitImage(t, m)
+	if st.State != "error" || !st.Usable {
+		t.Fatalf("offline: %+v", st)
+	}
+	if _, err := m.Open(t.Context(), "anna", "immich"); err != nil {
+		t.Fatalf("open with the earlier image: %v", err)
+	}
+	engine.mu.Lock()
+	used := engine.created[len(engine.created)-1].Image
+	engine.mu.Unlock()
+	if used != older {
+		t.Fatalf("started with %s, want the newest earlier image %s", used, older)
+	}
+	// The release answers again: its image is loaded and takes over.
+	m.mu.Lock()
+	m.image.checked = time.Time{}
+	m.mu.Unlock()
+	m.Release = fakeRelease{manifest: manifest(goodEntry), body: "image"}
+	m.PrepareImage()
+	if st := waitImage(t, m); st.State != "ready" || !st.Usable {
+		t.Fatalf("online again: %+v", st)
+	}
+	if got := m.readyImage(); got != testImageID {
+		t.Fatalf("ready image %s", got)
+	}
+	// Nothing loaded at all and no release: still nothing to open with.
+	lone := newFakeEngine()
+	n := testManager(t, lone)
+	n.image = imageState{}
+	delete(lone.images, testImageID)
+	n.Release = fakeRelease{manifestErr: errors.New("offline")}
+	n.Open(t.Context(), "anna", "immich")
+	if st := waitImage(t, n); st.Usable {
+		t.Fatalf("usable without any image: %+v", st)
+	}
+	if _, err := n.Open(t.Context(), "anna", "immich"); !errors.Is(err, ErrImageNotReady) {
+		t.Fatalf("open without any image: %v", err)
+	}
+}
+
 type countingRelease struct {
 	calls *int
 	fakeRelease

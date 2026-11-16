@@ -54,6 +54,11 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(autopilot.plan("0.74.0", [("v0.74.0", NOW - 10 * 86400, "0.74")], published("v0.74.0"), NOW)[:2], ("tag", "v0.75.0"))
         tags = [("v0.74.0", NOW - 10 * 86400, "0.74"), ("v0.75.0", NOW - 10 * 86400, "never released")]
         self.assertEqual(autopilot.plan("0.74.0", tags, published("v0.74.0"), NOW)[:2], ("tag", "v0.76.0"))
+        # x.xx (owner 16 Nov 2026): after 0.100 and after x.99 comes the next
+        # major version; 1.0.0 → 1.1.0 (shown 1.01).
+        self.assertEqual(autopilot.plan("0.100.0", [("v0.100.0", NOW - 10 * 86400, "0.100")], published("v0.100.0"), NOW)[:2], ("tag", "v1.0.0"))
+        self.assertEqual(autopilot.plan("1.0.0", [("v1.0.0", NOW - 10 * 86400, "1.00")], published("v1.0.0"), NOW)[:2], ("tag", "v1.1.0"))
+        self.assertEqual(autopilot.plan("1.99.0", [("v1.99.0", NOW - 10 * 86400, "1.99")], published("v1.99.0"), NOW)[:2], ("tag", "v2.0.0"))
 
     def test_no_autopilot_on_a_pre_release(self):
         self.assertEqual(autopilot.plan("0.46.0-beta.1", [], published(), NOW)[0], "wait")
@@ -94,6 +99,10 @@ class GuardTest(unittest.TestCase):
         ok = dict(tags=("v0.74.0",), pub=("v0.74.0",))
         self.assertTrue(self.guard(version="0.75.0", **ok))
         self.assertTrue(self.guard(version="0.76.0", **ok))  # 0.75.0 was taken
+        self.assertTrue(self.guard(version="1.0.0", tags=("v0.100.0",), pub=("v0.100.0",)))
+        self.assertTrue(self.guard(version="2.0.0", tags=("v1.99.0",), pub=("v1.99.0",)))
+        self.assertFalse(self.guard(version="2.0.0", tags=("v1.5.0",), pub=("v1.5.0",)))
+        self.assertFalse(self.guard(version="1.1.0", tags=("v0.100.0",), pub=("v0.100.0",)))
         self.assertFalse(self.guard(version="0.74.1", **ok))  # no third number any more
         self.assertFalse(self.guard(version="0.75.1", **ok))
         self.assertFalse(self.guard(version="1.0.0", **ok))  # another major version

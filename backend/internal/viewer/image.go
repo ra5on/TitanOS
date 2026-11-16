@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
 
 // DevImage is the image a development build uses; nothing is downloaded.
@@ -35,6 +37,9 @@ type ImageStatus struct {
 	Size     int64   `json:"size"`
 	Progress float64 `json:"progress"`
 	Error    string  `json:"error,omitempty"`
+	// Usable: a window can open now – the image of this release is ready,
+	// or an earlier one stands in while this one is fetched (0.98).
+	Usable bool `json:"usable"`
 	// Dev is set in development mode (local image titanos-viewer:dev).
 	Dev bool `json:"dev,omitempty"`
 }
@@ -86,6 +91,13 @@ type imageState struct {
 	part    string
 	running bool
 	checked time.Time
+	// spare is an image of an earlier release that is still loaded. It
+	// stands in while the image of this release is fetched, and when the
+	// release cannot be asked at all (0.98, owner 16 Nov 2026: after an
+	// update the remote view was shut until 320 MB had arrived, and stayed
+	// shut when GitHub did not answer). It was verified against the signed
+	// manifest of its own release when it was loaded.
+	spare string
 }
 
 // ImageStatus reports the state of the image; the download progress comes
@@ -94,8 +106,10 @@ func (m *Manager) ImageStatus() ImageStatus {
 	m.mu.Lock()
 	st := m.image.status
 	part := m.image.part
+	spare := m.image.spare
 	m.mu.Unlock()
 	st.Version, st.Dev = m.Version, m.Dev
+	st.Usable = st.State == "ready" || spare != ""
 	if st.State == "" {
 		st.State = "missing"
 	}
@@ -121,8 +135,10 @@ func (m *Manager) PrepareImage() {
 	m.readyImage()
 }
 
-// readyImage returns the ID of the loaded image, or "" while it is not
-// ready; then it starts getting it (once at a time).
+// readyImage returns the ID of the image to start a view with, or "" while
+// there is none; it starts getting the image of this release (once at a
+// time). Until that one is ready, an earlier image that is still loaded
+// stands in.
 func (m *Manager) readyImage() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -132,7 +148,7 @@ func (m *Manager) readyImage() string {
 	// After a failure, a window that reconnects does not fetch again at
 	// once: at most once a minute.
 	if m.image.status.State == "error" && time.Since(m.image.checked) < imageRetry {
-		return ""
+		return m.image.spare
 	}
 	if !m.image.running {
 		m.image.running = true
@@ -142,7 +158,7 @@ func (m *Manager) readyImage() string {
 		}
 		go m.fetchImage()
 	}
-	return ""
+	return m.image.spare
 }
 
 // fetchImage gets the image: in development mode the local one, otherwise
@@ -150,20 +166,43 @@ func (m *Manager) readyImage() string {
 func (m *Manager) fetchImage() {
 	ctx, cancel := context.WithTimeout(m.ctx(), 2*time.Hour)
 	defer cancel()
+	if !m.Dev {
+		spare := m.spareImage(ctx)
+		m.mu.Lock()
+		m.image.spare = spare
+		m.mu.Unlock()
+	}
 	id, err := m.obtainImage(ctx)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.image.running, m.image.part, m.image.checked = false, "", time.Now()
 	if err != nil {
-		slog.Warn("remote view image not ready", "err", err)
+		slog.Warn("remote view image not ready", "err", err, "spare", m.image.spare != "")
 		m.image.status = ImageStatus{State: "error", Error: err.Error()}
 		return
 	}
-	m.image.id = id
+	m.image.id, m.image.spare = id, ""
 	m.image.status = ImageStatus{State: "ready"}
 	if !m.Dev {
 		go m.pruneImages(id)
 	}
+}
+
+// spareImage is the newest image of the remote view that is loaded, or "".
+func (m *Manager) spareImage(ctx context.Context) string {
+	sctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	images, err := m.Engine.ViewerImages(sctx)
+	if err != nil {
+		return ""
+	}
+	best := docker.ViewerImage{}
+	for _, img := range images {
+		if best.ID == "" || img.Created > best.Created {
+			best = img
+		}
+	}
+	return best.ID
 }
 
 // pruneImages removes the images of earlier versions (label

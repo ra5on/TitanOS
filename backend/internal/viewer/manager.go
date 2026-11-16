@@ -459,8 +459,12 @@ func (m *Manager) start(ctx context.Context, s *session) (err error) {
 	// it again instead of failing every view until titand restarts.
 	if id, err := m.Engine.ViewerImageID(ctx, image); err == nil && id == "" {
 		m.mu.Lock()
-		if m.image.id == image {
+		switch image {
+		case m.image.id:
 			m.image = imageState{}
+		case m.image.spare:
+			// The stand-in is gone too: wait for the image of this release.
+			m.image.spare = ""
 		}
 		m.mu.Unlock()
 		m.readyImage()

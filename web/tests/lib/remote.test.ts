@@ -128,6 +128,14 @@ test('text messages: known ones parsed and checked, everything else ignored', ()
 	expect(parseMessage('null')).toBeNull();
 });
 
+test('the image is usable when ready, or when titand says an earlier one stands in', () => {
+	expect(sanitizeImage({ state: 'ready' }).usable).toBe(true);
+	expect(sanitizeImage({ state: 'downloading' }).usable).toBe(false);
+	expect(sanitizeImage({ state: 'downloading', usable: true }).usable).toBe(true);
+	expect(sanitizeImage({ state: 'error', error: 'offline', usable: true }).usable).toBe(true);
+	expect(sanitizeImage({ state: 'error', usable: 'yes' }).usable).toBe(false);
+});
+
 test('refusals: codes of titand from error messages and close reasons', () => {
 	expect(viewerError('viewer_memory')).toBe('viewer_memory');
 	expect(viewerError('app_forbidden')).toBe('app_forbidden');
@@ -143,7 +151,16 @@ test('refusals: codes of titand from error messages and close reasons', () => {
 		t: 'error',
 		code: 'viewer_image',
 		text: 'x',
-		image: { state: 'downloading', version: '', bytes: 5, size: 10, progress: 0.5, error: '' },
+		image: {
+			state: 'downloading',
+			version: '',
+			bytes: 5,
+			size: 10,
+			progress: 0.5,
+			error: '',
+			// An older NAS says nothing: only "ready" can open a window.
+			usable: false,
+		},
 	});
 	expect(parseMessage('{"t":"bye","reason":"replaced"}')).toMatchObject({ reason: 'replaced' });
 	expect(parseMessage('{"t":"bye","reason":"forbidden"}')).toMatchObject({ reason: 'forbidden' });

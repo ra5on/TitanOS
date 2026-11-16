@@ -44,6 +44,10 @@ class ReleaseKindTest(unittest.TestCase):
         result = self.decide("0.8.2", ["web/src/app.css", "CLA.md", "CONTRIBUTING.md"])
         self.assertEqual(result[:2], ("app", "0.8.0"))
 
+    def test_kept_npm_license_texts_are_not_part_of_the_image(self):
+        result = self.decide("0.8.2", ["web/package-lock.json", "scripts/licenses/@rolldown_binding-linux-x64-gnu@1.2.19/LICENSE"])
+        self.assertEqual(result[:2], ("app", "0.8.0"))
+
     def test_the_repack_script_is_not_part_of_the_image(self):
         result = self.decide("0.8.2", ["web/src/app.css", "scripts/repack-release.py"])
         self.assertEqual(result[:2], ("app", "0.8.0"))

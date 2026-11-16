@@ -126,5 +126,9 @@ export function formatDiskBytes(bytes: number): string {
  * releases with a third number (0.71.1) stay as they are.
  */
 export function osVersion(version: string | undefined | null): string {
-	return (version ?? '').replace(/^(\d+\.\d+)\.0$/, '$1');
+	// From 1.0 on the second part has two digits: 1.0.0 → "1.00", 1.1.0 →
+	// "1.01" (owner 16 Nov 2026: "x.xx"); 0.x stays 0.72 … 0.100.
+	return (version ?? '').replace(/^(\d+)\.(\d+)\.0$/, (_, major: string, minor: string) =>
+		major === '0' ? `0.${minor}` : `${Number(major)}.${minor.padStart(2, '0')}`,
+	);
 }
