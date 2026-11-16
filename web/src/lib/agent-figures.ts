@@ -4,17 +4,20 @@
 // liked all four of the draft, so every one has its place.
 //
 // A figure gives, for a time and a sphere, a place in units of half the
-// figure's width (-1 … 1), a depth (-1 back … 1 front) and a size. The
-// component (BusyFigure.svelte) draws that; this file is plain arithmetic.
+// figure's width (-1 … 1) and a depth (-1 back … 1 front). The component
+// (BusyFigure.svelte) draws that; this file is plain arithmetic.
+//
+// All three spheres are always the same size, in every figure (owner,
+// 16 Nov 2026: "dass alle drei Punkte gleich groß sind"): depth shows in
+// brightness and in what covers what, not in size. A change of figure
+// glides from one motion into the next (blendSpots).
 import type { BusyKind } from './agent.ts';
 
 export type Spot = {
 	x: number;
 	y: number;
-	/** -1 behind … 1 in front: decides size, brightness and what covers what. */
+	/** -1 behind … 1 in front: decides brightness and what covers what. */
 	z: number;
-	/** Size of the sphere, 1 = 42 % of the figure's width. */
-	s: number;
 	/** Squash on landing (1 = round). */
 	squash?: number;
 };
@@ -22,14 +25,17 @@ type Figure = (t: number, n: number, speed: number) => Spot;
 
 const THIRD = (2 * Math.PI) / 3;
 
+/** Diameter of every sphere as a share of the figure's width. */
+export const SPHERE = 0.24;
+
 /** Three spheres on a tilted ring. */
 const orbit: Figure = (t, n, k) => {
 	const a = t * k * 2.2 + n * THIRD;
-	return { x: Math.cos(a) * 0.7, y: Math.sin(a) * 0.26, z: Math.sin(a), s: 0.62 };
+	return { x: Math.cos(a) * 0.7, y: Math.sin(a) * 0.26, z: Math.sin(a) };
 };
 /** A core two spheres circle on two rings: the agent's own sign. */
 const atom: Figure = (t, n, k) => {
-	if (n === 0) return { x: 0, y: 0, z: 0, s: 0.78 + Math.sin(t * 2.4) * 0.06 };
+	if (n === 0) return { x: 0, y: Math.sin(t * 2.4) * 0.05, z: 0 };
 	const a = t * k * (n === 1 ? 2.6 : -1.9) + n;
 	const tilt = n === 1 ? 0.6 : -0.6;
 	const ex = Math.cos(a) * 0.78;
@@ -38,7 +44,6 @@ const atom: Figure = (t, n, k) => {
 		x: ex * Math.cos(tilt) - ey * Math.sin(tilt),
 		y: ex * Math.sin(tilt) + ey * Math.cos(tilt),
 		z: Math.sin(a) * 0.9,
-		s: 0.42,
 	};
 };
 /** The spheres fly in an eight, like being juggled. */
@@ -48,14 +53,13 @@ const juggle: Figure = (t, n, k) => {
 		x: Math.sin(a) * 0.72,
 		y: -Math.abs(Math.cos(a)) * 0.62 + 0.3,
 		z: Math.cos(a) * 0.8,
-		s: 0.56,
 	};
 };
 /** A row whose spheres hop one after the other. */
 const hop: Figure = (t, n, k) => {
 	const p = (((t * k * 1.5 - n * 0.22) % 1.4) + 1.4) % 1.4;
 	const up = p < 1 ? Math.sin(p * Math.PI) : 0;
-	return { x: (n - 1) * 0.62, y: 0.4 - up * 0.75, z: up * 0.4, s: 0.56, squash: p < 1 ? 1 : 0.86 };
+	return { x: (n - 1) * 0.62, y: 0.4 - up * 0.75, z: up * 0.4, squash: p < 1 ? 1 : 0.86 };
 };
 
 /** Which figure a kind of work shows, how fast, and whether it casts a shadow. */
@@ -74,4 +78,25 @@ export const FIGURES: Record<BusyKind, { figure: Figure; speed: number; shadow: 
 export function figureSpots(kind: BusyKind, t: number): Spot[] {
 	const { figure, speed } = FIGURES[kind] ?? FIGURES[''];
 	return [0, 1, 2].map((n) => figure(t, n, speed));
+}
+
+/** Eases a change of figure: slow at both ends. */
+export function ease(k: number): number {
+	const c = Math.min(1, Math.max(0, k));
+	return c * c * (3 - 2 * c);
+}
+
+/** The spheres on their way from one figure (a) to the next (b), k 0 … 1. */
+export function blendSpots(a: Spot[], b: Spot[], k: number): Spot[] {
+	const e = ease(k);
+	const mix = (x: number, y: number) => x + (y - x) * e;
+	return b.map((to, n) => {
+		const from = a[n] ?? to;
+		return {
+			x: mix(from.x, to.x),
+			y: mix(from.y, to.y),
+			z: mix(from.z, to.z),
+			squash: mix(from.squash ?? 1, to.squash ?? 1),
+		};
+	});
 }
