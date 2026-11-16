@@ -171,3 +171,35 @@ func TestAutoUpdateRollbackSkipsDigestPinnedImages(t *testing.T) {
 		t.Fatalf("steps: %v", steps)
 	}
 }
+
+// "Check for updates" from a page that is closed meanwhile keeps the last
+// result instead of marking every image as failed.
+func TestCancelledUpdateCheckKeepsTheLastResult(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			fmt.Fprint(w, `[{"Id":"c1","Image":"example/web:latest","ImageID":"sha256:1"}]`)
+		case strings.Contains(r.URL.Path, "/distribution/"):
+			cancel() // the page goes away while the registry is asked
+			http.Error(w, `{"message":"gone"}`, http.StatusInternalServerError)
+		default:
+			fmt.Fprint(w, `{"RepoDigests":["example/web@sha256:aaa"]}`)
+		}
+	}))
+	t.Cleanup(server.Close)
+	m.api = &client{http: &http.Client{Transport: rewriteTransport{server.URL}}}
+	checked := time.Now().Add(-time.Hour)
+	m.mu.Lock()
+	m.updatesChecked, m.updateErrors = checked, map[string]string{}
+	m.mu.Unlock()
+	if err := m.CheckUpdates(ctx); err == nil {
+		t.Fatal("a cancelled check counted as done")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.updatesChecked.Equal(checked) || len(m.updateErrors) != 0 {
+		t.Fatalf("result replaced: %v %v", m.updatesChecked, m.updateErrors)
+	}
+}
