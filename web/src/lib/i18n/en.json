@@ -9088,5 +9088,8 @@
 	"agent.haDomain.valve": "Valves",
 	"agent.haDomain.water_heater": "Water heaters",
 	"agent.haDomain.weather": "Weather",
-	"agent.haDomain.zone": "Zones"
+	"agent.haDomain.zone": "Zones",
+	"notify.unreadWarning": "New notifications: {count}, warnings among them",
+	"notify.unreadError": "New notifications: {count}, errors among them",
+	"smart.attrWatch": "Needs attention"
 }

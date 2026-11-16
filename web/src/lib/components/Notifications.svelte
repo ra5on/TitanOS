@@ -136,8 +136,17 @@
 		<Icon name="bell" />
 		<span class="sr-only">{t('notify.title')}</span>
 		{#if unread > 0}
-			<span class="count {worst}" aria-label={t('notify.unread', { count: unread })}
-				>{unread > 9 ? '9+' : unread}</span
+			<!-- Not by colour alone: warnings and errors carry "!" and say so (Durchsicht 102). -->
+			<span
+				class="count {worst}"
+				aria-label={t(
+					worst === 'error'
+						? 'notify.unreadError'
+						: worst === 'warning'
+							? 'notify.unreadWarning'
+							: 'notify.unread',
+					{ count: unread },
+				)}>{worst === 'info' ? '' : '!'}{unread > 9 ? '9+' : unread}</span
 			>
 		{/if}
 	</button>
