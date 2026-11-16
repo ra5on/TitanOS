@@ -17,18 +17,8 @@ import (
 // installApp loads titand of a release next to the running system and
 // restarts titand with it, on trial. The NAS keeps running.
 func (m *Manager) installApp(ctx context.Context, manifest Manifest, raw, signature []byte) error {
-	if m.Working != nil && m.Working() {
-		return ErrWorking
-	}
-	if len(raw) == 0 || len(signature) == 0 {
-		return ErrNothing
-	}
-	var room unix.Statfs_t
-	if err := unix.Statfs(m.bootDir, &room); err != nil {
+	if err := m.appReady(manifest, raw, signature); err != nil {
 		return err
-	}
-	if free := int64(room.Bavail) * int64(room.Bsize); free < manifest.App.Size+(8<<20) {
-		return fmt.Errorf("%w: %d MiB needed, %d MiB free", ErrNoSpace, manifest.App.Size>>20, free>>20)
 	}
 	if !m.work.TryLock() {
 		return ErrBusy
@@ -54,6 +44,25 @@ func (m *Manager) installApp(ctx context.Context, manifest Manifest, raw, signat
 		}
 		m.restart()
 	}()
+	return nil
+}
+
+// appReady refuses an app update that cannot start now: running work, no
+// signed manifest at hand, or too little room on the stick.
+func (m *Manager) appReady(manifest Manifest, raw, signature []byte) error {
+	if m.Working != nil && m.Working() {
+		return ErrWorking
+	}
+	if len(raw) == 0 || len(signature) == 0 {
+		return ErrNothing
+	}
+	var room unix.Statfs_t
+	if err := unix.Statfs(m.bootDir, &room); err != nil {
+		return err
+	}
+	if free := int64(room.Bavail) * int64(room.Bsize); free < manifest.App.Size+(8<<20) {
+		return fmt.Errorf("%w: %d MiB needed, %d MiB free", ErrNoSpace, manifest.App.Size>>20, free>>20)
+	}
 	return nil
 }
 

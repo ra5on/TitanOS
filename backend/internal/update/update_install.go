@@ -38,25 +38,27 @@ func (m *Manager) Install(ctx context.Context) error {
 	m.mu.Unlock()
 	// PLAN 74: a newer release found while an update waits for the restart
 	// takes its place (the owner need not update twice): the waiting switch
-	// is cancelled first, then the newer one installs as usual. Check never
-	// offers one that is not newer (evaluateLocked).
-	if pending != nil && pending.Kind == "update" && manifest != nil && !appTrial &&
-		phase != "download" && phase != "switch" && phase != "restart" {
-		if err := m.Cancel(); err != nil {
-			if errors.Is(err, ErrNothing) {
-				return ErrBusy
-			}
-			return err
-		}
-		pending = nil
-	}
+	// is cancelled, then the newer one installs as usual. Check never offers
+	// one that is not newer (evaluateLocked). The switch is only taken back
+	// once the newer release passed every check that can refuse it here;
+	// a refused one leaves the waiting update as it was.
+	replace := pending != nil && pending.Kind == "update" && manifest != nil && !appTrial &&
+		phase != "download" && phase != "switch" && phase != "restart"
 	switch {
-	case phase == "download" || phase == "switch" || phase == "restart" || pending != nil || appTrial:
+	case phase == "download" || phase == "switch" || phase == "restart" || pending != nil && !replace || appTrial:
 		return ErrBusy
 	case manifest == nil:
 		return ErrNothing
 	}
 	if m.appKind(manifest) {
+		if err := m.appReady(*manifest, raw, signature); err != nil {
+			return err
+		}
+		if replace {
+			if err := m.cancelWaiting(); err != nil {
+				return err
+			}
+		}
 		return m.installApp(ctx, *manifest, raw, signature)
 	}
 	m.mu.Lock()
@@ -80,6 +82,11 @@ func (m *Manager) Install(ctx context.Context) error {
 	staged, err := m.room(target, manifest.Size())
 	if err != nil {
 		return err
+	}
+	if replace {
+		if err := m.cancelWaiting(); err != nil {
+			return err
+		}
 	}
 	if !m.work.TryLock() {
 		return ErrBusy
@@ -117,6 +124,18 @@ func (m *Manager) Install(ctx context.Context) error {
 			slog.Error("update not installed", "version", manifest.Version, "err", err)
 		}
 	}()
+	return nil
+}
+
+// cancelWaiting takes back the switch an update waits with, for a newer
+// release that takes its place.
+func (m *Manager) cancelWaiting() error {
+	if err := m.Cancel(); err != nil {
+		if errors.Is(err, ErrNothing) {
+			return ErrBusy
+		}
+		return err
+	}
 	return nil
 }
 
