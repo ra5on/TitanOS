@@ -208,7 +208,10 @@
 	     manifest, icon and name on /agent, TitanOS everywhere else. -->
 	{#if agentRoute}
 		<link rel="manifest" href="/agent.webmanifest" />
-		<link rel="apple-touch-icon" href="/icons/agent-180.png" />
+		<!-- "agent2": the sign of 0.95 under an address of its own. iOS keeps
+		     the picture of an address it has seen, so the old name went on
+		     showing the old sign on the home screen. -->
+		<link rel="apple-touch-icon" href="/icons/agent2-180.png" />
 		<meta name="apple-mobile-web-app-title" content="TitanOS Agent" />
 	{:else}
 		<link rel="manifest" href="/manifest.webmanifest" />
