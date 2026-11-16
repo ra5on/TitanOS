@@ -8367,6 +8367,7 @@
 	"agent.heroStateOn": "On",
 	"agent.heroStateOff": "Off",
 	"agent.unsaved": "Unsaved changes",
+	"agent.unsavedLeave": "The changes to the settings of the AI agent are not saved yet. If you discard them, everything stays as it was.",
 	"agent.summaryAccounts": "{count} accounts",
 	"agent.summaryOn": "on",
 	"agent.summaryOff": "off",

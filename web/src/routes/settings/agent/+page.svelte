@@ -16,6 +16,7 @@
 	import ConnectionTab from './ConnectionTab.svelte';
 	import HomeAssistantTab from './HomeAssistantTab.svelte';
 	import RightsTab from './RightsTab.svelte';
+	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -67,10 +68,11 @@
 	async function setShare(node: string, body: { allowed?: boolean; remove?: boolean }) {
 		if (!settings) return;
 		try {
-			settings.shared = await api.put<NonNullable<Settings['shared']>>(
+			const shared = await api.put<NonNullable<Settings['shared']>>(
 				`/agent/cluster/nodes/${encodeURIComponent(node)}`,
 				body,
 			);
+			savedByNAS((s) => (s.shared = shared));
 		} catch (e) {
 			error = apiErrorText(e);
 		}
@@ -88,7 +90,7 @@
 				key,
 				mode,
 			}));
-			base = current();
+			remember();
 		} catch (e) {
 			error = apiErrorText(e);
 			return;
@@ -116,8 +118,11 @@
 		void load();
 	});
 
-	// PLAN 73: the save bar shows only when something was changed.
+	// PLAN 73: the save bar shows only when something was changed. stored is
+	// the state on the NAS the page compares with.
 	let base = $state('');
+	let stored: { settings: Settings; notify: string; rules: { key: string; mode: Mode }[] } | null =
+		null;
 	// Compared without what is empty: the NAS leaves empty fields out, and a
 	// choice field writes its empty first option into a field that was
 	// missing. That alone is no change (0.99: opening "Verbindung und
@@ -155,6 +160,28 @@
 	const current = () =>
 		JSON.stringify(lean([$state.snapshot(settings), haNotify, $state.snapshot(haRules)]));
 	const dirty = $derived(!!settings && base !== '' && current() !== base);
+	function remember() {
+		if (!settings) return;
+		stored = {
+			settings: $state.snapshot(settings) as Settings,
+			notify: haNotify,
+			rules: $state.snapshot(haRules),
+		};
+		base = JSON.stringify(lean([stored.settings, stored.notify, stored.rules]));
+	}
+	/**
+	 * A change the NAS made itself (a node of the cluster released, the data
+	 * moved to another volume): it goes into the page and into the state the
+	 * page compares with, so it is no unsaved change (1.01: "Ungespeicherte
+	 * Änderungen" came up after it). Changes typed before stay unsaved.
+	 */
+	function savedByNAS(change: (s: Settings) => void) {
+		if (!settings) return;
+		change(settings);
+		if (!stored) return;
+		change(stored.settings);
+		base = JSON.stringify(lean([stored.settings, stored.notify, stored.rules]));
+	}
 
 	async function save() {
 		if (!settings) return;
@@ -171,7 +198,7 @@
 		try {
 			settings = filled(await api.put<Settings>('/agent/settings', $state.snapshot(settings)));
 			saved = true;
-			base = current();
+			remember();
 			void api.get<Status>('/agent/status').then((s) => (status = s));
 			void api.get<{ tools: ToolView[] }>('/agent/tools').then((r) => (tools = r.tools));
 		} catch (e) {
@@ -400,6 +427,10 @@
 
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
+<!-- 1.01: leaving with unsaved changes asks first; another area of this
+     page (?tab=) keeps them and does not ask. -->
+<NavigationGuard dirty={dirty && !saving} samePath hint={t('agent.unsavedLeave')} />
+
 {#if settings}
 	{#if tab === 'features'}
 		<!-- PLAN 68: one card per group of functions, each function a row. -->
@@ -442,7 +473,7 @@
 				settings!.volume = v;
 				settings!.enabled = true;
 			}}
-			onmoved={(v) => (settings!.volume = v)}
+			onmoved={(v) => savedByNAS((s) => (s.volume = v))}
 		/>
 		<!-- Every area of the settings is a row that leads to it. -->
 		<SettingGroup title={t('agent.areasTitle')}>
