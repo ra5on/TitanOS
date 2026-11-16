@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -8,17 +9,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/cluster"
+	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/webauthn/webauthntest"
 )
 
 // clusterTestServer is a test server that is a node of a cluster. Nodes on
 // one machine talk plain HTTP (development mode).
-func clusterTestServer(t *testing.T, name string) (*testServer, *cluster.Manager) {
+func clusterTestServer(t *testing.T, name string, more ...func(*Options)) (*testServer, *cluster.Manager) {
 	t.Helper()
 	var node *cluster.Manager
 	ts := newTestServerWith(t, func(o *Options) {
+		for _, change := range more {
+			change(o)
+		}
 		node = cluster.NewManager(o.Store)
 		node.Users, node.Version, node.Backups = o.Users, o.Version, o.BackupTarget
 		node.Insecure, node.Loopback = true, true
@@ -190,6 +197,73 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	res, body = b.request("GET", "/api/v1/cluster/nodes/"+aID+"/api/users", nil)
 	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "cluster_not_permitted" {
 		t.Fatalf("local account of B acted on A: %d %s", res.StatusCode, body)
+	}
+}
+
+// TestClusterProxyEndsWithTheLogin: a console of another node, opened
+// through the proxy, ends once the login on the managing node no longer
+// holds; the other node trusts that node with the session.
+func TestClusterProxyEndsWithTheLogin(t *testing.T) {
+	recheck := consoleRecheck.Swap(int64(20 * time.Millisecond))
+	t.Cleanup(func() { consoleRecheck.Store(recheck) })
+
+	a, _ := clusterTestServer(t, "nas-a")
+	// B has a console that stays open: cat behind a pseudo terminal.
+	b, nodeB := clusterTestServer(t, "nas-b", func(o *Options) {
+		o.Terminal = terminal.NewManager(o.Store)
+		o.Terminal.SetCommandForTest([]string{"/bin/cat"})
+		o.Terminal.Load()
+	})
+	a.setup()
+	b.setup()
+	if res, body := a.request("POST", "/api/v1/cluster", map[string]string{"name": "Home"}); res.StatusCode != http.StatusOK {
+		t.Fatalf("create: %d %s", res.StatusCode, body)
+	}
+	_, body := a.request("POST", "/api/v1/cluster/join-info", map[string]string{"password": testPassword})
+	var view struct {
+		JoinInfo string `json:"joinInfo"`
+	}
+	json.Unmarshal(body, &view)
+	if res, body := b.request("POST", "/api/v1/cluster/join", map[string]string{"info": view.JoinInfo}); res.StatusCode != http.StatusOK {
+		t.Fatalf("join: %d %s", res.StatusCode, body)
+	}
+
+	base, _ := url.Parse(a.url)
+	header := http.Header{"Origin": {a.url}}
+	for _, cookie := range a.client.Jar.Cookies(base) {
+		header.Add("Cookie", cookie.String())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	address := "ws" + strings.TrimPrefix(a.url, "http") + "/api/v1/cluster/nodes/" + nodeB.ID() + "/api/terminal/shell"
+	conn, _, err := websocket.Dial(ctx, address, &websocket.DialOptions{HTTPHeader: header})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte("hi\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, data, err := conn.Read(ctx); err != nil || !strings.Contains(string(data), "hi") {
+		t.Fatalf("console of B through A: %q %v", data, err)
+	}
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		for {
+			if _, _, err := conn.Read(context.Background()); err != nil {
+				return
+			}
+		}
+	}()
+
+	if res, body := a.request("POST", "/api/v1/logout", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout: %d %s", res.StatusCode, body)
+	}
+	select {
+	case <-closed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the console of B outlived the logout on A")
 	}
 }
 
