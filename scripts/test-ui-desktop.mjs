@@ -263,10 +263,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     await page.getByRole("button", { name: "Widget hinzufügen" }).click();
   await agentWidget.click();
   await page.getByRole("button", { name: "Fertig" }).last().click();
-  await page
-    .locator(".widget", { hasText: "KI-Agent" })
-    .first()
-    .waitFor();
+  await page.locator(".widget", { hasText: "KI-Agent" }).first().waitFor();
   await page.waitForTimeout(1800);
   await shot(page, "09-widgets-bearbeiten");
   await ctx.close();
@@ -761,14 +758,19 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     bar.locator(".menubar").boundingBox(),
   ]);
   assert.ok(mb.x < 20, "menu button at the very left");
-  assert.ok(sb.x >= mb.x + mb.width && sb.width < 200, "small search next to it");
+  assert.ok(
+    sb.x >= mb.x + mb.width && sb.width < 200,
+    "small search next to it",
+  );
   assert.ok(first.x >= sb.x + sb.width, "then the menus of the program");
   const launcher = page.locator(".launcher");
   const labels = () =>
     launcher
       .locator(".prog")
       .evaluateAll((els) =>
-        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
+        els.map((el) =>
+          el.querySelector(":scope > span:last-child").textContent.trim(),
+        ),
       );
   const structure = async () => ({
     filters: await launcher
@@ -792,7 +794,12 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     "VMs",
     "Zuletzt",
   ]);
-  assert.deepEqual(fromBar.row1, ["account", "settings", "updates", "appcenter"]);
+  assert.deepEqual(fromBar.row1, [
+    "account",
+    "settings",
+    "updates",
+    "appcenter",
+  ]);
   assert.deepEqual(fromBar.row2, ["logout", "restart", "shutdown"]);
   const sorted = [...fromBar.programs].sort((a, b) =>
     a.localeCompare(b, "de", { sensitivity: "base", numeric: true }),
@@ -844,8 +851,15 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const second = launcher.locator(".cell").nth(1);
   await second.locator('[data-move="back"]').click();
   let now = await labels();
-  assert.deepEqual(now.slice(0, 2), [before[1], before[0]], "moved to the front");
-  assert.equal(await launcher.locator(".order-now").innerText(), "Eigene Reihenfolge");
+  assert.deepEqual(
+    now.slice(0, 2),
+    [before[1], before[0]],
+    "moved to the front",
+  );
+  assert.equal(
+    await launcher.locator(".order-now").innerText(),
+    "Eigene Reihenfolge",
+  );
   assert.match(
     await launcher.locator("[role=status]").innerText(),
     new RegExp(`${before[1]}: Platz 1 von ${before.length}`),
@@ -856,7 +870,11 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await launcher.locator(".prog").first().focus();
   await page.keyboard.press("Control+Shift+ArrowRight");
   now = await labels();
-  assert.deepEqual(now.slice(0, 2), [before[0], before[1]], "moved back by keyboard");
+  assert.deepEqual(
+    now.slice(0, 2),
+    [before[0], before[1]],
+    "moved back by keyboard",
+  );
   assert.equal(
     await page.evaluate(() => document.activeElement?.textContent.trim()),
     before[1],
@@ -870,7 +888,10 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.mouse.down();
   await page.mouse.move(to.x + 12, to.y + 30, { steps: 8 });
   await page.mouse.move(to.x + 10, to.y + 30, { steps: 2 });
-  assert.ok(await launcher.locator(".cell.drop-before").count(), "drop mark shown");
+  assert.ok(
+    await launcher.locator(".cell.drop-before").count(),
+    "drop mark shown",
+  );
   await shot(page, "14-menue-ziehen");
   await page.mouse.up();
   now = await labels();
@@ -882,11 +903,17 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.waitForTimeout(1800);
   const saved = made.puts.at(-1)?.menuOrder ?? [];
   assert.equal(saved.length, before.length, "the whole order is stored");
-  assert.ok(saved.every((k) => /^[a-z]+:/.test(k)), "as program keys");
+  assert.ok(
+    saved.every((k) => /^[a-z]+:/.test(k)),
+    "as program keys",
+  );
   // "Wieder A–Z sortieren".
   await launcher.locator("[data-menu-reset]").click();
   assert.deepEqual(await labels(), before, "A–Z again");
-  assert.equal(await launcher.locator(".order-now").innerText(), "Sortiert A–Z");
+  assert.equal(
+    await launcher.locator(".order-now").innerText(),
+    "Sortiert A–Z",
+  );
   assert.equal(await launcher.locator("[data-menu-reset]").count(), 0);
   await page.waitForTimeout(1800);
   assert.deepEqual(made.puts.at(-1)?.menuOrder, [], "reset stored");
@@ -901,14 +928,24 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
       barLoad: false,
     };
   });
-  assert.equal(await page.locator("header.topbar .load").count(), 0, "load off");
+  assert.equal(
+    await page.locator("header.topbar .load").count(),
+    0,
+    "load off",
+  );
   await page.locator(".topbar [data-menu-button]").click();
   const programs = await page
     .locator(".launcher .prog")
     .evaluateAll((els) =>
-        els.map((el) => el.querySelector(":scope > span:last-child").textContent.trim()),
-      );
-  assert.deepEqual(programs.slice(0, 2), ["Speicher", "immich"], "stored order first");
+      els.map((el) =>
+        el.querySelector(":scope > span:last-child").textContent.trim(),
+      ),
+    );
+  assert.deepEqual(
+    programs.slice(0, 2),
+    ["Speicher", "immich"],
+    "stored order first",
+  );
   const rest = programs.slice(2);
   assert.deepEqual(
     rest,
@@ -952,7 +989,8 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     history: [],
     ...o,
   });
-  const line = (v) => Array.from({ length: 40 }, (_, i) => v + Math.sin(i / 4) * 5);
+  const line = (v) =>
+    Array.from({ length: 40 }, (_, i) => v + Math.sin(i / 4) * 5);
   const accelerators = [
     acc({
       name: "Intel AI Boost",
@@ -1006,8 +1044,15 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await gpu.waitFor();
   assert.equal(await npu.locator("h4").innerText(), "NPU");
   assert.match(await npu.innerText(), /Intel AI Boost/);
-  assert.deepEqual(await values("npu"), ["usage", "history", "power"], "NPU: only what it reports");
-  assert.doesNotMatch(await npu.innerText(), /nicht gemeldet|Temperatur|Takt|Grafikspeicher/);
+  assert.deepEqual(
+    await values("npu"),
+    ["usage", "history", "power"],
+    "NPU: only what it reports",
+  );
+  assert.doesNotMatch(
+    await npu.innerText(),
+    /nicht gemeldet|Temperatur|Takt|Grafikspeicher/,
+  );
   assert.equal(await gpu.locator("h4").innerText(), "Grafikkarte");
   assert.match(await gpu.innerText(), /NVIDIA GeForce RTX 4060/);
   assert.deepEqual(await values("gpu"), [
@@ -1018,7 +1063,10 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     "power",
     "clock",
   ]);
-  assert.match(await gpu.innerText(), /71 %[\s\S]*64 °C[\s\S]*5,1 \/ 8 GB[\s\S]*92 W[\s\S]*2\.520 MHz/);
+  assert.match(
+    await gpu.innerText(),
+    /71 %[\s\S]*64 °C[\s\S]*5,1 \/ 8 GB[\s\S]*92 W[\s\S]*2\.520 MHz/,
+  );
   // Nothing in a widget is cut off or needs scrolling at its standard size.
   for (const w of [npu, gpu]) {
     const box = await w.evaluate((el) => [
@@ -1035,21 +1083,39 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await shot(page, "16-grafik-widgets");
   // The widget's menu: a check per value, the device with several of the kind.
   await npu.click({ button: "right" });
-  assert.equal(await page.locator("[data-gpu-device]").count(), 0, "one NPU: no device choice");
+  assert.equal(
+    await page.locator("[data-gpu-device]").count(),
+    0,
+    "one NPU: no device choice",
+  );
   await page.keyboard.press("Escape");
   await gpu.click({ button: "right" });
   const toggles = page.locator("[data-gpu-toggle]");
   assert.deepEqual(
     await toggles.evaluateAll((els) => els.map((el) => el.textContent.trim())),
-    ["Auslastung", "Verlauf", "Temperatur", "Grafikspeicher", "Leistung", "Takt"],
+    [
+      "Auslastung",
+      "Verlauf",
+      "Temperatur",
+      "Grafikspeicher",
+      "Leistung",
+      "Takt",
+    ],
   );
   await page.locator('[data-gpu-toggle="power"]').click();
   await page.locator('[data-gpu-toggle="history"]').click();
   assert.equal(
-    await page.locator('[data-gpu-toggle="power"]').getAttribute("aria-checked"),
+    await page
+      .locator('[data-gpu-toggle="power"]')
+      .getAttribute("aria-checked"),
     "false",
   );
-  assert.deepEqual(await values("gpu"), ["usage", "temperature", "memory", "clock"]);
+  assert.deepEqual(await values("gpu"), [
+    "usage",
+    "temperature",
+    "memory",
+    "clock",
+  ]);
   assert.deepEqual(
     await values("npu"),
     ["usage", "history", "power"],
@@ -1092,9 +1158,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
 // widget edit bar sits clear of the dock.
 {
   const { ctx, page } = await open(1440, 900);
-  const button = page
-    .locator(".dock")
-    .getByRole("button", { name: "Menü" });
+  const button = page.locator(".dock").getByRole("button", { name: "Menü" });
   await button.waitFor();
   const first = await page.locator(".dock .slot").first().getAttribute("class");
   assert.match(first, /menu-slot/, "menu button first in the dock");
@@ -1133,6 +1197,58 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     `edit bar above the dock: ${bar.y + bar.height} > ${dock.y}`,
   );
   await shot(page, "15-dock-menue-widgetleiste");
+  await ctx.close();
+}
+
+// 1.03 (owner 16 Nov 2026): what fails on the desktop is a short notice at
+// the bottom with its reason (role alert), above the dock, on the screen,
+// and it goes by itself.
+for (const [width, height] of [
+  [1600, 1000],
+  [1024, 700],
+]) {
+  const { ctx, page } = await open(width, height, "graphit", "/", (made) =>
+    made.ctx.route("**/api/v1/docker/containers/*/restart", (route) =>
+      route.fulfill({
+        status: 409,
+        json: { error: { code: "docker_busy", message: "fixture" } },
+      }),
+    ),
+  );
+  await page
+    .locator(".ico", { hasText: "immich" })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Neu starten" }).click();
+  const toast = page.locator('[role="alert"][data-toast="error"]');
+  await toast.waitFor();
+  const text = (await toast.innerText()).trim();
+  assert.match(text, /immich ließ sich nicht neu starten: /);
+  await page.waitForTimeout(400);
+  const box = await toast.boundingBox();
+  // On top of icons, widgets and windows (its close button is reachable).
+  assert.ok(
+    await page.evaluate(
+      ([x, y]) => !!document.elementFromPoint(x, y)?.closest("[data-toast]"),
+      [box.x + box.width - 20, box.y + box.height / 2],
+    ),
+    "notice on top",
+  );
+  const dock = await page.locator(".dock").boundingBox();
+  assert.ok(box.y + box.height <= dock.y, "notice above the dock");
+  assert.ok(box.x >= 0 && box.x + box.width <= width, "notice on the screen");
+  // The whole reason stays readable: the notice grows, nothing is clipped.
+  assert.ok(
+    await toast.evaluate(
+      (el) =>
+        el.scrollWidth <= el.clientWidth + 1 &&
+        el.scrollHeight <= el.clientHeight + 1 &&
+        getComputedStyle(el.querySelector(".text")).textOverflow !== "ellipsis",
+    ),
+    "notice not cut off",
+  );
+  await shot(page, `16-hinweis-unten-${width}`);
+  await toast.waitFor({ state: "detached", timeout: 12000 });
   await ctx.close();
 }
 

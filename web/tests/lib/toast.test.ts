@@ -44,20 +44,25 @@ test('a held notice stays until it is let go', () => {
 });
 
 test('errors are read out as an alert, other notices as a status; both can be closed', async () => {
-	render(Toasts);
-	const status = screen.getByRole('status');
-	const alert = screen.getByRole('alert');
-	// The regions are there before any text (a new region is often not read).
-	expect(status.textContent?.trim()).toBe('');
+	const { container } = render(Toasts);
+	const [polite, assertive] = [...container.querySelectorAll('[aria-live]')];
+	// The live regions are there before any text (a new region is often not
+	// read), but an empty one is no status of the page.
+	expect(polite.getAttribute('aria-live')).toBe('polite');
+	expect(assertive.getAttribute('aria-live')).toBe('assertive');
+	expect(screen.queryByRole('status')).toBeNull();
 	showToast('Gespeichert', 'info');
 	showToast('Speichern fehlgeschlagen');
 	flushSync();
-	expect(status.textContent).toContain('Gespeichert');
+	expect(screen.getByRole('status').textContent).toContain('Gespeichert');
+	expect(polite.contains(screen.getByRole('status'))).toBe(true);
+	const alert = screen.getByRole('alert');
 	expect(alert.textContent).toContain('Speichern fehlgeschlagen');
+	expect(assertive.contains(alert)).toBe(true);
 	// Not by colour alone: a sign for the kind.
 	expect(alert.querySelector('.sign')?.textContent).toBe('!');
 	const close = alert.querySelector('button')!;
 	expect(close.getAttribute('aria-label')).toBeTruthy();
 	await fireEvent.click(close);
-	expect(alert.textContent).not.toContain('Speichern fehlgeschlagen');
+	expect(screen.queryByRole('alert')).toBeNull();
 });

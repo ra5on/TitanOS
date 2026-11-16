@@ -2,6 +2,8 @@
 	// The short notices of lib/toast.svelte.ts at the bottom of the screen.
 	// Both live regions are always there, empty when nothing is shown: a
 	// region that appears together with its text is often not read out.
+	// The regions carry aria-live only; each notice has its role (status or
+	// alert), so an empty region is no "status" of the page.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { dismissToast, holdToast, releaseToast, toasts, type Toast } from '#lib/toast.svelte.ts';
 
@@ -14,7 +16,7 @@
 		class="toast"
 		class:error={toast.tone === 'error'}
 		data-toast={toast.tone}
-		role="group"
+		role={toast.tone === 'error' ? 'alert' : 'status'}
 		onpointerenter={() => holdToast(toast.id)}
 		onpointerleave={() => releaseToast(toast.id)}
 		onfocusin={() => holdToast(toast.id)}
@@ -34,10 +36,10 @@
 {/snippet}
 
 <div class="toasts">
-	<div class="stack" role="status">
+	<div class="stack" aria-live="polite">
 		{#each info as toast (toast.id)}{@render item(toast)}{/each}
 	</div>
-	<div class="stack" role="alert">
+	<div class="stack" aria-live="assertive">
 		{#each errors as toast (toast.id)}{@render item(toast)}{/each}
 	</div>
 </div>
