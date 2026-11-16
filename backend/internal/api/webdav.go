@@ -47,6 +47,19 @@ type davState struct {
 	loaded   bool
 	settings davSettings
 	locks    webdav.LockSystem
+	// passwords are the WebDAV passwords as read from the stick, once per
+	// account: a client sends its password with every request, and /config
+	// is not read for what a client repeats. Changes go through titand
+	// (new, delete, forgetWebDAV), which keep this in step.
+	passwords map[string]davKnown
+}
+
+// davKnown is the WebDAV password of an account as read from the stick.
+// account is the creation time of the account it was read for: a new
+// account of the same name reads its own. sum is nil when there is none.
+type davKnown struct {
+	account time.Time
+	sum     []byte
 }
 
 func davPasswordFile(user string) string { return "users/" + user + "/webdav.json" }
@@ -160,7 +173,10 @@ func (a davArea) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 	}
 	password := base64.RawURLEncoding.EncodeToString(raw)
 	sum := sha256.Sum256([]byte(password))
-	if err := a.store.WriteJSON(davPasswordFile(currentUser(r).Name), davPassword{SHA256: hex.EncodeToString(sum[:]), Created: time.Now().UTC()}); err != nil {
+	err := a.store.WriteJSON(davPasswordFile(currentUser(r).Name), davPassword{SHA256: hex.EncodeToString(sum[:]), Created: time.Now().UTC()})
+	// Also after a failed write: what the stick holds now is read again.
+	a.davForget(currentUser(r).Name)
+	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
@@ -172,12 +188,14 @@ func (a davArea) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 // changed or whose factors were reset: whoever made it with a session that
 // has just ended would keep the way to the shares otherwise.
 func (a davArea) forgetWebDAV(name string) {
+	defer a.davForget(name)
 	if err := a.store.Remove(davPasswordFile(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		slog.Error("remove the WebDAV password", "user", name, "err", err)
 	}
 }
 
 func (a davArea) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Request) {
+	defer a.davForget(currentUser(r).Name)
 	if err := a.store.Remove(davPasswordFile(currentUser(r).Name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -195,17 +213,53 @@ func (a davArea) davUser(r *http.Request) (auth.User, bool, time.Duration) {
 	if !ok || name == "" || len(password) > 256 {
 		return auth.User{}, false, 0
 	}
-	var stored davPassword
 	user, known := a.users.Get(name)
-	err := a.store.ReadJSON(davPasswordFile(name), &stored)
+	var want []byte
+	if known {
+		want = a.davPasswordOf(user)
+	}
 	sum := sha256.Sum256([]byte(password))
-	want, _ := hex.DecodeString(stored.SHA256)
-	if !known || err != nil || len(want) != len(sum) || subtle.ConstantTimeCompare(sum[:], want) != 1 || user.Disabled {
+	if !known || len(want) != len(sum) || subtle.ConstantTimeCompare(sum[:], want) != 1 || user.Disabled {
 		a.limiter().Fail("dav:"+ip, "dav-user:"+name)
 		slog.Warn("WebDAV sign-in refused", "user", name, "ip", ip)
 		return auth.User{}, false, 0
 	}
 	return user, true, 0
+}
+
+// davPasswordOf returns the hash of the WebDAV password of an account,
+// nil for none; the stick is read only the first time.
+func (a davArea) davPasswordOf(user auth.User) []byte {
+	d := a.state
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if known, ok := d.passwords[user.Name]; ok && known.account.Equal(user.Created) {
+		return known.sum
+	}
+	var stored davPassword
+	err := a.store.ReadJSON(davPasswordFile(user.Name), &stored)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Not readable now (stick away): no sign-in, and asked again next time.
+		slog.Warn("WebDAV password not readable", "user", user.Name, "err", err)
+		return nil
+	}
+	sum, _ := hex.DecodeString(stored.SHA256)
+	if len(sum) == 0 {
+		sum = nil
+	}
+	if d.passwords == nil {
+		d.passwords = map[string]davKnown{}
+	}
+	d.passwords[user.Name] = davKnown{account: user.Created, sum: sum}
+	return sum
+}
+
+// davForget drops what is known of the WebDAV password of an account, so
+// that the next request reads the stick.
+func (a davArea) davForget(name string) {
+	a.state.mu.Lock()
+	delete(a.state.passwords, name)
+	a.state.mu.Unlock()
 }
 
 // handleWebDAV serves /dav/…: the shares of the account as folders.
