@@ -1,6 +1,6 @@
 # Durchsicht 1.01 – Speicher und Daten: für die Versionshinweise
 
-Durchsicht vom 16.11.2026 (Auftrag „die ganze Codebasis prüfen … Stabilität reinbringen“), Bereich Speicher, Dateien, Freigaben und Sicherungen. Alle Änderungen betreffen nur titand (App-Update); jede Korrektur hat einen eigenen Test. Einzelheiten und die notierten, nicht gebauten Punkte: `docs/validation/durchsicht-102-speicher.md`.
+Durchsicht vom 16.11.2026 (Auftrag „die ganze Codebasis prüfen … Stabilität reinbringen“), Bereich Speicher, Dateien, Freigaben und Sicherungen. Alle Änderungen betreffen nur titand (App-Update); fast jede Korrektur hat einen eigenen Test (ohne: der hängende Wächter und das Entpacken, beide im Ablauf nachverfolgt). Einzelheiten und die notierten, nicht gebauten Punkte: `docs/validation/durchsicht-102-speicher.md`.
 
 ## Sicherungen (lesbare Kopie auf USB/SMB/Volume)
 
@@ -20,7 +20,7 @@ Durchsicht vom 16.11.2026 (Auftrag „die ganze Codebasis prüfen … Stabilitä
 
 - **Papierkorb leeren bleibt im Papierkorb.** Das stündliche Aufräumen ließ sich durch einen im richtigen Moment gesetzten Link dazu bringen, alte Dateien außerhalb der Freigabe zu löschen. Es arbeitet jetzt fest innerhalb des Papierkorbs.
 - **Papierkorb der Freigabe „KI-Agent“** wird jetzt auch geleert (lag in den Ordnern der Konten und wurde nie aufgeräumt).
-- **Ransomware-Schutz.** Nach dem Sperren werden offene Verbindungen ein zweites Mal geschlossen, sobald die nur lesende Einstellung geladen ist; vorher konnte ein sofort neu verbundener Client weiterschreiben. Nach „Aufheben“ sperrt eine einzelne Umbenennung nicht gleich wieder, und der Wächter kann nicht mehr unbemerkt stehen bleiben.
+- **Ransomware-Schutz.** Nach dem Sperren werden offene Verbindungen ein zweites Mal geschlossen, sobald die nur lesende Einstellung geladen ist; vorher konnte ein sofort neu verbundener Client vermutlich weiterschreiben (Reihenfolge belegt, mit echtem Samba nicht geprüft). Nach „Aufheben“ sperrt eine einzelne Umbenennung nicht gleich wieder, und der Wächter kann nicht mehr unbemerkt stehen bleiben.
 - **Kontingente** werden nach einem unterbrochenen Zählen neu gezählt, statt fälschlich „aktiv“ zu zeigen.
 - Eine nicht lesbare `shares.json` wird weder halb verwendet noch beim nächsten Bearbeiten überschrieben, und der Stick wird dabei nicht mehr alle fünf Sekunden gelesen.
 

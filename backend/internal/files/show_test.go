@@ -87,3 +87,28 @@ func TestMachineRootCannotMoveHiddenFiles(t *testing.T) {
 		t.Errorf("the .env changed: %q", data)
 	}
 }
+
+// Moving a folder to another root for a token leaves its hidden file where
+// it was, with its content, and the folder that still holds it.
+func TestMachineMoveLeavesHiddenFilesBehind(t *testing.T) {
+	m, src, dst := twoRoots(t)
+	src.Machine, dst.Machine = true, true
+	env := filepath.Join(src.Dir, "urlaub/.env")
+	os.WriteFile(env, []byte("DB_PASSWORD=hunter2"), 0o600)
+	if _, err := m.StartCopy(src, []string{"urlaub"}, dst, "ziel", true, ConflictRename, "alex", os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && m.Busy() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")); err != nil {
+		t.Fatalf("not moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst.Dir, "ziel/urlaub/.env")); err == nil {
+		t.Error("the hidden file was moved along")
+	}
+	if data, err := os.ReadFile(env); err != nil || string(data) != "DB_PASSWORD=hunter2" {
+		t.Fatalf("the hidden file at the source: %q %v", data, err)
+	}
+}
