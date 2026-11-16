@@ -873,6 +873,16 @@ func agentProbe(client *agent.Ollama, model, keepAlive string) func(context.Cont
 		return 0
 	}
 	return func(ctx context.Context) int {
+		// An outside provider loads nothing: the length is what it names
+		// for the model, or the careful guess where it names none.
+		if client.Provider() != "" {
+			sctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			if info, err := client.Show(sctx, model); err == nil && info.ContextLength > 0 {
+				return info.ContextLength
+			}
+			return agentGuessContext
+		}
 		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		n := running(pctx)
 		cancel()

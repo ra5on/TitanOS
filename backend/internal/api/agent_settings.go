@@ -75,6 +75,9 @@ type agentSettings struct {
 	// (PLAN 49, agent_media.go).
 	Voice  agentVoice  `json:"voice"`
 	Search agentSearch `json:"search"`
+	// Provider is an outside provider used instead of the Ollama server
+	// (agent_provider.go); empty from the factory.
+	Provider agentProvider `json:"provider,omitzero"`
 	// MCP are the connections to MCP servers (agent_mcp.go).
 	MCP    []agentMCPServer `json:"mcp,omitempty"`
 	Vision agentVision      `json:"vision"`
@@ -199,6 +202,7 @@ func (s *Server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
 	out.Features = out.Features.view() // no secrets to the page
 	out.HA.AssistKeySet, out.HA.AssistKey = out.HA.AssistKey != "", ""
 	out.MCP = mcpView(out.MCP)
+	out.Provider = out.Provider.view()
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -215,6 +219,10 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	// The tokens of the connections stay on the NAS: an empty one in the
 	// request keeps what is stored.
 	if err := checkAgentMCP(&req, s.agentSettings().MCP); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_agent_settings", err.Error())
+		return
+	}
+	if err := checkAgentProvider(&req, s.agentSettings().Provider); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_agent_settings", err.Error())
 		return
 	}
@@ -262,6 +270,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	s.shareSyncs.Go(s.agentSyncShare)
 	req.HA.AssistKeySet, req.HA.AssistKey = req.HA.AssistKey != "", ""
 	req.MCP = mcpView(req.MCP)
+	req.Provider = req.Provider.view()
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -276,7 +285,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	switch req.Source {
 	case agentSourceOwn:
-		if req.Enabled && req.Ollama == "" {
+		if req.Enabled && req.Ollama == "" && strings.TrimSpace(req.Provider.Kind) == "" {
 			return errors.New("the agent needs the address of an Ollama server")
 		}
 	case agentSourceCluster:
@@ -413,6 +422,18 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 func (s *Server) agentOllama() (*agent.Ollama, error) {
 	env := s.agentEnv()
 	settings := s.agentSettings()
+	// An outside provider takes the place of every Ollama server.
+	if p := settings.Provider; p.Kind != "" {
+		if c := s.agentClient.Load(); c != nil && c.Provider() == p.Kind {
+			return c, nil
+		}
+		c, err := p.client()
+		if err != nil {
+			return nil, err
+		}
+		s.agentClient.Store(c)
+		return c, nil
+	}
 	if settings.Source == agentSourceCluster {
 		if env.cluster == nil {
 			return nil, errors.New("no cluster")
@@ -461,7 +482,7 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	if settings.Source == agentSourceCluster {
+	if settings.Provider.Kind == "" && settings.Source == agentSourceCluster {
 		state := s.agentClusterCall(r.Context(), "GET", "/state")
 		out["source"], out["share"] = agentSourceCluster, state
 		if err := agentShareError(state); err != nil {
@@ -485,6 +506,8 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out["reachable"], out["version"] = true, version
+	// Where the questions go: the chat says so (Lokal / Cloud).
+	out["provider"], out["cloud"] = client.Provider(), client.Cloud()
 	models, err := client.Models(ctx)
 	if err != nil {
 		out["error"] = err.Error()

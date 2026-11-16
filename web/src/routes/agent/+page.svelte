@@ -268,9 +268,9 @@
 			aria-haspopup="dialog"
 			aria-label={t('agent.modelPick')}
 			onclick={() => (ag.dialog = { kind: 'head' })}
-			><strong>{ag.model || '–'}</strong>{#if ag.think}<span
-					>{levelLabel(ag.think, i18n.locale)}</span
-				>{/if}</button
+			><strong>{ag.model || '–'}</strong>{#if ag.status.cloud}<span class="cloud-tag"
+					>{t('agent.cloud')}</span
+				>{/if}{#if ag.think}<span>{levelLabel(ag.think, i18n.locale)}</span>{/if}</button
 		>
 	{:else}
 		<ModelPicker
@@ -280,6 +280,9 @@
 			small
 			calm={ag.calm}
 		/>
+		{#if ag.status.cloud}<span class="cloud-tag" title={t('agent.cloudHint')}
+				>{t('agent.cloud')}</span
+			>{/if}
 	{/if}
 {/snippet}
 
@@ -763,6 +766,18 @@
 		   text color, so both stay readable on a light and a dark theme. */
 		--ag-warm: #d9734a;
 		--ag-link: color-mix(in srgb, #5b8fe0 78%, var(--text));
+	}
+	/* 0.96: the model is asked at an outside provider. A word, not only a
+	   colour. */
+	.cloud-tag {
+		flex: none;
+		padding: 1px 8px;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--ag-warm) 60%, transparent);
+		color: var(--text);
+		font-size: 0.78em;
+		font-weight: 600;
+		white-space: nowrap;
 	}
 	:global(main:has(> .agent:not(.phone))) {
 		display: flex;

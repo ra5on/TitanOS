@@ -48,6 +48,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{ p: '/settings/updates', k: 'update.nas', kind: 'group', id: 'nas' },
 	{ p: '/settings/updates', k: 'update.upToDate', kind: 'row', in: ['update.nas'] },
+	{ p: '/settings/updates', k: 'update.check', kind: 'row', in: ['update.nas'] },
 	{ p: '/settings/updates', k: 'update.app.title', kind: 'row', in: ['update.nas'], id: 'app' },
 	{
 		p: '/settings/updates',
@@ -1494,6 +1495,27 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	{
 		p: '/settings/agent',
 		k: 'agent.source',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
+		k: 'agent.provider',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
+		k: 'agent.providerUrl',
+		kind: 'row',
+		tab: 'connection',
+		in: ['agent.sectionConnection'],
+	},
+	{
+		p: '/settings/agent',
+		k: 'agent.providerKey',
 		kind: 'row',
 		tab: 'connection',
 		in: ['agent.sectionConnection'],

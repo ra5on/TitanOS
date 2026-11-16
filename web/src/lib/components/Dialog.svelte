@@ -15,6 +15,12 @@
 		surface?: 'dialog' | 'menu';
 		onrequestclose?: () => void;
 		onclose: () => void;
+		/**
+		 * A tap or click beside the window closes it, like Escape. For windows
+		 * that only show something (the notifications); never for one that
+		 * asks before something is changed.
+		 */
+		dismiss?: boolean;
 		children: Snippet;
 	};
 	let {
@@ -25,6 +31,7 @@
 		surface = 'dialog',
 		onrequestclose,
 		onclose,
+		dismiss = false,
 		children,
 	}: Props = $props();
 
@@ -42,6 +49,21 @@
 	$effect(() => {
 		dialog.showModal();
 	});
+
+	// Beside the window is the backdrop: a click there reaches the dialog
+	// itself, outside of its box.
+	function beside(event: MouseEvent) {
+		if (!dismiss || locked || event.target !== dialog) return;
+		const box = dialog.getBoundingClientRect();
+		const inside =
+			event.clientX >= box.left &&
+			event.clientX <= box.right &&
+			event.clientY >= box.top &&
+			event.clientY <= box.bottom;
+		if (inside) return;
+		if (onrequestclose) onrequestclose();
+		else dialog.close();
+	}
 
 	// Escape is answered here: browsers close a dialog at the second Escape in
 	// a row even when "cancel" was refused – a locked dialog (work in
@@ -63,6 +85,7 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -- Escape closes it from the keyboard -->
 <dialog
 	bind:this={dialog}
 	class="tile"
@@ -74,6 +97,7 @@
 	{onclose}
 	oncancel={cancel}
 	onkeydown={keydown}
+	onclick={beside}
 	use:swipeDown={{ close: swipedAway, enabled: () => sheet && !locked }}
 >
 	{#if sheet}<span class="grip" aria-hidden="true"></span>{/if}

@@ -32,6 +32,9 @@ var ErrUnreachable = errors.New("agent: Ollama not reachable")
 type Ollama struct {
 	base   *url.URL
 	client *http.Client
+	// remote is set for a provider other than Ollama (remote.go); every
+	// call then goes there.
+	remote remote
 }
 
 // NewOllama checks the address and returns a client for it. Only http and
@@ -155,6 +158,13 @@ func ollamaError(status int, data []byte) error {
 
 // Version is the version of the server.
 func (o *Ollama) Version(ctx context.Context) (string, error) {
+	if o.remote != nil {
+		// Reachable and the key right, if the models can be listed.
+		if _, err := o.remoteModels(ctx); err != nil {
+			return "", err
+		}
+		return o.remote.kind(), nil
+	}
 	var v struct {
 		Version string `json:"version"`
 	}
@@ -187,6 +197,9 @@ func contains(list []string, v string) bool {
 // Models are the installed models. Newer Ollama versions put the
 // capabilities into the list; for older ones Show fills them in.
 func (o *Ollama) Models(ctx context.Context) ([]Model, error) {
+	if o.remote != nil {
+		return o.remoteModels(ctx)
+	}
 	var tags struct {
 		Models []struct {
 			Name    string `json:"name"`
@@ -235,6 +248,9 @@ type ModelInfo struct {
 
 // Show reads the details of one model.
 func (o *Ollama) Show(ctx context.Context, model string) (ModelInfo, error) {
+	if o.remote != nil {
+		return o.remoteInfo(ctx, model)
+	}
 	var raw struct {
 		Capabilities []string                   `json:"capabilities"`
 		Thinking     *Thinking                  `json:"thinking"`
@@ -265,6 +281,9 @@ type Running struct {
 
 // Running lists the loaded models.
 func (o *Ollama) Running(ctx context.Context) ([]Running, error) {
+	if o.remote != nil {
+		return nil, nil
+	}
 	var ps struct {
 		Models []struct {
 			Name          string `json:"name"`
@@ -415,6 +434,9 @@ const (
 // Chat sends one round and streams thinking and text to onChunk. It
 // returns the whole message, including the tool calls.
 func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (Message, Stats, error) {
+	if o.remote != nil {
+		return o.remote.chat(ctx, r, onChunk)
+	}
 	body := map[string]any{"model": r.Model, "messages": r.Messages, "stream": true}
 	if len(r.Tools) > 0 {
 		body["tools"] = r.Tools
@@ -514,6 +536,9 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 // Preload asks Ollama to load a model now, so the first answer does not
 // wait for it. A chat without messages only loads.
 func (o *Ollama) Preload(ctx context.Context, model, keepAlive string, numCtx int) error {
+	if o.remote != nil {
+		return nil
+	}
 	body := map[string]any{"model": model, "messages": []any{}}
 	if keepAlive != "" {
 		body["keep_alive"] = keepAlive
@@ -534,6 +559,9 @@ type PullProgress struct {
 
 // Pull downloads a model and reports the progress.
 func (o *Ollama) Pull(ctx context.Context, model string, progress func(PullProgress)) error {
+	if o.remote != nil {
+		return ErrOllamaOnly
+	}
 	data, _ := json.Marshal(map[string]any{"model": model, "stream": true})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.endpoint("/api/pull"), bytes.NewReader(data))
 	if err != nil {
@@ -568,6 +596,9 @@ func (o *Ollama) Pull(ctx context.Context, model string, progress func(PullProgr
 // numCtx is sent when the picture model is the main model, so that Ollama
 // does not load it anew with another context.
 func (o *Ollama) Look(ctx context.Context, model, prompt string, image []byte, keepAlive string, numCtx int) (string, error) {
+	if o.remote != nil {
+		return "", ErrOllamaOnly
+	}
 	body := map[string]any{"model": model, "stream": false,
 		"messages": []Message{{Role: "user", Content: prompt, Images: []string{base64.StdEncoding.EncodeToString(image)}}}}
 	if keepAlive != "" {
