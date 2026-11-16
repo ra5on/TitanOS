@@ -1151,3 +1151,37 @@ func TestDiskBackupUndoWaitsForEveryVolume(t *testing.T) {
 		t.Fatal("record left")
 	}
 }
+
+// Growing a disk changes the VM's own list only once the new size is
+// stored: readers of the VM meanwhile see either size, never a half
+// written one (go test -race).
+func TestGrowKeepsTheListOfTheVM(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := diskFixture(t)
+	os.Remove(filepath.Join(m.pidDir, "ha.pid"))
+	stop := make(chan struct{})
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			for _, s := range m.List([]string{"data", "fast"}) {
+				for _, d := range s.Disks {
+					_ = d.SizeBytes
+				}
+			}
+		}
+	}()
+	if err := m.Grow(ctx, "ha", 0, 40*gib); err != nil {
+		t.Fatal(err)
+	}
+	close(stop)
+	<-read
+	if v, _ := m.get("ha"); v.Disks[0].SizeBytes != 40*gib {
+		t.Fatalf("size %d", v.Disks[0].SizeBytes)
+	}
+}
