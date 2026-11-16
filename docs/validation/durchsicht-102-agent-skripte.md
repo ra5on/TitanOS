@@ -39,7 +39,7 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-9 | `guardLockShare`, `emergencyGrant` | Sperre und Notfallzugang lesen die Freigabe und schreiben sie ganz zurück. Ein Administrator, der ein vorher geöffnetes Freigabe-Formular speichert, kann eine Sperre still aufheben. | niedrig | notiert: gemeinsame Sperre mit `shares` (Bereich wt-r1/r3) |
 | A-10 | `agent_protect.go` Werkzeug `emergency_handbook` | Das Recht wird nur beim Aufbau der Werkzeuge geprüft. Endet ein Zugang während eines Laufs, liefert das Werkzeug bis zum Ende des Laufs weiter. | niedrig | notiert |
 | A-11 | `agent_protect_guard.go` `guardHold` | Snapshot über den eigenen Runner statt `storage.SnapshotAction`. Damit fehlen die Prüfung auf `-dev`, die Sperre `m.actions` und `diskwake.Note`. | niedrig (Aufräumen) | notiert |
-| A-12 | `ProtectEmergency.svelte` | „Ablehnen“ (endgültig) und „Zugang beenden“ fragen nicht nach; die Zähler in `ProtectGroup.svelte` werden erst beim nächsten Öffnen neu gelesen. | niedrig | behoben in 1.03 (Backend): die Routen brauchen keinen Bestätigungswert, nichts zu ändern; Dialoge und Zähler baut die Oberfläche (wt-103c). |
+| A-12 | `ProtectEmergency.svelte` | „Ablehnen“ (endgültig) und „Zugang beenden“ fragen nicht nach; die Zähler in `ProtectGroup.svelte` werden erst beim nächsten Öffnen neu gelesen. | niedrig | Backend: nichts nötig (die Routen nehmen keinen Bestätigungswert). Oberfläche offen (Dialoge, Zähler: wt-103c). |
 
 ### Dokumente
 
@@ -54,7 +54,7 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-19 | `DocsViews.svelte` | Der Papierkram fragte je Monat zweimal; eine späte Antwort zeigte den falschen Monat. | niedrig | behoben `6a9cf6fa`, `tests/components/docs-paper.test.ts` |
 | A-20 | `DocsGroup.svelte` | Der Zustand eines Laufs wurde nach dem Schließen bis zu 2 h weiter alle 2 s abgefragt. | niedrig | behoben `6a9cf6fa` (ohne eigenen Test, geprüft mit svelte-check und Browser) |
 | A-21 | `DocsFolderPicker.svelte` | Eine späte Antwort zeigte die Unterordner eines vorigen Ordners unter dem neuen Pfad. | niedrig | behoben `98480637`, `tests/components/docs-folder-picker.test.ts` |
-| A-22 | `DocsGroup.svelte`, `FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite schickt den Stand ohne die erste und überschreibt sie. | niedrig | Backend behoben in 1.03 (siehe A-30, `rev`); die Oberfläche (wt-103c) wertet 409 aus. |
+| A-22 | `DocsGroup.svelte`, `FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite schickt den Stand ohne die erste und überschreibt sie. | niedrig | Backend: `rev` geliefert (siehe A-30); die heutige Seite schickt es schon mit, ein zweites Speichern vor der Antwort des ersten bekommt 409 statt still zu überschreiben. Oberfläche offen (Meldung/Neuladen: wt-103c). |
 | A-23 | `agent_docs_paper.go` `paperwork_summary` | Das Werkzeug liefert Namen, Pfade und Beträge ohne die Ordnerregeln des Agenten (anders als `documents_search`). | niedrig | notiert: Entscheidung des Inhabers |
 | A-24 | `agent_docs_paper.go` | Scheitert ein späterer Anhang einer Mail, werden die früheren beim nächsten Mal als „(2)“ erneut abgelegt. `Hints` haben keine Obergrenze. `docsSearch` liest bei jeder Suche das ganze Verzeichnis (bis 128 MB JSON) in den RAM. | niedrig | notiert, nicht gemessen |
 
@@ -122,7 +122,7 @@ Fundstufen „niedrig–mittel“ zählen bei A-41 als mittel, bei B-3 und B-5 a
 
 Dazu zwei Bereiche ohne Fund (A-44 Code-Sandbox, A-45 Cluster-Freigabe).
 
-Die Zählung gibt den Stand von 1.02 wieder. In 1.03 behoben (Entscheidungen des Inhabers vom 16.11.2026, Zweig `feat/v1.03-b`): A-7, A-12 (Backend), A-22/A-30 (Backend), A-33, A-41, A-42, B-8, B-9, B-11.
+Die Zählung gibt den Stand von 1.02 wieder. In 1.03 behoben (Entscheidungen des Inhabers vom 16.11.2026, Zweig `feat/v1.03-b`): A-7, A-30, A-33, A-41, A-42, B-8, B-9, B-11; bei A-12 und A-22 ist der Teil im NAS erledigt, die Oberfläche offen.
 
 ## Angefasste gemeinsame Dateien
 
