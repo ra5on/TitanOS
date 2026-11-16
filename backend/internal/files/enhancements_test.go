@@ -68,6 +68,7 @@ func TestDuplicateScanAndStaleDeletionCheck(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
 // One file that cannot be read does not end the search: the others are
 // still compared.
 func TestDuplicateScanSkipsAnUnreadableFile(t *testing.T) {
