@@ -102,7 +102,10 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 	}
 	signature := sha256.Sum256([]byte(smbConf + "\x00" + exports + "\x00" + passwords + "\x00" + discovery))
 	m.mu.Lock()
-	unchanged := signature == m.applied
+	// An account that could not be made is tried again now and then, not
+	// every round.
+	retry := !m.accountsRetry.IsZero() && !m.now().Before(m.accountsRetry)
+	unchanged := signature == m.applied && !retry
 	m.mu.Unlock()
 	if unchanged {
 		// A share taken off NFS may still have been busy when its mount
@@ -112,7 +115,10 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 		return nil
 	}
 
-	if err := m.syncAccounts(ctx, users, passwords); err != nil {
+	// Accounts whose Linux user cannot be made are left out of everything
+	// below; the others and the shares are applied all the same.
+	users, err := m.syncAccounts(ctx, users)
+	if err != nil {
 		return err
 	}
 	for _, share := range offered {
@@ -160,7 +166,7 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 		return err
 	}
 	if nfs {
-		if _, err := m.runner.Run(ctx, "", "exportfs", "-ra"); err != nil {
+		if _, err := m.run(ctx, "exportfs", "-ra"); err != nil {
 			return err
 		}
 	}
@@ -180,7 +186,7 @@ func (m *Manager) service(ctx context.Context, wanted bool, unit, startVerb stri
 	if wanted {
 		verb = startVerb
 	}
-	_, err := m.runner.Run(ctx, "", "systemctl", verb, unit)
+	_, err := m.run(ctx, "systemctl", verb, unit)
 	return err
 }
 
@@ -195,31 +201,60 @@ func writeFile(path, content string) error {
 	return os.Rename(tmp, path)
 }
 
+// accountRetry is how often an account whose Linux user could not be made
+// is tried again (the whole Apply runs again then).
+var accountRetry = 10 * time.Minute
+
 // syncAccounts creates the Linux user of every account and gives Samba
-// their password hashes. Accounts that are gone are removed from both.
-func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords string) error {
-	for _, user := range users {
-		if _, err := m.runner.Run(ctx, "", "getent", "passwd", user.Name); err == nil {
-			continue
+// their password hashes. Accounts that are gone are removed from both. It
+// returns the accounts that have their Linux user now.
+//
+// An account whose Linux user cannot be made (its UID belongs to another
+// user of the system, say) is skipped and reported, instead of failing
+// the whole round: it is left out of the Samba accounts and the folders
+// per account (its UID would belong to that other user), while every
+// other account, the shares and the locks of the guard are applied. A
+// Samba entry it had is removed, so it cannot log in over SMB meanwhile.
+func (m *Manager) syncAccounts(ctx context.Context, all []auth.User) ([]auth.User, error) {
+	users := make([]auth.User, 0, len(all))
+	skipped := map[string]bool{}
+	for _, user := range all {
+		if _, err := m.run(ctx, "getent", "passwd", user.Name); err != nil {
+			// No login shell and no home: the account is for file access.
+			if _, err := m.run(ctx, "useradd", "--uid", fmt.Sprint(user.UID), "--gid", "users",
+				"--no-create-home", "--no-user-group", "--shell", "/usr/sbin/nologin", user.Name); err != nil {
+				skipped[user.Name] = true
+				m.accountSkipped(user.Name, err)
+				continue
+			}
 		}
-		// No login shell and no home: the account is for file access.
-		if _, err := m.runner.Run(ctx, "", "useradd", "--uid", fmt.Sprint(user.UID), "--gid", "users",
-			"--no-create-home", "--no-user-group", "--shell", "/usr/sbin/nologin", user.Name); err != nil {
-			return err
+		users = append(users, user)
+	}
+	m.mu.Lock()
+	for name := range m.skipped {
+		if !skipped[name] {
+			slog.Info("account for shares made after all", "user", name)
 		}
 	}
+	m.skipped = skipped
+	m.accountsRetry = time.Time{}
+	if len(skipped) > 0 {
+		m.accountsRetry = m.now().Add(accountRetry)
+	}
+	m.mu.Unlock()
 
 	if err := os.MkdirAll(m.runDir, 0o700); err != nil {
-		return err
+		return nil, err
 	}
+	passwords := renderSMBPasswd(users)
 	file := filepath.Join(m.runDir, "smbpasswd")
 	if err := os.WriteFile(file, []byte(passwords), 0o600); err != nil {
-		return err
+		return nil, err
 	}
 	defer os.Remove(file)
 	if passwords != "" {
-		if _, err := m.runner.Run(ctx, "", "pdbedit", "--import=smbpasswd:"+file); err != nil {
-			return err
+		if _, err := m.run(ctx, "pdbedit", "--import=smbpasswd:"+file); err != nil {
+			return nil, err
 		}
 	}
 	// The file already carries the D flag of a locked account; smbpasswd
@@ -234,9 +269,9 @@ func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords
 		if user.Disabled {
 			flag, locked = "-d", true
 		}
-		if _, err := m.runner.Run(ctx, "", "smbpasswd", flag, user.Name); err != nil {
+		if _, err := m.run(ctx, "smbpasswd", flag, user.Name); err != nil {
 			if user.Disabled {
-				return fmt.Errorf("lock Samba account %s: %w", user.Name, err)
+				return nil, fmt.Errorf("lock Samba account %s: %w", user.Name, err)
 			}
 			slog.Warn("unlock Samba account", "user", user.Name, "err", err)
 		}
@@ -245,25 +280,52 @@ func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords
 		m.endSMBSessions(ctx, users)
 	}
 
-	known, err := m.runner.Run(ctx, "", "pdbedit", "--list")
+	known, err := m.run(ctx, "pdbedit", "--list")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for line := range strings.SplitSeq(known, "\n") {
 		name, _, ok := strings.Cut(line, ":")
 		if !ok || slices.ContainsFunc(users, func(u auth.User) bool { return u.Name == name && u.SMBHash != "" }) {
 			continue
 		}
-		if _, err := m.runner.Run(ctx, "", "pdbedit", "--delete", "--user="+name); err != nil {
+		if _, err := m.run(ctx, "pdbedit", "--delete", "--user="+name); err != nil {
 			slog.Warn("remove Samba account", "user", name, "err", err)
 		}
-		if !slices.ContainsFunc(users, func(u auth.User) bool { return u.Name == name }) {
-			if _, err := m.runner.Run(ctx, "", "userdel", name); err != nil {
+		// A skipped account is no Linux user to remove: its name may not
+		// even be one.
+		if !skipped[name] && !slices.ContainsFunc(users, func(u auth.User) bool { return u.Name == name }) {
+			if _, err := m.run(ctx, "userdel", name); err != nil {
 				slog.Warn("remove Linux user", "user", name, "err", err)
 			}
 		}
 	}
-	return nil
+	return users, nil
+}
+
+// accountSkipped reports an account whose Linux user could not be made:
+// in the journal every time, as a message once until it works again.
+func (m *Manager) accountSkipped(name string, err error) {
+	slog.Error("account left out of the shares: its Linux user cannot be made", "user", name, "err", err)
+	m.mu.Lock()
+	reported, tell := m.skipped[name], m.onEvent
+	m.mu.Unlock()
+	if !reported && tell != nil {
+		tell("error", "share_account_skipped", name)
+	}
+}
+
+// SkippedAccounts are the accounts left out of the shares because their
+// Linux user could not be made, sorted.
+func (m *Manager) SkippedAccounts() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	names := make([]string, 0, len(m.skipped))
+	for name := range m.skipped {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // endSMBSessions ends the SMB connections of locked accounts. A disabled
@@ -271,13 +333,13 @@ func (m *Manager) syncAccounts(ctx context.Context, users []auth.User, passwords
 // session until it ends. Each connection is one smbd process, which is told
 // to stop; the client then has to log in again and is refused.
 func (m *Manager) endSMBSessions(ctx context.Context, users []auth.User) {
-	output, err := m.runner.Run(ctx, "", "smbstatus", "--processes", "--json")
+	output, err := m.run(ctx, "smbstatus", "--processes", "--json")
 	if err != nil {
 		slog.Debug("SMB sessions not readable", "err", err) // smbd not running
 		return
 	}
 	for _, pid := range lockedSMBProcesses(output, users) {
-		if _, err := m.runner.Run(ctx, "", "kill", "-TERM", pid); err != nil {
+		if _, err := m.run(ctx, "kill", "-TERM", pid); err != nil {
 			slog.Warn("end SMB connection of a locked account", "pid", pid, "err", err)
 		} else {
 			slog.Info("SMB connection of a locked account ended", "pid", pid)

@@ -134,6 +134,8 @@ func (w *titand) wireNotifications() error {
 		}
 		w.pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: link, Urgent: message.Severity == notify.Error})
 	}
+	// An account whose Linux user cannot be made is left out of the shares.
+	w.folders.SetOnEvent(func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) })
 	// Once per plugin and kind of device; installing stays a click.
 	w.extensions.Notify = func(title string) { w.notifier.Notify(notify.Info, "plugin_recommended", title) }
 	w.extensions.DriverBuilt = func(version string, err error) {
