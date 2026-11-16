@@ -97,10 +97,19 @@ func (s *Server) emergencyAsk(user auth.User, reason, code, via string) (protect
 func (s *Server) emergencyGrant(req protect.Request, by string, now time.Time) (protect.Request, error) {
 	env := s.agentEnv()
 	ps := s.protect()
+	// Only what the person's entry names now: the owner may have taken a
+	// share out since the request was made.
+	var current []string
+	if p := s.agentSettings().Features.Emergency.person(req.Account); p != nil {
+		current = p.Shares
+	}
 	ps.accessMu.Lock()
 	var added []string
 	var failed error
 	for _, name := range req.Shares {
+		if !slices.Contains(current, name) {
+			continue
+		}
 		sh, ok := s.shareByName(name)
 		if !ok {
 			continue // removed since: nothing to give
@@ -243,6 +252,23 @@ func (s *Server) emergencyReconcile(e agentEmergency, now time.Time) {
 		user, ok := env.users.Get(r.Account)
 		gone := !e.Enabled || p == nil || !ok || user.Disabled
 		if !gone {
+			// A share the owner took out of the person's entry ends now;
+			// the rest of the grant stays (a waiting request gets only the
+			// current shares in emergencyGrant).
+			if r.State == protect.StateGranted {
+				var out []string
+				for _, name := range r.Added {
+					if !slices.Contains(p.Shares, name) {
+						out = append(out, name)
+					}
+				}
+				if len(out) > 0 {
+					s.emergencyRevoke(r.Account, out)
+					if _, err := ps.emergency.Detach(r.ID, out); err == nil {
+						s.emergencyRecord(r.Account, "emergency access: shares taken out of the entry ended", fmt.Sprintf("%s: %v", r.Account, out))
+					}
+				}
+			}
 			continue
 		}
 		if r.State == protect.StateWaiting {
