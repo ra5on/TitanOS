@@ -228,7 +228,8 @@
 
 	// PLAN 53: the page in tabs instead of one long column.
 	// PLAN 73 (draft 06): the overview lists the areas with a summary each;
-	// an area opens with "‹ Übersicht" above instead of a row of tabs.
+	// an area opens as the last place of the path at the top instead of a
+	// row of tabs (owner 16 Nov 2026: no "‹ Übersicht" row in the page).
 	const TABS = [
 		'overview',
 		'connection',
@@ -348,25 +349,26 @@
 	}
 </script>
 
+<!-- Owner 16 Nov 2026: the open area is the last place of the path at the
+     top ("KI-Agent › Verbindung und Modelle"); "KI-Agent" there leads back
+     to the overview. No back row and no second heading in the page. -->
 {#if inWindow}
-	<!-- In the window the tabs come first, as in every program (PLAN 68). -->
-	<PageHead title={t('agent.settingsTitle')} />
+	<PageHead
+		title={t('agent.settingsTitle')}
+		section={tab === 'overview' ? undefined : t(`agent.tab.${tab}` as MessageKey)}
+	/>
 {:else}
-	<PageHead title={t('agent.settingsTitle')}>
-		<p class="muted">{t('agent.settingsIntro')}</p>
+	<PageHead
+		title={t('agent.settingsTitle')}
+		section={tab === 'overview' ? undefined : t(`agent.tab.${tab}` as MessageKey)}
+	>
+		{#if tab === 'overview'}<p class="muted">{t('agent.settingsIntro')}</p>{/if}
 	</PageHead>
 {/if}
 
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
 {#if settings}
-	{#if tab !== 'overview'}
-		<nav class="back-row" aria-label={t('agent.settingsTitle')}>
-			<button type="button" class="link" onclick={() => choose('overview')}
-				>‹ {t('agent.tab.overview')}</button
-			><span aria-hidden="true">·</span><strong>{t(`agent.tab.${tab}` as MessageKey)}</strong>
-		</nav>
-	{/if}
 	{#if tab === 'features'}
 		<!-- PLAN 68: one card per group of functions, each function a row. -->
 		<FeaturesPanel admin={true} heading={t('agent.f.title')} />
@@ -622,12 +624,6 @@
 {/if}
 
 <style>
-	.back-row {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-md);
-	}
 	/* An area of the settings: a row that is a button. */
 	.area {
 		width: 100%;

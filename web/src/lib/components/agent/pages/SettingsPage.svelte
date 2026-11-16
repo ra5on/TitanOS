@@ -80,8 +80,8 @@
 				summary={phone
 					? ''
 					: status.think
-						? `${status.model} · ${levelLabel(status.think, i18n.locale)}`
-						: status.model}
+						? `${status.modelLabel || status.model} · ${levelLabel(status.think, i18n.locale)}`
+						: status.modelLabel || status.model}
 				href={href('models')}
 			/>
 			<SettingRow
@@ -250,7 +250,11 @@
 				<div class="grp">
 					<div class="row">
 						<span class="t"
-							><strong>{t('agent.set.chatModel')}</strong><small>{status.model}</small></span
+							><strong>{t('agent.set.chatModel')}</strong><small
+								>{status.modelLabel
+									? `${status.modelLabel} (${status.model})`
+									: status.model}</small
+							></span
 						>
 					</div>
 					<div class="row">

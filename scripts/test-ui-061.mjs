@@ -542,9 +542,18 @@ try {
       await frame
         .getByRole("heading", { name: "Datum und Uhrzeit", exact: true })
         .waitFor();
+      // Owner 16 Nov 2026: the path stands once, in the window's title bar.
+      await page
+        .locator("section.win .titlebar .titles", {
+          hasText: "Datum und Uhrzeit",
+        })
+        .waitFor();
       assert.equal(
-        (await frame.locator(".set-path").innerText()).replace(/\s+/g, " "),
-        "System › Datum und Uhrzeit",
+        (await page.locator("section.win .titlebar .titles").innerText())
+          .replace(/\u00ad/g, "")
+          .replace(/\s*›\s*/g, " › ")
+          .trim(),
+        "Systemsteuerung › System › Datum und Uhrzeit",
       );
       assert.equal(
         await side

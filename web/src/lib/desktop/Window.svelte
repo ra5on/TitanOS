@@ -7,8 +7,8 @@
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import { pageDrawsSide, sideActive, type SideItem } from './apps.ts';
-	import { frameMessage, type FrameMessage } from './frame.ts';
+	import { pageDrawsSide, sideActive, SYSTEM_APPS, type SideItem } from './apps.ts';
+	import { frameMessage, ownPath, type FrameMessage } from './frame.ts';
 	import { openProgram, openTab as openProgramTab } from './programs.svelte.ts';
 	import Dialog from '../components/Dialog.svelte';
 	import '../components/menu.css';
@@ -198,6 +198,23 @@
 	// the page's own title, or the entry of the side bar when the page is
 	// called like its program.
 	let pageName = $state('');
+	// Owner 16 Nov 2026: a page with a path (every page of Systemsteuerung)
+	// sends it; the title bar shows it once, each place above the page a
+	// link that leads back there. Places named like the program are left out.
+	let pageCrumbs = $state<{ label: string; href?: string }[]>([]);
+	const plainName = (s: string) => s.replaceAll('\u00ad', '');
+	const trail = $derived(
+		external ? [] : pageCrumbs.filter((c) => plainName(c.label) !== plainName(win.title)),
+	);
+	const homeHref = $derived(
+		win.app.startsWith('app:')
+			? (SYSTEM_APPS.find((app) => `app:${app.id}` === win.app)?.href ?? '')
+			: '',
+	);
+	function goPath(href: string) {
+		navigateWindow(win.id, href);
+		focus(win.id);
+	}
 	const crumb = $derived.by(() => {
 		if (external) return '';
 		const vm = new URLSearchParams(win.href.split('?')[1] ?? '').get('vm');
@@ -231,6 +248,14 @@
 		if (msg?.type === 'titanos-page') {
 			if (staleReport(win.id, msg.path)) return;
 			pageName = msg.title;
+			pageCrumbs = Array.isArray(msg.crumbs)
+				? msg.crumbs
+						.filter((c) => c && typeof c.label === 'string' && c.label.trim() !== '')
+						.map((c) => ({
+							label: c.label,
+							href: typeof c.href === 'string' && ownPath(c.href) ? c.href : undefined,
+						}))
+				: [];
 			// A page chosen in the side bar while this one still loaded comes next.
 			const path = frameListening(win.id) ?? msg.path;
 			win.href = path;
@@ -372,7 +397,27 @@
 				/>{/if}
 			<!-- Program and page: the page's name takes a second line before a word is broken. -->
 			<span class="titles"
-				><b class="title">{win.title}</b>{#if webappId}{#if docName}<span class="title page"
+				><b class="title"
+					>{#if trail.length && homeHref}<button
+							type="button"
+							class="path-link"
+							ondblclick={(e) => e.stopPropagation()}
+							onclick={() => goPath(homeHref)}>{win.title}</button
+						>{:else}{win.title}{/if}</b
+				>{#if trail.length}<nav class="path" aria-label={t('settings.path')}>
+						{#each trail as place, i (i)}<span
+								class="title page"
+								class:here={i === trail.length - 1}
+								aria-current={i === trail.length - 1 ? 'page' : undefined}
+								><span class="crumb" aria-hidden="true">›</span
+								>{#if place.href && i < trail.length - 1}<button
+										type="button"
+										class="path-link"
+										ondblclick={(e) => e.stopPropagation()}
+										onclick={() => goPath(place.href!)}>{place.label}</button
+									>{:else}{place.label}{/if}</span
+							>{/each}
+					</nav>{:else if webappId}{#if docName}<span class="title page"
 							><span class="crumb" aria-hidden="true">·</span>{docName}</span
 						>{/if}{:else if crumb}<span class="title page"
 						><span class="crumb" aria-hidden="true">›</span>{crumb}</span
@@ -643,6 +688,33 @@
 		min-width: 0;
 		font-weight: 400;
 		color: var(--muted);
+	}
+	/* The path of the page: one place after the other, wrapping before a word breaks. */
+	.path {
+		display: contents;
+	}
+	.title.page.here {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.path-link {
+		padding: 1px 4px;
+		margin: -1px -4px;
+		border: 0;
+		border-radius: calc(5px * var(--radius-scale, 1));
+		background: none;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		text-align: left;
+	}
+	.path-link:hover {
+		background: color-mix(in srgb, var(--text) 10%, transparent);
+		color: var(--text);
+	}
+	.path-link:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.crumb {
 		margin: 0 -4px;

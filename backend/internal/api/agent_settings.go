@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -40,6 +41,10 @@ type agentSettings struct {
 	// Instruction is the owner's top instruction for every chat.
 	Instruction string `json:"instruction,omitempty"`
 	Model       string `json:"model,omitempty"`
+	// ModelNames gives a model a name of the owner's own that the chat
+	// shows instead of the model's ("qwen3.8:27b" → "Jarvis"); the model
+	// itself is still asked for by its real name (owner 16 Nov 2026).
+	ModelNames map[string]string `json:"modelNames,omitempty"`
 	// Think is the default thinking level, as the model names it; empty
 	// uses the model's default.
 	Think string `json:"think,omitempty"`
@@ -302,6 +307,20 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	if len(req.Model) > 200 || len(req.Think) > 40 {
 		return errors.New("model or level too long")
 	}
+	if len(req.ModelNames) > 100 {
+		return errors.New("too many model names")
+	}
+	for model, name := range req.ModelNames {
+		shown := strings.TrimSpace(name)
+		if shown == "" || shown == model {
+			delete(req.ModelNames, model)
+			continue
+		}
+		if model == "" || len(model) > 200 || len([]rune(shown)) > 40 || strings.ContainsFunc(shown, unicode.IsControl) {
+			return errors.New("a model's shown name has at most 40 characters")
+		}
+		req.ModelNames[model] = shown
+	}
 	if req.KeepAlive != "" && !keepAlivePattern.MatchString(req.KeepAlive) {
 		return errors.New("keep alive like 5m, 30m, 2h or -1")
 	}
@@ -462,6 +481,8 @@ func (s *Server) agentOllama() (*agent.Ollama, error) {
 // agentModelView is one model on the settings page and in the chat.
 type agentModelView struct {
 	agent.Model
+	// Label is the owner's own name for the model, empty for none.
+	Label        string   `json:"label,omitempty"`
 	Levels       []string `json:"levels"`
 	DefaultLevel string   `json:"defaultLevel,omitempty"`
 }
@@ -474,7 +495,7 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	settings := s.agentSettings()
 	out := map[string]any{
 		"enabled": settings.Enabled, "allowed": s.agentAllowed(user), "admin": user.Role.CanAdminister(),
-		"model": settings.Model, "think": settings.Think, "context": settings.Context,
+		"model": settings.Model, "modelLabel": settings.ModelNames[settings.Model], "think": settings.Think, "context": settings.Context,
 		"volume": s.agentStore().Available() == nil,
 		"web":    settings.Policy.Mode("web_search", agent.AreaWeb, agent.KindRead) != agent.ModeDeny,
 	}
@@ -514,7 +535,7 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	views := []agentModelView{}
 	for _, m := range models {
-		v := agentModelView{Model: m, Levels: []string{}}
+		v := agentModelView{Model: m, Label: settings.ModelNames[m.Name], Levels: []string{}}
 		if info, err := client.Show(ctx, m.Name); err == nil {
 			v.Levels = agent.Levels(info.Thinking)
 			if v.Levels == nil {

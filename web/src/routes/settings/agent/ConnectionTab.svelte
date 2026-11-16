@@ -328,6 +328,32 @@
 			</select>
 		{/snippet}
 	</SettingRow>
+	<!-- Owner 16 Nov 2026: a name of one's own for the model; the chat shows it. -->
+	{#if settings.model}
+		{@const named = settings.model}
+		<SettingRow
+			icon="edit"
+			title={t('agent.modelName')}
+			desc={t('agent.modelNameHint')}
+			for="ag-model-name"
+		>
+			{#snippet control()}
+				<input
+					id="ag-model-name"
+					class="field"
+					maxlength="40"
+					autocomplete="off"
+					placeholder={named}
+					value={settings.modelNames?.[named] ?? ''}
+					oninput={(e) =>
+						(settings!.modelNames = {
+							...(settings!.modelNames ?? {}),
+							[named]: e.currentTarget.value,
+						})}
+				/>
+			{/snippet}
+		</SettingRow>
+	{/if}
 	{#if chosen && chosen.levels.length}
 		<SettingRow icon="bulb" title={t('agent.thinkDefault')} desc={t('agent.thinkHint')}>
 			{#snippet control()}

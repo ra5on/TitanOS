@@ -66,7 +66,8 @@ func TestAgentWebAfterReading(t *testing.T) {
 			t.Errorf("%s: web_read %s, want ask", name, got)
 		}
 	}
-	// The person took the guard away: free, but not with an outside skill.
+	// The person took the guard away: free, also with an outside skill or
+	// a marked memory in the prompt (owner 16 Nov 2026).
 	settings.Policy.WebFree = true
 	free := ts.server.newAgentToolbox(user, settings)
 	if got := mode(free, other, "web_search", `{"query":"titanos"}`); got != agent.ModeAllow {
@@ -75,7 +76,16 @@ func TestAgentWebAfterReading(t *testing.T) {
 	if got := mode(free, other, "web_read", `{"url":"https://neu.example/seite"}`); got != agent.ModeAllow {
 		t.Errorf("webFree: web_read %s, want allow", got)
 	}
-	if got := mode(free, skill, "web_search", `{"query":"titanos"}`); got != agent.ModeAsk {
-		t.Errorf("webFree with an outside skill: %s, want ask", got)
+	if got := mode(free, skill, "web_search", `{"query":"titanos"}`); got != agent.ModeAllow {
+		t.Errorf("webFree with an outside skill: web_search %s, want allow", got)
+	}
+	if got := mode(free, skill, "web_read", `{"url":"https://neu.example/seite"}`); got != agent.ModeAllow {
+		t.Errorf("webFree with an outside skill: web_read %s, want allow", got)
+	}
+	// What the person set under "Internet" still counts: "Nachfragen" asks.
+	settings.Policy.Areas[agent.AreaWeb] = agent.ModeAsk
+	asks := ts.server.newAgentToolbox(user, settings)
+	if got := mode(asks, skill, "web_search", `{"query":"titanos"}`); got != agent.ModeAsk {
+		t.Errorf("webFree, Internet on ask: %s, want ask", got)
 	}
 }

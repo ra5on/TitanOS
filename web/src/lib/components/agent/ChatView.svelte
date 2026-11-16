@@ -370,10 +370,28 @@
 		return '';
 	});
 
+	// Owner 16 Nov 2026: reading further up while the answer is still being
+	// written. Any move upwards is the person's (the view itself only ever
+	// moves down), so it lets go at once – before, the view pulled back as
+	// long as one was within 80 px of the end, which a finger or a slow
+	// wheel never left. Back at the end, it follows again.
+	let lastTop = 0;
 	function scrolled() {
 		if (!scroller) return;
-		pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+		const top = scroller.scrollTop;
+		const below = scroller.scrollHeight - top - scroller.clientHeight;
+		// Content that got shorter moves the view up too: at the end it stays pinned.
+		if (top < lastTop - 1 && below > 2) pinned = false;
+		else if (below < 24) pinned = true;
+		lastTop = top;
 	}
+	// A message of one's own shows at the end again.
+	let ownSent = 0;
+	$effect(() => {
+		const sent = chat.entries.filter((e) => e.role === 'user').length;
+		if (sent > untrack(() => ownSent)) pinned = true;
+		ownSent = sent;
+	});
 	// Stay at the bottom while text streams in, unless the person scrolled up.
 	$effect(() => {
 		void chat.entries.length;
@@ -381,7 +399,9 @@
 		void live.thinking;
 		void chat.pending;
 		if (pinned && scroller)
-			queueMicrotask(() => scroller!.scrollTo({ top: scroller!.scrollHeight }));
+			queueMicrotask(() => {
+				if (pinned && scroller) scroller.scrollTo({ top: scroller.scrollHeight });
+			});
 	});
 
 	function stepLabel(e: Entry): string {

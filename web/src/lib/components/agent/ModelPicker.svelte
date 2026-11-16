@@ -9,7 +9,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, type Model } from '#lib/agent.ts';
+	import { levelLabel, modelShown, type Model } from '#lib/agent.ts';
 	import { dim, panelIn, sheetUp } from '#lib/agent-motion.ts';
 
 	let {
@@ -95,11 +95,12 @@
 			aria-label={t('agent.modelPick')}
 			bind:this={trigger}
 			onclick={toggle}
-			><strong>{model || '–'}</strong>{#if think}<span>{levelLabel(think, i18n.locale)}</span
+			><strong>{modelShown(models, model) || '–'}</strong>{#if think}<span
+					>{levelLabel(think, i18n.locale)}</span
 				>{/if}<Icon name="chevronDown" size={14} /></button
 		>
 	{:else}
-		<span class="trigger static"><strong>{model || '–'}</strong></span>
+		<span class="trigger static"><strong>{modelShown(models, model) || '–'}</strong></span>
 	{/if}
 	{#if open}
 		<div
@@ -136,7 +137,10 @@
 								if (!(m.levels ?? []).length) open = false;
 							}}
 						>
-							<span>{m.name}<small>{caps(m)}</small></span>
+							<span
+								>{m.label || m.name}<small>{m.label ? `${m.name} · ${caps(m)}` : caps(m)}</small
+								></span
+							>
 							{#if m.name === model}<Icon name="check" size={18} />{/if}
 						</button>
 					{/each}
