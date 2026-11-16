@@ -334,6 +334,30 @@ func (e *Emergency) Reschedule(p Person) (Request, bool, error) {
 	return next.Requests[i], true, nil
 }
 
+// ForgetAccount removes everything the emergency access holds of an
+// account that was deleted: its requests (waiting, granted or past), its
+// printed code and its wrong tries (1.03). A new account of the same name
+// starts with none of it. The shares a grant opened lose the account with
+// the account itself. Nothing is written when there is nothing of it.
+func (e *Emergency) ForgetAccount(account string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := e.loadLocked(); err != nil {
+		return err
+	}
+	next := e.clone()
+	n := len(next.Requests)
+	next.Requests = slices.DeleteFunc(next.Requests, func(r Request) bool { return r.Account == account })
+	_, code := next.Codes[account]
+	_, fails := next.CodeFails[account]
+	if len(next.Requests) == n && !code && !fails {
+		return nil
+	}
+	delete(next.Codes, account)
+	delete(next.CodeFails, account)
+	return e.saveLocked(next)
+}
+
 // Due lists the waiting requests whose time is over and the grants that
 // have ended by now.
 func (e *Emergency) Due(now time.Time) (grant, end []Request, err error) {

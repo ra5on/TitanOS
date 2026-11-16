@@ -356,6 +356,84 @@ type Store struct {
 	// needs no read of the volume.
 	seen    map[string]seenState
 	updated map[string]map[string]time.Time
+	// forgotten are accounts whose files were removed with the account
+	// (Forget, 1.03): nothing makes their folder again until the account
+	// is made anew (Unforget), so a run or copy that ends late cannot
+	// bring back what was deleted. Under fmu, not mu: userRoot runs with
+	// and without mu held.
+	fmu       sync.Mutex
+	forgotten map[string]bool
+}
+
+// Forget removes everything the agent keeps for an account – chats with
+// their files, projects, memory, skills, schedules, notes' marks, read
+// states, own settings – and what of it is in RAM, for an account that is
+// deleted (owner 16 Nov 2026: "Mitlöschen"). Until Unforget, the folder is
+// not made again. The RAM goes also when the volume is not there; the
+// error says the files stayed.
+func (s *Store) Forget(user string) error {
+	if !accountPattern.MatchString(user) {
+		return ErrNotFound
+	}
+	s.fmu.Lock()
+	if s.forgotten == nil {
+		s.forgotten = map[string]bool{}
+	}
+	s.forgotten[user] = true
+	s.fmu.Unlock()
+	s.mu.Lock()
+	delete(s.schedules, user)
+	delete(s.seen, user)
+	delete(s.updated, user)
+	if s.Open == nil {
+		s.mu.Unlock()
+		return ErrNoVolume
+	}
+	base, err := s.Open()
+	if err != nil {
+		s.mu.Unlock()
+		return ErrNoVolume
+	}
+	defer base.Close()
+	// Moved aside under the lock, removed outside of it: a large folder
+	// must not hold up the other accounts. A name with a dot is no account
+	// (Accounts), and a later Forget removes what an interrupted one left.
+	gone := fmt.Sprintf(".forgotten-%s-%d", user, time.Now().UnixNano())
+	err = base.Rename(user, gone)
+	s.mu.Unlock()
+	if errors.Is(err, fs.ErrNotExist) {
+		err = nil
+		gone = ""
+	}
+	if err != nil {
+		return err
+	}
+	if dir, err := base.Open("."); err == nil {
+		names, _ := dir.Readdirnames(-1)
+		dir.Close()
+		for _, n := range names {
+			if n == gone || strings.HasPrefix(n, ".forgotten-"+user+"-") {
+				if err := base.RemoveAll(n); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Unforget lets the folder of an account be made again: a new account of
+// the same name was made.
+func (s *Store) Unforget(user string) {
+	s.fmu.Lock()
+	defer s.fmu.Unlock()
+	delete(s.forgotten, user)
+}
+
+func (s *Store) isForgotten(user string) bool {
+	s.fmu.Lock()
+	defer s.fmu.Unlock()
+	return s.forgotten[user]
 }
 
 func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
@@ -364,6 +442,9 @@ func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
 	}
 	if s.Open == nil {
 		return nil, nil, ErrNoVolume
+	}
+	if create && s.isForgotten(user) {
+		return nil, nil, ErrNotFound
 	}
 	base, err := s.Open()
 	if err != nil {

@@ -522,7 +522,7 @@ Der Ransomware-Wächter läuft auch, wenn der Chat des Agenten aus ist; er ergä
 | Ordner des Kontos | Freigabe `KI-Agent/<konto>/` auf dem Volume des Agenten |
 | Snapshots vor Änderungen | `.titanos/snapshots/agent-*` auf Btrfs-Volumes, 7 Tage |
 
-Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein anderes aus); er speichert nie im RAM oder auf dem Stick. Ein Auftrag, den titand nicht beenden konnte (Neustart, Update), wird beim nächsten Start als „unterbrochen“ markiert. App-Updates warten, solange ein Auftrag läuft.
+Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein anderes aus); er speichert nie im RAM oder auf dem Stick. Wird ein Konto gelöscht, gehen seine Daten des Agenten mit (seit 1.03, Regel in `docs/rules/ACCOUNTS-ACCESS.md`, „Konto löschen nimmt die Daten des KI-Agenten mit“). Ein Auftrag, den titand nicht beenden konnte (Neustart, Update), wird beim nächsten Start als „unterbrochen“ markiert. App-Updates warten, solange ein Auftrag läuft.
 
 ## Prüfstand (5.11.2026)
 
