@@ -428,13 +428,30 @@ jobs:
           name: release
           path: release
 
+      - name: Install minisign
+        timeout-minutes: 15
+        run: |
+          # A mirror that stops answering hung this step for over 30 minutes
+          # (0.100 on 16 Nov 2026: apt-get update after noble-security
+          # InRelease). Every attempt has a time limit; three attempts.
+          opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          for attempt in 1 2 3; do
+            if timeout 240 sudo apt-get "${opts[@]}" update &&
+              timeout 240 sudo apt-get "${opts[@]}" install -y --no-install-recommends minisign; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt-get did not finish in three attempts"
+              exit 1
+            fi
+            sleep 20
+          done
+
       - name: Sign manifest, installation ZIP and checksums
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends minisign
           if [ -z "$MINISIGN_SECRET_KEY" ]; then
             echo "the environment of this job holds no MINISIGN_SECRET_KEY" >&2
             exit 1
