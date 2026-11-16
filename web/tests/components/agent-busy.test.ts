@@ -85,3 +85,22 @@ test('the tick shows only after a run that ended with an answer', async () => {
 	await rerender({ chat: chat(entries), busy: false });
 	expect(container.querySelector('.live-line.done')).toBeNull();
 });
+
+test('opening another chat while one runs shows no tick there (1.01)', async () => {
+	const entries: object[] = [
+		{ id: 'u1', role: 'user', content: 'Hallo', at },
+		{ id: 'a1', role: 'assistant', content: 'Hallo!', at },
+	];
+	const { container, rerender } = render(ChatView, {
+		...base,
+		chat: chat(entries),
+		busy: true,
+		live: { thinking: '', content: '', step: null },
+	});
+	// The running chat A is left for B, whose last line is an answer.
+	await rerender({
+		chat: { ...(chat(entries) as object), id: 'c2' } as never,
+		busy: false,
+	});
+	expect(container.querySelector('.live-line.done')).toBeNull();
+});

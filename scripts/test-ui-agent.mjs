@@ -477,6 +477,12 @@ async function open(
     if (p === "/agent/projects") return json({ projects });
     if (p === "/agent/chats" && method === "GET") return json({ chats });
     if (p === "/agent/chats/" + haChat.id) return json(haChat);
+    // 1.01: the chats that run, from the RAM of the NAS.
+    if (p === "/agent/runs")
+      return json({
+        runs: chats.filter((c) => c.state === "running").map((c) => c.id),
+        max: status.maxRuns ?? 0,
+      });
     // 0.100: a chat whose run still works (its stream ends at once here, so
     // the page keeps following it for a while): the working figure shows.
     if (p === "/agent/chats/c1aaaaaaaaaa0003")
@@ -1416,7 +1422,258 @@ function noConsoleErrors() {
   assert.deepEqual(real, [], "console errors");
 }
 
+// 1.01: runs per chat. Chat A runs; while it runs, chat B is opened and a
+// message is sent there (limit 2); back in A its answer goes on, with what
+// happened meanwhile from the snapshot. At the limit, the page says so.
+async function runs101() {
+  const runA = "c1aaaaaaaaaa0003"; // "Telekom-Rechnungen einsortieren", running
+  const chatB = {
+    id: "c1aaaaaaaaaa0004",
+    title: "Warum ist die CPU so hoch?",
+    created: at(8),
+    updated: at(8, 1),
+    state: "idle",
+    pinned: true,
+    origin: "web",
+    entries: [
+      {
+        id: "b1",
+        at: at(8),
+        role: "user",
+        content: "Warum ist die CPU so hoch?",
+      },
+      {
+        id: "b2",
+        at: at(8, 1),
+        role: "assistant",
+        content: "plex transkodiert zwei Streams.",
+      },
+    ],
+  };
+  const withRoutes = async (page, maxRuns, sent) => {
+    await page.route("**/api/v1/agent/status", (route) =>
+      route.fulfill({ json: { ...status, maxRuns } }),
+    );
+    await page.route("**/api/v1/agent/chats/" + chatB.id, (route) =>
+      route.fulfill({
+        json: {
+          ...chatB,
+          entries: [
+            ...chatB.entries,
+            ...sent.map((m, n) => ({
+              id: "b-new" + n,
+              at: at(12),
+              role: "user",
+              content: m,
+            })),
+          ],
+        },
+      }),
+    );
+  };
+  // Limit 2: B sends while A runs; the run of A goes on and shows again.
+  {
+    const { ctx, page } = await open(1280, 900);
+    const sent = [];
+    let phase = 1;
+    let attachA = 0;
+    const stepsOfA = [
+      {
+        id: "a-step1",
+        at: at(11, 1),
+        role: "assistant",
+        calls: [{ function: { name: "files_list", arguments: {} } }],
+      },
+      tool(
+        "a-step2",
+        "files_list",
+        { root: "share/Documents", path: "Post" },
+        "{}",
+        300,
+      ),
+    ];
+    await withRoutes(page, 2, sent);
+    // A belongs to the project "Steuer 2026": its chats show in the menu.
+    await page.route("**/api/v1/agent/chats/" + runA, (route) =>
+      route.fulfill({
+        json: {
+          id: runA,
+          title: "Telekom-Rechnungen einsortieren",
+          project: "p1aaaaaaaaaa0003",
+          created: at(11),
+          updated: at(11, 2),
+          state: "running",
+          origin: "web",
+          // What the run saved meanwhile is in the chat as read anew.
+          entries: [
+            {
+              id: "e3aaaaaaaaaa0001",
+              at: at(11),
+              role: "user",
+              content: "Sortiere die Telekom-Rechnungen nach Jahr.",
+            },
+            ...(phase === 1 ? [] : stepsOfA),
+          ],
+        },
+      }),
+    );
+    await page.route(
+      "**/api/v1/agent/chats/" + chatB.id + "/messages",
+      (route) => {
+        const body = route.request().postDataJSON();
+        sent.push(body.message);
+        return route.fulfill({
+          status: 202,
+          json: {
+            ...chatB,
+            entries: [
+              ...chatB.entries,
+              { id: "b-new0", at: at(12), role: "user", content: body.message },
+            ],
+          },
+        });
+      },
+    );
+    await page.route("**/api/v1/agent/chats/" + runA + "/events", (route) => {
+      attachA++;
+      // While the person is in B, the run of A wrote a step and more text.
+      const snap =
+        phase === 1
+          ? {
+              type: "snapshot",
+              entries: [],
+              content: "Die Rechnungen von",
+              state: "running",
+            }
+          : {
+              type: "snapshot",
+              entries: stepsOfA,
+              content: "Die Rechnungen von 2026 liegen jetzt im Ordner Steuer.",
+              state: "running",
+            };
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          `event: snapshot\ndata: ${JSON.stringify(snap)}\n\n` +
+          'event: state\ndata: {"type":"state","state":"running"}\n\n',
+      });
+    });
+    await page.goto(base + "/agent?chat=" + runA);
+    const answer = page.locator(".column .md.answer");
+    await answer.filter({ hasText: "Die Rechnungen von" }).waitFor();
+    assert.equal(
+      await page.locator(".column .steps-line").count(),
+      0,
+      "A has no step yet",
+    );
+    const menu = page.getByRole("navigation", { name: "Menü des KI-Agenten" });
+    // Into B while A runs: B is not busy, its input is free.
+    phase = 2;
+    await menu
+      .getByRole("button", { name: /Warum ist die CPU so hoch/ })
+      .first()
+      .click();
+    await page
+      .getByRole("heading", { name: "Warum ist die CPU so hoch?" })
+      .waitFor();
+    assert.equal(
+      await page.locator(".column .live-line").count(),
+      0,
+      "B shows no run of A",
+    );
+    assert.equal(
+      await page.locator(".column .md.answer").count(),
+      0,
+      "B shows no text of A",
+    );
+    assert.equal(
+      await menu
+        .getByRole("button", { name: /Telekom-Rechnungen einsortieren/ })
+        .locator(".live")
+        .count(),
+      1,
+      "A is marked as running in the menu",
+    );
+    const input = page.locator(".composer textarea");
+    assert.ok(!(await input.isDisabled()), "B's input is free");
+    await input.fill("Und welcher Container genau?");
+    await page.keyboard.press("Enter");
+    await page.getByText("Und welcher Container genau?").first().waitFor();
+    assert.deepEqual(
+      sent,
+      ["Und welcher Container genau?"],
+      "B sent at limit 2",
+    );
+    assert.equal(
+      await page.locator(".notice-error").count(),
+      0,
+      "no error in B",
+    );
+    await page.screenshot({ path: `${out}/101-b-sent-while-a-runs.png` });
+    // Back in A: the page follows its run again; the snapshot brings the
+    // step and the text written meanwhile.
+    const before = attachA;
+    await menu
+      .getByRole("button", { name: /Telekom-Rechnungen einsortieren/ })
+      .first()
+      .click();
+    await page
+      .getByRole("heading", { name: "Telekom-Rechnungen einsortieren" })
+      .waitFor();
+    await answer.filter({ hasText: "liegen jetzt im Ordner Steuer" }).waitFor();
+    assert.ok(attachA > before, "A followed again after coming back");
+    await page.locator(".column .steps-line").first().waitFor();
+    assert.equal(
+      await page.locator(".column .live-line .fig").count(),
+      1,
+      "A still works",
+    );
+    await page.screenshot({ path: `${out}/101-a-goes-on.png` });
+    await ctx.close();
+  }
+  // Limit 1: the NAS refuses the second chat; the page names the limit and
+  // the text stays in the input.
+  {
+    const { ctx, page } = await open(1280, 900);
+    await withRoutes(page, 1, []);
+    await page.route(
+      "**/api/v1/agent/chats/" + chatB.id + "/messages",
+      (route) =>
+        route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: "agent_limit",
+              message:
+                "this account runs as many chats at once as the settings allow",
+            },
+          },
+        }),
+    );
+    await page.goto(base + "/agent?chat=" + chatB.id);
+    await page
+      .getByRole("heading", { name: "Warum ist die CPU so hoch?" })
+      .waitFor();
+    const input = page.locator(".composer textarea");
+    await input.fill("Noch eine Frage");
+    await page.keyboard.press("Enter");
+    await page
+      .locator(".notice-error", { hasText: "Es läuft schon ein Chat" })
+      .waitFor();
+    assert.equal(await input.inputValue(), "Noch eine Frage", "the text stays");
+    await page.screenshot({ path: `${out}/101-limit.png` });
+    await ctx.close();
+  }
+}
+
 try {
+  if (process.env.UI_ONLY === "101") {
+    await runs101();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.01) ok:", out);
+    process.exit(0);
+  }
   await plan58();
   if (process.env.UI_ONLY === "58") {
     noConsoleErrors();
@@ -2869,6 +3126,7 @@ try {
     });
     await ctx.close();
   }
+  await runs101();
   noConsoleErrors();
   console.log("KI-Agent UI ok:", out);
 } finally {

@@ -35,8 +35,15 @@ const (
 
 type agentRun struct {
 	user, chat string
-	cancel     context.CancelFunc
-	subs       map[chan agent.Event]struct{}
+	// byPerson: started by the person in the chat; counts for the limit
+	// of runs at once (agent_runs.go).
+	byPerson bool
+	ctx      context.Context
+	cancel   context.CancelFunc
+	// subs are the pages that follow the run; view is what a page that
+	// comes later gets as its snapshot. Both under agentRuntime.mu.
+	subs map[*agentSub]struct{}
+	view agentRunView
 }
 
 type agentRuntime struct {
@@ -242,15 +249,22 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, chat)
 		return
 	}
+	// At the limit of runs at once no chat is made (1.01).
+	run, err := s.agentClaim(user.Name, chat.ID, true)
+	if err != nil {
+		agentStartError(w, err)
+		return
+	}
 	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: now, Role: "user", Content: req.Message})
 	if err := store.SaveChat(user.Name, chat); err != nil {
+		s.agentRelease(run)
 		agentStoreError(w, err)
 		return
 	}
 	// The answer is the chat as it starts: the run changes it right away
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
-	if err := s.agentStart(user, chat, s.agentWork(chat)); err != nil {
+	if err := s.agentLaunch(run, user, chat, s.agentWork(chat)); err != nil {
 		agentStartError(w, err)
 		return
 	}
@@ -268,10 +282,23 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if s.agentRunning(user.Name, r.PathValue("id")) {
-		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat; stop it first")
+	if !agent.ValidID(r.PathValue("id")) {
+		writeError(w, http.StatusNotFound, "not_found", "not found")
 		return
 	}
+	// The place of the run is taken before the message is written: a chat
+	// that runs, or an account at its limit of runs, keeps the chat as it is.
+	run, err := s.agentClaim(user.Name, r.PathValue("id"), true)
+	if err != nil {
+		agentStartError(w, err)
+		return
+	}
+	launched := false
+	defer func() {
+		if !launched {
+			s.agentRelease(run)
+		}
+	}()
 	store := s.agentStore()
 	chat, err := store.Chat(user.Name, r.PathValue("id"))
 	if err != nil {
@@ -319,7 +346,8 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	// The answer is the chat as it starts: the run changes it right away
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
-	if err := s.agentStart(user, chat, s.agentWork(chat)); err != nil {
+	launched = true
+	if err := s.agentLaunch(run, user, chat, s.agentWork(chat)); err != nil {
 		agentStartError(w, err)
 		return
 	}
@@ -346,23 +374,32 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if s.agentRunning(user.Name, r.PathValue("id")) {
-		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat")
+	if !agent.ValidID(r.PathValue("id")) {
+		writeError(w, http.StatusNotFound, "not_found", "not found")
+		return
+	}
+	// The answer goes on in a run of this chat only: another chat that
+	// waits keeps its step (1.01, several runs at once).
+	run, err := s.agentClaim(user.Name, r.PathValue("id"), true)
+	if err != nil {
+		agentStartError(w, err)
 		return
 	}
 	chat, err := s.agentStore().Chat(user.Name, r.PathValue("id"))
 	if err != nil {
+		s.agentRelease(run)
 		agentStoreError(w, err)
 		return
 	}
 	if chat.Pending == nil || chat.Pending.ID != req.ID {
+		s.agentRelease(run)
 		writeError(w, http.StatusConflict, "agent_nothing_pending", "this step no longer waits")
 		return
 	}
-	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error {
+	if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {
 		return rn.Decide(ctx, chat, req.ID, req.Approve)
 	}); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+		agentStartError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
@@ -494,17 +531,24 @@ func (s *Server) agentRunning(user, chat string) bool {
 	return ok
 }
 
-// agentStart runs a chat in the background as the account.
+// agentStart runs a chat in the background as the account: planned tasks,
+// the look into a notification, Home Assistant. They never wait for the
+// limit of runs at once (agent_runs.go); a run the person starts in the
+// chat claims its place with agentClaim before anything is written.
 func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.Runner, context.Context) error) error {
-	settings := s.agentSettings()
-	if !settings.Enabled {
-		return errors.New("the agent is switched off")
-	}
-	if s.agentMoving() {
-		return errAgentMoving
-	}
-	client, err := s.agentOllama()
+	run, err := s.agentClaim(user.Name, chat.ID, false)
 	if err != nil {
+		return err
+	}
+	return s.agentLaunch(run, user, chat, work)
+}
+
+// agentLaunch starts a claimed run; when it cannot, the claim goes.
+func (s *Server) agentLaunch(run *agentRun, user auth.User, chat *agent.Chat, work func(*agent.Runner, context.Context) error) error {
+	settings := s.agentSettings()
+	client, err := s.agentReady(settings)
+	if err != nil {
+		s.agentRelease(run)
 		return err
 	}
 	// A copy of the chat in the share the person changed is read back first.
@@ -514,36 +558,14 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 		model = settings.Model
 	}
 	if model == "" {
+		s.agentRelease(run)
 		return errors.New("no model chosen")
 	}
-	key := runKey(user.Name, chat.ID)
-	s.agentRT.mu.Lock()
-	if s.agentRT.runs == nil {
-		s.agentRT.runs = map[string]*agentRun{}
-	}
-	if _, busy := s.agentRT.runs[key]; busy {
-		s.agentRT.mu.Unlock()
-		return agent.ErrBusy
-	}
-	ctx, cancel := context.WithCancel(s.agentBase())
-	run := &agentRun{user: user.Name, chat: chat.ID, cancel: cancel, subs: map[chan agent.Event]struct{}{}}
-	s.agentRT.runs[key] = run
 	s.agentRT.work.Add(1)
-	s.agentRT.mu.Unlock()
-
+	ctx := run.ctx
 	go func() {
 		defer s.agentRT.work.Done()
-		defer func() {
-			cancel()
-			s.agentRT.mu.Lock()
-			delete(s.agentRT.runs, key)
-			subs := run.subs
-			run.subs = nil
-			s.agentRT.mu.Unlock()
-			for ch := range subs {
-				close(ch)
-			}
-		}()
+		defer s.agentRelease(run)
 		runner := s.agentRunner(ctx, user, settings, client, model, chat, run)
 		err := work(runner, ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -553,6 +575,17 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 		s.agentLearn(user.Name, chat)
 	}()
 	return nil
+}
+
+// agentReady is the client of the model when the agent can run now.
+func (s *Server) agentReady(settings agentSettings) (*agent.Ollama, error) {
+	if !settings.Enabled {
+		return nil, errors.New("the agent is switched off")
+	}
+	if s.agentMoving() {
+		return nil, errAgentMoving
+	}
+	return s.agentOllama()
 }
 
 // agentBase is the context runs live in: it ends when titand stops.
@@ -588,14 +621,7 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 		Emit: func(e agent.Event) {
 			s.agentRT.mu.Lock()
 			defer s.agentRT.mu.Unlock()
-			for ch := range run.subs {
-				select {
-				case ch <- e:
-				default:
-					// A slow page loses streamed pieces, never saved lines:
-					// it reloads the chat when the run ends.
-				}
-			}
+			run.emitLocked(e)
 		},
 	}
 }
@@ -731,7 +757,8 @@ type agentWatchers struct {
 }
 
 // handleAgentEvents streams the events of a chat as server-sent events
-// while it runs; the page reloads the chat when the stream ends.
+// while it runs, beginning with a snapshot of the run (agent_runs.go); the
+// page reloads the chat when the stream ends.
 func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	id := r.PathValue("id")
@@ -761,25 +788,28 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	ch := make(chan agent.Event, 256)
 	s.agentRT.mu.Lock()
 	run := s.agentRT.runs[key]
-	if run != nil && run.subs != nil {
-		run.subs[ch] = struct{}{}
-	}
 	s.agentRT.mu.Unlock()
-	if run == nil {
+	var sub *agentSub
+	var first agentSnapshot
+	ok := false
+	if run != nil {
+		sub, first, ok = s.agentSubscribe(run)
+	}
+	if !ok {
 		fmt.Fprint(w, "event: end\ndata: {}\n\n")
 		flusher.Flush()
 		return
 	}
-	defer func() {
-		s.agentRT.mu.Lock()
-		if run.subs != nil {
-			delete(run.subs, ch)
-		}
-		s.agentRT.mu.Unlock()
-	}()
+	defer s.agentUnsubscribe(run, sub)
+	// 1.01: first what the run did so far, then the state line older pages
+	// expect, then the events as they come.
+	snapshot := func(snap agentSnapshot) {
+		data, _ := json.Marshal(snap)
+		fmt.Fprintf(w, "event: snapshot\ndata: %s\n\n", data)
+	}
+	snapshot(first)
 	fmt.Fprint(w, "event: state\ndata: {\"type\":\"state\",\"state\":\"running\"}\n\n")
 	flusher.Flush()
 	keepAlive := time.NewTicker(20 * time.Second)
@@ -799,7 +829,16 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 		case <-keepAlive.C:
 			fmt.Fprint(w, ": keep-alive\n\n")
 			flusher.Flush()
-		case e, open := <-ch:
+		case <-sub.wake:
+			// Events were lost: a new snapshot instead of a gap.
+			snap, running := s.agentResync(run, sub)
+			if !running {
+				// Ended meanwhile: what is left in the channel, then the end.
+				continue
+			}
+			snapshot(snap)
+			flusher.Flush()
+		case e, open := <-sub.ch:
 			if !open {
 				fmt.Fprint(w, "event: end\ndata: {}\n\n")
 				flusher.Flush()
@@ -918,15 +957,6 @@ func mustJSON(v any) []byte {
 		return []byte("null")
 	}
 	return data
-}
-
-// agentStartError: a chat that already runs is a conflict, not a failure.
-func agentStartError(w http.ResponseWriter, err error) {
-	if errors.Is(err, agent.ErrBusy) {
-		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat; stop it first")
-		return
-	}
-	writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 }
 
 // autonomyOf reads the way to work a request names: "direct" (or ""

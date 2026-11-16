@@ -321,7 +321,7 @@ func TestAgentEventsEndWithTheSessionLock(t *testing.T) {
 	if ts.server.agentRT.runs == nil {
 		ts.server.agentRT.runs = map[string]*agentRun{}
 	}
-	ts.server.agentRT.runs[runKey("alex", id)] = &agentRun{user: "alex", chat: id, subs: map[chan agent.Event]struct{}{}}
+	ts.server.agentRT.runs[runKey("alex", id)] = &agentRun{user: "alex", chat: id, subs: map[*agentSub]struct{}{}}
 	ts.server.agentRT.mu.Unlock()
 
 	stream := func() chan struct{} {

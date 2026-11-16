@@ -491,7 +491,32 @@ export class AgentPage extends AgentChats {
 					this.listsReady = true;
 				}
 			})();
-			return () => this.stream?.abort();
+			return () => this.detach();
+		});
+
+		// 1.01: a chat runs that is not open (sent, then another chat opened;
+		// a planned task): the RAM of the NAS is asked every few seconds until
+		// it ends, so the list and the chat show its end. Eight answers
+		// without such a run end the asking.
+		$effect(() => {
+			const open = this.stream?.id ?? this.currentId;
+			const others =
+				this.chats.some((c) => !c.author && c.state === 'running' && c.id !== open) ||
+				[...this.runs].some(([id, run]) => run.busy && id !== open);
+			if (!others || !this.listsReady) return;
+			let quiet = 0;
+			let asking = false;
+			const timer = setInterval(() => {
+				if (asking || document.visibilityState !== 'visible') return;
+				asking = true;
+				void this.checkRuns()
+					.then((still) => {
+						quiet = still ? 0 : quiet + 1;
+						if (quiet >= 8) clearInterval(timer);
+					})
+					.finally(() => (asking = false));
+			}, 4000);
+			return () => clearInterval(timer);
 		});
 
 		// PLAN 75-16: a notification tapped while the agent is already open moves

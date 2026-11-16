@@ -52,7 +52,7 @@ test('a change of figure glides: it starts where the spheres stand and ends in t
 
 test('the words of every kind exist in German and English, numbered without a gap', () => {
 	const view = readFileSync(
-		new URL('../src/lib/components/agent/ChatView.svelte', import.meta.url),
+		new URL('../src/lib/components/agent/chat/LiveLine.svelte', import.meta.url),
 		'utf8',
 	);
 	const block = /const WORDS = \{([^}]*)\}/.exec(view)?.[1] ?? '';

@@ -1,10 +1,11 @@
 // The KI-Agent's page, first part: what the NAS says about the agent, the
-// chats and projects, the open chat with what streams in, the look, and the
-// requests that load, open, send and change chats. The menus, gestures and
-// suggestions on top of this are in agent-page.svelte.ts.
+// chats and projects, the runs of the chats with what streams in, the look,
+// and the requests that load, open, send and change chats. The menus,
+// gestures and suggestions on top of this are in agent-page.svelte.ts.
 import { page } from '$app/state';
 import { goto } from '$app/navigation';
-import { api, apiFetch, responseError, setAgentProfile } from '#lib/api.ts';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { api, ApiError, apiFetch, responseError, setAgentProfile } from '#lib/api.ts';
 import { agentAppMode } from '#lib/agent-app.ts';
 import { agentFull } from '#lib/agent-full.svelte.ts';
 import { clearAgentNotifications } from '#lib/web-push.ts';
@@ -15,6 +16,7 @@ import { session } from '#lib/session.svelte.ts';
 import {
 	defaultLook,
 	follow,
+	mergeEntries,
 	whereLine,
 	sanitizeLook,
 	type AgentEvent,
@@ -48,6 +50,27 @@ function savedAutonomy(): Autonomy {
 	}
 }
 
+/** What streams in while a chat runs: thoughts, text and the step. */
+export type Live = { thinking: string; content: string; step: Entry | null };
+const idle = (): Live => ({ thinking: '', content: '', step: null });
+const IDLE: Live = Object.freeze(idle());
+
+/**
+ * The run of one chat as this page knows it (1.01): runs are kept per chat,
+ * so one goes on while another chat is open, and its chat shows it again
+ * when opened. Only the open chat is followed (one stream: on plain HTTP a
+ * browser has few connections per address); a run elsewhere is asked for
+ * through /agent/runs until it ends.
+ */
+export class ChatRun {
+	busy = $state(false);
+	live = $state<Live>(idle());
+	deciding = $state(false);
+	/** Times the chat said "running" while no run answered (at most eight). */
+	retries = 0;
+	retryTimer: ReturnType<typeof setTimeout> | undefined;
+}
+
 export class AgentChats {
 	readLook = (): Look => {
 		try {
@@ -69,13 +92,22 @@ export class AgentChats {
 	readOnlyBy = $state('');
 	project = $state('');
 	error = $state('');
-	busy = $state(false);
-	deciding = $state(false);
-	live = $state<{ thinking: string; content: string; step: Entry | null }>({
-		thinking: '',
-		content: '',
-		step: null,
-	});
+	/** The runs this page knows, per chat. */
+	runs = new SvelteMap<string, ChatRun>();
+	/** The run of the open chat. */
+	openRun = $derived(this.current ? this.runs.get(this.current.id) : undefined);
+	busy = $derived(this.openRun?.busy ?? false);
+	deciding = $derived(this.openRun?.deciding ?? false);
+	live = $derived<Live>(this.openRun?.live ?? IDLE);
+	/** The run of a chat, made when it is first needed (never in a $derived). */
+	run = (id: string): ChatRun => {
+		let run = this.runs.get(id);
+		if (!run) {
+			run = new ChatRun();
+			this.runs.set(id, run);
+		}
+		return run;
+	};
 	model = $state('');
 	think = $state('');
 	/** How the agent works in this chat (owner 15 Nov 2026): start right
@@ -158,7 +190,8 @@ export class AgentChats {
 	draft = $state('');
 	attachments = $state<{ name: string; file?: File; ref?: string }[]>([]);
 	phone = $state(matchMedia('(max-width: 760px)').matches);
-	stream: AbortController | null = null;
+	/** The one stream this page follows: the run of the open chat. */
+	stream: { id: string; controller: AbortController } | null = null;
 
 	menuOpen = $state(false);
 
@@ -261,16 +294,44 @@ export class AgentChats {
 	};
 
 	listsReady = $state(false);
-	/** Lets go of the running stream so that its end does nothing more (0.99:
-	 *  the old stream's end read the last answer aloud again and wrote an
-	 *  older copy of the chat over the new one). */
-	private drop() {
+	/** A run no longer followed: its stream and its retries are gone; it goes
+	 *  on on the NAS. What streamed in stays until it is followed again (the
+	 *  snapshot then replaces it). */
+	private rest(id: string) {
+		const run = this.runs.get(id);
+		if (!run) return;
+		clearTimeout(run.retryTimer);
+		run.retries = 0;
+	}
+	/** Lets go of the followed stream so that its end does nothing more
+	 *  (0.99: the old stream's end read the last answer aloud again and wrote
+	 *  an older copy of the chat over the new one). Its run goes on and is
+	 *  followed again, with a snapshot, when its chat is opened (1.01). */
+	detach = () => {
 		const old = this.stream;
 		this.stream = null;
-		this.retries = 0;
-		clearTimeout(this.retryTimer);
-		old?.abort();
+		if (!old) return;
+		this.rest(old.id);
+		old.controller.abort();
+	};
+	/** The state of a chat in the list ("arbeitet" in the side bar). */
+	private listState(id: string, state: Chat['state']) {
+		const listed = this.chats.find((c) => c.id === id && !c.author);
+		if (listed && listed.state !== state) listed.state = state;
 	}
+	/** A run was started from here: the list and the chat's run know it at
+	 *  once (the answer of the NAS is the chat as it was before the run). */
+	private started(chat: Chat) {
+		if (this.chats.some((c) => c.id === chat.id && !c.author)) this.listState(chat.id, 'running');
+		else this.chats = [{ ...chat, state: 'running' }, ...this.chats];
+		this.run(chat.id).busy = true;
+	}
+	/** The text of a refused start: the limit of chats at once names its number. */
+	startError = (e: unknown): string => {
+		if (!(e instanceof ApiError) || e.code !== 'agent_limit') return apiErrorText(e);
+		const n = this.status?.maxRuns ?? 1;
+		return n <= 1 ? t('agent.runs.limitOne') : t('agent.runs.limitMany', { n });
+	};
 	/** Counts the chats asked for: an answer that comes late for a chat
 	 *  left in the meantime is dropped (two quick taps showed the first). */
 	private opened = 0;
@@ -280,9 +341,7 @@ export class AgentChats {
 		this.menuOpen = false;
 		this.find = null;
 		stopSpeaking();
-		this.drop();
-		this.busy = false;
-		this.live = { thinking: '', content: '', step: null };
+		this.detach();
 		this.error = '';
 		try {
 			// Another account's chat in a shared project is only read (PLAN 51).
@@ -303,7 +362,14 @@ export class AgentChats {
 			if (this.current.project) this.project = this.current.project;
 			if (push) void this.go(`/agent?chat=${id}`);
 			const listed = this.chats.find((c) => c.id === id);
-			if (this.current.state === 'running' || listed?.state === 'running') this.watch(id);
+			// A run that went on while another chat was open is followed
+			// again; its snapshot brings what happened meanwhile (1.01).
+			if (
+				this.current.state === 'running' ||
+				listed?.state === 'running' ||
+				this.runs.get(id)?.busy
+			)
+				this.watch(id);
 		} catch (e) {
 			if (turn === this.opened) this.error = apiErrorText(e);
 		}
@@ -323,75 +389,99 @@ export class AgentChats {
 		this.readOnlyBy = '';
 		this.opened++;
 		stopSpeaking();
-		this.drop();
+		this.detach();
 		this.find = null;
 		this.current = null;
-		this.busy = false;
 		this.project = inProject;
-		this.live = { thinking: '', content: '', step: null };
 		if (navigate) void this.go('/agent');
 	};
 
-	private retries = 0;
-	private retryTimer: ReturnType<typeof setTimeout> | undefined;
 	watch = (id: string) => {
+		const run = this.run(id);
 		const old = this.stream;
 		const controller = new AbortController();
-		this.stream = controller;
-		old?.abort();
-		clearTimeout(this.retryTimer);
-		this.busy = true;
-		this.live = { thinking: '', content: '', step: null };
+		this.stream = { id, controller };
+		// Another chat's run goes on without this page (1.01).
+		if (old && old.id !== id) this.rest(old.id);
+		old?.controller.abort();
+		clearTimeout(run.retryTimer);
+		run.busy = true;
+		this.listState(id, 'running');
+		// What streamed in before stays until the stream says more: a snapshot
+		// replaces it (no flicker when the page follows the run again); a
+		// titand without snapshots, or the end, clears it first.
+		let first = true;
 		void follow(
 			id,
 			(e) => {
+				if (first && e.type !== 'snapshot') run.live = idle();
+				first = false;
 				// The stream delivers: the next break starts counting anew. Its
 				// bare end does not count – a chat that says "running" while no
 				// run answers would otherwise be asked twice a second for ever.
-				if (e.type !== 'end') this.retries = 0;
+				if (e.type !== 'end') run.retries = 0;
 				this.onEvent(id, e);
 			},
 			controller.signal,
 		)
 			.catch(() => {})
 			.finally(() => {
-				if (this.stream === controller) void this.finish(id);
+				if (this.stream?.controller === controller) {
+					this.stream = null;
+					void this.finish(id);
+				}
 			});
 	};
 
 	onEvent = (id: string, e: AgentEvent) => {
-		if (!this.current || this.current.id !== id) return;
+		const run = this.runs.get(id);
+		if (!run) return;
+		// The chat itself changes only while it is open; what streams in
+		// belongs to its run.
+		const chat = this.current?.id === id ? this.current : null;
 		switch (e.type) {
+			case 'snapshot':
+				// What the run did before this page followed it (1.01): the text
+				// is replaced, the entries take their place by id.
+				run.live = { thinking: e.thinking ?? '', content: e.content ?? '', step: e.step ?? null };
+				if (chat) {
+					chat.entries = mergeEntries(chat.entries, e.entries ?? []);
+					if (e.state) chat.state = e.state;
+					chat.pending = e.pending ?? null;
+					if (e.plan) chat.plan = e.plan;
+				}
+				break;
 			case 'thinking':
-				this.live.thinking += e.text;
+				run.live.thinking += e.text;
 				break;
 			case 'content':
-				this.live.content += e.text;
+				run.live.content += e.text;
 				break;
 			case 'step':
-				this.live.step = e.step;
+				run.live.step = e.step;
 				break;
 			case 'entry':
-				if (!this.current.entries.some((x) => x.id === e.entry.id))
-					this.current.entries.push(e.entry);
+				if (chat && !chat.entries.some((x) => x.id === e.entry.id)) chat.entries.push(e.entry);
 				if (e.entry.role === 'assistant')
-					this.live = { thinking: '', content: '', step: this.live.step };
-				if (e.entry.role === 'tool') this.live.step = null;
+					run.live = { thinking: '', content: '', step: run.live.step };
+				if (e.entry.role === 'tool') run.live.step = null;
 				break;
 			case 'reset':
 				// The round is asked again; what streamed in does not count.
-				this.live = { thinking: '', content: '', step: this.live.step };
+				run.live = { thinking: '', content: '', step: run.live.step };
 				break;
 			case 'plan':
-				this.current.plan = e.plan;
+				if (chat) chat.plan = e.plan;
 				break;
 			case 'approval':
-				this.current.pending = e.pending;
-				this.current.state = 'waiting';
+				if (chat) {
+					chat.pending = e.pending;
+					chat.state = 'waiting';
+				}
 				this.buzz([60, 40, 60]);
 				break;
 			case 'state':
-				this.current.state = e.state;
+				if (chat) chat.state = e.state;
 				break;
 		}
 	};
@@ -401,28 +491,37 @@ export class AgentChats {
 	 *  still works (the connection broke) is followed again (0.99: the page
 	 *  stood still until it was loaded anew). */
 	finish = async (id: string) => {
-		this.stream = null;
+		const run = this.run(id);
 		const again = (ms: number) => {
-			clearTimeout(this.retryTimer);
-			this.retryTimer = setTimeout(() => {
+			clearTimeout(run.retryTimer);
+			run.retryTimer = setTimeout(() => {
 				if (this.current?.id !== id || this.stream) return;
-				if (this.busy) this.watch(id);
+				if (run.busy) this.watch(id);
 				else void this.finish(id);
 			}, ms);
 		};
 		try {
 			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
-			if (this.stream) return; // followed again in the meantime
+			if (this.stream?.id === id) return; // followed again in the meantime
 			if (this.current?.id === id) this.current = fresh;
-			if (fresh.state === 'running' && this.current?.id === id && this.retries < 8) {
-				this.retries++;
-				this.live = { thinking: '', content: '', step: null };
-				again(Math.min(500 * 2 ** (this.retries - 1), 8000));
-				return;
+			if (fresh.state === 'running') {
+				if (this.current?.id === id && run.retries < 8) {
+					run.retries++;
+					again(Math.min(500 * 2 ** (run.retries - 1), 8000));
+					return;
+				}
+				if (this.current?.id !== id) {
+					// Another chat was opened meanwhile: this run goes on there,
+					// and /agent/runs tells when it ends (1.01).
+					run.retries = 0;
+					run.live = idle();
+					void this.loadLists();
+					return;
+				}
 			}
-			this.retries = 0;
-			this.busy = false;
-			this.live = { thinking: '', content: '', step: null };
+			run.retries = 0;
+			run.busy = false;
+			run.live = idle();
 			if (fresh.state === 'idle') this.buzz(40);
 			// Read the new answer aloud if wished (Darstellung, PLAN 51).
 			if (
@@ -442,16 +541,58 @@ export class AgentChats {
 		} catch {
 			// The NAS did not answer: the state is not known. Ask again a few
 			// times; after that the chat shows what it has, not working.
-			if (this.current?.id === id && this.retries < 8) {
-				this.retries++;
-				again(Math.min(1000 * 2 ** (this.retries - 1), 10000));
+			if (this.current?.id === id && run.retries < 8) {
+				run.retries++;
+				again(Math.min(1000 * 2 ** (run.retries - 1), 10000));
 				return;
 			}
-			this.retries = 0;
-			this.busy = false;
-			this.live = { thinking: '', content: '', step: null };
+			run.retries = 0;
+			run.busy = false;
+			run.live = idle();
 		}
 		void this.loadLists();
+	};
+
+	/** Chats the NAS named as running in an earlier answer of /agent/runs. */
+	private seenRunning = new Set<string>();
+	/** The chats of the account that run on the NAS, while one runs that
+	 *  this page does not follow (1.01): its end updates the list, and its
+	 *  chat shows the answer when opened. Only the RAM of titand is asked.
+	 *  True while one of them still runs. */
+	checkRuns = async (): Promise<boolean> => {
+		let now: Set<string>;
+		try {
+			now = new Set((await api.get<{ runs?: string[] }>('/agent/runs')).runs ?? []);
+		} catch {
+			// No answer counts as a quiet one: the asking ends after a while.
+			return false;
+		}
+		const followed = this.stream?.id;
+		let ended = false;
+		let still = false;
+		for (const [id, run] of this.runs) {
+			if (id === followed || !run.busy) continue;
+			if (now.has(id)) still = true;
+			else {
+				run.busy = false;
+				run.live = idle();
+				ended = true;
+			}
+		}
+		for (const c of this.chats) {
+			if (c.author || c.id === followed || c.state !== 'running') continue;
+			if (now.has(c.id)) {
+				still = true;
+				this.seenRunning.add(c.id);
+			} else if (this.seenRunning.delete(c.id)) ended = true;
+			// A chat that says "running" without ever having a run here is
+			// not read again and again (the stored state of a run titand did
+			// not finish; it is marked "interrupted" at the next start).
+		}
+		// Started elsewhere (another device, a planned task): shown as running.
+		for (const id of now) if (id !== followed) this.listState(id, 'running');
+		if (ended) await this.loadLists();
+		return still;
 	};
 
 	/**
@@ -460,11 +601,12 @@ export class AgentChats {
 	 * erzeugen"). The chat forgets everything after it.
 	 */
 	resend = async (entry: Entry, text = '') => {
-		if (!this.current || this.busy || this.sending) return;
-		this.sending = true;
+		if (!this.current) return;
+		const id = this.current.id;
+		if (this.runs.get(id)?.busy || this.sendingIn.has(id)) return;
+		this.sendingIn.add(id);
 		this.error = '';
 		stopSpeaking();
-		const id = this.current.id;
 		try {
 			const chat = await api.post<Chat>(`/agent/chats/${id}/messages`, {
 				message: text,
@@ -473,31 +615,35 @@ export class AgentChats {
 				think: this.think,
 				autonomy: this.autonomy,
 			});
+			this.started(chat);
 			if (this.current?.id !== id) return;
 			this.current = chat;
 			this.watch(chat.id);
 		} catch (e) {
-			this.error = apiErrorText(e);
+			this.error = this.startError(e);
 		} finally {
-			this.sending = false;
+			this.sendingIn.delete(id);
 		}
 	};
 
-	/** A message is on its way to the NAS: a second tap sends nothing
-	 *  (two chats with the same question, or an error for the second). */
-	sending = $state(false);
+	/** Messages on their way to the NAS, by chat ('' a new one): a second
+	 *  tap sends nothing (two chats with the same question, or an error for
+	 *  the second). */
+	sendingIn = new SvelteSet<string>();
 	/**
 	 * Sends a message; false when nothing was sent (the text stays in the
-	 * input then). While one is on its way or a run works, nothing is sent.
+	 * input then). While one is on its way or the chat's run works, nothing
+	 * is sent; another chat may run meanwhile (1.01).
 	 */
 	send = async (text: string): Promise<boolean> => {
-		if (this.sending || this.busy) return false;
-		this.sending = true;
-		this.error = '';
-		const files = this.attachments;
 		// The chat the message belongs to; the person may open another one
 		// while it is sent (a slow upload) – the view then stays there.
 		const from = this.current?.id ?? null;
+		const key = from ?? '';
+		if (this.sendingIn.has(key) || (from && this.runs.get(from)?.busy)) return false;
+		this.sendingIn.add(key);
+		this.error = '';
+		const files = this.attachments;
 		const turn = this.opened;
 		const here = () => (this.current?.id ?? null) === from && turn === this.opened;
 		try {
@@ -539,7 +685,7 @@ export class AgentChats {
 					think: this.think,
 					autonomy: this.autonomy,
 				});
-				if (!this.chats.some((c) => c.id === chat.id)) this.chats = [chat, ...this.chats];
+				this.started(chat);
 				if (here()) {
 					this.current = chat;
 					void this.go(`/agent?chat=${chat.id}`);
@@ -553,7 +699,7 @@ export class AgentChats {
 					think: this.think,
 					autonomy: this.autonomy,
 				});
-				this.chats = [chat, ...this.chats];
+				this.started(chat);
 				if (here()) {
 					this.current = chat;
 					void this.go(`/agent?chat=${chat.id}`);
@@ -563,10 +709,10 @@ export class AgentChats {
 			return true;
 		} catch (e) {
 			this.attachments = files;
-			this.error = apiErrorText(e);
+			this.error = this.startError(e);
 			return false;
 		} finally {
-			this.sending = false;
+			this.sendingIn.delete(key);
 		}
 	};
 
@@ -601,19 +747,25 @@ export class AgentChats {
 	};
 
 	decide = async (p: Pending, approve: boolean) => {
-		if (!this.current || this.deciding) return;
-		this.deciding = true;
-		this.error = '';
+		if (!this.current) return;
 		const id = this.current.id;
+		// The answer belongs to this chat's run: another chat that waits keeps
+		// its step (1.01).
+		const run = this.run(id);
+		if (run.deciding) return;
+		run.deciding = true;
+		this.error = '';
 		try {
 			await api.post(`/agent/chats/${id}/decide`, { id: p.id, approve });
+			this.listState(id, 'running');
+			run.busy = true;
 			// The answer belongs to the chat it was given in, also when
 			// another one was opened while it was on its way.
 			if (this.current?.id !== id) return;
 			this.current.pending = null;
 			this.watch(id);
 		} catch (e) {
-			this.error = apiErrorText(e);
+			this.error = this.startError(e);
 			// Decided on another device meanwhile: show the chat as it is.
 			try {
 				const fresh = await api.get<Chat>(`/agent/chats/${id}`);
@@ -622,7 +774,7 @@ export class AgentChats {
 				// The error above stays.
 			}
 		} finally {
-			this.deciding = false;
+			run.deciding = false;
 		}
 	};
 
@@ -651,6 +803,7 @@ export class AgentChats {
 		try {
 			await api.delete(`/agent/chats/${chat.id}`);
 			if (this.current?.id === chat.id) this.newChat();
+			this.runs.delete(chat.id);
 			await this.loadLists();
 		} catch (e) {
 			this.error = apiErrorText(e);

@@ -494,7 +494,9 @@ func TestAgentEventStream(t *testing.T) {
 	buf := make([]byte, 64<<10)
 	var got strings.Builder
 	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(got.String(), `"text":"Hal"`) {
+	// The piece comes as an event, or in the snapshot when it streamed in
+	// before the page subscribed (1.01).
+	for !strings.Contains(got.String(), `"text":"Hal"`) && !strings.Contains(got.String(), `"content":"Hal"`) {
 		if time.Now().After(deadline) {
 			t.Fatalf("no streamed piece before the end: %s", got.String())
 		}
