@@ -123,8 +123,14 @@
 		loading = false;
 		if (reloadAfter) return load();
 	}
+	// A change made while the last one is saved is saved after it (Durchsicht
+	// 102: it was shown but never saved, the next visit brought the old view).
+	let viewAgain = false;
 	async function saveView() {
-		if (savingView) return;
+		if (savingView) {
+			viewAgain = true;
+			return;
+		}
 		savingView = true;
 		preferenceError = '';
 		const value = sanitizeShareView($state.snapshot(view));
@@ -135,6 +141,10 @@
 			preferenceError = apiErrorText(err);
 		} finally {
 			savingView = false;
+		}
+		if (viewAgain) {
+			viewAgain = false;
+			await saveView();
 		}
 	}
 	function sortBy(column: ShareView['sort']) {

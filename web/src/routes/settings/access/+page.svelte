@@ -76,12 +76,18 @@
 		};
 	}
 
+	// Every change starts a new round: a look asked for before it cannot put
+	// the old state back (Durchsicht 102: the switch showed SSH off again).
+	let sshRound = 0;
 	async function loadSsh() {
+		const round = sshRound;
 		try {
-			ssh = await api.get<Ssh>('/system/ssh');
+			const answer = await api.get<Ssh>('/system/ssh');
+			if (round !== sshRound) return;
+			ssh = answer;
 			sshError = '';
 		} catch (err) {
-			sshError = apiErrorText(err);
+			if (round === sshRound) sshError = apiErrorText(err);
 		}
 	}
 	async function loadCertificate() {
@@ -126,6 +132,7 @@
 		sshPolls = 0;
 		sshStuck = false;
 		try {
+			sshRound++;
 			ssh = await api.put<Ssh>('/system/ssh', { enabled });
 			sshSaved = true;
 		} catch (err) {
@@ -163,6 +170,7 @@
 		netSaved = false;
 		netError = '';
 		try {
+			sshRound++;
 			ssh = await api.put<Ssh>('/system/ssh/networks', {
 				networks: parseNetworks(netText),
 				confirm,
