@@ -8,7 +8,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
-	import { formatBytes, formatTime } from '#lib/format.ts';
+	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
 		configFileName,
@@ -267,7 +267,7 @@
 				icon="monitor"
 				title={peer.name}
 				desc={(peer.lastHandshake
-					? t('wg.lastSeen', { time: formatTime(new Date(peer.lastHandshake)) })
+					? t('wg.lastSeen', { time: formatDateTime(new Date(peer.lastHandshake)) })
 					: t('wg.never')) +
 					(peer.received || peer.sent
 						? ` · ↓ ${formatBytes(peer.sent)} · ↑ ${formatBytes(peer.received)}`

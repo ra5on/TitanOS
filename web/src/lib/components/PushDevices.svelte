@@ -5,7 +5,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { formatTime } from '#lib/format.ts';
+	import { formatDate } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
 	import SettingGroup from './settings/SettingGroup.svelte';
 	import {
@@ -166,7 +166,7 @@
 							>{/if}</span
 					>
 					<span class="muted small"
-						>{t('push.since', { date: formatTime(new Date(device.created)) })}</span
+						>{t('push.since', { date: formatDate(new Date(device.created)) })}</span
 					>
 					<span class="kinds">
 						{#if !personal}<label class="check"
