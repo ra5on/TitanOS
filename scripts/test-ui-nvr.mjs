@@ -1501,6 +1501,34 @@ try {
     await detail.getByRole("button", { name: "Behalten", exact: true }).waitFor();
     assert.ok(state.requests.some(([m, p]) => m === "DELETE" && p === `/nvr/events/${garden.id}/keep`));
     await detail.getByRole("button", { name: "Schließen" }).click();
+    // Durchsicht 102: closing the dialog while "Behalten" is still on its way
+    // keeps it closed (it came back empty: "undefined", "Invalid Date", "NaN").
+    {
+      let release;
+      const held = new Promise((r) => (release = r));
+      const slow = async (route) => {
+        await held;
+        await route.fallback();
+      };
+      await page.route("**/api/v1/nvr/events/*/keep", slow);
+      await page.getByRole("button", { name: /Person · Garten/ }).click();
+      await detail.getByRole("button", { name: "Behalten", exact: true }).click();
+      await detail.getByRole("button", { name: "Schließen" }).click();
+      await detail.waitFor({ state: "detached" });
+      const answered = page.waitForResponse((r) => r.url().endsWith("/keep"));
+      release();
+      await answered;
+      await page.waitForTimeout(300);
+      assert.equal(await page.getByRole("dialog").count(), 0, "the closed event stays closed");
+      assert.equal(await page.getByText(/undefined|NaN|Invalid Date/).count(), 0);
+      await page.unroute("**/api/v1/nvr/events/*/keep", slow);
+      // Back to "not kept" for the steps below.
+      await page.getByRole("button", { name: /Person · Garten/ }).click();
+      await detail.getByRole("button", { name: "Nicht mehr behalten" }).click();
+      await confirmDialog(page, de["nvr.events.unkeepTitle"]).getByRole("button", { name: de["nvr.events.unkeepConfirm"] }).click();
+      await detail.getByRole("button", { name: "Behalten", exact: true }).waitFor();
+      await detail.getByRole("button", { name: "Schließen" }).click();
+    }
     // An event that goes on is kept once it is over.
     await page.getByRole("button", { name: /Person · Haustür/ }).first().click();
     const running = page.getByRole("dialog", { name: "Person · Haustür" });

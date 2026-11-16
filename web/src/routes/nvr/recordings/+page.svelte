@@ -126,8 +126,12 @@
 	let zoom = $state<'24' | '6' | '1'>('24');
 	let playError = $state('');
 	let hls: { destroy: () => void } | null = null;
+	// Counts loads: a load that finishes after a newer one, a stop or leaving
+	// the page lets go of its player instead of taking the video element.
+	let loads = 0;
 
 	function stop() {
+		loads++;
 		hls?.destroy();
 		hls = null;
 		win = null;
@@ -139,10 +143,15 @@
 			video.load();
 		}
 	}
-	$effect(() => () => hls?.destroy());
+	$effect(() => () => {
+		loads++;
+		hls?.destroy();
+		hls = null;
+	});
 
 	async function load(next: { from: number; to: number }, wall: number, play = true) {
 		if (!video) return;
+		const mine = ++loads;
 		hls?.destroy();
 		hls = null;
 		win = next;
@@ -150,14 +159,19 @@
 		const el = video;
 		const src = apiPath(`${base}/vod/${Math.floor(next.from)}/${Math.floor(next.to)}/master.m3u8`);
 		const begin = () => {
+			if (mine !== loads) return;
 			el.currentTime = wallToMedia(segments, next.from, next.to, wall);
 			el.playbackRate = Number(speed);
 			if (play) void el.play().catch(() => {});
 		};
-		const stop = await attachVod(el, src, begin, (unsupported) => {
-			playError = t(unsupported ? 'nvr.rec.unsupported' : 'nvr.rec.playFailed');
+		const detach = await attachVod(el, src, begin, (unsupported) => {
+			if (mine === loads) playError = t(unsupported ? 'nvr.rec.unsupported' : 'nvr.rec.playFailed');
 		});
-		hls = { destroy: stop };
+		if (mine !== loads) {
+			detach();
+			return;
+		}
+		hls = { destroy: detach };
 	}
 	function pick(wall: number) {
 		const limit = Math.min(from + DAY, Math.floor(Date.now() / 1000));
