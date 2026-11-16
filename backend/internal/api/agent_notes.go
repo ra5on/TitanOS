@@ -240,6 +240,21 @@ func (s *Server) moveNote(user auth.User, from, to string) error {
 	if to == from || strings.HasPrefix(to+"/", from+"/") {
 		return errors.New("a folder cannot go into itself")
 	}
+	// Nothing may end up deeper than the list shows (four folders): those
+	// notes would be gone from the page.
+	err = fs.WalkDir(root.FS(), src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		parts := strings.Count(to+strings.TrimPrefix(p, src), "/") + 1
+		if (d.IsDir() && parts > noteMaxDepth) || parts > noteMaxDepth+1 {
+			return errors.New("folders too deep")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	if dir := path.Dir(dst); dir != notesDir {
 		if err := agentMkdirAll(root, user, s.usersGID(), dir); err != nil {
 			return err
