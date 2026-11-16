@@ -5,6 +5,7 @@ import (
 
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -506,6 +507,10 @@ func (m *Manager) Compose(name string) (string, error) {
 	return string(data), nil
 }
 
+// ErrRemoveNeedsEngine: an app is removed only while Docker's engine runs,
+// else its containers would come back unmanaged. It is an ErrNotRunning.
+var ErrRemoveNeedsEngine = fmt.Errorf("%w: start Docker to remove the app; its containers are still in Docker's data", ErrNotRunning)
+
 // RemoveApp stops and removes the containers of an app and forgets its
 // compose file. The app's data folder on the volume stays, unless purge is
 // set: then its folder, its named volumes and, where no other container
@@ -515,6 +520,14 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		return ErrDisabled
 	}
 	settings := m.current()
+	// Docker switched off keeps its containers in its data folder on the
+	// volume; they start again with the engine.
+	engineData := false
+	if settings.Volume != "" {
+		if info, err := os.Lstat(m.dataRoot(settings.Volume)); err == nil && info.IsDir() {
+			engineData = true
+		}
+	}
 	m.mu.Lock()
 	known := slices.Contains(m.knownApps(), name)
 	job := m.jobs[name]
@@ -532,13 +545,16 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		m.mu.Unlock()
 		return errBackupRunning
 	}
-	// With its data: only while the engine runs. Without it (the volume is
-	// locked or not there) nothing could be taken down or deleted, the app
-	// would be reported as removed and come back unmanaged, with all its
-	// data, once the volume is there again.
-	if purge && !running && settings.Enabled {
+	// Only while the engine runs, with or without the app's data: without
+	// it nothing could be taken down, the app would be reported as removed
+	// and its containers would come back unmanaged once the engine runs
+	// again (the volume unlocked, Docker switched on). With Docker switched
+	// off this holds as long as the engine's data are on its volume; where
+	// there are none (never switched on, the volume gone for good) there is
+	// nothing to take down, and the app is only forgotten.
+	if !running && (settings.Enabled || engineData) {
 		m.mu.Unlock()
-		return ErrNotRunning
+		return ErrRemoveNeedsEngine
 	}
 	// The removal is a job of the app like any other: an update, a change
 	// or an automatic update that comes meanwhile is refused as busy

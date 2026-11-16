@@ -24,6 +24,7 @@ var dockerErrors = []struct {
 }{
 	{docker.ErrNotLoaded, http.StatusServiceUnavailable, "config_unavailable"},
 	{docker.ErrUnknownVolume, http.StatusBadRequest, "unknown_volume"},
+	{docker.ErrRemoveNeedsEngine, http.StatusConflict, "docker_remove_needs_engine"},
 	{docker.ErrNotRunning, http.StatusConflict, "docker_not_running"},
 	{docker.ErrComposeTimeout, http.StatusGatewayTimeout, "docker_compose_timeout"},
 	{docker.ErrInvalidName, http.StatusBadRequest, "invalid_app_name"},
