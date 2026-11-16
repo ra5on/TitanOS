@@ -68,6 +68,20 @@ func TestDuplicateScanAndStaleDeletionCheck(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+// One file that cannot be read does not end the search: the others are
+// still compared.
+func TestDuplicateScanSkipsAnUnreadableFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	m, root, _ := newRoot(t)
+	os.WriteFile(filepath.Join(root.Dir, "copy.txt"), []byte("notiz"), 0600)
+	os.WriteFile(filepath.Join(root.Dir, "locked.txt"), []byte("other"), 0)
+	result, e := m.Duplicates(context.Background(), root, "", false)
+	if e != nil || len(result.Groups) != 1 || len(result.Groups[0].Paths) != 2 {
+		t.Fatalf("%+v %v", result, e)
+	}
+}
 func TestPerFileCopyChoicesPreserveNames(t *testing.T) {
 	m, src, dst := twoRoots(t)
 	os.WriteFile(filepath.Join(dst.Dir, "ziel/notiz.txt"), []byte("old"), 0600)
