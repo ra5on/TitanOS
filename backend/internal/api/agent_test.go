@@ -33,6 +33,27 @@ type agentOllama struct {
 	loaded        bool
 	loadedContext int
 	preloads      int
+	// The requests for a chat's title (1.07) are answered apart: they take
+	// no reply of the list and are not in got. title is the answer ("" →
+	// "Zustand der Apps"), titleFail makes them fail.
+	titles    []string
+	title     string
+	titleFail bool
+}
+
+// isTitleRequest: the request of agent_title.go for a chat's title.
+func isTitleRequest(body map[string]any) (string, bool) {
+	msgs, _ := body["messages"].([]any)
+	if len(msgs) != 2 {
+		return "", false
+	}
+	first, _ := msgs[0].(map[string]any)
+	second, _ := msgs[1].(map[string]any)
+	if first["content"] != titlePrompt {
+		return "", false
+	}
+	text, _ := second["content"].(string)
+	return text, true
 }
 
 func (f *agentOllama) start(t *testing.T) string {
@@ -64,6 +85,22 @@ func (f *agentOllama) start(t *testing.T) string {
 				f.preloads++
 				f.mu.Unlock()
 				w.Write([]byte(`{"model":"gpt-oss:20b","message":{"role":"assistant","content":""},"done":true,"done_reason":"load"}`))
+				return
+			}
+			if asked, ok := isTitleRequest(body); ok {
+				f.titles = append(f.titles, asked)
+				title, fail := cmp.Or(f.title, "Zustand der Apps"), f.titleFail
+				f.mu.Unlock()
+				if fail {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				reply, _ := json.Marshal(map[string]string{"role": "assistant", "content": title})
+				if stream, ok := body["stream"].(bool); ok && !stream {
+					w.Write([]byte(`{"message":` + string(reply) + `,"done":true}`))
+					return
+				}
+				w.Write([]byte(`{"message":` + string(reply) + `,"done":false}` + "\n" + `{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
 				return
 			}
 			f.got = append(f.got, body)

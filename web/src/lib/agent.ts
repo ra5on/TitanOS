@@ -51,6 +51,11 @@ export type ChatState = 'idle' | 'running' | 'waiting' | 'interrupted' | 'error'
 export type Chat = {
 	id: string;
 	title: string;
+	/** 1.07: the person named the chat / the model wrote its title; while
+	 *  "titling" the model writes it and the page asks again. */
+	titleOwn?: boolean;
+	titleMade?: boolean;
+	titling?: boolean;
 	project?: string;
 	pinned?: boolean;
 	/** PLAN 72: in the Archiv, not in the list. */
