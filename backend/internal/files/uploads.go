@@ -344,7 +344,7 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	}
 	final := u.name
 	if u.conflict == ConflictReplace {
-		err = r.Rename(u.part, final)
+		err = m.publishOver(r, u, final)
 	} else {
 		err = publishNewFile(r, u.part, final)
 		// "Keep both": the free name was chosen when the upload began. One
@@ -383,6 +383,37 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	status.Name = path.Base(final)
 	return status, nil
 }
+
+// publishOver gives an upload with "Ersetzen" its name (S-43, owner
+// 17.11.2026). The file it replaces goes into the recycle bin of the share,
+// as with a copy; where there is no bin (switched off, USB, the stick) it is
+// overwritten, as with a copy. A folder that took the name meanwhile is
+// never moved away for a file. Saves over WebDAV do not come here: they
+// overwrite, or every save of a program would fill the bin.
+func (m *Manager) publishOver(r *os.Root, u *upload, final string) error {
+	info, err := r.Lstat(final)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return publishNewFile(r, u.part, final)
+	case err != nil:
+		return err
+	case info.IsDir():
+		return ErrExists
+	}
+	bin, ok := u.root.binFor(final)
+	if !ok {
+		return r.Rename(u.part, final)
+	}
+	if _, err := m.recycleIn(r, bin, final, u.user); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	// Whatever took the name after it went to the bin (a save over SMB)
+	// is not replaced unasked; the upload can be finished again.
+	return publishNewFile(r, u.part, final)
+}
+
 func (m *Manager) AbortUpload(id, user string) error {
 	u, err := m.claim(id, user)
 	if err != nil {
