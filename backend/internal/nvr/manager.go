@@ -497,12 +497,14 @@ func (m *Manager) ensureSecret() {
 }
 
 // KeptImages are the image digests the Docker cleanup leaves while the NVR
-// is set up (switched on), also while Frigate's container is gone (volume
-// missing, stopped after crashes). Switched off, they may go (N-102-29).
+// is set up (N-102-29, owner 17.11.2026): a volume is chosen, switched on
+// or off. Switching off removes the container but keeps settings, cameras
+// and recordings; the image stays for switching on again. Only an NVR that
+// was never set up keeps nothing (TitanOS has no way to remove it yet).
 func (m *Manager) KeptImages() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.settings.Enabled {
+	if m.settings.Volume == "" {
 		return nil
 	}
 	return []string{FrigateDigest}

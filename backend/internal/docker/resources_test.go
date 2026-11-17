@@ -452,8 +452,8 @@ func TestSlowDiskUsageDoesNotHoldUp(t *testing.T) {
 
 // N-102-29 (owner 17.11.2026): the images of the NVR (Frigate, pulled by
 // digest only, so untagged) and of the speech services are kept while the
-// feature is set up, also when their containers are gone; once it is
-// switched off, the cleanup may take them.
+// feature is set up, also when their containers are gone; once nothing
+// keeps them any more, the cleanup may take them.
 func TestImagesOfFeaturesInUseAreKept(t *testing.T) {
 	m, e := resourceFixture(t)
 	ctx := context.Background()
@@ -492,15 +492,15 @@ func TestImagesOfFeaturesInUseAreKept(t *testing.T) {
 	if !e.images[imgNone] || !e.images[imgOld] {
 		t.Fatal("the cleanup deleted the image of a feature in use")
 	}
-	// Switched off: the cleanup may take them.
+	// Not set up (any more): the cleanup may take them.
 	keep = nil
 	if _, err := m.PruneImages(ctx, false); err != nil {
 		t.Fatal(err)
 	}
 	if e.images[imgNone] {
-		t.Error("the Frigate image stayed after the NVR was switched off")
+		t.Error("the Frigate image stayed although nothing keeps it")
 	}
 	if _, err := m.RemoveImage(ctx, imgOld); err != nil {
-		t.Errorf("remove after speech was switched off: %v", err)
+		t.Errorf("remove once nothing keeps it: %v", err)
 	}
 }

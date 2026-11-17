@@ -154,7 +154,8 @@ type Manager struct {
 	Ready           func() bool // drivers must be active before Docker autostarts containers
 	// KeepImages names the images features of TitanOS keep while they are
 	// set up (digest → reason, "nvr" or "speech"; N-102-29): the cleanup
-	// leaves them even when no container uses them. Called without locks
+	// leaves them even when no container uses them (switched off, volume
+	// missing). Called without locks
 	// of this manager held.
 	KeepImages      func() map[string]string
 	HardwareDevices func(context.Context) []hardware.ContainerDevice

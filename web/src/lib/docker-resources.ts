@@ -1,6 +1,6 @@
 // PLAN 67-1: Docker images, volumes and the clean-up page (docs/DOCKER-CLEANUP.md).
 // titand decides what may go: images in use or protected (remote view,
-// the agent's sandbox, the NVR and speech while switched on) and volumes of
+// the agent's sandbox, the NVR and speech while set up) and volumes of
 // TitanOS are never offered here, and the volume clean-up takes only unused
 // anonymous volumes by default.
 import { api } from './api.ts';

@@ -10,7 +10,8 @@ import (
 )
 
 // N-102-29: the Docker cleanup learns from the NVR and speech which images
-// they keep while they are switched on, and nothing once they are off.
+// they keep while they are set up (a volume chosen), switched on or off,
+// and nothing while they were never set up.
 func TestKeptImagesFollowTheFeatures(t *testing.T) {
 	store := config.Open(filepath.Join(t.TempDir(), "config"))
 	recorder, voices := nvr.New(store), speech.New(store)
@@ -18,10 +19,11 @@ func TestKeptImagesFollowTheFeatures(t *testing.T) {
 	if got := keep(); len(got) != 0 {
 		t.Fatalf("kept while off: %v", got)
 	}
-	if err := store.WriteJSON("nvr/settings.json", map[string]any{"enabled": true, "volume": "tank"}); err != nil {
+	// Set up and switched off again: the containers are gone, the images stay.
+	if err := store.WriteJSON("nvr/settings.json", map[string]any{"enabled": false, "volume": "tank"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.WriteJSON("system/speech.json", map[string]any{"enabled": true, "volume": "tank", "device": speech.DeviceCPU, "language": "auto", "speed": 1, "reach": "ha"}); err != nil {
+	if err := store.WriteJSON("system/speech.json", map[string]any{"enabled": false, "volume": "tank", "device": speech.DeviceCPU, "language": "auto", "speed": 1, "reach": "ha"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := recorder.Load(); err != nil {

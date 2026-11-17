@@ -186,12 +186,12 @@ func (m *Manager) Settings() Settings {
 }
 
 // KeptImages are the image digests the Docker cleanup leaves while speech
-// is set up (switched on), also while the containers are gone (no model
-// yet, volume missing): Piper and the Whisper build for the chosen device.
-// Switched off, they may go (N-102-29).
+// is set up (N-102-29, owner 17.11.2026): a volume is chosen, switched on
+// or off (switching off removes the containers, models and voices stay).
+// Piper and the Whisper build for the chosen device.
 func (m *Manager) KeptImages() []string {
 	s := m.Settings()
-	if !s.Enabled {
+	if s.Volume == "" {
 		return nil
 	}
 	whisper := WhisperDigest
