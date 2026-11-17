@@ -206,6 +206,7 @@
 	"error.mail_disabled": "T-Mail is not enabled for your account.",
 	"error.mail_auth_failed": "Login at the mail server failed: the user name or password is wrong (some providers need an app password).",
 	"error.mail_unreachable": "No connection to the mail server: not reachable, refused, no secure connection or no answer. Check the server, port and encryption.",
+	"error.mail_unavailable": "T-Mail is not ready on this NAS right now. Try again in a moment.",
 	"error.mail_tls": "No secure connection: the server offers no TLS or its certificate is not valid.",
 	"error.mail_host_forbidden": "This server is not allowed: only mail servers on the internet. Only an administrator may enter servers in the home network; the NAS itself never.",
 	"error.mail_timeout": "The mail server did not answer in time.",

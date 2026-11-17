@@ -206,6 +206,7 @@
 	"error.mail_disabled": "T-Mail ist für dein Konto nicht freigegeben.",
 	"error.mail_auth_failed": "Anmeldung beim Mailserver fehlgeschlagen: Benutzername oder Passwort stimmen nicht (bei manchen Anbietern braucht es ein App-Passwort).",
 	"error.mail_unreachable": "Keine Verbindung zum Mailserver: nicht erreichbar, abgelehnt, keine sichere Verbindung oder keine Antwort. Prüfe Server, Port und Verschlüsselung.",
+	"error.mail_unavailable": "T-Mail ist auf diesem NAS gerade nicht bereit. Versuche es gleich noch einmal.",
 	"error.mail_tls": "Keine sichere Verbindung: Der Server bietet kein TLS an oder sein Zertifikat ist ungültig.",
 	"error.mail_host_forbidden": "Dieser Server ist nicht erlaubt: nur Mailserver im Internet. Server im Heimnetz darf nur ein Administrator eintragen; das NAS selbst nie.",
 	"error.mail_timeout": "Der Mailserver hat nicht rechtzeitig geantwortet.",
