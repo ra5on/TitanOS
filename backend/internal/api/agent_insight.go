@@ -94,6 +94,13 @@ func (b *agentToolbox) insightTools() []*agentTool {
 		if len(hub.All()) > 1 {
 			props["connection"] = b.s.haArea().haConnectionProperty()
 		}
+		cfg := map[string]any{"entity": str("The automation or script, e.g. automation.flur_licht or script.gute_nacht.")}
+		if len(hub.All()) > 1 {
+			cfg["connection"] = b.s.haArea().haConnectionProperty()
+		}
+		tools = append(tools, read("ha_config_read", "home",
+			"The settings of one released automation or script of Home Assistant (triggers, conditions, actions), to read it before changing it with ha_automation_save or ha_script_save.",
+			schema(cfg, "entity"), true, b.haConfigRead))
 		tools = append(tools, read("ha_logbook", "home",
 			"The logbook of Home Assistant for up to 24 hours: which automation ran, which device changed, when – only released entities. For \"was lief heute?\", \"welche Automationen liefen?\".",
 			schema(props), true, b.haLogbook))
@@ -450,6 +457,46 @@ func (b *agentToolbox) haLogbook(ctx context.Context, args json.RawMessage) (any
 		result["note"] = "Nothing in the logbook of released devices in this time."
 	}
 	return result, nil
+}
+
+// haConfigRead reads the configuration of a released automation or script
+// (V15: an automation was changed without reading it first).
+func (b *agentToolbox) haConfigRead(ctx context.Context, args json.RawMessage) (any, error) {
+	ha, rest, err := b.s.haArea().haConnectionArg(args)
+	if err != nil {
+		return nil, err
+	}
+	if !ha.Active() {
+		return nil, homeassistant.ErrOff
+	}
+	var req struct{ Entity string }
+	_ = json.Unmarshal(rest, &req)
+	kind, object, _ := strings.Cut(req.Entity, ".")
+	if (kind != "automation" && kind != "script") || object == "" {
+		return nil, toolcatalog.Errorf("entity must be an automation or a script, e.g. automation.flur_licht")
+	}
+	if !ha.AllowedCtx(ctx, req.Entity) {
+		return nil, homeassistant.ErrNotAllowed
+	}
+	id := object
+	if kind == "automation" {
+		st, err := ha.State(ctx, req.Entity)
+		if err != nil {
+			return nil, err
+		}
+		id = fmt.Sprint(st.Attributes["id"])
+		if st.Attributes["id"] == nil || id == "" {
+			return map[string]any{"entity": req.Entity, "note": "This automation has no id: it is written in YAML, not made in the editor of Home Assistant, and cannot be read or changed from here."}, nil
+		}
+	}
+	config, err := ha.Config(ctx, kind, id)
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return map[string]any{"entity": req.Entity, "note": "Home Assistant has no editable configuration for it (made in YAML or a blueprint)."}, nil
+	}
+	return map[string]any{"entity": req.Entity, "id": id, "config": config}, nil
 }
 
 func (b *agentToolbox) releaseNotes(_ context.Context, args json.RawMessage) (any, error) {

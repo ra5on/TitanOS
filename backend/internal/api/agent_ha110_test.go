@@ -181,3 +181,33 @@ func TestAgentHALogbook(t *testing.T) {
 		t.Fatal("logbook of a hidden entity")
 	}
 }
+
+// 1.10 (V15): the settings of a released automation can be read before
+// changing it; one that is not released cannot.
+func TestAgentHAConfigRead(t *testing.T) {
+	ha := haHouse(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/states/automation.licht_aus" {
+			w.Write([]byte(`{"entity_id":"automation.licht_aus","state":"on","attributes":{"friendly_name":"Licht aus","id":"1"}}`))
+			return
+		}
+		if r.URL.Path == "/api/config/automation/config/1" {
+			w.Write([]byte(`{"id":"1","alias":"Licht aus","triggers":[{"trigger":"time","at":"22:00"}]}`))
+			return
+		}
+		http.NotFound(w, r)
+	})
+	ts := haAgentServer(t, ha)
+	settings := ts.server.agentSettings()
+	settings.HA.Release = homeassistant.Release{Domains: []string{"automation"}}
+	_, text, err := runAgentTool(t, ts, settings, "ha_config_read", map[string]any{"entity": "automation.licht_aus"})
+	if err != nil || !strings.Contains(text, `"at":"22:00"`) {
+		t.Fatalf("config: %s %v", text, err)
+	}
+	settings.HA.Release = homeassistant.Release{Domains: []string{"script"}}
+	if _, _, err := runAgentTool(t, ts, settings, "ha_config_read", map[string]any{"entity": "automation.licht_aus"}); err == nil {
+		t.Fatal("read an automation that is not released")
+	}
+	if _, _, err := runAgentTool(t, ts, settings, "ha_config_read", map[string]any{"entity": "light.flur"}); err == nil {
+		t.Fatal("read a light as a config")
+	}
+}
