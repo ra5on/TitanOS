@@ -719,3 +719,30 @@ func TestMailStalledDownloadLetsGo(t *testing.T) {
 		t.Fatalf("folders: %d", folders.StatusCode)
 	}
 }
+
+// TestMailShowsInTheMenuWithTheGrant: the program T-Mail appears only when
+// /services/state says "mail" – up to 1.07 it never did, so the menu never
+// showed T-Mail even with the grant.
+func TestMailShowsInTheMenuWithTheGrant(t *testing.T) {
+	ts, _, _ := newMailServer(t)
+	state := func() map[string]bool {
+		t.Helper()
+		_, body := ts.request("GET", "/api/v1/services/state", nil)
+		var out map[string]bool
+		if err := json.Unmarshal(body, &out); err != nil {
+			t.Fatalf("state: %v %s", err, body)
+		}
+		return out
+	}
+	if on, ok := state()["mail"]; !ok || on {
+		t.Fatalf("without the grant: mail=%v present=%v", on, ok)
+	}
+	ts.grantMail("alex")
+	if !state()["mail"] {
+		t.Fatal("with the grant: mail is not on")
+	}
+	ts.request("PUT", "/api/v1/users/alex/mail", map[string]bool{"enabled": false})
+	if state()["mail"] {
+		t.Fatal("after taking the grant back: mail is still on")
+	}
+}

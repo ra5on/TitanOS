@@ -52,13 +52,16 @@ type servicesArea struct {
 	storage *storage.Manager
 	state   *servicesState
 	agentOn func(user auth.User) bool
+	// mailOn says whether T-Mail is granted to an account (1.05 opt-in).
+	mailOn func(user auth.User) bool
 }
 
 // servicesArea is the area of the server; the tools of MCP and of the
 // KI-Agent ask it which services are on.
 func (s *Server) servicesArea() servicesArea {
 	return servicesArea{docker: s.opts.Docker, vms: s.opts.VMs, lxc: s.opts.LXC, store: s.opts.Store, storage: s.opts.Storage, state: &s.services,
-		agentOn: func(user auth.User) bool { return s.agentSettings().Enabled && s.agentAllowed(user) }}
+		agentOn: func(user auth.User) bool { return s.agentSettings().Enabled && s.agentAllowed(user) },
+		mailOn:  func(user auth.User) bool { return s.opts.Mail != nil && s.opts.Mail.Allowed(user.Name) }}
 }
 
 func (a servicesArea) register(mux *routeMux, g guards) {
@@ -134,6 +137,9 @@ func (a servicesArea) handleServicesState(w http.ResponseWriter, r *http.Request
 	}
 	// The tab of the KI-Agent: switched on and allowed for this account.
 	out["agent"] = a.agentOn(currentUser(r))
+	// The program T-Mail: shown only to an account with the grant. Without
+	// this the menu never offered T-Mail, whatever the switch said (1.08).
+	out["mail"] = a.mailOn != nil && a.mailOn(currentUser(r))
 	writeJSON(w, http.StatusOK, out)
 }
 
