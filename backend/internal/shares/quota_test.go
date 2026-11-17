@@ -2,7 +2,9 @@ package shares
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -236,4 +238,48 @@ func waitFor(t *testing.T, done func() bool) {
 		}
 	}
 	t.Fatal("timed out")
+}
+
+// pointQuota notes the limits per volume, as the kernel keeps them.
+type pointQuota struct {
+	*fakeQuota
+	set map[string]uint64 // "point/id" -> limit
+}
+
+func (p *pointQuota) SetLimit(point string, id uint32, bytes uint64) error {
+	p.mu.Lock()
+	p.set[fmt.Sprintf("%s/%d", point, id)] = bytes
+	p.mu.Unlock()
+	return p.fakeQuota.SetLimit(point, id, bytes)
+}
+
+// A share moved to another volume takes its limit along: the one on the old
+// volume is lifted, as for a deleted share.
+func TestRelocatedShareLiftsItsLimitOnTheOldVolume(t *testing.T) {
+	m, _ := newTestManager(t)
+	kernel := &pointQuota{fakeQuota: newFakeQuota(), set: map[string]uint64{}}
+	m.quotaKernel = kernel
+	vq := func(volume string) (string, bool, bool) { return m.mountRoot + "/" + volume, true, true }
+	mounted := []string{"data", "fast"}
+	if err := m.Create(Share{Name: "fotos", Volume: "data", Quota: 1 << 30}, volumes, users); err != nil {
+		t.Fatal(err)
+	}
+	fotos := m.List()[0]
+	os.MkdirAll(m.Path(fotos), 0o755)
+	os.MkdirAll(filepath.Join(m.mountRoot, "fast", "fotos"), 0o755)
+	m.ApplyQuotas(vq, mounted)
+	old := fmt.Sprintf("%s/data/%d", m.mountRoot, fotos.QuotaID)
+	if kernel.set[old] != 1<<30 {
+		t.Fatalf("limit not set: %v", kernel.set)
+	}
+	if err := m.Relocate("fotos", "fast", volumes); err != nil {
+		t.Fatal(err)
+	}
+	m.ApplyQuotas(vq, mounted)
+	if kernel.set[old] != 0 {
+		t.Fatalf("the limit stays on the old volume: %v", kernel.set)
+	}
+	if kernel.set[fmt.Sprintf("%s/fast/%d", m.mountRoot, fotos.QuotaID)] != 1<<30 {
+		t.Fatalf("no limit on the new volume: %v", kernel.set)
+	}
 }
