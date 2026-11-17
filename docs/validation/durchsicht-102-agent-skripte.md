@@ -58,7 +58,7 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-20 | `DocsGroup.svelte` | Der Zustand eines Laufs wurde nach dem Schließen bis zu 2 h weiter alle 2 s abgefragt. | niedrig | behoben `6a9cf6fa` (ohne eigenen Test, geprüft mit svelte-check und Browser) |
 | A-21 | `DocsFolderPicker.svelte` | Eine späte Antwort zeigte die Unterordner eines vorigen Ordners unter dem neuen Pfad. | niedrig | behoben `98480637`, `tests/components/docs-folder-picker.test.ts` |
 | A-22 | `DocsGroup.svelte`, `FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite schickt den Stand ohne die erste und überschreibt sie. | niedrig | Backend: `rev` geliefert (siehe A-30); die heutige Seite schickt es schon mit, ein zweites Speichern vor der Antwort des ersten bekommt 409 statt still zu überschreiben. Oberfläche: wt-104c (Meldung/Neuladen) |
-| A-23 | `agent_docs_paper.go` `paperwork_summary` | Das Werkzeug liefert Namen, Pfade und Beträge ohne die Ordnerregeln des Agenten (anders als `documents_search`). | niedrig | Entscheidung: Soll die Papierkram-Übersicht des Agenten die Ordnerregeln beachten, also Dokumente aus Ordnern, die der Agent nicht lesen darf, weder unter „zuletzt abgelegt“ noch in den Summen zeigen? Empfehlung: ja, wie `documents_search`; die Seite „Papierkram“ selbst bleibt unverändert |
+| A-23 | `agent_docs_paper.go` `paperwork_summary` | Das Werkzeug liefert Namen, Pfade und Beträge ohne die Ordnerregeln des Agenten (anders als `documents_search`). | niedrig | **behoben in 1.04 (Entscheidung des Inhabers 17.11.2026):** Das Werkzeug lässt jedes Dokument weg, dessen Ordner der Agent nicht lesen darf (`folderMode` wie `documents_search`), bevor es zählt: nicht in Summe, Vormonat, Arten und Absendern, nicht bei den offenen Zahlungen und nicht unter „zuletzt abgelegt“. Die Seite „Papierkram“ bleibt unverändert. `TestPaperSummaryKeepsToTheFolderRules` |
 | A-24 | `agent_docs_paper.go` | Scheitert ein späterer Anhang einer Mail, werden die früheren beim nächsten Mal als „(2)“ erneut abgelegt. `Hints` haben keine Obergrenze. `docsSearch` liest bei jeder Suche das ganze Verzeichnis (bis 128 MB JSON) in den RAM. | niedrig | behoben in 1.04 (zwei von drei): eine Mail kommt ganz oder gar nicht in den Eingang (Geschriebenes wird nach einem Fehler entfernt), Hinweise zu Dateien, die nicht mehr im Eingang liegen, fallen weg. `TestPaperMailTakenWholeOrNotAtAll`. Bewusst gelassen: `docsSearch` liest das Verzeichnis je Suche. Gemessen (künstlich, je Dokument die Höchstmenge Text): 1000 Dokumente 25 MB, Lesen 36 ms, Suche 0,4 s; 3000 Dokumente 75 MB, 81 ms, 1,1 s. Gesucht wird nur auf Anfrage, nie zyklisch; ein Zwischenspeicher hielte 25–75 MB je Konto dauerhaft im RAM, in dem das ganze System läuft |
 
 ### Vorausschau und Familie
@@ -127,15 +127,14 @@ Dazu zwei Bereiche ohne Fund (A-44 Code-Sandbox, A-45 Cluster-Freigabe).
 
 Die Zählung gibt den Stand von 1.02 wieder. In 1.03 behoben (Entscheidungen des Inhabers vom 16.11.2026, Zweig `feat/v1.03-b`): A-7, A-30, A-33, A-41, A-42, B-8, B-9, B-11; bei A-12 und A-22 ist der Teil im NAS erledigt, die Oberfläche offen.
 
-**Stand 1.04** (Zweig `feat/v1.04-b`): Kein Fund ist mehr nur „notiert“.
+**Stand 1.04** (Zweig `feat/v1.04-b`, A-23 nach der Entscheidung des Inhabers vom 17.11.2026 in `feat/v1.04-d`): Kein Fund ist mehr nur „notiert“, keiner wartet auf eine Entscheidung.
 
 | Ergebnis | Anzahl | Funde |
 |---|---|---|
 | behoben in 1.02 | 32 | siehe Tabelle oben |
 | behoben in 1.03 | 8 | A-7, A-30, A-33, A-41, A-42, B-8, B-9, B-11 |
-| behoben in 1.04 | 7 | A-8, A-9, A-10, A-24 (zwei von drei Teilen), A-35, A-36, A-43 |
+| behoben in 1.04 | 8 | A-8, A-9, A-10, A-23, A-24 (zwei von drei Teilen), A-35, A-36, A-43 |
 | bewusst gelassen | 7 | A-11, A-34, B-10, B-12, B-13, B-14, B-15 (dazu der dritte Teil von A-24) |
-| Entscheidung des Inhabers | 1 | A-23 |
 | im NAS erledigt, Oberfläche bei wt-104c | 3 | A-12, A-22, A-32 (dazu `stepsPreview` aus A-36) |
 | **Summe** | **58** | |
 

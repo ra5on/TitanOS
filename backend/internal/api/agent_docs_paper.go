@@ -946,6 +946,14 @@ func (b *agentToolbox) paperSummary(_ context.Context, _ *agent.Chat, args json.
 	if err != nil {
 		return agent.Outcome{}, err
 	}
+	// A-23 (owner 17.11.2026): like documents_search, the overview keeps
+	// to the folder rules. A document in a folder the agent may not read is
+	// left out before anything is summed: not listed, not in the totals,
+	// not among the senders. The page Papierkram shows the person all of it.
+	lg.Entries = slices.DeleteFunc(slices.Clone(lg.Entries), func(e paperEntry) bool {
+		a, _ := json.Marshal(map[string]string{"root": e.Root, "path": e.Path})
+		return b.folderMode(a, agent.KindRead) == agent.ModeDeny
+	})
 	sum := paperSummary(lg, req.Month, time.Now().In(b.s.agentLocation()))
 	delete(sum, "mailError")
 	if r, ok := sum["recent"].([]paperView); ok && len(r) > 10 {

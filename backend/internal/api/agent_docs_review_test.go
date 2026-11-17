@@ -208,3 +208,60 @@ func TestDeletedAccountLeavesNoDocuments(t *testing.T) {
 		t.Fatal("document memory taken over")
 	}
 }
+
+// A-23 (owner 17.11.2026): the agent's paperwork overview keeps to the
+// folder rules like documents_search. A document in a folder the agent may
+// not read is neither listed nor counted; the page Papierkram shows it.
+func TestPaperSummaryKeepsToTheFolderRules(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	dir := ts.withShare()
+	for _, d := range []string{"Privat", "Post"} {
+		os.MkdirAll(filepath.Join(dir, d), 0o755)
+	}
+	now := time.Now().In(ts.server.agentLocation())
+	day := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	due := now.AddDate(0, 0, 10)
+	entry := func(id, p, kind, sender string, cents int64) paperEntry {
+		return paperEntry{ID: id, At: now, State: "filed", Origin: "inbox", Root: "share/Docs", Path: p,
+			Info: docindex.Info{Type: kind, Sender: sender, Cents: cents, Date: day, Due: due}}
+	}
+	lg, _ := ts.server.paperLoad("alex")
+	lg.Entries = []paperEntry{
+		entry("a", "Post/Strom.pdf", docindex.TypeEnergy, "Stadtwerke", 4200),
+		entry("b", "Privat/Arzt.pdf", docindex.TypeHealth, "Praxis Geheim", 99900),
+		{ID: "c", At: now, State: "ask", Origin: "inbox", Root: "share/Docs", Path: "Privat/Unklar.pdf", Info: docindex.Info{Sender: "Praxis Geheim"}},
+	}
+	if err := ts.server.paperSave("alex", &lg); err != nil {
+		t.Fatal(err)
+	}
+	settings := ts.server.agentSettings()
+	settings.Policy.Folders = []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), settings)
+	out, err := box.paperSummary(context.Background(), &agent.Chat{ID: agent.NewID()}, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hidden := range []string{"Privat", "Praxis Geheim", "Arzt", "Unklar", "99900"} {
+		if strings.Contains(out.Text, hidden) {
+			t.Errorf("the overview shows %q from a locked folder: %s", hidden, out.Text)
+		}
+	}
+	var sum struct {
+		Total  int64             `json:"total"`
+		Count  int               `json:"count"`
+		Open   []paperView       `json:"open"`
+		Recent []paperView       `json:"recent"`
+		Types  []json.RawMessage `json:"types"`
+	}
+	if err := json.Unmarshal([]byte(out.Text), &sum); err != nil {
+		t.Fatal(err)
+	}
+	if sum.Total != 4200 || sum.Count != 1 || len(sum.Open) != 1 || len(sum.Recent) != 1 || len(sum.Types) != 1 {
+		t.Errorf("sums: %+v", sum)
+	}
+	// The page itself stays as it is: it shows the person all of it.
+	res, body := ts.request("GET", "/api/v1/agent/paper", nil)
+	if res.StatusCode == http.StatusOK && !strings.Contains(string(body), "Praxis Geheim") {
+		t.Errorf("the page lost a document: %s", body)
+	}
+}
