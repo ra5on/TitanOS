@@ -106,7 +106,8 @@ func TestOrderedStartLeavesAVMsGPUAlone(t *testing.T) {
 	target, _ := url.Parse(server.URL)
 	m.api.http = &http.Client{Transport: lanTransport{base: http.DefaultTransport, target: target}}
 	m.gpuLeases["vm"] = gpuLease{Devices: []hardware.ContainerDevice{{ID: "card"}}}
-	err := m.StartApp(context.Background(), "photos")
+	held := map[string]HeldPolicy{"gpu1": {Name: "unless-stopped", Running: true}, "web1": {Name: "unless-stopped", Running: true}}
+	err := m.StartApp(context.Background(), "photos", held)
 	if err == nil || !strings.Contains(err.Error(), "reserved by VM") {
 		t.Errorf("start on a leased GPU: %v", err)
 	}

@@ -182,9 +182,12 @@ func (m *Manager) ReadySince() time.Time {
 }
 
 // Policy is a held restart policy of one container (docker.HeldPolicy).
+// Running: the container ran when the NAS went down and is started in the
+// order again (N-102-22). Older titand ignore the field.
 type Policy struct {
 	Name       string `json:"name"`
 	MaxRetries int    `json:"maxRetries,omitempty"`
+	Running    bool   `json:"running,omitempty"`
 }
 
 const heldFile = "system/startup-held.json"
@@ -239,8 +242,10 @@ type Steps struct {
 	// EngineReady: Docker runs (or is off); apps start only then.
 	EngineReady func() bool
 	StartVM     func(ctx context.Context, name string) error
-	StartApp    func(ctx context.Context, name string) error
-	Restore     func(ctx context.Context, held map[string]Policy) error
+	// StartApp starts the containers of an app that ran when the NAS went
+	// down (held with Running); held is the note read at the beginning.
+	StartApp func(ctx context.Context, name string, held map[string]Policy) error
+	Restore  func(ctx context.Context, held map[string]Policy) error
 	// DoneFile marks that the order ran in this boot (in /run, gone after a restart).
 	DoneFile string
 }
@@ -252,9 +257,9 @@ func (m *Manager) Run(ctx context.Context, steps Steps) {
 	defer tick.Stop()
 	// Read once: the note of the held policies is on the stick, and this
 	// loop turns every two seconds until the NAS is ready.
-	held := len(m.Held()) > 0
+	note := m.Held()
 	for {
-		hasApps := held || len(m.Apps()) > 0
+		hasApps := len(note) > 0 || len(m.Apps()) > 0
 		if m.Ready() && (!hasApps || steps.EngineReady == nil || steps.EngineReady()) {
 			break
 		}
@@ -274,7 +279,7 @@ func (m *Manager) Run(ctx context.Context, steps Steps) {
 			case e.Kind == "vm" && steps.StartVM != nil:
 				err = steps.StartVM(ctx, e.Name)
 			case e.Kind == "app" && steps.StartApp != nil:
-				err = steps.StartApp(ctx, e.Name)
+				err = steps.StartApp(ctx, e.Name, note)
 			}
 			if err != nil {
 				slog.Warn("start after boot", "kind", e.Kind, "name", e.Name, "err", err)

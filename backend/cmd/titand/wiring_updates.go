@@ -104,8 +104,10 @@ func (w *titand) wireUpdates() error {
 				return err
 			}
 			w.start.ClearHeld()
+			// Only what ran before the shutdown began (N-102-22); the note
+			// was read above, before it was cleared.
 			for _, app := range w.start.Apps() {
-				if err := w.containers.StartApp(ctx, app); err != nil {
+				if err := w.containers.StartApp(ctx, app, policies); err != nil {
 					slog.Warn("start order: app not started again after a cancelled shutdown", "app", app, "err", err)
 				}
 			}

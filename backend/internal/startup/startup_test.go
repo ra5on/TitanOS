@@ -102,7 +102,7 @@ func TestRunStartsInOrderOnceAndGivesBack(t *testing.T) {
 		{Kind: "app", Name: "photos"},
 		{Kind: "app", Name: "old", Off: true},
 	}})
-	_ = m.Hold(map[string]Policy{"c1": {Name: "unless-stopped"}})
+	_ = m.Hold(map[string]Policy{"c1": {Name: "unless-stopped", Running: true}})
 	var got []string
 	var at []time.Time
 	var restored map[string]Policy
@@ -115,7 +115,10 @@ func TestRunStartsInOrderOnceAndGivesBack(t *testing.T) {
 			at = append(at, time.Now())
 			return nil
 		},
-		StartApp: func(_ context.Context, n string) error {
+		StartApp: func(_ context.Context, n string, held map[string]Policy) error {
+			if !held["c1"].Running {
+				t.Errorf("the app was started without the note of what ran: %+v", held)
+			}
 			got = append(got, "app:"+n)
 			at = append(at, time.Now())
 			return nil
