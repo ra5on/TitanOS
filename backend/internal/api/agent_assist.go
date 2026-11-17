@@ -103,6 +103,8 @@ func (h agentHASettings) assistMode(tool, area, kind, mode string) string {
 			area, kind = assistAreaPlan, agent.KindChange
 		case "schedule_list":
 			area, kind = assistAreaPlan, agent.KindRead
+		case "schedule_delete":
+			area, kind = assistAreaPlan, agent.KindChange
 		default:
 			return mode // asking back, named locations
 		}

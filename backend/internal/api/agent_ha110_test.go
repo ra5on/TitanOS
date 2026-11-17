@@ -143,3 +143,41 @@ func TestAgentHAEntitiesShortForm(t *testing.T) {
 		t.Fatalf("MCP form changed: %s", mcp)
 	}
 }
+
+// 1.10 (V7): the logbook of Home Assistant – only released entities, at
+// most 24 hours, and a hint (no count) when lines were left out.
+func TestAgentHALogbook(t *testing.T) {
+	var asked string
+	ha := haHouse(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/logbook/") {
+			asked = r.URL.Path + "?" + r.URL.RawQuery
+			w.Write([]byte(`[{"when":"2026-11-17T02:00:00+00:00","entity_id":"automation.licht_aus","name":"Licht aus","message":"triggered"},` +
+				`{"when":"2026-11-17T02:05:00+00:00","entity_id":"lock.haustuer","name":"Schloss","state":"unlocked"},` +
+				`{"when":"2026-11-17T02:06:00+00:00","name":"Home Assistant","message":"started"}]`))
+			return
+		}
+		http.NotFound(w, r)
+	})
+	ts := haAgentServer(t, ha)
+	settings := ts.server.agentSettings()
+	settings.HA.Release = homeassistant.Release{Domains: []string{"automation"}}
+	result, text, err := runAgentTool(t, ts, settings, "ha_logbook", map[string]any{"since": "2026-11-17T00:00", "until": "2026-11-17T07:00"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["total"] != float64(1) || result["hidden"] != true || strings.Contains(text, "Schloss") || strings.Contains(text, "started") {
+		t.Fatalf("logbook: %s", text)
+	}
+	if !strings.HasPrefix(asked, "/api/logbook/") || !strings.Contains(asked, "end_time=") {
+		t.Fatalf("asked %q", asked)
+	}
+	// More than 24 hours are cut to the last 24.
+	result, _, err = runAgentTool(t, ts, settings, "ha_logbook", map[string]any{"since": "3d"})
+	if err != nil || result["since"] == nil {
+		t.Fatalf("long window: %v %v", result, err)
+	}
+	// An entity that is not released is refused.
+	if _, _, err := runAgentTool(t, ts, settings, "ha_logbook", map[string]any{"entity": "lock.haustuer"}); err == nil {
+		t.Fatal("logbook of a hidden entity")
+	}
+}
