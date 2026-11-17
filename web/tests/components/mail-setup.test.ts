@@ -14,7 +14,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const SECRET = 'abcd-efgh-ijkl-mnop';
 
-function stub(opts: { known?: boolean; test?: unknown } = {}) {
+function stub(opts: { known?: boolean; test?: unknown; limited?: boolean } = {}) {
 	const calls: { method: string; url: URL; body: string }[] = [];
 	vi.stubGlobal(
 		'fetch',
@@ -24,15 +24,41 @@ function stub(opts: { known?: boolean; test?: unknown } = {}) {
 			if (u.pathname.endsWith('/mail/providers'))
 				return Promise.resolve(
 					opts.known === false
-						? reply(404, { error: { code: 'mail_not_found', message: '' } })
+						? reply(200, {
+								known: false,
+								id: '',
+								name: '',
+								domains: [],
+								imap: { host: '', port: 0, security: '' },
+								smtp: { host: '', port: 0, security: '' },
+								appPassword: false,
+								supported: false,
+								hint: '',
+							})
 						: reply(200, {
+								known: true,
+								id: 'gmail',
+								name: 'Gmail',
+								domains: ['gmail.com'],
 								imap: { host: 'imap.gmail.com', port: 993, security: 'tls' },
 								smtp: { host: 'smtp.gmail.com', port: 465, security: 'tls' },
 								appPassword: true,
+								supported: true,
+								hint: 'app_password_2fa',
 							}),
 				);
 			if (u.pathname.endsWith('/mail/accounts/test'))
-				return Promise.resolve(reply(200, opts.test ?? { imap: { ok: true }, smtp: { ok: true } }));
+				return Promise.resolve(
+					opts.limited
+						? new Response(
+								JSON.stringify({ error: { code: 'mail_rate_limited', message: 'slow down' } }),
+								{
+									status: 429,
+									headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+								},
+							)
+						: reply(200, opts.test ?? { imap: { ok: true }, smtp: { ok: true } }),
+				);
 			if (u.pathname.endsWith('/mail/accounts') && init?.method === 'POST')
 				return Promise.resolve(
 					reply(200, { id: 'n1', ...JSON.parse(String(init.body)), password: undefined }),
@@ -49,20 +75,20 @@ test('address → proposed servers → app password hint → check → save', as
 	render(SetupWizard, { onsaved });
 	await fireEvent.input(screen.getByLabelText('Adresse'), { target: { value: 'max@gmail.com' } });
 	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
-	await screen.findByText(/Die Server für gmail.com sind bekannt/);
+	await screen.findByText(/Gmail ist bekannt/);
 	expect(calls[0].url.searchParams.get('email')).toBe('max@gmail.com');
 	expect(screen.getByText(/imap.gmail.com:993/)).toBeTruthy();
 	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
 
 	await screen.findByText(/verlangt ein App-Passwort/);
-	expect(screen.getByText(/App-Passwörter/)).toBeTruthy();
+	expect(screen.getByText(/Gmail: Mit Anmeldung in zwei Schritten/)).toBeTruthy();
 	const password = screen.getByLabelText('App-Passwort');
 	expect(password.getAttribute('type')).toBe('password');
 	await fireEvent.input(password, { target: { value: SECRET } });
 	await fireEvent.click(screen.getByRole('button', { name: 'Verbindung prüfen' }));
 	const result = await screen.findByRole('list', { name: 'Ergebnis der Prüfung' });
-	expect(result.textContent).toContain('IMAP: Anmeldung klappt');
-	expect(result.textContent).toContain('SMTP: Anmeldung klappt');
+	expect(result.textContent).toContain('Eingang (IMAP): Anmeldung klappt');
+	expect(result.textContent).toContain('Ausgang (SMTP): Anmeldung klappt');
 
 	await fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
 	await waitFor(() => expect(onsaved).toHaveBeenCalled());
@@ -104,6 +130,23 @@ test('an unknown provider opens the server fields; a failed check names the caus
 	await fireEvent.click(screen.getByRole('button', { name: 'Verbindung prüfen' }));
 	const result = await screen.findByRole('list', { name: 'Ergebnis der Prüfung' });
 	expect(result.textContent).toContain('Benutzername oder Passwort stimmen nicht');
-	expect(result.textContent).toContain('nicht erreichbar');
+	expect(result.textContent).toContain('Keine Verbindung zum Mailserver');
 	expect(screen.getByRole('button', { name: 'Trotzdem speichern' })).toBeTruthy();
+});
+
+test('too many checks lock "Verbindung prüfen" with the reason in sight', async () => {
+	stub({ limited: true });
+	render(SetupWizard, { onsaved: () => {} });
+	await fireEvent.input(screen.getByLabelText('Adresse'), { target: { value: 'max@gmail.com' } });
+	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
+	await screen.findByText(/Gmail ist bekannt/);
+	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
+	await fireEvent.input(await screen.findByLabelText('App-Passwort'), { target: { value: 'x' } });
+	await fireEvent.click(screen.getByRole('button', { name: 'Verbindung prüfen' }));
+	await screen.findByText(
+		/Zu viele Verbindungsprüfungen – „Verbindung prüfen“ geht in 60 s wieder/,
+	);
+	expect(
+		(screen.getByRole('button', { name: 'Verbindung prüfen' }) as HTMLButtonElement).disabled,
+	).toBe(true);
 });

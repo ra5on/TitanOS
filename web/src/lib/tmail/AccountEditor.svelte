@@ -7,6 +7,7 @@
 	import { apiErrorText, errorText, t } from '../i18n/index.svelte.ts';
 	import Confirm from '../nvr/Confirm.svelte';
 	import { mailApi } from './api.ts';
+	import { lockedSeconds, lockFrom } from './checklock.svelte.ts';
 	import ServerFields from './ServerFields.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import type { MailAccount, Signature, TestResult } from './types.ts';
@@ -28,6 +29,7 @@
 	// A copy to edit; the account shown elsewhere changes only once saved.
 	const start = (() => $state.snapshot(account))();
 	let name = $state(start.name);
+	let senderName = $state(start.senderName ?? '');
 	let user = $state(start.user);
 	let imap = $state(start.imap);
 	let smtp = $state(start.smtp);
@@ -51,6 +53,7 @@
 		return {
 			name: name.trim() || account.email,
 			email: account.email,
+			senderName: senderName.trim(),
 			user: user.trim(),
 			imap,
 			smtp,
@@ -86,7 +89,7 @@
 			const b = body();
 			result = await mailApi.test(password ? b : { ...b, password: undefined, id: account.id });
 		} catch (err) {
-			error = apiErrorText(err);
+			if (!lockFrom(err)) error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -106,6 +109,17 @@
 		}
 	}
 
+	// A stored password never goes to another host (mail_password_required):
+	// after a new server or user name it is asked for again.
+	const moved = $derived(
+		imap.host.trim() !== start.imap.host ||
+			smtp.host.trim() !== start.smtp.host ||
+			user.trim() !== start.user,
+	);
+	const needsPassword = $derived(moved && !password);
+
+	const locked = $derived(lockedSeconds());
+
 	const resultText = (r: { ok: boolean; code?: string }) =>
 		r.ok ? t('mail.setup.ok') : r.code ? errorText(r.code) : t('mail.setup.failed');
 </script>
@@ -120,6 +134,11 @@
 		<input id="mail-edit-{account.id}-name" class="field" type="text" bind:value={name} />
 	</label>
 	<label
+		><span>{t('mail.setup.senderName')}</span>
+		<input id="mail-edit-{account.id}-sender" class="field" type="text" bind:value={senderName} />
+		<span class="muted small">{t('mail.setup.senderNameHint')}</span>
+	</label>
+	<label
 		><span>{t('mail.settings.password')}</span>
 		<input
 			id="mail-edit-{account.id}-password"
@@ -129,7 +148,12 @@
 			placeholder={account.passwordSet ? t('mail.settings.passwordKeep') : ''}
 			bind:this={passwordField}
 			bind:value={password}
+			required={needsPassword}
+			aria-invalid={needsPassword}
 		/>
+		{#if needsPassword}<span class="need" role="alert"
+				><Icon name="key" size={14} />{t('mail.settings.passwordAgain')}</span
+			>{/if}
 		<span class="muted small">{t('mail.settings.passwordHint')}</span>
 	</label>
 	<ServerFields id="mail-edit-{account.id}" bind:user bind:imap bind:smtp />
@@ -142,7 +166,7 @@
 	</label>
 	{#if result}
 		<ul class="results" aria-label={t('mail.setup.checkResult')}>
-			{#each [['IMAP', result.imap], ['SMTP', result.smtp]] as const as [label, r] (label)}
+			{#each [[t('mail.setup.imapShort'), result.imap], [t('mail.setup.smtpShort'), result.smtp]] as const as [label, r] (label)}
 				<li class:ok={r.ok} class:bad={!r.ok}>
 					<Icon name={r.ok ? 'check' : 'close'} size={16} />
 					<span><strong>{label}:</strong> {resultText(r)}</span>
@@ -152,11 +176,16 @@
 	{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if saved}<p class="notice-ok" role="status">{saved}</p>{/if}
+	{#if locked > 0}<p class="notice-warn" role="status">
+			{t('mail.setup.rateLimited', { seconds: locked })}
+		</p>{/if}
 	<div class="btns">
-		<button type="button" class="btn" disabled={busy} onclick={check}
+		<button type="button" class="btn" disabled={busy || needsPassword || locked > 0} onclick={check}
 			>{t('mail.setup.check')}</button
 		>
-		<button type="submit" class="btn btn-primary" disabled={busy}>{t('common.save')}</button>
+		<button type="submit" class="btn btn-primary" disabled={busy || needsPassword}
+			>{t('common.save')}</button
+		>
 	</div>
 	<DangerZone hint={t('mail.settings.removeHint')}>
 		<button
@@ -203,6 +232,14 @@
 	}
 	.small {
 		font-size: var(--text-sm);
+	}
+	.need {
+		display: flex;
+		gap: var(--space-1);
+		align-items: flex-start;
+		color: var(--warn-text);
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
 	}
 	.field {
 		width: 100%;

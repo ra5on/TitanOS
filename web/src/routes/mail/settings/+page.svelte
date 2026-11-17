@@ -35,9 +35,10 @@
 
 	onMount(async () => {
 		try {
-			settings = await mailApi.settings();
-			settings.signatures ??= [];
-			settings.rules ??= [];
+			const got = await mailApi.settings();
+			got.signatures ??= [];
+			got.rules ??= [];
+			settings = got;
 		} catch (err) {
 			loadError = apiErrorText(err);
 		}
@@ -56,8 +57,19 @@
 		busy = true;
 		saveError = '';
 		try {
-			const next = await mailApi.saveSettings($state.snapshot(settings));
-			if (next) settings = { signatures: next.signatures ?? [], rules: next.rules ?? [] };
+			const body = $state.snapshot(settings);
+			// The default signature of each mailbox is set at the mailbox; the
+			// lists here say the same (PUT /settings sets both, docs/TMAIL.md).
+			for (const sig of body.signatures)
+				sig.default = (mail.accounts ?? []).filter((a) => a.signature === sig.id).map((a) => a.id);
+			const next = await mailApi.saveSettings(body);
+			if (next)
+				settings = {
+					signatures: next.signatures ?? [],
+					rules: next.rules ?? [],
+					pushContent: next.pushContent,
+				};
+			void loadAccounts();
 			changed = false;
 			savedNote = t('mail.settings.saved');
 		} catch (err) {
@@ -68,7 +80,12 @@
 	}
 
 	function addSignature() {
-		settings?.signatures.push({ id: newId(), name: t('mail.signature.newName'), text: '' });
+		settings?.signatures.push({
+			id: newId(),
+			name: t('mail.signature.newName'),
+			text: '',
+			default: [],
+		});
 		touch();
 	}
 	function addRule() {
@@ -113,6 +130,7 @@
 			const next = await mailApi.updateAccount(a.id, {
 				name: a.name,
 				email: a.email,
+				senderName: a.senderName ?? '',
 				user: a.user,
 				imap: a.imap,
 				smtp: a.smtp,
@@ -186,6 +204,30 @@
 		desc={t('mail.settings.notifyDesc')}
 	>
 		{#if notifyError}<p class="notice-error" role="alert">{notifyError}</p>{/if}
+		{#if settings}
+			<SettingRow
+				icon="info"
+				title={t('mail.settings.pushContent')}
+				desc={t('mail.settings.pushContentDesc')}
+				for="mail-push-content"
+			>
+				{#snippet control()}
+					<input
+						id="mail-push-content"
+						type="checkbox"
+						role="switch"
+						class="switch"
+						checked={settings!.pushContent !== false}
+						disabled={busy}
+						onchange={(e) => {
+							// Saved at once, like the switches beside it.
+							settings!.pushContent = e.currentTarget.checked;
+							void save();
+						}}
+					/>
+				{/snippet}
+			</SettingRow>
+		{/if}
 		{#each mail.accounts ?? [] as a (a.id)}
 			<SettingRow icon="bell" title={a.name || a.email} for="mail-notify-{a.id}">
 				{#snippet control()}
@@ -362,7 +404,7 @@
 			{#if saveError}<p class="notice-error" role="alert">{saveError}</p>{/if}
 			{#if savedNote}<p class="notice-ok" role="status">{savedNote}</p>{/if}
 			<button type="button" class="btn btn-primary" disabled={busy || !changed} onclick={save}
-				>{t('mail.settings.saveSignaturesRules')}</button
+				>{t('mail.settings.saveAll')}</button
 			>
 		</div>
 	{/if}

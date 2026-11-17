@@ -11,6 +11,7 @@ import type {
 	MailSettings,
 	Message,
 	MessagePage,
+	NasFile,
 	Provider,
 	SendMeta,
 	TestResult,
@@ -63,16 +64,15 @@ export const mailApi = {
 			})}`,
 			signal,
 		),
-	/** `full`: the text of a message too large to show (open for the backend in docs/TMAIL.md). */
 	message: (
 		id: string,
 		folder: string,
 		uid: number,
-		opts: { images?: boolean; full?: boolean } = {},
+		opts: { images?: boolean } = {},
 		signal?: AbortSignal,
 	) =>
 		api.get<Message>(
-			`${acc(id)}/message${query({ folder, uid, images: opts.images ? 1 : 0, full: opts.full })}`,
+			`${acc(id)}/message${query({ folder, uid, images: opts.images ? 1 : 0 })}`,
 			signal,
 		),
 	/** The address of an attachment for a plain download link. */
@@ -81,9 +81,11 @@ export const mailApi = {
 	/** The API path of an embedded picture (cid:), for apiFetch. */
 	cidPath: (id: string, folder: string, uid: number, cid: string) =>
 		`${acc(id)}/cid${query({ folder, uid, cid })}`,
-	/** Saves an attachment into the NAS's files; `path` is "<root>:<folder>" of the file manager. */
-	savePart: (id: string, body: { folder: string; uid: number; part: string; path: string }) =>
-		api.post<{ path?: string; name?: string }>(`${acc(id)}/part/save`, body),
+	/** Saves an attachment as the file `path` in `root` (GET /files/roots); it must not exist yet. */
+	savePart: (
+		id: string,
+		body: { folder: string; uid: number; part: string; root: string; path: string },
+	) => api.post(`${acc(id)}/part/save`, body),
 	flags: (
 		id: string,
 		body: { folder: string; uids: number[]; add: (keyof Flags)[]; remove: (keyof Flags)[] },
@@ -94,6 +96,8 @@ export const mailApi = {
 		api.post(`${acc(id)}/delete`, body),
 	send: (id: string, form: FormData) => api.post(`${acc(id)}/send`, form),
 	draft: (id: string, form: FormData) => api.post<{ uid: number }>(`${acc(id)}/draft`, form),
+	/** Whether the account may use T-Mail (never 403). */
+	access: (signal?: AbortSignal) => api.get<{ enabled: boolean }>('/mail/access', signal),
 	contacts: (q: string, signal?: AbortSignal) =>
 		api.get<Contact[]>(`/mail/contacts${query({ q })}`, signal),
 	settings: () => api.get<MailSettings>('/mail/settings'),
@@ -101,11 +105,17 @@ export const mailApi = {
 		api.put<MailSettings>('/mail/settings', body as unknown as Record<string, unknown>),
 };
 
-/** The body of /send and /draft: `meta` as JSON, uploaded files as `file`, NAS files as `nasFiles`. */
-export function sendForm(meta: SendMeta, files: File[], nasFiles: string[]): FormData {
+/** The body of /send and /draft: `meta` as JSON, uploaded files as `file`, NAS files as one JSON list `nasFiles`. */
+export function sendForm(meta: SendMeta, files: File[], nasFiles: NasFile[]): FormData {
 	const form = new FormData();
 	form.append('meta', JSON.stringify(meta));
 	for (const file of files) form.append('file', file, file.name);
-	for (const path of nasFiles) form.append('nasFiles', path);
+	if (nasFiles.length) form.append('nasFiles', JSON.stringify(nasFiles));
 	return form;
+}
+
+/** "share/Dokumente:Rechnungen/a.pdf" (the file picker's reference) as {root, path}. */
+export function nasFileOf(ref: string): NasFile {
+	const at = ref.indexOf(':');
+	return at < 0 ? { root: ref, path: '' } : { root: ref.slice(0, at), path: ref.slice(at + 1) };
 }

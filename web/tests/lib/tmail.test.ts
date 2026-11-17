@@ -1,10 +1,10 @@
-// 1.05, T-Mail: the plain parts – the frame's document (CSP first, links
-// with their real target, nothing that could run), dates and addresses,
+// 1.05, T-Mail: the plain parts – the frame's sandbox, the links of a mail
+// with their real target, dates and addresses,
 // the levels in the address, the live stream's blocks and the draft's turn.
 import { afterEach, expect, test, vi } from 'vitest';
 import { appAllowed, SYSTEM_APPS, taskPage } from '#lib/desktop/apps.ts';
 import { createAutosave } from '#lib/tmail/autosave.ts';
-import { cidsIn, MAIL_SANDBOX, mailCsp, prepareHtml } from '#lib/tmail/html.ts';
+import { MAIL_SANDBOX, mailLinks } from '#lib/tmail/html.ts';
 import { levelOf, mailHref, mailUp, placeOf } from '#lib/tmail/levels.ts';
 import { parseBlock, pauseFor } from '#lib/tmail/live.svelte.ts';
 import {
@@ -12,7 +12,6 @@ import {
 	linkify,
 	linkMismatch,
 	listDate,
-	providerHint,
 	quote,
 	replyRecipients,
 	replySubject,
@@ -21,69 +20,27 @@ import {
 
 afterEach(() => vi.useRealTimers());
 
-const warn = (host: string) => `WARN ${host}`;
-
-test('the sandbox and the CSP are those of the contract', () => {
+test('the sandbox is that of the contract', () => {
 	expect(MAIL_SANDBOX).toBe('allow-popups allow-popups-to-escape-sandbox');
 	expect(MAIL_SANDBOX).not.toMatch(/allow-scripts|allow-same-origin/);
-	expect(mailCsp(false)).toBe(
-		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'",
-	);
-	expect(mailCsp(true)).toContain('img-src data: https:');
 });
 
-test('the CSP meta is the first element of the document, before any content of the mail', () => {
-	const { srcdoc } = prepareHtml(
-		'<style>p{color:red}</style><p>Hallo</p><meta http-equiv="refresh" content="0;url=https://x.test">',
-		{ images: false, warnText: warn },
-	);
-	const doc = new DOMParser().parseFromString(srcdoc, 'text/html');
-	const first = doc.head.firstElementChild;
-	expect(first?.tagName).toBe('META');
-	expect(first?.getAttribute('http-equiv')).toBe('Content-Security-Policy');
-	expect(first?.getAttribute('content')).toBe(mailCsp(false));
-	// The mail's own <meta> is gone; its style stays after the CSP.
-	expect(doc.querySelectorAll('meta[http-equiv="refresh"]').length).toBe(0);
-	expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('color:red'));
-	expect(doc.body.textContent).toContain('Hallo');
-});
-
-test('scripts, event attributes and javascript: links never reach the frame', () => {
-	const { srcdoc, links } = prepareHtml(
-		'<script>parent.x=1</script><img src="x" onerror="alert(1)"><a href="javascript:alert(1)">a</a><iframe src="https://x.test"></iframe><form action="https://x.test"><input></form>',
-		{ images: false, warnText: warn },
-	);
-	expect(srcdoc).not.toMatch(/<script|onerror|javascript:|<iframe|<form/i);
-	expect(links).toEqual([]);
-});
-
-test('links open a new tab without referrer and show their real target', () => {
-	const { srcdoc, links } = prepareHtml(
-		'<a href="https://evil.example/login">www.sparkasse.de</a> <a href="https://shop.example/a">Hier</a>',
-		{ images: false, warnText: warn },
-	);
-	const doc = new DOMParser().parseFromString(srcdoc, 'text/html');
-	const [a, b] = [...doc.querySelectorAll('a')];
-	expect(a.getAttribute('title')).toBe('https://evil.example/login');
-	expect(a.getAttribute('target')).toBe('_blank');
-	expect(a.getAttribute('rel')).toBe('noopener noreferrer');
-	// The text names another domain: a visible warning after the link.
-	expect(a.nextElementSibling?.textContent).toBe('WARN evil.example');
-	expect(b.getAttribute('title')).toBe('https://shop.example/a');
-	expect(links.map((l) => l.warn)).toEqual(['evil.example', '']);
-});
-
-test('embedded pictures come in as data: URLs or as a note', () => {
-	const html = '<img src="cid:logo@x"><img src="cid:gone@x" alt="Plan">';
-	expect(cidsIn(html)).toEqual(['logo@x', 'gone@x']);
-	const { srcdoc } = prepareHtml(html, {
-		images: false,
-		cids: new Map([['logo@x', 'data:image/png;base64,AAAA']]),
-		warnText: warn,
-	});
-	expect(srcdoc).toContain('src="data:image/png;base64,AAAA"');
-	expect(srcdoc).not.toContain('cid:');
-	expect(srcdoc).toContain('Plan');
+test('links are read from an inert copy, with their real target and lying texts marked', () => {
+	const html =
+		'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body>' +
+		'<a href="https://evil.example/login" title="https://bank.example">www.sparkasse.de</a> ' +
+		'<a href="https://shop.example/a">Hier</a> <a href="mailto:a@b.example">Schreiben</a> ' +
+		'<a href="javascript:alert(1)">x</a><img src="x" onerror="globalThis.ranInTest=1">' +
+		'</body></html>';
+	const links = mailLinks(html);
+	expect(links.map((l) => [l.href, l.warn])).toEqual([
+		['https://evil.example/login', 'evil.example'],
+		['https://shop.example/a', ''],
+		['mailto:a@b.example', ''],
+	]);
+	// The author's title does not count: the target is the href.
+	expect(links[0].host).toBe('evil.example');
+	expect((globalThis as Record<string, unknown>).ranInTest).toBeUndefined();
 });
 
 test('link mismatch only when the text names another domain', () => {
@@ -127,8 +84,6 @@ test('dates, subjects, quotes and recipients', () => {
 		{ text: 'https://x.example/a', href: 'https://x.example/a' },
 		{ text: '. Danke' },
 	]);
-	expect(providerHint('max@gmail.com')).toBe('gmail');
-	expect(providerHint('max@example.org')).toBe('');
 });
 
 test('levels in the address and the way up', () => {

@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
-import { installMail, mailState } from "./test-ui-mail-fixtures.mjs";
+import { bankHtml, installMail, mailState } from "./test-ui-mail-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -154,20 +154,11 @@ try {
       "allow-popups allow-popups-to-escape-sandbox",
       "sandbox exact",
     );
+    // titand's document goes in unchanged (its own CSP meta first). It
+    // carries a script and an onerror handler here: the frame must run neither.
     const srcdoc = await iframe.getAttribute("srcdoc");
-    assert.ok(
-      srcdoc.startsWith(
-        '<!doctype html><html><head><meta http-equiv="Content-Security-Policy"',
-      ),
-      "CSP first",
-    );
-    assert.match(srcdoc, /img-src data:;/);
-    assert.doesNotMatch(srcdoc, /<script/i, "no script in the frame");
-    assert.match(
-      srcdoc,
-      /title="https:\/\/evil\.example\.test\/login"/,
-      "link shows its target",
-    );
+    assert.equal(srcdoc, bankHtml(false), "document unchanged in srcdoc");
+    assert.match(srcdoc, /<script>/, "the fixture's script is in the frame");
     assert.match(
       srcdoc,
       /data:image\/png;base64/,
@@ -201,12 +192,12 @@ try {
       "picture after Bilder laden",
     );
     assert.ok(
-      state.sentinel.every((u) => !u.includes("/sentinel/script")),
+      state.sentinel.every((u) => u.includes("track.example.test")),
       "still no script",
     );
-    assert.match(
+    assert.equal(
       await mail.locator("iframe.frame").getAttribute("srcdoc"),
-      /img-src data: https:/,
+      bankHtml(true),
     );
     assert.ok(
       sent(state, "GET", /\/message\?.*images=1/).length,
@@ -228,7 +219,8 @@ try {
       folder: "INBOX",
       uid: 1000,
       part: "2",
-      path: "share/Documents:",
+      root: "share/Documents",
+      path: "Kontoauszug_November_2026_Girokonto_DE12345678901234567890.pdf",
     });
     await mail.getByText(/ist gespeichert in Documents/).waitFor();
 
@@ -290,13 +282,12 @@ try {
     assert.deepEqual(meta.to, ["Sparkasse Beispiel <service@bank.example>"]);
     assert.equal(meta.subject, "Re: Ihr Kontoauszug November");
     assert.equal(meta.inReplyTo, "<1000@fixture.example>");
-    assert.deepEqual(meta.source, {
-      folder: "INBOX",
-      uid: 1000,
-      mode: "reply",
-    });
+    assert.equal(meta.references, "<1000@fixture.example>");
+    assert.equal(meta.attachFrom, undefined, "a reply carries no attachments");
     assert.equal(meta.signature, "s1");
-    assert.deepEqual(state.sent[0].nas, ["share/Documents:Angebot Küche.pdf"]);
+    assert.deepEqual(state.sent[0].nas, [
+      { root: "share/Documents", path: "Angebot Küche.pdf" },
+    ]);
     await until(
       async () => (await page.locator("section.win").count()) === 1,
       "compose window closed after sending",
@@ -441,7 +432,7 @@ try {
       1,
     );
     await page
-      .getByText(/Der Mailserver ist nicht erreichbar/)
+      .getByText(/Keine Verbindung zum Mailserver/)
       .first()
       .waitFor();
     await sound(page, "error states");
@@ -498,9 +489,20 @@ try {
       change: (s) => (s.testFails["kaputt@gmail.example"] = "auth"),
     });
     await page.goto(base + "/mail/setup");
+    // A provider that takes no password any more: said plainly, no way on.
+    await page.locator("#mail-setup-email").fill("max@outlook.example");
+    await page.getByRole("button", { name: "Weiter" }).click();
+    await page
+      .getByText(/Outlook \(Test\) nimmt kein Passwort mehr an/)
+      .waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "Weiter" }).isDisabled(),
+      true,
+    );
+    await page.getByRole("button", { name: "Zurück" }).click();
     await page.locator("#mail-setup-email").fill("kaputt@gmail.example");
     await page.getByRole("button", { name: "Weiter" }).click();
-    await page.getByText(/Die Server für gmail.example sind bekannt/).waitFor();
+    await page.getByText(/Gmail \(Test\) ist bekannt/).waitFor();
     await page.getByRole("button", { name: "Weiter" }).click();
     await page.getByText(/verlangt ein App-Passwort/).waitFor();
     await page.locator("#mail-setup-password").fill("falsch");
@@ -516,7 +518,7 @@ try {
     await page.getByRole("button", { name: "Weiter" }).click();
     await page.locator("#mail-setup-password").fill(SECRET);
     await page.getByRole("button", { name: "Verbindung prüfen" }).click();
-    await page.getByText("IMAP: Anmeldung klappt").waitFor();
+    await page.getByText("Eingang (IMAP): Anmeldung klappt").waitFor();
     await shot(page, "09-einrichten-1440");
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.waitForURL(/\/mail\?a=acc-2&f=INBOX/);
@@ -587,12 +589,18 @@ try {
     await sound(page, "phone message");
     await big("phone message");
     await shot(page, "12-handy-nachricht-390");
-    // The bar's arrow goes one level up, then up again.
-    await page
-      .locator("header.phone-bar")
-      .getByRole("button", { name: "Eine Ebene zurück" })
-      .click();
+    // A swipe from the left edge goes one level up (PhoneGestures) …
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type, points) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: points.map(([x, y], id) => ({ x, y, id })),
+      });
+    await touch("touchStart", [[6, 420]]);
+    for (let i = 1; i <= 10; i++) await touch("touchMove", [[6 + 22 * i, 422]]);
+    await touch("touchEnd", []);
     await page.waitForURL(/\/mail\?a=acc-privat&f=INBOX$/);
+    // … and the bar's arrow, from the list to the mailboxes.
     await page
       .locator("header.phone-bar")
       .getByRole("button", { name: "Eine Ebene zurück" })
@@ -603,7 +611,7 @@ try {
       .locator(".col-folders .folder", { hasText: "Posteingang" })
       .first()
       .click();
-    await page.locator(".row").nth(2).click();
+    await page.locator(".row").nth(1).click();
     await page.getByRole("button", { name: "Weiterleiten" }).click();
     await page.waitForURL(/\/mail\/compose\?/);
     await page.locator("#mail-subject").waitFor();
@@ -614,8 +622,13 @@ try {
     await page.locator("#mail-to").fill("ben@example.net,");
     await page.getByRole("button", { name: /Senden/ }).click();
     await until(() => state.sent.length === 1, "sent from the phone");
-    assert.equal(state.sent[0].meta.source.mode, "forward");
-    await page.waitForURL(/\/mail\?a=acc-privat&f=INBOX&m=998$/);
+    // Forwarding takes the attachment of the mail along (attachFrom).
+    assert.deepEqual(state.sent[0].meta.attachFrom, {
+      folder: "INBOX",
+      uid: 999,
+      parts: ["2"],
+    });
+    await page.waitForURL(/\/mail\?a=acc-privat&f=INBOX&m=999$/);
     // The setup on the phone.
     await page.goto(base + "/mail/setup");
     await page.locator("#mail-setup-email").fill("neu@unbekannt.example");
@@ -628,6 +641,54 @@ try {
     await page.getByRole("heading", { name: "Signaturen" }).waitFor();
     await sound(page, "phone settings");
     await shot(page, "15-handy-einstellungen-390");
+  }
+
+  // ---- Narrow windows (420 and 800 px, the page alone as in a window) ----
+  for (const width of [420, 800]) {
+    const { page } = await open({ width, desk: false });
+    await page.goto(base + "/mail");
+    await page.locator(".mail.levels .col-folders").waitFor();
+    await sound(page, `window ${width} folders`);
+    await page
+      .locator(".col-folders .folder", { hasText: "Posteingang" })
+      .first()
+      .click();
+    await page.locator(".row").first().waitFor();
+    await sound(page, `window ${width} list`);
+    await page.locator(".row").nth(1).click();
+    await page.locator("#mail-message-subject").waitFor();
+    await sound(page, `window ${width} message`);
+    await shot(page, `17-fenster-nachricht-${width}`);
+    // A narrow window has its own back button (no phone bar there).
+    await page.getByRole("button", { name: "Zurück zu Posteingang" }).click();
+    await page.waitForURL(/\/mail\?a=acc-privat&f=INBOX$/);
+    await page.getByRole("button", { name: "Postfächer", exact: true }).click();
+    await page.waitForURL(/\/mail$/);
+  }
+
+  // ---- The release per account under Benutzer › Konto › Apps ----
+  {
+    const made = await create("owner", "hell", 1440, "de");
+    const state = mailState();
+    await installMail(made.ctx, state);
+    const { page } = made;
+    await page.goto(base + "/users");
+    await page.locator('[data-account="sam"]').first().click();
+    const sw = page.getByRole("checkbox", {
+      name: /T-Mail \(E-Mail-Programm\)/,
+    });
+    await sw.waitFor();
+    assert.equal(await sw.isChecked(), false, "off from the start");
+    await page
+      .getByText(/Ab Werk aus, auch für Besitzer und Administratoren/)
+      .waitFor();
+    await sw.check();
+    await until(() => state.released.sam === true, "released for sam");
+    assert.ok(
+      state.requests.some(([m, p]) => m === "PUT" && p === "/users/sam/mail"),
+    );
+    await sound(page, "users mail switch");
+    await shot(page, "16-benutzer-freigabe-1440");
   }
 
   // ---- Without the app release: no program ----

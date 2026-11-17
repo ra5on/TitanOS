@@ -17,7 +17,7 @@
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import Confirm from '#lib/nvr/Confirm.svelte';
 	import AddressField from '#lib/tmail/AddressField.svelte';
-	import { mailApi, sendForm } from '#lib/tmail/api.ts';
+	import { mailApi, nasFileOf, sendForm } from '#lib/tmail/api.ts';
 	import { createAutosave } from '#lib/tmail/autosave.ts';
 	import { closeCompose } from '#lib/tmail/open.ts';
 	import { folderOf, loadFolders, mail } from '#lib/tmail/store.svelte.ts';
@@ -58,9 +58,12 @@
 	let signatures = $state<Signature[]>([]);
 	let files = $state<File[]>([]);
 	let nasFiles = $state<string[]>([]);
-	let forwarded = $state<Attachment[]>([]);
+	// Attachments of an existing mail taken along (forwarding, a draft opened again).
+	let carried = $state<{ folder: string; uid: number; parts: Attachment[]; draft: boolean } | null>(
+		null,
+	);
 	let inReplyTo = '';
-	let references: string[] = [];
+	let references = '';
 	let draftUid = $state(0);
 
 	let loading = $state(!!mode && !!sourceUid);
@@ -100,11 +103,11 @@
 			signature,
 			draftUid,
 		};
-		if (sourceUid && (mode === 'reply' || mode === 'replyAll' || mode === 'forward'))
-			m.source = {
-				folder: sourceFolder,
-				uid: sourceUid,
-				mode: mode === 'forward' ? 'forward' : 'reply',
+		if (carried?.parts.length)
+			m.attachFrom = {
+				folder: carried.folder,
+				uid: carried.uid,
+				parts: carried.parts.map((a) => a.part),
 			};
 		return m;
 	}
@@ -114,8 +117,16 @@
 		const at = edits;
 		draftError = '';
 		try {
-			const res = await mailApi.draft(accountId, sendForm(meta(), files, nasFiles));
-			if (res && typeof res.uid === 'number') draftUid = res.uid;
+			const res = await mailApi.draft(accountId, sendForm(meta(), files, nasFiles.map(nasFileOf)));
+			if (res && typeof res.uid === 'number' && res.uid > 0) {
+				const was = draftUid;
+				draftUid = res.uid;
+				// The draft that carried attachments is replaced: they are in the new one now.
+				if (carried?.draft && carried.uid === was && carried.parts.length) {
+					const fresh = await mailApi.message(accountId, carried.folder, res.uid);
+					carried = { ...carried, uid: res.uid, parts: fresh.attachments.filter((a) => !a.inline) };
+				}
+			}
 			savedEdits = at;
 			draftNote = t('mail.compose.draftSaved', {
 				time: new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(
@@ -152,7 +163,7 @@
 			showCopies = cc.length > 0;
 			subject = replySubject(msg.subject);
 			inReplyTo = msg.messageId;
-			references = [...(msg.references ?? []), msg.messageId].filter(Boolean);
+			references = `${msg.references ?? ''} ${msg.messageId}`.trim();
 			const head = t('mail.compose.wrote', {
 				date: fullDate(msg.date, i18n.locale),
 				name: senderName(msg.from),
@@ -160,7 +171,12 @@
 			text = `\n\n${head}\n${quote(msg.text)}\n`;
 		} else if (mode === 'forward') {
 			subject = forwardSubject(msg.subject);
-			forwarded = msg.attachments.filter((a) => !a.inline);
+			carried = {
+				folder: sourceFolder,
+				uid: sourceUid,
+				parts: msg.attachments.filter((a) => !a.inline),
+				draft: false,
+			};
 			const lines = [
 				t('mail.compose.forwardHead'),
 				`${t('mail.head.from')} ${addressText(msg.from)}`,
@@ -173,12 +189,19 @@
 		} else if (mode === 'draft') {
 			to = msg.to.map(addressText);
 			cc = msg.cc.map(addressText);
-			showCopies = cc.length > 0;
+			bcc = (msg.bcc ?? []).map(addressText);
+			showCopies = cc.length > 0 || bcc.length > 0;
 			subject = msg.subject;
 			text = msg.text;
 			draftUid = msg.uid;
 			inReplyTo = msg.inReplyTo;
-			references = msg.references ?? [];
+			references = msg.references ?? '';
+			carried = {
+				folder: sourceFolder,
+				uid: msg.uid,
+				parts: msg.attachments.filter((a) => !a.inline),
+				draft: true,
+			};
 		}
 	}
 
@@ -230,6 +253,10 @@
 		nasFiles = [...new Set([...nasFiles, ...refs])];
 		touch();
 	}
+	function removeCarried(a: Attachment) {
+		if (carried) carried = { ...carried, parts: carried.parts.filter((p) => p !== a) };
+		touch();
+	}
 	function removeNas(ref: string) {
 		nasFiles = nasFiles.filter((r) => r !== ref);
 		touch();
@@ -257,7 +284,7 @@
 		if (sendError) return;
 		sending = true;
 		try {
-			await mailApi.send(accountId, sendForm(meta(), files, nasFiles));
+			await mailApi.send(accountId, sendForm(meta(), files, nasFiles.map(nasFileOf)));
 			done = true;
 			autosave.stop();
 			savedEdits = edits;
@@ -425,10 +452,20 @@
 						>
 					</li>
 				{/each}
-				{#each forwarded as a (a.part)}
+				{#each carried?.parts ?? [] as a (a.part)}
 					<li>
-						<Icon name="forward" size={16} /><span class="fname">{a.name}</span><span class="muted"
-							>{formatBytes(a.size)} · {t('mail.compose.forwarded')}</span
+						<Icon name={carried?.draft ? 'clip' : 'forward'} size={16} /><span class="fname"
+							>{a.name || t('mail.attachment.noName')}</span
+						><span class="muted"
+							>{formatBytes(a.size)} · {carried?.draft
+								? t('mail.compose.fromDraft')
+								: t('mail.compose.forwarded')}</span
+						>
+						<button
+							type="button"
+							class="btn x"
+							aria-label={t('mail.compose.removeFile', { name: a.name })}
+							onclick={() => removeCarried(a)}><Icon name="close" size={14} /></button
 						>
 					</li>
 				{/each}

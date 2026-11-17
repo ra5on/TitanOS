@@ -55,14 +55,14 @@
 			if (append) {
 				const have = new Set(rows.map((r) => r.uid));
 				rows = [...rows, ...page.messages.filter((m) => !have.has(m.uid))];
-				next = page.next ?? null;
+				next = page.next || null;
 			} else {
 				// Read again: new mail on top; older rows loaded further down stay,
 				// and with them the place of the next page.
 				const oldest = page.messages.at(-1)?.uid ?? 0;
-				const older = quiet && page.next !== null ? rows.filter((r) => r.uid < oldest) : [];
+				const older = quiet && page.next ? rows.filter((r) => r.uid < oldest) : [];
 				rows = [...page.messages, ...older];
-				if (!older.length) next = page.next ?? null;
+				if (!older.length) next = page.next || null;
 			}
 			total = page.total;
 			loaded = true;

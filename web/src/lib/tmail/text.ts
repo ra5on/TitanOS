@@ -171,22 +171,6 @@ export function linkMismatch(href: string, visible: string): string {
 	return real;
 }
 
-const HINTS: [RegExp, string][] = [
-	[/^(gmail|googlemail)\.com$/, 'gmail'],
-	[/^(icloud|me|mac)\.com$/, 'icloud'],
-	[/^gmx\.(de|net|at|ch)$/, 'gmx'],
-	[/^web\.de$/, 'webde'],
-	[/^t-online\.de$/, 'tonline'],
-	[/^(ionos|1und1|online)\.de$/, 'ionos'],
-	[/^(outlook|hotmail|live|msn)\.[a-z.]+$/, 'microsoft'],
-];
-
-/** The provider whose own steps the setup explains (its hint text); '' for others. */
-export function providerHint(email: string): string {
-	const domain = email.trim().toLowerCase().split('@')[1] ?? '';
-	return HINTS.find(([re]) => re.test(domain))?.[1] ?? '';
-}
-
 /** The domain of an address, for servers guessed when no provider is known. */
 export function domainOf(email: string): string {
 	return email.trim().toLowerCase().split('@')[1] ?? '';

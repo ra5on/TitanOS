@@ -24,7 +24,8 @@
 	});
 </script>
 
-{#if showOk || status.state !== 'ok'}
+<!-- "off" is no fault: no lasting connection (notices and rules off); lists still work. -->
+{#if showOk || (status.state !== 'ok' && status.state !== 'off')}
 	<span class="state {look.tone}" data-state={status.state}>
 		<Icon name={look.icon} size={14} />
 		<span

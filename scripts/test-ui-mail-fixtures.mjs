@@ -60,18 +60,31 @@ function row(uid, i, over = {}) {
   };
 }
 
-/** The HTML of the bank-like message: a script, a tracking picture, a link whose text lies. */
+/**
+ * The bank-like message as titand sends it: a whole document with its own
+ * CSP meta (docs/TMAIL.md, "Festlegungen des Backends › Lesen"), the logo as
+ * a data: URL, a link whose text lies. It also carries a script and an
+ * event handler, which titand would remove: here they show that the frame
+ * itself (sandbox, CSP) runs nothing.
+ */
 export const HTML_SCRIPT =
   "<script>fetch('/sentinel/script');parent.postMessage('script-ran','*')</script>";
-function bankHtml(images) {
+const LOGO = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}`;
+const HELD_BACK =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjZGRkIi8+PC9zdmc+";
+export function bankHtml(images) {
+  const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data:${images ? " https:" : ""}; font-src 'none'; form-action 'none'; base-uri 'none'`;
   return (
+    `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"></head><body>` +
     "<h1>Ihr Kontoauszug</h1><p>Guten Tag, Ihr Auszug für November liegt bei.</p>" +
     HTML_SCRIPT +
-    '<p><a href="https://evil.example.test/login">www.sparkasse.example</a> · <a href="https://docs.example.test/hilfe">Hilfe</a></p>' +
-    '<p><img src="cid:logo@bank" alt="Logo"></p>' +
+    `<img src="x" onerror="fetch('/sentinel/onerror')">` +
+    '<p><a href="https://evil.example.test/login" target="_blank" rel="noopener noreferrer">www.sparkasse.example</a> · <a href="https://docs.example.test/hilfe" target="_blank" rel="noopener noreferrer">Hilfe</a></p>' +
+    `<p><img src="${LOGO}" alt="Logo"></p>` +
     (images
-      ? '<p><img src="https://track.example.test/pixel.gif" alt="Werbung"></p>'
-      : '<p><span title="Bild blockiert">[Bild blockiert]</span></p>')
+      ? '<p><img src="https://track.example.test/pixel.gif" referrerpolicy="no-referrer" alt="Werbung"></p>'
+      : `<p><img src="${HELD_BACK}" alt="Werbung"></p>`) +
+    "</body></html>"
   );
 }
 
@@ -169,15 +182,38 @@ export function mailState() {
     },
     providers: {
       "gmail.example": {
+        known: true,
+        id: "gmail",
+        name: "Gmail (Test)",
+        domains: ["gmail.example"],
         imap: { host: "imap.gmail.example", port: 993, security: "tls" },
         smtp: { host: "smtp.gmail.example", port: 465, security: "tls" },
         appPassword: true,
+        supported: true,
+        hint: "app_password_2fa",
+      },
+      "outlook.example": {
+        known: true,
+        id: "outlook",
+        name: "Outlook (Test)",
+        domains: ["outlook.example"],
+        imap: { host: "outlook.office365.example", port: 993, security: "tls" },
+        smtp: {
+          host: "smtp.office365.example",
+          port: 587,
+          security: "starttls",
+        },
+        appPassword: false,
+        supported: false,
+        hint: "oauth_only",
       },
     },
     /** Test answers per address: "auth" or "unreachable" fail that side. */
     testFails: {},
     /** Events the next /events stream sends (then ends; the page connects again). */
     events: [],
+    /** Release of T-Mail per account name (GET/PUT /users/{name}/mail). */
+    released: { alex: true, kim: false },
     sent: [],
     drafts: [],
     saved: [],
@@ -198,9 +234,9 @@ function multipart(body) {
   const files = [...text.matchAll(/name="file"; filename="([^"]*)"/g)].map(
     (m) => m[1],
   );
-  const nas = [
-    ...text.matchAll(/name="nasFiles"\r\n\r\n([\s\S]*?)\r\n--/g),
-  ].map((m) => m[1]);
+  // nasFiles: one JSON list of {root, path}.
+  const list = /name="nasFiles"\r\n\r\n([\s\S]*?)\r\n--/.exec(text);
+  const nas = list ? JSON.parse(list[1]) : [];
   return { meta: meta ? JSON.parse(meta[1]) : null, files, nas };
 }
 
@@ -230,18 +266,16 @@ export async function installMail(target, state = mailState()) {
       body: Buffer.from(PNG, "base64"),
     });
   });
-  // The app release of the account: T-Mail shown.
-  await target.route(/\/api\/v1\/services\/state$/, (route) =>
-    route.fulfill({
-      json: {
-        docker: true,
-        vms: true,
-        lxc: true,
-        agent: false,
-        mail: s.disabled ? false : true,
-      },
-    }),
-  );
+  // The release per account (Benutzer › Konto › Apps): GET/PUT /users/{name}/mail.
+  await target.route(/\/api\/v1\/users\/[^/]+\/mail$/, (route) => {
+    const name = decodeURIComponent(
+      new URL(route.request().url()).pathname.split("/")[4],
+    );
+    if (route.request().method() === "PUT")
+      s.released[name] = route.request().postDataJSON().enabled === true;
+    s.requests.push([route.request().method(), `/users/${name}/mail`, null]);
+    return route.fulfill({ json: { enabled: s.released[name] === true } });
+  });
   await target.route(/\/api\/v1\/files\/list/, (route) => {
     const url = new URL(route.request().url());
     const dir = url.searchParams.get("path") ?? "";
@@ -344,10 +378,24 @@ export async function installMail(target, state = mailState()) {
         return json(a);
       }
     }
+    if (path === "/mail/access") return json({ enabled: !s.disabled });
+    if (s.disabled) return fail(403, "mail_disabled");
     if (path === "/mail/providers") {
       const domain = (q("email") ?? "").split("@")[1] ?? "";
-      const p = s.providers[domain];
-      return p ? json(p) : fail(404, "mail_not_found");
+      const empty = { host: "", port: 0, security: "" };
+      return json(
+        s.providers[domain] ?? {
+          known: false,
+          id: "",
+          name: "",
+          domains: [],
+          imap: empty,
+          smtp: empty,
+          appPassword: false,
+          supported: false,
+          hint: "",
+        },
+      );
     }
     if (path === "/mail/contacts") {
       const needle = (q("q") ?? "").toLowerCase();
@@ -368,16 +416,16 @@ export async function installMail(target, state = mailState()) {
     const a = s.accounts.find((x) => x.id === id);
     if (!a) return fail(404, "mail_not_found");
     if (a.status.state === "auth_failed" && what !== "folders")
-      return fail(502, "mail_auth_failed");
+      return fail(409, "mail_auth_failed");
     if (a.status.state === "unreachable" && what !== "folders")
-      return fail(504, "mail_unreachable");
+      return fail(502, "mail_unreachable");
     const box = s.messages[id];
 
     if (what === "folders") {
       if (a.status.state === "auth_failed")
-        return fail(502, "mail_auth_failed");
+        return fail(409, "mail_auth_failed");
       if (a.status.state === "unreachable")
-        return fail(504, "mail_unreachable");
+        return fail(502, "mail_unreachable");
       return json(s.folders[id]);
     }
     if (what === "messages") {
@@ -398,7 +446,7 @@ export async function installMail(target, state = mailState()) {
       const page = list.slice(0, limit);
       return json({
         messages: page,
-        next: list.length > limit ? page.at(-1).uid : null,
+        next: list.length > limit ? page.at(-1).uid : 0,
         total,
       });
     }
@@ -424,7 +472,7 @@ export async function installMail(target, state = mailState()) {
         date: r.date,
         messageId: `<${r.uid}@fixture.example>`,
         inReplyTo: "",
-        references: [],
+        references: "",
         flags: r.flags,
         text: bank
           ? "Guten Tag, Ihr Auszug für November liegt bei."
@@ -477,7 +525,7 @@ export async function installMail(target, state = mailState()) {
       });
     if (what === "part/save") {
       s.saved.push(body);
-      return json({ path: `${body.path}/Kontoauszug.pdf` });
+      return json({ name: body.path.split("/").pop(), path: body.path });
     }
     if (what === "flags") {
       for (const r of box[body.folder] ?? [])

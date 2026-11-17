@@ -15,6 +15,14 @@ afterEach(() => {
 	mail.folders = {};
 });
 
+// A document as titand sends it: its own CSP meta first, pictures held back.
+const doc = (images: boolean) =>
+	'<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:' +
+	(images ? ' https:' : '') +
+	"; font-src 'none'; form-action 'none'; base-uri 'none'\"><meta name=\"referrer\" content=\"no-referrer\"></head><body><p>Hallo</p>" +
+	(images ? '<img src="https://track.example/p.gif">' : '<img src="data:image/svg+xml,x">') +
+	'<a href="https://evil.example/x" target="_blank" rel="noopener noreferrer">www.bank.example</a></body></html>';
+
 const message = (over: Record<string, unknown> = {}) => ({
 	uid: 7,
 	folder: 'INBOX',
@@ -30,10 +38,10 @@ const message = (over: Record<string, unknown> = {}) => ({
 	date: '2026-11-16T09:00:00Z',
 	messageId: '<m7@bank.example>',
 	inReplyTo: '',
-	references: [],
+	references: '',
 	flags: { seen: false, flagged: false, answered: false },
 	text: '',
-	html: '<p>Hallo</p><script>parent.hacked=1</script><img src="https://track.example/p.gif"><a href="https://evil.example/x">www.bank.example</a>',
+	html: doc(false),
 	externalImages: true,
 	attachments: [
 		{
@@ -56,7 +64,10 @@ function stub(msg = message()) {
 		vi.fn((url: string, init?: RequestInit) => {
 			const u = new URL(url, 'http://nas.test');
 			calls.push({ method: init?.method ?? 'GET', url: u, body: init?.body });
-			if (u.pathname.endsWith('/message')) return Promise.resolve(reply(200, msg));
+			if (u.pathname.endsWith('/message'))
+				return Promise.resolve(
+					reply(200, { ...msg, html: msg.html && doc(u.searchParams.get('images') === '1') }),
+				);
 			return Promise.resolve(reply(204));
 		}),
 	);
@@ -72,22 +83,13 @@ const props = {
 	onremoved: () => {},
 };
 
-test('the HTML runs in a frame without scripts or same origin, the CSP first', async () => {
+test("titand's document goes into the frame unchanged, without scripts or same origin", async () => {
 	stub();
 	const { container } = render(MessageView, props);
 	await screen.findByRole('heading', { name: 'Ihr Konto' });
 	const frame = container.querySelector('iframe')!;
 	expect(frame.getAttribute('sandbox')).toBe('allow-popups allow-popups-to-escape-sandbox');
-	const srcdoc = frame.getAttribute('srcdoc')!;
-	expect(
-		srcdoc.startsWith('<!doctype html><html><head><meta http-equiv="Content-Security-Policy"'),
-	).toBe(true);
-	expect(srcdoc).toContain('img-src data:;');
-	expect(srcdoc).not.toContain('https:;');
-	expect(srcdoc).not.toMatch(/<script/i);
-	// The link shows where it really goes.
-	expect(srcdoc).toContain('title="https://evil.example/x"');
-	expect((globalThis as Record<string, unknown>).hacked).toBeUndefined();
+	expect(frame.getAttribute('srcdoc')).toBe(doc(false));
 });
 
 test('external pictures are blocked until "Bilder laden"', async () => {
@@ -98,9 +100,7 @@ test('external pictures are blocked until "Bilder laden"', async () => {
 	await fireEvent.click(screen.getByRole('button', { name: 'Bilder laden' }));
 	await waitFor(() => expect(calls.at(-1)?.url.searchParams.get('images')).toBe('1'));
 	await waitFor(() =>
-		expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain(
-			'img-src data: https:',
-		),
+		expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toBe(doc(true)),
 	);
 	expect(screen.queryByText(/Externe Bilder blockiert/)).toBeNull();
 });

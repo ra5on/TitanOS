@@ -14,6 +14,8 @@ export type MailAccount = {
 	id: string;
 	name: string;
 	email: string;
+	/** The name in "From" ('' = the address alone); `name` only labels the mailbox in T-Mail. */
+	senderName: string;
 	user: string;
 	imap: Server;
 	smtp: Server;
@@ -56,6 +58,7 @@ export type MessageRow = {
 	attachments: boolean;
 };
 
+/** `next`: the uid for `before` of the next page, 0 (or null) at the end. */
 export type MessagePage = { messages: MessageRow[]; next: number | null; total: number };
 
 export type Attachment = {
@@ -73,12 +76,15 @@ export type Message = {
 	from: Address;
 	to: Address[];
 	cc: Address[];
+	/** Only known for one's own mail (drafts). */
+	bcc?: Address[];
 	replyTo: Address[];
 	subject: string;
 	date: string;
 	messageId: string;
 	inReplyTo: string;
-	references: string[];
+	/** Message-IDs separated by spaces. */
+	references: string;
 	flags: Flags;
 	text: string;
 	html: string;
@@ -92,16 +98,26 @@ export type TestResult = {
 	smtp: { ok: boolean; code?: string };
 };
 
+/** GET /mail/providers?email= (flat; `known: false` with empty fields). */
 export type Provider = {
+	known: boolean;
+	id: string;
+	name: string;
+	domains: string[];
 	imap: Server;
 	smtp: Server;
 	/** The provider wants an app password (Gmail, iCloud …). */
 	appPassword: boolean;
+	/** false: the provider takes no password any more (only OAuth, not in this version). */
+	supported: boolean;
+	/** Key of the hint text: imap_enable, app_password, app_password_2fa, mail_password, oauth_only. */
+	hint: string;
 };
 
 export type Contact = { name: string; addr: string; count: number; last: string };
 
-export type Signature = { id: string; name: string; text: string };
+/** `default`: the mailboxes that propose this signature (the same as accounts[].signature). */
+export type Signature = { id: string; name: string; text: string; default?: string[] };
 
 export type Rule = {
 	id: string;
@@ -111,7 +127,8 @@ export type Rule = {
 	then: { moveTo: string; markRead: boolean; flag: boolean };
 };
 
-export type MailSettings = { signatures: Signature[]; rules: Rule[] };
+/** `pushContent`: push messages name sender and subject (from the start on). */
+export type MailSettings = { signatures: Signature[]; rules: Rule[]; pushContent?: boolean };
 
 /** The `meta` part of POST /send and POST /draft. */
 export type SendMeta = {
@@ -121,15 +138,15 @@ export type SendMeta = {
 	subject: string;
 	text: string;
 	inReplyTo: string;
-	references: string[];
+	references: string;
 	signature: string;
 	draftUid: number;
-	/**
-	 * The message answered or passed on (open for the backend in docs/TMAIL.md):
-	 * a reply marks it "answered", a forward takes its attachments along.
-	 */
-	source?: { folder: string; uid: number; mode: 'reply' | 'forward' };
+	/** Parts of an existing mail taken along (forwarding, a draft opened again). */
+	attachFrom?: { folder: string; uid: number; parts: string[] };
 };
+
+/** A file of the NAS for nasFiles (roots of GET /files/roots). */
+export type NasFile = { root: string; path: string };
 
 /** How a new e-mail starts from an open one. */
 export type ComposeMode = 'reply' | 'replyAll' | 'forward';

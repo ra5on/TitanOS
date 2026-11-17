@@ -65,3 +65,11 @@ export function folderName(f: Pick<MailFolder, 'name' | 'role'>): string {
 export function findFolder(id: string, path: string): MailFolder | undefined {
 	return mail.folders[id]?.find((f) => f.path === path);
 }
+
+/** Forgets everything (another account logged in). */
+export function resetMail() {
+	mail.accounts = null;
+	mail.error = '';
+	mail.folders = {};
+	mail.folderErrors = {};
+}

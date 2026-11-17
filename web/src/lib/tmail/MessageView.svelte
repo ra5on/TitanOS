@@ -38,7 +38,6 @@
 	let msg = $state<Message | null>(null);
 	let error = $state('');
 	let images = $state(false);
-	let full = $state(false);
 	let showAll = $state(false);
 	let links = $state<MailLink[]>([]);
 	let busy = $state(false);
@@ -53,12 +52,15 @@
 		const n = ++asked;
 		error = '';
 		try {
-			const got = await mailApi.message(accountId, folder, uid, { images, full });
+			const got = await mailApi.message(accountId, folder, uid, { images });
 			if (n !== asked) return;
 			msg = got;
-			// Opening marks it read (titand does it with the request).
-			if (!got.flags.seen) got.flags.seen = true;
-			onflags([uid], { seen: true });
+			// Opening marks it read (titand does it with the request); only a
+			// change is passed on (it reads the folders again).
+			if (!got.flags.seen) {
+				got.flags.seen = true;
+				onflags([uid], { seen: true });
+			}
 		} catch (err) {
 			if (n === asked) error = apiErrorText(err);
 		}
@@ -72,7 +74,6 @@
 		untrack(() => {
 			msg = null;
 			images = false;
-			full = false;
 			showAll = false;
 			links = [];
 			actionError = '';
@@ -83,10 +84,6 @@
 
 	function loadImages() {
 		images = true;
-		void load();
-	}
-	function loadFull() {
-		full = true;
 		void load();
 	}
 
@@ -152,12 +149,14 @@
 		saving = null;
 		if (!part) return;
 		const where = place(target);
+		const name = (part.name || 'attachment').replace(/[/\\]/g, '_');
 		const ok = await act(() =>
 			mailApi.savePart(accountId, {
 				folder,
 				uid,
 				part: part.part,
-				path: `${target.root}:${target.path}`,
+				root: target.root,
+				path: target.path ? `${target.path}/${name}` : name,
 			}),
 		);
 		if (ok) notice = t('mail.attachment.saved', { name: part.name, place: where });
@@ -200,6 +199,10 @@
 					{#if msg.cc.length}
 						<dt>{t('mail.head.cc')}</dt>
 						<dd>{msg.cc.map(addressText).join(', ')}</dd>
+					{/if}
+					{#if msg.bcc?.length}
+						<dt>{t('mail.head.bcc')}</dt>
+						<dd>{msg.bcc.map(addressText).join(', ')}</dd>
 					{/if}
 					{#if msg.replyTo.length}
 						<dt>{t('mail.head.replyTo')}</dt>
@@ -259,11 +262,8 @@
 			</div>
 		{/if}
 
-		{#if msg.truncated && !full}
-			<div class="images" role="note">
-				<span>{t('mail.truncated')}</span>
-				<button type="button" class="btn" onclick={loadFull}>{t('mail.truncatedLoad')}</button>
-			</div>
+		{#if msg.truncated}
+			<p class="notice-warn" role="note">{t('mail.truncated')}</p>
 		{/if}
 
 		{#if files.length}
@@ -296,10 +296,6 @@
 			{#if msg.html}
 				<MailFrame
 					html={msg.html}
-					{accountId}
-					{folder}
-					{uid}
-					{images}
 					title={t('mail.frameTitle', { subject: msg.subject || t('mail.noSubject') })}
 					onlinks={(l) => (links = l)}
 				/>

@@ -8,8 +8,9 @@
 	import Icon from '../components/Icon.svelte';
 	import { apiErrorText, errorText, t, tOr } from '../i18n/index.svelte.ts';
 	import { mailApi } from './api.ts';
+	import { lockedSeconds, lockFrom } from './checklock.svelte.ts';
 	import ServerFields from './ServerFields.svelte';
-	import { domainOf, providerHint, validAddress } from './text.ts';
+	import { domainOf, validAddress } from './text.ts';
 	import type { MailAccount, Server, TestResult } from './types.ts';
 
 	let { onsaved }: { onsaved: (account: MailAccount) => void } = $props();
@@ -18,6 +19,10 @@
 	let step = $state<Step>('address');
 	let email = $state('');
 	let name = $state('');
+	let senderName = $state('');
+	let providerName = $state('');
+	let supported = $state(true);
+	let hint = $state('');
 	let user = $state('');
 	let imap = $state<Server>({ host: '', port: 993, security: 'tls' });
 	let smtp = $state<Server>({ host: '', port: 465, security: 'tls' });
@@ -29,7 +34,6 @@
 	let error = $state('');
 	let result = $state<TestResult | null>(null);
 
-	const hint = $derived(providerHint(email));
 	const passed = $derived(!!result?.imap.ok && !!result?.smtp.ok);
 	const steps: Step[] = ['address', 'servers', 'password'];
 	const number = $derived(steps.indexOf(step) + 1);
@@ -45,9 +49,13 @@
 		user = user || email.trim();
 		try {
 			const p = await mailApi.provider(email.trim());
+			if (!p?.known) throw new Error('unknown');
 			imap = { ...p.imap };
 			smtp = { ...p.smtp };
 			appPassword = !!p.appPassword;
+			supported = p.supported !== false;
+			hint = p.hint ?? '';
+			providerName = p.name || domainOf(email);
 			known = true;
 			editServers = false;
 		} catch {
@@ -56,6 +64,9 @@
 			imap = { host: `imap.${domain}`, port: 993, security: 'tls' };
 			smtp = { host: `smtp.${domain}`, port: 465, security: 'tls' };
 			appPassword = false;
+			supported = true;
+			hint = '';
+			providerName = '';
 			known = false;
 			editServers = true;
 		} finally {
@@ -72,6 +83,7 @@
 		return {
 			name: name.trim() || email.trim(),
 			email: email.trim(),
+			senderName: senderName.trim(),
 			user: user.trim() || email.trim(),
 			imap,
 			smtp,
@@ -88,7 +100,7 @@
 		try {
 			result = await mailApi.test(body());
 		} catch (err) {
-			error = apiErrorText(err);
+			if (!lockFrom(err)) error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -110,6 +122,8 @@
 
 	const secText = (s: Server['security']) =>
 		s === 'starttls' ? t('mail.setup.starttls') : t('mail.setup.tls');
+	const locked = $derived(lockedSeconds());
+
 	const resultText = (r: { ok: boolean; code?: string }) =>
 		r.ok ? t('mail.setup.ok') : r.code ? errorText(r.code) : t('mail.setup.failed');
 </script>
@@ -141,6 +155,11 @@
 				<input id="mail-setup-name" class="field" type="text" bind:value={name} />
 				<span class="muted small">{t('mail.setup.nameHint')}</span>
 			</label>
+			<label
+				><span>{t('mail.setup.senderName')}</span>
+				<input id="mail-setup-sender" class="field" type="text" bind:value={senderName} />
+				<span class="muted small">{t('mail.setup.senderNameHint')}</span>
+			</label>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="nav">
 				<button type="submit" class="btn btn-primary" disabled={busy || !email.trim()}
@@ -157,8 +176,12 @@
 			}}
 		>
 			<h2>{t('mail.setup.serversTitle')}</h2>
-			{#if known}
-				<p class="notice-ok">{t('mail.setup.known', { domain: domainOf(email) })}</p>
+			{#if known && !supported}
+				<p class="notice-error" role="alert">
+					{t('mail.setup.unsupported', { name: providerName })}
+				</p>
+			{:else if known}
+				<p class="notice-ok">{t('mail.setup.known', { name: providerName })}</p>
 			{:else}
 				<p class="notice-warn">{t('mail.setup.unknown', { domain: domainOf(email) })}</p>
 			{/if}
@@ -184,7 +207,7 @@
 				<button
 					type="submit"
 					class="btn btn-primary"
-					disabled={!imap.host || !smtp.host || !imap.port || !smtp.port}
+					disabled={!supported || !imap.host || !smtp.host || !imap.port || !smtp.port}
 					>{t('mail.setup.next')}</button
 				>
 			</div>
@@ -204,7 +227,7 @@
 				</p>
 			{/if}
 			{#if hint}
-				<p class="muted hint">{tOr(`mail.hint.${hint}`, '')}</p>
+				<p class="muted hint">{tOr(`mail.hint.${hint}`, '').replace('{name}', providerName)}</p>
 			{/if}
 			<label
 				><span>{appPassword ? t('mail.setup.appPasswordLabel') : t('mail.setup.password')}</span>
@@ -220,7 +243,7 @@
 			</label>
 			{#if result}
 				<ul class="results" aria-label={t('mail.setup.checkResult')}>
-					{#each [['IMAP', result.imap], ['SMTP', result.smtp]] as const as [label, r] (label)}
+					{#each [[t('mail.setup.imapShort'), result.imap], [t('mail.setup.smtpShort'), result.smtp]] as const as [label, r] (label)}
 						<li class:ok={r.ok} class:bad={!r.ok}>
 							<Icon name={r.ok ? 'check' : 'close'} size={16} />
 							<span><strong>{label}:</strong> {resultText(r)}</span>
@@ -237,7 +260,7 @@
 					type={passed ? 'button' : 'submit'}
 					class="btn"
 					class:btn-primary={!passed}
-					disabled={busy || !password}>{t('mail.setup.check')}</button
+					disabled={busy || !password || locked > 0}>{t('mail.setup.check')}</button
 				>
 				{#if result}
 					<button
@@ -250,6 +273,9 @@
 				{/if}
 			</div>
 			{#if busy}<p class="muted" role="status">{t('mail.setup.working')}</p>{/if}
+			{#if locked > 0}<p class="notice-warn" role="status">
+					{t('mail.setup.rateLimited', { seconds: locked })}
+				</p>{/if}
 		</form>
 	{/if}
 </div>

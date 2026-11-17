@@ -12,8 +12,7 @@
 	import type { UserCameras } from '#lib/nvr/types.ts';
 
 	type UserApp = { app: string; icon: string; allowed: boolean };
-	/** `mail`: the release of T-Mail (1.05, docs/TMAIL.md), absent on a NAS without it. */
-	type UserApps = { admin: boolean; newApps: boolean; apps: UserApp[]; mail?: boolean };
+	type UserApps = { admin: boolean; newApps: boolean; apps: UserApp[] };
 
 	type Props = {
 		account: Account;
@@ -73,11 +72,7 @@
 			},
 		);
 	});
-	async function saveApps(body: {
-		newApps?: boolean;
-		apps?: Record<string, boolean>;
-		mail?: boolean;
-	}) {
+	async function saveApps(body: { newApps?: boolean; apps?: Record<string, boolean> }) {
 		// The answer belongs to this account: another one may be shown by then
 		// (Durchsicht 102, its rights showed under the other name).
 		const name = account.name;
@@ -92,14 +87,46 @@
 			appsBusy = false;
 		}
 	}
+	// ---- T-Mail (1.05, docs/TMAIL.md): its own release, off for every role ----
+	// null: not known (a NAS without T-Mail answers 404; then no switch).
+	let mailOn = $state<boolean | null>(null);
+	let mailBusy = $state(false);
+	let mailError = $state('');
+	$effect(() => {
+		const name = account.name;
+		mailOn = null;
+		mailError = '';
+		api.get<{ enabled: boolean }>(`/users/${encodeURIComponent(name)}/mail`).then(
+			(res) => {
+				if (name === account.name) mailOn = res?.enabled === true;
+			},
+			() => {
+				// No switch without an answer (older NAS, no right to see it).
+			},
+		);
+	});
+	async function saveMail(enabled: boolean) {
+		const name = account.name;
+		mailBusy = true;
+		mailError = '';
+		try {
+			const res = await api.put<{ enabled: boolean }>(`/users/${encodeURIComponent(name)}/mail`, {
+				enabled,
+			});
+			if (name === account.name) mailOn = res?.enabled === true;
+		} catch (err) {
+			if (name === account.name) mailError = apiErrorText(err);
+		} finally {
+			mailBusy = false;
+		}
+	}
+
 	const allowedCount = $derived(apps ? apps.apps.filter((a) => a.allowed).length : 0);
 	const appsSummary = $derived(
 		!apps
 			? ''
 			: [
-					...(typeof apps.mail === 'boolean'
-						? [apps.mail ? t('users.apps.mailOn') : t('users.apps.mailOff')]
-						: []),
+					...(mailOn === null ? [] : [mailOn ? t('users.apps.mailOn') : t('users.apps.mailOff')]),
 					...(apps.admin
 						? [t('users.apps.adminAll')]
 						: [
@@ -277,15 +304,15 @@
 
 	<Expander icon="grid" title={t('users.apps.title')} summary={appsSummary} bind:open={appsOpen}>
 		{#if appsError}<p class="notice-error part" role="alert">{appsError}</p>{/if}
-		{#if apps && typeof apps.mail === 'boolean'}
+		{#if mailOn !== null}
 			<!-- 1.05: T-Mail is off for every role until released here, admins included. -->
 			<div class="apps mail-app">
 				<label class="app">
 					<input
 						type="checkbox"
-						checked={apps.mail}
-						disabled={appsBusy}
-						onchange={(event) => saveApps({ mail: event.currentTarget.checked })}
+						checked={mailOn}
+						disabled={mailBusy}
+						onchange={(event) => saveMail(event.currentTarget.checked)}
 					/>
 					<span class="app-icon glyph" aria-hidden="true"
 						><DesktopIcon glyph="mail" gradient="blue" size={22} /></span
@@ -294,6 +321,7 @@
 				</label>
 			</div>
 			<p class="muted part mail-hint">{t('users.apps.mailHint')}</p>
+			{#if mailError}<p class="notice-error part" role="alert">{mailError}</p>{/if}
 		{/if}
 		{#if !apps}
 			<p class="muted part" role="status">{t('common.loading')}</p>

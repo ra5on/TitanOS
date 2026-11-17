@@ -70,6 +70,8 @@ export async function responseError(res: Response): Promise<ApiError> {
 	} catch {
 		// Not a JSON error body, e.g. an answer from a proxy.
 	}
+	// Seconds from the Retry-After header when the body names none (T-Mail's checks, 1.05).
+	if (!retryAfter) retryAfter = Number(res.headers.get('Retry-After')) || 0;
 	// Another node of the cluster that does not know the route runs an
 	// older version: say so instead of "not found".
 	if (
