@@ -430,6 +430,7 @@
 	"error.wrong_password": "The current password is wrong.",
 	"error.rate_limited": "Too many failed attempts. Wait a moment.",
 	"error.invalid_share_name": "Use letters, digits, blanks, -, _ and ., at most 32 characters; no blank or dot at the start or end.",
+	"error.share_guard_locked": "The ransomware guard of the AI agent has locked this share. Write access comes back once it is reopened in the guard.",
 	"error.share_exists": "A share with this name already exists.",
 	"error.share_not_found": "This share does not exist (any more).",
 	"error.unknown_volume": "This volume does not exist.",

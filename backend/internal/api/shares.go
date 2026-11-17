@@ -69,12 +69,15 @@ type sharesArea struct {
 	backup  *backup.Manager
 	notify  *notify.Manager
 	record  recordFunc
+	// guardHeld refuses a save that would lift the lock of the KI-Agent's
+	// ransomware guard; on success the caller saves, then calls release.
+	guardHeld func(name string, share shares.Share) (release func(), err error)
 }
 
 // sharesArea is the area of the server.
 func (s *Server) sharesArea() sharesArea {
 	return sharesArea{shares: s.opts.Shares, storage: s.opts.Storage, users: s.opts.Users, vms: s.opts.VMs, docker: s.opts.Docker,
-		backup: s.opts.Backup, notify: s.opts.Notify, record: s.recordActivity}
+		backup: s.opts.Backup, notify: s.opts.Notify, record: s.recordActivity, guardHeld: s.guardShareHeld}
 }
 
 func (a sharesArea) register(mux *routeMux, g guards) {
@@ -146,6 +149,14 @@ func (a sharesArea) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
+	if a.guardHeld != nil {
+		release, err := a.guardHeld(name, share)
+		if err != nil {
+			writeError(w, http.StatusConflict, "share_guard_locked", err.Error())
+			return
+		}
+		defer release()
+	}
 	if err := a.shares.Update(name, share, a.storage.Names(), a.userNames()); err != nil {
 		writeShareError(w, err)
 		return

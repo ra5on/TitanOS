@@ -207,3 +207,40 @@ func TestEmergencyWaitingTimeFollowsTheSetting(t *testing.T) {
 		t.Fatalf("not granted after the shorter time: %+v", got)
 	}
 }
+
+// A-9 (1.04): a share form opened before the guard locked the share does
+// not lift the lock when it is saved. A save that keeps the share
+// read-only goes through, and after reopening the old form saves again.
+func TestGuardLockSurvivesAnOldShareForm(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	before, _ := ts.server.shareByName("Documents")
+	env.features(t, map[string]any{"guard": map[string]any{"enabled": true}})
+	ts.server.agentProtectTick(env.clock())
+	env.attack(t, 40, true)
+	a := env.waitAlert(t)
+	if !a.Locked {
+		t.Fatalf("not locked: %+v", a)
+	}
+	if res, body := ts.request("PUT", "/api/v1/shares/Documents", before); res.StatusCode != http.StatusConflict || !strings.Contains(string(body), "share_guard_locked") {
+		t.Fatalf("old form saved: %d %s", res.StatusCode, body)
+	}
+	for user, acc := range env.access("Documents") {
+		if acc != shares.ReadOnly {
+			t.Fatalf("%s may write again: %v", user, env.access("Documents"))
+		}
+	}
+	now, _ := ts.server.shareByName("Documents")
+	now.Browseable = !now.Browseable
+	if res, body := ts.request("PUT", "/api/v1/shares/Documents", now); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("read-only save refused: %d %s", res.StatusCode, body)
+	}
+	env.set(env.clock().Add(5 * time.Minute))
+	ts.server.agentProtectTick(env.clock())
+	if res, body := ts.request("POST", "/api/v1/agent/protect/guard/"+a.ID+"/reopen", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("reopen: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/shares/Documents", before); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("old form after reopening: %d %s", res.StatusCode, body)
+	}
+}

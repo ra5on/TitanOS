@@ -288,9 +288,12 @@ type protectState struct {
 	overflows    int
 	alerts       []guardAlert
 	loaded       bool
-	lastPre      map[string]time.Time // volume → last pre-snapshot
-	sessions     map[int]protect.Client
-	sessionsAt   time.Time
+	// locking counts shares the guard locked whose alert is not among
+	// alerts yet (accessMu).
+	locking    map[string]int
+	lastPre    map[string]time.Time // volume → last pre-snapshot
+	sessions   map[int]protect.Client
+	sessionsAt time.Time
 
 	// emergency
 	emergency *protect.Emergency
@@ -318,7 +321,7 @@ func (s *Server) protect() *protectState {
 	if v, ok := protectStates.Load(s); ok {
 		return v.(*protectState)
 	}
-	ps := &protectState{runner: run.Exec{}, source: protect.Fanotify{}, now: time.Now, lastPre: map[string]time.Time{}}
+	ps := &protectState{runner: run.Exec{}, source: protect.Fanotify{}, now: time.Now, lastPre: map[string]time.Time{}, locking: map[string]int{}}
 	ps.emergency = protect.NewEmergency(sharedStore{s, emergencyFile}, func(err error) bool { return errors.Is(err, agent.ErrNotFound) })
 	v, _ := protectStates.LoadOrStore(s, ps)
 	return v.(*protectState)
