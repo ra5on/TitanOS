@@ -73,7 +73,7 @@ func (w *titand) wireNotifications() error {
 			w.logs.Forget(w.volumes.MountPoint(from))
 		}
 		// Calendars and address books are read again on their new volume.
-		if w.pim != nil && slices.Contains(pimFeatures, feature) {
+		if slices.Contains(pimFeatures, feature) && w.pim != nil {
 			w.pim.Moved(feature)
 		}
 	}
