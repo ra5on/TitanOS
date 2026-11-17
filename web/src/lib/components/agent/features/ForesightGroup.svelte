@@ -2,7 +2,8 @@
 	// Gruppe „Vorausschau“ (PLAN 54-V) in the list of functions: Was-wäre-wenn
 	// and Hardware-Berater, NAS-wide, switched by owners and administrators,
 	// off by default. A tap opens the settings of the function.
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { ApiError } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { Features, FeaturesMine, FeaturesPublic } from '#lib/agent-features.ts';
 	import { forgetWhatIf, type Advisor } from '#lib/features/foresight.ts';
 	import FeatureRow from './FeatureRow.svelte';
@@ -35,17 +36,28 @@
 		at: nas?.advisor.at || '03:30',
 	});
 
+	// A failed save is said in the open sheet too: the panel's error line
+	// lies behind it (Durchsicht 102, A-32).
+	let saveError = $state('');
 	async function save(change: Partial<Features>) {
 		if (!nas) return;
 		saving = true;
+		saveError = '';
 		try {
 			await savenas({ ...nas, ...change });
 			forgetWhatIf();
-		} catch {
-			// FeaturesPanel shows the error.
+		} catch (e) {
+			saveError =
+				e instanceof ApiError && e.code === 'agent_features_changed'
+					? t('agent.f.changedLost')
+					: apiErrorText(e);
 		} finally {
 			saving = false;
 		}
+	}
+	function closeSheet(next: typeof open = null) {
+		saveError = '';
+		open = next;
 	}
 	const setAdvisor = (change: Partial<Advisor>) => save({ advisor: { ...adv, ...change } });
 	const status = (on: boolean) => (on ? t('agent.f.foresight.on') : t('agent.f.foresight.off'));
@@ -75,7 +87,8 @@
 </div>
 
 {#if open === 'whatIf'}
-	<ForesightSheet title={t('agent.f.foresight.whatIf')} onclose={() => (open = null)}>
+	<ForesightSheet title={t('agent.f.foresight.whatIf')} onclose={() => closeSheet()}>
+		{#if saveError}<p class="notice-error" role="alert">{saveError}</p>{/if}
 		<div class="fgrp">
 			<FeatureRow
 				icon="🧪"
@@ -94,7 +107,8 @@
 		</div>
 	</ForesightSheet>
 {:else if open === 'advisor'}
-	<ForesightSheet title={t('agent.f.foresight.advisor')} onclose={() => (open = null)}>
+	<ForesightSheet title={t('agent.f.foresight.advisor')} onclose={() => closeSheet()}>
+		{#if saveError}<p class="notice-error" role="alert">{saveError}</p>{/if}
 		<div class="fgrp">
 			<FeatureRow
 				icon="🩺"
@@ -152,7 +166,7 @@
 		</label>
 		{#if advisorOn}
 			<div class="fbtns">
-				<button type="button" class="btn" onclick={() => (open = 'report')}
+				<button type="button" class="btn" onclick={() => closeSheet('report')}
 					>{t('agent.f.foresight.openReport')}</button
 				>
 			</div>
