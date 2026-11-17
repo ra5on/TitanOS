@@ -193,8 +193,10 @@ type Manager struct {
 	// nobody.
 	Notify func(Notice)
 	// Volume opens .titanos/mail on the system data volume for the
-	// address book; release ends the use. An error: no volume now.
-	Volume func() (root *os.Root, release func(), err error)
+	// address book; release ends the use. create makes the folder (only
+	// to write); without it a missing folder is fs.ErrNotExist. Another
+	// error: no volume now.
+	Volume func(create bool) (root *os.Root, release func(), err error)
 	// OwnPorts are the ports titand listens on; the NAS's own addresses
 	// are refused on them (OwnAddrs, nil: the addresses of the
 	// interfaces).

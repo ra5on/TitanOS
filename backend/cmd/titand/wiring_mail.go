@@ -36,13 +36,20 @@ func (w *titand) wireMail() error {
 		ports = append(ports, web.HTTP)
 	}
 	w.mail.OwnPorts = ports
-	w.mail.Volume = func() (*os.Root, func(), error) {
+	// The address book: the folder is made only to write; reading and the
+	// removal of a deleted account's book make nothing (no folder on a
+	// volume for accounts that never used T-Mail).
+	w.mail.Volume = func(create bool) (*os.Root, func(), error) {
 		volume, release := w.systemData.Use(mailFeature)
 		if volume == "" {
 			release()
 			return nil, nil, volumedata.ErrUnavailable
 		}
-		root, err := volumedata.Open("/mnt", volume, mailFeature, w.volumes.Mounted())
+		open := volumedata.OpenExisting
+		if create {
+			open = volumedata.Open
+		}
+		root, err := open("/mnt", volume, mailFeature, w.volumes.Mounted())
 		if err != nil {
 			release()
 			return nil, nil, err

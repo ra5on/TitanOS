@@ -1,6 +1,7 @@
 package tmail
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/mail"
@@ -43,10 +44,50 @@ type MailboxInput struct {
 // SignatureView is a signature with the mailboxes that choose it by
 // default (the same as MailboxView.Signature, seen from the signature).
 type SignatureView struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Text    string   `json:"text"`
-	Default []string `json:"default"`
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Text    string      `json:"text"`
+	Default DefaultList `json:"default"`
+}
+
+// DefaultList names mailboxes. It reads a list of IDs, one ID, or an
+// object whose values are IDs (or whose keys are IDs set to true), the
+// forms the first contract left open ("default:{accountId}").
+type DefaultList []string
+
+// UnmarshalJSON accepts every form of DefaultList.
+func (d *DefaultList) UnmarshalJSON(data []byte) error {
+	var list []string
+	if json.Unmarshal(data, &list) == nil {
+		*d = list
+		return nil
+	}
+	var one string
+	if json.Unmarshal(data, &one) == nil {
+		*d = nil
+		if one != "" {
+			*d = DefaultList{one}
+		}
+		return nil
+	}
+	var object map[string]any
+	if err := json.Unmarshal(data, &object); err != nil {
+		return err
+	}
+	*d = nil
+	for k, v := range object {
+		switch v := v.(type) {
+		case string:
+			if v != "" {
+				*d = append(*d, v)
+			}
+		case bool:
+			if v {
+				*d = append(*d, k)
+			}
+		}
+	}
+	return nil
 }
 
 // Settings are GET/PUT /api/v1/mail/settings.
@@ -307,7 +348,7 @@ func (m *Manager) Settings(user string) Settings {
 		return out
 	}
 	for _, s := range f.Signatures {
-		view := SignatureView{ID: s.ID, Name: s.Name, Text: s.Text, Default: []string{}}
+		view := SignatureView{ID: s.ID, Name: s.Name, Text: s.Text, Default: DefaultList{}}
 		for _, mb := range f.Mailboxes {
 			if mb.Signature == s.ID {
 				view.Default = append(view.Default, mb.ID)

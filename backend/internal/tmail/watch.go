@@ -77,6 +77,7 @@ func (m *Manager) stopAll() {
 		w.stop()
 	}
 	m.conns.closeAll()
+	m.events.closeAll()
 }
 
 // SyncAll brings the permanent connections of every account in line.

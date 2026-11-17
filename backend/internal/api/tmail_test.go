@@ -42,7 +42,7 @@ func newMailServer(t *testing.T) (*testServer, *tmailtest.Servers, *tmail.Manage
 		}
 		m.RootCAs = srv.Pool
 		m.Targets = func(netip.AddrPort) error { return nil }
-		m.Volume = func() (*os.Root, func(), error) {
+		m.Volume = func(bool) (*os.Root, func(), error) {
 			root, err := os.OpenRoot(volume)
 			if err != nil {
 				return nil, nil, err
@@ -502,5 +502,27 @@ func TestMailPasswordsStayOnTheNAS(t *testing.T) {
 				t.Errorf("%s carries the mail password", f.Name)
 			}
 		}
+	}
+}
+
+func TestMailProviders(t *testing.T) {
+	ts, _, _ := newMailServer(t)
+	ts.grantMail("alex")
+	_, body := ts.request("GET", "/api/v1/mail/providers?email=max@gmx.de", nil)
+	var gmx map[string]any
+	json.Unmarshal(body, &gmx)
+	if gmx["known"] != true || gmx["id"] != "gmx" || gmx["appPassword"] != false || gmx["imap"].(map[string]any)["host"] != "imap.gmx.net" {
+		t.Fatalf("gmx: %s", body)
+	}
+	_, body = ts.request("GET", "/api/v1/mail/providers?email=max@hotmail.com", nil)
+	if !strings.Contains(string(body), `"supported":false`) || !strings.Contains(string(body), `"hint":"oauth_only"`) {
+		t.Fatalf("hotmail: %s", body)
+	}
+	_, body = ts.request("GET", "/api/v1/mail/providers?email=me@own.example", nil)
+	if !strings.Contains(string(body), `"known":false`) {
+		t.Fatalf("unknown: %s", body)
+	}
+	if _, body = ts.request("GET", "/api/v1/mail/providers", nil); strings.Count(string(body), `"id":`) < 9 {
+		t.Fatalf("list: %s", body)
 	}
 }

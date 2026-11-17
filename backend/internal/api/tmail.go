@@ -175,12 +175,13 @@ func (a tmailArea) handleAccess(w http.ResponseWriter, r *http.Request) {
 
 func (a tmailArea) handleProviders(w http.ResponseWriter, r *http.Request) {
 	if email := r.URL.Query().Get("email"); email != "" {
+		// The fields of the provider at the top (host, port and security
+		// under imap/smtp, appPassword), known beside them.
 		p, ok := tmail.ProviderFor(email)
-		if !ok {
-			writeJSON(w, http.StatusOK, map[string]any{"known": false})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"known": true, "provider": p})
+		writeJSON(w, http.StatusOK, struct {
+			Known bool `json:"known"`
+			tmail.Provider
+		}{ok, p})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"providers": tmail.Providers()})

@@ -5,9 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/emersion/go-imap/v2/imapserver"
+	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
 )
 
 func plainMail(from, subject, body string) string {
@@ -551,5 +557,108 @@ func TestCertificateChecked(t *testing.T) {
 	}
 	if _, err := e.m.Send(t.Context(), "alex", id, Outgoing{To: []Address{{Addr: "bob@example.net"}}, Text: "x"}); !errors.Is(err, ErrTLS) {
 		t.Fatalf("SMTP with an unknown certificate: %v", err)
+	}
+}
+
+// The most common mails have one part only (BODY[1] is the whole body).
+func TestReadSinglePartMails(t *testing.T) {
+	e := newEnv(t)
+	id := e.addMailbox()
+	e.deliver("INBOX", "From: bob@example.net\nSubject: Nur Text\nMIME-Version: 1.0\nContent-Type: text/plain; charset=utf-8\nContent-Transfer-Encoding: base64\n\nR3LDvMOfZSBhdXMgZGVtIFRleHQ=\n")
+	e.deliver("INBOX", "From: bob@example.net\nSubject: Nur HTML\nMIME-Version: 1.0\nContent-Type: text/html; charset=utf-8\n\n<p onclick=\"x()\">Hallo <i>du</i></p><script>alert(1)</script>\n")
+	e.deliver("INBOX", "From: bob@example.net\nSubject: Ohne MIME\n\nGanz alter Text\n")
+	text, err := e.m.Read(t.Context(), "alex", id, "INBOX", 1, false)
+	if err != nil || text.Text != "Grüße aus dem Text" || text.HTML != "" || len(text.Attachments) != 0 || text.Truncated {
+		t.Fatalf("text: %+v %v", text, err)
+	}
+	page, _ := e.m.List(t.Context(), "alex", id, ListQuery{Folder: "INBOX"})
+	for _, s := range page.Messages {
+		if s.Attachments {
+			t.Errorf("%s has attachments in the list", s.Subject)
+		}
+	}
+	html, err := e.m.Read(t.Context(), "alex", id, "INBOX", 2, false)
+	if err != nil || html.Text != "" || !strings.Contains(html.HTML, "Hallo <i>du</i>") || strings.Contains(html.HTML, "script") || strings.Contains(html.HTML, "onclick") {
+		t.Fatalf("html: %+v %v", html, err)
+	}
+	old, err := e.m.Read(t.Context(), "alex", id, "INBOX", 3, false)
+	if err != nil || !strings.Contains(old.Text, "Ganz alter Text") {
+		t.Fatalf("without MIME: %+v %v", old, err)
+	}
+}
+
+// A server without STARTTLS gets no login: nothing goes out in plain text.
+func TestNoLoginWithoutTLS(t *testing.T) {
+	e := newEnv(t)
+	var logins atomic.Int32
+	mem := imapmemserver.New()
+	u := imapmemserver.NewUser(testUser, testPassword)
+	_ = u.Create("INBOX", nil)
+	mem.AddUser(u)
+	srv := imapserver.New(&imapserver.Options{
+		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
+			return loginSpy{mem.NewSession(), &logins}, nil, nil
+		},
+		InsecureAuth: true,
+		Logger:       quiet{},
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	in := e.input(testPassword)
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	in.IMAP = Server{Host: host, Port: atoi(port), Security: SecurityStartTLS}
+	view, err := e.m.AddMailbox("alex", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrTLS) {
+		t.Fatalf("plain server: %v", err)
+	}
+	if logins.Load() != 0 {
+		t.Fatal("logged in without TLS")
+	}
+}
+
+type loginSpy struct {
+	imapserver.Session
+	n *atomic.Int32
+}
+
+func (s loginSpy) Login(user, password string) error {
+	s.n.Add(1)
+	return s.Session.Login(user, password)
+}
+
+type quiet struct{}
+
+func (quiet) Printf(string, ...any) {}
+func (quiet) Println(...any)        {}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
+}
+
+// A stop of titand ends the event streams of open pages.
+func TestRunEndsEventStreams(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { e.m.Run(ctx); close(done) }()
+	events, stop := e.m.Subscribe("alex")
+	defer stop()
+	cancel()
+	<-done
+	select {
+	case _, open := <-events:
+		if open {
+			t.Fatal("an event instead of the end")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("event stream still open after the stop")
 	}
 }

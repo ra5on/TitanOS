@@ -60,11 +60,13 @@ type ListQuery struct {
 
 // Message is one mail to read.
 type Message struct {
-	UID            uint32       `json:"uid"`
-	Folder         string       `json:"folder"`
-	From           Address      `json:"from"`
-	To             []Address    `json:"to"`
-	Cc             []Address    `json:"cc"`
+	UID    uint32    `json:"uid"`
+	Folder string    `json:"folder"`
+	From   Address   `json:"from"`
+	To     []Address `json:"to"`
+	Cc     []Address `json:"cc"`
+	// Bcc is only known of own mail (a draft keeps it).
+	Bcc            []Address    `json:"bcc"`
 	ReplyTo        []Address    `json:"replyTo"`
 	Subject        string       `json:"subject"`
 	Date           time.Time    `json:"date"`
@@ -277,10 +279,10 @@ func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32,
 		if err != nil {
 			return err
 		}
-		msg := &Message{UID: uid, Folder: folder, Flags: flagsOf(b.Flags), To: []Address{}, Cc: []Address{}, ReplyTo: []Address{}}
+		msg := &Message{UID: uid, Folder: folder, Flags: flagsOf(b.Flags), To: []Address{}, Cc: []Address{}, Bcc: []Address{}, ReplyTo: []Address{}}
 		if e := b.Envelope; e != nil {
 			msg.Subject, msg.Date = clean(e.Subject, 1000), e.Date
-			msg.To, msg.Cc, msg.ReplyTo = addresses(e.To), addresses(e.Cc), addresses(e.ReplyTo)
+			msg.To, msg.Cc, msg.Bcc, msg.ReplyTo = addresses(e.To), addresses(e.Cc), addresses(e.Bcc), addresses(e.ReplyTo)
 			if from := addresses(e.From); len(from) > 0 {
 				msg.From = from[0]
 			}

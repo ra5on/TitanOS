@@ -65,7 +65,7 @@ func (e *testEnv) newManager() *Manager {
 		e.notices = append(e.notices, n)
 		e.mu.Unlock()
 	}
-	m.Volume = func() (*os.Root, func(), error) {
+	m.Volume = func(bool) (*os.Root, func(), error) {
 		root, err := os.OpenRoot(e.volume)
 		if err != nil {
 			return nil, nil, err

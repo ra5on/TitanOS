@@ -56,7 +56,7 @@ func (m *Manager) openContacts(user string, create bool) (*os.Root, func(), erro
 	if m.Volume == nil {
 		return nil, nil, volumedata.ErrUnavailable
 	}
-	root, release, err := m.Volume()
+	root, release, err := m.Volume(create)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,11 +131,12 @@ func (m *Manager) loadContactsLocked(user string, account Account) *userContacts
 	return uc
 }
 
-// volumeThere tells whether the volume of the address book is there now.
+// volumeThere tells whether the volume of the address book is there now
+// (with or without the folder of T-Mail).
 func volumeThere(m *Manager) bool {
-	_, release, err := m.Volume()
+	_, release, err := m.Volume(false)
 	if err != nil {
-		return false
+		return errors.Is(err, fs.ErrNotExist)
 	}
 	release()
 	return true
@@ -265,7 +266,10 @@ func (m *Manager) forgetContacts(user string) bool {
 	if m.Volume == nil {
 		return true
 	}
-	root, release, err := m.Volume()
+	root, release, err := m.Volume(false)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true // T-Mail never kept anything on this volume
+	}
 	if err != nil {
 		return false
 	}

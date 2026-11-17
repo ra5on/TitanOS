@@ -350,3 +350,23 @@ func TestCheckSettings(t *testing.T) {
 		t.Fatalf("host changed without password: %v", err)
 	}
 }
+
+// The default of a signature in every form the first contract allowed.
+func TestSignatureDefaultForms(t *testing.T) {
+	e := newEnv(t)
+	id := e.addMailbox()
+	for _, form := range []string{`["` + id + `"]`, `"` + id + `"`, `{"accountId":"` + id + `"}`, `{"` + id + `":true}`} {
+		var s Settings
+		if err := json.Unmarshal([]byte(`{"signatures":[{"name":"S","text":"x","default":`+form+`}]}`), &s); err != nil {
+			t.Fatalf("%s: %v", form, err)
+		}
+		got, err := e.m.SetSettings("alex", s)
+		if err != nil || len(got.Signatures) != 1 || len(got.Signatures[0].Default) != 1 || got.Signatures[0].Default[0] != id {
+			t.Fatalf("%s: %+v %v", form, got, err)
+		}
+	}
+	out, _ := json.Marshal(e.m.Settings("alex"))
+	if !strings.Contains(string(out), `"default":["`+id+`"]`) {
+		t.Fatalf("written as: %s", out)
+	}
+}

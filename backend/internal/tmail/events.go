@@ -65,3 +65,16 @@ func (h *hub) closeUser(user string) {
 	}
 	delete(h.subs, user)
 }
+
+// closeAll ends every event stream (titand stops: no open page holds up
+// the end of the web server).
+func (h *hub) closeAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, subs := range h.subs {
+		for ch := range subs {
+			close(ch)
+		}
+	}
+	h.subs = nil
+}
