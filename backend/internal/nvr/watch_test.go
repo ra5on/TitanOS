@@ -80,7 +80,11 @@ func (r *rig) advance(d time.Duration) {
 	r.mu.Unlock()
 }
 
-func (r *rig) look() { r.m.reconcile(context.Background()) }
+// look is one round of the loop, with the look at the space it started.
+func (r *rig) look() {
+	r.m.reconcile(context.Background())
+	r.storageDone()
+}
 
 func (r *rig) phase() string {
 	r.m.mu.Lock()

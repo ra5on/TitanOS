@@ -49,6 +49,11 @@ func (r *rig) storageLook() StorageStatus {
 	return r.m.Status(context.Background()).Storage
 }
 
+// storageDone waits for the look at the space beside the loop.
+func (r *rig) storageDone() {
+	r.wait(func() bool { return !r.m.storageBusy.Load() })
+}
+
 func gb(v *uint64) float64 {
 	if v == nil {
 		return -1

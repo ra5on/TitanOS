@@ -302,16 +302,32 @@ func (a nvrArea) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	if !a.available(w) {
 		return
 	}
-	current := a.nvr.Settings()
-	req := nvrSettingsRequest{nvrSettingsView: settingsView(current)}
-	if !readJSON(w, r, &req) {
+	var body json.RawMessage
+	if !readJSON(w, r, &body) {
 		return
 	}
-	next := current
-	next.Enabled, next.Volume, next.Detector, next.Storage = req.Enabled, req.Volume, req.Detector, req.Storage
-	next.PrivacyNoticeDismissed, next.RTSPOut, next.Plates = req.PrivacyNoticeDismissed, req.RTSPOut, req.Plates
-	next.NotifyOff, next.Decoder = req.NotifyOff, req.Decoder
-	if err := a.nvr.SetSettings(r.Context(), next, req.options()); err != nil {
+	// Fields left out keep what is stored when the change is made, not
+	// what was stored when the request came (two changes at once).
+	merge := func(current nvr.Settings) (nvr.Settings, nvrSettingsRequest, error) {
+		req := nvrSettingsRequest{nvrSettingsView: settingsView(current)}
+		if err := json.Unmarshal(body, &req); err != nil {
+			return current, req, err
+		}
+		next := current
+		next.Enabled, next.Volume, next.Detector, next.Storage = req.Enabled, req.Volume, req.Detector, req.Storage
+		next.PrivacyNoticeDismissed, next.RTSPOut, next.Plates = req.PrivacyNoticeDismissed, req.RTSPOut, req.Plates
+		next.NotifyOff, next.Decoder = req.NotifyOff, req.Decoder
+		return next, req, nil
+	}
+	_, req, err := merge(a.nvr.Settings())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "request body is not valid JSON")
+		return
+	}
+	if err := a.nvr.UpdateSettings(r.Context(), func(current nvr.Settings) (nvr.Settings, error) {
+		next, _, err := merge(current)
+		return next, err
+	}, req.options()); err != nil {
 		writeNVRError(w, err)
 		return
 	}

@@ -39,6 +39,10 @@ func (t secretTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // ErrNotRunning: Frigate does not run (or has no address yet).
 var ErrNotRunning = errors.New("nvr: the NVR does not run")
 
+// frigateRequestLimit bounds a request to Frigate's API with its answer
+// (call, get); callLong and stream are bounded by their context only.
+var frigateRequestLimit = 15 * time.Second
+
 // frigate is the client for Frigate's API.
 type frigate struct {
 	http *http.Client
@@ -51,7 +55,7 @@ func newFrigate(secret func() string) *frigate {
 	stay := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	transport := secretTransport{base: http.DefaultTransport.(*http.Transport).Clone(), secret: secret}
 	return &frigate{
-		http:   &http.Client{Timeout: 15 * time.Second, CheckRedirect: stay, Transport: transport},
+		http:   &http.Client{Timeout: frigateRequestLimit, CheckRedirect: stay, Transport: transport},
 		stream: &http.Client{CheckRedirect: stay, Transport: transport},
 	}
 }

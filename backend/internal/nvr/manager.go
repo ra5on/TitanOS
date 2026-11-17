@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -164,6 +165,13 @@ type Manager struct {
 	// those of settings.json. Both are taken before mu, never while mu is
 	// held, and never by the loop while it waits for Docker.
 	camerasMu, settingsMu sync.Mutex
+	// secret is settings.ProxySecret for the client of Frigate, which
+	// needs it on every request without waiting for mu (set with the
+	// settings, see secretChanged).
+	secret atomic.Pointer[string]
+	// storageBusy is set while a look at the space runs beside the loop
+	// (storage.go).
+	storageBusy atomic.Bool
 	// exportsMu orders the changes of exports.json (exports.go).
 	exportsMu sync.Mutex
 	// seenMu orders the changes of seen.json (seen.go).
@@ -260,6 +268,7 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	m.restored = restored
 	m.settings, m.cameras, m.deleted, m.loaded = normalize(s), cameras, deleted, true
+	m.secretChanged()
 	m.changedLocked()
 	m.mu.Unlock()
 	return nil
@@ -317,6 +326,24 @@ type SetOptions struct {
 func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) error {
 	m.settingsMu.Lock()
 	defer m.settingsMu.Unlock()
+	return m.setSettingsLocked(ctx, s, opts)
+}
+
+// UpdateSettings changes the settings as they are when the change is made
+// (settingsMu held): edit gets them and returns the new ones. Read before
+// SetSettings, another change made in between would be lost.
+func (m *Manager) UpdateSettings(ctx context.Context, edit func(Settings) (Settings, error), opts SetOptions) error {
+	m.settingsMu.Lock()
+	defer m.settingsMu.Unlock()
+	s, err := edit(m.Settings())
+	if err != nil {
+		return err
+	}
+	return m.setSettingsLocked(ctx, s, opts)
+}
+
+// setSettingsLocked is SetSettings with settingsMu held.
+func (m *Manager) setSettingsLocked(ctx context.Context, s Settings, opts SetOptions) error {
 	s = normalize(s)
 	if m.Dev && s.Volume == "" {
 		s.Volume = devVolume
@@ -382,6 +409,7 @@ func (m *Manager) SetSettings(ctx context.Context, s Settings, opts SetOptions) 
 	}
 	m.mu.Lock()
 	m.settings = s
+	m.secretChanged()
 	// Another device, another volume or switching on again: the choice is
 	// tried afresh.
 	if s.Detector.Kind != old.Detector.Kind || s.Volume != old.Volume || (s.Enabled && !old.Enabled) {
@@ -425,9 +453,16 @@ func newProxySecret() string {
 
 // proxySecret is the secret Frigate expects in X-Proxy-Secret.
 func (m *Manager) proxySecret() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.settings.ProxySecret
+	if secret := m.secret.Load(); secret != nil {
+		return *secret
+	}
+	return ""
+}
+
+// secretChanged publishes settings.ProxySecret to proxySecret (m.mu held).
+func (m *Manager) secretChanged() {
+	secret := m.settings.ProxySecret
+	m.secret.Store(&secret)
 }
 
 // FrigateHeader are the headers every connection to Frigate carries (the
@@ -452,6 +487,7 @@ func (m *Manager) ensureSecret() {
 		return
 	}
 	m.settings.ProxySecret = newProxySecret()
+	m.secretChanged()
 	s := m.settings
 	m.changedLocked()
 	m.mu.Unlock()
@@ -462,20 +498,22 @@ func (m *Manager) ensureSecret() {
 
 // Enable switches the NVR on (volume "" keeps the chosen one).
 func (m *Manager) Enable(ctx context.Context, volume string, opts SetOptions) error {
-	s := m.Settings()
-	s.Enabled = true
-	if volume != "" {
-		s.Volume = volume
-	}
-	return m.SetSettings(ctx, s, opts)
+	return m.UpdateSettings(ctx, func(s Settings) (Settings, error) {
+		s.Enabled = true
+		if volume != "" {
+			s.Volume = volume
+		}
+		return s, nil
+	}, opts)
 }
 
 // Disable stops and removes the container; settings, cameras, Frigate's
 // database and the recordings stay.
 func (m *Manager) Disable(ctx context.Context) error {
-	s := m.Settings()
-	s.Enabled = false
-	return m.SetSettings(ctx, s, SetOptions{})
+	return m.UpdateSettings(ctx, func(s Settings) (Settings, error) {
+		s.Enabled = false
+		return s, nil
+	}, SetOptions{})
 }
 
 // RetryDetector goes back to the chosen device after a failover or after
@@ -862,10 +900,16 @@ func (m *Manager) RemoveCamera(id string) error {
 	return err
 }
 
-// storeCamerasLocked writes the cameras and has them applied.
+// storeCamerasLocked writes the cameras and has them applied. The caller
+// holds camerasMu and m.mu; m.mu is let go while the stick is written
+// (camerasMu keeps every other change of the cameras out meanwhile), so
+// that a slow stick does not hold status, media and the loop up.
 func (m *Manager) storeCamerasLocked(list []Camera) error {
 	sortCameras(list)
-	if err := m.store.WriteJSON(camerasFile, list); err != nil {
+	m.mu.Unlock()
+	err := m.store.WriteJSON(camerasFile, list)
+	m.mu.Lock()
+	if err != nil {
 		return err
 	}
 	m.cameras = list

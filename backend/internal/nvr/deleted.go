@@ -248,7 +248,9 @@ func (m *Manager) purge(ctx context.Context, base, id string) error {
 	only := url.Values{"cameras": {id}}
 	for start := from; start < end; start += int64(purgeStep / time.Second) {
 		path := "/api/recordings/start/" + strconv.FormatInt(start, 10) + "/end/" + strconv.FormatInt(min(start+int64(purgeStep/time.Second), end), 10)
-		if err := m.frigate.call(ctx, http.MethodDelete, base, path, only, nil, nil); err != nil {
+		// Frigate deletes file by file and answers when done: without the
+		// client's 15 s, ctx bounds it.
+		if err := m.frigate.callLong(ctx, http.MethodDelete, base, path, only, nil, nil); err != nil {
 			return fmt.Errorf("nvr: recordings of the removed camera not deleted: %w", err)
 		}
 	}
