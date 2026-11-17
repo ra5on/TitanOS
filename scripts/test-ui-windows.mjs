@@ -749,6 +749,18 @@ if (!allOnly) {
     (await tab.count()) === 0,
     "an ended console of a request does not open again",
   );
+  // The focus stays in the tab bar (a tab, or "+" when none is left).
+  check(
+    await page.evaluate(() => {
+      const now = document.activeElement;
+      return (
+        !!now &&
+        (now.getAttribute("role") === "tab" ||
+          now.getAttribute("aria-haspopup") === "menu")
+      );
+    }),
+    "the focus stays in the tab bar after Delete",
+  );
   await made.ctx.close();
 }
 

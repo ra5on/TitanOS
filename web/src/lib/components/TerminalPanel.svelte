@@ -134,6 +134,18 @@
 		else closeSession(id);
 	}
 
+	// When the focused session ends (Delete, ✕, the question of a root shell)
+	// its tab is gone: the focus goes to the chosen tab, or "+" when none is
+	// left, instead of to nothing.
+	async function keepFocus() {
+		await tick();
+		await new Promise((resolve) => setTimeout(resolve));
+		const now = document.activeElement;
+		if (now && now !== document.body) return;
+		const tab = menuRoot?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]');
+		(tab ?? plus)?.focus();
+	}
+
 	function sessionKeys(event: KeyboardEvent) {
 		const id = Number((event.target as HTMLElement).dataset?.session);
 		if (event.key === 'Delete' && id) {
@@ -141,6 +153,7 @@
 			if (!session) return;
 			event.preventDefault();
 			end(session.id, session.title, session.kind);
+			void keepFocus();
 			return;
 		}
 		tabKeys(event);
@@ -302,7 +315,10 @@
 							class="x"
 							aria-label={t('terminal.end', { name: session.title })}
 							title={t('terminal.endKey', { name: session.title })}
-							onclick={() => end(session.id, session.title, session.kind)}>✕</button
+							onclick={() => {
+								end(session.id, session.title, session.kind);
+								void keepFocus();
+							}}>✕</button
 						>
 					</div>
 				{/each}
@@ -507,6 +523,7 @@
 				onclick={() => {
 					closeSession(target.id);
 					ending = null;
+					void keepFocus();
 				}}>{t('terminal.endConfirm')}</button
 			>
 		</div>
