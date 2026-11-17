@@ -4,6 +4,7 @@
 	// the level set under "send from". iPhones only from the home screen.
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
+	import { session } from '#lib/session.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDate } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
@@ -24,7 +25,11 @@
 	// component brings its own plain heading (the agent's settings).
 	let { personal = false, bare = false }: { personal?: boolean; bare?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
-	async function setKinds(device: PushDevice, kind: 'nas' | 'agent' | 'camera', on: boolean) {
+	async function setKinds(
+		device: PushDevice,
+		kind: 'nas' | 'agent' | 'camera' | 'mail',
+		on: boolean,
+	) {
 		const off = new Set(device.off ?? []);
 		if (on) off.delete(kind);
 		else off.add(kind);
@@ -34,6 +39,8 @@
 				nas: !off.has('nas'),
 				agent: !off.has('agent'),
 				camera: !off.has('camera'),
+				// 1.05: new mail in T-Mail; only sent where T-Mail is released.
+				...(session.services?.mail ? { mail: !off.has('mail') } : {}),
 			});
 			devices = (devices ?? []).map((d) => (d.id === next.id ? next : d));
 		} catch (err) {
@@ -194,6 +201,17 @@
 								onchange={(e) => setKinds(device, 'camera', e.currentTarget.checked)}
 							/><span>{t('push.kindCamera')}</span></label
 						>
+						{#if session.services?.mail}
+							<!-- 1.05: new mail in the account's own mailboxes (T-Mail). -->
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={!device.off?.includes('mail')}
+									disabled={busy}
+									onchange={(e) => setKinds(device, 'mail', e.currentTarget.checked)}
+								/><span>{t('push.kindMail')}</span></label
+							>
+						{/if}
 					</span>
 					<span class="row-actions">
 						<button type="button" class="btn small" disabled={busy} onclick={() => test(device)}

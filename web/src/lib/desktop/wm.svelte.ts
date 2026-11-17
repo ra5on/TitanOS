@@ -7,6 +7,7 @@ import { inWindow } from './frame.ts';
 import { followWidth, setDesktopHold } from './mode.svelte.ts';
 import { session } from '../session.svelte.ts';
 import { defaultDesktop, sanitizeDesktop, type DesktopPrefs } from './prefs.ts';
+import { taskPage } from './apps.ts';
 
 export type Snap = 'left' | 'right' | 'max' | 'tl' | 'tr' | 'bl' | 'br' | null;
 
@@ -325,9 +326,10 @@ export function openWindow(
 			return target.id;
 		}
 	}
+	// 1.05: a window of one task (writing an e-mail) is never taken over.
 	const existing =
 		!opts.multi && !opts.fresh && !app.startsWith('webapp:')
-			? wm.windows.find((w) => w.app === app)
+			? wm.windows.find((w) => w.app === app && !taskPage(w.href))
 			: undefined;
 	if (existing) {
 		if (href && existing.href !== href && !app.startsWith('docker:'))

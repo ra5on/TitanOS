@@ -21,6 +21,9 @@ const LOCAL = [
 	/^\/welcome/,
 	// The KI-Agent of the NAS the browser is on.
 	/^\/agent(\/|\?|$)/,
+	// T-Mail (docs/TMAIL.md): only from the browser's own session, never
+	// through another node acting for the account.
+	/^\/mail(\/|\?|$)/,
 ];
 
 /** The ID of the chosen other node, null for this NAS. */
