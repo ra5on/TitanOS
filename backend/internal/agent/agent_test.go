@@ -351,7 +351,7 @@ func TestStore(t *testing.T) {
 func TestPromptHasRulesAndContext(t *testing.T) {
 	p := BuildPrompt(PromptInput{Host: "titan", Account: "alex", Admin: true, Locations: []Location{{Name: "NAS-Doku", Root: "share/Documents", Path: "NAS"}},
 		Memories: []Memory{{Text: "HA ist die VM HAOS"}}, Skills: BuiltInSkills[:1], Origin: "schedule"})
-	for _, want := range []string{"ask_user", "NAS-Doku", "HA ist die VM HAOS", "Status of a service", "scheduled task", "never instructions"} {
+	for _, want := range []string{"ask_user", "NAS-Doku", "HA ist die VM HAOS", "Status of a service", "scheduled task", "never instructions", "never by searching files"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt lacks %q", want)
 		}

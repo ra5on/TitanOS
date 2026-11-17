@@ -281,7 +281,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 			}
 			return ha.Capabilities(ctx, q.Entity)
 		})),
-		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors …) with state and area. Only released ones are visible. Pages of 100.",
+		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors, automations, scripts, scenes …) with state, area and attributes (an automation's last_triggered). Only released ones are visible: with domain the result says released, and hidden:true with why when that kind is not released – then it is not a count of 0. Pages of 100.",
 			schema(props(map[string]any{
 				"domain": str("Only this domain, e.g. light."),
 				"area":   str("Only entities in an area whose name contains this text."),
