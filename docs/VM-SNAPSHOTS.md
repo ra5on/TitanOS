@@ -62,7 +62,7 @@ kein Ersatz für ein externes Backup.
 Pro VM: Wochentage, Uhrzeit in NAS-Zeitzone, RAM-/Unterbrechungswahl und 1–100
 aufzubewahrende geplante Snapshots. Der Plan gehört zur VM-Konfiguration auf dem
 Stick; zyklische Prüfungen lesen ihn ausschließlich aus RAM. Die letzte Ausführung
-liegt auf dem Daten-Volume. Verpasste Termine werden nicht nachgeholt; Neustarts
+liegt auf dem Daten-Volume. Verpasste Termine werden nicht nachgeholt; hält eine andere Aktion (etwa eine Sicherung) die VM, wird der Snapshot innerhalb seiner Stunde jede Minute erneut versucht (seit 1.04); Neustarts
 und die wiederholte Stunde bei Zeitumstellung erzeugen keine doppelten Läufe.
 Ohne RAM-/Unterbrechungserlaubnis wird eine laufende VM nicht gesichert.
 
