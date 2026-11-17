@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -534,9 +535,79 @@ func TestHeavyRequestsLimited(t *testing.T) {
 		r()
 	}
 	releases[0]()
+	// Without room in the budget: a text-only mail still goes, a large
+	// one waits a moment and is refused.
+	reserveWait = 300 * time.Millisecond
+	defer func() { reserveWait = 5 * time.Second }()
 	e.m.Reserve = func(int64) (func(), bool) { return nil, false }
-	if _, err := e.m.Begin("alex", 1); !errors.Is(err, ErrBusy) {
-		t.Fatalf("without RAM: %v", err)
+	small, err := e.m.Begin("alex", 64<<10)
+	if err != nil {
+		t.Fatalf("text only without RAM: %v", err)
+	}
+	small()
+	start := time.Now()
+	if _, err := e.m.Begin("alex", 32<<20); !errors.Is(err, ErrBusy) || time.Since(start) < 250*time.Millisecond {
+		t.Fatalf("without RAM: %v after %v", err, time.Since(start))
+	}
+	// Room that comes while waiting is taken.
+	tries := 0
+	e.m.Reserve = func(int64) (func(), bool) { tries++; return func() {}, tries > 1 }
+	if r, err := e.m.Begin("alex", 32<<20); err != nil {
+		t.Fatalf("room after a moment: %v", err)
+	} else {
+		r()
+	}
+}
+
+// LOW (follow-up review): the servers of stored mailboxes are no new
+// targets after a start, the same server counts once, and a check of
+// the settings (IMAP and SMTP) is one attempt.
+func TestNewTargetLimitSparesStoredMailboxes(t *testing.T) {
+	e := newEnv(t)
+	var ids []string
+	for range 12 {
+		ids = append(ids, e.addMailbox())
+	}
+	fresh := e.newManager()
+	for _, id := range ids {
+		if _, err := fresh.Folders(t.Context(), "alex", id); err != nil {
+			t.Fatalf("stored mailbox after a start: %v", err)
+		}
+	}
+	// A new account: twelve tries of one unknown server count once.
+	e.accounts["carl"] = Account{Name: "carl", Created: time.Now().Add(-time.Hour), Admin: true}
+	if err := e.m.SetAllowed("carl", true); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	closed := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	in := e.input("x")
+	in.IMAP.Port = closed
+	view, err := e.m.AddMailbox("carl", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 12 {
+		if _, err := e.m.Folders(t.Context(), "carl", view.ID); errors.Is(err, ErrRateLimited) {
+			t.Fatal("one server counted more than once")
+		}
+	}
+	// Nine checks against other servers (IMAP and SMTP each) are nine
+	// attempts: with the one above, ten.
+	for i := range NewTargetLimit - 1 {
+		check := e.input("x")
+		check.IMAP.Port, check.SMTP.Port = closed+100+i, closed+200+i
+		if res, err := e.m.CheckSettings(t.Context(), "carl", "", check); err != nil || res.SMTP.Code == "mail_rate_limited" || res.IMAP.Code == "mail_rate_limited" {
+			t.Fatalf("check %d: %+v %v", i+1, res, err)
+		}
+	}
+	in.IMAP.Port = closed + 300
+	if _, err := e.m.UpdateMailbox("carl", view.ID, in); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Folders(t.Context(), "carl", view.ID); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("eleventh attempt: %v", err)
 	}
 }
 
@@ -624,6 +695,81 @@ func TestLinkMismatchOnlyForWebAddresses(t *testing.T) {
 		doc, _ := SanitizeHTML(`<a href="`+c.href+`">`+c.text+`</a>`, nil, false)
 		if got := strings.Contains(doc, `data-tmail-mismatch="1"`); got != c.mark {
 			t.Errorf("%q → %s: marked %v, want %v", c.text, c.href, got, c.mark)
+		}
+	}
+}
+
+// partFloodIMAP serves one mail whose structure claims a part of 4 GB.
+// flood: the fetch of the part gets an endless untagged line instead of
+// the literal; else the part comes normally and every later command
+// (LIST) gets the endless line.
+func partFloodIMAP(t *testing.T, flood bool) (string, *x509.CertPool, *atomic.Int64) {
+	sent := &atomic.Int64{}
+	endless := func(w *bufio.Writer) bool {
+		w.WriteString("* OK ")
+		chunk := []byte(strings.Repeat("A", 1<<20))
+		for range 256 {
+			if _, err := w.Write(chunk); err != nil {
+				return false
+			}
+			sent.Add(int64(len(chunk)))
+		}
+		return false
+	}
+	addr, pool, _ := scripted(t, "* OK [CAPABILITY IMAP4rev1] evil\r\n", func(w *bufio.Writer, tag, cmd, line string) bool {
+		upper := strings.ToUpper(line)
+		switch {
+		case cmd == "LOGIN":
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		case cmd == "CAPABILITY":
+			fmt.Fprintf(w, "* CAPABILITY IMAP4rev1\r\n%s OK\r\n", tag)
+		case cmd == "SELECT":
+			fmt.Fprintf(w, "* 1 EXISTS\r\n* OK [UIDVALIDITY 1] x\r\n* OK [UIDNEXT 2] x\r\n%s OK [READ-WRITE] done\r\n", tag)
+		case strings.Contains(upper, "BODYSTRUCTURE"):
+			fmt.Fprintf(w, "* 1 FETCH (UID 1 BODYSTRUCTURE (\"application\" \"octet-stream\" (\"name\" \"big.bin\") NIL NIL \"base64\" 4000000000 NIL (\"attachment\" (\"filename\" \"big.bin\")) NIL NIL))\r\n%s OK\r\n", tag)
+		case strings.Contains(upper, "BODY.PEEK[1]"):
+			if flood {
+				return endless(w)
+			}
+			fmt.Fprintf(w, "* 1 FETCH (UID 1 BODY[1] {4}\r\nQUFB)\r\n%s OK\r\n", tag)
+		case cmd == "LIST":
+			return endless(w)
+		default:
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		}
+		return true
+	})
+	return addr, pool, sent
+}
+
+// HIGH (follow-up review): the size a server claims for a part is no
+// budget, and a raised budget does not stay on the connection.
+func TestPartBudgetNotFromServer(t *testing.T) {
+	for _, flood := range []bool{true, false} {
+		addr, pool, sent := partFloodIMAP(t, flood)
+		e := newEnv(t)
+		e.m.RootCAs = pool
+		in := e.input("x")
+		in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
+		view, err := e.m.AddMailbox("alex", in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var partErr, listErr error
+		peak := peakHeap(func() {
+			partErr = e.m.Part(t.Context(), "alex", view.ID, "INBOX", 1, "1", func(PartInfo) io.Writer { return io.Discard })
+			if !flood {
+				_, listErr = e.m.Folders(t.Context(), "alex", view.ID)
+			}
+		})
+		if flood && !errors.Is(partErr, ErrTooLarge) {
+			t.Errorf("flood instead of the part: %v", partErr)
+		}
+		if !flood && (partErr != nil || !errors.Is(listErr, ErrTooLarge)) {
+			t.Errorf("flood after the part: part %v, list %v", partErr, listErr)
+		}
+		if peak > 96<<20 {
+			t.Errorf("flood %v: peak heap %d MiB (server sent %d MiB)", flood, peak>>20, sent.Load()>>20)
 		}
 	}
 }

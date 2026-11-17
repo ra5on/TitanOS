@@ -115,6 +115,9 @@ func (m *Manager) CheckSettings(ctx context.Context, user, id string, in Mailbox
 		}
 	}
 	mb := Mailbox{ID: id, Email: in.Email, User: in.User, IMAP: in.IMAP, SMTP: in.SMTP}
+	// IMAP and SMTP of one check are one attempt for the limit of new
+	// servers.
+	ctx = context.WithValue(ctx, attemptKey{}, newID())
 	var out CheckResult
 	c, _, err := m.connect(ctx, user, mb, password, nil)
 	if err == nil {
@@ -149,9 +152,34 @@ type heavyState struct {
 	running map[string]int
 }
 
+// reserveFree is what a request may hold without asking the budget: a
+// text-only mail or draft (security review of 1.05, follow-up).
+const reserveFree = 1 << 20
+
+// reserveWait is how long a request waits for room in the budget of RAM
+// before it is answered with ErrBusy (as files.Acquire waits).
+var reserveWait = 5 * time.Second
+
+// More takes bytes of TitanOS's budget of RAM for a request, waiting a
+// little for room; ErrBusy without. Small amounts need no room.
+func (m *Manager) More(bytes int64) (func(), error) {
+	if m.Reserve == nil || bytes < reserveFree {
+		return func() {}, nil
+	}
+	deadline := time.Now().Add(reserveWait)
+	for {
+		if release, ok := m.Reserve(bytes); ok {
+			return release, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, ErrBusy
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 // Begin admits a heavy request that holds up to bytes in RAM: at most
-// HeavyPerAccount per account and only within the budget of RAM
-// (Reserve). The caller answers ErrBusy at once if it is refused.
+// HeavyPerAccount per account and only within the budget of RAM (More).
 func (m *Manager) Begin(user string, bytes int64) (func(), error) {
 	h := &m.heavy
 	h.mu.Lock()
@@ -172,14 +200,10 @@ func (m *Manager) Begin(user string, bytes int64) (func(), error) {
 		}
 		h.mu.Unlock()
 	}
-	release := func() {}
-	if m.Reserve != nil {
-		r, ok := m.Reserve(bytes)
-		if !ok {
-			leave()
-			return nil, ErrBusy
-		}
-		release = r
+	release, err := m.More(bytes)
+	if err != nil {
+		leave()
+		return nil, err
 	}
 	var once sync.Once
 	return func() { once.Do(func() { release(); leave() }) }, nil

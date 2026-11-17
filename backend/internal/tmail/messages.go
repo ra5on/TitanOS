@@ -285,7 +285,7 @@ func fetchOne(c *imapclient.Client, uid uint32, opts *imap.FetchOptions) (*imapc
 
 // fetchSections fetches parts of a mail, each at most its limit, and
 // reports which were cut.
-func fetchSections(c *imapclient.Client, uid uint32, parts []partInfo, limits []int64) (map[string][]byte, map[string]bool, error) {
+func fetchSections(c *imapclient.Client, b *budgetConn, uid uint32, parts []partInfo, limits []int64) (map[string][]byte, map[string]bool, error) {
 	if len(parts) == 0 {
 		return map[string][]byte{}, map[string]bool{}, nil
 	}
@@ -308,15 +308,21 @@ func fetchSections(c *imapclient.Client, uid uint32, parts []partInfo, limits []
 				if sectionKey(p.path) != k {
 					continue
 				}
-				b, err := io.ReadAll(io.LimitReader(section.Literal, limits[i]+1))
+				raise(b, section.Literal, limits[i])
+				got, err := io.ReadAll(io.LimitReader(section.Literal, limits[i]+1))
+				b.set(budgetCommand)
 				if err != nil {
-					_ = cmd.Close() // the read error is what counts
+					_ = c.Close() // the rest of the answer is not read
 					return nil, nil, err
 				}
-				if int64(len(b)) > limits[i] {
-					b = b[:limits[i]]
+				if int64(len(got)) > limits[i] {
+					// More than asked for: the rest is not read.
+					_ = c.Close()
+					got = got[:limits[i]]
+					data[k], cut[k] = got, true
+					return data, cut, nil
 				}
-				data[k] = b
+				data[k] = got
 				cut[k] = p.size > limits[i]
 			}
 		}
@@ -382,12 +388,7 @@ func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32,
 				limits = append(limits, encodedLimit(a, maxInlineImage))
 			}
 		}
-		var expected int64
-		for _, l := range limits {
-			expected += l
-		}
-		s.budget.set(budgetCommand + expected)
-		data, cut, err := fetchSections(c, uid, parts, limits)
+		data, cut, err := fetchSections(c, s.budget, uid, parts, limits)
 		if err != nil {
 			return err
 		}
@@ -481,10 +482,8 @@ func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32,
 		if err != nil {
 			return err
 		}
-		// The answer is the part as the structure gave its size.
-		s.budget.set(info.size + budgetMargin)
 		w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
-		return streamSection(c, uid, path, info.encoding, w, -1)
+		return streamSection(c, s.budget, uid, path, info.encoding, w, -1)
 	})
 }
 
@@ -508,8 +507,21 @@ func partOf(c *imapclient.Client, s *session, folder string, uid uint32, part st
 	return info, nil
 }
 
+// raise lets the literal of a part through the budget once it arrives:
+// its announced size (at most cap encoded bytes for a bounded part) plus
+// the margin. The literal is streamed, never kept whole; the caller sets
+// the budget back to budgetCommand right after it (security review of
+// 1.05: a size the server claims in the structure is never a budget).
+func raise(b *budgetConn, lit imap.LiteralReader, decoded int64) {
+	size := lit.Size()
+	if decoded >= 0 {
+		size = min(size, 3*decoded+4096)
+	}
+	b.set(size + budgetMargin)
+}
+
 // streamSection copies a decoded part to w; limit >= 0 refuses more.
-func streamSection(c *imapclient.Client, uid uint32, path []int, encoding string, w io.Writer, limit int64) error {
+func streamSection(c *imapclient.Client, b *budgetConn, uid uint32, path []int, encoding string, w io.Writer, limit int64) error {
 	cmd := c.Fetch(uidSet(uid), &imap.FetchOptions{UID: true, BodySection: []*imap.FetchItemBodySection{{Part: path, Peek: true}}})
 	found := false
 	var copyErr error
@@ -520,6 +532,7 @@ func streamSection(c *imapclient.Client, uid uint32, path []int, encoding string
 				continue
 			}
 			found = true
+			raise(b, section.Literal, limit)
 			r := decoder(encoding, section.Literal)
 			if limit >= 0 {
 				var n int64
@@ -530,8 +543,10 @@ func streamSection(c *imapclient.Client, uid uint32, path []int, encoding string
 			} else {
 				_, copyErr = io.Copy(w, r)
 			}
+			b.set(budgetCommand)
 			if copyErr != nil {
-				_ = cmd.Close() // the copy error is what counts; the connection is closed after it
+				// The rest of the literal is not read: the connection goes.
+				_ = c.Close()
 				return copyErr
 			}
 		}
@@ -562,9 +577,8 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 		}
 		for _, a := range walkStructure(b.BodyStructure).attachments {
 			if a.id == cid && slices.Contains(inlineTypes, a.mediaType) {
-				s.budget.set(encodedLimit(a, maxInlineImage) + budgetMargin)
 				w := head(PartInfo{Name: a.attachment().Name, Type: a.mediaType})
-				return streamSection(c, uid, a.path, a.encoding, w, maxInlineImage)
+				return streamSection(c, s.budget, uid, a.path, a.encoding, w, maxInlineImage)
 			}
 		}
 		return fmt.Errorf("%w: picture", ErrNotFound)
@@ -590,8 +604,7 @@ func (m *Manager) PartBytes(ctx context.Context, user, id, folder string, uid ui
 		} else if expected > 0 {
 			buf.Grow(int(expected) + 4096)
 		}
-		s.budget.set(encodedLimit(info, int(limit)) + budgetMargin)
-		return streamSection(c, uid, path, info.encoding, &buf, limit)
+		return streamSection(c, s.budget, uid, path, info.encoding, &buf, limit)
 	})
 	if err != nil {
 		return nil, Attachment{}, err

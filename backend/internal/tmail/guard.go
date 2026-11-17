@@ -136,12 +136,18 @@ const NewTargetLimit = 10
 type targetState struct {
 	mu    sync.Mutex
 	known map[string]bool
-	tries checkLimiter
+	// tried: account → attempts of the last minute (a host:port, or one
+	// check of the settings for IMAP and SMTP together) → first time.
+	tried map[string]map[string]time.Time
 }
 
 func targetKey(user string, s Server) string {
 	return user + "\x00" + s.Host + ":" + strconv.Itoa(s.Port)
 }
+
+// attemptKey names one check of the settings in a context: its IMAP and
+// SMTP connections count as one attempt.
+type attemptKey struct{}
 
 // succeeded notes that an account logged in to a server.
 func (m *Manager) succeeded(user string, s Server) {
@@ -154,28 +160,70 @@ func (m *Manager) succeeded(user string, s Server) {
 	t.known[targetKey(user, s)] = true
 }
 
-// mayTry tells whether an account may open a connection to a server now.
-func (m *Manager) mayTry(user string, s Server) bool {
+// knownLocked marks the servers of the stored mailboxes with a password
+// as known (m.mu held), at a start: they need no attempt of their own
+// after every start (follow-up of the security review). Servers changed
+// later count until a login there goes through.
+func (m *Manager) knownLocked() {
+	for name, f := range m.users {
+		for _, mb := range f.Mailboxes {
+			if mb.Password != "" {
+				m.succeeded(name, mb.IMAP)
+				m.succeeded(name, mb.SMTP)
+			}
+		}
+	}
+}
+
+// mayTry tells whether an account may open a connection to a server now:
+// a known one always, else at most NewTargetLimit different attempts a
+// minute (the same host:port, or one check of the settings, counts once).
+func (m *Manager) mayTry(ctx context.Context, user string, s Server) bool {
 	t := &m.targets
 	t.mu.Lock()
-	known := t.known[targetKey(user, s)]
-	t.mu.Unlock()
-	return known || t.tries.allow(user, m.clock(), NewTargetLimit)
+	defer t.mu.Unlock()
+	if t.known[targetKey(user, s)] {
+		return true
+	}
+	attempt := s.Host + ":" + strconv.Itoa(s.Port)
+	if id, ok := ctx.Value(attemptKey{}).(string); ok {
+		attempt = "check:" + id
+	}
+	now := m.clock()
+	if t.tried == nil {
+		t.tried = map[string]map[string]time.Time{}
+	}
+	recent := t.tried[user]
+	if recent == nil {
+		recent = map[string]time.Time{}
+		t.tried[user] = recent
+	}
+	for k, at := range recent {
+		if now.Sub(at) >= time.Minute {
+			delete(recent, k)
+		}
+	}
+	if _, counted := recent[attempt]; counted {
+		return true
+	}
+	if len(recent) >= NewTargetLimit {
+		return false
+	}
+	recent[attempt] = now
+	return true
 }
 
 // forgetTargets drops what is known of an account's servers.
 func (m *Manager) forgetTargets(user string) {
 	t := &m.targets
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	for k := range t.known {
 		if strings.HasPrefix(k, user+"\x00") {
 			delete(t.known, k)
 		}
 	}
-	t.mu.Unlock()
-	t.tries.mu.Lock()
-	delete(t.tries.used, user)
-	t.tries.mu.Unlock()
+	delete(t.tried, user)
 }
 
 // dial opens a TCP connection to a server of a mailbox of an account,
@@ -184,7 +232,7 @@ func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, er
 	if !validHost(s.Host) || s.Port < 1 || s.Port > 65535 {
 		return nil, ErrInvalid
 	}
-	if !m.mayTry(user, s) {
+	if !m.mayTry(ctx, user, s) {
 		return nil, ErrRateLimited
 	}
 	confined := m.confined(user)

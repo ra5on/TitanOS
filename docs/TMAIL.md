@@ -125,7 +125,7 @@ Beim Bau des Backends genauer festgelegt oder geändert. Routen, Felder und Code
 | `mail_password_required` | 400 | **neu:** Host von IMAP oder SMTP geändert (oder „prüfen“ gegen andere Hosts) ohne neues Passwort – ein gespeichertes Passwort geht nie an einen anderen Host |
 | `mail_no_password` | 409 | **neu:** kein Passwort gespeichert |
 | `mail_rate_limited` | 429 | **neu:** mehr als 10 Verbindungsprüfungen oder 10 Verbindungen zu noch nie erfolgreichen Servern je Minute und Konto; `Retry-After: 60` |
-| `mail_busy` | 503 | **neu:** schon zwei große Anfragen des Kontos (`send`, `draft`, `part`, `part/save`) oder kein Platz im RAM-Budget von TitanOS; `Retry-After: 5` |
+| `mail_busy` | 503 | **neu:** schon zwei große Anfragen des Kontos (`send`, `draft`, `part/save`) oder auch nach 5 s kein Platz im RAM-Budget von TitanOS; reserviert wird nach der echten Größe (Upload × 3, Dateien des NAS und Teile von Mails × 3, gespeicherter Anhang × 1), unter 1 MiB (reiner Text) nichts; Downloads streamen und reservieren nichts; `Retry-After: 5` |
 | `mail_key_missing` | 503 | **neu:** Schlüssel `/config/tmail/key` fehlt, obwohl Passwörter gespeichert sind (kein neuer Schlüssel; aus der Stick-Sicherung wiederherstellen oder Postfächer neu anlegen) |
 | `mail_key_damaged` | 503 | **neu:** Schlüssel beschädigt oder ein Passwort öffnet nicht |
 | `mail_settings_unreadable` | 503 | **neu:** `/config/tmail/<konto>.json` oder `access.json` beim Start nicht lesbar; nichts wird darüber geschrieben |
@@ -133,9 +133,10 @@ Beim Bau des Backends genauer festgelegt oder geändert. Routen, Felder und Code
 Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Dateimanagers (`file_not_found`, `file_exists` …).
 
 **Ziele je Rolle (Festlegung des Koordinators, 17.11.2026)**
+- **Grenzen von `netguard.Confined`** (bewusst so): Die Netze des NAS zählen bei IPv6 als /56. Bekommt der Anschluss ein /48 (manche Anbieter, Firmen), liegen andere /56 desselben Anschlusses außerhalb und gelten für Benutzer als öffentlich. Steht das NAS in einem Rechenzentrum mit öffentlichem IPv4-Netz, sind die Nachbarn im selben Netz für Benutzer gesperrt, auch wenn sie fremde Mailserver sind.
 - Konten der Rolle **Benutzer** erreichen nur öffentliche Adressen (keine privaten Netze, kein Tailscale/CGNAT, kein Link-Local, nichts Reserviertes, kein 6to4 `2002::/16`, kein NAT64 `64:ff9b::/96`/`64:ff9b:1::/48`) **außerhalb der Netze des NAS** (Netze der eigenen Schnittstellen mit ihrer Maske, IPv6 mindestens als /56; die eigenen Adressen auf allen Ports) – `netguard.Confined`, dieselbe Regel wie bei `notify` und Link-Downloads. Besitzer und Administratoren dürfen zusätzlich ins Heimnetz. Geprüft im Dialer nach der DNS-Auflösung, für jede Verbindung des Kontos (Listen, Lesen, Senden, IDLE, `POST /accounts/test`); Rolle wie sie jetzt ist.
 - Fehler `mail_host_forbidden` mit dem Grund im Text. Ein schon gespeichertes Postfach eines Benutzers mit LAN-Ziel bleibt stehen; seine Verbindung wird abgewiesen, Status `unreachable` mit Code `mail_host_forbidden` (wird später ein Administrator daraus, verbindet es wieder).
-- Gegen Port-Abtasten: `POST /accounts/test` höchstens 10-mal je Minute und Konto, und jede Verbindung zu einem Server, an dem sich das Konto noch nie angemeldet hat, höchstens 10-mal je Minute und Konto (beides alle Rollen, `429 mail_rate_limited`, `Retry-After: 60`; gilt für jede Route, auch über ein gespeichertes Postfach). Für Benutzer unterscheiden **alle** Antworten (Prüfung und jede andere Route) die Ursache nicht: verweigert, Zeitüberschreitung, kein Mailserver und TLS-Fehler heißen `mail_unreachable` ohne Servertext, `mail_send_failed` ohne Antwort des Servers.
+- Gegen Port-Abtasten: `POST /accounts/test` höchstens 10-mal je Minute und Konto, und höchstens 10 verschiedene Versuche je Minute und Konto mit Servern, an denen sich das Konto in diesem Lauf von titand noch nie angemeldet hat (derselbe `host:port` zählt einmal, eine Prüfung im Assistenten mit IMAP und SMTP zählt einmal; die Server gespeicherter Postfächer mit Passwort gelten beim Start als bekannt, nur geänderte oder neue zählen) (beides alle Rollen, `429 mail_rate_limited`, `Retry-After: 60`; gilt für jede Route, auch über ein gespeichertes Postfach). Für Benutzer unterscheiden **alle** Antworten (Prüfung und jede andere Route) die Ursache nicht: verweigert, Zeitüberschreitung, kein Mailserver und TLS-Fehler heißen `mail_unreachable` ohne Servertext, `mail_send_failed` ohne Antwort des Servers.
 
 **Postfächer**
 - Neues Feld `senderName` (Name im `From`, leer = nur Adresse). `name` ist nur die Bezeichnung in T-Mail.
@@ -232,3 +233,12 @@ Zwei unabhängige Durchsichten des Backends (Stand `bb8ea52a`), behoben am 17.11
 | NIEDRIG | Dateien ohne `Created` galten für jedes Konto des Namens | Ohne `Created` fremd für ein Konto mit `Created`; Passwörter neu als `v2:` mit der Anlegezeit in den Zusatzdaten (`v1:` wird weiter gelesen); Adressbuch ebenso |
 | NIEDRIG | Beliebig viele Ereignisströme | Höchstens 8 je Konto, der älteste endet |
 | NIEDRIG | Leere INBOX ohne UIDNEXT: `UID SEARCH UID *` wird abgelehnt, Wiederholschleife | Grundlinie mindestens UID 1 |
+
+**Nachprüfung (Stand `c4d0eec7`):** 13 von 14 Funden behoben; nachgebessert:
+
+| Stufe | Fund | Behebung |
+|---|---|---|
+| HOCH | Beim Herunterladen folgte das Budget der Größe, die der Server in der Struktur angab (bis 4 GiB), und blieb danach an der Verbindung im Pool stehen: eine unverlangte Zeile statt des Literals (Spitze 877 MiB) oder eine Flut nach dem Anhang (1096 MiB) | Vor jedem Abruf gilt das Budget eines Befehls; erst wenn das Literal ankommt, wird es auf dessen Größe plus 1 MiB gehoben (gestreamt, nie gepuffert; bei begrenzten Teilen höchstens das Dreifache der Grenze) und gleich danach zurückgesetzt. Nach jeder Anfrage setzt `withIMAP`, nach jedem Schritt der Wächter das Budget eines Befehls. Ein zu großer Teil schließt die Verbindung, statt den Rest zu lesen. Test mit beiden Wegen: Spitze unter 96 MiB (vorher 562/519 MiB) |
+| NIEDRIG | `mail_busy` auf Geräten mit wenig RAM (pauschal 83 MiB je Senden/Entwurf, 8 MiB je Download, kein Warten) | Reservierung nach echter Größe, unter 1 MiB keine, Downloads ohne; bis 5 s Warten auf Platz |
+| NIEDRIG | Grenze für neue Ziele traf nach jedem Start legitime Postfächer | Server gespeicherter Postfächer mit Passwort beim Laden bekannt; gleiche Versuche zählen einmal, eine Prüfung (IMAP+SMTP) einmal |
+| INFO | Grenzen von `netguard.Confined` (/48-Anschlüsse, Rechenzentrum) | dokumentiert unter „Ziele je Rolle“ und in `docs/rules/SYSTEM.md` |
