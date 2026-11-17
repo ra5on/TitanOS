@@ -172,9 +172,15 @@ func (b *agentToolbox) activityLog(ctx context.Context, args json.RawMessage) (a
 		OK     bool   `json:"ok"`
 	}
 	out := []line{}
-	total := 0
+	total, locked := 0, 0
 	for _, e := range entries {
 		if e.At.Before(since) || e.At.After(until) {
+			continue
+		}
+		// The folder rules hold here too: what happened in a locked folder
+		// would name its files.
+		if b.targetLocked(e.Target) {
+			locked++
 			continue
 		}
 		total++
@@ -190,7 +196,47 @@ func (b *agentToolbox) activityLog(ctx context.Context, args json.RawMessage) (a
 	if !stored {
 		result["note"] = "The activity log is only kept in memory until a volume holds it: entries from before the last start are missing."
 	}
+	if locked > 0 {
+		result["hidden"] = locked
+		result["why"] = fmt.Sprintf("%d entries concern folders the person locked for the agent and are not shown (%s).", locked, whereFolders)
+	}
 	return result, nil
+}
+
+// targetLocked reports whether a target of the activity log names a place
+// in a folder locked for the agent. Targets are root/path ("share/Docs/a"),
+// several joined by ", ", a move as "a → b" (activity.go, filePlace).
+func (b *agentToolbox) targetLocked(target string) bool {
+	if len(b.settings.Policy.Folders) == 0 || target == "" {
+		return false
+	}
+	for _, item := range strings.Split(target, ", ") {
+		// The place after "→" of a rename is a path in the same root.
+		root := ""
+		for _, part := range strings.Split(item, "→") {
+			part = strings.Trim(strings.TrimSpace(part), "/")
+			if part == "" {
+				continue
+			}
+			segs := strings.SplitN(part, "/", 3)
+			if len(segs) >= 2 {
+				rest := ""
+				if len(segs) == 3 {
+					rest = segs[2]
+				}
+				if b.realFolderMode(segs[0]+"/"+segs[1], rest, false) == agent.ModeDeny {
+					return true
+				}
+				if root == "" {
+					root = segs[0] + "/" + segs[1]
+				}
+			}
+			if root != "" && b.realFolderMode(root, part, false) == agent.ModeDeny {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // monitoringOff is the answer while the monitoring history is switched off.

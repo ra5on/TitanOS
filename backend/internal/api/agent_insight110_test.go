@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -14,6 +16,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
@@ -161,13 +164,6 @@ func TestAgentInsightToolsRights(t *testing.T) {
 	}
 	if _, _, err := runAgentTool(t, ts, settings, "activity_log", map[string]any{}); err == nil {
 		t.Fatal("forbidden area ran")
-	}
-	// The monitoring history switched off is no "all quiet".
-	if ts.server.opts.Monitoring != nil {
-		result, _, err = runAgentTool(t, ts, ts.server.agentSettings(), "monitoring_history", map[string]any{})
-		if err != nil || result["hidden"] != true || !strings.Contains(result["why"].(string), "switched off") {
-			t.Fatalf("monitoring off: %v %v", result, err)
-		}
 	}
 
 	// The page of the rights shows the area NVR also before a camera exists.
@@ -320,5 +316,84 @@ func TestParseMoment(t *testing.T) {
 	}
 	if _, err := parseMoment("gestern", now); err == nil {
 		t.Error("gestern read as a moment")
+	}
+}
+
+// The folder rules hold for the activity log too: what happened in a
+// locked folder is left out and counted, never named.
+func TestAgentActivityLogKeepsLockedFoldersOut(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard, Folders: []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}})
+	dir := ts.withShare()
+	os.MkdirAll(filepath.Join(dir, "Privat"), 0o755)
+	log := activity.New(ts.store)
+	ts.server.opts.Activity = log
+	now := time.Now()
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/files/delete", Target: filePlace("share/Docs", "Privat/brief.pdf"), OK: true})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/files/copy", Target: filePlace("share/Docs", "Offen/a.txt") + ", " + filePlace("share/Docs", "Privat/b.txt"), OK: true})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/files/rename", Target: filePlace("share/Docs", "Offen/c.txt") + " → Privat/c.txt", OK: true})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/files/delete", Target: filePlace("share/Docs", "Offen/alt.txt"), OK: true})
+	result, text, err := runAgentTool(t, ts, ts.server.agentSettings(), "activity_log", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, "Privat") || result["total"] != float64(1) || result["hidden"] != float64(3) {
+		t.Fatalf("locked folder in the activity log: %s", text)
+	}
+	if why, _ := result["why"].(string); !strings.Contains(why, "Ordner-Regeln") {
+		t.Fatalf("why: %q", why)
+	}
+}
+
+// The monitoring history in short: averages, highest value with its time
+// and the steps; gaps and missing latencies do not break it. Switched off,
+// it says so instead of "all quiet".
+func TestAgentMonitoringHistory(t *testing.T) {
+	start := time.Date(2026, 11, 10, 0, 0, 0, 0, time.Local)
+	var samples []monitoring.Sample
+	lat := 4.0
+	for h := range 168 {
+		if h >= 30 && h < 42 {
+			continue // no samples for half a day
+		}
+		s := monitoring.Sample{At: start.Add(time.Duration(h) * time.Hour), CPU: 10, RAMTotal: 8e9, RAMAvailable: 6e9,
+			Disks: []monitoring.Disk{{Name: "sda", ReadBPS: 2e6, WriteBPS: 1e6}}, Networks: []monitoring.Network{{Name: "eth0", Receive: 1e6, Send: 5e5}}}
+		if h == 100 {
+			s.CPU = 95
+			s.Disks[0].LatencyMS = &lat
+		}
+		samples = append(samples, s)
+	}
+	samples = append(samples, monitoring.Sample{At: start.Add(168 * time.Hour), Gap: true})
+	out := summariseHistory(samples, 168)
+	series := out["series"].(map[string]any)
+	data, _ := json.Marshal(series["cpu"])
+	var cpu struct {
+		Average, Highest float64
+		HighestAt        string
+		Steps            []float64
+	}
+	json.Unmarshal(data, &cpu)
+	if cpu.Highest != 95 || cpu.HighestAt != start.Add(100*time.Hour).Format("2006-01-02 15:04") || len(cpu.Steps) != 29 {
+		t.Fatalf("cpu: %+v", cpu)
+	}
+	if !slices.Contains(cpu.Steps, -1) || cpu.Steps[0] != 10 {
+		t.Fatalf("steps: %v", cpu.Steps)
+	}
+	if out["gaps"] != 1 || series["disk sda latency"] == nil || series["memory"] == nil || out["step"] != "6h0m0s" {
+		t.Fatalf("summary: %v", out)
+	}
+	if out := summariseHistory(nil, 24); out["samples"] != 0 {
+		t.Fatalf("empty: %v", out)
+	}
+
+	// Switched off (as from the factory).
+	ts := newTestServerWith(t, func(o *Options) { o.Monitoring = monitoring.New(o.Store) })
+	ts.setup()
+	agentOn(t, ts, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	for _, tool := range []string{"monitoring_history", "capacity_forecast"} {
+		result, _, err := runAgentTool(t, ts, ts.server.agentSettings(), tool, map[string]any{})
+		if err != nil || result["hidden"] != true || !strings.Contains(fmt.Sprint(result["why"]), "Einstellungen › Monitoring") {
+			t.Fatalf("%s switched off: %v %v", tool, result, err)
+		}
 	}
 }
