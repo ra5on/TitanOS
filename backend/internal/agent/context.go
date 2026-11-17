@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -286,10 +285,6 @@ func (r *Runner) offered(chat *Chat) []ToolSpec {
 				names = append(slices.Clone(names[:6]), "…")
 			}
 			desc.WriteString(a + " (" + strings.Join(names, ", ") + ")")
-		}
-		if why := r.missing(); len(why) > 0 {
-			// Only the names: agent_access and tools_load itself say why.
-			desc.WriteString(". Not available to you now (agent_access says why): " + strings.Join(slices.Sorted(maps.Keys(why)), ", "))
 		}
 		out = append(out, builtinSpec(toolLoad, desc.String(),
 			map[string]any{"type": "object", "properties": map[string]any{"area": map[string]any{"type": "string", "enum": areas}}, "required": []string{"area"}}))

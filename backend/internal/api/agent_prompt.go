@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -84,6 +85,9 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 		}
 	}
 	in.Snapshot = s.agentSnapshot(ctx, box)
+	// 1.10: what is not there for this account, so that "none" is not
+	// said where the agent may simply not look.
+	in.Missing = slices.Sorted(maps.Keys(box.Missing()))
 	in.Instruction = settings.Instruction
 	if p, err := store.Profile(user.Name); err == nil {
 		in.Personal = p.Instruction

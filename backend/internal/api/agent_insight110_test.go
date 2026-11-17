@@ -80,12 +80,13 @@ func TestAgentAccessSaysWhatIsHidden(t *testing.T) {
 	if !found {
 		t.Fatalf("tools_load did not say why: %+v", chat.Entries)
 	}
-	// The description of tools_load names the missing areas.
+	// The prompt names the missing areas.
 	fake.mu.Lock()
-	tools, _ := json.Marshal(fake.got[0]["tools"])
+	msgs, _ := fake.got[0]["messages"].([]any)
 	fake.mu.Unlock()
-	if !strings.Contains(string(tools), "Not available to you now (agent_access says why): ") || !strings.Contains(string(tools), "agent_access") {
-		t.Fatalf("tools_load without the missing areas: %.400s", tools)
+	system, _ := msgs[0].(map[string]any)["content"].(string)
+	if !strings.Contains(system, "Not available to you here: ") || !strings.Contains(system, "docker") {
+		t.Fatalf("prompt without the missing areas")
 	}
 
 	// A user: no Home Assistant, said as such.
