@@ -70,6 +70,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/tmail"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
@@ -102,6 +103,8 @@ type Options struct {
 	Startup *startup.Manager
 	Files   *files.Manager
 	Docker  *docker.Manager
+	// Mail is T-Mail (docs/TMAIL.md); nil answers 403 mail_disabled.
+	Mail *tmail.Manager
 	// SystemData says where TitanOS keeps its own data while no volume is
 	// chosen; nil takes the first mounted volume by name.
 	SystemData *volumedata.Home
@@ -418,6 +421,7 @@ func New(opts Options) *Server {
 	s.registerTerminal(mux)
 	s.registerScripts(mux)
 	s.registerAgent(mux)
+	s.registerMail(mux)
 
 	s.routeCluster(mux)
 
