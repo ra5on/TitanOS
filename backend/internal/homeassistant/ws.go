@@ -31,7 +31,7 @@ func (m *Manager) wsOpen(ctx context.Context) (*websocket.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
-	conn.SetReadLimit(4 << 20)
+	conn.SetReadLimit(wsReadLimit)
 	read := func(v any) error {
 		readCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -66,6 +66,14 @@ func (m *Manager) wsOpen(ctx context.Context) (*websocket.Conn, error) {
 	return conn, nil
 }
 
+// wsReadLimit bounds one message of the WebSocket API.
+const wsReadLimit = 4 << 20
+
+// ErrAnswerTooLarge is an answer above wsReadLimit (e.g. hourly statistics
+// of many entities over a year): Home Assistant was reached, the question
+// asks for too much.
+var ErrAnswerTooLarge = errors.New("homeassistant: the answer is larger than 4 MiB; ask for fewer entities, fewer days or a longer period")
+
 // CommandError is an error Home Assistant answered a command with.
 type CommandError struct {
 	Code, Message string
@@ -99,6 +107,9 @@ func (m *Manager) command(ctx context.Context, timeout time.Duration, cmd map[st
 	}
 	for {
 		_, data, err := conn.Read(ctx)
+		if errors.Is(err, websocket.ErrMessageTooBig) {
+			return nil, ErrAnswerTooLarge
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrUnreachable, err)
 		}

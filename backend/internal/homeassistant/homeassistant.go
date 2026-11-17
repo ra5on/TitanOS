@@ -473,6 +473,19 @@ func newClient(s Settings) *http.Client {
 const maxAnswer = 8 << 20
 
 // do sends one request to the REST API and decodes the answer into out.
+// StatusError is an answer of the REST API outside 2xx. It counts as
+// ErrUnreachable, as before; Code tells callers what Home Assistant said.
+type StatusError struct {
+	Code           int
+	Status, Detail string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("%v: %s %s", ErrUnreachable, e.Status, e.Detail)
+}
+
+func (e *StatusError) Unwrap() error { return ErrUnreachable }
+
 func (m *Manager) do(ctx context.Context, method, path string, body, out any) error {
 	m.mu.Lock()
 	s, client := m.settings, m.client
@@ -518,7 +531,7 @@ func (m *Manager) do(ctx context.Context, method, path string, body, out any) er
 		if len(detail) > 300 {
 			detail = detail[:300]
 		}
-		return fmt.Errorf("%w: %s %s", ErrUnreachable, res.Status, detail)
+		return &StatusError{Code: res.StatusCode, Status: res.Status, Detail: detail}
 	}
 	if out == nil {
 		return nil

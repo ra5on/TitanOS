@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"slices"
 	"strconv"
 	"sync"
@@ -47,7 +46,6 @@ type watchState struct {
 	// connection stands: read once when it opens, then every change. Empty
 	// while not connected: a state that may be old counts as unknown.
 	current          map[string]string
-	events           map[string][]func(json.RawMessage)
 	transitions      map[string][]Transition
 	boot             int64
 	counter          int64
@@ -66,7 +64,6 @@ type watchState struct {
 func (w *watchState) init() {
 	if w.transitions == nil {
 		w.transitions = map[string][]Transition{}
-		w.events = map[string][]func(json.RawMessage){}
 		w.sources = map[string][]string{}
 		w.current = map[string]string{}
 		w.boot = time.Now().UnixNano()
@@ -137,17 +134,6 @@ func (m *Manager) setCurrent(entity, state string) {
 	m.watch.current[entity] = state
 }
 
-// OnEvent calls handle for every Home Assistant event of a type, e.g.
-// mobile_app_notification_action. Handlers run on the watcher's goroutine
-// and must return quickly.
-func (m *Manager) OnEvent(eventType string, handle func(data json.RawMessage)) {
-	m.watch.mu.Lock()
-	defer m.watch.mu.Unlock()
-	m.watch.init()
-	m.watch.events[eventType] = append(m.watch.events[eventType], handle)
-	m.watch.changed()
-}
-
 // Transitions returns the recorded changes of an entity after mark, oldest
 // first, and the newest mark known for it ("" if none).
 func (m *Manager) Transitions(entity, after string) ([]Transition, string) {
@@ -196,13 +182,9 @@ func (m *Manager) Run(ctx context.Context) {
 		m.watch.init()
 		wake := m.watch.wake
 		entities := slices.Clone(m.watch.entities)
-		var events []string
-		for e := range m.watch.events {
-			events = append(events, e)
-		}
 		m.watch.mu.Unlock()
 		settingsChanged := m.Changed()
-		if !m.Active() || len(entities) == 0 && len(events) == 0 {
+		if !m.Active() || len(entities) == 0 {
 			m.setConnected(false, "")
 			select {
 			case <-ctx.Done():
@@ -212,7 +194,7 @@ func (m *Manager) Run(ctx context.Context) {
 			continue
 		}
 		started := time.Now()
-		err := m.session(ctx, entities, events, wake, settingsChanged)
+		err := m.session(ctx, entities, wake, settingsChanged)
 		m.setConnected(false, errorText(err))
 		if ctx.Err() != nil {
 			return
@@ -261,7 +243,7 @@ var errResubscribe = errors.New("what is watched changed")
 
 // session is one connection: authenticate, subscribe, read until something
 // changes or the connection breaks.
-func (m *Manager) session(ctx context.Context, entities, events []string, wake, settingsChanged <-chan struct{}) error {
+func (m *Manager) session(ctx context.Context, entities []string, wake, settingsChanged <-chan struct{}) error {
 	conn, err := m.wsOpen(ctx)
 	if err != nil {
 		return err
@@ -275,7 +257,6 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 	}
 	id := 0
 	triggerID := -1
-	eventIDs := map[int]string{}
 	if len(entities) > 0 {
 		id++
 		triggerID = id
@@ -283,28 +264,10 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 			return err
 		}
 	}
-	for _, e := range events {
-		id++
-		eventIDs[id] = e
-		if err := write(map[string]any{"id": id, "type": "subscribe_events", "event_type": e}); err != nil {
-			return err
-		}
-	}
-	m.setConnected(true, "")
-	// The states as they are now, read after subscribing: a change in
-	// between comes as an event after this and wins (PLAN 83). An entity
-	// that cannot be read stays unknown.
-	for _, entity := range entities {
-		readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		state, err := m.State(readCtx, entity)
-		cancel()
-		if err == nil {
-			m.setCurrent(entity, state.State)
-		}
-	}
-
-	// Reading happens on its own goroutine; this one waits for changes and
-	// keeps the connection alive.
+	// Reading happens on its own goroutine, from before the states are
+	// read over REST: Home Assistant's pings are answered meanwhile (it
+	// ends a connection that does not answer). This one waits for changes
+	// and keeps the connection alive.
 	type message struct {
 		ID      int    `json:"id"`
 		Type    string `json:"type"`
@@ -335,6 +298,20 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 			}
 		}
 	}()
+	m.setConnected(true, "")
+	// The states as they are now, read after subscribing: a change in
+	// between comes as an event after this and wins (PLAN 83; the events
+	// wait in messages until the states are read). An entity
+	// that cannot be read stays unknown.
+	for _, entity := range entities {
+		stateCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		state, err := m.State(stateCtx, entity)
+		cancel()
+		if err == nil {
+			m.setCurrent(entity, state.State)
+		}
+	}
+
 	ping := time.NewTicker(30 * time.Second)
 	defer ping.Stop()
 	for {
@@ -392,34 +369,9 @@ func (m *Manager) session(ctx context.Context, entities, events []string, wake, 
 						m.record(tr.EntityID, from, to)
 					}
 				}
-			case msg.Type == "event":
-				eventType, ok := eventIDs[msg.ID]
-				if !ok {
-					continue
-				}
-				var ev struct {
-					Data json.RawMessage `json:"data"`
-				}
-				if json.Unmarshal(msg.Event, &ev) != nil {
-					continue
-				}
-				m.watch.mu.Lock()
-				handlers := slices.Clone(m.watch.events[eventType])
-				m.watch.mu.Unlock()
-				for _, handle := range handlers {
-					handle(ev.Data)
-				}
 			}
 		}
 	}
-}
-
-// FireEvent fires an event in Home Assistant, e.g. titanos_answer.
-func (m *Manager) FireEvent(ctx context.Context, eventType string, data any) error {
-	if !ValidService(eventType) {
-		return invalid("event type")
-	}
-	return m.do(ctx, http.MethodPost, "/api/events/"+eventType, data, nil)
 }
 
 // Match says whether a transition fits a trigger: to and from are states to

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -52,7 +51,8 @@ func (m *Manager) Config(ctx context.Context, kind, id string) (json.RawMessage,
 	err := m.do(ctx, http.MethodGet, "/api/config/"+kind+"/config/"+id, nil, &out)
 	if err != nil {
 		// Home Assistant answers 404 for an id it does not know.
-		if strings.Contains(err.Error(), "404") {
+		var status *StatusError
+		if errors.As(err, &status) && status.Code == http.StatusNotFound {
 			return nil, nil
 		}
 		return nil, err
