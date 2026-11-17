@@ -191,7 +191,7 @@ func TestAgentHAConfigRead(t *testing.T) {
 			return
 		}
 		if r.URL.Path == "/api/config/automation/config/1" {
-			w.Write([]byte(`{"id":"1","alias":"Licht aus","triggers":[{"trigger":"time","at":"22:00"}]}`))
+			w.Write([]byte(`{"id":"1","alias":"Licht aus","triggers":[{"trigger":"time","at":"22:00"}],"actions":[{"action":"lock.lock","target":{"entity_id":"lock.haustuer"}}]}`))
 			return
 		}
 		http.NotFound(w, r)
@@ -200,7 +200,7 @@ func TestAgentHAConfigRead(t *testing.T) {
 	settings := ts.server.agentSettings()
 	settings.HA.Release = homeassistant.Release{Domains: []string{"automation"}}
 	_, text, err := runAgentTool(t, ts, settings, "ha_config_read", map[string]any{"entity": "automation.licht_aus"})
-	if err != nil || !strings.Contains(text, `"at":"22:00"`) {
+	if err != nil || !strings.Contains(text, `"at":"22:00"`) || strings.Contains(text, "lock.haustuer") || !strings.Contains(text, `"action":"lock.lock"`) || !strings.Contains(text, `"hidden":true`) {
 		t.Fatalf("config: %s %v", text, err)
 	}
 	settings.HA.Release = homeassistant.Release{Domains: []string{"script"}}

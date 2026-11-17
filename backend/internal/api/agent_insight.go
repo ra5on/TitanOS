@@ -542,7 +542,41 @@ func (b *agentToolbox) haConfigRead(ctx context.Context, args json.RawMessage) (
 	if config == nil {
 		return map[string]any{"entity": req.Entity, "note": "Home Assistant has no editable configuration for it (made in YAML or a blueprint)."}, nil
 	}
-	return map[string]any{"entity": req.Entity, "id": id, "config": config}, nil
+	// Devices the config names that are not released stay unnamed, as
+	// everywhere else (1.09: no names or counts of hidden ones).
+	var tree any
+	if err := json.Unmarshal(config, &tree); err != nil {
+		return nil, err
+	}
+	masked := false
+	var walk func(key string, v any) any
+	walk = func(key string, v any) any {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, vv := range x {
+				x[k] = walk(k, vv)
+			}
+		case []any:
+			for i, vv := range x {
+				x[i] = walk(key, vv)
+			}
+		case string:
+			switch key {
+			case "entity_id", "entity", "entities":
+				if homeassistant.ValidEntity(x) && !ha.AllowedCtx(ctx, x) {
+					masked = true
+					return "(not released)"
+				}
+			}
+		}
+		return v
+	}
+	out := map[string]any{"entity": req.Entity, "id": id, "config": walk("", tree)}
+	if masked {
+		out["hidden"] = true
+		out["why"] = "Devices that are not released to the agent are shown as (not released). Saving this config back would break them: change it only where you can see everything, or tell the person what to release under " + whereHA + "."
+	}
+	return out, nil
 }
 
 func (b *agentToolbox) releaseNotes(_ context.Context, args json.RawMessage) (any, error) {
