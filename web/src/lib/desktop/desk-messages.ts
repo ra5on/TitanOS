@@ -4,12 +4,13 @@ import { applyLockSoon, clampLockMinutes, lockAnswer } from './lock-link.svelte.
 import { setWindowDrag } from '../file-drag.ts';
 import { loadWebApps } from '../webapps/webapps.svelte.ts';
 import { sanitizeNvrPrefs } from '../nvr/layout.ts';
-import { frameMessage } from './frame.ts';
+import { frameMessage, ownPath } from './frame.ts';
+import { appForPath, taskPage } from './apps.ts';
 import { t } from '../i18n/index.svelte.ts';
 import { showToast } from '../toast.svelte.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
-import { anyUnsaved, desktop, savePrefs, wm } from './wm.svelte.ts';
+import { anyUnsaved, closeWindow, desktop, frameOf, savePrefs, wm } from './wm.svelte.ts';
 
 // PLAN 64: Settings › Appearance › Dock runs in a window. The desktop stays
 // the only writer of its settings: a window asks for the dock and sends
@@ -95,6 +96,20 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		else if (msg.type === 'titanos-open-program') {
 			const key = typeof msg.key === 'string' ? msg.key : '';
 			if (key.startsWith('docker:') && findProgram(key)) void openProgram(key);
+		}
+		// 1.05: writing an e-mail opens a window of its own; only pages that
+		// are such a task (taskPage), and only of a program the account has.
+		else if (msg.type === 'titanos-open-task') {
+			const href = typeof msg.href === 'string' ? msg.href : '';
+			const app = ownPath(href) && taskPage(href) ? appForPath(href.split('?')[0]) : undefined;
+			if (app && findProgram('app:' + app.id))
+				void openProgram('app:' + app.id, { href, fresh: true });
+		} else if (msg.type === 'titanos-close') {
+			// Only a task window closes itself this way, never a program's own window.
+			const win = wm.windows.find(
+				(w) => frameOf(w.id)?.contentWindow === event.source && taskPage(w.href),
+			);
+			if (win) closeWindow(win.id);
 		}
 	}
 

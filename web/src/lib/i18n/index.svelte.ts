@@ -32,6 +32,8 @@ import type phoneDe from './features/phone.de.json';
 import type runsDe from './features/runs.de.json';
 // 1.03: shared parts of the interface (short notices, keyboard, dialogs).
 import type uiDe from './features/ui.de.json';
+// 1.05: T-Mail.
+import type mailDe from './features/mail.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -52,7 +54,8 @@ type Messages = typeof deBase &
 	typeof nvrDe &
 	typeof phoneDe &
 	typeof runsDe &
-	typeof uiDe;
+	typeof uiDe &
+	typeof mailDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -78,6 +81,7 @@ const FILES = {
 			import('./features/phone.de.json'),
 			import('./features/runs.de.json'),
 			import('./features/ui.de.json'),
+			import('./features/mail.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -101,6 +105,7 @@ const FILES = {
 			import('./features/phone.en.json'),
 			import('./features/runs.en.json'),
 			import('./features/ui.en.json'),
+			import('./features/mail.en.json'),
 		]),
 };
 
