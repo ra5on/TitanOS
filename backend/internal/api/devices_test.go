@@ -12,10 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/cluster"
 	"github.com/ra5on/TitanOS/backend/internal/pim/devices"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
 
 // newDevice makes a device password through the page of the client's
@@ -455,5 +457,79 @@ func TestDeviceRouteRights(t *testing.T) {
 		if res, body := ts.request(rt[0], rt[1], map[string]any{}); strings.Contains(string(body), "browser_session_required") || res.StatusCode == http.StatusNotFound && !strings.Contains(string(body), "device_not_found") {
 			t.Errorf("%s %s from the web UI: %d %s", rt[0], rt[1], res.StatusCode, body)
 		}
+	}
+}
+
+// A device password opens nothing but /caldav/ and /carddav/: not the
+// shares over WebDAV, not the API, not MCP, not Assist (TECHNIK 3.4.6).
+func TestDevicePasswordOpensNothingElse(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	ts.withShare()
+	ts.request("PUT", "/api/v1/system/webdav", map[string]any{"enabled": true})
+	device := ts.newDevice(ts.client, "iPhone")
+	for _, c := range []struct{ method, path, auth string }{
+		{"PROPFIND", "/dav/", "basic"},
+		{"GET", "/api/v1/system", "basic"},
+		{"GET", "/api/v1/system", "bearer"},
+		{"POST", "/mcp", "basic"},
+		{"POST", "/mcp", "bearer"},
+		{"GET", "/agent-ollama/api/tags", "basic"},
+		{"GET", "/agent-ollama/api/tags", "bearer"},
+	} {
+		req, _ := http.NewRequest(c.method, ts.url+c.path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		if c.auth == "basic" {
+			req.SetBasicAuth("alex", device.Password)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+device.Password)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode < 400 {
+			t.Errorf("%s %s with the device password (%s): %d", c.method, c.path, c.auth, res.StatusCode)
+		}
+	}
+}
+
+// Deleting an account or making one anew removes its calendars and
+// contacts from the volume (pimForgetUser → pim/store ForgetUser).
+func TestDeviceAccountDeleteForgetsCalendarData(t *testing.T) {
+	dir := t.TempDir()
+	pim := pimstore.New()
+	pim.Volume = func(feature string, create bool) (*os.Root, func(), error) {
+		path := filepath.Join(dir, ".titanos", feature)
+		if create {
+			if err := os.MkdirAll(path, 0o700); err != nil {
+				return nil, nil, err
+			}
+		}
+		root, err := os.OpenRoot(path)
+		return root, func() {}, err
+	}
+	ts := newTestServerWith(t, func(o *Options) {
+		o.PIM = pim
+		pim.Account = func(name string) (time.Time, bool) {
+			u, ok := o.Users.Get(name)
+			return u.Created, ok
+		}
+	})
+	ts.setup()
+	ts.guest("bea")
+	event := []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261110T080000Z\r\nDURATION:PT1H\r\nSUMMARY:A\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	if _, err := pim.Put(pimstore.Calendar, "bea", pimstore.DefaultCalendar, "a.ics", event, pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(dir, ".titanos", "calendar", "bea")
+	if _, err := os.Stat(folder); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := ts.request("DELETE", "/api/v1/users/bea", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d", res.StatusCode)
+	}
+	if _, err := os.Stat(folder); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("calendar of the deleted account: %v", err)
 	}
 }
