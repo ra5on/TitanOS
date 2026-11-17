@@ -580,17 +580,6 @@ const sent = (seen, method, path) =>
   );
   await page.waitForTimeout(400);
   assert.match(await chip.innerText(), /Niedrig/, "the chat's own level stays");
-  await input.fill("Und jetzt?");
-  await input.press("Enter");
-  await until(
-    "the message with the chosen level is sent",
-    async () => sent(seen, "POST", `/agent/chats/${chat.id}/messages`).length === 3,
-  );
-  assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[2].body, {
-    message: "Und jetzt?",
-    think: "low",
-    autonomy: "direct",
-  });
   // /suche opens the search with the words.
   await input.fill("/suche Sicherung");
   await input.press("Enter");
@@ -606,6 +595,19 @@ const sent = (seen, method, path) =>
   await page.keyboard.press("Escape");
   await sheet.waitFor({ state: "detached" });
   await page.locator(".picker", { hasText: "qwen3:8b" }).waitFor();
+  // What was chosen in the chat goes with the next message.
+  await input.fill("Und jetzt?");
+  await input.press("Enter");
+  await until(
+    "the message with the chosen model and level is sent",
+    async () => sent(seen, "POST", `/agent/chats/${chat.id}/messages`).length === 3,
+  );
+  assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[2].body, {
+    message: "Und jetzt?",
+    model: "qwen3:8b",
+    think: "low",
+    autonomy: "direct",
+  });
   await ctx.close();
 }
 
