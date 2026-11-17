@@ -271,3 +271,10 @@ Zwei unabhängige Durchsichten des Backends (Stand `bb8ea52a`), behoben am 17.11
 | (eigener Fund) | Ein Browser, der einen Download nicht mehr las, aber die Verbindung offen hielt, hielt Download und Verbindung des Postfachs, bis TCP aufgab: die Zeitgrenze von 10 min schloss nur die IMAP-Seite, das Schreiben an den Browser hatte keine | Schreib-Frist am Download (`/part` 10 min, `/cid` 120 s). Test `api/TestMailStalledDownloadLetsGo`: 48 MiB, der Browser liest nach dem Kopf nicht weiter, dasselbe Postfach antwortet nach der (im Test auf 1 s gekürzten) Frist; ohne Frist nach 15 s noch nicht |
 
 Gegenprobe: Die Tests für Downloads, Runden, bekannte Server, Rohtext, Markierung und ESEARCH schlagen gegen `a929224c` (Stand 1.05) fehl bzw. hängen (geprüft in einem eigenen Arbeitsbaum).
+
+
+**Prüfung der Änderungen für 1.06 (Stand `d7126153`):** Urteil „kann veröffentlicht werden“, kein hoher oder mittlerer Fund. Die drei kleinen Punkte sind gleich in 1.06 behoben (Regressionstests in `security_test.go`, die ersten beiden schlagen mit `d7126153` fehl):
+- **A (niedrig):** Nach dem Literal eines Downloads (Befehlsplatz und Reservierung schon zurückgegeben) gilt nur noch `budgetTail` = 64 KiB statt `budgetCommand`; ein großer, nicht angefragter String danach beendet die Verbindung (`TestDownloadTailHasASmallBudget`).
+- **B (niedrig):** Bis das Literal beginnt, hat ein Download die Zeit eines Befehls (`partHeadTimeout` = `commandTimeout`, 60 s), erst danach `PartTimeout` (10 min); ein Server, der vorher hängt, hält Befehlsplatz und Reservierung nicht mehr zehn Minuten (`TestDownloadHeadHasTheTimeOfACommand`).
+- **C (Info):** Die Link-Markierung trägt `direction:ltr; unicode-bidi:isolate` mit `!important`; ein `<bdo dir="rtl">` des Absenders spiegelt sie nicht (`TestLinkMarkIsNotMirrored`).
+- Offen als Info: ein Absender mit unbekanntem Zeichensatz im Namen fällt aus den Meldungs-Regeln (Regel „Absender enthält …“ greift dann nicht); wechselndes DNS großer Anbieter kostet Versuche der Bremse, bis eine Anmeldung sie bekannt macht.

@@ -1039,3 +1039,82 @@ func TestKnownServerByAddress(t *testing.T) {
 		t.Fatalf("new port of a known host: %v", err)
 	}
 }
+
+// tailIMAP answers a part's literal and then, mode "tail", a large string
+// nobody asked for in the same response, or, mode "stall", nothing at all
+// after the structure.
+func tailIMAP(t *testing.T, mode string) (string, *x509.CertPool) {
+	addr, pool, _ := scripted(t, "* OK [CAPABILITY IMAP4rev1] evil\r\n", func(w *bufio.Writer, tag, cmd, line string) bool {
+		upper := strings.ToUpper(line)
+		switch {
+		case cmd == "LOGIN":
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		case cmd == "CAPABILITY":
+			fmt.Fprintf(w, "* CAPABILITY IMAP4rev1\r\n%s OK\r\n", tag)
+		case cmd == "SELECT":
+			fmt.Fprintf(w, "* 1 EXISTS\r\n* OK [UIDVALIDITY 1] x\r\n* OK [UIDNEXT 2] x\r\n%s OK [READ-WRITE] done\r\n", tag)
+		case strings.Contains(upper, "BODYSTRUCTURE"):
+			fmt.Fprintf(w, "* 1 FETCH (UID 1 BODYSTRUCTURE (\"application\" \"octet-stream\" (\"name\" \"a.bin\") NIL NIL \"base64\" 4 NIL (\"attachment\" (\"filename\" \"a.bin\")) NIL NIL))\r\n%s OK\r\n", tag)
+		case strings.Contains(upper, "BODY.PEEK[1]"):
+			if mode == "stall" {
+				_ = w.Flush()
+				time.Sleep(5 * time.Second)
+				return false
+			}
+			fmt.Fprintf(w, "* 1 FETCH (UID 1 BODY[1] {4}\r\nQUFB BODY[2] \"%s\")\r\n%s OK\r\n", strings.Repeat("A", 2<<20), tag)
+		default:
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		}
+		return true
+	})
+	return addr, pool
+}
+
+// LOW (review of 1.06, A): after the literal of a download only a small
+// budget remains; a large string nobody asked for ends the connection.
+func TestDownloadTailHasASmallBudget(t *testing.T) {
+	addr, pool := tailIMAP(t, "tail")
+	e := newEnv(t)
+	e.m.RootCAs = pool
+	in := e.input("x")
+	in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
+	view, err := e.m.AddMailbox("alex", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.m.Part(t.Context(), "alex", view.ID, "INBOX", 1, "1", func(PartInfo) io.Writer { return io.Discard })
+	if !errors.Is(err, ErrTooLarge) {
+		t.Errorf("a large tail after the literal was read: %v", err)
+	}
+}
+
+// LOW (review of 1.06, B): until its literal begins a download has the
+// time of a command, not the browser's ten minutes.
+func TestDownloadHeadHasTheTimeOfACommand(t *testing.T) {
+	old := partHeadTimeout
+	partHeadTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { partHeadTimeout = old })
+	addr, pool := tailIMAP(t, "stall")
+	e := newEnv(t)
+	e.m.RootCAs = pool
+	in := e.input("x")
+	in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
+	view, err := e.m.AddMailbox("alex", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = e.m.Part(t.Context(), "alex", view.ID, "INBOX", 1, "1", func(PartInfo) io.Writer { return io.Discard })
+	if !errors.Is(err, ErrTimeout) || time.Since(start) > 4*time.Second {
+		t.Errorf("a stalled download before its literal: %v after %v", err, time.Since(start))
+	}
+}
+
+// INFO (review of 1.06, C): a bdo or dir of the sender does not mirror the
+// warning.
+func TestLinkMarkIsNotMirrored(t *testing.T) {
+	doc, _ := SanitizeHTML(`<bdo dir="rtl"><a href="https://ed.knab-evil.example/x">www.bank.de</a></bdo>`, nil, false)
+	if !strings.Contains(doc, "direction:ltr !important") || !strings.Contains(doc, "unicode-bidi:isolate !important") {
+		t.Errorf("the mark can be mirrored: %s", doc)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"mime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -582,14 +583,35 @@ func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32,
 	}
 	defer done()
 	return m.withIMAP(ctx, user, id, PartTimeout, func(c *imapclient.Client, s *session) error {
-		info, err := partOf(c, s, folder, uid, part)
-		if err != nil {
-			return err
+		// Until the literal begins, a download is an ordinary command: it
+		// gets commandTimeout, not the browser's PartTimeout, so that a
+		// server that stalls before the literal does not hold a turn and
+		// its reservation for ten minutes (review of 1.06, B).
+		var early atomic.Bool
+		before := time.AfterFunc(partHeadTimeout, func() {
+			early.Store(true)
+			s.kill()
+		})
+		defer before.Stop()
+		started := func() {
+			before.Stop()
+			s.streaming()
 		}
-		w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
-		return streamSection(c, s.budget, uid, path, info.encoding, w, -1, s.streaming)
+		info, err := partOf(c, s, folder, uid, part)
+		if err == nil {
+			w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
+			err = streamSection(c, s.budget, uid, path, info.encoding, w, -1, started)
+		}
+		if err != nil && early.Load() {
+			return ErrTimeout
+		}
+		return err
 	})
 }
+
+// partHeadTimeout bounds a download until its literal begins (a variable
+// for the tests).
+var partHeadTimeout = commandTimeout
 
 // PartTimeout bounds a download of an attachment: it goes at the pace of
 // the browser. The API bounds its writes to the browser by it as well, so
@@ -664,7 +686,14 @@ func streamSection(c *imapclient.Client, b *budgetConn, uid uint32, path []int, 
 			} else {
 				_, copyErr = io.Copy(w, r)
 			}
-			b.set(budgetCommand)
+			if started != nil {
+				// A download has given its turn and reservation back: what
+				// may still follow is the end of the response, so only a
+				// small budget (review of 1.06, A).
+				b.set(budgetTail)
+			} else {
+				b.set(budgetCommand)
+			}
 			if copyErr != nil {
 				// The rest of the literal is not read (the browser went
 				// away, or the part is larger than allowed): the

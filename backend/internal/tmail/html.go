@@ -213,7 +213,10 @@ func markLink(n *html.Node, real string) {
 			// (third review of 1.05).
 			"letter-spacing:normal !important;word-spacing:normal !important;font-family:sans-serif !important;text-indent:0 !important;" +
 			"text-transform:none !important;font-style:normal !important;text-decoration:none !important;white-space:normal !important;" +
-			"vertical-align:baseline !important"},
+			"vertical-align:baseline !important;" +
+			// A <bdo dir="rtl"> or dir of the sender around the link does
+			// not mirror the warning (review of 1.06, C).
+			"direction:ltr !important;unicode-bidi:isolate !important"},
 			{Key: "data-tmail-target", Val: real}}}
 	mark.AppendChild(&html.Node{Type: html.TextNode, Data: " \u26a0 " + real})
 	if n.Parent != nil {
