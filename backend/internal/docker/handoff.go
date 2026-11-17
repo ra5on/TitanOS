@@ -34,7 +34,17 @@ func (m *Manager) blockedHardware() map[string]bool {
 	return result
 }
 
+// leasesChanged renews the copy LeasedHardware reads. The caller holds
+// hardwareMu.
+func (m *Manager) leasesChanged() {
+	blocked := m.blockedHardware()
+	m.leasedMu.Lock()
+	m.leasedNow = blocked
+	m.leasedMu.Unlock()
+}
+
 func (m *Manager) saveLeases() error {
+	m.leasesChanged()
 	if err := os.MkdirAll(m.hardwareRunDir, 0o700); err != nil {
 		return err
 	}
@@ -59,7 +69,9 @@ func (m *Manager) LoadHardwareLeases() error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, &m.gpuLeases)
+	err = json.Unmarshal(data, &m.gpuLeases)
+	m.leasesChanged()
+	return err
 }
 
 func (m *Manager) engineRunning() bool {
@@ -225,6 +237,7 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 	m.gpuLeases[name] = lease
 	if err := m.saveLeases(); err != nil {
 		delete(m.gpuLeases, name)
+		m.leasesChanged()
 		finish()
 		return nil, err
 	}
