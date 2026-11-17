@@ -179,12 +179,14 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 				}
 				return map[string]any{"accounts": list}, nil
 			})),
-			reading("logs_search", "Lines of the system log since the last start, oldest first. Addresses, account names and secrets are replaced by placeholders.",
+			reading("logs_search", "Lines of the system log (kept since the last start), oldest first; since/until narrow it to a time window. Addresses, account names and secrets are replaced by placeholders.",
 				schema(map[string]any{
 					"source":   enum("Part of the system, all if left out.", "all", "titand", "kernel", "storage", "shares", "docker", "vms", "network"),
 					"minLevel": enum("Least severe level to show, info if left out.", "error", "warning", "info"),
 					"search":   map[string]any{"type": "string", "maxLength": 200, "description": "Only lines containing this text (case does not matter)."},
 					"lines":    linesArg,
+					"since":    str(momentHelp),
+					"until":    str(momentHelp),
 				}), true, s.toolLogs),
 		)
 	} else {

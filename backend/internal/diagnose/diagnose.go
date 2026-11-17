@@ -55,8 +55,10 @@ type Query struct {
 	// After is the cursor a former answer ended at; only newer lines come back.
 	After  string
 	Search string
-	// Since, when set, leaves out lines older than this moment.
+	// Since, when set, leaves out lines older than this moment; Until
+	// lines newer than it (1.10: logs of a time window, "heute Nacht").
 	Since time.Time
+	Until time.Time
 }
 
 // Logs is the answer to a query.
@@ -118,6 +120,9 @@ func (m *Manager) Logs(ctx context.Context, q Query) (Logs, error) {
 	}
 	if !q.Since.IsZero() {
 		args = append(args, "--since=@"+strconv.FormatInt(q.Since.Unix(), 10))
+	}
+	if !q.Until.IsZero() {
+		args = append(args, "--until=@"+strconv.FormatInt(q.Until.Unix(), 10))
 	}
 	if q.After != "" {
 		args = append(args, "--after-cursor="+q.After)
