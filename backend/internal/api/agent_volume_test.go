@@ -207,3 +207,56 @@ func TestAgentMoveAfterBrokenMove(t *testing.T) {
 		t.Fatal("marker kept")
 	}
 }
+
+// A-43 (1.04): a run that starts while a move begins either keeps the move
+// from starting or is refused; it never runs during the move.
+func TestAgentMoveAndRunNeverTogether(t *testing.T) {
+	fake := &agentOllama{}
+	ts := newTestServer(t)
+	ts.setup()
+	mnt := t.TempDir()
+	if err := ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
+		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
+		{Name: "fast", Level: "raid1", Filesystem: "btrfs", ArrayUUID: "c", FilesystemUUID: "d"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.disks.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"tank", "fast"} {
+		os.MkdirAll(filepath.Join(mnt, v), 0o755)
+	}
+	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true, mnt + "/fast": true} })
+	ts.shares.UseMountRoot(mnt)
+	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "policy": agent.Policy{Preset: agent.PresetStandard}, "volume": "tank"}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+	ranDuringTheMove := false
+	t.Cleanup(func() { agentMoveChecked = nil })
+	agentMoveChecked = func() {
+		// What agentLaunch does: claim the place, then ask whether the
+		// agent can run.
+		run, err := ts.server.agentClaim("alex", "chat-1", false)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := ts.server.agentReady(ts.server.agentSettings()); err == nil {
+			ranDuringTheMove = true
+		}
+		ts.server.agentRelease(run)
+	}
+	res, body := ts.request("POST", "/api/v1/agent/volume/move", map[string]any{"to": "fast"})
+	if res.StatusCode == http.StatusAccepted && ranDuringTheMove {
+		t.Error("a run started while the move began, and both went on")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for ts.server.agentMoving() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if ts.server.agentMoving() {
+		t.Fatalf("the move did not end: %d %s", res.StatusCode, body)
+	}
+}
