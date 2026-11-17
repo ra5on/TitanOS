@@ -21,8 +21,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // State are the files of /config (slash separated, globs as in path.Match)
@@ -224,7 +226,31 @@ func (s *Store) write(name string, data []byte) error {
 		return err
 	}
 	s.wrote(name, "written")
-	return s.flush(dir)
+	err = s.flush(dir)
+	removeStaleTemps(dir, filepath.Base(tmp.Name()))
+	return err
+}
+
+// staleTemp is how old a temporary file must be to count as the leftover
+// of a write a crash broke off; one of a running write is younger.
+const staleTemp = 10 * time.Minute
+
+// removeStaleTemps removes temporary files a crash left in dir. It runs
+// only when a write already touches the stick there, never on its own: no
+// write without a change of the configuration.
+func removeStaleTemps(dir, own string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".tmp-") || e.Name() == own || !e.Type().IsRegular() {
+			continue
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > staleTemp {
+			_ = os.Remove(filepath.Join(dir, e.Name())) // best effort; the next write in dir tries again
+		}
+	}
 }
 
 // WriteJSON encodes v as indented JSON and writes it atomically.
