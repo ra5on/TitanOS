@@ -54,14 +54,13 @@ const swirl: Figure = (t, n, k) => {
 	};
 };
 
-/** Which figure a kind of work shows, how fast, and whether it casts a
- *  shadow. Owner 16 Nov 2026: "nur bei den 3 Punkten bleiben und nichts
+/** Which figure a kind of work shows and how fast (no shadow since 1.05). Owner 16 Nov 2026: "nur bei den 3 Punkten bleiben und nichts
  *  anderes noch mit reinholen, dann hätten wir immer eine flüssige
  *  Animation" – every kind shows the same three spheres at one pace (the
  *  circling swirl above); only the word beside them tells what is done.
  *  (0.100 to 1.00 had four figures, one per kind.) */
-const DOTS = { figure: swirl, speed: 1, shadow: true };
-export const FIGURES: Record<BusyKind, { figure: Figure; speed: number; shadow: boolean }> = {
+const DOTS = { figure: swirl, speed: 1 };
+export const FIGURES: Record<BusyKind, { figure: Figure; speed: number }> = {
 	'': DOTS,
 	system: DOTS,
 	web: DOTS,

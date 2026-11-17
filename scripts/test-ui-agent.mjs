@@ -3159,6 +3159,30 @@ try {
       Math.max(...sizes) - Math.min(...sizes) < 0.5,
       `${name}: three dots of one size (${sizes})`,
     );
+    // 1.05 (owner 17 Nov 2026: "eine Art Schimmer … was dann auch den
+    // Boden leuchten lässt", "heller als die Schrift"): flat dots in exactly
+    // their colour – no gradient, no shadow, no ground, nothing above them
+    // that dims or lightens them.
+    const look = await fig.evaluate((el) => {
+      const dots = [...el.querySelectorAll("i")].map((d) => {
+        const c = getComputedStyle(d);
+        return [c.backgroundImage, c.backgroundColor, c.boxShadow, c.filter, c.opacity];
+      });
+      const faded = [];
+      for (let n = el; n && !n.classList.contains("messages"); n = n.parentElement) {
+        const c = getComputedStyle(n);
+        if (c.opacity !== "1" || c.filter !== "none") faded.push(n.className);
+      }
+      return { dots, ground: el.querySelectorAll("u").length, faded };
+    });
+    assert.equal(look.ground, 0, `${name}: no ground below the dots`);
+    assert.deepEqual(look.faded, [], `${name}: nothing dims the dots`);
+    for (const d of look.dots)
+      assert.deepEqual(
+        d,
+        ["none", "rgb(217, 115, 74)", "none", "none", "1"],
+        `${name}: a flat dot in the agent's orange`,
+      );
     const seenLine = await page.evaluate(() => {
       const line = document.querySelector(".live-line").getBoundingClientRect();
       const view = document.querySelector(".messages").getBoundingClientRect();

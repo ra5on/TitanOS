@@ -177,10 +177,10 @@
 			animation: none;
 		}
 	}
-	/* Under an answer that streams in, the figure stays, smaller and alone. */
+	/* Under an answer that streams in, the figure stays alone. Not dimmed
+	   (1.05): the dots keep exactly their colour. */
 	.live-line.quiet {
 		min-height: 22px;
-		opacity: 0.8;
 	}
 	.took {
 		font-size: 0.86em;

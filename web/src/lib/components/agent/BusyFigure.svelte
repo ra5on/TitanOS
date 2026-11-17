@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The working figure of the KI-Agent: three shaded spheres in space
+	// The working figure of the KI-Agent: three flat dots moving in space
 	// (lib/agent-figures.ts says where they are). Drawn with transforms only,
 	// one frame at a time; standing still with "Animationen: Aus" and with
 	// "less motion" of the system, and while the page is not shown.
@@ -38,7 +38,6 @@
 
 	let box = $state<HTMLElement>();
 	let dots = $state<HTMLElement[]>([]);
-	const shadow = $derived((FIGURES[kind] ?? FIGURES['']).shadow);
 
 	// The figure and size the spheres come from while they glide.
 	let from: { size: number; at: number; spots: Spot[] } | null = null;
@@ -133,7 +132,7 @@
 	style:height="{first}px"
 	data-kind={kind}
 	aria-hidden="true"
-	><u class:off={!shadow}></u>{#each [0, 1, 2] as n (n)}<i bind:this={dots[n]}></i>{/each}</span
+	>{#each [0, 1, 2] as n (n)}<i bind:this={dots[n]}></i>{/each}</span
 >
 
 <style>
@@ -149,43 +148,22 @@
 			transform: scale(0.5);
 		}
 	}
-	/* A sphere: light from the upper left, its own colour, a darker rim. */
+	/* A dot: flat and exactly its colour (1.05, owner 17 Nov 2026: "die 3
+	   Punkte … sind irgendwie heller als die Schrift, wie als wenn da
+	   irgendwas drüber gelegt ist"; "eine Art Schimmer … was dann auch den
+	   Boden leuchten lässt") – no gradient, no highlight, no shadow, no
+	   ground below the figure. Depth shows only in the motion and in what
+	   covers what. */
 	.fig i {
 		position: absolute;
 		left: 50%;
 		top: 50%;
 		border-radius: 50%;
-		background: radial-gradient(
-			circle at 34% 28%,
-			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 45%, white) 0,
-			var(--ag-dots, var(--ag-warm, var(--accent))) 46%,
-			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 58%, black) 100%
-		);
-		will-change: transform;
-	}
-	/* The ground the spheres hang over; it fades with the figure that has
-	   none instead of vanishing. */
-	.fig u {
-		position: absolute;
-		left: 15%;
-		bottom: -8%;
-		width: 70%;
-		height: 12%;
-		border-radius: 50%;
-		background: color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 35%, black);
-		filter: blur(2px);
-		opacity: 0.4;
-		transition: opacity 0.45s ease;
-	}
-	.fig u.off {
-		opacity: 0;
+		background: var(--ag-dots, var(--ag-warm, var(--accent)));
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.fig {
 			animation: none;
-		}
-		.fig u {
-			transition: none;
 		}
 	}
 </style>
