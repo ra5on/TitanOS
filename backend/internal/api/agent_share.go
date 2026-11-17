@@ -152,6 +152,12 @@ func mapsEqual(a, b map[string]string) bool {
 // not there yet (the share manager makes it).
 func (s *Server) agentUserRoot(sh shares.Share, user auth.User) (*os.Root, error) {
 	env := s.agentEnv()
+	// Never below the mount point of a volume that is not there: that is
+	// the RAM (the share and agent.json may name different volumes after
+	// a restart in the middle of a move).
+	if env.storage == nil || !slices.Contains(env.storage.Mounted(), sh.Volume) {
+		return nil, fmt.Errorf("the volume %s of the share %s is not mounted", sh.Volume, sh.Name)
+	}
 	dir := env.shares.UserFolder(sh, user.Name)
 	st, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
