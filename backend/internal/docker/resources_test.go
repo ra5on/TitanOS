@@ -23,6 +23,8 @@ type resourceEngine struct {
 	tags    map[string][]string
 	volumes map[string]bool
 	dfCalls int
+	// digests: repository digests of images pulled by digest (id → repo@sha256:…).
+	digests map[string]string
 	// block holds the disk usage count until it is closed.
 	block chan struct{}
 }
@@ -63,6 +65,13 @@ func resourceFixture(t *testing.T) (*Manager, *resourceEngine) {
 	return m, e
 }
 
+func (e *resourceEngine) dfDigests(id string) string {
+	if d, ok := e.digests[id]; ok {
+		return `,"RepoDigests":["` + d + `"]`
+	}
+	return ""
+}
+
 func (e *resourceEngine) serve(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -92,6 +101,9 @@ func (e *resourceEngine) serve(w http.ResponseWriter, r *http.Request) {
 			if id == imgSand {
 				_, d, _ := strings.Cut(SandboxImage, "@")
 				digests = `["python@` + d + `"]`
+			}
+			if d, ok := e.digests[id]; ok {
+				digests = `["` + d + `"]`
 			}
 			tags := `[]`
 			if len(e.tags[id]) > 0 {
@@ -171,7 +183,7 @@ func (e *resourceEngine) serve(w http.ResponseWriter, r *http.Request) {
 			e.mu.Lock()
 		}
 		w.Write([]byte(`{"LayersSize":5000,
-		 "Images":[{"Id":"` + img1 + `","Size":1000,"SharedSize":400,"Containers":1},{"Id":"` + imgOld + `","Size":1000,"SharedSize":400,"Containers":0},
+		 "Images":[{"Id":"` + img1 + `","Size":1000,"SharedSize":400,"Containers":1},{"Id":"` + imgOld + `","Size":1000,"SharedSize":400,"Containers":0` + e.dfDigests(imgOld) + `},
 		   {"Id":"` + imgView + `","Size":3000,"SharedSize":0,"Containers":0,"Labels":{"titanos.viewer.image":"1","titanos.viewer.release":"0.63.0"}}],
 		 "Containers":[{"State":"running","SizeRw":10},{"State":"exited","SizeRw":20}],
 		 "Volumes":[{"Name":"whoami_data","Labels":{"com.docker.compose.project":"whoami"},"UsageData":{"Size":700,"RefCount":1}},
@@ -435,5 +447,60 @@ func TestSlowDiskUsageDoesNotHoldUp(t *testing.T) {
 	}
 	if usage, err := m.DiskUsage(ctx, false); err != nil || usage.Measuring || usage.MeasuredAt.IsZero() {
 		t.Errorf("usage: %+v %v", usage, err)
+	}
+}
+
+// N-102-29 (owner 17.11.2026): the images of the NVR (Frigate, pulled by
+// digest only, so untagged) and of the speech services are kept while the
+// feature is set up, also when their containers are gone; once it is
+// switched off, the cleanup may take them.
+func TestImagesOfFeaturesInUseAreKept(t *testing.T) {
+	m, e := resourceFixture(t)
+	ctx := context.Background()
+	frigate := "sha256:" + strings.Repeat("f", 64)
+	piper := "sha256:" + strings.Repeat("e", 64)
+	e.digests = map[string]string{imgNone: "ghcr.io/blakeblackshear/frigate@" + frigate, imgOld: "lscr.io/linuxserver/piper@" + piper}
+	keep := map[string]string{frigate: "nvr", piper: "speech"}
+	m.KeepImages = func() map[string]string { return keep }
+
+	list, err := m.Images(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, img := range list.Images {
+		if want := map[string]string{imgNone: "nvr", imgOld: "speech"}[img.ID]; want != "" && img.Protected != want {
+			t.Errorf("%s protected %q, want %q", img.ID, img.Protected, want)
+		}
+	}
+	// Only imgMulti is unused and free now.
+	if list.Totals.UnusedCount != 1 || list.Totals.DanglingCount != 0 {
+		t.Errorf("totals: %+v", list.Totals)
+	}
+	for _, id := range []string{imgNone, imgOld} {
+		if _, err := m.RemoveImage(ctx, id); !errors.Is(err, ErrProtected) {
+			t.Errorf("remove %s: %v", id, err)
+		}
+	}
+	if usage, err := m.DiskUsage(ctx, false); err != nil || usage.Images.Reclaimable != 0 {
+		t.Errorf("df counts a kept image as free: %+v %v", usage.Images, err)
+	}
+	for _, unused := range []bool{false, true} {
+		if _, err := m.PruneImages(ctx, unused); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !e.images[imgNone] || !e.images[imgOld] {
+		t.Fatal("the cleanup deleted the image of a feature in use")
+	}
+	// Switched off: the cleanup may take them.
+	keep = nil
+	if _, err := m.PruneImages(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if e.images[imgNone] {
+		t.Error("the Frigate image stayed after the NVR was switched off")
+	}
+	if _, err := m.RemoveImage(ctx, imgOld); err != nil {
+		t.Errorf("remove after speech was switched off: %v", err)
 	}
 }

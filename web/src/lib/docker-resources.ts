@@ -175,6 +175,14 @@ export function usedByText(used: UsedBy[]): string {
 export const freed = (image: DockerImage) =>
 	image.sharedSize > 0 ? Math.max(0, image.size - image.sharedSize) : image.size;
 
+/** Why TitanOS keeps an image, as a translation key: remote view, the
+ * agent's sandbox, the NVR or the speech services (N-102-29). */
+export function protectedKey(reason: string): string {
+	return ['viewer', 'sandbox', 'nvr', 'speech'].includes(reason)
+		? `dres.protected.${reason}`
+		: 'dres.protected.titanos';
+}
+
 /** Images "Ungenutzte löschen" takes: not used and not protected. */
 export const unusedImages = (images: DockerImage[]) =>
 	images.filter((i) => !i.usedBy.length && !i.protected);

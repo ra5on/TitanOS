@@ -185,6 +185,22 @@ func (m *Manager) Settings() Settings {
 	return m.settings
 }
 
+// KeptImages are the image digests the Docker cleanup leaves while speech
+// is set up (switched on), also while the containers are gone (no model
+// yet, volume missing): Piper and the Whisper build for the chosen device.
+// Switched off, they may go (N-102-29).
+func (m *Manager) KeptImages() []string {
+	s := m.Settings()
+	if !s.Enabled {
+		return nil
+	}
+	whisper := WhisperDigest
+	if s.Device != DeviceCPU {
+		whisper = WhisperGPUDigest
+	}
+	return []string{whisper, PiperDigest}
+}
+
 // SetSettings checks and saves; the services follow with the next look.
 func (m *Manager) SetSettings(s Settings) error {
 	if err := s.Check(); err != nil {

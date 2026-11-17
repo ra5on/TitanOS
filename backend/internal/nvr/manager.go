@@ -496,6 +496,18 @@ func (m *Manager) ensureSecret() {
 	}
 }
 
+// KeptImages are the image digests the Docker cleanup leaves while the NVR
+// is set up (switched on), also while Frigate's container is gone (volume
+// missing, stopped after crashes). Switched off, they may go (N-102-29).
+func (m *Manager) KeptImages() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.settings.Enabled {
+		return nil
+	}
+	return []string{FrigateDigest}
+}
+
 // Enable switches the NVR on (volume "" keeps the chosen one).
 func (m *Manager) Enable(ctx context.Context, volume string, opts SetOptions) error {
 	return m.UpdateSettings(ctx, func(s Settings) (Settings, error) {

@@ -152,6 +152,11 @@ type Manager struct {
 	lan             []LANNetwork
 	lanErrors       map[string]string
 	Ready           func() bool // drivers must be active before Docker autostarts containers
+	// KeepImages names the images features of TitanOS keep while they are
+	// set up (digest → reason, "nvr" or "speech"; N-102-29): the cleanup
+	// leaves them even when no container uses them. Called without locks
+	// of this manager held.
+	KeepImages      func() map[string]string
 	HardwareDevices func(context.Context) []hardware.ContainerDevice
 	RefreshCDI      func(context.Context) error
 	// hardwareMu guards only short critical sections: GPU leases, the
