@@ -560,6 +560,52 @@ for (const sameFunction of [false, true]) {
   await ctx.close();
 }
 
+// 1.04 (A-22): a change queued behind one that was lost to the same
+// function changed elsewhere is saved on its own; it does not bring the
+// lost one back over the other change.
+{
+  const { page, ctx } = await open(1440, 900);
+  let stored = { ...features, rev: "r1" };
+  const puts = [];
+  await ctx.route("**/api/v1/agent/features", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: stored });
+    const body = route.request().postDataJSON();
+    puts.push(body);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Meanwhile, elsewhere: the guard's mode changed.
+    if (puts.length === 1)
+      stored = { ...stored, rev: "r2", guard: { ...stored.guard, mode: "report" } };
+    if (body.rev !== stored.rev)
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: "agent_features_changed", message: "x" } },
+      });
+    stored = { ...body, rev: `r${puts.length + 2}` };
+    return route.fulfill({ json: stored });
+  });
+  await page.reload();
+  const guard = page.getByRole("switch", { name: "Ransomware-Wächter" });
+  const handbook = page.getByRole("switch", { name: "Notfallhandbuch" });
+  await guard.waitFor();
+  const handbookBefore = await handbook.isChecked();
+  await guard.click();
+  await handbook.click();
+  await page
+    .getByRole("alert")
+    .getByText("deshalb ist deine Änderung nicht gespeichert", { exact: false })
+    .waitFor();
+  await page.waitForTimeout(1200);
+  assert.equal(stored.guard.mode, "report", "the other change stays");
+  assert.equal(stored.guard.enabled, true, "the lost change is not saved");
+  assert.equal(
+    !!stored.handbook.enabled,
+    !handbookBefore,
+    "the queued change of another function is saved",
+  );
+  await ctx.close();
+}
+
 // The person's side (lena, a user): ask for the emergency access in the
 // agent app (Einstellungen › Funktionen), then waiting.
 {

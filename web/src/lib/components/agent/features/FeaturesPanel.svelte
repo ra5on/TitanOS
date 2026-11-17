@@ -65,17 +65,32 @@
 	let savedNas: Features | null = null;
 	let nasChain: Promise<unknown> = Promise.resolve();
 	let nasQueued = 0;
+	// Counts changes dropped because the same function was changed elsewhere.
+	// A change queued behind one of them was built on it and must not bring
+	// it back: only what it changed itself goes on top of the new state.
+	let nasLost = 0;
 	function savenas(next: Features): Promise<void> {
 		error = notice = '';
 		savedNas ??= nas;
+		const callBase = nas;
+		const seen = nasLost;
 		nas = next;
 		nasQueued++;
-		const run = nasChain.then(() => saveNasNow(next)).finally(() => nasQueued--);
+		const run = nasChain.then(() => saveNasNow(next, callBase, seen)).finally(() => nasQueued--);
 		nasChain = run.catch(() => {});
 		return run;
 	}
-	async function saveNasNow(next: Features) {
+	async function saveNasNow(next: Features, callBase: Features | null, seen: number) {
 		const base = savedNas;
+		if (nasLost !== seen && callBase && base) {
+			const own = rebaseFeatures(callBase, next, base);
+			if (!own) {
+				nas = base;
+				error = t('agent.f.changedLost');
+				throw new ApiError(409, 'agent_features_changed', 'changed elsewhere');
+			}
+			next = own;
+		}
 		try {
 			const saved = await saveFeatures({ ...next, rev: base?.rev ?? next.rev });
 			savedNas = saved;
@@ -111,6 +126,7 @@
 		savedNas = fresh;
 		const merged = rebaseFeatures(base, next, fresh);
 		if (!merged) {
+			nasLost++;
 			nas = fresh;
 			error = t('agent.f.changedLost');
 			throw conflict;
