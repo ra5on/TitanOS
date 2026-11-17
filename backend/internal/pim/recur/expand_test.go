@@ -615,3 +615,55 @@ func TestReadLimits(t *testing.T) {
 }
 
 func dtValue(t time.Time) tz.Value { return tz.Value{Time: t, Kind: tz.KindUTC} }
+
+func TestPrescanSeesParameterisedBegin(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:x\r\n")
+	for i := range MaxEvents + 1 {
+		fmt.Fprintf(&b, "BEGIN;X=1:VEVENT\r\nUID:%d\r\nDTSTART:20261102T090000Z\r\nEND;X=1:VEVENT\r\n", i)
+	}
+	b.WriteString("END:VCALENDAR\r\n")
+	if _, err := Read([]byte(b.String()), Options{}); !errors.Is(err, ErrLimit) {
+		t.Errorf("BEGIN;X=1:VEVENT: %v", err)
+	}
+	deep := "BEGIN:VCALENDAR\r\n" + strings.Repeat("BEGIN;X=\"a:b\":X\r\n", 20) + strings.Repeat("END:X\r\n", 20) + "END:VCALENDAR\r\n"
+	if _, err := Read([]byte(deep), Options{}); !errors.Is(err, ErrLimit) {
+		t.Errorf("nested BEGIN;X=…: %v", err)
+	}
+	lower := "BEGIN:VCALENDAR\r\n" + strings.Repeat("begin:x\r\n", 20) + strings.Repeat("end:x\r\n", 20) + "END:VCALENDAR\r\n"
+	if _, err := Read([]byte(lower), Options{}); !errors.Is(err, ErrLimit) {
+		t.Errorf("lower-case begin: %v", err)
+	}
+}
+
+// Many overrides of one long series: orphan detection walks the master
+// once, not once per override.
+func TestManyOverridesStayCheap(t *testing.T) {
+	events := []string{"UID:big\nDTSTAMP:20260101T000000Z\nDTSTART;TZID=Europe/Berlin:19500101T090000\nRRULE:FREQ=DAILY"}
+	for i := range MaxEvents - 1 {
+		rid := time.Date(2190, 1, 1, 9, 0, 0, 0, berlin(t)).AddDate(0, 0, i)
+		events = append(events, fmt.Sprintf("UID:big\nDTSTAMP:20260101T000000Z\nRECURRENCE-ID;TZID=Europe/Berlin:%s\nDTSTART;TZID=Europe/Berlin:20261110T120000\nDURATION:PT1H",
+			rid.Format("20060102T150405")))
+	}
+	f := read(t, ics(events...))
+	start := time.Now()
+	x, err := f.Series[0].Expand(day(t, 2026, 11, 1), day(t, 2026, 12, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("expansion took %v", d)
+	}
+	overrides := 0
+	for _, o := range x.Occurrences {
+		if o.Override {
+			overrides++
+			if o.Orphan {
+				t.Fatal("override of a real occurrence marked orphan")
+			}
+		}
+	}
+	if overrides != MaxEvents-1 {
+		t.Errorf("%d overrides shown", overrides)
+	}
+}

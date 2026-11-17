@@ -125,6 +125,17 @@ func Read(b []byte, opt Options) (f *File, err error) {
 	if err != nil {
 		return nil, err
 	}
+	// A second count after decoding, in case a line form slipped past the
+	// prescan.
+	n := 0
+	for _, c := range cal.Children {
+		if c.Name == ical.CompEvent {
+			n++
+		}
+	}
+	if n > maxEvents {
+		return nil, fmt.Errorf("%w: more than %d VEVENTs", ErrLimit, maxEvents)
+	}
 	f = &File{Calendar: cal, opt: opt, tz: tz.NewResolver(opt.Local, cal)}
 	byUID := map[string]*Series{}
 	for _, c := range cal.Children {
@@ -179,14 +190,21 @@ func decode(b []byte) (cal *ical.Calendar, err error) {
 
 // prescan walks the unfolded content lines once before go-ical sees them:
 // nesting depth, number of components and VEVENTs, length of parameters.
+// It splits a line the way go-ical does: the name ends at the first ";"
+// or ":", so "BEGIN;X=1:VEVENT" is a BEGIN too; the value starts after the
+// first ":" outside quotes.
 func prescan(b []byte, maxEvents int) error {
 	depth, comps, events := 0, 0, 0
-	var line []byte // first bytes of the logical line, enough for BEGIN:VEVENT
-	paramLen, inQuote, paramDone := 0, false, false
+	const (
+		inName = iota
+		inParams
+		inValue
+	)
+	var name, value []byte // upper-cased prefixes
+	phase, paramLen, inQuote := inName, 0, false
 	flush := func() error {
-		name := strings.ToUpper(string(line))
-		switch {
-		case strings.HasPrefix(name, "BEGIN:"):
+		switch string(name) {
+		case "BEGIN":
 			depth++
 			comps++
 			if depth > MaxDepth {
@@ -195,36 +213,55 @@ func prescan(b []byte, maxEvents int) error {
 			if comps > MaxComponents {
 				return fmt.Errorf("%w: more than %d components", ErrLimit, MaxComponents)
 			}
-			if strings.TrimSpace(name[6:]) == ical.CompEvent {
+			if strings.TrimSpace(string(value)) == ical.CompEvent {
 				events++
 				if events > maxEvents {
 					return fmt.Errorf("%w: more than %d VEVENTs", ErrLimit, maxEvents)
 				}
 			}
-		case strings.HasPrefix(name, "END:"):
+		case "END":
 			depth--
 		}
-		line = line[:0]
-		paramLen, inQuote, paramDone = 0, false, false
+		name, value = name[:0], value[:0]
+		phase, paramLen, inQuote = inName, 0, false
 		return nil
+	}
+	upper := func(c byte) byte {
+		if c >= 'a' && c <= 'z' {
+			return c - 'a' + 'A'
+		}
+		return c
 	}
 	feed := func(seg []byte) error {
 		for _, c := range seg {
-			if len(line) < 32 {
-				line = append(line, c)
-			}
-			if paramDone {
-				continue
-			}
-			switch {
-			case c == '"':
-				inQuote = !inQuote
-			case c == ':' && !inQuote:
-				paramDone = true
-			}
-			paramLen++
-			if paramLen > maxParamBytes {
-				return fmt.Errorf("%w: parameters longer than %d bytes", ErrLimit, maxParamBytes)
+			switch phase {
+			case inName:
+				switch c {
+				case ';':
+					phase = inParams
+				case ':':
+					phase = inValue
+				default:
+					if len(name) < 16 {
+						name = append(name, upper(c))
+					}
+				}
+			case inParams:
+				switch {
+				case c == '"':
+					inQuote = !inQuote
+				case c == ':' && !inQuote:
+					phase = inValue
+				}
+				paramLen++
+				if paramLen > maxParamBytes {
+					return fmt.Errorf("%w: parameters longer than %d bytes", ErrLimit, maxParamBytes)
+				}
+			case inValue:
+				if len(value) >= 32 {
+					return nil
+				}
+				value = append(value, upper(c))
 			}
 		}
 		return nil

@@ -192,15 +192,20 @@ type thisAndFuture struct {
 func (s *Series) walk(from, to time.Time, emit func(Occurrence) bool) bool {
 	local := s.file.opt.Local
 	m := s.Master
+	var shown []Occurrence
 	for _, o := range s.Overrides {
 		st, en := span(o.Start, o.Duration, local)
-		if !overlaps(st, en, from, to) {
-			continue
+		if overlaps(st, en, from, to) {
+			shown = append(shown, Occurrence{Start: st, End: en, AllDay: o.Start.IsDate(), RecurrenceID: *o.RecurrenceID, Event: o, Override: true})
 		}
-		occ := Occurrence{Start: st, End: en, AllDay: o.Start.IsDate(), RecurrenceID: *o.RecurrenceID, Event: o, Override: true}
-		occ.Orphan = m == nil || !s.isInstance(*o.RecurrenceID)
-		if !emit(occ) {
-			return false
+	}
+	if len(shown) > 0 {
+		members := s.members(shown)
+		for _, occ := range shown {
+			occ.Orphan = !members[occ.Event]
+			if !emit(occ) {
+				return false
+			}
 		}
 	}
 	if m == nil {
@@ -256,6 +261,51 @@ func (s *Series) ridOf(in instance) tz.Value {
 	m := s.Master
 	v := tz.Value{Time: in.start, Kind: m.Start.Kind, TZID: m.Start.TZID, Guess: m.Start.Guess}
 	return v
+}
+
+// members tells for the overrides of shown whether their RECURRENCE-ID is
+// a member of the master's set, in one walk up to the latest of them. An
+// override beyond the step cap counts as a member (not an orphan).
+func (s *Series) members(shown []Occurrence) map[*Event]bool {
+	out := map[*Event]bool{}
+	m := s.Master
+	if m == nil {
+		return out
+	}
+	byInstant := map[int64][]*Event{}
+	byDate := map[int][]*Event{}
+	var last time.Time
+	for _, o := range shown {
+		rid := *o.Event.RecurrenceID
+		at := s.toInstance(rid)
+		if at.After(last) {
+			last = at
+		}
+		if rid.IsDate() || m.Start.IsDate() {
+			byDate[ymd(at)] = append(byDate[ymd(at)], o.Event)
+		} else {
+			byInstant[at.Unix()] = append(byInstant[at.Unix()], o.Event)
+		}
+	}
+	var reached time.Time
+	truncated := s.instances(func(in instance) bool {
+		reached = in.start
+		for _, ev := range byInstant[in.start.Unix()] {
+			out[ev] = true
+		}
+		for _, ev := range byDate[ymd(in.start)] {
+			out[ev] = true
+		}
+		return !in.start.After(last.Add(24 * time.Hour))
+	})
+	if truncated {
+		for _, o := range shown {
+			if s.toInstance(*o.Event.RecurrenceID).After(reached) {
+				out[o.Event] = true
+			}
+		}
+	}
+	return out
 }
 
 // isInstance reports whether rid is a member of the master's set.
