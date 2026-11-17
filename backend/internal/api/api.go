@@ -278,6 +278,8 @@ type Server struct {
 	agentStoreOne   *agent.Store
 	agentPull       agentPull
 	agentMove       agentMoveState
+	// agentPhotos: the accounts' Immich keys and the Immich app (1.07).
+	agentPhotos agentPhotosState
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time

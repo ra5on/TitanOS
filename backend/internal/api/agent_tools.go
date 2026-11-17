@@ -145,6 +145,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.featureTools() {
 		add(t)
 	}
+	if t := b.photosTool(); t != nil {
+		add(t)
+	}
 	return b
 }
 
