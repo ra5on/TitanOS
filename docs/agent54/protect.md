@@ -26,7 +26,7 @@ Temporäre Namen von Office, Editoren und Synchronisierern (`~$x.docx`, `x.docx.
 
 **Meldung** (Ansicht `guard`, Entwurf 06): was, wann, Gerät, Konto, betroffene Dateien, dazu
 - *Zurückstellen* (fragt einmal nach): jede betroffene Datei kommt aus dem Snapshot an ihren alten Platz; was jetzt dort liegt (die `.locked`-Datei oder die neu geschriebene), wandert in `.recycle/titanos-guard/<Zeit>/` der Freigabe, nichts wird gelöscht. Dateien, die der Snapshot nicht hat, bleiben unberührt. Während des Zurückstellens zählen titands eigene Schreibvorgänge nicht. Zurückgestellt wird nur eine Meldung im Zustand „aufgehört“ und nur einmal (Zustand „wird zurückgestellt“); „Alles automatisch“ stellt im Hintergrund zurück, der Takt des Agenten wartet nicht darauf.
-- *Freigabe wieder öffnen:* gibt genau die Rechte zurück, die der Wächter genommen hat; was ein Administrator während der Sperre geändert hat, bleibt.
+- *Freigabe wieder öffnen:* gibt genau die Rechte zurück, die der Wächter genommen hat; was ein Administrator während der Sperre geändert hat, bleibt. Während der Sperre lehnt das Speichern einer Freigabe (`PUT /shares/{name}`) mit 409 `share_guard_locked` ab, wenn es wieder Schreibrecht gäbe (ein Formular von vor der Sperre hätte sie sonst still aufgehoben, Fund A-9, 1.04); Änderungen, die die Freigabe lesbar lassen, gehen.
 - *Fehlalarm:* öffnet die Freigabe, stellt nichts zurück, und die Freigabe löst eine Stunde lang keinen Alarm aus (die ganze Freigabe, weil ein getrenntes Gerät mit einem neuen Prozess wiederkommt).
 - Ohne Btrfs (ext4/XFS) oder ohne Snapshot von vorher: Sperren und Melden wie oben; die Meldung verweist auf Einstellungen › Datensicherung › Zurückstellen und darauf, dass Btrfs-Snapshots besser schützen.
 
