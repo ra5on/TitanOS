@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -271,5 +272,36 @@ func TestAgentFilesSearchHasNoOracle(t *testing.T) {
 	none := search(map[string]any{"query": "gibt-es-nicht"})
 	if big["total"] != float64(0) || big["hidden"] != none["hidden"] || big["why"] != none["why"] {
 		t.Fatalf("oracle: %v / %v", big, none)
+	}
+}
+
+// N8: lines of the journal that name a place in a locked folder are left
+// out of logs_search for the agent; a search says the same either way.
+func TestAgentLogsSearchKeepsLockedFoldersOut(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard, Folders: []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}})
+	dir := ts.withShare()
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), ts.server.agentSettings())
+	lines := []map[string]any{
+		{"message": `msg="text file saved" root=share/Docs path=Privat/brief.txt by=alex`},
+		{"message": `msg="file saved by web app" root=share/Docs path="Privat/x y.docx" size=10`},
+		{"message": `msg="recycle bin: folder passed over" path=` + filepath.Join(dir, "Privat", "alt")},
+		{"message": `msg="text file saved" root=share/Docs path=Offen/liste.txt by=alex`},
+		{"message": `msg="Privatsache" note=kept`},
+	}
+	data, _ := json.Marshal(map[string]any{"lines": lines})
+	out := box.filterHidden("logs_search", json.RawMessage(`{}`), string(data))
+	if strings.Contains(out, "brief.txt") || strings.Contains(out, "x y.docx") || strings.Contains(out, "alt") || !strings.Contains(out, "liste.txt") || !strings.Contains(out, "Privatsache") || !strings.Contains(out, `"hidden":true`) {
+		t.Fatalf("logs: %s", out)
+	}
+	// A search with nothing locked among its lines still says hidden.
+	clean, _ := json.Marshal(map[string]any{"lines": lines[3:4]})
+	if out := box.filterHidden("logs_search", json.RawMessage(`{"search":"liste"}`), string(clean)); !strings.Contains(out, `"hidden":true`) {
+		t.Fatalf("search oracle: %s", out)
+	}
+	// Without folder rules nothing changes.
+	free := ts.server.agentSettings()
+	free.Policy.Folders = nil
+	if out := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), free).filterHidden("logs_search", nil, string(data)); out != string(data) {
+		t.Fatalf("changed without rules: %s", out)
 	}
 }

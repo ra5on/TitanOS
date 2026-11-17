@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -668,7 +669,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(t.name, res.Text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, p.Args, res.Text)}, nil
 	case t.plan != nil:
 		var a toolcatalog.Action
 		if err := json.Unmarshal(p.Plan, &a); err != nil {
@@ -699,7 +700,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(t.name, text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, p.Args, text)}, nil
 	}
 	return agent.Outcome{}, errors.New("tool cannot run")
 }
@@ -716,13 +717,16 @@ type agentFolderLock func(root, p string) bool
 // locked for the agent, and counts them in hidden. A search never counts:
 // with a name or a size it would tell what lies there (N4); its locked
 // matches are left out inside the search (agentFolderLockKey).
-func (b *agentToolbox) filterHidden(tool, text string) string {
-	if !b.hasDenyRules() || !strings.Contains(text, `"entries"`) {
+func (b *agentToolbox) filterHidden(tool string, args json.RawMessage, text string) string {
+	if !b.hasDenyRules() || !strings.Contains(text, `"entries"`) && tool != "logs_search" {
 		return text
 	}
 	var out map[string]any
 	if json.Unmarshal([]byte(text), &out) != nil {
 		return text
+	}
+	if tool == "logs_search" {
+		return b.filterLogLines(out, text, argString(args, "search") != "")
 	}
 	if tool == "files_search" {
 		out["hidden"] = true
@@ -757,6 +761,63 @@ func (b *agentToolbox) filterHidden(tool, text string) string {
 		out["hidden"] = n
 		out["why"] = fmt.Sprintf("%d entries of this page lie in folders the person locked for the agent and are not shown (total counts them). Do not call the folder empty or a file missing because of it; they can be opened for the agent under %s.", n, whereFolders)
 	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return text
+	}
+	return string(data)
+}
+
+// filterLogLines leaves out lines of the journal that name a place in a
+// locked folder ("text file saved" root=share/Docs path=Privat/a.txt),
+// by name only (security review 1.10, N8). Rather too many lines go than
+// too few: a line naming a folder of the same name elsewhere goes too.
+func (b *agentToolbox) filterLogLines(out map[string]any, text string, search bool) string {
+	lines, ok := out["lines"].([]any)
+	if !ok {
+		return text
+	}
+	var needles []*regexp.Regexp
+	var dirs []string
+	for _, f := range b.settings.Policy.Folders {
+		if f.Mode != agent.ModeDeny {
+			continue
+		}
+		rel := strings.Trim(path.Clean("/"+f.Path), "/")
+		name := rel
+		if name == "" {
+			name = f.Root
+		}
+		needles = append(needles, regexp.MustCompile(`(^|[\s/="'])`+regexp.QuoteMeta(name)+`($|[\s/"'])`))
+		if base := b.rootDir(f.Root); base != "" {
+			dirs = append(dirs, filepath.Join(base, filepath.FromSlash(rel)))
+		}
+	}
+	kept := []any{}
+	dropped := 0
+	for _, l := range lines {
+		m, _ := l.(map[string]any)
+		msg, _ := m["message"].(string)
+		locked := false
+		for _, re := range needles {
+			locked = locked || re.MatchString(msg)
+		}
+		for _, d := range dirs {
+			locked = locked || strings.Contains(msg, d)
+		}
+		if locked {
+			dropped++
+			continue
+		}
+		kept = append(kept, l)
+	}
+	// A search says the same whether a locked line matched or not (N4).
+	if dropped == 0 && !search {
+		return text
+	}
+	out["lines"] = kept
+	out["hidden"] = true
+	out["why"] = "Lines that name folders the person locked for the agent are left out (no count). Do not read their absence as \"nothing happened\"; folders can be opened for the agent under " + whereFolders + "."
 	data, err := json.Marshal(out)
 	if err != nil {
 		return text
