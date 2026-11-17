@@ -317,7 +317,12 @@ func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.R
 			return nil, catalogFileError(err)
 		}
 		found := []files.FoundEntry{}
+		locked, _ := ctx.Value(agentFolderLockKey{}).(agentFolderLock)
 		for _, e := range result.Entries {
+			// The KI-Agent's locked folders are left out before counting.
+			if locked != nil && locked(root.ID, e.Path) {
+				continue
+			}
 			// 1.10 (V15): "größte Dateien" without paging through everything.
 			if !hiddenPath(e.Path) && (req.MinSize <= 0 || !e.Dir && float64(e.Size) >= req.MinSize*1e6) {
 				found = append(found, e)

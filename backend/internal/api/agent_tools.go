@@ -652,6 +652,11 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		chatID = chat.ID
 	}
 	ctx = context.WithValue(ctx, agentCallKey{}, chatID)
+	if b.hasDenyRules() {
+		ctx = context.WithValue(ctx, agentFolderLockKey{}, agentFolderLock(func(root, p string) bool {
+			return b.realFolderMode(root, p, false) == agent.ModeDeny
+		}))
+	}
 	ctx = b.haContext(ctx, t)
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
@@ -663,7 +668,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(res.Text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, res.Text)}, nil
 	case t.plan != nil:
 		var a toolcatalog.Action
 		if err := json.Unmarshal(p.Plan, &a); err != nil {
@@ -694,19 +699,37 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, text)}, nil
 	}
 	return agent.Outcome{}, errors.New("tool cannot run")
 }
 
+// agentFolderLockKey carries the folder rules of the agent into a search
+// of the catalog, so that what lies in a locked folder is left out before
+// it is counted and paged (security review 1.10, N4).
+type agentFolderLockKey struct{}
+
+// agentFolderLock reports whether a path of a root lies in a locked folder.
+type agentFolderLock func(root, p string) bool
+
 // filterHidden drops entries of listings and searches that lie in folders
-// locked for the agent, and counts them in hidden.
-func (b *agentToolbox) filterHidden(text string) string {
-	if len(b.settings.Policy.Folders) == 0 || !strings.Contains(text, `"entries"`) {
+// locked for the agent, and counts them in hidden. A search never counts:
+// with a name or a size it would tell what lies there (N4); its locked
+// matches are left out inside the search (agentFolderLockKey).
+func (b *agentToolbox) filterHidden(tool, text string) string {
+	if !b.hasDenyRules() || !strings.Contains(text, `"entries"`) {
 		return text
 	}
 	var out map[string]any
 	if json.Unmarshal([]byte(text), &out) != nil {
+		return text
+	}
+	if tool == "files_search" {
+		out["hidden"] = true
+		out["why"] = "Searches never show folders the person locked for the agent, and do not say whether anything there matched. Do not call a file missing because of it; folders can be opened for the agent under " + whereFolders + "."
+		if data, err := json.Marshal(out); err == nil {
+			return string(data)
+		}
 		return text
 	}
 	root, _ := out["root"].(string)

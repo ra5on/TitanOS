@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -235,5 +237,39 @@ func TestAgentActivityLogSecurity(t *testing.T) {
 	// N6: more than a year back is cut, and said.
 	if result, _ := run(map[string]any{"since": "500d"}); !strings.Contains(fmt.Sprint(result["note"]), "365 days") || result["since"] == now.AddDate(0, 0, -500).Format("2006-01-02 15:04") {
 		t.Fatalf("since: %v %v", result["since"], result["note"])
+	}
+}
+
+// N4: files_search leaves out locked folders before counting and paging,
+// and says the same whether something there matched or not – no oracle
+// for names or sizes through query and minSize.
+func TestAgentFilesSearchHasNoOracle(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard, Folders: []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}})
+	dir := ts.withShare()
+	os.MkdirAll(filepath.Join(dir, "Privat"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "Offen"), 0o755)
+	os.WriteFile(filepath.Join(dir, "Privat", "Kuendigung.pdf"), make([]byte, 2_000_000), 0o644)
+	os.WriteFile(filepath.Join(dir, "Offen", "Kuendigung-Vorlage.pdf"), make([]byte, 10), 0o644)
+	settings := ts.server.agentSettings()
+	search := func(args map[string]any) map[string]any {
+		t.Helper()
+		args["root"] = "share/Docs"
+		result, text, err := runAgentTool(t, ts, settings, "files_search", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(text, "Privat") {
+			t.Fatalf("locked folder found: %s", text)
+		}
+		return result
+	}
+	all := search(map[string]any{"query": "Kuendigung"})
+	if all["total"] != float64(1) || all["hidden"] != true {
+		t.Fatalf("search: %v", all)
+	}
+	big := search(map[string]any{"query": "Kuendigung", "minSize": 0.5})
+	none := search(map[string]any{"query": "gibt-es-nicht"})
+	if big["total"] != float64(0) || big["hidden"] != none["hidden"] || big["why"] != none["why"] {
+		t.Fatalf("oracle: %v / %v", big, none)
 	}
 }
