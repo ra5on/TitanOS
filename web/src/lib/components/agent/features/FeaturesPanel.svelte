@@ -48,23 +48,43 @@
 			admin ? loadFeatures() : Promise.resolve(null),
 			loadMine(),
 		]);
-		if (n.status === 'fulfilled') nas = n.value;
+		if (n.status === 'fulfilled') nas = savedNas = n.value;
 		else error = apiErrorText(n.reason);
 		if (m.status === 'fulfilled') {
-			mine = m.value.mine;
+			mine = savedMine = m.value.mine;
 			pub = m.value.nas;
 		} else if (!error) error = apiErrorText(m.reason);
 	}
 	void load();
 
-	async function savenas(next: Features) {
+	// Durchsicht 102 (A-22): two changes in a row – the second was made on
+	// the state before the first was saved and sent without it (the same
+	// function then came back as "changed elsewhere", the own choices as a
+	// silent overwrite). Now a change shows at once, saves wait for the one
+	// before, and each sends the newest state with the rev the NAS gave last.
+	let savedNas: Features | null = null;
+	let nasChain: Promise<unknown> = Promise.resolve();
+	let nasQueued = 0;
+	function savenas(next: Features): Promise<void> {
 		error = notice = '';
-		const base = nas;
+		savedNas ??= nas;
+		nas = next;
+		nasQueued++;
+		const run = nasChain.then(() => saveNasNow(next)).finally(() => nasQueued--);
+		nasChain = run.catch(() => {});
+		return run;
+	}
+	async function saveNasNow(next: Features) {
+		const base = savedNas;
 		try {
-			nas = await saveFeatures(next);
+			const saved = await saveFeatures({ ...next, rev: base?.rev ?? next.rev });
+			savedNas = saved;
+			// A newer change waits behind this one: it stays on screen.
+			if (nasQueued <= 1) nas = saved;
 		} catch (e) {
 			if (!(e instanceof ApiError && e.code === 'agent_features_changed') || !base) {
 				error = apiErrorText(e);
+				if (nasQueued <= 1) nas = savedNas;
 				throw e;
 			}
 			// 1.03: overtaken by another tab or administrator. Load the new
@@ -85,8 +105,10 @@
 			fresh = await loadFeatures();
 		} catch (e) {
 			error = apiErrorText(conflict);
+			if (nasQueued <= 1) nas = savedNas;
 			throw e;
 		}
+		savedNas = fresh;
 		const merged = rebaseFeatures(base, next, fresh);
 		if (!merged) {
 			nas = fresh;
@@ -94,7 +116,8 @@
 			throw conflict;
 		}
 		try {
-			nas = merged === fresh ? fresh : await saveFeatures(merged);
+			savedNas = merged === fresh ? fresh : await saveFeatures(merged);
+			if (nasQueued <= 1) nas = savedNas;
 			notice = t('agent.f.changedKept');
 		} catch (e) {
 			nas = fresh;
@@ -102,14 +125,29 @@
 			throw e;
 		}
 	}
-	async function savemine(next: FeaturesMine) {
+	// The own choices (folders, mailbox) the same way, without a rev.
+	let savedMine: FeaturesMine | null = null;
+	let mineChain: Promise<unknown> = Promise.resolve();
+	let mineQueued = 0;
+	function savemine(next: FeaturesMine): Promise<void> {
 		error = '';
-		try {
-			mine = await saveMine(next);
-		} catch (e) {
-			error = apiErrorText(e);
-			throw e;
-		}
+		savedMine ??= mine;
+		mine = next;
+		mineQueued++;
+		const run = mineChain
+			.then(async () => {
+				try {
+					savedMine = await saveMine(next);
+					if (mineQueued <= 1) mine = savedMine;
+				} catch (e) {
+					error = apiErrorText(e);
+					if (mineQueued <= 1) mine = savedMine;
+					throw e;
+				}
+			})
+			.finally(() => mineQueued--);
+		mineChain = run.catch(() => {});
+		return run;
 	}
 	const groupProps = $derived({ admin, nas, pub, mine, savenas, savemine, calm });
 	const groups = [

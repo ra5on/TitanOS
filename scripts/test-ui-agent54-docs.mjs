@@ -490,6 +490,54 @@ async function full(page, name) {
   await ctx.close();
 }
 
+// Durchsicht 102 (A-22): two quick changes of the same function. The
+// second used to be sent on the state before the first was saved: with the
+// rev it came back 409 ("changed elsewhere") and was lost. Now it waits for
+// the first and is sent with the rev the NAS gave for it.
+{
+  const { ctx, page } = await open(1440, 900);
+  let stored = { ...features, rev: "r1" };
+  let n = 1;
+  const puts = [];
+  await ctx.route("**/api/v1/agent/features", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: stored });
+    const body = route.request().postDataJSON();
+    puts.push(body);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (body.rev !== stored.rev)
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: "agent_features_changed", message: "x" } },
+      });
+    stored = { ...body, rev: `r${++n}` };
+    return route.fulfill({ json: stored });
+  });
+  await page.goto(base + "/settings/agent?tab=features");
+  const deadlines = page.getByRole("switch", { name: "Fristenwächter" });
+  const paperSwitch = page.getByRole("switch", { name: "Papierkram-Autopilot" });
+  await paperSwitch.waitFor();
+  // Both at once: the deadlines off, the paperwork on.
+  await deadlines.click();
+  await paperSwitch.click();
+  await page.waitForTimeout(1500);
+  assert.equal(puts.length, 2, "two saves, one after the other");
+  assert.equal(puts[1].rev, "r2", "the second with the rev of the first");
+  assert.deepEqual(
+    { deadlines: stored.docs.deadlines, paper: stored.docs.paper },
+    { deadlines: false, paper: true },
+    "both changes are stored",
+  );
+  assert.equal(await deadlines.isChecked(), false);
+  assert.equal(await paperSwitch.isChecked(), true);
+  assert.equal(
+    await page.getByText("Inzwischen anderswo geändert").count(),
+    0,
+    "no word of a change elsewhere",
+  );
+  await ctx.close();
+}
+
 await browser.close();
 assert.deepEqual(errors, [], errors.join("\n"));
 console.log(`agent54 docs UI ok: screenshots in ${out}`);
