@@ -77,7 +77,6 @@ func doAs(t *testing.T, user, password, method, path, body string, headers ...st
 	return res, string(data)
 }
 
-
 func TestPairingAndRepository(t *testing.T) {
 	m, root := newTarget(t)
 	srv := httptest.NewServer(m.Handler())
