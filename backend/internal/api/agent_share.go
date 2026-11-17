@@ -81,6 +81,35 @@ func (s *Server) agentShareUsers(settings agentSettings) []auth.User {
 	return list
 }
 
+// agentShareAccess gives the share of the agent the access it should have.
+// While the ransomware guard holds the share locked, everyone stays
+// read-only; the first sync after it was reopened gives write access
+// back (A-9, 1.04: before, this sync lifted the lock within a minute).
+func (s *Server) agentShareAccess(sh shares.Share, access map[string]string) shares.Share {
+	env := s.agentEnv()
+	ps := s.protect()
+	ps.accessMu.Lock()
+	defer ps.accessMu.Unlock()
+	if s.guardLocks(ps, sh.Name) {
+		for name := range access {
+			access[name] = shares.ReadOnly
+		}
+	}
+	if current, ok := s.shareByName(sh.Name); ok {
+		sh = current
+	}
+	if mapsEqual(sh.Access, access) {
+		return sh
+	}
+	sh.Access = access
+	if err := env.shares.Update(sh.Name, sh, env.storage.Names(), env.userNames()); err != nil {
+		slog.Warn("access of the share KI-Agent not updated", "err", err)
+	} else {
+		env.shares.Kick()
+	}
+	return sh
+}
+
 // agentShare makes or updates the share of the agent and returns it; false
 // when there is none (agent off, no volume, a share of the same name that
 // is not the agent's).
@@ -114,12 +143,7 @@ func (s *Server) agentShare() (shares.Share, bool) {
 			return shares.Share{}, false
 		}
 		if !mapsEqual(sh.Access, access) {
-			sh.Access = access
-			if err := env.shares.Update(sh.Name, sh, env.storage.Names(), env.userNames()); err != nil {
-				slog.Warn("access of the share KI-Agent not updated", "err", err)
-			} else {
-				env.shares.Kick()
-			}
+			sh = s.agentShareAccess(sh, access)
 		}
 		return sh, true
 	}
@@ -152,6 +176,12 @@ func mapsEqual(a, b map[string]string) bool {
 // not there yet (the share manager makes it).
 func (s *Server) agentUserRoot(sh shares.Share, user auth.User) (*os.Root, error) {
 	env := s.agentEnv()
+	// Never below the mount point of a volume that is not there: that is
+	// the RAM (the share and agent.json may name different volumes after
+	// a restart in the middle of a move).
+	if env.storage == nil || !slices.Contains(env.storage.Mounted(), sh.Volume) {
+		return nil, fmt.Errorf("the volume %s of the share %s is not mounted", sh.Volume, sh.Name)
+	}
 	dir := env.shares.UserFolder(sh, user.Name)
 	st, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {

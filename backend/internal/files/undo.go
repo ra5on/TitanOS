@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -86,6 +87,10 @@ func (m *Manager) RecordUndo(user, kind string, moves []UndoMove) string {
 	ids := []string{}
 	seen := map[string]bool{}
 	for _, move := range moves {
+		// Callers pass paths as they came in ("/a/b"); os.Root takes no
+		// leading "/", and without it the undo was silently missing. Not
+		// clean: moves into the recycle bin go to hidden folders.
+		move.Current, move.Original = strings.Trim(move.Current, "/"), strings.Trim(move.Original, "/")
 		if move.CurrentRoot.ID == move.OriginalRoot.ID && move.Current == move.Original {
 			continue
 		}

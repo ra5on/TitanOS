@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestWriteReadRemove(t *testing.T) {
@@ -220,5 +221,31 @@ func TestRetryAfterFailedFlushFlushesAgain(t *testing.T) {
 	}
 	if s.Writes() != 2 {
 		t.Fatalf("retries counted as writes: %d", s.Writes())
+	}
+}
+
+// A temporary file left by a crash in the middle of a write (it may hold a
+// secret that was changed since) goes with the next write in its folder;
+// one of a write that runs right now stays.
+func TestWriteRemovesTemporaryFilesOfACrash(t *testing.T) {
+	dir := t.TempDir()
+	s := Open(dir)
+	if err := s.Write("auth/users.json", []byte("{}")); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(dir, "auth", ".tmp-123")
+	fresh := filepath.Join(dir, "auth", ".tmp-456")
+	os.WriteFile(old, []byte("half"), 0o600)
+	os.WriteFile(fresh, []byte("half"), 0o600)
+	past := time.Now().Add(-time.Hour)
+	os.Chtimes(old, past, past)
+	if err := s.Write("auth/users.json", []byte(`{"a":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("leftover of a crash kept: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("temporary file of a running write removed: %v", err)
 	}
 }

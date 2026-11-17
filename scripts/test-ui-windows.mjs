@@ -731,12 +731,35 @@ if (!allOnly) {
   );
   const tab = page.getByRole("tab", { name: /immich/ });
   await tab.waitFor();
-  // A container console ends without asking.
-  await page.getByRole("button", { name: "Sitzung immich beenden" }).click();
+  // Durchsicht 102 (D102-49): only the sessions are in the tab list; "+"
+  // stands beside it.
+  check(
+    (await page.locator('[role="tablist"] button[aria-haspopup="menu"]').count()) === 0,
+    "the button for a new session is not inside the tab list",
+  );
+  check(
+    (await page.getByRole("button", { name: "Neue Sitzung" }).count()) === 1,
+    "the button for a new session is there",
+  );
+  // A container console ends without asking; Delete on its tab ends it.
+  await tab.focus();
+  await page.keyboard.press("Delete");
   await page.waitForTimeout(600);
   check(
     (await tab.count()) === 0,
     "an ended console of a request does not open again",
+  );
+  // The focus stays in the tab bar (a tab, or "+" when none is left).
+  check(
+    await page.evaluate(() => {
+      const now = document.activeElement;
+      return (
+        !!now &&
+        (now.getAttribute("role") === "tab" ||
+          now.getAttribute("aria-haspopup") === "menu")
+      );
+    }),
+    "the focus stays in the tab bar after Delete",
   );
   await made.ctx.close();
 }
@@ -765,6 +788,37 @@ if (!allOnly) {
   await again.click();
   await tab.waitFor();
   check((await tab.count()) === 1, "Neue Shell opens a NAS shell");
+  await made.ctx.close();
+}
+
+// 1.04: a page chosen in the side bar while the window's first page still
+// loads is shown, also when that first page reports itself shortly after
+// the click (its report counted as a late one, and the choice was lost).
+if (!allOnly) {
+  const made = await create("owner", "graphit", 1440);
+  const { page, ctx } = made;
+  await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+  await ctx.route("**/api/v1/storage/tests", (r) =>
+    r.fulfill({ json: { tests: [] } }),
+  );
+  // The window's first page comes 1.5 s late.
+  await ctx.route("**/tools", async (route) => {
+    if (route.request().frame() !== page.mainFrame())
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    return route.fallback();
+  });
+  await page.goto(base + "/tools");
+  await page
+    .locator("section.win nav.side")
+    .getByRole("button", { name: "Skripte", exact: true })
+    .click();
+  const frame = page.frameLocator("section.win iframe").first();
+  let shown = true;
+  await frame
+    .getByRole("heading", { name: "Skripte", level: 1 })
+    .waitFor({ timeout: 8000 })
+    .catch(() => (shown = false));
+  check(shown, "a page chosen while the window loads is shown");
   await made.ctx.close();
 }
 

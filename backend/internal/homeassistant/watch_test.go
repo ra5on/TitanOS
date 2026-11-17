@@ -126,7 +126,7 @@ func eventually(t *testing.T, what string, ok func() bool) {
 	t.Fatalf("timed out: %s", what)
 }
 
-func TestWatcherRecordsTransitionsAndEvents(t *testing.T) {
+func TestWatcherRecordsTransitions(t *testing.T) {
 	fake := &fakeWS{}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
@@ -139,9 +139,6 @@ func TestWatcherRecordsTransitionsAndEvents(t *testing.T) {
 	defer cancel()
 	go m.Run(ctx)
 
-	var got []string
-	var mu sync.Mutex
-	m.OnEvent("titanos_ask", func(data json.RawMessage) { mu.Lock(); got = append(got, string(data)); mu.Unlock() })
 	m.SetWatched([]string{"person.alex", "bad entity"})
 	eventually(t, "subscribed", func() bool { c, _ := fake.last(); return c != nil })
 	fake.mu.Lock()
@@ -165,18 +162,6 @@ func TestWatcherRecordsTransitionsAndEvents(t *testing.T) {
 		t.Fatalf("since: %+v", since)
 	}
 
-	// Subscribed events reach their handlers.
-	conn, _ := fake.last()
-	fake.mu.Lock()
-	askID := fake.eventIDs["titanos_ask"]
-	fake.mu.Unlock()
-	b, _ := json.Marshal(map[string]any{"id": askID, "type": "event", "event": map[string]any{"event_type": "titanos_ask", "data": map[string]string{"text": "Wie voll ist das NAS?"}}})
-	conn.Write(context.Background(), websocket.MessageText, b)
-	eventually(t, "event", func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 1 })
-	if !strings.Contains(got[0], "Wie voll") {
-		t.Fatalf("event %v", got)
-	}
-
 	// A new entity list subscribes again.
 	m.SetWatched([]string{"person.alex", "sensor.power"})
 	eventually(t, "resubscribed", func() bool {
@@ -193,7 +178,7 @@ func TestWatcherReportsRefusedToken(t *testing.T) {
 	m := NewManager(config.Open(t.TempDir()))
 	m.Load()
 	m.SetSettings(Settings{Enabled: true, URL: srv.URL, Token: "bad-token"})
-	err := m.session(context.Background(), []string{"light.a"}, nil, make(chan struct{}), make(chan struct{}))
+	err := m.session(context.Background(), []string{"light.a"}, make(chan struct{}), make(chan struct{}))
 	if err == nil || !strings.Contains(err.Error(), "refused") {
 		t.Fatalf("bad token: %v", err)
 	}

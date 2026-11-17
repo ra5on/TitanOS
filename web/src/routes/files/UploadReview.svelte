@@ -37,6 +37,16 @@
 	const bytes = $derived(accepted.reduce((total, row) => total + row.file.size, 0));
 	const conflicts = $derived(rows.filter((row) => row.existing || row.duplicate));
 	const replaces = $derived(conflicts.some((row) => row.choice === 'replace'));
+	// S-43: a replaced file goes to the recycle bin of the share it is in, as
+	// with a copy; where there is none it is gone. Said as in the copy dialog.
+	const replacedToBin = $derived(
+		conflicts
+			.filter((row) => row.choice === 'replace')
+			.every((row) => {
+				const target = join(dir, row.path);
+				return root.recycle || !!root.bins?.some((bin) => target.startsWith(bin + '/'));
+			}),
+	);
 	const join = (...parts: string[]) => parts.filter(Boolean).join('/');
 	$effect(() => {
 		const controller = new AbortController();
@@ -149,7 +159,10 @@
 					</select>
 				</div>{/each}
 		</div>{/if}
-	{#if replaces}<label
+	{#if replaces}<p class={replacedToBin ? 'muted' : 'notice-warn'}>
+			{t(replacedToBin ? 'files.replaceToBin' : 'files.replaceFinal')}
+		</p>
+		<label
 			><input type="checkbox" bind:checked={confirmed} />{t('files.uploadReplaceConfirm')}</label
 		>{/if}
 	<div class="dialog-actions">

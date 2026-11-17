@@ -61,3 +61,22 @@ func TestCompareDetectsSameSizeContentAndMissingEntries(t *testing.T) {
 		t.Fatalf("missing: %+v %v", comparison, err)
 	}
 }
+
+// A copy on FAT keeps times in two-second steps (exFAT in 10 ms): the
+// comparison takes them as the same time, as "only missing or changed"
+// does when copying; three seconds apart is different.
+func TestCompareToleratesTheTimeStepsOfFAT(t *testing.T) {
+	m, left, right := twoRoots(t)
+	os.MkdirAll(filepath.Join(right.Dir, "urlaub"), 0700)
+	file := filepath.Join(right.Dir, "urlaub/strand.jpg")
+	os.WriteFile(file, []byte("strand"), 0600)
+	info, _ := os.Stat(filepath.Join(left.Dir, "urlaub/strand.jpg"))
+	os.Chtimes(file, info.ModTime(), info.ModTime().Truncate(2*time.Second))
+	if c, err := m.Compare(context.Background(), left, "urlaub", right, "urlaub", false, false); err != nil || c.Same != 1 || len(c.Entries) != 0 {
+		t.Fatalf("within two seconds: %+v %v", c, err)
+	}
+	os.Chtimes(file, info.ModTime(), info.ModTime().Add(3*time.Second))
+	if c, err := m.Compare(context.Background(), left, "urlaub", right, "urlaub", false, false); err != nil || len(c.Entries) != 1 || c.Entries[0].State != "different" {
+		t.Fatalf("three seconds apart: %+v %v", c, err)
+	}
+}

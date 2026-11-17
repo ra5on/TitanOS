@@ -179,6 +179,13 @@ func (m *Manager) RestoreSnapshotFiles(ctx context.Context, volume, name string,
 	if len(req.Paths) == 0 || len(req.Paths) > 200 {
 		return out, ErrNotPossible
 	}
+	// As for the folder restore (restoreSource): nothing is written to a
+	// volume while an array is expanded.
+	if m.GrowthPending() {
+		return out, ErrBusy
+	}
+	// The UUID of the preview stays optional: older API and MCP clients do
+	// not send it (S-28, owner's decision).
 	if req.UUID != "" {
 		identity, err := m.snapshotIdentity(ctx, volume, name)
 		if err != nil {

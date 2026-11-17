@@ -77,8 +77,6 @@ func doAs(t *testing.T, user, password, method, path, body string, headers ...st
 	return res, string(data)
 }
 
-const blob = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
 func TestPairingAndRepository(t *testing.T) {
 	m, root := newTarget(t)
 	srv := httptest.NewServer(m.Handler())
@@ -121,13 +119,14 @@ func TestPairingAndRepository(t *testing.T) {
 	if res, body := do(t, c, "GET", "/Backup/config", ""); res.StatusCode != http.StatusOK || body != "the config" {
 		t.Errorf("config: %d %q", res.StatusCode, body)
 	}
+	blob := named("0123456789")
 	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "0123456789"); res.StatusCode != http.StatusOK {
 		t.Errorf("save blob: %d", res.StatusCode)
 	}
 	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "other"); res.StatusCode != http.StatusForbidden {
 		t.Errorf("blob overwritten: %d", res.StatusCode)
 	}
-	if _, err := os.Stat(filepath.Join(root, "mnt/tank/.titanos/backup-target/Backup/data/01", blob)); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "mnt/tank/.titanos/backup-target/Backup/data", blob[:2], blob)); err != nil {
 		t.Errorf("blob is not where restic's layout puts it: %v", err)
 	}
 	if res, body := do(t, c, "GET", "/Backup/data/"+blob, "", "Range", "bytes=2-4"); res.StatusCode != http.StatusPartialContent || body != "234" {
@@ -250,6 +249,7 @@ func TestUnmountedVolumeIsNeverWritten(t *testing.T) {
 	}
 	c := decode(t, text)
 	m.Mounted = func() []string { return nil }
+	blob := named("data")
 	if res, _ := do(t, c, "POST", "/Backup/data/"+blob, "data"); res.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("upload to an unmounted volume: %d", res.StatusCode)
 	}

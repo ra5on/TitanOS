@@ -29,7 +29,8 @@ type Image struct {
 type imageCache struct {
 	mu      sync.Mutex
 	images  []Image
-	fetched time.Time
+	fetched time.Time // last load that worked
+	failed  time.Time // last load that failed (err)
 	err     error
 }
 
@@ -85,28 +86,32 @@ func parseIndex(data []byte, arch string) []Image {
 
 // Images returns the images a container can be made of. The list is
 // kept in RAM; after a failed load the last known list is returned with
-// the error.
+// the error, until a load works again.
 func (m *Manager) Images(ctx context.Context) ([]Image, error) {
 	cache := &m.images
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if cache.images != nil && m.now().Sub(cache.fetched) < imageTTL {
+	// A failure is not retried for a minute, so that an open page does
+	// not hammer the server; it is shown until a load works.
+	if cache.err != nil {
+		if m.now().Sub(cache.failed) < time.Minute {
+			return cache.images, cache.err
+		}
+	} else if cache.images != nil && m.now().Sub(cache.fetched) < imageTTL {
 		return cache.images, nil
 	}
-	// A failure is not retried for a minute, so that an open page does
-	// not hammer the server.
-	if cache.err != nil && m.now().Sub(cache.fetched) < time.Minute {
-		return cache.images, cache.err
-	}
 	data, err := m.fetchIndex(ctx)
-	cache.fetched = m.now()
 	if err == nil {
 		if images := parseIndex(data, hostArch()); len(images) > 0 {
-			cache.images, cache.err = images, nil
+			cache.images, cache.err, cache.fetched = images, nil, m.now()
 			return images, nil
 		}
 		err = fmt.Errorf("lxc: the image list is empty")
 	}
-	cache.err = err
+	// A load cut off by its caller (the page was closed) says nothing
+	// about the server.
+	if ctx.Err() == nil {
+		cache.err, cache.failed = err, m.now()
+	}
 	return cache.images, err
 }

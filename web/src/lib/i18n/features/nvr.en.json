@@ -25,6 +25,7 @@
 	"nvr.privacy.title": "Privacy notice",
 	"nvr.privacy.text": "Point cameras only at your own property, not at the street or the neighbours. People who are filmed should know about it – for example from a sign. Faces and number plates are personal data: recognize them only where you are allowed to, and keep recordings no longer than needed.",
 	"nvr.privacy.dismiss": "Understood",
+	"nvr.privacy.failed": "The notice could not be hidden: {reason}",
 	"nvr.privacy.read": "Read",
 	"nvr.privacy.showAgain": "Show at the top again",
 	"nvr.state.userDown": "The NVR is not running right now. Live pictures and recordings come back once it runs.",

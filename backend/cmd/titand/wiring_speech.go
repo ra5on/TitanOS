@@ -47,5 +47,24 @@ func (w *titand) wireSpeech() error {
 		slog.Warn("speech settings not readable from /config; speech stays off until a start reads them", "err", err)
 	}
 	w.background(func() { w.voices.Run(ctx) })
+	w.containers.KeepImages = keptImages(w.recorder, w.voices)
 	return nil
+}
+
+// imageKeeper is a feature whose pinned images the Docker cleanup leaves
+// while it is set up (nvr.Manager, speech.Manager).
+type imageKeeper interface{ KeptImages() []string }
+
+// keptImages tells the Docker cleanup which images the NVR and speech keep
+// (N-102-29): digest → reason as shown on the page.
+func keptImages(recorder, voices imageKeeper) func() map[string]string {
+	return func() map[string]string {
+		out := map[string]string{}
+		for reason, k := range map[string]imageKeeper{"nvr": recorder, "speech": voices} {
+			for _, digest := range k.KeptImages() {
+				out[digest] = reason
+			}
+		}
+		return out
+	}
 }

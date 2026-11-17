@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -538,10 +539,15 @@ func notFound(err error) bool {
 
 // LeasedHardware lists the devices (PCI addresses) handed to a VM right
 // now; the remote view does not use them.
+// It does not wait for hardwareMu, which a VM start holds until libvirt
+// has created the VM.
 func (m *Manager) LeasedHardware() map[string]bool {
-	m.hardwareMu.Lock()
-	defer m.hardwareMu.Unlock()
-	return m.blockedHardware()
+	m.leasedMu.Lock()
+	defer m.leasedMu.Unlock()
+	if m.leasedNow == nil {
+		return map[string]bool{}
+	}
+	return maps.Clone(m.leasedNow)
 }
 
 // ViewerImageLabel marks images of the remote view (viewer/Dockerfile);

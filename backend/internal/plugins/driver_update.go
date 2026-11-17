@@ -381,9 +381,12 @@ func (m *Manager) RequestDriverUpdate(hash string, mounted []string) error {
 	if m.installed(settings.Volume)["nvidia"].Name == "" {
 		return ErrNotFound
 	}
+	// A request that waits already is not dropped silently: the caller is
+	// told, as for a build or a choice of version.
 	select {
 	case m.driverRequests <- hash:
 	default:
+		return ErrBusy
 	}
 	return nil
 }

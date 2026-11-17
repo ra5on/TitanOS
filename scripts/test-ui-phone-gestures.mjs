@@ -164,10 +164,13 @@ try {
   // The number of unread messages on the app's symbol.
   await page.waitForFunction(() => window.__badges.includes(3));
 
-  // Back from the edge: Systemsteuerung › Darstellung, back to the overview, back home.
+  // Back from the edge: Systemsteuerung › System › Darstellung, back to the
+  // area, to the areas (one row per area since 0.87), back home.
   await page.goto(base + "/settings");
   await page.locator("header.phone-bar").waitFor();
-  await page.locator("a.srow", { hasText: "Darstellung" }).first().tap();
+  await page.locator('a.srow[href="/settings?area=system"]').tap();
+  await page.waitForURL(/[?&]area=system/);
+  await page.locator('a.srow[href="/settings/appearance"]').tap();
   await page.waitForURL(/\/settings\/appearance/);
   await page.waitForTimeout(500);
   // Outside the zone: nothing.
@@ -195,7 +198,14 @@ try {
   await page.locator("[data-edge-back].armed").waitFor();
   await page.screenshot({ path: `${out}/zurueck-vom-rand.png` });
   await touch(cdp, "touchEnd", []);
-  await page.waitForURL((u) => u.pathname === "/settings");
+  await page.waitForURL(
+    (u) => u.pathname === "/settings" && u.searchParams.get("area") === "system",
+  );
+  await page.waitForTimeout(400);
+  await swipe(page, cdp, [6, 420], [200, 424]);
+  await page.waitForURL(
+    (u) => u.pathname === "/settings" && !u.searchParams.has("area"),
+  );
   await page.waitForTimeout(400);
   await swipe(page, cdp, [6, 420], [200, 424]);
   await page.waitForURL((u) => u.pathname === "/");

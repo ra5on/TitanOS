@@ -29,6 +29,10 @@ type NvidiaControl struct {
 	devices  *Manager
 	runner   run.Runner
 	Disabled bool
+	// applyMu orders the calls of nvidia-smi (Set and the loop); mu guards
+	// the state and is never held while nvidia-smi runs, so Status does
+	// not wait up to 30 s per GPU. applyMu is taken before mu.
+	applyMu  sync.Mutex
 	mu       sync.Mutex
 	loaded   bool
 	settings map[string]NvidiaSettings
@@ -109,9 +113,12 @@ func (n *NvidiaControl) apply(ctx context.Context, address string, settings Nvid
 }
 
 func (n *NvidiaControl) Set(ctx context.Context, address string, settings NvidiaSettings) error {
+	n.applyMu.Lock()
+	defer n.applyMu.Unlock()
 	n.mu.Lock()
-	defer n.mu.Unlock()
-	if !n.loaded {
+	loaded := n.loaded
+	n.mu.Unlock()
+	if !loaded {
 		return errors.New("hardware: settings could not be loaded")
 	}
 	if n.Disabled {
@@ -123,6 +130,8 @@ func (n *NvidiaControl) Set(ctx context.Context, address string, settings Nvidia
 	if err := n.apply(ctx, address, settings); err != nil {
 		return err
 	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	before := n.settings[address]
 	n.settings[address] = settings
 	if err := n.store.WriteJSON(nvidiaConfig, n.settings); err != nil {
@@ -157,31 +166,45 @@ func (n *NvidiaControl) Run(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		n.mu.Lock()
-		present := map[string]bool{}
-		for _, device := range n.devices.Status().PCI {
-			present[device.Address] = device.Driver == "nvidia"
-		}
-		for address, settings := range n.settings {
-			if !present[address] {
-				delete(n.applied, address)
-				continue
-			}
-			if n.applied[address] {
-				continue
-			}
-			if err := n.apply(ctx, address, settings); err != nil {
-				n.problems[address] = err.Error()
-			} else {
-				delete(n.problems, address)
-			}
-			n.applied[address] = true // failed attempts stay visible, no wake-up loop
-		}
-		n.mu.Unlock()
+		n.applyRound(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+// applyRound applies the limit to every GPU that came (back) to the driver.
+// nvidia-smi runs without mu (see applyMu); Set waits for the round.
+func (n *NvidiaControl) applyRound(ctx context.Context) {
+	n.applyMu.Lock()
+	defer n.applyMu.Unlock()
+	present := map[string]bool{}
+	for _, device := range n.devices.Status().PCI {
+		present[device.Address] = device.Driver == "nvidia"
+	}
+	due := map[string]NvidiaSettings{}
+	n.mu.Lock()
+	for address, settings := range n.settings {
+		if !present[address] {
+			delete(n.applied, address)
+			continue
+		}
+		if !n.applied[address] {
+			due[address] = settings
+		}
+	}
+	n.mu.Unlock()
+	for address, settings := range due {
+		err := n.apply(ctx, address, settings)
+		n.mu.Lock()
+		if err != nil {
+			n.problems[address] = err.Error()
+		} else {
+			delete(n.problems, address)
+		}
+		n.applied[address] = true // failed attempts stay visible, no wake-up loop
+		n.mu.Unlock()
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -115,12 +116,15 @@ func (m *Manager) RenameBatch(ctx context.Context, root Root, changes []RenameCh
 	}
 	defer r.Close()
 	sources, targets := map[string]bool{}, map[string]bool{}
-	for _, change := range changes {
+	// What is checked is what is carried out: the cleaned paths.
+	changes = slices.Clone(changes)
+	for i, change := range changes {
 		from, e := clean(change.From)
 		to, e2 := clean(change.To)
 		if e != nil || e2 != nil || from == "." || to == "." || path.Dir(from) != path.Dir(to) || !validName(path.Base(to)) || sources[from] || targets[to] {
 			return result, ErrInvalid
 		}
+		changes[i].From, changes[i].To = from, to
 		sources[from] = true
 		targets[to] = true
 		if root.secret(from) || root.secret(to) || m.protected(root, from) || m.protected(root, to) {

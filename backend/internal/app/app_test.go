@@ -264,3 +264,50 @@ func TestReadBase(t *testing.T) {
 		t.Error("a development image has a base version")
 	}
 }
+
+// Z-10 (1.04): an install that fails after the check leaves nothing of the
+// new version on the stick, and keeps what a version in use needs.
+func TestFailedInstallLeavesNothingBehind(t *testing.T) {
+	f := newFixture(t)
+	f.install("0.8.1")
+	f.stick.Confirm(true)
+	// The place of the binary is taken: the move fails after the
+	// manifest was written.
+	blocker := filepath.Join(f.stick.Dir, "titand-0.8.2", "x")
+	os.MkdirAll(blocker, 0o755)
+	manifest, signature, binary := f.release("0.8.2", "0.8.0", []byte("titand 0.8.2"))
+	if err := f.stick.Install("0.8.2", manifest, signature, binary); err == nil {
+		t.Fatal("installed onto a folder")
+	}
+	for _, name := range []string{"manifest-0.8.2.json", "manifest-0.8.2.json.minisig"} {
+		if _, err := os.Stat(filepath.Join(f.stick.Dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s stayed on the stick", name)
+		}
+	}
+	if s := f.state(); s.Current != "0.8.1" || s.Trial {
+		t.Errorf("state: %+v", s)
+	}
+	// The same version again, while it runs: what it needs stays.
+	os.RemoveAll(filepath.Join(f.stick.Dir, "titand-0.8.1"))
+	os.MkdirAll(filepath.Join(f.stick.Dir, "titand-0.8.1", "x"), 0o755)
+	manifest, signature, binary = f.release("0.8.1", "0.8.0", []byte("titand 0.8.1"))
+	if err := f.stick.Install("0.8.1", manifest, signature, binary); err == nil {
+		t.Fatal("installed onto a folder")
+	}
+	if _, err := os.Stat(filepath.Join(f.stick.Dir, "manifest-0.8.1.json")); err != nil {
+		t.Error("the manifest of the running app was removed")
+	}
+}
+
+// Z-10 (1.04): a copy into RAM that cannot be checked does not stay there.
+func TestUncheckedCopyLeavesNoRAM(t *testing.T) {
+	f := newFixture(t)
+	f.install("0.8.1")
+	os.Remove(filepath.Join(f.stick.Dir, "manifest-0.8.1.json"))
+	if _, err := f.stick.copyToRun("0.8.1"); err == nil {
+		t.Fatal("copied without a manifest")
+	}
+	if left, _ := filepath.Glob(filepath.Join(f.stick.RunDir, "titand-*")); len(left) > 0 {
+		t.Errorf("left in RAM: %v", left)
+	}
+}

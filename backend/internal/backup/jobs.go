@@ -117,9 +117,7 @@ func check(job Job, shares []Source, volumes []string) error {
 		switch {
 		case !plainCopy(job.Destination.Type):
 			return invalid("the setting for disks of running VMs belongs to readable copies")
-		case v.Mode == VMDisksSkip && v.Raw == "" && !v.LibvirtSnapshot:
-		case v.Mode == VMDisksConsistent && slices.Contains([]string{"", VMDisksRawSkip, VMDisksRawPause}, v.Raw):
-		default:
+		case !v.Known():
 			return invalid("setting for disks of running VMs")
 		}
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
@@ -63,7 +62,7 @@ func (a agentAdvisor) view() agentAdvisor {
 
 func (s *Server) checkForesight(f *agentFeatures, old agentFeatures) error {
 	if f.Advisor.At != "" {
-		if _, err := time.Parse("15:04", f.Advisor.At); err != nil || len(f.Advisor.At) != 5 {
+		if !clockRe.MatchString(f.Advisor.At) {
 			return errors.New("advisor.at must be HH:MM")
 		}
 	}

@@ -23,7 +23,7 @@ func TestUnreadableFolderIsNoEmptyList(t *testing.T) {
 	text, _ := m.Pair("Backup")
 	c := decode(t, text)
 	do(t, c, "POST", "/Backup/?create=true", "")
-	do(t, c, "POST", "/Backup/snapshots/"+blob, "snapshot")
+	do(t, c, "POST", "/Backup/snapshots/"+named("snapshot"), "snapshot")
 	if res, body := do(t, c, "GET", "/Backup/index/", "", "Accept", "application/vnd.x.restic.rest.v2"); res.StatusCode != http.StatusOK || body != "[]\n" {
 		t.Fatalf("empty folder: %d %q", res.StatusCode, body)
 	}

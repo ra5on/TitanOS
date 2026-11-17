@@ -187,6 +187,10 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 		m.mu.Unlock()
 		return errBackupRunning
 	}
+	if m.cleaning > 0 {
+		m.mu.Unlock()
+		return errCleaning
+	}
 	if job := m.jobs[name]; job != nil && job.State == "running" {
 		m.mu.Unlock()
 		return ErrExists
@@ -402,6 +406,9 @@ func (m *Manager) begin(name string) (*Job, string, error) {
 	}
 	if m.backups > 0 {
 		return nil, "", errBackupRunning
+	}
+	if m.cleaning > 0 {
+		return nil, "", errCleaning
 	}
 	job := &Job{State: "running"}
 	m.jobs[name] = job

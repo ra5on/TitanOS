@@ -74,6 +74,10 @@ type haBackupState struct {
 }
 
 type haStorageState struct {
+	// edit orders the changes of the setup (add, change, remove, enter
+	// again): each reads it, changes accounts and shares and saves it, and
+	// two at once would lose one's entry. Taken before mu.
+	edit   sync.Mutex
 	mu     sync.Mutex
 	loaded bool
 	setup  *haStorage
@@ -274,6 +278,9 @@ func (hass haArea) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "ha_storage_usage", "usage must be backup, media or share")
 		return
 	}
+	edit := &hass.haStoreOf(ha.ID()).edit
+	edit.Lock()
+	defer edit.Unlock()
 	if req.ReadOnly && req.Usage == "backup" {
 		writeError(w, http.StatusBadRequest, "ha_storage_read_only", "backups need to write")
 		return
@@ -371,6 +378,23 @@ func (hass haArea) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	setup.Entries = append(setup.Entries, entry)
+	if err := hass.saveHAStorage(ha.ID(), setup); err != nil {
+		// Nothing half: a share made for this entry goes again (its folder
+		// stays, as when a share is deleted), and so does an account made
+		// for it; otherwise the next try finds "account exists".
+		if !req.Existing {
+			if derr := hass.shares.Delete(req.Share); derr != nil {
+				slog.Warn("share for Home Assistant not removed again", "share", req.Share, "err", derr)
+			}
+		}
+		undo()
+		hass.shares.Kick()
+		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+		return
+	}
+	// The new password only once the entry is saved: a failed save leaves
+	// the entries in Home Assistant working with the old one.
 	if !newAccount && !restore && password != "" {
 		if _, err := hass.users.SetPassword(setup.Account, password); err != nil {
 			writeAccountError(w, err)
@@ -379,11 +403,6 @@ func (hass haArea) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	hass.shares.Kick()
 	hass.ssh.Kick()
-	setup.Entries = append(setup.Entries, entry)
-	if err := hass.saveHAStorage(ha.ID(), setup); err != nil {
-		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
-		return
-	}
 	slog.Info("storage for Home Assistant added", "share", entry.place(), "account", setup.Account, "usage", entry.Usage, "by", currentUser(r).Name, "ip", remoteIP(r))
 	res := map[string]any{"setup": setup, "entry": entry}
 	if password != "" {
@@ -460,6 +479,9 @@ func (hass haArea) handleHAStorageRegister(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
 		return
 	}
+	edit := &hass.haStoreOf(ha.ID()).edit
+	edit.Lock()
+	defer edit.Unlock()
 	setup, err := hass.haStorage(ha.ID())
 	if err != nil || setup == nil || len(setup.Entries) == 0 {
 		writeError(w, http.StatusNotFound, "ha_storage_missing", "no storage for Home Assistant is set up")
@@ -543,21 +565,26 @@ func haReason(err error) string {
 	return err.Error()
 }
 
-func (hass haArea) haEntry(w http.ResponseWriter, r *http.Request) (*homeassistant.Manager, *haStorage, int, bool) {
+// With ok it holds the edit lock of the setup; the caller calls the
+// returned function when done.
+func (hass haArea) haEntry(w http.ResponseWriter, r *http.Request) (*homeassistant.Manager, *haStorage, int, func(), bool) {
 	ha := hass.haOf(r)
 	if ha == nil {
 		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
-		return nil, nil, 0, false
+		return nil, nil, 0, nil, false
 	}
+	edit := &hass.haStoreOf(ha.ID()).edit
+	edit.Lock()
 	setup, err := hass.haStorage(ha.ID())
 	if err == nil && setup != nil {
 		mount := r.PathValue("mount")
 		if i := slices.IndexFunc(setup.Entries, func(e haEntry) bool { return e.Mount == mount }); i >= 0 {
-			return ha, setup, i, true
+			return ha, setup, i, edit.Unlock, true
 		}
 	}
+	edit.Unlock()
 	writeError(w, http.StatusNotFound, "ha_storage_missing", "no such storage for Home Assistant")
-	return nil, nil, 0, false
+	return nil, nil, 0, nil, false
 }
 
 func (hass haArea) handleHAStorageChange(w http.ResponseWriter, r *http.Request) {
@@ -567,10 +594,11 @@ func (hass haArea) handleHAStorageChange(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	ha, setup, i, ok := hass.haEntry(w, r)
+	ha, setup, i, done, ok := hass.haEntry(w, r)
 	if !ok {
 		return
 	}
+	defer done()
 	if req.MaxAgeDays < 0 || req.MaxAgeDays > 90 || req.MaxAgeDays > 0 && setup.Entries[i].Usage != "backup" {
 		writeError(w, http.StatusBadRequest, "ha_storage_max_age", "maxAgeDays is 0 (off) to 90, and only for backups")
 		return
@@ -587,10 +615,11 @@ func (hass haArea) handleHAStorageChange(w http.ResponseWriter, r *http.Request)
 // account's access to its share unless another entry needs it. Share and
 // data stay. Nobody left with access, the person removing it gets it.
 func (hass haArea) handleHAStorageRemove(w http.ResponseWriter, r *http.Request) {
-	ha, setup, i, ok := hass.haEntry(w, r)
+	ha, setup, i, done, ok := hass.haEntry(w, r)
 	if !ok {
 		return
 	}
+	defer done()
 	entry := setup.Entries[i]
 	noteTarget(r, entry.place())
 	setup.Entries = slices.Delete(setup.Entries, i, i+1)

@@ -1,8 +1,10 @@
 // PLAN 67-1: Docker images, volumes and the clean-up page (docs/DOCKER-CLEANUP.md).
 // titand decides what may go: images in use or protected (remote view,
-// the agent's sandbox) and volumes of TitanOS are never offered here, and
-// the volume clean-up takes only unused anonymous volumes by default.
+// the agent's sandbox, the NVR and speech while set up) and volumes of
+// TitanOS are never offered here, and the volume clean-up takes only unused
+// anonymous volumes by default.
 import { api } from './api.ts';
+import type { MessageKey } from './i18n/index.svelte.ts';
 
 export type UsedBy = { app?: string; container?: string; running?: boolean };
 
@@ -174,6 +176,18 @@ export function usedByText(used: UsedBy[]): string {
 /** About the space deleting an image frees (without layers shared with others). */
 export const freed = (image: DockerImage) =>
 	image.sharedSize > 0 ? Math.max(0, image.size - image.sharedSize) : image.size;
+
+/** Why TitanOS keeps an image, as a translation key: remote view, the
+ * agent's sandbox, the NVR or the speech services (N-102-29). */
+const protectedKeys: Record<string, MessageKey> = {
+	viewer: 'dres.protected.viewer',
+	sandbox: 'dres.protected.sandbox',
+	nvr: 'dres.protected.nvr',
+	speech: 'dres.protected.speech',
+};
+export function protectedKey(reason: string): MessageKey {
+	return protectedKeys[reason] ?? 'dres.protected.titanos';
+}
 
 /** Images "Ungenutzte löschen" takes: not used and not protected. */
 export const unusedImages = (images: DockerImage[]) =>

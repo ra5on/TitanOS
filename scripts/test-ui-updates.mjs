@@ -173,6 +173,8 @@ async function context(theme = "graphit", width = 1440) {
         sound: null,
       });
     if (path === "/system") return json({ ...system, version: state.version });
+    if (path === "/storage" && volumes === null)
+      return json({ error: { code: "internal", message: "storage down" } }, 500);
     if (path === "/storage")
       return json({
         volumes,
@@ -455,7 +457,28 @@ try {
       await second.page.getByTestId("rollback-encrypted").count(),
       0,
     );
+    assert.equal(
+      await second.page.getByTestId("rollback-encrypted-unknown").count(),
+      0,
+    );
     await second.ctx.close();
+    // Durchsicht 102 (D102-44): when the volumes cannot be looked up, the
+    // dialog says that it does not know instead of saying nothing.
+    volumes = null;
+    const third = await context();
+    await third.page.goto(`${base}/settings/updates`);
+    await third.page
+      .getByRole("button", { name: /0\.30\.0/ })
+      .first()
+      .click();
+    const unknown = third.page.getByTestId("rollback-encrypted-unknown");
+    await unknown.waitFor();
+    assert.match(
+      await unknown.textContent(),
+      /ließ sich nicht prüfen: .*0\.30\.0 kann verschlüsselte Volumes nicht öffnen/s,
+    );
+    await third.ctx.close();
+    volumes = [{ name: "Data", mounted: true, state: "ok" }];
   }
   {
     // Choose a version: an older one switches installing by itself off.

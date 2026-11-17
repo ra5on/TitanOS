@@ -247,16 +247,16 @@ func TestAdvisorRunAndKeep(t *testing.T) {
 func TestAdvisorDue(t *testing.T) {
 	loc := time.UTC
 	at := func(h, m int) time.Time { return time.Date(2026, 11, 6, h, m, 0, 0, loc) }
-	if advisorDue("03:30", time.Time{}, at(3, 0)) {
+	if dailyDue("03:30", time.Time{}, at(3, 0)) {
 		t.Fatal("before the time")
 	}
-	if !advisorDue("03:30", time.Time{}, at(3, 31)) || !advisorDue("03:30", at(3, 31).AddDate(0, 0, -1), at(14, 0)) {
+	if !dailyDue("03:30", time.Time{}, at(3, 31)) || !dailyDue("03:30", at(3, 31).AddDate(0, 0, -1), at(14, 0)) {
 		t.Fatal("due, also made up during the day")
 	}
-	if advisorDue("03:30", at(3, 40), at(4, 0)) {
+	if dailyDue("03:30", at(3, 40), at(4, 0)) {
 		t.Fatal("ran tonight already")
 	}
-	if advisorDue("bad", time.Time{}, at(4, 0)) {
+	if dailyDue("bad", time.Time{}, at(4, 0)) {
 		t.Fatal("bad time")
 	}
 }

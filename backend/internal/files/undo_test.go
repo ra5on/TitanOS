@@ -183,3 +183,29 @@ func TestUndoExpirationAndPermissions(t *testing.T) {
 		t.Fatal("undo record did not expire")
 	}
 }
+
+// Paths are checked in their cleaned form, so they are carried out in it:
+// a leading "/" (as the web UI and the API send paths elsewhere) renames
+// the files and can be undone, for one file and for many.
+func TestRenameWithALeadingSlashIsDoneAndCanBeUndone(t *testing.T) {
+	m, root, _ := newRoot(t)
+	plan, err := m.RenamePreview(root, RenameOptions{Names: []string{"notiz.txt"}, Prefix: "neu-", Start: 1, Digits: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan[0].From, plan[0].To = "/"+plan[0].From, "/"+plan[0].To
+	result, err := m.RenameBatch(context.Background(), root, plan, "alex")
+	if err != nil || result.Done != 1 || result.Error != "" || result.Undo == "" {
+		t.Fatalf("batch with a leading slash: %+v %v", result, err)
+	}
+	if read(t, filepath.Join(root.Dir, "neu-notiz.txt")) != "notiz" {
+		t.Fatal("not renamed")
+	}
+	// A single rename: the handler records its undo with the paths it got.
+	if err := m.Rename(root, "/neu-notiz.txt", "/notiz.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if id := m.RecordUndo("alex", "rename", []UndoMove{{CurrentRoot: root, OriginalRoot: root, Current: "/notiz.txt", Original: "/neu-notiz.txt"}}); id == "" {
+		t.Fatal("no undo for a rename given with a leading slash")
+	}
+}

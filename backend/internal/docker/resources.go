@@ -33,6 +33,8 @@ var (
 	// an install pulls its images before it creates the containers, and an
 	// update keeps the previous images for going back.
 	errAppWork = fmt.Errorf("%w: an app is being installed or updated", ErrBusy)
+	// errCleaning: unused images or volumes are being deleted right now.
+	errCleaning = fmt.Errorf("%w: unused images or volumes are being deleted", ErrBusy)
 )
 
 const (
@@ -269,6 +271,32 @@ func (m *Manager) cleanable() error {
 	return nil
 }
 
+// beginCleaning is cleanable for a cleanup that deletes several images or
+// volumes: until the returned function is called no app job starts (begin
+// refuses with errCleaning), so an update cannot lose the image it has just
+// pulled between two deletions.
+func (m *Manager) beginCleaning() (func(), error) {
+	if err := m.ready(); err != nil {
+		return nil, err
+	}
+	if m.backupActive() {
+		return nil, errBackupRunning
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if job.State == "running" {
+			return nil, errAppWork
+		}
+	}
+	m.cleaning++
+	return func() {
+		m.mu.Lock()
+		m.cleaning--
+		m.mu.Unlock()
+	}, nil
+}
+
 func (m *Manager) allContainers(ctx context.Context) ([]rawContainer, error) {
 	var list []rawContainer
 	if err := m.api.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}}, &list); err != nil {
@@ -300,18 +328,33 @@ func realTags(tags []string) []string {
 }
 
 // imageProtection says why TitanOS keeps an image: the remote view's own
-// images and the pinned image of the agent's sandbox.
-func imageProtection(img rawImage) string {
+// images, the pinned image of the agent's sandbox and the pinned images of
+// features that are set up (keep, from KeepImages: digest → reason).
+func imageProtection(img rawImage, keep map[string]string) string {
 	if ownImage(img.Labels) {
 		return "viewer"
 	}
 	_, sandboxDigest, _ := strings.Cut(SandboxImage, "@")
 	for _, d := range img.RepoDigests {
-		if _, digest, ok := strings.Cut(d, "@"); ok && digest == sandboxDigest {
-			return "sandbox"
+		if _, digest, ok := strings.Cut(d, "@"); ok {
+			if digest == sandboxDigest {
+				return "sandbox"
+			}
+			if why := keep[digest]; why != "" {
+				return why
+			}
 		}
 	}
 	return ""
+}
+
+// keptImages asks the features which images they keep (N-102-29). Asked
+// before any lock of this manager is taken: the features take their own.
+func (m *Manager) keptImages() map[string]string {
+	if m.KeepImages == nil {
+		return nil
+	}
+	return m.KeepImages()
 }
 
 // freed is about what deleting an image frees.
@@ -327,6 +370,7 @@ func (m *Manager) Images(ctx context.Context) (ImageList, error) {
 	if err := m.ready(); err != nil {
 		return ImageList{}, err
 	}
+	keep := m.keptImages()
 	images, users, err := m.imagesWithUsers(ctx)
 	if err != nil {
 		return ImageList{}, err
@@ -335,7 +379,7 @@ func (m *Manager) Images(ctx context.Context) (ImageList, error) {
 	for _, img := range images {
 		tags := realTags(img.RepoTags)
 		item := Image{ID: img.ID, RepoTags: tags, Size: img.Size, SharedSize: img.SharedSize, Created: time.Unix(img.Created, 0).UTC(),
-			UsedBy: users[img.ID], Dangling: len(tags) == 0, Protected: imageProtection(img)}
+			UsedBy: users[img.ID], Dangling: len(tags) == 0, Protected: imageProtection(img, keep)}
 		if item.UsedBy == nil {
 			item.UsedBy = []ResourceUser{}
 		}
@@ -401,6 +445,7 @@ func (m *Manager) RemoveImage(ctx context.Context, ref string) (Image, error) {
 	if err := m.cleanable(); err != nil {
 		return Image{}, err
 	}
+	keep := m.keptImages()
 	images, users, err := m.imagesWithUsers(ctx)
 	if err != nil {
 		return Image{}, err
@@ -409,7 +454,7 @@ func (m *Manager) RemoveImage(ctx context.Context, ref string) (Image, error) {
 	if !ok {
 		return Image{}, ErrNotFound
 	}
-	item := Image{ID: img.ID, RepoTags: realTags(img.RepoTags), Size: img.Size, SharedSize: img.SharedSize, UsedBy: users[img.ID], Protected: imageProtection(img)}
+	item := Image{ID: img.ID, RepoTags: realTags(img.RepoTags), Size: img.Size, SharedSize: img.SharedSize, UsedBy: users[img.ID], Protected: imageProtection(img, keep)}
 	switch {
 	case item.Protected != "":
 		return item, ErrProtected
@@ -453,9 +498,12 @@ func (m *Manager) deleteImageRef(ctx context.Context, ref string) error {
 // keep: only untagged ones, or with unused all unused ones.
 func (m *Manager) PruneImages(ctx context.Context, unused bool) (PruneResult, error) {
 	result := PruneResult{Deleted: []string{}, Failed: []PruneFailure{}}
-	if err := m.cleanable(); err != nil {
+	done, err := m.beginCleaning()
+	if err != nil {
 		return result, err
 	}
+	defer done()
+	keep := m.keptImages()
 	images, users, err := m.imagesWithUsers(ctx)
 	if err != nil {
 		return result, err
@@ -463,7 +511,7 @@ func (m *Manager) PruneImages(ctx context.Context, unused bool) (PruneResult, er
 	defer m.dropDF()
 	for _, img := range images {
 		dangling := len(realTags(img.RepoTags)) == 0
-		if len(users[img.ID]) > 0 || imageProtection(img) != "" || (!unused && !dangling) {
+		if len(users[img.ID]) > 0 || imageProtection(img, keep) != "" || (!unused && !dangling) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -606,9 +654,11 @@ func (m *Manager) deleteVolume(ctx context.Context, name string) error {
 // are still saved (an app taken down keeps its data) always stay.
 func (m *Manager) PruneVolumes(ctx context.Context, anonymousOnly bool) (PruneResult, error) {
 	result := PruneResult{Deleted: []string{}, Failed: []PruneFailure{}}
-	if err := m.cleanable(); err != nil {
+	done, err := m.beginCleaning()
+	if err != nil {
 		return result, err
 	}
+	defer done()
 	volumes, users, err := m.volumesWithUsers(ctx)
 	if err != nil {
 		return result, err
@@ -757,6 +807,7 @@ func (m *Manager) DiskUsage(ctx context.Context, fresh bool) (DiskUsage, error) 
 	if err := m.ready(); err != nil {
 		return DiskUsage{}, err
 	}
+	keep := m.keptImages()
 	df, err := m.diskUsage(ctx, dfWaitPage, fresh)
 	if errors.Is(err, errMeasuring) {
 		return DiskUsage{Measuring: true}, nil
@@ -775,7 +826,7 @@ func (m *Manager) DiskUsage(ctx context.Context, fresh bool) (DiskUsage, error) 
 	out.Images.Count = len(df.Images)
 	out.Images.Size = df.LayersSize
 	for _, img := range df.Images {
-		if img.Containers == 0 && imageProtection(img) == "" {
+		if img.Containers == 0 && imageProtection(img, keep) == "" {
 			out.Images.Reclaimable += freed(img.Size, img.SharedSize)
 		}
 	}

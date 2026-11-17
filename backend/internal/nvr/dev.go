@@ -406,6 +406,12 @@ type DevFrigate struct {
 	FailKept, IgnoreConfig bool
 	// FailPath, if set, is a path answered with 500 (a busy Frigate).
 	FailPath string
+	// SlowDelete holds every DELETE this long before it is done (Frigate
+	// deleting many files).
+	SlowDelete time.Duration
+	// HoldPath, if set, is a path answered only once HoldUntil is closed.
+	HoldPath  string
+	HoldUntil chan struct{}
 	// Cameras are the cameras Frigate "runs" with their pictures per
 	// second (0: offline).
 	Cameras map[string]float64
@@ -493,7 +499,18 @@ func (f *DevFrigate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		cameras[id] = fps
 	}
 	log := append([]string{}, f.Log...)
+	slow := f.SlowDelete
+	var hold chan struct{}
+	if f.HoldPath != "" && r.URL.Path == f.HoldPath {
+		hold = f.HoldUntil
+	}
 	f.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	if slow > 0 && r.Method == http.MethodDelete {
+		time.Sleep(slow)
+	}
 	if down {
 		http.Error(w, "down", http.StatusBadGateway)
 		return

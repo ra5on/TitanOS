@@ -320,7 +320,18 @@ func (m *Manager) removeContainer(ctx context.Context) {
 	}
 	rctx, cancel := context.WithTimeout(ctx, (docker.NVRStopSeconds+30)*time.Second)
 	defer cancel()
-	if err := m.Engine.NVRRemove(rctx); err != nil {
+	err := m.Engine.NVRRemove(rctx)
+	if errors.Is(err, docker.ErrNotNVR) {
+		// A container of that name is someone else's: it is not touched,
+		// and there is no container of the NVR. Told once, not in every
+		// round; switching the NVR on reports it again.
+		slog.Warn("NVR: a container of the NVR's name is not the NVR's own; it is left alone", "err", err)
+		m.mu.Lock()
+		m.rt.absent = true
+		m.mu.Unlock()
+		return
+	}
+	if err != nil {
 		slog.Warn("NVR: container not removed", "err", err)
 		return
 	}
@@ -1112,7 +1123,7 @@ func (m *Manager) check(ctx context.Context, st docker.NVRState) {
 		return
 	}
 	m.watchCameras(stats, now)
-	m.watchStorage(ctx, base, now)
+	m.watchStorageBeside(ctx, base, now)
 	m.watchPreload(ctx, now)
 }
 

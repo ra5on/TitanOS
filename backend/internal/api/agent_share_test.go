@@ -267,3 +267,18 @@ func TestAgentSharedProject(t *testing.T) {
 		t.Fatal("ben started a chat in a project not shared with him")
 	}
 }
+
+// The folder of an account in the share KI-Agent is never made in the RAM
+// below /mnt: a share whose volume is not mounted (after a restart in the
+// middle of moving the agent, say) has none.
+func TestAgentFolderNeedsAMountedVolume(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	mnt := filepath.Dir(filepath.Dir(ts.withShare()))
+	user, _ := ts.users.Get("alex")
+	if _, err := ts.server.agentUserRoot(shares.Share{Name: agentShareName, Volume: "gone", PerUser: true}, user); err == nil {
+		t.Fatal("a folder on a volume that is not mounted")
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "gone")); !os.IsNotExist(err) {
+		t.Fatalf("made below the mount point of a missing volume: %v", err)
+	}
+}

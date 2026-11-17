@@ -18,6 +18,7 @@
 		freed,
 		imageName,
 		loadImages,
+		protectedKey,
 		relativeDate,
 		sumSize,
 		unusedImages,
@@ -202,20 +203,15 @@
 											<span class="tag mono">{n.tag}</span>{/if}
 										{#if image.protected}<span
 												class="chip info"
-												title={t(
-													`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`,
-												)}><Icon name="lock" size={11} />{t('dres.protectedChip')}</span
+												title={t(protectedKey(image.protected))}
+												><Icon name="lock" size={11} />{t('dres.protectedChip')}</span
 											>{/if}
 										<span class="sub narrow">{used || t('dres.unused')}</span>
 									</td>
 									<td class="num">{formatBytes(image.size)}</td>
 									<td class="used" class:muted={!used}
 										>{used ||
-											(image.protected
-												? t(
-														`dres.protected.${image.protected === 'sandbox' ? 'sandbox' : 'viewer'}`,
-													)
-												: t('dres.unused'))}</td
+											(image.protected ? t(protectedKey(image.protected)) : t('dres.unused'))}</td
 									>
 									<td class="created">{relativeDate(createdDate(image.created), i18n.locale)}</td>
 									<td class="actions">

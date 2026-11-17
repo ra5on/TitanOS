@@ -377,11 +377,10 @@ func (s *Server) agentDocsTick(now agentNow) {
 // run itself skips what is done, so a folder on a sleeping disk is tried
 // again later the same night; a missed night is made up at the next one).
 func docsNightDue(at string, now time.Time) bool {
-	t, err := time.ParseInLocation("15:04", at, now.Location())
-	if err != nil {
+	due, ok := todayAt(at, now)
+	if !ok {
 		return false
 	}
-	due := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
 	d := now.Sub(due)
 	return d >= 0 && d < 3*time.Hour && int(d.Minutes())%10 == 0
 }

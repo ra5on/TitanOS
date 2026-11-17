@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -151,14 +152,26 @@ type Manager struct {
 	lan             []LANNetwork
 	lanErrors       map[string]string
 	Ready           func() bool // drivers must be active before Docker autostarts containers
+	// KeepImages names the images features of TitanOS keep while they are
+	// set up (digest → reason, "nvr" or "speech"; N-102-29): the cleanup
+	// leaves them even when no container uses them (switched off, volume
+	// missing). Called without locks
+	// of this manager held.
+	KeepImages      func() map[string]string
 	HardwareDevices func(context.Context) []hardware.ContainerDevice
 	RefreshCDI      func(context.Context) error
 	// hardwareMu guards only short critical sections: GPU leases, the
 	// composing count and engine/container lifecycle calls. Long work
-	// (compose up, app backups) runs without it.
+	// (compose up, app backups) runs without it. A container stop or a VM
+	// start holds it for as long as they take: the loops do not wait for
+	// it (reconcile tries, LeasedHardware reads leasedNow).
 	hardwareMu     sync.Mutex
 	hardwareRunDir string
 	gpuLeases      map[string]gpuLease
+	// leasedNow is a copy of the devices in gpuLeases, renewed with every
+	// change of the leases; guarded by leasedMu, not hardwareMu.
+	leasedMu  sync.Mutex
+	leasedNow map[string]bool
 	// composing holds the hardware of each running `docker compose up`,
 	// resolved against the leases of its start; guarded by hardwareMu.
 	composing map[string]composeUse
@@ -193,8 +206,13 @@ type Manager struct {
 	jobs     map[string]*Job
 	appList  []string // apps in /config; nil until read
 	// opens caches x-titanos.opens per app (opens.go); nil with appList.
-	opens   map[string]openEntry
-	backups int // open BackupLeases; no container lifecycle changes
+	opens map[string]openEntry
+	// appsGeneration grows with every forgetApps (opens.go).
+	appsGeneration uint64
+	backups        int // open BackupLeases; no container lifecycle changes
+	// cleaning counts running cleanups of images and volumes (resources.go);
+	// no app job starts meanwhile, or it could lose an image it just pulled.
+	cleaning int
 	// backupStopped are containers the open backup stopped and will start
 	// again; a VM must not take their hardware meanwhile.
 	backupStopped map[string]bool
@@ -204,6 +222,11 @@ type Manager struct {
 	local          map[string][]string // image ID → digests it is known under
 	updatesChecked time.Time
 	updateErrors   map[string]string
+	// checkingUpdates is set while the loop's update check runs beside it.
+	checkingUpdates atomic.Bool
+	// loadTries and loadAfter pace the reading of unreadable settings.
+	loadTries int
+	loadAfter time.Time
 }
 
 // NewManager returns a manager working on the real system.
@@ -285,7 +308,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
+			m.retryLoad(time.Now())
 		} else if !m.Disabled {
 			if err := m.reconcile(ctx, mounted()); err != nil {
 				slog.Error("docker engine", "err", err)
@@ -296,7 +319,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			due := m.applied != "" && time.Since(m.updatesChecked) > updateInterval
 			m.mu.Unlock()
 			if due {
-				_ = m.CheckUpdates(ctx) // only refreshes the update hints; the next round tries again
+				m.checkUpdatesBeside(ctx)
 			}
 		}
 		select {
@@ -307,10 +330,44 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 	}
 }
 
+// retryLoad reads the settings again while they could not be read, at
+// first every round, then less often (up to every ten minutes): the stick
+// is not read every five seconds for a file that stays broken.
+func (m *Manager) retryLoad(now time.Time) {
+	m.mu.Lock()
+	wait := now.Before(m.loadAfter)
+	m.mu.Unlock()
+	if wait {
+		return
+	}
+	if err := m.Load(); err == nil {
+		return
+	}
+	m.mu.Lock()
+	m.loadTries++
+	m.loadAfter = now.Add(min(sampleInterval<<min(m.loadTries, 7), 10*time.Minute))
+	m.mu.Unlock()
+}
+
+// checkUpdatesBeside asks the registries without holding the loop up (the
+// check may take two minutes); one check at a time.
+func (m *Manager) checkUpdatesBeside(ctx context.Context) {
+	if !m.checkingUpdates.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer m.checkingUpdates.Store(false)
+		_ = m.CheckUpdates(ctx) // only refreshes the update hints; the next round tries again
+	}()
+}
+
 // reconcile makes the engine run exactly when Docker is enabled and its
-// volume is mounted.
+// volume is mounted. While a container action or a VM start holds
+// hardwareMu it does nothing; the next round tries again.
 func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
-	m.hardwareMu.Lock()
+	if !m.hardwareMu.TryLock() {
+		return nil
+	}
 	defer m.hardwareMu.Unlock()
 	settings := m.current()
 	want := ""
@@ -529,9 +586,10 @@ func (m *Manager) sample(ctx context.Context) {
 		_ = m.api.getJSON(ctx, "/containers/"+c.ID+"/json", nil, &inspect) // a container that cannot be inspected keeps the zero time
 		since := inspect.State.FinishedAt
 		var stats apiStats
+		var statsErr error
 		if c.State == "running" {
 			since = inspect.State.StartedAt
-			stats, _ = m.api.stats(ctx, c.ID)
+			stats, statsErr = m.api.stats(ctx, c.ID)
 		}
 
 		m.mu.Lock()
@@ -539,6 +597,13 @@ func (m *Manager) sample(ctx context.Context) {
 		if s == nil {
 			s = &sample{}
 			m.samples[c.ID] = s
+		}
+		if statsErr != nil {
+			// No answer this round: CPU and memory stay as they were
+			// instead of dropping to 0.
+			s.since = since
+			m.mu.Unlock()
+			continue
 		}
 		percent := 0.0
 		if c.State == "running" && s.system > 0 && stats.CPUStats.SystemUsage > s.system && stats.CPUStats.CPUUsage.TotalUsage >= s.cpu {

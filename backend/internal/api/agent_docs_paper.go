@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"path"
 	"slices"
@@ -195,6 +196,12 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 	for _, e := range entries {
 		inInbox[path.Join(paperInbox, e.Name)] = e.Modified
 	}
+	// What a mail told of a file that is gone from Eingang before it was
+	// read is of no use any more; the log would only grow (A-24, 1.04).
+	maps.DeleteFunc(lg.Hints, func(p string, _ paperHint) bool {
+		_, ok := inInbox[p]
+		return !ok
+	})
 	lg.Entries = slices.DeleteFunc(lg.Entries, func(x paperEntry) bool {
 		if x.Root != root.ID || (x.State != "ask" && x.State != "waiting") || path.Dir(x.Path) != paperInbox {
 			return false
@@ -533,8 +540,23 @@ func (s *Server) paperFetchOne(c *imapmini.Client, uid uint32) ([]byte, error) {
 	return c.Fetch(uid)
 }
 
-func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, lg *paperLog, mail imapmini.Mail, now time.Time) error {
+func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, lg *paperLog, mail imapmini.Mail, now time.Time) (err error) {
 	env := s.agentEnv()
+	// A mail is taken whole or not at all (A-24, 1.04): it stays unread
+	// and comes again, and what was written of it before would come a
+	// second time as "… (2)".
+	var written []string
+	defer func() {
+		if err == nil || len(written) == 0 {
+			return
+		}
+		for _, to := range written {
+			delete(lg.Hints, to)
+		}
+		if derr := env.files.Delete(root, written, u.Name, true); derr != nil {
+			slog.Warn("parts of a mail not taken back", "account", u.Name, "err", derr)
+		}
+	}()
 	date := mail.Date
 	if date.IsZero() {
 		date = now
@@ -553,6 +575,7 @@ func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, l
 		if err := env.files.WriteFile(root, to, a.Data, u.UID, false); err != nil {
 			return err
 		}
+		written = append(written, to)
 		lg.Hints[to] = hint
 	}
 	if p.Mail.Mode != "attachments" && strings.TrimSpace(mail.Text) != "" {
@@ -569,6 +592,7 @@ func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, l
 		if err := env.files.WriteFile(root, to, []byte(b.String()), u.UID, false); err != nil {
 			return err
 		}
+		written = append(written, to)
 		h := hint
 		h.Origin = "mailtext"
 		lg.Hints[to] = h
@@ -922,6 +946,14 @@ func (b *agentToolbox) paperSummary(_ context.Context, _ *agent.Chat, args json.
 	if err != nil {
 		return agent.Outcome{}, err
 	}
+	// A-23 (owner 17.11.2026): like documents_search, the overview keeps
+	// to the folder rules. A document in a folder the agent may not read is
+	// left out before anything is summed: not listed, not in the totals,
+	// not among the senders. The page Papierkram shows the person all of it.
+	lg.Entries = slices.DeleteFunc(slices.Clone(lg.Entries), func(e paperEntry) bool {
+		a, _ := json.Marshal(map[string]string{"root": e.Root, "path": e.Path})
+		return b.folderMode(a, agent.KindRead) == agent.ModeDeny
+	})
 	sum := paperSummary(lg, req.Month, time.Now().In(b.s.agentLocation()))
 	delete(sum, "mailError")
 	if r, ok := sum["recent"].([]paperView); ok && len(r) > 10 {

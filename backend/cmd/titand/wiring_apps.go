@@ -253,7 +253,9 @@ func (w *titand) wireApplications() error {
 			StartVM: func(ctx context.Context, name string) error {
 				return w.machines.StartOrdered(ctx, name, w.volumes.Mounted())
 			},
-			StartApp: w.containers.StartApp,
+			StartApp: func(ctx context.Context, app string, held map[string]startup.Policy) error {
+				return w.containers.StartApp(ctx, app, dockerPolicies(held))
+			},
 			Restore: func(ctx context.Context, held map[string]startup.Policy) error {
 				return w.containers.RestorePolicies(ctx, dockerPolicies(held))
 			},
@@ -266,7 +268,7 @@ func (w *titand) wireApplications() error {
 func dockerPolicies(held map[string]startup.Policy) map[string]docker.HeldPolicy {
 	out := make(map[string]docker.HeldPolicy, len(held))
 	for id, p := range held {
-		out[id] = docker.HeldPolicy{Name: p.Name, MaxRetries: p.MaxRetries}
+		out[id] = docker.HeldPolicy{Name: p.Name, MaxRetries: p.MaxRetries, Running: p.Running}
 	}
 	return out
 }
@@ -287,7 +289,7 @@ func (w *titand) holdOrderedApps(ctx context.Context) {
 	held, err := w.containers.HoldApps(ctx, apps)
 	policies := make(map[string]startup.Policy, len(held))
 	for id, p := range held {
-		policies[id] = startup.Policy{Name: p.Name, MaxRetries: p.MaxRetries}
+		policies[id] = startup.Policy{Name: p.Name, MaxRetries: p.MaxRetries, Running: p.Running}
 	}
 	// Written even after an error: what was changed must be given back.
 	if saveErr := w.start.Hold(policies); saveErr != nil {

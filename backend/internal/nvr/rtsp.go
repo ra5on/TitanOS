@@ -122,8 +122,28 @@ func (p *Prober) ProbeRTSP(ctx context.Context, address, user, password string) 
 	return StreamInfo{Outcome: OutcomeOther}, nil
 }
 
+// rtspLineLimit bounds one line of a camera's answer; a camera that sends
+// an endless line (until the deadline) does not fill titand's memory.
+const rtspLineLimit = 8 << 10
+
+// readRTSPLine reads one line of at most rtspLineLimit bytes.
+func readRTSPLine(r *bufio.Reader) (string, error) {
+	var line []byte
+	for {
+		part, err := r.ReadSlice('\n')
+		line = append(line, part...)
+		if len(line) > rtspLineLimit {
+			return "", errors.New("nvr: a line of the RTSP answer is too long")
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return string(line), err
+	}
+}
+
 func readRTSPResponse(r *bufio.Reader) (int, map[string]string, string, error) {
-	line, err := r.ReadString('\n')
+	line, err := readRTSPLine(r)
 	if err != nil {
 		return 0, nil, "", err
 	}
@@ -134,7 +154,7 @@ func readRTSPResponse(r *bufio.Reader) (int, map[string]string, string, error) {
 	status, _ := strconv.Atoi(fields[1]) // 0 for a status that is no number: handled as "other"
 	head := map[string]string{}
 	for range 100 {
-		l, err := r.ReadString('\n')
+		l, err := readRTSPLine(r)
 		if err != nil {
 			return 0, nil, "", err
 		}

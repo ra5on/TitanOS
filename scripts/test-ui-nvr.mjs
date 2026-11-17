@@ -972,6 +972,23 @@ try {
     const { ctx, page, state } = await open("owner", (s) => (s.settings.privacyNoticeDismissed = false));
     await page.goto(base + "/nvr");
     await page.locator("#nvr-privacy").getByText(de["nvr.privacy.text"]).waitFor();
+    // Durchsicht 102 (D102-43): a refused dismissal says why, at the notice.
+    let refuse = true;
+    await ctx.route("**/api/v1/nvr/settings", (route) => {
+      if (route.request().method() !== "PUT" || !refuse) return route.fallback();
+      refuse = false;
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "unavailable", message: "Stick nicht erreichbar" } }),
+      });
+    });
+    await page.locator("#nvr-privacy").getByRole("button", { name: "Verstanden" }).click();
+    await page
+      .locator("#nvr-privacy")
+      .getByRole("alert")
+      .getByText(/^Der Hinweis ließ sich nicht ausblenden: /)
+      .waitFor();
     await page.locator("#nvr-privacy").getByRole("button", { name: "Verstanden" }).click();
     await page.locator("#nvr-privacy").waitFor({ state: "detached" });
     assert.deepEqual(sent(state, "PUT", "/nvr/settings"), [{ privacyNoticeDismissed: true }]);

@@ -20,6 +20,14 @@ import (
 // much as the VM has RAM.
 var virshLimit = 2 * time.Minute
 
+// systemctlLimit bounds one systemctl that moves the rest of the NAS off
+// the CPUs of exclusive VMs; it runs under the lock of the VMs. A failed
+// move is tried again by the loop after cpuRetryWait.
+var (
+	systemctlLimit = 30 * time.Second
+	cpuRetryWait   = time.Minute
+)
+
 // ErrLibvirtTimeout: libvirt did not answer a command within its limit.
 var ErrLibvirtTimeout = errors.New("vm: libvirt did not answer in time")
 

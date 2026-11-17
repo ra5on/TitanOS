@@ -172,8 +172,9 @@ type Manager struct {
 	mu        sync.Mutex
 	// seen are the drives of the last look; nil until there was one.
 	seen map[string]bool
-	// inUse counts the backups writing to a drive, by ID. A long copy holds
-	// only its drive, not every other drive of the NAS.
+	// inUse counts the backups writing to a drive, by ID. Ejecting waits
+	// only for the copies to its own drive; formatting or changing the
+	// partitions of any drive is refused while a copy runs (using).
 	inUse map[string]int
 }
 
@@ -614,10 +615,26 @@ func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root
 	return work(root)
 }
 
+// lockOperation waits for the operation lock until ctx ends: a format
+// holds it for up to four hours, and a backup waiting for it must still be
+// able to give up.
+func (m *Manager) lockOperation(ctx context.Context) error {
+	for !m.operation.TryLock() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	return nil
+}
+
 // pin mounts a drive if needed, opens it and marks it in use, all under the
 // operation lock, so that no format or eject comes in between.
 func (m *Manager) pin(ctx context.Context, id string) (*os.Root, error) {
-	m.operation.Lock()
+	if err := m.lockOperation(ctx); err != nil {
+		return nil, err
+	}
 	defer m.operation.Unlock()
 	d, err := m.find(ctx, id)
 	if err != nil {

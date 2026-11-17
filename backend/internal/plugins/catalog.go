@@ -316,22 +316,11 @@ func (m *Manager) InstallOfficialWithActivation(ctx context.Context, name, volum
 	if err != nil {
 		return err
 	}
-	// One download per plugin; a second click must not fetch it twice.
-	m.mu.Lock()
-	if m.downloading[name] {
-		m.mu.Unlock()
-		return ErrDownloading
+	release, err := m.claimDownload(name)
+	if err != nil {
+		return err
 	}
-	if m.downloading == nil {
-		m.downloading = map[string]bool{}
-	}
-	m.downloading[name] = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.downloading, name)
-		m.mu.Unlock()
-	}()
+	defer release()
 	tr := m.track(name, "install", StepSignature, StepDownload, StepChecksum, StepWrite)
 	ctx = withTracker(ctx, tr)
 	err = m.installOfficial(ctx, name, volume, mounted, activate)
@@ -413,21 +402,11 @@ func (m *Manager) UpdateDownload(ctx context.Context, name, confirm string, moun
 	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	if m.downloading[name] {
-		m.mu.Unlock()
-		return ErrDownloading
+	release, err := m.claimDownload(name)
+	if err != nil {
+		return err
 	}
-	if m.downloading == nil {
-		m.downloading = map[string]bool{}
-	}
-	m.downloading[name] = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.downloading, name)
-		m.mu.Unlock()
-	}()
+	defer release()
 	tr := m.track(name, "update", StepSignature, StepDownload, StepChecksum, StepWrite, StepStop)
 	err = m.updateDownload(withTracker(ctx, tr), name, confirm, volume, mounted)
 	tr.finish(err)
@@ -710,4 +689,24 @@ func (m *Manager) downloadAttempt(ctx context.Context, client *http.Client, url,
 		return resumed, discard(fmt.Errorf("%w: %w", ErrInvalid, errDownloadChecksum))
 	}
 	return resumed, file.Sync()
+}
+
+// claimDownload marks a download of a plugin as running: one per plugin, a
+// second click must not fetch it twice (ErrDownloading). The returned
+// function ends the claim.
+func (m *Manager) claimDownload(name string) (func(), error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.downloading[name] {
+		return nil, ErrDownloading
+	}
+	if m.downloading == nil {
+		m.downloading = map[string]bool{}
+	}
+	m.downloading[name] = true
+	return func() {
+		m.mu.Lock()
+		delete(m.downloading, name)
+		m.mu.Unlock()
+	}, nil
 }
