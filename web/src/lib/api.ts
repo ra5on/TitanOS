@@ -3,6 +3,7 @@
 import { activeNode, apiPath } from './cluster-node.ts';
 import type { Virtualization } from './hwcheck.ts';
 import { RESTART_WAIT_MS, restartPause, waitForNode } from './node-restart.ts';
+import { connection, markBack, markLost, noteForOffline } from './offline.svelte.ts';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -137,6 +138,11 @@ async function request<T>(
 		init.headers = { 'Content-Type': 'application/json' };
 	}
 
+	// 1.07: while the NAS does not answer, a change is not sent at all – it
+	// fails at once and says so; nothing waits in a queue (offline.svelte.ts).
+	if (connection.lost && method !== 'GET' && method !== 'HEAD')
+		throw new ApiError(0, 'nas_unreachable', 'the NAS is not reachable');
+
 	let res: Response;
 	// A node of the cluster that is starting again refused the connection,
 	// so the request never reached it: wait and ask again (node-restart.ts).
@@ -147,8 +153,10 @@ async function request<T>(
 			try {
 				res = await apiFetch(path, init);
 			} catch {
+				if (!signal?.aborted) markLost();
 				throw new ApiError(0, 'unreachable', 'titand is not reachable');
 			}
+			markBack();
 			if (res.status !== 503 || Date.now() - started > RESTART_WAIT_MS || signal?.aborted) break;
 			const answer = await res
 				.clone()
@@ -179,11 +187,15 @@ async function request<T>(
 	if (!res.headers.get('content-type')?.toLowerCase().includes('application/json')) {
 		throw new ApiError(res.status, 'invalid_response', 'Expected a JSON API response');
 	}
+	let data: T;
 	try {
-		return JSON.parse(text) as T;
+		data = JSON.parse(text) as T;
 	} catch {
 		throw new ApiError(res.status, 'invalid_response', 'Invalid JSON API response');
 	}
+	// What the installed app shows without the NAS (allow-list, offline.svelte.ts).
+	if (method === 'GET' && !activeNode()) noteForOffline(path, data);
+	return data;
 }
 
 // The answer type is never guessed from where the result goes: without a type

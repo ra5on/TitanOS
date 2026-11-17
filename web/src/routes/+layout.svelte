@@ -17,6 +17,8 @@
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
+	import OfflineView from '#lib/pages/OfflineView.svelte';
+	import { offlineSnapshot } from '#lib/offline.svelte.ts';
 	import Setup from '#lib/pages/Setup.svelte';
 	import LoginPreview from '#lib/login/LoginPreview.svelte';
 	import { loginBackgroundURL } from '#lib/login/look.ts';
@@ -232,7 +234,13 @@
 {#if !i18n.ready}
 	<!-- Nothing yet: usually a moment only. -->
 {:else if session.status === 'unreachable'}
-	<Problem title={t('unreachable.title')} text={t('unreachable.text')} />
+	<!-- 1.07: with a snapshot of before, the last state instead of an error. -->
+	{@const snap = inWindow ? null : offlineSnapshot()}
+	{#if snap}
+		<OfflineView {snap} />
+	{:else}
+		<Problem title={t('unreachable.title')} text={t('unreachable.text')} />
+	{/if}
 {:else if session.status === 'ready' && session.data}
 	{#if !session.data.configAvailable}
 		<Problem title={t('config.missingTitle')} text={t('config.missingText')} />

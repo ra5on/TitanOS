@@ -5,6 +5,7 @@ import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
 import { bell } from './notifications.svelte.ts';
+import { clearOffline } from './offline.svelte.ts';
 import { sanitizeBell } from './notify-groups.ts';
 
 export const session = $state<{
@@ -150,6 +151,7 @@ export async function logout() {
 		if (!(err instanceof ApiError)) throw err;
 	}
 	resetSound();
+	clearOffline();
 	if (session.data) session.data = { ...session.data, user: null };
 	toLoginPage();
 }
@@ -159,6 +161,8 @@ export function sessionExpired() {
 	// Only once: a 401 while the login page already shows reloads nothing.
 	const wasIn = !!session.data?.user;
 	resetSound();
+	// Nothing of the account stays for the view without the NAS.
+	clearOffline();
 	if (session.data) session.data = { ...session.data, user: null };
 	if (wasIn) toLoginPage();
 }

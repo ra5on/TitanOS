@@ -280,6 +280,8 @@ type Server struct {
 	agentMove       agentMoveState
 	// agentPhotos: the accounts' Immich keys and the Immich app (1.07).
 	agentPhotos agentPhotosState
+	// agentTitles: chats whose title the model is writing (1.07).
+	agentTitles agentTitles
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time

@@ -28,8 +28,6 @@ type agentTitles struct {
 	busy map[string]bool
 }
 
-var agentTitleState agentTitles
-
 // agentTitleDue reports whether the model should write the chat's title:
 // a chat of the person (not Home Assistant's, not a planned task's), not
 // named by the person, not titled yet, with an answer to name it by.
@@ -55,9 +53,9 @@ func titleSource(chat *agent.Chat) (question, answer string) {
 }
 
 func (s *Server) agentTitling(user, chat string) bool {
-	agentTitleState.mu.Lock()
-	defer agentTitleState.mu.Unlock()
-	return agentTitleState.busy[runKey(user, chat)]
+	s.agentTitles.mu.Lock()
+	defer s.agentTitles.mu.Unlock()
+	return s.agentTitles.busy[runKey(user, chat)]
 }
 
 // agentRetitle lets the model write the title of a chat in the background.
@@ -71,15 +69,15 @@ func (s *Server) agentRetitle(user, id string) {
 // sees "titling" and asks again); false when it already is.
 func (s *Server) agentTitleMark(user, id string) bool {
 	key := runKey(user, id)
-	agentTitleState.mu.Lock()
-	defer agentTitleState.mu.Unlock()
-	if agentTitleState.busy[key] {
+	s.agentTitles.mu.Lock()
+	defer s.agentTitles.mu.Unlock()
+	if s.agentTitles.busy[key] {
 		return false
 	}
-	if agentTitleState.busy == nil {
-		agentTitleState.busy = map[string]bool{}
+	if s.agentTitles.busy == nil {
+		s.agentTitles.busy = map[string]bool{}
 	}
-	agentTitleState.busy[key] = true
+	s.agentTitles.busy[key] = true
 	return true
 }
 
@@ -90,9 +88,9 @@ func (s *Server) agentTitleRun(user, id string) {
 	go func() {
 		defer s.agentRT.work.Done()
 		defer func() {
-			agentTitleState.mu.Lock()
-			delete(agentTitleState.busy, key)
-			agentTitleState.mu.Unlock()
+			s.agentTitles.mu.Lock()
+			delete(s.agentTitles.busy, key)
+			s.agentTitles.mu.Unlock()
 		}()
 		s.agentWriteTitle(user, id)
 	}()
