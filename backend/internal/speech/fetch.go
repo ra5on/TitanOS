@@ -45,6 +45,9 @@ type remoteFile struct {
 	sha256, md5 string
 }
 
+// stallLimit: a download that gets no data for this long fails.
+var stallLimit = time.Minute
+
 // hub asks Hugging Face. base and client are replaced in tests.
 type hub struct {
 	base   string
@@ -194,7 +197,26 @@ func (v Voice) remote() []remoteFile {
 // download fetches one file into dir of root as name: written beside its
 // place and moved there once size and checksum fit. step reports the
 // bytes read since the last call.
-func (h *hub) download(ctx context.Context, root *os.Root, dir string, f remoteFile, step func(n int64)) error {
+func (h *hub) download(ctx context.Context, root *os.Root, dir string, f remoteFile, step func(n int64)) (err error) {
+	// Data that stop coming end the download after stallLimit; the
+	// request itself has a limit only until the answer starts.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stalled := fmt.Errorf("speech: no data for %s while downloading %s", stallLimit, f.name)
+	watch := time.AfterFunc(stallLimit, func() { cancel(stalled) })
+	defer watch.Stop()
+	defer func() {
+		if err != nil && context.Cause(ctx) == stalled {
+			err = stalled
+		}
+	}()
+	inner := step
+	step = func(n int64) {
+		watch.Reset(stallLimit)
+		if inner != nil {
+			inner(n)
+		}
+	}
 	res, err := h.get(ctx, f.url)
 	if err != nil {
 		return err
