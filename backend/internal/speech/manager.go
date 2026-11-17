@@ -102,10 +102,17 @@ type Manager struct {
 	voicesFailed error
 	voicesTried  time.Time
 	jobs         map[string]*job
-	services     map[string]*service
-	pulls        map[string]*pull
-	ha           []net.IP
-	haAt         time.Time
+	// fetching is closed when the download running for a key (model/x,
+	// voice/x) has ended, also a cancelled one: the next download of the
+	// same key starts only then.
+	fetching map[string]chan struct{}
+	// afterFiles, in tests, is called when a download has all its files,
+	// before it puts them in place.
+	afterFiles func()
+	services   map[string]*service
+	pulls      map[string]*pull
+	ha         []net.IP
+	haAt       time.Time
 	// peers are addresses that asked Assist with the key of TitanOS, newest last.
 	peers   []string
 	kick    chan struct{}
@@ -420,17 +427,40 @@ func (m *Manager) Download(ctx context.Context, kind, id string) error {
 		j.Total += f.bytes
 	}
 	m.jobs[key] = j
+	// A cancelled download of the same model may still be busy where it
+	// does not look at its cancellation (the sync of a large file): this
+	// one starts once that one has ended, so that neither removes the
+	// folder of the other.
+	previous := m.fetching[key]
+	done := make(chan struct{})
+	if m.fetching == nil {
+		m.fetching = map[string]chan struct{}{}
+	}
+	m.fetching[key] = done
 	m.mu.Unlock()
 	go func() {
 		defer root.Close()
 		defer stop()
-		err := m.fetch(run, root, files, dir, tmp, j)
+		if previous != nil {
+			<-previous // always: a later download waits for this one, and so for that one
+		}
+		err := run.Err()
+		if err == nil {
+			err = m.fetch(run, root, files, dir, tmp, j)
+		}
 		m.mu.Lock()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			j.Error = err.Error()
-			slog.Warn("speech: download failed", "what", key, "err", err)
-		} else {
-			delete(m.jobs, key)
+		if m.fetching[key] == done {
+			delete(m.fetching, key)
+		}
+		close(done)
+		// Only its own entry: after Cancel a new download may have one.
+		if m.jobs[key] == j {
+			if err != nil && !errors.Is(err, context.Canceled) {
+				j.Error = err.Error()
+				slog.Warn("speech: download failed", "what", key, "err", err)
+			} else {
+				delete(m.jobs, key)
+			}
 		}
 		m.mu.Unlock()
 		m.Kick()
@@ -456,6 +486,13 @@ func (m *Manager) fetch(ctx context.Context, root *os.Root, files []remoteFile, 
 		}); err != nil {
 			return err
 		}
+	}
+	if m.afterFiles != nil {
+		m.afterFiles()
+	}
+	// Cancelled meanwhile: nothing is put in place.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if tmp != "" {
 		root.RemoveAll(dir)

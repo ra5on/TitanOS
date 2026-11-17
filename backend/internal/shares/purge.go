@@ -706,6 +706,14 @@ func (m *Manager) purgeShare(ctx context.Context, job *PurgeJob, share Share, re
 	if req.Check != nil {
 		blockers = append(blockers, req.Check(ctx, m.Path(share))...)
 	}
+	// inspect passes over the share's own name, which is gone from the
+	// configuration by now: one of that name there again was made while the
+	// job waited, and it uses the folder.
+	for _, other := range m.List() {
+		if other.Name == share.Name && Overlaps(m.Path(other), m.Path(share)) {
+			blockers = append(blockers, Usage{Kind: UseShare, Name: other.Name, Path: m.Path(other)})
+		}
+	}
 	if len(blockers) > 0 {
 		return &BlockedError{blockers}
 	}

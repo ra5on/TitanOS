@@ -557,9 +557,8 @@ func (m *Manager) FormatPartition(ctx context.Context, id string, number int, re
 			if err != nil {
 				return "", err
 			}
-			if s.Reason == "" && l.Table == "dos" && slices.Contains(extendedTypes, s.Type) {
-				return "", fmt.Errorf("%w: extended", ErrPartitionUnsupported)
-			}
+			// An extended partition has the reason "extended" (layout), so
+			// free has refused it already.
 			// FAT16 or FAT32 and their MBR type follow from the size
 			// (partitionType, mkfsArgs); the work below sets the type.
 			return s.Device, checkFilesystem(req.Filesystem, req.Label, s.Size)
@@ -741,7 +740,9 @@ func (m *Manager) growFilesystem(ctx context.Context, fs, part string) error {
 		} else {
 			_, grow = m.runner.Run(ctx, "", "btrfs", "filesystem", "resize", "max", dir)
 		}
-		if _, err := m.runner.Run(context.WithoutCancel(ctx), "", "umount", dir); err != nil && grow == nil {
+		unmount, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandLimit)
+		defer cancel()
+		if _, err := m.runner.Run(unmount, "", "umount", dir); err != nil && grow == nil {
 			return err
 		}
 		return grow

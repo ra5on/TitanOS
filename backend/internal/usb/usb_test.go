@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/run"
 )
@@ -328,5 +329,25 @@ func TestDriveInUseAndStaleMounts(t *testing.T) {
 	m.dropStale(ctx, dir)
 	if !strings.Contains(strings.Join(f.calls, "\n"), "umount -l "+dir) {
 		t.Errorf("stale mount kept: %v", f.calls)
+	}
+}
+
+// A backup waiting for a format (which may take hours) to end gives up
+// when it is cancelled.
+func TestPinWaitingForAFormatEndsWithItsContext(t *testing.T) {
+	m, _ := newTest(t)
+	m.operation.Lock() // a format runs
+	defer m.operation.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- m.WithMounted(ctx, "AAAA-BBBB", func(*os.Root) error { return nil }) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("cancelled wait: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the backup still waits for the format after it was cancelled")
 	}
 }

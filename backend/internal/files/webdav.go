@@ -210,6 +210,20 @@ func (f *davWrite) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// ReadFrom copies into the part file and remembers when the copy failed.
+// The handler copies a PUT (and COPY) with io.Copy, which takes this method
+// and not Write: without it a body that ends in an error (broken chunk
+// framing) or a full volume would only reach the caller, and Close would put
+// the cut-short file in place when no length was announced. It hands on to
+// the ReadFrom of *os.File, which keeps copy_file_range (reflinks) for COPY.
+func (f *davWrite) ReadFrom(r io.Reader) (int64, error) {
+	n, err := f.File.ReadFrom(r)
+	if err != nil {
+		f.failed = true
+	}
+	return n, err
+}
+
 // Close puts the part file in place. What is incomplete is dropped and the
 // file there stays as it was: a write failed (volume full), the client went
 // away, or fewer bytes came than the request announced.

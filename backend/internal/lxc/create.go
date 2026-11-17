@@ -249,6 +249,9 @@ func (m *Manager) Create(ctx context.Context, c Container, mounted []string) err
 		if err != nil {
 			slog.Error("container not created", "container", c.Name, "err", err)
 			job.State, job.Text = "failed", errorText(err)
+			if errors.Is(err, errCreateTimeout) {
+				job.Code = "timeout"
+			}
 			return
 		}
 		slog.Info("container created", "container", c.Name, "image", c.Distribution+"/"+c.Release)
@@ -274,6 +277,15 @@ func (m *Manager) setPhase(job *Job, phase string) {
 	job.Phase = phase
 	m.mu.Unlock()
 }
+
+// createLimit bounds lxc-create with the download template: the template's
+// wget has a read timeout of its own, but a download that trickles or an
+// unpacking that hangs would otherwise keep the creation running for good,
+// and with it Busy (an app update of TitanOS waits for it).
+var createLimit = 30 * time.Minute
+
+// errCreateTimeout: lxc-create did not finish within createLimit.
+var errCreateTimeout = errors.New("lxc: creating the container did not finish within its time limit")
 
 // build runs lxc-create with the download template. Its cache and
 // temporary files lie on the volume, never in the RAM of the NAS.
@@ -301,10 +313,15 @@ func (m *Manager) build(ctx context.Context, c Container, job *Job) error {
 	if c.Btrfs {
 		backing = "btrfs"
 	}
-	_, err := m.runner.Run(ctx, "", "env", "LXC_CACHE_PATH="+cache, "TMPDIR="+tmp,
+	limited, cancel := context.WithTimeout(ctx, createLimit)
+	defer cancel()
+	_, err := m.runner.Run(limited, "", "env", "LXC_CACHE_PATH="+cache, "TMPDIR="+tmp,
 		"lxc-create", "-P", path, "-n", c.Name, "-B", backing, "-f", initial, "-t", "download", "--",
 		"--dist", c.Distribution, "--release", c.Release, "--arch", c.Arch)
 	if err != nil {
+		if errors.Is(limited.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return fmt.Errorf("%w (%s)", errCreateTimeout, createLimit)
+		}
 		return err
 	}
 	m.setPhase(job, "configure")

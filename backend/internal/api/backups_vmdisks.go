@@ -45,9 +45,7 @@ func (a backupsArea) handleBackupVMDisks(w http.ResponseWriter, r *http.Request)
 		job.VMDisks = &backup.VMDisks{Mode: mode, Raw: query.Get("raw"), LibvirtSnapshot: query.Get("libvirtSnapshot") == "true"}
 	}
 	if v := job.VMDisks; v != nil {
-		known := v.Mode == backup.VMDisksSkip && v.Raw == "" && !v.LibvirtSnapshot ||
-			v.Mode == backup.VMDisksConsistent && (v.Raw == "" || v.Raw == backup.VMDisksRawSkip || v.Raw == backup.VMDisksRawPause)
-		if !known {
+		if !v.Known() {
 			writeError(w, http.StatusBadRequest, "invalid_backup_job", "unknown setting for disks of running VMs")
 			return
 		}

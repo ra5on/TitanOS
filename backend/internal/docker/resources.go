@@ -33,6 +33,8 @@ var (
 	// an install pulls its images before it creates the containers, and an
 	// update keeps the previous images for going back.
 	errAppWork = fmt.Errorf("%w: an app is being installed or updated", ErrBusy)
+	// errCleaning: unused images or volumes are being deleted right now.
+	errCleaning = fmt.Errorf("%w: unused images or volumes are being deleted", ErrBusy)
 )
 
 const (
@@ -269,6 +271,32 @@ func (m *Manager) cleanable() error {
 	return nil
 }
 
+// beginCleaning is cleanable for a cleanup that deletes several images or
+// volumes: until the returned function is called no app job starts (begin
+// refuses with errCleaning), so an update cannot lose the image it has just
+// pulled between two deletions.
+func (m *Manager) beginCleaning() (func(), error) {
+	if err := m.ready(); err != nil {
+		return nil, err
+	}
+	if m.backupActive() {
+		return nil, errBackupRunning
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if job.State == "running" {
+			return nil, errAppWork
+		}
+	}
+	m.cleaning++
+	return func() {
+		m.mu.Lock()
+		m.cleaning--
+		m.mu.Unlock()
+	}, nil
+}
+
 func (m *Manager) allContainers(ctx context.Context) ([]rawContainer, error) {
 	var list []rawContainer
 	if err := m.api.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}}, &list); err != nil {
@@ -453,9 +481,11 @@ func (m *Manager) deleteImageRef(ctx context.Context, ref string) error {
 // keep: only untagged ones, or with unused all unused ones.
 func (m *Manager) PruneImages(ctx context.Context, unused bool) (PruneResult, error) {
 	result := PruneResult{Deleted: []string{}, Failed: []PruneFailure{}}
-	if err := m.cleanable(); err != nil {
+	done, err := m.beginCleaning()
+	if err != nil {
 		return result, err
 	}
+	defer done()
 	images, users, err := m.imagesWithUsers(ctx)
 	if err != nil {
 		return result, err
@@ -606,9 +636,11 @@ func (m *Manager) deleteVolume(ctx context.Context, name string) error {
 // are still saved (an app taken down keeps its data) always stay.
 func (m *Manager) PruneVolumes(ctx context.Context, anonymousOnly bool) (PruneResult, error) {
 	result := PruneResult{Deleted: []string{}, Failed: []PruneFailure{}}
-	if err := m.cleanable(); err != nil {
+	done, err := m.beginCleaning()
+	if err != nil {
 		return result, err
 	}
+	defer done()
 	volumes, users, err := m.volumesWithUsers(ctx)
 	if err != nil {
 		return result, err

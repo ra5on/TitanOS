@@ -64,14 +64,21 @@ type seenRuntime struct {
 	data     *seenData
 	volume   string
 	readable bool
+	// at is when the file was read; an unreadable one is read again after
+	// seenRetry.
+	at time.Time
 }
+
+// seenRetry is how long a seen.json that could not be read counts as
+// unreadable before it is read again (a volume with a passing error).
+const seenRetry = 5 * time.Minute
 
 // seenState returns seen.json of the NVR's volume, read once.
 func (m *Manager) seenState() (*seenData, string, bool, error) {
 	m.mu.Lock()
 	cached, volume := m.rt.seen, m.settings.Volume
 	m.mu.Unlock()
-	if cached.data != nil && cached.volume == volume {
+	if cached.data != nil && cached.volume == volume && (cached.readable || m.now().Sub(cached.at) < seenRetry) {
 		return cached.data, volume, cached.readable, nil
 	}
 	root, _, err := m.privateRoot(volume)
@@ -96,7 +103,7 @@ func (m *Manager) seenState() (*seenData, string, bool, error) {
 	}
 	m.mu.Lock()
 	if m.settings.Volume == volume {
-		m.rt.seen = seenRuntime{data: data, volume: volume, readable: readable}
+		m.rt.seen = seenRuntime{data: data, volume: volume, readable: readable, at: m.now()}
 	}
 	m.mu.Unlock()
 	return data, volume, readable, nil

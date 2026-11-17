@@ -213,6 +213,29 @@ func (m *Manager) Delete(ctx context.Context, name string, deleteData bool, conf
 			return ErrMounted
 		}
 	}
+	if deleteData {
+		// The data go first, and the container is forgotten only once they
+		// are gone: a deletion that fails halfway (a snapshot that cannot
+		// be removed) leaves a container that is listed as failed, cannot
+		// start on what is left (Incomplete, also after a restart) and can
+		// be removed again.
+		if !c.Incomplete {
+			c.Incomplete = true
+			if err := m.store.WriteJSON(configDir+"/"+name+".json", c); err != nil {
+				return err
+			}
+			m.mu.Lock()
+			m.containers[name] = c
+			m.mu.Unlock()
+		}
+		if err := m.deleteData(ctx, c); err != nil {
+			m.mu.Lock()
+			m.jobs[name] = &Job{State: "failed", Phase: "prepare", Code: "delete_failed", Started: m.now(),
+				Text: "Removing the data of the container did not finish: " + err.Error() + ". Remove it again."}
+			m.mu.Unlock()
+			return err
+		}
+	}
 	if err := m.store.Remove(configDir + "/" + name + ".json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -223,9 +246,13 @@ func (m *Manager) Delete(ctx context.Context, name string, deleteData bool, conf
 	delete(m.autostarted, name)
 	m.mu.Unlock()
 	os.Remove(filepath.Join(m.envDir, name+".env"))
-	if !deleteData {
-		return nil
-	}
+	return nil
+}
+
+// deleteData removes the folder of a container with its root filesystem
+// and snapshots.
+func (m *Manager) deleteData(ctx context.Context, c Container) error {
+	name, dir := c.Name, m.dir(c)
 	if c.Btrfs {
 		// Snapshots and the root filesystem are subvolumes.
 		snapshots, _ := m.snapshotNames(c)

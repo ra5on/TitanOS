@@ -211,7 +211,10 @@ func (m *Manager) Compare(ctx context.Context, left Root, leftDir string, right 
 				if xsum.SHA256 != ysum.SHA256 {
 					row.State = "different"
 				}
-			} else if !x.Modified.Equal(y.Modified) {
+			} else if d := x.Modified.Sub(y.Modified); d > mtimeTolerance || d < -mtimeTolerance {
+				// Within two seconds is the same time, as when copying
+				// "only missing or changed" (sameContent): FAT keeps times in
+				// two-second steps, exFAT in 10 ms.
 				row.State = "different"
 			}
 		}

@@ -443,21 +443,11 @@ func (m *Manager) installExternal(ctx context.Context, req ExternalRequest, volu
 	if !m.compatible(entry.plugin.Manifest) {
 		return fmt.Errorf("%w: plugin targets another kernel", ErrInvalid)
 	}
-	m.mu.Lock()
-	if m.downloading[name] {
-		m.mu.Unlock()
-		return ErrDownloading
+	release, err := m.claimDownload(name)
+	if err != nil {
+		return err
 	}
-	if m.downloading == nil {
-		m.downloading = map[string]bool{}
-	}
-	m.downloading[name] = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.downloading, name)
-		m.mu.Unlock()
-	}()
+	defer release()
 	path, cleanup, err := m.stageDownload(ctx, entry, volume)
 	if err != nil {
 		return err

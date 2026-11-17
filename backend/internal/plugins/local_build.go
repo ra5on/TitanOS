@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -521,11 +522,7 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, check,
 		return err
 	}
 	destination := filepath.Join(m.driverCache(settings.Volume), image)
-	if _, e := os.Stat(destination); e == nil {
-		if _, e = m.cachedDriver(destination, true); e != nil {
-			return e
-		}
-	} else if err = os.Rename(result, destination); err != nil {
+	if err = m.publishLocalBuild(result, destination); err != nil {
 		return err
 	}
 	if err = syncTree(destination); err != nil {
@@ -607,4 +604,40 @@ func (m *Manager) busyLocked() bool {
 		return true
 	}
 	return false
+}
+
+// publishLocalBuild moves a finished build into the driver cache under
+// the hash of its image.
+// A local build already there that no longer checks out (the build key
+// was lost with a restored stick, so its receipt fails) is replaced by
+// the fresh one: the image is the same (same hash), only titand's receipt
+// is new. An active driver set holds hard links of its own, so it is not
+// affected. An official driver (signed) is never replaced.
+func (m *Manager) publishLocalBuild(result, destination string) error {
+	if _, err := os.Stat(destination); err != nil {
+		return os.Rename(result, destination)
+	}
+	_, err := m.cachedDriver(destination, true)
+	if err == nil {
+		return nil
+	}
+	if _, signed := os.Lstat(filepath.Join(destination, "nvidia"+manifestSuffix+".minisig")); signed == nil || !errors.Is(err, ErrInvalid) {
+		return err
+	}
+	// The old copy goes aside under a name the cache does not list (no
+	// hash), then the new one takes its name.
+	aside := destination + ".replaced"
+	if err := os.RemoveAll(aside); err != nil {
+		return err
+	}
+	if err := os.Rename(destination, aside); err != nil {
+		return err
+	}
+	if err := os.Rename(result, destination); err != nil {
+		return errors.Join(err, os.Rename(aside, destination))
+	}
+	if err := os.RemoveAll(aside); err != nil {
+		slog.Warn("old copy of a local driver build left in the cache", "path", aside, "err", err)
+	}
+	return nil
 }

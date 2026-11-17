@@ -589,6 +589,8 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	}
 	// busyWhy is why a busy disk is busy, for a disk it woke up.
 	busy, busyWhy := m.testing(), map[string]diskwake.Cause{}
+	// probes are the answers of WakeProbe in this round, per volume.
+	probes := map[string][]diskwake.Cause{}
 	for disk := range busy {
 		busyWhy[disk] = diskwake.Cause{Code: diskwake.DiskTest}
 	}
@@ -664,7 +666,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 				previous.identity == m.sleepIdentity(device) && !now.Before(previous.sampled) && now.Sub(previous.sampled) <= 30*time.Second {
 				why := busyWhy[name]
 				entry := times[name]
-				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, &why)}
+				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, &why, probes)}
 				entry.identity, entry.asleepSince, entry.wokenAt = previous.identity, time.Time{}, wake.At
 				times[name] = entry
 				m.recordWake(wakeKey(ids[device.Name], name), wake)
@@ -690,7 +692,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 			if known && previous.identity == identity && previous.attempted && previous.err == "" &&
 				!now.Before(previous.sampled) && now.Sub(previous.sampled) <= 30*time.Second {
 				entry := times[name]
-				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, nil)}
+				wake := DiskWake{At: now.Truncate(time.Second), Causes: m.wakeCausesFor(ctx, volume, entry.asleepSince, previous.sampled, now, nil, probes)}
 				entry.identity, entry.asleepSince, entry.wokenAt = identity, time.Time{}, wake.At
 				times[name] = entry
 				m.recordWake(wakeKey(ids[device.Name], name), wake)

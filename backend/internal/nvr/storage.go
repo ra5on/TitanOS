@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -125,6 +126,20 @@ func (m *Manager) oldestRecording(ctx context.Context) float64 {
 // recordings of kept events (with a margin), and the last hour. If the
 // exports alone are above the cap nothing is deleted and the status says
 // so (CapExportsExceed). The owner is told at most once a day.
+// watchStorageBeside runs watchStorage without holding the loop up: the
+// look at the space and deleting for the cap may take two minutes, while
+// the loop applies changes of the cameras and watches Frigate. One at a
+// time; a look that is due while one runs waits for the next round.
+func (m *Manager) watchStorageBeside(ctx context.Context, base string, now time.Time) {
+	if !m.storageBusy.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer m.storageBusy.Store(false)
+		m.watchStorage(ctx, base, now)
+	}()
+}
+
 func (m *Manager) watchStorage(ctx context.Context, base string, now time.Time) {
 	m.mu.Lock()
 	due := now.Sub(m.rt.storage.at) >= storageEvery
@@ -204,7 +219,9 @@ func (m *Manager) enforceCap(ctx context.Context, base string, now time.Time, li
 		}
 		for _, span := range spans {
 			path := fmt.Sprintf("/api/recordings/start/%s/end/%s", formatTime(span[0]), formatTime(span[1]))
-			if err := m.frigate.call(ctx, http.MethodDelete, base, path, nil, nil, nil); err != nil {
+			// An hour of many cameras can take Frigate longer than 15 s;
+			// the look's own time bounds it.
+			if err := m.frigate.callLong(ctx, http.MethodDelete, base, path, nil, nil, nil); err != nil {
 				slog.Warn("NVR: oldest recordings not deleted", "err", err)
 				return CapCleaning, cleaned, recordings, oldest
 			}
@@ -231,14 +248,48 @@ func (m *Manager) enforceCap(ctx context.Context, base string, now time.Time, li
 	return CapOK, cleaned, recordings, oldest
 }
 
+// keptPage and keptPages bound the questions for kept events: Frigate
+// answers at most keptPage at a time.
+const (
+	keptPage  = 500
+	keptPages = 40
+)
+
+// keptBefore returns every kept event that began before the given time,
+// however long ago: an event is found by its start, and a kept one may
+// have begun days before the hour that is deleted. Frigate answers the
+// newest first; further pages go on before the oldest start of the last.
+// known is false when Frigate did not answer or there were more than
+// keptPages pages.
+func (m *Manager) keptBefore(ctx context.Context, base string, before float64) ([]frigateEvent, bool) {
+	var all []frigateEvent
+	for range keptPages {
+		var page []frigateEvent
+		query := url.Values{"favorites": {"1"}, "before": {formatTime(before)}, "limit": {strconv.Itoa(keptPage)}, "include_thumbnails": {"0"}}
+		if err := m.frigate.call(ctx, http.MethodGet, base, "/api/events", query, nil, &page); err != nil {
+			return nil, false
+		}
+		all = append(all, page...)
+		if len(page) < keptPage {
+			return all, true
+		}
+		oldest := before
+		for _, e := range page {
+			oldest = min(oldest, e.Start)
+		}
+		// Events that began in the same instant as the oldest one may not
+		// all have fit; they are asked again (a millisecond later).
+		before = oldest + 0.001
+	}
+	return nil, false
+}
+
 // withoutKept returns the parts of [from, to) that hold no kept event
 // (Frigate: "retain indefinitely"), with a margin around each. known is
 // false when Frigate did not say which events are kept.
 func (m *Manager) withoutKept(ctx context.Context, base string, from, to float64) (spans [][2]float64, known bool) {
-	var kept []frigateEvent
-	// An event is found by its start: look far enough back for long ones.
-	query := url.Values{"favorites": {"1"}, "after": {formatTime(from - 6*3600)}, "before": {formatTime(to + keptMargin)}, "limit": {"500"}, "include_thumbnails": {"0"}}
-	if err := m.frigate.call(ctx, http.MethodGet, base, "/api/events", query, nil, &kept); err != nil {
+	kept, known := m.keptBefore(ctx, base, to+keptMargin)
+	if !known {
 		return nil, false
 	}
 	var holes [][2]float64

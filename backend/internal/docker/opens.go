@@ -194,6 +194,7 @@ type openEntry struct {
 func (m *Manager) opener(app string) openEntry {
 	m.mu.Lock()
 	entry, ok := m.opens[app]
+	generation := m.appsGeneration
 	m.mu.Unlock()
 	if ok {
 		return entry
@@ -202,21 +203,32 @@ func (m *Manager) opener(app string) openEntry {
 	if err != nil {
 		return openEntry{err: err}
 	}
+	if openerRead != nil {
+		openerRead()
+	}
 	op, name, err := parseOpener(compose)
 	entry = openEntry{op: op, name: name, err: err}
 	m.mu.Lock()
-	if m.opens == nil {
-		m.opens = map[string]openEntry{}
+	// An app changed while its compose file was read: what was read may
+	// be the old file, so it is not kept.
+	if m.appsGeneration == generation {
+		if m.opens == nil {
+			m.opens = map[string]openEntry{}
+		}
+		m.opens[app] = entry
 	}
-	m.opens[app] = entry
 	m.mu.Unlock()
 	return entry
 }
+
+// openerRead runs in tests between reading and keeping an opener.
+var openerRead func()
 
 // forgetApps drops what is known of the apps in /config. Call with m.mu held.
 func (m *Manager) forgetApps() {
 	m.appList = nil
 	m.opens = nil
+	m.appsGeneration++
 }
 
 // Mount is a folder of the NAS inside a container.

@@ -951,6 +951,24 @@ func (m *Manager) overlaysOf(vm VM) map[int][]string {
 	return found
 }
 
+// missingDiskVolume returns a volume holding a disk file of the VM that is
+// not mounted, or "" when all are there.
+func (m *Manager) missingDiskVolume(vm VM) string {
+	if m.Mounted == nil {
+		return ""
+	}
+	mounted := m.Mounted()
+	for _, disk := range vm.Disks {
+		if m.isBlock(disk) {
+			continue
+		}
+		if volume, ok := m.volumeOf(m.diskPath(vm, disk)); ok && !containsString(mounted, volume) {
+			return volume
+		}
+	}
+	return ""
+}
+
 // setDiskBackupAside takes a record that cannot be used out of the way, so
 // that it does not hold the VM back for good; it is kept for a look.
 func (m *Manager) setDiskBackupAside(vm VM) error {
@@ -993,6 +1011,12 @@ func (m *Manager) finishDiskBackupOf(ctx context.Context, vm VM) (err error) {
 		err = errors.New("it belongs to another VM")
 	}
 	if err != nil {
+		// Without the record only the folders of the disks tell where
+		// overlays are; one on a volume that is not mounted yet cannot be
+		// seen. Wait for it, as the undo with a record does.
+		if volume := m.missingDiskVolume(vm); volume != "" {
+			return fmt.Errorf("%w: volume %s of a disk is not mounted", ErrUnknownVolume, volume)
+		}
 		if len(m.overlaysOf(vm)) > 0 {
 			slog.Error("record of an interrupted VM backup unusable and overlays lie next to the disks; the VM waits for a repair", "vm", vm.Name, "err", err)
 			if m.Notify != nil {

@@ -105,7 +105,8 @@ func (m *Manager) SetSyncSpeed(ctx context.Context, name, preset string) error {
 func (m *Manager) writeSyncSpeed(device, preset string) error {
 	limits := syncSpeedLimits[preset]
 	dir := filepath.Join(m.sysBlock, device, "md")
-	// The upper limit first, so that min never stands above max.
+	// md takes both limits in either order (it does not refuse a minimum
+	// above the maximum for a moment, as when going from fast to gentle).
 	err := os.WriteFile(filepath.Join(dir, "sync_speed_max"), []byte(limits[1]), 0o644)
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "sync_speed_min"), []byte(limits[0]), 0o644)

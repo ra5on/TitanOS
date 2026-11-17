@@ -141,7 +141,9 @@ func (m *Manager) FollowAudit(ctx context.Context, onLock func(Share)) {
 		// (a line too long for the scanner), Wait would wait for ever and
 		// the guard would be gone without a word.
 		follow, stop := context.WithCancel(ctx)
-		cmd := exec.CommandContext(follow, "journalctl", "--follow", "--lines=0", "--output=json", "SYSLOG_IDENTIFIER=smbd_audit")
+		// --all: without it journalctl writes fields over 4096 bytes (long
+		// paths) as null, and the guard would not see those renames.
+		cmd := exec.CommandContext(follow, "journalctl", "--follow", "--lines=0", "--output=json", "--all", "SYSLOG_IDENTIFIER=smbd_audit")
 		out, err := cmd.StdoutPipe()
 		if err == nil {
 			err = cmd.Start()
@@ -175,8 +177,8 @@ func (m *Manager) readAudit(ctx context.Context, r io.Reader, onLock func(Share)
 		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
 			continue
 		}
-		var message string
-		if json.Unmarshal(entry.Message, &message) != nil {
+		message, ok := journalField(entry.Message)
+		if !ok {
 			continue
 		}
 		event, ok := parseAudit(message)
@@ -190,6 +192,28 @@ func (m *Manager) readAudit(ctx context.Context, r io.Reader, onLock func(Share)
 		m.observeAudit(ctx, event, onLock)
 	}
 	return scanner.Err()
+}
+
+// journalField reads a field of journalctl --output=json: a string, or,
+// for a value that is not valid UTF-8 (a file name in another encoding),
+// an array of its byte values.
+func journalField(raw json.RawMessage) (string, bool) {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text, true
+	}
+	var values []byte
+	var numbers []int
+	if json.Unmarshal(raw, &numbers) != nil {
+		return "", false
+	}
+	for _, n := range numbers {
+		if n < 0 || n > 255 {
+			return "", false
+		}
+		values = append(values, byte(n))
+	}
+	return string(values), true
 }
 
 func (m *Manager) observeAudit(ctx context.Context, event auditEvent, onLock func(Share)) {

@@ -452,10 +452,21 @@ func (m *Manager) Relocate(name, volume string, volumes []string) error {
 	if share.Volume == volume {
 		return nil
 	}
+	old := share.Volume
 	share.Volume = volume
 	shares := slices.Clone(m.shares)
 	shares[i] = share
-	return m.save(shares)
+	if err := m.save(shares); err != nil {
+		return err
+	}
+	if share.QuotaID != 0 {
+		// The limit goes with the share; the one on the old volume is
+		// lifted like that of a deleted share (ApplyQuotas).
+		m.quota.mu.Lock()
+		m.quota.released = append(m.quota.released, releasedQuota{old, share.QuotaID})
+		m.quota.mu.Unlock()
+	}
+	return nil
 }
 
 // GID is the group that owns the files of the shares ("users").

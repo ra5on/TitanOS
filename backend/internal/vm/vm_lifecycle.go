@@ -344,6 +344,20 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 	m.mu.Unlock()
 	m.resetPower(name, time.Now())
 	os.Remove(filepath.Join(m.runDir, name+".xml"))
+	// A copy of an image that a crash cut off (copyDisks) left its part
+	// file next to where the disk would be. It is never a disk of its own
+	// and goes with the VM, with or without its disks.
+	for _, disk := range vm.Disks {
+		if disk.Source == "" || disk.Path != "" {
+			continue
+		}
+		partial := m.diskPath(vm, disk) + ".partial"
+		if info, err := os.Lstat(partial); err == nil && info.Mode().IsRegular() {
+			if err := os.Remove(partial); err != nil {
+				slog.Warn("part file of a cut off disk copy not deleted", "vm", name, "err", err)
+			}
+		}
+	}
 
 	if deleteDisks {
 		// Only what TitanOS made itself; anything else in the folder stays,

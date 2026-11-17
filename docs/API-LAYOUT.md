@@ -37,7 +37,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | file | `file_download.go`, `file_media.go`, `file_tools.go` | – | 2 |
 | files | `files.go` | `filesArea` | 0 |
 | firewall | `firewall.go` | `firewallArea` | 1 |
-| ha | `ha_area.go`, `ha_connections.go`, `ha_storage.go` | `haArea` | 2 |
+| ha | `ha_area.go`, `ha_connections.go`, `ha_storage.go` | `haArea` | 3 |
 | healthreport | `healthreport.go` | `healthReportArea` | 1 |
 | homeassistant | `homeassistant.go`, `homeassistant_mqtt.go`, `homeassistant_telemetry.go`, `homeassistant_undo.go` | – | 3 |
 | hwcheck | `hwcheck.go` | `hwcheckArea` | 1 |

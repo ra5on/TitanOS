@@ -48,6 +48,7 @@ var fileErrors = []struct {
 	{files.ErrNotFound, http.StatusNotFound, "file_not_found"},
 	{files.ErrExists, http.StatusConflict, "file_exists"},
 	{files.ErrLinkOutside, http.StatusForbidden, "file_link_outside"},
+	{files.ErrTrashTooMany, http.StatusUnprocessableEntity, "trash_too_many"},
 	{files.ErrInvalid, http.StatusBadRequest, "invalid_path"},
 	{files.ErrScanLimit, http.StatusUnprocessableEntity, "file_scan_limit"},
 	{context.DeadlineExceeded, http.StatusRequestTimeout, "file_scan_timeout"},

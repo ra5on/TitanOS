@@ -31,7 +31,10 @@ type ContainerDevice struct {
 	Index string `json:"index,omitempty"`
 }
 
-var gpuUUID = regexp.MustCompile(`^GPU-[a-fA-F0-9-]+$`)
+var (
+	gpuUUID  = regexp.MustCompile(`^GPU-[a-fA-F0-9-]+$`)
+	gpuIndex = regexp.MustCompile(`^[0-9]+$`)
+)
 
 func (m *Manager) ContainerDevices(ctx context.Context) []ContainerDevice {
 	return m.containerDevices(ctx, run.Exec{}, "/dev")
@@ -55,14 +58,13 @@ func (m *Manager) containerDevices(ctx context.Context, runner run.Runner, devRo
 			continue
 		}
 		if pci.Vendor == "10de" {
-			device.Kind = "nvidia"
 			// The first nvidia-smi after the driver loaded (no persistence
 			// mode, several GPUs) can take far longer than a few seconds.
 			queryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			out, err := runner.Run(queryCtx, "", "nvidia-smi", "--id="+pci.Address, "--query-gpu=uuid,index", "--format=csv,noheader,nounits")
 			cancel()
 			rows, parseErr := csv.NewReader(strings.NewReader(strings.TrimSpace(out))).ReadAll()
-			if err == nil && parseErr == nil && len(rows) == 1 && len(rows[0]) == 2 && gpuUUID.MatchString(strings.TrimSpace(rows[0][0])) && regexp.MustCompile(`^[0-9]+$`).MatchString(strings.TrimSpace(rows[0][1])) {
+			if err == nil && parseErr == nil && len(rows) == 1 && len(rows[0]) == 2 && gpuUUID.MatchString(strings.TrimSpace(rows[0][0])) && gpuIndex.MatchString(strings.TrimSpace(rows[0][1])) {
 				device.UUID, device.Index = strings.TrimSpace(rows[0][0]), strings.TrimSpace(rows[0][1])
 				device.Mappings = []string{"nvidia.com/gpu=" + device.UUID}
 			}

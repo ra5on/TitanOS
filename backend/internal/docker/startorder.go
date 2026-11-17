@@ -95,7 +95,17 @@ func (m *Manager) StartApp(ctx context.Context, app string) error {
 	// the network of another (network_mode: service:vpn) cannot start
 	// before that one runs. What fails in the first round is tried once
 	// more after the others are up.
+	// Like any container start (Action): not on a GPU a VM holds, not
+	// while an app backup holds Docker.
 	start := func(id string) error {
+		m.hardwareMu.Lock()
+		defer m.hardwareMu.Unlock()
+		if m.backupActive() {
+			return errBackupRunning
+		}
+		if err := m.canStartContainer(ctx, url.PathEscape(id)); err != nil {
+			return err
+		}
 		return m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil)
 	}
 	var again []string

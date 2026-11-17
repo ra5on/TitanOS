@@ -8,7 +8,7 @@ Seit 0.64.0 (PLAN 67-1, Wunsch des Inhabers vom 7.11.2026: „Volumes löschen, 
 - titand entscheidet selbst, was weg darf. Die Prune-Endpunkte der Engine für Images und Volumes werden **nie** aufgerufen („alle ungenutzten“ würde auch die Images der Fernansicht und der Sandbox des KI-Agenten nehmen). Gelöscht wird einzeln und **nie mit force**; benutzt ein Container ein Image oder Volume doch noch, lehnt die Engine selbst ab.
 - „Benutzt“ heißt: irgendein Container, laufend oder gestoppt, auch Container der Fernansicht und der Sandbox.
 - **Geschützt** (nie löschbar, nicht in „ungenutzt“ gezählt): Images der Fernansicht (Labels `titanos.viewer.image=1` und `titanos.viewer.release`), das festgelegte Sandbox-Image des KI-Agenten (Digest aus `docker.SandboxImage`), Volumes von TitanOS (Name `titanos-…`/`titanos_…` oder ein Label `titanos.…`; heute legt TitanOS selbst keine benannten Volumes an, die Regel schützt künftige).
-- Während eine App eingerichtet oder aktualisiert wird (auch automatische Updates, die alte Images für den Rückweg behalten) und während einer Anwendungssicherung wird nichts gelöscht: 409 `app_busy`.
+- Während eine App eingerichtet oder aktualisiert wird (auch automatische Updates, die alte Images für den Rückweg behalten) und während einer Anwendungssicherung wird nichts gelöscht: 409 `app_busy`. Umgekehrt lehnen Installieren, Update, Compose-Änderung und automatisches Update ab (`app_busy`), solange ein Aufräumen läuft (seit 1.04): Ein Update kann so kein gerade geladenes Image verlieren.
 - Docker aus, nicht gestartet: 409 `docker_not_running`; Entwicklungsmodus: 409 `read_only`.
 
 ## Routen

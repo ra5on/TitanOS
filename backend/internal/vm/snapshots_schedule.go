@@ -67,6 +67,11 @@ func (m *Manager) SetSnapshotSchedule(name string, s SnapshotSchedule) error {
 	m.mu.Unlock()
 	return nil
 }
+
+// snapshotRetryWait: a scheduled snapshot that found its VM busy is tried
+// again after this.
+const snapshotRetryWait = time.Minute
+
 func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, now time.Time) {
 	if m.ScheduleAdmission != nil {
 		leave, err := m.ScheduleAdmission()
@@ -101,6 +106,12 @@ func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, no
 			continue
 		}
 		v := status.VM
+		m.mu.Lock()
+		wait := m.snapshotRetry[v.Name]
+		m.mu.Unlock()
+		if now.Before(wait) {
+			continue
+		}
 		root := m.snapshotRoot(v)
 		if m.snapshotPath(root, true) != nil {
 			continue
@@ -114,11 +125,27 @@ func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, no
 		if err != nil && !errors.Is(err, fs.ErrNotExist) || last.Key == key {
 			continue
 		}
+		previous := last.Key
 		last.Key = key
 		if store.WriteJSON("last-scheduled.json", last) != nil {
 			continue
 		}
 		err = m.createSnapshot(ctx, v.Name, SnapshotRequest{Name: now.Format("2006-01-02 15:04"), Memory: s.Memory, AllowPause: s.AllowPause}, mounted, true)
+		if errors.Is(err, ErrSnapshotBusy) || errors.Is(err, ErrPreparing) {
+			// Nothing was tried: another operation (a backup of the disks,
+			// a copy) holds the VM. The day is not done then; it is tried
+			// again after snapshotRetryWait, within the hour it is due.
+			// The note is marked first so that a snapshot cut off by a
+			// restart is not taken twice.
+			last.Key = previous
+			_ = store.WriteJSON("last-scheduled.json", last) // if this fails, the day is skipped as before
+			m.mu.Lock()
+			if m.snapshotRetry == nil {
+				m.snapshotRetry = map[string]time.Time{}
+			}
+			m.snapshotRetry[v.Name] = now.Add(snapshotRetryWait)
+			m.mu.Unlock()
+		}
 		if err != nil {
 			slog.Error("scheduled VM snapshot failed", "vm", v.Name, "err", err)
 			m.mu.Lock()
