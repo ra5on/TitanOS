@@ -94,7 +94,26 @@ var mailStatus = map[string]int{
 	"mail_too_large": http.StatusRequestEntityTooLarge, "mail_not_found": http.StatusNotFound, "mail_folder_exists": http.StatusConflict,
 	"mail_send_failed": http.StatusBadGateway, "mail_invalid": http.StatusBadRequest, "mail_no_password": http.StatusConflict,
 	"mail_settings_unreadable": http.StatusServiceUnavailable, "mail_password_required": http.StatusBadRequest,
-	"mail_rate_limited": http.StatusTooManyRequests,
+	"mail_rate_limited": http.StatusTooManyRequests, "mail_busy": http.StatusServiceUnavailable,
+	"mail_key_missing": http.StatusServiceUnavailable, "mail_key_damaged": http.StatusServiceUnavailable,
+}
+
+// mailError answers an error of a request; for an account that reaches
+// only the internet without what would tell why a connection failed
+// (refused, no answer, no TLS, the text of a server).
+func (a tmailArea) mailError(w http.ResponseWriter, r *http.Request, err error) {
+	if a.mail == nil || !a.mail.Confined(currentUser(r).Name) {
+		writeMailError(w, err)
+		return
+	}
+	switch code := tmail.VagueCode(err); code {
+	case "mail_unreachable":
+		writeError(w, mailStatus[code], code, "the mail server is not reachable")
+	case "mail_send_failed":
+		writeError(w, mailStatus[code], code, "the mail server did not accept the mail")
+	default:
+		writeMailError(w, err)
+	}
 }
 
 // writeMailError answers with the code of an error. Only the refusal of
@@ -113,10 +132,16 @@ func writeMailError(w http.ResponseWriter, err error) {
 		"mail_too_large": "too large", "mail_not_found": "not found", "mail_folder_exists": "the folder exists already",
 		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the T-Mail settings could not be read from /config",
 		"mail_password_required": "enter the password again for another host",
-		"mail_rate_limited":      "too many checks of the settings; try again in a minute",
+		"mail_rate_limited":      "too many checks of the settings or new servers; try again in a minute",
+		"mail_busy":              "T-Mail is busy with other large requests; try again in a moment",
+		"mail_key_missing":       "the key of the stored mail passwords is missing; restore it from the backup of the stick or add the mailboxes anew",
+		"mail_key_damaged":       "the key of the stored mail passwords is damaged; restore it from the backup of the stick or add the mailboxes anew",
 	}[code]
 	if errors.Is(err, tmail.ErrConfined) {
 		message = "accounts of the role user may only use mail servers on the internet, not in the home network"
+	}
+	if code == "mail_busy" {
+		w.Header().Set("Retry-After", "5")
 	}
 	if code == "mail_rate_limited" {
 		w.Header().Set("Retry-After", "60")
@@ -235,7 +260,7 @@ func (a tmailArea) handleAccountRemove(w http.ResponseWriter, r *http.Request) {
 
 // writeSaveError answers a failed change of the settings.
 func (a tmailArea) writeSaveError(w http.ResponseWriter, err error) {
-	for _, known := range []error{tmail.ErrInvalid, tmail.ErrNotFound, tmail.ErrDisabled, tmail.ErrUnreadable, tmail.ErrPasswordRequired} {
+	for _, known := range []error{tmail.ErrInvalid, tmail.ErrNotFound, tmail.ErrDisabled, tmail.ErrUnreadable, tmail.ErrPasswordRequired, tmail.ErrKeyMissing, tmail.ErrKeyDamaged} {
 		if errors.Is(err, known) {
 			writeMailError(w, err)
 			return
@@ -257,7 +282,7 @@ func (a tmailArea) handleAccountTest(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := a.mail.CheckSettings(r.Context(), currentUser(r).Name, req.ID, req.MailboxInput)
 	if err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -339,5 +364,13 @@ func (a tmailArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) mailForgetUser(name string) {
 	if s.opts.Mail != nil {
 		_ = s.opts.Mail.ForgetUser(name) // logged by the package; what stays names its owner
+	}
+}
+
+// mailRoleChanged ends the connections of an account whose role (or lock)
+// changed: they are made anew with the rules of the role.
+func (s *Server) mailRoleChanged(name string) {
+	if s.opts.Mail != nil {
+		s.opts.Mail.RoleChanged(name)
 	}
 }

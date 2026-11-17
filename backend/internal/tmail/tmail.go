@@ -177,7 +177,11 @@ type Notice struct {
 	User        string
 	Mailbox     string
 	MailboxName string
-	Count       int
+	// Label is the name the person gave the mailbox, "" if it is none or
+	// holds an address: the bell, which the KI-Agent can read, names no
+	// address (security review of 1.05).
+	Label string
+	Count int
 	// From and Subject of the newest mail.
 	From, Subject string
 	// Content: the account allows sender and subject in push messages.
@@ -202,6 +206,12 @@ type Manager struct {
 	// interfaces).
 	OwnPorts []int
 	OwnAddrs func() []netip.Addr
+	// OwnNets are the networks of the NAS (nil: those of the interfaces);
+	// confined accounts reach none of them.
+	OwnNets func() []netip.Prefix
+	// Reserve takes RAM of TitanOS's budget for a heavy request (system.
+	// MemoryPolicy.TryReserve); nil counts nothing.
+	Reserve func(bytes int64) (release func(), ok bool)
 	// RootCAs are the certificates trusted for TLS; nil is the system's.
 	RootCAs *x509.CertPool
 
@@ -232,6 +242,8 @@ type Manager struct {
 	contacts contactBook
 	notices  noticeState
 	checks   checkLimiter
+	targets  targetState
+	heavy    heavyState
 	ctx      contextHolder
 }
 
@@ -299,8 +311,19 @@ func (m *Manager) fileLocked(user string) *userFile {
 	return f
 }
 
+// sameAccount tells whether a file written for owner belongs to the
+// account a: a file without a creation time does not belong to an account
+// with one (it may be of an earlier account of the name, as in the camera
+// rights of the NVR). Only an account without a known creation time
+// (tests, old builds) goes by its name.
 func sameAccount(o owner, a Account) bool {
-	return o.Name == a.Name && (o.Created.IsZero() || a.Created.IsZero() || o.Created.Equal(a.Created))
+	if o.Name != a.Name {
+		return false
+	}
+	if a.Created.IsZero() {
+		return true
+	}
+	return !o.Created.IsZero() && o.Created.Equal(a.Created)
 }
 
 func (m *Manager) lookup(name string) (Account, bool) {

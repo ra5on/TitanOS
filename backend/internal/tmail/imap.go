@@ -31,6 +31,8 @@ type session struct {
 	fp       string
 	selected string
 	last     time.Time
+	// budget limits what the server may send for the next command.
+	budget *budgetConn
 }
 
 type connPool struct {
@@ -54,6 +56,14 @@ func (p *connPool) get(k string) *session {
 		p.sessions[k] = s
 	}
 	return s
+}
+
+// current tells whether s is still the session of its key (a removed
+// mailbox, a forgotten account or a taken grant closed the pool's).
+func (p *connPool) current(k string, s *session) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sessions[k] == s
 }
 
 // close ends the connection of a mailbox (all of an account with id "").
@@ -122,11 +132,12 @@ func fingerprint(mb Mailbox) string {
 }
 
 // connect opens an IMAP connection to a mailbox and logs in.
-func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, password string, handler *imapclient.UnilateralDataHandler) (*imapclient.Client, error) {
-	conn, err := m.dial(ctx, user, mb.IMAP)
+func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, password string, handler *imapclient.UnilateralDataHandler) (*imapclient.Client, *budgetConn, error) {
+	raw, err := m.dial(ctx, user, mb.IMAP)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	conn := newBudgetConn(raw, budgetLogin)
 	opts := &imapclient.Options{TLSConfig: m.tlsConfig(mb.IMAP.Host), UnilateralDataHandler: handler,
 		WordDecoder: &mime.WordDecoder{CharsetReader: charset.Reader}}
 	// Greeting, TLS and login together within twice the time to connect.
@@ -139,15 +150,15 @@ func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, password
 	defer watchdog.Stop()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() }) // the request is gone
 	defer stop()
-	fail := func(err error) (*imapclient.Client, error) {
+	fail := func(err error) (*imapclient.Client, *budgetConn, error) {
 		_ = conn.Close() // given up
-		if closed.Load() {
-			return nil, ErrTimeout
+		switch {
+		case conn.tooLarge():
+			return nil, nil, ErrTooLarge
+		case closed.Load(), ctx.Err() != nil:
+			return nil, nil, ErrTimeout
 		}
-		if ctx.Err() != nil {
-			return nil, ErrTimeout
-		}
-		return nil, err
+		return nil, nil, err
 	}
 	if mb.IMAP.Security == SecurityTLS {
 		tc := tls.Client(conn, opts.TLSConfig)
@@ -176,7 +187,9 @@ func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, password
 		}
 		return fail(classify(err))
 	}
-	return c, nil
+	m.succeeded(user, mb.IMAP)
+	conn.set(budgetCommand)
+	return c, conn, nil
 }
 
 // tlsError is an error while TLS is set up: unreachable and timeouts stay
@@ -208,7 +221,9 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	s := m.conns.get(key(user, id))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fp := fingerprint(mb)
+	// The role is part of the fingerprint: a connection made for an
+	// administrator is not used after a demotion.
+	fp := fingerprint(mb) + fmt.Sprint(m.confined(user))
 	if s.client() != nil && s.fp != fp {
 		s.kill()
 		s.setClient(nil)
@@ -233,24 +248,30 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 		if err != nil {
 			return err
 		}
-		c, err := m.connect(ctx, user, mb, password, nil)
+		c, budget, err := m.connect(ctx, user, mb, password, nil)
 		if err != nil {
 			if errors.Is(err, ErrAuthFailed) {
 				m.setAuthFailed(user, mb)
 			}
 			return err
 		}
+		s.budget = budget
 		s.setClient(c)
 		s.fp, s.selected = fp, ""
 	}
+	s.budget.set(budgetCommand)
 	err = work(s.client(), s)
 	s.last = time.Now()
-	if expired.Load() {
+	if s.budget.tooLarge() {
+		err = ErrTooLarge
+	} else if expired.Load() {
 		err = ErrTimeout
 	} else if ctx.Err() != nil && err != nil {
 		err = ErrTimeout
 	}
-	if err != nil && !keepsConnection(err) {
+	if err != nil && !keepsConnection(err) || !m.conns.current(key(user, id), s) {
+		// Broken, or the mailbox, the account or the grant went away while
+		// the request ran: nothing stays connected for it.
 		s.kill()
 		s.setClient(nil)
 	}
@@ -264,7 +285,7 @@ func keepsConnection(err error) bool {
 	if errors.As(err, &imapErr) {
 		return true
 	}
-	for _, e := range []error{ErrNotFound, ErrInvalid, ErrTooLarge, ErrFolderExists} {
+	for _, e := range []error{ErrNotFound, ErrInvalid, ErrFolderExists} {
 		if errors.Is(err, e) {
 			return true
 		}

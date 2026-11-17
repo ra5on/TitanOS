@@ -41,6 +41,15 @@ type Outgoing struct {
 	// after the new draft is kept).
 	DraftUID uint32
 	Files    []File
+	// Answers is the mail this one answers; it is marked "answered" after
+	// sending. Without it the mail of InReplyTo is looked for in the INBOX.
+	Answers *MailRef
+}
+
+// MailRef names a mail of a mailbox.
+type MailRef struct {
+	Folder string `json:"folder"`
+	UID    uint32 `json:"uid"`
 }
 
 // SendResult says what happened besides sending.
@@ -216,14 +225,27 @@ func msgIDs(value string, max int) []string {
 func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, password, from string, rcpt []string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-	conn, err := m.dial(ctx, user, mb.SMTP)
+	raw, err := m.dial(ctx, user, mb.SMTP)
 	if err != nil {
 		return err
 	}
+	// The whole conversation within one budget of bytes and lines: a
+	// server cannot make titand keep an endless answer.
+	conn := newBudgetConn(raw, budgetSMTP)
+	conn.setLines(smtpLines)
 	_ = conn.SetDeadline(time.Now().Add(sendTimeout)) // a failure shows in the next read or write
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
+	err = m.smtpTalk(ctx, conn, user, mb, password, from, rcpt, data)
+	if conn.tooLarge() {
+		return ErrTooLarge
+	}
+	return err
+}
+
+func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, mb Mailbox, password, from string, rcpt []string, data []byte) error {
 	var c *smtp.Client
+	var err error
 	cfg := m.tlsConfig(mb.SMTP.Host)
 	if mb.SMTP.Security == SecurityTLS {
 		tc := tls.Client(conn, cfg)
@@ -259,6 +281,7 @@ func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, passwor
 		}
 		return smtpError(ctx, err)
 	}
+	m.succeeded(user, mb.SMTP)
 	if data != nil {
 		if err := c.SendMail(from, rcpt, bytes.NewReader(data)); err != nil {
 			return smtpError(ctx, err)
@@ -313,6 +336,7 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	}
 	m.learn(user, append(append(append([]Address{}, out.To...), out.Cc...), out.Bcc...))
 	result := SendResult{}
+	var answered *MailRef
 	// The copy and the draft after the mail went out: their failure does
 	// not make the mail unsent.
 	err = m.withIMAP(context.WithoutCancel(ctx), user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
@@ -322,33 +346,73 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 			if _, err := appendMail(c, sent, data, []imap.Flag{imap.FlagSeen}); err == nil {
 				result.SentCopy = true
 			} else {
-				slog.Warn("T-Mail: copy of a sent mail not kept", "account", user, "err", safeText(err.Error()))
+				slog.Warn("T-Mail: copy of a sent mail not kept", "account", user, "code", Code(err))
 			}
 		}
 		if out.DraftUID != 0 {
 			removeDraft(c, s, out.DraftUID)
 		}
+		if ref := m.markAnswered(c, s, out); ref != nil {
+			answered = ref
+		}
 		return nil
 	})
 	if err != nil {
-		slog.Warn("T-Mail: sent mail not filed", "account", user, "err", safeText(err.Error()))
+		slog.Warn("T-Mail: sent mail not filed", "account", user, "code", Code(err))
+	}
+	if answered != nil {
+		m.events.publish(user, Event{Type: "flags", Data: map[string]any{"account": id, "folder": answered.Folder, "uids": []uint32{answered.UID}}})
 	}
 	return result, nil
 }
 
+// markAnswered sets "answered" on the mail an answer answers: the one
+// named, else the mail of In-Reply-To in the INBOX. It reports the mail.
+func (m *Manager) markAnswered(c *imapclient.Client, s *session, out Outgoing) *MailRef {
+	ref := out.Answers
+	if ref == nil || ref.UID == 0 || ref.Folder == "" {
+		ids := msgIDs(out.InReplyTo, 1)
+		if len(ids) == 0 {
+			return nil
+		}
+		if _, err := selectFolder(c, s, "INBOX"); err != nil {
+			return nil
+		}
+		found, err := c.UIDSearch(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Message-ID", Value: "<" + ids[0] + ">"}}}, nil).Wait()
+		if err != nil {
+			return nil
+		}
+		uids := uidsDesc(found.All, 0, 1)
+		if len(uids) == 0 {
+			return nil
+		}
+		ref = &MailRef{Folder: "INBOX", UID: uids[0]}
+	}
+	if _, err := selectFolder(c, s, ref.Folder); err != nil {
+		return nil
+	}
+	if err := c.Store(uidSet(ref.UID), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagAnswered}}, nil).Close(); err != nil {
+		slog.Warn("T-Mail: answered mail not marked", "code", Code(err))
+		return nil
+	}
+	return ref
+}
+
 // SaveDraft keeps a mail in the drafts folder and removes the draft it
 // replaces; it returns the UID of the new draft (0 if the server does not
-// tell it).
-func (m *Manager) SaveDraft(ctx context.Context, user, id string, out Outgoing) (uint32, error) {
+// tell it) and its attachments, whose parts a later save can take along
+// (attachFrom) instead of sending the files again.
+func (m *Manager) SaveDraft(ctx context.Context, user, id string, out Outgoing) (uint32, []Attachment, error) {
 	mb, err := m.mailbox(user, id)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	data, _, err := m.compose(user, mb, out, true)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	var uid uint32
+	attachments := []Attachment{}
 	err = m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
 		drafts, err := folderOf(c, RoleDrafts, "Drafts", true)
 		if err != nil {
@@ -360,9 +424,48 @@ func (m *Manager) SaveDraft(ctx context.Context, user, id string, out Outgoing) 
 		if out.DraftUID != 0 && out.DraftUID != uid {
 			removeDraft(c, s, out.DraftUID)
 		}
+		if uid != 0 {
+			if _, err := selectFolder(c, s, drafts); err == nil {
+				if b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}}); err == nil {
+					attachments = walkStructure(b.BodyStructure).attachmentList()
+				}
+			}
+		}
 		return nil
 	})
-	return uid, err
+	return uid, attachments, err
+}
+
+// DraftsFolder is the path of the drafts folder of a mailbox.
+func (m *Manager) DraftsFolder(ctx context.Context, user, id string) (string, error) {
+	var path string
+	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, _ *session) error {
+		var err error
+		path, err = folderOf(c, RoleDrafts, "Drafts", false)
+		return err
+	})
+	return path, err
+}
+
+// Attachments lists the attachments of a mail (not its embedded pictures).
+func (m *Manager) Attachments(ctx context.Context, user, id, folder string, uid uint32) ([]Attachment, error) {
+	var out []Attachment
+	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+		if _, err := selectFolder(c, s, folder); err != nil {
+			return err
+		}
+		b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
+		if err != nil {
+			return err
+		}
+		for _, a := range walkStructure(b.BodyStructure).attachmentList() {
+			if !a.Inline {
+				out = append(out, a)
+			}
+		}
+		return nil
+	})
+	return out, err
 }
 
 func appendMail(c *imapclient.Client, folder string, data []byte, flags []imap.Flag) (uint32, error) {
@@ -391,6 +494,6 @@ func removeDraft(c *imapclient.Client, s *session, uid uint32) {
 		return
 	}
 	if err := expunge(c, []uint32{uid}); err != nil {
-		slog.Warn("T-Mail: old draft not removed", "err", safeText(err.Error()))
+		slog.Warn("T-Mail: old draft not removed", "code", Code(err))
 	}
 }

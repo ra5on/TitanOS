@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/quotedprintable"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -170,17 +171,31 @@ func safeFileName(name string) string {
 	}
 	out := []rune{}
 	for _, r := range name {
-		if r < 0x20 || r == 0x7f || strings.ContainsRune(`<>:"|?*`, r) {
+		if invisible(r) {
+			continue
+		}
+		if r < 0x20 || r == 0x7f || r == '\u2028' || r == '\u2029' || strings.ContainsRune(`<>:"|?*`, r) {
 			r = '_'
 		}
 		out = append(out, r)
-		if len(out) >= 200 {
-			break
-		}
 	}
 	name = strings.Trim(strings.TrimSpace(string(out)), ".")
 	if name == "" {
 		name = "attachment"
+	}
+	// At most 255 bytes (the limit of file names on the volumes), the
+	// extension kept.
+	if len(name) > 255 {
+		ext := path.Ext(name)
+		if len(ext) > 16 {
+			ext = ""
+		}
+		base := name[:len(name)-len(ext)]
+		for len(base)+len(ext) > 255 {
+			_, size := utf8.DecodeLastRuneInString(base)
+			base = base[:len(base)-size]
+		}
+		name = base + ext
 	}
 	return name
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,7 +10,9 @@ import (
 	"net/http"
 	"net/mail"
 	"path"
+	"slices"
 	"strconv"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/tmail"
@@ -21,7 +24,7 @@ import (
 func (a tmailArea) handleFolders(w http.ResponseWriter, r *http.Request) {
 	list, err := a.mail.Folders(r.Context(), currentUser(r).Name, r.PathValue("id"))
 	if err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
@@ -35,7 +38,7 @@ func (a tmailArea) handleFolderCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.mail.CreateFolder(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Path); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -50,7 +53,7 @@ func (a tmailArea) handleFolderRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.mail.RenameFolder(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Path, req.To); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -58,7 +61,7 @@ func (a tmailArea) handleFolderRename(w http.ResponseWriter, r *http.Request) {
 
 func (a tmailArea) handleFolderDelete(w http.ResponseWriter, r *http.Request) {
 	if err := a.mail.DeleteFolder(r.Context(), currentUser(r).Name, r.PathValue("id"), r.URL.Query().Get("path")); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -84,7 +87,7 @@ func (a tmailArea) handleMessages(w http.ResponseWriter, r *http.Request) {
 	page, err := a.mail.List(r.Context(), currentUser(r).Name, r.PathValue("id"), tmail.ListQuery{Folder: q.Get("folder"),
 		Before: queryUID(r, "before"), Limit: limit, Q: q.Get("q"), Unread: queryBool(r, "unread"), Flagged: queryBool(r, "flagged")})
 	if err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
@@ -98,7 +101,7 @@ func (a tmailArea) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	msg, err := a.mail.Read(r.Context(), currentUser(r).Name, r.PathValue("id"), r.URL.Query().Get("folder"), uid, queryBool(r, "images"))
 	if err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -129,10 +132,36 @@ func (p *partWriter) Write(b []byte) (int, error) {
 // handlePart hands out an attachment: always as a download, never shown
 // by the browser under the address of TitanOS (not HTML, SVG or PDF
 // either).
+// RAM that the heavy requests may hold (Begin): a part streams through a
+// small buffer, a saved part lies whole in memory, a mail to send with its
+// attachments about three times (body, files, encoded mail).
+const (
+	heavyPart = 8 << 20
+	heavySave = maxSaveBytes + (8 << 20)
+	heavySend = 3*tmail.MaxAttachments + (8 << 20)
+)
+
+// heavy admits a heavy request or answers 503 mail_busy at once.
+func (a tmailArea) heavy(w http.ResponseWriter, r *http.Request, bytes int64) (func(), bool) {
+	release, err := a.mail.Begin(currentUser(r).Name, bytes)
+	if err != nil {
+		writeMailError(w, err)
+		return nil, false
+	}
+	return release, true
+}
+
 func (a tmailArea) handlePart(w http.ResponseWriter, r *http.Request) {
+	release, ok := a.heavy(w, r, heavyPart)
+	if !ok {
+		return
+	}
+	defer release()
+	ctx, stop := a.holding(r)
+	defer stop()
 	q := r.URL.Query()
 	pw := &partWriter{w: w}
-	err := a.mail.Part(r.Context(), currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("part"),
+	err := a.mail.Part(ctx, currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("part"),
 		func(info tmail.PartInfo) io.Writer {
 			pw.headers = func(h http.Header) {
 				h.Set("Content-Type", "application/octet-stream")
@@ -143,24 +172,26 @@ func (a tmailArea) handlePart(w http.ResponseWriter, r *http.Request) {
 			}
 			return pw
 		})
-	a.finishPart(w, pw, err)
+	a.finishPart(w, r, pw, err)
 }
 
-func (a tmailArea) finishPart(w http.ResponseWriter, pw *partWriter, err error) {
+func (a tmailArea) finishPart(w http.ResponseWriter, r *http.Request, pw *partWriter, err error) {
 	switch {
 	case err == nil:
 		pw.start() // an empty part
 	case !pw.started:
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 	}
 }
 
 // handleCID hands out a picture embedded in a mail (cid:): only PNG, JPEG,
 // GIF and WebP, inline, without scripts.
 func (a tmailArea) handleCID(w http.ResponseWriter, r *http.Request) {
+	ctx, stop := a.holding(r)
+	defer stop()
 	q := r.URL.Query()
 	pw := &partWriter{w: w}
-	err := a.mail.CID(r.Context(), currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("cid"),
+	err := a.mail.CID(ctx, currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("cid"),
 		func(info tmail.PartInfo) io.Writer {
 			pw.headers = func(h http.Header) {
 				h.Set("Content-Type", info.Type)
@@ -171,7 +202,30 @@ func (a tmailArea) handleCID(w http.ResponseWriter, r *http.Request) {
 			}
 			return pw
 		})
-	a.finishPart(w, pw, err)
+	a.finishPart(w, r, pw, err)
+}
+
+// holding is the context of a download: it ends with the login (logout,
+// lock screen, locked account) and with the grant of T-Mail.
+func (a tmailArea) holding(r *http.Request) (context.Context, func()) {
+	user := currentUser(r)
+	ctx, cancel := a.whileLoginHolds(r, user)
+	go func() {
+		tick := time.NewTicker(3 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				if !a.mail.Allowed(user.Name) {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return ctx, cancel
 }
 
 // maxSaveBytes bounds an attachment saved to the NAS: it passes through
@@ -208,10 +262,15 @@ func (a tmailArea) handlePartSave(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	release, ok := a.heavy(w, r, heavySave)
+	if !ok {
+		return
+	}
+	defer release()
 	user := currentUser(r)
 	data, _, err := a.mail.PartBytes(r.Context(), user.Name, r.PathValue("id"), req.Folder, req.UID, req.Part, maxSaveBytes)
 	if err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	noteTarget(r, filePlace(req.Root, req.Path))
@@ -238,7 +297,7 @@ func (a tmailArea) handleFlags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.mail.SetFlags(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Folder, req.UIDs, req.Add, req.Remove); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -253,7 +312,7 @@ func (a tmailArea) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.mail.Move(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Folder, req.UIDs, req.To); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -265,7 +324,7 @@ func (a tmailArea) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.mail.Delete(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Folder, req.UIDs); err != nil {
-		writeMailError(w, err)
+		a.mailError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -319,8 +378,11 @@ type sendMeta struct {
 	References string     `json:"references"`
 	Signature  string     `json:"signature"`
 	DraftUID   uint32     `json:"draftUid"`
+	// Answers is the mail this one answers (marked "answered").
+	Answers *tmail.MailRef `json:"answers"`
 	// AttachFrom takes parts of a mail along (forwarding, a draft opened
-	// again).
+	// again). Without uid it is the draft draftUid, its folder found by
+	// T-Mail; parts ["*"] (or none, for the draft) are all attachments.
 	AttachFrom *struct {
 		Folder string   `json:"folder"`
 		UID    uint32   `json:"uid"`
@@ -341,6 +403,11 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := currentUser(r)
 		id := r.PathValue("id")
+		release, ok := a.heavy(w, r, heavySend)
+		if !ok {
+			return
+		}
+		defer release()
 		r.Body = http.MaxBytesReader(w, r.Body, tmail.MaxAttachments+(4<<20))
 		mr, err := r.MultipartReader()
 		if err != nil {
@@ -434,10 +501,34 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "mail_invalid", "too many parts")
 				return
 			}
+			if from.UID == 0 && meta.DraftUID != 0 {
+				// The parts of the draft this save replaces: uploads are
+				// not sent again with every save.
+				drafts, err := a.mail.DraftsFolder(r.Context(), user.Name, id)
+				if err != nil {
+					a.mailError(w, r, err)
+					return
+				}
+				from.Folder, from.UID = drafts, meta.DraftUID
+				if len(from.Parts) == 0 {
+					from.Parts = []string{"*"}
+				}
+			}
+			if slices.Contains(from.Parts, "*") {
+				list, err := a.mail.Attachments(r.Context(), user.Name, id, from.Folder, from.UID)
+				if err != nil {
+					a.mailError(w, r, err)
+					return
+				}
+				from.Parts = nil
+				for _, att := range list {
+					from.Parts = append(from.Parts, att.Part)
+				}
+			}
 			for _, part := range from.Parts {
 				data, info, err := a.mail.PartBytes(r.Context(), user.Name, id, from.Folder, from.UID, part, left)
 				if err != nil {
-					writeMailError(w, err)
+					a.mailError(w, r, err)
 					return
 				}
 				left -= int64(len(data))
@@ -445,19 +536,19 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 			}
 		}
 		out := tmail.Outgoing{To: meta.To, Cc: meta.Cc, Bcc: meta.Bcc, Subject: meta.Subject, Text: meta.Text, InReplyTo: meta.InReplyTo,
-			References: meta.References, Signature: meta.Signature, DraftUID: meta.DraftUID, Files: attached}
+			References: meta.References, Signature: meta.Signature, DraftUID: meta.DraftUID, Files: attached, Answers: meta.Answers}
 		if draft {
-			uid, err := a.mail.SaveDraft(r.Context(), user.Name, id, out)
+			uid, list, err := a.mail.SaveDraft(r.Context(), user.Name, id, out)
 			if err != nil {
-				writeMailError(w, err)
+				a.mailError(w, r, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]uint32{"uid": uid})
+			writeJSON(w, http.StatusOK, map[string]any{"uid": uid, "attachments": list})
 			return
 		}
 		res, err := a.mail.Send(r.Context(), user.Name, id, out)
 		if err != nil {
-			writeMailError(w, err)
+			a.mailError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, res)

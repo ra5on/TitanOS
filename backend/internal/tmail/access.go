@@ -102,6 +102,10 @@ func (m *Manager) SetAllowed(user string, enabled bool) error {
 	}
 	m.access.given = next
 	m.mu.Unlock()
+	if !enabled {
+		m.conns.close(user, "")
+		m.events.closeUser(user)
+	}
 	m.Sync(user)
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net"
@@ -411,7 +412,7 @@ func TestMailReadSendAndFiles(t *testing.T) {
 	dbody := new(bytes.Buffer)
 	dbody.ReadFrom(dres.Body)
 	dres.Body.Close()
-	if dres.StatusCode != 200 || !regexp.MustCompile(`^\{"uid":[1-9]`).Match(dbody.Bytes()) || srv.Count("Drafts") != 1 {
+	if dres.StatusCode != 200 || !regexp.MustCompile(`"uid":[1-9]`).Match(dbody.Bytes()) || srv.Count("Drafts") != 1 {
 		t.Fatalf("draft: %d %s", dres.StatusCode, dbody)
 	}
 }
@@ -557,5 +558,88 @@ func TestMailUserConfinedAndCheckLimit(t *testing.T) {
 	res, body = ts.request("POST", "/api/v1/mail/accounts/test", mailInput(srv, tmailtest.Password))
 	if res.StatusCode != 200 || strings.Count(string(body), `"ok":true`) != 2 {
 		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+}
+
+// Security review of 1.05: for an account of the role user no answer
+// tells why a connection failed (refused, no answer, no TLS, server text).
+func TestMailVagueErrorsForUsers(t *testing.T) {
+	ts, _, _ := newMailServer(t)
+	ts.guest("bob")
+	area := ts.server.tmailArea()
+	for _, c := range []struct {
+		user string
+		err  error
+		code string
+	}{
+		{"bob", tmail.ErrTLS, "mail_unreachable"}, {"bob", tmail.ErrTimeout, "mail_unreachable"},
+		{"bob", fmt.Errorf("%w: 554 relay denied for 10.0.0.5", tmail.ErrSendFailed), "mail_send_failed"},
+		{"alex", tmail.ErrTLS, "mail_tls"}, {"alex", tmail.ErrTimeout, "mail_timeout"},
+	} {
+		user, _ := ts.users.Get(c.user)
+		req := httptest.NewRequest("GET", "/api/v1/mail/accounts", nil)
+		req = req.WithContext(context.WithValue(req.Context(), contextKey{}, user))
+		rec := httptest.NewRecorder()
+		area.mailError(rec, req, c.err)
+		if code := errorCode(t, rec.Body.Bytes()); code != c.code {
+			t.Errorf("%s %v: %s", c.user, c.err, code)
+		}
+		if c.user == "bob" && strings.Contains(rec.Body.String(), "10.0.0.5") {
+			t.Errorf("server text for a user: %s", rec.Body)
+		}
+	}
+}
+
+// Interface: the question before deleting an account counts its mailboxes.
+func TestMailAccountsInAgentData(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	bob := ts.guest("bob")
+	ts.grantMail("bob")
+	ts.addMailbox(bob, srv)
+	ts.addMailbox(bob, srv)
+	_, body := ts.request("GET", "/api/v1/users/bob/agent-data", nil)
+	if !strings.Contains(string(body), `"mailAccounts":2`) {
+		t.Fatalf("agent-data: %s", body)
+	}
+}
+
+// Interface: a later save of a draft takes the attachments of the draft it
+// replaces along without the files sent again.
+func TestMailDraftKeepsItsAttachments(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	ts.grantMail("alex")
+	id := ts.addMailbox(ts.client, srv)
+	post := func(meta string, file bool) map[string]any {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		mw.WriteField("meta", meta)
+		if file {
+			fw, _ := mw.CreateFormFile("file", "plan.txt")
+			fw.Write([]byte("Der Plan"))
+		}
+		mw.Close()
+		req, _ := http.NewRequest("POST", ts.url+"/api/v1/mail/accounts/"+id+"/draft", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		res, err := ts.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		json.NewDecoder(res.Body).Decode(&out)
+		if res.StatusCode != 200 {
+			t.Fatalf("draft: %d %v", res.StatusCode, out)
+		}
+		return out
+	}
+	first := post(`{"subject":"E","text":"eins"}`, true)
+	if list, _ := first["attachments"].([]any); len(list) != 1 {
+		t.Fatalf("first: %v", first)
+	}
+	uid := int(first["uid"].(float64))
+	second := post(fmt.Sprintf(`{"subject":"E","text":"zwei","draftUid":%d,"attachFrom":{}}`, uid), false)
+	list, _ := second["attachments"].([]any)
+	if len(list) != 1 || list[0].(map[string]any)["name"] != "plan.txt" || srv.Count("Drafts") != 1 {
+		t.Fatalf("second: %v, drafts %d", second, srv.Count("Drafts"))
 	}
 }

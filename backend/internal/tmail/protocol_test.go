@@ -359,12 +359,12 @@ func TestSendWithAttachmentCopyAndDraft(t *testing.T) {
 		InReplyTo: "<x1@example.net>", References: "<x0@example.net> <x1@example.net>",
 		Files: []File{{Name: "angebot.pdf", Type: "application/pdf", Data: []byte("%PDF-1.4 test")}}}
 	// A draft first, replaced by a second one, removed by sending.
-	uid, err := e.m.SaveDraft(ctx, "alex", id, out)
+	uid, _, err := e.m.SaveDraft(ctx, "alex", id, out)
 	if err != nil || uid == 0 {
 		t.Fatalf("draft: %d %v", uid, err)
 	}
 	out.DraftUID = uid
-	uid2, err := e.m.SaveDraft(ctx, "alex", id, out)
+	uid2, _, err := e.m.SaveDraft(ctx, "alex", id, out)
 	if err != nil || uid2 == uid || e.count("Drafts") != 1 {
 		t.Fatalf("second draft: %d %v, %d drafts", uid2, err, e.count("Drafts"))
 	}

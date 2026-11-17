@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/emersion/go-imap/v2"
@@ -38,6 +41,8 @@ type Summary struct {
 	Flags       Flags     `json:"flags"`
 	Size        int64     `json:"size"`
 	Attachments bool      `json:"attachments"`
+	// TooLarge: the head of this mail was too large to list.
+	TooLarge bool `json:"tooLarge,omitempty"`
 }
 
 // Page is a page of a list, newest first; Next is the UID to ask for the
@@ -96,10 +101,10 @@ func addresses(list []imap.Address) []Address {
 func clean(s string, limit int) string {
 	s = strings.ToValidUTF8(s, "�")
 	s = strings.Map(func(r rune) rune {
-		if r == '\r' || r == '\n' || r == '\t' {
+		if r == '\r' || r == '\n' || r == '\t' || r == '\u2028' || r == '\u2029' {
 			return ' '
 		}
-		if r < 0x20 || r == 0x7f {
+		if r < 0x20 || r == 0x7f || invisible(r) {
 			return -1
 		}
 		return r
@@ -110,12 +115,23 @@ func clean(s string, limit int) string {
 	return strings.TrimSpace(s)
 }
 
+// invisible tells format characters (Unicode Cf): zero widths and the
+// controls of the writing direction (U+202A–202E, U+2066–2069) that make
+// "rechnung\u202efdp.exe" look like a PDF (security review of 1.05).
+func invisible(r rune) bool { return unicode.Is(unicode.Cf, r) }
+
 func flagsOf(list []imap.Flag) Flags {
 	return Flags{Seen: slices.Contains(list, imap.FlagSeen), Flagged: slices.Contains(list, imap.FlagFlagged), Answered: slices.Contains(list, imap.FlagAnswered)}
 }
 
 func summaryOf(b *imapclient.FetchMessageBuffer) Summary {
-	s := Summary{UID: uint32(b.UID), Flags: flagsOf(b.Flags), Size: b.RFC822Size, To: []Address{}, Attachments: hasAttachments(b.BodyStructure)}
+	s := Summary{UID: uint32(b.UID), Flags: flagsOf(b.Flags), Size: b.RFC822Size, To: []Address{}}
+	if b.BodyStructure != nil {
+		s.Attachments = hasAttachments(b.BodyStructure)
+	}
+	for _, section := range b.BodySection {
+		s.Attachments = s.Attachments || attachmentsByHead(section.Bytes)
+	}
 	if e := b.Envelope; e != nil {
 		s.Subject, s.Date, s.To = clean(e.Subject, 1000), e.Date, addresses(e.To)
 		if from := addresses(e.From); len(from) > 0 {
@@ -160,7 +176,31 @@ func searchCriteria(q ListQuery) *imap.SearchCriteria {
 	return c
 }
 
-// List returns a page of a folder, newest first.
+// listFetch asks for what a line of the list shows; the attachment mark
+// comes from the Content-Type of the head, not from the structure, so that
+// a mail with thousands of parts cannot make a page too large.
+func listFetch() *imap.FetchOptions {
+	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
+		BodySection: []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"Content-Type"}, Peek: true,
+			Partial: &imap.SectionPartial{Size: 8 << 10}}}}
+}
+
+// attachmentsByHead tells from the Content-Type of a mail whether it has
+// attachments: multipart/mixed, or a single part that is no text.
+func attachmentsByHead(header []byte) bool {
+	_, value, ok := strings.Cut(string(header), ":")
+	if !ok {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", ""), "\n", "")))
+	if err != nil {
+		return false
+	}
+	return mediaType == "multipart/mixed" || !strings.HasPrefix(mediaType, "multipart/") && !strings.HasPrefix(mediaType, "text/")
+}
+
+// List returns a page of a folder, newest first. A mail whose head is too
+// large to list is shown with its UID and tooLarge, not left out.
 func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page, error) {
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 50
@@ -169,6 +209,7 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		return Page{}, ErrInvalid
 	}
 	page := Page{Messages: []Summary{}}
+	var pick []uint32
 	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, q.Folder); err != nil {
 			return err
@@ -177,41 +218,60 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		if err != nil {
 			return err
 		}
-		all := data.AllUIDs()
-		slices.SortFunc(all, func(a, b imap.UID) int { return int(int64(b) - int64(a)) })
-		page.Total = len(all)
-		var pick []uint32
-		for _, u := range all {
-			if q.Before != 0 && uint32(u) >= q.Before {
-				continue
-			}
-			if len(pick) == q.Limit {
-				page.Next = pick[len(pick)-1]
-				break
-			}
-			pick = append(pick, uint32(u))
+		page.Total = uidCount(data.All)
+		pick = uidsDesc(data.All, q.Before, q.Limit+1)
+		if len(pick) > q.Limit {
+			pick = pick[:q.Limit]
+			page.Next = pick[len(pick)-1]
 		}
 		if len(pick) == 0 {
 			return nil
 		}
-		msgs, err := c.Fetch(uidSet(pick...), &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true,
-			InternalDate: true, BodyStructure: &imap.FetchItemBodyStructure{Extended: true}}).Collect()
+		msgs, err := collect(c.Fetch(uidSet(pick...), listFetch()))
 		if err != nil {
 			return err
 		}
 		for _, b := range msgs {
 			page.Messages = append(page.Messages, summaryOf(b))
 		}
-		slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
 		return nil
 	})
+	if errors.Is(err, ErrTooLarge) && len(pick) > 0 {
+		// One by one: only the mails too large to list are marked.
+		page.Messages = []Summary{}
+		for _, uid := range pick {
+			var one Summary
+			err = m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+				if _, err := selectFolder(c, s, q.Folder); err != nil {
+					return err
+				}
+				s.budget.set(budgetCommand / 4)
+				b, err := fetchOne(c, uid, listFetch())
+				if err == nil {
+					one = summaryOf(b)
+				}
+				return err
+			})
+			switch {
+			case errors.Is(err, ErrTooLarge):
+				one = Summary{UID: uid, To: []Address{}, TooLarge: true}
+			case errors.Is(err, ErrNotFound):
+				continue
+			case err != nil:
+				return page, err
+			}
+			page.Messages = append(page.Messages, one)
+		}
+		err = nil
+	}
+	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
 	return page, err
 }
 
 // fetchOne fetches the head data of one mail; ErrNotFound without it.
 func fetchOne(c *imapclient.Client, uid uint32, opts *imap.FetchOptions) (*imapclient.FetchMessageBuffer, error) {
 	opts.UID = true
-	msgs, err := c.Fetch(uidSet(uid), opts).Collect()
+	msgs, err := collect(c.Fetch(uidSet(uid), opts))
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +382,11 @@ func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32,
 				limits = append(limits, encodedLimit(a, maxInlineImage))
 			}
 		}
+		var expected int64
+		for _, l := range limits {
+			expected += l
+		}
+		s.budget.set(budgetCommand + expected)
 		data, cut, err := fetchSections(c, uid, parts, limits)
 		if err != nil {
 			return err
@@ -416,6 +481,8 @@ func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32,
 		if err != nil {
 			return err
 		}
+		// The answer is the part as the structure gave its size.
+		s.budget.set(info.size + budgetMargin)
 		w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
 		return streamSection(c, uid, path, info.encoding, w, -1)
 	})
@@ -495,8 +562,9 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 		}
 		for _, a := range walkStructure(b.BodyStructure).attachments {
 			if a.id == cid && slices.Contains(inlineTypes, a.mediaType) {
+				s.budget.set(encodedLimit(a, maxInlineImage) + budgetMargin)
 				w := head(PartInfo{Name: a.attachment().Name, Type: a.mediaType})
-				return streamSection(c, uid, a.path, a.encoding, w, maxInlineImage*4)
+				return streamSection(c, uid, a.path, a.encoding, w, maxInlineImage)
 			}
 		}
 		return fmt.Errorf("%w: picture", ErrNotFound)
@@ -510,19 +578,25 @@ func (m *Manager) PartBytes(ctx context.Context, user, id, folder string, uid ui
 	if !ok {
 		return nil, Attachment{}, ErrInvalid
 	}
-	var buf strings.Builder
+	var buf bytes.Buffer
 	var info partInfo
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		var err error
 		if info, err = partOf(c, s, folder, uid, part); err != nil {
 			return err
 		}
+		if expected := info.attachment().Size; expected > limit {
+			return ErrTooLarge
+		} else if expected > 0 {
+			buf.Grow(int(expected) + 4096)
+		}
+		s.budget.set(encodedLimit(info, int(limit)) + budgetMargin)
 		return streamSection(c, uid, path, info.encoding, &buf, limit)
 	})
 	if err != nil {
 		return nil, Attachment{}, err
 	}
-	return []byte(buf.String()), info.attachment(), nil
+	return buf.Bytes(), info.attachment(), nil
 }
 
 var flagNames = map[string]imap.Flag{"seen": imap.FlagSeen, "flagged": imap.FlagFlagged, "answered": imap.FlagAnswered}

@@ -9,6 +9,8 @@ import (
 	"net/netip"
 	"slices"
 	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -90,12 +92,90 @@ func (m *Manager) confined(user string) bool {
 }
 
 // CheckTargetFor is CheckTarget for an account; confined accounts reach
-// public addresses only.
+// public addresses only, outside the networks of the NAS (own addresses
+// counted as /56 for IPv6) and never the NAS itself on any port.
 func CheckTargetFor(target netip.AddrPort, own []netip.Addr, ports []int, confined bool) error {
-	if confined && !netguard.Public(target.Addr()) {
+	if confined && !netguard.Confined(target.Addr(), ownPrefixes(own, nil)) {
 		return ErrConfined
 	}
 	return CheckTarget(target, own, ports)
+}
+
+// ownPrefixes are the networks of the NAS: those of its interfaces and
+// each own address (IPv4 alone, IPv6 widened by netguard).
+func ownPrefixes(own []netip.Addr, nets []netip.Prefix) []netip.Prefix {
+	out := append([]netip.Prefix{}, nets...)
+	for _, a := range own {
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out
+}
+
+// confinedTarget tells whether a confined account may reach an address.
+func (m *Manager) confinedTarget(addr netip.Addr) bool {
+	own := m.OwnAddrs
+	if own == nil {
+		own = interfaceAddrs
+	}
+	nets := m.OwnNets
+	if nets == nil {
+		nets = netguard.OwnNetworks
+	}
+	return netguard.Confined(addr, ownPrefixes(own(), nets()))
+}
+
+// NewTargetLimit is how many connections an account may open a minute to
+// mail servers it never logged in to (all roles): a stored mailbox whose
+// port is changed again and again must not become a port scanner
+// (security review of 1.05).
+const NewTargetLimit = 10
+
+// targetState remembers the servers an account logged in to (RAM only)
+// and counts its tries of others.
+type targetState struct {
+	mu    sync.Mutex
+	known map[string]bool
+	tries checkLimiter
+}
+
+func targetKey(user string, s Server) string {
+	return user + "\x00" + s.Host + ":" + strconv.Itoa(s.Port)
+}
+
+// succeeded notes that an account logged in to a server.
+func (m *Manager) succeeded(user string, s Server) {
+	t := &m.targets
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.known == nil {
+		t.known = map[string]bool{}
+	}
+	t.known[targetKey(user, s)] = true
+}
+
+// mayTry tells whether an account may open a connection to a server now.
+func (m *Manager) mayTry(user string, s Server) bool {
+	t := &m.targets
+	t.mu.Lock()
+	known := t.known[targetKey(user, s)]
+	t.mu.Unlock()
+	return known || t.tries.allow(user, m.clock(), NewTargetLimit)
+}
+
+// forgetTargets drops what is known of an account's servers.
+func (m *Manager) forgetTargets(user string) {
+	t := &m.targets
+	t.mu.Lock()
+	for k := range t.known {
+		if strings.HasPrefix(k, user+"\x00") {
+			delete(t.known, k)
+		}
+	}
+	t.mu.Unlock()
+	t.tries.mu.Lock()
+	delete(t.tries.used, user)
+	t.tries.mu.Unlock()
 }
 
 // dial opens a TCP connection to a server of a mailbox of an account,
@@ -103,6 +183,9 @@ func CheckTargetFor(target netip.AddrPort, own []netip.Addr, ports []int, confin
 func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, error) {
 	if !validHost(s.Host) || s.Port < 1 || s.Port > 65535 {
 		return nil, ErrInvalid
+	}
+	if !m.mayTry(user, s) {
+		return nil, ErrRateLimited
 	}
 	confined := m.confined(user)
 	dialer := net.Dialer{Timeout: connectTimeout, ControlContext: func(_ context.Context, _, address string, _ syscall.RawConn) error {
@@ -112,7 +195,7 @@ func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, er
 		}
 		// The role is checked before the hook of the tests, so that
 		// tests reach their servers on loopback only as administrators.
-		if confined && !netguard.Public(target.Addr()) {
+		if confined && !m.confinedTarget(target.Addr()) {
 			return ErrConfined
 		}
 		return m.checkTarget(target)

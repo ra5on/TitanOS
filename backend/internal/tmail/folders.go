@@ -57,12 +57,23 @@ func listFolders(c *imapclient.Client, status bool) ([]Folder, error) {
 	if listStatus {
 		opts.ReturnStatus = statusOpts
 	}
-	list, err := c.List("", "*", opts).Collect()
-	if err != nil {
-		return nil, err
+	// Read one by one and stop after maxFolders: the rest of the answer is
+	// not read, the connection is given up instead.
+	cmd := c.List("", "*", opts)
+	var list []*imap.ListData
+	cut := false
+	for data := cmd.Next(); data != nil; data = cmd.Next() {
+		if len(list) == maxFolders {
+			_ = c.Close() // too many folders; the next request connects anew
+			cut = true
+			break
+		}
+		list = append(list, data)
 	}
-	if len(list) > maxFolders {
-		list = list[:maxFolders]
+	if !cut {
+		if err := cmd.Close(); err != nil {
+			return nil, err
+		}
 	}
 	out := []Folder{}
 	taken := map[string]bool{}

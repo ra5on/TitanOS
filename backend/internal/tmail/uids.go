@@ -1,0 +1,119 @@
+package tmail
+
+import (
+	"slices"
+
+	"github.com/emersion/go-imap/v2"
+	"github.com/emersion/go-imap/v2/imapclient"
+)
+
+// UID lists of a server are read range by range and never expanded whole:
+// "1:4000000000" in a SEARCH answer is a few bytes, its UIDs are not
+// (security review of 1.05).
+
+// maxUIDs bounds the UIDs taken from one answer.
+const maxUIDs = 100000
+
+// uidRanges returns the ranges of a set of UIDs, low to high bounds.
+func uidRanges(set imap.NumSet) []imap.UIDRange {
+	uids, ok := set.(imap.UIDSet)
+	if !ok {
+		return nil
+	}
+	out := make([]imap.UIDRange, 0, len(uids))
+	for _, r := range uids {
+		lo, hi := r.Start, r.Stop
+		if hi == 0 {
+			hi = lo
+		}
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if lo == 0 {
+			lo = 1
+		}
+		if hi >= lo {
+			out = append(out, imap.UIDRange{Start: lo, Stop: hi})
+		}
+	}
+	return out
+}
+
+// uidCount is the number of UIDs of a set.
+func uidCount(set imap.NumSet) int {
+	var n uint64
+	for _, r := range uidRanges(set) {
+		n += uint64(r.Stop-r.Start) + 1
+	}
+	return int(min(n, 1<<31-1))
+}
+
+// uidsDesc returns at most limit UIDs of a set below before (0: all),
+// highest first.
+func uidsDesc(set imap.NumSet, before uint32, limit int) []uint32 {
+	limit = min(limit, maxUIDs)
+	var out []uint32
+	ranges := uidRanges(set)
+	slices.SortFunc(ranges, func(a, b imap.UIDRange) int { return int(int64(b.Stop) - int64(a.Stop)) })
+	seen := map[uint32]bool{}
+	for _, r := range ranges {
+		hi := uint64(r.Stop)
+		if before != 0 && hi >= uint64(before) {
+			if uint64(before) <= uint64(r.Start) {
+				continue
+			}
+			hi = uint64(before) - 1
+		}
+		for u := hi; u >= uint64(r.Start) && len(out) < limit; u-- {
+			if !seen[uint32(u)] {
+				seen[uint32(u)] = true
+				out = append(out, uint32(u))
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b uint32) int { return int(int64(b) - int64(a)) })
+	return out
+}
+
+// uidsFrom returns at most limit UIDs of a set from from on, lowest
+// first.
+func uidsFrom(set imap.NumSet, from uint32, limit int) []uint32 {
+	limit = min(limit, maxUIDs)
+	var out []uint32
+	ranges := uidRanges(set)
+	slices.SortFunc(ranges, func(a, b imap.UIDRange) int { return int(int64(a.Start) - int64(b.Start)) })
+	for _, r := range ranges {
+		lo := max(uint32(r.Start), from)
+		for u := uint64(lo); u <= uint64(r.Stop) && len(out) < limit; u++ {
+			if len(out) == 0 || out[len(out)-1] != uint32(u) {
+				out = append(out, uint32(u))
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// maxUID is the highest UID of a set (0 if empty).
+func maxUID(set imap.NumSet) uint32 {
+	var top uint32
+	for _, r := range uidRanges(set) {
+		top = max(top, uint32(r.Stop))
+	}
+	return top
+}
+
+// collect reads the answers of a FETCH one mail after the other; the
+// budget of the connection bounds them.
+func collect(cmd *imapclient.FetchCommand) ([]*imapclient.FetchMessageBuffer, error) {
+	var out []*imapclient.FetchMessageBuffer
+	for msg := cmd.Next(); msg != nil; msg = cmd.Next() {
+		buf, err := msg.Collect()
+		if err != nil {
+			_ = cmd.Close() // the error of the mail is what counts
+			return nil, err
+		}
+		out = append(out, buf)
+	}
+	return out, cmd.Close()
+}

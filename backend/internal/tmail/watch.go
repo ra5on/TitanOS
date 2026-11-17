@@ -103,9 +103,11 @@ func (m *Manager) SyncAll() {
 }
 
 // watchConfig names what a watcher depends on; another value restarts it.
-func watchConfig(mb Mailbox, rules []Rule) string {
+// The role is part of it: a demoted administrator's connection into the
+// home network does not stay open (security review of 1.05).
+func watchConfig(mb Mailbox, rules []Rule, confined bool) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%v\x00%v", fingerprint(mb), mb.Notify, rules)
+	fmt.Fprintf(h, "%s\x00%v\x00%v\x00%v", fingerprint(mb), mb.Notify, rules, confined)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -116,6 +118,7 @@ func (m *Manager) Sync(user string) {
 	ctx := m.ctx.get()
 	want := map[string]Mailbox{}
 	configs := map[string]string{}
+	confined := m.confined(user)
 	if m.Allowed(user) {
 		m.mu.Lock()
 		f := m.fileLocked(user)
@@ -130,7 +133,7 @@ func (m *Manager) Sync(user string) {
 				continue
 			}
 			k := key(user, mb.ID)
-			want[k], configs[k] = mb, watchConfig(mb, rules)
+			want[k], configs[k] = mb, watchConfig(mb, rules, confined)
 		}
 	}
 	m.watch.mu.Lock()
@@ -186,7 +189,7 @@ func (m *Manager) runWatcher(ctx context.Context, w *watcher) {
 			m.setAuthFailed(w.user, mb)
 			return
 		}
-		slog.Info("T-Mail: connection of a mailbox lost", "account", w.user, "mailbox", w.id, "err", safeText(fmt.Sprint(err)))
+		slog.Info("T-Mail: connection of a mailbox lost", "account", w.user, "mailbox", w.id, "code", Code(err))
 		m.setStatus(w.user, w.id, StateUnreachable, Code(err))
 		if m.clock().Sub(started) > 5*time.Minute {
 			delay = m.backoffMin
@@ -216,7 +219,7 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 	if err != nil {
 		return err
 	}
-	c, err := m.connect(ctx, user, mb, password, handler)
+	c, budget, err := m.connect(ctx, user, mb, password, handler)
 	if err != nil {
 		return err
 	}
@@ -226,7 +229,23 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 	limited := func(work func() error) error {
 		timer := time.AfterFunc(commandTimeout, func() { _ = c.Close() })
 		defer timer.Stop()
-		return work()
+		budget.set(budgetCommand)
+		err := work()
+		if budget.tooLarge() {
+			return ErrTooLarge
+		}
+		return err
+	}
+	// drain handles new mail in rounds of a hundred.
+	drain := func() error {
+		for range 20 {
+			more, err := m.checkNew(c, user, mb)
+			if err != nil || !more {
+				return err
+			}
+			budget.set(budgetCommand)
+		}
+		return nil
 	}
 	var data *imap.SelectData
 	if err := limited(func() error {
@@ -241,17 +260,20 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 			if err != nil {
 				return err
 			}
-			for _, u := range all.AllUIDs() {
-				next = max(next, uint32(u)+1)
-			}
+			next = maxUID(all.All) + 1
 		}
+		// UID 0 does not exist: an empty INBOX without UIDNEXT starts at 1
+		// (a search from 0 is refused and would loop).
+		next = max(next, 1)
 		m.baselineFor(user, mb.ID, data.UIDValidity, next)
-		return m.checkNew(c, user, mb)
+		return drain()
 	}); err != nil {
 		return classify(err)
 	}
 	m.setStatus(user, mb.ID, StateOK, "")
 	for {
+		// What a server sends while waiting counts as well.
+		budget.set(budgetCommand)
 		idle, err := c.Idle()
 		if err != nil {
 			return classify(err)
@@ -260,6 +282,9 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 		case <-ctx.Done():
 			return nil
 		case <-c.Closed():
+			if budget.tooLarge() {
+				return ErrTooLarge
+			}
 			return ErrUnreachable
 		case <-wake:
 		case <-time.After(m.idleRestart):
@@ -271,7 +296,7 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 			if err := idle.Wait(); err != nil {
 				return err
 			}
-			return m.checkNew(c, user, mb)
+			return drain()
 		}); err != nil {
 			return classify(err)
 		}
@@ -304,25 +329,20 @@ func (m *Manager) advance(user, id string, uid uint32) {
 }
 
 // checkNew handles the mail of the INBOX from the baseline on.
-func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) error {
+func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) (more bool, err error) {
 	m.watch.mu.Lock()
 	b := m.watch.baseline[key(user, mb.ID)]
 	m.watch.mu.Unlock()
-	data, err := c.UIDSearch(&imap.SearchCriteria{UID: []imap.UIDSet{{imap.UIDRange{Start: imap.UID(b.next), Stop: 0}}}}, nil).Wait()
+	data, err := c.UIDSearch(&imap.SearchCriteria{UID: []imap.UIDSet{{imap.UIDRange{Start: imap.UID(max(b.next, 1)), Stop: 0}}}}, nil).Wait()
 	if err != nil {
-		return err
+		return false, err
 	}
-	var uids []uint32
-	for _, u := range data.AllUIDs() {
-		if uint32(u) >= b.next {
-			uids = append(uids, uint32(u))
-		}
-	}
-	slices.Sort(uids)
+	// At most a hundred a round; the rest comes in the next one.
+	uids := uidsFrom(data.All, b.next, 100)
 	if len(uids) > 0 {
-		msgs, err := c.Fetch(uidSet(uids...), &imap.FetchOptions{UID: true, Envelope: true, Flags: true}).Collect()
+		msgs, err := collect(c.Fetch(uidSet(uids...), &imap.FetchOptions{UID: true, Envelope: true, Flags: true}))
 		if err != nil {
-			return err
+			return false, err
 		}
 		slices.SortFunc(msgs, func(a, b *imapclient.FetchMessageBuffer) int { return int(int64(a.UID) - int64(b.UID)) })
 		rules := m.rulesOf(user, mb.ID)
@@ -350,9 +370,9 @@ func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) error 
 	}
 	unread, err := c.UIDSearch(&imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen, imap.FlagDeleted}}, nil).Wait()
 	if err == nil {
-		m.setUnread(user, mb.ID, len(unread.AllUIDs()))
+		m.setUnread(user, mb.ID, uidCount(unread.All))
 	}
-	return nil
+	return len(uids) == 100, nil
 }
 
 // ruleMatches tells whether a rule applies to a mail.
@@ -393,13 +413,13 @@ func (m *Manager) applyRules(c *imapclient.Client, user string, mb Mailbox, rule
 		}
 		if len(add) > 0 {
 			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: add}, nil).Close(); err != nil {
-				slog.Warn("T-Mail: rule could not set flags", "account", user, "rule", r.ID, "err", safeText(err.Error()))
+				slog.Warn("T-Mail: rule could not set flags", "account", user, "rule", r.ID, "code", Code(err))
 			}
 		}
 		if r.Then.MoveTo != "" && !strings.EqualFold(r.Then.MoveTo, "INBOX") {
 			data, err := c.Move(uidSet(uid), r.Then.MoveTo).Wait()
 			if err != nil {
-				slog.Warn("T-Mail: rule could not move a mail", "account", user, "rule", r.ID, "err", safeText(err.Error()))
+				slog.Warn("T-Mail: rule could not move a mail", "account", user, "rule", r.ID, "code", Code(err))
 				continue
 			}
 			var dest uint32
@@ -436,7 +456,11 @@ func (m *Manager) notice(user string, mb Mailbox, count int, from, subject strin
 		p.From, p.Subject = from, subject
 		return
 	}
-	n.pending[k] = &Notice{User: user, Mailbox: mb.ID, MailboxName: mb.Name, Count: count, From: from, Subject: subject}
+	label := mb.Name
+	if strings.Contains(label, "@") || strings.EqualFold(label, mb.Email) {
+		label = ""
+	}
+	n.pending[k] = &Notice{User: user, Mailbox: mb.ID, MailboxName: mb.Name, Label: label, Count: count, From: from, Subject: subject}
 	time.AfterFunc(m.noticeWindow, func() {
 		n.mu.Lock()
 		p := n.pending[k]
@@ -459,7 +483,7 @@ func Code(err error) string {
 		{ErrDisabled, "mail_disabled"}, {ErrAuthFailed, "mail_auth_failed"}, {ErrTLS, "mail_tls"},
 		{ErrHostForbidden, "mail_host_forbidden"}, {ErrTimeout, "mail_timeout"}, {ErrTooLarge, "mail_too_large"},
 		{ErrNotFound, "mail_not_found"}, {ErrFolderExists, "mail_folder_exists"}, {ErrSendFailed, "mail_send_failed"},
-		{ErrPasswordRequired, "mail_password_required"}, {ErrRateLimited, "mail_rate_limited"}, {ErrInvalid, "mail_invalid"}, {ErrNoPassword, "mail_no_password"}, {ErrUnreadable, "mail_settings_unreadable"},
+		{ErrPasswordRequired, "mail_password_required"}, {ErrRateLimited, "mail_rate_limited"}, {ErrBusy, "mail_busy"}, {ErrKeyMissing, "mail_key_missing"}, {ErrKeyDamaged, "mail_key_damaged"}, {ErrInvalid, "mail_invalid"}, {ErrNoPassword, "mail_no_password"}, {ErrUnreadable, "mail_settings_unreadable"},
 		{ErrUnreachable, "mail_unreachable"},
 	} {
 		if errors.Is(err, c.err) {
@@ -467,4 +491,11 @@ func Code(err error) string {
 		}
 	}
 	return "mail_unreachable"
+}
+
+// RoleChanged ends the connections of an account and starts its watchers
+// anew: where they may connect depends on the role.
+func (m *Manager) RoleChanged(user string) {
+	m.conns.close(user, "")
+	m.Sync(user)
 }

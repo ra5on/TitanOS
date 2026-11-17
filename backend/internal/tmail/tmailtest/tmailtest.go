@@ -62,7 +62,7 @@ type Servers struct {
 func Start(t testing.TB) *Servers {
 	t.Helper()
 	s := &Servers{t: t}
-	cert, pool := certificate(t)
+	cert, pool := Certificate(t)
 	s.Pool = pool
 	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 
@@ -130,9 +130,9 @@ func (s *Servers) Sent() []Received {
 	return append([]Received(nil), s.sent...)
 }
 
-// certificate makes a certificate for 127.0.0.1 and localhost and a pool
+// Certificate makes a certificate for 127.0.0.1 and localhost and a pool
 // that trusts it.
-func certificate(t testing.TB) (tls.Certificate, *x509.CertPool) {
+func Certificate(t testing.TB) (tls.Certificate, *x509.CertPool) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)

@@ -57,6 +57,7 @@ func (m *Manager) ForgetUser(name string) error {
 	}
 	m.conns.close(name, "")
 	m.events.closeUser(name)
+	m.forgetTargets(name)
 	m.notices.mu.Lock()
 	for k := range m.notices.pending {
 		if strings.HasPrefix(k, name+"\x00") {

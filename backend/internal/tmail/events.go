@@ -11,33 +11,46 @@ type Event struct {
 	Data any
 }
 
+// maxStreams is how many event streams an account may have open; a new
+// one ends the oldest (security review of 1.05).
+const maxStreams = 8
+
 type hub struct {
 	mu   sync.Mutex
-	subs map[string]map[chan Event]struct{}
+	subs map[string][]chan Event
 }
 
-// Subscribe returns the events of an account until cancel is called or
-// the account loses T-Mail (the channel is closed then).
+// Subscribe returns the events of an account until cancel is called, the
+// account loses T-Mail or it opens more than maxStreams (the channel is
+// closed then).
 func (m *Manager) Subscribe(user string) (<-chan Event, func()) {
 	ch := make(chan Event, 64)
 	h := &m.events
 	h.mu.Lock()
 	if h.subs == nil {
-		h.subs = map[string]map[chan Event]struct{}{}
+		h.subs = map[string][]chan Event{}
 	}
-	if h.subs[user] == nil {
-		h.subs[user] = map[chan Event]struct{}{}
+	if list := h.subs[user]; len(list) >= maxStreams {
+		close(list[0])
+		h.subs[user] = list[1:]
 	}
-	h.subs[user][ch] = struct{}{}
+	h.subs[user] = append(h.subs[user], ch)
 	h.mu.Unlock()
 	var once sync.Once
 	return ch, func() {
 		once.Do(func() {
 			h.mu.Lock()
 			defer h.mu.Unlock()
-			if _, ok := h.subs[user][ch]; ok {
-				delete(h.subs[user], ch)
-				close(ch)
+			list := h.subs[user]
+			for i, c := range list {
+				if c == ch {
+					close(ch)
+					h.subs[user] = append(list[:i:i], list[i+1:]...)
+					if len(h.subs[user]) == 0 {
+						delete(h.subs, user)
+					}
+					return
+				}
 			}
 		})
 	}
@@ -48,7 +61,7 @@ func (m *Manager) Subscribe(user string) (<-chan Event, func()) {
 func (h *hub) publish(user string, ev Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for ch := range h.subs[user] {
+	for _, ch := range h.subs[user] {
 		select {
 		case ch <- ev:
 		default:
@@ -60,7 +73,7 @@ func (h *hub) publish(user string, ev Event) {
 func (h *hub) closeUser(user string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for ch := range h.subs[user] {
+	for _, ch := range h.subs[user] {
 		close(ch)
 	}
 	delete(h.subs, user)
@@ -71,8 +84,8 @@ func (h *hub) closeUser(user string) {
 func (h *hub) closeAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for _, subs := range h.subs {
-		for ch := range subs {
+	for _, list := range h.subs {
+		for _, ch := range list {
 			close(ch)
 		}
 	}

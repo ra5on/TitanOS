@@ -140,6 +140,7 @@ func dropAttr(n *html.Node, name string) {
 
 // fixLink lets a link open only http(s) and mailto in a new window.
 func fixLink(n *html.Node) {
+	dropAttr(n, "title") // the sender's title may name another target
 	href, _ := attr(n, "href")
 	u, err := url.Parse(strings.TrimSpace(href))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "mailto") {
@@ -148,6 +149,58 @@ func fixLink(n *html.Node) {
 	}
 	setAttr(n, "target", "_blank")
 	setAttr(n, "rel", "noopener noreferrer")
+	// The real target shows on hover, whatever the text says.
+	setAttr(n, "title", u.String())
+	if u.Scheme == "mailto" {
+		return
+	}
+	shown := shownHost(textOf(n))
+	real := strings.ToLower(u.Hostname())
+	if shown == "" || real == "" || sameSite(shown, real) {
+		return
+	}
+	// The visible text names another domain: say where the link goes,
+	// right behind it.
+	setAttr(n, "data-tmail-mismatch", "1")
+	mark := &html.Node{Type: html.ElementNode, DataAtom: atom.Span, Data: "span",
+		Attr: []html.Attribute{{Key: "style", Val: "color:#b00020;font-weight:bold"}, {Key: "data-tmail-target", Val: real}}}
+	mark.AppendChild(&html.Node{Type: html.TextNode, Data: " \u26a0 " + real})
+	if n.Parent != nil {
+		n.Parent.InsertBefore(mark, n.NextSibling)
+	}
+}
+
+// textOf is the visible text of a node.
+func textOf(n *html.Node) string {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return b.String()
+}
+
+var hostInText = regexp.MustCompile(`(?i)(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,63})\b`)
+
+// shownHost is the domain a link text names, "" if it names none.
+func shownHost(text string) string {
+	m := hostInText.FindStringSubmatch(strings.TrimSpace(text))
+	if m == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(m[1], "."))
+}
+
+// sameSite tells whether two hosts belong together: equal, or one below
+// the other (www.example.com and example.com).
+func sameSite(a, b string) bool {
+	return a == b || strings.HasSuffix(a, "."+b) || strings.HasSuffix(b, "."+a)
 }
 
 // fixImage resolves cid: pictures and holds back the others; it reports

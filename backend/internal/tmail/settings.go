@@ -165,7 +165,8 @@ func cleanInput(in MailboxInput) (MailboxInput, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Email = strings.TrimSpace(in.Email)
 	in.User = strings.TrimSpace(in.User)
-	in.SenderName = strings.TrimSpace(in.SenderName)
+	in.SenderName = strings.TrimSpace(stripInvisible(in.SenderName))
+	in.Name = strings.TrimSpace(stripInvisible(in.Name))
 	if !shortText(in.SenderName, 128) {
 		return in, invalid("senderName")
 	}
@@ -474,4 +475,25 @@ func (m *Manager) rulesOf(user, id string) []Rule {
 		}
 	}
 	return out
+}
+
+// stripInvisible drops format characters (Unicode Cf, bidi controls).
+func stripInvisible(s string) string {
+	return strings.Map(func(r rune) rune {
+		if invisible(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// MailboxCount is the number of mailboxes of an account (for the question
+// before it is deleted); none of an earlier account of the name.
+func (m *Manager) MailboxCount(user string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if f := m.fileLocked(user); f != nil {
+		return len(f.Mailboxes)
+	}
+	return 0
 }
