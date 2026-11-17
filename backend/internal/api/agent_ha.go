@@ -10,6 +10,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
@@ -89,6 +90,68 @@ func (b *agentToolbox) haStatistics(ctx context.Context, _ *agent.Chat, args jso
 	return agent.Outcome{Text: string(data)}, nil
 }
 
+// haEntityOf is the entity of an automation or script by the id of its
+// config: a script's id is its object id, an automation's is the "id"
+// attribute of its state.
+func haEntityOf(ctx context.Context, ha *homeassistant.Manager, kind, id string) (string, error) {
+	if kind == "script" {
+		return "script." + id, nil
+	}
+	states, err := ha.States(ctx, false)
+	if err != nil {
+		return "", err
+	}
+	for _, st := range states {
+		if strings.HasPrefix(st.EntityID, "automation.") && fmt.Sprint(st.Attributes["id"]) == id {
+			return st.EntityID, nil
+		}
+	}
+	return "", toolcatalog.Errorf("no automation with the id %q is known to Home Assistant; it cannot be checked against the release", id)
+}
+
+// haRestoreSecrets puts back, at the same place, what the agent only saw
+// masked: where the new value equals the masked previous one.
+func haRestoreSecrets(ctx context.Context, allowed func(context.Context, string) bool, v, prev any) any {
+	return haRestore(newHAMasker(ctx, allowed), "", v, prev)
+}
+
+func haRestore(m *haMasker, key string, v, prev any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		p, _ := prev.(map[string]any)
+		out := make(map[string]any, len(x))
+		for k, vv := range x {
+			out[k] = haRestore(m, k, vv, p[k])
+		}
+		return out
+	case []any:
+		p, _ := prev.([]any)
+		out := make([]any, len(x))
+		for i, vv := range x {
+			var pv any
+			if i < len(p) {
+				pv = p[i]
+			}
+			out[i] = haRestore(m, key, vv, pv)
+		}
+		return out
+	case string:
+		if prev == nil {
+			return x
+		}
+		if masked, ok := m.value(key, prev).(string); ok && masked == x && masked != prev {
+			if (strings.Contains(x, haSecretMark) || strings.Contains(x, "<removed>")) && !strings.Contains(x, "(not released") {
+				return prev
+			}
+		}
+		// A value masked as a whole (a secret object such as headers).
+		if x == haSecretMark && haSecretKey.MatchString(key) {
+			return prev
+		}
+	}
+	return v
+}
+
 func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error) {
 	env := b.s.agentEnv()
 	return func(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
@@ -112,7 +175,37 @@ func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, js
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		err = ha.SaveConfig(ctx, kind, req.ID, req.Config)
+		// Security review 1.10, B1: an existing automation or script is
+		// changed only when it is released, and the agent gets its previous
+		// version masked like ha_config_read gives it.
+		var prev any
+		if before != nil {
+			entity, err := haEntityOf(ctx, ha, kind, req.ID)
+			if err != nil {
+				return agent.Outcome{}, err
+			}
+			if !ha.AllowedCtx(ctx, entity) {
+				return agent.Outcome{}, toolcatalog.Errorf("%s is not released for the agent (%s)", entity, whereHA)
+			}
+			if err := json.Unmarshal(before, &prev); err != nil {
+				return agent.Outcome{}, err
+			}
+		}
+		// Secrets the agent only saw as stand-ins are put back from the
+		// previous version, at the same place.
+		config, ok := haRestoreSecrets(ctx, ha.AllowedCtx, req.Config, prev).(map[string]any)
+		if !ok {
+			return agent.Outcome{}, toolcatalog.Errorf("give the config as an object")
+		}
+		if haHasMarks(config, "(not released", haSecretMark, "<removed>", agent.CutMark) {
+			return agent.Outcome{}, toolcatalog.Errorf("the config holds stand-ins (%s, %s or %s) of a masked or shortened result; it cannot be saved like that. Change only what you can see whole, or let the person change it in Home Assistant", haHiddenMark, haSecretMark, agent.CutMark)
+		}
+		check := newHAMasker(ctx, ha.AllowedCtx)
+		check.value("", config)
+		if check.hidden {
+			return agent.Outcome{}, toolcatalog.Errorf("the config names devices, areas or services that are not released for the agent (or a device_id/area_id); it cannot be saved from here. The person can release them under %s", whereHA)
+		}
+		err = ha.SaveConfig(ctx, kind, req.ID, config)
 		// Not a route of TitanOS, so the activity log hears it from here.
 		if env.activity != nil {
 			status := http.StatusOK
@@ -125,9 +218,14 @@ func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, js
 			return agent.Outcome{}, err
 		}
 		out := map[string]any{"saved": kind + "." + req.ID}
-		if before != nil {
-			out["previous"] = json.RawMessage(before)
-			out["note"] = "The previous version is above; save it again to undo."
+		if prev != nil {
+			m := newHAMasker(ctx, ha.AllowedCtx)
+			out["previous"] = m.value("", prev)
+			out["note"] = "The previous version is above; save it again to undo (not where it shows " + haHiddenMark + ": then the person undoes it in Home Assistant)."
+			if why := m.why(); why != "" {
+				out["hidden"] = true
+				out["why"] = why
+			}
 		}
 		res, err := toolcatalog.JSON(out)
 		return agent.Outcome{Text: res.Text, Note: "homeassistant", NoteText: fmt.Sprintf("%s %s", kind, req.ID)}, err

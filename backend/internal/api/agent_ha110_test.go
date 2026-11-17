@@ -165,7 +165,7 @@ func TestAgentHALogbook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result["total"] != float64(1) || result["hidden"] != true || strings.Contains(text, "Schloss") || strings.Contains(text, "started") {
+	if result["shown"] != float64(1) || result["hidden"] != true || strings.Contains(text, "Schloss") || strings.Contains(text, "started") {
 		t.Fatalf("logbook: %s", text)
 	}
 	if !strings.HasPrefix(asked, "/api/logbook/") || !strings.Contains(asked, "end_time=") {
