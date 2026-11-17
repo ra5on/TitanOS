@@ -77,7 +77,6 @@ func doAs(t *testing.T, user, password, method, path, body string, headers ...st
 	return res, string(data)
 }
 
-const blob = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestPairingAndRepository(t *testing.T) {
 	m, root := newTarget(t)
