@@ -77,6 +77,20 @@ func nvrRunning(t *testing.T, ts *testServer) {
 	}
 }
 
+// nvrRestarted waits until the container was started again after starts
+// and Frigate runs: a change of the cameras has been applied.
+func nvrRestarted(t *testing.T, ts *testServer, engine *nvr.DevEngine, starts int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for engine.StartCount() <= starts {
+		if time.Now().After(deadline) {
+			t.Fatal("Frigate was not restarted with the new configuration")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	nvrRunning(t, ts)
+}
+
 func TestNVRRoutesNeedTheRightRole(t *testing.T) {
 	ts, _ := nvrServer(t)
 	admin := []struct{ method, path string }{
@@ -543,17 +557,23 @@ func newLocalServer(t *testing.T, handler http.Handler) string {
 // administrators find them under the camera, listed as deleted, other
 // accounts never.
 func TestNVRDeletedCameras(t *testing.T) {
-	ts, _ := nvrServer(t)
+	ts, manager := nvrServer(t)
 	ts.setup()
 	nvrRunning(t, ts)
+	engine := manager.Engine.(*nvr.DevEngine)
 	guest := ts.guest("gast")
 	ts.request("PUT", "/api/v1/users/gast/cameras", map[string]any{"cameras": map[string]any{"einfahrt": map[string]any{"live": true, "recordings": true}}})
 	if res, body := ts.do(guest, "GET", "/api/v1/nvr/cameras/einfahrt/recordings/summary", nil); res.StatusCode != 200 {
 		t.Fatalf("before: %d %s", res.StatusCode, body)
 	}
+	starts := engine.StartCount()
 	if res, body := ts.request("DELETE", "/api/v1/nvr/cameras/einfahrt", nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", res.StatusCode, body)
 	}
+	// The deletion rewrites config.yml and restarts Frigate (as on the NAS);
+	// meanwhile recordings and events answer nvr_not_running. The checks
+	// below begin once Frigate runs with the new configuration.
+	nvrRestarted(t, ts, engine, starts)
 	var list struct {
 		Cameras []nvr.CameraView `json:"cameras"`
 	}

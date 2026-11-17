@@ -379,6 +379,14 @@ func (e *DevEngine) RestartEngine() {
 	e.engineStarted = time.Now()
 }
 
+// StartCount is Starts, read under the engine's lock: how often the
+// container was started or restarted so far.
+func (e *DevEngine) StartCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Starts
+}
+
 // Spec is what the container was last created from.
 func (e *DevEngine) Spec() docker.NVRSpec {
 	e.mu.Lock()
