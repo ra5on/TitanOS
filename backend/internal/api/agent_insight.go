@@ -722,6 +722,12 @@ func releaseFile(shown string) string {
 	return parts[0] + "." + minor + ".0"
 }
 
+// scheduleLine names a planned task with when it runs.
+func scheduleLine(sc agent.Schedule) string {
+	when := strings.TrimSpace(strings.Join([]string{sc.Every, sc.Date, sc.At}, " "))
+	return fmt.Sprintf("%q (%s, %s)", sc.Name, sc.Kind, when)
+}
+
 // scheduleDeleteTool lets the agent take back a planned task or reminder
 // of the account (V15: "Lösch die Erinnerung wieder").
 func (b *agentToolbox) scheduleDeleteTool() *agentTool {
@@ -742,7 +748,8 @@ func (b *agentToolbox) scheduleDeleteTool() *agentTool {
 				if i < 0 {
 					return nil, agent.ErrNotFound
 				}
-				name = list[i].Name
+				// What it was stays in the chat, so it can be made again.
+				name = scheduleLine(list[i]) + " – task: " + list[i].Task
 				return slices.Delete(list, i, i+1), nil
 			})
 			if errors.Is(err, agent.ErrNotFound) {

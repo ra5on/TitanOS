@@ -445,6 +445,16 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if t.name == "schedule_delete" && chat != nil && (chat.Tainted || chat.OutsideSkill) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
+	if t.name == "schedule_delete" {
+		// The card names the task, not only its id.
+		if list, err := b.s.agentStore().Schedules(b.user.Name); err == nil {
+			for _, sc := range list {
+				if sc.ID == argString(args, "id") {
+					p.Summary = "schedule_delete: " + scheduleLine(sc)
+				}
+			}
+		}
+	}
 	if t.name == "code_run" {
 		if _, err := parseCode(args); err != nil {
 			return agent.Prepared{}, err

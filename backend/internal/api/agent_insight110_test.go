@@ -287,7 +287,7 @@ func TestAgentScheduleDelete(t *testing.T) {
 	if err := store.SaveSchedules("alex", []agent.Schedule{{ID: "s1", Name: "Müll", Task: "Müll raus", Kind: "reminder", Every: "once", Date: "2026-11-18", At: "09:00"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, text, err := runAgentTool(t, ts, ts.server.agentSettings(), "schedule_delete", map[string]any{"id": "s1"}); err != nil || !strings.Contains(text, "Müll") {
+	if _, text, err := runAgentTool(t, ts, ts.server.agentSettings(), "schedule_delete", map[string]any{"id": "s1"}); err != nil || !strings.Contains(text, "Müll raus") || !strings.Contains(text, "09:00") {
 		t.Fatalf("delete: %q %v", text, err)
 	}
 	if list, _ := store.Schedules("alex"); len(list) != 0 {
@@ -316,6 +316,11 @@ func TestAgentScheduleDeleteFollowsTheRights(t *testing.T) {
 		return prepared.Mode
 	}
 	plain := func() *agent.Chat { return &agent.Chat{ID: agent.NewID()} }
+	ts.server.agentStore().SaveSchedules("alex", []agent.Schedule{{ID: "s1", Name: "Müll", Task: "Müll raus", Kind: "reminder", Every: "once", Date: "2026-11-18", At: "09:00"}})
+	box := ts.server.newAgentToolbox(alex, ts.server.agentSettings())
+	if p, err := box.Prepare(context.Background(), plain(), "schedule_delete", args); err != nil || !strings.Contains(p.Summary, "Müll") || !strings.Contains(p.Summary, "09:00") {
+		t.Fatalf("card: %q %v", p.Summary, err)
+	}
 	cases := []struct {
 		name string
 		p    agent.Policy
