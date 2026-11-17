@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -128,7 +130,9 @@ func (s *Server) fileTools(user auth.User) []toolcatalog.Tool {
 			return s.readPDF(ctx, root, q.Path, q.First, q.Last, q.OCR)
 		}),
 		read("files_search", "Search files recursively inside one exact root returned by files_list. For photos use extension=images and omit query; query matches file names literally, not file types. Repeat for other accessible roots as needed.",
-			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."}}, "root"),
+			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."},
+				"minSize": map[string]any{"type": "number", "minimum": 0, "description": "Only files of at least this many MB."},
+				"sort":    enum("Order: size (biggest first), modified (newest first) or name.", "size", "modified", "name")}, "root"),
 			s.catalogFilesSearch(user)),
 		actionTool("file_write", "Propose to write a file: plain text, Markdown, CSV, JSON, or a Word (.docx), Excel (.xlsx) or PDF document. For docx and pdf, write the content as Markdown (headings, lists, tables, bold, italic). For xlsx, give sheets or CSV content.",
 			map[string]any{"root": str("Root ID such as share/Documents."), "path": str("Path of the file inside the root; missing folders are created."),
@@ -282,6 +286,8 @@ func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.R
 		var req struct {
 			Root, Query, Path, Extension string
 			Offset                       int
+			MinSize                      float64 `json:"minSize"`
+			Sort                         string
 		}
 		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
@@ -311,10 +317,25 @@ func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.R
 			return nil, catalogFileError(err)
 		}
 		found := []files.FoundEntry{}
+		locked, _ := ctx.Value(agentFolderLockKey{}).(agentFolderLock)
 		for _, e := range result.Entries {
-			if !hiddenPath(e.Path) {
+			// The KI-Agent's locked folders are left out before counting.
+			if locked != nil && locked(root.ID, e.Path) {
+				continue
+			}
+			// 1.10 (V15): "größte Dateien" without paging through everything.
+			if !hiddenPath(e.Path) && (req.MinSize <= 0 || !e.Dir && float64(e.Size) >= req.MinSize*1e6) {
 				found = append(found, e)
 			}
+		}
+		switch req.Sort {
+		case "size":
+			slices.SortStableFunc(found, func(a, b files.FoundEntry) int { return cmp.Compare(b.Size, a.Size) })
+		case "modified":
+			slices.SortStableFunc(found, func(a, b files.FoundEntry) int { return b.Modified.Compare(a.Modified) })
+		case "", "name":
+		default:
+			return nil, toolcatalog.Errorf("sort must be size, modified or name")
 		}
 		start := min(req.Offset, len(found))
 		end := min(start+100, len(found))

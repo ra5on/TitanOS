@@ -83,7 +83,7 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 	limit := r.resultLimit()
 	tools := r.offered(chat)
 	threshold := int(float64(r.Window) * compactAt)
-	if tokens(buildMessages(r.System, chat, limit), tools) < threshold {
+	if tokens(buildMessages(r.System, chat, limit, r.paged()), tools) < threshold {
 		return
 	}
 	from := 0
@@ -106,7 +106,7 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 	if i := lastUserIndex(chat); i >= 0 {
 		floor.Entries = append(floor.Entries, chat.Entries[i])
 	}
-	if tokens(buildMessages(r.System, floor, limit), tools) >= threshold {
+	if tokens(buildMessages(r.System, floor, limit, r.paged()), tools) >= threshold {
 		if r.squeezed {
 			return
 		}
@@ -292,6 +292,20 @@ func (r *Runner) offered(chat *Chat) []ToolSpec {
 	return out
 }
 
+// Explainer is a toolbox that can say why an area has no tools for the
+// account right now (a service switched off, no right, nothing connected;
+// 1.10). The model reads it with tools_load instead of guessing.
+type Explainer interface {
+	Missing() map[string]string
+}
+
+func (r *Runner) missing() map[string]string {
+	if ex, ok := r.Tools.(Explainer); ok {
+		return ex.Missing()
+	}
+	return nil
+}
+
 func builtinSpec(name, description string, params map[string]any) ToolSpec {
 	var s ToolSpec
 	s.Type = "function"
@@ -348,6 +362,9 @@ func (r *Runner) builtin(ctx context.Context, chat *Chat, name string, args json
 			}
 		}
 		if len(names) == 0 {
+			if why := r.missing()[req.Area]; why != "" {
+				return "", true, fmt.Errorf("the area %q has no tools for you now: %s. Tell the person; do not look for it another way", req.Area, why)
+			}
 			return "", true, fmt.Errorf("there is no area %q with tools for you", req.Area)
 		}
 		if !slices.Contains(chat.Areas, req.Area) {

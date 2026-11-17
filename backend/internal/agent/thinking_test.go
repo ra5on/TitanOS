@@ -190,7 +190,7 @@ func TestStoredAnswerWithReasoningIsCleanWhenRead(t *testing.T) {
 		t.Fatalf("read back: %q / %q", a.Content[:min(80, len(a.Content))], a.Thinking[:min(80, len(a.Thinking))])
 	}
 	// What the model gets as history is the answer only.
-	for _, m := range buildMessages("system", read, MaxResultText) {
+	for _, m := range buildMessages("system", read, MaxResultText, nil) {
 		if m.Role == "assistant" && strings.Contains(m.Content, "The user says") {
 			t.Fatal("the reasoning went back to the model as an answer")
 		}

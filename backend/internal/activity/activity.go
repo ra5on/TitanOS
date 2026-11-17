@@ -92,6 +92,9 @@ type Filter struct {
 	Failed bool
 	Before time.Time
 	Limit  int
+	// Keep is one more test an entry must pass (the KI-Agent searches
+	// without the address and without names typed at a failed login).
+	Keep func(Entry) bool
 }
 
 type Manager struct {
@@ -480,6 +483,9 @@ func (f Filter) match(e Entry, cutoff time.Time) bool {
 		return false
 	}
 	if f.Failed && e.OK {
+		return false
+	}
+	if f.Keep != nil && !f.Keep(e) {
 		return false
 	}
 	if f.Text != "" {

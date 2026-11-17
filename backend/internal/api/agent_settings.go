@@ -56,8 +56,12 @@ type agentSettings struct {
 	MaxSteps  int    `json:"maxSteps,omitempty"`
 	// Users are the accounts besides owners that may use the agent
 	// ("KI-Agent erlaubt" per account). Owners always may.
-	Users     []string         `json:"users,omitempty"`
-	Policy    agent.Policy     `json:"policy"`
+	Users  []string     `json:"users,omitempty"`
+	Policy agent.Policy `json:"policy"`
+	// NVRNames lets nvr_events give the names of known faces and plates
+	// and the plates read (1.10, owner 17 Nov 2026: only with a switch of
+	// its own, off from the factory). Pictures never go to the agent.
+	NVRNames  bool             `json:"nvrNames,omitempty"`
 	Locations []agent.Location `json:"locations,omitempty"`
 	// WeeklyReport sends on Monday what the agent changed in the week.
 	WeeklyReport bool `json:"weeklyReport,omitempty"`
@@ -612,6 +616,11 @@ func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 	if box.tools["photos_search"] == nil {
 		_, set := settings.Policy.Tools["photos_search"]
 		views = append(views, agentToolView{Name: "photos_search", Area: agent.AreaPhotos, Kind: agent.KindRead, Mode: settings.Policy.Mode("photos_search", agent.AreaPhotos, agent.KindRead), Set: set})
+	}
+	// Likewise the area NVR (1.10) before a camera exists.
+	if box.tools["nvr_events"] == nil {
+		_, set := settings.Policy.Tools["nvr_events"]
+		views = append(views, agentToolView{Name: "nvr_events", Area: agent.AreaNVR, Kind: agent.KindRead, Mode: settings.Policy.Mode("nvr_events", agent.AreaNVR, agent.KindRead), Set: set})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views, "areas": agent.AgentAreas})
 }

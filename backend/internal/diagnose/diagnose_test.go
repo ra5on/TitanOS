@@ -94,8 +94,13 @@ func TestLogs(t *testing.T) {
 	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--after-cursor=s=abc;i=3") || strings.Contains(last, " -n ") {
 		t.Errorf("follow: %q", last)
 	}
+	// 1.10: a time window for the agent ("heute Nacht").
+	m.Logs(context.Background(), Query{Priority: 7, Since: time.Unix(1791900000, 0), Until: time.Unix(1791920000, 0)})
+	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--since=@1791900000") || !strings.Contains(last, "--until=@1791920000") {
+		t.Fatalf("window: %s", last)
+	}
 	m.Logs(context.Background(), Query{Priority: 7, Since: time.Unix(1791900000, 0)})
-	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--since=@1791900000") {
+	if last := system.calls[len(system.calls)-1]; !strings.Contains(last, "--since=@1791900000") || strings.Contains(last, "--until") {
 		t.Errorf("since: %q", last)
 	}
 	m.Logs(context.Background(), Query{Priority: 7})

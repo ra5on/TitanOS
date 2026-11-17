@@ -33,6 +33,9 @@ func (m *Manual) Files() []string {
 	}
 	var names []string
 	_ = fs.WalkDir(m.files, ".", func(name string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() && name == releasesDir {
+			return fs.SkipDir
+		}
 		if err == nil && !d.IsDir() && strings.HasSuffix(name, ".md") {
 			names = append(names, name)
 		}
@@ -132,4 +135,61 @@ func (m *Manual) Read(name, heading string) (string, bool) {
 		}
 	}
 	return text.String(), text.Len() > 0
+}
+
+// releasesDir holds the release notes of the newest versions (1.10, V14:
+// "Was ist neu?"). They are no part of Files and Search – the notes of a
+// dozen versions would crowd out the manual – but Release reads them.
+const releasesDir = "releases"
+
+// Release returns the notes of a version ("1.10.0" or "v1.10.0"); ok is
+// false when this build has none for it.
+func (m *Manual) Release(version string) (string, bool) {
+	if m == nil || m.files == nil {
+		return "", false
+	}
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if version == "" || strings.ContainsAny(version, "/\\") || strings.Contains(version, "..") {
+		return "", false
+	}
+	data, err := fs.ReadFile(m.files, path.Join(releasesDir, "v"+version+".md"))
+	return string(data), err == nil
+}
+
+// Releases lists the versions whose notes this build has, as in their
+// file names ("1.10.0"), newest first.
+func (m *Manual) Releases() []string {
+	if m == nil || m.files == nil {
+		return nil
+	}
+	entries, err := fs.ReadDir(m.files, releasesDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if v, ok := strings.CutPrefix(strings.TrimSuffix(e.Name(), ".md"), "v"); ok && strings.HasSuffix(e.Name(), ".md") {
+			out = append(out, v)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return versionLess(out[j], out[i]) })
+	return out
+}
+
+// versionLess compares versions like 1.9.0 and 1.10.0 by their numbers.
+func versionLess(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		var x, y int
+		for _, c := range pa[i] {
+			x = x*10 + int(c-'0')
+		}
+		for _, c := range pb[i] {
+			y = y*10 + int(c-'0')
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return len(pa) < len(pb)
 }

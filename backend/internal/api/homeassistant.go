@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -281,16 +282,20 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 			}
 			return ha.Capabilities(ctx, q.Entity)
 		})),
-		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors, automations, scripts, scenes …) with state, area and attributes (an automation's last_triggered). Only released ones are visible: with domain the result says released, and hidden:true with why when that kind is not released – then it is not a count of 0. Pages of 100.",
+		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors, automations, scripts, scenes …) with state, area, device class and an automation's last run. Only released ones are visible: with domain the result says released, and hidden:true with why when that kind is not released – then it is not a count of 0. byDomain counts what is visible per domain. Pages of 100; ha_state has all attributes of one.",
 			schema(props(map[string]any{
-				"domain": str("Only this domain, e.g. light."),
-				"area":   str("Only entities in an area whose name contains this text."),
-				"search": str("Text in the ID or name."),
-				"offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset."},
+				"domain":       str("Only this domain, e.g. light, binary_sensor, lock."),
+				"device_class": str("Only this device class, e.g. window, door, garage_door, motion (comma-separated for several)."),
+				"area":         str("Only entities in an area whose name contains this text."),
+				"search":       str("Text in the ID or name."),
+				"attributes":   map[string]any{"type": "boolean", "description": "Also all attributes (long; only when needed)."},
+				"offset":       map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset."},
 			})), true,
 			on(func(ctx context.Context, ha *homeassistant.Manager, args json.RawMessage) (any, error) {
 				var q struct {
 					Domain, Area, Search string
+					DeviceClass          string `json:"device_class"`
+					Attributes           *bool
 					Offset               int
 				}
 				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
@@ -300,7 +305,33 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				if err != nil {
 					return nil, err
 				}
+				// 1.10 (V5): the agent gets a short form – all attributes of
+				// 100 devices were 40–150 KB and cut after a few dozen. MCP
+				// keeps what it had (attributes unless asked otherwise).
+				_, fromAgent := ctx.Value(agentCallKey{}).(string)
+				withAttributes := !fromAgent
+				if q.Attributes != nil {
+					withAttributes = *q.Attributes
+				}
+				classes := map[string]bool{}
+				for _, c := range strings.Split(q.DeviceClass, ",") {
+					if c = strings.TrimSpace(strings.ToLower(c)); c != "" {
+						classes[c] = true
+					}
+				}
 				type entity struct {
+					Policy        *homeassistant.EntityPolicy `json:"policy,omitempty"`
+					Attributes    map[string]any              `json:"attributes,omitempty"`
+					LastChanged   time.Time                   `json:"lastChanged"`
+					ID            string                      `json:"id"`
+					Name          string                      `json:"name"`
+					State         string                      `json:"state"`
+					Area          string                      `json:"area,omitempty"`
+					Unit          string                      `json:"unit,omitempty"`
+					DeviceClass   string                      `json:"deviceClass,omitempty"`
+					LastTriggered string                      `json:"lastTriggered,omitempty"`
+				}
+				type mcpEntity struct {
 					Policy      homeassistant.EntityPolicy `json:"policy"`
 					Attributes  map[string]any             `json:"attributes"`
 					LastChanged time.Time                  `json:"lastChanged"`
@@ -311,20 +342,46 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					Unit        string                     `json:"unit,omitempty"`
 				}
 				var list []entity
+				byDomain := map[string]int{}
 				for _, st := range states {
 					domain, _, _ := strings.Cut(st.EntityID, ".")
 					search := strings.ToLower(q.Search)
+					class, _ := st.Attributes["device_class"].(string)
 					if q.Domain != "" && domain != q.Domain || q.Area != "" && !strings.Contains(strings.ToLower(st.Area), strings.ToLower(q.Area)) ||
+						len(classes) > 0 && !classes[strings.ToLower(class)] ||
 						search != "" && !strings.Contains(strings.ToLower(st.EntityID+" "+st.Name()+" "+strings.Join(ha.PolicyCtx(ctx, st.EntityID).Aliases, " ")), search) {
 						continue
 					}
+					byDomain[domain]++
 					unit, _ := st.Attributes["unit_of_measurement"].(string)
-					list = append(list, entity{ha.PolicyCtx(ctx, st.EntityID), st.Attributes, st.LastChanged, st.EntityID, st.Name(), st.State, st.Area, unit})
+					e := entity{LastChanged: st.LastChanged, ID: st.EntityID, Name: st.Name(), State: st.State, Area: st.Area, Unit: unit, DeviceClass: class}
+					if p := ha.PolicyCtx(ctx, st.EntityID); len(p.Aliases) > 0 || p.ReadOnly || len(p.Services) > 0 || p.Description != "" {
+						e.Policy = &p
+					}
+					if withAttributes {
+						e.Attributes = st.Attributes
+					} else if v, ok := st.Attributes["last_triggered"]; ok && v != nil {
+						e.LastTriggered = fmt.Sprint(v)
+					}
+					list = append(list, e)
 				}
 				total := len(list)
 				start := min(q.Offset, total)
 				end := min(start+100, total)
-				result := map[string]any{"entities": list[start:end], "total": total}
+				var page any = list[start:end]
+				if !fromAgent && q.Attributes == nil && len(classes) == 0 {
+					// MCP: the same entries as before 1.10.
+					old := make([]mcpEntity, 0, end-start)
+					for _, e := range list[start:end] {
+						m := mcpEntity{ha.PolicyCtx(ctx, e.ID), e.Attributes, e.LastChanged, e.ID, e.Name, e.State, e.Area, e.Unit}
+						old = append(old, m)
+					}
+					page = old
+				}
+				result := map[string]any{"entities": page, "total": total}
+				if fromAgent {
+					result["byDomain"] = byDomain
+				}
 				if end < total {
 					result["cut"], result["nextOffset"] = true, end
 				}
@@ -339,7 +396,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					switch {
 					case !released:
 						result["hidden"], result["why"] = true, haDomainHidden(ha.OwnRelease(ctx), q.Domain, total)
-					case total == 0 && q.Area == "" && q.Search == "":
+					case total == 0 && q.Area == "" && q.Search == "" && len(classes) == 0:
 						result["note"] = "None present: the domain " + q.Domain + " is released and Home Assistant has no entity of it."
 					}
 				case total == 0 && !ha.ReleasesAll(ctx):

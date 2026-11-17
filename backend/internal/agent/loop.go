@@ -169,6 +169,10 @@ func keepResult(text string) string {
 	if len(text) <= MaxStoredResult {
 		return text
 	}
+	// A list is cut at a whole entry, with its counts first (1.10).
+	if fitted := fitResult(text, MaxStoredResult/2, nil, false); strings.HasPrefix(text, "{") && len(fitted) <= MaxStoredResult {
+		return fitted
+	}
 	cut := MaxStoredResult
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
@@ -177,7 +181,10 @@ func keepResult(text string) string {
 }
 
 // olderResultText is how much of a result of an earlier turn it sees.
-const olderResultText = 1500
+// 1.10 (V4): 3000 instead of 1500, and the fitter keeps counts and hints
+// of the result whatever the length, so that after "das stimmt nicht"
+// the model can still read what it based its answer on.
+const olderResultText = 3000
 
 // Hints the runner gives the model as notes; they are part of the
 // conversation for the model, short lines for the person.
@@ -187,7 +194,20 @@ const (
 	hintTime   = "[TitanOS] The time limit of this run is reached. Do not call tools now. Report in a few lines: what is done, what is still open, what the next step would be. The person can say \"Weiter\" to go on."
 )
 
-func buildMessages(system string, chat *Chat, resultLimit int) []Message {
+// Pager is a Toolbox that can say which tools take an offset for their
+// next page; the note of a cut list names an offset only for those.
+type Pager interface {
+	Paged(name string) bool
+}
+
+func (r *Runner) paged() func(string) bool {
+	if p, ok := r.Tools.(Pager); ok {
+		return p.Paged
+	}
+	return nil
+}
+
+func buildMessages(system string, chat *Chat, resultLimit int, paged func(string) bool) []Message {
 	if p := planText(chat.Plan); p != "" {
 		system += "\n\n" + p
 	}
@@ -229,9 +249,7 @@ func buildMessages(system string, chat *Chat, resultLimit int) []Message {
 			if i < lastUser {
 				limit = min(olderResultText, resultLimit)
 			}
-			if r := []rune(text); len(r) > limit {
-				text = string(r[:limit]) + "\n[… gekürzt / cut]"
-			}
+			text = fitResult(text, limit, e.Args, paged != nil && paged(e.Tool))
 			msgs = append(msgs, Message{Role: "tool", ToolName: e.Tool, Content: text})
 		case "note":
 			// A decision of the person is part of the conversation.
@@ -384,7 +402,7 @@ func (r *Runner) ask(ctx context.Context, chat *Chat, tools []ToolSpec) (Message
 			}
 			wait *= 3
 		}
-		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: buildMessages(r.System, chat, r.resultLimit()), Tools: tools, Think: r.Think, Context: r.Context, KeepAlive: r.KeepAlive}, func(c Chunk) {
+		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: buildMessages(r.System, chat, r.resultLimit(), r.paged()), Tools: tools, Think: r.Think, Context: r.Context, KeepAlive: r.KeepAlive}, func(c Chunk) {
 			if c.Thinking != "" {
 				r.emit(Event{Type: "thinking", Text: c.Thinking})
 			}

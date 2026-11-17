@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -79,7 +80,12 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	}
 	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
 	on := env.servicesOn()
-	off := func(area string) bool {
+	// A switched-off service has no tools; agent_access and tools_load say
+	// why (1.10). System containers have a switch of their own.
+	off := func(name, area string) bool {
+		if strings.HasPrefix(name, "lxc_") {
+			return !on["lxc"]
+		}
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}
 	add := func(t *agentTool) {
@@ -90,7 +96,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		b.ordered = append(b.ordered, t)
 	}
 	for _, tool := range s.catalogTools(user) {
-		if mcpSkip[tool.Name] || off(tool.Area) {
+		if mcpSkip[tool.Name] || off(tool.Name, tool.Area) {
 			continue
 		}
 		params := tool.Parameters
@@ -103,6 +109,19 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 			t.area = toolcatalog.AreaSystem
 		}
 		t.kind = agent.KindOf(tool.Name, tool.Read != nil)
+		// V12 (owner 17 Nov 2026): looking for updates changes nothing on
+		// the NAS; installing still asks.
+		switch tool.Name {
+		case "docker_check_updates":
+			t.kind = agent.KindRead
+		case "update_action":
+			t.kindOf = func(args json.RawMessage) string {
+				if argString(args, "action") == "check" {
+					return agent.KindRead
+				}
+				return agent.KindChange
+			}
+		}
 		if t.params == nil {
 			t.params = schema(nil)
 		}
@@ -111,7 +130,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	allowed := func(scope string) bool { return !auth.AdminScope(scope) || user.Role.CanAdminister() }
 	for i := range publicRoutes {
 		route := &publicRoutes[i]
-		if route.Tool == "" || !allowed(route.Scope) || off(routeArea(route.Scope)) {
+		if route.Tool == "" || !allowed(route.Scope) || off(route.Tool, routeArea(route.Scope)) || agentRetired[route.Tool].survivor != "" {
 			continue
 		}
 		mt := s.routeTool(*route)
@@ -146,6 +165,12 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		add(t)
 	}
 	if t := b.photosTool(); t != nil {
+		add(t)
+	}
+	// 1.10: what the agent may see, and reading what happened.
+	add(b.accessTool())
+	add(b.scheduleDeleteTool())
+	for _, t := range b.insightTools() {
 		add(t)
 	}
 	return b
@@ -209,8 +234,70 @@ func (b *agentToolbox) offered(t *agentTool) bool {
 		if b.modeIn(t, area, t.kind) != agent.ModeDeny {
 			return true
 		}
+		// A tool that also reads (update_action check) is offered where
+		// reading is allowed; Prepare decides per call.
+		if t.kindOf != nil && t.kind != agent.KindAgent && b.modeIn(t, area, agent.KindRead) != agent.ModeDeny {
+			return true
+		}
 	}
 	return false
+}
+
+// agentRetired are tools of the public routes the agent no longer gets
+// (1.10, V10, owner 17 Nov 2026: one tool for each task; MCP keeps them),
+// with the tool that does the same and for which of its calls. A rule the
+// person set for an old name still holds for those calls.
+var agentRetired = map[string]struct {
+	survivor string
+	covers   func(args json.RawMessage) bool
+}{
+	"files_read_text":  {"file_read", func(json.RawMessage) bool { return true }},
+	"files_write_text": {"file_write", func(args json.RawMessage) bool { return argBool(args, "replace") }},
+	"files_create":     {"file_write", func(args json.RawMessage) bool { return !argBool(args, "replace") }},
+	"files_copy":       {"file_copy", func(json.RawMessage) bool { return true }},
+	"vm_start":         {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "start" }},
+	"vm_shutdown":      {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "shutdown" }},
+	"vm_reboot":        {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "reboot" }},
+}
+
+// callMode is the mode of one call: modeIn, with the person's rules for
+// retired tools that did the same.
+func (b *agentToolbox) callMode(t *agentTool, area, kind string, args json.RawMessage) string {
+	p := b.settings.Policy
+	mode := p.Mode(t.name, area, kind)
+	old := ""
+	for name, r := range agentRetired {
+		if r.survivor != t.name || !agent.ValidMode(p.Tools[name]) || !r.covers(args) {
+			continue
+		}
+		if old == "" {
+			old = p.Tools[name]
+		} else {
+			old = agent.Stricter(old, p.Tools[name])
+		}
+	}
+	if old != "" {
+		if agent.ValidMode(p.Tools[t.name]) {
+			mode = agent.Stricter(mode, old)
+		} else {
+			mode = old
+		}
+	}
+	if b.user.Name == agent.AssistProfile {
+		return b.settings.HA.assistMode(t.name, area, kind, mode)
+	}
+	return mode
+}
+
+// argBool is a yes/no argument of a call, false when it is missing.
+func argBool(args json.RawMessage, key string) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(args, &fields) != nil {
+		return false
+	}
+	var v bool
+	_ = json.Unmarshal(fields[key], &v)
+	return v
 }
 
 // Specs are the tools the model is offered: all but those set to
@@ -224,12 +311,35 @@ func (b *agentToolbox) Specs(chat *agent.Chat) []agent.ToolSpec {
 		var spec agent.ToolSpec
 		spec.Type = "function"
 		spec.Function.Name = t.name
-		spec.Function.Description = strings.TrimSpace(strings.Split(t.description, "\n")[0])
+		spec.Function.Description = specDescription(t.description)
 		spec.Function.Parameters = t.params
 		spec.Area, spec.Kind = t.area, t.kind
 		specs = append(specs, spec)
 	}
 	return specs
+}
+
+// specDescription is the first line of a description, without the "Propose
+// to" of the MCP catalog: for the agent the call does it (TitanOS asks the
+// person where the rights say so), it does not propose it (1.10, V10).
+func specDescription(d string) string {
+	d = strings.TrimSpace(strings.Split(d, "\n")[0])
+	if rest, ok := strings.CutPrefix(d, "Propose to "); ok && rest != "" {
+		d = strings.ToUpper(rest[:1]) + rest[1:]
+	}
+	return d
+}
+
+// Paged reports whether a tool takes an offset for its next page (the note
+// of a cut list names one only then).
+func (b *agentToolbox) Paged(name string) bool {
+	t, ok := b.tools[name]
+	if !ok {
+		return false
+	}
+	props, _ := t.params["properties"].(map[string]any)
+	_, ok = props["offset"]
+	return ok
 }
 
 // Prepare checks a call against the policy and plans it.
@@ -239,7 +349,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		return agent.Prepared{}, fmt.Errorf("there is no tool %q", name)
 	}
 	area := t.areaFor(args)
-	if b.modeIn(t, area, t.kind) == agent.ModeDeny && t.kind != agent.KindCreate && !(t.name == "file_write") {
+	kind := t.kind
+	if t.kindOf != nil {
+		kind = t.kindOf(args)
+	}
+	if b.callMode(t, area, kind, args) == agent.ModeDeny && kind != agent.KindCreate && !(t.name == "file_write") {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
 	if t.own == nil {
@@ -249,10 +363,6 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	}
 	p := agent.Prepared{Tool: name, Args: args, Area: area, Untrusted: t.untrusted}
 	ctx = b.haContext(ctx, t)
-	kind := t.kind
-	if t.kindOf != nil {
-		kind = t.kindOf(args)
-	}
 	if t.plan != nil {
 		planned := args
 		var fields map[string]json.RawMessage
@@ -283,7 +393,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		p.Summary = t.name + " " + compactArgs(args)
 	}
-	mode := b.modeIn(t, area, kind)
+	mode := b.callMode(t, area, kind, args)
 	if mode == agent.ModeDeny {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
@@ -326,6 +436,24 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// what the model gives them to a server outside TitanOS (0.99).
 	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	if t.area == agent.AreaNVR {
+		mode = b.nvrMode(t.name, mode)
+	}
+	// Deleting planned tasks cannot be undone: after outside content (a
+	// file could say "delete all reminders") the person decides (M4).
+	if t.name == "schedule_delete" && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	if t.name == "schedule_delete" {
+		// The card names the task, not only its id.
+		if list, err := b.s.agentStore().Schedules(b.user.Name); err == nil {
+			for _, sc := range list {
+				if sc.ID == argString(args, "id") {
+					p.Summary = "schedule_delete: " + scheduleLine(sc)
+				}
+			}
+		}
 	}
 	if t.name == "code_run" {
 		if _, err := parseCode(args); err != nil {
@@ -535,6 +663,11 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		chatID = chat.ID
 	}
 	ctx = context.WithValue(ctx, agentCallKey{}, chatID)
+	if b.hasDenyRules() {
+		ctx = context.WithValue(ctx, agentFolderLockKey{}, agentFolderLock(func(root, p string) bool {
+			return b.realFolderMode(root, p, false) == agent.ModeDeny
+		}))
+	}
 	ctx = b.haContext(ctx, t)
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
@@ -546,7 +679,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(res.Text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, p.Args, res.Text)}, nil
 	case t.plan != nil:
 		var a toolcatalog.Action
 		if err := json.Unmarshal(p.Plan, &a); err != nil {
@@ -577,19 +710,40 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		return agent.Outcome{Text: b.filterHidden(text)}, nil
+		return agent.Outcome{Text: b.filterHidden(t.name, p.Args, text)}, nil
 	}
 	return agent.Outcome{}, errors.New("tool cannot run")
 }
 
+// agentFolderLockKey carries the folder rules of the agent into a search
+// of the catalog, so that what lies in a locked folder is left out before
+// it is counted and paged (security review 1.10, N4).
+type agentFolderLockKey struct{}
+
+// agentFolderLock reports whether a path of a root lies in a locked folder.
+type agentFolderLock func(root, p string) bool
+
 // filterHidden drops entries of listings and searches that lie in folders
-// locked for the agent.
-func (b *agentToolbox) filterHidden(text string) string {
-	if len(b.settings.Policy.Folders) == 0 || !strings.Contains(text, `"entries"`) {
+// locked for the agent, and counts them in hidden. A search never counts:
+// with a name or a size it would tell what lies there (N4); its locked
+// matches are left out inside the search (agentFolderLockKey).
+func (b *agentToolbox) filterHidden(tool string, args json.RawMessage, text string) string {
+	if !b.hasDenyRules() || !strings.Contains(text, `"entries"`) && tool != "logs_search" {
 		return text
 	}
 	var out map[string]any
 	if json.Unmarshal([]byte(text), &out) != nil {
+		return text
+	}
+	if tool == "logs_search" {
+		return b.filterLogLines(out, text, argString(args, "search") != "")
+	}
+	if tool == "files_search" {
+		out["hidden"] = true
+		out["why"] = "Searches never show folders the person locked for the agent, and do not say whether anything there matched. Do not call a file missing because of it; folders can be opened for the agent under " + whereFolders + "."
+		if data, err := json.Marshal(out); err == nil {
+			return string(data)
+		}
 		return text
 	}
 	root, _ := out["root"].(string)
@@ -611,6 +765,69 @@ func (b *agentToolbox) filterHidden(text string) string {
 		}
 	}
 	out["entries"] = kept
+	// 1.10 (V1): say that something was left out, not what. Without it an
+	// empty folder and a locked one read the same.
+	if n := len(entries) - len(kept); n > 0 {
+		out["hidden"] = n
+		out["why"] = fmt.Sprintf("%d entries of this page lie in folders the person locked for the agent and are not shown (total counts them). Do not call the folder empty or a file missing because of it; they can be opened for the agent under %s.", n, whereFolders)
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return text
+	}
+	return string(data)
+}
+
+// filterLogLines leaves out lines of the journal that name a place in a
+// locked folder ("text file saved" root=share/Docs path=Privat/a.txt),
+// by name only (security review 1.10, N8). Rather too many lines go than
+// too few: a line naming a folder of the same name elsewhere goes too.
+func (b *agentToolbox) filterLogLines(out map[string]any, text string, search bool) string {
+	lines, ok := out["lines"].([]any)
+	if !ok {
+		return text
+	}
+	var needles []*regexp.Regexp
+	var dirs []string
+	for _, f := range b.settings.Policy.Folders {
+		if f.Mode != agent.ModeDeny {
+			continue
+		}
+		rel := strings.Trim(path.Clean("/"+f.Path), "/")
+		name := rel
+		if name == "" {
+			name = f.Root
+		}
+		needles = append(needles, regexp.MustCompile(`(^|[\s/="'])`+regexp.QuoteMeta(name)+`($|[\s/"'])`))
+		if base := b.rootDir(f.Root); base != "" {
+			dirs = append(dirs, filepath.Join(base, filepath.FromSlash(rel)))
+		}
+	}
+	kept := []any{}
+	dropped := 0
+	for _, l := range lines {
+		m, _ := l.(map[string]any)
+		msg, _ := m["message"].(string)
+		locked := false
+		for _, re := range needles {
+			locked = locked || re.MatchString(msg)
+		}
+		for _, d := range dirs {
+			locked = locked || strings.Contains(msg, d)
+		}
+		if locked {
+			dropped++
+			continue
+		}
+		kept = append(kept, l)
+	}
+	// A search says the same whether a locked line matched or not (N4).
+	if dropped == 0 && !search {
+		return text
+	}
+	out["lines"] = kept
+	out["hidden"] = true
+	out["why"] = "Lines that name folders the person locked for the agent are left out (no count). Do not read their absence as \"nothing happened\"; folders can be opened for the agent under " + whereFolders + "."
 	data, err := json.Marshal(out)
 	if err != nil {
 		return text

@@ -61,7 +61,23 @@
 	// PLAN 68: areas that are rarely changed wait behind "weitere Bereiche"
 	// – but only while nothing of them is set apart from the Schnellwahl;
 	// a changed area is always in view.
-	const RARE = ['backups', 'storage', 'shares', 'accounts', 'plugins', 'home', 'code'];
+	const RARE = [
+		'backups',
+		'storage',
+		'shares',
+		'accounts',
+		'plugins',
+		'home',
+		'history',
+		'nvr',
+		'code',
+	];
+	// 1.10: hints of areas whose tools behave apart from the Schnellwahl.
+	const areaHint: Record<string, MessageKey> = {
+		photos: 'agent.area.photosHint',
+		history: 'agent.area.historyHint',
+		nvr: 'agent.area.nvrHint',
+	};
 	const withTools = $derived(AREAS.filter((a) => tools.some((x) => x.area === a)));
 	function ownSetting(area: string): boolean {
 		if (!settings) return false;
@@ -127,7 +143,7 @@
 		{@const m = areaMode(settings.policy, area, list)}
 		<SettingRow
 			title={areaLabel(area)}
-			desc={(area === 'photos' ? t('agent.area.photosHint') + ' ' : '') +
+			desc={(areaHint[area] ? t(areaHint[area]) + ' ' : '') +
 				t('agent.toolCount', { count: list.length }) +
 				(m === 'mixed' ? ' · ' + t('agent.mixed') : '')}
 			bind:open={() => !!open[area], (on) => (open[area] = on)}
@@ -141,6 +157,25 @@
 					onchange={(v) => setArea(area, v)}
 				/>
 			{/snippet}
+			{#if area === 'nvr'}
+				<div class="srow-sub">
+					<label class="srow-text nvr-names" for="ag-nvr-names"
+						><span>{t('agent.nvrNames')}</span><span class="srow-desc"
+							>{t('agent.nvrNamesHint')}</span
+						></label
+					>
+					<div class="srow-ctl">
+						<input
+							id="ag-nvr-names"
+							type="checkbox"
+							class="switch"
+							role="switch"
+							checked={!!settings.nvrNames}
+							onchange={(e) => (settings!.nvrNames = e.currentTarget.checked)}
+						/>
+					</div>
+				</div>
+			{/if}
 			{#each list as tool (tool.name)}
 				<div class="srow-sub">
 					<span class="srow-text tname"
@@ -276,5 +311,12 @@
 		.frule-where {
 			flex-basis: 100%;
 		}
+	}
+	.nvr-names {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		flex: 1 1 0;
+		min-width: 0;
 	}
 </style>

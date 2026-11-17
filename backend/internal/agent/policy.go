@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"errors"
 	"path"
 	"slices"
@@ -49,6 +50,14 @@ const AreaCode = "code"
 
 // AreaMCP is the area of the tools of connected MCP servers (0.93).
 const AreaMCP = "mcp"
+
+// AreaHistory holds what happened on the NAS: the activity log, the
+// monitoring history and the capacity forecast (1.10). It only reads.
+const AreaHistory = "history"
+
+// AreaNVR holds the events of the cameras (1.10), without pictures. It
+// only reads, and asks first unless the person allowed it expressly.
+const AreaNVR = "nvr"
 
 // AreaPhotos is the area of the account's own photos in Immich (1.07). It
 // only reads; the tool exists only with the account's own Immich key.
@@ -220,7 +229,56 @@ func cleanPath(p string) string {
 
 // Areas of the agent in the order the settings show them, with the tool
 // areas of the catalog first.
-var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaPhotos, AreaWeb, AreaCode, AreaMCP}
+var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaHistory, AreaNVR, AreaPhotos, AreaWeb, AreaCode, AreaMCP}
+
+// newAreas are the areas since 1.10. On the stick their modes stand under
+// extraAreas: 1.09 refuses an unknown area when it saves the settings, so
+// it must not find them under areas (rollback, like extraDomains of the
+// Home Assistant release). The running app takes both together.
+var newAreas = []string{AreaHistory, AreaNVR}
+
+type policyJSON struct {
+	Preset     string            `json:"preset"`
+	Areas      map[string]string `json:"areas,omitempty"`
+	ExtraAreas map[string]string `json:"extraAreas,omitempty"`
+	Tools      map[string]string `json:"tools,omitempty"`
+	Folders    []FolderRule      `json:"folders,omitempty"`
+	WebFree    bool              `json:"webFree,omitempty"`
+}
+
+// MarshalJSON writes the modes of areas 1.09 does not know under extraAreas.
+func (p Policy) MarshalJSON() ([]byte, error) {
+	out := policyJSON{Preset: p.Preset, Tools: p.Tools, Folders: p.Folders, WebFree: p.WebFree}
+	for a, m := range p.Areas {
+		target := &out.Areas
+		if slices.Contains(newAreas, a) {
+			target = &out.ExtraAreas
+		}
+		if *target == nil {
+			*target = map[string]string{}
+		}
+		(*target)[a] = m
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalJSON takes areas and extraAreas together.
+func (p *Policy) UnmarshalJSON(data []byte) error {
+	var in policyJSON
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	*p = Policy{Preset: in.Preset, Areas: in.Areas, Tools: in.Tools, Folders: in.Folders, WebFree: in.WebFree}
+	for a, m := range in.ExtraAreas {
+		if p.Areas == nil {
+			p.Areas = map[string]string{}
+		}
+		if _, set := p.Areas[a]; !set {
+			p.Areas[a] = m
+		}
+	}
+	return nil
+}
 
 // ValidArea reports whether a is one of the areas.
 func ValidArea(a string) bool { return slices.Contains(AgentAreas, a) }

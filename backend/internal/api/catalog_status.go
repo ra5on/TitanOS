@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -444,9 +445,19 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 		MinLevel string `json:"minLevel"`
 		Search   string `json:"search"`
 		Lines    int    `json:"lines"`
+		Since    string `json:"since"`
+		Until    string `json:"until"`
 	}
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
+	}
+	since, err := parseMoment(req.Since, time.Now())
+	if err != nil {
+		return nil, toolcatalog.Errorf("since: %v", err)
+	}
+	until, err := parseMoment(req.Until, time.Now())
+	if err != nil {
+		return nil, toolcatalog.Errorf("until: %v", err)
 	}
 	if req.Source == "all" {
 		req.Source = ""
@@ -462,7 +473,7 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 	if len(req.Search) > 200 {
 		return nil, toolcatalog.Errorf("search is too long")
 	}
-	logs, err := env.diagnose.Logs(ctx, diagnose.Query{Source: req.Source, Priority: level, Search: req.Search, Lines: clampLines(req.Lines)})
+	logs, err := env.diagnose.Logs(ctx, diagnose.Query{Source: req.Source, Priority: level, Search: req.Search, Lines: clampLines(req.Lines), Since: since, Until: until})
 	if err != nil {
 		return nil, err
 	}
@@ -509,4 +520,35 @@ func (s *Server) toolLXC(ctx context.Context) (any, error) {
 		}
 	}
 	return map[string]any{"containers": list}, nil
+}
+
+// momentHelp describes the time arguments parseMoment reads.
+const momentHelp = "A moment: 2026-11-17T03:00 (local time), 2026-11-17, or how long ago such as 8h or 30m. Optional."
+
+// parseMoment reads a moment of a tool argument: RFC 3339, a local date
+// with or without time, or a duration back from now ("8h", "90m", "2d").
+// Empty is the zero time.
+func parseMoment(s string, now time.Time) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, s, now.Location()); err == nil {
+			return t, nil
+		}
+	}
+	if days, ok := strings.CutSuffix(s, "d"); ok {
+		var n int
+		if _, err := fmt.Sscanf(days, "%d", &n); err == nil && n >= 0 && n <= 3650 {
+			return now.AddDate(0, 0, -n), nil
+		}
+	}
+	if d, err := time.ParseDuration(s); err == nil && d >= 0 {
+		return now.Add(-d), nil
+	}
+	return time.Time{}, fmt.Errorf("%q is no moment (2026-11-17T03:00, 2026-11-17 or 8h)", s)
 }
