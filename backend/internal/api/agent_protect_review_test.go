@@ -244,3 +244,39 @@ func TestGuardLockSurvivesAnOldShareForm(t *testing.T) {
 		t.Fatalf("old form after reopening: %d %s", res.StatusCode, body)
 	}
 }
+
+// A-9 (1.04): the sync of the share KI-Agent, every minute, kept the
+// access it wants and so lifted a lock of the guard on that share.
+func TestGuardLockOfTheAgentShareStays(t *testing.T) {
+	ts, _ := docsServer(t)
+	sh, ok := ts.server.agentShare()
+	if !ok || sh.Access["alex"] != shares.ReadWrite {
+		t.Fatalf("share: %v %+v", ok, sh)
+	}
+	ps := ts.server.protect()
+	ps.accessMu.Lock()
+	locked := map[string]string{}
+	for name := range sh.Access {
+		locked[name] = shares.ReadOnly
+	}
+	sh.Access = locked
+	if err := ts.server.updateShare(sh); err != nil {
+		t.Fatal(err)
+	}
+	ps.mu.Lock()
+	ps.alerts, ps.loaded = append(ps.alerts, guardAlert{ID: "x", Share: sh.Name, State: "stopped", Locked: true, Saved: map[string]string{"alex": shares.ReadWrite}}), true
+	ps.mu.Unlock()
+	ps.accessMu.Unlock()
+	ts.server.agentSyncShare()
+	if now, _ := ts.server.shareByName(sh.Name); now.Access["alex"] != shares.ReadOnly {
+		t.Fatalf("the sync lifted the lock: %v", now.Access)
+	}
+	// Reopened in the guard, the next sync gives write access back.
+	ps.mu.Lock()
+	ps.alerts[len(ps.alerts)-1].Locked = false
+	ps.mu.Unlock()
+	ts.server.agentSyncShare()
+	if now, _ := ts.server.shareByName(sh.Name); now.Access["alex"] != shares.ReadWrite {
+		t.Fatalf("no write access after reopening: %v", now.Access)
+	}
+}
