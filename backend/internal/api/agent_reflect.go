@@ -57,15 +57,9 @@ func (s *Server) agentReflectTick(now time.Time) {
 	}
 }
 
-// reflectDue: the time of today has come and there was no run since; a
-// missed night (NAS off, disk asleep) is made up while the day lasts.
+// reflectDue: the thinking of tonight is due (dailyDue).
 func reflectDue(in agentInitiative, now time.Time) bool {
-	at, err := time.ParseInLocation("15:04", in.ReflectAt, now.Location())
-	if err != nil {
-		return false
-	}
-	due := time.Date(now.Year(), now.Month(), now.Day(), at.Hour(), at.Minute(), 0, 0, now.Location())
-	return !now.Before(due) && in.LastReflect.Before(due) && now.Sub(due) < 20*time.Hour
+	return dailyDue(in.ReflectAt, in.LastReflect, now)
 }
 
 // agentVolumeAsleep: a disk of the volume with the agent's data sleeps.

@@ -10,7 +10,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 )
 
-// PLAN 54: nine functions of the agent, in four groups, each switched on
+// PLAN 54: the functions of the agent, in four groups, each switched on
 // by itself and off by default (decision of the owner 6.11.2026: "alles
 // einstellbar", every way of a question a setting, the answer the value
 // ab Werk):
@@ -18,14 +18,15 @@ import (
 //	Dokumente und Fristen  agent_docs.go      (Dokumenten-Gedächtnis, Fristenwächter, Papierkram)
 //	Schutz                 agent_protect.go   (Ransomware-Wächter, Notfallhandbuch, Notfallzugang)
 //	Vorausschau            agent_foresight.go (Was-wäre-wenn, Hardware-Berater)
-//	Gemeinschaft, Familie  agent_family54.go  (Backup-Buddy, Skill-Katalog, Familien-Tagebuch)
+//	Gemeinschaft, Familie  agent_family54.go  (Backup-Buddy, Skill-Katalog; the Familien-Tagebuch went with 0.69)
 //
 // What applies to the whole NAS lives in agent.json (Features, owners and
 // administrators); what an account sets for itself (its folders, its
 // mailbox, its sources) in features.json in its private agent folder on
 // the agent's volume, never on the stick.
 
-// agentFeatures are the NAS-wide settings of the eight functions.
+// agentFeatures are the NAS-wide settings of the functions, one block per
+// function (Docs holds the three of Dokumente und Fristen).
 type agentFeatures struct {
 	Docs      agentDocsNAS   `json:"docs"`
 	Guard     agentGuard     `json:"guard"`
