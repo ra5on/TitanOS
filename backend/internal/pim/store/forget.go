@@ -43,6 +43,7 @@ func (s *Store) ForgetUser(name string) error {
 		s.mu.Unlock()
 	}()
 	s.parsed.dropAccount(name)
+	s.forgetMarks(name)
 	// Writes that run end first; later ones on these states fail.
 	for _, acc := range old {
 		acc.gate.Lock()

@@ -187,6 +187,7 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 	if acc.virtual != nil && acc.virtual.virtual {
 		acc.virtual = nil
 	}
+	s.noteData(acc)
 	return info(kind, c), nil
 }
 
@@ -284,6 +285,8 @@ func (s *Store) materialize(acc *account, ar *os.Root, c *collection) error {
 	c.st = defaultState(acc.kind, c.id, newEpoch(), s.now().UTC())
 	c.virtual = false
 	acc.cols[c.id] = c
+	// An own collection is on the volume now: the account keeps data.
+	s.noteData(acc)
 	return nil
 }
 
@@ -448,6 +451,7 @@ func (s *Store) Put(kind Kind, account, col, name string, data []byte, opt PutOp
 		return PutResult{}, err
 	}
 	s.parsed.dropEntry(kind, account, col, name)
+	s.noteData(acc) // once; a mark lost earlier is made up for here
 	return PutResult{ETag: entry.ETag, Created: cur == nil}, nil
 }
 

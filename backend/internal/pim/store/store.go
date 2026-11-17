@@ -144,6 +144,17 @@ type Store struct {
 	Local func() *time.Location
 	// Now is the clock; nil = time.Now.
 	Now func() time.Time
+	// ReadMark and WriteMark read and write /config/users/<account>/
+	// pim.json (config.Store, atomic): the mark that an account kept data
+	// of a feature (marks.go). ReadMark gives fs.ErrNotExist without one.
+	// Nil: no mark, a missing folder shows the virtual default.
+	ReadMark  func(account string) ([]byte, error)
+	WriteMark func(account string, data []byte) error
+	// Mounted lists the mounted volumes (RAM only), Peek opens
+	// .titanos/<feature> on one of them without making anything: where
+	// the folder of an account went (journal hint). Nil: no hint.
+	Mounted func() []string
+	Peek    func(volume, feature string) (*os.Root, error)
 
 	mu         sync.Mutex
 	features   map[Kind]*featureCache
@@ -151,6 +162,12 @@ type Store struct {
 	forgetting map[string]int
 
 	parsed parsedCache
+
+	// markMu guards marks, hints and logged (marks.go); taken last.
+	markMu sync.Mutex
+	marks  map[string]*knownMark
+	hints  map[Kind]*hintCache
+	logged map[string]string
 
 	// failState, in tests, fails the write of state.json.
 	failState func(collection string) error
@@ -184,6 +201,10 @@ type account struct {
 	foreign bool // a folder of an earlier account (or none): removed on the first write
 	cols    map[string]*collection
 	virtual *collection
+	// away: the account kept data, but the folder is not on this volume
+	// (ErrElsewhere); read again when the mounted volumes change (awaySig).
+	away    *ElsewhereError
+	awaySig string
 }
 
 type collection struct {
@@ -311,10 +332,18 @@ func (s *Store) accountFor(kind Kind, name string) (*account, error) {
 	s.mu.Unlock()
 	acc.mu.Lock()
 	defer acc.mu.Unlock()
+	if acc.loaded && acc.away != nil && acc.awaySig != s.mountSig() {
+		// Volumes came or went: look again (once per mount set, so an
+		// iPhone that asks every 15 minutes wakes no disk).
+		acc.loaded = false
+	}
 	if !acc.loaded {
-		if err := s.loadLocked(acc); err != nil {
+		if err := s.loadLocked(acc, volume); err != nil {
 			return nil, err
 		}
+	}
+	if acc.away != nil {
+		return nil, acc.away
 	}
 	return acc, nil
 }
@@ -352,7 +381,30 @@ func sameAccount(o owner, name string, created time.Time) bool {
 
 // loadLocked reads the account's folder (acc.mu held): owner.json and the
 // state of every collection, checked against the files (crash recovery).
-func (s *Store) loadLocked(acc *account) error {
+// An account that kept data (pim.json) but has no own collection here is
+// away (ErrElsewhere), never shown the virtual default.
+func (s *Store) loadLocked(acc *account, volume string) error {
+	if err := s.loadFolderLocked(acc); err != nil {
+		return err
+	}
+	acc.away, acc.awaySig = nil, ""
+	if len(acc.cols) > 0 {
+		return nil
+	}
+	marked, err := s.marked(acc)
+	if err != nil {
+		acc.loaded = false // not known now: asked again, never served empty
+		return err
+	}
+	if marked {
+		acc.awaySig = s.mountSig()
+		acc.away = s.elsewhere(acc, volume)
+	}
+	return nil
+}
+
+// loadFolderLocked is the reading part of loadLocked.
+func (s *Store) loadFolderLocked(acc *account) error {
 	acc.cols = map[string]*collection{}
 	acc.virtual = nil
 	acc.onDisk, acc.foreign = false, false

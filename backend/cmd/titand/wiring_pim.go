@@ -63,5 +63,22 @@ func (w *titand) wirePIM() error {
 		// The store closes the root; release ends the hold against a move.
 		return root, release, nil
 	}
+	// The mark that an account kept data (pim.json, written once per
+	// account and feature; it goes with users/<name>): a folder missing on
+	// the current volume is 503, never an empty collection.
+	w.pim.ReadMark = func(account string) ([]byte, error) {
+		return w.store.Read(pimMarkFile(account))
+	}
+	w.pim.WriteMark = func(account string, data []byte) error {
+		return w.store.Write(pimMarkFile(account), data)
+	}
+	// Where such a folder went: looked for on the other mounted volumes
+	// once per mount set (the journal names it).
+	w.pim.Mounted = w.volumes.Mounted
+	w.pim.Peek = func(volume, feature string) (*os.Root, error) {
+		return volumedata.OpenExisting("/mnt", volume, feature, w.volumes.Mounted())
+	}
 	return nil
 }
+
+func pimMarkFile(account string) string { return "users/" + account + "/pim.json" }
