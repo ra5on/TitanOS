@@ -14,6 +14,7 @@ import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.t
 import type { FeatureViewId, FeaturesPublic } from '#lib/agent-features.ts';
 import { session } from '#lib/session.svelte.ts';
 import {
+	activeSchedules,
 	defaultLook,
 	follow,
 	mergeEntries,
@@ -27,6 +28,7 @@ import {
 	type Look,
 	type Pending,
 	type Project,
+	type Schedule,
 	type Status,
 	type AgentView,
 } from '#lib/agent.ts';
@@ -249,8 +251,8 @@ export class AgentChats {
 			this.error = apiErrorText(e);
 		}
 		api
-			.get<{ schedules?: unknown[] }>('/agent/schedules')
-			.then((r) => (this.plannedCount = r.schedules?.length ?? 0))
+			.get<{ schedules?: Schedule[] }>('/agent/schedules')
+			.then((r) => (this.plannedCount = activeSchedules(r.schedules)))
 			.catch(() => (this.plannedCount = 0));
 	};
 	plannedCount = $state(0);

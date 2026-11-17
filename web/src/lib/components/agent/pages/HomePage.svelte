@@ -11,14 +11,15 @@
 	import { api } from '#lib/api.ts';
 	import { formatDateTime, formatTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import type {
-		AgentView,
-		ChatInfo,
-		HomeState,
-		InboxItem,
-		NasHint,
-		Schedule,
-		Suggestion,
+	import {
+		activeSchedules,
+		type AgentView,
+		type ChatInfo,
+		type HomeState,
+		type InboxItem,
+		type NasHint,
+		type Schedule,
+		type Suggestion,
 	} from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
 
@@ -460,7 +461,7 @@
 					{#if next.length}
 						<SettingGroup title={t('agent.home.next')}>
 							{#snippet tools()}<button type="button" class="more" onclick={() => onshow('planned')}
-									>{t('agent.home.all', { count: planned.length })}</button
+									>{t('agent.home.all', { count: activeSchedules(planned) })}</button
 								>{/snippet}
 							{#each next as s (s.id)}
 								<button type="button" class="srow" onclick={() => onshow('planned')}>

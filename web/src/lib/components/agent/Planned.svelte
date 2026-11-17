@@ -9,7 +9,7 @@
 	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import type { Project, Report, Schedule } from '#lib/agent.ts';
+	import { activeSchedules, type Project, type Report, type Schedule } from '#lib/agent.ts';
 	import { morningForm, morningKey } from './morning-form.ts';
 
 	let {
@@ -47,7 +47,7 @@
 		error = '';
 		try {
 			list = (await api.get<{ schedules: View[] }>('/agent/schedules')).schedules;
-			oncount?.(list.length);
+			oncount?.(activeSchedules(list));
 		} catch (e) {
 			error = apiErrorText(e);
 		}

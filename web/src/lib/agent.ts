@@ -188,6 +188,21 @@ export type Schedule = {
 	created?: string;
 };
 
+/** Whether a planned task still runs: switched on, and a one-off task that
+ *  already ran is done. The count beside "Geplant" counts only these (owner
+ *  17 Nov 2026: "es sind aber nur 2 aktiv … der Morgenbericht wird
+ *  mitgezählt, obwohl der Morgenbericht deaktiviert ist"). */
+export function scheduleActive(s: Pick<Schedule, 'enabled' | 'every' | 'lastRun'>): boolean {
+	if (!s.enabled) return false;
+	const ran = !!s.lastRun && new Date(s.lastRun).getFullYear() >= 2000;
+	return !(s.every === 'once' && ran);
+}
+
+/** How many planned tasks, reminders and the morning report are active. */
+export function activeSchedules(list: readonly Pick<Schedule, 'enabled' | 'every' | 'lastRun'>[] | undefined): number {
+	return (list ?? []).filter(scheduleActive).length;
+}
+
 export type Model = {
 	name: string;
 	/** The owner's own name for the model, shown instead of `name` (0.98). */

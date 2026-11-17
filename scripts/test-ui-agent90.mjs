@@ -270,6 +270,20 @@ async function open(width, height, theme = "hell") {
             when: "einmal",
             created: at(1),
           },
+          // 1.05 (owner 17 Nov 2026): a switched-off morning report is not
+          // counted beside "Geplant".
+          {
+            id: "sc3",
+            name: "",
+            task: "",
+            kind: "morning",
+            every: "weekdays",
+            at: "07:00",
+            weekdays: [1, 2, 3, 4, 5],
+            enabled: false,
+            when: "werktags 07:00",
+            created: at(1),
+          },
         ],
       });
     if (p === "/agent/memory" && method === "GET") return json({ memory });
@@ -388,6 +402,24 @@ const sent = (seen, method, path) =>
     "Müll rausstellen",
     "Gesundheitscheck",
   ]);
+  // Only active tasks count (owner 17 Nov 2026: "es sind aber nur 2
+  // aktiv … der Morgenbericht wird mitgezählt").
+  assert.equal(
+    (await next.locator("button.more").innerText()).trim(),
+    "Alle 2",
+    "the start page counts the two active tasks",
+  );
+  assert.equal(
+    (
+      await page
+        .locator("nav .item", { hasText: "Geplant" })
+        .first()
+        .locator(".n")
+        .innerText()
+    ).trim(),
+    "2",
+    "the side bar counts the two active tasks",
+  );
   assert.ok(
     await page
       .locator(".sgroup", { hasText: "Zuletzt erledigt" })
