@@ -247,6 +247,7 @@
 		const sent = onsend(value);
 		text = '';
 		queueMicrotask(grow);
+		keepOrClose();
 		// Not sent (NAS not reachable, a failed upload): the text is back,
 		// unless something new was typed meanwhile.
 		void Promise.resolve(sent).then((ok) => {
@@ -255,6 +256,13 @@
 				queueMicrotask(grow);
 			}
 		});
+	}
+	// 1.09 (owner 17 Nov 2026): at the desk the cursor stays in the field
+	// after Enter and after "Senden", to type on at once; on the phone and
+	// with touch the keyboard closes after sending, as in 1.08.
+	function keepOrClose() {
+		if (phone || matchMedia('(pointer: coarse)').matches) area?.blur();
+		else area?.focus();
 	}
 	function key(event: KeyboardEvent) {
 		if (offered.length) {
@@ -431,7 +439,7 @@
 		oninput={grow}
 		onkeydown={key}
 		rows="1"
-		{disabled}
+		readonly={disabled}
 		aria-label={t('agent.input')}
 		aria-controls={offered.length ? 'agent-cmds' : undefined}
 		aria-activedescendant={offered.length ? `agent-cmd-${offered[pickedCmd]?.name}` : undefined}

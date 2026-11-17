@@ -4,7 +4,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDateTime } from '#lib/format.ts';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { agentProfilePath } from '#lib/api.ts';
 	import type { ChatInfo, Project } from '#lib/agent.ts';
 	import type { ChatSheet } from './chat-sheets.ts';
@@ -83,13 +83,15 @@
 					: t('agent.archive.do')}</button
 			>
 			<a
-				href={agentProfilePath(`/api/v1/agent/chats/${chat.id}/export`)}
+				href={agentProfilePath(`/api/v1/agent/chats/${chat.id}/export?lang=${i18n.locale}`)}
 				download
 				onclick={() => close()}
 				><span class="sq"><Icon name="download" size={17} /></span>{t('agent.exportMd')}</a
 			>
 			<a
-				href={agentProfilePath(`/api/v1/agent/chats/${chat.id}/export?format=pdf`)}
+				href={agentProfilePath(
+					`/api/v1/agent/chats/${chat.id}/export?format=pdf&lang=${i18n.locale}`,
+				)}
 				download
 				onclick={() => close()}
 				><span class="sq"><Icon name="fileText" size={17} /></span>{t('agent.exportPdf')}</a

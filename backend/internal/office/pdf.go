@@ -3,14 +3,27 @@ package office
 import (
 	"bytes"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
+
+	"golang.org/x/text/unicode/norm"
 )
 
-// A PDF from Markdown with the standard fonts every reader has (Helvetica,
-// Courier) in WinAnsi encoding: German umlauts, ß, €, quotes and dashes
-// work; characters outside it become "?". A4, wrapped lines, tables with
-// borders, page breaks.
+// A PDF from Markdown with the standard fonts every reader has, so nothing
+// is embedded: Helvetica and Courier in WinAnsi encoding for the text
+// (German umlauts, ß, €, quotes, dashes, ›), Symbol for arrows and signs
+// of mathematics (→ ≤ ≥ ≠ ≈), ZapfDingbats for ✓ ✗ ★ ● ■. Both of the
+// latter carry a ToUnicode map, so the text can be copied and searched.
+// Since 1.09 no character becomes "?" (the export of a chat of 17 Nov 2026
+// was full of them): narrow and other spaces become a space, every kind
+// of hyphen and dash a hyphen, letters with accents outside WinAnsi their
+// base letter, invisible characters nothing; what no standard font has
+// (other scripts, most emoji) is drawn as an empty box ❏. A4, wrapped
+// lines, tables with borders, page breaks.
 
 const (
 	pageW, pageH = 595.0, 842.0
@@ -35,20 +48,134 @@ var winAnsi = map[rune]byte{
 	'˜': 0x98, '™': 0x99, 'š': 0x9A, '›': 0x9B, 'œ': 0x9C, 'ž': 0x9E, 'Ÿ': 0x9F,
 }
 
-func encode(s string) []byte {
-	out := make([]byte, 0, len(s))
-	for _, r := range s {
-		switch {
-		case r == '\t':
-			out = append(out, ' ', ' ', ' ', ' ')
-		case r >= 32 && r < 127, r >= 0xA0 && r <= 0xFF:
-			out = append(out, byte(r))
-		default:
-			if b, ok := winAnsi[r]; ok {
-				out = append(out, b)
-			} else {
-				out = append(out, '?')
+// Fonts besides the four of the text (F1–F4).
+const (
+	fontSymbol   = "F5"
+	fontDingbats = "F6"
+)
+
+// glyph is one character as drawn: a code in the font of the text (font
+// ""), or in Symbol or ZapfDingbats with its width in 1/1000 em.
+type glyph struct {
+	font  string
+	code  byte
+	width int
+}
+
+// symbolGlyphs are characters of the Symbol font: code, width (Adobe AFM).
+var symbolGlyphs = map[rune]glyph{
+	'←': {fontSymbol, 0xAC, 987}, '↑': {fontSymbol, 0xAD, 603}, '→': {fontSymbol, 0xAE, 987}, '↓': {fontSymbol, 0xAF, 603},
+	'↔': {fontSymbol, 0xAB, 1042}, '⇐': {fontSymbol, 0xDC, 987}, '⇒': {fontSymbol, 0xDE, 987}, '⇔': {fontSymbol, 0xDB, 1042},
+	'≤': {fontSymbol, 0xA3, 549}, '≥': {fontSymbol, 0xB3, 549}, '≠': {fontSymbol, 0xB9, 549}, '≈': {fontSymbol, 0xBB, 549},
+	'∞': {fontSymbol, 0xA5, 713}, '−': {fontSymbol, 0x2D, 549}, '√': {fontSymbol, 0xD6, 549}, '∑': {fontSymbol, 0xE5, 713},
+	'Δ': {fontSymbol, 0x44, 612}, 'Ω': {fontSymbol, 0x57, 768}, 'α': {fontSymbol, 0x61, 631}, 'β': {fontSymbol, 0x62, 549},
+	'π': {fontSymbol, 0x70, 549},
+}
+
+// dingbatGlyphs are characters of ZapfDingbats; a few emoji are drawn as
+// the sign they stand for (✅ as ✔, ❌ as ✘).
+var dingbatGlyphs = map[rune]glyph{
+	'✓': {fontDingbats, 0x33, 755}, '✔': {fontDingbats, 0x34, 846}, '✗': {fontDingbats, 0x37, 571}, '✘': {fontDingbats, 0x38, 677},
+	'★': {fontDingbats, 0x48, 816}, '●': {fontDingbats, 0x6C, 791}, '■': {fontDingbats, 0x6E, 761}, '❏': {fontDingbats, 0x6F, 762},
+	'▲': {fontDingbats, 0x73, 892}, '▼': {fontDingbats, 0x74, 892}, '◆': {fontDingbats, 0x75, 788},
+	'✅': {fontDingbats, 0x34, 846}, '☑': {fontDingbats, 0x34, 846},
+	'❌': {fontDingbats, 0x38, 677}, '❎': {fontDingbats, 0x38, 677}, '✖': {fontDingbats, 0x38, 677},
+}
+
+// glyphAliases are drawn with the glyph of another character.
+var glyphAliases = map[rune]bool{'✅': true, '☑': true, '❌': true, '❎': true, '✖': true}
+
+// unknownGlyph stands for a character no standard font has.
+var unknownGlyph = dingbatGlyphs['❏']
+
+// plainText are characters written as other WinAnsi text.
+var plainText = map[rune]string{
+	'′': "'", '″': "\"", '⚠': "!", '❗': "!", '❕': "!", '❓': "?", '❔': "?", '⁄': "/", '∕': "/", '∶': ":",
+}
+
+// invisible are characters that are drawn as nothing: joiners, marks of
+// direction, variation selectors and skin tones of emoji, the byte order mark.
+func invisible(r rune) bool {
+	switch {
+	case r < 32, r == 0x7F, r >= 0x80 && r < 0xA0, r == 0x200B, r == 0x200C, r == 0x200D, r == 0x2060, r == 0xFEFF,
+		r >= 0x200E && r <= 0x200F, r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069,
+		r >= 0xFE00 && r <= 0xFE0F, r >= 0x1F3FB && r <= 0x1F3FF, r >= 0xE0100 && r <= 0xE01EF:
+		return true
+	}
+	return unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r)
+}
+
+// glyphsOf appends how r is drawn.
+func glyphsOf(r rune, out []glyph) []glyph {
+	switch {
+	case r == '\t':
+		return append(out, glyph{code: ' '}, glyph{code: ' '}, glyph{code: ' '}, glyph{code: ' '})
+	case r >= 32 && r < 127, r >= 0xA0 && r <= 0xFF:
+		return append(out, glyph{code: byte(r)})
+	}
+	if b, ok := winAnsi[r]; ok {
+		return append(out, glyph{code: b})
+	}
+	if g, ok := symbolGlyphs[r]; ok {
+		return append(out, g)
+	}
+	if g, ok := dingbatGlyphs[r]; ok {
+		return append(out, g)
+	}
+	if text, ok := plainText[r]; ok {
+		for _, c := range text {
+			out = append(out, glyph{code: byte(c)})
+		}
+		return out
+	}
+	switch {
+	case invisible(r):
+		return out
+	case unicode.Is(unicode.Zs, r):
+		// Narrow no-break space (U+202F), thin space, ideographic space …
+		return append(out, glyph{code: ' '})
+	case unicode.Is(unicode.Pd, r):
+		// Non-breaking hyphen (U+2011), hyphen, figure dash …
+		return append(out, glyph{code: '-'})
+	}
+	// Letters with marks outside WinAnsi (ă, ș, ł has none), ligatures,
+	// full-width letters, circled numbers: their compatibility form.
+	if d := norm.NFKD.String(string(r)); d != string(r) {
+		before := len(out)
+		for _, c := range d {
+			if c == r {
+				break
 			}
+			out = glyphsOf(c, out)
+		}
+		if len(out) > before && !slices.Contains(out[before:], unknownGlyph) {
+			return out
+		}
+		out = out[:before]
+	}
+	return append(out, unknownGlyph)
+}
+
+// glyphRun is a piece of text in one font.
+type glyphRun struct {
+	font  string // "" the font of the text
+	codes []byte
+	width int
+}
+
+// glyphRuns splits text into pieces by font.
+func glyphRuns(text string) []glyphRun {
+	var out []glyphRun
+	var gs []glyph
+	for _, r := range text {
+		gs = glyphsOf(r, gs[:0])
+		for _, g := range gs {
+			if n := len(out); n > 0 && out[n-1].font == g.font {
+				out[n-1].codes = append(out[n-1].codes, g.code)
+				out[n-1].width += g.width
+				continue
+			}
+			out = append(out, glyphRun{font: g.font, codes: []byte{g.code}, width: g.width})
 		}
 	}
 	return out
@@ -71,18 +198,24 @@ func (f font) scale(units int) float64 {
 // units is the width of text in thousandths of the font size.
 func (f font) units(text string) int {
 	total := 0
-	for _, b := range encode(text) {
-		w := 556
-		switch {
-		case f.name == "F4":
-			w = 600
-		case b >= 32 && b < 127:
-			w = helvetica[b-32]
+	for _, run := range glyphRuns(text) {
+		if run.font != "" {
+			total += run.width
+			continue
 		}
-		if f.name == "F2" {
-			w = w * 105 / 100
+		for _, b := range run.codes {
+			w := 556
+			switch {
+			case f.name == "F4":
+				w = 600
+			case b >= 32 && b < 127:
+				w = helvetica[b-32]
+			}
+			if f.name == "F2" {
+				w = w * 105 / 100
+			}
+			total += w
 		}
-		total += w
 	}
 	return total
 }
@@ -127,7 +260,13 @@ func pdfString(b []byte) string {
 func (p *pdfWriter) text(x, y float64, segs []segment) {
 	fmt.Fprintf(p.page, "BT %.2f %.2f Td ", x, y)
 	for _, s := range segs {
-		fmt.Fprintf(p.page, "/%s %.1f Tf %s Tj ", s.font.name, s.font.size, pdfString(encode(s.text)))
+		for _, run := range glyphRuns(s.text) {
+			name := s.font.name
+			if run.font != "" {
+				name = run.font
+			}
+			fmt.Fprintf(p.page, "/%s %.1f Tf %s Tj ", name, s.font.size, pdfString(run.codes))
+		}
 	}
 	p.page.WriteString("ET\n")
 }
@@ -334,19 +473,28 @@ func PDF(markdown, title string) ([]byte, error) {
 	}
 	out.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
 	n := len(p.pages)
-	// 1 catalog, 2 pages, 3–6 fonts, 7 info, then per page: page, content.
+	// 1 catalog, 2 pages, 3–6 fonts of the text, 7 info, 8 Symbol,
+	// 9 ZapfDingbats, 10–11 their ToUnicode maps, then per page: page,
+	// content.
+	const firstPage = 12
 	kids := make([]string, n)
 	for i := range n {
-		kids[i] = fmt.Sprintf("%d 0 R", 8+2*i)
+		kids[i] = fmt.Sprintf("%d 0 R", firstPage+2*i)
 	}
 	obj("<< /Type /Catalog /Pages 2 0 R >>")
 	obj(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), n))
 	for _, base := range []string{"Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Courier"} {
 		obj("<< /Type /Font /Subtype /Type1 /BaseFont /" + base + " /Encoding /WinAnsiEncoding >>")
 	}
-	obj(fmt.Sprintf("<< /Title %s /Producer (TitanOS) /CreationDate (D:%s) >>", pdfString(encode(title)), time.Now().UTC().Format("20060102150405Z")))
+	obj(fmt.Sprintf("<< /Title %s /Producer (TitanOS) /CreationDate (D:%s) >>", pdfText(title), time.Now().UTC().Format("20060102150405Z")))
+	obj("<< /Type /Font /Subtype /Type1 /BaseFont /Symbol /ToUnicode 10 0 R >>")
+	obj("<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats /ToUnicode 11 0 R >>")
+	for _, f := range []string{fontSymbol, fontDingbats} {
+		cmap := toUnicode(f)
+		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(cmap), cmap))
+	}
 	for i, page := range p.pages {
-		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.0f %.0f] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents %d 0 R >>", pageW, pageH, 9+2*i))
+		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.0f %.0f] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R /F5 8 0 R /F6 9 0 R >> >> /Contents %d 0 R >>", pageW, pageH, firstPage+1+2*i))
 		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", page.Len(), page.String()))
 	}
 	xref := out.Len()
@@ -356,4 +504,44 @@ func PDF(markdown, title string) ([]byte, error) {
 	}
 	fmt.Fprintf(&out, "trailer\n<< /Size %d /Root 1 0 R /Info 7 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets)+1, xref)
 	return out.Bytes(), nil
+}
+
+// pdfText is a text string of the document information in UTF-16 (the
+// title of a chat may have any character).
+func pdfText(s string) string {
+	var b strings.Builder
+	b.WriteString("<FEFF")
+	for _, u := range utf16.Encode([]rune(s)) {
+		fmt.Fprintf(&b, "%04X", u)
+	}
+	b.WriteString(">")
+	return b.String()
+}
+
+// toUnicode is the ToUnicode CMap of Symbol or ZapfDingbats for the codes
+// used here: what a reader copies or searches for.
+func toUnicode(font string) string {
+	codes := map[byte]rune{}
+	for _, table := range []map[rune]glyph{symbolGlyphs, dingbatGlyphs} {
+		for r, g := range table {
+			if g.font != font {
+				continue
+			}
+			// Several characters drawn alike (✅ as ✔): the sign itself.
+			if _, alias := glyphAliases[r]; !alias {
+				codes[g.code] = r
+			}
+		}
+	}
+	keys := slices.Sorted(maps.Keys(codes))
+	var b strings.Builder
+	b.WriteString("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n")
+	b.WriteString("/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n")
+	fmt.Fprintf(&b, "/CMapName /TitanOS-%s def\n/CMapType 2 def\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n", font)
+	fmt.Fprintf(&b, "%d beginbfchar\n", len(keys))
+	for _, c := range keys {
+		fmt.Fprintf(&b, "<%02X> <%04X>\n", c, codes[c])
+	}
+	b.WriteString("endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n")
+	return b.String()
 }

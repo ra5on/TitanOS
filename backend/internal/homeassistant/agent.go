@@ -88,6 +88,71 @@ type Release struct {
 	Entities []string `json:"entities,omitempty"`
 }
 
+// agentOnlyDomains are kinds of entities that only the KI-Agent can be
+// given (1.09, owner 17 Nov 2026: "wieviele Automationen habe ich" answered
+// 0, because automations could not be released under "Auswahl"; decision
+// of the same day: a row of their own, read, and switch on, off and
+// trigger after asking). MCP keeps its domains (Domains, Level).
+var agentOnlyDomains = []string{"automation"}
+
+// agentServices are the services the agent may call in its own domains.
+var agentServices = map[string][]string{"automation": {"turn_on", "turn_off", "toggle", "trigger"}}
+
+// CallLevel is Level for a call made with the context: the agent's own
+// release also allows the services of its own domains.
+func (m *Manager) CallLevel(ctx context.Context, domain, service string) (string, bool) {
+	if _, own := releaseOf(ctx, m.id); own && slices.Contains(agentOnlyDomains, domain) {
+		return LevelNormal, slices.Contains(agentServices[domain], service)
+	}
+	return Level(domain)
+}
+
+// AgentDomains are the domains the agent's release can list: those of MCP
+// and the agent's own.
+func AgentDomains() []string {
+	return slices.Sorted(slices.Values(append(Domains(), agentOnlyDomains...)))
+}
+
+// releaseJSON is a release as it is written. Domains that versions before
+// 1.09 do not know go to extraDomains: the previous app reads the file
+// unchanged and can still save its settings (it would refuse an unknown
+// domain); it only drops the extra ones (like extraGroups of MQTT).
+type releaseJSON struct {
+	All          bool     `json:"all,omitempty"`
+	Domains      []string `json:"domains,omitempty"`
+	ExtraDomains []string `json:"extraDomains,omitempty"`
+	Entities     []string `json:"entities,omitempty"`
+}
+
+// MarshalJSON writes the domains known before 1.09 under domains, the
+// others under extraDomains.
+func (r Release) MarshalJSON() ([]byte, error) {
+	out := releaseJSON{All: r.All, Entities: r.Entities}
+	for _, d := range r.Domains {
+		if slices.Contains(agentOnlyDomains, d) {
+			out.ExtraDomains = append(out.ExtraDomains, d)
+		} else {
+			out.Domains = append(out.Domains, d)
+		}
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalJSON takes both lists into Domains.
+func (r *Release) UnmarshalJSON(data []byte) error {
+	var in releaseJSON
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	*r = Release{All: in.All, Entities: in.Entities, Domains: in.Domains}
+	for _, d := range in.ExtraDomains {
+		if !slices.Contains(r.Domains, d) {
+			r.Domains = append(r.Domains, d)
+		}
+	}
+	return nil
+}
+
 // Empty reports whether the list releases nothing at all.
 func (r Release) Empty() bool { return !r.All && len(r.Domains) == 0 && len(r.Entities) == 0 }
 
@@ -122,6 +187,34 @@ func (r Release) allows(entity string) bool {
 		return false
 	}
 	return r.All || slices.Contains(r.Domains, domainOf(entity)) || slices.Contains(r.Entities, entity)
+}
+
+// DomainReleased reports whether every entity of a domain is visible:
+// released as a whole (or "Alles") in the agent's own list, or among the
+// domains released to MCP. Single released entities do not count; the
+// rest of their domain stays hidden.
+func (m *Manager) DomainReleased(ctx context.Context, domain string) bool {
+	if r, ok := releaseOf(ctx, m.id); ok {
+		return r.All || slices.Contains(r.Domains, domain)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, known := domainLevels[domain]
+	return known && slices.Contains(m.settings.Domains, domain)
+}
+
+// ReleasesAll reports whether the agent's own release is "Alles" (MCP has
+// no such release).
+func (m *Manager) ReleasesAll(ctx context.Context) bool {
+	r, ok := releaseOf(ctx, m.id)
+	return ok && r.All
+}
+
+// OwnRelease reports whether the context carries the agent's own release
+// list (rather than the release to MCP).
+func (m *Manager) OwnRelease(ctx context.Context) bool {
+	_, ok := releaseOf(ctx, m.id)
+	return ok
 }
 
 // ReleasesNothing reports whether the context carries a release list of

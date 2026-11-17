@@ -416,7 +416,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 			return errors.New("too many released devices")
 		}
 		for _, d := range r.Domains {
-			if !slices.Contains(homeassistant.Domains(), d) {
+			if !slices.Contains(homeassistant.AgentDomains(), d) {
 				return errors.New("unknown Home Assistant domain " + d)
 			}
 		}

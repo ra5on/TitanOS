@@ -822,7 +822,7 @@ func (s *Server) agentLearn(user string, chat *agent.Chat) {
 	for i, t := range tools {
 		steps = append(steps, fmt.Sprintf("%d. %s", i+1, t))
 	}
-	s.addAgentInbox(user, agentInboxItem{Kind: "skill", Title: chat.Title, Body: "Diesen Ablauf hast du zweimal gleich gemacht: " + strings.Join(tools, " → "),
+	s.addAgentInbox(user, agentInboxItem{Kind: "skill", Title: chat.ShownTitle(), Body: "Diesen Ablauf hast du zweimal gleich gemacht: " + strings.Join(tools, " → "),
 		Data: map[string]string{"when": when, "steps": strings.Join(steps, "\n"), "chat": chat.ID}})
 }
 

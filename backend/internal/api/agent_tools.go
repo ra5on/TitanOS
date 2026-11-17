@@ -697,7 +697,7 @@ func (b *agentToolbox) haMode(name, kind string, args json.RawMessage, mode stri
 			}
 		case m == "":
 			m = mode
-			if domain == "lock" || domain == "alarm_control_panel" {
+			if haAsksFirst(domain) {
 				m = agent.Stricter(m, agent.ModeAsk)
 			}
 		}
@@ -726,6 +726,18 @@ func (b *agentToolbox) haMode(name, kind string, args json.RawMessage, mode stri
 		out = agent.Stricter(out, agent.ModeAsk)
 	}
 	return out
+}
+
+// haAsksFirst are the kinds whose switching asks first unless the person
+// set a rule for them: locks and alarm systems, and since 1.09 (owner,
+// 17 Nov 2026) automations. Scripts and scenes switch as before, so that
+// "Szene Kino an" works at once from quick commands and Assist.
+func haAsksFirst(domain string) bool {
+	switch domain {
+	case "lock", "alarm_control_panel", "automation":
+		return true
+	}
+	return false
 }
 
 // haContext gives Home Assistant calls the agent's own release list.

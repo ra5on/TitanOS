@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -165,9 +164,11 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 	}
 	// A title of before 1.07 that ends in " …" gets one from the model once,
 	// when the chat is opened (unless the person named it).
-	if strings.HasSuffix(chat.Title, " …") && agentTitleDue(chat) && !s.agentRunning(user, chat.ID) {
+	if chat.LegacyTitle() && agentTitleDue(chat) && !s.agentRunning(user, chat.ID) {
 		s.agentRetitle(user, chat.ID)
 	}
+	// Until then (and for chats the model does not name) the whole question.
+	chat.Title = chat.ShownTitle()
 	writeJSON(w, http.StatusOK, struct {
 		*agent.Chat
 		// Titling: the model is writing the title; the page asks again.
@@ -208,29 +209,13 @@ func (m *agentMessage) check() error {
 }
 
 // fileRef is a line naming an attached file or a file of the NAS.
-var fileRef = regexp.MustCompile(`(?m)^\[(Anhang|Datei): [^\]\n]*\]\s*$`)
+var fileRef = agent.FileLine
 
-func chatTitle(text string) string {
-	// The names of attached files are no title; the question after them is.
-	if rest := strings.TrimSpace(fileRef.ReplaceAllString(text, "")); rest != "" {
-		text = rest
-	}
-	// 1.07 (owner 17 Nov 2026): the whole question until the model has
-	// written a short title (agent_title.go) – never cut off with "…". Only
-	// a pasted text of many pages is kept to its first words, at a word.
-	text = strings.Join(strings.Fields(text), " ")
-	if r := []rune(text); len(r) > chatTitleMax {
-		cut := string(r[:chatTitleMax])
-		if i := strings.LastIndex(cut, " "); i > chatTitleMax/2 {
-			cut = cut[:i]
-		}
-		return cut
-	}
-	return text
-}
+// chatTitle is the title of a new chat: its whole first question.
+func chatTitle(text string) string { return agent.QuestionTitle(text) }
 
 // chatTitleMax bounds a question taken as the title (a pasted log, a letter).
-const chatTitleMax = 400
+const chatTitleMax = agent.QuestionTitleMax
 
 // handleAgentChatNew starts a chat with its first message.
 func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
@@ -698,7 +683,7 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 		}
 		return
 	}
-	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.Title, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
+	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.ShownTitle(), Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 }
 
 // agentShouldPush decides whether the end of a run goes out as a push

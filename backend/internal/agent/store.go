@@ -254,7 +254,7 @@ type ChatInfo struct {
 
 // Info returns the list entry of a chat.
 func (c *Chat) Info() ChatInfo {
-	info := ChatInfo{ID: c.ID, Title: c.Title, Project: c.Project, Pinned: c.Pinned, Archived: c.Archived, Created: c.Created, Updated: c.Updated, State: c.State, Origin: c.Origin}
+	info := ChatInfo{ID: c.ID, Title: c.ShownTitle(), Project: c.Project, Pinned: c.Pinned, Archived: c.Archived, Created: c.Created, Updated: c.Updated, State: c.State, Origin: c.Origin}
 	for i := len(c.Entries) - 1; i >= 0; i-- {
 		e := c.Entries[i]
 		if e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
@@ -565,6 +565,7 @@ func (s *Store) Chat(user, id string) (*Chat, error) {
 	if c.Entries == nil {
 		c.Entries = []Entry{}
 	}
+	cleanEntries(&c)
 	return &c, nil
 }
 
@@ -696,6 +697,9 @@ func (s *Store) updatedLocked(user string, index []ChatInfo) {
 func (s *Store) Chats(user string) ([]ChatInfo, error) {
 	s.mu.Lock()
 	index, err := s.indexLocked(user)
+	if err == nil {
+		s.showTitlesLocked(user, index)
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return nil, err
@@ -707,6 +711,30 @@ func (s *Store) Chats(user string) ([]ChatInfo, error) {
 		return index[i].Updated.After(index[j].Updated)
 	})
 	return index, nil
+}
+
+// showTitlesLocked replaces cut titles of before 1.07 in the list by the
+// whole question (ShownTitle) and writes the list once, so the next list
+// has them (1.09). The chats themselves stay as they are.
+func (s *Store) showTitlesLocked(user string, index []ChatInfo) {
+	changed := false
+	for i := range index {
+		if !strings.HasSuffix(index[i].Title, cutTitle) {
+			continue
+		}
+		var c Chat
+		if s.read(user, "chats/"+index[i].ID+".json", &c, maxChatFile) != nil {
+			continue
+		}
+		if t := c.ShownTitle(); t != index[i].Title {
+			index[i].Title, changed = t, true
+		}
+	}
+	if changed {
+		if err := s.write(user, "chats.json", index); err != nil {
+			slog.Warn("agent: list of chats not written with whole titles", "account", user, "err", err)
+		}
+	}
 }
 
 // DeleteChat removes a chat.

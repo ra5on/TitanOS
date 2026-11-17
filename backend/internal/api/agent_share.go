@@ -270,7 +270,7 @@ func agentFileName(title string) string {
 // agentChatMarkdown is the copy of a chat in the share.
 func agentChatMarkdown(c *agent.Chat, project string, loc *time.Location) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", c.Title)
+	fmt.Fprintf(&b, "# %s\n\n", c.ShownTitle())
 	meta := []string{}
 	if project != "" {
 		meta = append(meta, "Projekt "+project)
@@ -426,7 +426,7 @@ func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
 				}
 			}
 		}
-		file := fmt.Sprintf("%s/%s %s (%s).md", dir, chat.Created.In(loc).Format("2006-01-02"), agentFileName(chat.Title), id[:4])
+		file := fmt.Sprintf("%s/%s %s (%s).md", dir, chat.Created.In(loc).Format("2006-01-02"), agentFileName(chat.ShownTitle()), id[:4])
 		data := []byte(agentChatMarkdown(chat, project, loc))
 		if known && prev.File != file {
 			_ = root.Remove(prev.File)

@@ -153,6 +153,13 @@
 	function filled(s: Settings): Settings {
 		s.policy ??= { preset: 'standard' };
 		s.homeassistant ??= {};
+		// 1.09: kinds only the agent can see (automations) are kept apart on
+		// the NAS for the previous version; the page shows one list.
+		for (const r of [s.homeassistant.release, ...Object.values(s.homeassistant.releases ?? {})]) {
+			if (!r?.extraDomains) continue;
+			r.domains = [...new Set([...(r.domains ?? []), ...r.extraDomains])].sort();
+			delete r.extraDomains;
+		}
 		s.model ??= '';
 		s.context ??= 0;
 		s.keepAlive ??= '';

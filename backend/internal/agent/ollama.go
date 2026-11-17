@@ -432,11 +432,27 @@ const (
 )
 
 // Chat sends one round and streams thinking and text to onChunk. It
-// returns the whole message, including the tool calls.
+// returns the whole message, including the tool calls. Thinking that a
+// model writes into the text of its answer is taken out of it, for every
+// provider (thinking.go).
 func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (Message, Stats, error) {
+	stream := &thinkStream{out: onChunk}
+	var msg Message
+	var stats Stats
+	var err error
 	if o.remote != nil {
-		return o.remote.chat(ctx, r, onChunk)
+		msg, stats, err = o.remote.chat(ctx, r, stream.chunk)
+	} else {
+		msg, stats, err = o.chat(ctx, r, stream.chunk)
 	}
+	if err != nil {
+		return msg, stats, err
+	}
+	return separate(msg), stats, nil
+}
+
+// chat is one round with an Ollama server.
+func (o *Ollama) chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (Message, Stats, error) {
 	body := map[string]any{"model": r.Model, "messages": r.Messages, "stream": true}
 	if len(r.Tools) > 0 {
 		body["tools"] = r.Tools
@@ -613,5 +629,5 @@ func (o *Ollama) Look(ctx context.Context, model, prompt string, image []byte, k
 	if err := o.do(ctx, http.MethodPost, "/api/chat", body, &out); err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(out.Message.Content), nil
+	return strings.TrimSpace(CleanAnswer(out.Message.Content)), nil
 }

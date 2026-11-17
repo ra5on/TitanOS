@@ -1,0 +1,8 @@
+data: {"id":"c2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"The user asks how many automations."}}]}
+
+data: {"id":"c2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Du hast 2 Automationen."}}]}
+
+data: {"id":"c2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}
+
+data: [DONE]
+

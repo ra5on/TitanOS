@@ -108,7 +108,7 @@ func (s *Server) reflectTranscript(user string, since time.Time) (string, []stri
 		}
 		ids = append(ids, chat.ID)
 		tainted = tainted || chat.Tainted
-		b.WriteString("## " + chat.Title + "\n")
+		b.WriteString("## " + chat.ShownTitle() + "\n")
 		used := 0
 		for _, e := range chat.Entries {
 			if (e.Role != "user" && e.Role != "assistant") || strings.TrimSpace(e.Content) == "" {

@@ -64,7 +64,7 @@ func (hass haArea) handleHASettings(w http.ResponseWriter, r *http.Request) {
 	settings, set := ha.Settings()
 	watching, watchError := ha.WatchStatus()
 	publishing, mqttError := ha.MQTTStatus()
-	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(),
+	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(), "agentDomains": homeassistant.AgentDomains(),
 		"diagnostics": ha.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups, "mqttDevices": hass.HASnapshot(r.Context()).Telemetry,
 		"status": map[string]any{"watching": watching, "watchError": watchError, "mqtt": publishing, "mqttError": mqttError}})
 }
@@ -220,6 +220,21 @@ func (hass haArea) handleHACall(w http.ResponseWriter, r *http.Request) {
 // haNothingReleased is what the KI-Agent reads when its own list of
 // devices is empty: without it the model only sees "no entities" and
 // tells the person there are none.
+// haDomainHidden is the note of ha_entities for a domain that is not
+// released as a whole: its entities are not visible, so a count says
+// nothing about how many there are (1.09).
+func haDomainHidden(agentList bool, domain string, single int) string {
+	where := "Einstellungen › KI-Agent › Home Assistant › Gerätearten, \"Ansehen\" (or \"Alles\")"
+	if !agentList {
+		where = "Einstellungen › Home Assistant › Geräte für MCP freigeben"
+	}
+	text := "NOT RELEASED: the domain " + domain + " is not released to you, so its entities are not visible. This is no count: do not say there are none. Tell the person you have no right to see them and that they can release them under " + where + "."
+	if single > 0 {
+		text += " Only the single entities listed are released."
+	}
+	return text
+}
+
 const haNothingReleased = "No Home Assistant device is released for the KI-Agent yet. Tell the person to release devices under Einstellungen › KI-Agent › Home Assistant › Geräte für den Agenten (\"Alles\" or a selection)."
 
 func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
@@ -266,7 +281,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 			}
 			return ha.Capabilities(ctx, q.Entity)
 		})),
-		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors …) with state and area. Only released ones are visible. Pages of 100.",
+		reading("ha_entities", "Entities of Home Assistant released to TitanOS (lights, switches, sensors, automations, scripts, scenes …) with state, area and attributes (an automation's last_triggered). Only released ones are visible: with domain the result says released, and hidden:true with why when that kind is not released – then it is not a count of 0. Pages of 100.",
 			schema(props(map[string]any{
 				"domain": str("Only this domain, e.g. light."),
 				"area":   str("Only entities in an area whose name contains this text."),
@@ -313,8 +328,24 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				if end < total {
 					result["cut"], result["nextOffset"] = true, end
 				}
-				if total == 0 && ha.ReleasesNothing(ctx) {
+				switch {
+				case total == 0 && ha.ReleasesNothing(ctx):
 					result["note"] = haNothingReleased
+					result["hidden"], result["why"] = true, haNothingReleased
+				case q.Domain != "":
+					// 1.09: a count of 0 must not stand for "not visible".
+					released := ha.DomainReleased(ctx, q.Domain)
+					result["released"] = released
+					switch {
+					case !released:
+						result["hidden"], result["why"] = true, haDomainHidden(ha.OwnRelease(ctx), q.Domain, total)
+					case total == 0 && q.Area == "" && q.Search == "":
+						result["note"] = "None present: the domain " + q.Domain + " is released and Home Assistant has no entity of it."
+					}
+				case total == 0 && !ha.ReleasesAll(ctx):
+					// A selection searched by name or room: what is not
+					// released cannot be found either.
+					result["note"] = "Only released kinds and entities are searched; something not released is not visible here. Ask with domain to see whether a kind is released."
 				}
 				return result, nil
 			})),
@@ -366,7 +397,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
-				level, ok := homeassistant.Level(q.Domain)
+				level, ok := ha.CallLevel(ctx, q.Domain, q.Service)
 				if !ok || !homeassistant.ValidService(q.Service) {
 					return nil, homeassistant.ErrNotAllowed
 				}
