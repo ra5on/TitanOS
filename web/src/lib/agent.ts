@@ -738,6 +738,9 @@ export type DotSize = 's' | 'm' | 'l';
  *  "m" is the default since 1.05 (before, the figure was always 26 px). */
 export const DOT_SIZES: Record<DotSize, number> = { s: 14, m: 18, l: 26 };
 
+/** Where the agent page keeps this browser's copy of the look. */
+export const LOOK_KEY = 'titanos.agent.look';
+
 /** Settings that belong to the device, not the account. */
 export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
 

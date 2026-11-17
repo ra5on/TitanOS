@@ -20,6 +20,9 @@
 	import { isGpuWidget, type GpuValue, type WidgetKind } from './prefs.ts';
 	import { dockerPrograms, sources } from './sources.svelte.ts';
 	import { session } from '../session.svelte.ts';
+	import BusyFigure from '../components/agent/BusyFigure.svelte';
+	import { DOT_SIZES } from '../agent.ts';
+	import { agentLook, lookCalm } from '../agent-look.svelte.ts';
 
 	let {
 		kind,
@@ -131,6 +134,15 @@
 	});
 	const agentWaiting = $derived((agent?.chats ?? []).filter((c) => c.state === 'waiting'));
 	const agentRunning = $derived((agent?.chats ?? []).filter((c) => c.state === 'running'));
+	// 1.06: a running chat shows the chat's figure in the colour and size of
+	// the agent's settings (agent-look.svelte.ts: this browser's copy, the
+	// NAS only when there is none).
+	$effect(() => {
+		if (kind === 'agent') agentLook.start();
+	});
+	$effect(() => {
+		if (agentRunning.length) agentLook.need();
+	});
 	const agentLast = $derived(
 		[...(agent?.chats ?? [])]
 			.filter((c) => c.preview && c.state !== 'running' && c.state !== 'waiting')
@@ -528,7 +540,13 @@
 				class="list-row"
 				onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(c.id))}
 			>
-				<span class="ag-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+				<span
+					class="ag-fig"
+					data-agent-figure
+					style:--ag-dots={agentLook.value.dotColor || null}
+					style:--ag-dot-size="{DOT_SIZES[agentLook.value.dotSize]}px"
+					><BusyFigure kind="" calm={lookCalm(agentLook.value)} /></span
+				>
 				<span class="ellipsis grow">{c.title}</span>
 				<span class="state on">{t('desktop.widget.agentRuns')}</span>
 			</button>
@@ -602,54 +620,14 @@
 		border-radius: 50%;
 		border: 2px solid var(--status-warn, #d9734a);
 	}
-	.ag-dots {
+	/* The chat's figure (BusyFigure): flat dots in one colour, the agent's
+	   orange unless the settings choose another. */
+	.ag-fig {
 		flex: none;
-		position: relative;
-		width: 16px;
-		height: 16px;
+		display: inline-flex;
+		align-items: center;
 		margin: 0 4px;
-		animation: ag-turn 2.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
-	}
-	.ag-dots i {
-		position: absolute;
-		width: 4.5px;
-		height: 4.5px;
-		border-radius: 50%;
-		background: #d9734a;
-	}
-	.ag-dots i:nth-child(1) {
-		left: 5.75px;
-		top: 1px;
-	}
-	.ag-dots i:nth-child(2) {
-		left: 1px;
-		top: 10px;
-	}
-	.ag-dots i:nth-child(3) {
-		left: 10.5px;
-		top: 10px;
-	}
-	@keyframes ag-turn {
-		0%,
-		12% {
-			transform: rotate(0deg);
-		}
-		33%,
-		45% {
-			transform: rotate(120deg);
-		}
-		66%,
-		78% {
-			transform: rotate(240deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.ag-dots {
-			animation: none;
-		}
+		--ag-warm: #d9734a;
 	}
 	.ag-last {
 		display: flex;
