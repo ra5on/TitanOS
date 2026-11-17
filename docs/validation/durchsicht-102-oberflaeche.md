@@ -86,9 +86,11 @@ Die Backend-Teile hat der Zweig `feat/v1.04-b` erledigt; hier steht nur, was an 
 | Nr. | Ort | Oberfläche | Stand |
 |---|---|---|---|
 | A-12 | `agent/features/ProtectGroup.svelte` | Die Nachfragen bei „Ablehnen“ und „Zugang beenden“ gibt es seit 1.03. Neu: Die Zähler der Zeilen (offene Meldungen, offene Anträge) werden beim Schließen einer Ansicht neu gelesen, nicht erst beim nächsten Öffnen der Liste. | behoben in 1.04. Prüfung in `test-ui-agent54-protect`. |
-| A-22 | `agent/features/FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite entstand auf dem Stand vor der ersten und kam als 409 „anderswo geändert“ zurück (dieselbe Funktion: verloren) bzw. überschrieb bei den eigenen Einstellungen still die erste. Jetzt zeigt die Seite eine Änderung sofort, Speichern wartet auf das vorige und schickt den neuesten Stand mit dem `rev`, den das NAS zuletzt gab. | behoben in 1.04. Prüfung in `test-ui-agent54-docs` (zwei Schalter derselben Funktion schnell hintereinander). |
+| A-22 | `agent/features/FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite entstand auf dem Stand vor der ersten und kam als 409 „anderswo geändert“ zurück (dieselbe Funktion: verloren) bzw. überschrieb bei den eigenen Einstellungen still die erste. Jetzt zeigt die Seite eine Änderung sofort, Speichern wartet auf das vorige und schickt den neuesten Stand mit dem `rev`, den das NAS zuletzt gab. Ging eine Änderung verloren, weil anderswo dieselbe Funktion geändert wurde, bringt eine dahinter wartende sie nicht zurück: Sie schickt nur, was sie selbst geändert hat. | behoben in 1.04. Prüfungen in `test-ui-agent54-docs` (zwei Schalter derselben Funktion schnell hintereinander) und `test-ui-agent54-protect` (wartende Änderung nach verlorener; rot ohne Korrektur). |
 | A-32 | `agent/features/ForesightGroup.svelte` | Ein Speicherfehler steht jetzt im offenen Blatt selbst (die Fehlerzeile der Liste lag dahinter); Schließen vergisst ihn. | behoben in 1.04. Test `tests/components/foresight-save-error.test.ts` (rot ohne Korrektur). |
 | A-36 (Rest) | `lib/features/family.ts` | `stepsPreview` wurde nur vom Test benutzt. | entfernt, samt Test. |
+| – | `lib/job-code.ts`, `routes/lxc/+page.svelte` | Neue Auftragscodes aus `feat/v1.04-a`: `timeout` (lxc-create über 30 Minuten) und `delete_failed` (Löschen samt Daten gescheitert, der Container bleibt bekannt) zeigen ihren Text wie `interrupted` (`lxc.jobCode.*`, gleiche Schlüssel und Texte wie dort). Bei `delete_failed` entfällt der Hinweis „Das Anlegen ist fehlgeschlagen …“. | gebaut in 1.04. Test `tests/lib/job-code.test.ts`. |
+| – | `routes/files/TrashView.svelte` | Neuer API-Fehler `trash_too_many` aus `feat/v1.04-a`: Der Papierkorb zeigt ihn über den gemeinsamen Fehlertext (`apiErrorText`); Text `error.trash_too_many` wie dort angelegt. | gebaut in 1.04 (nur der Text; die Anzeige gab es schon). |
 | – | `routes/shares/ShareDialog.svelte` | Neuer Fehler `share_guard_locked` (409 beim Speichern einer Freigabe, die der Ransomware-Wächter gesperrt hat, wenn das Speichern wieder Schreibrecht gäbe): Der Dialog springt auf den Reiter „Zugriff“, nennt den Grund (`error.share_guard_locked`, gleicher Text wie in `feat/v1.04-b`) und sagt, wo die Sperre aufgehoben wird (`shares.guardLockedHint`). | gebaut in 1.04. Prüfung in `test-ui-share-quotas`. |
 
 ## Geprüft und in Ordnung
@@ -124,7 +126,7 @@ Die Backend-Teile hat der Zweig `feat/v1.04-b` erledigt; hier steht nur, was an 
 
 ## Prüfstand 1.04 (Zweig `feat/v1.04-c`, 17.11.2026)
 
-- `npm test`: Node-Tests 364, vitest 239, alle grün. `npm run check`: svelte-check 0 Fehler, Prettier sauber.
+- `npm test`: Node-Tests 364, vitest 240, alle grün. `npm run check`: svelte-check 0 Fehler, Prettier sauber.
 - **Alle UI-Skripte** gegen die gebaute Vorschau, je drei gleichzeitig: 84 von 84 grün auf dem Endstand.
 - **Rot beim ersten Lauf (auf dem Stand 1.03):**
   - Ein echter Fehler: `test-ui-scripts` scheiterte unter Last an D102-54, der verlorenen Seitenwahl im Fenster. Allein lief es grün; mit 1,5 s Verzögerung der ersten Seite war es auf dem alten Bau 5 von 5 Mal falsch.
@@ -133,7 +135,7 @@ Die Backend-Teile hat der Zweig `feat/v1.04-b` erledigt; hier steht nur, was an 
     - `test-ui-phone-gestures`: Zurück-Wischen über die Bereichsebene von „Alle Einstellungen“ (seit 0.87).
     - `test-ui-login-appearance`: der Knopf „Anmelden“ genau, neben „Mit Passkey anmelden“.
     - `test-ui-060`: Die Suche wartet auf den nachgeladenen Einstellungsindex; die Systemsteuerung am Handy zeigt die Bereiche statt `.overview .sgroup`.
-- **Neue Prüfungen, rot auf dem alten Bau:** `test-ui-nvr` (D102-43), `test-ui-updates` (D102-44), `test-ui-windows` (D102-49 Reiterleiste und Fokus, D102-54), `test-ui-agent54-docs` (A-22), `test-ui-agent54-protect` (A-12), `test-ui-share-quotas` (`share_guard_locked`); dazu `tests/lib/desk-notices.test.ts` (D102-42) und `tests/components/foresight-save-error.test.ts` (A-32).
+- **Neue Prüfungen, rot auf dem alten Bau:** `test-ui-nvr` (D102-43), `test-ui-updates` (D102-44), `test-ui-windows` (D102-49 Reiterleiste und Fokus, D102-54), `test-ui-agent54-docs` (A-22), `test-ui-agent54-protect` (A-12, A-22 nach Konflikt), `test-ui-share-quotas` (`share_guard_locked`); dazu `tests/lib/desk-notices.test.ts` (D102-42) und `tests/components/foresight-save-error.test.ts` (A-32).
 - **Nicht gelaufen:**
   - `test-ui-crawl` braucht ein echtes `titand -dev`.
   - `test-ui-webapp-focus` braucht den gebauten T-PDF für das Web. Hier gibt es keinen Build davon, nur den Download von GitHub.
