@@ -9190,5 +9190,13 @@
 	"immichGuide.cannot": "What it cannot do",
 	"immichGuide.cannot1": "Decide when it runs in the background: iOS decides. The more often you open the app, the more often it may.",
 	"immichGuide.cannot2": "After swiping it away in the app switcher, and in Low Power Mode, nothing runs in the background until you open the app again.",
-	"immichGuide.cannot3": "Back up without a connection to the NAS: then it waits until the NAS can be reached again."
+	"immichGuide.cannot3": "Back up without a connection to the NAS: then it waits until the NAS can be reached again.",
+	"agent.stepsMoreOne": "and 1 more",
+	"agent.stepsMore": "and {count} more",
+	"agent.set.chatWidth": "Width of the chat",
+	"agent.set.chatWidthHint": "On the computer; on the phone the chat always uses the whole width.",
+	"agent.set.chatWidth.full": "Full width",
+	"agent.set.chatWidth.read": "Reading width",
+	"agent.sideResize": "Width of the side bar",
+	"agent.sideResizeHint": "Drag or use the arrow keys to change the width; a double click resets it."
 }

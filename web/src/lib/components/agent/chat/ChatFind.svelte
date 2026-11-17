@@ -137,7 +137,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-1-5);
-		max-width: 760px;
+		max-width: var(--ag-chat-width, 760px);
 		margin: 0 auto var(--space-3);
 		padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-3);
 		border: 1px solid var(--accent);

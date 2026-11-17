@@ -33,10 +33,17 @@ export function seconds(steps: Entry[]): string {
 	return ` · ${n} s`;
 }
 
-/** What the steps did, in short ("Docker-Apps gelesen, VMs gelesen"). */
+/** What the steps did, in short ("Docker-Apps gelesen, VMs gelesen"). More
+ *  than three end in "und 2 weitere", never in "…" (1.07: no cut-off text). */
 export function stepsGist(steps: Entry[]): string {
 	const words = [...new Set(steps.filter((s) => s.role === 'tool').map(stepLabel))];
-	return words.slice(0, 3).join(', ') + (words.length > 3 ? ' …' : '');
+	const rest = words.length - 3;
+	if (rest <= 0) return words.join(', ');
+	return (
+		words.slice(0, 3).join(', ') +
+		' ' +
+		(rest === 1 ? t('agent.stepsMoreOne') : t('agent.stepsMore', { count: rest }))
+	);
 }
 
 export function stepOutput(step: Entry): string {

@@ -69,7 +69,7 @@
 		overscroll-behavior: contain;
 	}
 	.page {
-		max-width: 980px;
+		max-width: var(--ag-page-width, 980px);
 		margin: 0 auto;
 		padding: var(--space-5) 28px;
 		display: flex;

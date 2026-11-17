@@ -357,7 +357,7 @@
 		overscroll-behavior: contain;
 	}
 	.column {
-		max-width: 760px;
+		max-width: var(--ag-chat-width, 760px);
 		margin: 0 auto;
 		display: flex;
 		flex-direction: column;

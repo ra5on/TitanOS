@@ -40,6 +40,7 @@
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
+	import SideResize, { readSideWidth } from '#lib/components/agent/SideResize.svelte';
 	import { trapFocus } from '#lib/focus-trap.ts';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
@@ -81,6 +82,8 @@
 		'agent.settings': { run: () => ag.show('settings'), enabled: agentOn },
 	});
 
+	// 1.07: the width of the side bar on the desktop, per device.
+	let sideWidth = $state(readSideWidth());
 	const unfold = $derived(ag.folded && !ag.phone ? () => ag.setFolded(false) : undefined);
 	const pageNames = $derived({
 		chat: t('nav.agent'),
@@ -305,6 +308,7 @@
 	style:--ag-dots={ag.look.dotColor || null}
 	style:--ag-busy-text={ag.look.textColor || null}
 	style:--ag-dot-size="{DOT_SIZES[ag.look.dotSize]}px"
+	data-width={ag.look.chatWidth}
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 
@@ -351,9 +355,10 @@
 				>{/if}
 		</div>
 	{:else}
-		<div class="layout" class:folded={ag.folded && !ag.phone}>
+		<div class="layout" class:folded={ag.folded && !ag.phone} style:--ag-side-w="{sideWidth}px">
 			{#if !ag.phone && !ag.folded}
 				<aside class="side"><AgentMenu {...ag.menuProps} /></aside>
+				<SideResize bind:width={sideWidth} />
 			{/if}
 			<section class="main" class:floating aria-label={ag.current?.title ?? t('agent.newChat')}>
 				{#if ag.dialog?.kind === 'feature' && !ag.phone}
@@ -827,10 +832,12 @@
 		min-height: 0;
 	}
 	.layout {
+		position: relative;
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: 264px minmax(0, 1fr);
+		/* 1.07: the side bar's width can be dragged (SideResize, per device). */
+		grid-template-columns: var(--ag-side-w, 264px) minmax(0, 1fr);
 	}
 	.layout.folded,
 	.agent.phone .layout {
@@ -1099,6 +1106,17 @@
 		color: var(--text);
 		hyphens: manual;
 	}
+	/* 1.07: the chat and the input use the whole main area with an even
+	   margin (owner 17 Nov 2026), or the reading width of before. The
+	   pages (start page, memory …) follow: full, or their 980 px. */
+	.agent {
+		--ag-chat-width: none;
+		--ag-page-width: none;
+	}
+	.agent[data-width='read'] {
+		--ag-chat-width: 760px;
+		--ag-page-width: 980px;
+	}
 	.p-text small {
 		color: var(--muted);
 		font-size: var(--text-sm);
@@ -1112,7 +1130,7 @@
 		font-size: var(--text-lg);
 	}
 	.said {
-		max-width: 760px;
+		max-width: var(--ag-chat-width);
 		margin: 0 auto var(--space-1-5);
 		font-size: var(--text-sm);
 		color: var(--muted);
@@ -1136,7 +1154,7 @@
 	.dock :global(.composer),
 	.dock :global(.cmds),
 	.where {
-		max-width: 760px;
+		max-width: var(--ag-chat-width);
 		margin-left: auto;
 		margin-right: auto;
 	}

@@ -9190,5 +9190,13 @@
 	"immichGuide.cannot": "Was sie nicht kann",
 	"immichGuide.cannot1": "Selbst bestimmen, wann sie im Hintergrund läuft: das entscheidet iOS. Je öfter du die App öffnest, desto öfter darf sie.",
 	"immichGuide.cannot2": "Nach dem Wegwischen aus dem App-Umschalter und im Stromsparmodus läuft nichts im Hintergrund, bis du die App wieder öffnest.",
-	"immichGuide.cannot3": "Ohne Verbindung zum NAS sichern: dann wartet sie, bis das NAS wieder erreichbar ist."
+	"immichGuide.cannot3": "Ohne Verbindung zum NAS sichern: dann wartet sie, bis das NAS wieder erreichbar ist.",
+	"agent.stepsMoreOne": "und 1 weiterer",
+	"agent.stepsMore": "und {count} weitere",
+	"agent.set.chatWidth": "Breite des Chats",
+	"agent.set.chatWidthHint": "Am Computer; am Handy nutzt der Chat immer die ganze Breite.",
+	"agent.set.chatWidth.full": "Volle Breite",
+	"agent.set.chatWidth.read": "Lesebreite",
+	"agent.sideResize": "Breite der Seitenleiste",
+	"agent.sideResizeHint": "Ziehen oder Pfeiltasten ändern die Breite, Doppelklick setzt sie zurück."
 }

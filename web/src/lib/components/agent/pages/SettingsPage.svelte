@@ -351,6 +351,24 @@
 							{/each}
 						</span>
 					</div>
+					<!-- 1.07: the width of the chat on the desktop; the phone always
+					     uses its whole width. -->
+					<div class="row col">
+						<span class="t"
+							><strong>{t('agent.set.chatWidth')}</strong><small
+								>{t('agent.set.chatWidthHint')}</small
+							></span
+						>
+						<span class="seg" role="radiogroup" aria-label={t('agent.set.chatWidth')}>
+							{#each ['full', 'read'] as const as w (w)}
+								<label class:on={look.chatWidth === w}
+									><input type="radio" bind:group={look.chatWidth} value={w} />{t(
+										`agent.set.chatWidth.${w}`,
+									)}</label
+								>
+							{/each}
+						</span>
+					</div>
 					<label class="row">
 						<span class="t"><strong>{t('agent.set.compact')}</strong></span>
 						<input type="checkbox" class="switch" bind:checked={look.compact} />

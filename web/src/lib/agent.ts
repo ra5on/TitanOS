@@ -732,7 +732,15 @@ export type Look = {
 	/** Size of the working dots' figure (owner 17 Nov 2026: "Größe der
 	 *  Punkte anpassen … die sind für mich viel zu groß"); see DOT_SIZES. */
 	dotSize: DotSize;
+	/** Width of the chat on the desktop (1.07, owner 17 Nov 2026: "dass der
+	 *  wirklich die volle Breite nimmt"): the whole main area ("full", the
+	 *  default) or a reading width of about 760 px ("read"). A stored look
+	 *  without it, or with an unknown value, is "full"; older versions
+	 *  ignore the field. The phone always uses its whole width. */
+	chatWidth: ChatWidth;
 };
+
+export type ChatWidth = 'full' | 'read';
 
 export type DotSize = 's' | 'm' | 'l';
 /** The width of the working figure in px per size; the dots grow with it.
@@ -767,6 +775,7 @@ export const defaultLook = (): Look => ({
 	dotColor: '',
 	textColor: '',
 	dotSize: 'm',
+	chatWidth: 'full',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -802,6 +811,7 @@ export function sanitizeLook(v: unknown): Look {
 		dotColor: color(o.dotColor),
 		textColor: color(o.textColor),
 		dotSize: pick(o.dotSize, ['s', 'm', 'l'], d.dotSize),
+		chatWidth: pick(o.chatWidth, ['full', 'read'], d.chatWidth),
 	};
 }
 
