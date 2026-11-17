@@ -223,12 +223,11 @@
 	"mail.setup.imapShort": "Eingang (IMAP)",
 	"mail.setup.smtpShort": "Ausgang (SMTP)",
 	"mail.setup.unsupported": "{name} nimmt kein Passwort mehr an, nur noch die Anmeldung beim Anbieter (OAuth). Das kann T-Mail in dieser Fassung nicht.",
-	"mail.setup.rateLimited": "Zu viele Verbindungsprüfungen – „Verbindung prüfen“ geht in {seconds} s wieder.",
 	"mail.settings.passwordAgain": "Server oder Benutzername geändert: Gib das Passwort neu ein. Ein gespeichertes Passwort geht nie an einen anderen Server.",
 	"mail.settings.pushContent": "Absender und Betreff in Push-Mitteilungen",
 	"mail.settings.pushContentDesc": "Aus: Push-Mitteilungen sagen nur „Neue E-Mail in <Postfach>“. Die Glocke nennt nie Absender oder Betreff.",
 	"mail.settings.saveAll": "Signaturen und Regeln speichern",
-	"mail.compose.fromDraft": "aus dem Entwurf",
+	"mail.compose.fromDraft": "im Entwurf gespeichert",
 	"mail.hint.imap_enable": "{name}: Erlaube in den Einstellungen deines Postfachs beim Anbieter den Zugriff über IMAP/POP3.",
 	"mail.hint.app_password": "{name}: Erzeuge in deinem Konto beim Anbieter ein App-Passwort für T-Mail und gib es hier ein.",
 	"mail.hint.app_password_2fa": "{name}: Mit Anmeldung in zwei Schritten brauchst du ein App-Passwort, das du in deinem Konto beim Anbieter erzeugst.",
@@ -246,5 +245,8 @@
 	"error.mail_rate_limited": "Zu viele Versuche mit neuen Servern oder Verbindungsprüfungen – bitte eine Minute warten.",
 	"error.mail_busy": "T-Mail ist gerade mit anderen großen Aufträgen beschäftigt (Senden, Anhänge). Versuche es gleich noch einmal.",
 	"error.mail_key_missing": "Der Schlüssel der gespeicherten Mail-Passwörter fehlt auf dem Stick. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an.",
-	"error.mail_key_damaged": "Der Schlüssel der gespeicherten Mail-Passwörter ist beschädigt. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an."
+	"error.mail_key_damaged": "Der Schlüssel der gespeicherten Mail-Passwörter ist beschädigt. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an.",
+	"users.agentData.mailAccounts": "T-Mail-Postfächer ({count}) mit Servern, Passwörtern, Signaturen, Regeln und Adressbuch",
+	"mail.limit.wait": "Zu viele Versuche mit neuen Servern oder Verbindungsprüfungen – T-Mail wartet noch {seconds} s; „Verbindung prüfen“ geht danach wieder.",
+	"mail.list.tooLarge": "Mail zu groß zum Anzeigen"
 }

@@ -176,9 +176,6 @@
 	{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if saved}<p class="notice-ok" role="status">{saved}</p>{/if}
-	{#if locked > 0}<p class="notice-warn" role="status">
-			{t('mail.setup.rateLimited', { seconds: locked })}
-		</p>{/if}
 	<div class="btns">
 		<button type="button" class="btn" disabled={busy || needsPassword || locked > 0} onclick={check}
 			>{t('mail.setup.check')}</button

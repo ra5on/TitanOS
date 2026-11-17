@@ -8,6 +8,7 @@ import Compose from '../../src/routes/mail/compose/+page.svelte';
 import { i18n } from '#lib/i18n/index.svelte.ts';
 import { mail } from '#lib/tmail/store.svelte.ts';
 import type { MailAccount } from '#lib/tmail/types.ts';
+import { page } from '$app/state';
 import { reply } from './fetch.ts';
 
 i18n.locale = 'de';
@@ -29,9 +30,13 @@ const account: MailAccount = {
 type Call = { method: string; url: URL; body: unknown };
 let calls: Call[] = [];
 let sendAnswer: () => Response = () => reply(204);
+let drafts = 0;
+const names = new Map<string, string>();
 
 beforeEach(() => {
 	calls = [];
+	drafts = 0;
+	page.url = new URL('http://nas.test/mail/compose');
 	sendAnswer = () => reply(204);
 	mail.accounts = [account];
 	mail.folders = {
@@ -53,7 +58,54 @@ beforeEach(() => {
 				return Promise.resolve(
 					reply(200, { signatures: [{ id: 's1', name: 'Kurz', text: 'Gruß, Max' }], rules: [] }),
 				);
-			if (u.pathname.endsWith('/draft')) return Promise.resolve(reply(200, { uid: 41 }));
+			if (u.pathname.endsWith('/draft')) {
+				const form = init?.body as FormData;
+				const sent = form.getAll('file') as File[];
+				const meta = JSON.parse(form.get('meta') as string);
+				// Like titand: the new draft holds the uploads and what attachFrom names.
+				const kept = (meta.attachFrom?.parts ?? []).map((part: string) => ({
+					part,
+					name: names.get(part) ?? part,
+					type: 'text/plain',
+					size: 3,
+					inline: false,
+					cid: '',
+				}));
+				const fresh = sent.map((f, i) => ({
+					part: String(10 + i),
+					name: f.name,
+					type: 'text/plain',
+					size: f.size,
+					inline: false,
+					cid: '',
+				}));
+				for (const f of fresh) names.set(f.part, f.name);
+				return Promise.resolve(
+					reply(200, { uid: 41 + drafts++, attachments: [...kept, ...fresh] }),
+				);
+			}
+			if (u.pathname.endsWith('/message'))
+				return Promise.resolve(
+					reply(200, {
+						uid: 7,
+						folder: 'INBOX',
+						from: { name: 'Anna', addr: 'anna@example.org' },
+						to: [{ name: '', addr: 'me@example.org' }],
+						cc: [],
+						replyTo: [],
+						subject: 'Frage',
+						date: '2026-11-16T09:00:00Z',
+						messageId: '<m7@example.org>',
+						inReplyTo: '',
+						references: '<m1@example.org>',
+						flags: { seen: true, flagged: false, answered: false },
+						text: 'Kommst du?',
+						html: '',
+						externalImages: false,
+						attachments: [],
+						truncated: false,
+					}),
+				);
 			if (u.pathname.endsWith('/send')) return Promise.resolve(sendAnswer());
 			return Promise.resolve(reply(204));
 		}),
@@ -138,4 +190,47 @@ test('throwing away a draft asks first, with Abbrechen first', async () => {
 	const buttons = dialog.querySelectorAll('.dialog-actions button');
 	expect(buttons[0].textContent).toBe('Abbrechen');
 	expect(buttons[1].classList.contains('btn-danger')).toBe(true);
+});
+
+test('an uploaded file goes up once; later drafts take it from the previous one', async () => {
+	vi.useFakeTimers({ shouldAdvanceTime: true });
+	const { container } = render(Compose);
+	await screen.findByLabelText('Betreff');
+	const input = container.querySelector('input[type=file]') as HTMLInputElement;
+	const file = new File(['abc'], 'plan.txt', { type: 'text/plain' });
+	Object.defineProperty(input, 'files', { value: [file], configurable: true });
+	await fireEvent.change(input);
+	await vi.advanceTimersByTimeAsync(31_000);
+	await fireEvent.input(screen.getByLabelText('Betreff'), { target: { value: 'Plan' } });
+	await vi.advanceTimersByTimeAsync(31_000);
+	const saves = calls.filter((c) => c.url.pathname.endsWith('/draft'));
+	expect(saves.length).toBe(2);
+	const first = saves[0].body as FormData;
+	expect((first.getAll('file') as File[]).map((f) => f.name)).toEqual(['plan.txt']);
+	const second = saves[1].body as FormData;
+	expect(second.getAll('file')).toEqual([]);
+	expect(JSON.parse(second.get('meta') as string)).toMatchObject({
+		draftUid: 41,
+		attachFrom: { parts: ['10'] },
+	});
+	expect(JSON.parse(second.get('meta') as string).attachFrom.uid).toBeUndefined();
+	// Still listed, now as part of the draft.
+	expect(container.textContent).toContain('plan.txt');
+});
+
+test('a reply names the mail it answers (answers), with references and quote', async () => {
+	page.url = new URL('http://nas.test/mail/compose?a=a1&mode=reply&f=INBOX&uid=7');
+	render(Compose);
+	await screen.findByDisplayValue('Re: Frage');
+	await fireEvent.click(screen.getByRole('button', { name: /Senden/ }));
+	await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/send'))).toBe(true));
+	const send = calls.find((c) => c.url.pathname.endsWith('/send'))!;
+	const meta = JSON.parse((send.body as FormData).get('meta') as string);
+	expect(meta).toMatchObject({
+		to: ['Anna <anna@example.org>'],
+		inReplyTo: '<m7@example.org>',
+		references: '<m1@example.org> <m7@example.org>',
+		answers: { folder: 'INBOX', uid: 7 },
+	});
+	expect(meta.text).toContain('> Kommst du?');
 });

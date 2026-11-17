@@ -79,7 +79,9 @@ export function bankHtml(images) {
     "<h1>Ihr Kontoauszug</h1><p>Guten Tag, Ihr Auszug für November liegt bei.</p>" +
     HTML_SCRIPT +
     `<img src="x" onerror="fetch('/sentinel/onerror')">` +
-    '<p><a href="https://evil.example.test/login" target="_blank" rel="noopener noreferrer">www.sparkasse.example</a> · <a href="https://docs.example.test/hilfe" target="_blank" rel="noopener noreferrer">Hilfe</a></p>' +
+    // Links as titand marks them: title = the real target; a text naming
+    // another domain gets data-tmail-mismatch and "⚠ <domain>" after it.
+    '<p><a href="https://evil.example.test/login" target="_blank" rel="noopener noreferrer" title="https://evil.example.test/login" data-tmail-mismatch="1">www.sparkasse.example</a><span style="color:#b00;font-weight:bold"> ⚠ evil.example.test</span> · <a href="https://docs.example.test/hilfe" target="_blank" rel="noopener noreferrer" title="https://docs.example.test/hilfe">Hilfe</a></p>' +
     `<p><img src="${LOGO}" alt="Logo"></p>` +
     (images
       ? '<p><img src="https://track.example.test/pixel.gif" referrerpolicy="no-referrer" alt="Werbung"></p>'
@@ -120,6 +122,8 @@ export function mailState() {
     flags: { seen: false, flagged: false, answered: false },
     attachments: true,
   });
+  // A mail whose head is too large to list: titand knows only its uid.
+  inbox[40] = { uid: inbox[40].uid, tooLarge: true };
   const messages = {
     "acc-privat": {
       INBOX: inbox,
@@ -245,7 +249,7 @@ function counts(s) {
     for (const f of s.folders[a.id]) {
       const list = s.messages[a.id][f.path] ?? [];
       f.total = list.length;
-      f.unread = list.filter((m) => !m.flags.seen).length;
+      f.unread = list.filter((m) => m.flags && !m.flags.seen).length;
     }
     a.unread = s.folders[a.id].find((f) => f.role === "inbox")?.unread ?? 0;
   }
@@ -346,6 +350,14 @@ export async function installMail(target, state = mailState()) {
       };
       return json(a, 201);
     }
+    if (path === "/mail/accounts/test" && s.limitChecks)
+      return route.fulfill({
+        status: 429,
+        headers: { "Retry-After": "60" },
+        json: {
+          error: { code: "mail_rate_limited", message: "mail_rate_limited" },
+        },
+      });
     if (path === "/mail/accounts/test") {
       const how = s.testFails[body?.email] ?? "";
       return json({
@@ -433,12 +445,13 @@ export async function installMail(target, state = mailState()) {
       const needle = (q("q") ?? "").toLowerCase();
       if (needle)
         list = list.filter((r) =>
-          (r.subject + " " + r.from.name + " " + r.from.addr)
+          `${r.subject ?? ""} ${r.from?.name ?? ""} ${r.from?.addr ?? ""}`
             .toLowerCase()
             .includes(needle),
         );
-      if (q("unread") === "1") list = list.filter((r) => !r.flags.seen);
-      if (q("flagged") === "1") list = list.filter((r) => r.flags.flagged);
+      if (q("unread") === "1")
+        list = list.filter((r) => r.flags && !r.flags.seen);
+      if (q("flagged") === "1") list = list.filter((r) => r.flags?.flagged);
       const total = list.length;
       const before = Number(q("before") || 0);
       if (before) list = list.filter((r) => r.uid < before);
@@ -455,6 +468,7 @@ export async function installMail(target, state = mailState()) {
         (x) => x.uid === Number(q("uid")),
       );
       if (!r) return fail(404, "mail_not_found");
+      if (r.tooLarge) return fail(413, "mail_too_large");
       r.flags.seen = true;
       const bank = r.uid === 1000 && q("folder") === "INBOX";
       return json({
@@ -549,7 +563,21 @@ export async function installMail(target, state = mailState()) {
       const sent = multipart(request.postDataBuffer()?.toString("utf8"));
       if (what === "draft") {
         s.drafts.push(sent);
-        return json({ uid: s.nextUid++ });
+        // Like titand: the new draft and its attachments (uploads, NAS files
+        // and what attachFrom takes over).
+        const parts = [
+          ...(sent.meta?.attachFrom?.parts ?? []),
+          ...sent.files,
+          ...sent.nas.map((f) => f.path),
+        ].map((name, i) => ({
+          part: String(i + 2),
+          name: String(name).split("/").pop(),
+          type: "application/octet-stream",
+          size: 1000,
+          inline: false,
+          cid: "",
+        }));
+        return json({ uid: s.nextUid++, attachments: parts });
       }
       if (s.failSend || /FEHLER/.test(sent.meta?.subject ?? ""))
         return fail(502, "mail_send_failed", "550 5.1.1 Mailbox unavailable");

@@ -56,6 +56,8 @@ export type MessageRow = {
 	flags: Flags;
 	size: number;
 	attachments: boolean;
+	/** The head is too large to list: only the uid is sure, the other fields may be missing. */
+	tooLarge?: boolean;
 };
 
 /** `next`: the uid for `before` of the next page, 0 (or null) at the end. */
@@ -141,8 +143,14 @@ export type SendMeta = {
 	references: string;
 	signature: string;
 	draftUid: number;
-	/** Parts of an existing mail taken along (forwarding, a draft opened again). */
-	attachFrom?: { folder: string; uid: number; parts: string[] };
+	/**
+	 * Parts of an existing mail taken along (forwarding, a draft opened
+	 * again). Without `uid` (and folder): the draft this save replaces
+	 * (`draftUid`), so uploaded files need not come again.
+	 */
+	attachFrom?: { folder?: string; uid?: number; parts: string[] };
+	/** The mail answered: it is marked "answered" once this one is sent. */
+	answers?: { folder: string; uid: number };
 };
 
 /** A file of the NAS for nasFiles (roots of GET /files/roots). */
@@ -150,3 +158,6 @@ export type NasFile = { root: string; path: string };
 
 /** How a new e-mail starts from an open one. */
 export type ComposeMode = 'reply' | 'replyAll' | 'forward';
+
+/** The answer of POST …/draft: the new draft and its attachments. */
+export type DraftSaved = { uid: number; attachments?: Attachment[] };

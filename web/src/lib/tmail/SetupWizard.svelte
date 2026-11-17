@@ -273,9 +273,6 @@
 				{/if}
 			</div>
 			{#if busy}<p class="muted" role="status">{t('mail.setup.working')}</p>{/if}
-			{#if locked > 0}<p class="notice-warn" role="status">
-					{t('mail.setup.rateLimited', { seconds: locked })}
-				</p>{/if}
 		</form>
 	{/if}
 </div>

@@ -178,7 +178,7 @@
 	{/if}
 	<ul class="rows">
 		{#each rows as m (m.uid)}
-			{@const unread = !m.flags.seen}
+			{@const unread = m.flags?.seen === false}
 			<li>
 				<button
 					type="button"
@@ -194,17 +194,24 @@
 								>{t('mail.mark.unread')}</span
 							>{/if}
 						<span class="from">{senderName(m.from) || t('mail.noSender')}</span>
-						<time datetime={m.date}>{listDate(m.date, i18n.locale)}</time>
+						{#if m.date}<time datetime={m.date}>{listDate(m.date, i18n.locale)}</time>{/if}
 					</span>
-					<span class="subject">{m.subject.trim() || t('mail.noSubject')}</span>
-					{#if m.flags.flagged || m.flags.answered || m.attachments}
+					{#if m.tooLarge}
+						<!-- Its head is too large to list (titand reads only the uid). -->
+						<span class="subject large"
+							><Icon name="info" size={14} />{t('mail.list.tooLarge')}</span
+						>
+					{:else}
+						<span class="subject">{m.subject?.trim() || t('mail.noSubject')}</span>
+					{/if}
+					{#if m.flags?.flagged || m.flags?.answered || m.attachments}
 						<span class="marks">
-							{#if m.flags.flagged}<span class="mark flagged" title={t('mail.mark.flagged')}
+							{#if m.flags?.flagged}<span class="mark flagged" title={t('mail.mark.flagged')}
 									><Icon name="flag" size={14} /><span class="sr-only"
 										>{t('mail.mark.flagged')}</span
 									></span
 								>{/if}
-							{#if m.flags.answered}<span class="mark" title={t('mail.mark.answered')}
+							{#if m.flags?.answered}<span class="mark" title={t('mail.mark.answered')}
 									><Icon name="reply" size={14} /><span class="sr-only"
 										>{t('mail.mark.answered')}</span
 									></span
@@ -324,6 +331,12 @@
 	.subject {
 		overflow-wrap: anywhere;
 		color: var(--muted);
+	}
+	.subject.large {
+		display: inline-flex;
+		align-items: flex-start;
+		gap: var(--space-1);
+		font-style: italic;
 	}
 	.unread .from,
 	.unread .subject {

@@ -283,6 +283,7 @@ try {
     assert.equal(meta.subject, "Re: Ihr Kontoauszug November");
     assert.equal(meta.inReplyTo, "<1000@fixture.example>");
     assert.equal(meta.references, "<1000@fixture.example>");
+    assert.deepEqual(meta.answers, { folder: "INBOX", uid: 1000 });
     assert.equal(meta.attachFrom, undefined, "a reply carries no attachments");
     assert.equal(meta.signature, "s1");
     assert.deepEqual(state.sent[0].nas, [
@@ -364,6 +365,9 @@ try {
       async () => (await mail.locator(".row").count()) === 72,
       "all pages",
     );
+    // A mail whose head is too large to list says so in words.
+    await mail.getByText("Mail zu groß zum Anzeigen").waitFor();
+    await sound(mail, "list with a too large mail");
 
     // ---- A new mail over the live stream ----
     state.messages["acc-privat"].INBOX.unshift({
@@ -643,6 +647,30 @@ try {
     await shot(page, "15-handy-einstellungen-390");
   }
 
+  // ---- mail_rate_limited: the checks wait, the reason is in sight ----
+  {
+    const { page } = await open({
+      desk: false,
+      change: (s) => (s.limitChecks = true),
+    });
+    await page.goto(base + "/mail/setup");
+    await page.locator("#mail-setup-email").fill("alex@gmail.example");
+    await page.getByRole("button", { name: "Weiter" }).click();
+    await page.getByText(/Gmail \(Test\) ist bekannt/).waitFor();
+    await page.getByRole("button", { name: "Weiter" }).click();
+    await page.locator("#mail-setup-password").fill("x");
+    await page.getByRole("button", { name: "Verbindung prüfen" }).click();
+    await page.getByText(/T-Mail wartet noch (59|60) s/).waitFor();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Verbindung prüfen" })
+        .isDisabled(),
+      true,
+    );
+    await sound(page, "rate limited");
+    await shot(page, "19-zu-viele-pruefungen-1440");
+  }
+
   // ---- Narrow windows (420 and 800 px, the page alone as in a window) ----
   for (const width of [420, 800]) {
     const { page } = await open({ width, desk: false });
@@ -689,6 +717,21 @@ try {
     );
     await sound(page, "users mail switch");
     await shot(page, "16-benutzer-freigabe-1440");
+    // Deleting the account names its T-Mail mailboxes (agent-data mailAccounts).
+    made.data.agentData = {
+      sam: { available: true, chats: 2, folder: false, mailAccounts: 2 },
+    };
+    await page.reload();
+    await page.locator('[data-account="sam"]').first().click();
+    await page
+      .getByRole("button", { name: "Löschen", exact: true })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText(/T-Mail-Postfächer \(2\)/).waitFor();
+    await sound(page, "account delete with T-Mail");
+    await shot(page, "18-konto-loeschen-tmail-1440");
+    await dialog.getByRole("button", { name: "Abbrechen" }).click();
   }
 
   // ---- Without the app release: no program ----

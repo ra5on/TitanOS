@@ -154,23 +154,6 @@ export function hostOf(href: string): string {
 	}
 }
 
-const DOMAIN_IN_TEXT = /^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[/:?#]\S*)?$/i;
-
-/**
- * The real host of a link whose visible text names another domain
- * ("www.bank.de" leading to evil.example) – else ''. Text that names no
- * domain ("Hier klicken") is no mismatch; its target shows anyway.
- */
-export function linkMismatch(href: string, visible: string): string {
-	const real = hostOf(href);
-	if (!real) return '';
-	const m = DOMAIN_IN_TEXT.exec(visible.trim());
-	if (!m) return '';
-	const shown = m[1].toLowerCase().replace(/^www\./, '');
-	if (shown === real || real.endsWith('.' + shown)) return '';
-	return real;
-}
-
 /** The domain of an address, for servers guessed when no provider is known. */
 export function domainOf(email: string): string {
 	return email.trim().toLowerCase().split('@')[1] ?? '';

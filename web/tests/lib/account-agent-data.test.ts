@@ -63,3 +63,18 @@ test('a foreign answer gives no list; odd numbers are made safe', () => {
 	expect(d.chats).toBe(0);
 	expect(d.notes).toBe(2);
 });
+
+test('1.05: the T-Mail mailboxes go with the account, with or without the volume', () => {
+	i18n.locale = 'de';
+	const line = 'T-Mail-Postfächer (2) mit Servern, Passwörtern, Signaturen, Regeln und Adressbuch';
+	expect(agentDataText(sanitizeAgentData({ ...full, mailAccounts: 2 })!).deleted).toContain(line);
+	expect(
+		agentDataText(sanitizeAgentData({ available: false, mailAccounts: 2 })!).deleted,
+	).toContain(line);
+	// Nothing else to delete: the mailboxes alone are no "nothing".
+	const only = agentDataText(
+		sanitizeAgentData({ available: true, folder: false, mailAccounts: 1 })!,
+	);
+	expect(only.note).toBe('');
+	expect(agentDataText(sanitizeAgentData(full)!).deleted.join(' ')).not.toContain('T-Mail');
+});

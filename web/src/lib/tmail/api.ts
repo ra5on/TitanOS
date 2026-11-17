@@ -1,10 +1,12 @@
 // 1.05: the requests of T-Mail (docs/TMAIL.md, "API"). Passwords only travel
 // in the body of a request; nothing here keeps or logs one.
-import { api } from '../api.ts';
+import { api, ApiError } from '../api.ts';
 import { apiPath } from '../cluster-node.ts';
+import { lockFrom } from './checklock.svelte.ts';
 import type {
 	AccountInput,
 	Contact,
+	DraftSaved,
 	Flags,
 	MailAccount,
 	MailFolder,
@@ -18,6 +20,46 @@ import type {
 } from './types.ts';
 
 const enc = encodeURIComponent;
+
+/**
+ * mail_busy (503, Retry-After 5): titand runs two large requests of the
+ * account already, or TitanOS has no memory to spare. Tried once more after
+ * the pause, then the error stands.
+ */
+export async function busyOnce<T>(run: () => Promise<T>, wait = sleep): Promise<T> {
+	try {
+		return await run();
+	} catch (err) {
+		if (!(err instanceof ApiError) || err.code !== 'mail_busy') throw err;
+		await wait((err.retryAfter > 0 ? Math.min(err.retryAfter, 30) : 5) * 1000);
+		return run();
+	}
+}
+/**
+ * mail_rate_limited may come from any route (connections to servers the
+ * account never logged in to, checks): every request notes it, and the
+ * pages say how long T-Mail waits (checklock.svelte.ts).
+ */
+function noteLimits<T extends Record<string, unknown>>(calls: T): T {
+	const out: Record<string, unknown> = {};
+	for (const [name, call] of Object.entries(calls)) {
+		if (typeof call !== 'function') {
+			out[name] = call;
+			continue;
+		}
+		out[name] = (...args: unknown[]) => {
+			const result = (call as (...a: unknown[]) => unknown)(...args);
+			if (result instanceof Promise)
+				return result.catch((err: unknown) => {
+					lockFrom(err);
+					throw err;
+				});
+			return result;
+		};
+	}
+	return out as T;
+}
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const acc = (id: string) => `/mail/accounts/${enc(id)}`;
 
 /** A query string of the values that are set (empty strings and false are left out). */
@@ -39,7 +81,7 @@ export type ListQuery = {
 
 export const PAGE_SIZE = 50;
 
-export const mailApi = {
+export const mailApi = noteLimits({
 	accounts: (signal?: AbortSignal) => api.get<MailAccount[]>('/mail/accounts', signal),
 	createAccount: (body: AccountInput) =>
 		api.post<MailAccount>('/mail/accounts', body as unknown as Record<string, unknown>),
@@ -85,7 +127,7 @@ export const mailApi = {
 	savePart: (
 		id: string,
 		body: { folder: string; uid: number; part: string; root: string; path: string },
-	) => api.post(`${acc(id)}/part/save`, body),
+	) => busyOnce(() => api.post(`${acc(id)}/part/save`, body)),
 	flags: (
 		id: string,
 		body: { folder: string; uids: number[]; add: (keyof Flags)[]; remove: (keyof Flags)[] },
@@ -94,8 +136,10 @@ export const mailApi = {
 		api.post(`${acc(id)}/move`, body),
 	remove: (id: string, body: { folder: string; uids: number[] }) =>
 		api.post(`${acc(id)}/delete`, body),
-	send: (id: string, form: FormData) => api.post(`${acc(id)}/send`, form),
-	draft: (id: string, form: FormData) => api.post<{ uid: number }>(`${acc(id)}/draft`, form),
+	// Large requests (send, draft, saving a part) wait once when titand is busy.
+	send: (id: string, form: FormData) => busyOnce(() => api.post(`${acc(id)}/send`, form)),
+	draft: (id: string, form: FormData) =>
+		busyOnce(() => api.post<DraftSaved>(`${acc(id)}/draft`, form)),
 	/** Whether the account may use T-Mail (never 403). */
 	access: (signal?: AbortSignal) => api.get<{ enabled: boolean }>('/mail/access', signal),
 	contacts: (q: string, signal?: AbortSignal) =>
@@ -103,7 +147,7 @@ export const mailApi = {
 	settings: () => api.get<MailSettings>('/mail/settings'),
 	saveSettings: (body: MailSettings) =>
 		api.put<MailSettings>('/mail/settings', body as unknown as Record<string, unknown>),
-};
+});
 
 /** The body of /send and /draft: `meta` as JSON, uploaded files as `file`, NAS files as one JSON list `nasFiles`. */
 export function sendForm(meta: SendMeta, files: File[], nasFiles: NasFile[]): FormData {

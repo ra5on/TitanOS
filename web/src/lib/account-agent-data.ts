@@ -17,6 +17,8 @@ export type AgentData = {
 	notes: number;
 	/** The account has a folder in the share KI-Agent. */
 	folder: boolean;
+	/** 1.05: the account's T-Mail mailboxes (kept on the stick, counted without the agent's volume too). */
+	mailAccounts: number;
 };
 
 const COUNTS = [
@@ -38,6 +40,7 @@ export function sanitizeAgentData(raw: unknown): AgentData | null {
 		typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
 	const out = { available: r.available, folder: r.folder === true } as AgentData;
 	for (const key of COUNTS) out[key] = count(r[key]);
+	out.mailAccounts = count(r.mailAccounts);
 	// A subset of the projects, never more.
 	out.handedOver = Math.min(out.handedOver, out.projects);
 	return out;
@@ -54,19 +57,25 @@ export type AgentDataText = {
 
 /** The lines of the delete dialog. */
 export function agentDataText(d: AgentData): AgentDataText {
+	// T-Mail lives on the stick: its mailboxes are counted with or without the volume.
+	const mail =
+		d.mailAccounts > 0 ? [t('users.agentData.mailAccounts', { count: d.mailAccounts })] : [];
 	if (!d.available)
 		return {
-			deleted: (
-				[
-					'users.agentData.part.chats',
-					'users.agentData.part.projects',
-					'users.agentData.part.memories',
-					'users.agentData.part.skills',
-					'users.agentData.part.schedules',
-					'users.agentData.part.notes',
-					'users.agentData.part.folder',
-				] as MessageKey[]
-			).map((key) => t(key)),
+			deleted: [
+				...(
+					[
+						'users.agentData.part.chats',
+						'users.agentData.part.projects',
+						'users.agentData.part.memories',
+						'users.agentData.part.skills',
+						'users.agentData.part.schedules',
+						'users.agentData.part.notes',
+						'users.agentData.part.folder',
+					] as MessageKey[]
+				).map((key) => t(key)),
+				...mail,
+			],
 			kept: t('users.agentData.part.shared'),
 			note: t('users.agentData.unavailable'),
 		};
@@ -80,6 +89,7 @@ export function agentDataText(d: AgentData): AgentDataText {
 	];
 	const deleted = rows.filter(([, n]) => n > 0).map(([key, n]) => t(key, { count: n }));
 	if (d.folder) deleted.push(t('users.agentData.part.folder'));
+	deleted.push(...mail);
 	return {
 		deleted,
 		kept: d.handedOver > 0 ? t('users.agentData.handedOver', { count: d.handedOver }) : '',
