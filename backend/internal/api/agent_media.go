@@ -175,7 +175,7 @@ func chatModel(chat *agent.Chat) string {
 	if chat == nil {
 		return ""
 	}
-	return chat.Model
+	return chat.OwnModel()
 }
 
 // readNASFile reads a file of a root the account sees, at most limit bytes.

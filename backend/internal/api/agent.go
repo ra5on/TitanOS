@@ -239,7 +239,9 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now()
-	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Model: req.Model, Think: req.Think, Autonomy: autonomyOf(req.Autonomy, ""), Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
+	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Autonomy: autonomyOf(req.Autonomy, ""), Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
+	chat.ChooseModel(req.Model)
+	chat.ChooseThink(req.Think)
 	if req.Draft {
 		chat.Title = ""
 		if err := store.SaveChat(user.Name, chat); err != nil {
@@ -306,10 +308,10 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Model != "" {
-		chat.Model = req.Model
+		chat.ChooseModel(req.Model)
 	}
 	if req.Think != "" {
-		chat.Think = req.Think
+		chat.ChooseThink(req.Think)
 	}
 	chat.Autonomy = autonomyOf(req.Autonomy, chat.Autonomy)
 	if req.Replace != "" {
@@ -467,10 +469,10 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 		chat.Archived = *req.Archived
 	}
 	if req.Model != nil && len(*req.Model) <= 200 {
-		chat.Model = *req.Model
+		chat.ChooseModel(*req.Model)
 	}
 	if req.Think != nil && len(*req.Think) <= 40 {
-		chat.Think = *req.Think
+		chat.ChooseThink(*req.Think)
 	}
 	if req.Autonomy != nil {
 		chat.Autonomy = autonomyOf(*req.Autonomy, chat.Autonomy)
@@ -553,7 +555,7 @@ func (s *Server) agentLaunch(run *agentRun, user auth.User, chat *agent.Chat, wo
 	}
 	// A copy of the chat in the share the person changed is read back first.
 	s.agentCheckEdit(user, chat)
-	model := chat.Model
+	model := chat.OwnModel()
 	if model == "" {
 		model = settings.Model
 	}
@@ -599,7 +601,7 @@ func (s *Server) agentBase() context.Context {
 func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agentSettings, client *agent.Ollama, model string, chat *agent.Chat, run *agentRun) *agent.Runner {
 	store := s.agentStore()
 	box := s.newAgentToolbox(user, settings)
-	think := chat.Think
+	think := chat.OwnThink()
 	if think == "" {
 		think = settings.Think
 	}

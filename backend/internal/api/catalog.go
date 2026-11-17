@@ -13,6 +13,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/office"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
+	"github.com/ra5on/TitanOS/backend/internal/version"
 	"io"
 	"time"
 )
@@ -142,7 +143,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 					"limit":       map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "description": "How many, 20 if left out."},
 					"minSeverity": enum("Leave out less severe ones.", "info", "warning", "error"),
 				}), true, s.toolNotifications(user)),
-			reading("update_status", "The running TitanOS version, the system in the other slot to fall back to, and a newer release if one was found.", nil, false, noArgs(s.toolUpdateStatus)),
+			reading("update_status", "Whether TitanOS is up to date: running is the version that runs now (answer with it), upToDate, newest (a newer release, if one was found), lastCheck, and answer – one sentence to take over. systemImageBase and fallbackSystems are not the running version.", nil, false, noArgs(s.toolUpdateStatus)),
 			reading("ups_status", "State of the uninterruptible power supply: on battery, charge, runtime left.", nil, false, noArgs(s.toolUPSStatus)),
 			reading("storage_overview", "Volumes (RAID level, state, size, use, rebuild or check in progress) and disks (model, size, role, SMART health, temperature, errors, wear).", nil, false, noArgs(s.toolStorage)),
 			reading("disk_tests", "Running and finished disk tests (read test, overwrite test, SMART self-test) with progress and result.", nil, false,
@@ -189,7 +190,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 	} else {
 		tools = append(tools,
 			reading("nas_info", "Name and TitanOS version of the NAS.", nil, false, noArgs(func(ctx context.Context) (any, error) {
-				return map[string]any{"hostname": env.monitor.Info().Hostname, "version": env.version}, nil
+				return map[string]any{"hostname": env.monitor.Info().Hostname, "version": version.Display(env.version)}, nil
 			})),
 			reading("my_shares", "The shares this account may open, whether it may write, and the free space of each.", nil, false, noArgs(func(ctx context.Context) (any, error) {
 				return s.catalogMyShares(user), nil

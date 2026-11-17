@@ -233,7 +233,7 @@ var BuiltInSkills = []Skill{
 	{ID: "builtin-firewall", BuiltIn: true, Name: "Firewall rules", When: "Firewall, Port freigeben, gesperrt",
 		Steps: "1. firewall_status: zones, rules, blocked addresses.\n2. Add the rule with firewall_rule_add or unblock with firewall_unblock as asked, and say in one sentence what is open now.\n3. Never open the admin page to the internet."},
 	{ID: "builtin-updates", BuiltIn: true, Name: "System updates", When: "TitanOS-Update, \"gibt es ein Update?\"",
-		Steps: "1. update_status: installed and available version, kind of update.\n2. Summarise what changes; check backup_status and that nothing long runs.\n3. If the task was to update: say that it may restart the NAS, then update_action. If it was only a question, stop at the summary."},
+		Steps: "1. update_status: running is the version that runs now (never systemImageBase or fallbackSystems), upToDate, newest; take over its answer sentence, and never call TitanOS up to date when checkError is set or nothing was checked.\n2. Summarise what changes; check backup_status and that nothing long runs.\n3. If the task was to update: say that it may restart the NAS, then update_action. If it was only a question, stop at the summary."},
 	{ID: "builtin-power", BuiltIn: true, Name: "Energy and sleep", When: "Strom, Platten schlafen, Energiesparen",
 		Steps: "1. hardware_status and ups_status: power, temperatures, sleeping disks.\n2. Explain what keeps disks awake (running apps, scans) with logs_search if needed.\n3. Suggest settings under Einstellungen › Energie."},
 	{ID: "builtin-ups", BuiltIn: true, Name: "UPS state", When: "USV, Stromausfall",

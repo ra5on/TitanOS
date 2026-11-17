@@ -10,6 +10,7 @@ import { nasSpeech, speechPrefs } from '#lib/agent-speech.svelte.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 import { pageTitle } from '#lib/page-title.svelte.ts';
 import { loadMine, type FeatureViewId } from '#lib/agent-features.ts';
+import { onAgentSettings } from '#lib/agent-settings-signal.ts';
 import { inWindow } from '#lib/desktop/frame.ts';
 import {
 	accountLook,
@@ -487,7 +488,7 @@ export class AgentPage extends AgentChats {
 					const ask = page.url.searchParams.get('ask');
 					if (ask || attach) queueMicrotask(() => this.composer?.fill(ask ?? ''));
 					// Ollama loads the model now, not with the first message.
-					void api.post('/agent/preload', { model: this.model }).catch(() => {});
+					void api.post('/agent/preload', { model: this.shownModel }).catch(() => {});
 					this.listsReady = true;
 				}
 			})();
@@ -593,6 +594,9 @@ export class AgentPage extends AgentChats {
 				window.removeEventListener('pageshow', shown);
 			};
 		});
+		// Saved in Einstellungen › KI-Agent (another window or tab): the new
+		// default model and thinking level show at once (1.05).
+		$effect(() => onAgentSettings(() => void this.loadStatus()));
 
 		$effect(() => {
 			// The id alone: the chat itself is replaced with every message and

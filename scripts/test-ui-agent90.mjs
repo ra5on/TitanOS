@@ -66,6 +66,11 @@ const chat = {
   updated: at(10, 42),
   state: "idle",
   origin: "web",
+  // Written by a page up to 1.04: the default of then went along with
+  // every message and stands at the chat, without the mark of an own
+  // choice; the chat follows the settings (1.05).
+  model: "gpt-oss:20b",
+  think: "medium",
   entries: [
     {
       id: "u1",
@@ -270,6 +275,20 @@ async function open(width, height, theme = "hell") {
             when: "einmal",
             created: at(1),
           },
+          // 1.05 (owner 17 Nov 2026): a switched-off morning report is not
+          // counted beside "Geplant".
+          {
+            id: "sc3",
+            name: "",
+            task: "",
+            kind: "morning",
+            every: "weekdays",
+            at: "07:00",
+            weekdays: [1, 2, 3, 4, 5],
+            enabled: false,
+            when: "werktags 07:00",
+            created: at(1),
+          },
         ],
       });
     if (p === "/agent/memory" && method === "GET") return json({ memory });
@@ -388,6 +407,24 @@ const sent = (seen, method, path) =>
     "Müll rausstellen",
     "Gesundheitscheck",
   ]);
+  // Only active tasks count (owner 17 Nov 2026: "es sind aber nur 2
+  // aktiv … der Morgenbericht wird mitgezählt").
+  assert.equal(
+    (await next.locator("button.more").innerText()).trim(),
+    "Alle 2",
+    "the start page counts the two active tasks",
+  );
+  assert.equal(
+    (
+      await page
+        .locator("nav .item", { hasText: "Geplant" })
+        .first()
+        .locator(".n")
+        .innerText()
+    ).trim(),
+    "2",
+    "the side bar counts the two active tasks",
+  );
   assert.ok(
     await page
       .locator(".sgroup", { hasText: "Zuletzt erledigt" })
@@ -450,11 +487,13 @@ const sent = (seen, method, path) =>
   assert.equal(await again.count(), 1);
   await again.click();
   await page.waitForTimeout(300);
+  // 1.05 (owner 17 Nov 2026: "bei Denken hoch auswähle … wird das nicht
+  // direkt übernommen"): a chat without a choice of its own sends neither
+  // model nor level, so the NAS takes its settings at the time of the run
+  // (before, the page's copy of the old default went along and stuck).
   assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[0].body, {
     message: "",
     replace: "u2",
-    model: "gpt-oss:20b",
-    think: "medium",
     autonomy: "direct",
   });
 
@@ -521,6 +560,31 @@ const sent = (seen, method, path) =>
     2,
     "a command is not sent as a message",
   );
+  // The default level changes in Einstellungen › KI-Agent (another window):
+  // the chip shows it at once, and the next message still sends no level.
+  const chip = page.locator(".composer .picker .trigger");
+  assert.match(await chip.innerText(), /Mittel/);
+  status.think = "high";
+  await page.evaluate(() =>
+    new BroadcastChannel("titanos-agent-settings").postMessage("saved"),
+  );
+  await until("the chip shows the new default level", async () =>
+    /Hoch/.test(await chip.innerText()),
+  );
+  // A level chosen in the chat is its own: it is sent and stays when the
+  // default changes again.
+  await chip.click();
+  const levels = page.getByRole("dialog", { name: "Modell und Denkstufe wählen" });
+  await levels.getByRole("button", { name: /Niedrig/ }).click();
+  await until("the chip shows the chosen level", async () =>
+    /Niedrig/.test(await chip.innerText()),
+  );
+  status.think = "medium";
+  await page.evaluate(() =>
+    new BroadcastChannel("titanos-agent-settings").postMessage("saved"),
+  );
+  await page.waitForTimeout(400);
+  assert.match(await chip.innerText(), /Niedrig/, "the chat's own level stays");
   // /suche opens the search with the words.
   await input.fill("/suche Sicherung");
   await input.press("Enter");
@@ -536,6 +600,19 @@ const sent = (seen, method, path) =>
   await page.keyboard.press("Escape");
   await sheet.waitFor({ state: "detached" });
   await page.locator(".picker", { hasText: "qwen3:8b" }).waitFor();
+  // What was chosen in the chat goes with the next message.
+  await input.fill("Und jetzt?");
+  await input.press("Enter");
+  await until(
+    "the message with the chosen model and level is sent",
+    async () => sent(seen, "POST", `/agent/chats/${chat.id}/messages`).length === 3,
+  );
+  assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[2].body, {
+    message: "Und jetzt?",
+    model: "qwen3:8b",
+    think: "low",
+    autonomy: "direct",
+  });
   await ctx.close();
 }
 
