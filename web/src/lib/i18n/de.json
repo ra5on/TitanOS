@@ -9080,6 +9080,7 @@
 	"agent.haNo": "Nein",
 	"agent.haReadOnly": "nur ansehen",
 	"agent.haDomain.alarm_control_panel": "Alarmanlagen",
+	"agent.haDomain.automation": "Automationen",
 	"agent.haDomain.binary_sensor": "Melder (auf/zu, Bewegung)",
 	"agent.haDomain.button": "Taster",
 	"agent.haDomain.climate": "Heizung und Klima",

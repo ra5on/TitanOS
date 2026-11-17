@@ -277,7 +277,13 @@ export type Location = { name: string; root: string; path: string; note?: string
 export type FolderRule = { root: string; path: string; mode: Mode };
 
 /** Devices of Home Assistant the agent sees: everything, or domains and single ones. */
-export type HARelease = { all?: boolean; domains?: string[]; entities?: string[] };
+export type HARelease = {
+	all?: boolean;
+	domains?: string[];
+	/** Kinds only the agent can see (1.09, automations), as the NAS sends them. */
+	extraDomains?: string[];
+	entities?: string[];
+};
 
 export type Settings = {
 	enabled: boolean;

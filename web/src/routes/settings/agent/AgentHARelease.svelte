@@ -103,8 +103,11 @@
 		loading = true;
 		const query = haConn === 'main' ? '' : `?connection=${encodeURIComponent(haConn)}`;
 		try {
-			const s = await api.get<{ domains: string[] }>(`/homeassistant/settings${query}`);
-			haDomains = s.domains ?? [];
+			const s = await api.get<{ domains: string[]; agentDomains?: string[] }>(
+				`/homeassistant/settings${query}`,
+			);
+			// The agent can also be given kinds MCP cannot (1.09: automations).
+			haDomains = s.agentDomains ?? s.domains ?? [];
 			haEntities = (await api.get<{ entities: Entity[] }>(`/homeassistant/entities${query}`))
 				.entities;
 		} catch (e) {
@@ -141,6 +144,7 @@
 	]);
 	// Domains without services worth calling (homeassistant.domainLevels).
 	const readOnly = new Set([
+		'automation',
 		'sensor',
 		'binary_sensor',
 		'weather',
@@ -151,6 +155,7 @@
 	]);
 	const named = new Set([
 		'alarm_control_panel',
+		'automation',
 		'binary_sensor',
 		'button',
 		'climate',

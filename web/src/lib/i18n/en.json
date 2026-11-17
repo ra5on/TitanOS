@@ -9080,6 +9080,7 @@
 	"agent.haNo": "No",
 	"agent.haReadOnly": "look only",
 	"agent.haDomain.alarm_control_panel": "Alarm systems",
+	"agent.haDomain.automation": "Automations",
 	"agent.haDomain.binary_sensor": "Binary sensors",
 	"agent.haDomain.button": "Buttons",
 	"agent.haDomain.climate": "Climate",
