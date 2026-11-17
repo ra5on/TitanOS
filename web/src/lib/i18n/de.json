@@ -430,6 +430,7 @@
 	"error.wrong_password": "Das aktuelle Passwort ist falsch.",
 	"error.rate_limited": "Zu viele Fehlversuche. Bitte warte einen Moment.",
 	"error.invalid_share_name": "Erlaubt sind Buchstaben, Ziffern, Leerzeichen, -, _ und ., höchstens 32 Zeichen; nicht mit Leerzeichen oder Punkt beginnen oder enden.",
+	"error.share_guard_locked": "Der Ransomware-Wächter des KI-Agenten hat diese Freigabe gesperrt. Schreibrechte gibt es erst wieder, wenn sie im Wächter wieder geöffnet ist.",
 	"error.share_exists": "Eine Freigabe mit diesem Namen gibt es schon.",
 	"error.share_not_found": "Diese Freigabe gibt es nicht (mehr).",
 	"error.unknown_volume": "Dieses Volume gibt es nicht.",

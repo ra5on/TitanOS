@@ -227,3 +227,30 @@ func TestNewestVersionKeepsAutomaticInstallation(t *testing.T) {
 		t.Errorf("status: pending %+v, auto %v", status.Pending, status.Settings.AutoInstall)
 	}
 }
+
+// Z-8 (1.04): a check that runs while a chosen version installs (schedule,
+// an administrator's login) offers the newest release; the chosen one
+// installs all the same, and is not refused as busy.
+func TestChosenVersionSurvivesACheckMeanwhile(t *testing.T) {
+	e, _ := newChoiceEnv(t)
+	checked := false
+	e.m.freeSpace = func() (int64, error) {
+		if !checked {
+			checked = true
+			if err := e.m.Check(context.Background()); err != nil {
+				t.Error(err)
+			}
+		}
+		return 1 << 30, nil
+	}
+	if err := e.m.InstallVersion(context.Background(), "1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	waitInstalled(t, e.m)
+	if !checked {
+		t.Fatal("the check did not run in between")
+	}
+	if pending := e.m.Status().Pending; pending == nil || pending.Version != "1.1.0" {
+		t.Fatalf("pending: %+v", pending)
+	}
+}

@@ -86,15 +86,21 @@ func (s *Server) advisorReport() (advisorSaved, bool) {
 	return st.saved, !st.saved.LastRun.IsZero()
 }
 
-// advisorDue: the time of today has come and there was no run since; a
-// missed night is made up while the day lasts (like the thinking).
-func advisorDue(at string, last, now time.Time) bool {
+// dailyDue: the time of today (HH:MM) has come and there was no run
+// since; a missed night (NAS off, disk asleep) is made up while the day
+// lasts. The adviser and the thinking of the agent use it.
+func dailyDue(at string, last, now time.Time) bool {
+	due, ok := todayAt(at, now)
+	return ok && !now.Before(due) && last.Before(due) && now.Sub(due) < 20*time.Hour
+}
+
+// todayAt is the time at (HH:MM) of the day of now, in its location.
+func todayAt(at string, now time.Time) (time.Time, bool) {
 	t, err := time.ParseInLocation("15:04", at, now.Location())
 	if err != nil {
-		return false
+		return time.Time{}, false
 	}
-	due := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
-	return !now.Before(due) && last.Before(due) && now.Sub(due) < 20*time.Hour
+	return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location()), true
 }
 
 func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
@@ -107,7 +113,7 @@ func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
 	}
 	last, loaded := st.saved.LastRun, st.loaded
 	st.mu.Unlock()
-	if loaded && !advisorDue(a.at(), last, now) || !loaded && !advisorDue(a.at(), time.Time{}, now) {
+	if loaded && !dailyDue(a.at(), last, now) || !loaded && !dailyDue(a.at(), time.Time{}, now) {
 		return
 	}
 	st.mu.Lock()
@@ -119,7 +125,7 @@ func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
 	}
 	s.advisorLoad()
 	st.mu.Lock()
-	if !st.loaded || !advisorDue(a.at(), st.saved.LastRun, now) || st.running {
+	if !st.loaded || !dailyDue(a.at(), st.saved.LastRun, now) || st.running {
 		st.mu.Unlock()
 		return
 	}

@@ -147,6 +147,10 @@ func (s *Server) handleAgentMoveStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"move": s.agentMoveView()})
 }
 
+// agentMoveChecked runs right after a move looked for running work; tests
+// start a run there.
+var agentMoveChecked func()
+
 // handleAgentMove starts moving the agent's data to another volume.
 func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
 	env := s.agentEnv()
@@ -174,18 +178,26 @@ func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "agent_volume_unknown", "no such mounted volume")
 		return
 	}
+	// "Moving" is set before the look for runs (A-43, 1.04): a run claims
+	// its place first and asks agentMoving after, so either the move sees
+	// the run or the run sees the move. The other way round, a run that
+	// started between the look and the switch ran into a locked store.
+	if !s.agentMove.active.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, "agent_moving", errAgentMoving.Error())
+		return
+	}
 	s.agentRT.mu.Lock()
 	busy := len(s.agentRT.runs) > 0
 	s.agentRT.mu.Unlock()
 	// A run of "Dokumente" writes its index and log at the end, into the
 	// old volume's copy (1.02: those move along now).
 	if busy || s.docsBusy() {
+		s.agentMove.active.Store(false)
 		writeError(w, http.StatusConflict, "agent_busy", "a task of the agent is running; stop it or let it finish first")
 		return
 	}
-	if !s.agentMove.active.CompareAndSwap(false, true) {
-		writeError(w, http.StatusConflict, "agent_moving", errAgentMoving.Error())
-		return
+	if agentMoveChecked != nil {
+		agentMoveChecked()
 	}
 	plan, err := s.agentMovePlan(from, req.To, mounted)
 	if err != nil {

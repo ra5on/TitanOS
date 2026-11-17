@@ -536,6 +536,14 @@ func (s *Server) guardStart(inc protect.Incident, pid int, g agentGuard) {
 	ps.alerts = append(ps.alerts, a)
 	s.guardSaveLocked(ps)
 	ps.mu.Unlock()
+	if a.Locked {
+		// The alert holds the lock from now on (guardShareHeld).
+		ps.accessMu.Lock()
+		if ps.locking[a.Share]--; ps.locking[a.Share] <= 0 {
+			delete(ps.locking, a.Share)
+		}
+		ps.accessMu.Unlock()
+	}
 	slog.Error("ransomware guard alarm", "share", a.Share, "reason", a.Reason, "client", a.Client.Label(), "account", a.Client.User, "files", a.Count, "locked", a.Locked)
 	env.activity.Record(activity.Entry{At: time.Now().UTC(), User: a.Client.User, Via: activity.ViaSystem, Action: "ransomware guard alarm", Target: a.Share, OK: true})
 	s.guardTell(a)
@@ -615,6 +623,9 @@ func (s *Server) guardLockShare(ctx context.Context, a *guardAlert) error {
 		sh.NFS.Mode, sh.NFS.Enabled = shares.ReadOnly, true
 	}
 	err := s.updateShare(sh)
+	if err == nil {
+		ps.locking[a.Share]++
+	}
 	ps.accessMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("share not locked: %w", err)
@@ -624,6 +635,49 @@ func (s *Server) guardLockShare(ctx context.Context, a *guardAlert) error {
 		slog.Warn("connections of the attacking device not ended", "share", a.Share, "err", err)
 	}
 	return nil
+}
+
+var errShareGuardLocked = errors.New("the ransomware guard locked this share; reopen it in the guard first")
+
+// guardShareHeld is asked before a share is saved from its form (A-9,
+// 1.04). While the guard holds the share locked, a save that gives write
+// access again is refused: a form opened before the lock would otherwise
+// lift it silently. A save that keeps the share read-only goes through.
+// On success the caller saves and then calls release; the access lock is
+// held in between, so a lock of the guard cannot come between check and
+// save.
+func (s *Server) guardShareHeld(name string, sh shares.Share) (release func(), err error) {
+	ps := s.protect()
+	ps.accessMu.Lock()
+	if guardGivesWrite(sh) && s.guardLocks(ps, name) {
+		ps.accessMu.Unlock()
+		return nil, errShareGuardLocked
+	}
+	return ps.accessMu.Unlock, nil
+}
+
+// guardLocks: the guard holds the share locked. Caller holds accessMu.
+func (s *Server) guardLocks(ps *protectState, name string) bool {
+	if ps.locking[name] > 0 {
+		return true
+	}
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	if !ps.loaded && s.agentSettings().Features.Guard.Enabled {
+		s.guardLoadLocked(ps)
+	}
+	return slices.ContainsFunc(ps.alerts, func(a guardAlert) bool { return a.Locked && a.Share == name })
+}
+
+// guardGivesWrite: the share as saved lets someone write (what
+// guardLockShare takes away).
+func guardGivesWrite(sh shares.Share) bool {
+	for _, acc := range sh.Access {
+		if acc == shares.ReadWrite {
+			return true
+		}
+	}
+	return sh.NFS.Mode == shares.ReadWrite || sh.NFS.Mode == "" && sh.NFS.Enabled
 }
 
 // guardUnlockShare gives back the access the guard took; entries changed

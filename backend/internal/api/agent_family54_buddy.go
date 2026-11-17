@@ -592,6 +592,12 @@ func (s *Server) handleBuddyPartnerDelete(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
+	// A change of the partner saved while this ran may have made its job
+	// again; without the partner the sync removes it.
+	_ = s.buddySyncJob(buddyPartner{ID: id}) // logged
+	f.mu.Lock()
+	delete(f.jobErr, id)
+	f.mu.Unlock()
 	if r.URL.Query().Get("data") == "1" {
 		if err := s.buddyServer().RemoveData(id); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			writeError(w, http.StatusServiceUnavailable, "buddy_data", err.Error())
@@ -619,11 +625,24 @@ func (s *Server) buddyJob(p buddyPartner, settings agentBuddy) backup.Job {
 
 // buddySyncJob makes the job of a partner match: there while shares are
 // chosen, gone without. It writes /config only when something differs.
+// It follows the partner as stored now, not p (A-35, 1.04): of two changes
+// at once the one saved last wins in the job too, and a partner removed
+// meanwhile gets no job back.
 func (s *Server) buddySyncJob(p buddyPartner) error {
 	env := s.agentEnv()
 	if env.backup == nil || env.storage == nil {
 		return nil
 	}
+	f := s.family54()
+	f.syncMu.Lock()
+	defer f.syncMu.Unlock()
+	f.mu.Lock()
+	if at := slices.IndexFunc(f.partners, func(x buddyPartner) bool { return x.ID == p.ID }); at >= 0 {
+		p = f.partners[at]
+	} else {
+		p = buddyPartner{ID: p.ID}
+	}
+	f.mu.Unlock()
 	id := buddyJobPrefix + p.ID
 	have, exists := s.buddyJobs()[id]
 	want := s.buddyJob(p, s.buddySettings())
@@ -638,7 +657,6 @@ func (s *Server) buddySyncJob(p buddyPartner) error {
 	default:
 		err = env.backup.Create(want, env.storage.Names())
 	}
-	f := s.family54()
 	f.mu.Lock()
 	if err != nil {
 		f.jobErr[p.ID] = err.Error()

@@ -544,11 +544,10 @@ folders:
 
 // docsNightDone: every folder was read since tonight's time.
 func docsNightDone(st docsState, folders []agentFolderRef, at string, now time.Time) bool {
-	t, err := time.ParseInLocation("15:04", at, now.Location())
-	if err != nil {
+	due, ok := todayAt(at, now)
+	if !ok {
 		return false
 	}
-	due := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
 	for _, f := range folders {
 		fst := st.Folders[folderKey(f)]
 		if fst == nil || fst.LastRun.Before(due) {

@@ -143,3 +143,26 @@ func TestFamily54BuddyNoDoublePairing(t *testing.T) {
 		t.Fatal("full list used up the code")
 	}
 }
+
+// A-35 (1.04): the job follows the partner as stored, whatever order the
+// syncs of two changes at once come in; a partner removed meanwhile gets
+// no job back.
+func TestFamily54BuddyJobFollowsTheStoredPartner(t *testing.T) {
+	_, b, _ := pairedServers(t)
+	stale := b.server.buddyPartners()[0]
+	if res, body := b.request("PUT", "/api/v1/agent/buddy/partners/"+stale.ID, map[string]any{"quota": 4 << 30, "shares": []string{}}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("partner: %d %s", res.StatusCode, body)
+	}
+	// The sync of an earlier change comes last.
+	b.server.buddySyncJob(stale)
+	if job, ok := b.server.buddyJobs()[buddyJobPrefix+stale.ID]; ok {
+		t.Fatalf("job from an older state: %v", job.Job.Sources)
+	}
+	if res, _ := b.request("DELETE", "/api/v1/agent/buddy/partners/"+stale.ID, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d", res.StatusCode)
+	}
+	b.server.buddySyncJob(stale)
+	if _, ok := b.server.buddyJobs()[buddyJobPrefix+stale.ID]; ok {
+		t.Fatal("job for a removed partner")
+	}
+}

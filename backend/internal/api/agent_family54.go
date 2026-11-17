@@ -114,6 +114,8 @@ type family54 struct {
 	mu       sync.Mutex
 	loaded   bool
 	partners []buddyPartner
+	// syncMu orders the syncs of the sending jobs (buddySyncJob).
+	syncMu sync.Mutex
 	// tick bookkeeping, only in RAM.
 	lastNet   int64
 	synced    string

@@ -312,24 +312,33 @@ func (s *Stick) copyToRun(version string) (string, error) {
 	}
 	if _, err := io.Copy(out, io.LimitReader(source, maxBinary)); err != nil {
 		out.Close()
+		os.Remove(tmp)
 		return "", err
 	}
 	if err := out.Close(); err != nil {
+		os.Remove(tmp)
 		return "", err
 	}
+	// A copy that is not started would only take RAM (Z-10, 1.04).
 	data, err := os.ReadFile(s.manifest(version))
 	if err != nil {
+		os.Remove(tmp)
 		return "", err
 	}
 	signature, err := os.ReadFile(s.manifest(version) + ".minisig")
 	if err != nil {
+		os.Remove(tmp)
 		return "", err
 	}
 	if err := s.check(version, data, signature, tmp); err != nil {
 		os.Remove(tmp)
 		return "", err
 	}
-	return target, os.Rename(tmp, target)
+	if err := os.Rename(tmp, target); err != nil {
+		os.Remove(tmp)
+		return "", err
+	}
+	return target, nil
 }
 
 // runningFile notes which app the base handed over to, for the check.
@@ -375,16 +384,15 @@ func (s *Stick) Install(version string, manifestData, signature []byte, binary s
 	if err := s.check(version, manifestData, signature, binary); err != nil {
 		return err
 	}
-	if err := writeFile(s.manifest(version), manifestData, 0o644); err != nil {
-		return err
-	}
-	if err := writeFile(s.manifest(version)+".minisig", signature, 0o644); err != nil {
-		return err
-	}
-	if err := os.Rename(binary, s.binary(version)); err != nil {
-		return err
-	}
-	if err := s.Verify(version); err != nil {
+	if err := s.place(version, manifestData, signature, binary); err != nil {
+		// What this attempt put on the stick would stay there until the
+		// next app update that works (Z-10, 1.04). A version the state
+		// names is in use and stays.
+		if version != state.Current && version != state.Previous {
+			for _, path := range []string{s.manifest(version), s.manifest(version) + ".minisig", s.binary(version)} {
+				_ = os.Remove(path) // best effort; prune takes it with the next update
+			}
+		}
 		return err
 	}
 	previous := state.Current
@@ -397,6 +405,20 @@ func (s *Stick) Install(version string, manifestData, signature []byte, binary s
 	}
 	s.prune(next)
 	return nil
+}
+
+// place puts a checked app with its manifest into the app folder.
+func (s *Stick) place(version string, manifestData, signature []byte, binary string) error {
+	if err := writeFile(s.manifest(version), manifestData, 0o644); err != nil {
+		return err
+	}
+	if err := writeFile(s.manifest(version)+".minisig", signature, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(binary, s.binary(version)); err != nil {
+		return err
+	}
+	return s.Verify(version)
 }
 
 // PartPath is where an app is downloaded to before Install.

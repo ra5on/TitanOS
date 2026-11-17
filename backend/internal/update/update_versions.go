@@ -171,7 +171,10 @@ func (m *Manager) InstallVersion(ctx context.Context, wanted string) error {
 	}
 	settings := m.settings
 	m.mu.Unlock()
-	if err := m.Install(ctx); err != nil {
+	// The chosen release goes to the installation as it is: a check that
+	// runs meanwhile (schedule, an administrator's login) replaces what
+	// m.available offers, never the choice.
+	if err := m.installOffer(ctx, offer{manifest: &release.manifest, raw: release.raw, signature: release.signature}, true); err != nil {
 		m.mu.Lock()
 		m.evaluateLocked(false)
 		m.mu.Unlock()

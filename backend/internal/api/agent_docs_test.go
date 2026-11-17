@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net"
 	"net/http"
@@ -779,4 +780,70 @@ func TestPaperRunSurvivesPanic(t *testing.T) {
 		t.Fatal("flag not reset after the panic")
 	}
 	waitDocs(t, ts, "alex")
+}
+
+// A-24 (1.04): a mail whose second attachment cannot be written is taken
+// back whole; when it comes again, its first attachment is there once.
+// What a mail told of a file that left Eingang unread goes from the log.
+func TestPaperMailTakenWholeOrNotAtAll(t *testing.T) {
+	ts, home := docsServer(t)
+	f := fakeMailbox(t, ts)
+	read := docsReadPDF
+	t.Cleanup(func() { docsReadPDF = read })
+	docsReadPDF = func(context.Context, []byte, int, int) (office.PDFReading, error) {
+		return office.PDFReading{Pages: []office.PDFPage{{Number: 1, Text: "Ein Brief"}}}, nil
+	}
+	pdf := func(name string) string {
+		return "--B\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"" + name + "\"\r\nContent-Transfer-Encoding: base64\r\n\r\nJVBERi0xLjQK\r\n"
+	}
+	f.mail[21] = "From: Amt <post@amt.test>\r\nSubject: Bescheid\r\nDate: Wed, 04 Nov 2026 10:00:00 +0100\r\nMessage-ID: <b1@amt.test>\r\n" +
+		"Content-Type: multipart/mixed; boundary=B\r\n\r\n" + pdf("a.pdf") + pdf("b.pdf") + "--B--\r\n"
+	inbox := filepath.Join(home, paperInbox)
+	// Every name the second attachment could get is taken.
+	var blocked []string
+	for n := 1; n < 100; n++ {
+		name := "2026-11-04 b.pdf"
+		if n > 1 {
+			name = fmt.Sprintf("2026-11-04 b (%d).pdf", n)
+		}
+		blocked = append(blocked, filepath.Join(inbox, name))
+	}
+	for _, dir := range blocked {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	lg, _ := ts.server.paperLoad("alex")
+	lg.Hints["Eingang/weg.pdf"] = paperHint{Origin: "mail", Subject: "weg"}
+	if err := ts.server.paperSave("alex", &lg); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.paperRun(context.Background(), alex, m, true, time.Now())
+	if f.seen[21] {
+		t.Fatal("a mail that was not taken whole was marked read")
+	}
+	for _, dir := range blocked {
+		os.Remove(dir)
+	}
+	ts.server.paperRun(context.Background(), alex, m, true, time.Now())
+	if !f.seen[21] {
+		t.Fatal("not taken the second time")
+	}
+	var names []string
+	filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".pdf") {
+			names = append(names, filepath.Base(p))
+		}
+		return nil
+	})
+	slices.Sort(names)
+	if strings.Join(names, "|") != "2026-11-04 a.pdf|2026-11-04 b.pdf" {
+		t.Errorf("files: %v", names)
+	}
+	lg, _ = ts.server.paperLoad("alex")
+	if _, ok := lg.Hints["Eingang/weg.pdf"]; ok {
+		t.Error("the hint of a file gone from Eingang stayed")
+	}
 }

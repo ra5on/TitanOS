@@ -5,7 +5,7 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 - **Teil A:** die Teile des KI-Agenten, die in 0.99 nicht gelesen wurden: Dokumente, Schutz/Wächter (mit Notfallzugang und Notfallhandbuch), Vorausschau (Was-wäre-wenn, Hardware-Berater), Familie (geteilte Projekte, Backup-Buddy, Skill-Katalog), Notizen, Volume-Umzug, Cluster und Code-Sandbox. Jeweils das Backend und die Oberfläche. Chat und Lauf-Verwaltung waren nicht Teil dieser Durchsicht.
 - **Teil B:** `scripts/*.py`, `scripts/*.sh`, `scripts/tests/` und `.github/workflows/*.yml`.
 
-**So wurde vorgegangen:** Vier Teile wurden parallel gelesen: Dokumente; Schutz; Vorausschau und Familie; Skripte und CI. Notizen, Umzug, Cluster und Sandbox habe ich selbst gelesen. Jeder Fund wurde am Code nachverfolgt. Jeder behobene Fund hat einen Test, der mit dem alten Code fehlschlägt; die Ausnahmen sind in der Tabelle genannt.
+**So wurde vorgegangen:** Vier Teile wurden parallel gelesen: Dokumente; Schutz; Vorausschau und Familie; Skripte und CI. Notizen, Umzug, Cluster und Sandbox habe ich selbst gelesen. Jeder Fund wurde am Code nachverfolgt. Jeder behobene Fund hat einen Test, der mit dem alten Code fehlschlägt; die Ausnahmen sind in der Tabelle genannt. Bei A-8 und A-43 (1.04) braucht der Test einen Haken im Code (`emergencyGrantStep`, `agentMoveChecked`); „schlägt mit dem alten Code fehl“ heißt dort: alter Ablauf mit demselben Haken an derselben Stelle.
 
 **Schwere:**
 
@@ -19,8 +19,11 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 
 | Status | Bedeutung |
 |---|---|
-| behoben | mit Commit auf `review/r5` |
-| notiert | nicht gebaut, mit Grund |
+| behoben | mit Commit auf `review/r5`; „behoben in 1.03/1.04“: im jeweiligen Release |
+| notiert | nicht gebaut, mit Grund (Stand 1.02; seit 1.04 keiner mehr) |
+| bewusst gelassen | nicht gebaut, der Grund steht in der Zeile |
+| Entscheidung | wartet auf den Inhaber; Frage und Empfehlung stehen in der Zeile |
+| Oberfläche: wt-104c | der Teil im NAS ist erledigt, der Rest liegt bei der Oberfläche |
 
 ## Teil A – KI-Agent
 
@@ -35,11 +38,11 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-5 | `ProtectGuard.svelte` | Nach dem Ende des Angriffs las die Seite nicht mehr nach. Ein automatisches Wiederherstellen blieb bei „gestoppt“ bzw. „stellt wieder her“ stehen, und der Knopf „Wiederherstellen“ bekam nur eine Ablehnung. | niedrig | behoben `d86f2ccf` (gleicher Test) |
 | A-6 | `agent_protect_handbook.go` `handbookCurrent` | Das Notfallhandbuch wird nur nachts neu erzeugt. Bis dahin enthielt es abgeschaltete Kontakte bzw. alte Nummern, und eine Person mit Notfallzugang las sie. | niedrig (Datenschutz) | behoben `8397102f`, `TestHandbookFollowsContactSettings` |
 | A-7 | `agent_protect_emergency.go` | Eine geänderte Wartezeit gilt nicht für schon offene Anfragen. | niedrig | behoben in 1.03: die Wartezeit eines wartenden Antrags folgt der Einstellung (kürzer und länger, ab dem Antrag); `TestEmergencyWaitingTimeFollowsTheSetting`. |
-| A-8 | `agent_protect_emergency.go` | Zwei gleichzeitige Freigaben (Takt und „Jetzt freigeben“) können sich überschneiden. Folge: weniger Zugang, nicht mehr. | niedrig | notiert |
-| A-9 | `guardLockShare`, `emergencyGrant` | Sperre und Notfallzugang lesen die Freigabe und schreiben sie ganz zurück. Ein Administrator, der ein vorher geöffnetes Freigabe-Formular speichert, kann eine Sperre still aufheben. | niedrig | notiert: gemeinsame Sperre mit `shares` (Bereich wt-r1/r3) |
-| A-10 | `agent_protect.go` Werkzeug `emergency_handbook` | Das Recht wird nur beim Aufbau der Werkzeuge geprüft. Endet ein Zugang während eines Laufs, liefert das Werkzeug bis zum Ende des Laufs weiter. | niedrig | notiert |
-| A-11 | `agent_protect_guard.go` `guardHold` | Snapshot über den eigenen Runner statt `storage.SnapshotAction`. Damit fehlen die Prüfung auf `-dev`, die Sperre `m.actions` und `diskwake.Note`. | niedrig (Aufräumen) | notiert |
-| A-12 | `ProtectEmergency.svelte` | „Ablehnen“ (endgültig) und „Zugang beenden“ fragen nicht nach; die Zähler in `ProtectGroup.svelte` werden erst beim nächsten Öffnen neu gelesen. | niedrig | Backend: nichts nötig (die Routen nehmen keinen Bestätigungswert). Oberfläche offen (Dialoge, Zähler: wt-103c). |
+| A-8 | `agent_protect_emergency.go` | Zwei gleichzeitige Freigaben (Takt und „Jetzt freigeben“) können sich überschneiden. Folge: weniger Zugang, nicht mehr. | niedrig | behoben in 1.04: der Zustand ändert sich unter derselben Sperre wie die Freigaben; eine zweite Freigabe wartet und findet den Antrag entschieden. `TestEmergencyGrantTwiceAtOnce` (ohne Korrektur: „freigegeben“ ohne Freigabe, kein Lesezugriff) |
+| A-9 | `guardLockShare`, `emergencyGrant` | Sperre und Notfallzugang lesen die Freigabe und schreiben sie ganz zurück. Ein Administrator, der ein vorher geöffnetes Freigabe-Formular speichert, kann eine Sperre still aufheben. | niedrig | behoben in 1.04: `PUT /shares/{name}` antwortet 409 `share_guard_locked`, solange der Wächter die Freigabe sperrt und das Speichern wieder Schreibrecht gäbe (SMB `rw` oder NFS schreibend); Speichern, das die Freigabe lesbar lässt, geht. Prüfung und Speichern unter der Sperre des Wächters. `TestGuardLockSurvivesAnOldShareForm` (ohne Korrektur: 204, Sperre aufgehoben). Übersetzung `error.share_guard_locked`. Dabei gefunden: der minütliche Abgleich der Freigabe „KI-Agent“ setzte die Rechte zurück und hob eine Sperre auf dieser Freigabe binnen einer Minute auf; jetzt bleibt sie während der Sperre lesbar (`TestGuardLockOfTheAgentShareStays`). Übrige Schreiber von Freigaben (Speicher für Home Assistant) lesen den aktuellen Stand und geben höchstens dem eingetragenen Konto ausdrücklich neues Recht; das bleibt eine bewusste Handlung des Administrators |
+| A-10 | `agent_protect.go` Werkzeug `emergency_handbook` | Das Recht wird nur beim Aufbau der Werkzeuge geprüft. Endet ein Zugang während eines Laufs, liefert das Werkzeug bis zum Ende des Laufs weiter. | niedrig | behoben in 1.04: das Werkzeug prüft bei jedem Aufruf Konto, Schalter und Zugang. `TestHandbookToolEndsWithTheAccess` |
+| A-11 | `agent_protect_guard.go` `guardHold` | Snapshot über den eigenen Runner statt `storage.SnapshotAction`. Damit fehlen die Prüfung auf `-dev`, die Sperre `m.actions` und `diskwake.Note`. | niedrig (Aufräumen) | bewusst gelassen: `storage.SnapshotAction` passt nicht (sie macht einen Snapshot des Volumes, der Wächter kopiert einen vorhandenen Snapshot). `-dev` ist abgedeckt: `guardHold` bekommt nur einen Snapshot aus `storage.Snapshots`, und das lehnt im Entwicklungsmodus ab. Es fehlen nur die Sperre `m.actions` und der Vermerk für das Aufwecken; scheitert die Kopie, weil gleichzeitig ein Snapshot gelöscht wird, steht eine Warnung im Protokoll, und der Alarm behält den ursprünglichen Snapshot. Eine eigene Methode im Paket `storage` (anderer Bereich) wäre mehr Umbau als Nutzen |
+| A-12 | `ProtectEmergency.svelte` | „Ablehnen“ (endgültig) und „Zugang beenden“ fragen nicht nach; die Zähler in `ProtectGroup.svelte` werden erst beim nächsten Öffnen neu gelesen. | niedrig | Backend: nichts nötig (die Routen nehmen keinen Bestätigungswert). Oberfläche: wt-104c (Dialoge, Zähler) |
 
 ### Dokumente
 
@@ -54,9 +57,9 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-19 | `DocsViews.svelte` | Der Papierkram fragte je Monat zweimal; eine späte Antwort zeigte den falschen Monat. | niedrig | behoben `6a9cf6fa`, `tests/components/docs-paper.test.ts` |
 | A-20 | `DocsGroup.svelte` | Der Zustand eines Laufs wurde nach dem Schließen bis zu 2 h weiter alle 2 s abgefragt. | niedrig | behoben `6a9cf6fa` (ohne eigenen Test, geprüft mit svelte-check und Browser) |
 | A-21 | `DocsFolderPicker.svelte` | Eine späte Antwort zeigte die Unterordner eines vorigen Ordners unter dem neuen Pfad. | niedrig | behoben `98480637`, `tests/components/docs-folder-picker.test.ts` |
-| A-22 | `DocsGroup.svelte`, `FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite schickt den Stand ohne die erste und überschreibt sie. | niedrig | Backend: `rev` geliefert (siehe A-30); die heutige Seite schickt es schon mit, ein zweites Speichern vor der Antwort des ersten bekommt 409 statt still zu überschreiben. Oberfläche offen (Meldung/Neuladen: wt-103c). |
-| A-23 | `agent_docs_paper.go` `paperwork_summary` | Das Werkzeug liefert Namen, Pfade und Beträge ohne die Ordnerregeln des Agenten (anders als `documents_search`). | niedrig | notiert: Entscheidung des Inhabers |
-| A-24 | `agent_docs_paper.go` | Scheitert ein späterer Anhang einer Mail, werden die früheren beim nächsten Mal als „(2)“ erneut abgelegt. `Hints` haben keine Obergrenze. `docsSearch` liest bei jeder Suche das ganze Verzeichnis (bis 128 MB JSON) in den RAM. | niedrig | notiert, nicht gemessen |
+| A-22 | `DocsGroup.svelte`, `FeaturesPanel.svelte` | Zwei schnelle Änderungen hintereinander: Die zweite schickt den Stand ohne die erste und überschreibt sie. | niedrig | Backend: `rev` geliefert (siehe A-30); die heutige Seite schickt es schon mit, ein zweites Speichern vor der Antwort des ersten bekommt 409 statt still zu überschreiben. Oberfläche: wt-104c (Meldung/Neuladen) |
+| A-23 | `agent_docs_paper.go` `paperwork_summary` | Das Werkzeug liefert Namen, Pfade und Beträge ohne die Ordnerregeln des Agenten (anders als `documents_search`). | niedrig | Entscheidung: Soll die Papierkram-Übersicht des Agenten die Ordnerregeln beachten, also Dokumente aus Ordnern, die der Agent nicht lesen darf, weder unter „zuletzt abgelegt“ noch in den Summen zeigen? Empfehlung: ja, wie `documents_search`; die Seite „Papierkram“ selbst bleibt unverändert |
+| A-24 | `agent_docs_paper.go` | Scheitert ein späterer Anhang einer Mail, werden die früheren beim nächsten Mal als „(2)“ erneut abgelegt. `Hints` haben keine Obergrenze. `docsSearch` liest bei jeder Suche das ganze Verzeichnis (bis 128 MB JSON) in den RAM. | niedrig | behoben in 1.04 (zwei von drei): eine Mail kommt ganz oder gar nicht in den Eingang (Geschriebenes wird nach einem Fehler entfernt), Hinweise zu Dateien, die nicht mehr im Eingang liegen, fallen weg. `TestPaperMailTakenWholeOrNotAtAll`. Bewusst gelassen: `docsSearch` liest das Verzeichnis je Suche. Gemessen (künstlich, je Dokument die Höchstmenge Text): 1000 Dokumente 25 MB, Lesen 36 ms, Suche 0,4 s; 3000 Dokumente 75 MB, 81 ms, 1,1 s. Gesucht wird nur auf Anfrage, nie zyklisch; ein Zwischenspeicher hielte 25–75 MB je Konto dauerhaft im RAM, in dem das ganze System läuft |
 
 ### Vorausschau und Familie
 
@@ -69,11 +72,11 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-29 | `agent_foresight.go` Werkzeug `hardware_advice` | Mit „Ersatz mit Preis“ aus gab das Werkzeug gespeicherte Angebote fremder Webseiten an das Modell, ohne den Chat als „fremder Inhalt gelesen“ zu markieren. | niedrig | behoben `26063c50`, `TestHardwareAdviceWithoutPricesHasNoOffers` |
 | A-30 | `agent_features.go` `PUT /agent/features` | Die Seite schickt immer den ganzen Block der Funktionen. Zwei Administratoren oder zwei Tabs: Das Schalten einer Funktion setzt eine inzwischen von anderer Seite geschaltete still zurück (z. B. den Wächter). | mittel | behoben in 1.03: Feld `rev` (Hash des gespeicherten Stands) in `GET`/`PUT /agent/features`, veraltet → 409 `agent_features_changed`, ohne `rev` wie bisher; `TestAgentFeaturesStaleSaveIsRefused`. |
 | A-31 | `agent_foresight_advisor.go` `advisorLoad` | Ein Bericht aus der Zeit, als das Volume schlief, wurde beim Aufwachen durch die ältere Datei ersetzt (samt Vermerk des Monatsberichts). | niedrig | behoben `f9065228`, `TestAdvisorLoadKeepsANewerRun` |
-| A-32 | `ForesightGroup.svelte` / `ForesightSheet.svelte` | Ein Speicherfehler im Blatt ist unsichtbar: Die Fehlerzeile liegt hinter dem Blatt. | niedrig | notiert |
+| A-32 | `ForesightGroup.svelte` / `ForesightSheet.svelte` | Ein Speicherfehler im Blatt ist unsichtbar: Die Fehlerzeile liegt hinter dem Blatt. | niedrig | Oberfläche: wt-104c (nur Oberfläche, im NAS nichts zu tun) |
 | A-33 | `FamilyBuddy.svelte` | Kontingent als „GB“ eingegeben, gespeichert in GiB. 500 „GB“ erscheinen als „537 GB“. | niedrig | behoben in 1.03: Eingabe und Speicherung in GB (1000³), gespeicherte Werte unverändert, unverändertes Speichern behält die Bytes; `tests/agent54-family.test.mjs`. |
-| A-34 | `agent_reflect.go` `agentVolumeAsleep` | Ein Fehler der Schlafabfrage gilt als „wach“; der Berater liest und schreibt dann trotzdem. Der Berater selbst behandelt Fehler als „schläft“. | niedrig | notiert: eine Änderung träfe alle nächtlichen Arbeiten |
-| A-35 | `agent_family54_buddy.go` | Rennen zwischen zwei gleichzeitigen Partner-Änderungen und dem Abgleichauftrag; Partner-Änderung bei ausgeschaltetem Buddy. | niedrig | notiert, unbestätigt |
-| A-36 | `agent_foresight_advisor.go`, `agent_reflect.go` | „Heute um HH:MM fällig“ steht doppelt (`advisorDue`, `reflectDue`); HH:MM wird auf zwei Arten geprüft. `stepsPreview` wird nur vom Test benutzt; Kommentare in `agent_features.go` sind veraltet. | niedrig (Aufräumen) | notiert |
+| A-34 | `agent_reflect.go` `agentVolumeAsleep` | Ein Fehler der Schlafabfrage gilt als „wach“; der Berater liest und schreibt dann trotzdem. Der Berater selbst behandelt Fehler als „schläft“. | niedrig | bewusst gelassen: „Fehler = wach“ ist Absicht. Scheitert die Schlafabfrage dauerhaft (lsblk kaputt), fielen sonst alle nächtlichen Arbeiten des Agenten still aus; einmal eine Platte zu wecken ist das kleinere Übel. Der Berater behandelt nur die Platte des SMART-Verlaufs (`volumeAsleep`) bei Fehlern als schlafend, sein eigener Speicher folgt derselben Regel wie die übrigen |
+| A-35 | `agent_family54_buddy.go` | Rennen zwischen zwei gleichzeitigen Partner-Änderungen und dem Abgleichauftrag; Partner-Änderung bei ausgeschaltetem Buddy. | niedrig | behoben in 1.04: der Abgleich liest den gespeicherten Partner und läuft einzeln; das Lösen eines Partners gleicht am Ende noch einmal ab. `TestFamily54BuddyJobFollowsTheStoredPartner`. Partner-Änderung bei ausgeschaltetem Buddy: kein Fund, die Aufträge laufen laut `docs/agent54/family.md` auch dann als gewöhnliche Sicherung weiter |
+| A-36 | `agent_foresight_advisor.go`, `agent_reflect.go` | „Heute um HH:MM fällig“ steht doppelt (`advisorDue`, `reflectDue`); HH:MM wird auf zwei Arten geprüft. `stepsPreview` wird nur vom Test benutzt; Kommentare in `agent_features.go` sind veraltet. | niedrig (Aufräumen) | behoben in 1.04 (Aufräumen, kein Test möglich, bestehende Tests grün): ein Helfer `dailyDue`/`todayAt` für alle Tageszeiten, HH:MM überall mit `clockRe`, Kommentare in `agent_features.go`. `stepsPreview` liegt in `web/src/lib/features/family.ts`: Oberfläche: wt-104c |
 
 ### Notizen, Umzug, Cluster und Code-Sandbox
 
@@ -85,7 +88,7 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | A-40 | `routes/settings/agent/+page.svelte`, `AgentVolume.svelte` | Das Abfragen eines Modell-Downloads lief nach dem Verlassen der Seite weiter (ein zweiter Download gab ein zweites Intervall). Der Umzug fragte nach dem Verlassen weiter, wenn eine Antwort noch unterwegs war. | niedrig | behoben `6b49bfd0`; `tests/components/agent-volume-poll.test.ts` (Download ohne eigenen Test) |
 | A-41 | `agent_extra.go` `cluster_action` | Das Werkzeug gehört zum Bereich „VMs“, auch für Container und Systemcontainer. Ist „Docker“ verboten und „VMs“ ohne Nachfrage, startet und stoppt der Agent Container auf anderen Knoten ohne Nachfrage. | niedrig–mittel (Rechte, gewollt?) | behoben in 1.03: Bereich je Art (Container → Docker, VM und LXC → VMs, wie `lxc_action`); `TestClusterActionFollowsTheAreaOfItsKind`. |
 | A-42 | `api/users.go` | Beim Löschen eines Kontos bleiben Chats, Gedächtnis, Skills und sein Ordner in „KI-Agent“ liegen. Ein neues Konto gleichen Namens erbt sie (A-13 löscht nur Einstellungen und Dokumente). | mittel | behoben in 1.03 (Inhaber: „Mitlöschen“): `api/agent_forget.go`; `TestDeletedAccountTakesTheAgentDataAlong`, `TestForgottenAccountIsNotMadeAgain`, `TestClusterDeletedAccountTakesTheAgentDataAlong`, `TestAgentDataNeedsTheRightToManage`. |
-| A-43 | `agent_volume.go` | Zwischen der Prüfung „kein Lauf“ und dem Setzen von „zieht um“ liegt ein kurzes Fenster. Ein Lauf, der genau dann startet, scheitert am gesperrten Speicher. | niedrig | notiert |
+| A-43 | `agent_volume.go` | Zwischen der Prüfung „kein Lauf“ und dem Setzen von „zieht um“ liegt ein kurzes Fenster. Ein Lauf, der genau dann startet, scheitert am gesperrten Speicher. | niedrig | behoben in 1.04: der Umzug setzt „zieht um“ vor dem Blick auf laufende Arbeit und nimmt es zurück, wenn etwas läuft. `TestAgentMoveAndRunNeverTogether` (ohne Korrektur: Lauf und Umzug beide gestartet) |
 | A-44 | `agent_code.go`, `docker/sandbox.go` | **Code-Sandbox:** Kein Fund. Gelesen wurden die Zeitlimits (Lauf, Bild-Download 10 min, Laden der Bibliotheken 5 min, Logs 15 s, Löschen 30 s), das Aufräumen bei Abbruch, kein Netz, die Rechte und die Nachfrage-Regel. | – | geprüft |
 | A-45 | `agent_cluster.go` | **Cluster-Freigabe:** Kein Fund (Pfadliste, Prüfung der Freigabe, Signatur durch den Cluster). | – | geprüft |
 
@@ -102,12 +105,12 @@ Auftrag des Inhabers vom 16.11.2026: „die ganze Codebasis prüfen und den Code
 | B-7 | `scripts/tests/` | Testserver wurden nicht geschlossen (ResourceWarning), `test_fetch_webapps` ließ Temp-Ordner liegen, der Git-Test des Autopiloten las die globale Git-Einstellung des Entwicklers (signierte Commits). | niedrig | behoben `e12366fc`, `ff790a5d` |
 | B-8 | `plugin-sign.yml` (~Z. 283) | Scheitert der Download des Plugin-Katalogs vorübergehend, beginnt `sign-plugin-set.py pointer` bei Seriennummer 0. Er veröffentlicht einen Katalog nur mit dem neuen Satz und kleinerer Nummer. Jedes NAS lehnt ihn ab („went backwards“), bis die Nummer wieder höher ist; andere Kernel-Sätze fehlen. | hoch | behoben in 1.03 (Inhaber: „Ja, abbrechen“): nur 404 bzw. leeres Release beginnt bei 0, sonst Abbruch vor dem Veröffentlichen; `test_plugin_sign_catalog.py`. |
 | B-9 | `plugin-sign.yml` Signierschritt (~Z. 213) | Dieselbe Pipe wie B-6 im Signierschritt, schlägt geschlossen fehl. | niedrig | behoben in 1.03: keine Pipe mehr; mit B-8. |
-| B-10 | `plugin-common-check.sh` Z. 245 | Bei zwei Entwürfen desselben `common-N` liefert `--jq` zwei IDs, der nächste Aufruf scheitert. Schlägt geschlossen fehl. | niedrig | notiert: außerhalb von `ALLOWED` |
+| B-10 | `plugin-common-check.sh` Z. 245 | Bei zwei Entwürfen desselben `common-N` liefert `--jq` zwei IDs, der nächste Aufruf scheitert. Schlägt geschlossen fehl. | niedrig | bewusst gelassen: das Skript liegt außerhalb von `ALLOWED` (eine Änderung machte das Release zu einem vollen Systemrelease) und schlägt geschlossen fehl: Bei zwei Entwürfen wird nichts von selbst signiert, der Satz wartet auf die Freigabe von Hand |
 | B-11 | `repack-release.py` Z. 63, `viewer-image-reuse.py` Z. 274; `autopilot.py` `published`, `debian-security.py` | Wiederholt wird nur das Öffnen eines Downloads; ein Abbruch mitten im mehrere GB großen Abbild bricht das App-Release ab (`RELEASING.md` sagt anderes). Autopilot und Debian-Prüfung wiederholen gar nicht. | mittel | behoben in 1.03: ganze Datei neu bei Abbruch/Timeout/5xx in `repack-release.py`, `viewer-image-reuse.py`, `autopilot.py` (`debian-security.py` unverändert); `test_download_retries.py`. |
-| B-12 | mehrere Skripte | Doppelte Helfer: SHA-256 einer Datei (7×), minisign-Prüfung (6×, `plugin-guard.trusted` ohne `rehearsal.pub`), Download mit Wiederholung (3 verschiedene). | niedrig (Aufräumen) | notiert: Zusammenlegen berührt Signaturen |
-| B-13 | `nvidia-update-release.py`, `debian-security.py`, `repack-release.py` | Toter Code: in `nvidia-update-release.py` ungenutzte Funktionen (außerhalb von `ALLOWED`), in `debian-security.py` Funktionen nur für Tests, in `repack-release.py` der ungenutzte Parameter `version` von `repack()`. | niedrig | notiert |
-| B-14 | `fetch-pci-ids.sh`, `tailscale_smoke.py`, `netbird_smoke.py` | `curl` bzw. `scp` ohne Zeitlimit. | niedrig | notiert: außerhalb von `ALLOWED` |
-| B-15 | `release.yml` | `${{ steps.*.outputs.* }}` direkt in `run:`. Die Werte sind vorher per Regex geprüft, also nicht ausnutzbar. | niedrig | notiert (nur Einheitlichkeit) |
+| B-12 | mehrere Skripte | Doppelte Helfer: SHA-256 einer Datei (7×), minisign-Prüfung (6×, `plugin-guard.trusted` ohne `rehearsal.pub`), Download mit Wiederholung (3 verschiedene). | niedrig (Aufräumen) | bewusst gelassen: Zusammenlegen ist Aufräumen in Signaturpfaden, das Risiko ist größer als der Nutzen. `plugin-guard.trusted` lässt `rehearsal.pub` absichtlich aus (strenger, kein falsches Ergebnis) |
+| B-13 | `nvidia-update-release.py`, `debian-security.py`, `repack-release.py` | Toter Code: in `nvidia-update-release.py` ungenutzte Funktionen (außerhalb von `ALLOWED`), in `debian-security.py` Funktionen nur für Tests, in `repack-release.py` der ungenutzte Parameter `version` von `repack()`. | niedrig | bewusst gelassen: Release-Werkzeug wird nur bei Fehlern geändert (Vorgabe des Inhabers für 1.04); toter Code ist keiner. Geprüft: das unbenutzte `version` in `repack()` ist kein vergessenes Schreiben (die Version des Slots schreibt `repack_rest`). `nvidia-update-release.py` liegt außerdem außerhalb von `ALLOWED` |
+| B-14 | `fetch-pci-ids.sh`, `tailscale_smoke.py`, `netbird_smoke.py` | `curl` bzw. `scp` ohne Zeitlimit. | niedrig | bewusst gelassen: alle drei liegen außerhalb von `ALLOWED` (`fetch-pci-ids.sh` gehört zum Bau des Abbilds, die beiden `*_smoke.py` passen nicht auf das Präfix `scripts/smoke-`). Ein Hängen begrenzt das `timeout-minutes` der Jobs in `release.yml` |
+| B-15 | `release.yml` | `${{ steps.*.outputs.* }}` direkt in `run:`. Die Werte sind vorher per Regex geprüft, also nicht ausnutzbar. | niedrig | bewusst gelassen: Release-Werkzeug wird nur bei Fehlern geändert; die Werte sind vorher per Regex geprüft, also nicht ausnutzbar |
 
 ## Zählung
 
@@ -124,7 +127,26 @@ Dazu zwei Bereiche ohne Fund (A-44 Code-Sandbox, A-45 Cluster-Freigabe).
 
 Die Zählung gibt den Stand von 1.02 wieder. In 1.03 behoben (Entscheidungen des Inhabers vom 16.11.2026, Zweig `feat/v1.03-b`): A-7, A-30, A-33, A-41, A-42, B-8, B-9, B-11; bei A-12 und A-22 ist der Teil im NAS erledigt, die Oberfläche offen.
 
+**Stand 1.04** (Zweig `feat/v1.04-b`): Kein Fund ist mehr nur „notiert“.
+
+| Ergebnis | Anzahl | Funde |
+|---|---|---|
+| behoben in 1.02 | 32 | siehe Tabelle oben |
+| behoben in 1.03 | 8 | A-7, A-30, A-33, A-41, A-42, B-8, B-9, B-11 |
+| behoben in 1.04 | 7 | A-8, A-9, A-10, A-24 (zwei von drei Teilen), A-35, A-36, A-43 |
+| bewusst gelassen | 7 | A-11, A-34, B-10, B-12, B-13, B-14, B-15 (dazu der dritte Teil von A-24) |
+| Entscheidung des Inhabers | 1 | A-23 |
+| im NAS erledigt, Oberfläche bei wt-104c | 3 | A-12, A-22, A-32 (dazu `stepsPreview` aus A-36) |
+| **Summe** | **58** | |
+
 ## Angefasste gemeinsame Dateien
+
+In 1.04:
+
+- `backend/internal/api/shares.go`: Haken `guardHeld` vor dem Speichern einer Freigabe (A-9). Gehört zum Bereich Freigaben.
+- `web/src/lib/i18n/de.json`, `en.json`: nur der Schlüssel `error.share_guard_locked` (A-9).
+
+Bis 1.02:
 
 - `backend/internal/api/users.go`: ein Haken `agentForgetUser` im Löschen eines Kontos (A-13). Gehört zur Durchsicht „Konten“ (wt-r3).
 - `backend/internal/agent/store.go`, `agent/seen.go`: `UpdateNotesMeta`, `RemovePrivate`, `SaveNotesMeta` unter der Sperre.
