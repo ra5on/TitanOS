@@ -92,7 +92,7 @@ func (b *agentToolbox) Missing() map[string]string {
 func (b *agentToolbox) accessTool() *agentTool {
 	return &agentTool{name: "agent_access", area: agent.AreaAgent, kind: agent.KindAgent,
 		description: "Your own rights and what you cannot see here: role, rights per area, Home Assistant release, folder rules (count), services off, Immich, and where the person changes each. Call it before you say \"none\" or \"I cannot\", and when the person says your answer is wrong.",
-		params: schema(nil),
+		params:      schema(nil),
 		own: func(ctx context.Context, _ *agent.Chat, _ json.RawMessage) (agent.Outcome, error) {
 			data, err := json.Marshal(b.access(ctx))
 			return agent.Outcome{Text: string(data)}, err

@@ -56,12 +56,12 @@ type agentSettings struct {
 	MaxSteps  int    `json:"maxSteps,omitempty"`
 	// Users are the accounts besides owners that may use the agent
 	// ("KI-Agent erlaubt" per account). Owners always may.
-	Users     []string         `json:"users,omitempty"`
-	Policy    agent.Policy     `json:"policy"`
+	Users  []string     `json:"users,omitempty"`
+	Policy agent.Policy `json:"policy"`
 	// NVRNames lets nvr_events give the names of known faces and plates
 	// and the plates read (1.10, owner 17 Nov 2026: only with a switch of
 	// its own, off from the factory). Pictures never go to the agent.
-	NVRNames bool `json:"nvrNames,omitempty"`
+	NVRNames  bool             `json:"nvrNames,omitempty"`
 	Locations []agent.Location `json:"locations,omitempty"`
 	// WeeklyReport sends on Monday what the agent changed in the week.
 	WeeklyReport bool `json:"weeklyReport,omitempty"`
