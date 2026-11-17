@@ -13,7 +13,7 @@
 	// unless a size is given; the dots and their paths grow with it, because
 	// every length below is a share of the figure.
 	import type { BusyKind } from '#lib/agent.ts';
-	import { FIGURES, SPHERE, figureAt, type Spot } from '#lib/agent-figures.ts';
+	import { BLOCK, FIGURES, SPHERE, figureAt, type Spot } from '#lib/agent-figures.ts';
 
 	let {
 		kind = '',
@@ -61,8 +61,15 @@
 	});
 	// Moving: one loop for the life of the figure. It reads the kind every
 	// frame, so a change never restarts it.
+	// A moving figure begins at a block of its own, so not every run opens
+	// with the same phases (the still picture stays at time 0: the ring).
+	let begun = false;
 	$effect(() => {
 		if (still) return;
+		if (!begun) {
+			begun = true;
+			clock += BLOCK * Math.floor(Math.random() * 50);
+		}
 		let frame = 0;
 		let before = performance.now();
 		const step = (now: number) => {
