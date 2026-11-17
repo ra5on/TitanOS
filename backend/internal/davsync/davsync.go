@@ -165,26 +165,33 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(status)
 		return
 	}
+	if r.Method == http.MethodOptions {
+		// From the shape of the path only: no sign-in, no store, nothing
+		// about which accounts exist; no CORS headers either, so a
+		// browser's preflight fails.
+		t, ok := parsePath(r.URL.EscapedPath())
+		if !ok {
+			http.NotFound(rw, r)
+			return
+		}
+		rw.Header().Set("DAV", davHeader(t.kind))
+		rw.Header().Set("Allow", h.allow(t.level))
+		rw.Header().Set("Content-Length", "0")
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+	// Sign-in before anything else, the path included (BAU-API step 5).
+	id, err := h.Devices.Authenticate(r)
+	if err != nil {
+		devices.WriteChallenge(rw, err)
+		return
+	}
 	t, ok := parsePath(r.URL.EscapedPath())
 	if !ok {
 		http.NotFound(rw, r)
 		return
 	}
 	rw.Header().Set("DAV", davHeader(t.kind))
-	if r.Method == http.MethodOptions {
-		// From the shape of the path only: no sign-in, no store, nothing
-		// about which accounts exist; no CORS headers either, so a
-		// browser's preflight fails.
-		rw.Header().Set("Allow", h.allow(t.level))
-		rw.Header().Set("Content-Length", "0")
-		rw.WriteHeader(http.StatusOK)
-		return
-	}
-	id, err := h.Devices.Authenticate(r)
-	if err != nil {
-		devices.WriteChallenge(rw, err)
-		return
-	}
 	if t.level != levelRoot && t.account != id.User.Name {
 		// Never 403: nothing about other accounts (TECHNIK 3.4.5).
 		http.NotFound(rw, r)

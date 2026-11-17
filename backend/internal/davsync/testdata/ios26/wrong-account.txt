@@ -73,3 +73,10 @@
 > Depth: 0
 < status 401
 < header-has WWW-Authenticate TitanOS Kalender
+
+# Without a password even a path of no account is 401 first: nothing is
+# told before the sign-in.
+> PROPFIND /caldav/Bad%20Name/x/y/z/w/
+> Auth: none
+< status 401
+< header-has WWW-Authenticate TitanOS Kalender
