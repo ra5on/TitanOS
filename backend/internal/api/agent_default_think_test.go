@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 )
@@ -63,5 +64,28 @@ func TestAgentDefaultThinkFollowsSettings(t *testing.T) {
 	}
 	if chat := waitChat(t, ts, ts.client, started.ID); chat.Think != "medium" || lastThink() != "medium" {
 		t.Fatalf("chosen level: chat %q, sent %v", chat.Think, lastThink())
+	}
+}
+
+// A chat written by a page up to 1.04 carries the default of then as model
+// and level, without the mark of an own choice: it follows the settings.
+func TestAgentOldChatFollowsNewDefaults(t *testing.T) {
+	fake := &agentOllama{replies: []string{`{"role":"assistant","content":"Eins."}`}}
+	ts := agentServer(t, fake, agent.Policy{})
+	chat := &agent.Chat{ID: agent.NewID(), Title: "Alt", Created: time.Now(), Updated: time.Now(), Origin: "web",
+		Model: "llama3:8b", Think: "medium", State: agent.StateIdle, Entries: []agent.Entry{}}
+	if err := ts.server.agentStore().SaveChat("alex", chat); err != nil {
+		t.Fatal(err)
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Weiter"})
+	if res.StatusCode != http.StatusAccepted {
+		t.Fatalf("message: %d %s", res.StatusCode, body)
+	}
+	waitChat(t, ts, ts.client, chat.ID)
+	fake.mu.Lock()
+	got := fake.got[len(fake.got)-1]
+	fake.mu.Unlock()
+	if got["think"] != "high" || got["model"] != "gpt-oss:20b" {
+		t.Fatalf("the old chat kept the default of then: think %v, model %v", got["think"], got["model"])
 	}
 }

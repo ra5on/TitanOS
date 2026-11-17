@@ -376,8 +376,8 @@ export class AgentChats {
 				return;
 			}
 			// The chat's own choice; without one it follows the settings.
-			this.model = this.current.model ?? '';
-			this.think = this.current.think ?? '';
+			this.model = (this.current.modelOwn && this.current.model) || '';
+			this.think = (this.current.thinkOwn && this.current.think) || '';
 			this.autonomy = (this.current.autonomy as Autonomy) || 'direct';
 			if (this.current.project) this.project = this.current.project;
 			if (push) void this.go(`/agent?chat=${id}`);

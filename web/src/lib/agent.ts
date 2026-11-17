@@ -59,6 +59,11 @@ export type Chat = {
 	updated: string;
 	model?: string;
 	think?: string;
+	/** Model and think are the chat's own choice (1.05); without the mark
+	 *  they are the copy of the default that pages up to 1.04 sent, and the
+	 *  chat follows the settings. */
+	modelOwn?: boolean;
+	thinkOwn?: boolean;
 	/** How the chat works: left out starts right away, "plan" or "ask". */
 	autonomy?: string;
 	origin?: string;
@@ -75,7 +80,7 @@ export type Chat = {
 
 export type ChatInfo = Omit<
 	Chat,
-	'entries' | 'model' | 'think' | 'pending' | 'tainted' | 'plan' | 'areas'
+	'entries' | 'model' | 'think' | 'modelOwn' | 'thinkOwn' | 'pending' | 'tainted' | 'plan' | 'areas'
 > & {
 	preview?: string;
 	/** Changed since the person last looked, on any device (PLAN 48). */

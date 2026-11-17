@@ -155,8 +155,15 @@ type Chat struct {
 	// Schedule is the planned task that started the chat (its wake choice).
 	Schedule string `json:"schedule,omitempty"`
 	// Model and Think as chosen in the chat; empty uses the settings.
-	Model string `json:"model,omitempty"`
-	Think string `json:"think,omitempty"`
+	// Only a value with its mark (ModelOwn, ThinkOwn; since 1.05) is a
+	// choice of the chat: up to 1.04 the page sent its copy of the default
+	// with every message, so an unmarked value is that copy and the chat
+	// follows the settings (owner 17 Nov 2026). Older versions ignore the
+	// marks and keep using the values.
+	Model    string `json:"model,omitempty"`
+	Think    string `json:"think,omitempty"`
+	ModelOwn bool   `json:"modelOwn,omitempty"`
+	ThinkOwn bool   `json:"thinkOwn,omitempty"`
 	// Autonomy is how the person wants this chat to work (owner 15.11.2026):
 	// "" starts right away and asks only where the rights of the NAS ask,
 	// "plan" shows the plan first and works through it after a yes, "ask"
@@ -190,6 +197,33 @@ type Chat struct {
 	// Areas of tools loaded in this chat (tools_load, PLAN 55).
 	Areas   []string `json:"areas,omitempty"`
 	Entries []Entry  `json:"entries"`
+}
+
+// OwnModel is the model chosen in this chat, or "" to use the settings.
+func (c *Chat) OwnModel() string {
+	if !c.ModelOwn {
+		return ""
+	}
+	return c.Model
+}
+
+// OwnThink is the thinking level chosen in this chat, or "" to use the
+// settings.
+func (c *Chat) OwnThink() string {
+	if !c.ThinkOwn {
+		return ""
+	}
+	return c.Think
+}
+
+// ChooseModel makes model the chat's own choice; "" follows the settings.
+func (c *Chat) ChooseModel(model string) {
+	c.Model, c.ModelOwn = model, model != ""
+}
+
+// ChooseThink makes level the chat's own choice; "" follows the settings.
+func (c *Chat) ChooseThink(level string) {
+	c.Think, c.ThinkOwn = level, level != ""
 }
 
 // ChatInfo is a chat in the list, without its entries.

@@ -66,6 +66,11 @@ const chat = {
   updated: at(10, 42),
   state: "idle",
   origin: "web",
+  // Written by a page up to 1.04: the default of then went along with
+  // every message and stands at the chat, without the mark of an own
+  // choice; the chat follows the settings (1.05).
+  model: "gpt-oss:20b",
+  think: "medium",
   entries: [
     {
       id: "u1",
