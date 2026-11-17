@@ -108,6 +108,19 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 			t.area = toolcatalog.AreaSystem
 		}
 		t.kind = agent.KindOf(tool.Name, tool.Read != nil)
+		// V12 (owner 17 Nov 2026): looking for updates changes nothing on
+		// the NAS; installing still asks.
+		switch tool.Name {
+		case "docker_check_updates":
+			t.kind = agent.KindRead
+		case "update_action":
+			t.kindOf = func(args json.RawMessage) string {
+				if argString(args, "action") == "check" {
+					return agent.KindRead
+				}
+				return agent.KindChange
+			}
+		}
 		if t.params == nil {
 			t.params = schema(nil)
 		}
@@ -116,7 +129,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	allowed := func(scope string) bool { return !auth.AdminScope(scope) || user.Role.CanAdminister() }
 	for i := range publicRoutes {
 		route := &publicRoutes[i]
-		if route.Tool == "" || !allowed(route.Scope) || off(route.Tool, routeArea(route.Scope)) {
+		if route.Tool == "" || !allowed(route.Scope) || off(route.Tool, routeArea(route.Scope)) || agentRetired[route.Tool].survivor != "" {
 			continue
 		}
 		mt := s.routeTool(*route)
@@ -220,8 +233,70 @@ func (b *agentToolbox) offered(t *agentTool) bool {
 		if b.modeIn(t, area, t.kind) != agent.ModeDeny {
 			return true
 		}
+		// A tool that also reads (update_action check) is offered where
+		// reading is allowed; Prepare decides per call.
+		if t.kindOf != nil && t.kind != agent.KindAgent && b.modeIn(t, area, agent.KindRead) != agent.ModeDeny {
+			return true
+		}
 	}
 	return false
+}
+
+// agentRetired are tools of the public routes the agent no longer gets
+// (1.10, V10, owner 17 Nov 2026: one tool for each task; MCP keeps them),
+// with the tool that does the same and for which of its calls. A rule the
+// person set for an old name still holds for those calls.
+var agentRetired = map[string]struct {
+	survivor string
+	covers   func(args json.RawMessage) bool
+}{
+	"files_read_text":  {"file_read", func(json.RawMessage) bool { return true }},
+	"files_write_text": {"file_write", func(args json.RawMessage) bool { return argBool(args, "replace") }},
+	"files_create":     {"file_write", func(args json.RawMessage) bool { return !argBool(args, "replace") }},
+	"files_copy":       {"file_copy", func(json.RawMessage) bool { return true }},
+	"vm_start":         {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "start" }},
+	"vm_shutdown":      {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "shutdown" }},
+	"vm_reboot":        {"vm_action", func(args json.RawMessage) bool { return argString(args, "action") == "reboot" }},
+}
+
+// callMode is the mode of one call: modeIn, with the person's rules for
+// retired tools that did the same.
+func (b *agentToolbox) callMode(t *agentTool, area, kind string, args json.RawMessage) string {
+	p := b.settings.Policy
+	mode := p.Mode(t.name, area, kind)
+	old := ""
+	for name, r := range agentRetired {
+		if r.survivor != t.name || !agent.ValidMode(p.Tools[name]) || !r.covers(args) {
+			continue
+		}
+		if old == "" {
+			old = p.Tools[name]
+		} else {
+			old = agent.Stricter(old, p.Tools[name])
+		}
+	}
+	if old != "" {
+		if agent.ValidMode(p.Tools[t.name]) {
+			mode = agent.Stricter(mode, old)
+		} else {
+			mode = old
+		}
+	}
+	if b.user.Name == agent.AssistProfile {
+		return b.settings.HA.assistMode(t.name, area, kind, mode)
+	}
+	return mode
+}
+
+// argBool is a yes/no argument of a call, false when it is missing.
+func argBool(args json.RawMessage, key string) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(args, &fields) != nil {
+		return false
+	}
+	var v bool
+	_ = json.Unmarshal(fields[key], &v)
+	return v
 }
 
 // Specs are the tools the model is offered: all but those set to
@@ -235,12 +310,23 @@ func (b *agentToolbox) Specs(chat *agent.Chat) []agent.ToolSpec {
 		var spec agent.ToolSpec
 		spec.Type = "function"
 		spec.Function.Name = t.name
-		spec.Function.Description = strings.TrimSpace(strings.Split(t.description, "\n")[0])
+		spec.Function.Description = specDescription(t.description)
 		spec.Function.Parameters = t.params
 		spec.Area, spec.Kind = t.area, t.kind
 		specs = append(specs, spec)
 	}
 	return specs
+}
+
+// specDescription is the first line of a description, without the "Propose
+// to" of the MCP catalog: for the agent the call does it (TitanOS asks the
+// person where the rights say so), it does not propose it (1.10, V10).
+func specDescription(d string) string {
+	d = strings.TrimSpace(strings.Split(d, "\n")[0])
+	if rest, ok := strings.CutPrefix(d, "Propose to "); ok && rest != "" {
+		d = strings.ToUpper(rest[:1]) + rest[1:]
+	}
+	return d
 }
 
 // Prepare checks a call against the policy and plans it.
@@ -250,7 +336,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		return agent.Prepared{}, fmt.Errorf("there is no tool %q", name)
 	}
 	area := t.areaFor(args)
-	if b.modeIn(t, area, t.kind) == agent.ModeDeny && t.kind != agent.KindCreate && !(t.name == "file_write") {
+	kind := t.kind
+	if t.kindOf != nil {
+		kind = t.kindOf(args)
+	}
+	if b.callMode(t, area, kind, args) == agent.ModeDeny && kind != agent.KindCreate && !(t.name == "file_write") {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
 	if t.own == nil {
@@ -260,10 +350,6 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	}
 	p := agent.Prepared{Tool: name, Args: args, Area: area, Untrusted: t.untrusted}
 	ctx = b.haContext(ctx, t)
-	kind := t.kind
-	if t.kindOf != nil {
-		kind = t.kindOf(args)
-	}
 	if t.plan != nil {
 		planned := args
 		var fields map[string]json.RawMessage
@@ -294,7 +380,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		p.Summary = t.name + " " + compactArgs(args)
 	}
-	mode := b.modeIn(t, area, kind)
+	mode := b.callMode(t, area, kind, args)
 	if mode == agent.ModeDeny {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
