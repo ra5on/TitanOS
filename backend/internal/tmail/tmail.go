@@ -295,6 +295,7 @@ func (m *Manager) Load() error {
 		}
 		m.users[name] = &f
 	}
+	m.knownLocked()
 	return firstErr
 }
 

@@ -436,6 +436,20 @@ func (m *Manager) SaveDraft(ctx context.Context, user, id string, out Outgoing) 
 	return uid, attachments, err
 }
 
+// PartAttachment describes one part of a mail (its size before a save).
+func (m *Manager) PartAttachment(ctx context.Context, user, id, folder string, uid uint32, part string) (Attachment, error) {
+	if _, ok := parsePart(part); !ok {
+		return Attachment{}, ErrInvalid
+	}
+	var out Attachment
+	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+		info, err := partOf(c, s, folder, uid, part)
+		out = info.attachment()
+		return err
+	})
+	return out, err
+}
+
 // DraftsFolder is the path of the drafts folder of a mailbox.
 func (m *Manager) DraftsFolder(ctx context.Context, user, id string) (string, error) {
 	var path string

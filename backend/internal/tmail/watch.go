@@ -231,6 +231,7 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 		defer timer.Stop()
 		budget.set(budgetCommand)
 		err := work()
+		budget.set(budgetCommand)
 		if budget.tooLarge() {
 			return ErrTooLarge
 		}

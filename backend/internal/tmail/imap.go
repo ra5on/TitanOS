@@ -261,6 +261,9 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	}
 	s.budget.set(budgetCommand)
 	err = work(s.client(), s)
+	// Whatever work raised the budget to, the idle connection in the
+	// pool gets the budget of a command again.
+	s.budget.set(budgetCommand)
 	s.last = time.Now()
 	if s.budget.tooLarge() {
 		err = ErrTooLarge

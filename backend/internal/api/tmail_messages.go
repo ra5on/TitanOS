@@ -132,13 +132,13 @@ func (p *partWriter) Write(b []byte) (int, error) {
 // handlePart hands out an attachment: always as a download, never shown
 // by the browser under the address of TitanOS (not HTML, SVG or PDF
 // either).
-// RAM that the heavy requests may hold (Begin): a part streams through a
-// small buffer, a saved part lies whole in memory, a mail to send with its
-// attachments about three times (body, files, encoded mail).
+// RAM that the heavy requests hold (Begin, More), after their real size:
+// a saved part lies whole in memory once, a mail to send with its
+// attachments about three times (body, files, encoded mail). Downloads
+// stream and reserve nothing; a text-only mail or draft needs no room.
 const (
-	heavyPart = 8 << 20
-	heavySave = maxSaveBytes + (8 << 20)
-	heavySend = 3*tmail.MaxAttachments + (8 << 20)
+	heavySend   = 3*tmail.MaxAttachments + (8 << 20)
+	heavyFactor = 3
 )
 
 // heavy admits a heavy request or answers 503 mail_busy at once.
@@ -152,11 +152,6 @@ func (a tmailArea) heavy(w http.ResponseWriter, r *http.Request, bytes int64) (f
 }
 
 func (a tmailArea) handlePart(w http.ResponseWriter, r *http.Request) {
-	release, ok := a.heavy(w, r, heavyPart)
-	if !ok {
-		return
-	}
-	defer release()
 	ctx, stop := a.holding(r)
 	defer stop()
 	q := r.URL.Query()
@@ -262,12 +257,21 @@ func (a tmailArea) handlePartSave(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	release, ok := a.heavy(w, r, heavySave)
+	user := currentUser(r)
+	att, err := a.mail.PartAttachment(r.Context(), user.Name, r.PathValue("id"), req.Folder, req.UID, req.Part)
+	if err != nil {
+		a.mailError(w, r, err)
+		return
+	}
+	if att.Size > maxSaveBytes {
+		writeMailError(w, tmail.ErrTooLarge)
+		return
+	}
+	release, ok := a.heavy(w, r, att.Size+(1<<20))
 	if !ok {
 		return
 	}
 	defer release()
-	user := currentUser(r)
 	data, _, err := a.mail.PartBytes(r.Context(), user.Name, r.PathValue("id"), req.Folder, req.UID, req.Part, maxSaveBytes)
 	if err != nil {
 		a.mailError(w, r, err)
@@ -403,11 +407,32 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := currentUser(r)
 		id := r.PathValue("id")
-		release, ok := a.heavy(w, r, heavySend)
+		var defers []func()
+		// The upload as sent; files of the NAS and parts of mails reserve
+		// their own room below.
+		size := int64(heavySend)
+		if r.ContentLength >= 0 {
+			size = min(size, heavyFactor*r.ContentLength)
+		}
+		release, ok := a.heavy(w, r, size)
 		if !ok {
 			return
 		}
 		defer release()
+		more := func(bytes int64) bool {
+			extra, err := a.mail.More(heavyFactor * bytes)
+			if err != nil {
+				writeMailError(w, err)
+				return false
+			}
+			defers = append(defers, extra)
+			return true
+		}
+		defer func() {
+			for _, f := range defers {
+				f()
+			}
+		}()
 		r.Body = http.MaxBytesReader(w, r.Body, tmail.MaxAttachments+(4<<20))
 		mr, err := r.MultipartReader()
 		if err != nil {
@@ -478,6 +503,10 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 				writeFileError(w, err)
 				return
 			}
+			if info.Mode().IsRegular() && info.Size() <= left && !more(info.Size()) {
+				file.Close()
+				return
+			}
 			if !info.Mode().IsRegular() || info.Size() > left {
 				file.Close()
 				if info.Mode().IsRegular() {
@@ -514,16 +543,25 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 					from.Parts = []string{"*"}
 				}
 			}
+			list, err := a.mail.Attachments(r.Context(), user.Name, id, from.Folder, from.UID)
+			if err != nil {
+				a.mailError(w, r, err)
+				return
+			}
 			if slices.Contains(from.Parts, "*") {
-				list, err := a.mail.Attachments(r.Context(), user.Name, id, from.Folder, from.UID)
-				if err != nil {
-					a.mailError(w, r, err)
-					return
-				}
 				from.Parts = nil
 				for _, att := range list {
 					from.Parts = append(from.Parts, att.Part)
 				}
+			}
+			var expected int64
+			for _, att := range list {
+				if slices.Contains(from.Parts, att.Part) {
+					expected += att.Size
+				}
+			}
+			if !more(min(expected, left) + (1 << 20)) {
+				return
 			}
 			for _, part := range from.Parts {
 				data, info, err := a.mail.PartBytes(r.Context(), user.Name, id, from.Folder, from.UID, part, left)
