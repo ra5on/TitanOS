@@ -120,11 +120,7 @@ func fingerprint(mb Mailbox) string {
 }
 
 // connect opens an IMAP connection to a mailbox and logs in.
-func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, handler *imapclient.UnilateralDataHandler) (*imapclient.Client, error) {
-	password, err := m.password(user, mb)
-	if err != nil {
-		return nil, err
-	}
+func (m *Manager) connect(ctx context.Context, mb Mailbox, password string, handler *imapclient.UnilateralDataHandler) (*imapclient.Client, error) {
 	conn, err := m.dial(ctx, mb.IMAP)
 	if err != nil {
 		return nil, err
@@ -231,7 +227,11 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	stop := context.AfterFunc(ctx, s.kill)
 	defer stop()
 	if s.client() == nil {
-		c, err := m.connect(ctx, user, mb, nil)
+		password, err := m.password(user, mb)
+		if err != nil {
+			return err
+		}
+		c, err := m.connect(ctx, mb, password, nil)
 		if err != nil {
 			if errors.Is(err, ErrAuthFailed) {
 				m.setAuthFailed(user, mb)

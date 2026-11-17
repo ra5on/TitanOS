@@ -135,7 +135,7 @@ func TestForbiddenTargets(t *testing.T) {
 	}
 	// The real dialer refuses loopback, also behind a name.
 	e := newEnv(t)
-	e.m.targets = nil
+	e.m.Targets = nil
 	for _, host := range []string{"127.0.0.1", "localhost"} {
 		in := e.input(testPassword)
 		in.IMAP.Host = host
@@ -147,7 +147,7 @@ func TestForbiddenTargets(t *testing.T) {
 			t.Errorf("%s: %v", host, err)
 		}
 	}
-	if e.imapConn.Load() != 0 {
+	if e.srv.IMAPConns.Load() != 0 {
 		t.Fatal("a refused target was reached")
 	}
 	if _, err := e.m.AddMailbox("alex", MailboxInput{Email: testUser, IMAP: Server{Host: "https://x.example/"}, SMTP: Server{Host: "x.example"}}); !errors.Is(err, ErrInvalid) {
@@ -323,5 +323,30 @@ func TestSettingsValidation(t *testing.T) {
 	}
 	if got := e.m.Settings("alex"); len(got.Rules) != 0 {
 		t.Fatalf("rules left: %+v", got.Rules)
+	}
+}
+
+func TestCheckSettings(t *testing.T) {
+	e := newEnv(t)
+	id := e.addMailbox()
+	res, err := e.m.CheckSettings(t.Context(), "alex", "", e.input(testPassword))
+	if err != nil || !res.IMAP.OK || !res.SMTP.OK {
+		t.Fatalf("check: %+v %v", res, err)
+	}
+	res, err = e.m.CheckSettings(t.Context(), "alex", "", e.input("wrong"))
+	if err != nil || res.IMAP.OK || res.IMAP.Code != "mail_auth_failed" || res.SMTP.Code != "mail_auth_failed" {
+		t.Fatalf("wrong password: %+v %v", res, err)
+	}
+	// The stored password, never for another host.
+	if res, err := e.m.CheckSettings(t.Context(), "alex", id, e.input("")); err != nil || !res.IMAP.OK {
+		t.Fatalf("stored: %+v %v", res, err)
+	}
+	other := e.input("")
+	other.SMTP.Host = "203.0.113.9"
+	if _, err := e.m.CheckSettings(t.Context(), "alex", id, other); !errors.Is(err, ErrPasswordRequired) {
+		t.Fatalf("stored password for another host: %v", err)
+	}
+	if _, err := e.m.UpdateMailbox("alex", id, other); !errors.Is(err, ErrPasswordRequired) {
+		t.Fatalf("host changed without password: %v", err)
 	}
 }

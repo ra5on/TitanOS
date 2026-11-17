@@ -244,6 +244,10 @@ func (m *Manager) UpdateMailbox(user, id string, in MailboxInput) (MailboxView, 
 		return MailboxView{}, ErrNotFound
 	}
 	mb := f.Mailboxes[i]
+	if in.Password == "" && mb.Password != "" && !sameHosts(mb, in) {
+		m.mu.Unlock()
+		return MailboxView{}, ErrPasswordRequired
+	}
 	mb.Name, mb.Email, mb.SenderName, mb.User, mb.IMAP, mb.SMTP, mb.Notify = in.Name, in.Email, in.SenderName, in.User, in.IMAP, in.SMTP, in.Notify
 	mb.Signature = ""
 	if in.Signature != "" && slices.ContainsFunc(f.Signatures, func(s Signature) bool { return s.ID == in.Signature }) {

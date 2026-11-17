@@ -211,12 +211,9 @@ func msgIDs(value string, max int) []string {
 	return out
 }
 
-// smtpSend hands a mail to the SMTP server of a mailbox.
-func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, from string, rcpt []string, data []byte) error {
-	password, err := m.password(user, mb)
-	if err != nil {
-		return err
-	}
+// smtpSend hands a mail to the SMTP server of a mailbox; without data it
+// only logs in (the check of the settings).
+func (m *Manager) smtpSend(ctx context.Context, mb Mailbox, password, from string, rcpt []string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
 	conn, err := m.dial(ctx, mb.SMTP)
@@ -262,8 +259,10 @@ func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, from st
 		}
 		return smtpError(ctx, err)
 	}
-	if err := c.SendMail(from, rcpt, bytes.NewReader(data)); err != nil {
-		return smtpError(ctx, err)
+	if data != nil {
+		if err := c.SendMail(from, rcpt, bytes.NewReader(data)); err != nil {
+			return smtpError(ctx, err)
+		}
 	}
 	_ = c.Quit() // the mail is accepted; a failing goodbye changes nothing
 	return nil
@@ -302,7 +301,11 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	if err != nil {
 		return SendResult{}, err
 	}
-	if err := m.smtpSend(ctx, user, mb, mb.Email, rcpt, data); err != nil {
+	password, err := m.password(user, mb)
+	if err != nil {
+		return SendResult{}, err
+	}
+	if err := m.smtpSend(ctx, mb, password, mb.Email, rcpt, data); err != nil {
 		if errors.Is(err, ErrAuthFailed) {
 			m.setAuthFailed(user, mb)
 		}

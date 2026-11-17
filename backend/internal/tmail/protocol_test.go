@@ -52,7 +52,7 @@ func TestAuthFailedStopsUntilChange(t *testing.T) {
 	if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrAuthFailed) {
 		t.Fatalf("wrong password: %v", err)
 	}
-	before := e.imapConn.Load()
+	before := e.srv.IMAPConns.Load()
 	for range 3 {
 		if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrAuthFailed) {
 			t.Fatalf("again: %v", err)
@@ -61,8 +61,8 @@ func TestAuthFailedStopsUntilChange(t *testing.T) {
 	if _, err := e.m.Send(t.Context(), "alex", view.ID, Outgoing{To: []Address{{Addr: "bob@example.net"}}, Text: "x"}); !errors.Is(err, ErrAuthFailed) {
 		t.Fatalf("send while refused: %v", err)
 	}
-	if e.imapConn.Load() != before {
-		t.Fatalf("tried again after a refused login: %d connections, %d before", e.imapConn.Load(), before)
+	if e.srv.IMAPConns.Load() != before {
+		t.Fatalf("tried again after a refused login: %d connections, %d before", e.srv.IMAPConns.Load(), before)
 	}
 	if st := e.m.Mailboxes("alex")[0].Status; st.State != StateAuthFailed || st.Code != "mail_auth_failed" {
 		t.Fatalf("status: %+v", st)
@@ -72,7 +72,7 @@ func TestAuthFailedStopsUntilChange(t *testing.T) {
 	if _, err := e.m.UpdateMailbox("alex", view.ID, in); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrAuthFailed) || e.imapConn.Load() != before {
+	if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrAuthFailed) || e.srv.IMAPConns.Load() != before {
 		t.Fatalf("an unchanged save started trying: %v", err)
 	}
 	in.Password = testPassword
@@ -371,10 +371,10 @@ func TestSendWithAttachmentCopyAndDraft(t *testing.T) {
 		t.Fatalf("copy %v, sent %d, drafts %d", res.SentCopy, e.count("Sent"), e.count("Drafts"))
 	}
 	sent := e.sentMails()
-	if len(sent) != 1 || sent[0].from != testUser || strings.Join(sent[0].to, ",") != "bob@example.net,carol@example.net,dave@example.net" {
+	if len(sent) != 1 || sent[0].From != testUser || strings.Join(sent[0].To, ",") != "bob@example.net,carol@example.net,dave@example.net" {
 		t.Fatalf("SMTP envelope: %+v", sent)
 	}
-	data := string(sent[0].data)
+	data := string(sent[0].Data)
 	for _, want := range []string{"From: \"Alice\" <alice@example.org>", "Subject: Angebot", "In-Reply-To: <x1@example.net>", "angebot.pdf", "Viele Gr=C3=BC=C3=9Fe", "--=20"} {
 		if !strings.Contains(data, want) {
 			t.Errorf("sent mail lacks %q:\n%s", want, data)
@@ -517,7 +517,7 @@ func TestNoWatcherWhenOff(t *testing.T) {
 	defer cancel()
 	go e.m.Run(ctx)
 	time.Sleep(300 * time.Millisecond)
-	if n := e.imapConn.Load(); n != 0 {
+	if n := e.srv.IMAPConns.Load(); n != 0 {
 		t.Fatalf("%d connections without messages or rules", n)
 	}
 	if st := e.m.Mailboxes("alex")[0].Status; st.State != StateOff {

@@ -203,9 +203,10 @@ type Manager struct {
 	// RootCAs are the certificates trusted for TLS; nil is the system's.
 	RootCAs *x509.CertPool
 
-	// targets checks an address after DNS; nil is CheckTarget. Tests
-	// reach their servers on loopback with it.
-	targets func(netip.AddrPort) error
+	// Targets checks an address after DNS; nil is CheckTarget with
+	// OwnAddrs and OwnPorts. Only tests set it, to reach their servers on
+	// loopback.
+	Targets func(netip.AddrPort) error
 	// now is the clock (tests).
 	now func() time.Time
 	// noticeWindow collects new mail of a mailbox into one message.

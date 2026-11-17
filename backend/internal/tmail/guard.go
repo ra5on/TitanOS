@@ -64,8 +64,8 @@ func interfaceAddrs() []netip.Addr {
 }
 
 func (m *Manager) checkTarget(target netip.AddrPort) error {
-	if m.targets != nil {
-		return m.targets(target)
+	if m.Targets != nil {
+		return m.Targets(target)
 	}
 	own := m.OwnAddrs
 	if own == nil {

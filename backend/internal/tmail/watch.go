@@ -211,7 +211,11 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 			}
 		}
 	}}
-	c, err := m.connect(ctx, user, mb, handler)
+	password, err := m.password(user, mb)
+	if err != nil {
+		return err
+	}
+	c, err := m.connect(ctx, mb, password, handler)
 	if err != nil {
 		return err
 	}
@@ -454,7 +458,7 @@ func Code(err error) string {
 		{ErrDisabled, "mail_disabled"}, {ErrAuthFailed, "mail_auth_failed"}, {ErrTLS, "mail_tls"},
 		{ErrHostForbidden, "mail_host_forbidden"}, {ErrTimeout, "mail_timeout"}, {ErrTooLarge, "mail_too_large"},
 		{ErrNotFound, "mail_not_found"}, {ErrFolderExists, "mail_folder_exists"}, {ErrSendFailed, "mail_send_failed"},
-		{ErrInvalid, "mail_invalid"}, {ErrNoPassword, "mail_no_password"}, {ErrUnreadable, "mail_settings_unreadable"},
+		{ErrPasswordRequired, "mail_password_required"}, {ErrInvalid, "mail_invalid"}, {ErrNoPassword, "mail_no_password"}, {ErrUnreadable, "mail_settings_unreadable"},
 		{ErrUnreachable, "mail_unreachable"},
 	} {
 		if errors.Is(err, c.err) {
