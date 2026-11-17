@@ -273,7 +273,7 @@ func (m *Manager) enter(ctx context.Context, user string) (func(), error) {
 }
 
 // Downloads (attachments, embedded pictures) go at the pace of the
-// browser, up to partTimeout. They hold a command's turn only until the
+// browser, up to PartTimeout. They hold a command's turn only until the
 // part's literal begins; the stream itself takes a turn of its own,
 // without RAM of the budget (it is copied through, never kept), so that
 // stalled downloads cannot block the commands of anyone (third review of

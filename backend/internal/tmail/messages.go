@@ -581,7 +581,7 @@ func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32,
 		return err
 	}
 	defer done()
-	return m.withIMAP(ctx, user, id, partTimeout, func(c *imapclient.Client, s *session) error {
+	return m.withIMAP(ctx, user, id, PartTimeout, func(c *imapclient.Client, s *session) error {
 		info, err := partOf(c, s, folder, uid, part)
 		if err != nil {
 			return err
@@ -591,9 +591,13 @@ func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32,
 	})
 }
 
-// partTimeout bounds a download of an attachment: it goes at the pace of
-// the browser.
-const partTimeout = 10 * time.Minute
+// PartTimeout bounds a download of an attachment: it goes at the pace of
+// the browser. The API bounds its writes to the browser by it as well, so
+// that a browser that stops reading lets go of the connection.
+const PartTimeout = 10 * time.Minute
+
+// PictureTimeout bounds a download of an embedded picture (CID).
+const PictureTimeout = fetchTimeout
 
 // partOf selects the folder and finds a part in the structure of a mail.
 func partOf(c *imapclient.Client, s *session, folder string, uid uint32, part string) (partInfo, error) {
@@ -691,7 +695,7 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 		return err
 	}
 	defer done()
-	return m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
+	return m.withIMAP(ctx, user, id, PictureTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}

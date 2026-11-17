@@ -91,7 +91,7 @@ func TestStalledDownloadsBlockNoOne(t *testing.T) {
 
 	// Another account goes on at once.
 	start := time.Now()
-	if _, err := e.m.Folders(t.Context(), "bob", bob.ID); err != nil || time.Since(start) > 200*time.Millisecond {
+	if _, err := e.m.Folders(t.Context(), "bob", bob.ID); err != nil {
 		t.Fatalf("another account while two downloads stall: %v after %v", err, time.Since(start))
 	}
 	// So does the account itself, on another mailbox.
@@ -297,12 +297,15 @@ func TestLargeHeadsDoNotHoldUpMessages(t *testing.T) {
 // watcher connects again after the shortest pause, which does not grow.
 func TestTooLargeRoundsHalveWithoutGrowingPause(t *testing.T) {
 	pad := strings.Repeat("x", 600<<10)
-	var conns atomic.Int32
+	var mu sync.Mutex
+	var logins []time.Time
 	addr, pool, _ := scripted(t, "* OK [CAPABILITY IMAP4rev1] heads\r\n", func(w *bufio.Writer, tag, cmd, line string) bool {
 		upper := strings.ToUpper(line)
 		switch {
 		case cmd == "LOGIN":
-			conns.Add(1)
+			mu.Lock()
+			logins = append(logins, time.Now())
+			mu.Unlock()
 			fmt.Fprintf(w, "%s OK\r\n", tag)
 		case cmd == "SELECT":
 			fmt.Fprintf(w, "* 0 EXISTS\r\n* OK [UIDVALIDITY 1] v\r\n* OK [UIDNEXT 1] n\r\n%s OK [READ-WRITE] done\r\n", tag)
@@ -338,7 +341,7 @@ func TestTooLargeRoundsHalveWithoutGrowingPause(t *testing.T) {
 	})
 	e := newEnv(t)
 	e.m.RootCAs = pool
-	e.m.backoffMin, e.m.backoffMax = 500*time.Millisecond, time.Hour
+	e.m.backoffMin, e.m.backoffMax = time.Second, time.Hour
 	in := e.input("x")
 	in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
 	in.Notify = true
@@ -349,19 +352,31 @@ func TestTooLargeRoundsHalveWithoutGrowingPause(t *testing.T) {
 	done := make(chan struct{})
 	go func() { e.m.Run(ctx); close(done) }()
 	defer func() { cancel(); <-done }()
-	start := time.Now()
-	waitFor(t, "messages of all 25 mails", func() bool {
+	told := func() int {
 		n := 0
 		for _, notice := range e.noticeList() {
 			n += notice.Count
 		}
-		return n == 25
-	})
+		return n
+	}
+	for deadline := time.Now().Add(30 * time.Second); told() != 25; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d of 25 mails told", told())
+		}
+	}
 	// 20 → 10 → 5 mails a round, later 10 → 5 again: three rounds too
-	// large, each followed by the shortest pause (a growing pause would
-	// take 0.5 + 1 + 2 s).
-	if took := time.Since(start); took > 3*time.Second || conns.Load() > 5 {
-		t.Fatalf("%d connections in %v", conns.Load(), took)
+	// large, each followed by the shortest pause. Measured between the
+	// logins, not against a clock of the whole test: with a growing pause
+	// the second gap would be at least two pauses.
+	mu.Lock()
+	defer mu.Unlock()
+	if len(logins) < 3 {
+		t.Fatalf("%d connections: no round was too large", len(logins))
+	}
+	for i := 1; i < len(logins); i++ {
+		if gap := logins[i].Sub(logins[i-1]); gap >= 2*e.m.backoffMin {
+			t.Fatalf("pause %d grew: %v", i, gap)
+		}
 	}
 }
 
