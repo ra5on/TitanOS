@@ -214,7 +214,7 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		if _, err := selectFolder(c, s, q.Folder); err != nil {
 			return err
 		}
-		data, err := c.UIDSearch(searchCriteria(q), nil).Wait()
+		data, err := c.UIDSearch(searchCriteria(q), searchOptions(c)).Wait()
 		if err != nil {
 			return err
 		}
@@ -266,6 +266,15 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 	}
 	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
 	return page, err
+}
+
+// fetchStructure is fetchOne for an answer with BODYSTRUCTURE: decoding a
+// structure costs many times its size, so its answer has a budget of its
+// own (budgetStructure; a mail of 200 parts needs a few KiB).
+func fetchStructure(c *imapclient.Client, b *budgetConn, uid uint32, opts *imap.FetchOptions) (*imapclient.FetchMessageBuffer, error) {
+	b.set(budgetStructure)
+	defer b.set(budgetCommand)
+	return fetchOne(c, uid, opts)
 }
 
 // fetchOne fetches the head data of one mail; ErrNotFound without it.
@@ -338,7 +347,7 @@ func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32,
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}
-		b, err := fetchOne(c, uid, &imap.FetchOptions{Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
+		b, err := fetchStructure(c, s.budget, uid, &imap.FetchOptions{Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
 			BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
 			BodySection: []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"References"}, Peek: true,
 				Partial: &imap.SectionPartial{Size: MaxHeader}}}})
@@ -496,7 +505,7 @@ func partOf(c *imapclient.Client, s *session, folder string, uid uint32, part st
 	if _, err := selectFolder(c, s, folder); err != nil {
 		return partInfo{}, err
 	}
-	b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
+	b, err := fetchStructure(c, s.budget, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
 	if err != nil {
 		return partInfo{}, err
 	}
@@ -571,7 +580,7 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}
-		b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
+		b, err := fetchStructure(c, s.budget, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
 		if err != nil {
 			return err
 		}
@@ -599,17 +608,21 @@ func (m *Manager) PartBytes(ctx context.Context, user, id, folder string, uid ui
 		if info, err = partOf(c, s, folder, uid, part); err != nil {
 			return err
 		}
-		if expected := info.attachment().Size; expected > limit {
-			return ErrTooLarge
-		} else if expected > 0 {
-			buf.Grow(int(expected) + 4096)
+		// The size of the structure is the server's word: no more than
+		// a MiB is made room for in advance (security review of 1.05).
+		if expected := info.attachment().Size; expected > 0 {
+			buf.Grow(int(min(expected, 1<<20)))
 		}
 		return streamSection(c, s.budget, uid, path, info.encoding, &buf, limit)
 	})
 	if err != nil {
 		return nil, Attachment{}, err
 	}
-	return buf.Bytes(), info.attachment(), nil
+	data := buf.Bytes()
+	if cap(data) > len(data)+len(data)/4+4096 {
+		data = bytes.Clone(data) // what is kept holds its real length only
+	}
+	return data, info.attachment(), nil
 }
 
 var flagNames = map[string]imap.Flag{"seen": imap.FlagSeen, "flagged": imap.FlagFlagged, "answered": imap.FlagAnswered}

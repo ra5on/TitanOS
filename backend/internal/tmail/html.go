@@ -2,15 +2,19 @@ package tmail
 
 import (
 	"bytes"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"golang.org/x/net/idna"
 	"golang.org/x/net/publicsuffix"
+	"golang.org/x/text/unicode/norm"
 )
 
 // HTML mail is cleaned on the server (docs/TMAIL.md "Sicherheit der
@@ -148,30 +152,111 @@ func fixLink(n *html.Node) {
 		dropAttr(n, "href")
 		return
 	}
+	var real string
+	var mixed bool
+	if u.Scheme == "mailto" {
+		real = mailDomain(u.Opaque)
+	} else {
+		// The host as the browser will look it up: Punycode. A host with
+		// invisible characters or that IDNA refuses leads nowhere sure:
+		// the link goes and the place is marked.
+		host := u.Hostname()
+		ascii, err := idna.Lookup.ToASCII(host)
+		if err != nil || ascii == "" || hasInvisible(host) {
+			dropAttr(n, "href")
+			markLink(n, "?")
+			return
+		}
+		ascii = strings.ToLower(ascii)
+		if port := u.Port(); port != "" {
+			u.Host = net.JoinHostPort(ascii, port)
+		} else {
+			u.Host = ascii
+		}
+		setAttr(n, "href", u.String())
+		real = ascii
+		unicodeHost, _ := idna.Lookup.ToUnicode(ascii)
+		mixed = mixedScripts(unicodeHost)
+	}
 	setAttr(n, "target", "_blank")
 	setAttr(n, "rel", "noopener noreferrer")
 	// The real target shows on hover, whatever the text says.
-	setAttr(n, "title", u.String())
-	text := strings.TrimSpace(textOf(n))
-	var shown, real string
+	setAttr(n, "title", stripInvisible(u.String()))
+	text := normalizeText(textOf(n))
+	var shown string
+	var shownMixed bool
 	if u.Scheme == "mailto" {
 		// An address as text is compared with the address of the link.
-		shown, real = mailDomain(text), mailDomain(u.Opaque)
+		shown = mailDomain(text)
 	} else {
-		shown, real = shownHost(text), strings.ToLower(u.Hostname())
+		shown, shownMixed = shownHost(text)
 	}
-	if shown == "" || real == "" || sameSite(shown, real) {
+	if !mixed && !shownMixed && (shown == "" || real == "" || sameSite(shown, real)) {
 		return
 	}
-	// The visible text names another domain: say where the link goes,
-	// right behind it.
+	// The visible text names another domain, or a name mixes scripts:
+	// say where the link goes, right behind it.
+	markLink(n, real)
+}
+
+// markLink puts a warning with the real target behind a link. Its own
+// styles win over what the sender set on the parent (font-size:0, white
+// on white), so that it cannot be hidden.
+func markLink(n *html.Node, real string) {
 	setAttr(n, "data-tmail-mismatch", "1")
+	real = stripInvisible(real)
 	mark := &html.Node{Type: html.ElementNode, DataAtom: atom.Span, Data: "span",
-		Attr: []html.Attribute{{Key: "style", Val: "color:#b00020;font-weight:bold"}, {Key: "data-tmail-target", Val: real}}}
+		Attr: []html.Attribute{{Key: "style", Val: "font-size:14px !important;line-height:normal !important;color:#b00020 !important;background:#ffffff !important;" +
+			"font-weight:bold !important;display:inline !important;visibility:visible !important;opacity:1 !important;position:static !important"},
+			{Key: "data-tmail-target", Val: real}}}
 	mark.AppendChild(&html.Node{Type: html.TextNode, Data: " \u26a0 " + real})
 	if n.Parent != nil {
 		n.Parent.InsertBefore(mark, n.NextSibling)
 	}
+}
+
+// hasInvisible tells whether a text holds format characters (Cf).
+func hasInvisible(s string) bool {
+	return strings.IndexFunc(s, invisible) >= 0
+}
+
+// normalizeText makes a link text comparable: NFKC (look-alike forms to
+// their plain letters), no invisible characters.
+func normalizeText(s string) string {
+	return strings.TrimSpace(stripInvisible(norm.NFKC.String(s)))
+}
+
+// mixedScripts tells whether the letters of a name come from more than
+// one script (a Cyrillic "а" in a Latin name).
+func mixedScripts(s string) bool {
+	scripts := []*unicode.RangeTable{unicode.Latin, unicode.Cyrillic, unicode.Greek, unicode.Armenian, unicode.Hebrew,
+		unicode.Arabic, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Thai, unicode.Devanagari, unicode.Georgian, unicode.Cherokee}
+	seen := map[int]bool{}
+	other := false
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			continue
+		}
+		found := false
+		for i, table := range scripts {
+			if unicode.Is(table, r) {
+				seen[i], found = true, true
+				break
+			}
+		}
+		if !found {
+			other = true
+		}
+	}
+	n := len(seen)
+	if other {
+		n++
+	}
+	// Chinese and Japanese mix scripts by nature.
+	if n == 2 && seen[6] && (seen[7] || seen[8]) {
+		return false
+	}
+	return n > 1
 }
 
 // textOf is the visible text of a node.
@@ -190,31 +275,44 @@ func textOf(n *html.Node) string {
 	return b.String()
 }
 
-// webInText is a link text that may be a web address: an optional scheme
-// and a host name, nothing else but a path after it.
-var webInText = regexp.MustCompile(`(?i)^(https?://)?((?:[a-z0-9-]+\.)+[a-z0-9-]+)\.?(?::[0-9]+)?(?:[/?#]\S*)?$`)
+// hostInText finds names in a link text that may be web addresses: an
+// optional scheme and a host name of letters (any script), digits and
+// hyphens with at least one dot.
+var hostInText = regexp.MustCompile(`(?i)(https?://)?([\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+)`)
 
-// shownHost is the host a link text names, "" if the text does not look
-// like a web address: a scheme, "www." or a name whose ending is a real
-// public suffix (ICANN). File names (rechnung.pdf, bild.jpg), version
-// numbers (v1.2) and mail addresses are no targets to compare.
-func shownHost(text string) string {
-	if strings.Contains(text, "@") && !strings.Contains(strings.ToLower(text), "://") {
-		return ""
+// shownHost is the host a link text names (in Punycode), "" if it names
+// none that looks like a web address: a scheme, "www." or a name whose
+// ending is a real public suffix (ICANN), anywhere in the text ("Login:
+// www.sparkasse.de"). File names (rechnung.pdf), version numbers (v1.2)
+// and mail addresses are no targets to compare. mixed: the name mixes
+// scripts.
+func shownHost(text string) (string, bool) {
+	for _, loc := range hostInText.FindAllStringSubmatchIndex(text, -1) {
+		if loc[0] > 0 && text[loc[0]-1] == '@' || loc[1] < len(text) && text[loc[1]] == '@' {
+			continue // part of a mail address
+		}
+		scheme := loc[2] >= 0
+		host := strings.ToLower(text[loc[4]:loc[5]])
+		mixed := mixedScripts(host)
+		ascii, err := idna.Lookup.ToASCII(host)
+		if err != nil {
+			if mixed {
+				return host, true
+			}
+			continue
+		}
+		if scheme || strings.HasPrefix(ascii, "www.") {
+			return ascii, mixed
+		}
+		// The last label must be a top-level domain of the ICANN list
+		// (".com", ".de"), not a file ending (".pdf").
+		if dot := strings.LastIndexByte(ascii, '.'); dot > 0 {
+			if suffix, icann := publicsuffix.PublicSuffix(ascii[dot+1:]); icann && suffix == ascii[dot+1:] {
+				return ascii, mixed
+			}
+		}
 	}
-	m := webInText.FindStringSubmatch(text)
-	if m == nil {
-		return ""
-	}
-	host := strings.ToLower(m[2])
-	if m[1] != "" || strings.HasPrefix(host, "www.") {
-		return host
-	}
-	suffix, icann := publicsuffix.PublicSuffix(host)
-	if !icann || suffix == host {
-		return ""
-	}
-	return host
+	return "", false
 }
 
 // mailDomain is the domain of a mail address ("" if the text is none).

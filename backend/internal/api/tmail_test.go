@@ -643,3 +643,33 @@ func TestMailDraftKeepsItsAttachments(t *testing.T) {
 		t.Fatalf("second: %v, drafts %d", second, srv.Count("Drafts"))
 	}
 }
+
+// Security review N1: the limit of 100 parts counts after "*" is unfolded.
+func TestMailAttachFromPartsCountedAfterUnfolding(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	ts.grantMail("alex")
+	id := ts.addMailbox(ts.client, srv)
+	var b strings.Builder
+	b.WriteString("From: bob@example.net\nSubject: viele\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=b\n\n--b\nContent-Type: text/plain\n\nx\n")
+	for i := range 101 {
+		fmt.Fprintf(&b, "--b\nContent-Type: application/octet-stream\nContent-Disposition: attachment; filename=f%d.bin\n\nx\n", i)
+	}
+	b.WriteString("--b--\n")
+	srv.Deliver("INBOX", b.String())
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	mw.WriteField("meta", `{"subject":"Fw","text":"x","attachFrom":{"folder":"INBOX","uid":1,"parts":["*"]}}`)
+	mw.Close()
+	req, _ := http.NewRequest("POST", ts.url+"/api/v1/mail/accounts/"+id+"/draft", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res, err := ts.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := new(bytes.Buffer)
+	body.ReadFrom(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || errorCode(t, body.Bytes()) != "mail_invalid" {
+		t.Fatalf("101 parts by *: %d %s", res.StatusCode, body)
+	}
+}

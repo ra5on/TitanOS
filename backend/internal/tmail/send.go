@@ -281,7 +281,7 @@ func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, m
 		}
 		return smtpError(ctx, err)
 	}
-	m.succeeded(user, mb.SMTP)
+	m.succeeded(user, conn.RemoteAddr())
 	if data != nil {
 		if err := c.SendMail(from, rcpt, bytes.NewReader(data)); err != nil {
 			return smtpError(ctx, err)
@@ -426,7 +426,7 @@ func (m *Manager) SaveDraft(ctx context.Context, user, id string, out Outgoing) 
 		}
 		if uid != 0 {
 			if _, err := selectFolder(c, s, drafts); err == nil {
-				if b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}}); err == nil {
+				if b, err := fetchStructure(c, s.budget, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}}); err == nil {
 					attachments = walkStructure(b.BodyStructure).attachmentList()
 				}
 			}
@@ -468,7 +468,7 @@ func (m *Manager) Attachments(ctx context.Context, user, id, folder string, uid 
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}
-		b, err := fetchOne(c, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
+		b, err := fetchStructure(c, s.budget, uid, &imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{Extended: true}})
 		if err != nil {
 			return err
 		}

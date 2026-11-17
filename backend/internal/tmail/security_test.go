@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -252,6 +253,10 @@ func TestNewTargetsLimited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// One login to the real server first: its address is known then.
+	if _, err := e.m.CheckSettings(t.Context(), "alex", "", e.input(testPassword)); err != nil {
+		t.Fatal(err)
+	}
 	limited := false
 	for i := range NewTargetLimit + 3 {
 		in.IMAP.Port = closed + 1 + i
@@ -272,7 +277,6 @@ func TestNewTargetsLimited(t *testing.T) {
 	if _, err := e.m.UpdateMailbox("alex", view.ID, ok); err != nil {
 		t.Fatal(err)
 	}
-	e.m.succeeded("alex", ok.IMAP)
 	if _, err := e.m.Folders(t.Context(), "alex", view.ID); err != nil {
 		t.Fatalf("known server: %v", err)
 	}
@@ -520,16 +524,16 @@ func TestHeavyRequestsLimited(t *testing.T) {
 	e := newEnv(t)
 	var releases []func()
 	for range HeavyPerAccount {
-		r, err := e.m.Begin("alex", 1)
+		r, err := e.m.Begin(t.Context(), "alex", 1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		releases = append(releases, r)
 	}
-	if _, err := e.m.Begin("alex", 1); !errors.Is(err, ErrBusy) || Code(err) != "mail_busy" {
+	if _, err := e.m.Begin(t.Context(), "alex", 1); !errors.Is(err, ErrBusy) || Code(err) != "mail_busy" {
 		t.Fatalf("third: %v", err)
 	}
-	if r, err := e.m.Begin("bob", 1); err != nil {
+	if r, err := e.m.Begin(t.Context(), "bob", 1); err != nil {
 		t.Fatalf("another account: %v", err)
 	} else {
 		r()
@@ -540,19 +544,19 @@ func TestHeavyRequestsLimited(t *testing.T) {
 	reserveWait = 300 * time.Millisecond
 	defer func() { reserveWait = 5 * time.Second }()
 	e.m.Reserve = func(int64) (func(), bool) { return nil, false }
-	small, err := e.m.Begin("alex", 64<<10)
+	small, err := e.m.Begin(t.Context(), "alex", 64<<10)
 	if err != nil {
 		t.Fatalf("text only without RAM: %v", err)
 	}
 	small()
 	start := time.Now()
-	if _, err := e.m.Begin("alex", 32<<20); !errors.Is(err, ErrBusy) || time.Since(start) < 250*time.Millisecond {
+	if _, err := e.m.Begin(t.Context(), "alex", 32<<20); !errors.Is(err, ErrBusy) || time.Since(start) < 250*time.Millisecond {
 		t.Fatalf("without RAM: %v after %v", err, time.Since(start))
 	}
 	// Room that comes while waiting is taken.
 	tries := 0
 	e.m.Reserve = func(int64) (func(), bool) { tries++; return func() {}, tries > 1 }
-	if r, err := e.m.Begin("alex", 32<<20); err != nil {
+	if r, err := e.m.Begin(t.Context(), "alex", 32<<20); err != nil {
 		t.Fatalf("room after a moment: %v", err)
 	} else {
 		r()
@@ -771,5 +775,267 @@ func TestPartBudgetNotFromServer(t *testing.T) {
 		if peak > 96<<20 {
 			t.Errorf("flood %v: peak heap %d MiB (server sent %d MiB)", flood, peak>>20, sent.Load()>>20)
 		}
+	}
+}
+
+// LOW (follow-up review): look-alike, invisible and hidden tricks of link
+// texts and targets.
+func TestLinkMarkTricks(t *testing.T) {
+	for _, c := range []struct {
+		name, html string
+		mark       bool
+	}{
+		{"plain", `<a href="https://evil.example/login">www.sparkasse.de</a>`, true},
+		{"cyrillic a in text", `<a href="https://evil.example/login">www.sp` + "а" + `rkasse.de</a>`, true},
+		{"zero width in text", `<a href="https://evil.example/login">www.spar` + "\u200b" + `kasse.de</a>`, true},
+		{"words around", `<a href="https://evil.example/login">Login: www.sparkasse.de</a>`, true},
+		{"trailing dot", `<a href="https://evil.example/login">sparkasse.de.</a>`, true},
+		{"idn href", `<a href="https://www.sp` + "а" + `rkasse.de/login">www.sparkasse.de</a>`, true},
+		{"punycode href", `<a href="https://www.xn--sprkasse-2fg.de/login">www.sparkasse.de</a>`, true},
+		{"bidi href", `<a href="https://moc.` + "\u202e" + `evil.example/">www.paypal.com</a>`, true},
+		{"font-size 0", `<p style="font-size:0"><a style="font-size:14px" href="https://evil.example/">www.sparkasse.de</a></p>`, true},
+		{"blogspot", `<a href="https://evil.blogspot.com/">bank.blogspot.com</a>`, true},
+		{"ip host", `<a href="http://192.0.2.7/">www.sparkasse.de</a>`, true},
+		{"same site", `<a href="https://banking.sparkasse.de/">Login bei www.sparkasse.de</a>`, false},
+		{"umlaut domain", `<a href="https://www.m` + "ü" + `nchen.de/">www.m` + "ü" + `nchen.de</a>`, false},
+		{"file name", `<a href="https://cdn.example/r.pdf">Rechnung.pdf</a>`, false},
+	} {
+		doc, _ := SanitizeHTML(c.html, nil, false)
+		body := doc[strings.Index(doc, "<body>"):]
+		if got := strings.Contains(body, `data-tmail-mismatch="1"`); got != c.mark {
+			t.Errorf("%s: marked %v, want %v: %s", c.name, got, c.mark, body)
+		}
+		for _, m := range regexp.MustCompile(`title="[^"]*"|data-tmail-target="[^"]*"`).FindAllString(body, -1) {
+			if hasInvisible(m) {
+				t.Errorf("%s: invisible characters in %q", c.name, m)
+			}
+		}
+		if c.mark && !strings.Contains(body, "font-size:14px !important") {
+			t.Errorf("%s: the mark can be hidden: %s", c.name, body)
+		}
+	}
+	doc, _ := SanitizeHTML(`<a href="https://www.sp`+"а"+`rkasse.de/x">x</a>`, nil, false)
+	if !strings.Contains(doc, `href="https://www.xn--sprkasse-26g.de/x"`) || !strings.Contains(doc, `title="https://www.xn--sprkasse-26g.de/x"`) {
+		t.Errorf("punycode target: %s", doc)
+	}
+}
+
+// evilList answers LIST with a mailbox name of size bytes and FETCH with
+// a structure of size bytes of small parts; parts come with 8 bytes each.
+func evilAnswers(t *testing.T, listSize int, structure string) (string, *x509.CertPool) {
+	chunk := strings.Repeat("A", 1<<20)
+	addr, pool, _ := scripted(t, "* OK [CAPABILITY IMAP4rev1 UIDPLUS MOVE] evil\r\n", func(w *bufio.Writer, tag, cmd, line string) bool {
+		upper := strings.ToUpper(line)
+		switch {
+		case cmd == "LOGIN":
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		case cmd == "SELECT":
+			fmt.Fprintf(w, "* 1 EXISTS\r\n* OK [UIDVALIDITY 1] v\r\n* OK [UIDNEXT 2] n\r\n%s OK [READ-WRITE] done\r\n", tag)
+		case cmd == "LIST":
+			fmt.Fprintf(w, "* LIST () \"/\" {%d}\r\n", listSize)
+			for left := listSize; left > 0; left -= min(left, len(chunk)) {
+				w.WriteString(chunk[:min(left, len(chunk))])
+			}
+			fmt.Fprintf(w, "\r\n%s OK done\r\n", tag)
+		case strings.Contains(upper, "BODYSTRUCTURE"):
+			// Written as it is: the test's server must not copy it (its
+			// memory counts in the same process).
+			w.WriteString("* 1 FETCH (UID 1 FLAGS (\\Seen) BODYSTRUCTURE ")
+			w.WriteString(structure)
+			fmt.Fprintf(w, ")\r\n%s OK done\r\n", tag)
+		case strings.Contains(upper, "BODY.PEEK["):
+			i := strings.Index(upper, "BODY.PEEK[")
+			sec := upper[i+10 : i+10+strings.Index(upper[i+10:], "]")]
+			fmt.Fprintf(w, "* 1 FETCH (UID 1 BODY[%s] {12}\r\nQUFBQUFBQUE=)\r\n%s OK done\r\n", sec, tag)
+		default:
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		}
+		return true
+	})
+	return addr, pool
+}
+
+func evilMailboxes(t *testing.T, e *testEnv, addr string, pool *x509.CertPool, n int) []string {
+	e.m.RootCAs = pool
+	var ids []string
+	for i := range n {
+		in := e.input("x")
+		in.Name = "evil" + strconv.Itoa(i)
+		in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
+		view, err := e.m.AddMailbox("alex", in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, view.ID)
+	}
+	return ids
+}
+
+// HIGH (follow-up review N1): sizes in the structure make no room in
+// advance; what is kept holds its real length.
+func TestClaimedSizesMakeNoRoom(t *testing.T) {
+	var parts strings.Builder
+	for range 100 {
+		parts.WriteString(`("application" "octet-stream" ("name" "a.bin") NIL NIL "base64" 34000000)`)
+	}
+	addr, pool := evilAnswers(t, 10, "("+parts.String()+` "mixed")`)
+	e := newEnv(t)
+	id := evilMailboxes(t, e, addr, pool, 1)[0]
+	var held int
+	var kept [][]byte
+	peak := peakHeap(func() {
+		for p := 1; p <= 100; p++ {
+			data, _, err := e.m.PartBytes(t.Context(), "alex", id, "INBOX", 1, strconv.Itoa(p), MaxAttachments)
+			if err != nil {
+				t.Fatalf("part %d: %v", p, err)
+			}
+			held += cap(data)
+			kept = append(kept, data)
+		}
+	})
+	runtime.KeepAlive(kept)
+	if held > 1<<20 || peak > 96<<20 {
+		t.Fatalf("held %d KiB, peak %d MiB", held>>10, peak>>20)
+	}
+}
+
+// MEDIUM (follow-up review N2): many mailboxes of one account cannot add
+// their budgets up; commands wait for the account's turn.
+func TestParallelCommandsOfAnAccountBounded(t *testing.T) {
+	addr, pool := evilAnswers(t, budgetCommand-(512<<10), "")
+	e := newEnv(t)
+	ids := evilMailboxes(t, e, addr, pool, MaxMailboxes)
+	var running, most atomic.Int32
+	e.m.Reserve = func(int64) (func(), bool) {
+		n := running.Add(1)
+		for {
+			m := most.Load()
+			if n <= m || most.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		return func() { running.Add(-1) }, true
+	}
+	peak := peakHeap(func() {
+		var wg sync.WaitGroup
+		for _, id := range ids {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, _ = e.m.Folders(t.Context(), "alex", id)
+			}()
+		}
+		wg.Wait()
+	})
+	if peak > 160<<20 {
+		t.Fatalf("peak heap %d MiB", peak>>20)
+	}
+	if most.Load() > CommandsPerAccount {
+		t.Fatalf("%d commands of one account at once", most.Load())
+	}
+}
+
+// MEDIUM (follow-up review N2): structures of 15 MiB, read in parallel
+// by many mailboxes of an account, stay bounded.
+func TestLargeStructureBounded(t *testing.T) {
+	part := `("text" "plain" NIL NIL NIL "7bit" 1 1)`
+	var b strings.Builder
+	b.WriteString("(")
+	for range (15 << 20) / len(part) { // the size of the review's proof
+		b.WriteString(part)
+	}
+	b.WriteString(` "mixed")`)
+	addr, pool := evilAnswers(t, 10, b.String())
+	e := newEnv(t)
+	ids := evilMailboxes(t, e, addr, pool, 8)
+	// Sampled every millisecond: decoding a structure is brief.
+	runtime.GC()
+	var start runtime.MemStats
+	runtime.ReadMemStats(&start)
+	base := start.HeapAlloc
+	var peak atomic.Uint64
+	stop := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		var ms runtime.MemStats
+		for {
+			runtime.ReadMemStats(&ms)
+			if ms.HeapAlloc > peak.Load() {
+				peak.Store(ms.HeapAlloc)
+			}
+			select {
+			case <-stop:
+				return
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}()
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = e.m.Read(t.Context(), "alex", id, "INBOX", 1, false)
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	<-sampled
+	grown := peak.Load() - min(peak.Load(), base)
+	t.Logf("peak %d MiB above the start", grown>>20)
+	if grown > 128<<20 {
+		t.Fatalf("heap grew by %d MiB", grown>>20)
+	}
+}
+
+// INFO (follow-up review): waiting for room ends with the request.
+func TestMoreEndsWithTheRequest(t *testing.T) {
+	e := newEnv(t)
+	e.m.Reserve = func(int64) (func(), bool) { return nil, false }
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	start := time.Now()
+	if _, err := e.m.More(ctx, 32<<20); !errors.Is(err, ErrBusy) || time.Since(start) > time.Second {
+		t.Fatalf("%v after %v", err, time.Since(start))
+	}
+}
+
+// LOW (follow-up review N4): a server is known by its address after a
+// login, not by its name.
+func TestKnownServerByAddress(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.m.CheckSettings(t.Context(), "alex", "", e.input(testPassword)); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	closed := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	in := e.input("x")
+	view, err := e.m.AddMailbox("alex", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range NewTargetLimit {
+		in.IMAP.Port = closed + 1 + i
+		in.Password = "p" + strconv.Itoa(i)
+		e.m.UpdateMailbox("alex", view.ID, in)
+		e.m.Folders(t.Context(), "alex", view.ID)
+	}
+	// The real server under another name: its address is known.
+	ok := e.input(testPassword)
+	_, port := hostPort(t, e.srv.IMAPAddr)
+	ok.IMAP.Host, ok.IMAP.Port = "localhost", port
+	if _, err := e.m.UpdateMailbox("alex", view.ID, ok); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Folders(t.Context(), "alex", view.ID); errors.Is(err, ErrRateLimited) {
+		t.Fatalf("known address refused: %v", err)
+	}
+	// A known name on another port is a new target.
+	ok.IMAP.Host, ok.IMAP.Port = "127.0.0.1", closed+50
+	e.m.UpdateMailbox("alex", view.ID, ok)
+	if _, err := e.m.Folders(t.Context(), "alex", view.ID); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("new port of a known host: %v", err)
 	}
 }

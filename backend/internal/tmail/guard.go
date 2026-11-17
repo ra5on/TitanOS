@@ -134,8 +134,13 @@ const NewTargetLimit = 10
 // targetState remembers the servers an account logged in to (RAM only)
 // and counts its tries of others.
 type targetState struct {
-	mu    sync.Mutex
+	mu sync.Mutex
+	// known: account and address:port of a server a login went through
+	// (the address after DNS, never a name that may point elsewhere).
 	known map[string]bool
+	// loaded: account and host:port of the mailboxes with a password as
+	// they were stored at the start; they are no new targets.
+	loaded map[string]bool
 	// tried: account → attempts of the last minute (a host:port, or one
 	// check of the settings for IMAP and SMTP together) → first time.
 	tried map[string]map[string]time.Time
@@ -149,40 +154,51 @@ func targetKey(user string, s Server) string {
 // SMTP connections count as one attempt.
 type attemptKey struct{}
 
-// succeeded notes that an account logged in to a server.
-func (m *Manager) succeeded(user string, s Server) {
+// succeeded notes that an account logged in to the server at addr.
+func (m *Manager) succeeded(user string, addr net.Addr) {
+	ap, err := netip.ParseAddrPort(addr.String())
+	if err != nil {
+		return
+	}
 	t := &m.targets
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.known == nil {
 		t.known = map[string]bool{}
 	}
-	t.known[targetKey(user, s)] = true
+	t.known[user+"\x00"+netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()).String()] = true
 }
 
-// knownLocked marks the servers of the stored mailboxes with a password
-// as known (m.mu held), at a start: they need no attempt of their own
-// after every start (follow-up of the security review). Servers changed
-// later count until a login there goes through.
-func (m *Manager) knownLocked() {
+// loadedLocked notes the servers of the stored mailboxes with a password
+// at a start (m.mu held): unchanged since then, they are no new targets
+// and need no attempt of their own after every start. A server changed
+// later counts until a login there goes through.
+func (m *Manager) loadedLocked() {
+	t := &m.targets
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.loaded == nil {
+		t.loaded = map[string]bool{}
+	}
 	for name, f := range m.users {
 		for _, mb := range f.Mailboxes {
 			if mb.Password != "" {
-				m.succeeded(name, mb.IMAP)
-				m.succeeded(name, mb.SMTP)
+				t.loaded[targetKey(name, mb.IMAP)] = true
+				t.loaded[targetKey(name, mb.SMTP)] = true
 			}
 		}
 	}
 }
 
-// mayTry tells whether an account may open a connection to a server now:
-// a known one always, else at most NewTargetLimit different attempts a
-// minute (the same host:port, or one check of the settings, counts once).
-func (m *Manager) mayTry(ctx context.Context, user string, s Server) bool {
+// mayTry tells whether an account may connect to a server at target now:
+// one stored at the start, or one a login went through, always; else at
+// most NewTargetLimit different attempts a minute (the same host:port, or
+// one check of the settings, counts once).
+func (m *Manager) mayTry(ctx context.Context, user string, s Server, target netip.AddrPort) bool {
 	t := &m.targets
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.known[targetKey(user, s)] {
+	if t.loaded[targetKey(user, s)] || t.known[user+"\x00"+netip.AddrPortFrom(target.Addr().Unmap(), target.Port()).String()] {
 		return true
 	}
 	attempt := s.Host + ":" + strconv.Itoa(s.Port)
@@ -223,6 +239,11 @@ func (m *Manager) forgetTargets(user string) {
 			delete(t.known, k)
 		}
 	}
+	for k := range t.loaded {
+		if strings.HasPrefix(k, user+"\x00") {
+			delete(t.loaded, k)
+		}
+	}
 	delete(t.tried, user)
 }
 
@@ -231,9 +252,6 @@ func (m *Manager) forgetTargets(user string) {
 func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, error) {
 	if !validHost(s.Host) || s.Port < 1 || s.Port > 65535 {
 		return nil, ErrInvalid
-	}
-	if !m.mayTry(ctx, user, s) {
-		return nil, ErrRateLimited
 	}
 	confined := m.confined(user)
 	dialer := net.Dialer{Timeout: connectTimeout, ControlContext: func(_ context.Context, _, address string, _ syscall.RawConn) error {
@@ -246,7 +264,13 @@ func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, er
 		if confined && !m.confinedTarget(target.Addr()) {
 			return ErrConfined
 		}
-		return m.checkTarget(target)
+		if err := m.checkTarget(target); err != nil {
+			return err
+		}
+		if !m.mayTry(ctx, user, s, target) {
+			return ErrRateLimited
+		}
+		return nil
 	}}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(s.Host, strconv.Itoa(s.Port)))
 	if err != nil {
@@ -266,7 +290,7 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, known := range []error{ErrAuthFailed, ErrUnreachable, ErrTLS, ErrHostForbidden, ErrTimeout, ErrTooLarge, ErrNotFound, ErrFolderExists, ErrSendFailed, ErrInvalid, ErrNoPassword, ErrDisabled} {
+	for _, known := range []error{ErrRateLimited, ErrBusy, ErrAuthFailed, ErrUnreachable, ErrTLS, ErrHostForbidden, ErrTimeout, ErrTooLarge, ErrNotFound, ErrFolderExists, ErrSendFailed, ErrInvalid, ErrNoPassword, ErrDisabled} {
 		if errors.Is(err, known) {
 			return err
 		}

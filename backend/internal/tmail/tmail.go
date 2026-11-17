@@ -244,6 +244,7 @@ type Manager struct {
 	checks   checkLimiter
 	targets  targetState
 	heavy    heavyState
+	gate     gateState
 	ctx      contextHolder
 }
 
@@ -295,7 +296,7 @@ func (m *Manager) Load() error {
 		}
 		m.users[name] = &f
 	}
-	m.knownLocked()
+	m.loadedLocked()
 	return firstErr
 }
 

@@ -18,9 +18,14 @@ import (
 const (
 	// budgetLogin covers greeting, STARTTLS, capabilities and login.
 	budgetLogin = 1 << 20
-	// budgetCommand covers LIST, SEARCH, STATUS, STORE, MOVE and the
-	// heads of a page of mails.
-	budgetCommand = 16 << 20
+	// budgetCommand covers LIST, SEARCH, STATUS, STORE, MOVE, the heads
+	// of a page of mails and what the permanent connection receives;
+	// small, since many connections of an account add up (follow-up of
+	// the security review).
+	budgetCommand = 4 << 20
+	// budgetStructure covers an answer with BODYSTRUCTURE (and the head
+	// of one mail): decoding it takes about twelve times its size.
+	budgetStructure = 1 << 20
 	// budgetMargin is added to the expected size of a part.
 	budgetMargin = 1 << 20
 	// budgetSMTP covers a whole SMTP conversation; smtpLines its lines.

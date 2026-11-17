@@ -14,6 +14,10 @@ type watchState struct {
 	unread     map[string]int
 	baseline   map[string]baseline
 	running    map[string]*watcher
+	// single: the last round was too large, take one mail a round;
+	// pending: the first UID of the round under way.
+	single  map[string]bool
+	pending map[string]uint32
 }
 
 // baseline is where new mail of an INBOX starts: UIDs from next on are
@@ -28,6 +32,7 @@ func (w *watchState) init() {
 	if w.status == nil {
 		w.status, w.authFailed, w.unread = map[string]Status{}, map[string]string{}, map[string]int{}
 		w.baseline, w.running = map[string]baseline{}, map[string]*watcher{}
+		w.single, w.pending = map[string]bool{}, map[string]uint32{}
 	}
 }
 

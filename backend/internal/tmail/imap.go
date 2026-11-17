@@ -187,7 +187,7 @@ func (m *Manager) connect(ctx context.Context, user string, mb Mailbox, password
 		}
 		return fail(classify(err))
 	}
-	m.succeeded(user, mb.IMAP)
+	m.succeeded(user, raw.RemoteAddr())
 	conn.set(budgetCommand)
 	return c, conn, nil
 }
@@ -218,6 +218,11 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	if m.authFailed(user, mb) {
 		return ErrAuthFailed
 	}
+	leave, err := m.enter(ctx, user)
+	if err != nil {
+		return err
+	}
+	defer leave()
 	s := m.conns.get(key(user, id))
 	s.mu.Lock()
 	defer s.mu.Unlock()

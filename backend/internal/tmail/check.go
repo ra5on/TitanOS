@@ -118,6 +118,11 @@ func (m *Manager) CheckSettings(ctx context.Context, user, id string, in Mailbox
 	// IMAP and SMTP of one check are one attempt for the limit of new
 	// servers.
 	ctx = context.WithValue(ctx, attemptKey{}, newID())
+	leave, err := m.enter(ctx, user)
+	if err != nil {
+		return CheckResult{}, err
+	}
+	defer leave()
 	var out CheckResult
 	c, _, err := m.connect(ctx, user, mb, password, nil)
 	if err == nil {
@@ -162,25 +167,29 @@ var reserveWait = 5 * time.Second
 
 // More takes bytes of TitanOS's budget of RAM for a request, waiting a
 // little for room; ErrBusy without. Small amounts need no room.
-func (m *Manager) More(bytes int64) (func(), error) {
+func (m *Manager) More(ctx context.Context, bytes int64) (func(), error) {
 	if m.Reserve == nil || bytes < reserveFree {
 		return func() {}, nil
 	}
-	deadline := time.Now().Add(reserveWait)
+	deadline := time.NewTimer(reserveWait)
+	defer deadline.Stop()
 	for {
 		if release, ok := m.Reserve(bytes); ok {
 			return release, nil
 		}
-		if time.Now().After(deadline) {
+		select {
+		case <-ctx.Done():
 			return nil, ErrBusy
+		case <-deadline.C:
+			return nil, ErrBusy
+		case <-time.After(200 * time.Millisecond):
 		}
-		time.Sleep(200 * time.Millisecond)
 	}
 }
 
 // Begin admits a heavy request that holds up to bytes in RAM: at most
 // HeavyPerAccount per account and only within the budget of RAM (More).
-func (m *Manager) Begin(user string, bytes int64) (func(), error) {
+func (m *Manager) Begin(ctx context.Context, user string, bytes int64) (func(), error) {
 	h := &m.heavy
 	h.mu.Lock()
 	if h.running == nil {
@@ -200,11 +209,76 @@ func (m *Manager) Begin(user string, bytes int64) (func(), error) {
 		}
 		h.mu.Unlock()
 	}
-	release, err := m.More(bytes)
+	release, err := m.More(ctx, bytes)
 	if err != nil {
 		leave()
 		return nil, err
 	}
 	var once sync.Once
 	return func() { once.Do(func() { release(); leave() }) }, nil
+}
+
+// Commands of T-Mail at the servers: each may hold up to its budget and
+// what decoding makes of it, so they are limited per account across all
+// its mailboxes and, beyond a floor, by TitanOS's budget of RAM
+// (security review of 1.05, follow-up).
+const (
+	// CommandsPerAccount is how many IMAP commands an account may have
+	// running at once, over all its mailboxes.
+	CommandsPerAccount = 4
+	// commandReserve is the RAM a running command may need.
+	commandReserve = 6 * budgetCommand
+	// commandFloor commands run on the whole NAS without asking the
+	// budget, so that T-Mail stays usable while VMs take the RAM.
+	commandFloor = 2
+)
+
+type gateState struct {
+	mu      sync.Mutex
+	perUser map[string]int
+	running int
+}
+
+// enter waits (at most reserveWait, and while ctx lasts) until an account
+// may run one more command; ErrBusy without room.
+func (m *Manager) enter(ctx context.Context, user string) (func(), error) {
+	g := &m.gate
+	deadline := time.Now().Add(reserveWait)
+	for {
+		g.mu.Lock()
+		if g.perUser == nil {
+			g.perUser = map[string]int{}
+		}
+		if g.perUser[user] < CommandsPerAccount {
+			release, ok := func() {}, true
+			if g.running >= commandFloor && m.Reserve != nil {
+				release, ok = m.Reserve(commandReserve)
+			}
+			if ok {
+				g.perUser[user]++
+				g.running++
+				g.mu.Unlock()
+				var once sync.Once
+				return func() {
+					once.Do(func() {
+						release()
+						g.mu.Lock()
+						g.running--
+						if g.perUser[user]--; g.perUser[user] <= 0 {
+							delete(g.perUser, user)
+						}
+						g.mu.Unlock()
+					})
+				}, nil
+			}
+		}
+		g.mu.Unlock()
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return nil, ErrBusy
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }

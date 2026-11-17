@@ -227,12 +227,20 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 	stop := context.AfterFunc(ctx, func() { _ = c.Close() }) // titand stops: no goodbye to the server
 	defer stop()
 	limited := func(work func() error) error {
+		// A step counts against the commands of the account like one of
+		// the web UI; without room the watcher pauses (ErrBusy).
+		leave, err := m.enter(ctx, user)
+		if err != nil {
+			return err
+		}
+		defer leave()
 		timer := time.AfterFunc(commandTimeout, func() { _ = c.Close() })
 		defer timer.Stop()
 		budget.set(budgetCommand)
-		err := work()
+		err = work()
 		budget.set(budgetCommand)
 		if budget.tooLarge() {
+			m.tooLargeMail(user, mb.ID)
 			return ErrTooLarge
 		}
 		return err
@@ -338,8 +346,19 @@ func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) (more 
 	if err != nil {
 		return false, err
 	}
-	// At most a hundred a round; the rest comes in the next one.
-	uids := uidsFrom(data.All, b.next, 100)
+	// At most twenty a round, one while a round was too large: a single
+	// mail whose head does not fit the budget is passed over, so that it
+	// cannot stop the messages for good.
+	batch := 20
+	if m.singleRound(user, mb.ID) {
+		batch = 1
+	}
+	uids := uidsFrom(data.All, b.next, batch)
+	if len(uids) > 0 {
+		m.watch.mu.Lock()
+		m.watch.pending[key(user, mb.ID)] = uids[0]
+		m.watch.mu.Unlock()
+	}
 	if len(uids) > 0 {
 		msgs, err := collect(c.Fetch(uidSet(uids...), &imap.FetchOptions{UID: true, Envelope: true, Flags: true}))
 		if err != nil {
@@ -369,11 +388,16 @@ func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) (more 
 			m.notice(user, mb, len(told), from, last.Subject)
 		}
 	}
-	unread, err := c.UIDSearch(&imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen, imap.FlagDeleted}}, nil).Wait()
+	unread, err := c.UIDSearch(&imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen, imap.FlagDeleted}}, searchOptions(c)).Wait()
 	if err == nil {
 		m.setUnread(user, mb.ID, uidCount(unread.All))
 	}
-	return len(uids) == 100, nil
+	if batch == 1 && len(uids) == 1 {
+		m.watch.mu.Lock()
+		delete(m.watch.single, key(user, mb.ID))
+		m.watch.mu.Unlock()
+	}
+	return len(uids) == batch, nil
 }
 
 // ruleMatches tells whether a rule applies to a mail.
@@ -499,4 +523,33 @@ func Code(err error) string {
 func (m *Manager) RoleChanged(user string) {
 	m.conns.close(user, "")
 	m.Sync(user)
+}
+
+// tooLargeMail is told when a step of the watcher was cut off: the next
+// rounds take one mail each; if that one mail is too large, it is passed
+// over (no message for it, it stays in the INBOX).
+func (m *Manager) tooLargeMail(user, id string) {
+	k := key(user, id)
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	m.watch.init()
+	if !m.watch.single[k] {
+		m.watch.single[k] = true
+		return
+	}
+	if uid, ok := m.watch.pending[k]; ok {
+		if b, ok := m.watch.baseline[k]; ok && uid+1 > b.next {
+			b.next = uid + 1
+			m.watch.baseline[k] = b
+		}
+		delete(m.watch.pending, k)
+	}
+	delete(m.watch.single, k)
+}
+
+func (m *Manager) singleRound(user, id string) bool {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	m.watch.init()
+	return m.watch.single[key(user, id)]
 }

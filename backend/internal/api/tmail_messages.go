@@ -143,7 +143,7 @@ const (
 
 // heavy admits a heavy request or answers 503 mail_busy at once.
 func (a tmailArea) heavy(w http.ResponseWriter, r *http.Request, bytes int64) (func(), bool) {
-	release, err := a.mail.Begin(currentUser(r).Name, bytes)
+	release, err := a.mail.Begin(r.Context(), currentUser(r).Name, bytes)
 	if err != nil {
 		writeMailError(w, err)
 		return nil, false
@@ -267,12 +267,15 @@ func (a tmailArea) handlePartSave(w http.ResponseWriter, r *http.Request) {
 		writeMailError(w, tmail.ErrTooLarge)
 		return
 	}
-	release, ok := a.heavy(w, r, att.Size+(1<<20))
+	// The part may not be larger than reserved, whatever the server sends
+	// now (it may answer differently than for the size).
+	limit := min(int64(maxSaveBytes), att.Size+(64<<10))
+	release, ok := a.heavy(w, r, limit+(1<<20))
 	if !ok {
 		return
 	}
 	defer release()
-	data, _, err := a.mail.PartBytes(r.Context(), user.Name, r.PathValue("id"), req.Folder, req.UID, req.Part, maxSaveBytes)
+	data, _, err := a.mail.PartBytes(r.Context(), user.Name, r.PathValue("id"), req.Folder, req.UID, req.Part, limit)
 	if err != nil {
 		a.mailError(w, r, err)
 		return
@@ -420,7 +423,7 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 		}
 		defer release()
 		more := func(bytes int64) bool {
-			extra, err := a.mail.More(heavyFactor * bytes)
+			extra, err := a.mail.More(r.Context(), heavyFactor*bytes)
 			if err != nil {
 				writeMailError(w, err)
 				return false
@@ -526,10 +529,6 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 			attached = append(attached, tmail.File{Name: info.Name(), Type: mime.TypeByExtension(extOf(info.Name())), Data: data})
 		}
 		if from := meta.AttachFrom; from != nil {
-			if len(from.Parts) > 100 {
-				writeError(w, http.StatusBadRequest, "mail_invalid", "too many parts")
-				return
-			}
 			if from.UID == 0 && meta.DraftUID != 0 {
 				// The parts of the draft this save replaces: uploads are
 				// not sent again with every save.
@@ -554,15 +553,25 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 					from.Parts = append(from.Parts, att.Part)
 				}
 			}
+			// The limit counts the parts after "*" is unfolded.
+			if len(from.Parts) > 100 {
+				writeError(w, http.StatusBadRequest, "mail_invalid", "too many parts")
+				return
+			}
+			// Room for what the structure claims (never more than is
+			// left), then for what really comes beyond it: the server's
+			// word is no measure (security review of 1.05).
 			var expected int64
 			for _, att := range list {
 				if slices.Contains(from.Parts, att.Part) {
 					expected += att.Size
 				}
 			}
-			if !more(min(expected, left) + (1 << 20)) {
+			covered := min(expected, left) + (1 << 20)
+			if !more(covered) {
 				return
 			}
+			var real int64
 			for _, part := range from.Parts {
 				data, info, err := a.mail.PartBytes(r.Context(), user.Name, id, from.Folder, from.UID, part, left)
 				if err != nil {
@@ -570,6 +579,13 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 					return
 				}
 				left -= int64(len(data))
+				real += int64(cap(data))
+				if real > covered {
+					if !more(real - covered) {
+						return
+					}
+					covered = real
+				}
 				attached = append(attached, tmail.File{Name: info.Name, Type: info.Type, Data: data})
 			}
 		}

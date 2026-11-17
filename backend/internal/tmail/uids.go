@@ -117,3 +117,13 @@ func collect(cmd *imapclient.FetchCommand) ([]*imapclient.FetchMessageBuffer, er
 	}
 	return out, cmd.Close()
 }
+
+// searchOptions asks for the compact answer (ESEARCH: ranges instead of
+// every UID) where the server has it, so that a big folder fits the
+// budget of a command.
+func searchOptions(c *imapclient.Client) *imap.SearchOptions {
+	if c.Caps().Has(imap.CapESearch) || c.Caps().Has(imap.CapIMAP4rev2) {
+		return &imap.SearchOptions{ReturnAll: true}
+	}
+	return nil
+}
