@@ -743,6 +743,104 @@ async function agent109() {
     }
     await ctx.close();
   }
+  // Automations, scripts and scenes have a row of their own (owner, 17 Nov
+  // 2026); automations come from extraDomains of the NAS, the page is
+  // unchanged after loading, switching asks until set otherwise.
+  {
+    const { ctx, page, seen } = await open(1440, 1100);
+    await page.route("**/api/v1/agent/settings", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            json: {
+              ...settings,
+              homeassistant: {
+                ...settings.homeassistant,
+                release: {
+                  domains: ["sensor"],
+                  extraDomains: ["automation"],
+                  entities: [],
+                },
+              },
+            },
+          })
+        : route.fallback(),
+    );
+    await page.route("**/api/v1/homeassistant/settings", (route) =>
+      route.fulfill({
+        json: {
+          domains: ["light", "lock", "scene", "script", "sensor"],
+          agentDomains: [
+            "automation",
+            "light",
+            "lock",
+            "scene",
+            "script",
+            "sensor",
+          ],
+          enabled: true,
+        },
+      }),
+    );
+    await page.route("**/api/v1/homeassistant/entities", (route) =>
+      route.fulfill({
+        json: {
+          entities: [
+            {
+              id: "automation.morgens",
+              name: "Morgens",
+              state: "on",
+              domain: "automation",
+            },
+            {
+              id: "sensor.strom_tag",
+              name: "Strom heute",
+              state: "4.2",
+              domain: "sensor",
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto(base + "/settings/agent?tab=ha");
+    const kinds = page.locator("#ag-ha-kinds");
+    await kinds.locator('[data-domain="automation"]').waitFor();
+    for (const d of ["automation", "script", "scene"])
+      assert.equal(
+        await kinds.locator(`[data-domain="${d}"]`).count(),
+        1,
+        `a row for ${d}`,
+      );
+    assert.ok(
+      await kinds
+        .getByRole("switch", { name: "Automationen: Ansehen" })
+        .isChecked(),
+      "automations released (from extraDomains)",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "Speichern" }).count(),
+      0,
+      "unchanged after loading",
+    );
+    for (const name of ["Automationen", "Skripte", "Szenen"])
+      assert.equal(
+        await kinds
+          .getByRole("radiogroup", { name: `${name}: Schalten` })
+          .getByRole("radio", { name: "Nachfragen" })
+          .getAttribute("aria-checked"),
+        "true",
+        `${name} ask until set otherwise`,
+      );
+    await kinds.getByRole("switch", { name: "Skripte: Ansehen" }).click();
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.getByRole("status").waitFor();
+    assert.deepEqual(seen.puts[0].homeassistant.release.domains, [
+      "automation",
+      "script",
+      "sensor",
+    ]);
+    await page.screenshot({ path: `${out}/109-ha-kinds.png`, fullPage: true });
+    await ctx.close();
+  }
   // Waiting for approval: the input is not disabled (that took the focus).
   {
     const { ctx, page } = await open(1280, 900);
