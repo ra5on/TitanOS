@@ -430,6 +430,13 @@ try {
           .evaluateAll((a) => a.map((x) => x.textContent.trim()));
       await search.fill("SSH");
       await side.locator(".items .item.result").first().waitFor();
+      // The rows come with the index, loaded on the first search; until it is
+      // there the pages alone are listed ("Zugang" by its keywords).
+      await side
+        .locator(".items .item.result .two > span")
+        .first()
+        .filter({ hasText: /^SSH-Zugang einschalten$/ })
+        .waitFor({ timeout: 10000 });
       assert.equal((await label())[0], "SSH-Zugang einschalten");
       await search.fill("DNS");
       assert.ok(
@@ -550,7 +557,8 @@ try {
       const { ctx, page } = await context("owner", theme, 390, "desktop");
       await page.goto(base + "/settings");
       await page.locator(".phone-bar").waitFor();
-      await page.locator(".overview .sgroup").first().waitFor();
+      // Since 0.87 one row per area (the levels of the control panel).
+      await page.locator('a.srow[href^="/settings?area="]').first().waitFor();
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
