@@ -565,6 +565,7 @@ func (s *Store) Chat(user, id string) (*Chat, error) {
 	if c.Entries == nil {
 		c.Entries = []Entry{}
 	}
+	cleanEntries(&c)
 	return &c, nil
 }
 

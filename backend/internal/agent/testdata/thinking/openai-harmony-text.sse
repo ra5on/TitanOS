@@ -1,0 +1,10 @@
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"<|channel|>analysis<|mess"}}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"age|>The user asks how many automations there are. ha_entities said total 2."}}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"<|end|><|start|>assistant<|channel|>final<|message|>Du hast "}}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"2 Automationen.<|return|>"},"finish_reason":"stop"}]}
+
+data: [DONE]
+
