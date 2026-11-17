@@ -95,3 +95,26 @@ Eigenes E-Mail-Programm in TitanOS (PLAN §81, Inhaber 13.11. „Eigenes T-Mail�
 - `github.com/emersion/go-imap/v2` (MIT), festgelegt auf **v2.0.0-beta.9** (Grund: IDLE/NOTIFY im Client, Korrekturen gegenüber beta.8 – u. a. keine getrennte Verbindung bei COPYUID, Fehler werden durchgereicht; Prüfung der Änderungen 17.11.2026). Testserver `imapserver/imapmemserver` für Protokoll-Tests im Prozess.
 - `github.com/emersion/go-message` (MIT), `github.com/emersion/go-sasl` (MIT), `github.com/emersion/go-smtp` (MIT, Client; Server für Tests), `github.com/microcosm-cc/bluemonday` (BSD-3-Clause).
 - Lizenztexte müssen im Inventar (`scripts/third-party-licenses.py`) gefunden werden; `THIRD_PARTY_LICENSES` ergänzen. Das Release bleibt ein App-Update (alles unter `backend/`, `web/`, `docs/`).
+
+## Offen für das Backend
+
+Von der Oberfläche (Zweig `feat/v1.05-b`, 17.11.2026) eingetragen: was sie braucht und der Vertrag oben nicht festlegt. Die Oberfläche baut schon so; was das Backend anders löst, hier ändern, dann zieht die Oberfläche nach.
+
+1. **Sichtbarkeit:** `GET /services/state` liefert `mail: true`, wenn T-Mail für das angemeldete Konto freigegeben ist (Muster `agent` in `services.go`). Ohne `mail: true` blendet die Oberfläche das Programm aus und `/mail` zeigt „nicht freigegeben“.
+2. **Schalter unter Benutzer › Konto › Apps:** `GET /users/{name}/apps` liefert zusätzlich `mail: bool` (auch bei `admin: true`, denn T-Mail ist für jede Rolle ab Werk aus); `PUT /users/{name}/apps` nimmt `{mail: bool}`. Die Oberfläche zeigt den Schalter nur, wenn das Feld da ist.
+3. **Konto löschen:** Der Löschdialog nennt seit 1.03 die Agent-Daten (`GET /users/{name}/agent-data`). Für „T-Mail-Postfächer“ dort ein Feld `mailAccounts: number` (Anzahl der Postfächer des Kontos). Die Oberfläche zeigt es noch nicht, bis das Feld feststeht.
+4. **Pfade im NAS:** `POST …/part/save` `path` und jeder Eintrag von `nasFiles` haben die Form `<root>:<pfad>` mit `root` aus `GET /files/roots` (wie der Dateiwähler des KI-Agenten, z. B. `share/Dokumente:Rechnungen/2026`). Bei `part/save` ist `path` der Zielordner, der Dateiname der des Anhangs; gibt es ihn schon, „Name (2).ext“. Antwort `{path}` der gespeicherten Datei.
+5. **Eingebettete Bilder:** Das bereinigte `html` behält `src="cid:<id>"`. Die Oberfläche holt jedes über `GET …/cid` (mit ihrer Anmeldung) und setzt es als `data:`-URL ein; im Rahmen gilt deshalb `img-src data:` (mit „Bilder laden“ `data: https:`). Grund: Der Rahmen hat keinen eigenen Ursprung, Anfragen aus ihm an TitanOS trügen kein Sitzungs-Cookie.
+6. **Externe Bilder:** `externalImages: true`, sobald in der Fassung ohne `images=1` mindestens ein Bild ersetzt wurde; sonst `false` (dann keine Leiste).
+7. **Zu große Nachricht:** `GET …/message?…&full=1` liefert bei `truncated: true` den Text doch (Knopf „Text trotzdem laden“).
+8. **Text zum Zitieren:** Hat eine Mail nur HTML, enthält `text` eine Textfassung davon; Antworten und Weiterleiten zitieren `text`.
+9. **Antworten und Weiterleiten:** `meta.source = {folder, uid, mode: "reply" | "forward"}`. `reply`: nach dem Senden `answered` an der Nachricht setzen. `forward`: ihre Anhänge (nicht `inline`) mitschicken; die Oberfläche zeigt sie im Schreiben als „aus der weitergeleiteten Nachricht“.
+10. **Entwürfe:** Jede Speicherung (alle 30 s bei Änderung) schickt die hochgeladenen Dateien erneut mit; `draftUid` ersetzt den vorigen Entwurf. Verwerfen löscht den Entwurf mit `POST …/delete` im Ordner `drafts`.
+11. **Anbieter:** `GET /providers?email=` antwortet `{imap, smtp, appPassword}`; ein unbekannter Anbieter mit 404 (`mail_not_found`). Die Hinweise je Anbieter (Gmail, iCloud, GMX, WEB.DE, T-Online, IONOS, Microsoft) stehen in der Oberfläche, nach der Domain der Adresse.
+12. **Verbindung prüfen mit gespeichertem Passwort:** `POST /accounts/test` mit `id` und ohne `password`.
+13. **Signatur ab Werk:** Die Oberfläche nimmt `account.signature` (Kennung oder `""`) als Vorgabe des Postfachs und schickt Signaturen als `{id,name,text}`. Das Feld `default:{accountId}` in `/settings` nutzt sie nicht – streichen oder hier erklären.
+14. **Ereignisse (`/events`):** `mail` `{account, folder, uid}`; `status` `{account, status:{state,code,since}}` (flach `{account,state,code,since}` geht auch); `flags` `{account, folder, uids:[…]}`. Kommentarzeilen (`: …`) als Lebenszeichen sind willkommen. Die Oberfläche verbindet nach einem Abbruch mit 1 s … 30 s Pause neu und liest danach alles neu.
+15. **Meldungen je Postfach:** Der Schalter schickt `PUT /accounts/{id}` mit allen Feldern und `password: ""`.
+16. **Postfach entfernen:** Regeln dieses Postfachs entfernt das Backend mit.
+17. **Fehlertexte:** `error.mail_*` (Deutsch/Englisch) stehen in `web/src/lib/i18n/features/mail.{de,en}.json`. Nicht noch einmal in `errors.*.json` anlegen (der Test gegen doppelte Schlüssel schlägt sonst fehl).
+18. **Cluster:** Die Oberfläche schickt `/mail/…` immer an das NAS, auf dem der Browser angemeldet ist (`cluster-node.ts`, wie `/agent`), nie über einen anderen Knoten.
