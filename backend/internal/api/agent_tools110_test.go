@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -107,5 +109,26 @@ func TestAgentUpdateChecksAreReading(t *testing.T) {
 	}
 	if _, err := box.Prepare(context.Background(), &agent.Chat{}, "update_action", json.RawMessage(`{"action":"install"}`)); err == nil {
 		t.Fatal("install under \"Nur lesen\"")
+	}
+}
+
+// 1.10 (V15): files_search finds the biggest files without paging through
+// all of them.
+func TestFilesSearchBySize(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	dir := ts.withShare()
+	os.WriteFile(filepath.Join(dir, "klein.txt"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(dir, "gross.iso"), make([]byte, 3_000_000), 0o644)
+	os.WriteFile(filepath.Join(dir, "mittel.mkv"), make([]byte, 1_500_000), 0o644)
+	result, text, err := runAgentTool(t, ts, ts.server.agentSettings(), "files_search", map[string]any{"root": "share/Docs", "minSize": 1, "sort": "size"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := result["entries"].([]any)
+	if len(entries) != 2 || !strings.Contains(text, "gross.iso") || strings.Index(text, "gross.iso") > strings.Index(text, "mittel.mkv") || strings.Contains(text, "klein.txt") {
+		t.Fatalf("by size: %s", text)
+	}
+	if _, _, err := runAgentTool(t, ts, ts.server.agentSettings(), "files_search", map[string]any{"root": "share/Docs", "sort": "colour"}); err == nil {
+		t.Fatal("unknown sort accepted")
 	}
 }
