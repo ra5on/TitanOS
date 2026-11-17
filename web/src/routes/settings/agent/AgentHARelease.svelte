@@ -190,8 +190,8 @@
 	const sees = (d: string) => !!haRelease?.all || !!haRelease?.domains?.includes(d);
 	const canSwitch = (d: string) => haDomains.includes(d) && !readOnly.has(d);
 	// Without a rule a kind follows "Geräte schalten" above; locks, alarm
-	// systems, automations, scripts and scenes ask at least (haAsksFirst).
-	const asksFirst = ['lock', 'alarm_control_panel', 'automation', 'script', 'scene'];
+	// systems and automations ask at least (haAsksFirst).
+	const asksFirst = ['lock', 'alarm_control_panel', 'automation'];
 	function switchMode(d: string): Mode {
 		const rule = haRules.find((r) => r.key.trim() === `domain:${d}`);
 		if (rule) return rule.mode;

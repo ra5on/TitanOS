@@ -7678,7 +7678,7 @@
 	"agent.haNotifyHint": "Notify-Dienste, durch Komma getrennt. Ergebnisse von geplanten Aufträgen und Eigeninitiative gehen zusätzlich dorthin.",
 	"agent.haRuleAdd": "Regel",
 	"agent.haRules": "Ausnahmen für einzelne Geräte und Räume",
-	"agent.haRulesHint": "entity:… für ein Gerät, area:… für einen Raum. Eine Ausnahme geht der Geräteart vor: „Ohne Nachfrage“ schaltet auch dort ohne Nachfrage, wo sonst gefragt wird; „Verboten“ sperrt das Gerät auch fürs Ansehen. Schlösser, Alarmanlagen, Automationen, Skripte und Szenen fragen vor dem Schalten nach, solange nichts anderes eingestellt ist – ansehen kann der Agent sie ohne Nachfrage.",
+	"agent.haRulesHint": "entity:… für ein Gerät, area:… für einen Raum. Eine Ausnahme geht der Geräteart vor: „Ohne Nachfrage“ schaltet auch dort ohne Nachfrage, wo sonst gefragt wird; „Verboten“ sperrt das Gerät auch fürs Ansehen. Schlösser, Alarmanlagen und Automationen fragen vor dem Schalten nach, solange nichts anderes eingestellt ist – ansehen kann der Agent sie ohne Nachfrage.",
 	"agent.helloDay": "Hallo, {name}",
 	"agent.helloEvening": "Guten Abend, {name}",
 	"agent.freshTitle": "Womit kann ich helfen?",

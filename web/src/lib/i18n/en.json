@@ -7678,7 +7678,7 @@
 	"agent.haNotifyHint": "Notify services, separated by commas. Results of scheduled tasks and own initiative also go there.",
 	"agent.haRuleAdd": "Rule",
 	"agent.haRules": "Exceptions for single devices and rooms",
-	"agent.haRulesHint": "entity:… for a device, area:… for a room. An exception comes before the kind of device: 'Without asking' switches without asking even where the agent would ask; 'Denied' also keeps the device from being looked at. Locks, alarm systems, automations, scripts and scenes ask before switching unless set otherwise – looking at them never asks.",
+	"agent.haRulesHint": "entity:… for a device, area:… for a room. An exception comes before the kind of device: 'Without asking' switches without asking even where the agent would ask; 'Denied' also keeps the device from being looked at. Locks, alarm systems and automations ask before switching unless set otherwise – looking at them never asks.",
 	"agent.helloDay": "Hello, {name}",
 	"agent.helloEvening": "Good evening, {name}",
 	"agent.freshTitle": "How can I help?",

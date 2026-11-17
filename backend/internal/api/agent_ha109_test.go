@@ -125,12 +125,14 @@ func TestAgentHAEntitiesTellsHiddenFromNone(t *testing.T) {
 	}
 
 	// Owner, 17 Nov 2026: automations can be switched on, off and
-	// triggered – after asking, unless a rule says otherwise.
-	call := func(release homeassistant.Release, rules map[string]string, service string) (agent.Prepared, error) {
+	// triggered – after asking, unless a rule says otherwise (the agent's
+	// policy here allows everything).
+	callOn := func(release homeassistant.Release, rules map[string]string, entity, service string) (agent.Prepared, error) {
 		settings := ts.server.agentSettings()
 		settings.HA.Release, settings.HA.Entities = release, rules
 		box := ts.server.newAgentToolbox(user, settings)
-		data, _ := json.Marshal(map[string]any{"domain": "automation", "service": service, "entities": []string{"automation.morgens"}})
+		domain, _, _ := strings.Cut(entity, ".")
+		data, _ := json.Marshal(map[string]any{"domain": domain, "service": service, "entities": []string{entity}})
 		chat := &agent.Chat{ID: agent.NewID()}
 		p, err := box.Prepare(context.Background(), chat, "ha_call", data)
 		if err != nil {
@@ -138,6 +140,9 @@ func TestAgentHAEntitiesTellsHiddenFromNone(t *testing.T) {
 		}
 		_, err = box.Execute(context.Background(), chat, p)
 		return p, err
+	}
+	call := func(release homeassistant.Release, rules map[string]string, service string) (agent.Prepared, error) {
+		return callOn(release, rules, "automation.morgens", service)
 	}
 	withAutomations := homeassistant.Release{Domains: []string{"automation"}}
 	if p, err := call(withAutomations, nil, "trigger"); err != nil || p.Mode != agent.ModeAsk {
@@ -152,10 +157,18 @@ func TestAgentHAEntitiesTellsHiddenFromNone(t *testing.T) {
 	if _, err := call(homeassistant.Release{Domains: []string{"script"}}, nil, "turn_on"); err == nil {
 		t.Fatal("an automation that is not released was switched")
 	}
+	// Scripts and scenes switch as before 1.09, without asking (owner's
+	// decision: "Szene Kino an" from Assist and quick commands at once).
+	scripts := homeassistant.Release{Domains: []string{"scene", "script"}}
+	for _, entity := range []string{"script.toggle_room", "scene.kino"} {
+		if p, err := callOn(scripts, nil, entity, "turn_on"); err != nil || p.Mode != agent.ModeAllow {
+			t.Fatalf("%s: %+v %v", entity, p, err)
+		}
+	}
 	haCalls.mu.Lock()
 	got := slices.Clone(haCalls.paths)
 	haCalls.mu.Unlock()
-	if !slices.Equal(got, []string{"/api/services/automation/trigger", "/api/services/automation/turn_off"}) {
+	if !slices.Equal(got, []string{"/api/services/automation/trigger", "/api/services/automation/turn_off", "/api/services/script/turn_on", "/api/services/scene/turn_on"}) {
 		t.Fatalf("calls in Home Assistant: %v", got)
 	}
 

@@ -745,7 +745,7 @@ async function agent109() {
   }
   // Automations, scripts and scenes have a row of their own (owner, 17 Nov
   // 2026); automations come from extraDomains of the NAS, the page is
-  // unchanged after loading, switching asks until set otherwise.
+  // unchanged after loading, automations ask until set otherwise.
   {
     const { ctx, page, seen } = await open(1440, 1100);
     await page.route("**/api/v1/agent/settings", (route) =>
@@ -753,6 +753,7 @@ async function agent109() {
         ? route.fulfill({
             json: {
               ...settings,
+              policy: { preset: "all" },
               homeassistant: {
                 ...settings.homeassistant,
                 release: {
@@ -821,14 +822,20 @@ async function agent109() {
       0,
       "unchanged after loading",
     );
-    for (const name of ["Automationen", "Skripte", "Szenen"])
+    // "Geräte schalten: Ohne Nachfrage": automations still ask, scripts
+    // and scenes switch at once (owner, 17 Nov 2026).
+    for (const [name, mode] of [
+      ["Automationen", "Nachfragen"],
+      ["Skripte", "Ja"],
+      ["Szenen", "Ja"],
+    ])
       assert.equal(
         await kinds
           .getByRole("radiogroup", { name: `${name}: Schalten` })
-          .getByRole("radio", { name: "Nachfragen" })
+          .getByRole("radio", { name: mode })
           .getAttribute("aria-checked"),
         "true",
-        `${name} ask until set otherwise`,
+        `${name}: ${mode} until set otherwise`,
       );
     await kinds.getByRole("switch", { name: "Skripte: Ansehen" }).click();
     await page.getByRole("button", { name: "Speichern" }).click();
