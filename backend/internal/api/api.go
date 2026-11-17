@@ -245,8 +245,10 @@ type Server struct {
 	containerNames containerNameCache
 	handler        http.Handler
 	// patterns are all routes of the mux, for tests that compare them
-	// with the route list of the public API.
+	// with the route list of the public API; mux is the mux itself, for
+	// tests that ask which pattern serves a path.
 	patterns []string
+	mux      *http.ServeMux
 	// manual is the documentation for docs_search and docs_read over MCP.
 	manual *toolcatalog.Manual
 	// power is a restart or shutdown that waits for a rebuild; see system.go.
@@ -445,6 +447,7 @@ func New(opts Options) *Server {
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
+	s.mux = mux.ServeMux
 	s.handler = s.securityHeaders(s.clusterArea().clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }

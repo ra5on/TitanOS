@@ -105,6 +105,12 @@ func (a clusterArea) clusterAccess(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if davsyncPath(r) {
+			// Calendars and contacts sync with each node itself (TECHNIK
+			// 4.1.3): the device passwords and the data live there.
+			writeError(w, http.StatusForbidden, "cluster_local_only", "calendars and contacts sync with the node itself")
+			return
+		}
 		if c == nil {
 			writeError(w, http.StatusUnauthorized, "cluster_unauthorized", "request not signed by the cluster")
 			return

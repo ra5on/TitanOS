@@ -1,9 +1,13 @@
 package api
 
 import (
+	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ra5on/TitanOS/backend/internal/davsync"
 )
 
 // A {parameter} in a route of the public API must not stand for a path the
@@ -45,6 +49,36 @@ func TestRouteListsDoNotShadowOtherHandlers(t *testing.T) {
 			if _, ok := matchPattern(r.path, concrete); ok {
 				t.Errorf("%s: %s %s also matches %s, which the mux serves as %q", r.list, r.method, r.path, concrete, pattern)
 			}
+		}
+	}
+
+	// CalDAV and CardDAV (davsync, TECHNIK 4.1.5): the six patterns are
+	// there, serve their paths before the catch-all of the web UI, and
+	// take nothing of /calendar, /contacts or the API.
+	for _, p := range davsync.Patterns {
+		if !slices.Contains(ts.server.patterns, p) {
+			t.Errorf("pattern %s missing", p)
+		}
+	}
+	for path, want := range map[string]string{
+		"/caldav": "/caldav", "/caldav/": "/caldav/", "/caldav/alex/calendars/privat/a.ics": "/caldav/",
+		"/carddav": "/carddav", "/carddav/alex/addressbooks/kontakte/": "/carddav/",
+		"/.well-known/caldav": "/.well-known/caldav", "/.well-known/carddav": "/.well-known/carddav",
+		"/caldavx": "/", "/calendar": "/", "/contacts": "/", "/calendar/iphone": "/", "/.well-known/caldav/x": "/",
+		"/api/v1/account/devices": "GET /api/v1/account/devices",
+	} {
+		req := httptest.NewRequest("GET", path, nil)
+		if _, got := ts.server.mux.Handler(req); got != want {
+			t.Errorf("%s is served by %q, want %q", path, got, want)
+		}
+	}
+	for _, pattern := range ts.server.patterns {
+		_, full, ok := strings.Cut(pattern, " ")
+		if !ok {
+			full = pattern
+		}
+		if davsync.Path(strings.TrimSuffix(full, "{$}")) && !slices.Contains(davsync.Patterns, pattern) {
+			t.Errorf("pattern %q lies below davsync", pattern)
 		}
 	}
 }

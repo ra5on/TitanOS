@@ -30,7 +30,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |
 | craft | `craft_replace.go` | – | 1 |
 | dashboard | `dashboard_background.go` | – | 1 |
-| devices | `devices.go` | `pimArea` | 1 |
+| devices | `devices.go` | `pimArea` | 2 |
 | diagnose | `diagnose.go` | `diagnoseArea` | 0 |
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |
