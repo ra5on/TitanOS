@@ -130,7 +130,14 @@ type Manager struct {
 	// they were: the page shows it while NUT does not answer, instead of
 	// only upsc's "Connection refused".
 	applyError string
+	// started is when Apply last started NUT anew: upsc does not answer
+	// for a few seconds then (startGrace).
+	started time.Time
 }
+
+// startGrace is how long after NUT was started anew a missing answer of
+// upsc is not taken for a lost UPS.
+const startGrace = 30 * time.Second
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
@@ -415,6 +422,9 @@ func (m *Manager) Apply(ctx context.Context) error {
 			return err
 		}
 	}
+	m.mu.Lock()
+	m.started = m.now()
+	m.mu.Unlock()
 	slog.Info("UPS settings put in place", "mode", settings.Mode)
 	return nil
 }
@@ -504,7 +514,13 @@ func (m *Manager) look(ctx context.Context) {
 		if m.applyError != "" {
 			status.Error = m.applyError
 		}
+		starting := before.Connected && m.applyError == "" && m.now().Sub(m.started) < startGrace
 		m.mu.Unlock()
+		if starting {
+			// NUT was just started anew and does not answer yet: the UPS
+			// is not lost; the last status stays until the grace is over.
+			return
+		}
 	} else {
 		status.Connected = true
 		status.Raw = values["ups.status"]
