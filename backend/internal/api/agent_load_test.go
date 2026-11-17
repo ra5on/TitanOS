@@ -25,6 +25,12 @@ import (
 // (12 437 of them the 34 skills in full) and 39 tools with 23 324
 // characters, 40 115 characters ≈ 13 400 tokens; a user account 16 819 and
 // 33 tools with 19 830, 36 649 ≈ 12 200 tokens.
+//
+// 1.10 (skills by name only, one tool per task, short HA results): the
+// administrator 8 551 + 38 tools with 22 415 = 30 966 characters ≈ 10 300
+// tokens; a user 8 683 + 32 tools with 18 607 = 27 290 ≈ 9 100 tokens.
+// The caps leave about 1 000 characters of room; a new tool in the core
+// areas or a longer rule has to make room elsewhere.
 func TestAgentBaseLoad(t *testing.T) {
 	fake := &agentOllama{}
 	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
@@ -61,11 +67,15 @@ func TestAgentBaseLoad(t *testing.T) {
 		return len(text), len(data), len(list)
 	}
 	for _, c := range []struct {
-		who    string
-		client *http.Client
-	}{{"admin", ts.client}, {"user", guest}} {
+		who                         string
+		client                      *http.Client
+		maxPrompt, maxTools, maxAll int
+	}{{"admin", ts.client, 9_500, 23_500, 32_000}, {"user", guest, 9_500, 19_500, 28_500}} {
 		prompt, tools, count := measure(c.client)
 		total := prompt + tools
 		t.Logf("%s: prompt %d chars, %d tools with %d chars, together %d chars ≈ %d tokens", c.who, prompt, count, tools, total, total/3)
+		if prompt > c.maxPrompt || tools > c.maxTools || total > c.maxAll {
+			t.Errorf("%s: base load over its cap (prompt %d/%d, tools %d/%d, together %d/%d)", c.who, prompt, c.maxPrompt, tools, c.maxTools, total, c.maxAll)
+		}
 	}
 }
