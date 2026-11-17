@@ -3953,6 +3953,7 @@
 	"files.undoKind.trash": "{count} Einträge in den Papierkorb verschoben",
 	"error.file_scan_limit": "Zu viele Einträge für einen vollständigen Vergleich. Bitte kleinere Unterordner wählen.",
 	"error.file_scan_timeout": "Die Prüfung hat zu lange gedauert. Bitte einen kleineren Ordner wählen.",
+	"error.trash_too_many": "Im Papierkorb liegen mehr als 10.000 Dateien, zu viele für „Alle gelöschten Dateien“. Bitte ordnerweise ansehen.",
 	"files.downloadArchive": "Als ZIP herunterladen",
 	"files.archiveName": "Archivname (.zip)",
 	"files.downloadCount": "Dateien: {count}",

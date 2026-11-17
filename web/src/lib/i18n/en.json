@@ -3953,6 +3953,7 @@
 	"files.undoKind.trash": "{count} items moved to the recycle bin",
 	"error.file_scan_limit": "Too many entries for a complete comparison. Choose smaller subfolders.",
 	"error.file_scan_timeout": "The scan took too long. Choose a smaller folder.",
+	"error.trash_too_many": "The recycle bin holds more than 10,000 files, too many for “All deleted files”. Please browse it folder by folder.",
 	"files.downloadArchive": "Download as ZIP",
 	"files.archiveName": "Archive name (.zip)",
 	"files.downloadCount": "Files: {count}",

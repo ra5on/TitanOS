@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"sort"
@@ -237,8 +238,15 @@ type TrashEntry struct {
 	Original  string `json:"original"`
 }
 
+// ErrTrashTooMany is a bin with more files than the flat view lists.
+var ErrTrashTooMany = errors.New("files: too many files in the recycle bin for one list")
+
+// trashFlatLimit is the most files the flat view lists.
+var trashFlatLimit = 10000
+
 // TrashFlat lists files across original folders without exposing another
-// account's bin. It never follows symbolic links.
+// account's bin. It never follows symbolic links. A folder of the bin that
+// cannot be read is passed over (it stays in the folder view).
 func (m *Manager) TrashFlat(ctx context.Context, root Root, user string, admin bool) ([]TrashEntry, error) {
 	if root.Kind != "share" {
 		return nil, ErrInvalid
@@ -259,6 +267,10 @@ func (m *Manager) TrashFlat(ctx context.Context, root Root, user string, admin b
 			if p == base && os.IsNotExist(e) {
 				return nil
 			}
+			if ctx.Err() == nil && p != base && d != nil && d.IsDir() {
+				slog.Warn("recycle bin: folder passed over in the flat view", "path", p, "err", e)
+				return fs.SkipDir
+			}
 			return e
 		}
 		if e = ctx.Err(); e != nil {
@@ -272,6 +284,9 @@ func (m *Manager) TrashFlat(ctx context.Context, root Root, user string, admin b
 		}
 		relative := strings.TrimPrefix(p, RecycleDir+"/")
 		info, e := d.Info()
+		if errors.Is(e, fs.ErrNotExist) {
+			return nil // gone meanwhile
+		}
 		if e != nil {
 			return e
 		}
@@ -288,8 +303,8 @@ func (m *Manager) TrashFlat(ctx context.Context, root Root, user string, admin b
 			allocated = &bytes
 		}
 		result = append(result, TrashEntry{Allocated: allocated, Entry: Entry{Name: d.Name(), Size: info.Size(), Modified: metadata.Deleted}, Path: relative, Original: original})
-		if len(result) > 10000 {
-			return ErrInvalid
+		if len(result) > trashFlatLimit {
+			return ErrTrashTooMany
 		}
 		return nil
 	})
