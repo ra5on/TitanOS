@@ -10,7 +10,6 @@ import { parseBlock, pauseFor } from '#lib/tmail/live.svelte.ts';
 import {
 	forwardSubject,
 	linkify,
-	linkMismatch,
 	listDate,
 	quote,
 	replyRecipients,
@@ -25,10 +24,10 @@ test('the sandbox is that of the contract', () => {
 	expect(MAIL_SANDBOX).not.toMatch(/allow-scripts|allow-same-origin/);
 });
 
-test('links are read from an inert copy, with their real target and lying texts marked', () => {
+test("links are read from an inert copy, with their real target and titand's mismatch mark", () => {
 	const html =
 		'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body>' +
-		'<a href="https://evil.example/login" title="https://bank.example">www.sparkasse.de</a> ' +
+		'<a href="https://evil.example/login" title="https://evil.example/login" data-tmail-mismatch="1">www.sparkasse.de</a><span>⚠ evil.example</span> ' +
 		'<a href="https://shop.example/a">Hier</a> <a href="mailto:a@b.example">Schreiben</a> ' +
 		'<a href="javascript:alert(1)">x</a><img src="x" onerror="globalThis.ranInTest=1">' +
 		'</body></html>';
@@ -38,16 +37,10 @@ test('links are read from an inert copy, with their real target and lying texts 
 		['https://shop.example/a', ''],
 		['mailto:a@b.example', ''],
 	]);
-	// The author's title does not count: the target is the href.
 	expect(links[0].host).toBe('evil.example');
+	// Only titand's mark counts: a text naming another domain without it is no warning here.
+	expect(mailLinks('<a href="https://a.example">www.b.example</a>')[0].warn).toBe('');
 	expect((globalThis as Record<string, unknown>).ranInTest).toBeUndefined();
-});
-
-test('link mismatch only when the text names another domain', () => {
-	expect(linkMismatch('https://www.bank.de/x', 'bank.de')).toBe('');
-	expect(linkMismatch('https://login.bank.de/x', 'www.bank.de')).toBe('');
-	expect(linkMismatch('https://bank.de.evil.example', 'bank.de')).toBe('bank.de.evil.example');
-	expect(linkMismatch('https://evil.example', 'Jetzt anmelden')).toBe('');
 });
 
 test('dates, subjects, quotes and recipients', () => {
@@ -157,4 +150,24 @@ test('T-Mail shows only with the app release, and a compose window is never take
 	expect(taskPage('/mail/compose')).toBe(true);
 	expect(taskPage('/mail')).toBe(false);
 	expect(taskPage('/mail/composed')).toBe(false);
+});
+
+test('mail_busy waits as titand says and tries once more; then the error stands', async () => {
+	const { busyOnce } = await import('#lib/tmail/api.ts');
+	const { ApiError } = await import('#lib/api.ts');
+	const busy = () => new ApiError(503, 'mail_busy', 'busy', 5);
+	const waits: number[] = [];
+	const wait = async (ms: number) => void waits.push(ms);
+	let n = 0;
+	await expect(
+		busyOnce(async () => (n++ === 0 ? Promise.reject(busy()) : 'ok'), wait),
+	).resolves.toBe('ok');
+	expect(waits).toEqual([5000]);
+	await expect(busyOnce(() => Promise.reject(busy()), wait)).rejects.toMatchObject({
+		code: 'mail_busy',
+	});
+	await expect(
+		busyOnce(() => Promise.reject(new ApiError(502, 'mail_unreachable', 'x')), wait),
+	).rejects.toMatchObject({ code: 'mail_unreachable' });
+	expect(waits).toEqual([5000, 5000]);
 });

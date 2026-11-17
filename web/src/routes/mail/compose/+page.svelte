@@ -58,10 +58,16 @@
 	let signatures = $state<Signature[]>([]);
 	let files = $state<File[]>([]);
 	let nasFiles = $state<string[]>([]);
-	// Attachments of an existing mail taken along (forwarding, a draft opened again).
-	let carried = $state<{ folder: string; uid: number; parts: Attachment[]; draft: boolean } | null>(
-		null,
-	);
+	// Attachments of an existing mail taken along: of the forwarded mail
+	// (folder, uid), or of the draft `draftUid` names (draft: true) – a draft
+	// opened again, and after every save everything attached, so that files
+	// go up only once (attachFrom without uid, docs/TMAIL.md).
+	let carried = $state<{
+		folder?: string;
+		uid?: number;
+		parts: Attachment[];
+		draft: boolean;
+	} | null>(null);
 	let inReplyTo = '';
 	let references = '';
 	let draftUid = $state(0);
@@ -83,7 +89,10 @@
 
 	const account = $derived(mail.accounts?.find((a) => a.id === accountId));
 	const chosenSignature = $derived(signatures.find((s) => s.id === signature));
-	const bytes = $derived(files.reduce((sum, f) => sum + f.size, 0));
+	const bytes = $derived(
+		files.reduce((sum, f) => sum + f.size, 0) +
+			(carried?.parts ?? []).reduce((sum, a) => sum + (a.size || 0), 0),
+	);
 	const recipients = $derived([...to, ...cc, ...bcc]);
 
 	function touch() {
@@ -104,11 +113,12 @@
 			draftUid,
 		};
 		if (carried?.parts.length)
-			m.attachFrom = {
-				folder: carried.folder,
-				uid: carried.uid,
-				parts: carried.parts.map((a) => a.part),
-			};
+			m.attachFrom = carried.draft
+				? { parts: carried.parts.map((a) => a.part) }
+				: { folder: carried.folder, uid: carried.uid, parts: carried.parts.map((a) => a.part) };
+		// A reply marks the mail it answers once sent.
+		if (sourceUid && (mode === 'reply' || mode === 'replyAll'))
+			m.answers = { folder: sourceFolder, uid: sourceUid };
 		return m;
 	}
 
@@ -116,15 +126,21 @@
 		if (!accountId || done) return;
 		const at = edits;
 		draftError = '';
+		const sentFiles = [...files];
+		const sentNas = [...nasFiles];
 		try {
-			const res = await mailApi.draft(accountId, sendForm(meta(), files, nasFiles.map(nasFileOf)));
+			const res = await mailApi.draft(
+				accountId,
+				sendForm(meta(), sentFiles, sentNas.map(nasFileOf)),
+			);
 			if (res && typeof res.uid === 'number' && res.uid > 0) {
-				const was = draftUid;
 				draftUid = res.uid;
-				// The draft that carried attachments is replaced: they are in the new one now.
-				if (carried?.draft && carried.uid === was && carried.parts.length) {
-					const fresh = await mailApi.message(accountId, carried.folder, res.uid);
-					carried = { ...carried, uid: res.uid, parts: fresh.attachments.filter((a) => !a.inline) };
+				// Everything attached is in the new draft now: the next save takes
+				// it from there; only files added meanwhile still go up.
+				if (Array.isArray(res.attachments)) {
+					carried = { parts: res.attachments.filter((a) => !a.inline), draft: true };
+					files = files.filter((f) => !sentFiles.includes(f));
+					nasFiles = nasFiles.filter((r) => !sentNas.includes(r));
 				}
 			}
 			savedEdits = at;
@@ -196,12 +212,7 @@
 			draftUid = msg.uid;
 			inReplyTo = msg.inReplyTo;
 			references = msg.references ?? '';
-			carried = {
-				folder: sourceFolder,
-				uid: msg.uid,
-				parts: msg.attachments.filter((a) => !a.inline),
-				draft: true,
-			};
+			carried = { parts: msg.attachments.filter((a) => !a.inline), draft: true };
 		}
 	}
 

@@ -5,6 +5,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import SetupWizard from '#lib/tmail/SetupWizard.svelte';
+import { lockedSeconds } from '#lib/tmail/checklock.svelte.ts';
 import { i18n } from '#lib/i18n/index.svelte.ts';
 import { reply } from './fetch.ts';
 
@@ -134,7 +135,7 @@ test('an unknown provider opens the server fields; a failed check names the caus
 	expect(screen.getByRole('button', { name: 'Trotzdem speichern' })).toBeTruthy();
 });
 
-test('too many checks lock "Verbindung prüfen" with the reason in sight', async () => {
+test('too many checks lock "Verbindung prüfen" for the time titand names', async () => {
 	stub({ limited: true });
 	render(SetupWizard, { onsaved: () => {} });
 	await fireEvent.input(screen.getByLabelText('Adresse'), { target: { value: 'max@gmail.com' } });
@@ -143,9 +144,8 @@ test('too many checks lock "Verbindung prüfen" with the reason in sight', async
 	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
 	await fireEvent.input(await screen.findByLabelText('App-Passwort'), { target: { value: 'x' } });
 	await fireEvent.click(screen.getByRole('button', { name: 'Verbindung prüfen' }));
-	await screen.findByText(
-		/Zu viele Verbindungsprüfungen – „Verbindung prüfen“ geht in 60 s wieder/,
-	);
+	// The reason stands at the top of every page of T-Mail (routes/mail/+layout.svelte).
+	await waitFor(() => expect(lockedSeconds()).toBe(60));
 	expect(
 		(screen.getByRole('button', { name: 'Verbindung prüfen' }) as HTMLButtonElement).disabled,
 	).toBe(true);

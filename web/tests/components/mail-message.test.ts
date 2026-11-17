@@ -21,7 +21,7 @@ const doc = (images: boolean) =>
 	(images ? ' https:' : '') +
 	"; font-src 'none'; form-action 'none'; base-uri 'none'\"><meta name=\"referrer\" content=\"no-referrer\"></head><body><p>Hallo</p>" +
 	(images ? '<img src="https://track.example/p.gif">' : '<img src="data:image/svg+xml,x">') +
-	'<a href="https://evil.example/x" target="_blank" rel="noopener noreferrer">www.bank.example</a></body></html>';
+	'<a href="https://evil.example/x" target="_blank" rel="noopener noreferrer" title="https://evil.example/x" data-tmail-mismatch="1">www.bank.example</a><span> ⚠ evil.example</span></body></html>';
 
 const message = (over: Record<string, unknown> = {}) => ({
 	uid: 7,

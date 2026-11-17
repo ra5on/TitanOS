@@ -223,12 +223,11 @@
 	"mail.setup.imapShort": "Incoming (IMAP)",
 	"mail.setup.smtpShort": "Outgoing (SMTP)",
 	"mail.setup.unsupported": "{name} no longer accepts a password, only signing in with the provider (OAuth). T-Mail cannot do that in this version.",
-	"mail.setup.rateLimited": "Too many connection checks – “Check connection” works again in {seconds} s.",
 	"mail.settings.passwordAgain": "Server or user name changed: enter the password again. A stored password never goes to another server.",
 	"mail.settings.pushContent": "Sender and subject in push messages",
 	"mail.settings.pushContentDesc": "Off: push messages only say “New e-mail in <mailbox>”. The bell never names sender or subject.",
 	"mail.settings.saveAll": "Save signatures and rules",
-	"mail.compose.fromDraft": "from the draft",
+	"mail.compose.fromDraft": "saved in the draft",
 	"mail.hint.imap_enable": "{name}: allow access through IMAP/POP3 in your mailbox settings at the provider.",
 	"mail.hint.app_password": "{name}: create an app password for T-Mail in your account at the provider and enter it here.",
 	"mail.hint.app_password_2fa": "{name}: with two-step sign-in you need an app password, which you create in your account at the provider.",
@@ -246,5 +245,8 @@
 	"error.mail_rate_limited": "Too many tries with new servers or connection checks – please wait a minute.",
 	"error.mail_busy": "T-Mail is busy with other large requests (sending, attachments). Try again in a moment.",
 	"error.mail_key_missing": "The key of the stored mail passwords is missing on the stick. Restore it from the backup of the stick or add the mailboxes anew.",
-	"error.mail_key_damaged": "The key of the stored mail passwords is damaged. Restore it from the backup of the stick or add the mailboxes anew."
+	"error.mail_key_damaged": "The key of the stored mail passwords is damaged. Restore it from the backup of the stick or add the mailboxes anew.",
+	"users.agentData.mailAccounts": "T-Mail mailboxes ({count}) with servers, passwords, signatures, rules and address book",
+	"mail.limit.wait": "Too many attempts with new servers or connection checks – T-Mail waits another {seconds} s; “Check connection” works again after that.",
+	"mail.list.tooLarge": "Mail too large to show"
 }
