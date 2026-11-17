@@ -165,8 +165,13 @@ export class AgentChats {
 		setAgentProfile(p);
 		return p;
 	})();
-	go = (path: string) =>
-		goto(this.profile ? `${path}${path.includes('?') ? '&' : '?'}profile=${this.profile}` : path);
+	/** keep: the focus stays where it is (SvelteKit 3 `reset: false`); the
+	 *  input keeps the cursor after sending (1.09). */
+	go = (path: string, keep = false) =>
+		goto(
+			this.profile ? `${path}${path.includes('?') ? '&' : '?'}profile=${this.profile}` : path,
+			keep ? { reset: false } : undefined,
+		);
 	view = $state<AgentView>('chat');
 	part = $state('');
 	show = (view: AgentView, part = '') => {
@@ -732,7 +737,7 @@ export class AgentChats {
 				this.started(chat);
 				if (here()) {
 					this.current = chat;
-					void this.go(`/agent?chat=${chat.id}`);
+					void this.go(`/agent?chat=${chat.id}`, true);
 					this.watch(chat.id);
 				}
 			} else {
@@ -745,7 +750,7 @@ export class AgentChats {
 				this.started(chat);
 				if (here()) {
 					this.current = chat;
-					void this.go(`/agent?chat=${chat.id}`);
+					void this.go(`/agent?chat=${chat.id}`, true);
 					this.watch(chat.id);
 				}
 			}

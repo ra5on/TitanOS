@@ -361,7 +361,12 @@ async function agent107() {
     await word.waitFor({ timeout: 40000 });
     const look = await word.evaluate((el) => {
       const c = getComputedStyle(el);
-      return { anim: c.animationName, bg: c.backgroundImage, clip: c.backgroundClip || c.webkitBackgroundClip, wrap: c.overflowWrap };
+      return {
+        anim: c.animationName,
+        bg: c.backgroundImage,
+        clip: c.backgroundClip || c.webkitBackgroundClip,
+        wrap: c.overflowWrap,
+      };
     });
     assert.match(look.anim, /sweep/, "the word has the trail");
     assert.match(look.bg, /linear-gradient/, "the trail is a band of light");
@@ -369,7 +374,12 @@ async function agent107() {
     assert.equal(look.wrap, "anywhere", "the word wraps");
     const dots = await page
       .locator(".live-line .fig i")
-      .evaluateAll((list) => list.map((d) => [getComputedStyle(d).backgroundImage, getComputedStyle(d).animationName]));
+      .evaluateAll((list) =>
+        list.map((d) => [
+          getComputedStyle(d).backgroundImage,
+          getComputedStyle(d).animationName,
+        ]),
+      );
     for (const [bg] of dots) assert.equal(bg, "none", "the dots stay flat");
     await ctx.close();
   }
@@ -385,7 +395,11 @@ async function agent107() {
     });
     assert.equal(look.anim, "none", "no trail with Animationen: Aus");
     assert.equal(look.bg, "none", "one colour with Animationen: Aus");
-    assert.notEqual(look.color, "rgba(0, 0, 0, 0)", "the text is not transparent");
+    assert.notEqual(
+      look.color,
+      "rgba(0, 0, 0, 0)",
+      "the text is not transparent",
+    );
     await ctx.close();
   }
   // The whole width at 1850 px, and the side bar.
@@ -401,33 +415,59 @@ async function agent107() {
     await page.goto(base + "/agent?chat=" + haChat.id);
     await page.locator(".messages .column").waitFor();
     const widths = await page.evaluate(() => ({
-      column: document.querySelector(".messages .column").getBoundingClientRect().width,
-      composer: document.querySelector(".dock .composer").getBoundingClientRect().width,
+      column: document
+        .querySelector(".messages .column")
+        .getBoundingClientRect().width,
+      composer: document
+        .querySelector(".dock .composer")
+        .getBoundingClientRect().width,
       over: document.documentElement.scrollWidth - innerWidth,
     }));
-    assert.ok(widths.column > 1200, `the chat uses the width (${widths.column})`);
-    assert.ok(widths.composer > 1200, `the input uses the width (${widths.composer})`);
+    assert.ok(
+      widths.column > 1200,
+      `the chat uses the width (${widths.column})`,
+    );
+    assert.ok(
+      widths.composer > 1200,
+      `the input uses the width (${widths.composer})`,
+    );
     assert.ok(widths.over <= 1, "no sideways scrolling");
     const bubble = await page.evaluate(() => {
       const b = document.querySelector(".user span");
-      const col = document.querySelector(".messages .column").getBoundingClientRect().width;
+      const col = document
+        .querySelector(".messages .column")
+        .getBoundingClientRect().width;
       return b ? b.getBoundingClientRect().width / col : 0;
     });
-    assert.ok(bubble > 0 && bubble <= 0.71, `the own message stays a bubble (${bubble})`);
+    assert.ok(
+      bubble > 0 && bubble <= 0.71,
+      `the own message stays a bubble (${bubble})`,
+    );
     // The long title wraps, never "…".
     const title = page.locator("h1", { hasText: "Kannst du bitte" }).first();
-    const t = await title.evaluate((el) => ({ text: el.textContent, fits: el.scrollWidth <= el.clientWidth + 1, lines: el.getBoundingClientRect().height }));
+    const t = await title.evaluate((el) => ({
+      text: el.textContent,
+      fits: el.scrollWidth <= el.clientWidth + 1,
+      lines: el.getBoundingClientRect().height,
+    }));
     assert.ok(t.fits && !t.text.includes("…"), "the long title is whole");
     await page.screenshot({ path: `${out}/107-1850-volle-breite.png` });
     // The side bar: by mouse, by keys, double click back, kept after reload.
-    const sep = page.getByRole("separator", { name: "Breite der Seitenleiste" });
+    const sep = page.getByRole("separator", {
+      name: "Breite der Seitenleiste",
+    });
     const now = async () => Number(await sep.getAttribute("aria-valuenow"));
-    const side = () => page.locator("aside.side").evaluate((el) => el.getBoundingClientRect().width);
+    const side = () =>
+      page
+        .locator("aside.side")
+        .evaluate((el) => el.getBoundingClientRect().width);
     assert.equal(await now(), 264, "the default width");
     const box = await sep.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + 200);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 100, box.y + 200, { steps: 5 });
+    await page.mouse.move(box.x + box.width / 2 + 100, box.y + 200, {
+      steps: 5,
+    });
     await page.mouse.up();
     assert.equal(await now(), 364, "dragged 100 px");
     assert.ok(Math.abs((await side()) - 364) < 2, "the side bar follows");
@@ -445,21 +485,32 @@ async function agent107() {
     await sep.dblclick();
     assert.equal(await now(), 264, "double click: back to the default");
     assert.ok(
-      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
       "no sideways scrolling",
     );
     await ctx.close();
   }
   // "Lesebreite": about 760 px.
   {
-    const { ctx, page } = await open(1850, 1000, { look: { chatWidth: "read" } });
+    const { ctx, page } = await open(1850, 1000, {
+      look: { chatWidth: "read" },
+    });
     await page.goto(base + "/agent?chat=" + haChat.id);
     await page.locator(".messages .column").waitFor();
     const widths = await page.evaluate(() => ({
-      column: document.querySelector(".messages .column").getBoundingClientRect().width,
-      composer: document.querySelector(".dock .composer").getBoundingClientRect().width,
+      column: document
+        .querySelector(".messages .column")
+        .getBoundingClientRect().width,
+      composer: document
+        .querySelector(".dock .composer")
+        .getBoundingClientRect().width,
     }));
-    assert.ok(Math.abs(widths.column - 760) < 2, `reading width (${widths.column})`);
+    assert.ok(
+      Math.abs(widths.column - 760) < 2,
+      `reading width (${widths.column})`,
+    );
     assert.ok(widths.composer <= 761, `the input too (${widths.composer})`);
     await ctx.close();
   }
@@ -472,19 +523,32 @@ async function agent107() {
     // answer is made up like the subscription.
     await ctx.addInitScript(() => {
       let permission = "default";
-      Object.defineProperty(Notification, "permission", { get: () => permission });
+      Object.defineProperty(Notification, "permission", {
+        get: () => permission,
+      });
       Notification.requestPermission = async () => (permission = "granted");
       PushManager.prototype.getSubscription = async () => null;
       PushManager.prototype.subscribe = async () => ({
         options: { applicationServerKey: null },
-        toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/test", keys: { p256dh: "a", auth: "b" } }),
+        toJSON: () => ({
+          endpoint: "https://fcm.googleapis.com/fcm/send/test",
+          keys: { p256dh: "a", auth: "b" },
+        }),
       });
     });
     const posted = [];
     await page.route("**/api/v1/notifications/push", (route) => {
       if (route.request().method() === "POST") {
         posted.push(route.request().postDataJSON());
-        return route.fulfill({ json: { id: "d1", name: "Android", service: "fcm.googleapis.com", created: at(12), app: "agent" } });
+        return route.fulfill({
+          json: {
+            id: "d1",
+            name: "Android",
+            service: "fcm.googleapis.com",
+            created: at(12),
+            app: "agent",
+          },
+        });
       }
       return route.fulfill({ json: { publicKey: "BOrq", devices: [] } });
     });
@@ -508,7 +572,10 @@ async function agent107() {
       throw e;
     }
     const allow = hint.getByRole("button", { name: "Erlauben" });
-    assert.ok((await allow.boundingBox()).height >= 44, "the button is big enough");
+    assert.ok(
+      (await allow.boundingBox()).height >= 44,
+      "the button is big enough",
+    );
     await page.screenshot({ path: `${out}/107-mitteilungen-erlauben.png` });
     await allow.click();
     await hint.getByText("Mitteilungen sind an.").waitFor();
@@ -517,7 +584,13 @@ async function agent107() {
     // Asked once: not again.
     await page.reload();
     await page.waitForTimeout(1500);
-    assert.equal(await page.getByRole("dialog", { name: "Mitteilungen erlauben?" }).count(), 0, "asked once only");
+    assert.equal(
+      await page
+        .getByRole("dialog", { name: "Mitteilungen erlauben?" })
+        .count(),
+      0,
+      "asked once only",
+    );
     await ctx.close();
   }
   // In the TitanOS app on the phone a tapped message of the agent opens
@@ -528,7 +601,9 @@ async function agent107() {
     await page.waitForTimeout(1500);
     await page.evaluate(() =>
       navigator.serviceWorker.dispatchEvent(
-        new MessageEvent("message", { data: { type: "open", url: "/agent?chat=c1aaaaaaaaaa0001" } }),
+        new MessageEvent("message", {
+          data: { type: "open", url: "/agent?chat=c1aaaaaaaaaa0001" },
+        }),
       ),
     );
     await page.waitForURL(/\/agent\?chat=c1aaaaaaaaaa0001/, { timeout: 15000 });
@@ -540,10 +615,147 @@ async function agent107() {
     const { ctx, page } = await open(390, 800);
     await page.goto(base + "/agent?chat=" + haChat.id);
     await page.locator(".messages .column").waitFor();
-    assert.equal(await page.getByRole("separator", { name: "Breite der Seitenleiste" }).count(), 0, "no handle on the phone");
+    assert.equal(
+      await page
+        .getByRole("separator", { name: "Breite der Seitenleiste" })
+        .count(),
+      0,
+      "no handle on the phone",
+    );
     assert.ok(
-      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
       "phone: no sideways scrolling",
+    );
+    await ctx.close();
+  }
+}
+
+// 1.09 (owner 17 Nov 2026): at the desk the cursor stays in the input
+// after Enter and after "Senden", while the agent works and after the
+// answer; on the phone the keyboard closes after sending, as before. A
+// chat waiting for approval keeps its input focusable (readonly, not
+// disabled).
+async function agent109() {
+  const chat = {
+    id: "c1aaaaaaaaaa0109",
+    title: "Fokus im Eingabefeld",
+    created: at(8),
+    updated: at(8, 1),
+    state: "idle",
+    origin: "web",
+    entries: [
+      { id: "f1", at: at(8), role: "user", content: "Hallo" },
+      { id: "f2", at: at(8, 1), role: "assistant", content: "Hallo zurück." },
+    ],
+  };
+  const focused = (page) =>
+    page.evaluate(
+      () => document.activeElement?.matches(".composer textarea") ?? false,
+    );
+  for (const phone of [false, true]) {
+    const { ctx, page } = await open(phone ? 390 : 1280, phone ? 800 : 900);
+    let entries = [...chat.entries];
+    let n = 0;
+    await page.route("**/api/v1/agent/chats/" + chat.id, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { ...chat, entries } })
+        : route.fallback(),
+    );
+    await page.route(
+      "**/api/v1/agent/chats/" + chat.id + "/messages",
+      (route) => {
+        n++;
+        const message = route.request().postDataJSON().message;
+        const asked = {
+          id: "q" + n,
+          at: at(9, n),
+          role: "user",
+          content: message,
+        };
+        const answer = {
+          id: "r" + n,
+          at: at(9, n),
+          role: "assistant",
+          content: "Antwort " + n,
+        };
+        entries = [...entries, asked, answer];
+        return route.fulfill({
+          status: 202,
+          json: { ...chat, state: "running", entries: entries.slice(0, -1) },
+        });
+      },
+    );
+    await page.route("**/api/v1/agent/chats/" + chat.id + "/events", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          `event: snapshot\ndata: ${JSON.stringify({ type: "snapshot", entries, content: "", state: "idle" })}\n\n` +
+          'event: state\ndata: {"type":"state","state":"idle"}\n\n',
+      }),
+    );
+    await page.goto(base + "/agent?chat=" + chat.id);
+    await page.getByText("Hallo zurück.").waitFor();
+    const input = page.locator(".composer textarea");
+    await input.click();
+    await page.keyboard.type("Erste Frage");
+    await page.keyboard.press("Enter");
+    if (!phone) {
+      // Typing on at once, while the message goes out and the agent works.
+      await page.keyboard.type("Zweite");
+      await page.getByText("Antwort 1", { exact: true }).waitFor();
+      await page.waitForTimeout(400);
+      await page.keyboard.type(" Frage");
+      assert.equal(
+        await input.inputValue(),
+        "Zweite Frage",
+        "desk: typing goes on after Enter",
+      );
+      assert.ok(
+        await focused(page),
+        "desk: the cursor stays in the input after the answer",
+      );
+      // The same with the button.
+      await page.locator(".composer .send").click();
+      await page.keyboard.type("Dritte");
+      await page.getByText("Antwort 2", { exact: true }).waitFor();
+      await page.waitForTimeout(400);
+      await page.keyboard.type("!");
+      assert.equal(
+        await input.inputValue(),
+        "Dritte!",
+        "desk: typing goes on after Senden",
+      );
+      assert.ok(
+        await focused(page),
+        "desk: the cursor stays in the input after Senden",
+      );
+      await page.screenshot({ path: `${out}/109-desk-focus.png` });
+    } else {
+      await page.getByText("Antwort 1", { exact: true }).waitFor();
+      await page.waitForTimeout(400);
+      assert.ok(
+        !(await focused(page)),
+        "phone: the keyboard closes after sending",
+      );
+    }
+    await ctx.close();
+  }
+  // Waiting for approval: the input is not disabled (that took the focus).
+  {
+    const { ctx, page } = await open(1280, 900);
+    await page.goto(base + "/agent?chat=" + haChat.id);
+    await page.getByRole("button", { name: "Ausführen" }).waitFor();
+    const input = page.locator(".composer textarea");
+    assert.ok(
+      !(await input.evaluate((el) => el.disabled)),
+      "the input is not disabled while a step waits",
+    );
+    assert.ok(
+      await input.evaluate((el) => el.readOnly),
+      "it is read-only while a step waits",
     );
     await ctx.close();
   }
@@ -1140,7 +1352,10 @@ async function plan55() {
     const previewFig = preview.locator(".fig");
     const figWidth = async () => (await previewFig.boundingBox()).width;
     await page.waitForTimeout(400);
-    assert.ok(Math.abs((await figWidth()) - 18) < 1, "medium by default: 18 px");
+    assert.ok(
+      Math.abs((await figWidth()) - 18) < 1,
+      "medium by default: 18 px",
+    );
     for (const [label, px] of [
       ["Groß", 26],
       ["Klein", 14],
@@ -1149,7 +1364,10 @@ async function plan55() {
       await sizePick.locator("label", { hasText: label }).click();
       await page.waitForTimeout(450);
       const w = await figWidth();
-      assert.ok(Math.abs(w - px) < 1, `${label}: the preview is ${px} px (${w})`);
+      assert.ok(
+        Math.abs(w - px) < 1,
+        `${label}: the preview is ${px} px (${w})`,
+      );
       const dot = (await previewFig.locator("i").first().boundingBox()).width;
       assert.ok(
         Math.abs(dot - px * 0.24) < 0.6,
@@ -1921,6 +2139,12 @@ async function runs101() {
 }
 
 try {
+  if (process.env.UI_ONLY === "109") {
+    await agent109();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.09) ok:", out);
+    process.exit(0);
+  }
   if (process.env.UI_ONLY === "107") {
     await agent107();
     noConsoleErrors();
@@ -2931,7 +3155,7 @@ try {
     await drawer.getByRole("button", { name: /Fähre buchen/ }).click();
     await page.getByText("Fähre ab Kiel.").first().waitFor();
     const input = page.locator(".composer textarea");
-    assert.ok(await input.isDisabled(), "read-only chat");
+    assert.ok(!(await input.isEditable()), "read-only chat");
     assert.equal(
       await input.getAttribute("placeholder"),
       "Chat von maria – nur lesen",
@@ -3368,7 +3592,9 @@ try {
     const places = () =>
       fig
         .locator("i")
-        .evaluateAll((list) => list.map((el) => getComputedStyle(el).transform));
+        .evaluateAll((list) =>
+          list.map((el) => getComputedStyle(el).transform),
+        );
     const before = await places();
     assert.equal(before.length, 3, `${name}: three spheres`);
     await page.waitForTimeout(400);
@@ -3401,10 +3627,20 @@ try {
     const look = await fig.evaluate((el) => {
       const dots = [...el.querySelectorAll("i")].map((d) => {
         const c = getComputedStyle(d);
-        return [c.backgroundImage, c.backgroundColor, c.boxShadow, c.filter, c.opacity];
+        return [
+          c.backgroundImage,
+          c.backgroundColor,
+          c.boxShadow,
+          c.filter,
+          c.opacity,
+        ];
       });
       const faded = [];
-      for (let n = el; n && !n.classList.contains("messages"); n = n.parentElement) {
+      for (
+        let n = el;
+        n && !n.classList.contains("messages");
+        n = n.parentElement
+      ) {
         const c = getComputedStyle(n);
         if (c.opacity !== "1" || c.filter !== "none") faded.push(n.className);
       }
