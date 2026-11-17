@@ -1,11 +1,14 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
@@ -177,5 +180,60 @@ func TestAgentHASaveKeepsTheRelease(t *testing.T) {
 	// Scripts share the code: script.1 exists and is not released.
 	if _, _, err := save("ha_script_save", map[string]any{"id": "1", "config": map[string]any{"alias": "x", "sequence": []any{}}}); err == nil || saved != "" {
 		t.Fatalf("hidden script saved: %v", err)
+	}
+}
+
+// N1–N4, N6: the activity log does not give addresses (not even through a
+// search), nor names typed at a failed login; an app in front of a target
+// does not hide a locked folder; a search never says whether something in
+// a locked folder matched; the rules are applied by name, without the
+// folder having to exist; a year at most, and it says so.
+func TestAgentActivityLogSecurity(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard, Folders: []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}})
+	ts.withShare() // Privat is not made: the rule holds by its name
+	log := activity.New(ts.store)
+	ts.server.opts.Activity = log
+	now := time.Now()
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "MeinPasswort123", Via: "web", IP: "203.0.113.7", Action: "login_failed", OK: false})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", IP: "203.0.113.9", Action: "login", OK: true})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/docker/open", Target: "jellyfin: " + filePlace("share/Docs", "Privat/film.mkv"), OK: true})
+	log.Record(activity.Entry{At: now.Add(-time.Hour), User: "alex", Via: "web", Action: "POST /api/v1/files/delete", Target: filePlace("share/Docs", "Offen/alt.txt"), OK: true})
+	settings := ts.server.agentSettings()
+	run := func(args map[string]any) (map[string]any, string) {
+		t.Helper()
+		result, text, err := runAgentTool(t, ts, settings, "activity_log", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result, text
+	}
+	// N1: no search by address.
+	if result, _ := run(map[string]any{"search": "203.0.113"}); result["total"] != float64(0) {
+		t.Fatalf("found by address: %v", result)
+	}
+	// N2: a typed name is neither shown nor searchable nor a filter.
+	result, text := run(map[string]any{})
+	if strings.Contains(text, "MeinPasswort123") || !strings.Contains(text, "(no such account)") {
+		t.Fatalf("typed name shown: %s", text)
+	}
+	if result, _ := run(map[string]any{"search": "MeinPass"}); result["total"] != float64(0) {
+		t.Fatalf("typed name found: %v", result)
+	}
+	if _, _, err := runAgentTool(t, ts, settings, "activity_log", map[string]any{"account": "MeinPasswort123"}); err == nil {
+		t.Fatal("unknown account as a filter")
+	}
+	// N3, N6: the app in front and the folder that does not exist on disk.
+	if strings.Contains(text, "Privat") || result["hidden"] != float64(1) {
+		t.Fatalf("locked folder behind an app: %v %s", result["hidden"], text)
+	}
+	// N4: a search says the same whether a locked entry matched or not.
+	hit, _ := run(map[string]any{"search": "film"})
+	miss, _ := run(map[string]any{"search": "nichts-passt-xyz"})
+	if hit["hidden"] != true || miss["hidden"] != true || hit["why"] != miss["why"] || hit["total"] != float64(0) {
+		t.Fatalf("search oracle: %v / %v", hit, miss)
+	}
+	// N6: more than a year back is cut, and said.
+	if result, _ := run(map[string]any{"since": "500d"}); !strings.Contains(fmt.Sprint(result["note"]), "365 days") || result["since"] == now.AddDate(0, 0, -500).Format("2006-01-02 15:04") {
+		t.Fatalf("since: %v %v", result["since"], result["note"])
 	}
 }

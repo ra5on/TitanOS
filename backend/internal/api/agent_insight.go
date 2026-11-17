@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -151,12 +153,42 @@ func (b *agentToolbox) activityLog(ctx context.Context, args json.RawMessage) (a
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
+	env := b.s.agentEnv()
+	// Names typed at a failed login need not be accounts – a password
+	// typed into the field for the name, say (security review 1.10, N2).
+	accounts := map[string]bool{}
+	for _, u := range env.users.List() {
+		accounts[u.Name] = true
+	}
+	if req.Account != "" && !accounts[req.Account] {
+		return nil, toolcatalog.Errorf("there is no account %q", req.Account)
+	}
+	failedLogin := func(e activity.Entry) bool {
+		return (e.Action == "login_failed" || e.Action == "login_blocked") && !accounts[e.User]
+	}
+	notes := []string{}
+	// At most a year back, and the result says so (N6).
+	if earliest := time.Now().AddDate(0, 0, -365); since.Before(earliest) {
+		since = earliest
+		notes = append(notes, "The activity log is read at most 365 days back.")
+	}
 	days := int(math.Ceil(time.Since(since).Hours()/24)) + 1
-	f := activity.Filter{Days: min(max(days, 1), 365), User: req.Account, Via: req.Via, Text: req.Search, Failed: req.Failed, Limit: 1000}
+	f := activity.Filter{Days: min(max(days, 1), 365), User: req.Account, Via: req.Via, Failed: req.Failed, Limit: 1000}
+	if search := strings.ToLower(strings.TrimSpace(req.Search)); search != "" {
+		// Never by the address (N1: the address could be found digit by
+		// digit), nor by a name typed at a failed login (N2).
+		f.Keep = func(e activity.Entry) bool {
+			text := e.Action + " " + e.Target
+			if !failedLogin(e) {
+				text += " " + e.User
+			}
+			return strings.Contains(strings.ToLower(text), search)
+		}
+	}
 	if until.Before(time.Now()) {
 		f.Before = until
 	}
-	entries, more, stored, err := b.s.agentEnv().activity.Query(ctx, f)
+	entries, more, stored, err := env.activity.Query(ctx, f)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
@@ -185,58 +217,121 @@ func (b *agentToolbox) activityLog(ctx context.Context, args json.RawMessage) (a
 		}
 		total++
 		if len(out) < limit {
+			user := e.User
+			if failedLogin(e) {
+				user = "(no such account)"
+			}
 			// No addresses: who did it is the account and the way.
-			out = append(out, line{e.At.Local().Format("2006-01-02 15:04:05"), e.User, e.Via, e.Action, e.Target, e.OK})
+			out = append(out, line{e.At.Local().Format("2006-01-02 15:04:05"), user, e.Via, e.Action, e.Target, e.OK})
 		}
 	}
 	result := map[string]any{"since": since.Local().Format("2006-01-02 15:04"), "until": until.Local().Format("2006-01-02 15:04"), "total": total, "entries": out}
 	if total > len(out) || more {
-		result["note"] = "More entries than shown: narrow it with since/until, account, via or search."
+		notes = append(notes, "More entries than shown: narrow it with since/until, account, via or search.")
 	}
 	if !stored {
-		result["note"] = "The activity log is only kept in memory until a volume holds it: entries from before the last start are missing."
+		notes = append(notes, "The activity log is only kept in memory until a volume holds it: entries from before the last start are missing.")
 	}
-	if locked > 0 {
+	if len(notes) > 0 {
+		result["note"] = strings.Join(notes, " ")
+	}
+	switch {
+	case req.Search != "" && b.hasDenyRules():
+		// A search says only that locked folders are left out, never
+		// whether one of them matched (N4: no oracle for names there).
+		result["hidden"] = true
+		result["why"] = "Entries about folders the person locked for the agent are never shown, and a search does not say whether any of them matched (" + whereFolders + ")."
+	case locked > 0:
 		result["hidden"] = locked
 		result["why"] = fmt.Sprintf("%d entries concern folders the person locked for the agent and are not shown (%s).", locked, whereFolders)
 	}
 	return result, nil
 }
 
-// targetLocked reports whether a target of the activity log names a place
-// in a folder locked for the agent. Targets are root/path ("share/Docs/a"),
-// several joined by ", ", a move as "a → b" (activity.go, filePlace).
-func (b *agentToolbox) targetLocked(target string) bool {
-	if len(b.settings.Policy.Folders) == 0 || target == "" {
-		return false
-	}
-	for _, item := range strings.Split(target, ", ") {
-		// The place after "→" of a rename is a path in the same root.
-		root := ""
-		for _, part := range strings.Split(item, "→") {
-			part = strings.Trim(strings.TrimSpace(part), "/")
-			if part == "" {
-				continue
-			}
-			segs := strings.SplitN(part, "/", 3)
-			if len(segs) >= 2 {
-				rest := ""
-				if len(segs) == 3 {
-					rest = segs[2]
-				}
-				if b.realFolderMode(segs[0]+"/"+segs[1], rest, false) == agent.ModeDeny {
-					return true
-				}
-				if root == "" {
-					root = segs[0] + "/" + segs[1]
-				}
-			}
-			if root != "" && b.realFolderMode(root, part, false) == agent.ModeDeny {
-				return true
-			}
+// hasDenyRules reports whether a folder is locked for the agent.
+func (b *agentToolbox) hasDenyRules() bool {
+	for _, f := range b.settings.Policy.Folders {
+		if f.Mode == agent.ModeDeny {
+			return true
 		}
 	}
 	return false
+}
+
+// targetLocked reports whether a target of the activity log names a place
+// in a folder locked for the agent. Targets are root/path ("share/Docs/a"),
+// several joined by ", ", a move as "a → b", an app in front ("jellyfin:
+// share/Medien/x", docker_opens.go) (activity.go, filePlace). It works on
+// the names only, without touching a disk (security review 1.10, N3, N6):
+// a year of entries must not wake sleeping disks.
+func (b *agentToolbox) targetLocked(target string) bool {
+	if !b.hasDenyRules() || target == "" {
+		return false
+	}
+	for _, item := range strings.Split(target, ", ") {
+		if b.placeLocked(item) {
+			return true
+		}
+		if _, rest, ok := strings.Cut(item, ": "); ok && b.placeLocked(rest) {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *agentToolbox) placeLocked(item string) bool {
+	// The place after "→" of a rename is a path in the same root.
+	root := ""
+	for _, part := range strings.Split(item, "→") {
+		part = strings.Trim(strings.TrimSpace(part), "/")
+		if part == "" {
+			continue
+		}
+		segs := strings.SplitN(part, "/", 3)
+		if len(segs) >= 2 {
+			rest := ""
+			if len(segs) == 3 {
+				rest = segs[2]
+			}
+			if b.namedFolderMode(segs[0]+"/"+segs[1], rest) == agent.ModeDeny {
+				return true
+			}
+			if root == "" {
+				root = segs[0] + "/" + segs[1]
+			}
+		}
+		if root != "" && b.namedFolderMode(root, part) == agent.ModeDeny {
+			return true
+		}
+	}
+	return false
+}
+
+// namedFolderMode is the folder rule for a path by its name only: the
+// roots' folders are joined, links are not followed, no disk is touched.
+// A rule on share/Docs also holds for volume/tank/Docs.
+func (b *agentToolbox) namedFolderMode(root, p string) string {
+	mode := b.settings.Policy.FolderMode(root, p)
+	dir := b.rootDir(root)
+	if dir == "" {
+		return mode
+	}
+	target := filepath.Join(dir, filepath.FromSlash(path.Clean("/"+p)))
+	for _, f := range b.settings.Policy.Folders {
+		base := b.rootDir(f.Root)
+		if base == "" {
+			continue
+		}
+		rule := filepath.Join(base, filepath.FromSlash(path.Clean("/"+f.Path)))
+		if target == rule || strings.HasPrefix(target, rule+string(filepath.Separator)) {
+			if mode == "" {
+				mode = f.Mode
+			} else {
+				mode = agent.Stricter(mode, f.Mode)
+			}
+		}
+	}
+	return mode
 }
 
 // monitoringOff is the answer while the monitoring history is switched off.
