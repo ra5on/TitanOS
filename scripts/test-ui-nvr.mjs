@@ -72,6 +72,15 @@ async function open(role, change = () => {}, theme = "hell", width = WIDTH) {
 }
 const sent = (state, method, path) =>
   state.requests.filter(([m, p]) => m === method && p === path).map((r) => r[2]);
+/** How many settings the page has sent so far. */
+const settingsPuts = (state) => sent(state, "PUT", "/nvr/settings").length;
+/** The settings a change sent: waited for, because a select or switch shows
+ *  its new value before the request has left the page (1.06: under load the
+ *  last request seen was still the one before). */
+async function nextPut(state, before) {
+  await until(() => settingsPuts(state) > before, "the change is sent");
+  return sent(state, "PUT", "/nvr/settings").at(-1);
+}
 /** Opens a row of the settings style unless the browser remembered it open. */
 async function openRow(page, id) {
   const chevron = page.locator(`#${id} > .srow-head .srow-chev`);
@@ -702,9 +711,10 @@ try {
     await page.getByText(de["nvr.notify.mainOnHint"]).waitFor();
     await sound(page, "notification overview");
     await overview.screenshot({ path: `${out}/einstellungen-meldungen-${WIDTH}.png`, animations: "disabled" });
+    const beforeOff = settingsPuts(state);
     await page.getByRole("switch", { name: de["nvr.notify.main"] }).uncheck();
     await page.getByText(de["nvr.notify.mainOffHint"]).waitFor();
-    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { notifyOff: true });
+    assert.deepEqual(await nextPut(state, beforeOff), { notifyOff: true });
     // "Ändern" opens the camera's rows at its recipients; the form says the switch is off.
     await overview.getByRole("link", { name: "Meldungen von Einfahrt ändern" }).click();
     await page.getByRole("heading", { name: "Einfahrt" }).waitFor();
@@ -1006,9 +1016,10 @@ try {
     await page.locator("#nvr-cap-row").getByRole("button", { name: "Speichern" }).click();
     await page.getByText("Gespeichert.").waitFor();
     assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { storage: { limitGB: 300 } });
+    let before = settingsPuts(state);
     await page.locator("#nvr-detector").selectOption("igpu");
     await page.waitForFunction(() => document.querySelector("#nvr-detector").value === "igpu");
-    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { detector: { kind: "igpu" } });
+    assert.deepEqual(await nextPut(state, before), { detector: { kind: "igpu" } });
     // PLAN 82-4: which GPU decodes the videos; one with a VM cannot be chosen.
     const decoderRow = page.locator("#nvr-decoder-row");
     await decoderRow.getByText("Entschlüsselt gerade: iGPU (Intel Arc)").waitFor();
@@ -1022,13 +1033,15 @@ try {
       ],
     );
     assert.equal(await page.locator("#nvr-decoder option[value='0000:01:00.0']").isDisabled(), true);
+    before = settingsPuts(state);
     await page.locator("#nvr-decoder").selectOption("cpu");
     await page.waitForFunction(() => document.querySelector("#nvr-decoder").value === "cpu");
-    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { decoder: "cpu" });
+    assert.deepEqual(await nextPut(state, before), { decoder: "cpu" });
     await decoderRow.getByText("Entschlüsselt gerade: CPU").waitFor();
+    before = settingsPuts(state);
     await page.locator("#nvr-decoder").selectOption("0000:00:02.0");
     await page.waitForFunction(() => document.querySelector("#nvr-decoder").value === "0000:00:02.0");
-    assert.deepEqual(sent(state, "PUT", "/nvr/settings").at(-1), { decoder: "0000:00:02.0" });
+    assert.deepEqual(await nextPut(state, before), { decoder: "0000:00:02.0" });
 
     // Known faces: people, pictures, faces to assign.
     await page.locator("#nvr-faces").getByRole("button", { name: /Bekannte Gesichter/ }).click();

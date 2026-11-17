@@ -15,6 +15,16 @@ await mkdir(out, { recursive: true });
 const errors = [];
 const context = fixtureFactory(browser, errors);
 const at = "2026-10-24T00:00:00Z";
+/** Waits until a condition of the test holds: a click answers before the
+ *  request it sends has reached the fixtures (1.06: under load the check
+ *  came first). */
+async function until(fn, what, ms = 6000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error(`timed out: ${what}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
 try {
   const { ctx, page, data } = await context();
   await page.goto(base + "/tools/maintenance");
@@ -98,11 +108,13 @@ try {
   ); // attention remains visible
   await page.getByRole("button", { name: "Aktiv", exact: true }).click();
   await page.getByRole("button", { name: "Fortsetzen", exact: true }).click();
-  assert.ok(
-    data.requests.some(
-      ([method, path]) =>
-        method === "POST" && path === "/files/jobs/paused/control",
-    ),
+  await until(
+    () =>
+      data.requests.some(
+        ([method, path]) =>
+          method === "POST" && path === "/files/jobs/paused/control",
+      ),
+    "the paused copy is resumed",
   );
   data.recovery = {
     id: "0123456789abcdef01234567",
