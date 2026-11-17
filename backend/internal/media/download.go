@@ -40,7 +40,17 @@ func hashFile(ctx context.Context, f *os.File) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// downloadStall is how long a download may go without data before it
+// ends (a server that stops sending without closing the connection); the
+// job can be resumed from what arrived.
+var downloadStall = 5 * time.Minute
+
+// errStalled ends a download that got no data for downloadStall.
+var errStalled = errors.New("download stopped: no data from the server for 5 minutes; resume to try again")
+
 type progressWriter struct {
+	// watchdog ends the download when no data came for downloadStall.
+	watchdog *time.Timer
 	ctx      context.Context
 	file     *os.File
 	m        *Manager
@@ -62,6 +72,9 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 			return 0, err
 		}
 		w.checked = w.written + 1
+	}
+	if w.watchdog != nil {
+		w.watchdog.Reset(downloadStall)
 	}
 	n, err := w.file.Write(p)
 	w.written += int64(n)
@@ -132,6 +145,18 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 	if _, ok := httpfetch.ValidURL(j.URL); !ok {
 		return ErrInvalid
 	}
+	// A server that stops sending ends the download after downloadStall
+	// (the client only bounds the wait for the answer's header).
+	ctx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	watchdog := time.AfterFunc(downloadStall, func() { stop(errStalled) })
+	defer watchdog.Stop()
+	stalled := func(err error) error {
+		if errors.Is(context.Cause(ctx), errStalled) {
+			return errStalled
+		}
+		return err
+	}
 	res, err := httpfetch.Open(ctx, &client, j.URL, header, resume)
 	if errors.Is(err, httpfetch.ErrChanged) {
 		return fmt.Errorf("%w; retry the import", err)
@@ -162,9 +187,9 @@ func (m *Manager) download(ctx context.Context, e *entry, root *os.Root) error {
 	if err = m.save(e, root); err != nil {
 		return err
 	}
-	writer := &progressWriter{ctx: ctx, file: file, m: m, e: e, root: root, offset: offset, download: true}
+	writer := &progressWriter{watchdog: watchdog, ctx: ctx, file: file, m: m, e: e, root: root, offset: offset, download: true}
 	if _, err = io.CopyBuffer(writer, res.Body, make([]byte, 1<<20)); err != nil {
-		return errors.Join(err, file.Sync())
+		return errors.Join(stalled(err), file.Sync())
 	}
 	if err = file.Sync(); err != nil {
 		return err
