@@ -606,6 +606,11 @@
 		background: hsl(var(--hue) 50% 36%);
 		color: #fff;
 	}
+	/* 1.05: T-Mail on a line of its own, its name in one piece. */
+	.mail-app {
+		grid-template-columns: minmax(0, 1fr);
+		padding-bottom: 0;
+	}
 	.apps-foot {
 		display: flex;
 		flex-wrap: wrap;
