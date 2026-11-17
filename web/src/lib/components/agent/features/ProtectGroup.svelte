@@ -25,12 +25,22 @@
 	type Id = 'guard' | 'handbook' | 'emergency';
 	let open = $state<Id | null>(null);
 	let me = $state<ProtectMe | null>(null);
-	$effect(() => {
-		void pub;
+	function loadMe() {
 		loadProtectMe()
 			.then((m) => (me = m))
 			.catch(() => (me = null));
+	}
+	$effect(() => {
+		void pub;
+		loadMe();
 	});
+	// The counts of the rows (open alerts, open requests) are read again when
+	// a view closes: what was done there shows at once, not only on the next
+	// opening of the list (Durchsicht 102, A-12).
+	function closeView() {
+		open = null;
+		loadMe();
+	}
 
 	async function toggle(id: Id, on: boolean) {
 		if (!nas) return;
@@ -140,10 +150,5 @@
 			<ProtectSettings id={open!} {nas} {savenas} />
 		{/if}
 	{/snippet}
-	<ProtectViews
-		id={open}
-		{calm}
-		onclose={() => (open = null)}
-		extra={admin && nas ? settings : undefined}
-	/>
+	<ProtectViews id={open} {calm} onclose={closeView} extra={admin && nas ? settings : undefined} />
 {/if}

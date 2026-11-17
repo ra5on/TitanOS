@@ -246,7 +246,8 @@ async function open(width, height, alerts = [alert]) {
         handbook: true,
         emergency: false,
         alerts: 1,
-        requests: 1,
+        // A declined request is no longer open.
+        requests: seen.posts.some((x) => x.endsWith("/r1/decline")) ? 0 : 1,
       });
     if (p === "/agent/protect/guard")
       return json({
@@ -478,6 +479,15 @@ for (const [width, height, tag] of [
   assert.ok(
     seen.posts.some((p) => p.endsWith("/r2/end")),
     "end was sent",
+  );
+  // Durchsicht 102 (A-12): back in the list, the row counts the open
+  // requests anew (before: only when the list was opened again).
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      ![...document.querySelectorAll("button")].some((b) =>
+        /Notfallzugang[\s\S]*1 offener Antrag/.test(b.textContent),
+      ),
   );
   await ctx.close();
 }
