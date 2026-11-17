@@ -53,6 +53,14 @@ Svelte / SvelteKit        MIT                     https://github.com/sveltejs
 Go standard library       BSD-3-Clause            https://go.dev
 golang.org/x/crypto, sys  BSD-3-Clause            https://pkg.go.dev/golang.org/x/crypto
 golang.org/x/image        BSD-3-Clause            https://pkg.go.dev/golang.org/x/image
+golang.org/x/text, net    BSD-3-Clause            https://pkg.go.dev/golang.org/x/text
+emersion/go-imap (v2)     MIT                     https://github.com/emersion/go-imap
+emersion/go-message       MIT                     https://github.com/emersion/go-message
+emersion/go-smtp          MIT                     https://github.com/emersion/go-smtp
+emersion/go-sasl          MIT                     https://github.com/emersion/go-sasl
+microcosm-cc/bluemonday   BSD-3-Clause            https://github.com/microcosm-cc/bluemonday
+aymerick/douceur          MIT                     https://github.com/aymerick/douceur
+gorilla/css               BSD-3-Clause            https://github.com/gorilla/css
 coder/websocket           ISC                     https://github.com/coder/websocket
 HugoSmits86/nativewebp    MIT                     https://github.com/HugoSmits86/nativewebp
 bbolt                     MIT                     https://github.com/etcd-io/bbolt
