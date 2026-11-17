@@ -283,9 +283,10 @@ func TestLargeHeadsDoNotHoldUpMessages(t *testing.T) {
 	if _, subject := told(); subject != "Grüße Nr. 24" || e.noticeList()[0].From != "Versand" {
 		t.Fatalf("notices: %+v", e.noticeList())
 	}
-	if st := e.m.Mailboxes("alex")[0].Status; st.State != StateOK {
-		t.Fatalf("status: %+v", st)
-	}
+	// The messages can go out before the session reports itself OK (under
+	// -race in CI the status was still "connecting" here). A pause would
+	// last a minute (backoff above), far longer than waitFor waits.
+	waitFor(t, "status OK without a pause", func() bool { return e.m.Mailboxes("alex")[0].Status.State == StateOK })
 	page, err := e.m.List(t.Context(), "alex", view.ID, ListQuery{Folder: "INBOX", Flagged: true})
 	if err != nil || page.Total != 25 {
 		t.Fatalf("flagged by the rule on To and Subject: %d %v", page.Total, err)
