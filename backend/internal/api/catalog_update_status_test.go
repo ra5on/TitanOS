@@ -59,6 +59,20 @@ func TestUpdateStatusNamesTheRunningVersion(t *testing.T) {
 		t.Fatalf("kernel switch: %v", res)
 	}
 
+	// A newer release only with the other kernel variant: found, not offered.
+	missing := app
+	missing.KernelMissing = "1.5.0"
+	res = updateStatusView(missing)
+	if res["upToDate"] != false || !strings.Contains(res["answer"].(string), "1.05 ist erschienen") || strings.Contains(res["answer"].(string), "kein neueres") {
+		t.Fatalf("kernel missing: %v", res)
+	}
+	// A release that did not start on this NAS is named as such.
+	failedOnce := newer
+	failedOnce.FailedVersion = "1.5.0"
+	if a := updateStatusView(failedOnce)["answer"].(string); !strings.Contains(a, "nicht gestartet") {
+		t.Fatalf("failed version: %q", a)
+	}
+
 	// A failed check or none at all: never "up to date".
 	failed := app
 	failed.CheckError = "github.com not reachable"

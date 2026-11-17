@@ -189,12 +189,23 @@ func updateStatusView(status update.Status) map[string]any {
 		}
 	}
 	checked := status.LastCheck != nil && !status.LastCheck.IsZero()
-	upToDate := checked && status.CheckError == "" && newest == ""
+	// A newer release that has no system with the chosen kernel variant is
+	// found, but not offered: TitanOS is not up to date then either.
+	missing := ""
+	if status.KernelMissing != "" {
+		missing = version.Display(status.KernelMissing)
+	}
+	upToDate := checked && status.CheckError == "" && newest == "" && missing == ""
 	res["upToDate"] = upToDate
 	answer := ""
 	switch {
 	case newest != "":
 		answer = "TitanOS " + running + " läuft; " + newest + " ist verfügbar."
+		if status.FailedVersion != "" && version.Display(status.FailedVersion) == newest {
+			answer += " Diese Version ist auf diesem NAS schon einmal nicht gestartet; sie wird nicht von selbst wieder installiert."
+		}
+	case missing != "":
+		answer = "TitanOS " + running + " läuft; " + missing + " ist erschienen, aber nicht mit der gewählten Kernel-Variante (Einstellungen › Updates)."
 	case status.CheckError != "":
 		answer = "TitanOS " + running + " läuft; konnte nicht prüfen, ob es ein neueres Release gibt: " + status.CheckError
 	case !checked:
