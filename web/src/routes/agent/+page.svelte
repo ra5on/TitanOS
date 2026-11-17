@@ -238,14 +238,16 @@
 						<hr />
 						<a
 							role="menuitem"
-							href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export`)}
+							href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export?lang=${i18n.locale}`)}
 							download
 							onclick={close}
 							><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
 						>
 						<a
 							role="menuitem"
-							href={agentProfilePath(`/api/v1/agent/chats/${info.id}/export?format=pdf`)}
+							href={agentProfilePath(
+								`/api/v1/agent/chats/${info.id}/export?format=pdf&lang=${i18n.locale}`,
+							)}
 							download
 							onclick={close}
 							><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a

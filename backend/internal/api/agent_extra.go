@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -308,25 +309,96 @@ func (s *Server) handleAgentProjectFiles(w http.ResponseWriter, r *http.Request)
 
 // ---- Export ------------------------------------------------------------------
 
-// chatMarkdown writes a chat as Markdown, with the steps as a short list.
-func chatMarkdown(chat *agent.Chat) string {
+// exportStepWords are the steps in plain words, as the chat shows them
+// (web: STEP_WORDS in lib/agent.ts, texts agent.step.<word> of the
+// translation files; TestExportStepWordsMatchThePage keeps them alike).
+var exportStepWords = map[string]string{
+	"files_list": "files", "files_search": "search", "file_read": "read", "document_read": "read", "files_read_text": "read",
+	"file_write": "write", "files_write_text": "write", "files_move": "move", "file_copy": "copy", "files_copy": "copy",
+	"files_mkdir": "folder", "files_delete": "delete", "docker_list": "docker", "container_logs": "logs", "logs_search": "logs",
+	"vm_list": "vms", "storage_overview": "storage", "shares_list": "shares", "my_shares": "shares", "system_status": "system",
+	"hardware_status": "hardware", "backup_status": "backups", "notifications": "notifications", "web_search": "web",
+	"web_read": "page", "memory_save": "memory", "skill_save": "skill", "ask_user": "ask", "ha_entities": "home",
+	"ha_state": "home", "ha_call": "homeCall", "ha_history": "home", "ha_diagnostics": "home", "plan_update": "plan",
+	"tools_load": "toolsLoad", "task_delegate": "delegate", "code_run": "code",
+}
+
+// exportTexts are the words of an export in German and English.
+var exportTexts = map[string]map[string]string{
+	"de": {"you": "Du", "agent": "KI-Agent",
+		"files": "Ordner gelesen", "search": "Dateien gesucht", "read": "Datei gelesen", "write": "Datei geschrieben",
+		"move": "Verschoben", "copy": "Kopiert", "folder": "Ordner angelegt", "delete": "Gelöscht", "docker": "Docker-Apps gelesen",
+		"logs": "Protokolle durchsucht", "vms": "VMs gelesen", "storage": "Speicher gelesen", "shares": "Freigaben gelesen",
+		"system": "System gelesen", "hardware": "Hardware gelesen", "backups": "Sicherungen gelesen", "notifications": "Meldungen gelesen",
+		"web": "Im Web gesucht", "page": "Webseite gelesen", "memory": "Gemerkt", "skill": "Skill gespeichert", "ask": "Rückfrage",
+		"home": "Home Assistant gelesen", "homeCall": "In Home Assistant geschaltet", "plan": "Plan aktualisiert",
+		"toolsLoad": "Werkzeuge geladen", "delegate": "Helfer beauftragt", "code": "Code ausgeführt"},
+	"en": {"you": "You", "agent": "AI agent",
+		"files": "Folder read", "search": "Files searched", "read": "File read", "write": "File written",
+		"move": "Moved", "copy": "Copied", "folder": "Folder created", "delete": "Deleted", "docker": "Docker apps read",
+		"logs": "Logs searched", "vms": "VMs read", "storage": "Storage read", "shares": "Shares read",
+		"system": "System read", "hardware": "Hardware read", "backups": "Backups read", "notifications": "Notifications read",
+		"web": "Searched the web", "page": "Web page read", "memory": "Remembered", "skill": "Skill saved", "ask": "Question",
+		"home": "Home Assistant read", "homeCall": "Switched in Home Assistant", "plan": "Plan updated",
+		"toolsLoad": "Tools loaded", "delegate": "Helper asked", "code": "Code run"},
+}
+
+// exportStepDetail is what a step was about, like the chat shows it
+// (stepDetail in lib/agent.ts): place, query, address, name, device.
+func exportStepDetail(args json.RawMessage) string {
+	var a map[string]any
+	if json.Unmarshal(args, &a) != nil {
+		return ""
+	}
+	str := func(k string) string { v, _ := a[k].(string); return v }
+	var where []string
+	for _, v := range []string{str("root"), str("path")} {
+		if v != "" {
+			where = append(where, v)
+		}
+	}
+	parts := []string{strings.TrimPrefix(strings.Join(where, " › "), "share/")}
+	for _, k := range []string{"query", "url", "name", "entity_id", "domain", "vm", "container"} {
+		parts = append(parts, str(k))
+	}
+	parts = slices.DeleteFunc(parts, func(p string) bool { return p == "" })
+	return strings.Join(parts, " · ")
+}
+
+// chatMarkdown writes a chat as Markdown, with the steps as a short list
+// in words, as the chat shows them (1.09: "• ? ha_entities" before).
+func chatMarkdown(chat *agent.Chat, lang string) string {
+	words, ok := exportTexts[lang]
+	if !ok {
+		words = exportTexts["de"]
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", chat.ShownTitle())
 	fmt.Fprintf(&b, "_%s_\n\n", chat.Created.Local().Format("02.01.2006 15:04"))
 	for _, e := range chat.Entries {
 		switch e.Role {
 		case "user":
-			fmt.Fprintf(&b, "**Du:** %s\n\n", e.Content)
+			fmt.Fprintf(&b, "**%s:** %s\n\n", words["you"], e.Content)
 		case "assistant":
 			if strings.TrimSpace(e.Content) != "" {
-				fmt.Fprintf(&b, "**KI-Agent:**\n\n%s\n\n", e.Content)
+				fmt.Fprintf(&b, "**%s:**\n\n%s\n\n", words["agent"], e.Content)
 			}
 		case "tool":
 			mark := "✓"
-			if strings.HasPrefix(e.Result, "Error:") {
-				mark = "!"
+			switch {
+			case strings.HasPrefix(e.Result, "Error:"):
+				mark = "✗"
+			case !e.OK:
+				mark = "–" // not run (waiting, stopped, a repeat)
 			}
-			fmt.Fprintf(&b, "- %s `%s`\n", mark, e.Tool)
+			step := "`" + e.Tool + "`"
+			if word := words[exportStepWords[e.Tool]]; word != "" {
+				step = word
+			}
+			if detail := exportStepDetail(e.Args); detail != "" {
+				step += " · " + detail
+			}
+			fmt.Fprintf(&b, "- %s %s\n", mark, step)
 		case "note":
 			if e.Content != "" {
 				fmt.Fprintf(&b, "> %s: %s\n\n", e.Note, e.Content)
@@ -342,7 +414,11 @@ func (s *Server) handleAgentExport(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
-	md := chatMarkdown(chat)
+	lang := "de"
+	if r.URL.Query().Get("lang") == "en" {
+		lang = "en"
+	}
+	md := chatMarkdown(chat, lang)
 	name := strings.Map(func(r rune) rune {
 		if strings.ContainsRune(`/\:*?"<>|`, r) || r < 32 {
 			return '_'
