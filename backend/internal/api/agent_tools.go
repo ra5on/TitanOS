@@ -439,6 +439,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if t.area == agent.AreaNVR {
 		mode = b.nvrMode(t.name, mode)
 	}
+	// Deleting planned tasks cannot be undone: after outside content (a
+	// file could say "delete all reminders") the person decides (M4).
+	if t.name == "schedule_delete" && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
 	if t.name == "code_run" {
 		if _, err := parseCode(args); err != nil {
 			return agent.Prepared{}, err

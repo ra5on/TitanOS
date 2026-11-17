@@ -282,7 +282,7 @@ func TestAgentReleaseNotes(t *testing.T) {
 
 // 1.10 (V15): a planned task can be taken back by the agent.
 func TestAgentScheduleDelete(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetAll})
 	store := ts.server.agentStore()
 	if err := store.SaveSchedules("alex", []agent.Schedule{{ID: "s1", Name: "Müll", Task: "Müll raus", Kind: "reminder", Every: "once", Date: "2026-11-18", At: "09:00"}}); err != nil {
 		t.Fatal(err)
@@ -295,6 +295,59 @@ func TestAgentScheduleDelete(t *testing.T) {
 	}
 	if _, _, err := runAgentTool(t, ts, ts.server.agentSettings(), "schedule_delete", map[string]any{"id": "s1"}); err == nil {
 		t.Fatal("deleted twice")
+	}
+}
+
+// Security review 1.10, M4: schedule_delete is a change under the rights –
+// no free pass of the agent's own tools.
+func TestAgentScheduleDeleteFollowsTheRights(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	alex := mustUser(t, ts, "alex")
+	args := json.RawMessage(`{"id":"s1"}`)
+	mode := func(p agent.Policy, chat *agent.Chat) string {
+		t.Helper()
+		settings := ts.server.agentSettings()
+		settings.Policy = p
+		box := ts.server.newAgentToolbox(alex, settings)
+		prepared, err := box.Prepare(context.Background(), chat, "schedule_delete", args)
+		if err != nil {
+			return agent.ModeDeny
+		}
+		return prepared.Mode
+	}
+	plain := func() *agent.Chat { return &agent.Chat{ID: agent.NewID()} }
+	cases := []struct {
+		name string
+		p    agent.Policy
+		chat *agent.Chat
+		want string
+	}{
+		{"Standard", agent.Policy{Preset: agent.PresetStandard}, plain(), agent.ModeAsk},
+		{"Nur lesen", agent.Policy{Preset: agent.PresetRead}, plain(), agent.ModeDeny},
+		{"Alles", agent.Policy{Preset: agent.PresetAll}, plain(), agent.ModeAllow},
+		{"Alles after outside content", agent.Policy{Preset: agent.PresetAll}, &agent.Chat{ID: agent.NewID(), Tainted: true}, agent.ModeAsk},
+		{"Jeden Schritt fragen", agent.Policy{Preset: agent.PresetAll}, &agent.Chat{ID: agent.NewID(), Autonomy: agent.AutonomyAsk}, agent.ModeAsk},
+		{"rule Verboten", agent.Policy{Preset: agent.PresetAll, Tools: map[string]string{"schedule_delete": agent.ModeDeny}}, plain(), agent.ModeDeny},
+		{"rule Nachfragen", agent.Policy{Preset: agent.PresetAll, Tools: map[string]string{"schedule_delete": agent.ModeAsk}}, plain(), agent.ModeAsk},
+	}
+	for _, c := range cases {
+		if got := mode(c.p, c.chat); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+	// Offered under "Standard", not under "Nur lesen".
+	offered := func(preset string) bool {
+		settings := ts.server.agentSettings()
+		settings.Policy = agent.Policy{Preset: preset}
+		for _, spec := range ts.server.newAgentToolbox(alex, settings).Specs(&agent.Chat{}) {
+			if spec.Function.Name == "schedule_delete" {
+				return true
+			}
+		}
+		return false
+	}
+	if !offered(agent.PresetStandard) || offered(agent.PresetRead) {
+		t.Fatalf("offered: standard %v, read %v", offered(agent.PresetStandard), offered(agent.PresetRead))
 	}
 }
 

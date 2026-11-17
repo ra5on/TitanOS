@@ -630,7 +630,10 @@ func releaseFile(shown string) string {
 // scheduleDeleteTool lets the agent take back a planned task or reminder
 // of the account (V15: "Lösch die Erinnerung wieder").
 func (b *agentToolbox) scheduleDeleteTool() *agentTool {
-	return &agentTool{name: "schedule_delete", area: agent.AreaAgent, kind: agent.KindAgent,
+	// A change like any other (security review 1.10, M4): it follows the
+	// rights – asks under "Standard", is not there under "Nur lesen", a
+	// rule of its own holds – and asks after outside content (Prepare).
+	return &agentTool{name: "schedule_delete", area: agent.AreaAgent, kind: agent.KindChange,
 		description: "Delete a planned task or reminder of the person by its id from schedule_list.",
 		params:      schema(map[string]any{"id": str("ID as schedule_list shows it.")}, "id"),
 		own: func(_ context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
