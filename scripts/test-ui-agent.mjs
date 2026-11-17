@@ -468,8 +468,12 @@ async function agent107() {
   // is made up, the NAS's answer too).
   {
     const { ctx, page } = await open(390, 800);
-    await ctx.grantPermissions(["notifications"]);
+    // Headless Chromium answers "denied" to notifications: the browser's
+    // answer is made up like the subscription.
     await ctx.addInitScript(() => {
+      let permission = "default";
+      Object.defineProperty(Notification, "permission", { get: () => permission });
+      Notification.requestPermission = async () => (permission = "granted");
       PushManager.prototype.getSubscription = async () => null;
       PushManager.prototype.subscribe = async () => ({
         options: { applicationServerKey: null },
@@ -486,7 +490,23 @@ async function agent107() {
     });
     await page.goto(base + "/agent?app=1");
     const hint = page.getByRole("dialog", { name: "Mitteilungen erlauben?" });
-    await hint.waitFor({ timeout: 20000 });
+    try {
+      await hint.waitFor({ timeout: 20000 });
+    } catch (e) {
+      console.error(
+        await page.evaluate(async () => ({
+          secure: isSecureContext,
+          sw: "serviceWorker" in navigator,
+          pm: "PushManager" in window,
+          n: "Notification" in window,
+          perm: typeof Notification !== "undefined" && Notification.permission,
+          asked: localStorage.getItem("titanos.agent.pushAsked"),
+          app: sessionStorage.getItem("titanos.agent.app"),
+          phone: document.querySelector(".agent")?.className,
+        })),
+      );
+      throw e;
+    }
     const allow = hint.getByRole("button", { name: "Erlauben" });
     assert.ok((await allow.boundingBox()).height >= 44, "the button is big enough");
     await page.screenshot({ path: `${out}/107-mitteilungen-erlauben.png` });
@@ -1901,6 +1921,12 @@ async function runs101() {
 }
 
 try {
+  if (process.env.UI_ONLY === "107") {
+    await agent107();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.07) ok:", out);
+    process.exit(0);
+  }
   if (process.env.UI_ONLY === "101") {
     await runs101();
     noConsoleErrors();
