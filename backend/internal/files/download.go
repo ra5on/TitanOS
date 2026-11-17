@@ -107,7 +107,7 @@ type download struct {
 var downloadClients = sync.OnceValue(func() [2]*http.Client {
 	return [2]*http.Client{
 		httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.LAN(a.Addr()) }}),
-		httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.Public(a.Addr()) }}),
+		httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.Confined(a.Addr(), nil) }}),
 	}
 })
 
