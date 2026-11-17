@@ -203,6 +203,13 @@ func (m *Manager) DomainReleased(ctx context.Context, domain string) bool {
 	return known && slices.Contains(m.settings.Domains, domain)
 }
 
+// ReleasesAll reports whether the agent's own release is "Alles" (MCP has
+// no such release).
+func (m *Manager) ReleasesAll(ctx context.Context) bool {
+	r, ok := releaseOf(ctx, m.id)
+	return ok && r.All
+}
+
 // OwnRelease reports whether the context carries the agent's own release
 // list (rather than the release to MCP).
 func (m *Manager) OwnRelease(ctx context.Context) bool {

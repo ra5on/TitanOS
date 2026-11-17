@@ -331,6 +331,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				switch {
 				case total == 0 && ha.ReleasesNothing(ctx):
 					result["note"] = haNothingReleased
+					result["hidden"], result["why"] = true, haNothingReleased
 				case q.Domain != "":
 					// 1.09: a count of 0 must not stand for "not visible".
 					released := ha.DomainReleased(ctx, q.Domain)
@@ -341,6 +342,10 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					case total == 0 && q.Area == "" && q.Search == "":
 						result["note"] = "None present: the domain " + q.Domain + " is released and Home Assistant has no entity of it."
 					}
+				case total == 0 && !ha.ReleasesAll(ctx):
+					// A selection searched by name or room: what is not
+					// released cannot be found either.
+					result["note"] = "Only released kinds and entities are searched; something not released is not visible here. Ask with domain to see whether a kind is released."
 				}
 				return result, nil
 			})),

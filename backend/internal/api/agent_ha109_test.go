@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -94,6 +95,14 @@ func TestAgentHAEntitiesTellsHiddenFromNone(t *testing.T) {
 	why, _ := result["why"].(string)
 	if result["released"] != false || result["hidden"] != true || !strings.Contains(why, "NOT RELEASED") || !strings.Contains(why, "KI-Agent › Home Assistant") {
 		t.Fatalf("a hidden domain must not read as none: %v", result)
+	}
+	// "Nichts": hidden as well, and a search in a selection says that only
+	// released kinds are searched.
+	if result = run(homeassistant.Release{}, map[string]any{"domain": "automation"}); result["hidden"] != true || result["why"] == nil {
+		t.Fatalf("nothing released: %v", result)
+	}
+	if result = run(homeassistant.Release{Domains: []string{"script"}}, map[string]any{"search": "morgens"}); result["total"] != float64(0) || !strings.Contains(fmt.Sprint(result["note"]), "Only released kinds") {
+		t.Fatalf("search in a selection: %v", result)
 	}
 	// Released: both are there.
 	result = run(homeassistant.Release{Domains: []string{"automation", "binary_sensor"}}, map[string]any{"domain": "automation"})

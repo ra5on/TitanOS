@@ -841,6 +841,64 @@ async function agent109() {
     await page.screenshot({ path: `${out}/109-ha-kinds.png`, fullPage: true });
     await ctx.close();
   }
+  // The first question of a new chat, from the start page: the chat is
+  // made, the page changes to it, the cursor stays in the input.
+  {
+    const { ctx, page } = await open(1280, 900);
+    const id = "c1aaaaaaaaaa0110";
+    let entries = [];
+    await page.route("**/api/v1/agent/chats", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      const message = route.request().postDataJSON().message;
+      entries = [
+        { id: "n1", at: at(10), role: "user", content: message },
+        { id: "n2", at: at(10, 1), role: "assistant", content: "Antwort neu" },
+      ];
+      return route.fulfill({
+        status: 202,
+        json: {
+          ...chat,
+          id,
+          title: message,
+          state: "running",
+          entries: entries.slice(0, 1),
+        },
+      });
+    });
+    await page.route("**/api/v1/agent/chats/" + id, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { ...chat, id, title: "Neue Frage", entries } })
+        : route.fallback(),
+    );
+    await page.route("**/api/v1/agent/chats/" + id + "/events", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          `event: snapshot\ndata: ${JSON.stringify({ type: "snapshot", entries, content: "", state: "idle" })}\n\n` +
+          'event: state\ndata: {"type":"state","state":"idle"}\n\n',
+      }),
+    );
+    await page.goto(base + "/agent");
+    const input = page.locator(".composer textarea");
+    await input.click();
+    await page.keyboard.type("Neue Frage");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Noch");
+    await page.getByText("Antwort neu", { exact: true }).waitFor();
+    await page.waitForTimeout(400);
+    await page.keyboard.type(" was");
+    assert.equal(
+      await input.inputValue(),
+      "Noch was",
+      "desk: typing goes on in a new chat",
+    );
+    assert.ok(
+      await focused(page),
+      "desk: the cursor stays in the input of the new chat",
+    );
+    await ctx.close();
+  }
   // Waiting for approval: the input is not disabled (that took the focus).
   {
     const { ctx, page } = await open(1280, 900);
