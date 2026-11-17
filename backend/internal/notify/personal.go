@@ -312,6 +312,17 @@ func (m *Manager) personalMail(user string) (address, language, content string) 
 	return to, p.Language, p.Content
 }
 
+// PersonalContent is what the own notifications of an account may show:
+// "summary" (the text) or "none" (only the title); T-Mail keeps sender
+// and subject out of its push messages for "none".
+func (m *Manager) PersonalContent(user string) string {
+	_, _, content := m.personalMail(user)
+	if content == "" {
+		return "summary"
+	}
+	return content
+}
+
 // forwardsMail tells whether a bell message of severity and kind reaches
 // user's own e-mail through tellPeople anyway: the event and e-mail are
 // switched on in its settings, the mail server is set, the address is
