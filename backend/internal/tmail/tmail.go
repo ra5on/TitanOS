@@ -223,7 +223,6 @@ type Manager struct {
 	unreadable map[string]bool
 	access     accessState
 	key        []byte
-	keyLoaded  bool
 
 	conns    connPool
 	watch    watchState

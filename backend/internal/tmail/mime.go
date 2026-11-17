@@ -128,17 +128,17 @@ func (p *plan) attachmentList() []Attachment {
 	return out
 }
 
-func (a partInfo) attachment() Attachment {
-	name := a.filename
+func (p partInfo) attachment() Attachment {
+	name := p.filename
 	if name == "" {
-		name = "part-" + a.section() + extension(a.mediaType)
+		name = "part-" + p.section() + extension(p.mediaType)
 	}
-	size := a.size
-	if a.encoding == "base64" {
+	size := p.size
+	if p.encoding == "base64" {
 		size = size * 3 / 4
 	}
-	inline := a.id != "" && slices.Contains(inlineTypes, a.mediaType) && a.disposition != "attachment"
-	return Attachment{Part: a.section(), Name: safeFileName(name), Type: a.mediaType, Size: size, Inline: inline, CID: a.id}
+	inline := p.id != "" && slices.Contains(inlineTypes, p.mediaType) && p.disposition != "attachment"
+	return Attachment{Part: p.section(), Name: safeFileName(name), Type: p.mediaType, Size: size, Inline: inline, CID: p.id}
 }
 
 func extension(mediaType string) string {

@@ -60,7 +60,7 @@ func (m *Manager) Run(ctx context.Context) {
 			m.stopAll()
 			return
 		case <-tick.C:
-			m.conns.reap(m.clock(), m.sessionIdle)
+			m.conns.reap(time.Now(), m.sessionIdle)
 			m.SyncAll()
 		}
 	}
@@ -219,7 +219,7 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()                         // the connection is given up either way
 	stop := context.AfterFunc(ctx, func() { _ = c.Close() }) // titand stops: no goodbye to the server
 	defer stop()
 	limited := func(work func() error) error {

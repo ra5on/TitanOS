@@ -1,9 +1,6 @@
 package tmail
 
-import (
-	"sync"
-	"time"
-)
+import "sync"
 
 // watchState is what titand knows of the mailboxes in RAM: the state of
 // their permanent connection, a failed login, the unread mails of the
@@ -48,6 +45,9 @@ func (m *Manager) setAuthFailed(user string, mb Mailbox) {
 	m.watch.mu.Lock()
 	m.watch.init()
 	m.watch.authFailed[k] = fingerprint(mb)
+	if m.watch.status[k].State != StateAuthFailed {
+		m.watch.status[k] = Status{State: StateAuthFailed, Code: "mail_auth_failed", Since: m.clock().UTC()}
+	}
 	w := m.watch.running[k]
 	m.watch.mu.Unlock()
 	if w != nil {
@@ -73,11 +73,10 @@ func (m *Manager) statusOf(user string, mb Mailbox) Status {
 	defer m.watch.mu.Unlock()
 	m.watch.init()
 	if fp, ok := m.watch.authFailed[k]; ok && fp == fingerprint(mb) {
-		st := m.watch.status[k]
-		if st.State != StateAuthFailed {
-			st = Status{State: StateAuthFailed, Code: "mail_auth_failed", Since: time.Now().UTC()}
+		if st := m.watch.status[k]; st.State == StateAuthFailed {
+			return st
 		}
-		return st
+		return Status{State: StateAuthFailed, Code: "mail_auth_failed"}
 	}
 	if _, on := m.watch.running[k]; on {
 		if st, ok := m.watch.status[k]; ok {

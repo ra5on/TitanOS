@@ -242,7 +242,7 @@ func (m *Manager) smtpSend(ctx context.Context, mb Mailbox, password, from strin
 			return tlsError(err)
 		}
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }() // after QUIT or an error; nothing to do on a failure
 	var auth sasl.Client
 	switch {
 	case c.SupportsAuth(sasl.Plain):

@@ -48,7 +48,9 @@ func (p *connPool) get(k string) *session {
 	}
 	s := p.sessions[k]
 	if s == nil {
-		s = &session{}
+		// A new connection counts as used now, so that reap does not take
+		// it before its first command.
+		s = &session{last: time.Now()}
 		p.sessions[k] = s
 	}
 	return s
@@ -242,7 +244,7 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 		s.fp, s.selected = fp, ""
 	}
 	err = work(s.client(), s)
-	s.last = m.clock()
+	s.last = time.Now()
 	if expired.Load() {
 		err = ErrTimeout
 	} else if ctx.Err() != nil && err != nil {
