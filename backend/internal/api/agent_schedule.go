@@ -415,7 +415,7 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 		if ha == nil || !ha.Active() {
 			continue
 		}
-		if err := ha.Notify(ctx, service, "KI-Agent: "+chat.Title, text, nil); err != nil {
+		if err := ha.Notify(ctx, service, "KI-Agent: "+chat.ShownTitle(), text, nil); err != nil {
 			slog.Warn("agent message to Home Assistant not sent", "service", service, "err", err)
 		}
 	}

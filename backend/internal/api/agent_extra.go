@@ -311,7 +311,7 @@ func (s *Server) handleAgentProjectFiles(w http.ResponseWriter, r *http.Request)
 // chatMarkdown writes a chat as Markdown, with the steps as a short list.
 func chatMarkdown(chat *agent.Chat) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", chat.Title)
+	fmt.Fprintf(&b, "# %s\n\n", chat.ShownTitle())
 	fmt.Fprintf(&b, "_%s_\n\n", chat.Created.Local().Format("02.01.2006 15:04"))
 	for _, e := range chat.Entries {
 		switch e.Role {
@@ -348,10 +348,10 @@ func (s *Server) handleAgentExport(w http.ResponseWriter, r *http.Request) {
 			return '_'
 		}
 		return r
-	}, chat.Title)
+	}, chat.ShownTitle())
 	switch r.URL.Query().Get("format") {
 	case "pdf":
-		data, err := office.PDF(md, chat.Title)
+		data, err := office.PDF(md, chat.ShownTitle())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "export_failed", err.Error())
 			return

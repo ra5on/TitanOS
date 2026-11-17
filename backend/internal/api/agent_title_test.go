@@ -132,3 +132,38 @@ func TestCleanTitle(t *testing.T) {
 		t.Fatalf("long question: %q", got)
 	}
 }
+
+// 1.09: an old cut title never shows with "…" – not in the export (heading
+// and file name), the chat, the list – also where the model never writes a
+// title (a chat from Home Assistant) or before it has.
+func TestAgentCutTitleNeverShown(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetAll})
+	store := ts.server.agentStore()
+	question := "Ist zu Hause alles zu? Prüfe Fenster, Türen, Schlösser und die Alarmanlage in Home Assistant."
+	chat := &agent.Chat{ID: agent.NewID(), Title: "Ist zu Hause alles zu? Prüfe Fenster, Türen, Schlösser und …", Origin: "homeassistant", State: agent.StateIdle,
+		Entries: []agent.Entry{{ID: "u", Role: "user", Content: question}, {ID: "a", Role: "assistant", Content: "Alles ist zu."}}}
+	if err := store.SaveChat("alex", chat); err != nil {
+		t.Fatal(err)
+	}
+	res, body := ts.request("GET", "/api/v1/agent/chats/"+chat.ID, nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"title":"`+question+`"`) {
+		t.Fatalf("chat: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("GET", "/api/v1/agent/chats", nil)
+	if res.StatusCode != http.StatusOK || strings.Contains(string(body), "…") || !strings.Contains(string(body), question) {
+		t.Fatalf("list: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export", nil)
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(string(body), "# "+question+"\n") || strings.Contains(res.Header.Get("Content-Disposition"), "%E2%80%A6") {
+		t.Fatalf("export: %d %q %s", res.StatusCode, res.Header.Get("Content-Disposition"), body)
+	}
+	res, body = ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export?format=pdf", nil)
+	if res.StatusCode != http.StatusOK || strings.Contains(res.Header.Get("Content-Disposition"), "%E2%80%A6") || !strings.HasPrefix(string(body), "%PDF") {
+		t.Fatalf("pdf: %d %q", res.StatusCode, res.Header.Get("Content-Disposition"))
+	}
+	// The stored title stays (the model may still name it once).
+	if c, _ := store.Chat("alex", chat.ID); !strings.HasSuffix(c.Title, " …") {
+		t.Fatalf("stored title changed: %q", c.Title)
+	}
+}
