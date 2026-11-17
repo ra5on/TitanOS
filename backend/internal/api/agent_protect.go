@@ -427,11 +427,18 @@ func (b *agentToolbox) protectTools() []*agentTool {
 			description: "The emergency handbook of this NAS as Markdown: volumes with RAID level and disks (model, serial number), shares, apps, VMs, network, remote access and what to do when a disk fails, the NAS does not start, the stick is broken or data must come back. It holds no passwords.",
 			params:      schema(map[string]any{}),
 			own: func(ctx context.Context, _ *agent.Chat, _ json.RawMessage) (agent.Outcome, error) {
+				// The right holds at the call, not only when the run
+				// began: an emergency access that ended meanwhile, a
+				// changed role or a handbook switched off end it (A-10).
+				user, ok := b.s.agentEnv().users.Get(b.user.Name)
+				if !ok || user.Disabled || !b.s.agentSettings().Features.Handbook.Enabled || !b.s.handbookAllowed(user) {
+					return agent.Outcome{}, toolcatalog.Errorf("the emergency handbook is not open to %s (any more)", b.user.Name)
+				}
 				hb, err := b.s.handbookCurrent(ctx)
 				if err != nil {
 					return agent.Outcome{}, err
 				}
-				if !b.user.Role.CanAdminister() {
+				if !user.Role.CanAdminister() {
 					b.s.emergencyRecord(b.user.Name, "emergency handbook read", b.user.Name+" (agent)")
 				}
 				return agent.Outcome{Text: protect.Markdown(hb.Facts, hb.Made.In(b.s.agentLocation()), true)}, nil

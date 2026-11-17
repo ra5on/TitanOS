@@ -194,6 +194,41 @@ func TestHandbookToolLogs(t *testing.T) {
 	}
 }
 
+// A-10 (1.04): the handbook tool checks the right when it is called. An
+// emergency access that ends during a run ends the tool too.
+func TestHandbookToolEndsWithTheAccess(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	env.features(t, map[string]any{
+		"handbook":  map[string]any{"enabled": true},
+		"emergency": map[string]any{"enabled": true, "persons": []map[string]any{{"account": "lena", "shares": []string{"Fotos"}}}},
+	})
+	lena := env.login(t, "lena")
+	_, body := ts.do(lena, "POST", "/api/v1/agent/protect/emergency/request", map[string]any{"reason": "x"})
+	id := strings.Split(strings.Split(string(body), `"id":"`)[1], `"`)[0]
+	ts.request("POST", "/api/v1/agent/protect/emergency/"+id+"/grant", nil)
+	user, _ := ts.users.Get("lena")
+	box := ts.server.newAgentToolbox(user, ts.server.agentSettings())
+	var tool *agentTool
+	for _, x := range box.protectTools() {
+		if x.name == "emergency_handbook" {
+			tool = x
+		}
+	}
+	if tool == nil {
+		t.Fatal("no handbook tool for the granted person")
+	}
+	if _, err := tool.own(t.Context(), nil, nil); err != nil {
+		t.Fatalf("while granted: %v", err)
+	}
+	if res, b := ts.request("POST", "/api/v1/agent/protect/emergency/"+id+"/end", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("end: %d %s", res.StatusCode, b)
+	}
+	if out, err := tool.own(t.Context(), nil, nil); err == nil {
+		t.Fatalf("the handbook after the end of the access: %.60q", out.Text)
+	}
+}
+
 // What an administrator changed on a granted share during the access is
 // theirs: the end of the access leaves it.
 func TestEmergencyRevokeKeepsAdminChange(t *testing.T) {
