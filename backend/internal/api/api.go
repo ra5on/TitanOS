@@ -54,6 +54,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
@@ -105,6 +106,9 @@ type Options struct {
 	Docker  *docker.Manager
 	// Mail is T-Mail (docs/TMAIL.md); nil answers 403 mail_disabled.
 	Mail *tmail.Manager
+	// PIM keeps calendars and address books (TECHNIK 5, pim/store); nil
+	// answers 503 like a missing volume.
+	PIM *pimstore.Store
 	// SystemData says where TitanOS keeps its own data while no volume is
 	// chosen; nil takes the first mounted volume by name.
 	SystemData *volumedata.Home
