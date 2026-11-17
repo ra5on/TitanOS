@@ -93,6 +93,10 @@ func (s *Server) emergencyAsk(user auth.User, reason, code, via string) (protect
 	return req, nil
 }
 
+// emergencyGrantStep runs between the shares and the state of a grant;
+// tests use it to start a second grant there.
+var emergencyGrantStep func()
+
 // emergencyGrant gives the read access of a request and keeps what it added.
 func (s *Server) emergencyGrant(req protect.Request, by string, now time.Time) (protect.Request, error) {
 	env := s.agentEnv()
@@ -128,12 +132,21 @@ func (s *Server) emergencyGrant(req protect.Request, by string, now time.Time) (
 		}
 		added = append(added, name)
 	}
-	ps.accessMu.Unlock()
 	if failed != nil {
+		ps.accessMu.Unlock()
 		s.emergencyRevoke(req.Account, added)
 		return req, fmt.Errorf("access not granted: %w", failed)
 	}
+	if emergencyGrantStep != nil {
+		emergencyGrantStep()
+	}
+	// The state changes under the same lock as the shares (A-8, 1.04): a
+	// second grant of the same request (the tick and "Jetzt freigeben")
+	// waits, finds the access given and the request decided. Before, it
+	// could decide the request with nothing added while the first one
+	// took its shares back.
 	out, err := ps.emergency.Grant(req.ID, by, added, now)
+	ps.accessMu.Unlock()
 	if err != nil {
 		s.emergencyRevoke(req.Account, added)
 		return out, err

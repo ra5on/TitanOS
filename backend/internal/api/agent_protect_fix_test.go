@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -226,6 +227,51 @@ func TestHandbookToolEndsWithTheAccess(t *testing.T) {
 	}
 	if out, err := tool.own(t.Context(), nil, nil); err == nil {
 		t.Fatalf("the handbook after the end of the access: %.60q", out.Text)
+	}
+}
+
+// A-8 (1.04): two grants of the same request at once (the tick and
+// "Jetzt freigeben") give the access once and keep it.
+func TestEmergencyGrantTwiceAtOnce(t *testing.T) {
+	env := protectServer(t)
+	ts := env.ts
+	env.features(t, map[string]any{"emergency": map[string]any{"enabled": true, "persons": []map[string]any{{"account": "lena", "shares": []string{"Fotos"}}}}})
+	lena := env.login(t, "lena")
+	if res, b := ts.do(lena, "POST", "/api/v1/agent/protect/emergency/request", map[string]any{"reason": "x"}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("request: %d %s", res.StatusCode, b)
+	}
+	req, ok := ts.server.emergencyLatest("lena")
+	if !ok {
+		t.Fatal("no request")
+	}
+	var started atomic.Bool
+	second := make(chan struct{})
+	t.Cleanup(func() { emergencyGrantStep = nil })
+	emergencyGrantStep = func() {
+		if started.Swap(true) {
+			return
+		}
+		go func() {
+			defer close(second)
+			_, _ = ts.server.emergencyGrant(req, "max", env.clock())
+		}()
+		// Give the second grant the time to pass, where nothing holds it
+		// back.
+		select {
+		case <-second:
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	if _, err := ts.server.emergencyGrant(req, "", env.clock()); err != nil {
+		t.Logf("first grant: %v", err)
+	}
+	<-second
+	if env.access("Fotos")["lena"] != shares.ReadOnly {
+		t.Errorf("lena has no read access after the grant: %v", env.access("Fotos"))
+	}
+	out, _ := ts.server.emergencyLatest("lena")
+	if out.State != protect.StateGranted || !slices.Equal(out.Added, []string{"Fotos"}) {
+		t.Errorf("request: state %s, added %v", out.State, out.Added)
 	}
 }
 
