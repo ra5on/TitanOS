@@ -329,6 +329,18 @@ func specDescription(d string) string {
 	return d
 }
 
+// Paged reports whether a tool takes an offset for its next page (the note
+// of a cut list names one only then).
+func (b *agentToolbox) Paged(name string) bool {
+	t, ok := b.tools[name]
+	if !ok {
+		return false
+	}
+	props, _ := t.params["properties"].(map[string]any)
+	_, ok = props["offset"]
+	return ok
+}
+
 // Prepare checks a call against the policy and plans it.
 func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage) (agent.Prepared, error) {
 	t, ok := b.tools[name]

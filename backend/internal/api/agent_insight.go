@@ -473,6 +473,9 @@ func cmpName(name, id string) string {
 	return id
 }
 
+// haLogbookLines is how many lines of the logbook one call gives.
+const haLogbookLines = 100
+
 func (b *agentToolbox) haLogbook(ctx context.Context, args json.RawMessage) (any, error) {
 	ha, rest, err := b.s.haArea().haConnectionArg(args)
 	if err != nil {
@@ -494,10 +497,29 @@ func (b *agentToolbox) haLogbook(ctx context.Context, args json.RawMessage) (any
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]any{"since": since.Local().Format("2006-01-02 15:04"), "until": until.Local().Format("2006-01-02 15:04"), "total": len(book.Entries), "entries": book.Entries}
-	if book.Hidden {
+	// The text of a line names what triggered it ("triggered by state of
+	// binary_sensor.fenster"): devices that are not released and secrets
+	// are masked there too (security review 1.10, M3).
+	m := newHAMasker(ctx, ha.AllowedCtx)
+	for i := range book.Entries {
+		book.Entries[i].Message = m.secret(m.text(book.Entries[i].Message))
+		book.Entries[i].State = m.secret(m.text(book.Entries[i].State))
+	}
+	// At most the newest haLogbookLines lines; older ones with until (N7).
+	entries := book.Entries
+	result := map[string]any{"since": since.Local().Format("2006-01-02 15:04"), "until": until.Local().Format("2006-01-02 15:04")}
+	if len(entries) > haLogbookLines {
+		slices.SortStableFunc(entries, func(a, b homeassistant.LogbookEntry) int { return a.When.Compare(b.When) })
+		entries = entries[len(entries)-haLogbookLines:]
+		oldest := entries[0].When
+		result["cut"] = true
+		result["next"] = fmt.Sprintf("Only the newest %d lines are shown. Older ones: call again with until=%s (and since for how far back).", haLogbookLines, oldest.Local().Format("2006-01-02T15:04:05"))
+	}
+	result["entries"] = entries
+	result["shown"] = len(entries)
+	if book.Hidden || m.hidden || m.secrets {
 		result["hidden"] = true
-		result["why"] = "Lines of devices that are not released to the agent are left out (no count). They can be released under " + whereHA + "."
+		result["why"] = strings.TrimSpace("Lines of devices that are not released to the agent are left out (no count). They can be released under " + whereHA + ". " + m.why())
 	}
 	if len(book.Entries) == 0 && !book.Hidden {
 		result["note"] = "Nothing in the logbook of released devices in this time."
@@ -543,38 +565,18 @@ func (b *agentToolbox) haConfigRead(ctx context.Context, args json.RawMessage) (
 		return map[string]any{"entity": req.Entity, "note": "Home Assistant has no editable configuration for it (made in YAML or a blueprint)."}, nil
 	}
 	// Devices the config names that are not released stay unnamed, as
-	// everywhere else (1.09: no names or counts of hidden ones).
+	// everywhere else (1.09: no names or counts of hidden ones), and
+	// secrets stay on the NAS (security review 1.10, M1, M2).
 	var tree any
 	if err := json.Unmarshal(config, &tree); err != nil {
 		return nil, err
 	}
-	masked := false
-	var walk func(key string, v any) any
-	walk = func(key string, v any) any {
-		switch x := v.(type) {
-		case map[string]any:
-			for k, vv := range x {
-				x[k] = walk(k, vv)
-			}
-		case []any:
-			for i, vv := range x {
-				x[i] = walk(key, vv)
-			}
-		case string:
-			switch key {
-			case "entity_id", "entity", "entities":
-				if homeassistant.ValidEntity(x) && !ha.AllowedCtx(ctx, x) {
-					masked = true
-					return "(not released)"
-				}
-			}
-		}
-		return v
-	}
-	out := map[string]any{"entity": req.Entity, "id": id, "config": walk("", tree)}
-	if masked {
+	m := newHAMasker(ctx, ha.AllowedCtx)
+	out := map[string]any{"entity": req.Entity, "id": id, "config": m.value("", tree),
+		"note": "Save it back only as read here and whole: never a config cut for length (" + agent.CutMark + ") and never with stand-ins such as " + haHiddenMark + "; ha_automation_save refuses those."}
+	if why := m.why(); why != "" {
 		out["hidden"] = true
-		out["why"] = "Devices that are not released to the agent are shown as (not released). Saving this config back would break them: change it only where you can see everything, or tell the person what to release under " + whereHA + "."
+		out["why"] = why
 	}
 	return out, nil
 }
