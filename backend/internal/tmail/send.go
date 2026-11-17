@@ -213,10 +213,10 @@ func msgIDs(value string, max int) []string {
 
 // smtpSend hands a mail to the SMTP server of a mailbox; without data it
 // only logs in (the check of the settings).
-func (m *Manager) smtpSend(ctx context.Context, mb Mailbox, password, from string, rcpt []string, data []byte) error {
+func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, password, from string, rcpt []string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-	conn, err := m.dial(ctx, mb.SMTP)
+	conn, err := m.dial(ctx, user, mb.SMTP)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	if err != nil {
 		return SendResult{}, err
 	}
-	if err := m.smtpSend(ctx, mb, password, mb.Email, rcpt, data); err != nil {
+	if err := m.smtpSend(ctx, user, mb, password, mb.Email, rcpt, data); err != nil {
 		if errors.Is(err, ErrAuthFailed) {
 			m.setAuthFailed(user, mb)
 		}

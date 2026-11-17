@@ -94,6 +94,7 @@ var mailStatus = map[string]int{
 	"mail_too_large": http.StatusRequestEntityTooLarge, "mail_not_found": http.StatusNotFound, "mail_folder_exists": http.StatusConflict,
 	"mail_send_failed": http.StatusBadGateway, "mail_invalid": http.StatusBadRequest, "mail_no_password": http.StatusConflict,
 	"mail_settings_unreadable": http.StatusServiceUnavailable, "mail_password_required": http.StatusBadRequest,
+	"mail_rate_limited": http.StatusTooManyRequests,
 }
 
 // writeMailError answers with the code of an error. Only the refusal of
@@ -112,7 +113,14 @@ func writeMailError(w http.ResponseWriter, err error) {
 		"mail_too_large": "too large", "mail_not_found": "not found", "mail_folder_exists": "the folder exists already",
 		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the T-Mail settings could not be read from /config",
 		"mail_password_required": "enter the password again for another host",
+		"mail_rate_limited":      "too many checks of the settings; try again in a minute",
 	}[code]
+	if errors.Is(err, tmail.ErrConfined) {
+		message = "accounts of the role user may only use mail servers on the internet, not in the home network"
+	}
+	if code == "mail_rate_limited" {
+		w.Header().Set("Retry-After", "60")
+	}
 	if code == "mail_send_failed" || code == "mail_invalid" {
 		message = err.Error()
 	}

@@ -526,3 +526,36 @@ func TestMailProviders(t *testing.T) {
 		t.Fatalf("list: %s", body)
 	}
 }
+
+// Accounts of the role user only reach mail servers on the internet; the
+// check of the settings is limited per account.
+func TestMailUserConfinedAndCheckLimit(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	bob := ts.guest("bob")
+	ts.grantMail("bob")
+	id := ts.addMailbox(bob, srv)
+	res, body := ts.do(bob, "GET", "/api/v1/mail/accounts/"+id+"/folders", nil)
+	if res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "mail_host_forbidden" || !strings.Contains(string(body), "role user") {
+		t.Fatalf("user to the home network: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.do(bob, "POST", "/api/v1/mail/accounts/test", mailInput(srv, tmailtest.Password))
+	if res.StatusCode != 200 || strings.Count(string(body), `"code":"mail_host_forbidden"`) != 2 {
+		t.Fatalf("check: %d %s", res.StatusCode, body)
+	}
+	if srv.IMAPConns.Load() != 0 {
+		t.Fatal("bob reached the server")
+	}
+	for i := 1; i < tmail.CheckLimit; i++ {
+		ts.do(bob, "POST", "/api/v1/mail/accounts/test", mailInput(srv, tmailtest.Password))
+	}
+	res, body = ts.do(bob, "POST", "/api/v1/mail/accounts/test", mailInput(srv, tmailtest.Password))
+	if res.StatusCode != http.StatusTooManyRequests || errorCode(t, body) != "mail_rate_limited" || res.Header.Get("Retry-After") == "" {
+		t.Fatalf("check %d: %d %s", tmail.CheckLimit+1, res.StatusCode, body)
+	}
+	// The owner keeps reaching the server in the home network.
+	ts.grantMail("alex")
+	res, body = ts.request("POST", "/api/v1/mail/accounts/test", mailInput(srv, tmailtest.Password))
+	if res.StatusCode != 200 || strings.Count(string(body), `"ok":true`) != 2 {
+		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+}

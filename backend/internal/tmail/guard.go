@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
 )
 
 // Where titand may connect for a mailbox (docs/TMAIL.md "Ziele"): any host
@@ -74,16 +76,44 @@ func (m *Manager) checkTarget(target netip.AddrPort) error {
 	return CheckTarget(target, own(), m.OwnPorts)
 }
 
-// dial opens a TCP connection to a server of a mailbox, checked at the
-// moment of connecting.
-func (m *Manager) dial(ctx context.Context, s Server) (net.Conn, error) {
+// ErrConfined: accounts of the role "user" reach only mail servers on the
+// internet (owner 17.11.2026, as for their own notification channels):
+// no home network, no Tailscale/CGNAT, no private or reserved ranges.
+// Owners and administrators may use a mail server in the home network.
+var ErrConfined = fmt.Errorf("%w: accounts of the role user may only use mail servers on the internet, not in the home network", ErrHostForbidden)
+
+// confined tells whether an account reaches only public addresses: every
+// account that is not an owner or administrator (also an unknown one).
+func (m *Manager) confined(user string) bool {
+	account, ok := m.lookup(user)
+	return !ok || !account.Admin
+}
+
+// CheckTargetFor is CheckTarget for an account; confined accounts reach
+// public addresses only.
+func CheckTargetFor(target netip.AddrPort, own []netip.Addr, ports []int, confined bool) error {
+	if confined && !netguard.Public(target.Addr()) {
+		return ErrConfined
+	}
+	return CheckTarget(target, own, ports)
+}
+
+// dial opens a TCP connection to a server of a mailbox of an account,
+// checked at the moment of connecting, after DNS.
+func (m *Manager) dial(ctx context.Context, user string, s Server) (net.Conn, error) {
 	if !validHost(s.Host) || s.Port < 1 || s.Port > 65535 {
 		return nil, ErrInvalid
 	}
+	confined := m.confined(user)
 	dialer := net.Dialer{Timeout: connectTimeout, ControlContext: func(_ context.Context, _, address string, _ syscall.RawConn) error {
 		target, err := netip.ParseAddrPort(address)
 		if err != nil {
 			return errForbiddenTarget
+		}
+		// The role is checked before the hook of the tests, so that
+		// tests reach their servers on loopback only as administrators.
+		if confined && !netguard.Public(target.Addr()) {
+			return ErrConfined
 		}
 		return m.checkTarget(target)
 	}}

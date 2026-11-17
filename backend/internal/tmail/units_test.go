@@ -1,6 +1,7 @@
 package tmail
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -368,5 +369,103 @@ func TestSignatureDefaultForms(t *testing.T) {
 	out, _ := json.Marshal(e.m.Settings("alex"))
 	if !strings.Contains(string(out), `"default":["`+id+`"]`) {
 		t.Fatalf("written as: %s", out)
+	}
+}
+
+// Accounts of the role user reach only mail servers on the internet;
+// owners and administrators also the home network (owner 17.11.2026).
+func TestConfinedTargets(t *testing.T) {
+	own := []netip.Addr{netip.MustParseAddr("192.168.1.10")}
+	for _, target := range []string{"192.168.1.20:993", "10.0.0.5:143", "172.16.3.4:465", "100.100.1.2:993", "[fd00::5]:993", "127.0.0.1:993", "169.254.1.1:993"} {
+		if err := CheckTargetFor(netip.MustParseAddrPort(target), own, nil, true); !errors.Is(err, ErrConfined) && !errors.Is(err, ErrHostForbidden) {
+			t.Errorf("user reached %s", target)
+		}
+	}
+	for _, target := range []string{"192.168.1.20:993", "10.0.0.5:143", "[fd00::5]:993"} {
+		if err := CheckTargetFor(netip.MustParseAddrPort(target), own, nil, false); err != nil {
+			t.Errorf("administrator refused %s: %v", target, err)
+		}
+	}
+	for _, target := range []string{"8.8.8.8:993", "[2a00:1450::1]:465"} {
+		if err := CheckTargetFor(netip.MustParseAddrPort(target), own, nil, true); err != nil {
+			t.Errorf("user refused %s: %v", target, err)
+		}
+	}
+
+	// Through the dialer: the test servers are on loopback, which only the
+	// administrator alex reaches (the hook of the tests stands behind the
+	// check of the role).
+	e := newEnv(t)
+	e.accounts["bob"] = Account{Name: "bob", Created: time.Now().Add(-time.Hour)}
+	if err := e.m.SetAllowed("bob", true); err != nil {
+		t.Fatal(err)
+	}
+	in := e.input(testPassword)
+	in.Notify = true
+	view, err := e.m.AddMailbox("bob", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Folders(t.Context(), "bob", view.ID); !errors.Is(err, ErrConfined) || Code(err) != "mail_host_forbidden" {
+		t.Fatalf("user to the home network: %v", err)
+	}
+	if _, err := e.m.Send(t.Context(), "bob", view.ID, Outgoing{To: []Address{{Addr: "x@example.net"}}, Text: "x"}); !errors.Is(err, ErrConfined) {
+		t.Fatalf("user sends to the home network: %v", err)
+	}
+	res, err := e.m.CheckSettings(t.Context(), "bob", "", in)
+	if err != nil || res.IMAP.Code != "mail_host_forbidden" || res.SMTP.Code != "mail_host_forbidden" {
+		t.Fatalf("check: %+v %v", res, err)
+	}
+	if n := e.srv.IMAPConns.Load(); n != 0 || len(e.srv.Sent()) != 0 {
+		t.Fatalf("a user's connection reached the home network: %d", n)
+	}
+	// The stored mailbox stays, its connection is refused.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go e.m.Run(ctx)
+	waitFor(t, "refused watcher", func() bool {
+		st := e.m.Mailboxes("bob")[0].Status
+		return st.State == StateUnreachable && st.Code == "mail_host_forbidden"
+	})
+	if len(e.m.Mailboxes("bob")) != 1 || e.srv.IMAPConns.Load() != 0 {
+		t.Fatal("mailbox removed or reached")
+	}
+	// The administrator reaches the same server.
+	if _, err := e.m.CheckSettings(t.Context(), "alex", "", e.input(testPassword)); err != nil {
+		t.Fatal(err)
+	}
+	if e.srv.IMAPConns.Load() == 0 {
+		t.Fatal("administrator did not reach the home network")
+	}
+}
+
+// The causes of a failed check are not told apart for confined accounts.
+func TestVagueCodes(t *testing.T) {
+	for _, err := range []error{ErrTimeout, ErrTLS, ErrUnreachable, fmt.Errorf("%w: connection refused", ErrUnreachable), errors.New("unexpected greeting")} {
+		if got := vagueCode(err); got != "mail_unreachable" {
+			t.Errorf("%v: %s", err, got)
+		}
+	}
+	if vagueCode(ErrAuthFailed) != "mail_auth_failed" || vagueCode(ErrConfined) != "mail_host_forbidden" {
+		t.Error("login or role told apart")
+	}
+}
+
+func TestCheckRateLimit(t *testing.T) {
+	e := newEnv(t)
+	now := time.Now()
+	e.m.now = func() time.Time { return now }
+	in := e.input(testPassword)
+	for i := range CheckLimit {
+		if _, err := e.m.CheckSettings(t.Context(), "alex", "", in); err != nil {
+			t.Fatalf("check %d: %v", i+1, err)
+		}
+	}
+	if _, err := e.m.CheckSettings(t.Context(), "alex", "", in); !errors.Is(err, ErrRateLimited) || Code(err) != "mail_rate_limited" {
+		t.Fatalf("check %d: %v", CheckLimit+1, err)
+	}
+	now = now.Add(61 * time.Second)
+	if _, err := e.m.CheckSettings(t.Context(), "alex", "", in); err != nil {
+		t.Fatalf("after a minute: %v", err)
 	}
 }

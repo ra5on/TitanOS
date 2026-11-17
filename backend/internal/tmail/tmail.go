@@ -231,6 +231,7 @@ type Manager struct {
 	events   hub
 	contacts contactBook
 	notices  noticeState
+	checks   checkLimiter
 	ctx      contextHolder
 }
 
