@@ -126,8 +126,8 @@
 	<p class="live-line" class:quiet={!!live.content && !live.step}>
 		<!-- 1.01 (owner 16 Nov 2026): always the same three dots, one size,
 		     one pace (BusyFigure); they are never made anew and run on while
-		     the word beside them changes. -->
-		<BusyFigure kind={live.content && !live.step ? 'write' : kind} size={26} {calm} />
+		     the word beside them changes. Their size is --ag-dot-size (1.05). -->
+		<BusyFigure kind={live.content && !live.step ? 'write' : kind} {calm} />
 		{#if live.step}
 			<!-- A new text fades in, as the word does; the figure is not keyed. -->
 			{#key sweepText}<span class="sweep">{sweepText}</span>{/key}

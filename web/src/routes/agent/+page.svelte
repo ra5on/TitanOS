@@ -36,7 +36,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { agentProfilePath, api } from '#lib/api.ts';
 	import { apiErrorText, i18n } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, modelShown, tokens, type ChatInfo } from '#lib/agent.ts';
+	import { DOT_SIZES, levelLabel, modelShown, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
@@ -304,6 +304,7 @@
 	style:--agent-head={ag.phone && headH ? `${headH}px` : null}
 	style:--ag-dots={ag.look.dotColor || null}
 	style:--ag-busy-text={ag.look.textColor || null}
+	style:--ag-dot-size="{DOT_SIZES[ag.look.dotSize]}px"
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 

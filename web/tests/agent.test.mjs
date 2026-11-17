@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
 	activeSchedules,
+	DOT_SIZES,
 	areaMode,
 	blocks,
 	groupChats,
@@ -290,4 +291,17 @@ test('"Geplant" counts only active tasks (owner, 17 Nov 2026)', () => {
 		read('lib/components/agent/pages/HomePage.svelte'),
 		/count: activeSchedules\(planned\)/,
 	);
+});
+
+test('the size of the working dots: small, medium or large, medium by default (owner, 17 Nov 2026)', () => {
+	// "Gut wäre, wenn ich die Größe der Punkte anpassen könnte … die sind für
+	// mich viel zu groß": smaller by default than the 26 px before.
+	assert.deepEqual(DOT_SIZES, { s: 14, m: 18, l: 26 });
+	assert.equal(sanitizeLook({}).dotSize, 'm');
+	assert.equal(sanitizeLook(null).dotSize, 'm');
+	for (const z of ['s', 'm', 'l']) assert.equal(sanitizeLook({ dotSize: z }).dotSize, z);
+	for (const bad of ['xl', 'M', 26, '', null, {}])
+		assert.equal(sanitizeLook({ dotSize: bad }).dotSize, 'm', String(bad));
+	// Kept for the account like the colours, as a flat value.
+	assert.equal(accountLook(sanitizeLook({ dotSize: 's' })).dotSize, 's');
 });

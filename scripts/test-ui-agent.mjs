@@ -933,6 +933,29 @@ async function plan55() {
     );
     for (const b of await dotsPick.locator(".sw").all())
       assert.ok((await b.boundingBox()).height >= 44, "44 px colour buttons");
+    // 1.05 (owner 17 Nov 2026): the size of the dots, with the preview.
+    const sizePick = page.getByRole("radiogroup", { name: "Größe der Punkte" });
+    const previewFig = preview.locator(".fig");
+    const figWidth = async () => (await previewFig.boundingBox()).width;
+    await page.waitForTimeout(400);
+    assert.ok(Math.abs((await figWidth()) - 18) < 1, "medium by default: 18 px");
+    for (const [label, px] of [
+      ["Groß", 26],
+      ["Klein", 14],
+      ["Mittel", 18],
+    ]) {
+      await sizePick.locator("label", { hasText: label }).click();
+      await page.waitForTimeout(450);
+      const w = await figWidth();
+      assert.ok(Math.abs(w - px) < 1, `${label}: the preview is ${px} px (${w})`);
+      const dot = (await previewFig.locator("i").first().boundingBox()).width;
+      assert.ok(
+        Math.abs(dot - px * 0.24) < 0.6,
+        `${label}: the dots grow with the figure (${dot})`,
+      );
+    }
+    for (const b of await sizePick.locator("label").all())
+      assert.ok((await b.boundingBox()).height >= 44, "44 px size buttons");
     await noOverflow(page, "colours on the phone");
     await page.screenshot({ path: `${out}/101-colours-phone.png` });
     // One way back: the button in the head, no second link in the page.
@@ -3126,9 +3149,11 @@ try {
     // It grows in for a third of a second; measured once it stands.
     await page.waitForTimeout(600);
     const box = await fig.boundingBox();
+    // 1.05 (owner 17 Nov 2026: "die sind für mich viel zu groß"): 18 px
+    // by default ("Mittel"), the dots a quarter of it.
     assert.ok(
-      Math.abs(box.width - 26) < 1 && Math.abs(box.height - 26) < 1,
-      `${name}: the figure is 26 px (${box.width}×${box.height})`,
+      Math.abs(box.width - 18) < 1 && Math.abs(box.height - 18) < 1,
+      `${name}: the figure is 18 px (${box.width}×${box.height})`,
     );
     const places = () =>
       fig

@@ -723,7 +723,15 @@ export type Look = {
 	dotColor: string;
 	/** Colour of the text beside the dots, "#rrggbb"; empty: the theme's grey. */
 	textColor: string;
+	/** Size of the working dots' figure (owner 17 Nov 2026: "Größe der
+	 *  Punkte anpassen … die sind für mich viel zu groß"); see DOT_SIZES. */
+	dotSize: DotSize;
 };
+
+export type DotSize = 's' | 'm' | 'l';
+/** The width of the working figure in px per size; the dots grow with it.
+ *  "m" is the default since 1.05 (before, the figure was always 26 px). */
+export const DOT_SIZES: Record<DotSize, number> = { s: 14, m: 18, l: 26 };
 
 /** Settings that belong to the device, not the account. */
 export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
@@ -749,6 +757,7 @@ export const defaultLook = (): Look => ({
 	mic: 'tap',
 	dotColor: '',
 	textColor: '',
+	dotSize: 'm',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -783,6 +792,7 @@ export function sanitizeLook(v: unknown): Look {
 		mic: pick(o.mic, ['tap', 'hold'], d.mic),
 		dotColor: color(o.dotColor),
 		textColor: color(o.textColor),
+		dotSize: pick(o.dotSize, ['s', 'm', 'l'], d.dotSize),
 	};
 }
 
