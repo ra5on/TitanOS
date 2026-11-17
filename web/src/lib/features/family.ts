@@ -121,15 +121,6 @@ export function quotaPercent(used: number, quota: number): number {
 	return Math.max(0, Math.min(100, Math.round((used / quota) * 100)));
 }
 
-/** The first steps of a skill, for the question before installing. */
-export function stepsPreview(steps: string, lines = 3): string[] {
-	return steps
-		.split('\n')
-		.map((l) => l.trim())
-		.filter(Boolean)
-		.slice(0, lines);
-}
-
 /** A code typed by a person: upper case, groups of three. */
 export function formatCode(raw: string): string {
 	const c = raw

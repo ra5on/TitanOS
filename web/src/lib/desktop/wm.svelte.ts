@@ -1,6 +1,6 @@
 // PLAN 61: the windows of the desktop and the desktop's own settings.
 import { untrack } from 'svelte';
-import { api } from '../api.ts';
+import { api, apiFetch } from '../api.ts';
 import { apiErrorText, t } from '../i18n/index.svelte.ts';
 import { showToast } from '../toast.svelte.ts';
 import { inWindow } from './frame.ts';
@@ -195,9 +195,19 @@ function channel(): BroadcastChannel | null {
 /** Listens for the settings other tabs save (called when the desktop loads). */
 export function listenForPrefs() {
 	channel();
+	if (!flushListening && typeof window !== 'undefined') {
+		flushListening = true;
+		window.addEventListener('pagehide', flushPrefs);
+	}
 }
+let flushListening = false;
 
 let savePrefsTimer: ReturnType<typeof setTimeout> | undefined;
+// Durchsicht 102 (D102-42): a change still waiting for its timer when the
+// page goes (a reload within 1.5 s) is sent on pagehide, and other tabs get
+// a value only once the NAS has kept it.
+let prefsWaiting = false;
+let prefsRound = 0;
 /** Saves the desktop's settings on the NAS, a moment after the last change. */
 export function savePrefs(change?: (p: DesktopPrefs) => void) {
 	if (change) change(desktop.prefs);
@@ -209,16 +219,45 @@ export function savePrefs(change?: (p: DesktopPrefs) => void) {
 	// timer runs (the phone's home after Settings) must not read old values.
 	session.desktop = $state.snapshot(desktop.prefs) as unknown as Record<string, unknown>;
 	clearTimeout(savePrefsTimer);
+	prefsWaiting = true;
 	savePrefsTimer = setTimeout(() => {
+		prefsWaiting = false;
 		const value = $state.snapshot(desktop.prefs);
 		session.desktop = value as unknown as Record<string, unknown>;
-		channel()?.postMessage({ user: session.data?.user?.name ?? '', prefs: value });
-		api.put('/preferences/desktop', value).catch((err) => {
-			// Only in this page's memory now: the next change sends all of it
-			// again. Said in a short notice (1.03), not kept quiet.
-			showToast(t('desktop.toast.prefs', { reason: apiErrorText(err) }));
-		});
+		const round = ++prefsRound;
+		api.put('/preferences/desktop', value).then(
+			() => {
+				// A newer save that went out meanwhile tells the tabs itself.
+				if (round !== prefsRound) return;
+				channel()?.postMessage({ user: session.data?.user?.name ?? '', prefs: value });
+			},
+			(err) => {
+				// Only in this page's memory now: the next change sends all of it
+				// again. Said in a short notice (1.03), not kept quiet.
+				showToast(t('desktop.toast.prefs', { reason: apiErrorText(err) }));
+			},
+		);
 	}, 1500);
+}
+
+/** Sends a change still waiting for its timer while the page goes away. */
+export function flushPrefs() {
+	if (!prefsWaiting) return;
+	clearTimeout(savePrefsTimer);
+	prefsWaiting = false;
+	const value = $state.snapshot(desktop.prefs);
+	// keepalive: the request outlives the page that is being reloaded or closed.
+	void apiFetch('/preferences/desktop', {
+		method: 'PUT',
+		body: JSON.stringify(value),
+		headers: { 'Content-Type': 'application/json' },
+		keepalive: true,
+	}).then(
+		(res) => {
+			if (res.ok) channel()?.postMessage({ user: session.data?.user?.name ?? '', prefs: value });
+		},
+		() => {},
+	);
 }
 
 export function focus(id: string) {

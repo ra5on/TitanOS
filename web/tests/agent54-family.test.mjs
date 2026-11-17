@@ -7,7 +7,6 @@ import {
 	quotaEdited,
 	quotaField,
 	quotaPercent,
-	stepsPreview,
 } from '../src/lib/features/family.ts';
 
 test('pairing codes are typed in groups of three', () => {
@@ -32,10 +31,6 @@ test('the buddy quota is typed and shown in the same GB (A-33)', () => {
 	assert.equal(quotaField(old), 537);
 	assert.equal(quotaEdited(quotaField(old), old), old);
 	assert.equal(quotaEdited(600, old), 600e9);
-});
-
-test('steps preview keeps the first lines', () => {
-	assert.deepEqual(stepsPreview('1. a\n\n2. b\n3. c\n4. d', 2), ['1. a', '2. b']);
 });
 
 test('family texts have the same keys in German and English', () => {

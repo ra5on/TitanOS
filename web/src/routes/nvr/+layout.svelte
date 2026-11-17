@@ -7,7 +7,7 @@
 	import { page } from '$app/state';
 	import { api } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { nvr, nvrAdmin, refreshNvr, watchNvr } from '#lib/nvr/nvr.svelte.ts';
 	import StateBanner from '#lib/nvr/StateBanner.svelte';
 	import Setup from './Setup.svelte';
@@ -41,6 +41,7 @@
 		!!status?.enabled && (admin ? !status.privacyNoticeDismissed : !seenHere),
 	);
 	let privacyBusy = $state(false);
+	let privacyError = $state('');
 	async function dismissPrivacy() {
 		if (!admin) {
 			seenHere = true;
@@ -52,11 +53,14 @@
 			return;
 		}
 		privacyBusy = true;
+		privacyError = '';
 		try {
 			await api.put('/nvr/settings', { privacyNoticeDismissed: true });
 			await refreshNvr();
-		} catch {
-			// The notice stays; the settings page shows why saving fails.
+		} catch (err) {
+			// The notice stays and says why, right at its button (Durchsicht
+			// 102, D102-43: it stayed without a word).
+			privacyError = t('nvr.privacy.failed', { reason: apiErrorText(err) });
 		} finally {
 			privacyBusy = false;
 		}
@@ -86,6 +90,7 @@
 				<button type="button" class="btn" disabled={privacyBusy} onclick={dismissPrivacy}
 					>{t('nvr.privacy.dismiss')}</button
 				>
+				{#if privacyError}<p class="notice-error privacy-error" role="alert">{privacyError}</p>{/if}
 			</div>
 		{/if}
 		{#if path !== '/nvr/diagnosis'}<StateBanner compact={live} />{/if}
@@ -113,6 +118,10 @@
 		border-radius: 10px;
 		background: var(--surface);
 		font-size: var(--text-base);
+	}
+	.privacy-error {
+		flex-basis: 100%;
+		margin: 0;
 	}
 	.privacy div {
 		display: flex;

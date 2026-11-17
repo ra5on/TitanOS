@@ -388,8 +388,9 @@ try {
     const acme = { value: acmeData("http-01") };
     await routes(ctx, fw, acme);
 
-    // The overview lists the firewall under "Netzwerk" (PLAN 61), A–Z and
-    // with the "neu" badge.
+    // The overview lists the firewall with the security settings (since the
+    // areas of PLAN 78/86; before under "Netzwerk", A–Z) and with the "neu"
+    // badge; the network area keeps DDNS and Let's Encrypt.
     await page.goto(base + "/settings");
     await nav(page).locator("a.srow").first().waitFor();
     const group = nav(page).locator(".sgroup-title", { hasText: "Netzwerk" });
@@ -398,21 +399,27 @@ try {
       path: `${out}/settings-overview-desktop.png`,
       fullPage: true,
     });
-    const hrefs = await nav(page)
-      .locator("a.srow")
-      .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
-    const network = hrefs.slice(
-      hrefs.indexOf("/settings/ddns"),
-      hrefs.indexOf("/settings/wireguard") + 1,
-    );
-    assert.deepEqual(network, [
-      "/settings/ddns",
-      "/settings/firewall",
-      "/settings/proxy",
-      "/settings/letsencrypt",
+    const byGroup = await nav(page)
+      .locator("section.sgroup")
+      .evaluateAll((sections) =>
+        Object.fromEntries(
+          sections.map((s) => [
+            s.querySelector(".sgroup-title")?.textContent.trim(),
+            [...s.querySelectorAll("a.srow")].map((a) => a.getAttribute("href")),
+          ]),
+        ),
+      );
+    assert.deepEqual(byGroup["Netzwerk und Fernzugriff"], [
       "/settings/network",
       "/settings/wireguard",
+      "/settings/ddns",
+      "/settings/letsencrypt",
+      "/settings/proxy",
     ]);
+    assert.ok(
+      byGroup["Sicherheit und Konten"].includes("/settings/firewall"),
+      "the firewall stands with the security settings",
+    );
     for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(
         await nav(page)

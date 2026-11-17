@@ -52,6 +52,7 @@
 	});
 	let working = $state(false);
 	let error = $state('');
+	let errorCode = $state('');
 	let tab = $state<'general' | 'access' | 'options'>('general');
 	const tabs = ['general', 'access', 'options'] as const;
 	const initial = JSON.stringify(untrack(() => $state.snapshot(draft)));
@@ -142,6 +143,8 @@
 		invalid_nfs_client: 'general',
 		unknown_user: 'access',
 		invalid_access: 'access',
+		// The guard locked the share; saving would give write access again.
+		share_guard_locked: 'access',
 	};
 
 	function setAccess(user: string, level: '' | AccessLevel) {
@@ -180,6 +183,7 @@
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
 			error = errorText(code);
+			errorCode = code;
 			// Out-of-range values are the quota (general) or the SMB options.
 			const where =
 				ERROR_TABS[code] ??
@@ -391,7 +395,10 @@
 		{:else if tab !== 'general'}<p class="muted">{t('shares.smbOptions')}</p>
 		{/if}
 
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		{#if error}<p class="notice-error" role="alert">
+				{error}{#if errorCode === 'share_guard_locked'}
+					{t('shares.guardLockedHint')}{/if}
+			</p>{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={requestClose} disabled={working}
 				>{t('common.cancel')}</button

@@ -19,7 +19,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import LxcForm from './LxcForm.svelte';
-	import { lxcJobText } from '#lib/job-code.ts';
+	import { lxcCreateFailed, lxcJobText } from '#lib/job-code.ts';
 
 	let list = $state<LXCList | null>(null);
 	let loadError = $state('');
@@ -298,7 +298,7 @@
 						</p>
 					{:else}
 						<div class="notice-error" role="alert">
-							<p>{t('lxc.failedHint')}</p>
+							{#if lxcCreateFailed(c.job)}<p>{t('lxc.failedHint')}</p>{/if}
 							{#if lxcJobText(c.job, jobText)}<pre class="mono">{lxcJobText(
 										c.job,
 										jobText,

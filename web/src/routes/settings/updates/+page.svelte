@@ -21,7 +21,7 @@
 		formatPercent,
 		osVersion,
 	} from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import Changelog from '#lib/update/Changelog.svelte';
 	import {
 		counts,
@@ -157,6 +157,9 @@
 	// Encrypted volumes, looked up when going back is asked for: a system
 	// before 0.31.0 cannot open them (they stay unmounted there).
 	let encrypted = $state<string[]>([]);
+	// Why the volumes could not be looked up: the warning then says that it
+	// does not know (Durchsicht 102, D102-44: it was left out without a word).
+	let encryptedUnknown = $state('');
 	const beforeEncryption = (target: string) => {
 		const [major, minor] = target.replace(/^v/, '').split('.').map(Number);
 		return Number.isInteger(major) && Number.isInteger(minor) && major === 0 && minor < 31;
@@ -164,10 +167,11 @@
 	$effect(() => {
 		if (asking !== 'rollback') return;
 		encrypted = [];
+		encryptedUnknown = '';
 		api
 			.get<{ volumes: { name: string; encryption?: unknown }[] }>('/storage')
 			.then((s) => (encrypted = s.volumes.filter((v) => v.encryption).map((v) => v.name)))
-			.catch(() => {});
+			.catch((err) => (encryptedUnknown = apiErrorText(err)));
 	});
 	let checked = $state(false);
 
@@ -1143,6 +1147,13 @@
 		{#if encrypted.length && beforeEncryption(other.version || '')}
 			<p class="notice-error" role="alert" data-testid="rollback-encrypted">
 				{t('update.rollbackEncrypted', { version: other.version, volumes: encrypted.join(', ') })}
+			</p>
+		{:else if encryptedUnknown && beforeEncryption(other.version || '')}
+			<p class="notice-warn" role="alert" data-testid="rollback-encrypted-unknown">
+				{t('update.rollbackEncryptedUnknown', {
+					version: other.version,
+					reason: encryptedUnknown,
+				})}
 			</p>
 		{/if}
 		<div class="dialog-actions">

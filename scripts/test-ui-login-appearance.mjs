@@ -307,7 +307,7 @@ try {
     // The two-factor step keeps the look.
     await page.getByLabel("Name").fill("alex");
     await page.getByLabel("Passwort").fill("secret-password");
-    await page.getByRole("button", { name: "Anmelden" }).click();
+    await page.getByRole("button", { name: "Anmelden", exact: true }).click();
     await page.getByLabel("Code").waitFor();
     await page.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
     // English falls back to the German texts.

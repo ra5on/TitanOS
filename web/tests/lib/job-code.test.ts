@@ -1,7 +1,7 @@
 // 1.03: known causes of Docker and LXC jobs in the page's language, and
 // the bell's texts for a kind it may not know.
 import { expect, test } from 'vitest';
-import { dockerJobOutput, jobCodeText, lxcJobText } from '#lib/job-code.ts';
+import { dockerJobOutput, jobCodeText, lxcCreateFailed, lxcJobText } from '#lib/job-code.ts';
 import { i18n, tOr } from '#lib/i18n/index.svelte.ts';
 import { noticeText } from '#lib/notifications.svelte.ts';
 
@@ -32,6 +32,19 @@ test('an interrupted LXC job names the way out instead of the English text', () 
 		'Creating did not finish because TitanOS stopped meanwhile. Remove the container and create it again.',
 	);
 	expect(lxcJobText({ text: 'download failed' }, lookup)).toBe('download failed');
+});
+
+test('1.04: a creation over its time and a failed removal of an LXC container say so', () => {
+	i18n.locale = 'de';
+	expect(lxcJobText({ text: 'lxc-create: timeout', code: 'timeout' }, lookup)).toMatch(
+		/^Abgebrochen: Das Herunterladen und Entpacken des Abbilds ist nicht innerhalb von 30 Minuten/,
+	);
+	const removal = { text: 'rm: busy', code: 'delete_failed' };
+	expect(lxcJobText(removal, lookup)).toMatch(/^Die Daten des Containers wurden nicht vollständig/);
+	// A failed removal is no failed creation: no hint to create it anew.
+	expect(lxcCreateFailed(removal)).toBe(false);
+	expect(lxcCreateFailed({ code: 'timeout' })).toBe(true);
+	expect(lxcCreateFailed({})).toBe(true);
 });
 
 test('the bell shows the texts of share_account_skipped and the NAS text of an unknown kind', () => {
