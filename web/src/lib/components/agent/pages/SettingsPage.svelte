@@ -13,6 +13,7 @@
 	import PushDevices from '#lib/components/PushDevices.svelte';
 	import InitiativeSettings from '../InitiativeSettings.svelte';
 	import FeaturesPanel from '../features/FeaturesPanel.svelte';
+	import PhotosSettings from '../PhotosSettings.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { DOT_SIZES, levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
@@ -26,6 +27,7 @@
 		'personality',
 		'initiative',
 		'features',
+		'photos',
 		'push',
 		'look',
 		'gestures',
@@ -65,6 +67,7 @@
 		personality: t('agent.init.personality'),
 		initiative: t('agent.set.initiative'),
 		features: t('agent.f.title'),
+		photos: t('agent.photos.title'),
 		push: t('agent.set.push'),
 		look: t('agent.set.lookTitle'),
 		gestures: t('agent.set.gestures'),
@@ -112,6 +115,12 @@
 				title={t('agent.f.title')}
 				desc={t('agent.f.sub')}
 				href={href('features')}
+			/>
+			<SettingRow
+				icon="image"
+				title={t('agent.photos.title')}
+				desc={t('agent.photos.desc')}
+				href={href('photos')}
 			/>
 		</SettingGroup>
 		<SettingGroup title={t('agent.set.groupDevice')}>
@@ -245,6 +254,8 @@
 				<InitiativeSettings part="mind" onrestart={onknow} />
 			{:else if part === 'features'}
 				<FeaturesPanel admin={status.admin} {calm} />
+			{:else if part === 'photos'}
+				<PhotosSettings />
 			{:else if part === 'push'}
 				<p class="pushhint">{t('agent.set.pushHint')}</p>
 				<PushDevices personal={!status.admin} />

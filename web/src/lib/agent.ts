@@ -369,6 +369,7 @@ export const AREAS = [
 	'accounts',
 	'plugins',
 	'home',
+	'photos',
 	'web',
 	'code',
 ] as const;

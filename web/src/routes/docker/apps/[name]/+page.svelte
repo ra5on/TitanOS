@@ -9,9 +9,16 @@
 	import AppHead from './AppHead.svelte';
 	import EditorDialogs from './EditorDialogs.svelte';
 	import ServiceFields from './ServiceFields.svelte';
+	import ImmichGuide from '#lib/components/ImmichGuide.svelte';
 
 	// State and actions live in app-editor.svelte.ts.
 	const ed = new AppEditor();
+	// 1.07: the guide "Fotos vom iPhone sichern" on the page of Immich.
+	const immich = $derived(
+		(ed.status?.containers ?? []).some(
+			(c) => c.app === ed.name && c.image.includes('immich-server'),
+		),
+	);
 </script>
 
 <PageHead title={t('editor.title', { name: ed.name })}>
@@ -19,6 +26,7 @@
 </PageHead>
 
 <AppHead {ed} />
+{#if immich}<div class="guide"><ImmichGuide installHref="" /></div>{/if}
 
 {#if ed.loadError}<div class="notice-error row-note" role="alert">
 		<span>{ed.loadError}</span><button
@@ -129,6 +137,9 @@
 <EditorDialogs {ed} />
 
 <style>
+	.guide {
+		margin: var(--space-3) 0;
+	}
 	.segments {
 		display: inline-flex;
 		align-self: flex-start;

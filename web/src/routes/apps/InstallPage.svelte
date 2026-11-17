@@ -17,6 +17,7 @@
 	import InstallFields from './InstallFields.svelte';
 	import { Installer } from './install-form.svelte.ts';
 	import InstallProgress from './InstallProgress.svelte';
+	import ImmichGuide from '#lib/components/ImmichGuide.svelte';
 
 	/** The app of the catalog; without it an own container is set up. */
 	let { source = '', id = '' }: { source?: string; id?: string } = $props();
@@ -33,6 +34,10 @@
 		{#if ins.phase === 'form' && ins.form}<ViewSwitch bind:advanced={ins.advanced} />{/if}
 	{/snippet}
 </PageHead>
+{#if source === 'titanos' && id === 'immich' && ins.phase === 'form'}
+	<!-- 1.07: what comes after installing Immich, for the iPhone. -->
+	<div class="immich-guide"><ImmichGuide installHref="" /></div>
+{/if}
 
 {#if ins.loadError}
 	<div class="notice-error" role="alert">{ins.loadError}</div>
@@ -197,6 +202,9 @@
 {/if}
 
 <style>
+	.immich-guide {
+		margin: 0 0 var(--space-3);
+	}
 	.form {
 		display: flex;
 		flex-direction: column;
