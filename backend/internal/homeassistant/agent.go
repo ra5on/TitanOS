@@ -89,11 +89,23 @@ type Release struct {
 }
 
 // agentOnlyDomains are kinds of entities that only the KI-Agent can be
-// given, to look at (1.09, owner 17 Nov 2026: "wieviele Automationen habe
-// ich" answered 0, because automations could not be released under
-// "Auswahl"). Calls there stay impossible (no Level); saving automations is
-// the tool ha_automation_save with its own right.
+// given (1.09, owner 17 Nov 2026: "wieviele Automationen habe ich" answered
+// 0, because automations could not be released under "Auswahl"; decision
+// of the same day: a row of their own, read, and switch on, off and
+// trigger after asking). MCP keeps its domains (Domains, Level).
 var agentOnlyDomains = []string{"automation"}
+
+// agentServices are the services the agent may call in its own domains.
+var agentServices = map[string][]string{"automation": {"turn_on", "turn_off", "toggle", "trigger"}}
+
+// CallLevel is Level for a call made with the context: the agent's own
+// release also allows the services of its own domains.
+func (m *Manager) CallLevel(ctx context.Context, domain, service string) (string, bool) {
+	if _, own := releaseOf(ctx, m.id); own && slices.Contains(agentOnlyDomains, domain) {
+		return LevelNormal, slices.Contains(agentServices[domain], service)
+	}
+	return Level(domain)
+}
 
 // AgentDomains are the domains the agent's release can list: those of MCP
 // and the agent's own.

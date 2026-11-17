@@ -658,7 +658,7 @@ func (m *Manager) NotifyServices(ctx context.Context) ([]string, error) {
 // Call calls a service for released entities. Every entity has to be
 // released and belong to the domain of the service.
 func (m *Manager) Call(ctx context.Context, domain, service string, entities []string, data map[string]any) ([]State, error) {
-	if _, ok := Level(domain); !ok || !ValidService(service) {
+	if _, ok := m.CallLevel(ctx, domain, service); !ok || !ValidService(service) {
 		return nil, ErrNotAllowed
 	}
 	if len(entities) == 0 || len(entities) > 50 {

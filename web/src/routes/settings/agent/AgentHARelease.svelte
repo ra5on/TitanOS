@@ -134,8 +134,13 @@
 	});
 	// Only domains this Home Assistant has devices of. With "Alles" also
 	// those TitanOS has no services for: they can only be looked at.
+	// Automations, scripts and scenes always have their row (1.09, owner
+	// 17 Nov 2026: "wieviele Automationen" found none, they had no row).
+	const always = ['automation', 'scene', 'script'];
 	const domainsShown = $derived([
-		...haDomains.filter((d) => perDomain[d] || haRelease?.domains?.includes(d)),
+		...haDomains.filter(
+			(d) => perDomain[d] || haRelease?.domains?.includes(d) || always.includes(d),
+		),
 		...(scope === 'all'
 			? Object.keys(perDomain)
 					.filter((d) => !haDomains.includes(d))
@@ -144,7 +149,6 @@
 	]);
 	// Domains without services worth calling (homeassistant.domainLevels).
 	const readOnly = new Set([
-		'automation',
 		'sensor',
 		'binary_sensor',
 		'weather',
@@ -185,13 +189,14 @@
 	const domainName = (d: string) => (named.has(d) ? t(`agent.haDomain.${d}` as MessageKey) : d);
 	const sees = (d: string) => !!haRelease?.all || !!haRelease?.domains?.includes(d);
 	const canSwitch = (d: string) => haDomains.includes(d) && !readOnly.has(d);
-	// Without a rule a kind follows "Geräte schalten" above; locks and alarm
-	// systems ask at least.
+	// Without a rule a kind follows "Geräte schalten" above; locks, alarm
+	// systems, automations, scripts and scenes ask at least (haAsksFirst).
+	const asksFirst = ['lock', 'alarm_control_panel', 'automation', 'script', 'scene'];
 	function switchMode(d: string): Mode {
 		const rule = haRules.find((r) => r.key.trim() === `domain:${d}`);
 		if (rule) return rule.mode;
 		const base = (modeOf(switching) || 'ask') as Mode;
-		return base === 'allow' && (d === 'lock' || d === 'alarm_control_panel') ? 'ask' : base;
+		return base === 'allow' && asksFirst.includes(d) ? 'ask' : base;
 	}
 	function setSwitch(d: string, mode: Mode) {
 		const rule = haRules.find((r) => r.key.trim() === `domain:${d}`);

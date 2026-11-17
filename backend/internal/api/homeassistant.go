@@ -337,7 +337,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 					result["released"] = released
 					switch {
 					case !released:
-						result["note"] = haDomainHidden(ha.OwnRelease(ctx), q.Domain, total)
+						result["hidden"], result["why"] = true, haDomainHidden(ha.OwnRelease(ctx), q.Domain, total)
 					case total == 0 && q.Area == "" && q.Search == "":
 						result["note"] = "None present: the domain " + q.Domain + " is released and Home Assistant has no entity of it."
 					}
@@ -392,7 +392,7 @@ func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
-				level, ok := homeassistant.Level(q.Domain)
+				level, ok := ha.CallLevel(ctx, q.Domain, q.Service)
 				if !ok || !homeassistant.ValidService(q.Service) {
 					return nil, homeassistant.ErrNotAllowed
 				}
