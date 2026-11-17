@@ -93,6 +93,9 @@ export type Message = {
 	externalImages: boolean;
 	attachments: Attachment[];
 	truncated: boolean;
+	/** The structure was too large to read (a digest): text is the
+	 *  beginning of the body as it came, without HTML or attachments. */
+	rawText?: boolean;
 };
 
 export type TestResult = {

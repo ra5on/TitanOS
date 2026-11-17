@@ -114,11 +114,15 @@ type partWriter struct {
 	w       http.ResponseWriter
 	headers func(h http.Header)
 	started bool
+	// kind names the limit of the writes (partWriteLimit), counted from
+	// the first byte.
+	kind string
 }
 
 func (p *partWriter) start() {
 	if !p.started {
 		p.started = true
+		writeLimit(p.w, p.kind)
 		p.headers(p.w.Header())
 		p.w.WriteHeader(http.StatusOK)
 	}
@@ -151,11 +155,23 @@ func (a tmailArea) heavy(w http.ResponseWriter, r *http.Request, bytes int64) (f
 	return release, true
 }
 
+// partWriteLimit bounds the writes of a download to the browser (tests
+// shorten it): a browser that stops reading would otherwise hold the
+// download's turn and its mailbox's connection until TCP gives up, since
+// titand's server has no write timeout.
+var partWriteLimit = map[string]time.Duration{"part": tmail.PartTimeout, "cid": tmail.PictureTimeout}
+
+// writeLimit sets the deadline of a download's writes; a writer that
+// cannot have one (none in titand) is left as it is.
+func writeLimit(w http.ResponseWriter, kind string) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(partWriteLimit[kind])) // see partWriteLimit
+}
+
 func (a tmailArea) handlePart(w http.ResponseWriter, r *http.Request) {
 	ctx, stop := a.holding(r)
 	defer stop()
 	q := r.URL.Query()
-	pw := &partWriter{w: w}
+	pw := &partWriter{w: w, kind: "part"}
 	err := a.mail.Part(ctx, currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("part"),
 		func(info tmail.PartInfo) io.Writer {
 			pw.headers = func(h http.Header) {
@@ -185,7 +201,7 @@ func (a tmailArea) handleCID(w http.ResponseWriter, r *http.Request) {
 	ctx, stop := a.holding(r)
 	defer stop()
 	q := r.URL.Query()
-	pw := &partWriter{w: w}
+	pw := &partWriter{w: w, kind: "cid"}
 	err := a.mail.CID(ctx, currentUser(r).Name, r.PathValue("id"), q.Get("folder"), queryUID(r, "uid"), q.Get("cid"),
 		func(info tmail.PartInfo) io.Writer {
 			pw.headers = func(h http.Header) {

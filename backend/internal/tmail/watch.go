@@ -183,6 +183,17 @@ func (m *Manager) runWatcher(ctx context.Context, w *watcher) {
 		if ctx.Err() != nil {
 			return
 		}
+		if errors.Is(err, errRoundTooLarge) {
+			// No lost connection to count: again after the shortest
+			// pause, with a smaller round; the pause does not grow.
+			slog.Info("T-Mail: new mail too large for one round, fewer at once", "account", w.user, "mailbox", w.id)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(m.backoffMin):
+			}
+			continue
+		}
 		if errors.Is(err, ErrAuthFailed) {
 			slog.Info("T-Mail: login refused, not tried again until the settings change", "account", w.user, "mailbox", w.id)
 			m.setStatus(w.user, w.id, StateAuthFailed, "mail_auth_failed")
@@ -240,12 +251,14 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 		err = work()
 		budget.set(budgetCommand)
 		if budget.tooLarge() {
-			m.tooLargeMail(user, mb.ID)
+			if m.tooLargeMail(user, mb.ID) {
+				return errRoundTooLarge
+			}
 			return ErrTooLarge
 		}
 		return err
 	}
-	// drain handles new mail in rounds of a hundred.
+	// drain handles new mail round by round.
 	drain := func() error {
 		for range 20 {
 			more, err := m.checkNew(c, user, mb)
@@ -265,7 +278,7 @@ func (m *Manager) idleSession(ctx context.Context, user string, mb Mailbox) erro
 		}
 		next := uint32(data.UIDNext)
 		if next == 0 {
-			all, err := c.UIDSearch(&imap.SearchCriteria{}, nil).Wait()
+			all, err := uidSearch(c, &imap.SearchCriteria{}, false)
 			if err != nil {
 				return err
 			}
@@ -342,27 +355,24 @@ func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) (more 
 	m.watch.mu.Lock()
 	b := m.watch.baseline[key(user, mb.ID)]
 	m.watch.mu.Unlock()
-	data, err := c.UIDSearch(&imap.SearchCriteria{UID: []imap.UIDSet{{imap.UIDRange{Start: imap.UID(max(b.next, 1)), Stop: 0}}}}, nil).Wait()
+	data, err := uidSearch(c, &imap.SearchCriteria{UID: []imap.UIDSet{{imap.UIDRange{Start: imap.UID(max(b.next, 1)), Stop: 0}}}}, false)
 	if err != nil {
 		return false, err
 	}
-	// At most twenty a round, one while a round was too large: a single
-	// mail whose head does not fit the budget is passed over, so that it
-	// cannot stop the messages for good.
-	batch := 20
-	if m.singleRound(user, mb.ID) {
-		batch = 1
-	}
+	// The round takes at most as many mails as the last rounds allowed;
+	// only a few header fields of each, cut at headPartial (head.go).
+	k := key(user, mb.ID)
+	batch := m.roundSize(k)
 	uids := uidsFrom(data.All, b.next, batch)
 	if len(uids) > 0 {
-		m.watch.mu.Lock()
-		m.watch.pending[key(user, mb.ID)] = uids[0]
-		m.watch.mu.Unlock()
-	}
-	if len(uids) > 0 {
-		msgs, err := collect(c.Fetch(uidSet(uids...), &imap.FetchOptions{UID: true, Envelope: true, Flags: true}))
+		m.roundBegin(k, uids[0], len(uids))
+		msgs, err := collect(c.Fetch(uidSet(uids...), &imap.FetchOptions{UID: true, Flags: true, BodySection: headSections(headSender, headRecipients)}))
 		if err != nil {
 			return false, err
+		}
+		for _, msg := range msgs {
+			msg.Envelope = headEnvelope(msg)
+			msg.BodySection = nil
 		}
 		slices.SortFunc(msgs, func(a, b *imapclient.FetchMessageBuffer) int { return int(int64(a.UID) - int64(b.UID)) })
 		rules := m.rulesOf(user, mb.ID)
@@ -387,15 +397,11 @@ func (m *Manager) checkNew(c *imapclient.Client, user string, mb Mailbox) (more 
 			}
 			m.notice(user, mb, len(told), from, last.Subject)
 		}
+		m.roundDone(k)
 	}
-	unread, err := c.UIDSearch(&imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen, imap.FlagDeleted}}, searchOptions(c)).Wait()
+	unread, err := uidSearch(c, &imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen, imap.FlagDeleted}}, true)
 	if err == nil {
 		m.setUnread(user, mb.ID, uidCount(unread.All))
-	}
-	if batch == 1 && len(uids) == 1 {
-		m.watch.mu.Lock()
-		delete(m.watch.single, key(user, mb.ID))
-		m.watch.mu.Unlock()
 	}
 	return len(uids) == batch, nil
 }
@@ -525,31 +531,84 @@ func (m *Manager) RoleChanged(user string) {
 	m.Sync(user)
 }
 
-// tooLargeMail is told when a step of the watcher was cut off: the next
-// rounds take one mail each; if that one mail is too large, it is passed
-// over (no message for it, it stays in the INBOX).
-func (m *Manager) tooLargeMail(user, id string) {
+// round is how the watcher takes the new mail of a mailbox: size mails
+// at once; a round that is too large halves it, roundGrow rounds in a row
+// that went through double it again, up to roundMax (third review of
+// 1.05: a sender with very large heads must not hold the messages up for
+// hours).
+type round struct {
+	size int
+	// good counts the rounds that went through at this size.
+	good int
+	// first and count describe the round under way (first 0: none).
+	first uint32
+	count int
+}
+
+const (
+	roundMax  = 20
+	roundGrow = 3
+)
+
+// errRoundTooLarge: a round of new mail was cut off for its budget. The
+// connection is lost, the server is not: the watcher connects again
+// after the shortest pause with a smaller round.
+var errRoundTooLarge = fmt.Errorf("%w: a round of new mail", ErrTooLarge)
+
+func (m *Manager) roundLocked(k string) *round {
+	m.watch.init()
+	r := m.watch.rounds[k]
+	if r == nil {
+		r = &round{size: roundMax}
+		m.watch.rounds[k] = r
+	}
+	return r
+}
+
+// roundSize is how many new mails the next round takes.
+func (m *Manager) roundSize(k string) int {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	return m.roundLocked(k).size
+}
+
+func (m *Manager) roundBegin(k string, first uint32, count int) {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	r := m.roundLocked(k)
+	r.first, r.count = first, count
+}
+
+// roundDone notes a round that went through.
+func (m *Manager) roundDone(k string) {
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	r := m.roundLocked(k)
+	r.first, r.count = 0, 0
+	if r.good++; r.good >= roundGrow && r.size < roundMax {
+		r.size, r.good = min(2*r.size, roundMax), 0
+	}
+}
+
+// tooLargeMail is told when a step of the watcher was cut off for its
+// budget; it tells whether a round of new mail was under way. That round
+// is halved; a single mail that is still too large is passed over (no
+// message for it, it stays in the INBOX).
+func (m *Manager) tooLargeMail(user, id string) bool {
 	k := key(user, id)
 	m.watch.mu.Lock()
 	defer m.watch.mu.Unlock()
-	m.watch.init()
-	if !m.watch.single[k] {
-		m.watch.single[k] = true
-		return
+	r := m.roundLocked(k)
+	if r.first == 0 {
+		return false
 	}
-	if uid, ok := m.watch.pending[k]; ok {
-		if b, ok := m.watch.baseline[k]; ok && uid+1 > b.next {
-			b.next = uid + 1
-			m.watch.baseline[k] = b
-		}
-		delete(m.watch.pending, k)
+	if n := min(r.size, r.count); n > 1 {
+		r.size = n / 2
+	} else if b, ok := m.watch.baseline[k]; ok && r.first+1 > b.next {
+		b.next = r.first + 1
+		m.watch.baseline[k] = b
+		slog.Info("T-Mail: a new mail too large to look at, passed over", "account", user, "mailbox", id, "uid", r.first)
 	}
-	delete(m.watch.single, k)
-}
-
-func (m *Manager) singleRound(user, id string) bool {
-	m.watch.mu.Lock()
-	defer m.watch.mu.Unlock()
-	m.watch.init()
-	return m.watch.single[key(user, id)]
+	r.good, r.first, r.count = 0, 0, 0
+	return true
 }

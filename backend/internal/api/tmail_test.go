@@ -673,3 +673,49 @@ func TestMailAttachFromPartsCountedAfterUnfolding(t *testing.T) {
 		t.Fatalf("101 parts by *: %d %s", res.StatusCode, body)
 	}
 }
+
+// 1.06: a browser that stops reading a download lets go of the mailbox's
+// connection after the write limit; until 1.05 titand wrote into it until
+// TCP gave up, and every other request to that mailbox waited.
+func TestMailStalledDownloadLetsGo(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	ts.grantMail("alex")
+	id := ts.addMailbox(ts.client, srv)
+	base := "/api/v1/mail/accounts/" + id
+	var mail strings.Builder
+	mail.WriteString("From: bob@example.net\r\nTo: alice@example.org\r\nSubject: Groß\r\nMIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nAnbei.\r\n" +
+		"--b\r\nContent-Type: application/octet-stream; name=big.bin\r\nContent-Disposition: attachment; filename=big.bin\r\n" +
+		"Content-Transfer-Encoding: base64\r\n\r\n")
+	line := strings.Repeat("QUFB", 19) + "\r\n" // 57 bytes a line
+	for range (48 << 20) / 57 {                 // 48 MiB, beyond every socket buffer
+		mail.WriteString(line)
+	}
+	mail.WriteString("--b--\r\n")
+	srv.Deliver("INBOX", mail.String())
+	partWriteLimit["part"] = time.Second
+	t.Cleanup(func() { partWriteLimit["part"] = tmail.PartTimeout })
+
+	// A browser that takes the head and then stops reading.
+	stalled, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(stalled, "GET", ts.url+base+"/part?folder=INBOX&uid=1&part=2", nil)
+	res, err := ts.client.Do(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("download: %v %v", res, err)
+	}
+	defer res.Body.Close()
+	// The same mailbox answers again once the write limit has passed.
+	ctx, stop := context.WithTimeout(t.Context(), 15*time.Second)
+	defer stop()
+	start := time.Now()
+	req, _ = http.NewRequestWithContext(ctx, "GET", ts.url+base+"/folders", nil)
+	folders, err := ts.client.Do(req)
+	if err != nil {
+		t.Fatalf("the mailbox did not answer while the download stalls: %v after %v", err, time.Since(start))
+	}
+	folders.Body.Close()
+	if folders.StatusCode != 200 {
+		t.Fatalf("folders: %d", folders.StatusCode)
+	}
+}

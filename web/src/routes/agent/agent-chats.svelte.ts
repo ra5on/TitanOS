@@ -20,6 +20,7 @@ import {
 	mergeEntries,
 	whereLine,
 	sanitizeLook,
+	LOOK_KEY,
 	type AgentEvent,
 	type Chat,
 	type ChatInfo,
@@ -34,7 +35,7 @@ import {
 } from '#lib/agent.ts';
 import type { ChatSheet } from './chat-sheets.ts';
 
-export const LOOK_KEY = 'titanos.agent.look';
+export { LOOK_KEY };
 // PLAN 68: the side bar can be folded away (per device).
 const FOLD_KEY = 'titanos.agent.side';
 

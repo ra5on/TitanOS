@@ -207,7 +207,16 @@ func markLink(n *html.Node, real string) {
 	real = stripInvisible(real)
 	mark := &html.Node{Type: html.ElementNode, DataAtom: atom.Span, Data: "span",
 		Attr: []html.Attribute{{Key: "style", Val: "font-size:14px !important;line-height:normal !important;color:#b00020 !important;background:#ffffff !important;" +
-			"font-weight:bold !important;display:inline !important;visibility:visible !important;opacity:1 !important;position:static !important"},
+			"font-weight:bold !important;display:inline !important;visibility:visible !important;opacity:1 !important;position:static !important;" +
+			// The sender's letter spacing, font (a symbol font of the
+			// device), indent, case and spacing are not inherited either
+			// (third review of 1.05).
+			"letter-spacing:normal !important;word-spacing:normal !important;font-family:sans-serif !important;text-indent:0 !important;" +
+			"text-transform:none !important;font-style:normal !important;text-decoration:none !important;white-space:normal !important;" +
+			"vertical-align:baseline !important;" +
+			// A <bdo dir="rtl"> or dir of the sender around the link does
+			// not mirror the warning (review of 1.06, C).
+			"direction:ltr !important;unicode-bidi:isolate !important"},
 			{Key: "data-tmail-target", Val: real}}}
 	mark.AppendChild(&html.Node{Type: html.TextNode, Data: " \u26a0 " + real})
 	if n.Parent != nil {

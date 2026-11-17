@@ -10,6 +10,7 @@ import (
 	"mime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -84,6 +85,10 @@ type Message struct {
 	ExternalImages bool         `json:"externalImages"`
 	Attachments    []Attachment `json:"attachments"`
 	Truncated      bool         `json:"truncated"`
+	// RawText: the structure of the mail was too large to read (a digest
+	// of hundreds of mails); Text is the beginning of its body as it
+	// came, without decoding, HTML or attachments.
+	RawText bool `json:"rawText,omitempty"`
 }
 
 func addresses(list []imap.Address) []Address {
@@ -214,7 +219,7 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		if _, err := selectFolder(c, s, q.Folder); err != nil {
 			return err
 		}
-		data, err := c.UIDSearch(searchCriteria(q), searchOptions(c)).Wait()
+		data, err := uidSearch(c, searchCriteria(q), true)
 		if err != nil {
 			return err
 		}
@@ -313,35 +318,118 @@ func fetchSections(c *imapclient.Client, b *budgetConn, uid uint32, parts []part
 				continue
 			}
 			k := sectionKey(section.Section.Part)
-			for i, p := range parts {
-				if sectionKey(p.path) != k {
-					continue
-				}
-				raise(b, section.Literal, limits[i])
-				got, err := io.ReadAll(io.LimitReader(section.Literal, limits[i]+1))
-				b.set(budgetCommand)
-				if err != nil {
-					_ = c.Close() // the rest of the answer is not read
+			at := slices.IndexFunc(parts, func(p partInfo) bool { return sectionKey(p.path) == k })
+			if at < 0 || data[k] != nil {
+				// Not asked for: read away within the budget of a command
+				// (go-imap waits until a literal is read).
+				if _, err := io.Copy(io.Discard, section.Literal); err != nil {
+					abandon(c, drainFetch(cmd, msg))
 					return nil, nil, err
 				}
-				if int64(len(got)) > limits[i] {
-					// More than asked for: the rest is not read.
-					_ = c.Close()
-					got = got[:limits[i]]
-					data[k], cut[k] = got, true
-					return data, cut, nil
-				}
-				data[k] = got
-				cut[k] = p.size > limits[i]
+				continue
 			}
+			raise(b, section.Literal, limits[at])
+			got, err := io.ReadAll(io.LimitReader(section.Literal, limits[at]+1))
+			b.set(budgetCommand)
+			if err != nil {
+				// The rest of the answer is not read.
+				abandon(c, drainFetch(cmd, msg))
+				return nil, nil, err
+			}
+			if int64(len(got)) > limits[at] {
+				// More than asked for: the rest is not read.
+				abandon(c, drainFetch(cmd, msg, section.Literal))
+				got = got[:limits[at]]
+				data[k], cut[k] = got, true
+				return data, cut, nil
+			}
+			data[k] = got
+			cut[k] = parts[at].size > limits[at]
 		}
 	}
 	return data, cut, cmd.Close()
 }
 
 // Read returns a mail to show and marks it as read. images lets pictures
-// from the internet load in its HTML.
+// from the internet load in its HTML. A mail whose structure is too large
+// to read is shown as the beginning of its raw body (readRaw).
 func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
+	msg, err := m.read(ctx, user, id, folder, uid, images)
+	if errors.Is(err, ErrTooLarge) {
+		return m.readRaw(ctx, user, id, folder, uid)
+	}
+	return msg, err
+}
+
+// rawTextLimit is how much of the body readRaw shows.
+const rawTextLimit = 1 << 20
+
+// readRaw shows a mail without its structure: a few header fields and the
+// beginning of its body as it came (third review of 1.05: digests with
+// hundreds of attached mails could not be opened at all).
+func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint32) (*Message, error) {
+	var out *Message
+	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
+		if _, err := selectFolder(c, s, folder); err != nil {
+			return err
+		}
+		sections := headSections(headSender, headRecipients, headReply, headReferences)
+		sections = append(sections, &imap.FetchItemBodySection{Specifier: imap.PartSpecifierText, Peek: true,
+			Partial: &imap.SectionPartial{Size: rawTextLimit}})
+		b, err := fetchOne(c, uid, &imap.FetchOptions{Flags: true, InternalDate: true, BodySection: sections})
+		if err != nil {
+			return err
+		}
+		e := headEnvelope(b)
+		msg := &Message{UID: uid, Folder: folder, Flags: flagsOf(b.Flags), Subject: clean(e.Subject, 1000), Date: e.Date,
+			To: addresses(e.To), Cc: addresses(e.Cc), Bcc: []Address{}, ReplyTo: addresses(e.ReplyTo),
+			Attachments: []Attachment{}, Truncated: true, RawText: true}
+		if from := addresses(e.From); len(from) > 0 {
+			msg.From = from[0]
+		}
+		if e.MessageID != "" {
+			msg.MessageID = clean(angle(e.MessageID), 998)
+		}
+		if len(e.InReplyTo) > 0 {
+			msg.InReplyTo = clean(angle(e.InReplyTo[0]), 998)
+		}
+		if msg.Date.IsZero() {
+			msg.Date = b.InternalDate
+		}
+		fields := headFieldsOf(b)
+		msg.References = references("References: " + fields["references"])
+		for _, section := range b.BodySection {
+			if section.Section != nil && section.Section.Specifier == imap.PartSpecifierText {
+				msg.Text = rawText(section.Bytes)
+			}
+		}
+		if !msg.Flags.Seen {
+			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}, nil).Close(); err == nil {
+				msg.Flags.Seen = true
+			}
+		}
+		out = msg
+		return nil
+	})
+	return out, err
+}
+
+// rawText makes a body as it came showable: valid UTF-8, lines ending in
+// "\n", no control or invisible characters but tabs.
+func rawText(raw []byte) string {
+	text := strings.ToValidUTF8(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\uFFFD")
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f || invisible(r) {
+			return -1
+		}
+		return r
+	}, text)
+}
+
+func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
 	var out *Message
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
@@ -481,24 +569,57 @@ type PartInfo struct {
 
 // Part streams one part of a mail, decoded, to w after head was told its
 // name and type. It is the same for attachments and embedded pictures.
+//
+// It takes a turn of the downloads (DownloadsPerAccount) and a command's
+// turn only until the part streams (third review of 1.05).
 func (m *Manager) Part(ctx context.Context, user, id, folder string, uid uint32, part string, head func(PartInfo) io.Writer) error {
 	path, ok := parsePart(part)
 	if !ok {
 		return ErrInvalid
 	}
-	return m.withIMAP(ctx, user, id, partTimeout, func(c *imapclient.Client, s *session) error {
-		info, err := partOf(c, s, folder, uid, part)
-		if err != nil {
-			return err
+	done, err := m.download(ctx, user)
+	if err != nil {
+		return err
+	}
+	defer done()
+	return m.withIMAP(ctx, user, id, PartTimeout, func(c *imapclient.Client, s *session) error {
+		// Until the literal begins, a download is an ordinary command: it
+		// gets commandTimeout, not the browser's PartTimeout, so that a
+		// server that stalls before the literal does not hold a turn and
+		// its reservation for ten minutes (review of 1.06, B).
+		var early atomic.Bool
+		before := time.AfterFunc(partHeadTimeout, func() {
+			early.Store(true)
+			s.kill()
+		})
+		defer before.Stop()
+		started := func() {
+			before.Stop()
+			s.streaming()
 		}
-		w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
-		return streamSection(c, s.budget, uid, path, info.encoding, w, -1)
+		info, err := partOf(c, s, folder, uid, part)
+		if err == nil {
+			w := head(PartInfo{Name: info.attachment().Name, Type: info.mediaType})
+			err = streamSection(c, s.budget, uid, path, info.encoding, w, -1, started)
+		}
+		if err != nil && early.Load() {
+			return ErrTimeout
+		}
+		return err
 	})
 }
 
-// partTimeout bounds a download of an attachment: it goes at the pace of
-// the browser.
-const partTimeout = 10 * time.Minute
+// partHeadTimeout bounds a download until its literal begins (a variable
+// for the tests).
+var partHeadTimeout = commandTimeout
+
+// PartTimeout bounds a download of an attachment: it goes at the pace of
+// the browser. The API bounds its writes to the browser by it as well, so
+// that a browser that stops reading lets go of the connection.
+const PartTimeout = 10 * time.Minute
+
+// PictureTimeout bounds a download of an embedded picture (CID).
+const PictureTimeout = fetchTimeout
 
 // partOf selects the folder and finds a part in the structure of a mail.
 func partOf(c *imapclient.Client, s *session, folder string, uid uint32, part string) (partInfo, error) {
@@ -530,18 +651,31 @@ func raise(b *budgetConn, lit imap.LiteralReader, decoded int64) {
 }
 
 // streamSection copies a decoded part to w; limit >= 0 refuses more.
-func streamSection(c *imapclient.Client, b *budgetConn, uid uint32, path []int, encoding string, w io.Writer, limit int64) error {
+// started, if set, is called once the part's literal begins.
+func streamSection(c *imapclient.Client, b *budgetConn, uid uint32, path []int, encoding string, w io.Writer, limit int64, started func()) error {
 	cmd := c.Fetch(uidSet(uid), &imap.FetchOptions{UID: true, BodySection: []*imap.FetchItemBodySection{{Part: path, Peek: true}}})
 	found := false
 	var copyErr error
 	for msg := cmd.Next(); msg != nil; msg = cmd.Next() {
 		for item := msg.Next(); item != nil; item = msg.Next() {
 			section, ok := item.(imapclient.FetchItemDataBodySection)
-			if !ok || section.Literal == nil || found {
+			if !ok || section.Literal == nil {
+				continue
+			}
+			if found {
+				// A second literal nobody asked for: read away within the
+				// budget of a command (go-imap waits until it is read).
+				if _, err := io.Copy(io.Discard, section.Literal); err != nil {
+					abandon(c, drainFetch(cmd, msg))
+					return err
+				}
 				continue
 			}
 			found = true
 			raise(b, section.Literal, limit)
+			if started != nil {
+				started()
+			}
 			r := decoder(encoding, section.Literal)
 			if limit >= 0 {
 				var n int64
@@ -552,10 +686,19 @@ func streamSection(c *imapclient.Client, b *budgetConn, uid uint32, path []int, 
 			} else {
 				_, copyErr = io.Copy(w, r)
 			}
-			b.set(budgetCommand)
+			if started != nil {
+				// A download has given its turn and reservation back: what
+				// may still follow is the end of the response, so only a
+				// small budget (review of 1.06, A).
+				b.set(budgetTail)
+			} else {
+				b.set(budgetCommand)
+			}
 			if copyErr != nil {
-				// The rest of the literal is not read: the connection goes.
-				_ = c.Close()
+				// The rest of the literal is not read (the browser went
+				// away, or the part is larger than allowed): the
+				// connection goes.
+				abandon(c, drainFetch(cmd, msg, section.Literal))
 				return copyErr
 			}
 		}
@@ -576,7 +719,12 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 	if cid == "" || len(cid) > 998 {
 		return ErrInvalid
 	}
-	return m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
+	done, err := m.download(ctx, user)
+	if err != nil {
+		return err
+	}
+	defer done()
+	return m.withIMAP(ctx, user, id, PictureTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}
@@ -587,7 +735,7 @@ func (m *Manager) CID(ctx context.Context, user, id, folder string, uid uint32, 
 		for _, a := range walkStructure(b.BodyStructure).attachments {
 			if a.id == cid && slices.Contains(inlineTypes, a.mediaType) {
 				w := head(PartInfo{Name: a.attachment().Name, Type: a.mediaType})
-				return streamSection(c, s.budget, uid, a.path, a.encoding, w, maxInlineImage)
+				return streamSection(c, s.budget, uid, a.path, a.encoding, w, maxInlineImage, s.streaming)
 			}
 		}
 		return fmt.Errorf("%w: picture", ErrNotFound)
@@ -613,7 +761,7 @@ func (m *Manager) PartBytes(ctx context.Context, user, id, folder string, uid ui
 		if expected := info.attachment().Size; expected > 0 {
 			buf.Grow(int(min(expected, 1<<20)))
 		}
-		return streamSection(c, s.budget, uid, path, info.encoding, &buf, limit)
+		return streamSection(c, s.budget, uid, path, info.encoding, &buf, limit, nil)
 	})
 	if err != nil {
 		return nil, Attachment{}, err

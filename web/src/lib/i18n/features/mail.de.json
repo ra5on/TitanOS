@@ -69,6 +69,7 @@
 	"mail.images.blocked": "Externe Bilder blockiert – sie würden dem Absender verraten, dass und wann du die Nachricht öffnest.",
 	"mail.images.load": "Bilder laden",
 	"mail.truncated": "Die Nachricht ist sehr groß: Teile sind gekürzt oder weggelassen. Die Anhänge stehen oben.",
+	"mail.rawText": "Diese Mail ist zu groß gegliedert, um sie aufzubereiten (zum Beispiel eine Sammelmail mit sehr vielen Beiträgen). T-Mail zeigt den Anfang ihres Inhalts so, wie er ankam – ohne Formatierung und ohne Anhänge.",
 	"mail.frameTitle": "Inhalt der Nachricht „{subject}“",
 	"mail.picture": "Bild",
 	"mail.link.title": "Linkziele in dieser Nachricht ({count})",

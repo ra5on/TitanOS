@@ -236,16 +236,17 @@ type Manager struct {
 	access     accessState
 	key        []byte
 
-	conns    connPool
-	watch    watchState
-	events   hub
-	contacts contactBook
-	notices  noticeState
-	checks   checkLimiter
-	targets  targetState
-	heavy    heavyState
-	gate     gateState
-	ctx      contextHolder
+	conns     connPool
+	watch     watchState
+	events    hub
+	contacts  contactBook
+	notices   noticeState
+	checks    checkLimiter
+	targets   targetState
+	heavy     heavyState
+	gate      gateState
+	downloads downloadState
+	ctx       contextHolder
 }
 
 // New returns a manager; Load reads /config.

@@ -1,6 +1,8 @@
 package tmail
 
 import (
+	"fmt"
+	"io"
 	"slices"
 
 	"github.com/emersion/go-imap/v2"
@@ -118,6 +120,37 @@ func collect(cmd *imapclient.FetchCommand) ([]*imapclient.FetchMessageBuffer, er
 	return out, cmd.Close()
 }
 
+// uidSearch runs a UID SEARCH; compact asks for the ranges of ESEARCH
+// where the server has it. An ESEARCH answer without "UID" holds sequence
+// numbers, not UIDs: it is not taken as empty but asked again without
+// ESEARCH; a second such answer is an error (third review of 1.05).
+func uidSearch(c *imapclient.Client, criteria *imap.SearchCriteria, compact bool) (*imap.SearchData, error) {
+	var opts *imap.SearchOptions
+	if compact {
+		opts = searchOptions(c)
+	}
+	data, err := c.UIDSearch(criteria, opts).Wait()
+	if err != nil {
+		return nil, err
+	}
+	if _, seq := data.All.(imap.SeqSet); !seq {
+		return data, nil
+	}
+	if opts != nil {
+		if data, err = c.UIDSearch(criteria, nil).Wait(); err != nil {
+			return nil, err
+		}
+		if _, seq := data.All.(imap.SeqSet); !seq {
+			return data, nil
+		}
+	}
+	return nil, errSearchWithoutUIDs
+}
+
+// errSearchWithoutUIDs: the server answered a UID SEARCH with sequence
+// numbers.
+var errSearchWithoutUIDs = fmt.Errorf("%w: the server answered a UID SEARCH without UIDs", ErrUnreachable)
+
 // searchOptions asks for the compact answer (ESEARCH: ranges instead of
 // every UID) where the server has it, so that a big folder fits the
 // budget of a command.
@@ -126,4 +159,39 @@ func searchOptions(c *imapclient.Client) *imap.SearchOptions {
 		return &imap.SearchOptions{ReturnAll: true}
 	}
 	return nil
+}
+
+// abandon gives a connection up in the middle of an answer. go-imap's
+// reader waits until a literal it handed out has been read and until its
+// channels are taken from, so a Close from the reading side alone would
+// wait for ever (a browser that went away during a download, a server
+// that sends more than asked for). The connection closes in the
+// background while drain reads the rest away; with the connection closed
+// that ends at once.
+func abandon(c *imapclient.Client, drain func()) {
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		_ = c.Close() // given up; its error says nothing new
+	}()
+	drain()
+	<-closed
+}
+
+// drainFetch reads away what is left of a FETCH: the literals given, the
+// rest of the current mail and the mails after it.
+func drainFetch(cmd *imapclient.FetchCommand, msg *imapclient.FetchMessageData, literals ...io.Reader) func() {
+	return func() {
+		for _, lit := range literals {
+			_, _ = io.Copy(io.Discard, lit) // ends with the connection
+		}
+		for ; msg != nil; msg = cmd.Next() {
+			for item := msg.Next(); item != nil; item = msg.Next() {
+				if section, ok := item.(imapclient.FetchItemDataBodySection); ok && section.Literal != nil {
+					_, _ = io.Copy(io.Discard, section.Literal)
+				}
+			}
+		}
+		_ = cmd.Close() // the connection is gone; so is the answer
+	}
 }

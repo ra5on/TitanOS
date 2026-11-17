@@ -1252,6 +1252,68 @@ for (const [width, height] of [
   await ctx.close();
 }
 
+// 1.06: the agent widget shows the chat's figure in the colour and size of
+// the agent's settings, from this browser's copy, without asking the NAS.
+{
+  const prefsAsked = [];
+  const made = await open(1440, 900, "graphit", "/", async (m) => {
+    m.data.prefs.desktop = {
+      version: 1,
+      customIcons: true,
+      icons: ["app:files"],
+      customWidgets: true,
+      widgets: [{ id: "w-agent", kind: "agent", x: 12, y: 1, w: 26, h: 20 }],
+    };
+    await m.ctx.addInitScript(() =>
+      localStorage.setItem(
+        "titanos.agent.look",
+        JSON.stringify({ dotColor: "#2e7d32", dotSize: "l", motion: "full" }),
+      ),
+    );
+    await m.ctx.route("**/api/v1/agent/**", (route) => {
+      const p = new URL(route.request().url()).pathname;
+      if (p.endsWith("/agent/status"))
+        return route.fulfill({ json: { enabled: true, allowed: true } });
+      if (p.endsWith("/agent/chats"))
+        return route.fulfill({
+          json: {
+            chats: [
+              {
+                id: "c1",
+                title: "Bericht über die Sicherungen schreiben",
+                state: "running",
+                updated: new Date().toISOString(),
+              },
+            ],
+          },
+        });
+      if (p.endsWith("/agent/prefs")) prefsAsked.push(p);
+      return route.fulfill({ json: {} });
+    });
+  });
+  const { ctx, page } = made;
+  const figure = page.locator('[data-widget="agent"] [data-agent-figure] .fig');
+  await figure.waitFor();
+  const look = await figure.evaluate((el) => ({
+    width: el.getBoundingClientRect().width,
+    color: getComputedStyle(el.querySelector("i")).backgroundColor,
+    dots: el.querySelectorAll("i").length,
+  }));
+  assert.equal(look.dots, 3, "three dots");
+  assert.equal(look.color, "rgb(46, 125, 50)", "the chosen colour");
+  assert.equal(Math.round(look.width), 26, "size L");
+  assert.equal(prefsAsked.length, 0, "the NAS is not asked for the look");
+  // The row stays whole beside the larger figure.
+  assert.ok(
+    await page
+      .locator('[data-widget="agent"]')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    "widget content fits",
+  );
+  await shot(page, "17b-agent-widget-figur");
+  await ctx.close();
+}
+
 await browser.close();
 assert.deepEqual(errors, [], "no script errors");
 console.log("desktop UI ok");

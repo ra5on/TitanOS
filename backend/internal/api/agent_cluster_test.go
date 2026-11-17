@@ -16,6 +16,11 @@ import (
 func TestAgentSharedByTheAdminNode(t *testing.T) {
 	a, _ := clusterTestServer(t, "nas-a")
 	b, nodeB := clusterTestServer(t, "nas-b")
+	// B keeps its chats in a folder of the test. Set before the join: the
+	// join imports the accounts of A in the background, and that already
+	// builds B's store of chats (agentForgetLeftovers), once.
+	dir := t.TempDir()
+	b.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
 	a.setup()
 	b.setup()
 	if res, body := a.request("POST", "/api/v1/cluster", map[string]string{"name": "Home"}); res.StatusCode != http.StatusOK {
@@ -42,8 +47,6 @@ func TestAgentSharedByTheAdminNode(t *testing.T) {
 		t.Fatalf("admin node with the cluster source: %d", res.StatusCode)
 	}
 	// B chooses the admin node's agent: no address of its own needed.
-	dir := t.TempDir()
-	b.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
 	if res, body := b.request("PUT", "/api/v1/agent/settings", map[string]any{"enabled": true, "source": "cluster", "model": "gpt-oss:20b"}); res.StatusCode != http.StatusOK {
 		t.Fatalf("settings B: %d %s", res.StatusCode, body)
 	}

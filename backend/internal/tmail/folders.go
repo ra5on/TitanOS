@@ -64,7 +64,12 @@ func listFolders(c *imapclient.Client, status bool) ([]Folder, error) {
 	cut := false
 	for data := cmd.Next(); data != nil; data = cmd.Next() {
 		if len(list) == maxFolders {
-			_ = c.Close() // too many folders; the next request connects anew
+			// Too many folders; the next request connects anew.
+			abandon(c, func() {
+				for cmd.Next() != nil {
+				}
+				_ = cmd.Close() // the connection is gone
+			})
 			cut = true
 			break
 		}

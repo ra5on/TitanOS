@@ -69,6 +69,7 @@
 	"mail.images.blocked": "External images blocked – they would tell the sender that and when you open the message.",
 	"mail.images.load": "Load images",
 	"mail.truncated": "The message is very large: parts are shortened or left out. The attachments are above.",
+	"mail.rawText": "This mail is too large in structure to be prepared (for example a digest with a great many posts). T-Mail shows the beginning of its content as it came – without formatting and without attachments.",
 	"mail.frameTitle": "Content of the message “{subject}”",
 	"mail.picture": "Picture",
 	"mail.link.title": "Link targets in this message ({count})",

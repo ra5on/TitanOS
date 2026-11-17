@@ -23,6 +23,9 @@ const (
 	// small, since many connections of an account add up (follow-up of
 	// the security review).
 	budgetCommand = 4 << 20
+	// budgetTail is what may follow a downloaded literal in its response:
+	// its closing parenthesis and the end of the command.
+	budgetTail = 64 << 10
 	// budgetStructure covers an answer with BODYSTRUCTURE (and the head
 	// of one mail): decoding it takes about twelve times its size.
 	budgetStructure = 1 << 20
