@@ -170,8 +170,14 @@ func TestAgentInsightToolsRights(t *testing.T) {
 		}
 	}
 
+	// The page of the rights shows the area NVR also before a camera exists.
+	_, body := ts.request("GET", "/api/v1/agent/tools", nil)
+	if !strings.Contains(string(body), `{"name":"nvr_events","area":"nvr"`) || !strings.Contains(string(body), `"activity_log"`) {
+		t.Fatalf("tools of the page: %.300s", body)
+	}
+
 	// New areas go to extraAreas on the stick; read back as one.
-	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
+	_, body = ts.request("GET", "/api/v1/agent/settings", nil)
 	var put map[string]any
 	json.Unmarshal(body, &put)
 	put["policy"] = map[string]any{"preset": "standard", "areas": map[string]any{"history": "deny", "nvr": "allow", "files": "ask"}}
