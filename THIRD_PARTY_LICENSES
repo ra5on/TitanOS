@@ -61,6 +61,7 @@ emersion/go-sasl          MIT                     https://github.com/emersion/go
 emersion/go-ical          MIT                     https://github.com/emersion/go-ical
 emersion/go-vcard         MIT                     https://github.com/emersion/go-vcard
 teambition/rrule-go       MIT                     https://github.com/teambition/rrule-go
+CLDR windowsZones (table) Unicode License       https://github.com/unicode-org/cldr
 microcosm-cc/bluemonday   BSD-3-Clause            https://github.com/microcosm-cc/bluemonday
 aymerick/douceur          MIT                     https://github.com/aymerick/douceur
 gorilla/css               BSD-3-Clause            https://github.com/gorilla/css
