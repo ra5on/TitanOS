@@ -2301,7 +2301,124 @@ async function runs101() {
   }
 }
 
+// 1.10: the areas "Verlauf" and "Kameras (NVR)" with their hints, the
+// switch for names of faces and plates (off from the factory); modes of the
+// new areas come from extraAreas of the NAS and go back under areas.
+async function agent110() {
+  for (const phone of [false, true]) {
+    const { ctx, page, seen } = await open(
+      phone ? 390 : 1440,
+      phone ? 844 : 1100,
+    );
+    await page.route("**/api/v1/agent/settings", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            json: {
+              ...settings,
+              policy: {
+                preset: "standard",
+                areas: { files: "ask" },
+                extraAreas: { history: "deny", nvr: "allow" },
+              },
+            },
+          })
+        : route.fallback(),
+    );
+    await page.route("**/api/v1/agent/tools", (route) =>
+      route.fulfill({
+        json: {
+          areas: [],
+          tools: [
+            ...tools,
+            {
+              name: "activity_log",
+              area: "history",
+              kind: "read",
+              dangerous: false,
+              mode: "allow",
+              set: false,
+            },
+            {
+              name: "monitoring_history",
+              area: "history",
+              kind: "read",
+              dangerous: false,
+              mode: "allow",
+              set: false,
+            },
+            {
+              name: "nvr_events",
+              area: "nvr",
+              kind: "read",
+              dangerous: false,
+              mode: "allow",
+              set: false,
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto(base + "/settings/agent?tab=rights");
+    const history = page.getByRole("radiogroup", {
+      name: "Verlauf (Aktivität, Monitoring)",
+    });
+    const nvr = page.getByRole("radiogroup", { name: "Kameras (NVR)" });
+    await nvr.waitFor();
+    assert.equal(
+      await history
+        .getByRole("radio", { name: "Verboten" })
+        .getAttribute("aria-checked"),
+      "true",
+      "history from extraAreas",
+    );
+    assert.equal(
+      await nvr
+        .getByRole("radio", { name: "Ohne Nachfrage" })
+        .getAttribute("aria-checked"),
+      "true",
+      "nvr from extraAreas",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "Speichern" }).count(),
+      0,
+      "unchanged after loading",
+    );
+    await page.getByText("Fragt ab Werk vor jedem Lesen nach").waitFor();
+    await page.getByText("Aktivitätsprotokoll, Verlauf von CPU").waitFor();
+    await page
+      .getByRole("button", { name: "Kameras (NVR): Aufklappen" })
+      .click();
+    const names = page.getByRole("switch", {
+      name: /Namen von Gesichtern und Kennzeichen/,
+    });
+    assert.equal(await names.isChecked(), false, "names off from the factory");
+    await names.click();
+    await noOverflow(page, "rights 1.10");
+    await page.screenshot({
+      path: `${out}/110-rights${phone ? "-phone" : ""}.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.getByRole("status").waitFor();
+    const put = seen.puts.at(-1);
+    assert.equal(put.nvrNames, true, "names switched on");
+    assert.deepEqual(put.policy.areas, {
+      files: "ask",
+      history: "deny",
+      nvr: "allow",
+    });
+    assert.equal(put.policy.extraAreas, undefined, "no extraAreas sent");
+    await ctx.close();
+  }
+}
+
 try {
+  if (process.env.UI_ONLY === "110") {
+    await agent110();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.10) ok:", out);
+    process.exit(0);
+  }
   if (process.env.UI_ONLY === "109") {
     await agent109();
     noConsoleErrors();

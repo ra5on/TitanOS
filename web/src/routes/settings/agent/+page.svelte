@@ -152,6 +152,12 @@
 	/** The fields of choice lists always have a value the list knows. */
 	function filled(s: Settings): Settings {
 		s.policy ??= { preset: 'standard' };
+		// 1.10: the areas Verlauf and NVR stand apart on the NAS (extraAreas)
+		// so that 1.09 can still save; the page shows one list.
+		if (s.policy.extraAreas) {
+			s.policy.areas = { ...s.policy.extraAreas, ...(s.policy.areas ?? {}) };
+			delete s.policy.extraAreas;
+		}
 		s.homeassistant ??= {};
 		// 1.09: kinds only the agent can see (automations) are kept apart on
 		// the NAS for the previous version; the page shows one list.

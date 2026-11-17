@@ -312,12 +312,17 @@ export type Settings = {
 	policy: {
 		preset: Preset;
 		areas?: Record<string, Mode>;
+		/** 1.10: modes of areas 1.09 does not know (history, nvr), kept
+		 *  apart on the NAS; the page shows them under areas. */
+		extraAreas?: Record<string, Mode>;
 		tools?: Record<string, Mode>;
 		folders?: FolderRule[];
 		/** Web tools do not ask again after outside content was read. */
 		webFree?: boolean;
 	};
 	locations?: Location[];
+	/** 1.10: nvr_events gives names of known faces and plates. */
+	nvrNames?: boolean;
 	react?: boolean;
 	reactAs?: string;
 	skillsOff?: string[];
@@ -380,6 +385,8 @@ export const AREAS = [
 	'accounts',
 	'plugins',
 	'home',
+	'history',
+	'nvr',
 	'photos',
 	'web',
 	'code',

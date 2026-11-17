@@ -617,6 +617,11 @@ func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 		_, set := settings.Policy.Tools["photos_search"]
 		views = append(views, agentToolView{Name: "photos_search", Area: agent.AreaPhotos, Kind: agent.KindRead, Mode: settings.Policy.Mode("photos_search", agent.AreaPhotos, agent.KindRead), Set: set})
 	}
+	// Likewise the area NVR (1.10) before a camera exists.
+	if box.tools["nvr_events"] == nil {
+		_, set := settings.Policy.Tools["nvr_events"]
+		views = append(views, agentToolView{Name: "nvr_events", Area: agent.AreaNVR, Kind: agent.KindRead, Mode: settings.Policy.Mode("nvr_events", agent.AreaNVR, agent.KindRead), Set: set})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views, "areas": agent.AgentAreas})
 }
 
