@@ -60,6 +60,11 @@ jobs:
       - name: Test
         run: make test test-release
 
+      # The packages with the most concurrency also run with the race
+      # detector here: it needs more memory than a small development VM has.
+      - name: Race detector
+        run: cd backend && go test -race ./internal/api/ ./internal/tmail/ ./internal/immich/ ./internal/webpush/ ./internal/vm/
+
       - name: Build titand with web UI
         run: make build
 
