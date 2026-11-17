@@ -379,7 +379,7 @@
 		</div>
 		{#if chosenSignature}
 			<p class="sigtext" aria-label={t('mail.compose.signaturePreview')}>
-				-- <br />{chosenSignature.text}
+				{`-- \n${chosenSignature.text}`}
 			</p>
 		{/if}
 

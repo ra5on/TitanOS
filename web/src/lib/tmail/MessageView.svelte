@@ -173,9 +173,9 @@
 {:else if !msg}
 	<p class="muted pad" role="status">{t('common.loading')}</p>
 {:else}
-	<article class="message" aria-labelledby="mail-subject">
+	<article class="message" aria-labelledby="mail-message-subject">
 		<header class="head">
-			<h2 id="mail-subject" tabindex="-1">{msg.subject.trim() || t('mail.noSubject')}</h2>
+			<h2 id="mail-message-subject" tabindex="-1">{msg.subject.trim() || t('mail.noSubject')}</h2>
 			<p class="from">
 				<span class="label">{t('mail.head.from')}</span>
 				<span class="who">{addressText(msg.from)}</span>

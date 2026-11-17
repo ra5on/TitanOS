@@ -28,7 +28,7 @@
 	"mail.state.off": "Off",
 	"mail.state.since": "since {time}",
 	"mail.search.label": "Search this folder",
-	"mail.search.placeholder": "Search subject, sender, recipients, text",
+	"mail.search.placeholder": "Search folder",
 	"mail.filter.label": "Show",
 	"mail.filter.all": "All",
 	"mail.filter.unread": "Unread",
