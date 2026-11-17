@@ -169,6 +169,10 @@ func keepResult(text string) string {
 	if len(text) <= MaxStoredResult {
 		return text
 	}
+	// A list is cut at a whole entry, with its counts first (1.10).
+	if fitted := fitResult(text, MaxStoredResult/2, nil); strings.HasPrefix(text, "{") && len(fitted) <= MaxStoredResult {
+		return fitted
+	}
 	cut := MaxStoredResult
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
@@ -177,7 +181,10 @@ func keepResult(text string) string {
 }
 
 // olderResultText is how much of a result of an earlier turn it sees.
-const olderResultText = 1500
+// 1.10 (V4): 3000 instead of 1500, and the fitter keeps counts and hints
+// of the result whatever the length, so that after "das stimmt nicht"
+// the model can still read what it based its answer on.
+const olderResultText = 3000
 
 // Hints the runner gives the model as notes; they are part of the
 // conversation for the model, short lines for the person.
@@ -229,9 +236,7 @@ func buildMessages(system string, chat *Chat, resultLimit int) []Message {
 			if i < lastUser {
 				limit = min(olderResultText, resultLimit)
 			}
-			if r := []rune(text); len(r) > limit {
-				text = string(r[:limit]) + "\n[… gekürzt / cut]"
-			}
+			text = fitResult(text, limit, e.Args)
 			msgs = append(msgs, Message{Role: "tool", ToolName: e.Tool, Content: text})
 		case "note":
 			// A decision of the person is part of the conversation.
