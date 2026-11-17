@@ -58,6 +58,9 @@ emersion/go-imap (v2)     MIT                     https://github.com/emersion/go
 emersion/go-message       MIT                     https://github.com/emersion/go-message
 emersion/go-smtp          MIT                     https://github.com/emersion/go-smtp
 emersion/go-sasl          MIT                     https://github.com/emersion/go-sasl
+emersion/go-ical          MIT                     https://github.com/emersion/go-ical
+emersion/go-vcard         MIT                     https://github.com/emersion/go-vcard
+teambition/rrule-go       MIT                     https://github.com/teambition/rrule-go
 microcosm-cc/bluemonday   BSD-3-Clause            https://github.com/microcosm-cc/bluemonday
 aymerick/douceur          MIT                     https://github.com/aymerick/douceur
 gorilla/css               BSD-3-Clause            https://github.com/gorilla/css
