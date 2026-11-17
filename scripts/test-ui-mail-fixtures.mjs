@@ -131,7 +131,8 @@ export function mailState() {
       "Entw&APw-rfe": [],
       Gesendet: [],
       Spamverdacht: [],
-      Rechnungen: [row(60, 1)],
+      // A digest whose structure titand could not read: shown raw.
+      Rechnungen: [row(60, 1, { subject: "Tagesübersicht der Liste", digest: true })],
       "Rechnungen/2026": [],
     },
     "acc-arbeit": {
@@ -470,6 +471,28 @@ export async function installMail(target, state = mailState()) {
       if (!r) return fail(404, "mail_not_found");
       if (r.tooLarge) return fail(413, "mail_too_large");
       r.flags.seen = true;
+      if (r.digest)
+        return json({
+          uid: r.uid,
+          folder: q("folder"),
+          from: r.from,
+          to: [{ name: "Alex", addr: "alex@gmx.example" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          subject: r.subject,
+          date: r.date,
+          messageId: `<${r.uid}@fixture.example>`,
+          inReplyTo: "",
+          references: "",
+          flags: r.flags,
+          text: "--grenze\nContent-Type: message/rfc822\n\nSubject: Beitrag 1\n\nErster Beitrag der Liste\n--grenze--\n",
+          html: "",
+          externalImages: false,
+          attachments: [],
+          truncated: true,
+          rawText: true,
+        });
       const bank = r.uid === 1000 && q("folder") === "INBOX";
       return json({
         uid: r.uid,

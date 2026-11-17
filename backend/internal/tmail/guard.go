@@ -139,10 +139,14 @@ type targetState struct {
 	// (the address after DNS, never a name that may point elsewhere).
 	known map[string]bool
 	// loaded: account and host:port of the mailboxes with a password as
-	// they were stored at the start; they are no new targets.
-	loaded map[string]bool
-	// tried: account → attempts of the last minute (a host:port, or one
-	// check of the settings for IMAP and SMTP together) → first time.
+	// they were stored at the start, each with the address it was first
+	// resolved to in this run (zero until then). Only that address is no
+	// new target: a name stored before a start must not lead anywhere
+	// its DNS points later (third review of 1.05).
+	loaded map[string]netip.AddrPort
+	// tried: account → attempts of the last minute (an address after DNS
+	// with its port, or one check of the settings for IMAP and SMTP
+	// together) → first time.
 	tried map[string]map[string]time.Time
 }
 
@@ -178,30 +182,43 @@ func (m *Manager) loadedLocked() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.loaded == nil {
-		t.loaded = map[string]bool{}
+		t.loaded = map[string]netip.AddrPort{}
 	}
 	for name, f := range m.users {
 		for _, mb := range f.Mailboxes {
 			if mb.Password != "" {
-				t.loaded[targetKey(name, mb.IMAP)] = true
-				t.loaded[targetKey(name, mb.SMTP)] = true
+				t.loaded[targetKey(name, mb.IMAP)] = netip.AddrPort{}
+				t.loaded[targetKey(name, mb.SMTP)] = netip.AddrPort{}
 			}
 		}
 	}
 }
 
 // mayTry tells whether an account may connect to a server at target now:
-// one stored at the start, or one a login went through, always; else at
-// most NewTargetLimit different attempts a minute (the same host:port, or
-// one check of the settings, counts once).
+// the first address a server stored at the start resolves to, or one a
+// login went through, always; else at most NewTargetLimit different
+// attempts a minute (the same address and port, or one check of the
+// settings, counts once). Attempts count by the address after DNS, not
+// by the name: a name whose DNS changes from try to try is a new target
+// each time (third review of 1.05).
 func (m *Manager) mayTry(ctx context.Context, user string, s Server, target netip.AddrPort) bool {
 	t := &m.targets
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.loaded[targetKey(user, s)] || t.known[user+"\x00"+netip.AddrPortFrom(target.Addr().Unmap(), target.Port()).String()] {
+	addr := netip.AddrPortFrom(target.Addr().Unmap(), target.Port())
+	if bound, ok := t.loaded[targetKey(user, s)]; ok {
+		if !bound.IsValid() {
+			t.loaded[targetKey(user, s)] = addr
+			return true
+		}
+		if bound == addr {
+			return true
+		}
+	}
+	if t.known[user+"\x00"+addr.String()] {
 		return true
 	}
-	attempt := s.Host + ":" + strconv.Itoa(s.Port)
+	attempt := addr.String()
 	if id, ok := ctx.Value(attemptKey{}).(string); ok {
 		attempt = "check:" + id
 	}

@@ -633,6 +633,19 @@ try {
       parts: ["2"],
     });
     await page.waitForURL(/\/mail\?a=acc-privat&f=INBOX&m=999$/);
+    // A digest titand could not take apart: its raw beginning, with a
+    // note in words, no frame and no attachments.
+    await page.goto(base + "/mail?a=acc-privat&f=Rechnungen&m=60");
+    await page.locator("[data-raw-text]").waitFor();
+    assert.match(
+      await page.locator("[data-raw-text]").innerText(),
+      /zu groß gegliedert/,
+    );
+    await page.getByText("Erster Beitrag der Liste").waitFor();
+    assert.equal(await page.locator("iframe").count(), 0, "no frame");
+    await sound(page, "phone digest");
+    await big("phone digest");
+    await shot(page, "12b-handy-sammelmail-390");
     // The setup on the phone.
     await page.goto(base + "/mail/setup");
     await page.locator("#mail-setup-email").fill("neu@unbekannt.example");

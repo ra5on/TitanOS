@@ -25,14 +25,51 @@ import (
 
 // session is one IMAP connection for the web UI.
 type session struct {
-	mu sync.Mutex
-	// cl is the connection; read without mu to close it at any time.
+	// turn is held by the request that uses the connection (a channel,
+	// so that waiting for it ends with the request).
+	turn chan struct{}
+	// cl is the connection; read without turn to close it at any time.
 	cl       atomic.Pointer[imapclient.Client]
 	fp       string
 	selected string
 	last     time.Time
 	// budget limits what the server may send for the next command.
 	budget *budgetConn
+	// leave gives the request's command turn back (enter) before the
+	// request ends: a download does so once its part streams.
+	leave func()
+}
+
+// lock waits for the connection while ctx lasts.
+func (s *session) lock(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return ErrTimeout
+	}
+	select {
+	case s.turn <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ErrTimeout
+	}
+}
+
+func (s *session) tryLock() bool {
+	select {
+	case s.turn <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *session) unlock() { <-s.turn }
+
+// streaming tells that the part of a download streams now: the command's
+// turn goes back, the download keeps its own.
+func (s *session) streaming() {
+	if s.leave != nil {
+		s.leave()
+	}
 }
 
 type connPool struct {
@@ -52,7 +89,7 @@ func (p *connPool) get(k string) *session {
 	if s == nil {
 		// A new connection counts as used now, so that reap does not take
 		// it before its first command.
-		s = &session{last: time.Now()}
+		s = &session{turn: make(chan struct{}, 1), last: time.Now()}
 		p.sessions[k] = s
 	}
 	return s
@@ -88,12 +125,12 @@ func (p *connPool) reap(now time.Time, rest time.Duration) {
 	p.mu.Lock()
 	var gone []*session
 	for k, s := range p.sessions {
-		if s.mu.TryLock() {
+		if s.tryLock() {
 			if now.Sub(s.last) >= rest {
 				gone = append(gone, s)
 				delete(p.sessions, k)
 			}
-			s.mu.Unlock()
+			s.unlock()
 		}
 	}
 	p.mu.Unlock()
@@ -218,14 +255,21 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	if m.authFailed(user, mb) {
 		return ErrAuthFailed
 	}
+	// The connection first, then a turn of the account's commands: a
+	// request that waits for a mailbox busy with a download holds no
+	// turn meanwhile.
+	s := m.conns.get(key(user, id))
+	if err := s.lock(ctx); err != nil {
+		return err
+	}
+	defer s.unlock()
 	leave, err := m.enter(ctx, user)
 	if err != nil {
 		return err
 	}
 	defer leave()
-	s := m.conns.get(key(user, id))
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.leave = leave
+	defer func() { s.leave = nil }()
 	// The role is part of the fingerprint: a connection made for an
 	// administrator is not used after a demotion.
 	fp := fingerprint(mb) + fmt.Sprint(m.confined(user))

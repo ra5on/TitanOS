@@ -262,7 +262,9 @@
 			</div>
 		{/if}
 
-		{#if msg.truncated}
+		{#if msg.rawText}
+			<p class="notice-warn" role="note" data-raw-text>{t('mail.rawText')}</p>
+		{:else if msg.truncated}
 			<p class="notice-warn" role="note">{t('mail.truncated')}</p>
 		{/if}
 

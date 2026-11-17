@@ -378,7 +378,7 @@ func (m *Manager) markAnswered(c *imapclient.Client, s *session, out Outgoing) *
 		if _, err := selectFolder(c, s, "INBOX"); err != nil {
 			return nil
 		}
-		found, err := c.UIDSearch(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Message-ID", Value: "<" + ids[0] + ">"}}}, nil).Wait()
+		found, err := uidSearch(c, &imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Message-ID", Value: "<" + ids[0] + ">"}}}, false)
 		if err != nil {
 			return nil
 		}

@@ -50,14 +50,9 @@ func (m *Manager) ForgetUser(name string) error {
 			delete(m.watch.baseline, k)
 		}
 	}
-	for k := range m.watch.single {
+	for k := range m.watch.rounds {
 		if strings.HasPrefix(k, name+"\x00") {
-			delete(m.watch.single, k)
-		}
-	}
-	for k := range m.watch.pending {
-		if strings.HasPrefix(k, name+"\x00") {
-			delete(m.watch.pending, k)
+			delete(m.watch.rounds, k)
 		}
 	}
 	m.watch.mu.Unlock()

@@ -228,51 +228,106 @@ const (
 	CommandsPerAccount = 4
 	// commandReserve is the RAM a running command may need.
 	commandReserve = 6 * budgetCommand
-	// commandFloor commands run on the whole NAS without asking the
-	// budget, so that T-Mail stays usable while VMs take the RAM.
-	commandFloor = 2
+	// commandFloor commands of each account run without asking the
+	// budget, so that T-Mail stays usable while VMs take the RAM; per
+	// account, so that one account cannot take the floor of the others
+	// (third review of 1.05).
+	commandFloor = 1
 )
 
 type gateState struct {
 	mu      sync.Mutex
 	perUser map[string]int
-	running int
 }
 
 // enter waits (at most reserveWait, and while ctx lasts) until an account
 // may run one more command; ErrBusy without room.
 func (m *Manager) enter(ctx context.Context, user string) (func(), error) {
 	g := &m.gate
-	deadline := time.Now().Add(reserveWait)
-	for {
+	return waitTurn(ctx, func() (func(), bool) {
 		g.mu.Lock()
+		defer g.mu.Unlock()
 		if g.perUser == nil {
 			g.perUser = map[string]int{}
 		}
-		if g.perUser[user] < CommandsPerAccount {
-			release, ok := func() {}, true
-			if g.running >= commandFloor && m.Reserve != nil {
-				release, ok = m.Reserve(commandReserve)
-			}
-			if ok {
-				g.perUser[user]++
-				g.running++
-				g.mu.Unlock()
-				var once sync.Once
-				return func() {
-					once.Do(func() {
-						release()
-						g.mu.Lock()
-						g.running--
-						if g.perUser[user]--; g.perUser[user] <= 0 {
-							delete(g.perUser, user)
-						}
-						g.mu.Unlock()
-					})
-				}, nil
-			}
+		if g.perUser[user] >= CommandsPerAccount {
+			return nil, false
 		}
-		g.mu.Unlock()
+		release, ok := func() {}, true
+		if g.perUser[user] >= commandFloor && m.Reserve != nil {
+			release, ok = m.Reserve(commandReserve)
+		}
+		if !ok {
+			return nil, false
+		}
+		g.perUser[user]++
+		return func() {
+			release()
+			g.mu.Lock()
+			if g.perUser[user]--; g.perUser[user] <= 0 {
+				delete(g.perUser, user)
+			}
+			g.mu.Unlock()
+		}, true
+	})
+}
+
+// Downloads (attachments, embedded pictures) go at the pace of the
+// browser, up to partTimeout. They hold a command's turn only until the
+// part's literal begins; the stream itself takes a turn of its own,
+// without RAM of the budget (it is copied through, never kept), so that
+// stalled downloads cannot block the commands of anyone (third review of
+// 1.05).
+const (
+	// DownloadsPerAccount is how many downloads an account may have
+	// running at once.
+	DownloadsPerAccount = 4
+	// downloadsTotal is how many run on the whole NAS.
+	downloadsTotal = 16
+)
+
+type downloadState struct {
+	mu      sync.Mutex
+	perUser map[string]int
+	running int
+}
+
+// download waits (like enter) for a turn to stream a part; ErrBusy
+// without one.
+func (m *Manager) download(ctx context.Context, user string) (func(), error) {
+	d := &m.downloads
+	return waitTurn(ctx, func() (func(), bool) {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if d.perUser == nil {
+			d.perUser = map[string]int{}
+		}
+		if d.perUser[user] >= DownloadsPerAccount || d.running >= downloadsTotal {
+			return nil, false
+		}
+		d.perUser[user]++
+		d.running++
+		return func() {
+			d.mu.Lock()
+			d.running--
+			if d.perUser[user]--; d.perUser[user] <= 0 {
+				delete(d.perUser, user)
+			}
+			d.mu.Unlock()
+		}, true
+	})
+}
+
+// waitTurn asks take for a turn until it gives one, at most reserveWait
+// and while ctx lasts; ErrBusy without. The release it returns works
+// once, however often it is called.
+func waitTurn(ctx context.Context, take func() (func(), bool)) (func(), error) {
+	deadline := time.Now().Add(reserveWait)
+	for {
+		if release, ok := take(); ok {
+			var once sync.Once
+			return func() { once.Do(release) }, nil
+		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
 			return nil, ErrBusy
 		}
