@@ -79,7 +79,12 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	}
 	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
 	on := env.servicesOn()
-	off := func(area string) bool {
+	// A switched-off service has no tools; agent_access and tools_load say
+	// why (1.10). System containers have a switch of their own.
+	off := func(name, area string) bool {
+		if strings.HasPrefix(name, "lxc_") {
+			return !on["lxc"]
+		}
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}
 	add := func(t *agentTool) {
@@ -90,7 +95,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		b.ordered = append(b.ordered, t)
 	}
 	for _, tool := range s.catalogTools(user) {
-		if mcpSkip[tool.Name] || off(tool.Area) {
+		if mcpSkip[tool.Name] || off(tool.Name, tool.Area) {
 			continue
 		}
 		params := tool.Parameters
@@ -111,7 +116,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	allowed := func(scope string) bool { return !auth.AdminScope(scope) || user.Role.CanAdminister() }
 	for i := range publicRoutes {
 		route := &publicRoutes[i]
-		if route.Tool == "" || !allowed(route.Scope) || off(routeArea(route.Scope)) {
+		if route.Tool == "" || !allowed(route.Scope) || off(route.Tool, routeArea(route.Scope)) {
 			continue
 		}
 		mt := s.routeTool(*route)
@@ -146,6 +151,12 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		add(t)
 	}
 	if t := b.photosTool(); t != nil {
+		add(t)
+	}
+	// 1.10: what the agent may see, and reading what happened.
+	add(b.accessTool())
+	add(b.scheduleDeleteTool())
+	for _, t := range b.insightTools() {
 		add(t)
 	}
 	return b
@@ -326,6 +337,9 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// what the model gives them to a server outside TitanOS (0.99).
 	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	if t.area == agent.AreaNVR {
+		mode = b.nvrMode(t.name, mode)
 	}
 	if t.name == "code_run" {
 		if _, err := parseCode(args); err != nil {
@@ -583,7 +597,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 }
 
 // filterHidden drops entries of listings and searches that lie in folders
-// locked for the agent.
+// locked for the agent, and counts them in hidden.
 func (b *agentToolbox) filterHidden(text string) string {
 	if len(b.settings.Policy.Folders) == 0 || !strings.Contains(text, `"entries"`) {
 		return text
@@ -611,6 +625,12 @@ func (b *agentToolbox) filterHidden(text string) string {
 		}
 	}
 	out["entries"] = kept
+	// 1.10 (V1): say that something was left out, not what. Without it an
+	// empty folder and a locked one read the same.
+	if n := len(entries) - len(kept); n > 0 {
+		out["hidden"] = n
+		out["why"] = fmt.Sprintf("%d entries of this page lie in folders the person locked for the agent and are not shown (total counts them). Do not call the folder empty or a file missing because of it; they can be opened for the agent under %s.", n, whereFolders)
+	}
 	data, err := json.Marshal(out)
 	if err != nil {
 		return text

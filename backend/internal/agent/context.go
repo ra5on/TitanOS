@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -286,10 +287,28 @@ func (r *Runner) offered(chat *Chat) []ToolSpec {
 			}
 			desc.WriteString(a + " (" + strings.Join(names, ", ") + ")")
 		}
+		if why := r.missing(); len(why) > 0 {
+			// Only the names: agent_access and tools_load itself say why.
+			desc.WriteString(". Not available to you now (agent_access says why): " + strings.Join(slices.Sorted(maps.Keys(why)), ", "))
+		}
 		out = append(out, builtinSpec(toolLoad, desc.String(),
 			map[string]any{"type": "object", "properties": map[string]any{"area": map[string]any{"type": "string", "enum": areas}}, "required": []string{"area"}}))
 	}
 	return out
+}
+
+// Explainer is a toolbox that can say why an area has no tools for the
+// account right now (a service switched off, no right, nothing connected;
+// 1.10). The model reads it with tools_load instead of guessing.
+type Explainer interface {
+	Missing() map[string]string
+}
+
+func (r *Runner) missing() map[string]string {
+	if ex, ok := r.Tools.(Explainer); ok {
+		return ex.Missing()
+	}
+	return nil
 }
 
 func builtinSpec(name, description string, params map[string]any) ToolSpec {
@@ -348,6 +367,9 @@ func (r *Runner) builtin(ctx context.Context, chat *Chat, name string, args json
 			}
 		}
 		if len(names) == 0 {
+			if why := r.missing()[req.Area]; why != "" {
+				return "", true, fmt.Errorf("the area %q has no tools for you now: %s. Tell the person; do not look for it another way", req.Area, why)
+			}
 			return "", true, fmt.Errorf("there is no area %q with tools for you", req.Area)
 		}
 		if !slices.Contains(chat.Areas, req.Area) {
