@@ -3,6 +3,7 @@ package shares
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -191,5 +192,30 @@ func TestUnlockForgetsTheCountedRenames(t *testing.T) {
 	m.observeAudit(context.Background(), auditEvent{at: at.Add(time.Second), user: "alex", share: "Fotos", op: "renameat", from: "brief.txt", to: "brief.crypt"}, nil)
 	if m.List()[0].GuardLocked != nil {
 		t.Fatal("one rename after the unlock locked the share again")
+	}
+}
+
+// journalctl writes a field that is not valid UTF-8 (a file name in another
+// encoding) as an array of byte values: such renames count like the others.
+func TestGuardReadsAuditLinesWrittenAsBytes(t *testing.T) {
+	m, _ := newTestManager(t)
+	if err := m.Create(Share{Name: "Fotos", Volume: "data", SMB: true, Access: map[string]string{"alex": ReadWrite}, Guard: true}, volumes, users); err != nil {
+		t.Fatal(err)
+	}
+	var lines strings.Builder
+	for i := range guardKnown + 3 {
+		message := []byte(fmt.Sprintf("alex|Fotos|renameat|ok|f\xe4%d|f\xe4%d.crypt", i, i))
+		numbers := make([]string, len(message))
+		for j, b := range message {
+			numbers[j] = strconv.Itoa(int(b))
+		}
+		fmt.Fprintf(&lines, `{"MESSAGE":[%s],"__REALTIME_TIMESTAMP":"%d"}`+"\n", strings.Join(numbers, ","), time.Now().UnixMicro())
+	}
+	var locked []string
+	if err := m.readAudit(context.Background(), strings.NewReader(lines.String()), func(s Share) { locked = append(locked, s.Name) }); err != nil {
+		t.Fatal(err)
+	}
+	if len(locked) != 1 {
+		t.Fatalf("renames written as bytes were not seen: %v", locked)
 	}
 }
