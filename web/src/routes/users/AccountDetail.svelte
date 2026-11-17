@@ -5,13 +5,15 @@
 	// may use which app is set here.
 	import { api, type Account, type AccessLevel, type Role, type Share } from '#lib/api.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
+	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import Expander from '#lib/components/explorer/Expander.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 
 	import type { UserCameras } from '#lib/nvr/types.ts';
 
 	type UserApp = { app: string; icon: string; allowed: boolean };
-	type UserApps = { admin: boolean; newApps: boolean; apps: UserApp[] };
+	/** `mail`: the release of T-Mail (1.05, docs/TMAIL.md), absent on a NAS without it. */
+	type UserApps = { admin: boolean; newApps: boolean; apps: UserApp[]; mail?: boolean };
 
 	type Props = {
 		account: Account;
@@ -71,7 +73,11 @@
 			},
 		);
 	});
-	async function saveApps(body: { newApps?: boolean; apps?: Record<string, boolean> }) {
+	async function saveApps(body: {
+		newApps?: boolean;
+		apps?: Record<string, boolean>;
+		mail?: boolean;
+	}) {
 		// The answer belongs to this account: another one may be shown by then
 		// (Durchsicht 102, its rights showed under the other name).
 		const name = account.name;
@@ -90,12 +96,17 @@
 	const appsSummary = $derived(
 		!apps
 			? ''
-			: apps.admin
-				? t('users.apps.adminAll')
-				: [
-						t('users.apps.count', { allowed: allowedCount, total: apps.apps.length }),
-						apps.newApps ? t('users.apps.newAuto') : t('users.apps.newManual'),
-					].join(' · '),
+			: [
+					...(typeof apps.mail === 'boolean'
+						? [apps.mail ? t('users.apps.mailOn') : t('users.apps.mailOff')]
+						: []),
+					...(apps.admin
+						? [t('users.apps.adminAll')]
+						: [
+								t('users.apps.count', { allowed: allowedCount, total: apps.apps.length }),
+								apps.newApps ? t('users.apps.newAuto') : t('users.apps.newManual'),
+							]),
+				].join(' · '),
 	);
 	function hue(name: string) {
 		let h = 0;
@@ -266,6 +277,24 @@
 
 	<Expander icon="grid" title={t('users.apps.title')} summary={appsSummary} bind:open={appsOpen}>
 		{#if appsError}<p class="notice-error part" role="alert">{appsError}</p>{/if}
+		{#if apps && typeof apps.mail === 'boolean'}
+			<!-- 1.05: T-Mail is off for every role until released here, admins included. -->
+			<div class="apps mail-app">
+				<label class="app">
+					<input
+						type="checkbox"
+						checked={apps.mail}
+						disabled={appsBusy}
+						onchange={(event) => saveApps({ mail: event.currentTarget.checked })}
+					/>
+					<span class="app-icon glyph" aria-hidden="true"
+						><DesktopIcon glyph="mail" gradient="blue" size={22} /></span
+					>
+					<span>{t('users.apps.mail')}</span>
+				</label>
+			</div>
+			<p class="muted part mail-hint">{t('users.apps.mailHint')}</p>
+		{/if}
 		{#if !apps}
 			<p class="muted part" role="status">{t('common.loading')}</p>
 		{:else if apps.admin}

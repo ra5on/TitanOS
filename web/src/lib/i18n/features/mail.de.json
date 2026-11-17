@@ -221,5 +221,9 @@
 	"error.mail_too_large": "Zu groß: Anhänge dürfen zusammen höchstens 25 MB haben.",
 	"error.mail_not_found": "Die Nachricht oder der Ordner ist nicht mehr da.",
 	"error.mail_folder_exists": "Einen Ordner mit diesem Namen gibt es schon.",
-	"error.mail_send_failed": "Der Mailserver hat die E-Mail nicht angenommen."
+	"error.mail_send_failed": "Der Mailserver hat die E-Mail nicht angenommen.",
+	"users.apps.mail": "T-Mail (E-Mail-Programm)",
+	"users.apps.mailHint": "Ab Werk aus, auch für Besitzer und Administratoren. Jedes Postfach sieht nur das Konto, das es einrichtet.",
+	"users.apps.mailOn": "T-Mail an",
+	"users.apps.mailOff": "T-Mail aus"
 }

@@ -221,5 +221,9 @@
 	"error.mail_too_large": "Too large: attachments may add up to at most 25 MB.",
 	"error.mail_not_found": "The message or folder is no longer there.",
 	"error.mail_folder_exists": "A folder with this name already exists.",
-	"error.mail_send_failed": "The mail server did not accept the e-mail."
+	"error.mail_send_failed": "The mail server did not accept the e-mail.",
+	"users.apps.mail": "T-Mail (e-mail program)",
+	"users.apps.mailHint": "Off from the start, for owners and administrators too. Each mailbox is seen only by the account that sets it up.",
+	"users.apps.mailOn": "T-Mail on",
+	"users.apps.mailOff": "T-Mail off"
 }
