@@ -168,8 +168,9 @@
 			{#each devices as device (device.id)}
 				<li>
 					<span class="name"
-						>{device.name || device.service}{#if device.id === thisDevice}<span class="chip ok"
-								>{t('push.thisDevice')}</span
+						>{device.name || device.service}<span class="chip"
+							>{t(device.app === 'agent' ? 'push.appAgent' : 'push.appTitanOS')}</span
+						>{#if device.id === thisDevice}<span class="chip ok">{t('push.thisDevice')}</span
 							>{/if}</span
 					>
 					<span class="muted small"

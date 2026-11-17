@@ -4,6 +4,7 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
+	import OfflineBanner from './OfflineBanner.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -316,6 +317,9 @@
 {#if admin && (frame === 'window' ? page.url.pathname === '/terminal' : frame !== 'desktop')}<TerminalPanel
 	/>{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
+<!-- 1.07: the NAS stopped answering – where no ConnectionBanner stands. -->
+{#if frame === 'desktop' || (frame === 'phone' && page.url.pathname === '/') || agentApp}<OfflineBanner
+	/>{/if}
 <!-- 1.03: short notices at the bottom, once, in the top window. -->
 {#if !inWindow}<Toasts />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}

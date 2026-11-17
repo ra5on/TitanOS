@@ -45,6 +45,23 @@ gewählt hat (auch für Benutzer; ein Tippen öffnet den NVR). Jedes Gerät
 schaltet die drei Arten einzeln ab: „Meldungen von TitanOS“, „KI-Agent“,
 „Kameras“ (`docs/NVR.md`, „Meldungen je Kamera“).
 
+**Zwei Apps auf dem iPhone (seit 1.07):** Auf dem Home-Bildschirm ist
+jede Web-App ein eigener Behälter mit eigener Anmeldung für Mitteilungen;
+eine Mitteilung öffnet die App, die sie bekam. Die Agent-App meldet sich
+deshalb selbst an: einmal fragt sie „Mitteilungen erlauben?“ (das iPhone
+fragt erst nach einem Tipp), sonst unter KI-Agent › Einstellungen ›
+Mitteilungen. Jedes Gerät trägt seine App (`app`: `titanos` oder `agent`;
+Geräte älterer Fassungen gelten als TitanOS), die Liste nennt sie. Die
+Mitteilungen des Agenten zu einem Chat (Tag `agent-<chat>`) gehen an die
+Agent-Geräte des Kontos, alle anderen an die TitanOS-Geräte; hat ein
+Konto nur Geräte der einen App (oder hat sie die Art abgeschaltet),
+gehen sie dorthin, damit nichts verloren geht (`webpush.pick`,
+`TestMessagesGoToTheirApp`). Derselbe Service Worker `/sw.js` mit dem
+Bereich `/` gilt auch auf `/agent`; eine eigene Registrierung braucht die
+Agent-App nicht. Kommt eine Mitteilung des Agenten in der TitanOS-App an,
+öffnet ein Tipp dort die Ansicht des Agenten mit dem Chat (der Worker
+schickt `open`, die Seite lädt `/agent?chat=…`).
+
 ## App-Symbol
 
 Einstellungen › Darstellung › **App-Symbol** (nur Besitzer und Administratoren,

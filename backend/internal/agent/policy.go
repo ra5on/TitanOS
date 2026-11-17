@@ -50,6 +50,10 @@ const AreaCode = "code"
 // AreaMCP is the area of the tools of connected MCP servers (0.93).
 const AreaMCP = "mcp"
 
+// AreaPhotos is the area of the account's own photos in Immich (1.07). It
+// only reads; the tool exists only with the account's own Immich key.
+const AreaPhotos = "photos"
+
 // createTools only add something new; the standard preset runs them
 // without asking ("neue Dateien legt er frei an").
 var createTools = map[string]bool{
@@ -216,7 +220,7 @@ func cleanPath(p string) string {
 
 // Areas of the agent in the order the settings show them, with the tool
 // areas of the catalog first.
-var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaWeb, AreaCode, AreaMCP}
+var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaPhotos, AreaWeb, AreaCode, AreaMCP}
 
 // ValidArea reports whether a is one of the areas.
 func ValidArea(a string) bool { return slices.Contains(AgentAreas, a) }

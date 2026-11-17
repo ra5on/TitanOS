@@ -1,9 +1,113 @@
 // Service worker of the TitanOS web app: shows notifications that the NAS
-// sends over Web Push (docs/WEB-PUSH.md) and takes files shared to the
-// installed app (PLAN 70, docs/PWA.md). It caches nothing of the web UI or
-// the API; the web UI always comes from the NAS.
+// sends over Web Push (docs/WEB-PUSH.md), takes files shared to the
+// installed app (PLAN 70, docs/PWA.md) and, since 1.07, keeps the page
+// itself so that the installed app opens without the NAS (docs/PWA.md
+// "Ohne Verbindung"). It never keeps anything of the API.
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (event) =>
+	event.waitUntil(
+		(async () => {
+			// Caches of other versions of this worker go; the shared files
+			// (titanos-share) are never touched here.
+			for (const name of await caches.keys())
+				if (
+					(name.startsWith('titanos-shell-') && name !== SHELL_CACHE) ||
+					(name.startsWith('titanos-assets-') && name !== ASSET_CACHE)
+				)
+					await caches.delete(name);
+			await self.clients.claim();
+		})(),
+	),
+);
+
+// 1.07: the page without the NAS. A page of the web UI (a route of the app,
+// not a file, not the API, not a web app or the manual) comes from the NAS
+// as before; its HTML is kept – one for TitanOS, one for the agent app,
+// whose HTML differs a little. When the NAS does not answer within a few
+// seconds, the kept HTML is the answer, and the page shows the last state
+// it saw (lib/offline.svelte.ts). The hashed files of the UI
+// (/_app/immutable/) are kept as the page loads them: a part of TitanOS
+// that was never opened with the NAS is not there without it. A new
+// version of the UI (another entry file in the HTML) empties the kept files.
+const SHELL_CACHE = 'titanos-shell-v1';
+const ASSET_CACHE = 'titanos-assets-v1';
+const SHELL_WAIT_MS = 6000;
+const NOT_APP = /^\/(api|_app|webapps|manual|icons|backgrounds|share-target)(\/|$)/;
+const ENTRY = /\/_app\/immutable\/entry\/start\.[A-Za-z0-9_-]+\.js/;
+
+function appRoute(url) {
+	if (NOT_APP.test(url.pathname)) return false;
+	const last = url.pathname.split('/').pop() || '';
+	return !last.includes('.');
+}
+const shellKey = (url) =>
+	url.pathname === '/agent' || url.pathname.startsWith('/agent/')
+		? '/__shell/agent'
+		: '/__shell/main';
+
+async function keepShell(url, res) {
+	try {
+		if (!res.ok || res.redirected || res.type !== 'basic') return;
+		if (!(res.headers.get('Content-Type') || '').includes('text/html')) return;
+		const html = await res.clone().text();
+		const entry = html.match(ENTRY)?.[0];
+		if (!entry) return;
+		const cache = await caches.open(SHELL_CACHE);
+		const before = await cache.match('/__shell/version');
+		const version = before ? await before.text() : '';
+		if (version !== entry) {
+			// Another version of the UI: its files replace the kept ones.
+			await caches.delete(ASSET_CACHE);
+			for (const key of ['/__shell/main', '/__shell/agent']) await cache.delete(key);
+			await cache.put('/__shell/version', new Response(entry));
+		}
+		const headers = new Headers(res.headers);
+		headers.set('X-TitanOS-Kept', '1');
+		await cache.put(shellKey(url), new Response(html, { status: 200, statusText: 'OK', headers }));
+	} catch {
+		// Not kept this time (quota, private mode); it is next time.
+	}
+}
+
+async function navigate(event, url) {
+	const network = fetch(event.request);
+	// Kept whenever the NAS answered, even after the kept page was shown.
+	event.waitUntil(network.then((res) => keepShell(url, res)).catch(() => {}));
+	const kept = async () => (await caches.open(SHELL_CACHE)).match(shellKey(url));
+	try {
+		const res = await Promise.race([
+			network,
+			new Promise((_, fail) => setTimeout(() => fail(new Error('slow')), SHELL_WAIT_MS)),
+		]);
+		return res;
+	} catch {
+		const page = await kept();
+		if (page) return page;
+		return network; // nothing kept: the browser's own error
+	}
+}
+
+async function asset(event) {
+	const cache = await caches.open(ASSET_CACHE);
+	const hit = await cache.match(event.request);
+	if (hit) return hit;
+	const res = await fetch(event.request);
+	if (res.ok && res.type === 'basic')
+		event.waitUntil(cache.put(event.request, res.clone()).catch(() => {}));
+	return res;
+}
+
+self.addEventListener('fetch', (event) => {
+	const req = event.request;
+	if (req.method !== 'GET') return;
+	const url = new URL(req.url);
+	if (url.origin !== self.location.origin) return;
+	if (req.mode === 'navigate' && appRoute(url)) {
+		event.respondWith(navigate(event, url));
+		return;
+	}
+	if (url.pathname.startsWith('/_app/immutable/')) event.respondWith(asset(event));
+});
 
 self.addEventListener('push', (event) => {
 	let message = {};

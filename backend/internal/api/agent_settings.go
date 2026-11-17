@@ -605,7 +605,15 @@ type agentToolView struct {
 func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 	settings := s.agentSettings()
 	box := s.newAgentToolbox(currentUser(r), settings)
-	writeJSON(w, http.StatusOK, map[string]any{"tools": box.views(), "areas": agent.AgentAreas})
+	views := box.views()
+	// The area "Fotos" stands on the page of the rights also when this
+	// account has no Immich key: the setting holds for every account
+	// (1.07). The tool itself exists only with a key.
+	if box.tools["photos_search"] == nil {
+		_, set := settings.Policy.Tools["photos_search"]
+		views = append(views, agentToolView{Name: "photos_search", Area: agent.AreaPhotos, Kind: agent.KindRead, Mode: settings.Policy.Mode("photos_search", agent.AreaPhotos, agent.KindRead), Set: set})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tools": views, "areas": agent.AgentAreas})
 }
 
 // views are the rows of the tools on the page of the rights.

@@ -54,6 +54,13 @@
 		};
 	});
 	const kind = $derived(busyKind(live.step?.tool));
+	// 1.07 (owner 17 Nov 2026: "der Text neben den 3 Punkten wieder diesen
+	// Schweif"): one trail of light over the text beside the dots, for the
+	// word while thinking as for a step. A new word is a new element (it
+	// fades in); its trail starts at the place the running one has reached,
+	// so the light glides on instead of starting over.
+	const SWEEP_MS = 1700;
+	const sweepPhase = () => `0s, ${-(Math.round(performance.now()) % SWEEP_MS)}ms`;
 	/** The line of a running step: a word of its kind or its name, and what it is about. */
 	const sweepText = $derived.by(() => {
 		if (!live.step) return '';
@@ -130,9 +137,13 @@
 		<BusyFigure kind={live.content && !live.step ? 'write' : kind} {calm} />
 		{#if live.step}
 			<!-- A new text fades in, as the word does; the figure is not keyed. -->
-			{#key sweepText}<span class="sweep">{sweepText}</span>{/key}
+			{#key sweepText}<span class="sweep trail" style:animation-delay={sweepPhase()}
+					>{sweepText}</span
+				>{/key}
 		{:else if !live.content}
-			{#key busyWord}<span class="busy-word">{busyWord}</span>{/key}
+			{#key busyWord}<span class="busy-word trail" style:animation-delay={sweepPhase()}
+					>{busyWord}</span
+				>{/key}
 		{/if}
 		{#if elapsed >= 20 && !live.content}
 			<span class="took">{t('agent.busy.seconds', { n: elapsed })}</span>
@@ -246,27 +257,38 @@
 			opacity: 0;
 		}
 	}
-	.sweep {
-		/* Grey like in the chat apps: the orange dots say that something runs,
-		   the light over the grey line says that it is still running. */
+	/* The trail (1.07): the text keeps its colour (--ag-busy-text, else the
+	   grey of the theme); a band of the theme's text colour glides over it
+	   from left to right. The text colour always has the most contrast to
+	   the background, so the brightest place of the trail stays readable.
+	   Only on the text: the dots stay flat (1.05). */
+	.trail {
 		--sweep: var(--ag-busy-text, var(--muted));
+		--sweep-light: color-mix(in srgb, var(--sweep) 35%, var(--text));
 		min-width: 0;
 		overflow-wrap: anywhere;
 		color: transparent;
 		background: linear-gradient(
 			90deg,
 			var(--sweep) 0%,
-			var(--sweep) 38%,
-			color-mix(in srgb, var(--sweep) 30%, transparent) 50%,
-			var(--sweep) 62%,
+			var(--sweep) 36%,
+			var(--sweep-light) 50%,
+			var(--sweep) 64%,
 			var(--sweep) 100%
 		);
 		background-size: 220% 100%;
 		-webkit-background-clip: text;
 		background-clip: text;
+	}
+	.sweep {
 		/* It fades in like the word when a step begins (1.01), then the light runs. */
 		animation:
 			settle 0.36s ease-out both,
+			sweep 1.7s linear infinite;
+	}
+	.busy-word.trail {
+		animation:
+			roll 0.36s cubic-bezier(0.22, 1, 0.36, 1) both,
 			sweep 1.7s linear infinite;
 	}
 	@keyframes sweep {
@@ -281,7 +303,7 @@
 	:global(.agent.calm) .busy-word {
 		animation: none;
 	}
-	:global(.agent.calm) .sweep {
+	:global(.agent.calm) .trail {
 		color: var(--sweep);
 		background: none;
 	}
@@ -292,7 +314,7 @@
 		.sweep {
 			animation: none;
 		}
-		.sweep {
+		.trail {
 			color: var(--sweep);
 			background: none;
 		}

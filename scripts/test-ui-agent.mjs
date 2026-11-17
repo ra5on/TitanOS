@@ -347,6 +347,208 @@ const tools = [
   set: false,
 }));
 
+// 1.07 (owner 17 Nov 2026): the trail over the text beside the dots, the
+// chat and the input in the whole width at 1850 px or the reading width,
+// the side bar that can be dragged and set with the keys, a long title that
+// wraps; the phone unchanged.
+async function agent107() {
+  const running = "/agent?chat=c1aaaaaaaaaa0003";
+  // The trail on the word while thinking; the dots stay flat.
+  {
+    const { ctx, page } = await open(1280, 900);
+    await page.goto(base + running);
+    const word = page.locator(".live-line .busy-word");
+    await word.waitFor({ timeout: 40000 });
+    const look = await word.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { anim: c.animationName, bg: c.backgroundImage, clip: c.backgroundClip || c.webkitBackgroundClip, wrap: c.overflowWrap };
+    });
+    assert.match(look.anim, /sweep/, "the word has the trail");
+    assert.match(look.bg, /linear-gradient/, "the trail is a band of light");
+    assert.equal(look.clip, "text", "only on the text");
+    assert.equal(look.wrap, "anywhere", "the word wraps");
+    const dots = await page
+      .locator(".live-line .fig i")
+      .evaluateAll((list) => list.map((d) => [getComputedStyle(d).backgroundImage, getComputedStyle(d).animationName]));
+    for (const [bg] of dots) assert.equal(bg, "none", "the dots stay flat");
+    await ctx.close();
+  }
+  // "Animationen: Aus": still, in one colour.
+  {
+    const { ctx, page } = await open(1280, 900, { look: { motion: "off" } });
+    await page.goto(base + running);
+    const word = page.locator(".live-line .busy-word");
+    await word.waitFor({ timeout: 40000 });
+    const look = await word.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { anim: c.animationName, bg: c.backgroundImage, color: c.color };
+    });
+    assert.equal(look.anim, "none", "no trail with Animationen: Aus");
+    assert.equal(look.bg, "none", "one colour with Animationen: Aus");
+    assert.notEqual(look.color, "rgba(0, 0, 0, 0)", "the text is not transparent");
+    await ctx.close();
+  }
+  // The whole width at 1850 px, and the side bar.
+  {
+    const { ctx, page } = await open(1850, 1000);
+    const long =
+      "Kannst du bitte einmal nachsehen, wie es meinen Apps, VMs und Containern geht und ob irgendwo Fehler in den Protokollen der letzten Woche stehen, besonders bei Home Assistant und Paperless?";
+    await page.route("**/api/v1/agent/chats/" + haChat.id, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { ...haChat, title: long } })
+        : route.fallback(),
+    );
+    await page.goto(base + "/agent?chat=" + haChat.id);
+    await page.locator(".messages .column").waitFor();
+    const widths = await page.evaluate(() => ({
+      column: document.querySelector(".messages .column").getBoundingClientRect().width,
+      composer: document.querySelector(".dock .composer").getBoundingClientRect().width,
+      over: document.documentElement.scrollWidth - innerWidth,
+    }));
+    assert.ok(widths.column > 1200, `the chat uses the width (${widths.column})`);
+    assert.ok(widths.composer > 1200, `the input uses the width (${widths.composer})`);
+    assert.ok(widths.over <= 1, "no sideways scrolling");
+    const bubble = await page.evaluate(() => {
+      const b = document.querySelector(".user span");
+      const col = document.querySelector(".messages .column").getBoundingClientRect().width;
+      return b ? b.getBoundingClientRect().width / col : 0;
+    });
+    assert.ok(bubble > 0 && bubble <= 0.71, `the own message stays a bubble (${bubble})`);
+    // The long title wraps, never "…".
+    const title = page.locator("h1", { hasText: "Kannst du bitte" }).first();
+    const t = await title.evaluate((el) => ({ text: el.textContent, fits: el.scrollWidth <= el.clientWidth + 1, lines: el.getBoundingClientRect().height }));
+    assert.ok(t.fits && !t.text.includes("…"), "the long title is whole");
+    await page.screenshot({ path: `${out}/107-1850-volle-breite.png` });
+    // The side bar: by mouse, by keys, double click back, kept after reload.
+    const sep = page.getByRole("separator", { name: "Breite der Seitenleiste" });
+    const now = async () => Number(await sep.getAttribute("aria-valuenow"));
+    const side = () => page.locator("aside.side").evaluate((el) => el.getBoundingClientRect().width);
+    assert.equal(await now(), 264, "the default width");
+    const box = await sep.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 100, box.y + 200, { steps: 5 });
+    await page.mouse.up();
+    assert.equal(await now(), 364, "dragged 100 px");
+    assert.ok(Math.abs((await side()) - 364) < 2, "the side bar follows");
+    await sep.focus();
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await now(), 348, "a step with the arrow key");
+    await page.keyboard.press("End");
+    assert.equal(await now(), 480, "End: the widest");
+    await page.keyboard.press("Home");
+    assert.equal(await now(), 200, "Home: the narrowest");
+    await page.keyboard.press("ArrowRight");
+    await page.reload();
+    await page.locator(".messages .column").waitFor();
+    assert.equal(await now(), 216, "kept after reloading");
+    await sep.dblclick();
+    assert.equal(await now(), 264, "double click: back to the default");
+    assert.ok(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      "no sideways scrolling",
+    );
+    await ctx.close();
+  }
+  // "Lesebreite": about 760 px.
+  {
+    const { ctx, page } = await open(1850, 1000, { look: { chatWidth: "read" } });
+    await page.goto(base + "/agent?chat=" + haChat.id);
+    await page.locator(".messages .column").waitFor();
+    const widths = await page.evaluate(() => ({
+      column: document.querySelector(".messages .column").getBoundingClientRect().width,
+      composer: document.querySelector(".dock .composer").getBoundingClientRect().width,
+    }));
+    assert.ok(Math.abs(widths.column - 760) < 2, `reading width (${widths.column})`);
+    assert.ok(widths.composer <= 761, `the input too (${widths.composer})`);
+    await ctx.close();
+  }
+  // The agent's own app on the phone asks once for notifications and
+  // subscribes as "agent" (no real push here: the browser's subscription
+  // is made up, the NAS's answer too).
+  {
+    const { ctx, page } = await open(390, 800);
+    // Headless Chromium answers "denied" to notifications: the browser's
+    // answer is made up like the subscription.
+    await ctx.addInitScript(() => {
+      let permission = "default";
+      Object.defineProperty(Notification, "permission", { get: () => permission });
+      Notification.requestPermission = async () => (permission = "granted");
+      PushManager.prototype.getSubscription = async () => null;
+      PushManager.prototype.subscribe = async () => ({
+        options: { applicationServerKey: null },
+        toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/test", keys: { p256dh: "a", auth: "b" } }),
+      });
+    });
+    const posted = [];
+    await page.route("**/api/v1/notifications/push", (route) => {
+      if (route.request().method() === "POST") {
+        posted.push(route.request().postDataJSON());
+        return route.fulfill({ json: { id: "d1", name: "Android", service: "fcm.googleapis.com", created: at(12), app: "agent" } });
+      }
+      return route.fulfill({ json: { publicKey: "BOrq", devices: [] } });
+    });
+    await page.goto(base + "/agent?app=1");
+    const hint = page.getByRole("dialog", { name: "Mitteilungen erlauben?" });
+    try {
+      await hint.waitFor({ timeout: 20000 });
+    } catch (e) {
+      console.error(
+        await page.evaluate(async () => ({
+          secure: isSecureContext,
+          sw: "serviceWorker" in navigator,
+          pm: "PushManager" in window,
+          n: "Notification" in window,
+          perm: typeof Notification !== "undefined" && Notification.permission,
+          asked: localStorage.getItem("titanos.agent.pushAsked"),
+          app: sessionStorage.getItem("titanos.agent.app"),
+          phone: document.querySelector(".agent")?.className,
+        })),
+      );
+      throw e;
+    }
+    const allow = hint.getByRole("button", { name: "Erlauben" });
+    assert.ok((await allow.boundingBox()).height >= 44, "the button is big enough");
+    await page.screenshot({ path: `${out}/107-mitteilungen-erlauben.png` });
+    await allow.click();
+    await hint.getByText("Mitteilungen sind an.").waitFor();
+    assert.equal(posted.length, 1, "subscribed once");
+    assert.equal(posted[0].app, "agent", "the agent app subscribes as agent");
+    // Asked once: not again.
+    await page.reload();
+    await page.waitForTimeout(1500);
+    assert.equal(await page.getByRole("dialog", { name: "Mitteilungen erlauben?" }).count(), 0, "asked once only");
+    await ctx.close();
+  }
+  // In the TitanOS app on the phone a tapped message of the agent opens
+  // the agent with its chat, not the home screen (sw.js posts "open").
+  {
+    const { ctx, page } = await open(390, 800);
+    await page.goto(base + "/");
+    await page.waitForTimeout(1500);
+    await page.evaluate(() =>
+      navigator.serviceWorker.dispatchEvent(
+        new MessageEvent("message", { data: { type: "open", url: "/agent?chat=c1aaaaaaaaaa0001" } }),
+      ),
+    );
+    await page.waitForURL(/\/agent\?chat=c1aaaaaaaaaa0001/, { timeout: 15000 });
+    await page.locator(".messages .column").waitFor({ timeout: 20000 });
+    await ctx.close();
+  }
+  // The phone: no handle, the chat in the whole width as before.
+  {
+    const { ctx, page } = await open(390, 800);
+    await page.goto(base + "/agent?chat=" + haChat.id);
+    await page.locator(".messages .column").waitFor();
+    assert.equal(await page.getByRole("separator", { name: "Breite der Seitenleiste" }).count(), 0, "no handle on the phone");
+    assert.ok(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      "phone: no sideways scrolling",
+    );
+    await ctx.close();
+  }
+}
+
 async function open(
   width,
   height,
@@ -1719,6 +1921,12 @@ async function runs101() {
 }
 
 try {
+  if (process.env.UI_ONLY === "107") {
+    await agent107();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.07) ok:", out);
+    process.exit(0);
+  }
   if (process.env.UI_ONLY === "101") {
     await runs101();
     noConsoleErrors();
@@ -3155,10 +3363,12 @@ try {
       Math.abs(box.width - 18) < 1 && Math.abs(box.height - 18) < 1,
       `${name}: the figure is 18 px (${box.width}×${box.height})`,
     );
+    // 1.07: the browser plays the motion (an animation of the transform),
+    // so the place is the computed one, not the inline style.
     const places = () =>
       fig
         .locator("i")
-        .evaluateAll((list) => list.map((el) => el.style.transform));
+        .evaluateAll((list) => list.map((el) => getComputedStyle(el).transform));
     const before = await places();
     assert.equal(before.length, 3, `${name}: three spheres`);
     await page.waitForTimeout(400);
@@ -3238,6 +3448,7 @@ try {
     });
     await ctx.close();
   }
+  await agent107();
   await runs101();
   noConsoleErrors();
   console.log("KI-Agent UI ok:", out);

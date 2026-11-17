@@ -151,7 +151,12 @@ func (m *Manager) domainXML(vm VM) (string, error) {
 		// of the VM. A guest without it does not mind the channel.
 		el("channel", "type", "unix").with(el("target", "type", "virtio", "name", "org.qemu.guest_agent.0")),
 		el("rng", "model", "virtio").with(el("backend", "model", "random").text("/dev/urandom")),
-		el("memballoon", "model", "virtio"),
+		// The balloon hands pages the guest has freed back to the NAS
+		// (free page reporting, libvirt 6.9 and QEMU 5.1; Debian 13 has
+		// libvirt 11 and QEMU 10). Without it a VM that once used much of
+		// its memory kept it, until the NAS ran short and its OOM killer
+		// ended the VM (1.07).
+		el("memballoon", "model", "virtio", "freePageReporting", "on"),
 	)
 	if vm.TPM {
 		// The state of the TPM lies in the VM's folder and is kept when the

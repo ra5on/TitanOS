@@ -33,6 +33,7 @@ type browser struct {
 	auth   []byte
 	mu     sync.Mutex
 	got    []Message
+	paths  []string
 	status int
 	header http.Header
 }
@@ -95,6 +96,7 @@ func fixture(t *testing.T, b *browser) (*Manager, *httptest.Server, func() *Mana
 				t.Error(err)
 			}
 			b.got = append(b.got, msg)
+			b.paths = append(b.paths, r.URL.Path)
 		}
 		w.WriteHeader(b.status)
 	}))
@@ -382,5 +384,71 @@ func TestCameraKind(t *testing.T) {
 	m.SendCamera("gesperrt", Message{Title: "Person"})
 	if n := count(); n != 0 {
 		t.Fatal("camera message to a locked account")
+	}
+}
+
+// 1.07: on the iPhone the agent app and TitanOS are two containers with
+// two subscriptions. The agent's messages about a chat go to the agent
+// app, all others to TitanOS; an account with devices of one app only
+// gets everything there; devices of older files are TitanOS.
+func TestMessagesGoToTheirApp(t *testing.T) {
+	b := newBrowser(t)
+	m, server, open := fixture(t, b)
+	m.Allowed = func(string) bool { return true }
+	sent := func(do func()) []string {
+		t.Helper()
+		b.mu.Lock()
+		b.paths = nil
+		b.mu.Unlock()
+		do()
+		time.Sleep(300 * time.Millisecond)
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		out := slices.Clone(b.paths)
+		slices.Sort(out)
+		return out
+	}
+	agentMsg := Message{Title: "KI-Agent: Backups", Tag: "agent-c1", URL: "/agent?chat=c1"}
+	// Only TitanOS: everything there, as before.
+	if _, err := m.Subscribe("alex", "iPhone", b.subscription(server.URL+"/titanos")); err != nil {
+		t.Fatal(err)
+	}
+	if got := sent(func() { m.SendTo("alex", agentMsg) }); !slices.Equal(got, []string{"/titanos"}) {
+		t.Fatalf("agent message without agent app: %v", got)
+	}
+	// With the agent app: the agent's chats there, the rest to TitanOS.
+	d, err := m.SubscribeApp("alex", "iPhone (KI-Agent)", AppAgent, b.subscription(server.URL+"/agent"))
+	if err != nil || d.App != AppAgent {
+		t.Fatalf("agent device %+v %v", d, err)
+	}
+	if got := sent(func() { m.SendTo("alex", agentMsg) }); !slices.Equal(got, []string{"/agent"}) {
+		t.Fatalf("agent message: %v", got)
+	}
+	if got := sent(func() { m.Broadcast(Message{Title: "Volume", Body: "degradiert"}) }); !slices.Equal(got, []string{"/titanos"}) {
+		t.Fatalf("NAS message: %v", got)
+	}
+	if got := sent(func() { m.SendTo("alex", Message{Title: "Notfallzugang", Tag: "emergency-1"}) }); !slices.Equal(got, []string{"/titanos"}) {
+		t.Fatalf("other message of the agent's functions: %v", got)
+	}
+	// The agent app switched the agent's messages off: TitanOS takes them.
+	if _, err := m.SetKinds("alex", d.ID, map[string]bool{KindAgent: false}); err != nil {
+		t.Fatal(err)
+	}
+	if got := sent(func() { m.SendTo("alex", agentMsg) }); !slices.Equal(got, []string{"/titanos"}) {
+		t.Fatalf("agent app off: %v", got)
+	}
+	// Only the agent app: everything goes there, nothing is lost.
+	m.SubscribeApp("bob", "Pixel (KI-Agent)", AppAgent, b.subscription(server.URL+"/bob-agent"))
+	if got := sent(func() { m.Broadcast(Message{Title: "Volume"}) }); !slices.Contains(got, "/bob-agent") {
+		t.Fatalf("bob has only the agent app: %v", got)
+	}
+	// Devices of older files are TitanOS; the app is listed.
+	devs := open().Devices("alex")
+	apps := map[string]string{}
+	for _, d := range devs {
+		apps[d.Name] = d.App
+	}
+	if apps["iPhone"] != AppTitanOS || apps["iPhone (KI-Agent)"] != AppAgent {
+		t.Fatalf("apps %v", apps)
 	}
 }

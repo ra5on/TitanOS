@@ -94,4 +94,6 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/schedules/{id}/run", s.requireAgent(s.handleAgentScheduleRun))
 	// The nine functions of PLAN 54 (agent_features.go).
 	s.registerAgentFeatures(mux)
+	// Photos in Immich, each account with its own key (1.07, agent_photos.go).
+	s.registerAgentPhotos(mux)
 }

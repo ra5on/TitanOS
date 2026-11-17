@@ -127,7 +127,8 @@
 		{@const m = areaMode(settings.policy, area, list)}
 		<SettingRow
 			title={areaLabel(area)}
-			desc={t('agent.toolCount', { count: list.length }) +
+			desc={(area === 'photos' ? t('agent.area.photosHint') + ' ' : '') +
+				t('agent.toolCount', { count: list.length }) +
 				(m === 'mixed' ? ' · ' + t('agent.mixed') : '')}
 			bind:open={() => !!open[area], (on) => (open[area] = on)}
 		>

@@ -156,7 +156,8 @@
 		width: 100%;
 	}
 	.user span {
-		max-width: 78%;
+		/* 1.07: with the full width of the chat the bubble stays a bubble. */
+		max-width: 70%;
 		padding: 10px 16px;
 		border-radius: 20px;
 		background: color-mix(in srgb, var(--text) 9%, var(--surface));

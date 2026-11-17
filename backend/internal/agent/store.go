@@ -192,6 +192,11 @@ type Chat struct {
 	// Helper: the chat of a delegated subtask. Its first message is the
 	// task the model wrote, not words of the person; never saved.
 	Helper bool `json:"-"`
+	// TitleOwn: the person named the chat; nothing renames it again.
+	// TitleMade: the model wrote the title after the first answer (1.07).
+	// Older versions ignore both and keep the title as it is.
+	TitleOwn  bool `json:"titleOwn,omitempty"`
+	TitleMade bool `json:"titleMade,omitempty"`
 	// Plan is the plan the agent keeps for the current task (plan_update).
 	Plan []PlanStep `json:"plan,omitempty"`
 	// Areas of tools loaded in this chat (tools_load, PLAN 55).

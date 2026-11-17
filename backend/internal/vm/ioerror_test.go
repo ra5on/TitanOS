@@ -71,3 +71,15 @@ func TestDisksStopOnErrors(t *testing.T) {
 		t.Fatalf("disks without error_policy stop:\n%s", xml)
 	}
 }
+
+// 1.07: the balloon reports free pages, so a VM gives freed memory back.
+func TestBalloonReportsFreePages(t *testing.T) {
+	m, _ := newTestManager(t)
+	xml, err := m.domainXML(VM{Name: "ha", Template: "other", MemoryMiB: 512, VCPUs: 1, Disks: []Disk{{Format: "qcow2", Path: "/mnt/data/vms/ha/disk.qcow2"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(xml, `<memballoon model="virtio" freePageReporting="on">`) {
+		t.Fatalf("no free page reporting:\n%s", xml)
+	}
+}

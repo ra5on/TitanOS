@@ -157,12 +157,22 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 		}{chat, author, true})
 		return
 	}
-	chat, err := s.agentStore().Chat(currentUser(r).Name, r.PathValue("id"))
+	user := currentUser(r).Name
+	chat, err := s.agentStore().Chat(user, r.PathValue("id"))
 	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, chat)
+	// A title of before 1.07 that ends in " …" gets one from the model once,
+	// when the chat is opened (unless the person named it).
+	if strings.HasSuffix(chat.Title, " …") && agentTitleDue(chat) && !s.agentRunning(user, chat.ID) {
+		s.agentRetitle(user, chat.ID)
+	}
+	writeJSON(w, http.StatusOK, struct {
+		*agent.Chat
+		// Titling: the model is writing the title; the page asks again.
+		Titling bool `json:"titling,omitempty"`
+	}{chat, s.agentTitling(user, chat.ID)})
 }
 
 type agentMessage struct {
@@ -205,16 +215,22 @@ func chatTitle(text string) string {
 	if rest := strings.TrimSpace(fileRef.ReplaceAllString(text, "")); rest != "" {
 		text = rest
 	}
+	// 1.07 (owner 17 Nov 2026): the whole question until the model has
+	// written a short title (agent_title.go) – never cut off with "…". Only
+	// a pasted text of many pages is kept to its first words, at a word.
 	text = strings.Join(strings.Fields(text), " ")
-	if r := []rune(text); len(r) > 60 {
-		cut := string(r[:60])
-		if i := strings.LastIndex(cut, " "); i > 30 {
+	if r := []rune(text); len(r) > chatTitleMax {
+		cut := string(r[:chatTitleMax])
+		if i := strings.LastIndex(cut, " "); i > chatTitleMax/2 {
 			cut = cut[:i]
 		}
-		return cut + " …"
+		return cut
 	}
 	return text
 }
+
+// chatTitleMax bounds a question taken as the title (a pasted log, a letter).
+const chatTitleMax = 400
 
 // handleAgentChatNew starts a chat with its first message.
 func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
@@ -452,6 +468,8 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		chat.Title = t
+		// Named by the person: the model never renames it (1.07).
+		chat.TitleOwn = true
 	}
 	if req.Project != nil {
 		if *req.Project != "" {
@@ -567,7 +585,17 @@ func (s *Server) agentLaunch(run *agentRun, user auth.User, chat *agent.Chat, wo
 	ctx := run.ctx
 	go func() {
 		defer s.agentRT.work.Done()
+		// After the first answer the model writes a short title (1.07),
+		// once the run has ended; it is noted before, so the page that
+		// reads the chat at the end knows to ask again.
+		titling := false
+		defer func() {
+			if titling {
+				s.agentTitleRun(user.Name, chat.ID)
+			}
+		}()
 		defer s.agentRelease(run)
+		defer func() { titling = agentTitleDue(chat) && s.agentTitleMark(user.Name, chat.ID) }()
 		runner := s.agentRunner(ctx, user, settings, client, model, chat, run)
 		err := work(runner, ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {

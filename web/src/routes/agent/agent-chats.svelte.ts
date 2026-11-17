@@ -371,6 +371,7 @@ export class AgentChats {
 			if (turn !== this.opened) return;
 			this.readOnlyBy = fetched.readOnly ? (fetched.author ?? author) : '';
 			this.current = fetched;
+			if (fetched.titling) this.followTitle(id);
 			if (this.readOnlyBy) {
 				if (fetched.project) this.project = fetched.project;
 				if (push) void this.go(`/agent?chat=${id}&author=${encodeURIComponent(this.readOnlyBy)}`);
@@ -394,6 +395,27 @@ export class AgentChats {
 		} catch (e) {
 			if (turn === this.opened) this.error = apiErrorText(e);
 		}
+	};
+
+	/** 1.07: the model writes the chat's title after the first answer; the
+	 *  page asks a few times until it is there, then shows it in the head
+	 *  and the list. When it does not come, the question stays the title. */
+	followTitle = (id: string, tries = 0) => {
+		if (tries >= 8) return;
+		setTimeout(
+			async () => {
+				try {
+					const c = await api.get<Chat>(`/agent/chats/${id}`);
+					if (c.titling) return this.followTitle(id, tries + 1);
+					if (this.current?.id === id) this.current.title = c.title;
+					const listed = this.chats.find((x) => x.id === id);
+					if (listed) listed.title = c.title;
+				} catch {
+					// The list shows it the next time it is read.
+				}
+			},
+			Math.min(1000 * 2 ** tries, 8000),
+		);
 	};
 
 	/** "Neuer Chat" was asked for: an empty chat to write in, not the start
@@ -528,6 +550,7 @@ export class AgentChats {
 			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
 			if (this.stream?.id === id) return; // followed again in the meantime
 			if (this.current?.id === id) this.current = fresh;
+			if (fresh.titling) this.followTitle(id);
 			if (fresh.state === 'running') {
 				if (this.current?.id === id && run.retries < 8) {
 					run.retries++;

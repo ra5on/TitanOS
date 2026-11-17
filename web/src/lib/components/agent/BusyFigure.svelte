@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The working figure of the KI-Agent: three flat dots moving in space
-	// (lib/agent-figures.ts says where they are). Drawn with transforms only,
-	// one frame at a time; standing still with "Animationen: Aus" and with
-	// "less motion" of the system, and while the page is not shown.
+	// (lib/agent-figures.ts says where they are). Moved with transforms only,
+	// as an animation the browser plays itself (1.07, below); standing still
+	// with "Animationen: Aus" and with "less motion" of the system.
 	//
 	// One clock runs on across every change (1.01, owner 16 Nov 2026: "wird
 	// die immer wieder von vorne neu geladen"): a new word or kind of work
@@ -13,6 +13,7 @@
 	// unless a size is given; the dots and their paths grow with it, because
 	// every length below is a share of the figure.
 	import type { BusyKind } from '#lib/agent.ts';
+	import { untrack } from 'svelte';
 	import { BLOCK, FIGURES, SPHERE, figureAt, type Spot } from '#lib/agent-figures.ts';
 
 	let {
@@ -32,57 +33,118 @@
 	// A place in half widths of the figure, as a share of a dot's own size
 	// (a percentage in translate() refers to the dot).
 	const unit = 100 / (2 * SPHERE);
+	// While it moves, places are in px (half the figure's width per unit):
+	// the browser plays a transform with lengths on its compositor, one with
+	// percentages of the dot not always. A new size plays anew (below).
+	let box = $state<HTMLElement>();
+	let half = 0;
+	const transform = (p: Spot) =>
+		half > 0
+			? `translate3d(${(p.x * half).toFixed(2)}px, ${(p.y * half).toFixed(2)}px, ${(p.z * 4).toFixed(2)}px)`
+			: `translate3d(${(p.x * unit).toFixed(2)}%, ${(p.y * unit).toFixed(2)}%, ${(p.z * 4).toFixed(2)}px)`;
 
-	function place(spots: Spot[]) {
-		spots.forEach((p, n) => {
-			const el = dots[n];
-			if (!el) return;
-			el.style.transform = `translate(${(p.x * unit).toFixed(2)}%, ${(p.y * unit).toFixed(2)}%)`;
-			// Depth shows only in what covers what: one size, one colour.
-			el.style.zIndex = String(Math.round(p.z * 10) + 10);
+	/** The still picture at the clock. */
+	function place() {
+		figureAt(kind, clock).forEach((p, n) => {
+			if (dots[n]) dots[n].style.transform = transform(p);
 		});
 	}
 
-	/** One frame: dt seconds since the last one. */
-	function draw(dt: number) {
-		clock += dt * (FIGURES[kind] ?? FIGURES['']).speed;
-		place(figureAt(kind, clock));
+	// 1.07 (owner 17 Nov 2026: "Die Animation der 3 Punkte am Arbeitsplatz
+	// ist nicht flüssig"): the motion is no longer drawn by a script frame
+	// by frame. The path of the next seconds is worked out at once and
+	// handed to the browser as an animation of the transform only
+	// (translate3d; depth is the z of the 3D space, not a z-index). The
+	// browser plays it on its compositor: no style or layout work per frame,
+	// and it stays smooth while the page is busy (an answer streaming in).
+	// Before a stretch ends the next one begins where the dots are – the
+	// clock runs on with the real time; when a stretch was not followed in
+	// time (page in the background), the figure stands at its end and goes
+	// on from there, never with a jump to make up for the time lost.
+	const STRETCH = 3000; // ms of motion one set of key frames covers
+	const RATE = 30; // key frames per second; the browser goes between them
+	let playing: Animation[] = [];
+	let from = 0; // the clock at the start of the stretch
+	let speed = 1;
+	let next: ReturnType<typeof setTimeout> | undefined;
+
+	/** Where the clock stands now in the stretch that plays. */
+	function clockNow(): number {
+		const t = Number(playing[0]?.currentTime ?? 0);
+		return from + (Math.min(Math.max(0, t), STRETCH) / 1000) * speed;
+	}
+	function stop() {
+		clearTimeout(next);
+		next = undefined;
+		if (playing.length) clock = clockNow();
+		for (const a of playing) a.cancel();
+		playing = [];
+	}
+	/** Plays the next stretch of the figure of `k`, from where it stands. */
+	function play(k: BusyKind) {
+		if (playing.length) clock = clockNow();
+		for (const a of playing) a.cancel();
+		from = clock;
+		speed = (FIGURES[k] ?? FIGURES['']).speed;
+		half = (box?.offsetWidth ?? 0) / 2;
+		const frames: Keyframe[][] = [[], [], []];
+		const count = (STRETCH / 1000) * RATE;
+		for (let i = 0; i <= count; i++)
+			figureAt(k, from + (i / RATE) * speed).forEach((p, n) =>
+				frames[n].push({ transform: transform(p) }),
+			);
+		playing = dots.filter(Boolean).map((el, n) => {
+			// The stretch's first place under the animation: never a flash.
+			el.style.transform = String(frames[n][0].transform);
+			return el.animate(frames[n], { duration: STRETCH, fill: 'forwards' });
+		});
+		clearTimeout(next);
+		next = setTimeout(() => play(kind), STRETCH - 400);
 	}
 
 	// Standing still: one picture.
 	const still = $derived(
 		calm ||
-			typeof requestAnimationFrame === 'undefined' ||
+			typeof window === 'undefined' ||
+			typeof Element.prototype.animate !== 'function' ||
 			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
 	);
 	$effect(() => {
 		void dots.length;
-		if (still) draw(0);
+		if (still) place();
 	});
-	// Moving: one loop for the life of the figure. It reads the kind every
-	// frame, so a change never restarts it.
+	// Moving: one clock for the life of the figure. A new kind of work goes
+	// on from where the dots are; it never starts the motion again.
 	// A moving figure begins at a block of its own, so not every run opens
 	// with the same phases (the still picture stays at time 0: the ring).
 	let begun = false;
 	$effect(() => {
-		if (still) return;
+		if (still || dots.length < 3) return;
 		if (!begun) {
 			begun = true;
 			clock += BLOCK * Math.floor(Math.random() * 50);
 		}
-		let frame = 0;
-		let before = performance.now();
-		const step = (now: number) => {
-			draw(Math.min(0.1, Math.max(0, (now - before) / 1000)));
-			before = now;
-			frame = requestAnimationFrame(step);
-		};
-		frame = requestAnimationFrame(step);
-		return () => cancelAnimationFrame(frame);
+		play(untrack(() => kind));
+		return stop;
+	});
+	$effect(() => {
+		const k = kind;
+		if (untrack(() => playing.length)) play(k);
+	});
+	// Another size (Einstellungen › Darstellung): the places of the stretch
+	// are worked out again for it.
+	$effect(() => {
+		if (!box || typeof ResizeObserver === 'undefined') return;
+		const watch = new ResizeObserver(() => {
+			if (playing.length && box && box.offsetWidth / 2 !== half) play(kind);
+		});
+		watch.observe(box);
+		return () => watch.disconnect();
 	});
 </script>
 
 <span
+	bind:this={box}
 	class="fig"
 	style:--fig-size={size ? `${size}px` : null}
 	style:--fig-dot="{SPHERE * 100}%"
@@ -102,6 +164,10 @@
 		transition:
 			width 0.3s ease,
 			height 0.3s ease;
+		/* What happens inside never moves the line around it; the dots
+		   stand in one 3D space, so their z decides what covers what. */
+		contain: layout;
+		transform-style: preserve-3d;
 	}
 	@keyframes appear {
 		from {
@@ -124,6 +190,8 @@
 		margin: calc(var(--fig-dot) / -2) 0 0 calc(var(--fig-dot) / -2);
 		border-radius: 50%;
 		background: var(--ag-dots, var(--ag-warm, var(--accent)));
+		/* Flat dots without a shine (1.05): a layer of their own is safe. */
+		will-change: transform;
 	}
 	:global(.agent.calm) .fig {
 		transition: none;

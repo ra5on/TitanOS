@@ -78,6 +78,7 @@
 	import { slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import Icon from '#lib/components/Icon.svelte';
+	import PhotoGrid, { photoHits } from './PhotoGrid.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	let {
@@ -93,6 +94,7 @@
 
 	const apps = $derived(appRows(steps));
 	const devices = $derived(deviceCards(steps));
+	const photos = $derived(photoHits(steps));
 	const running = $derived(apps.filter((a) => a.state === 'running').length);
 	let all = $state(false);
 	// The one row that shows its actions.
@@ -189,6 +191,8 @@
 		{/if}
 	</section>
 {/if}
+
+<PhotoGrid {photos} />
 
 {#each devices as d (d.id)}
 	<section class="card device" aria-label={d.name}>

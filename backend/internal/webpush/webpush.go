@@ -85,6 +85,25 @@ type Device struct {
 	// 82-3): KindNAS (what the bell shows), KindAgent (the KI-Agent's) and
 	// KindCamera (the cameras'). Empty, as in older files, means all.
 	Off []string `json:"off,omitempty"`
+	// App is the app the device subscribed in (1.07): AppTitanOS or
+	// AppAgent. On the iPhone every web app on the home screen is a
+	// container of its own with its own subscription; a message opens the
+	// app that got it. Empty, as in older files, is TitanOS.
+	App string `json:"app,omitempty"`
+}
+
+// Apps a device can belong to.
+const (
+	AppTitanOS = "titanos"
+	AppAgent   = "agent"
+)
+
+// app is the device's app, TitanOS for devices of older files.
+func (d Device) app() string {
+	if d.App == AppAgent {
+		return AppAgent
+	}
+	return AppTitanOS
 }
 
 // Kinds of messages a device can switch off.
@@ -288,8 +307,17 @@ func deviceID(endpoint string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// Subscribe adds or renews a device of user.
+// Subscribe adds or renews a device of user in the TitanOS app.
 func (m *Manager) Subscribe(user, name string, s Subscription) (Device, error) {
+	return m.SubscribeApp(user, name, AppTitanOS, s)
+}
+
+// SubscribeApp adds or renews a device of user in an app (AppTitanOS or
+// AppAgent; anything else is TitanOS).
+func (m *Manager) SubscribeApp(user, name, app string, s Subscription) (Device, error) {
+	if app != AppAgent {
+		app = AppTitanOS
+	}
 	u, pub, auth, err := m.check(s)
 	if err != nil {
 		return Device{}, err
@@ -317,7 +345,7 @@ func (m *Manager) Subscribe(user, name string, s Subscription) (Device, error) {
 	if mine >= maxPerUser || len(devices) >= maxDevices {
 		return Device{}, ErrTooMany
 	}
-	d := stored{Device: Device{ID: id, User: user, Name: name, Service: u.Hostname(), Created: m.now().UTC()},
+	d := stored{Device: Device{ID: id, User: user, Name: name, Service: u.Hostname(), Created: m.now().UTC(), App: app},
 		Endpoint: s.Endpoint, P256dh: b64.EncodeToString(pub), Auth: b64.EncodeToString(auth)}
 	next := m.st
 	next.Devices = append(devices, d)
@@ -335,10 +363,42 @@ func (m *Manager) Devices(user string) []Device {
 	out := []Device{}
 	for _, d := range m.st.Devices {
 		if d.User == user {
+			d.App = d.app()
 			out = append(out, d.Device)
 		}
 	}
 	return out
+}
+
+// pick chooses the devices of one account a message goes to (1.07): those
+// of the app the message belongs to (the KI-Agent's chats to the agent
+// app, everything else to TitanOS) that want its kind; when the account
+// has none there, those of the other app, so that nothing is lost.
+func pick(devices []stored, user, app, kind string) []stored {
+	var own, other []stored
+	for _, d := range devices {
+		if d.User != user || !d.wants(kind) {
+			continue
+		}
+		if d.app() == app {
+			own = append(own, d)
+		} else {
+			other = append(other, d)
+		}
+	}
+	if len(own) > 0 {
+		return own
+	}
+	return other
+}
+
+// AppOf is the app a message belongs to: the KI-Agent's messages about a
+// chat (tag "agent-<chat>") to the agent app, all others to TitanOS.
+func AppOf(msg Message) string {
+	if strings.HasPrefix(msg.Tag, "agent-") {
+		return AppAgent
+	}
+	return AppTitanOS
 }
 
 // CameraDevices counts the devices of user that take camera messages and
@@ -407,12 +467,18 @@ func (m *Manager) personal(user string) bool {
 // notifications, in the background, one attempt each with one retry.
 func (m *Manager) Broadcast(msg Message) {
 	m.mu.Lock()
-	devices := slices.Clone(m.st.Devices)
+	all := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
-	for _, d := range devices {
-		if (m.Allowed != nil && !m.Allowed(d.User)) || !d.wants(KindNAS) {
+	var devices []stored
+	seen := map[string]bool{}
+	for _, d := range all {
+		if seen[d.User] || (m.Allowed != nil && !m.Allowed(d.User)) {
 			continue
 		}
+		seen[d.User] = true
+		devices = append(devices, pick(all, d.User, AppOf(msg), KindNAS)...)
+	}
+	for _, d := range devices {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
@@ -454,13 +520,13 @@ func (m *Manager) SendTo(user string, msg Message) {
 
 // send sends to the devices of one account that want kind.
 func (m *Manager) send(user, kind string, msg Message) {
+	if !m.personal(user) {
+		return
+	}
 	m.mu.Lock()
-	devices := slices.Clone(m.st.Devices)
+	devices := pick(slices.Clone(m.st.Devices), user, AppOf(msg), kind)
 	m.mu.Unlock()
 	for _, d := range devices {
-		if d.User != user || !m.personal(d.User) || !d.wants(kind) {
-			continue
-		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
