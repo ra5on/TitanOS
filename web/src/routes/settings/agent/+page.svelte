@@ -4,6 +4,7 @@
 	// named locations, what the agent may do (quick choice, areas, single
 	// tools and folders with "Ohne Nachfrage / Nachfragen / Verboten"), its
 	// own initiative and Home Assistant. Owners and administrators only.
+	import { announceAgentSettings } from '#lib/agent-settings-signal.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -200,6 +201,8 @@
 			settings = filled(await api.put<Settings>('/agent/settings', $state.snapshot(settings)));
 			saved = true;
 			remember();
+			// An agent page open elsewhere takes the new defaults at once.
+			announceAgentSettings();
 			void api.get<Status>('/agent/status').then((s) => (status = s));
 			void api.get<{ tools: ToolView[] }>('/agent/tools').then((r) => (tools = r.tools));
 		} catch (e) {

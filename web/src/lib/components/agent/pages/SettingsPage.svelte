@@ -14,7 +14,7 @@
 	import InitiativeSettings from '../InitiativeSettings.svelte';
 	import FeaturesPanel from '../features/FeaturesPanel.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
+	import { DOT_SIZES, levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
 	import ColorPick from '../ColorPick.svelte';
 	import BusyFigure from '../BusyFigure.svelte';
@@ -366,12 +366,27 @@
 							text
 						/>
 					</div>
+					<!-- 1.05 (owner 17 Nov 2026): the size of the dots, smaller by
+					     default than the 26 px before. -->
+					<div class="row col">
+						<span class="t"><strong>{t('agent.set.dotSize')}</strong></span>
+						<span class="seg" role="radiogroup" aria-label={t('agent.set.dotSize')}>
+							{#each ['s', 'm', 'l'] as const as z (z)}
+								<label class:on={look.dotSize === z}
+									><input type="radio" bind:group={look.dotSize} value={z} />{t(
+										`agent.set.dotSize.${z}`,
+									)}</label
+								>
+							{/each}
+						</span>
+					</div>
 					<div
 						class="row busy-preview"
 						role="img"
 						aria-label={t('agent.set.colorPreview')}
 						style:--ag-dots={look.dotColor || null}
 						style:--ag-busy-text={look.textColor || null}
+						style:--ag-dot-size="{DOT_SIZES[look.dotSize]}px"
 					>
 						<BusyFigure kind="" calm={look.motion === 'off'} />
 						<span class="word">{t('agent.busy.1')}</span>
@@ -495,6 +510,15 @@
 		background: var(--surface);
 		font-weight: 600;
 		box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+	}
+	/* Big enough for a finger on the phone. */
+	@media (max-width: 760px) {
+		.seg label {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 44px;
+		}
 	}
 	.seg input {
 		position: absolute;

@@ -1,5 +1,6 @@
 import { api, ApiError, type Preferences, type Session, type User } from './api.ts';
 import { sound, resetSound } from './sound.svelte.ts';
+import { resetMail } from './tmail/store.svelte.ts';
 import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
@@ -75,12 +76,26 @@ export async function loadServices() {
 	try {
 		// Not longer than a few seconds: a managed node that is restarting
 		// must not hold up the start of the web interface (node-restart.ts).
-		session.services = await api.get<Record<string, boolean>>(
-			'/services/state',
-			AbortSignal.timeout(5000),
-		);
+		const [services, mail] = await Promise.all([
+			api.get<Record<string, boolean>>('/services/state', AbortSignal.timeout(5000)),
+			mailAccess(),
+		]);
+		session.services = { ...services, mail };
 	} catch {
 		session.services = {};
+	}
+}
+
+/**
+ * 1.05: whether T-Mail is released for this account (GET /mail/access,
+ * docs/TMAIL.md). A NAS without T-Mail answers 404: not shown.
+ */
+async function mailAccess(): Promise<boolean> {
+	try {
+		const answer = await api.get<{ enabled?: boolean }>('/mail/access', AbortSignal.timeout(5000));
+		return answer?.enabled === true;
+	} catch {
+		return false;
 	}
 }
 
@@ -90,6 +105,8 @@ export async function refreshSession() {
 		const data = await api.get<Session>('/session');
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
+			// Another account: none of the previous one's mailboxes stay in memory.
+			resetMail();
 		}
 		// A locked session answers nothing else (lock.svelte.ts); the
 		// preferences follow once it is unlocked.

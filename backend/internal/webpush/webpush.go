@@ -95,10 +95,13 @@ const (
 	// camera names (SendCamera); separate from KindAgent, so that the
 	// agent's switch never silences a camera.
 	KindCamera = "camera"
+	// KindMail is new mail in T-Mail (SendMail, docs/TMAIL.md), to the
+	// account whose mailbox it is.
+	KindMail = "mail"
 )
 
 // kinds are all kinds, in the order Off lists them.
-var kinds = []string{KindNAS, KindAgent, KindCamera}
+var kinds = []string{KindNAS, KindAgent, KindCamera, KindMail}
 
 func (d Device) wants(kind string) bool { return !slices.Contains(d.Off, kind) }
 
@@ -432,6 +435,14 @@ func (m *Manager) Broadcast(msg Message) {
 // agent's switch does not count.
 func (m *Manager) SendCamera(user string, msg Message) {
 	m.send(user, KindCamera, msg)
+}
+
+// SendMail sends a message about new mail to every device of one account
+// that did not switch mail messages off. T-Mail has checked that the
+// account may use it; a locked or deleted account gets nothing here
+// either (Personal).
+func (m *Manager) SendMail(user string, msg Message) {
+	m.send(user, KindMail, msg)
 }
 
 // SendTo sends a message to every device of one account, in the

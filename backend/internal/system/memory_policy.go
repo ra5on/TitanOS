@@ -186,6 +186,25 @@ func (m *MemoryPolicy) Run(ctx context.Context) {
 	}
 }
 
+// TryReserve takes bytes of the budget for work that holds data in RAM
+// for a moment (T-Mail: a mail with its attachments), without waiting:
+// false when the budget is used up now. Without a known budget (switched
+// off, not loaded) nothing is counted.
+func (m *MemoryPolicy) TryReserve(bytes int64) (func(), bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Disabled || !m.loaded || bytes <= 0 {
+		return func() {}, true
+	}
+	budget, _ := memoryBudget(m.memory(), m.settings.CachePercent)
+	if m.inFlight+uint64(bytes) > budget {
+		return nil, false
+	}
+	m.inFlight += uint64(bytes)
+	var once sync.Once
+	return func() { once.Do(func() { m.mu.Lock(); m.inFlight -= uint64(bytes); m.mu.Unlock() }) }, true
+}
+
 // Acquire shares the budget across all managed writes. A bounded window is
 // synced and evicted before its reservation is released by the caller.
 func (m *MemoryPolicy) Acquire(ctx context.Context) (int64, func(), error) {

@@ -443,6 +443,20 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('terminal.fullscreen', 'menubar.vms.fullscreen'),
 		]),
 	],
+	// 1.05: T-Mail (docs/TMAIL.md).
+	mail: [
+		menu('file', 'menubar.menu.file', [
+			cmd('mail.compose', 'mail.action.compose'),
+			sep,
+			go('mail.go.setup', 'mail.side.add', '/mail/setup'),
+		]),
+		menu('view', 'menubar.menu.view', [
+			cmd('mail.refresh', 'menubar.refresh'),
+			sep,
+			go('mail.go.mail', 'mail.side.mail', '/mail'),
+			go('mail.go.settings', 'mail.side.settings', '/mail/settings'),
+		]),
+	],
 	// PLAN 79-7: the NVR's pages; what only administrators may open is left out for others.
 	nvr: [
 		menu('view', 'menubar.menu.view', [
@@ -607,6 +621,7 @@ const DOCS: Record<string, string> = {
 	vmscreen: 'VM-MEDIA.md',
 	lxc: 'LXC.md',
 	nvr: 'NVR.md',
+	mail: 'TMAIL.md',
 	appcenter: 'PLUGINS.md',
 	backup: 'REPLICATION.md',
 	agent: 'AGENT.md',

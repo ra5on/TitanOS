@@ -48,6 +48,9 @@ type agentAccountData struct {
 	Notes      int `json:"notes"`
 	// Folder: the account has a folder in the share KI-Agent.
 	Folder bool `json:"folder"`
+	// MailAccounts are the mailboxes of T-Mail the deletion takes along
+	// (1.05; from the stick's settings in RAM, also without the agent).
+	MailAccounts int `json:"mailAccounts"`
 }
 
 // agentDataOf counts the agent's data of an account. It reads the volume
@@ -55,6 +58,9 @@ type agentAccountData struct {
 func (s *Server) agentDataOf(name string) agentAccountData {
 	store := s.agentStore()
 	out := agentAccountData{}
+	if s.opts.Mail != nil {
+		out.MailAccounts = s.opts.Mail.MailboxCount(name)
+	}
 	if s.agentOpen == nil && s.agentSettings().Volume == "" || store.Available() != nil {
 		return out
 	}

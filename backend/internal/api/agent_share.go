@@ -275,8 +275,8 @@ func agentChatMarkdown(c *agent.Chat, project string, loc *time.Location) string
 	if project != "" {
 		meta = append(meta, "Projekt "+project)
 	}
-	if c.Model != "" {
-		meta = append(meta, c.Model)
+	if m := c.OwnModel(); m != "" {
+		meta = append(meta, m)
 	}
 	meta = append(meta, "begonnen "+c.Created.In(loc).Format("02.01.2006 15:04"))
 	fmt.Fprintf(&b, "_%s_\n", strings.Join(meta, " · "))

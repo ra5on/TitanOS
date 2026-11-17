@@ -36,7 +36,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { agentProfilePath, api } from '#lib/api.ts';
 	import { apiErrorText, i18n } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, modelShown, tokens, type ChatInfo } from '#lib/agent.ts';
+	import { DOT_SIZES, levelLabel, modelShown, tokens, type ChatInfo } from '#lib/agent.ts';
 	import { AgentPage } from './agent-page.svelte.ts';
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
@@ -72,7 +72,7 @@
 				(ag.status?.models ?? []).map((m) => ({
 					id: m.name,
 					text: m.label || m.name,
-					checked: ag.model === m.name,
+					checked: ag.shownModel === m.name,
 				})),
 			run: (id) => {
 				if (id && (ag.status?.models ?? []).some((m) => m.name === id)) ag.model = id;
@@ -275,15 +275,15 @@
 			aria-haspopup="dialog"
 			aria-label={t('agent.modelPick')}
 			onclick={() => (ag.dialog = { kind: 'head' })}
-			><strong>{modelShown(ag.status.models, ag.model) || '–'}</strong>{#if ag.status.cloud}<span
-					class="cloud-tag">{t('agent.cloud')}</span
-				>{/if}{#if ag.think}<span>{levelLabel(ag.think, i18n.locale)}</span>{/if}</button
+			><strong>{modelShown(ag.status.models, ag.shownModel) || '–'}</strong
+			>{#if ag.status.cloud}<span class="cloud-tag">{t('agent.cloud')}</span
+				>{/if}{#if ag.shownThink}<span>{levelLabel(ag.shownThink, i18n.locale)}</span>{/if}</button
 		>
 	{:else}
 		<ModelPicker
 			models={ag.status.models}
-			bind:model={ag.model}
-			bind:think={ag.think}
+			bind:model={() => ag.shownModel, (v) => (ag.model = v)}
+			bind:think={() => ag.shownThink, (v) => (ag.think = v)}
 			small
 			calm={ag.calm}
 		/>
@@ -304,6 +304,7 @@
 	style:--agent-head={ag.phone && headH ? `${headH}px` : null}
 	style:--ag-dots={ag.look.dotColor || null}
 	style:--ag-busy-text={ag.look.textColor || null}
+	style:--ag-dot-size="{DOT_SIZES[ag.look.dotSize]}px"
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 
@@ -404,7 +405,8 @@
 										<small
 											>{ag.currentProject
 												? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-												: ''}<span>{modelShown(ag.status?.models, ag.model) || '–'}</span></small
+												: ''}<span>{modelShown(ag.status?.models, ag.shownModel) || '–'}</span
+											></small
 										>
 									</span>
 									<Icon name="chevronDown" size={16} />
@@ -710,8 +712,8 @@
 		projects={ag.projects}
 		project={ag.current ? (ag.current.project ?? '') : ag.project}
 		models={ag.status.models}
-		bind:model={ag.model}
-		bind:think={ag.think}
+		bind:model={() => ag.shownModel, (v) => (ag.model = v)}
+		bind:think={() => ag.shownThink, (v) => (ag.think = v)}
 		calm={ag.calm}
 		onproject={ag.readOnlyBy ? undefined : setProject}
 		onclose={() => (ag.dialog = null)}

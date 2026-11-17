@@ -17,6 +17,7 @@
 	import { unreadCount } from '../notifications.svelte.ts';
 	import { swipeDown } from '../components/sheet.ts';
 	import { settingsGroupOf, settingsMenu } from '../settings-search.ts';
+	import { mailUp } from '../tmail/levels.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -50,6 +51,8 @@
 	// other program) to the home screen.
 	const up = $derived.by(() => {
 		const path = page.url.pathname.replace(/\/$/, '');
+		// 1.05: T-Mail in levels – message › list › mailboxes › home screen.
+		if (path === '/mail' || path.startsWith('/mail/')) return mailUp(page.url);
 		if (path !== '/settings' && !path.startsWith('/settings/')) return '/';
 		if (path === '/settings') return page.url.searchParams.has('area') ? '/settings' : '/';
 		const group = settingsGroupOf(path);

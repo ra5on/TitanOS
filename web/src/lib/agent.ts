@@ -59,6 +59,11 @@ export type Chat = {
 	updated: string;
 	model?: string;
 	think?: string;
+	/** Model and think are the chat's own choice (1.05); without the mark
+	 *  they are the copy of the default that pages up to 1.04 sent, and the
+	 *  chat follows the settings. */
+	modelOwn?: boolean;
+	thinkOwn?: boolean;
 	/** How the chat works: left out starts right away, "plan" or "ask". */
 	autonomy?: string;
 	origin?: string;
@@ -75,7 +80,7 @@ export type Chat = {
 
 export type ChatInfo = Omit<
 	Chat,
-	'entries' | 'model' | 'think' | 'pending' | 'tainted' | 'plan' | 'areas'
+	'entries' | 'model' | 'think' | 'modelOwn' | 'thinkOwn' | 'pending' | 'tainted' | 'plan' | 'areas'
 > & {
 	preview?: string;
 	/** Changed since the person last looked, on any device (PLAN 48). */
@@ -187,6 +192,23 @@ export type Schedule = {
 	wake?: '' | 'wake' | 'ask' | 'never';
 	created?: string;
 };
+
+/** Whether a planned task still runs: switched on, and a one-off task that
+ *  already ran is done. The count beside "Geplant" counts only these (owner
+ *  17 Nov 2026: "es sind aber nur 2 aktiv … der Morgenbericht wird
+ *  mitgezählt, obwohl der Morgenbericht deaktiviert ist"). */
+export function scheduleActive(s: Pick<Schedule, 'enabled' | 'every' | 'lastRun'>): boolean {
+	if (!s.enabled) return false;
+	const ran = !!s.lastRun && new Date(s.lastRun).getFullYear() >= 2000;
+	return !(s.every === 'once' && ran);
+}
+
+/** How many planned tasks, reminders and the morning report are active. */
+export function activeSchedules(
+	list: readonly Pick<Schedule, 'enabled' | 'every' | 'lastRun'>[] | undefined,
+): number {
+	return (list ?? []).filter(scheduleActive).length;
+}
 
 export type Model = {
 	name: string;
@@ -706,7 +728,15 @@ export type Look = {
 	dotColor: string;
 	/** Colour of the text beside the dots, "#rrggbb"; empty: the theme's grey. */
 	textColor: string;
+	/** Size of the working dots' figure (owner 17 Nov 2026: "Größe der
+	 *  Punkte anpassen … die sind für mich viel zu groß"); see DOT_SIZES. */
+	dotSize: DotSize;
 };
+
+export type DotSize = 's' | 'm' | 'l';
+/** The width of the working figure in px per size; the dots grow with it.
+ *  "m" is the default since 1.05 (before, the figure was always 26 px). */
+export const DOT_SIZES: Record<DotSize, number> = { s: 14, m: 18, l: 26 };
 
 /** Settings that belong to the device, not the account. */
 export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
@@ -732,6 +762,7 @@ export const defaultLook = (): Look => ({
 	mic: 'tap',
 	dotColor: '',
 	textColor: '',
+	dotSize: 'm',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -766,6 +797,7 @@ export function sanitizeLook(v: unknown): Look {
 		mic: pick(o.mic, ['tap', 'hold'], d.mic),
 		dotColor: color(o.dotColor),
 		textColor: color(o.textColor),
+		dotSize: pick(o.dotSize, ['s', 'm', 'l'], d.dotSize),
 	};
 }
 

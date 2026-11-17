@@ -768,4 +768,6 @@ func confinedClient() *http.Client {
 
 // public is the rule for confined accounts; other outbound requests made for
 // an account (file downloads from a link) share it through netguard.
-func public(addr netip.Addr) bool { return netguard.Public(addr) }
+// Not the networks of the NAS either: with IPv6 the home network has
+// public addresses (security review of 1.05).
+func public(addr netip.Addr) bool { return netguard.Confined(addr, nil) }

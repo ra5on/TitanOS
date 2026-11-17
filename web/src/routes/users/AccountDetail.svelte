@@ -5,6 +5,7 @@
 	// may use which app is set here.
 	import { api, type Account, type AccessLevel, type Role, type Share } from '#lib/api.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
+	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import Expander from '#lib/components/explorer/Expander.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 
@@ -86,16 +87,53 @@
 			appsBusy = false;
 		}
 	}
+	// ---- T-Mail (1.05, docs/TMAIL.md): its own release, off for every role ----
+	// null: not known (a NAS without T-Mail answers 404; then no switch).
+	let mailOn = $state<boolean | null>(null);
+	let mailBusy = $state(false);
+	let mailError = $state('');
+	$effect(() => {
+		const name = account.name;
+		mailOn = null;
+		mailError = '';
+		api.get<{ enabled: boolean }>(`/users/${encodeURIComponent(name)}/mail`).then(
+			(res) => {
+				if (name === account.name) mailOn = res?.enabled === true;
+			},
+			() => {
+				// No switch without an answer (older NAS, no right to see it).
+			},
+		);
+	});
+	async function saveMail(enabled: boolean) {
+		const name = account.name;
+		mailBusy = true;
+		mailError = '';
+		try {
+			const res = await api.put<{ enabled: boolean }>(`/users/${encodeURIComponent(name)}/mail`, {
+				enabled,
+			});
+			if (name === account.name) mailOn = res?.enabled === true;
+		} catch (err) {
+			if (name === account.name) mailError = apiErrorText(err);
+		} finally {
+			mailBusy = false;
+		}
+	}
+
 	const allowedCount = $derived(apps ? apps.apps.filter((a) => a.allowed).length : 0);
 	const appsSummary = $derived(
 		!apps
 			? ''
-			: apps.admin
-				? t('users.apps.adminAll')
-				: [
-						t('users.apps.count', { allowed: allowedCount, total: apps.apps.length }),
-						apps.newApps ? t('users.apps.newAuto') : t('users.apps.newManual'),
-					].join(' · '),
+			: [
+					...(mailOn === null ? [] : [mailOn ? t('users.apps.mailOn') : t('users.apps.mailOff')]),
+					...(apps.admin
+						? [t('users.apps.adminAll')]
+						: [
+								t('users.apps.count', { allowed: allowedCount, total: apps.apps.length }),
+								apps.newApps ? t('users.apps.newAuto') : t('users.apps.newManual'),
+							]),
+				].join(' · '),
 	);
 	function hue(name: string) {
 		let h = 0;
@@ -266,6 +304,25 @@
 
 	<Expander icon="grid" title={t('users.apps.title')} summary={appsSummary} bind:open={appsOpen}>
 		{#if appsError}<p class="notice-error part" role="alert">{appsError}</p>{/if}
+		{#if mailOn !== null}
+			<!-- 1.05: T-Mail is off for every role until released here, admins included. -->
+			<div class="apps mail-app">
+				<label class="app">
+					<input
+						type="checkbox"
+						checked={mailOn}
+						disabled={mailBusy}
+						onchange={(event) => saveMail(event.currentTarget.checked)}
+					/>
+					<span class="app-icon glyph" aria-hidden="true"
+						><DesktopIcon glyph="mail" gradient="blue" size={22} /></span
+					>
+					<span>{t('users.apps.mail')}</span>
+				</label>
+			</div>
+			<p class="muted part mail-hint">{t('users.apps.mailHint')}</p>
+			{#if mailError}<p class="notice-error part" role="alert">{mailError}</p>{/if}
+		{/if}
 		{#if !apps}
 			<p class="muted part" role="status">{t('common.loading')}</p>
 		{:else if apps.admin}
@@ -548,6 +605,11 @@
 	.app-icon.letter {
 		background: hsl(var(--hue) 50% 36%);
 		color: #fff;
+	}
+	/* 1.05: T-Mail on a line of its own, its name in one piece. */
+	.mail-app {
+		grid-template-columns: minmax(0, 1fr);
+		padding-bottom: 0;
 	}
 	.apps-foot {
 		display: flex;

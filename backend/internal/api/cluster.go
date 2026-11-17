@@ -58,6 +58,11 @@ type clusterArea struct {
 	agentForgetSettings, agentForgetLeftovers func(name string)
 	agentForgetUser                           func(name string)
 	goJob                                     jobFunc
+	// mailForgetUser: T-Mail of an account deleted elsewhere goes, and an
+	// account taken over anew does not inherit an earlier one's.
+	mailForgetUser func(name string)
+	// mailRoleChanged: the role decides where T-Mail may connect.
+	mailRoleChanged func(name string)
 }
 
 // clusterArea is the area of the server; New wires its callbacks into the
@@ -67,7 +72,7 @@ func (s *Server) clusterArea() clusterArea {
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
 		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds,
-		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob}
+		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -573,6 +578,11 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 	name := after.Name
 	if deleted {
 		name = before.Name
+	}
+	if a.mailForgetUser != nil && (deleted || !existed || !before.Created.Equal(after.Created)) {
+		a.mailForgetUser(name)
+	} else if a.mailRoleChanged != nil && existed && (before.Role != after.Role || before.Disabled != after.Disabled) {
+		a.mailRoleChanged(name)
 	}
 	switch {
 	case deleted:

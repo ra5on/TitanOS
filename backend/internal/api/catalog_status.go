@@ -12,6 +12,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
+	"github.com/ra5on/TitanOS/backend/internal/update"
+	"github.com/ra5on/TitanOS/backend/internal/version"
 )
 
 // The reading tools of the catalog for owners and administrators. Each
@@ -35,7 +37,7 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 	}
 	res := map[string]any{
 		"hostname":      info.Hostname,
-		"version":       env.version,
+		"version":       version.Display(env.version),
 		"kernel":        info.Kernel,
 		"uptimeSeconds": info.UptimeSeconds,
 		"cpu": map[string]any{
@@ -48,7 +50,10 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 		"stickPresent": info.Stick.Present,
 	}
 	if env.update != nil && env.update.Base != "" {
-		res["baseVersion"] = env.update.Base
+		// Not the running version (owner, 17 Nov 2026): the system image
+		// under the app update.
+		res["systemImageBase"] = version.Display(env.update.Base)
+		res["note"] = "version is the running TitanOS; systemImageBase is not the running version but the system image under the app update."
 	}
 	if info.Image != nil {
 		res["slot"] = info.Image.Slot
@@ -106,37 +111,116 @@ func (s *Server) notificationsFor(user auth.User, args json.RawMessage) (any, er
 func (s *Server) toolUpdateStatus(ctx context.Context) (any, error) {
 	env := s.toolEnv()
 	if env.update == nil {
-		return map[string]any{"version": env.version}, nil
+		running := version.Display(env.version)
+		return map[string]any{"running": running, "upToDate": false,
+			"answer": "TitanOS " + running + " läuft; nach Updates sieht dieses NAS nicht (keine Update-Verwaltung)."}, nil
 	}
-	status := env.update.Status()
+	return updateStatusView(env.update.Status()), nil
+}
+
+// updateStatusNote says what the other version numbers are (owner, 17 Nov
+// 2026: asked whether there is an update, the agent took the base 0.99 for
+// the running version).
+const updateStatusNote = "running is the TitanOS version that runs now, as TitanOS shows it; answer with it. " +
+	"systemImageBase and fallbackSystems are not the running version: the system image under the app update and the systems to go back to."
+
+// updateStatusView is what update_status gives the model: the running
+// version as TitanOS shows it ("1.04", never the raw "1.4.0"), whether a
+// check found nothing newer, a newer version if one was found, and one
+// sentence to answer with. The base of an app update and the versions in
+// the two system slots carry names that cannot pass for the running one.
+func updateStatusView(status update.Status) map[string]any {
+	running := version.Display(status.Version)
 	res := map[string]any{
-		"version":     status.Version,
+		"running":     running,
 		"channel":     status.Settings.Channel,
 		"autoInstall": status.Settings.AutoInstall,
-		"slots":       status.Slots,
 		"unconfirmed": status.Unconfirmed,
 		"lastCheck":   status.LastCheck,
 		"nextCheck":   status.NextCheck,
 		"checkEvery":  status.Settings.CheckEvery,
 		"kernel":      status.Variant,
+		"note":        updateStatusNote,
 	}
+	type fallback struct {
+		Slot     string `json:"slot"`
+		Version  string `json:"version"`
+		Running  bool   `json:"running"`
+		Complete bool   `json:"complete"`
+		Next     bool   `json:"next"`
+		Kernel   string `json:"kernel,omitempty"`
+	}
+	systems := make([]fallback, 0, len(status.Slots))
+	for _, sl := range status.Slots {
+		v := ""
+		if sl.Version != "" {
+			v = version.Display(sl.Version)
+		}
+		systems = append(systems, fallback{Slot: sl.Name, Version: v, Running: sl.Running, Complete: sl.Complete, Next: sl.Next, Kernel: sl.Variant})
+	}
+	res["fallbackSystems"] = systems
 	if status.Base != "" {
-		res["baseVersion"] = status.Base
+		res["systemImageBase"] = version.Display(status.Base)
 	}
 	if status.CheckError != "" {
 		res["checkError"] = status.CheckError
 	}
-	if status.Pending != nil {
-		res["pendingRestart"] = map[string]any{"kind": status.Pending.Kind, "version": status.Pending.Version, "since": status.Pending.Since}
+	if status.FailedVersion != "" {
+		res["failedVersion"] = version.Display(status.FailedVersion)
 	}
+	if status.KernelMissing != "" {
+		res["kernelMissing"] = version.Display(status.KernelMissing)
+	}
+	if status.Pending != nil {
+		res["pendingRestart"] = map[string]any{"kind": status.Pending.Kind, "version": version.Display(status.Pending.Version), "since": status.Pending.Since}
+	}
+	// A newer release, or the running one with the other kernel variant
+	// (KernelSwitch): the latter is no newer version.
+	newest := ""
 	if a := status.Available; a != nil {
 		changelog := a.Changelog
 		if len(changelog) > 4000 {
 			changelog = changelog[:4000] + " …"
 		}
-		res["available"] = map[string]any{"version": a.Version, "channel": a.Channel, "released": a.Released, "kind": status.Kind, "changelog": changelog}
+		res["available"] = map[string]any{"version": version.Display(a.Version), "channel": a.Channel, "released": a.Released, "kind": status.Kind, "kernelSwitch": status.KernelSwitch, "changelog": changelog}
+		if !status.KernelSwitch {
+			newest = version.Display(a.Version)
+			res["newest"] = newest
+		}
 	}
-	return res, nil
+	checked := status.LastCheck != nil && !status.LastCheck.IsZero()
+	// A newer release that has no system with the chosen kernel variant is
+	// found, but not offered: TitanOS is not up to date then either.
+	missing := ""
+	if status.KernelMissing != "" {
+		missing = version.Display(status.KernelMissing)
+	}
+	upToDate := checked && status.CheckError == "" && newest == "" && missing == ""
+	res["upToDate"] = upToDate
+	answer := ""
+	switch {
+	case newest != "":
+		answer = "TitanOS " + running + " läuft; " + newest + " ist verfügbar."
+		if status.FailedVersion != "" && version.Display(status.FailedVersion) == newest {
+			answer += " Diese Version ist auf diesem NAS schon einmal nicht gestartet; sie wird nicht von selbst wieder installiert."
+		}
+	case missing != "":
+		answer = "TitanOS " + running + " läuft; " + missing + " ist erschienen, aber nicht mit der gewählten Kernel-Variante (Einstellungen › Updates)."
+	case status.CheckError != "":
+		answer = "TitanOS " + running + " läuft; konnte nicht prüfen, ob es ein neueres Release gibt: " + status.CheckError
+	case !checked:
+		answer = "TitanOS " + running + " läuft; nach Updates wurde noch nicht gesucht."
+	default:
+		answer = "TitanOS " + running + " läuft; zuletzt geprüft " + status.LastCheck.Local().Format("02.01.2006 15:04") + ": kein neueres Release."
+	}
+	if status.Available != nil && status.KernelSwitch {
+		answer += " Bereit liegt dieselbe Version mit der anderen Kernel-Variante (" + version.Display(status.Available.Version) + ")."
+	}
+	if status.Pending != nil && status.Pending.Kind == "update" {
+		answer += " Ein Neustart in " + version.Display(status.Pending.Version) + " steht aus."
+	}
+	res["answer"] = answer
+	return res
 }
 
 func (s *Server) toolUPSStatus(ctx context.Context) (any, error) {

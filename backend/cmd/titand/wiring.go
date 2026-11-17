@@ -62,6 +62,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/tmail"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
@@ -97,11 +98,13 @@ type titand struct {
 	remoteView   *viewer.Manager
 	recorder     *nvr.Manager
 	voices       *speech.Manager
-	webApps      *webapps.Manager
-	devices      *hardware.Manager
-	containers   *docker.Manager
-	appCatalog   *catalog.Manager
-	machines     *vm.Manager
+	// mail is T-Mail (docs/TMAIL.md).
+	mail       *tmail.Manager
+	webApps    *webapps.Manager
+	devices    *hardware.Manager
+	containers *docker.Manager
+	appCatalog *catalog.Manager
+	machines   *vm.Manager
 	// start: when apps and VMs start after boot (PLAN 73).
 	start            *startup.Manager
 	systemContainers *lxc.Manager
@@ -262,7 +265,7 @@ func (w *titand) wireBase() error {
 func (w *titand) wire() error {
 	for _, step := range []func() error{
 		w.wireBase, w.wireShares, w.wireApplications, w.wireNotifications, w.wireAccess, w.wireUpdates,
-		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireSpeech, w.wireWebapps, w.wireMaintenance, w.wireAPI,
+		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireSpeech, w.wireWebapps, w.wireMail, w.wireMaintenance, w.wireAPI,
 	} {
 		if err := step(); err != nil {
 			return err

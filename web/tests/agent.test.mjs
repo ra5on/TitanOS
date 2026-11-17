@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+	activeSchedules,
+	DOT_SIZES,
 	areaMode,
 	blocks,
 	groupChats,
@@ -258,4 +261,47 @@ test('the colours of the working line are "#rrggbb" or empty (owner, 16 Nov 2026
 	assert.equal(ok.textColor, '#30a46c');
 	for (const bad of ['red', '#fff', 'url(x)', 'var(--x)', '#12345g', 42, null])
 		assert.equal(sanitizeLook({ dotColor: bad, textColor: bad }).dotColor, '', String(bad));
+});
+
+test('"Geplant" counts only active tasks (owner, 17 Nov 2026)', () => {
+	// "es sind aber nur 2 aktiv … der Morgenbericht wird mitgezählt, obwohl
+	// der Morgenbericht deaktiviert ist"
+	const list = [
+		{ kind: 'morning', every: 'weekdays', enabled: false },
+		{ kind: '', every: 'daily', enabled: true },
+		{ kind: 'reminder', every: 'weekly', enabled: true, lastRun: '2026-11-10T08:00:00Z' },
+		{ kind: '', every: 'trigger', enabled: true },
+		{ kind: '', every: 'daily', enabled: false },
+		// A one-off task that ran is done; one that never ran still counts.
+		{ kind: '', every: 'once', enabled: true, lastRun: '2026-11-16T08:00:00Z' },
+		{ kind: 'reminder', every: 'once', enabled: true, lastRun: '0001-01-01T00:00:00Z' },
+	];
+	assert.equal(activeSchedules(list), 4);
+	assert.equal(activeSchedules(list.slice(0, 3)), 2);
+	assert.equal(activeSchedules([]), 0);
+	assert.equal(activeSchedules(undefined), 0);
+	// Every place that shows the number uses it.
+	const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
+	assert.match(read('routes/agent/agent-chats.svelte.ts'), /plannedCount = activeSchedules\(/);
+	assert.match(
+		read('lib/components/agent/Planned.svelte'),
+		/oncount\?\.\(activeSchedules\(list\)\)/,
+	);
+	assert.match(
+		read('lib/components/agent/pages/HomePage.svelte'),
+		/count: activeSchedules\(planned\)/,
+	);
+});
+
+test('the size of the working dots: small, medium or large, medium by default (owner, 17 Nov 2026)', () => {
+	// "Gut wäre, wenn ich die Größe der Punkte anpassen könnte … die sind für
+	// mich viel zu groß": smaller by default than the 26 px before.
+	assert.deepEqual(DOT_SIZES, { s: 14, m: 18, l: 26 });
+	assert.equal(sanitizeLook({}).dotSize, 'm');
+	assert.equal(sanitizeLook(null).dotSize, 'm');
+	for (const z of ['s', 'm', 'l']) assert.equal(sanitizeLook({ dotSize: z }).dotSize, z);
+	for (const bad of ['xl', 'M', 26, '', null, {}])
+		assert.equal(sanitizeLook({ dotSize: bad }).dotSize, 'm', String(bad));
+	// Kept for the account like the colours, as a flat value.
+	assert.equal(accountLook(sanitizeLook({ dotSize: 's' })).dotSize, 's');
 });

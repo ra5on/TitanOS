@@ -64,6 +64,10 @@ export type FrameMessage =
 	| { type: 'titanos-open-file'; root: string; path: string; app?: string }
 	/** PLAN 67: a page asks the desktop to open a Docker app's window ("docker:<app>"). */
 	| { type: 'titanos-open-program'; key: string }
+	/** 1.05: a page asks for a window of its own for one task (writing an e-mail, apps.ts taskPage). */
+	| { type: 'titanos-open-task'; href: string }
+	/** 1.05: a task window is done and closes itself (sent e-mail). */
+	| { type: 'titanos-close' }
 	/** PLAN 69: a page that draws the window's side bar itself asks whether it is folded. */
 	| { type: 'titanos-side-get' }
 	/** PLAN 69: such a page folds or unfolds the window's side bar (saved by the desktop). */

@@ -105,6 +105,12 @@
 		home: 'M3 11.5 12 4l9 7.5M5.5 9.5V20h13V9.5M10 20v-5.5h4V20',
 		zap: 'M13 3 5 13.5h6L10 21l8-10.5h-6Z',
 		shield: 'M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6ZM9 12l2 2 4-4',
+		// 1.05, T-Mail: a letter, answering, answering all, passing on, a flag.
+		mail: 'M3 6h18v12H3ZM3.5 6.5 12 13l8.5-6.5',
+		reply: 'M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6v1',
+		replyAll: 'M12 7l-5 5 5 5M7 7l-5 5 5 5M7 12h7a6 6 0 0 1 6 6v1',
+		forward: 'M15 7l5 5-5 5M20 12H10a6 6 0 0 0-6 6v1',
+		flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

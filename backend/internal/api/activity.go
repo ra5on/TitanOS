@@ -43,6 +43,10 @@ var activityQuiet = []string{
 	"POST /api/v1/files/search",
 	"POST /api/v1/storage/smart/refresh",
 	"POST /api/v1/files/usage",
+	// T-Mail: drafts are saved every 30 s, flags change while reading.
+	"POST /api/v1/mail/accounts/{id}/draft",
+	"POST /api/v1/mail/accounts/{id}/flags",
+	"POST /api/v1/mail/accounts/test",
 	"POST /api/v1/files/url-download/probe",
 	"PUT /api/v1/preferences/{kind}",
 	// Locking and unlocking are recorded by their handlers, with their own names.

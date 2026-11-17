@@ -33,6 +33,8 @@
 			'<path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="var(--c)" stroke-opacity=".45" stroke-width="2.2" stroke-linecap="round"/><circle cx="15" cy="6.5" r="2.6" fill="var(--c)"/><circle cx="8.5" cy="12" r="2.6" fill="var(--c)"/><circle cx="13" cy="17.5" r="2.6" fill="var(--c)"/>',
 		// PLAN 79-7: a camera on its mount with a recording dot.
 		nvr: '<rect x="3" y="5" width="13.5" height="9.5" rx="2.2" fill="#fff"/><path d="m16.5 8.2 4.3-2.4v8.4l-4.3-2.4Z" fill="#fff" fill-opacity=".7"/><circle cx="7" cy="8.6" r="1.5" fill="var(--c)"/><path d="M9.7 14.5v3.2M6 19.5h7.4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+		// 1.05: T-Mail, a closed letter.
+		mail: '<rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="#fff"/><path d="m4 7.2 8 6 8-6" stroke="var(--c)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
 		users:
 			'<circle cx="9" cy="8" r="3.6" fill="#fff"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0Z" fill="#fff"/><circle cx="17" cy="9" r="2.6" fill="#fff" fill-opacity=".7"/><path d="M15.8 14.2A5 5 0 0 1 21.5 20h-4.2a8 8 0 0 0-1.5-5.8Z" fill="#fff" fill-opacity=".7"/>',
 		planner:

@@ -105,6 +105,12 @@ type usersArea struct {
 	agentForgetSettings  func(name string)
 	agentForgetLeftovers func(name string)
 	agentDataOf          func(name string) agentAccountData
+	// mailForgetUser removes what T-Mail keeps of an account: when it is
+	// deleted, and when one is made (nothing of an earlier account of the
+	// same name goes to it).
+	mailForgetUser func(name string)
+	// mailRoleChanged makes T-Mail connect anew with the rules of the role.
+	mailRoleChanged func(name string)
 }
 
 // usersArea is the area of the server.
@@ -113,7 +119,7 @@ func (s *Server) usersArea() usersArea {
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
 		agentForgetUser: s.agentForgetAccount, agentForgetSettings: s.agentForgetSettings,
-		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf}
+		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -161,6 +167,7 @@ func (a usersArea) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	// What a deletion of an earlier account of this name could not remove
 	// (the agent's volume was missing) does not go to the new one.
 	a.agentForgetLeftovers(user.Name)
+	a.mailForgetUser(user.Name)
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	a.shares.Kick()
 	a.ssh.Kick()
@@ -230,6 +237,9 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			user = fresh
 		}
 	}
+	// T-Mail: a user reaches the internet only, an administrator the home
+	// network too; the connections follow the role at once.
+	a.mailRoleChanged(user.Name)
 	slog.Info("account role changed", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	// SSH is for owners and administrators only.
 	a.ssh.Kick()
@@ -345,6 +355,8 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	a.agentForgetSettings(target.Name)
 	a.goJob(func(context.Context) { a.agentForgetUser(target.Name) })
 	a.nvrForgetUser(target.Name)
+	// T-Mail: connections end, settings, passwords and the address book go.
+	a.mailForgetUser(target.Name)
 	a.prefs.forget(target.Name)
 	a.notify.ForgetPersonal(target.Name)
 	a.notify.ForgetBell(target.Name)

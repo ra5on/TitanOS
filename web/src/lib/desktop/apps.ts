@@ -247,6 +247,26 @@ export const SYSTEM_APPS: SystemApp[] = [
 		kind: 'system',
 	},
 	{
+		// 1.05 (docs/TMAIL.md): T-Mail, the account's own mailboxes. Hidden
+		// until the account's app release says so (/services/state "mail");
+		// off for every role from the start.
+		id: 'mail',
+		label: 'desktop.app.mail',
+		glyph: 'mail',
+		gradient: 'blue',
+		href: '/mail',
+		paths: ['/mail'],
+		side: [
+			// The page draws its own column of mailboxes and folders.
+			{ href: '/mail', label: 'mail.side.mail', icon: 'mail', page: true, match: ['/mail'] },
+			{ group: 'desktop.side.settings' },
+			{ href: '/mail/setup', label: 'mail.side.add', icon: 'plus' },
+			{ href: '/mail/settings', label: 'mail.side.settings', icon: 'gear' },
+		],
+		optIn: true,
+		kind: 'system',
+	},
+	{
 		id: 'agent',
 		label: 'desktop.app.agent',
 		glyph: 'agent',
@@ -441,4 +461,13 @@ export function sideActive(item: SideItem, path: string, items: SideItem[]): boo
 /** PLAN 69: the page at this path draws the window's side bar itself. */
 export function pageDrawsSide(items: SideItem[], path: string): boolean {
 	return items.some((item) => 'page' in item && item.page && sideActive(item, path, items));
+}
+
+/**
+ * 1.05: pages that do one task in a window of their own (writing an e-mail).
+ * Opening the program never takes such a window over, and a page may ask the
+ * desktop for one (titanos-open-task).
+ */
+export function taskPage(href: string): boolean {
+	return /^\/mail\/compose(\?|$)/.test(href);
 }

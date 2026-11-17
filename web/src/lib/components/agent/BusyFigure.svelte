@@ -1,123 +1,79 @@
 <script lang="ts">
-	// The working figure of the KI-Agent: three shaded spheres in space
+	// The working figure of the KI-Agent: three flat dots moving in space
 	// (lib/agent-figures.ts says where they are). Drawn with transforms only,
 	// one frame at a time; standing still with "Animationen: Aus" and with
 	// "less motion" of the system, and while the page is not shown.
 	//
-	// 1.01 (owner 16 Nov 2026: "teilweise keine sanften Übergänge", "alle
-	// drei Punkte gleich groß"): the three spheres always have one size; the
-	// figure stays when the kind of work or its size changes and glides into
-	// the new motion and size instead of being built anew. One clock runs
-	// on across every change ("wird die immer wieder von vorne neu
-	// geladen"): a new word or a kind with the same figure only changes the
-	// pace, never starts the motion again; only another figure glides.
-	import { untrack } from 'svelte';
+	// One clock runs on across every change (1.01, owner 16 Nov 2026: "wird
+	// die immer wieder von vorne neu geladen"): a new word or kind of work
+	// never starts the motion again. The three dots always have one size.
+	//
+	// 1.05 (owner 17 Nov 2026: "Größe der Punkte anpassen"): the figure is as
+	// wide as --ag-dot-size (Einstellungen › Darstellung, 18 px by default)
+	// unless a size is given; the dots and their paths grow with it, because
+	// every length below is a share of the figure.
 	import type { BusyKind } from '#lib/agent.ts';
-	import {
-		FIGURES,
-		SPHERE,
-		blendSpots,
-		figureAt,
-		sameFigure,
-		type Spot,
-	} from '#lib/agent-figures.ts';
+	import { BLOCK, FIGURES, SPHERE, figureAt, type Spot } from '#lib/agent-figures.ts';
 
 	let {
 		kind = '',
-		size = 26,
+		size,
 		calm = false,
 	}: {
 		kind?: BusyKind;
-		/** Width and height in px. */
+		/** Width and height in px; without it --ag-dot-size. */
 		size?: number;
 		calm?: boolean;
 	} = $props();
 
-	/** How long a change of figure or size takes, in seconds. */
-	const GLIDE = 0.45;
-
-	let box = $state<HTMLElement>();
 	let dots = $state<HTMLElement[]>([]);
-	const shadow = $derived((FIGURES[kind] ?? FIGURES['']).shadow);
-
-	// The figure and size the spheres come from while they glide.
-	let from: { size: number; at: number; spots: Spot[] } | null = null;
-	// Units of motion so far (seconds × the figure's speed) and seconds.
+	// Units of motion so far (seconds × the figure's speed).
 	let clock = 0;
-	let seconds = 0;
-	const first = untrack(() => size);
-	let shownKind: BusyKind = untrack(() => kind);
-	let shownSize = first;
-	let last: Spot[] = [];
-	let lastSize = first;
+	// A place in half widths of the figure, as a share of a dot's own size
+	// (a percentage in translate() refers to the dot).
+	const unit = 100 / (2 * SPHERE);
 
-	function place(spots: Spot[], width: number) {
-		const half = width / 2;
-		const d = Math.max(3, width * SPHERE);
-		if (box && width !== lastSize) {
-			box.style.width = box.style.height = `${width}px`;
-			lastSize = width;
-		}
+	function place(spots: Spot[]) {
 		spots.forEach((p, n) => {
 			const el = dots[n];
 			if (!el) return;
-			el.style.width = el.style.height = `${d}px`;
-			el.style.margin = `${-d / 2}px 0 0 ${-d / 2}px`;
-			el.style.transform = `translate(${p.x * half}px, ${p.y * half}px) scaleY(${p.squash ?? 1})`;
-			// Depth shows in what covers what; all three keep one tone (owner
-			// 16 Nov 2026: "alle in dem gleich Farbton").
+			el.style.transform = `translate(${(p.x * unit).toFixed(2)}%, ${(p.y * unit).toFixed(2)}%)`;
+			// Depth shows only in what covers what: one size, one colour.
 			el.style.zIndex = String(Math.round(p.z * 10) + 10);
 		});
-		last = spots;
 	}
 
-	/** One frame: dt seconds since the last one; glide = animate changes. */
-	function draw(dt: number, glide: boolean) {
-		seconds += dt;
+	/** One frame: dt seconds since the last one. */
+	function draw(dt: number) {
 		clock += dt * (FIGURES[kind] ?? FIGURES['']).speed;
-		if (kind !== shownKind || size !== shownSize) {
-			// Another figure or size glides from where the spheres stand now,
-			// also in the middle of another change; the same figure at another
-			// pace goes straight on.
-			const other = !sameFigure(kind, shownKind) || size !== shownSize;
-			from = glide && other && last.length ? { size: lastSize, at: seconds, spots: last } : null;
-			shownKind = kind;
-			shownSize = size;
-		}
-		const target = figureAt(kind, clock);
-		if (!from) {
-			place(target, size);
-			return;
-		}
-		const k = (seconds - from.at) / GLIDE;
-		if (k >= 1) {
-			from = null;
-			place(target, size);
-			return;
-		}
-		const e = k * k * (3 - 2 * k);
-		place(blendSpots(from.spots, target, k), from.size + (size - from.size) * e);
+		place(figureAt(kind, clock));
 	}
 
-	// Standing still: drawn again whenever what it shows changes.
+	// Standing still: one picture.
 	const still = $derived(
 		calm ||
 			typeof requestAnimationFrame === 'undefined' ||
 			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
 	);
 	$effect(() => {
-		void kind;
-		void size;
-		if (still) untrack(() => draw(0, false));
+		void dots.length;
+		if (still) draw(0);
 	});
-	// Moving: one loop for the life of the figure. It reads kind and size
-	// every frame, so a change never restarts it.
+	// Moving: one loop for the life of the figure. It reads the kind every
+	// frame, so a change never restarts it.
+	// A moving figure begins at a block of its own, so not every run opens
+	// with the same phases (the still picture stays at time 0: the ring).
+	let begun = false;
 	$effect(() => {
 		if (still) return;
+		if (!begun) {
+			begun = true;
+			clock += BLOCK * Math.floor(Math.random() * 50);
+		}
 		let frame = 0;
 		let before = performance.now();
 		const step = (now: number) => {
-			draw(Math.min(0.1, Math.max(0, (now - before) / 1000)), true);
+			draw(Math.min(0.1, Math.max(0, (now - before) / 1000)));
 			before = now;
 			frame = requestAnimationFrame(step);
 		};
@@ -128,12 +84,11 @@
 
 <span
 	class="fig"
-	bind:this={box}
-	style:width="{first}px"
-	style:height="{first}px"
+	style:--fig-size={size ? `${size}px` : null}
+	style:--fig-dot="{SPHERE * 100}%"
 	data-kind={kind}
 	aria-hidden="true"
-	><u class:off={!shadow}></u>{#each [0, 1, 2] as n (n)}<i bind:this={dots[n]}></i>{/each}</span
+	>{#each [0, 1, 2] as n (n)}<i bind:this={dots[n]}></i>{/each}</span
 >
 
 <style>
@@ -141,7 +96,12 @@
 		flex: none;
 		position: relative;
 		display: inline-block;
+		width: var(--fig-size, var(--ag-dot-size, 18px));
+		height: var(--fig-size, var(--ag-dot-size, 18px));
 		animation: appear 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+		transition:
+			width 0.3s ease,
+			height 0.3s ease;
 	}
 	@keyframes appear {
 		from {
@@ -149,42 +109,28 @@
 			transform: scale(0.5);
 		}
 	}
-	/* A sphere: light from the upper left, its own colour, a darker rim. */
+	/* A dot: flat and exactly its colour (1.05, owner 17 Nov 2026: "die 3
+	   Punkte … sind irgendwie heller als die Schrift, wie als wenn da
+	   irgendwas drüber gelegt ist"; "eine Art Schimmer … was dann auch den
+	   Boden leuchten lässt") – no gradient, no highlight, no shadow, no
+	   ground below the figure. Depth shows only in the motion and in what
+	   covers what. Size and margin are shares of the figure's width. */
 	.fig i {
 		position: absolute;
 		left: 50%;
 		top: 50%;
+		width: var(--fig-dot);
+		height: var(--fig-dot);
+		margin: calc(var(--fig-dot) / -2) 0 0 calc(var(--fig-dot) / -2);
 		border-radius: 50%;
-		background: radial-gradient(
-			circle at 34% 28%,
-			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 45%, white) 0,
-			var(--ag-dots, var(--ag-warm, var(--accent))) 46%,
-			color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 58%, black) 100%
-		);
-		will-change: transform;
+		background: var(--ag-dots, var(--ag-warm, var(--accent)));
 	}
-	/* The ground the spheres hang over; it fades with the figure that has
-	   none instead of vanishing. */
-	.fig u {
-		position: absolute;
-		left: 15%;
-		bottom: -8%;
-		width: 70%;
-		height: 12%;
-		border-radius: 50%;
-		background: color-mix(in srgb, var(--ag-dots, var(--ag-warm, var(--accent))) 35%, black);
-		filter: blur(2px);
-		opacity: 0.4;
-		transition: opacity 0.45s ease;
-	}
-	.fig u.off {
-		opacity: 0;
+	:global(.agent.calm) .fig {
+		transition: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.fig {
 			animation: none;
-		}
-		.fig u {
 			transition: none;
 		}
 	}

@@ -72,6 +72,8 @@ func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
 		NAS    bool  `json:"nas"`
 		Agent  bool  `json:"agent"`
 		Camera *bool `json:"camera"`
+		// Mail is new mail in T-Mail (1.05); left out it stays as it is.
+		Mail *bool `json:"mail"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -79,6 +81,9 @@ func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
 	want := map[string]bool{webpush.KindNAS: req.NAS, webpush.KindAgent: req.Agent}
 	if req.Camera != nil {
 		want[webpush.KindCamera] = *req.Camera
+	}
+	if req.Mail != nil {
+		want[webpush.KindMail] = *req.Mail
 	}
 	device, err := a.push.SetKinds(currentUser(r).Name, r.PathValue("id"), want)
 	switch {

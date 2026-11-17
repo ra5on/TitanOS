@@ -933,6 +933,29 @@ async function plan55() {
     );
     for (const b of await dotsPick.locator(".sw").all())
       assert.ok((await b.boundingBox()).height >= 44, "44 px colour buttons");
+    // 1.05 (owner 17 Nov 2026): the size of the dots, with the preview.
+    const sizePick = page.getByRole("radiogroup", { name: "Größe der Punkte" });
+    const previewFig = preview.locator(".fig");
+    const figWidth = async () => (await previewFig.boundingBox()).width;
+    await page.waitForTimeout(400);
+    assert.ok(Math.abs((await figWidth()) - 18) < 1, "medium by default: 18 px");
+    for (const [label, px] of [
+      ["Groß", 26],
+      ["Klein", 14],
+      ["Mittel", 18],
+    ]) {
+      await sizePick.locator("label", { hasText: label }).click();
+      await page.waitForTimeout(450);
+      const w = await figWidth();
+      assert.ok(Math.abs(w - px) < 1, `${label}: the preview is ${px} px (${w})`);
+      const dot = (await previewFig.locator("i").first().boundingBox()).width;
+      assert.ok(
+        Math.abs(dot - px * 0.24) < 0.6,
+        `${label}: the dots grow with the figure (${dot})`,
+      );
+    }
+    for (const b of await sizePick.locator("label").all())
+      assert.ok((await b.boundingBox()).height >= 44, "44 px size buttons");
     await noOverflow(page, "colours on the phone");
     await page.screenshot({ path: `${out}/101-colours-phone.png` });
     // One way back: the button in the head, no second link in the page.
@@ -3126,9 +3149,11 @@ try {
     // It grows in for a third of a second; measured once it stands.
     await page.waitForTimeout(600);
     const box = await fig.boundingBox();
+    // 1.05 (owner 17 Nov 2026: "die sind für mich viel zu groß"): 18 px
+    // by default ("Mittel"), the dots a quarter of it.
     assert.ok(
-      Math.abs(box.width - 26) < 1 && Math.abs(box.height - 26) < 1,
-      `${name}: the figure is 26 px (${box.width}×${box.height})`,
+      Math.abs(box.width - 18) < 1 && Math.abs(box.height - 18) < 1,
+      `${name}: the figure is 18 px (${box.width}×${box.height})`,
     );
     const places = () =>
       fig
@@ -3159,6 +3184,30 @@ try {
       Math.max(...sizes) - Math.min(...sizes) < 0.5,
       `${name}: three dots of one size (${sizes})`,
     );
+    // 1.05 (owner 17 Nov 2026: "eine Art Schimmer … was dann auch den
+    // Boden leuchten lässt", "heller als die Schrift"): flat dots in exactly
+    // their colour – no gradient, no shadow, no ground, nothing above them
+    // that dims or lightens them.
+    const look = await fig.evaluate((el) => {
+      const dots = [...el.querySelectorAll("i")].map((d) => {
+        const c = getComputedStyle(d);
+        return [c.backgroundImage, c.backgroundColor, c.boxShadow, c.filter, c.opacity];
+      });
+      const faded = [];
+      for (let n = el; n && !n.classList.contains("messages"); n = n.parentElement) {
+        const c = getComputedStyle(n);
+        if (c.opacity !== "1" || c.filter !== "none") faded.push(n.className);
+      }
+      return { dots, ground: el.querySelectorAll("u").length, faded };
+    });
+    assert.equal(look.ground, 0, `${name}: no ground below the dots`);
+    assert.deepEqual(look.faded, [], `${name}: nothing dims the dots`);
+    for (const d of look.dots)
+      assert.deepEqual(
+        d,
+        ["none", "rgb(217, 115, 74)", "none", "none", "1"],
+        `${name}: a flat dot in the agent's orange`,
+      );
     const seenLine = await page.evaluate(() => {
       const line = document.querySelector(".live-line").getBoundingClientRect();
       const view = document.querySelector(".messages").getBoundingClientRect();
