@@ -25,13 +25,23 @@
 	const badge = $derived(ddnsBadge(status));
 	const when = (value?: string) => (value ? formatDateTime(new Date(value)) : '–');
 
+	// One update at a time: a double click sent two (1.03, D102-48). The
+	// look a moment later does not outlive the page.
+	let updating = $state(false);
+	let later: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => () => clearTimeout(later));
 	async function update() {
+		if (updating) return;
+		updating = true;
 		updateError = '';
 		try {
 			onstatus(await updateNow());
-			setTimeout(onrefresh, 3000);
+			clearTimeout(later);
+			later = setTimeout(onrefresh, 3000);
 		} catch (err) {
 			updateError = apiErrorText(err);
+		} finally {
+			updating = false;
 		}
 	}
 </script>
@@ -82,7 +92,7 @@
 			<button
 				type="button"
 				class="btn"
-				disabled={!status.settings.enabled || status.running || status.disabled}
+				disabled={!status.settings.enabled || status.running || status.disabled || updating}
 				onclick={update}>{t('ddns.updateNow')}</button
 			>
 			<button type="button" class="btn" onclick={onrefresh}>{t('ddns.refresh')}</button>

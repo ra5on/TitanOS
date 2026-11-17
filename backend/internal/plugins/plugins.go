@@ -244,6 +244,9 @@ type Manager struct {
 	// recovered are the plugin folders whose interrupted update, if any,
 	// has been undone in this run of titand.
 	recovered map[string]bool
+	// swept are the plugin volumes whose cut-off downloads were removed
+	// in this run of titand (sweepDownloads).
+	swept map[string]bool
 	// retryAt is when a failed activation is tried again on its own;
 	// retries counts those tries (a driver whose device is not ready yet
 	// right after the start). Zero: no automatic retry.

@@ -17,6 +17,7 @@
 	import ClusterBanner from './ClusterBanner.svelte';
 	import { loadClusterNodes } from '#lib/cluster.svelte.ts';
 	import TerminalPanel from './TerminalPanel.svelte';
+	import Toasts from './Toasts.svelte';
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
@@ -315,6 +316,8 @@
 {#if admin && (frame === 'window' ? page.url.pathname === '/terminal' : frame !== 'desktop')}<TerminalPanel
 	/>{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
+<!-- 1.03: short notices at the bottom, once, in the top window. -->
+{#if !inWindow}<Toasts />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 

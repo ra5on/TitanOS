@@ -117,6 +117,9 @@ const WebUILabel = "titanos.webui"
 type Job struct {
 	State  string `json:"state"` // running, done, failed
 	Output string `json:"output"`
+	// Code names a known cause of a failed job for the page: "timeout"
+	// when docker compose was stopped at its time limit. Empty otherwise.
+	Code string `json:"code,omitempty"`
 }
 
 // Status is everything the Docker page shows.

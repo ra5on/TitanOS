@@ -1,0 +1,88 @@
+// What deleting an account takes along of the KI-Agent (1.03, A-42): the
+// delete dialog names it before (GET /users/{name}/agent-data). A NAS
+// without the route (an older version) answers 404; the dialog then
+// stays as it was, without this list.
+import { t, type MessageKey } from './i18n/index.svelte.ts';
+
+export type AgentData = {
+	/** false: the agent's volume is not there; the counts are then 0. */
+	available: boolean;
+	chats: number;
+	/** Projects the account owns; `handedOver` of them go to a member. */
+	projects: number;
+	handedOver: number;
+	memories: number;
+	skills: number;
+	schedules: number;
+	notes: number;
+	/** The account has a folder in the share KI-Agent. */
+	folder: boolean;
+};
+
+const COUNTS = [
+	'chats',
+	'projects',
+	'handedOver',
+	'memories',
+	'skills',
+	'schedules',
+	'notes',
+] as const;
+
+/** The answer checked; null for anything that is not one (the dialog shows no list then). */
+export function sanitizeAgentData(raw: unknown): AgentData | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	if (typeof r.available !== 'boolean') return null;
+	const count = (v: unknown) =>
+		typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+	const out = { available: r.available, folder: r.folder === true } as AgentData;
+	for (const key of COUNTS) out[key] = count(r[key]);
+	// A subset of the projects, never more.
+	out.handedOver = Math.min(out.handedOver, out.projects);
+	return out;
+}
+
+export type AgentDataText = {
+	/** What goes with the account, one line each. */
+	deleted: string[];
+	/** Shared projects that stay with a member, if any. */
+	kept: string;
+	/** Instead of the list: nothing to delete, or counted without the volume. */
+	note: string;
+};
+
+/** The lines of the delete dialog. */
+export function agentDataText(d: AgentData): AgentDataText {
+	if (!d.available)
+		return {
+			deleted: (
+				[
+					'users.agentData.part.chats',
+					'users.agentData.part.projects',
+					'users.agentData.part.memories',
+					'users.agentData.part.skills',
+					'users.agentData.part.schedules',
+					'users.agentData.part.notes',
+					'users.agentData.part.folder',
+				] as MessageKey[]
+			).map((key) => t(key)),
+			kept: t('users.agentData.part.shared'),
+			note: t('users.agentData.unavailable'),
+		};
+	const rows: [MessageKey, number][] = [
+		['users.agentData.chats', d.chats],
+		['users.agentData.projects', d.projects - d.handedOver],
+		['users.agentData.memories', d.memories],
+		['users.agentData.skills', d.skills],
+		['users.agentData.schedules', d.schedules],
+		['users.agentData.notes', d.notes],
+	];
+	const deleted = rows.filter(([, n]) => n > 0).map(([key, n]) => t(key, { count: n }));
+	if (d.folder) deleted.push(t('users.agentData.part.folder'));
+	return {
+		deleted,
+		kept: d.handedOver > 0 ? t('users.agentData.handedOver', { count: d.handedOver }) : '',
+		note: deleted.length || d.handedOver ? '' : t('users.agentData.nothing'),
+	};
+}

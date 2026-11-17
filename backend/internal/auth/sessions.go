@@ -41,7 +41,9 @@ type Session struct {
 	// Locked is a session whose screen is locked (PLAN 61): the cookie
 	// stays valid, but nothing but unlocking and logging out works until
 	// the account's password, code or passkey is given again. Kept in RAM
-	// and in the file in /run, never on the stick.
+	// and in the file in /run; for a remembered session also as a mark in
+	// LockedFile on the stick, written only when it is locked or unlocked
+	// (owner 16 Nov 2026, Z-9), so the lock outlives a restart of the NAS.
 	Locked   bool      `json:",omitempty"`
 	LockedAt time.Time `json:",omitzero"`
 }
@@ -74,9 +76,14 @@ type Sessions struct {
 	// for it.
 	want    []byte
 	wantMap map[string]Session
-	wantGen uint64
-	writing bool
-	idle    *sync.Cond
+	// lockWant and lockWantMap are what LockedFile should hold, lockKept
+	// what it holds; the same writer writes them.
+	lockWant    []byte
+	lockWantMap map[string]lockMark
+	lockKept    []byte
+	wantGen     uint64
+	writing     bool
+	idle        *sync.Cond
 	// stay is the setting "stay logged in": days after the login, 0 = off,
 	// StayForever = no end.
 	stay int
@@ -92,6 +99,18 @@ type Keeper interface {
 // tokens, the account, the login time and the device, nothing that changes
 // while a session is used.
 const RememberFile = "sessions/remembered.json"
+
+// LockedFile marks the remembered sessions whose screen is locked (1.03,
+// Z-9): hashes of their tokens and when they were locked. Written only
+// when a remembered session is locked or unlocked, never while it is used
+// or at a start; read at the start of titand. Older titand do not know it
+// and start such a session unlocked, as before.
+const LockedFile = "sessions/locked.json"
+
+// lockMark is what LockedFile keeps of a locked session.
+type lockMark struct {
+	LockedAt time.Time `json:"lockedAt"`
+}
 
 // StayFile holds the setting "stay logged in" of the NAS.
 const StayFile = "system/login.json"
@@ -203,6 +222,7 @@ func (s *Sessions) Lock(token string) bool {
 	if !session.Locked {
 		session.Locked, session.LockedAt = true, s.now()
 		s.save()
+		s.keepLocks()
 	}
 	return true
 }
@@ -222,6 +242,7 @@ func (s *Sessions) Unlock(token string) bool {
 	session.Locked, session.LockedAt = false, time.Time{}
 	session.LastSeen = s.now()
 	s.save()
+	s.keepLocks()
 	return true
 }
 
@@ -244,6 +265,7 @@ func (s *Sessions) LockIfIdle(token string, idle time.Duration) bool {
 	}
 	session.Locked, session.LockedAt = true, now
 	s.save()
+	s.keepLocks()
 	return true
 }
 
@@ -515,6 +537,22 @@ func (s *Sessions) Remember(store Keeper) error {
 	}
 	s.kept, _ = json.Marshal(written)
 	s.want = s.kept
+	// The marks of locked sessions. What the file holds counts as written;
+	// an unreadable file locks every session taken over from the stick
+	// (unlocking costs a password, a lost lock could cost more) and is
+	// replaced with the next lock or unlock.
+	var marks map[string]lockMark
+	lockAll := false
+	switch err := store.ReadJSON(LockedFile, &marks); {
+	case err == nil:
+		s.lockKept, _ = json.Marshal(marks)
+	case errors.Is(err, fs.ErrNotExist):
+		s.lockKept, _ = json.Marshal(map[string]lockMark{})
+	default:
+		slog.Warn("marks of locked logins not readable; remembered logins start locked", "err", err)
+		lockAll, s.lockKept = true, nil
+	}
+	s.lockWant = s.lockKept
 	now := s.now()
 	for hash, session := range stored {
 		raw, err := hex.DecodeString(hash)
@@ -524,6 +562,14 @@ func (s *Sessions) Remember(store Keeper) error {
 		key := [sha256.Size]byte(raw)
 		if _, known := s.sessions[key]; !known {
 			session.LastSeen = session.Created
+			// The file in RAM knows the lock of a session it holds; one
+			// from the stick is locked if it was locked when the NAS went
+			// down.
+			mark, locked := marks[hash]
+			session.Locked, session.LockedAt = locked || lockAll, mark.LockedAt
+			if session.Locked && session.LockedAt.IsZero() {
+				session.LockedAt = now
+			}
 			s.sessions[key] = session
 		}
 	}
@@ -563,17 +609,51 @@ func (s *Sessions) keepRemembered() {
 	}
 }
 
-// writeKept writes what keepRemembered asked for, always the latest, one
-// write at a time and so in order, until nothing is left to write.
+// keepLocks has the marks of the locked remembered sessions written to
+// the stick if they changed. Called only when a session is locked or
+// unlocked: the file follows the locks, not logins, logouts or use, and a
+// mark of a session that is gone drops out with the next lock or unlock.
+// The lock is held; writeKept writes.
+func (s *Sessions) keepLocks() {
+	if s.keep == nil {
+		return
+	}
+	now := s.now()
+	marks := map[string]lockMark{}
+	for key, session := range s.sessions {
+		if session.Locked && session.Remember && s.stay != 0 && !s.expired(session, now) {
+			marks[hex.EncodeToString(key[:])] = lockMark{LockedAt: session.LockedAt}
+		}
+	}
+	data, err := json.Marshal(marks)
+	if err != nil || string(data) == string(s.lockWant) {
+		return
+	}
+	s.lockWant, s.lockWantMap = data, marks
+	s.wantGen++
+	if !s.writing {
+		s.writing = true
+		go s.writeKept()
+	}
+}
+
+// writeKept writes what keepRemembered and keepLocks asked for, always the
+// latest, one write at a time and so in order, until nothing is left to
+// write.
 func (s *Sessions) writeKept() {
 	s.mu.Lock()
 	for done := uint64(0); done != s.wantGen; {
 		gen, data, stored, keep := s.wantGen, s.want, s.wantMap, s.keep
+		lockData, lockStored := s.lockWant, s.lockWantMap
 		written := string(data) == string(s.kept)
+		lockWritten := string(lockData) == string(s.lockKept)
 		s.mu.Unlock()
-		var err error
+		var err, lockErr error
 		if !written {
 			err = keep.WriteJSON(RememberFile, stored)
+		}
+		if !lockWritten {
+			lockErr = keep.WriteJSON(LockedFile, lockStored)
 		}
 		s.mu.Lock()
 		switch {
@@ -585,6 +665,15 @@ func (s *Sessions) writeKept() {
 			}
 		case !written:
 			s.kept = data
+		}
+		switch {
+		case lockErr != nil:
+			slog.Warn("lock of remembered logins not saved to the stick", "err", lockErr)
+			if s.wantGen == gen {
+				s.lockWant = s.lockKept
+			}
+		case !lockWritten:
+			s.lockKept = lockData
 		}
 		done = gen
 	}

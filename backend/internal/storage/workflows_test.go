@@ -119,12 +119,20 @@ func TestSnapshotFileRestoreKeepsAppUpdateWaiting(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("restore did not start")
 	}
-	if !m.ActionsRunning() {
+	// App updates wait for ActionsRunning or SnapshotRestoresRunning
+	// (cmd/titand); the copy itself runs without the storage lock.
+	if !m.SnapshotRestoresRunning() {
 		t.Fatal("app update would interrupt an active snapshot-file restore")
+	}
+	if !m.restoreUses("data", "manual") || !m.restoreUses("safe", "") {
+		t.Fatal("snapshot or target volume could be deleted or locked during the copy")
+	}
+	if m.ActionsRunning() {
+		t.Fatal("the copy holds the storage lock: every other storage action waits for it")
 	}
 	unblock()
 	<-done
-	if result != nil || m.ActionsRunning() {
+	if result != nil || m.ActionsRunning() || m.SnapshotRestoresRunning() {
 		t.Fatal("restore did not release app update", result)
 	}
 }

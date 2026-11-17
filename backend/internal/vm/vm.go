@@ -544,7 +544,7 @@ func (m *Manager) checkIOErrors(ctx context.Context) {
 	running := m.RunningNames()
 	paused := map[string]bool{}
 	for name := range running {
-		out, err := m.runner.Run(ctx, "", "virsh", "--quiet", "domstate", name, "--reason")
+		out, err := m.virsh(ctx, "--quiet", "domstate", name, "--reason")
 		if err == nil && strings.Contains(out, "paused") && strings.Contains(strings.ToLower(out), "i/o error") {
 			paused[name] = true
 		}

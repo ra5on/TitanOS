@@ -29,9 +29,12 @@
 	let message = $state('');
 	let showPreview = $state(false);
 
-	function take(next: Answer) {
+	/** `keep`: changes not saved yet stay in the form (a test send, 1.03 – D102-45). */
+	function take(next: Answer, keep = false) {
+		const edited =
+			keep && !!draft && !!answer && JSON.stringify(draft) !== JSON.stringify(answer.settings);
 		answer = next;
-		draft = { ...next.settings };
+		if (!edited) draft = { ...next.settings };
 	}
 
 	onMount(async () => {
@@ -42,11 +45,11 @@
 		}
 	});
 
-	async function run(action: () => Promise<Answer>, done: MessageKey) {
+	async function run(action: () => Promise<Answer>, done: MessageKey, keep = false) {
 		busy = true;
 		error = message = '';
 		try {
-			take(await action());
+			take(await action(), keep);
 			message = t(done);
 		} catch (err) {
 			error = apiErrorText(err);
@@ -58,7 +61,7 @@
 		const body = draft;
 		if (body) void run(() => api.put<Answer>('/health-report', body), 'ui.saved');
 	}
-	const send = () => run(() => api.post<Answer>('/health-report/send', {}), 'report.sent');
+	const send = () => run(() => api.post<Answer>('/health-report/send', {}), 'report.sent', true);
 	const days = [1, 2, 3, 4, 5, 6, 0];
 	// What is stored, in a few words, at the right of the row.
 	const summary = $derived.by(() => {

@@ -228,6 +228,10 @@ type Manager struct {
 	OnSnapshotRestoreDone func(SnapshotFolderJob)
 	restoreMu             sync.Mutex
 	restores              []*SnapshotFolderJob
+	// fileRestores are the restores of single files from a snapshot that
+	// copy right now (without holding actions).
+	fileRestores   []fileRestore
+	fileRestoreSeq uint64
 	// restoreStep is called before each file of a folder restore (tests).
 	restoreStep func(name string)
 
@@ -249,6 +253,9 @@ type Manager struct {
 	// backupCleaned are the volumes whose leftover backup snapshots were
 	// removed since the start.
 	backupCleaned map[string]bool
+	// restoresCleaned are the volumes whose leftovers of interrupted
+	// restores are being or were removed since the start.
+	restoresCleaned map[string]bool
 	// shadowIdle are the Btrfs volumes without previous versions and
 	// without mirrors: SyncShadowCopies leaves them alone (RAM only).
 	shadowIdle map[string]bool
@@ -774,6 +781,11 @@ func (m *Manager) Run(ctx context.Context) {
 			m.ResumeSavedTests(ctx)
 			// Snapshots a backup left behind when titand last stopped.
 			m.cleanBackupSnapshotsOnce(ctx)
+			// Staging folders and temporary entries of restores that a
+			// stop of titand cut off; in the background (a walk).
+			if !m.ReadOnly {
+				m.cleanRestoresOnce()
+			}
 		}
 		m.mu.RLock()
 		stale := time.Since(m.smartTime) > smartMaxAge

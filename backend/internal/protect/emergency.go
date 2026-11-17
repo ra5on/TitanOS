@@ -185,16 +185,12 @@ func (e *Emergency) Ask(p *Person, account, reason, code string, now time.Time) 
 	if slices.ContainsFunc(e.state.Requests, func(r Request) bool { return r.Account == account && r.Open() }) {
 		return Request{}, ErrOpenRequest
 	}
-	wait := p.WaitDays
-	if wait <= 0 {
-		wait = 3
-	}
 	reason = strings.TrimSpace(reason)
 	if r := []rune(reason); len(r) > 500 {
 		reason = string(r[:500])
 	}
 	now = now.UTC()
-	req := Request{ID: newID(), Account: account, Reason: reason, Created: now, Due: now.Add(time.Duration(wait) * 24 * time.Hour), State: StateWaiting, Shares: slices.Clone(p.Shares)}
+	req := Request{ID: newID(), Account: account, Reason: reason, Created: now, Due: waitUntil(now, p.WaitDays), State: StateWaiting, Shares: slices.Clone(p.Shares)}
 	next := e.clone()
 	if code != "" {
 		fail := next.CodeFails[account]
@@ -298,6 +294,68 @@ func (e *Emergency) End(id, by string, now time.Time) (Request, error) {
 		}
 		return nil
 	})
+}
+
+// waitUntil is when a request made at created is granted without an
+// answer: after the person's waiting time, 3 days when none is set.
+func waitUntil(created time.Time, waitDays int) time.Time {
+	if waitDays <= 0 {
+		waitDays = 3
+	}
+	return created.Add(time.Duration(waitDays) * 24 * time.Hour)
+}
+
+// Reschedule makes the waiting request of the person follow a changed
+// waiting time (A-7, 1.03): its time is counted from the request again,
+// shorter or longer. A request made with a printed code was granted at
+// once and is left alone. It reports the request when its time changed;
+// nothing is written otherwise.
+func (e *Emergency) Reschedule(p Person) (Request, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := e.loadLocked(); err != nil {
+		return Request{}, false, err
+	}
+	i := slices.IndexFunc(e.state.Requests, func(r Request) bool {
+		return r.Account == p.Account && r.State == StateWaiting && !r.Code
+	})
+	if i < 0 {
+		return Request{}, false, nil
+	}
+	due := waitUntil(e.state.Requests[i].Created, p.WaitDays)
+	if due.Equal(e.state.Requests[i].Due) {
+		return Request{}, false, nil
+	}
+	next := e.clone()
+	next.Requests[i].Due = due
+	if err := e.saveLocked(next); err != nil {
+		return Request{}, false, err
+	}
+	return next.Requests[i], true, nil
+}
+
+// ForgetAccount removes everything the emergency access holds of an
+// account that was deleted: its requests (waiting, granted or past), its
+// printed code and its wrong tries (1.03). A new account of the same name
+// starts with none of it. The shares a grant opened lose the account with
+// the account itself. Nothing is written when there is nothing of it.
+func (e *Emergency) ForgetAccount(account string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := e.loadLocked(); err != nil {
+		return err
+	}
+	next := e.clone()
+	n := len(next.Requests)
+	next.Requests = slices.DeleteFunc(next.Requests, func(r Request) bool { return r.Account == account })
+	_, code := next.Codes[account]
+	_, fails := next.CodeFails[account]
+	if len(next.Requests) == n && !code && !fails {
+		return nil
+	}
+	delete(next.Codes, account)
+	delete(next.CodeFails, account)
+	return e.saveLocked(next)
 }
 
 // Due lists the waiting requests whose time is over and the grants that

@@ -257,9 +257,22 @@
 	// one answers, then says which version runs now.
 	let restartFrom = $state('');
 	let restartedTo = $state('');
+	// A look sent before a check, an installation or a save may answer after
+	// it and show the old state for a moment (1.03): such answers do not count.
+	let round = 0;
+	async function change<T>(request: () => Promise<T>): Promise<T> {
+		round++;
+		try {
+			return await request();
+		} finally {
+			round++;
+		}
+	}
 	async function load() {
+		const mine = round;
 		try {
 			const next = await api.get<Status>('/update');
+			if (mine !== round) return;
 			if (restartFrom && next.progress.phase !== 'restart') {
 				restartedTo = next.version;
 				restartFrom = '';
@@ -292,7 +305,7 @@
 		asking = '';
 		restartedTo = '';
 		try {
-			take(await api.post<Status>('/update/install-version', { version: picked }));
+			take(await change(() => api.post<Status>('/update/install-version', { version: picked })));
 			// The settings may have changed: automatic installation off.
 			draft = { ...status!.settings };
 		} catch (err) {
@@ -315,7 +328,7 @@
 		checked = false;
 		restartedTo = '';
 		try {
-			take(await api.post<Status>(`/update/${action}`));
+			take(await change(() => api.post<Status>(`/update/${action}`)));
 			checked = action === 'check';
 		} catch (err) {
 			problem(err);
@@ -343,7 +356,9 @@
 		try {
 			// Stable is the default and left out, as before the choice existed.
 			take(
-				await api.put<Status>('/update/settings', { ...draft, kernel: draft.kernel || undefined }),
+				await change(() =>
+					api.put<Status>('/update/settings', { ...draft, kernel: draft?.kernel || undefined }),
+				),
 			);
 			draft = { ...status!.settings };
 			saved = true;

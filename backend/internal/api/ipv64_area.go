@@ -50,15 +50,31 @@ func (a ipv64Area) dynamicDNS(w http.ResponseWriter) bool {
 // an API token: they act in the name of an account but are no person at a
 // web session.
 func (s *Server) browserOnly(next http.HandlerFunc) http.HandlerFunc {
+	return browserOnly(next)
+}
+
+// browserOnly is the check of Server.browserOnly, for areas that hold no
+// Server.
+func browserOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, token := r.Context().Value(apiTokenIdentity{}).(string)
-		_, agent := r.Context().Value(inProcessIdentity{}).(string)
-		if token || agent {
-			writeError(w, http.StatusForbidden, "browser_session_required", "this needs a web session")
+		if !refuseOutsideBrowser(w, r) {
 			return
 		}
 		next(w, r)
 	}
+}
+
+// refuseOutsideBrowser answers 403 browser_session_required and reports
+// false for a request of an API token or one titand makes in the name of
+// an account (MCP, the agent, Home Assistant).
+func refuseOutsideBrowser(w http.ResponseWriter, r *http.Request) bool {
+	_, token := r.Context().Value(apiTokenIdentity{}).(string)
+	_, agent := r.Context().Value(inProcessIdentity{}).(string)
+	if token || agent {
+		writeError(w, http.StatusForbidden, "browser_session_required", "this needs a web session")
+		return false
+	}
+	return true
 }
 
 // ddnsHosts are the names of dynamic DNS if it works with IPv64.

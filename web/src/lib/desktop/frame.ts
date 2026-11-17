@@ -26,7 +26,7 @@ export type FrameMessage =
 	  }
 	| { type: 'titanos-goto'; href: string }
 	| { type: 'titanos-open'; href: string }
-	| { type: 'titanos-upload'; files: File[] }
+	| { type: 'titanos-upload'; files: File[]; drop?: string }
 	/** PLAN 76: the page holds unsaved changes ('edits') or running work ('busy'); '' for neither. */
 	| { type: 'titanos-unsaved'; state: 'edits' | 'busy' | '' }
 	/** PLAN 64, Settings › Appearance › Dock: a window asks for the dock (answer: titanos-dock). */

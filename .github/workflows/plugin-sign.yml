@@ -216,11 +216,51 @@ jobs:
           python3 scripts/check-release-keys.py build/mkosi.extra/usr/share/titanos/update-keys
           pending=
           if [ "$AUTO" = true ]; then
-            pending=$(python3 scripts/autopilot.py pending | sed -n 's/^pending=//p')
+            # Not in a pipe (B-9): a failed look fails the step instead of
+            # reading as "nothing pending".
+            answer=$(python3 scripts/autopilot.py pending)
+            pending=$(sed -n 's/^pending=//p' <<<"$answer")
           fi
           key=$(mktemp)
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          # load_catalog puts the current catalog into catalog-current and
+          # sets current to that folder, or to "-" when there is none yet.
+          # Only a catalog that does not exist yet starts at serial 0: the
+          # release "catalog" is missing (HTTP 404), or it has no file at all
+          # (created by an earlier run whose upload then failed; nothing was
+          # ever published there). Every other error – the release cannot be
+          # read, it holds files but not both catalog.json and its signature,
+          # the download fails – returns 1: a catalog starting at 0 again
+          # would be refused by every NAS ("went backwards") and drop the
+          # other kernel sets (B-8, owner 16 Nov 2026: abort instead).
+          load_catalog() {
+            current=
+            rm -rf catalog-current catalog-new
+            local info assets
+            if ! info=$(gh api "repos/$PLUGINS/releases/tags/catalog" 2>catalog.err); then
+              if grep -q '(HTTP 404)' catalog.err; then
+                current=-
+                return 0
+              fi
+              echo "::error::the release catalog could not be read: $(tail -n 1 catalog.err)"
+              return 1
+            fi
+            assets=$(jq -r '[.assets[].name] | length' <<<"$info") || return 1
+            if [ "$assets" = 0 ]; then
+              current=-
+              return 0
+            fi
+            if ! gh release download catalog --repo "$PLUGINS" -p 'catalog.json*' -D catalog-current 2>catalog.err; then
+              echo "::error::the current catalog could not be loaded: $(tail -n 1 catalog.err)"
+              return 1
+            fi
+            if [ ! -s catalog-current/catalog.json ] || [ ! -s catalog-current/catalog.json.minisig ]; then
+              echo "::error::the release catalog holds files, but not catalog.json with its signature"
+              return 1
+            fi
+            current=catalog-current
+          }
           releases=$(gh api "repos/$PLUGINS/releases?per_page=100")
           # Kernel sets before the common set before driver updates.
           for tag in $(jq -r "$DRAFTS | sort_by(if startswith(\"kernel-\") then 0 elif startswith(\"common-\") then 1 else 2 end) | .[]" <<<"$releases"); do
@@ -279,14 +319,18 @@ jobs:
               unproven=true
               continue
             fi
+            # The current catalog before anything of the set goes out: a later
+            # run only looks at drafts, so a set published without its entry
+            # in the catalog would never get one.
+            if ! load_catalog; then
+              echo "::error::$tag: not published, the current catalog could not be loaded"
+              exit 1
+            fi
             # Signs manifests and index, then checks the set against the keys
             # of the image: only a signature the image accepts goes out.
             python3 scripts/sign-plugin-set.py set "$dir" "$key"
             for signature in "$dir"/*.minisig; do upload "$id" "$signature"; done
             gh api -X PATCH "repos/$PLUGINS/releases/$id" -F draft=false -f make_latest=false >/dev/null
-            current=-
-            rm -rf catalog-current catalog-new
-            if gh release download catalog --repo "$PLUGINS" -p 'catalog.json*' -D catalog-current; then current=catalog-current; fi
             python3 scripts/sign-plugin-set.py pointer "$dir" "$current" catalog-new "$key"
             if ! gh release view catalog --repo "$PLUGINS" >/dev/null 2>&1; then
               gh release create catalog --repo "$PLUGINS" --title "Plugin catalog" --latest=false \

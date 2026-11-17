@@ -357,7 +357,9 @@ func (m *Manager) realUpdater() updater {
 		},
 		pullUp: func(ctx context.Context, app string, pull bool) error {
 			if pull {
-				if out, err := run.Combined(ctx, m.runner, "", "docker", m.compose(volume, app, "pull", "--quiet")...); err != nil {
+				if out, err := withLimit(ctx, composePullLimit, "pull", func(ctx context.Context) (string, error) {
+					return run.Combined(ctx, m.runner, "", "docker", m.compose(volume, app, "pull", "--quiet")...)
+				}); err != nil {
 					return fmt.Errorf("%w: %s", err, tail(out, 300))
 				}
 			}
@@ -368,7 +370,9 @@ func (m *Manager) realUpdater() updater {
 			defer func() { cleanup(); m.endCompose(app) }()
 			args := m.compose(volume, app, "up", "--detach", "--remove-orphans", "--pull", "never")
 			args[4] = path
-			if out, err := run.Combined(ctx, m.runner, "", "docker", args...); err != nil {
+			if out, err := withLimit(ctx, composeUpLimit, "up", func(ctx context.Context) (string, error) {
+				return run.Combined(ctx, m.runner, "", "docker", args...)
+			}); err != nil {
 				return fmt.Errorf("%w: %s", err, tail(out, 300))
 			}
 			return nil

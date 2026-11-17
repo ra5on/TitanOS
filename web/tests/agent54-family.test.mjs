@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { formatCode, quotaPercent, stepsPreview } from '../src/lib/features/family.ts';
+import {
+	formatCode,
+	quotaBytes,
+	quotaEdited,
+	quotaField,
+	quotaPercent,
+	stepsPreview,
+} from '../src/lib/features/family.ts';
 
 test('pairing codes are typed in groups of three', () => {
 	assert.equal(formatCode('k7q4mz92x'), 'K7Q-4MZ-92X');
@@ -13,6 +20,18 @@ test('quota share stays between 0 and 100', () => {
 	assert.equal(quotaPercent(0, 0), 0);
 	assert.equal(quotaPercent(2.3, 3), 77);
 	assert.equal(quotaPercent(5, 3), 100);
+});
+
+test('the buddy quota is typed and shown in the same GB (A-33)', () => {
+	// 500 typed in the field labelled GB is shown as 500 GB again, not 537.
+	assert.equal(quotaBytes(500), 500e9);
+	assert.equal(quotaField(quotaBytes(500)), 500);
+	// A quota saved before 1.03 (500 GiB) keeps its stored bytes when the
+	// edit dialog is saved without touching the field.
+	const old = 500 * 2 ** 30;
+	assert.equal(quotaField(old), 537);
+	assert.equal(quotaEdited(quotaField(old), old), old);
+	assert.equal(quotaEdited(600, old), 600e9);
 });
 
 test('steps preview keeps the first lines', () => {

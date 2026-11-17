@@ -44,7 +44,7 @@ func (m *Manager) SetMedium(ctx context.Context, name, path string) error {
 		if real != "" {
 			args = append(args, real)
 		}
-		if _, err := m.runner.Run(ctx, "", "virsh", append(args, "--update", "--live", "--force")...); err != nil {
+		if _, err := m.virsh(ctx, append(args, "--update", "--live", "--force")...); err != nil {
 			return err
 		}
 	}

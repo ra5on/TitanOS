@@ -113,6 +113,32 @@ async function phone() {
   );
 }
 
+// 1.03: the manifest in the language of the page; the same app in both.
+{
+  const en = await (await fetch(base + "/manifest.en.webmanifest")).json();
+  assert.equal(en.lang, "en");
+  assert.equal(en.id, "/");
+  assert.equal(en.share_target.action, "/share-target");
+  assert.deepEqual(
+    en.shortcuts.map((s) => s.name),
+    ["Files", "Docker", "Control panel"],
+  );
+  for (const [locale, href] of [
+    ["de", "/manifest.webmanifest"],
+    ["en", "/manifest.en.webmanifest"],
+  ]) {
+    const { ctx, page } = await create("owner", "graphit", 390, locale);
+    await page.goto(base + "/files");
+    await page.waitForFunction(
+      (href) =>
+        document.querySelector("link[rel=manifest]")?.getAttribute("href") ===
+        href,
+      href,
+    );
+    await ctx.close();
+  }
+}
+
 // /share with two files and a text, as the service worker leaves them.
 {
   const made = await phone();

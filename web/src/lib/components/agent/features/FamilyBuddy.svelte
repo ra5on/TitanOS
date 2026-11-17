@@ -6,7 +6,9 @@
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import {
-		GiB,
+		quotaBytes,
+		quotaEdited,
+		quotaField,
 		buddyCode,
 		buddyCodeCancel,
 		buddyPair,
@@ -151,7 +153,7 @@
 						class="btn"
 						onclick={() => {
 							editing = p;
-							editQuota = Math.round(p.quota / GiB);
+							editQuota = quotaField(p.quota);
 							editShares = [...p.shares];
 						}}>{t('agent.f.family.buddy.change')}</button
 					>
@@ -232,7 +234,7 @@
 						type="button"
 						class="btn btn-primary"
 						disabled={busy || data.problem === 'off'}
-						onclick={() => run(() => buddyCode(quotaGB * GiB, shares))}
+						onclick={() => run(() => buddyCode(quotaBytes(quotaGB), shares))}
 						>{t('agent.f.family.buddy.showCode')}</button
 					>
 				</div>
@@ -264,7 +266,8 @@
 						onclick={async () => {
 							let jobError = '';
 							const ok = await run(async () => {
-								jobError = (await buddyPair(address, code, quotaGB * GiB, shares)).jobError ?? '';
+								jobError =
+									(await buddyPair(address, code, quotaBytes(quotaGB), shares)).jobError ?? '';
 							});
 							if (jobError) error = tk('agent.f.family.buddy.jobError', { error: jobError });
 							if (ok) {
@@ -317,7 +320,8 @@
 					disabled={busy}
 					onclick={async () => {
 						const p = editing!;
-						if (await run(() => buddyPartnerSet(p.id, editQuota * GiB, editShares))) editing = null;
+						if (await run(() => buddyPartnerSet(p.id, quotaEdited(editQuota, p.quota), editShares)))
+							editing = null;
 					}}>{t('agent.f.family.save')}</button
 				>
 			</div>

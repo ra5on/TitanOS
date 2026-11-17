@@ -99,7 +99,7 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id, confirm string,
 		if err = m.snapshotPath(p, false); err != nil {
 			return err
 		}
-		if _, err = m.runner.Run(ctx, "", "virsh", "--quiet", "save-image-dumpxml", p); err != nil {
+		if _, err = m.virsh(ctx, "--quiet", "save-image-dumpxml", p); err != nil {
 			return err
 		}
 	}
@@ -302,7 +302,7 @@ func (m *Manager) RecoverSnapshot(ctx context.Context, name, confirm string, dis
 		if err = m.snapshotPath(p, false); err != nil {
 			return err
 		}
-		if _, err = m.runner.Run(ctx, "", "virsh", "--quiet", "save-image-dumpxml", p); err != nil {
+		if _, err = m.virsh(ctx, "--quiet", "save-image-dumpxml", p); err != nil {
 			return err
 		}
 		if err = m.resumeSnapshot(ctx, store, &op, dir); err != nil {

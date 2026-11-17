@@ -673,7 +673,8 @@ export type DockerStatus = {
 	version: string;
 	containers: DockerContainer[];
 	apps: string[];
-	jobs: Record<string, { state: 'running' | 'done' | 'failed'; output: string }>;
+	/** `code` (1.03): a known cause of a failed job, e.g. "timeout" (lib/job-code.ts). */
+	jobs: Record<string, { state: 'running' | 'done' | 'failed'; output: string; code?: string }>;
 	updatesChecked: string;
 };
 

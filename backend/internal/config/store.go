@@ -38,6 +38,7 @@ import (
 // RAM or .titanos/<function> on a volume.
 var State = []string{
 	"sessions/remembered.json",        // logins that stay (auth)
+	"sessions/locked.json",            // which of them are locked, written at lock and unlock (auth, 1.03)
 	"backup/application-pending.json", // pointer to a cut-off application backup, written only when one is found (appbackup)
 	"firewall/blocked.json",           // addresses blocked for good after failed logins (firewall)
 	"system/startup-held.json",        // restart policies held over a shutdown (startup)

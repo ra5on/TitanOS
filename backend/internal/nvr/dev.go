@@ -117,8 +117,11 @@ type DevEngine struct {
 	// for the spec NVRCreate answers instead of creating (nil: it creates).
 	CreateError func(docker.NVRSpec) error
 	// RestartError and RemoveError, if set, answer NVRRestart and
-	// NVRRemove instead when they return an error.
-	RestartError, RemoveError func() error
+	// NVRRemove instead when they return an error. StartError does so for
+	// NVRStart (and the start of NVRRestart): Docker refuses the start of
+	// the container, e.g. because a port is taken by an app; the container
+	// does not run and its StartedAt stays as it was.
+	RestartError, RemoveError, StartError func() error
 	// frigate is told which config.yml the container started with.
 	frigate *DevFrigate
 	// engineStarted is when the engine started (zero: long ago);
@@ -178,6 +181,11 @@ func (e *DevEngine) NVRStart(context.Context) error {
 	}
 	if e.RefuseCDI && len(e.spec.CDIDevices) > 0 {
 		return errors.New(`docker: could not select device driver "cdi" with capabilities: [] (HTTP 500)`)
+	}
+	if e.StartError != nil {
+		if err := e.StartError(); err != nil {
+			return err
+		}
 	}
 	e.state.Running, e.state.StartedAt, e.state.Address = true, time.Now(), "127.0.0.1"
 	e.Starts++

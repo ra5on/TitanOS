@@ -112,15 +112,20 @@
 		if (drill) return; // the page shows the area's pages itself
 		const group = settingsGroupOf(`/settings${search}`);
 		if (!group) return;
-		// The list comes with the session and the texts; look for it a while.
+		// The list comes with the session and the texts; look for it a while,
+		// not after the page is gone (1.03, D102-48).
 		const until = Date.now() + 5000;
 		const find = () => {
+			findTimer = undefined;
 			const heading = document.getElementById(`${prefix}-group-${group}`);
 			if (heading) requestAnimationFrame(() => heading.scrollIntoView({ block: 'start' }));
-			else if (Date.now() < until) setTimeout(find, 100);
+			else if (Date.now() < until) findTimer = setTimeout(find, 100);
 		};
+		clearTimeout(findTimer);
 		find();
 	}
+	let findTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => () => clearTimeout(findTimer));
 
 	function clear() {
 		settingsSearch.query = '';

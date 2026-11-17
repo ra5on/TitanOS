@@ -1,5 +1,6 @@
 <script lang="ts" generics="T extends string">
 	// A small choice of two to five modes as one row of buttons (radiogroup).
+	import { radioKeys } from '#lib/radio-group.ts';
 	let {
 		options,
 		value = $bindable(),
@@ -17,14 +18,18 @@
 		compact?: boolean;
 		onchange?: (value: T) => void;
 	} = $props();
+	// One Tab stop for the group (1.03): the chosen one, or the first when none is.
+	const known = $derived(options.some((option) => option.value === value));
 </script>
 
-<div class="segments" class:compact role="radiogroup" aria-label={label}>
-	{#each options as option (option.value)}
+<!-- svelte-ignore a11y_interactive_supports_focus -->
+<div class="segments" class:compact role="radiogroup" aria-label={label} onkeydown={radioKeys}>
+	{#each options as option, i (option.value)}
 		<button
 			type="button"
 			role="radio"
 			aria-checked={value === option.value}
+			tabindex={value === option.value || (!known && i === 0) ? 0 : -1}
 			aria-label={option.hint}
 			title={option.hint}
 			{disabled}

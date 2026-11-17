@@ -1,6 +1,8 @@
 // PLAN 61: the windows of the desktop and the desktop's own settings.
 import { untrack } from 'svelte';
 import { api } from '../api.ts';
+import { apiErrorText, t } from '../i18n/index.svelte.ts';
+import { showToast } from '../toast.svelte.ts';
 import { inWindow } from './frame.ts';
 import { followWidth, setDesktopHold } from './mode.svelte.ts';
 import { session } from '../session.svelte.ts';
@@ -211,8 +213,10 @@ export function savePrefs(change?: (p: DesktopPrefs) => void) {
 		const value = $state.snapshot(desktop.prefs);
 		session.desktop = value as unknown as Record<string, unknown>;
 		channel()?.postMessage({ user: session.data?.user?.name ?? '', prefs: value });
-		api.put('/preferences/desktop', value).catch(() => {
-			// Kept in this browser until the next change succeeds.
+		api.put('/preferences/desktop', value).catch((err) => {
+			// Only in this page's memory now: the next change sends all of it
+			// again. Said in a short notice (1.03), not kept quiet.
+			showToast(t('desktop.toast.prefs', { reason: apiErrorText(err) }));
 		});
 	}, 1500);
 }

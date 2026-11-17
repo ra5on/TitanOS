@@ -20,6 +20,7 @@
 	import type TerminalScreen from './TerminalScreen.svelte';
 	import Dialog from './Dialog.svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
+	import { tabKeys } from '#lib/radio-group.ts';
 	import { tick } from 'svelte';
 
 	type TerminalInfo = { enabled: boolean; nasShell: boolean };
@@ -66,9 +67,21 @@
 		if (terminal.open) check();
 	});
 
-	// A first session, so that an opened panel is not empty.
+	// A first session, so that an opened panel is not empty. Not after the
+	// last one was closed in it (1.03, owner 16 Nov 2026): a closed root
+	// shell stays closed, "Neue Shell" opens the next. Closing the panel
+	// starts over.
 	$effect(() => {
-		if (terminal.open && info?.enabled && info.nasShell && terminal.sessions.length === 0)
+		if (!terminal.open) terminal.lastClosed = false;
+	});
+	$effect(() => {
+		if (
+			terminal.open &&
+			info?.enabled &&
+			info.nasShell &&
+			terminal.sessions.length === 0 &&
+			!terminal.lastClosed
+		)
 			addNasShell();
 	});
 
@@ -234,13 +247,22 @@
 	{/if}
 
 	<div class="toolbar">
-		<div class="tabs" role="tablist" aria-label={t('terminal.sessions')} bind:this={menuRoot}>
+		<!-- Arrow keys, Home and End between the sessions (1.03); one Tab stop for them. -->
+		<!-- svelte-ignore a11y_interactive_supports_focus -->
+		<div
+			class="tabs"
+			role="tablist"
+			aria-label={t('terminal.sessions')}
+			bind:this={menuRoot}
+			onkeydown={tabKeys}
+		>
 			{#each terminal.sessions as session (session.id)}
 				<div class="tab" class:on={session.id === terminal.active}>
 					<button
 						type="button"
 						role="tab"
 						aria-selected={session.id === terminal.active}
+						tabindex={session.id === terminal.active ? 0 : -1}
 						onclick={() => (terminal.active = session.id)}
 					>
 						<span
@@ -414,9 +436,23 @@
 		{#if info && !info.enabled}
 			<p class="message">{t('terminal.off')} <a href="/settings">{t('nav.settings')}</a></p>
 		{:else if terminal.sessions.length === 0}
-			<p class="message">
-				{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}
-			</p>
+			<div class="message empty">
+				<p>
+					{error ||
+						t(
+							info?.nasShell === false
+								? 'terminal.emptyNoShell'
+								: terminal.lastClosed
+									? 'terminal.lastClosed'
+									: 'terminal.empty',
+						)}
+				</p>
+				{#if info?.enabled && info.nasShell && terminal.lastClosed}
+					<button type="button" class="btn new-shell" onclick={addNasShell}
+						>{t('terminal.newShell')}</button
+					>
+				{/if}
+			</div>
 		{/if}
 		{#if Screen}
 			{#each terminal.sessions as session (session.id)}
@@ -687,6 +723,18 @@
 		padding: 20px var(--space-5);
 		background: var(--bg);
 		font-size: var(--text-md);
+	}
+	.empty {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-3);
+	}
+	.empty p {
+		margin: 0;
+	}
+	.new-shell {
+		min-height: 44px;
 	}
 	.foot {
 		flex: none;

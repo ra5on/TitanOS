@@ -210,6 +210,30 @@ type Manager struct {
 	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has
 	// none (not Btrfs). Set by titand from the storage manager.
 	Shadow func(volume string) string
+	// onEvent is told of what an owner should hear about (an account
+	// left out of the shares); nil tells nobody. Set with SetOnEvent.
+	onEvent func(severity, kind, subject string)
+	// skipped are the accounts whose Linux user could not be made in the
+	// last Apply; accountsRetry is when Apply tries them again (zero: none).
+	skipped       map[string]bool
+	accountsRetry time.Time
+	// clock is time.Now; tests replace it.
+	clock func() time.Time
+}
+
+// SetOnEvent sets who is told of what an owner should hear about. It may
+// be called while Run runs.
+func (m *Manager) SetOnEvent(f func(severity, kind, subject string)) {
+	m.mu.Lock()
+	m.onEvent = f
+	m.mu.Unlock()
+}
+
+func (m *Manager) now() time.Time {
+	if m.clock != nil {
+		return m.clock()
+	}
+	return time.Now()
 }
 
 // NewManager returns a manager working on the real system.
@@ -533,7 +557,7 @@ func (m *Manager) LetGo(ctx context.Context, volume string) {
 		if share.Volume != volume {
 			continue
 		}
-		if _, err := m.runner.Run(ctx, "", "smbcontrol", "smbd", "close-share", share.Name); err != nil {
+		if _, err := m.run(ctx, "smbcontrol", "smbd", "close-share", share.Name); err != nil {
 			slog.Debug("close share before locking", "share", share.Name, "err", err)
 		}
 	}
@@ -589,7 +613,7 @@ func (m *Manager) bindShares(ctx context.Context, shares []Share) error {
 		if mounts[target] {
 			continue
 		}
-		if _, err := m.runner.Run(ctx, "", "mount", "--bind", m.Path(share), target); err != nil {
+		if _, err := m.run(ctx, "mount", "--bind", m.Path(share), target); err != nil {
 			return err
 		}
 	}
@@ -606,7 +630,7 @@ func (m *Manager) unbindShares(ctx context.Context, shares []Share) {
 		}
 		target := filepath.Join(m.nfsRoot, entry.Name())
 		if mounts[target] {
-			if _, err := m.runner.Run(ctx, "", "umount", target); err != nil {
+			if _, err := m.run(ctx, "umount", target); err != nil {
 				slog.Debug("unmount NFS share", "path", target, "err", err)
 				continue
 			}

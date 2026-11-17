@@ -11,13 +11,15 @@
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
-	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
+	const jobText = (key: string) => tOr(key, '');
 	import { containerLabel, type LXCList, type LXCSnapshot, type LXCStatus } from '#lib/lxc.ts';
 	import { addLXCConsole } from '#lib/terminal.svelte.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import LxcForm from './LxcForm.svelte';
+	import { lxcJobText } from '#lib/job-code.ts';
 
 	let list = $state<LXCList | null>(null);
 	let loadError = $state('');
@@ -297,7 +299,10 @@
 					{:else}
 						<div class="notice-error" role="alert">
 							<p>{t('lxc.failedHint')}</p>
-							{#if c.job.text}<pre class="mono">{c.job.text}</pre>{/if}
+							{#if lxcJobText(c.job, jobText)}<pre class="mono">{lxcJobText(
+										c.job,
+										jobText,
+									)}</pre>{/if}
 						</div>
 					{/if}
 				{/if}

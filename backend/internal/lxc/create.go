@@ -217,6 +217,9 @@ func (m *Manager) Create(ctx context.Context, c Container, mounted []string) err
 		lock.Unlock()
 		return fmt.Errorf("%w: %s already exists", ErrExists, m.dir(c))
 	}
+	// Noted as incomplete until the build is done: a stop of titand
+	// halfway must not leave a container that counts as ready.
+	c.Incomplete = true
 	if err := m.store.WriteJSON(configDir+"/"+c.Name+".json", c); err != nil {
 		m.mu.Unlock()
 		lock.Unlock()
@@ -231,8 +234,18 @@ func (m *Manager) Create(ctx context.Context, c Container, mounted []string) err
 		defer lock.Unlock()
 		// The request that asked for it ends long before the download does.
 		err := m.build(context.WithoutCancel(ctx), c, job)
+		if err == nil {
+			done := c
+			done.Incomplete = false
+			if err = m.store.WriteJSON(configDir+"/"+c.Name+".json", done); err == nil {
+				c = done
+			}
+		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
+		if _, known := m.containers[c.Name]; known {
+			m.containers[c.Name] = c
+		}
 		if err != nil {
 			slog.Error("container not created", "container", c.Name, "err", err)
 			job.State, job.Text = "failed", errorText(err)

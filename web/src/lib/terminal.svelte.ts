@@ -37,6 +37,8 @@ export const terminal = $state({
 	full: false,
 	sessions: [] as TerminalSession[],
 	active: 0,
+	/** The last session was closed in the panel: no new one opens by itself (1.03). */
+	lastClosed: false,
 	...remembered(),
 });
 
@@ -64,6 +66,7 @@ function add(session: NewSession) {
 	}
 	const id = nextId++;
 	terminal.sessions.push({ ...session, id, started: Date.now() });
+	terminal.lastClosed = false;
 	terminal.active = id;
 	terminal.open = true;
 }
@@ -140,6 +143,7 @@ export function closeSession(id: number) {
 	const at = terminal.sessions.findIndex((session) => session.id === id);
 	if (at < 0) return;
 	terminal.sessions.splice(at, 1);
+	if (!terminal.sessions.length) terminal.lastClosed = true;
 	if (terminal.active === id) terminal.active = terminal.sessions[Math.max(0, at - 1)]?.id ?? 0;
 }
 
