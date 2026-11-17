@@ -1,0 +1,29 @@
+# The same discovery with 308 (TECHNIK 4.1.7: in case iOS does not follow
+# a 301 with PROPFIND).
+@redirect 308
+
+> PROPFIND /.well-known/caldav
+> Auth: none
+> Depth: 0
+< status 308
+< header Location /caldav/
+
+> PROPFIND /.well-known/caldav
+> Auth: alex
+> Follow: yes
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:current-user-principal/></A:prop></A:propfind>
+< status 207
+< value /caldav/ d:current-user-principal <d:href>/caldav/alex/</d:href>
+
+> PROPFIND /.well-known/carddav
+> Auth: alex
+> Follow: yes
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:current-user-principal/></A:prop></A:propfind>
+< status 207
+< value /carddav/ d:current-user-principal <d:href>/carddav/alex/</d:href>

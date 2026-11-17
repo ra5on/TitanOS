@@ -1,0 +1,57 @@
+# GET and HEAD of an entry: the bytes as stored, strong ETag.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+@seed calendar privat Zahnarzt%20ä.ics dentist.ics
+@seed contacts kontakte A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf erika.vcf
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 200
+< body weekly-team.ics
+< header ETag {etag:weekly-team.ics}
+< header Content-Type text/calendar; charset=utf-8
+< header X-Content-Type-Options nosniff
+< header-has Last-Modified GMT
+
+> GET /caldav/alex/calendars/privat/Zahnarzt%20%C3%A4.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+< header ETag {etag:dentist.ics}
+
+> HEAD /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 200
+< header ETag {etag:weekly-team.ics}
+< header-has Last-Modified GMT
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+> If-None-Match: {etag:weekly-team.ics}
+< status 304
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 200
+< body erika.vcf
+< header ETag {etag:erika.vcf}
+< header Content-Type text/vcard; charset=utf-8
+
+> GET /caldav/alex/calendars/privat/missing.ics
+> Auth: alex
+< status 404
+
+> GET /caldav/alex/calendars/privat/
+> Auth: alex
+< status 405
+< header-has Allow PROPFIND
+
+# PROPFIND of the entry: everything of TECHNIK 1.4, calendar-data only in
+# REPORT; allprop without a body.
+> PROPFIND /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+> Depth: 0
+< status 207
+< prop /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics 200 d:getetag d:getcontenttype d:getcontentlength d:getlastmodified d:resourcetype
+< value /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics d:getetag {etag:weekly-team.ics}
+< no-prop /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics cal:calendar-data
+< body-lacks BEGIN:VCALENDAR

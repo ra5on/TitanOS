@@ -1,0 +1,139 @@
+# An iPhone adds a CalDAV account with the host name only
+# (Settings › Apps › Calendar › Calendar Accounts › Add Account › Other).
+# No data yet: the virtual "privat" with ctag 0-0.
+
+# RFC 6764: discovery before any sign-in.
+> PROPFIND /.well-known/caldav
+> Auth: none
+> Depth: 0
+< status 301
+< header Location /caldav/
+< no-header WWW-Authenticate
+
+# The first request comes without Authorization: 401, not counted.
+> PROPFIND /caldav/
+> Auth: none
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:current-user-principal/><A:principal-URL/><A:resourcetype/></A:prop></A:propfind>
+< status 401
+< header WWW-Authenticate Basic realm="TitanOS Kalender", charset="UTF-8"
+< not-counted
+
+# Signed in, following the redirect with PROPFIND.
+> PROPFIND /.well-known/caldav
+> Auth: alex
+> Follow: yes
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:current-user-principal/><A:principal-URL/><A:resourcetype/></A:prop></A:propfind>
+< status 207
+< header-has Content-Type application/xml
+< responses 1
+< prop /caldav/ 200 d:current-user-principal d:resourcetype
+< value /caldav/ d:current-user-principal <d:href>/caldav/alex/</d:href>
+< prop /caldav/ 404 d:principal-URL
+
+# The principal with what iOS asks for (sabre.io/dav/clients/ios).
+> PROPFIND /caldav/alex/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav" xmlns:C="http://calendarserver.org/ns/">
+>   <A:prop>
+>     <B:calendar-home-set/>
+>     <B:calendar-user-address-set/>
+>     <A:current-user-principal/>
+>     <A:displayname/>
+>     <C:dropbox-home-URL/>
+>     <C:email-address-set/>
+>     <C:notification-URL/>
+>     <A:principal-collection-set/>
+>     <A:principal-URL/>
+>     <A:resource-id/>
+>     <B:schedule-inbox-URL/>
+>     <B:schedule-outbox-URL/>
+>     <A:supported-report-set/>
+>   </A:prop>
+> </A:propfind>
+< status 207
+< prop /caldav/alex/ 200 cal:calendar-home-set cal:calendar-user-address-set d:current-user-principal d:displayname d:principal-URL d:supported-report-set
+< value /caldav/alex/ cal:calendar-home-set <d:href>/caldav/alex/calendars/</d:href>
+< value /caldav/alex/ d:principal-URL <d:href>/caldav/alex/</d:href>
+< value /caldav/alex/ d:displayname alex
+< prop /caldav/alex/ 404 cs:dropbox-home-URL cs:email-address-set cs:notification-URL d:principal-collection-set d:resource-id cal:schedule-inbox-URL cal:schedule-outbox-URL
+
+# The Stalwart case (iOS 26.6): OPTIONS on the principal must answer.
+> OPTIONS /caldav/alex/
+> Auth: alex
+< status 200
+< header-has DAV calendar-access
+< header-has DAV access-control
+< header-has Allow OPTIONS
+< header-has Allow PROPFIND
+
+# The home set, Depth 1, with the property list of TECHNIK 1.5.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav" xmlns:C="http://calendarserver.org/ns/" xmlns:D="http://apple.com/ns/ical/">
+>   <A:prop>
+>     <C:getctag/>
+>     <A:sync-token/>
+>     <A:resourcetype/>
+>     <A:displayname/>
+>     <D:calendar-color/>
+>     <D:calendar-order/>
+>     <B:supported-calendar-component-set/>
+>     <A:current-user-privilege-set/>
+>     <A:supported-report-set/>
+>   </A:prop>
+> </A:propfind>
+< status 207
+< responses 2
+< prop /caldav/alex/calendars/privat/ 200 cs:getctag d:sync-token d:resourcetype d:displayname ical:calendar-color ical:calendar-order cal:supported-calendar-component-set d:current-user-privilege-set d:supported-report-set
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+< value /caldav/alex/calendars/privat/ d:sync-token https://ns.titanos.invalid/sync/0/0
+< value /caldav/alex/calendars/privat/ d:resourcetype <d:collection/><cal:calendar/>
+< value /caldav/alex/calendars/privat/ d:displayname Privat
+< value /caldav/alex/calendars/privat/ ical:calendar-color #7c3aed
+< value /caldav/alex/calendars/privat/ ical:calendar-order 0
+< value /caldav/alex/calendars/privat/ cal:supported-calendar-component-set <cal:comp name="VEVENT"/>
+< privileges /caldav/alex/calendars/privat/ read write write-properties write-content bind unbind read-current-user-privilege-set
+< value /caldav/alex/calendars/privat/ d:supported-report-set <d:supported-report><d:report><cal:calendar-multiget/></d:report></d:supported-report>
+< value /caldav/alex/calendars/privat/ d:supported-report-set <d:supported-report><d:report><cal:calendar-query/></d:report></d:supported-report>
+< value /caldav/alex/calendars/privat/ d:supported-report-set <d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report>
+< prop /caldav/alex/calendars/ 200 cs:getctag d:resourcetype d:displayname d:current-user-privilege-set d:supported-report-set
+< value /caldav/alex/calendars/ d:resourcetype <d:collection/>
+< privileges /caldav/alex/calendars/ read bind unbind read-current-user-privilege-set
+< prop /caldav/alex/calendars/ 404 d:sync-token ical:calendar-color ical:calendar-order cal:supported-calendar-component-set
+
+# The collection itself: the rest of TECHNIK 1.4.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav">
+>   <A:prop><B:calendar-description/><B:supported-calendar-data/><B:max-resource-size/><A:getcontenttype/><A:owner/><A:current-user-principal/></A:prop>
+> </A:propfind>
+< status 207
+< prop /caldav/alex/calendars/privat/ 200 cal:calendar-description cal:supported-calendar-data cal:max-resource-size d:getcontenttype d:owner d:current-user-principal
+< value /caldav/alex/calendars/privat/ cal:supported-calendar-data <cal:calendar-data content-type="text/calendar" version="2.0"/>
+< value /caldav/alex/calendars/privat/ cal:max-resource-size 1048576
+< value /caldav/alex/calendars/privat/ d:owner <d:href>/caldav/alex/</d:href>
+
+# Depth 1 on the empty collection: the collection alone, never a 503 or 404.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:getetag/><A:resourcetype/></A:prop></A:propfind>
+< status 207
+< responses 1
