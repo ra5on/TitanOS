@@ -2,6 +2,7 @@
 // service worker /sw.js shows what the NAS sends; this module registers it
 // and subscribes the browser with the key of the NAS.
 import { api } from './api.ts';
+import { agentAppMode } from './agent-app.ts';
 
 export type PushDevice = {
 	id: string;
@@ -10,7 +11,22 @@ export type PushDevice = {
 	created: string;
 	/** Kinds switched off: 'nas' (TitanOS), 'agent' (KI-Agent), PLAN 59; 'camera' (the cameras' messages), PLAN 82-3. */
 	off?: string[];
+	/** 1.07: the app the device subscribed in; older NAS send none (TitanOS). */
+	app?: PushApp;
 };
+
+/** The app a device subscribes in (1.07): on the iPhone the KI-Agent on
+ *  the home screen is a container of its own with its own subscription. */
+export type PushApp = 'titanos' | 'agent';
+
+/** The app this page runs as: the agent's own installed app, else TitanOS. */
+export function pushApp(): PushApp {
+	try {
+		return agentAppMode(new URL(location.href)) ? 'agent' : 'titanos';
+	} catch {
+		return 'titanos';
+	}
+}
 
 /** Registers the service worker where browsers allow one (HTTPS or localhost). */
 export function registerServiceWorker(): void {
@@ -93,7 +109,11 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 }
 
 /** Asks for permission, subscribes this browser and tells the NAS. */
-export async function subscribe(publicKey: string, name: string): Promise<PushDevice> {
+export async function subscribe(
+	publicKey: string,
+	name: string,
+	app: PushApp = pushApp(),
+): Promise<PushDevice> {
 	if ((await Notification.requestPermission()) !== 'granted') throw new Error('denied');
 	const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
 	await navigator.serviceWorker.ready;
@@ -116,7 +136,12 @@ export async function subscribe(publicKey: string, name: string): Promise<PushDe
 		userVisibleOnly: true,
 		applicationServerKey: keyBytes(publicKey),
 	});
-	return api.post<PushDevice>('/notifications/push', { name, subscription: subscription.toJSON() });
+	// The agent's own app says so: the agent's chats then open there (1.07).
+	return api.post<PushDevice>('/notifications/push', {
+		name,
+		subscription: subscription.toJSON(),
+		...(app === 'agent' ? { app } : {}),
+	});
 }
 
 /** The chat of a notification of the KI-Agent ("agent-<chat>"), or ''. */

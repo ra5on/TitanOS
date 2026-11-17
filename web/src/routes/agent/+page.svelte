@@ -41,6 +41,7 @@
 	import { nasSpeech } from '#lib/agent-speech.svelte.ts';
 	import VoiceMode from '#lib/components/agent/VoiceMode.svelte';
 	import SideResize, { readSideWidth } from '#lib/components/agent/SideResize.svelte';
+	import PushHint from '#lib/components/agent/PushHint.svelte';
 	import { trapFocus } from '#lib/focus-trap.ts';
 
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
@@ -311,6 +312,8 @@
 	data-width={ag.look.chatWidth}
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
+	<!-- 1.07: the installed agent app asks once for its own notifications. -->
+	{#if ag.installed && ag.phone && !ag.profile}<PushHint active />{/if}
 
 	{#if !ag.status && ag.statusFailed}
 		<p class="pad">

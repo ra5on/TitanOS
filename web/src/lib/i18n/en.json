@@ -9221,5 +9221,12 @@
 	"offline.hint": "Without a connection TitanOS only shows the state it saw last. Changes, uploads and questions to the agent work again with the NAS; TitanOS checks every 15 seconds by itself.",
 	"offline.lostTitle": "No connection to the NAS.",
 	"offline.lostText": "What you see is the last state. Changes are sent again once the NAS answers; what you typed stays.",
-	"error.nas_unreachable": "The NAS is not reachable right now. Nothing was sent – please try again once the connection is back."
+	"error.nas_unreachable": "The NAS is not reachable right now. Nothing was sent – please try again once the connection is back.",
+	"agent.pushHint.title": "Allow notifications?",
+	"agent.pushHint.text": "Then the KI-Agent tells you on this device when a task is done or waits for you, and a tap opens the chat here.",
+	"agent.pushHint.allow": "Allow",
+	"agent.pushHint.later": "Later",
+	"agent.pushHint.done": "Notifications are on.",
+	"push.appAgent": "KI-Agent",
+	"push.appTitanOS": "TitanOS"
 }

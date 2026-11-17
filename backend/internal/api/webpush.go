@@ -45,12 +45,15 @@ func (a pushArea) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name         string               `json:"name"`
 		Subscription webpush.Subscription `json:"subscription"`
+		// App: "agent" when the KI-Agent's own app subscribes (1.07);
+		// left out, as by older pages, it is TitanOS.
+		App string `json:"app"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, req.Name)
-	device, err := a.push.Subscribe(currentUser(r).Name, req.Name, req.Subscription)
+	device, err := a.push.SubscribeApp(currentUser(r).Name, req.Name, req.App, req.Subscription)
 	switch {
 	case errors.Is(err, webpush.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_push_subscription", err.Error())

@@ -463,6 +463,58 @@ async function agent107() {
     assert.ok(widths.composer <= 761, `the input too (${widths.composer})`);
     await ctx.close();
   }
+  // The agent's own app on the phone asks once for notifications and
+  // subscribes as "agent" (no real push here: the browser's subscription
+  // is made up, the NAS's answer too).
+  {
+    const { ctx, page } = await open(390, 800);
+    await ctx.grantPermissions(["notifications"]);
+    await ctx.addInitScript(() => {
+      PushManager.prototype.getSubscription = async () => null;
+      PushManager.prototype.subscribe = async () => ({
+        options: { applicationServerKey: null },
+        toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/test", keys: { p256dh: "a", auth: "b" } }),
+      });
+    });
+    const posted = [];
+    await page.route("**/api/v1/notifications/push", (route) => {
+      if (route.request().method() === "POST") {
+        posted.push(route.request().postDataJSON());
+        return route.fulfill({ json: { id: "d1", name: "Android", service: "fcm.googleapis.com", created: at(12), app: "agent" } });
+      }
+      return route.fulfill({ json: { publicKey: "BOrq", devices: [] } });
+    });
+    await page.goto(base + "/agent?app=1");
+    const hint = page.getByRole("dialog", { name: "Mitteilungen erlauben?" });
+    await hint.waitFor({ timeout: 20000 });
+    const allow = hint.getByRole("button", { name: "Erlauben" });
+    assert.ok((await allow.boundingBox()).height >= 44, "the button is big enough");
+    await page.screenshot({ path: `${out}/107-mitteilungen-erlauben.png` });
+    await allow.click();
+    await hint.getByText("Mitteilungen sind an.").waitFor();
+    assert.equal(posted.length, 1, "subscribed once");
+    assert.equal(posted[0].app, "agent", "the agent app subscribes as agent");
+    // Asked once: not again.
+    await page.reload();
+    await page.waitForTimeout(1500);
+    assert.equal(await page.getByRole("dialog", { name: "Mitteilungen erlauben?" }).count(), 0, "asked once only");
+    await ctx.close();
+  }
+  // In the TitanOS app on the phone a tapped message of the agent opens
+  // the agent with its chat, not the home screen (sw.js posts "open").
+  {
+    const { ctx, page } = await open(390, 800);
+    await page.goto(base + "/");
+    await page.waitForTimeout(1500);
+    await page.evaluate(() =>
+      navigator.serviceWorker.dispatchEvent(
+        new MessageEvent("message", { data: { type: "open", url: "/agent?chat=c1aaaaaaaaaa0001" } }),
+      ),
+    );
+    await page.waitForURL(/\/agent\?chat=c1aaaaaaaaaa0001/, { timeout: 15000 });
+    await page.locator(".messages .column").waitFor({ timeout: 20000 });
+    await ctx.close();
+  }
   // The phone: no handle, the chat in the whole width as before.
   {
     const { ctx, page } = await open(390, 800);

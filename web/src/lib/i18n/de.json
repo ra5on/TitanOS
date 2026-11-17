@@ -9221,5 +9221,12 @@
 	"offline.hint": "Ohne Verbindung zeigt TitanOS nur den zuletzt gesehenen Stand. Ändern, Hochladen und Fragen an den Agenten gehen erst wieder mit dem NAS; TitanOS prüft alle 15 Sekunden von selbst.",
 	"offline.lostTitle": "Keine Verbindung zum NAS.",
 	"offline.lostText": "Was zu sehen ist, ist der letzte Stand. Änderungen werden erst wieder gesendet, wenn das NAS antwortet; Eingegebenes bleibt stehen.",
-	"error.nas_unreachable": "Das NAS ist gerade nicht erreichbar. Nichts wurde gesendet – bitte erneut versuchen, sobald die Verbindung wieder steht."
+	"error.nas_unreachable": "Das NAS ist gerade nicht erreichbar. Nichts wurde gesendet – bitte erneut versuchen, sobald die Verbindung wieder steht.",
+	"agent.pushHint.title": "Mitteilungen erlauben?",
+	"agent.pushHint.text": "Dann meldet sich der KI-Agent auf diesem Gerät selbst, wenn ein Auftrag fertig ist oder auf dich wartet, und ein Tipp öffnet den Chat hier.",
+	"agent.pushHint.allow": "Erlauben",
+	"agent.pushHint.later": "Später",
+	"agent.pushHint.done": "Mitteilungen sind an.",
+	"push.appAgent": "KI-Agent",
+	"push.appTitanOS": "TitanOS"
 }

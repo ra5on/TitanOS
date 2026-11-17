@@ -79,7 +79,7 @@ type agentPhotosState struct {
 
 var (
 	errPhotosKeyMissing = errors.New("the key of the stored Immich keys is missing on the stick")
-	errPhotosNoImmich   = errors.New("Immich is not running on this NAS")
+	errPhotosNoImmich   = errors.New("the photo app Immich is not running on this NAS")
 	errPhotosNoKey      = errors.New("no Immich API key is set for this account")
 )
 
@@ -731,11 +731,11 @@ func (s *Server) photosSearch(ctx context.Context, user string, raw json.RawMess
 func immichToolError(err error) error {
 	switch {
 	case errors.Is(err, immich.ErrUnauthorized):
-		return errors.New("Immich did not accept the account's API key; it can be entered anew under the agent's settings › Photos")
+		return errors.New("the photo app Immich did not accept the account's API key; it can be entered anew under the agent's settings › Photos")
 	case errors.Is(err, immich.ErrForbidden):
 		return errors.New("the Immich API key lacks a permission (needed: " + strings.Join(immich.Permissions, ", ") + ")")
 	}
-	return errors.New("Immich does not answer")
+	return errors.New("the photo app Immich does not answer")
 }
 
 func photosJSON(v any) string {
