@@ -597,3 +597,33 @@ func TestAnswerMarksAnswered(t *testing.T) {
 		}
 	}
 }
+
+// Only texts that look like web addresses are compared, by registrable
+// domain; file names, versions and mail addresses are no targets.
+func TestLinkMismatchOnlyForWebAddresses(t *testing.T) {
+	for _, c := range []struct {
+		text, href string
+		mark       bool
+	}{
+		{"www.sparkasse.de", "https://evil.example/login", true},
+		{"sparkasse.de", "https://sparkasse.evil.example/", true},
+		{"https://paypal.com/signin", "https://paypal.com.evil.example/", true},
+		{"amazon.co.uk", "https://amazon.example/", true},
+		{"bob@bank.de", "mailto:bob@evil.example", true},
+		{"www.sparkasse.de", "https://banking.sparkasse.de/x", false},
+		{"sparkasse.de", "https://www.sparkasse.de/", false},
+		{"amazon.co.uk", "https://www.amazon.co.uk/", false},
+		{"Rechnung.pdf", "https://cdn.example/r.pdf", false},
+		{"bild.jpg", "https://cdn.example/b.jpg", false},
+		{"v1.2", "https://github.example/release", false},
+		{"Version 2.0.1", "https://x.example/", false},
+		{"bob@bank.de", "https://evil.example/", false},
+		{"Hier klicken", "https://evil.example/", false},
+		{"bob@bank.de", "mailto:bob@bank.de", false},
+	} {
+		doc, _ := SanitizeHTML(`<a href="`+c.href+`">`+c.text+`</a>`, nil, false)
+		if got := strings.Contains(doc, `data-tmail-mismatch="1"`); got != c.mark {
+			t.Errorf("%q → %s: marked %v, want %v", c.text, c.href, got, c.mark)
+		}
+	}
+}

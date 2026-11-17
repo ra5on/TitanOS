@@ -10,6 +10,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"golang.org/x/net/publicsuffix"
 )
 
 // HTML mail is cleaned on the server (docs/TMAIL.md "Sicherheit der
@@ -151,11 +152,14 @@ func fixLink(n *html.Node) {
 	setAttr(n, "rel", "noopener noreferrer")
 	// The real target shows on hover, whatever the text says.
 	setAttr(n, "title", u.String())
+	text := strings.TrimSpace(textOf(n))
+	var shown, real string
 	if u.Scheme == "mailto" {
-		return
+		// An address as text is compared with the address of the link.
+		shown, real = mailDomain(text), mailDomain(u.Opaque)
+	} else {
+		shown, real = shownHost(text), strings.ToLower(u.Hostname())
 	}
-	shown := shownHost(textOf(n))
-	real := strings.ToLower(u.Hostname())
 	if shown == "" || real == "" || sameSite(shown, real) {
 		return
 	}
@@ -186,21 +190,58 @@ func textOf(n *html.Node) string {
 	return b.String()
 }
 
-var hostInText = regexp.MustCompile(`(?i)(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,63})\b`)
+// webInText is a link text that may be a web address: an optional scheme
+// and a host name, nothing else but a path after it.
+var webInText = regexp.MustCompile(`(?i)^(https?://)?((?:[a-z0-9-]+\.)+[a-z0-9-]+)\.?(?::[0-9]+)?(?:[/?#]\S*)?$`)
 
-// shownHost is the domain a link text names, "" if it names none.
+// shownHost is the host a link text names, "" if the text does not look
+// like a web address: a scheme, "www." or a name whose ending is a real
+// public suffix (ICANN). File names (rechnung.pdf, bild.jpg), version
+// numbers (v1.2) and mail addresses are no targets to compare.
 func shownHost(text string) string {
-	m := hostInText.FindStringSubmatch(strings.TrimSpace(text))
+	if strings.Contains(text, "@") && !strings.Contains(strings.ToLower(text), "://") {
+		return ""
+	}
+	m := webInText.FindStringSubmatch(text)
 	if m == nil {
 		return ""
 	}
-	return strings.ToLower(strings.TrimSuffix(m[1], "."))
+	host := strings.ToLower(m[2])
+	if m[1] != "" || strings.HasPrefix(host, "www.") {
+		return host
+	}
+	suffix, icann := publicsuffix.PublicSuffix(host)
+	if !icann || suffix == host {
+		return ""
+	}
+	return host
 }
 
-// sameSite tells whether two hosts belong together: equal, or one below
-// the other (www.example.com and example.com).
+// mailDomain is the domain of a mail address ("" if the text is none).
+func mailDomain(text string) string {
+	addr := strings.TrimSpace(text)
+	if i := strings.IndexAny(addr, "?"); i >= 0 {
+		addr = addr[:i]
+	}
+	local, domain, ok := strings.Cut(addr, "@")
+	if !ok || local == "" || strings.ContainsAny(domain, " /@") || !strings.Contains(domain, ".") {
+		return ""
+	}
+	return strings.ToLower(domain)
+}
+
+// sameSite tells whether two hosts belong to the same registrable domain
+// (eTLD+1): www.sparkasse.de and banking.sparkasse.de are one site.
 func sameSite(a, b string) bool {
-	return a == b || strings.HasSuffix(a, "."+b) || strings.HasSuffix(b, "."+a)
+	if a == b {
+		return true
+	}
+	ra, errA := publicsuffix.EffectiveTLDPlusOne(a)
+	rb, errB := publicsuffix.EffectiveTLDPlusOne(b)
+	if errA != nil || errB != nil {
+		return strings.HasSuffix(a, "."+b) || strings.HasSuffix(b, "."+a)
+	}
+	return ra == rb
 }
 
 // fixImage resolves cid: pictures and holds back the others; it reports
