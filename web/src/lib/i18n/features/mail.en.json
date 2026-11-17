@@ -238,10 +238,13 @@
 	"notify.kind.mail_new.title": "New e-mail",
 	"notify.kind.mail_new.text": "New e-mail in {subject}.",
 	"notify.kind.mail_new_many.title": "New e-mails",
-	"notify.kind.mail_new_many.text": "Several new e-mails in {subject}.",
+	"notify.kind.mail_new_many.text": "{subject} new e-mails in T-Mail.",
 	"error.mail_password_required": "The server or user name was changed: enter the password again. A stored password never goes to another server.",
 	"error.mail_no_password": "No password is stored for this mailbox. Enter it in the settings of the mailbox.",
 	"error.mail_invalid": "An entry is not valid.",
 	"error.mail_settings_unreadable": "The T-Mail settings of this account could not be read at start. So that nothing is lost, T-Mail saves nothing over them.",
-	"error.mail_rate_limited": "Too many connection checks – please wait a minute."
+	"error.mail_rate_limited": "Too many tries with new servers or connection checks – please wait a minute.",
+	"error.mail_busy": "T-Mail is busy with other large requests (sending, attachments). Try again in a moment.",
+	"error.mail_key_missing": "The key of the stored mail passwords is missing on the stick. Restore it from the backup of the stick or add the mailboxes anew.",
+	"error.mail_key_damaged": "The key of the stored mail passwords is damaged. Restore it from the backup of the stick or add the mailboxes anew."
 }

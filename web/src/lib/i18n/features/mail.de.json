@@ -238,10 +238,13 @@
 	"notify.kind.mail_new.title": "Neue E-Mail",
 	"notify.kind.mail_new.text": "Neue E-Mail in {subject}.",
 	"notify.kind.mail_new_many.title": "Neue E-Mails",
-	"notify.kind.mail_new_many.text": "Mehrere neue E-Mails in {subject}.",
+	"notify.kind.mail_new_many.text": "{subject} neue E-Mails in T-Mail.",
 	"error.mail_password_required": "Server oder Benutzername wurden geändert: Gib das Passwort neu ein. Ein gespeichertes Passwort geht nie an einen anderen Server.",
 	"error.mail_no_password": "Für dieses Postfach ist kein Passwort gespeichert. Gib es unter Einstellungen beim Postfach ein.",
 	"error.mail_invalid": "Eine Angabe ist ungültig.",
 	"error.mail_settings_unreadable": "Die T-Mail-Einstellungen dieses Kontos ließen sich beim Start nicht lesen. Damit nichts verloren geht, speichert T-Mail nichts darüber.",
-	"error.mail_rate_limited": "Zu viele Verbindungsprüfungen – bitte eine Minute warten."
+	"error.mail_rate_limited": "Zu viele Versuche mit neuen Servern oder Verbindungsprüfungen – bitte eine Minute warten.",
+	"error.mail_busy": "T-Mail ist gerade mit anderen großen Aufträgen beschäftigt (Senden, Anhänge). Versuche es gleich noch einmal.",
+	"error.mail_key_missing": "Der Schlüssel der gespeicherten Mail-Passwörter fehlt auf dem Stick. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an.",
+	"error.mail_key_damaged": "Der Schlüssel der gespeicherten Mail-Passwörter ist beschädigt. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an."
 }

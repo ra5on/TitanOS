@@ -117,22 +117,25 @@ Beim Bau des Backends genauer festgelegt oder geändert. Routen, Felder und Code
 | `mail_tls` | 502 | kein TLS, STARTTLS fehlt oder Zertifikat ungültig |
 | `mail_host_forbidden` | 400 | Ziel verboten (Loopback, Link-Local, eigene Adresse auf titand-Port; für Konten der Rolle Benutzer jede nicht öffentliche Adresse – dann nennt `message` diesen Grund) |
 | `mail_timeout` | 504 | Zeitgrenze überschritten |
-| `mail_too_large` | 413 | Anhänge über 25 MB, Anhang zum Speichern über 64 MB |
+| `mail_too_large` | 413 | Anhänge über 25 MB, Anhang zum Speichern über 64 MB, Antwort eines Servers über ihr Budget |
 | `mail_not_found` | 404 | Postfach, Ordner, Nachricht oder Teil fehlt |
 | `mail_folder_exists` | 409 | Ordner gibt es schon |
 | `mail_send_failed` | 502 | SMTP lehnt ab; `message` enthält Code und Text des Servers (einzeilig, höchstens 300 Zeichen) |
 | `mail_invalid` | 400 | Eingabe ungültig; `message` nennt das Feld |
 | `mail_password_required` | 400 | **neu:** Host von IMAP oder SMTP geändert (oder „prüfen“ gegen andere Hosts) ohne neues Passwort – ein gespeichertes Passwort geht nie an einen anderen Host |
 | `mail_no_password` | 409 | **neu:** kein Passwort gespeichert |
-| `mail_rate_limited` | 429 | **neu:** mehr als 10 Verbindungsprüfungen (`POST /accounts/test`) je Minute und Konto; `Retry-After: 60` |
+| `mail_rate_limited` | 429 | **neu:** mehr als 10 Verbindungsprüfungen oder 10 Verbindungen zu noch nie erfolgreichen Servern je Minute und Konto; `Retry-After: 60` |
+| `mail_busy` | 503 | **neu:** schon zwei große Anfragen des Kontos (`send`, `draft`, `part`, `part/save`) oder kein Platz im RAM-Budget von TitanOS; `Retry-After: 5` |
+| `mail_key_missing` | 503 | **neu:** Schlüssel `/config/tmail/key` fehlt, obwohl Passwörter gespeichert sind (kein neuer Schlüssel; aus der Stick-Sicherung wiederherstellen oder Postfächer neu anlegen) |
+| `mail_key_damaged` | 503 | **neu:** Schlüssel beschädigt oder ein Passwort öffnet nicht |
 | `mail_settings_unreadable` | 503 | **neu:** `/config/tmail/<konto>.json` oder `access.json` beim Start nicht lesbar; nichts wird darüber geschrieben |
 
 Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Dateimanagers (`file_not_found`, `file_exists` …).
 
 **Ziele je Rolle (Festlegung des Koordinators, 17.11.2026)**
-- Konten der Rolle **Benutzer** erreichen nur öffentliche Adressen (keine privaten Netze, kein Tailscale/CGNAT, kein Link-Local, nichts Reserviertes; `netguard.Public` wie bei `notify`). Besitzer und Administratoren dürfen zusätzlich ins Heimnetz. Geprüft im Dialer nach der DNS-Auflösung, für jede Verbindung des Kontos (Listen, Lesen, Senden, IDLE, `POST /accounts/test`); Rolle wie sie jetzt ist.
+- Konten der Rolle **Benutzer** erreichen nur öffentliche Adressen (keine privaten Netze, kein Tailscale/CGNAT, kein Link-Local, nichts Reserviertes, kein 6to4 `2002::/16`, kein NAT64 `64:ff9b::/96`/`64:ff9b:1::/48`) **außerhalb der Netze des NAS** (Netze der eigenen Schnittstellen mit ihrer Maske, IPv6 mindestens als /56; die eigenen Adressen auf allen Ports) – `netguard.Confined`, dieselbe Regel wie bei `notify` und Link-Downloads. Besitzer und Administratoren dürfen zusätzlich ins Heimnetz. Geprüft im Dialer nach der DNS-Auflösung, für jede Verbindung des Kontos (Listen, Lesen, Senden, IDLE, `POST /accounts/test`); Rolle wie sie jetzt ist.
 - Fehler `mail_host_forbidden` mit dem Grund im Text. Ein schon gespeichertes Postfach eines Benutzers mit LAN-Ziel bleibt stehen; seine Verbindung wird abgewiesen, Status `unreachable` mit Code `mail_host_forbidden` (wird später ein Administrator daraus, verbindet es wieder).
-- Gegen Port-Abtasten: `POST /accounts/test` höchstens 10-mal je Minute und Konto (alle Rollen, `429 mail_rate_limited`). Für Benutzer unterscheiden die Codes der Prüfung die Ursache nicht: verweigert, Zeitüberschreitung, kein Mailserver und TLS-Fehler heißen alle `mail_unreachable`; nur `mail_auth_failed` und `mail_host_forbidden` bleiben.
+- Gegen Port-Abtasten: `POST /accounts/test` höchstens 10-mal je Minute und Konto, und jede Verbindung zu einem Server, an dem sich das Konto noch nie angemeldet hat, höchstens 10-mal je Minute und Konto (beides alle Rollen, `429 mail_rate_limited`, `Retry-After: 60`; gilt für jede Route, auch über ein gespeichertes Postfach). Für Benutzer unterscheiden **alle** Antworten (Prüfung und jede andere Route) die Ursache nicht: verweigert, Zeitüberschreitung, kein Mailserver und TLS-Fehler heißen `mail_unreachable` ohne Servertext, `mail_send_failed` ohne Antwort des Servers.
 
 **Postfächer**
 - Neues Feld `senderName` (Name im `From`, leer = nur Adresse). `name` ist nur die Bezeichnung in T-Mail.
@@ -144,10 +147,11 @@ Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Da
 
 **Ordner und Listen**
 - Ordner: `POST {path}`, `PUT {path,to}`, `DELETE ?path=`; die INBOX lässt sich nicht umbenennen oder löschen (`mail_invalid`). Fehlt ein Papierkorb, Entwürfe- oder Gesendet-Ordner, legt T-Mail beim ersten Bedarf `Trash`, `Drafts` bzw. `Sent` an.
-- `messages`: `next` ist 0 am Ende; `unread=1`, `flagged=1`; als gelöscht markierte Mails erscheinen nicht. `total` zählt alle Treffer des Filters.
+- `messages`: `next` ist 0 am Ende; **neu** `tooLarge:true` an einer Mail, deren Kopf zu groß zum Auflisten ist (nur UID); `attachments` kommt aus dem `Content-Type` des Kopfs (`multipart/mixed` oder einteilig kein Text); `unread=1`, `flagged=1`; als gelöscht markierte Mails erscheinen nicht. `total` zählt alle Treffer des Filters.
 
 **Lesen**
 - Neues Feld `bcc` (nur bei eigenen Mails bekannt, z. B. Entwürfen). `references` ist ein String (Message-IDs mit Leerzeichen getrennt), ebenso `inReplyTo`; so werden sie auch beim Senden zurückgegeben.
+- **Links im `html`:** `title` ist immer das echte Ziel (ein `title` des Absenders wird ersetzt). Nennt der sichtbare Text eine andere Domain, trägt der Link `data-tmail-mismatch="1"` und dahinter steht im Dokument „⚠ <echte Domain>“ (rot, fett).
 - `html` ist ein **ganzes Dokument** mit eigener CSP-Meta (`default-src 'none'; style-src 'unsafe-inline'; img-src data:` – mit `images=1` zusätzlich `https:` –`; font-src 'none'; form-action 'none'; base-uri 'none'`) und `referrer` `no-referrer`; die Oberfläche gibt es unverändert in `srcdoc` (Sandbox wie oben).
 - **Eingebettete Bilder (`cid:`) stehen im `html` als `data:`-URL** (nur PNG/JPEG/GIF/WebP, Inhalt geprüft, je höchstens 2 MB, zusammen 8 MB). Grund: Das Sitzungs-Cookie ist `SameSite=Strict`, und ein `srcdoc`-Rahmen ohne `allow-same-origin` hat eine fremde Herkunft – eine angemeldete Bild-Route würde dort nicht laden. `GET /cid` bleibt (nur erlaubte Bildtypen, `inline`, `nosniff`, `CSP: sandbox`), z. B. für die Anhangsliste.
 - `<style>`-Blöcke werden ganz entfernt (nicht nur `@import`), Inline-Styles nur aus einer Positivliste (Farben, Schrift, Abstände, Ränder, Breiten; kein `url()`). Externe Bilder ohne `images=1`: grauer Platzhalter (`data:`-SVG); `http:`-Bilder bleiben auch mit `images=1` Platzhalter (CSP nur `https:`).
@@ -158,10 +162,11 @@ Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Da
 **Senden und Entwürfe**
 - `to`/`cc`/`bcc`: Liste aus Strings (`"Name <a@b>"` oder `"a@b"`) oder Objekten `{name,addr}`.
 - `nasFiles`: JSON-Liste `[{root,path}]` (Wurzeln wie `GET /files/roots`), gelesen mit den Rechten des Kontos.
-- **Neu:** `meta.attachFrom: {folder,uid,parts:[…]}` hängt Teile einer vorhandenen Mail an (Weiterleiten, wieder geöffneter Entwurf mit Anhängen).
+- **Neu:** `meta.attachFrom: {folder,uid,parts:[…]}` hängt Teile einer vorhandenen Mail an (Weiterleiten, wieder geöffneter Entwurf mit Anhängen); `parts:["*"]` sind alle Anhänge. **Ohne `uid`, mit `draftUid`:** die Anhänge des Entwurfs, den diese Speicherung ersetzt (Ordner findet T-Mail; ohne `parts` alle) – hochgeladene Dateien müssen nicht bei jeder Speicherung neu kommen.
+- **Neu:** `meta.answers: {folder,uid}`: diese Mail bekommt nach dem Senden `answered`. Ohne `answers`, mit `inReplyTo`: die Mail mit dieser Message-ID in der INBOX.
 - `signature`: Kennung; der Text kommt unter `-- ` an den Text.
 - Antwort `send`: `{sentCopy}` (`true`, wenn die Kopie in „Gesendet“ liegt – bei Gmail, erkannt an `X-GM-EXT-1`, legt der Anbieter sie ab). Schlägt nur die Kopie fehl, gilt die Mail trotzdem als gesendet.
-- Ein Entwurf behält `Bcc` im Kopf (er wird nie so versendet); Antwort `{uid}` (0, wenn der Server keine UID nennt).
+- Ein Entwurf behält `Bcc` im Kopf (er wird nie so versendet); Antwort `{uid,attachments:[{part,name,type,size,inline,cid}]}` (`uid` 0, wenn der Server keine UID nennt; `attachments` die Anhänge des neuen Entwurfs).
 - `POST /part/save`: `{folder,uid,part,root,path}`; die Datei darf es noch nicht geben; höchstens 64 MB (läuft durch den RAM).
 
 **Signaturen und Einstellungen**
@@ -169,8 +174,8 @@ Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Da
 - **Neu:** `pushContent` (ab Werk `true`): Push-Mitteilungen nennen Absender und Betreff.
 
 **Meldungen**
-- **Glocke** (nur Besitzer/Administratoren haben eine): Art `mail_new` bzw. `mail_new_many` (Sammelmeldung), Betreff = Name des Postfachs, Text neutral („Neue E-Mail in {s}.“). **Abweichung:** kein Absender, kein Betreff in der Glocke, denn die Glocke ist über das Werkzeug `notifications` für den KI-Agenten lesbar. Die Oberfläche braucht `notify.kind.mail_new.*` und `notify.kind.mail_new_many.*` in beiden Sprachdateien.
-- **Push** an die eigenen Geräte, neue Art `mail` (je Gerät abschaltbar: `PUT /api/v1/notifications/push/{id}` mit `mail:true|false`, weggelassen bleibt es): Titel = Absender, Text = Betreff, wenn `pushContent` an ist und die persönliche Einstellung des Kontos „Inhalt“ nicht `none` ist; sonst „Neue E-Mail“ / „Neue E-Mail in <Postfach>“. Sammelmeldung immer neutral. Tippen öffnet `/mail`. Konten der Rolle Benutzer bekommen nur Push.
+- **Glocke** (nur Besitzer/Administratoren haben eine): Art `mail_new` mit Betreff = Name des Postfachs, nur wenn die Person ihn selbst vergeben hat und er kein `@` enthält, sonst „T-Mail“ („Neue E-Mail in {s}.“); Art `mail_new_many` (Sammelmeldung) mit Betreff = Anzahl („{s} neue E-Mails in T-Mail.“). Nie eine Adresse. **Abweichung:** kein Absender, kein Betreff in der Glocke, denn die Glocke ist über das Werkzeug `notifications` für den KI-Agenten lesbar. Die Oberfläche braucht `notify.kind.mail_new.*` und `notify.kind.mail_new_many.*` in beiden Sprachdateien.
+- **Push** an die eigenen Geräte, neue Art `mail` (je Gerät abschaltbar: `PUT /api/v1/notifications/push/{id}` mit `mail:true|false`, weggelassen bleibt es): Titel = Absender, Text = Betreff, wenn `pushContent` an ist und die persönliche Einstellung des Kontos „Inhalt“ nicht `none` ist; sonst die Texte der Glocke. Sammelmeldung immer neutral. Titel höchstens 120, Text höchstens 240 Zeichen; unsichtbare Zeichen und Steuerzeichen der Schreibrichtung entfernt. Tippen öffnet `/mail`. Konten der Rolle Benutzer bekommen nur Push.
 - Sammelmeldung: neue Mails eines Postfachs innerhalb von 10 s werden eine Meldung.
 - Bereits gelesene Mails (z. B. durch eine Regel „als gelesen markieren“) melden sich nicht.
 - Regeln: alle passenden in Reihenfolge; Teile von Absender (Name und Adresse), Empfänger (An und Cc) und Betreff ohne Groß-/Kleinschreibung; nach einem Verschieben enden sie. Verschieben in einen fehlenden Ordner wird protokolliert, die Mail bleibt.
@@ -194,6 +199,7 @@ Geprüft am 17.11.2026 mit Go-Tests (auch mit `-race`), ohne echte Mailanbieter 
 - **Ziele je Rolle:** Benutzer → Heimnetz/Loopback abgewiesen (Listen, Senden, Prüfung, IDLE-Status `unreachable`/`mail_host_forbidden`, Postfach bleibt, am Server keine Verbindung), Administrator → Heimnetz erlaubt; Prüfcodes für Benutzer ohne Ursache; Rate-Grenze 10/min greift und gibt nach einer Minute frei (auch über die API mit `429`/`Retry-After`).
 - **Ziele:** Loopback (auch über `localhost`), Link-Local, `::1`, `fe80::`, Multicast, eigene Adresse auf titand-Port verboten; Heimnetz und eigene Adresse auf anderem Port erlaubt; der echte Dialer erreicht den Testserver auf 127.0.0.1 nicht.
 - **Ablage:** kein Klartext-Passwort im Konfigurationsordner oder in Antworten, Schlüssel 0600, Chiffrat an Postfach gebunden, unverändertes Speichern schreibt nichts Neues; Freigabe ab Werk aus, gesperrt aus, nicht vererbt; Konto vergessen entfernt Einstellungen, Freigabe, Adressbuch und Ereignisströme; Einstellungen eines früheren Kontos gleichen Namens unsichtbar.
+- **Sicherheitsdurchsicht:** siehe Abschnitt „Sicherheitsdurchsicht 1.05“; zusätzlich ein bösartiger IMAP-Server (512-MiB-Literal: Abbruch nach dem Budget, Speicherspitze unter 96 MiB), ein SMTP-Server mit 200 000 Antwortzeilen, ein Server ohne UIDNEXT mit leerer INBOX, Mails mit 50 000 Teilen in der Liste.
 - **API** (`api/tmail_test.go`): ohne Freigabe 403 an jeder Route (auch für den Besitzer); fremdes Postfach 404; Benutzer kann sich nicht selbst freigeben, Administrator nicht den Besitzer; jede T-Mail-Route lehnt In-Process-Aufrufe, Tokens und Aufrufe über den Cluster ab; keine Route in `publicRoutes`, kein Werkzeug im Katalog, keine Katalog-/Agent-Datei nennt T-Mail; Anhänge mit `attachment`/`nosniff`/`sandbox`, `cid` nur Bild; Speichern in NAS-Dateien mit Rechten (fremde Freigabe 404, vorhandene Datei abgelehnt); Senden mit Upload und NAS-Datei (fremde Datei 404, nichts versendet); Entwurf; Ereignis `flags` im Strom; Konto löschen hier und über `clusterApplied`, neues Konto erbt nichts; Diagnosepaket (entpackt) und Kontodatensatz des Clusters ohne Mail-Passwort.
 
 Nicht geprüft: echte Anbieter (GMX, Gmail, iCloud …) und ihre Eigenheiten (Gmail-Ordner, APPENDLIMIT, Drosselung), ein erfolgreiches STARTTLS (nur die Ablehnung ohne TLS ist geprüft), der Datensatz, den der Cluster tatsächlich verschickt (geprüft ist der Kontodatensatz `auth.User`, den der Abgleich überträgt), Server ohne MOVE/UIDPLUS (Rückfall COPY+STORE+EXPUNGE nur im Code), Push-Zustellung an echte Geräte, die Oberfläche, ein echtes NAS mit Volume-Wechsel des Adressbuchs, ein App-Update mit offenen IDLE-Verbindungen auf echter Hardware.
@@ -202,6 +208,8 @@ Grenzen der ersten Fassung: Nach einem Neustart von titand ist ein Anmeldefehler
 
 ## Offen für das Backend
 
+**Stand 17.11.2026 (Backend):** Punkte 1–4 sind gebaut – `mailAccounts` in `GET /users/{name}/agent-data`; `title` = echtes Ziel und Markierung abweichender Domains im Dokument; `meta.answers` bzw. Suche über `inReplyTo`; `attachFrom` ohne `uid` mit `draftUid` und `attachments` in der Antwort von `draft`. Einzelheiten in den Festlegungen oben.
+
 Von der Oberfläche (Zweig `feat/v1.05-b`, 17.11.2026) eingetragen. Die Oberfläche ist an die „Festlegungen des Backends“ (Zweig `feat/v1.05-a`) angepasst: `GET /mail/access`, `GET`/`PUT /users/{name}/mail`, `/providers` flach mit `known`, `html` als ganzes Dokument unverändert in `srcdoc`, `senderName`, `bcc`, `references`/`inReplyTo` als String, `meta.attachFrom`, `nasFiles` als JSON-Liste `[{root,path}]`, `part/save` mit `root` und Dateipfad, `signatures[].default` als Liste, `pushContent`, Push-Art `mail`, `next` 0 am Ende, Fehlercodes samt `mail_rate_limited` (`Retry-After`). Offen bleibt:
 
 1. **Konto löschen:** Der Löschdialog nennt seit 1.03 die Agent-Daten (`GET /users/{name}/agent-data`). Für „T-Mail-Postfächer“ fehlt ein Feld, z. B. `mailAccounts: number` (Anzahl der Postfächer des Kontos) in dieser Antwort. Bis dahin nennt der Dialog T-Mail nicht.
@@ -209,3 +217,24 @@ Von der Oberfläche (Zweig `feat/v1.05-b`, 17.11.2026) eingetragen. Die Oberflä
 3. **„Beantwortet“:** Nach dem Senden einer Antwort (`inReplyTo` gesetzt) sollte die beantwortete Mail `answered` bekommen. `meta` nennt dafür nur die Message-ID, nicht Ordner und UID; entweder sucht das Backend die Mail über die Message-ID, oder `meta` bekommt `answers:{folder,uid}`.
 4. **Entwürfe mit hochgeladenen Dateien:** Jede automatische Speicherung (alle 30 s bei Änderung) schickt hochgeladene Dateien erneut mit. Geht, kostet aber Übertragung; denkbar wäre, dass `attachFrom` mit `draftUid` die Teile des vorigen Entwurfs übernimmt (die Oberfläche macht das schon für Teile, die aus dem Entwurf stammen).
 5. **Fehlertexte:** `error.mail_*` (Deutsch/Englisch) stehen in `web/src/lib/i18n/features/mail.{de,en}.json`; `notify.kind.mail_new*` ebenda, `push.kindMail` auch. Nicht noch einmal in anderen Sprachdateien anlegen (der Test gegen doppelte Schlüssel schlägt sonst fehl).
+
+## Sicherheitsdurchsicht 1.05: Funde und Behebung
+
+Zwei unabhängige Durchsichten des Backends (Stand `bb8ea52a`), behoben am 17.11.2026. Jeder Fund hat einen Regressionstest (`backend/internal/tmail/security_test.go`, `netguard_test.go`, `api/tmail_test.go`, `cmd/titand/wiring_mail_test.go`). Die Tests der Funde, die sich gegen den alten Code bauen lassen, schlagen dort fehl (geprüft mit einer Kopie von `bb8ea52a`); die übrigen prüfen neue Schnittstellen.
+
+| Stufe | Fund | Behebung |
+|---|---|---|
+| HOCH | Der IMAP-Client (go-imap beta.9) begrenzt keine Literale, Texte und Zeilen; ein bösartiger oder kaputter Server ließ titand Gigabytes puffern, über die IDLE-Verbindung nach jedem Neustart wieder | Jede Verbindung (IMAP und SMTP, unter TLS) liest durch ein Budget je Befehl: 1 MiB für Anmeldung, 16 MiB für LIST/SEARCH/Köpfe/IDLE, für Teile die erwartete Größe plus 1 MiB; darüber wird die Verbindung geschlossen, `mail_too_large`. FETCH-Antworten Mail für Mail (`Next`), LIST bricht nach 500 Ordnern ab, UID-Mengen werden nie ganz ausgepackt (höchstens 100 000, neue Mails in Runden zu 100). Die Liste nimmt die Anhang-Markierung aus dem Kopf statt aus der Struktur; eine Mail mit zu großem Kopf erscheint als `tooLarge`. Der Wächter geht nach `mail_too_large` auf `unreachable` mit Pause. SMTP: 1 MiB und 2000 Zeilen je Gespräch |
+| MITTEL | IPv6: Benutzer erreichten eigene öffentliche Adressen des NAS und Geräte im Heimnetz | `netguard.Confined`: keine Adresse in den Netzen der eigenen Schnittstellen (IPv6 mindestens /56), das NAS auf keinem Port, kein `2002::/16`, kein `64:ff9b:1::/48` – auch für `notify` und Link-Downloads |
+| MITTEL | Port-Abtasten über gespeicherte Postfächer (Port ändern, Ordner abrufen, Code lesen) | Höchstens 10 Verbindungen je Minute und Konto zu Servern ohne erfolgreiche Anmeldung (alle Rollen); für Benutzer verschleierte Codes und keine Servertexte in jeder Antwort |
+| MITTEL | Speicher bei parallelen großen Anfragen | Höchstens zwei große Anfragen je Konto, gekoppelt an das RAM-Budget von TitanOS (`MemoryPolicy.TryReserve`); ohne Platz sofort `503 mail_busy`. `PartBytes` ohne zusätzliche Kopie |
+| NIEDRIG | Rollenwechsel ließ Verbindungen ins Heimnetz offen | Rolle im Fingerabdruck der Verbindung und der Konfiguration des Wächters; Rollenwechsel (hier und im Cluster) schließt die Verbindungen |
+| NIEDRIG | Verwaiste Verbindung nach Entfernen von Postfach, Konto oder Freigabe während einer Anfrage | Am Ende jeder Anfrage geprüft und geschlossen; Freigabe entziehen schließt alle Verbindungen und Ströme; Downloads enden mit Anmeldung und Freigabe |
+| NIEDRIG | Fehlender oder beschädigter Schlüssel: still ein neuer | Kein neuer Schlüssel, solange Passwörter liegen; `mail_key_missing`/`mail_key_damaged` (503) mit Protokollzeile |
+| NIEDRIG | Unsichtbare und Bidi-Zeichen in Betreff, Namen, Dateinamen, Push | Unicode-Kategorie `Cf` (auch U+202A–202E, U+2066–2069) entfernt; Dateinamen höchstens 255 Byte mit Endung |
+| NIEDRIG | Push-Nutzlast unbegrenzt | Titel 120, Text 240 Zeichen |
+| NIEDRIG | Servertexte im Protokoll (der KI-Agent liest es) | Nur noch der Code |
+| NIEDRIG | Glocke nannte den Postfachnamen, oft eine Adresse | „T-Mail“ oder ein selbst vergebener Name ohne `@`; Sammelmeldung mit Anzahl |
+| NIEDRIG | Dateien ohne `Created` galten für jedes Konto des Namens | Ohne `Created` fremd für ein Konto mit `Created`; Passwörter neu als `v2:` mit der Anlegezeit in den Zusatzdaten (`v1:` wird weiter gelesen); Adressbuch ebenso |
+| NIEDRIG | Beliebig viele Ereignisströme | Höchstens 8 je Konto, der älteste endet |
+| NIEDRIG | Leere INBOX ohne UIDNEXT: `UID SEARCH UID *` wird abgelehnt, Wiederholschleife | Grundlinie mindestens UID 1 |
