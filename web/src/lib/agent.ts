@@ -199,7 +199,9 @@ export function scheduleActive(s: Pick<Schedule, 'enabled' | 'every' | 'lastRun'
 }
 
 /** How many planned tasks, reminders and the morning report are active. */
-export function activeSchedules(list: readonly Pick<Schedule, 'enabled' | 'every' | 'lastRun'>[] | undefined): number {
+export function activeSchedules(
+	list: readonly Pick<Schedule, 'enabled' | 'every' | 'lastRun'>[] | undefined,
+): number {
 	return (list ?? []).filter(scheduleActive).length;
 }
 

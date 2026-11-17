@@ -282,6 +282,12 @@ test('"Geplant" counts only active tasks (owner, 17 Nov 2026)', () => {
 	// Every place that shows the number uses it.
 	const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
 	assert.match(read('routes/agent/agent-chats.svelte.ts'), /plannedCount = activeSchedules\(/);
-	assert.match(read('lib/components/agent/Planned.svelte'), /oncount\?\.\(activeSchedules\(list\)\)/);
-	assert.match(read('lib/components/agent/pages/HomePage.svelte'), /count: activeSchedules\(planned\)/);
+	assert.match(
+		read('lib/components/agent/Planned.svelte'),
+		/oncount\?\.\(activeSchedules\(list\)\)/,
+	);
+	assert.match(
+		read('lib/components/agent/pages/HomePage.svelte'),
+		/count: activeSchedules\(planned\)/,
+	);
 });

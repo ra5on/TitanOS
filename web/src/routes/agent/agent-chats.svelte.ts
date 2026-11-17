@@ -110,8 +110,18 @@ export class AgentChats {
 		}
 		return run;
 	};
+	/** The model and thinking level chosen in this chat; empty follows the
+	 *  settings of the agent (owner 17 Nov 2026: a new default level only
+	 *  counted after a restart, because the page sent its copy of the old
+	 *  default with every message and the NAS kept it as the chat's own). */
 	model = $state('');
 	think = $state('');
+	/** What a message sends: only a choice made in the chat. Without a
+	 *  model in the settings the first usable one goes, as before. */
+	choice = (): { model?: string; think?: string } => {
+		const model = this.model || (this.status?.model ? '' : this.shownModel);
+		return { ...(model && { model }), ...(this.think && { think: this.think }) };
+	};
 	/** How the agent works in this chat (owner 15 Nov 2026): start right
 	 *  away, show the plan first, or ask before every change. A new chat
 	 *  takes what was chosen last on this device. */
@@ -205,9 +215,18 @@ export class AgentChats {
 	toTitanOS = () => location.assign('/');
 	user = $derived(session.data?.user?.name ?? '');
 	usable = $derived((this.status?.models ?? []).filter((m) => m.capabilities.includes('tools')));
+	/** The model the chat runs with: its own, or the settings' default. */
+	shownModel = $derived(this.model || this.status?.model || this.usable[0]?.name || '');
+	/** The thinking level the chat runs with, as the model offers it. */
+	shownThink = $derived.by(() => {
+		const want = this.think || this.status?.think || '';
+		const m = this.usable.find((x) => x.name === this.shownModel);
+		if (m && want && !(m.levels ?? []).includes(want)) return m.defaultLevel ?? '';
+		return want;
+	});
 	contextNow = $derived(
 		this.status?.context ||
-			this.status?.running?.find((r) => r.name === this.model)?.contextLength ||
+			this.status?.running?.find((r) => r.name === this.shownModel)?.contextLength ||
 			0,
 	);
 	// PLAN 53: the look and the app settings belong to the account and live on
@@ -232,8 +251,6 @@ export class AgentChats {
 		try {
 			this.status = await api.get<Status>('/agent/status');
 			this.statusFailed = false;
-			if (!this.model) this.model = this.status.model || this.usable[0]?.name || '';
-			if (!this.think) this.think = this.status.think || '';
 		} catch (e) {
 			this.error = apiErrorText(e);
 			this.statusFailed = true;
@@ -358,8 +375,9 @@ export class AgentChats {
 				if (push) void this.go(`/agent?chat=${id}&author=${encodeURIComponent(this.readOnlyBy)}`);
 				return;
 			}
-			if (this.current.model) this.model = this.current.model;
-			if (this.current.think) this.think = this.current.think;
+			// The chat's own choice; without one it follows the settings.
+			this.model = this.current.model ?? '';
+			this.think = this.current.think ?? '';
 			this.autonomy = (this.current.autonomy as Autonomy) || 'direct';
 			if (this.current.project) this.project = this.current.project;
 			if (push) void this.go(`/agent?chat=${id}`);
@@ -395,6 +413,9 @@ export class AgentChats {
 		this.find = null;
 		this.current = null;
 		this.project = inProject;
+		// A new chat follows the settings until something is chosen in it.
+		this.model = '';
+		this.think = '';
 		if (navigate) void this.go('/agent');
 	};
 
@@ -613,8 +634,7 @@ export class AgentChats {
 			const chat = await api.post<Chat>(`/agent/chats/${id}/messages`, {
 				message: text,
 				replace: entry.id,
-				model: this.model,
-				think: this.think,
+				...this.choice(),
 				autonomy: this.autonomy,
 			});
 			this.started(chat);
@@ -656,8 +676,7 @@ export class AgentChats {
 				target = await api.post<Chat>('/agent/chats', {
 					draft: true,
 					project: this.project,
-					model: this.model,
-					think: this.think,
+					...this.choice(),
 					autonomy: this.autonomy,
 				});
 			}
@@ -683,8 +702,7 @@ export class AgentChats {
 			if (target) {
 				const chat = await api.post<Chat>(`/agent/chats/${target.id}/messages`, {
 					message,
-					model: this.model,
-					think: this.think,
+					...this.choice(),
 					autonomy: this.autonomy,
 				});
 				this.started(chat);
@@ -697,8 +715,7 @@ export class AgentChats {
 				const chat = await api.post<Chat>('/agent/chats', {
 					message,
 					project: this.project,
-					model: this.model,
-					think: this.think,
+					...this.choice(),
 					autonomy: this.autonomy,
 				});
 				this.started(chat);

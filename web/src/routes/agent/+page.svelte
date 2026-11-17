@@ -72,7 +72,7 @@
 				(ag.status?.models ?? []).map((m) => ({
 					id: m.name,
 					text: m.label || m.name,
-					checked: ag.model === m.name,
+					checked: ag.shownModel === m.name,
 				})),
 			run: (id) => {
 				if (id && (ag.status?.models ?? []).some((m) => m.name === id)) ag.model = id;
@@ -275,15 +275,15 @@
 			aria-haspopup="dialog"
 			aria-label={t('agent.modelPick')}
 			onclick={() => (ag.dialog = { kind: 'head' })}
-			><strong>{modelShown(ag.status.models, ag.model) || '–'}</strong>{#if ag.status.cloud}<span
-					class="cloud-tag">{t('agent.cloud')}</span
-				>{/if}{#if ag.think}<span>{levelLabel(ag.think, i18n.locale)}</span>{/if}</button
+			><strong>{modelShown(ag.status.models, ag.shownModel) || '–'}</strong
+			>{#if ag.status.cloud}<span class="cloud-tag">{t('agent.cloud')}</span
+				>{/if}{#if ag.shownThink}<span>{levelLabel(ag.shownThink, i18n.locale)}</span>{/if}</button
 		>
 	{:else}
 		<ModelPicker
 			models={ag.status.models}
-			bind:model={ag.model}
-			bind:think={ag.think}
+			bind:model={() => ag.shownModel, (v) => (ag.model = v)}
+			bind:think={() => ag.shownThink, (v) => (ag.think = v)}
 			small
 			calm={ag.calm}
 		/>
@@ -404,7 +404,8 @@
 										<small
 											>{ag.currentProject
 												? `${ag.currentProject.icon ?? ''} ${ag.currentProject.name} · `
-												: ''}<span>{modelShown(ag.status?.models, ag.model) || '–'}</span></small
+												: ''}<span>{modelShown(ag.status?.models, ag.shownModel) || '–'}</span
+											></small
 										>
 									</span>
 									<Icon name="chevronDown" size={16} />
@@ -710,8 +711,8 @@
 		projects={ag.projects}
 		project={ag.current ? (ag.current.project ?? '') : ag.project}
 		models={ag.status.models}
-		bind:model={ag.model}
-		bind:think={ag.think}
+		bind:model={() => ag.shownModel, (v) => (ag.model = v)}
+		bind:think={() => ag.shownThink, (v) => (ag.think = v)}
 		calm={ag.calm}
 		onproject={ag.readOnlyBy ? undefined : setProject}
 		onclose={() => (ag.dialog = null)}

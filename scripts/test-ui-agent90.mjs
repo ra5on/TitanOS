@@ -482,11 +482,13 @@ const sent = (seen, method, path) =>
   assert.equal(await again.count(), 1);
   await again.click();
   await page.waitForTimeout(300);
+  // 1.05 (owner 17 Nov 2026: "bei Denken hoch auswähle … wird das nicht
+  // direkt übernommen"): a chat without a choice of its own sends neither
+  // model nor level, so the NAS takes its settings at the time of the run
+  // (before, the page's copy of the old default went along and stuck).
   assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[0].body, {
     message: "",
     replace: "u2",
-    model: "gpt-oss:20b",
-    think: "medium",
     autonomy: "direct",
   });
 
@@ -553,6 +555,42 @@ const sent = (seen, method, path) =>
     2,
     "a command is not sent as a message",
   );
+  // The default level changes in Einstellungen › KI-Agent (another window):
+  // the chip shows it at once, and the next message still sends no level.
+  const chip = page.locator(".composer .picker .trigger");
+  assert.match(await chip.innerText(), /Mittel/);
+  status.think = "high";
+  await page.evaluate(() =>
+    new BroadcastChannel("titanos-agent-settings").postMessage("saved"),
+  );
+  await until("the chip shows the new default level", async () =>
+    /Hoch/.test(await chip.innerText()),
+  );
+  // A level chosen in the chat is its own: it is sent and stays when the
+  // default changes again.
+  await chip.click();
+  const levels = page.getByRole("dialog", { name: "Modell und Denkstufe wählen" });
+  await levels.getByRole("button", { name: /Niedrig/ }).click();
+  await until("the chip shows the chosen level", async () =>
+    /Niedrig/.test(await chip.innerText()),
+  );
+  status.think = "medium";
+  await page.evaluate(() =>
+    new BroadcastChannel("titanos-agent-settings").postMessage("saved"),
+  );
+  await page.waitForTimeout(400);
+  assert.match(await chip.innerText(), /Niedrig/, "the chat's own level stays");
+  await input.fill("Und jetzt?");
+  await input.press("Enter");
+  await until(
+    "the message with the chosen level is sent",
+    async () => sent(seen, "POST", `/agent/chats/${chat.id}/messages`).length === 3,
+  );
+  assert.deepEqual(sent(seen, "POST", `/agent/chats/${chat.id}/messages`)[2].body, {
+    message: "Und jetzt?",
+    think: "low",
+    autonomy: "direct",
+  });
   // /suche opens the search with the words.
   await input.fill("/suche Sicherung");
   await input.press("Enter");
