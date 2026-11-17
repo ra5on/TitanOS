@@ -60,6 +60,38 @@ try {
     assert.equal(data.shareSaves.at(-1).quota, 120e9);
     assert.equal(data.shareSaves.at(-1).quotaID, undefined);
 
+    // 1.04: the guard of the agent locked the share and saving would give
+    // write access again: the dialog says so on the tab of the rights and
+    // where the lock is lifted.
+    await ctx.route("**/api/v1/shares/Documents", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({
+            status: 409,
+            json: { error: { code: "share_guard_locked", message: "locked" } },
+          })
+        : route.fallback(),
+    );
+    await page
+      .getByRole("button", { name: "Bearbeiten", exact: true })
+      .first()
+      .click();
+    await dialog
+      .getByRole("button", { name: "Speichern", exact: true })
+      .click();
+    const locked = dialog.getByRole("alert");
+    await locked.getByText(/Ransomware-Wächter des KI-Agenten hat diese Freigabe gesperrt/).waitFor();
+    assert.match(await locked.textContent(), /Freigabe wieder öffnen/);
+    assert.equal(
+      await dialog
+        .getByRole("tab", { name: "Zugriff" })
+        .getAttribute("aria-selected"),
+      "true",
+      "the tab of the access rights is shown",
+    );
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "detached" });
+    await ctx.unroute("**/api/v1/shares/Documents");
+
     // Btrfs shares get no limit field, only the reason.
     await page.getByRole("button", { name: "Projects", exact: true }).click();
     await page
