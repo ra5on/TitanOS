@@ -779,6 +779,37 @@ if (!allOnly) {
   await made.ctx.close();
 }
 
+// 1.04: a page chosen in the side bar while the window's first page still
+// loads is shown, also when that first page reports itself shortly after
+// the click (its report counted as a late one, and the choice was lost).
+if (!allOnly) {
+  const made = await create("owner", "graphit", 1440);
+  const { page, ctx } = made;
+  await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+  await ctx.route("**/api/v1/storage/tests", (r) =>
+    r.fulfill({ json: { tests: [] } }),
+  );
+  // The window's first page comes 1.5 s late.
+  await ctx.route("**/tools", async (route) => {
+    if (route.request().frame() !== page.mainFrame())
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    return route.fallback();
+  });
+  await page.goto(base + "/tools");
+  await page
+    .locator("section.win nav.side")
+    .getByRole("button", { name: "Skripte", exact: true })
+    .click();
+  const frame = page.frameLocator("section.win iframe").first();
+  let shown = true;
+  await frame
+    .getByRole("heading", { name: "Skripte", level: 1 })
+    .waitFor({ timeout: 8000 })
+    .catch(() => (shown = false));
+  check(shown, "a page chosen while the window loads is shown");
+  await made.ctx.close();
+}
+
 // Script errors of the checked pages; the visual pass below also opens pages
 // whose data the shared fixtures do not have (they have scripts of their own).
 // A reload of the dev server while a page loads is no error of the page.

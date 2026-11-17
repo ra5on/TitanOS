@@ -246,6 +246,10 @@
 		if (!frame || event.source !== frame.contentWindow) return;
 		const msg = frameMessage(event);
 		if (msg?.type === 'titanos-page') {
+			// A page chosen in the side bar while this one still loaded goes out
+			// now, also when this report is a late one of the page being left
+			// (it was lost then, and the window kept the first page).
+			const asked = frameListening(win.id);
 			if (staleReport(win.id, msg.path)) return;
 			pageName = msg.title;
 			pageCrumbs = Array.isArray(msg.crumbs)
@@ -256,8 +260,7 @@
 							href: typeof c.href === 'string' && ownPath(c.href) ? c.href : undefined,
 						}))
 				: [];
-			// A page chosen in the side bar while this one still loaded comes next.
-			const path = frameListening(win.id) ?? msg.path;
+			const path = asked ?? msg.path;
 			win.href = path;
 			if (focused) onaddress?.(path);
 			saveWindows();
