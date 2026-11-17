@@ -11,6 +11,28 @@ const out = '../backend/internal/webui/dist';
 // assistant in titand can search it (see backend/internal/assistant/manual.go).
 // It is copied to static/manual (not in Git) before the build; SvelteKit then
 // puts it next to the pages like any static file.
+/** How many release notes go along with the manual. */
+const RELEASE_NOTES = 12;
+
+/** The file names vX.Y.Z.md of the newest versions in dir, newest first. */
+function newestReleases(dir: string, count: number): string[] {
+	const num = (name: string) =>
+		name
+			.replace(/^v/, '')
+			.replace(/\.md$/, '')
+			.split('.')
+			.map((p) => Number(p));
+	return (readdirSync(dir) as string[])
+		.filter((name) => /^v\d+\.\d+\.\d+\.md$/.test(name))
+		.sort((a, b) => {
+			const x = num(a);
+			const y = num(b);
+			for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return y[i] - x[i];
+			return 0;
+		})
+		.slice(0, count);
+}
+
 function manual(): Plugin {
 	return {
 		name: 'titanos-manual',
@@ -22,6 +44,13 @@ function manual(): Plugin {
 			cpSync('../README.md', `${target}/README.md`);
 			for (const name of readdirSync('../docs')) {
 				if (name.endsWith('.md')) cpSync(`../docs/${name}`, `${target}/docs/${name}`);
+			}
+			// 1.10: the notes of the newest releases, for "Was ist neu?" of
+			// the agent (tool release_notes). Not all 160: they would fill
+			// titand with history nobody asks for.
+			mkdirSync(`${target}/releases`, { recursive: true });
+			for (const name of newestReleases('../docs/releases', RELEASE_NOTES)) {
+				cpSync(`../docs/releases/${name}`, `${target}/releases/${name}`);
 			}
 		},
 	};

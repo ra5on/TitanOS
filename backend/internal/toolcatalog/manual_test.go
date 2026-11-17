@@ -26,3 +26,32 @@ func TestManual(t *testing.T) {
 		t.Fatal("empty manual has files")
 	}
 }
+
+// 1.10 (V14): the release notes come along under releases/, apart from the
+// manual: docs_search does not find them, Release reads them.
+func TestManualReleaseNotes(t *testing.T) {
+	manual := NewManual(fstest.MapFS{
+		"docs/AGENT.md":        {Data: []byte("# Agent\n\n## Neu\n\nText.\n")},
+		"releases/v1.9.0.md":   {Data: []byte("# TitanOS 1.09\n\nNeu: Automationen.\n")},
+		"releases/v1.10.0.md":  {Data: []byte("# TitanOS 1.10\n\nNeu: agent_access.\n")},
+		"releases/v0.100.0.md": {Data: []byte("# TitanOS 0.100\n")},
+		"releases/notes.txt":   {Data: []byte("x")},
+	})
+	for _, f := range manual.Files() {
+		if strings.HasPrefix(f, "releases/") {
+			t.Fatalf("release notes in the manual: %v", manual.Files())
+		}
+	}
+	if hits := manual.Search("Automationen", 3); len(hits) != 0 {
+		t.Fatalf("search finds release notes: %+v", hits)
+	}
+	if text, ok := manual.Release("v1.10.0"); !ok || !strings.Contains(text, "agent_access") {
+		t.Fatalf("release: %q %v", text, ok)
+	}
+	if _, ok := manual.Release("../docs/AGENT"); ok {
+		t.Fatal("release outside its folder")
+	}
+	if got := strings.Join(manual.Releases(), " "); got != "1.10.0 1.9.0 0.100.0" {
+		t.Fatalf("releases: %s", got)
+	}
+}
