@@ -30,6 +30,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |
 | craft | `craft_replace.go` | – | 1 |
 | dashboard | `dashboard_background.go` | – | 1 |
+| devices | `devices.go` | `pimArea` | 1 |
 | diagnose | `diagnose.go` | `diagnoseArea` | 0 |
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |
@@ -65,7 +66,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | preferences | `preferences.go` | `prefsArea` | 0 |
 | processes | `processes.go` | `processesArea` | 1 |
 | public | `public_routes.go` | – | 0 |
-| register | `register_accounts.go`, `register_agent.go`, `register_backups.go`, `register_docker.go`, `register_files.go`, `register_hardware.go`, `register_homeassistant.go`, `register_login.go`, `register_lxc.go`, `register_network.go`, `register_notifications.go`, `register_plugins.go`, `register_preferences.go`, `register_remote.go`, `register_shares.go`, `register_storage.go`, `register_system.go`, `register_terminal.go`, `register_tmail.go`, `register_usb.go`, `register_vms.go` | – | 1 |
+| register | `register_accounts.go`, `register_agent.go`, `register_backups.go`, `register_docker.go`, `register_files.go`, `register_hardware.go`, `register_homeassistant.go`, `register_login.go`, `register_lxc.go`, `register_network.go`, `register_notifications.go`, `register_pim.go`, `register_plugins.go`, `register_preferences.go`, `register_remote.go`, `register_shares.go`, `register_storage.go`, `register_system.go`, `register_terminal.go`, `register_tmail.go`, `register_usb.go`, `register_vms.go` | – | 1 |
 | replication | `replication.go` | `replicationArea` | 0 |
 | retired | `retired.go` | – | 1 |
 | scripts | `scripts.go` | `scriptsArea` | 1 |

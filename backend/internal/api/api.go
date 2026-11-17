@@ -54,6 +54,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	"github.com/ra5on/TitanOS/backend/internal/pim/devices"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
@@ -287,6 +288,10 @@ type Server struct {
 	// agentTitles: chats whose title the model is writing (1.07).
 	agentTitles agentTitles
 
+	// devices: the device passwords of T-Kalender and Kontakte (RAM of
+	// what the stick holds, "last synced"; devices.go).
+	devices *devices.Manager
+
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
 
@@ -315,6 +320,7 @@ func New(opts Options) *Server {
 		tokens:   auth.NewTokens(opts.Store),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.devices = newDevices(opts, s.rateLimiter)
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -430,6 +436,7 @@ func New(opts Options) *Server {
 	s.registerScripts(mux)
 	s.registerAgent(mux)
 	s.registerMail(mux)
+	s.registerPIM(mux)
 
 	s.routeCluster(mux)
 

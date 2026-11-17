@@ -63,6 +63,12 @@ type clusterArea struct {
 	mailForgetUser func(name string)
 	// mailRoleChanged: the role decides where T-Mail may connect.
 	mailRoleChanged func(name string)
+	// devicesRevokeAll and pimForgetUser as in usersArea: the device
+	// passwords of an account whose password or TOTP changed elsewhere are
+	// revoked; calendars, contacts and devices of one deleted or made anew
+	// elsewhere go.
+	devicesRevokeAll func(name string)
+	pimForgetUser    func(name string)
 }
 
 // clusterArea is the area of the server; New wires its callbacks into the
@@ -72,7 +78,8 @@ func (s *Server) clusterArea() clusterArea {
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
 		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds,
-		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged}
+		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
+		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -584,6 +591,9 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 	} else if a.mailRoleChanged != nil && existed && (before.Role != after.Role || before.Disabled != after.Disabled) {
 		a.mailRoleChanged(name)
 	}
+	if a.pimForgetUser != nil && (deleted || !existed || !before.Created.Equal(after.Created)) {
+		a.pimForgetUser(name)
+	}
 	switch {
 	case deleted:
 		a.sessions().DeleteUser(name, "")
@@ -611,6 +621,9 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		if existed {
 			a.sessions().DeleteUser(name, "")
 			a.forgetWebDAV(name)
+			if a.devicesRevokeAll != nil {
+				a.devicesRevokeAll(name)
+			}
 		}
 	case existed && (before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret ||
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):
@@ -618,6 +631,9 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		a.sessions().DeleteUser(name, "")
 		if before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret {
 			a.forgetWebDAV(name)
+			if a.devicesRevokeAll != nil {
+				a.devicesRevokeAll(name)
+			}
 		}
 	}
 	slog.Info("account taken over from the cluster", "user", name, "deleted", deleted)
