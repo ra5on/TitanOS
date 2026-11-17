@@ -100,3 +100,32 @@ describe('offline snapshot', () => {
 		expect(snapshotLocked(locked)).toBe(true);
 	});
 });
+
+// 1.07: while the NAS does not answer, a change is refused at once and
+// nothing is sent; reading still asks.
+describe('changes without the NAS', () => {
+	it('are refused at once with nas_unreachable', async () => {
+		const { api, ApiError } = await import('#lib/api.ts');
+		const { connection, markBack, markLost } = await import('#lib/offline.svelte.ts');
+		const calls: string[] = [];
+		const real = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			calls.push(`${init?.method ?? 'GET'} ${String(input)}`);
+			throw new TypeError('Failed to fetch');
+		}) as typeof fetch;
+		try {
+			markBack();
+			await expect(api.get('/system')).rejects.toMatchObject({ code: 'unreachable' });
+			expect(connection.lost).toBe(true);
+			const before = calls.length;
+			const err = await api.post('/docker/containers/x/restart').catch((e) => e);
+			expect(err).toBeInstanceOf(ApiError);
+			expect(err.code).toBe('nas_unreachable');
+			expect(calls.length).toBe(before);
+			markLost();
+		} finally {
+			globalThis.fetch = real;
+			markBack();
+		}
+	});
+});

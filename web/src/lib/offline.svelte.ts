@@ -16,6 +16,8 @@
 //   per part. A home-screen app on the iPhone may have storage of its own:
 //   the agent app keeps its own snapshot.
 
+import { offlineHooks } from './api.ts';
+
 export const connection = $state({ lost: false, since: 0 });
 
 /** A request did not reach the NAS. */
@@ -288,3 +290,9 @@ export function noteForOffline(path: string, data: unknown) {
 		}
 	}
 }
+
+// api.ts asks and tells through these (it stays plain TypeScript).
+offlineHooks.lost = () => connection.lost;
+offlineHooks.markLost = markLost;
+offlineHooks.markBack = markBack;
+offlineHooks.note = noteForOffline;
