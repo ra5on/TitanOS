@@ -213,8 +213,10 @@ func TestDeletedAccountLeavesNoDocuments(t *testing.T) {
 // folder rules like documents_search. A document in a folder the agent may
 // not read is neither listed nor counted; the page Papierkram shows it.
 func TestPaperSummaryKeepsToTheFolderRules(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	dir := ts.withShare()
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	docsMine(t, ts, ts.client, map[string]any{"docs": map[string]any{"on": true}, "paper": map[string]any{"on": true}})
+	dir := filepath.Join(filepath.Dir(filepath.Dir(home)), "Docs") // the share Docs
 	for _, d := range []string{"Privat", "Post"} {
 		os.MkdirAll(filepath.Join(dir, d), 0o755)
 	}
@@ -261,7 +263,7 @@ func TestPaperSummaryKeepsToTheFolderRules(t *testing.T) {
 	}
 	// The page itself stays as it is: it shows the person all of it.
 	res, body := ts.request("GET", "/api/v1/agent/paper", nil)
-	if res.StatusCode == http.StatusOK && !strings.Contains(string(body), "Praxis Geheim") {
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), "Praxis Geheim") {
 		t.Errorf("the page lost a document: %s", body)
 	}
 }
