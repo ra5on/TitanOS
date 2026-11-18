@@ -760,3 +760,61 @@ func TestMailShowsInTheMenuWithTheGrant(t *testing.T) {
 		t.Fatal("after taking the grant back: mail is still on")
 	}
 }
+
+// 1.12: the preview of an HTML mail is text without markup; the search
+// over all folders and the archive through the API; days and empty
+// searches are refused; another account's mailbox is not found.
+func TestMailSearchArchiveAndPreview(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	ts.grantMail("alex")
+	id := ts.addMailbox(ts.client, srv)
+	base := "/api/v1/mail/accounts/" + id
+	srv.Deliver("INBOX", testMailHTML)
+	srv.Deliver("Archiv", "From: bob@example.net\nSubject: Bild alt\nMessage-ID: <api-2@example.net>\n\n<b>kein HTML</b>\n")
+	res, body := ts.request("GET", base+"/messages?folder=INBOX", nil)
+	var page tmail.Page
+	if res.StatusCode != 200 || json.Unmarshal(body, &page) != nil || len(page.Messages) != 1 {
+		t.Fatalf("messages: %d %s", res.StatusCode, body)
+	}
+	if p := page.Messages[0].Preview; p == "" || strings.ContainsAny(p, "<>") || strings.Contains(p, "alert") {
+		t.Fatalf("preview: %q", p)
+	}
+	res, body = ts.request("GET", base+"/search?q=bild", nil)
+	var found tmail.SearchResult
+	if res.StatusCode != 200 || json.Unmarshal(body, &found) != nil || len(found.Messages) != 2 || found.Total != 2 {
+		t.Fatalf("search: %d %s", res.StatusCode, body)
+	}
+	folders := map[string]bool{}
+	for _, h := range found.Messages {
+		folders[h.Folder] = true
+	}
+	if !folders["INBOX"] || !folders["Archiv"] {
+		t.Fatalf("folders of the hits: %v", folders)
+	}
+	for _, bad := range []string{"", "?q=bild&since=17.11.2026", "?since=2026-11-20&until=2026-11-01", "?q=" + strings.Repeat("a", 300)} {
+		if res, body := ts.request("GET", base+"/search"+bad, nil); res.StatusCode != 400 || errorCode(t, body) != "mail_invalid" {
+			t.Errorf("search %q: %d %s", bad, res.StatusCode, body)
+		}
+	}
+	if res, body := ts.request("GET", base+"/messages?folder=INBOX&until=morgen", nil); res.StatusCode != 400 || errorCode(t, body) != "mail_invalid" {
+		t.Errorf("messages with a bad day: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("POST", base+"/archive", map[string]any{"folder": "INBOX", "uids": []int{1}})
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"to":"Archiv"`) || srv.Count("Archiv") != 2 {
+		t.Fatalf("archive: %d %s", res.StatusCode, body)
+	}
+	// Bea has T-Mail but not alex's mailbox.
+	ts.guest("bea")
+	ts.grantMail("bea")
+	bea := ts.newClient()
+	ts.do(bea, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword})
+	for _, rt := range [][2]string{{"GET", base + "/search?q=bild"}, {"POST", base + "/archive"}} {
+		var payload any
+		if rt[0] == "POST" {
+			payload = map[string]any{"folder": "Archiv", "uids": []int{1}}
+		}
+		if res, body := ts.do(bea, rt[0], rt[1], payload); res.StatusCode != 404 || errorCode(t, body) != "mail_not_found" {
+			t.Errorf("bea %s %s: %d %s", rt[0], rt[1], res.StatusCode, body)
+		}
+	}
+}

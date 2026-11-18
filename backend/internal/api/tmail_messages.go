@@ -81,16 +81,53 @@ func queryBool(r *http.Request, name string) bool {
 	return v == "1" || v == "true"
 }
 
-func (a tmailArea) handleMessages(w http.ResponseWriter, r *http.Request) {
+// listQuery reads the query of a list or search; false (answered with
+// mail_invalid) for a day that is no YYYY-MM-DD.
+func listQuery(w http.ResponseWriter, r *http.Request) (tmail.ListQuery, bool) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	page, err := a.mail.List(r.Context(), currentUser(r).Name, r.PathValue("id"), tmail.ListQuery{Folder: q.Get("folder"),
-		Before: queryUID(r, "before"), Limit: limit, Q: q.Get("q"), Unread: queryBool(r, "unread"), Flagged: queryBool(r, "flagged")})
+	out := tmail.ListQuery{Folder: q.Get("folder"), Before: queryUID(r, "before"), Limit: limit, Q: q.Get("q"),
+		Unread: queryBool(r, "unread"), Flagged: queryBool(r, "flagged"), From: q.Get("from"), Attachment: queryBool(r, "attachment")}
+	for name, day := range map[string]*time.Time{"since": &out.Since, "until": &out.Until} {
+		v := q.Get(name)
+		if v == "" {
+			continue
+		}
+		t, err := time.Parse(time.DateOnly, v)
+		if err != nil || t.Year() < 1970 || t.Year() > 9999 {
+			writeError(w, http.StatusBadRequest, "mail_invalid", name+" is not a day (YYYY-MM-DD)")
+			return out, false
+		}
+		*day = t
+	}
+	return out, true
+}
+
+func (a tmailArea) handleMessages(w http.ResponseWriter, r *http.Request) {
+	q, ok := listQuery(w, r)
+	if !ok {
+		return
+	}
+	page, err := a.mail.List(r.Context(), currentUser(r).Name, r.PathValue("id"), q)
 	if err != nil {
 		a.mailError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+// handleSearch searches all folders of a mailbox (1.12).
+func (a tmailArea) handleSearch(w http.ResponseWriter, r *http.Request) {
+	q, ok := listQuery(w, r)
+	if !ok {
+		return
+	}
+	res, err := a.mail.Search(r.Context(), currentUser(r).Name, r.PathValue("id"), q)
+	if err != nil {
+		a.mailError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (a tmailArea) handleMessage(w http.ResponseWriter, r *http.Request) {
@@ -341,6 +378,20 @@ func (a tmailArea) handleMove(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleArchive moves mails into the archive (1.12).
+func (a tmailArea) handleArchive(w http.ResponseWriter, r *http.Request) {
+	var req mailUIDs
+	if !readJSON(w, r, &req) {
+		return
+	}
+	to, err := a.mail.Archive(r.Context(), currentUser(r).Name, r.PathValue("id"), req.Folder, req.UIDs)
+	if err != nil {
+		a.mailError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"to": to})
+}
+
 func (a tmailArea) handleDelete(w http.ResponseWriter, r *http.Request) {
 	var req mailUIDs
 	if !readJSON(w, r, &req) {
@@ -403,6 +454,8 @@ type sendMeta struct {
 	DraftUID   uint32     `json:"draftUid"`
 	// Answers is the mail this one answers (marked "answered").
 	Answers *tmail.MailRef `json:"answers"`
+	// Forwards is the mail this one forwards (marked $Forwarded, 1.12).
+	Forwards *tmail.MailRef `json:"forwards"`
 	// AttachFrom takes parts of a mail along (forwarding, a draft opened
 	// again). Without uid it is the draft draftUid, its folder found by
 	// T-Mail; parts ["*"] (or none, for the draft) are all attachments.
@@ -606,7 +659,7 @@ func (a tmailArea) handleSend(draft bool) http.HandlerFunc {
 			}
 		}
 		out := tmail.Outgoing{To: meta.To, Cc: meta.Cc, Bcc: meta.Bcc, Subject: meta.Subject, Text: meta.Text, InReplyTo: meta.InReplyTo,
-			References: meta.References, Signature: meta.Signature, DraftUID: meta.DraftUID, Files: attached, Answers: meta.Answers}
+			References: meta.References, Signature: meta.Signature, DraftUID: meta.DraftUID, Files: attached, Answers: meta.Answers, Forwards: meta.Forwards}
 		if draft {
 			uid, list, err := a.mail.SaveDraft(r.Context(), user.Name, id, out)
 			if err != nil {

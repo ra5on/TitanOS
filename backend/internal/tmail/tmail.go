@@ -247,6 +247,8 @@ type Manager struct {
 	gate      gateState
 	downloads downloadState
 	ctx       contextHolder
+	// searching: the accounts whose search over all folders runs (m.mu).
+	searching map[string]bool
 }
 
 // New returns a manager; Load reads /config.

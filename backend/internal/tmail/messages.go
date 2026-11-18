@@ -66,14 +66,30 @@ type Page struct {
 	Total    int       `json:"total"`
 }
 
-// ListQuery asks for a page of a folder.
+// ListQuery asks for a page of a folder. From, Attachment, Since and
+// Until are the filters of 1.12; Since and Until are days (both counted),
+// zero for none.
 type ListQuery struct {
-	Folder  string
-	Before  uint32
-	Limit   int
-	Q       string
-	Unread  bool
-	Flagged bool
+	Folder     string
+	Before     uint32
+	Limit      int
+	Q          string
+	Unread     bool
+	Flagged    bool
+	From       string
+	Attachment bool
+	Since      time.Time
+	Until      time.Time
+}
+
+// validFilter checks the texts of a query.
+func (q ListQuery) validFilter() bool {
+	for _, text := range []string{q.Q, q.From} {
+		if len(text) > 256 || strings.ContainsAny(text, "\r\n\x00") {
+			return false
+		}
+	}
+	return q.Since.IsZero() || q.Until.IsZero() || !q.Until.Before(q.Since)
 }
 
 // Message is one mail to read.
@@ -200,6 +216,20 @@ func searchCriteria(q ListQuery) *imap.SearchCriteria {
 		c.Flag = append(c.Flag, imap.FlagFlagged)
 	}
 	c.NotFlag = append(c.NotFlag, imap.FlagDeleted)
+	if from := strings.TrimSpace(q.From); from != "" {
+		c.Header = append(c.Header, imap.SearchCriteriaHeaderField{Key: "From", Value: from})
+	}
+	if q.Attachment {
+		// IMAP has no search for attachments: the type of the head is the
+		// approximation (docs/TMAIL.md "1.12").
+		c.Header = append(c.Header, imap.SearchCriteriaHeaderField{Key: "Content-Type", Value: "multipart/mixed"})
+	}
+	if !q.Since.IsZero() {
+		c.Since = q.Since
+	}
+	if !q.Until.IsZero() {
+		c.Before = q.Until.AddDate(0, 0, 1)
+	}
 	if text := strings.TrimSpace(q.Q); text != "" {
 		subject := imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: text}}}
 		from := imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "From", Value: text}}}
@@ -267,7 +297,7 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 50
 	}
-	if len(q.Q) > 256 || strings.ContainsAny(q.Q, "\r\n\x00") {
+	if !q.validFilter() {
 		return Page{}, ErrInvalid
 	}
 	page := Page{Messages: []Summary{}}
@@ -299,35 +329,63 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		return nil
 	})
 	if errors.Is(err, ErrTooLarge) && len(pick) > 0 {
-		// One by one: only the mails too large to list are marked.
-		page.Messages = []Summary{}
-		for _, uid := range pick {
-			var one Summary
-			err = m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
-				if _, err := selectFolder(c, s, q.Folder); err != nil {
-					return err
-				}
-				s.budget.set(budgetCommand / 4)
-				b, err := fetchOne(c, uid, listFetch())
-				if err == nil {
-					one = summaryOf(b)
-				}
-				return err
-			})
-			switch {
-			case errors.Is(err, ErrTooLarge):
-				one = Summary{UID: uid, To: []Address{}, TooLarge: true}
-			case errors.Is(err, ErrNotFound):
-				continue
-			case err != nil:
-				return page, err
-			}
-			page.Messages = append(page.Messages, one)
-		}
-		err = nil
+		page.Messages, err = m.oneByOne(ctx, user, id, q.Folder, pick)
 	}
 	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
 	return page, err
+}
+
+// summaries fetches the lines of some mails of a folder (search over all
+// folders); a page too large for the budget goes one by one.
+func (m *Manager) summaries(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	var out []Summary
+	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+		if _, err := selectFolder(c, s, folder); err != nil {
+			return err
+		}
+		msgs, err := collect(c.Fetch(uidSet(uids...), listFetch()))
+		if err != nil {
+			return err
+		}
+		for _, b := range msgs {
+			out = append(out, summaryOf(b))
+		}
+		return nil
+	})
+	if errors.Is(err, ErrTooLarge) {
+		return m.oneByOne(ctx, user, id, folder, uids)
+	}
+	return out, err
+}
+
+// oneByOne fetches lines one mail at a time: only the mails too large to
+// list are marked (tooLarge), the others are whole.
+func (m *Manager) oneByOne(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out := []Summary{}
+	for _, uid := range uids {
+		var one Summary
+		err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+			if _, err := selectFolder(c, s, folder); err != nil {
+				return err
+			}
+			s.budget.set(budgetCommand / 4)
+			b, err := fetchOne(c, uid, listFetch())
+			if err == nil {
+				one = summaryOf(b)
+			}
+			return err
+		})
+		switch {
+		case errors.Is(err, ErrTooLarge):
+			one = Summary{UID: uid, To: []Address{}, TooLarge: true}
+		case errors.Is(err, ErrNotFound):
+			continue
+		case err != nil:
+			return out, err
+		}
+		out = append(out, one)
+	}
+	return out, nil
 }
 
 // fetchStructure is fetchOne for an answer with BODYSTRUCTURE: decoding a

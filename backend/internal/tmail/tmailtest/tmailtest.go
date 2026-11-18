@@ -107,8 +107,14 @@ func Start(t testing.TB) *Servers {
 // Deliver puts a mail into a folder, as a provider would.
 func (s *Servers) Deliver(folder, raw string) {
 	s.t.Helper()
+	s.DeliverAt(folder, raw, time.Time{})
+}
+
+// DeliverAt is Deliver with the date of arrival (INTERNALDATE); zero is now.
+func (s *Servers) DeliverAt(folder, raw string, at time.Time) {
+	s.t.Helper()
 	raw = strings.ReplaceAll(strings.ReplaceAll(raw, "\r\n", "\n"), "\n", "\r\n")
-	if _, err := s.Mailbox.Append(folder, literal{bytes.NewReader([]byte(raw)), int64(len(raw))}, &imap.AppendOptions{}); err != nil {
+	if _, err := s.Mailbox.Append(folder, literal{bytes.NewReader([]byte(raw)), int64(len(raw))}, &imap.AppendOptions{Time: at}); err != nil {
 		s.t.Fatal(err)
 	}
 }
