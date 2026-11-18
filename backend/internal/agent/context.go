@@ -83,7 +83,7 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 	limit := r.resultLimit()
 	tools := r.offered(chat)
 	threshold := int(float64(r.Window) * compactAt)
-	if tokens(buildMessages(r.System, chat, limit, r.paged()), tools) < threshold {
+	if tokens(buildMessages(r.system(), chat, limit, r.paged()), tools) < threshold {
 		return
 	}
 	from := 0
@@ -106,7 +106,7 @@ func (r *Runner) compact(ctx context.Context, chat *Chat) {
 	if i := lastUserIndex(chat); i >= 0 {
 		floor.Entries = append(floor.Entries, chat.Entries[i])
 	}
-	if tokens(buildMessages(r.System, floor, limit, r.paged()), tools) >= threshold {
+	if tokens(buildMessages(r.system(), floor, limit, r.paged()), tools) >= threshold {
 		if r.squeezed {
 			return
 		}

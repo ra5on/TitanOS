@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -108,9 +109,11 @@ type Runner struct {
 	Delegate bool
 	// System is the system prompt for this run (prompt.go).
 	System string
-	Tools  Toolbox
-	Emit   func(Event)
-	Save   func(*Chat) error
+	// closedHint is the note of preload for this run (wanted.go).
+	closedHint string
+	Tools      Toolbox
+	Emit       func(Event)
+	Save       func(*Chat) error
 	// Now replaces the clock in tests.
 	Now func() time.Time
 	// Retry is the wait before a new try (tests make it short).
@@ -300,6 +303,7 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 	if i := lastUserIndex(chat); i >= 0 && len(chat.Plan) > 0 && !answered(chat, i) {
 		chat.Plan = nil
 	}
+	r.preload(chat)
 	maxSteps := r.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = 30
@@ -414,7 +418,7 @@ func (r *Runner) ask(ctx context.Context, chat *Chat, tools []ToolSpec) (Message
 			}
 			wait *= 3
 		}
-		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: buildMessages(r.System, chat, r.resultLimit(), r.paged()), Tools: tools, Think: r.Think, Context: r.Context, KeepAlive: r.KeepAlive}, func(c Chunk) {
+		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: buildMessages(r.system(), chat, r.resultLimit(), r.paged()), Tools: tools, Think: r.Think, Context: r.Context, KeepAlive: r.KeepAlive}, func(c Chunk) {
 			if c.Thinking != "" {
 				r.emit(Event{Type: "thinking", Text: c.Thinking})
 			}
@@ -597,6 +601,13 @@ func (r *Runner) call(ctx context.Context, chat *Chat, name string, args json.Ra
 	if p.Draft {
 		// A draft writes nothing and never waits for approval.
 		p.Mode = ModeAllow
+		// 114-1: gpt-oss called mail_send seven times for one mail, each a
+		// card of its own. The same draft again in this turn makes none.
+		if sameDraft(chat, p) {
+			step.OK, step.Kind = true, p.Kind
+			step.Result = "Already done: this is the card you made above; the person finishes it. Do not call " + p.Tool + " again for it; answer now in one sentence."
+			return false, r.add(chat, step)
+		}
 	}
 	if p.Mode == ModeAsk {
 		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, At: r.now()}
@@ -734,4 +745,38 @@ func (r *Runner) decide(ctx context.Context, chat *Chat, id string, approve bool
 		return r.save(chat)
 	}
 	return r.Run(ctx, chat)
+}
+
+// sameDraft reports whether this turn already made a draft with the same
+// content by the same tool (mail_send and mail_draft count as one; the
+// mailbox may be named differently).
+func sameDraft(chat *Chat, p Prepared) bool {
+	norm := func(raw json.RawMessage) (map[string]any, bool) {
+		var m map[string]any
+		if json.Unmarshal(raw, &m) != nil {
+			return nil, false
+		}
+		delete(m, "account")
+		return m, true
+	}
+	want, ok := norm(p.Args)
+	if !ok {
+		return false
+	}
+	for _, e := range chat.Entries[lastUserIndex(chat)+1:] {
+		if e.Role != "tool" || e.Draft == nil || draftFamily(e.Tool) != draftFamily(p.Tool) {
+			continue
+		}
+		if got, ok := norm(e.Args); ok && reflect.DeepEqual(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func draftFamily(tool string) string {
+	if tool == "mail_send" || tool == "mail_draft" {
+		return "mail"
+	}
+	return tool
 }
