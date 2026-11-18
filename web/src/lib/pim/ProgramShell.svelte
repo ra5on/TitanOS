@@ -38,8 +38,9 @@
 	const here = $derived(page.url.pathname + page.url.search);
 	// 1.13: while loading (or unavailable) a page that draws its own column
 	// shows the shape of that column already – the same card, the same
-	// width – so that nothing jumps when the data arrives. (Until these
-	// pages move to ColumnFrame, Baustand steps 6 and 9.)
+	// width – so that nothing jumps when the data arrives. (Until Kalender
+	// moves to ColumnFrame, Baustand step 9; Kontakte draws its loading
+	// state in its own ColumnFrame since 1.13 and no longer uses this.)
 	const card = $derived(own && !phone && view.kind !== 'ready');
 	const UNAVAILABLE: Record<Props['program'], { title: MessageKey; text: MessageKey }> = {
 		calendar: { title: 'calendar.unavailable.title', text: 'calendar.unavailable.text' },
@@ -52,7 +53,6 @@
 	class:phone
 	class:own={own && view.kind === 'ready'}
 	class:card
-	class:contacts={program === 'contacts'}
 	data-pim-shell={program}
 >
 	{#if !phone && !(own && view.kind === 'ready')}
@@ -113,10 +113,6 @@
 		border-radius: var(--radius-tile);
 		background: var(--surface);
 	}
-	.pim.card.contacts {
-		grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
-		height: calc(100dvh - 8.5rem);
-	}
 	.card .column {
 		width: auto;
 		padding: var(--space-3) var(--space-2);
@@ -128,28 +124,15 @@
 	.card .body {
 		padding: var(--space-4);
 	}
-	/* As the pages do in a narrower window: the calendar's column below,
-	   the address books as a row on top. */
+	/* As the page does in a narrower window: the calendar's column below. */
 	@media (max-width: 980px) {
-		.pim.card:not(.contacts) {
+		.pim.card {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.pim.card:not(.contacts) .column {
+		.pim.card .column {
 			order: 2;
 			border-right: 0;
 			border-top: 1px solid var(--border);
-		}
-	}
-	@media (max-width: 1100px) {
-		.pim.card.contacts {
-			grid-template-columns: minmax(0, 1fr);
-			grid-template-rows: auto minmax(0, 1fr);
-		}
-		.pim.card.contacts .column {
-			flex-direction: row;
-			flex-wrap: wrap;
-			border-right: 0;
-			border-bottom: 1px solid var(--border);
 		}
 	}
 	.column {

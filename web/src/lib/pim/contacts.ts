@@ -49,6 +49,8 @@ export type Item = {
 	initials: string;
 	email: string;
 	hasPhoto: boolean;
+	/** The card's etag (1.13): the picture's address names it, the browser keeps it for good. */
+	etag: string;
 	birthdaySoon: Soon | null;
 };
 export type Suggestion = { name: string; addr: string; count: number };
@@ -82,8 +84,98 @@ export function sanitizeItems(raw: unknown): Item[] | null {
 			initials: str(i.initials),
 			email: str(i.email),
 			hasPhoto: i.hasPhoto === true,
+			etag: str(i.etag),
 			birthdaySoon: soonOf(i.birthdaySoon),
 		}));
+}
+
+/** One row of a write's answer (`item`), checked; null without one. */
+export function sanitizeItem(raw: unknown): Item | null {
+	return raw && typeof raw === 'object' ? (sanitizeItems([raw])?.[0] ?? null) : null;
+}
+
+// ---- 1.13: address books, groups, duplicates (GET /contacts/overview) ----
+
+export type Book = { id: string; name: string; count: number };
+/** A group (iOS's group vCard): its members as contact ids; `other` members TitanOS cannot show. */
+export type Group = {
+	id: string;
+	book: string;
+	etag: string;
+	name: string;
+	members: string[];
+	other: number;
+};
+export type Overview = { books: Book[]; groups: Group[]; duplicates: number };
+export type DuplicateMatch = { kind: 'email' | 'phone' | 'name'; value: string; ids: string[] };
+export type DuplicateSet = { book: string; ids: string[]; matches: DuplicateMatch[] };
+
+const strings = (v: unknown): string[] =>
+	Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
+const count = (v: unknown): number => (typeof v === 'number' && v > 0 ? Math.floor(v) : 0);
+
+export function sanitizeGroup(raw: unknown): Group | null {
+	const g = rec(raw);
+	if (!str(g.id)) return null;
+	return {
+		id: str(g.id),
+		book: str(g.book) || 'kontakte',
+		etag: str(g.etag),
+		name: str(g.name),
+		members: strings(g.members),
+		other: count(g.other),
+	};
+}
+
+/** GET /contacts/overview, checked; null for anything else. */
+export function sanitizeOverview(raw: unknown): Overview | null {
+	const o = rec(raw);
+	if (!Array.isArray(o.books) || !Array.isArray(o.groups)) return null;
+	return {
+		books: o.books
+			.map(rec)
+			.filter((b) => str(b.id) !== '')
+			.map((b) => ({ id: str(b.id), name: str(b.name), count: count(b.count) })),
+		groups: o.groups.map(sanitizeGroup).filter((g): g is Group => g !== null),
+		duplicates: count(o.duplicates),
+	};
+}
+
+/** GET /contacts/duplicates, checked. */
+export function sanitizeDuplicates(raw: unknown): DuplicateSet[] | null {
+	if (!Array.isArray(raw)) return null;
+	return raw
+		.map(rec)
+		.map((s) => ({
+			book: str(s.book) || 'kontakte',
+			ids: strings(s.ids),
+			matches: (Array.isArray(s.matches) ? s.matches : [])
+				.map(rec)
+				.filter((m) => m.kind === 'email' || m.kind === 'phone' || m.kind === 'name')
+				.map((m) => ({
+					kind: m.kind as DuplicateMatch['kind'],
+					value: str(m.value),
+					ids: strings(m.ids),
+				})),
+		}))
+		.filter((s) => s.ids.length >= 2);
+}
+
+/** The groups a contact is in, by name. */
+export function groupsOf(groups: Group[], id: string): Group[] {
+	return groups.filter((g) => g.members.includes(id));
+}
+
+/** The list with a row put in its place (by the sort key, then name and id), or replaced. */
+export function upsertItem(list: Item[], item: Item): Item[] {
+	const rest = list.filter((i) => i.id !== item.id);
+	const key = (i: Item) => [fold(i.sortKey), fold(i.name), i.id] as const;
+	const k = key(item);
+	const at = rest.findIndex((i) => {
+		const o = key(i);
+		return o[0] > k[0] || (o[0] === k[0] && (o[1] > k[1] || (o[1] === k[1] && o[2] > k[2])));
+	});
+	return at < 0 ? [...rest, item] : [...rest.slice(0, at), item, ...rest.slice(at)];
 }
 
 function valuesOf(v: unknown): Value[] {
@@ -258,6 +350,25 @@ export function webHref(value: string): string {
 }
 
 /** The lines of an address as written on a letter. */
+/** A text message to a number (sms:), '' without digits. */
+export function smsHref(value: string): string {
+	const tel = telHref(value);
+	return tel && !/[*#]/.test(tel) ? 'sms:' + tel.slice(4) : '';
+}
+
+/**
+ * A map of an address (1.13, the contact's "Karte"): Apple Maps on Apple
+ * devices (it opens the Maps app), OpenStreetMap elsewhere. Only on a tap,
+ * the address leaves the NAS then.
+ */
+export function mapHref(a: Omit<Address, 'type' | 'label'>, apple: boolean): string {
+	const q = addressLines(a).join(', ');
+	if (!q) return '';
+	return apple
+		? `https://maps.apple.com/?q=${encodeURIComponent(q)}`
+		: `https://www.openstreetmap.org/search?query=${encodeURIComponent(q)}`;
+}
+
 export function addressLines(a: Omit<Address, 'type' | 'label'>): string[] {
 	return [
 		...a.street.split('\n'),
