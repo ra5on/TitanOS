@@ -15,8 +15,18 @@
 	import { session } from '#lib/session.svelte.ts';
 	import type { ShellState } from './shell.ts';
 
-	type Props = { program: 'calendar' | 'contacts'; view: ShellState; children: Snippet };
-	let { program, view, children }: Props = $props();
+	type Props = {
+		program: 'calendar' | 'contacts';
+		view: ShellState;
+		/**
+		 * Step 15: once the data is there the page draws its own column (the
+		 * mini month and the calendars, draft 01) in place of the entries;
+		 * while loading or unavailable the entries stay.
+		 */
+		own?: boolean;
+		children: Snippet;
+	};
+	let { program, view, own = false, children }: Props = $props();
 
 	const phone = $derived(phoneView());
 	const role = $derived(session.data?.user?.role ?? 'user');
@@ -32,8 +42,8 @@
 	};
 </script>
 
-<div class="pim" class:phone data-pim-shell={program}>
-	{#if !phone}
+<div class="pim" class:phone class:own={own && view.kind === 'ready'} data-pim-shell={program}>
+	{#if !phone && !(own && view.kind === 'ready')}
 		<nav
 			class="column"
 			aria-label={t(program === 'calendar' ? 'desktop.app.calendar' : 'desktop.app.contacts')}
@@ -76,6 +86,9 @@
 		gap: var(--space-4);
 		align-items: flex-start;
 		min-width: 0;
+	}
+	.pim.own {
+		display: block;
 	}
 	.column {
 		flex: none;
