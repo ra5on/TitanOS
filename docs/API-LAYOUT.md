@@ -63,7 +63,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
 | passkeys | `passkeys.go` | – | 1 |
-| pim | `pim_data.go` | `pimDataArea` | 1 |
+| pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 3 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go` | `powerButtonArea` | 0 |
 | preferences | `preferences.go` | `prefsArea` | 0 |

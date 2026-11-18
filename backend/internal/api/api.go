@@ -299,6 +299,11 @@ type Server struct {
 	// devices: the device passwords of T-Kalender and Kontakte (RAM of
 	// what the stick holds, "last synced"; devices.go).
 	devices *devices.Manager
+	// pimLive hands the changes of calendars and address books to the
+	// pages' streams, pimCache keeps the prepared address books (1.13,
+	// pim_live.go, pim_cache.go).
+	pimLive  *pimHub
+	pimCache *pimCache
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -329,6 +334,7 @@ func New(opts Options) *Server {
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.devices = newDevices(opts, s.rateLimiter)
+	s.pimLive, s.pimCache = newPIMHub(), newPIMCache()
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -376,6 +382,17 @@ func New(opts Options) *Server {
 	// the managers as they are at this moment.
 	if s.opts.Shares != nil {
 		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
+	}
+	if pim := s.opts.PIM; pim != nil {
+		// Every change of a calendar or address book, from any side, to
+		// the pages' live streams.
+		prev, hub := pim.OnChanged, s.pimLive
+		pim.OnChanged = func(c pimstore.Changed) {
+			if prev != nil {
+				prev(c)
+			}
+			hub.publish(c)
+		}
 	}
 	if c := s.opts.Cluster; c != nil {
 		area := s.clusterArea()

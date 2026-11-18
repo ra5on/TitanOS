@@ -82,6 +82,10 @@ func Initials(fn, org string) string {
 	return s
 }
 
+// WeekOf is Monday 00:00 of the week of now and the Monday after (the
+// week of birthdaySoon).
+func WeekOf(now time.Time, local *time.Location) (time.Time, time.Time) { return weekOf(now, local) }
+
 // weekOf is Monday 00:00 of the week of now and the Monday after.
 func weekOf(now time.Time, local *time.Location) (time.Time, time.Time) {
 	t := now.In(local)
@@ -94,9 +98,77 @@ func weekOf(now time.Time, local *time.Location) (time.Time, time.Time) {
 // (Matches), sorted by the folded sort key (last name, first name; for a
 // company its name), then name and id.
 func List(book string, objects []pimstore.ObjectInfo, q string, now time.Time, local *time.Location) []Item {
+	return NewListIndex(book, objects).List(q, now, local)
+}
+
+// ListIndex is the address book ready for its list: rows sorted, the
+// texts of the search folded and the birthdays parsed once (1.13). The
+// pages ask for the list again and again; the book changes rarely, so
+// the API keeps one per ctag.
+type ListIndex struct {
+	book      string
+	rows      []listRow
+	birthdays *calweb.BirthdayIndex
+}
+
+type listRow struct {
+	item Item
+	// The folded texts Matches compares.
+	fn, org string
+	emails  []string // lower case
+	adr     []string
+	phones  []string // without a leading +
+}
+
+// NewListIndex prepares the rows of one book.
+func NewListIndex(book string, objects []pimstore.ObjectInfo) *ListIndex {
+	ix := &ListIndex{book: book, birthdays: calweb.NewBirthdayIndex(objects)}
+	type sorted struct {
+		listRow
+		fold, name string
+	}
+	rows := make([]sorted, 0, len(objects))
+	for _, o := range objects {
+		if o.Group {
+			continue
+		}
+		it := Item{ID: o.Name, Book: book, Name: o.FN, SortKey: o.SortKey, Org: o.Org, Initials: Initials(o.FN, o.Org), HasPhoto: o.HasPhoto}
+		if len(o.Emails) > 0 {
+			it.Email = o.Emails[0]
+		}
+		r := listRow{item: it, fn: Fold(o.FN), org: Fold(o.Org)}
+		for _, v := range o.Emails {
+			r.emails = append(r.emails, strings.ToLower(v))
+		}
+		for _, v := range o.Addresses {
+			r.adr = append(r.adr, Fold(v))
+		}
+		for _, p := range o.Phones {
+			r.phones = append(r.phones, strings.TrimPrefix(p, "+"))
+		}
+		rows = append(rows, sorted{r, Fold(o.SortKey), r.fn})
+	}
+	slices.SortFunc(rows, func(a, b sorted) int {
+		return cmp.Or(strings.Compare(a.fold, b.fold), strings.Compare(a.name, b.name), strings.Compare(a.item.ID, b.item.ID))
+	})
+	ix.rows = make([]listRow, len(rows))
+	for i, r := range rows {
+		ix.rows[i] = r.listRow
+	}
+	return ix
+}
+
+// Len is the number of contacts (groups not counted).
+func (ix *ListIndex) Len() int { return len(ix.rows) }
+
+// Birthdays are the parsed birthdays of the book.
+func (ix *ListIndex) Birthdays() *calweb.BirthdayIndex { return ix.birthdays }
+
+// List makes the rows matching q, with this week's birthdays (List).
+func (ix *ListIndex) List(q string, now time.Time, local *time.Location) []Item {
 	from, to := weekOf(now, local)
 	soon := map[string]SoonBirthday{}
-	for _, b := range calweb.Birthdays(objects, from, to, local) {
+	for _, b := range ix.birthdays.Between(from, to, local) {
 		s := SoonBirthday{Date: b.Start}
 		if b.Birthday != nil && b.Birthday.Age != nil {
 			s.Age = b.Birthday.Age
@@ -105,29 +177,16 @@ func List(book string, objects []pimstore.ObjectInfo, q string, now time.Time, l
 	}
 	query := NewQuery(q)
 	out := []Item{}
-	type sorted struct {
-		Item
-		fold string
-	}
-	var rows []sorted
-	for _, o := range objects {
-		if o.Group || !query.Matches(o.Entry) {
+	for i := range ix.rows {
+		r := &ix.rows[i]
+		if !query.matchesRow(r) {
 			continue
 		}
-		it := Item{ID: o.Name, Book: book, Name: o.FN, SortKey: o.SortKey, Org: o.Org, Initials: Initials(o.FN, o.Org), HasPhoto: o.HasPhoto}
-		if len(o.Emails) > 0 {
-			it.Email = o.Emails[0]
-		}
-		if s, ok := soon[o.Name]; ok {
+		it := r.item
+		if s, ok := soon[it.ID]; ok {
 			it.BirthdaySoon = &s
 		}
-		rows = append(rows, sorted{it, Fold(o.SortKey)})
-	}
-	slices.SortFunc(rows, func(a, b sorted) int {
-		return cmp.Or(strings.Compare(a.fold, b.fold), strings.Compare(Fold(a.Name), Fold(b.Name)), strings.Compare(a.ID, b.ID))
-	})
-	for _, r := range rows {
-		out = append(out, r.Item)
+		out = append(out, it)
 	}
 	return out
 }
@@ -178,6 +237,34 @@ func NewQuery(q string) Query {
 		}
 	}
 	return out
+}
+
+// matchesRow is Matches on the folded texts of a row.
+func (q Query) matchesRow(r *listRow) bool {
+	if q.text == "" {
+		return true
+	}
+	if strings.Contains(r.fn, q.text) || strings.Contains(r.org, q.text) {
+		return true
+	}
+	for _, v := range r.emails {
+		if strings.Contains(v, q.text) {
+			return true
+		}
+	}
+	for _, v := range r.adr {
+		if strings.Contains(v, q.text) {
+			return true
+		}
+	}
+	for _, p := range r.phones {
+		for _, x := range q.phones {
+			if strings.Contains(p, x) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Matches reports whether an entry of the index matches (an empty query

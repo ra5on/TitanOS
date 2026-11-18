@@ -205,8 +205,8 @@ func (a pimDataArea) handleCalendars(w http.ResponseWriter, r *http.Request) {
 	}
 	birthdays := calendarView{ID: calweb.BirthdaysID, Name: "Geburtstage", Color: birthdayColor, Order: last + 1, ReadOnly: true,
 		Kind: "birthdays", Hidden: slices.Contains(hidden, calweb.BirthdaysID)}
-	if contacts, err := store.Objects(pimstore.Contacts, user, pimstore.DefaultBook); err == nil {
-		birthdays.Count = calweb.CountBirthdays(contacts)
+	if ix, _, err := a.cache.book(store, user, pimstore.DefaultBook); err == nil {
+		birthdays.Count = ix.Birthdays().Len()
 	} else {
 		birthdays.Unavailable = true
 	}

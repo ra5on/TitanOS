@@ -115,7 +115,11 @@ func (a pimDataArea) openContact(store *pimstore.Store, user, book, name string)
 }
 
 // handleContacts lists the contacts (groups never), searched with q, of
-// one book or all (there is one).
+// one book or all (there is one). The rows come prepared from the cache
+// (pim_cache.go). The answer has an ETag of the books' ctags, q, the week
+// (birthdaySoon) and the zone; a page that sends it back as If-None-Match
+// gets 304 without a body and keeps the list it has (1.13). The list
+// stays no-store: the browser keeps no copy of its own.
 func (a pimDataArea) handleContacts(w http.ResponseWriter, r *http.Request) {
 	store, ok := a.contactsStore(w)
 	if !ok {
@@ -140,14 +144,29 @@ func (a pimDataArea) handleContacts(w http.ResponseWriter, r *http.Request) {
 			books = append(books, c.ID)
 		}
 	}
-	out := []cardweb.Item{}
+	local, now := store.Zone(), a.now()
+	monday, _ := cardweb.WeekOf(now, local)
+	parts := []string{"contacts", user, volumeOf(store), q, monday.Format("2006-01-02"), local.String()}
+	indexes := make([]*cardweb.ListIndex, 0, len(books))
 	for _, b := range books {
-		objects, err := store.Objects(pimstore.Contacts, user, b)
+		ix, ctag, err := a.cache.book(store, user, b)
 		if err != nil {
 			contactsFail(w, r, b, err, "contact_not_found")
 			return
 		}
-		out = append(out, cardweb.List(b, objects, q, a.now(), store.Zone())...)
+		indexes = append(indexes, ix)
+		parts = append(parts, b, ctag)
+	}
+	etag := pimETag(parts...)
+	w.Header().Set("ETag", `"`+etag+`"`)
+	if notModified(r, etag) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	out := []cardweb.Item{}
+	for _, ix := range indexes {
+		out = append(out, ix.List(q, now, local)...)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

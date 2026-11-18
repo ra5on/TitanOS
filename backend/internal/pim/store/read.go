@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -35,20 +37,31 @@ func copyEntry(e *Entry) Entry {
 // Objects lists the entries of a collection from RAM (names, ETags and the
 // index), sorted by name. Group vCards are included (Group set).
 func (s *Store) Objects(kind Kind, account, col string) ([]ObjectInfo, error) {
+	out, _, err := s.ObjectsTag(kind, account, col)
+	return out, err
+}
+
+// ObjectsTag is Objects with the ctag of the same moment: what a cache
+// of the list keeps under that ctag (1.13).
+func (s *Store) ObjectsTag(kind Kind, account, col string) ([]ObjectInfo, string, error) {
 	c, err := s.collectionFor(kind, account, col)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.deleted {
-		return nil, ErrNotFound
+		c.mu.Unlock()
+		return nil, "", ErrNotFound
 	}
 	out := make([]ObjectInfo, 0, len(c.st.Index))
-	for _, name := range sortedNames(c.st.Index) {
-		out = append(out, ObjectInfo{Name: name, Entry: copyEntry(c.st.Index[name])})
+	for name, e := range c.st.Index {
+		out = append(out, ObjectInfo{Name: name, Entry: copyEntry(e)})
 	}
-	return out, nil
+	ctag := c.st.CTag()
+	c.mu.Unlock()
+	// Sorted outside the lock: the copy is the caller's.
+	slices.SortFunc(out, func(a, b ObjectInfo) int { return strings.Compare(a.Name, b.Name) })
+	return out, ctag, nil
 }
 
 // Stat returns the index entry of one entry from RAM.
