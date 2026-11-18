@@ -6,6 +6,8 @@
 	// reminder changed elsewhere meanwhile (task_conflict) says so and can
 	// be read again. Everything else the file holds (X-APPLE-…, other
 	// alarms, a rule) stays (pim/tasks edits the component tree).
+	// A draft of the KI-Agent (`draft`, its fields) is put into the form
+	// once the reminder is read: text to check, saved only with "Sichern".
 	import { ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -22,19 +24,22 @@
 		type TaskInput,
 		type TaskList,
 	} from './tasks.ts';
+	import { taskDraftForm } from '#lib/agent/drafts.ts';
 
 	type Props = {
 		/** The reminder to change; none = a new one. */
-		task?: DueTask;
+		task?: Pick<DueTask, 'list' | 'id'>;
 		lists: TaskList[];
 		/** The list of a new one. */
 		list?: string;
 		/** A first due date of a new one. */
 		due?: string;
+		/** The fields of a draft of the KI-Agent to put in. */
+		draft?: Record<string, unknown>;
 		onclose: () => void;
 		onchanged: () => void;
 	};
-	let { task, lists, list = '', due = '', onclose, onchanged }: Props = $props();
+	let { task, lists, list = '', due = '', draft, onclose, onchanged }: Props = $props();
 
 	type Form = {
 		title: string;
@@ -84,9 +89,21 @@
 			notes: x.notes,
 		};
 	}
+	/** The draft goes in once, over what was there (the change is the difference). */
+	let drafted = false;
+	function putDraft() {
+		if (!draft || drafted) return;
+		drafted = true;
+		form = taskDraftForm(
+			form,
+			draft,
+			lists.map((l) => l.id),
+		);
+	}
 	async function read() {
 		if (!task) {
 			initial = JSON.stringify(form);
+			putDraft();
 			return;
 		}
 		loading = true;
@@ -94,6 +111,7 @@
 			full = await loadTask(task.list, task.id);
 			form = formOf(full);
 			initial = JSON.stringify(form);
+			putDraft();
 			error = '';
 			conflict = false;
 		} catch (err) {
@@ -197,6 +215,9 @@
 			<p class="muted" role="status">{t('common.loading')}</p>
 		{:else}
 			<form class="form" onsubmit={save} data-task-dialog>
+				{#if draft}<p class="notice-warn" role="note" data-agent-draft>
+						{t('agentpim.draft.taskNote')}
+					</p>{/if}
 				<label class="row">
 					<span class="lbl">{t('calendar.tasks.title')}</span>
 					<input class="field" type="text" bind:value={form.title} maxlength="2000" required />

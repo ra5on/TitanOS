@@ -9,6 +9,10 @@
 	// place, notes. Changing one event of a series asks which ones are meant
 	// when saving; the danger zone deletes. A conflict (changed elsewhere)
 	// says so and reads the event again.
+	// 1.13: a draft of the KI-Agent (?agentDraft=<chat>:<entry>, "Öffnen und
+	// bearbeiten") fills the form – a new event, or a change of the event the
+	// draft names (cal, id, occurrence; only the fields that change). It is
+	// text to check: saved only with "Speichern", a series asks as always.
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
@@ -75,13 +79,22 @@
 	import DeleteEventDialog from '#lib/pim/cal/DeleteEventDialog.svelte';
 	import ScopeChoices from '#lib/pim/cal/ScopeChoices.svelte';
 	import { shellOfError } from '#lib/pim/shell.ts';
+	import { eventDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import type { Simple } from '#lib/pim/calendar.ts';
 
 	const phone = $derived(phoneView());
 	const params = page.url.searchParams;
-	const editCal = params.get('cal') ?? '';
-	const editId = params.get('id') ?? '';
-	const editOcc = params.get('occurrence') ?? '';
-	const editing = !!(editCal && editId);
+	// A draft of a change names its event itself (load() sets these).
+	let editCal = $state(params.get('cal') ?? '');
+	let editId = $state(params.get('id') ?? '');
+	let editOcc = $state(params.get('occurrence') ?? '');
+	const editing = $derived(!!(editCal && editId));
+	const draftParam = params.get('agentDraft');
+	/** A draft was put in ('applied') or could not be opened ('gone'). */
+	let fromAgent = $state<'' | 'applied' | 'gone'>('');
+	let draftRule: Simple | null = null;
+	let draftScope: Scope | '' = '';
+	let draftZone = $state('');
 	const back = safeBack(params.get('back'));
 	// Without ?date= today in the NAS zone (known once loadNasZone answered).
 	const startDayIn = (zone: string) => {
@@ -205,14 +218,27 @@
 	const own = $derived(calendars.filter((c) => c.kind === 'own' && !c.readOnly));
 	// New events in the NAS zone (/calendar/access), the browser's without one.
 	let nasZone = $state(viewZone());
-	const zone = $derived(editing ? (event?.timezone ?? '') : nasZone);
+	const zone = $derived(editing ? (event?.timezone ?? '') : draftZone || nasZone);
 	const dirty = $derived(JSON.stringify(form) !== initial);
 
 	async function load() {
 		loading = true;
 		loadError = '';
 		try {
-			[calendars, nasZone] = await Promise.all([loadCalendars(), loadNasZone()]);
+			let got: AgentDraft | null;
+			[calendars, nasZone, got] = await Promise.all([
+				loadCalendars(),
+				loadNasZone(),
+				draftParam ? loadAgentDraft(draftParam) : Promise.resolve(null),
+			]);
+			const draft = got?.app === 'calendar' && got.kind === 'event' ? got : null;
+			if (draftParam && !draft) fromAgent = 'gone';
+			const f = draft?.fields ?? {};
+			if (draft && !editing && typeof f.cal === 'string' && typeof f.id === 'string') {
+				editCal = f.cal;
+				editId = f.id;
+				editOcc = typeof f.occurrence === 'string' ? f.occurrence : '';
+			}
 			if (editing) {
 				event = await loadEvent(editCal, editId, editOcc);
 				form = formOf(event);
@@ -223,7 +249,17 @@
 					calendars.find((c) => c.kind === 'own' && !c.readOnly);
 				form = { ...blank(nasZone), calendar: first?.id ?? '' };
 			}
+			// What was there before the draft: the change is what differs from it.
 			initial = JSON.stringify(form);
+			if (draft) {
+				const ids = calendars.filter((c) => c.kind === 'own' && !c.readOnly).map((c) => c.id);
+				const put = eventDraftForm(form, f, ids);
+				form = put.form;
+				draftRule = put.rule;
+				draftScope = put.scope;
+				if (!editing) draftZone = put.zone;
+				fromAgent = 'applied';
+			}
 			takeDuration();
 		} catch (err) {
 			unavailable = shellOfError(err).kind === 'unavailable';
@@ -352,7 +388,11 @@
 		if (!editing || JSON.stringify(form.alarms) !== JSON.stringify(base.alarms))
 			out.alarms = form.alarms;
 		if (!editing || JSON.stringify(form.repeat) !== JSON.stringify(base.repeat) || timesChanged)
-			out.repeat = toSimple(form.repeat, form.startDate);
+			// A rule of the agent's draft the form shows only as "custom" goes as it came.
+			out.repeat =
+				form.repeat.kind === 'custom' && draftRule
+					? draftRule
+					: toSimple(form.repeat, form.startDate);
 		return out;
 	}
 
@@ -361,7 +401,7 @@
 		conflict = false;
 		if (error) return;
 		if (editing && event?.recurring) {
-			scope = moved ? 'all' : 'this';
+			scope = moved ? 'all' : draftScope || 'this';
 			askScope = true;
 			return;
 		}
@@ -479,6 +519,11 @@
 	{/if}
 {:else}
 	<form class="ev" class:phone onsubmit={(e) => (e.preventDefault(), save())} data-event-form>
+		{#if fromAgent === 'applied'}<p class="notice-warn" role="note" data-agent-draft>
+				{t('agentpim.draft.eventNote')}
+			</p>{:else if fromAgent === 'gone'}<p class="muted" role="status">
+				{t('agentpim.draft.gone')}
+			</p>{/if}
 		{#if note}<p class="notice-warn" role="status">{note}</p>{/if}
 		<div class="row">
 			<label class="lbl" for="t-title">{t('calendar.form.title')}</label>

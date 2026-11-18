@@ -16,6 +16,11 @@
 	// overview on opening; Mail's suggestions only when shown; a search is
 	// one request; a write puts its row in place (no list again); the live
 	// stream (lib/pim/live.ts) reads the list when a device changed it.
+	// The KI-Agent (1.13, with session.services.agent): its panel right of
+	// the contact (a column of the frame) or a sheet from below, open or not
+	// kept per device; the open contact goes with each message as a
+	// reference (book and id), never its content. A draft (?agentDraft=,
+	// also while the page is open) fills the form; saved only by the person.
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -94,6 +99,10 @@
 	import MergeView from '#lib/pim/con/MergeView.svelte';
 	import SuggestionRow from '#lib/pim/con/SuggestionRow.svelte';
 	import { contactDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
+	import type { AgentContext } from '#lib/agent.ts';
+	import { contactsPanelActions } from '#lib/agent/panel-actions.ts';
 	import { shellOfError, type ShellState } from '#lib/pim/shell.ts';
 
 	// ---- Columns or levels (like Mail) ----
@@ -165,15 +174,39 @@
 	}
 	onMount(() => void start());
 	// 1.13: a draft of the KI-Agent (?agentDraft=, "Öffnen und bearbeiten"):
-	// the form opens with it filled in, saved only by the person.
+	// the form opens with it filled in, saved only by the person. Read from
+	// the address whenever it names one – the panel of this page opens it
+	// here too, without loading the page anew.
 	let agentDraft: AgentDraft | null = null;
-	onMount(async () => {
-		const d = await loadAgentDraft(page.url.searchParams.get('agentDraft'));
-		if (d?.app !== 'contacts') return;
+	let draftSeen = '';
+	/** The form shows a draft of the agent. */
+	let fromAgent = $state(false);
+	let draftNote = $state('');
+	$effect(() => {
+		const param = page.url.searchParams.get('agentDraft') ?? '';
+		if (!param || param === draftSeen) return;
+		draftSeen = param;
+		untrack(() => void takeDraft(param));
+	});
+	async function takeDraft(param: string) {
+		draftNote = '';
+		const d = await loadAgentDraft(param);
+		draftSeen = '';
+		if (d?.app !== 'contacts' || d.kind !== 'contact') {
+			draftNote = d ? t('agentpim.draft.foreign') : t('agentpim.draft.gone');
+			go(listPlace, false);
+			return;
+		}
 		agentDraft = d;
 		const id = typeof d.fields.id === 'string' ? d.fields.id : '';
+		// The form already open for it (and unchanged): the draft goes in here.
+		if (!dirty && editKey !== '' && (id ? mode === 'edit' && selId === id : mode === 'new')) {
+			form = contactDraftForm(form, d.fields);
+			agentDraft = null;
+			fromAgent = true;
+		}
 		go(id ? { ...listPlace, id, edit: true } : { ...listPlace, isNew: true }, false);
-	});
+	}
 	// The NAS zone (GET /calendar/access) only when a birthday of this week is worded.
 	let zoneAsked = false;
 	$effect(() => {
@@ -462,11 +495,13 @@
 			photo = { kind: 'keep' };
 			formError = '';
 			conflict = false;
+			fromAgent = false;
 			if (key === 'new') {
 				form = blankForm();
 				if (agentDraft && !agentDraft.fields.id) {
 					form = contactDraftForm(form, agentDraft.fields);
 					agentDraft = null;
+					fromAgent = true;
 				}
 				before = null;
 				// A new contact in an open group joins it.
@@ -478,6 +513,7 @@
 				if (agentDraft?.fields.id === contact.id) {
 					form = contactDraftForm(form, agentDraft.fields);
 					agentDraft = null;
+					fromAgent = true;
 				}
 				member = groupsOf(groups, contact.id).map((g) => g.id);
 				memberBefore = [...member];
@@ -801,6 +837,34 @@
 	);
 	const duplicates = $derived(dups === null ? (overview?.duplicates ?? 0) : dupShown.length);
 	const sheet = $derived(compact && editing);
+
+	// ---- The KI-Agent's panel (1.13) ----
+	const AGENT_KEY = 'titanos.contacts.agentPanel';
+	const withAgent = $derived(!!session.services.agent);
+	let agentOpen = $state(readAgentOpen());
+	/** The panel stands as a column (room next to the contact); else a sheet. */
+	let agentColumn = $state(false);
+	function readAgentOpen(): boolean {
+		try {
+			return localStorage.getItem(AGENT_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+	function setAgent(on: boolean) {
+		agentOpen = on;
+		try {
+			if (on) localStorage.setItem(AGENT_KEY, '1');
+			else localStorage.removeItem(AGENT_KEY);
+		} catch {
+			// Kept for this visit only.
+		}
+	}
+	const openRow = $derived(selId && !place.isNew ? all.find((i) => i.id === selId) : undefined);
+	const agentContext = $derived<AgentContext | null>(
+		openRow ? { app: 'contacts', card: { book: openRow.book, id: openRow.id } } : null,
+	);
+	const agentActions = $derived(contactsPanelActions((k) => t(k)));
 </script>
 
 <PageHead {title} />
@@ -841,8 +905,37 @@
 	<ContactRail {groups} place={sidePlace} {mail} {duplicates} onpick={pick} />
 {/snippet}
 
+{#snippet agentToggle(folded: boolean)}
+	{#if withAgent}
+		<button
+			type="button"
+			class="side-link agent-toggle"
+			class:icon={folded}
+			aria-pressed={agentOpen}
+			title={folded ? t('agentpim.panel.toggle') : undefined}
+			aria-label={folded ? t('agentpim.panel.toggle') : undefined}
+			onclick={() => setAgent(!agentOpen)}
+			><Icon name="sparkle" size={17} />{#if !folded}<span>{t('agentpim.panel.toggle')}</span
+				>{/if}</button
+		>
+	{/if}
+{/snippet}
+
+{#snippet barAgent()}
+	{#if withAgent}
+		<button
+			type="button"
+			class="bar-btn"
+			aria-label={t('agentpim.panel.toggle')}
+			title={t('agentpim.panel.toggle')}
+			onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
+		>
+	{/if}
+{/snippet}
+
 {#snippet foot(folded: boolean)}
 	<div class="foot" class:folded>
+		{@render agentToggle(folded)}
 		<Dropdown
 			label={t('contacts.side.transfer')}
 			text={folded ? undefined : t('contacts.side.transfer')}
@@ -880,6 +973,14 @@
 
 {#snippet notices()}
 	{#if notice}<p class="notice-error notice" role="alert">{notice}</p>{/if}
+	{#if draftNote}
+		<p class="muted notice" role="status">
+			{draftNote}
+			<button type="button" class="btn small-btn" onclick={() => (draftNote = '')}
+				>{t('common.close')}</button
+			>
+		</p>
+	{/if}
 	{#if addedTo}
 		<p class="notice-ok notice" role="status">
 			{addedTo}
@@ -892,9 +993,17 @@
 
 {#snippet backButton(label: string)}
 	{#if !wide && !phone}
-		<button type="button" class="btn back" onclick={up} data-back
-			><Icon name="chevronLeft" size={16} />{label}</button
-		>
+		<!-- The narrow window: the KI-Agent next to the way back (no bar at the bottom here). -->
+		<div class="level-head">
+			<button type="button" class="btn back" onclick={up} data-back
+				><Icon name="chevronLeft" size={16} />{label}</button
+			>
+			{#if withAgent && !compact}
+				<button type="button" class="btn agent-level" onclick={() => setAgent(true)}
+					><Icon name="sparkle" size={16} />{t('agentpim.panel.toggle')}</button
+				>
+			{/if}
+		</div>
 	{/if}
 {/snippet}
 
@@ -979,6 +1088,7 @@
 	</div>
 	{#if compact && level === 'list'}
 		<BottomBar label={t('contacts.bar.list')}>
+			{@render barAgent()}
 			<button
 				type="button"
 				class="bar-btn bar-new"
@@ -1100,6 +1210,9 @@
 {#snippet editor()}
 	{@render editorHead()}
 	<div class="ed-body">
+		{#if fromAgent}<p class="notice-warn msg" role="note" data-agent-draft>
+				{t('agentpim.draft.contactNote')}
+			</p>{/if}
 		{#if formError}
 			<p class="notice-error msg" role="alert">
 				{formError}
@@ -1149,8 +1262,12 @@
 	{side}
 	{rail}
 	sideFoot={foot}
-	notices={notice || addedTo ? notices : undefined}
+	notices={notice || addedTo || draftNote ? notices : undefined}
 	list={listColumn}
+	aside={withAgent && agentOpen && wide ? agentAside : undefined}
+	asideKey="titanos.agentPanel.width"
+	asideResizeLabel={t('agentpim.panel.resize')}
+	bind:asideShown={agentColumn}
 >
 	<div class="content" data-content-mode={mode}>
 		{#if shown.kind !== 'ready'}
@@ -1211,6 +1328,7 @@
 						disabled={!contact}
 						onclick={() => void newEvent()}><Icon name="calendar" size={20} /></button
 					>
+					{@render barAgent()}
 					<button
 						type="button"
 						class="bar-btn bar-new"
@@ -1253,6 +1371,7 @@
 				groupDialog = { kind: 'new', name: '' };
 			}}><Icon name="users" size={20} /></button
 		>
+		{@render barAgent()}
 		<button
 			type="button"
 			class="bar-btn bar-new"
@@ -1262,6 +1381,27 @@
 			onclick={newContact}><Icon name="plus" size={20} /></button
 		>
 	</BottomBar>
+{/if}
+
+{#snippet agentAside()}
+	<AgentPanel
+		app="contacts"
+		context={agentContext}
+		actions={agentActions}
+		onclose={() => setAgent(false)}
+	/>
+{/snippet}
+
+{#if withAgent && agentOpen && !(wide && agentColumn)}
+	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
+		<AgentPanel
+			app="contacts"
+			phone
+			context={agentContext}
+			actions={agentActions}
+			onclose={() => setAgent(false)}
+		/>
+	</AgentSheet>
 {/if}
 
 {#if askDelete && contact}
@@ -1456,6 +1596,33 @@
 		justify-content: center;
 		width: 44px;
 		padding: 0;
+	}
+	button.side-link {
+		width: 100%;
+		border: 0;
+		background: none;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	button.side-link.icon {
+		width: 44px;
+	}
+	.agent-toggle[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+	}
+	.level-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+	.agent-level {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		min-height: 44px;
 	}
 	.side-link :global(svg) {
 		flex: none;

@@ -430,3 +430,128 @@ test('a contact draft fills the form of Kontakte', async () => {
 	assert.equal(f.notes, 'bleibt');
 	assert.equal(blank.first, '', 'the form given is not changed');
 });
+
+test('an event draft fills the event window (new and change)', async () => {
+	const { eventDraftForm } = await import('../src/lib/agent/drafts.ts');
+	const blank = {
+		title: '',
+		calendar: 'privat',
+		allDay: false,
+		startDate: '2026-11-18',
+		startTime: '09:00',
+		endDate: '2026-11-18',
+		endTime: '10:00',
+		repeat: { kind: 'none', interval: 1, end: 'never', until: '', count: 10 },
+		alarms: [],
+		location: '',
+		notes: '',
+	};
+	// calendar_create: every field as calweb.View has it.
+	const made = eventDraftForm(
+		blank,
+		{
+			title: 'Zahnarzt\nDr. Weiß',
+			start: '2026-11-20T08:30:00+01:00',
+			end: '2026-11-20T09:15:00+01:00',
+			allDay: false,
+			timezone: 'Europe/Berlin',
+			location: 'Hauptstraße 1',
+			notes: 'Karte mitnehmen',
+			calendar: 'arbeit',
+			alarms: [30, 10, 30, 'x'],
+			rrule: { freq: 'weekly', interval: 1, byDay: ['FR'] },
+		},
+		['privat', 'arbeit'],
+	);
+	assert.equal(made.form.title, 'Zahnarzt Dr. Weiß');
+	assert.deepEqual(
+		[made.form.startDate, made.form.startTime, made.form.endDate, made.form.endTime],
+		['2026-11-20', '08:30', '2026-11-20', '09:15'],
+	);
+	assert.equal(made.form.calendar, 'arbeit');
+	assert.deepEqual(made.form.alarms, [10, 30]);
+	assert.equal(made.form.repeat.kind, 'weekly');
+	assert.equal(made.rule, null);
+	assert.equal(made.zone, 'Europe/Berlin');
+	assert.equal(blank.title, '', 'the form given is not changed');
+	// All day: the end is the day after the last day; a foreign calendar stays out.
+	const day = eventDraftForm(
+		blank,
+		{ start: '2026-12-24', end: '2026-12-27', allDay: true, calendar: 'fremd' },
+		['privat'],
+	);
+	assert.ok(day.form.allDay);
+	assert.equal(day.form.endDate, '2026-12-26');
+	assert.equal(day.form.calendar, 'privat');
+	// A rule the form shows only as "custom" is kept as it came.
+	const two = eventDraftForm(blank, { rrule: { freq: 'weekly', byDay: ['MO', 'WE'] } }, []);
+	assert.equal(two.form.repeat.kind, 'custom');
+	assert.deepEqual(two.rule, { freq: 'weekly', interval: 1, byDay: ['MO', 'WE'] });
+	// calendar_update: only the start moves, the length stays; scope comes along.
+	const moved = eventDraftForm(
+		{ ...blank, endTime: '10:30' },
+		{ cal: 'privat', id: 'x.ics', start: '2026-11-19T14:00', scope: 'following' },
+		[],
+	);
+	assert.deepEqual(
+		[moved.form.startDate, moved.form.startTime, moved.form.endDate, moved.form.endTime],
+		['2026-11-19', '14:00', '2026-11-19', '15:30'],
+	);
+	assert.equal(moved.scope, 'following');
+	assert.equal(moved.form.title, '', 'what the change does not name stays');
+	// duration in minutes; the repetition removed; bad values left out.
+	const long = eventDraftForm(
+		{ ...blank, repeat: { ...blank.repeat, kind: 'daily' } },
+		{ start: '2026-11-19T23:30', duration: 90, rrule: { freq: 'none' }, timezone: '../x' },
+		[],
+	);
+	assert.deepEqual([long.form.endDate, long.form.endTime], ['2026-11-20', '01:00']);
+	assert.equal(long.form.repeat.kind, 'none');
+	assert.equal(long.zone, '');
+	const bad = eventDraftForm(blank, { start: '2026-02-30T09:00', end: 'morgen' }, []);
+	assert.deepEqual(bad.form, blank);
+	// An end before the start: an hour after the start.
+	const back = eventDraftForm(blank, { start: '2026-11-18T15:00', end: '2026-11-18T14:00' }, []);
+	assert.equal(back.form.endTime, '16:00');
+});
+
+test('a reminder draft fills the reminder dialog', async () => {
+	const { taskDraftForm } = await import('../src/lib/agent/drafts.ts');
+	const blank = {
+		title: 'Alt',
+		list: 'erinnerungen--titanos',
+		hasDue: false,
+		date: '2026-11-18',
+		hasTime: false,
+		time: '09:00',
+		priority: 0,
+		alarm: false,
+		notes: '',
+	};
+	const f = taskDraftForm(
+		blank,
+		{
+			title: 'Reifen wechseln',
+			due: '2026-11-21T10:30',
+			priority: 1,
+			list: 'einkauf',
+			notes: 'Termin',
+		},
+		['erinnerungen--titanos', 'einkauf'],
+	);
+	assert.equal(f.title, 'Reifen wechseln');
+	assert.ok(f.hasDue && f.hasTime);
+	assert.deepEqual([f.date, f.time], ['2026-11-21', '10:30']);
+	assert.equal(f.priority, 1);
+	assert.equal(f.list, 'einkauf');
+	const day = taskDraftForm(
+		{ ...blank, hasDue: true, hasTime: true },
+		{ due: '2026-11-22', list: 'x', priority: 12 },
+		[],
+	);
+	assert.ok(day.hasDue && !day.hasTime);
+	assert.equal(day.list, 'erinnerungen--titanos');
+	assert.equal(day.priority, 0);
+	assert.equal(day.title, 'Alt', 'what the draft does not name stays');
+	assert.equal(taskDraftForm({ ...blank, hasDue: true }, { due: null }, []).hasDue, false);
+});
