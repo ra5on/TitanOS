@@ -17,7 +17,10 @@ export const MAIL_KEYS: { action: MailKey; keys: string[] }[] = [
 	{ action: 'help', keys: ['?'] },
 ];
 
-type KeyLike = Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'defaultPrevented'> & {
+type KeyLike = Pick<
+	KeyboardEvent,
+	'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'defaultPrevented'
+> & {
 	target: EventTarget | null;
 };
 

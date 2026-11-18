@@ -71,7 +71,12 @@ const row = (uid: number, over: Partial<Row> = {}): Row => ({
 
 test('conversations by Message-ID, In-Reply-To and References, siblings by a common earlier mail', () => {
 	const rows = [
-		row(5, { subject: 'Re: Frage', messageId: '<e@x>', inReplyTo: '<d@x>', references: '<a@x> <d@x>' }),
+		row(5, {
+			subject: 'Re: Frage',
+			messageId: '<e@x>',
+			inReplyTo: '<d@x>',
+			references: '<a@x> <d@x>',
+		}),
 		row(4, { subject: 'Anderes', messageId: '<z@x>' }),
 		// Answers the first mail, which is not in the list (an older page).
 		row(3, { subject: 'AW: Frage', messageId: '<c@x>', references: '<a@x>' }),
@@ -117,7 +122,11 @@ test('search results with the same uid in two folders stay apart', () => {
 	expect(threadRows(rows).length).toBe(2);
 });
 
-const key = (k: string, over: Partial<KeyboardEvent> = {}, target: EventTarget | null = document.body) =>
+const key = (
+	k: string,
+	over: Partial<KeyboardEvent> = {},
+	target: EventTarget | null = document.body,
+) =>
 	mailKey({
 		key: k,
 		ctrlKey: false,

@@ -30,6 +30,9 @@ export function avatarColor(addr: string): string {
 /** Up to two letters of a name, else of the address before the "@". */
 export function avatarInitials(name: string, addr: string): string {
 	if ((name ?? '').trim()) return initialsOf(name);
-	const local = (addr ?? '').split('@')[0].replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+	const local = (addr ?? '')
+		.split('@')[0]
+		.replace(/[^\p{L}\p{N}]+/gu, ' ')
+		.trim();
 	return local ? initialsOf(local) : '?';
 }
