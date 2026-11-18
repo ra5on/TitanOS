@@ -174,6 +174,7 @@ func Open(data []byte, occurrence string, local *time.Location) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
+	op.view.Occurrences = occurrences(op.series, local)
 	return op.view, nil
 }
 

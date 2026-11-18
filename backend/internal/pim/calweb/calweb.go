@@ -118,9 +118,12 @@ type View struct {
 	// keeps (256 bytes); GET of the one event has the whole text.
 	Clipped bool `json:"clipped,omitempty"`
 	// Notes are only in the answer for one event.
-	Notes            *string   `json:"notes,omitempty"`
-	Recurring        bool      `json:"recurring"`
-	Rule             *RuleView `json:"rule"`
+	Notes     *string   `json:"notes,omitempty"`
+	Recurring bool      `json:"recurring"`
+	Rule      *RuleView `json:"rule"`
+	// Occurrences is the number of occurrences of a series whose rule
+	// ends (one event only; omitted for a rule without end or above 5000).
+	Occurrences      *int      `json:"occurrences,omitempty"`
 	Alarms           []int     `json:"alarms"`
 	Exception        bool      `json:"exception"`
 	ETag             string    `json:"etag"`

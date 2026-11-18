@@ -624,3 +624,22 @@ func (e *calEnv) importICS(cal, onDuplicate string, data []byte, want int) impor
 	_ = json.Unmarshal(raw.Bytes(), &out)
 	return out
 }
+
+// A single event of a series whose rule ends says how many occurrences
+// it has ("Alle 12 Termine").
+func TestCalendarEventOccurrences(t *testing.T) {
+	e := newCalEnv(t)
+	e.seed("privat", "r.ics", "\nBEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:r\nDTSTAMP:20261101T000000Z\n"+
+		"DTSTART;TZID=Europe/Berlin:20261103T090000\nDURATION:PT30M\nRRULE:FREQ=WEEKLY;COUNT=12\nSUMMARY:Reihe\nEND:VEVENT\nEND:VCALENDAR\n")
+	e.seed("privat", "o.ics", "\nBEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:o\nDTSTAMP:20261101T000000Z\n"+
+		"DTSTART;TZID=Europe/Berlin:20261103T090000\nDURATION:PT30M\nRRULE:FREQ=WEEKLY\nSUMMARY:Offen\nEND:VEVENT\nEND:VCALENDAR\n")
+	var v calweb.View
+	e.do("GET", "/api/v1/calendar/events/privat/r.ics?occurrence=20261110T080000Z", nil, http.StatusOK, &v)
+	if v.Occurrences == nil || *v.Occurrences != 12 {
+		t.Fatalf("occurrences %v", v.Occurrences)
+	}
+	body := e.do("GET", "/api/v1/calendar/events/privat/o.ics", nil, http.StatusOK, nil)
+	if strings.Contains(string(body), "occurrences") {
+		t.Fatalf("no end: %s", body)
+	}
+}

@@ -257,3 +257,40 @@ func TestCalendarID(t *testing.T) {
 		t.Fatalf("long: %q", id)
 	}
 }
+
+// One event says how many occurrences its series has when the rule ends:
+// EXDATEs left out, an override counted once; none without an end.
+func TestOpenCountsOccurrences(t *testing.T) {
+	series := func(rule string, extra ...string) []byte {
+		lines := []string{"BEGIN:VEVENT", "UID:s", "DTSTAMP:20261101T000000Z", "DTSTART;TZID=Europe/Berlin:20261103T090000",
+			"DURATION:PT30M", "RRULE:" + rule}
+		lines = append(append(lines, extra...), "END:VEVENT")
+		return ics(lines...)
+	}
+	count := func(data []byte, occurrence string) *int {
+		t.Helper()
+		v, err := Open(data, occurrence, berlin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v.Occurrences
+	}
+	if n := count(series("FREQ=WEEKLY;COUNT=12", "EXDATE;TZID=Europe/Berlin:20261110T090000"), ""); n == nil || *n != 11 {
+		t.Fatalf("count with exdate: %v", n)
+	}
+	withOverride := series("FREQ=WEEKLY;UNTIL=20270126T080000Z")
+	withOverride = []byte(strings.Replace(string(withOverride), "END:VCALENDAR", "BEGIN:VEVENT\r\nUID:s\r\nDTSTAMP:20261101T000000Z\r\n"+
+		"RECURRENCE-ID;TZID=Europe/Berlin:20261117T090000\r\nDTSTART;TZID=Europe/Berlin:20261118T100000\r\nDURATION:PT30M\r\nEND:VEVENT\r\nEND:VCALENDAR", 1))
+	if n := count(withOverride, "20261117T080000Z"); n == nil || *n != 13 {
+		t.Fatalf("until with override: %v", n)
+	}
+	if n := count(series("FREQ=WEEKLY"), ""); n != nil {
+		t.Fatalf("no end: %d", *n)
+	}
+	if n := count(series("FREQ=DAILY;COUNT=6000"), ""); n != nil {
+		t.Fatalf("above the bound: %d", *n)
+	}
+	if n := count(ics("BEGIN:VEVENT", "UID:x", "DTSTAMP:20261101T000000Z", "DTSTART:20261110T080000Z", "END:VEVENT"), ""); n != nil {
+		t.Fatalf("single: %d", *n)
+	}
+}
