@@ -50,6 +50,13 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/decide", s.requireAgent(s.handleAgentDecide))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/stop", s.requireAgent(s.handleAgentStop))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/events", s.requireAgent(s.handleAgentEvents))
+	// 1.13: drafts for the programs, the account's own action rights and
+	// the one chat of the panel in Mail, Kontakte and Kalender.
+	mux.HandleFunc("GET /api/v1/agent/chats/{id}/drafts/{entry}", s.requireAgent(s.handleAgentDraft))
+	mux.HandleFunc("GET /api/v1/agent/rights/me", s.requireAgent(s.handleAgentRightsMine))
+	mux.HandleFunc("PUT /api/v1/agent/rights/me", s.requireAgent(s.handleAgentRightsMineSet))
+	mux.HandleFunc("GET /api/v1/agent/pim-chat", s.requireAgent(s.handleAgentPanel))
+	mux.HandleFunc("PUT /api/v1/agent/pim-chat", s.requireAgent(s.handleAgentPanelSet))
 	// The chats of the account that run now, from the RAM (1.01).
 	mux.HandleFunc("GET /api/v1/agent/runs", s.requireAgent(s.handleAgentRuns))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/attachments", s.requireAgent(s.handleAgentAttach))

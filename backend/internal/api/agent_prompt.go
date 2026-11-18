@@ -23,6 +23,8 @@ import (
 func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agentSettings, chat *agent.Chat, box *agentToolbox) string {
 	env := s.agentEnv()
 	in := agent.PromptInput{Account: user.Name, Admin: user.Role.CanAdminister(), Version: env.version, Now: time.Now(), Locations: settings.Locations, Origin: chat.Origin, Autonomy: chat.Autonomy}
+	// 1.13: what is open in the program of the panel, as one cleaned line.
+	in.Context = s.contextLine(user.Name, chat)
 	if env.monitor != nil {
 		in.Host = env.monitor.Info().Hostname
 	}

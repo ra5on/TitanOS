@@ -334,3 +334,99 @@ test('the size of the working dots: small, medium or large, medium by default (o
 	// Kept for the account like the colours, as a flat value.
 	assert.equal(accountLook(sanitizeLook({ dotSize: 's' })).dotSize, 's');
 });
+
+// 1.13: the rights per kind of action decide like the backend
+// (backend/internal/agent/actions.go, the same table).
+test('action rights decide like the backend', async () => {
+	const { ACTION_KEYS, actionMode, nasAction, ownChoices, stricterAction, validAction } =
+		await import('../src/lib/agent-actions.ts');
+	const matrix = JSON.parse(
+		readFileSync(
+			new URL('../../backend/internal/agent/testdata/data-rights.json', import.meta.url),
+			'utf8',
+		),
+	);
+	assert.deepEqual(matrix.actions.keys, [...ACTION_KEYS]);
+	assert.ok(matrix.actions.cases.length >= 12);
+	for (const c of matrix.actions.cases)
+		for (const key of ACTION_KEYS)
+			assert.equal(actionMode(c.policy, c.own, key, c.read), c.modes[key], `${c.name}: ${key}`);
+	assert.equal(stricterAction('allow', 'suggest'), 'suggest');
+	assert.equal(stricterAction('ask', 'weird'), 'deny');
+	assert.ok(!validAction('event.delete', 'allow'));
+	assert.ok(!validAction('mail.read', 'ask'));
+	assert.equal(nasAction({ preset: 'standard' }, 'event.create'), 'suggest');
+	assert.deepEqual(ownChoices('event.create', 'allow'), ['', 'suggest', 'ask']);
+	assert.deepEqual(ownChoices('event.create', 'suggest'), ['']);
+	assert.deepEqual(ownChoices('mail.read', 'allow'), ['', 'deny']);
+	// A set action right counts as touched: the quick choice shows "Eigene".
+	assert.equal(presetOf({ preset: 'all', actionRights: { 'mail.send': 'allow' } }), 'custom');
+});
+
+test('drafts of the agent open in their program', async () => {
+	const { parseDraftParam, draftHref, draftAppOf, draftList, DRAFT_TOOLS } =
+		await import('../src/lib/agent/drafts.ts');
+	assert.deepEqual(parseDraftParam('abc123:def456'), { chat: 'abc123', entry: 'def456' });
+	for (const bad of ['', 'abc', ':x', 'a:b/c', '../x:y', 'a:b:c'])
+		assert.equal(parseDraftParam(bad), null, bad);
+	assert.equal(
+		draftHref({ app: 'mail', kind: 'reply', fields: {} }, 'c1', 'e1'),
+		'/mail/compose?agentDraft=c1%3Ae1',
+	);
+	assert.equal(
+		draftHref(
+			{ app: 'mail', kind: 'move', fields: { a: 'm1', f: 'INBOX', uids: [7], to: 'Archiv' } },
+			'c',
+			'e',
+		),
+		'/mail?a=m1&f=INBOX&m=7',
+	);
+	assert.equal(
+		draftHref({ app: 'calendar', kind: 'event', fields: {} }, 'c', 'e'),
+		'/calendar/event?agentDraft=c%3Ae',
+	);
+	assert.equal(
+		draftHref({ app: 'contacts', kind: 'contact', fields: {} }, 'c', 'e'),
+		'/contacts?agentDraft=c%3Ae',
+	);
+	assert.equal(
+		draftHref({ app: 'tasks', kind: 'task', fields: {} }, 'c', 'e'),
+		'/calendar?agentDraft=c%3Ae',
+	);
+	assert.equal(draftAppOf('tasks_complete'), 'tasks');
+	assert.ok(DRAFT_TOOLS.has('mail_send') && !DRAFT_TOOLS.has('calendar_delete'));
+	assert.deepEqual(draftList(['a@b', 3, ' ', 'c@d']), ['a@b', 'c@d']);
+});
+
+test('a contact draft fills the form of Kontakte', async () => {
+	const { contactDraftForm } = await import('../src/lib/agent/drafts.ts');
+	const blank = {
+		first: '',
+		last: '',
+		org: 'Alt',
+		phones: [],
+		emails: [{ type: 'home', value: 'alt@example.com' }],
+		addresses: [],
+		birthdayDate: '',
+		birthdayNoYear: false,
+		notes: 'bleibt',
+	};
+	const f = contactDraftForm(blank, {
+		name: 'Bea Maria Muster',
+		emails: [{ type: 'work', value: 'bea@example.com' }, { value: ' ' }],
+		phones: [{ value: '+49 171 1' }],
+		addresses: [{ street: 'Weg 1', city: 'Köln' }],
+		birthday: '--11-20',
+	});
+	assert.equal(f.first, 'Bea Maria');
+	assert.equal(f.last, 'Muster');
+	assert.deepEqual(f.emails, [{ type: 'work', value: 'bea@example.com' }]);
+	assert.deepEqual(f.phones, [{ type: 'mobile', value: '+49 171 1' }]);
+	assert.equal(f.addresses[0].city, 'Köln');
+	assert.equal(f.birthdayDate, '2000-11-20');
+	assert.ok(f.birthdayNoYear);
+	// What the draft does not name stays.
+	assert.equal(f.org, 'Alt');
+	assert.equal(f.notes, 'bleibt');
+	assert.equal(blank.first, '', 'the form given is not changed');
+});

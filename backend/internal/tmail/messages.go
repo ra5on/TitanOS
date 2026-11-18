@@ -513,11 +513,31 @@ func fetchSections(c *imapclient.Client, b *budgetConn, uid uint32, parts []part
 // from the internet load in its HTML. A mail whose structure is too large
 // to read is shown as the beginning of its raw body (readRaw).
 func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
-	msg, err := m.read(ctx, user, id, folder, uid, images)
+	msg, err := m.read(ctx, user, id, folder, uid, images, true)
 	if errors.Is(err, ErrTooLarge) {
-		return m.readRaw(ctx, user, id, folder, uid)
+		return m.readRaw(ctx, user, id, folder, uid, true)
 	}
 	return msg, err
+}
+
+// ReadQuiet returns a mail like Read, without pictures from the internet
+// and without marking it as read: the KI-Agent reads it for the person
+// (1.13), who has not seen it yet.
+func (m *Manager) ReadQuiet(ctx context.Context, user, id, folder string, uid uint32) (*Message, error) {
+	msg, err := m.read(ctx, user, id, folder, uid, false, false)
+	if errors.Is(err, ErrTooLarge) {
+		return m.readRaw(ctx, user, id, folder, uid, false)
+	}
+	return msg, err
+}
+
+// PlainText is the text of a mail: its text part, else the visible text
+// of its (sanitized) HTML; never markup.
+func (msg *Message) PlainText() string {
+	if strings.TrimSpace(msg.Text) != "" || msg.HTML == "" {
+		return msg.Text
+	}
+	return htmlText(msg.HTML)
 }
 
 // rawTextLimit is how much of the body readRaw shows.
@@ -526,7 +546,7 @@ const rawTextLimit = 1 << 20
 // readRaw shows a mail without its structure: a few header fields and the
 // beginning of its body as it came (third review of 1.05: digests with
 // hundreds of attached mails could not be opened at all).
-func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint32) (*Message, error) {
+func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint32, mark bool) (*Message, error) {
 	var out *Message
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
@@ -562,7 +582,7 @@ func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint
 				msg.Text = rawText(section.Bytes)
 			}
 		}
-		if !msg.Flags.Seen {
+		if mark && !msg.Flags.Seen {
 			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}, nil).Close(); err == nil {
 				msg.Flags.Seen = true
 			}
@@ -588,7 +608,7 @@ func rawText(raw []byte) string {
 	}, text)
 }
 
-func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
+func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32, images, mark bool) (*Message, error) {
 	var out *Message
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
@@ -671,7 +691,7 @@ func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32,
 			}
 			msg.HTML, msg.ExternalImages = SanitizeHTML(raw, cids, images)
 		}
-		if !msg.Flags.Seen {
+		if mark && !msg.Flags.Seen {
 			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}, nil).Close(); err == nil {
 				msg.Flags.Seen = true
 			}

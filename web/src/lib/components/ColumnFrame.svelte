@@ -113,6 +113,16 @@
 		notices?: Snippet;
 		/** The list column; without it the content follows the side bar. */
 		list?: Snippet;
+		/** 1.13: a column right of the content (the agent's panel), only with
+		 *  columns; dragged at its left border, its width kept under asideKey. */
+		aside?: Snippet;
+		asideWidth?: ColumnWidth;
+		asideKey?: string;
+		asideResizeLabel?: string;
+		/** Whether the aside stands as a column now: only while side bar, list
+		 *  and content keep their minimum next to it (else the page shows it
+		 *  another way, e.g. as a sheet). */
+		asideShown?: boolean;
 		/** The content. */
 		children: Snippet;
 	};
@@ -140,6 +150,11 @@
 		bar,
 		notices,
 		list,
+		aside,
+		asideWidth = { min: 300, max: 640, fallback: 380 },
+		asideKey = `${storage}.asideWidth`,
+		asideResizeLabel,
+		asideShown = $bindable(false),
 		children,
 	}: Props = $props();
 
@@ -152,6 +167,9 @@
 		untrack(() => readWidth(listKey, listWidth.min, listWidth.max, listWidth.fallback)),
 	);
 	let foldedPref = $state(untrack(() => readFolded(foldKey)));
+	let asideStored = $state(
+		untrack(() => readWidth(asideKey, asideWidth.min, asideWidth.max, asideWidth.fallback)),
+	);
 
 	// Below 620 px folded; unfolded by hand it stays so until the window is wide again.
 	let narrow = $state(
@@ -185,9 +203,22 @@
 		}
 	}
 
+	// The panel takes its width first, but leaves the content its minimum.
+	const asideMax = $derived(
+		Math.max(asideWidth.min, Math.min(asideWidth.max, (frameWidth || 1200) - contentMin - 240)),
+	);
+	// Room for the aside: the others at their minimum next to its minimum.
+	const asideFits = $derived(
+		(frameWidth || 1200) - asideWidth.min >=
+			(folded ? RAIL : sideWidth.min) + (list ? listWidth.min : 0) + contentMin,
+	);
+	const asideW = $derived(aside && columns && asideFits ? Math.min(asideStored, asideMax) : 0);
+	$effect(() => {
+		asideShown = asideW > 0;
+	});
 	const widths = $derived(
 		columnWidths({
-			frame: frameWidth || 1200,
+			frame: (frameWidth || 1200) - asideW,
 			side: sideStored,
 			list: list ? listStored : null,
 			folded,
@@ -197,7 +228,9 @@
 		}),
 	);
 	const template = $derived(
-		list ? `${widths.side}px ${widths.list}px minmax(0, 1fr)` : `${widths.side}px minmax(0, 1fr)`,
+		(list
+			? `${widths.side}px ${widths.list}px minmax(0, 1fr)`
+			: `${widths.side}px minmax(0, 1fr)`) + (asideW ? ` ${asideW}px` : ''),
 	);
 	const resizable = $derived(columns && !narrow);
 </script>
@@ -237,10 +270,12 @@
 		class="cf columns {own}"
 		class:folded
 		class:narrow
+		class:has-aside={!!asideW}
 		bind:clientWidth={frameWidth}
 		style:grid-template-columns={template}
 		style:--cf-side-w="{widths.side}px"
 		style:--cf-list-w="{widths.list}px"
+		style:--cf-aside-w="{asideW}px"
 	>
 		{@render sideColumn()}
 		{#if bar || notices}
@@ -251,6 +286,20 @@
 		{/if}
 		{#if list}<div class="col cf-list {listClass}">{@render list()}</div>{/if}
 		<div class="col cf-content {contentClass}">{@render children()}</div>
+		{#if aside && asideW}<div class="col cf-aside">{@render aside()}</div>{/if}
+		{#if aside && asideW && !narrow}
+			<ColumnResize
+				bind:width={asideStored}
+				min={asideWidth.min}
+				max={asideMax}
+				fallback={asideWidth.fallback}
+				key={asideKey}
+				label={asideResizeLabel ?? t('ui.columns.aside')}
+				hint={resizeHint ?? t('ui.columns.hint')}
+				left="calc(100% - var(--cf-aside-w))"
+				invert
+			/>
+		{/if}
 		{#if resizable}
 			{#if !folded}
 				<ColumnResize
@@ -342,6 +391,19 @@
 	}
 	.columns > .cf-list + .cf-content {
 		border-left: 1px solid var(--border);
+	}
+	.columns.has-aside > .cf-top {
+		grid-column: 2 / -2;
+	}
+	.columns > .cf-aside {
+		position: relative;
+		grid-column: -2 / -1;
+		grid-row: 1 / -1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border-left: 1px solid var(--border);
+		background: var(--surface);
 	}
 	.cf-bar {
 		display: flex;

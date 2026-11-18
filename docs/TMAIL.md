@@ -13,7 +13,7 @@ Eigenes E-Mail-Programm in TitanOS (PLAN §81, Inhaber 13.11. „Eigenes T-Mail�
 - **Signaturen** je Postfach (mehrere, eine als Vorgabe).
 - **Regeln/Filter**, die auf dem NAS laufen (z. B. „Absender enthält X → in Ordner Y“).
 - **Jedes Postfach privat:** nur das Konto, das es angelegt hat, sieht es. Kein Teilen.
-- **Der KI-Agent bekommt keinen Zugriff** (meine Festlegung, dem Inhaber gesagt): kein Werkzeug, nicht im MCP-Katalog, nicht in `publicRoutes`. Ein Test hält das fest.
+- ~~Der KI-Agent bekommt keinen Zugriff~~ – **ersetzt am 18.11.2026 (Inhaber, Q27):** Der eingebaute KI-Agent liest, entwirft, sendet und verschiebt Mails mit eigenen Werkzeugen (`api/agent_mail.go`, direkt über `tmail.Manager`, nie über die Routen von Mail), nur mit der Freigabe von Mail für das Konto, abschaltbar unter Einstellungen › KI-Agent › Rechte („Mails lesen“) und je Konto in der KI-Agent-App; Senden fragt immer, sobald der Chat eine Mail (oder anderen fremden Inhalt) gelesen hat; jede gesendete Mail steht „per KI-Agent“ im Aktivitätsprotokoll; Lesen lässt die Mail ungelesen (`ReadQuiet`), kein Anhang geht hinaus. Weiter gesperrt: MCP, API-Tokens (`publicRoutes`, Katalog) und die gelernten Adressen (`TestMailIsNoToolAndNoPublicRoute`, angepasst). Einzelheiten `docs/AGENT.md` „1.13“.
 - Das Postfach des Papierkrams (`imapmini`, KI-Agent) bleibt davon getrennt.
 
 ## Rechte

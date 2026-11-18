@@ -113,6 +113,11 @@ type Entry struct {
 	Note string `json:"note,omitempty"`
 	// Stats of the round that wrote an assistant entry.
 	Stats *Stats `json:"stats,omitempty"`
+	// Draft of a tool step in the mode "Nur Vorschläge" (1.13).
+	Draft *Draft `json:"draft,omitempty"`
+	// Context of a message of the person: what was open in the program
+	// the panel was opened in (1.13), a reference only, never content.
+	Context *ChatContext `json:"context,omitempty"`
 }
 
 // Pending is a step that waits for the person: the call as it was planned,

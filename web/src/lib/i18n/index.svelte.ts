@@ -34,6 +34,7 @@ import type runsDe from './features/runs.de.json';
 import type uiDe from './features/ui.de.json';
 // 1.05: T-Mail.
 import type mailDe from './features/mail.de.json';
+import type agentpimDe from './features/agentpim.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -55,7 +56,8 @@ type Messages = typeof deBase &
 	typeof phoneDe &
 	typeof runsDe &
 	typeof uiDe &
-	typeof mailDe;
+	typeof mailDe &
+	typeof agentpimDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -82,6 +84,7 @@ const FILES = {
 			import('./features/runs.de.json'),
 			import('./features/ui.de.json'),
 			import('./features/mail.de.json'),
+			import('./features/agentpim.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -106,6 +109,7 @@ const FILES = {
 			import('./features/runs.en.json'),
 			import('./features/ui.en.json'),
 			import('./features/mail.en.json'),
+			import('./features/agentpim.en.json'),
 		]),
 };
 

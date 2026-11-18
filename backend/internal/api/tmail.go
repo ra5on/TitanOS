@@ -2,9 +2,11 @@ package api
 
 // T-Mail (docs/TMAIL.md): the mail program of every account that has the
 // app grant. Every route is for the web session only (browserOnly), never
-// for API tokens, MCP, the KI-Agent or requests titand makes in the name
-// of an account, and stays on this node (clusterLocal): no route is in
-// publicRoutes or the tool catalog (TestMailIsNoToolAndNoPublicRoute).
+// for API tokens, MCP or requests titand makes in the name of an account,
+// and stays on this node (clusterLocal): no route is in publicRoutes or
+// the tool catalog (TestMailIsNoToolAndNoPublicRoute). Since 1.13 the
+// KI-Agent has mail tools of its own (agent_mail.go, owner 18 Nov 2026):
+// they call tmail.Manager directly, never these routes.
 // Mailboxes are the account's own: another account's ID is not found.
 
 import (

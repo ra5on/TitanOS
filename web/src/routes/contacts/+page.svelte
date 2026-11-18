@@ -93,6 +93,7 @@
 	import ImportDialog from '#lib/pim/con/ImportDialog.svelte';
 	import MergeView from '#lib/pim/con/MergeView.svelte';
 	import SuggestionRow from '#lib/pim/con/SuggestionRow.svelte';
+	import { contactDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
 	import { shellOfError, type ShellState } from '#lib/pim/shell.ts';
 
 	// ---- Columns or levels (like Mail) ----
@@ -163,6 +164,16 @@
 		}
 	}
 	onMount(() => void start());
+	// 1.13: a draft of the KI-Agent (?agentDraft=, "Öffnen und bearbeiten"):
+	// the form opens with it filled in, saved only by the person.
+	let agentDraft: AgentDraft | null = null;
+	onMount(async () => {
+		const d = await loadAgentDraft(page.url.searchParams.get('agentDraft'));
+		if (d?.app !== 'contacts') return;
+		agentDraft = d;
+		const id = typeof d.fields.id === 'string' ? d.fields.id : '';
+		go(id ? { ...listPlace, id, edit: true } : { ...listPlace, isNew: true }, false);
+	});
 	// The NAS zone (GET /calendar/access) only when a birthday of this week is worded.
 	let zoneAsked = false;
 	$effect(() => {
@@ -453,6 +464,10 @@
 			conflict = false;
 			if (key === 'new') {
 				form = blankForm();
+				if (agentDraft && !agentDraft.fields.id) {
+					form = contactDraftForm(form, agentDraft.fields);
+					agentDraft = null;
+				}
 				before = null;
 				// A new contact in an open group joins it.
 				member = place.g ? [place.g] : [];
@@ -460,6 +475,10 @@
 			} else if (contact) {
 				form = formOf(contact);
 				before = formOf(contact);
+				if (agentDraft?.fields.id === contact.id) {
+					form = contactDraftForm(form, agentDraft.fields);
+					agentDraft = null;
+				}
 				member = groupsOf(groups, contact.id).map((g) => g.id);
 				memberBefore = [...member];
 			}

@@ -104,6 +104,13 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 			const app = ownPath(href) && taskPage(href) ? appForPath(href.split('?')[0]) : undefined;
 			if (app && findProgram('app:' + app.id))
 				void openProgram('app:' + app.id, { href, fresh: true });
+		} else if (msg.type === 'titanos-open-app') {
+			// 1.13: the agent's panel opens a page of a program – only a page of
+			// this UI, of a program the account has; a task page gets its own window.
+			const href = typeof msg.href === 'string' ? msg.href : '';
+			const app = ownPath(href) ? appForPath(href.split('?')[0]) : undefined;
+			if (app && findProgram('app:' + app.id))
+				void openProgram('app:' + app.id, { href, fresh: taskPage(href) });
 		} else if (msg.type === 'titanos-close') {
 			// Only a task window closes itself this way, never a program's own window.
 			const win = wm.windows.find(
