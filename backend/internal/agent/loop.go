@@ -262,6 +262,11 @@ func buildMessages(system string, chat *Chat, resultLimit int, paged func(string
 			// A decision of the person is part of the conversation.
 			switch e.Note {
 			case "declined":
+				if e.Draft != nil {
+					// 1.13: taken into the program's editor instead.
+					msgs = append(msgs, Message{Role: "tool", ToolName: e.Tool, Content: e.Content})
+					break
+				}
 				msgs = append(msgs, Message{Role: "tool", ToolName: e.Tool, Content: "The person declined this step. Do not try it another way; ask what they want instead. / Die Person hat abgelehnt."})
 			case "stopped":
 				msgs = append(msgs, Message{Role: "user", Content: "[Stopped by the person / von der Person angehalten]"})
@@ -670,6 +675,18 @@ func (c *Chat) TakeSkipped() []Entry {
 // Decide answers a pending step: approve runs exactly what was planned,
 // decline tells the model. Then the run goes on.
 func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool) error {
+	return r.decide(ctx, chat, id, approve, "", nil)
+}
+
+// DeclineToEdit answers a waiting step with "no" because the person takes
+// it into the program's editor ("Öffnen und bearbeiten", 1.13): the note
+// of the "no" (with the id noteID) carries the draft, and the model reads
+// that the person finishes it themselves.
+func (r *Runner) DeclineToEdit(ctx context.Context, chat *Chat, id, noteID string, d *Draft) error {
+	return r.decide(ctx, chat, id, false, noteID, d)
+}
+
+func (r *Runner) decide(ctx context.Context, chat *Chat, id string, approve bool, noteID string, d *Draft) error {
 	p := chat.Pending
 	if p == nil || p.ID != id {
 		return ErrNotFound
@@ -679,10 +696,14 @@ func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool
 	if approve {
 		note = "approved"
 	}
+	content := ""
+	if d != nil {
+		content = "The person opened this step in the program to edit and finish it there themselves; it did not run. Do not repeat it."
+	}
 	// The step stops waiting only once the answer is saved: a failed save
 	// leaves the chat as it was, still waiting with its step.
 	chat.Pending = nil
-	if err := r.add(chat, Entry{Role: "note", Note: note, Tool: p.Tool, Summary: p.Summary}); err != nil {
+	if err := r.add(chat, Entry{ID: noteID, Role: "note", Note: note, Tool: p.Tool, Summary: p.Summary, Draft: d, Content: content}); err != nil {
 		chat.Entries = append(chat.Entries[:len(chat.Entries)-1], skipped...)
 		chat.Pending = p
 		return err

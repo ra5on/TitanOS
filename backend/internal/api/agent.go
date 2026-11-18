@@ -380,9 +380,15 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID      string `json:"id"`
 		Approve bool   `json:"approve"`
+		// Edit (1.13, "Öffnen und bearbeiten"): no, the person finishes the
+		// step in the program's editor; the answer names the draft.
+		Edit bool `json:"edit,omitempty"`
 	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.Edit {
+		req.Approve = false
 	}
 	if _, inProcess := r.Context().Value(inProcessIdentity{}).(string); inProcess {
 		writeError(w, http.StatusForbidden, "web_session_required", "only the person can approve")
@@ -413,6 +419,24 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 	if chat.Pending == nil || chat.Pending.ID != req.ID {
 		s.agentRelease(run)
 		writeError(w, http.StatusConflict, "agent_nothing_pending", "this step no longer waits")
+		return
+	}
+	if req.Edit {
+		// The draft is made now, before the step stops waiting; nothing runs.
+		d, err := s.agentPendingDraft(r.Context(), user, chat)
+		if err != nil {
+			s.agentRelease(run)
+			writeError(w, http.StatusConflict, "no_draft", err.Error())
+			return
+		}
+		note := agent.NewID()
+		if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {
+			return rn.DeclineToEdit(ctx, chat, req.ID, note, d)
+		}); err != nil {
+			agentStartError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "entry": note, "draft": d})
 		return
 	}
 	if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {

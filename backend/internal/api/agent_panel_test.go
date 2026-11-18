@@ -209,3 +209,41 @@ func TestAgentTasksFreeDuplicates(t *testing.T) {
 	}
 	mustHave(t, "event unchanged", e.raw("privat", "x.ics"), "SUMMARY:Termin")
 }
+
+// "Öffnen und bearbeiten" on a waiting step: no, with the draft kept in
+// the note of the "no"; the program fetches it from there; nothing ran.
+func TestAgentDecideToEdit(t *testing.T) {
+	e := newCalEnv(t)
+	withAgentVolume(t, e.ts)
+	fake := &agentOllama{}
+	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b",
+		"policy": agent.Policy{Preset: agent.PresetStandard, DataRights: map[string]agent.DataRight{agent.AreaCalendar: {Read: agent.ModeAllow, Write: agent.ModeAsk}}}}
+	if res, body := e.ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+	e.ts.server.shareSyncs.Wait()
+	now := time.Now()
+	chat := &agent.Chat{ID: agent.NewID(), Title: "x", Created: now, Updated: now, State: agent.StateWaiting, Origin: "panel",
+		Entries: []agent.Entry{{ID: "u1", Role: "user", Content: "Zahnarzt morgen"}},
+		Pending: &agent.Pending{ID: "p1", Tool: "calendar_create", Args: json.RawMessage(`{"title":"Zahnarzt","start":"` + pimTomorrow().Format("2006-01-02T15:04") + `"}`), At: now}}
+	if err := e.ts.server.agentStore().SaveChat("alex", chat); err != nil {
+		t.Fatal(err)
+	}
+	var ans struct {
+		Entry string
+		Draft agent.Draft
+	}
+	e.do("POST", "/api/v1/agent/chats/"+chat.ID+"/decide", map[string]any{"id": "p1", "approve": true, "edit": true}, http.StatusAccepted, &ans)
+	if ans.Entry == "" || ans.Draft.App != "calendar" || ans.Draft.Fields["title"] != "Zahnarzt" {
+		t.Fatalf("answer %+v", ans)
+	}
+	done := waitChat(t, e.ts, e.client, chat.ID)
+	var got agent.Draft
+	e.do("GET", "/api/v1/agent/chats/"+chat.ID+"/drafts/"+ans.Entry, nil, 200, &got)
+	if got.Fields["title"] != "Zahnarzt" || done.Pending != nil {
+		t.Fatalf("draft %+v pending %+v", got, done.Pending)
+	}
+	if objs, _ := e.pim.Objects("calendar", "alex", "privat"); len(objs) != 0 {
+		t.Fatal("the step ran although the person took it into the editor")
+	}
+}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
 
 // agentActionsFile is the account's own action rights.
@@ -182,24 +183,34 @@ func (s *Server) handleAgentDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p := chat.Pending; p != nil && p.ID == entry {
-		box := s.newAgentToolbox(user, s.agentSettings())
-		t, ok := box.tools[p.Tool]
-		if !ok || t.draft == nil {
-			writeError(w, http.StatusNotFound, "no_draft", "this step has no draft")
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		out, err := t.draft(ctx, chat, p.Args)
-		if err != nil || out.Draft == nil {
-			if err == nil {
-				err = errors.New("no draft")
-			}
+		d, err := s.agentPendingDraft(r.Context(), user, chat)
+		if err != nil {
 			writeError(w, http.StatusConflict, "no_draft", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, out.Draft)
+		writeJSON(w, http.StatusOK, d)
 		return
 	}
 	writeError(w, http.StatusNotFound, "no_draft", "no such draft in this chat")
+}
+
+// agentPendingDraft is the draft of the step a chat waits with, made by
+// the tool's draft (nothing is written).
+func (s *Server) agentPendingDraft(ctx context.Context, user auth.User, chat *agent.Chat) (*agent.Draft, error) {
+	p := chat.Pending
+	if p == nil {
+		return nil, errors.New("no step waits")
+	}
+	box := s.newAgentToolbox(user, s.agentSettings())
+	t, ok := box.tools[p.Tool]
+	if !ok || t.draft == nil {
+		return nil, errors.New("this step has no draft")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := t.draft(ctx, chat, p.Args)
+	if err == nil && out.Draft == nil {
+		err = errors.New("no draft")
+	}
+	return out.Draft, err
 }
