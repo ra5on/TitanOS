@@ -29,7 +29,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 3 |
 | cluster | `cluster.go` | `clusterArea` | 1 |
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |
-| contacts | `contacts.go`, `contacts_photo.go`, `contacts_suggest.go`, `contacts_vcf.go` | – | 1 |
+| contacts | `contacts.go`, `contacts_groups.go`, `contacts_merge.go`, `contacts_photo.go`, `contacts_suggest.go`, `contacts_vcf.go` | – | 2 |
 | craft | `craft_replace.go` | – | 1 |
 | dashboard | `dashboard_background.go` | – | 1 |
 | devices | `devices.go`, `devices_profile.go` | `pimArea`, `profileArea` | 3 |
@@ -62,8 +62,9 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | nvr | `nvr.go`, `nvr_events.go`, `nvr_exports.go`, `nvr_faces.go`, `nvr_live.go`, `nvr_ptz.go`, `nvr_recordings.go` | `nvrArea` | 12 |
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
+| order | `order_preferences.go` | – | 1 |
 | passkeys | `passkeys.go` | – | 1 |
-| pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 3 |
+| pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 4 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go` | `powerButtonArea` | 0 |
 | preferences | `preferences.go` | `prefsArea` | 0 |

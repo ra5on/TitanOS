@@ -2,7 +2,7 @@
 // birthdays of this week, counts – in the language of the UI.
 import { t, type MessageKey } from '../i18n/index.svelte.ts';
 import { dateText, shortDate, weekdayLong } from './calendar-text.ts';
-import { parseBirthday, soonWhen, type Soon } from './contacts.ts';
+import { parseBirthday, soonWhen, type DuplicateSet, type Soon } from './contacts.ts';
 
 /** "Mobil", "Privat", "Arbeit", "Sonstige" – or the card's own label ("Werkstatt"). */
 export function typeLabel(type: string, label?: string): string {
@@ -61,4 +61,11 @@ export function foundText(contacts: number, suggestions: number, q: string): str
 /** "14 gesendete Mails". */
 export function sentText(n: number): string {
 	return n === 1 ? t('contacts.sug.sentOne') : t('contacts.sug.sent', { n });
+}
+
+/** Why a set of contacts may be one person: "gleiche E-Mail-Adresse anna@… · gleicher Name". */
+export function dupText(s: Pick<DuplicateSet, 'matches'>): string {
+	return s.matches
+		.map((m) => t(`contacts.dup.by.${m.kind}` as MessageKey, { value: m.value }))
+		.join(' · ');
 }
