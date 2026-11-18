@@ -4,6 +4,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import MessageView from '#lib/tmail/MessageView.svelte';
+import { FIT_STYLE, fitMailHtml } from '#lib/tmail/html.ts';
 import { mail } from '#lib/tmail/store.svelte.ts';
 import { i18n } from '#lib/i18n/index.svelte.ts';
 import { reply } from './fetch.ts';
@@ -89,7 +90,10 @@ test("titand's document goes into the frame unchanged, without scripts or same o
 	await screen.findByRole('heading', { name: 'Ihr Konto' });
 	const frame = container.querySelector('iframe')!;
 	expect(frame.getAttribute('sandbox')).toBe('allow-popups allow-popups-to-escape-sandbox');
-	expect(frame.getAttribute('srcdoc')).toBe(doc(false));
+	expect(frame.getAttribute('srcdoc')).toBe(fitMailHtml(doc(false)));
+	// 1.13: the only addition is the fitting style before </head>.
+	expect(fitMailHtml(doc(false)).replace(FIT_STYLE, '')).toBe(doc(false));
+	expect(FIT_STYLE).not.toMatch(/url\(|@import|script/i);
 });
 
 test('external pictures are blocked until "Bilder laden"', async () => {
@@ -100,7 +104,7 @@ test('external pictures are blocked until "Bilder laden"', async () => {
 	await fireEvent.click(screen.getByRole('button', { name: 'Bilder laden' }));
 	await waitFor(() => expect(calls.at(-1)?.url.searchParams.get('images')).toBe('1'));
 	await waitFor(() =>
-		expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toBe(doc(true)),
+		expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toBe(fitMailHtml(doc(true))),
 	);
 	expect(screen.queryByText(/Externe Bilder blockiert/)).toBeNull();
 });

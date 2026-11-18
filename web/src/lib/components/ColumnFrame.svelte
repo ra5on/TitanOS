@@ -11,7 +11,9 @@
 	// side bar is folded (a tap unfolds it until the window is wide again)
 	// and nothing is dragged. With `columns` false the program shows one
 	// level at a time (its phone and narrow view) and the frame only keeps
-	// the parts' classes.
+	// the parts' classes; compact (compact.svelte.ts: the phone or under
+	// 620 px) the levels reach the screen's edges and the program puts its
+	// actions into a BottomBar.
 	import { readWidth } from './ColumnResize.svelte';
 
 	export type FrameLevel = 'side' | 'list' | 'content';
@@ -64,6 +66,7 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import ColumnResize from './ColumnResize.svelte';
+	import { compactView } from './compact.svelte.ts';
 	import Icon from './Icon.svelte';
 	import { sortStatus } from './SortGrip.svelte';
 	import { t } from '../i18n/index.svelte.ts';
@@ -263,7 +266,8 @@
 		{/if}
 	</div>
 {:else}
-	<div class="cf levels {own}" data-level={level}>
+	<!-- Compact (the phone, under 620 px): edge to edge, the program draws no cards. -->
+	<div class="cf levels {own}" class:compact={compactView()} data-level={level}>
 		{#if notices}{@render notices()}{/if}
 		{#if level === 'side'}
 			{@render sideColumn()}
@@ -337,6 +341,9 @@
 	}
 	.levels > .col[hidden] {
 		display: none;
+	}
+	.cf.levels.compact {
+		margin-inline: calc(-1 * var(--page-pad));
 	}
 	/* The side bar in the look of the window's side bar (WindowSide, PLAN 71). */
 	.columns > .cf-side {
