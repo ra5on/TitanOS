@@ -2,9 +2,11 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ra5on/TitanOS/backend/internal/pim/calweb"
 	"github.com/ra5on/TitanOS/backend/internal/pim/cardweb"
@@ -77,10 +79,58 @@ func readGroup(store *pimstore.Store, user, book, name string, uids bookUIDs) (g
 	return v, obj, nil
 }
 
+// groupCache keeps the groups of a book under its ctag and volume, so
+// the side bar (GET /contacts/overview, on every live event) reads the
+// group cards from the disk only after a change – a sleeping disk is not
+// woken for an unchanged book. In RAM only, a few books.
+var groupCache = struct {
+	sync.Mutex
+	m     map[string]groupsAt
+	order []string
+}{m: map[string]groupsAt{}}
+
+type groupsAt struct {
+	tag    string
+	groups []groupView
+}
+
+const maxCachedGroups = 32
+
 // contactGroups lists the groups of a book, sorted by name (folded). A
 // group card that cannot be read is left out (it stays on the disk).
 // Shared with the later tools of the agent.
 func contactGroups(store *pimstore.Store, user, book string) ([]groupView, error) {
+	col, err := store.GetCollection(pimstore.Contacts, user, book)
+	if err != nil {
+		return nil, err
+	}
+	key := fmt.Sprintf("%p\x00%s\x00%s", store, user, book)
+	tag := volumeOf(store) + "\x00" + col.CTag
+	groupCache.Lock()
+	hit, ok := groupCache.m[key]
+	groupCache.Unlock()
+	if ok && hit.tag == tag {
+		return slices.Clone(hit.groups), nil
+	}
+	groups, err := readGroups(store, user, book)
+	if err != nil {
+		return nil, err
+	}
+	groupCache.Lock()
+	if _, had := groupCache.m[key]; !had {
+		groupCache.order = append(groupCache.order, key)
+		if len(groupCache.order) > maxCachedGroups {
+			delete(groupCache.m, groupCache.order[0])
+			groupCache.order = groupCache.order[1:]
+		}
+	}
+	groupCache.m[key] = groupsAt{tag: tag, groups: groups}
+	groupCache.Unlock()
+	return slices.Clone(groups), nil
+}
+
+// readGroups reads the group cards of a book (contactGroups).
+func readGroups(store *pimstore.Store, user, book string) ([]groupView, error) {
 	objects, err := store.Objects(pimstore.Contacts, user, book)
 	if err != nil {
 		return nil, err

@@ -360,8 +360,11 @@
 			dupError = failed(err);
 		}
 	}
+	// Read when shown – or at once when sets are hidden on this device, so
+	// the side bar's count leaves them out (and the entry goes with the last).
 	$effect(() => {
-		if (shown.kind === 'ready' && view === 'duplicates' && dups === null)
+		if (shown.kind !== 'ready' || dups !== null) return;
+		if (view === 'duplicates' || (hidden.length && (overview?.duplicates ?? 0) > 0))
 			untrack(() => void loadDups());
 	});
 	// Wide: the first set opens by itself.

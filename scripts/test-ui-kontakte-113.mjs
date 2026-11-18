@@ -380,7 +380,7 @@ try {
     await ctx.close();
   }
 
-  // ---- Suggestions only when shown ----
+  // ---- Suggestions only when shown; one taken becomes a contact without a list ----
   {
     const { page, ctx, state } = await open();
     await page.goto(base + "/contacts");
@@ -388,6 +388,28 @@ try {
     await page.locator("[data-side-suggestions]").click();
     await page.locator("[data-suggestions]").getByText("Sparkasse Beispiel").waitFor();
     assert.equal(sent(state, "GET", /^\/contacts\/suggestions$/).length, 1);
+    const lists = sent(state, "GET", /^\/contacts$/).length;
+    await page.locator("[data-suggestions]").getByRole("button", { name: "Als Kontakt übernehmen" }).first().click();
+    await page.locator("[data-contact-detail]").waitFor();
+    assert.equal(sent(state, "POST", /^\/contacts\/from-suggestion$/).length, 1);
+    assert.equal(sent(state, "GET", /^\/contacts$/).length, lists, "no list after taking it");
+    assert.match(await page.locator("[data-contact-detail]").innerText(), /Sparkasse Beispiel|service@bank\.example/);
+    // "Termin" opens Kalender's form with the name.
+    await page.getByRole("button", { name: "Termin" }).click();
+    await until(() => new URL(page.url()).pathname === "/calendar/event", "event form");
+    assert.match(new URL(page.url()).searchParams.get("title") ?? "", /Sparkasse/);
+    await ctx.close();
+  }
+  {
+    // A set hidden on this device stays hidden after a reload, the entry goes.
+    const { page, ctx } = await open();
+    await page.goto(base + "/contacts?view=duplicates");
+    await page.locator("[data-merge-hide]").click();
+    await until(async () => !(await page.locator("[data-side-duplicates]").count()), "hidden");
+    await page.goto(base + "/contacts");
+    await ready(page);
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator("[data-side-duplicates]").count(), 0, "still hidden after a reload");
     await ctx.close();
   }
 
