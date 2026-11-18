@@ -126,7 +126,12 @@ func newAlarm(minutes int) *ical.Component {
 	a := ical.NewComponent(ical.CompAlarm)
 	a.Props.SetText(ical.PropAction, "DISPLAY")
 	trig := ical.NewProp(ical.PropTrigger)
-	trig.Value = tz.Duration{Negative: minutes > 0, Exact: time.Duration(minutes) * time.Minute}.String()
+	// Minutes before the start; negative: after it (1.13, "am Tag um 9:00").
+	after := minutes < 0
+	if after {
+		minutes = -minutes
+	}
+	trig.Value = tz.Duration{Negative: !after && minutes > 0, Exact: time.Duration(minutes) * time.Minute}.String()
 	a.Props.Set(trig)
 	a.Props.SetText(ical.PropDescription, "Reminder")
 	a.Props.SetText(ical.PropUID, NewUID())

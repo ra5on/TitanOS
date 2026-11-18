@@ -83,7 +83,8 @@ func TestBuild(t *testing.T) {
 	for _, bad := range []Input{
 		{Start: ""}, {Start: "2026-11-17T19:00", End: "2026-11-17T18:00"}, {Start: "2026-11-17T19:00", Timezone: "Mars/Olympus"},
 		{Start: "2026-11-17", End: "2026-11-17", AllDay: true}, {Start: "2026-11-17T19:00", Title: str("a\x00b")},
-		{Start: "2026-11-17T19:00", Alarms: Opt[[]int]{Set: true, Value: &[]int{-5}}},
+		{Start: "2026-11-17T19:00", Alarms: Opt[[]int]{Set: true, Value: &[]int{-1440}}},
+		{Start: "2026-11-17T19:00", Alarms: Opt[[]int]{Set: true, Value: &[]int{MaxAlarmMinutes + 1}}},
 		{Start: "2026-11-17T19:00", Repeat: Opt[recur.Simple]{Set: true, Value: &recur.Simple{Freq: "hourly"}}},
 	} {
 		if _, err := Build(bad, "x", now, berlin); err == nil {
@@ -98,6 +99,39 @@ func TestBuild(t *testing.T) {
 	has(t, win, "DTSTART;TZID=Europe/Berlin:20261117T190000")
 	utc, _ := Build(Input{Start: "2026-11-17T19:00", Timezone: "UTC"}, "z", now, berlin)
 	has(t, utc, "DTSTART:20261117T190000Z")
+}
+
+// 1.13: an all-day event's "am Tag um 9:00" is an alarm after the start
+// (TRIGGER:PT9H, −540 minutes), "am Vortag um 9:00" one before it (900);
+// both are written as DISPLAY alarms, read back and changed without
+// touching an alarm TitanOS cannot show (a day after the start, absolute).
+func TestAllDayAlarmAfterStart(t *testing.T) {
+	data, err := Build(Input{Title: str("Geburtstag Oma"), Start: "2026-12-03", End: "2026-12-04", AllDay: true,
+		Alarms: Opt[[]int]{Set: true, Value: &[]int{900, -540}}}, "a-1", now, berlin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	has(t, data, "TRIGGER:PT9H", "TRIGGER:-PT15H", "ACTION:DISPLAY")
+	v, err := Open(data, "", berlin)
+	if err != nil || len(v.Alarms) != 2 || v.Alarms[0] != -540 || v.Alarms[1] != 900 {
+		t.Fatalf("alarms read back %v %v", v.Alarms, err)
+	}
+	foreign := ics("BEGIN:VEVENT", "UID:a-2", "DTSTAMP:20261118T100000Z", "DTSTART;VALUE=DATE:20261203", "DTEND;VALUE=DATE:20261204",
+		"SUMMARY:x", "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:P1DT2H", "END:VALARM",
+		"BEGIN:VALARM", "ACTION:AUDIO", "TRIGGER;VALUE=DATE-TIME:20261202T080000Z", "END:VALARM",
+		"BEGIN:VALARM", "ACTION:DISPLAY", "X-WR-ALARMUID:keep-me", "TRIGGER:PT9H", "END:VALARM", "END:VEVENT")
+	v, err = Open(foreign, "", berlin)
+	if err != nil || len(v.Alarms) != 1 || v.Alarms[0] != -540 {
+		t.Fatalf("foreign alarms %v %v", v.Alarms, err)
+	}
+	res, changed, err := Edit(foreign, "", recur.ScopeAll, Input{Alarms: Opt[[]int]{Set: true, Value: &[]int{-540, 2340}}}, EditOptions{Now: now, Local: berlin})
+	if err != nil || !changed {
+		t.Fatalf("edit: %v %v", changed, err)
+	}
+	has(t, res.Data, "TRIGGER:P1DT2H", "TRIGGER;VALUE=DATE-TIME:20261202T080000Z", "X-WR-ALARMUID:keep-me", "TRIGGER:-PT39H")
+	if strings.Count(string(res.Data), "TRIGGER:PT9H") != 1 {
+		t.Fatalf("the kept alarm once: %s", res.Data)
+	}
 }
 
 // The edit keeps what TitanOS does not show and touches only what
