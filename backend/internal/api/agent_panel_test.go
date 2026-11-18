@@ -162,11 +162,16 @@ func TestAgentTasksFreeDuplicates(t *testing.T) {
 	if !strings.Contains(first["start"].(string), "T08:00") || !strings.Contains(first["end"].(string), "T09:00") {
 		t.Errorf("first slot %v", first)
 	}
-	// Duplicates: the same address (any case) and the same number.
+	// Duplicates as Kontakte finds them: the same address (any case) and
+	// the same number join the three into one set.
 	_, dup := pimRun(t, all, "contacts_duplicates", `{}`)
 	groups, _ := dup["groups"].([]any)
-	if len(groups) != 2 {
+	if len(groups) != 1 {
 		t.Fatalf("duplicates %v", dup)
+	}
+	g := groups[0].(map[string]any)
+	if members, _ := g["contacts"].([]any); len(members) != 3 || len(g["matches"].([]any)) != 2 {
+		t.Fatalf("set %v", g)
 	}
 	// Reminders: create, list, tick off; delete always asks.
 	_, made := pimRun(t, all, "tasks_create", `{"title":"Milch kaufen","due":"`+day+`"}`)

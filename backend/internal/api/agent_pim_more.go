@@ -14,6 +14,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/pim/calweb"
+	"github.com/ra5on/TitanOS/backend/internal/pim/cardweb"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
@@ -36,7 +37,7 @@ func (b *agentToolbox) pimMoreTools() []*agentTool {
 				"calendars": map[string]any{"type": "array", "maxItems": 60, "items": str("Calendar id or name."), "description": "Only these calendars (default all)."},
 			}), own: b.calendarFree, prepare: b.pimCheckArgs},
 		{name: "contacts_duplicates", area: agent.AreaContacts, kind: agent.KindRead, untrusted: true,
-			description: "Contacts that look like the same person: the same e-mail address or phone number. Merging is done by the person in Kontakte.",
+			description: "Contacts that may be the same person (the same e-mail address, number or name), as Kontakte shows them under Dubletten. Merging is done by the person in Kontakte.",
 			params:      schema(nil), own: b.contactsDuplicates, prepare: b.pimCheckArgs},
 	}
 	if b.user.Name != agent.AssistProfile {
@@ -297,18 +298,13 @@ func containsFold(list []string, values ...string) bool {
 
 // ---------- contacts_duplicates ----------
 
-// duplicateFinder finds contacts that may be the same person. 1.13: a
-// simple version of the agent (the same e-mail address or phone number);
-// TO BE REPLACED after the merge of feat/v1.13-contacts by the candidates
-// of Kontakte (the duplicate function of wt-113k), behind this interface.
-type duplicateFinder interface {
-	Duplicates(account string) ([]duplicateGroup, error)
-}
-
+// duplicateGroup is a set of contacts that may be one person, as
+// Kontakte finds them (contactDuplicates, cardweb.Duplicates: the same
+// e-mail address, number or name; values shared by many are no sign).
 type duplicateGroup struct {
-	Reason   string            `json:"reason"` // email, phone
-	Value    string            `json:"value"`
-	Contacts []duplicateMember `json:"contacts"`
+	Book     string                   `json:"book"`
+	Contacts []duplicateMember        `json:"contacts"`
+	Matches  []cardweb.DuplicateMatch `json:"matches"`
 }
 
 type duplicateMember struct {
@@ -316,67 +312,14 @@ type duplicateMember struct {
 	Name string `json:"name"`
 }
 
-// simpleDuplicates reads the index of the store (RAM): no file is read.
-type simpleDuplicates struct{ store *pimstore.Store }
-
-func (d simpleDuplicates) Duplicates(account string) ([]duplicateGroup, error) {
-	list, err := d.store.Objects(pimstore.Contacts, account, pimstore.DefaultBook)
-	if err != nil {
-		return nil, err
-	}
-	type key struct{ reason, value string }
-	groups := map[key][]duplicateMember{}
-	var order []key
-	add := func(k key, m duplicateMember) {
-		for _, have := range groups[k] {
-			if have.ID == m.ID {
-				return
-			}
-		}
-		if _, ok := groups[k]; !ok {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], m)
-	}
-	for _, o := range list {
-		if o.Group {
-			continue
-		}
-		m := duplicateMember{ID: cardID(o.Name), Name: o.FN}
-		for _, e := range o.Emails {
-			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
-				add(key{"email", e}, m)
-			}
-		}
-		for _, p := range o.Phones {
-			// The last nine digits: +49 171 … and 0171 … are the same number.
-			digits := strings.TrimPrefix(p, "+")
-			if len(digits) >= 6 {
-				if len(digits) > 9 {
-					digits = digits[len(digits)-9:]
-				}
-				add(key{"phone", digits}, m)
-			}
-		}
-	}
-	out := []duplicateGroup{}
-	for _, k := range order {
-		if len(groups[k]) > 1 && len(out) < 50 {
-			out = append(out, duplicateGroup{Reason: k.reason, Value: k.value, Contacts: groups[k]})
-		}
-	}
-	return out, nil
-}
-
-func (b *agentToolbox) duplicates() duplicateFinder { return simpleDuplicates{b.s.opts.PIM} }
-
 func (b *agentToolbox) contactsDuplicates(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error) {
 	out := map[string]any{"groups": []duplicateGroup{}}
 	if !b.pimMounted(pimstore.Contacts) {
 		out["hidden"], out["why"] = true, pimWhyContactsVolume
 		return pimJSON(out)
 	}
-	groups, err := b.duplicates().Duplicates(b.pimAccount())
+	store, user := b.s.opts.PIM, b.pimAccount()
+	sets, err := contactDuplicates(store, user)
 	if pimGone(err) {
 		out["hidden"], out["why"] = true, pimWhyContactsVolume
 		return pimJSON(out)
@@ -384,6 +327,28 @@ func (b *agentToolbox) contactsDuplicates(context.Context, *agent.Chat, json.Raw
 	if err != nil {
 		return agent.Outcome{}, pimError(err, pimstore.Contacts)
 	}
+	names := map[string]map[string]string{}
+	groups := []duplicateGroup{}
+	for _, set := range sets {
+		if len(groups) >= 50 {
+			out["truncated"] = true
+			break
+		}
+		if names[set.Book] == nil {
+			names[set.Book] = map[string]string{}
+			if list, err := store.Objects(pimstore.Contacts, user, set.Book); err == nil {
+				for _, o := range list {
+					names[set.Book][o.Name] = o.FN
+				}
+			}
+		}
+		g := duplicateGroup{Book: set.Book, Matches: set.Matches}
+		for _, id := range set.IDs {
+			g.Contacts = append(g.Contacts, duplicateMember{ID: "card:" + set.Book + "/" + id, Name: names[set.Book][id]})
+		}
+		groups = append(groups, g)
+	}
 	out["groups"] = groups
+	out["note"] = "Merging is done by the person in Kontakte (Dubletten)."
 	return pimJSON(out)
 }

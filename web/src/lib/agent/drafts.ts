@@ -113,3 +113,75 @@ export function draftList(v: unknown): string[] {
 		? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '')
 		: [];
 }
+
+type DraftRow = { type: string; value: string };
+type DraftAddress = {
+	type: string;
+	street: string;
+	postcode: string;
+	city: string;
+	region: string;
+	country: string;
+};
+/** The parts of the form of Kontakte a draft fills (lib/pim/contacts.ts Form). */
+type ContactFormLike = {
+	first: string;
+	last: string;
+	org: string;
+	phones: DraftRow[];
+	emails: DraftRow[];
+	addresses: DraftAddress[];
+	birthdayDate: string;
+	birthdayNoYear: boolean;
+	notes: string;
+};
+
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+
+/**
+ * The form of Kontakte with a contact draft put in: the fields the draft
+ * names replace those of the form (a change names only what changes);
+ * lists replace the whole list, as contacts_update does.
+ */
+export function contactDraftForm<F extends ContactFormLike>(
+	form: F,
+	fields: Record<string, unknown>,
+): F {
+	const out = { ...form };
+	if ('first' in fields) out.first = str(fields.first);
+	if ('last' in fields) out.last = str(fields.last);
+	if (!('first' in fields) && !('last' in fields) && str(fields.name)) {
+		const parts = str(fields.name).trim().split(/\s+/);
+		out.last = parts.length > 1 ? (parts.pop() ?? '') : '';
+		out.first = parts.join(' ');
+	}
+	if ('org' in fields) out.org = str(fields.org);
+	if ('notes' in fields) out.notes = str(fields.notes);
+	const rows = (v: unknown, fallback: string): DraftRow[] =>
+		Array.isArray(v)
+			? v
+					.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+					.map((r) => ({ type: str(r.type) || fallback, value: str(r.value) }))
+					.filter((r) => r.value.trim() !== '')
+			: [];
+	if ('phones' in fields) out.phones = rows(fields.phones, 'mobile');
+	if ('emails' in fields) out.emails = rows(fields.emails, 'home');
+	if ('addresses' in fields && Array.isArray(fields.addresses))
+		out.addresses = fields.addresses
+			.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+			.map((r) => ({
+				type: str(r.type) || 'home',
+				street: str(r.street),
+				postcode: str(r.postcode),
+				city: str(r.city),
+				region: str(r.region),
+				country: str(r.country),
+			}));
+	if ('birthday' in fields) {
+		const b = str(fields.birthday);
+		const noYear = /^--\d{2}-\d{2}$/.test(b);
+		out.birthdayNoYear = noYear;
+		out.birthdayDate = noYear ? '2000' + b.slice(1) : /^\d{4}-\d{2}-\d{2}$/.test(b) ? b : '';
+	}
+	return out;
+}

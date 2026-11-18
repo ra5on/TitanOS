@@ -397,3 +397,36 @@ test('drafts of the agent open in their program', async () => {
 	assert.ok(DRAFT_TOOLS.has('mail_send') && !DRAFT_TOOLS.has('calendar_delete'));
 	assert.deepEqual(draftList(['a@b', 3, ' ', 'c@d']), ['a@b', 'c@d']);
 });
+
+test('a contact draft fills the form of Kontakte', async () => {
+	const { contactDraftForm } = await import('../src/lib/agent/drafts.ts');
+	const blank = {
+		first: '',
+		last: '',
+		org: 'Alt',
+		phones: [],
+		emails: [{ type: 'home', value: 'alt@example.com' }],
+		addresses: [],
+		birthdayDate: '',
+		birthdayNoYear: false,
+		notes: 'bleibt',
+	};
+	const f = contactDraftForm(blank, {
+		name: 'Bea Maria Muster',
+		emails: [{ type: 'work', value: 'bea@example.com' }, { value: ' ' }],
+		phones: [{ value: '+49 171 1' }],
+		addresses: [{ street: 'Weg 1', city: 'Köln' }],
+		birthday: '--11-20',
+	});
+	assert.equal(f.first, 'Bea Maria');
+	assert.equal(f.last, 'Muster');
+	assert.deepEqual(f.emails, [{ type: 'work', value: 'bea@example.com' }]);
+	assert.deepEqual(f.phones, [{ type: 'mobile', value: '+49 171 1' }]);
+	assert.equal(f.addresses[0].city, 'Köln');
+	assert.equal(f.birthdayDate, '2000-11-20');
+	assert.ok(f.birthdayNoYear);
+	// What the draft does not name stays.
+	assert.equal(f.org, 'Alt');
+	assert.equal(f.notes, 'bleibt');
+	assert.equal(blank.first, '', 'the form given is not changed');
+});
