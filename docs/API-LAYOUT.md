@@ -25,6 +25,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | backup | `backup_coverage.go` | – | 2 |
 | backups | `backups.go`, `backups_vmdisks.go` | `backupsArea` | 1 |
 | backuptarget | `backuptarget.go` | `backupTargetArea` | 0 |
+| calendar | `calendar.go`, `calendar_events.go`, `calendar_ics.go` | – | 2 |
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 3 |
 | cluster | `cluster.go` | `clusterArea` | 1 |
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |

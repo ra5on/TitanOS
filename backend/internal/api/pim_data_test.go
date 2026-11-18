@@ -68,7 +68,7 @@ func TestPIMDataRouteRights(t *testing.T) {
 	})
 	ts.setup()
 	routes := pimDataRoutes(ts)
-	if len(routes) != 2 {
+	if len(routes) != 14 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {
@@ -79,6 +79,9 @@ func TestPIMDataRouteRights(t *testing.T) {
 	owner, _ := ts.users.Get("alex")
 	token := ts.mcpToken("alex", "system:read", "system:write", "files:read", "files:write")
 	for _, rt := range routes {
+		if rt[0] != "GET" || strings.Contains(rt[1], "{") {
+			continue // TestCalendarRouteRights has them all
+		}
 		code, body := ts.server.internalAs(context.Background(), owner, rt[0], rt[1], nil)
 		if code != http.StatusForbidden || !strings.Contains(body, "browser_session_required") {
 			t.Errorf("%s %s in-process: %d %s", rt[0], rt[1], code, body)

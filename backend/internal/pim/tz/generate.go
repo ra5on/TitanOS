@@ -20,7 +20,9 @@ func VTimezone(tzid string, loc *time.Location, from, to int) *ical.Component {
 	}
 	c := ical.NewComponent(ical.CompTimezone)
 	c.Props.SetText(ical.PropTimezoneID, tzid)
-	c.Props.SetText("X-LIC-LOCATION", loc.String())
+	lic := ical.NewProp("X-LIC-LOCATION")
+	lic.Value = loc.String()
+	c.Props.Set(lic)
 	var all []change
 	for y := from; y <= to; y++ {
 		all = append(all, changesIn(loc, y)...)

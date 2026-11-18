@@ -193,7 +193,9 @@ func ensureZones(cal *ical.Calendar) bool {
 						year = y
 					}
 				}
-				zones = append(zones, tz.VTimezone(id, loc, year, year+10))
+				// From the year before: the offset before the first change
+				// of the event's year is described too.
+				zones = append(zones, tz.VTimezone(id, loc, year-1, year+10))
 			}
 		}
 		for _, ch := range c.Children {

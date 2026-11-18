@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -16,14 +17,40 @@ import (
 // agent, not through the cluster), never in publicRoutes.
 type pimDataArea struct {
 	store *pimstore.Store
+	// prefs holds the hidden calendars (preference kind "calendar").
+	prefs *preferences
+	// reserve takes RAM of TitanOS's budget for an import
+	// (system.MemoryPolicy.TryReserve); nil counts nothing.
+	reserve func(bytes int64) (release func(), ok bool)
+	// clock is the time of DTSTAMP and of "today"; nil = time.Now.
+	clock func() time.Time
 }
 
-func (s *Server) pimDataArea() pimDataArea { return pimDataArea{store: s.opts.PIM} }
+func (s *Server) pimDataArea() pimDataArea {
+	a := pimDataArea{store: s.opts.PIM, prefs: s.prefs}
+	if s.opts.MemoryPolicy != nil {
+		a.reserve = s.opts.MemoryPolicy.TryReserve
+	}
+	return a
+}
 
 func (a pimDataArea) register(mux *routeMux, g guards) {
 	web := func(h http.HandlerFunc) http.HandlerFunc { return g.user(g.clusterLocal(g.browserOnly(h))) }
 	mux.HandleFunc("GET /api/v1/calendar/access", web(a.handleCalendarAccess))
 	mux.HandleFunc("GET /api/v1/contacts/books", web(a.handleBooks))
+	// T-Kalender (calendar.go, calendar_events.go, calendar_ics.go).
+	mux.HandleFunc("GET /api/v1/calendar/calendars", web(a.handleCalendars))
+	mux.HandleFunc("POST /api/v1/calendar/calendars", web(a.handleCreateCalendar))
+	mux.HandleFunc("PUT /api/v1/calendar/calendars/{id}", web(a.handleUpdateCalendar))
+	mux.HandleFunc("DELETE /api/v1/calendar/calendars/{id}", web(a.handleDeleteCalendar))
+	mux.HandleFunc("POST /api/v1/calendar/calendars/{id}/import", web(a.handleImportCalendar))
+	mux.HandleFunc("GET /api/v1/calendar/calendars/{id}/export", web(a.handleExportCalendar))
+	mux.HandleFunc("GET /api/v1/calendar/events", web(a.handleEvents))
+	mux.HandleFunc("POST /api/v1/calendar/events", web(a.handleCreateEvent))
+	mux.HandleFunc("GET /api/v1/calendar/events/{cal}/{obj}", web(a.handleEvent))
+	mux.HandleFunc("PUT /api/v1/calendar/events/{cal}/{obj}", web(a.handleUpdateEvent))
+	mux.HandleFunc("DELETE /api/v1/calendar/events/{cal}/{obj}", web(a.handleDeleteEvent))
+	mux.HandleFunc("POST /api/v1/calendar/preview", web(a.handlePreview))
 }
 
 // handleCalendarAccess says whether the account has T-Kalender and whether

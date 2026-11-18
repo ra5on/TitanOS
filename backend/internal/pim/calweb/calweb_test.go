@@ -56,7 +56,7 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	has(t, data, "PRODID:"+ProdID, "BEGIN:VTIMEZONE", "TZID:Europe/Berlin", "UID:u-1", "DTSTAMP:20261118T100000Z",
+	has(t, data, "PRODID:"+ProdID, "BEGIN:VTIMEZONE", "TZID:Europe/Berlin", "X-LIC-LOCATION:Europe/Berlin", "UID:u-1", "DTSTAMP:20261118T100000Z",
 		"DTSTART;TZID=Europe/Berlin:20261117T190000", "DTEND;TZID=Europe/Berlin:20261117T203000",
 		"RRULE:FREQ=MONTHLY;COUNT=9;BYDAY=3TU", `SUMMARY:Elternabend <b>3b</b>\, Raum\; 12`, `DESCRIPTION:Zeile 1\nZeile 2`,
 		"TRIGGER:-PT1H", "TRIGGER:PT0S", "ACTION:DISPLAY")
