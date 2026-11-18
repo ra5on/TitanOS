@@ -189,6 +189,8 @@ export function eventHref(p: {
 	occurrence?: string;
 	date?: string;
 	time?: string;
+	/** A first title of a new event (the name of a contact). */
+	title?: string;
 	back?: string;
 }): string {
 	const q = new URLSearchParams();
@@ -217,8 +219,8 @@ export function closeEventWindow(back: string) {
 	void goto(back, { replace: true });
 }
 
-/** A `back` of the URL: only a place of T-Kalender. */
+/** A `back` of the URL: only a place of T-Kalender or Kontakte ("Termin" of a contact). */
 export function safeBack(raw: string | null): string {
 	const b = raw ?? '';
-	return /^\/calendar(\?|$)/.test(b) ? b : '/calendar';
+	return /^\/(calendar|contacts)(\?|$)/.test(b) ? b : '/calendar';
 }

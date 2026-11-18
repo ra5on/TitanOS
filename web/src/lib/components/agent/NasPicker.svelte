@@ -11,14 +11,25 @@
 	let {
 		onpick,
 		onclose,
+		max = 10,
+		title,
+		only,
 	}: {
 		/** The chosen files as root:path. */
 		onpick: (refs: string[]) => void;
 		onclose: () => void;
+		/** How many files may be chosen; with 1 a click replaces the choice (a contact's picture). */
+		max?: number;
+		/** The dialog's title (default: the chat's "Dateien des NAS"). */
+		title?: string;
+		/** Which files are shown (folders always), e.g. pictures only. */
+		only?: (name: string) => boolean;
 	} = $props();
 
 	type Row = FileEntry & { path: string };
-	const MAX = 10;
+	// svelte-ignore state_referenced_locally
+	const MAX = Math.max(1, max);
+	const shown = (e: FileEntry) => e.dir || !only || only(e.name);
 
 	let roots = $state<FileRoot[] | null>(null);
 	let root = $state<FileRoot | null>(null);
@@ -59,7 +70,7 @@
 				`/files/list?root=${encodeURIComponent(next.id)}&path=${encodeURIComponent(path)}`,
 			);
 			rows = list
-				.filter((e) => !e.name.startsWith('.'))
+				.filter((e) => !e.name.startsWith('.') && shown(e))
 				.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
 				.map((e) => ({ ...e, path: join(path, e.name) }));
 		} catch (e) {
@@ -82,7 +93,7 @@
 				path: dir,
 				query: query.trim(),
 			});
-			rows = result.entries.filter((e) => !e.dir).slice(0, 200);
+			rows = result.entries.filter((e) => !e.dir && shown(e)).slice(0, 200);
 			found = true;
 		} catch (e) {
 			error = apiErrorText(e);
@@ -94,12 +105,13 @@
 	function toggle(r: Row) {
 		const id = ref(r);
 		if (chosen.includes(id)) chosen = chosen.filter((x) => x !== id);
+		else if (MAX === 1) chosen = [id];
 		else if (chosen.length < MAX) chosen = [...chosen, id];
 	}
 	const crumbs = $derived(dir ? dir.split('/') : []);
 </script>
 
-<Dialog title={t('agent.nasTitle')} {onclose}>
+<Dialog title={title ?? t('agent.nasTitle')} {onclose}>
 	{#if root}
 		<form class="search" onsubmit={search}>
 			<Icon name="search" size={16} />
@@ -162,7 +174,7 @@
 							<input
 								type="checkbox"
 								checked={chosen.includes(ref(r))}
-								disabled={!chosen.includes(ref(r)) && chosen.length >= MAX}
+								disabled={MAX > 1 && !chosen.includes(ref(r)) && chosen.length >= MAX}
 								onchange={() => toggle(r)}
 							/>
 							<span class="ic"><Icon name="file" size={20} /></span>

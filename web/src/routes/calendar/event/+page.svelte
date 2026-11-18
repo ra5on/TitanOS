@@ -83,11 +83,13 @@
 	const editOcc = params.get('occurrence') ?? '';
 	const editing = !!(editCal && editId);
 	const back = safeBack(params.get('back'));
-	const today = wallOf(new Date(), viewZone()).date;
-	const startDay = (() => {
+	// Without ?date= today in the NAS zone (known once loadNasZone answered).
+	const startDayIn = (zone: string) => {
 		const d = params.get('date') ?? '';
-		return validDate(d) ? d : today;
-	})();
+		return validDate(d) ? d : wallOf(new Date(), zone).date;
+	};
+	// A first title, e.g. the name of a contact ("Termin" in Kontakte); text only.
+	const startTitle = (params.get('title') ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
 	const startClock = (() => {
 		const v = params.get('time') ?? '';
 		return /^\d{2}:\d{2}$/.test(v) ? v : '09:00';
@@ -110,10 +112,11 @@
 		const m = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + 60;
 		return m >= 1440 ? { day: 1, time: clock(m - 1440) } : { day: 0, time: clock(m) };
 	};
-	function blank(): Form {
+	function blank(zone = viewZone()): Form {
 		const end = plusHour(startClock);
+		const startDay = startDayIn(zone);
 		return {
-			title: '',
+			title: startTitle,
 			calendar: '',
 			allDay: false,
 			startDate: startDay,
@@ -179,7 +182,7 @@
 				const first =
 					calendars.find((c) => c.kind === 'own' && !c.readOnly && !c.hidden) ??
 					calendars.find((c) => c.kind === 'own' && !c.readOnly);
-				form = { ...blank(), calendar: first?.id ?? '' };
+				form = { ...blank(nasZone), calendar: first?.id ?? '' };
 			}
 			initial = JSON.stringify(form);
 			takeDuration();
