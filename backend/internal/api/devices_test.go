@@ -629,7 +629,7 @@ func TestDeviceAccountDeleteTakesCalendarAlong(t *testing.T) {
 	if err := ts.users.Delete("dina"); err != nil {
 		t.Fatal(err)
 	}
-	nextSecond() // another creation time (auth keeps whole seconds)
+	// In the same second: auth gives the new account the next one.
 	if _, err := ts.users.Create("dina", testPassword, auth.RoleUser); err != nil {
 		t.Fatal(err)
 	}
@@ -692,11 +692,9 @@ func TestDeviceAccountDeleteWithoutTheVolume(t *testing.T) {
 	if _, err := os.Stat(mark); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("pim.json after the deletion: %v", err)
 	}
-	// Made anew while the volume is still missing: 503, never an empty list.
-	// (A new account made in the same second as the deletion would have the
-	// same creation time – auth keeps whole seconds – and owner.json could
-	// not tell them apart; see BAU-API "Schritt 11/12".)
-	nextSecond()
+	// Made anew while the volume is still missing – in the same second as
+	// the deletion: auth gives it the next second, so owner.json tells the
+	// two apart. 503, never an empty list.
 	if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": "bea", "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
 		t.Fatalf("made anew: %d %s", res.StatusCode, body)
 	}
@@ -728,12 +726,4 @@ func TestDeviceAccountDeleteWithoutTheVolume(t *testing.T) {
 	if events, _, err := pim.Counts("bea"); err != nil || events != 1 {
 		t.Fatalf("counts after the first write: %d %v", events, err)
 	}
-}
-
-// nextSecond waits for the next whole second: auth.Users keeps the creation
-// time of an account in whole seconds, and the binding of a folder to its
-// account (owner.json) is that time.
-func nextSecond() {
-	now := time.Now()
-	time.Sleep(now.Truncate(time.Second).Add(time.Second).Sub(now) + 5*time.Millisecond)
 }

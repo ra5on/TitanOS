@@ -132,6 +132,15 @@ type Users struct {
 	loaded bool
 	// pendingTOTP holds secrets that were handed out but not confirmed yet.
 	pendingTOTP map[string]string
+	// gone remembers the creation time of accounts removed since the start
+	// (Delete, Forget), in RAM only. Created is kept in whole seconds, and
+	// data an account leaves where it cannot be removed at once (calendars
+	// on a missing volume, 1.11) is bound to its name and creation time: a
+	// new account of the same name made in the same second waits for the
+	// next one (never a creation time in the future: grants compare it with
+	// the time they were given), so it never matches the old one. After a
+	// restart more than a second has passed anyway.
+	gone map[string]time.Time
 
 	// Changed, if set before use, is told the name of every account
 	// written or removed here, in its own goroutine. The cluster passes the
@@ -269,6 +278,7 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 	if err := ValidateName(name); err != nil {
 		return User{}, err
 	}
+	u.waitPastGone(name)
 	if !validRole(role) {
 		return User{}, ErrInvalidRole
 	}
@@ -300,8 +310,13 @@ func (u *Users) create(name, password string, role Role, first bool) (User, erro
 		return User{}, ErrExists
 	}
 
+	created := time.Now().UTC().Truncate(time.Second)
+	if before, ok := u.gone[name]; ok && !created.After(before) {
+		// Removed again meanwhile, or the clock went back: never the old time.
+		created = before.Add(time.Second)
+	}
 	user := User{
-		Name: name, Role: role, PasswordHash: hash, Created: time.Now().UTC().Truncate(time.Second),
+		Name: name, Role: role, PasswordHash: hash, Created: created,
 		UID: nextUID(u.users), SMBHash: ntHash(password),
 	}
 	if err := u.store.WriteJSON(accountFile(name), user); err != nil {
@@ -482,9 +497,36 @@ func (u *Users) Delete(name string) error {
 	if err := u.store.RemoveAll("users/" + name); err != nil {
 		return err
 	}
+	u.rememberGoneLocked(user)
 	delete(u.users, name)
 	u.changed(name)
 	return nil
+}
+
+// waitPastGone waits, if an account of this name was removed in the
+// current second, until the next one begins (at most a second, and only
+// for a name made again at once).
+func (u *Users) waitPastGone(name string) {
+	u.mu.RLock()
+	before, ok := u.gone[name]
+	u.mu.RUnlock()
+	if !ok {
+		return
+	}
+	if wait := before.Add(time.Second).Sub(time.Now()); wait > 0 && wait <= time.Second {
+		time.Sleep(wait)
+	}
+}
+
+// rememberGoneLocked notes the creation time of a removed account (u.mu
+// held); see gone.
+func (u *Users) rememberGoneLocked(user User) {
+	if u.gone == nil {
+		u.gone = map[string]time.Time{}
+	}
+	if user.Created.After(u.gone[user.Name]) {
+		u.gone[user.Name] = user.Created
+	}
 }
 
 // SetDisabled locks or unlocks an account. by is the account doing it. The
