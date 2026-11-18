@@ -5,7 +5,7 @@
 // isolated data (test-ui-kontakte-fixtures.mjs), nothing reaches a NAS.
 // Prints requests per kind, times (ms) and the rows in the DOM as JSON;
 // MEASURE_OUT writes them to a file.
-// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5213 node scripts/measure-ui-kontakte.mjs
+// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5213 node scripts/test-ui-measure-kontakte.mjs
 import { writeFile } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
 import { calendarState, installCalendar } from "./test-ui-kalender-fixtures.mjs";

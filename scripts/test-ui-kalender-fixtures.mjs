@@ -549,7 +549,7 @@ export async function installCalendar(target, state = calendarState()) {
       }
     } else if (type.includes("multipart")) body = "(multipart)";
     s.requests.push([method, path + url.search, body]);
-    // 1.13: a NAS takes some time to answer (measure-ui-kalender.mjs).
+    // 1.13: a NAS takes some time to answer (test-ui-measure-kalender.mjs).
     if (s.delay && path !== "/calendar/stream")
       await new Promise((r) => setTimeout(r, s.delay));
     const json = (value, status = 200) =>

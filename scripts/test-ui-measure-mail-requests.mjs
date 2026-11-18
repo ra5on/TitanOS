@@ -7,7 +7,7 @@
 // and is refused from then on (no reconnect storm, no "resync" noise), so
 // the numbers depend on the page, not on the stream's timing.
 // Prints the requests per kind as JSON; MEASURE_OUT writes them to a file.
-// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5212 node scripts/measure-ui-mail-requests.mjs
+// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5212 node scripts/test-ui-measure-mail-requests.mjs
 import { writeFile } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
 import { installMail, mailState } from "./test-ui-mail-fixtures.mjs";

@@ -12,7 +12,7 @@
 // (Performance.getMetrics: layouts and style recalculations while the
 // week opens and while the window is resized). Prints JSON (requests per kind, time to
 // the grid as median of 5 openings); MEASURE_OUT writes it to a file.
-// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5211 node scripts/measure-ui-kalender.mjs
+// PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5211 node scripts/test-ui-measure-kalender.mjs
 import { writeFile } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
 import { calendarState, installCalendar } from "./test-ui-kalender-fixtures.mjs";

@@ -1,6 +1,6 @@
 # Leistung des Kalenders 1.13 (Oberfläche)
 
-Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/measure-ui-kalender.mjs` (Playwright, Chromium headless, isolierte Testdaten aus `scripts/test-ui-kalender-fixtures.mjs`, Uhr fest auf Dienstag, 17.11.2026, 12:29 Berlin), vorher auf dem Stand `def6eb37` (Basis `feat/v1.13` mit dem Backend der Leistungsarbeit), nachher auf `3032e172` und noch einmal auf `c1f49351` (Stand der Übergabe; Anfragen und Scrollposition gleich, Zeiten siehe Tabelle). Backend-Messungen (Store, ETag, `full=1`, Strom): `performance-113.md`.
+Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/test-ui-measure-kalender.mjs` (Playwright, Chromium headless, isolierte Testdaten aus `scripts/test-ui-kalender-fixtures.mjs`, Uhr fest auf Dienstag, 17.11.2026, 12:29 Berlin), vorher auf dem Stand `def6eb37` (Basis `feat/v1.13` mit dem Backend der Leistungsarbeit), nachher auf `3032e172` und noch einmal auf `c1f49351` (Stand der Übergabe; Anfragen und Scrollposition gleich, Zeiten siehe Tabelle). Backend-Messungen (Store, ETag, `full=1`, Strom): `performance-113.md`.
 
 ## Methode
 

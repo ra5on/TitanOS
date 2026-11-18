@@ -1,6 +1,6 @@
 // 1.13 (Baustand step 9, docs/KALENDER.md "1.13"): what the page of Kalender
 // reads, kept apart from its views. Measured before (scripts/
-// measure-ui-kalender.mjs): the page asked /calendar/access, then the
+// test-ui-measure-kalender.mjs): the page asked /calendar/access, then the
 // calendars, then the events one after the other, read every clipped event
 // again on its own (up to 40, each drawing the views anew), read
 // everything twice after hiding a calendar and again for every change of
