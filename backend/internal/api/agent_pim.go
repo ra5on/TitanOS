@@ -117,7 +117,7 @@ func (b *agentToolbox) pimTools() []*agentTool {
 			description: "The person's calendars in T-Kalender (id, name, color, number of events), and the birthdays from the contacts.",
 			params:      schema(nil), own: b.calendarList, prepare: b.pimCheckArgs},
 		{name: "calendar_search", area: cal, kind: agent.KindRead, untrusted: true,
-			description: "Events of the person's calendars between from and to (default today 00:00 to 14 days later, at most 400 days), optionally only those whose title, place or notes contain query. Use it for \"Was steht morgen an?\" and before changing or deleting an event (its id).",
+			description: "Events of the person's calendars between from and to (default today 00:00 to 14 days later, at most 400 days), optionally only those whose title, place or notes contain query. Use it for \"Was steht morgen an?\" and before changing or deleting an event (its id). truncated:true means not all were looked at (with query only the earliest 2000 of the span): search a shorter span before saying there is none.",
 			params: schema(map[string]any{
 				"from":      str("Start of the time span: 2026-11-20 or 2026-11-20T08:00 (zone of the NAS) or RFC 3339."),
 				"to":        str("End of the time span (exclusive), like from."),

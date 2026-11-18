@@ -81,7 +81,7 @@ Alle Web-Routen unter `/api/v1`, Bereich `pimDataArea` (`api/pim_data.go`) bzw. 
 | `PUT /calendar/events/{cal}/{obj}` | ändern mit `etag` (Pflicht), `scope` `this|following|all`, `occurrence`; anderer `calendar` = verschieben (nur ganze Reihe); alter Stand → `409 calendar_conflict` mit `current` |
 | `DELETE /calendar/events/{cal}/{obj}?scope=&occurrence=&etag=` | löschen (Umfang wie oben) |
 | `POST /calendar/preview` | die nächsten fünf Termine einer Regel und ihr Text (de/en), `total` wenn sie endet |
-| `POST /calendar/calendars/{id}/import?onDuplicate=skip|replace` | `.ics` bis 20 MB; je UID eine Datei mit den VTIMEZONEs, die sie nennt, doppelte über UID; eine Datei über 1 MiB oder mit einer Zone über 64 KiB scheitert als `too_large`, bevor sie entsteht; geschrieben in Stapeln von 2 MiB; Zusammenfassung `{added, updated, skipped, failed}` |
+| `POST /calendar/calendars/{id}/import?onDuplicate=skip|replace` | `.ics` bis 20 MB; je UID eine Datei mit den VTIMEZONEs, die sie nennt, doppelte über UID; eine Datei über 1 MiB oder mit einer Zone über 64 KiB scheitert als `too_large`, bevor sie entsteht; geschrieben in Stapeln von 2 MiB (scheitert ein späterer Stapel, etwa weil das Volume fehlt, sind die früheren geschrieben; ein neuer Import mit `skip` setzt fort); Zusammenfassung `{added, updated, skipped, failed}` |
 | `GET /calendar/calendars/{id}/export` | `.ics` als Anhang (`text/calendar`, `nosniff`, `CSP: sandbox`, `no-store`) |
 | `PUT /preferences/calendar` | ausgeblendete Kalender `{hidden:[…]}` (≤ 100 Ids); `GET /preferences` nennt sie |
 

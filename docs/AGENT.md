@@ -226,7 +226,7 @@ Entscheidungen des Inhabers vom 17.11.2026 (PLAN „T-Kalender & Kontakte“): d
   | Werkzeug | Art | Was |
   |---|---|---|
   | `calendar_list` | lesen, fremder Inhalt | Kalender mit Id, Name, Farbe, Zahl der Termine; „Geburtstage“ nur mit Lesen der Kontakte |
-  | `calendar_search` | lesen, fremder Inhalt | Termine im Fenster (ab Werk heute bis +14 Tage, ≤ 400 Tage), Suche über Titel, Ort und Notiz, Kalender nach Id oder Name, ≤ 100; liest alle Kalender (auch in der Oberfläche ausgeblendete), höchstens 400 Dateien je Aufruf (sonst `truncated`), Notiz ≤ 2000 Zeichen |
+  | `calendar_search` | lesen, fremder Inhalt | Termine im Fenster (ab Werk heute bis +14 Tage, ≤ 400 Tage), Suche über Titel, Ort und Notiz, Kalender nach Id oder Name, ≤ 100; liest alle Kalender (auch in der Oberfläche ausgeblendete), höchstens 400 Dateien je Aufruf, ohne Suchtext die frühesten `limit` + 1 Vorkommen, mit Suchtext die frühesten 2000 des Fensters (sonst jeweils `truncated`; die Beschreibung sagt dem Modell, dann ein kürzeres Fenster zu suchen, bevor es „keiner“ sagt), Notiz ≤ 2000 Zeichen |
   | `calendar_create` | eintragen | Termin mit Titel, Beginn, Ende oder Dauer (Minuten), ganztägig, Zone, Ort, Notiz, Wiederholung (täglich/wöchentlich/monatlich/jährlich mit Abstand, Tagen, Ende), Erinnerungen |
   | `calendar_update` | eintragen | Felder ändern (fehlend = unverändert); bei einer Reihe `scope` Pflicht (`this`/`following` nur an einem Vorkommen); verschiebt nicht in einen anderen Kalender |
   | `calendar_delete` | eintragen | Termin, Vorkommen oder Reihe löschen |
