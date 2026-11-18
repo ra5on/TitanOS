@@ -57,6 +57,9 @@
 > Depth: 0
 < status 207
 < value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-color #1BADF8
+# The change moves the ctag (<epoch>-<seq>): other devices see it.
+< body-lacks -0</cs:getctag>
+< body-has -1</cs:getctag>
 
 # An unknown property: 403 for it, 424 for the color, nothing changes.
 > PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/

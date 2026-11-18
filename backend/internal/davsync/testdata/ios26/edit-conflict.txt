@@ -1,19 +1,40 @@
 # iOS changes an event another device changed meanwhile: If-Match with the
-# old (here: a wrong, a weak) ETag is 412 and the content stays.
+# old ETag (also a wrong or a weak one) is 412 and the content stays.
 @seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+
+# Another device moves the event first.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:dentist.ics}
+> Body: dentist-moved.ics
+< status 204
+
+# This one still holds the old ETag.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:dentist.ics}
+> Body: dentist.ics
+< status 412
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist-moved.ics
 
 > PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
 > Auth: alex
 > Content-Type: text/calendar; charset=utf-8
 > If-Match: {etag:weekly-team.ics}
-> Body: dentist-moved.ics
+> Body: dentist.ics
 < status 412
 
 > PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
 > Auth: alex
 > Content-Type: text/calendar; charset=utf-8
-> If-Match: W/{etag:dentist.ics}
-> Body: dentist-moved.ics
+> If-Match: W/{etag:dentist-moved.ics}
+> Body: dentist.ics
 < status 412
 
 # If-Match on an entry that does not exist.
@@ -27,8 +48,8 @@
 > GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
 > Auth: alex
 < status 200
-< body dentist.ics
-< header ETag {etag:dentist.ics}
+< body dentist-moved.ics
+< header ETag {etag:dentist-moved.ics}
 
 > GET /caldav/alex/calendars/privat/new.ics
 > Auth: alex
