@@ -570,7 +570,7 @@ try {
 
   // ---- In its window on the real desktop: T-Kalender, and the same page in Kontakte ----
   for (const [path, title, name] of [
-    [PATH, "T-Kalender", "desktop-window"],
+    [PATH, "Kalender", "desktop-window"],
     ["/contacts/iphone", "Kontakte", "desktop-window-contacts"],
   ]) {
     const { page, ctx } = await open({ desk: true });
