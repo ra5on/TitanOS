@@ -17,6 +17,7 @@
 	import type { DeviceSetup, SetupAddress } from '#lib/pim/devices.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import Devices from './Devices.svelte';
+	import ProfileSetup from './ProfileSetup.svelte';
 
 	let { program }: { program: 'calendar' | 'contacts' } = $props();
 
@@ -26,6 +27,8 @@
 	let setup = $state<DeviceSetup | null>(null);
 	let error = $state('');
 	let copied = $state('');
+	// Raised when the iPhone fetched a profile: the list of devices reads again.
+	let refresh = $state(0);
 
 	$effect(() => {
 		api
@@ -121,7 +124,14 @@
 <div class="page" class:phone>
 	<p class="lead">{t('iphone.lead')}</p>
 
-	<Devices />
+	<ProfileSetup {setup} {describe} onfetched={() => refresh++} />
+
+	<div class="manual">
+		<h2>{t('iphone.manual.title')}</h2>
+		<p class="lead">{t('iphone.manual.desc')}</p>
+	</div>
+
+	<Devices {refresh} />
 
 	<SettingGroup title={t('iphone.details.title')} id="details">
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -196,6 +206,16 @@
 	.lead {
 		margin: 0;
 		color: var(--muted);
+	}
+	.manual {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		margin-top: var(--space-2);
+	}
+	.manual h2 {
+		margin: 0;
+		font-size: var(--text-lg);
 	}
 	code {
 		font-family: var(--font-mono, ui-monospace, monospace);

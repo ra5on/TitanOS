@@ -51,6 +51,8 @@ const named: Record<string, string> = {
 	'PUT /api/v1/firewall/autoblock': 'firewallAutoBlock',
 	'POST /api/v1/firewall/unblock': 'firewallUnblock',
 	login_disabled: 'loginDisabled',
+	// 1.13: the iPhone fetched its profile over the one-time link.
+	iphone_profile: 'iphoneProfile',
 	setup: 'setup',
 	'POST /api/v1/files/delete': 'fileDelete',
 	'POST /api/v1/files/rename': 'fileRename',

@@ -27,6 +27,41 @@ export type SetupAddress = {
 
 export type DeviceSetup = { user: string; port: number; addresses: SetupAddress[] };
 
+/** 1.13, GET /account/devices/profile: whether the profile is signed, and by which name. */
+export type ProfileInfo = { signed: boolean; signer: string; ttl: number; states: string[] };
+
+/** A one-time link of a profile (GET /account/devices/profile/{id}); never its token. */
+export type ProfileLink = {
+	id: string;
+	device: string;
+	expires: string;
+	state: 'pending' | 'fetched' | 'failed' | 'expired' | 'cancelled';
+	code?: string;
+};
+
+/** POST /account/devices/profile: the link with its URL, shown once, never kept. */
+export type ProfileMade = { link: ProfileLink; url: string; path: string; signed: boolean };
+
+/** The states of the holidays (codes of titand, pim/holidays). */
+export const HOLIDAY_STATES = [
+	'bw',
+	'by',
+	'be',
+	'bb',
+	'hb',
+	'hh',
+	'he',
+	'mv',
+	'ni',
+	'nw',
+	'rp',
+	'sl',
+	'sn',
+	'st',
+	'sh',
+	'th',
+] as const;
+
 /**
  * "Last synced" as TECHNIK 3.5 words it: never, before the restart (a date),
  * or today/yesterday/a date with the time and what was synced.
