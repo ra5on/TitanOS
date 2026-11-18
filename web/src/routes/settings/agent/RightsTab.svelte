@@ -5,13 +5,18 @@
 	import Segments from '#lib/components/Segments.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import type { FileRoot } from '#lib/api.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		AREAS,
 		areaMode,
+		dataRight,
+		isDataArea,
 		presetOf,
 		toolMode,
+		type DataArea,
+		type DataRight,
 		type Mode,
 		type Preset,
 		type Settings,
@@ -78,9 +83,12 @@
 		history: 'agent.area.historyHint',
 		nvr: 'agent.area.nvrHint',
 	};
-	const withTools = $derived(AREAS.filter((a) => tools.some((x) => x.area === a)));
+	// Calendar and contacts (1.11) always stand there: their rights hold for
+	// the account also while the data volume is away.
+	const withTools = $derived(AREAS.filter((a) => isDataArea(a) || tools.some((x) => x.area === a)));
 	function ownSetting(area: string): boolean {
 		if (!settings) return false;
+		if (isDataArea(area)) return !!settings.policy.dataRights?.[area];
 		if (settings.policy.areas?.[area]) return true;
 		return tools.some((x) => x.area === area && settings!.policy.tools?.[x.name]);
 	}
@@ -88,12 +96,58 @@
 	const shownAreas = $derived(
 		allAreas ? withTools : withTools.filter((a) => !hiddenAreas.includes(a)),
 	);
+	// ----- calendar and contacts: two axes (draft 30/31/62) -----
+	function setData(area: DataArea, axis: keyof DataRight, mode: Mode) {
+		if (!settings) return;
+		// Both axes are written: the other keeps what it shows now.
+		const now = dataRight(settings.policy, area);
+		settings.policy.dataRights = {
+			...(settings.policy.dataRights ?? {}),
+			[area]: { ...now, [axis]: mode },
+		};
+	}
+	const readOptions = $derived([
+		{ value: 'allow' as Mode, label: t('agent.data.allowed') },
+		{ value: 'deny' as Mode, label: t('agent.data.denied') },
+	]);
+	function dataSummary(area: DataArea): string {
+		const r = dataRight(settings.policy, area);
+		const read = t(r.read === 'deny' ? 'agent.data.sumNoRead' : 'agent.data.sumRead');
+		const write = t(
+			r.write === 'allow'
+				? 'agent.data.sumWriteAllow'
+				: r.write === 'ask'
+					? 'agent.data.sumWriteAsk'
+					: 'agent.data.sumWriteDeny',
+		);
+		return `${read} · ${write}`;
+	}
 	const kindLabel: Record<string, MessageKey> = {
 		read: 'agent.kindRead',
 		create: 'agent.kindCreate',
 		change: 'agent.kindChange',
 	};
 </script>
+
+{#snippet fresh()}<span class="chip info">{t('agent.data.new')}</span>{/snippet}
+{#snippet readChoice(area: DataArea, label: string)}
+	<Segments
+		compact
+		{label}
+		value={dataRight(settings.policy, area).read}
+		options={readOptions}
+		onchange={(v) => setData(area, 'read', v)}
+	/>
+{/snippet}
+{#snippet writeChoice(area: DataArea, label: string)}
+	<Segments
+		compact
+		{label}
+		value={dataRight(settings.policy, area).write}
+		options={modeOptions}
+		onchange={(v) => setData(area, 'write', v)}
+	/>
+{/snippet}
 
 <!-- PLAN 78-1: Schnellwahl, Bereiche and Ordner-Regeln as plain headings
      with rows (they were cards, PLAN 68); an area opens to its tools. -->
@@ -139,63 +193,95 @@
 </SettingGroup>
 <SettingGroup title={t('agent.areas')}>
 	{#each shownAreas as area (area)}
-		{@const list = tools.filter((x) => x.area === area)}
-		{@const m = areaMode(settings.policy, area, list)}
-		<SettingRow
-			title={areaLabel(area)}
-			desc={(areaHint[area] ? t(areaHint[area]) + ' ' : '') +
-				t('agent.toolCount', { count: list.length }) +
-				(m === 'mixed' ? ' · ' + t('agent.mixed') : '')}
-			bind:open={() => !!open[area], (on) => (open[area] = on)}
-		>
-			{#snippet control()}
-				<Segments
-					compact
-					label={areaLabel(area)}
-					value={m === 'mixed' ? ('' as Mode) : m}
-					options={modeOptions}
-					onchange={(v) => setArea(area, v)}
-				/>
-			{/snippet}
-			{#if area === 'nvr'}
-				<div class="srow-sub">
-					<label class="srow-text nvr-names" for="ag-nvr-names"
-						><span>{t('agent.nvrNames')}</span><span class="srow-desc"
-							>{t('agent.nvrNamesHint')}</span
-						></label
-					>
-					<div class="srow-ctl">
-						<input
-							id="ag-nvr-names"
-							type="checkbox"
-							class="switch"
-							role="switch"
-							checked={!!settings.nvrNames}
-							onchange={(e) => (settings!.nvrNames = e.currentTarget.checked)}
-						/>
+		{#if area === 'calendar'}
+			<SettingRow
+				title={t('agent.area.calendar')}
+				desc={t('agent.data.calendarDesc')}
+				summary={dataSummary(area)}
+				bind:open={() => !!open[area], (on) => (open[area] = on)}
+			>
+				{#snippet badge()}{@render fresh()}{/snippet}
+				<SettingSub title={t('agent.data.calendarRead')} desc={t('agent.data.calendarReadDesc')}>
+					{#snippet control()}{@render readChoice(area, t('agent.data.calendarRead'))}{/snippet}
+				</SettingSub>
+				<SettingSub title={t('agent.data.calendarWrite')} desc={t('agent.data.calendarWriteDesc')}>
+					{#snippet control()}{@render writeChoice(area, t('agent.data.calendarWrite'))}{/snippet}
+				</SettingSub>
+			</SettingRow>
+		{:else if area === 'contacts'}
+			<SettingRow
+				title={t('agent.area.contacts')}
+				desc={t('agent.data.contactsDesc')}
+				summary={dataSummary(area)}
+				bind:open={() => !!open[area], (on) => (open[area] = on)}
+			>
+				{#snippet badge()}{@render fresh()}{/snippet}
+				<SettingSub title={t('agent.data.contactsRead')} desc={t('agent.data.contactsReadDesc')}>
+					{#snippet control()}{@render readChoice(area, t('agent.data.contactsRead'))}{/snippet}
+				</SettingSub>
+				<SettingSub title={t('agent.data.contactsWrite')} desc={t('agent.data.contactsWriteDesc')}>
+					{#snippet control()}{@render writeChoice(area, t('agent.data.contactsWrite'))}{/snippet}
+				</SettingSub>
+			</SettingRow>
+		{:else}
+			{@const list = tools.filter((x) => x.area === area)}
+			{@const m = areaMode(settings.policy, area, list)}
+			<SettingRow
+				title={areaLabel(area)}
+				desc={(areaHint[area] ? t(areaHint[area]) + ' ' : '') +
+					t('agent.toolCount', { count: list.length }) +
+					(m === 'mixed' ? ' · ' + t('agent.mixed') : '')}
+				bind:open={() => !!open[area], (on) => (open[area] = on)}
+			>
+				{#snippet control()}
+					<Segments
+						compact
+						label={areaLabel(area)}
+						value={m === 'mixed' ? ('' as Mode) : m}
+						options={modeOptions}
+						onchange={(v) => setArea(area, v)}
+					/>
+				{/snippet}
+				{#if area === 'nvr'}
+					<div class="srow-sub">
+						<label class="srow-text nvr-names" for="ag-nvr-names"
+							><span>{t('agent.nvrNames')}</span><span class="srow-desc"
+								>{t('agent.nvrNamesHint')}</span
+							></label
+						>
+						<div class="srow-ctl">
+							<input
+								id="ag-nvr-names"
+								type="checkbox"
+								class="switch"
+								role="switch"
+								checked={!!settings.nvrNames}
+								onchange={(e) => (settings!.nvrNames = e.currentTarget.checked)}
+							/>
+						</div>
 					</div>
-				</div>
-			{/if}
-			{#each list as tool (tool.name)}
-				<div class="srow-sub">
-					<span class="srow-text tname"
-						><code>{tool.name}</code>
-						<span class="chip {tool.dangerous ? 'warn' : ''}"
-							>{t(kindLabel[tool.kind] ?? 'agent.kindChange')}</span
-						></span
-					>
-					<div class="srow-ctl">
-						<Segments
-							compact
-							label={tool.name}
-							value={toolMode(settings.policy, tool)}
-							options={modeOptions}
-							onchange={(v) => setTool(tool.name, v)}
-						/>
+				{/if}
+				{#each list as tool (tool.name)}
+					<div class="srow-sub">
+						<span class="srow-text tname"
+							><code>{tool.name}</code>
+							<span class="chip {tool.dangerous ? 'warn' : ''}"
+								>{t(kindLabel[tool.kind] ?? 'agent.kindChange')}</span
+							></span
+						>
+						<div class="srow-ctl">
+							<Segments
+								compact
+								label={tool.name}
+								value={toolMode(settings.policy, tool)}
+								options={modeOptions}
+								onchange={(v) => setTool(tool.name, v)}
+							/>
+						</div>
 					</div>
-				</div>
-			{/each}
-		</SettingRow>
+				{/each}
+			</SettingRow>
+		{/if}
 	{/each}
 	{#if hiddenAreas.length}
 		<div class="row-actions">

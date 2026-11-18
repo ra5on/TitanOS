@@ -22,6 +22,9 @@
 		addresses: { kind: string; url: string }[];
 		areas: string[];
 		levels: Record<string, Level>;
+		/** 1.11: calendar and contacts, deny or read only (assistData). */
+		dataAreas?: string[];
+		dataLevels?: Record<string, Level>;
 		last: {
 			at: string;
 			from: string;
@@ -107,6 +110,8 @@
 		memory: 'bulb',
 		plan: 'clock',
 		code: 'zap',
+		calendar: 'calendar',
+		contacts: 'person',
 	};
 	// Areas without a reading side are only on or off.
 	const onOff = ['web', 'plan', 'code'];
@@ -129,10 +134,36 @@
 			[area]: value,
 		};
 	}
-	const denyAll = () =>
-		(settings.homeassistant.assistAreas = Object.fromEntries(
+	// Calendar and contacts: never more than reading, in a field of their own.
+	const readOnly = $derived([
+		{ value: 'deny' as Level, label: t('agent.assist.deny') },
+		{ value: 'read' as Level, label: t('agent.assist.read') },
+	]);
+	const dataLevel = (area: string): Level =>
+		settings.homeassistant.assistData?.[area] === 'read'
+			? 'read'
+			: settings.homeassistant.assistData?.[area] === 'deny'
+				? 'deny'
+				: (info?.dataLevels?.[area] ?? 'deny');
+	function setDataLevel(area: string, value: Level) {
+		settings.homeassistant.assistData = {
+			...(settings.homeassistant.assistData ?? {}),
+			[area]: value === 'read' ? 'read' : 'deny',
+		};
+	}
+	function denyAll() {
+		settings.homeassistant.assistAreas = Object.fromEntries(
 			(info?.areas ?? []).map((a) => [a, 'deny']),
-		));
+		);
+		if (info?.dataAreas?.length)
+			settings.homeassistant.assistData = Object.fromEntries(
+				info.dataAreas.map((a) => [a, 'deny']),
+			);
+	}
+	function defaults() {
+		settings.homeassistant.assistAreas = undefined;
+		settings.homeassistant.assistData = undefined;
+	}
 	const kindText = (kind: string) =>
 		t(
 			(['lan', 'tailscale', 'netbird', 'ddns', 'domain'].includes(kind)
@@ -257,12 +288,7 @@
 	<SettingGroup title={t('agent.assist.rights')} desc={t('agent.assist.rightsDesc')}>
 		{#snippet tools()}
 			<button type="button" class="btn" onclick={denyAll}>{t('agent.assist.denyAll')}</button>
-			<button
-				type="button"
-				class="btn"
-				onclick={() => (settings.homeassistant.assistAreas = undefined)}
-				>{t('agent.assist.defaults')}</button
-			>
+			<button type="button" class="btn" onclick={defaults}>{t('agent.assist.defaults')}</button>
 		{/snippet}
 		{#each info.areas as area (area)}
 			<SettingRow
@@ -277,6 +303,23 @@
 						value={onOff.includes(area) && level(area) === 'read' ? 'deny' : level(area)}
 						options={onOff.includes(area) ? two : three}
 						onchange={(v) => setLevel(area, v)}
+					/>
+				{/snippet}
+			</SettingRow>
+		{/each}
+		{#each info.dataAreas ?? [] as area (area)}
+			<SettingRow
+				icon={icons[area] ?? 'box'}
+				title={t(`agent.assist.area.${area}` as MessageKey)}
+				desc={t(`agent.assist.areaDesc.${area}` as MessageKey)}
+			>
+				{#snippet control()}
+					<Segments
+						compact
+						label={t(`agent.assist.area.${area}` as MessageKey)}
+						value={dataLevel(area)}
+						options={readOnly}
+						onchange={(v) => setDataLevel(area, v)}
 					/>
 				{/snippet}
 			</SettingRow>

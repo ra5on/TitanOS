@@ -17,6 +17,9 @@ import {
 	accountLook,
 	stepDetail,
 	toolMode,
+	AREAS,
+	dataRight,
+	presetDataMode,
 } from '../src/lib/agent.ts';
 
 test('server-sent events of a running chat', () => {
@@ -119,6 +122,32 @@ test('the policy in the UI decides like the backend', () => {
 	assert.equal(areaMode({ preset: 'standard' }, 'vms', [vms[1]]), 'ask');
 	assert.equal(presetOf(custom), 'custom');
 	assert.equal(presetOf({ preset: 'read' }), 'read');
+});
+
+// 1.11 (TECHNIK 6.4): preset × dataRights × tool → mode, the same table
+// as backend/internal/agent/policy_test.go reads.
+test('calendar and contacts decide like the backend', () => {
+	const matrix = JSON.parse(
+		readFileSync(
+			new URL('../../backend/internal/agent/testdata/data-rights.json', import.meta.url),
+			'utf8',
+		),
+	);
+	assert.equal(matrix.tools.length, 9);
+	assert.ok(matrix.cases.length >= 20);
+	for (const c of matrix.cases)
+		for (const tool of matrix.tools)
+			assert.equal(toolMode(c.policy, tool), c.modes[tool.name], `${c.name}: ${tool.name}`);
+	assert.equal(presetDataMode('standard', 'change'), 'ask');
+	assert.equal(presetDataMode('standard', 'create'), 'ask');
+	assert.deepEqual(dataRight({ preset: 'read' }, 'contacts'), { read: 'allow', write: 'deny' });
+	// A set right counts as touched: the quick choice shows "Eigene".
+	assert.equal(
+		presetOf({ preset: 'standard', dataRights: { calendar: { read: 'allow', write: 'ask' } } }),
+		'custom',
+	);
+	assert.equal(presetOf({ preset: 'standard', dataRights: {} }), 'standard');
+	assert.deepEqual(AREAS.slice(1, 4), ['files', 'calendar', 'contacts']);
 });
 
 test('levels, step details and the look', () => {
