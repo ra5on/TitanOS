@@ -25,6 +25,9 @@ type Item struct {
 	// the company says nothing new).
 	Email    string `json:"email,omitempty"`
 	HasPhoto bool   `json:"hasPhoto"`
+	// ETag of the card (1.13): the page asks for the picture with ?v=<etag>,
+	// an address the browser keeps for good.
+	ETag string `json:"etag,omitempty"`
 	// BirthdaySoon: the birthday falls into this week (Monday to Sunday in
 	// the zone of the NAS, days gone included); the page words it.
 	BirthdaySoon *SoonBirthday `json:"birthdaySoon,omitempty"`
@@ -132,7 +135,7 @@ func NewListIndex(book string, objects []pimstore.ObjectInfo) *ListIndex {
 		if o.Group {
 			continue
 		}
-		it := Item{ID: o.Name, Book: book, Name: o.FN, SortKey: o.SortKey, Org: o.Org, Initials: Initials(o.FN, o.Org), HasPhoto: o.HasPhoto}
+		it := Item{ID: o.Name, Book: book, Name: o.FN, SortKey: o.SortKey, Org: o.Org, Initials: Initials(o.FN, o.Org), HasPhoto: o.HasPhoto, ETag: o.ETag}
 		if len(o.Emails) > 0 {
 			it.Email = o.Emails[0]
 		}

@@ -157,7 +157,7 @@ func TestContactRouteRights(t *testing.T) {
 	e := newConEnv(t)
 	ts := e.ts
 	routes := contactRoutes(ts)
-	if len(routes) != 13 {
+	if len(routes) != 20 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {

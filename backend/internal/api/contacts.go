@@ -58,6 +58,8 @@ func contactsCode(err error, notFound string) (int, string) {
 
 var contactsMessages = map[string]string{
 	"contact_not_found":            "no such contact or address book",
+	"contact_group_not_found":      "no such group",
+	"contacts_no_uid":              "the contact has no UID a group could name",
 	"contact_photo_not_found":      "the contact has no picture TitanOS can show",
 	"contact_suggestion_not_found": "no such address learned by Mail",
 	"contacts_conflict":            "the contact was changed meanwhile",
@@ -191,6 +193,9 @@ type contactWritten struct {
 	Book     string `json:"book"`
 	ETag     string `json:"etag"`
 	HasPhoto *bool  `json:"hasPhoto,omitempty"`
+	// Item is the contact's row of the list now (1.13): the page puts it
+	// in place instead of reading the whole list again.
+	Item *cardweb.Item `json:"item,omitempty"`
 }
 
 type createContactRequest struct {
@@ -238,7 +243,7 @@ func (a pimDataArea) createContact(store *pimstore.Store, user, book string, in 
 	if err != nil {
 		return contactWritten{}, err
 	}
-	return contactWritten{ID: name, Book: book, ETag: res.ETag}, nil
+	return contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name)}, nil
 }
 
 // contactConflict answers 409 contacts_conflict with the contact as it is
@@ -289,7 +294,7 @@ func (a pimDataArea) handleUpdateContact(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !changed {
-		writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: obj.ETag})
+		writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: obj.ETag, Item: a.contactRow(store, user, book, name)})
 		return
 	}
 	res, err := store.Put(pimstore.Contacts, user, book, name, data, pimstore.PutOptions{IfMatch: obj.ETag})
@@ -301,7 +306,7 @@ func (a pimDataArea) handleUpdateContact(w http.ResponseWriter, r *http.Request)
 		contactsFail(w, r, book, err, "contact_not_found")
 		return
 	}
-	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: res.ETag})
+	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name)})
 }
 
 // handleDeleteContact removes a contact (etag required); 204.
