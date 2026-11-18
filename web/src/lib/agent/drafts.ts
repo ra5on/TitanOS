@@ -21,6 +21,15 @@
 
 import { api } from '../api.ts';
 import type { AgentDraft } from '../agent.ts';
+import {
+	addDays,
+	clock,
+	daysBetween,
+	inclusiveEnd,
+	validDate,
+	wallMinutes,
+} from '../pim/caldates.ts';
+import { fromRule, type Repeat, type Simple } from '../pim/calendar.ts';
 
 export type { AgentDraft };
 
@@ -183,5 +192,205 @@ export function contactDraftForm<F extends ContactFormLike>(
 		out.birthdayNoYear = noYear;
 		out.birthdayDate = noYear ? '2000' + b.slice(1) : /^\d{4}-\d{2}-\d{2}$/.test(b) ? b : '';
 	}
+	return out;
+}
+
+// ---------- Kalender: events and reminders ----------
+
+/** The parts of the form of the event window a draft fills
+ *  (routes/calendar/event/+page.svelte Form). */
+type EventFormLike = {
+	title: string;
+	calendar: string;
+	allDay: boolean;
+	startDate: string;
+	startTime: string;
+	endDate: string;
+	endTime: string;
+	repeat: Repeat;
+	alarms: number[];
+	location: string;
+	notes: string;
+};
+
+export type EventDraftResult<F> = {
+	form: F;
+	/** A repetition the form shows only as "custom": sent as it is. */
+	rule: Simple | null;
+	/** The zone a new event is meant in ('' = the NAS zone). */
+	zone: string;
+	/** Which events of a series the change means ('' = ask as always). */
+	scope: '' | 'this' | 'following' | 'all';
+};
+
+const WHEN = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?/;
+const ZONE = /^(UTC|[A-Za-z]+(?:\/[A-Za-z0-9_+-]+){1,2})$/;
+const FREQS = new Set(['daily', 'weekly', 'monthly', 'yearly']);
+const line = (v: unknown, max: number) => str(v).replace(/\s+/g, ' ').trim().slice(0, max);
+
+function when(v: unknown): { date: string; time: string } | null {
+	const m = WHEN.exec(str(v).trim());
+	if (!m || !validDate(m[1])) return null;
+	if (m[2] === undefined) return { date: m[1], time: '' };
+	if (Number(m[2]) > 23 || Number(m[3]) > 59) return null;
+	return { date: m[1], time: `${m[2]}:${m[3]}` };
+}
+
+/** The repetition of a draft (recur.Simple of the web API), checked. */
+function simpleOf(v: Record<string, unknown>): Simple | null {
+	if (!FREQS.has(str(v.freq))) return null;
+	const out: Simple = {
+		freq: str(v.freq) as Simple['freq'],
+		interval:
+			typeof v.interval === 'number' && Number.isInteger(v.interval) && v.interval > 0
+				? Math.min(v.interval, 999)
+				: 1,
+	};
+	if (Array.isArray(v.byDay)) {
+		const days = v.byDay.filter(
+			(d): d is string => typeof d === 'string' && /^(-?[1-5])?(MO|TU|WE|TH|FR|SA|SU)$/.test(d),
+		);
+		if (days.length) out.byDay = days.slice(0, 7 * 5);
+	}
+	if (Array.isArray(v.byMonthDay)) {
+		const days = v.byMonthDay.filter(
+			(d): d is number =>
+				typeof d === 'number' && Number.isInteger(d) && d !== 0 && d >= -31 && d <= 31,
+		);
+		if (days.length) out.byMonthDay = days.slice(0, 31);
+	}
+	if (validDate(str(v.until))) out.until = str(v.until);
+	else if (typeof v.count === 'number' && Number.isInteger(v.count) && v.count > 0)
+		out.count = Math.min(v.count, 999);
+	return out;
+}
+
+/**
+ * The form of the event window with an event draft put in (calendar_create:
+ * every field; calendar_update: only what changes). Fields that do not fit
+ * (a day that is none, a calendar that is not one of `calendars`, the
+ * person's own and writable) are left as the form has them. A start
+ * without an end keeps the event's length (or takes `duration`); an
+ * all-day end is the day after the last day, as the API has it.
+ */
+export function eventDraftForm<F extends EventFormLike>(
+	form: F,
+	fields: Record<string, unknown>,
+	calendars: string[],
+): EventDraftResult<F> {
+	const out = { ...form, repeat: { ...form.repeat }, alarms: [...form.alarms] };
+	let rule: Simple | null = null;
+	if ('title' in fields) out.title = line(fields.title, 2000);
+	if ('location' in fields) out.location = line(fields.location, 2000);
+	if ('notes' in fields) out.notes = str(fields.notes).replace(/\r\n?/g, '\n').slice(0, 10000);
+	if (typeof fields.calendar === 'string' && calendars.includes(fields.calendar))
+		out.calendar = fields.calendar;
+
+	// The length before: kept when only the start moves.
+	const spanDays = Math.max(0, daysBetween(form.startDate, form.endDate));
+	const spanMinutes = Math.max(
+		0,
+		wallMinutes(form.startDate, form.startTime, form.endDate, form.endTime),
+	);
+	const start = when(fields.start);
+	const end = when(fields.end);
+	if (typeof fields.allDay === 'boolean') out.allDay = fields.allDay;
+	else if (start) out.allDay = start.time === '';
+	if (start) {
+		out.startDate = start.date;
+		if (start.time) out.startTime = start.time;
+	}
+	if (end && (end.date >= out.startDate || !out.allDay)) {
+		if (out.allDay) out.endDate = inclusiveEnd(out.startDate, end.date);
+		else {
+			out.endDate = end.date;
+			if (end.time) out.endTime = end.time;
+		}
+	} else if (start || 'allDay' in fields) {
+		const d = Number(fields.duration);
+		const minutes =
+			Number.isInteger(d) && d > 0 && d <= 10080 ? d : out.allDay ? 0 : spanMinutes || 60;
+		if (out.allDay) out.endDate = addDays(out.startDate, spanDays);
+		else {
+			const total = Number(out.startTime.slice(0, 2)) * 60 + Number(out.startTime.slice(3, 5));
+			out.endDate = addDays(out.startDate, Math.floor((total + minutes) / 1440));
+			out.endTime = clock((total + minutes) % 1440);
+		}
+	}
+	// An end before the start (a wrong end in the draft): an hour after it.
+	if (!out.allDay && wallMinutes(out.startDate, out.startTime, out.endDate, out.endTime) < 0) {
+		const total = Number(out.startTime.slice(0, 2)) * 60 + Number(out.startTime.slice(3, 5)) + 60;
+		out.endDate = addDays(out.startDate, Math.floor(total / 1440));
+		out.endTime = clock(total % 1440);
+	}
+	if (out.allDay && out.endDate < out.startDate) out.endDate = out.startDate;
+
+	if (Array.isArray(fields.alarms))
+		out.alarms = [
+			...new Set(
+				fields.alarms.filter(
+					(m): m is number =>
+						typeof m === 'number' && Number.isInteger(m) && m >= -1440 && m <= 40320,
+				),
+			),
+		]
+			.sort((a, b) => a - b)
+			.slice(0, 20);
+
+	if ('rrule' in fields) {
+		const r = fields.rrule;
+		const simple = r && typeof r === 'object' ? simpleOf(r as Record<string, unknown>) : null;
+		if (!simple) out.repeat = { kind: 'none', interval: 1, end: 'never', until: '', count: 10 };
+		else {
+			out.repeat = fromRule(simple, true, out.startDate);
+			if (out.repeat.kind === 'custom') rule = simple;
+		}
+	}
+	const zone =
+		typeof fields.timezone === 'string' && ZONE.test(fields.timezone) ? fields.timezone : '';
+	const s = str(fields.scope);
+	const scope = s === 'this' || s === 'following' || s === 'all' ? s : '';
+	return { form: out, rule, zone, scope };
+}
+
+/** The parts of the form of the reminder dialog a draft fills
+ *  (lib/pim/cal/TaskDialog.svelte Form). */
+type TaskFormLike = {
+	title: string;
+	list: string;
+	hasDue: boolean;
+	date: string;
+	hasTime: boolean;
+	time: string;
+	priority: number;
+	notes: string;
+};
+
+/**
+ * The form of the reminder dialog with a draft of tasks_create or
+ * tasks_update put in: title, notes, due (a day, a day with a time, null
+ * removes it), priority (0–9) and the list (only one of `lists`).
+ */
+export function taskDraftForm<F extends TaskFormLike>(
+	form: F,
+	fields: Record<string, unknown>,
+	lists: string[],
+): F {
+	const out = { ...form };
+	if ('title' in fields) out.title = line(fields.title, 2000);
+	if ('notes' in fields) out.notes = str(fields.notes).replace(/\r\n?/g, '\n').slice(0, 10000);
+	if (fields.due === null) out.hasDue = false;
+	else if ('due' in fields) {
+		const d = when(fields.due);
+		if (d) {
+			out.hasDue = true;
+			out.date = d.date;
+			out.hasTime = d.time !== '';
+			if (d.time) out.time = d.time;
+		}
+	}
+	const p = fields.priority;
+	if (typeof p === 'number' && Number.isInteger(p) && p >= 0 && p <= 9) out.priority = p;
+	if (typeof fields.list === 'string' && lists.includes(fields.list)) out.list = fields.list;
 	return out;
 }
