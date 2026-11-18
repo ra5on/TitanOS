@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/emersion/go-ical"
 
@@ -46,12 +47,22 @@ type Occurrence struct {
 	RuleZone *time.Location
 }
 
+// MaxQueryOccurrences bounds the occurrences of one Query (and of the
+// event list of the web API): 20 000 daily series over 400 days would be
+// 8 million (S-20).
+const MaxQueryOccurrences = 10000
+
 // Bounds of the cache of parsed recurring entries (recur.File is not safe
-// for concurrent use: each cached file has its own lock).
-const (
-	maxParsed      = 1024
-	maxParsedBytes = 32 << 20
-)
+// for concurrent use: each cached file has its own lock). The bytes count
+// each file and the occurrences of its last window (S-22).
+const maxParsed = 1024
+
+// maxParsedBytes is a variable only for tests.
+var maxParsedBytes = 32 << 20
+
+// occurrenceBytes is what one cached occurrence holds (the event it
+// points to belongs to the parsed file).
+const occurrenceBytes = int(unsafe.Sizeof(recur.Occurrence{}))
 
 type parsedCache struct {
 	mu    sync.Mutex
@@ -61,8 +72,12 @@ type parsedCache struct {
 
 type parsedFile struct {
 	mu   sync.Mutex
+	key  string
 	etag string
 	size int
+	// cost is size plus the occurrences of last (guarded by the cache's
+	// lock, not mu).
+	cost int
 	file *recur.File
 	// The last window and its result: a month view asks again and again,
 	// and a rare rule can cost ~45 ms.
@@ -91,18 +106,42 @@ func (p *parsedCache) put(key string, f *parsedFile) {
 		p.files = map[string]*parsedFile{}
 	}
 	if old := p.files[key]; old != nil {
-		p.bytes -= old.size
+		p.bytes -= old.cost
 		delete(p.files, key)
 	}
+	f.key, f.cost = key, f.size
 	for k, v := range p.files {
-		if len(p.files) < maxParsed && p.bytes+f.size <= maxParsedBytes {
+		if len(p.files) < maxParsed && p.bytes+f.cost <= maxParsedBytes {
 			break
 		}
-		p.bytes -= v.size
+		p.bytes -= v.cost
 		delete(p.files, k)
 	}
 	p.files[key] = f
-	p.bytes += f.size
+	p.bytes += f.cost
+}
+
+// resize sets the cost of a cached file after its last window changed
+// and evicts others while the cache is over its bytes; a file evicted
+// meanwhile counts nothing. The caller holds f.mu (lock order: f.mu,
+// then p.mu; nothing takes them the other way round).
+func (p *parsedCache) resize(f *parsedFile, cost int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.files[f.key] != f {
+		return
+	}
+	p.bytes += cost - f.cost
+	f.cost = cost
+	for k, v := range p.files {
+		if p.bytes <= maxParsedBytes {
+			break
+		}
+		if v != f {
+			p.bytes -= v.cost
+			delete(p.files, k)
+		}
+	}
 }
 
 func (p *parsedCache) drop(match func(key string) bool) {
@@ -110,7 +149,7 @@ func (p *parsedCache) drop(match func(key string) bool) {
 	defer p.mu.Unlock()
 	for k, v := range p.files {
 		if match(k) {
-			p.bytes -= v.size
+			p.bytes -= v.cost
 			delete(p.files, k)
 		}
 	}
@@ -205,42 +244,67 @@ func entryID(e *Entry) string {
 }
 
 // Query returns the occurrences of a calendar's events in [from, to) (at
-// most 400 days, recur.ErrWindow otherwise), sorted by start. Single
-// events come from the index (no disk); recurring ones are expanded with
-// pim/recur, their parsed file and last window cached per ETag.
-func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, error) {
+// most 400 days, recur.ErrWindow otherwise), sorted by start: the first
+// limit of them (at most MaxQueryOccurrences; <= 0 is that), truncated
+// when there were more. Single events come from the index (no disk);
+// recurring ones are expanded with pim/recur, their parsed file and last
+// window cached per ETag. Once more than limit are held the list is cut
+// to the earliest limit and later entries are expanded only up to the
+// start of the last one kept, so neither RAM nor time grows with the
+// number of series (S-20).
+func (s *Store) Query(account, col string, from, to time.Time, limit int) ([]Occurrence, bool, error) {
 	if !to.After(from) || to.After(from.AddDate(0, 0, recur.MaxWindowDays)) {
-		return nil, recur.ErrWindow
+		return nil, false, recur.ErrWindow
+	}
+	if limit <= 0 || limit > MaxQueryOccurrences {
+		limit = MaxQueryOccurrences
 	}
 	acc, items, err := s.snapshot(account, col)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	loc := s.local()
 	out := []Occurrence{}
+	// end is to, or once cut the start of the last occurrence kept: what
+	// starts there or later is not among the first limit.
+	end, cut := to, false
+	trim := func() {
+		slices.SortStableFunc(out, func(a, b Occurrence) int { return a.Start.Compare(b.Start) })
+		if len(out) > limit {
+			clear(out[limit:])
+			out, cut = out[:limit], true
+			end = out[limit-1].Start
+		}
+	}
 	for _, it := range items {
+		if len(out) >= 2*limit {
+			trim()
+		}
 		e := &it.entry
 		if !e.Recurs {
 			if e.Start.IsZero() && e.ETag != "" && e.UID == "" {
 				continue // a file the index could not read
 			}
 			st, en := e.span(loc)
-			if overlaps(st, en, from, to) {
+			if overlaps(st, en, from, end) {
 				out = append(out, Occurrence{Name: it.name, ETag: e.ETag, UID: e.UID, ID: entryID(e), Start: st, End: en,
 					AllDay: e.AllDay, Summary: e.Summary, Unsupported: e.Unsupported, Floating: e.Floating,
 					Location: e.Location, TZID: e.TZID, TZGuess: e.TZGuess, Alarms: e.Alarms, Clipped: e.Clipped})
 			}
 			continue
 		}
+		if !end.After(from) {
+			continue // cut at the window's start: no occurrence fits
+		}
 		pf, err := s.parsedFor(acc, col, it)
 		if errors.Is(err, ErrUnavailable) {
-			return nil, err
+			return nil, false, err
 		}
 		if err != nil {
 			continue // gone meanwhile or unreadable: the next query sees it
 		}
 		pf.mu.Lock() // the events of a cached file are read under its lock
-		x, err := pf.expandLocked(from, to)
+		x, err := s.expandCached(pf, from, end)
 		if err != nil {
 			pf.mu.Unlock()
 			continue
@@ -268,8 +332,8 @@ func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, er
 		}
 		pf.mu.Unlock()
 	}
-	slices.SortStableFunc(out, func(a, b Occurrence) int { return a.Start.Compare(b.Start) })
-	return out, nil
+	trim()
+	return out, cut, nil
 }
 
 // zoneOf is the zone a start is read in: its own, UTC, or the NAS zone
@@ -282,6 +346,19 @@ func zoneOf(v tz.Value, local *time.Location) *time.Location {
 		return v.Time.Location()
 	}
 	return local
+}
+
+// expandCached is expandLocked with the occurrences of the new last
+// window counted in the cache (pf.mu held).
+func (s *Store) expandCached(pf *parsedFile, from, to time.Time) (recur.Expansion, error) {
+	if pf.hasLast && pf.from.Equal(from) && pf.to.Equal(to) {
+		return pf.last, nil
+	}
+	x, err := pf.expandLocked(from, to)
+	if err == nil {
+		s.parsed.resize(pf, pf.size+len(x.Occurrences)*occurrenceBytes)
+	}
+	return x, err
 }
 
 // expandLocked expands every series of the file (pf.mu held).

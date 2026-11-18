@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"regexp"
 	"slices"
@@ -755,5 +756,47 @@ func TestPimDeleteAfterOutsideContentAsks(t *testing.T) {
 				t.Errorf("%s clean %s: %s, want allow", pn, c[0], p.Mode)
 			}
 		}
+	}
+}
+
+// S-20: 300 daily series without end (120 000 occurrences in 400 days).
+// The event list stops at MaxQueryOccurrences with the earliest of them
+// and truncated; calendar_search bounds them before it expands: the
+// earliest limit, or pimMaxScan when it searches a text.
+func TestPimOccurrencesBounded(t *testing.T) {
+	e := newCalEnv(t)
+	var items []pimstore.Item
+	for i := range 300 {
+		data := crlf(fmt.Sprintf("\nBEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:d%d\nDTSTAMP:20261101T000000Z\nDTSTART:20260101T%02d%02d00Z\nDURATION:PT30M\nSUMMARY:Täglich %d\nRRULE:FREQ=DAILY\nEND:VEVENT\nEND:VCALENDAR\n", i, i/60%24, i%60, i))
+		items = append(items, pimstore.Item{Name: fmt.Sprintf("d%d.ics", i), Data: data})
+	}
+	if _, err := e.pim.Import(context.Background(), pimstore.Calendar, "alex", "privat", items); err != nil {
+		t.Fatal(err)
+	}
+	list := e.events("from=2026-11-01T00:00:00Z&to=2027-12-05T00:00:00Z")
+	if !list.Truncated || len(list.Events) != pimstore.MaxQueryOccurrences || list.Events[0].Start > list.Events[len(list.Events)-1].Start {
+		t.Fatalf("event list: %d, truncated %v", len(list.Events), list.Truncated)
+	}
+	// The first 10 000 of 300 a day lie in the first 34 days.
+	if last := list.Events[len(list.Events)-1].Start; last > "2026-12-05" {
+		t.Fatalf("last shown %s", last)
+	}
+	if day := e.events("from=2026-11-01T00:00:00Z&to=2026-11-02T00:00:00Z"); day.Truncated || len(day.Events) != 300 {
+		t.Fatalf("one day: %d %v", len(day.Events), day.Truncated)
+	}
+	box := pimBox(t, e, "alex", agent.Policy{Preset: agent.PresetAll})
+	to := time.Now().AddDate(0, 0, 390).Format("2006-01-02")
+	_, res := pimRun(t, box, "calendar_search", `{"to":"`+to+`","limit":50}`)
+	events, _ := res["events"].([]any)
+	if len(events) != 50 || res["truncated"] != true {
+		t.Fatalf("search: %d, truncated %v", len(events), res["truncated"])
+	}
+	_, res = pimRun(t, box, "calendar_search", `{"to":"`+to+`","query":"täglich 7"}`)
+	if events, _ := res["events"].([]any); len(events) == 0 || res["truncated"] != true {
+		t.Fatalf("text search: %d, truncated %v", len(events), res["truncated"])
+	}
+	_, res = pimRun(t, box, "calendar_search", `{"to":"`+to+`","query":"nirgends"}`)
+	if events, _ := res["events"].([]any); len(events) != 0 || res["truncated"] != true {
+		t.Fatalf("no match: %d, truncated %v", len(events), res["truncated"])
 	}
 }

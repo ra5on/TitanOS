@@ -274,7 +274,7 @@ func TestVolumeMissing(t *testing.T) {
 	_, _, err = s.Counts("alex")
 	check("counts", err)
 	check("save seen", s.SaveSeen("alex", map[string]string{}))
-	_, err = s.Query("alex", "privat", t1, t1.AddDate(0, 1, 0))
+	_, err = query(s, "alex", "privat", t1, t1.AddDate(0, 1, 0))
 	check("query", err)
 	if len(e.tree()) != 0 {
 		t.Fatalf("made without a volume: %v", e.tree())
@@ -318,7 +318,7 @@ func TestReadCreatesNothing(t *testing.T) {
 		_, _ = s.Get(Calendar, "alex", "privat", "a.ics")
 		_, _ = s.Stat(Calendar, "alex", "privat", "a.ics")
 		_, _ = s.Changes(Calendar, "alex", "privat", "")
-		_, _ = s.Query("alex", "privat", from, from.AddDate(0, 1, 0))
+		_, _ = query(s, "alex", "privat", from, from.AddDate(0, 1, 0))
 		_, _ = s.Overlapping("alex", "privat", from, time.Time{})
 		_, _, _ = s.Counts("alex")
 		var v map[string]any
@@ -365,7 +365,7 @@ func TestNoVolumeAccessWithoutChange(t *testing.T) {
 		_, _ = s.Objects(Contacts, "alex", "kontakte")
 		_, _ = s.Stat(Calendar, "alex", "privat", "a.ics")
 		_, _ = s.Changes(Calendar, "alex", "privat", "")
-		if q, err := s.Query("alex", "privat", from, from.AddDate(0, 1, 0)); err != nil || len(q) != 1 {
+		if q, err := query(s, "alex", "privat", from, from.AddDate(0, 1, 0)); err != nil || len(q) != 1 {
 			t.Fatalf("query: %v %v", q, err)
 		}
 		_, _ = s.Overlapping("alex", "privat", from, time.Time{})
@@ -1095,7 +1095,7 @@ func TestQueryAndOverlapping(t *testing.T) {
 	mustPut(t, s, Calendar, "privat", "old.ics", ics("o", "Alt", "20250101T080000Z"))
 	from := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	to := from.AddDate(0, 0, 30)
-	occ, err := s.Query("alex", "privat", from, to)
+	occ, err := query(s, "alex", "privat", from, to)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1121,10 +1121,10 @@ func TestQueryAndOverlapping(t *testing.T) {
 	}
 	// Cached by ETag: asking again reads nothing.
 	before := e.opens.Load()
-	if _, err := s.Query("alex", "privat", from, to); err != nil || e.opens.Load() != before {
+	if _, err := query(s, "alex", "privat", from, to); err != nil || e.opens.Load() != before {
 		t.Fatalf("second query opened the volume: %v", err)
 	}
-	if _, err := s.Query("alex", "privat", from, from.AddDate(2, 0, 0)); !errors.Is(err, recur.ErrWindow) {
+	if _, err := query(s, "alex", "privat", from, from.AddDate(2, 0, 0)); !errors.Is(err, recur.ErrWindow) {
 		t.Fatalf("window: %v", err)
 	}
 	names, err := s.Overlapping("alex", "privat", time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
@@ -1137,13 +1137,84 @@ func TestQueryAndOverlapping(t *testing.T) {
 	}
 	// A new version is read again.
 	mustPut(t, s, Calendar, "privat", "weekly.ics", ics("w", "Woche", "20261102T090000Z", "RRULE:FREQ=WEEKLY;COUNT=2"))
-	occ, _ = s.Query("alex", "privat", from, to)
+	occ, _ = query(s, "alex", "privat", from, to)
 	counts = map[string]int{}
 	for _, o := range occ {
 		counts[o.Name]++
 	}
 	if counts["weekly.ics"] != 2 {
 		t.Fatalf("after change %v", counts)
+	}
+}
+
+// S-20/S-22: many daily series over 400 days stop at the limit with the
+// earliest occurrences and truncated; the parse cache counts the
+// occurrences of each file's last window in its bytes.
+func TestQueryLimitAndCacheBytes(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	const series = 300 // 120 000 occurrences in 400 days
+	var items []Item
+	for i := range series {
+		start := fmt.Sprintf("20261101T%02d%02d00Z", i/60%24, i%60)
+		items = append(items, Item{Name: fmt.Sprintf("d%d.ics", i), Data: ics(fmt.Sprintf("d%d", i), "Täglich", start, "RRULE:FREQ=DAILY")})
+	}
+	if _, err := s.Import(context.Background(), Calendar, "alex", "privat", items); err != nil {
+		t.Fatal(err)
+	}
+	mustPut(t, s, Calendar, "privat", "single.ics", ics("s", "Einmal", "20261101T000000Z"))
+	from := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 0, recur.MaxWindowDays)
+	all, cut, err := s.Query("alex", "privat", from, to, 0)
+	if err != nil || !cut || len(all) != MaxQueryOccurrences {
+		t.Fatalf("default limit: %d %v %v", len(all), cut, err)
+	}
+	few, cut, err := s.Query("alex", "privat", from, to, 1000)
+	if err != nil || !cut || len(few) != 1000 {
+		t.Fatalf("limit 1000: %d %v %v", len(few), cut, err)
+	}
+	for i := range few {
+		if !few[i].Start.Equal(all[i].Start) {
+			t.Fatalf("occurrence %d: %v, the earliest is %v", i, few[i].Start, all[i].Start)
+		}
+	}
+	// 300 series a day: the first 1000 end in the fourth day.
+	if last := few[999].Start; last.After(from.AddDate(0, 0, 4)) || !few[0].Start.Equal(from) {
+		t.Fatalf("last kept %v, first %s", last, few[0].Name)
+	}
+	if month, cut, _ := s.Query("alex", "privat", from, from.AddDate(0, 0, 1), 0); cut || len(month) != series+1 {
+		t.Fatalf("one day: %d %v", len(month), cut)
+	}
+
+	// The cache: with room, each file costs its bytes and its occurrences.
+	s.parsed.drop(func(string) bool { return true })
+	if _, _, err := s.Query("alex", "privat", from, from.AddDate(0, 0, 100), MaxQueryOccurrences); err != nil {
+		t.Fatal(err)
+	}
+	sizes, occs := 0, 0
+	s.parsed.mu.Lock()
+	for _, f := range s.parsed.files {
+		sizes += f.size
+		occs += len(f.last.Occurrences)
+	}
+	cached, bytes := len(s.parsed.files), s.parsed.bytes
+	s.parsed.mu.Unlock()
+	if cached != series || occs == 0 || bytes != sizes+occs*occurrenceBytes {
+		t.Fatalf("cache: %d files, %d bytes, sizes %d, %d occurrences", cached, bytes, sizes, occs)
+	}
+	// Bounded: a budget of 64 KiB holds a few files with their windows.
+	old := maxParsedBytes
+	maxParsedBytes = 64 << 10
+	t.Cleanup(func() { maxParsedBytes = old })
+	s.parsed.drop(func(string) bool { return true })
+	if _, _, err := s.Query("alex", "privat", from, from.AddDate(0, 0, 200), 0); err != nil {
+		t.Fatal(err)
+	}
+	s.parsed.mu.Lock()
+	cached, bytes = len(s.parsed.files), s.parsed.bytes
+	s.parsed.mu.Unlock()
+	if bytes > maxParsedBytes || cached == 0 || cached >= series {
+		t.Fatalf("bounded cache: %d files, %d bytes", cached, bytes)
 	}
 }
 
@@ -1324,7 +1395,7 @@ func TestQueryDetails(t *testing.T) {
 	mustPut(t, s, Calendar, "privat", "s.ics", single)
 	mustPut(t, s, Calendar, "privat", "w.ics", ics("w", "Woche", "20261102T090000Z", append([]string{"RRULE:FREQ=WEEKLY;COUNT=3"}, alarm...)...))
 	before := e.opens.Load()
-	occ, err := s.Query("alex", "privat", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC))
+	occ, err := query(s, "alex", "privat", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1349,4 +1420,10 @@ func TestQueryDetails(t *testing.T) {
 	if opened := e.opens.Load() - before; opened != 1 {
 		t.Fatalf("the single event read the volume: %d opens", opened)
 	}
+}
+
+// query is Query with the default limit, its truncation dropped.
+func query(s *Store, account, col string, from, to time.Time) ([]Occurrence, error) {
+	occ, _, err := s.Query(account, col, from, to, 0)
+	return occ, err
 }

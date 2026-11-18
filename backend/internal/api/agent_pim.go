@@ -49,6 +49,9 @@ const (
 	pimMaxContacts  = 50
 	pimMaxNotes     = 2000
 	pimMaxFileReads = 400
+	// pimMaxScan bounds the occurrences calendar_search looks through for
+	// a text (S-20): the earliest of the window; truncated past it.
+	pimMaxScan = 2000
 )
 
 // pimTools are the tools of calendar and contacts; none without the store
@@ -495,10 +498,18 @@ func (b *agentToolbox) calendarSearch(_ context.Context, _ *agent.Chat, args jso
 			chosen = append(chosen, cols[i])
 		}
 	}
+	// The occurrences are bounded before they are expanded (S-20): the
+	// earliest limit+1 tell whether there are more; with a text the
+	// earliest pimMaxScan are searched.
+	needle := cardweb.Fold(strings.TrimSpace(q.Query))
+	scan := limit + 1
+	if needle != "" {
+		scan = pimMaxScan
+	}
 	var views []calweb.View
 	for _, c := range chosen {
 		names[c.ID] = ownCalendar(c, nil).Name
-		occs, err := store.Query(user, c.ID, from, to)
+		occs, cut, err := store.Query(user, c.ID, from, to, scan)
 		if pimGone(err) {
 			out["hidden"], out["why"] = true, pimWhyCalendarVolume
 			return pimJSON(out)
@@ -512,6 +523,11 @@ func (b *agentToolbox) calendarSearch(_ context.Context, _ *agent.Chat, args jso
 			}
 		}
 		views = append(views, calweb.Views(c.ID, occs, local)...)
+		var merged bool
+		views, merged = earliestViews(views, scan, local)
+		if (cut || merged) && needle != "" {
+			out["truncated"] = true // a match may be past the scan
+		}
 	}
 	if birthdays {
 		switch {
@@ -528,8 +544,10 @@ func (b *agentToolbox) calendarSearch(_ context.Context, _ *agent.Chat, args jso
 			views = append(views, calweb.Birthdays(contacts, from, to, local)...)
 		}
 	}
-	slices.SortStableFunc(views, func(x, y calweb.View) int { return viewStart(x, local).Compare(viewStart(y, local)) })
-	needle := cardweb.Fold(strings.TrimSpace(q.Query))
+	views, cut := earliestViews(views, scan, local)
+	if cut && needle != "" {
+		out["truncated"] = true
+	}
 	files := map[string]*pimFile{}
 	reads := 0
 	events := []pimEventView{}

@@ -100,15 +100,21 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	out := calendarEventList{Events: []calweb.View{}}
 	for _, id := range ids {
-		occs, err := store.Query(user, id, from, to)
+		occs, cut, err := store.Query(user, id, from, to, pimstore.MaxQueryOccurrences)
 		if err != nil {
 			calendarFail(w, r, id, err, "calendar_not_found")
 			return
 		}
+		out.Truncated = out.Truncated || cut
 		for _, o := range occs {
 			out.Truncated = out.Truncated || o.Truncated
 		}
 		out.Events = append(out.Events, calweb.Views(id, occs, local)...)
+		if len(out.Events) > pimstore.MaxQueryOccurrences {
+			// The earliest MaxQueryOccurrences of all calendars (S-20).
+			out.Events, _ = earliestViews(out.Events, pimstore.MaxQueryOccurrences, local)
+			out.Truncated = true
+		}
 	}
 	if birthdays {
 		contacts, err := store.Objects(pimstore.Contacts, user, pimstore.DefaultBook)
@@ -122,8 +128,32 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 			out.BirthdaysUnavailable = true
 		}
 	}
-	slices.SortStableFunc(out.Events, func(x, y calweb.View) int { return viewStart(x, local).Compare(viewStart(y, local)) })
+	var cut bool
+	out.Events, cut = earliestViews(out.Events, pimstore.MaxQueryOccurrences, local)
+	out.Truncated = out.Truncated || cut
 	writeJSON(w, http.StatusOK, out)
+}
+
+// earliestViews sorts views by start and keeps the first limit; true when
+// it cut.
+func earliestViews(views []calweb.View, limit int, local *time.Location) ([]calweb.View, bool) {
+	type keyed struct {
+		at time.Time
+		v  calweb.View
+	}
+	ks := make([]keyed, len(views))
+	for i, v := range views {
+		ks[i] = keyed{viewStart(v, local), v}
+	}
+	slices.SortStableFunc(ks, func(x, y keyed) int { return x.at.Compare(y.at) })
+	for i := range ks {
+		views[i] = ks[i].v
+	}
+	if len(views) <= limit {
+		return views, false
+	}
+	clear(views[limit:])
+	return views[:limit], true
 }
 
 // birthdayEvent is one birthday of a contact: the occurrence named
