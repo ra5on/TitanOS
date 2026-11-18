@@ -266,3 +266,38 @@ func TestContactSearchOneRequest(t *testing.T) {
 		t.Fatalf("%+v", out)
 	}
 }
+
+// TestContactWriteKeepsList: a write answers its row and the list's ETag
+// now; the list asked with it is 304 (the page keeps the row it put in
+// place, the live event of its own write costs no list).
+func TestContactWriteKeepsList(t *testing.T) {
+	e := newConEnv(t)
+	e.seed("ben.vcf", iosContact)
+	var made contactWritten
+	e.do(e.alex, "POST", "/api/v1/contacts", map[string]any{"contact": map[string]any{"first": "Eva", "last": "Neu"}}, http.StatusCreated, &made)
+	if made.Item == nil || made.ListETag == "" {
+		t.Fatalf("%+v", made)
+	}
+	ask := func(tag string) int {
+		req, _ := http.NewRequest("GET", e.ts.url+"/api/v1/contacts", nil)
+		req.Header.Set("If-None-Match", tag)
+		res, err := e.alex.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := ask(made.ListETag); code != http.StatusNotModified {
+		t.Fatalf("list after the write: %d", code)
+	}
+	var g groupView
+	e.do(e.alex, "POST", "/api/v1/contacts/groups", map[string]any{"name": "Team", "members": []string{made.ID}}, http.StatusCreated, &g)
+	if g.ListETag == "" || g.ListETag == made.ListETag || ask(g.ListETag) != http.StatusNotModified {
+		t.Fatalf("after the group: %q", g.ListETag)
+	}
+	res, _ := e.ts.do(e.alex, "DELETE", "/api/v1/contacts/kontakte/"+url.PathEscape(made.ID)+"?etag="+url.QueryEscape(made.ETag), nil)
+	if res.StatusCode != http.StatusNoContent || ask(res.Header.Get("X-List-ETag")) != http.StatusNotModified {
+		t.Fatalf("delete: %d %q", res.StatusCode, res.Header.Get("X-List-ETag"))
+	}
+}

@@ -31,6 +31,9 @@ type groupView struct {
 	// Other counts members TitanOS cannot show: a UID of no contact here
 	// (on another device's book), a mailto: member. They stay in the card.
 	Other int `json:"other"`
+	// ListETag: after a write, the ETag of the whole list of contacts now
+	// (a group changes the book's ctag; the page keeps its list).
+	ListETag string `json:"listETag,omitempty"`
 }
 
 // bookUIDs maps the UIDs of a book's contacts to their file names (groups
@@ -187,6 +190,7 @@ func (a pimDataArea) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		contactsFail(w, r, book, err, "contact_group_not_found")
 		return
 	}
+	v.ListETag = a.listTagNow(store, user)
 	writeJSON(w, http.StatusCreated, v)
 }
 
@@ -306,6 +310,7 @@ func (a pimDataArea) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 		contactsFail(w, r, book, err, "contact_group_not_found")
 		return
 	}
+	v.ListETag = a.listTagNow(store, user)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -338,6 +343,7 @@ func (a pimDataArea) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 		contactsFail(w, r, book, err, "contact_group_not_found")
 		return
 	}
+	w.Header().Set("X-List-ETag", a.listTagNow(store, user))
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -257,6 +257,6 @@ func (a pimDataArea) handleMergeContacts(w http.ResponseWriter, r *http.Request)
 		contactsFail(w, r, book, err, "contact_not_found")
 		return
 	}
-	out := mergeResult{contactWritten: contactWritten{ID: q.Keep.ID, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, q.Keep.ID)}, Groups: groups}
+	out := mergeResult{contactWritten: contactWritten{ID: q.Keep.ID, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, q.Keep.ID), ListETag: a.listTagNow(store, user)}, Groups: groups}
 	writeJSON(w, http.StatusOK, out)
 }
