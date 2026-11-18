@@ -11,6 +11,7 @@
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Segments from '#lib/components/Segments.svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { apiErrorText, t, tOr, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { SQUARES, squareHex, squareOf, type Calendar, type SquareName } from '../calendar.ts';
 	import {
@@ -30,6 +31,7 @@
 		onchanged: () => void;
 	};
 	let { calendar, onclose, onchanged }: Props = $props();
+	const phone = phoneView();
 
 	// svelte-ignore state_referenced_locally
 	let name = $state(calendar?.name ?? '');
@@ -140,7 +142,7 @@
 			</label>
 			<div class="field-row">
 				<span class="lbl" id="cal-color-label">{t('calendar.cal.color')}</span>
-				<div class="colors" role="radiogroup" aria-labelledby="cal-color-label">
+				<div class="colors" class:phone role="radiogroup" aria-labelledby="cal-color-label">
 					{#each SQUARES as [c] (c)}
 						<label
 							class="swatch"
@@ -273,6 +275,10 @@
 		color: var(--on-icon-square);
 		cursor: pointer;
 		outline-offset: 2px;
+	}
+	.colors.phone .swatch {
+		width: 44px;
+		height: 44px;
 	}
 	.swatch.on {
 		outline: 2px solid var(--text);

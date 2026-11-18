@@ -217,16 +217,14 @@ try {
       "repeat sign with words",
     );
     // The long title grows; nothing lies on top of another block of its lane.
-    const boxes = await col
-      .locator(".blk")
-      .evaluateAll((els) =>
-        els.map((e) => ({
-          lane: e.dataset.lane,
-          top: e.offsetTop,
-          bottom: e.offsetTop + e.offsetHeight,
-          text: e.textContent,
-        })),
-      );
+    const boxes = await col.locator(".blk").evaluateAll((els) =>
+      els.map((e) => ({
+        lane: e.dataset.lane,
+        top: e.offsetTop,
+        bottom: e.offsetTop + e.offsetHeight,
+        text: e.textContent,
+      })),
+    );
     const long = boxes.find((b) => b.text.includes(LONG_TITLE));
     assert.ok(long && long.bottom - long.top > 100, "the long event grew");
     for (const a of boxes)
@@ -306,15 +304,13 @@ try {
       async () => (await d.innerText()).includes("Bastelsachen"),
       "notes loaded",
     );
-    const links = await d
-      .locator("a")
-      .evaluateAll((as) =>
-        as.map((a) => ({
-          href: a.getAttribute("href"),
-          text: a.textContent,
-          rel: a.rel,
-        })),
-      );
+    const links = await d.locator("a").evaluateAll((as) =>
+      as.map((a) => ({
+        href: a.getAttribute("href"),
+        text: a.textContent,
+        rel: a.rel,
+      })),
+    );
     assert.deepEqual(
       links.map((l) => l.href),
       [
@@ -603,7 +599,9 @@ try {
       await page.locator("[data-preview]").innerText(),
       /Nächste Termine: 15\. Dezember, 19\. Januar, 16\. Februar … · 8 Termine bis 13\. Juli 2027/,
     );
-    await page.getByLabel("Erinnerung hinzufügen").selectOption("60");
+    // "+ Erinnerung" (drafts 05/43) opens the choices.
+    await page.getByRole("button", { name: "Erinnerung hinzufügen" }).click();
+    await page.getByRole("menuitem", { name: "1 Stunde vorher" }).click();
     await page.locator("#t-place").fill("Grundschule am Park, Raum 12");
     await page.locator("#t-note").fill("Bastelsachen mitbringen.");
     await sound(page, "new event");
@@ -810,6 +808,51 @@ try {
     );
     await sound(page, `phone list ${theme}`);
     await namedColors(page, `phone list ${theme}`);
+    // The dialogs come as sheets with 44 px targets.
+    for (const [opener, what] of [
+      [
+        page.getByRole("button", { name: "Privat: Einstellungen" }).first(),
+        "calendar dialog",
+      ],
+      [
+        page.locator(".arow", { hasText: "Elternabend" }).first(),
+        "event detail",
+      ],
+    ]) {
+      await opener.click();
+      const sheet = dialog(page);
+      await sheet.waitFor();
+      await page.waitForTimeout(500);
+      if (what === "event detail")
+        await until(
+          async () => (await sheet.innerText()).includes("Bastelsachen"),
+          "notes on the phone",
+        );
+      assert.deepEqual(
+        await small(page, "dialog[open]"),
+        [],
+        `phone ${what} ${theme}: targets under 44 px`,
+      );
+      await sound(page, `phone ${what} ${theme}`);
+      await shot(page, `handy-${what.replace(" ", "-")}-${theme}`);
+      if (what === "event detail") {
+        await sheet.getByRole("button", { name: "Löschen …" }).click();
+        await dialog(page).getByText("Nur diesen Termin").waitFor();
+        await page.waitForTimeout(500);
+        assert.deepEqual(
+          await small(page, "dialog[open]"),
+          [],
+          `phone delete ${theme}: targets under 44 px`,
+        );
+        await sound(page, `phone delete ${theme}`);
+        await shot(page, `handy-loeschen-${theme}`);
+      }
+      await page.keyboard.press("Escape");
+      await until(
+        async () => (await page.locator("dialog[open]").count()) === 0,
+        `${what} closes`,
+      );
+    }
     await shot(page, `handy-liste-${theme}`);
 
     await page.getByRole("radio", { name: "Monat" }).click();
@@ -855,7 +898,7 @@ try {
 
   // ---- In a window of the real desktop; "Ablage › Neuer Termin" opens the event window ----
   {
-    const { page, ctx } = await open({ desk: true, height: 1000 });
+    const { page, ctx, state } = await open({ desk: true, height: 1000 });
     await page.goto(base + "/calendar");
     await page.locator("section.win").first().waitFor();
     const frame = await windowFrame(page, "/calendar");
@@ -888,6 +931,59 @@ try {
     );
     await sound(ev, "event window");
     await shot(page, "arbeitsplatz-neuer-termin");
+    // Saving closes the event window and the calendar window reads again.
+    await ev.locator("#t-title").fill("Rückruf Hausverwaltung");
+    const posted = state.requests.length;
+    await ev.getByRole("button", { name: "Speichern" }).click();
+    await until(
+      () => sent(state, "POST", /^\/calendar\/events$/).length === 1,
+      "POST from the window",
+    );
+    await until(
+      async () => (await page.locator("section.win").count()) === 1,
+      "the event window closes",
+    );
+    await until(
+      () =>
+        state.requests
+          .slice(posted)
+          .some(([m, p]) => m === "GET" && p.startsWith("/calendar/events?")),
+      "the calendar reloads after the save",
+    );
+    // The week in the window (about 1000 px): no cut text in narrow blocks.
+    await frame.getByRole("radio", { name: "Woche" }).click();
+    await frame.locator('[data-pim-ready][data-view="week"]').waitFor();
+    await frame.locator(".blk").first().waitFor();
+    await page.waitForTimeout(400);
+    await sound(frame, "desktop window week");
+    await shot(page, "arbeitsplatz-fenster-woche");
+    await ctx.close();
+  }
+
+  // ---- A smaller window (800 px, the page alone): month, week, form ----
+  for (const [path, view] of [
+    ["/calendar", "month"],
+    ["/calendar?view=week", "week"],
+    ["/calendar?view=list", "list"],
+  ]) {
+    const { page, ctx } = await open({ width: 800 });
+    await page.goto(base + path);
+    await ready(page, view);
+    await sound(page, `800 ${view}`);
+    await namedColors(page, `800 ${view}`);
+    await shot(page, `fenster-800-${view}`);
+    await ctx.close();
+  }
+  {
+    const { page, ctx } = await open({ width: 800, theme: "graphit" });
+    await page.goto(
+      base +
+        `/calendar/event?cal=familie&id=${encodeURIComponent(ODD_ID)}&occurrence=20261117T180000Z`,
+    );
+    await page.locator("[data-event-form]").waitFor();
+    await page.waitForTimeout(400);
+    await sound(page, "800 form");
+    await shot(page, "fenster-800-termin");
     await ctx.close();
   }
 

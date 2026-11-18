@@ -14,6 +14,7 @@
 	import { ApiError } from '#lib/api.ts';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Segments from '#lib/components/Segments.svelte';
@@ -385,7 +386,6 @@
 		}
 	}
 
-	let addAlarm = $state('');
 	const startMin = $derived(
 		Number(form.startTime.slice(0, 2)) * 60 + Number(form.startTime.slice(3, 5)) || 0,
 	);
@@ -603,25 +603,22 @@
 					>
 				{/each}
 				{#if alarmChoices.length && form.alarms.length < 20}
-					<span class="add-alarm">
-						<Icon name="plus" size={15} />
-						<select
-							class="field sel"
-							aria-label={t('calendar.form.addAlarm')}
-							bind:value={addAlarm}
-							onchange={() => {
-								const m = Number(addAlarm);
-								if (addAlarm !== '' && !form.alarms.includes(m))
-									form.alarms = [...form.alarms, m].sort((x, y) => x - y);
-								addAlarm = '';
-							}}
-						>
-							<option value="">{t('calendar.form.addAlarm')}</option>
-							{#each alarmChoices as m (m)}<option value={String(m)}
-									>{alarmText(m, form.allDay, startMin)}</option
-								>{/each}
-						</select>
-					</span>
+					<!-- Draft 05/43: "+ Erinnerung" opens the choices. -->
+					<Dropdown label={t('calendar.form.addAlarm')} text={t('calendar.form.alarm')} icon="plus">
+						{#snippet children(close)}
+							{#each alarmChoices as m (m)}
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										close();
+										if (!form.alarms.includes(m))
+											form.alarms = [...form.alarms, m].sort((x, y) => x - y);
+									}}><span>{alarmText(m, form.allDay, startMin)}</span></button
+								>
+							{/each}
+						{/snippet}
+					</Dropdown>
 				{/if}
 				<small class="muted">{t('calendar.form.alarmHint')}</small>
 			</span>
@@ -865,11 +862,8 @@
 		background: var(--srow-bg);
 		width: min(26rem, 100%);
 	}
-	.add-alarm {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		max-width: 100%;
+	.phone .stack :global(.dropdown .btn) {
+		min-height: 44px;
 	}
 	.grow {
 		flex: 1;

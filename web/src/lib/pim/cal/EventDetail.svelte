@@ -7,6 +7,7 @@
 	// come from the contacts and are read-only.
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { calColor, linkPieces, safeHref, type Calendar, type CalEvent } from '../calendar.ts';
 	import { loadEvent } from '../calendar-api.ts';
@@ -28,6 +29,7 @@
 		ondelete: (ev: CalEvent) => void;
 	};
 	let { event, calFor, onclose, onedit, ondelete }: Props = $props();
+	const phone = phoneView();
 
 	// svelte-ignore state_referenced_locally
 	let ev = $state<CalEvent>(event);
@@ -55,7 +57,7 @@
 </script>
 
 <Dialog title={detailTitle(ev)} {onclose}>
-	<dl class="detail" data-event-detail>
+	<dl class="detail" class:phone data-event-detail>
 		<div class="row">
 			<dt>
 				<Icon name="clock" size={16} /><span class="sr-only">{t('calendar.detail.when')}</span>
@@ -185,6 +187,14 @@
 	.notes {
 		display: block;
 		white-space: pre-wrap;
+	}
+	/* The phone: a link in the notes is a 44 px target of its own. */
+	.phone .notes a {
+		display: inline-block;
+		max-width: 100%;
+		min-height: 44px;
+		line-height: 44px;
+		vertical-align: top;
 	}
 	small {
 		font-size: var(--text-sm);

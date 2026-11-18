@@ -401,11 +401,17 @@
 					{phone}
 					onopen={(ev) => (detail = ev)}
 				/>
-				<div class="list-more">
-					<button type="button" class="btn" onclick={() => (listLength += 30)}
-						>{t('calendar.moreDays')}</button
-					>
-				</div>
+				<!-- The API reads at most 400 days (with a day around): the list stops at 390. -->
+				{#if listLength < 390}
+					<div class="list-more">
+						<button
+							type="button"
+							class="btn"
+							onclick={() => (listLength = Math.min(390, listLength + 30))}
+							>{t('calendar.moreDays')}</button
+						>
+					</div>
+				{/if}
 			{/if}
 
 			{#if phone}
@@ -597,8 +603,9 @@
 	.phone-cals {
 		margin-top: var(--space-5);
 	}
-	/* A narrow window: the column below the view. */
-	@media (max-width: 760px) {
+	/* A narrower window: the column below the view, so the days keep room
+	   for their titles (a cell under 4 letters' width would break every word). */
+	@media (max-width: 980px) {
 		.cal:not(.phone) {
 			grid-template-columns: minmax(0, 1fr);
 		}
