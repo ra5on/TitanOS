@@ -2,10 +2,11 @@
 // spam and trash without a count, a server with the namespace "INBOX."
 // (every folder below the inbox): the inbox folds nothing and no folder
 // with a role ever folds away.
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import FolderColumn from '#lib/tmail/FolderColumn.svelte';
 import { i18n } from '#lib/i18n/index.svelte.ts';
+import { session } from '#lib/session.svelte.ts';
 import { mail } from '#lib/tmail/store.svelte.ts';
 import type { MailFolder } from '#lib/tmail/types.ts';
 
@@ -82,4 +83,31 @@ test('spam and trash show no count; favourites go on top and stay', async () => 
 			.getAllByRole('button', { name: '„Rechnungen“ aus den Favoriten lösen' })[0]
 			.getAttribute('aria-pressed'),
 	).toBe('true');
+});
+
+test('1.13: folders sort among their siblings with the keys, saved for the account', async () => {
+	vi.useFakeTimers();
+	const put = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+	vi.stubGlobal('fetch', put);
+	render(FolderColumn, { account: 'a1', folder: 'INBOX', sortable: true, onpick: () => {} });
+	const names = () =>
+		[...document.querySelectorAll('.folder .name')].map((e) => e.textContent?.trim());
+	expect(names()).toEqual(['Posteingang', 'Gesendet', 'Spam', 'Papierkorb', 'Rechnungen', '2026']);
+	// A group of one has nothing to sort: grips only for the four folders with a role.
+	expect(screen.getAllByRole('button', { name: /verschieben$/ })).toHaveLength(4);
+	await fireEvent.keyDown(folderButton('Posteingang')!, { key: 'ArrowDown', altKey: true });
+	expect(names()).toEqual(['Gesendet', 'Posteingang', 'Spam', 'Papierkorb', 'Rechnungen', '2026']);
+	expect(session.order).toMatchObject({
+		mail: { a1: ['INBOX.Sent', 'INBOX', 'INBOX.Spam', 'INBOX.Trash'] },
+	});
+	await vi.advanceTimersByTimeAsync(700);
+	expect(put).toHaveBeenCalledTimes(1);
+	const [url, init] = put.mock.calls[0] as unknown as [string, RequestInit];
+	expect(url).toContain('/preferences/order');
+	expect(JSON.parse(String(init.body))).toEqual({
+		mail: { a1: ['INBOX.Sent', 'INBOX', 'INBOX.Spam', 'INBOX.Trash'] },
+	});
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+	session.order = null;
 });
