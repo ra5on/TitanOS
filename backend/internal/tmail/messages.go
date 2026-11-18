@@ -256,6 +256,25 @@ var (
 		Partial: &imap.SectionPartial{Size: previewFetch}}
 )
 
+// leanFetch is listFetch without the preview and References: the line of
+// a page that was too large with them (fallback).
+func leanFetch() *imap.FetchOptions {
+	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
+		BodySection: []*imap.FetchItemBodySection{fresh(listTypeSection)}}
+}
+
+// fresh is a copy of a section of the list for one request: the shared
+// ones are only patterns (and what findSection compares with).
+func fresh(s *imap.FetchItemBodySection) *imap.FetchItemBodySection {
+	c := *s
+	c.HeaderFields = slices.Clone(s.HeaderFields)
+	if s.Partial != nil {
+		p := *s.Partial
+		c.Partial = &p
+	}
+	return &c
+}
+
 // findSection is the data of a fetched section like want, whether or not
 // the server echoed its partial; nil if it is missing.
 func findSection(b *imapclient.FetchMessageBuffer, want *imap.FetchItemBodySection) []byte {
@@ -274,7 +293,7 @@ func findSection(b *imapclient.FetchMessageBuffer, want *imap.FetchItemBodySecti
 // a mail with thousands of parts cannot make a page too large.
 func listFetch() *imap.FetchOptions {
 	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
-		BodySection: []*imap.FetchItemBodySection{listTypeSection, listReferencesSection, listTextSection}}
+		BodySection: []*imap.FetchItemBodySection{fresh(listTypeSection), fresh(listReferencesSection), fresh(listTextSection)}}
 }
 
 // attachmentsByHead tells from the Content-Type of a mail whether it has
@@ -329,21 +348,30 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		return nil
 	})
 	if errors.Is(err, ErrTooLarge) && len(pick) > 0 {
-		page.Messages, err = m.oneByOne(ctx, user, id, q.Folder, pick)
+		page.Messages, err = m.fallback(ctx, user, id, q.Folder, pick)
 	}
 	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
 	return page, err
 }
 
 // summaries fetches the lines of some mails of a folder (search over all
-// folders); a page too large for the budget goes one by one.
+// folders); a page too large for the budget goes the way of fallback.
 func (m *Manager) summaries(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out, err := m.fetchLines(ctx, user, id, folder, uids, listFetch)
+	if errors.Is(err, ErrTooLarge) {
+		return m.fallback(ctx, user, id, folder, uids)
+	}
+	return out, err
+}
+
+// fetchLines fetches the lines of some mails in one FETCH.
+func (m *Manager) fetchLines(ctx context.Context, user, id, folder string, uids []uint32, opts func() *imap.FetchOptions) ([]Summary, error) {
 	var out []Summary
 	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
 			return err
 		}
-		msgs, err := collect(c.Fetch(uidSet(uids...), listFetch()))
+		msgs, err := collect(c.Fetch(uidSet(uids...), opts()))
 		if err != nil {
 			return err
 		}
@@ -352,29 +380,45 @@ func (m *Manager) summaries(ctx context.Context, user, id, folder string, uids [
 		}
 		return nil
 	})
+	return out, err
+}
+
+// fallback is the way of a page too large for the budget of a command:
+// the page again without preview and References (a server that ignores
+// the cut of BODY[TEXT] sends whole bodies – the preview is optional,
+// sender and subject are not), then mail by mail.
+func (m *Manager) fallback(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out, err := m.fetchLines(ctx, user, id, folder, uids, leanFetch)
 	if errors.Is(err, ErrTooLarge) {
 		return m.oneByOne(ctx, user, id, folder, uids)
 	}
 	return out, err
 }
 
-// oneByOne fetches lines one mail at a time: only the mails too large to
-// list are marked (tooLarge), the others are whole.
+// oneByOne fetches lines one mail at a time, each with its preview and
+// else without: only the mails whose heads alone are too large to list
+// are marked (tooLarge), the others are whole.
 func (m *Manager) oneByOne(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
 	out := []Summary{}
 	for _, uid := range uids {
 		var one Summary
-		err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
-			if _, err := selectFolder(c, s, folder); err != nil {
+		var err error
+		for _, opts := range []func() *imap.FetchOptions{listFetch, leanFetch} {
+			err = m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+				if _, err := selectFolder(c, s, folder); err != nil {
+					return err
+				}
+				s.budget.set(budgetCommand / 4)
+				b, err := fetchOne(c, uid, opts())
+				if err == nil {
+					one = summaryOf(b)
+				}
 				return err
+			})
+			if !errors.Is(err, ErrTooLarge) {
+				break
 			}
-			s.budget.set(budgetCommand / 4)
-			b, err := fetchOne(c, uid, listFetch())
-			if err == nil {
-				one = summaryOf(b)
-			}
-			return err
-		})
+		}
 		switch {
 		case errors.Is(err, ErrTooLarge):
 			one = Summary{UID: uid, To: []Address{}, TooLarge: true}

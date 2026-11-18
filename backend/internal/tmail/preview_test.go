@@ -1,8 +1,11 @@
 package tmail
 
 import (
+	"bufio"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -127,5 +130,75 @@ func TestListTooLargeKeepsPreviews(t *testing.T) {
 	if len(page.Messages) != 3 || !page.Messages[1].TooLarge || page.Messages[1].Preview != "" ||
 		page.Messages[0].Preview != "Dritter Text" || page.Messages[2].Preview != "Erster Text" {
 		t.Fatalf("page: %+v", page.Messages)
+	}
+}
+
+// A server that ignores the cut of BODY[TEXT] sends whole bodies: the
+// page is too large with the preview, so it comes again without it –
+// sender and subject stay, no mail turns into "too large" (1.12 review).
+func TestListWithoutPreviewWhenTheCutIsIgnored(t *testing.T) {
+	body := strings.Repeat("y", 2<<20)
+	var mu sync.Mutex
+	var fetches []string
+	addr, pool, _ := scripted(t, "* OK [CAPABILITY IMAP4rev1] ignores partial\r\n", func(w *bufio.Writer, tag, cmd, line string) bool {
+		upper := strings.ToUpper(line)
+		switch {
+		case cmd == "LOGIN":
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		case cmd == "SELECT":
+			fmt.Fprintf(w, "* 3 EXISTS\r\n* OK [UIDVALIDITY 1] v\r\n* OK [UIDNEXT 4] n\r\n%s OK [READ-WRITE] done\r\n", tag)
+		case strings.Contains(upper, "UID SEARCH"):
+			fmt.Fprintf(w, "* SEARCH 1 2 3\r\n%s OK done\r\n", tag)
+		case strings.Contains(upper, "UID FETCH"):
+			mu.Lock()
+			fetches = append(fetches, upper)
+			mu.Unlock()
+			text := strings.Contains(upper, "BODY.PEEK[TEXT]")
+			for _, part := range strings.Split(strings.Fields(line)[3], ",") {
+				lo, hi, _ := strings.Cut(part, ":")
+				a, _ := strconv.Atoi(lo)
+				b := a
+				if hi != "" {
+					b, _ = strconv.Atoi(hi)
+				}
+				for u := a; u <= b; u++ {
+					head := "Content-Type: text/plain\r\n\r\n"
+					fmt.Fprintf(w, `* %d FETCH (UID %d FLAGS () RFC822.SIZE 2100000 INTERNALDATE "17-Nov-2026 10:00:00 +0100" ENVELOPE ("Tue, 17 Nov 2026 10:00:00 +0100" "Mail %d" (("Bob" NIL "bob" "example.net")) NIL NIL NIL NIL NIL NIL "<m%d@x>") BODY[HEADER.FIELDS (CONTENT-TYPE CONTENT-TRANSFER-ENCODING)]<0> {%d}`+"\r\n%s", u, u, u, u, len(head), head)
+					if text {
+						fmt.Fprintf(w, " BODY[TEXT]<0> {%d}\r\n%s", len(body), body)
+					}
+					w.WriteString(")\r\n")
+				}
+			}
+			fmt.Fprintf(w, "%s OK done\r\n", tag)
+		default:
+			fmt.Fprintf(w, "%s OK\r\n", tag)
+		}
+		return true
+	})
+	e := newEnv(t)
+	e.m.RootCAs = pool
+	in := e.input("x")
+	in.IMAP.Host, in.IMAP.Port = hostPort(t, addr)
+	view, err := e.m.AddMailbox("alex", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := e.m.List(t.Context(), "alex", view.ID, ListQuery{Folder: "INBOX"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Messages) != 3 {
+		t.Fatalf("page: %+v", page.Messages)
+	}
+	for i, s := range page.Messages {
+		if s.TooLarge || s.Subject != fmt.Sprintf("Mail %d", 3-i) || s.From.Addr != "bob@example.net" || s.Preview != "" {
+			t.Fatalf("line %d: %+v", i, s)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(fetches) != 2 || strings.Contains(fetches[1], "BODY.PEEK[TEXT]") {
+		t.Fatalf("fetches: %d, second %q", len(fetches), fetches[len(fetches)-1])
 	}
 }

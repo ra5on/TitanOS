@@ -160,6 +160,87 @@ async function swipe(page, from, to, steps = 10) {
   await page.waitForTimeout(250);
   await cdp.detach();
 }
+/**
+ * Text contrast of the new parts (CLAUDE.md: at least 4.5:1): the text
+ * colour against the first backgrounds below it, blended where they are
+ * translucent (the mail page has no glass: solid surfaces only).
+ */
+async function contrast(page, name, selectors) {
+  const low = await page.evaluate((selectors) => {
+    // Any CSS colour (also color-mix results) through a canvas pixel.
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const rgba = (c) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = "rgba(0,0,0,0)";
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
+    };
+    const over = (top, below) => {
+      const a = top[3];
+      return [0, 1, 2].map((i) => top[i] * a + below[i] * (1 - a)).concat(1);
+    };
+    const lum = ([r, g, b]) => {
+      const f = (v) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const background = (el) => {
+      const layers = [];
+      for (let at = el; at; at = at.parentElement) {
+        const c = rgba(getComputedStyle(at).backgroundColor);
+        if (c && c[3] > 0) {
+          layers.push(c);
+          if (c[3] >= 1) break;
+        }
+      }
+      let bg = [255, 255, 255, 1];
+      for (const layer of layers.reverse()) bg = over(layer, bg);
+      return bg;
+    };
+    const out = [];
+    let checked = 0;
+    for (const sel of selectors)
+      for (const el of document.querySelectorAll(sel)) {
+        if (!el.getClientRects().length || !el.textContent.trim()) continue;
+        const bg = background(el);
+        const fg = over(rgba(getComputedStyle(el).color), bg);
+        const [l1, l2] = [lum(fg), lum(bg)].sort((a, b) => b - a);
+        const ratio = (l1 + 0.05) / (l2 + 0.05);
+        checked++;
+        if (ratio < 4.5) out.push(`${sel} "${el.textContent.trim().slice(0, 30)}" ${ratio.toFixed(2)}`);
+        break;
+      }
+    return { out, checked };
+  }, selectors);
+  assert.deepEqual(low.out, [], `${name}: contrast under 4.5:1`);
+  assert.ok(low.checked >= 10, `${name}: only ${low.checked} texts measured`);
+  console.log(`${name}: ${low.checked} texts at 4.5:1 or more`);
+}
+const CONTRAST = [
+  ".group h3",
+  ".entry .from",
+  ".entry .subject",
+  ".entry .preview",
+  ".entry time",
+  ".entry .where",
+  ".entry.picked .preview",
+  ".entry.picked .subject",
+  ".entry.child .preview",
+  ".entry.child .subject",
+  ".entry.current .preview",
+  ".count",
+  ".bulk .picked-count",
+  ".overview p",
+  ".overview .num",
+  ".overview .subj",
+  ".col-folders .addr",
+  ".col-folders .name",
+];
+
 async function windowFrame(page, prefix) {
   let found = null;
   await until(async () => {
@@ -241,6 +322,7 @@ try {
     assert.equal(await toggle.getAttribute("aria-expanded"), "true");
     assert.equal(await page.locator(".entry.child").count(), 2, "two below");
     await sound(page, "desktop list");
+    await contrast(page, "light", CONTRAST);
 
     // 11: the overview with nothing open.
     const overview = page.locator(".overview");
@@ -341,6 +423,7 @@ try {
     const bar = page.getByRole("toolbar", { name: "Aktionen für die Auswahl" });
     await bar.getByText("3 ausgewählt").waitFor();
     await sound(page, "bulk bar");
+    await contrast(page, "light, picked", CONTRAST);
     await shot(page, "04-desktop-mehrfachauswahl-1440-hell");
     await bar.getByRole("button", { name: "Archivieren" }).click();
     await until(() => sent(state, "POST", /\/archive$/).length === 1, "bulk archive");
@@ -472,6 +555,10 @@ try {
     await page.getByRole("button", { name: "All folders" }).waitFor();
     await page.locator(".overview").getByText(/Last refreshed/).waitFor();
     await sound(page, "desktop dark en");
+    await page.getByRole("button", { name: /Show the conversation: 3 messages/ }).click();
+    await page.locator(".entry.child").first().waitFor();
+    await page.getByRole("checkbox", { name: /Select/ }).nth(2).check();
+    await contrast(page, "dark", CONTRAST);
     await shot(page, "08-desktop-liste-1440-dunkel-en");
     await page.locator(".row").first().click();
     await page.locator("#mail-message-subject").waitFor();

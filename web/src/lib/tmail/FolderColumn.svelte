@@ -39,8 +39,7 @@
 
 	const roleIcon = (role: FolderRole): IconName => ICONS[role] ?? 'folder';
 	/** Indent by the folder's depth (IMAP names it with its delimiter). */
-	const depth = (f: MailFolder) =>
-		f.role ? 0 : Math.min(4, f.path.split(f.delim || /[/.]/).length - 1);
+	const levels = (f: MailFolder) => f.path.split(f.delim || /[/.]/).length - 1;
 	/** Spam and trash count nothing unread (owner 18 Nov 2026). */
 	const counts = (f: MailFolder) => f.unread > 0 && f.role !== 'junk' && f.role !== 'trash';
 
@@ -73,12 +72,27 @@
 	});
 
 	/** The folders shown: those below a folded one are left out. */
-	function visible(id: string): { f: MailFolder; parent: boolean }[] {
+	/**
+	 * The folders shown: those below a folded one are left out. Folders
+	 * with a role (Posteingang, Gesendet …) stand on top and never fold
+	 * away, and the inbox folds nothing: servers with the namespace
+	 * "INBOX." (Courier, cPanel) name every folder below it, which would
+	 * otherwise hide them all with the inbox. There the levels count from
+	 * below the inbox.
+	 */
+	function visible(id: string): { f: MailFolder; parent: boolean; depth: number }[] {
 		const list = sortFolders(mail.folders[id] ?? []);
-		const shut = list.filter((p) => folded.includes(folderRef(id, p.path)));
+		const inbox = list.find((p) => p.role === 'inbox');
+		const shut = list.filter((p) => p.role !== 'inbox' && folded.includes(folderRef(id, p.path)));
 		return list
-			.filter((f) => !shut.some((p) => isBelow(f, p)))
-			.map((f) => ({ f, parent: list.some((c) => isBelow(c, f)) }));
+			.filter((f) => f.role || !shut.some((p) => isBelow(f, p)))
+			.map((f) => ({
+				f,
+				parent: f.role !== 'inbox' && list.some((c) => !c.role && isBelow(c, f)),
+				depth: f.role
+					? 0
+					: Math.max(0, Math.min(4, levels(f) - (inbox && isBelow(f, inbox) ? 1 : 0))),
+			}));
 	}
 
 	// Dragging: only folders of the dragged mails' mailbox, not their own folder.
@@ -198,10 +212,10 @@
 				<p class="muted small" role="status">{t('common.loading')}</p>
 			{:else}
 				<ul>
-					{#each visible(a.id) as { f, parent } (f.path)}
+					{#each visible(a.id) as { f, parent, depth } (f.path)}
 						{@const shut = folded.includes(folderRef(a.id, f.path))}
 						<li class="line">
-							{@render folderButton(a, f, depth(f), folderName(f))}
+							{@render folderButton(a, f, depth, folderName(f))}
 							{#if parent}
 								<button
 									type="button"
