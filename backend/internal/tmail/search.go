@@ -98,6 +98,9 @@ func (m *Manager) Search(ctx context.Context, user, id string, q ListQuery) (Sea
 		return res, ErrBusy
 	}
 	defer done()
+	// Folder after folder on the background connection (lanes.go): the
+	// page opens mails meanwhile.
+	ctx = background(ctx)
 	var folders []Folder
 	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, _ *session) error {
 		var err error

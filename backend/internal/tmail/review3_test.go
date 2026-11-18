@@ -114,7 +114,7 @@ func TestStalledDownloadsBlockNoOne(t *testing.T) {
 	defer cancel()
 	var waited atomic.Bool
 	running.Go(func() {
-		_, err := e.m.Folders(short, "alex", ids[0])
+		_, err := e.m.Read(short, "alex", ids[0], "INBOX", 1, false)
 		waited.Store(errors.Is(err, ErrTimeout))
 	})
 	time.Sleep(50 * time.Millisecond)
@@ -122,6 +122,11 @@ func TestStalledDownloadsBlockNoOne(t *testing.T) {
 		t.Fatalf("a command while another waits for its mailbox: %v", err)
 	}
 	waitFor(t, "the waiting request to end with its context", waited.Load)
+	// 1.13: the folder counts of that mailbox go over the second
+	// connection and do not wait for the stalled download at all.
+	if _, err := e.m.Folders(t.Context(), "alex", ids[0]); err != nil {
+		t.Fatalf("folder counts beside a stalled download: %v", err)
+	}
 }
 
 // LOW (third review): a server stored before a start is known only at
