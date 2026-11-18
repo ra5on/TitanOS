@@ -171,7 +171,7 @@ Kurzfassung; Einzelheiten in `docs/AGENT.md`, Abschnitt „T-Kalender und Kontak
 - Zwei Bereiche „Kalender“ und „Kontakte“ unter Einstellungen › KI-Agent › Rechte, je mit **Lesen** (Erlaubt/Verboten) und **Eintragen** (Ohne Nachfrage/Nachfragen/Verboten; Löschen zählt zum Eintragen), gespeichert in `policy.dataRights`. Ab Werk (Schnellwahl „Standard“): Lesen ja, jedes Eintragen mit Nachfrage – auch Anlegen.
 - Neun eigene Werkzeuge (`calendar_list`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `contacts_search`, `contacts_create`, `contacts_update`, `contacts_delete`), nur für das eigene Konto des Chats, nicht im MCP-Katalog.
 - **Immer mit Nachfrage**, über alle Rechte, „Alles ohne Nachfrage“, Arbeitsweisen und geplante Aufträge: eine ganze Reihe löschen oder die Wiederholung der ganzen Reihe ändern (S-13); Löschen nach gelesenem fremdem Inhalt (S-14). Gelesene Termine und Kontakte zählen als fremder Inhalt.
-- Home Assistant (Assist) ab Werk ohne Zugriff, höchstens „Nur lesen“ (`ha.assistData`), gelesen wird das Konto „Assist als“.
+- Home Assistant (Assist) ab Werk ohne Zugriff, höchstens „Nur lesen“ (`homeassistant.assistData` in `agent.json`), gelesen wird das Konto „Assist als“.
 - Die gelernten Adressen von T-Mail erreicht kein Werkzeug.
 
 ## Sicherheit
