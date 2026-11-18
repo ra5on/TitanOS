@@ -242,9 +242,10 @@ func TestAgentDecideToEdit(t *testing.T) {
 	if ans.Entry == "" || ans.Draft.App != "calendar" || ans.Draft.Fields["title"] != "Zahnarzt" {
 		t.Fatalf("answer %+v", ans)
 	}
-	done := waitChat(t, e.ts, e.client, chat.ID)
+	// At once, without waiting for the run: the editor asks right away.
 	var got agent.Draft
 	e.do("GET", "/api/v1/agent/chats/"+chat.ID+"/drafts/"+ans.Entry, nil, 200, &got)
+	done := waitChat(t, e.ts, e.client, chat.ID)
 	if got.Fields["title"] != "Zahnarzt" || done.Pending != nil {
 		t.Fatalf("draft %+v pending %+v", got, done.Pending)
 	}

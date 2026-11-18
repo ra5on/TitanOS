@@ -8,7 +8,9 @@
 // never its content) and starts a chat of the panel (origin "panel"); a
 // step in "Nur Vorschläge" shows a draft card, "Öffnen und bearbeiten" opens
 // the mail editor filled with it (To, subject, text, the note) and sends
-// nothing by itself. Narrow window 800 px dark and phone 390 px light and
+// nothing by itself. 1440 dark: the column; 1024: no room next to the list,
+// a sheet, the message keeps 320 px. Narrow window 800 px light and dark and
+// phone 390 px light and
 // dark: the panel is a sheet from below. On every page: no sideways scroll,
 // no cut text.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5212 UI_OUTPUT=out/validation/113-agent node scripts/test-ui-agent-panel-113.mjs
@@ -238,7 +240,29 @@ try {
   }
 
   // ---- Narrow window 800 dark and the phone: a sheet from below ----
+  // ---- 1440 dark: the column; 1024: no room next to the list, a sheet ----
+  for (const [width, theme] of [
+    [1440, "dunkel"],
+    [1024, "hell"],
+  ]) {
+    const { page, panel } = await open({ width, height: 768, theme });
+    panel.cloud = false;
+    await page.goto(base + "/mail?a=acc-privat&f=INBOX&m=1000");
+    await page.locator(".col-message").first().waitFor();
+    await page.locator(".col-folders .agent-toggle").click();
+    const where = width >= 1200 ? ".cf-aside .agent-panel" : "[role=dialog] .agent-panel";
+    await page.locator(where).waitFor();
+    const content = await page.locator(".cf-content").boundingBox();
+    assert.ok(content.width >= 320, `${width}: the message keeps 320 px (${content.width})`);
+    await page.locator(where).locator("textarea").scrollIntoViewIfNeeded();
+    assert.ok(await page.locator(where).locator("textarea").isVisible(), `${width}: the input is in view`);
+    await sound(page, `${width} ${theme}`);
+    await shot(page, `05-panel-${width}-${theme}`);
+    await page.context().close();
+  }
+
   for (const [width, phone, theme] of [
+    [800, false, "hell"],
     [800, false, "dunkel"],
     [390, true, "hell"],
     [390, true, "dunkel"],
@@ -265,6 +289,12 @@ try {
     const sheet = page.locator('[role=dialog] .agent-panel');
     await sheet.waitFor();
     await sheet.getByRole("button", { name: "Zusammenfassen" }).waitFor();
+    await page.waitForTimeout(600); // the sheet slides up
+    const input = await sheet.locator("textarea").boundingBox();
+    assert.ok(
+      input && input.y + input.height <= (phone ? 844 : 900),
+      `${width}: the input stands in the sheet's view ${JSON.stringify(input)}`,
+    );
     await sound(page, `${width} ${theme} sheet`);
     await shot(page, `04-panel-blatt-${width}-${theme}`);
     await page.context().close();

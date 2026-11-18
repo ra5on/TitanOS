@@ -48,6 +48,9 @@
 	onMount(() => void panel.load());
 	onDestroy(() => panel.detach());
 
+	// Mail switched off for the agent (or no Mail for the account): no
+	// chips the agent could not act on.
+	const shownActions = $derived(app === 'mail' && panel.state && !panel.state.mail ? [] : actions);
 	const needsNote = $derived(!!panel.state?.cloud && !panel.state.cloudNoted);
 	const ready = $derived(!!panel.state && !needsNote);
 
@@ -98,9 +101,9 @@
 		</div>
 	{/if}
 
-	{#if actions.length}
+	{#if shownActions.length}
 		<div class="chips" role="group" aria-label={t('agentpim.panel.actions')}>
-			{#each actions as a (a.id)}
+			{#each shownActions as a (a.id)}
 				<button
 					type="button"
 					class="chip-btn"
@@ -187,7 +190,8 @@
 		padding: var(--space-3);
 	}
 	.agent-panel.phone {
-		height: 78dvh;
+		/* Within the sheet (at most 86 dvh, on wide screens 640 px). */
+		height: min(78dvh, 600px);
 	}
 	header {
 		display: flex;

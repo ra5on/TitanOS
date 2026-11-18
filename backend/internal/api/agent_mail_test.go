@@ -118,21 +118,31 @@ func TestAgentMailTools(t *testing.T) {
 	// the web (also with "Web frei") and MCP.
 	free := sendAllowed
 	free.WebFree = true
+	e.ts.withShare()
 	fbox := e.box(t, free)
 	checked := 0
-	for _, c := range [][2]string{{"web_search", `{"query":"x"}`}, {"file_write", `{"root":"share/Docs","path":"a.txt","content":"x"}`}, {"note_write", `{"name":"x","content":"y"}`}} {
+	for _, c := range [][2]string{{"web_search", `{"query":"x"}`}, {"web_read", `{"url":"https://example.org/x"}`}, {"file_write", `{"root":"share/Docs","path":"a.txt","content":"x"}`}} {
 		if _, ok := fbox.tools[c[0]]; !ok {
 			continue
 		}
-		if p, err := fbox.Prepare(context.Background(), chat, c[0], json.RawMessage(c[1])); err == nil {
+		p, err := fbox.Prepare(context.Background(), chat, c[0], json.RawMessage(c[1]))
+		if err != nil {
+			t.Logf("%s: %v", c[0], err)
+		}
+		if err == nil {
 			checked++
 			if p.Mode != agent.ModeAsk {
 				t.Errorf("%s after a mail: %s", c[0], p.Mode)
 			}
 		}
 	}
-	if checked == 0 {
-		t.Error("no way out was checked")
+	if checked < 3 {
+		t.Errorf("only %d ways out were checked", checked)
+	}
+	for _, name := range []string{"web_search", "web_read", "file_write"} {
+		if _, ok := fbox.tools[name]; !ok {
+			t.Errorf("%s is missing in the test", name)
+		}
 	}
 	// A fresh chat that read nothing sends as the right says, logged.
 	fresh := &agent.Chat{}

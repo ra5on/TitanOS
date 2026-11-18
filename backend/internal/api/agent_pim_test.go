@@ -636,11 +636,14 @@ func TestPimSettingsRollbackTo110(t *testing.T) {
 // Calendar and contacts are no MCP tools and no public routes (TECHNIK
 // 6.1 [V]: no tokens for personal data).
 func TestPimIsNoMCPTool(t *testing.T) {
+	// 1.13: also mail, reminders, free time and duplicates.
 	isPim := func(name string) bool {
-		return strings.HasPrefix(name, "calendar") || strings.HasPrefix(name, "contacts") || strings.HasPrefix(name, "contact_")
+		return strings.HasPrefix(name, "calendar") || strings.HasPrefix(name, "contacts") || strings.HasPrefix(name, "contact_") ||
+			strings.HasPrefix(name, "mail") || strings.HasPrefix(name, "tasks") || strings.HasPrefix(name, "task_")
 	}
 	for _, r := range publicRoutes {
-		if isPim(r.Tool) || strings.HasPrefix(r.Path, "/calendar") || strings.HasPrefix(r.Path, "/contacts") || strings.Contains(r.Path, "dav") {
+		if isPim(r.Tool) || strings.HasPrefix(r.Path, "/calendar") || strings.HasPrefix(r.Path, "/contacts") || strings.Contains(r.Path, "dav") ||
+			strings.HasPrefix(r.Path, "/agent") {
 			t.Errorf("public route %s %s (%s)", r.Method, r.Path, r.Tool)
 		}
 	}
@@ -654,7 +657,7 @@ func TestPimIsNoMCPTool(t *testing.T) {
 	}
 	// The agent has them, as tools of its own.
 	box := pimBox(t, e, "alex", agent.Policy{Preset: agent.PresetStandard})
-	for _, name := range pimToolNames {
+	for _, name := range append(slices.Clone(pimToolNames), "calendar_free", "contacts_duplicates", "tasks_list", "tasks_create", "tasks_update", "tasks_complete", "tasks_delete") {
 		if box.tools[name] == nil || box.tools[name].own == nil {
 			t.Errorf("agent lacks %s", name)
 		}

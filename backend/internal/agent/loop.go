@@ -675,18 +675,32 @@ func (c *Chat) TakeSkipped() []Entry {
 // Decide answers a pending step: approve runs exactly what was planned,
 // decline tells the model. Then the run goes on.
 func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool) error {
-	return r.decide(ctx, chat, id, approve, "", nil)
+	return r.decide(ctx, chat, id, approve)
 }
+
+// editedNote is what the model reads for a step the person took into a
+// program's editor (1.13).
+const editedNote = "The person opened this step in the program to edit and finish it there themselves; it did not run. Do not repeat it."
 
 // DeclineToEdit answers a waiting step with "no" because the person takes
 // it into the program's editor ("Öffnen und bearbeiten", 1.13): the note
-// of the "no" (with the id noteID) carries the draft, and the model reads
-// that the person finishes it themselves.
-func (r *Runner) DeclineToEdit(ctx context.Context, chat *Chat, id, noteID string, d *Draft) error {
-	return r.decide(ctx, chat, id, false, noteID, d)
+// of the "no" (id noteID) carries the draft, before the calls of the round
+// that were not made. The caller saves the chat before anything else, so
+// that the program finds the draft at once, and then runs it on.
+func (c *Chat) DeclineToEdit(id, noteID string, d *Draft, at time.Time) error {
+	p := c.Pending
+	if p == nil || p.ID != id || d == nil {
+		return ErrNotFound
+	}
+	skipped := c.TakeSkipped()
+	c.Pending = nil
+	c.Entries = append(c.Entries, Entry{ID: noteID, At: at, Role: "note", Note: "declined", Tool: p.Tool, Summary: p.Summary, Draft: d, Content: editedNote})
+	c.Entries = append(c.Entries, skipped...)
+	c.Updated = at
+	return nil
 }
 
-func (r *Runner) decide(ctx context.Context, chat *Chat, id string, approve bool, noteID string, d *Draft) error {
+func (r *Runner) decide(ctx context.Context, chat *Chat, id string, approve bool) error {
 	p := chat.Pending
 	if p == nil || p.ID != id {
 		return ErrNotFound
@@ -696,14 +710,10 @@ func (r *Runner) decide(ctx context.Context, chat *Chat, id string, approve bool
 	if approve {
 		note = "approved"
 	}
-	content := ""
-	if d != nil {
-		content = "The person opened this step in the program to edit and finish it there themselves; it did not run. Do not repeat it."
-	}
 	// The step stops waiting only once the answer is saved: a failed save
 	// leaves the chat as it was, still waiting with its step.
 	chat.Pending = nil
-	if err := r.add(chat, Entry{ID: noteID, Role: "note", Note: note, Tool: p.Tool, Summary: p.Summary, Draft: d, Content: content}); err != nil {
+	if err := r.add(chat, Entry{Role: "note", Note: note, Tool: p.Tool, Summary: p.Summary}); err != nil {
 		chat.Entries = append(chat.Entries[:len(chat.Entries)-1], skipped...)
 		chat.Pending = p
 		return err

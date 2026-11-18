@@ -113,6 +113,10 @@
 		asideWidth?: ColumnWidth;
 		asideKey?: string;
 		asideResizeLabel?: string;
+		/** Whether the aside stands as a column now: only while side bar, list
+		 *  and content keep their minimum next to it (else the page shows it
+		 *  another way, e.g. as a sheet). */
+		asideShown?: boolean;
 		/** The content. */
 		children: Snippet;
 	};
@@ -143,6 +147,7 @@
 		asideWidth = { min: 300, max: 640, fallback: 380 },
 		asideKey = `${storage}.asideWidth`,
 		asideResizeLabel,
+		asideShown = $bindable(false),
 		children,
 	}: Props = $props();
 
@@ -189,7 +194,15 @@
 	const asideMax = $derived(
 		Math.max(asideWidth.min, Math.min(asideWidth.max, (frameWidth || 1200) - contentMin - 240)),
 	);
-	const asideW = $derived(aside && columns ? Math.min(asideStored, asideMax) : 0);
+	// Room for the aside: the others at their minimum next to its minimum.
+	const asideFits = $derived(
+		(frameWidth || 1200) - asideWidth.min >=
+			(folded ? RAIL : sideWidth.min) + (list ? listWidth.min : 0) + contentMin,
+	);
+	const asideW = $derived(aside && columns && asideFits ? Math.min(asideStored, asideMax) : 0);
+	$effect(() => {
+		asideShown = asideW > 0;
+	});
 	const widths = $derived(
 		columnWidths({
 			frame: (frameWidth || 1200) - asideW,

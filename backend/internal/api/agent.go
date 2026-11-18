@@ -430,8 +430,20 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		note := agent.NewID()
+		// Saved before the run starts: the program asks for the draft at once.
+		if err := chat.DeclineToEdit(req.ID, note, d, time.Now()); err != nil {
+			s.agentRelease(run)
+			agentStoreError(w, err)
+			return
+		}
+		chat.State = agent.StateRunning
+		if err := s.agentStore().SaveChat(user.Name, chat); err != nil {
+			s.agentRelease(run)
+			agentStoreError(w, err)
+			return
+		}
 		if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {
-			return rn.DeclineToEdit(ctx, chat, req.ID, note, d)
+			return rn.Run(ctx, chat)
 		}); err != nil {
 			agentStartError(w, err)
 			return

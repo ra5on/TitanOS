@@ -89,6 +89,8 @@
 	const AGENT_KEY = 'titanos.mail.agentPanel';
 	const withAgent = $derived(!!session.services.agent);
 	let agentOpen = $state(readAgentOpen());
+	/** The panel stands as a column (enough room next to it); else a sheet. */
+	let agentColumn = $state(false);
 	function readAgentOpen(): boolean {
 		try {
 			return localStorage.getItem(AGENT_KEY) === '1';
@@ -470,6 +472,7 @@
 		aside={withAgent && agentOpen && wide ? agentAside : undefined}
 		asideKey="titanos.agentPanel.width"
 		asideResizeLabel={t('agentpim.panel.resize')}
+		bind:asideShown={agentColumn}
 	>
 		{#if place.a && place.f && place.m}
 			{#if !wide && !phone}
@@ -515,7 +518,7 @@
 	/>
 {/snippet}
 
-{#if withAgent && agentOpen && !wide}
+{#if withAgent && agentOpen && !(wide && agentColumn)}
 	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
 		<AgentPanel
 			app="mail"
