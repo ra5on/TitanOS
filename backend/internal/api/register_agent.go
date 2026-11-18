@@ -22,6 +22,9 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/agent/assist", s.requireAdmin(s.handleAgentAssist))
 	mux.HandleFunc("GET /api/v1/agent/assist/key", s.requireAdmin(s.handleAgentAssistKey))
 	mux.HandleFunc("POST /api/v1/agent/assist/key", s.requireAdmin(s.handleAgentAssistKey))
+	// 1.11 (S-23): the account itself agrees that Assist reads its calendar
+	// and contacts, in its own web session.
+	mux.HandleFunc("PUT /api/v1/agent/assist/consent", s.requireAdmin(s.handleAgentAssistConsent))
 	// The volume of the agent's data, chosen when it is switched on, and
 	// moving it (PLAN 58).
 	mux.HandleFunc("GET /api/v1/agent/volumes", s.requireAdmin(s.handleAgentVolumes))

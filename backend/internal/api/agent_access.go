@@ -58,6 +58,8 @@ func (b *agentToolbox) Missing() map[string]string {
 		switch {
 		case b.settings.Policy.AreaMode(area) == agent.ModeDeny:
 			why = "forbidden for the agent by the person (" + whereRights + ")"
+		case agent.IsDataArea(area) && b.user.Name == agent.AssistProfile && slices.Contains(b.assistWaiting, area):
+			why = "waits for the consent of the account " + b.assistActing + ": only it can let questions from Home Assistant read its " + area + ", in its own session (" + whereHA + " › Assist)"
 		case agent.IsDataArea(area) && b.user.Name == agent.AssistProfile && b.settings.HA.assistLevel(area) == assistDeny:
 			why = "forbidden for questions from Home Assistant (" + whereHA + " › Assist)"
 		case agent.IsDataArea(area):

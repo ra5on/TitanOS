@@ -1811,6 +1811,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	{ p: '/settings/agent', k: 'agent.assist.last', kind: 'row', tab: 'ha', in: ['agent.haAssist'] },
 	{ p: '/settings/agent', k: 'agent.assist.setup', kind: 'row', tab: 'ha', in: ['agent.haAssist'] },
 	{ p: '/settings/agent', k: 'agent.assist.rights', kind: 'group', tab: 'ha' },
+	{ p: '/settings/agent', k: 'agent.assist.consent.title', kind: 'group', tab: 'ha' },
 	{ p: '/settings/agent', k: 'agent.haRules', kind: 'group', tab: 'ha' },
 	{ p: '/settings/agent', k: 'agent.sectionHA', kind: 'group', tab: 'ha' },
 	{ p: '/settings/agent', k: 'agent.haNotify', kind: 'row', tab: 'ha', in: ['agent.sectionHA'] },

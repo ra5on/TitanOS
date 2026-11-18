@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"regexp"
 	"slices"
@@ -510,6 +511,15 @@ func TestPimAssist(t *testing.T) {
 	if why := box(nil).Missing()["calendar"]; !strings.Contains(why, "Home Assistant") {
 		t.Errorf("Missing for Assist: %q", why)
 	}
+	// S-23: "read" waits for the consent of the account Assist acts as
+	// (alex, the first owner), given in its own session.
+	if got := offered(box(map[string]string{"calendar": "read"})); len(got) != 0 {
+		t.Errorf("Assist without consent offers %v", got)
+	}
+	if why := box(map[string]string{"calendar": "read"}).Missing()["calendar"]; !strings.Contains(why, "consent of the account alex") {
+		t.Errorf("Missing without consent: %q", why)
+	}
+	e.do("PUT", "/api/v1/agent/assist/consent", map[string]bool{"calendar": true}, http.StatusOK, nil)
 	read := box(map[string]string{"calendar": "read"})
 	if got := offered(read); !slices.Equal(got, []string{"calendar_list", "calendar_search"}) {
 		t.Errorf("Assist with read offers %v", got)
@@ -575,7 +585,8 @@ func TestPimSettingsRollbackTo110(t *testing.T) {
 	saved := agentSettings{
 		Policy: agent.Policy{Preset: agent.PresetStandard, Areas: map[string]string{"files": agent.ModeAsk},
 			DataRights: map[string]agent.DataRight{agent.AreaCalendar: {Read: agent.ModeAllow, Write: agent.ModeAllow}}},
-		HA: agentHASettings{Assist: true, AssistAreas: map[string]string{"web": "deny"}, AssistData: map[string]string{"calendar": "read"}},
+		HA: agentHASettings{Assist: true, AssistAreas: map[string]string{"web": "deny"}, AssistData: map[string]string{"calendar": "read"},
+			Notify: []string{"notify.phone"}, NotifyBy: "ada", NotifyByCreated: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
 	}
 	data, err := json.Marshal(saved)
 	if err != nil {
@@ -605,14 +616,14 @@ func TestPimSettingsRollbackTo110(t *testing.T) {
 		}
 	}
 	again, _ := json.Marshal(old)
-	if strings.Contains(string(again), "assistData") {
-		t.Fatalf("assistData survived: %s", again)
+	if strings.Contains(string(again), "assistData") || strings.Contains(string(again), "notifyBy") || !strings.Contains(string(again), "notify.phone") {
+		t.Fatalf("assistData or notifyBy survived, or notify lost: %s", again)
 	}
 	var back agentSettings
 	if err := json.Unmarshal(again, &back); err != nil {
 		t.Fatal(err)
 	}
-	if back.HA.AssistData != nil || back.HA.assistLevel("calendar") != assistDeny || back.HA.AssistAreas["web"] != "deny" {
+	if back.HA.AssistData != nil || back.HA.assistLevel("calendar") != assistDeny || back.HA.AssistAreas["web"] != "deny" || back.HA.NotifyBy != "" {
 		t.Errorf("back on 1.11: %+v", back.HA)
 	}
 }

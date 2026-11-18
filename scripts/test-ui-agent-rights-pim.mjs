@@ -101,6 +101,7 @@ async function open({
   height = 1300,
   theme = "hell",
   lang = "de",
+  isActor = true,
 } = {}) {
   const phone = width < 600;
   const made = await create(
@@ -117,7 +118,9 @@ async function open({
         }
       : { viewport: { width, height } },
   );
-  const seen = { puts: [] };
+  const seen = { puts: [], consents: [] };
+  // S-23: Assist acts as alex; the page is alex's own (isActor) or ada's.
+  let consent = {};
   let settings = baseSettings();
   await made.ctx.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -139,6 +142,12 @@ async function open({
       return json(settings);
     }
     if (p === "/agent/tools") return json({ tools, areas: [] });
+    if (p === "/agent/assist/consent" && method === "PUT") {
+      const body = route.request().postDataJSON();
+      seen.consents.push(body);
+      consent = { ...body };
+      return json(body);
+    }
     if (p === "/agent/assist")
       return json({
         keySet: true,
@@ -150,6 +159,10 @@ async function open({
         last: null,
         memories: 0,
         chats: 0,
+        actor: "alex",
+        isActor,
+        consent: isActor ? consent : {},
+        myConsent: isActor ? consent : {},
       });
     if (method === "GET" && p === "/agent/cluster")
       return json({ member: false, admin: false });
@@ -398,9 +411,39 @@ try {
     await rights
       .getByRole("radiogroup", { name: "Kalender" })
       .scrollIntoViewIfNeeded();
+    // S-23: "Nur lesen" waits for alex's own consent, given below.
+    await rights.getByText("wartet auf deine Zustimmung (unten)").waitFor();
+    const consentGroup = page.locator("section.sgroup", {
+      has: page.getByRole("heading", {
+        name: "Deine Zustimmung: Kalender und Kontakte für Assist",
+      }),
+    });
+    await consentGroup.waitFor();
+    await consentGroup
+      .getByText("die alle Inhaber und Administratoren sehen", { exact: false })
+      .waitFor();
     await page.waitForTimeout(300);
     await sound(page, `${tag} assist`);
     await shot(page, `assist-${tag}`);
+    await consentGroup
+      .getByRole("switch", { name: "Assist darf meinen Kalender lesen" })
+      .click();
+    await consentGroup.getByText("Zugestimmt – nur lesen, nie ändern").waitFor();
+    assert.deepEqual(
+      seen.consents.at(-1),
+      { calendar: true },
+      `${tag}: consent sent for alex's own account`,
+    );
+    assert.equal(
+      await rights.getByText("wartet auf deine Zustimmung (unten)").count(),
+      0,
+      `${tag}: no longer waiting`,
+    );
+    assert.equal(
+      seen.puts.length,
+      0,
+      `${tag}: the consent is no setting of the page`,
+    );
     if (!phone) {
       await page.getByRole("button", { name: "Speichern" }).click();
       await page.getByRole("status").first().waitFor();
@@ -426,6 +469,34 @@ try {
       await page.waitForTimeout(400);
       assert.equal(seen.puts.at(-1).homeassistant.assistData, undefined);
     }
+    await ctx.close();
+  }
+
+  // ---- an administrator: waits for alex, no consent of its own here ----
+  {
+    const { ctx, page, seen } = await open({ isActor: false });
+    await page.goto(base + "/settings/agent?tab=ha");
+    const rights = page.locator("section.sgroup", {
+      has: page.getByRole("heading", { name: "Was Home Assistant fragen darf" }),
+    });
+    await rights.waitFor();
+    await rights
+      .getByRole("radiogroup", { name: "Kontakte" })
+      .getByRole("radio", { name: "Nur lesen" })
+      .click();
+    await rights.getByText("wartet auf Zustimmung von alex").waitFor();
+    assert.equal(
+      await page
+        .getByRole("heading", {
+          name: "Deine Zustimmung: Kalender und Kontakte für Assist",
+        })
+        .count(),
+      0,
+      "admin: no consent switches for someone else",
+    );
+    await sound(page, "admin assist");
+    await shot(page, "assist-admin-1440-hell");
+    assert.equal(seen.consents.length, 0);
     await ctx.close();
   }
 

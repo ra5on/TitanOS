@@ -67,6 +67,11 @@ type agentToolbox struct {
 	dirs     map[string]string
 	// areas maps Home Assistant entities to their room, for area: rules.
 	areas map[string]string
+	// assistWaiting are the areas of calendar and contacts an
+	// administrator allowed for Assist that wait for the consent of
+	// assistActing, the account the profile acts as (S-23).
+	assistWaiting []string
+	assistActing  string
 }
 
 // newAgentToolbox collects the tools of an account.
@@ -81,6 +86,10 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	acting := user
 	if user.Name == agent.AssistProfile {
 		acting, _ = s.assistActor()
+		// Calendar and contacts only with the consent of that account,
+		// given in its own session (S-23); the map is the toolbox's own.
+		b.settings.HA.AssistData, b.assistWaiting = s.assistDataWithConsent(settings.HA, acting)
+		b.assistActing = acting.Name
 	}
 	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
 	on := env.servicesOn()

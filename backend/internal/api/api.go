@@ -266,13 +266,16 @@ type Server struct {
 	// The KI-Agent (agent*.go): settings, the Ollama client, running
 	// chats and open pages. agentOpen and agentWebFactory replace the data
 	// volume and the web in tests.
-	agentConf   agentSettingsState
-	agentClient atomic.Pointer[agent.Ollama]
-	agentRT     agentRuntime
-	agentWatch  agentWatchers
-	agentMirror agentMirror
-	agentSnaps  agentSnapState
-	agentOpen   func() (*os.Root, error)
+	agentConf agentSettingsState
+	// assistConsent: the consent of accounts to Assist reading their
+	// calendar and contacts (agent_assist_consent.go, S-23).
+	assistConsent assistConsents
+	agentClient   atomic.Pointer[agent.Ollama]
+	agentRT       agentRuntime
+	agentWatch    agentWatchers
+	agentMirror   agentMirror
+	agentSnaps    agentSnapState
+	agentOpen     func() (*os.Root, error)
 	// viewerOpen replaces viewer.Manager.Open in tests.
 	viewerOpen viewerOpener
 	// agentMCP holds the clients of the agent's MCP connections.
