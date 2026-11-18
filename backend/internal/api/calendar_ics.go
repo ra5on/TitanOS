@@ -18,9 +18,13 @@ import (
 // maxImport bounds an uploaded .ics file (20 MB).
 const maxImport = 20 << 20
 
-// importFactor is the RAM an import holds per byte of the upload: the
-// bytes, their lines, the event blocks and the files made of them.
-const importFactor = 8
+// The RAM an import holds, measured (TestCalendarImport5000/-Large): per
+// byte of the upload the bytes, the event blocks and the files made of
+// them; per event its index entry and the parse that checks it.
+const (
+	importFactor   = 3
+	importPerEvent = 6 << 10
+)
 
 // maxImportFailures bounds the list of failed entries in the answer.
 const maxImportFailures = 500
@@ -67,6 +71,21 @@ func importReason(err error) string {
 	return "write_failed"
 }
 
+// reserveImport takes RAM of the budget for the rest of the request; it
+// answers 503 calendar_busy itself when there is no room now.
+func (a pimDataArea) reserveImport(w http.ResponseWriter, bytes int64) (release func(), ok bool) {
+	if a.reserve == nil {
+		return func() {}, true
+	}
+	release, ok = a.reserve(bytes)
+	if !ok {
+		w.Header().Set("Retry-After", "30")
+		writeError(w, http.StatusServiceUnavailable, "calendar_busy", "TitanOS has no room in RAM for this import now; try again in a moment")
+		return nil, false
+	}
+	return release, true
+}
+
 // handleImportCalendar imports an .ics file (multipart field "file",
 // at most 20 MB) into a calendar: one file per UID with the VTIMEZONEs it
 // needs, all written with one state.json (store.Import). A UID the
@@ -99,15 +118,11 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 	if r.ContentLength > 0 && r.ContentLength < size {
 		size = r.ContentLength
 	}
-	if a.reserve != nil {
-		release, ok := a.reserve(importFactor * size)
-		if !ok {
-			w.Header().Set("Retry-After", "30")
-			writeError(w, http.StatusServiceUnavailable, "calendar_busy", "TitanOS has no room in RAM for this import now; try again in a moment")
-			return
-		}
-		defer release()
+	release, ok := a.reserveImport(w, importFactor*size)
+	if !ok {
+		return
 	}
+	defer release()
 	r.Body = http.MaxBytesReader(w, r.Body, maxImport+(64<<10))
 	mr, err := r.MultipartReader()
 	if err != nil {
@@ -152,6 +167,11 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "calendar_import_invalid", "the file is no iCalendar file")
 		return
 	}
+	releaseEvents, ok := a.reserveImport(w, importPerEvent*int64(len(sp.Groups)))
+	if !ok {
+		return
+	}
+	defer releaseEvents()
 	existing, err := store.Objects(pimstore.Calendar, user, id)
 	if err != nil {
 		calendarFail(w, r, id, err, "calendar_not_found")

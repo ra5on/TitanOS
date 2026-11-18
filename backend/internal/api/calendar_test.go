@@ -375,6 +375,26 @@ func TestCalendarEvents(t *testing.T) {
 	if res, body := e.ts.request("GET", "/api/v1/calendar/events?from=2026-01-01&to=2027-06-01", nil); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "calendar_window" {
 		t.Fatalf("window: %d %s", res.StatusCode, body)
 	}
+	if res, body := e.ts.request("DELETE", "/api/v1/calendar/events/privat/"+made.ID+"?scope=this&occurrence=garbage&etag="+changed.ETag, nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "event_not_found" {
+		t.Fatalf("bad occurrence: %d %s", res.StatusCode, body)
+	}
+	if res, body := e.ts.request("DELETE", "/api/v1/calendar/events/privat/"+made.ID+"?scope=this&occurrence=20261118T180000Z&etag="+changed.ETag, nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "event_not_found" {
+		t.Fatalf("no such occurrence: %d %s", res.StatusCode, body)
+	}
+	// A title longer than the list keeps is marked; the event has it whole.
+	long := strings.Repeat("Sehr langer Titel ", 30)
+	var lw eventWritten
+	e.do("POST", "/api/v1/calendar/events", map[string]any{"calendar": "privat", "event": map[string]any{"title": long, "start": "2026-11-20T10:00"}}, http.StatusCreated, &lw)
+	for _, v := range e.events("from=2026-11-20&to=2026-11-21").Events {
+		if v.ID == lw.ID && (!v.Clipped || len(v.Title) > 256) {
+			t.Fatalf("long title in the list: %+v", v)
+		}
+	}
+	var whole calweb.View
+	e.do("GET", "/api/v1/calendar/events/privat/"+lw.ID, nil, http.StatusOK, &whole)
+	if whole.Title != strings.TrimSpace(long) && whole.Title != long {
+		t.Fatalf("whole title: %q", whole.Title)
+	}
 	var gone eventDeleted
 	e.do("DELETE", "/api/v1/calendar/events/privat/"+made.ID+"?scope=all&etag="+changed.ETag, nil, http.StatusOK, &gone)
 	if !gone.Removed {
@@ -478,6 +498,59 @@ func TestCalendarSeriesEditing(t *testing.T) {
 			if _, err := e.pim.Stat(pimstore.Calendar, "alex", "privat", newName); !d.Removed || !errors.Is(err, pimstore.ErrNotFound) {
 				t.Fatalf("delete all: %+v %v", d, err)
 			}
+		})
+	}
+}
+
+// The rows of 2.4 about exceptions after the cut, in the raw bytes: an
+// override (1.12.) and an EXDATE (8.12.) after the cut on 24.11.
+func TestCalendarSeriesExceptionsAfterTheCut(t *testing.T) {
+	dec := func(s string) string { return strings.Replace(s, "202611", "202612", 1) }
+	for _, k := range seriesKinds {
+		t.Run(k.name, func(t *testing.T) {
+			e := newCalEnv(t)
+			seed := func() string {
+				override := "BEGIN:VEVENT\nUID:serie\nDTSTAMP:20261101T000000Z\nRECURRENCE-ID" + dec(k.form(1)) + "\n" +
+					strings.Replace(k.start, "20261103", "20261201", 1) + "\n" + strings.Replace(k.end, "20261104", "20261202", 1) + "\nSUMMARY:Ausnahme Dezember\nEND:VEVENT\n"
+				if k.name != "date" {
+					override = strings.Replace(override, strings.Replace(k.end, "20261104", "20261202", 1), strings.Replace(k.end, "20261103", "20261201", 1), 1)
+				}
+				_ = e.pim.DeleteObject(pimstore.Calendar, "alex", "privat", "x.ics", "")
+				return e.seed("privat", "x.ics", "\nBEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:serie\nDTSTAMP:20261101T000000Z\n"+
+					k.start+"\n"+k.end+"\nRRULE:FREQ=WEEKLY;COUNT=8\nEXDATE"+dec(k.form(8))+"\nSUMMARY:Serie\nEND:VEVENT\n"+override+"END:VCALENDAR\n")
+			}
+			path := "/api/v1/calendar/events/privat/x.ics"
+			// Following with the title only: override and EXDATE go along
+			// into the new file with the new UID, the old file loses them.
+			var w eventWritten
+			e.do("PUT", path, map[string]any{"etag": seed(), "scope": "following", "occurrence": k.occ(24), "event": map[string]any{"title": "Neu"}}, http.StatusOK, &w)
+			old, fresh := e.raw("privat", "x.ics"), e.raw("privat", w.NewID)
+			mustLack(t, "old", old, "RECURRENCE-ID", "EXDATE", "Ausnahme Dezember")
+			mustHave(t, "old", old, k.until(24))
+			mustHave(t, "new", fresh, "RECURRENCE-ID"+dec(k.form(1)), "EXDATE"+dec(k.form(8)), "Ausnahme Dezember", "RRULE:FREQ=WEEKLY;COUNT=5")
+			if w.DroppedExceptions != 0 || strings.Count(fresh, "UID:serie\r") != 0 {
+				t.Fatalf("carried %+v\n%s", w, fresh)
+			}
+			// Following with a new time: they no longer fit and are dropped (counted).
+			moveTo := map[string]any{"start": "2026-11-24T10:00", "end": "2026-11-24T11:00", "timezone": "Europe/Berlin"}
+			switch k.name {
+			case "utc":
+				moveTo = map[string]any{"start": "2026-11-24T09:00", "end": "2026-11-24T10:00", "timezone": "UTC"}
+			case "date":
+				moveTo = map[string]any{"start": "2026-11-25", "end": "2026-11-26", "allDay": true}
+			}
+			e.do("PUT", path, map[string]any{"etag": seed(), "scope": "following", "occurrence": k.occ(24), "event": moveTo}, http.StatusOK, &w)
+			fresh = e.raw("privat", w.NewID)
+			if w.DroppedExceptions != 2 {
+				t.Fatalf("dropped %+v", w)
+			}
+			mustLack(t, "new moved", fresh, "RECURRENCE-ID", "EXDATE", "Ausnahme Dezember")
+			// Delete following: override and EXDATE after the cut go.
+			var d eventDeleted
+			e.do("DELETE", path+"?scope=following&occurrence="+k.occ(24)+"&etag="+seed(), nil, http.StatusOK, &d)
+			old = e.raw("privat", "x.ics")
+			mustLack(t, "delete following", old, "RECURRENCE-ID", "EXDATE", "Ausnahme Dezember", "COUNT=")
+			mustHave(t, "delete following", old, k.until(24))
 		})
 	}
 }

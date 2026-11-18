@@ -148,33 +148,46 @@ func TestCalendarImport(t *testing.T) {
 	}
 }
 
-// 5000 events in one file: under 10 s, RAM bounded (measured and printed;
-// t.TempDir is tmpfs on the VM, so fsync costs nothing there).
-func TestCalendarImport5000(t *testing.T) {
-	e := newCalEnv(t)
+// bigICS is an upload of n events, every tenth a series with an alarm,
+// each with notes of pad bytes.
+func bigICS(n, pad int) []byte {
 	var b strings.Builder
 	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n" + strings.ReplaceAll(outlookZone, "\n", "\r\n"))
 	start := time.Date(2026, 1, 1, 8, 0, 0, 0, time.UTC)
-	for i := range 5000 {
+	notes := strings.Repeat("Notiz ", pad/6)
+	for i := range n {
 		at := start.Add(time.Duration(i) * 3 * time.Hour)
 		fmt.Fprintf(&b, "BEGIN:VEVENT\r\nUID:ev-%d@import.example\r\nDTSTAMP:20261101T000000Z\r\nDTSTART;TZID=W. Europe Standard Time:%s\r\nDURATION:PT1H\r\nSUMMARY:Termin %d\r\nLOCATION:Raum %d\r\n",
 			i, at.In(calBerlin).Format("20060102T150405"), i, i%50)
+		if pad > 0 {
+			b.WriteString(fold("DESCRIPTION:" + notes))
+		}
 		if i%10 == 0 {
 			b.WriteString("RRULE:FREQ=WEEKLY;COUNT=10\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n")
 		}
 		b.WriteString("END:VEVENT\r\n")
 	}
 	b.WriteString("END:VCALENDAR\r\n")
-	data := []byte(b.String())
-	e.do("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Gross"}, http.StatusCreated, nil)
+	return []byte(b.String())
+}
 
+func fold(s string) string {
+	var b strings.Builder
+	for len(s) > 74 {
+		b.WriteString(s[:74] + "\r\n ")
+		s = s[74:]
+	}
+	return b.String() + s + "\r\n"
+}
+
+// measuredImport imports and reports time and the peak of the heap above
+// what it was before (sampled every 5 ms).
+func (e *calEnv) measuredImport(cal string, data []byte) (importResult, time.Duration, int64) {
 	runtime.GC()
 	var base runtime.MemStats
 	runtime.ReadMemStats(&base)
 	var peak uint64
-	var mu sync.Mutex
-	stop := make(chan struct{})
-	done := make(chan struct{})
+	stop, done := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
 		var m runtime.MemStats
@@ -184,37 +197,66 @@ func TestCalendarImport5000(t *testing.T) {
 				return
 			case <-time.After(5 * time.Millisecond):
 				runtime.ReadMemStats(&m)
-				mu.Lock()
 				peak = max(peak, m.HeapAlloc)
-				mu.Unlock()
 			}
 		}
 	}()
 	began := time.Now()
-	out := e.importICS("gross", "skip", data, http.StatusOK)
+	out := e.importICS(cal, "skip", data, http.StatusOK)
 	took := time.Since(began)
 	close(stop)
 	<-done
-	extra := int64(peak) - int64(base.HeapAlloc)
-	t.Logf("import of 5000 events (%d KiB): %v, heap peak +%d MiB over %d MiB before", len(data)>>10, took, extra>>20, base.HeapAlloc>>20)
+	return out, took, int64(peak) - int64(base.HeapAlloc)
+}
+
+// 5000 events in one file: under 10 s, RAM bounded (measured and printed;
+// t.TempDir is tmpfs on the VM, so fsync costs nothing there).
+func TestCalendarImport5000(t *testing.T) {
+	e := newCalEnv(t)
+	data := bigICS(5000, 0)
+	e.do("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Gross"}, http.StatusCreated, nil)
+	out, took, extra := e.measuredImport("gross", data)
+	t.Logf("import of 5000 events (%d KiB): %v, heap peak +%d MiB", len(data)>>10, took, extra>>20)
 	if out.Added != 5000 || len(out.Failed) != 0 {
 		t.Fatalf("import %+v", out)
 	}
 	if took > 10*time.Second {
 		t.Fatalf("import took %v", took)
 	}
-	if extra > 40*int64(len(data)) {
-		t.Fatalf("import held %d MiB for a %d KiB file", extra>>20, len(data)>>10)
+	if budget := importFactor*int64(len(data)) + importPerEvent*5000; extra > budget {
+		t.Fatalf("import held %d MiB for a %d KiB file (reserved %d MiB)", extra>>20, len(data)>>10, budget>>20)
 	}
 	col, _ := e.pim.GetCollection(pimstore.Calendar, "alex", "gross")
 	if col.Count != 5000 {
 		t.Fatalf("count %d", col.Count)
 	}
-	began = time.Now()
+	began := time.Now()
 	list := e.events("from=2026-03-01&to=2026-04-01&calendars=gross")
 	t.Logf("one month of 5000 events: %d occurrences in %v", len(list.Events), time.Since(began))
 	if len(list.Events) < 248 {
 		t.Fatalf("march: %d", len(list.Events))
+	}
+}
+
+// Near the limit: 20 000 events (the most a calendar holds) in about
+// 19 MB stay within the RAM the import reserves.
+func TestCalendarImportLarge(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large import")
+	}
+	e := newCalEnv(t)
+	data := bigICS(20000, 800)
+	e.do("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Gross"}, http.StatusCreated, nil)
+	out, took, extra := e.measuredImport("gross", data)
+	t.Logf("import of 20000 events (%d KiB): %v, heap peak +%d MiB (%.1fx the file)", len(data)>>10, took, extra>>20, float64(extra)/float64(len(data)))
+	if out.Added != 20000 || len(out.Failed) != 0 {
+		t.Fatalf("import added %d, failed %d", out.Added, len(out.Failed))
+	}
+	if len(data) > maxImport || len(data) < maxImport*8/10 {
+		t.Fatalf("file of %d bytes", len(data))
+	}
+	if budget := importFactor*int64(len(data)) + importPerEvent*20000; extra > budget {
+		t.Fatalf("import held %d MiB for %d MiB (reserved %d MiB)", extra>>20, len(data)>>20, budget>>20)
 	}
 }
 

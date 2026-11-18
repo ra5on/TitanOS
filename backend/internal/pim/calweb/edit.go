@@ -27,7 +27,7 @@ func Views(calendar string, occs []pimstore.Occurrence, local *time.Location) []
 		v := View{Kind: "event", ID: o.Name, Occurrence: o.ID, Calendar: calendar, UID: o.UID, Title: o.Summary,
 			AllDay: o.AllDay, Timezone: o.TZID, Floating: o.Floating, Location: o.Location, Recurring: o.Recurs,
 			Alarms: append([]int{}, o.Alarms...), Exception: o.Override, ETag: o.ETag, TZGuess: o.TZGuess,
-			RecurUnsupported: o.Unsupported}
+			RecurUnsupported: o.Unsupported, Clipped: o.Clipped}
 		if o.AllDay {
 			v.Start, v.End = o.Start.In(local).Format(dateLayout), o.End.In(local).Format(dateLayout)
 		} else {

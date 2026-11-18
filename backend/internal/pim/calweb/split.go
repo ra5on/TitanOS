@@ -49,168 +49,220 @@ type Split struct {
 	missing int
 }
 
-// line is one content line: the unfolded text and the lines as written.
-type line struct {
-	text string
-	raw  []string
+// contentLine is one content line of the upload: its bytes with the
+// folded lines after it (raw, offsets into the upload), and the unfolded
+// text (a copy only when it was folded).
+type contentLine struct {
+	start, end int // raw bytes, the line break after the last part included
+	text       []byte
 }
 
-func lines(s string) []line {
-	s = strings.TrimPrefix(s, "\uFEFF")
-	var out []line
-	for len(s) > 0 {
-		i := strings.IndexByte(s, '\n')
-		var l string
-		if i < 0 {
-			l, s = s, ""
-		} else {
-			l, s = s[:i], s[i+1:]
-		}
-		l = strings.TrimSuffix(l, "\r")
-		if l == "" {
-			continue
-		}
-		if (l[0] == ' ' || l[0] == '\t') && len(out) > 0 {
-			last := &out[len(out)-1]
-			last.text += l[1:]
-			last.raw = append(last.raw, l)
-			continue
-		}
-		out = append(out, line{text: l, raw: []string{l}})
+// scanner walks the content lines of an upload without a table of them,
+// so an import holds the upload and the blocks cut from it, nothing more.
+type scanner struct {
+	data []byte
+	pos  int
+}
+
+func (sc *scanner) physical() (line []byte, next int, ok bool) {
+	if sc.pos >= len(sc.data) {
+		return nil, sc.pos, false
 	}
-	return out
+	i := bytes.IndexByte(sc.data[sc.pos:], '\n')
+	end := len(sc.data)
+	if i >= 0 {
+		end = sc.pos + i + 1
+	}
+	return bytes.TrimRight(sc.data[sc.pos:end], "\r\n"), end, true
 }
 
-// propName splits a content line into upper-case name, parameters and
-// value; quoted parameter values may hold ';' and ':'.
-func propName(text string) (name string, params map[string]string, value string) {
-	quoted := false
-	cut := -1
-	for i := 0; i < len(text); i++ {
-		switch c := text[i]; {
-		case c == '"':
-			quoted = !quoted
-		case c == ':' && !quoted:
-			cut = i
+// next returns the next content line; empty lines are skipped.
+func (sc *scanner) next() (contentLine, bool) {
+	for {
+		start := sc.pos
+		first, end, ok := sc.physical()
+		if !ok {
+			return contentLine{}, false
 		}
-		if cut >= 0 {
+		sc.pos = end
+		if len(first) == 0 {
+			continue
+		}
+		cl := contentLine{start: start, end: end, text: first}
+		folded := false
+		for sc.pos < len(sc.data) && (sc.data[sc.pos] == ' ' || sc.data[sc.pos] == '\t') {
+			more, end, _ := sc.physical()
+			if !folded {
+				cl.text = append([]byte(nil), cl.text...)
+				folded = true
+			}
+			cl.text = append(cl.text, more[1:]...)
+			sc.pos, cl.end = end, end
+		}
+		return cl, true
+	}
+}
+
+// parts splits an unfolded line into name, parameters and value at the
+// first ':' outside quotes.
+func parts(text []byte) (name, params, value []byte) {
+	quoted := false
+	cut := len(text)
+	for i, c := range text {
+		if c == '"' {
+			quoted = !quoted
+		} else if c == ':' && !quoted {
+			cut = i
 			break
 		}
 	}
-	head := text
-	if cut >= 0 {
-		head, value = text[:cut], text[cut+1:]
+	head := text[:cut]
+	if cut < len(text) {
+		value = text[cut+1:]
 	}
-	parts := splitUnquoted(head, ';')
-	name = strings.ToUpper(strings.TrimSpace(parts[0]))
-	for _, p := range parts[1:] {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok {
+	if i := bytes.IndexByte(head, ';'); i >= 0 {
+		return head[:i], head[i:], value
+	}
+	return head, nil, value
+}
+
+// param finds a parameter (";TZID=…", any case) and returns its value
+// without quotes.
+func param(params []byte, name string) string {
+	key := ";" + name + "="
+	for i := 0; i+len(key) <= len(params); i++ {
+		if !bytes.EqualFold(params[i:i+len(key)], []byte(key)) {
 			continue
 		}
-		if params == nil {
-			params = map[string]string{}
-		}
-		params[strings.ToUpper(strings.TrimSpace(k))] = strings.Trim(v, `"`)
-	}
-	return name, params, value
-}
-
-func splitUnquoted(s string, sep byte) []string {
-	var out []string
-	quoted, start := false, 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '"':
-			quoted = !quoted
-		case sep:
-			if !quoted {
-				out = append(out, s[start:i])
-				start = i + 1
+		v := params[i+len(key):]
+		if len(v) > 0 && v[0] == '"' {
+			if j := bytes.IndexByte(v[1:], '"'); j >= 0 {
+				return string(v[1 : j+1])
 			}
+			return string(v[1:])
 		}
+		if j := bytes.IndexByte(v, ';'); j >= 0 {
+			v = v[:j]
+		}
+		return string(v)
 	}
-	return append(out, s[start:])
+	return ""
 }
 
-func block(ls []line) string {
-	var b strings.Builder
-	for _, l := range ls {
-		for _, r := range l.raw {
-			b.WriteString(r)
-			b.WriteString("\r\n")
-		}
+func is(b []byte, s string) bool { return bytes.EqualFold(bytes.TrimSpace(b), []byte(s)) }
+
+// crlfBlock is the text of a block with CRLF line ends and without empty
+// lines; one copy of the bytes.
+func crlfBlock(b []byte) string {
+	if !bytes.Contains(b, []byte("\n\n")) && !bytes.Contains(b, []byte("\r\n\r\n")) &&
+		bytes.Count(b, []byte("\n")) == bytes.Count(b, []byte("\r\n")) && bytes.HasSuffix(b, []byte("\r\n")) {
+		return string(b)
 	}
-	return b.String()
+	var out strings.Builder
+	out.Grow(len(b) + len(b)/40)
+	for len(b) > 0 {
+		i := bytes.IndexByte(b, '\n')
+		line := b
+		if i >= 0 {
+			line, b = b[:i], b[i+1:]
+		} else {
+			b = nil
+		}
+		line = bytes.TrimRight(line, "\r")
+		if len(line) == 0 {
+			continue
+		}
+		out.Write(line)
+		out.WriteString("\r\n")
+	}
+	return out.String()
+}
+
+// block is one component at the top of a VCALENDAR while it is read.
+type block struct {
+	comp       string
+	start      int
+	depth      int
+	uid, tzid  string
+	tzids      []string
+	hasUIDLine bool
 }
 
 // SplitICS cuts an .ics file (one or more VCALENDARs) into the events of
 // each UID, without decoding it as a whole: the lines of each VEVENT stay
-// as they came. VTIMEZONEs are kept by TZID; METHOD and the calendar's own
-// X- properties go. A VEVENT without UID gets one (newUID); other
-// components (VTODO …) are failures. Each group is checked later as the
-// file it becomes (pim/store).
+// as they came (line ends made CRLF). VTIMEZONEs are kept by TZID; METHOD
+// and the calendar's own X- properties go. A VEVENT without UID gets one
+// (newUID); other components (VTODO …) are failures. Each group is checked
+// later as the file it becomes (pim/store).
 func SplitICS(data []byte, newUID func() string) (*Split, error) {
-	all := lines(string(data))
+	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) {
+		data = data[3:]
+	}
+	sc := &scanner{data: data}
 	sp := &Split{Zones: map[string]string{}}
 	byUID := map[string]*Group{}
 	depth, comps, calendars := 0, 0, 0
-	for i := 0; i < len(all); i++ {
-		name, _, value := propName(all[i].text)
+	var cur *block
+	for {
+		cl, ok := sc.next()
+		if !ok {
+			break
+		}
+		name, params, value := parts(cl.text)
+		begin, end := is(name, "BEGIN"), is(name, "END")
 		switch {
-		case depth == 0 && name == "BEGIN" && strings.EqualFold(value, "VCALENDAR"):
+		case depth == 0 && begin && is(value, "VCALENDAR"):
 			depth, calendars = 1, calendars+1
 		case depth == 0:
 			return nil, ErrNotCalendar
-		case depth == 1 && name == "END" && strings.EqualFold(value, "VCALENDAR"):
-			depth = 0
-		case depth == 1 && name == "BEGIN":
-			comp := strings.ToUpper(value)
-			end, err := blockEnd(all, i)
-			if err != nil {
-				return nil, err
+		case depth == 1 && end:
+			if !is(value, "VCALENDAR") {
+				return nil, ErrNotCalendar
 			}
+			depth = 0
+		case depth == 1 && begin:
 			comps++
 			if comps > MaxSplitComponents {
 				return nil, ErrNotCalendar
 			}
-			body := all[i : end+1]
-			i = end
-			switch comp {
-			case ical.CompTimezone:
-				if id := topValue(body, ical.PropTimezoneID); id != "" {
-					if _, ok := sp.Zones[id]; !ok {
-						sp.Zones[id] = block(body)
-					}
-				}
-			case ical.CompEvent:
-				uid := topValue(body, ical.PropUID)
-				if strings.TrimSpace(uid) == "" {
-					uid = newUID()
-					body = append([]line{body[0], {text: "UID:" + uid, raw: []string{"UID:" + uid}}}, body[1:]...)
-					sp.missing++
-				}
-				g := byUID[uid]
-				if g == nil {
-					g = &Group{UID: uid}
-					byUID[uid] = g
-					sp.Groups = append(sp.Groups, g)
-				}
-				g.Events = append(g.Events, block(body))
-				for _, l := range body {
-					if _, params, _ := propName(l.text); params["TZID"] != "" && !slices.Contains(g.TZIDs, params["TZID"]) {
-						g.TZIDs = append(g.TZIDs, params["TZID"])
-					}
-				}
-			default:
-				sp.Failed = append(sp.Failed, Failure{UID: topValue(body, ical.PropUID), Reason: "unsupported_component"})
+			cur = &block{comp: strings.ToUpper(string(bytes.TrimSpace(value))), start: cl.start, depth: 1}
+			depth = 2
+		case depth == 1:
+			if calendars == 1 && is(name, ical.PropProductID) && sp.ProdID == "" {
+				sp.ProdID = string(value)
 			}
-		case depth == 1 && calendars == 1 && name == ical.PropProductID && sp.ProdID == "":
-			sp.ProdID = value
-		case depth == 1 && calendars == 1 && name == ical.PropCalendarScale && sp.CalScale == "":
-			sp.CalScale = value
-		case depth == 1 && name == "END":
-			return nil, ErrNotCalendar
+			if calendars == 1 && is(name, ical.PropCalendarScale) && sp.CalScale == "" {
+				sp.CalScale = string(value)
+			}
+		case begin:
+			depth++
+			cur.depth++
+			if cur.depth > maxDepth {
+				return nil, ErrNotCalendar
+			}
+		case end:
+			depth--
+			cur.depth--
+			if cur.depth > 0 {
+				continue
+			}
+			if !is(value, cur.comp) {
+				return nil, ErrNotCalendar
+			}
+			sp.finish(cur, crlfBlock(data[cur.start:cl.end]), byUID, newUID)
+			cur = nil
+		default:
+			if cur.depth == 1 && is(name, ical.PropUID) && cur.uid == "" {
+				cur.uid, cur.hasUIDLine = string(value), true
+			}
+			if cur.depth == 1 && cur.comp == ical.CompTimezone && is(name, ical.PropTimezoneID) {
+				cur.tzid = string(value)
+			}
+			if len(params) > 0 {
+				if id := param(params, "TZID"); id != "" && !slices.Contains(cur.tzids, id) {
+					cur.tzids = append(cur.tzids, id)
+				}
+			}
 		}
 	}
 	if depth != 0 || calendars == 0 {
@@ -219,47 +271,40 @@ func SplitICS(data []byte, newUID func() string) (*Split, error) {
 	return sp, nil
 }
 
-// blockEnd finds the END that closes the BEGIN at all[i].
-func blockEnd(all []line, i int) (int, error) {
-	depth := 0
-	for j := i; j < len(all); j++ {
-		name, _, value := propName(all[j].text)
-		switch name {
-		case "BEGIN":
-			depth++
-			if depth > maxDepth {
-				return 0, ErrNotCalendar
+// finish files a block that has ended.
+func (sp *Split) finish(b *block, text string, byUID map[string]*Group, newUID func() string) {
+	switch b.comp {
+	case ical.CompTimezone:
+		if _, ok := sp.Zones[b.tzid]; b.tzid != "" && !ok {
+			sp.Zones[b.tzid] = text
+		}
+	case ical.CompEvent:
+		uid := b.uid
+		if strings.TrimSpace(uid) == "" {
+			uid = newUID()
+			first, rest, _ := strings.Cut(text, "\r\n")
+			if b.hasUIDLine {
+				// An empty UID line: the new one goes first and wins.
+				rest = strings.Replace(rest, "UID:\r\n", "", 1)
 			}
-		case "END":
-			depth--
-			if depth == 0 {
-				_, _, open := propName(all[i].text)
-				if !strings.EqualFold(value, open) {
-					return 0, ErrNotCalendar
-				}
-				return j, nil
+			text = first + "\r\nUID:" + uid + "\r\n" + rest
+			sp.missing++
+		}
+		g := byUID[uid]
+		if g == nil {
+			g = &Group{UID: uid}
+			byUID[uid] = g
+			sp.Groups = append(sp.Groups, g)
+		}
+		g.Events = append(g.Events, text)
+		for _, id := range b.tzids {
+			if !slices.Contains(g.TZIDs, id) {
+				g.TZIDs = append(g.TZIDs, id)
 			}
 		}
+	default:
+		sp.Failed = append(sp.Failed, Failure{UID: b.uid, Reason: "unsupported_component"})
 	}
-	return 0, ErrNotCalendar
-}
-
-// topValue is the value of a property of the component itself (not of a
-// VALARM inside it).
-func topValue(body []line, prop string) string {
-	depth := 0
-	for _, l := range body {
-		name, _, value := propName(l.text)
-		switch {
-		case name == "BEGIN":
-			depth++
-		case name == "END":
-			depth--
-		case depth == 1 && name == prop:
-			return value
-		}
-	}
-	return ""
 }
 
 // File is the .ics file of one group: VCALENDAR with the PRODID of the

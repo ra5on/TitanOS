@@ -114,6 +114,9 @@ type View struct {
 	Timezone string `json:"timezone"`
 	Floating bool   `json:"floating,omitempty"`
 	Location string `json:"location"`
+	// Clipped (lists only): title or location is longer than the list
+	// keeps (256 bytes); GET of the one event has the whole text.
+	Clipped bool `json:"clipped,omitempty"`
 	// Notes are only in the answer for one event.
 	Notes            *string   `json:"notes,omitempty"`
 	Recurring        bool      `json:"recurring"`

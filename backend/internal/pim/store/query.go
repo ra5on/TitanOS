@@ -40,6 +40,8 @@ type Occurrence struct {
 	TZID     string
 	TZGuess  bool
 	Alarms   []int
+	// Clipped: Summary or Location was cut to the length of the index.
+	Clipped  bool
 	Rule     *recur.Rule
 	RuleZone *time.Location
 }
@@ -226,7 +228,7 @@ func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, er
 			if overlaps(st, en, from, to) {
 				out = append(out, Occurrence{Name: it.name, ETag: e.ETag, UID: e.UID, ID: entryID(e), Start: st, End: en,
 					AllDay: e.AllDay, Summary: e.Summary, Unsupported: e.Unsupported, Floating: e.Floating,
-					Location: e.Location, TZID: e.TZID, TZGuess: e.TZGuess, Alarms: e.Alarms})
+					Location: e.Location, TZID: e.TZID, TZGuess: e.TZGuess, Alarms: e.Alarms, Clipped: e.Clipped})
 			}
 			continue
 		}
@@ -255,10 +257,12 @@ func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, er
 				Unsupported: x.Unsupported || x.Failed, Truncated: x.Truncated, Rule: rule, RuleZone: ruleZone}
 			if o.Event != nil {
 				if t, err := o.Event.Component.Props.Text(ical.PropSummary); err == nil {
-					oc.Summary = clip(t)
+					oc.Summary, oc.Clipped = clip(t), clipped(t)
 				}
 				oc.Floating = o.Event.Start.Kind == tz.KindFloating
-				oc.Location, oc.TZID, oc.TZGuess, oc.Alarms = eventDetails(o.Event)
+				var cut bool
+				oc.Location, oc.TZID, oc.TZGuess, oc.Alarms, cut = eventDetails(o.Event)
+				oc.Clipped = oc.Clipped || cut
 			}
 			out = append(out, oc)
 		}

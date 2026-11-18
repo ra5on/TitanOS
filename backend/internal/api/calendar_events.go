@@ -462,6 +462,10 @@ func (a pimDataArea) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, occurrence := currentUser(r).Name, q.Get("occurrence")
+	if _, err := recur.ParseOccurrenceID(occurrence); occurrence != "" && err != nil {
+		writeError(w, http.StatusNotFound, "event_not_found", calendarMessages["event_not_found"])
+		return
+	}
 	_, obj, err := a.openEvent(store, user, cal, name, "")
 	if err != nil && obj.ETag == "" {
 		eventFail(w, r, cal, err)

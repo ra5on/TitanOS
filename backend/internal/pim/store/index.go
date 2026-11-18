@@ -59,9 +59,11 @@ func calendarEntry(f *recur.File, data []byte) (*Entry, error) {
 	}
 	e := &Entry{ETag: ETag(data), UID: sr.UID}
 	if summary, err := ev.Component.Props.Text(ical.PropSummary); err == nil {
-		e.Summary = clip(summary)
+		e.Summary, e.Clipped = clip(summary), clipped(summary)
 	}
-	e.Location, e.TZID, e.TZGuess, e.Alarms = eventDetails(ev)
+	var cut bool
+	e.Location, e.TZID, e.TZGuess, e.Alarms, cut = eventDetails(ev)
+	e.Clipped = e.Clipped || cut
 	e.Recurs = sr.Master == nil || len(sr.Overrides) > 0 || sr.Master.Recurring()
 	e.Unsupported = sr.Master != nil && sr.Master.Unsupported
 	e.AllDay = ev.Start.Kind == tz.KindDate
@@ -88,11 +90,11 @@ func calendarEntry(f *recur.File, data []byte) (*Entry, error) {
 // eventDetails are what lists show of an event besides title and time:
 // location (clipped), the zone of DTSTART, whether a zone was guessed, the
 // alarms.
-func eventDetails(ev *recur.Event) (location, tzid string, guess bool, alarms []int) {
+func eventDetails(ev *recur.Event) (location, tzid string, guess bool, alarms []int, cut bool) {
 	if l, err := ev.Component.Props.Text(ical.PropLocation); err == nil {
-		location = clip(l)
+		location, cut = clip(l), clipped(l)
 	}
-	return location, ZoneName(ev.Start), ev.TZGuess, recur.Alarms(ev.Component)
+	return location, ZoneName(ev.Start), ev.TZGuess, recur.Alarms(ev.Component), cut
 }
 
 // ZoneName names the zone of a start: its IANA name, "UTC", or "" for a
@@ -180,6 +182,9 @@ func phoneDigits(v string) string {
 	}
 	return b.String()
 }
+
+// clipped reports whether clip cuts s.
+func clipped(s string) bool { return len(strings.TrimSpace(s)) > maxIndexText }
 
 // clip bounds a text of the index to maxIndexText bytes of whole runes.
 func clip(s string) string {

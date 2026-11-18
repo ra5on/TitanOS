@@ -71,6 +71,9 @@ type Entry struct {
 	TZID     string `json:"tzid,omitempty"`
 	TZGuess  bool   `json:"tzGuess,omitempty"`
 	Alarms   []int  `json:"alarms,omitempty"`
+	// Clipped: Summary or Location is longer than the index keeps; the
+	// whole text is in the file (the API's GET of one event).
+	Clipped bool `json:"clipped,omitempty"`
 
 	// Contacts.
 	FN       string   `json:"fn,omitempty"`
