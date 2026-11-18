@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/files"
@@ -147,6 +148,23 @@ func (a pimDataArea) handleBooks(w http.ResponseWriter, r *http.Request) {
 		out = append(out, view)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// notModified reports whether If-None-Match names etag (an ETag without
+// quotes): "*" or one of the tags, a weak one compared weakly (RFC 9110
+// 13.1.2).
+func notModified(r *http.Request, etag string) bool {
+	header := r.Header.Get("If-None-Match")
+	if header == "" || etag == "" {
+		return false
+	}
+	for _, tag := range strings.Split(header, ",") {
+		tag = strings.TrimPrefix(strings.TrimSpace(tag), "W/")
+		if tag == "*" || strings.Trim(tag, `"`) == etag {
+			return true
+		}
+	}
+	return false
 }
 
 // writePIMUnavailable answers 503 calendar_unavailable or

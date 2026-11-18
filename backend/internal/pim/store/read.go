@@ -70,35 +70,149 @@ func (s *Store) Stat(kind Kind, account, col, name string) (ObjectInfo, error) {
 }
 
 // Get reads an entry: its bytes as stored, ETag and modification time.
+// The file is read without the lock of the collection (Reader), so a slow
+// disk holds up no listing, ctag or other request (1.13).
 func (s *Store) Get(kind Kind, account, col, name string) (Object, error) {
 	if !kind.valid() || !ValidName(kind, name) {
 		return Object{}, ErrInvalidName
 	}
-	acc, err := s.accountFor(kind, account)
+	r, err := s.Reader(kind, account, col)
 	if err != nil {
 		return Object{}, err
+	}
+	defer r.Close()
+	return r.Get(name)
+}
+
+// Reader reads entries of one collection one after the other (GET, the
+// multigets): the folder of the collection is opened once, on the first
+// read, and each file is read without the collection's lock. Its ETag is
+// checked against the index afterwards, so a write that lands meanwhile
+// gives the new bytes with their ETag (or the old ones with theirs),
+// never bytes of one version with the ETag of another. Close it.
+type Reader struct {
+	s    *Store
+	acc  *account
+	c    *collection
+	kind Kind
+	col  string
+
+	or      *os.Root
+	release func()
+	openErr error
+}
+
+// Reader returns a reader of a collection; ErrNotFound for one that does
+// not exist (from RAM, the volume is opened by the first Get).
+func (s *Store) Reader(kind Kind, account, col string) (*Reader, error) {
+	if !kind.valid() {
+		return nil, ErrInvalidName
+	}
+	if !ValidCollection(col) {
+		return nil, ErrInvalidCollection
+	}
+	acc, err := s.accountFor(kind, account)
+	if err != nil {
+		return nil, err
 	}
 	c, err := acc.lookup(col)
 	if err != nil {
-		return Object{}, err
+		return nil, err
 	}
+	return &Reader{s: s, acc: acc, c: c, kind: kind, col: col}, nil
+}
+
+// Close ends the use of the volume.
+func (r *Reader) Close() {
+	if r.release != nil {
+		r.release()
+		r.release, r.or = nil, nil
+	}
+}
+
+// readFile reads the file of an entry; ErrNotFound when it is missing.
+func (r *Reader) readFile(name string) ([]byte, error) {
+	if r.or == nil && r.openErr == nil {
+		ar, release, err := r.s.openRead(r.acc)
+		if err == nil {
+			cr, or, oerr := openCollectionRead(ar, r.col)
+			if oerr != nil {
+				release()
+				err = oerr
+			} else {
+				r.or = or
+				r.release = func() { or.Close(); cr.Close(); release() }
+			}
+		}
+		r.openErr = err
+	}
+	if r.openErr != nil {
+		return nil, r.openErr
+	}
+	if readHook != nil {
+		readHook()
+	}
+	data, err := readLimited(r.or, encodeName(name), maxSize(r.kind))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	return data, err
+}
+
+// indexed is the ETag and time of an entry in the index; ok is false when
+// the entry or its collection is gone.
+func (c *collection) indexed(name string) (etag string, mtime time.Time, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e := c.st.Index[name]
 	if c.deleted || e == nil {
-		return Object{}, ErrNotFound
+		return "", time.Time{}, false
 	}
-	data, err := s.readObject(acc, col, name)
-	if err != nil {
-		return Object{}, err
+	return e.ETag, e.MTime, true
+}
+
+// maxReadRetries is how often a read starts again when the entry changed
+// while its file was read.
+const maxReadRetries = 3
+
+// Get reads one entry of the reader's collection.
+func (r *Reader) Get(name string) (Object, error) {
+	if !ValidName(r.kind, name) {
+		return Object{}, ErrInvalidName
 	}
-	etag := e.ETag
-	if got := ETag(data); got != etag {
+	for attempt := 0; ; attempt++ {
+		want, mtime, ok := r.c.indexed(name)
+		if !ok {
+			return Object{}, ErrNotFound
+		}
+		data, err := r.readFile(name)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return Object{}, err
+		}
+		got := ""
+		if err == nil {
+			if got = ETag(data); got == want {
+				return Object{Name: name, Data: data, ETag: want, MTime: mtime}, nil
+			}
+		}
+		// The bytes are not those of the index: a write ran meanwhile (it
+		// holds the lock until its index is in; taking it waits for that),
+		// or the file changed behind titand's back.
+		cur, curMTime, ok := r.c.indexed(name)
+		switch {
+		case !ok:
+			return Object{}, ErrNotFound
+		case err == nil && cur == got:
+			return Object{Name: name, Data: data, ETag: got, MTime: curMTime}, nil
+		case cur != want && attempt < maxReadRetries:
+			continue // changed again: read the new state
+		case err != nil:
+			return Object{}, err // indexed, but the file is missing
+		}
 		// Changed behind titand's back: the bytes count.
-		slog.Warn("Calendar: entry differs from its index", "kind", kind, "account", account, "collection", col)
-		etag = got
+		slog.Warn("Calendar: entry differs from its index", "kind", r.kind, "account", r.acc.name, "collection", r.col)
+		return Object{Name: name, Data: data, ETag: got, MTime: curMTime}, nil
 	}
-	return Object{Name: name, Data: data, ETag: etag, MTime: e.MTime}, nil
 }
 
 // readObject reads the bytes of an entry from the volume.
@@ -120,6 +234,10 @@ func (s *Store) readObject(acc *account, col, name string) ([]byte, error) {
 	}
 	return data, err
 }
+
+// readHook, in tests, runs before a file is read without a lock (a read
+// that a write overtakes).
+var readHook func()
 
 func openCollectionRead(ar *os.Root, col string) (*os.Root, *os.Root, error) {
 	cr, err := ar.OpenRoot(col)
@@ -292,27 +410,59 @@ func (s *Store) SavePhoto(account, name, etag string, jpeg []byte) error {
 
 // Photo reads the reduced picture of a contact; ErrNotFound without one.
 func (s *Store) Photo(account, name string) ([]byte, error) {
+	data, _, err := s.PhotoTag(account, name)
+	return data, err
+}
+
+// PhotoTag reads the reduced picture of a contact and the ETag of the
+// card it was made of; ErrNotFound without one. The file is read without
+// the lock of the book; a card changed meanwhile is read again, so the
+// picture always belongs to the ETag given.
+func (s *Store) PhotoTag(account, name string) ([]byte, string, error) {
 	if !ValidName(Contacts, name) {
-		return nil, ErrInvalidName
+		return nil, "", ErrInvalidName
 	}
 	acc, err := s.accountFor(Contacts, account)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	c, err := acc.lookup(DefaultBook)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.deleted || c.st.Index[name] == nil {
-		return nil, ErrNotFound
+	for attempt := 0; ; attempt++ {
+		etag, _, ok := c.indexed(name)
+		if !ok {
+			return nil, "", ErrNotFound
+		}
+		data, err := s.readPhoto(acc, name)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return nil, "", err
+		}
+		now, _, ok := c.indexed(name)
+		switch {
+		case !ok:
+			return nil, "", ErrNotFound
+		case now != etag && attempt < maxReadRetries:
+			continue // the card changed while its picture was read
+		case now != etag:
+			return nil, "", ErrNotFound // keeps changing: made again from the card
+		case err != nil:
+			return nil, "", err
+		}
+		return data, etag, nil
 	}
+}
+
+func (s *Store) readPhoto(acc *account, name string) ([]byte, error) {
 	ar, release, err := s.openRead(acc)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
+	if readHook != nil {
+		readHook()
+	}
 	data, err := readLimited(ar, DefaultBook+"/"+photosDir+"/"+photoName(name), MaxPhoto)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, ErrNotFound
