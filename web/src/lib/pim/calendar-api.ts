@@ -230,6 +230,17 @@ export function eventHref(p: {
 	/** A first title of a new event (the name of a contact). */
 	title?: string;
 	back?: string;
+	/** 1.13, a new event: its end (HH:MM, on endDate or the start's day) … */
+	end?: string;
+	endDate?: string;
+	/** … or its length in minutes. */
+	duration?: string;
+	/** "1": all day (date to endDate). */
+	allDay?: string;
+	location?: string;
+	notes?: string;
+	/** The calendar of a new event (its id). */
+	calendar?: string;
 }): string {
 	const q = new URLSearchParams();
 	for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);

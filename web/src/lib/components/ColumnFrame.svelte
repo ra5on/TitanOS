@@ -90,6 +90,12 @@
 		listWidth?: ColumnWidth;
 		/** The content keeps at least this much; the columns give way. */
 		contentMin?: number;
+		/**
+		 * 1.13 (Kalender): below this width of the frame the side bar folds by
+		 * itself, as under 620 px (a tap unfolds it until the frame is wider
+		 * again). 0: never (the side bar only narrows).
+		 */
+		foldBelow?: number;
 		sideResizeLabel?: string;
 		listResizeLabel?: string;
 		resizeHint?: string;
@@ -123,6 +129,7 @@
 		sideWidth = { min: 180, max: 420, fallback: 240 },
 		listWidth = { min: 280, max: 720, fallback: 380 },
 		contentMin = 320,
+		foldBelow = 0,
 		sideResizeLabel,
 		listResizeLabel,
 		resizeHint,
@@ -162,16 +169,22 @@
 		query.addEventListener('change', change);
 		return () => query.removeEventListener('change', change);
 	});
-	const folded = $derived(columns && (narrow ? !heldOpen : foldedPref));
+	let frameWidth = $state(0);
+	const tight = $derived(!narrow && foldBelow > 0 && frameWidth > 0 && frameWidth < foldBelow);
+	let heldTight = $state(false);
+	$effect(() => {
+		if (!tight) heldTight = false;
+	});
+	const folded = $derived(columns && (narrow ? !heldOpen : tight ? !heldTight : foldedPref));
 	function toggleFold() {
 		if (narrow) heldOpen = !heldOpen;
+		else if (tight) heldTight = !heldTight;
 		else {
 			foldedPref = !foldedPref;
 			storeFolded(foldKey, foldedPref);
 		}
 	}
 
-	let frameWidth = $state(0);
 	const widths = $derived(
 		columnWidths({
 			frame: frameWidth || 1200,

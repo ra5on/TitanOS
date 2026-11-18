@@ -110,6 +110,18 @@ function allDay(id, cal, title, day, days = 1, more = {}) {
   });
 }
 
+function task(id, list, title, due, more = {}) {
+  return {
+    id,
+    list,
+    uid: id.replace(/\.ics$/, ""),
+    title,
+    ...(due ? { due, ...(due.length === 10 ? { dueAllDay: true } : {}) } : {}),
+    etag: `"t-${id}"`,
+    ...more,
+  };
+}
+
 /** The data a test starts from; change it before or while the page runs. */
 export function calendarState() {
   const calendars = [
@@ -415,6 +427,19 @@ export function calendarState() {
     stream: null,
     /** 1.13: milliseconds each answer waits (a NAS is not instant). */
     delay: 0,
+    /** 1.13: lists of reminders and the reminders (VTODO). */
+    taskLists: [
+      { id: "erinnerungen--titanos", name: "Erinnerungen", color: "#c2410c", order: 0 },
+      { id: "einkauf", name: "Einkauf", color: "#0f766e", order: 1 },
+    ],
+    tasks: [
+      task("steuer.ics", "erinnerungen--titanos", "Steuererklärung abgeben", "2026-11-17", { priority: 1 }),
+      task("arzt.ics", "erinnerungen--titanos", "Arzttermin vereinbaren", at("2026-11-18", "10:00")),
+      task("vertrag.ics", "erinnerungen--titanos", "Handyvertrag kündigen", "2026-11-12"),
+      task("buch.ics", "erinnerungen--titanos", "Buch zurückgeben", ""),
+      task("alt.ics", "erinnerungen--titanos", "Altpapier rausstellen", "2026-11-10", { done: true, completed: "2026-11-10T08:00:00Z" }),
+      task("milch.ics", "einkauf", "Milch", ""),
+    ],
   };
 }
 
@@ -538,6 +563,92 @@ export async function installCalendar(target, state = calendarState()) {
         headers: { "Retry-After": "300" },
         json: { error: { code: "calendar_unavailable", message: "no volume" } },
       });
+    }
+    // 1.13: reminders (docs/KALENDER.md "Erinnerungen (VTODO, seit 1.13)").
+    if (path === "/calendar/tasklists" && method === "GET")
+      return json(
+        s.taskLists
+          .slice()
+          .sort((a, b) => a.order - b.order)
+          .map((l) => ({
+            ...l,
+            count: s.tasks.filter((t) => t.list === l.id).length,
+            open: s.tasks.filter((t) => t.list === l.id && !t.done).length,
+          })),
+      );
+    if (path === "/calendar/tasklists" && method === "POST") {
+      const l = {
+        id: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "liste",
+        name: body.name,
+        color: body.color ?? "#c2410c",
+        order: s.taskLists.length,
+      };
+      s.taskLists.push(l);
+      return json({ ...l, count: 0, open: 0 }, 201);
+    }
+    let tm = path.match(/^\/calendar\/tasklists\/([^/]+)$/);
+    if (tm) {
+      const id = decodeURIComponent(tm[1]);
+      const l = s.taskLists.find((x) => x.id === id);
+      if (!l) return fail(404, "tasklist_not_found");
+      if (method === "PUT") {
+        Object.assign(l, body);
+        return json(l);
+      }
+      if (method === "DELETE") {
+        if (s.taskLists.length === 1) return fail(409, "tasklist_last");
+        s.taskLists = s.taskLists.filter((x) => x !== l);
+        s.tasks = s.tasks.filter((t) => t.list !== id);
+        return route.fulfill({ status: 204, body: "" });
+      }
+    }
+    if (path === "/calendar/tasks" && method === "GET") {
+      const status = q("status") || "open";
+      const list = s.tasks.filter(
+        (t) =>
+          (!q("list") || t.list === q("list")) &&
+          (status === "all" || (status === "done") === !!t.done),
+      );
+      return json({ tasks: list });
+    }
+    if (path === "/calendar/tasks/due" && method === "GET") {
+      const from = dayOf(q("from"));
+      const to = dayOf(q("to"));
+      return json({
+        tasks: s.tasks.filter(
+          (t) => !t.done && t.due && dayOf(t.due) >= from && dayOf(t.due) < to,
+        ),
+      });
+    }
+    if (path === "/calendar/tasks" && method === "POST") {
+      const id = `neu-${s.tasks.length + 1}.ics`;
+      const t = task(id, body.list || s.taskLists[0].id, body.title, body.due ?? "");
+      s.tasks.push(t);
+      return json(t, 201);
+    }
+    tm = path.match(/^\/calendar\/tasks\/([^/]+)\/([^/]+?)(\/done)?$/);
+    if (tm) {
+      const list = decodeURIComponent(tm[1]);
+      const id = decodeURIComponent(tm[2]);
+      const t = s.tasks.find((x) => x.list === list && x.id === id);
+      if (!t) return fail(404, "task_not_found");
+      if (tm[3] && method === "POST") {
+        t.done = body.done;
+        return json({ task: t });
+      }
+      if (method === "GET")
+        return json({ ...t, notes: "", timezone: "", alarms: [] });
+      if (method === "PUT") {
+        for (const k of ["title", "notes", "priority"])
+          if (k in body) t[k] = body[k];
+        if ("due" in body) t.due = body.due ?? "";
+        if (body.list) t.list = body.list;
+        return json(t);
+      }
+      if (method === "DELETE") {
+        s.tasks = s.tasks.filter((x) => x !== t);
+        return route.fulfill({ status: 204, body: "" });
+      }
     }
     if (path === "/calendar/access")
       return json({
