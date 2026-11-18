@@ -107,7 +107,9 @@ func TestCalendarReminders(t *testing.T) {
 		t.Fatalf("09:45: %s", g)
 	}
 	// The next day: the plan slides (made again), older hints than 12 h are gone.
-	set(time.Date(2026, 11, 21, 9, 0, 0, 0, berlin))
+	// The all-day event is on the day in the zone of the NAS (the store's,
+	// time.Local – UTC in CI), its alarm at 09:00 there.
+	set(time.Date(2026, 11, 21, 9, 0, 0, 0, pim.Zone()))
 	c.replan("")
 	c.planDirty()
 	c.fire()
@@ -118,6 +120,7 @@ func TestCalendarReminders(t *testing.T) {
 		t.Fatalf("pushed without asking: %v", pushed)
 	}
 
+	// From here on the 22nd in Berlin: later than the step above in any zone of the NAS.
 	// Push asked for, hints off: the hidden calendar stays hidden (merged).
 	if res, _ := ts.do(ts.client, "PUT", "/api/v1/preferences/calendar", map[string]any{"reminderPush": true, "reminderHints": false}); res.StatusCode != http.StatusNoContent {
 		t.Fatal("prefs")
@@ -125,15 +128,15 @@ func TestCalendarReminders(t *testing.T) {
 	if h := s.pimDataArea().hiddenCalendars("alex"); len(h) != 1 || h[0] != "versteckt" {
 		t.Fatalf("hidden lost: %v", h)
 	}
-	post(ts.client, "privat", map[string]any{"title": "Anruf", "start": "2026-11-21T10:00", "end": "2026-11-21T10:30",
+	post(ts.client, "privat", map[string]any{"title": "Anruf", "start": "2026-11-22T10:00", "end": "2026-11-22T10:30",
 		"timezone": "Europe/Berlin", "alarms": []int{10}})
 	c.planDirty()
-	set(time.Date(2026, 11, 21, 9, 50, 0, 0, berlin))
+	set(time.Date(2026, 11, 22, 9, 50, 0, 0, berlin))
 	c.fire()
 	if len(pushed) != 1 || pushed[0] != "alex:Anruf" {
 		t.Fatalf("push: %v", pushed)
 	}
-	if g := got(ts.client); len(g) != 1 {
+	if g := strings.Join(got(ts.client), ","); strings.Contains(g, "Anruf") {
 		t.Fatalf("a hint without hints: %v", g)
 	}
 	if res, _ := ts.do(ts.client, "PUT", "/api/v1/preferences/calendar", map[string]any{"reminderPush": "ja"}); res.StatusCode != http.StatusBadRequest {
@@ -146,7 +149,7 @@ func TestCalendarReminders(t *testing.T) {
 	d := *c.deps.Load()
 	d.available = func() bool { return !away.Load() }
 	c.deps.Store(&d)
-	post(bea, "privat", map[string]any{"title": "Später", "start": "2026-11-21T11:00", "end": "2026-11-21T11:30",
+	post(bea, "privat", map[string]any{"title": "Später", "start": "2026-11-22T11:00", "end": "2026-11-22T11:30",
 		"timezone": "Europe/Berlin", "alarms": []int{5}})
 	c.replan("bea")
 	if !c.planDirty() {
@@ -156,7 +159,7 @@ func TestCalendarReminders(t *testing.T) {
 	if c.planDirty() {
 		t.Fatal("not planned once the volume is there")
 	}
-	set(time.Date(2026, 11, 21, 10, 55, 0, 0, berlin))
+	set(time.Date(2026, 11, 22, 10, 55, 0, 0, berlin))
 	c.fire()
 	if g := got(bea); len(g) != 1 || g[0] != "Später/5m0s" {
 		t.Fatalf("after the volume came: %v", g)
