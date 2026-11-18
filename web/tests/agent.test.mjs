@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+	skillIn,
 	activeSchedules,
 	DOT_SIZES,
 	areaMode,
@@ -554,4 +555,23 @@ test('a reminder draft fills the reminder dialog', async () => {
 	assert.equal(day.priority, 0);
 	assert.equal(day.title, 'Alt', 'what the draft does not name stays');
 	assert.equal(taskDraftForm({ ...blank, hasDue: true }, { due: null }, []).hasDue, false);
+});
+
+test('1.14: built-in skills in the language of the page', () => {
+	const built = {
+		id: 'builtin-health',
+		name: 'Health check',
+		when: 'regular report',
+		steps: '1. system_status',
+		builtIn: true,
+		updated: '',
+		de: { name: 'Gesundheitscheck', when: 'regelmäßiger Bericht', steps: '1. system_status prüfen' },
+	};
+	assert.equal(skillIn(built, 'de').name, 'Gesundheitscheck');
+	assert.equal(skillIn(built, 'de').steps, '1. system_status prüfen');
+	assert.equal(skillIn(built, 'de').id, 'builtin-health');
+	assert.equal(skillIn(built, 'en').name, 'Health check');
+	const own = { id: 'x', name: 'Mein Ablauf', when: '', steps: '1.', updated: '' };
+	assert.equal(skillIn(own, 'de'), own);
+	assert.equal(skillIn({ ...built, de: undefined }, 'de').name, 'Health check');
 });

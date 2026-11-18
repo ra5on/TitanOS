@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,7 +25,11 @@ func TestBuiltInSkillsNameRealTools(t *testing.T) {
 		"code_run": true, "plan_update": true,
 		// 1.10: with Home Assistant, the NVR, Immich, the activity log and
 		// the monitoring history of a real NAS.
-		"ha_logbook": true, "ha_config_read": true, "nvr_events": true, "photos_search": true, "activity_log": true, "monitoring_history": true, "capacity_forecast": true}
+		"ha_logbook": true, "ha_config_read": true, "nvr_events": true, "photos_search": true, "activity_log": true, "monitoring_history": true, "capacity_forecast": true,
+		// 1.14: the runner's own tools_load; Mail, the calendar and the
+		// contacts of an account that has them (agent_mail.go, agent_pim.go).
+		"tools_load": true, "mail_search": true, "mail_list": true, "mail_read": true, "mail_send": true, "mail_draft": true,
+		"calendar_list": true, "calendar_free": true, "calendar_create": true, "contacts_search": true, "contacts_create": true}
 	// Words of Home Assistant in the steps, no tools.
 	for _, w := range []string{"device_class", "garage_door", "alarm_control_panel"} {
 		known[w] = true
@@ -78,5 +83,60 @@ func TestAgentSkillRead(t *testing.T) {
 	chat := &agent.Chat{}
 	if text, err := read(chat, "Fremder Ablauf"); err != nil || !strings.HasPrefix(text, "[Outside content") || !chat.OutsideSkill {
 		t.Fatalf("outside skill: %q %v %v", text, err, chat.OutsideSkill)
+	}
+}
+
+// 114-2: every built-in skill in German, with the same tools and the same
+// steps (lines) as in English.
+func TestBuiltInSkillsGerman(t *testing.T) {
+	word := regexp.MustCompile(`\b[a-z]+_[a-z_]+\b`)
+	if len(agent.BuiltInSkillsDE) != len(agent.BuiltInSkills) {
+		t.Fatalf("%d German, %d skills", len(agent.BuiltInSkillsDE), len(agent.BuiltInSkills))
+	}
+	for _, s := range agent.BuiltInSkills {
+		de, ok := agent.BuiltInSkillsDE[s.ID]
+		if !ok {
+			t.Errorf("%s has no German text", s.ID)
+			continue
+		}
+		if de.Name == "" || len([]rune(de.Name)) > 80 || de.Name == s.Name || strings.Contains(de.When, "\n") {
+			t.Errorf("%s: name %q when %q", s.ID, de.Name, de.When)
+		}
+		if strings.Count(de.Steps, "\n") != strings.Count(s.Steps, "\n") {
+			t.Errorf("%s: %d lines in German, %d in English", s.ID, strings.Count(de.Steps, "\n")+1, strings.Count(s.Steps, "\n")+1)
+		}
+		have := map[string]bool{}
+		for _, w := range word.FindAllString(de.Steps, -1) {
+			have[w] = true
+		}
+		for _, w := range word.FindAllString(s.Steps, -1) {
+			if !have[w] {
+				t.Errorf("%s: %s missing in German", s.ID, w)
+			}
+		}
+	}
+}
+
+// 114-2: the page gets the German text of a built-in skill, not of an own one.
+func TestAgentSkillsViewGerman(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{})
+	res, body := ts.request("GET", "/api/v1/agent/skills", nil)
+	var got struct {
+		Skills []struct {
+			ID, Name string
+			BuiltIn  bool
+			DE       *agent.SkillText
+		}
+	}
+	if err := json.Unmarshal(body, &got); err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	for _, s := range got.Skills {
+		if s.ID == "builtin-health" && (s.Name != "Health check" || s.DE == nil || s.DE.Name != "Gesundheitscheck") {
+			t.Fatalf("health: %+v", s)
+		}
+		if !s.BuiltIn && s.DE != nil {
+			t.Fatalf("own skill with German: %+v", s)
+		}
 	}
 }

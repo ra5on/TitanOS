@@ -63,10 +63,26 @@ func TestAgentShareFolders(t *testing.T) {
 			t.Fatalf("folder %s: %v", dir, err)
 		}
 	}
-	for _, f := range []string{"LIESMICH.md", "Wissen/TitanOS/docker.md", "Skills/TitanOS/Health check.md", "Projekte/Steuer 2026/Anweisungen.md"} {
+	for _, f := range []string{"LIESMICH.md", "Wissen/TitanOS/docker.md", "Skills/TitanOS/Gesundheitscheck.md", "Projekte/Steuer 2026/Anweisungen.md"} {
 		if _, err := os.Stat(filepath.Join(home, f)); err != nil {
 			t.Errorf("%s: %v", f, err)
 		}
+	}
+	// 114-2: the built-in skills in German; a file of 1.13 (English name) goes.
+	if data, _ := os.ReadFile(filepath.Join(home, "Skills/TitanOS/Gesundheitscheck.md")); !strings.Contains(string(data), "**Wann:** Gesundheitscheck") || !strings.Contains(string(data), "1. system_status") {
+		t.Errorf("German skill file: %s", data)
+	}
+	// Each new version writes them anew (st.Version).
+	old := filepath.Join(home, "Skills/TitanOS/Health check.md")
+	if err := os.WriteFile(old, []byte("# Health check\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.agentMirror.mu.Lock()
+	ts.server.agentMirror.load(ts.server, "alex").Version = "1.13"
+	ts.server.agentMirror.mu.Unlock()
+	ts.server.agentSyncShare()
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("the English file of 1.13 stays: %v", err)
 	}
 	matches, _ := filepath.Glob(filepath.Join(home, "Projekte", "Steuer 2026", "*.md"))
 	var copyFile string
