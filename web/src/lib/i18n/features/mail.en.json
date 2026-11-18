@@ -324,5 +324,6 @@
 	"mail.overview.poll": "The list reloads every 2 minutes while Mail is open.",
 	"mail.overview.links": "Quick links",
 	"mail.overview.settings": "Mail settings",
-	"mail.keys.global": "The other keys of TitanOS, such as Ctrl+K, still work here."
+	"mail.keys.global": "The other keys of TitanOS, such as Ctrl+K, still work here.",
+	"mail.listActions": "List actions"
 }

@@ -72,6 +72,24 @@ export const HTML_SCRIPT =
 const LOGO = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}`;
 const HELD_BACK =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjZGRkIi8+PC9zdmc+";
+/**
+ * 1.13: a newsletter as many are – a 640 px table with a picture of that
+ * width, two columns of 320 px and a coloured banner, all with fixed
+ * widths; put it on a row as `html` (test-ui-mail-113.mjs). On a phone it
+ * must fit the frame instead of being cut off at the right.
+ */
+export const NEWSLETTER_HTML =
+  `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'"></head>` +
+  `<body style="margin:0;background:#eeeeee"><table width="100%" bgcolor="#eeeeee" cellpadding="0" cellspacing="0"><tr><td align="center">` +
+  `<table width="640" cellpadding="0" cellspacing="0" style="width:640px;background:#ffffff;font-family:Arial,sans-serif">` +
+  `<tr><td><img alt="Paketdienst" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='180'%3E%3Crect width='640' height='180' fill='%23351c15'/%3E%3Ccircle cx='560' cy='90' r='60' fill='%23ffc400'/%3E%3C/svg%3E" width="640" height="180" style="display:block;width:640px"></td></tr>` +
+  `<tr><td style="padding:24px 32px;font-size:18px;text-align:right">Hallo Alex Beispiel</td></tr>` +
+  `<tr><td style="padding:0 32px;font-size:34px;font-weight:bold;text-align:right">Ihr Paket kommt morgen</td></tr>` +
+  `<tr><td style="padding:24px 0"><table width="640" cellpadding="0" cellspacing="0"><tr><td width="320" style="padding:12px 32px;font-size:16px">Sendungsnummer 1Z999AA10123456784</td><td width="320" style="padding:12px 32px;font-size:16px">Geschätzte Zustellung Donnerstag, 19.11.</td></tr></table></td></tr>` +
+  `<tr><td style="background:#ffc400;padding:20px 32px;font-size:24px;font-weight:bold">Für die Paketzustellung ist eine Unterschrift erforderlich</td></tr>` +
+  `<tr><td style="padding:24px 32px;font-size:14px;color:#555555">Diese Nachricht wurde automatisch versandt. https://www.paketdienst.example/sendungsverfolgung/1Z999AA10123456784</td></tr>` +
+  `</table></td></tr></table></body></html>`;
+
 export function bankHtml(images) {
   const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data:${images ? " https:" : ""}; font-src 'none'; form-action 'none'; base-uri 'none'`;
   return (
@@ -590,7 +608,7 @@ export async function installMail(target, state = mailState()) {
         text: bank
           ? "Guten Tag, Ihr Auszug für November liegt bei."
           : `Hallo Alex,\n\nhier der Text zu „${r.subject}“. Mehr unter https://example.org/info?id=${r.uid}\n\nViele Grüße`,
-        html: bank ? bankHtml(q("images") === "1") : "",
+        html: bank ? bankHtml(q("images") === "1") : (r.html ?? ""),
         externalImages: bank && q("images") !== "1",
         attachments: r.attachments
           ? [

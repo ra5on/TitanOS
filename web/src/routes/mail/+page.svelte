@@ -18,7 +18,9 @@
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import BottomBar from '#lib/components/BottomBar.svelte';
 	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
+	import { compactView } from '#lib/components/compact.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -62,6 +64,9 @@
 	});
 	const phone = $derived(phoneView());
 	const wide = $derived(wideView && !phone);
+	// 1.13: the phone and windows under 620 px – levels edge to edge, the
+	// actions in a bar at the bottom, "Neue E-Mail" at its right.
+	const compact = $derived(!wide && compactView());
 
 	const place = $derived(placeOf(page.url));
 	const level = $derived(levelOf(place));
@@ -255,13 +260,26 @@
 		helpOpen = true;
 	}
 
-	const title = $derived(level === 'folders' || !listHeading ? t('desktop.app.mail') : listHeading);
+	// On the phone the bar above names the program and each level its place
+	// itself (the list's heading, the subject): no second strip (1.13).
+	const title = $derived(
+		level === 'folders' || !listHeading || phone ? t('desktop.app.mail') : listHeading,
+	);
+
+	// Opening a message on a level of its own starts at its top (the subject).
+	$effect(() => {
+		if (wide || !place.m) return;
+		void place.m;
+		untrack(() => window.scrollTo(0, 0));
+	});
 
 	// The parts of the frame by the level of the narrow view.
 	const frameLevel = $derived<FrameLevel>(
 		level === 'folders' ? 'side' : level === 'list' ? 'list' : 'content',
 	);
-	const hasList = $derived(!!place.a && !!place.f);
+	// In columns the list's column stands from the start (also while the
+	// mailboxes load), so that nothing moves when the first folder opens.
+	const hasList = $derived(wide || (!!place.a && !!place.f));
 </script>
 
 <svelte:window onkeydown={keydown} onkeydowncapture={helpKey} />
@@ -343,12 +361,23 @@
 						account: account.name || account.email,
 					})
 				: listHeading}
-			oncompose={wide ? undefined : () => compose()}
+			oncompose={wide || compact ? undefined : () => compose()}
 			onopen={openMessage}
 			onchanged={counted}
 			onremoved={listRemoved}
 			onloaded={(at) => (refreshed = at)}
 		/>
+		{#if compact}
+			<BottomBar label={t('mail.listActions')}>
+				<button
+					type="button"
+					class="bar-btn bar-new"
+					aria-label={t('mail.action.compose')}
+					title={t('mail.action.compose')}
+					onclick={() => compose()}><Icon name="edit" size={20} /></button
+				>
+			</BottomBar>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -392,6 +421,7 @@
 				>
 			{/if}
 			<MessageView
+				{compact}
 				accountId={place.a}
 				folder={messageFolder}
 				uid={place.m}
@@ -484,8 +514,8 @@
 	:global(.mail.levels .col) {
 		min-width: 0;
 	}
-	:global(.mail.levels .col-list),
-	:global(.mail.levels .col-message) {
+	:global(.mail.levels:not(.compact) .col-list),
+	:global(.mail.levels:not(.compact) .col-message) {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);

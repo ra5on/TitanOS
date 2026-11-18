@@ -7,13 +7,17 @@
 // rail and stays folded per device, loading in the same column (nothing
 // jumps), folders sorted by dragging the grip and with Alt+arrow and saved
 // for the account (PUT /preferences/order, read back after a reload), the
-// shown name "Mail". On every page: no sideways scroll, no cut text.
+// shown name "Mail". Compact (phone 390 px light and dark, a window of
+// 560 px): levels without cards, no second strip, the bars at the bottom
+// with named 44 px buttons, "Neue E-Mail" at the right, a newsletter of
+// fixed 640 px fitted to the width. On every page: no sideways scroll, no
+// cut text.
 // Screenshots into UI_OUTPUT.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5212 UI_OUTPUT=out/validation/113-shell node scripts/test-ui-mail-113.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
-import { installMail, mailState } from "./test-ui-mail-fixtures.mjs";
+import { installMail, mailState, NEWSLETTER_HTML } from "./test-ui-mail-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -49,6 +53,11 @@ async function open({
       : { viewport: { width, height } },
   );
   const state = mailState();
+  // The second mail of the inbox is a newsletter with fixed widths.
+  Object.assign(state.messages["acc-privat"].INBOX[1], {
+    html: NEWSLETTER_HTML,
+    subject: "Nachricht 999: Ihr Paket kommt morgen – Zustellung terminiert",
+  });
   if (desk)
     await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   await installMail(made.ctx, state);
@@ -290,22 +299,82 @@ try {
     await page.close();
   }
 
-  // ---- Phone 390 px ----
-  {
-    const { page } = await open({ width: 390, height: 844, phone: true, desk: true });
+  // ---- Phone 390 px, light and dark: levels, bars at the bottom, the newsletter fits ----
+  for (const theme of ["hell", "graphit"]) {
+    const name = theme === "hell" ? "hell" : "dunkel";
+    const { page } = await open({ width: 390, height: 844, phone: true, desk: true, theme });
     await page.goto(base + "/mail");
-    await page.locator(".mail.levels .col-folders").waitFor();
+    await page.locator(".mail.levels.compact .col-folders").waitFor();
     await page.locator(".col-folders").getByRole("button", { name: "Neue E-Mail" }).waitFor();
-    await sound(page, "phone folders");
-    await shot(page, "08-handy-ordner-390-hell");
+    await sound(page, `phone ${name} folders`);
+    await shot(page, `08-handy-ordner-390-${name}`);
     await page.locator(".col-folders .folder", { hasText: "Posteingang" }).first().click();
     await page.locator(".row").first().waitFor();
-    await sound(page, "phone list");
-    await shot(page, "09-handy-liste-390-hell");
-    await page.locator(".row").first().click();
+    // No card, no second strip under the phone's bar.
+    assert.equal(await page.locator(".win-toolbar").count(), 0, "no strip of the page head");
+    assert.equal(
+      await page.locator(".col-list").evaluate((el) => getComputedStyle(el).borderTopWidth),
+      "0px",
+      "the list is no card",
+    );
+    const listBar = page.getByRole("toolbar", { name: "Aktionen für die Liste" });
+    const compose = listBar.getByRole("button", { name: "Neue E-Mail" });
+    const cb = await compose.boundingBox();
+    assert.ok(cb.width >= 44 && cb.height >= 44, "the new button is 44 px");
+    assert.ok(cb.x + cb.width > 390 - 60, "at the right");
+    const lb = await listBar.boundingBox();
+    assert.ok(Math.abs(lb.y + lb.height - 844) <= 1, `the bar stands at the bottom (${lb.y + lb.height})`);
+    await sound(page, `phone ${name} list`);
+    await shot(page, `09-handy-liste-390-${name}`);
+
+    // The newsletter: on its own level, starting at the subject, fitted to the width.
+    await page.locator(".entry").nth(1).locator(".row").click();
+    const subject = page.locator("#mail-message-subject");
+    await subject.waitFor();
+    await page.waitForTimeout(400);
+    const bar = await page.locator("header.phone-bar, body > header, header").first().boundingBox();
+    const sb = await subject.boundingBox();
+    assert.ok(!bar || sb.y >= bar.y + bar.height - 1, "the subject is not under the bar above");
+    const frame = page.frames().find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
+    assert.ok(frame, "the mail's frame");
+    const [sw, cw] = await frame.evaluate(() => [
+      document.documentElement.scrollWidth,
+      document.documentElement.clientWidth,
+    ]);
+    assert.ok(sw <= cw + 1, `the newsletter fits (${sw} > ${cw})`);
+    const fb = await page.locator("iframe.frame").boundingBox();
+    assert.ok(fb.x >= 0 && fb.x + fb.width <= 390, "the frame stays on the screen");
+    assert.equal(await page.locator(".message .actions").count(), 0, "no rows of big buttons");
+    const actions = page.getByRole("toolbar", { name: "Aktionen für diese Nachricht" });
+    for (const label of ["Antworten", "Verschieben", "Archivieren", "Löschen", "Markieren", "Weitere Aktionen"]) {
+      const b = await actions.getByRole("button", { name: label, exact: true }).boundingBox();
+      assert.ok(b && b.width >= 44 && b.height >= 44, `${label}: 44 px`);
+    }
+    await sound(page, `phone ${name} newsletter`);
+    await shot(page, `10-handy-newsletter-390-${name}`);
+    await actions.getByRole("button", { name: "Antworten", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Allen antworten" }).waitFor();
+    await page.getByRole("menuitem", { name: "Weiterleiten" }).waitFor();
+    await shot(page, `11-handy-antworten-390-${name}`);
+    await page.keyboard.press("Escape");
+    await page.close();
+  }
+
+  // ---- A browser window of 560 px (compact without the phone's bar) ----
+  {
+    const { page } = await open({ width: 560, height: 800 });
+    await page.goto(base + "/mail?a=acc-privat&f=INBOX&m=999");
     await page.locator("#mail-message-subject").waitFor();
-    await sound(page, "phone message");
-    await shot(page, "10-handy-nachricht-390-hell");
+    await page.getByRole("button", { name: /Zurück zu Posteingang/ }).waitFor();
+    await page.getByRole("toolbar", { name: "Aktionen für diese Nachricht" }).waitFor();
+    const frame = page.frames().find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
+    const [sw, cw] = await frame.evaluate(() => [
+      document.documentElement.scrollWidth,
+      document.documentElement.clientWidth,
+    ]);
+    assert.ok(sw <= cw + 1, `the newsletter fits at 560 px (${sw} > ${cw})`);
+    await sound(page, "560 newsletter");
+    await shot(page, "12-fenster-newsletter-560-hell");
     await page.close();
   }
 

@@ -157,7 +157,14 @@ try {
     // titand's document goes in unchanged (its own CSP meta first). It
     // carries a script and an onerror handler here: the frame must run neither.
     const srcdoc = await iframe.getAttribute("srcdoc");
-    assert.equal(srcdoc, bankHtml(false), "document unchanged in srcdoc");
+    // 1.13: the one addition is the style that fits the mail to the frame,
+    // at the end of the head (after the CSP meta); it loads and runs nothing.
+    const FIT = /<style data-titanos-fit>[^<]*<\/style>/;
+    const fit = srcdoc.match(FIT)?.[0] ?? "";
+    assert.ok(fit, "the fitting style is there");
+    assert.doesNotMatch(fit, /url\(|@import|expression|script/i, "the style loads nothing");
+    assert.ok(srcdoc.indexOf(fit) > srcdoc.indexOf("Content-Security-Policy"), "after the CSP meta");
+    assert.equal(srcdoc.replace(FIT, ""), bankHtml(false), "document otherwise unchanged in srcdoc");
     assert.match(srcdoc, /<script>/, "the fixture's script is in the frame");
     assert.match(
       srcdoc,
@@ -196,7 +203,10 @@ try {
       "still no script",
     );
     assert.equal(
-      await mail.locator("iframe.frame").getAttribute("srcdoc"),
+      (await mail.locator("iframe.frame").getAttribute("srcdoc")).replace(
+        /<style data-titanos-fit>[^<]*<\/style>/,
+        "",
+      ),
       bankHtml(true),
     );
     assert.ok(
@@ -627,7 +637,12 @@ try {
       .first()
       .click();
     await page.locator(".row").nth(1).click();
-    await page.getByRole("button", { name: "Weiterleiten" }).click();
+    // 1.13: on the phone the answers are a menu of the bar at the bottom.
+    await page
+      .getByRole("toolbar", { name: "Aktionen für diese Nachricht" })
+      .getByRole("button", { name: "Antworten", exact: true })
+      .click();
+    await page.getByRole("menuitem", { name: "Weiterleiten" }).click();
     await page.waitForURL(/\/mail\/compose\?/);
     await page.locator("#mail-subject").waitFor();
     assert.match(await page.locator("#mail-subject").inputValue(), /^Fwd: /);

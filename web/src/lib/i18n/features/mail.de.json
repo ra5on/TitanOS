@@ -324,5 +324,6 @@
 	"mail.overview.poll": "Die Liste lädt alle 2 Minuten neu, solange Mail offen ist.",
 	"mail.overview.links": "Schnellzugriff",
 	"mail.overview.settings": "Mail-Einstellungen",
-	"mail.keys.global": "Die übrigen Tasten von TitanOS, etwa Strg+K, gelten hier weiter."
+	"mail.keys.global": "Die übrigen Tasten von TitanOS, etwa Strg+K, gelten hier weiter.",
+	"mail.listActions": "Aktionen für die Liste"
 }
