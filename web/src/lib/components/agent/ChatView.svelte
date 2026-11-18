@@ -10,6 +10,7 @@
 	import { blocks, type Chat, type Entry, type Pending } from '#lib/agent.ts';
 	import AnswerBlock from './chat/AnswerBlock.svelte';
 	import ApprovalCard from './chat/ApprovalCard.svelte';
+	import DraftCard from './chat/DraftCard.svelte';
 	import ChatFiles from './chat/ChatFiles.svelte';
 	import ChatFind from './chat/ChatFind.svelte';
 	import LiveLine from './chat/LiveLine.svelte';
@@ -27,6 +28,7 @@
 		busy = false,
 		deciding = false,
 		ondecide,
+		onedit,
 		onchoice,
 		onretry,
 		onundo,
@@ -62,6 +64,8 @@
 		busy?: boolean;
 		deciding?: boolean;
 		ondecide: (pending: Pending, approve: boolean) => void;
+		/** 1.13: a waiting step goes into the program's editor instead. */
+		onedit?: (pending: Pending) => void;
 		onchoice: (choice: string) => void;
 		onretry?: () => void;
 		onundo?: (step: Entry) => void;
@@ -255,6 +259,15 @@
 						onundo={undo}
 					/>
 				{/if}
+				<!-- 1.13: drafts of "Nur Vorschläge" and of steps taken into an editor. -->
+				{#each block.steps.filter((x) => x.draft) as step (step.id)}
+					{#if step.draft}<DraftCard
+							draft={step.draft}
+							chatId={chat.id}
+							entryId={step.id}
+							{readonly}
+						/>{/if}
+				{/each}
 			{:else if block.kind === 'answer'}
 				{@const last = block.entry.id === lastAnswer}
 				<AnswerBlock
@@ -290,7 +303,7 @@
 		<LiveLine {chat} {live} {busy} {calm} />
 
 		{#if chat.pending && !busy && !readonly}
-			<ApprovalCard pending={chat.pending} {deciding} {ondecide} />
+			<ApprovalCard pending={chat.pending} {deciding} {ondecide} {onedit} />
 		{/if}
 	</div>
 </div>

@@ -1762,6 +1762,14 @@ export const settingsIndex: SettingsIndexEntry[] = [
 		tab: 'rights',
 		in: ['agent.areas', 'agent.area.contacts'],
 	},
+	{ p: '/settings/agent', k: 'agentpim.rights.title', kind: 'group', tab: 'rights' },
+	{
+		p: '/settings/agent',
+		k: 'agentpim.rights.intro',
+		kind: 'row',
+		tab: 'rights',
+		in: ['agentpim.rights.title'],
+	},
 	{ p: '/settings/agent', k: 'agent.folderRules', kind: 'group', tab: 'rights' },
 	{ p: '/settings/agent', k: 'agent.sectionInitiative', kind: 'group', tab: 'initiative' },
 	{

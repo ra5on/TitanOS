@@ -8,16 +8,21 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { Pending } from '#lib/agent.ts';
 	import { argLines, askTitle, levelText, preview } from './chat-text.svelte.ts';
+	import { DRAFT_TOOLS } from '#lib/agent/drafts.ts';
 
 	let {
 		pending: p,
 		deciding = false,
 		ondecide,
+		onedit,
 	}: {
 		pending: Pending;
 		/** An answer is on its way: the buttons wait. */
 		deciding?: boolean;
 		ondecide: (pending: Pending, approve: boolean) => void;
+		/** 1.13: "Öffnen und bearbeiten" – the person finishes the step in the
+		 *  program's editor instead (mail, events, contacts, reminders). */
+		onedit?: (pending: Pending) => void;
 	} = $props();
 	const lines = $derived(argLines(p.args));
 	const shown = $derived(preview(p.args));
@@ -47,6 +52,11 @@
 			<button type="button" class="btn" disabled={deciding} onclick={() => ondecide(p, false)}
 				>{t('agent.decline')}</button
 			>
+			{#if onedit && DRAFT_TOOLS.has(p.tool)}
+				<button type="button" class="btn" disabled={deciding} onclick={() => onedit(p)}
+					>{t('agentpim.draft.open')}</button
+				>
+			{/if}
 			<button
 				type="button"
 				class="btn {p.level === 'destroy' ? 'btn-danger' : 'btn-primary'}"

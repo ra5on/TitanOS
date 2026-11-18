@@ -561,6 +561,7 @@
 						calm={ag.calm}
 						bind:find={ag.find}
 						ondecide={ag.decide}
+						onedit={ag.edit}
 						onchoice={(c) => ag.send(c)}
 						onretry={() => ag.send(t('agent.continueMessage'))}
 						onundo={ag.undo}

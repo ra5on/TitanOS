@@ -22,6 +22,13 @@
 		type Settings,
 		type ToolView,
 	} from '#lib/agent.ts';
+	import {
+		ACTION_GROUPS,
+		isDelete,
+		nasAction,
+		type ActionKey,
+		type ActionMode,
+	} from '#lib/agent-actions.ts';
 
 	let {
 		settings = $bindable(),
@@ -121,6 +128,37 @@
 					: 'agent.data.sumWriteDeny',
 		);
 		return `${read} · ${write}`;
+	}
+	// ----- 1.13: rights per kind of action (Q27–Q29) -----
+	const actionLabel = (k: string) => t(`agentpim.action.${k}` as MessageKey);
+	const groupTitle = $derived({
+		mail: t('agentpim.group.mail'),
+		event: t('agentpim.group.event'),
+		contact: t('agentpim.group.contact'),
+		task: t('agentpim.group.task'),
+	});
+	const modeLabel = (m: string) => t(`agentpim.mode.${m}` as MessageKey);
+	function setAction(key: ActionKey, mode: ActionMode) {
+		if (!settings) return;
+		settings.policy.actionRights = { ...(settings.policy.actionRights ?? {}), [key]: mode };
+	}
+	const actionOptions = $derived([
+		{ value: 'suggest' as ActionMode, label: modeLabel('suggest') },
+		{ value: 'ask' as ActionMode, label: modeLabel('ask') },
+		{ value: 'allow' as ActionMode, label: modeLabel('allow') },
+	]);
+	const mailReadOptions = $derived([
+		{ value: 'allow' as ActionMode, label: t('agentpim.mode.on') },
+		{ value: 'deny' as ActionMode, label: t('agentpim.mode.off') },
+	]);
+	function groupSummary(keys: ActionKey[]): string {
+		const modes = keys
+			.filter((k) => !isDelete(k) && k !== 'mail.read')
+			.map((k) => nasAction(settings.policy, k));
+		if (keys.includes('mail.read') && nasAction(settings.policy, 'mail.read') === 'deny')
+			return t('agentpim.mode.mailOff');
+		const shown = [...new Set(modes)].map(modeLabel).join(' / ');
+		return keys.some(isDelete) ? `${shown} · ${t('agentpim.mode.deleteAsks')}` : shown;
 	}
 	const kindLabel: Record<string, MessageKey> = {
 		read: 'agent.kindRead',
@@ -293,6 +331,43 @@
 		</div>
 	{/if}
 </SettingGroup>
+<!-- 1.13 (Q27–Q29): mail, events, contacts and reminders per kind of
+     action – the most every account gets; accounts may be stricter. -->
+<SettingGroup title={t('agentpim.rights.title')}>
+	<SettingRow
+		icon="mail"
+		title={t('agentpim.rights.intro')}
+		desc={t('agentpim.rights.introDesc')}
+	/>
+	<div class="notice-warn cloud-note" role="note">{t('agentpim.cloud.settings')}</div>
+	{#each ACTION_GROUPS as g (g.id)}
+		<SettingRow
+			title={groupTitle[g.id]}
+			summary={groupSummary(g.keys)}
+			bind:open={() => !!open['act-' + g.id], (on) => (open['act-' + g.id] = on)}
+		>
+			{#each g.keys as key (key)}
+				<SettingSub title={actionLabel(key)} desc={t(`agentpim.action.${key}.desc` as MessageKey)}>
+					{#snippet control()}
+						{#if key !== 'mail.read' && nasAction(settings.policy, key) === 'deny'}
+							<span class="chip info">{t('agentpim.mode.closed')}</span>
+						{:else if isDelete(key)}
+							<span class="chip info">{t('agentpim.mode.alwaysAsk')}</span>
+						{:else}
+							<Segments
+								compact
+								label={actionLabel(key)}
+								value={nasAction(settings.policy, key)}
+								options={key === 'mail.read' ? mailReadOptions : actionOptions}
+								onchange={(v) => setAction(key, v as ActionMode)}
+							/>
+						{/if}
+					{/snippet}
+				</SettingSub>
+			{/each}
+		</SettingRow>
+	{/each}
+</SettingGroup>
 <SettingGroup title={t('agent.folderRules')}>
 	{#snippet tools()}
 		<button
@@ -345,6 +420,10 @@
 </SettingGroup>
 
 <style>
+	.cloud-note {
+		margin: var(--space-2) 0;
+		overflow-wrap: anywhere;
+	}
 	.frule-where {
 		display: flex;
 		flex-wrap: wrap;

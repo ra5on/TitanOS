@@ -14,6 +14,7 @@
 	import InitiativeSettings from '../InitiativeSettings.svelte';
 	import FeaturesPanel from '../features/FeaturesPanel.svelte';
 	import PhotosSettings from '../PhotosSettings.svelte';
+	import MyActionRights from '../MyActionRights.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { DOT_SIZES, levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
@@ -28,6 +29,7 @@
 		'initiative',
 		'features',
 		'photos',
+		'pim',
 		'push',
 		'look',
 		'gestures',
@@ -68,6 +70,7 @@
 		initiative: t('agent.set.initiative'),
 		features: t('agent.f.title'),
 		photos: t('agent.photos.title'),
+		pim: t('agentpim.mine.title'),
 		push: t('agent.set.push'),
 		look: t('agent.set.lookTitle'),
 		gestures: t('agent.set.gestures'),
@@ -121,6 +124,12 @@
 				title={t('agent.photos.title')}
 				desc={t('agent.photos.desc')}
 				href={href('photos')}
+			/>
+			<SettingRow
+				icon="mail"
+				title={t('agentpim.mine.title')}
+				desc={t('agentpim.mine.desc')}
+				href={href('pim')}
 			/>
 		</SettingGroup>
 		<SettingGroup title={t('agent.set.groupDevice')}>
@@ -256,6 +265,8 @@
 				<FeaturesPanel admin={status.admin} {calm} />
 			{:else if part === 'photos'}
 				<PhotosSettings />
+			{:else if part === 'pim'}
+				<MyActionRights />
 			{:else if part === 'push'}
 				<p class="pushhint">{t('agent.set.pushHint')}</p>
 				<PushDevices personal={!status.admin} />

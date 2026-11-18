@@ -66,6 +66,9 @@ export type FrameMessage =
 	| { type: 'titanos-open-program'; key: string }
 	/** 1.05: a page asks for a window of its own for one task (writing an e-mail, apps.ts taskPage). */
 	| { type: 'titanos-open-task'; href: string }
+	/** 1.13: a page asks to show a page of another program (the agent's panel opens a draft or a
+	 *  mail); only own pages of a program the account has (desk-messages.ts). */
+	| { type: 'titanos-open-app'; href: string }
 	/** 1.05: a task window is done and closes itself (sent e-mail). */
 	| { type: 'titanos-close' }
 	/** PLAN 69: a page that draws the window's side bar itself asks whether it is folded. */

@@ -28,6 +28,7 @@
 		oncompose,
 		onflags,
 		onremoved,
+		onagent,
 	}: {
 		accountId: string;
 		folder: string;
@@ -41,6 +42,8 @@
 		onflags: (uids: number[], change: Partial<Flags>) => void;
 		/** The message left this folder (moved, deleted). */
 		onremoved: (uid: number) => void;
+		/** 1.13: opens the agent's panel with this message (only with the agent). */
+		onagent?: () => void;
 	} = $props();
 
 	let msg = $state<Message | null>(null);
@@ -248,6 +251,11 @@
 						? t('mail.action.deleteForever')
 						: t('mail.action.delete')}</button
 				>
+				{#if onagent}
+					<button type="button" class="btn" onclick={onagent}
+						><Icon name="sparkle" size={16} />{t('agentpim.panel.title')}</button
+					>
+				{/if}
 				<button
 					type="button"
 					class="btn"
@@ -429,6 +437,16 @@
 								void setFlag('seen', !m.flags.seen);
 							}}>{m.flags.seen ? t('mail.action.markUnread') : t('mail.action.markRead')}</button
 						>
+						{#if onagent}
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									onagent();
+								}}>{t('agentpim.panel.title')}</button
+							>
+						{/if}
 					{/snippet}
 				</Dropdown>
 			</BottomBar>

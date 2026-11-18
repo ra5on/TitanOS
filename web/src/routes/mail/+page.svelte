@@ -53,6 +53,11 @@
 		type FolderDelta,
 	} from '#lib/tmail/store.svelte.ts';
 	import type { ComposeMode, Flags, Message } from '#lib/tmail/types.ts';
+	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
+	import type { AgentContext } from '#lib/agent.ts';
+	import { mailPanelActions } from '#lib/agent/panel-actions.ts';
+	import { session } from '#lib/session.svelte.ts';
 
 	const WIDE = '(min-width: 900px)';
 	let wideView = $state(typeof matchMedia === 'function' ? matchMedia(WIDE).matches : true);
@@ -77,6 +82,35 @@
 	);
 	/** The folder of the open message: a hit of the search may lie elsewhere. */
 	const messageFolder = $derived(place.mf || place.f);
+
+	// 1.13 (owner 18 Nov 2026): the agent's panel – right of the message
+	// (a column of the frame), compact a sheet from below; open or not is
+	// kept per device. The open mail goes with each message as a reference.
+	const AGENT_KEY = 'titanos.mail.agentPanel';
+	const withAgent = $derived(!!session.services.agent);
+	let agentOpen = $state(readAgentOpen());
+	function readAgentOpen(): boolean {
+		try {
+			return localStorage.getItem(AGENT_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+	function setAgent(on: boolean) {
+		agentOpen = on;
+		try {
+			if (on) localStorage.setItem(AGENT_KEY, '1');
+			else localStorage.removeItem(AGENT_KEY);
+		} catch {
+			// Kept for this visit only.
+		}
+	}
+	const agentContext = $derived<AgentContext | null>(
+		place.a && place.m
+			? { app: 'mail', mail: { a: place.a, f: place.mf || place.f, uid: place.m } }
+			: null,
+	);
+	const agentActions = $derived(session.services.mail ? mailPanelActions((k) => t(k)) : []);
 
 	let list = $state<MessageList>();
 	let refreshed = $state<Date | null>(null);
@@ -328,6 +362,19 @@
 {/snippet}
 
 {#snippet foot(folded: boolean)}
+	{#if withAgent}
+		<button
+			type="button"
+			class="side-link agent-toggle"
+			class:icon={folded}
+			aria-pressed={agentOpen}
+			title={folded ? t('agentpim.panel.toggle') : undefined}
+			aria-label={folded ? t('agentpim.panel.toggle') : undefined}
+			onclick={() => setAgent(!agentOpen)}
+			><Icon name="sparkle" size={17} />{#if !folded}<span>{t('agentpim.panel.toggle')}</span
+				>{/if}</button
+		>
+	{/if}
 	{#each [{ href: '/mail/setup', icon: 'plus' as const, label: t('mail.side.add') }, { href: '/mail/settings', icon: 'gear' as const, label: t('mail.side.settings') }] as link (link.href)}
 		<a
 			class="side-link"
@@ -376,6 +423,15 @@
 					title={t('mail.action.compose')}
 					onclick={() => compose()}><Icon name="edit" size={20} /></button
 				>
+				{#if withAgent}
+					<button
+						type="button"
+						class="bar-btn"
+						aria-label={t('agentpim.panel.toggle')}
+						title={t('agentpim.panel.toggle')}
+						onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
+					>
+				{/if}
 			</BottomBar>
 		{/if}
 	{/if}
@@ -411,6 +467,9 @@
 		sideFoot={foot}
 		notices={mail.error || live.down ? notices : undefined}
 		list={hasList ? messages : undefined}
+		aside={withAgent && agentOpen && wide ? agentAside : undefined}
+		asideKey="titanos.agentPanel.width"
+		asideResizeLabel={t('agentpim.panel.resize')}
 	>
 		{#if place.a && place.f && place.m}
 			{#if !wide && !phone}
@@ -428,6 +487,7 @@
 				oncompose={compose}
 				onflags={flagsChanged}
 				onremoved={removed}
+				onagent={withAgent ? () => setAgent(true) : undefined}
 			/>
 		{:else if place.a && place.f}
 			<MailOverview
@@ -444,6 +504,27 @@
 			<p class="muted none">{mail.accounts === null ? t('common.loading') : t('mail.noneOpen')}</p>
 		{/if}
 	</ColumnFrame>
+{/if}
+
+{#snippet agentAside()}
+	<AgentPanel
+		app="mail"
+		context={agentContext}
+		actions={agentActions}
+		onclose={() => setAgent(false)}
+	/>
+{/snippet}
+
+{#if withAgent && agentOpen && !wide}
+	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
+		<AgentPanel
+			app="mail"
+			phone
+			context={agentContext}
+			actions={agentActions}
+			onclose={() => setAgent(false)}
+		/>
+	</AgentSheet>
 {/if}
 
 {#if helpOpen}<KeysHelp onclose={() => (helpOpen = false)} />{/if}
@@ -484,6 +565,20 @@
 		justify-content: center;
 		width: 44px;
 		padding: 0;
+	}
+	button.side-link {
+		width: 100%;
+		border: 0;
+		background: none;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	button.side-link.icon {
+		width: 44px;
+	}
+	.agent-toggle[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
 	}
 	.side-link :global(svg) {
 		flex: none;

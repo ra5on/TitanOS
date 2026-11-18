@@ -31,7 +31,24 @@ export type Entry = {
 	stats?: { promptTokens: number; outputTokens: number };
 	/** Kind of a tool step: read, create, change or agent (PLAN 55). */
 	kind?: string;
+	/** 1.13: what a tool made in the mode "Nur Vorschläge" (DraftCard). */
+	draft?: AgentDraft;
+	/** 1.13: what was open in the program of the panel (a reference). */
+	context?: AgentContext;
 };
+
+/** 1.13: a draft of the agent for the editor of a program (agent.Draft). */
+export type AgentDraft = {
+	app: 'mail' | 'calendar' | 'contacts' | 'tasks' | string;
+	kind: string;
+	fields: Record<string, unknown>;
+};
+
+/** 1.13: what is open in Mail, Kontakte or Kalender (agent.ChatContext). */
+export type AgentContext =
+	| { app: 'mail'; mail: { a: string; f: string; uid: number } }
+	| { app: 'contacts'; card: { book: string; id: string } }
+	| { app: 'calendar'; date?: string; event?: { cal: string; id: string; occurrence?: string } };
 
 /** A point of the plan the agent keeps for a task (plan_update, PLAN 55). */
 export type PlanStep = { text: string; done?: boolean };
@@ -271,6 +288,12 @@ export type Status = {
 	cloud?: boolean;
 	/** How many chats the account may run at once (1.01; 0 or missing: no limit). */
 	maxRuns?: number;
+	/** 1.13: the action rights that hold for this account. */
+	actions?: {
+		effective: Record<string, string>;
+		nas: Record<string, string>;
+		own: Record<string, string>;
+	};
 };
 
 export type Location = { name: string; root: string; path: string; note?: string };
@@ -321,6 +344,8 @@ export type Settings = {
 		webFree?: boolean;
 		/** 1.11: calendar and contacts have two axes (never under areas). */
 		dataRights?: Partial<Record<DataArea, DataRight>>;
+		/** 1.13: rights per kind of action (lib/agent-actions.ts); 1.12 drops them. */
+		actionRights?: Partial<Record<string, string>>;
 	};
 	locations?: Location[];
 	/** 1.10: nvr_events gives names of known faces and plates. */
@@ -740,7 +765,8 @@ export function presetOf(policy: Settings['policy']): Preset | 'custom' {
 	const touched =
 		Object.keys(policy.areas ?? {}).length > 0 ||
 		Object.keys(policy.tools ?? {}).length > 0 ||
-		Object.keys(policy.dataRights ?? {}).length > 0;
+		Object.keys(policy.dataRights ?? {}).length > 0 ||
+		Object.keys(policy.actionRights ?? {}).length > 0;
 	return touched ? 'custom' : policy.preset;
 }
 

@@ -33,6 +33,7 @@
 		validAddress,
 	} from '#lib/tmail/text.ts';
 	import type { Attachment, Message, SendMeta, Signature } from '#lib/tmail/types.ts';
+	import { draftList, loadAgentDraft } from '#lib/agent/drafts.ts';
 
 	/** Contract: at most 100 recipients and 25 MB of attachments. */
 	const MAX_RECIPIENTS = 100;
@@ -72,7 +73,14 @@
 	let references = '';
 	let draftUid = $state(0);
 
-	let loading = $state(!!mode && !!sourceUid);
+	// 1.13: a draft of the KI-Agent (?agentDraft=<chat>:<entry>, "Öffnen und
+	// bearbeiten"): its fields come in as text to check; nothing is sent
+	// without the person.
+	const agentDraft = params.get('agentDraft');
+	let fromAgent = $state(false);
+	let agentAnswers: { folder: string; uid: number } | null = null;
+
+	let loading = $state((!!mode && !!sourceUid) || !!agentDraft);
 	let loadError = $state('');
 	let sending = $state(false);
 	let sendError = $state('');
@@ -121,6 +129,7 @@
 			m.answers = { folder: sourceFolder, uid: sourceUid };
 		// 1.12: a forward marks the mail it forwards ($Forwarded).
 		if (sourceUid && mode === 'forward') m.forwards = { folder: sourceFolder, uid: sourceUid };
+		if (agentAnswers) m.answers = agentAnswers;
 		return m;
 	}
 
@@ -218,6 +227,35 @@
 		}
 	}
 
+	async function startFromAgent(param: string) {
+		const d = await loadAgentDraft(param);
+		if (!d || d.app !== 'mail' || d.kind === 'move') {
+			loadError = t('agentpim.draft.gone');
+			return;
+		}
+		const f = d.fields;
+		if (typeof f.a === 'string' && mail.accounts?.some((a) => a.id === f.a)) accountId = f.a;
+		to = draftList(f.to);
+		cc = draftList(f.cc);
+		bcc = draftList(f.bcc);
+		showCopies = cc.length > 0 || bcc.length > 0;
+		subject = typeof f.subject === 'string' ? f.subject : '';
+		text = typeof f.text === 'string' ? f.text : '';
+		// An answer: the mail it answers is marked once sent, and the thread kept.
+		if (d.kind === 'reply' && typeof f.f === 'string' && typeof f.uid === 'number') {
+			agentAnswers = { folder: f.f, uid: f.uid };
+			try {
+				const orig = await mailApi.message(accountId, f.f, f.uid);
+				inReplyTo = orig.messageId;
+				references = `${orig.references ?? ''} ${orig.messageId}`.trim();
+			} catch {
+				// Sent without the thread's references; the answer still goes.
+			}
+		}
+		fromAgent = true;
+		touch();
+	}
+
 	onMount(async () => {
 		if (accountId && !mail.folders[accountId]) void loadFolders(accountId);
 		mailApi.settings().then(
@@ -226,7 +264,8 @@
 		);
 		if (!loading) return;
 		try {
-			startFrom(await mailApi.message(accountId, sourceFolder, sourceUid));
+			if (agentDraft) await startFromAgent(agentDraft);
+			else startFrom(await mailApi.message(accountId, sourceFolder, sourceUid));
 		} catch (err) {
 			loadError = apiErrorText(err);
 		} finally {
@@ -356,6 +395,7 @@
 </PageHead>
 
 {#if loadError}<p class="notice-error" role="alert">{loadError}</p>{/if}
+{#if fromAgent}<p class="notice-warn" role="note">{t('agentpim.draft.composeNote')}</p>{/if}
 {#if loading}
 	<p class="muted" role="status">{t('common.loading')}</p>
 {:else}

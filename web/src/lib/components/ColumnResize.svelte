@@ -38,8 +38,21 @@
 		hint: string;
 		/** Where the border is (CSS length from the left of the positioned parent). */
 		left: string;
+		/** 1.13: the column lies right of the border (the agent's panel):
+		 *  dragging left makes it wider, the arrows likewise. */
+		invert?: boolean;
 	};
-	let { width = $bindable(), min, max, fallback, key, label, hint, left }: Props = $props();
+	let {
+		width = $bindable(),
+		min,
+		max,
+		fallback,
+		key,
+		label,
+		hint,
+		left,
+		invert = false,
+	}: Props = $props();
 
 	/** Sets the width; kept in the browser at once, unless a drag is still going on. */
 	const set = (w: number, keep = true) => {
@@ -56,14 +69,14 @@
 	// 1.13: while dragging only the column follows; the width is written to
 	// localStorage once, when the pointer lets go.
 	function move(e: PointerEvent) {
-		if (from) set(from.w + e.clientX - from.x, false);
+		if (from) set(from.w + (invert ? from.x - e.clientX : e.clientX - from.x), false);
 	}
 	function up() {
 		if (from && width !== from.w) storeWidth(key, width, fallback);
 		from = null;
 	}
 	function keydown(e: KeyboardEvent) {
-		const step = e.shiftKey ? 48 : 16;
+		const step = (e.shiftKey ? 48 : 16) * (invert ? -1 : 1);
 		const next =
 			e.key === 'ArrowLeft'
 				? width - step
