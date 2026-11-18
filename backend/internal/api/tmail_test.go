@@ -192,6 +192,10 @@ func TestMailRights(t *testing.T) {
 // The KI-Agent gets no access (docs/TMAIL.md): no route of T-Mail is in
 // publicRoutes, no tool of the catalog names it, and no file that makes
 // tools mentions its paths.
+// mailProgramName is the program's name since 1.13 ("Mail", before
+// "T-Mail") as a word of its own, not inside "E-Mail" or "e-mail".
+var mailProgramName = regexp.MustCompile(`(^|[^-A-Za-z])Mail\b`)
+
 func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 	for _, r := range publicRoutes {
 		if strings.HasPrefix(r.Path, "/mail") || strings.HasSuffix(r.Path, "/mail") || strings.Contains(strings.ToLower(r.Tool), "mail") {
@@ -202,7 +206,7 @@ func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 	ts.setup()
 	for _, role := range []auth.Role{auth.RoleOwner, auth.RoleAdmin, auth.RoleUser} {
 		for _, tool := range ts.server.catalogTools(auth.User{Name: "alex", Role: role}) {
-			if strings.Contains(strings.ToLower(tool.Name), "mail") || strings.Contains(tool.Description, "/mail") || strings.Contains(tool.Description, "T-Mail") {
+			if strings.Contains(strings.ToLower(tool.Name), "mail") || strings.Contains(tool.Description, "/mail") || strings.Contains(tool.Description, "T-Mail") || mailProgramName.MatchString(tool.Description) {
 				t.Errorf("tool %s", tool.Name)
 			}
 		}

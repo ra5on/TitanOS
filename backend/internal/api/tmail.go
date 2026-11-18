@@ -103,7 +103,7 @@ func (a tmailArea) register(mux *routeMux, g guards) {
 func (a tmailArea) granted(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.mail == nil || !a.mail.Allowed(currentUser(r).Name) {
-			writeError(w, http.StatusForbidden, "mail_disabled", "T-Mail is not enabled for this account")
+			writeError(w, http.StatusForbidden, "mail_disabled", "Mail is not enabled for this account")
 			return
 		}
 		next(w, r)
@@ -149,14 +149,14 @@ func writeMailError(w http.ResponseWriter, err error) {
 		status = http.StatusBadGateway
 	}
 	message := map[string]string{
-		"mail_disabled": "T-Mail is not enabled for this account", "mail_auth_failed": "the mail server refused the login",
+		"mail_disabled": "Mail is not enabled for this account", "mail_auth_failed": "the mail server refused the login",
 		"mail_unreachable": "the mail server is not reachable", "mail_tls": "no TLS or the certificate of the mail server is not valid",
 		"mail_host_forbidden": "this address may not be used for mail", "mail_timeout": "the mail server did not answer in time",
 		"mail_too_large": "too large", "mail_not_found": "not found", "mail_folder_exists": "the folder exists already",
-		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the T-Mail settings could not be read from /config",
+		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the Mail settings could not be read from /config",
 		"mail_password_required": "enter the password again for another host",
 		"mail_rate_limited":      "too many checks of the settings or new servers; try again in a minute",
-		"mail_busy":              "T-Mail is busy with other large requests; try again in a moment",
+		"mail_busy":              "Mail is busy with other large requests; try again in a moment",
 		"mail_key_missing":       "the key of the stored mail passwords is missing; restore it from the backup of the stick or add the mailboxes anew",
 		"mail_key_damaged":       "the key of the stored mail passwords is damaged; restore it from the backup of the stick or add the mailboxes anew",
 	}[code]
@@ -207,7 +207,7 @@ func (a tmailArea) handleGrantSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.mail == nil {
-		writeError(w, http.StatusServiceUnavailable, "mail_unavailable", "T-Mail is not available")
+		writeError(w, http.StatusServiceUnavailable, "mail_unavailable", "Mail is not available")
 		return
 	}
 	noteTarget(r, target.Name)

@@ -10,10 +10,17 @@
 	// gone: the live stream brings new mail of the inbox, and without it (or
 	// in other folders) the list reloads every 2 minutes while T-Mail is seen;
 	// keys (j/k/e/r/Entf, /, ?); with no message open an overview.
+	// 1.13 (owner 18 Nov 2026): the columns are the shared ColumnFrame –
+	// edge to edge, the window's height, the side bar in the window side
+	// bar's look, folding to a rail; folders sorted per account. The
+	// folders' counts change at once and the NAS is asked for them once the
+	// changes rest (store.svelte.ts refreshFolders), not on every event.
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import ColumnResize, { readWidth } from '#lib/components/ColumnResize.svelte';
+	import BottomBar from '#lib/components/BottomBar.svelte';
+	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
+	import { compactView } from '#lib/components/compact.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -21,6 +28,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	import FolderColumn from '#lib/tmail/FolderColumn.svelte';
+	import FolderRail from '#lib/tmail/FolderRail.svelte';
 	import KeysHelp from '#lib/tmail/KeysHelp.svelte';
 	import { levelOf, mailHref, mailUp, placeOf, type MailPlace } from '#lib/tmail/levels.ts';
 	import { live, watchMail, type MailEvent } from '#lib/tmail/live.svelte.ts';
@@ -30,7 +38,9 @@
 	import { openCompose } from '#lib/tmail/open.ts';
 	import { mailKey } from '#lib/tmail/shortcuts.ts';
 	import {
+		adjustFolders,
 		applyStatus,
+		ensureFolders,
 		findFolder,
 		folderName,
 		inboxOf,
@@ -39,6 +49,8 @@
 		loadFolders,
 		mail,
 		mailDrag,
+		refreshFolders,
+		type FolderDelta,
 	} from '#lib/tmail/store.svelte.ts';
 	import type { ComposeMode, Flags, Message } from '#lib/tmail/types.ts';
 
@@ -52,6 +64,9 @@
 	});
 	const phone = $derived(phoneView());
 	const wide = $derived(wideView && !phone);
+	// 1.13: the phone and windows under 620 px – levels edge to edge, the
+	// actions in a bar at the bottom, "Neue E-Mail" at its right.
+	const compact = $derived(!wide && compactView());
 
 	const place = $derived(placeOf(page.url));
 	const level = $derived(levelOf(place));
@@ -78,7 +93,7 @@
 	// The folders of every mailbox, read once each; the contacts' pictures once.
 	$effect(() => {
 		for (const a of mail.accounts ?? [])
-			if (!mail.folders[a.id]) untrack(() => void loadFolders(a.id));
+			if (!mail.folders[a.id]) untrack(() => ensureFolders(a.id));
 	});
 	onMount(() => void loadAvatars());
 
@@ -94,10 +109,19 @@
 		if (place.a && mail.accounts && !account) untrack(() => go({}, false));
 	});
 
+	// 1.13: a burst of events (ten new mails, marks set on another device)
+	// reads the list once, a moment after the last of them.
+	let listTimer: ReturnType<typeof setTimeout> | undefined;
+	function listSoon() {
+		clearTimeout(listTimer);
+		listTimer = setTimeout(() => list?.refresh(true), 800);
+	}
+	onMount(() => () => clearTimeout(listTimer));
+
 	function onEvent(e: MailEvent) {
 		if (e.type === 'resync') {
 			void loadAccounts();
-			for (const a of mail.accounts ?? []) void loadFolders(a.id);
+			for (const a of mail.accounts ?? []) refreshFolders(a.id, true);
 			list?.refresh(true);
 			return;
 		}
@@ -105,9 +129,10 @@
 			applyStatus(e.account, e.status);
 			return;
 		}
-		void loadFolders(e.account);
-		if (e.type === 'mail') void loadAccounts();
-		if (e.account === place.a && e.folder === place.f) list?.refresh(true);
+		// New mail and changed marks: the counts once things rest; the
+		// mailboxes' list is not read again (their state comes as "status").
+		refreshFolders(e.account);
+		if (e.account === place.a && e.folder === place.f) listSoon();
 	}
 	onMount(() => watchMail(onEvent));
 
@@ -124,7 +149,7 @@
 			if (document.visibilityState !== 'visible' || !place.a || !account) return;
 			if (account.status.state === 'auth_failed' || account.status.state === 'unreachable') return;
 			if (liveHere) return;
-			void loadFolders(place.a);
+			refreshFolders(place.a, true);
 			list?.refresh(true);
 		}, POLL);
 		return () => clearInterval(timer);
@@ -150,15 +175,22 @@
 		'mail.refresh': refresh,
 	});
 
+	/** Counts changed by this page: shown at once, read from the NAS once things rest. */
+	function counted(deltas: FolderDelta[]) {
+		if (!place.a) return;
+		adjustFolders(place.a, deltas);
+		refreshFolders(place.a);
+	}
 	function flagsChanged(uids: number[], change: Partial<Flags>) {
 		list?.setFlags(uids, change, messageFolder);
-		if ('seen' in change && place.a) void loadFolders(place.a);
+		if ('seen' in change)
+			counted([{ folder: messageFolder, unread: change.seen ? -uids.length : uids.length }]);
 	}
 	/** The open message was moved or deleted in the reading pane. */
 	function removed(uid: number) {
 		const next = wide ? (list?.neighbour(uid, messageFolder) ?? null) : null;
 		list?.drop([uid], messageFolder);
-		if (place.a) void loadFolders(place.a);
+		counted([{ folder: messageFolder, total: -1 }]);
 		go({ a: place.a, f: place.f, m: next?.uid ?? null, mf: next?.folder }, false);
 	}
 	/** Mails left the list (quick actions, the bar, a drop): the open one goes on to the next. */
@@ -228,215 +260,262 @@
 		helpOpen = true;
 	}
 
-	const title = $derived(level === 'folders' || !listHeading ? t('desktop.app.mail') : listHeading);
+	// On the phone the bar above names the program and each level its place
+	// itself (the list's heading, the subject): no second strip (1.13).
+	const title = $derived(
+		level === 'folders' || !listHeading || phone ? t('desktop.app.mail') : listHeading,
+	);
 
-	// The columns fill the window; each scrolls on its own.
-	let grid = $state<HTMLElement>();
-	let top = $state(0);
-	let gridWidth = $state(1200);
+	// Opening a message on a level of its own starts at its top (the subject).
 	$effect(() => {
-		const el = grid;
-		if (!el || !wide) return;
-		const measure = () => {
-			top = Math.max(0, el.getBoundingClientRect().top + window.scrollY);
-			gridWidth = el.clientWidth;
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(document.body);
-		observer.observe(el);
-		return () => observer.disconnect();
+		if (wide || !place.m) return;
+		void place.m;
+		untrack(() => window.scrollTo(0, 0));
 	});
 
-	// Widths per device (ColumnResize). The reading pane keeps at least
-	// READ_MIN: when the window is narrower, the columns give way.
-	const FOLDERS = { min: 170, max: 420, fallback: 240, key: 'titanos.mail.foldersWidth' };
-	const LIST = { min: 280, max: 720, fallback: 380, key: 'titanos.mail.listWidth' };
-	const READ_MIN = 320;
-	let folderWidth = $state(readWidth(FOLDERS.key, FOLDERS.min, FOLDERS.max, FOLDERS.fallback));
-	let listWidth = $state(readWidth(LIST.key, LIST.min, LIST.max, LIST.fallback));
-	const foldersMax = $derived(
-		Math.max(FOLDERS.min, Math.min(FOLDERS.max, gridWidth - READ_MIN - LIST.min)),
+	// The parts of the frame by the level of the narrow view.
+	const frameLevel = $derived<FrameLevel>(
+		level === 'folders' ? 'side' : level === 'list' ? 'list' : 'content',
 	);
-	const fw = $derived(Math.min(folderWidth, foldersMax));
-	const listMax = $derived(Math.max(LIST.min, Math.min(LIST.max, gridWidth - READ_MIN - fw)));
-	const lw = $derived(Math.min(listWidth, listMax));
+	// In columns the list's column stands from the start (also while the
+	// mailboxes load), so that nothing moves when the first folder opens.
+	const hasList = $derived(wide || (!!place.a && !!place.f));
 </script>
 
 <svelte:window onkeydown={keydown} onkeydowncapture={helpKey} />
 
 <PageHead {title} />
 
-{#if mail.error}<p class="notice-error" role="alert">{mail.error}</p>{/if}
-{#if live.down}
-	<p class="notice-warn live" role="status">{t('mail.live.down')}</p>
-{/if}
+{#snippet notices()}
+	{#if mail.error}<p class="notice-error notice" role="alert">{mail.error}</p>{/if}
+	{#if live.down}
+		<p class="notice-warn notice" role="status">{t('mail.live.down')}</p>
+	{/if}
+{/snippet}
 
-{#if !mail.accounts?.length}
+{#snippet compose_(folded: boolean)}
+	<!-- Already there while the mailboxes load (disabled): nothing moves when they arrive. -->
+	{#if mail.accounts === null || mail.accounts.length}
+		<button
+			type="button"
+			class="btn btn-primary compose"
+			disabled={mail.accounts === null}
+			class:icon={folded}
+			title={folded ? t('mail.action.compose') : undefined}
+			aria-label={folded ? t('mail.action.compose') : undefined}
+			onclick={() => compose()}
+			><Icon name="edit" size={16} />{#if !folded}{t('mail.action.compose')}{/if}</button
+		>
+	{/if}
+{/snippet}
+
+{#snippet folders()}
+	{#if mail.accounts === null}
+		<p class="muted side-loading" role="status">{t('common.loading')}</p>
+	{:else}
+		<FolderColumn
+			account={place.a}
+			folder={place.f}
+			sortable={wide}
+			onpick={(a, f) => go({ a, f }, !wide)}
+			ondrop={wide ? dropped : undefined}
+		/>
+	{/if}
+{/snippet}
+
+{#snippet rail()}
+	<FolderRail account={place.a} folder={place.f} onpick={(a, f) => go({ a, f }, false)} />
+{/snippet}
+
+{#snippet foot(folded: boolean)}
+	{#each [{ href: '/mail/setup', icon: 'plus' as const, label: t('mail.side.add') }, { href: '/mail/settings', icon: 'gear' as const, label: t('mail.side.settings') }] as link (link.href)}
+		<a
+			class="side-link"
+			class:icon={folded}
+			href={link.href}
+			title={folded ? link.label : undefined}
+			aria-label={folded ? link.label : undefined}
+			><Icon name={link.icon} size={17} />{#if !folded}<span>{link.label}</span>{/if}</a
+		>
+	{/each}
+{/snippet}
+
+{#snippet messages()}
+	{#if place.a && place.f}
+		{#if !wide && !phone}
+			<button type="button" class="btn back" onclick={() => void goto(mailUp(page.url))}
+				><Icon name="chevronLeft" size={16} />{t('mail.back.folders')}</button
+			>
+		{/if}
+		<MessageList
+			bind:this={list}
+			accountId={place.a}
+			folder={place.f}
+			selected={place.m}
+			selectedFolder={messageFolder}
+			{phone}
+			drag={wide}
+			heading={account && (mail.accounts?.length ?? 0) > 1
+				? t('mail.list.heading', {
+						folder: listHeading,
+						account: account.name || account.email,
+					})
+				: listHeading}
+			oncompose={wide || compact ? undefined : () => compose()}
+			onopen={openMessage}
+			onchanged={counted}
+			onremoved={listRemoved}
+			onloaded={(at) => (refreshed = at)}
+		/>
+		{#if compact}
+			<BottomBar label={t('mail.listActions')}>
+				<button
+					type="button"
+					class="bar-btn bar-new"
+					aria-label={t('mail.action.compose')}
+					title={t('mail.action.compose')}
+					onclick={() => compose()}><Icon name="edit" size={20} /></button
+				>
+			</BottomBar>
+		{/if}
+	{/if}
+{/snippet}
+
+{#if mail.accounts !== null && !mail.accounts.length}
+	{@render notices()}
 	<EmptyState title={t('mail.empty.title')} text={t('mail.empty.text')}>
 		<a class="btn btn-primary" href="/mail/setup">{t('mail.empty.add')}</a>
 	</EmptyState>
+{:else if mail.accounts === null && !wide}
+	<p class="muted" role="status">{t('common.loading')}</p>
 {:else}
-	<div
-		class="mail"
-		class:wide
-		class:levels={!wide}
-		data-level={level}
-		bind:this={grid}
-		style:--mail-top="{top}px"
-		style:--mail-fw="{fw}px"
-		style:--mail-lw="{lw}px"
+	<ColumnFrame
+		storage="titanos.mail"
+		sideKey="titanos.mail.foldersWidth"
+		listKey="titanos.mail.listWidth"
+		columns={wide}
+		level={frameLevel}
+		class={wide ? 'mail wide' : 'mail levels'}
+		sideClass="col-folders"
+		listClass="col-list"
+		contentClass="col-message"
+		sideWidth={{ min: 170, max: 420, fallback: 240 }}
+		listWidth={{ min: 280, max: 720, fallback: 380 }}
+		contentMin={320}
+		sideResizeLabel={t('mail.resize.folders')}
+		listResizeLabel={t('mail.resize.list')}
+		resizeHint={t('mail.resize.hint')}
+		action={compose_}
+		side={folders}
+		{rail}
+		sideFoot={foot}
+		notices={mail.error || live.down ? notices : undefined}
+		list={hasList ? messages : undefined}
 	>
-		{#if wide || level === 'folders'}
-			<div class="col col-folders">
-				<FolderColumn
-					account={place.a}
-					folder={place.f}
-					onpick={(a, f) => go({ a, f }, !wide)}
-					oncompose={() => compose()}
-					ondrop={wide ? dropped : undefined}
-				/>
-				<a class="btn add" href="/mail/setup"><Icon name="plus" size={16} />{t('mail.side.add')}</a>
-			</div>
-		{/if}
-		{#if place.a && place.f}
-			<!-- Kept while a message is open on the phone: going back finds the list (and a search) as it was. -->
-			<div class="col col-list" hidden={!wide && level !== 'list'}>
-				{#if !wide && !phone}
-					<button type="button" class="btn back" onclick={() => void goto(mailUp(page.url))}
-						><Icon name="chevronLeft" size={16} />{t('mail.back.folders')}</button
-					>
-				{/if}
-				<MessageList
-					bind:this={list}
-					accountId={place.a}
-					folder={place.f}
-					selected={place.m}
-					selectedFolder={messageFolder}
-					{phone}
-					drag={wide}
-					heading={account && mail.accounts.length > 1
-						? t('mail.list.heading', {
-								folder: listHeading,
-								account: account.name || account.email,
-							})
-						: listHeading}
-					oncompose={wide ? undefined : () => compose()}
-					onopen={openMessage}
-					onchanged={() => place.a && void loadFolders(place.a)}
-					onremoved={listRemoved}
-					onloaded={(at) => (refreshed = at)}
-				/>
-			</div>
-		{/if}
-		{#if wide || level === 'message'}
-			<div class="col col-message">
-				{#if place.a && place.f && place.m}
-					{#if !wide && !phone}
-						<button type="button" class="btn back" onclick={() => void goto(mailUp(page.url))}
-							><Icon name="chevronLeft" size={16} />{t('mail.back.list', {
-								folder: listHeading,
-							})}</button
-						>
-					{/if}
-					<MessageView
-						accountId={place.a}
-						folder={messageFolder}
-						uid={place.m}
-						oncompose={compose}
-						onflags={flagsChanged}
-						onremoved={removed}
-					/>
-				{:else if place.a && place.f}
-					<MailOverview
-						accountId={place.a}
-						folder={place.f}
-						{refreshed}
-						live={liveHere}
-						onopen={openMessage}
-						onpick={(f) => go({ a: place.a, f }, false)}
-						onshow={(f) => list?.showFilter(f)}
-						oncompose={() => compose()}
-					/>
-				{:else}
-					<p class="muted none">{t('mail.noneOpen')}</p>
-				{/if}
-			</div>
-		{/if}
-		{#if wide}
-			<ColumnResize
-				bind:width={folderWidth}
-				min={FOLDERS.min}
-				max={foldersMax}
-				fallback={FOLDERS.fallback}
-				key={FOLDERS.key}
-				label={t('mail.resize.folders')}
-				hint={t('mail.resize.hint')}
-				left="var(--mail-fw)"
+		{#if place.a && place.f && place.m}
+			{#if !wide && !phone}
+				<button type="button" class="btn back" onclick={() => void goto(mailUp(page.url))}
+					><Icon name="chevronLeft" size={16} />{t('mail.back.list', {
+						folder: listHeading,
+					})}</button
+				>
+			{/if}
+			<MessageView
+				{compact}
+				accountId={place.a}
+				folder={messageFolder}
+				uid={place.m}
+				oncompose={compose}
+				onflags={flagsChanged}
+				onremoved={removed}
 			/>
-			<ColumnResize
-				bind:width={listWidth}
-				min={LIST.min}
-				max={listMax}
-				fallback={LIST.fallback}
-				key={LIST.key}
-				label={t('mail.resize.list')}
-				hint={t('mail.resize.hint')}
-				left="calc(var(--mail-fw) + var(--mail-lw))"
+		{:else if place.a && place.f}
+			<MailOverview
+				accountId={place.a}
+				folder={place.f}
+				{refreshed}
+				live={liveHere}
+				onopen={openMessage}
+				onpick={(f) => go({ a: place.a, f }, false)}
+				onshow={(f) => list?.showFilter(f)}
+				oncompose={() => compose()}
 			/>
+		{:else}
+			<p class="muted none">{mail.accounts === null ? t('common.loading') : t('mail.noneOpen')}</p>
 		{/if}
-	</div>
+	</ColumnFrame>
 {/if}
 
 {#if helpOpen}<KeysHelp onclose={() => (helpOpen = false)} />{/if}
 
 <style>
-	.live {
+	.notice {
+		margin: var(--space-2) var(--space-3);
+	}
+	:global(.mail.levels) .notice {
 		margin: 0 0 var(--space-2);
 	}
-	.mail.wide {
-		position: relative;
-		display: grid;
-		grid-template-columns: var(--mail-fw) var(--mail-lw) minmax(0, 1fr);
-		height: calc(100dvh - var(--mail-top) - var(--page-pad));
-		min-height: 360px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-tile);
-		background: var(--surface);
+	.compose {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-1-5);
+		min-height: 40px;
 	}
-	.wide .col {
+	.compose.icon {
+		width: 44px;
+		min-height: 44px;
+		padding: 0;
+	}
+	.side-loading {
+		margin: var(--space-2) var(--space-2-5);
+	}
+	.side-link {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		min-height: 36px;
+		padding: var(--space-1-5) var(--space-2-5);
+		border-radius: calc(9px * var(--radius-scale, 1));
+		color: var(--text);
+		text-decoration: none;
+	}
+	.side-link.icon {
+		justify-content: center;
+		width: 44px;
+		padding: 0;
+	}
+	.side-link :global(svg) {
+		flex: none;
+		color: var(--muted);
+	}
+	.side-link span {
 		min-width: 0;
-		min-height: 0;
-		overflow: auto;
+		overflow-wrap: anywhere;
 	}
-	.wide .col + .col {
-		border-left: 1px solid var(--border);
+	.side-link:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
-	.col[hidden] {
-		display: none;
+	.side-link:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
-	.col-folders {
+	/* The columns: the reading pane is a column of its own. */
+	:global(.mail.wide .col-message) {
+		display: flex;
+		flex-direction: column;
+	}
+	/* The narrow view and the phone: one level at a time, as before 1.13. */
+	:global(.mail.levels) {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
-		padding: var(--space-3) var(--space-1-5);
 	}
-	.wide .col-message {
-		display: flex;
-		flex-direction: column;
-	}
-	.add {
-		align-self: flex-start;
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		margin: 0 var(--space-2);
-	}
-	.levels .col {
+	:global(.mail.levels .col) {
 		min-width: 0;
 	}
-	.levels .col-list,
-	.levels .col-message {
+	:global(.mail.levels:not(.compact) .col-list),
+	:global(.mail.levels:not(.compact) .col-message) {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
@@ -454,7 +533,8 @@
 		margin: var(--space-4);
 	}
 	@media (max-width: 899px) {
-		.add {
+		.compose,
+		.side-link {
 			min-height: 44px;
 		}
 	}

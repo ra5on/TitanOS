@@ -22,7 +22,15 @@
 	import { groupByDay, type DayGroup } from './groups.ts';
 	import MailEntry, { type EntryAction } from './MailEntry.svelte';
 	import { isBool, rangeOf, readPref, writePref } from './prefs.ts';
-	import { findFolder, folderName, mail, mailDrag, sortFolders } from './store.svelte.ts';
+	import {
+		findFolder,
+		folderName,
+		folderOf,
+		mail,
+		mailDrag,
+		sortFolders,
+		type FolderDelta,
+	} from './store.svelte.ts';
 	import { rowKey, threadRows, type Row, type Thread } from './threads.ts';
 	import type { Flags } from './types.ts';
 
@@ -55,8 +63,8 @@
 		onopen: (uid: number, folder: string) => void;
 		/** A button "Neue E-Mail" in the list (narrow windows and the phone). */
 		oncompose?: () => void;
-		/** Something changed the folders' counts. */
-		onchanged?: () => void;
+		/** Something changed the folders' counts; `deltas` as far as known here (1.13). */
+		onchanged?: (deltas: FolderDelta[]) => void;
 		/** Mails left the list; `next` is the one shown after them. */
 		onremoved?: (items: MailItem[], next: MailItem | null) => void;
 		/** A list arrived from titand (the overview names the time). */
@@ -348,6 +356,16 @@
 		actionError = '';
 		notice = '';
 		const done: Row[] = [];
+		const deltas: FolderDelta[] = [];
+		/** Where archive and delete put mails (none: deleted for good, or not known). */
+		const target = (from: string): string =>
+			kind === 'move'
+				? to
+				: kind === 'archive'
+					? (folderOf(accountId, 'archive')?.path ?? '')
+					: kind === 'delete' && role(from) !== 'trash'
+						? (folderOf(accountId, 'trash')?.path ?? '')
+						: '';
 		try {
 			for (const [f, uids] of byFolder(items)) {
 				if (kind === 'move' && f === to) continue;
@@ -357,6 +375,9 @@
 				else {
 					const flag: keyof Flags = kind === 'seen' || kind === 'unseen' ? 'seen' : 'flagged';
 					const on = kind === 'seen' || kind === 'flag';
+					const changing = items.filter(
+						(r) => (r.folder ?? folder) === f && uids.includes(r.uid) && !!r.flags[flag] !== on,
+					).length;
 					await mailApi.flags(accountId, {
 						folder: f,
 						uids,
@@ -366,8 +387,17 @@
 					for (const r of rows)
 						if ((r.folder ?? folder) === f && uids.includes(r.uid))
 							r.flags = { ...r.flags, [flag]: on };
+					if (flag === 'seen' && changing)
+						deltas.push({ folder: f, unread: on ? -changing : changing });
 				}
-				done.push(...items.filter((r) => (r.folder ?? folder) === f && uids.includes(r.uid)));
+				const these = items.filter((r) => (r.folder ?? folder) === f && uids.includes(r.uid));
+				if (kind === 'archive' || kind === 'delete' || kind === 'move') {
+					const unread = these.filter((r) => !r.flags.seen).length;
+					deltas.push({ folder: f, total: -these.length, unread: -unread });
+					const into = target(f);
+					if (into) deltas.push({ folder: into, total: these.length, unread });
+				}
+				done.push(...these);
 			}
 		} catch (err) {
 			actionError = apiErrorText(err, { detail: true });
@@ -384,7 +414,7 @@
 						? t('mail.done.deleted', { count: done.length })
 						: t('mail.done.moved', { count: done.length, folder: nameOf(to) });
 		}
-		onchanged?.();
+		onchanged?.(deltas);
 	}
 
 	/** Deleting in the trash is for good: asked first, on every way. */

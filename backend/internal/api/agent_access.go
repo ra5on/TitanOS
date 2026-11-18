@@ -218,8 +218,8 @@ func (b *agentToolbox) access(ctx context.Context) map[string]any {
 		"folderRules": map[string]any{"count": len(p.Folders), "forbidden": denied, "ask": ask,
 			"note": "Forbidden folders are left out of lists and searches (hidden counts them); the paths are not shown here.", "where": whereFolders},
 		"services":         map[string]any{"docker": on["docker"], "vms": on["vms"], "lxc": on["lxc"], "where": whereServices},
-		"mail":             "T-Mail is closed to the agent by design: no tool reads or sends mail. Say so; do not search files for mail.",
-		"tmailAddressBook": "Suggestions learned from sent mail are T-Mail's and closed to the agent by design.",
+		"mail":             "Mail (the e-mail program) is closed to the agent by design: no tool reads or sends mail. Say so; do not search files for mail.",
+		"tmailAddressBook": "Suggestions learned from sent mail are Mail's and closed to the agent by design.",
 		"where":            map[string]string{"rights": whereRights, "homeAssistant": whereHA, "photos": wherePhotos, "accounts": whereAccounts},
 	}
 	if b.user.Name != agent.AssistProfile {

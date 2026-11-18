@@ -121,7 +121,7 @@ test('an unknown provider opens the server fields; a failed check names the caus
 		target: { value: 'max@eigene.example' },
 	});
 	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
-	await screen.findByText(/kennt T-Mail keine Server/);
+	await screen.findByText(/kennt Mail keine Server/);
 	const host = document.getElementById('mail-setup-imap-host') as HTMLInputElement;
 	expect(host.value).toBe('imap.eigene.example');
 	await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));

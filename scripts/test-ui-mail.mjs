@@ -157,7 +157,14 @@ try {
     // titand's document goes in unchanged (its own CSP meta first). It
     // carries a script and an onerror handler here: the frame must run neither.
     const srcdoc = await iframe.getAttribute("srcdoc");
-    assert.equal(srcdoc, bankHtml(false), "document unchanged in srcdoc");
+    // 1.13: the one addition is the style that fits the mail to the frame,
+    // at the end of the head (after the CSP meta); it loads and runs nothing.
+    const FIT = /<style data-titanos-fit>[^<]*<\/style>/;
+    const fit = srcdoc.match(FIT)?.[0] ?? "";
+    assert.ok(fit, "the fitting style is there");
+    assert.doesNotMatch(fit, /url\(|@import|expression|script/i, "the style loads nothing");
+    assert.ok(srcdoc.indexOf(fit) > srcdoc.indexOf("Content-Security-Policy"), "after the CSP meta");
+    assert.equal(srcdoc.replace(FIT, ""), bankHtml(false), "document otherwise unchanged in srcdoc");
     assert.match(srcdoc, /<script>/, "the fixture's script is in the frame");
     assert.match(
       srcdoc,
@@ -196,7 +203,10 @@ try {
       "still no script",
     );
     assert.equal(
-      await mail.locator("iframe.frame").getAttribute("srcdoc"),
+      (await mail.locator("iframe.frame").getAttribute("srcdoc")).replace(
+        /<style data-titanos-fit>[^<]*<\/style>/,
+        "",
+      ),
       bankHtml(true),
     );
     assert.ok(
@@ -460,7 +470,7 @@ try {
       () => field.evaluate((el) => el === document.activeElement),
       "password field focused",
     );
-    await page.getByText(/T-Mail versucht es erst wieder/).waitFor();
+    await page.getByText(/Mail versucht es erst wieder/).waitFor();
     await field.fill(SECRET);
     await page
       .locator("#mail-account-acc-arbeit")
@@ -627,7 +637,12 @@ try {
       .first()
       .click();
     await page.locator(".row").nth(1).click();
-    await page.getByRole("button", { name: "Weiterleiten" }).click();
+    // 1.13: on the phone the answers are a menu of the bar at the bottom.
+    await page
+      .getByRole("toolbar", { name: "Aktionen für diese Nachricht" })
+      .getByRole("button", { name: "Antworten", exact: true })
+      .click();
+    await page.getByRole("menuitem", { name: "Weiterleiten" }).click();
     await page.waitForURL(/\/mail\/compose\?/);
     await page.locator("#mail-subject").waitFor();
     assert.match(await page.locator("#mail-subject").inputValue(), /^Fwd: /);
@@ -661,7 +676,7 @@ try {
     await page.goto(base + "/mail/setup");
     await page.locator("#mail-setup-email").fill("neu@unbekannt.example");
     await page.getByRole("button", { name: "Weiter" }).click();
-    await page.getByText(/kennt T-Mail keine Server/).waitFor();
+    await page.getByText(/kennt Mail keine Server/).waitFor();
     await sound(page, "phone setup servers");
     await big("phone setup servers");
     await shot(page, "14-handy-einrichten-390");
@@ -684,7 +699,7 @@ try {
     await page.getByRole("button", { name: "Weiter" }).click();
     await page.locator("#mail-setup-password").fill("x");
     await page.getByRole("button", { name: "Verbindung prüfen" }).click();
-    await page.getByText(/T-Mail wartet noch (59|60) s/).waitFor();
+    await page.getByText(/Mail wartet noch (59|60) s/).waitFor();
     assert.equal(
       await page
         .getByRole("button", { name: "Verbindung prüfen" })
@@ -727,7 +742,7 @@ try {
     await page.goto(base + "/users");
     await page.locator('[data-account="sam"]').first().click();
     const sw = page.getByRole("checkbox", {
-      name: /T-Mail \(E-Mail-Programm\)/,
+      name: /^Mail \(E-Mail-Programm\)/,
     });
     await sw.waitFor();
     assert.equal(await sw.isChecked(), false, "off from the start");
@@ -752,7 +767,7 @@ try {
       .first()
       .click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByText(/T-Mail-Postfächer \(2\)/).waitFor();
+    await dialog.getByText(/Mail-Postfächer \(2\)/).waitFor();
     await sound(page, "account delete with T-Mail");
     await shot(page, "18-konto-loeschen-tmail-1440");
     await dialog.getByRole("button", { name: "Abbrechen" }).click();
@@ -766,7 +781,7 @@ try {
     });
     await page.goto(base + "/mail");
     await page
-      .getByText("T-Mail ist für dein Konto nicht freigegeben")
+      .getByText("Mail ist für dein Konto nicht freigegeben")
       .waitFor();
     assert.equal(
       await page.evaluate(

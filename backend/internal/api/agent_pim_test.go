@@ -386,7 +386,7 @@ func TestPimOwnAccountOnly(t *testing.T) {
 	if _, gone := bea.Missing()["calendar"]; gone {
 		t.Error("Missing names the calendar for a user")
 	}
-	if access["tmailAddressBook"] != "Suggestions learned from sent mail are T-Mail's and closed to the agent by design." {
+	if access["tmailAddressBook"] != "Suggestions learned from sent mail are Mail's and closed to the agent by design." {
 		t.Errorf("tmailAddressBook: %v", access["tmailAddressBook"])
 	}
 }

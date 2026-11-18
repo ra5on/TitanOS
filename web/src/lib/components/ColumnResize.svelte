@@ -41,9 +41,10 @@
 	};
 	let { width = $bindable(), min, max, fallback, key, label, hint, left }: Props = $props();
 
-	const set = (w: number) => {
+	/** Sets the width; kept in the browser at once, unless a drag is still going on. */
+	const set = (w: number, keep = true) => {
 		width = clampWidth(w, min, max, fallback);
-		storeWidth(key, width, fallback);
+		if (keep) storeWidth(key, width, fallback);
 	};
 	let from = $state<{ x: number; w: number } | null>(null);
 	function down(e: PointerEvent) {
@@ -52,10 +53,13 @@
 		from = { x: e.clientX, w: width };
 		(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
 	}
+	// 1.13: while dragging only the column follows; the width is written to
+	// localStorage once, when the pointer lets go.
 	function move(e: PointerEvent) {
-		if (from) set(from.w + e.clientX - from.x);
+		if (from) set(from.w + e.clientX - from.x, false);
 	}
 	function up() {
+		if (from && width !== from.w) storeWidth(key, width, fallback);
 		from = null;
 	}
 	function keydown(e: KeyboardEvent) {

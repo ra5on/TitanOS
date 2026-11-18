@@ -6,24 +6,31 @@
 	// are pinned as favourites and folders with subfolders fold (both per
 	// device); spam and trash show no unread count; mails dragged from the
 	// list drop onto a folder of the same mailbox.
+	// 1.13: "Neue E-Mail" is the frame's main action (ColumnFrame); the
+	// folders are sorted by dragging their grip or with the keys (Alt+↑/↓
+	// on a folder), among their siblings, in the account's order on the NAS
+	// (side-order.svelte.ts).
 	import Icon, { type IconName } from '../components/Icon.svelte';
+	import SortGrip, { sortKey } from '../components/SortGrip.svelte';
 	import { t } from '../i18n/index.svelte.ts';
+	import { mergeGroup, orderOf, setOrder } from '../side-order.svelte.ts';
 	import { folderRef, isStrings, readPref, writePref } from './prefs.ts';
 	import StatusBadge from './StatusBadge.svelte';
-	import { folderName, isBelow, mail, mailDrag, sortFolders } from './store.svelte.ts';
+	import { arrangeFolders, folderName, isBelow, mail, mailDrag } from './store.svelte.ts';
 	import type { FolderRole, MailAccount, MailFolder } from './types.ts';
 
 	let {
 		account = '',
 		folder = '',
+		sortable = false,
 		onpick,
-		oncompose,
 		ondrop,
 	}: {
 		account?: string;
 		folder?: string;
+		/** The folders can be sorted (the desktop's columns). */
+		sortable?: boolean;
 		onpick: (account: string, folder: string) => void;
-		oncompose?: () => void;
 		/** Mails dragged from the list onto a folder of their mailbox. */
 		ondrop?: (account: string, folder: string) => void;
 	} = $props();
@@ -71,7 +78,6 @@
 		return out;
 	});
 
-	/** The folders shown: those below a folded one are left out. */
 	/**
 	 * The folders shown: those below a folded one are left out. Folders
 	 * with a role (Posteingang, Gesendet …) stand on top and never fold
@@ -80,19 +86,36 @@
 	 * otherwise hide them all with the inbox. There the levels count from
 	 * below the inbox.
 	 */
-	function visible(id: string): { f: MailFolder; parent: boolean; depth: number }[] {
-		const list = sortFolders(mail.folders[id] ?? []);
+	function visible(
+		id: string,
+	): { f: MailFolder; parent: boolean; depth: number; group: string; keys: string[] }[] {
+		const arranged = arrangeFolders(mail.folders[id] ?? [], orderOf('mail', id));
+		const list = arranged.map((x) => x.f);
+		const groups = new Map<string, string[]>();
+		for (const x of arranged) groups.set(x.group, [...(groups.get(x.group) ?? []), x.f.path]);
 		const inbox = list.find((p) => p.role === 'inbox');
 		const shut = list.filter((p) => p.role !== 'inbox' && folded.includes(folderRef(id, p.path)));
-		return list
-			.filter((f) => f.role || !shut.some((p) => isBelow(f, p)))
-			.map((f) => ({
+		return arranged
+			.filter(({ f }) => f.role || !shut.some((p) => isBelow(f, p)))
+			.map(({ f, group }) => ({
 				f,
+				group,
+				keys: groups.get(group) ?? [],
 				parent: f.role !== 'inbox' && list.some((c) => !c.role && isBelow(c, f)),
 				depth: f.role
 					? 0
 					: Math.max(0, Math.min(4, levels(f) - (inbox && isBelow(f, inbox) ? 1 : 0))),
 			}));
+	}
+
+	/** A group of a mailbox's folders was sorted: saved for the account, other groups keep theirs. */
+	function sorted(id: string, keys: string[]) {
+		const known = new Set((mail.folders[id] ?? []).map((f) => f.path));
+		const saved = orderOf('mail', id).filter((p) => known.has(p));
+		setOrder('mail', mergeGroup(saved, keys), {
+			mailbox: id,
+			mailboxes: (mail.accounts ?? []).map((a) => a.id),
+		});
 	}
 
 	// Dragging: only folders of the dragged mails' mailbox, not their own folder.
@@ -115,7 +138,13 @@
 	}
 </script>
 
-{#snippet folderButton(a: MailAccount, f: MailFolder, indent: number, label: string)}
+{#snippet folderButton(
+	a: MailAccount,
+	f: MailFolder,
+	indent: number,
+	label: string,
+	keys: string[] | null = null,
+)}
 	{@const current = a.id === account && f.path === folder}
 	{@const ref = folderRef(a.id, f.path)}
 	<button
@@ -130,6 +159,7 @@
 			? t('mail.drop.other')
 			: undefined}
 		onclick={() => onpick(a.id, f.path)}
+		onkeydown={(e) => keys && sortKey(e, keys, f.path, folderName(f), (next) => sorted(a.id, next))}
 		ondragover={(e) => dragOver(e, a.id, f)}
 		ondragleave={() => over === ref && (over = '')}
 		ondrop={(e) => dropped(e, a.id, f)}
@@ -164,12 +194,6 @@
 {/snippet}
 
 <nav class="folders" aria-label={t('mail.folders')}>
-	{#if oncompose && mail.accounts?.length}
-		<button type="button" class="btn btn-primary compose" onclick={oncompose}
-			><Icon name="edit" size={16} />{t('mail.action.compose')}</button
-		>
-	{/if}
-
 	{#if favList.length}
 		<section class="box" aria-labelledby="mail-favourites">
 			<h2 id="mail-favourites" class="fav-head">
@@ -211,11 +235,15 @@
 			{#if !mail.folders[a.id]}
 				<p class="muted small" role="status">{t('common.loading')}</p>
 			{:else}
-				<ul>
-					{#each visible(a.id) as { f, parent, depth } (f.path)}
+				<ul data-sort-list>
+					{#each visible(a.id) as { f, parent, depth, group, keys } (f.path)}
 						{@const shut = folded.includes(folderRef(a.id, f.path))}
-						<li class="line">
-							{@render folderButton(a, f, depth, folderName(f))}
+						<li
+							class="line"
+							data-sort-group={sortable ? group : undefined}
+							data-sort-key={sortable ? f.path : undefined}
+						>
+							{@render folderButton(a, f, depth, folderName(f), sortable ? keys : null)}
 							{#if parent}
 								<button
 									type="button"
@@ -232,6 +260,15 @@
 								>
 							{/if}
 							{@render pin(a, f)}
+							{#if sortable && keys.length > 1}
+								<SortGrip
+									{group}
+									key={f.path}
+									{keys}
+									name={folderName(f)}
+									onmove={(next) => sorted(a.id, next)}
+								/>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -246,14 +283,6 @@
 		flex-direction: column;
 		gap: var(--space-3);
 		min-width: 0;
-	}
-	.compose {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-1-5);
-		margin: 0 var(--space-2);
-		min-height: 40px;
 	}
 	.box {
 		display: flex;
@@ -384,6 +413,20 @@
 	.pin.on {
 		color: var(--status-warn);
 	}
+	/* 1.13: the grip shows on hover and focus, like the pin (always with a finger). */
+	.line :global(.sort-grip) {
+		opacity: 0;
+	}
+	.line:hover :global(.sort-grip),
+	.line:focus-within :global(.sort-grip),
+	.line :global(.sort-grip.active) {
+		opacity: 1;
+	}
+	@media (pointer: coarse) {
+		.line :global(.sort-grip) {
+			opacity: 1;
+		}
+	}
 	.small {
 		margin: 0 var(--space-2-5);
 		font-size: var(--text-sm);
@@ -401,9 +444,6 @@
 		}
 		.pin {
 			opacity: 1;
-		}
-		.compose {
-			min-height: 44px;
 		}
 	}
 </style>

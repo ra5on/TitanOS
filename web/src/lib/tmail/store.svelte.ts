@@ -2,6 +2,7 @@
 // state and the folders of each. Read from titand; nothing is kept in the
 // browser beyond the open page.
 import { apiErrorText, tOr } from '../i18n/index.svelte.ts';
+import { applyOrder } from '../side-order.svelte.ts';
 import { mailApi } from './api.ts';
 import type { FolderRole, MailAccount, MailFolder, MailStatus } from './types.ts';
 
@@ -22,13 +23,79 @@ export async function loadAccounts(): Promise<void> {
 	}
 }
 
-export async function loadFolders(id: string): Promise<void> {
-	try {
-		mail.folders[id] = await mailApi.folders(id);
-		mail.folderErrors[id] = '';
-	} catch (err) {
-		mail.folderErrors[id] = apiErrorText(err);
-		mail.folders[id] ??= [];
+// 1.13: one request per mailbox at a time; asked again while one runs, it
+// runs once more afterwards (not once per asking).
+const folderLoads = new Map<string, Promise<void>>();
+const folderAgain = new Set<string>();
+
+/** Reads a mailbox's folders with their counts (IMAP STATUS of each: not cheap). */
+export function loadFolders(id: string): Promise<void> {
+	const running = folderLoads.get(id);
+	if (running) {
+		folderAgain.add(id);
+		return running;
+	}
+	const run = (async () => {
+		try {
+			mail.folders[id] = await mailApi.folders(id);
+			mail.folderErrors[id] = '';
+		} catch (err) {
+			mail.folderErrors[id] = apiErrorText(err);
+			mail.folders[id] ??= [];
+		} finally {
+			folderLoads.delete(id);
+		}
+		if (folderAgain.delete(id)) await loadFolders(id);
+	})();
+	folderLoads.set(id, run);
+	return run;
+}
+
+/** Reads a mailbox's folders once: not when they are there or on their way. */
+export function ensureFolders(id: string): void {
+	if (!mail.folders[id] && !folderLoads.has(id)) void loadFolders(id);
+}
+
+/**
+ * 1.13 (Baustand step 5): the folders' state after something changed – a
+ * mail read, moved or deleted, an event of the live stream. The counts
+ * change on the page at once (adjustFolders); the NAS is asked once the
+ * changes rest for QUIET, at the latest after MOST, so that ten mails read
+ * one after the other cost one request, not ten.
+ */
+const QUIET = 3000;
+const MOST = 10_000;
+const folderTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; first: number }>();
+export function refreshFolders(id: string, now = false) {
+	const held = folderTimers.get(id);
+	if (held) clearTimeout(held.timer);
+	const first = held?.first ?? Date.now();
+	const wait = now ? 0 : Math.max(0, Math.min(QUIET, first + MOST - Date.now()));
+	folderTimers.set(id, {
+		first,
+		timer: setTimeout(() => {
+			folderTimers.delete(id);
+			void loadFolders(id);
+		}, wait),
+	});
+}
+
+/** A change of a folder's counts, known before the NAS says it. */
+export type FolderDelta = { folder: string; unread?: number; total?: number };
+
+/** Changes the counts on the page at once (never below 0); the NAS's answer replaces them. */
+export function adjustFolders(id: string, deltas: FolderDelta[]) {
+	const list = mail.folders[id];
+	if (!list) return;
+	for (const d of deltas) {
+		const f = list.find((x) => x.path === d.folder);
+		if (!f) continue;
+		if (d.unread) f.unread = Math.max(0, f.unread + d.unread);
+		if (d.total) f.total = Math.max(0, f.total + d.total);
+		if (d.unread && f.role === 'inbox') {
+			const a = mail.accounts?.find((x) => x.id === id);
+			if (a) a.unread = Math.max(0, a.unread + d.unread);
+		}
 	}
 }
 
@@ -44,6 +111,50 @@ const ORDER: FolderRole[] = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'tras
 export function sortFolders(list: MailFolder[]): MailFolder[] {
 	const rank = (f: MailFolder) => (f.role ? ORDER.indexOf(f.role) : ORDER.length);
 	return [...list].sort((a, b) => rank(a) - rank(b) || a.path.localeCompare(b.path));
+}
+
+/** The group of the folders with a role. */
+export const ROLES = '\u0001';
+
+/** A folder as the side bar shows it: its group of siblings for sorting. */
+export type ArrangedFolder = { f: MailFolder; group: string };
+
+/**
+ * 1.13: the folders in the order of the side bar – first the folders with
+ * a role (Posteingang, Entwürfe …), then the others, each followed by its
+ * subfolders; within each group the account's own order (`order`, folder
+ * paths, side-order.svelte.ts), the default order after it. A folder's
+ * group is its nearest shown parent without a role ("" at the top, "\u0001"
+ * for the roles); below the inbox counts as the top (servers with the
+ * namespace "INBOX.").
+ */
+export function arrangeFolders(list: MailFolder[], order: string[]): ArrangedFolder[] {
+	const sorted = sortFolders(list);
+	const parentOf = (f: MailFolder): string => {
+		if (f.role) return ROLES;
+		let best: MailFolder | undefined;
+		for (const p of sorted)
+			if (!p.role && isBelow(f, p) && (!best || p.path.length > best.path.length)) best = p;
+		return best?.path ?? '';
+	};
+	const children = new Map<string, MailFolder[]>();
+	for (const f of sorted) {
+		const g = parentOf(f);
+		children.set(g, [...(children.get(g) ?? []), f]);
+	}
+	const out: ArrangedFolder[] = [];
+	const seen = new Set<string>();
+	const walk = (group: string) => {
+		for (const f of applyOrder(children.get(group) ?? [], order, (x) => x.path)) {
+			if (seen.has(f.path)) continue;
+			seen.add(f.path);
+			out.push({ f, group });
+			if (!f.role) walk(f.path);
+		}
+	};
+	walk(ROLES);
+	walk('');
+	return out;
 }
 
 /** The folder of a role in a mailbox (drafts, trash …). */
