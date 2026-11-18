@@ -513,7 +513,7 @@ func (u *Users) waitPastGone(name string) {
 	if !ok {
 		return
 	}
-	if wait := before.Add(time.Second).Sub(time.Now()); wait > 0 && wait <= time.Second {
+	if wait := time.Until(before.Add(time.Second)); wait > 0 && wait <= time.Second {
 		time.Sleep(wait)
 	}
 }
