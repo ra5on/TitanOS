@@ -360,12 +360,18 @@ func TestQuickReminderInMarkedChatIsThePersons(t *testing.T) {
 	var chat agent.Chat
 	json.Unmarshal(body, &chat)
 	waitChat(t, ts, ts.client, chat.ID)
+	// Marked under the lock of the runs, like the title written in the
+	// background after the first answer: it reads and saves the chat under
+	// that lock, so it cannot write back a copy without the marks (seen
+	// under -race in CI).
+	ts.server.agentRT.mu.Lock()
 	stored, err := ts.server.agentStore().Chat("alex", chat.ID)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		stored.Tainted, stored.PIMRead = true, true
+		err = ts.server.agentStore().SaveChat("alex", stored)
 	}
-	stored.Tainted, stored.PIMRead = true, true
-	if err := ts.server.agentStore().SaveChat("alex", stored); err != nil {
+	ts.server.agentRT.mu.Unlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 	if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Erinnere mich in 20 Minuten an die Pizza"}); res.StatusCode >= 300 {
