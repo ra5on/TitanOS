@@ -241,7 +241,7 @@ export function mailState() {
     /** Events the next /events stream sends (then ends; the page connects again). */
     events: [],
     /**
-     * 1.13 (measure-ui-mail-requests.mjs): a message read answers with its
+     * 1.13 (test-ui-measure-mail-requests.mjs): a message read answers with its
      * marks from before the read, like titand (it stores \Seen afterwards);
      * off by default, so the older scripts see what they saw.
      */
