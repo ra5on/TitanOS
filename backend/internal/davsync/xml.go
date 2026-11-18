@@ -217,14 +217,15 @@ func textElem(name xml.Name, text string) Elem { return Elem{Name: name, Text: t
 func hrefElem(href string) Elem { return textElem(davName("href"), href) }
 
 // xmlWriter writes elements with the prefixes of the root; an element of
-// another namespace declares its own.
+// another namespace declares its own. Errors of the bufio.Writer stick and
+// show at Flush (the writes are not checked one by one).
 type xmlWriter struct {
 	b     *bufio.Writer
 	extra int
 }
 
 func (x *xmlWriter) open(name xml.Name, attrs []xml.Attr, empty bool) string {
-	x.b.WriteByte('<')
+	_ = x.b.WriteByte('<')
 	tag := name.Local
 	declare := ""
 	if name.Space != "" {
@@ -237,21 +238,21 @@ func (x *xmlWriter) open(name xml.Name, attrs []xml.Attr, empty bool) string {
 			declare = p
 		}
 	}
-	x.b.WriteString(tag)
+	_, _ = x.b.WriteString(tag)
 	if declare != "" {
-		x.b.WriteString(` xmlns:` + declare + `="`)
+		_, _ = x.b.WriteString(` xmlns:` + declare + `="`)
 		escapeText(x.b, name.Space, true)
-		x.b.WriteByte('"')
+		_ = x.b.WriteByte('"')
 	}
 	for _, a := range attrs {
-		x.b.WriteString(" " + a.Name.Local + `="`)
+		_, _ = x.b.WriteString(" " + a.Name.Local + `="`)
 		escapeText(x.b, a.Value, true)
-		x.b.WriteByte('"')
+		_ = x.b.WriteByte('"')
 	}
 	if empty {
-		x.b.WriteString("/>")
+		_, _ = x.b.WriteString("/>")
 	} else {
-		x.b.WriteByte('>')
+		_ = x.b.WriteByte('>')
 	}
 	return tag
 }
@@ -266,23 +267,23 @@ func (x *xmlWriter) elem(e Elem) {
 	for _, c := range e.Children {
 		x.elem(c)
 	}
-	x.b.WriteString("</" + tag + ">")
+	_, _ = x.b.WriteString("</" + tag + ">")
 }
 
 // root opens the root element with every prefix declared.
 func (x *xmlWriter) root(name xml.Name) {
-	x.b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	_, _ = x.b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	p, _ := prefixOf(name.Space)
-	x.b.WriteString("<" + p + ":" + name.Local)
+	_, _ = x.b.WriteString("<" + p + ":" + name.Local)
 	for _, pr := range prefixes {
-		x.b.WriteString(` xmlns:` + pr.prefix + `="` + pr.space + `"`)
+		_, _ = x.b.WriteString(` xmlns:` + pr.prefix + `="` + pr.space + `"`)
 	}
-	x.b.WriteByte('>')
+	_ = x.b.WriteByte('>')
 }
 
 func (x *xmlWriter) closeRoot(name xml.Name) {
 	p, _ := prefixOf(name.Space)
-	x.b.WriteString("</" + p + ":" + name.Local + ">\n")
+	_, _ = x.b.WriteString("</" + p + ":" + name.Local + ">\n")
 }
 
 // escapeText escapes for XML. CR is kept as a character reference (an XML
@@ -293,21 +294,21 @@ func escapeText(b *bufio.Writer, s string, attr bool) {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		switch {
 		case r == '&':
-			b.WriteString("&amp;")
+			_, _ = b.WriteString("&amp;")
 		case r == '<':
-			b.WriteString("&lt;")
+			_, _ = b.WriteString("&lt;")
 		case r == '>':
-			b.WriteString("&gt;")
+			_, _ = b.WriteString("&gt;")
 		case r == '"' && attr:
-			b.WriteString("&quot;")
+			_, _ = b.WriteString("&quot;")
 		case r == '\r':
-			b.WriteString("&#13;")
+			_, _ = b.WriteString("&#13;")
 		case (r == '\n' || r == '\t') && attr:
-			b.WriteString("&#" + strconv.Itoa(int(r)) + ";")
+			_, _ = b.WriteString("&#" + strconv.Itoa(int(r)) + ";")
 		case r == utf8.RuneError && size == 1, !xmlChar(r):
-			b.WriteString("�")
+			_, _ = b.WriteString("�")
 		default:
-			b.WriteString(s[i : i+size])
+			_, _ = b.WriteString(s[i : i+size])
 		}
 		i += size
 	}
