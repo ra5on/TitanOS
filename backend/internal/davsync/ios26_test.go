@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"image"
+	_ "image/jpeg"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ra5on/TitanOS/backend/internal/pim/card"
 	"github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
 
@@ -106,8 +109,17 @@ func readSequence(file string) ([]*step, error) {
 	return steps, nil
 }
 
+// generated are fixtures made by the test (a picture of 1 MB has no
+// place in the repository).
+var generated = map[string]func(t *testing.T) []byte{
+	"big-photo.vcf": bigPhotoCard,
+}
+
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
+	if gen, ok := generated[name]; ok {
+		return gen(t)
+	}
 	b, err := os.ReadFile(filepath.Join("testdata/ios26/fixtures", name))
 	if err != nil {
 		t.Fatal(err)
@@ -743,6 +755,22 @@ func (e *env) check(t *testing.T, s *step, res *http.Response, body []byte, w []
 		got := e.requestOpens
 		if w[1] == "+" && got == 0 || w[1] != "+" && strconv.Itoa(int(got)) != w[1] {
 			return fmt.Errorf("%d opens of the volume, want %s", got, w[1])
+		}
+	case "photo-below":
+		// photo-below N: the inline picture of the card in the body is a
+		// JPEG of fewer than N bytes and at most 512 pixels per side.
+		d, err := card.ParseDoc(body)
+		if err != nil {
+			return err
+		}
+		pic, ok := d.PhotoData()
+		if !ok {
+			return fmt.Errorf("no inline picture")
+		}
+		limit, _ := strconv.Atoi(w[1])
+		c, format, err := image.DecodeConfig(bytes.NewReader(pic))
+		if err != nil || format != "jpeg" || len(pic) >= limit || c.Width > 512 || c.Height > 512 {
+			return fmt.Errorf("picture %s %dx%d of %d bytes (%v)", format, c.Width, c.Height, len(pic), err)
 		}
 	case "not-counted":
 		// The request (without a password) does not count: ten more of

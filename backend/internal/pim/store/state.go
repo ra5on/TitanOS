@@ -76,14 +76,17 @@ type Entry struct {
 	Clipped bool `json:"clipped,omitempty"`
 
 	// Contacts.
-	FN       string   `json:"fn,omitempty"`
-	SortKey  string   `json:"sortKey,omitempty"`
-	Org      string   `json:"org,omitempty"`
-	Emails   []string `json:"emails,omitempty"`
-	Phones   []string `json:"phones,omitempty"` // digits only (a leading + kept)
-	BDay     string   `json:"bday,omitempty"`
-	Group    bool     `json:"group,omitempty"` // a group vCard: hidden in lists and search
-	HasPhoto bool     `json:"hasPhoto,omitempty"`
+	FN      string   `json:"fn,omitempty"`
+	SortKey string   `json:"sortKey,omitempty"`
+	Org     string   `json:"org,omitempty"`
+	Emails  []string `json:"emails,omitempty"`
+	Phones  []string `json:"phones,omitempty"` // digits only (a leading + kept)
+	BDay    string   `json:"bday,omitempty"`
+	// Addresses are the postal addresses as one text each (street,
+	// postcode and city, region, country; clipped), for the search.
+	Addresses []string `json:"adr,omitempty"`
+	Group     bool     `json:"group,omitempty"` // a group vCard: hidden in lists and search
+	HasPhoto  bool     `json:"hasPhoto,omitempty"`
 }
 
 // ETag is the strong entity tag of stored bytes, without quotes: the first

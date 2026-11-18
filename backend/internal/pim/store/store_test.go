@@ -1042,7 +1042,8 @@ func TestContactsIndexAndGroups(t *testing.T) {
 	e := newEnv(t)
 	s := e.store()
 	mustPut(t, s, Contacts, "kontakte", "c.vcf", vcf("c", "Carla Muster", "N:Muster;Carla;;;", "ORG:Firma;Abteilung",
-		"EMAIL;TYPE=INTERNET:carla@example.org", "TEL;TYPE=CELL:+49 (170) 123-45", "BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-01"))
+		"EMAIL;TYPE=INTERNET:carla@example.org", "TEL;TYPE=CELL:+49 (170) 123-45", "BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-01",
+		"ADR;TYPE=HOME:;;Lindenallee 7;Köln;;50667;Deutschland"))
 	group := []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:Familie\r\nN:Familie;;;;\r\nX-ADDRESSBOOKSERVER-KIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:c\r\nEND:VCARD\r\n")
 	mustPut(t, s, Contacts, "kontakte", "g.vcf", group)
 	objs, err := s.Objects(Contacts, "alex", "kontakte")
@@ -1051,7 +1052,8 @@ func TestContactsIndexAndGroups(t *testing.T) {
 	}
 	c, g := objs[0], objs[1]
 	if c.FN != "Carla Muster" || c.Org != "Firma" || c.SortKey != "muster carla" || !slices.Equal(c.Emails, []string{"carla@example.org"}) ||
-		!slices.Equal(c.Phones, []string{"+4917012345"}) || c.BDay != "1604-03-01" || c.Group {
+		!slices.Equal(c.Phones, []string{"+4917012345"}) || c.BDay != "1604-03-01" || c.Group ||
+		!slices.Equal(c.Addresses, []string{"Lindenallee 7, 50667 Köln, Deutschland"}) {
 		t.Fatalf("contact index: %+v", c)
 	}
 	if !g.Group {
@@ -1065,7 +1067,11 @@ func TestContactsIndexAndGroups(t *testing.T) {
 		t.Fatalf("counts %d %d %v", ev, co, err)
 	}
 	// Photos: a cache next to the book, gone with a new version.
-	if err := s.SavePhoto("alex", "c.vcf", []byte("jpeg")); err != nil {
+	cinfo, _ := s.Stat(Contacts, "alex", "kontakte", "c.vcf")
+	if err := s.SavePhoto("alex", "c.vcf", "0123", []byte("jpeg")); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("photo of another version: %v", err)
+	}
+	if err := s.SavePhoto("alex", "c.vcf", cinfo.ETag, []byte("jpeg")); err != nil {
 		t.Fatal(err)
 	}
 	if p, err := s.Photo("alex", "c.vcf"); err != nil || string(p) != "jpeg" {
@@ -1075,7 +1081,7 @@ func TestContactsIndexAndGroups(t *testing.T) {
 	if _, err := s.Photo("alex", "c.vcf"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("stale photo: %v", err)
 	}
-	if err := s.SavePhoto("alex", "none.vcf", []byte("x")); !errors.Is(err, ErrNotFound) {
+	if err := s.SavePhoto("alex", "none.vcf", "", []byte("x")); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("photo of nothing: %v", err)
 	}
 }

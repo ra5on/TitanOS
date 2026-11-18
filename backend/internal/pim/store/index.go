@@ -155,6 +155,17 @@ func inspectCard(data []byte) (*Entry, error) {
 		}
 	}
 	e.BDay = clip(c.Value(vcard.FieldBirthday))
+	for _, a := range c.Addresses() {
+		var parts []string
+		for _, p := range []string{a.StreetAddress, strings.TrimSpace(a.PostalCode + " " + a.Locality), a.Region, a.Country} {
+			if p = strings.TrimSpace(p); p != "" {
+				parts = append(parts, p)
+			}
+		}
+		if len(parts) > 0 && len(e.Addresses) < maxIndexValues {
+			e.Addresses = append(e.Addresses, clip(strings.Join(parts, ", ")))
+		}
+	}
 	e.Group = strings.EqualFold(strings.TrimSpace(c.Value("X-ADDRESSBOOKSERVER-KIND")), "group") ||
 		strings.EqualFold(strings.TrimSpace(c.Value(vcard.FieldKind)), "group")
 	e.HasPhoto = len(c[vcard.FieldPhoto]) > 0

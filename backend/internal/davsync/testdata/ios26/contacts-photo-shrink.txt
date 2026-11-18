@@ -1,0 +1,36 @@
+# A contact from the iPhone with a picture over 512 KiB (TECHNIK 5.5): the
+# server shrinks it and answers without ETag (RFC 6352 6.3.2), so the
+# device fetches what is stored; the rest of the card stays.
+> PUT /carddav/alex/addressbooks/kontakte/C0FFEE00-0000-4000-8000-000000000001.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> If-None-Match: *
+> Body: big-photo.vcf
+< status 201
+< no-header ETag
+
+> GET /carddav/alex/addressbooks/kontakte/C0FFEE00-0000-4000-8000-000000000001.vcf
+> Auth: alex
+< status 200
+< header-has ETag "
+< photo-below 262145
+< body-has PHOTO;ENCODING=b;TYPE=JPEG:
+< body-has X-APPLE-SUBLOCALITY:Ehrenfeld
+< body-has UID:C0FFEE00-0000-4000-8000-000000000001
+< body-lacks X-ABCROP-RECTANGLE
+< save stored header ETag
+
+# The same card again (If-Match on the stored state): shrunk the same way,
+# no write, still without ETag – 204.
+> PUT /carddav/alex/addressbooks/kontakte/C0FFEE00-0000-4000-8000-000000000001.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> If-Match: {saved:stored}
+> Body: big-photo.vcf
+< status 204
+< no-header ETag
+
+> GET /carddav/alex/addressbooks/kontakte/C0FFEE00-0000-4000-8000-000000000001.vcf
+> Auth: alex
+< status 200
+< header ETag {saved:stored}

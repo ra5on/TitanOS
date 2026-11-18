@@ -21,7 +21,9 @@ Every *.txt but this file is one sequence; steps run in order on one server.
                                          (device password of alex/bea; account = alex's
                                          account password, which is refused)
                                        Follow: yes (follow 3xx with method, body, sign-in)
-                                       Body: <fixture> (the body is the fixture, byte for byte)
+                                       Body: <fixture> (the body is the fixture, byte for byte;
+                                         big-photo.vcf is made by the test: a card with
+                                         a JPEG over 512 KiB)
                                        Body-Size: N (the body is N bytes "a")
   >                                  a bare ">" ends the headers; "> …" lines after it
   > <body line>                      are the body
@@ -48,6 +50,8 @@ Expectations ({etag:<fixture>} is the quoted ETag of a fixture):
                                      bodies and expectations
   sync-token-is text | sync-token-not text   the DAV:sync-token of the multistatus
   volume-opens N | volume-opens +    opens of the volume during the request
+  photo-below N                      the inline PHOTO of the card in the body is a JPEG
+                                       of fewer than N bytes, at most 512 px per side
   not-counted                        ten more of this request never lock, the device
                                        signs in right after
 

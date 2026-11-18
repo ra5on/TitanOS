@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ra5on/TitanOS/backend/internal/pim/card"
+	"github.com/ra5on/TitanOS/backend/internal/pim/photo"
 	"github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
 
@@ -251,12 +253,11 @@ func writeFailure(kind store.Kind, err error) (int, xml.Name, string) {
 // are stored unchanged. A missing collection is 409; the virtual default
 // becomes real with its first entry.
 //
-// TODO(step 14, TECHNIK 5.5): a contact from a device with a picture over
-// store.MaxPhoto is to be shrunk and stored changed, answered without
-// ETag. The resizer of the account pictures (api.reencodeAccountPicture)
-// is not reachable from here (api imports davsync) and the PHOTO line
-// would need rewriting; until then the bytes are kept (≤ 2 MiB) and the
-// ETag is always sent.
+// A contact whose inline picture is larger than store.MaxPhoto is stored
+// with the picture shrunk (TECHNIK 5.5: at most 512 px, a JPEG of at most
+// 256 KiB) and answered without ETag (RFC 6352 6.3.2), so that the device
+// fetches what is stored. A picture that cannot be read (another format,
+// more than photo.DevicePixels) stays as it came, with the ETag.
 func (rq *request) put() {
 	st, ok := rq.store()
 	if !ok {
@@ -291,18 +292,36 @@ func (rq *request) put() {
 	if !ok {
 		return
 	}
+	shrunk := false
+	if t.kind == store.Contacts {
+		data, shrunk = shrinkPhoto(data)
+	}
 	res, err := st.Put(t.kind, t.account, t.collection, t.name, data, opt)
 	if err != nil {
 		rq.putFailed(err)
 		return
 	}
 	rq.volumeOpen = true
-	rq.w.Header().Set("ETag", quote(res.ETag))
+	if !shrunk {
+		rq.w.Header().Set("ETag", quote(res.ETag))
+	}
 	if res.Created {
 		rq.w.WriteHeader(http.StatusCreated)
 		return
 	}
 	rq.w.WriteHeader(http.StatusNoContent)
+}
+
+// shrinkPhoto is the card with its picture shrunk when that is larger
+// than store.MaxPhoto; else the bytes as they came.
+func shrinkPhoto(data []byte) ([]byte, bool) {
+	small, ok := card.ShrinkPhoto(data, store.MaxPhoto, func(pic []byte) ([]byte, error) {
+		return photo.Reencode(pic, photo.Contact(photo.DevicePixels))
+	})
+	if !ok {
+		return data, false
+	}
+	return small, true
 }
 
 // putFailed is failWrite with "not found" as 409: the collection of a PUT

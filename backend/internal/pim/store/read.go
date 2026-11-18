@@ -242,8 +242,10 @@ func (s *Store) LoadSeen(account string, v any) error {
 }
 
 // SavePhoto keeps the reduced picture of a contact (photos/, a cache that
-// may be missing) of the book kontakte.
-func (s *Store) SavePhoto(account, name string, jpeg []byte) error {
+// may be missing) of the book kontakte, made of the card with the ETag
+// etag: ErrPrecondition when the card changed meanwhile (the picture of
+// the old card must not stay for the new one).
+func (s *Store) SavePhoto(account, name, etag string, jpeg []byte) error {
 	if !ValidName(Contacts, name) {
 		return ErrInvalidName
 	}
@@ -263,6 +265,9 @@ func (s *Store) SavePhoto(account, name string, jpeg []byte) error {
 	defer c.mu.Unlock()
 	if c.deleted || c.virtual || c.st.Index[name] == nil {
 		return ErrNotFound
+	}
+	if c.st.Index[name].ETag != etag {
+		return ErrPrecondition
 	}
 	ar, release, err := s.openWrite(acc)
 	if err != nil {

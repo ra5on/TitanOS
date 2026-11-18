@@ -152,3 +152,20 @@ func fit(w, h, edge int) (int, int) {
 	}
 	return max(1, w*edge/h), edge
 }
+
+// Contact is how the picture of a contact is kept (TECHNIK 5.5): at most
+// 512 pixels per side, the ratio kept, a JPEG of at most 256 KiB.
+func Contact(maxPixels int) Options {
+	return Options{Edge: ContactEdge, MaxBytes: ContactBytes, MaxPixels: maxPixels}
+}
+
+// Bounds of the picture of a contact.
+const (
+	ContactEdge  = 512
+	ContactBytes = 256 << 10
+	// DevicePixels bounds a picture in a card of a device: it comes in at
+	// most 2 MiB without a RAM budget of its own, so the bound is lower
+	// than for a picture chosen in TitanOS (iOS keeps contact pictures
+	// far smaller).
+	DevicePixels = 24_000_000
+)
