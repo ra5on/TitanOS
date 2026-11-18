@@ -327,10 +327,13 @@ func TestCalendarImportZoneAmplification(t *testing.T) {
 		t.Fatalf("import %+v", out)
 	}
 	// Alone the peak is about 4 MiB of the 6 reserved; in a run of the
-	// package the sampled heap has up to 2 MiB more of other tests'
-	// garbage (measuredImport). Without batches it would be 30 MiB.
-	if budget := importFactor*int64(len(many)) + 2*int64(importBatchBytes) + importPerEvent*252; extra > budget+4<<20 {
-		t.Fatalf("held %d MiB for %d KiB (reserved %d MiB, files %d MiB)", extra>>20, len(many)>>10, budget>>20, 250*120>>10)
+	// whole package, and more so under -race (CI: 11 MiB), the sampled
+	// heap carries other tests' garbage (measuredImport). Without batches
+	// it would hold all 30 MiB of files at once, so the bound is half of
+	// that: it fails for the unbatched build and leaves room for noise.
+	budget := importFactor*int64(len(many)) + 2*int64(importBatchBytes) + importPerEvent*252
+	if files := int64(250 * 120 << 10); extra > files/2 {
+		t.Fatalf("held %d MiB for %d KiB (reserved %d MiB, files %d MiB)", extra>>20, len(many)>>10, budget>>20, files>>20)
 	}
 	if list := e.events("from=2026-11-01&to=2026-12-01&calendars=viele"); len(list.Events) != 252 || list.Events[0].Timezone != "Pad/One" {
 		t.Fatalf("events %d %+v", len(list.Events), list.Events[0])
