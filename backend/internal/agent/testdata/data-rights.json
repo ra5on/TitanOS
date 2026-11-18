@@ -1,0 +1,764 @@
+{
+ "note": "Preset x dataRights x tool -> mode (TECHNIK 6.4). Read by backend/internal/agent/policy_test.go and web/tests/agent.test.mjs, so both sides decide alike.",
+ "tools": [
+  {
+   "name": "calendar_list",
+   "area": "calendar",
+   "kind": "read"
+  },
+  {
+   "name": "calendar_search",
+   "area": "calendar",
+   "kind": "read"
+  },
+  {
+   "name": "calendar_create",
+   "area": "calendar",
+   "kind": "change"
+  },
+  {
+   "name": "calendar_update",
+   "area": "calendar",
+   "kind": "change"
+  },
+  {
+   "name": "calendar_delete",
+   "area": "calendar",
+   "kind": "change"
+  },
+  {
+   "name": "contacts_search",
+   "area": "contacts",
+   "kind": "read"
+  },
+  {
+   "name": "contacts_create",
+   "area": "contacts",
+   "kind": "change"
+  },
+  {
+   "name": "contacts_update",
+   "area": "contacts",
+   "kind": "change"
+  },
+  {
+   "name": "contacts_delete",
+   "area": "contacts",
+   "kind": "change"
+  }
+ ],
+ "cases": [
+  {
+   "name": "read · none",
+   "policy": {
+    "preset": "read",
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "deny",
+    "contacts_update": "deny",
+    "contacts_delete": "deny"
+   }
+  },
+  {
+   "name": "read · calendar free",
+   "policy": {
+    "preset": "read",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "allow"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "deny",
+    "contacts_update": "deny",
+    "contacts_delete": "deny"
+   }
+  },
+  {
+   "name": "read · calendar closed",
+   "policy": {
+    "preset": "read",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "deny",
+    "contacts_update": "deny",
+    "contacts_delete": "deny"
+   }
+  },
+  {
+   "name": "read · calendar read only",
+   "policy": {
+    "preset": "read",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "deny",
+    "contacts_update": "deny",
+    "contacts_delete": "deny"
+   }
+  },
+  {
+   "name": "read · contacts write without read",
+   "policy": {
+    "preset": "read",
+    "dataRights": {
+     "contacts": {
+      "read": "deny",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "deny",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "read · both set",
+   "policy": {
+    "preset": "read",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "allow"
+     },
+     "contacts": {
+      "read": "allow",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · none",
+   "policy": {
+    "preset": "standard",
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "ask",
+    "calendar_update": "ask",
+    "calendar_delete": "ask",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · calendar free",
+   "policy": {
+    "preset": "standard",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "allow"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · calendar closed",
+   "policy": {
+    "preset": "standard",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · calendar read only",
+   "policy": {
+    "preset": "standard",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · contacts write without read",
+   "policy": {
+    "preset": "standard",
+    "dataRights": {
+     "contacts": {
+      "read": "deny",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "ask",
+    "calendar_update": "ask",
+    "calendar_delete": "ask",
+    "contacts_search": "deny",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "standard · both set",
+   "policy": {
+    "preset": "standard",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "allow"
+     },
+     "contacts": {
+      "read": "allow",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "all · none",
+   "policy": {
+    "preset": "all",
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "allow",
+    "contacts_update": "allow",
+    "contacts_delete": "allow"
+   }
+  },
+  {
+   "name": "all · calendar free",
+   "policy": {
+    "preset": "all",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "allow"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "allow",
+    "contacts_update": "allow",
+    "contacts_delete": "allow"
+   }
+  },
+  {
+   "name": "all · calendar closed",
+   "policy": {
+    "preset": "all",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "allow",
+    "contacts_update": "allow",
+    "contacts_delete": "allow"
+   }
+  },
+  {
+   "name": "all · calendar read only",
+   "policy": {
+    "preset": "all",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "allow",
+    "contacts_update": "allow",
+    "contacts_delete": "allow"
+   }
+  },
+  {
+   "name": "all · contacts write without read",
+   "policy": {
+    "preset": "all",
+    "dataRights": {
+     "contacts": {
+      "read": "deny",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "deny",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "all · both set",
+   "policy": {
+    "preset": "all",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "allow"
+     },
+     "contacts": {
+      "read": "allow",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · none",
+   "policy": {
+    "preset": "",
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "ask",
+    "calendar_update": "ask",
+    "calendar_delete": "ask",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · calendar free",
+   "policy": {
+    "preset": "",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "allow"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · calendar closed",
+   "policy": {
+    "preset": "",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · calendar read only",
+   "policy": {
+    "preset": "",
+    "dataRights": {
+     "calendar": {
+      "read": "allow",
+      "write": "deny"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "deny",
+    "calendar_update": "deny",
+    "calendar_delete": "deny",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · contacts write without read",
+   "policy": {
+    "preset": "",
+    "dataRights": {
+     "contacts": {
+      "read": "deny",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "allow",
+    "calendar_search": "allow",
+    "calendar_create": "ask",
+    "calendar_update": "ask",
+    "calendar_delete": "ask",
+    "contacts_search": "deny",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  },
+  {
+   "name": "empty · both set",
+   "policy": {
+    "preset": "",
+    "dataRights": {
+     "calendar": {
+      "read": "deny",
+      "write": "allow"
+     },
+     "contacts": {
+      "read": "allow",
+      "write": "ask"
+     }
+    },
+    "tools": {
+     "calendar_create": "allow",
+     "contacts_search": "deny"
+    },
+    "areas": {
+     "files": "deny"
+    }
+   },
+   "modes": {
+    "calendar_list": "deny",
+    "calendar_search": "deny",
+    "calendar_create": "allow",
+    "calendar_update": "allow",
+    "calendar_delete": "allow",
+    "contacts_search": "allow",
+    "contacts_create": "ask",
+    "contacts_update": "ask",
+    "contacts_delete": "ask"
+   }
+  }
+ ]
+}

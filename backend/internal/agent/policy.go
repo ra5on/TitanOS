@@ -63,6 +63,29 @@ const AreaNVR = "nvr"
 // only reads; the tool exists only with the account's own Immich key.
 const AreaPhotos = "photos"
 
+// AreaCalendar and AreaContacts are T-Kalender and Kontakte (1.11). Unlike
+// the other areas they have two axes, reading and writing, set under
+// Policy.DataRights (never under areas: 1.10 refuses an unknown area when
+// it saves, also under extraAreas, TECHNIK 6.2).
+const (
+	AreaCalendar = "calendar"
+	AreaContacts = "contacts"
+)
+
+// DataAreas are the areas with two axes.
+var DataAreas = []string{AreaCalendar, AreaContacts}
+
+// IsDataArea reports whether a is calendar or contacts.
+func IsDataArea(a string) bool { return slices.Contains(DataAreas, a) }
+
+// DataRight is what the agent may do with the calendar or the contacts:
+// Read is allow or deny, Write (create, change and delete) allow, ask or
+// deny.
+type DataRight struct {
+	Read  string `json:"read"`
+	Write string `json:"write"`
+}
+
 // createTools only add something new; the standard preset runs them
 // without asking ("neue Dateien legt er frei an").
 var createTools = map[string]bool{
@@ -107,6 +130,10 @@ type Policy struct {
 	// content could tell the model to send data out. The person switches
 	// it on knowingly (0.94, owner 15 Nov 2026).
 	WebFree bool `json:"webFree,omitempty"`
+	// DataRights holds the two axes of calendar and contacts (1.11). 1.10
+	// drops the field when it reads the settings; saved there, it is gone,
+	// and back on 1.11 the preset holds again (the careful side).
+	DataRights map[string]DataRight `json:"dataRights,omitempty"`
 }
 
 // ValidMode reports whether m is one of the three modes.
@@ -119,9 +146,20 @@ func (p Policy) Check() error {
 	default:
 		return errors.New("unknown preset")
 	}
-	for _, m := range p.Areas {
+	for a, m := range p.Areas {
 		if !ValidMode(m) {
 			return errors.New("unknown mode")
+		}
+		if IsDataArea(a) {
+			return errors.New("the area " + a + " is set under dataRights")
+		}
+	}
+	for a, r := range p.DataRights {
+		if !IsDataArea(a) {
+			return errors.New("unknown data area " + a)
+		}
+		if r.Read != ModeAllow && r.Read != ModeDeny || !ValidMode(r.Write) {
+			return errors.New("invalid rights for " + a)
 		}
 	}
 	for _, m := range p.Tools {
@@ -161,11 +199,46 @@ func presetMode(preset, kind string) string {
 	return ModeAsk
 }
 
+// presetDataMode is the mode a preset gives calendar and contacts: reading
+// is allowed in every preset, writing (create, change, delete) asks in the
+// standard one (owner, PLAN 108 question 7: "Eintragen soll nachfragen").
+func presetDataMode(preset, kind string) string {
+	if kind == KindRead {
+		return ModeAllow
+	}
+	switch preset {
+	case PresetAll:
+		return ModeAllow
+	case PresetRead:
+		return ModeDeny
+	}
+	return ModeAsk
+}
+
+// DataMode is the mode of calendar or contacts for a kind: the person's
+// two axes, else the preset. Single tool settings do not count here (the
+// page shows no single tools for these areas).
+func (p Policy) DataMode(area, kind string) string {
+	if r, ok := p.DataRights[area]; ok {
+		m := r.Write
+		if kind == KindRead {
+			m = r.Read
+		}
+		if ValidMode(m) {
+			return m
+		}
+	}
+	return presetDataMode(p.Preset, kind)
+}
+
 // Mode is how a tool is switched: a single setting first, then its area,
-// then the preset.
+// then the preset. Calendar and contacts follow DataMode.
 func (p Policy) Mode(name, area, kind string) string {
 	if kind == KindAgent {
 		return ModeAllow
+	}
+	if IsDataArea(area) {
+		return p.DataMode(area, kind)
 	}
 	if m := p.Tools[name]; ValidMode(m) {
 		return m
@@ -179,6 +252,13 @@ func (p Policy) Mode(name, area, kind string) string {
 // AreaMode is how an area is shown: its own setting, or "mixed" when its
 // tools differ, or what the preset gives most of them.
 func (p Policy) AreaMode(area string) string {
+	if IsDataArea(area) {
+		// Forbidden only when both axes are (Missing says why).
+		if p.DataMode(area, KindRead) == ModeDeny && p.DataMode(area, KindChange) == ModeDeny {
+			return ModeDeny
+		}
+		return ""
+	}
 	if m := p.Areas[area]; ValidMode(m) {
 		return m
 	}
@@ -229,7 +309,7 @@ func cleanPath(p string) string {
 
 // Areas of the agent in the order the settings show them, with the tool
 // areas of the catalog first.
-var AgentAreas = []string{"system", "files", "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaHistory, AreaNVR, AreaPhotos, AreaWeb, AreaCode, AreaMCP}
+var AgentAreas = []string{"system", "files", AreaCalendar, AreaContacts, "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaHistory, AreaNVR, AreaPhotos, AreaWeb, AreaCode, AreaMCP}
 
 // newAreas are the areas since 1.10. On the stick their modes stand under
 // extraAreas: 1.09 refuses an unknown area when it saves the settings, so
@@ -244,11 +324,13 @@ type policyJSON struct {
 	Tools      map[string]string `json:"tools,omitempty"`
 	Folders    []FolderRule      `json:"folders,omitempty"`
 	WebFree    bool              `json:"webFree,omitempty"`
+	// DataRights: 1.10 does not know the field and drops it (TECHNIK 6.2).
+	DataRights map[string]DataRight `json:"dataRights,omitempty"`
 }
 
 // MarshalJSON writes the modes of areas 1.09 does not know under extraAreas.
 func (p Policy) MarshalJSON() ([]byte, error) {
-	out := policyJSON{Preset: p.Preset, Tools: p.Tools, Folders: p.Folders, WebFree: p.WebFree}
+	out := policyJSON{Preset: p.Preset, Tools: p.Tools, Folders: p.Folders, WebFree: p.WebFree, DataRights: p.DataRights}
 	for a, m := range p.Areas {
 		target := &out.Areas
 		if slices.Contains(newAreas, a) {
@@ -268,7 +350,7 @@ func (p *Policy) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
-	*p = Policy{Preset: in.Preset, Areas: in.Areas, Tools: in.Tools, Folders: in.Folders, WebFree: in.WebFree}
+	*p = Policy{Preset: in.Preset, Areas: in.Areas, Tools: in.Tools, Folders: in.Folders, WebFree: in.WebFree, DataRights: in.DataRights}
 	for a, m := range in.ExtraAreas {
 		if p.Areas == nil {
 			p.Areas = map[string]string{}
