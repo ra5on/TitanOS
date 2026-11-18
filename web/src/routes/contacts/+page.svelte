@@ -56,7 +56,11 @@
 	import ProgramShell from '#lib/pim/ProgramShell.svelte';
 	import { shellOfError, type ShellState } from '#lib/pim/shell.ts';
 
-	const phone = $derived(phoneView());
+	// A narrow window (≤ 640 px) works like the phone: one pane at a time,
+	// so a chosen contact never opens below the whole list.
+	let winWidth = $state(typeof window === 'undefined' ? 1440 : window.innerWidth);
+	const phoneMode = $derived(phoneView());
+	const phone = $derived(phoneMode || winWidth <= 640);
 	/** T-Mail's release (session.services.mail comes from GET /mail/access). */
 	const mail = $derived(session.services.mail === true);
 	const bookName = $derived(t('contacts.side.contacts'));
@@ -87,6 +91,8 @@
 	onDestroy(() => clearInterval(timer));
 	const today = $derived(wallOf(clockNow, zone).date);
 	let notice = $state('');
+	/** Pictures changed here (id → etag): the list loads them anew. */
+	let pictures = $state<Record<string, string>>({});
 
 	function failed(err: unknown): string {
 		const s = shellOfError(err);
@@ -315,9 +321,12 @@
 			// The picture after the card, with the card's new etag.
 			let photoNote = '';
 			try {
-				if (photo.kind === 'file') await putPhotoFile(id, etag, photo.file);
-				else if (photo.kind === 'nas') await putPhotoNas(id, etag, photo.root, photo.path);
-				else if (photo.kind === 'remove') await removePhoto(id, etag);
+				let done: { etag: string } | null = null;
+				if (photo.kind === 'file') done = await putPhotoFile(id, etag, photo.file);
+				else if (photo.kind === 'nas') done = await putPhotoNas(id, etag, photo.root, photo.path);
+				else if (photo.kind === 'remove') done = await removePhoto(id, etag);
+				// The list's picture loads anew too.
+				if (done) pictures = { ...pictures, [id]: done.etag };
 			} catch (err) {
 				photoNote = t('contacts.form.photoFailed', { error: apiErrorText(err) });
 			}
@@ -427,6 +436,7 @@
 		{answered}
 		suggestions={sugHits}
 		selected={phone ? '' : selId}
+		{pictures}
 		{today}
 		{phone}
 		{taking}
@@ -528,6 +538,8 @@
 	{/if}
 {/snippet}
 
+<svelte:window bind:innerWidth={winWidth} />
+
 <PageHead {title}>
 	{#snippet actions()}
 		{#if editing}
@@ -541,6 +553,10 @@
 				onclick={save}><Icon name="check" size={16} />{t('common.save')}</button
 			>
 		{:else if phone && mode === 'show'}
+			<!-- A narrow window has no back arrow of the phone's bar. -->
+			{#if !phoneMode}<a class="btn" href="/contacts"
+					><Icon name="chevronLeft" size={16} />{t('contacts.toList')}</a
+				>{/if}
 			<button
 				type="button"
 				class="btn"
@@ -850,19 +866,6 @@
 		}
 		.side {
 			align-self: center;
-		}
-	}
-	/* A narrow window: list and contact below each other. */
-	@media (max-width: 640px) {
-		.con {
-			grid-template-columns: minmax(0, 1fr);
-			grid-template-rows: none;
-			grid-template-areas: 'books' 'mid' 'right';
-			height: auto;
-		}
-		.right {
-			border-left: 0 !important;
-			border-top: 1px solid var(--border);
 		}
 	}
 </style>

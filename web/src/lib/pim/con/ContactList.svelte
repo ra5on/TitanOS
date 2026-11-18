@@ -21,6 +21,8 @@
 		answered: string;
 		suggestions: Suggestion[];
 		selected: string;
+		/** Pictures changed on this page (id → etag), loaded anew. */
+		pictures?: Record<string, string>;
 		today: string;
 		phone: boolean;
 		taking: string;
@@ -35,6 +37,7 @@
 		answered,
 		suggestions,
 		selected,
+		pictures = {},
 		today,
 		phone,
 		taking,
@@ -85,6 +88,7 @@
 					name={item.name}
 					initials={item.initials}
 					hasPhoto={item.hasPhoto}
+					version={pictures[item.id] ?? ''}
 					size={36}
 				/>
 				<span class="ct"

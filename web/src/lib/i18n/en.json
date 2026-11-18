@@ -9517,6 +9517,7 @@
 	"contacts.unavailable.text": "The data volume is not mounted. The contacts live on the volume of the system data; once it is mounted, they appear here. On the iPhone everything stays as it is until then.",
 	"contacts.new": "New contact",
 	"contacts.newTitle": "New contact",
+	"contacts.toList": "All contacts",
 	"contacts.edit": "Edit",
 	"contacts.editTitle": "Edit contact",
 	"contacts.books": "Address books",

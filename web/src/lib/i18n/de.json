@@ -9517,6 +9517,7 @@
 	"contacts.unavailable.text": "Das Daten-Volume ist nicht eingebunden. Die Kontakte liegen auf dem Volume der Systemdaten; sobald es eingebunden ist, erscheinen sie hier. Auf dem iPhone bleibt bis dahin alles, wie es ist.",
 	"contacts.new": "Neuer Kontakt",
 	"contacts.newTitle": "Neuer Kontakt",
+	"contacts.toList": "Alle Kontakte",
 	"contacts.edit": "Bearbeiten",
 	"contacts.editTitle": "Kontakt bearbeiten",
 	"contacts.books": "Adressbücher",

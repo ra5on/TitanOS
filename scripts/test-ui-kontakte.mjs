@@ -432,6 +432,11 @@ try {
       .locator("[data-contact-detail]")
       .getByText("Spielt dienstags Tennis.")
       .waitFor();
+    // The list's picture loads anew after the change.
+    assert.match(
+      await page.locator('[data-contact="ben.vcf"] img').getAttribute("src"),
+      /\/photo\?v=/,
+    );
     await ctx.close();
   }
 
@@ -964,6 +969,31 @@ try {
     await page.waitForTimeout(300);
     await sound(frame, "desktop window new");
     await shot(page, "arbeitsplatz-neuer-kontakt");
+    await ctx.close();
+  }
+
+  // ---- A narrow window (420 px, not the phone): one pane at a time ----
+  {
+    const { page, ctx } = await open({ width: 420 });
+    await page.goto(base + "/contacts");
+    await ready(page, "none");
+    await sound(page, "420 list");
+    await shot(page, "fenster-420-liste");
+    await page.locator('[data-contact="ben.vcf"]').click();
+    await page.locator("[data-contact-detail]").waitFor();
+    assert.equal(
+      await page.locator("[data-contact-list]").count(),
+      0,
+      "the contact instead of the list",
+    );
+    await sound(page, "420 contact");
+    await shot(page, "fenster-420-kontakt");
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    await page.locator("[data-contact-editor]").waitFor();
+    await sound(page, "420 form");
+    await page.getByRole("button", { name: "Abbrechen" }).click();
+    await page.getByRole("link", { name: "Alle Kontakte" }).click();
+    await page.locator("[data-contact-list]").waitFor();
     await ctx.close();
   }
 
