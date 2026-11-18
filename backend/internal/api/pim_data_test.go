@@ -133,6 +133,19 @@ func TestPIMDataRouteRights(t *testing.T) {
 	if _, body := ts.do(bea, "GET", "/api/v1/calendar/access", nil); !strings.Contains(string(body), `"enabled":true`) || !strings.Contains(string(body), `"volume":true`) {
 		t.Fatalf("access with the volume: %s", body)
 	}
+	// The NAS zone for the pages (a plain account cannot read /network);
+	// time.Local without a name is left out (the page takes the browser's).
+	if _, body := ts.do(bea, "GET", "/api/v1/calendar/access", nil); strings.Contains(string(body), `"timezone"`) {
+		t.Fatalf("access names an unnamed zone: %s", body)
+	}
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pim.Local = func() *time.Location { return berlin }
+	if _, body := ts.do(bea, "GET", "/api/v1/calendar/access", nil); !strings.Contains(string(body), `"timezone":"Europe/Berlin"`) {
+		t.Fatalf("access without the NAS zone: %s", body)
+	}
 
 	// The volume gone: 503, never an empty list.
 	setVolume("")

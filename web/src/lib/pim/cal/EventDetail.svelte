@@ -19,7 +19,7 @@
 		whenText,
 		zoneName,
 	} from '../calendar-text.ts';
-	import { localZone } from '../caldates.ts';
+	import { viewZone } from '../caldates.ts';
 
 	type Props = {
 		event: CalEvent;
@@ -47,9 +47,7 @@
 
 	const cal = $derived(calFor(ev.calendar));
 	const rule = $derived(ruleText(ev));
-	const zone = $derived(
-		!ev.allDay && ev.timezone && ev.timezone !== localZone() ? ev.timezone : '',
-	);
+	const zone = $derived(!ev.allDay && ev.timezone && ev.timezone !== viewZone() ? ev.timezone : '');
 	const birthday = $derived(ev.kind === 'birthday');
 	/** Minutes after midnight of the start on the event's own clock. */
 	const startOf = (e: CalEvent) =>

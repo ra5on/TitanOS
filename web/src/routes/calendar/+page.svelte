@@ -23,9 +23,10 @@
 		addMonths,
 		clock,
 		isoDate,
-		localZone,
 		monthGrid,
+		setNasZone,
 		validDate,
+		viewZone,
 		wallOf,
 		weekDays,
 		weekStart,
@@ -55,7 +56,8 @@
 	type View = 'month' | 'week' | 'day' | 'list';
 
 	const phone = $derived(phoneView());
-	const zone = localZone();
+	// The NAS zone once /calendar/access named it (the browser's before and without).
+	let zone = $state(viewZone());
 	let clockNow = $state(new Date());
 	const timer = setInterval(() => (clockNow = new Date()), 30_000);
 	onDestroy(() => clearInterval(timer));
@@ -111,6 +113,8 @@
 	async function start() {
 		try {
 			const access = await api.get<unknown>('/calendar/access');
+			setNasZone((access as { timezone?: unknown } | null)?.timezone);
+			zone = viewZone();
 			const state = calendarShell(access);
 			if (state.kind !== 'ready') {
 				shown = state;
@@ -133,7 +137,7 @@
 		const mine = ++asked;
 		const { first, last } = range;
 		try {
-			// One day around: titand reads dates in the NAS zone, the views use the browser's.
+			// One day around: titand reads dates in the NAS zone (the view's, unless titand named none).
 			const got = await loadEvents(addDays(first, -1), addDays(last, 2));
 			if (mine !== asked) return;
 			events = got.events;

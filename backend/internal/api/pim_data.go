@@ -75,12 +75,40 @@ func (a pimDataArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("DELETE /api/v1/contacts/{book}/{id}/photo", web(a.handleDeleteContactPhoto))
 }
 
+type calendarAccess struct {
+	Enabled bool `json:"enabled"`
+	Volume  bool `json:"volume"`
+	// Timezone is the IANA name of the NAS zone (Settings › Time zone), in
+	// which the pages show times and create events (TECHNIK 2.2 point 5) –
+	// a plain account cannot read /network. Missing when titand has no
+	// named zone (the page then uses the browser's).
+	Timezone string `json:"timezone,omitempty"`
+}
+
 // handleCalendarAccess says whether the account has T-Kalender and whether
-// its data can be read now (the volume of the system data is there). From
-// RAM only: the page asks on every start, the volume may sleep.
+// its data can be read now (the volume of the system data is there), and
+// the zone of the NAS. From RAM only: the page asks on every start, the
+// volume may sleep.
 func (a pimDataArea) handleCalendarAccess(w http.ResponseWriter, r *http.Request) {
-	volume := a.store != nil && (a.store.Current == nil || a.store.Current(string(pimstore.Calendar)) != "")
-	writeJSON(w, http.StatusOK, map[string]bool{"enabled": true, "volume": volume})
+	out := calendarAccess{Enabled: true}
+	if a.store != nil {
+		out.Volume = a.store.Current == nil || a.store.Current(string(pimstore.Calendar)) != ""
+		out.Timezone = zoneName(a.store.Zone())
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// zoneName is the IANA name of a zone; "" for time.Local without a name
+// (its String() is "Local", which no browser knows).
+func zoneName(loc *time.Location) string {
+	if loc == nil || loc == time.Local {
+		return ""
+	}
+	name := loc.String()
+	if name == "" || name == "Local" {
+		return ""
+	}
+	return name
 }
 
 type bookView struct {

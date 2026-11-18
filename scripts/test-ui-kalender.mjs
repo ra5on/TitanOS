@@ -50,6 +50,7 @@ async function open({
   lang = "de",
   phone = false,
   desk = false,
+  zone = "Europe/Berlin",
   change = () => {},
 } = {}) {
   const made = await create(
@@ -63,9 +64,9 @@ async function open({
           hasTouch: true,
           deviceScaleFactor: 3,
           viewport: { width, height: 844 },
-          timezoneId: "Europe/Berlin",
+          timezoneId: zone,
         }
-      : { viewport: { width, height }, timezoneId: "Europe/Berlin" },
+      : { viewport: { width, height }, timezoneId: zone },
   );
   await made.ctx.clock.setFixedTime(NOW);
   if (phone || desk)
@@ -727,6 +728,82 @@ try {
     );
     await sound(page, `unavailable ${mode}`);
     if (mode === "503") await shot(page, "nicht-verfuegbar");
+    await ctx.close();
+  }
+
+  // ---- The NAS zone (TECHNIK 2.2 point 5): the browser elsewhere ----
+  {
+    const { page, ctx, state } = await open({
+      zone: "America/New_York",
+      change: (s) =>
+        s.events.push({
+          ...s.events.find((e) => e.title === "Elternabend Klasse 3b"),
+          id: "tokio.ics",
+          uid: "tokio",
+          title: "Anruf Tokio",
+          start: "2026-11-19T09:00:00+09:00",
+          end: "2026-11-19T09:30:00+09:00",
+          occurrence: "20261119T000000Z",
+          timezone: "Asia/Tokyo",
+          recurring: false,
+          rule: null,
+          etag: '"e-tokio"',
+        }),
+    });
+    await page.goto(base + "/calendar?view=week");
+    await ready(page, "week");
+    // Shown at the NAS clock, not New York's (13:00).
+    assert.match(
+      await page
+        .locator(".blk", { hasText: "Elternabend" })
+        .first()
+        .innerText(),
+      /19:00/,
+    );
+    // An event of another zone: the 01:00 Berlin block, its own zone in the details.
+    await page.locator(".blk", { hasText: "Anruf Tokio" }).click();
+    assert.match(await dialog(page).innerText(), /Zeitzone Tokyo/);
+    await sound(page, "nas zone details");
+    await page.keyboard.press("Escape");
+    // A new event is made in the NAS zone.
+    await page.goto(base + "/calendar/event?date=2026-11-18&time=10:00");
+    await page.locator("[data-event-form]").waitFor();
+    await page.locator("#t-title").fill("Zahnarzt");
+    await until(
+      async () =>
+        /Zeitzone Berlin/.test(
+          await page.locator("[data-duration]").innerText(),
+        ),
+      "form in the NAS zone",
+    );
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await until(
+      () => sent(state, "POST", /^\/calendar\/events$/).length === 1,
+      "POST in the NAS zone",
+    );
+    const made = sent(state, "POST", /^\/calendar\/events$/)[0][2].event;
+    assert.equal(made.timezone, "Europe/Berlin");
+    assert.equal(made.start, "2026-11-18T10:00");
+    await ctx.close();
+  }
+  // Without a NAS zone the browser's.
+  {
+    const { page, ctx, state } = await open({
+      zone: "America/New_York",
+      change: (s) => (s.timezone = ""),
+    });
+    await page.goto(base + "/calendar/event?date=2026-11-18&time=10:00");
+    await page.locator("[data-event-form]").waitFor();
+    await page.locator("#t-title").fill("Zahnarzt");
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await until(
+      () => sent(state, "POST", /^\/calendar\/events$/).length === 1,
+      "POST in the browser zone",
+    );
+    assert.equal(
+      sent(state, "POST", /^\/calendar\/events$/)[0][2].event.timezone,
+      "America/New_York",
+    );
     await ctx.close();
   }
 

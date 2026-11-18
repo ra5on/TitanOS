@@ -26,7 +26,7 @@
 		clock,
 		daysBetween,
 		inclusiveEnd,
-		localZone,
+		viewZone,
 		validDate,
 		wallMinutes,
 		wallOf,
@@ -52,6 +52,7 @@
 		closeEventWindow,
 		createEvent,
 		loadCalendars,
+		loadNasZone,
 		loadEvent,
 		previewRepeat,
 		safeBack,
@@ -82,7 +83,7 @@
 	const editOcc = params.get('occurrence') ?? '';
 	const editing = !!(editCal && editId);
 	const back = safeBack(params.get('back'));
-	const today = wallOf(new Date(), localZone()).date;
+	const today = wallOf(new Date(), viewZone()).date;
 	const startDay = (() => {
 		const d = params.get('date') ?? '';
 		return validDate(d) ? d : today;
@@ -161,14 +162,16 @@
 	let done = $state(false);
 
 	const own = $derived(calendars.filter((c) => c.kind === 'own' && !c.readOnly));
-	const zone = $derived(editing ? (event?.timezone ?? '') : localZone());
+	// New events in the NAS zone (/calendar/access), the browser's without one.
+	let nasZone = $state(viewZone());
+	const zone = $derived(editing ? (event?.timezone ?? '') : nasZone);
 	const dirty = $derived(JSON.stringify(form) !== initial);
 
 	async function load() {
 		loading = true;
 		loadError = '';
 		try {
-			calendars = await loadCalendars();
+			[calendars, nasZone] = await Promise.all([loadCalendars(), loadNasZone()]);
 			if (editing) {
 				event = await loadEvent(editCal, editId, editOcc);
 				form = formOf(event);
@@ -298,7 +301,7 @@
 			(!form.allDay && (form.startTime !== base.startTime || form.endTime !== base.endTime));
 		if (timesChanged) {
 			Object.assign(out, times);
-			// New: the browser's zone; changed: '' keeps the event's own zone.
+			// New: the NAS zone (else the browser's); changed: '' keeps the event's own zone.
 			out.timezone = editing ? '' : zone;
 		}
 		if (!editing || form.title !== base.title) out.title = form.title;

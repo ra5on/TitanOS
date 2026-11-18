@@ -103,6 +103,32 @@ export function localZone(): string {
 	}
 }
 
+/** Whether the browser knows a zone by this IANA name. */
+export function knownZone(zone: string): boolean {
+	if (!zone) return false;
+	try {
+		new Intl.DateTimeFormat('en', { timeZone: zone });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+// The NAS zone (GET /calendar/access `timezone`, TECHNIK 2.2 point 5):
+// times show in it and new events are made in it. Unknown or missing:
+// the browser's zone.
+let nasZone = '';
+
+/** Takes the NAS zone from titand; anything the browser does not know is dropped. */
+export function setNasZone(zone: unknown): void {
+	nasZone = typeof zone === 'string' && knownZone(zone) ? zone : '';
+}
+
+/** The zone the calendar shows: the NAS zone, else the browser's. */
+export function viewZone(): string {
+	return nasZone || localZone();
+}
+
 const wallFormats = new Map<string, Intl.DateTimeFormat>();
 /** Date and minutes after midnight of an instant on the wall clock of a zone. */
 export function wallOf(at: Date, zone: string): { date: string; minutes: number } {

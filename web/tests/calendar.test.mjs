@@ -10,6 +10,9 @@ import {
 	longEvent,
 	monthGrid,
 	overlapLanes,
+	localZone,
+	setNasZone,
+	viewZone,
 	wallMinutes,
 	wallOf,
 	wallParts,
@@ -396,4 +399,17 @@ test('the texts of T-Kalender exist in German and English with the same keys', a
 			.sort();
 	assert.deepEqual(keys('de'), keys('en'));
 	assert.ok(keys('de').length > 150);
+});
+
+test('the NAS zone from titand, the browser zone without or for an unknown name', () => {
+	setNasZone('Asia/Tokyo');
+	assert.equal(viewZone(), 'Asia/Tokyo');
+	setNasZone('Local');
+	assert.equal(viewZone(), localZone());
+	setNasZone('Mars/Olympus');
+	assert.equal(viewZone(), localZone());
+	setNasZone(undefined);
+	assert.equal(viewZone(), localZone());
+	setNasZone(42);
+	assert.equal(viewZone(), localZone());
 });

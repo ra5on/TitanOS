@@ -393,6 +393,8 @@ export function calendarState() {
     hidden: ["sport"],
     /** "503": every route answers calendar_unavailable; "volume": /access says volume:false. */
     unavailable: "",
+    /** The NAS zone /access names ("" leaves it out: the page takes the browser's). */
+    timezone: "Europe/Berlin",
     /** The next PUT/DELETE of an event answers calendar_conflict. */
     conflictOnce: false,
     importResult: {
@@ -527,7 +529,11 @@ export async function installCalendar(target, state = calendarState()) {
       });
     }
     if (path === "/calendar/access")
-      return json({ enabled: true, volume: s.unavailable !== "volume" });
+      return json({
+        enabled: true,
+        volume: s.unavailable !== "volume",
+        ...(s.timezone ? { timezone: s.timezone } : {}),
+      });
     if (path === "/calendar/calendars" && method === "GET")
       return json(calendarsOf(s));
     if (path === "/calendar/calendars" && method === "POST") {

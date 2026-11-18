@@ -5,6 +5,7 @@
 import { api, apiFetch, dispositionName, responseError, saveBlob, ApiError } from '../api.ts';
 import { goto } from '$app/navigation';
 import { inWindow, type FrameMessage } from '../desktop/frame.ts';
+import { setNasZone, viewZone } from './caldates.ts';
 import {
 	sanitizeCalendars,
 	sanitizeEvent,
@@ -36,6 +37,20 @@ export type SaveResult = {
 	scope: Scope;
 	droppedExceptions: number;
 };
+
+let zoneAsked: Promise<string> | null = null;
+/**
+ * The NAS zone once per page (GET /calendar/access `timezone`), set for
+ * viewZone(); a failed request leaves the browser's zone.
+ */
+export function loadNasZone(): Promise<string> {
+	zoneAsked ??= api
+		.get<unknown>('/calendar/access')
+		.then((a) => setNasZone((a as { timezone?: unknown } | null)?.timezone))
+		.catch(() => setNasZone(''))
+		.then(() => viewZone());
+	return zoneAsked;
+}
 
 export async function loadCalendars(): Promise<Calendar[]> {
 	const list = sanitizeCalendars(await api.get<unknown>('/calendar/calendars'));
