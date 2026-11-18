@@ -425,7 +425,7 @@ func TestDeviceRouteRights(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	routes := deviceRoutes(ts)
-	if len(routes) != 6 {
+	if len(routes) != 10 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {
@@ -458,7 +458,7 @@ func TestDeviceRouteRights(t *testing.T) {
 			t.Errorf("%s %s through the cluster: %d %s", rt[0], rt[1], rec.Code, rec.Body)
 		}
 		// The web session reaches the handler.
-		if res, body := ts.request(rt[0], rt[1], map[string]any{}); strings.Contains(string(body), "browser_session_required") || res.StatusCode == http.StatusNotFound && !strings.Contains(string(body), "device_not_found") {
+		if res, body := ts.request(rt[0], rt[1], map[string]any{}); strings.Contains(string(body), "browser_session_required") || res.StatusCode == http.StatusNotFound && !strings.Contains(string(body), "device_not_found") && !strings.Contains(string(body), "profile_link_not_found") {
 			t.Errorf("%s %s from the web UI: %d %s", rt[0], rt[1], res.StatusCode, body)
 		}
 	}

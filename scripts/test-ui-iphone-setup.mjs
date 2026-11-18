@@ -10,6 +10,12 @@
 // is asked; "Entziehen …" asks in a dialog with the danger button left of
 // "Abbrechen", and Enter never revokes. The servers stand in the order
 // Let's Encrypt, Tailscale (recommended, as text), home network.
+// 1.13: "Mit Profil einrichten" above it (GET/POST /account/devices/profile,
+// GET/DELETE …/profile/{id}, the fetch over /api/v1/iphone-profile/{token}):
+// name, server, holidays, signed or not in words, the account password in a
+// dialog, then QR code, link, validity, download and the steps with the note
+// on the 15-minute sync; at 1440 and 390 px, light and dark; the token never
+// in the browser's storage; a fetched profile reads the devices again.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5211 node scripts/test-ui-iphone-setup.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -29,6 +35,7 @@ const errors = [];
 const create = fixtureFactory(browser, errors);
 const PATH = "/calendar/iphone";
 const PASSWORD = "k7qm-2xrp-9tfl-c4wn-hb3s-m8vd-q2ze";
+const TOKEN = "Tq3x9vK2bLm8NpR4sW6yZ1aC5dE7fG0hJ-iU_oQ2eRt";
 
 /** Isolated answers of the device passwords and the setup. */
 function deviceState({ certificate = "valid" } = {}) {
@@ -94,6 +101,14 @@ function deviceState({ certificate = "valid" } = {}) {
     },
     setupError: false,
     requests: [],
+    // 1.13: the profile.
+    profileInfo: {
+      signed: certificate === "valid",
+      signer: certificate === "valid" ? "nas.example.org" : "",
+      ttl: 600,
+      states: [],
+    },
+    linkState: "pending",
   };
 }
 
@@ -188,6 +203,53 @@ async function open({
           headers: { "Cache-Control": "no-store" },
         });
       }
+      if (path === "/account/devices/profile" && method === "GET")
+        return route.fulfill({ json: state.profileInfo });
+      if (path === "/account/devices/profile" && method === "POST") {
+        const body = req.postDataJSON();
+        if (
+          body.password !== "richtig" ||
+          (twoFactor && body.code !== "123456")
+        )
+          return route.fulfill({
+            status: 403,
+            json: { error: { code: "wrong_password", message: "x" } },
+          });
+        state.linkState = "pending";
+        state.linkDevice = body.name;
+        const host = body.server || "nas.example.org";
+        return route.fulfill({
+          json: {
+            link: {
+              id: "p_1",
+              device: body.name,
+              expires: new Date(Date.now() + 600_000).toISOString(),
+              state: "pending",
+            },
+            url: `https://${host}/api/v1/iphone-profile/${TOKEN}`,
+            path: `/api/v1/iphone-profile/${TOKEN}`,
+            signed: state.profileInfo.signed,
+          },
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+      const link = path.match(/^\/account\/devices\/profile\/([^/]+)$/)?.[1];
+      if (link === "p_1" && method === "GET")
+        return route.fulfill({
+          json: {
+            id: "p_1",
+            device: state.linkDevice,
+            expires: new Date(Date.now() + 600_000).toISOString(),
+            state: state.linkState,
+            ...(state.linkState === "failed"
+              ? { code: "profile_link_void" }
+              : {}),
+          },
+        });
+      if (link === "p_1" && method === "DELETE") {
+        state.linkState = "cancelled";
+        return route.fulfill({ status: 204, body: "" });
+      }
       const id = path.match(/^\/account\/devices\/([^/]+)$/)?.[1];
       if (id && method === "DELETE") {
         state.devices = state.devices.filter((d) => d.id !== id);
@@ -199,6 +261,20 @@ async function open({
       });
     },
   );
+  // The profile itself, as the iPhone (or "Herunterladen") fetches it.
+  await made.ctx.route("**/api/v1/iphone-profile/**", (route) => {
+    state.requests.push(["GET", new URL(route.request().url()).pathname, null]);
+    state.linkState = "fetched";
+    return route.fulfill({
+      status: 200,
+      body: "<plist/>",
+      headers: {
+        "Content-Type": "application/x-apple-aspen-config",
+        "Content-Disposition": 'attachment; filename="TitanOS.mobileconfig"',
+        "Cache-Control": "no-store",
+      },
+    });
+  });
   if (twoFactor)
     await made.ctx.route("**/api/v1/session", (route) =>
       route.fulfill({
@@ -239,7 +315,7 @@ async function until(fn, what, ms = 8000) {
 /** The page is there with its devices and servers. */
 async function ready(target) {
   await target.getByText("iPhone von Alex").first().waitFor();
-  await target.getByText("192.168.1.20").first().waitFor();
+  await target.locator("#details").getByText("192.168.1.20").first().waitFor();
 }
 /** The texts of the server rows, in order. */
 const serverValues = (target) =>
@@ -299,7 +375,7 @@ try {
 
     // A new device: the name, then the account password in a dialog.
     await page.locator("#dev-name").fill("iPad von Alex");
-    await page.getByRole("button", { name: "Erzeugen …" }).click();
+    await page.getByRole("button", { name: "Erzeugen …", exact: true }).click();
     const dialog = page.locator("dialog[open]");
     await dialog.waitFor();
     assert.equal(
@@ -481,7 +557,7 @@ try {
     const { page, ctx } = await open({ width, theme, lang });
     await page.goto(base + PATH);
     await page.getByText("iPhone von Alex").first().waitFor();
-    await page.getByText("192.168.1.20").first().waitFor();
+    await page.locator("#details").getByText("192.168.1.20").first().waitFor();
     if (lang === "en")
       assert.match(
         await page.locator("#steps").innerText(),
@@ -546,7 +622,7 @@ try {
     await shot(page, `phone-${theme}`);
     // The new password at 390 px breaks between its groups only.
     await page.locator("#dev-name").fill("iPad von Alex");
-    await page.getByRole("button", { name: "Erzeugen …" }).click();
+    await page.getByRole("button", { name: "Erzeugen …", exact: true }).click();
     await page.locator("dialog[open] input[type=password]").fill("richtig");
     await page
       .locator("dialog[open]")
@@ -556,6 +632,180 @@ try {
     await sound(page, `phone ${theme} with the new password`);
     await page.locator(".shown").scrollIntoViewIfNeeded();
     await shot(page, `phone-${theme}-password`, false);
+    await ctx.close();
+  }
+
+
+  // ---- 1.13: the profile, 1440 and 390 px, light and dark ----
+  for (const [width, theme, signed] of [
+    [1440, "hell", true],
+    [1440, "graphit", false],
+    [390, "hell", false],
+    [390, "graphit", true],
+  ]) {
+    const phone = width < 600;
+    const { page, state, ctx } = await open({
+      width,
+      theme,
+      phone,
+      change: (s) => {
+        s.profileInfo.signed = signed;
+        s.profileInfo.signer = signed ? "nas.example.org" : "";
+      },
+    });
+    const name = `profile ${width} ${theme}`;
+    await page.goto(base + PATH);
+    await ready(page);
+    const group = page.locator("#profile");
+    await group.waitFor();
+    // The profile comes first, the manual way below it.
+    const [p, d] = [
+      await group.boundingBox(),
+      await page.locator("#devices").boundingBox(),
+    ];
+    assert.ok(p.y < d.y, `${name}: profile above the manual way`);
+    assert.match(
+      await page.locator(".manual").innerText(),
+      /Oder manuell einrichten/,
+    );
+    // "iPhone von Alex" is taken (another case counts as the same name).
+    await until(
+      async () => (await page.locator("#profile-name").inputValue()) === "iPhone von alex 2",
+      "a free name suggested",
+    );
+    // The first server iOS trusts is chosen.
+    assert.equal(
+      await page.locator("#profile-server").inputValue(),
+      "nas.example.org",
+    );
+    const text = await group.innerText();
+    assert.match(
+      text,
+      signed
+        ? /Signiert[\s\S]*nas\.example\.org[\s\S]*„Überprüft“/
+        : /Nicht signiert[\s\S]*„Nicht verifiziert“/,
+    );
+    assert.match(
+      text,
+      /Einstellungen › Kalender › Accounts › Datenabgleich: Alle 15 Minuten; in der Kalender-App nach unten ziehen gleicht sofort ab\. Sofort-Push gibt es nicht\./,
+    );
+    assert.match(text, /Einstellungen › Profil geladen › Installieren/);
+    await page.locator("#profile-holidays").selectOption("de-by");
+    await sound(page, name);
+    await shot(page, `profile-${width}-${theme}`);
+
+    await page.getByRole("button", { name: "Profil erzeugen …" }).click();
+    const dialog = page.locator("dialog[open]");
+    await dialog.waitFor();
+    assert.match(await dialog.innerText(), /Profil für „iPhone von alex 2“/);
+    await dialog.locator('input[type="password"]').fill("falsch");
+    await dialog.getByRole("button", { name: "Erzeugen", exact: true }).click();
+    await dialog.getByText("Das aktuelle Passwort ist falsch.").waitFor();
+    await dialog.locator('input[type="password"]').fill("richtig");
+    await dialog.getByRole("button", { name: "Erzeugen", exact: true }).click();
+    await group.locator("svg.qr").waitFor();
+    const post = state.requests
+      .filter(([m, path]) => m === "POST" && path === "/account/devices/profile")
+      .at(-1);
+    assert.deepEqual(JSON.parse(post[2]), {
+      name: "iPhone von alex 2",
+      password: "richtig",
+      code: "",
+      server: "nas.example.org",
+      holidays: "de-by",
+      lang: "de",
+    });
+    const made = await group.innerText();
+    assert.ok(
+      made.includes(`https://nas.example.org/api/v1/iphone-profile/${TOKEN}`),
+      `${name}: the link in full`,
+    );
+    // On the iPhone itself the link is tapped (a new tab keeps this page).
+    const anchor = group.locator("a.url");
+    assert.equal(
+      await anchor.getAttribute("href"),
+      `https://nas.example.org/api/v1/iphone-profile/${TOKEN}`,
+    );
+    assert.equal(await anchor.getAttribute("target"), "_blank");
+    assert.match(made, /Gültig bis \d\d:\d\d und nur einmal abrufbar/);
+    assert.match(made, /Datei enthält das Gerätepasswort/);
+    if (!signed) assert.match(made, /„Nicht verifiziert“/);
+    assert.equal(
+      await group.locator("svg.qr").getAttribute("aria-label"),
+      "QR-Code mit dem Link zum Profil für „iPhone von alex 2“",
+    );
+    assert.ok(
+      !(await stored(page)).includes(TOKEN.slice(0, 12)),
+      `${name}: token in the browser's storage`,
+    );
+    await sound(page, `${name} with the link`);
+    await group.scrollIntoViewIfNeeded();
+    await shot(page, `profile-${width}-${theme}-link`, false);
+    if (phone) {
+      const small = await page.evaluate(() =>
+        [...document.querySelectorAll("#profile button, #profile input, #profile select, #profile a")]
+          .filter((el) => el.getClientRects().length)
+          .map((el) => [el.textContent.trim() || el.id, el.getBoundingClientRect()])
+          .filter(([, r]) => r.height < 44)
+          .map(([n, r]) => `${n} ${Math.round(r.width)}x${Math.round(r.height)}`),
+      );
+      assert.deepEqual(small, [], `${name}: targets under 44 px`);
+    }
+
+    const lists = () =>
+      state.requests.filter(([m, path]) => m === "GET" && path === "/account/devices").length;
+    const before = lists();
+    if (theme === "hell") {
+      // "Herunterladen" fetches the same link here.
+      const download = page.waitForEvent("download");
+      await group.getByRole("button", { name: "Herunterladen" }).click();
+      assert.equal((await download).suggestedFilename(), "TitanOS.mobileconfig");
+      assert.ok(
+        state.requests.some(([, path]) => path === `/api/v1/iphone-profile/${TOKEN}`),
+        "download over the link",
+      );
+    } else {
+      // The iPhone fetched it.
+      state.linkState = "fetched";
+    }
+    await group.getByText("Das iPhone hat das Profil abgeholt.").waitFor({ timeout: 8000 });
+    await until(async () => lists() > before, "devices read again");
+    await sound(page, `${name} fetched`);
+    await shot(page, `profile-${width}-${theme}-fetched`, false);
+    // A new link: the form again.
+    await group.getByRole("button", { name: "Neuen Link erzeugen" }).click();
+    await page.locator("#profile-name").waitFor();
+    await ctx.close();
+  }
+
+  // ---- A link discarded, one that failed, and English ----
+  {
+    const { page, state, ctx } = await open({ theme: "graphit", lang: "en" });
+    await page.goto(base + PATH);
+    await page.locator("#profile").waitFor();
+    assert.equal(await page.locator("#profile-name").inputValue(), "iPhone of alex");
+    assert.match(
+      await page.locator("#profile").innerText(),
+      /Fetch New Data: Every 15 Minutes[\s\S]*There is no instant push\./,
+    );
+    await page.getByRole("button", { name: "Make profile …" }).click();
+    await page.locator('dialog[open] input[type="password"]').fill("richtig");
+    await page.locator("dialog[open]").getByRole("button", { name: "Make", exact: true }).click();
+    await page.locator("#profile svg.qr").waitFor();
+    await page.getByRole("button", { name: "Discard link" }).click();
+    await page.getByText("The link is discarded. No device was made.").waitFor();
+    assert.ok(
+      state.requests.some(([m, path]) => m === "DELETE" && path === "/account/devices/profile/p_1"),
+      "discarded on the NAS",
+    );
+    await page.getByRole("button", { name: "Make a new link" }).click();
+    await page.getByRole("button", { name: "Make profile …" }).click();
+    await page.locator('dialog[open] input[type="password"]').fill("richtig");
+    await page.locator("dialog[open]").getByRole("button", { name: "Make", exact: true }).click();
+    await page.locator("#profile svg.qr").waitFor();
+    state.linkState = "failed";
+    await page.getByText(/No profile handed out: The login or the account changed/).waitFor({ timeout: 8000 });
+    await sound(page, "profile failed en");
     await ctx.close();
   }
 

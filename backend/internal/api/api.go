@@ -55,6 +55,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/pim/devices"
+	"github.com/ra5on/TitanOS/backend/internal/pim/profile"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
@@ -299,6 +300,11 @@ type Server struct {
 	// devices: the device passwords of T-Kalender and Kontakte (RAM of
 	// what the stick holds, "last synced"; devices.go).
 	devices *devices.Manager
+	// profileLinks: the one-time links of the iPhone profile (RAM only,
+	// devices_profile.go); profileSigner replaces the certificate it is
+	// signed with in tests.
+	profileLinks  profile.Links
+	profileSigner func() *tls.Certificate
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
