@@ -74,16 +74,28 @@ func (s *session) streaming() {
 
 type connPool struct {
 	mu       sync.Mutex
-	sessions map[string]*session
+	sessions map[poolKey]*session
+	// single: mailboxes whose provider refused a second connection (by
+	// key(user, id)), until when; their background work shares the one
+	// of the page (lanes.go).
+	single map[string]time.Time
+	// folders: the folder counts kept a short while (lanes.go).
+	folders folderCache
+}
+
+// poolKey names a connection of the web UI: the mailbox and its lane.
+type poolKey struct {
+	user, id string
+	lane     lane
 }
 
 func key(user, id string) string { return user + "\x00" + id }
 
-func (p *connPool) get(k string) *session {
+func (p *connPool) get(k poolKey) *session {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.sessions == nil {
-		p.sessions = map[string]*session{}
+		p.sessions = map[poolKey]*session{}
 	}
 	s := p.sessions[k]
 	if s == nil {
@@ -97,21 +109,33 @@ func (p *connPool) get(k string) *session {
 
 // current tells whether s is still the session of its key (a removed
 // mailbox, a forgotten account or a taken grant closed the pool's).
-func (p *connPool) current(k string, s *session) bool {
+func (p *connPool) current(k poolKey, s *session) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.sessions[k] == s
 }
 
-// close ends the connection of a mailbox (all of an account with id "").
+// close ends the connections of a mailbox, every lane (all of an account
+// with id ""), and forgets that its provider refused a second one.
 func (p *connPool) close(user, id string) {
 	p.mu.Lock()
 	var gone []*session
 	for k, s := range p.sessions {
-		u, i, _ := strings.Cut(k, "\x00")
-		if u == user && (id == "" || i == id) {
+		if k.user == user && (id == "" || k.id == id) {
 			gone = append(gone, s)
 			delete(p.sessions, k)
+		}
+	}
+	for k := range p.single {
+		u, i, _ := strings.Cut(k, "\x00")
+		if u == user && (id == "" || i == id) {
+			delete(p.single, k)
+		}
+	}
+	for k := range p.folders.m {
+		u, i, _ := strings.Cut(k, "\x00")
+		if u == user && (id == "" || i == id) {
+			delete(p.folders.m, k)
 		}
 	}
 	p.mu.Unlock()
@@ -243,8 +267,27 @@ func tlsError(err error) error {
 }
 
 // withIMAP runs work on the web UI's connection of a mailbox within limit;
-// a broken connection is closed and made anew next time.
+// a broken connection is closed and made anew next time. Work of a
+// context marked background (lanes.go: the folder counts, the search over
+// all folders) runs on a second connection, so that it never holds up
+// opening a mail.
 func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Duration, work func(c *imapclient.Client, s *session) error) error {
+	if laneOf(ctx) == laneBackground {
+		return m.withBackground(ctx, user, id, limit, work)
+	}
+	// The page did something: counts may change, also while it runs (a
+	// count taken meanwhile on the background lane is not kept as the one
+	// after it).
+	m.events.touch(user, id)
+	defer m.events.touch(user, id)
+	return m.withLane(ctx, user, id, laneUI, limit, work)
+}
+
+// withLane is withIMAP on one connection of the mailbox. A refused login
+// on the background lane is errSecondRefused and never marks the
+// mailbox's login as failed (a provider's limit of connections, not a
+// wrong password).
+func (m *Manager) withLane(ctx context.Context, user, id string, ln lane, limit time.Duration, work func(c *imapclient.Client, s *session) error) error {
 	if !m.Allowed(user) {
 		return ErrDisabled
 	}
@@ -258,7 +301,8 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	// The connection first, then a turn of the account's commands: a
 	// request that waits for a mailbox busy with a download holds no
 	// turn meanwhile.
-	s := m.conns.get(key(user, id))
+	pk := poolKey{user, id, ln}
+	s := m.conns.get(pk)
 	if err := s.lock(ctx); err != nil {
 		return err
 	}
@@ -299,6 +343,9 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 		}
 		c, budget, err := m.connect(ctx, user, mb, password, nil)
 		if err != nil {
+			if ln == laneBackground && ctx.Err() == nil {
+				return fmt.Errorf("%w: %w", errSecondRefused, err)
+			}
 			if errors.Is(err, ErrAuthFailed) {
 				m.setAuthFailed(user, mb)
 			}
@@ -321,7 +368,7 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	} else if ctx.Err() != nil && err != nil {
 		err = ErrTimeout
 	}
-	if err != nil && !keepsConnection(err) || !m.conns.current(key(user, id), s) {
+	if err != nil && !keepsConnection(err) || !m.conns.current(pk, s) {
 		// Broken, or the mailbox, the account or the grant went away while
 		// the request ran: nothing stays connected for it.
 		s.kill()

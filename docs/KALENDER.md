@@ -94,7 +94,8 @@ Alle Web-Routen unter `/api/v1`, Bereich `pimDataArea` (`api/pim_data.go`) bzw. 
 | `POST /calendar/calendars` | anlegen (`name`, `color`); Id aus dem Namen (`[a-z0-9-]`, Umlaute ausgeschrieben), Farbe ab Werk `#7c3aed` |
 | `PUT /calendar/calendars/{id}` | Name, Farbe, Reihenfolge |
 | `DELETE /calendar/calendars/{id}` | `204`; der letzte → `409 calendar_last`; `geburtstage` → `403 calendar_read_only` |
-| `GET /calendar/events?from=&to=&calendars=` | Vorkommen im Fenster (≤ 400 Tage), ohne `calendars` alle nicht ausgeblendeten und die Geburtstage; höchstens die frühesten 10 000 (sonst `truncated`, die Seite sagt es); `{events, truncated, birthdaysUnavailable?}` |
+| `GET /calendar/events?from=&to=&calendars=&full=` | Vorkommen im Fenster (≤ 400 Tage), ohne `calendars` alle nicht ausgeblendeten und die Geburtstage; höchstens die frühesten 10 000 (sonst `truncated`, die Seite sagt es); `{events, truncated, birthdaysUnavailable?}`. Seit 1.13: `full=1` liefert gekürzte Titel und Orte (`clipped`) ganz (höchstens 200 Vorkommen, sonst bleibt `clipped:true`), `ETag` und `If-None-Match` → `304` ohne Körper (siehe „Leistung und Live-Aktualisierung“), ab 32 KB gzip |
+| `GET /calendar/stream` | seit 1.13: Server-Sent Events der eigenen Kalender und Kontakte (siehe „Leistung und Live-Aktualisierung“) |
 | `GET /calendar/events/{cal}/{obj}?occurrence=` | ein Termin oder Vorkommen mit Notiz, `etag`, `occurrences` (Zahl, wenn die Regel endet) |
 | `POST /calendar/events` | anlegen; Datei mit PRODID TitanOS, zufälliger UID, VTIMEZONE |
 | `PUT /calendar/events/{cal}/{obj}` | ändern mit `etag` (Pflicht), `scope` `this|following|all`, `occurrence`; anderer `calendar` = verschieben (nur ganze Reihe); alter Stand → `409 calendar_conflict` mit `current` |
@@ -111,12 +112,12 @@ Zeiten: zeitgebunden RFC 3339 mit dem Offset der Ereigniszone, ganztägig `YYYY-
 | Route | Zweck |
 |---|---|
 | `GET /contacts/books` | das eine Buch `kontakte` mit Zahl (ohne Gruppen) |
-| `GET /contacts?q=&book=` | Liste ohne Gruppen, sortiert nach DIN 5007-1 (Faltung, ohne `x/text/collate`), Suche wie oben, `birthdaySoon` für die Woche Mo–So |
+| `GET /contacts?q=&book=` | Liste ohne Gruppen, sortiert nach DIN 5007-1 (Faltung, ohne `x/text/collate`), Suche wie oben, `birthdaySoon` für die Woche Mo–So; seit 1.13 mit `ETag` (`If-None-Match` → `304`) und ab 32 KB gzip |
 | `GET /contacts/{book}/{id}` | ein Kontakt (Felder, Arten, eigenes iPhone-Label nur lesend, `url` nur http(s), `modified`) |
 | `POST /contacts` | anlegen (vCard 3.0, UID = UUID) |
 | `PUT /contacts/{book}/{id}` | ändern mit `etag`; nur abweichende Felder, unveränderte Zeilen bleiben byte-gleich; alter Stand → `409 contacts_conflict` mit `current` |
 | `DELETE /contacts/{book}/{id}?etag=` | `204` |
-| `GET /contacts/{book}/{id}/photo` | Bild als JPEG (≤ 512 px, `nosniff`, `CSP: sandbox`, `private, no-cache`); aus dem Zwischenspeicher oder neu aus der Karte |
+| `GET /contacts/{book}/{id}/photo` | Bild als JPEG (≤ 512 px, `nosniff`, `CSP: sandbox`, `private, no-cache`); aus dem Zwischenspeicher oder neu aus der Karte. Seit 1.13: `ETag` = ETag der Karte, `If-None-Match` → `304` aus dem RAM; mit `?v=<ETag der Karte>` `private, max-age=604800, immutable` |
 | `PUT /contacts/{book}/{id}/photo?etag=` | Bild hochladen (multipart) oder aus den Dateien des NAS (`{root, path}` mit den Dateirechten des Kontos), bis 20 MB; neu kodiert als JPEG ≤ 512 px, ≤ 256 KiB in die Karte |
 | `DELETE /contacts/{book}/{id}/photo?etag=` | Bild entfernen |
 | `GET /contacts/suggestions?q=` | gelernte Adressen aus T-Mail, die in keinem Kontakt stehen (≤ 500); ohne Freigabe von T-Mail `[]` |
@@ -152,6 +153,22 @@ Dazu: `GET /users/{name}/agent-data` nennt für den Löschdialog `calendarEvents
 - **Schreiben:** nur VEVENT (VTODO, VJOURNAL → `403 supported-calendar-component`), gültige Daten (`403 valid-calendar-data`/`valid-address-data`), eine UID je Datei; eine andere UID beim Überschreiben → `409 no-uid-conflict`. Grenzen `413 max-resource-size`, `507` bei voller Sammlung. Eine Karte mit Bild über 512 KiB vom Gerät wird verkleinert gespeichert und **ohne ETag** beantwortet (das Gerät holt den neuen Stand); ein nicht lesbares Bild (HEIC …) bleibt, wie es kam.
 - **Körper:** höchstens 256 KiB, 60 s Zeit, Tiefe 32, 20 000 Elemente, kein `DOCTYPE`/`ENTITY`. Vor der Anmeldung wird kein Körper gelesen.
 - **Journal:** nur bei `500` und abgebrochenem Multiget eine Zeile mit Konto, Gerätename, Sammlung, Methode und Fehlercode; nie Titel, Orte, Namen aus Karten. Abgleiche stehen nicht im Aktivitätsprotokoll (das greift nur unter `/api/v1/`); Anlegen und Entziehen von Geräten schon.
+
+## Leistung und Live-Aktualisierung (1.13)
+
+Messungen, Methode und Grenzen: `docs/validation/performance-113.md`.
+
+- **Lesen ohne Sperre:** `pim/store` liest Einträge und Bilder außerhalb der Sammlungssperre (`Store.Reader`, `PhotoTag`) und prüft den ETag danach; eine Platte, die anläuft, hält Liste, ctag, `sync-collection` und Geburtstage nicht mehr an. Ein Multiget und die Exporte öffnen den Ordner einmal je Anfrage. **Schreiben** hält die Sammlung weiter für Datei, `fsync` und `state.json` (Grenze, siehe dort).
+- **Vorbereitetes Adressbuch:** Liste, Zahl der Kontakte, Geburtstagskalender und „Geburtstag diese Woche“ kommen aus einem Zwischenspeicher je Konto (`api/pim_cache.go`), gültig für den ctag des Buchs und das Volume; jede Änderung von jeder Seite macht ihn von selbst ungültig. Nur RAM.
+- **ETag/304:** `GET /contacts` und `GET /calendar/events` antworten mit `ETag` (aus ctags, `q` bzw. Fenster/`calendars`/`full`, der Woche, der Zone) und auf `If-None-Match` mit `304` ohne Körper und ohne Abfrage. Die Körper bleiben `Cache-Control: no-store`: der Browser behält nichts, **die Seite schickt den zuletzt erhaltenen ETag selbst** (`apiFetch` mit Kopf `If-None-Match`; bei `304` ist `res.ok` falsch und der Körper leer – die eigene Liste weiterverwenden).
+- **Ganze Titel in einer Anfrage:** `GET /calendar/events?...&full=1` statt bis zu 40 Einzelabrufen von `GET /calendar/events/{cal}/{obj}`; Vorkommen über der Grenze von 200 bleiben `clipped:true` und können wie bisher einzeln geholt werden.
+- **Live-Aktualisierung:** `GET /api/v1/calendar/stream` (nur Web-Sitzung dieses Knotens wie alle Routen hier, nicht in `publicRoutes`, kein Token/MCP/Agent, ohne Store `503 calendar_unavailable`), `text/event-stream`, `no-store`, alle 20 s `: keep-alive`. Ereignisse:
+  - `ready` `{account, generations: {"calendar/<id>": ctag, "contacts/kontakte": ctag}}` beim Öffnen,
+  - `pim` `{account, kind: "contacts"|"calendar", collection, generation}` nach jeder Änderung einer eigenen Sammlung – über die Web-API, CalDAV/CardDAV vom iPhone, den Agenten oder einen Import (`Store.OnChanged`); `generation` ist der ctag danach (`""`: Sammlung gelöscht). Änderungen werden 250 ms gesammelt und je Sammlung einmal geschickt (ein iPhone, das 2000 Kontakte hochlädt, macht wenige Ereignisse),
+  - `resync` `{account}`: Ereignisse mussten ausfallen – alles neu lesen.
+
+  Nur Änderungen des eigenen Kontos, höchstens 8 Ströme je Konto (ein neuer beendet den ältesten), Ende mit der Anmeldung und beim Löschen des Kontos. **Abonnieren in der Oberfläche:** `watchPim(onEvent)` aus `web/src/lib/pim/live.ts` (wie `watchMail`: `fetch`, Wiederaufbau nach 1 s … 30 s, geschlossen solange die Seite verborgen ist, danach `resync`); Rückgabe beendet. Der Kalender lädt bei `kind:"contacts"` die Geburtstage (bzw. bei `kind:"calendar"` die Termine) neu, wenn `generation` von der gelesenen abweicht; die Kontakte bei `kind:"contacts"` die Liste (mit `If-None-Match`). Den bisherigen `BroadcastChannel` (`announceChange`) ersetzt das nicht; er bleibt für Fenster ohne Strom.
+- **Große Listen** gehen ab 32 KB mit gzip hinaus, wenn der Browser es annimmt (2000 Kontakte 398 → 42 KB, ein Monat 941 → 73 KB).
 
 ## Speicher
 

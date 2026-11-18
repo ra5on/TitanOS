@@ -17,6 +17,7 @@ func (s *Server) registerPIM(mux *routeMux) {
 	s.pimDataArea().register(mux, s.guards())
 	// 1.13: the profile of the iPhone (one-time link) and the holidays.
 	s.profileArea().register(mux, s.guards())
+	s.pimLiveArea().register(mux, s.guards())
 	dav := davsync.New(s.opts.PIM, s.devices)
 	dav.RemoteIP = remoteIP
 	for _, pattern := range davsync.Patterns {

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
@@ -128,8 +129,14 @@ func listFolders(c *imapclient.Client, status bool) ([]Folder, error) {
 		}
 	}
 	if status && !listStatus {
+		// All STATUS at once, then the answers (1.13): one round trip to
+		// the provider instead of one per folder.
+		cmds := make([]*imapclient.StatusCommand, len(out))
 		for i := range out {
-			data, err := c.Status(out[i].Path, statusOpts).Wait()
+			cmds[i] = c.Status(out[i].Path, statusOpts)
+		}
+		for i, cmd := range cmds {
+			data, err := cmd.Wait()
 			if err != nil {
 				continue
 			}
@@ -153,13 +160,22 @@ func count(n *uint32) int {
 }
 
 // Folders lists the folders of a mailbox with their counts.
+// They come from the background connection (lanes.go), or kept from a
+// moment ago when nothing happened in the mailbox since.
 func (m *Manager) Folders(ctx context.Context, user, id string) ([]Folder, error) {
+	gen := m.events.generation(user, id)
+	if out, ok := m.cachedFolders(user, id, gen, time.Now()); ok {
+		return out, nil
+	}
 	var out []Folder
-	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, _ *session) error {
+	err := m.withIMAP(background(ctx), user, id, commandTimeout, func(c *imapclient.Client, _ *session) error {
 		var err error
 		out, err = listFolders(c, true)
 		return err
 	})
+	if err == nil {
+		m.keepFolders(user, id, out, gen, time.Now())
+	}
 	for _, f := range out {
 		if f.Role == RoleInbox {
 			m.setUnread(user, id, f.Unread)

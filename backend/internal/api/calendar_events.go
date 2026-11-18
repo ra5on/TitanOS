@@ -2,12 +2,14 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/pim/calweb"
+	"github.com/ra5on/TitanOS/backend/internal/pim/cardweb"
 	"github.com/ra5on/TitanOS/backend/internal/pim/recur"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
@@ -53,6 +55,14 @@ type calendarEventList struct {
 // handleEvents lists the occurrences of [from, to) (at most 400 days) of
 // the calendars named, or of all that are not hidden (the birthdays
 // included unless hidden), sorted by start.
+//
+// 1.13: full=1 gives the whole title and place of clipped events (read
+// from their files, at most maxFilled occurrences; the rest stays
+// clipped), so the page needs no request per event. The answer has an
+// ETag of the calendars' and the address book's ctags, the window, the
+// zone and full; sent back as If-None-Match it is 304 without a body and
+// without any query (the page keeps what it has; the answer stays
+// no-store).
 func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 	store, ok := a.calendarStore(w)
 	if !ok {
@@ -65,6 +75,7 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "calendar_window", calendarMessages["calendar_window"])
 		return
 	}
+	full := r.URL.Query().Get("full") == "1"
 	user := currentUser(r).Name
 	cols, err := store.Collections(pimstore.Calendar, user)
 	if err != nil {
@@ -98,6 +109,36 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		birthdays = !slices.Contains(hidden, calweb.BirthdaysID)
 	}
+	parts := []string{"events", user, volumeOf(store), local.String(), from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), fmt.Sprint(full)}
+	for _, id := range ids {
+		for _, c := range cols {
+			if c.ID == id {
+				parts = append(parts, id, c.CTag)
+			}
+		}
+	}
+	var book *cardweb.ListIndex
+	var bookErr error
+	if birthdays {
+		var ctag string
+		book, ctag, bookErr = a.cache.book(store, user, pimstore.DefaultBook)
+		switch {
+		case bookErr == nil:
+			parts = append(parts, calweb.BirthdaysID, ctag)
+		case explicit:
+			calendarFail(w, r, calweb.BirthdaysID, bookErr, "calendar_not_found")
+			return
+		default:
+			parts = append(parts, calweb.BirthdaysID, "unavailable")
+		}
+	}
+	etag := pimETag(parts...)
+	w.Header().Set("ETag", `"`+etag+`"`)
+	if notModified(r, etag) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	out := calendarEventList{Events: []calweb.View{}}
 	for _, id := range ids {
 		occs, cut, err := store.Query(user, id, from, to, pimstore.MaxQueryOccurrences)
@@ -117,21 +158,66 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if birthdays {
-		contacts, err := store.Objects(pimstore.Contacts, user, pimstore.DefaultBook)
-		switch {
-		case err == nil:
-			out.Events = append(out.Events, calweb.Birthdays(contacts, from, to, local)...)
-		case explicit:
-			calendarFail(w, r, calweb.BirthdaysID, err, "calendar_not_found")
-			return
-		default:
+		if bookErr == nil {
+			out.Events = append(out.Events, book.Birthdays().Between(from, to, local)...)
+		} else {
 			out.BirthdaysUnavailable = true
 		}
 	}
 	var cut bool
 	out.Events, cut = earliestViews(out.Events, pimstore.MaxQueryOccurrences, local)
 	out.Truncated = out.Truncated || cut
-	writeJSON(w, http.StatusOK, out)
+	if full {
+		a.fillClipped(store, user, out.Events, local)
+	}
+	writeJSONList(w, r, out)
+}
+
+// maxFilled bounds the clipped occurrences full=1 reads in whole.
+const maxFilled = 200
+
+// fillClipped puts the whole title and place into clipped events: each
+// file read once (the volume opened once per calendar), each occurrence
+// opened from it. An event changed meanwhile, unreadable or beyond
+// maxFilled stays clipped (the page may still ask for it alone).
+func (a pimDataArea) fillClipped(store *pimstore.Store, user string, views []calweb.View, local *time.Location) {
+	readers := map[string]*pimstore.Reader{}
+	defer func() {
+		for _, rd := range readers {
+			rd.Close()
+		}
+	}()
+	files := map[string]pimstore.Object{}
+	filled := 0
+	for i := range views {
+		v := &views[i]
+		if !v.Clipped || v.Kind != "event" || filled == maxFilled {
+			continue
+		}
+		filled++
+		key := v.Calendar + "/" + v.ID
+		obj, ok := files[key]
+		if !ok {
+			rd := readers[v.Calendar]
+			if rd == nil {
+				var err error
+				if rd, err = store.Reader(pimstore.Calendar, user, v.Calendar); err != nil {
+					continue
+				}
+				readers[v.Calendar] = rd
+			}
+			obj, _ = rd.Get(v.ID) // unreadable: an empty object, stays clipped
+			files[key] = obj
+		}
+		if obj.ETag == "" || obj.ETag != v.ETag {
+			continue
+		}
+		whole, err := calweb.Open(obj.Data, v.Occurrence, local)
+		if err != nil {
+			continue
+		}
+		v.Title, v.Location, v.Clipped = whole.Title, whole.Location, false
+	}
 }
 
 // earliestViews sorts views by start and keeps the first limit; true when

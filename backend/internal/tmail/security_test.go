@@ -379,7 +379,7 @@ func TestGrantTakenClosesConnections(t *testing.T) {
 	if _, err := e.m.Folders(t.Context(), "alex", id); err != nil {
 		t.Fatal(err)
 	}
-	s := e.m.conns.get(key("alex", id))
+	s := e.m.conns.get(poolKey{"alex", id, laneUI})
 	c := s.client()
 	if c == nil {
 		t.Fatal("no connection")

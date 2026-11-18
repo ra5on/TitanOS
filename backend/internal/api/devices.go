@@ -206,6 +206,8 @@ func (s *Server) devicesRebind(before auth.User) {
 func (s *Server) pimForgetUser(name string) {
 	s.devices.Forget(name)
 	s.profileLinks.Forget(name)
+	s.pimLive.forget(name)
+	s.pimCache.forget(name)
 	if s.opts.PIM != nil {
 		_ = s.opts.PIM.ForgetUser(name) // logged by the package
 	}

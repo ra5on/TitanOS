@@ -117,6 +117,33 @@ var (
 	ErrInvalidMeta = errors.New("pim: invalid collection properties")
 )
 
+// Changed says that a collection changed: an entry written or deleted,
+// its properties, or the collection made or deleted (CTag "" then).
+type Changed struct {
+	Kind       Kind
+	Account    string
+	Collection string
+	// CTag is the collection's ctag after the change (<epoch>-<seq>): the
+	// generation the pages compare with what they read.
+	CTag string
+}
+
+// changed tells OnChanged.
+func (s *Store) changed(kind Kind, account, col string, c *collection) {
+	if s.OnChanged == nil {
+		return
+	}
+	ev := Changed{Kind: kind, Account: account, Collection: col}
+	if c != nil {
+		c.mu.Lock()
+		if !c.deleted {
+			ev.CTag = c.st.CTag()
+		}
+		c.mu.Unlock()
+	}
+	s.OnChanged(ev)
+}
+
 // UIDConflictError names the entry that already has the UID.
 type UIDConflictError struct{ Name string }
 
@@ -156,6 +183,11 @@ type Store struct {
 	// the folder of an account went (journal hint). Nil: no hint.
 	Mounted func() []string
 	Peek    func(volume, feature string) (*os.Root, error)
+	// OnChanged hears every change of a collection or its entries, from
+	// any side (web API, CalDAV/CardDAV, the agent, an import), after the
+	// locks are given back (1.13, the pages' live updates). It must not
+	// block. Nil: nobody listens.
+	OnChanged func(Changed)
 
 	mu         sync.Mutex
 	features   map[Kind]*featureCache

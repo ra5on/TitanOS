@@ -60,8 +60,26 @@ func ParseBDay(raw string) (year int, month time.Month, day int, ok bool) {
 // into [from, to), as all-day occurrences in the zone of the NAS. 29
 // February shows on 28 February in other years.
 func Birthdays(contacts []pimstore.ObjectInfo, from, to time.Time, local *time.Location) []View {
-	var out []View
-	first, last := from.In(local).Year(), to.In(local).Year()
+	return NewBirthdayIndex(contacts).Between(from, to, local)
+}
+
+// BirthdayIndex is the readable birthdays of an address book, parsed
+// once (1.13): the pages ask for them on every view, the index changes
+// only with the book (cached by its ctag).
+type BirthdayIndex struct {
+	list []birthdayOf
+}
+
+type birthdayOf struct {
+	name, uid, fn, etag string
+	year                int
+	month               time.Month
+	day                 int
+}
+
+// NewBirthdayIndex reads the birthdays of the contacts (groups left out).
+func NewBirthdayIndex(contacts []pimstore.ObjectInfo) *BirthdayIndex {
+	ix := &BirthdayIndex{}
 	for _, c := range contacts {
 		if c.Group || c.BDay == "" {
 			continue
@@ -70,27 +88,40 @@ func Birthdays(contacts []pimstore.ObjectInfo, from, to time.Time, local *time.L
 		if !ok {
 			continue
 		}
+		ix.list = append(ix.list, birthdayOf{name: c.Name, uid: c.UID, fn: c.FN, etag: c.ETag, year: year, month: month, day: day})
+	}
+	return ix
+}
+
+// Len is the number of contacts with a readable birthday.
+func (ix *BirthdayIndex) Len() int { return len(ix.list) }
+
+// Between are the birthdays that fall into [from, to) (Birthdays).
+func (ix *BirthdayIndex) Between(from, to time.Time, local *time.Location) []View {
+	var out []View
+	first, last := from.In(local).Year(), to.In(local).Year()
+	for _, c := range ix.list {
 		for y := first; y <= last; y++ {
-			if year > 0 && y < year {
+			if c.year > 0 && y < c.year {
 				continue
 			}
-			d := day
-			if month == time.February && d == 29 && time.Date(y, 3, 0, 0, 0, 0, 0, time.UTC).Day() != 29 {
+			d := c.day
+			if c.month == time.February && d == 29 && time.Date(y, 3, 0, 0, 0, 0, 0, time.UTC).Day() != 29 {
 				d = 28
 			}
-			start := time.Date(y, month, d, 0, 0, 0, 0, local)
+			start := time.Date(y, c.month, d, 0, 0, 0, 0, local)
 			end := start.AddDate(0, 0, 1)
 			if !start.Before(to) || !end.After(from) {
 				continue
 			}
-			b := &Birthday{Name: c.FN}
-			if year > 0 {
-				age := y - year
-				b.Year, b.Age = year, &age
+			b := &Birthday{Name: c.fn}
+			if c.year > 0 {
+				age := y - c.year
+				b.Year, b.Age = c.year, &age
 			}
-			out = append(out, View{Kind: "birthday", ID: c.Name, Occurrence: start.Format("20060102"), Calendar: BirthdaysID,
-				UID: c.UID, Title: c.FN, Start: start.Format(dateLayout), End: end.Format(dateLayout), AllDay: true,
-				Recurring: true, Alarms: []int{}, ETag: c.ETag, ReadOnly: true, Birthday: b})
+			out = append(out, View{Kind: "birthday", ID: c.name, Occurrence: start.Format("20060102"), Calendar: BirthdaysID,
+				UID: c.uid, Title: c.fn, Start: start.Format(dateLayout), End: end.Format(dateLayout), AllDay: true,
+				Recurring: true, Alarms: []int{}, ETag: c.etag, ReadOnly: true, Birthday: b})
 		}
 	}
 	slices.SortStableFunc(out, func(a, b View) int {
