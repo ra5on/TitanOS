@@ -225,7 +225,7 @@ try {
     const column = await page.locator("nav.books").innerText();
     assert.match(column, /Adressbücher/);
     assert.match(column, /Kontakte\s*11/);
-    assert.match(column, /Aus T-Mail/);
+    assert.match(column, /Aus Mail/);
     assert.match(column, /Vorschläge aus gesendeten Mails\s*3/);
     // Letters after folding (Krüger under K), one heading per letter.
     const letters = await page
@@ -646,7 +646,7 @@ try {
     await page.getByLabel("Kontakte durchsuchen").fill("beispiel");
     await until(
       async () =>
-        /4 Kontakte und 1 Vorschlag aus T-Mail für „beispiel“/.test(
+        /4 Kontakte und 1 Vorschlag aus Mail für „beispiel“/.test(
           await page.locator("[data-contact-list] .count").innerText(),
         ),
       "count of the hits",
@@ -660,7 +660,7 @@ try {
     );
     assert.match(
       await page.locator("[data-contact-list]").innerText(),
-      /Vorschläge aus T-Mail\s+Adressen, an die du geschrieben hast/,
+      /Vorschläge aus Mail\s+Adressen, an die du geschrieben hast/,
     );
     assert.match(
       await page
@@ -789,7 +789,7 @@ try {
     );
     assert.doesNotMatch(
       await page.locator("nav.books").innerText(),
-      /Vorschläge|T-Mail/,
+      /Vorschläge|Mail/,
     );
     await page.getByLabel("Kontakte durchsuchen").fill("beispiel");
     await until(
@@ -810,7 +810,7 @@ try {
     await page.locator("[data-suggestions-off]").waitFor();
     assert.match(
       await page.locator("[data-suggestions-off]").innerText(),
-      /Für dein Konto ist T-Mail nicht freigegeben/,
+      /Für dein Konto ist Mail nicht freigegeben/,
     );
     assert.equal(await page.locator("[data-suggestion]").count(), 0);
     await sound(page, "without T-Mail suggestions");

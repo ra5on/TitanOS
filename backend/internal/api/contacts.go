@@ -59,7 +59,7 @@ func contactsCode(err error, notFound string) (int, string) {
 var contactsMessages = map[string]string{
 	"contact_not_found":            "no such contact or address book",
 	"contact_photo_not_found":      "the contact has no picture TitanOS can show",
-	"contact_suggestion_not_found": "no such address learned by T-Mail",
+	"contact_suggestion_not_found": "no such address learned by Mail",
 	"contacts_conflict":            "the contact was changed meanwhile",
 	"contact_exists":               "a contact has this address already",
 	"contacts_uid_conflict":        "the contact may not change its UID",

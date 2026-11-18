@@ -15,7 +15,7 @@ func TestPromptRulesAndSkillIndex(t *testing.T) {
 	p := BuildPrompt(in)
 	for _, want := range []string{
 		"Empty is not always \"none\"", "agent_access", "If the person says your answer is wrong", "Do not save a disputed claim",
-		"T-Mail (e-mail) is closed to you", "docs_search", "Ask with ask_user only when a name fits several things",
+		"Mail (the e-mail program) is closed to you", "docs_search", "Ask with ask_user only when a name fits several things",
 		"Not available to you here: docker, photos", "first read its steps with skill_read",
 		"- Is everything closed at home?: Fenster/Türen zu",
 	} {
@@ -39,7 +39,7 @@ func TestPromptRulesAndSkillIndex(t *testing.T) {
 	// The added rules stay short (owner: about 600 characters).
 	added := 0
 	for _, line := range strings.Split(rules, "\n") {
-		for _, k := range []string{"Empty is not always", "If the person says your answer is wrong", "T-Mail (e-mail)", "\"Where/how do I set"} {
+		for _, k := range []string{"Empty is not always", "If the person says your answer is wrong", "Mail (the e-mail program)", "\"Where/how do I set"} {
 			if strings.Contains(line, k) {
 				added += len(line)
 			}

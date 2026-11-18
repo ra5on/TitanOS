@@ -66,7 +66,7 @@ test('a foreign answer gives no list; odd numbers are made safe', () => {
 
 test('1.05: the T-Mail mailboxes go with the account, with or without the volume', () => {
 	i18n.locale = 'de';
-	const line = 'T-Mail-Postfächer (2) mit Servern, Passwörtern, Signaturen, Regeln und Adressbuch';
+	const line = 'Mail-Postfächer (2) mit Servern, Passwörtern, Signaturen, Regeln und Adressbuch';
 	expect(agentDataText(sanitizeAgentData({ ...full, mailAccounts: 2 })!).deleted).toContain(line);
 	expect(
 		agentDataText(sanitizeAgentData({ available: false, mailAccounts: 2 })!).deleted,
@@ -76,7 +76,9 @@ test('1.05: the T-Mail mailboxes go with the account, with or without the volume
 		sanitizeAgentData({ available: true, folder: false, mailAccounts: 1 })!,
 	);
 	expect(only.note).toBe('');
-	expect(agentDataText(sanitizeAgentData(full)!).deleted.join(' ')).not.toContain('T-Mail');
+	expect(agentDataText(sanitizeAgentData(full)!).deleted.join(' ')).not.toContain(
+		'Mail-Postfächer',
+	);
 });
 
 // 1.11: T-Kalender and Kontakte go with the account (TECHNIK 5.7); counted
@@ -86,13 +88,13 @@ test('events and contacts are named with their counts, never 0 when unknown', ()
 	const counted = agentDataText(
 		sanitizeAgentData({ available: true, calendarEvents: 42, contacts: 7 })!,
 	);
-	expect(counted.deleted).toEqual(['Termine in T-Kalender: 42', 'Kontakte: 7']);
+	expect(counted.deleted).toEqual(['Termine im Kalender: 42', 'Kontakte: 7']);
 	expect(counted.note).toBe('');
 	// Without the agent's volume the counts stay.
 	const noAgent = agentDataText(
 		sanitizeAgentData({ available: false, calendarEvents: 3, contacts: 0 })!,
 	);
-	expect(noAgent.deleted).toContain('Termine in T-Kalender: 3');
+	expect(noAgent.deleted).toContain('Termine im Kalender: 3');
 	expect(noAgent.deleted.join(' ')).not.toMatch(/Kontakte: 0/);
 	// Nothing kept: no line, the agent's "nothing" note stays.
 	const none = agentDataText(
@@ -106,7 +108,7 @@ test('events and contacts are named with their counts, never 0 when unknown', ()
 	const lines = agentDataText(unknown).deleted;
 	expect(lines).toHaveLength(1);
 	expect(lines[0]).toMatch(
-		/^Termine und Kontakte aus T-Kalender und Kontakte \(gerade nicht zu zählen/,
+		/^Termine und Kontakte aus den Programmen Kalender und Kontakte \(gerade nicht zu zählen/,
 	);
 	expect(lines[0]).not.toMatch(/\d/);
 	// An older NAS says nothing about them: no line.

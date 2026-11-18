@@ -720,7 +720,7 @@ try {
     await page.locator('[data-pim-state="unavailable"]').waitFor();
     assert.match(
       await page.locator('[data-pim-state="unavailable"]').innerText(),
-      /T-Kalender ist gerade nicht verfügbar/,
+      /Der Kalender ist gerade nicht verfügbar/,
     );
     assert.equal(
       await page.locator("[data-pim-ready], .month, .week").count(),

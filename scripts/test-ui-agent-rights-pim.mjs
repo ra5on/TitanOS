@@ -353,7 +353,7 @@ try {
     const { ctx, page } = await open({ width: 1440, lang: "en" });
     await page.goto(base + "/settings/agent?tab=rights");
     await page
-      .getByText("Events in T-Calendar, all calendars of this account")
+      .getByText("Events in Calendar, all calendars of this account")
       .waitFor();
     assert.equal(
       (
