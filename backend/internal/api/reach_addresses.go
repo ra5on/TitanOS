@@ -157,7 +157,8 @@ func setupAddresses(list []reachAddress, account string, port int, certs setupCe
 			hints = append(hints, hintTailscaleApp)
 			if a.TailscaleCert {
 				cert = certValid
-			} else {
+			} else if net.ParseIP(a.Host) == nil {
+				// Only a name in the tailnet gets a certificate.
 				hints = append(hints, hintTailscaleCert)
 			}
 		case "lan":
@@ -209,8 +210,15 @@ func (s *Server) setupCerts() setupCerts {
 	if info.Kind == tlscert.KindCustom {
 		certs.fallback = certOwn
 	}
-	staging := s.opts.LetsEncrypt != nil && s.opts.LetsEncrypt.Status().CertificateStaging
-	if info.LetsEncrypt == nil || staging {
+	// Staging and another ACME CA (Directory, e.g. step-ca at home) are not
+	// trusted by iOS: such a domain is left out like one without a
+	// certificate.
+	untrusted := false
+	if le := s.opts.LetsEncrypt; le != nil {
+		st := le.Status()
+		untrusted = st.CertificateStaging || st.Settings.Directory != ""
+	}
+	if info.LetsEncrypt == nil || untrusted {
 		return certs
 	}
 	fingerprint := info.LetsEncrypt.Fingerprint

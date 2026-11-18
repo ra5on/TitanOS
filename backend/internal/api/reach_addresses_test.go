@@ -166,7 +166,7 @@ func TestSetupAddressesPortAndCertificate(t *testing.T) {
 	if lan.Certificate != "own" || slices.Contains(lan.Hints, "selfSignedOnce") {
 		t.Errorf("own certificate: %+v", lan)
 	}
-	if ts.Server != "[fd7a:115c::1]:8443" || ts.CalDAV != "https://[fd7a:115c::1]:8443/caldav/bea/" {
+	if ts.Server != "[fd7a:115c::1]:8443" || ts.CalDAV != "https://[fd7a:115c::1]:8443/caldav/bea/" || !reflect.DeepEqual(ts.Hints, []string{"tailscaleApp"}) {
 		t.Errorf("IPv6: %+v", ts)
 	}
 	got = setupAddresses(list, "bea", 443, setupCertsFor())

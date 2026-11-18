@@ -152,7 +152,7 @@
 			<div class="once">
 				<b>{t('iphone.once.title', { name: shown.name })}</b>
 				<span class="pw">
-					<code class="secret" aria-label={t('iphone.password')}
+					<code class="secret"
 						>{#each passwordGroups(shown.password) as g, i (i)}<span class="grp">{g}</span
 							>{/each}</code
 					>
