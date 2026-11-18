@@ -301,3 +301,20 @@ func TestContactWriteKeepsList(t *testing.T) {
 		t.Fatalf("delete: %d %q", res.StatusCode, res.Header.Get("X-List-ETag"))
 	}
 }
+
+// TestContactWriteCTag: a write names the book's ctag after it, one more
+// than before (the page knows then that nothing else changed).
+func TestContactWriteCTag(t *testing.T) {
+	e := newConEnv(t)
+	e.seed("ben.vcf", iosContact)
+	before, err := e.pim.GetCollection(pimstore.Contacts, "alex", pimstore.DefaultBook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var made contactWritten
+	e.do(e.alex, "POST", "/api/v1/contacts", map[string]any{"contact": map[string]any{"first": "Eva"}}, http.StatusCreated, &made)
+	after, _ := e.pim.GetCollection(pimstore.Contacts, "alex", pimstore.DefaultBook)
+	if made.CTag == "" || made.CTag != after.CTag || made.CTag == before.CTag {
+		t.Fatalf("ctag %q, before %q, after %q", made.CTag, before.CTag, after.CTag)
+	}
+}

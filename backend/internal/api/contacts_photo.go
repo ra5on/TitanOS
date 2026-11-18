@@ -307,7 +307,7 @@ func (a pimDataArea) writeContactPhoto(w http.ResponseWriter, r *http.Request, s
 			slog.Warn("Contacts: picture not kept", "account", user, "err", err)
 		}
 	}
-	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: etag, HasPhoto: &has, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user)})
+	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: etag, HasPhoto: &has, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user), CTag: a.ctagOf(store, user, book)})
 }
 
 // reserveRAM takes RAM of the budget for the rest of a request; it

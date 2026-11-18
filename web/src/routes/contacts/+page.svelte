@@ -65,6 +65,8 @@
 		exportVCF,
 		fromSuggestion,
 		keepListTag,
+		knowGeneration,
+		knownGeneration,
 		loadContact,
 		loadContacts,
 		loadDuplicates,
@@ -169,8 +171,8 @@
 		void loadNasZone().then((z) => (zone = z));
 	});
 
-	/** The list again (a 304 when nothing changed) and the side bar. */
-	async function refresh() {
+	/** The list again (a 304 when nothing changed) and the side bar; false when it failed. */
+	async function refresh(): Promise<boolean> {
 		try {
 			const [list, over] = await Promise.all([loadContacts(), loadOverview()]);
 			if (list) all = list;
@@ -178,7 +180,7 @@
 			if (shown.kind !== 'ready') shown = { kind: 'ready' };
 		} catch (err) {
 			notice = failed(err);
-			return;
+			return false;
 		}
 		if (answered) void search(answered);
 		if (sugAll !== null) void loadAllSuggestions();
@@ -186,6 +188,7 @@
 		// The open contact changed elsewhere (an iPhone): read again unless it is being edited.
 		const row = all.find((i) => i.id === contact?.id);
 		if (contact && !editing && row?.etag && row.etag !== contact.etag) void openContact(contact.id);
+		return true;
 	}
 	/** The side bar's counts after a change of this page. */
 	async function refreshOverview() {
@@ -196,14 +199,28 @@
 		}
 	}
 
-	// Live: a change of the address book on a device (or another window) reads the list again.
+	// Live: a change of the address book on a device (or another window)
+	// reads the list again. An event naming the generation the list has
+	// seen (this page's own write) is skipped; "ready" names the
+	// generations when the stream opens (the list read once more with its
+	// ETag, a 304 when nothing changed meanwhile).
 	let liveTimer: ReturnType<typeof setTimeout> | undefined;
+	let liveGen = '';
 	onMount(() => {
 		const stop = watchPim((e) => {
-			if (e.type === 'ready') return;
-			if (e.type === 'pim' && e.kind !== 'contacts') return;
+			if (e.type === 'ready') liveGen = e.generations['contacts/kontakte'] ?? '';
+			else if (e.type === 'pim') {
+				if (e.kind !== 'contacts') return;
+				if (e.collection === 'kontakte' && e.generation && e.generation === knownGeneration())
+					return;
+				liveGen = e.collection === 'kontakte' ? e.generation : '';
+			} else liveGen = '';
 			clearTimeout(liveTimer);
-			liveTimer = setTimeout(() => void refresh(), 300);
+			liveTimer = setTimeout(() => {
+				const gen = liveGen;
+				knowGeneration('');
+				void refresh().then((ok) => ok && knowGeneration(gen));
+			}, 300);
 		});
 		return () => {
 			clearTimeout(liveTimer);
@@ -216,7 +233,7 @@
 		const row = rowOf(saved);
 		if (row) all = upsertItem(all, row);
 		if (row && hits.length) hits = hits.map((h) => (h.id === row.id ? row : h));
-		keepListTag(saved.listETag);
+		keepListTag(saved.listETag, saved.ctag);
 	}
 	function dropRow(id: string) {
 		all = all.filter((i) => i.id !== id);

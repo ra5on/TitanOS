@@ -26,7 +26,14 @@ const bad = () => new ApiError(0, 'invalid_response', 'unexpected answer');
 const one = (id: string) => `/contacts/${BOOK}/${enc(id)}`;
 
 /** A write's answer; `item` (1.13) is the contact's row of the list now. */
-export type Saved = { id: string; book: string; etag: string; item?: unknown; listETag?: string };
+export type Saved = {
+	id: string;
+	book: string;
+	etag: string;
+	item?: unknown;
+	listETag?: string;
+	ctag?: string;
+};
 export type PhotoSaved = Saved & { hasPhoto: boolean };
 
 /** The row of a write's answer, checked (null when titand sent none). */
@@ -72,11 +79,37 @@ export function forgetListTag() {
 	listTag = '';
 }
 /**
- * After a write of this page (its row put in place): the list's ETag
- * titand named with the write, so the live event of the write is a 304.
+ * The book's ctag the shown list has seen (the live stream's "generation"
+ * of contacts/kontakte); '' when unknown.
  */
-export function keepListTag(tag: string | undefined | null) {
-	if (tag) listTag = tag;
+let known = '';
+export function knowGeneration(generation: string) {
+	known = generation;
+}
+export function knownGeneration(): string {
+	return known;
+}
+/** The ctag one write after `ctag` ("<epoch>-<seq>"). */
+export function nextCTag(ctag: string): string {
+	const at = ctag.lastIndexOf('-');
+	const seq = Number(ctag.slice(at + 1));
+	return at > 0 && Number.isInteger(seq) ? `${ctag.slice(0, at)}-${seq + 1}` : '';
+}
+/**
+ * After a write of this page (its row put in place): the list's ETag
+ * titand named with the write is kept only when the book's ctag is the
+ * known one plus this write – then nothing else changed and the live
+ * event of the write is a 304 (or skipped). Otherwise the next read of
+ * the list is a whole one.
+ */
+export function keepListTag(tag: string | undefined | null, ctag: string | undefined | null) {
+	if (tag && ctag && known && ctag === nextCTag(known)) {
+		listTag = tag;
+		known = ctag;
+	} else {
+		listTag = '';
+		known = '';
+	}
 }
 
 /** A DELETE answering 204 with the list's ETag in X-List-ETag. */
@@ -88,7 +121,7 @@ async function deleteKeeping(path: string): Promise<void> {
 		throw new ApiError(0, 'unreachable', 'titand is not reachable');
 	}
 	if (!res.ok) throw await responseError(res);
-	keepListTag(res.headers.get('X-List-ETag'));
+	keepListTag(res.headers.get('X-List-ETag'), res.headers.get('X-CTag'));
 }
 
 /** Address books, groups and the number of possible duplicates: the side bar in one request. */
@@ -109,7 +142,8 @@ async function groupOf(p: Promise<unknown>): Promise<Group> {
 	const raw = await p;
 	const g = sanitizeGroup(raw);
 	if (!g) throw bad();
-	keepListTag((raw as { listETag?: string }).listETag);
+	const r = raw as { listETag?: string; ctag?: string };
+	keepListTag(r.listETag, r.ctag);
 	return g;
 }
 export function createGroup(name: string, members: string[] = []) {

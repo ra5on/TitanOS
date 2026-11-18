@@ -293,6 +293,23 @@ function picture(id) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="${color}"/><circle cx="20" cy="16" r="7" fill="#fff" fill-opacity=".9"/><path d="M6 40a14 14 0 0 1 28 0Z" fill="#fff" fill-opacity=".9"/></svg>`;
 }
 
+/**
+ * A live stream for a test (state.stream): each connection gets "ready"
+ * with the book's generation, then the events the test queued in
+ * state.events (each {kind, collection, generation}); the stream ends
+ * there and the page connects again (lib/pim/live.ts says "resync").
+ */
+export function liveStream(s) {
+  return (route) => {
+    const blocks = [
+      `event: ready\ndata: ${JSON.stringify({ account: "user", generations: { "contacts/kontakte": `e-${s.listVersion ?? 0}` } })}\n\n`,
+      ...(s.events ?? []).splice(0).map((e) => `event: pim\ndata: ${JSON.stringify({ account: "user", ...e })}\n\n`),
+    ];
+    s.streams = (s.streams ?? 0) + 1;
+    return route.fulfill({ status: 200, contentType: "text/event-stream", body: blocks.join("") });
+  };
+}
+
 /** Possible duplicates like titand's cardweb.Duplicates (e-mail, number, name). */
 export function duplicatesOf(contacts) {
   const buckets = new Map();
@@ -435,6 +452,8 @@ export async function installContacts(target, state = contactsState()) {
       ...extra,
     });
     const listTag = () => `"list-${s.listVersion ?? 0}"`;
+    // The book's ctag: one more per write (the live stream's generation).
+    const ctagNow = () => `e-${s.listVersion ?? 0}`;
     const bumpList = () => (s.listVersion = (s.listVersion ?? 0) + 1);
     if (path === "/contacts/overview")
       return json({
@@ -463,7 +482,7 @@ export async function installContacts(target, state = contactsState()) {
       const g = { id: `G${s.created}.vcf`, name: body.name, members: body.members ?? [] };
       s.groups.push(g);
       bumpList();
-      return json(groupView(g, { listETag: listTag() }), 201);
+      return json(groupView(g, { listETag: listTag(), ctag: ctagNow() }), 201);
     }
     const gm = /^\/contacts\/groups\/(.+)$/.exec(path);
     if (gm) {
@@ -474,14 +493,14 @@ export async function installContacts(target, state = contactsState()) {
       bumpList();
       if (method === "DELETE") {
         s.groups = s.groups.filter((x) => x !== g);
-        return route.fulfill({ status: 204, headers: { "X-List-ETag": listTag() }, body: "" });
+        return route.fulfill({ status: 204, headers: { "X-List-ETag": listTag(), "X-CTag": ctagNow() }, body: "" });
       }
       if (body.name) g.name = body.name;
       for (const id of body.add ?? []) if (!g.members.includes(id)) g.members.push(id);
       g.members = g.members.filter((id) => !(body.remove ?? []).includes(id));
       const n = Number((g.etag ?? `"g1-${g.id}"`).slice(2).split("-")[0]) + 1;
       g.etag = `"g${n}-${g.id}"`;
-      return json(groupView(g, { listETag: listTag() }));
+      return json(groupView(g, { listETag: listTag(), ctag: ctagNow() }));
     }
     if (path === "/contacts/merge" && method === "POST") {
       const keep = s.contacts.find((c) => c.id === body.keep.id);
@@ -500,7 +519,7 @@ export async function installContacts(target, state = contactsState()) {
         }
       keep.etag = `"9-${keep.id}"`;
       bumpList();
-      return json({ id: keep.id, book: "kontakte", etag: keep.etag, item: itemOf(keep), listETag: listTag(), groups });
+      return json({ id: keep.id, book: "kontakte", etag: keep.etag, item: itemOf(keep), listETag: listTag(), ctag: ctagNow(), groups });
     }
     if (path === "/contacts" && method === "GET") {
       // 1.13: the list's ETag; asked with it and unchanged, 304 without a body.
@@ -520,7 +539,7 @@ export async function installContacts(target, state = contactsState()) {
       const c = contact({ id, etag: `"1-${id}"`, ...body.contact });
       s.contacts.push(c);
       bumpList();
-      return json({ id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag() }, 201);
+      return json({ id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag(), ctag: ctagNow() }, 201);
     }
     if (path === "/contacts/suggestions") {
       if (!s.mail) return json([]);
@@ -552,7 +571,7 @@ export async function installContacts(target, state = contactsState()) {
       });
       s.contacts.push(c);
       bumpList();
-      return json({ id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag() }, 201);
+      return json({ id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag(), ctag: ctagNow() }, 201);
     }
     if (path === "/contacts/books/kontakte/import") return json(s.importResult);
     if (path === "/contacts/books/kontakte/export")
@@ -593,7 +612,7 @@ export async function installContacts(target, state = contactsState()) {
         etag: c.etag,
         hasPhoto: c.hasPhoto,
         item: itemOf(c),
-        listETag: listTag(),
+        listETag: listTag(), ctag: ctagNow(),
       });
     }
     if (method === "GET") return json(viewOf(c));
@@ -608,12 +627,12 @@ export async function installContacts(target, state = contactsState()) {
       bumpList();
       if (method === "DELETE") {
         s.contacts = s.contacts.filter((x) => x !== c);
-        return route.fulfill({ status: 204, headers: { "X-List-ETag": listTag() }, body: "" });
+        return route.fulfill({ status: 204, headers: { "X-List-ETag": listTag(), "X-CTag": ctagNow() }, body: "" });
       }
       for (const k of KNOWN)
         if (k in (body.contact ?? {})) c[k] = body.contact[k] ?? "";
       bump();
-      return json({ id: c.id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag() });
+      return json({ id: c.id, book: "kontakte", etag: c.etag, item: itemOf(c), listETag: listTag(), ctag: ctagNow() });
     }
     return fail(405, "method_not_allowed");
   });

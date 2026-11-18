@@ -34,6 +34,7 @@ type groupView struct {
 	// ListETag: after a write, the ETag of the whole list of contacts now
 	// (a group changes the book's ctag; the page keeps its list).
 	ListETag string `json:"listETag,omitempty"`
+	CTag     string `json:"ctag,omitempty"`
 }
 
 // bookUIDs maps the UIDs of a book's contacts to their file names (groups
@@ -190,7 +191,7 @@ func (a pimDataArea) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		contactsFail(w, r, book, err, "contact_group_not_found")
 		return
 	}
-	v.ListETag = a.listTagNow(store, user)
+	v.ListETag, v.CTag = a.listTagNow(store, user), a.ctagOf(store, user, book)
 	writeJSON(w, http.StatusCreated, v)
 }
 
@@ -310,7 +311,7 @@ func (a pimDataArea) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 		contactsFail(w, r, book, err, "contact_group_not_found")
 		return
 	}
-	v.ListETag = a.listTagNow(store, user)
+	v.ListETag, v.CTag = a.listTagNow(store, user), a.ctagOf(store, user, book)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -344,6 +345,7 @@ func (a pimDataArea) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("X-List-ETag", a.listTagNow(store, user))
+	w.Header().Set("X-CTag", a.ctagOf(store, user, book))
 	w.WriteHeader(http.StatusNoContent)
 }
 

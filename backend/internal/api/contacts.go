@@ -204,6 +204,15 @@ func (a pimDataArea) listTagNow(store *pimstore.Store, user string) string {
 	return `"` + etag + `"`
 }
 
+// ctagOf is the ctag of a book now ("" when it cannot be read).
+func (a pimDataArea) ctagOf(store *pimstore.Store, user, book string) string {
+	c, err := store.GetCollection(pimstore.Contacts, user, book)
+	if err != nil {
+		return ""
+	}
+	return c.CTag
+}
+
 func (a pimDataArea) handleContact(w http.ResponseWriter, r *http.Request) {
 	store, ok := a.contactsStore(w)
 	if !ok {
@@ -227,8 +236,11 @@ type contactWritten struct {
 	// Item is the contact's row of the list now (1.13): the page puts it
 	// in place instead of reading the whole list again.
 	Item *cardweb.Item `json:"item,omitempty"`
-	// ListETag is the ETag of the whole list after this write (1.13).
+	// ListETag is the ETag of the whole list after this write, CTag the
+	// book's ctag after it (1.13): the page keeps the list's ETag only
+	// when the ctag is the one before plus this write.
 	ListETag string `json:"listETag,omitempty"`
+	CTag     string `json:"ctag,omitempty"`
 }
 
 type createContactRequest struct {
@@ -276,7 +288,7 @@ func (a pimDataArea) createContact(store *pimstore.Store, user, book string, in 
 	if err != nil {
 		return contactWritten{}, err
 	}
-	return contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user)}, nil
+	return contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user), CTag: a.ctagOf(store, user, book)}, nil
 }
 
 // contactConflict answers 409 contacts_conflict with the contact as it is
@@ -327,7 +339,7 @@ func (a pimDataArea) handleUpdateContact(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !changed {
-		writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: obj.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user)})
+		writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: obj.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user), CTag: a.ctagOf(store, user, book)})
 		return
 	}
 	res, err := store.Put(pimstore.Contacts, user, book, name, data, pimstore.PutOptions{IfMatch: obj.ETag})
@@ -339,7 +351,7 @@ func (a pimDataArea) handleUpdateContact(w http.ResponseWriter, r *http.Request)
 		contactsFail(w, r, book, err, "contact_not_found")
 		return
 	}
-	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user)})
+	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: res.ETag, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user), CTag: a.ctagOf(store, user, book)})
 }
 
 // handleDeleteContact removes a contact (etag required); 204.
@@ -381,5 +393,6 @@ func (a pimDataArea) handleDeleteContact(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.Header().Set("X-List-ETag", a.listTagNow(store, user))
+	w.Header().Set("X-CTag", a.ctagOf(store, user, book))
 	w.WriteHeader(http.StatusNoContent)
 }

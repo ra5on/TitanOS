@@ -27,7 +27,7 @@ import { mkdir } from "node:fs/promises";
 import { deflateSync } from "node:zlib";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 import { calendarState, installCalendar } from "./test-ui-kalender-fixtures.mjs";
-import { contactsState, installContacts } from "./test-ui-kontakte-fixtures.mjs";
+import { contactsState, installContacts, liveStream } from "./test-ui-kontakte-fixtures.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 
 const browser = await chromium.launch({
@@ -317,6 +317,39 @@ try {
     await until(() => sent(state, "PUT", /\/photo\?etag=/).length === 1, "picture sent");
     assert.equal(sent(state, "PUT", /\/photo\?etag=/)[0][2], "(multipart)");
     await page.locator("[data-contact-detail]").waitFor();
+    await ctx.close();
+  }
+
+  // ---- Live: the own write costs no list, a device's change shows ----
+  {
+    const { page, ctx, state } = await open({
+      change: (s) => {
+        withExtras(s);
+        s.stream = liveStream(s);
+      },
+    });
+    const lists = [];
+    page.on("response", (res) => {
+      const u = new URL(res.url());
+      if (u.pathname === "/api/v1/contacts" && res.request().method() === "GET") lists.push(res.status());
+    });
+    await page.goto(base + "/contacts?id=tom.vcf&edit=1");
+    await page.locator("[data-contact-editor]").waitFor();
+    await until(() => (state.streams ?? 0) >= 1, "stream");
+    await page.waitForTimeout(600);
+    const from = lists.length;
+    await page.locator("[data-contact-editor]").getByLabel("Nachname").fill("Richter-Neu");
+    await page.locator("[data-editor-save]").click();
+    await page.locator("[data-contact-detail]").waitFor();
+    // The stream ends and opens again ("resync"): the list is asked with its ETag.
+    await until(() => (state.streams ?? 0) >= 3, "reconnects", 12000);
+    await page.waitForTimeout(500);
+    assert.ok(lists.slice(from).every((st) => st === 304), `own write: ${lists.slice(from)}`);
+    // A contact added on the iPhone shows by itself.
+    state.contacts.push({ ...state.contacts.find((c) => c.id === "eva.vcf"), id: "neu-iphone.vcf", first: "Ida", last: "Vom-iPhone", etag: '"1-neu-iphone.vcf"' });
+    state.listVersion = (state.listVersion ?? 0) + 1;
+    state.events = [{ kind: "contacts", collection: "kontakte", generation: `e-${state.listVersion}` }];
+    await page.locator("[data-contact='neu-iphone.vcf']").waitFor({ timeout: 20000 });
     await ctx.close();
   }
 
