@@ -128,7 +128,14 @@ type agentHASettings struct {
 	Releases map[string]homeassistant.Release `json:"releases,omitempty"`
 	Entities map[string]string                `json:"entities,omitempty"`
 	Notify   []string                         `json:"notify,omitempty"`
-	Assist   bool                             `json:"assist,omitempty"`
+	// NotifyBy and NotifyByCreated are the account that last changed Notify
+	// (1.11, Sicherheitsdurchsicht S-24): only its own unattended runs send
+	// their answer there in full, others only "fertig". Set by titand,
+	// never taken from a request; 1.10 drops them on a save, then the first
+	// owner counts, as before (agentHANotify).
+	NotifyBy        string    `json:"notifyBy,omitempty"`
+	NotifyByCreated time.Time `json:"notifyByCreated,omitzero"`
+	Assist          bool      `json:"assist,omitempty"`
 	// AssistAs is the account questions from Home Assistant run as.
 	AssistAs string `json:"assistAs,omitempty"`
 	// PLAN 91: AssistKey is what Home Assistant sends as the API key of its
@@ -278,6 +285,18 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	req.Features = a.settings.Features
 	// The key of Assist changes only through its own route (agent_assist.go).
 	req.HA.AssistKey, req.HA.AssistKeySet = a.settings.HA.AssistKey, false
+	// Who chose the notify services of Home Assistant (S-24): whoever
+	// changes the list now; otherwise what was recorded.
+	req.HA.NotifyBy, req.HA.NotifyByCreated = a.settings.HA.NotifyBy, a.settings.HA.NotifyByCreated
+	if !slices.Equal(req.HA.Notify, a.settings.HA.Notify) {
+		req.HA.NotifyBy, req.HA.NotifyByCreated = "", time.Time{}
+		if len(req.HA.Notify) > 0 {
+			actor := currentUser(r)
+			if u, ok := env.users.Get(actor.Name); ok {
+				req.HA.NotifyBy, req.HA.NotifyByCreated = u.Name, u.Created
+			}
+		}
+	}
 	if err := env.store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
