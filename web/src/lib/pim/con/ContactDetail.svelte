@@ -156,7 +156,7 @@
 						class="val"
 						href={web}
 						target="_blank"
-						rel="noopener noreferrer">{contact.url}</a
+						rel="noopener noreferrer">{web}</a
 					></span
 				>
 			</div>

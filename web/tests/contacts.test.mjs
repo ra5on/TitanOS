@@ -108,6 +108,14 @@ test('tel links of numbers as people write them; web links http(s) only', () => 
 	assert.equal(webHref('javascript:alert(1)'), '');
 	assert.equal(webHref('ftp://x'), '');
 	assert.equal(webHref('kein link'), '');
+	// The page shows this, not the text of the card: the real target
+	// (Sicherheitsdurchsicht 1.11 S-15) – a backslash ends the host, a
+	// look-alike letter shows as punycode.
+	assert.equal(
+		webHref('https://evil.example\\.good.example'),
+		'https://evil.example/.good.example',
+	);
+	assert.equal(webHref('https://аpple.com'), 'https://xn--pple-43d.com/');
 });
 
 test('address lines as on a letter', () => {
