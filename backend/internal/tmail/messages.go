@@ -25,12 +25,17 @@ type Address struct {
 	Addr string `json:"addr"`
 }
 
-// Flags are the flags the web UI shows and changes.
+// Flags are the flags the web UI shows and changes. Forwarded is the
+// keyword $Forwarded (1.12); the web UI only shows it.
 type Flags struct {
-	Seen     bool `json:"seen"`
-	Flagged  bool `json:"flagged"`
-	Answered bool `json:"answered"`
+	Seen      bool `json:"seen"`
+	Flagged   bool `json:"flagged"`
+	Answered  bool `json:"answered"`
+	Forwarded bool `json:"forwarded"`
 }
+
+// flagForwarded is the keyword other programs set on a forwarded mail.
+const flagForwarded = imap.Flag("$Forwarded")
 
 // Summary is one mail of a list.
 type Summary struct {
@@ -44,6 +49,13 @@ type Summary struct {
 	Attachments bool      `json:"attachments"`
 	// TooLarge: the head of this mail was too large to list.
 	TooLarge bool `json:"tooLarge,omitempty"`
+	// Preview is the beginning of its text (preview.go, 1.12).
+	Preview string `json:"preview"`
+	// MessageID, InReplyTo and References (at most listReferences ids)
+	// let the web UI put a conversation together (1.12).
+	MessageID  string `json:"messageId,omitempty"`
+	InReplyTo  string `json:"inReplyTo,omitempty"`
+	References string `json:"references,omitempty"`
 }
 
 // Page is a page of a list, newest first; Next is the UID to ask for the
@@ -126,21 +138,41 @@ func clean(s string, limit int) string {
 func invisible(r rune) bool { return unicode.Is(unicode.Cf, r) }
 
 func flagsOf(list []imap.Flag) Flags {
-	return Flags{Seen: slices.Contains(list, imap.FlagSeen), Flagged: slices.Contains(list, imap.FlagFlagged), Answered: slices.Contains(list, imap.FlagAnswered)}
+	return Flags{Seen: slices.Contains(list, imap.FlagSeen), Flagged: slices.Contains(list, imap.FlagFlagged), Answered: slices.Contains(list, imap.FlagAnswered),
+		Forwarded: slices.ContainsFunc(list, func(f imap.Flag) bool { return strings.EqualFold(string(f), string(flagForwarded)) })}
 }
+
+// listReferences bounds the References of a line of the list: the first
+// id (the start of the conversation) and the last ones (the nearest).
+const listReferences = 20
 
 func summaryOf(b *imapclient.FetchMessageBuffer) Summary {
 	s := Summary{UID: uint32(b.UID), Flags: flagsOf(b.Flags), Size: b.RFC822Size, To: []Address{}}
 	if b.BodyStructure != nil {
 		s.Attachments = hasAttachments(b.BodyStructure)
 	}
-	for _, section := range b.BodySection {
-		s.Attachments = s.Attachments || attachmentsByHead(section.Bytes)
+	head := headFields(findSection(b, listTypeSection), false)
+	if ct, ok := head["content-type"]; ok {
+		s.Attachments = s.Attachments || attachmentsByHead([]byte("Content-Type: "+ct))
+	}
+	if text := findSection(b, listTextSection); text != nil {
+		s.Preview = previewOf(head["content-type"], head["content-transfer-encoding"], text)
+	}
+	if raw := findSection(b, listReferencesSection); raw != nil {
+		ids := strings.Fields(references(string(raw)))
+		if len(ids) > listReferences {
+			ids = append(ids[:1], ids[len(ids)-listReferences+1:]...)
+		}
+		s.References = strings.Join(ids, " ")
 	}
 	if e := b.Envelope; e != nil {
 		s.Subject, s.Date, s.To = clean(e.Subject, 1000), e.Date, addresses(e.To)
 		if from := addresses(e.From); len(from) > 0 {
 			s.From = from[0]
+		}
+		s.MessageID = clean(angle(e.MessageID), 998)
+		if len(e.InReplyTo) > 0 {
+			s.InReplyTo = clean(angle(e.InReplyTo[0]), 998)
 		}
 	}
 	if s.Date.IsZero() {
@@ -181,13 +213,38 @@ func searchCriteria(q ListQuery) *imap.SearchCriteria {
 	return c
 }
 
+// The sections a line of the list fetches besides the envelope: the
+// type of the mail (attachment mark and preview), its References (the
+// conversation) and the beginning of its body (the preview, 1.12). All
+// with PEEK: listing marks nothing read.
+var (
+	listTypeSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
+		HeaderFields: []string{"Content-Type", "Content-Transfer-Encoding"}, Peek: true, Partial: &imap.SectionPartial{Size: 8 << 10}}
+	listReferencesSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
+		HeaderFields: []string{"References"}, Peek: true, Partial: &imap.SectionPartial{Size: 4 << 10}}
+	listTextSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierText, Peek: true,
+		Partial: &imap.SectionPartial{Size: previewFetch}}
+)
+
+// findSection is the data of a fetched section like want, whether or not
+// the server echoed its partial; nil if it is missing.
+func findSection(b *imapclient.FetchMessageBuffer, want *imap.FetchItemBodySection) []byte {
+	for _, got := range b.BodySection {
+		if got.Section == nil || got.Section.Specifier != want.Specifier || len(got.Section.Part) > 0 ||
+			!slices.EqualFunc(got.Section.HeaderFields, want.HeaderFields, strings.EqualFold) {
+			continue
+		}
+		return got.Bytes
+	}
+	return nil
+}
+
 // listFetch asks for what a line of the list shows; the attachment mark
 // comes from the Content-Type of the head, not from the structure, so that
 // a mail with thousands of parts cannot make a page too large.
 func listFetch() *imap.FetchOptions {
 	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
-		BodySection: []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"Content-Type"}, Peek: true,
-			Partial: &imap.SectionPartial{Size: 8 << 10}}}}
+		BodySection: []*imap.FetchItemBodySection{listTypeSection, listReferencesSection, listTextSection}}
 }
 
 // attachmentsByHead tells from the Content-Type of a mail whether it has

@@ -1,4 +1,4 @@
-# T-Mail – Vertrag (1.06)
+# T-Mail – Vertrag (1.06, Oberfläche 1.12)
 
 Eigenes E-Mail-Programm in TitanOS (PLAN §81, Inhaber 13.11. „Eigenes T-Mail“, Fragerunde 16.11.2026). Dieses Dokument ist der Vertrag zwischen Backend (`backend/internal/tmail`, `backend/internal/api/tmail*.go`) und Oberfläche (`web/src/routes/mail/`, `web/src/lib/tmail*`). Abweichungen werden hier eingetragen, bevor sie gebaut werden. Was das Backend genauer festgelegt oder geändert hat, steht im Abschnitt „Festlegungen des Backends“ (17.11.2026); er geht den Zeilen darüber vor.
 
@@ -84,7 +84,7 @@ Eigenes E-Mail-Programm in TitanOS (PLAN §81, Inhaber 13.11. „Eigenes T-Mail�
 
 - Programm **„T-Mail“** im Arbeitsplatz und am Handy (eigenes Symbol, Fenster), Route `/mail`. Erscheint nur bei App-Freigabe.
 - Arbeitsplatz: drei Spalten (Ordner je Postfach | Liste | Nachricht), am Handy Ebenen (Postfächer/Ordner → Liste → Nachricht) mit Zurück-Pfeil und Wischen.
-- **Kein abgeschnittener Text:** Betreff und Absender in der Liste brechen um; **keine Vorschauzeile** in der Liste (wäre zwangsläufig gekürzt). Datum mit Tag, wenn nicht heute.
+- **Kein abgeschnittener Text:** Betreff und Absender in der Liste brechen um. Datum mit Tag, wenn nicht heute. **Seit 1.12** mit Vorschau: titand schickt höchstens 140 Zeichen des Textes, an einer Wortgrenze gekürzt (ohne „…“); die Oberfläche bricht sie um und begrenzt sie nie mit CSS (Abschnitt „1.12“).
 - Schreiben: An/Cc/Bcc mit Vorschlägen aus dem Adressbuch, Betreff, Text (reiner Text in der ersten Fassung; Antworten zitieren den Text), Signatur wählbar, Anhänge hochladen oder aus den Dateien des NAS, Entwurf automatisch speichern (alle 30 s bei Änderung). Am Handy als Seite, am Arbeitsplatz als eigenes Fenster.
 - Einrichten: Assistent (E-Mail-Adresse → Vorschlag aus `/providers` → Passwort/App-Passwort mit Hinweis je Anbieter → „Verbindung prüfen“ → speichern). Einstellungen: Postfächer, Signaturen, Regeln, Meldungen je Postfach.
 - Externe Bilder: Leiste „Externe Bilder blockiert – laden“; Links zeigen ihr Ziel.
@@ -193,6 +193,34 @@ Fehler der Dateirechte (Anhang aus/nach NAS-Dateien) kommen mit den Codes des Da
 - Konto löschen (hier oder durch einen anderen Knoten) und Konto anlegen (auch Übernahme aus dem Cluster): Verbindungen und Ereignisströme enden, `/config/tmail/<konto>.json` und der Eintrag in `access.json` werden entfernt, das Adressbuch vom Volume gelöscht. Lesen und Löschen legen auf dem Volume nichts an (nur Speichern legt `.titanos/mail` an). Ist das Volume gerade nicht da, bleibt die Datei liegen und wird von einem neuen Konto gleichen Namens nicht gelesen.
 - Ein App-Update wartet nicht auf T-Mail (keine Arbeit des NAS); beim Beenden von titand werden die Verbindungen ohne Abmelden geschlossen.
 - Ziele: „Ports von titand“ sind HTTPS, HTTP, Sicherungsziel (8750), Cluster-Relay (8751), Buddy (8752) und die Wyoming-Ports der Sprachdienste (10300, 10200).
+
+## 1.12: Überarbeitung der Oberfläche (Vertrag)
+
+Entscheidungen des Inhabers vom 18.11.2026 (Screenshot der Desktop-Ansicht, zwölf gewählte Punkte; „Ungelesen fett mit Punkt“ nicht gewählt – Ungelesen sieht aus wie bisher). Die Sicherheitsregeln oben gelten unverändert: kein Zugriff des KI-Agenten, keine Route in `publicRoutes`/MCP, alle Routen `browserOnly` und `clusterLocal`, externe Bilder blockiert, HTML bereinigt.
+
+**Liste (`GET /accounts/{id}/messages`), neue Felder je Mail**
+- `preview`: Anfang des Textes, höchstens 140 Zeichen, an einer Wortgrenze gekürzt, ohne „…“. Geholt im selben FETCH wie die Liste als `BODY.PEEK[TEXT]<0.3072>` (nie als gelesen markiert) mit `Content-Type`/`Content-Transfer-Encoding` des Kopfs: einteiliger Text dekodiert (base64, quoted-printable, Zeichensatz), mehrteilig der erste `text/plain` (sonst `text/html` ohne Tags, ohne `<style>`/`<script>`) innerhalb dieser 3 KiB. Zitatzeilen (`>`), die Signatur nach `-- `, Webadressen und Wörter über 40 Zeichen fallen weg; Steuer- und unsichtbare Zeichen ebenso. Verschlüsselte (`multipart/encrypted`, `application/pkcs7-mime`) und andere Mails: leer. Reiner Text, die Oberfläche setzt ihn als Text (kein HTML).
+- `flags.forwarded`: Schlüsselwort `$Forwarded`. `POST /send` mit **neuem** `meta.forwards: {folder,uid}` setzt es nach dem Senden (lehnt der Server das Schlüsselwort ab, wird das protokolliert, die Mail gilt trotzdem als gesendet).
+- `messageId`, `inReplyTo`, `references` (wie bei `GET /message`; `references` höchstens 20 Kennungen: die erste und die letzten 19, aus höchstens 4 KiB Kopf) für die Unterhaltungen.
+- Neue Filter `from` (Teil des Absenders), `attachment=1`, `since`, `until` (`YYYY-MM-DD`, beide Tage eingeschlossen, Eingangsdatum `SINCE`/`BEFORE`). **Anhang** sucht IMAP nicht: `HEADER Content-Type "multipart/mixed"` als Näherung – eine Mail, die als Ganzes ein Anhang ist (einteilig, z. B. nur PDF), oder eine signierte mit Anhang wird nicht gefunden, eine `multipart/mixed` ohne echten Anhang schon.
+
+**Ordner (`GET /accounts/{id}/folders`):** neues Feld `delim` (Trennzeichen der Ordnerebenen, leer wenn der Server keines nennt).
+
+**Neue Routen**
+
+| Route | Zweck |
+|---|---|
+| `GET /accounts/{id}/search?q=&from=&attachment=&since=&until=&unread=&flagged=&limit=` | Suche über **alle Ordner** des Postfachs. Mindestens ein Suchbegriff oder Filter (sonst `mail_invalid`). Je Ordner eine eigene Anfrage (`SELECT`, `UID SEARCH`, `FETCH INTERNALDATE` der neuesten `limit` Treffer), dazwischen kommen andere Anfragen des Postfachs dran; höchstens 100 Ordner, `limit` ≤ 50 (Vorgabe 50), zusammen die neuesten `limit` Treffer nach Eingangsdatum, deren Zeilen wie in der Liste (mit `folder`). Zeitbudget 45 s für das Durchsuchen; danach, bei mehr als 100 Ordnern oder nach einem Ordner, der die Suche ablehnt: `truncated:true`. Höchstens eine Suche je Konto zur Zeit (sonst `503 mail_busy`). Antwort `{messages:[{…Zeile, folder}], total, folders, truncated}` (`total` = Treffer aller durchsuchten Ordner, `folders` = durchsuchte Ordner). |
+| `POST /accounts/{id}/archive` | `{folder,uids}` → in den Ordner mit der Rolle `archive`; fehlt er, legt T-Mail „Archive“ an (wie beim Papierkorb). Antwort `{to}`. Aus dem Archiv selbst: `mail_invalid`. |
+| `GET /mail/avatars` | Bilder der eigenen Kontakte für die Absender: `{book, photos:{"<adresse klein>":"<kontakt-id>"}}`, nur Kontakte mit Bild, höchstens 2000 Adressen, aus dem RAM des Kontaktspeichers (legt nichts an). Ohne Volume oder ohne Kontakte `{photos:{}}`. Das Bild selbst holt die Oberfläche über `GET /contacts/{book}/{id}/photo` (eigene Kopfzeilen: `nosniff`, `CSP: sandbox`); scheitert es (z. B. `503` ohne Volume), zeigt sie die Initialen. Kein Bild aus dem Netz. |
+
+**Oberfläche**
+- Spalten Ordner | Liste | Nachricht auf dem Arbeitsplatz in der Breite ziehbar (ARIA-Trenner wie die Seitenleiste des KI-Agenten: Pfeiltasten, Pos1/Ende, Doppelklick = Vorgabe), mit Mindest- und Höchstbreite, je Gerät gemerkt (`localStorage`). Die Kopfleiste mit „Neue E-Mail“/„Aktualisieren“ entfällt: „Neue E-Mail“ steht oben in der Ordnerspalte; „Aktualisieren“ ersetzt der Live-Strom (IDLE, Status `ok`) bzw. ohne IDLE ein stilles Neuladen alle 2 Minuten, solange die Seite sichtbar ist; am Handy bleibt Herunterziehen.
+- Liste: Absenderbild (Initialen in einer festen Farbe aus den Theme-Farben, Kontaktbild wenn vorhanden), Vorschau, Symbole für Anhang, markiert, beantwortet, weitergeleitet; gruppiert nach Heute, Gestern, Diese Woche, Älter (Zeitzone des Browsers, Wochenbeginn nach Sprache); Unterhaltungen als ein Eintrag mit Anzahl, aufklappbar (über `references`/`inReplyTo`, sonst über den Betreff nur bei einer Antwort ohne diese Köpfe), je Gerät abschaltbar; Schnellaktionen Archivieren, Löschen, Gelesen/Ungelesen, Markieren bei Zeigen/Fokus, am Handy Wischen; Mehrfachauswahl (Kästchen, Umschalt-/Strg-Klick) mit Leiste für alle; Zeilen auf einen Ordner **desselben Postfachs** ziehen verschiebt sie.
+- Tastenkürzel (nicht beim Tippen): `j`/`k` nächste/vorige, `e` archivieren, `r` antworten, `Entf` löschen, `/` Suche, `?` Übersicht der Kürzel.
+- Ordner: Favoriten oben, Unterordner einklappbar (je Gerät gemerkt), Spam und Papierkorb ohne Zähler.
+- Ohne geöffnete Nachricht zeigt der Lesebereich eine Übersicht: ungelesene Mails, markierte Mails, letzte Aktualisierung, Verknüpfungen.
+- Endgültiges Löschen (im Papierkorb) fragt auf jedem Weg (Knopf, Schnellaktion, Leiste, Taste, Wischen, Ziehen auf den Papierkorb).
 
 ## Prüfstand und Grenzen
 

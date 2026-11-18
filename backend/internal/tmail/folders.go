@@ -28,6 +28,9 @@ type Folder struct {
 	Role   string `json:"role"`
 	Unread int    `json:"unread"`
 	Total  int    `json:"total"`
+	// Delim separates the levels of Path (1.12: the tree of the web UI);
+	// empty when the server names none.
+	Delim string `json:"delim,omitempty"`
 }
 
 const maxFolders = 500
@@ -88,6 +91,7 @@ func listFolders(c *imapclient.Client, status bool) ([]Folder, error) {
 		}
 		f := Folder{Path: l.Mailbox, Name: l.Mailbox}
 		if l.Delim != 0 {
+			f.Delim = string(l.Delim)
 			if i := strings.LastIndex(l.Mailbox, string(l.Delim)); i >= 0 {
 				f.Name = l.Mailbox[i+1:]
 			}
