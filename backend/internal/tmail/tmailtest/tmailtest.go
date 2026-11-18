@@ -53,6 +53,17 @@ type Servers struct {
 	Mailbox *imapmemserver.User
 	// IMAPConns counts the connections the IMAP server accepted.
 	IMAPConns atomic.Int32
+	// Open counts the IMAP connections open now (sessions not closed).
+	Open atomic.Int32
+	// MaxConns, when above 0, refuses a connection beyond that many at
+	// once, as iCloud or Gmail do: with BYE at the greeting, or with
+	// RefuseLogin a NO at the login (an answer many providers give).
+	MaxConns    atomic.Int32
+	RefuseLogin atomic.Bool
+	// SlowSearch and SlowStatus delay every SEARCH and STATUS (a provider
+	// that searches a large folder, a slow line).
+	SlowSearch atomic.Int64
+	SlowStatus atomic.Int64
 
 	mu   sync.Mutex
 	sent []Received
@@ -76,7 +87,12 @@ func Start(t testing.TB) *Servers {
 	mem.AddUser(s.Mailbox)
 	srv := imapserver.New(&imapserver.Options{
 		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
-			return mem.NewSession(), nil, nil
+			n := s.Open.Add(1)
+			if limit := s.MaxConns.Load(); limit > 0 && n > limit && !s.RefuseLogin.Load() {
+				s.Open.Add(-1)
+				return nil, nil, &imap.Error{Type: imap.StatusResponseTypeBye, Text: "Too many simultaneous connections"}
+			}
+			return &slowSession{s: s, over: s.MaxConns.Load() > 0 && n > s.MaxConns.Load()}, nil, nil
 		},
 		Caps:      imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapMove: {}, imap.CapUIDPlus: {}},
 		TLSConfig: tlsCfg,
@@ -181,6 +197,53 @@ type literal struct {
 func (l literal) Size() int64 { return l.size }
 
 type discard struct{}
+
+// slowSession is the session of imapmemserver with the delays and the
+// limit of Servers.
+type slowSession struct {
+	*imapmemserver.UserSession // nil until the login
+	s                          *Servers
+	over                       bool // beyond MaxConns: the login is refused
+	closed                     bool
+}
+
+func (x *slowSession) Login(username, password string) error {
+	if x.over {
+		return &imap.Error{Type: imap.StatusResponseTypeNo, Code: imap.ResponseCodeLimit, Text: "Too many simultaneous connections"}
+	}
+	if err := x.s.Mailbox.Login(username, password); err != nil {
+		return err
+	}
+	x.UserSession = imapmemserver.NewUserSession(x.s.Mailbox)
+	return nil
+}
+
+func (x *slowSession) Close() error {
+	if !x.closed {
+		x.closed = true
+		x.s.Open.Add(-1)
+	}
+	if x.UserSession == nil {
+		return nil
+	}
+	return x.UserSession.Close()
+}
+
+func wait(d *atomic.Int64) {
+	if v := d.Load(); v > 0 {
+		time.Sleep(time.Duration(v))
+	}
+}
+
+func (x *slowSession) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria, options *imap.SearchOptions) (*imap.SearchData, error) {
+	wait(&x.s.SlowSearch)
+	return x.UserSession.Search(kind, criteria, options)
+}
+
+func (x *slowSession) Status(name string, options *imap.StatusOptions) (*imap.StatusData, error) {
+	wait(&x.s.SlowStatus)
+	return x.UserSession.Status(name, options)
+}
 
 func (discard) Printf(string, ...any) {}
 func (discard) Println(...any)        {}
