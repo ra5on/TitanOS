@@ -294,7 +294,9 @@
 		gap: var(--space-1-5);
 		min-height: 36px;
 	}
-	.phone .add-list {
+	.phone .add-list,
+	.phone .showdone,
+	.phone .add .field {
 		min-height: 44px;
 	}
 </style>

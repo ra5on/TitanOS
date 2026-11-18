@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -135,6 +136,28 @@ func TestCalendarReminders(t *testing.T) {
 	}
 	if res, _ := ts.do(ts.client, "PUT", "/api/v1/preferences/calendar", map[string]any{"reminderPush": "ja"}); res.StatusCode != http.StatusBadRequest {
 		t.Fatal("a push that is no boolean")
+	}
+
+	// The volume not there yet: the plan stays due and is made once it is.
+	var away atomic.Bool
+	away.Store(true)
+	d := *c.deps.Load()
+	d.available = func() bool { return !away.Load() }
+	c.deps.Store(&d)
+	post(bea, "privat", map[string]any{"title": "Später", "start": "2026-11-21T11:00", "end": "2026-11-21T11:30",
+		"timezone": "Europe/Berlin", "alarms": []int{5}})
+	c.replan("bea")
+	if !c.planDirty() {
+		t.Fatal("a plan without the volume counts as done")
+	}
+	away.Store(false)
+	if c.planDirty() {
+		t.Fatal("not planned once the volume is there")
+	}
+	set(time.Date(2026, 11, 21, 10, 55, 0, 0, berlin))
+	c.fire()
+	if g := got(bea); len(g) != 1 || g[0] != "Später/5m0s" {
+		t.Fatalf("after the volume came: %v", g)
 	}
 
 	// The account deleted: nothing kept.

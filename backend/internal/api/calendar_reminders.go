@@ -46,6 +46,8 @@ const (
 	maxFiredReminders = 50
 	// maxPlannedReminders bounds one account's plan.
 	maxPlannedReminders = 2000
+	// reminderRetry is how soon a plan that could not be read is tried again.
+	reminderRetry = time.Minute
 )
 
 // firedReminder is one hint as the shell reads it.
@@ -83,6 +85,8 @@ type reminderDeps struct {
 	hidden func(user string) []string
 	push   func(user string, r firedReminder)
 	now    func() time.Time
+	// available: the calendars' volume is there (nil: ask the store).
+	available func() bool
 }
 
 type calendarReminders struct {
@@ -137,8 +141,9 @@ func (c *calendarReminders) replan(user string) {
 	}
 }
 
-// run plans and fires until ctx ends. The first plan waits a moment so
-// that the volume is mounted.
+// run plans and fires until ctx ends. The first plan comes a moment after
+// the start; one that cannot be read (the volume not mounted yet) is
+// tried again every minute.
 func (c *calendarReminders) run(ctx context.Context) {
 	c.replan("")
 	timer := time.NewTimer(30 * time.Second)
@@ -161,9 +166,13 @@ func (c *calendarReminders) run(ctx context.Context) {
 			c.replan("")
 			nextAll = c.now().Add(reminderReplan)
 		}
-		c.planDirty()
+		failed := c.planDirty()
 		c.fire()
 		wait := time.Until(nextAll)
+		// The volume not there yet (a passphrase awaited): asked again each minute.
+		if failed && wait > reminderRetry {
+			wait = reminderRetry
+		}
 		if next, ok := c.nextAt(); ok && next.Sub(c.now()) < wait {
 			wait = max(next.Sub(c.now()), time.Second)
 		}
@@ -177,7 +186,9 @@ func (c *calendarReminders) run(ctx context.Context) {
 	}
 }
 
-func (c *calendarReminders) planDirty() {
+// planDirty plans the accounts marked. One whose plan could not be read
+// (the volume is not there yet) stays marked; the result says so.
+func (c *calendarReminders) planDirty() (failed bool) {
 	c.mu.Lock()
 	var users []string
 	if c.all {
@@ -196,8 +207,12 @@ func (c *calendarReminders) planDirty() {
 	for _, u := range users {
 		plan, err := c.plan(u)
 		if err != nil {
-			// The volume is away or the account has no data: nothing planned, kept as it was.
+			// The volume is away: kept as it was, tried again soon.
 			slog.Debug("calendar reminders not planned", "account", u, "err", err)
+			c.mu.Lock()
+			c.dirty[u] = true
+			c.mu.Unlock()
+			failed = true
 			continue
 		}
 		c.mu.Lock()
@@ -208,6 +223,7 @@ func (c *calendarReminders) planDirty() {
 		}
 		c.mu.Unlock()
 	}
+	return failed
 }
 
 // plan reads the reminders of an account due in [now − grace, now + horizon).
@@ -222,7 +238,8 @@ func (c *calendarReminders) plan(user string) ([]plannedReminder, error) {
 			return nil, nil
 		}
 	}
-	if store.Current != nil && store.Current(string(pimstore.Calendar)) == "" {
+	if d.available != nil && !d.available() ||
+		d.available == nil && store.Current != nil && store.Current(string(pimstore.Calendar)) == "" {
 		return nil, fmt.Errorf("calendar store unavailable")
 	}
 	cols, err := store.Collections(pimstore.Calendar, user)
@@ -452,7 +469,11 @@ func (s *Server) startReminders() {
 			hostname, _ := os.Hostname()
 			title := r.Title
 			if title == "" {
+				// In the account's language of its notifications.
 				title = "(ohne Titel)"
+				if p, _, err := n.PersonalSettings(user); err == nil && p.Language == "en" {
+					title = "(no title)"
+				}
 			}
 			n.PushTo(user, "calendar", notify.Message{Time: r.At, Severity: notify.Info, Kind: "calendar_reminder",
 				Subject: title, Title: title, Text: reminderPushText(r, local()), Link: "/calendar"}, "["+hostname+"] "+title)

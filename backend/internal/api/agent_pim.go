@@ -1416,9 +1416,15 @@ func alarmWords(alarms []int, en bool) string {
 	}
 	parts := []string{}
 	for _, m := range alarms {
-		w := minutesWords(m, en)
-		if m > 0 {
-			w += pick(en, " vorher", " before")
+		var w string
+		switch {
+		case m > 0:
+			w = minutesWords(m, en) + pick(en, " vorher", " before")
+		case m < 0:
+			// 1.13: after the start (an all-day event's "on the day at 9:00").
+			w = minutesWords(-m, en) + pick(en, " nach Beginn", " after the start")
+		default:
+			w = minutesWords(m, en)
 		}
 		parts = append(parts, w)
 	}

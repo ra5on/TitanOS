@@ -826,7 +826,7 @@
 		font-size: var(--text-xl);
 	}
 	.compact .views :global(.segments button) {
-		min-height: 40px;
+		min-height: 44px;
 	}
 	.msg {
 		margin: var(--space-2) var(--space-3);

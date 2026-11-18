@@ -7,7 +7,7 @@
 	//
 	// 1.13 (Baustand steps 9/10): as high as the frame, the hours scroll on
 	// their own. Every block is placed from its minutes alone – top and
-	// height from start and end (at least half an hour, as overlapLanes
+	// height from start and end (at least 45 minutes high, as overlapLanes
 	// counts it), so nothing lies on another and nothing is measured; a
 	// title longer than its block scrolls inside it, shows whole while the
 	// block has the focus and as its tooltip. The hours scroll to 07:00 (earlier
@@ -75,8 +75,8 @@
 
 	const HOUR = 52;
 	const STEP = 15;
-	/** The shortest block, as overlapLanes counts it. */
-	const SHORTEST = 30;
+	/** The shortest block (two lines: title and time), as overlapLanes counts it. */
+	const SHORTEST = 45;
 	const hours = Array.from({ length: 24 }, (_, i) => i);
 	const items = (d: string) => byDay.get(d) ?? [];
 	const top = (d: string) => items(d).filter((it) => it.long);
@@ -177,6 +177,8 @@
 			to: it?.part.to ?? 0,
 		};
 		if (mode === 'move' && it) d.grab = minuteAt(d, e.clientY) - it.part.from;
+		// The edge follows the pointer by what it moved (a short block is drawn longer).
+		if (mode === 'resize' && it) d.grab = minuteAt(d, e.clientY) - it.part.to;
 		if (mode === 'new') {
 			d.anchor = Math.max(
 				0,
@@ -207,7 +209,7 @@
 			d.from = from;
 			d.to = from + length;
 		} else if (d.mode === 'resize' && d.it) {
-			d.to = Math.max(d.it.part.from + STEP, Math.min(1440, snap(at)));
+			d.to = Math.max(d.it.part.from + STEP, Math.min(1440, snap(at - d.grab)));
 		} else if (d.mode === 'new') {
 			const here = Math.max(0, Math.min(1440, snap(at)));
 			d.from = Math.min(d.anchor, here);
@@ -615,7 +617,7 @@
 		/* A title longer than its block scrolls in it (never cut) … */
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		scrollbar-width: none;
+		scrollbar-width: thin;
 		box-shadow: 0 0 0 1px var(--surface);
 		cursor: pointer;
 	}

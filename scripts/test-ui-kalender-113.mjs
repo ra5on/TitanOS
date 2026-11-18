@@ -103,6 +103,26 @@ async function drag(page, box, dx, dy, from = 0.5) {
     await page.mouse.move(x + (dx * i) / 8, y + (dy * i) / 8);
   await page.mouse.up();
 }
+/** Buttons, fields and links of a part under 44 px (the phone). */
+const small = (page, scope) =>
+  page.evaluate((scope) => {
+    const box = (el) => {
+      if (el.matches("input[type=checkbox], input[type=radio]")) {
+        const label = el.closest("label") ?? el.labels?.[0];
+        return (label ?? el).getBoundingClientRect();
+      }
+      return el.getBoundingClientRect();
+    };
+    return [
+      ...document.querySelectorAll(
+        `${scope} button, ${scope} input, ${scope} a, ${scope} select, ${scope} summary`,
+      ),
+    ]
+      .filter((el) => el.getClientRects().length && getComputedStyle(el).visibility === "visible")
+      .map((el) => [el.textContent.trim() || el.getAttribute("aria-label") || el.type, box(el)])
+      .filter(([, r]) => r.height < 44 || (r.width < 44 && r.width > 0))
+      .map(([n, r]) => `${n} ${Math.round(r.width)}x${Math.round(r.height)}`);
+  }, scope);
 const status = (page) => page.locator('p[role="status"][aria-live]').innerText();
 
 try {
@@ -341,12 +361,16 @@ try {
     assert.match(await bottom.innerText(), /Heute/);
     assert.equal(await bottom.locator(".bar-new").count(), 1, "+ at the right");
     await sound(page, `phone month ${theme}`);
+    assert.deepEqual(await small(page, ".bottombar"), [], `phone bar ${theme}: under 44 px`);
+    assert.deepEqual(await small(page, ".cf-bar"), [], `phone top ${theme}: under 44 px`);
     await shot(page, `handy-monat-${theme}`);
 
     await bottom.getByRole("button", { name: "Kalender", exact: true }).click();
     await page.locator('.calrow[data-calendar="privat"]').waitFor();
     assert.equal(await page.locator(".sort-grip").count(), 0, "no dragging on the phone");
     await sound(page, `phone calendars ${theme}`);
+    await page.locator("[data-reminder-settings] summary").click();
+    assert.deepEqual(await small(page, ".col-cal-side"), [], `phone calendars ${theme}: under 44 px`);
     await shot(page, `handy-kalender-${theme}`);
     await page.getByRole("button", { name: "Zurück" }).first().click();
     await ready(page, "month");
@@ -354,6 +378,7 @@ try {
     await bottom.getByRole("button", { name: "Erinnerungen" }).click();
     await page.locator("[data-tasks]").waitFor();
     await sound(page, `phone reminders ${theme}`);
+    assert.deepEqual(await small(page, ".col-cal-tasks"), [], `phone reminders ${theme}: under 44 px`);
     await shot(page, `handy-erinnerungen-${theme}`);
     await page.getByRole("button", { name: "Zurück" }).first().click();
     await ready(page, "month");
