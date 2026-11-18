@@ -15,7 +15,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | account | `account.go`, `account_picture.go` | – | 3 |
 | activity | `activity.go` | `activityArea` | 1 |
 | admission | `admission.go` | – | 0 |
-| agent | `agent.go`, `agent_access.go`, `agent_addresses.go`, `agent_assist.go`, `agent_cluster.go`, `agent_code.go`, `agent_data.go`, `agent_docs.go`, `agent_docs_deadline.go`, `agent_docs_index.go`, `agent_docs_paper.go`, `agent_env.go`, `agent_extra.go`, `agent_family.go`, `agent_family54.go`, `agent_family54_buddy.go`, `agent_family54_catalog.go`, `agent_features.go`, `agent_features_stub.go`, `agent_foresight.go`, `agent_foresight_advisor.go`, `agent_foresight_model.go`, `agent_forget.go`, `agent_ha.go`, `agent_hamask.go`, `agent_home.go`, `agent_initiative.go`, `agent_insight.go`, `agent_map.go`, `agent_mcp.go`, `agent_media.go`, `agent_notes.go`, `agent_own.go`, `agent_photos.go`, `agent_prefs.go`, `agent_prompt.go`, `agent_protect.go`, `agent_protect_emergency.go`, `agent_protect_guard.go`, `agent_protect_handbook.go`, `agent_provider.go`, `agent_quick.go`, `agent_reflect.go`, `agent_runs.go`, `agent_schedule.go`, `agent_settings.go`, `agent_share.go`, `agent_snapshot.go`, `agent_title.go`, `agent_tools.go`, `agent_volume.go`, `agent_when.go` | `accessArea` | 59 |
+| agent | `agent.go`, `agent_access.go`, `agent_addresses.go`, `agent_assist.go`, `agent_assist_consent.go`, `agent_cluster.go`, `agent_code.go`, `agent_data.go`, `agent_docs.go`, `agent_docs_deadline.go`, `agent_docs_index.go`, `agent_docs_paper.go`, `agent_env.go`, `agent_extra.go`, `agent_family.go`, `agent_family54.go`, `agent_family54_buddy.go`, `agent_family54_catalog.go`, `agent_features.go`, `agent_features_stub.go`, `agent_foresight.go`, `agent_foresight_advisor.go`, `agent_foresight_model.go`, `agent_forget.go`, `agent_ha.go`, `agent_hamask.go`, `agent_home.go`, `agent_initiative.go`, `agent_insight.go`, `agent_map.go`, `agent_mcp.go`, `agent_media.go`, `agent_notes.go`, `agent_own.go`, `agent_photos.go`, `agent_pim.go`, `agent_prefs.go`, `agent_prompt.go`, `agent_protect.go`, `agent_protect_emergency.go`, `agent_protect_guard.go`, `agent_protect_handbook.go`, `agent_provider.go`, `agent_quick.go`, `agent_reflect.go`, `agent_runs.go`, `agent_schedule.go`, `agent_settings.go`, `agent_share.go`, `agent_snapshot.go`, `agent_title.go`, `agent_tools.go`, `agent_volume.go`, `agent_when.go` | `accessArea` | 63 |
 | api | `api.go` | – | 1 |
 | app | `app_access.go`, `app_icon.go`, `app_proxy.go` | `appAccessArea`, `appIconArea`, `appProxyArea` | 4 |
 | application | `application_restore.go` | – | 0 |
@@ -25,11 +25,14 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | backup | `backup_coverage.go` | – | 2 |
 | backups | `backups.go`, `backups_vmdisks.go` | `backupsArea` | 1 |
 | backuptarget | `backuptarget.go` | `backupTargetArea` | 0 |
+| calendar | `calendar.go`, `calendar_events.go`, `calendar_ics.go` | – | 2 |
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 3 |
 | cluster | `cluster.go` | `clusterArea` | 1 |
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |
+| contacts | `contacts.go`, `contacts_photo.go`, `contacts_suggest.go`, `contacts_vcf.go` | – | 1 |
 | craft | `craft_replace.go` | – | 1 |
 | dashboard | `dashboard_background.go` | – | 1 |
+| devices | `devices.go` | `pimArea` | 2 |
 | diagnose | `diagnose.go` | `diagnoseArea` | 0 |
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |
@@ -60,12 +63,14 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
 | passkeys | `passkeys.go` | – | 1 |
+| pim | `pim_data.go` | `pimDataArea` | 1 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go` | `powerButtonArea` | 0 |
 | preferences | `preferences.go` | `prefsArea` | 0 |
 | processes | `processes.go` | `processesArea` | 1 |
 | public | `public_routes.go` | – | 0 |
-| register | `register_accounts.go`, `register_agent.go`, `register_backups.go`, `register_docker.go`, `register_files.go`, `register_hardware.go`, `register_homeassistant.go`, `register_login.go`, `register_lxc.go`, `register_network.go`, `register_notifications.go`, `register_plugins.go`, `register_preferences.go`, `register_remote.go`, `register_shares.go`, `register_storage.go`, `register_system.go`, `register_terminal.go`, `register_tmail.go`, `register_usb.go`, `register_vms.go` | – | 1 |
+| reach | `reach_addresses.go` | – | 1 |
+| register | `register_accounts.go`, `register_agent.go`, `register_backups.go`, `register_docker.go`, `register_files.go`, `register_hardware.go`, `register_homeassistant.go`, `register_login.go`, `register_lxc.go`, `register_network.go`, `register_notifications.go`, `register_pim.go`, `register_plugins.go`, `register_preferences.go`, `register_remote.go`, `register_shares.go`, `register_storage.go`, `register_system.go`, `register_terminal.go`, `register_tmail.go`, `register_usb.go`, `register_vms.go` | – | 1 |
 | replication | `replication.go` | `replicationArea` | 0 |
 | retired | `retired.go` | – | 1 |
 | scripts | `scripts.go` | `scriptsArea` | 1 |
@@ -82,7 +87,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | system | `system.go` | `powerArea`, `systemArea` | 0 |
 | tailscale | `tailscale.go` | `tailscaleArea` | 0 |
 | terminal | `terminal_console.go` | – | 1 |
-| tmail | `tmail.go`, `tmail_messages.go` | `tmailArea` | 1 |
+| tmail | `tmail.go`, `tmail_messages.go` | `tmailArea` | 2 |
 | tokens | `tokens.go` | `tokensArea` | 2 |
 | tool | `tool_env.go` | – | 0 |
 | ui | `ui.go` | – | 0 |

@@ -63,6 +63,9 @@ type authArea struct {
 	loginAppearance func() (loginAppearance, bool)
 	webSession      webSessionFunc
 	goJob           jobFunc
+	// devicesRebind keeps the calendar devices of an account whose second
+	// factor the person switched on or off itself (devices.Rebind, S-25).
+	devicesRebind func(before auth.User)
 }
 
 // authArea is the area of the server. Everything that needs the account
@@ -75,5 +78,6 @@ func (s *Server) authArea() authArea {
 		secureCookies: s.opts.SecureCookies,
 		sessions:      s.sessionStore, limiter: s.rateLimiter, prefs: s.prefs, passkeyState: &s.passkeys, pictureState: &s.accountPictures,
 		loginState: &s.loginAccounts, loadMu: &s.loadMu, lastLoadTry: &s.lastLoadTry,
-		recordEvent: s.recordEvent, loginAppearance: s.loginAppearance, webSession: s.requireWebSession, goJob: s.goJob}
+		recordEvent: s.recordEvent, loginAppearance: s.loginAppearance, webSession: s.requireWebSession, goJob: s.goJob,
+		devicesRebind: s.devicesRebind}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
@@ -61,6 +62,8 @@ func (w *titand) wireNotifications() error {
 					features = append(features, sysdata.Folder(function))
 				}
 			}
+			// Calendars and address books move with the default volume.
+			features = append(features, pimFeatures...)
 			w.systemData.Watch(ctx, features)
 		})
 	}
@@ -68,6 +71,10 @@ func (w *titand) wireNotifications() error {
 	w.systemData.OnMoved = func(feature, from, _ string) {
 		if feature == "logs" {
 			w.logs.Forget(w.volumes.MountPoint(from))
+		}
+		// Calendars and address books are read again on their new volume.
+		if slices.Contains(pimFeatures, feature) && w.pim != nil {
+			w.pim.Moved(feature)
 		}
 	}
 	w.logs.OnUnclean = func(u logkeep.Unclean) {

@@ -1,0 +1,302 @@
+# The system data volume goes away (or holds no folder of the account
+# while the account kept data): 503 with Retry-After on everything that
+# needs the data; never 207 with an empty list, never 404. OPTIONS and
+# discovery keep answering.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+@seed contacts kontakte A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf erika.vcf
+@volume off
+
+> OPTIONS /caldav/alex/
+< status 200
+< header-has DAV calendar-access
+
+> PROPFIND /.well-known/caldav
+> Auth: none
+< status 301
+
+> PROPFIND /caldav/
+> Auth: alex
+> Depth: 0
+< status 207
+
+> PROPFIND /caldav/alex/
+> Auth: alex
+> Depth: 0
+< status 207
+
+> PROPFIND /caldav/alex/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+> PROPFIND /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+> Depth: 0
+< status 503
+< header Retry-After 300
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+< header Retry-After 300
+
+> HEAD /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><D:href>/caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics</D:href></C:calendar-multiget>
+< status 503
+< header Retry-After 300
+
+> PROPFIND /carddav/alex/addressbooks/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+# Every report: 503 before any 207 (never an empty list).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 503
+
+
+# Writes without the volume: 503 with Retry-After, nothing written.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 503
+< header Retry-After 300
+
+> DELETE /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+< header Retry-After 300
+
+> DELETE /caldav/alex/calendars/privat/
+> Auth: alex
+< status 503
+
+> MKCALENDAR /caldav/alex/calendars/neu/
+> Auth: alex
+< status 503
+< header Retry-After 300
+
+> MKCOL /caldav/alex/calendars/neu/
+> Auth: alex
+< status 503
+
+> PROPPATCH /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>X</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 503
+< header Retry-After 300
+
+> PUT /carddav/alex/addressbooks/kontakte/B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: group-family.vcf
+< status 503
+< header Retry-After 300
+
+> DELETE /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 503
+
+# Back: all there again, nothing of the writes.
+@volume disk1
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 2
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:displayname/></A:prop></A:propfind>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/ d:displayname Privat
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 404
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 200
+
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 2
+
+# Another system data volume without the account's folder: the account
+# kept data (pim.json), so 503 (store.ErrElsewhere), not the empty virtual
+# "privat" – iOS would delete its copy.
+@volume disk2
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 503
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 0
+< status 503
+
+# Every report: 503 before any 207 (never an empty list).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+# Writes on another volume without the account's data: 503 with Retry-After, nothing written.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 503
+< header Retry-After 300
+
+> DELETE /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+< header Retry-After 300
+
+> DELETE /caldav/alex/calendars/privat/
+> Auth: alex
+< status 503
+
+> MKCALENDAR /caldav/alex/calendars/neu/
+> Auth: alex
+< status 503
+< header Retry-After 300
+
+> MKCOL /caldav/alex/calendars/neu/
+> Auth: alex
+< status 503
+
+> PROPPATCH /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>X</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 503
+< header Retry-After 300
+
+> PUT /carddav/alex/addressbooks/kontakte/B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: group-family.vcf
+< status 503
+< header Retry-After 300
+
+> DELETE /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 503
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 503
+
+@volume disk1
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 200
+< body weekly-team.ics

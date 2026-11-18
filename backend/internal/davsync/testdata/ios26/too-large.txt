@@ -1,0 +1,32 @@
+# An entry over the limit (1 MiB for .ics, 2 MiB for .vcf): 413 with
+# max-resource-size, nothing written. At the limit the data check decides.
+> PUT /caldav/alex/calendars/privat/big.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body-Size: 1048577
+< status 413
+< error cal:max-resource-size
+
+> PUT /caldav/alex/calendars/privat/big.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body-Size: 1048576
+< status 403
+< error cal:valid-calendar-data
+
+> GET /caldav/alex/calendars/privat/big.ics
+> Auth: alex
+< status 404
+
+> PUT /carddav/alex/addressbooks/kontakte/big.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body-Size: 2097153
+< status 413
+< error card:max-resource-size
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 1

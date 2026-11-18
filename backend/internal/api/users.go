@@ -111,6 +111,12 @@ type usersArea struct {
 	mailForgetUser func(name string)
 	// mailRoleChanged makes T-Mail connect anew with the rules of the role.
 	mailRoleChanged func(name string)
+	// devicesRevokeAll revokes the device passwords of the calendar
+	// (password changed, second factor reset); pimForgetUser drops the
+	// calendars, contacts and device passwords of a deleted account, and
+	// what an earlier account of the name left when one is made.
+	devicesRevokeAll func(name string)
+	pimForgetUser    func(name string)
 }
 
 // usersArea is the area of the server.
@@ -119,7 +125,8 @@ func (s *Server) usersArea() usersArea {
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
 		agentForgetUser: s.agentForgetAccount, agentForgetSettings: s.agentForgetSettings,
-		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged}
+		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
+		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -168,6 +175,7 @@ func (a usersArea) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	// (the agent's volume was missing) does not go to the new one.
 	a.agentForgetLeftovers(user.Name)
 	a.mailForgetUser(user.Name)
+	a.pimForgetUser(user.Name)
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	a.shares.Kick()
 	a.ssh.Kick()
@@ -232,6 +240,7 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		// Whoever had the lost phone is logged out as well.
 		a.sessions().DeleteUser(target.Name, "")
 		a.forgetWebDAV(target.Name)
+		a.devicesRevokeAll(target.Name)
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 		if fresh, ok := a.users.Get(target.Name); ok {
 			user = fresh
@@ -304,6 +313,7 @@ func (a usersArea) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	a.sessions().DeleteUser(target.Name, keep)
 	a.forgetWebDAV(target.Name)
+	a.devicesRevokeAll(target.Name)
 	slog.Info("password changed", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	a.shares.Kick()
 	a.ssh.Kick()
@@ -357,6 +367,8 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	a.nvrForgetUser(target.Name)
 	// T-Mail: connections end, settings, passwords and the address book go.
 	a.mailForgetUser(target.Name)
+	// T-Kalender and Kontakte: devices.json went with users/<name>.
+	a.pimForgetUser(target.Name)
 	a.prefs.forget(target.Name)
 	a.notify.ForgetPersonal(target.Name)
 	a.notify.ForgetBell(target.Name)

@@ -1,0 +1,49 @@
+# TitanOS keeps events only (TECHNIK 1.4): a VTODO is 403
+# supported-calendar-component, as is a calendar for anything but VEVENT.
+> PUT /caldav/alex/calendars/privat/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: todo.ics
+< status 403
+< error cal:supported-calendar-component
+
+> GET /caldav/alex/calendars/privat/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+< status 404
+
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><A:displayname>Erinnerungen</A:displayname><B:supported-calendar-component-set><B:comp name="VTODO"/></B:supported-calendar-component-set></A:prop></A:set></B:mkcalendar>
+< status 403
+< error cal:supported-calendar-component
+
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><B:supported-calendar-component-set><B:comp name="VEVENT"/><B:comp name="VTODO"/></B:supported-calendar-component-set></A:prop></A:set></B:mkcalendar>
+< status 403
+< error cal:supported-calendar-component
+
+> PROPFIND /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+> Depth: 0
+< status 404
+
+# Without a component set it is an event calendar.
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+< status 201
+
+> PROPFIND /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><B:supported-calendar-component-set/><A:displayname/></A:prop></A:propfind>
+< status 207
+< value /caldav/alex/calendars/erinnerungen/ cal:supported-calendar-component-set VEVENT
+< value /caldav/alex/calendars/erinnerungen/ d:displayname erinnerungen

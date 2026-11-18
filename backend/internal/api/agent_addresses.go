@@ -2,10 +2,7 @@ package api
 
 import (
 	"net/http"
-	"slices"
-	"strings"
 
-	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
 
@@ -20,54 +17,31 @@ type agentAddress struct {
 }
 
 func (s *Server) agentAddresses(r *http.Request) []agentAddress {
-	env := s.agentEnv()
+	return agentAddressesOf(s.reachAddresses(), r.TLS != nil)
+}
+
+// agentAddressesOf gives each address its scheme: https with a trusted
+// name, in the home network the scheme of the request (secure).
+func agentAddressesOf(list []reachAddress, secure bool) []agentAddress {
 	out := []agentAddress{}
-	seen := map[string]bool{}
-	add := func(kind, scheme, host string) {
-		host = strings.TrimSuffix(strings.TrimSpace(host), ".")
-		if host == "" || seen[host] {
-			return
+	for _, a := range list {
+		var https bool
+		switch a.Kind {
+		case "lan":
+			// The scheme of the request: the home network has no trusted name.
+			https = secure
+		case "tailscale":
+			https = a.TailscaleCert
+		case "ddns":
+			https = a.LetsEncrypt
+		case "domain":
+			https = true
 		}
-		seen[host] = true
-		out = append(out, agentAddress{Kind: kind, URL: scheme + "://" + host + "/agent", HTTPS: scheme == "https"})
-	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	add("lan", scheme, appproxy.PrimaryIPv4())
-	if env.tailscale != nil {
-		ts := env.tailscale.Status()
-		if ts.Name != "" {
-			if ts.HTTPS.State == "ok" {
-				add("tailscale", "https", ts.Name)
-			} else {
-				add("tailscale", "http", ts.Name)
-			}
-		} else if len(ts.IPs) > 0 {
-			add("tailscale", "http", ts.IPs[0])
+		scheme := "http"
+		if https {
+			scheme = "https"
 		}
-	}
-	if env.netbird != nil {
-		if nb := env.netbird.Status(); nb.FQDN != "" {
-			add("netbird", "http", nb.FQDN)
-		}
-	}
-	var domains []string
-	if env.letsEncrypt != nil {
-		domains = env.letsEncrypt.Status().Settings.Domains
-	}
-	for _, h := range s.ipv64Area().ddnsHosts() {
-		if slices.Contains(domains, h) {
-			add("ddns", "https", h)
-		} else {
-			add("ddns", "http", h)
-		}
-	}
-	for _, d := range domains {
-		if !strings.HasPrefix(d, "*.") {
-			add("domain", "https", d)
-		}
+		out = append(out, agentAddress{Kind: a.Kind, URL: scheme + "://" + a.Host + "/agent", HTTPS: https})
 	}
 	return out
 }

@@ -2,7 +2,9 @@
 // KI-Agent (GET /api/v1/users/{name}/agent-data, A-42): the counts, the
 // shared projects that stay with a member, the parts without numbers when
 // the agent's volume is missing, and the dialog as before on a NAS without
-// the route. Desktop width and a phone, German and English. Isolated API
+// the route; 1.11: the events and contacts of T-Kalender and Kontakte, named
+// without a number when the data volume is missing. Desktop width and a
+// phone, German and English. Isolated API
 // data only; nothing reaches a NAS.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5201 node scripts/test-ui-account-delete.mjs
 import assert from "node:assert/strict";
@@ -121,6 +123,55 @@ for (const [width, phone] of [
   await ctx.close();
 }
 
+// 1.11: T-Kalender and Kontakte go along – counted, and named without a
+// number while the data volume is missing (never "0").
+{
+  const { ctx, page, dialog } = await openDelete({
+    agentData: {
+      sam: { available: true, chats: 2, calendarEvents: 42, contacts: 7 },
+    },
+  });
+  const list = dialog.locator("[data-agent-data]");
+  await list.waitFor();
+  assert.deepEqual(
+    (await list.locator("li").allTextContents()).map((s) => s.trim()),
+    ["Chats mit ihren Dateien: 2", "Termine in T-Kalender: 42", "Kontakte: 7"],
+  );
+  await dialog.getByText("Mit dem Konto wird mitgelöscht:").waitFor();
+  assert.deepEqual(await page.evaluate(cutTextIn), [], "no cut text");
+  await page.screenshot({ path: `${out}/konto-loeschen-kalender.png` });
+  await ctx.close();
+}
+for (const [width, phone] of [
+  [1280, false],
+  [390, true],
+]) {
+  const { ctx, page, dialog } = await openDelete({
+    width,
+    phone,
+    agentData: { sam: { available: true, calendarUnknown: true } },
+  });
+  const list = dialog.locator("[data-agent-data]");
+  await list.waitFor();
+  const lines = (await list.locator("li").allTextContents()).map((s) =>
+    s.trim(),
+  );
+  assert.equal(lines.length, 1, lines.join(" | "));
+  assert.match(lines[0], /^Termine und Kontakte aus T-Kalender und Kontakte/);
+  assert.match(lines[0], /Daten-Volume ist nicht eingebunden/);
+  assert.ok(!/\d/.test(lines[0]), "no number without the data volume");
+  assert.deepEqual(await page.evaluate(cutTextIn), [], "no cut text");
+  assert.ok(
+    (await page.evaluate(() => document.documentElement.scrollWidth)) <=
+      width,
+    "no sideways scroll",
+  );
+  await page.screenshot({
+    path: `${out}/konto-loeschen-kalender-ohne-volume-${width}.png`,
+  });
+  await ctx.close();
+}
+
 // A NAS without the route (404): the dialog as before, still able to delete.
 {
   const { ctx, page, data, dialog } = await openDelete({ agentData: {} });
@@ -144,5 +195,5 @@ const relevant = errors.filter(
 );
 assert.deepEqual(relevant, [], "no script errors");
 console.log(
-  "PASS account delete names the agent's data (counts, no volume, older NAS)",
+  "PASS account delete names the agent's data, T-Mail and T-Kalender/Kontakte (counts, no volume, older NAS)",
 );

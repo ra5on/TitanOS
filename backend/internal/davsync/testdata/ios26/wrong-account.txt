@@ -1,0 +1,82 @@
+# A device of alex asks for paths of bea, of no account or of no valid
+# name: 404 everywhere, never 403 (nothing about other accounts).
+@seed-bea calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+
+> PROPFIND /caldav/bea/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> PROPFIND /caldav/bea/calendars/
+> Auth: alex
+> Depth: 1
+< status 404
+
+> PROPFIND /caldav/bea/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 404
+
+> GET /caldav/bea/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 404
+< body-lacks BEGIN:VCALENDAR
+
+> REPORT /caldav/bea/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/><C:calendar-data/></D:prop><D:href>/caldav/bea/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics</D:href></C:calendar-multiget>
+< status 404
+< body-lacks BEGIN:VCALENDAR
+
+> PROPFIND /carddav/bea/addressbooks/
+> Auth: alex
+> Depth: 1
+< status 404
+
+> PROPFIND /caldav/nobody/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> PROPFIND /caldav/Alex/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> PROPFIND /caldav/%61lex/calendars/
+> Auth: alex
+> Depth: 0
+< status 207
+
+> PROPFIND /caldav/alex/kalender/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> PROPFIND /caldav/alex/calendars/privat/x.vcf
+> Auth: alex
+> Depth: 0
+< status 404
+
+# bea's own device sees her data.
+> GET /caldav/bea/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: bea
+< status 200
+< body weekly-team.ics
+
+# alex's account password (and any but a device password) is refused.
+> PROPFIND /caldav/alex/
+> Auth: account
+> Depth: 0
+< status 401
+< header-has WWW-Authenticate TitanOS Kalender
+
+# Without a password even a path of no account is 401 first: nothing is
+# told before the sign-in.
+> PROPFIND /caldav/Bad%20Name/x/y/z/w/
+> Auth: none
+< status 401
+< header-has WWW-Authenticate TitanOS Kalender

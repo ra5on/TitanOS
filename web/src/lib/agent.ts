@@ -319,6 +319,8 @@ export type Settings = {
 		folders?: FolderRule[];
 		/** Web tools do not ask again after outside content was read. */
 		webFree?: boolean;
+		/** 1.11: calendar and contacts have two axes (never under areas). */
+		dataRights?: Partial<Record<DataArea, DataRight>>;
 	};
 	locations?: Location[];
 	/** 1.10: nvr_events gives names of known faces and plates. */
@@ -339,6 +341,9 @@ export type Settings = {
 		assistKeySet?: boolean;
 		/** What a question from Home Assistant may use: deny, read or change per area. */
 		assistAreas?: Record<string, string>;
+		/** 1.11: calendar and contacts for Home Assistant – deny or read only;
+		 *  a field of its own (1.10 refuses unknown keys in assistAreas). */
+		assistData?: Record<string, string>;
 	};
 	/** Speech to text with a Whisper service on the Ollama computer (PLAN 49). */
 	voice?: { enabled?: boolean; url?: string; model?: string };
@@ -375,6 +380,8 @@ export type ToolView = {
 export const AREAS = [
 	'system',
 	'files',
+	'calendar',
+	'contacts',
 	'docker',
 	'vms',
 	'backups',
@@ -665,11 +672,43 @@ export function levelLabel(level: string, locale: 'de' | 'en'): string {
 	return LEVELS[level]?.[locale] ?? level;
 }
 
+/** Calendar and contacts (1.11): two axes instead of single tools. */
+export const DATA_AREAS = ['calendar', 'contacts'] as const;
+export type DataArea = (typeof DATA_AREAS)[number];
+/** Reading is allow or deny, writing (create, change, delete) allow, ask or deny. */
+export type DataRight = { read: Mode; write: Mode };
+
+export const isDataArea = (area: string): area is DataArea =>
+	(DATA_AREAS as readonly string[]).includes(area);
+
+/** What a preset gives calendar and contacts (policy.go presetDataMode):
+ *  reading always, writing asks in the standard preset. */
+export function presetDataMode(preset: Preset | string, kind: string): Mode {
+	if (kind === 'read') return 'allow';
+	if (preset === 'all') return 'allow';
+	if (preset === 'read') return 'deny';
+	return 'ask';
+}
+
+/** The two axes of calendar or contacts as they apply now. */
+export function dataRight(policy: Settings['policy'], area: DataArea): DataRight {
+	const own = policy.dataRights?.[area];
+	return {
+		read: own?.read ?? presetDataMode(policy.preset, 'read'),
+		write: own?.write ?? presetDataMode(policy.preset, 'change'),
+	};
+}
+
 /** The mode of a tool under a policy, like the backend decides (policy.go). */
 export function toolMode(
 	policy: Settings['policy'],
 	tool: { name: string; area: string; kind: string },
 ): Mode {
+	// Single tool settings do not count for calendar and contacts.
+	if (isDataArea(tool.area)) {
+		const r = dataRight(policy, tool.area);
+		return tool.kind === 'read' ? r.read : r.write;
+	}
 	const set = policy.tools?.[tool.name];
 	if (set) return set;
 	const area = policy.areas?.[tool.area];
@@ -699,7 +738,9 @@ export function areaMode(
 /** Whether the policy is one of the quick choices, untouched. */
 export function presetOf(policy: Settings['policy']): Preset | 'custom' {
 	const touched =
-		Object.keys(policy.areas ?? {}).length > 0 || Object.keys(policy.tools ?? {}).length > 0;
+		Object.keys(policy.areas ?? {}).length > 0 ||
+		Object.keys(policy.tools ?? {}).length > 0 ||
+		Object.keys(policy.dataRights ?? {}).length > 0;
 	return touched ? 'custom' : policy.preset;
 }
 

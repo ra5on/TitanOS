@@ -22,6 +22,9 @@
 		addresses: { kind: string; url: string }[];
 		areas: string[];
 		levels: Record<string, Level>;
+		/** 1.11: calendar and contacts, deny or read only (assistData). */
+		dataAreas?: string[];
+		dataLevels?: Record<string, Level>;
 		last: {
 			at: string;
 			from: string;
@@ -32,6 +35,12 @@
 		} | null;
 		memories?: number;
 		chats?: number;
+		/** S-23: the account Assist acts as, and what it agreed to itself. */
+		actor?: string;
+		isActor?: boolean;
+		consent?: Record<string, boolean>;
+		/** What the account on this page agreed to (it may not be the actor now). */
+		myConsent?: Record<string, boolean>;
 	};
 	let info = $state<Info | null>(null);
 	let error = $state('');
@@ -107,6 +116,8 @@
 		memory: 'bulb',
 		plan: 'clock',
 		code: 'zap',
+		calendar: 'calendar',
+		contacts: 'person',
 	};
 	// Areas without a reading side are only on or off.
 	const onOff = ['web', 'plan', 'code'];
@@ -129,10 +140,66 @@
 			[area]: value,
 		};
 	}
-	const denyAll = () =>
-		(settings.homeassistant.assistAreas = Object.fromEntries(
+	// Calendar and contacts: never more than reading, in a field of their own.
+	const readOnly = $derived([
+		{ value: 'deny' as Level, label: t('agent.assist.deny') },
+		{ value: 'read' as Level, label: t('agent.assist.read') },
+	]);
+	const dataLevel = (area: string): Level =>
+		settings.homeassistant.assistData?.[area] === 'read'
+			? 'read'
+			: settings.homeassistant.assistData?.[area] === 'deny'
+				? 'deny'
+				: (info?.dataLevels?.[area] ?? 'deny');
+	function setDataLevel(area: string, value: Level) {
+		settings.homeassistant.assistData = {
+			...(settings.homeassistant.assistData ?? {}),
+			[area]: value === 'read' ? 'read' : 'deny',
+		};
+	}
+	// Calendar and contacts hold only with the consent of the acting account,
+	// given by that account itself on this page (S-23); never saved with
+	// the page, never for someone else.
+	let consentBusy = $state(false);
+	const showConsent = $derived(
+		!!info && (!!info.isActor || Object.values(info.myConsent ?? {}).some(Boolean)),
+	);
+	const waitText = (area: string) => {
+		if (dataLevel(area) !== 'read' || info?.consent?.[area]) return '';
+		return info?.isActor
+			? t('agent.assist.consent.waitingMe')
+			: t('agent.assist.consent.waiting', { account: info?.actor ?? '' });
+	};
+	const consentTitle = $derived<Record<string, string>>({
+		calendar: t('agent.assist.consent.calendar'),
+		contacts: t('agent.assist.consent.contacts'),
+	});
+	async function setConsent(area: string, value: boolean) {
+		consentBusy = true;
+		error = '';
+		try {
+			const next = { ...(info?.myConsent ?? {}), [area]: value };
+			await api.put('/agent/assist/consent', next);
+			await load();
+		} catch (e) {
+			error = apiErrorText(e);
+		} finally {
+			consentBusy = false;
+		}
+	}
+	function denyAll() {
+		settings.homeassistant.assistAreas = Object.fromEntries(
 			(info?.areas ?? []).map((a) => [a, 'deny']),
-		));
+		);
+		if (info?.dataAreas?.length)
+			settings.homeassistant.assistData = Object.fromEntries(
+				info.dataAreas.map((a) => [a, 'deny']),
+			);
+	}
+	function defaults() {
+		settings.homeassistant.assistAreas = undefined;
+		settings.homeassistant.assistData = undefined;
+	}
 	const kindText = (kind: string) =>
 		t(
 			(['lan', 'tailscale', 'netbird', 'ddns', 'domain'].includes(kind)
@@ -149,12 +216,10 @@
 				from: l.from,
 				reason: t(`agent.assist.reason.${l.reason === 'key' ? 'key' : 'address'}` as MessageKey),
 			});
-		return t('agent.assist.lastOk', {
-			when,
-			from: l.from,
-			question: l.question ?? '',
-			seconds: ((l.millis ?? 0) / 1000).toFixed(1).replace('.', ','),
-		});
+		const seconds = ((l.millis ?? 0) / 1000).toFixed(1).replace('.', ',');
+		// The question only for the account Assist acts as (S-23).
+		if (!l.question) return t('agent.assist.lastOkNoQuestion', { when, from: l.from, seconds });
+		return t('agent.assist.lastOk', { when, from: l.from, question: l.question, seconds });
 	});
 </script>
 
@@ -257,12 +322,7 @@
 	<SettingGroup title={t('agent.assist.rights')} desc={t('agent.assist.rightsDesc')}>
 		{#snippet tools()}
 			<button type="button" class="btn" onclick={denyAll}>{t('agent.assist.denyAll')}</button>
-			<button
-				type="button"
-				class="btn"
-				onclick={() => (settings.homeassistant.assistAreas = undefined)}
-				>{t('agent.assist.defaults')}</button
-			>
+			<button type="button" class="btn" onclick={defaults}>{t('agent.assist.defaults')}</button>
 		{/snippet}
 		{#each info.areas as area (area)}
 			<SettingRow
@@ -281,7 +341,58 @@
 				{/snippet}
 			</SettingRow>
 		{/each}
+		{#each info.dataAreas ?? [] as area (area)}
+			<SettingRow
+				icon={icons[area] ?? 'box'}
+				title={t(`agent.assist.area.${area}` as MessageKey)}
+				desc={waitText(area)
+					? `${t(`agent.assist.areaDesc.${area}` as MessageKey)} – ${waitText(area)}`
+					: t(`agent.assist.areaDesc.${area}` as MessageKey)}
+			>
+				{#snippet control()}
+					<Segments
+						compact
+						label={t(`agent.assist.area.${area}` as MessageKey)}
+						value={dataLevel(area)}
+						options={readOnly}
+						onchange={(v) => setDataLevel(area, v)}
+					/>
+				{/snippet}
+			</SettingRow>
+		{/each}
 	</SettingGroup>
+	{#if showConsent}
+		<SettingGroup
+			title={t('agent.assist.consent.title')}
+			desc={info.isActor
+				? t('agent.assist.consent.desc')
+				: t('agent.assist.consent.notActor', { actor: info.actor ?? '' })}
+		>
+			{#each info.dataAreas ?? [] as area (area)}
+				<SettingRow
+					icon={icons[area] ?? 'box'}
+					title={consentTitle[area] ?? area}
+					desc={info.myConsent?.[area]
+						? t('agent.assist.consent.given')
+						: t('agent.assist.consent.notGiven')}
+					for="ag-consent-{area}"
+				>
+					{#snippet control()}
+						<input
+							id="ag-consent-{area}"
+							type="checkbox"
+							class="switch"
+							role="switch"
+							data-consent={area}
+							disabled={consentBusy}
+							checked={!!info?.myConsent?.[area]}
+							onchange={(e) => setConsent(area, e.currentTarget.checked)}
+						/>
+					{/snippet}
+				</SettingRow>
+			{/each}
+		</SettingGroup>
+	{/if}
 {/if}
 
 {#if confirmNew}

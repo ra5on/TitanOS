@@ -18,10 +18,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"image"
-	"image/color"
-	"image/jpeg"
 	"io"
 	"maps"
 	"net/http"
@@ -29,7 +25,7 @@ import (
 	"slices"
 	"sync"
 
-	xdraw "golang.org/x/image/draw"
+	"github.com/ra5on/TitanOS/backend/internal/pim/photo"
 )
 
 const (
@@ -248,28 +244,5 @@ func (au authArea) handleAccountPicturePhoto(w http.ResponseWriter, r *http.Requ
 // reencodeAccountPicture decodes an upload and writes a square JPEG of at
 // most accountPictureEdge pixels: only pixels are kept (no location data).
 func reencodeAccountPicture(data []byte) ([]byte, error) {
-	if !slices.Contains(backgroundTypes, http.DetectContentType(data)) {
-		return nil, errors.New("the picture must be JPEG, PNG or WebP")
-	}
-	config, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || config.Width < 16 || config.Height < 16 || config.Width*config.Height > maxLoginImagePixels {
-		return nil, errors.New("the picture could not be read or is too large")
-	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, errors.New("the picture could not be read")
-	}
-	b := img.Bounds()
-	side := min(b.Dx(), b.Dy())
-	crop := image.Rect(b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2, 0, 0)
-	crop.Max = crop.Min.Add(image.Pt(side, side))
-	edge := min(side, accountPictureEdge)
-	canvas := image.NewRGBA(image.Rect(0, 0, edge, edge))
-	xdraw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, xdraw.Src)
-	xdraw.CatmullRom.Scale(canvas, canvas.Bounds(), img, crop, xdraw.Over, nil)
-	var out bytes.Buffer
-	if err := jpeg.Encode(&out, canvas, &jpeg.Options{Quality: 86}); err != nil {
-		return nil, errors.New("the picture could not be saved")
-	}
-	return out.Bytes(), nil
+	return photo.Reencode(data, photo.Options{Edge: accountPictureEdge, Square: true, MaxPixels: maxLoginImagePixels, MinEdge: 16})
 }

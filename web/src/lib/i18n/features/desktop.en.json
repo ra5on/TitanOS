@@ -373,5 +373,7 @@
 	"desktop.widget.agentIdle": "Nothing open. Ask a question.",
 	"share.fileGone": "No longer in the browser – share the file again.",
 	"share.textFile": "shared-{stamp}.txt",
-	"share.fileName": "File {n}"
+	"share.fileName": "File {n}",
+	"desktop.app.calendar": "T-Calendar",
+	"desktop.app.contacts": "Contacts"
 }

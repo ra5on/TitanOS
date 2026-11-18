@@ -111,6 +111,22 @@
 		replyAll: 'M12 7l-5 5 5 5M7 7l-5 5 5 5M7 12h7a6 6 0 0 1 6 6v1',
 		forward: 'M15 7l5 5-5 5M20 12H10a6 6 0 0 0-6 6v1',
 		flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+		// 1.11, T-Kalender and Kontakte: a phone or tablet with a device password.
+		device:
+			'M8 2.5h8A1.5 1.5 0 0 1 17.5 4v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5ZM11 18.5h2',
+		// A calendar sheet, a person, a phone, a place, a birthday cake, a
+		// repetition, a note and an address book (draft 108, Icon108.svelte).
+		calendar:
+			'M5 5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5v-12A1.5 1.5 0 0 1 5 5ZM3.5 10h17M8 3v4M16 3v4',
+		person: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4.5 20a7.5 7.5 0 0 1 15 0',
+		phone:
+			'M6.5 3.5h3l1.5 4-2 1.5a10 10 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2Z',
+		place:
+			'M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11ZM12 7.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
+		cake: 'M4 20h16M5 20v-6.5A1.5 1.5 0 0 1 6.5 12h11a1.5 1.5 0 0 1 1.5 1.5V20M5 15.5c1.7 1.3 3.3 1.3 5 0 1.7 1.3 3.3 1.3 5 0 1.7 1.3 3.3 1.3 4 0M12 12V9M12 6.5c-1-1 0-2.5 0-3 0 .5 1 2 0 3Z',
+		repeat: 'M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3',
+		note: 'M6 3.5h8.5L19 8v12.5H6ZM14 3.5V8h5M9 12h7M9 15.5h7',
+		book: 'M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15ZM5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3M9 7.5h6',
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

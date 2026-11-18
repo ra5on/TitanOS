@@ -21,7 +21,7 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -174,6 +174,10 @@ func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) 
 	}
 	if kind == "fileappsdocker" && !validDockerFileApps(value) {
 		writeError(w, http.StatusBadRequest, "bad_request", `fileappsdocker maps file endings (lower case, without dot) to "docker:<app>"`)
+		return
+	}
+	if kind == "calendar" && !validCalendarPrefs(value) {
+		writeError(w, http.StatusBadRequest, "bad_request", `calendar holds hidden: a list of calendar ids`)
 		return
 	}
 	if kind == "fileapps" && !validFileApps(value) {

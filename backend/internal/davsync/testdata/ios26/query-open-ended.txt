@@ -1,0 +1,110 @@
+# calendar-query with a time-range that has only a start (what iOS sends,
+# TECHNIK 1.5): a weekly series from 03.11.2026 and a single event after
+# the start both match; an event before it does not. (go-webdav dropped
+# series here.)
+@seed calendar privat sport.ics weekly-tuesday.ics
+@seed calendar privat zahnarzt.ics dentist.ics
+@seed calendar privat vorbei.ics old-event.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/sport.ics d:getetag {etag:weekly-tuesday.ics}
+< value /caldav/alex/calendars/privat/zahnarzt.ics d:getetag {etag:dentist.ics}
+< response-lacks /caldav/alex/calendars/privat/vorbei.ics
+
+# Far after the start of the series: it still matches (no end), the
+# single events not.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/><C:calendar-data/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20300101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+< data /caldav/alex/calendars/privat/sport.ics weekly-tuesday.ics
+
+# Only an end: what began before it.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range end="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+< response-lacks /caldav/alex/calendars/privat/sport.ics
+< value /caldav/alex/calendars/privat/vorbei.ics d:getetag {etag:old-event.ics}
+
+# No time-range: every event; comp/expand below calendar-data are not
+# applied (the stored bytes come back).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/><C:calendar-data><C:comp name="VCALENDAR"><C:comp name="VEVENT"><C:prop name="SUMMARY"/></C:comp></C:comp><C:expand start="20261101T000000Z" end="20261201T000000Z"/></C:calendar-data></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"/></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 3
+< data /caldav/alex/calendars/privat/zahnarzt.ics dentist.ics
+< data /caldav/alex/calendars/privat/vorbei.ics old-event.ics
+
+# Only VEVENT is stored: a VTODO query is empty; a filter the server does
+# not evaluate (SUMMARY) gives every event (the client filters).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"/></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 0
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="SUMMARY"><C:text-match>Zahnarzt</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 3
+
+# Bad filters: none, a time-range without start and end, a date that is no
+# UTC time, an end before the start.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop></C:calendar-query>
+< status 403
+< error cal:valid-filter
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 403
+< error cal:valid-filter
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 403
+< error cal:valid-filter
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261201T000000Z" end="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 403
+< error cal:valid-filter

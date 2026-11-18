@@ -51,6 +51,14 @@ type agentAccountData struct {
 	// MailAccounts are the mailboxes of T-Mail the deletion takes along
 	// (1.05; from the stick's settings in RAM, also without the agent).
 	MailAccounts int `json:"mailAccounts"`
+	// CalendarEvents and Contacts are the events (calendar files) and
+	// contacts (groups not counted) of T-Kalender and Kontakte the deletion
+	// takes along (1.11, TECHNIK 5.7). Both are left out while they cannot
+	// be counted – no data volume, the account's folder on another volume –
+	// and CalendarUnknown says so: never 0 for data that is not known.
+	CalendarEvents  *int `json:"calendarEvents,omitempty"`
+	Contacts        *int `json:"contacts,omitempty"`
+	CalendarUnknown bool `json:"calendarUnknown,omitempty"`
 }
 
 // agentDataOf counts the agent's data of an account. It reads the volume
@@ -60,6 +68,15 @@ func (s *Server) agentDataOf(name string) agentAccountData {
 	out := agentAccountData{}
 	if s.opts.Mail != nil {
 		out.MailAccounts = s.opts.Mail.MailboxCount(name)
+	}
+	// T-Kalender and Kontakte live on the volume of the system data, not on
+	// the agent's: counted here whatever the agent's volume says.
+	if s.opts.PIM != nil {
+		if events, contacts, err := s.opts.PIM.Counts(name); err == nil {
+			out.CalendarEvents, out.Contacts = &events, &contacts
+		} else {
+			out.CalendarUnknown = true
+		}
 	}
 	if s.agentOpen == nil && s.agentSettings().Volume == "" || store.Available() != nil {
 		return out

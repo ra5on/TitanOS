@@ -5,7 +5,7 @@
 	"desktop.toast.restart": "{name} ließ sich nicht neu starten: {reason}",
 	"desktop.toast.prefs": "Die Einstellungen des Arbeitsplatzes ließen sich nicht speichern: {reason} Sie gelten nur bis zum Neuladen; die nächste Änderung versucht es erneut.",
 	"desktop.toast.drop": "Der Dateimanager hat die abgelegten Dateien ({count}) nicht angenommen. Ziehe sie noch einmal auf den Arbeitsplatz oder lade sie im Dateimanager hoch.",
-	"users.agentData.title": "Vom KI-Agenten wird mitgelöscht:",
+	"users.agentData.title": "Mit dem Konto wird mitgelöscht:",
 	"users.agentData.loading": "Wird geprüft, was der KI-Agent zu diesem Konto gespeichert hat …",
 	"users.agentData.chats": "Chats mit ihren Dateien: {count}",
 	"users.agentData.projects": "Eigene Projekte: {count}",
@@ -32,5 +32,8 @@
 	"agent.f.protect.e.endConfirm": "{name} verliert sofort den lesenden Zugang auf {shares} und das Notfallhandbuch. Zurückgenommen wird genau das, was der Notfallzugang gegeben hat.",
 	"agent.f.protect.e.endNow": "Zugang beenden",
 	"terminal.newShell": "Neue Shell",
-	"terminal.lastClosed": "Die letzte NAS-Shell ist beendet."
+	"terminal.lastClosed": "Die letzte NAS-Shell ist beendet.",
+	"users.agentData.calendarEvents": "Termine in T-Kalender: {count}",
+	"users.agentData.contacts": "Kontakte: {count}",
+	"users.agentData.part.calendar": "Termine und Kontakte aus T-Kalender und Kontakte (gerade nicht zu zählen: Das Daten-Volume ist nicht eingebunden. Ihr Ordner bleibt dort liegen, bis ein neues Konto mit diesem Namen zum ersten Mal speichert; sehen kann es ihn nie.)"
 }

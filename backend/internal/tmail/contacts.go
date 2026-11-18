@@ -210,9 +210,16 @@ func trimContacts(uc *userContacts) {
 // Contacts suggests at most 20 entries for q (part of name or address),
 // the most used first.
 func (m *Manager) Contacts(user, q string) []Contact {
+	return m.Learned(user, q, maxSuggestions, nil)
+}
+
+// Learned lists the learned addresses matching q (part of name or address,
+// empty = all) that skip does not refuse (nil = none refused), the most
+// used first, at most limit. Kontakte shows those not in a contact.
+func (m *Manager) Learned(user, q string, limit int, skip func(addr string) bool) []Contact {
 	account, ok := m.lookup(user)
 	out := []Contact{}
-	if !ok {
+	if !ok || limit <= 0 {
 		return out
 	}
 	q = strings.ToLower(strings.TrimSpace(q))
@@ -221,18 +228,25 @@ func (m *Manager) Contacts(user, q string) []Contact {
 	defer b.mu.Unlock()
 	uc := m.loadContactsLocked(user, account)
 	for _, c := range uc.list {
-		if q == "" || strings.Contains(strings.ToLower(c.Addr), q) || strings.Contains(strings.ToLower(c.Name), q) {
-			out = append(out, *c)
+		if q != "" && !strings.Contains(strings.ToLower(c.Addr), q) && !strings.Contains(strings.ToLower(c.Name), q) {
+			continue
 		}
+		if skip != nil && skip(c.Addr) {
+			continue
+		}
+		out = append(out, *c)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {
 			return out[i].Count > out[j].Count
 		}
-		return out[i].Last.After(out[j].Last)
+		if !out[i].Last.Equal(out[j].Last) {
+			return out[i].Last.After(out[j].Last)
+		}
+		return out[i].Addr < out[j].Addr
 	})
-	if len(out) > maxSuggestions {
-		out = out[:maxSuggestions]
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out
 }

@@ -1,0 +1,169 @@
+# What davsync refuses, and how.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: infinity
+< status 403
+< error d:propfind-finite-depth
+
+# No Depth is Depth 0.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+< status 207
+< responses 1
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 2
+< status 400
+
+# allprop leaves out supported-report-set, privileges and sync-token;
+# propname names them.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:allprop/></A:propfind>
+< status 207
+< prop /caldav/alex/calendars/privat/ 200 d:resourcetype d:displayname cs:getctag ical:calendar-color
+< no-prop /caldav/alex/calendars/privat/ d:supported-report-set d:current-user-privilege-set d:sync-token
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:allprop/><A:include><A:sync-token/></A:include></A:propfind>
+< status 207
+< prop /caldav/alex/calendars/privat/ 200 d:sync-token cs:getctag
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:propname/></A:propfind>
+< status 207
+< prop /caldav/alex/calendars/privat/ 200 d:supported-report-set d:current-user-privilege-set d:sync-token cs:getctag
+< body-lacks Privat
+
+# Unknown properties, of any namespace, are 404.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:X="http://example.com/ns/"><A:prop><X:color-of-the-day/><A:quota-used-bytes/><A:getetag/><A:displayname/></A:prop></A:propfind>
+< status 207
+< prop /caldav/alex/calendars/privat/ 404 x:color-of-the-day d:quota-used-bytes d:getetag
+< prop /caldav/alex/calendars/privat/ 200 d:displayname
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0"?>
+> <!DOCTYPE propfind [<!ENTITY big "aaaaaaaaaaaaaaaaaaaaaaaa">]>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:displayname/></A:prop></A:propfind>
+< status 400
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 0
+>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:displayname></A:prop></A:propfind>
+< status 400
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 0
+>
+> <A:prop xmlns:A="DAV:"><A:displayname/></A:prop>
+< status 400
+
+> MOVE /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+> Destination: /caldav/alex/calendars/arbeit/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+< status 403
+
+> COPY /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 403
+
+> LOCK /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 405
+
+> ACL /caldav/alex/calendars/privat/
+> Auth: alex
+< status 405
+
+# An empty PUT is no calendar data.
+> PUT /caldav/alex/calendars/privat/new.ics
+> Auth: alex
+< status 403
+< error cal:valid-calendar-data
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"/></C:filter></C:calendar-query>
+< status 207
+< responses 1
+
+# A report of the other protocol, or on another level, is 403 supported-report.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
+< status 403
+< error d:supported-report
+
+> REPORT /caldav/alex/calendars/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:sync-level>1</D:sync-level><D:prop><D:getetag/></D:prop></D:sync-collection>
+< status 405
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+< status 400
+
+# A device of bea at alex's OPTIONS: OPTIONS needs no sign-in and says
+# nothing about accounts.
+> OPTIONS /caldav/nobody/calendars/
+< status 200
+< header-has DAV calendar-access
+< no-header Access-Control-Allow-Origin
+
+> OPTIONS /caldav/alex/calendars/privat/x.ics
+< status 200
+< header Allow OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH
+
+> OPTIONS /caldav/alex/calendars/privat/
+< status 200
+< header Allow OPTIONS, DELETE, PROPFIND, PROPPATCH, MKCOL, MKCALENDAR, REPORT
+
+> OPTIONS /carddav/alex/addressbooks/kontakte/
+< status 200
+< header Allow OPTIONS, DELETE, PROPFIND, PROPPATCH, MKCOL, REPORT
+# One address book per account: MKCOL is 403 there, so no extended-mkcol.
+< header DAV 1, 3, access-control, addressbook
+< header-lacks DAV extended-mkcol
+
+> OPTIONS /caldav/alex/calendars/privat/
+< status 200
+< header DAV 1, 3, access-control, calendar-access, extended-mkcol
+
+> OPTIONS /caldav/alex/calendars/
+< status 200
+< header Allow OPTIONS, PROPFIND, PROPPATCH
+
+> OPTIONS /caldav/
+< status 200
+< header Allow OPTIONS, PROPFIND

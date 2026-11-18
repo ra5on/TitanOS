@@ -1,0 +1,90 @@
+# An iPhone adds a CardDAV account (Settings › Apps › Contacts › Accounts).
+# No data yet: the virtual "kontakte" with ctag 0-0.
+
+> PROPFIND /.well-known/carddav
+> Auth: none
+> Depth: 0
+< status 301
+< header Location /carddav/
+
+> PROPFIND /carddav/
+> Auth: none
+> Depth: 0
+< status 401
+< header WWW-Authenticate Basic realm="TitanOS Kalender", charset="UTF-8"
+< not-counted
+
+> PROPFIND /.well-known/carddav
+> Auth: alex
+> Follow: yes
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:current-user-principal/><A:resourcetype/></A:prop></A:propfind>
+< status 207
+< value /carddav/ d:current-user-principal <d:href>/carddav/alex/</d:href>
+
+> PROPFIND /carddav/alex/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:carddav">
+>   <A:prop><B:addressbook-home-set/><A:current-user-principal/><A:displayname/><A:principal-URL/><A:resourcetype/><A:supported-report-set/></A:prop>
+> </A:propfind>
+< status 207
+< prop /carddav/alex/ 200 card:addressbook-home-set d:current-user-principal d:displayname d:principal-URL d:resourcetype d:supported-report-set
+< value /carddav/alex/ card:addressbook-home-set <d:href>/carddav/alex/addressbooks/</d:href>
+< value /carddav/alex/ d:resourcetype <d:collection/><d:principal/>
+
+> OPTIONS /carddav/alex/
+> Auth: alex
+< status 200
+< header-has DAV addressbook
+< header-has Allow PROPFIND
+
+> OPTIONS /carddav/alex/addressbooks/kontakte/
+< status 200
+< header-has DAV addressbook
+< header-has Allow REPORT
+
+> PROPFIND /carddav/alex/addressbooks/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:carddav" xmlns:C="http://calendarserver.org/ns/">
+>   <A:prop>
+>     <C:getctag/>
+>     <A:sync-token/>
+>     <A:resourcetype/>
+>     <A:displayname/>
+>     <B:supported-address-data/>
+>     <B:max-resource-size/>
+>     <B:addressbook-description/>
+>     <A:current-user-privilege-set/>
+>     <A:supported-report-set/>
+>   </A:prop>
+> </A:propfind>
+< status 207
+< responses 2
+< prop /carddav/alex/addressbooks/kontakte/ 200 cs:getctag d:sync-token d:resourcetype d:displayname card:supported-address-data card:max-resource-size card:addressbook-description d:current-user-privilege-set d:supported-report-set
+< value /carddav/alex/addressbooks/kontakte/ cs:getctag 0-0
+< value /carddav/alex/addressbooks/kontakte/ d:resourcetype <d:collection/><card:addressbook/>
+< value /carddav/alex/addressbooks/kontakte/ card:supported-address-data <card:address-data-type content-type="text/vcard" version="3.0"/>
+< value /carddav/alex/addressbooks/kontakte/ card:max-resource-size 2097152
+< privileges /carddav/alex/addressbooks/kontakte/ read write write-properties write-content bind unbind read-current-user-privilege-set
+< value /carddav/alex/addressbooks/kontakte/ d:supported-report-set <d:supported-report><d:report><card:addressbook-multiget/></d:report></d:supported-report>
+< value /carddav/alex/addressbooks/kontakte/ d:supported-report-set <d:supported-report><d:report><card:addressbook-query/></d:report></d:supported-report>
+< value /carddav/alex/addressbooks/kontakte/ d:supported-report-set <d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report>
+< privileges /carddav/alex/addressbooks/ read read-current-user-privilege-set
+
+# Calendar properties are no address book's.
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><B:supported-calendar-component-set/><B:calendar-home-set/></A:prop></A:propfind>
+< status 207
+< prop /carddav/alex/addressbooks/kontakte/ 404 cal:supported-calendar-component-set cal:calendar-home-set

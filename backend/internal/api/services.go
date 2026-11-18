@@ -140,7 +140,18 @@ func (a servicesArea) handleServicesState(w http.ResponseWriter, r *http.Request
 	// The program T-Mail: shown only to an account with the grant. Without
 	// this the menu never offered T-Mail, whatever the switch said (1.08).
 	out["mail"] = a.mailOn != nil && a.mailOn(currentUser(r))
+	// 1.11: T-Kalender and Kontakte for every account that is not locked
+	// (decided, TECHNIK 7.5); the keys let the menu show them (optIn) and
+	// leave room to switch them off later without a new web UI.
+	pim := pimOn(currentUser(r))
+	out["calendar"], out["contacts"] = pim, pim
 	writeJSON(w, http.StatusOK, out)
+}
+
+// pimOn says whether an account has T-Kalender and Kontakte: every account
+// that is not locked. A locked one has no session to ask with anyway.
+func pimOn(user auth.User) bool {
+	return user.Name != "" && !user.Disabled
 }
 
 func (a servicesArea) handleServices(w http.ResponseWriter, r *http.Request) {

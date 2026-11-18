@@ -1,0 +1,68 @@
+# DELETE goes by the kind of the path: a collection path deletes the
+# collection (never an entry of a like name), an entry path the entry
+# (never a collection). The last own calendar and the address book stay.
+@seed calendar privat arbeit.ics dentist.ics
+@collection calendar arbeit Arbeit
+@seed calendar arbeit 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+
+> DELETE /caldav/alex/calendars/privat/arbeit.ics/
+> Auth: alex
+< status 404
+
+> DELETE /caldav/alex/calendars/arbeit/
+> Auth: alex
+> If-Match: "0-0"
+< status 412
+
+> DELETE /caldav/alex/calendars/arbeit/
+> Auth: alex
+< status 204
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 2
+< response-lacks /caldav/alex/calendars/arbeit/
+
+> GET /caldav/alex/calendars/privat/arbeit.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+
+> GET /caldav/alex/calendars/arbeit/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 404
+
+# The entry path deletes the entry; privat stays.
+> DELETE /caldav/alex/calendars/privat/arbeit.ics
+> Auth: alex
+< status 204
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 1
+
+# privat is the last one now.
+> DELETE /caldav/alex/calendars/privat/
+> Auth: alex
+< status 403
+
+> DELETE /caldav/alex/calendars/privat
+> Auth: alex
+< status 403
+
+> DELETE /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+< status 403
+
+> DELETE /caldav/alex/calendars/
+> Auth: alex
+< status 405
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+< status 207

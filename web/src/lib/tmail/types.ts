@@ -119,7 +119,14 @@ export type Provider = {
 	hint: string;
 };
 
-export type Contact = { name: string; addr: string; count: number; last: string };
+/** `source` (1.11): from the account's contacts or learned from sent mail; older NAS leave it out. */
+export type Contact = {
+	name: string;
+	addr: string;
+	count: number;
+	last: string;
+	source?: 'contact' | 'learned';
+};
 
 /** `default`: the mailboxes that propose this signature (the same as accounts[].signature). */
 export type Signature = { id: string; name: string; text: string; default?: string[] };

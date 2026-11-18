@@ -54,6 +54,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	"github.com/ra5on/TitanOS/backend/internal/pim/devices"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
@@ -105,6 +107,12 @@ type Options struct {
 	Docker  *docker.Manager
 	// Mail is T-Mail (docs/TMAIL.md); nil answers 403 mail_disabled.
 	Mail *tmail.Manager
+	// PIM keeps calendars and address books (TECHNIK 5, pim/store); nil
+	// answers 503 like a missing volume.
+	PIM *pimstore.Store
+	// HTTPSPort is the port of the web UI over HTTPS (webPorts of titand),
+	// for the addresses of the setup page of the iPhone; 0 is 443.
+	HTTPSPort int
 	// SystemData says where TitanOS keeps its own data while no volume is
 	// chosen; nil takes the first mounted volume by name.
 	SystemData *volumedata.Home
@@ -240,8 +248,10 @@ type Server struct {
 	containerNames containerNameCache
 	handler        http.Handler
 	// patterns are all routes of the mux, for tests that compare them
-	// with the route list of the public API.
+	// with the route list of the public API; mux is the mux itself, for
+	// tests that ask which pattern serves a path.
 	patterns []string
+	mux      *http.ServeMux
 	// manual is the documentation for docs_search and docs_read over MCP.
 	manual *toolcatalog.Manual
 	// power is a restart or shutdown that waits for a rebuild; see system.go.
@@ -256,13 +266,16 @@ type Server struct {
 	// The KI-Agent (agent*.go): settings, the Ollama client, running
 	// chats and open pages. agentOpen and agentWebFactory replace the data
 	// volume and the web in tests.
-	agentConf   agentSettingsState
-	agentClient atomic.Pointer[agent.Ollama]
-	agentRT     agentRuntime
-	agentWatch  agentWatchers
-	agentMirror agentMirror
-	agentSnaps  agentSnapState
-	agentOpen   func() (*os.Root, error)
+	agentConf agentSettingsState
+	// assistConsent: the consent of accounts to Assist reading their
+	// calendar and contacts (agent_assist_consent.go, S-23).
+	assistConsent assistConsents
+	agentClient   atomic.Pointer[agent.Ollama]
+	agentRT       agentRuntime
+	agentWatch    agentWatchers
+	agentMirror   agentMirror
+	agentSnaps    agentSnapState
+	agentOpen     func() (*os.Root, error)
 	// viewerOpen replaces viewer.Manager.Open in tests.
 	viewerOpen viewerOpener
 	// agentMCP holds the clients of the agent's MCP connections.
@@ -282,6 +295,10 @@ type Server struct {
 	agentPhotos agentPhotosState
 	// agentTitles: chats whose title the model is writing (1.07).
 	agentTitles agentTitles
+
+	// devices: the device passwords of T-Kalender and Kontakte (RAM of
+	// what the stick holds, "last synced"; devices.go).
+	devices *devices.Manager
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -311,6 +328,7 @@ func New(opts Options) *Server {
 		tokens:   auth.NewTokens(opts.Store),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.devices = newDevices(opts, s.rateLimiter)
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -426,6 +444,7 @@ func New(opts Options) *Server {
 	s.registerScripts(mux)
 	s.registerAgent(mux)
 	s.registerMail(mux)
+	s.registerPIM(mux)
 
 	s.routeCluster(mux)
 
@@ -434,6 +453,7 @@ func New(opts Options) *Server {
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
+	s.mux = mux.ServeMux
 	s.handler = s.securityHeaders(s.clusterArea().clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }

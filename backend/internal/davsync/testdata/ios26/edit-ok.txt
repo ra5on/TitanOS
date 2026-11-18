@@ -1,0 +1,25 @@
+# iOS changes an event with the right ETag: 204 and the new ETag.
+@seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:dentist.ics}
+> Body: dentist-moved.ics
+< status 204
+< header ETag {etag:dentist-moved.ics}
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist-moved.ics
+< header ETag {etag:dentist-moved.ics}
+
+# One of several tags matching is enough.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:weekly-team.ics}, {etag:dentist-moved.ics}
+> Body: dentist.ics
+< status 204
+< header ETag {etag:dentist.ics}

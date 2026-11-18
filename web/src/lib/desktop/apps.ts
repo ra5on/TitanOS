@@ -267,6 +267,59 @@ export const SYSTEM_APPS: SystemApp[] = [
 		kind: 'system',
 	},
 	{
+		// 1.11 (docs/KALENDER.md, TECHNIK 7.5): T-Kalender and Kontakte, every
+		// account's own calendars and address book, also on the iPhone over
+		// CalDAV/CardDAV. Shown when /services/state says so (every account
+		// that is not locked); the key lets them be switched off later.
+		id: 'calendar',
+		label: 'desktop.app.calendar',
+		glyph: 'calendar',
+		gradient: 'violet',
+		href: '/calendar',
+		paths: ['/calendar'],
+		side: [
+			// The page draws its own column (the mini month, its calendars).
+			{
+				href: '/calendar',
+				label: 'calendar.side.calendar',
+				icon: 'calendar',
+				page: true,
+				match: ['/calendar'],
+			},
+			{ href: '/calendar?view=list', label: 'calendar.side.list', icon: 'list', match: [] },
+			{ href: '/calendar/iphone', label: 'calendar.side.iphone', icon: 'device' },
+		],
+		optIn: true,
+		kind: 'system',
+	},
+	{
+		id: 'contacts',
+		label: 'desktop.app.contacts',
+		glyph: 'contacts',
+		gradient: 'green',
+		href: '/contacts',
+		paths: ['/contacts'],
+		side: [
+			// The page draws its own column (the address books).
+			{
+				href: '/contacts',
+				label: 'contacts.side.contacts',
+				icon: 'person',
+				page: true,
+				match: ['/contacts'],
+			},
+			{
+				href: '/contacts?view=suggestions',
+				label: 'contacts.side.suggestions',
+				icon: 'mail',
+				match: [],
+			},
+			{ href: '/contacts/iphone', label: 'calendar.side.iphone', icon: 'device' },
+		],
+		optIn: true,
+		kind: 'system',
+	},
+	{
 		id: 'agent',
 		label: 'desktop.app.agent',
 		glyph: 'agent',
@@ -464,10 +517,12 @@ export function pageDrawsSide(items: SideItem[], path: string): boolean {
 }
 
 /**
- * 1.05: pages that do one task in a window of their own (writing an e-mail).
+ * 1.05: pages that do one task in a window of their own (writing an e-mail,
+ * 1.11: an event of T-Kalender).
  * Opening the program never takes such a window over, and a page may ask the
  * desktop for one (titanos-open-task).
  */
 export function taskPage(href: string): boolean {
-	return /^\/mail\/compose(\?|$)/.test(href);
+	// 1.11: a new or changed event of T-Kalender, too.
+	return /^\/(mail\/compose|calendar\/event)(\?|$)/.test(href);
 }

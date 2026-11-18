@@ -85,7 +85,15 @@ func assistDefault(area string) string {
 }
 
 // assistLevel is what a question from Home Assistant may use of an area.
+// Calendar and contacts (1.11) stand in AssistData: forbidden until the
+// person allows reading; more than reading never.
 func (h agentHASettings) assistLevel(area string) string {
+	if agent.IsDataArea(area) {
+		if h.AssistData[area] == assistRead {
+			return assistRead
+		}
+		return assistDeny
+	}
 	if l, ok := h.AssistAreas[area]; ok {
 		return l
 	}
@@ -129,7 +137,8 @@ type assistSeen struct {
 	From string    `json:"from"`
 	OK   bool      `json:"ok"`
 	// Reason when refused: "off", "key", "address".
-	Reason   string `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Question is shown only to the account Assist acts as (S-23).
 	Question string `json:"question,omitempty"`
 	Millis   int64  `json:"millis,omitempty"`
 }
@@ -442,10 +451,39 @@ func (s *Server) handleAgentAssist(w http.ResponseWriter, r *http.Request) {
 	for _, area := range assistAreas {
 		levels[area] = settings.HA.assistLevel(area)
 	}
+	actor, hasActor := s.assistActor()
+	me := currentUser(r)
 	assistLast.Lock()
-	last := assistLast.seen
+	var last *assistSeen
+	if seen := assistLast.seen; seen != nil {
+		copied := *seen
+		last = &copied
+	}
 	assistLast.Unlock()
-	out := map[string]any{"keySet": settings.HA.AssistKey != "", "addresses": addrs, "areas": assistAreas, "levels": levels, "last": last}
+	// The question asked of Home Assistant is shown only to the account
+	// Assist acts as (S-23): it can be about its calendar or contacts.
+	if last != nil && (!hasActor || me.Name != actor.Name) {
+		last.Question = ""
+	}
+	// 1.11: calendar and contacts apart (assistData, deny or read only),
+	// as set; each holds only with the consent of the acting account.
+	dataLevels := map[string]string{}
+	for _, area := range agent.DataAreas {
+		dataLevels[area] = settings.HA.assistLevel(area)
+	}
+	consent := map[string]bool{}
+	actorName := ""
+	if hasActor {
+		actorName = actor.Name
+		consent = s.assistConsentOf(actor)
+	}
+	mine := map[string]bool{}
+	if own, ok := s.agentEnv().users.Get(me.Name); ok {
+		mine = s.assistConsentOf(own)
+	}
+	out := map[string]any{"keySet": settings.HA.AssistKey != "", "addresses": addrs, "areas": assistAreas, "levels": levels, "last": last,
+		"dataAreas": agent.DataAreas, "dataLevels": dataLevels,
+		"actor": actorName, "isActor": hasActor && me.Name == actor.Name, "consent": consent, "myConsent": mine}
 	if store := s.agentStore(); store != nil {
 		if mem, err := store.Memories(agent.AssistProfile); err == nil {
 			out["memories"] = len(mem)

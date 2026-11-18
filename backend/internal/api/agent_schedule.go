@@ -268,7 +268,7 @@ func (s *Server) agentRemind(user auth.User, chat *agent.Chat, sc agent.Schedule
 		}
 		env.webPush.SendTo(user.Name, webpush.Message{Title: "⏰ " + sc.Name, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 	}
-	s.agentHANotify(chat)
+	s.agentHANotify(user.Name, chat)
 }
 
 // agentMorningTask is the task of the morning report from what the person
@@ -308,7 +308,7 @@ func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
 	if err != nil && !errors.Is(err, agent.ErrNotFound) {
 		slog.Warn("result of a recurring task not saved", "schedule", id, "err", err)
 	}
-	s.agentHANotify(chat)
+	s.agentHANotify(user, chat)
 }
 
 // agentObserve is told about warnings and errors of the NAS. With the
@@ -362,7 +362,7 @@ func (s *Server) agentObserveAs(user auth.User, m notify.Message) {
 	}
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error {
 		err := rn.Run(ctx, chat)
-		s.agentHANotify(chat)
+		s.agentHANotify(user.Name, chat)
 		return err
 	}); err != nil && !errors.Is(err, agent.ErrBusy) {
 		slog.Warn("agent cannot look into a notification", "err", err)
@@ -380,26 +380,18 @@ func (s *Server) firstOwner() string {
 }
 
 // agentHANotify sends the end of an unattended run to the notify services
-// of Home Assistant the owner chose.
-func (s *Server) agentHANotify(chat *agent.Chat) {
+// of Home Assistant chosen under Settings › KI-Agent (S-24). In full only
+// for a run of the account that chose them (notifyBy; without a record the
+// first owner) and of the profile of Home Assistant, whose questions come
+// from there; and never when the run read the calendar or the contacts.
+// Otherwise a fixed text: "fertig", "wartet", "Fehler", no title of the
+// task, no answer.
+func (s *Server) agentHANotify(user string, chat *agent.Chat) {
 	settings := s.agentSettings()
 	if len(settings.HA.Notify) == 0 || s.haHub() == nil {
 		return
 	}
-	text := "Fertig."
-	switch chat.State {
-	case agent.StateWaiting:
-		text = "Wartet auf deine Freigabe in TitanOS."
-	case agent.StateError:
-		text = "Fehler: " + chat.Error
-	default:
-		for i := len(chat.Entries) - 1; i >= 0; i-- {
-			if e := chat.Entries[i]; e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
-				text = e.Content
-				break
-			}
-		}
-	}
+	title, text := agentHANotifyText(chat, s.agentNotifyOwn(settings.HA, user))
 	if r := []rune(text); len(r) > 500 {
 		text = string(r[:499]) + "…"
 	}
@@ -415,10 +407,75 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 		if ha == nil || !ha.Active() {
 			continue
 		}
-		if err := ha.Notify(ctx, service, "KI-Agent: "+chat.ShownTitle(), text, nil); err != nil {
+		if err := ha.Notify(ctx, service, title, text, nil); err != nil {
 			slog.Warn("agent message to Home Assistant not sent", "service", service, "err", err)
 		}
 	}
+}
+
+// agentNotifyOwn reports whether the notify services of Home Assistant are
+// the account's own: it chose them (name and creation time recorded), or
+// nothing is recorded and it is the first owner (lists from before S-24 or
+// saved by 1.10). The profile of Home Assistant counts as their own.
+func (s *Server) agentNotifyOwn(ha agentHASettings, user string) bool {
+	if user == agent.AssistProfile {
+		return true
+	}
+	if ha.NotifyBy == "" {
+		return user != "" && user == s.firstOwner()
+	}
+	if user != ha.NotifyBy {
+		return false
+	}
+	u, ok := s.agentEnv().users.Get(user)
+	return ok && u.Created.Equal(ha.NotifyByCreated)
+}
+
+// agentHANotifyText is title and text of the message about a run: in full
+// for own runs that read neither calendar nor contacts, else neutral.
+func agentHANotifyText(chat *agent.Chat, own bool) (string, string) {
+	full := own && !chat.PIMRead && !agentChatUsedPIM(chat)
+	if !full {
+		title := "KI-Agent"
+		if own {
+			title += ": " + chat.ShownTitle()
+		}
+		switch {
+		case chat.State == agent.StateWaiting:
+			return title, "Ein Auftrag wartet auf eine Freigabe in TitanOS."
+		case chat.State == agent.StateError:
+			return title, "Ein Auftrag endete mit einem Fehler. Einzelheiten in TitanOS."
+		case chat.Origin == "reminder":
+			return title, "Eine Erinnerung ist fällig. Sie steht in TitanOS."
+		}
+		return title, "Fertig. Das Ergebnis steht in TitanOS."
+	}
+	text := "Fertig."
+	switch chat.State {
+	case agent.StateWaiting:
+		text = "Wartet auf deine Freigabe in TitanOS."
+	case agent.StateError:
+		text = "Fehler: " + chat.Error
+	default:
+		for i := len(chat.Entries) - 1; i >= 0; i-- {
+			if e := chat.Entries[i]; e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
+				text = e.Content
+				break
+			}
+		}
+	}
+	return "KI-Agent: " + chat.ShownTitle(), text
+}
+
+// agentChatUsedPIM reports a step of the calendar or the contacts in the
+// chat (also of a chat from before chat.PIMRead).
+func agentChatUsedPIM(chat *agent.Chat) bool {
+	for _, e := range chat.Entries {
+		if e.Role == "tool" && (strings.HasPrefix(e.Tool, "calendar_") || strings.HasPrefix(e.Tool, "contacts_")) {
+			return true
+		}
+	}
+	return false
 }
 
 // agentButtons are the recurring tasks that have a button in Home Assistant.

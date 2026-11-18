@@ -49,6 +49,10 @@ type agentTool struct {
 	// area stays the one for arguments that name none of them.
 	areaOf func(json.RawMessage) string
 	areas  []string
+	// prepare checks the arguments of a tool of the agent's own and plans
+	// the step: it may write the summary, rewrite the arguments (an etag)
+	// and return a mode the call needs at least ("" for none).
+	prepare func(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage, p *agent.Prepared) (string, error)
 }
 
 type agentToolbox struct {
@@ -63,6 +67,11 @@ type agentToolbox struct {
 	dirs     map[string]string
 	// areas maps Home Assistant entities to their room, for area: rules.
 	areas map[string]string
+	// assistWaiting are the areas of calendar and contacts an
+	// administrator allowed for Assist that wait for the consent of
+	// assistActing, the account the profile acts as (S-23).
+	assistWaiting []string
+	assistActing  string
 }
 
 // newAgentToolbox collects the tools of an account.
@@ -77,6 +86,10 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	acting := user
 	if user.Name == agent.AssistProfile {
 		acting, _ = s.assistActor()
+		// Calendar and contacts only with the consent of that account,
+		// given in its own session (S-23); the map is the toolbox's own.
+		b.settings.HA.AssistData, b.assistWaiting = s.assistDataWithConsent(settings.HA, acting)
+		b.assistActing = acting.Name
 	}
 	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
 	on := env.servicesOn()
@@ -159,6 +172,10 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		add(t)
 	}
 	for _, t := range b.noteTools() {
+		add(t)
+	}
+	// 1.11: calendar and contacts (agent_pim.go), never in the catalog.
+	for _, t := range b.pimTools() {
 		add(t)
 	}
 	for _, t := range b.featureTools() {
@@ -287,6 +304,16 @@ func (b *agentToolbox) callMode(t *agentTool, area, kind string, args json.RawMe
 		return b.settings.HA.assistMode(t.name, area, kind, mode)
 	}
 	return mode
+}
+
+// pimExfiltrates reports whether a call writes files or notes: the ways
+// data read from the calendar or the contacts could leave the account
+// (a shared folder, the notes folder of the agent's share).
+func pimExfiltrates(tool, area, kind string) bool {
+	if kind == agent.KindRead {
+		return false
+	}
+	return area == toolcatalog.AreaFiles || tool == "note_write" || tool == "note_delete"
 }
 
 // argBool is a yes/no argument of a call, false when it is missing.
@@ -441,8 +468,19 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		mode = b.nvrMode(t.name, mode)
 	}
 	// Deleting planned tasks cannot be undone: after outside content (a
-	// file could say "delete all reminders") the person decides (M4).
-	if t.name == "schedule_delete" && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+	// file could say "delete all reminders") the person decides (M4). The
+	// same for events and contacts (1.11, Sicherheitsdurchsicht S-14): no
+	// trash, and the devices delete them too; an invitation read with
+	// calendar_search can say "delete all contacts".
+	if (t.name == "schedule_delete" || t.name == "calendar_delete" || t.name == "contacts_delete") && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	// After the calendar or the contacts were read, writing files or notes
+	// asks first (Sicherheitsdurchsicht S-26): an invitation or a contact
+	// note could tell the model to copy the address book into a shared
+	// folder. Like the web after outside content, only narrower: other
+	// outside content keeps file writes as the rights say.
+	if chat != nil && chat.PIMRead && pimExfiltrates(t.name, area, kind) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.name == "schedule_delete" {
@@ -461,6 +499,17 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		mode = b.codeMode(mode)
 		p.Summary = codeSummary(args)
+	}
+	if t.prepare != nil {
+		// Calendar and contacts: "deleting a whole series always asks"
+		// comes back from here and holds over every right and work mode.
+		least, err := t.prepare(ctx, chat, name, args, &p)
+		if err != nil {
+			return agent.Prepared{}, err
+		}
+		if least != "" {
+			mode = agent.Stricter(mode, least)
+		}
 	}
 	if p.Summary == "" && t.kind != agent.KindRead && t.kind != agent.KindAgent {
 		p.Summary = t.name + " " + compactArgs(args)

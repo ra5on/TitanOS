@@ -67,6 +67,8 @@ func (w *titand) wireAPI() error {
 		NVR:                w.recorder,
 		Speech:             w.voices,
 		Mail:               w.mail,
+		PIM:                w.pim,
+		HTTPSPort:          webPorts(w.opts).HTTPS,
 		Webapps:            w.webApps,
 		VMs:                w.machines,
 		LXC:                w.systemContainers,

@@ -64,6 +64,7 @@ func (u *Users) Forget(name string) (before User, existed bool, err error) {
 	if err := u.store.RemoveAll("users/" + name); err != nil {
 		return User{}, false, err
 	}
+	u.rememberGoneLocked(before)
 	delete(u.users, name)
 	return before, true, nil
 }

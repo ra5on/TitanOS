@@ -338,3 +338,55 @@ func TestLimiterFloodKeepsGuessedAccount(t *testing.T) {
 		t.Fatalf("wait after the flood = %v, want %v: the failures of the account were forgotten", wait, 2*limiterBaseDelay)
 	}
 }
+
+// 1.11: an account made anew with the name of one removed in the same
+// second gets a later creation time – data bound to name and creation time
+// (calendars left on a missing volume) never goes to it –, but never one in
+// the future (T-Mail compares it with the time of its grant). Also after a
+// removal taken over from another node.
+func TestNewAccountOfARemovedNameIsLater(t *testing.T) {
+	store := config.Open(t.TempDir())
+	users := NewUsers(store)
+	if err := users.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.CreateOwner("alex", "long enough password"); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		old, err := users.Create("bea", "long enough password", RoleUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i%2 == 0 {
+			err = users.Delete("bea")
+		} else {
+			_, _, err = users.Forget("bea")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		made, err := users.Create("bea", "long enough password", RoleUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !made.Created.After(old.Created) || made.Created.Sub(old.Created) > 2*time.Second {
+			t.Fatalf("round %d: old %v, new %v", i, old.Created, made.Created)
+		}
+		if made.Created != made.Created.Truncate(time.Second) || made.Created.After(time.Now()) {
+			t.Fatalf("not whole seconds or in the future: %v", made.Created)
+		}
+		if err := users.Delete("bea"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Another name is not moved.
+	now := time.Now().UTC().Truncate(time.Second)
+	other, err := users.Create("cleo", "long enough password", RoleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Created.Sub(now) > time.Second {
+		t.Fatalf("another name moved: %v", other.Created)
+	}
+}

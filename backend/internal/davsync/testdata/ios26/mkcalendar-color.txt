@@ -1,0 +1,158 @@
+# iOS makes a calendar (MKCALENDAR with name, color, order, component set
+# and a time zone, which is dropped), then changes the color by PROPPATCH.
+# PROPPATCH is atomic: an unknown property is 403, the rest 424, nothing
+# changes.
+# The virtual default exists for the device, too.
+> MKCALENDAR /caldav/alex/calendars/privat/
+> Auth: alex
+< status 405
+
+> MKCALENDAR /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:B="urn:ietf:params:xml:ns:caldav">
+>   <A:set xmlns:A="DAV:">
+>     <A:prop>
+>       <A:displayname>Arbeit</A:displayname>
+>       <D:calendar-color xmlns:D="http://apple.com/ns/ical/" symbolic-color="red">#FF2968FF</D:calendar-color>
+>       <D:calendar-order xmlns:D="http://apple.com/ns/ical/">3</D:calendar-order>
+>       <B:calendar-description>Termine im Büro</B:calendar-description>
+>       <B:supported-calendar-component-set><B:comp name="VEVENT"/></B:supported-calendar-component-set>
+>       <B:calendar-timezone>BEGIN:VCALENDAR
+> BEGIN:VTIMEZONE
+> TZID:Europe/Berlin
+> END:VTIMEZONE
+> END:VCALENDAR</B:calendar-timezone>
+>       <B:schedule-calendar-transp><B:opaque/></B:schedule-calendar-transp>
+>     </A:prop>
+>   </A:set>
+> </B:mkcalendar>
+< status 201
+
+> PROPFIND /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+> Depth: 0
+< status 207
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ d:displayname Arbeit
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-color #FF2968FF
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-order 3
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ cal:calendar-description Termine im Büro
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ d:resourcetype <cal:calendar/>
+
+> MKCALENDAR /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+< status 405
+
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><D:calendar-color xmlns:D="http://apple.com/ns/ical/">#1BADF8</D:calendar-color></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 200 ical:calendar-color
+
+> PROPFIND /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+> Depth: 0
+< status 207
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-color #1BADF8
+# The change moves the ctag (<epoch>-<seq>): other devices see it.
+< body-lacks -0</cs:getctag>
+< body-has -1</cs:getctag>
+
+# An unknown property: 403 for it, 424 for the color, nothing changes.
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:X="http://example.com/ns/"><A:set><A:prop><D:calendar-color xmlns:D="http://apple.com/ns/ical/">#00FF00</D:calendar-color><X:mood>fine</X:mood><A:displayname>Neu</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 403 x:mood
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 424 ical:calendar-color d:displayname
+
+# A value the property cannot hold: 409, the rest 424.
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><D:calendar-color xmlns:D="http://apple.com/ns/ical/">red</D:calendar-color><D:calendar-order xmlns:D="http://apple.com/ns/ical/">1</D:calendar-order></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 409 ical:calendar-color
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 424 ical:calendar-order
+
+# Removing a property that is not there is fine; protected ones are 403.
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:X="http://example.com/ns/"><A:remove><A:prop><X:mood/></A:prop></A:remove><A:set><A:prop><A:displayname>Büro</A:displayname><B:calendar-description xmlns:B="urn:ietf:params:xml:ns:caldav"/></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 200 x:mood d:displayname cal:calendar-description
+
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:getetag>"x"</A:getetag><A:resourcetype/></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ 403 d:getetag d:resourcetype
+
+> PROPFIND /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+> Depth: 0
+< status 207
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-color #1BADF8
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ d:displayname Büro
+< value /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/ ical:calendar-order 3
+
+# The home set and the principal have nothing to write: 207 with 403.
+> PROPPATCH /caldav/alex/calendars/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><B:default-alarm-vevent-datetime>BEGIN:VALARM</B:default-alarm-vevent-datetime></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/ 403 cal:default-alarm-vevent-datetime
+
+# The address book: name and description, no color.
+> PROPPATCH /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><A:set><A:prop><C:addressbook-description>Alle</C:addressbook-description><A:displayname>Adressen</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /carddav/alex/addressbooks/kontakte/ 200 card:addressbook-description d:displayname
+
+> PROPPATCH /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><D:calendar-color xmlns:D="http://apple.com/ns/ical/">#1BADF8</D:calendar-color></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /carddav/alex/addressbooks/kontakte/ 403 ical:calendar-color
+
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 0
+< status 207
+< value /carddav/alex/addressbooks/kontakte/ d:displayname Adressen
+
+> PROPPATCH /caldav/alex/calendars/3F2504E0-4F89-11D3-9A0C-0305E82C3301/
+> Auth: alex
+>
+> <A:propfind xmlns:A="DAV:"/>
+< status 400
+
+> PROPPATCH /caldav/alex/calendars/nothere/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>X</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 404
+
+# No MKCALENDAR for address books.
+> MKCALENDAR /carddav/alex/addressbooks/neu/
+> Auth: alex
+< status 405
+< header-lacks Allow MKCALENDAR

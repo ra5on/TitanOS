@@ -1,0 +1,85 @@
+# iOS makes an event: PUT with If-None-Match: * into the (virtual)
+# default calendar, which becomes real; 201 with the ETag of the bytes. The
+# same PUT again is 412; the same bytes without condition 204, same ETag.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist.ics
+< status 201
+< header ETag {etag:dentist.ics}
+
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist-moved.ics
+< status 412
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+< header ETag {etag:dentist.ics}
+
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 204
+< header ETag {etag:dentist.ics}
+
+# The default calendar is real now: own ctag, the entry listed.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="http://calendarserver.org/ns/"><A:prop><A:getetag/><B:getctag/></A:prop></A:propfind>
+< status 207
+< responses 2
+< body-lacks <cs:getctag>0-0</cs:getctag>
+< value /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics d:getetag {etag:dentist.ics}
+
+# A PUT on the collection itself, the home set, or into a calendar that
+# does not exist.
+> PUT /caldav/alex/calendars/privat/
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 405
+< header-has Allow MKCALENDAR
+
+> PUT /caldav/alex/calendars/missing/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 409
+
+# Not calendar data by its type: 403 supported-calendar-data.
+> PUT /caldav/alex/calendars/privat/other.ics
+> Auth: alex
+> Content-Type: text/plain
+> Body: dentist.ics
+< status 403
+< error cal:supported-calendar-data
+
+> PUT /caldav/alex/calendars/privat/other.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=iso-8859-1
+> Body: dentist.ics
+< status 403
+< error cal:supported-calendar-data
+
+> PUT /caldav/alex/calendars/privat/other.ics
+> Auth: alex
+> Content-Type: text/calendar
+>
+> BEGIN:VCALENDAR
+> this is no calendar
+< status 403
+< error cal:valid-calendar-data
+
+> GET /caldav/alex/calendars/privat/other.ics
+> Auth: alex
+< status 404

@@ -457,6 +457,29 @@ const PROGRAMS: Record<string, Menu[]> = {
 			go('mail.go.settings', 'mail.side.settings', '/mail/settings'),
 		]),
 	],
+	// 1.11: T-Kalender and Kontakte (docs/KALENDER.md). "Ablage": the calendar
+	// page (step 15) and the contacts' page (step 16) register the commands.
+	calendar: [
+		menu('file', 'menubar.menu.file', [
+			cmd('calendar.newEvent', 'calendar.newEvent'),
+			cmd('calendar.newCalendar', 'calendar.newCalendar'),
+		]),
+		menu('view', 'menubar.menu.view', [
+			go('calendar.go.calendar', 'calendar.side.calendar', '/calendar'),
+			go('calendar.go.list', 'calendar.side.list', '/calendar?view=list'),
+			sep,
+			go('calendar.go.iphone', 'calendar.side.iphone', '/calendar/iphone'),
+		]),
+	],
+	contacts: [
+		menu('file', 'menubar.menu.file', [cmd('contacts.new', 'contacts.new')]),
+		menu('view', 'menubar.menu.view', [
+			go('contacts.go.contacts', 'contacts.side.contacts', '/contacts'),
+			go('contacts.go.suggestions', 'contacts.side.suggestions', '/contacts?view=suggestions'),
+			sep,
+			go('contacts.go.iphone', 'calendar.side.iphone', '/contacts/iphone'),
+		]),
+	],
 	// PLAN 79-7: the NVR's pages; what only administrators may open is left out for others.
 	nvr: [
 		menu('view', 'menubar.menu.view', [
@@ -622,6 +645,8 @@ const DOCS: Record<string, string> = {
 	lxc: 'LXC.md',
 	nvr: 'NVR.md',
 	mail: 'TMAIL.md',
+	calendar: 'KALENDER.md',
+	contacts: 'KALENDER.md',
 	appcenter: 'PLUGINS.md',
 	backup: 'REPLICATION.md',
 	agent: 'AGENT.md',

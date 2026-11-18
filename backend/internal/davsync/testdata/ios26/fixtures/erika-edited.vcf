@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iPhone OS 26.1//EN
+N:Muster;Erika;;;
+FN:Erika Muster
+ORG:Beispiel GmbH;
+EMAIL;type=INTERNET;type=HOME;type=pref:erika@example.com
+TEL;type=CELL;type=VOICE;type=pref:+49 151 00000000
+ADR;type=HOME;type=pref:;;Musterstraße 1;Musterstadt;;12345;Deutschland
+NOTE:Kennt sich mit Fahrrädern und Booten aus
+REV:2026-11-12T08:10:00Z
+UID:A5B7C9D1-E3F5-4789-9ABC-DEF012345678
+END:VCARD

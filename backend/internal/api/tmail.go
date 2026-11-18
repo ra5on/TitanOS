@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -31,12 +32,25 @@ type tmailArea struct {
 	files           *files.Manager
 	roots           func(r *http.Request) []files.Root
 	whileLoginHolds func(r *http.Request, user auth.User) (context.Context, context.CancelFunc)
+	// contactsFor gives the addresses of the account's contacts that match
+	// q (TECHNIK 7.4, pim/store); nil without calendars and contacts.
+	contactsFor func(user, q string) []tmail.Contact
 }
 
 // tmailArea is the area of the server.
 func (s *Server) tmailArea() tmailArea {
-	return tmailArea{mail: s.opts.Mail, users: s.opts.Users, files: s.opts.Files, roots: s.filesArea().requestRoots,
+	a := tmailArea{mail: s.opts.Mail, users: s.opts.Users, files: s.opts.Files, roots: s.filesArea().requestRoots,
 		whileLoginHolds: s.whileLoginHolds}
+	if pim := s.opts.PIM; pim != nil {
+		a.contactsFor = func(user, q string) []tmail.Contact {
+			var out []tmail.Contact
+			for _, c := range pim.SuggestAddresses(user, q, maxMailSuggestions) {
+				out = append(out, tmail.Contact{Name: c.Name, Addr: c.Addr})
+			}
+			return out
+		}
+	}
+	return a
 }
 
 func (a tmailArea) register(mux *routeMux, g guards) {
@@ -288,8 +302,45 @@ func (a tmailArea) handleAccountTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// maxMailSuggestions is how many addresses the address field gets.
+const maxMailSuggestions = 20
+
+// mailSuggestion is an address for the address field: from the contacts
+// of the account or learned from sent mail (source).
+type mailSuggestion struct {
+	tmail.Contact
+	Source string `json:"source"`
+}
+
+// handleContacts suggests addresses (TECHNIK 7.4): matching contacts first,
+// then the learned ones; an address once (as contact, case aside); at most
+// 20. The contacts are only read here: nothing of them goes into the
+// address book of T-Mail, nothing learned into the contacts.
 func (a tmailArea) handleContacts(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.mail.Contacts(currentUser(r).Name, r.URL.Query().Get("q")))
+	user, q := currentUser(r).Name, r.URL.Query().Get("q")
+	var contacts []tmail.Contact
+	if a.contactsFor != nil {
+		contacts = a.contactsFor(user, q)
+	}
+	writeJSON(w, http.StatusOK, mergeSuggestions(contacts, a.mail.Contacts(user, q)))
+}
+
+func mergeSuggestions(contacts, learned []tmail.Contact) []mailSuggestion {
+	out := []mailSuggestion{}
+	seen := map[string]bool{}
+	add := func(list []tmail.Contact, source string) {
+		for _, c := range list {
+			key := strings.ToLower(strings.TrimSpace(c.Addr))
+			if key == "" || seen[key] || len(out) == maxMailSuggestions {
+				continue
+			}
+			seen[key] = true
+			out = append(out, mailSuggestion{Contact: c, Source: source})
+		}
+	}
+	add(contacts, "contact")
+	add(learned, "learned")
+	return out
 }
 
 func (a tmailArea) handleContactForget(w http.ResponseWriter, r *http.Request) {

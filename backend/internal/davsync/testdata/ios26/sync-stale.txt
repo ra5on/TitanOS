@@ -1,0 +1,107 @@
+# A token the collection cannot go on from is 403 with
+# <D:error><D:valid-sync-token/></D:error>: the device syncs in full.
+@collection calendar arbeit Arbeit
+@seed calendar arbeit a.ics dentist.ics
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save old sync-token
+
+# The calendar is deleted and made again with the same name: a new epoch.
+> DELETE /caldav/alex/calendars/arbeit/
+> Auth: alex
+< status 204
+
+> MKCALENDAR /caldav/alex/calendars/arbeit/
+> Auth: alex
+< status 201
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:old}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+# Made up, of another server, from the future, not a token at all.
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>https://ns.titanos.invalid/sync/0123456789ab/1</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>http://example.com/ns/sync/1232</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save fresh sync-token
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:fresh}9</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>sync me</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+# Older than the log (2000 changes): 403; a token within it still works.
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save before sync-token
+
+@churn arbeit 1000
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save within sync-token
+
+@churn arbeit 1001
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:before}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:within}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 1001

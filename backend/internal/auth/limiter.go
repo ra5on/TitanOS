@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -14,7 +16,22 @@ const (
 	limiterForget = time.Hour
 	// limiterMaxKeys bounds the memory an attacker can make the limiter use.
 	limiterMaxKeys = 10000
+	// limiterMaxKey bounds the length of a key in the table. Keys carry a
+	// name as the client sent it (a Basic header may hold most of a
+	// megabyte), and 10 000 such keys would hold gigabytes. A longer key is
+	// kept as its start and a hash of the whole: still one key per name,
+	// and no account name comes near the bound.
+	limiterMaxKey = 128
 )
+
+// limiterKey is the form of a key in the table (see limiterMaxKey).
+func limiterKey(key string) string {
+	if len(key) <= limiterMaxKey {
+		return key
+	}
+	sum := sha256.Sum256([]byte(key))
+	return key[:64] + "#" + hex.EncodeToString(sum[:16])
+}
 
 // Limiter slows down password guessing. Failures are counted per key; callers
 // use one key for the account name and one for the remote address.
@@ -43,7 +60,7 @@ func (l *Limiter) RetryAfter(keys ...string) time.Duration {
 	now := l.now()
 	var wait time.Duration
 	for _, key := range keys {
-		if e, ok := l.entries[key]; ok && e.blockedUntil.After(now) {
+		if e, ok := l.entries[limiterKey(key)]; ok && e.blockedUntil.After(now) {
 			wait = max(wait, e.blockedUntil.Sub(now))
 		}
 	}
@@ -63,6 +80,7 @@ func (l *Limiter) Fail(keys ...string) {
 		}
 	}
 	for _, key := range keys {
+		key = limiterKey(key)
 		e, ok := l.entries[key]
 		if !ok || now.Sub(e.last) > limiterForget {
 			if !ok && len(l.entries) >= limiterMaxKeys {
@@ -119,5 +137,5 @@ func (l *Limiter) evict(now time.Time) {
 func (l *Limiter) Reset(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	delete(l.entries, key)
+	delete(l.entries, limiterKey(key))
 }

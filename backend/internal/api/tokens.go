@@ -63,10 +63,11 @@ func (a tokensArea) tokenAccount(header string) (auth.APIToken, auth.User, *toke
 func (a tokensArea) bearerAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
-		// WebDAV checks its own Basic sign-in (webdav.go), the MCP server
-		// its token (mcp.go), Assist the key of Home Assistant
-		// (agent_assist.go).
-		if header == "" || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == mcpPath || AssistPath(r.URL.Path) {
+		// WebDAV checks its own Basic sign-in (webdav.go), CalDAV and
+		// CardDAV the device passwords (davsync, any header: a token there
+		// gets its 401 challenge), the MCP server its token (mcp.go),
+		// Assist the key of Home Assistant (agent_assist.go).
+		if header == "" || davsyncPath(r) || r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == mcpPath || AssistPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

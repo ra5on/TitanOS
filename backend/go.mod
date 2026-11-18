@@ -6,13 +6,16 @@ require (
 	github.com/HugoSmits86/nativewebp v1.3.0
 	github.com/anthropics/anthropic-sdk-go/v2 v2.9.0
 	github.com/coder/websocket v1.8.15
+	github.com/emersion/go-ical v0.0.0-20261112170022-46c5b53a1723
 	github.com/emersion/go-imap/v2 v2.0.0-beta.9
 	github.com/emersion/go-message v0.18.2
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.26.0
+	github.com/emersion/go-vcard v0.1.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/teambition/rrule-go v1.8.2
 	go.etcd.io/bbolt v1.5.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.59.0

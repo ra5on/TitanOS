@@ -1,0 +1,78 @@
+# Extended MKCOL (RFC 5689) makes a calendar like MKCALENDAR; a plain
+# collection is refused (valid-resourcetype), CardDAV keeps one book.
+> MKCOL /caldav/alex/calendars/reisen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:mkcol xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop>
+>   <A:resourcetype><A:collection/><B:calendar/></A:resourcetype>
+>   <A:displayname>Reisen</A:displayname>
+>   <D:calendar-color xmlns:D="http://apple.com/ns/ical/">#34C759</D:calendar-color>
+>   <B:supported-calendar-component-set><B:comp name="VEVENT"/></B:supported-calendar-component-set>
+> </A:prop></A:set></A:mkcol>
+< status 201
+
+# The first own calendar makes the virtual default real as well (pim/store,
+# TestVirtualKeptByOwnCalendar): a device that synced "privat" keeps it.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 3
+< value /caldav/alex/calendars/privat/ d:displayname Privat
+< value /caldav/alex/calendars/reisen/ d:displayname Reisen
+< value /caldav/alex/calendars/reisen/ ical:calendar-color #34C759
+< value /caldav/alex/calendars/reisen/ d:resourcetype <cal:calendar/>
+
+> MKCOL /caldav/alex/calendars/reisen/
+> Auth: alex
+< status 405
+
+> MKCOL /caldav/alex/calendars/ordner/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:mkcol xmlns:A="DAV:"><A:set><A:prop><A:resourcetype><A:collection/></A:resourcetype></A:prop></A:set></A:mkcol>
+< status 403
+< error d:valid-resourcetype
+
+> MKCOL /caldav/alex/calendars/ordner/
+> Auth: alex
+< status 403
+< error d:valid-resourcetype
+
+> MKCOL /caldav/alex/calendars/ordner/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"/>
+< status 415
+
+# A property that cannot be set: 403 with the propstats, nothing made.
+> MKCOL /caldav/alex/calendars/ordner/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:mkcol xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><A:resourcetype><A:collection/><B:calendar/></A:resourcetype><D:calendar-color xmlns:D="http://apple.com/ns/ical/">blue</D:calendar-color></A:prop></A:set></A:mkcol>
+< status 403
+< body-has mkcol-response
+< body-has HTTP/1.1 409 Conflict
+< body-has HTTP/1.1 424 Failed Dependency
+
+> PROPFIND /caldav/alex/calendars/ordner/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> MKCOL /carddav/alex/addressbooks/zweites/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:mkcol xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:carddav"><A:set><A:prop><A:resourcetype><A:collection/><B:addressbook/></A:resourcetype></A:prop></A:set></A:mkcol>
+< status 403
+
+> PROPFIND /carddav/alex/addressbooks/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 2

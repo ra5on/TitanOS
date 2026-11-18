@@ -132,7 +132,9 @@ export function mailState() {
       Gesendet: [],
       Spamverdacht: [],
       // A digest whose structure titand could not read: shown raw.
-      Rechnungen: [row(60, 1, { subject: "Tagesübersicht der Liste", digest: true })],
+      Rechnungen: [
+        row(60, 1, { subject: "Tagesübersicht der Liste", digest: true }),
+      ],
       "Rechnungen/2026": [],
     },
     "acc-arbeit": {
@@ -152,12 +154,15 @@ export function mailState() {
         addr: "anna@example.org",
         count: 12,
         last: ago(600),
+        // 1.11: from the account's contacts (TECHNIK 7.4).
+        source: "contact",
       },
       {
         name: "Anton Groß",
         addr: "anton@example.org",
         count: 2,
         last: ago(9000),
+        source: "learned",
       },
       {
         name: "Ben Muster",

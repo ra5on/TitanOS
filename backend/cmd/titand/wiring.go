@@ -46,6 +46,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/scripts"
@@ -99,7 +100,9 @@ type titand struct {
 	recorder     *nvr.Manager
 	voices       *speech.Manager
 	// mail is T-Mail (docs/TMAIL.md).
-	mail       *tmail.Manager
+	mail *tmail.Manager
+	// pim keeps calendars and address books (TECHNIK 5).
+	pim        *pimstore.Store
 	webApps    *webapps.Manager
 	devices    *hardware.Manager
 	containers *docker.Manager
@@ -240,7 +243,7 @@ func (w *titand) wireBase() error {
 			slog.Warn("finished move of system data not noted in /config", "feature", feature, "from", from, "err", err)
 		}
 	}
-	w.systemData.NoLegacy = []string{sysdata.Monitoring}
+	w.systemData.NoLegacy = append([]string{sysdata.Monitoring}, pimFeatures...)
 	w.volumes.ReadOnly = w.opts.dev
 	if err := w.volumes.Load(); err != nil {
 		slog.Warn("volumes not readable from /config", "err", err)
@@ -265,7 +268,7 @@ func (w *titand) wireBase() error {
 func (w *titand) wire() error {
 	for _, step := range []func() error{
 		w.wireBase, w.wireShares, w.wireApplications, w.wireNotifications, w.wireAccess, w.wireUpdates,
-		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireSpeech, w.wireWebapps, w.wireMail, w.wireMaintenance, w.wireAPI,
+		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireNVR, w.wireSpeech, w.wireWebapps, w.wireMail, w.wirePIM, w.wireMaintenance, w.wireAPI,
 	} {
 		if err := step(); err != nil {
 			return err

@@ -1,4 +1,5 @@
-// What deleting an account takes along of the KI-Agent (1.03, A-42): the
+// What deleting an account takes along of the KI-Agent (1.03, A-42), of
+// T-Mail (1.05) and of T-Kalender and Kontakte (1.11): the
 // delete dialog names it before (GET /users/{name}/agent-data). A NAS
 // without the route (an older version) answers 404; the dialog then
 // stays as it was, without this list.
@@ -19,6 +20,15 @@ export type AgentData = {
 	folder: boolean;
 	/** 1.05: the account's T-Mail mailboxes (kept on the stick, counted without the agent's volume too). */
 	mailAccounts: number;
+	/**
+	 * 1.11: events and contacts of T-Kalender and Kontakte (on the volume of
+	 * the system data, counted whatever the agent's volume says). Undefined
+	 * when the NAS does not say (older NAS, or `calendarUnknown`).
+	 */
+	calendarEvents?: number;
+	contacts?: number;
+	/** The NAS could not count them now (no data volume): named without numbers. */
+	calendarUnknown: boolean;
 };
 
 const COUNTS = [
@@ -41,6 +51,11 @@ export function sanitizeAgentData(raw: unknown): AgentData | null {
 	const out = { available: r.available, folder: r.folder === true } as AgentData;
 	for (const key of COUNTS) out[key] = count(r[key]);
 	out.mailAccounts = count(r.mailAccounts);
+	out.calendarUnknown = r.calendarUnknown === true;
+	if (!out.calendarUnknown) {
+		if (typeof r.calendarEvents === 'number') out.calendarEvents = count(r.calendarEvents);
+		if (typeof r.contacts === 'number') out.contacts = count(r.contacts);
+	}
 	// A subset of the projects, never more.
 	out.handedOver = Math.min(out.handedOver, out.projects);
 	return out;
@@ -60,6 +75,13 @@ export function agentDataText(d: AgentData): AgentDataText {
 	// T-Mail lives on the stick: its mailboxes are counted with or without the volume.
 	const mail =
 		d.mailAccounts > 0 ? [t('users.agentData.mailAccounts', { count: d.mailAccounts })] : [];
+	// 1.11: T-Kalender and Kontakte; without the data volume named, never "0".
+	if (d.calendarUnknown) mail.push(t('users.agentData.part.calendar'));
+	else {
+		if (d.calendarEvents)
+			mail.push(t('users.agentData.calendarEvents', { count: d.calendarEvents }));
+		if (d.contacts) mail.push(t('users.agentData.contacts', { count: d.contacts }));
+	}
 	if (!d.available)
 		return {
 			deleted: [
