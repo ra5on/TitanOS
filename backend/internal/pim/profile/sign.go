@@ -168,6 +168,12 @@ func Sign(content []byte, cert *tls.Certificate, now time.Time) ([]byte, error) 
 // serial match), the digest of the content, and returns the content and
 // the certificates. It does not check the chain against any root; the
 // tests do that with openssl.
+//
+// Only for tests (this package and api/devices_profile_test.go, so it
+// cannot live in a _test.go file): it checks less than openssl cms -verify
+// (no chain, no times, no key usage, no other attribute) and must never
+// decide in titand whether a profile or anything else is trusted
+// (unabhängige Durchsicht 1.13, A-8).
 func Verify(data []byte) ([]byte, []*x509.Certificate, error) {
 	var ci contentInfo
 	if rest, err := asn1.Unmarshal(data, &ci); err != nil || len(rest) > 0 || !ci.Type.Equal(oidSignedData) {
