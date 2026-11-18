@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/protect"
 )
 
@@ -222,5 +224,44 @@ func TestClusterDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
 	}
 	if err := store.SaveChat("maria", c); err != nil {
 		t.Fatalf("new account cannot keep files: %v", err)
+	}
+}
+
+// 1.11 (TECHNIK 5.7): the delete dialog counts the events and contacts of
+// T-Kalender and Kontakte (groups not counted), also without the agent's
+// volume; without a store of calendars the answer has no such keys.
+func TestAgentDataCountsCalendarAndContacts(t *testing.T) {
+	ts, pim, _, _ := pimServer(t)
+	ts.guest("bea")
+	for i, uid := range []string{"a", "b", "c"} {
+		if _, err := pim.Put(pimstore.Calendar, "bea", pimstore.DefaultCalendar, uid+".ics", pimEvent(uid), pimstore.PutOptions{}); err != nil {
+			t.Fatal(i, err)
+		}
+	}
+	group := []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:g\r\nFN:Familie\r\nX-ADDRESSBOOKSERVER-KIND:group\r\nEND:VCARD\r\n")
+	for name, card := range map[string][]byte{"x.vcf": pimCard("x"), "g.vcf": group} {
+		if _, err := pim.Put(pimstore.Contacts, "bea", pimstore.DefaultBook, name, card, pimstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var data agentAccountData
+	res, body := ts.request("GET", "/api/v1/users/bea/agent-data", nil)
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &data) != nil {
+		t.Fatalf("agent-data: %d %s", res.StatusCode, body)
+	}
+	if data.Available || data.CalendarUnknown || data.CalendarEvents == nil || *data.CalendarEvents != 3 || data.Contacts == nil || *data.Contacts != 1 {
+		t.Fatalf("counts: %s", body)
+	}
+	// An account without anything: 0, counted.
+	_, body = ts.request("GET", "/api/v1/users/alex/agent-data", nil)
+	if !strings.Contains(string(body), `"calendarEvents":0`) || !strings.Contains(string(body), `"contacts":0`) {
+		t.Fatalf("owner: %s", body)
+	}
+	// A server without a store of calendars says nothing about them.
+	plain := newTestServer(t)
+	plain.setup()
+	_, body = plain.request("GET", "/api/v1/users/alex/agent-data", nil)
+	if strings.Contains(string(body), "calendar") || strings.Contains(string(body), `"contacts"`) {
+		t.Fatalf("without a store: %s", body)
 	}
 }

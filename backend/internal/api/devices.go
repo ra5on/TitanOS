@@ -187,7 +187,12 @@ func (s *Server) devicesRevokeAll(name string) {
 // was deleted or made anew: the device passwords in RAM (devices.json goes
 // with users/<name>) and the calendars and address books on the volume
 // (pim/store ForgetUser; without a volume owner.json keeps them from a new
-// account of the name).
+// account of the name). It runs before the answer, like T-Mail's and unlike
+// the agent's data (goJob): the store removes by name, and a removal still
+// running after a new account of the same name was made could take that
+// account's first entries along (TestDeviceAccountDeleteTakesCalendarAlong).
+// The store refuses the account while it removes (503), so a device asking
+// meanwhile is told to come back, never shown an empty collection.
 func (s *Server) pimForgetUser(name string) {
 	s.devices.Forget(name)
 	if s.opts.PIM != nil {

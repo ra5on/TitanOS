@@ -5,7 +5,7 @@
 	"desktop.toast.restart": "{name} could not be restarted: {reason}",
 	"desktop.toast.prefs": "The desktop's settings could not be saved: {reason} They hold only until the page is reloaded; the next change tries again.",
 	"desktop.toast.drop": "The file manager did not take the dropped files ({count}). Drop them on the desktop again or upload them in the file manager.",
-	"users.agentData.title": "Deleted from the AI agent along with it:",
+	"users.agentData.title": "Deleted along with the account:",
 	"users.agentData.loading": "Checking what the AI agent keeps of this account …",
 	"users.agentData.chats": "Chats with their files: {count}",
 	"users.agentData.projects": "Own projects: {count}",
@@ -32,5 +32,8 @@
 	"agent.f.protect.e.endConfirm": "{name} loses the read access to {shares} and the emergency handbook at once. Exactly what the emergency access gave is taken back.",
 	"agent.f.protect.e.endNow": "End access",
 	"terminal.newShell": "New shell",
-	"terminal.lastClosed": "The last NAS shell has ended."
+	"terminal.lastClosed": "The last NAS shell has ended.",
+	"users.agentData.calendarEvents": "Events in T-Calendar: {count}",
+	"users.agentData.contacts": "Contacts: {count}",
+	"users.agentData.part.calendar": "Events and contacts of T-Calendar and Contacts (cannot be counted right now: the data volume is not mounted. Their folder stays there until a new account with this name first saves something; it never sees it.)"
 }

@@ -154,3 +154,34 @@ func TestPIMDataWithoutStore(t *testing.T) {
 		t.Fatalf("books: %d %s", res.StatusCode, body)
 	}
 }
+
+// pimServer is a test server with a store of calendars as titand wires it:
+// accounts by creation time, and the mark pim.json under users/<name> on
+// the stick (cmd/titand/wiring_pim.go). setVolume("") takes the volume away.
+func pimServer(t *testing.T) (*testServer, *pimstore.Store, string, func(string)) {
+	t.Helper()
+	pim, dir, setVolume := pimTestStore(t)
+	ts := newTestServerWith(t, func(o *Options) {
+		o.PIM = pim
+		users, store := o.Users, o.Store
+		pim.Account = func(name string) (time.Time, bool) {
+			u, ok := users.Get(name)
+			return u.Created, ok
+		}
+		pim.ReadMark = func(account string) ([]byte, error) { return store.Read("users/" + account + "/pim.json") }
+		pim.WriteMark = func(account string, data []byte) error {
+			return store.Write("users/"+account+"/pim.json", data)
+		}
+	})
+	ts.setup()
+	return ts, pim, dir, setVolume
+}
+
+// pimEvent is a small event; pimCard a contact.
+func pimEvent(uid string) []byte {
+	return []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:" + uid + "\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261110T080000Z\r\nDURATION:PT1H\r\nSUMMARY:" + uid + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+}
+
+func pimCard(uid string) []byte {
+	return []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:" + uid + "\r\nFN:" + uid + "\r\nEND:VCARD\r\n")
+}

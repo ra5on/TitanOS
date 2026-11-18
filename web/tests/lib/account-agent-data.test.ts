@@ -78,3 +78,39 @@ test('1.05: the T-Mail mailboxes go with the account, with or without the volume
 	expect(only.note).toBe('');
 	expect(agentDataText(sanitizeAgentData(full)!).deleted.join(' ')).not.toContain('T-Mail');
 });
+
+// 1.11: T-Kalender and Kontakte go with the account (TECHNIK 5.7); counted
+// on the volume of the system data, so with or without the agent's volume.
+test('events and contacts are named with their counts, never 0 when unknown', () => {
+	i18n.locale = 'de';
+	const counted = agentDataText(
+		sanitizeAgentData({ available: true, calendarEvents: 42, contacts: 7 })!,
+	);
+	expect(counted.deleted).toEqual(['Termine in T-Kalender: 42', 'Kontakte: 7']);
+	expect(counted.note).toBe('');
+	// Without the agent's volume the counts stay.
+	const noAgent = agentDataText(
+		sanitizeAgentData({ available: false, calendarEvents: 3, contacts: 0 })!,
+	);
+	expect(noAgent.deleted).toContain('Termine in T-Kalender: 3');
+	expect(noAgent.deleted.join(' ')).not.toMatch(/Kontakte: 0/);
+	// Nothing kept: no line, the agent's "nothing" note stays.
+	const none = agentDataText(
+		sanitizeAgentData({ available: true, calendarEvents: 0, contacts: 0 })!,
+	);
+	expect(none.deleted).toEqual([]);
+	expect(none.note).toBe('Der KI-Agent hat zu diesem Konto nichts gespeichert.');
+	// Not countable (no data volume): named without a number, even if a number came along.
+	const unknown = sanitizeAgentData({ available: true, calendarUnknown: true, calendarEvents: 0 })!;
+	expect(unknown.calendarEvents).toBeUndefined();
+	const lines = agentDataText(unknown).deleted;
+	expect(lines).toHaveLength(1);
+	expect(lines[0]).toMatch(
+		/^Termine und Kontakte aus T-Kalender und Kontakte \(gerade nicht zu zählen/,
+	);
+	expect(lines[0]).not.toMatch(/\d/);
+	// An older NAS says nothing about them: no line.
+	expect(agentDataText(sanitizeAgentData({ available: true, chats: 1 })!).deleted).toEqual([
+		'Chats mit ihren Dateien: 1',
+	]);
+});

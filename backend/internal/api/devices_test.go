@@ -533,3 +533,207 @@ func TestDeviceAccountDeleteForgetsCalendarData(t *testing.T) {
 		t.Fatalf("calendar of the deleted account: %v", err)
 	}
 }
+
+// TECHNIK 5.7 and 3.3, step 12: what T-Kalender and Kontakte keep of an
+// account goes with it – deleted here, deleted by another node, made anew
+// elsewhere (other creation time) – and a new account of the same name
+// inherits nothing: no devices.json, no mark, no folder. The removal runs
+// before the answer (as T-Mail's): a later one, in the background, would
+// remove by name and could take the first entries of a new account of the
+// same name with it.
+func TestDeviceAccountDeleteTakesCalendarAlong(t *testing.T) {
+	ts, pim, dir, _ := pimServer(t)
+	folder := func(kind pimstore.Kind, name string) string {
+		return filepath.Join(dir, "disk1", ".titanos", string(kind), name)
+	}
+	exists := func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	keep := func(name string) {
+		t.Helper()
+		if _, err := pim.Put(pimstore.Calendar, name, pimstore.DefaultCalendar, "a.ics", pimEvent("a-"+name), pimstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pim.Put(pimstore.Contacts, name, pimstore.DefaultBook, "c.vcf", pimCard("c-"+name), pimstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if !exists(folder(pimstore.Calendar, name)) || !exists(folder(pimstore.Contacts, name)) {
+			t.Fatalf("%s: folders not written", name)
+		}
+		if !exists(filepath.Join(ts.store.Dir(), "users", name, "pim.json")) {
+			t.Fatalf("%s: no mark", name)
+		}
+	}
+	gone := func(step, name string) {
+		t.Helper()
+		for _, kind := range []pimstore.Kind{pimstore.Calendar, pimstore.Contacts} {
+			if exists(folder(kind, name)) {
+				t.Errorf("%s: %s folder of %s still there", step, kind, name)
+			}
+		}
+		if exists(filepath.Join(ts.store.Dir(), "users", name, "pim.json")) {
+			t.Errorf("%s: pim.json of %s still there", step, name)
+		}
+	}
+	fresh := func(step, name string) {
+		t.Helper()
+		cols, err := pim.Collections(pimstore.Calendar, name)
+		if err != nil || len(cols) != 1 || !cols[0].Virtual || cols[0].Count != 0 {
+			t.Errorf("%s: calendars of the new %s: %+v %v", step, name, cols, err)
+		}
+		if events, contacts, err := pim.Counts(name); err != nil || events != 0 || contacts != 0 {
+			t.Errorf("%s: counts of the new %s: %d %d %v", step, name, events, contacts, err)
+		}
+	}
+
+	// Deleted here.
+	ts.guest("bea")
+	keep("bea")
+	ts.newDevice(ts.client, "iPhone") // the owner's; bea's own below
+	if res, _ := ts.request("DELETE", "/api/v1/users/bea", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d", res.StatusCode)
+	}
+	gone("deleted here", "bea")
+	// Made anew with the same name: inherits nothing, and what it keeps
+	// stays (nothing of the deletion runs later).
+	if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": "bea", "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("made anew: %d %s", res.StatusCode, body)
+	}
+	fresh("made anew", "bea")
+	if n := len(ts.deviceList(ts.client, "/api/v1/users/bea/devices")); n != 0 {
+		t.Fatalf("made anew: %d devices", n)
+	}
+	if _, err := pim.Put(pimstore.Calendar, "bea", pimstore.DefaultCalendar, "new.ics", pimEvent("new"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.jobs.Wait()
+	if !exists(filepath.Join(folder(pimstore.Calendar, "bea"), pimstore.DefaultCalendar, "o", "new.ics")) {
+		t.Fatal("the new account's first event went with the old account's deletion")
+	}
+
+	// Deleted by another node (the cluster's record of the deletion).
+	ts.guest("cleo")
+	keep("cleo")
+	before, _ := ts.users.Get("cleo")
+	if err := ts.users.Delete("cleo"); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.clusterArea().clusterApplied(before, true, auth.User{}, true)
+	gone("deleted elsewhere", "cleo")
+
+	// Made anew elsewhere: same name, another creation time.
+	ts.guest("dina")
+	keep("dina")
+	before, _ = ts.users.Get("dina")
+	if err := ts.users.Delete("dina"); err != nil {
+		t.Fatal(err)
+	}
+	nextSecond() // another creation time (auth keeps whole seconds)
+	if _, err := ts.users.Create("dina", testPassword, auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := ts.users.Get("dina")
+	if after.Created.Equal(before.Created) {
+		t.Fatal("same creation time")
+	}
+	ts.server.clusterArea().clusterApplied(before, true, after, false)
+	gone("made anew elsewhere", "dina")
+	fresh("made anew elsewhere", "dina")
+
+	// Changed elsewhere without a new creation time (a role): stays.
+	ts.guest("emil")
+	keep("emil")
+	before, _ = ts.users.Get("emil")
+	after = before
+	after.Role = auth.RoleAdmin
+	ts.server.clusterArea().clusterApplied(before, true, after, false)
+	if !exists(folder(pimstore.Calendar, "emil")) {
+		t.Fatal("a role changed elsewhere removed the calendars")
+	}
+}
+
+// Deleted while the data volume is missing: the folder stays where it is,
+// pim.json goes with users/<name>, and a new account of the same name sees
+// none of it – the dialog said "nicht zu zählen", not 0 – and its first
+// write replaces the old folder.
+func TestDeviceAccountDeleteWithoutTheVolume(t *testing.T) {
+	ts, pim, dir, setVolume := pimServer(t)
+	ts.guest("bea")
+	if _, err := pim.Put(pimstore.Calendar, "bea", pimstore.DefaultCalendar, "old.ics", pimEvent("old"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pim.Put(pimstore.Contacts, "bea", pimstore.DefaultBook, "old.vcf", pimCard("old"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(dir, "disk1", ".titanos", "calendar", "bea", pimstore.DefaultCalendar, "o", "old.ics")
+	mark := filepath.Join(ts.store.Dir(), "users", "bea", "pim.json")
+	for _, p := range []string{old, mark} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setVolume("")
+	var data agentAccountData
+	_, body := ts.request("GET", "/api/v1/users/bea/agent-data", nil)
+	if err := json.Unmarshal(body, &data); err != nil || !data.CalendarUnknown || data.CalendarEvents != nil || data.Contacts != nil {
+		t.Fatalf("agent-data without the volume: %s", body)
+	}
+	if strings.Contains(string(body), "calendarEvents") || strings.Contains(string(body), `"contacts"`) {
+		t.Fatalf("a count without the volume: %s", body)
+	}
+	if res, _ := ts.request("DELETE", "/api/v1/users/bea", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d", res.StatusCode)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatalf("the folder on the missing volume: %v", err)
+	}
+	if _, err := os.Stat(mark); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("pim.json after the deletion: %v", err)
+	}
+	// Made anew while the volume is still missing: 503, never an empty list.
+	// (A new account made in the same second as the deletion would have the
+	// same creation time – auth keeps whole seconds – and owner.json could
+	// not tell them apart; see BAU-API "Schritt 11/12".)
+	nextSecond()
+	if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": "bea", "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("made anew: %d %s", res.StatusCode, body)
+	}
+	if _, err := pim.Collections(pimstore.Calendar, "bea"); !errors.Is(err, pimstore.ErrUnavailable) {
+		t.Fatalf("without the volume: %v", err)
+	}
+
+	// The volume back: the old folder is not the new account's.
+	setVolume("disk1")
+	cols, err := pim.Collections(pimstore.Calendar, "bea")
+	if err != nil || len(cols) != 1 || !cols[0].Virtual || cols[0].Count != 0 {
+		t.Fatalf("calendars of the new bea: %+v %v", cols, err)
+	}
+	if _, err := pim.Get(pimstore.Calendar, "bea", pimstore.DefaultCalendar, "old.ics"); !errors.Is(err, pimstore.ErrNotFound) {
+		t.Fatalf("the old event for the new account: %v", err)
+	}
+	data = agentAccountData{}
+	_, body = ts.request("GET", "/api/v1/users/bea/agent-data", nil)
+	if err := json.Unmarshal(body, &data); err != nil || data.CalendarUnknown || data.CalendarEvents == nil || *data.CalendarEvents != 0 || data.Contacts == nil || *data.Contacts != 0 {
+		t.Fatalf("agent-data of the new bea: %s", body)
+	}
+	// Its first write replaces the old folder.
+	if _, err := pim.Put(pimstore.Calendar, "bea", pimstore.DefaultCalendar, "new.ics", pimEvent("new"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the old event after the new account's first write: %v", err)
+	}
+	if events, _, err := pim.Counts("bea"); err != nil || events != 1 {
+		t.Fatalf("counts after the first write: %d %v", events, err)
+	}
+}
+
+// nextSecond waits for the next whole second: auth.Users keeps the creation
+// time of an account in whole seconds, and the binding of a folder to its
+// account (owner.json) is that time.
+func nextSecond() {
+	now := time.Now()
+	time.Sleep(now.Truncate(time.Second).Add(time.Second).Sub(now) + 5*time.Millisecond)
+}
