@@ -297,3 +297,19 @@ func (s *Store) CalDAVKind(account, id string) (Kind, error) {
 	}
 	return Calendar, ErrNotFound
 }
+
+// CountTasks is the number of reminders of an account (the dialog that
+// deletes it).
+func (s *Store) CountTasks(name string) (int, error) {
+	acc, err := s.accountFor(Tasks, name)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range acc.collections() {
+		c.mu.Lock()
+		n += len(c.st.Index)
+		c.mu.Unlock()
+	}
+	return n, nil
+}

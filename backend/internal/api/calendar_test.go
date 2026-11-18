@@ -130,7 +130,7 @@ func TestCalendarRouteRights(t *testing.T) {
 	e := newCalEnv(t)
 	ts := e.ts
 	routes := calendarRoutes(ts)
-	if len(routes) != 12 {
+	if len(routes) != 23 { // 12 of events, 11 of reminders (1.13)
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {

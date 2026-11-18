@@ -68,7 +68,7 @@ func TestPIMDataRouteRights(t *testing.T) {
 	})
 	ts.setup()
 	routes := pimDataRoutes(ts)
-	if len(routes) != 26 {
+	if len(routes) != 37 { // 11 of them reminders (1.13)
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {
@@ -245,7 +245,7 @@ func TestPIMDataCrossSite(t *testing.T) {
 			}
 		}
 	}
-	if writes != 15 {
+	if writes != 22 { // 7 of them reminders (1.13)
 		t.Fatalf("writing routes: %d", writes)
 	}
 	cals, _ := pim.Collections(pimstore.Calendar, "alex")

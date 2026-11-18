@@ -257,7 +257,9 @@ func (a pimDataArea) handleCreateCalendar(w http.ResponseWriter, r *http.Request
 			meta.Order = max(meta.Order, c.Order+1)
 		}
 		id := calweb.CalendarID(name, func(id string) bool {
-			return slices.ContainsFunc(cols, func(c pimstore.Collection) bool { return c.ID == id && !c.Virtual })
+			// An id is a calendar or a reminder list (1.13).
+			return slices.ContainsFunc(cols, func(c pimstore.Collection) bool { return c.ID == id && !c.Virtual }) ||
+				store.Holds(pimstore.Tasks, user, id)
 		})
 		if created, err = store.CreateCollection(pimstore.Calendar, user, id, meta); !errors.Is(err, pimstore.ErrExists) {
 			break

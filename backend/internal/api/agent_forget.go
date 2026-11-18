@@ -59,6 +59,9 @@ type agentAccountData struct {
 	CalendarEvents  *int `json:"calendarEvents,omitempty"`
 	Contacts        *int `json:"contacts,omitempty"`
 	CalendarUnknown bool `json:"calendarUnknown,omitempty"`
+	// Reminders (1.13) are counted like the events; left out when they
+	// cannot be (CalendarUnknown).
+	Reminders *int `json:"reminders,omitempty"`
 }
 
 // agentDataOf counts the agent's data of an account. It reads the volume
@@ -74,6 +77,11 @@ func (s *Server) agentDataOf(name string) agentAccountData {
 	if s.opts.PIM != nil {
 		if events, contacts, err := s.opts.PIM.Counts(name); err == nil {
 			out.CalendarEvents, out.Contacts = &events, &contacts
+		} else {
+			out.CalendarUnknown = true
+		}
+		if reminders, err := s.opts.PIM.CountTasks(name); err == nil {
+			out.Reminders = &reminders
 		} else {
 			out.CalendarUnknown = true
 		}

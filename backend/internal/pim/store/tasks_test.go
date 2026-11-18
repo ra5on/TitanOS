@@ -151,6 +151,9 @@ func TestTaskIndex(t *testing.T) {
 	if n, _, err := s2.Counts("alex"); err != nil || n != 0 {
 		t.Fatalf("reminders counted as events: %d %v", n, err)
 	}
+	if n, err := s2.CountTasks("alex"); err != nil || n != 3 {
+		t.Fatalf("reminders: %d %v", n, err)
+	}
 }
 
 // Deleting an account takes its lists along; the mark of kept reminders
