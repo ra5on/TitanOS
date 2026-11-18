@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -84,10 +85,8 @@ func Merge(keep, drop []byte, in Input, photo string, now time.Time) ([]byte, er
 	groups := map[string][]*card.Line{}
 	var groupOrder []string
 	for _, l := range dd.Lines {
-		if managedMerge[l.Name] {
-			if l.Group == "" {
-				continue
-			}
+		if managedMerge[l.Name] && l.Group == "" {
+			continue
 		}
 		if l.Group == "" {
 			plain = append(plain, l)
@@ -126,7 +125,11 @@ func Merge(keep, drop []byte, in Input, photo string, now time.Time) ([]byte, er
 	for _, g := range groupOrder {
 		lines := groups[g]
 		main := mainLine(lines)
-		if main == nil || managedMerge[main.Name] || has(main) || (!sameVersion && !portable(main)) {
+		// A group with any line the merge decides (item1.TEL with its label,
+		// but also item1.UID or item1.X-ADDRESSBOOKSERVER-MEMBER next to a
+		// web address) is not taken over at all (unabhängige Durchsicht
+		// 1.13, A-3).
+		if main == nil || slices.ContainsFunc(lines, func(l *card.Line) bool { return managedMerge[l.Name] }) || has(main) || (!sameVersion && !portable(main)) {
 			continue
 		}
 		if hasName(main.Name) && !multiMerge[main.Name] {

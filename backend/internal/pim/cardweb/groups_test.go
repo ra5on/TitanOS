@@ -273,3 +273,30 @@ END:VCARD
 		t.Fatal("a group merged")
 	}
 }
+
+// Unabhängige Durchsicht 1.13, A-3: a group of the other card with a line
+// the merge decides itself (UID, members of a group, numbers …) is not
+// taken over at all – not the line, not its companions.
+func TestMergeDropsGroupsWithManagedLines(t *testing.T) {
+	keep := []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:keep-1\r\nFN:Anna\r\nN:;Anna;;;\r\nEND:VCARD\r\n")
+	drop := []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:drop-1\r\nFN:Anna B\r\nN:B;Anna;;;\r\n" +
+		"item1.URL:https://smuggle.example\r\nitem1.UID:smuggled\r\nitem1.X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:other\r\n" +
+		"item2.URL:https://ok.example\r\nitem2.X-ABLabel:Blog\r\nEND:VCARD\r\n")
+	out, err := Merge(keep, drop, Input{}, "keep", groupNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, bad := range []string{"smuggled", "urn:uuid:other", "smuggle.example"} {
+		if strings.Contains(s, bad) {
+			t.Errorf("%q taken over:\n%s", bad, s)
+		}
+	}
+	if !strings.Contains(s, "UID:keep-1") || strings.Count(s, "UID") != 1 {
+		t.Errorf("UID of the kept card:\n%s", s)
+	}
+	// A group without such a line still comes along with its label.
+	if !strings.Contains(s, "URL:https://ok.example") || !strings.Contains(s, "X-ABLabel:Blog") {
+		t.Errorf("ordinary group lost:\n%s", s)
+	}
+}
