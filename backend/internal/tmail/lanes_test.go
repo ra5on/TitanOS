@@ -140,3 +140,40 @@ func mustMailbox(t *testing.T, e *testEnv, id string) Mailbox {
 	}
 	return mb
 }
+
+// The counts asked while a mail is being opened on the page's connection
+// are not kept as the counts after it: opening marks it read (1.13).
+func TestFolderCountsNotKeptAcrossAnOpen(t *testing.T) {
+	e, id, uid := laneEnv(t)
+	ctx := t.Context()
+	first, err := e.m.Folders(ctx, "alex", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox := func(list []Folder) int {
+		for _, f := range list {
+			if f.Role == RoleInbox {
+				return f.Unread
+			}
+		}
+		return -1
+	}
+	e.srv.SlowFetch.Store(int64(300 * time.Millisecond))
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.m.Read(ctx, "alex", id, "INBOX", uid, false)
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	if _, err := e.m.Folders(ctx, "alex", id); err != nil { // counts before \Seen lands
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	e.srv.SlowFetch.Store(0)
+	after, err := e.m.Folders(ctx, "alex", id)
+	if err != nil || inbox(after) != inbox(first)-1 {
+		t.Fatalf("unread after opening: %d, before %d (%v)", inbox(after), inbox(first), err)
+	}
+}

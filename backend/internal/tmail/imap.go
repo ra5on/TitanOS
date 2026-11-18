@@ -275,7 +275,11 @@ func (m *Manager) withIMAP(ctx context.Context, user, id string, limit time.Dura
 	if laneOf(ctx) == laneBackground {
 		return m.withBackground(ctx, user, id, limit, work)
 	}
-	m.events.touch(user, id) // the page did something: counts may change
+	// The page did something: counts may change, also while it runs (a
+	// count taken meanwhile on the background lane is not kept as the one
+	// after it).
+	m.events.touch(user, id)
+	defer m.events.touch(user, id)
 	return m.withLane(ctx, user, id, laneUI, limit, work)
 }
 

@@ -64,6 +64,9 @@ type Servers struct {
 	// that searches a large folder, a slow line).
 	SlowSearch atomic.Int64
 	SlowStatus atomic.Int64
+	// SlowFetch delays every FETCH before it is served (\Seen of an opened
+	// mail is set after the pause).
+	SlowFetch atomic.Int64
 
 	mu   sync.Mutex
 	sent []Received
@@ -238,6 +241,11 @@ func wait(d *atomic.Int64) {
 func (x *slowSession) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria, options *imap.SearchOptions) (*imap.SearchData, error) {
 	wait(&x.s.SlowSearch)
 	return x.UserSession.Search(kind, criteria, options)
+}
+
+func (x *slowSession) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *imap.FetchOptions) error {
+	wait(&x.s.SlowFetch)
+	return x.UserSession.Fetch(w, numSet, options)
 }
 
 func (x *slowSession) Status(name string, options *imap.StatusOptions) (*imap.StatusData, error) {
