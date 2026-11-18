@@ -111,6 +111,9 @@
 		replyAll: 'M12 7l-5 5 5 5M7 7l-5 5 5 5M7 12h7a6 6 0 0 1 6 6v1',
 		forward: 'M15 7l5 5-5 5M20 12H10a6 6 0 0 0-6 6v1',
 		flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+		// 1.11, T-Kalender and Kontakte: a phone or tablet with a device password.
+		device:
+			'M8 2.5h8A1.5 1.5 0 0 1 17.5 4v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5ZM11 18.5h2',
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

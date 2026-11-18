@@ -421,7 +421,7 @@ func TestDeviceRouteRights(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	routes := deviceRoutes(ts)
-	if len(routes) != 5 {
+	if len(routes) != 6 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {

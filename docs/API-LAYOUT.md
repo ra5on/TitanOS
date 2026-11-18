@@ -66,6 +66,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | preferences | `preferences.go` | `prefsArea` | 0 |
 | processes | `processes.go` | `processesArea` | 1 |
 | public | `public_routes.go` | – | 0 |
+| reach | `reach_addresses.go` | – | 1 |
 | register | `register_accounts.go`, `register_agent.go`, `register_backups.go`, `register_docker.go`, `register_files.go`, `register_hardware.go`, `register_homeassistant.go`, `register_login.go`, `register_lxc.go`, `register_network.go`, `register_notifications.go`, `register_pim.go`, `register_plugins.go`, `register_preferences.go`, `register_remote.go`, `register_shares.go`, `register_storage.go`, `register_system.go`, `register_terminal.go`, `register_tmail.go`, `register_usb.go`, `register_vms.go` | – | 1 |
 | replication | `replication.go` | `replicationArea` | 0 |
 | retired | `retired.go` | – | 1 |

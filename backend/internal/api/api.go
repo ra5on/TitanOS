@@ -110,6 +110,9 @@ type Options struct {
 	// PIM keeps calendars and address books (TECHNIK 5, pim/store); nil
 	// answers 503 like a missing volume.
 	PIM *pimstore.Store
+	// HTTPSPort is the port of the web UI over HTTPS (webPorts of titand),
+	// for the addresses of the setup page of the iPhone; 0 is 443.
+	HTTPSPort int
 	// SystemData says where TitanOS keeps its own data while no volume is
 	// chosen; nil takes the first mounted volume by name.
 	SystemData *volumedata.Home

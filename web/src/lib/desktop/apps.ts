@@ -376,7 +376,9 @@ export const SYSTEM_APPS: SystemApp[] = [
 		glyph: 'account',
 		gradient: 'grey',
 		href: '/account',
-		paths: ['/account'],
+		// 1.11: the iPhone setup of T-Kalender and Kontakte (device passwords
+		// of the account) until T-Kalender is a program of its own (step 11).
+		paths: ['/account', '/calendar/iphone'],
 		side: [],
 		kind: 'system',
 	},

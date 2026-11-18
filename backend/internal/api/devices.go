@@ -24,11 +24,14 @@ type pimArea struct {
 	devices    *devices.Manager
 	webSession webSessionFunc
 	reconfirm  reconfirmFunc
+	// setup is what the iPhone needs (addresses, TECHNIK 4.2).
+	setup func(account string) deviceSetup
 }
 
 // pimArea is the area of the server.
 func (s *Server) pimArea() pimArea {
-	return pimArea{users: s.opts.Users, devices: s.devices, webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm}
+	return pimArea{users: s.opts.Users, devices: s.devices, webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm,
+		setup: s.deviceSetup}
 }
 
 // newDevices builds the manager of the device passwords; "last synced"
@@ -53,6 +56,7 @@ func (a pimArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("GET /api/v1/account/devices", web(a.handleDevices))
 	mux.HandleFunc("POST /api/v1/account/devices", web(a.handleDeviceNew))
 	mux.HandleFunc("DELETE /api/v1/account/devices/{id}", web(a.handleDeviceRevoke))
+	mux.HandleFunc("GET /api/v1/account/devices/setup", web(a.handleDeviceSetup))
 	mux.HandleFunc("GET /api/v1/users/{name}/devices", admin(a.handleUserDevices))
 	mux.HandleFunc("DELETE /api/v1/users/{name}/devices/{id}", admin(a.handleUserDeviceRevoke))
 }
@@ -84,6 +88,13 @@ func (a pimArea) list(w http.ResponseWriter, user auth.User) {
 // handleDevices lists the own devices with "last synced"; never a hash.
 func (a pimArea) handleDevices(w http.ResponseWriter, r *http.Request) {
 	a.list(w, currentUser(r))
+}
+
+// handleDeviceSetup tells the setup page of the iPhone the account and
+// the servers to type in (TECHNIK 4.2): every account, host names and
+// addresses only.
+func (a pimArea) handleDeviceSetup(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.setup(currentUser(r).Name))
 }
 
 // handleDeviceNew makes a device password and shows it once.
