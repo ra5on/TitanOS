@@ -9739,6 +9739,7 @@
 	"contacts.side.transfer": "Import und Export",
 	"contacts.dup.title": "Mögliche Dubletten",
 	"contacts.dup.count": "{n} mögliche Dubletten",
+	"contacts.dup.countOne": "1 mögliche Dublette",
 	"contacts.dup.text": "Kontakte mit gleicher E-Mail-Adresse, gleicher Nummer oder gleichem Namen. Zusammenführen machst nur du; nichts geschieht von selbst.",
 	"contacts.dup.none": "Keine möglichen Dubletten.",
 	"contacts.dup.pick": "Wähle links zwei Kontakte, die zusammengehören.",

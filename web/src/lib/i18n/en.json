@@ -9739,6 +9739,7 @@
 	"contacts.side.transfer": "Import and export",
 	"contacts.dup.title": "Possible duplicates",
 	"contacts.dup.count": "{n} possible duplicates",
+	"contacts.dup.countOne": "1 possible duplicate",
 	"contacts.dup.text": "Contacts with the same e-mail address, number or name. Only you merge them; nothing happens by itself.",
 	"contacts.dup.none": "No possible duplicates.",
 	"contacts.dup.pick": "Pick two contacts on the left that belong together.",

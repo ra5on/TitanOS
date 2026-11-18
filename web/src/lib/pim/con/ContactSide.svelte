@@ -192,7 +192,9 @@
 							><Icon name="copy" size={16} /><span class="name">{t('contacts.dup.title')}</span
 							><span class="count"
 								><span aria-hidden="true">{duplicates}</span><span class="sr-only"
-									>{t('contacts.dup.count', { n: duplicates })}</span
+									>{duplicates === 1
+										? t('contacts.dup.countOne')
+										: t('contacts.dup.count', { n: duplicates })}</span
 								></span
 							></button
 						>
