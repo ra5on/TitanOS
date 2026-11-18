@@ -23,7 +23,14 @@
 	// and the reminders each a level of their own with "‹ Zurück"; "Heute",
 	// "Kalender", "Erinnerungen" and "Neuer Termin" (+, at the right) in the
 	// bar at the bottom. No dragging there; an event opens to be edited.
-	import { onDestroy, onMount } from 'svelte';
+	// The KI-Agent (1.13, with session.services.agent): its panel right of
+	// the content (a column of the frame) or, without room and compact, a
+	// sheet from below; open or not kept per device. The day shown (and an
+	// event asked about from its details) goes with each message as a
+	// reference, never its content. A draft of a reminder (?agentDraft=,
+	// "Öffnen und bearbeiten") opens the reminder dialog filled in, ticking
+	// one off asks first; nothing is saved without the person.
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
@@ -82,6 +89,13 @@
 	import TaskSide from '#lib/pim/cal/TaskSide.svelte';
 	import { tasksByDay, type DueTask, type TaskList } from '#lib/pim/cal/tasks.ts';
 	import WeekView, { type TimedChange } from '#lib/pim/cal/WeekView.svelte';
+	import { loadTask, setTaskDone, type Task } from '#lib/pim/cal/tasks.ts';
+	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
+	import type { AgentContext } from '#lib/agent.ts';
+	import { loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import { calendarPanelActions } from '#lib/agent/panel-actions.ts';
+	import { session } from '#lib/session.svelte.ts';
 
 	type View = 'month' | 'week' | 'day' | 'list';
 
@@ -132,7 +146,11 @@
 	let detail = $state<CalEvent | null>(null);
 	let deleting = $state<CalEvent | null>(null);
 	let calDialog = $state<{ calendar?: Calendar | TaskList; tasks?: boolean } | null>(null);
-	let taskDialog = $state<{ task?: DueTask; due?: string } | null>(null);
+	let taskDialog = $state<{
+		task?: Pick<DueTask, 'list' | 'id'>;
+		due?: string;
+		draft?: Record<string, unknown>;
+	} | null>(null);
 	let said = $state('');
 	const announce = (text: string) => (said = said === text ? text + ' ' : text);
 
@@ -341,6 +359,135 @@
 		ontask: (task: DueTask) => (taskDialog = { task }),
 		ontaskdone: (task: DueTask) => void tasks.toggleDone(task),
 	};
+
+	// ---- The KI-Agent's panel (1.13) ----
+	const AGENT_KEY = 'titanos.calendar.agentPanel';
+	const withAgent = $derived(!!session.services.agent);
+	let agentOpen = $state(readAgentOpen());
+	/** The panel stands as a column (room next to the content); else a sheet. */
+	let agentColumn = $state(false);
+	function readAgentOpen(): boolean {
+		try {
+			return localStorage.getItem(AGENT_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+	function setAgent(on: boolean) {
+		agentOpen = on;
+		try {
+			if (on) localStorage.setItem(AGENT_KEY, '1');
+			else localStorage.removeItem(AGENT_KEY);
+		} catch {
+			// Kept for this visit only.
+		}
+	}
+	/** The event asked about from its details; gone with another day or view. */
+	let agentEvent = $state<CalEvent | null>(null);
+	$effect(() => {
+		void anchor;
+		void view;
+		untrack(() => (agentEvent = null));
+	});
+	const agentContext = $derived<AgentContext>({
+		app: 'calendar',
+		date: compact && view === 'month' ? phoneDay : anchor,
+		...(agentEvent && agentEvent.kind === 'event'
+			? {
+					event: {
+						cal: agentEvent.calendar,
+						id: agentEvent.id,
+						...(agentEvent.occurrence ? { occurrence: agentEvent.occurrence } : {}),
+					},
+				}
+			: {}),
+	});
+	const agentActions = $derived(calendarPanelActions((k) => t(k)));
+	function askAgent(ev: CalEvent) {
+		detail = null;
+		agentEvent = ev;
+		setAgent(true);
+	}
+
+	// ---- Drafts of the KI-Agent (?agentDraft=, also while the page is open) ----
+	let draftSeen = '';
+	let draftNote = $state('');
+	let taskDraft = $state<AgentDraft | null>(null);
+	let doneAsk = $state<{ task: Task; done: boolean } | null>(null);
+	let doneBusy = $state(false);
+	let doneError = $state('');
+	$effect(() => {
+		const param = page.url.searchParams.get('agentDraft') ?? '';
+		if (!param || param === draftSeen) return;
+		draftSeen = param;
+		untrack(() => void takeDraft(param));
+	});
+	async function takeDraft(param: string) {
+		draftNote = '';
+		const d = await loadAgentDraft(param);
+		// Out of the address: a reload or the way back does not open it again.
+		const q = new URLSearchParams(page.url.search);
+		q.delete('agentDraft');
+		await goto(`/calendar${q.size ? '?' + q : ''}`, { replace: true, reset: false });
+		draftSeen = '';
+		if (d?.app === 'calendar' && d.kind === 'event') {
+			openEventWindow(`/calendar/event?agentDraft=${encodeURIComponent(param)}&back=/calendar`);
+			return;
+		}
+		if (d?.app !== 'tasks' || (d.kind !== 'task' && d.kind !== 'complete')) {
+			draftNote = d ? t('agentpim.draft.foreign') : t('agentpim.draft.gone');
+			return;
+		}
+		taskDraft = d;
+	}
+	// The dialog once the lists are there (its list is chosen from them).
+	$effect(() => {
+		const d = taskDraft;
+		if (!d || !tasks.ready) return;
+		untrack(() => {
+			taskDraft = null;
+			void showTaskDraft(d);
+		});
+	});
+	async function showTaskDraft(d: AgentDraft) {
+		const f = d.fields;
+		const list = typeof f.list === 'string' ? f.list : '';
+		const id = typeof f.id === 'string' ? f.id : '';
+		if (d.kind === 'task') {
+			detail = null;
+			taskDialog = list && id ? { task: { list, id }, draft: f } : { draft: f };
+			return;
+		}
+		if (!list || !id) {
+			draftNote = t('agentpim.draft.gone');
+			return;
+		}
+		try {
+			doneError = '';
+			doneAsk = { task: await loadTask(list, id), done: f.done !== false };
+		} catch (err) {
+			draftNote = apiErrorText(err);
+		}
+	}
+	async function confirmDone() {
+		if (!doneAsk) return;
+		const { task, done } = doneAsk;
+		doneBusy = true;
+		try {
+			await setTaskDone(task, done);
+			doneAsk = null;
+			announce(
+				done
+					? t('agentpim.draft.doneSaid', { title: task.title })
+					: t('agentpim.draft.openSaid', { title: task.title }),
+			);
+			tasks.refresh();
+		} catch (err) {
+			doneError = apiErrorText(err);
+		} finally {
+			doneBusy = false;
+		}
+	}
 </script>
 
 <PageHead {title} />
@@ -417,6 +564,19 @@
 {/snippet}
 
 {#snippet foot(folded: boolean)}
+	{#if !compact && withAgent}
+		<button
+			type="button"
+			class="side-link agent-toggle"
+			class:icon={folded}
+			aria-pressed={agentOpen}
+			title={folded ? t('agentpim.panel.toggle') : undefined}
+			aria-label={folded ? t('agentpim.panel.toggle') : undefined}
+			onclick={() => setAgent(!agentOpen)}
+			><Icon name="sparkle" size={17} />{#if !folded}<span>{t('agentpim.panel.toggle')}</span
+				>{/if}</button
+		>
+	{/if}
 	{#if !compact}
 		<button
 			type="button"
@@ -476,6 +636,14 @@
 			{t('calendar.birthdaysUnavailable')}
 		</p>{/if}
 	{#if allHidden}<p class="muted msg">{t('calendar.allHidden')}</p>{/if}
+	{#if draftNote}
+		<p class="muted msg draft-note" role="status">
+			{draftNote}
+			<button type="button" class="btn btn-sm" onclick={() => (draftNote = '')}
+				>{t('common.close')}</button
+			>
+		</p>
+	{/if}
 {/snippet}
 
 {#snippet taskLevel()}
@@ -509,10 +677,19 @@
 	{rail}
 	sideFoot={compact ? undefined : foot}
 	bar={!compact || (data.shown.kind === 'ready' && level === 'content') ? bar : undefined}
-	notices={data.error || moveError || data.truncated || data.birthdaysUnavailable || allHidden
+	notices={data.error ||
+	moveError ||
+	data.truncated ||
+	data.birthdaysUnavailable ||
+	allHidden ||
+	draftNote
 		? notices
 		: undefined}
 	list={compact && data.shown.kind === 'ready' ? taskLevel : undefined}
+	aside={withAgent && agentOpen && !compact ? agentAside : undefined}
+	asideKey="titanos.agentPanel.width"
+	asideResizeLabel={t('agentpim.panel.resize')}
+	bind:asideShown={agentColumn}
 >
 	<div
 		class="calview"
@@ -633,6 +810,15 @@
 				disabled={data.shown.kind !== 'ready'}
 				onclick={() => go(view, anchor, 'tasks')}><Icon name="check" size={20} /></button
 			>
+			{#if withAgent}
+				<button
+					type="button"
+					class="bar-btn"
+					aria-label={t('agentpim.panel.toggle')}
+					title={t('agentpim.panel.toggle')}
+					onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
+				>
+			{/if}
 			<button
 				type="button"
 				class="bar-btn bar-new"
@@ -656,6 +842,7 @@
 			detail = null;
 			deleting = ev;
 		}}
+		onagent={withAgent ? askAgent : undefined}
 	/>
 {/if}
 {#if deleting}
@@ -684,11 +871,59 @@
 	<TaskDialog
 		task={taskDialog.task}
 		due={taskDialog.due}
+		draft={taskDialog.draft}
 		lists={tasks.lists}
 		list={tasks.chosen}
 		onclose={() => (taskDialog = null)}
 		onchanged={() => tasks.refresh()}
 	/>
+{/if}
+{#if doneAsk}
+	{@const d = doneAsk}
+	<Dialog
+		title={d.done
+			? t('agentpim.draft.doneTitle', { title: d.task.title })
+			: t('agentpim.draft.openTitle', { title: d.task.title })}
+		locked={doneBusy}
+		onclose={() => (doneAsk = null)}
+	>
+		<p class="lead">{t('agentpim.draft.doneText')}</p>
+		{#if doneError}<p class="notice-error" role="alert">{doneError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={doneBusy} onclick={() => (doneAsk = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={doneBusy}
+				data-done-confirm
+				onclick={() => void confirmDone()}
+				><Icon name="check" size={15} />{d.done
+					? t('agentpim.draft.doneConfirm')
+					: t('agentpim.draft.openConfirm')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+{#snippet agentAside()}
+	<AgentPanel
+		app="calendar"
+		context={agentContext}
+		actions={agentActions}
+		onclose={() => setAgent(false)}
+	/>
+{/snippet}
+{#if withAgent && agentOpen && !(!compact && agentColumn)}
+	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
+		<AgentPanel
+			app="calendar"
+			phone
+			context={agentContext}
+			actions={agentActions}
+			onclose={() => setAgent(false)}
+		/>
+	</AgentSheet>
 {/if}
 {#if moving}
 	{@const m = moving}
@@ -779,6 +1014,16 @@
 	:global(.calendar) .side-link:hover {
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 		color: var(--text);
+	}
+	:global(.calendar) .agent-toggle[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--text);
+	}
+	.draft-note {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
 	}
 	.cbar {
 		display: flex;
