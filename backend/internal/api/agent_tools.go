@@ -449,8 +449,11 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		mode = b.nvrMode(t.name, mode)
 	}
 	// Deleting planned tasks cannot be undone: after outside content (a
-	// file could say "delete all reminders") the person decides (M4).
-	if t.name == "schedule_delete" && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+	// file could say "delete all reminders") the person decides (M4). The
+	// same for events and contacts (1.11, Sicherheitsdurchsicht S-14): no
+	// trash, and the devices delete them too; an invitation read with
+	// calendar_search can say "delete all contacts".
+	if (t.name == "schedule_delete" || t.name == "calendar_delete" || t.name == "contacts_delete") && chat != nil && (chat.Tainted || chat.OutsideSkill) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.name == "schedule_delete" {

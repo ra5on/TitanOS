@@ -7,7 +7,8 @@ package api
 // only; ids name a collection and a file of that account, never another
 // account. Reading tools return outside content (invitations of others),
 // so the chat counts as tainted afterwards. What may run is decided by
-// Policy.DataRights (two axes), and deleting a whole series always asks.
+// Policy.DataRights (two axes); deleting a whole series or cutting it
+// down always asks, and so does any delete after outside content.
 // The addresses T-Mail learned from sent mail are T-Mail's: no tool here
 // reads them.
 
@@ -126,11 +127,11 @@ func (b *agentToolbox) pimTools() []*agentTool {
 			params:      schema(with(event, map[string]any{"calendar": str("Calendar id or name from calendar_list; default the first.")}), "title", "start"),
 			own:         b.calendarCreate, prepare: b.calendarCreatePrepare},
 		{name: "calendar_update", area: cal, kind: agent.KindChange,
-			description: "Change an event: only the fields given change. For a series give scope.",
+			description: "Change an event: only the fields given change. For a series give scope; a new repeat rule for the whole series always asks the person.",
 			params:      schema(with(event, map[string]any{"id": idCal, "scope": scope, "etag": etag}), "id"),
 			own:         b.calendarUpdate, prepare: b.calendarUpdatePrepare},
 		{name: "calendar_delete", area: cal, kind: agent.KindChange,
-			description: "Delete an event, only when asked to. For a series give scope; deleting a whole series always asks the person.",
+			description: "Delete an event, only when asked to. For a series give scope; deleting a whole series always asks the person, and so does any delete after outside content.",
 			params:      schema(map[string]any{"id": idCal, "scope": scope, "etag": etag}, "id"),
 			own:         b.calendarDelete, prepare: b.calendarDeletePrepare},
 		{name: "contacts_search", area: con, kind: agent.KindRead, untrusted: true,
@@ -923,7 +924,25 @@ func (b *agentToolbox) calendarUpdatePrepare(_ context.Context, chat *agent.Chat
 		p.Summary += pick(en, fmt.Sprintf(" (%d geänderte Einzeltermine der Reihe gehen dabei verloren)", plan.res.DroppedExceptions),
 			fmt.Sprintf(" (%d changed occurrences of the series are dropped)", plan.res.DroppedExceptions))
 	}
+	// A new rule for the whole series can cut it down to one event (repeat
+	// none, count 1, until its first day): losing a series asks like
+	// deleting it, over every right and work mode (Sicherheitsdurchsicht
+	// S-13). "following" at the first occurrence is the whole series too.
+	if plan.series && plan.changed && plan.res.Scope == recur.ScopeAll && plan.args.Repeat != nil {
+		whole, _ := calweb.Open(plan.obj.Data, "", b.s.opts.PIM.Zone())
+		p.Summary += pick(en, " – die Wiederholung der ganzen Reihe ändert sich (bisher ", " – the repetition of the whole series changes (so far ") +
+			seriesCount(whole, en) + ", " + ruleWords(whole, en) + ")"
+		return agent.ModeAsk, nil
+	}
 	return "", nil
+}
+
+// seriesCount is the number of occurrences of a series in words.
+func seriesCount(whole calweb.View, en bool) string {
+	if whole.Occurrences == nil {
+		return pick(en, "ohne Ende", "without end")
+	}
+	return pick(en, fmt.Sprintf("%d Termine", *whole.Occurrences), fmt.Sprintf("%d occurrences", *whole.Occurrences))
 }
 
 func (b *agentToolbox) calendarUpdate(_ context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
@@ -993,11 +1012,7 @@ func (b *agentToolbox) calendarDeletePrepare(_ context.Context, chat *agent.Chat
 	switch {
 	case plan.whole:
 		whole, _ := calweb.Open(plan.obj.Data, "", b.s.opts.PIM.Zone())
-		count := pick(en, "ohne Ende", "without end")
-		if whole.Occurrences != nil {
-			count = pick(en, fmt.Sprintf("%d Termine", *whole.Occurrences), fmt.Sprintf("%d occurrences", *whole.Occurrences))
-		}
-		p.Summary += pick(en, " – die ganze Reihe (", " – the whole series (") + count + ", " + ruleWords(whole, en) + ")"
+		p.Summary += pick(en, " – die ganze Reihe (", " – the whole series (") + seriesCount(whole, en) + ", " + ruleWords(whole, en) + ")"
 		return agent.ModeAsk, nil
 	case plan.res.Scope == recur.ScopeFollowing:
 		p.Summary += pick(en, " – dieses und alle folgenden Vorkommen", " – this and all following occurrences")

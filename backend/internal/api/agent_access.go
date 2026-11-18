@@ -183,7 +183,9 @@ func (b *agentToolbox) access(ctx context.Context) map[string]any {
 			case !b.pimMounted(kind):
 				a.Why = "the data volume is not mounted right now; searches answer hidden/why instead of results"
 			case area == agent.AreaCalendar && change != agent.ModeDeny:
-				a.Why = "deleting a whole series always asks the person"
+				a.Why = "deleting a whole series or changing its repetition always asks the person, and so does deleting after outside content was read"
+			case area == agent.AreaContacts && change != agent.ModeDeny:
+				a.Why = "deleting a contact after outside content was read always asks the person"
 			}
 		}
 		if area == agent.AreaNVR && read == agent.ModeAsk {

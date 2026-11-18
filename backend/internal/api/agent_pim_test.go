@@ -664,3 +664,96 @@ func TestPimSettingsCheck(t *testing.T) {
 		}
 	}
 }
+
+// Sicherheitsdurchsicht 1.11 S-13: cutting a whole series down with
+// calendar_update (repeat none, count 1, until its first day, also
+// "following" at the first occurrence) loses it like deleting it, so it
+// asks as well – with "Alles ohne Nachfrage", write allow, "Direkt" and in
+// a planned task. Other changes of the whole series, and a new rule from a
+// later occurrence on (like deleting "this and following"), follow the
+// rights.
+func TestPimSeriesCutAlwaysAsks(t *testing.T) {
+	e := newCalEnv(t)
+	start := pimTomorrow()
+	first := start.UTC().Format("20060102T150405Z")
+	second := start.AddDate(0, 0, 7).UTC().Format("20060102T150405Z")
+	base := "cal:privat/yoga@google.com.ics"
+	e.seed("privat", "yoga@google.com.ics", pimSeries("yoga@google.com", start))
+	policies := map[string]agent.Policy{
+		"all":         {Preset: agent.PresetAll},
+		"write allow": {Preset: agent.PresetRead, DataRights: map[string]agent.DataRight{agent.AreaCalendar: {Read: agent.ModeAllow, Write: agent.ModeAllow}}},
+	}
+	chats := map[string]*agent.Chat{"none": nil, "direct": {Autonomy: agent.AutonomyDirect, Origin: "web"}, "planned task": {Origin: "schedule", Schedule: "s1"}}
+	cuts := []string{
+		`{"id":"` + base + `","scope":"all","repeat":{"freq":"none"}}`,
+		`{"id":"` + base + "@" + second + `","scope":"all","repeat":{"freq":"weekly","count":1}}`,
+		`{"id":"` + base + `","scope":"all","repeat":{"freq":"weekly","until":"` + start.Format("2006-01-02") + `"}}`,
+		`{"id":"` + base + "@" + first + `","scope":"following","repeat":{"freq":"none"}}`,
+	}
+	free := []string{
+		`{"id":"` + base + `","scope":"all","title":"Pilates"}`,
+		`{"id":"` + base + "@" + second + `","scope":"following","repeat":{"freq":"none"}}`,
+		`{"id":"` + base + "@" + second + `","scope":"this","title":"Pilates"}`,
+	}
+	for pn, pol := range policies {
+		box := pimBox(t, e, "alex", pol)
+		for cn, chat := range chats {
+			for _, args := range cuts {
+				p := pimPrepare(t, box, chat, "calendar_update", args)
+				if p.Mode != agent.ModeAsk {
+					t.Errorf("%s/%s %s: %s, want ask", pn, cn, args, p.Mode)
+				}
+				mustHave(t, "cut summary", p.Summary, "die Wiederholung der ganzen Reihe ändert sich (bisher 5 Termine")
+			}
+			for _, args := range free {
+				if p := pimPrepare(t, box, chat, "calendar_update", args); p.Mode != agent.ModeAllow {
+					t.Errorf("%s/%s %s: %s, want allow", pn, cn, args, p.Mode)
+				}
+			}
+		}
+	}
+}
+
+// Sicherheitsdurchsicht 1.11 S-14: after outside content (an invitation
+// read with calendar_search, a skill from outside) deleting an event or a
+// contact asks, like schedule_delete since 1.10 (M4) – nothing can bring
+// it back, and the devices delete it too. Adding and changing follow the
+// rights as file changes do.
+func TestPimDeleteAfterOutsideContentAsks(t *testing.T) {
+	e := newCalEnv(t)
+	e.seed("privat", "x.ics", pimSingle("x", "Einladung", pimTomorrow()))
+	pimCardOf(e, "alex", "anna", "Anna", "")
+	policies := map[string]agent.Policy{
+		"all": {Preset: agent.PresetAll},
+		"write allow": {Preset: agent.PresetStandard, DataRights: map[string]agent.DataRight{
+			agent.AreaCalendar: {Read: agent.ModeAllow, Write: agent.ModeAllow}, agent.AreaContacts: {Read: agent.ModeAllow, Write: agent.ModeAllow}}},
+	}
+	deletes := [][2]string{{"calendar_delete", `{"id":"cal:privat/x.ics"}`}, {"contacts_delete", `{"id":"card:kontakte/anna.vcf"}`}}
+	others := [][2]string{
+		{"calendar_create", `{"title":"Zahnarzt","start":"` + pimTomorrow().Format("2006-01-02T15:04") + `"}`},
+		{"calendar_update", `{"id":"cal:privat/x.ics","title":"Zahnarzt"}`},
+		{"contacts_create", `{"first":"Bea"}`},
+		{"contacts_update", `{"id":"card:kontakte/anna.vcf","org":"Firma"}`},
+	}
+	for pn, pol := range policies {
+		box := pimBox(t, e, "alex", pol)
+		for cn, chat := range map[string]*agent.Chat{"tainted": {Tainted: true}, "outside skill": {OutsideSkill: true}} {
+			for _, c := range deletes {
+				if p := pimPrepare(t, box, chat, c[0], c[1]); p.Mode != agent.ModeAsk {
+					t.Errorf("%s/%s %s: %s, want ask", pn, cn, c[0], p.Mode)
+				}
+			}
+			for _, c := range others {
+				if p := pimPrepare(t, box, chat, c[0], c[1]); p.Mode != agent.ModeAllow {
+					t.Errorf("%s/%s %s: %s, want allow", pn, cn, c[0], p.Mode)
+				}
+			}
+		}
+		// A chat without outside content deletes as the rights say.
+		for _, c := range deletes {
+			if p := pimPrepare(t, box, &agent.Chat{}, c[0], c[1]); p.Mode != agent.ModeAllow {
+				t.Errorf("%s clean %s: %s, want allow", pn, c[0], p.Mode)
+			}
+		}
+	}
+}
