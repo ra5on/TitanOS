@@ -21,7 +21,7 @@ func TestPreviewOfBodies(t *testing.T) {
 		{"base64 cut", "text/plain; charset=utf-8", "base64", "SGFsbG8gV2VsdCwgd2llIGdlaHQg\r\nZXM/IEhhbGxvIFdlbH", "Hallo Welt, wie geht es? Hallo We"},
 		{"quotes and signature", "text/plain", "", "Ja, passt.\n\n> Passt dir Freitag?\n> Gruß\n-- \nAlex Muster\nTel 123", "Ja, passt."},
 		{"addresses and long words", "text/plain", "", "Siehe https://example.org/a?b=c und www.example.org oder " + strings.Repeat("x", 41) + " Ende", "Siehe und oder Ende"},
-		{"invisible characters", "text/plain", "", "Rech​nung‮ fdp.exe \x07da", "Rechnung fdp.exe da"},
+		{"invisible characters", "text/plain", "", "Rech\u200bnung\u202e fdp.exe \x07da", "Rechnung fdp.exe da"},
 		{"html", "text/html; charset=utf-8", "", "<html><head><title>T</title><style>p{color:red}</style></head><body><script>alert(1)</script><p>Guten&nbsp;Tag &amp; willkommen</p><blockquote>alt</blockquote><p>Neu</p></body></html>", "Guten Tag & willkommen Neu"},
 		{"html cut in a tag", "text/html", "", "<p>Anfang</p><a href=\"https://exa", "Anfang"},
 		{"encrypted", "multipart/encrypted; boundary=x", "", "--x\r\nContent-Type: text/plain\r\n\r\ngeheim\r\n--x--", ""},
