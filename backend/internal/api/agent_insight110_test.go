@@ -58,7 +58,8 @@ func TestAgentAccessSaysWhatIsHidden(t *testing.T) {
 	if !strings.Contains(text, `{"areas":["docker"],"why":"Docker is switched off on this NAS (Einstellungen › Dienste)"}`) {
 		t.Fatalf("docker off not said: %v", result["notAvailable"])
 	}
-	if mail, _ := result["mail"].(string); !strings.Contains(mail, "closed to the agent") {
+	// 1.13: Mail is open to the agent (Q27), never to MCP or tokens.
+	if mail, _ := result["mail"].(string); !strings.Contains(mail, "Never through MCP or API tokens") || result["actions"] == nil {
 		t.Fatalf("mail: %v", result["mail"])
 	}
 	if result["role"] != "owner" {

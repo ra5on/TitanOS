@@ -107,8 +107,9 @@ func TestPimToolsRightsAndModes(t *testing.T) {
 	}
 	tomorrow := pimTomorrow().Format("2006-01-02T15:04")
 	create := `{"title":"Zahnarzt","start":"` + tomorrow + `","duration":45,"location":"Praxis Dr. Weber","alarms":[30]}`
-	if p := pimPrepare(t, std, nil, "calendar_create", create); p.Mode != agent.ModeAsk {
-		t.Errorf("standard create: %s", p.Mode)
+	// 1.13: the factory standard only suggests (a draft, nothing written).
+	if p := pimPrepare(t, std, nil, "calendar_create", create); p.Mode != agent.ModeAllow || !p.Draft {
+		t.Errorf("standard create: %s draft %v", p.Mode, p.Draft)
 	}
 	if p := pimPrepare(t, std, nil, "calendar_search", `{}`); p.Mode != agent.ModeAllow || !p.Untrusted {
 		t.Errorf("standard search: %+v", p)
@@ -199,9 +200,9 @@ func TestPimCalendarFlow(t *testing.T) {
 		t.Errorf("update: %v", done)
 	}
 	mustHave(t, "file", e.raw("privat", strings.TrimPrefix(id, "cal:privat/")), "SUMMARY:Zahnarzt Kontrolle", "LOCATION:Neu")
-	// A single event: delete runs without asking under "Alles ohne Nachfrage".
+	// A single event: since 1.13 delete asks also under "Alles ohne Nachfrage".
 	pd := pimPrepare(t, box, nil, "calendar_delete", `{"id":"`+id+`"}`)
-	if pd.Mode != agent.ModeAllow {
+	if pd.Mode != agent.ModeAsk {
 		t.Errorf("single delete: %s", pd.Mode)
 	}
 	mustHave(t, "delete summary", pd.Summary, "Termin löschen in Privat: Zahnarzt Kontrolle")
@@ -246,8 +247,9 @@ func TestPimSeriesDeleteAlwaysAsks(t *testing.T) {
 				mustHave(t, "series summary", p.Summary, "die ganze Reihe (5 Termine, wiederholt sich")
 			}
 			p := pimPrepare(t, box, chat, "calendar_delete", `{"id":"`+base+"@"+second+`","scope":"this"}`)
-			if p.Mode != agent.ModeAllow {
-				t.Errorf("%s/%s scope this: %s, want allow", pn, cn, p.Mode)
+			// 1.13: every delete asks (before: only the whole series).
+			if p.Mode != agent.ModeAsk {
+				t.Errorf("%s/%s scope this: %s, want ask", pn, cn, p.Mode)
 			}
 			mustHave(t, "this summary", p.Summary, "nur dieses Vorkommen")
 		}
@@ -425,7 +427,10 @@ func TestPimContactsFlow(t *testing.T) {
 	ts, pim, mailDir, _ := contactsMailServer(t)
 	pim.Local = func() *time.Location { return calBerlin }
 	learnedBook(t, ts, mailDir, "alex", "gelernt@example.org")
-	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), agentSettings{Policy: agent.Policy{Preset: agent.PresetStandard}})
+	// 1.13: "Eintragen mit Nachfrage" chosen before stays ask (Q28); the
+	// plain standard makes drafts (TestActionDrafts).
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), agentSettings{Policy: agent.Policy{Preset: agent.PresetStandard,
+		DataRights: map[string]agent.DataRight{agent.AreaContacts: {Read: agent.ModeAllow, Write: agent.ModeAsk}}}})
 	ctx := context.Background()
 	run := func(tool, args string) (agent.Prepared, map[string]any) {
 		t.Helper()
@@ -761,10 +766,11 @@ func TestPimDeleteAfterOutsideContentAsks(t *testing.T) {
 				}
 			}
 		}
-		// A chat without outside content deletes as the rights say.
+		// 1.13 (owner 18 Nov 2026: "Löschen immer mit Bestätigung"): a chat
+		// without outside content asks before deleting too (before: allow).
 		for _, c := range deletes {
-			if p := pimPrepare(t, box, &agent.Chat{}, c[0], c[1]); p.Mode != agent.ModeAllow {
-				t.Errorf("%s clean %s: %s, want allow", pn, c[0], p.Mode)
+			if p := pimPrepare(t, box, &agent.Chat{}, c[0], c[1]); p.Mode != agent.ModeAsk {
+				t.Errorf("%s clean %s: %s, want ask", pn, c[0], p.Mode)
 			}
 		}
 	}

@@ -189,9 +189,12 @@ func TestMailRights(t *testing.T) {
 	}
 }
 
-// The KI-Agent gets no access (docs/TMAIL.md): no route of T-Mail is in
-// publicRoutes, no tool of the catalog names it, and no file that makes
-// tools mentions its paths.
+// No token and no MCP client reaches mail (docs/TMAIL.md): no route of
+// Mail is in publicRoutes, no tool of the catalog names it, and no file
+// that makes tools mentions its paths. Since 1.13 the KI-Agent has mail
+// tools of its own (owner 18 Nov 2026, Q27): only agent_mail.go uses the
+// manager of Mail, never its routes, and no file reads the addresses
+// Mail learned.
 // mailProgramName is the program's name since 1.13 ("Mail", before
 // "T-Mail") as a word of its own, not inside "E-Mail" or "e-mail".
 var mailProgramName = regexp.MustCompile(`(^|[^-A-Za-z])Mail\b`)
@@ -221,8 +224,11 @@ func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pattern.Match(data) {
+		if pattern.Match(data) && f != "agent_mail.go" {
 			t.Errorf("%s mentions T-Mail", f)
+		}
+		if f == "agent_mail.go" && regexp.MustCompile(`/api/v1/mail|"/mail/|callRoute\(`).Match(data) {
+			t.Errorf("%s goes through the routes of Mail", f)
 		}
 		// 1.11: the address book T-Mail learns from sent mail stays
 		// T-Mail's – no tool reads .titanos/mail/<account>/contacts.json.
