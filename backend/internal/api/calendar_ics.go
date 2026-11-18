@@ -280,9 +280,17 @@ func (a pimDataArea) handleExportCalendar(w http.ResponseWriter, r *http.Request
 		calendarFail(w, r, id, err, "calendar_not_found")
 		return
 	}
+	// One open of the folder for all entries (1.13), each read without
+	// the collection's lock.
+	rd, err := store.Reader(pimstore.Calendar, user, id)
+	if err != nil {
+		calendarFail(w, r, id, err, "calendar_not_found")
+		return
+	}
+	defer rd.Close()
 	exp := calweb.NewExport(w)
 	for _, o := range objects {
-		obj, err := store.Get(pimstore.Calendar, user, id, o.Name)
+		obj, err := rd.Get(o.Name)
 		if errors.Is(err, pimstore.ErrNotFound) {
 			continue // deleted meanwhile
 		}
@@ -305,7 +313,7 @@ func (a pimDataArea) handleExportCalendar(w http.ResponseWriter, r *http.Request
 		return // the client went away
 	}
 	for _, o := range objects {
-		obj, err := store.Get(pimstore.Calendar, user, id, o.Name)
+		obj, err := rd.Get(o.Name)
 		if errors.Is(err, pimstore.ErrNotFound) {
 			continue
 		}

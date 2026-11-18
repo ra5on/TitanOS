@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -126,5 +129,52 @@ func TestEventsETagAndFull(t *testing.T) {
 	e.seed("privat", "x.ics", "\nBEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\nUID:x\nDTSTAMP:20261101T000000Z\nDTSTART:20261111T080000Z\nDURATION:PT1H\nSUMMARY:X\nEND:VEVENT\nEND:VCALENDAR\n")
 	if res, _ := getTagged(t, e.ts, e.client, only, resOnly.Header.Get("ETag")); res.StatusCode != http.StatusOK {
 		t.Fatalf("calendar changed: %d", res.StatusCode)
+	}
+}
+
+// Long lists go out compressed when the browser takes gzip (1.13).
+func TestPIMListsGzip(t *testing.T) {
+	ts, pim, _, _ := pimServer(t)
+	var items []pimstore.Item
+	for i := range 400 {
+		uid := "k" + strings.Repeat("x", 3) + string(rune('a'+i%26)) + strings.Repeat("0", i%7) + strconv.Itoa(i)
+		items = append(items, pimstore.Item{Name: uid + ".vcf", Data: pimCard(uid)})
+	}
+	if _, err := pim.Import(t.Context(), pimstore.Contacts, "alex", pimstore.DefaultBook, items); err != nil {
+		t.Fatal(err)
+	}
+	get := func(enc string) (*http.Response, []byte) {
+		req, _ := http.NewRequest("GET", ts.url+"/api/v1/contacts", nil)
+		if enc != "" {
+			req.Header.Set("Accept-Encoding", enc) // set by hand: the client leaves it compressed
+		}
+		res, err := ts.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		data, _ := io.ReadAll(res.Body)
+		return res, data
+	}
+	res, zipped := get("gzip, deflate, br")
+	if res.Header.Get("Content-Encoding") != "gzip" || res.Header.Get("Cache-Control") != "no-store" || !strings.Contains(res.Header.Get("Vary"), "Accept-Encoding") {
+		t.Fatalf("headers: %v", res.Header)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(zipped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, _ := io.ReadAll(zr)
+	var list []cardweb.Item
+	if json.Unmarshal(plain, &list) != nil || len(list) != 400 {
+		t.Fatalf("decoded: %d bytes", len(plain))
+	}
+	if len(zipped)*3 > len(plain) {
+		t.Fatalf("compressed %d of %d", len(zipped), len(plain))
+	}
+	for _, enc := range []string{"identity", "gzip;q=0"} {
+		if res, body := get(enc); res.Header.Get("Content-Encoding") != "" || json.Unmarshal(body, &list) != nil {
+			t.Fatalf("%s: %v", enc, res.Header)
+		}
 	}
 }

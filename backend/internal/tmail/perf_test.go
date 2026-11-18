@@ -42,20 +42,28 @@ func TestPerfMailLanes(t *testing.T) {
 		}
 	}
 	pimtest.Bench(t, "open a mail (idle connection)", open)
-	pimtest.Bench(t, "Folders with counts (13 folders, STATUS each)", func() { _, _ = e.m.Folders(ctx, "alex", id) })
+	// Folder counts asked anew each time (something happened in the
+	// mailbox: the counts kept for 15 s are stale; 1.13).
+	fresh := func() {
+		e.m.events.touch("alex", id)
+		_, _ = e.m.Folders(ctx, "alex", id)
+	}
+	pimtest.Bench(t, "Folders with counts (13 folders, STATUS each)", fresh)
+	pimtest.Bench(t, "Folders with counts, unchanged mailbox (kept)", func() { _, _ = e.m.Folders(ctx, "alex", id) })
 	e.srv.SlowStatus.Store(int64(100 * time.Millisecond))
 	start := time.Now()
-	if _, err := e.m.Folders(ctx, "alex", id); err != nil {
-		t.Fatal(err)
-	}
+	fresh()
 	t.Logf("%-58s %s", "Folders with counts, 100 ms per STATUS", time.Since(start))
-	folders := func() { _, _ = e.m.Folders(ctx, "alex", id) }
+	folders := fresh
 	pimtest.Blocked(t, "open a mail while the folder counts run", 6, folders, open)
 	e.srv.SlowStatus.Store(0)
 	e.srv.SlowSearch.Store(int64(300 * time.Millisecond))
 	search := func() { _, _ = e.m.Search(ctx, "alex", id, ListQuery{Q: "rechnung"}) }
 	pimtest.Blocked(t, "open a mail while a search runs", 6, search, open)
 	pimtest.Blocked(t, "the list of a folder while a search runs", 6, search, list)
+	start = time.Now()
+	list()
+	t.Logf("%-58s %s", "the list alone (its own SEARCH waits 300 ms too)", time.Since(start))
 	e.srv.SlowSearch.Store(0)
 	t.Logf("IMAP connections opened: %d, open now: %d", e.srv.IMAPConns.Load(), e.srv.Open.Load())
 }

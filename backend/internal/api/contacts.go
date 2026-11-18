@@ -168,7 +168,7 @@ func (a pimDataArea) handleContacts(w http.ResponseWriter, r *http.Request) {
 	for _, ix := range indexes {
 		out = append(out, ix.List(q, now, local)...)
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSONList(w, r, out)
 }
 
 func (a pimDataArea) handleContact(w http.ResponseWriter, r *http.Request) {

@@ -1,8 +1,13 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -106,4 +111,50 @@ func (c *pimCache) forget(user string) {
 func pimETag(parts ...string) string {
 	sum := sha256.Sum256([]byte("p1\x00" + strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:16])
+}
+
+// gzipFrom is the size from which a list goes out compressed.
+const gzipFrom = 32 << 10
+
+// writeJSONList is writeJSON for the long lists of Kontakte and Kalender
+// (2000 contacts are some 400 KB, a month of a full calendar 1 MB of
+// JSON): compressed with gzip when the browser takes it (1.13; repeated
+// field names shrink to a tenth, which counts over Tailscale and on the
+// phone). Same headers otherwise (no-store).
+func writeJSONList(w http.ResponseWriter, r *http.Request, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		slog.Error("write response", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "could not write the answer")
+		return
+	}
+	data = append(data, '\n')
+	h := w.Header()
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Add("Vary", "Accept-Encoding")
+	if len(data) < gzipFrom || !acceptsGzip(r) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
+		return
+	}
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed) // a valid level
+	_, _ = zw.Write(data)
+	_ = zw.Close()
+	h.Set("Content-Encoding", "gzip")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// acceptsGzip reads Accept-Encoding (gzip without q=0).
+func acceptsGzip(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		name, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		if strings.EqualFold(strings.TrimSpace(name), "gzip") {
+			q := strings.ReplaceAll(strings.TrimSpace(params), " ", "")
+			return q != "q=0" && q != "q=0.0" && q != "q=0.00" && q != "q=0.000"
+		}
+	}
+	return false
 }

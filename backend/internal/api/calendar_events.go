@@ -170,7 +170,7 @@ func (a pimDataArea) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if full {
 		a.fillClipped(store, user, out.Events, local)
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSONList(w, r, out)
 }
 
 // maxFilled bounds the clipped occurrences full=1 reads in whole.

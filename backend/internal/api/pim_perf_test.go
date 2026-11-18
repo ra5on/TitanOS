@@ -87,7 +87,8 @@ func TestPerfPIMRoutes(t *testing.T) {
 	}
 	size := func(path string) {
 		_, data := perfGet(t, ts, path, nil, http.StatusOK)
-		t.Logf("    %s: %d KB", path, len(data)>>10)
+		_, zipped := perfGet(t, ts, path, map[string]string{"Accept-Encoding": "gzip"}, http.StatusOK)
+		t.Logf("    %s: %d KB (sent: %d KB)", path, len(data)>>10, len(zipped)>>10)
 	}
 	month := "/api/v1/calendar/events?from=2026-10-26&to=2026-12-07"
 	week := "/api/v1/calendar/events?from=2026-11-16&to=2026-11-23"
@@ -120,6 +121,16 @@ func TestPerfPIMRoutes(t *testing.T) {
 	pimtest.Bench(t, "GET /calendar/events month, without birthdays", get(noBirthdays))
 	pimtest.Bench(t, "GET /calendar/events month, only birthdays", get(onlyBirthdays))
 	pimtest.Bench(t, "GET /calendar/events week + birthdays", get(week))
+	tagged := func(path string) func() {
+		res, _ := perfGet(t, ts, path, nil, http.StatusOK)
+		h := map[string]string{"If-None-Match": res.Header.Get("ETag")}
+		return func() { perfGet(t, ts, path, h, -1) }
+	}
+	if res, _ := perfGet(t, ts, "/api/v1/contacts", nil, http.StatusOK); res.Header.Get("ETag") != "" {
+		pimtest.Bench(t, "GET /contacts with If-None-Match (unchanged)", tagged("/api/v1/contacts"))
+		pimtest.Bench(t, "GET /calendar/events month with If-None-Match", tagged(month))
+		pimtest.Bench(t, "GET /calendar/events month, full=1", get(month+"&full=1"))
+	}
 	photo := "/api/v1/contacts/kontakte/perf-contact-0000.vcf/photo"
 	start := time.Now()
 	res, _ := perfGet(t, ts, photo, nil, http.StatusOK)
