@@ -58,12 +58,50 @@ export async function loadCalendars(): Promise<Calendar[]> {
 	return list;
 }
 
-/** Events of [from, to) – dates in the NAS zone. */
-export async function loadEvents(from: string, to: string) {
-	const list = sanitizeEventList(
-		await api.get<unknown>(`/calendar/events?from=${enc(from)}&to=${enc(to)}`),
-	);
+export type EventList = NonNullable<ReturnType<typeof sanitizeEventList>>;
+
+// 1.13: the last answers of GET /calendar/events with their ETag, by query.
+// The answer itself is no-store: the page sends the ETag (If-None-Match) and
+// keeps its list on 304 (docs/KALENDER.md "Leistung und Live-Aktualisierung").
+const answers = new Map<string, { etag: string; list: EventList }>();
+const KEPT_ANSWERS = 16;
+
+/**
+ * Events of [from, to) – dates in the NAS zone – with whole titles
+ * (`full=1`, no request per clipped event). `calendars`: only these (the
+ * birthdays are `geburtstage`); without, all that are not hidden. An
+ * answer read before with the same query and unchanged on the NAS comes
+ * back as 304 and the kept list is returned.
+ */
+export async function loadEvents(
+	from: string,
+	to: string,
+	calendars?: string[],
+): Promise<EventList> {
+	const q = new URLSearchParams({ from, to, full: '1' });
+	if (calendars) q.set('calendars', calendars.join(','));
+	const path = `/calendar/events?${q}`;
+	const kept = answers.get(path);
+	let res: Response;
+	try {
+		res = await apiFetch(path, kept ? { headers: { 'If-None-Match': kept.etag } } : {});
+	} catch {
+		throw new ApiError(0, 'unreachable', 'titand is not reachable');
+	}
+	if (res.status === 304 && kept) {
+		answers.delete(path);
+		answers.set(path, kept);
+		return kept.list;
+	}
+	if (!res.ok) throw await responseError(res);
+	const list = sanitizeEventList(await res.json().catch(() => null));
 	if (!list) throw bad();
+	const etag = res.headers.get('ETag');
+	answers.delete(path);
+	if (etag) {
+		answers.set(path, { etag, list });
+		while (answers.size > KEPT_ANSWERS) answers.delete(answers.keys().next().value as string);
+	}
 	return list;
 }
 
