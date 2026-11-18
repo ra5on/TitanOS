@@ -174,15 +174,19 @@ export function groupByLetter<T extends Pick<Item, 'sortKey' | 'name'>>(
 	return out;
 }
 
-/** Initials when titand sent none: first letters of the first and last word ("Oma Hilde" → "OH"). */
-export function initialsOf(name: string): string {
+/**
+ * Initials when titand sent none, like its cardweb.Initials: first letters
+ * of the first and last word ("Oma Hilde" → "OH"), one for a company.
+ */
+export function initialsOf(name: string, org = ''): string {
 	const words = name
 		.split(/[\s,]+/)
 		.map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ''))
 		.filter(Boolean);
 	if (!words.length) return '?';
 	const first = [...words[0]][0] ?? '';
-	const last = words.length > 1 ? ([...words[words.length - 1]][0] ?? '') : '';
+	const one = words.length === 1 || name.trim() === org.trim();
+	const last = one ? '' : ([...words[words.length - 1]][0] ?? '');
 	return (first + last).toLocaleUpperCase('de');
 }
 

@@ -457,9 +457,8 @@ const PROGRAMS: Record<string, Menu[]> = {
 			go('mail.go.settings', 'mail.side.settings', '/mail/settings'),
 		]),
 	],
-	// 1.11: T-Kalender and Kontakte (docs/KALENDER.md). "Ablage" of T-Kalender
-	// (step 15): the calendar page registers its commands; "Neuer Kontakt"
-	// comes with the contacts' view (step 16).
+	// 1.11: T-Kalender and Kontakte (docs/KALENDER.md). "Ablage": the calendar
+	// page (step 15) and the contacts' page (step 16) register the commands.
 	calendar: [
 		menu('file', 'menubar.menu.file', [
 			cmd('calendar.newEvent', 'calendar.newEvent'),
@@ -473,6 +472,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 		]),
 	],
 	contacts: [
+		menu('file', 'menubar.menu.file', [cmd('contacts.new', 'contacts.new')]),
 		menu('view', 'menubar.menu.view', [
 			go('contacts.go.contacts', 'contacts.side.contacts', '/contacts'),
 			go('contacts.go.suggestions', 'contacts.side.suggestions', '/contacts?view=suggestions'),

@@ -57,6 +57,7 @@ test('letters after German folding: Ä under A, ß like ss, digits and others un
 test('initials of a name without titand’s', () => {
 	assert.equal(initialsOf('Oma Hilde'), 'OH');
 	assert.equal(initialsOf('Grundschule'), 'G');
+	assert.equal(initialsOf('Grundschule am Park', 'Grundschule am Park'), 'G');
 	assert.equal(initialsOf('carla beispiel-hoffmann'), 'CB');
 	assert.equal(initialsOf('Özil, Mesut'), 'ÖM');
 	assert.equal(initialsOf('(Büro) Ben'), 'BB');
