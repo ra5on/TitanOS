@@ -61,6 +61,7 @@ func calendarEntry(f *recur.File, data []byte) (*Entry, error) {
 	if summary, err := ev.Component.Props.Text(ical.PropSummary); err == nil {
 		e.Summary = clip(summary)
 	}
+	e.Location, e.TZID, e.TZGuess, e.Alarms = eventDetails(ev)
 	e.Recurs = sr.Master == nil || len(sr.Overrides) > 0 || sr.Master.Recurring()
 	e.Unsupported = sr.Master != nil && sr.Master.Unsupported
 	e.AllDay = ev.Start.Kind == tz.KindDate
@@ -82,6 +83,28 @@ func calendarEntry(f *recur.File, data []byte) (*Entry, error) {
 		e.End = time.Time{}
 	}
 	return e, nil
+}
+
+// eventDetails are what lists show of an event besides title and time:
+// location (clipped), the zone of DTSTART, whether a zone was guessed, the
+// alarms.
+func eventDetails(ev *recur.Event) (location, tzid string, guess bool, alarms []int) {
+	if l, err := ev.Component.Props.Text(ical.PropLocation); err == nil {
+		location = clip(l)
+	}
+	return location, ZoneName(ev.Start), ev.TZGuess, recur.Alarms(ev.Component)
+}
+
+// ZoneName names the zone of a start: its IANA name, "UTC", or "" for a
+// date or a floating time (they follow the zone of the NAS).
+func ZoneName(v tz.Value) string {
+	switch v.Kind {
+	case tz.KindUTC:
+		return "UTC"
+	case tz.KindZoned:
+		return v.Time.Location().String()
+	}
+	return ""
 }
 
 // span places an index entry on the timeline with the NAS zone.

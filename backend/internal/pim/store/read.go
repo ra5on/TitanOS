@@ -28,6 +28,7 @@ func copyEntry(e *Entry) Entry {
 	out := *e
 	out.Emails = append([]string(nil), e.Emails...)
 	out.Phones = append([]string(nil), e.Phones...)
+	out.Alarms = append([]int(nil), e.Alarms...)
 	return out
 }
 

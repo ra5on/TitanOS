@@ -635,7 +635,8 @@ type ImportResult struct {
 
 // Import writes many entries into one collection: each file without its
 // own sync of the folder, then one sync, one log entry per file and
-// state.json once at the end. An existing name is overwritten. Items
+// state.json once at the end. An existing name is overwritten (not with
+// another UID: *UIDConflictError, as Put). Items
 // that fail carry their error; ctx ends the import between files.
 func (s *Store) Import(ctx context.Context, kind Kind, account, col string, items []Item) ([]ImportResult, error) {
 	if !ValidCollection(col) {
@@ -696,6 +697,11 @@ func (s *Store) Import(ctx context.Context, kind Kind, account, col string, item
 		cur := c.st.Index[it.Name]
 		if cur != nil && cur.ETag == e.ETag {
 			results[i].ETag = cur.ETag
+			continue
+		}
+		if cur != nil && cur.UID != "" && e.UID != cur.UID {
+			// As Put: an entry is not overwritten with another UID.
+			results[i].Err = &UIDConflictError{Name: it.Name}
 			continue
 		}
 		if err := uidFree(c.st, it.Name, e.UID); err != nil {

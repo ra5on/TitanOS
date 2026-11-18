@@ -31,6 +31,17 @@ type Occurrence struct {
 	// event shows once.
 	Unsupported bool
 	Truncated   bool
+
+	// What lists show besides the title: location (clipped), zone of the
+	// start (ZoneName), guessed zone, alarms (minutes before), and for a
+	// series the rule of its master (a copy) with the zone it is read in.
+	Floating bool
+	Location string
+	TZID     string
+	TZGuess  bool
+	Alarms   []int
+	Rule     *recur.Rule
+	RuleZone *time.Location
 }
 
 // Bounds of the cache of parsed recurring entries (recur.File is not safe
@@ -214,7 +225,8 @@ func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, er
 			st, en := e.span(loc)
 			if overlaps(st, en, from, to) {
 				out = append(out, Occurrence{Name: it.name, ETag: e.ETag, UID: e.UID, ID: entryID(e), Start: st, End: en,
-					AllDay: e.AllDay, Summary: e.Summary, Unsupported: e.Unsupported})
+					AllDay: e.AllDay, Summary: e.Summary, Unsupported: e.Unsupported, Floating: e.Floating,
+					Location: e.Location, TZID: e.TZID, TZGuess: e.TZGuess, Alarms: e.Alarms})
 			}
 			continue
 		}
@@ -231,21 +243,41 @@ func (s *Store) Query(account, col string, from, to time.Time) ([]Occurrence, er
 			pf.mu.Unlock()
 			continue
 		}
+		var rule *recur.Rule
+		var ruleZone *time.Location
+		if sr := pf.file.Series; len(sr) > 0 && sr[0].Master != nil && sr[0].Master.Rule != nil {
+			m := sr[0].Master
+			rule, ruleZone = m.Rule.Clone(), zoneOf(m.Start, loc)
+		}
 		for _, o := range x.Occurrences {
-			summary := ""
+			oc := Occurrence{Name: it.name, ETag: pf.etag, UID: e.UID, ID: o.ID(), Start: o.Start, End: o.End,
+				AllDay: o.AllDay, Recurs: true, Override: o.Override, Orphan: o.Orphan,
+				Unsupported: x.Unsupported || x.Failed, Truncated: x.Truncated, Rule: rule, RuleZone: ruleZone}
 			if o.Event != nil {
 				if t, err := o.Event.Component.Props.Text(ical.PropSummary); err == nil {
-					summary = clip(t)
+					oc.Summary = clip(t)
 				}
+				oc.Floating = o.Event.Start.Kind == tz.KindFloating
+				oc.Location, oc.TZID, oc.TZGuess, oc.Alarms = eventDetails(o.Event)
 			}
-			out = append(out, Occurrence{Name: it.name, ETag: pf.etag, UID: e.UID, ID: o.ID(), Start: o.Start, End: o.End,
-				AllDay: o.AllDay, Summary: summary, Recurs: true, Override: o.Override, Orphan: o.Orphan,
-				Unsupported: x.Unsupported || x.Failed, Truncated: x.Truncated})
+			out = append(out, oc)
 		}
 		pf.mu.Unlock()
 	}
 	slices.SortStableFunc(out, func(a, b Occurrence) int { return a.Start.Compare(b.Start) })
 	return out, nil
+}
+
+// zoneOf is the zone a start is read in: its own, UTC, or the NAS zone
+// for dates and floating times.
+func zoneOf(v tz.Value, local *time.Location) *time.Location {
+	switch v.Kind {
+	case tz.KindUTC:
+		return time.UTC
+	case tz.KindZoned:
+		return v.Time.Location()
+	}
+	return local
 }
 
 // expandLocked expands every series of the file (pf.mu held).

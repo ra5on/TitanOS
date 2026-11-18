@@ -63,6 +63,14 @@ type Entry struct {
 	Recurs      bool      `json:"recurs,omitempty"`
 	Unsupported bool      `json:"recurUnsupported,omitempty"`
 	Summary     string    `json:"summary,omitempty"`
+	// Location (clipped like Summary), the zone of DTSTART (an IANA name,
+	// "UTC"; empty for dates and floating times), whether it was guessed,
+	// and the alarms as minutes before the start (recur.Alarms): what the
+	// lists of the web UI show without reading the file.
+	Location string `json:"location,omitempty"`
+	TZID     string `json:"tzid,omitempty"`
+	TZGuess  bool   `json:"tzGuess,omitempty"`
+	Alarms   []int  `json:"alarms,omitempty"`
 
 	// Contacts.
 	FN       string   `json:"fn,omitempty"`

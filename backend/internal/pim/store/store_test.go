@@ -1282,3 +1282,65 @@ func loadToken(t *testing.T, s *Store) string {
 	}
 	return c.SyncToken
 }
+
+// Import refuses to overwrite an entry with another UID, as Put does
+// (BAUSTAND, step 8 open point); a card without UID may get one.
+func TestImportKeepsUID(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	first := mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "A", "20261110T080000Z"))
+	res, err := s.Import(context.Background(), Calendar, "alex", "privat", []Item{
+		{Name: "a.ics", Data: ics("b", "B", "20261110T080000Z")},
+		{Name: "c.ics", Data: ics("c", "C", "20261110T080000Z")},
+	})
+	var uc *UIDConflictError
+	if err != nil || !errors.As(res[0].Err, &uc) || uc.Name != "a.ics" || res[1].Err != nil {
+		t.Fatalf("import: %v %+v", err, res)
+	}
+	if info, _ := s.Stat(Calendar, "alex", "privat", "a.ics"); info.ETag != first.ETag {
+		t.Fatalf("overwritten: %+v", info)
+	}
+	mustPut(t, s, Contacts, "kontakte", "e.vcf", []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Erika\r\nN:Erika;;;;\r\nEND:VCARD\r\n"))
+	res, err = s.Import(context.Background(), Contacts, "alex", "kontakte", []Item{{Name: "e.vcf", Data: vcf("e", "Erika")}})
+	if err != nil || res[0].Err != nil {
+		t.Fatalf("card gets a uid: %v %+v", err, res)
+	}
+}
+
+// The index keeps what the lists show without reading the file: location,
+// zone, alarms; Query hands them out, with the rule of a series.
+func TestQueryDetails(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	alarm := []string{"LOCATION:Praxis\\, Raum 2", "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-PT30M", "END:VALARM",
+		"BEGIN:VALARM", "ACTION:AUDIO", "TRIGGER;VALUE=DATE-TIME:20261110T070000Z", "END:VALARM"}
+	single := []byte(strings.Replace(string(ics("s", "Einmal", "20261110T080000Z", alarm...)), "DTSTART:20261110T080000Z", "DTSTART;TZID=W. Europe Standard Time:20261110T090000", 1))
+	mustPut(t, s, Calendar, "privat", "s.ics", single)
+	mustPut(t, s, Calendar, "privat", "w.ics", ics("w", "Woche", "20261102T090000Z", append([]string{"RRULE:FREQ=WEEKLY;COUNT=3"}, alarm...)...))
+	before := e.opens.Load()
+	occ, err := s.Query("alex", "privat", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range occ {
+		if o.Location != "Praxis, Raum 2" || !slices.Equal(o.Alarms, []int{30}) {
+			t.Fatalf("%s: %+v", o.Name, o)
+		}
+		switch o.Name {
+		case "s.ics":
+			if o.TZID != "Europe/Berlin" || o.Rule != nil || !o.Start.Equal(time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)) {
+				t.Fatalf("single: %+v", o)
+			}
+		case "w.ics":
+			if o.TZID != "UTC" || o.Rule == nil || o.Rule.Count != 3 || o.RuleZone != time.UTC {
+				t.Fatalf("series: %+v", o)
+			}
+		}
+	}
+	if len(occ) != 4 {
+		t.Fatalf("occurrences: %d", len(occ))
+	}
+	if opened := e.opens.Load() - before; opened != 1 {
+		t.Fatalf("the single event read the volume: %d opens", opened)
+	}
+}

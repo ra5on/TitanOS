@@ -237,6 +237,9 @@ func (s *Store) local() *time.Location {
 	return time.Local
 }
 
+// Zone is the zone of the NAS the store reads dates and floating times in.
+func (s *Store) Zone() *time.Location { return s.local() }
+
 // Context ends when the account is forgotten (ForgetUser): running DAV
 // requests of the account watch it.
 func (s *Store) Context(name string) context.Context {
