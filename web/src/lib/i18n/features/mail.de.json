@@ -249,5 +249,6 @@
 	"error.mail_key_damaged": "Der Schlüssel der gespeicherten Mail-Passwörter ist beschädigt. Stelle ihn aus der Sicherung des Sticks wieder her oder lege die Postfächer neu an.",
 	"users.agentData.mailAccounts": "T-Mail-Postfächer ({count}) mit Servern, Passwörtern, Signaturen, Regeln und Adressbuch",
 	"mail.limit.wait": "Zu viele Versuche mit neuen Servern oder Verbindungsprüfungen – T-Mail wartet noch {seconds} s; „Verbindung prüfen“ geht danach wieder.",
-	"mail.list.tooLarge": "Mail zu groß zum Anzeigen"
+	"mail.list.tooLarge": "Mail zu groß zum Anzeigen",
+	"mail.compose.fromContacts": "Kontakt"
 }

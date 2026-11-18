@@ -305,6 +305,15 @@ try {
     await c2.locator("#mail-to").pressSequentially("an");
     await c2.getByRole("listbox").waitFor();
     assert.match(await c2.getByRole("listbox").innerText(), /Anna Beispiel/);
+    // 1.11: a contact says so in words; a learned address does not.
+    assert.match(
+      await c2.getByRole("option", { name: /Anna Beispiel/ }).innerText(),
+      /anna@example\.org\s*· Kontakt/,
+    );
+    assert.doesNotMatch(
+      await c2.getByRole("option", { name: /Anton/ }).innerText(),
+      /Kontakt/,
+    );
     await c2.locator("#mail-to").press("ArrowDown");
     await c2.locator("#mail-to").press("Enter");
     await c2.getByText("Anna Beispiel <anna@example.org>").waitFor();

@@ -1,6 +1,7 @@
 <script lang="ts">
-	// To, Cc or Bcc: the recipients as chips and a field with suggestions from
-	// the address book (GET /mail/contacts, learned from sent mail). Arrow
+	// To, Cc or Bcc: the recipients as chips and a field with suggestions:
+	// the account's contacts first (marked "Kontakt"), then the address book
+	// learned from sent mail (GET /mail/contacts, 1.11). Arrow
 	// keys pick a suggestion, Enter takes it; a typed address is taken at a
 	// comma, a semicolon, Enter or when the field is left.
 	import Icon from '../components/Icon.svelte';
@@ -170,7 +171,11 @@
 					onkeydown={(e) => e.key === 'Enter' && pick(c)}
 				>
 					{#if c.name}<span class="name">{c.name}</span>{/if}
-					<span class="mail">{c.addr}</span>
+					<span class="mail"
+						>{c.addr}{#if c.source === 'contact'}<span class="src">
+								· {t('mail.compose.fromContacts')}</span
+							>{/if}</span
+					>
 				</li>
 			{/each}
 		</ul>

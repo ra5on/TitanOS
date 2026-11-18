@@ -249,5 +249,6 @@
 	"error.mail_key_damaged": "The key of the stored mail passwords is damaged. Restore it from the backup of the stick or add the mailboxes anew.",
 	"users.agentData.mailAccounts": "T-Mail mailboxes ({count}) with servers, passwords, signatures, rules and address book",
 	"mail.limit.wait": "Too many attempts with new servers or connection checks – T-Mail waits another {seconds} s; “Check connection” works again after that.",
-	"mail.list.tooLarge": "Mail too large to show"
+	"mail.list.tooLarge": "Mail too large to show",
+	"mail.compose.fromContacts": "contact"
 }
