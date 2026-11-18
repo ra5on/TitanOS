@@ -124,7 +124,7 @@
 <div class="page" class:phone>
 	<p class="lead">{t('iphone.lead')}</p>
 
-	<ProfileSetup {setup} {describe} onfetched={() => refresh++} />
+	<ProfileSetup {setup} {describe} {refresh} onfetched={() => refresh++} />
 
 	<div class="manual">
 		<h2>{t('iphone.manual.title')}</h2>

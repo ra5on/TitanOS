@@ -668,7 +668,11 @@ try {
       await page.locator(".manual").innerText(),
       /Oder manuell einrichten/,
     );
-    assert.equal(await page.locator("#profile-name").inputValue(), "iPhone von alex");
+    // "iPhone von Alex" is taken (another case counts as the same name).
+    await until(
+      async () => (await page.locator("#profile-name").inputValue()) === "iPhone von alex 2",
+      "a free name suggested",
+    );
     // The first server iOS trusts is chosen.
     assert.equal(
       await page.locator("#profile-server").inputValue(),
@@ -693,7 +697,7 @@ try {
     await page.getByRole("button", { name: "Profil erzeugen …" }).click();
     const dialog = page.locator("dialog[open]");
     await dialog.waitFor();
-    assert.match(await dialog.innerText(), /Profil für „iPhone von alex“/);
+    assert.match(await dialog.innerText(), /Profil für „iPhone von alex 2“/);
     await dialog.locator('input[type="password"]').fill("falsch");
     await dialog.getByRole("button", { name: "Erzeugen", exact: true }).click();
     await dialog.getByText("Das aktuelle Passwort ist falsch.").waitFor();
@@ -704,7 +708,7 @@ try {
       .filter(([m, path]) => m === "POST" && path === "/account/devices/profile")
       .at(-1);
     assert.deepEqual(JSON.parse(post[2]), {
-      name: "iPhone von alex",
+      name: "iPhone von alex 2",
       password: "richtig",
       code: "",
       server: "nas.example.org",
@@ -716,12 +720,19 @@ try {
       made.includes(`https://nas.example.org/api/v1/iphone-profile/${TOKEN}`),
       `${name}: the link in full`,
     );
+    // On the iPhone itself the link is tapped (a new tab keeps this page).
+    const anchor = group.locator("a.url");
+    assert.equal(
+      await anchor.getAttribute("href"),
+      `https://nas.example.org/api/v1/iphone-profile/${TOKEN}`,
+    );
+    assert.equal(await anchor.getAttribute("target"), "_blank");
     assert.match(made, /Gültig bis \d\d:\d\d und nur einmal abrufbar/);
     assert.match(made, /Datei enthält das Gerätepasswort/);
     if (!signed) assert.match(made, /„Nicht verifiziert“/);
     assert.equal(
       await group.locator("svg.qr").getAttribute("aria-label"),
-      "QR-Code mit dem Link zum Profil für „iPhone von alex“",
+      "QR-Code mit dem Link zum Profil für „iPhone von alex 2“",
     );
     assert.ok(
       !(await stored(page)).includes(TOKEN.slice(0, 12)),
@@ -732,7 +743,7 @@ try {
     await shot(page, `profile-${width}-${theme}-link`, false);
     if (phone) {
       const small = await page.evaluate(() =>
-        [...document.querySelectorAll("#profile button, #profile input, #profile select")]
+        [...document.querySelectorAll("#profile button, #profile input, #profile select, #profile a")]
           .filter((el) => el.getClientRects().length)
           .map((el) => [el.textContent.trim() || el.id, el.getBoundingClientRect()])
           .filter(([, r]) => r.height < 44)

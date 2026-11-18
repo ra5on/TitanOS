@@ -32,10 +32,13 @@
 		setup,
 		describe,
 		onfetched,
+		refresh = 0,
 	}: {
 		setup: DeviceSetup | null;
 		describe: (a: SetupAddress) => string;
 		onfetched: () => void;
+		/** Raised when the list of devices changed (a profile was fetched). */
+		refresh?: number;
 	} = $props();
 
 	const phone = $derived(phoneView());
@@ -67,10 +70,36 @@
 			.catch((err) => (infoError = apiErrorText(err)));
 	});
 
-	// "iPhone von Alex" until the person types a name of their own.
+	// The names of the devices there are, so the suggested name is a free
+	// one ("iPhone von Alex", else "iPhone von Alex 2", …).
+	let taken = $state<string[]>([]);
 	$effect(() => {
-		if (!named && user) name = t('iphone.profile.defaultName', { user });
+		void refresh;
+		api
+			.get<{ devices: { name: string }[] }>('/account/devices')
+			.then((r) => (taken = (r.devices ?? []).map((d) => d.name.toLowerCase())))
+			.catch(() => (taken = []));
 	});
+
+	// The suggestion until the person types a name of their own.
+	$effect(() => {
+		if (named || !user) return;
+		const base = t('iphone.profile.defaultName', { user });
+		let next = base;
+		for (let i = 2; taken.includes(next.toLowerCase()); i++) next = `${base} ${i}`;
+		name = next;
+	});
+
+	let copied = $state(false);
+	async function copyLink() {
+		if (!made) return;
+		try {
+			await navigator.clipboard.writeText(made.url);
+			copied = true;
+		} catch {
+			copied = false;
+		}
+	}
 
 	const addresses = $derived(setup?.addresses ?? []);
 	// The first server iOS trusts, else the first one.
@@ -143,6 +172,7 @@
 				lang: i18n.locale === 'en' ? 'en' : 'de',
 			});
 			link = made.link;
+			copied = false;
 			error = '';
 			asking = false;
 			password = '';
@@ -287,13 +317,20 @@
 				<div class="what">
 					<b>{t('iphone.profile.scan')}</b>
 					<span class="muted">{t('iphone.profile.link')}</span>
-					<code class="url">{made.url}</code>
+					<!-- A tap on the iPhone itself opens the profile in Safari; a new
+					     tab, so that this page (and its link) stays. -->
+					<a class="url" href={made.url} target="_blank" rel="noopener noreferrer">{made.url}</a>
 					<span class="muted"
 						>{t('iphone.profile.until', { time: formatTime(new Date(link.expires)) })}</span
 					>
 					<span role="status" class="muted">{t('iphone.profile.waiting')}</span>
 					{#if !made.signed}<span class="muted">{t('iphone.profile.unsignedShort')}</span>{/if}
 					<span class="acts">
+						<button type="button" class="btn" onclick={copyLink}
+							><Icon name={copied ? 'check' : 'copy'} size={15} />{copied
+								? t('iphone.copied')
+								: t('iphone.profile.copy')}</button
+						>
 						<button type="button" class="btn" onclick={download}
 							><Icon name="download" size={15} />{t('iphone.profile.download')}</button
 						>
@@ -403,6 +440,9 @@
 		overflow-wrap: break-word;
 	}
 	.url {
+		display: inline-block;
+		color: var(--text);
+		text-decoration: underline;
 		font-family: var(--font-mono, ui-monospace, monospace);
 		font-size: 0.92em;
 		padding: 2px 6px;
@@ -419,6 +459,11 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
+	}
+	.made.phone .url {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
 	}
 	.made.phone .btn,
 	.phone .btn {

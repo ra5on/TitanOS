@@ -11,7 +11,8 @@
 // Catholic municipalities of Bavaria, the Augsburger Friedensfest, and
 // one-off days (Tag der Befreiung in Berlin 2020 and 2025, Reformationstag
 // nationwide 2017). Hessen counts every Sunday as a holiday; Easter Sunday
-// and Whit Sunday are listed only for Brandenburg, which names them.
+// and Whit Sunday are listed only for Brandenburg, which names them in § 2
+// (1) of its Feiertagsgesetz (de.wikipedia.org "Ostersonntag", "Pfingsten").
 package holidays
 
 import (

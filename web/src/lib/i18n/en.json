@@ -9386,6 +9386,7 @@
 	"iphone.profile.link": "Or open this link on the iPhone:",
 	"iphone.profile.until": "Valid until {time}, and only once.",
 	"iphone.profile.waiting": "Waiting for the iPhone to fetch the profile.",
+	"iphone.profile.copy": "Copy link",
 	"iphone.profile.download": "Download",
 	"iphone.profile.downloadHint": "To pass on by AirDrop; this uses up the link. The file holds the device password: delete it after installing.",
 	"iphone.profile.cancel": "Discard link",
