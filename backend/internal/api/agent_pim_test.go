@@ -13,7 +13,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
-	"github.com/ra5on/TitanOS/backend/internal/pim/cardweb"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
 
@@ -480,7 +479,6 @@ func TestPimContactsFlow(t *testing.T) {
 	if _, err := os.Stat(mailDir + "/alex/contacts.json"); err != nil {
 		t.Fatal("the learned book is there:", err)
 	}
-	_ = cardweb.Fold
 }
 
 // Home Assistant: no calendar or contacts from the factory; with read
