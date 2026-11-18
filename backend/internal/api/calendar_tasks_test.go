@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/pim/tasks"
 )
@@ -158,12 +159,19 @@ func TestTaskListsAPI(t *testing.T) {
 	if errorCode(t, body) != "tasklist_last" {
 		t.Fatalf("last: %s", body)
 	}
-	// Another account's list is not there for alex.
-	if _, err := e.pim.Put(pimstore.Tasks, "bea", pimstore.DefaultTaskList, "b.ics", []byte(iPhoneReminder), pimstore.PutOptions{}); err == nil {
-		body := e.do("GET", "/api/v1/calendar/tasks/"+pimstore.DefaultTaskList+"/b.ics", nil, http.StatusNotFound, nil)
-		if errorCode(t, body) != "task_not_found" {
-			t.Fatalf("foreign: %s", body)
-		}
+	// Another account's reminder is not there for alex (404, never 403),
+	// and bea sees only her own.
+	bea := e.ts.signIn("bea", auth.RoleUser)
+	if _, err := e.pim.Put(pimstore.Tasks, "bea", pimstore.DefaultTaskList, "b.ics", []byte(iPhoneReminder), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	body = e.do("GET", "/api/v1/calendar/tasks/"+pimstore.DefaultTaskList+"/b.ics", nil, http.StatusNotFound, nil)
+	if errorCode(t, body) != "task_not_found" {
+		t.Fatalf("foreign: %s", body)
+	}
+	if res, body := e.ts.do(bea, "GET", "/api/v1/calendar/tasks?status=all", nil); res.StatusCode != http.StatusOK ||
+		!strings.Contains(string(body), "b.ics") || strings.Contains(string(body), "Brot") {
+		t.Fatalf("bea: %d %s", res.StatusCode, body)
 	}
 	// Without the volume: 503, never an empty list.
 	e.setVolume("")
