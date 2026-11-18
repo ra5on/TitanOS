@@ -12,7 +12,7 @@
 	// 1.13: a draft of the KI-Agent (?agentDraft=<chat>:<entry>, "Öffnen und
 	// bearbeiten") fills the form – a new event, or a change of the event the
 	// draft names (cal, id, occurrence; only the fields that change). It is
-	// text to check: saved only with "Sichern", a series asks as always.
+	// text to check: saved only with "Speichern", a series asks as always.
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
