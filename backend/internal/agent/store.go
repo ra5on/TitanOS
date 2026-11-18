@@ -189,6 +189,13 @@ type Chat struct {
 	// content) is in the prompt (PLAN 54-G); web tools ask first, like after
 	// outside content, but what the person says is not marked for it.
 	OutsideSkill bool `json:"outsideSkill,omitempty"`
+	// PIMRead: the chat has read the calendar or the contacts (1.11,
+	// Sicherheitsdurchsicht S-24/S-26). Writing files and notes then asks
+	// first (an invitation could tell the model to copy the address book
+	// into a shared folder), and the answer of an unattended run goes to
+	// the notify services of Home Assistant only as "fertig". 1.10 drops
+	// the field; such a chat is then like any tainted one.
+	PIMRead bool `json:"pimRead,omitempty"`
 	// Helper: the chat of a delegated subtask. Its first message is the
 	// task the model wrote, not words of the person; never saved.
 	Helper bool `json:"-"`

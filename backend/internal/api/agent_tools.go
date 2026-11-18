@@ -297,6 +297,16 @@ func (b *agentToolbox) callMode(t *agentTool, area, kind string, args json.RawMe
 	return mode
 }
 
+// pimExfiltrates reports whether a call writes files or notes: the ways
+// data read from the calendar or the contacts could leave the account
+// (a shared folder, the notes folder of the agent's share).
+func pimExfiltrates(tool, area, kind string) bool {
+	if kind == agent.KindRead {
+		return false
+	}
+	return area == toolcatalog.AreaFiles || tool == "note_write" || tool == "note_delete"
+}
+
 // argBool is a yes/no argument of a call, false when it is missing.
 func argBool(args json.RawMessage, key string) bool {
 	var fields map[string]json.RawMessage
@@ -454,6 +464,14 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// trash, and the devices delete them too; an invitation read with
 	// calendar_search can say "delete all contacts".
 	if (t.name == "schedule_delete" || t.name == "calendar_delete" || t.name == "contacts_delete") && chat != nil && (chat.Tainted || chat.OutsideSkill) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	// After the calendar or the contacts were read, writing files or notes
+	// asks first (Sicherheitsdurchsicht S-26): an invitation or a contact
+	// note could tell the model to copy the address book into a shared
+	// folder. Like the web after outside content, only narrower: other
+	// outside content keeps file writes as the rights say.
+	if chat != nil && chat.PIMRead && pimExfiltrates(t.name, area, kind) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.name == "schedule_delete" {

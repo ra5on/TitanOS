@@ -600,6 +600,11 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 		chat.WebOnly = p.Area == AreaWeb && (!chat.Tainted || chat.WebOnly)
 		chat.Tainted = true
 	}
+	if IsDataArea(p.Area) {
+		// Also a failed call may have read something; changes return
+		// titles and names too.
+		chat.PIMRead = true
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			// The step stays in the chat: what it started may have happened.

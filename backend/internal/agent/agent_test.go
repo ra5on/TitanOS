@@ -425,3 +425,47 @@ func TestChatRefusesAStreamWithoutItsEnd(t *testing.T) {
 		}
 	}
 }
+
+// pimTools: "calendar_search" reads the calendar (area calendar, outside
+// content), "look" reads the NAS.
+type pimTools struct{ fakeTools }
+
+func (f *pimTools) Prepare(ctx context.Context, chat *Chat, name string, args json.RawMessage) (Prepared, error) {
+	if name == "calendar_search" {
+		return Prepared{Tool: name, Args: args, Mode: ModeAllow, Untrusted: true, Area: AreaCalendar, Kind: KindRead}, nil
+	}
+	return f.fakeTools.Prepare(ctx, chat, name, args)
+}
+
+// S-24/S-26: a call in the calendar or the contacts marks the chat
+// (PIMRead), also through a helper; other reading tools do not.
+func TestPIMReadMarksTheChat(t *testing.T) {
+	fake := &fakeOllama{replies: [][]string{{call("look", `{}`)}, {`{"role":"assistant","content":"ok"}`}}}
+	r := &Runner{Ollama: fake.serve(t), Model: "gpt-oss:20b", Context: 32768, Tools: &pimTools{}, System: "sys"}
+	chat := newChat("Status?")
+	if err := r.Run(context.Background(), chat); err != nil {
+		t.Fatal(err)
+	}
+	if !chat.Tainted || chat.PIMRead {
+		t.Fatalf("look: tainted %v pimRead %v", chat.Tainted, chat.PIMRead)
+	}
+	fake = &fakeOllama{replies: [][]string{{call("calendar_search", `{}`)}, {`{"role":"assistant","content":"ok"}`}}}
+	r = &Runner{Ollama: fake.serve(t), Model: "gpt-oss:20b", Context: 32768, Tools: &pimTools{}, System: "sys"}
+	chat = newChat("Termine?")
+	if err := r.Run(context.Background(), chat); err != nil {
+		t.Fatal(err)
+	}
+	if !chat.PIMRead {
+		t.Fatal("calendar_search did not mark the chat")
+	}
+	// A helper that reads the calendar marks its parent.
+	fake = &fakeOllama{replies: [][]string{{call("calendar_search", `{}`)}, {`{"role":"assistant","content":"Bericht"}`}}}
+	r = &Runner{Ollama: fake.serve(t), Model: "gpt-oss:20b", Context: 32768, Tools: &pimTools{}, System: "sys"}
+	parent := newChat("Termine?")
+	if _, err := r.delegate(context.Background(), parent, "Suche Termine"); err != nil {
+		t.Fatal(err)
+	}
+	if !parent.PIMRead {
+		t.Fatal("the helper's calendar read did not mark the parent")
+	}
+}

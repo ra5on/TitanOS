@@ -393,7 +393,7 @@ func (r *Runner) delegate(ctx context.Context, parent *Chat, task string) (strin
 	// The helper works under the same guards as its chat: what marks the
 	// parent marks it, and its task – written by the model – is no message
 	// of the person (Helper; an address in it is not "already there", 0.99).
-	sub := &Chat{ID: NewID(), Origin: parent.Origin, Tainted: parent.Tainted, WebOnly: parent.WebOnly, OutsideSkill: parent.OutsideSkill,
+	sub := &Chat{ID: NewID(), Origin: parent.Origin, Tainted: parent.Tainted, WebOnly: parent.WebOnly, OutsideSkill: parent.OutsideSkill, PIMRead: parent.PIMRead,
 		Schedule: parent.Schedule, Project: parent.Project, Helper: true, Areas: slices.Clone(parent.Areas), State: StateIdle,
 		Entries: []Entry{{ID: NewID(), At: r.now(), Role: "user", Content: task + "\n\nOnly read and look; you cannot change anything. End with a short report of what you found (with names and paths)."}}}
 	budget := 12
@@ -416,6 +416,7 @@ func (r *Runner) delegate(ctx context.Context, parent *Chat, task string) (strin
 		parent.WebOnly = sub.WebOnly && (!parent.Tainted || parent.WebOnly)
 		parent.Tainted = true
 	}
+	parent.PIMRead = parent.PIMRead || sub.PIMRead
 	n := 0
 	answer := ""
 	for _, e := range sub.Entries {
