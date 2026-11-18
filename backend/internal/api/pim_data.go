@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/files"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
+	"github.com/ra5on/TitanOS/backend/internal/tmail"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
@@ -24,10 +26,17 @@ type pimDataArea struct {
 	reserve func(bytes int64) (release func(), ok bool)
 	// clock is the time of DTSTAMP and of "today"; nil = time.Now.
 	clock func() time.Time
+	// mail is T-Mail: its learned addresses are the suggestions of
+	// Kontakte, with the account's grant only (nil: none).
+	mail *tmail.Manager
+	// files and roots open a file of the NAS with the rights of the
+	// account (a picture of a contact from the files).
+	files *files.Manager
+	roots func(r *http.Request) []files.Root
 }
 
 func (s *Server) pimDataArea() pimDataArea {
-	a := pimDataArea{store: s.opts.PIM, prefs: s.prefs}
+	a := pimDataArea{store: s.opts.PIM, prefs: s.prefs, mail: s.opts.Mail, files: s.opts.Files, roots: s.filesArea().requestRoots}
 	if s.opts.MemoryPolicy != nil {
 		a.reserve = s.opts.MemoryPolicy.TryReserve
 	}
@@ -51,6 +60,19 @@ func (a pimDataArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("PUT /api/v1/calendar/events/{cal}/{obj}", web(a.handleUpdateEvent))
 	mux.HandleFunc("DELETE /api/v1/calendar/events/{cal}/{obj}", web(a.handleDeleteEvent))
 	mux.HandleFunc("POST /api/v1/calendar/preview", web(a.handlePreview))
+	// Kontakte (contacts.go, contacts_photo.go, contacts_suggest.go, contacts_vcf.go).
+	mux.HandleFunc("GET /api/v1/contacts", web(a.handleContacts))
+	mux.HandleFunc("POST /api/v1/contacts", web(a.handleCreateContact))
+	mux.HandleFunc("GET /api/v1/contacts/suggestions", web(a.handleContactSuggestions))
+	mux.HandleFunc("POST /api/v1/contacts/from-suggestion", web(a.handleContactFromSuggestion))
+	mux.HandleFunc("POST /api/v1/contacts/books/{id}/import", web(a.handleImportContacts))
+	mux.HandleFunc("GET /api/v1/contacts/books/{id}/export", web(a.handleExportContacts))
+	mux.HandleFunc("GET /api/v1/contacts/{book}/{id}", web(a.handleContact))
+	mux.HandleFunc("PUT /api/v1/contacts/{book}/{id}", web(a.handleUpdateContact))
+	mux.HandleFunc("DELETE /api/v1/contacts/{book}/{id}", web(a.handleDeleteContact))
+	mux.HandleFunc("GET /api/v1/contacts/{book}/{id}/photo", web(a.handleContactPhoto))
+	mux.HandleFunc("PUT /api/v1/contacts/{book}/{id}/photo", web(a.handlePutContactPhoto))
+	mux.HandleFunc("DELETE /api/v1/contacts/{book}/{id}/photo", web(a.handleDeleteContactPhoto))
 }
 
 // handleCalendarAccess says whether the account has T-Kalender and whether

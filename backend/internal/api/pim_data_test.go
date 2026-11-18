@@ -68,7 +68,7 @@ func TestPIMDataRouteRights(t *testing.T) {
 	})
 	ts.setup()
 	routes := pimDataRoutes(ts)
-	if len(routes) != 14 {
+	if len(routes) != 26 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {

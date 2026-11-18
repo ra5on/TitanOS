@@ -39,17 +39,21 @@ type importResult struct {
 // safeUID is a UID that may name its file as it is.
 var safeUID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@+-]{0,150}$`)
 
-// importName is the file name of a new UID: <uid>.ics when that is a
-// plain name and free, else a hash of the UID, else a random one.
-func importName(uid string, taken map[string]bool) string {
-	if name := uid + ".ics"; safeUID.MatchString(uid) && pimstore.ValidName(pimstore.Calendar, name) && !taken[name] {
+// importName is the file name of a new UID: <uid>.ics (.vcf) when that
+// is a plain name and free, else a hash of the UID, else a random one.
+func importName(kind pimstore.Kind, uid string, taken map[string]bool) string {
+	ext := ".ics"
+	if kind == pimstore.Contacts {
+		ext = ".vcf"
+	}
+	if name := uid + ext; safeUID.MatchString(uid) && pimstore.ValidName(kind, name) && !taken[name] {
 		return name
 	}
 	sum := sha256.Sum256([]byte(uid))
-	if name := hex.EncodeToString(sum[:16]) + ".ics"; !taken[name] {
+	if name := hex.EncodeToString(sum[:16]) + ext; !taken[name] {
 		return name
 	}
-	return calweb.NewUID() + ".ics"
+	return calweb.NewUID() + ext
 }
 
 // importReason is the code of a failed entry (never the error text: a
@@ -74,16 +78,7 @@ func importReason(err error) string {
 // reserveImport takes RAM of the budget for the rest of the request; it
 // answers 503 calendar_busy itself when there is no room now.
 func (a pimDataArea) reserveImport(w http.ResponseWriter, bytes int64) (release func(), ok bool) {
-	if a.reserve == nil {
-		return func() {}, true
-	}
-	release, ok = a.reserve(bytes)
-	if !ok {
-		w.Header().Set("Retry-After", "30")
-		writeError(w, http.StatusServiceUnavailable, "calendar_busy", "TitanOS has no room in RAM for this import now; try again in a moment")
-		return nil, false
-	}
-	return release, true
+	return a.reserveRAM(w, pimstore.Calendar, bytes)
 }
 
 // handleImportCalendar imports an .ics file (multipart field "file",
@@ -197,7 +192,7 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 			}
 			items = append(items, pimstore.Item{Name: old.Name, Data: file})
 		} else {
-			name := importName(g.UID, taken)
+			name := importName(pimstore.Calendar, g.UID, taken)
 			taken[name] = true
 			items = append(items, pimstore.Item{Name: name, Data: file})
 		}

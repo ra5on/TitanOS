@@ -9338,5 +9338,17 @@
 	"error.calendar_move_series": "Eine Terminreihe lässt sich nur als Ganzes in einen anderen Kalender verschieben.",
 	"error.calendar_busy": "TitanOS hat gerade keinen Arbeitsspeicher für diesen Import frei. Bitte gleich noch einmal versuchen.",
 	"error.calendar_import_invalid": "Die Datei ist keine Kalenderdatei (.ics).",
-	"error.contacts_unavailable": "Kontakte sind gerade nicht verfügbar: Das Daten-Volume ist nicht eingebunden."
+	"error.contacts_unavailable": "Kontakte sind gerade nicht verfügbar: Das Daten-Volume ist nicht eingebunden.",
+	"error.contact_not_found": "Diesen Kontakt oder dieses Adressbuch gibt es nicht (mehr).",
+	"error.contact_photo_not_found": "Der Kontakt hat kein Bild, das TitanOS anzeigen kann.",
+	"error.contact_suggestion_not_found": "Diese Adresse ist kein Vorschlag aus T-Mail (mehr).",
+	"error.contacts_conflict": "Der Kontakt wurde inzwischen geändert, etwa auf einem anderen Gerät. Der aktuelle Stand wird angezeigt.",
+	"error.contact_exists": "Ein Kontakt hat diese Adresse schon.",
+	"error.contacts_uid_conflict": "Der Kontakt darf seine Kennung (UID) nicht ändern.",
+	"error.contacts_full": "Das Adressbuch ist voll (höchstens 20 000 Kontakte).",
+	"error.contacts_too_large": "Der Kontakt, das Bild oder die Datei ist zu groß (Kontakt höchstens 2 MiB, Bild und Datei höchstens 20 MB).",
+	"error.contacts_invalid": "Die Angaben zum Kontakt sind ungültig.",
+	"error.contacts_photo_invalid": "Das Bild muss JPEG, PNG oder WebP sein und darf nicht zu groß sein.",
+	"error.contacts_import_invalid": "Die Datei ist keine Kontaktdatei (.vcf).",
+	"error.contacts_busy": "TitanOS hat gerade keinen Arbeitsspeicher dafür frei. Bitte gleich noch einmal versuchen."
 }

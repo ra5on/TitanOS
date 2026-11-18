@@ -9338,5 +9338,17 @@
 	"error.calendar_move_series": "A series of events moves to another calendar only as a whole.",
 	"error.calendar_busy": "TitanOS has no memory free for this import right now. Please try again in a moment.",
 	"error.calendar_import_invalid": "The file is not a calendar file (.ics).",
-	"error.contacts_unavailable": "Contacts are not available right now: the data volume is not mounted."
+	"error.contacts_unavailable": "Contacts are not available right now: the data volume is not mounted.",
+	"error.contact_not_found": "This contact or address book does not exist (any more).",
+	"error.contact_photo_not_found": "The contact has no picture TitanOS can show.",
+	"error.contact_suggestion_not_found": "This address is not a suggestion from T-Mail (any more).",
+	"error.contacts_conflict": "The contact was changed meanwhile, for example on another device. The current state is shown.",
+	"error.contact_exists": "A contact has this address already.",
+	"error.contacts_uid_conflict": "The contact may not change its identifier (UID).",
+	"error.contacts_full": "The address book is full (at most 20,000 contacts).",
+	"error.contacts_too_large": "The contact, the picture or the file is too large (a contact at most 2 MiB, a picture or file at most 20 MB).",
+	"error.contacts_invalid": "The details of the contact are not valid.",
+	"error.contacts_photo_invalid": "The picture must be JPEG, PNG or WebP and not too large.",
+	"error.contacts_import_invalid": "The file is not a contacts file (.vcf).",
+	"error.contacts_busy": "TitanOS has no memory free for this right now. Please try again in a moment."
 }
