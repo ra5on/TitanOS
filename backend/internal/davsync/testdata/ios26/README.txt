@@ -1,4 +1,4 @@
-iOS-like request sequences (TECHNIK 8.2 step 6), replayed by TestIOS26
+iOS-like request sequences (TECHNIK 8.2 steps 6 and 7), replayed by TestIOS26
 (ios26_test.go) against the real davsync handler over TLS, with a real
 pim/store on a temporary volume and real device passwords. Written by hand
 after what iOS 26 sends (sabre.io/dav/clients/ios, RFC 6764); to be
@@ -19,15 +19,18 @@ Every *.txt but this file is one sequence; steps run in order on one server.
                                          (device password of alex/bea; account = alex's
                                          account password, which is refused)
                                        Follow: yes (follow 3xx with method, body, sign-in)
+                                       Body: <fixture> (the body is the fixture, byte for byte)
+                                       Body-Size: N (the body is N bytes "a")
   >                                  a bare ">" ends the headers; "> …" lines after it
   > <body line>                      are the body
   < expectation                      checked on the (final) answer
 
 Expectations ({etag:<fixture>} is the quoted ETag of a fixture):
-  status N | header Name value | header-has Name text | no-header Name
+  status N | header Name value | header-has Name text | header-lacks Name text | no-header Name
   body <fixture> | body-has text | body-lacks text
   responses N                        number of DAV:response elements
   response HREF STATUS               a response with a status of its own (404 href)
+  response-lacks HREF                no response for HREF
   prop HREF STATUS ns:name…          properties in a propstat of that status
   no-prop HREF ns:name…              properties not in the answer at all
   value HREF ns:name text            canonical content of a 200 property contains text

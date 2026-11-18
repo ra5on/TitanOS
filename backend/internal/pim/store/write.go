@@ -75,6 +75,11 @@ func (m MetaPatch) valid() bool {
 		(m.Order == nil || (*m.Order >= -1_000_000 && *m.Order <= 1_000_000))
 }
 
+// Valid reports whether the set fields are acceptable values (the rules
+// of UpdateCollection): davsync checks each property of a PROPPATCH on its
+// own to answer per property.
+func (m MetaPatch) Valid() bool { return m.valid() }
+
 func (m MetaPatch) apply(st *State) {
 	if m.Name != nil {
 		st.Name = *m.Name

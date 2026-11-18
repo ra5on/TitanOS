@@ -1,0 +1,37 @@
+# iOS deletes an event with If-Match: a wrong ETag is 412 and nothing goes.
+@seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+
+> DELETE /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> If-Match: {etag:weekly-team.ics}
+< status 412
+
+> DELETE /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> If-Match: W/{etag:dentist.ics}
+< status 412
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+
+> DELETE /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> If-Match: {etag:dentist.ics}
+< status 204
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 404
+
+> DELETE /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 404
+
+# The calendar stays.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 1

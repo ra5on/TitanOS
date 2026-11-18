@@ -150,23 +150,33 @@ func parseXML(data []byte) (*node, error) {
 // readBody reads a request body of at most MaxBody within the body
 // timeout (as readJSONBody); on failure it answered (413, 408 or 400).
 func (rq *request) readBody() ([]byte, bool) {
+	tooLarge := func() { http.Error(rq.w, "request body too large", http.StatusRequestEntityTooLarge) }
 	if rq.r.ContentLength > MaxBody {
-		http.Error(rq.w, "request body too large", http.StatusRequestEntityTooLarge)
+		tooLarge()
 		return nil, false
 	}
+	return rq.readLimited(MaxBody, tooLarge)
+}
+
+// readLimited reads a body of at most limit bytes within the body timeout;
+// tooLarge answers a longer one (PUT: 413 with max-resource-size). It
+// reads limit+1 bytes before it gives up, so a client that announced the
+// length is not cut off mid-send (which could reset the connection before
+// it reads the answer).
+func (rq *request) readLimited(limit int64, tooLarge func()) ([]byte, bool) {
 	control := http.NewResponseController(rq.w)
 	timed := control.SetReadDeadline(time.Now().Add(rq.h.bodyTimeout)) == nil
-	body, err := io.ReadAll(http.MaxBytesReader(rq.w, rq.r.Body, MaxBody))
+	body, err := io.ReadAll(http.MaxBytesReader(rq.w, rq.r.Body, limit))
 	if timed && err == nil {
 		// A long answer must not end on the deadline of the body.
 		_ = control.SetReadDeadline(time.Time{})
 	}
 	if err != nil {
-		var tooLarge *http.MaxBytesError
+		var maxErr *http.MaxBytesError
 		var netErr net.Error
 		switch {
-		case errors.As(err, &tooLarge):
-			http.Error(rq.w, "request body too large", http.StatusRequestEntityTooLarge)
+		case errors.As(err, &maxErr):
+			tooLarge()
 		case errors.As(err, &netErr) && netErr.Timeout():
 			http.Error(rq.w, "the request body did not arrive in time", http.StatusRequestTimeout)
 		default:
@@ -310,13 +320,38 @@ func xmlChar(r rune) bool {
 // writeXMLError answers status with a DAV:error naming the precondition
 // (RFC 4918 16).
 func writeXMLError(w http.ResponseWriter, status int, condition xml.Name) {
+	writeXMLErrorElem(w, status, elem(condition))
+}
+
+// writeXMLErrorElem is writeXMLError with content in the precondition
+// (no-uid-conflict names the entry that holds the UID).
+func writeXMLErrorElem(w http.ResponseWriter, status int, condition Elem) {
+	writeXMLBody(w, status, davName("error"), condition)
+}
+
+// writeXMLBody answers status with one XML document of root and children.
+func writeXMLBody(w http.ResponseWriter, status int, root xml.Name, children ...Elem) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(status)
 	x := &xmlWriter{b: bufio.NewWriter(w)}
-	x.root(davName("error"))
-	x.elem(elem(condition))
-	x.closeRoot(davName("error"))
+	x.root(root)
+	for _, c := range children {
+		x.elem(c)
+	}
+	x.closeRoot(root)
 	_ = x.b.Flush()
+}
+
+// propstatElems are propstats as elements (the body of a failed MKCALENDAR
+// or MKCOL, RFC 4791 5.3.1.2, RFC 5689 3.1).
+func propstatElems(ps []Propstat) []Elem {
+	var out []Elem
+	for _, p := range ps {
+		if len(p.Props) > 0 {
+			out = append(out, elem(davName("propstat"), elem(davName("prop"), p.Props...), textElem(davName("status"), statusLine(p.Status))))
+		}
+	}
+	return out
 }
 
 // Response is one response of a multistatus: either a Status (404 for a
@@ -367,12 +402,7 @@ func (m *multistatus) add(r Response) {
 	if r.Status != 0 {
 		children = append(children, textElem(davName("status"), statusLine(r.Status)))
 	}
-	for _, ps := range r.Propstats {
-		if len(ps.Props) == 0 {
-			continue
-		}
-		children = append(children, elem(davName("propstat"), elem(davName("prop"), ps.Props...), textElem(davName("status"), statusLine(ps.Status))))
-	}
+	children = append(children, propstatElems(r.Propstats)...)
 	m.x.elem(elem(davName("response"), children...))
 }
 

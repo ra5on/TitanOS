@@ -100,11 +100,11 @@
 > Auth: alex
 < status 405
 
-# Writing comes with step 7, the queries with step 8.
+# An empty PUT is no calendar data; the queries come with step 8.
 > PUT /caldav/alex/calendars/privat/new.ics
 > Auth: alex
-< status 405
-< header-has Allow GET
+< status 403
+< error cal:valid-calendar-data
 
 > REPORT /caldav/alex/calendars/privat/
 > Auth: alex
@@ -127,4 +127,20 @@
 
 > OPTIONS /caldav/alex/calendars/privat/x.ics
 < status 200
-< header Allow OPTIONS, GET, HEAD, PROPFIND
+< header Allow OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH
+
+> OPTIONS /caldav/alex/calendars/privat/
+< status 200
+< header Allow OPTIONS, DELETE, PROPFIND, PROPPATCH, MKCOL, MKCALENDAR, REPORT
+
+> OPTIONS /carddav/alex/addressbooks/kontakte/
+< status 200
+< header Allow OPTIONS, DELETE, PROPFIND, PROPPATCH, MKCOL, REPORT
+
+> OPTIONS /caldav/alex/calendars/
+< status 200
+< header Allow OPTIONS, PROPFIND, PROPPATCH
+
+> OPTIONS /caldav/
+< status 200
+< header Allow OPTIONS, PROPFIND

@@ -1,6 +1,7 @@
 package davsync
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -9,12 +10,17 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
 
-// method serves one HTTP method on the levels it names; Allow lists it
-// there. Step 7 adds PUT, DELETE, MKCALENDAR, MKCOL and PROPPATCH to the
-// table (until then they answer 405).
+// method serves one HTTP method on the levels it names (and of one kind,
+// if kind is set); Allow lists it there. The writing methods are in
+// write.go (writeMethods).
 type method struct {
 	levels levels
+	kind   store.Kind
 	serve  func(rq *request)
+}
+
+func (m method) serves(kind store.Kind, l level) bool {
+	return m.levels.has(l) && (m.kind == "" || m.kind == kind)
 }
 
 // readMethods are the methods of step 6.
@@ -27,6 +33,13 @@ func readMethods() map[string]method {
 	}
 }
 
+// allMethods are the methods of the handler.
+func allMethods() map[string]method {
+	m := readMethods()
+	maps.Copy(m, writeMethods())
+	return m
+}
+
 // refused are answered alike everywhere (TECHNIK 1.4): iOS moves between
 // calendars with DELETE and PUT; no locks, no ACL changes.
 var refused = map[string]int{
@@ -37,13 +50,13 @@ var refused = map[string]int{
 // methodOrder is the order of Allow.
 var methodOrder = []string{"OPTIONS", "GET", "HEAD", "PUT", "DELETE", "PROPFIND", "PROPPATCH", "MKCOL", "MKCALENDAR", "REPORT"}
 
-// allow is the Allow header of a level: OPTIONS and the methods of the
-// table that serve it.
-func (h *Handler) allow(l level) string {
+// allow is the Allow header of a level of a kind: OPTIONS and the methods
+// of the table that serve it.
+func (h *Handler) allow(kind store.Kind, l level) string {
 	out := []string{http.MethodOptions}
 	var rest []string
 	for name, m := range h.methods {
-		if m.levels.has(l) && name != http.MethodOptions {
+		if m.serves(kind, l) && name != http.MethodOptions {
 			rest = append(rest, name)
 		}
 	}
@@ -60,14 +73,14 @@ func (h *Handler) allow(l level) string {
 func (h *Handler) dispatch(rq *request) {
 	if code, ok := refused[rq.r.Method]; ok {
 		if code == http.StatusMethodNotAllowed {
-			rq.w.Header().Set("Allow", h.allow(rq.t.level))
+			rq.w.Header().Set("Allow", h.allow(rq.t.kind, rq.t.level))
 		}
 		http.Error(rq.w, http.StatusText(code), code)
 		return
 	}
 	m, ok := h.methods[rq.r.Method]
-	if !ok || !m.levels.has(rq.t.level) {
-		rq.w.Header().Set("Allow", h.allow(rq.t.level))
+	if !ok || !m.serves(rq.t.kind, rq.t.level) {
+		rq.w.Header().Set("Allow", h.allow(rq.t.kind, rq.t.level))
 		http.Error(rq.w, "method not allowed here", http.StatusMethodNotAllowed)
 		return
 	}

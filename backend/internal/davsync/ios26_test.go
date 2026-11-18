@@ -176,8 +176,20 @@ func unescapeName(t *testing.T, s string) string {
 // request builds the request of a step; Auth and Follow are pseudo
 // headers.
 func (e *env) request(t *testing.T, s *step, target string) *http.Request {
-	body := strings.Join(s.body, "\n")
-	req, err := http.NewRequest(s.method, target, strings.NewReader(body))
+	body := []byte(strings.Join(s.body, "\n"))
+	if name := s.header("Body"); name != "" {
+		// Body: <fixture> sends the file byte for byte (CRLF kept).
+		body = fixture(t, name)
+	}
+	if n := s.header("Body-Size"); n != "" {
+		// Body-Size: N sends N bytes (limits).
+		size, err := strconv.Atoi(n)
+		if err != nil {
+			t.Fatalf("Body-Size %q", n)
+		}
+		body = bytes.Repeat([]byte("a"), size)
+	}
+	req, err := http.NewRequest(s.method, target, bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +208,7 @@ func (e *env) request(t *testing.T, s *step, target string) *http.Request {
 				}
 				req.SetBasicAuth(user, pw)
 			}
-		case "Follow":
+		case "Follow", "Body", "Body-Size":
 		default:
 			req.Header.Set(h[0], subst(t, h[1]))
 		}
@@ -470,6 +482,19 @@ func (e *env) check(t *testing.T, s *step, res *http.Response, body []byte, w []
 	case "header-has":
 		if got := res.Header.Get(w[1]); !strings.Contains(got, arg(2)) {
 			return fmt.Errorf("%s: %q lacks %q", w[1], got, arg(2))
+		}
+	case "header-lacks":
+		if got := res.Header.Get(w[1]); strings.Contains(got, arg(2)) {
+			return fmt.Errorf("%s: %q has %q", w[1], got, arg(2))
+		}
+	case "response-lacks":
+		// response-lacks HREF: no response for it.
+		all, _, err := multistatus()
+		if err != nil {
+			return err
+		}
+		if all[w[1]] != nil {
+			return fmt.Errorf("a response for %s", w[1])
 		}
 	case "no-header":
 		if got := res.Header.Get(w[1]); got != "" {

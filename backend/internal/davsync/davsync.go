@@ -1,10 +1,10 @@
 // Package davsync serves CalDAV and CardDAV to iPhones and Macs (TECHNIK
 // 1.4, 1.5, 4.1): discovery, PROPFIND, GET/HEAD and the multiget reports;
-// writing (step 7) and sync-collection/queries (step 8) slot into the
-// tables of methods (methods.go), reports (report.go) and properties
-// (props.go). Only the standard library and encoding/xml: the bytes
-// stored by pim/store are served as they came, go-ical and go-vcard stay
-// in pim.
+// PUT, DELETE, MKCALENDAR, extended MKCOL and PROPPATCH (write.go,
+// proppatch.go); sync-collection/queries (step 8) slot into the tables of
+// methods (methods.go), reports (report.go) and properties (props.go).
+// Only the standard library and encoding/xml: the bytes stored by
+// pim/store are served as they came, go-ical and go-vcard stay in pim.
 //
 // Every request but OPTIONS and /.well-known signs in with a device
 // password (pim/devices); the path must name the account signed in, else
@@ -106,7 +106,7 @@ type Handler struct {
 // New returns the handler over the store and the device checker.
 func New(st *store.Store, d Devices) *Handler {
 	h := &Handler{Store: st, Devices: d, bodyTimeout: BodyTimeout}
-	h.methods = readMethods()
+	h.methods = allMethods()
 	h.reports = readReports()
 	h.props = newPropTable(readProps())
 	return h
@@ -175,7 +175,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rw.Header().Set("DAV", davHeader(t.kind))
-		rw.Header().Set("Allow", h.allow(t.level))
+		rw.Header().Set("Allow", h.allow(t.kind, t.level))
 		rw.Header().Set("Content-Length", "0")
 		rw.WriteHeader(http.StatusOK)
 		return
@@ -188,6 +188,13 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	t, ok := parsePath(r.URL.EscapedPath())
 	if !ok {
+		// A write to a name the store refuses, below the account signed
+		// in, says so (400/403); anything else stays 404 and tells
+		// nothing about other accounts.
+		if status := nameProblem(r.Method, r.URL.EscapedPath(), id.User.Name); status != 0 {
+			http.Error(rw, "this name cannot be used for a calendar, an address book or an entry", status)
+			return
+		}
 		http.NotFound(rw, r)
 		return
 	}
@@ -315,6 +322,10 @@ func errorCode(err error) string {
 		{store.ErrInvalidAccount, "invalid_account"}, {store.ErrNoAccount, "no_account"},
 		{store.ErrTooLarge, "too_large"}, {store.ErrInvalidData, "invalid_data"},
 		{store.ErrPrecondition, "precondition"}, {store.ErrInvalidSyncToken, "invalid_sync_token"},
+		{store.ErrUnsupportedComponent, "unsupported_component"}, {store.ErrUIDConflict, "uid_conflict"},
+		{store.ErrCollectionFull, "collection_full"}, {store.ErrTooManyCollections, "too_many_collections"},
+		{store.ErrLastCollection, "last_collection"}, {store.ErrExists, "exists"}, {store.ErrFixedBook, "fixed_book"},
+		{store.ErrInvalidMeta, "invalid_meta"},
 		{context.Canceled, "canceled"},
 	} {
 		if errors.Is(err, c.err) {

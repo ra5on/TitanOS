@@ -1,0 +1,167 @@
+# Names the store refuses, written below the own account: 400 for what is
+# no name at all (.., an encoded "/", NUL, control characters), 403 for a
+# name the rules refuse (leading dot, too long, wrong extension, a
+# collection id outside [a-z0-9-] or a UUID). Nothing is written, nothing
+# outside the collection is touched. Below another account it stays 404
+# (nothing about other accounts); reading a bad name is 404.
+
+> PUT /caldav/alex/calendars/privat/..
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/%2e%2e
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/.
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/a%2Fb.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/..%2F..%2Fbea.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/%00.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/a%0Ab.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/%C3%28.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/../privat/x.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/%2e%2e/x.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 400
+
+> PUT /caldav/alex/calendars/privat/.hidden.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/alex/calendars/privat/x.txt
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/alex/calendars/privat/x.vcf
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/alex/calendars/privat/.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/alex/calendars/privat/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/alex/calendars/Privat/x.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 403
+
+> PUT /caldav/bea/calendars/privat/..
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 404
+
+> PUT /caldav/bea/calendars/privat/.hidden.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 404
+
+> PUT /caldav/alex/calendars/privat/a/b.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 404
+
+> GET /caldav/alex/calendars/privat/.hidden.ics
+> Auth: alex
+< status 404
+
+> DELETE /caldav/alex/calendars/privat/%2e%2e
+> Auth: alex
+< status 400
+
+> DELETE /caldav/alex/calendars/privat/.hidden.ics
+> Auth: alex
+< status 403
+
+> MKCALENDAR /caldav/alex/calendars/Mein%20Kalender/
+> Auth: alex
+< status 403
+
+> MKCALENDAR /caldav/alex/calendars/..
+> Auth: alex
+< status 400
+
+> PROPPATCH /caldav/alex/calendars/.trash/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>X</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 403
+
+> PUT /carddav/alex/addressbooks/kontakte/x.ics
+> Auth: alex
+> Content-Type: text/vcard
+> Body: erika.vcf
+< status 403
+
+# Nothing was written anywhere.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 1

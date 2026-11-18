@@ -1,0 +1,83 @@
+# A contact from iOS: new, changed with If-Match, deleted with If-Match.
+> PUT /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> If-None-Match: *
+> Body: erika.vcf
+< status 201
+< header ETag {etag:erika.vcf}
+
+> PUT /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> If-None-Match: *
+> Body: erika-edited.vcf
+< status 412
+
+> PUT /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> Content-Type: text/x-vcard
+> If-Match: {etag:erika.vcf}
+> Body: erika-edited.vcf
+< status 204
+< header ETag {etag:erika-edited.vcf}
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 200
+< body erika-edited.vcf
+
+> PUT /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> If-Match: {etag:erika.vcf}
+> Body: erika.vcf
+< status 412
+
+> DELETE /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> If-Match: {etag:erika.vcf}
+< status 412
+
+> DELETE /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> If-Match: {etag:erika-edited.vcf}
+< status 204
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 404
+
+# Not a vCard, a vCard without FN, the wrong type, a book that is not there.
+> PUT /carddav/alex/addressbooks/kontakte/x.vcf
+> Auth: alex
+> Content-Type: text/plain
+> Body: erika.vcf
+< status 403
+< error card:supported-address-data
+
+> PUT /carddav/alex/addressbooks/kontakte/x.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: no-fn.vcf
+< status 403
+< error card:valid-address-data
+
+> PUT /carddav/alex/addressbooks/kontakte/x.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: dentist.ics
+< status 403
+< error card:valid-address-data
+
+> PUT /carddav/alex/addressbooks/andere/x.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: erika.vcf
+< status 409
+
+> PROPFIND /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+> Depth: 1
+< status 207
+< responses 1

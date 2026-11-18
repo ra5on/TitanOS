@@ -170,8 +170,15 @@ func TestDeviceDAVCrossOrigin(t *testing.T) {
 		{"Origin": "https://evil.example", "Depth": "0"},
 		{"Sec-Fetch-Site": "cross-site", "Depth": "0"},
 	} {
-		for _, method := range []string{"PROPFIND", "REPORT"} {
-			res, body := ts.davDo(method, "/caldav/alex/calendars/", h, "alex", device.Password)
+		for _, method := range []string{"PROPFIND", "REPORT", "PUT", "DELETE", "PROPPATCH", "MKCALENDAR"} {
+			path := "/caldav/alex/calendars/"
+			switch method {
+			case "PUT":
+				path += "privat/a.ics"
+			case "DELETE", "PROPPATCH", "MKCALENDAR":
+				path += "neu/"
+			}
+			res, body := ts.davDo(method, path, h, "alex", device.Password)
 			if res.StatusCode != http.StatusForbidden || strings.Contains(body, "multistatus") {
 				t.Errorf("%s %v: %d %s", method, h, res.StatusCode, body)
 			}
@@ -208,5 +215,60 @@ func TestDeviceDAVPathPredicate(t *testing.T) {
 	}
 	if len(davsync.Patterns) != 6 {
 		t.Errorf("patterns %v", davsync.Patterns)
+	}
+}
+
+// Writing goes through the whole chain with a device password: PUT of an
+// iCalendar body (no cap of the API in front), MKCALENDAR, PROPPATCH and
+// DELETE, and the bytes come back as sent.
+func TestDeviceDAVWrites(t *testing.T) {
+	ts := newDAVTestServer(t)
+	device := ts.newDevice(ts.client, "iPhone")
+	ics := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Apple Inc.//iPhone OS 26.1//EN\r\nBEGIN:VEVENT\r\nUID:chain-1\r\n" +
+		"DTSTAMP:20261110T074512Z\r\nDTSTART:20261120T160000Z\r\nDTEND:20261120T170000Z\r\nSUMMARY:Kette\r\n" +
+		"DESCRIPTION:" + strings.Repeat("x", 300<<10) + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	send := func(method, path, body string, header map[string]string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(method, ts.url+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.SetBasicAuth("alex", device.Password)
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		res.Body = io.NopCloser(strings.NewReader(string(b)))
+		return res
+	}
+	res := send("PUT", "/caldav/alex/calendars/privat/chain.ics", ics, map[string]string{"Content-Type": "text/calendar; charset=utf-8", "If-None-Match": "*"})
+	if res.StatusCode != http.StatusCreated || res.Header.Get("ETag") != `"`+pimstore.ETag([]byte(ics))+`"` {
+		t.Fatalf("PUT: %d %q", res.StatusCode, res.Header.Get("ETag"))
+	}
+	res = send("GET", "/caldav/alex/calendars/privat/chain.ics", "", nil)
+	if b, _ := io.ReadAll(res.Body); res.StatusCode != http.StatusOK || string(b) != ics {
+		t.Errorf("GET: %d, %d bytes", res.StatusCode, len(b))
+	}
+	if res := send("MKCALENDAR", "/caldav/alex/calendars/neu/", "", nil); res.StatusCode != http.StatusCreated {
+		t.Errorf("MKCALENDAR: %d", res.StatusCode)
+	}
+	patch := `<A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>Neu</A:displayname></A:prop></A:set></A:propertyupdate>`
+	if res := send("PROPPATCH", "/caldav/alex/calendars/neu/", patch, map[string]string{"Content-Type": "application/xml"}); res.StatusCode != http.StatusMultiStatus {
+		t.Errorf("PROPPATCH: %d", res.StatusCode)
+	}
+	if res := send("DELETE", "/caldav/alex/calendars/neu/", "", nil); res.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE collection: %d", res.StatusCode)
+	}
+	if res := send("DELETE", "/caldav/alex/calendars/privat/chain.ics", "", map[string]string{"If-Match": `"` + pimstore.ETag([]byte(ics)) + `"`}); res.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE entry: %d", res.StatusCode)
+	}
+	// An encoded "/" never reaches davsync with the device password.
+	if res := send("PUT", "/caldav/alex/calendars/privat/a%2Fb.ics", ics, map[string]string{"Content-Type": "text/calendar"}); res.StatusCode < 400 {
+		t.Errorf("PUT with %%2F: %d", res.StatusCode)
 	}
 }

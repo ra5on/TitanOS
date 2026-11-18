@@ -1,0 +1,43 @@
+# What iOS PUTs comes back byte for byte (X-APPLE-*, VALARM, folded lines,
+# CRLF), with the same ETag: GET, HEAD, PROPFIND and multiget.
+> PUT /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: weekly-team.ics
+< status 201
+< header ETag {etag:weekly-team.ics}
+
+> GET /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 200
+< body weekly-team.ics
+< header ETag {etag:weekly-team.ics}
+< header Content-Type text/calendar; charset=utf-8
+
+> HEAD /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+> Auth: alex
+< status 200
+< header ETag {etag:weekly-team.ics}
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/><C:calendar-data/></D:prop><D:href>/caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics</D:href></C:calendar-multiget>
+< status 207
+< value /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics d:getetag {etag:weekly-team.ics}
+< data /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+
+> PUT /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: erika.vcf
+< status 201
+< header ETag {etag:erika.vcf}
+
+> GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
+> Auth: alex
+< status 200
+< body erika.vcf
+< header ETag {etag:erika.vcf}

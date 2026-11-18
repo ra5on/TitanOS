@@ -1,0 +1,36 @@
+# A second entry with the UID of one in the same calendar: 409
+# no-uid-conflict with the href of the entry that has it; nothing written.
+# Another calendar may hold the same UID.
+@seed calendar privat first.ics dentist.ics
+@collection calendar arbeit Arbeit
+
+> PUT /caldav/alex/calendars/privat/second.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist-moved.ics
+< status 409
+< error cal:no-uid-conflict
+< body-has <d:href>/caldav/alex/calendars/privat/first.ics</d:href>
+
+> GET /caldav/alex/calendars/privat/second.ics
+> Auth: alex
+< status 404
+
+> PUT /caldav/alex/calendars/arbeit/second.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist-moved.ics
+< status 201
+
+# Contacts likewise.
+@seed contacts kontakte erika.vcf erika.vcf
+
+> PUT /carddav/alex/addressbooks/kontakte/erika-2.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: erika-edited.vcf
+< status 409
+< error card:no-uid-conflict
+< body-has <d:href>/carddav/alex/addressbooks/kontakte/erika.vcf</d:href>
