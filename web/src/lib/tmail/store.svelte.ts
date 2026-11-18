@@ -72,4 +72,46 @@ export function resetMail() {
 	mail.error = '';
 	mail.folders = {};
 	mail.folderErrors = {};
+	avatars.photos = {};
+	avatars.loaded = false;
+}
+
+/**
+ * 1.12: rows being dragged from the list onto a folder. Only folders of
+ * the same mailbox take them (a move never crosses mailboxes); the data of
+ * a drag cannot be read before the drop, so the page keeps it here.
+ */
+export const mailDrag = $state<{ account: string; items: { folder: string; uid: number }[] }>({
+	account: '',
+	items: [],
+});
+
+/** 1.12: the own contacts with a picture by lower-case address (GET /mail/avatars). */
+export const avatars = $state<{ book: string; photos: Record<string, string>; loaded: boolean }>({
+	book: 'kontakte',
+	photos: {},
+	loaded: false,
+});
+
+/** Reads the pictures once per page; without contacts or volume the list shows initials. */
+export async function loadAvatars(): Promise<void> {
+	if (avatars.loaded) return;
+	avatars.loaded = true;
+	try {
+		const got = await mailApi.avatars();
+		const photos: Record<string, string> = {};
+		if (got && typeof got.photos === 'object' && got.photos)
+			for (const [addr, id] of Object.entries(got.photos))
+				if (typeof id === 'string' && id) photos[addr.toLowerCase()] = id;
+		avatars.photos = photos;
+		if (typeof got?.book === 'string' && got.book) avatars.book = got.book;
+	} catch {
+		// An older NAS or no contacts: initials only.
+	}
+}
+
+/** The folders a folder holds below it: its path and the delimiter. */
+export function isBelow(child: MailFolder, parent: MailFolder): boolean {
+	const delim = child.delim || parent.delim || (child.path.includes('/') ? '/' : '.');
+	return child.path !== parent.path && child.path.startsWith(parent.path + delim);
 }
