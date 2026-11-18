@@ -201,3 +201,61 @@ func pimEvent(uid string) []byte {
 func pimCard(uid string) []byte {
 	return []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:" + uid + "\r\nFN:" + uid + "\r\nEND:VCARD\r\n")
 }
+
+// TestPIMDataCrossSite (Sicherheitsdurchsicht 1.11, question 19): another
+// website cannot change calendars or contacts with the person's cookie –
+// every route that writes answers 403 to a cross-site request
+// (http.CrossOriginProtection around the whole mux, api.go) and changes
+// nothing; the same request from the page itself goes through.
+func TestPIMDataCrossSite(t *testing.T) {
+	ts, pim, _, _ := pimServer(t)
+	if _, err := pim.Put(pimstore.Calendar, "alex", "privat", "a.ics", pimEvent("a"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pim.Put(pimstore.Contacts, "alex", pimstore.DefaultBook, "c.vcf", pimCard("c"), pimstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	writes := 0
+	for _, rt := range pimDataRoutes(ts) {
+		if rt[0] == http.MethodGet {
+			continue
+		}
+		writes++
+		names := strings.NewReplacer("{id}", "privat", "{cal}", "privat", "{obj}", "a.ics")
+		switch {
+		case strings.HasPrefix(rt[1], "/api/v1/contacts/books/"):
+			names = strings.NewReplacer("{id}", pimstore.DefaultBook)
+		case strings.HasPrefix(rt[1], "/api/v1/contacts/"):
+			names = strings.NewReplacer("{book}", pimstore.DefaultBook, "{id}", "c.vcf")
+		}
+		path := names.Replace(rt[1])
+		for _, h := range []map[string]string{{"Sec-Fetch-Site": "cross-site"}, {"Origin": "https://evil.example"}} {
+			req, _ := http.NewRequest(rt[0], ts.url+path, strings.NewReader(`{"name":"x","event":{"title":"x","start":"2026-12-01"},"contact":{"first":"x"}}`))
+			req.Header.Set("Content-Type", "application/json")
+			for k, v := range h {
+				req.Header.Set(k, v)
+			}
+			res, err := ts.client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			if res.StatusCode != http.StatusForbidden {
+				t.Errorf("%s %s %v: %d, want 403", rt[0], path, h, res.StatusCode)
+			}
+		}
+	}
+	if writes != 15 {
+		t.Fatalf("writing routes: %d", writes)
+	}
+	cals, _ := pim.Collections(pimstore.Calendar, "alex")
+	events, _ := pim.Objects(pimstore.Calendar, "alex", "privat")
+	cards, _ := pim.Objects(pimstore.Contacts, "alex", pimstore.DefaultBook)
+	if len(cals) != 1 || len(events) != 1 || len(cards) != 1 {
+		t.Fatalf("changed by a cross-site request: %d calendars, %d events, %d contacts", len(cals), len(events), len(cards))
+	}
+	// The same request from the page itself goes through.
+	if res, body := ts.request("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Neu", "color": "#3B82F6"}); res.StatusCode >= 300 {
+		t.Fatalf("new calendar from the page: %d %s", res.StatusCode, body)
+	}
+}
