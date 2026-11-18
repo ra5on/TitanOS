@@ -100,7 +100,7 @@
 > Auth: alex
 < status 405
 
-# An empty PUT is no calendar data; the queries come with step 8.
+# An empty PUT is no calendar data.
 > PUT /caldav/alex/calendars/privat/new.ics
 > Auth: alex
 < status 403
@@ -111,8 +111,24 @@
 >
 > <?xml version="1.0" encoding="UTF-8"?>
 > <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"/></C:filter></C:calendar-query>
+< status 207
+< responses 1
+
+# A report of the other protocol, or on another level, is 403 supported-report.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
 < status 403
 < error d:supported-report
+
+> REPORT /caldav/alex/calendars/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:sync-level>1</D:sync-level><D:prop><D:getetag/></D:prop></D:sync-collection>
+< status 405
 
 > REPORT /caldav/alex/calendars/privat/
 > Auth: alex

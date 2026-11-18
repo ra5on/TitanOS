@@ -2,6 +2,7 @@ package davsync
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -147,6 +148,35 @@ func (e *env) directive(t *testing.T, where string, d []string) {
 		if _, err := e.store.CreateCollection(store.Kind(d[1]), "alex", d[2], store.Meta{Name: d[3], Color: store.DefaultColor}); err != nil {
 			t.Fatalf("%s: %v", where, err)
 		}
+	case d[0] == "delete" && len(d) == 4:
+		// @delete calendar|contacts <collection> <name>: deleted
+		// elsewhere (the web API), through the store.
+		if err := e.store.DeleteObject(store.Kind(d[1]), "alex", d[2], unescapeName(t, d[3]), ""); err != nil {
+			t.Fatalf("%s: %v", where, err)
+		}
+	case d[0] == "churn" && len(d) == 3:
+		// @churn <calendar> N: N new events of alex (one change each, in
+		// one import), so older sync tokens fall out of the log.
+		n, err := strconv.Atoi(d[2])
+		if err != nil {
+			t.Fatalf("%s: %v", where, err)
+		}
+		items := make([]store.Item, n)
+		for i := range items {
+			uid := fmt.Sprintf("churn-%d", e.churned+i)
+			items[i] = store.Item{Name: uid + ".ics", Data: []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:" + uid +
+				"\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261110T080000Z\r\nDURATION:PT1H\r\nSUMMARY:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")}
+		}
+		e.churned += n
+		res, err := e.store.Import(context.Background(), store.Calendar, "alex", d[1], items)
+		if err != nil {
+			t.Fatalf("%s: %v", where, err)
+		}
+		for _, r := range res {
+			if r.Err != nil {
+				t.Fatalf("%s: %s: %v", where, r.Name, r.Err)
+			}
+		}
 	case d[0] == "volume" && len(d) == 2:
 		// @volume off | disk1 | disk2 (another, empty volume)
 		v := d[1]
@@ -176,7 +206,7 @@ func unescapeName(t *testing.T, s string) string {
 // request builds the request of a step; Auth and Follow are pseudo
 // headers.
 func (e *env) request(t *testing.T, s *step, target string) *http.Request {
-	body := []byte(strings.Join(s.body, "\n"))
+	body := []byte(e.subst(t, strings.Join(s.body, "\n")))
 	if name := s.header("Body"); name != "" {
 		// Body: <fixture> sends the file byte for byte (CRLF kept).
 		body = fixture(t, name)
@@ -210,7 +240,7 @@ func (e *env) request(t *testing.T, s *step, target string) *http.Request {
 			}
 		case "Follow", "Body", "Body-Size":
 		default:
-			req.Header.Set(h[0], subst(t, h[1]))
+			req.Header.Set(h[0], e.subst(t, h[1]))
 		}
 	}
 	if len(s.body) > 0 && req.Header.Get("Content-Type") == "" {
@@ -231,7 +261,9 @@ func (s *step) header(name string) string {
 // replay sends a step, following redirects with the same method, body
 // and sign-in when it says Follow: yes (as iOS does).
 func (e *env) replay(t *testing.T, s *step) (*http.Response, []byte) {
-	target := e.srv.URL + s.path
+	target := e.srv.URL + e.subst(t, s.path)
+	before := e.opens.Load()
+	defer func() { e.requestOpens = e.opens.Load() - before }()
 	for hops := 0; ; hops++ {
 		res, err := e.client().Do(e.request(t, s, target))
 		if err != nil {
@@ -346,6 +378,8 @@ func innerOf(n *tnode) string {
 type davResponse struct {
 	status string
 	props  map[xml.Name]davProp
+	// errors are the preconditions of a DAV:error of the response.
+	errors []xml.Name
 }
 
 type davProp struct {
@@ -375,6 +409,11 @@ func parseMultistatus(b []byte) (map[string]*davResponse, int, error) {
 		dr := &davResponse{props: map[xml.Name]davProp{}}
 		if s := r.child(davName("status")); s != nil {
 			dr.status = strings.TrimSpace(s.text)
+		}
+		if er := r.child(davName("error")); er != nil {
+			for _, c := range er.children {
+				dr.errors = append(dr.errors, c.name)
+			}
 		}
 		for _, ps := range r.children {
 			if ps.name != davName("propstat") {
@@ -419,23 +458,52 @@ func testName(s string) (xml.Name, error) {
 	return xml.Name{}, fmt.Errorf("unknown prefix %q", p)
 }
 
-// subst replaces {etag:<fixture>} by the quoted ETag of the fixture.
-func subst(t *testing.T, s string) string {
-	for {
-		i := strings.Index(s, "{etag:")
-		if i < 0 {
-			return s
+// subst replaces {etag:<fixture>} by the quoted ETag of the fixture and
+// {saved:NAME} by a value kept with "< save".
+func (e *env) subst(t *testing.T, s string) string {
+	for _, kind := range []string{"{etag:", "{saved:"} {
+		for {
+			i := strings.Index(s, kind)
+			if i < 0 {
+				break
+			}
+			j := strings.Index(s[i:], "}")
+			if j < 0 {
+				t.Fatalf("unclosed %s in %q", kind, s)
+			}
+			name := s[i+len(kind) : i+j]
+			var v string
+			if kind == "{etag:" {
+				v = quote(store.ETag(fixture(t, name)))
+			} else {
+				var ok bool
+				if v, ok = e.saved[name]; !ok {
+					t.Fatalf("nothing saved as %q", name)
+				}
+			}
+			s = s[:i] + v + s[i+j+1:]
 		}
-		j := strings.Index(s[i:], "}")
-		name := s[i+6 : i+j]
-		s = s[:i] + quote(store.ETag(fixture(t, name))) + s[i+j+1:]
 	}
+	return s
+}
+
+// syncTokenOf is the DAV:sync-token after the responses of a multistatus.
+func syncTokenOf(b []byte) (string, error) {
+	root, err := parseAnswer(b)
+	if err != nil {
+		return "", err
+	}
+	tok := root.child(davName("sync-token"))
+	if root.name != davName("multistatus") || tok == nil {
+		return "", fmt.Errorf("no sync-token in the multistatus")
+	}
+	return strings.TrimSpace(tok.text), nil
 }
 
 func (e *env) check(t *testing.T, s *step, res *http.Response, body []byte, w []string) error {
 	arg := func(i int) string {
 		if i < len(w) {
-			return subst(t, strings.Join(w[i:], " "))
+			return e.subst(t, strings.Join(w[i:], " "))
 		}
 		return ""
 	}
@@ -611,6 +679,70 @@ func (e *env) check(t *testing.T, s *step, res *http.Response, body []byte, w []
 		}
 		if root.name != davName("error") || root.child(n) == nil {
 			return fmt.Errorf("no DAV:error with %s", w[1])
+		}
+	case "save":
+		// save NAME header H | save NAME sync-token | save NAME prop HREF ns:name
+		var v string
+		switch {
+		case len(w) == 4 && w[2] == "header":
+			v = res.Header.Get(w[3])
+		case len(w) == 3 && w[2] == "sync-token":
+			tok, err := syncTokenOf(body)
+			if err != nil {
+				return err
+			}
+			v = tok
+		case len(w) == 5 && w[2] == "prop":
+			p, err := prop(w[3], w[4])
+			if err != nil {
+				return err
+			}
+			if p.status != 200 {
+				return fmt.Errorf("%s %s: %d", w[3], w[4], p.status)
+			}
+			v = innerOf(p.node)
+		default:
+			return fmt.Errorf("save: %v", w)
+		}
+		if v == "" {
+			return fmt.Errorf("save %s: empty", w[1])
+		}
+		e.saved[w[1]] = v
+	case "value-lacks":
+		// value-lacks HREF NAME text: a 200 property without the text.
+		p, err := prop(w[1], w[2])
+		if err != nil {
+			return err
+		}
+		if got := innerOf(p.node); p.status != 200 || strings.Contains(got, arg(3)) {
+			return fmt.Errorf("%s %s: %d %q has %q", w[1], w[2], p.status, got, arg(3))
+		}
+	case "sync-token-is", "sync-token-not":
+		tok, err := syncTokenOf(body)
+		if err != nil {
+			return err
+		}
+		if (tok == arg(1)) != (w[0] == "sync-token-is") {
+			return fmt.Errorf("sync-token %q, %s %q", tok, w[0], arg(1))
+		}
+	case "response-error":
+		// response-error HREF NAME: the response has a DAV:error with it.
+		r, err := response(w[1])
+		if err != nil {
+			return err
+		}
+		n, err := testName(w[2])
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(r.errors, n) {
+			return fmt.Errorf("%s: errors %v, want %s", w[1], r.errors, w[2])
+		}
+	case "volume-opens":
+		// volume-opens N | +: opens of the volume during the request.
+		got := e.requestOpens
+		if w[1] == "+" && got == 0 || w[1] != "+" && strconv.Itoa(int(got)) != w[1] {
+			return fmt.Errorf("%d opens of the volume, want %s", got, w[1])
 		}
 	case "not-counted":
 		// The request (without a password) does not count: ten more of

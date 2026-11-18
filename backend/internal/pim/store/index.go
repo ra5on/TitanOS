@@ -136,6 +136,10 @@ func inspectCard(data []byte) (*Entry, error) {
 	return e, nil
 }
 
+// PhoneDigits keeps the digits of a number and a leading + (the form of
+// Entry.Phones; addressbook-query compares a TEL text with it).
+func PhoneDigits(v string) string { return phoneDigits(v) }
+
 // phoneDigits keeps the digits of a number and a leading +.
 func phoneDigits(v string) string {
 	v = strings.TrimPrefix(strings.TrimSpace(v), "tel:")

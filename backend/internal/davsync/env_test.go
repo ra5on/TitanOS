@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,6 +67,15 @@ type env struct {
 	// passwords: "alex" and "bea" are device passwords of the accounts,
 	// "account" alex's account password (refused).
 	passwords map[string]string
+	// opens counts the opens of the volume (Volume hook): an unchanged
+	// state is served from RAM (disk sleep, TECHNIK 5.4).
+	opens atomic.Int32
+	// requestOpens are the opens during the last replayed request.
+	requestOpens int32
+	// churned counts the events of @churn (new names each time).
+	churned int
+	// saved are the values a sequence keeps (< save …, {saved:NAME}).
+	saved map[string]string
 }
 
 func newEnv(t *testing.T) *env {
@@ -77,8 +87,14 @@ func newEnv(t *testing.T) *env {
 			"bea":  {Name: "bea", Role: auth.RoleUser, Created: created.Add(time.Hour)},
 		},
 		volume: "disk1", dirs: map[string]string{"disk1": t.TempDir(), "disk2": t.TempDir()},
-		passwords: map[string]string{"account": "the-account-password"}}
+		passwords: map[string]string{"account": "the-account-password"}, saved: map[string]string{}}
 	st := store.New()
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The zone of the NAS: dates and floating times (never the machine's).
+	st.Local = func() *time.Location { return berlin }
 	st.Current = func(string) string {
 		e.mu.Lock()
 		defer e.mu.Unlock()
@@ -89,6 +105,7 @@ func newEnv(t *testing.T) *env {
 		volume := e.volume
 		dir := e.dirs[volume]
 		e.mu.Unlock()
+		e.opens.Add(1)
 		if volume == "" {
 			return nil, nil, volumedata.ErrUnavailable
 		}

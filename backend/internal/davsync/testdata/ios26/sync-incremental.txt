@@ -1,0 +1,73 @@
+# The device holds a token; elsewhere (the web API: the store directly)
+# one entry is added and one deleted. sync-collection with the token
+# answers exactly these two: the new one with its ETag, the deleted one
+# as a bare 404.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+@seed calendar privat old.ics old-event.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< save token sync-token
+
+@seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+@delete calendar privat old.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/><A:getcontenttype/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics d:getetag {etag:dentist.ics}
+< value /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics d:getcontenttype text/calendar
+< response /caldav/alex/calendars/privat/old.ics 404
+< no-prop /caldav/alex/calendars/privat/old.ics d:getetag
+< response-lacks /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics
+< sync-token-not {saved:token}
+< save token2 sync-token
+
+# A change of the calendar's properties moves the token but names no entry.
+> PROPPATCH /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:I="http://apple.com/ns/ical/"><A:set><A:prop><I:calendar-color>#FF9500FF</I:calendar-color></A:prop></A:set></A:propertyupdate>
+< status 207
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token2}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< sync-token-not {saved:token2}
+
+# An entry changed twice and then deleted is reported once, deleted.
+@seed calendar privat twice.ics running.ics
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save token3 sync-token
+
+@delete calendar privat twice.ics
+@seed calendar privat twice.ics running.ics
+@delete calendar privat twice.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token3}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 1
+< response /caldav/alex/calendars/privat/twice.ics 404

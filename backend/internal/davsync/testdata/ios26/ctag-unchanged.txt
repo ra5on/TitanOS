@@ -1,0 +1,156 @@
+# getctag of the home set and of each collection (TECHNIK 5.4): equal
+# while nothing changes, and then the home set's PROPFIND answers from RAM
+# without opening the volume (disk sleep: an iPhone asks every 15
+# minutes). Every PUT, DELETE and PROPPATCH moves both.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+@seed contacts kontakte A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf erika.vcf
+# As after a restart: RAM knows nothing yet.
+@volume disk1
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/><A:sync-token/><A:displayname/><A:resourcetype/></A:prop></A:propfind>
+< status 207
+< volume-opens +
+< save home prop /caldav/alex/calendars/ cs:getctag
+< save privat prop /caldav/alex/calendars/privat/ cs:getctag
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/><A:sync-token/><A:displayname/><A:resourcetype/></A:prop></A:propfind>
+< status 207
+< volume-opens 0
+< value /caldav/alex/calendars/ cs:getctag {saved:home}
+< value /caldav/alex/calendars/privat/ cs:getctag {saved:privat}
+
+# The collection itself and a sync without changes need no disk either.
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:getetag/></A:prop></A:propfind>
+< status 207
+< volume-opens 0
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< volume-opens 0
+
+> PROPFIND /carddav/alex/addressbooks/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< save book prop /carddav/alex/addressbooks/kontakte/ cs:getctag
+
+> PROPFIND /carddav/alex/addressbooks/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< volume-opens 0
+< value /carddav/alex/addressbooks/kontakte/ cs:getctag {saved:book}
+
+# PUT moves both ctags.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> If-None-Match: *
+> Body: dentist.ics
+< status 201
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< volume-opens 0
+< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}
+< value-lacks /caldav/alex/calendars/privat/ cs:getctag {saved:privat}
+< save home prop /caldav/alex/calendars/ cs:getctag
+< save privat prop /caldav/alex/calendars/privat/ cs:getctag
+
+# A PUT of the same bytes changes nothing.
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar
+> Body: dentist.ics
+< status 204
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< value /caldav/alex/calendars/ cs:getctag {saved:home}
+< value /caldav/alex/calendars/privat/ cs:getctag {saved:privat}
+
+# DELETE moves both.
+> DELETE /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 204
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}
+< value-lacks /caldav/alex/calendars/privat/ cs:getctag {saved:privat}
+< save home prop /caldav/alex/calendars/ cs:getctag
+< save privat prop /caldav/alex/calendars/privat/ cs:getctag
+
+# PROPPATCH moves both.
+> PROPPATCH /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:"><A:set><A:prop><A:displayname>Zuhause</A:displayname></A:prop></A:set></A:propertyupdate>
+< status 207
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}
+< value-lacks /caldav/alex/calendars/privat/ cs:getctag {saved:privat}
+< save home prop /caldav/alex/calendars/ cs:getctag
+
+# A new calendar moves the home set's ctag.
+> MKCALENDAR /caldav/alex/calendars/arbeit/
+> Auth: alex
+< status 201
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< volume-opens 0
+< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}

@@ -1,0 +1,107 @@
+# limit/nresults (RFC 6578 3.6/3.7): more changes than the limit give the
+# first ones, a 507 for the collection with number-of-matches-within-
+# limits and a token that goes on right after them.
+@seed calendar privat a.ics weekly-team.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< save token sync-token
+
+# Three changes elsewhere, then limit 1.
+@seed calendar privat b.ics dentist.ics
+@seed calendar privat c.ics running.ics
+@delete calendar privat a.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token}</A:sync-token><A:sync-level>1</A:sync-level><A:limit><A:nresults>1</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/b.ics d:getetag {etag:dentist.ics}
+< response /caldav/alex/calendars/privat/ 507
+< response-error /caldav/alex/calendars/privat/ d:number-of-matches-within-limits
+< sync-token-not {saved:token}
+< save page1 sync-token
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:page1}</A:sync-token><A:sync-level>1</A:sync-level><A:limit><A:nresults>1</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/c.ics d:getetag {etag:running.ics}
+< response /caldav/alex/calendars/privat/ 507
+< save page2 sync-token
+
+# The rest without a limit; then nothing is left.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:page2}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 1
+< response /caldav/alex/calendars/privat/a.ics 404
+< save done sync-token
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:done}</A:sync-token><A:sync-level>1</A:sync-level><A:limit><A:nresults>1</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< sync-token-is {saved:done}
+
+# The first listing in pages (RFC 6578 3.11): by name, the token goes on
+# after the last name given.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:limit><A:nresults>1</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/b.ics d:getetag {etag:dentist.ics}
+< response /caldav/alex/calendars/privat/ 507
+< save first sync-token
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:first}</A:sync-token><A:sync-level>1</A:sync-level><A:limit><A:nresults>5</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 1
+< value /caldav/alex/calendars/privat/c.ics d:getetag {etag:running.ics}
+< sync-token-is {saved:done}
+
+# A limit that is no positive number is 400; one over 1000 is taken as 1000.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:limit><A:nresults>0</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 400
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:limit><A:nresults>zehn</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 400
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:limit><A:nresults>99999</A:nresults></A:limit><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2

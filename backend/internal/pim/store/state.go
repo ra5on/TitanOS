@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -123,40 +124,124 @@ type Change struct {
 type ChangeSet struct {
 	Token   string
 	Changes []Change
+	// Truncated: more changes follow (RFC 6578 3.6); Token continues
+	// right after the ones given.
+	Truncated bool
+}
+
+// syncToken is a parsed sync token: <epoch>/<seq> ("the state at seq"),
+// or <epoch>/<seq>/<hex name> while a listing of the whole collection
+// goes on in pages: the client has the entries up to the name (by name),
+// and nothing it was told before seq is stale.
+type syncToken struct {
+	epoch     string
+	seq       int64
+	cursor    string
+	hasCursor bool
+}
+
+func (t syncToken) String() string {
+	s := SyncTokenPrefix + t.epoch + "/" + strconv.FormatInt(t.seq, 10)
+	if t.hasCursor {
+		s += "/" + hex.EncodeToString([]byte(t.cursor))
+	}
+	return s
+}
+
+func parseSyncToken(token string) (syncToken, bool) {
+	rest, ok := strings.CutPrefix(token, SyncTokenPrefix)
+	if !ok {
+		return syncToken{}, false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) < 2 || len(parts) > 3 || parts[0] == "" {
+		return syncToken{}, false
+	}
+	seq, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || seq < 0 || strconv.FormatInt(seq, 10) != parts[1] {
+		return syncToken{}, false
+	}
+	t := syncToken{epoch: parts[0], seq: seq}
+	if len(parts) == 3 {
+		name, err := hex.DecodeString(parts[2])
+		if err != nil || len(name) == 0 || len(name) > MaxNameBytes {
+			return syncToken{}, false
+		}
+		t.cursor, t.hasCursor = string(name), true
+	}
+	return t, true
 }
 
 // changes answers sync-collection: everything for an empty token, else
-// the latest state of each name changed after it.
-func (st *State) changes(token string) (ChangeSet, error) {
+// the latest state of each name changed after it. limit > 0 cuts the
+// answer after that many (RFC 6578 3.6/3.7) with a token that goes on
+// right after them:
+//   - A listing of everything (empty token, or a cursor token) goes by
+//     name; cut after name X, the token is <seq>/<X> with the seq of the
+//     listing's start, so later changes to the names already given come
+//     again.
+//   - Then (or for a plain token) the names changed after the token, by
+//     the seq of their latest change; cut after the n-th, the token is
+//     that seq: every name left out changed after it.
+//
+// The page itself is sorted by name.
+func (st *State) changes(token string, limit int) (ChangeSet, error) {
+	from := syncToken{epoch: st.Epoch, seq: st.Seq, hasCursor: true}
+	if token != "" {
+		t, ok := parseSyncToken(token)
+		if !ok || t.epoch != st.Epoch || t.seq > st.Seq {
+			return ChangeSet{}, ErrInvalidSyncToken
+		}
+		if t.seq < st.Seq && (len(st.Log) == 0 || t.seq < st.Log[0].Seq-1) {
+			return ChangeSet{}, ErrInvalidSyncToken // older than the log
+		}
+		from = t
+	}
 	out := ChangeSet{Token: st.SyncToken(), Changes: []Change{}}
-	if token == "" {
+	listed := map[string]bool{}
+	if from.hasCursor {
 		for _, name := range sortedNames(st.Index) {
+			if name <= from.cursor {
+				continue
+			}
+			if limit > 0 && len(out.Changes) == limit {
+				out.Truncated = true
+				out.Token = syncToken{epoch: st.Epoch, seq: from.seq, cursor: out.Changes[len(out.Changes)-1].Name, hasCursor: true}.String()
+				return out, nil
+			}
 			out.Changes = append(out.Changes, Change{Name: name, ETag: st.Index[name].ETag})
+			listed[name] = true
 		}
-		return out, nil
 	}
-	rest, ok := strings.CutPrefix(token, SyncTokenPrefix)
-	epoch, seqText, ok2 := strings.Cut(rest, "/")
-	seq, err := strconv.ParseInt(seqText, 10, 64)
-	if !ok || !ok2 || err != nil || epoch != st.Epoch || seq < 0 || seq > st.Seq {
-		return ChangeSet{}, ErrInvalidSyncToken
-	}
-	if seq < st.Seq && (len(st.Log) == 0 || seq < st.Log[0].Seq-1) {
-		return ChangeSet{}, ErrInvalidSyncToken // older than the log
-	}
-	latest := map[string]bool{}
+	// The latest change of each name after the token, oldest first.
+	latest := map[string]int64{}
 	for _, l := range st.Log {
-		if l.Seq > seq && l.Name != "" {
-			latest[l.Name] = true
+		if l.Seq > from.seq && l.Name != "" {
+			latest[l.Name] = l.Seq
 		}
 	}
-	for _, name := range slices.Sorted(maps.Keys(latest)) {
+	names := slices.SortedFunc(maps.Keys(latest), func(a, b string) int { return cmp.Compare(latest[a], latest[b]) })
+	for _, name := range names {
+		if listed[name] {
+			continue
+		}
+		if limit > 0 && len(out.Changes) == limit {
+			out.Truncated = true
+			last := out.Changes[len(out.Changes)-1].Name
+			out.Token = syncToken{epoch: st.Epoch, seq: latest[last]}.String()
+			if listed[last] {
+				// Only the listing fits: go on from its start.
+				out.Token = syncToken{epoch: st.Epoch, seq: from.seq, cursor: last, hasCursor: true}.String()
+			}
+			break
+		}
 		if e := st.Index[name]; e != nil {
 			out.Changes = append(out.Changes, Change{Name: name, ETag: e.ETag})
 		} else {
 			out.Changes = append(out.Changes, Change{Name: name, Deleted: true})
 		}
 	}
+	slices.SortFunc(out.Changes, func(a, b Change) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
 }
 

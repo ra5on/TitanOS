@@ -1,4 +1,4 @@
-iOS-like request sequences (TECHNIK 8.2 steps 6 and 7), replayed by TestIOS26
+iOS-like request sequences (TECHNIK 8.2 steps 6, 7 and 8), replayed by TestIOS26
 (ios26_test.go) against the real davsync handler over TLS, with a real
 pim/store on a temporary volume and real device passwords. Written by hand
 after what iOS 26 sends (sabre.io/dav/clients/ios, RFC 6764); to be
@@ -12,6 +12,8 @@ Every *.txt but this file is one sequence; steps run in order on one server.
   @collection calendar <id> <name>   another calendar of alex
   @volume off|disk1|disk2            system data volume gone / back / another, empty one
   @redirect 308                      status of /.well-known (default 301)
+  @delete calendar|contacts <collection> <name>   entry of alex deleted elsewhere (store)
+  @churn <calendar> N                N new events of alex in one import (N changes)
 
   > METHOD /path                     a request
   > Header: value                    headers; pseudo headers:
@@ -39,6 +41,13 @@ Expectations ({etag:<fixture>} is the quoted ETag of a fixture):
                                        one DAV:privilege element each
   data HREF <fixture>                calendar-data/address-data equals the fixture
   error ns:name                      a DAV:error body with this precondition
+  response-error HREF ns:name        the response of HREF has a DAV:error with it
+  value-lacks HREF ns:name text      a 200 property without the text
+  save NAME header H | save NAME sync-token | save NAME prop HREF ns:name
+                                     keep a value; {saved:NAME} in paths, headers,
+                                     bodies and expectations
+  sync-token-is text | sync-token-not text   the DAV:sync-token of the multistatus
+  volume-opens N | volume-opens +    opens of the volume during the request
   not-counted                        ten more of this request never lock, the device
                                        signs in right after
 

@@ -214,7 +214,8 @@ func (r *recordingDevices) Synced(account, device, kind, addr string, volumeOpen
 }
 
 // "Last synced" after an answer that succeeded; volumeOpen only where the
-// volume was read anyway (GET, multiget), not for answers from RAM.
+// volume was read anyway (GET, a REPORT with calendar-data), not for
+// answers from RAM.
 func TestSynced(t *testing.T) {
 	e := newEnv(t)
 	rec := &recordingDevices{Manager: e.devices}
@@ -230,7 +231,10 @@ func TestSynced(t *testing.T) {
 		{"HEAD", "/caldav/alex/calendars/privat/a.ics", "", &syncedCall{"alex", "", "caldav", false}},
 		{"GET", "/caldav/alex/calendars/privat/a.ics", "", &syncedCall{"alex", "", "caldav", true}},
 		{"GET", "/carddav/alex/addressbooks/kontakte/c.vcf", "", &syncedCall{"alex", "", "carddav", true}},
-		{"REPORT", "/caldav/alex/calendars/privat/", multiget, &syncedCall{"alex", "", "caldav", true}},
+		// A multiget only of ETags is answered from RAM; with the data it reads the volume.
+		{"REPORT", "/caldav/alex/calendars/privat/", multiget, &syncedCall{"alex", "", "caldav", false}},
+		{"REPORT", "/caldav/alex/calendars/privat/", strings.Replace(multiget, "<D:getetag/>", "<D:getetag/><C:calendar-data/>", 1), &syncedCall{"alex", "", "caldav", true}},
+		{"REPORT", "/caldav/alex/calendars/privat/", `<D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:sync-level>1</D:sync-level><D:prop><D:getetag/></D:prop></D:sync-collection>`, &syncedCall{"alex", "", "caldav", false}},
 		{"GET", "/caldav/alex/calendars/privat/missing.ics", "", nil},
 		{"PROPFIND", "/caldav/bea/", "", nil},
 	} {

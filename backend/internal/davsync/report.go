@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/pim/store"
@@ -12,20 +13,26 @@ import (
 // reportKey is the root element of a REPORT body.
 type reportKey = xml.Name
 
-// report serves one REPORT of a kind on the levels it names. Step 8 adds
-// calendar-query, addressbook-query and sync-collection (named in
-// supported-report-set already) to readReports; until then they answer
-// 403 DAV:supported-report.
+// report serves one REPORT of a kind ("" = both) on the levels it names.
 type report struct {
 	kind   store.Kind
 	levels levels
 	serve  func(rq *request, body *node)
 }
 
+// readReports are the reports of collectionReports (supported-report-set
+// names exactly these): the multigets, the queries (query.go) and
+// sync-collection (sync.go). The Depth header is not looked at: every
+// report answers for the members of the collection (RFC 6578 defines
+// sync-collection for Depth 0, RFC 4791/6352 the queries for Depth 1;
+// clients send either).
 func readReports() map[reportKey]report {
 	return map[reportKey]report{
 		calName("calendar-multiget"):     {kind: store.Calendar, levels: on(levelCollection), serve: (*request).multiget},
 		cardName("addressbook-multiget"): {kind: store.Contacts, levels: on(levelCollection), serve: (*request).multiget},
+		calName("calendar-query"):        {kind: store.Calendar, levels: on(levelCollection), serve: (*request).calendarQuery},
+		cardName("addressbook-query"):    {kind: store.Contacts, levels: on(levelCollection), serve: (*request).addressbookQuery},
+		davName("sync-collection"):       {levels: on(levelCollection), serve: (*request).syncCollection},
 	}
 }
 
@@ -39,7 +46,7 @@ func (rq *request) report() {
 		return
 	}
 	rep, ok := rq.h.reports[body.Name]
-	if !ok || rep.kind != rq.t.kind || !rep.levels.has(rq.t.level) {
+	if !ok || (rep.kind != "" && rep.kind != rq.t.kind) || !rep.levels.has(rq.t.level) {
 		writeXMLError(rq.w, http.StatusForbidden, davName("supported-report"))
 		return
 	}
@@ -65,12 +72,20 @@ func hrefOut(raw string) string {
 	return raw
 }
 
+// member is one entry of a REPORT answer: found (info from the index in
+// RAM) or a status of its own (404).
+type member struct {
+	href   string
+	name   string
+	info   store.ObjectInfo
+	status int
+}
+
 // multiget answers calendar-multiget and addressbook-multiget (RFC 4791
 // 7.9, RFC 6352 8.7): at most MaxHrefs, each one missing, outside the
 // collection or not an entry 404. The index in RAM decides first (so no
 // volume is 503 before any byte goes out); then the entries are read and
-// streamed one by one. A read that fails after the answer began aborts
-// the connection: never a 404 for an entry that exists.
+// streamed one by one.
 func (rq *request) multiget(body *node) {
 	st, ok := rq.store()
 	if !ok {
@@ -91,61 +106,88 @@ func (rq *request) multiget(body *node) {
 		return
 	}
 	pr := parsePropRequest(body)
-	type item struct {
-		href  string
-		name  string
-		found bool
-	}
-	items := make([]item, 0, len(hrefs))
+	members := make([]member, 0, len(hrefs))
 	for _, h := range hrefs {
-		it := item{href: hrefOut(h.Text)}
+		m := member{href: hrefOut(h.Text), status: http.StatusNotFound}
 		if name, ok := entryOf(t, h.Text); ok {
-			_, err := st.Stat(t.kind, t.account, t.collection, name)
+			info, err := st.Stat(t.kind, t.account, t.collection, name)
 			switch {
 			case err == nil:
-				it.name, it.found = name, true
+				m.name, m.info, m.status = name, info, 0
 			case !notFound(err):
 				rq.fail(err)
 				return
 			}
 		}
-		items = append(items, it)
+		members = append(members, m)
 	}
 	ms := newMultistatus(rq.w)
+	if rq.streamMembers(st, ms, members, pr) {
+		ms.finish()
+	}
+}
+
+// wantsData reports whether a prop request asks for calendar-data or
+// address-data (never part of allprop, RFC 4791 9.6).
+func wantsData(pr propRequest, data xml.Name) bool {
+	return pr.mode != modeName && slices.Contains(pr.names, data)
+}
+
+// memberHref is the canonical href of an entry of the collection.
+func (rq *request) memberHref(name string) string {
+	e := rq.t.at(levelEntry)
+	e.name = name
+	return e.href()
+}
+
+// streamMembers writes the responses of a REPORT; false when it answered
+// otherwise (nothing streamed yet). Everything up to here
+// came from RAM; the bytes of an entry are read from the volume only when
+// calendar-data/address-data is asked for, one entry at a time. Before the
+// first byte a failed read is answered as such (503); after it the
+// connection is aborted: never a 404 for an entry that exists, never a
+// 207 that ends early as if complete.
+func (rq *request) streamMembers(st *store.Store, ms *multistatus, members []member, pr propRequest) bool {
+	t := rq.t
 	data := dataName(t.kind)
-	for _, it := range items {
+	read := wantsData(pr, data)
+	for _, m := range members {
 		if rq.r.Context().Err() != nil {
 			// The account was forgotten or the client went away.
 			if !ms.started {
 				rq.unavailable()
-				return
+				return false
 			}
 			panic(http.ErrAbortHandler)
 		}
-		if !it.found {
-			ms.add(Response{Href: it.href, Status: http.StatusNotFound})
+		if m.status != 0 {
+			ms.add(Response{Href: m.href, Status: m.status})
 			continue
 		}
-		obj, err := st.Get(t.kind, t.account, t.collection, it.name)
-		switch {
-		case err == nil:
-		case notFound(err):
-			// Deleted since the index was asked.
-			ms.add(Response{Href: it.href, Status: http.StatusNotFound})
-			continue
-		case !ms.started:
-			rq.fail(err)
-			return
-		default:
-			rq.journal("multiget aborted", err)
-			panic(http.ErrAbortHandler)
-		}
-		rq.volumeOpen = true
 		e := t.at(levelEntry)
-		e.name = it.name
-		res := &resource{t: e, obj: &store.ObjectInfo{Name: it.name, Entry: store.Entry{ETag: obj.ETag, Size: int64(len(obj.Data)), MTime: obj.MTime}}}
-		extra := map[xml.Name]extraProp{data: func() (Elem, bool) { return textElem(data, string(obj.Data)), true }}
-		ms.add(Response{Href: it.href, Propstats: rq.propstats(res, pr, extra)})
+		e.name = m.name
+		info := m.info
+		var extra map[xml.Name]extraProp
+		if read {
+			obj, err := st.Get(t.kind, t.account, t.collection, m.name)
+			switch {
+			case err == nil:
+			case notFound(err):
+				// Deleted since the index was asked.
+				ms.add(Response{Href: m.href, Status: http.StatusNotFound})
+				continue
+			case !ms.started:
+				rq.fail(err)
+				return false
+			default:
+				rq.journal("report aborted", err)
+				panic(http.ErrAbortHandler)
+			}
+			rq.volumeOpen = true
+			info = store.ObjectInfo{Name: m.name, Entry: store.Entry{ETag: obj.ETag, Size: int64(len(obj.Data)), MTime: obj.MTime}}
+			extra = map[xml.Name]extraProp{data: func() (Elem, bool) { return textElem(data, string(obj.Data)), true }}
+		}
+		ms.add(Response{Href: m.href, Propstats: rq.propstats(&resource{t: e, obj: &info}, pr, extra)})
 	}
-	ms.finish()
+	return true
 }

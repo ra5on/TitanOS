@@ -1,0 +1,104 @@
+# sync-collection (RFC 6578) with an empty token: every entry with its
+# ETag, no deleted ones, and a token. The same token again: nothing
+# changed, the same token back. The address book likewise; group vCards
+# are part of it.
+@seed calendar privat 2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+@seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+@seed contacts kontakte A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf erika.vcf
+@seed contacts kontakte B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E.vcf group-family.vcf
+
+> PROPFIND /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:"><A:prop><A:sync-token/><A:supported-report-set/></A:prop></A:propfind>
+< status 207
+< save collection-token prop /caldav/alex/calendars/privat/ d:sync-token
+< value /caldav/alex/calendars/privat/ d:supported-report-set <d:sync-collection/>
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics d:getetag {etag:weekly-team.ics}
+< value /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics d:getetag {etag:dentist.ics}
+< sync-token-is {saved:collection-token}
+< save token sync-token
+< body-has https://ns.titanos.invalid/sync/
+
+# Nothing changed: no response, the same token.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< sync-token-is {saved:token}
+
+# sync-level infinite is answered like 1 (a calendar holds no
+# collections); the data may be asked for, too.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><A:sync-token/><A:sync-level>infinite</A:sync-level><A:prop><A:getetag/><C:calendar-data/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< data /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+< data /caldav/alex/calendars/privat/2F0E6A64-1B7C-4E5A-9C1D-6A8E0B3D4C21.ics weekly-team.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>2</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 400
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 400
+
+# The virtual default of another account has nothing yet: an empty list
+# with the token of the virtual collection (never 404 or 503).
+> REPORT /caldav/bea/calendars/privat/
+> Auth: bea
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< sync-token-is https://ns.titanos.invalid/sync/0/0
+
+# Not another account's calendar, nor a missing one.
+> REPORT /caldav/bea/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 404
+
+> REPORT /caldav/alex/calendars/fehlt/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 404
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/><C:address-data/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< data /carddav/alex/addressbooks/kontakte/B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E.vcf group-family.vcf
+< data /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf erika.vcf

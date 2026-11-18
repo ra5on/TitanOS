@@ -254,6 +254,17 @@ func TestDeviceDAVWrites(t *testing.T) {
 	if b, _ := io.ReadAll(res.Body); res.StatusCode != http.StatusOK || string(b) != ics {
 		t.Errorf("GET: %d, %d bytes", res.StatusCode, len(b))
 	}
+	// The reports through the chain: sync-collection and calendar-query.
+	sync := `<A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>`
+	res = send("REPORT", "/caldav/alex/calendars/privat/", sync, map[string]string{"Content-Type": "application/xml"})
+	if b, _ := io.ReadAll(res.Body); res.StatusCode != http.StatusMultiStatus || !strings.Contains(string(b), "chain.ics") || !strings.Contains(string(b), "<d:sync-token>") {
+		t.Errorf("sync-collection: %d %s", res.StatusCode, b)
+	}
+	query := `<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20000101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>`
+	res = send("REPORT", "/caldav/alex/calendars/privat/", query, map[string]string{"Content-Type": "application/xml", "Depth": "1"})
+	if b, _ := io.ReadAll(res.Body); res.StatusCode != http.StatusMultiStatus || !strings.Contains(string(b), "chain.ics") {
+		t.Errorf("calendar-query: %d %s", res.StatusCode, b)
+	}
 	if res := send("MKCALENDAR", "/caldav/alex/calendars/neu/", "", nil); res.StatusCode != http.StatusCreated {
 		t.Errorf("MKCALENDAR: %d", res.StatusCode)
 	}

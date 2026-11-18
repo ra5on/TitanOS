@@ -71,6 +71,39 @@
 < status 503
 < header Retry-After 300
 
+# Every report: 503 before any 207 (never an empty list).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
 > GET /carddav/alex/addressbooks/kontakte/A5B7C9D1-E3F5-4789-9ABC-DEF012345678.vcf
 > Auth: alex
 < status 503
@@ -178,6 +211,39 @@
 > Auth: alex
 > Depth: 0
 < status 503
+
+# Every report: 503 before any 207 (never an empty list).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><C:filter/></C:addressbook-query>
+< status 503
+< header Retry-After 300
+
+> REPORT /carddav/alex/addressbooks/kontakte/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 503
+< header Retry-After 300
 
 # Writes on another volume without the account's data: 503 with Retry-After, nothing written.
 > PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics

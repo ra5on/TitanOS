@@ -360,6 +360,9 @@ type Response struct {
 	Href      string
 	Status    int
 	Propstats []Propstat
+	// Error is the content of a DAV:error after the status (RFC 4918
+	// 14.24: the 507 of a cut REPORT names number-of-matches-within-limits).
+	Error []Elem
 }
 
 // Propstat is the properties of one status.
@@ -403,11 +406,14 @@ func (m *multistatus) add(r Response) {
 		children = append(children, textElem(davName("status"), statusLine(r.Status)))
 	}
 	children = append(children, propstatElems(r.Propstats)...)
+	if len(r.Error) > 0 {
+		children = append(children, elem(davName("error"), r.Error...))
+	}
 	m.x.elem(elem(davName("response"), children...))
 }
 
 // finish ends the answer; tail follows the responses (the sync-token of
-// sync-collection, step 8).
+// sync-collection).
 func (m *multistatus) finish(tail ...Elem) {
 	m.start()
 	for _, e := range tail {

@@ -1,0 +1,44 @@
+# An all-day event on 25.10.2026, the day the clocks go back in Berlin
+# (the zone of the NAS): the day has 25 hours, 24.10. 22:00Z to 25.10.
+# 23:00Z. A naive UTC day (25.10. 00:00Z–26.10. 00:00Z) gets the second
+# and third query wrong, a day of 24 hours the first.
+@seed calendar privat umstellung.ics allday.ics
+
+# The 25th hour (22:30–23:00Z on 25.10.) is still the day.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261025T223000Z" end="20261025T230000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+
+# After 23:00Z it is the 26th in Berlin.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261025T233000Z" end="20261026T000000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 0
+
+# The day begins at 22:00Z on 24.10. (00:00 CEST).
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261024T223000Z" end="20261024T230000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261024T213000Z" end="20261024T220000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 0

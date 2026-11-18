@@ -155,6 +155,13 @@ func (s *Store) collectionFor(kind Kind, account, col string) (*collection, erro
 // (deleted ones with Deleted). A token of another epoch or older than the
 // log is ErrInvalidSyncToken.
 func (s *Store) Changes(kind Kind, account, col, token string) (ChangeSet, error) {
+	return s.ChangesLimit(kind, account, col, token, 0)
+}
+
+// ChangesLimit is Changes with at most limit changes (0 = all); a cut
+// answer is Truncated and its token goes on after the changes given
+// (RFC 6578 3.6, 3.7). The token and the list are one snapshot.
+func (s *Store) ChangesLimit(kind Kind, account, col, token string, limit int) (ChangeSet, error) {
 	c, err := s.collectionFor(kind, account, col)
 	if err != nil {
 		return ChangeSet{}, err
@@ -164,7 +171,7 @@ func (s *Store) Changes(kind Kind, account, col, token string) (ChangeSet, error
 	if c.deleted {
 		return ChangeSet{}, ErrNotFound
 	}
-	return c.st.changes(token)
+	return c.st.changes(token, limit)
 }
 
 // Counts are the events (calendar files) and contacts (without groups) of

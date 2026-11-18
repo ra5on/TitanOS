@@ -1,7 +1,8 @@
 // Package davsync serves CalDAV and CardDAV to iPhones and Macs (TECHNIK
 // 1.4, 1.5, 4.1): discovery, PROPFIND, GET/HEAD and the multiget reports;
 // PUT, DELETE, MKCALENDAR, extended MKCOL and PROPPATCH (write.go,
-// proppatch.go); sync-collection/queries (step 8) slot into the tables of
+// proppatch.go); sync-collection (sync.go), calendar-query and
+// addressbook-query (query.go). Everything hangs off the tables of
 // methods (methods.go), reports (report.go) and properties (props.go).
 // Only the standard library and encoding/xml: the bytes stored by
 // pim/store are served as they came, go-ical and go-vcard stay in pim.

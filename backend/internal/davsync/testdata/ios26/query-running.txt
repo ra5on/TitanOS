@@ -1,0 +1,37 @@
+# A range in the middle of a running event (08:00–09:00Z, range
+# 08:30–08:45Z on 17.11.2026) matches; the weekly series that day at
+# 10:00 Berlin (09:00Z) does not.
+@seed calendar privat fruehstueck.ics running.ics
+@seed calendar privat sport.ics weekly-tuesday.ics
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261117T083000Z" end="20261117T084500Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+< value /caldav/alex/calendars/privat/fruehstueck.ics d:getetag {etag:running.ics}
+
+# The end of the event is not part of it; a running occurrence of the
+# series is.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261117T090000Z" end="20261117T091500Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+< value /caldav/alex/calendars/privat/sport.ics d:getetag {etag:weekly-tuesday.ics}
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261124T093000Z"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>
+< status 207
+< responses 1
+< response-lacks /caldav/alex/calendars/privat/fruehstueck.ics

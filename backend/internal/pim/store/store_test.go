@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1153,4 +1154,131 @@ func TestSeen(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(e.dir, ".titanos/calendar/alex", seenFile)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Paged sync (RFC 6578 3.6/3.7): a client that applies each page and goes
+// on with its token ends with exactly the server's entries and ETags, also
+// when entries change between the pages (initial listing and later
+// syncs, every limit).
+func TestSyncChangesPaged(t *testing.T) {
+	for _, limit := range []int{1, 2, 3, 7} {
+		e := newEnv(t)
+		s := e.store()
+		n := 0
+		edit := func(i int) {
+			name := fmt.Sprintf("e%02d.ics", i%23)
+			n++
+			if i%5 == 4 {
+				_ = s.DeleteObject(Calendar, "alex", "privat", name, "")
+				return
+			}
+			mustPut(t, s, Calendar, "privat", name, ics("u"+name, fmt.Sprint("S", n), "20261110T080000Z"))
+		}
+		for i := range 30 {
+			edit(i)
+		}
+		client := map[string]string{}
+		apply := func(cs ChangeSet) {
+			for _, c := range cs.Changes {
+				if c.Deleted {
+					delete(client, c.Name)
+				} else {
+					client[c.Name] = c.ETag
+				}
+			}
+		}
+		token, round := "", 0
+		for pass := range 4 {
+			for {
+				cs, err := s.ChangesLimit(Calendar, "alex", "privat", token, limit)
+				if err != nil {
+					t.Fatalf("limit %d pass %d: %v", limit, pass, err)
+				}
+				if len(cs.Changes) > limit {
+					t.Fatalf("limit %d: %d changes", limit, len(cs.Changes))
+				}
+				apply(cs)
+				token = cs.Token
+				round++
+				if round%4 != 0 {
+					edit(round * 3) // a change between the pages (not always: the queue must drain)
+				}
+				if !cs.Truncated {
+					break
+				}
+			}
+			// Settle: sync without changes in between.
+			for {
+				cs, err := s.ChangesLimit(Calendar, "alex", "privat", token, limit)
+				if err != nil {
+					t.Fatal(err)
+				}
+				apply(cs)
+				token = cs.Token
+				if !cs.Truncated {
+					break
+				}
+			}
+			objs, _ := s.Objects(Calendar, "alex", "privat")
+			want := map[string]string{}
+			for _, o := range objs {
+				want[o.Name] = o.ETag
+			}
+			if !maps.Equal(client, want) {
+				t.Fatalf("limit %d pass %d: client %v, server %v", limit, pass, client, want)
+			}
+		}
+	}
+	// A cut initial listing: the first page, a 507-able cut, the token
+	// goes on by name; a bad cursor is an invalid token.
+	e := newEnv(t)
+	s := e.store()
+	for _, n := range []string{"a.ics", "b.ics", "c.ics"} {
+		mustPut(t, s, Calendar, "privat", n, ics("u"+n, "X", "20261110T080000Z"))
+	}
+	first, err := s.ChangesLimit(Calendar, "alex", "privat", "", 1)
+	if err != nil || !first.Truncated || len(first.Changes) != 1 || first.Changes[0].Name != "a.ics" {
+		t.Fatalf("first page: %+v %v", first, err)
+	}
+	rest, err := s.ChangesLimit(Calendar, "alex", "privat", first.Token, 0)
+	if err != nil || rest.Truncated || len(rest.Changes) != 2 || rest.Token != loadToken(t, s) {
+		t.Fatalf("rest: %+v %v", rest, err)
+	}
+	// A name already listed changes before the next page: it comes again.
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("ua.ics", "Y", "20261110T080000Z"))
+	second, err := s.ChangesLimit(Calendar, "alex", "privat", first.Token, 1)
+	if err != nil || !second.Truncated || len(second.Changes) != 1 || second.Changes[0].Name != "b.ics" {
+		t.Fatalf("second page: %+v %v", second, err)
+	}
+	var seen []string
+	for tok := second.Token; ; {
+		cs, err := s.ChangesLimit(Calendar, "alex", "privat", tok, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cs.Changes {
+			seen = append(seen, c.Name)
+		}
+		tok = cs.Token
+		if !cs.Truncated {
+			break
+		}
+	}
+	if !slices.Equal(seen, []string{"c.ics", "a.ics"}) {
+		t.Fatalf("after the second page: %v", seen)
+	}
+	for _, bad := range []string{first.Token + "zz", first.Token + "/x", strings.TrimSuffix(first.Token, "/"+strings.Split(first.Token, "/")[len(strings.Split(first.Token, "/"))-1]) + "/"} {
+		if _, err := s.ChangesLimit(Calendar, "alex", "privat", bad, 1); !errors.Is(err, ErrInvalidSyncToken) {
+			t.Fatalf("token %q: %v", bad, err)
+		}
+	}
+}
+
+func loadToken(t *testing.T, s *Store) string {
+	t.Helper()
+	c, err := s.GetCollection(Calendar, "alex", "privat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.SyncToken
 }

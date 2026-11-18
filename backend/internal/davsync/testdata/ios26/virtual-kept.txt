@@ -12,6 +12,15 @@
 < responses 2
 < value /caldav/alex/calendars/privat/ cs:getctag 0-0
 
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< sync-token-is https://ns.titanos.invalid/sync/0/0
+
 > MKCALENDAR /caldav/alex/calendars/arbeit/
 > Auth: alex
 >
@@ -44,6 +53,25 @@
 > Auth: alex
 < status 200
 < body dentist.ics
+
+# "privat" is real now, with a new epoch: the token of the virtual one is
+# 403 valid-sync-token, the iPhone syncs it once in full and keeps it.
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>https://ns.titanos.invalid/sync/0/0</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 1
+< value /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics d:getetag {etag:dentist.ics}
 
 # Deleting "arbeit" leaves "privat"; "privat" is the last one then.
 > DELETE /caldav/alex/calendars/arbeit/
