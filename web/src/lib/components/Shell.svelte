@@ -19,6 +19,7 @@
 	import { loadClusterNodes } from '#lib/cluster.svelte.ts';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import Toasts from './Toasts.svelte';
+	import { watchReminders } from '#lib/pim/reminders.svelte.ts';
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
@@ -245,6 +246,10 @@
 		if (!inWindow) return watchAppBadge();
 	});
 	$effect(() => watchStorage());
+	// 1.13: the reminders of events as hints where the toasts are (the desktop, not its windows).
+	$effect(() => {
+		if (!inWindow) return watchReminders();
+	});
 </script>
 
 <svelte:window onkeydown={hotkey} />

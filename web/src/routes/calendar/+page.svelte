@@ -76,6 +76,7 @@
 	import MiniMonth from '#lib/pim/cal/MiniMonth.svelte';
 	import MonthView from '#lib/pim/cal/MonthView.svelte';
 	import ScopeChoices from '#lib/pim/cal/ScopeChoices.svelte';
+	import ReminderSettings from '#lib/pim/cal/ReminderSettings.svelte';
 	import { TaskData } from '#lib/pim/cal/task-data.svelte.ts';
 	import TaskDialog from '#lib/pim/cal/TaskDialog.svelte';
 	import TaskSide from '#lib/pim/cal/TaskSide.svelte';
@@ -400,6 +401,7 @@
 					onnewlist={() => (calDialog = { tasks: true })}
 				/>
 			{/if}
+			<ReminderSettings phone={compact} />
 		{/if}
 	</div>
 {/snippet}

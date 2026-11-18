@@ -236,16 +236,18 @@ try {
       })),
     );
     // 1.13: blocks stand by their minutes; a longer title scrolls in its
-    // block and shows whole while pointed at.
+    // block, shows whole while focused and as the tooltip.
     const long = boxes.find((b) => b.text.includes(LONG_TITLE));
     assert.ok(long, "the long title is whole");
     const longBlk = col.locator(".blk", { hasText: "Hausverwaltung" });
-    await longBlk.hover();
+    await longBlk.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
     assert.ok(
       await longBlk.evaluate((el) => el.offsetHeight >= el.scrollHeight - 1),
-      "pointed at, the long event shows whole",
+      "focused, the long event shows whole",
     );
-    await page.mouse.move(5, 5);
+    assert.match(await longBlk.getAttribute("title"), /Nebenkostenabrechnung/);
     for (const a of boxes)
       for (const b of boxes)
         if (a !== b && a.lane === b.lane)

@@ -845,6 +845,12 @@ export async function installCalendar(target, state = calendarState()) {
           if (body.scope === "this" && e !== one) continue;
           if (typeof ev.title === "string") e.title = ev.title;
           if (typeof ev.location === "string") e.location = ev.location;
+          // 1.13: a dragged event (start/end as RFC 3339 or dates).
+          if (typeof ev.start === "string" && body.scope !== "all") {
+            e.start = ev.start;
+            e.end = ev.end;
+            e.allDay = !!ev.allDay;
+          }
           if (body.calendar) e.calendar = body.calendar;
         }
         return json({

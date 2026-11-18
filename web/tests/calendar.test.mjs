@@ -283,6 +283,9 @@ test('reminders in parts for the words', () => {
 	assert.deepEqual(alarmWords(360, true), { kind: 'dayAt', days: 1, time: '18:00' });
 	assert.deepEqual(alarmWords(900, true), { kind: 'dayAt', days: 1, time: '09:00' });
 	assert.deepEqual(alarmWords(0, true), { kind: 'dayAt', days: 0, time: '00:00' });
+	// 1.13: on the day at 09:00 is after the start (TRIGGER:PT9H).
+	assert.deepEqual(alarmWords(-540, true), { kind: 'dayAt', days: 0, time: '09:00' });
+	assert.deepEqual(alarmWords(-540, false), { kind: 'start' });
 	assert.deepEqual(alarmWords(9540, true), { kind: 'dayAt', days: 7, time: '09:00' });
 });
 
@@ -340,7 +343,7 @@ test('API answers are checked: text stays text, unknown shapes are dropped', () 
 			byDay: ['3TU'],
 			text: { de: 'jeden Monat', en: 'monthly' },
 		},
-		alarms: [60, 'x', -5],
+		alarms: [60, 'x', -1440],
 		occurrences: 9,
 	});
 	assert.equal(ev.title, '<img src=x onerror=alert(1)>');

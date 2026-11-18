@@ -317,6 +317,8 @@ export type SystemInfo = {
 	networkPendingSeconds: number;
 	/** Number of the newest message; 0 if there is none or the account may not see them. */
 	notificationsLatest: number;
+	/** 1.13: the newest hint of a reminder of the account's events ("<epoch>-<seq>"). */
+	remindersLatest?: string;
 };
 
 export type Preferences = {

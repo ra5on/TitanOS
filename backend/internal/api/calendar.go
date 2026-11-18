@@ -35,6 +35,10 @@ const maxHiddenCalendars = 100
 func validCalendarPrefs(value json.RawMessage) bool {
 	var p struct {
 		Hidden *[]string `json:"hidden"`
+		// 1.13: the hints of reminders in TitanOS (default on) and a push
+		// to the account's devices (default off).
+		Hints *bool `json:"reminderHints"`
+		Push  *bool `json:"reminderPush"`
 	}
 	if json.Unmarshal(value, &p) != nil {
 		return false
@@ -51,6 +55,28 @@ func validCalendarPrefs(value json.RawMessage) bool {
 		}
 	}
 	return true
+}
+
+// mergeCalendarPrefs puts the keys of put over the stored ones; only the
+// known keys stay.
+func mergeCalendarPrefs(stored, put json.RawMessage) (json.RawMessage, error) {
+	merged := map[string]json.RawMessage{}
+	if stored != nil && (json.Unmarshal(stored, &merged) != nil || merged == nil) {
+		merged = map[string]json.RawMessage{}
+	}
+	var change map[string]json.RawMessage
+	if err := json.Unmarshal(put, &change); err != nil {
+		return nil, err
+	}
+	for k, v := range change {
+		merged[k] = v
+	}
+	for k := range merged {
+		if k != "hidden" && k != "reminderHints" && k != "reminderPush" {
+			delete(merged, k)
+		}
+	}
+	return json.Marshal(merged)
 }
 
 type calendarView struct {

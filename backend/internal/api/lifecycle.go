@@ -24,6 +24,8 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	s.pending = nil
+	// 1.13: the reminders of events, planned from the store (RAM only).
+	s.startReminders()
 	return errors.Join(errs...)
 }
 

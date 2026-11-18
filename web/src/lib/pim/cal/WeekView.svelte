@@ -9,8 +9,8 @@
 	// their own. Every block is placed from its minutes alone – top and
 	// height from start and end (at least half an hour, as overlapLanes
 	// counts it), so nothing lies on another and nothing is measured; a
-	// title longer than its block scrolls inside it and shows whole while
-	// the pointer or the focus is on it. The hours scroll to 07:00 (earlier
+	// title longer than its block scrolls inside it, shows whole while the
+	// block has the focus and as its tooltip. The hours scroll to 07:00 (earlier
 	// for an earlier event) when the view opens or shows other days, never
 	// when the events are read again.
 	// Changing (desktop, own calendars): a block is dragged to another time
@@ -365,6 +365,7 @@
 							class:short={length < 50}
 							data-key={it.key}
 							data-lane={it.lane}
+							title={`${eventTitle(it.ev)} · ${partTime(it.part)}`}
 							style:--c={calColor(c?.color ?? '')}
 							style:top="{px(it.part.from)}px"
 							style:--h="{px(Math.max(length, SHORTEST))}px"
@@ -618,8 +619,8 @@
 		box-shadow: 0 0 0 1px var(--surface);
 		cursor: pointer;
 	}
-	/* … and shows whole while pointed at or focused. */
-	.blk:hover,
+	/* … and shows whole while focused (pointed at: its tooltip – the
+	   resize edge does not move away under the pointer). */
 	.blk:focus-visible {
 		height: auto;
 		min-height: var(--h);

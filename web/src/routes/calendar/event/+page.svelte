@@ -94,6 +94,29 @@
 		const v = params.get('time') ?? '';
 		return /^\d{2}:\d{2}$/.test(v) ? v : '09:00';
 	})();
+	// 1.13 (dragging in the week, later the agent): more of a new event in
+	// the address – its end (`end` HH:MM on `endDate` or the start's day) or
+	// length (`duration` in minutes, 1 … 10 080), all day (`allDay=1`, to
+	// `endDate`), place, notes and calendar. Each bounded; anything else is
+	// left out. Only a draft: nothing is saved before "Sichern".
+	const oneLine = (v: string | null, max: number) =>
+		(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+	const startAllDay = params.get('allDay') === '1';
+	const startPlace = oneLine(params.get('location'), 500);
+	const startNotes = (params.get('notes') ?? '').replace(/\r\n?/g, '\n').slice(0, 4000);
+	const startCalendar = oneLine(params.get('calendar'), 100);
+	const startEnd = (() => {
+		const v = params.get('end') ?? '';
+		return /^\d{2}:\d{2}$/.test(v) ? v : '';
+	})();
+	const startEndDate = (() => {
+		const v = params.get('endDate') ?? '';
+		return validDate(v) ? v : '';
+	})();
+	const startDuration = (() => {
+		const n = Number(params.get('duration') ?? '');
+		return Number.isInteger(n) && n > 0 && n <= 10080 ? n : 0;
+	})();
 
 	type Form = {
 		title: string;
@@ -112,21 +135,36 @@
 		const m = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + 60;
 		return m >= 1440 ? { day: 1, time: clock(m - 1440) } : { day: 0, time: clock(m) };
 	};
-	function blank(zone = viewZone()): Form {
+	/** The end of a new event: from the address, else an hour after the start. */
+	function endOf(startDay: string): { date: string; time: string } {
+		const startMin = Number(startClock.slice(0, 2)) * 60 + Number(startClock.slice(3, 5));
+		if (startDuration) {
+			const total = startMin + startDuration;
+			return { date: addDays(startDay, Math.floor(total / 1440)), time: clock(total % 1440) };
+		}
+		if (startEnd || startEndDate) {
+			const date = startEndDate && startEndDate >= startDay ? startEndDate : startDay;
+			const time = startEnd || startClock;
+			if (startAllDay || wallMinutes(startDay, startClock, date, time) > 0) return { date, time };
+		}
 		const end = plusHour(startClock);
+		return { date: addDays(startDay, end.day), time: end.time };
+	}
+	function blank(zone = viewZone()): Form {
 		const startDay = startDayIn(zone);
+		const end = endOf(startDay);
 		return {
 			title: startTitle,
 			calendar: '',
-			allDay: false,
+			allDay: startAllDay,
 			startDate: startDay,
 			startTime: startClock,
-			endDate: addDays(startDay, end.day),
+			endDate: end.date,
 			endTime: end.time,
 			repeat: { kind: 'none', interval: 1, end: 'never', until: '', count: 10 },
 			alarms: [],
-			location: '',
-			notes: '',
+			location: startPlace,
+			notes: startNotes,
 		};
 	}
 	function formOf(ev: CalEvent): Form {
@@ -180,6 +218,7 @@
 				form = formOf(event);
 			} else {
 				const first =
+					calendars.find((c) => c.id === startCalendar && c.kind === 'own' && !c.readOnly) ??
 					calendars.find((c) => c.kind === 'own' && !c.readOnly && !c.hidden) ??
 					calendars.find((c) => c.kind === 'own' && !c.readOnly);
 				form = { ...blank(nasZone), calendar: first?.id ?? '' };

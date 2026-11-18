@@ -2,7 +2,7 @@ package api
 
 // registerPower registers the routes of the system overview and restart or shutdown.
 func (s *Server) registerPower(mux *routeMux) {
-	systemArea{monitor: s.opts.Monitor, version: s.opts.Version, network: s.opts.Network, accelerators: s.opts.Accelerators, notify: s.opts.Notify}.register(mux, s.requireUser)
+	systemArea{monitor: s.opts.Monitor, version: s.opts.Version, network: s.opts.Network, accelerators: s.opts.Accelerators, notify: s.opts.Notify, reminders: s.reminders.latest}.register(mux, s.requireUser)
 	s.powerArea().register(mux, s.requireAdmin)
 	// Task manager (PLAN 61): owners and administrators, never tokens/MCP.
 	processesArea{procs: s.opts.Processes, docker: s.opts.Docker, names: &s.containerNames}.register(mux, s.requireAdmin, s.browserOnly)
