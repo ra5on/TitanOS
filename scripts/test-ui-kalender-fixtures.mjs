@@ -397,6 +397,8 @@ export function calendarState() {
     timezone: "Europe/Berlin",
     /** The next PUT/DELETE of an event answers calendar_conflict. */
     conflictOnce: false,
+    /** GET /calendar/events says truncated (titand's cap of 10 000 occurrences, S-20). */
+    truncated: false,
     importResult: {
       added: 3,
       updated: 1,
@@ -602,7 +604,7 @@ export async function installCalendar(target, state = calendarState()) {
           s.hidden.includes("geburtstage") ? [] : s.birthdays.filter(inWindow),
         )
         .sort((a, b) => new Date(a.start) - new Date(b.start));
-      return json({ events: list, truncated: false });
+      return json({ events: list, truncated: s.truncated });
     }
     if (path === "/calendar/events" && method === "POST") {
       const id = `neu-${s.created.length + 1}.ics`;

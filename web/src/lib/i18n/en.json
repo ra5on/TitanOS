@@ -9378,7 +9378,7 @@
 	"calendar.birthdayOf": "Birthday: {name}",
 	"calendar.birthdayAge": "Birthday: {name} ({age})",
 	"calendar.settingsOf": "{name}: settings",
-	"calendar.truncated": "There are too many events in this period; not all of them are shown.",
+	"calendar.truncated": "Not all events are shown: there are too many in this period. A shorter view (week or day) shows more.",
 	"calendar.repeats": "repeats",
 	"calendar.withAlarm": "with reminder",
 	"calendar.now": "Now, {time}",

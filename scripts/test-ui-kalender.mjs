@@ -12,7 +12,8 @@
 // summary, delete in its own dialog, calendar_last as text, hide with the
 // word "ausgeblendet". The event form new (request asserted) and changed
 // (scope asked, only the changed field sent), danger zone. Unavailable
-// (503 and volume:false) shows the message, never a grid. English once.
+// (503 and volume:false) shows the message, never a grid. Truncated
+// (titand's cap of occurrences) shows a note. English once.
 // Phone 390 px light and dark: list with the week on top, month with dashes,
 // the form; targets ≥ 44 px. Once in a real desktop window, with "Ablage ›
 // Neuer Termin" opening the event window. Every view: no sideways scroll,
@@ -728,6 +729,37 @@ try {
     );
     await sound(page, `unavailable ${mode}`);
     if (mode === "503") await shot(page, "nicht-verfuegbar");
+    await ctx.close();
+  }
+
+  // ---- Too many events (S-20): titand says truncated, the page says so ----
+  for (const lang of ["de", "en"]) {
+    const { page, ctx } = await open({
+      lang,
+      change: (s) => (s.truncated = true),
+    });
+    await page.goto(base + "/calendar");
+    await ready(page, "month");
+    const note = page.locator('.notice-warn[role="status"]');
+    await note.waitFor();
+    assert.match(
+      await note.innerText(),
+      lang === "de"
+        ? /Nicht alle Termine angezeigt/
+        : /Not all events are shown/,
+    );
+    await sound(page, `truncated ${lang}`);
+    await ctx.close();
+  }
+  {
+    const { page, ctx } = await open();
+    await page.goto(base + "/calendar");
+    await ready(page, "month");
+    assert.equal(
+      await page.locator('.notice-warn[role="status"]').count(),
+      0,
+      "no note without truncated",
+    );
     await ctx.close();
   }
 
