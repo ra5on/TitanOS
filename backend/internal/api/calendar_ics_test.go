@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -181,8 +182,14 @@ func fold(s string) string {
 }
 
 // measuredImport imports and reports time and the peak of the heap above
-// what it was before (sampled every 5 ms).
+// what it was before (sampled every 5 ms). The heap counts garbage until
+// the next collection, and the collector waits for a share of the whole
+// live heap of the test binary: after many tests in one run that share
+// alone came near the budget (+30-32 MiB in a run of most of the package,
+// +21 MiB alone). A low GOGC while measuring keeps the peak about what the
+// import holds.
 func (e *calEnv) measuredImport(cal string, data []byte) (importResult, time.Duration, int64) {
+	defer debug.SetGCPercent(debug.SetGCPercent(10))
 	runtime.GC()
 	var base runtime.MemStats
 	runtime.ReadMemStats(&base)
