@@ -46,6 +46,10 @@ const (
 // the tests); what is found by then is answered.
 var searchTime = 45 * time.Second
 
+// searchLines bounds fetching the lines of the hits (at most
+// maxSearchHits mails in at most as many folders).
+var searchLines = 30 * time.Second
+
 // hasCriteria tells whether a query searches for something.
 func (q ListQuery) hasCriteria() bool {
 	return strings.TrimSpace(q.Q) != "" || strings.TrimSpace(q.From) != "" || q.Attachment || !q.Since.IsZero() ||
@@ -171,9 +175,17 @@ func (m *Manager) Search(ctx context.Context, user, id string, q ListQuery) (Sea
 		}
 		byFolder[h.folder] = append(byFolder[h.folder], h.uid)
 	}
+	// The lines have a time of their own: a server that is slow now ends
+	// the search with what it has (truncated), not with an error.
+	lineCtx, cancel := context.WithTimeout(ctx, searchLines)
+	defer cancel()
 	lines := map[string]map[uint32]Summary{}
 	for _, folder := range order {
-		list, err := m.summaries(ctx, user, id, folder, byFolder[folder])
+		list, err := m.summaries(lineCtx, user, id, folder, byFolder[folder])
+		if errors.Is(err, ErrTimeout) && ctx.Err() == nil {
+			res.Truncated = true
+			break
+		}
 		if err != nil && !errors.Is(err, ErrNotFound) {
 			return res, err
 		}

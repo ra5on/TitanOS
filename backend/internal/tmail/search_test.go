@@ -140,6 +140,16 @@ func TestSearchLimits(t *testing.T) {
 	if err != nil || !res.Truncated || res.Folders > 1 {
 		t.Fatalf("out of time: %+v %v", res, err)
 	}
+	// Out of time for the lines: what was found is no error, only truncated.
+	searchTime = old
+	oldLines := searchLines
+	searchLines = 0
+	t.Cleanup(func() { searchLines = oldLines })
+	e.deliver("INBOX", plainMail("bob@example.net", "Auch spät", "x"))
+	res, err = e.m.Search(ctx, "alex", id, ListQuery{Q: "spät"})
+	if err != nil || !res.Truncated || len(res.Messages) != 0 || res.Total != 1 {
+		t.Fatalf("lines out of time: %+v %v", res, err)
+	}
 }
 
 func TestArchiveAndForwarded(t *testing.T) {

@@ -205,3 +205,21 @@ test('Shift ranges follow the shown order', () => {
 	expect(rangeOf(order, 'x', 'c')).toEqual(['c']);
 	expect(rangeOf(order, 'a', 'x')).toEqual([]);
 });
+
+test('sender pictures: only an own key of the list; "constructor" or "__proto__" are no contact', async () => {
+	const { render } = await import('@testing-library/svelte');
+	const { default: SenderAvatar } = await import('#lib/tmail/SenderAvatar.svelte');
+	const { avatars } = await import('#lib/tmail/store.svelte.ts');
+	// A plain object on purpose: the lookup itself must not reach the prototype.
+	avatars.photos = { 'anna@example.org': 'anna.vcf' };
+	const anna = render(SenderAvatar, { from: { name: 'Anna', addr: 'Anna@Example.org' } });
+	expect(anna.container.querySelector('img')?.getAttribute('src')).toContain(
+		'/contacts/kontakte/anna.vcf/photo',
+	);
+	expect(anna.container.querySelector('img')?.getAttribute('alt')).toBe('');
+	for (const addr of ['constructor', '__proto__', 'toString']) {
+		const other = render(SenderAvatar, { from: { name: '', addr } });
+		expect(other.container.querySelector('img')).toBeNull();
+		expect(other.container.querySelector('.letters')).not.toBeNull();
+	}
+});

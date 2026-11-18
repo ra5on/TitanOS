@@ -72,7 +72,7 @@ export function resetMail() {
 	mail.error = '';
 	mail.folders = {};
 	mail.folderErrors = {};
-	avatars.photos = {};
+	avatars.photos = Object.create(null);
 	avatars.loaded = false;
 }
 
@@ -99,7 +99,9 @@ export async function loadAvatars(): Promise<void> {
 	avatars.loaded = true;
 	try {
 		const got = await mailApi.avatars();
-		const photos: Record<string, string> = {};
+		// Addresses come from cards a device wrote: no prototype, so that
+		// "__proto__" or "constructor" are plain keys (1.12 review).
+		const photos: Record<string, string> = Object.create(null);
 		if (got && typeof got.photos === 'object' && got.photos)
 			for (const [addr, id] of Object.entries(got.photos))
 				if (typeof id === 'string' && id) photos[addr.toLowerCase()] = id;

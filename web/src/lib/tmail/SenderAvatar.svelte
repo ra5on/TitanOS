@@ -12,7 +12,9 @@
 	let { from, size = 36 }: { from: Address | null | undefined; size?: number } = $props();
 
 	const addr = $derived((from?.addr ?? '').trim().toLowerCase());
-	const contact = $derived(addr ? avatars.photos[addr] : undefined);
+	const contact = $derived(
+		addr && Object.hasOwn(avatars.photos, addr) ? avatars.photos[addr] : undefined,
+	);
 	const src = $derived(contact ? photoURL(contact) : '');
 	let failed = $state('');
 </script>
