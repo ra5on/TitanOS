@@ -28,6 +28,10 @@ const (
 	// maxParamBytes bounds the parameter part of a content line; go-ical
 	// builds parameter values byte by byte, which is quadratic.
 	maxParamBytes = 8 << 10
+	// MaxZoneBytes bounds one VTIMEZONE as written (Options.MaxZone): a
+	// real zone has a few KiB, and an import copies the zone into every
+	// file that names it (S-19, S-21).
+	MaxZoneBytes = 64 << 10
 )
 
 var (
@@ -49,6 +53,10 @@ type Options struct {
 	MaxSize int
 	// MaxEvents overrides MaxEvents; 0 = MaxEvents.
 	MaxEvents int
+	// MaxZone bounds the bytes of one VTIMEZONE (BEGIN to END line, as
+	// written); 0 = no bound. The checks of a write set MaxZoneBytes;
+	// reading a stored file sets none, so it never drops out of a query.
+	MaxZone int
 }
 
 // File is a parsed calendar file.
@@ -118,7 +126,7 @@ func Read(b []byte, opt Options) (f *File, err error) {
 	if len(b) > maxSize {
 		return nil, fmt.Errorf("%w: larger than %d bytes", ErrLimit, maxSize)
 	}
-	if err := prescan(b, maxEvents); err != nil {
+	if err := prescan(b, maxEvents, opt.MaxZone); err != nil {
 		return nil, err
 	}
 	cal, err := decode(b)
@@ -192,9 +200,11 @@ func decode(b []byte) (cal *ical.Calendar, err error) {
 // nesting depth, number of components and VEVENTs, length of parameters.
 // It splits a line the way go-ical does: the name ends at the first ";"
 // or ":", so "BEGIN;X=1:VEVENT" is a BEGIN too; the value starts after the
-// first ":" outside quotes.
-func prescan(b []byte, maxEvents int) error {
+// first ":" outside quotes. With maxZone > 0 a VTIMEZONE of the calendar
+// may have at most that many bytes.
+func prescan(b []byte, maxEvents, maxZone int) error {
 	depth, comps, events := 0, 0, 0
+	total, lineStart, zoneStart := len(b), 0, -1
 	const (
 		inName = iota
 		inParams
@@ -202,11 +212,16 @@ func prescan(b []byte, maxEvents int) error {
 	)
 	var name, value []byte // upper-cased prefixes
 	phase, paramLen, inQuote := inName, 0, false
-	flush := func() error {
+	// flush ends the logical line that began at lineStart; end is where
+	// the next one begins.
+	flush := func(end int) error {
 		switch string(name) {
 		case "BEGIN":
 			depth++
 			comps++
+			if depth == 2 && strings.TrimSpace(string(value)) == ical.CompTimezone {
+				zoneStart = lineStart
+			}
 			if depth > MaxDepth {
 				return fmt.Errorf("%w: components nested deeper than %d", ErrLimit, MaxDepth)
 			}
@@ -220,6 +235,12 @@ func prescan(b []byte, maxEvents int) error {
 				}
 			}
 		case "END":
+			if depth == 2 && zoneStart >= 0 {
+				if maxZone > 0 && end-zoneStart > maxZone {
+					return fmt.Errorf("%w: a VTIMEZONE larger than %d bytes", ErrLimit, maxZone)
+				}
+				zoneStart = -1
+			}
 			depth--
 		}
 		name, value = name[:0], value[:0]
@@ -268,6 +289,7 @@ func prescan(b []byte, maxEvents int) error {
 	}
 	started := false
 	for len(b) > 0 {
+		pos := total - len(b)
 		i := bytes.IndexByte(b, '\n')
 		var seg []byte
 		if i < 0 {
@@ -283,17 +305,17 @@ func prescan(b []byte, maxEvents int) error {
 			continue
 		}
 		if started {
-			if err := flush(); err != nil {
+			if err := flush(pos); err != nil {
 				return err
 			}
 		}
-		started = true
+		started, lineStart = true, pos
 		if err := feed(seg); err != nil {
 			return err
 		}
 	}
 	if started {
-		return flush()
+		return flush(total)
 	}
 	return nil
 }

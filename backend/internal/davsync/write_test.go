@@ -159,6 +159,35 @@ func TestMkcalendarLimit(t *testing.T) {
 }
 
 // Every error of a write of the store has its answer; none is 500.
+// A VTIMEZONE over 64 KiB is refused as valid-calendar-data and nothing
+// is written; one just under it is stored (S-21).
+func TestPutBigZone(t *testing.T) {
+	e := newEnv(t)
+	zone := func(n int) string {
+		var b strings.Builder
+		b.WriteString("BEGIN:VTIMEZONE\r\nTZID:Pad/Zone\r\nBEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n")
+		for b.Len()+68+16 <= n {
+			b.WriteString("X-PAD:" + strings.Repeat("x", 60) + "\r\n")
+		}
+		b.WriteString("END:VTIMEZONE\r\n")
+		return b.String()
+	}
+	body := func(n int) string {
+		return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n" + zone(n) +
+			"BEGIN:VEVENT\r\nUID:big-zone\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Pad/Zone:20261102T090000\r\nSUMMARY:Zone\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	}
+	res, b := e.do(http.MethodPut, "/caldav/alex/calendars/privat/big.ics", "alex", map[string]string{"Content-Type": "text/calendar"}, strings.NewReader(body(70<<10)))
+	if res.StatusCode != http.StatusForbidden || !strings.Contains(string(b), "valid-calendar-data") {
+		t.Fatalf("PUT with a zone of 70 KiB: %d %s", res.StatusCode, b)
+	}
+	if objs, err := e.store.Objects(store.Calendar, "alex", "privat"); err != nil || len(objs) != 0 {
+		t.Fatalf("stored: %v %v", objs, err)
+	}
+	if res, b := e.do(http.MethodPut, "/caldav/alex/calendars/privat/big.ics", "alex", map[string]string{"Content-Type": "text/calendar"}, strings.NewReader(body(60<<10))); res.StatusCode != http.StatusCreated {
+		t.Fatalf("PUT with a zone of 60 KiB: %d %s", res.StatusCode, b)
+	}
+}
+
 func TestWriteFailure(t *testing.T) {
 	for _, c := range []struct {
 		err    error

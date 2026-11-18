@@ -267,6 +267,76 @@ func TestCalendarImportLarge(t *testing.T) {
 	}
 }
 
+// paddedZone is a VTIMEZONE of about n bytes (X-PAD lines).
+func paddedZone(tzid string, n int) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VTIMEZONE\r\nTZID:" + tzid + "\r\nBEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n")
+	for b.Len()+68+16 <= n {
+		b.WriteString("X-PAD:" + strings.Repeat("x", 60) + "\r\n")
+	}
+	b.WriteString("END:VTIMEZONE\r\n")
+	return b.String()
+}
+
+// zoneICS is an upload with the zones given and n tiny events naming the
+// first zone at DTSTART and the last at DTEND, then two without a zone.
+func zoneICS(n int, zones ...string) []byte {
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n")
+	var ids []string
+	for _, z := range zones {
+		b.WriteString(z)
+		id, _, _ := strings.Cut(strings.SplitN(z, "TZID:", 2)[1], "\r\n")
+		ids = append(ids, id)
+	}
+	for i := range n {
+		fmt.Fprintf(&b, "BEGIN:VEVENT\r\nUID:z%d\r\nDTSTAMP:20261101T000000Z\r\nDTSTART;TZID=%s:20261103T090000\r\nDTEND;TZID=%s:20261103T100000\r\nEND:VEVENT\r\n",
+			i, ids[0], ids[len(ids)-1])
+	}
+	b.WriteString("BEGIN:VEVENT\r\nUID:plain-1\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261104T090000Z\r\nEND:VEVENT\r\n")
+	b.WriteString("BEGIN:VEVENT\r\nUID:plain-2\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261105T090000Z\r\nEND:VEVENT\r\n")
+	b.WriteString("END:VCALENDAR\r\n")
+	return []byte(b.String())
+}
+
+// S-19: a VTIMEZONE is copied into every file that names it. A zone over
+// 64 KiB (the measured attack had 10 MB and 20 000 events, ~195 GiB of
+// files; here 640 KiB and 3000 events, ~1.9 GB unbounded) fails its
+// events as too_large without a file built; zones under the limit that
+// make the files far larger than the upload are written in batches, so
+// the heap stays within what the import reserves.
+func TestCalendarImportZoneAmplification(t *testing.T) {
+	e := newCalEnv(t)
+	e.do("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Zonen"}, http.StatusCreated, nil)
+	big := zoneICS(3000, paddedZone("Pad/Big", 10<<16))
+	out, took, extra := e.measuredImport("zonen", big)
+	t.Logf("zone of 640 KiB, 3000 events (%d KiB): %v, heap peak +%d MiB", len(big)>>10, took, extra>>20)
+	if out.Added != 2 || len(out.Failed) != maxImportFailures || out.Failed[0] != (calweb.Failure{UID: "z0", Reason: "too_large"}) {
+		t.Fatalf("import %+v", out.Added)
+	}
+	if budget := importFactor*int64(len(big)) + 2*int64(importBatchBytes) + importPerEvent*3002; extra > budget {
+		t.Fatalf("held %d MiB (reserved %d MiB)", extra>>20, budget>>20)
+	}
+	// Two zones of 60 KiB in each of 250 files: 30 MB of files from an
+	// upload of 180 KiB.
+	e.do("POST", "/api/v1/calendar/calendars", map[string]any{"name": "Viele"}, http.StatusCreated, nil)
+	many := zoneICS(250, paddedZone("Pad/One", 60<<10), paddedZone("Pad/Two", 60<<10))
+	out, took, extra = e.measuredImport("viele", many)
+	t.Logf("two zones of 60 KiB, 250 events (%d KiB): %v, heap peak +%d MiB", len(many)>>10, took, extra>>20)
+	if out.Added != 252 || len(out.Failed) != 0 {
+		t.Fatalf("import %+v", out)
+	}
+	// Alone the peak is about 4 MiB of the 6 reserved; in a run of the
+	// package the sampled heap has up to 2 MiB more of other tests'
+	// garbage (measuredImport). Without batches it would be 30 MiB.
+	if budget := importFactor*int64(len(many)) + 2*int64(importBatchBytes) + importPerEvent*252; extra > budget+4<<20 {
+		t.Fatalf("held %d MiB for %d KiB (reserved %d MiB, files %d MiB)", extra>>20, len(many)>>10, budget>>20, 250*120>>10)
+	}
+	if list := e.events("from=2026-11-01&to=2026-12-01&calendars=viele"); len(list.Events) != 252 || list.Events[0].Timezone != "Pad/One" {
+		t.Fatalf("events %d %+v", len(list.Events), list.Events[0])
+	}
+}
+
 // Export: one VCALENDAR, each VTIMEZONE once, a download that never runs
 // as a page; imported again it gives the same events.
 func TestCalendarExport(t *testing.T) {

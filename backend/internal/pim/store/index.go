@@ -31,7 +31,8 @@ func (s *Store) inspect(kind Kind, account, name string, data []byte) (*Entry, e
 	if len(data) > MaxICS {
 		return nil, ErrTooLarge
 	}
-	f, err := recur.Read(data, recur.Options{Local: s.local(), Account: account, Name: name})
+	// A write: one VTIMEZONE at most MaxZoneBytes (S-21).
+	f, err := recur.Read(data, recur.Options{Local: s.local(), Account: account, Name: name, MaxZone: recur.MaxZoneBytes})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidData, err)
 	}

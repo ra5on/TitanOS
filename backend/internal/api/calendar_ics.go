@@ -29,6 +29,12 @@ const (
 // maxImportFailures bounds the list of failed entries in the answer.
 const maxImportFailures = 500
 
+// importBatchBytes bounds the files an import builds before it writes
+// them (store.Import): a VTIMEZONE is copied into every file that names
+// it, so the files can be far larger than the upload (S-19). Each file is
+// at most pimstore.MaxICS; a variable only for tests.
+var importBatchBytes = 2 << 20
+
 type importResult struct {
 	Added   int              `json:"added"`
 	Updated int              `json:"updated"`
@@ -83,9 +89,10 @@ func (a pimDataArea) reserveImport(w http.ResponseWriter, bytes int64) (release 
 
 // handleImportCalendar imports an .ics file (multipart field "file",
 // at most 20 MB) into a calendar: one file per UID with the VTIMEZONEs it
-// needs, all written with one state.json (store.Import). A UID the
-// calendar has is skipped or, with onDuplicate=replace, replaced in its
-// file.
+// needs, written in batches of at most importBatchBytes (store.Import,
+// one state.json each). A file over pimstore.MaxICS, or naming a zone
+// over 64 KiB, fails as too_large before it is built. A UID the calendar
+// has is skipped or, with onDuplicate=replace, replaced in its file.
 func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request) {
 	store, ok := a.calendarStore(w)
 	if !ok {
@@ -113,7 +120,9 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 	if r.ContentLength > 0 && r.ContentLength < size {
 		size = r.ContentLength
 	}
-	release, ok := a.reserveImport(w, importFactor*size)
+	// The upload, its blocks, and one batch of files with the parse that
+	// checks them (measured: TestCalendarImportZoneAmplification).
+	release, ok := a.reserveImport(w, importFactor*size+2*int64(importBatchBytes))
 	if !ok {
 		return
 	}
@@ -183,27 +192,14 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 	out := importResult{Failed: append([]calweb.Failure{}, sp.Failed...)}
 	var items []pimstore.Item
 	var uids []string
-	for _, g := range sp.Groups {
-		file := sp.File(g)
-		if old, ok := byUID[g.UID]; ok {
-			if onDuplicate == "skip" || pimstore.ETag(file) == old.ETag {
-				out.Skipped++
-				continue
-			}
-			items = append(items, pimstore.Item{Name: old.Name, Data: file})
-		} else {
-			name := importName(pimstore.Calendar, g.UID, taken)
-			taken[name] = true
-			items = append(items, pimstore.Item{Name: name, Data: file})
+	batch := 0
+	flush := func() error {
+		if len(items) == 0 {
+			return nil
 		}
-		uids = append(uids, g.UID)
-	}
-	sp = nil
-	if len(items) > 0 {
 		results, err := store.Import(r.Context(), pimstore.Calendar, user, id, items)
 		if err != nil {
-			calendarFail(w, r, id, err, "calendar_not_found")
-			return
+			return err
 		}
 		for i, res := range results {
 			switch {
@@ -215,6 +211,45 @@ func (a pimDataArea) handleImportCalendar(w http.ResponseWriter, r *http.Request
 				out.Updated++
 			}
 		}
+		items, uids, batch = nil, nil, 0
+		return nil
+	}
+	for _, g := range sp.Groups {
+		old, dup := byUID[g.UID]
+		if dup && onDuplicate == "skip" {
+			out.Skipped++
+			continue
+		}
+		n, err := sp.Size(g)
+		if err != nil || n > pimstore.MaxICS {
+			out.Failed = append(out.Failed, calweb.Failure{UID: g.UID, Reason: "too_large"})
+			continue
+		}
+		if batch+n > importBatchBytes {
+			if err := flush(); err != nil {
+				calendarFail(w, r, id, err, "calendar_not_found")
+				return
+			}
+		}
+		file := sp.File(g)
+		if dup {
+			if pimstore.ETag(file) == old.ETag {
+				out.Skipped++
+				continue
+			}
+			items = append(items, pimstore.Item{Name: old.Name, Data: file})
+		} else {
+			name := importName(pimstore.Calendar, g.UID, taken)
+			taken[name] = true
+			items = append(items, pimstore.Item{Name: name, Data: file})
+		}
+		uids = append(uids, g.UID)
+		batch += n
+	}
+	sp = nil
+	if err := flush(); err != nil {
+		calendarFail(w, r, id, err, "calendar_not_found")
+		return
 	}
 	if len(out.Failed) > maxImportFailures {
 		out.Failed = out.Failed[:maxImportFailures]
@@ -256,6 +291,9 @@ func (a pimDataArea) handleExportCalendar(w http.ResponseWriter, r *http.Request
 			return
 		}
 		exp.Zones(obj.Data)
+	}
+	if exp.LeftOut > 0 {
+		slog.Info("Calendar: export without some time zones (over the limit); their events keep the TZID", "account", user, "calendar", id, "zones", exp.LeftOut)
 	}
 	h := w.Header()
 	h.Set("Content-Type", "text/calendar; charset=utf-8")

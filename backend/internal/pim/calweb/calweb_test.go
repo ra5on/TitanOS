@@ -1,6 +1,8 @@
 package calweb
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -189,6 +191,91 @@ func TestSplitICS(t *testing.T) {
 		if _, err := SplitICS([]byte(bad), NewUID); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+}
+
+// paddedZone is a VTIMEZONE of about n bytes (X-PAD lines), LF only.
+func paddedZone(tzid string, n int) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VTIMEZONE\nTZID:" + tzid + "\nBEGIN:STANDARD\nDTSTART:16010101T000000\nTZOFFSETFROM:+0100\nTZOFFSETTO:+0100\nEND:STANDARD\n")
+	for b.Len()+68+16 <= n {
+		b.WriteString("X-PAD:" + strings.Repeat("x", 60) + "\n")
+	}
+	b.WriteString("END:VTIMEZONE\n")
+	return b.String()
+}
+
+// A VTIMEZONE over 64 KiB is not kept: Size fails the groups that name
+// it, before a file is built; a long PRODID is not copied into every
+// file; Size is the length of File (S-19).
+func TestSplitBounds(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:" + strings.Repeat("p", 300) + "\nCALSCALE:GREGORIAN\n")
+	b.WriteString(paddedZone("Big/Zone", 10*recur.MaxZoneBytes))
+	b.WriteString(paddedZone("Big/Zone", 1000)) // the first one counts
+	// 64 KiB raw with LF, over it with CRLF.
+	b.WriteString(paddedZone("Grown/Zone", recur.MaxZoneBytes-500))
+	b.WriteString(paddedZone("Ok/Zone", 4000))
+	for i, id := range []string{"Big/Zone", "Grown/Zone", "Ok/Zone", "Ok/Zone"} {
+		fmt.Fprintf(&b, "BEGIN:VEVENT\nUID:e%d\nDTSTART;TZID=%s:20261103T090000\nDTEND;TZID=Ok/Zone:20261103T100000\nEND:VEVENT\n", i, id)
+	}
+	b.WriteString("END:VCALENDAR\n")
+	sp, err := SplitICS([]byte(b.String()), NewUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sp.Zones) != 1 || sp.Zones["Ok/Zone"] == "" || sp.ProdID != "" || sp.CalScale != "GREGORIAN" {
+		t.Fatalf("zones %d, prodid %q", len(sp.Zones), sp.ProdID)
+	}
+	for i, g := range sp.Groups {
+		n, err := sp.Size(g)
+		if i < 2 {
+			if !errors.Is(err, ErrZoneTooLarge) {
+				t.Errorf("group %s: %d %v", g.UID, n, err)
+			}
+			continue
+		}
+		file := sp.File(g)
+		if err != nil || n != len(file) {
+			t.Errorf("group %s: size %d %v, file %d", g.UID, n, err, len(file))
+		}
+		has(t, file, "PRODID:"+ProdID, "CALSCALE:GREGORIAN", "TZID:Ok/Zone")
+		if _, err := recur.Read(file, recur.Options{Local: berlin, MaxZone: recur.MaxZoneBytes}); err != nil {
+			t.Errorf("group %s: %v", g.UID, err)
+		}
+	}
+}
+
+// The zones of an export are bounded: past MaxExportZones they are left
+// out (counted), the events still written (S-21).
+func TestExportZonesBounded(t *testing.T) {
+	var out strings.Builder
+	exp := NewExport(&out)
+	n := MaxExportZones/(60<<10) + 5
+	var files [][]byte
+	for i := range n {
+		id := fmt.Sprintf("Zone/%d", i)
+		files = append(files, []byte(strings.ReplaceAll("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\n"+paddedZone(id, 60<<10)+
+			fmt.Sprintf("BEGIN:VEVENT\nUID:u%d\nDTSTART;TZID=%s:20261103T090000\nEND:VEVENT\nEND:VCALENDAR\n", i, id), "\n", "\r\n")))
+	}
+	for _, f := range files {
+		exp.Zones(f)
+		exp.Zones(f) // seen twice, counted once
+	}
+	if exp.bytes > MaxExportZones || exp.LeftOut == 0 || len(exp.order)+exp.LeftOut != n {
+		t.Fatalf("zones %d bytes, kept %d, left out %d of %d", exp.bytes, len(exp.order), exp.LeftOut, n)
+	}
+	if err := exp.Begin("Test"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if err := exp.Events(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = exp.End()
+	if got := strings.Count(out.String(), "BEGIN:VTIMEZONE"); got != len(exp.order) || strings.Count(out.String(), "BEGIN:VEVENT") != n {
+		t.Fatalf("export with %d zones, %d events", got, strings.Count(out.String(), "BEGIN:VEVENT"))
 	}
 }
 

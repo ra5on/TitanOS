@@ -614,6 +614,44 @@ func TestReadLimits(t *testing.T) {
 	}
 }
 
+// paddedZone is a VTIMEZONE "Pad/Zone" of about n bytes (X-PAD lines).
+func paddedZone(n int) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VTIMEZONE\r\nTZID:Pad/Zone\r\nBEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n")
+	for b.Len()+68+16 <= n { // a pad line, the END line
+		b.WriteString("X-PAD:" + strings.Repeat("x", 60) + "\r\n")
+	}
+	b.WriteString("END:VTIMEZONE\r\n")
+	return b.String()
+}
+
+// One VTIMEZONE may have MaxZoneBytes when MaxZone asks for it (the
+// checks of a write); a stored file is read without the bound (S-21).
+func TestReadZoneLimit(t *testing.T) {
+	file := func(zone string) []byte {
+		return []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n" + zone +
+			"BEGIN:VEVENT\r\nUID:z\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Pad/Zone:20261102T090000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	}
+	small, big := paddedZone(MaxZoneBytes-100), paddedZone(MaxZoneBytes+100)
+	if len(small) > MaxZoneBytes || len(big) <= MaxZoneBytes {
+		t.Fatalf("zones of %d and %d bytes", len(small), len(big))
+	}
+	if _, err := Read(file(small), Options{MaxZone: MaxZoneBytes}); err != nil {
+		t.Errorf("zone of %d bytes: %v", len(small), err)
+	}
+	if _, err := Read(file(big), Options{MaxZone: MaxZoneBytes}); !errors.Is(err, ErrLimit) {
+		t.Errorf("zone of %d bytes: %v", len(big), err)
+	}
+	// Folded and with LF only, the zone is counted as written.
+	lf := strings.ReplaceAll(strings.ReplaceAll(big, "X-PAD:xxxxx", "X-PAD:xx\r\n xxx"), "\r\n", "\n")
+	if _, err := Read(file(lf), Options{MaxZone: MaxZoneBytes}); !errors.Is(err, ErrLimit) {
+		t.Errorf("folded zone: %v", err)
+	}
+	if _, err := Read(file(big), Options{}); err != nil {
+		t.Errorf("stored file with a big zone: %v", err)
+	}
+}
+
 func dtValue(t time.Time) tz.Value { return tz.Value{Time: t, Kind: tz.KindUTC} }
 
 func TestPrescanSeesParameterisedBegin(t *testing.T) {

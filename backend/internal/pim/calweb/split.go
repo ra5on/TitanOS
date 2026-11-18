@@ -8,16 +8,29 @@ import (
 	"strings"
 
 	"github.com/emersion/go-ical"
+
+	"github.com/ra5on/TitanOS/backend/internal/pim/recur"
 )
 
 // ErrNotCalendar: the upload is no iCalendar file (400).
 var ErrNotCalendar = errors.New("calweb: not an iCalendar file")
+
+// ErrZoneTooLarge: a group names a VTIMEZONE over recur.MaxZoneBytes; its
+// file is not built (Split.Size, S-19).
+var ErrZoneTooLarge = errors.New("calweb: VTIMEZONE too large")
 
 // Bounds of a file split for an import.
 const (
 	// MaxSplitComponents bounds the components of one upload.
 	MaxSplitComponents = 100000
 	maxDepth           = 8
+	// maxHeadValue bounds PRODID and CALSCALE, copied into every file of
+	// an import: a longer one is not taken (TitanOS's PRODID instead).
+	maxHeadValue = 255
+	// MaxExportZones bounds the bytes of the VTIMEZONEs an export holds
+	// (each at most recur.MaxZoneBytes); zones over it are left out, the
+	// events keep their TZID (S-21).
+	MaxExportZones = 2 << 20
 )
 
 // Group is the events of one UID in an upload, with the VTIMEZONEs they
@@ -44,9 +57,12 @@ type Split struct {
 	ProdID, CalScale string
 	Groups           []*Group
 	// Zones are the VTIMEZONE blocks by TZID (the first of each).
-	Zones   map[string]string
-	Failed  []Failure
-	missing int
+	Zones  map[string]string
+	Failed []Failure
+	// bigZones are the TZIDs whose first VTIMEZONE is over
+	// recur.MaxZoneBytes: not kept, the groups naming them fail.
+	bigZones map[string]bool
+	missing  int
 }
 
 // contentLine is one content line of the upload: its bytes with the
@@ -228,10 +244,10 @@ func SplitICS(data []byte, newUID func() string) (*Split, error) {
 			cur = &block{comp: strings.ToUpper(string(bytes.TrimSpace(value))), start: cl.start, depth: 1}
 			depth = 2
 		case depth == 1:
-			if calendars == 1 && is(name, ical.PropProductID) && sp.ProdID == "" {
+			if calendars == 1 && is(name, ical.PropProductID) && sp.ProdID == "" && len(value) <= maxHeadValue {
 				sp.ProdID = string(value)
 			}
-			if calendars == 1 && is(name, ical.PropCalendarScale) && sp.CalScale == "" {
+			if calendars == 1 && is(name, ical.PropCalendarScale) && sp.CalScale == "" && len(value) <= maxHeadValue {
 				sp.CalScale = string(value)
 			}
 		case begin:
@@ -249,7 +265,11 @@ func SplitICS(data []byte, newUID func() string) (*Split, error) {
 			if !is(value, cur.comp) {
 				return nil, ErrNotCalendar
 			}
-			sp.finish(cur, crlfBlock(data[cur.start:cl.end]), byUID, newUID)
+			if cur.comp == ical.CompTimezone && cl.end-cur.start > recur.MaxZoneBytes {
+				sp.bigZone(cur.tzid) // not copied
+			} else {
+				sp.finish(cur, crlfBlock(data[cur.start:cl.end]), byUID, newUID)
+			}
 			cur = nil
 		default:
 			if cur.depth == 1 && is(name, ical.PropUID) && cur.uid == "" {
@@ -271,11 +291,27 @@ func SplitICS(data []byte, newUID func() string) (*Split, error) {
 	return sp, nil
 }
 
+// bigZone notes a VTIMEZONE over recur.MaxZoneBytes, unless its TZID
+// has a zone already (the first one counts).
+func (sp *Split) bigZone(tzid string) {
+	if _, ok := sp.Zones[tzid]; tzid == "" || ok {
+		return
+	}
+	if sp.bigZones == nil {
+		sp.bigZones = map[string]bool{}
+	}
+	sp.bigZones[tzid] = true
+}
+
 // finish files a block that has ended.
 func (sp *Split) finish(b *block, text string, byUID map[string]*Group, newUID func() string) {
 	switch b.comp {
 	case ical.CompTimezone:
-		if _, ok := sp.Zones[b.tzid]; b.tzid != "" && !ok {
+		if len(text) > recur.MaxZoneBytes { // grown by CRLF line ends
+			sp.bigZone(b.tzid)
+			return
+		}
+		if _, ok := sp.Zones[b.tzid]; b.tzid != "" && !ok && !sp.bigZones[b.tzid] {
 			sp.Zones[b.tzid] = text
 		}
 	case ical.CompEvent:
@@ -307,19 +343,45 @@ func (sp *Split) finish(b *block, text string, byUID map[string]*Group, newUID f
 	}
 }
 
-// File is the .ics file of one group: VCALENDAR with the PRODID of the
-// upload (or TitanOS's), the VTIMEZONEs it names, the events.
-func (sp *Split) File(g *Group) []byte {
-	var b bytes.Buffer
-	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n")
+const fileEnd = "END:VCALENDAR\r\n"
+
+// head is what each file of the split begins with: VCALENDAR with the
+// PRODID of the upload (or TitanOS's) and its CALSCALE.
+func (sp *Split) head() string {
 	prod := sp.ProdID
 	if prod == "" {
 		prod = ProdID
 	}
-	b.WriteString("PRODID:" + prod + "\r\n")
+	h := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:" + prod + "\r\n"
 	if sp.CalScale != "" {
-		b.WriteString("CALSCALE:" + sp.CalScale + "\r\n")
+		h += "CALSCALE:" + sp.CalScale + "\r\n"
 	}
+	return h
+}
+
+// Size is the length of File(g) without building it; ErrZoneTooLarge
+// when g names a VTIMEZONE over recur.MaxZoneBytes. An import checks it
+// before it builds a file: a zone is copied into every file that names
+// it (S-19).
+func (sp *Split) Size(g *Group) (int, error) {
+	n := len(sp.head()) + len(fileEnd)
+	for _, id := range g.TZIDs {
+		if sp.bigZones[id] {
+			return 0, ErrZoneTooLarge
+		}
+		n += len(sp.Zones[id])
+	}
+	for _, e := range g.Events {
+		n += len(e)
+	}
+	return n, nil
+}
+
+// File is the .ics file of one group: the head, the VTIMEZONEs it names,
+// the events.
+func (sp *Split) File(g *Group) []byte {
+	var b bytes.Buffer
+	b.WriteString(sp.head())
 	for _, id := range g.TZIDs {
 		if z, ok := sp.Zones[id]; ok {
 			b.WriteString(z)
@@ -328,7 +390,7 @@ func (sp *Split) File(g *Group) []byte {
 	for _, e := range g.Events {
 		b.WriteString(e)
 	}
-	b.WriteString("END:VCALENDAR\r\n")
+	b.WriteString(fileEnd)
 	return b.Bytes()
 }
 
@@ -336,12 +398,15 @@ func (sp *Split) File(g *Group) []byte {
 // files, so only the zones stay in RAM: Zones for each file, Begin (head
 // and each VTIMEZONE once, the first of each TZID), Events for each file
 // (every event as it is stored), End. A file that cannot be cut is
-// skipped.
+// skipped. The zones are bounded by MaxExportZones bytes.
 type Export struct {
 	w     io.Writer
 	zones map[string]string
 	order []string
-	err   error
+	bytes int
+	// LeftOut counts the zones over MaxExportZones (not written).
+	LeftOut int
+	err     error
 }
 
 // NewExport starts an export to w.
@@ -357,12 +422,18 @@ func (e *Export) Zones(data []byte) {
 	}
 	for _, g := range sp.Groups {
 		for _, id := range g.TZIDs {
-			if z, ok := sp.Zones[id]; ok {
-				if _, seen := e.zones[id]; !seen {
-					e.zones[id] = z
-					e.order = append(e.order, id)
-				}
+			z, ok := sp.Zones[id]
+			if _, seen := e.zones[id]; !ok || seen {
+				continue
 			}
+			if e.bytes+len(z) > MaxExportZones {
+				e.zones[id] = "" // seen, not written
+				e.LeftOut++
+				continue
+			}
+			e.zones[id] = z
+			e.order = append(e.order, id)
+			e.bytes += len(z)
 		}
 	}
 }
