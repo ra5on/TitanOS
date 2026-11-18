@@ -286,6 +286,21 @@ export async function installMail(target, state = mailState()) {
     s.requests.push([route.request().method(), `/users/${name}/mail`, null]);
     return route.fulfill({ json: { enabled: s.released[name] === true } });
   });
+  // 1.12: a contact's picture for the sender pictures (the contacts' route).
+  await target.route(/\/api\/v1\/contacts\/kontakte\/[^/]+\/photo/, (route) => {
+    s.requests.push(["GET", new URL(route.request().url()).pathname, null]);
+    if (s.photosGone)
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: "contacts_unavailable", message: "x" } },
+      });
+    return route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      headers: { "X-Content-Type-Options": "nosniff" },
+      body: Buffer.from(PNG, "base64"),
+    });
+  });
   await target.route(/\/api\/v1\/files\/list/, (route) => {
     const url = new URL(route.request().url());
     const dir = url.searchParams.get("path") ?? "";
@@ -427,6 +442,9 @@ export async function installMail(target, state = mailState()) {
       if (method === "PUT") s.settings = body;
       return json(s.settings);
     }
+    // 1.12: the contacts with a picture (their photo route answers below).
+    if (path === "/mail/avatars")
+      return json({ book: "kontakte", photos: s.avatars ?? {} });
     if (!(m = /^\/mail\/accounts\/([^/]+)\/(.+)$/.exec(path)))
       return fail(404, "not_found");
     const id = decodeURIComponent(m[1]);
@@ -446,8 +464,9 @@ export async function installMail(target, state = mailState()) {
         return fail(502, "mail_unreachable");
       return json(s.folders[id]);
     }
-    if (what === "messages") {
-      let list = [...(box[q("folder")] ?? [])].sort((x, y) => y.uid - x.uid);
+    // The filters of a list and of the search over all folders (1.12).
+    const filtered = (rows) => {
+      let list = [...rows].sort((x, y) => y.uid - x.uid);
       const needle = (q("q") ?? "").toLowerCase();
       if (needle)
         list = list.filter((r) =>
@@ -455,9 +474,54 @@ export async function installMail(target, state = mailState()) {
             .toLowerCase()
             .includes(needle),
         );
+      const sender = (q("from") ?? "").toLowerCase();
+      if (sender)
+        list = list.filter((r) =>
+          `${r.from?.name ?? ""} ${r.from?.addr ?? ""}`
+            .toLowerCase()
+            .includes(sender),
+        );
+      if (q("attachment") === "1") list = list.filter((r) => r.attachments);
+      if (q("since"))
+        list = list.filter((r) => r.date.slice(0, 10) >= q("since"));
+      if (q("until"))
+        list = list.filter((r) => r.date.slice(0, 10) <= q("until"));
       if (q("unread") === "1")
         list = list.filter((r) => r.flags && !r.flags.seen);
       if (q("flagged") === "1") list = list.filter((r) => r.flags?.flagged);
+      return list;
+    };
+    if (what === "search") {
+      const hits = [];
+      let total = 0;
+      for (const f of s.folders[id]) {
+        const found = filtered(box[f.path] ?? []);
+        total += found.length;
+        hits.push(...found.slice(0, 50).map((r) => ({ ...r, folder: f.path })));
+      }
+      hits.sort((x, y) => y.date.localeCompare(x.date));
+      return json({
+        messages: hits.slice(0, Number(q("limit") || 50)),
+        total,
+        folders: s.folders[id].length,
+        truncated: !!s.searchTruncated,
+      });
+    }
+    if (what === "archive") {
+      const target =
+        s.folders[id].find((f) => f.role === "archive")?.path ?? "Archive";
+      if (!s.folders[id].some((f) => f.path === target))
+        s.folders[id].push(folder(target, target, "archive"));
+      const from = box[body.folder] ?? [];
+      box[body.folder] = from.filter((r) => !body.uids.includes(r.uid));
+      box[target] = [
+        ...from.filter((r) => body.uids.includes(r.uid)),
+        ...(box[target] ?? []),
+      ];
+      return json({ to: target });
+    }
+    if (what === "messages") {
+      let list = filtered(box[q("folder")] ?? []);
       const total = list.length;
       const before = Number(q("before") || 0);
       if (before) list = list.filter((r) => r.uid < before);

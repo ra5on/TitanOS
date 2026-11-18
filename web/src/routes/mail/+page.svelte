@@ -177,12 +177,7 @@
 	function keydown(e: KeyboardEvent) {
 		if (helpOpen || document.querySelector('dialog[open]')) return;
 		const action = mailKey(e);
-		if (!action || !mail.accounts?.length) return;
-		if (action === 'help') {
-			e.preventDefault();
-			helpOpen = true;
-			return;
-		}
+		if (!action || action === 'help' || !mail.accounts?.length) return;
 		if (!list || !place.a || !place.f) return;
 		// On the phone and in narrow windows only where the list is seen.
 		if (
@@ -221,6 +216,18 @@
 		}
 	}
 
+	/**
+	 * "?" shows T-Mail's keys here instead of the shortcuts of the whole UI
+	 * (Shell): taken before the Shell's own listener on the window sees it.
+	 */
+	function helpKey(e: KeyboardEvent) {
+		if (helpOpen || document.querySelector('dialog[open]') || !mail.accounts?.length) return;
+		if (mailKey(e) !== 'help') return;
+		e.preventDefault();
+		e.stopPropagation();
+		helpOpen = true;
+	}
+
 	const title = $derived(level === 'folders' || !listHeading ? t('desktop.app.mail') : listHeading);
 
 	// The columns fill the window; each scrolls on its own.
@@ -256,7 +263,7 @@
 	const lw = $derived(Math.min(listWidth, listMax));
 </script>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window onkeydown={keydown} onkeydowncapture={helpKey} />
 
 <PageHead {title} />
 

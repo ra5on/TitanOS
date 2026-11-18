@@ -225,7 +225,9 @@ try {
     await mail.getByText(/ist gespeichert in Documents/).waitFor();
 
     // Flag, unread, move.
-    await mail.getByRole("button", { name: "Markieren", exact: true }).click();
+    // 1.12: the list's quick actions have the same words; the message's bar.
+    const bar = mail.getByRole("toolbar", { name: "Aktionen für diese Nachricht" });
+    await bar.getByRole("button", { name: "Markieren", exact: true }).click();
     await until(
       () => sent(state, "POST", /\/flags$/).length === 1,
       "flag sent",
@@ -236,7 +238,7 @@ try {
       add: ["flagged"],
       remove: [],
     });
-    await mail
+    await bar
       .getByRole("button", { name: "Markierung entfernen", exact: true })
       .waitFor();
 

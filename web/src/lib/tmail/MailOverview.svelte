@@ -3,6 +3,7 @@
 	// message open the reading pane shows the unread mail of the mailbox by
 	// folder, the flagged mails of this folder, when the list was last read
 	// (and whether new mail comes by itself) and a few links.
+	import { untrack } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import { apiErrorText, i18n, t } from '../i18n/index.svelte.ts';
 	import { mailApi } from './api.ts';
@@ -45,10 +46,13 @@
 	let flaggedTotal = $state(0);
 	let flaggedError = $state('');
 	let asked = 0;
+	const where = $derived(`${accountId}\u0000${folder}`);
+	const at = $derived(refreshed?.getTime() ?? 0);
 	$effect(() => {
-		const id = accountId;
-		const f = folder;
-		void refreshed;
+		void where;
+		void at;
+		const id = untrack(() => accountId);
+		const f = untrack(() => folder);
 		const n = ++asked;
 		const controller = new AbortController();
 		mailApi

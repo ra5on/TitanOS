@@ -30,6 +30,7 @@
 		{/each}
 	</dl>
 	<p class="muted note">{t('mail.keys.note')}</p>
+	<p class="muted note">{t('mail.keys.global')}</p>
 	<div class="dialog-actions">
 		<!-- svelte-ignore a11y_autofocus -->
 		<button type="button" class="btn" autofocus onclick={onclose}>{t('common.close')}</button>

@@ -171,12 +171,16 @@
 		}
 	}
 
+	// Keys of what is listed: a derived passes a change on only when its
+	// value changes, so that a new address of the page (a message opened)
+	// does not read the list again.
+	const where = $derived(`${accountId}\u0000${folder}`);
+	const asking = $derived(`${scope}\u0000${JSON.stringify(filters)}`);
+
 	// A new folder, search, filter or scope starts from the top.
 	$effect(() => {
-		void accountId;
-		void folder;
-		void filters;
-		void scope;
+		void where;
+		void asking;
 		untrack(() => {
 			rows = [];
 			next = null;
@@ -187,12 +191,15 @@
 			void load(false);
 		});
 	});
-	// Another folder forgets the search in all folders.
+	// Another folder forgets a search in all folders with its words and
+	// filters (a search in one folder stays, as before 1.12).
 	$effect(() => {
-		void accountId;
-		void folder;
+		void where;
 		untrack(() => {
-			if (scope === 'all') scope = 'folder';
+			if (scope !== 'all') return;
+			scope = 'folder';
+			search = q = '';
+			resetFilters();
 		});
 	});
 

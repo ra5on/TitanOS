@@ -323,5 +323,6 @@
 	"mail.overview.live": "Neue Mails im Posteingang kommen von selbst.",
 	"mail.overview.poll": "Die Liste lädt alle 2 Minuten neu, solange T-Mail offen ist.",
 	"mail.overview.links": "Schnellzugriff",
-	"mail.overview.settings": "Einstellungen von T-Mail"
+	"mail.overview.settings": "Einstellungen von T-Mail",
+	"mail.keys.global": "Die übrigen Tasten von TitanOS, etwa Strg+K, gelten hier weiter."
 }

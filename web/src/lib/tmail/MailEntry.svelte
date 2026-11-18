@@ -114,13 +114,30 @@
 		{ondragstart}
 		{ondragend}
 	>
-		<input
-			class="pick"
-			type="checkbox"
-			checked={picked}
-			aria-label={t('mail.pick.one', { name: `${name} – ${subject}` })}
-			onclick={onpick}
-		/>
+		<!-- The box and the count of a conversation stand left, apart from the quick actions. -->
+		<div class="side">
+			<input
+				class="pick"
+				type="checkbox"
+				checked={picked}
+				aria-label={t('mail.pick.one', { name: `${name} – ${subject}` })}
+				onclick={onpick}
+			/>
+			{#if count > 1 && ontoggle}
+				<button
+					type="button"
+					class="count"
+					aria-expanded={expanded}
+					aria-label={`${t('mail.thread.expand')}: ${t('mail.thread.count', { count })}`}
+					title={t('mail.thread.count', { count })}
+					onclick={ontoggle}
+					><span aria-hidden="true">{count}</span><Icon
+						name={expanded ? 'chevronDown' : 'chevronRight'}
+						size={14}
+					/></button
+				>
+			{/if}
+		</div>
 		<button
 			type="button"
 			class="row"
@@ -171,20 +188,6 @@
 					>{/if}
 			</span>
 		</button>
-		{#if count > 1 && ontoggle}
-			<button
-				type="button"
-				class="count"
-				aria-expanded={expanded}
-				aria-label={`${t('mail.thread.expand')}: ${t('mail.thread.count', { count })}`}
-				title={t('mail.thread.count', { count })}
-				onclick={ontoggle}
-				><span aria-hidden="true">{count}</span><Icon
-					name={expanded ? 'chevronDown' : 'chevronRight'}
-					size={14}
-				/></button
-			>
-		{/if}
 		{#if !phone}
 			<div class="quick" role="group" aria-label={t('mail.quick.label')}>
 				{#if canArchive}
@@ -235,7 +238,7 @@
 	.entry {
 		position: relative;
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-columns: auto minmax(0, 1fr);
 		align-items: start;
 		gap: 0 var(--space-1);
 		padding: 0 var(--space-2) 0 var(--space-1-5);
@@ -256,8 +259,15 @@
 	.entry.picked {
 		background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 	}
+	.side {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-1);
+		padding-top: calc(var(--space-2) + 10px);
+	}
 	.pick {
-		margin: calc(var(--space-2) + 10px) 0 0;
+		margin: 0;
 		width: 18px;
 		height: 18px;
 		accent-color: var(--accent);
@@ -356,7 +366,6 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 2px;
-		margin-top: var(--space-2);
 		min-height: 32px;
 		padding: 0 var(--space-1-5);
 		border: 1px solid var(--border);

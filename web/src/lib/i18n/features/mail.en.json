@@ -323,5 +323,6 @@
 	"mail.overview.live": "New mail in the inbox arrives by itself.",
 	"mail.overview.poll": "The list reloads every 2 minutes while T-Mail is open.",
 	"mail.overview.links": "Quick links",
-	"mail.overview.settings": "T-Mail settings"
+	"mail.overview.settings": "T-Mail settings",
+	"mail.keys.global": "The other keys of TitanOS, such as Ctrl+K, still work here."
 }
