@@ -41,4 +41,4 @@ Stand 18.11.2026, Zweig `feat/v1.13-contacts` (Schritt 6 des Baustands, Frontend
 
 - Gemessen mit Testdaten im Browser, nicht gegen ein NAS: die Zeiten enthalten keine Netz- und Serverzeit; die Serverseite misst `performance-113.md` oben.
 - Ein Gerät mit wenig Leistung (iPhone) ist nicht gemessen; `content-visibility` gibt es in Safari seit 18.
-- Hat ein anderes Gerät zwischen dem letzten Lesen der Liste und einem eigenen Schreiben etwas geändert, überdeckt der ETag aus der Schreib-Antwort diese Änderung bis zum nächsten Ereignis (in der Regel kommt dessen Ereignis vorher an).
+- Den ETag eines Schreibens behält die Seite nur, wenn der ctag des Adressbuchs danach genau eins über dem ist, den sie kennt (Antwortfeld `ctag`, Kopfzeile `X-CTag`; bekannt aus `ready` und den Ereignissen des Live-Stroms). Hat ein anderes Gerät dazwischen geschrieben, liest die Seite die Liste beim nächsten Mal ganz. Ohne Live-Strom (kein Volume, Strom getrennt) behält sie keinen ETag aus einem Schreiben.
