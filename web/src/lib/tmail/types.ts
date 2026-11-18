@@ -41,11 +41,14 @@ export type MailFolder = {
 	role: FolderRole;
 	unread: number;
 	total: number;
+	/** 1.12: what separates the levels of `path` ('' or missing: unknown). */
+	delim?: string;
 };
 
 export type Address = { name: string; addr: string };
 
-export type Flags = { seen: boolean; flagged: boolean; answered: boolean };
+/** `forwarded` (1.12, $Forwarded) only shows; older NAS leave it out. */
+export type Flags = { seen: boolean; flagged: boolean; answered: boolean; forwarded?: boolean };
 
 export type MessageRow = {
 	uid: number;
@@ -58,7 +61,27 @@ export type MessageRow = {
 	attachments: boolean;
 	/** The head is too large to list: only the uid is sure, the other fields may be missing. */
 	tooLarge?: boolean;
+	/** 1.12: the beginning of the text, at most 140 characters cut at a word by titand (plain text). */
+	preview?: string;
+	/** 1.12: the heads of the conversation (Message-IDs; `references` separated by spaces). */
+	messageId?: string;
+	inReplyTo?: string;
+	references?: string;
 };
+
+/** 1.12: a hit of the search over all folders. */
+export type SearchHit = MessageRow & { folder: string };
+
+/** `truncated`: not every folder was searched (more than 100, out of time, a folder refused). */
+export type SearchResult = {
+	messages: SearchHit[];
+	total: number;
+	folders: number;
+	truncated: boolean;
+};
+
+/** 1.12: the contacts with a picture by lower-case address (GET /mail/avatars). */
+export type Avatars = { book: string; photos: Record<string, string> };
 
 /** `next`: the uid for `before` of the next page, 0 (or null) at the end. */
 export type MessagePage = { messages: MessageRow[]; next: number | null; total: number };
@@ -161,6 +184,8 @@ export type SendMeta = {
 	attachFrom?: { folder?: string; uid?: number; parts: string[] };
 	/** The mail answered: it is marked "answered" once this one is sent. */
 	answers?: { folder: string; uid: number };
+	/** 1.12: the mail forwarded: it is marked $Forwarded once this one is sent. */
+	forwards?: { folder: string; uid: number };
 };
 
 /** A file of the NAS for nasFiles (roots of GET /files/roots). */

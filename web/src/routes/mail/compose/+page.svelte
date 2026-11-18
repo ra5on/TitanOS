@@ -119,6 +119,8 @@
 		// A reply marks the mail it answers once sent.
 		if (sourceUid && (mode === 'reply' || mode === 'replyAll'))
 			m.answers = { folder: sourceFolder, uid: sourceUid };
+		// 1.12: a forward marks the mail it forwards ($Forwarded).
+		if (sourceUid && mode === 'forward') m.forwards = { folder: sourceFolder, uid: sourceUid };
 		return m;
 	}
 
