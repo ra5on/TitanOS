@@ -367,8 +367,11 @@
 	let contact = $state<Contact | null>(null);
 	let contactError = $state('');
 	let loadingContact = 0;
+	/** The contact being read now: an effect running again asks once. */
+	let reading = '';
 	async function openContact(id: string) {
 		const mine = ++loadingContact;
+		reading = id;
 		contactError = '';
 		try {
 			const got = await loadContact(id);
@@ -377,12 +380,14 @@
 			if (mine !== loadingContact) return;
 			contact = null;
 			contactError = failed(err);
+		} finally {
+			if (mine === loadingContact) reading = '';
 		}
 	}
 	$effect(() => {
 		if (shown.kind !== 'ready') return;
 		if (selId && mode !== 'new') {
-			if (contact?.id !== selId) untrack(() => void openContact(selId));
+			if (contact?.id !== selId && reading !== selId) untrack(() => void openContact(selId));
 		} else {
 			contact = null;
 			contactError = '';
