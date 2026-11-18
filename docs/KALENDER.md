@@ -1,5 +1,7 @@
 # T-Kalender und Kontakte (1.11)
 
+> Seit 1.13 in der Oberfläche angezeigt als **„Kalender“** (englisch „Calendar“) statt „T-Kalender“; „Kontakte“ bleibt. Routen, Code-Namen und Schlüssel bleiben. Seit 1.13 zeigt die Ladeansicht beider Programme schon die Form ihrer Karte (gleiche Spaltenbreite, `ProgramShell`), bis sie auf das gemeinsame Spaltengerüst `ColumnFrame` umgestellt sind; die Reihenfolge von Kalendern und Adressbüchern kann das NAS je Konto bereits speichern (Einstellungsart `order`, Schlüssel `calendar` und `contacts`, siehe `docs/TMAIL.md` „1.13“).
+
 Zwei eigene Programme in TitanOS: **T-Kalender** (Termine) und **Kontakte** (Adressbuch), je Konto, mit Abgleich zum iPhone über CalDAV und CardDAV. Grundlage sind die abgenommenen Entwürfe `Entwuerfe/108-kalender-kontakte/` und die Entscheidungen des Inhabers vom 17.11.2026 (PLAN „T-Kalender & Kontakte“). Dieses Dokument ist zugleich die Hilfe beider Programme (Menüleiste › Hilfe) und der Vertrag zwischen Backend (`backend/internal/pim/…`, `backend/internal/davsync`, `backend/internal/api/calendar*.go`, `contacts*.go`, `devices*.go`, `pim_data.go`, `register_pim.go`) und Oberfläche (`web/src/routes/calendar/`, `web/src/routes/contacts/`, `web/src/lib/pim/`). Es beschreibt, was gebaut ist.
 
 ## Kurz für die Bedienung
