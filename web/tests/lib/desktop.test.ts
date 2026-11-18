@@ -294,3 +294,28 @@ test('PLAN 79-5: graphics widgets keep their hidden values and device', () => {
 	expect(GPU_VALUES).toEqual(['usage', 'history', 'temperature', 'memory', 'power', 'clock']);
 	expect(widgetDims('gpu', 'm')[1]).toBeGreaterThan(widgetDims('clock', 'm')[1]);
 });
+
+// Unabhängige Durchsicht 1.13, A-5: only paths of this UI open in a window
+// or page; what the URL parser reads as another host never counts.
+test('ownPath refuses what the URL parser takes for another host', async () => {
+	const { ownPath } = await import('#lib/desktop/frame.ts');
+	for (const ok of ['/', '/mail', '/contacts?agentDraft=a:b', '/calendar#x', '/files/a%5Cb'])
+		expect(ownPath(ok), ok).toBe(true);
+	for (const bad of [
+		'//evil.example',
+		'/\\evil.example',
+		'/\\/evil.example',
+		'\\\\evil.example',
+		'/\t/evil.example',
+		'/\n/evil.example',
+		'/\r/evil.example',
+		'/x\u0000y',
+		'/x\u007fy',
+		'/api/v1/system',
+		'https://evil.example/',
+		'javascript:alert(1)',
+		'mail',
+		'',
+	])
+		expect(ownPath(bad), JSON.stringify(bad)).toBe(false);
+});
