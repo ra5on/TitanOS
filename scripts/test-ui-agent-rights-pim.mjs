@@ -9,6 +9,10 @@
 // and Kontakte with only Verboten / Nur lesen, saved in assistData (never
 // assistAreas). Desktop 1440 px light and dark, phone 390 px light and
 // dark; no sideways scroll, no cut text. Isolated API data only.
+// 1.13: the group "Mail, Termine, Kontakte und Erinnerungen" per action
+// (Nur Vorschläge / Fragen / Selbst ausführen, deleting always asks, the
+// note about a provider in the internet), saved as actionRights; the quick
+// choice "Alles ohne Nachfrage" leaves mail.send on Fragen.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5211 node scripts/test-ui-agent-rights-pim.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -252,7 +256,7 @@ try {
     const preset = page.getByRole("radiogroup", { name: "Schnellwahl" });
     assert.ok(await checked(preset, "Standard"), `${tag}: Standard`);
     // Open: the two parts with their choices.
-    await page.getByRole("button", { name: "Kalender: Aufklappen" }).click();
+    await areas(page).getByRole("button", { name: "Kalender: Aufklappen" }).click();
     const read = page.getByRole("radiogroup", { name: "Termine lesen" });
     const write = page.getByRole("radiogroup", {
       name: "Termine eintragen, ändern und löschen",
@@ -287,7 +291,7 @@ try {
       `${tag}: summary follows`,
     );
     assert.ok(await checked(preset, "Eigene Einstellung"), `${tag}: Eigene`);
-    await page.getByRole("button", { name: "Kontakte: Aufklappen" }).click();
+    await areas(page).getByRole("button", { name: "Kontakte: Aufklappen" }).click();
     await page
       .getByRole("radiogroup", { name: "Kontakte lesen" })
       .getByRole("radio", { name: "Verboten" })
@@ -345,6 +349,66 @@ try {
     } else {
       await shot(page, `rechte-${tag}-geaendert`);
     }
+    await ctx.close();
+  }
+
+  // ---- 1.13: Mail, Termine, Kontakte und Erinnerungen per action ----
+  for (const theme of ["hell", "graphit"]) {
+    const { ctx, page, seen } = await open({ width: 1440, theme });
+    const tag = `1440-${theme === "hell" ? "hell" : "dunkel"}`;
+    await page.goto(base + "/settings/agent?tab=rights");
+    const group = page.locator("section", {
+      has: page.getByRole("heading", {
+        name: "Mail, Termine, Kontakte und Erinnerungen",
+      }),
+    });
+    await group.waitFor();
+    // The note about a provider in the internet (Q30).
+    await group.getByText("an diesen Anbieter").first().waitFor();
+    // From the factory: suggestions only, deleting asks (Q28).
+    const mailRow = group.locator(".srow").filter({
+      has: page.locator(".srow-title", { hasText: /^\s*Mail\s*$/ }),
+    });
+    assert.equal(
+      (await mailRow.locator(".srow-summary").innerText()).trim(),
+      "Nur Vorschläge",
+      `${tag}: mail from the factory`,
+    );
+    await group.getByRole("button", { name: "Termine: Aufklappen" }).click();
+    const create = page.getByRole("radiogroup", { name: "Termin anlegen" });
+    await create.waitFor();
+    assert.deepEqual(
+      await create.getByRole("radio").allInnerTexts(),
+      ["Nur Vorschläge", "Fragen", "Selbst ausführen"],
+    );
+    assert.ok(await checked(create, "Nur Vorschläge"), `${tag}: suggest`);
+    await group.getByText("Fragt immer").first().waitFor();
+    await group.getByRole("button", { name: "Mail: Aufklappen" }).click();
+    const send = page.getByRole("radiogroup", { name: "Mail senden" });
+    await send.getByRole("radio", { name: "Selbst ausführen" }).click();
+    await page
+      .getByRole("radiogroup", { name: "Mails lesen" })
+      .getByRole("radio", { name: "Erlaubt" })
+      .waitFor();
+    await create.getByRole("radio", { name: "Fragen" }).click();
+    await sound(page, `${tag} actions`);
+    await group.scrollIntoViewIfNeeded();
+    await shot(page, `aktionen-${tag}`);
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.waitForTimeout(400);
+    assert.deepEqual(
+      seen.puts.at(-1).policy.actionRights,
+      { "mail.send": "allow", "event.create": "ask" },
+      `${tag}: actionRights sent, nothing else`,
+    );
+    assert.equal(seen.puts.at(-1).policy.dataRights, undefined);
+    // "Alles ohne Nachfrage" clears them; mail.send stays on "Fragen" (Q29).
+    await page
+      .getByRole("radiogroup", { name: "Schnellwahl" })
+      .getByRole("radio", { name: "Alles ohne Nachfrage" })
+      .click();
+    assert.ok(await checked(send, "Fragen"), `${tag}: all keeps send on ask`);
+    assert.ok(await checked(create, "Selbst ausführen"), `${tag}: all`);
     await ctx.close();
   }
 
