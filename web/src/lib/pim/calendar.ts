@@ -392,7 +392,7 @@ export function alarmWords(minutes: number, allDay: boolean, start?: number): Al
 	const timedDayAt = !allDay && start !== undefined && m >= 1440 && m % 1440 !== 0;
 	if (allDay || timedDayAt) {
 		const from = allDay ? 0 : (start as number);
-		const days = Math.ceil((m - from) / 1440);
+		const days = Math.ceil((m - from) / 1440) || 0; // never -0
 		const at = from + days * 1440 - m;
 		const time = `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`;
 		return { kind: 'dayAt', days, time };

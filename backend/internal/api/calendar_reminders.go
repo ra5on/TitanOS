@@ -387,6 +387,10 @@ func (c *calendarReminders) forget(user string) {
 // handleReminders is GET /api/v1/calendar/reminders: the account's hints
 // of the last 12 hours, {epoch, reminders: [firedReminder]}.
 func (s *Server) handleReminders(w http.ResponseWriter, r *http.Request) {
+	// Like every route of the calendar: without the data never an empty list.
+	if _, ok := s.pimDataArea().calendarStore(w); !ok {
+		return
+	}
 	user := currentUser(r).Name
 	writeJSON(w, http.StatusOK, map[string]any{
 		"epoch":     strconv.FormatInt(s.reminders.epoch, 10),
@@ -455,7 +459,9 @@ func (s *Server) startReminders() {
 		}
 	}
 	c.deps.Store(d)
-	s.goJob(c.run)
+	// Not a job of goJob: it runs as long as titand (Close need not wait
+	// for it; it writes nothing).
+	go c.run(s.ctx)
 }
 
 // reminderPushText is the line of a push: when the event begins (in the

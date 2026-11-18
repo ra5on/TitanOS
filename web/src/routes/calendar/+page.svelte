@@ -502,7 +502,7 @@
 	contentClass="col-cal-main"
 	sideWidth={{ min: 230, max: 400, fallback: 260 }}
 	contentMin={560}
-	foldBelow={800}
+	foldBelow={view === 'week' ? 960 : 800}
 	sideResizeLabel={t('calendar.resize.side')}
 	action={compact ? undefined : newButton}
 	{side}
