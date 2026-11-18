@@ -18,7 +18,8 @@
 > Auth: alex
 > Depth: 1
 < status 207
-< responses 3
+< responses 4
+# (and the virtual reminder list, 1.13: reminders.txt)
 < value /caldav/alex/calendars/privat/ d:displayname Privat
 < value /caldav/alex/calendars/reisen/ d:displayname Reisen
 < value /caldav/alex/calendars/reisen/ ical:calendar-color #34C759

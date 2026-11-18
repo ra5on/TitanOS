@@ -54,23 +54,32 @@ func (e *ElsewhereError) Error() string {
 func (e *ElsewhereError) Unwrap() error { return ErrElsewhere }
 
 // mark is pim.json.
+// Tasks (1.13): 1.12 ignores the field, and drops it when it writes a
+// first mark of its own (the next write of a reminder sets it again).
 type mark struct {
 	Owner    owner     `json:"owner"`
 	Calendar time.Time `json:"calendar,omitzero"`
 	Contacts time.Time `json:"contacts,omitzero"`
+	Tasks    time.Time `json:"tasks,omitzero"`
 }
 
 func (m mark) has(kind Kind) bool {
-	if kind == Contacts {
+	switch kind {
+	case Contacts:
 		return !m.Contacts.IsZero()
+	case Tasks:
+		return !m.Tasks.IsZero()
 	}
 	return !m.Calendar.IsZero()
 }
 
 func (m *mark) set(kind Kind, at time.Time) {
-	if kind == Contacts {
+	switch kind {
+	case Contacts:
 		m.Contacts = at
-	} else {
+	case Tasks:
+		m.Tasks = at
+	default:
 		m.Calendar = at
 	}
 }

@@ -46,7 +46,7 @@ func (rq *request) report() {
 		return
 	}
 	rep, ok := rq.h.reports[body.Name]
-	if !ok || (rep.kind != "" && rep.kind != rq.t.kind) || !rep.levels.has(rq.t.level) {
+	if !ok || (rep.kind != "" && rep.kind != family(rq.t.kind)) || !rep.levels.has(rq.t.level) {
 		writeXMLError(rq.w, http.StatusForbidden, davName("supported-report"))
 		return
 	}

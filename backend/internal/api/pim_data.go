@@ -64,6 +64,8 @@ func (a pimDataArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("PUT /api/v1/calendar/events/{cal}/{obj}", web(a.handleUpdateEvent))
 	mux.HandleFunc("DELETE /api/v1/calendar/events/{cal}/{obj}", web(a.handleDeleteEvent))
 	mux.HandleFunc("POST /api/v1/calendar/preview", web(a.handlePreview))
+	// Reminders, 1.13 (calendar_tasks.go).
+	a.registerTasks(mux, web)
 	// Kontakte (contacts.go, contacts_photo.go, contacts_suggest.go, contacts_vcf.go).
 	mux.HandleFunc("GET /api/v1/contacts", web(a.handleContacts))
 	mux.HandleFunc("POST /api/v1/contacts", web(a.handleCreateContact))

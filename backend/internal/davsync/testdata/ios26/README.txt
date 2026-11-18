@@ -7,10 +7,11 @@ confirmed on a real iPhone. No personal data.
 Every *.txt but this file is one sequence; steps run in order on one server.
 
   # comment            (blank lines are ignored)
-  @seed calendar|contacts <collection> <name> <fixture>   entry of alex (fixtures/)
+  @seed calendar|contacts|tasks <collection> <name> <fixture>   entry of alex (fixtures/)
   @seed-bea calendar|contacts <collection> <name> <fixture>
   @collection calendar <id> <name>   another calendar of alex
   @volume off|disk1|disk2            system data volume gone / back / another, empty one
+  @tasks off|on                      only the reminder lists (.titanos/tasks) cannot be read
   @redirect 308                      status of /.well-known (default 301)
   @delete calendar|contacts <collection> <name>   entry of alex deleted elsewhere (store)
   @churn <calendar> N                N new events of alex in one import (N changes)

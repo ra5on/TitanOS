@@ -211,6 +211,9 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if t.level == levelRoot {
 		rq.t.account = id.User.Name
 	}
+	if !rq.resolveKind() { // a calendar or a reminder list (tasks.go)
+		return
+	}
 	h.dispatch(rq)
 	if s := rq.w.status; s >= 200 && s < 300 {
 		h.Devices.Synced(id.User.Name, id.Device, protocol(t.kind), h.remoteIP(r), rq.volumeOpen)
