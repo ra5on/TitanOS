@@ -1,4 +1,4 @@
-# T-Mail – Vertrag (1.06, Oberfläche 1.12)
+# Mail (bis 1.12 „T-Mail“) – Vertrag (1.06, Oberfläche 1.12, 1.13)
 
 > Seit 1.13 in der Oberfläche angezeigt als **„Mail“** (englisch „Mail“); Routen (`/mail`), Code-Namen (`tmail`), Dateien und Schlüssel bleiben. Dieses Dokument behält den alten Namen.
 

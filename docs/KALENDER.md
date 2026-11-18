@@ -1,4 +1,4 @@
-# T-Kalender und Kontakte (1.11)
+# Kalender (bis 1.12 „T-Kalender“) und Kontakte (1.11, überarbeitet 1.13)
 
 > Seit 1.13 in der Oberfläche angezeigt als **„Kalender“** (englisch „Calendar“) statt „T-Kalender“; „Kontakte“ bleibt. Routen, Code-Namen und Schlüssel bleiben. Seit 1.13 steht **Kontakte** auf dem gemeinsamen Spaltengerüst `ColumnFrame` (Abschnitt „Kontakte 1.13“ unten); die Ladeansicht des Kalenders zeigt die Form seiner Karte (gleiche Spaltenbreite, `ProgramShell`), bis er umgestellt ist; die Reihenfolge von Kalendern und Adressbüchern kann das NAS je Konto bereits speichern (Einstellungsart `order`, Schlüssel `calendar` und `contacts`, siehe `docs/TMAIL.md` „1.13“).
 

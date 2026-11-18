@@ -141,7 +141,7 @@ func (m *Manager) compose(user string, mb Mailbox, out Outgoing, draft bool) ([]
 	if refs := msgIDs(out.References, 50); len(refs) > 0 {
 		h.SetMsgIDList("References", refs)
 	}
-	h.Set("User-Agent", "T-Mail (TitanOS)")
+	h.Set("User-Agent", "TitanOS Mail")
 	var buf bytes.Buffer
 	textHeader := gomail.InlineHeader{}
 	textHeader.Set("Content-Type", "text/plain; charset=utf-8")
