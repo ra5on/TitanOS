@@ -8103,7 +8103,7 @@
 	"agent.assist.area.contacts": "Kontakte",
 	"agent.assist.areaDesc.contacts": "Liest die Kontakte des Kontos ‚Assist als‘",
 	"agent.assist.consent.title": "Deine Zustimmung: Kalender und Kontakte für Assist",
-	"agent.assist.consent.desc": "Fragen aus Home Assistant laufen mit den Rechten deines Kontos. Deinen Kalender und deine Kontakte liest Assist nur, was du hier selbst einschaltest – kein Administrator kann das für dich tun, und „Nur lesen“ oben allein genügt nicht. Bedenke: Mit deiner Zustimmung kann jeder, der in Home Assistant mit dem Assist-Schlüssel fragt, deine Termine bzw. Kontakte erfragen, und die Antworten stehen in den Chats des Profils Home Assistant, die alle Inhaber und Administratoren sehen. Du kannst sie jederzeit hier zurücknehmen; sie gilt sofort.",
+	"agent.assist.consent.desc": "Fragen aus Home Assistant laufen mit den Rechten deines Kontos. Deinen Kalender und deine Kontakte liest Assist nur, was du hier selbst einschaltest – kein Administrator kann das für dich tun, und „Nur lesen“ oben allein genügt nicht. Bedenke: Mit deiner Zustimmung kann jeder, der in Home Assistant mit dem Assist-Schlüssel fragt, deine Termine bzw. Kontakte erfragen; alle Inhaber und Administratoren können im Profil Home Assistant des KI-Agenten selbst danach fragen und sehen dessen Chats mit den Antworten. Du kannst sie jederzeit hier zurücknehmen; sie gilt sofort.",
 	"agent.assist.consent.notActor": "Assist fragt gerade als {actor}, nicht als dein Konto. Deine Zustimmung gilt erst wieder, wenn Assist als dein Konto fragt; du kannst sie hier zurücknehmen.",
 	"agent.assist.consent.calendar": "Assist darf meinen Kalender lesen",
 	"agent.assist.consent.contacts": "Assist darf meine Kontakte lesen",

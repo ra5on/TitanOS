@@ -420,7 +420,7 @@ try {
     });
     await consentGroup.waitFor();
     await consentGroup
-      .getByText("die alle Inhaber und Administratoren sehen", { exact: false })
+      .getByText("selbst danach fragen", { exact: false })
       .waitFor();
     await page.waitForTimeout(300);
     await sound(page, `${tag} assist`);

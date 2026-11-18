@@ -8103,7 +8103,7 @@
 	"agent.assist.area.contacts": "Contacts",
 	"agent.assist.areaDesc.contacts": "Reads the contacts of the account ‘Assist as’",
 	"agent.assist.consent.title": "Your consent: calendar and contacts for Assist",
-	"agent.assist.consent.desc": "Questions from Home Assistant run with the rights of your account. Assist reads your calendar and your contacts only where you switch it on here yourself – no administrator can do that for you, and “Read only” above is not enough on its own. Keep in mind: with your consent, anyone who asks in Home Assistant with the Assist key can ask about your events or contacts, and the answers are in the chats of the Home Assistant profile, which all owners and administrators see. You can withdraw it here at any time; it applies at once.",
+	"agent.assist.consent.desc": "Questions from Home Assistant run with the rights of your account. Assist reads your calendar and your contacts only where you switch it on here yourself – no administrator can do that for you, and “Read only” above is not enough on its own. Keep in mind: with your consent, anyone who asks in Home Assistant with the Assist key can ask about your events or contacts; all owners and administrators can ask about them themselves in the Home Assistant profile of the AI agent and see its chats with the answers. You can withdraw it here at any time; it applies at once.",
 	"agent.assist.consent.notActor": "Assist currently asks as {actor}, not as your account. Your consent applies again only when Assist asks as your account; you can withdraw it here.",
 	"agent.assist.consent.calendar": "Assist may read my calendar",
 	"agent.assist.consent.contacts": "Assist may read my contacts",
