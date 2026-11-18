@@ -15,7 +15,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | account | `account.go`, `account_picture.go` | – | 3 |
 | activity | `activity.go` | `activityArea` | 1 |
 | admission | `admission.go` | – | 0 |
-| agent | `agent.go`, `agent_access.go`, `agent_addresses.go`, `agent_assist.go`, `agent_assist_consent.go`, `agent_cluster.go`, `agent_code.go`, `agent_data.go`, `agent_docs.go`, `agent_docs_deadline.go`, `agent_docs_index.go`, `agent_docs_paper.go`, `agent_env.go`, `agent_extra.go`, `agent_family.go`, `agent_family54.go`, `agent_family54_buddy.go`, `agent_family54_catalog.go`, `agent_features.go`, `agent_features_stub.go`, `agent_foresight.go`, `agent_foresight_advisor.go`, `agent_foresight_model.go`, `agent_forget.go`, `agent_ha.go`, `agent_hamask.go`, `agent_home.go`, `agent_initiative.go`, `agent_insight.go`, `agent_map.go`, `agent_mcp.go`, `agent_media.go`, `agent_notes.go`, `agent_own.go`, `agent_photos.go`, `agent_pim.go`, `agent_prefs.go`, `agent_prompt.go`, `agent_protect.go`, `agent_protect_emergency.go`, `agent_protect_guard.go`, `agent_protect_handbook.go`, `agent_provider.go`, `agent_quick.go`, `agent_reflect.go`, `agent_runs.go`, `agent_schedule.go`, `agent_settings.go`, `agent_share.go`, `agent_snapshot.go`, `agent_title.go`, `agent_tools.go`, `agent_volume.go`, `agent_when.go` | `accessArea` | 63 |
+| agent | `agent.go`, `agent_access.go`, `agent_actions.go`, `agent_addresses.go`, `agent_assist.go`, `agent_assist_consent.go`, `agent_cluster.go`, `agent_code.go`, `agent_data.go`, `agent_docs.go`, `agent_docs_deadline.go`, `agent_docs_index.go`, `agent_docs_paper.go`, `agent_env.go`, `agent_extra.go`, `agent_family.go`, `agent_family54.go`, `agent_family54_buddy.go`, `agent_family54_catalog.go`, `agent_features.go`, `agent_features_stub.go`, `agent_foresight.go`, `agent_foresight_advisor.go`, `agent_foresight_model.go`, `agent_forget.go`, `agent_ha.go`, `agent_hamask.go`, `agent_home.go`, `agent_initiative.go`, `agent_insight.go`, `agent_mail.go`, `agent_map.go`, `agent_mcp.go`, `agent_media.go`, `agent_notes.go`, `agent_own.go`, `agent_panel.go`, `agent_photos.go`, `agent_pim.go`, `agent_pim_more.go`, `agent_prefs.go`, `agent_prompt.go`, `agent_protect.go`, `agent_protect_emergency.go`, `agent_protect_guard.go`, `agent_protect_handbook.go`, `agent_provider.go`, `agent_quick.go`, `agent_reflect.go`, `agent_runs.go`, `agent_schedule.go`, `agent_settings.go`, `agent_share.go`, `agent_snapshot.go`, `agent_tasks.go`, `agent_title.go`, `agent_tools.go`, `agent_volume.go`, `agent_when.go` | `accessArea` | 65 |
 | api | `api.go` | – | 1 |
 | app | `app_access.go`, `app_icon.go`, `app_proxy.go` | `appAccessArea`, `appIconArea`, `appProxyArea` | 4 |
 | application | `application_restore.go` | – | 0 |
@@ -62,8 +62,9 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | nvr | `nvr.go`, `nvr_events.go`, `nvr_exports.go`, `nvr_faces.go`, `nvr_live.go`, `nvr_ptz.go`, `nvr_recordings.go` | `nvrArea` | 12 |
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
+| order | `order_preferences.go` | – | 1 |
 | passkeys | `passkeys.go` | – | 1 |
-| pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 3 |
+| pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 4 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go` | `powerButtonArea` | 0 |
 | preferences | `preferences.go` | `prefsArea` | 0 |
