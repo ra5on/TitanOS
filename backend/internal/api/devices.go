@@ -183,6 +183,15 @@ func (s *Server) devicesRevokeAll(name string) {
 	s.devices.RevokeAll(name)
 }
 
+// devicesRebind keeps the devices of an account whose second factor the
+// person switched on or off in its own session (password and code shown):
+// without it the changed fingerprint would revoke them (S-25).
+func (s *Server) devicesRebind(before auth.User) {
+	if s.devices != nil {
+		s.devices.Rebind(before)
+	}
+}
+
 // pimForgetUser drops what T-Kalender and Kontakte keep of an account that
 // was deleted or made anew: the device passwords in RAM (devices.json goes
 // with users/<name>) and the calendars and address books on the volume

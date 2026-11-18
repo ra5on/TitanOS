@@ -6,9 +6,16 @@
 // password and API tokens are not taken there.
 //
 // The stick is read once per account (and again only when the account's
-// creation time or password hash changed) and written only when a device
-// is made, revoked or deleted: a device sends its password with every
-// request, and /config is never read or written for what a device repeats.
+// creation time, password hash or second factor changed) and written only
+// when a device is made, revoked or deleted: a device sends its password
+// with every request, and /config is never read or written for what a
+// device repeats.
+//
+// The owner record of devices.json carries a fingerprint of the account's
+// password hash and TOTP secret (Sicherheitsdurchsicht S-25): a file whose
+// fingerprint is not that of the account now – the password changed while
+// RevokeAll did not reach the stick, or titand stopped in between – has
+// all its devices revoked when it is read, never accepted.
 //
 // The DAV handler (davsync) takes a *Manager and calls Authenticate for
 // every request, WriteChallenge for a refusal and Synced after an answer.
@@ -108,6 +115,10 @@ type file struct {
 type owner struct {
 	Name    string    `json:"name"`
 	Created time.Time `json:"created"`
+	// Creds is the fingerprint of the account's credentials when the file
+	// was written (credentials). Missing in a file of a 1.11 test build:
+	// taken as matching once and written with the next write.
+	Creds string `json:"creds,omitempty"`
 }
 
 type device struct {
@@ -169,13 +180,13 @@ type Manager struct {
 }
 
 // state is the device passwords of one account, bound to the account's
-// creation time and password hash.
+// creation time and credentials (password hash and TOTP secret).
 type state struct {
-	created      time.Time
-	passwordHash string
-	file         file
-	sums         [][]byte // of file.Devices
-	revoked      [][]byte // of file.Revoked
+	created time.Time
+	creds   string
+	file    file
+	sums    [][]byte // of file.Devices
+	revoked [][]byte // of file.Revoked
 }
 
 // New returns a manager; seen may be nil (no "last synced" on a volume).
@@ -255,20 +266,25 @@ func Sum(password string) []byte {
 	return sum[:]
 }
 
-// stateLocked returns the device passwords of an account (m.mu held):
-// from RAM, else read once from the stick. ErrUnavailable: not readable
-// now; nothing is kept, and the next request asks again.
-func (m *Manager) stateLocked(user auth.User) (*state, error) {
-	if st := m.known[user.Name]; st != nil && st.created.Equal(user.Created) && st.passwordHash == user.PasswordHash {
-		return st, nil
-	}
+// credentials is the fingerprint of what revokes the devices of an
+// account when it changes: the password hash and the TOTP secret (the
+// first 16 bytes of a SHA-256, hex; not the secret itself, and nothing a
+// device password could be guessed from).
+func credentials(user auth.User) string {
+	sum := sha256.Sum256([]byte("titanos-devices-creds\x00" + user.PasswordHash + "\x00" + user.TOTPSecret))
+	return hex.EncodeToString(sum[:16])
+}
+
+// readLocked reads devices.json of an account (m.mu held): an empty file
+// for none, a damaged one or one of an earlier account of the name.
+func (m *Manager) readLocked(user auth.User) (file, error) {
 	var f file
 	data, err := m.config.Read(File(user.Name))
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		slog.Warn("Calendar: device passwords not readable", "user", user.Name, "err", err)
-		return nil, ErrUnavailable
+		return file{}, ErrUnavailable
 	case json.Unmarshal(data, &f) != nil:
 		// Damaged: no devices, until one is made.
 		slog.Warn("Calendar: device passwords damaged", "user", user.Name)
@@ -278,6 +294,34 @@ func (m *Manager) stateLocked(user auth.User) (*state, error) {
 		// Of an earlier account of the name (or none): not read.
 		f = file{}
 	}
+	return f, nil
+}
+
+// stateLocked returns the device passwords of an account (m.mu held):
+// from RAM, else read once from the stick. ErrUnavailable: not readable
+// now; nothing is kept, and the next request asks again.
+func (m *Manager) stateLocked(user auth.User) (*state, error) {
+	creds := credentials(user)
+	if st := m.known[user.Name]; st != nil && st.created.Equal(user.Created) && st.creds == creds {
+		return st, nil
+	}
+	f, err := m.readLocked(user)
+	if err != nil {
+		return nil, err
+	}
+	if f.Owner.Creds != "" && f.Owner.Creds != creds && len(f.Devices) > 0 {
+		// Written for other credentials, and RevokeAll never reached the
+		// stick (not readable then, not written, or titand stopped before
+		// it): the devices count as revoked – refused without counting, and
+		// moved to revoked with the next write.
+		at := m.now().UTC()
+		f.Revoked = slices.Clone(f.Revoked)
+		for _, d := range f.Devices {
+			f.Revoked = append(f.Revoked, revoked{SHA256: d.SHA256, At: at})
+		}
+		f.Devices = nil
+		slog.Warn("Calendar: device passwords of other credentials revoked", "user", user.Name)
+	}
 	f.Revoked = m.prune(f.Revoked)
 	st := m.build(user, f)
 	m.known[user.Name] = st
@@ -286,8 +330,8 @@ func (m *Manager) stateLocked(user auth.User) (*state, error) {
 
 // build makes the state of a file for an account.
 func (m *Manager) build(user auth.User, f file) *state {
-	f.Owner = owner{Name: user.Name, Created: user.Created}
-	st := &state{created: user.Created, passwordHash: user.PasswordHash, file: f}
+	f.Owner = owner{Name: user.Name, Created: user.Created, Creds: credentials(user)}
+	st := &state{created: user.Created, creds: f.Owner.Creds, file: f}
 	for _, d := range f.Devices {
 		sum, _ := hex.DecodeString(d.SHA256)
 		st.sums = append(st.sums, sum)
@@ -318,7 +362,7 @@ func (m *Manager) prune(list []revoked) []revoked {
 // saveLocked writes the file of an account and takes it into RAM (m.mu
 // held). On a failed write RAM keeps the state before.
 func (m *Manager) saveLocked(user auth.User, f file) error {
-	f.Owner = owner{Name: user.Name, Created: user.Created}
+	f.Owner = owner{Name: user.Name, Created: user.Created, Creds: credentials(user)}
 	f.Revoked = m.prune(f.Revoked)
 	if f.Devices == nil {
 		f.Devices = []device{}
@@ -451,8 +495,9 @@ func (m *Manager) Revoke(user auth.User, id string) error {
 // second factor was reset (here or through the cluster). The hashes go to
 // the revoked ones (never cleared), so the old devices keep getting 401
 // without locking the account's new device. Called after the account was
-// changed; when the stick cannot be written, the revocation still holds
-// in RAM (bound to the new password hash) until titand restarts.
+// changed; when the stick cannot be read or written, the revocation holds
+// in RAM and, after a restart, through the fingerprint of the credentials
+// in the owner record (S-25).
 func (m *Manager) RevokeAll(name string) {
 	user, ok := m.users.Get(name)
 	if !ok {
@@ -464,29 +509,67 @@ func (m *Manager) RevokeAll(name string) {
 	delete(m.synced, name)
 	// The stick, not RAM: a state read for the old password hash is not
 	// the current one.
+	// Read as stored (stateLocked would already revoke them in RAM for
+	// the new credentials, and nothing would be written).
 	delete(m.known, name)
-	st, err := m.stateLocked(user)
+	f, err := m.readLocked(user)
 	if err != nil {
-		slog.Error("Calendar: device passwords not revoked: not readable", "user", name, "err", err)
+		// Not readable now: the file keeps the fingerprint of the old
+		// credentials, so its devices are revoked when it is read (S-25).
+		slog.Error("Calendar: device passwords not revoked now: not readable; revoked when read", "user", name, "err", err)
 		return
 	}
-	if len(st.file.Devices) == 0 {
+	if len(f.Devices) == 0 {
 		return
 	}
-	next := st.file
-	next.Revoked = slices.Clone(st.file.Revoked)
+	next := f
+	next.Revoked = slices.Clone(f.Revoked)
 	at := m.now().UTC()
-	for _, d := range st.file.Devices {
+	for _, d := range f.Devices {
 		next.Revoked = append(next.Revoked, revoked{SHA256: d.SHA256, At: at})
 	}
 	next.Devices = []device{}
 	if err := m.saveLocked(user, next); err != nil {
-		slog.Error("Calendar: revoked device passwords not saved; revoked in RAM until restart", "user", name, "err", err)
+		slog.Error("Calendar: revoked device passwords not saved; revoked in RAM, and by the fingerprint after a restart", "user", name, "err", err)
 		next.Revoked = m.prune(next.Revoked)
 		m.known[name] = m.build(user, next)
 		return
 	}
-	slog.Info("Calendar: all device passwords revoked", "user", name, "devices", len(st.file.Devices))
+	slog.Info("Calendar: all device passwords revoked", "user", name, "devices", len(f.Devices))
+}
+
+// Rebind keeps the devices of an account whose second factor the person
+// switched on or off in its own session, with password and code (before is
+// the account as it was). Changed credentials revoke the devices
+// otherwise (stateLocked); this writes the new fingerprint instead, if the
+// file is still that of before. Not written (stick away): the devices hold
+// in RAM and are revoked after a restart – the careful side.
+func (m *Manager) Rebind(before auth.User) {
+	user, ok := m.users.Get(before.Name)
+	if !ok || !user.Created.Equal(before.Created) || credentials(user) == credentials(before) {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// The stick, not RAM: a request in between may have revoked them in
+	// RAM for the new credentials.
+	delete(m.known, user.Name)
+	f, err := m.readLocked(user)
+	if err != nil {
+		slog.Error("Calendar: device passwords not kept after a change of the second factor: not readable", "user", user.Name, "err", err)
+		return
+	}
+	if f.Owner.Creds != "" && f.Owner.Creds != credentials(before) {
+		return // already for other credentials: stays revoked
+	}
+	if len(f.Devices) == 0 && len(f.Revoked) == 0 {
+		return
+	}
+	f.Revoked = m.prune(f.Revoked)
+	if err := m.saveLocked(user, f); err != nil {
+		slog.Error("Calendar: device passwords kept in RAM only after a change of the second factor", "user", user.Name, "err", err)
+		m.known[user.Name] = m.build(user, f)
+	}
 }
 
 // Forget drops what RAM knows of an account: deleted (its devices.json

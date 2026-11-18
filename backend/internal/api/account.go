@@ -81,10 +81,14 @@ func (au authArea) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	user := currentUser(r)
+	before, _ := au.users.Get(user.Name)
 	codes, err := au.users.EnableTwoFactor(user.Name, req.Code)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return
+	}
+	if au.devicesRebind != nil {
+		au.devicesRebind(before)
 	}
 	slog.Info("two-factor login switched on", "user", user.Name, "ip", remoteIP(r))
 	// Shown this once; only hashes are kept.
@@ -227,9 +231,13 @@ func (au authArea) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request
 	if !au.reconfirmProof(w, user, req) {
 		return
 	}
+	before, _ := au.users.Get(user.Name)
 	if err := au.users.DisableTwoFactor(user.Name); err != nil {
 		writeTwoFactorError(w, err)
 		return
+	}
+	if au.devicesRebind != nil {
+		au.devicesRebind(before)
 	}
 	slog.Info("two-factor login switched off", "user", user.Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)

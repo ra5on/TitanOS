@@ -89,6 +89,10 @@ func TestDeviceCreateNeedsPasswordAndCode(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/account/2fa/enable", map[string]string{"code": auth.CodeForTest(begun.Secret, 0)}); res.StatusCode != http.StatusOK {
 		t.Fatalf("2fa: %d %s", res.StatusCode, body)
 	}
+	// Switching it on oneself keeps the device (S-25: devices.Rebind).
+	if _, err := ts.calAuth("alex", created.Password); err != nil {
+		t.Fatalf("device after switching the second factor on: %v", err)
+	}
 	if res, body := ts.request("POST", "/api/v1/account/devices", map[string]string{"name": "Mac", "password": testPassword}); res.StatusCode != http.StatusForbidden {
 		t.Fatalf("without code: %d %s", res.StatusCode, body)
 	}

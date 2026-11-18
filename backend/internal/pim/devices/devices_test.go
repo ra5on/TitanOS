@@ -573,3 +573,117 @@ func TestLongNameIsShortened(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// S-25: the owner record binds the devices to the credentials. When the
+// password changed and RevokeAll did not reach the stick (not readable,
+// not written, titand stopped before it), the old devices are refused
+// after a restart, as revoked – not counted as a wrong password.
+func TestCredentialsBindDevicesAfterRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		revoke func(f *fixture)
+	}{
+		{"stopped before RevokeAll", func(f *fixture) {}},
+		{"not readable", func(f *fixture) {
+			f.cfg.failR.Store(true)
+			f.m.RevokeAll("alex")
+			f.cfg.failR.Store(false)
+		}},
+		{"not written", func(f *fixture) {
+			f.cfg.failW.Store(true)
+			f.m.RevokeAll("alex")
+			f.cfg.failW.Store(false)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			old := f.create("alex", "iPhone")
+			u := f.user("alex")
+			u.PasswordHash = "h1-new"
+			f.users.set(u)
+			tc.revoke(f)
+			// A restart: a new manager reads the stick.
+			f.m = New(f.cfg, f.users, func() *auth.Limiter { return f.limiter }, f.seen)
+			f.m.Now = func() time.Time { return f.now }
+			for range 10 {
+				if _, err := f.ask("alex", old.Password, "10.0.0.2"); !errors.Is(err, ErrRevoked) {
+					t.Fatalf("old device after the restart: %v", err)
+				}
+			}
+			if f.limiter.RetryAfter(limiterKeys("10.0.0.2", "alex")...) > 0 {
+				t.Fatal("the revoked device was counted")
+			}
+			if list, err := f.m.List(f.user("alex")); err != nil || len(list) != 0 {
+				t.Fatalf("list: %v %v", list, err)
+			}
+			// The next write moves it to revoked for good, with the new fingerprint.
+			fresh := f.create("alex", "neues iPhone")
+			var stored file
+			json.Unmarshal(f.cfg.files[File("alex")], &stored)
+			if len(stored.Devices) != 1 || len(stored.Revoked) != 1 || stored.Owner.Creds != credentials(f.user("alex")) {
+				t.Fatalf("stored: %+v", stored)
+			}
+			if _, err := f.ask("alex", fresh.Password, "10.0.0.3"); err != nil {
+				t.Fatalf("new device: %v", err)
+			}
+		})
+	}
+}
+
+// A new TOTP secret (second factor reset elsewhere) revokes like a new
+// password; switching it on or off oneself keeps the devices (Rebind).
+func TestSecondFactorAndRebind(t *testing.T) {
+	f := newFixture(t)
+	c := f.create("alex", "iPhone")
+	before := f.user("alex")
+	u := before
+	u.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	f.users.set(u)
+	f.m.Rebind(before)
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); err != nil {
+		t.Fatalf("after switching it on oneself: %v", err)
+	}
+	f.m = New(f.cfg, f.users, func() *auth.Limiter { return f.limiter }, f.seen)
+	f.m.Now = func() time.Time { return f.now }
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); err != nil {
+		t.Fatalf("after a restart: %v", err)
+	}
+	// Changed without Rebind or RevokeAll: revoked at once (RAM is keyed
+	// on the fingerprint too).
+	u.TOTPSecret = "KRSXG5CTMVRXEZLU"
+	f.users.set(u)
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("after a new secret: %v", err)
+	}
+	// Rebind does not bring back what was written for other credentials.
+	f.m.RevokeAll("alex")
+	other := u
+	other.TOTPSecret = ""
+	f.users.set(other)
+	f.m.Rebind(u)
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("after Rebind of a revoked device: %v", err)
+	}
+}
+
+// A file of a 1.11 test build has no fingerprint: its devices hold, and
+// the next write adds it.
+func TestMissingFingerprintTakenOnce(t *testing.T) {
+	f := newFixture(t)
+	c := f.create("alex", "iPhone")
+	var stored map[string]any
+	json.Unmarshal(f.cfg.files[File("alex")], &stored)
+	delete(stored["owner"].(map[string]any), "creds")
+	f.cfg.files[File("alex")], _ = json.Marshal(stored)
+	f.m = New(f.cfg, f.users, func() *auth.Limiter { return f.limiter }, f.seen)
+	f.m.Now = func() time.Time { return f.now }
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); err != nil {
+		t.Fatalf("without fingerprint: %v", err)
+	}
+	f.create("alex", "Mac")
+	var again file
+	json.Unmarshal(f.cfg.files[File("alex")], &again)
+	if again.Owner.Creds != credentials(f.user("alex")) || len(again.Devices) != 2 {
+		t.Fatalf("stored: %+v", again)
+	}
+}
