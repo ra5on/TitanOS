@@ -152,7 +152,7 @@ func (b *agentToolbox) mailError(err error) error {
 	case "mail_invalid":
 		return toolcatalog.Errorf("Mail refused it: %v", err)
 	case "":
-		return errors.New("Mail could not do it")
+		return errors.New("the mail program could not do it")
 	}
 	return toolcatalog.Errorf("Mail: %s", code)
 }

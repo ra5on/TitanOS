@@ -120,7 +120,7 @@ func (a pimDataArea) handleContactSearch(w http.ResponseWriter, r *http.Request)
 	}
 	local, now := store.Zone(), a.now()
 	out := contactSearch{Contacts: []cardweb.Item{}, Suggestions: []contactSuggestion{}}
-	known := map[string]bool{}
+	var known map[string]bool
 	for _, c := range cols {
 		ix, _, err := a.cache.book(store, user, c.ID)
 		if err != nil {
