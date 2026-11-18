@@ -222,6 +222,12 @@ export function mailState() {
     testFails: {},
     /** Events the next /events stream sends (then ends; the page connects again). */
     events: [],
+    /**
+     * 1.13 (measure-ui-mail-requests.mjs): a message read answers with its
+     * marks from before the read, like titand (it stores \Seen afterwards);
+     * off by default, so the older scripts see what they saw.
+     */
+    flagsBeforeRead: false,
     /** Release of T-Mail per account name (GET/PUT /users/{name}/mail). */
     released: { alex: true, kim: false },
     sent: [],
@@ -539,6 +545,7 @@ export async function installMail(target, state = mailState()) {
       );
       if (!r) return fail(404, "mail_not_found");
       if (r.tooLarge) return fail(413, "mail_too_large");
+      const marks = s.flagsBeforeRead ? { ...r.flags } : r.flags;
       r.flags.seen = true;
       if (r.digest)
         return json({
@@ -554,7 +561,7 @@ export async function installMail(target, state = mailState()) {
           messageId: `<${r.uid}@fixture.example>`,
           inReplyTo: "",
           references: "",
-          flags: r.flags,
+          flags: marks,
           text: "--grenze\nContent-Type: message/rfc822\n\nSubject: Beitrag 1\n\nErster Beitrag der Liste\n--grenze--\n",
           html: "",
           externalImages: false,
@@ -579,7 +586,7 @@ export async function installMail(target, state = mailState()) {
         messageId: `<${r.uid}@fixture.example>`,
         inReplyTo: "",
         references: "",
-        flags: r.flags,
+        flags: marks,
         text: bank
           ? "Guten Tag, Ihr Auszug für November liegt bei."
           : `Hallo Alex,\n\nhier der Text zu „${r.subject}“. Mehr unter https://example.org/info?id=${r.uid}\n\nViele Grüße`,
