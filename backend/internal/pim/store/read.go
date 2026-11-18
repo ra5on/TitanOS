@@ -53,14 +53,23 @@ func (s *Store) ObjectsTag(kind Kind, account, col string) ([]ObjectInfo, string
 		c.mu.Unlock()
 		return nil, "", ErrNotFound
 	}
-	out := make([]ObjectInfo, 0, len(c.st.Index))
+	copied := make([]ObjectInfo, 0, len(c.st.Index))
 	for name, e := range c.st.Index {
-		out = append(out, ObjectInfo{Name: name, Entry: copyEntry(e)})
+		copied = append(copied, ObjectInfo{Name: name, Entry: copyEntry(e)})
 	}
 	ctag := c.st.CTag()
 	c.mu.Unlock()
-	// Sorted outside the lock: the copy is the caller's.
-	slices.SortFunc(out, func(a, b ObjectInfo) int { return strings.Compare(a.Name, b.Name) })
+	// Sorted outside the lock (the copy is the caller's), by pointer: an
+	// ObjectInfo is large to swap.
+	order := make([]*ObjectInfo, len(copied))
+	for i := range copied {
+		order[i] = &copied[i]
+	}
+	slices.SortFunc(order, func(a, b *ObjectInfo) int { return strings.Compare(a.Name, b.Name) })
+	out := make([]ObjectInfo, len(order))
+	for i, o := range order {
+		out[i] = *o
+	}
 	return out, ctag, nil
 }
 
