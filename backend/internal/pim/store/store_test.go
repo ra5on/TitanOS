@@ -164,18 +164,46 @@ func TestVirtualDefaults(t *testing.T) {
 }
 
 // Another calendar while the default is virtual: only that one is shown.
-func TestVirtualHiddenByOwnCalendar(t *testing.T) {
+// The first own calendar makes the virtual "privat" real as well: a device
+// that synced it keeps it, and a PUT made offline still lands there.
+func TestVirtualKeptByOwnCalendar(t *testing.T) {
 	e := newEnv(t)
 	s := e.store()
 	if _, err := s.CreateCollection(Calendar, "alex", "arbeit", Meta{Name: "Arbeit", Color: "#112233"}); err != nil {
 		t.Fatal(err)
 	}
 	cals, _ := s.Collections(Calendar, "alex")
-	if len(cals) != 1 || cals[0].ID != "arbeit" || cals[0].Color != "#112233" {
+	if len(cals) != 2 || cals[0].ID != "arbeit" && cals[1].ID != "arbeit" {
 		t.Fatalf("%+v", cals)
 	}
-	if _, err := s.Put(Calendar, "alex", "privat", "a.ics", ics("a", "A", "20261110T080000Z"), PutOptions{}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("put into the hidden virtual calendar: %v", err)
+	for _, c := range cals {
+		switch c.ID {
+		case "arbeit":
+			if c.Color != "#112233" || c.Virtual {
+				t.Fatalf("arbeit %+v", c)
+			}
+		case "privat":
+			if c.Virtual || c.Name != DefaultCalendarName || c.Color != DefaultColor || c.Count != 0 || c.CTag == "0-0" {
+				t.Fatalf("privat %+v", c)
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(e.dir, ".titanos/calendar/alex/privat", stateFile)); err != nil {
+		t.Fatalf("privat not on the volume: %v", err)
+	}
+	if _, err := s.Put(Calendar, "alex", "privat", "a.ics", ics("a", "A", "20261110T080000Z"), PutOptions{IfNoneMatch: true}); err != nil {
+		t.Fatalf("put into privat after the first own calendar: %v", err)
+	}
+	// Read again from the volume: both stay.
+	if cals, err := e.store().Collections(Calendar, "alex"); err != nil || len(cals) != 2 {
+		t.Fatalf("after reload: %+v %v", cals, err)
+	}
+	// Creating "privat" itself while it is virtual takes the properties.
+	if _, err := s.CreateCollection(Calendar, "bea", "privat", Meta{Name: "Mein", Color: "#445566"}); err != nil {
+		t.Fatal(err)
+	}
+	if cals, _ := s.Collections(Calendar, "bea"); len(cals) != 1 || cals[0].Name != "Mein" || cals[0].Color != "#445566" || cals[0].Virtual {
+		t.Fatalf("bea %+v", cals)
 	}
 	if _, err := s.CreateCollection(Calendar, "alex", "arbeit", Meta{}); !errors.Is(err, ErrExists) {
 		t.Fatalf("twice: %v", err)
@@ -188,6 +216,32 @@ func TestVirtualHiddenByOwnCalendar(t *testing.T) {
 	}
 	if _, err := s.CreateCollection(Calendar, "alex", "x", Meta{Color: "violet"}); !errors.Is(err, ErrInvalidMeta) {
 		t.Fatalf("bad color: %v", err)
+	}
+}
+
+// An entry is not overwritten with another UID (RFC 4791 5.3.2.1, RFC
+// 6352 6.3.2.1); a card without UID may get one.
+func TestPutKeepsUID(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	first := mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "A", "20261110T080000Z"))
+	_, err := s.Put(Calendar, "alex", "privat", "a.ics", ics("b", "B", "20261110T080000Z"), PutOptions{})
+	var uc *UIDConflictError
+	if !errors.As(err, &uc) || uc.Name != "a.ics" {
+		t.Fatalf("other uid: %v", err)
+	}
+	if info, _ := s.Stat(Calendar, "alex", "privat", "a.ics"); info.ETag != first.ETag || info.UID != "a" {
+		t.Fatalf("changed: %+v", info)
+	}
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "A2", "20261110T080000Z"))
+	noUID := []byte("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Erika\r\nN:Erika;;;;\r\nEND:VCARD\r\n")
+	mustPut(t, s, Contacts, "kontakte", "e.vcf", noUID)
+	mustPut(t, s, Contacts, "kontakte", "e.vcf", vcf("e", "Erika"))
+	if _, err := s.Put(Contacts, "alex", "kontakte", "e.vcf", vcf("f", "Erika"), PutOptions{}); !errors.As(err, &uc) {
+		t.Fatalf("card with another uid: %v", err)
+	}
+	if _, err := s.Put(Contacts, "alex", "kontakte", "e.vcf", noUID, PutOptions{}); !errors.As(err, &uc) {
+		t.Fatalf("card without its uid: %v", err)
 	}
 }
 

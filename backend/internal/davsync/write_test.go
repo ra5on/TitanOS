@@ -136,7 +136,8 @@ func TestWritesElsewhereLeaveNothing(t *testing.T) {
 // The 51st calendar is 507 (TECHNIK 5.3).
 func TestMkcalendarLimit(t *testing.T) {
 	e := newEnv(t)
-	for i := range store.MaxCollections {
+	// The first one makes the virtual "privat" real as well: 49 + privat.
+	for i := range store.MaxCollections - 1 {
 		if _, err := e.store.CreateCollection(store.Calendar, "alex", fmt.Sprintf("k%d", i), store.Meta{}); err != nil {
 			t.Fatal(err)
 		}

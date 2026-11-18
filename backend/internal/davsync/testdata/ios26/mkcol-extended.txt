@@ -12,14 +12,14 @@
 > </A:prop></A:set></A:mkcol>
 < status 201
 
-# The empty virtual default gives way to the first own calendar (pim/store,
-# TestVirtualHiddenByOwnCalendar).
+# The first own calendar makes the virtual default real as well (pim/store,
+# TestVirtualKeptByOwnCalendar): a device that synced "privat" keeps it.
 > PROPFIND /caldav/alex/calendars/
 > Auth: alex
 > Depth: 1
 < status 207
-< responses 2
-< response-lacks /caldav/alex/calendars/privat/
+< responses 3
+< value /caldav/alex/calendars/privat/ d:displayname Privat
 < value /caldav/alex/calendars/reisen/ d:displayname Reisen
 < value /caldav/alex/calendars/reisen/ ical:calendar-color #34C759
 < value /caldav/alex/calendars/reisen/ d:resourcetype <cal:calendar/>

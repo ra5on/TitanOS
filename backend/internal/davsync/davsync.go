@@ -127,7 +127,7 @@ type request struct {
 // davHeader is the DAV header of a kind (TECHNIK 1.4).
 func davHeader(kind store.Kind) string {
 	if kind == store.Contacts {
-		return "1, 3, access-control, addressbook, extended-mkcol"
+		return "1, 3, access-control, addressbook"
 	}
 	return "1, 3, access-control, calendar-access, extended-mkcol"
 }

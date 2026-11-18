@@ -142,6 +142,13 @@ func (s *Store) GetCollection(kind Kind, account, id string) (Collection, error)
 
 // CreateCollection makes a calendar (MKCALENDAR). Contacts keep the one
 // book "kontakte" (ErrFixedBook). A name used before gets a new epoch.
+//
+// While the account still shows the virtual "privat", the first own
+// calendar makes it real as well (empty, default name and color, in the
+// same lock): a device that synced "privat" keeps it, and a PUT it made
+// offline still lands. Creating "privat" itself makes the virtual one real
+// with the properties given. The virtual object is made real in place, so
+// a PUT waiting on its lock goes on into the real collection.
 func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collection, error) {
 	if kind == Contacts {
 		return Collection{}, ErrFixedBook
@@ -158,6 +165,13 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 		return Collection{}, err
 	}
 	defer done()
+	// Lock order: the collection first, then the account.
+	var virtual *collection
+	if v, err := acc.lookup(DefaultCalendar); err == nil && v.virtual {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		virtual = v
+	}
 	acc.mu.Lock()
 	defer acc.mu.Unlock()
 	if acc.cols[id] != nil {
@@ -166,11 +180,38 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 	if len(acc.cols) >= maxCollections {
 		return Collection{}, ErrTooManyCollections
 	}
+	if virtual != nil && (len(acc.cols) > 0 || !virtual.virtual || virtual.deleted || acc.virtual != virtual) {
+		virtual = nil // made real (or replaced) meanwhile
+	}
 	ar, release, err := s.openWriteLocked(acc)
 	if err != nil {
 		return Collection{}, err
 	}
 	defer release()
+	if virtual != nil {
+		if err := s.materializeLocked(acc, ar, virtual); err != nil {
+			return Collection{}, err
+		}
+		if id == DefaultCalendar {
+			if m.Name == "" {
+				m.Name = virtual.st.Name
+			}
+			patch.apply(virtual.st)
+		}
+		vr, err := ar.OpenRoot(DefaultCalendar)
+		if err != nil {
+			return Collection{}, err
+		}
+		err = s.writeState(vr, virtual.st)
+		vr.Close()
+		if err != nil {
+			return Collection{}, err
+		}
+		acc.virtual = nil
+		if id == DefaultCalendar {
+			return info(kind, virtual), nil
+		}
+	}
 	st := defaultState(kind, id, newEpoch(), s.now().UTC())
 	if m.Name == "" {
 		m.Name = st.Name
@@ -277,6 +318,14 @@ func (s *Store) materialize(acc *account, ar *os.Root, c *collection) error {
 	}
 	acc.mu.Lock()
 	defer acc.mu.Unlock()
+	return s.materializeLocked(acc, ar, c)
+}
+
+// materializeLocked is materialize with acc.mu held as well.
+func (s *Store) materializeLocked(acc *account, ar *os.Root, c *collection) error {
+	if !c.virtual {
+		return nil
+	}
 	if acc.cols[c.id] != nil {
 		// Made meanwhile by CreateCollection: the virtual one is gone.
 		return ErrExists
@@ -416,6 +465,11 @@ func (s *Store) Put(kind Kind, account, col, name string, data []byte, opt PutOp
 	}
 	if cur != nil && cur.ETag == entry.ETag {
 		return PutResult{ETag: cur.ETag}, nil // the same bytes: nothing to write
+	}
+	if cur != nil && cur.UID != "" && entry.UID != cur.UID {
+		// RFC 4791 5.3.2.1, RFC 6352 6.3.2.1: an entry is not overwritten
+		// with another UID (an old card without UID may get one).
+		return PutResult{}, &UIDConflictError{Name: name}
 	}
 	if err := uidFree(c.st, name, entry.UID); err != nil {
 		return PutResult{}, err

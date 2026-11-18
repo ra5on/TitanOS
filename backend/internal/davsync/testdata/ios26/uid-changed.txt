@@ -1,0 +1,41 @@
+# A PUT that overwrites an entry with another UID: 409 no-uid-conflict
+# (RFC 4791 5.3.2.1, RFC 6352 6.3.2.1) naming the entry, content unchanged.
+@seed calendar privat termin.ics dentist.ics
+@seed contacts kontakte erika.vcf erika.vcf
+
+> PUT /caldav/alex/calendars/privat/termin.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:dentist.ics}
+> Body: weekly-team.ics
+< status 409
+< error cal:no-uid-conflict
+< body-has <d:href>/caldav/alex/calendars/privat/termin.ics</d:href>
+
+> GET /caldav/alex/calendars/privat/termin.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+< header ETag {etag:dentist.ics}
+
+# The same UID is an ordinary edit.
+> PUT /caldav/alex/calendars/privat/termin.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:dentist.ics}
+> Body: dentist-moved.ics
+< status 204
+< header ETag {etag:dentist-moved.ics}
+
+> PUT /carddav/alex/addressbooks/kontakte/erika.vcf
+> Auth: alex
+> Content-Type: text/vcard
+> Body: group-family.vcf
+< status 409
+< error card:no-uid-conflict
+< body-has <d:href>/carddav/alex/addressbooks/kontakte/erika.vcf</d:href>
+
+> GET /carddav/alex/addressbooks/kontakte/erika.vcf
+> Auth: alex
+< status 200
+< body erika.vcf

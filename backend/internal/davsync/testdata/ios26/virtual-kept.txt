@@ -1,0 +1,55 @@
+# The first own calendar of an account that still sees the virtual
+# "privat" makes "privat" real as well (empty, default name and color): an
+# iPhone that synced "privat" keeps it, and a PUT it made offline to
+# "privat" still lands there.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><A:displayname/><C:getctag/></A:prop></A:propfind>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+
+> MKCALENDAR /caldav/alex/calendars/arbeit/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set xmlns:A="DAV:"><A:prop><A:displayname>Arbeit</A:displayname></A:prop></A:set></B:mkcalendar>
+< status 201
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/" xmlns:I="http://apple.com/ns/ical/"><A:prop><A:displayname/><C:getctag/><I:calendar-color/></A:prop></A:propfind>
+< status 207
+< responses 3
+< value /caldav/alex/calendars/privat/ d:displayname Privat
+< value /caldav/alex/calendars/privat/ ical:calendar-color #7c3aed
+< value /caldav/alex/calendars/arbeit/ d:displayname Arbeit
+
+# The offline PUT of the iPhone into "privat".
+> PUT /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist.ics
+< status 201
+< header ETag {etag:dentist.ics}
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+
+# Deleting "arbeit" leaves "privat"; "privat" is the last one then.
+> DELETE /caldav/alex/calendars/arbeit/
+> Auth: alex
+< status 204
+
+> DELETE /caldav/alex/calendars/privat/
+> Auth: alex
+< status 403

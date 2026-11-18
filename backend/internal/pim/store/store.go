@@ -100,8 +100,9 @@ var (
 	ErrTooManyCollections = errors.New("pim: too many collections")
 	// ErrPrecondition: If-Match / If-None-Match failed (412).
 	ErrPrecondition = errors.New("pim: precondition failed")
-	// ErrUIDConflict: another entry of the collection has the UID
-	// (no-uid-conflict); errors.As gives *UIDConflictError with its name.
+	// ErrUIDConflict: another entry of the collection has the UID, or a
+	// PUT overwrites an entry with another UID (no-uid-conflict);
+	// errors.As gives *UIDConflictError with the name holding the UID.
 	ErrUIDConflict = errors.New("pim: uid already used in the collection")
 	// ErrLastCollection: the last own collection is not deleted (409).
 	ErrLastCollection = errors.New("pim: last collection")
