@@ -220,6 +220,20 @@ func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 		if pattern.Match(data) {
 			t.Errorf("%s mentions T-Mail", f)
 		}
+		// 1.11: the address book T-Mail learns from sent mail stays
+		// T-Mail's – no tool reads .titanos/mail/<account>/contacts.json.
+		if regexp.MustCompile(`contacts\.json|\.Learned\(|contacts/suggestions|from-suggestion|pimDataArea\(\)`).Match(data) {
+			t.Errorf("%s reaches T-Mail's learned addresses", f)
+		}
+	}
+	// The tools of calendar and contacts build their store access without
+	// T-Mail (pimDataArea has a mail field for the web suggestions).
+	data, err := os.ReadFile("agent_pim.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexp.MustCompile(`opts\.Mail|mail:|suggest|tmail`).Match(data) {
+		t.Error("agent_pim.go touches T-Mail")
 	}
 }
 

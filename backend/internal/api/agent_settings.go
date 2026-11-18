@@ -140,6 +140,11 @@ type agentHASettings struct {
 	AssistKey    string            `json:"assistKey,omitempty"`
 	AssistKeySet bool              `json:"assistKeySet,omitempty"`
 	AssistAreas  map[string]string `json:"assistAreas,omitempty"`
+	// AssistData is what a question from Home Assistant may do with the
+	// calendar and the contacts of the account "Assist als" (1.11): "deny"
+	// (the default) or "read", never more. A field of its own: 1.10
+	// refuses an unknown key in assistAreas when it saves (rollback).
+	AssistData map[string]string `json:"assistData,omitempty"`
 }
 
 const (
@@ -398,6 +403,11 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	for area, level := range req.HA.AssistAreas {
 		if !slices.Contains(assistAreas, area) || !slices.Contains([]string{assistDeny, assistRead, assistChange}, level) {
 			return errors.New("invalid Assist area")
+		}
+	}
+	for area, level := range req.HA.AssistData {
+		if !agent.IsDataArea(area) || (level != assistDeny && level != assistRead) {
+			return errors.New("invalid Assist rights for the calendar or the contacts (deny or read)")
 		}
 	}
 	for key, mode := range req.HA.Entities {

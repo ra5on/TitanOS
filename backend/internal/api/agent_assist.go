@@ -85,7 +85,15 @@ func assistDefault(area string) string {
 }
 
 // assistLevel is what a question from Home Assistant may use of an area.
+// Calendar and contacts (1.11) stand in AssistData: forbidden until the
+// person allows reading; more than reading never.
 func (h agentHASettings) assistLevel(area string) string {
+	if agent.IsDataArea(area) {
+		if h.AssistData[area] == assistRead {
+			return assistRead
+		}
+		return assistDeny
+	}
 	if l, ok := h.AssistAreas[area]; ok {
 		return l
 	}
@@ -445,7 +453,13 @@ func (s *Server) handleAgentAssist(w http.ResponseWriter, r *http.Request) {
 	assistLast.Lock()
 	last := assistLast.seen
 	assistLast.Unlock()
-	out := map[string]any{"keySet": settings.HA.AssistKey != "", "addresses": addrs, "areas": assistAreas, "levels": levels, "last": last}
+	// 1.11: calendar and contacts apart (assistData, deny or read only).
+	dataLevels := map[string]string{}
+	for _, area := range agent.DataAreas {
+		dataLevels[area] = settings.HA.assistLevel(area)
+	}
+	out := map[string]any{"keySet": settings.HA.AssistKey != "", "addresses": addrs, "areas": assistAreas, "levels": levels, "last": last,
+		"dataAreas": agent.DataAreas, "dataLevels": dataLevels}
 	if store := s.agentStore(); store != nil {
 		if mem, err := store.Memories(agent.AssistProfile); err == nil {
 			out["memories"] = len(mem)

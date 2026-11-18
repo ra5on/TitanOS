@@ -49,6 +49,10 @@ type agentTool struct {
 	// area stays the one for arguments that name none of them.
 	areaOf func(json.RawMessage) string
 	areas  []string
+	// prepare checks the arguments of a tool of the agent's own and plans
+	// the step: it may write the summary, rewrite the arguments (an etag)
+	// and return a mode the call needs at least ("" for none).
+	prepare func(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage, p *agent.Prepared) (string, error)
 }
 
 type agentToolbox struct {
@@ -159,6 +163,10 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		add(t)
 	}
 	for _, t := range b.noteTools() {
+		add(t)
+	}
+	// 1.11: calendar and contacts (agent_pim.go), never in the catalog.
+	for _, t := range b.pimTools() {
 		add(t)
 	}
 	for _, t := range b.featureTools() {
@@ -461,6 +469,17 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		mode = b.codeMode(mode)
 		p.Summary = codeSummary(args)
+	}
+	if t.prepare != nil {
+		// Calendar and contacts: "deleting a whole series always asks"
+		// comes back from here and holds over every right and work mode.
+		least, err := t.prepare(ctx, chat, name, args, &p)
+		if err != nil {
+			return agent.Prepared{}, err
+		}
+		if least != "" {
+			mode = agent.Stricter(mode, least)
+		}
 	}
 	if p.Summary == "" && t.kind != agent.KindRead && t.kind != agent.KindAgent {
 		p.Summary = t.name + " " + compactArgs(args)

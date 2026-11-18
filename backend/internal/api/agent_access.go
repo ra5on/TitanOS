@@ -16,6 +16,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
@@ -52,10 +53,15 @@ func (b *agentToolbox) Missing() map[string]string {
 			continue
 		}
 		why := ""
-		userArea := area == agent.AreaWeb || area == agent.AreaPhotos || area == agent.AreaCode || area == agent.AreaMCP || area == toolcatalog.AreaFiles || area == toolcatalog.AreaSystem
+		// Calendar and contacts are every account's own (1.11).
+		userArea := area == agent.AreaWeb || area == agent.AreaPhotos || area == agent.AreaCode || area == agent.AreaMCP || area == toolcatalog.AreaFiles || area == toolcatalog.AreaSystem || agent.IsDataArea(area)
 		switch {
 		case b.settings.Policy.AreaMode(area) == agent.ModeDeny:
 			why = "forbidden for the agent by the person (" + whereRights + ")"
+		case agent.IsDataArea(area) && b.user.Name == agent.AssistProfile && b.settings.HA.assistLevel(area) == assistDeny:
+			why = "forbidden for questions from Home Assistant (" + whereHA + " › Assist)"
+		case agent.IsDataArea(area):
+			why = "the data volume is not mounted (Kalender and Kontakte live on it)"
 		case !admin && !userArea:
 			why = "only for owners and administrators; this account is a user (" + whereAccounts + ")"
 		case area == toolcatalog.AreaDocker && !on["docker"]:
@@ -135,6 +141,10 @@ func (b *agentToolbox) access(ctx context.Context) map[string]any {
 			}
 		}
 		if len(list) == 0 {
+			// Calendar and contacts are always named, with the reason.
+			if agent.IsDataArea(area) {
+				areas = append(areas, accessArea{Area: area, Read: agent.ModeDeny, Change: agent.ModeDeny, Why: missing[area]})
+			}
 			continue
 		}
 		read, change := "", ""
@@ -154,6 +164,28 @@ func (b *agentToolbox) access(ctx context.Context) map[string]any {
 			}
 		}
 		a.Read, a.Change = read, change
+		if agent.IsDataArea(area) {
+			// No single tools here: the two axes, as the person set them.
+			read, change = agent.ModeDeny, agent.ModeDeny
+			for _, t := range list {
+				if t.kind == agent.KindRead {
+					read = b.modeIn(t, area, agent.KindRead)
+				} else {
+					change = b.modeIn(t, area, agent.KindChange)
+				}
+			}
+			a.Read, a.Change = read, change
+			kind := pimstore.Calendar
+			if area == agent.AreaContacts {
+				kind = pimstore.Contacts
+			}
+			switch {
+			case !b.pimMounted(kind):
+				a.Why = "the data volume is not mounted right now; searches answer hidden/why instead of results"
+			case area == agent.AreaCalendar && change != agent.ModeDeny:
+				a.Why = "deleting a whole series always asks the person"
+			}
+		}
 		if area == agent.AreaNVR && read == agent.ModeAsk {
 			a.Why = "camera events ask first unless the person allows them expressly (" + whereRights + " › NVR)"
 		}
@@ -181,9 +213,10 @@ func (b *agentToolbox) access(ctx context.Context) map[string]any {
 		"areas": areas, "toolSettings": own,
 		"folderRules": map[string]any{"count": len(p.Folders), "forbidden": denied, "ask": ask,
 			"note": "Forbidden folders are left out of lists and searches (hidden counts them); the paths are not shown here.", "where": whereFolders},
-		"services": map[string]any{"docker": on["docker"], "vms": on["vms"], "lxc": on["lxc"], "where": whereServices},
-		"mail":     "T-Mail is closed to the agent by design: no tool reads or sends mail. Say so; do not search files for mail.",
-		"where":    map[string]string{"rights": whereRights, "homeAssistant": whereHA, "photos": wherePhotos, "accounts": whereAccounts},
+		"services":         map[string]any{"docker": on["docker"], "vms": on["vms"], "lxc": on["lxc"], "where": whereServices},
+		"mail":             "T-Mail is closed to the agent by design: no tool reads or sends mail. Say so; do not search files for mail.",
+		"tmailAddressBook": "Suggestions learned from sent mail are T-Mail's and closed to the agent by design.",
+		"where":            map[string]string{"rights": whereRights, "homeAssistant": whereHA, "photos": wherePhotos, "accounts": whereAccounts},
 	}
 	if b.user.Name != agent.AssistProfile {
 		st, _ := b.s.photosStored(b.user.Name)
@@ -262,7 +295,7 @@ func presetMeaning(preset string) string {
 	case agent.PresetAll:
 		return "everything without asking (code and camera events still ask)"
 	}
-	return "reading and creating new things without asking; every other change asks the person first"
+	return "reading and creating new things without asking; every other change asks the person first (calendar and contacts: every entry asks)"
 }
 
 // looser is the more open of two modes ("" is none yet).
