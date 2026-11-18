@@ -1,6 +1,6 @@
 # Leistung des Kalenders 1.13 (Oberfläche)
 
-Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/measure-ui-kalender.mjs` (Playwright, Chromium headless, isolierte Testdaten aus `scripts/test-ui-kalender-fixtures.mjs`, Uhr fest auf Dienstag, 17.11.2026, 12:29 Berlin), vorher auf dem Stand `def6eb37` (Basis `feat/v1.13` mit dem Backend der Leistungsarbeit), nachher auf `3032e172`. Backend-Messungen (Store, ETag, `full=1`, Strom): `performance-113.md`.
+Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/measure-ui-kalender.mjs` (Playwright, Chromium headless, isolierte Testdaten aus `scripts/test-ui-kalender-fixtures.mjs`, Uhr fest auf Dienstag, 17.11.2026, 12:29 Berlin), vorher auf dem Stand `def6eb37` (Basis `feat/v1.13` mit dem Backend der Leistungsarbeit), nachher auf `3032e172` und noch einmal auf `c1f49351` (Stand der Übergabe; Anfragen und Scrollposition gleich, Zeiten siehe Tabelle). Backend-Messungen (Store, ETag, `full=1`, Strom): `performance-113.md`.
 
 ## Methode
 
@@ -14,8 +14,8 @@ Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/measure-ui-
 
 | | vorher | nachher |
 |---|---|---|
-| Zeit bis Raster sichtbar | 406 ms | 219 ms |
-| Zeit bis alle Titel ganz | 2212 ms | 226 ms |
+| Zeit bis Raster sichtbar | 406 ms | 219 ms (`c1f49351`: 279 ms, Maschine parallel belastet) |
+| Zeit bis alle Titel ganz | 2212 ms | 226 ms (`c1f49351`: 284 ms) |
 | Anfragen der Runde | 84 | 14 (davon 3 Live-Strom) |
 | davon Einzelabrufe `GET /calendar/events/{cal}/{obj}` | 70 | 0 |
 | Öffnen: Anfragen | 34 (access → calendars → events nacheinander, dann 31 Einzelabrufe) | 4 (access, calendars, events gleichzeitig; Strom) |
@@ -23,8 +23,8 @@ Stand 18.11.2026, Zweig `feat/v1.13-calendar`. Gemessen mit `scripts/measure-ui-
 | Änderung eines anderen Fensters | 7 | 1 (nur ohne Live-Strom; mit Strom liest das Ereignis nur die Sammlung) |
 | Live-Ereignis „privat geändert“ | – (nicht ausgewertet) | 1 (`calendars=privat`) |
 | Zurück zum Monat | 22 | 1 (`If-None-Match` → `304`) |
-| Woche öffnen: Layouts / Stilberechnungen / Layoutzeit | 33 / 37 / 5,7 ms | 4 / 5 / 3,0 ms |
-| Fensterbreite ziehen (20 Schritte): Layouts / Stile / Zeit | 150 / 161 / 40,8 ms | 40 / 46 / 24,4 ms |
+| Woche öffnen: Layouts / Stilberechnungen / Layoutzeit | 33 / 37 / 5,7 ms | 4 / 5 / 3,0 ms (`c1f49351`: 4 / 5 / 2,7 ms) |
+| Fensterbreite ziehen (20 Schritte): Layouts / Stile / Zeit | 150 / 161 / 40,8 ms | 40 / 46 / 24,4 ms (`c1f49351`: 40 / 40 / 18,4 ms) |
 | Scrollposition der Stunden nach Neuladen | springt auf 07:00 (356 px) | bleibt (518 px) |
 
 ## Ursachen und was geändert ist
