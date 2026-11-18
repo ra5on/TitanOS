@@ -185,7 +185,7 @@ func entryOf(c target, href string) (string, bool) {
 		return "", false
 	}
 	t, ok := parsePath(u.EscapedPath())
-	if !ok || t.level != levelEntry || t.kind != c.kind || t.account != c.account || t.collection != c.collection {
+	if !ok || t.level != levelEntry || t.kind != family(c.kind) || t.account != c.account || t.collection != c.collection {
 		return "", false
 	}
 	return t.name, true

@@ -36,7 +36,8 @@
 > <?xml version="1.0" encoding="UTF-8"?>
 > <A:propfind xmlns:A="DAV:" xmlns:B="http://calendarserver.org/ns/" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:D="http://apple.com/ns/ical/"><A:prop><B:getctag/><A:sync-token/><A:resourcetype/><A:displayname/><D:calendar-color/><D:calendar-order/><C:supported-calendar-component-set/><A:current-user-privilege-set/><A:supported-report-set/></A:prop></A:propfind>
 < status 207
-< responses 2
+< responses 3
+# (and the virtual reminder list, 1.13: reminders.txt)
 < value /caldav/alex/calendars/privat/ d:supported-report-set <d:sync-collection/>
 < save ctag prop /caldav/alex/calendars/privat/ cs:getctag
 < save token prop /caldav/alex/calendars/privat/ d:sync-token

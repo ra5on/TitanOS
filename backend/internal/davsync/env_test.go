@@ -76,6 +76,8 @@ type env struct {
 	churned int
 	// saved are the values a sequence keeps (< save …, {saved:NAME}).
 	saved map[string]string
+	// tasksGone: only the reminder lists cannot be read (@tasks off).
+	tasksGone bool
 }
 
 func newEnv(t *testing.T) *env {
@@ -95,14 +97,20 @@ func newEnv(t *testing.T) *env {
 	}
 	// The zone of the NAS: dates and floating times (never the machine's).
 	st.Local = func() *time.Location { return berlin }
-	st.Current = func(string) string {
+	st.Current = func(feature string) string {
 		e.mu.Lock()
 		defer e.mu.Unlock()
+		if feature == string(store.Tasks) && e.tasksGone {
+			return ""
+		}
 		return e.volume
 	}
 	st.Volume = func(feature string, create bool) (*os.Root, func(), error) {
 		e.mu.Lock()
 		volume := e.volume
+		if feature == string(store.Tasks) && e.tasksGone {
+			volume = ""
+		}
 		dir := e.dirs[volume]
 		e.mu.Unlock()
 		e.opens.Add(1)
@@ -149,6 +157,7 @@ func (e *env) setVolume(v string) {
 	if v != "" {
 		e.store.Moved(string(store.Calendar))
 		e.store.Moved(string(store.Contacts))
+		e.store.Moved(string(store.Tasks))
 	}
 }
 

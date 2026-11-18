@@ -25,14 +25,14 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | backup | `backup_coverage.go` | – | 2 |
 | backups | `backups.go`, `backups_vmdisks.go` | `backupsArea` | 1 |
 | backuptarget | `backuptarget.go` | `backupTargetArea` | 0 |
-| calendar | `calendar.go`, `calendar_events.go`, `calendar_ics.go` | – | 2 |
+| calendar | `calendar.go`, `calendar_events.go`, `calendar_ics.go`, `calendar_tasks.go` | – | 3 |
 | catalog | `catalog.go`, `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`, `catalog_status.go` | – | 3 |
 | cluster | `cluster.go` | `clusterArea` | 1 |
 | configbackup | `configbackup.go` | `configBackupArea` | 0 |
 | contacts | `contacts.go`, `contacts_photo.go`, `contacts_suggest.go`, `contacts_vcf.go` | – | 1 |
 | craft | `craft_replace.go` | – | 1 |
 | dashboard | `dashboard_background.go` | – | 1 |
-| devices | `devices.go` | `pimArea` | 2 |
+| devices | `devices.go`, `devices_profile.go` | `pimArea`, `profileArea` | 3 |
 | diagnose | `diagnose.go` | `diagnoseArea` | 0 |
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |

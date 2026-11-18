@@ -160,6 +160,11 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 	if !patch.valid() {
 		return Collection{}, ErrInvalidMeta
 	}
+	// CalDAV shows calendars and reminder lists side by side: an id is
+	// one or the other (tasks.go).
+	if err := s.idFree(kind, account, id); err != nil {
+		return Collection{}, err
+	}
 	acc, done, err := s.beginWrite(kind, account)
 	if err != nil {
 		return Collection{}, err
@@ -173,7 +178,7 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 	defer done()
 	// Lock order: the collection first, then the account.
 	var virtual *collection
-	if v, err := acc.lookup(DefaultCalendar); err == nil && v.virtual {
+	if v, err := acc.lookup(defaultID(kind)); err == nil && v.virtual {
 		v.mu.Lock()
 		defer v.mu.Unlock()
 		virtual = v
@@ -198,13 +203,13 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 		if err := s.materializeLocked(acc, ar, virtual); err != nil {
 			return Collection{}, err
 		}
-		if id == DefaultCalendar {
+		if id == virtual.id {
 			if m.Name == "" {
 				m.Name = virtual.st.Name
 			}
 			patch.apply(virtual.st)
 		}
-		vr, err := ar.OpenRoot(DefaultCalendar)
+		vr, err := ar.OpenRoot(virtual.id)
 		if err != nil {
 			return Collection{}, err
 		}
@@ -215,7 +220,7 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 		}
 		acc.virtual = nil
 		made = append(made, virtual)
-		if id == DefaultCalendar {
+		if id == virtual.id {
 			return info(kind, virtual), nil
 		}
 	}

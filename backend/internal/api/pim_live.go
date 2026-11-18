@@ -139,7 +139,7 @@ func (a pimLiveArea) register(mux *routeMux, g guards) {
 // kind that cannot be read is left out).
 func (a pimLiveArea) generations(user string) map[string]string {
 	out := map[string]string{}
-	for _, kind := range []pimstore.Kind{pimstore.Calendar, pimstore.Contacts} {
+	for _, kind := range []pimstore.Kind{pimstore.Calendar, pimstore.Contacts, pimstore.Tasks} {
 		cols, err := a.store.Collections(kind, user)
 		if err != nil {
 			continue

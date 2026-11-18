@@ -87,6 +87,9 @@ type Entry struct {
 	Addresses []string `json:"adr,omitempty"`
 	Group     bool     `json:"group,omitempty"` // a group vCard: hidden in lists and search
 	HasPhoto  bool     `json:"hasPhoto,omitempty"`
+
+	// Task is set for a reminder (kind Tasks, 1.13; tasks.go).
+	Task *TaskInfo `json:"task,omitempty"`
 }
 
 // ETag is the strong entity tag of stored bytes, without quotes: the first

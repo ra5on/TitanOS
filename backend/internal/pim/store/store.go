@@ -31,17 +31,21 @@ import (
 )
 
 // Kind is calendar or contacts; its value is the folder below .titanos.
+// Tasks (1.13) are the reminder lists (VTODO): calendar collections of
+// CalDAV, kept apart in .titanos/tasks so that 1.12 never sees them
+// (tasks.go).
 type Kind string
 
 const (
 	Calendar Kind = "calendar"
 	Contacts Kind = "contacts"
+	Tasks    Kind = "tasks"
 )
 
 // Features are the folders below .titanos the store uses.
-var Features = []string{string(Calendar), string(Contacts)}
+var Features = []string{string(Calendar), string(Contacts), string(Tasks)}
 
-func (k Kind) valid() bool { return k == Calendar || k == Contacts }
+func (k Kind) valid() bool { return k == Calendar || k == Contacts || k == Tasks }
 
 func (k Kind) suffix() string {
 	if k == Contacts {
@@ -535,6 +539,11 @@ func defaultState(kind Kind, id string, epoch string, created time.Time) *State 
 	switch {
 	case kind == Contacts:
 		st.Name = DefaultBookName
+	case kind == Tasks:
+		st.Color = DefaultTaskColor
+		if id == DefaultTaskList {
+			st.Name = DefaultTaskListName
+		}
 	case id == DefaultCalendar:
 		st.Name, st.Color = DefaultCalendarName, DefaultColor
 	default:
@@ -545,11 +554,7 @@ func defaultState(kind Kind, id string, epoch string, created time.Time) *State 
 
 // virtualState is the collection that exists until the first write.
 func virtualState(kind Kind) *State {
-	id := DefaultCalendar
-	if kind == Contacts {
-		id = DefaultBook
-	}
-	return defaultState(kind, id, virtualEpoch, time.Time{})
+	return defaultState(kind, defaultID(kind), virtualEpoch, time.Time{})
 }
 
 // lookup returns a collection of the account: an own one, or the default
@@ -570,8 +575,11 @@ func (acc *account) lookup(id string) (*collection, error) {
 }
 
 func defaultID(kind Kind) string {
-	if kind == Contacts {
+	switch kind {
+	case Contacts:
 		return DefaultBook
+	case Tasks:
+		return DefaultTaskList
 	}
 	return DefaultCalendar
 }

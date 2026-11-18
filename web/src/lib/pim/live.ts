@@ -10,7 +10,7 @@
 // again (what changed meanwhile is unknown: read anew).
 import { apiFetch } from '../api.ts';
 
-export type PimKind = 'contacts' | 'calendar';
+export type PimKind = 'contacts' | 'calendar' | 'tasks';
 
 export type PimEvent =
 	/** The stream is open; `generations` maps "<kind>/<collection>" to its ctag. */
@@ -58,7 +58,7 @@ export function parsePimBlock(block: string): PimEvent | null {
 	}
 	if (type === 'pim') {
 		const kind = raw.kind;
-		if (kind !== 'contacts' && kind !== 'calendar') return null;
+		if (kind !== 'contacts' && kind !== 'calendar' && kind !== 'tasks') return null;
 		const collection = typeof raw.collection === 'string' ? raw.collection : '';
 		if (!collection) return null;
 		const generation = typeof raw.generation === 'string' ? raw.generation : '';

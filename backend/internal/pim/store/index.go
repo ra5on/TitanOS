@@ -25,8 +25,11 @@ const (
 // entry (without size and time): one UID per .ics file and only VEVENT
 // besides VTIMEZONE; one vCard per .vcf file.
 func (s *Store) inspect(kind Kind, account, name string, data []byte) (*Entry, error) {
-	if kind == Contacts {
+	switch kind {
+	case Contacts:
 		return inspectCard(data)
+	case Tasks:
+		return s.inspectTodo(account, name, data) // tasks.go
 	}
 	if len(data) > MaxICS {
 		return nil, ErrTooLarge

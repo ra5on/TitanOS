@@ -95,7 +95,8 @@
 >   </A:prop>
 > </A:propfind>
 < status 207
-< responses 2
+< responses 3
+# (and the virtual reminder list, 1.13: reminders.txt)
 < prop /caldav/alex/calendars/privat/ 200 cs:getctag d:sync-token d:resourcetype d:displayname ical:calendar-color ical:calendar-order cal:supported-calendar-component-set d:current-user-privilege-set d:supported-report-set
 < value /caldav/alex/calendars/privat/ cs:getctag 0-0
 < value /caldav/alex/calendars/privat/ d:sync-token https://ns.titanos.invalid/sync/0/0

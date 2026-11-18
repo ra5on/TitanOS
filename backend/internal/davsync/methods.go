@@ -20,7 +20,7 @@ type method struct {
 }
 
 func (m method) serves(kind store.Kind, l level) bool {
-	return m.levels.has(l) && (m.kind == "" || m.kind == kind)
+	return m.levels.has(l) && (m.kind == "" || m.kind == family(kind))
 }
 
 // readMethods are the methods of step 6.
@@ -153,7 +153,7 @@ func (rq *request) propfind() {
 		if depth == 1 {
 			for i := range home.cols {
 				c := t.at(levelCollection)
-				c.collection = home.cols[i].ID
+				c.collection, c.kind = home.cols[i].ID, home.cols[i].Kind
 				children = append(children, &resource{t: c, col: &home.cols[i]})
 			}
 		}
@@ -208,7 +208,7 @@ func (rq *request) home() (*resource, bool) {
 	if !ok {
 		return nil, false
 	}
-	cols, err := st.Collections(rq.t.kind, rq.t.account)
+	cols, err := rq.homeCollections(st) // calendars and reminder lists (tasks.go)
 	if err != nil {
 		rq.fail(err)
 		return nil, false

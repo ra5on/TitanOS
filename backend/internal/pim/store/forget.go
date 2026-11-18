@@ -8,11 +8,11 @@ import (
 
 // ForgetUser removes everything the store keeps of an account (TECHNIK
 // 5.7): RAM first (state, locks, parsed entries), its context is cancelled
-// so that running DAV requests end, then .titanos/calendar/<name> and
-// .titanos/contacts/<name> (opened without creating anything). Without a
-// volume the folders stay: owner.json names their account with its
-// creation time, so a new account of the name neither reads them nor keeps
-// them (they go with its first write). It runs when an account is deleted
+// so that running DAV requests end, then .titanos/calendar/<name>,
+// .titanos/contacts/<name> and .titanos/tasks/<name> (opened without
+// creating anything). Without a volume the folders stay: owner.json names
+// their account with its creation time, so a new account of the name
+// neither reads them nor keeps them (they go with its first write). It runs when an account is deleted
 // here or by another node, and when one is made.
 func (s *Store) ForgetUser(name string) error {
 	if !accountRE.MatchString(name) {
@@ -50,7 +50,7 @@ func (s *Store) ForgetUser(name string) error {
 		acc.gone = true
 		acc.gate.Unlock()
 	}
-	for _, kind := range []Kind{Calendar, Contacts} {
+	for _, kind := range []Kind{Calendar, Contacts, Tasks} {
 		root, release, err := s.open(kind, false)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue // nothing kept on this volume
