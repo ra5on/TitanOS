@@ -1,32 +1,58 @@
 <script lang="ts">
-	// 1.11: T-Kalender (docs/KALENDER.md, drafts 01–04, 07, 40–42). Asks
-	// titand first whether the calendars can be read (GET /calendar/access):
-	// without the data volume the page says "nicht verfügbar", never an
-	// empty grid. Then the column (mini month, calendars with color and
-	// name), the bar (Heute, back/forward, Monat · Woche · Tag · Liste in
-	// `?view=`, the day in `?date=`) and the view. An event opens its
-	// details; "Neuer Termin" and "Bearbeiten" open /calendar/event in a
-	// window of its own (a page on the phone), which tells this page when it
-	// saved. The phone has the list (with the week on top) and the month.
-	import { onDestroy } from 'svelte';
+	// 1.11: T-Kalender (docs/KALENDER.md, drafts 01–04, 07, 40–42). Without
+	// the data volume the page says "nicht verfügbar", never an empty grid.
+	// An event opens its details; "Neuer Termin" and "Bearbeiten" open
+	// /calendar/event in a window of its own (a page on the phone).
+	//
+	// 1.13 (owner 18 Nov 2026, docs/KALENDER.md "1.13"): the shared
+	// ColumnFrame, edge to edge and as high as the window, from the first
+	// frame on (loading and "nicht verfügbar" stand in the content: nothing
+	// jumps). The side bar: "Neuer Termin" on top, the small month, "Meine
+	// Kalender" (sorted per account on the NAS), the reminders (TaskSide),
+	// at its foot "Neuer Kalender" and "Am iPhone einrichten". Over the
+	// content one bar: ‹ Heute › and the month, Monat · Woche · Tag · Liste.
+	// The title bar of the window names only the place. The data: CalendarData
+	// (three first requests at once, full=1, ETag, the live stream, hiding
+	// without reading everything again) and TaskData.
+	// Changing by dragging (week, day, month; desktop): a moved or longer
+	// event is saved at once, a series asks first which events are meant
+	// (only this one, this and the following, all); what happened is said
+	// in the status line.
+	// Compact (the phone or under 620 px): levels like Mail – the month with
+	// dots and the chosen day's events below (or the list), the calendars
+	// and the reminders each a level of their own with "‹ Zurück"; "Heute",
+	// "Kalender", "Erinnerungen" and "Neuer Termin" (+, at the right) in the
+	// bar at the bottom. No dragging there; an event opens to be edited.
+	// The KI-Agent (1.13, with session.services.agent): its panel right of
+	// the content (a column of the frame) or, without room and compact, a
+	// sheet from below; open or not kept per device. The day shown (and an
+	// event asked about from its details) goes with each message as a
+	// reference, never its content. A draft of a reminder (?agentDraft=,
+	// "Öffnen und bearbeiten") opens the reminder dialog filled in, ticking
+	// one off asks first; nothing is saved without the person.
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api } from '#lib/api.ts';
+	import { ApiError } from '#lib/api.ts';
+	import BottomBar from '#lib/components/BottomBar.svelte';
+	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
+	import { compactView } from '#lib/components/compact.svelte.ts';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Segments from '#lib/components/Segments.svelte';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { applyOrder, orderOf, setOrder } from '#lib/side-order.svelte.ts';
 	import {
 		addDays,
 		addMonths,
 		clock,
-		isoDate,
+		instantAt,
 		monthGrid,
-		setNasZone,
+		rfc3339,
 		validDate,
-		viewZone,
 		wallOf,
 		weekDays,
 		weekStart,
@@ -34,69 +60,105 @@
 	import { BIRTHDAYS, eventsByDay, type CalEvent, type Calendar } from '#lib/pim/calendar.ts';
 	import {
 		eventHref,
-		loadCalendars,
-		loadEvent,
-		loadEvents,
 		onChange,
 		openEventWindow,
-		setHidden,
+		updateEvent,
+		type Scope,
 	} from '#lib/pim/calendar-api.ts';
-	import { dayTitle, monthTitle, weekTitle, weekdayOf } from '#lib/pim/calendar-text.ts';
+	import {
+		dayTitle,
+		eventTitle,
+		longDay,
+		monthTitle,
+		weekTitle,
+		whenText,
+	} from '#lib/pim/calendar-text.ts';
+	import { watchPim } from '#lib/pim/live.ts';
 	import AgendaList from '#lib/pim/cal/AgendaList.svelte';
+	import { CalendarData } from '#lib/pim/cal/calendar-data.svelte.ts';
 	import CalendarDialog from '#lib/pim/cal/CalendarDialog.svelte';
 	import CalendarList from '#lib/pim/cal/CalendarList.svelte';
 	import DeleteEventDialog from '#lib/pim/cal/DeleteEventDialog.svelte';
 	import EventDetail from '#lib/pim/cal/EventDetail.svelte';
 	import MiniMonth from '#lib/pim/cal/MiniMonth.svelte';
 	import MonthView from '#lib/pim/cal/MonthView.svelte';
-	import WeekView from '#lib/pim/cal/WeekView.svelte';
-	import ProgramShell from '#lib/pim/ProgramShell.svelte';
-	import { calendarShell, shellOfError, type ShellState } from '#lib/pim/shell.ts';
+	import ScopeChoices from '#lib/pim/cal/ScopeChoices.svelte';
+	import ReminderSettings from '#lib/pim/cal/ReminderSettings.svelte';
+	import { TaskData } from '#lib/pim/cal/task-data.svelte.ts';
+	import TaskDialog from '#lib/pim/cal/TaskDialog.svelte';
+	import TaskSide from '#lib/pim/cal/TaskSide.svelte';
+	import { tasksByDay, type DueTask, type TaskList } from '#lib/pim/cal/tasks.ts';
+	import WeekView, { type TimedChange } from '#lib/pim/cal/WeekView.svelte';
+	import { loadTask, setTaskDone, type Task } from '#lib/pim/cal/tasks.ts';
+	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
+	import type { AgentContext } from '#lib/agent.ts';
+	import { loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import { calendarPanelActions } from '#lib/agent/panel-actions.ts';
+	import { session } from '#lib/session.svelte.ts';
 
 	type View = 'month' | 'week' | 'day' | 'list';
 
 	const phone = $derived(phoneView());
-	// The NAS zone once /calendar/access named it (the browser's before and without).
-	let zone = $state(viewZone());
+	const compact = $derived(compactView());
+	const data = new CalendarData();
+	const tasks = new TaskData();
 	let clockNow = $state(new Date());
 	const timer = setInterval(() => (clockNow = new Date()), 30_000);
-	onDestroy(() => clearInterval(timer));
+	onDestroy(() => {
+		clearInterval(timer);
+		data.stop();
+		tasks.stop();
+	});
+	const zone = $derived(data.zone);
 	const today = $derived(wallOf(clockNow, zone).date);
 	const nowMinutes = $derived(wallOf(clockNow, zone).minutes);
 
-	// The view and the day live in the address (the side bar's "Liste" is ?view=list).
+	// The view, the day and the phone's level live in the address.
 	const view = $derived.by((): View => {
 		const v = page.url.searchParams.get('view');
-		if (phone) return v === 'month' ? 'month' : 'list';
+		if (compact) return v === 'list' ? 'list' : 'month';
 		return v === 'week' || v === 'day' || v === 'list' ? v : 'month';
 	});
 	const anchor = $derived.by(() => {
 		const d = page.url.searchParams.get('date') ?? '';
 		return validDate(d) ? d : today;
 	});
-	function go(v: View, date: string) {
+	const level = $derived.by((): FrameLevel => {
+		const l = page.url.searchParams.get('level');
+		return compact && l === 'cals' ? 'side' : compact && l === 'tasks' ? 'list' : 'content';
+	});
+	function go(v: View, date: string, lvl = '') {
 		const q = new URLSearchParams();
 		q.set('view', v);
 		if (date !== today) q.set('date', date);
-		void goto(`/calendar?${q}`, { replace: true, reset: false });
+		if (lvl) q.set('level', lvl);
+		void goto(`/calendar?${q}`, { replace: !lvl, reset: false });
+	}
+	function up() {
+		if (history.length > 1) history.back();
+		else go(view, anchor);
 	}
 
-	let shown = $state<ShellState>({ kind: 'loading' });
-	let calendars = $state<Calendar[]>([]);
-	let events = $state<CalEvent[]>([]);
-	let truncated = $state(false);
-	let birthdaysUnavailable = $state(false);
-	let loadError = $state('');
 	let listLength = $state(30);
 	let miniMonth = $state('');
 	let picked = $state(''); // the chosen day of the phone's month
-
 	let detail = $state<CalEvent | null>(null);
 	let deleting = $state<CalEvent | null>(null);
-	let calDialog = $state<{ calendar?: Calendar } | null>(null);
+	let calDialog = $state<{ calendar?: Calendar | TaskList; tasks?: boolean } | null>(null);
+	let taskDialog = $state<{
+		task?: Pick<DueTask, 'list' | 'id'>;
+		due?: string;
+		draft?: Record<string, unknown>;
+	} | null>(null);
+	let said = $state('');
+	const announce = (text: string) => (said = said === text ? text + ' ' : text);
 
-	const byId = $derived(new Map(calendars.map((c) => [c.id, c])));
+	// The calendars in the account's order (the birthdays too).
+	const calendars = $derived(applyOrder(data.calendars, orderOf('calendar'), (c) => c.id));
+	const byId = $derived(new Map(data.calendars.map((c) => [c.id, c])));
 	const calFor = (id: string) => byId.get(id);
+	const own = $derived(data.calendars.some((c) => c.kind === 'own' && !c.readOnly));
 
 	/** The days the view shows. */
 	const range = $derived.by((): { first: string; last: string } => {
@@ -108,96 +170,33 @@
 		if (view === 'day') return { first: anchor, last: anchor };
 		return { first: anchor, last: addDays(anchor, listLength - 1) };
 	});
-	const byDay = $derived(eventsByDay(events, zone, range.first, range.last));
+	const byDay = $derived(eventsByDay(data.events, zone, range.first, range.last));
+	const dueByDay = $derived(tasksByDay(data.shown.kind === 'ready' ? tasks.due : [], zone));
 
-	async function start() {
-		try {
-			const access = await api.get<unknown>('/calendar/access');
-			setNasZone((access as { timezone?: unknown } | null)?.timezone);
-			zone = viewZone();
-			const state = calendarShell(access);
-			if (state.kind !== 'ready') {
-				shown = state;
-				return;
-			}
-			calendars = await loadCalendars();
-			shown = { kind: 'ready' };
-		} catch (err) {
-			shown = shellOfError(err);
-		}
-	}
+	let started = false;
 	$effect(() => {
-		void start();
-	});
-
-	// A request per shown range; an older answer never replaces a newer one.
-	let asked = 0;
-	async function reload() {
-		if (shown.kind !== 'ready') return;
-		const mine = ++asked;
 		const { first, last } = range;
-		try {
-			// One day around: titand reads dates in the NAS zone (the view's, unless titand named none).
-			const got = await loadEvents(addDays(first, -1), addDays(last, 2));
-			if (mine !== asked) return;
-			events = got.events;
-			truncated = got.truncated;
-			birthdaysUnavailable = got.birthdaysUnavailable;
-			loadError = '';
-			void fillClipped(mine);
-		} catch (err) {
-			if (mine !== asked) return;
-			const s = shellOfError(err);
-			if (s.kind === 'unavailable') shown = s;
-			else loadError = apiErrorText(err);
-		}
-	}
-	$effect(() => {
-		void range.first;
-		void range.last;
-		if (shown.kind === 'ready') void reload();
+		if (!started) {
+			started = true;
+			void data.start(first, last);
+			void tasks.start();
+		} else void data.show(first, last);
+		void tasks.showDays(first, last);
 	});
 
-	// Titles and places longer than the list keeps (clipped): the whole
-	// event once, so no text is cut.
-	async function fillClipped(mine: number) {
-		const cut = events.filter((e) => e.clipped).slice(0, 40);
-		for (const e of cut) {
-			try {
-				const full = await loadEvent(e.calendar, e.id, e.occurrence);
-				if (mine !== asked) return;
-				events = events.map((x) =>
-					x === e ? { ...x, title: full.title, location: full.location, clipped: false } : x,
-				);
-			} catch {
-				// Stays as the list had it.
-			}
-		}
-	}
-
-	async function refreshAll() {
-		try {
-			calendars = await loadCalendars();
-		} catch (err) {
-			const s = shellOfError(err);
-			if (s.kind === 'unavailable') shown = s;
-			return;
-		}
-		await reload();
-	}
-	const stop = onChange(() => void refreshAll());
-	onDestroy(stop);
-
-	async function toggle(c: Calendar) {
-		const hidden = calendars.filter((x) => (x.id === c.id ? !x.hidden : x.hidden)).map((x) => x.id);
-		calendars = calendars.map((x) => (x.id === c.id ? { ...x, hidden: !x.hidden } : x));
-		try {
-			await setHidden(hidden);
-		} catch (err) {
-			loadError = apiErrorText(err);
-		}
-		await refreshAll();
-	}
+	// Live: the stream names the collection that changed; another window of
+	// this browser (the event window) says so over the BroadcastChannel.
+	onMount(() =>
+		watchPim((e) => {
+			if (e.type === 'pim' && e.kind === 'tasks') tasks.refresh();
+			else if (e.type === 'resync') {
+				tasks.refresh();
+				data.live(e);
+			} else data.live(e);
+		}),
+	);
+	const stopChange = onChange(() => data.announced());
+	onDestroy(stopChange);
 
 	function step(dir: -1 | 1) {
 		if (view === 'month') go(view, addMonths(anchor, dir));
@@ -207,45 +206,120 @@
 	}
 
 	const back = $derived(page.url.pathname + page.url.search);
-	function newEvent(date = view === 'list' ? today : anchor, minutes?: number) {
+	function newEvent(date = view === 'list' ? today : anchor, minutes?: number, to?: number) {
 		const time =
 			minutes !== undefined
 				? clock(minutes)
 				: date === today
 					? clock(Math.min(23 * 60, (Math.floor(nowMinutes / 60) + 1) * 60))
 					: '09:00';
-		openEventWindow(eventHref({ date, time, back }));
+		const end =
+			to === undefined
+				? {}
+				: to >= 1440
+					? { endDate: addDays(date, 1), end: clock(to - 1440) }
+					: { end: clock(to) };
+		openEventWindow(eventHref({ date, time, back, ...end }));
 	}
 	function edit(ev: CalEvent) {
 		detail = null;
 		openEventWindow(eventHref({ cal: ev.calendar, id: ev.id, occurrence: ev.occurrence, back }));
 	}
 
+	// ---- Moving by dragging (or the keys of the week) ----
+	const canEdit = (ev: CalEvent) =>
+		!compact &&
+		ev.kind === 'event' &&
+		!ev.readOnly &&
+		!ev.recurUnsupported &&
+		calFor(ev.calendar)?.kind === 'own' &&
+		!calFor(ev.calendar)?.readOnly;
+	type Move = { ev: CalEvent; start: string; end: string; allDay: boolean; what: string };
+	let moving = $state<Move | null>(null);
+	let moveScope = $state<Scope>('this');
+	let moveError = $state('');
+
+	function timedChange(ev: CalEvent, c: TimedChange) {
+		const start = rfc3339(instantAt(c.date, c.from, zone));
+		const end = rfc3339(instantAt(c.date, c.to, zone));
+		const what = `${longDay(c.date)}, ${clock(c.from)}–${clock(c.to % 1440)}`;
+		ask({ ev, start, end, allDay: false, what });
+	}
+	function shift(ev: CalEvent, n: number) {
+		if (ev.allDay) {
+			const start = addDays(ev.start.slice(0, 10), n);
+			const end = addDays((ev.end || ev.start).slice(0, 10), n);
+			ask({ ev, start, end, allDay: true, what: whenText({ start, end, allDay: true }) });
+			return;
+		}
+		const s = wallOf(new Date(ev.start), zone);
+		const e = wallOf(new Date(ev.end || ev.start), zone);
+		const start = rfc3339(instantAt(addDays(s.date, n), s.minutes, zone));
+		const end = rfc3339(instantAt(addDays(e.date, n), e.minutes, zone));
+		ask({
+			ev,
+			start,
+			end,
+			allDay: false,
+			what: `${longDay(addDays(s.date, n))}, ${clock(s.minutes)}`,
+		});
+	}
+	function ask(m: Move) {
+		moveError = '';
+		if (m.ev.recurring) {
+			moveScope = 'this';
+			moving = m;
+			return;
+		}
+		void save(m, 'all');
+	}
+	async function save(m: Move, scope: Scope) {
+		moving = null;
+		const title = eventTitle(m.ev);
+		// Shown at once where it goes; the NAS answers and the stream reads it again.
+		const changed = { ...m.ev, start: m.start, end: m.end, allDay: m.allDay };
+		if (scope === 'this' || !m.ev.recurring) data.replace(m.ev, changed);
+		try {
+			await updateEvent(m.ev.calendar, m.ev.id, {
+				etag: m.ev.etag,
+				scope,
+				occurrence: m.ev.occurrence,
+				event: { start: m.start, end: m.end, allDay: m.allDay, timezone: '' },
+			});
+			announce(t('calendar.drag.saved', { title, when: m.what }));
+		} catch (err) {
+			moveError =
+				err instanceof ApiError && err.code === 'calendar_conflict'
+					? t('calendar.conflict')
+					: apiErrorText(err);
+			announce(t('calendar.drag.failed', { title, reason: moveError }));
+		}
+		void data.refresh([m.ev.calendar]);
+	}
+
 	registerMenuCommands({
 		'calendar.newEvent': {
 			run: () => newEvent(),
-			enabled: () => shown.kind === 'ready' && calendars.some((c) => c.kind === 'own'),
+			enabled: () => data.shown.kind === 'ready' && own,
 		},
 		'calendar.newCalendar': {
 			run: () => (calDialog = {}),
-			enabled: () => shown.kind === 'ready',
+			enabled: () => data.shown.kind === 'ready',
 		},
 	});
 
 	const heading = $derived(
-		view === 'month'
+		view === 'month' || view === 'list'
 			? monthTitle(anchor)
 			: view === 'week'
 				? weekTitle(weekStart(anchor))
-				: view === 'day'
-					? dayTitle(anchor)
-					: monthTitle(anchor),
+				: dayTitle(anchor),
 	);
 	const viewOptions = $derived(
-		phone
+		compact
 			? [
-					{ value: 'list' as View, label: t('calendar.view.list') },
 					{ value: 'month' as View, label: t('calendar.view.month') },
+					{ value: 'list' as View, label: t('calendar.view.list') },
 				]
 			: [
 					{ value: 'month' as View, label: t('calendar.view.month') },
@@ -255,12 +329,13 @@
 				],
 	);
 
-	// The list from the chosen day: days with events, today and tomorrow always.
+	// The list from the chosen day: days with events or reminders, today and tomorrow always.
 	const listDays = $derived.by(() => {
 		const out: string[] = [];
 		for (let i = 0; i < listLength; i++) {
 			const d = addDays(range.first, i);
-			if (byDay.has(d) || d === today || d === addDays(today, 1) || i === 0) out.push(d);
+			if (byDay.has(d) || dueByDay.has(d) || d === today || d === addDays(today, 1) || i === 0)
+				out.push(d);
 		}
 		return out;
 	});
@@ -272,92 +347,387 @@
 	);
 	const busyDay = (d: string) => (byDay.get(d)?.length ?? 0) > 0;
 	const phoneDay = $derived(picked && picked.slice(0, 7) === anchor.slice(0, 7) ? picked : anchor);
-	const hiddenNames = $derived(calendars.filter((c) => c.hidden).length);
+	const allHidden = $derived(
+		data.calendars.some((c) => c.hidden) &&
+			!data.calendars.some((c) => !c.hidden && c.id !== BIRTHDAYS),
+	);
+	const title = $derived(
+		compact ? t('desktop.app.calendar') : t(`calendar.view.${view}` as MessageKey),
+	);
+	const sortCalendars = (ids: string[]) => setOrder('calendar', ids);
+	const taskHandlers = {
+		ontask: (task: DueTask) => (taskDialog = { task }),
+		ontaskdone: (task: DueTask) => void tasks.toggleDone(task),
+	};
+
+	// ---- The KI-Agent's panel (1.13) ----
+	const AGENT_KEY = 'titanos.calendar.agentPanel';
+	const withAgent = $derived(!!session.services.agent);
+	let agentOpen = $state(readAgentOpen());
+	/** The panel stands as a column (room next to the content); else a sheet. */
+	let agentColumn = $state(false);
+	function readAgentOpen(): boolean {
+		try {
+			return localStorage.getItem(AGENT_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+	function setAgent(on: boolean) {
+		agentOpen = on;
+		try {
+			if (on) localStorage.setItem(AGENT_KEY, '1');
+			else localStorage.removeItem(AGENT_KEY);
+		} catch {
+			// Kept for this visit only.
+		}
+	}
+	/** The event asked about from its details; gone with another day or view. */
+	let agentEvent = $state<CalEvent | null>(null);
+	$effect(() => {
+		void anchor;
+		void view;
+		untrack(() => (agentEvent = null));
+	});
+	const agentContext = $derived<AgentContext>({
+		app: 'calendar',
+		date: compact && view === 'month' ? phoneDay : anchor,
+		...(agentEvent && agentEvent.kind === 'event'
+			? {
+					event: {
+						cal: agentEvent.calendar,
+						id: agentEvent.id,
+						...(agentEvent.occurrence ? { occurrence: agentEvent.occurrence } : {}),
+					},
+				}
+			: {}),
+	});
+	const agentActions = $derived(calendarPanelActions((k) => t(k)));
+	function askAgent(ev: CalEvent) {
+		detail = null;
+		agentEvent = ev;
+		setAgent(true);
+	}
+
+	// ---- Drafts of the KI-Agent (?agentDraft=, also while the page is open) ----
+	let draftSeen = '';
+	let draftNote = $state('');
+	let taskDraft = $state<AgentDraft | null>(null);
+	let doneAsk = $state<{ task: Task; done: boolean } | null>(null);
+	let doneBusy = $state(false);
+	let doneError = $state('');
+	$effect(() => {
+		const param = page.url.searchParams.get('agentDraft') ?? '';
+		if (!param || param === draftSeen) return;
+		draftSeen = param;
+		untrack(() => void takeDraft(param));
+	});
+	async function takeDraft(param: string) {
+		draftNote = '';
+		const d = await loadAgentDraft(param);
+		// Out of the address: a reload or the way back does not open it again.
+		const q = new URLSearchParams(page.url.search);
+		q.delete('agentDraft');
+		await goto(`/calendar${q.size ? '?' + q : ''}`, { replace: true, reset: false });
+		draftSeen = '';
+		if (d?.app === 'calendar' && d.kind === 'event') {
+			openEventWindow(`/calendar/event?agentDraft=${encodeURIComponent(param)}&back=/calendar`);
+			return;
+		}
+		if (d?.app !== 'tasks' || (d.kind !== 'task' && d.kind !== 'complete')) {
+			draftNote = d ? t('agentpim.draft.foreign') : t('agentpim.draft.gone');
+			return;
+		}
+		taskDraft = d;
+	}
+	// The dialog once the lists are there (its list is chosen from them).
+	$effect(() => {
+		const d = taskDraft;
+		if (!d || !tasks.ready) return;
+		untrack(() => {
+			taskDraft = null;
+			void showTaskDraft(d);
+		});
+	});
+	async function showTaskDraft(d: AgentDraft) {
+		const f = d.fields;
+		const list = typeof f.list === 'string' ? f.list : '';
+		const id = typeof f.id === 'string' ? f.id : '';
+		if (d.kind === 'task') {
+			detail = null;
+			taskDialog = list && id ? { task: { list, id }, draft: f } : { draft: f };
+			return;
+		}
+		if (!list || !id) {
+			draftNote = t('agentpim.draft.gone');
+			return;
+		}
+		try {
+			doneError = '';
+			doneAsk = { task: await loadTask(list, id), done: f.done !== false };
+		} catch (err) {
+			draftNote = apiErrorText(err);
+		}
+	}
+	async function confirmDone() {
+		if (!doneAsk) return;
+		const { task, done } = doneAsk;
+		doneBusy = true;
+		try {
+			await setTaskDone(task, done);
+			doneAsk = null;
+			announce(
+				done
+					? t('agentpim.draft.doneSaid', { title: task.title })
+					: t('agentpim.draft.openSaid', { title: task.title }),
+			);
+			tasks.refresh();
+		} catch (err) {
+			doneError = apiErrorText(err);
+		} finally {
+			doneBusy = false;
+		}
+	}
 </script>
 
-<!-- In a window the title bar names the view ("T-Kalender › Monat"); the phone's bar says it itself. -->
-<PageHead
-	title={phone && view === 'list'
-		? t('calendar.view.agenda')
-		: t(`calendar.view.${view}` as MessageKey)}
-	path={phone ? undefined : []}
->
-	{#snippet actions()}
+<PageHead {title} />
+<p class="sr-only" role="status" aria-live="polite">{said}</p>
+
+{#snippet newButton(folded: boolean)}
+	<button
+		type="button"
+		class="btn btn-primary new-event"
+		class:icon={folded}
+		disabled={data.shown.kind !== 'ready' || !own}
+		title={folded ? t('calendar.newEvent') : undefined}
+		aria-label={folded ? t('calendar.newEvent') : undefined}
+		onclick={() => newEvent()}
+		><Icon name="plus" size={16} />{#if !folded}{t('calendar.newEvent')}{/if}</button
+	>
+{/snippet}
+
+{#snippet backButton(label: string)}
+	<button type="button" class="btn back" onclick={up}
+		><Icon name="chevronLeft" size={16} />{label}</button
+	>
+{/snippet}
+
+{#snippet side()}
+	<div class="side" data-cal-side>
+		{#if compact}{@render backButton(t('calendar.back'))}{/if}
+		{#if !compact}
+			<MiniMonth
+				month={shownMonth}
+				{today}
+				selected={selectedDays}
+				busy={busyDay}
+				onpick={(d) => {
+					miniMonth = '';
+					go(view === 'month' ? 'day' : view, d);
+				}}
+				onmonth={(d) => (miniMonth = d)}
+			/>
+		{/if}
+		{#if data.shown.kind === 'ready'}
+			<CalendarList
+				{calendars}
+				phone={compact}
+				adds={compact}
+				ontoggle={(c) => void data.toggle(c)}
+				onedit={(c) => (calDialog = { calendar: c })}
+				onnew={() => (calDialog = {})}
+				onsort={compact ? undefined : sortCalendars}
+			/>
+			{#if !compact}
+				<!-- The reminders below the calendars (Baustand step 11). -->
+				<TaskSide
+					data={tasks}
+					{today}
+					onopen={(task) => (taskDialog = { task })}
+					onedit={(l) => (calDialog = { calendar: l, tasks: true })}
+					onnewlist={() => (calDialog = { tasks: true })}
+				/>
+			{/if}
+			<ReminderSettings phone={compact} />
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet rail()}
+	<button
+		type="button"
+		class="rail-btn"
+		title={t('calendar.today')}
+		aria-label={t('calendar.today')}
+		onclick={() => go(view, today)}><Icon name="calendar" size={18} /></button
+	>
+{/snippet}
+
+{#snippet foot(folded: boolean)}
+	{#if !compact && withAgent}
 		<button
 			type="button"
-			class="btn btn-primary"
-			disabled={shown.kind !== 'ready' || !calendars.some((c) => c.kind === 'own')}
-			onclick={() => newEvent()}><Icon name="plus" size={16} />{t('calendar.newEvent')}</button
+			class="side-link agent-toggle"
+			class:icon={folded}
+			aria-pressed={agentOpen}
+			title={folded ? t('agentpim.panel.toggle') : undefined}
+			aria-label={folded ? t('agentpim.panel.toggle') : undefined}
+			onclick={() => setAgent(!agentOpen)}
+			><Icon name="sparkle" size={17} />{#if !folded}<span>{t('agentpim.panel.toggle')}</span
+				>{/if}</button
 		>
-	{/snippet}
-</PageHead>
+	{/if}
+	{#if !compact}
+		<button
+			type="button"
+			class="side-link"
+			class:icon={folded}
+			title={folded ? t('calendar.newCalendar') : undefined}
+			aria-label={folded ? t('calendar.newCalendar') : undefined}
+			disabled={data.shown.kind !== 'ready'}
+			onclick={() => (calDialog = {})}
+			><Icon name="plus" size={17} />{#if !folded}<span>{t('calendar.newCalendar')}</span
+				>{/if}</button
+		>
+		<a
+			class="side-link"
+			class:icon={folded}
+			href="/calendar/iphone"
+			title={folded ? t('calendar.side.iphone') : undefined}
+			aria-label={folded ? t('calendar.side.iphone') : undefined}
+			><Icon name="device" size={17} />{#if !folded}<span>{t('calendar.side.iphone')}</span>{/if}</a
+		>
+	{/if}
+{/snippet}
 
-<ProgramShell program="calendar" view={shown} own>
-	<div class="cal" class:phone data-pim-ready data-view={view}>
-		{#if !phone}
-			<aside class="side">
-				<MiniMonth
-					month={shownMonth}
-					{today}
-					selected={selectedDays}
-					busy={busyDay}
-					onpick={(d) => {
-						miniMonth = '';
-						go(view === 'month' ? 'day' : view, d);
-					}}
-					onmonth={(d) => (miniMonth = d)}
-				/>
-				<CalendarList
-					{calendars}
-					ontoggle={toggle}
-					onedit={(c) => (calDialog = { calendar: c })}
-					onnew={() => (calDialog = {})}
-				/>
-			</aside>
-		{/if}
-		<section class="main">
-			<div class="cbar">
-				<span class="nav">
-					<button type="button" class="ib" aria-label={t('calendar.prev')} onclick={() => step(-1)}
-						><Icon name="chevronLeft" size={18} /></button
-					>
-					<button type="button" class="btn today-btn" onclick={() => go(view, today)}
-						>{t('calendar.today')}</button
-					>
-					<button type="button" class="ib" aria-label={t('calendar.next')} onclick={() => step(1)}
-						><Icon name="chevronRight" size={18} /></button
-					>
-				</span>
-				<h2>{heading}</h2>
-				<span class="views">
-					<Segments
-						compact
-						label={t('calendar.views')}
-						value={view}
-						options={viewOptions}
-						onchange={(v) => go(v, anchor)}
-					/>
-				</span>
+{#snippet bar()}
+	<div class="cbar" class:compact>
+		<span class="nav">
+			<button type="button" class="ib" aria-label={t('calendar.prev')} onclick={() => step(-1)}
+				><Icon name="chevronLeft" size={18} /></button
+			>
+			{#if !compact}
+				<button type="button" class="btn today-btn" onclick={() => go(view, today)}
+					>{t('calendar.today')}</button
+				>
+			{/if}
+			<button type="button" class="ib" aria-label={t('calendar.next')} onclick={() => step(1)}
+				><Icon name="chevronRight" size={18} /></button
+			>
+		</span>
+		<h2>{heading}</h2>
+		<span class="views">
+			<Segments
+				compact
+				label={t('calendar.views')}
+				value={view}
+				options={viewOptions}
+				onchange={(v) => go(v, anchor)}
+			/>
+		</span>
+	</div>
+{/snippet}
+
+{#snippet notices()}
+	{#if data.error}<p class="notice-error msg" role="alert">{data.error}</p>{/if}
+	{#if moveError}<p class="notice-error msg" role="alert">{moveError}</p>{/if}
+	{#if data.truncated}<p class="notice-warn msg" role="status">{t('calendar.truncated')}</p>{/if}
+	{#if data.birthdaysUnavailable}<p class="muted msg" role="status">
+			{t('calendar.birthdaysUnavailable')}
+		</p>{/if}
+	{#if allHidden}<p class="muted msg">{t('calendar.allHidden')}</p>{/if}
+	{#if draftNote}
+		<p class="muted msg draft-note" role="status">
+			{draftNote}
+			<button type="button" class="btn btn-sm" onclick={() => (draftNote = '')}
+				>{t('common.close')}</button
+			>
+		</p>
+	{/if}
+{/snippet}
+
+{#snippet taskLevel()}
+	<div class="task-level">
+		{@render backButton(t('calendar.back'))}
+		<TaskSide
+			data={tasks}
+			{today}
+			phone
+			onopen={(task) => (taskDialog = { task })}
+			onedit={(l) => (calDialog = { calendar: l, tasks: true })}
+			onnewlist={() => (calDialog = { tasks: true })}
+		/>
+	</div>
+{/snippet}
+
+<ColumnFrame
+	storage="titanos.calendar"
+	columns={!compact}
+	{level}
+	class={compact ? 'calendar levels' : 'calendar wide'}
+	sideClass="col-cal-side"
+	listClass="col-cal-tasks"
+	contentClass="col-cal-main"
+	sideWidth={{ min: 230, max: 400, fallback: 260 }}
+	contentMin={560}
+	foldBelow={view === 'week' ? 960 : 800}
+	sideResizeLabel={t('calendar.resize.side')}
+	action={compact ? undefined : newButton}
+	{side}
+	{rail}
+	sideFoot={compact ? undefined : foot}
+	bar={!compact || (data.shown.kind === 'ready' && level === 'content') ? bar : undefined}
+	notices={data.error ||
+	moveError ||
+	data.truncated ||
+	data.birthdaysUnavailable ||
+	allHidden ||
+	draftNote
+		? notices
+		: undefined}
+	list={compact && data.shown.kind === 'ready' ? taskLevel : undefined}
+	aside={withAgent && agentOpen && !compact ? agentAside : undefined}
+	asideKey="titanos.agentPanel.width"
+	asideResizeLabel={t('agentpim.panel.resize')}
+	bind:asideShown={agentColumn}
+>
+	<div
+		class="calview"
+		class:compact
+		data-pim-shell="calendar"
+		data-pim-state={data.shown.kind}
+		data-pim-ready={data.shown.kind === 'ready' ? '' : undefined}
+		data-view={view}
+	>
+		{#if data.shown.kind === 'loading'}
+			<p class="muted state" role="status">{t('common.loading')}</p>
+		{:else if data.shown.kind === 'unavailable'}
+			<div class="notice state" role="status">
+				<Icon name="disk" size={22} />
+				<div>
+					<p class="strong">{t('calendar.unavailable.title')}</p>
+					<p>{t('calendar.unavailable.text')}</p>
+				</div>
 			</div>
-
-			{#if loadError}<p class="notice-error msg" role="alert">{loadError}</p>{/if}
-			{#if truncated}<p class="notice-warn msg" role="status">{t('calendar.truncated')}</p>{/if}
-			{#if birthdaysUnavailable}<p class="muted msg" role="status">
-					{t('calendar.birthdaysUnavailable')}
-				</p>{/if}
-
-			{#if view === 'month'}
-				<MonthView
-					month={anchor}
-					{today}
-					{byDay}
-					{calFor}
-					{phone}
-					selected={phoneDay}
-					onopen={(ev) => (detail = ev)}
-					onday={(d) => (phone ? (picked = d) : go('day', d))}
-				/>
-				{#if phone}
+		{:else if data.shown.kind === 'error'}
+			<p class="notice-error state" role="alert">{apiErrorText(data.shown.error)}</p>
+		{:else if view === 'month'}
+			<MonthView
+				month={anchor}
+				{today}
+				{byDay}
+				{calFor}
+				phone={compact}
+				selected={phoneDay}
+				{canEdit}
+				onopen={(ev) => (detail = ev)}
+				onday={(d) => (compact ? (picked = d) : go('day', d))}
+				onshift={compact ? undefined : shift}
+				tasks={dueByDay}
+				{...taskHandlers}
+			/>
+			{#if compact}
+				<div class="phone-day">
 					<AgendaList
 						days={[phoneDay]}
 						{today}
@@ -365,45 +735,39 @@
 						{calFor}
 						phone
 						onopen={(ev) => (detail = ev)}
+						tasks={dueByDay}
+						{...taskHandlers}
 					/>
-				{/if}
-			{:else if view === 'week' || view === 'day'}
-				<WeekView
-					days={view === 'week' ? weekDays(anchor) : [anchor]}
-					{today}
-					{byDay}
-					{calFor}
-					now={nowMinutes}
-					onopen={(ev) => (detail = ev)}
-					onslot={(d, m) => newEvent(d, m)}
-				/>
-			{:else}
-				{#if phone}
-					<div class="strip" role="group" aria-label={t('calendar.thisWeek')}>
-						{#each weekDays(anchor) as d (d)}
-							<button
-								type="button"
-								class="sd"
-								class:today={d === today}
-								class:sel={d === anchor}
-								aria-pressed={d === anchor}
-								onclick={() => go('list', d)}
-								><small>{weekdayOf(d)}</small><b>{Number(d.slice(8))}</b><i
-									class:has={busyDay(d)}
-									aria-hidden="true"
-								></i>{#if d === today}<span class="sr-only">{t('calendar.today')}</span
-									>{/if}</button
-							>
-						{/each}
-					</div>
-				{/if}
+				</div>
+			{/if}
+		{:else if view === 'week' || view === 'day'}
+			<WeekView
+				days={view === 'week' ? weekDays(anchor) : [anchor]}
+				{today}
+				{byDay}
+				{calFor}
+				now={nowMinutes}
+				loaded={data.loaded}
+				{canEdit}
+				onopen={(ev) => (detail = ev)}
+				onslot={(d, m, to) => own && newEvent(d, m, to)}
+				onchange={timedChange}
+				onshift={shift}
+				onannounce={announce}
+				tasks={dueByDay}
+				{...taskHandlers}
+			/>
+		{:else}
+			<div class="list-scroll">
 				<AgendaList
 					days={listDays}
 					{today}
 					{byDay}
 					{calFor}
-					{phone}
+					phone={compact}
 					onopen={(ev) => (detail = ev)}
+					tasks={dueByDay}
+					{...taskHandlers}
 				/>
 				<!-- The API reads at most 400 days (with a day around): the list stops at 390. -->
 				{#if listLength < 390}
@@ -416,25 +780,57 @@
 						>
 					</div>
 				{/if}
-			{/if}
-
-			{#if phone}
-				<div class="phone-cals">
-					<CalendarList
-						{calendars}
-						phone
-						ontoggle={toggle}
-						onedit={(c) => (calDialog = { calendar: c })}
-						onnew={() => (calDialog = {})}
-					/>
-				</div>
-			{/if}
-			{#if hiddenNames && !calendars.some((c) => !c.hidden && c.id !== BIRTHDAYS)}
-				<p class="muted msg">{t('calendar.allHidden')}</p>
-			{/if}
-		</section>
+			</div>
+		{/if}
 	</div>
-</ProgramShell>
+	{#if compact && level === 'content'}
+		<BottomBar label={t('calendar.actions')}>
+			<button
+				type="button"
+				class="bar-btn"
+				title={t('calendar.today')}
+				onclick={() => {
+					picked = '';
+					go(view, today);
+				}}>{t('calendar.today')}</button
+			>
+			<button
+				type="button"
+				class="bar-btn"
+				aria-label={t('calendar.phoneCalendars')}
+				title={t('calendar.phoneCalendars')}
+				disabled={data.shown.kind !== 'ready'}
+				onclick={() => go(view, anchor, 'cals')}><Icon name="calendar" size={20} /></button
+			>
+			<button
+				type="button"
+				class="bar-btn"
+				aria-label={t('calendar.tasks.heading')}
+				title={t('calendar.tasks.heading')}
+				disabled={data.shown.kind !== 'ready'}
+				onclick={() => go(view, anchor, 'tasks')}><Icon name="check" size={20} /></button
+			>
+			{#if withAgent}
+				<button
+					type="button"
+					class="bar-btn"
+					aria-label={t('agentpim.panel.toggle')}
+					title={t('agentpim.panel.toggle')}
+					onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
+				>
+			{/if}
+			<button
+				type="button"
+				class="bar-btn bar-new"
+				aria-label={t('calendar.newEvent')}
+				title={t('calendar.newEvent')}
+				disabled={data.shown.kind !== 'ready' || !own}
+				onclick={() => newEvent(view === 'month' ? phoneDay : today)}
+				><Icon name="plus" size={20} /></button
+			>
+		</BottomBar>
+	{/if}
+</ColumnFrame>
 
 {#if detail}
 	<EventDetail
@@ -446,6 +842,7 @@
 			detail = null;
 			deleting = ev;
 		}}
+		onagent={withAgent ? askAgent : undefined}
 	/>
 {/if}
 {#if deleting}
@@ -453,57 +850,188 @@
 		event={deleting}
 		onclose={() => (deleting = null)}
 		ondone={() => {
+			const cal = deleting?.calendar ?? '';
 			deleting = null;
-			void reload();
+			void data.refresh([cal]);
 		}}
 	/>
 {/if}
 {#if calDialog}
 	<CalendarDialog
 		calendar={calDialog.calendar}
+		tasks={calDialog.tasks}
 		onclose={() => (calDialog = null)}
-		onchanged={() => void refreshAll()}
+		onchanged={() => {
+			if (calDialog?.tasks) tasks.refresh();
+			else void data.reloadCalendars().then(() => data.reload());
+		}}
 	/>
+{/if}
+{#if taskDialog}
+	<TaskDialog
+		task={taskDialog.task}
+		due={taskDialog.due}
+		draft={taskDialog.draft}
+		lists={tasks.lists}
+		list={tasks.chosen}
+		onclose={() => (taskDialog = null)}
+		onchanged={() => tasks.refresh()}
+	/>
+{/if}
+{#if doneAsk}
+	{@const d = doneAsk}
+	<Dialog
+		title={d.done
+			? t('agentpim.draft.doneTitle', { title: d.task.title })
+			: t('agentpim.draft.openTitle', { title: d.task.title })}
+		locked={doneBusy}
+		onclose={() => (doneAsk = null)}
+	>
+		<p class="lead">{t('agentpim.draft.doneText')}</p>
+		{#if doneError}<p class="notice-error" role="alert">{doneError}</p>{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={doneBusy} onclick={() => (doneAsk = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={doneBusy}
+				data-done-confirm
+				onclick={() => void confirmDone()}
+				><Icon name="check" size={15} />{d.done
+					? t('agentpim.draft.doneConfirm')
+					: t('agentpim.draft.openConfirm')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+{#snippet agentAside()}
+	<AgentPanel
+		app="calendar"
+		context={agentContext}
+		actions={agentActions}
+		onclose={() => setAgent(false)}
+	/>
+{/snippet}
+{#if withAgent && agentOpen && !(!compact && agentColumn)}
+	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
+		<AgentPanel
+			app="calendar"
+			phone
+			context={agentContext}
+			actions={agentActions}
+			onclose={() => setAgent(false)}
+		/>
+	</AgentSheet>
+{/if}
+{#if moving}
+	{@const m = moving}
+	<Dialog
+		title={t('calendar.drag.seriesTitle', { title: eventTitle(m.ev) })}
+		onclose={() => (moving = null)}
+	>
+		<p class="lead">{t('calendar.drag.seriesText', { when: m.what })}</p>
+		<ScopeChoices bind:value={moveScope} mode="save" label={t('calendar.save.which')} />
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (moving = null)}>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={() => void save(m, moveScope)}
+				>{t('calendar.drag.move')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 <style>
-	.cal {
-		display: grid;
-		grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-tile);
-		background: var(--surface);
+	.calview {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
 		min-height: 0;
 	}
-	.cal.phone {
-		display: block;
-		border: 0;
-		background: none;
+	.calview.compact {
+		height: auto;
+	}
+	.state {
+		margin: var(--space-4);
+	}
+	.notice {
+		display: flex;
+		gap: var(--space-3);
+		align-items: flex-start;
+	}
+	.notice p {
+		margin: 0 0 var(--space-1);
+	}
+	.strong {
+		font-weight: 600;
 	}
 	.side {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
+		padding: 0 var(--space-1-5) var(--space-2);
 		min-width: 0;
-		padding: var(--space-3);
-		border-right: 1px solid var(--border);
 	}
-	.main {
-		min-width: 0;
+	.new-event {
+		justify-content: center;
+		min-height: 36px;
+	}
+	.new-event.icon {
+		width: 44px;
+		padding: 0;
+	}
+	.rail-btn,
+	:global(.calendar) .side-link {
 		display: flex;
-		flex-direction: column;
+		align-items: center;
+		gap: var(--space-2-5);
+		min-height: 36px;
+		padding: var(--space-1-5) var(--space-2-5);
+		border: 0;
+		border-radius: calc(9px * var(--radius-scale, 1));
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.rail-btn {
+		justify-content: center;
+		width: 44px;
+		padding: 0;
+	}
+	:global(.calendar) .side-link.icon {
+		justify-content: center;
+		width: 44px;
+		padding: 0;
+	}
+	.rail-btn:hover,
+	:global(.calendar) .side-link:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+		color: var(--text);
+	}
+	:global(.calendar) .agent-toggle[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--text);
+	}
+	.draft-note {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
 	}
 	.cbar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
-		padding: var(--space-3);
-		border-bottom: 1px solid var(--border);
-	}
-	.phone .cbar {
-		padding: 0 0 var(--space-3);
-		border: 0;
+		flex: 1;
+		min-width: 0;
 	}
 	.nav {
 		display: flex;
@@ -521,10 +1049,10 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.phone .ib,
-	.phone .today-btn {
+	.compact .ib {
 		min-width: 44px;
 		min-height: 44px;
+		border-color: transparent;
 	}
 	.ib:focus-visible {
 		outline: 2px solid var(--accent);
@@ -537,86 +1065,51 @@
 		font-weight: 600;
 		overflow-wrap: break-word;
 	}
-	.phone .cbar h2 {
+	.cbar.compact h2 {
 		order: -1;
 		flex-basis: 100%;
+		font-size: var(--text-xl);
 	}
-	.phone .views :global(.segments button) {
+	.compact .views :global(.segments button) {
 		min-height: 44px;
 	}
 	.msg {
 		margin: var(--space-2) var(--space-3);
 	}
-	.phone .msg {
-		margin: 0 0 var(--space-2);
+	.list-scroll {
+		position: relative;
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+	}
+	.compact .list-scroll {
+		overflow: visible;
+		padding: 0 var(--space-3);
 	}
 	.list-more {
 		padding: 0 var(--space-3) var(--space-3);
 	}
-	.phone .list-more {
-		padding: var(--space-3) 0 0;
-	}
 	.list-more .btn {
 		min-height: 44px;
 	}
-	.strip {
-		display: grid;
-		grid-template-columns: repeat(7, minmax(0, 1fr));
-		gap: 3px;
-		margin-bottom: var(--space-3);
+	.phone-day {
+		padding: var(--space-3);
+		border-top: 1px solid var(--border);
 	}
-	.sd {
+	.back {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: 44px;
+	}
+	.task-level {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: 1px;
-		min-height: 56px;
-		padding: 6px 0;
-		border: 1px solid transparent;
-		border-radius: var(--radius-ctl);
-		background: var(--srow-bg);
-		color: var(--text);
-		font: inherit;
+		gap: var(--space-3);
+		padding: var(--space-3);
 	}
-	.sd small {
-		color: var(--muted);
-		font-size: var(--text-xs);
-	}
-	.sd b {
-		font-size: var(--text-md);
-	}
-	.sd.sel {
-		border-color: var(--accent);
-	}
-	.sd.today {
-		background: var(--accent);
-		color: var(--on-accent);
-	}
-	.sd.today small {
-		color: inherit;
-	}
-	.sd i {
-		width: 4px;
-		height: 4px;
-		border-radius: 50%;
-	}
-	.sd i.has {
-		background: currentColor;
-		opacity: 0.6;
-	}
-	.phone-cals {
-		margin-top: var(--space-5);
-	}
-	/* A narrower window: the column below the view, so the days keep room
-	   for their titles (a cell under 4 letters' width would break every word). */
-	@media (max-width: 980px) {
-		.cal:not(.phone) {
-			grid-template-columns: minmax(0, 1fr);
-		}
-		.cal:not(.phone) .side {
-			order: 2;
-			border-right: 0;
-			border-top: 1px solid var(--border);
-		}
+	:global(.calendar.levels) .side {
+		padding: var(--space-3);
 	}
 </style>

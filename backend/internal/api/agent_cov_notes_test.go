@@ -125,6 +125,15 @@ func TestCovAgentMemoryAndSkillAfterUntrustedRead(t *testing.T) {
 	if !tainted.Tainted {
 		t.Fatalf("chat not tainted after notes_list: %+v", tainted.Entries)
 	}
+	// Saving a skill after outside content asks (1.13, A-1); said yes, it
+	// is saved marked.
+	if tainted.State != agent.StateWaiting || tainted.Pending == nil || tainted.Pending.Tool != "skill_save" {
+		t.Fatalf("skill_save after outside content did not ask: %s %+v", tainted.State, tainted.Pending)
+	}
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+tainted.ID+"/decide", map[string]any{"id": tainted.Pending.ID, "approve": true}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("decide: %d %s", res.StatusCode, body)
+	}
+	tainted = waitChat(t, ts, ts.client, tainted.ID)
 	fake.mu.Lock()
 	fake.replies = []string{
 		toolCall("memory_save", map[string]any{"text": "Der Drucker steht im Flur."}),
@@ -138,6 +147,15 @@ func TestCovAgentMemoryAndSkillAfterUntrustedRead(t *testing.T) {
 	if clean.Tainted || !clean.OutsideSkill {
 		t.Fatalf("clean chat: tainted %v, outside skill %v", clean.Tainted, clean.OutsideSkill)
 	}
+	// Saving a skill with an outside skill in the prompt asks (1.13, A-1):
+	// the outside skill could copy itself into one of the person's.
+	if clean.State != agent.StateWaiting || clean.Pending == nil || clean.Pending.Tool != "skill_save" {
+		t.Fatalf("skill_save with an outside skill did not ask: %s %+v", clean.State, clean.Pending)
+	}
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+clean.ID+"/decide", map[string]any{"id": clean.Pending.ID, "approve": true}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("decide: %d %s", res.StatusCode, body)
+	}
+	clean = waitChat(t, ts, ts.client, clean.ID)
 
 	_, body := ts.request("GET", "/api/v1/agent/memory", nil)
 	var mem struct{ Memory []agent.Memory }

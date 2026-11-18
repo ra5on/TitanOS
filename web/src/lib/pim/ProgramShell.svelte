@@ -36,13 +36,25 @@
 		),
 	);
 	const here = $derived(page.url.pathname + page.url.search);
+	// 1.13: while loading (or unavailable) a page that draws its own column
+	// shows the shape of that column already – the same card, the same
+	// width – so that nothing jumps when the data arrives. (Until Kalender
+	// moves to ColumnFrame, Baustand step 9; Kontakte draws its loading
+	// state in its own ColumnFrame since 1.13 and no longer uses this.)
+	const card = $derived(own && !phone && view.kind !== 'ready');
 	const UNAVAILABLE: Record<Props['program'], { title: MessageKey; text: MessageKey }> = {
 		calendar: { title: 'calendar.unavailable.title', text: 'calendar.unavailable.text' },
 		contacts: { title: 'contacts.unavailable.title', text: 'contacts.unavailable.text' },
 	};
 </script>
 
-<div class="pim" class:phone class:own={own && view.kind === 'ready'} data-pim-shell={program}>
+<div
+	class="pim"
+	class:phone
+	class:own={own && view.kind === 'ready'}
+	class:card
+	data-pim-shell={program}
+>
 	{#if !phone && !(own && view.kind === 'ready')}
 		<nav
 			class="column"
@@ -89,6 +101,39 @@
 	}
 	.pim.own {
 		display: block;
+	}
+	/* The shape of the page's own card (routes/calendar, routes/contacts: .cal, .con). */
+	.pim.card {
+		display: grid;
+		grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+		gap: 0;
+		align-items: stretch;
+		min-height: 420px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+	}
+	.card .column {
+		width: auto;
+		padding: var(--space-3) var(--space-2);
+		border: 0;
+		border-right: 1px solid var(--border);
+		border-radius: 0;
+		background: none;
+	}
+	.card .body {
+		padding: var(--space-4);
+	}
+	/* As the page does in a narrower window: the calendar's column below. */
+	@media (max-width: 980px) {
+		.pim.card {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.pim.card .column {
+			order: 2;
+			border-right: 0;
+			border-top: 1px solid var(--border);
+		}
 	}
 	.column {
 		flex: none;

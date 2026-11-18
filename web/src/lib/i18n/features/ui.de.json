@@ -33,7 +33,14 @@
 	"agent.f.protect.e.endNow": "Zugang beenden",
 	"terminal.newShell": "Neue Shell",
 	"terminal.lastClosed": "Die letzte NAS-Shell ist beendet.",
-	"users.agentData.calendarEvents": "Termine in T-Kalender: {count}",
+	"users.agentData.calendarEvents": "Termine im Kalender: {count}",
 	"users.agentData.contacts": "Kontakte: {count}",
-	"users.agentData.part.calendar": "Termine und Kontakte aus T-Kalender und Kontakte (gerade nicht zu zählen: Das Daten-Volume ist nicht eingebunden. Ihr Ordner bleibt dort liegen, bis ein neues Konto mit diesem Namen zum ersten Mal speichert; sehen kann es ihn nie.)"
+	"users.agentData.part.calendar": "Termine und Kontakte aus den Programmen Kalender und Kontakte (gerade nicht zu zählen: Das Daten-Volume ist nicht eingebunden. Ihr Ordner bleibt dort liegen, bis ein neues Konto mit diesem Namen zum ersten Mal speichert; sehen kann es ihn nie.)",
+	"ui.columns.side": "Breite der Seitenleiste",
+	"ui.columns.list": "Breite der Liste",
+	"ui.columns.hint": "Ziehen oder mit den Pfeiltasten die Breite ändern; ein Doppelklick stellt sie zurück.",
+	"ui.sort.move": "„{name}“ verschieben",
+	"ui.sort.hint": "Ziehen oder mit den Pfeiltasten verschieben (auf dem Eintrag Alt+Pfeiltaste); die Reihenfolge gilt für dein Konto.",
+	"ui.sort.moved": "„{name}“ steht jetzt an Stelle {pos} von {count}.",
+	"ui.sort.saveFailed": "Die Reihenfolge wurde nicht gespeichert: {reason}"
 }

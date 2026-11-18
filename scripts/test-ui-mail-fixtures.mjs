@@ -72,6 +72,24 @@ export const HTML_SCRIPT =
 const LOGO = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}`;
 const HELD_BACK =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjZGRkIi8+PC9zdmc+";
+/**
+ * 1.13: a newsletter as many are – a 640 px table with a picture of that
+ * width, two columns of 320 px and a coloured banner, all with fixed
+ * widths; put it on a row as `html` (test-ui-mail-113.mjs). On a phone it
+ * must fit the frame instead of being cut off at the right.
+ */
+export const NEWSLETTER_HTML =
+  `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'"></head>` +
+  `<body style="margin:0;background:#eeeeee"><table width="100%" bgcolor="#eeeeee" cellpadding="0" cellspacing="0"><tr><td align="center">` +
+  `<table width="640" cellpadding="0" cellspacing="0" style="width:640px;background:#ffffff;font-family:Arial,sans-serif">` +
+  `<tr><td><img alt="Paketdienst" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='180'%3E%3Crect width='640' height='180' fill='%23351c15'/%3E%3Ccircle cx='560' cy='90' r='60' fill='%23ffc400'/%3E%3C/svg%3E" width="640" height="180" style="display:block;width:640px"></td></tr>` +
+  `<tr><td style="padding:24px 32px;font-size:18px;text-align:right">Hallo Alex Beispiel</td></tr>` +
+  `<tr><td style="padding:0 32px;font-size:34px;font-weight:bold;text-align:right">Ihr Paket kommt morgen</td></tr>` +
+  `<tr><td style="padding:24px 0"><table width="640" cellpadding="0" cellspacing="0"><tr><td width="320" style="padding:12px 32px;font-size:16px">Sendungsnummer 1Z999AA10123456784</td><td width="320" style="padding:12px 32px;font-size:16px">Geschätzte Zustellung Donnerstag, 19.11.</td></tr></table></td></tr>` +
+  `<tr><td style="background:#ffc400;padding:20px 32px;font-size:24px;font-weight:bold">Für die Paketzustellung ist eine Unterschrift erforderlich</td></tr>` +
+  `<tr><td style="padding:24px 32px;font-size:14px;color:#555555">Diese Nachricht wurde automatisch versandt. https://www.paketdienst.example/sendungsverfolgung/1Z999AA10123456784</td></tr>` +
+  `</table></td></tr></table></body></html>`;
+
 export function bankHtml(images) {
   const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data:${images ? " https:" : ""}; font-src 'none'; form-action 'none'; base-uri 'none'`;
   return (
@@ -222,6 +240,12 @@ export function mailState() {
     testFails: {},
     /** Events the next /events stream sends (then ends; the page connects again). */
     events: [],
+    /**
+     * 1.13 (measure-ui-mail-requests.mjs): a message read answers with its
+     * marks from before the read, like titand (it stores \Seen afterwards);
+     * off by default, so the older scripts see what they saw.
+     */
+    flagsBeforeRead: false,
     /** Release of T-Mail per account name (GET/PUT /users/{name}/mail). */
     released: { alex: true, kim: false },
     sent: [],
@@ -285,6 +309,21 @@ export async function installMail(target, state = mailState()) {
       s.released[name] = route.request().postDataJSON().enabled === true;
     s.requests.push([route.request().method(), `/users/${name}/mail`, null]);
     return route.fulfill({ json: { enabled: s.released[name] === true } });
+  });
+  // 1.12: a contact's picture for the sender pictures (the contacts' route).
+  await target.route(/\/api\/v1\/contacts\/kontakte\/[^/]+\/photo/, (route) => {
+    s.requests.push(["GET", new URL(route.request().url()).pathname, null]);
+    if (s.photosGone)
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: "contacts_unavailable", message: "x" } },
+      });
+    return route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      headers: { "X-Content-Type-Options": "nosniff" },
+      body: Buffer.from(PNG, "base64"),
+    });
   });
   await target.route(/\/api\/v1\/files\/list/, (route) => {
     const url = new URL(route.request().url());
@@ -427,6 +466,9 @@ export async function installMail(target, state = mailState()) {
       if (method === "PUT") s.settings = body;
       return json(s.settings);
     }
+    // 1.12: the contacts with a picture (their photo route answers below).
+    if (path === "/mail/avatars")
+      return json({ book: "kontakte", photos: s.avatars ?? {} });
     if (!(m = /^\/mail\/accounts\/([^/]+)\/(.+)$/.exec(path)))
       return fail(404, "not_found");
     const id = decodeURIComponent(m[1]);
@@ -446,8 +488,9 @@ export async function installMail(target, state = mailState()) {
         return fail(502, "mail_unreachable");
       return json(s.folders[id]);
     }
-    if (what === "messages") {
-      let list = [...(box[q("folder")] ?? [])].sort((x, y) => y.uid - x.uid);
+    // The filters of a list and of the search over all folders (1.12).
+    const filtered = (rows) => {
+      let list = [...rows].sort((x, y) => y.uid - x.uid);
       const needle = (q("q") ?? "").toLowerCase();
       if (needle)
         list = list.filter((r) =>
@@ -455,9 +498,54 @@ export async function installMail(target, state = mailState()) {
             .toLowerCase()
             .includes(needle),
         );
+      const sender = (q("from") ?? "").toLowerCase();
+      if (sender)
+        list = list.filter((r) =>
+          `${r.from?.name ?? ""} ${r.from?.addr ?? ""}`
+            .toLowerCase()
+            .includes(sender),
+        );
+      if (q("attachment") === "1") list = list.filter((r) => r.attachments);
+      if (q("since"))
+        list = list.filter((r) => r.date.slice(0, 10) >= q("since"));
+      if (q("until"))
+        list = list.filter((r) => r.date.slice(0, 10) <= q("until"));
       if (q("unread") === "1")
         list = list.filter((r) => r.flags && !r.flags.seen);
       if (q("flagged") === "1") list = list.filter((r) => r.flags?.flagged);
+      return list;
+    };
+    if (what === "search") {
+      const hits = [];
+      let total = 0;
+      for (const f of s.folders[id]) {
+        const found = filtered(box[f.path] ?? []);
+        total += found.length;
+        hits.push(...found.slice(0, 50).map((r) => ({ ...r, folder: f.path })));
+      }
+      hits.sort((x, y) => y.date.localeCompare(x.date));
+      return json({
+        messages: hits.slice(0, Number(q("limit") || 50)),
+        total,
+        folders: s.folders[id].length,
+        truncated: !!s.searchTruncated,
+      });
+    }
+    if (what === "archive") {
+      const target =
+        s.folders[id].find((f) => f.role === "archive")?.path ?? "Archive";
+      if (!s.folders[id].some((f) => f.path === target))
+        s.folders[id].push(folder(target, target, "archive"));
+      const from = box[body.folder] ?? [];
+      box[body.folder] = from.filter((r) => !body.uids.includes(r.uid));
+      box[target] = [
+        ...from.filter((r) => body.uids.includes(r.uid)),
+        ...(box[target] ?? []),
+      ];
+      return json({ to: target });
+    }
+    if (what === "messages") {
+      let list = filtered(box[q("folder")] ?? []);
       const total = list.length;
       const before = Number(q("before") || 0);
       if (before) list = list.filter((r) => r.uid < before);
@@ -475,6 +563,7 @@ export async function installMail(target, state = mailState()) {
       );
       if (!r) return fail(404, "mail_not_found");
       if (r.tooLarge) return fail(413, "mail_too_large");
+      const marks = s.flagsBeforeRead ? { ...r.flags } : r.flags;
       r.flags.seen = true;
       if (r.digest)
         return json({
@@ -490,7 +579,7 @@ export async function installMail(target, state = mailState()) {
           messageId: `<${r.uid}@fixture.example>`,
           inReplyTo: "",
           references: "",
-          flags: r.flags,
+          flags: marks,
           text: "--grenze\nContent-Type: message/rfc822\n\nSubject: Beitrag 1\n\nErster Beitrag der Liste\n--grenze--\n",
           html: "",
           externalImages: false,
@@ -515,11 +604,11 @@ export async function installMail(target, state = mailState()) {
         messageId: `<${r.uid}@fixture.example>`,
         inReplyTo: "",
         references: "",
-        flags: r.flags,
+        flags: marks,
         text: bank
           ? "Guten Tag, Ihr Auszug für November liegt bei."
           : `Hallo Alex,\n\nhier der Text zu „${r.subject}“. Mehr unter https://example.org/info?id=${r.uid}\n\nViele Grüße`,
-        html: bank ? bankHtml(q("images") === "1") : "",
+        html: bank ? bankHtml(q("images") === "1") : (r.html ?? ""),
         externalImages: bank && q("images") !== "1",
         attachments: r.attachments
           ? [

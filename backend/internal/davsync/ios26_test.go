@@ -196,6 +196,12 @@ func (e *env) directive(t *testing.T, where string, d []string) {
 			v = ""
 		}
 		e.setVolume(v)
+	case d[0] == "tasks" && len(d) == 2:
+		// @tasks off | on: only the reminder lists cannot be read (their
+		// folder follows the volume like the calendars').
+		e.mu.Lock()
+		e.tasksGone = d[1] == "off"
+		e.mu.Unlock()
 	case d[0] == "redirect" && len(d) == 2:
 		code, err := strconv.Atoi(d[1])
 		if err != nil {

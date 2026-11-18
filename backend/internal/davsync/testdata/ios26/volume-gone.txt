@@ -170,7 +170,8 @@
 > <?xml version="1.0" encoding="UTF-8"?>
 > <A:propfind xmlns:A="DAV:"><A:prop><A:displayname/></A:prop></A:propfind>
 < status 207
-< responses 2
+< responses 3
+# (and the virtual reminder list, 1.13: reminders.txt)
 < value /caldav/alex/calendars/privat/ d:displayname Privat
 
 > GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics

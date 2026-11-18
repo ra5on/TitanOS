@@ -167,7 +167,7 @@ func planUpdate(kind store.Kind, collection bool, ins []instruction) (store.Meta
 		status := http.StatusOK
 		w, known := writables[in.name]
 		switch {
-		case !collection || !known || (w.kind != "" && w.kind != kind):
+		case !collection || !known || (w.kind != "" && w.kind != family(kind)):
 			if in.value != nil {
 				status = http.StatusForbidden
 			}
@@ -264,7 +264,7 @@ func (rq *request) proppatch() {
 			// set is 409, the rest 424 (nothing changed).
 			for i := range verdicts {
 				verdicts[i].status = http.StatusFailedDependency
-				if w, known := writables[verdicts[i].name]; known && (w.kind == "" || w.kind == t.kind) {
+				if w, known := writables[verdicts[i].name]; known && (w.kind == "" || w.kind == family(t.kind)) {
 					verdicts[i].status = http.StatusConflict
 				}
 			}
@@ -283,26 +283,42 @@ type mkcolPlan struct {
 	verdicts []verdict
 	// failed: a property cannot be set (403 with the propstats).
 	failed bool
-	// component: the supported-calendar-component-set names anything but
-	// VEVENT (403 supported-calendar-component).
+	// component: the supported-calendar-component-set names neither
+	// VEVENT alone nor VTODO alone (403 supported-calendar-component).
 	component bool
+	// comp is the kind to make: a calendar, or a reminder list for a
+	// component set of VTODO (1.13).
+	comp store.Kind
 	// calendar: the resourcetype names a calendar (extended MKCOL).
 	calendar bool
 }
 
-// componentsOK reports whether a supported-calendar-component-set names
-// VEVENT and nothing else (TECHNIK 1.4: only events).
-func componentsOK(v *node) bool {
+// components reads a supported-calendar-component-set: VEVENT alone is a
+// calendar, VTODO alone a reminder list (1.13); anything else – both,
+// VJOURNAL, none – is not made (a collection holds one component, as on
+// iCloud).
+func components(v *node) (store.Kind, bool) {
 	comps := v.all(calName("comp"))
 	if len(comps) == 0 || len(comps) != len(v.Children) {
-		return false
+		return "", false
 	}
+	var kind store.Kind
 	for _, c := range comps {
-		if !strings.EqualFold(strings.TrimSpace(c.attr("name")), "VEVENT") {
-			return false
+		var k store.Kind
+		switch strings.ToUpper(strings.TrimSpace(c.attr("name"))) {
+		case "VEVENT":
+			k = store.Calendar
+		case "VTODO":
+			k = store.Tasks
+		default:
+			return "", false
 		}
+		if kind != "" && kind != k {
+			return "", false
+		}
+		kind = k
 	}
-	return true
+	return kind, true
 }
 
 // parseMkcol reads the body of a MKCALENDAR (cal:mkcalendar) or an
@@ -312,7 +328,7 @@ func componentsOK(v *node) bool {
 // transp, dead properties) is taken and dropped, so a calendar is never
 // refused for what iOS adds. A nil body is no property at all.
 func parseMkcol(kind store.Kind, root *node, extended bool) (mkcolPlan, error) {
-	var plan mkcolPlan
+	plan := mkcolPlan{comp: store.Calendar}
 	if root == nil {
 		return plan, nil
 	}
@@ -331,12 +347,14 @@ func parseMkcol(kind store.Kind, root *node, extended bool) (mkcolPlan, error) {
 				case davName("resourcetype"):
 					plan.calendar = v.child(calName("calendar")) != nil && v.child(cardName("addressbook")) == nil
 				case calName("supported-calendar-component-set"):
-					if !componentsOK(v) {
+					if comp, ok := components(v); ok && kind != store.Contacts {
+						plan.comp = comp
+					} else {
 						plan.component = true
 						status = http.StatusForbidden
 					}
 				default:
-					if w, known := writables[v.Name]; known && (w.kind == "" || w.kind == kind) {
+					if w, known := writables[v.Name]; known && (w.kind == "" || w.kind == family(kind)) {
 						if s := w.apply(&plan.patch, v); s != 0 {
 							status = s
 						}
@@ -429,13 +447,16 @@ func (rq *request) makeCalendar(extended bool) {
 	if p := plan.patch; p.Description != nil {
 		meta.Description = *p.Description
 	}
+	if plan.comp == store.Tasks && plan.patch.Color == nil {
+		meta.Color = store.DefaultTaskColor
+	}
 	if p := plan.patch; p.Order != nil {
 		meta.Order = *p.Order
-	} else if cols, err := st.Collections(t.kind, t.account); err == nil && len(cols) > 0 {
-		// A new calendar comes last (sorted by order).
+	} else if cols, err := st.Collections(plan.comp, t.account); err == nil && len(cols) > 0 {
+		// A new calendar (list) comes last (sorted by order).
 		meta.Order = cols[len(cols)-1].Order + 1
 	}
-	if _, err := st.CreateCollection(t.kind, t.account, t.collection, meta); err != nil {
+	if _, err := st.CreateCollection(plan.comp, t.account, t.collection, meta); err != nil {
 		if errors.Is(err, store.ErrExists) {
 			rq.w.Header().Set("Allow", rq.h.allow(t.kind, t.level))
 			http.Error(rq.w, "the collection exists", http.StatusMethodNotAllowed)

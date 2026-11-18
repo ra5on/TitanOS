@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/files"
@@ -33,10 +34,13 @@ type pimDataArea struct {
 	// account (a picture of a contact from the files).
 	files *files.Manager
 	roots func(r *http.Request) []files.Root
+	// cache keeps the prepared address books (pim_cache.go); nil prepares
+	// them for every request (the agent's toolbox).
+	cache *pimCache
 }
 
 func (s *Server) pimDataArea() pimDataArea {
-	a := pimDataArea{store: s.opts.PIM, prefs: s.prefs, mail: s.opts.Mail, files: s.opts.Files, roots: s.filesArea().requestRoots}
+	a := pimDataArea{store: s.opts.PIM, prefs: s.prefs, mail: s.opts.Mail, files: s.opts.Files, roots: s.filesArea().requestRoots, cache: s.pimCache}
 	if s.opts.MemoryPolicy != nil {
 		a.reserve = s.opts.MemoryPolicy.TryReserve
 	}
@@ -60,10 +64,20 @@ func (a pimDataArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("PUT /api/v1/calendar/events/{cal}/{obj}", web(a.handleUpdateEvent))
 	mux.HandleFunc("DELETE /api/v1/calendar/events/{cal}/{obj}", web(a.handleDeleteEvent))
 	mux.HandleFunc("POST /api/v1/calendar/preview", web(a.handlePreview))
+	// Reminders, 1.13 (calendar_tasks.go).
+	a.registerTasks(mux, web)
 	// Kontakte (contacts.go, contacts_photo.go, contacts_suggest.go, contacts_vcf.go).
 	mux.HandleFunc("GET /api/v1/contacts", web(a.handleContacts))
 	mux.HandleFunc("POST /api/v1/contacts", web(a.handleCreateContact))
 	mux.HandleFunc("GET /api/v1/contacts/suggestions", web(a.handleContactSuggestions))
+	// 1.13: side bar, search, groups, duplicates (contacts_groups.go, contacts_merge.go).
+	mux.HandleFunc("GET /api/v1/contacts/overview", web(a.handleContactsOverview))
+	mux.HandleFunc("GET /api/v1/contacts/search", web(a.handleContactSearch))
+	mux.HandleFunc("GET /api/v1/contacts/duplicates", web(a.handleContactDuplicates))
+	mux.HandleFunc("POST /api/v1/contacts/merge", web(a.handleMergeContacts))
+	mux.HandleFunc("POST /api/v1/contacts/groups", web(a.handleCreateGroup))
+	mux.HandleFunc("PUT /api/v1/contacts/groups/{id}", web(a.handleUpdateGroup))
+	mux.HandleFunc("DELETE /api/v1/contacts/groups/{id}", web(a.handleDeleteGroup))
 	mux.HandleFunc("POST /api/v1/contacts/from-suggestion", web(a.handleContactFromSuggestion))
 	mux.HandleFunc("POST /api/v1/contacts/books/{id}/import", web(a.handleImportContacts))
 	mux.HandleFunc("GET /api/v1/contacts/books/{id}/export", web(a.handleExportContacts))
@@ -133,20 +147,31 @@ func (a pimDataArea) handleBooks(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]bookView, 0, len(books))
 	for _, b := range books {
-		objects, err := a.store.Objects(pimstore.Contacts, user.Name, b.ID)
+		ix, _, err := a.cache.book(a.store, user.Name, b.ID)
 		if err != nil {
 			writePIMError(w, pimstore.Contacts, err)
 			return
 		}
-		view := bookView{ID: b.ID, Name: b.Name}
-		for _, o := range objects {
-			if !o.Entry.Group {
-				view.Count++
-			}
-		}
-		out = append(out, view)
+		out = append(out, bookView{ID: b.ID, Name: b.Name, Count: ix.Len()})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// notModified reports whether If-None-Match names etag (an ETag without
+// quotes): "*" or one of the tags, a weak one compared weakly (RFC 9110
+// 13.1.2).
+func notModified(r *http.Request, etag string) bool {
+	header := r.Header.Get("If-None-Match")
+	if header == "" || etag == "" {
+		return false
+	}
+	for _, tag := range strings.Split(header, ",") {
+		tag = strings.TrimPrefix(strings.TrimSpace(tag), "W/")
+		if tag == "*" || strings.Trim(tag, `"`) == etag {
+			return true
+		}
+	}
+	return false
 }
 
 // writePIMUnavailable answers 503 calendar_unavailable or

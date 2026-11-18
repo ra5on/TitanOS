@@ -5,6 +5,7 @@ import { apiPath } from '../cluster-node.ts';
 import { lockFrom } from './checklock.svelte.ts';
 import type {
 	AccountInput,
+	Avatars,
 	Contact,
 	DraftSaved,
 	Flags,
@@ -15,6 +16,7 @@ import type {
 	MessagePage,
 	NasFile,
 	Provider,
+	SearchResult,
 	SendMeta,
 	TestResult,
 } from './types.ts';
@@ -70,14 +72,32 @@ export function query(params: Record<string, string | number | boolean | null | 
 	return parts.length ? '?' + parts.join('&') : '';
 }
 
-export type ListQuery = {
-	folder: string;
-	before?: number | null;
-	limit?: number;
+/** The filters of 1.12: `since`/`until` are days (YYYY-MM-DD, both counted). */
+export type Filters = {
 	q?: string;
 	unread?: boolean;
 	flagged?: boolean;
+	from?: string;
+	attachment?: boolean;
+	since?: string;
+	until?: string;
 };
+
+export type ListQuery = Filters & {
+	folder: string;
+	before?: number | null;
+	limit?: number;
+};
+
+const filterParams = (q: Filters) => ({
+	q: q.q,
+	unread: q.unread,
+	flagged: q.flagged,
+	from: q.from,
+	attachment: q.attachment,
+	since: q.since,
+	until: q.until,
+});
 
 export const PAGE_SIZE = 50;
 
@@ -100,10 +120,14 @@ export const mailApi = noteLimits({
 				folder: q.folder,
 				before: q.before ?? undefined,
 				limit: q.limit ?? PAGE_SIZE,
-				q: q.q,
-				unread: q.unread,
-				flagged: q.flagged,
+				...filterParams(q),
 			})}`,
+			signal,
+		),
+	/** 1.12: the newest hits of all folders of a mailbox. */
+	search: (id: string, q: Filters & { limit?: number }, signal?: AbortSignal) =>
+		api.get<SearchResult>(
+			`${acc(id)}/search${query({ ...filterParams(q), limit: q.limit })}`,
 			signal,
 		),
 	message: (
@@ -136,6 +160,11 @@ export const mailApi = noteLimits({
 		api.post(`${acc(id)}/move`, body),
 	remove: (id: string, body: { folder: string; uids: number[] }) =>
 		api.post(`${acc(id)}/delete`, body),
+	/** 1.12: into the mailbox's archive (made if there is none). */
+	archive: (id: string, body: { folder: string; uids: number[] }) =>
+		api.post<{ to: string }>(`${acc(id)}/archive`, body),
+	/** 1.12: the own contacts with a picture, for the senders' pictures. */
+	avatars: (signal?: AbortSignal) => api.get<Avatars>('/mail/avatars', signal),
 	// Large requests (send, draft, saving a part) wait once when titand is busy.
 	send: (id: string, form: FormData) => busyOnce(() => api.post(`${acc(id)}/send`, form)),
 	draft: (id: string, form: FormData) =>

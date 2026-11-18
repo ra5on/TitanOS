@@ -7,6 +7,9 @@
 	// deletion of one event). The colors are the fixed program squares,
 	// each with its name; the last calendar cannot go (calendar_last, shown
 	// as text).
+	// 1.13: the same for a list of reminders (`tasks`): name and color,
+	// deleting it with its reminders (the last list stays, tasklist_last); no
+	// import or export (the .ics files carry only events).
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -22,21 +25,24 @@
 		updateCalendar,
 		type ImportResult,
 	} from '../calendar-api.ts';
+	import { createTaskList, removeTaskList, updateTaskList, type TaskList } from './tasks.ts';
 
 	type Props = {
 		/** The calendar to change; none = a new one. */
-		calendar?: Calendar;
+		calendar?: Calendar | TaskList;
+		/** 1.13: a list of reminders instead of a calendar. */
+		tasks?: boolean;
 		onclose: () => void;
 		/** Something changed: reload calendars and events. */
 		onchanged: () => void;
 	};
-	let { calendar, onclose, onchanged }: Props = $props();
+	let { calendar, tasks = false, onclose, onchanged }: Props = $props();
 	const phone = phoneView();
 
 	// svelte-ignore state_referenced_locally
 	let name = $state(calendar?.name ?? '');
 	// svelte-ignore state_referenced_locally
-	let color = $state<SquareName>(calendar ? squareOf(calendar.color) : 'violet');
+	let color = $state<SquareName>(calendar ? squareOf(calendar.color) : tasks ? 'orange' : 'violet');
 	let busy = $state(false);
 	let error = $state('');
 	let confirmDelete = $state(false);
@@ -56,7 +62,11 @@
 		busy = true;
 		error = '';
 		try {
-			if (calendar)
+			if (tasks) {
+				if (calendar)
+					await updateTaskList(calendar.id, { name: name.trim(), color: squareHex(color) });
+				else await createTaskList(name.trim(), squareHex(color));
+			} else if (calendar)
 				await updateCalendar(calendar.id, { name: name.trim(), color: squareHex(color) });
 			else await createCalendar(name.trim(), squareHex(color));
 			onchanged();
@@ -98,7 +108,7 @@
 		busy = true;
 		error = '';
 		try {
-			await removeCalendar(calendar.id);
+			await (tasks ? removeTaskList(calendar.id) : removeCalendar(calendar.id));
 			onchanged();
 			onclose();
 		} catch (err) {
@@ -113,17 +123,24 @@
 
 {#if confirmDelete && calendar}
 	<Dialog
-		title={t('calendar.cal.delTitle', { name: calendar.name })}
+		title={t(tasks ? 'calendar.list.delTitle' : 'calendar.cal.delTitle', { name: calendar.name })}
 		locked={busy}
 		onclose={() => (confirmDelete = false)}
 	>
-		<p class="lead">{t('calendar.cal.delText', { name: calendar.name, n: calendar.count })}</p>
+		<p class="lead">
+			{t(tasks ? 'calendar.list.delText' : 'calendar.cal.delText', {
+				name: calendar.name,
+				n: calendar.count,
+			})}
+		</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" disabled={busy} onclick={() => (confirmDelete = false)}
 				>{t('common.cancel')}</button
 			>
 			<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}
-				><Icon name="trash" size={15} />{t('calendar.cal.delConfirm')}</button
+				><Icon name="trash" size={15} />{t(
+					tasks ? 'calendar.list.delConfirm' : 'calendar.cal.delConfirm',
+				)}</button
 			>
 		</div>
 	</Dialog>
@@ -131,7 +148,7 @@
 	<Dialog
 		title={calendar
 			? t('calendar.cal.editTitle', { name: calendar.name })
-			: t('calendar.cal.newTitle')}
+			: t(tasks ? 'calendar.list.newTitle' : 'calendar.cal.newTitle')}
 		locked={busy}
 		{onclose}
 	>
@@ -174,7 +191,7 @@
 			</div>
 		</form>
 
-		{#if calendar}
+		{#if calendar && !tasks}
 			<section class="part" aria-labelledby="cal-import-head" data-calendar-import>
 				<h3 id="cal-import-head">{t('calendar.cal.import')}</h3>
 				<input
@@ -232,13 +249,21 @@
 					><Icon name="download" size={15} />{t('calendar.cal.export')}</button
 				>
 			</section>
-			<DangerZone hint={t('calendar.cal.dangerHint', { n: calendar.count })}>
+		{/if}
+		{#if calendar}
+			<DangerZone
+				hint={t(tasks ? 'calendar.list.dangerHint' : 'calendar.cal.dangerHint', {
+					n: calendar.count,
+				})}
+			>
 				<button
 					type="button"
 					class="btn btn-danger"
 					disabled={busy}
 					onclick={() => (confirmDelete = true)}
-					><Icon name="trash" size={15} />{t('calendar.cal.delete')}</button
+					><Icon name="trash" size={15} />{t(
+						tasks ? 'calendar.list.delete' : 'calendar.cal.delete',
+					)}</button
 				>
 			</DangerZone>
 		{/if}

@@ -282,3 +282,28 @@ export function wallMinutes(
 	const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 	return daysBetween(fromDate, toDate) * 1440 + m(toTime) - m(fromTime);
 }
+
+/**
+ * 1.13: the instant of a wall clock in a zone (the inverse of wallOf): the
+ * date and minutes after midnight (1440 = the next midnight). A time the
+ * clock skips (spring forward) lands after the gap, one it shows twice the
+ * first time.
+ */
+export function instantAt(date: string, minutes: number, zone: string): Date {
+	const [y, m, d] = date.split('-').map(Number);
+	const target = Date.UTC(y, m - 1, d) + minutes * 60_000;
+	let t = target;
+	for (let i = 0; i < 3; i++) {
+		const w = wallOf(new Date(t), zone);
+		const [wy, wm, wd] = w.date.split('-').map(Number);
+		const diff = Date.UTC(wy, wm - 1, wd) + w.minutes * 60_000 - target;
+		if (!diff) break;
+		t -= diff;
+	}
+	return new Date(t);
+}
+
+/** RFC 3339 in UTC without fractions ("2026-11-17T09:15:00Z"), as titand reads it. */
+export function rfc3339(at: Date): string {
+	return at.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}

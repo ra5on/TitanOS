@@ -181,6 +181,7 @@ func (a pimArea) handleUserDeviceRevoke(w http.ResponseWriter, r *http.Request) 
 // changed or whose second factor was reset (here or by another node).
 func (s *Server) devicesRevokeAll(name string) {
 	s.devices.RevokeAll(name)
+	s.profileLinks.Forget(name)
 }
 
 // devicesRebind keeps the devices of an account whose second factor the
@@ -204,6 +205,10 @@ func (s *Server) devicesRebind(before auth.User) {
 // meanwhile is told to come back, never shown an empty collection.
 func (s *Server) pimForgetUser(name string) {
 	s.devices.Forget(name)
+	s.profileLinks.Forget(name)
+	s.pimLive.forget(name)
+	s.reminders.forget(name)
+	s.pimCache.forget(name)
 	if s.opts.PIM != nil {
 		_ = s.opts.PIM.ForgetUser(name) // logged by the package
 	}

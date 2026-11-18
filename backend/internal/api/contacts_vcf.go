@@ -236,6 +236,14 @@ func (a pimDataArea) handleExportContacts(w http.ResponseWriter, r *http.Request
 		contactsFail(w, r, book, err, "contact_not_found")
 		return
 	}
+	// One open of the folder for all entries (1.13), each read without
+	// the collection's lock.
+	rd, err := store.Reader(pimstore.Contacts, user, book)
+	if err != nil {
+		contactsFail(w, r, book, err, "contact_not_found")
+		return
+	}
+	defer rd.Close()
 	exportHeaders := func() {
 		h := w.Header()
 		h.Set("Content-Type", "text/vcard; charset=utf-8")
@@ -246,7 +254,7 @@ func (a pimDataArea) handleExportContacts(w http.ResponseWriter, r *http.Request
 	}
 	started := false
 	for _, o := range objects {
-		obj, err := store.Get(pimstore.Contacts, user, book, o.Name)
+		obj, err := rd.Get(o.Name)
 		if errors.Is(err, pimstore.ErrNotFound) {
 			continue // deleted meanwhile
 		}

@@ -133,7 +133,7 @@ export function sanitizeEvent(raw: unknown): CalEvent | null {
 		recurring: e.recurring === true,
 		rule: sanitizeRule(e.rule),
 		alarms: Array.isArray(e.alarms)
-			? e.alarms.filter((m): m is number => typeof m === 'number' && m >= 0)
+			? e.alarms.filter((m): m is number => typeof m === 'number' && m > -1440)
 			: [],
 		exception: e.exception === true,
 		etag: str(e.etag),
@@ -368,8 +368,11 @@ export function intervalUnit(kind: RepeatKind): 'day' | 'week' | 'month' | 'year
 
 /** Reminders the form offers: minutes before the start. */
 export const TIMED_ALARMS = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080];
-/** All-day: the day before at 18:00 / 09:00, two days before 09:00, a week before 09:00. */
-export const ALLDAY_ALARMS = [360, 900, 2340, 9540];
+/**
+ * All-day: on the day at 09:00 (1.13, after the start: −540), the day
+ * before at 09:00 / 18:00, two days before 09:00, a week before 09:00.
+ */
+export const ALLDAY_ALARMS = [-540, 900, 360, 2340, 9540];
 
 /** A reminder in parts for the words: relative ("1 Stunde vorher") or at a time of a day before (all-day). */
 export type AlarmWords =
@@ -384,11 +387,12 @@ export type AlarmWords =
  * before ("Am Vortag um 18:00" for 25 hours before 19:00).
  */
 export function alarmWords(minutes: number, allDay: boolean, start?: number): AlarmWords {
-	const m = Math.max(0, Math.floor(minutes));
+	// After the start only for all-day events (on the day at a time).
+	const m = allDay ? Math.max(-1439, Math.floor(minutes)) : Math.max(0, Math.floor(minutes));
 	const timedDayAt = !allDay && start !== undefined && m >= 1440 && m % 1440 !== 0;
 	if (allDay || timedDayAt) {
 		const from = allDay ? 0 : (start as number);
-		const days = Math.ceil((m - from) / 1440);
+		const days = Math.ceil((m - from) / 1440) || 0; // never -0
 		const at = from + days * 1440 - m;
 		const time = `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`;
 		return { kind: 'dayAt', days, time };

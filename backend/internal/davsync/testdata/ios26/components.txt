@@ -1,0 +1,100 @@
+# One component per collection (1.13, as on iCloud): a calendar holds
+# VEVENT only, a reminder list VTODO only. A VTODO in a calendar and a
+# VEVENT in a list are 403 supported-calendar-component; MKCALENDAR with
+# VTODO alone makes a list, with both (or VJOURNAL) nothing.
+> PUT /caldav/alex/calendars/privat/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: todo.ics
+< status 403
+< error cal:supported-calendar-component
+
+> GET /caldav/alex/calendars/privat/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+< status 404
+
+> PUT /caldav/alex/calendars/erinnerungen--titanos/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist.ics
+< status 403
+< error cal:supported-calendar-component
+
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><B:supported-calendar-component-set><B:comp name="VEVENT"/><B:comp name="VTODO"/></B:supported-calendar-component-set></A:prop></A:set></B:mkcalendar>
+< status 403
+< error cal:supported-calendar-component
+
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><B:supported-calendar-component-set><B:comp name="VJOURNAL"/></B:supported-calendar-component-set></A:prop></A:set></B:mkcalendar>
+< status 403
+< error cal:supported-calendar-component
+
+> PROPFIND /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+> Depth: 0
+< status 404
+
+# Without a component set it is a calendar of events (a calendar named
+# "erinnerungen" of 1.11/1.12 stays one).
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+< status 201
+
+> PROPFIND /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+> Depth: 0
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><B:supported-calendar-component-set/><A:displayname/></A:prop></A:propfind>
+< status 207
+< value /caldav/alex/calendars/erinnerungen/ cal:supported-calendar-component-set VEVENT
+< value-lacks /caldav/alex/calendars/erinnerungen/ cal:supported-calendar-component-set VTODO
+< value /caldav/alex/calendars/erinnerungen/ d:displayname erinnerungen
+
+# An id is a calendar or a list: a list cannot take the calendar's id,
+# nor a calendar the list's.
+> MKCALENDAR /caldav/alex/calendars/erinnerungen/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:set><A:prop><B:supported-calendar-component-set><B:comp name="VTODO"/></B:supported-calendar-component-set></A:prop></A:set></B:mkcalendar>
+< status 405
+
+> MKCALENDAR /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+< status 405
+
+# The virtual list still takes reminders, the calendar events.
+> PUT /caldav/alex/calendars/erinnerungen--titanos/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: todo.ics
+< status 201
+< header ETag {etag:todo.ics}
+
+> PUT /caldav/alex/calendars/erinnerungen/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: dentist.ics
+< status 201
+
+# A multiget names an entry of the list by the list's path only.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <C:calendar-multiget xmlns:A="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/><C:calendar-data/></A:prop><A:href>/caldav/alex/calendars/erinnerungen--titanos/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics</A:href><A:href>/caldav/alex/calendars/erinnerungen/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics</A:href></C:calendar-multiget>
+< status 207
+< data /caldav/alex/calendars/erinnerungen--titanos/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics todo.ics
+< response /caldav/alex/calendars/erinnerungen/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics 404

@@ -545,6 +545,9 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
+	// 1.13: the action rights that hold for this account (Q29: every
+	// account sees them, also without the settings of the agent).
+	out["actions"] = s.agentActionsView(user.Name)
 	if settings.Provider.Kind == "" && settings.Source == agentSourceCluster {
 		state := s.agentClusterCall(r.Context(), "GET", "/state")
 		out["source"], out["share"] = agentSourceCluster, state

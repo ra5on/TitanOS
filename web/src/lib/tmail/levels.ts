@@ -6,15 +6,23 @@
 /** What is read of an address (URL, or SvelteKit's read-only page.url). */
 export type Address = { pathname: string; searchParams: { get(name: string): string | null } };
 
-export type MailPlace = { a: string; f: string; m: number | null };
+/**
+ * `mf` (1.12): the folder of the open message when it is not the list's –
+ * a hit of the search over all folders. The list stays on `f` with its
+ * search, so going back returns to the hits.
+ */
+export type MailPlace = { a: string; f: string; m: number | null; mf?: string };
 
 export function placeOf(url: Address): MailPlace {
 	const m = Number(url.searchParams.get('m'));
-	return {
+	const place: MailPlace = {
 		a: url.searchParams.get('a') ?? '',
 		f: url.searchParams.get('f') ?? '',
 		m: Number.isInteger(m) && m > 0 ? m : null,
 	};
+	const mf = url.searchParams.get('mf');
+	if (place.m && mf && mf !== place.f) place.mf = mf;
+	return place;
 }
 
 export function mailHref(p: Partial<MailPlace>): string {
@@ -22,6 +30,7 @@ export function mailHref(p: Partial<MailPlace>): string {
 	if (p.a) q.set('a', p.a);
 	if (p.a && p.f) q.set('f', p.f);
 	if (p.a && p.f && p.m) q.set('m', String(p.m));
+	if (p.a && p.f && p.m && p.mf && p.mf !== p.f) q.set('mf', p.mf);
 	const s = q.toString();
 	return '/mail' + (s ? '?' + s : '');
 }

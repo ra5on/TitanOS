@@ -4,7 +4,9 @@
 	// the real targets of its links and the attachments with "Herunterladen"
 	// and "In Dateien speichern".
 	import { untrack } from 'svelte';
+	import BottomBar from '../components/BottomBar.svelte';
 	import Dialog from '../components/Dialog.svelte';
+	import Dropdown from '../components/Dropdown.svelte';
 	import Icon from '../components/Icon.svelte';
 	import DocsFolderPicker from '../components/agent/features/DocsFolderPicker.svelte';
 	import { place } from '../features/docs.ts';
@@ -22,17 +24,26 @@
 		accountId,
 		folder,
 		uid,
+		compact = false,
 		oncompose,
 		onflags,
 		onremoved,
+		onagent,
 	}: {
 		accountId: string;
 		folder: string;
 		uid: number;
+		/**
+		 * 1.13: the phone and windows under 620 px – the actions as a bar at
+		 * the bottom (BottomBar), answering and the rest in menus.
+		 */
+		compact?: boolean;
 		oncompose: (mode: ComposeMode, msg: Message) => void;
 		onflags: (uids: number[], change: Partial<Flags>) => void;
 		/** The message left this folder (moved, deleted). */
 		onremoved: (uid: number) => void;
+		/** 1.13: opens the agent's panel with this message (only with the agent). */
+		onagent?: () => void;
 	} = $props();
 
 	let msg = $state<Message | null>(null);
@@ -88,6 +99,7 @@
 	}
 
 	const inTrash = $derived(findFolder(accountId, folder)?.role === 'trash');
+	const inArchive = $derived(findFolder(accountId, folder)?.role === 'archive');
 	const recipients = $derived.by(() => {
 		if (!msg) return '';
 		const all = [...msg.to, ...msg.cc];
@@ -132,6 +144,11 @@
 	async function moveTo(to: string) {
 		moving = false;
 		if (await act(() => mailApi.move(accountId, { folder, uids: [uid], to }))) onremoved(uid);
+	}
+
+	/** 1.13 (the bar at the bottom): into the mailbox's archive, like the list's action. */
+	async function archive() {
+		if (await act(() => mailApi.archive(accountId, { folder, uids: [uid] }))) onremoved(uid);
 	}
 
 	async function remove() {
@@ -212,44 +229,53 @@
 			{/if}
 		</header>
 
-		<div class="actions" role="toolbar" aria-label={t('mail.actions')}>
-			<button type="button" class="btn" disabled={busy} onclick={() => oncompose('reply', msg!)}
-				><Icon name="reply" size={16} />{t('mail.action.reply')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => oncompose('replyAll', msg!)}
-				><Icon name="replyAll" size={16} />{t('mail.action.replyAll')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => oncompose('forward', msg!)}
-				><Icon name="forward" size={16} />{t('mail.action.forward')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => (moving = true)}
-				><Icon name="move" size={16} />{t('mail.action.move')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={askDelete}
-				><Icon name="trash" size={16} />{inTrash
-					? t('mail.action.deleteForever')
-					: t('mail.action.delete')}</button
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={busy}
-				aria-pressed={msg.flags.flagged}
-				onclick={() => setFlag('flagged', !msg!.flags.flagged)}
-				><Icon name="flag" size={16} />{msg.flags.flagged
-					? t('mail.action.unflag')
-					: t('mail.action.flag')}</button
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={busy}
-				onclick={() => setFlag('seen', !msg!.flags.seen)}
-				><Icon name="mail" size={16} />{msg.flags.seen
-					? t('mail.action.markUnread')
-					: t('mail.action.markRead')}</button
-			>
-		</div>
+		{#if !compact}<div class="actions" role="toolbar" aria-label={t('mail.actions')}>
+				<button type="button" class="btn" disabled={busy} onclick={() => oncompose('reply', msg!)}
+					><Icon name="reply" size={16} />{t('mail.action.reply')}</button
+				>
+				<button
+					type="button"
+					class="btn"
+					disabled={busy}
+					onclick={() => oncompose('replyAll', msg!)}
+					><Icon name="replyAll" size={16} />{t('mail.action.replyAll')}</button
+				>
+				<button type="button" class="btn" disabled={busy} onclick={() => oncompose('forward', msg!)}
+					><Icon name="forward" size={16} />{t('mail.action.forward')}</button
+				>
+				<button type="button" class="btn" disabled={busy} onclick={() => (moving = true)}
+					><Icon name="move" size={16} />{t('mail.action.move')}</button
+				>
+				<button type="button" class="btn" disabled={busy} onclick={askDelete}
+					><Icon name="trash" size={16} />{inTrash
+						? t('mail.action.deleteForever')
+						: t('mail.action.delete')}</button
+				>
+				{#if onagent}
+					<button type="button" class="btn" onclick={onagent}
+						><Icon name="sparkle" size={16} />{t('agentpim.panel.title')}</button
+					>
+				{/if}
+				<button
+					type="button"
+					class="btn"
+					disabled={busy}
+					aria-pressed={msg.flags.flagged}
+					onclick={() => setFlag('flagged', !msg!.flags.flagged)}
+					><Icon name="flag" size={16} />{msg.flags.flagged
+						? t('mail.action.unflag')
+						: t('mail.action.flag')}</button
+				>
+				<button
+					type="button"
+					class="btn"
+					disabled={busy}
+					onclick={() => setFlag('seen', !msg!.flags.seen)}
+					><Icon name="mail" size={16} />{msg.flags.seen
+						? t('mail.action.markUnread')
+						: t('mail.action.markRead')}</button
+				>
+			</div>{/if}
 
 		{#if actionError}<p class="notice-error" role="alert">{actionError}</p>{/if}
 		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
@@ -333,6 +359,97 @@
 					{/each}
 				</ul>
 			</details>
+		{/if}
+		{#if compact}
+			{@const m = msg}
+			<BottomBar label={t('mail.actions')}>
+				<Dropdown label={t('mail.action.reply')} icon="reply" disabled={busy}>
+					{#snippet children(close)}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								oncompose('reply', m);
+							}}>{t('mail.action.reply')}</button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								oncompose('replyAll', m);
+							}}>{t('mail.action.replyAll')}</button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								oncompose('forward', m);
+							}}>{t('mail.action.forward')}</button
+						>
+					{/snippet}
+				</Dropdown>
+				<button
+					type="button"
+					class="bar-btn"
+					disabled={busy}
+					aria-label={t('mail.action.move')}
+					title={t('mail.action.move')}
+					onclick={() => (moving = true)}><Icon name="move" size={20} /></button
+				>
+				{#if !inArchive}
+					<button
+						type="button"
+						class="bar-btn"
+						disabled={busy}
+						aria-label={t('mail.action.archive')}
+						title={t('mail.action.archive')}
+						onclick={archive}><Icon name="archive" size={20} /></button
+					>
+				{/if}
+				<button
+					type="button"
+					class="bar-btn"
+					disabled={busy}
+					aria-label={inTrash ? t('mail.action.deleteForever') : t('mail.action.delete')}
+					title={inTrash ? t('mail.action.deleteForever') : t('mail.action.delete')}
+					onclick={askDelete}><Icon name="trash" size={20} /></button
+				>
+				<button
+					type="button"
+					class="bar-btn"
+					disabled={busy}
+					aria-pressed={m.flags.flagged}
+					aria-label={t('mail.action.flag')}
+					title={m.flags.flagged ? t('mail.action.unflag') : t('mail.action.flag')}
+					onclick={() => setFlag('flagged', !m.flags.flagged)}
+					><Icon name="flag" size={20} /></button
+				>
+				<Dropdown label={t('ui.more')} icon="more" align="right" disabled={busy}>
+					{#snippet children(close)}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								void setFlag('seen', !m.flags.seen);
+							}}>{m.flags.seen ? t('mail.action.markUnread') : t('mail.action.markRead')}</button
+						>
+						{#if onagent}
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									onagent();
+								}}>{t('agentpim.panel.title')}</button
+							>
+						{/if}
+					{/snippet}
+				</Dropdown>
+			</BottomBar>
 		{/if}
 	</article>
 {/if}

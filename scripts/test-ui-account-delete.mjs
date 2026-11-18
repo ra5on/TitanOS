@@ -135,7 +135,7 @@ for (const [width, phone] of [
   await list.waitFor();
   assert.deepEqual(
     (await list.locator("li").allTextContents()).map((s) => s.trim()),
-    ["Chats mit ihren Dateien: 2", "Termine in T-Kalender: 42", "Kontakte: 7"],
+    ["Chats mit ihren Dateien: 2", "Termine im Kalender: 42", "Kontakte: 7"],
   );
   await dialog.getByText("Mit dem Konto wird mitgelöscht:").waitFor();
   assert.deepEqual(await page.evaluate(cutTextIn), [], "no cut text");
@@ -157,7 +157,7 @@ for (const [width, phone] of [
     s.trim(),
   );
   assert.equal(lines.length, 1, lines.join(" | "));
-  assert.match(lines[0], /^Termine und Kontakte aus T-Kalender und Kontakte/);
+  assert.match(lines[0], /^Termine und Kontakte aus den Programmen Kalender und Kontakte/);
   assert.match(lines[0], /Daten-Volume ist nicht eingebunden/);
   assert.ok(!/\d/.test(lines[0]), "no number without the data volume");
   assert.deepEqual(await page.evaluate(cutTextIn), [], "no cut text");

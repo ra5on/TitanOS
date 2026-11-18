@@ -114,7 +114,7 @@ func (b *agentToolbox) pimTools() []*agentTool {
 	}
 	return []*agentTool{
 		{name: "calendar_list", area: cal, kind: agent.KindRead, untrusted: true,
-			description: "The person's calendars in T-Kalender (id, name, color, number of events), and the birthdays from the contacts.",
+			description: "The person's calendars in Kalender (id, name, color, number of events), and the birthdays from the contacts.",
 			params:      schema(nil), own: b.calendarList, prepare: b.pimCheckArgs},
 		{name: "calendar_search", area: cal, kind: agent.KindRead, untrusted: true,
 			description: "Events of the person's calendars between from and to (default today 00:00 to 14 days later, at most 400 days), optionally only those whose title, place or notes contain query. Use it for \"Was steht morgen an?\" and before changing or deleting an event (its id). truncated:true means not all were looked at (with query only the earliest 2000 of the span): search a shorter span before saying there is none.",
@@ -138,7 +138,7 @@ func (b *agentToolbox) pimTools() []*agentTool {
 			params:      schema(map[string]any{"id": idCal, "scope": scope, "etag": etag}, "id"),
 			own:         b.calendarDelete, prepare: b.calendarDeletePrepare},
 		{name: "contacts_search", area: con, kind: agent.KindRead, untrusted: true,
-			description: "The person's contacts in Kontakte whose name, company, number, address or e-mail address contains query (empty: all), with numbers, addresses, birthday and notes. Not the addresses T-Mail learned.",
+			description: "The person's contacts in Kontakte whose name, company, number, address or e-mail address contains query (empty: all), with numbers, addresses, birthday and notes. Not the addresses Mail learned.",
 			params: schema(map[string]any{
 				"query": str("Name, company, number, address or e-mail address."),
 				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": pimMaxContacts, "description": "At most this many (default 20)."},
@@ -1416,9 +1416,15 @@ func alarmWords(alarms []int, en bool) string {
 	}
 	parts := []string{}
 	for _, m := range alarms {
-		w := minutesWords(m, en)
-		if m > 0 {
-			w += pick(en, " vorher", " before")
+		var w string
+		switch {
+		case m > 0:
+			w = minutesWords(m, en) + pick(en, " vorher", " before")
+		case m < 0:
+			// 1.13: after the start (an all-day event's "on the day at 9:00").
+			w = minutesWords(-m, en) + pick(en, " nach Beginn", " after the start")
+		default:
+			w = minutesWords(m, en)
 		}
 		parts = append(parts, w)
 	}

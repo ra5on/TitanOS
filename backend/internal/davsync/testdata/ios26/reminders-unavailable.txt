@@ -1,0 +1,51 @@
+# The lists live in .titanos/tasks, next to the calendars on the system
+# data volume. When only they cannot be read, the home set is 503 (never
+# a home without the lists: iOS would delete them), a calendar and its
+# entries still answer, and an id that might be a list is 503, never 404.
+@seed calendar privat 6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics dentist.ics
+@seed tasks erinnerungen--titanos 4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics todo.ics
+@tasks off
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+< status 503
+< header Retry-After 300
+
+> GET /caldav/alex/calendars/privat/6D3B0C8E-5F21-4A77-B0C4-1E9D2A7F3B55.ics
+> Auth: alex
+< status 200
+< body dentist.ics
+
+> PROPFIND /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+< status 503
+
+> GET /caldav/alex/calendars/erinnerungen--titanos/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+< status 503
+
+> PROPFIND /caldav/alex/calendars/nothere/
+> Auth: alex
+> Depth: 0
+< status 503
+
+@tasks on
+
+> GET /caldav/alex/calendars/erinnerungen--titanos/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+< status 200
+< body todo.ics
+
+> PROPFIND /caldav/alex/calendars/nothere/
+> Auth: alex
+> Depth: 0
+< status 404
+
+# Without the volume both are 503, as before.
+@volume off
+> PROPFIND /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 0
+< status 503

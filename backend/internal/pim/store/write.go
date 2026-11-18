@@ -160,14 +160,25 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 	if !patch.valid() {
 		return Collection{}, ErrInvalidMeta
 	}
+	// CalDAV shows calendars and reminder lists side by side: an id is
+	// one or the other (tasks.go).
+	if err := s.idFree(kind, account, id); err != nil {
+		return Collection{}, err
+	}
 	acc, done, err := s.beginWrite(kind, account)
 	if err != nil {
 		return Collection{}, err
 	}
+	var made []*collection // told after every lock is given back
+	defer func() {
+		for _, c := range made {
+			s.changed(kind, account, c.id, c)
+		}
+	}()
 	defer done()
 	// Lock order: the collection first, then the account.
 	var virtual *collection
-	if v, err := acc.lookup(DefaultCalendar); err == nil && v.virtual {
+	if v, err := acc.lookup(defaultID(kind)); err == nil && v.virtual {
 		v.mu.Lock()
 		defer v.mu.Unlock()
 		virtual = v
@@ -192,13 +203,13 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 		if err := s.materializeLocked(acc, ar, virtual); err != nil {
 			return Collection{}, err
 		}
-		if id == DefaultCalendar {
+		if id == virtual.id {
 			if m.Name == "" {
 				m.Name = virtual.st.Name
 			}
 			patch.apply(virtual.st)
 		}
-		vr, err := ar.OpenRoot(DefaultCalendar)
+		vr, err := ar.OpenRoot(virtual.id)
 		if err != nil {
 			return Collection{}, err
 		}
@@ -208,7 +219,8 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 			return Collection{}, err
 		}
 		acc.virtual = nil
-		if id == DefaultCalendar {
+		made = append(made, virtual)
+		if id == virtual.id {
 			return info(kind, virtual), nil
 		}
 	}
@@ -234,6 +246,7 @@ func (s *Store) CreateCollection(kind Kind, account, id string, m Meta) (Collect
 		acc.virtual = nil
 	}
 	s.noteData(acc)
+	made = append(made, c)
 	return info(kind, c), nil
 }
 
@@ -279,6 +292,12 @@ func (s *Store) UpdateCollection(kind Kind, account, id string, m MetaPatch) (Co
 	if err != nil {
 		return Collection{}, err
 	}
+	var told *collection
+	defer func() {
+		if told != nil {
+			s.changed(kind, account, id, told)
+		}
+	}()
 	defer done()
 	c, err := acc.lookup(id)
 	if err != nil {
@@ -304,6 +323,7 @@ func (s *Store) UpdateCollection(kind Kind, account, id string, m MetaPatch) (Co
 	defer cr.Close()
 	m.apply(c.st)
 	c.st.change("", false)
+	told = c
 	if err := s.writeState(cr, c.st); err != nil {
 		return Collection{}, err
 	}
@@ -355,6 +375,12 @@ func (s *Store) DeleteCollection(kind Kind, account, id, ifMatch string) error {
 	if err != nil {
 		return err
 	}
+	gone := false
+	defer func() {
+		if gone {
+			s.changed(kind, account, id, nil)
+		}
+	}()
 	defer done()
 	c, err := acc.lookup(id)
 	if err != nil {
@@ -391,6 +417,7 @@ func (s *Store) DeleteCollection(kind Kind, account, id, ifMatch string) error {
 	}
 	delete(acc.cols, id)
 	c.deleted = true
+	gone = true
 	acc.mu.Unlock()
 	s.parsed.dropCollection(kind, account, id)
 	_ = ar.RemoveAll(trash) // a leftover goes with the next load
@@ -449,6 +476,12 @@ func (s *Store) Put(kind Kind, account, col, name string, data []byte, opt PutOp
 	if err != nil {
 		return PutResult{}, err
 	}
+	var told *collection
+	defer func() {
+		if told != nil {
+			s.changed(kind, account, col, told)
+		}
+	}()
 	defer done()
 	c, err := acc.lookup(col)
 	if err != nil {
@@ -503,6 +536,7 @@ func (s *Store) Put(kind Kind, account, col, name string, data []byte, opt PutOp
 	}
 	c.st.Index[name] = entry
 	c.st.change(name, false)
+	told = c
 	// A failed state.json leaves RAM right (the file is there); the next
 	// write writes it again, and a restart before that rebuilds the index
 	// with a new epoch.
@@ -579,6 +613,12 @@ func (s *Store) DeleteObject(kind Kind, account, col, name, ifMatch string) erro
 	if err != nil {
 		return err
 	}
+	var told *collection
+	defer func() {
+		if told != nil {
+			s.changed(kind, account, col, told)
+		}
+	}()
 	defer done()
 	c, err := acc.lookup(col)
 	if err != nil {
@@ -615,6 +655,7 @@ func (s *Store) DeleteObject(kind Kind, account, col, name, ifMatch string) erro
 	}
 	delete(c.st.Index, name)
 	c.st.change(name, true)
+	told = c
 	s.parsed.dropEntry(kind, account, col, name)
 	return s.writeState(cr, c.st)
 }
@@ -659,6 +700,12 @@ func (s *Store) Import(ctx context.Context, kind Kind, account, col string, item
 	if err != nil {
 		return nil, err
 	}
+	var told *collection
+	defer func() {
+		if told != nil {
+			s.changed(kind, account, col, told)
+		}
+	}()
 	defer done()
 	c, err := acc.lookup(col)
 	if err != nil {
@@ -677,6 +724,9 @@ func (s *Store) Import(ctx context.Context, kind Kind, account, col string, item
 	fresh := c.virtual
 	if err := s.materialize(acc, ar, c); err != nil {
 		return nil, err
+	}
+	if fresh {
+		told = c // a new epoch even when nothing is written
 	}
 	cr, or, err := openCollection(ar, col)
 	if err != nil {
@@ -729,6 +779,7 @@ func (s *Store) Import(ctx context.Context, kind Kind, account, col string, item
 		s.parsed.dropEntry(kind, account, col, it.Name)
 		results[i].ETag, results[i].Created = e.ETag, cur == nil
 		written++
+		told = c
 	}
 	if written == 0 {
 		if fresh {

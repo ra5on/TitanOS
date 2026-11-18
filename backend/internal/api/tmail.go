@@ -2,9 +2,11 @@ package api
 
 // T-Mail (docs/TMAIL.md): the mail program of every account that has the
 // app grant. Every route is for the web session only (browserOnly), never
-// for API tokens, MCP, the KI-Agent or requests titand makes in the name
-// of an account, and stays on this node (clusterLocal): no route is in
-// publicRoutes or the tool catalog (TestMailIsNoToolAndNoPublicRoute).
+// for API tokens, MCP or requests titand makes in the name of an account,
+// and stays on this node (clusterLocal): no route is in publicRoutes or
+// the tool catalog (TestMailIsNoToolAndNoPublicRoute). Since 1.13 the
+// KI-Agent has mail tools of its own (agent_mail.go, owner 18 Nov 2026):
+// they call tmail.Manager directly, never these routes.
 // Mailboxes are the account's own: another account's ID is not found.
 
 import (
@@ -19,6 +21,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/tmail"
 )
 
@@ -35,6 +38,10 @@ type tmailArea struct {
 	// contactsFor gives the addresses of the account's contacts that match
 	// q (TECHNIK 7.4, pim/store); nil without calendars and contacts.
 	contactsFor func(user, q string) []tmail.Contact
+	// photosFor gives the addresses of the account's contacts with a
+	// picture and the contact of each (1.12, sender pictures); nil
+	// without calendars and contacts.
+	photosFor func(user string) map[string]string
 }
 
 // tmailArea is the area of the server.
@@ -49,6 +56,7 @@ func (s *Server) tmailArea() tmailArea {
 			}
 			return out
 		}
+		a.photosFor = func(user string) map[string]string { return pim.PhotoAddresses(user, maxMailAvatars) }
 	}
 	return a
 }
@@ -74,17 +82,20 @@ func (a tmailArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("PUT /api/v1/mail/accounts/{id}/folders", mail(a.handleFolderRename))
 	mux.HandleFunc("DELETE /api/v1/mail/accounts/{id}/folders", mail(a.handleFolderDelete))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/messages", mail(a.handleMessages))
+	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/search", mail(a.handleSearch))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/message", mail(a.handleMessage))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/part", mail(a.handlePart))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/cid", mail(a.handleCID))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/part/save", mail(a.handlePartSave))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/flags", mail(a.handleFlags))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/move", mail(a.handleMove))
+	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/archive", mail(a.handleArchive))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/delete", mail(a.handleDelete))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/send", mail(a.handleSend(false)))
 	mux.HandleFunc("POST /api/v1/mail/accounts/{id}/draft", mail(a.handleSend(true)))
 	mux.HandleFunc("GET /api/v1/mail/contacts", mail(a.handleContacts))
 	mux.HandleFunc("DELETE /api/v1/mail/contacts", mail(a.handleContactForget))
+	mux.HandleFunc("GET /api/v1/mail/avatars", mail(a.handleAvatars))
 	mux.HandleFunc("GET /api/v1/mail/settings", mail(a.handleSettings))
 	mux.HandleFunc("PUT /api/v1/mail/settings", mail(a.handleSettingsSet))
 	mux.HandleFunc("GET /api/v1/mail/events", mail(a.handleEvents))
@@ -94,7 +105,7 @@ func (a tmailArea) register(mux *routeMux, g guards) {
 func (a tmailArea) granted(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.mail == nil || !a.mail.Allowed(currentUser(r).Name) {
-			writeError(w, http.StatusForbidden, "mail_disabled", "T-Mail is not enabled for this account")
+			writeError(w, http.StatusForbidden, "mail_disabled", "Mail is not enabled for this account")
 			return
 		}
 		next(w, r)
@@ -140,14 +151,14 @@ func writeMailError(w http.ResponseWriter, err error) {
 		status = http.StatusBadGateway
 	}
 	message := map[string]string{
-		"mail_disabled": "T-Mail is not enabled for this account", "mail_auth_failed": "the mail server refused the login",
+		"mail_disabled": "Mail is not enabled for this account", "mail_auth_failed": "the mail server refused the login",
 		"mail_unreachable": "the mail server is not reachable", "mail_tls": "no TLS or the certificate of the mail server is not valid",
 		"mail_host_forbidden": "this address may not be used for mail", "mail_timeout": "the mail server did not answer in time",
 		"mail_too_large": "too large", "mail_not_found": "not found", "mail_folder_exists": "the folder exists already",
-		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the T-Mail settings could not be read from /config",
+		"mail_no_password": "no password is stored for this mailbox", "mail_settings_unreadable": "the Mail settings could not be read from /config",
 		"mail_password_required": "enter the password again for another host",
 		"mail_rate_limited":      "too many checks of the settings or new servers; try again in a minute",
-		"mail_busy":              "T-Mail is busy with other large requests; try again in a moment",
+		"mail_busy":              "Mail is busy with other large requests; try again in a moment",
 		"mail_key_missing":       "the key of the stored mail passwords is missing; restore it from the backup of the stick or add the mailboxes anew",
 		"mail_key_damaged":       "the key of the stored mail passwords is damaged; restore it from the backup of the stick or add the mailboxes anew",
 	}[code]
@@ -198,7 +209,7 @@ func (a tmailArea) handleGrantSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.mail == nil {
-		writeError(w, http.StatusServiceUnavailable, "mail_unavailable", "T-Mail is not available")
+		writeError(w, http.StatusServiceUnavailable, "mail_unavailable", "Mail is not available")
 		return
 	}
 	noteTarget(r, target.Name)
@@ -300,6 +311,22 @@ func (a tmailArea) handleAccountTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// maxMailAvatars bounds the addresses of GET /mail/avatars.
+const maxMailAvatars = 2000
+
+// handleAvatars names the contacts with a picture by their addresses, for
+// the sender pictures of the list (1.12). The picture itself comes from
+// the contacts' own route (GET /contacts/{book}/{id}/photo) with its
+// headers; nothing is fetched from the internet.
+func (a tmailArea) handleAvatars(w http.ResponseWriter, r *http.Request) {
+	photos := map[string]string{}
+	if a.photosFor != nil {
+		photos = a.photosFor(currentUser(r).Name)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"book": pimstore.DefaultBook, "photos": photos})
 }
 
 // maxMailSuggestions is how many addresses the address field gets.

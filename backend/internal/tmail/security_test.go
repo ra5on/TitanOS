@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,8 +115,19 @@ func hostPort(t *testing.T, addr string) (string, int) {
 }
 
 // peakHeap runs work and reports the highest heap seen meanwhile.
+// peakHeap measures what work adds to the heap at its peak: the heap after
+// a collection is the base (what earlier tests of the package still hold
+// is not the work's – in the whole package that was 50–100 MiB and made
+// the bounds flaky, also in 1.12).
 func peakHeap(work func()) uint64 {
 	var peak atomic.Uint64
+	// Collect often while the work runs, so that the peak is what it holds
+	// and not garbage a busy machine (CI, packages in parallel) has not yet
+	// collected.
+	defer debug.SetGCPercent(debug.SetGCPercent(20))
+	runtime.GC()
+	var base runtime.MemStats
+	runtime.ReadMemStats(&base)
 	done := make(chan struct{})
 	go func() {
 		var ms runtime.MemStats
@@ -131,10 +143,12 @@ func peakHeap(work func()) uint64 {
 			}
 		}
 	}()
-	runtime.GC()
 	work()
 	close(done)
-	return peak.Load()
+	if p := peak.Load(); p > base.HeapAlloc {
+		return p - base.HeapAlloc
+	}
+	return 0
 }
 
 // HIGH: a hostile server cannot make titand keep an endless answer.
@@ -379,7 +393,7 @@ func TestGrantTakenClosesConnections(t *testing.T) {
 	if _, err := e.m.Folders(t.Context(), "alex", id); err != nil {
 		t.Fatal(err)
 	}
-	s := e.m.conns.get(key("alex", id))
+	s := e.m.conns.get(poolKey{"alex", id, laneUI})
 	c := s.client()
 	if c == nil {
 		t.Fatal("no connection")

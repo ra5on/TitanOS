@@ -24,6 +24,10 @@ type systemResponse struct {
 	// NotificationsLatest is the number of the newest message, for owners
 	// and administrators; the web UI fetches the list when it changes.
 	NotificationsLatest int `json:"notificationsLatest"`
+	// RemindersLatest names the newest hint of a reminder of the account's
+	// events ("<epoch>-<seq>", 1.13, calendar_reminders.go), for every
+	// role; the shell reads them when it changes. Left out without.
+	RemindersLatest string `json:"remindersLatest,omitempty"`
 }
 
 // systemArea is the overview of the system; an area with narrow
@@ -35,6 +39,7 @@ type systemArea struct {
 	network      *network.Manager
 	accelerators *hardware.AcceleratorMonitor
 	notify       *notify.Manager
+	reminders    func(user string) string
 }
 
 func (a systemArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -49,6 +54,9 @@ func (a systemArea) handleSystem(w http.ResponseWriter, r *http.Request) {
 	}
 	if currentUser(r).Role.CanAdminister() {
 		res.NotificationsLatest = a.notify.Latest()
+	}
+	if a.reminders != nil {
+		res.RemindersLatest = a.reminders(currentUser(r).Name)
 	}
 	writeJSON(w, http.StatusOK, res)
 }

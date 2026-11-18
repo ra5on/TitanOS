@@ -37,7 +37,7 @@ type propDef struct {
 }
 
 func (d *propDef) applies(res *resource) bool {
-	return d.levels.has(res.t.level) && (d.kind == "" || d.kind == res.t.kind)
+	return d.levels.has(res.t.level) && (d.kind == "" || d.kind == family(res.t.kind))
 }
 
 // propTable holds the properties; steps 7 and 8 add theirs to
@@ -321,8 +321,11 @@ func readProps() []propDef {
 			get: colText(calName("calendar-description"), func(c *store.Collection) string { return c.Description })},
 		{name: cardName("addressbook-description"), levels: on(levelCollection), kind: store.Contacts,
 			get: colText(cardName("addressbook-description"), func(c *store.Collection) string { return c.Description })},
+		// VEVENT for a calendar, VTODO for a reminder list (tasks.go).
 		{name: calName("supported-calendar-component-set"), levels: on(levelCollection), kind: store.Calendar,
-			get: value(elem(calName("supported-calendar-component-set"), Elem{Name: calName("comp"), Attr: []xml.Attr{{Name: xml.Name{Local: "name"}, Value: "VEVENT"}}}))},
+			get: func(rq *request, res *resource) (Elem, bool) {
+				return elem(calName("supported-calendar-component-set"), Elem{Name: calName("comp"), Attr: []xml.Attr{{Name: xml.Name{Local: "name"}, Value: component(res.t.kind)}}}), true
+			}},
 		{name: calName("supported-calendar-data"), levels: on(levelCollection), kind: store.Calendar,
 			get: value(elem(calName("supported-calendar-data"), Elem{Name: calName("calendar-data"), Attr: []xml.Attr{
 				{Name: xml.Name{Local: "content-type"}, Value: "text/calendar"}, {Name: xml.Name{Local: "version"}, Value: "2.0"}}}))},

@@ -192,9 +192,21 @@ type agentMessage struct {
 	// ("Bearbeiten und erneut senden"). Without a Message the same one is
 	// asked again ("Neu erzeugen").
 	Replace string `json:"replace,omitempty"`
+	// Context names what is open in the program of the panel (1.13): a
+	// reference, checked and kept with the message, never content.
+	Context *agent.ChatContext `json:"context,omitempty"`
+	// Origin "panel" starts a chat of the panel in Mail, Kontakte or
+	// Kalender (only for a new chat; nothing else may be given).
+	Origin string `json:"origin,omitempty"`
 }
 
 func (m *agentMessage) check() error {
+	if m.Origin != "" && m.Origin != "panel" {
+		return errors.New("invalid origin")
+	}
+	if err := checkContext(m.Context); err != nil {
+		return err
+	}
 	m.Message = strings.TrimSpace(m.Message)
 	if m.Message == "" && m.Replace != "" {
 		return nil
@@ -241,6 +253,10 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Autonomy: autonomyOf(req.Autonomy, ""), Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
+	if req.Origin == "panel" {
+		// The tools of mail, calendar and contacts are there from the start.
+		chat.Origin, chat.Areas = "panel", slices.Clone(panelAreas)
+	}
 	chat.ChooseModel(req.Model)
 	chat.ChooseThink(req.Think)
 	if req.Draft {
@@ -258,7 +274,7 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		agentStartError(w, err)
 		return
 	}
-	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: now, Role: "user", Content: req.Message})
+	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: now, Role: "user", Content: req.Message, Context: req.Context})
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		s.agentRelease(run)
 		agentStoreError(w, err)
@@ -337,7 +353,7 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 		chat.Entries = append(chat.Entries, skipped...)
 		chat.Pending = nil
 	}
-	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: time.Now(), Role: "user", Content: req.Message})
+	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: time.Now(), Role: "user", Content: req.Message, Context: req.Context})
 	chat.Updated = time.Now()
 	if chat.Title == "" {
 		chat.Title = chatTitle(req.Message)
@@ -364,9 +380,15 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID      string `json:"id"`
 		Approve bool   `json:"approve"`
+		// Edit (1.13, "Öffnen und bearbeiten"): no, the person finishes the
+		// step in the program's editor; the answer names the draft.
+		Edit bool `json:"edit,omitempty"`
 	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.Edit {
+		req.Approve = false
 	}
 	if _, inProcess := r.Context().Value(inProcessIdentity{}).(string); inProcess {
 		writeError(w, http.StatusForbidden, "web_session_required", "only the person can approve")
@@ -397,6 +419,36 @@ func (s *Server) handleAgentDecide(w http.ResponseWriter, r *http.Request) {
 	if chat.Pending == nil || chat.Pending.ID != req.ID {
 		s.agentRelease(run)
 		writeError(w, http.StatusConflict, "agent_nothing_pending", "this step no longer waits")
+		return
+	}
+	if req.Edit {
+		// The draft is made now, before the step stops waiting; nothing runs.
+		d, err := s.agentPendingDraft(r.Context(), user, chat)
+		if err != nil {
+			s.agentRelease(run)
+			writeError(w, http.StatusConflict, "no_draft", err.Error())
+			return
+		}
+		note := agent.NewID()
+		// Saved before the run starts: the program asks for the draft at once.
+		if err := chat.DeclineToEdit(req.ID, note, d, time.Now()); err != nil {
+			s.agentRelease(run)
+			agentStoreError(w, err)
+			return
+		}
+		chat.State = agent.StateRunning
+		if err := s.agentStore().SaveChat(user.Name, chat); err != nil {
+			s.agentRelease(run)
+			agentStoreError(w, err)
+			return
+		}
+		if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {
+			return rn.Run(ctx, chat)
+		}); err != nil {
+			agentStartError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "entry": note, "draft": d})
 		return
 	}
 	if err := s.agentLaunch(run, user, chat, func(rn *agent.Runner, ctx context.Context) error {

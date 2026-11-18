@@ -317,6 +317,8 @@ export type SystemInfo = {
 	networkPendingSeconds: number;
 	/** Number of the newest message; 0 if there is none or the account may not see them. */
 	notificationsLatest: number;
+	/** 1.13: the newest hint of a reminder of the account's events ("<epoch>-<seq>"). */
+	remindersLatest?: string;
 };
 
 export type Preferences = {
@@ -336,6 +338,8 @@ export type Preferences = {
 	fileapps?: Record<string, unknown> | null;
 	/** PLAN 72: standard Docker apps per file type; missing before 0.69. */
 	fileappsdocker?: Record<string, unknown> | null;
+	/** 1.13: the order of the side bars of Mail, Kontakte, Kalender; missing before 1.13. */
+	order?: Record<string, unknown> | null;
 };
 
 export type Temperature = {

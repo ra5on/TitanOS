@@ -91,3 +91,50 @@ func wordStarts(s, prefix string) bool {
 	}
 	return false
 }
+
+// PhotoAddresses maps the e-mail addresses (lower case) of the account's
+// contacts that have a picture to the entry's name, for the sender
+// pictures of T-Mail (1.12). An address of two contacts goes with the one
+// first by sort key. At most limit addresses; from RAM after the first
+// read, empty without a volume or for an unknown account.
+func (s *Store) PhotoAddresses(account string, limit int) map[string]string {
+	out := map[string]string{}
+	if limit <= 0 {
+		return out
+	}
+	acc, err := s.accountFor(Contacts, account)
+	if err != nil {
+		return out
+	}
+	type found struct{ addr, name, sortKey string }
+	var list []found
+	for _, c := range acc.collections() {
+		c.mu.Lock()
+		if !c.deleted {
+			for name, e := range c.st.Index {
+				if e.Group || !e.HasPhoto {
+					continue
+				}
+				for _, addr := range e.Emails {
+					if addr = strings.ToLower(strings.TrimSpace(addr)); addr != "" {
+						list = append(list, found{addr, name, e.SortKey})
+					}
+				}
+			}
+		}
+		c.mu.Unlock()
+	}
+	slices.SortFunc(list, func(a, b found) int {
+		return cmp.Or(cmp.Compare(a.sortKey, b.sortKey), cmp.Compare(a.name, b.name), cmp.Compare(a.addr, b.addr))
+	})
+	for _, f := range list {
+		if _, ok := out[f.addr]; ok {
+			continue
+		}
+		if len(out) == limit {
+			break
+		}
+		out[f.addr] = f.name
+	}
+	return out
+}

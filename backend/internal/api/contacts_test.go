@@ -157,7 +157,7 @@ func TestContactRouteRights(t *testing.T) {
 	e := newConEnv(t)
 	ts := e.ts
 	routes := contactRoutes(ts)
-	if len(routes) != 13 {
+	if len(routes) != 20 {
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {
@@ -452,6 +452,41 @@ func TestContactPhoto(t *testing.T) {
 	if r.StatusCode != http.StatusOK || h.Get("Content-Type") != "image/jpeg" || h.Get("X-Content-Type-Options") != "nosniff" ||
 		h.Get("Content-Security-Policy") != "sandbox" || !strings.HasPrefix(h.Get("Cache-Control"), "private") || !bytes.Equal(data, pic) {
 		t.Fatalf("photo route: %d %v %d bytes", r.StatusCode, h, len(data))
+	}
+	// 1.13: the card's ETag names the picture; asked again with it, 304
+	// from RAM.
+	photoTag := h.Get("ETag")
+	if photoTag != `"`+w.ETag+`"` || h.Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("photo etag %s (card %s), %s", photoTag, w.ETag, h.Get("Cache-Control"))
+	}
+	conditional := func(client *http.Client, tag, query string) *http.Response {
+		req, _ := http.NewRequest("GET", e.ts.url+"/api/v1/contacts/kontakte/ben.vcf/photo"+query, nil)
+		req.Header.Set("If-None-Match", tag)
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		return r
+	}
+	for _, tag := range []string{photoTag, "W/" + photoTag, `"x", ` + photoTag, "*"} {
+		if r := conditional(e.alex, tag, ""); r.StatusCode != http.StatusNotModified || r.Header.Get("ETag") != photoTag {
+			t.Fatalf("If-None-Match %s: %d", tag, r.StatusCode)
+		}
+	}
+	if r := conditional(e.alex, `"old"`, ""); r.StatusCode != http.StatusOK {
+		t.Fatalf("another etag: %d", r.StatusCode)
+	}
+	// ?v=<the card's ETag> (photoURL of the page) names one picture for good.
+	if r := conditional(e.alex, `"old"`, "?v="+w.ETag); r.Header.Get("Cache-Control") != "private, max-age=604800, immutable" {
+		t.Fatalf("?v=etag: %s", r.Header.Get("Cache-Control"))
+	}
+	if r := conditional(e.alex, `"old"`, "?v=stale"); r.Header.Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("?v=stale: %s", r.Header.Get("Cache-Control"))
+	}
+	// bea never gets alex's picture, not even as 304.
+	if r := conditional(e.bea, photoTag, ""); r.StatusCode != http.StatusNotFound {
+		t.Fatalf("bea with alex's etag: %d", r.StatusCode)
 	}
 	// A conflict: the old etag.
 	if res, body := e.putPhoto(e.alex, "/api/v1/contacts/kontakte/ben.vcf/photo?etag="+etag, contactPNG(t, 64, 64)); res.StatusCode != http.StatusConflict || errorCode(t, body) != "contacts_conflict" {

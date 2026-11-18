@@ -115,7 +115,8 @@ func mustLack(t *testing.T, what, s string, not ...string) {
 func calendarRoutes(ts *testServer) [][2]string {
 	var out [][2]string
 	for _, rt := range pimDataRoutes(ts) {
-		if strings.HasPrefix(rt[1], "/api/v1/calendar/") && rt[1] != "/api/v1/calendar/access" {
+		// The stream never ends by itself: TestPIMStreamRights has it.
+		if strings.HasPrefix(rt[1], "/api/v1/calendar/") && rt[1] != "/api/v1/calendar/access" && rt[1] != "/api/v1/calendar/stream" {
 			out = append(out, rt)
 		}
 	}
@@ -130,7 +131,7 @@ func TestCalendarRouteRights(t *testing.T) {
 	e := newCalEnv(t)
 	ts := e.ts
 	routes := calendarRoutes(ts)
-	if len(routes) != 12 {
+	if len(routes) != 24 { // 12 of events, 11 of reminders, 1 of hints (1.13)
 		t.Fatalf("routes: %v", routes)
 	}
 	for _, r := range publicRoutes {

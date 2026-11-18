@@ -35,6 +35,10 @@ const maxHiddenCalendars = 100
 func validCalendarPrefs(value json.RawMessage) bool {
 	var p struct {
 		Hidden *[]string `json:"hidden"`
+		// 1.13: the hints of reminders in TitanOS (default on) and a push
+		// to the account's devices (default off).
+		Hints *bool `json:"reminderHints"`
+		Push  *bool `json:"reminderPush"`
 	}
 	if json.Unmarshal(value, &p) != nil {
 		return false
@@ -51,6 +55,28 @@ func validCalendarPrefs(value json.RawMessage) bool {
 		}
 	}
 	return true
+}
+
+// mergeCalendarPrefs puts the keys of put over the stored ones; only the
+// known keys stay.
+func mergeCalendarPrefs(stored, put json.RawMessage) (json.RawMessage, error) {
+	merged := map[string]json.RawMessage{}
+	if stored != nil && (json.Unmarshal(stored, &merged) != nil || merged == nil) {
+		merged = map[string]json.RawMessage{}
+	}
+	var change map[string]json.RawMessage
+	if err := json.Unmarshal(put, &change); err != nil {
+		return nil, err
+	}
+	for k, v := range change {
+		merged[k] = v
+	}
+	for k := range merged {
+		if k != "hidden" && k != "reminderHints" && k != "reminderPush" {
+			delete(merged, k)
+		}
+	}
+	return json.Marshal(merged)
 }
 
 type calendarView struct {
@@ -205,8 +231,8 @@ func (a pimDataArea) handleCalendars(w http.ResponseWriter, r *http.Request) {
 	}
 	birthdays := calendarView{ID: calweb.BirthdaysID, Name: "Geburtstage", Color: birthdayColor, Order: last + 1, ReadOnly: true,
 		Kind: "birthdays", Hidden: slices.Contains(hidden, calweb.BirthdaysID)}
-	if contacts, err := store.Objects(pimstore.Contacts, user, pimstore.DefaultBook); err == nil {
-		birthdays.Count = calweb.CountBirthdays(contacts)
+	if ix, _, err := a.cache.book(store, user, pimstore.DefaultBook); err == nil {
+		birthdays.Count = ix.Birthdays().Len()
 	} else {
 		birthdays.Unavailable = true
 	}
@@ -257,7 +283,9 @@ func (a pimDataArea) handleCreateCalendar(w http.ResponseWriter, r *http.Request
 			meta.Order = max(meta.Order, c.Order+1)
 		}
 		id := calweb.CalendarID(name, func(id string) bool {
-			return slices.ContainsFunc(cols, func(c pimstore.Collection) bool { return c.ID == id && !c.Virtual })
+			// An id is a calendar or a reminder list (1.13).
+			return slices.ContainsFunc(cols, func(c pimstore.Collection) bool { return c.ID == id && !c.Virtual }) ||
+				store.Holds(pimstore.Tasks, user, id)
 		})
 		if created, err = store.CreateCollection(pimstore.Calendar, user, id, meta); !errors.Is(err, pimstore.ErrExists) {
 			break

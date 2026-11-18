@@ -134,6 +134,10 @@ type Policy struct {
 	// drops the field when it reads the settings; saved there, it is gone,
 	// and back on 1.11 the preset holds again (the careful side).
 	DataRights map[string]DataRight `json:"dataRights,omitempty"`
+	// ActionRights are the modes per kind of action for mail, events,
+	// contacts and reminders (1.13, actions.go): suggest, ask or allow;
+	// mail.read allow or deny; deletes ask only. 1.12 drops the field.
+	ActionRights map[string]string `json:"actionRights,omitempty"`
 }
 
 // ValidMode reports whether m is one of the three modes.
@@ -153,6 +157,9 @@ func (p Policy) Check() error {
 		if IsDataArea(a) {
 			return errors.New("the area " + a + " is set under dataRights")
 		}
+		if a == AreaMail {
+			return errors.New("the area mail is set under actionRights")
+		}
 	}
 	for a, r := range p.DataRights {
 		if !IsDataArea(a) {
@@ -166,6 +173,9 @@ func (p Policy) Check() error {
 		if !ValidMode(m) {
 			return errors.New("unknown mode")
 		}
+	}
+	if err := CheckActions(p.ActionRights); err != nil {
+		return err
 	}
 	if len(p.Folders) > 100 {
 		return errors.New("too many folder rules")
@@ -240,6 +250,9 @@ func (p Policy) Mode(name, area, kind string) string {
 	if IsDataArea(area) {
 		return p.DataMode(area, kind)
 	}
+	if area == AreaMail {
+		return p.mailMode(kind)
+	}
 	if m := p.Tools[name]; ValidMode(m) {
 		return m
 	}
@@ -255,6 +268,12 @@ func (p Policy) AreaMode(area string) string {
 	if IsDataArea(area) {
 		// Forbidden only when both axes are (Missing says why).
 		if p.DataMode(area, KindRead) == ModeDeny && p.DataMode(area, KindChange) == ModeDeny {
+			return ModeDeny
+		}
+		return ""
+	}
+	if area == AreaMail {
+		if p.mailMode(KindRead) == ModeDeny {
 			return ModeDeny
 		}
 		return ""
@@ -309,7 +328,7 @@ func cleanPath(p string) string {
 
 // Areas of the agent in the order the settings show them, with the tool
 // areas of the catalog first.
-var AgentAreas = []string{"system", "files", AreaCalendar, AreaContacts, "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaHistory, AreaNVR, AreaPhotos, AreaWeb, AreaCode, AreaMCP}
+var AgentAreas = []string{"system", "files", AreaCalendar, AreaContacts, AreaMail, "docker", "vms", "backups", "updates", "storage", "shares", "network", "accounts", "plugins", "home", AreaHistory, AreaNVR, AreaPhotos, AreaWeb, AreaCode, AreaMCP}
 
 // newAreas are the areas since 1.10. On the stick their modes stand under
 // extraAreas: 1.09 refuses an unknown area when it saves the settings, so
@@ -326,11 +345,13 @@ type policyJSON struct {
 	WebFree    bool              `json:"webFree,omitempty"`
 	// DataRights: 1.10 does not know the field and drops it (TECHNIK 6.2).
 	DataRights map[string]DataRight `json:"dataRights,omitempty"`
+	// ActionRights: 1.12 does not know the field and drops it (1.13).
+	ActionRights map[string]string `json:"actionRights,omitempty"`
 }
 
 // MarshalJSON writes the modes of areas 1.09 does not know under extraAreas.
 func (p Policy) MarshalJSON() ([]byte, error) {
-	out := policyJSON{Preset: p.Preset, Tools: p.Tools, Folders: p.Folders, WebFree: p.WebFree, DataRights: p.DataRights}
+	out := policyJSON{Preset: p.Preset, Tools: p.Tools, Folders: p.Folders, WebFree: p.WebFree, DataRights: p.DataRights, ActionRights: p.ActionRights}
 	for a, m := range p.Areas {
 		target := &out.Areas
 		if slices.Contains(newAreas, a) {
@@ -350,7 +371,7 @@ func (p *Policy) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
-	*p = Policy{Preset: in.Preset, Areas: in.Areas, Tools: in.Tools, Folders: in.Folders, WebFree: in.WebFree, DataRights: in.DataRights}
+	*p = Policy{Preset: in.Preset, Areas: in.Areas, Tools: in.Tools, Folders: in.Folders, WebFree: in.WebFree, DataRights: in.DataRights, ActionRights: in.ActionRights}
 	for a, m := range in.ExtraAreas {
 		if p.Areas == nil {
 			p.Areas = map[string]string{}

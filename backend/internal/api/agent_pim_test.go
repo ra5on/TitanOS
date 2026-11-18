@@ -107,8 +107,9 @@ func TestPimToolsRightsAndModes(t *testing.T) {
 	}
 	tomorrow := pimTomorrow().Format("2006-01-02T15:04")
 	create := `{"title":"Zahnarzt","start":"` + tomorrow + `","duration":45,"location":"Praxis Dr. Weber","alarms":[30]}`
-	if p := pimPrepare(t, std, nil, "calendar_create", create); p.Mode != agent.ModeAsk {
-		t.Errorf("standard create: %s", p.Mode)
+	// 1.13: the factory standard only suggests (a draft, nothing written).
+	if p := pimPrepare(t, std, nil, "calendar_create", create); p.Mode != agent.ModeAllow || !p.Draft {
+		t.Errorf("standard create: %s draft %v", p.Mode, p.Draft)
 	}
 	if p := pimPrepare(t, std, nil, "calendar_search", `{}`); p.Mode != agent.ModeAllow || !p.Untrusted {
 		t.Errorf("standard search: %+v", p)
@@ -199,9 +200,9 @@ func TestPimCalendarFlow(t *testing.T) {
 		t.Errorf("update: %v", done)
 	}
 	mustHave(t, "file", e.raw("privat", strings.TrimPrefix(id, "cal:privat/")), "SUMMARY:Zahnarzt Kontrolle", "LOCATION:Neu")
-	// A single event: delete runs without asking under "Alles ohne Nachfrage".
+	// A single event: since 1.13 delete asks also under "Alles ohne Nachfrage".
 	pd := pimPrepare(t, box, nil, "calendar_delete", `{"id":"`+id+`"}`)
-	if pd.Mode != agent.ModeAllow {
+	if pd.Mode != agent.ModeAsk {
 		t.Errorf("single delete: %s", pd.Mode)
 	}
 	mustHave(t, "delete summary", pd.Summary, "Termin löschen in Privat: Zahnarzt Kontrolle")
@@ -246,8 +247,9 @@ func TestPimSeriesDeleteAlwaysAsks(t *testing.T) {
 				mustHave(t, "series summary", p.Summary, "die ganze Reihe (5 Termine, wiederholt sich")
 			}
 			p := pimPrepare(t, box, chat, "calendar_delete", `{"id":"`+base+"@"+second+`","scope":"this"}`)
-			if p.Mode != agent.ModeAllow {
-				t.Errorf("%s/%s scope this: %s, want allow", pn, cn, p.Mode)
+			// 1.13: every delete asks (before: only the whole series).
+			if p.Mode != agent.ModeAsk {
+				t.Errorf("%s/%s scope this: %s, want ask", pn, cn, p.Mode)
 			}
 			mustHave(t, "this summary", p.Summary, "nur dieses Vorkommen")
 		}
@@ -386,7 +388,7 @@ func TestPimOwnAccountOnly(t *testing.T) {
 	if _, gone := bea.Missing()["calendar"]; gone {
 		t.Error("Missing names the calendar for a user")
 	}
-	if access["tmailAddressBook"] != "Suggestions learned from sent mail are T-Mail's and closed to the agent by design." {
+	if access["tmailAddressBook"] != "Suggestions learned from sent mail are Mail's and closed to the agent by design." {
 		t.Errorf("tmailAddressBook: %v", access["tmailAddressBook"])
 	}
 }
@@ -425,7 +427,10 @@ func TestPimContactsFlow(t *testing.T) {
 	ts, pim, mailDir, _ := contactsMailServer(t)
 	pim.Local = func() *time.Location { return calBerlin }
 	learnedBook(t, ts, mailDir, "alex", "gelernt@example.org")
-	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), agentSettings{Policy: agent.Policy{Preset: agent.PresetStandard}})
+	// 1.13: "Eintragen mit Nachfrage" chosen before stays ask (Q28); the
+	// plain standard makes drafts (TestActionDrafts).
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), agentSettings{Policy: agent.Policy{Preset: agent.PresetStandard,
+		DataRights: map[string]agent.DataRight{agent.AreaContacts: {Read: agent.ModeAllow, Write: agent.ModeAsk}}}})
 	ctx := context.Background()
 	run := func(tool, args string) (agent.Prepared, map[string]any) {
 		t.Helper()
@@ -631,11 +636,14 @@ func TestPimSettingsRollbackTo110(t *testing.T) {
 // Calendar and contacts are no MCP tools and no public routes (TECHNIK
 // 6.1 [V]: no tokens for personal data).
 func TestPimIsNoMCPTool(t *testing.T) {
+	// 1.13: also mail, reminders, free time and duplicates.
 	isPim := func(name string) bool {
-		return strings.HasPrefix(name, "calendar") || strings.HasPrefix(name, "contacts") || strings.HasPrefix(name, "contact_")
+		return strings.HasPrefix(name, "calendar") || strings.HasPrefix(name, "contacts") || strings.HasPrefix(name, "contact_") ||
+			strings.HasPrefix(name, "mail") || strings.HasPrefix(name, "tasks") || strings.HasPrefix(name, "task_")
 	}
 	for _, r := range publicRoutes {
-		if isPim(r.Tool) || strings.HasPrefix(r.Path, "/calendar") || strings.HasPrefix(r.Path, "/contacts") || strings.Contains(r.Path, "dav") {
+		if isPim(r.Tool) || strings.HasPrefix(r.Path, "/calendar") || strings.HasPrefix(r.Path, "/contacts") || strings.Contains(r.Path, "dav") ||
+			strings.HasPrefix(r.Path, "/agent") {
 			t.Errorf("public route %s %s (%s)", r.Method, r.Path, r.Tool)
 		}
 	}
@@ -649,7 +657,7 @@ func TestPimIsNoMCPTool(t *testing.T) {
 	}
 	// The agent has them, as tools of its own.
 	box := pimBox(t, e, "alex", agent.Policy{Preset: agent.PresetStandard})
-	for _, name := range pimToolNames {
+	for _, name := range append(slices.Clone(pimToolNames), "calendar_free", "contacts_duplicates", "tasks_list", "tasks_create", "tasks_update", "tasks_complete", "tasks_delete") {
 		if box.tools[name] == nil || box.tools[name].own == nil {
 			t.Errorf("agent lacks %s", name)
 		}
@@ -761,10 +769,11 @@ func TestPimDeleteAfterOutsideContentAsks(t *testing.T) {
 				}
 			}
 		}
-		// A chat without outside content deletes as the rights say.
+		// 1.13 (owner 18 Nov 2026: "Löschen immer mit Bestätigung"): a chat
+		// without outside content asks before deleting too (before: allow).
 		for _, c := range deletes {
-			if p := pimPrepare(t, box, &agent.Chat{}, c[0], c[1]); p.Mode != agent.ModeAllow {
-				t.Errorf("%s clean %s: %s, want allow", pn, c[0], p.Mode)
+			if p := pimPrepare(t, box, &agent.Chat{}, c[0], c[1]); p.Mode != agent.ModeAsk {
+				t.Errorf("%s clean %s: %s, want ask", pn, c[0], p.Mode)
 			}
 		}
 	}

@@ -177,9 +177,9 @@ async function frameAt(page, path) {
 }
 
 const PROGRAMS = {
-  calendar: { label: "T-Kalender", path: "/calendar", pim: true },
+  calendar: { label: "Kalender", path: "/calendar", pim: true },
   contacts: { label: "Kontakte", path: "/contacts", pim: true },
-  mail: { label: "T-Mail", path: "/mail" },
+  mail: { label: "Mail", path: "/mail" },
   agent: { label: "KI-Agent", path: "/agent" },
 };
 

@@ -27,8 +27,10 @@
 		onclose: () => void;
 		onedit: (ev: CalEvent) => void;
 		ondelete: (ev: CalEvent) => void;
+		/** 1.13: asks the KI-Agent about this event (its panel, the event as reference). */
+		onagent?: (ev: CalEvent) => void;
 	};
-	let { event, calFor, onclose, onedit, ondelete }: Props = $props();
+	let { event, calFor, onclose, onedit, ondelete, onagent }: Props = $props();
 	const phone = phoneView();
 
 	// svelte-ignore state_referenced_locally
@@ -130,6 +132,11 @@
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<div class="dialog-actions">
 		<button type="button" class="btn" onclick={onclose}>{t('calendar.detail.close')}</button>
+		{#if onagent && !birthday}
+			<button type="button" class="btn" onclick={() => onagent(ev)}
+				><Icon name="sparkle" size={15} />{t('agentpim.panel.toggle')}</button
+			>
+		{/if}
 		{#if !birthday && !ev.readOnly}
 			<button type="button" class="btn btn-danger" disabled={!full} onclick={() => ondelete(ev)}
 				><Icon name="trash" size={15} />{t('calendar.detail.delete')}</button

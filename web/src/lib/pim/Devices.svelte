@@ -15,6 +15,10 @@
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { lastSync, passwordGroups, type CreatedDevice, type Device } from '#lib/pim/devices.ts';
 
+	// 1.13: a number the page raises when a profile made a device, to read
+	// the list again.
+	let { refresh = 0 }: { refresh?: number } = $props();
+
 	const phone = $derived(phoneView());
 
 	let devices = $state<Device[] | null>(null);
@@ -43,6 +47,7 @@
 		}
 	}
 	$effect(() => {
+		void refresh;
 		load();
 	});
 

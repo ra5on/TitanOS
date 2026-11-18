@@ -34,6 +34,9 @@ import {
 	type AgentView,
 } from '#lib/agent.ts';
 import type { ChatSheet } from './chat-sheets.ts';
+import type { AgentDraft } from '#lib/agent.ts';
+import { draftHref } from '#lib/agent/drafts.ts';
+import { openInProgram } from '#lib/agent/open.ts';
 
 export { LOOK_KEY };
 // PLAN 68: the side bar can be folded away (per device).
@@ -821,6 +824,33 @@ export class AgentChats {
 			} catch {
 				// The error above stays.
 			}
+		} finally {
+			run.deciding = false;
+		}
+	};
+
+	/** 1.13: "Öffnen und bearbeiten" – the waiting step goes into the
+	 *  program's editor (the server says no and keeps its draft). */
+	edit = async (p: Pending) => {
+		if (!this.current) return;
+		const id = this.current.id;
+		const run = this.run(id);
+		if (run.deciding) return;
+		run.deciding = true;
+		this.error = '';
+		try {
+			const ans = await api.post<{ entry: string; draft: AgentDraft }>(
+				`/agent/chats/${id}/decide`,
+				{ id: p.id, approve: false, edit: true },
+			);
+			openInProgram(draftHref(ans.draft, id, ans.entry));
+			this.listState(id, 'running');
+			run.busy = true;
+			if (this.current?.id !== id) return;
+			this.current.pending = null;
+			this.watch(id);
+		} catch (e) {
+			this.error = this.startError(e);
 		} finally {
 			run.deciding = false;
 		}

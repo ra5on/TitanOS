@@ -25,12 +25,17 @@ type Address struct {
 	Addr string `json:"addr"`
 }
 
-// Flags are the flags the web UI shows and changes.
+// Flags are the flags the web UI shows and changes. Forwarded is the
+// keyword $Forwarded (1.12); the web UI only shows it.
 type Flags struct {
-	Seen     bool `json:"seen"`
-	Flagged  bool `json:"flagged"`
-	Answered bool `json:"answered"`
+	Seen      bool `json:"seen"`
+	Flagged   bool `json:"flagged"`
+	Answered  bool `json:"answered"`
+	Forwarded bool `json:"forwarded"`
 }
+
+// flagForwarded is the keyword other programs set on a forwarded mail.
+const flagForwarded = imap.Flag("$Forwarded")
 
 // Summary is one mail of a list.
 type Summary struct {
@@ -44,6 +49,13 @@ type Summary struct {
 	Attachments bool      `json:"attachments"`
 	// TooLarge: the head of this mail was too large to list.
 	TooLarge bool `json:"tooLarge,omitempty"`
+	// Preview is the beginning of its text (preview.go, 1.12).
+	Preview string `json:"preview"`
+	// MessageID, InReplyTo and References (at most listReferences ids)
+	// let the web UI put a conversation together (1.12).
+	MessageID  string `json:"messageId,omitempty"`
+	InReplyTo  string `json:"inReplyTo,omitempty"`
+	References string `json:"references,omitempty"`
 }
 
 // Page is a page of a list, newest first; Next is the UID to ask for the
@@ -54,14 +66,30 @@ type Page struct {
 	Total    int       `json:"total"`
 }
 
-// ListQuery asks for a page of a folder.
+// ListQuery asks for a page of a folder. From, Attachment, Since and
+// Until are the filters of 1.12; Since and Until are days (both counted),
+// zero for none.
 type ListQuery struct {
-	Folder  string
-	Before  uint32
-	Limit   int
-	Q       string
-	Unread  bool
-	Flagged bool
+	Folder     string
+	Before     uint32
+	Limit      int
+	Q          string
+	Unread     bool
+	Flagged    bool
+	From       string
+	Attachment bool
+	Since      time.Time
+	Until      time.Time
+}
+
+// validFilter checks the texts of a query.
+func (q ListQuery) validFilter() bool {
+	for _, text := range []string{q.Q, q.From} {
+		if len(text) > 256 || strings.ContainsAny(text, "\r\n\x00") {
+			return false
+		}
+	}
+	return q.Since.IsZero() || q.Until.IsZero() || !q.Until.Before(q.Since)
 }
 
 // Message is one mail to read.
@@ -126,21 +154,41 @@ func clean(s string, limit int) string {
 func invisible(r rune) bool { return unicode.Is(unicode.Cf, r) }
 
 func flagsOf(list []imap.Flag) Flags {
-	return Flags{Seen: slices.Contains(list, imap.FlagSeen), Flagged: slices.Contains(list, imap.FlagFlagged), Answered: slices.Contains(list, imap.FlagAnswered)}
+	return Flags{Seen: slices.Contains(list, imap.FlagSeen), Flagged: slices.Contains(list, imap.FlagFlagged), Answered: slices.Contains(list, imap.FlagAnswered),
+		Forwarded: slices.ContainsFunc(list, func(f imap.Flag) bool { return strings.EqualFold(string(f), string(flagForwarded)) })}
 }
+
+// listReferences bounds the References of a line of the list: the first
+// id (the start of the conversation) and the last ones (the nearest).
+const listReferences = 20
 
 func summaryOf(b *imapclient.FetchMessageBuffer) Summary {
 	s := Summary{UID: uint32(b.UID), Flags: flagsOf(b.Flags), Size: b.RFC822Size, To: []Address{}}
 	if b.BodyStructure != nil {
 		s.Attachments = hasAttachments(b.BodyStructure)
 	}
-	for _, section := range b.BodySection {
-		s.Attachments = s.Attachments || attachmentsByHead(section.Bytes)
+	head := headFields(findSection(b, listTypeSection), false)
+	if ct, ok := head["content-type"]; ok {
+		s.Attachments = s.Attachments || attachmentsByHead([]byte("Content-Type: "+ct))
+	}
+	if text := findSection(b, listTextSection); text != nil {
+		s.Preview = previewOf(head["content-type"], head["content-transfer-encoding"], text)
+	}
+	if raw := findSection(b, listReferencesSection); raw != nil {
+		ids := strings.Fields(references(string(raw)))
+		if len(ids) > listReferences {
+			ids = append(ids[:1], ids[len(ids)-listReferences+1:]...)
+		}
+		s.References = strings.Join(ids, " ")
 	}
 	if e := b.Envelope; e != nil {
 		s.Subject, s.Date, s.To = clean(e.Subject, 1000), e.Date, addresses(e.To)
 		if from := addresses(e.From); len(from) > 0 {
 			s.From = from[0]
+		}
+		s.MessageID = clean(angle(e.MessageID), 998)
+		if len(e.InReplyTo) > 0 {
+			s.InReplyTo = clean(angle(e.InReplyTo[0]), 998)
 		}
 	}
 	if s.Date.IsZero() {
@@ -168,6 +216,20 @@ func searchCriteria(q ListQuery) *imap.SearchCriteria {
 		c.Flag = append(c.Flag, imap.FlagFlagged)
 	}
 	c.NotFlag = append(c.NotFlag, imap.FlagDeleted)
+	if from := strings.TrimSpace(q.From); from != "" {
+		c.Header = append(c.Header, imap.SearchCriteriaHeaderField{Key: "From", Value: from})
+	}
+	if q.Attachment {
+		// IMAP has no search for attachments: the type of the head is the
+		// approximation (docs/TMAIL.md "1.12").
+		c.Header = append(c.Header, imap.SearchCriteriaHeaderField{Key: "Content-Type", Value: "multipart/mixed"})
+	}
+	if !q.Since.IsZero() {
+		c.Since = q.Since
+	}
+	if !q.Until.IsZero() {
+		c.Before = q.Until.AddDate(0, 0, 1)
+	}
 	if text := strings.TrimSpace(q.Q); text != "" {
 		subject := imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: text}}}
 		from := imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "From", Value: text}}}
@@ -181,13 +243,57 @@ func searchCriteria(q ListQuery) *imap.SearchCriteria {
 	return c
 }
 
+// The sections a line of the list fetches besides the envelope: the
+// type of the mail (attachment mark and preview), its References (the
+// conversation) and the beginning of its body (the preview, 1.12). All
+// with PEEK: listing marks nothing read.
+var (
+	listTypeSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
+		HeaderFields: []string{"Content-Type", "Content-Transfer-Encoding"}, Peek: true, Partial: &imap.SectionPartial{Size: 8 << 10}}
+	listReferencesSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
+		HeaderFields: []string{"References"}, Peek: true, Partial: &imap.SectionPartial{Size: 4 << 10}}
+	listTextSection = &imap.FetchItemBodySection{Specifier: imap.PartSpecifierText, Peek: true,
+		Partial: &imap.SectionPartial{Size: previewFetch}}
+)
+
+// leanFetch is listFetch without the preview and References: the line of
+// a page that was too large with them (fallback).
+func leanFetch() *imap.FetchOptions {
+	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
+		BodySection: []*imap.FetchItemBodySection{fresh(listTypeSection)}}
+}
+
+// fresh is a copy of a section of the list for one request: the shared
+// ones are only patterns (and what findSection compares with).
+func fresh(s *imap.FetchItemBodySection) *imap.FetchItemBodySection {
+	c := *s
+	c.HeaderFields = slices.Clone(s.HeaderFields)
+	if s.Partial != nil {
+		p := *s.Partial
+		c.Partial = &p
+	}
+	return &c
+}
+
+// findSection is the data of a fetched section like want, whether or not
+// the server echoed its partial; nil if it is missing.
+func findSection(b *imapclient.FetchMessageBuffer, want *imap.FetchItemBodySection) []byte {
+	for _, got := range b.BodySection {
+		if got.Section == nil || got.Section.Specifier != want.Specifier || len(got.Section.Part) > 0 ||
+			!slices.EqualFunc(got.Section.HeaderFields, want.HeaderFields, strings.EqualFold) {
+			continue
+		}
+		return got.Bytes
+	}
+	return nil
+}
+
 // listFetch asks for what a line of the list shows; the attachment mark
 // comes from the Content-Type of the head, not from the structure, so that
 // a mail with thousands of parts cannot make a page too large.
 func listFetch() *imap.FetchOptions {
 	return &imap.FetchOptions{UID: true, Flags: true, Envelope: true, RFC822Size: true, InternalDate: true,
-		BodySection: []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"Content-Type"}, Peek: true,
-			Partial: &imap.SectionPartial{Size: 8 << 10}}}}
+		BodySection: []*imap.FetchItemBodySection{fresh(listTypeSection), fresh(listReferencesSection), fresh(listTextSection)}}
 }
 
 // attachmentsByHead tells from the Content-Type of a mail whether it has
@@ -210,7 +316,7 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 50
 	}
-	if len(q.Q) > 256 || strings.ContainsAny(q.Q, "\r\n\x00") {
+	if !q.validFilter() {
 		return Page{}, ErrInvalid
 	}
 	page := Page{Messages: []Summary{}}
@@ -242,35 +348,88 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 		return nil
 	})
 	if errors.Is(err, ErrTooLarge) && len(pick) > 0 {
-		// One by one: only the mails too large to list are marked.
-		page.Messages = []Summary{}
-		for _, uid := range pick {
-			var one Summary
+		page.Messages, err = m.fallback(ctx, user, id, q.Folder, pick)
+	}
+	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
+	return page, err
+}
+
+// summaries fetches the lines of some mails of a folder (search over all
+// folders); a page too large for the budget goes the way of fallback.
+func (m *Manager) summaries(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out, err := m.fetchLines(ctx, user, id, folder, uids, listFetch)
+	if errors.Is(err, ErrTooLarge) {
+		return m.fallback(ctx, user, id, folder, uids)
+	}
+	return out, err
+}
+
+// fetchLines fetches the lines of some mails in one FETCH.
+func (m *Manager) fetchLines(ctx context.Context, user, id, folder string, uids []uint32, opts func() *imap.FetchOptions) ([]Summary, error) {
+	var out []Summary
+	err := m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+		if _, err := selectFolder(c, s, folder); err != nil {
+			return err
+		}
+		msgs, err := collect(c.Fetch(uidSet(uids...), opts()))
+		if err != nil {
+			return err
+		}
+		for _, b := range msgs {
+			out = append(out, summaryOf(b))
+		}
+		return nil
+	})
+	return out, err
+}
+
+// fallback is the way of a page too large for the budget of a command:
+// the page again without preview and References (a server that ignores
+// the cut of BODY[TEXT] sends whole bodies – the preview is optional,
+// sender and subject are not), then mail by mail.
+func (m *Manager) fallback(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out, err := m.fetchLines(ctx, user, id, folder, uids, leanFetch)
+	if errors.Is(err, ErrTooLarge) {
+		return m.oneByOne(ctx, user, id, folder, uids)
+	}
+	return out, err
+}
+
+// oneByOne fetches lines one mail at a time, each with its preview and
+// else without: only the mails whose heads alone are too large to list
+// are marked (tooLarge), the others are whole.
+func (m *Manager) oneByOne(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	out := []Summary{}
+	for _, uid := range uids {
+		var one Summary
+		var err error
+		for _, opts := range []func() *imap.FetchOptions{listFetch, leanFetch} {
 			err = m.withIMAP(ctx, user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
-				if _, err := selectFolder(c, s, q.Folder); err != nil {
+				if _, err := selectFolder(c, s, folder); err != nil {
 					return err
 				}
 				s.budget.set(budgetCommand / 4)
-				b, err := fetchOne(c, uid, listFetch())
+				b, err := fetchOne(c, uid, opts())
 				if err == nil {
 					one = summaryOf(b)
 				}
 				return err
 			})
-			switch {
-			case errors.Is(err, ErrTooLarge):
-				one = Summary{UID: uid, To: []Address{}, TooLarge: true}
-			case errors.Is(err, ErrNotFound):
-				continue
-			case err != nil:
-				return page, err
+			if !errors.Is(err, ErrTooLarge) {
+				break
 			}
-			page.Messages = append(page.Messages, one)
 		}
-		err = nil
+		switch {
+		case errors.Is(err, ErrTooLarge):
+			one = Summary{UID: uid, To: []Address{}, TooLarge: true}
+		case errors.Is(err, ErrNotFound):
+			continue
+		case err != nil:
+			return out, err
+		}
+		out = append(out, one)
 	}
-	slices.SortFunc(page.Messages, func(a, b Summary) int { return int(int64(b.UID) - int64(a.UID)) })
-	return page, err
+	return out, nil
 }
 
 // fetchStructure is fetchOne for an answer with BODYSTRUCTURE: decoding a
@@ -354,11 +513,31 @@ func fetchSections(c *imapclient.Client, b *budgetConn, uid uint32, parts []part
 // from the internet load in its HTML. A mail whose structure is too large
 // to read is shown as the beginning of its raw body (readRaw).
 func (m *Manager) Read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
-	msg, err := m.read(ctx, user, id, folder, uid, images)
+	msg, err := m.read(ctx, user, id, folder, uid, images, true)
 	if errors.Is(err, ErrTooLarge) {
-		return m.readRaw(ctx, user, id, folder, uid)
+		return m.readRaw(ctx, user, id, folder, uid, true)
 	}
 	return msg, err
+}
+
+// ReadQuiet returns a mail like Read, without pictures from the internet
+// and without marking it as read: the KI-Agent reads it for the person
+// (1.13), who has not seen it yet.
+func (m *Manager) ReadQuiet(ctx context.Context, user, id, folder string, uid uint32) (*Message, error) {
+	msg, err := m.read(ctx, user, id, folder, uid, false, false)
+	if errors.Is(err, ErrTooLarge) {
+		return m.readRaw(ctx, user, id, folder, uid, false)
+	}
+	return msg, err
+}
+
+// PlainText is the text of a mail: its text part, else the visible text
+// of its (sanitized) HTML; never markup.
+func (msg *Message) PlainText() string {
+	if strings.TrimSpace(msg.Text) != "" || msg.HTML == "" {
+		return msg.Text
+	}
+	return htmlText(msg.HTML)
 }
 
 // rawTextLimit is how much of the body readRaw shows.
@@ -367,7 +546,7 @@ const rawTextLimit = 1 << 20
 // readRaw shows a mail without its structure: a few header fields and the
 // beginning of its body as it came (third review of 1.05: digests with
 // hundreds of attached mails could not be opened at all).
-func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint32) (*Message, error) {
+func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint32, mark bool) (*Message, error) {
 	var out *Message
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
@@ -403,7 +582,7 @@ func (m *Manager) readRaw(ctx context.Context, user, id, folder string, uid uint
 				msg.Text = rawText(section.Bytes)
 			}
 		}
-		if !msg.Flags.Seen {
+		if mark && !msg.Flags.Seen {
 			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}, nil).Close(); err == nil {
 				msg.Flags.Seen = true
 			}
@@ -429,7 +608,7 @@ func rawText(raw []byte) string {
 	}, text)
 }
 
-func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32, images bool) (*Message, error) {
+func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32, images, mark bool) (*Message, error) {
 	var out *Message
 	err := m.withIMAP(ctx, user, id, fetchTimeout, func(c *imapclient.Client, s *session) error {
 		if _, err := selectFolder(c, s, folder); err != nil {
@@ -512,7 +691,7 @@ func (m *Manager) read(ctx context.Context, user, id, folder string, uid uint32,
 			}
 			msg.HTML, msg.ExternalImages = SanitizeHTML(raw, cids, images)
 		}
-		if !msg.Flags.Seen {
+		if mark && !msg.Flags.Seen {
 			if err := c.Store(uidSet(uid), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}, nil).Close(); err == nil {
 				msg.Flags.Seen = true
 			}

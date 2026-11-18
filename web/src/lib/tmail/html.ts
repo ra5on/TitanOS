@@ -30,3 +30,29 @@ export function mailLinks(html: string): MailLink[] {
 	}
 	return links;
 }
+
+/**
+ * 1.13 (owner 18 Nov 2026, the phone): the mail fits the frame's width
+ * instead of being cut off at the right. The one change to titand's
+ * document: a style element before </head> (its CSP allows inline
+ * styles; nothing runs, nothing loads). Pictures never grow wider than the
+ * frame; below 700 px (the phone, narrow windows) tables and blocks give
+ * up fixed widths and long words break, so newsletters made for 600–700
+ * px reflow. Wide frames keep the mail's own layout. Pinch zoom stays.
+ */
+export const FIT_STYLE =
+	'<style data-titanos-fit>' +
+	'html{overflow-x:auto;-webkit-text-size-adjust:100%;text-size-adjust:100%}' +
+	'img,video{max-width:100%!important;height:auto}' +
+	'pre{white-space:pre-wrap!important}' +
+	'@media (max-width:700px){' +
+	'table,td,th,div,p,center,section{max-width:100%!important;box-sizing:border-box}' +
+	'table[width],td[width],th[width],table[style*="width"],td[style*="width"],th[style*="width"]{width:auto!important}' +
+	'body{overflow-wrap:anywhere}' +
+	'}</style>';
+
+/** The document with FIT_STYLE at the end of its head (or in front, without one). */
+export function fitMailHtml(html: string): string {
+	const at = html.search(/<\/head\s*>/i);
+	return at < 0 ? FIT_STYLE + html : html.slice(0, at) + FIT_STYLE + html.slice(at);
+}

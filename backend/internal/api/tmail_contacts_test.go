@@ -172,3 +172,51 @@ func TestMailContactsFirst(t *testing.T) {
 		t.Fatalf("no volume: %+v", got)
 	}
 }
+
+// 1.12: the sender pictures name the account's own contacts with a
+// picture by address (lower case), nothing of another account, nothing
+// without the volume; the picture itself answers 503 then, and the list
+// shows initials.
+func TestMailAvatars(t *testing.T) {
+	ts, pim, _, pimGone := contactsMailServer(t)
+	put := func(name string, data []byte) {
+		t.Helper()
+		if _, err := pim.Put(pimstore.Contacts, "alex", pimstore.DefaultBook, name, data, pimstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	photo := "PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRg=="
+	put("anna.vcf", vcard("anna", "Anna Bild", "EMAIL:Anna@Example.org", "EMAIL:anna@firma.example", photo))
+	put("ben.vcf", vcard("ben", "Ben Ohne", "EMAIL:ben@example.org"))
+	put("group.vcf", vcard("group", "Gruppe", "X-ADDRESSBOOKSERVER-KIND:group", "EMAIL:alle@example.org", photo))
+	avatars := func(client *http.Client) map[string]string {
+		t.Helper()
+		res, body := ts.do(client, "GET", "/api/v1/mail/avatars", nil)
+		var out struct {
+			Book   string            `json:"book"`
+			Photos map[string]string `json:"photos"`
+		}
+		if res.StatusCode != http.StatusOK || json.Unmarshal(body, &out) != nil || out.Book != "kontakte" || out.Photos == nil {
+			t.Fatalf("avatars: %d %s", res.StatusCode, body)
+		}
+		if res.Header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("cache: %q", res.Header.Get("Cache-Control"))
+		}
+		return out.Photos
+	}
+	if got := avatars(ts.client); fmt.Sprint(got) != "map[anna@example.org:anna.vcf anna@firma.example:anna.vcf]" {
+		t.Fatalf("alex: %v", got)
+	}
+	bea := ts.newClient()
+	ts.do(bea, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword})
+	if got := avatars(bea); len(got) != 0 {
+		t.Fatalf("bea sees alex's pictures: %v", got)
+	}
+	pimGone.Store(true)
+	if got := avatars(ts.client); len(got) != 0 {
+		t.Fatalf("without the volume: %v", got)
+	}
+	if res, _ := ts.do(ts.client, "GET", "/api/v1/contacts/kontakte/anna.vcf/photo", nil); res.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("picture without the volume: %d", res.StatusCode)
+	}
+}

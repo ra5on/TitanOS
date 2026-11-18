@@ -462,13 +462,30 @@ func quickSpan(minutes int, english bool) string {
 	return unit(h, "Stunde", "Stunden", "hour", "hours") + " " + unit(m, "Minute", "Minuten", "minute", "minutes")
 }
 
+// personsWordsKey marks the context of a quick command: its steps come
+// from the person's own message, read by ParseQuick, never from the model.
+type personsWordsKey struct{}
+
+func withPersonsWords(ctx context.Context) context.Context {
+	return context.WithValue(ctx, personsWordsKey{}, true)
+}
+
+// personsWords reports a step of a quick command (a reminder the person
+// typed: "Erinnere mich in 20 Minuten an die Pizza"). It plans without a
+// card and without the marks of the chat also in a chat that read outside
+// content (A-1): the text is the person's.
+func personsWords(ctx context.Context) bool {
+	v, _ := ctx.Value(personsWordsKey{}).(bool)
+	return v
+}
+
 // agentWork is what a run does with a new message: the quick command if
 // the message is one and the owner left them on, else the model.
 func (s *Server) agentWork(chat *agent.Chat) func(*agent.Runner, context.Context) error {
 	return func(rn *agent.Runner, ctx context.Context) error {
 		if !s.agentSettings().QuickOff {
 			if steps := agentQuick(ctx, rn.Tools, chat); len(steps) > 0 {
-				done, err := rn.Direct(ctx, chat, steps...)
+				done, err := rn.Direct(withPersonsWords(ctx), chat, steps...)
 				if err != nil || done {
 					return err
 				}

@@ -68,7 +68,7 @@ const (
 
 // Errors the API turns into codes. Messages never hold a password.
 var (
-	ErrDisabled      = errors.New("tmail: T-Mail is not enabled for this account")
+	ErrDisabled      = errors.New("tmail: Mail is not enabled for this account")
 	ErrAuthFailed    = errors.New("tmail: the server refused the login")
 	ErrUnreachable   = errors.New("tmail: the server is not reachable")
 	ErrTLS           = errors.New("tmail: no TLS or the certificate is not valid")
@@ -247,6 +247,8 @@ type Manager struct {
 	gate      gateState
 	downloads downloadState
 	ctx       contextHolder
+	// searching: the accounts whose search over all folders runs (m.mu).
+	searching map[string]bool
 }
 
 // New returns a manager; Load reads /config.

@@ -144,7 +144,8 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 		m.Topic = topic
 	}
 	if chat != nil {
-		m.Chat, m.Untrusted = chat.ID, chat.Tainted
+		// Also after mail, the calendar, the contacts or reminders (A-1).
+		m.Chat, m.Untrusted = chat.ID, chat.ReadOutside()
 		if req.Project {
 			m.Project = chat.Project
 		}
@@ -225,7 +226,7 @@ func (b *agentToolbox) skillSave(_ context.Context, chat *agent.Chat, args json.
 	}
 	sk := agent.Skill{ID: agent.NewID(), Name: req.Name, When: strings.TrimSpace(req.When), Steps: strings.TrimSpace(req.Steps), Updated: time.Now()}
 	if chat != nil {
-		sk.Chat, sk.Untrusted = chat.ID, chat.Tainted
+		sk.Chat, sk.Untrusted = chat.ID, chat.ReadOutside()
 	}
 	err := b.s.agentStore().UpdateSkills(b.user.Name, func(list []agent.Skill) ([]agent.Skill, error) {
 		updated := false
@@ -420,7 +421,7 @@ func checkSchedule(sc *agent.Schedule) error {
 	return nil
 }
 
-func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
+func (b *agentToolbox) scheduleCreate(ctx context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
 	var req struct {
 		agent.Schedule
 		InMinutes int `json:"in_minutes"`
@@ -442,8 +443,15 @@ func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args 
 		sc.Every, sc.Date, sc.At = "once", at.Format("2006-01-02"), at.Format("15:04")
 	}
 	sc.ID, sc.Enabled, sc.Created, sc.LastRun, sc.Chat, sc.Trigger = agent.NewID(), true, now, time.Time{}, "", nil
+	// Where the task comes from, from the chat only (never the arguments):
+	// its runs start with the same marks (A-1, agentRunSchedule). A quick
+	// command is the person's own text.
+	sc.Untrusted, sc.PIMRead = false, false
 	if chat != nil {
 		sc.Project = chat.Project
+		if !personsWords(ctx) {
+			sc.Untrusted, sc.PIMRead = chat.Tainted, chat.PIMRead
+		}
 	}
 	if err := checkSchedule(&sc); err != nil {
 		return agent.Outcome{}, err

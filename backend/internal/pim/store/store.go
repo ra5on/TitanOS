@@ -25,23 +25,28 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
 // Kind is calendar or contacts; its value is the folder below .titanos.
+// Tasks (1.13) are the reminder lists (VTODO): calendar collections of
+// CalDAV, kept apart in .titanos/tasks so that 1.12 never sees them
+// (tasks.go).
 type Kind string
 
 const (
 	Calendar Kind = "calendar"
 	Contacts Kind = "contacts"
+	Tasks    Kind = "tasks"
 )
 
 // Features are the folders below .titanos the store uses.
-var Features = []string{string(Calendar), string(Contacts)}
+var Features = []string{string(Calendar), string(Contacts), string(Tasks)}
 
-func (k Kind) valid() bool { return k == Calendar || k == Contacts }
+func (k Kind) valid() bool { return k == Calendar || k == Contacts || k == Tasks }
 
 func (k Kind) suffix() string {
 	if k == Contacts {
@@ -117,6 +122,33 @@ var (
 	ErrInvalidMeta = errors.New("pim: invalid collection properties")
 )
 
+// Changed says that a collection changed: an entry written or deleted,
+// its properties, or the collection made or deleted (CTag "" then).
+type Changed struct {
+	Kind       Kind
+	Account    string
+	Collection string
+	// CTag is the collection's ctag after the change (<epoch>-<seq>): the
+	// generation the pages compare with what they read.
+	CTag string
+}
+
+// changed tells OnChanged.
+func (s *Store) changed(kind Kind, account, col string, c *collection) {
+	if s.OnChanged == nil {
+		return
+	}
+	ev := Changed{Kind: kind, Account: account, Collection: col}
+	if c != nil {
+		c.mu.Lock()
+		if !c.deleted {
+			ev.CTag = c.st.CTag()
+		}
+		c.mu.Unlock()
+	}
+	s.OnChanged(ev)
+}
+
 // UIDConflictError names the entry that already has the UID.
 type UIDConflictError struct{ Name string }
 
@@ -156,6 +188,11 @@ type Store struct {
 	// the folder of an account went (journal hint). Nil: no hint.
 	Mounted func() []string
 	Peek    func(volume, feature string) (*os.Root, error)
+	// OnChanged hears every change of a collection or its entries, from
+	// any side (web API, CalDAV/CardDAV, the agent, an import), after the
+	// locks are given back (1.13, the pages' live updates). It must not
+	// block. Nil: nobody listens.
+	OnChanged func(Changed)
 
 	mu         sync.Mutex
 	features   map[Kind]*featureCache
@@ -193,6 +230,10 @@ type account struct {
 	// gate: writes hold it shared, ForgetUser alone; gone is then set.
 	gate sync.RWMutex
 	gone bool
+	// forgotten is gone for readers, which do not take the gate (a reader
+	// may write too, and a second RLock while ForgetUser waits would hang):
+	// set by ForgetUser before the folder goes (openRead).
+	forgotten atomic.Bool
 
 	// mu guards the fields below. Lock order: a collection's mu may be
 	// held when taking mu, never the other way round.
@@ -503,6 +544,11 @@ func defaultState(kind Kind, id string, epoch string, created time.Time) *State 
 	switch {
 	case kind == Contacts:
 		st.Name = DefaultBookName
+	case kind == Tasks:
+		st.Color = DefaultTaskColor
+		if id == DefaultTaskList {
+			st.Name = DefaultTaskListName
+		}
 	case id == DefaultCalendar:
 		st.Name, st.Color = DefaultCalendarName, DefaultColor
 	default:
@@ -513,11 +559,7 @@ func defaultState(kind Kind, id string, epoch string, created time.Time) *State 
 
 // virtualState is the collection that exists until the first write.
 func virtualState(kind Kind) *State {
-	id := DefaultCalendar
-	if kind == Contacts {
-		id = DefaultBook
-	}
-	return defaultState(kind, id, virtualEpoch, time.Time{})
+	return defaultState(kind, defaultID(kind), virtualEpoch, time.Time{})
 }
 
 // lookup returns a collection of the account: an own one, or the default
@@ -538,8 +580,11 @@ func (acc *account) lookup(id string) (*collection, error) {
 }
 
 func defaultID(kind Kind) string {
-	if kind == Contacts {
+	switch kind {
+	case Contacts:
 		return DefaultBook
+	case Tasks:
+		return DefaultTaskList
 	}
 	return DefaultCalendar
 }
@@ -620,6 +665,14 @@ func (s *Store) openWrite(acc *account) (*os.Root, func(), error) {
 
 // openRead opens the account's folder to read; ErrNotFound when the
 // account keeps nothing.
+//
+// The folder is found by name. A reader that began before the account was
+// deleted and made anew under the same name would otherwise read the new
+// account's files (unabhängige Durchsicht 1.13, A-6): after opening, the
+// folder must still belong to this account (owner.json with its creation
+// time, read through the opened folder, which stays that folder even if
+// the name is taken again meanwhile), and the account must not have been
+// forgotten (for an account without a known creation time).
 func (s *Store) openRead(acc *account) (*os.Root, func(), error) {
 	root, release, err := s.open(acc.kind, false)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -636,7 +689,21 @@ func (s *Store) openRead(acc *account) (*os.Root, func(), error) {
 		}
 		return nil, nil, err
 	}
-	return ar, func() { _ = ar.Close(); release() }, nil
+	done := func() { _ = ar.Close(); release() }
+	if acc.forgotten.Load() {
+		done()
+		return nil, nil, ErrUnavailable
+	}
+	var o owner
+	if err := volumedata.ReadJSON(ar, ownerFile, &o, 4096); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		done()
+		return nil, nil, err
+	}
+	if !sameAccount(o, acc.name, acc.created) {
+		done()
+		return nil, nil, ErrNotFound
+	}
+	return ar, done, nil
 }
 
 // beginWrite takes the account for a write: the gate against ForgetUser.

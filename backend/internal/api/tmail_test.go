@@ -189,9 +189,16 @@ func TestMailRights(t *testing.T) {
 	}
 }
 
-// The KI-Agent gets no access (docs/TMAIL.md): no route of T-Mail is in
-// publicRoutes, no tool of the catalog names it, and no file that makes
-// tools mentions its paths.
+// No token and no MCP client reaches mail (docs/TMAIL.md): no route of
+// Mail is in publicRoutes, no tool of the catalog names it, and no file
+// that makes tools mentions its paths. Since 1.13 the KI-Agent has mail
+// tools of its own (owner 18 Nov 2026, Q27): only agent_mail.go uses the
+// manager of Mail, never its routes, and no file reads the addresses
+// Mail learned.
+// mailProgramName is the program's name since 1.13 ("Mail", before
+// "T-Mail") as a word of its own, not inside "E-Mail" or "e-mail".
+var mailProgramName = regexp.MustCompile(`(^|[^-A-Za-z])Mail\b`)
+
 func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 	for _, r := range publicRoutes {
 		if strings.HasPrefix(r.Path, "/mail") || strings.HasSuffix(r.Path, "/mail") || strings.Contains(strings.ToLower(r.Tool), "mail") {
@@ -202,7 +209,7 @@ func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 	ts.setup()
 	for _, role := range []auth.Role{auth.RoleOwner, auth.RoleAdmin, auth.RoleUser} {
 		for _, tool := range ts.server.catalogTools(auth.User{Name: "alex", Role: role}) {
-			if strings.Contains(strings.ToLower(tool.Name), "mail") || strings.Contains(tool.Description, "/mail") || strings.Contains(tool.Description, "T-Mail") {
+			if strings.Contains(strings.ToLower(tool.Name), "mail") || strings.Contains(tool.Description, "/mail") || strings.Contains(tool.Description, "T-Mail") || mailProgramName.MatchString(tool.Description) {
 				t.Errorf("tool %s", tool.Name)
 			}
 		}
@@ -217,8 +224,11 @@ func TestMailIsNoToolAndNoPublicRoute(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pattern.Match(data) {
+		if pattern.Match(data) && f != "agent_mail.go" {
 			t.Errorf("%s mentions T-Mail", f)
+		}
+		if f == "agent_mail.go" && regexp.MustCompile(`/api/v1/mail|"/mail/|callRoute\(`).Match(data) {
+			t.Errorf("%s goes through the routes of Mail", f)
 		}
 		// 1.11: the address book T-Mail learns from sent mail stays
 		// T-Mail's – no tool reads .titanos/mail/<account>/contacts.json.
@@ -758,5 +768,63 @@ func TestMailShowsInTheMenuWithTheGrant(t *testing.T) {
 	ts.request("PUT", "/api/v1/users/alex/mail", map[string]bool{"enabled": false})
 	if state()["mail"] {
 		t.Fatal("after taking the grant back: mail is still on")
+	}
+}
+
+// 1.12: the preview of an HTML mail is text without markup; the search
+// over all folders and the archive through the API; days and empty
+// searches are refused; another account's mailbox is not found.
+func TestMailSearchArchiveAndPreview(t *testing.T) {
+	ts, srv, _ := newMailServer(t)
+	ts.grantMail("alex")
+	id := ts.addMailbox(ts.client, srv)
+	base := "/api/v1/mail/accounts/" + id
+	srv.Deliver("INBOX", testMailHTML)
+	srv.Deliver("Archiv", "From: bob@example.net\nSubject: Bild alt\nMessage-ID: <api-2@example.net>\n\n<b>kein HTML</b>\n")
+	res, body := ts.request("GET", base+"/messages?folder=INBOX", nil)
+	var page tmail.Page
+	if res.StatusCode != 200 || json.Unmarshal(body, &page) != nil || len(page.Messages) != 1 {
+		t.Fatalf("messages: %d %s", res.StatusCode, body)
+	}
+	if p := page.Messages[0].Preview; p == "" || strings.ContainsAny(p, "<>") || strings.Contains(p, "alert") {
+		t.Fatalf("preview: %q", p)
+	}
+	res, body = ts.request("GET", base+"/search?q=bild", nil)
+	var found tmail.SearchResult
+	if res.StatusCode != 200 || json.Unmarshal(body, &found) != nil || len(found.Messages) != 2 || found.Total != 2 {
+		t.Fatalf("search: %d %s", res.StatusCode, body)
+	}
+	folders := map[string]bool{}
+	for _, h := range found.Messages {
+		folders[h.Folder] = true
+	}
+	if !folders["INBOX"] || !folders["Archiv"] {
+		t.Fatalf("folders of the hits: %v", folders)
+	}
+	for _, bad := range []string{"", "?q=bild&since=17.11.2026", "?since=2026-11-20&until=2026-11-01", "?q=" + strings.Repeat("a", 300)} {
+		if res, body := ts.request("GET", base+"/search"+bad, nil); res.StatusCode != 400 || errorCode(t, body) != "mail_invalid" {
+			t.Errorf("search %q: %d %s", bad, res.StatusCode, body)
+		}
+	}
+	if res, body := ts.request("GET", base+"/messages?folder=INBOX&until=morgen", nil); res.StatusCode != 400 || errorCode(t, body) != "mail_invalid" {
+		t.Errorf("messages with a bad day: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("POST", base+"/archive", map[string]any{"folder": "INBOX", "uids": []int{1}})
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"to":"Archiv"`) || srv.Count("Archiv") != 2 {
+		t.Fatalf("archive: %d %s", res.StatusCode, body)
+	}
+	// Bea has T-Mail but not alex's mailbox.
+	ts.guest("bea")
+	ts.grantMail("bea")
+	bea := ts.newClient()
+	ts.do(bea, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword})
+	for _, rt := range [][2]string{{"GET", base + "/search?q=bild"}, {"POST", base + "/archive"}} {
+		var payload any
+		if rt[0] == "POST" {
+			payload = map[string]any{"folder": "Archiv", "uids": []int{1}}
+		}
+		if res, body := ts.do(bea, rt[0], rt[1], payload); res.StatusCode != 404 || errorCode(t, body) != "mail_not_found" {
+			t.Errorf("bea %s %s: %d %s", rt[0], rt[1], res.StatusCode, body)
+		}
 	}
 }

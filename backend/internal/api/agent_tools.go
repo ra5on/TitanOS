@@ -53,6 +53,19 @@ type agentTool struct {
 	// the step: it may write the summary, rewrite the arguments (an etag)
 	// and return a mode the call needs at least ("" for none).
 	prepare func(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage, p *agent.Prepared) (string, error)
+	// action is the kind of action of a writing tool of mail, calendar,
+	// contacts or reminders (1.13, agent.ActionKeys); actionOf decides it
+	// from the arguments where one tool does several (mail_move to the
+	// trash is a delete). Its right decides the mode (agent_actions.go).
+	action   string
+	actionOf func(json.RawMessage) string
+	// draft makes what the tool would write as a draft for the person's
+	// editor, writing nothing ("Nur Vorschläge"); every tool with an
+	// action that may be suggest has one.
+	draft func(ctx context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error)
+	// logged names the target of a change for the activity log ("per
+	// KI-Agent"), short and without content; nil logs the tool's name only.
+	logged func(args json.RawMessage) string
 }
 
 type agentToolbox struct {
@@ -67,6 +80,8 @@ type agentToolbox struct {
 	dirs     map[string]string
 	// areas maps Home Assistant entities to their room, for area: rules.
 	areas map[string]string
+	// own are the account's own, stricter action rights (1.13).
+	own map[string]string
 	// assistWaiting are the areas of calendar and contacts an
 	// administrator allowed for Assist that wait for the consent of
 	// assistActing, the account the profile acts as (S-23).
@@ -92,6 +107,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		b.assistActing = acting.Name
 	}
 	b.session = &mcpSession{user: acting, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
+	b.own = s.agentOwnActions(user.Name)
 	on := env.servicesOn()
 	// A switched-off service has no tools; agent_access and tools_load say
 	// why (1.10). System containers have a switch of their own.
@@ -178,6 +194,14 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.pimTools() {
 		add(t)
 	}
+	// 1.13: mail, reminders, free time, duplicates (agent_mail.go,
+	// agent_tasks.go, agent_pim_more.go), never in the catalog.
+	for _, t := range b.mailTools() {
+		add(t)
+	}
+	for _, t := range b.pimMoreTools() {
+		add(t)
+	}
 	for _, t := range b.featureTools() {
 		add(t)
 	}
@@ -227,6 +251,10 @@ func (b *agentToolbox) mode(t *agentTool, kind string) string {
 // modeIn is the mode of a tool for a call in an area (see areaOf).
 func (b *agentToolbox) modeIn(t *agentTool, area, kind string) string {
 	mode := b.settings.Policy.Mode(t.name, area, kind)
+	// Mail switched off by the account itself (1.13).
+	if area == agent.AreaMail && b.own[agent.ActMailRead] == agent.ModeDeny {
+		return agent.ModeDeny
+	}
 	// PLAN 91: a question from Home Assistant may use less, never more.
 	if b.user.Name == agent.AssistProfile {
 		return b.settings.HA.assistMode(t.name, area, kind, mode)
@@ -282,6 +310,9 @@ var agentRetired = map[string]struct {
 func (b *agentToolbox) callMode(t *agentTool, area, kind string, args json.RawMessage) string {
 	p := b.settings.Policy
 	mode := p.Mode(t.name, area, kind)
+	if area == agent.AreaMail && b.own[agent.ActMailRead] == agent.ModeDeny {
+		return agent.ModeDeny
+	}
 	old := ""
 	for name, r := range agentRetired {
 		if r.survivor != t.name || !agent.ValidMode(p.Tools[name]) || !r.covers(args) {
@@ -424,6 +455,19 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if mode == agent.ModeDeny {
 		return agent.Prepared{}, fmt.Errorf("the person has not allowed %s for the agent (Einstellungen › KI-Agent)", name)
 	}
+	// 1.13: a writing tool of mail, calendar, contacts or reminders follows
+	// the right of its kind of action instead of the write axis.
+	if key := t.actionFor(args); key != "" {
+		am, err := b.actionMode(chat, name, key)
+		if err != nil {
+			return agent.Prepared{}, err
+		}
+		if am == agent.ModeSuggest {
+			p.Draft, mode = true, agent.ModeAllow
+		} else {
+			mode = am
+		}
+	}
 	// The person's rules for devices come first: they may also switch
 	// without asking; everything after this only tightens.
 	if t.area == toolcatalog.AreaHome {
@@ -462,6 +506,12 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// The same holds for the tools of connected MCP servers: they send
 	// what the model gives them to a server outside TitanOS (0.99).
 	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+	}
+	// After mail, the calendar, the contacts or reminders were read, the
+	// web and MCP always ask, also with "Web frei" (1.13): a mail can tell
+	// the model to put the address book into a web address.
+	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && chat.PIMRead {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.area == agent.AreaNVR {
@@ -519,8 +569,75 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if chat != nil && chat.Autonomy == agent.AutonomyAsk && mode == agent.ModeAllow && kind != agent.KindRead && kind != agent.KindAgent {
 		mode = agent.ModeAsk
 	}
+	// A chat that read outside content or mail, the calendar, the contacts
+	// or reminders (unabhängige Durchsicht 1.13, A-1): what is saved here
+	// to be followed later without the person – a planned task or reminder,
+	// a skill, an automation or script of Home Assistant – waits for the
+	// person, also with "Alles ohne Nachfrage" and in "Direkt". The agent's
+	// own tools are otherwise free (Policy.Mode, KindAgent). After content
+	// was read (ReadOutside), a planned task keeps the marks for its runs
+	// (scheduleCreate), a skill and a memory are saved as untrusted.
+	// A reminder of a quick command is the person's own text (personsWords).
+	if chat.Marked() && standingInstruction(t.name) && !(t.name == "schedule_create" && personsWords(ctx)) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+		if s := standingSummary(t.name, args); s != "" {
+			p.Summary = s
+		}
+	}
+	// A draft writes nothing: it never waits, whatever tightened above.
+	if p.Draft {
+		if t.draft == nil {
+			return agent.Prepared{}, fmt.Errorf("%s cannot make a draft", name)
+		}
+		mode = agent.ModeAllow
+	}
 	p.Mode, p.Kind = mode, kind
 	return p, nil
+}
+
+// standingInstruction: tools that save text something follows later
+// without the person watching – the agent (a planned task, a reminder that
+// goes to the devices and Home Assistant, a skill) or Home Assistant (an
+// automation or a script). A memory is not one of them: it is saved marked
+// and makes every later chat ask before the web (OutsideSkill).
+func standingInstruction(name string) bool {
+	switch name {
+	case "schedule_create", "skill_save", "ha_automation_save", "ha_script_save":
+		return true
+	}
+	return false
+}
+
+// standingSummary is the card of a planned task or skill that waits for
+// the person: the whole text, never cut – they approve what will run
+// later; "" keeps the summary Prepare made.
+func standingSummary(name string, args json.RawMessage) string {
+	switch name {
+	case "schedule_create":
+		var req struct {
+			agent.Schedule
+			InMinutes int `json:"in_minutes"`
+		}
+		if json.Unmarshal(args, &req) != nil {
+			return ""
+		}
+		kind := "task"
+		if req.Kind != "" {
+			kind = req.Kind
+		}
+		when := strings.TrimSpace(strings.Join([]string{req.Every, req.Date, req.At, req.Cron}, " "))
+		if req.InMinutes > 0 {
+			when = fmt.Sprintf("once in %d minutes", req.InMinutes)
+		}
+		return fmt.Sprintf("schedule_create: %q (%s, %s) – planned after outside content; task: %s", req.Name, kind, when, req.Task)
+	case "skill_save":
+		var req struct{ Name, When, Steps string }
+		if json.Unmarshal(args, &req) != nil {
+			return ""
+		}
+		return fmt.Sprintf("skill_save: %q – saved after outside content; when: %s; steps: %s", req.Name, req.When, req.Steps)
+	}
+	return ""
 }
 
 func actionSummary(a *toolcatalog.Action) string {
@@ -721,8 +838,20 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	switch {
+	case p.Draft:
+		// Nothing is written; only the tool's draft runs.
+		if t.draft == nil {
+			return agent.Outcome{}, fmt.Errorf("%s cannot make a draft", p.Tool)
+		}
+		out, err := t.draft(ctx, chat, p.Args)
+		if err == nil && out.Draft == nil {
+			err = errors.New("no draft was made")
+		}
+		return out, err
 	case t.own != nil:
-		return t.own(ctx, chat, p.Args)
+		out, err := t.own(ctx, chat, p.Args)
+		b.logChange(t, p, err)
+		return out, err
 	case t.read != nil:
 		res, err := t.read(ctx, p.Args)
 		if err != nil {

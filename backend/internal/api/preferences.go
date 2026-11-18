@@ -21,7 +21,7 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -39,6 +39,8 @@ type preferences struct {
 
 	mu    sync.Mutex
 	cache map[string]json.RawMessage // key: user + "/" + kind
+	// updateMu runs one read-change-write (update) at a time.
+	updateMu sync.Mutex
 	// locks caches the field lockMinutes of the desktop preferences per
 	// account, read on every request of a session (session_lock.go).
 	locks map[string]lockTimes
@@ -116,6 +118,9 @@ func isJSONObject(data []byte) bool {
 type prefsArea struct {
 	store *config.Store
 	prefs *preferences
+	// calendarChanged is told when an account's preference "calendar"
+	// changed (1.13: the reminders are planned again).
+	calendarChanged func(user string)
 }
 
 func (a prefsArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -176,8 +181,41 @@ func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "bad_request", `fileappsdocker maps file endings (lower case, without dot) to "docker:<app>"`)
 		return
 	}
-	if kind == "calendar" && !validCalendarPrefs(value) {
-		writeError(w, http.StatusBadRequest, "bad_request", `calendar holds hidden: a list of calendar ids`)
+	if kind == "calendar" {
+		if !validCalendarPrefs(value) {
+			writeError(w, http.StatusBadRequest, "bad_request", `calendar holds hidden: a list of calendar ids, reminderHints and reminderPush: true or false`)
+			return
+		}
+		// 1.13: the keys sent replace theirs, the others stay (hidden and
+		// the reminders' choice are saved apart).
+		user := currentUser(r).Name
+		if err := a.prefs.update(user, kind, func(stored json.RawMessage) (json.RawMessage, error) {
+			return mergeCalendarPrefs(stored, value)
+		}); err != nil {
+			slog.Error("write preferences", "user", user, "kind", kind, "err", err)
+			writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
+			return
+		}
+		if a.calendarChanged != nil {
+			a.calendarChanged(user)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if kind == "order" {
+		if !validOrderPrefs(value) {
+			writeError(w, http.StatusBadRequest, "bad_request", `order holds mail (mailbox id to folder paths), contacts and calendar (lists of ids)`)
+			return
+		}
+		user := currentUser(r).Name
+		if err := a.prefs.update(user, kind, func(stored json.RawMessage) (json.RawMessage, error) {
+			return mergeOrderPrefs(stored, value)
+		}); err != nil {
+			slog.Error("write preferences", "user", user, "kind", kind, "err", err)
+			writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if kind == "fileapps" && !validFileApps(value) {

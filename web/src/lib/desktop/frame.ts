@@ -66,6 +66,9 @@ export type FrameMessage =
 	| { type: 'titanos-open-program'; key: string }
 	/** 1.05: a page asks for a window of its own for one task (writing an e-mail, apps.ts taskPage). */
 	| { type: 'titanos-open-task'; href: string }
+	/** 1.13: a page asks to show a page of another program (the agent's panel opens a draft or a
+	 *  mail); only own pages of a program the account has (desk-messages.ts). */
+	| { type: 'titanos-open-app'; href: string }
 	/** 1.05: a task window is done and closes itself (sent e-mail). */
 	| { type: 'titanos-close' }
 	/** PLAN 69: a page that draws the window's side bar itself asks whether it is folded. */
@@ -107,7 +110,17 @@ export function frameMessage(event: MessageEvent): FrameMessage | null {
 	return data;
 }
 
-/** Whether a path is a page of this UI (not an outside address). */
+/** Whether a path is a page of this UI (not an outside address). The URL
+ *  parser reads a backslash as a slash ("/\evil.example" is another host)
+ *  and drops tabs and line breaks ("/\t/evil.example"), so neither and no
+ *  other control character is allowed (unabhängige Durchsicht 1.13, A-5). */
 export function ownPath(href: string): boolean {
-	return href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/api/');
+	if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) return false;
+	if (/[\\\u0000-\u001f\u007f]/.test(href)) return false;
+	if (href.startsWith('/api/')) return false;
+	try {
+		return new URL(href, 'http://own.invalid').host === 'own.invalid';
+	} catch {
+		return false;
+	}
 }

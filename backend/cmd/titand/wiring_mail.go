@@ -62,7 +62,7 @@ func (w *titand) wireMail() error {
 	}
 	// New mail: the bell of owners and administrators only says that
 	// there is mail – with the name of the mailbox if the person gave it
-	// one without an address, else "T-Mail", and the count for several
+	// one without an address, else "Mail" (1.13; "T-Mail" before), and the count for several
 	// (the bell is readable by the KI-Agent's tool "notifications", which
 	// must not learn addresses, senders or subjects). The push message to
 	// the account's own devices names sender and subject if the account
@@ -70,7 +70,7 @@ func (w *titand) wireMail() error {
 	w.mail.Notify = func(n tmail.Notice) {
 		place := n.Label
 		if place == "" {
-			place = "T-Mail"
+			place = "Mail"
 		}
 		kind, subject := "mail_new", place
 		if n.Count > 1 {

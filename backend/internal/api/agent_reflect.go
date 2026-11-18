@@ -107,7 +107,7 @@ func (s *Server) reflectTranscript(user string, since time.Time) (string, []stri
 			continue
 		}
 		ids = append(ids, chat.ID)
-		tainted = tainted || chat.Tainted
+		tainted = tainted || chat.ReadOutside()
 		b.WriteString("## " + chat.ShownTitle() + "\n")
 		used := 0
 		for _, e := range chat.Entries {

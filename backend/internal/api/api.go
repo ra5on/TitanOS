@@ -55,6 +55,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/pim/devices"
+	"github.com/ra5on/TitanOS/backend/internal/pim/profile"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
@@ -299,6 +300,18 @@ type Server struct {
 	// devices: the device passwords of T-Kalender and Kontakte (RAM of
 	// what the stick holds, "last synced"; devices.go).
 	devices *devices.Manager
+	// profileLinks: the one-time links of the iPhone profile (RAM only,
+	// devices_profile.go); profileSigner replaces the certificate it is
+	// signed with in tests.
+	profileLinks  profile.Links
+	profileSigner func() *tls.Certificate
+	// pimLive hands the changes of calendars and address books to the
+	// pages' streams, pimCache keeps the prepared address books (1.13,
+	// pim_live.go, pim_cache.go).
+	pimLive *pimHub
+	// reminders plans the alarms of events for the hints in TitanOS (1.13).
+	reminders *calendarReminders
+	pimCache  *pimCache
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -329,6 +342,8 @@ func New(opts Options) *Server {
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.devices = newDevices(opts, s.rateLimiter)
+	s.pimLive, s.pimCache = newPIMHub(), newPIMCache()
+	s.reminders = newCalendarReminders()
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -376,6 +391,18 @@ func New(opts Options) *Server {
 	// the managers as they are at this moment.
 	if s.opts.Shares != nil {
 		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
+	}
+	if pim := s.opts.PIM; pim != nil {
+		// Every change of a calendar or address book, from any side, to
+		// the pages' live streams.
+		prev, hub, reminders := pim.OnChanged, s.pimLive, s.reminders
+		pim.OnChanged = func(c pimstore.Changed) {
+			if prev != nil {
+				prev(c)
+			}
+			hub.publish(c)
+			reminders.changed(c)
+		}
 	}
 	if c := s.opts.Cluster; c != nil {
 		area := s.clusterArea()

@@ -9,6 +9,10 @@
 	// place, notes. Changing one event of a series asks which ones are meant
 	// when saving; the danger zone deletes. A conflict (changed elsewhere)
 	// says so and reads the event again.
+	// 1.13: a draft of the KI-Agent (?agentDraft=<chat>:<entry>, "Öffnen und
+	// bearbeiten") fills the form – a new event, or a change of the event the
+	// draft names (cal, id, occurrence; only the fields that change). It is
+	// text to check: saved only with "Speichern", a series asks as always.
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
@@ -75,13 +79,22 @@
 	import DeleteEventDialog from '#lib/pim/cal/DeleteEventDialog.svelte';
 	import ScopeChoices from '#lib/pim/cal/ScopeChoices.svelte';
 	import { shellOfError } from '#lib/pim/shell.ts';
+	import { eventDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import type { Simple } from '#lib/pim/calendar.ts';
 
 	const phone = $derived(phoneView());
 	const params = page.url.searchParams;
-	const editCal = params.get('cal') ?? '';
-	const editId = params.get('id') ?? '';
-	const editOcc = params.get('occurrence') ?? '';
-	const editing = !!(editCal && editId);
+	// A draft of a change names its event itself (load() sets these).
+	let editCal = $state(params.get('cal') ?? '');
+	let editId = $state(params.get('id') ?? '');
+	let editOcc = $state(params.get('occurrence') ?? '');
+	const editing = $derived(!!(editCal && editId));
+	const draftParam = params.get('agentDraft');
+	/** A draft was put in ('applied') or could not be opened ('gone'). */
+	let fromAgent = $state<'' | 'applied' | 'gone'>('');
+	let draftRule: Simple | null = null;
+	let draftScope: Scope | '' = '';
+	let draftZone = $state('');
 	const back = safeBack(params.get('back'));
 	// Without ?date= today in the NAS zone (known once loadNasZone answered).
 	const startDayIn = (zone: string) => {
@@ -93,6 +106,29 @@
 	const startClock = (() => {
 		const v = params.get('time') ?? '';
 		return /^\d{2}:\d{2}$/.test(v) ? v : '09:00';
+	})();
+	// 1.13 (dragging in the week, later the agent): more of a new event in
+	// the address – its end (`end` HH:MM on `endDate` or the start's day) or
+	// length (`duration` in minutes, 1 … 10 080), all day (`allDay=1`, to
+	// `endDate`), place, notes and calendar. Each bounded; anything else is
+	// left out. Only a draft: nothing is saved before "Sichern".
+	const oneLine = (v: string | null, max: number) =>
+		(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+	const startAllDay = params.get('allDay') === '1';
+	const startPlace = oneLine(params.get('location'), 500);
+	const startNotes = (params.get('notes') ?? '').replace(/\r\n?/g, '\n').slice(0, 4000);
+	const startCalendar = oneLine(params.get('calendar'), 100);
+	const startEnd = (() => {
+		const v = params.get('end') ?? '';
+		return /^\d{2}:\d{2}$/.test(v) ? v : '';
+	})();
+	const startEndDate = (() => {
+		const v = params.get('endDate') ?? '';
+		return validDate(v) ? v : '';
+	})();
+	const startDuration = (() => {
+		const n = Number(params.get('duration') ?? '');
+		return Number.isInteger(n) && n > 0 && n <= 10080 ? n : 0;
 	})();
 
 	type Form = {
@@ -112,21 +148,36 @@
 		const m = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + 60;
 		return m >= 1440 ? { day: 1, time: clock(m - 1440) } : { day: 0, time: clock(m) };
 	};
-	function blank(zone = viewZone()): Form {
+	/** The end of a new event: from the address, else an hour after the start. */
+	function endOf(startDay: string): { date: string; time: string } {
+		const startMin = Number(startClock.slice(0, 2)) * 60 + Number(startClock.slice(3, 5));
+		if (startDuration) {
+			const total = startMin + startDuration;
+			return { date: addDays(startDay, Math.floor(total / 1440)), time: clock(total % 1440) };
+		}
+		if (startEnd || startEndDate) {
+			const date = startEndDate && startEndDate >= startDay ? startEndDate : startDay;
+			const time = startEnd || startClock;
+			if (startAllDay || wallMinutes(startDay, startClock, date, time) > 0) return { date, time };
+		}
 		const end = plusHour(startClock);
+		return { date: addDays(startDay, end.day), time: end.time };
+	}
+	function blank(zone = viewZone()): Form {
 		const startDay = startDayIn(zone);
+		const end = endOf(startDay);
 		return {
 			title: startTitle,
 			calendar: '',
-			allDay: false,
+			allDay: startAllDay,
 			startDate: startDay,
 			startTime: startClock,
-			endDate: addDays(startDay, end.day),
+			endDate: end.date,
 			endTime: end.time,
 			repeat: { kind: 'none', interval: 1, end: 'never', until: '', count: 10 },
 			alarms: [],
-			location: '',
-			notes: '',
+			location: startPlace,
+			notes: startNotes,
 		};
 	}
 	function formOf(ev: CalEvent): Form {
@@ -167,24 +218,48 @@
 	const own = $derived(calendars.filter((c) => c.kind === 'own' && !c.readOnly));
 	// New events in the NAS zone (/calendar/access), the browser's without one.
 	let nasZone = $state(viewZone());
-	const zone = $derived(editing ? (event?.timezone ?? '') : nasZone);
+	const zone = $derived(editing ? (event?.timezone ?? '') : draftZone || nasZone);
 	const dirty = $derived(JSON.stringify(form) !== initial);
 
 	async function load() {
 		loading = true;
 		loadError = '';
 		try {
-			[calendars, nasZone] = await Promise.all([loadCalendars(), loadNasZone()]);
+			let got: AgentDraft | null;
+			[calendars, nasZone, got] = await Promise.all([
+				loadCalendars(),
+				loadNasZone(),
+				draftParam ? loadAgentDraft(draftParam) : Promise.resolve(null),
+			]);
+			const draft = got?.app === 'calendar' && got.kind === 'event' ? got : null;
+			if (draftParam && !draft) fromAgent = 'gone';
+			const f = draft?.fields ?? {};
+			if (draft && !editing && typeof f.cal === 'string' && typeof f.id === 'string') {
+				editCal = f.cal;
+				editId = f.id;
+				editOcc = typeof f.occurrence === 'string' ? f.occurrence : '';
+			}
 			if (editing) {
 				event = await loadEvent(editCal, editId, editOcc);
 				form = formOf(event);
 			} else {
 				const first =
+					calendars.find((c) => c.id === startCalendar && c.kind === 'own' && !c.readOnly) ??
 					calendars.find((c) => c.kind === 'own' && !c.readOnly && !c.hidden) ??
 					calendars.find((c) => c.kind === 'own' && !c.readOnly);
 				form = { ...blank(nasZone), calendar: first?.id ?? '' };
 			}
+			// What was there before the draft: the change is what differs from it.
 			initial = JSON.stringify(form);
+			if (draft) {
+				const ids = calendars.filter((c) => c.kind === 'own' && !c.readOnly).map((c) => c.id);
+				const put = eventDraftForm(form, f, ids);
+				form = put.form;
+				draftRule = put.rule;
+				draftScope = put.scope;
+				if (!editing) draftZone = put.zone;
+				fromAgent = 'applied';
+			}
 			takeDuration();
 		} catch (err) {
 			unavailable = shellOfError(err).kind === 'unavailable';
@@ -313,7 +388,11 @@
 		if (!editing || JSON.stringify(form.alarms) !== JSON.stringify(base.alarms))
 			out.alarms = form.alarms;
 		if (!editing || JSON.stringify(form.repeat) !== JSON.stringify(base.repeat) || timesChanged)
-			out.repeat = toSimple(form.repeat, form.startDate);
+			// A rule of the agent's draft the form shows only as "custom" goes as it came.
+			out.repeat =
+				form.repeat.kind === 'custom' && draftRule
+					? draftRule
+					: toSimple(form.repeat, form.startDate);
 		return out;
 	}
 
@@ -322,7 +401,7 @@
 		conflict = false;
 		if (error) return;
 		if (editing && event?.recurring) {
-			scope = moved ? 'all' : 'this';
+			scope = moved ? 'all' : draftScope || 'this';
 			askScope = true;
 			return;
 		}
@@ -440,6 +519,11 @@
 	{/if}
 {:else}
 	<form class="ev" class:phone onsubmit={(e) => (e.preventDefault(), save())} data-event-form>
+		{#if fromAgent === 'applied'}<p class="notice-warn" role="note" data-agent-draft>
+				{t('agentpim.draft.eventNote')}
+			</p>{:else if fromAgent === 'gone'}<p class="muted" role="status">
+				{t('agentpim.draft.gone')}
+			</p>{/if}
 		{#if note}<p class="notice-warn" role="status">{note}</p>{/if}
 		<div class="row">
 			<label class="lbl" for="t-title">{t('calendar.form.title')}</label>

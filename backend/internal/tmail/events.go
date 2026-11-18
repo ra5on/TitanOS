@@ -18,6 +18,9 @@ const maxStreams = 8
 type hub struct {
 	mu   sync.Mutex
 	subs map[string][]chan Event
+	// gens counts what happened per mailbox (key(user, id)): kept folder
+	// counts are stale after it (lanes.go).
+	gens map[string]uint64
 }
 
 // Subscribe returns the events of an account until cancel is called, the
@@ -61,6 +64,11 @@ func (m *Manager) Subscribe(user string) (<-chan Event, func()) {
 func (h *hub) publish(user string, ev Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if data, ok := ev.Data.(map[string]any); ok {
+		if id, ok := data["account"].(string); ok {
+			h.touchLocked(key(user, id))
+		}
+	}
 	for _, ch := range h.subs[user] {
 		select {
 		case ch <- ev:

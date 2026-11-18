@@ -53,7 +53,14 @@ func (a pimDataArea) handleContactPhoto(w http.ResponseWriter, r *http.Request) 
 		noPhoto()
 		return
 	}
-	jpeg, err := store.Photo(user, name)
+	// The picture is made of the card: the card's ETag names it. A page
+	// that has it already gets 304 from RAM, without the disk (1.13).
+	if notModified(r, info.ETag) {
+		photoHeaders(w, r, info.ETag)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	jpeg, etag, err := store.PhotoTag(user, name)
 	if errors.Is(err, pimstore.ErrNotFound) {
 		obj, gerr := store.Get(pimstore.Contacts, user, book, name)
 		if gerr != nil {
@@ -69,6 +76,7 @@ func (a pimDataArea) handleContactPhoto(w http.ResponseWriter, r *http.Request) 
 			noPhoto()
 			return
 		}
+		etag = obj.ETag
 		if book == pimstore.DefaultBook {
 			if serr := store.SavePhoto(user, name, obj.ETag, jpeg); serr != nil && !errors.Is(serr, pimstore.ErrPrecondition) {
 				slog.Warn("Contacts: picture not kept", "account", user, "err", serr)
@@ -78,13 +86,25 @@ func (a pimDataArea) handleContactPhoto(w http.ResponseWriter, r *http.Request) 
 		contactsFail(w, r, book, err, "contact_not_found")
 		return
 	}
+	photoHeaders(w, r, etag)
+	_, _ = w.Write(jpeg)
+}
+
+// photoHeaders are the headers of a contact's picture: a JPEG TitanOS
+// made (nosniff, sandbox), named by the ETag of its card. Asked with
+// ?v=<that ETag> (the page's photoURL), the address names one picture
+// for good and the browser keeps it a week without asking; otherwise it
+// asks each time (If-None-Match, 304).
+func photoHeaders(w http.ResponseWriter, r *http.Request, etag string) {
 	h := w.Header()
 	h.Set("Content-Type", "image/jpeg")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "sandbox")
 	h.Set("Cache-Control", "private, no-cache")
-	h.Set("ETag", `"`+info.ETag+`"`)
-	_, _ = w.Write(jpeg)
+	if v := r.URL.Query().Get("v"); v != "" && strings.Trim(v, `"`) == etag {
+		h.Set("Cache-Control", "private, max-age=604800, immutable")
+	}
+	h.Set("ETag", `"`+etag+`"`)
 }
 
 // readContactPhoto reads the picture of a PUT: a multipart upload (field
@@ -287,7 +307,7 @@ func (a pimDataArea) writeContactPhoto(w http.ResponseWriter, r *http.Request, s
 			slog.Warn("Contacts: picture not kept", "account", user, "err", err)
 		}
 	}
-	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: etag, HasPhoto: &has})
+	writeJSON(w, http.StatusOK, contactWritten{ID: name, Book: book, ETag: etag, HasPhoto: &has, Item: a.contactRow(store, user, book, name), ListETag: a.listTagNow(store, user), CTag: a.ctagOf(store, user, book)})
 }
 
 // reserveRAM takes RAM of the budget for the rest of a request; it

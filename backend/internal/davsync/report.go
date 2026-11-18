@@ -46,7 +46,7 @@ func (rq *request) report() {
 		return
 	}
 	rep, ok := rq.h.reports[body.Name]
-	if !ok || (rep.kind != "" && rep.kind != rq.t.kind) || !rep.levels.has(rq.t.level) {
+	if !ok || (rep.kind != "" && rep.kind != family(rq.t.kind)) || !rep.levels.has(rq.t.level) {
 		writeXMLError(rq.w, http.StatusForbidden, davName("supported-report"))
 		return
 	}
@@ -154,6 +154,17 @@ func (rq *request) streamMembers(st *store.Store, ms *multistatus, members []mem
 	t := rq.t
 	data := dataName(t.kind)
 	read := wantsData(pr, data)
+	var rd *store.Reader
+	if read {
+		// One open of the collection's folder for all entries (1.13; was
+		// one per entry), each file read without the collection's lock.
+		var err error
+		if rd, err = st.Reader(t.kind, t.account, t.collection); err != nil {
+			rq.fail(err)
+			return false
+		}
+		defer rd.Close()
+	}
 	for _, m := range members {
 		if rq.r.Context().Err() != nil {
 			// The account was forgotten or the client went away.
@@ -172,7 +183,7 @@ func (rq *request) streamMembers(st *store.Store, ms *multistatus, members []mem
 		info := m.info
 		var extra map[xml.Name]extraProp
 		if read {
-			obj, err := st.Get(t.kind, t.account, t.collection, m.name)
+			obj, err := rd.Get(m.name)
 			switch {
 			case err == nil:
 			case notFound(err):

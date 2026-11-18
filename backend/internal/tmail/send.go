@@ -44,6 +44,9 @@ type Outgoing struct {
 	// Answers is the mail this one answers; it is marked "answered" after
 	// sending. Without it the mail of InReplyTo is looked for in the INBOX.
 	Answers *MailRef
+	// Forwards is the mail this one forwards; it gets $Forwarded after
+	// sending (1.12).
+	Forwards *MailRef
 }
 
 // MailRef names a mail of a mailbox.
@@ -138,7 +141,7 @@ func (m *Manager) compose(user string, mb Mailbox, out Outgoing, draft bool) ([]
 	if refs := msgIDs(out.References, 50); len(refs) > 0 {
 		h.SetMsgIDList("References", refs)
 	}
-	h.Set("User-Agent", "T-Mail (TitanOS)")
+	h.Set("User-Agent", "TitanOS Mail")
 	var buf bytes.Buffer
 	textHeader := gomail.InlineHeader{}
 	textHeader.Set("Content-Type", "text/plain; charset=utf-8")
@@ -336,7 +339,7 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	}
 	m.learn(user, append(append(append([]Address{}, out.To...), out.Cc...), out.Bcc...))
 	result := SendResult{}
-	var answered *MailRef
+	var answered, forwarded *MailRef
 	// The copy and the draft after the mail went out: their failure does
 	// not make the mail unsent.
 	err = m.withIMAP(context.WithoutCancel(ctx), user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
@@ -355,13 +358,18 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 		if ref := m.markAnswered(c, s, out); ref != nil {
 			answered = ref
 		}
+		if ref := markForwarded(c, s, out.Forwards); ref != nil {
+			forwarded = ref
+		}
 		return nil
 	})
 	if err != nil {
 		slog.Warn("T-Mail: sent mail not filed", "account", user, "code", Code(err))
 	}
-	if answered != nil {
-		m.events.publish(user, Event{Type: "flags", Data: map[string]any{"account": id, "folder": answered.Folder, "uids": []uint32{answered.UID}}})
+	for _, ref := range []*MailRef{answered, forwarded} {
+		if ref != nil {
+			m.events.publish(user, Event{Type: "flags", Data: map[string]any{"account": id, "folder": ref.Folder, "uids": []uint32{ref.UID}}})
+		}
 	}
 	return result, nil
 }
@@ -393,6 +401,22 @@ func (m *Manager) markAnswered(c *imapclient.Client, s *session, out Outgoing) *
 	}
 	if err := c.Store(uidSet(ref.UID), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagAnswered}}, nil).Close(); err != nil {
 		slog.Warn("T-Mail: answered mail not marked", "code", Code(err))
+		return nil
+	}
+	return ref
+}
+
+// markForwarded sets $Forwarded on the mail a forward forwards. A server
+// that keeps no keywords refuses it: that is logged, the mail stays sent.
+func markForwarded(c *imapclient.Client, s *session, ref *MailRef) *MailRef {
+	if ref == nil || ref.UID == 0 || ref.Folder == "" {
+		return nil
+	}
+	if _, err := selectFolder(c, s, ref.Folder); err != nil {
+		return nil
+	}
+	if err := c.Store(uidSet(ref.UID), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{flagForwarded}}, nil).Close(); err != nil {
+		slog.Warn("T-Mail: forwarded mail not marked", "code", Code(err))
 		return nil
 	}
 	return ref

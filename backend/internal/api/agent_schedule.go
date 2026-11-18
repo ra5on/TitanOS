@@ -188,7 +188,6 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 		return "", agent.ErrNotFound
 	}
 	sc := list[i]
-	origin := "schedule"
 	title := sc.Name + " · " + now.In(s.agentLocation()).Format("02.01. 15:04")
 	if late {
 		title += " (nachgeholt)"
@@ -197,12 +196,8 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 	if sc.Kind == "morning" {
 		task = agentMorningTask(sc.Report) + nightNote(user.Name)
 	}
-	chat := &agent.Chat{ID: agent.NewID(), Title: title, Project: sc.Project, Created: now, Updated: now, Origin: origin, Schedule: sc.ID, State: agent.StateIdle,
-		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
-	if sc.Kind == "reminder" {
-		chat.Origin = "reminder"
-		chat.Entries = []agent.Entry{{ID: agent.NewID(), At: now, Role: "assistant", Content: "⏰ **Erinnerung:** " + sc.Task}}
-	}
+	chat := scheduleChat(sc, task, now)
+	chat.Title = title
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		return "", err
 	}
@@ -239,6 +234,28 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 		s.agentScheduleResult(user.Name, id, chat)
 	}
 	return chat.ID, err
+}
+
+// scheduleChat is the chat of one run of a planned task: the task as the
+// message of the person, a reminder as the agent's message.
+func scheduleChat(sc agent.Schedule, task string, now time.Time) *agent.Chat {
+	chat := &agent.Chat{ID: agent.NewID(), Title: sc.Name, Project: sc.Project, Created: now, Updated: now, Origin: "schedule", Schedule: sc.ID, State: agent.StateIdle,
+		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
+	if sc.Kind == "reminder" {
+		chat.Origin = "reminder"
+		chat.Entries = []agent.Entry{{ID: agent.NewID(), At: now, Role: "assistant", Content: "⏰ **Erinnerung:** " + sc.Task}}
+	}
+	// Planned in a chat that had read outside content or mail, calendar,
+	// contacts or reminders (A-1): the run starts as that chat was, so
+	// sending, the web, MCP, files and notes ask as there; nobody watches,
+	// so such a step waits ("Wartet auf deine Freigabe", agentDone). Never
+	// WebOnly: the task is the model's text, an address in it is not one
+	// the person wrote. A reminder's message to Home Assistant is then the
+	// neutral one (agentHANotifyText).
+	if sc.Untrusted || sc.PIMRead {
+		chat.Tainted, chat.WebOnly, chat.PIMRead = true, false, sc.PIMRead
+	}
+	return chat
 }
 
 // agentStartProblem says in the person's words why a planned run did not start.
