@@ -24,9 +24,15 @@ test('requests go to the chosen node, login, own account and the cluster stay he
 		'/background?v=2',
 		'/login-appearance',
 		'/app-icon',
+		'/calendar/access',
+		'/calendar/events?from=2026-11-01',
+		'/contacts',
+		'/contacts?q=ben',
+		'/contacts/kontakte/ben.vcf/photo',
 	]) {
 		assert.equal(apiPath(local, 'abc'), '/api/v1' + local, local);
 	}
+	assert.equal(apiPath('/contactsheet', 'abc'), '/api/v1/cluster/nodes/abc/api/contactsheet');
 	assert.equal(apiPath('/users', 'a/b'), '/api/v1/cluster/nodes/a%2Fb/api/users');
 });
 

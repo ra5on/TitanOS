@@ -24,6 +24,10 @@ const LOCAL = [
 	// T-Mail (docs/TMAIL.md): only from the browser's own session, never
 	// through another node acting for the account.
 	/^\/mail(\/|\?|$)/,
+	// 1.11: T-Kalender and Kontakte – their routes are clusterLocal (the data
+	// of the account on this NAS, never through another node).
+	/^\/calendar(\/|\?|$)/,
+	/^\/contacts(\/|\?|$)/,
 ];
 
 /** The ID of the chosen other node, null for this NAS. */
