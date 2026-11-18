@@ -40,6 +40,10 @@ type Prepared struct {
 	Untrusted bool            `json:"untrusted,omitempty"`
 	// Kind is read, create, change or agent (policy.go).
 	Kind string `json:"kind,omitempty"`
+	// Draft: the right of the action is "Nur Vorschläge" (1.13): the tool
+	// makes a draft and writes nothing. Set by Prepare only, never from the
+	// arguments; such a call never waits for approval.
+	Draft bool `json:"draft,omitempty"`
 }
 
 // Outcome is what a call returned.
@@ -53,6 +57,9 @@ type Outcome struct {
 	Choices []string
 	// Question is the text that goes with the choices.
 	Question string
+	// Draft is what a tool made instead of writing (1.13): the page shows
+	// a card "Öffnen und bearbeiten".
+	Draft *Draft
 }
 
 // Toolbox is what package api hands in: the tools of the account with the
@@ -582,6 +589,10 @@ func (r *Runner) call(ctx context.Context, chat *Chat, name string, args json.Ra
 		return false, r.add(chat, step)
 	}
 	r.loadArea(chat, p.Area)
+	if p.Draft {
+		// A draft writes nothing and never waits for approval.
+		p.Mode = ModeAllow
+	}
 	if p.Mode == ModeAsk {
 		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, At: r.now()}
 		r.setState(chat, StateWaiting, "")
@@ -600,9 +611,9 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 		chat.WebOnly = p.Area == AreaWeb && (!chat.Tainted || chat.WebOnly)
 		chat.Tainted = true
 	}
-	if IsDataArea(p.Area) {
+	if ReadsPersonal(p.Area) {
 		// Also a failed call may have read something; changes return
-		// titles and names too.
+		// titles and names too. Mail counts since 1.13.
 		chat.PIMRead = true
 	}
 	if err != nil {
@@ -617,7 +628,7 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 		step.Result = "Error: " + err.Error()
 		return false, r.add(chat, step)
 	}
-	step.OK, step.Result, step.Sources, step.Files = true, keepResult(out.Text), out.Sources, out.Files
+	step.OK, step.Result, step.Sources, step.Files, step.Draft = true, keepResult(out.Text), out.Sources, out.Files, out.Draft
 	if err := r.add(chat, step); err != nil {
 		return false, err
 	}

@@ -1,5 +1,5 @@
 {
- "note": "Preset x dataRights x tool -> mode (TECHNIK 6.4). Read by backend/internal/agent/policy_test.go and web/tests/agent.test.mjs, so both sides decide alike.",
+ "note": "Preset x dataRights x tool -> mode (TECHNIK 6.4), and since 1.13 preset x dataRights x actionRights x the account's own rights x 'the chat has read personal data' -> action mode. Read by backend/internal/agent/policy_test.go, actions_test.go and web/tests/agent.test.mjs, so both sides decide alike.",
  "tools": [
   {
    "name": "calendar_list",
@@ -760,5 +760,441 @@
     "contacts_delete": "ask"
    }
   }
- ]
+ ],
+ "actions": {
+  "keys": [
+   "mail.read",
+   "mail.draft",
+   "mail.send",
+   "mail.move",
+   "event.create",
+   "event.update",
+   "event.delete",
+   "contact.create",
+   "contact.update",
+   "contact.delete",
+   "task.create",
+   "task.update",
+   "task.complete",
+   "task.delete"
+  ],
+  "cases": [
+   {
+    "name": "factory: standard, nothing set",
+    "policy": {
+     "preset": "standard"
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "suggest",
+     "event.update": "suggest",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "no preset at all",
+    "policy": {
+     "preset": ""
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "suggest",
+     "event.update": "suggest",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "Q28: ask chosen before stays ask",
+    "policy": {
+     "preset": "standard",
+     "dataRights": {
+      "calendar": {
+       "read": "allow",
+       "write": "ask"
+      },
+      "contacts": {
+       "read": "allow",
+       "write": "allow"
+      }
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "ask",
+     "event.update": "ask",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "allow",
+     "contact.delete": "ask",
+     "task.create": "ask",
+     "task.update": "ask",
+     "task.complete": "ask",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "all: mail.send stays ask (Q29)",
+    "policy": {
+     "preset": "all"
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "ask",
+     "mail.move": "allow",
+     "event.create": "allow",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "allow",
+     "contact.delete": "ask",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "allow",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "all with mail.send allowed by itself",
+    "policy": {
+     "preset": "all",
+     "actionRights": {
+      "mail.send": "allow"
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "allow",
+     "mail.move": "allow",
+     "event.create": "allow",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "allow",
+     "contact.delete": "ask",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "allow",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "mail.send allowed, chat has read mail",
+    "policy": {
+     "preset": "all",
+     "actionRights": {
+      "mail.send": "allow"
+     }
+    },
+    "own": {},
+    "read": true,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "ask",
+     "mail.move": "allow",
+     "event.create": "allow",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "allow",
+     "contact.delete": "ask",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "allow",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "read only",
+    "policy": {
+     "preset": "read"
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "deny",
+     "mail.send": "deny",
+     "mail.move": "deny",
+     "event.create": "deny",
+     "event.update": "deny",
+     "event.delete": "deny",
+     "contact.create": "deny",
+     "contact.update": "deny",
+     "contact.delete": "deny",
+     "task.create": "deny",
+     "task.update": "deny",
+     "task.complete": "deny",
+     "task.delete": "deny"
+    }
+   },
+   {
+    "name": "mail switched off",
+    "policy": {
+     "preset": "standard",
+     "actionRights": {
+      "mail.read": "deny"
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "deny",
+     "mail.draft": "deny",
+     "mail.send": "deny",
+     "mail.move": "deny",
+     "event.create": "suggest",
+     "event.update": "suggest",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "account stricter than the NAS",
+    "policy": {
+     "preset": "all"
+    },
+    "own": {
+     "event.create": "suggest",
+     "mail.read": "deny",
+     "contact.update": "ask",
+     "task.complete": "suggest"
+    },
+    "read": false,
+    "modes": {
+     "mail.read": "deny",
+     "mail.draft": "deny",
+     "mail.send": "deny",
+     "mail.move": "deny",
+     "event.create": "suggest",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "ask",
+     "contact.delete": "ask",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "account cannot loosen",
+    "policy": {
+     "preset": "standard"
+    },
+    "own": {
+     "event.create": "allow",
+     "mail.send": "allow",
+     "mail.read": "allow"
+    },
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "suggest",
+     "event.update": "suggest",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "contacts closed",
+    "policy": {
+     "preset": "all",
+     "dataRights": {
+      "contacts": {
+       "read": "deny",
+       "write": "deny"
+      }
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "ask",
+     "mail.move": "allow",
+     "event.create": "allow",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "deny",
+     "contact.update": "deny",
+     "contact.delete": "deny",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "allow",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "calendar read only",
+    "policy": {
+     "preset": "standard",
+     "dataRights": {
+      "calendar": {
+       "read": "allow",
+       "write": "deny"
+      }
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "deny",
+     "event.update": "deny",
+     "event.delete": "deny",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "deny",
+     "task.update": "deny",
+     "task.complete": "deny",
+     "task.delete": "deny"
+    }
+   },
+   {
+    "name": "administrator sets single actions",
+    "policy": {
+     "preset": "standard",
+     "actionRights": {
+      "event.create": "allow",
+      "task.complete": "ask",
+      "mail.draft": "allow",
+      "mail.move": "ask"
+     }
+    },
+    "own": {},
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "suggest",
+     "mail.move": "ask",
+     "event.create": "allow",
+     "event.update": "suggest",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "ask",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "own values it may not store count as nothing",
+    "policy": {
+     "preset": "all"
+    },
+    "own": {
+     "event.delete": "allow",
+     "mail.read": "suggest",
+     "task.create": "deny"
+    },
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "allow",
+     "mail.send": "ask",
+     "mail.move": "allow",
+     "event.create": "allow",
+     "event.update": "allow",
+     "event.delete": "ask",
+     "contact.create": "allow",
+     "contact.update": "allow",
+     "contact.delete": "ask",
+     "task.create": "allow",
+     "task.update": "allow",
+     "task.complete": "allow",
+     "task.delete": "ask"
+    }
+   },
+   {
+    "name": "NAS ask, account suggest",
+    "policy": {
+     "preset": "standard",
+     "actionRights": {
+      "mail.draft": "ask",
+      "event.update": "ask"
+     }
+    },
+    "own": {
+     "mail.draft": "suggest"
+    },
+    "read": false,
+    "modes": {
+     "mail.read": "allow",
+     "mail.draft": "suggest",
+     "mail.send": "suggest",
+     "mail.move": "suggest",
+     "event.create": "suggest",
+     "event.update": "ask",
+     "event.delete": "ask",
+     "contact.create": "suggest",
+     "contact.update": "suggest",
+     "contact.delete": "ask",
+     "task.create": "suggest",
+     "task.update": "suggest",
+     "task.complete": "suggest",
+     "task.delete": "ask"
+    }
+   }
+  ]
+ }
 }
