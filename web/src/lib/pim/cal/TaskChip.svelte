@@ -25,7 +25,9 @@
 			: t('calendar.tasks.done', { title })}
 		title={task.done ? t('calendar.tasks.reopen', { title }) : t('calendar.tasks.done', { title })}
 		onclick={ondone}
-		>{#if task.done}<Icon name="check" size={11} />{/if}</button
+		><span class="ring"
+			>{#if task.done}<Icon name="check" size={11} />{/if}</span
+		></button
 	><button type="button" class="tt" onclick={onopen}
 		><span class="sr-only">{t('calendar.tasks.one')}: </span>{#if minutes !== null}<b
 				>{clock(minutes)}</b
@@ -56,23 +58,43 @@
 		flex: none;
 		display: inline-grid;
 		place-items: center;
-		width: 14px;
-		height: 14px;
 		margin-top: 2px;
 		padding: 0;
-		border: 1.5px solid var(--muted);
+		border: 0;
 		border-radius: 50%;
 		background: none;
 		color: var(--on-accent);
 		cursor: pointer;
 	}
-	.done .tick {
+	.ring {
+		display: inline-grid;
+		place-items: center;
+		width: 14px;
+		height: 14px;
+		border: 1.5px solid var(--muted);
+		border-radius: 50%;
+	}
+	.done .ring {
 		border-color: var(--accent);
 		background: var(--accent);
 	}
+	/* The list and the phone: a target of 44 px around a larger ring. */
+	.wide {
+		align-items: center;
+	}
 	.wide .tick {
+		width: 44px;
+		height: 44px;
+		margin: -6px 0 -6px -6px;
+	}
+	.wide .ring {
 		width: 20px;
 		height: 20px;
+	}
+	.wide .tt {
+		min-height: 44px;
+		align-items: center;
+		align-content: center;
 	}
 	.tt {
 		display: flex;
@@ -105,11 +127,5 @@
 	.tt:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
-	}
-	@media (pointer: coarse) {
-		.tick {
-			width: 22px;
-			height: 22px;
-		}
 	}
 </style>

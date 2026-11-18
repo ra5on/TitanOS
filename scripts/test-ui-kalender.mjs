@@ -14,7 +14,7 @@
 // (scope asked, only the changed field sent), danger zone. Unavailable
 // (503 and volume:false) shows the message, never a grid. Truncated
 // (titand's cap of occurrences) shows a note. English once.
-// Phone 390 px light and dark: list with the week on top, month with dashes,
+// Phone 390 px light and dark: the list, the month with dots (1.13),
 // the form; targets ≥ 44 px. Once in a real desktop window, with "Ablage ›
 // Neuer Termin" opening the event window. Every view: no sideways scroll,
 // no cut text, the calendar's name beside every color.
@@ -156,7 +156,13 @@ try {
     await ready(page, "month");
     const todayCell = page.locator('.cell[data-day="2026-11-17"]');
     assert.match(await todayCell.innerText(), /Heute/, "today is named");
-    assert.match(await todayCell.innerText(), /\+2 weitere/, "+2 weitere");
+    // 1.13: every event of the day in its cell (they scroll there), no "+N weitere".
+    assert.match(await todayCell.innerText(), /Elternabend/, "all of the day's events");
+    assert.equal(
+      await todayCell.locator(".evs").evaluate((el) => getComputedStyle(el).overflowY),
+      "auto",
+      "the day's events scroll in the cell",
+    );
     // The clipped title of the list is read whole (no cut text).
     await until(
       async () =>
@@ -180,7 +186,9 @@ try {
       /aus den Kontakten, nur lesen/,
     );
     assert.equal(
-      await page.locator('.calrow[data-calendar="geburtstage"] button').count(),
+      await page
+        .locator('.calrow[data-calendar="geburtstage"] button:not(.sort-grip)')
+        .count(),
       0,
       "Geburtstage cannot be changed",
     );
@@ -194,7 +202,7 @@ try {
     await page.goto(base + "/calendar?view=week");
     await ready(page, "week");
     assert.match(await page.locator(".cbar h2").innerText(), /KW 47/);
-    const col = page.locator('.col[data-day="2026-11-17"]');
+    const col = page.locator('.wk-grid .col[data-day="2026-11-17"]');
     assert.equal(
       await col.locator(".now").count(),
       1,
@@ -227,8 +235,17 @@ try {
         text: e.textContent,
       })),
     );
+    // 1.13: blocks stand by their minutes; a longer title scrolls in its
+    // block and shows whole while pointed at.
     const long = boxes.find((b) => b.text.includes(LONG_TITLE));
-    assert.ok(long && long.bottom - long.top > 100, "the long event grew");
+    assert.ok(long, "the long title is whole");
+    const longBlk = col.locator(".blk", { hasText: "Hausverwaltung" });
+    await longBlk.hover();
+    assert.ok(
+      await longBlk.evaluate((el) => el.offsetHeight >= el.scrollHeight - 1),
+      "pointed at, the long event shows whole",
+    );
+    await page.mouse.move(5, 5);
     for (const a of boxes)
       for (const b of boxes)
         if (a !== b && a.lane === b.lane)
@@ -247,7 +264,7 @@ try {
 
     await page.goto(base + "/calendar?view=day&date=2026-11-17");
     await ready(page, "day");
-    assert.equal(await page.locator(".col").count(), 1, "day: one column");
+    assert.equal(await page.locator(".wk-grid .col").count(), 1, "day: one column");
     await sound(page, `day ${theme}`);
     await shot(page, `tag-${theme}`);
 
@@ -268,13 +285,13 @@ try {
     const { page, ctx } = await open();
     await page.goto(base + "/calendar");
     await ready(page, "month");
-    await page.locator('.cell[data-day="2026-11-17"] .more').click();
+    await page.locator('.cell[data-day="2026-11-17"] .dn .n').click();
     // Today needs no date in the address.
     await until(
       () =>
         page.url().includes("view=day") &&
         !/date=(?!2026-11-17)/.test(page.url()),
-      "+2 weitere opens the day",
+      "the day's number opens the day",
     );
     await ready(page, "day");
     // Tab reaches the controls of the bar.
@@ -897,13 +914,9 @@ try {
     }, scope);
   for (const theme of ["graphit", "hell"]) {
     const { page, ctx } = await open({ width: 390, theme, phone: true });
-    await page.goto(base + "/calendar");
+    // 1.13: the phone opens on the month; the list is the other view.
+    await page.goto(base + "/calendar?view=list");
     await ready(page, "list");
-    assert.equal(
-      await page.locator(".strip .sd").count(),
-      7,
-      "the week on top",
-    );
     const first = await page.locator(".arow").first().innerText();
     assert.match(first, /07:45[\s\S]*Fahrgemeinschaft Schule[\s\S]*Familie/);
     assert.ok(
@@ -928,6 +941,14 @@ try {
         "event detail",
       ],
     ]) {
+      // 1.13: the calendars are a level of their own ("Kalender" below).
+      if (what === "calendar dialog") {
+        await page.getByRole("button", { name: "Kalender", exact: true }).click();
+        await page.locator('.calrow[data-calendar="privat"]').waitFor();
+      } else if (!(await page.locator(".agenda").count())) {
+        await page.getByRole("button", { name: "Zurück" }).first().click();
+        await ready(page, "list");
+      }
       await opener.click();
       const sheet = dialog(page);
       await sheet.waitFor();
@@ -973,7 +994,7 @@ try {
     );
     assert.ok(
       (await page.locator(".marks i").count()) > 10,
-      "dashes per event",
+      "a dot per event",
     );
     await page.locator(".pick", { hasText: "19" }).first().click();
     await until(

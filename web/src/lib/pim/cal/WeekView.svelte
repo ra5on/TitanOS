@@ -364,6 +364,7 @@
 							class:editable={edit}
 							class:short={length < 50}
 							data-key={it.key}
+							data-lane={it.lane}
 							style:--c={calColor(c?.color ?? '')}
 							style:top="{px(it.part.from)}px"
 							style:--h="{px(Math.max(length, SHORTEST))}px"
