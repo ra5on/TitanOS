@@ -1,0 +1,234 @@
+# Reminders (1.13): what iOS 26 does with the lists of its Reminders app
+# on a CalDAV account, written by hand after RFC 4791 and what iOS is
+# reported to send (to be confirmed on a real iPhone). The home set shows
+# the calendars and, after them, the virtual list "Erinnerungen" (VTODO)
+# until the account has a list of its own.
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav" xmlns:C="http://calendarserver.org/ns/" xmlns:D="http://apple.com/ns/ical/"><A:prop><C:getctag/><A:sync-token/><A:resourcetype/><A:displayname/><D:calendar-color/><D:calendar-order/><B:supported-calendar-component-set/><A:current-user-privilege-set/><A:supported-report-set/><B:calendar-description/></A:prop></A:propfind>
+< status 207
+< responses 3
+< value /caldav/alex/calendars/privat/ cal:supported-calendar-component-set <cal:comp name="VEVENT"/>
+< value /caldav/alex/calendars/erinnerungen--titanos/ cal:supported-calendar-component-set <cal:comp name="VTODO"/>
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:resourcetype <d:collection/><cal:calendar/>
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:displayname Erinnerungen
+< value /caldav/alex/calendars/erinnerungen--titanos/ ical:calendar-color #c2410c
+< value /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:sync-token https://ns.titanos.invalid/sync/0/0
+< privileges /caldav/alex/calendars/erinnerungen--titanos/ read write write-properties write-content bind unbind read-current-user-privilege-set
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:supported-report-set <d:supported-report><d:report><cal:calendar-query/></d:report></d:supported-report>
+< save home prop /caldav/alex/calendars/ cs:getctag
+
+# The first sync of the list: nothing yet.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/><A:getcontenttype/></A:prop></A:sync-collection>
+< status 207
+< responses 0
+< save virtual sync-token
+
+# A new reminder with date, time and an alarm (iOS writes DTSTART and
+# DUE, the alarm at an absolute time, its own X-APPLE properties).
+> PUT /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: reminder-new.ics
+< status 201
+< header ETag {etag:reminder-new.ics}
+
+# A weekly one on a date and a sub-task of the first (RELATED-TO).
+> PUT /caldav/alex/calendars/erinnerungen--titanos/7E2D4C6B-8A9F-4E1D-B3C5-D7E9F1A3B5C7.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: reminder-weekly.ics
+< status 201
+
+> PUT /caldav/alex/calendars/erinnerungen--titanos/1D3F5A7C-9E2B-4D6F-8A1C-3E5B7D9F2A4C.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: reminder-sub.ics
+< status 201
+
+# The list is real now, with an epoch of its own: the token of the
+# virtual list is stale (403, the device syncs once in full – as for
+# "privat").
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:virtual}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 403
+< error d:valid-sync-token
+
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token/><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 3
+< save token sync-token
+
+# Its ctag moved, and so did the home's. "privat"
+# stays virtual (a list is no calendar).
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/><A:displayname/></A:prop></A:propfind>
+< status 207
+< responses 3
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+< value-lacks /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:displayname Erinnerungen
+< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}
+
+# The bytes come back as they went (X-APPLE-SORT-ORDER, X-WR-ALARMUID).
+> GET /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+> Auth: alex
+< status 200
+< header ETag {etag:reminder-new.ics}
+< header-has Content-Type text/calendar
+< body reminder-new.ics
+
+# The open ones, as iOS asks for them: COMPLETED is not defined.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/><A:getcontenttype/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:prop-filter name="COMPLETED"><B:is-not-defined/></B:prop-filter></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 3
+
+# Ticked off on the iPhone: STATUS, COMPLETED, PERCENT-COMPLETE.
+> PUT /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:reminder-new.ics}
+> Body: reminder-done.ics
+< status 204
+< header ETag {etag:reminder-done.ics}
+
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:prop-filter name="COMPLETED"><B:is-not-defined/></B:prop-filter></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 2
+< response-lacks /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+
+# The done ones of the last weeks: COMPLETED in a time-range.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/><B:calendar-data/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:prop-filter name="COMPLETED"><B:time-range start="20261101T000000Z"/></B:prop-filter></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 1
+< data /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics reminder-done.ics
+
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:prop-filter name="COMPLETED"><B:time-range start="20261201T000000Z"/></B:prop-filter></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 0
+
+# Due in a window (RFC 4791 9.9; a recurring one always matches), STATUS.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:time-range start="20261120T000000Z" end="20261121T000000Z"/></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 3
+
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:time-range start="20261125T000000Z" end="20261126T000000Z"/></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 2
+< response-lacks /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"><B:prop-filter name="STATUS"><B:text-match>needs-action</B:text-match></B:prop-filter></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 1
+< response-lacks /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+
+# Events are asked of a list, reminders of a calendar: nothing.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VEVENT"><B:time-range start="20261101T000000Z"/></B:comp-filter></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 0
+
+> REPORT /caldav/alex/calendars/privat/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:calendar-query xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav"><A:prop><A:getetag/></A:prop><B:filter><B:comp-filter name="VCALENDAR"><B:comp-filter name="VTODO"/></B:comp-filter></B:filter></B:calendar-query>
+< status 207
+< responses 0
+
+# Changed on the Mac meanwhile: the iPhone's old ETag is refused, the
+# current one goes through.
+> PUT /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:reminder-new.ics}
+> Body: reminder-renamed.ics
+< status 412
+
+> PUT /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-Match: {etag:reminder-done.ics}
+> Body: reminder-renamed.ics
+< status 204
+
+# Deleted on the iPhone.
+> DELETE /caldav/alex/calendars/erinnerungen--titanos/1D3F5A7C-9E2B-4D6F-8A1C-3E5B7D9F2A4C.ics
+> Auth: alex
+> If-Match: {etag:reminder-sub.ics}
+< status 204
+
+# The next sync names exactly what changed since the first one.
+> REPORT /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:sync-collection xmlns:A="DAV:"><A:sync-token>{saved:token}</A:sync-token><A:sync-level>1</A:sync-level><A:prop><A:getetag/></A:prop></A:sync-collection>
+< status 207
+< responses 2
+< value /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics d:getetag {etag:reminder-renamed.ics}
+< response-lacks /caldav/alex/calendars/erinnerungen--titanos/7E2D4C6B-8A9F-4E1D-B3C5-D7E9F1A3B5C7.ics
+< response /caldav/alex/calendars/erinnerungen--titanos/1D3F5A7C-9E2B-4D6F-8A1C-3E5B7D9F2A4C.ics 404
+< sync-token-not {saved:token}

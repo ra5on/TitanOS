@@ -122,6 +122,12 @@ type calFilter struct {
 	uids   []textMatch
 	// noUID: prop-filter UID is-not-defined.
 	noUID bool
+	// The components asked for (1.13): a comp-filter VEVENT or VTODO,
+	// or one of them with is-not-defined. A calendar holds only VEVENT, a
+	// reminder list only VTODO (excludes, tasks.go).
+	event, noEvent, todo, noTodo bool
+	// task are the filters below comp-filter VTODO (tasks.go).
+	task todoFilter
 }
 
 const utcFormat = "20060102T150405Z"
@@ -167,16 +173,24 @@ func parseCalFilter(f *node) (calFilter, *filterError) {
 		undefined := c.child(calName("is-not-defined")) != nil
 		switch {
 		case name == "VEVENT" && undefined:
-			out.none = true
+			out.noEvent = true
 		case name == "VEVENT":
-			if fe := out.event(c); fe != nil {
+			out.event = true
+			if fe := out.eventFilters(c); fe != nil {
 				return out, fe
 			}
 			if len(out.ranges) > 1 || len(out.uids) > maxFilterTerms {
 				return out, tooComplex(calName)
 			}
-		case name == "VTODO" || name == "VJOURNAL" || name == "VFREEBUSY":
-			// Only VEVENT is stored: nothing has one.
+		case name == "VTODO" && undefined:
+			out.noTodo = true
+		case name == "VTODO":
+			out.todo = true
+			if fe := out.todoFilters(c); fe != nil {
+				return out, fe
+			}
+		case name == "VJOURNAL" || name == "VFREEBUSY":
+			// Neither is stored: nothing has one.
 			if !undefined {
 				out.none = true
 			}
@@ -185,8 +199,8 @@ func parseCalFilter(f *node) (calFilter, *filterError) {
 	return out, nil
 }
 
-// event reads the filters below comp-filter VEVENT.
-func (f *calFilter) event(c *node) *filterError {
+// eventFilters reads the filters below comp-filter VEVENT.
+func (f *calFilter) eventFilters(c *node) *filterError {
 	ranges := c.all(calName("time-range"))
 	if len(ranges) > 1 {
 		// RFC 4791 9.7.1: a comp-filter has at most one time-range.
@@ -255,8 +269,9 @@ func (rq *request) calendarQuery(body *node) {
 		rq.fail(err)
 		return
 	}
+	none := f.excludes(t.kind)
 	var allowed []map[string]bool
-	if !f.none {
+	if !none {
 		for _, r := range f.ranges {
 			names, err := st.Overlapping(t.account, t.collection, r[0], r[1])
 			if err != nil {
@@ -272,7 +287,7 @@ func (rq *request) calendarQuery(body *node) {
 	}
 	var members []member
 	for _, o := range objs {
-		if f.none || !f.uidOK(o.UID) {
+		if none || !f.uidOK(o.UID) || (f.todo && !f.task.match(o.Entry, st.Zone())) {
 			continue
 		}
 		in := true

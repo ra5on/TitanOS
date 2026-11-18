@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/pim/store"
 )
@@ -102,6 +103,7 @@ func FuzzReportFilters(f *testing.F) {
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:caldav"><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="20261101T000000Z"/></C:comp-filter></C:comp-filter></C:filter>`,
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:caldav"><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="UID"><C:text-match negate-condition="yes" collation="i;octet">x</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>`,
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:caldav"><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:is-not-defined/></C:comp-filter></C:comp-filter></C:filter>`,
+		`<C:filter xmlns:C="urn:ietf:params:xml:ns:caldav"><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:time-range start="20261101T000000Z"/><C:prop-filter name="COMPLETED"><C:time-range end="20261201T000000Z"/></C:prop-filter><C:prop-filter name="STATUS"><C:text-match>done</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>`,
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:carddav" test="allof"><C:prop-filter name="TEL"><C:text-match match-type="starts-with">+49</C:text-match></C:prop-filter><C:prop-filter name="FN" test="allof"><C:text-match>a</C:text-match><C:text-match>b</C:text-match></C:prop-filter></C:filter>`,
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:carddav"><C:prop-filter name="EMAIL"><C:is-not-defined/></C:prop-filter></C:filter>`,
 		`<C:filter xmlns:C="urn:ietf:params:xml:ns:carddav"/>`, "<", "",
@@ -112,6 +114,9 @@ func FuzzReportFilters(f *testing.F) {
 		{FN: "Jürgen Groß", Emails: []string{"j@example.org"}, Phones: []string{"+49301234567"}, UID: "u"},
 		{FN: "Familie", Group: true},
 		{},
+		{UID: "t", Task: &store.TaskInfo{Due: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC), DueAllDay: true, Status: "COMPLETED",
+			Completed: time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)}},
+		{UID: "s", Task: &store.TaskInfo{Start: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC), Recurs: true}},
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		root, err := parseXML(data)
@@ -126,6 +131,12 @@ func FuzzReportFilters(f *testing.F) {
 			}
 			for _, e := range entries {
 				cf.uidOK(e.UID)
+				cf.task.match(e, time.UTC)
+			}
+			for _, r := range cf.task.ranges {
+				if r[0].IsZero() && r[1].IsZero() {
+					t.Fatalf("bad reminder range %v passed", r)
+				}
 			}
 		} else if fe.status == 0 {
 			t.Fatal("refusal without status")

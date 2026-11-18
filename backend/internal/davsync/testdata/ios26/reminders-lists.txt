@@ -1,0 +1,101 @@
+# Reminder lists (1.13): iOS makes a list with MKCALENDAR and the
+# component set VTODO (name, color, order), renames it and changes its
+# color with PROPPATCH, deletes it with DELETE. The first own list makes
+# the virtual "Erinnerungen" real as well (as "privat" with the first
+# calendar), so a device that saw it keeps it.
+> MKCALENDAR /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <B:mkcalendar xmlns:B="urn:ietf:params:xml:ns:caldav">
+>   <A:set xmlns:A="DAV:">
+>     <A:prop>
+>       <A:displayname>Einkauf</A:displayname>
+>       <D:calendar-color xmlns:D="http://apple.com/ns/ical/" symbolic-color="green">#34C759FF</D:calendar-color>
+>       <D:calendar-order xmlns:D="http://apple.com/ns/ical/">2</D:calendar-order>
+>       <B:supported-calendar-component-set><B:comp name="VTODO"/></B:supported-calendar-component-set>
+>       <B:calendar-timezone>BEGIN:VCALENDAR
+> BEGIN:VTIMEZONE
+> TZID:Europe/Berlin
+> END:VTIMEZONE
+> END:VCALENDAR</B:calendar-timezone>
+>     </A:prop>
+>   </A:set>
+> </B:mkcalendar>
+< status 201
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:B="urn:ietf:params:xml:ns:caldav" xmlns:C="http://calendarserver.org/ns/" xmlns:D="http://apple.com/ns/ical/"><A:prop><C:getctag/><A:displayname/><D:calendar-color/><D:calendar-order/><B:supported-calendar-component-set/></A:prop></A:propfind>
+< status 207
+< responses 4
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ d:displayname Einkauf
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ ical:calendar-color #34C759FF
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ ical:calendar-order 2
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ cal:supported-calendar-component-set <cal:comp name="VTODO"/>
+< value /caldav/alex/calendars/erinnerungen--titanos/ d:displayname Erinnerungen
+< value-lacks /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
+
+# Renamed and recolored on the iPhone.
+> PROPPATCH /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propertyupdate xmlns:A="DAV:" xmlns:D="http://apple.com/ns/ical/"><A:set><A:prop><A:displayname>Wocheneinkauf</A:displayname><D:calendar-color>#FF9500FF</D:calendar-color></A:prop></A:set></A:propertyupdate>
+< status 207
+< prop /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ 200 d:displayname ical:calendar-color
+
+> PROPFIND /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+> Depth: 0
+< status 207
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ d:displayname Wocheneinkauf
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ ical:calendar-color #FF9500FF
+< value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ d:resourcetype <d:collection/><cal:calendar/>
+< body-has -1</cs:getctag>
+
+> MKCALENDAR /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+< status 405
+
+# An entry in it, then the list goes with DELETE (with its reminders).
+> PUT /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+> Content-Type: text/calendar; charset=utf-8
+> If-None-Match: *
+> Body: todo.ics
+< status 201
+
+> DELETE /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+< status 204
+
+> PROPFIND /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
+> Auth: alex
+> Depth: 0
+< status 404
+
+> GET /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/4E2A9C11-7B3D-4F60-A1E2-3C4D5E6F7081.ics
+> Auth: alex
+< status 404
+
+# The last list stays (as the last calendar), and deleting a list never
+# touches the calendars.
+> DELETE /caldav/alex/calendars/erinnerungen--titanos/
+> Auth: alex
+< status 403
+
+> PROPFIND /caldav/alex/calendars/
+> Auth: alex
+> Depth: 1
+>
+> <?xml version="1.0" encoding="UTF-8"?>
+> <A:propfind xmlns:A="DAV:" xmlns:C="http://calendarserver.org/ns/"><A:prop><C:getctag/></A:prop></A:propfind>
+< status 207
+< responses 3
+< value /caldav/alex/calendars/privat/ cs:getctag 0-0
+< response-lacks /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/
