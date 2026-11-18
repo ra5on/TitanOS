@@ -718,11 +718,12 @@ export async function installCalendar(target, state = calendarState()) {
           : addDays(dayOf(e.end || e.start), 1);
         return start < to && end > from;
       };
+      // 1.13: calendars= names the calendars (hidden ones too), else all shown.
+      const named = q("calendars") ? q("calendars").split(",") : null;
+      const wanted = (id) => (named ? named.includes(id) : !s.hidden.includes(id));
       const list = s.events
-        .filter((e) => !s.hidden.includes(e.calendar) && inWindow(e))
-        .concat(
-          s.hidden.includes("geburtstage") ? [] : s.birthdays.filter(inWindow),
-        )
+        .filter((e) => wanted(e.calendar) && inWindow(e))
+        .concat(wanted("geburtstage") ? s.birthdays.filter(inWindow) : [])
         .sort((a, b) => new Date(a.start) - new Date(b.start));
       // 1.13: full=1 has whole titles (titand reads up to 200 clipped ones).
       const shown =

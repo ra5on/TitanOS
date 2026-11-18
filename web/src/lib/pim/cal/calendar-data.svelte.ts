@@ -135,7 +135,10 @@ export class CalendarData {
 			const got = await loadEvents(this.#from, this.#to, shown);
 			// A newer window (or a whole reading) came meanwhile: that one counts.
 			if (window !== this.#from + '/' + this.#to || asked !== this.#asked) return;
-			this.events = [...this.events.filter((e) => !shown.includes(e.calendar)), ...got.events];
+			this.events = [
+				...this.events.filter((e) => !shown.includes(e.calendar)),
+				...got.events.filter((e) => shown.includes(e.calendar)),
+			];
 			this.truncated = this.truncated || got.truncated;
 			if (shown.includes(BIRTHDAYS)) this.birthdaysUnavailable = false;
 			this.loaded++;
