@@ -7,6 +7,8 @@
 	// "Kontakt löschen …" (its own dialog; Enter never deletes). The page
 	// saves (the head's "Speichern" or Enter in a field) and sends only what
 	// changed.
+	// 1.13 (owner 18 Nov 2026): a new picture is cut square first
+	// (PhotoCrop); the groups of the contact as boxes to tick.
 	import { tick } from 'svelte';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -21,10 +23,12 @@
 		pictureName,
 		type Contact,
 		type Form,
+		type Group,
 		type PhotoChoice,
 	} from '../contacts.ts';
 	import { typeLabel } from '../contacts-text.ts';
 	import Avatar from './Avatar.svelte';
+	import PhotoCrop from './PhotoCrop.svelte';
 
 	type Props = {
 		form: Form;
@@ -33,6 +37,9 @@
 		contact: Contact | null;
 		phone: boolean;
 		busy: boolean;
+		/** The groups of the address book; `member` the ids of those the contact is in. */
+		groups?: Group[];
+		member?: string[];
 		onsubmit: () => void;
 		ondelete: () => void;
 	};
@@ -42,9 +49,21 @@
 		contact,
 		phone,
 		busy,
+		groups = [],
+		member = $bindable([]),
 		onsubmit,
 		ondelete,
 	}: Props = $props();
+
+	/** The picture being cut: its address and what to send when it cannot be cut. */
+	let cropping = $state<{ src: string; raw: PhotoChoice; own: boolean } | null>(null);
+	function endCrop() {
+		if (cropping?.own) URL.revokeObjectURL(cropping.src);
+		cropping = null;
+	}
+	function toggleGroup(id: string, on: boolean) {
+		member = on ? [...member.filter((g) => g !== id), id] : member.filter((g) => g !== id);
+	}
 
 	const uid = $props.id();
 	let fileInput: HTMLInputElement | undefined = $state();
@@ -70,16 +89,32 @@
 		const file = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
 		if (!file) return;
+		const src = URL.createObjectURL(file);
+		cropping = { src, own: true, raw: { kind: 'file', file, preview: src } };
+	}
+	function cropped(file: File, preview: string) {
 		dropPreview();
-		photo = { kind: 'file', file, preview: URL.createObjectURL(file) };
+		photo = { kind: 'file', file, preview };
+		endCrop();
+	}
+	function takeRaw() {
+		if (!cropping) return;
+		dropPreview();
+		photo = cropping.raw;
+		// The object URL is the preview now: not revoked with the crop.
+		cropping = null;
 	}
 	function chooseNas(refs: string[]) {
 		picking = false;
 		const ref = refs[0];
 		if (!ref) return;
 		const { root, path } = nasFileOf(ref);
-		dropPreview();
-		photo = { kind: 'nas', root, path, preview: thumbnailURL(root, path, 176) };
+		// Cut from the NAS's large preview (1280 px); as it is when it cannot be read.
+		cropping = {
+			src: thumbnailURL(root, path, 1280),
+			own: false,
+			raw: { kind: 'nas', root, path, preview: thumbnailURL(root, path, 176) },
+		};
 	}
 	function removePicture() {
 		dropPreview();
@@ -349,6 +384,24 @@
 		<small class="muted">{t('contacts.form.birthdayHint')}</small>
 	</fieldset>
 
+	{#if groups.length}
+		<fieldset data-editor-groups>
+			<legend>{t('contacts.groups.title')}</legend>
+			<span class="multi">
+				{#each groups as g (g.id)}
+					<label class="chk"
+						><input
+							type="checkbox"
+							checked={member.includes(g.id)}
+							onchange={(e) => toggleGroup(g.id, e.currentTarget.checked)}
+						/>
+						{g.name || t('contacts.groups.unnamed')}</label
+					>
+				{/each}
+			</span>
+		</fieldset>
+	{/if}
+
 	<fieldset>
 		<legend>{t('contacts.field.notes')}</legend>
 		<textarea
@@ -368,6 +421,10 @@
 	<!-- Enter in a field saves (the head's button is outside the form). -->
 	<button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">{t('common.save')}</button>
 </form>
+
+{#if cropping}
+	<PhotoCrop src={cropping.src} onpick={cropped} onraw={takeRaw} onclose={endCrop} />
+{/if}
 
 {#if picking}
 	<NasPicker
@@ -505,6 +562,7 @@
 		align-items: center;
 		gap: var(--space-1-5);
 		min-height: 44px;
+		overflow-wrap: anywhere;
 	}
 	.note {
 		width: 100%;

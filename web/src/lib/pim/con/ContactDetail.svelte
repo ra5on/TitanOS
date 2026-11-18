@@ -6,11 +6,25 @@
 	// kind in words, numbers as tel: links, everything as text. Links only
 	// http(s)/mailto/tel, with rel="noopener noreferrer" and their target
 	// as the visible text.
+	// 1.13 (owner 18 Nov 2026): the groups of the contact; each e-mail
+	// address opens Mail's compose in a window (only with Mail's release,
+	// else a mailto: link); compact (the phone) the big round actions of
+	// iOS's contacts – Anrufen, Nachricht (sms:), E-Mail, Karte – edge to
+	// edge, editing from the bar at the bottom.
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { linkPieces, safeHref } from '../calendar.ts';
 	import { dateText } from '../calendar-text.ts';
-	import { addressLines, telHref, webHref, type Contact, type Soon } from '../contacts.ts';
+	import {
+		addressLines,
+		mapHref,
+		smsHref,
+		telHref,
+		webHref,
+		type Contact,
+		type Group,
+		type Soon,
+	} from '../contacts.ts';
 	import { birthdayLine, typeLabel } from '../contacts-text.ts';
 	import Avatar from './Avatar.svelte';
 
@@ -23,13 +37,35 @@
 		mail: boolean;
 		/** The name of the address book ("Kontakte"). */
 		book: string;
+		/** The groups the contact is in. */
+		groups?: Group[];
 		onedit: () => void;
 		onmail: (addr: string) => void;
 		onevent: () => void;
 	};
-	let { contact, soon, today, phone, mail, book, onedit, onmail, onevent }: Props = $props();
+	let {
+		contact,
+		soon,
+		today,
+		phone,
+		mail,
+		book,
+		groups = [],
+		onedit,
+		onmail,
+		onevent,
+	}: Props = $props();
 
 	const call = $derived(contact.phones.map((p) => telHref(p.value)).find(Boolean) ?? '');
+	// A message goes to a mobile number first.
+	const sms = $derived(
+		[...contact.phones.filter((p) => p.type === 'mobile'), ...contact.phones]
+			.map((p) => smsHref(p.value))
+			.find(Boolean) ?? '',
+	);
+	const apple =
+		typeof navigator !== 'undefined' && /iPhone|iPad|Macintosh/.test(navigator.userAgent);
+	const map = $derived(contact.addresses.map((a) => mapHref(a, apple)).find(Boolean) ?? '');
 	const firstMail = $derived(contact.emails.find((e) => e.value.trim())?.value.trim() ?? '');
 	const birthday = $derived(birthdayLine(contact.birthday, soon, today));
 	const web = $derived(webHref(contact.url));
@@ -99,16 +135,40 @@
 				><Icon name="edit" size={15} />{t('contacts.edit')}</button
 			>{/if}
 	</header>
-	<div class="acts">
+	{#if groups.length}
+		<p class="chips" data-contact-groups>
+			<span class="sr-only">{t('contacts.groups.title')}:</span>
+			{#each groups as g (g.id)}<span class="chip"
+					><Icon name="users" size={13} />{g.name || t('contacts.groups.unnamed')}</span
+				>{/each}
+		</p>
+	{/if}
+	<div class="acts" data-contact-actions>
 		{#if call}<a class="btn act" href={call}
-				><Icon name="phone" size={18} />{t('contacts.act.call')}</a
+				><span class="ico"><Icon name="phone" size={18} /></span>{t('contacts.act.call')}</a
 			>{/if}
-		{#if mail && firstMail}<button type="button" class="btn act" onclick={() => onmail(firstMail)}
-				><Icon name="mail" size={18} />{t('contacts.act.mail')}</button
+		{#if phone && sms}<a class="btn act" href={sms}
+				><span class="ico"><Icon name="chat" size={18} /></span>{t('contacts.act.sms')}</a
 			>{/if}
-		<button type="button" class="btn act" onclick={onevent}
-			><Icon name="calendar" size={18} />{t('contacts.act.event')}</button
-		>
+		{#if firstMail}
+			{#if mail}<button type="button" class="btn act" onclick={() => onmail(firstMail)}
+					><span class="ico"><Icon name="mail" size={18} /></span>{phone
+						? t('contacts.act.mailShort')
+						: t('contacts.act.mail')}</button
+				>{:else}<a class="btn act" href="mailto:{firstMail}"
+					><span class="ico"><Icon name="mail" size={18} /></span>{phone
+						? t('contacts.act.mailShort')
+						: t('contacts.act.mail')}</a
+				>{/if}
+		{/if}
+		{#if phone && map}<a class="btn act" href={map} target="_blank" rel="noopener noreferrer"
+				><span class="ico"><Icon name="place" size={18} /></span>{t('contacts.act.map')}</a
+			>{/if}
+		{#if !phone}<button type="button" class="btn act" onclick={onevent}
+				><span class="ico"><Icon name="calendar" size={18} /></span>{t(
+					'contacts.act.event',
+				)}</button
+			>{/if}
 	</div>
 	<div class="fields">
 		{#each contact.phones as p, i (i)}
@@ -125,9 +185,13 @@
 		{#each contact.emails as e, i (i)}
 			<div class="frow">
 				<Icon name="mail" size={18} /><span class="fx"
-					><small>{t('contacts.field.email')} · {typeLabel(e.type, e.label)}</small><span
-						class="val">{e.value}</span
-					></span
+					><small>{t('contacts.field.email')} · {typeLabel(e.type, e.label)}</small
+					>{#if mail}<button
+							type="button"
+							class="val link"
+							title={t('contacts.act.mailTo', { addr: e.value })}
+							onclick={() => onmail(e.value.trim())}>{e.value}</button
+						>{:else}<a class="val" href="mailto:{e.value.trim()}">{e.value}</a>{/if}</span
 				>{@render copyButton(`e${i}`, e.value, e.value)}
 			</div>
 		{/each}
@@ -138,7 +202,12 @@
 					><small>{t('contacts.field.address')} · {typeLabel(a.type, a.label)}</small><span
 						class="lines"
 						>{#each lines as line, j (j)}<span>{line}</span>{/each}</span
-					></span
+					>{#if !phone && mapHref(a, apple)}<a
+							class="maplink"
+							href={mapHref(a, apple)}
+							target="_blank"
+							rel="noopener noreferrer">{t('contacts.act.mapShow')}</a
+						>{/if}</span
 				>{@render copyButton(`a${i}`, lines.join('\n'), t('contacts.field.address'))}
 			</div>
 		{/each}
@@ -232,19 +301,69 @@
 		min-height: 40px;
 		text-decoration: none;
 	}
+	/* The phone: iOS's round actions, side by side, the name below. */
 	.phone .acts {
 		display: grid;
 		grid-auto-flow: column;
 		grid-auto-columns: minmax(0, 1fr);
+		gap: var(--space-2);
 	}
 	.phone .act {
 		flex-direction: column;
 		justify-content: center;
-		min-height: 64px;
+		gap: var(--space-1);
+		min-height: 72px;
 		padding: var(--space-2) var(--space-1);
+		border-radius: var(--radius-tile);
 		text-align: center;
+		font-size: var(--text-sm);
 		overflow-wrap: break-word;
 		hyphens: auto;
+	}
+	.phone .act .ico {
+		display: inline-grid;
+		place-items: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+	.ico {
+		display: inline-flex;
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1-5);
+		margin: 0;
+	}
+	.phone .chips {
+		justify-content: center;
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 2px var(--space-2);
+		border-radius: 999px;
+		background: var(--chip);
+		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
+	}
+	.link {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		text-align: left;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.maplink {
+		align-self: flex-start;
+		font-size: var(--text-sm);
 	}
 	.fields {
 		display: flex;
@@ -283,7 +402,8 @@
 	}
 	/* A number to tap: 44 px high on the phone, the row stays compact. */
 	.phone .fx a.tel,
-	.phone .fx a.val {
+	.phone .fx a.val,
+	.phone .fx .link {
 		display: inline-flex;
 		align-items: center;
 		align-self: flex-start;
