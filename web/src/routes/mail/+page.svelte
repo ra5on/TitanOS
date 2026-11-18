@@ -276,10 +276,12 @@
 {/snippet}
 
 {#snippet compose_(folded: boolean)}
-	{#if mail.accounts?.length}
+	<!-- Already there while the mailboxes load (disabled): nothing moves when they arrive. -->
+	{#if mail.accounts === null || mail.accounts.length}
 		<button
 			type="button"
 			class="btn btn-primary compose"
+			disabled={mail.accounts === null}
 			class:icon={folded}
 			title={folded ? t('mail.action.compose') : undefined}
 			aria-label={folded ? t('mail.action.compose') : undefined}
@@ -291,7 +293,7 @@
 
 {#snippet folders()}
 	{#if mail.accounts === null}
-		<p class="muted loading" role="status">{t('common.loading')}</p>
+		<p class="muted side-loading" role="status">{t('common.loading')}</p>
 	{:else}
 		<FolderColumn
 			account={place.a}
@@ -435,7 +437,7 @@
 		min-height: 44px;
 		padding: 0;
 	}
-	.loading {
+	.side-loading {
 		margin: var(--space-2) var(--space-2-5);
 	}
 	.side-link {
