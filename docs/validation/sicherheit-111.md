@@ -4,7 +4,7 @@ Auftrag: Sicherheitsdurchsicht nach Bauschritt 17 über die Fragen aus `Entwuerf
 
 Nummern `S-<lfd>`. Schwere wie in `durchsicht-102-*.md`: **hoch** (Sicherheit/Datenverlust, ohne besondere Lage ausnutzbar), **mittel** (Sicherheitsregel verletzt, braucht eine besondere Lage), **niedrig** (seltener Fehler, kleine Wirkung, oder nur mit eigener Anmeldung), **Hinweis**. Status: behoben (Commit, Test) · bewusst gelassen (Grund) · Entscheidung des Inhabers.
 
-Vorgehen: Code selbst gelesen (Kommentare nicht als Beweis genommen), Verdachtsfälle mit Tests belegt; jeder Regressionstest schlägt mit dem alten Code fehl (S-3/S-4 geprüft durch Zurücknehmen der Korrektur; S-1/S-2 laut Testinhalt, die Tests nutzen neue Hilfsfunktionen).
+Vorgehen: Code selbst gelesen (Kommentare nicht als Beweis genommen), Verdachtsfälle mit Tests belegt; jeder Regressionstest schlägt mit dem alten Code fehl (S-2 und S-3/S-4 geprüft durch Zurücknehmen der Korrektur: mit dem alten `check.go` bekommt das Gerät in `TestStrangerDoesNotLockOutTheDevices` `429`; S-1 laut Testinhalt, der Test nutzt die neue Konstante `limiterMaxKey`).
 
 ## Funde
 
@@ -79,7 +79,7 @@ folgt
 
 ## Prüfungen
 
-- `go test -p 2` (ohne `-race`, die CI prüft das): `./internal/auth`, `./internal/pim/devices`, `./internal/davsync` vollständig grün; `./internal/api -run 'Device|DAV|Limiter|Login'` grün.
+- `go test -p 2` (ohne `-race`, die CI prüft das): `./internal/auth`, `./internal/pim/devices`, `./internal/davsync` vollständig grün; `./internal/api -run 'Device|DAV|Limiter|Login'` und `-run 'Device|DAV|RouteLists|PIM|User|Cluster|Session|Passkey|WebDAV|Account|Calendar|Contacts'` grün (die Bremse gilt auch für Anmeldung, Entsperren, Passkeys und WebDAV). `gofmt -l` und `go vet` für `auth`, `pim/devices`, `davsync` ohne Meldung.
 - Fuzz je kurz lokal: `FuzzRead` 60 s, `FuzzParse` 30 s, `FuzzDoc` 30 s, `FuzzWriteBodies` 30 s, `FuzzReportFilters` 30 s (nach den Korrekturen) – kein Fund.
 - Gemessen: Text aus Kommentarstücken in 256 KiB XML 74 ms (S-8).
 
