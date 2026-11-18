@@ -14,6 +14,7 @@ import (
 // catch-all of the web UI.
 func (s *Server) registerPIM(mux *routeMux) {
 	s.pimArea().register(mux, s.guards())
+	s.pimDataArea().register(mux, s.guards())
 	dav := davsync.New(s.opts.PIM, s.devices)
 	dav.RemoteIP = remoteIP
 	for _, pattern := range davsync.Patterns {

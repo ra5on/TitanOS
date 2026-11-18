@@ -1,5 +1,6 @@
 // 1.11, T-Kalender and Kontakte: the page "Am iPhone einrichten"
-// (/calendar/iphone, TECHNIK 4.2, draft 108 pictures 20/21/60/61) with
+// (/calendar/iphone in T-Kalender and /contacts/iphone in Kontakte, TECHNIK
+// 4.2, draft 108 pictures 20/21/60/61) with
 // isolated data for GET/POST/DELETE /account/devices and GET
 // /account/devices/setup (page.route). Desktop 1440 px (the page alone and
 // in its window on the desktop), the page as a window shows it at 420 and
@@ -125,6 +126,20 @@ async function open({
     await made.ctx.addInitScript(() =>
       localStorage.removeItem("titanos.layout"),
     );
+  // 1.11: the page belongs to T-Kalender, a program shown only when
+  // /services/state says so (scripts/test-ui-pim-visibility.mjs checks the
+  // real answer of titand -dev); the shared fixtures have no such key.
+  await made.ctx.route("**/api/v1/services/state", (route) =>
+    route.fulfill({
+      json: {
+        docker: true,
+        vms: true,
+        lxc: true,
+        calendar: true,
+        contacts: true,
+      },
+    }),
+  );
   const state = deviceState();
   change(state);
   // Registered after the fixtures' catch-all: tried first.
@@ -477,16 +492,19 @@ try {
     await ctx.close();
   }
 
-  // ---- In its window on the real desktop (program "Mein Konto" until step 11) ----
-  {
+  // ---- In its window on the real desktop: T-Kalender, and the same page in Kontakte ----
+  for (const [path, title, name] of [
+    [PATH, "T-Kalender", "desktop-window"],
+    ["/contacts/iphone", "Kontakte", "desktop-window-contacts"],
+  ]) {
     const { page, ctx } = await open({ desk: true });
-    await page.goto(base + PATH);
+    await page.goto(base + path);
     await page.locator("section.win").first().waitFor();
     let frame = null;
     await until(() => {
       frame = page.frames().find((f) => {
         try {
-          return f !== page.mainFrame() && new URL(f.url()).pathname === PATH;
+          return f !== page.mainFrame() && new URL(f.url()).pathname === path;
         } catch {
           return false;
         }
@@ -494,9 +512,17 @@ try {
       return !!frame;
     }, "window of the page");
     await ready(frame);
-    await sound(frame, "desktop window");
+    // The title bar names the program the page belongs to.
+    await until(
+      async () =>
+        (await page.locator("section.win").first().textContent()).includes(
+          title,
+        ),
+      `window of ${title}`,
+    );
+    await sound(frame, `desktop window ${title}`);
     await sound(page, "desktop");
-    await shot(page, "desktop-window", false);
+    await shot(page, name, false);
     await ctx.close();
   }
 

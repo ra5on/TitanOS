@@ -9310,5 +9310,19 @@
 	"iphone.step4.title": "Add the contacts",
 	"iphone.step4.text": "Settings › Apps › Contacts › Contacts Accounts › Add Account › Other › Add CardDAV Account – with the same details.",
 	"iphone.step5.title": "Choose the default",
-	"iphone.step5.text": "So that new events and contacts from the iPhone land on the NAS: Settings › Apps › Calendar › Default Calendar “Privat” under “TitanOS”, and Settings › Apps › Contacts › Default Account “TitanOS”."
+	"iphone.step5.text": "So that new events and contacts from the iPhone land on the NAS: Settings › Apps › Calendar › Default Calendar “Privat” under “TitanOS”, and Settings › Apps › Contacts › Default Account “TitanOS”.",
+	"calendar.side.calendar": "Calendar",
+	"calendar.side.list": "List",
+	"calendar.side.iphone": "Set up on iPhone",
+	"contacts.side.contacts": "Contacts",
+	"contacts.side.suggestions": "Suggestions from T-Mail",
+	"calendar.unavailable.title": "T-Calendar is not available right now",
+	"calendar.unavailable.text": "The data volume is not mounted. The events live on the volume of the system data; once it is mounted, they appear here. On the iPhone everything stays as it is until then.",
+	"contacts.unavailable.title": "Contacts are not available right now",
+	"contacts.unavailable.text": "The data volume is not mounted. The contacts live on the volume of the system data; once it is mounted, they appear here. On the iPhone everything stays as it is until then.",
+	"calendar.shell.text": "This account's events are kept on this NAS. The month, week and list views come with the next stage; until then, events can be added on the iPhone or Mac.",
+	"contacts.shell.text": "The list of contacts comes with the next stage; until then, contacts can be kept on the iPhone or Mac.",
+	"contacts.shell.count": "Contacts: {count}",
+	"error.calendar_unavailable": "T-Calendar is not available right now: the data volume is not mounted.",
+	"error.contacts_unavailable": "Contacts are not available right now: the data volume is not mounted."
 }

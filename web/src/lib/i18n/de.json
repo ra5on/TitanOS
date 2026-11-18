@@ -9310,5 +9310,19 @@
 	"iphone.step4.title": "Kontakte hinzufügen",
 	"iphone.step4.text": "Einstellungen › Apps › Kontakte › Kontakte-Accounts › Account hinzufügen › Andere › CardDAV-Account hinzufügen – mit denselben Angaben.",
 	"iphone.step5.title": "Standard wählen",
-	"iphone.step5.text": "Damit neue Termine und Kontakte vom iPhone auf dem NAS landen: Einstellungen › Apps › Kalender › Standardkalender „Privat“ unter „TitanOS“ und Einstellungen › Apps › Kontakte › Standardaccount „TitanOS“."
+	"iphone.step5.text": "Damit neue Termine und Kontakte vom iPhone auf dem NAS landen: Einstellungen › Apps › Kalender › Standardkalender „Privat“ unter „TitanOS“ und Einstellungen › Apps › Kontakte › Standardaccount „TitanOS“.",
+	"calendar.side.calendar": "Kalender",
+	"calendar.side.list": "Liste",
+	"calendar.side.iphone": "Am iPhone einrichten",
+	"contacts.side.contacts": "Kontakte",
+	"contacts.side.suggestions": "Vorschläge aus T-Mail",
+	"calendar.unavailable.title": "T-Kalender ist gerade nicht verfügbar",
+	"calendar.unavailable.text": "Das Daten-Volume ist nicht eingebunden. Die Termine liegen auf dem Volume der Systemdaten; sobald es eingebunden ist, erscheinen sie hier. Auf dem iPhone bleibt bis dahin alles, wie es ist.",
+	"contacts.unavailable.title": "Kontakte sind gerade nicht verfügbar",
+	"contacts.unavailable.text": "Das Daten-Volume ist nicht eingebunden. Die Kontakte liegen auf dem Volume der Systemdaten; sobald es eingebunden ist, erscheinen sie hier. Auf dem iPhone bleibt bis dahin alles, wie es ist.",
+	"calendar.shell.text": "Die Termine dieses Kontos liegen auf diesem NAS. Die Monats-, Wochen- und Listenansicht kommt mit dem nächsten Ausbau; bis dahin lassen sich Termine am iPhone oder Mac eintragen.",
+	"contacts.shell.text": "Die Liste der Kontakte kommt mit dem nächsten Ausbau; bis dahin lassen sich Kontakte am iPhone oder Mac pflegen.",
+	"contacts.shell.count": "Kontakte: {count}",
+	"error.calendar_unavailable": "T-Kalender ist gerade nicht verfügbar: Das Daten-Volume ist nicht eingebunden.",
+	"error.contacts_unavailable": "Kontakte sind gerade nicht verfügbar: Das Daten-Volume ist nicht eingebunden."
 }

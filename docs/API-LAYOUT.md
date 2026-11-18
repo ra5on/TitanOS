@@ -61,6 +61,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | openapi | `openapi.go` | – | 0 |
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
 | passkeys | `passkeys.go` | – | 1 |
+| pim | `pim_data.go` | `pimDataArea` | 1 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go` | `powerButtonArea` | 0 |
 | preferences | `preferences.go` | `prefsArea` | 0 |
@@ -84,7 +85,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | system | `system.go` | `powerArea`, `systemArea` | 0 |
 | tailscale | `tailscale.go` | `tailscaleArea` | 0 |
 | terminal | `terminal_console.go` | – | 1 |
-| tmail | `tmail.go`, `tmail_messages.go` | `tmailArea` | 1 |
+| tmail | `tmail.go`, `tmail_messages.go` | `tmailArea` | 2 |
 | tokens | `tokens.go` | `tokensArea` | 2 |
 | tool | `tool_env.go` | – | 0 |
 | ui | `ui.go` | – | 0 |

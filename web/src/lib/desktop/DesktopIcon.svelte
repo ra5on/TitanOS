@@ -33,6 +33,11 @@
 			'<path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="var(--c)" stroke-opacity=".45" stroke-width="2.2" stroke-linecap="round"/><circle cx="15" cy="6.5" r="2.6" fill="var(--c)"/><circle cx="8.5" cy="12" r="2.6" fill="var(--c)"/><circle cx="13" cy="17.5" r="2.6" fill="var(--c)"/>',
 		// PLAN 79-7: a camera on its mount with a recording dot.
 		nvr: '<rect x="3" y="5" width="13.5" height="9.5" rx="2.2" fill="#fff"/><path d="m16.5 8.2 4.3-2.4v8.4l-4.3-2.4Z" fill="#fff" fill-opacity=".7"/><circle cx="7" cy="8.6" r="1.5" fill="var(--c)"/><path d="M9.7 14.5v3.2M6 19.5h7.4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+		// 1.11: T-Kalender, a calendar sheet; Kontakte, a card with a person.
+		calendar:
+			'<rect x="3" y="4.5" width="18" height="16.5" rx="3" fill="#fff"/><path d="M3 9.5h18V7.5a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3Z" fill="var(--c)" fill-opacity=".55"/><path d="M8 2.8v3.6M16 2.8v3.6" stroke="#fff" stroke-width="2" stroke-linecap="round"/><rect x="6.5" y="12" width="3" height="2.6" rx=".6" fill="var(--c)"/><rect x="10.5" y="12" width="3" height="2.6" rx=".6" fill="var(--c)" fill-opacity=".45"/><rect x="14.5" y="12" width="3" height="2.6" rx=".6" fill="var(--c)" fill-opacity=".45"/><rect x="6.5" y="16" width="3" height="2.6" rx=".6" fill="var(--c)" fill-opacity=".45"/><rect x="10.5" y="16" width="3" height="2.6" rx=".6" fill="var(--c)" fill-opacity=".45"/>',
+		contacts:
+			'<rect x="4" y="2.5" width="16" height="19" rx="3" fill="#fff"/><circle cx="12" cy="10" r="3.2" fill="var(--c)"/><path d="M6.8 18.2a5.2 5.2 0 0 1 10.4 0Z" fill="var(--c)"/><path d="M2.5 7h2.2M2.5 12h2.2M2.5 17h2.2" stroke="#fff" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>',
 		// 1.05: T-Mail, a closed letter.
 		mail: '<rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="#fff"/><path d="m4 7.2 8 6 8-6" stroke="var(--c)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
 		users:
