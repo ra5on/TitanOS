@@ -143,6 +143,12 @@ func TestEditValues(t *testing.T) {
 	if len(c.Addresses) != 2 || c.Addresses[1].City != "Köln; Porz" || c.Addresses[0].Type != "work" || c.Phones[0].Type != "work" {
 		t.Fatalf("read back: %+v", c)
 	}
+	// Left out: unchanged; null: cleared.
+	kept, _, _ := Edit(iosCard, input(t, `{"notes":"x"}`), now)
+	cleared, _, _ := Edit(iosCard, input(t, `{"phones":null}`), now)
+	if k, c := mustOpen(t, kept), mustOpen(t, cleared); len(k.Phones) != 2 || len(c.Phones) != 0 || len(c.Emails) != 2 {
+		t.Fatalf("left out %+v, null %+v", k.Phones, c.Phones)
+	}
 	if _, _, err := Edit(iosCard, input(t, `{"emails":[{"type":"mobile","value":"x@y"}]}`), now); err == nil {
 		t.Fatal("an e-mail address of type mobile")
 	}
@@ -353,4 +359,13 @@ func TestSplitVCF(t *testing.T) {
 	if w := WithUID(b, "new"); !strings.Contains(string(w), "UID:new\r\n") {
 		t.Fatalf("%s", w)
 	}
+}
+
+func mustOpen(t *testing.T, data []byte) Contact {
+	t.Helper()
+	c, err := Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
 }

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
@@ -457,8 +459,9 @@ func TestContactPhoto(t *testing.T) {
 	}
 	// A decompression bomb: a PNG header of 30000×30000 pixels.
 	bomb := contactPNG(t, 16, 16)
-	bomb[16], bomb[17], bomb[18], bomb[19] = 0, 0, 0x75, 0x30 // width 30000
-	bomb[20], bomb[21], bomb[22], bomb[23] = 0, 0, 0x75, 0x30 // height 30000
+	bomb[16], bomb[17], bomb[18], bomb[19] = 0, 0, 0x75, 0x30                // width 30000
+	bomb[20], bomb[21], bomb[22], bomb[23] = 0, 0, 0x75, 0x30                // height 30000
+	binary.BigEndian.PutUint32(bomb[29:33], crc32.ChecksumIEEE(bomb[12:29])) // a valid header: refused by the pixel bound
 	if res, body := e.putPhoto(e.alex, "/api/v1/contacts/kontakte/ben.vcf/photo", bomb); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "contacts_photo_invalid" {
 		t.Fatalf("bomb: %d %s", res.StatusCode, body)
 	}

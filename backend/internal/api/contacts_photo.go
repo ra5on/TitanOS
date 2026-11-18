@@ -91,7 +91,7 @@ func (a pimDataArea) handleContactPhoto(w http.ResponseWriter, r *http.Request) 
 // "file") or JSON {root, path} of a file of the NAS, read with the rights
 // of the account (the roots it may open; missing and foreign are the same
 // 404). It answers errors itself.
-func (a pimDataArea) readContactPhoto(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+func (a pimDataArea) readContactPhoto(w http.ResponseWriter, r *http.Request) ([]byte, func(), bool) {
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	tooLarge := func() {
 		writeError(w, http.StatusRequestEntityTooLarge, "contacts_too_large", "the picture is larger than 20 MB")
@@ -103,11 +103,11 @@ func (a pimDataArea) readContactPhoto(w http.ResponseWriter, r *http.Request) ([
 			Path string `json:"path"`
 		}
 		if !readJSON(w, r, &q) {
-			return nil, false
+			return nil, nil, false
 		}
 		if q.Root == "" || q.Path == "" || a.files == nil || a.roots == nil {
 			writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "root and path name the picture")
-			return nil, false
+			return nil, nil, false
 		}
 		var root files.Root
 		found := false
@@ -118,49 +118,56 @@ func (a pimDataArea) readContactPhoto(w http.ResponseWriter, r *http.Request) ([
 		}
 		if !found {
 			writeError(w, http.StatusNotFound, "file_not_found", "no such share")
-			return nil, false
+			return nil, nil, false
 		}
 		f, info, err := a.files.Open(root, q.Path)
 		if err != nil {
 			writeFileError(w, err)
-			return nil, false
+			return nil, nil, false
 		}
 		defer f.Close()
 		if !info.Mode().IsRegular() {
 			writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "only a file can be a picture")
-			return nil, false
+			return nil, nil, false
 		}
 		if info.Size() > maxContactPhoto {
 			tooLarge()
-			return nil, false
+			return nil, nil, false
+		}
+		// The request was small; the file is not.
+		release, ok := a.reserveRAM(w, pimstore.Contacts, 2*info.Size())
+		if !ok {
+			return nil, nil, false
 		}
 		data, err := io.ReadAll(io.LimitReader(f, maxContactPhoto+1))
 		if err != nil {
+			release()
 			writeFileError(w, err)
-			return nil, false
+			return nil, nil, false
 		}
 		if len(data) > maxContactPhoto {
+			release()
 			tooLarge()
-			return nil, false
+			return nil, nil, false
 		}
-		return data, true
+		return data, release, true
 	case "multipart/form-data":
 		r.Body = http.MaxBytesReader(w, r.Body, maxContactPhoto+(64<<10))
 		mr, err := r.MultipartReader()
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "a multipart body with the field file is required")
-			return nil, false
+			return nil, nil, false
 		}
 		for {
 			part, err := mr.NextPart()
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
 				tooLarge()
-				return nil, false
+				return nil, nil, false
 			}
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "the field file is missing")
-				return nil, false
+				return nil, nil, false
 			}
 			if part.FormName() != "file" {
 				continue
@@ -168,17 +175,17 @@ func (a pimDataArea) readContactPhoto(w http.ResponseWriter, r *http.Request) ([
 			data, err := io.ReadAll(io.LimitReader(part, maxContactPhoto+1))
 			if errors.As(err, &maxErr) || len(data) > maxContactPhoto {
 				tooLarge()
-				return nil, false
+				return nil, nil, false
 			}
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "the picture could not be read")
-				return nil, false
+				return nil, nil, false
 			}
-			return data, true
+			return data, func() {}, true
 		}
 	}
 	writeError(w, http.StatusBadRequest, "contacts_photo_invalid", "send the picture as multipart (field file) or JSON {root, path}")
-	return nil, false
+	return nil, nil, false
 }
 
 // handlePutContactPhoto puts a picture into the card. ?etag= (optional)
@@ -208,10 +215,11 @@ func (a pimDataArea) handlePutContactPhoto(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer release()
-	pic, ok := a.readContactPhoto(w, r)
+	pic, releasePic, ok := a.readContactPhoto(w, r)
 	if !ok {
 		return
 	}
+	defer releasePic()
 	opt := photo.Contact(photo.DefaultMaxPixels)
 	config, err := photo.Config(pic, opt)
 	if err != nil {

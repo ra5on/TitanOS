@@ -84,8 +84,8 @@ type Contact struct {
 	Modified string `json:"modified,omitempty"`
 }
 
-// Input is a contact from the page. A field left out (or null) stays as it
-// is; an empty string or list clears it.
+// Input is a contact from the page. A field left out stays as it is; null,
+// an empty string or an empty list clears it (calweb.Opt, as for events).
 type Input struct {
 	First     calweb.Opt[string]    `json:"first"`
 	Last      calweb.Opt[string]    `json:"last"`
