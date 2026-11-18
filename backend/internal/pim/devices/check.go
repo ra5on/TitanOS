@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -47,8 +48,32 @@ type Identity struct {
 
 // limiterKeys are the keys of the calendar, apart from those of WebDAV
 // ("dav:"): a wrong WebDAV password in Infuse locks no calendar, and the
-// other way round.
-func limiterKeys(ip, name string) []string { return []string{"cal:" + ip, "cal-user:" + name} }
+// other way round. The address counts by its /64 for IPv6, as at the login
+// (passkeySource): one device has many addresses there, and a guesser
+// could take a fresh one for every try.
+func limiterKeys(ip, name string) []string {
+	return []string{"cal:" + sourceKey(ip), "cal-user:" + name}
+}
+
+// sourceKey is the address of a request as a key of the limiter.
+func sourceKey(ip string) string {
+	addr := net.ParseIP(ip)
+	if addr == nil || addr.To4() != nil {
+		return ip
+	}
+	return addr.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
+// maxLogName bounds a name from the request in the journal (a Basic
+// header may hold most of a megabyte; account names have at most 32).
+const maxLogName = 64
+
+func logName(name string) string {
+	if len(name) <= maxLogName {
+		return name
+	}
+	return name[:maxLogName] + "…"
+}
 
 // Authenticate checks the Basic credentials of a request to /caldav/ or
 // /carddav/ (TECHNIK 3.4). Only a device password of the account is taken
@@ -58,16 +83,30 @@ func limiterKeys(ip, name string) []string { return []string{"cal:" + ip, "cal-u
 // wrong password get the same answer after the same work. A success is
 // not recorded as "last synced": the handler calls Synced after it
 // answered.
+//
+// The limiter stops wrong passwords, never a right one (security review
+// 1.11, S-2): while a key is blocked every request but one with a current
+// device password of the account gets 429, uncounted. Otherwise anyone who
+// knows an account name (the login page shows them in the home network)
+// could lock all devices of the account out with a wrong password every 15
+// minutes – against the rule that strangers never lock the owner out
+// (docs/rules/ACCOUNTS-ACCESS.md, known devices at the login). Guessing
+// gains nothing by it: a device password has 140 bits.
 func (m *Manager) Authenticate(r *http.Request) (Identity, error) {
 	ip := m.remoteIP(r)
 	name, password, ok := r.BasicAuth()
-	if wait := m.limiter().RetryAfter(limiterKeys(ip, name)...); wait > 0 {
-		return Identity{}, &LimitedError{RetryAfter: wait}
-	}
+	wait := m.limiter().RetryAfter(limiterKeys(ip, name)...)
+	limited := func() error { return &LimitedError{RetryAfter: wait} }
 	if !ok || name == "" {
+		if wait > 0 {
+			return Identity{}, limited()
+		}
 		return Identity{}, ErrNoCredentials
 	}
 	if len(password) > MaxPassword {
+		if wait > 0 {
+			return Identity{}, limited()
+		}
 		return Identity{}, m.refuse(ip, name)
 	}
 	user, known := m.users.Get(name)
@@ -113,6 +152,8 @@ func (m *Manager) Authenticate(r *http.Request) (Identity, error) {
 	switch {
 	case known && match >= 0 && !user.Disabled:
 		return Identity{User: user, Device: ids[match], Name: names[match]}, nil
+	case wait > 0:
+		return Identity{}, limited()
 	case known && match < 0 && wasRevoked:
 		m.noteRevoked(user.Name, ip, sum)
 		return Identity{}, ErrRevoked
@@ -124,7 +165,7 @@ func (m *Manager) Authenticate(r *http.Request) (Identity, error) {
 // never the password).
 func (m *Manager) refuse(ip, name string) error {
 	m.limiter().Fail(limiterKeys(ip, name)...)
-	slog.Warn("Calendar sign-in refused", "user", name, "ip", ip)
+	slog.Warn("Calendar sign-in refused", "user", logName(name), "ip", ip)
 	return ErrDenied
 }
 

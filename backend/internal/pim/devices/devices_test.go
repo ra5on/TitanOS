@@ -492,3 +492,84 @@ func TestWriteChallenge(t *testing.T) {
 		}
 	}
 }
+
+// Someone who knows the account name sends wrong passwords until the
+// account's key is blocked: the account's devices keep syncing, the wrong
+// passwords keep getting 429 without being counted (security review 1.11,
+// S-2). Before, every device of the account got 429 until the stranger
+// stopped.
+func TestStrangerDoesNotLockOutTheDevices(t *testing.T) {
+	f := newFixture(t)
+	c := f.create("alex", "iPhone")
+	for i := range 40 {
+		// From many addresses, so that only cal-user:alex blocks.
+		f.ask("alex", "wrong", fmt.Sprintf("10.1.0.%d", i))
+	}
+	if f.limiter.RetryAfter("cal-user:alex") == 0 {
+		t.Fatal("the account key is not blocked")
+	}
+	if id, err := f.ask("alex", c.Password, "10.0.0.2"); err != nil || id.Name != "iPhone" {
+		t.Fatalf("device locked out: %v", err)
+	}
+	// From the blocked address of the stranger as well.
+	if _, err := f.ask("alex", c.Password, "10.1.0.39"); err != nil {
+		t.Fatalf("device behind a blocked address: %v", err)
+	}
+	before := f.limiter.RetryAfter("cal-user:alex")
+	for range 20 {
+		_, err := f.ask("alex", "wrong", "10.2.0.1")
+		var l *LimitedError
+		if !errors.As(err, &l) {
+			t.Fatalf("wrong password while blocked: %v", err)
+		}
+	}
+	if f.limiter.RetryAfter("cal:10.2.0.1") > 0 || f.limiter.RetryAfter("cal-user:alex") > before {
+		t.Fatal("refusals while blocked were counted")
+	}
+	// A locked account stays out while blocked.
+	u := f.user("alex")
+	u.Disabled = true
+	f.users.set(u)
+	if _, err := f.ask("alex", c.Password, "10.0.0.2"); err == nil {
+		t.Fatal("locked account let in")
+	}
+}
+
+// IPv6: the address counts by its /64, so a guesser cannot take a fresh
+// address of the prefix for every try (as at the login).
+func TestIPv6CountsByPrefix(t *testing.T) {
+	f := newFixture(t)
+	limited := false
+	for i := range 12 {
+		r := httptest.NewRequest("PROPFIND", "/caldav/", nil)
+		r.RemoteAddr = fmt.Sprintf("[2001:db8:1:2::%x]:5000", i+1)
+		r.SetBasicAuth(fmt.Sprintf("nobody%d", i), "wrong")
+		_, err := f.m.Authenticate(r)
+		var l *LimitedError
+		if errors.As(err, &l) {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("fresh addresses of one /64 are not counted together")
+	}
+	if got := sourceKey("2001:db8:1:2::99"); got != "2001:db8:1:2::/64" {
+		t.Fatalf("key %q", got)
+	}
+	if got := sourceKey("10.0.0.1"); got != "10.0.0.1" {
+		t.Fatalf("key %q", got)
+	}
+}
+
+// A name of a megabyte reaches neither the limiter nor the journal whole.
+func TestLongNameIsShortened(t *testing.T) {
+	long := strings.Repeat("n", 500<<10)
+	if got := logName(long); len(got) > maxLogName+len("…") {
+		t.Fatalf("journal name of %d bytes", len(got))
+	}
+	f := newFixture(t)
+	if _, err := f.ask(long, "x", "10.0.0.3"); !errors.Is(err, ErrDenied) {
+		t.Fatal(err)
+	}
+}
