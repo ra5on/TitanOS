@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -202,4 +203,61 @@ func writeFile(e *env, feature, rel string, data []byte) error {
 		err = cerr
 	}
 	return err
+}
+
+// Unabhängige Durchsicht 1.13, A-6: a reader of an account that is deleted
+// and made anew under the same name before its first read never gives the
+// new account's bytes (the folder is opened by name; owner.json decides).
+func TestReaderAfterForgetAndNewAccount(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "Alt", "20261110T080000Z"))
+	mustPut(t, s, Contacts, "kontakte", "c.vcf", vcf("c", "Alt"))
+	r, err := s.Reader(Calendar, "alex", "privat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	// For recurring entries and pictures the same path (readObject, readPhoto).
+	acc, err := s.accountFor(Calendar, "alex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ForgetUser("alex"); err != nil {
+		t.Fatal(err)
+	}
+	e.setCreated("alex", t2)
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "Neu", "20261110T080000Z"))
+	obj, err := r.Get("a.ics")
+	if err == nil || strings.Contains(string(obj.Data), "Neu") {
+		t.Fatalf("old reader gave the new account's entry: %v %q", err, obj.Data)
+	}
+	if data, err := s.readObject(acc, "privat", "a.ics"); err == nil || strings.Contains(string(data), "Neu") {
+		t.Fatalf("readObject of the old account: %v %q", err, data)
+	}
+	// The new account reads its own.
+	if obj, err := s.Get(Calendar, "alex", "privat", "a.ics"); err != nil || !strings.Contains(string(obj.Data), "Neu") {
+		t.Fatalf("new account: %v %q", err, obj.Data)
+	}
+}
+
+// The same without a known creation time of accounts: the reader of the
+// forgotten account reads nothing of the folder made anew.
+func TestReaderAfterForgetWithoutCreationTime(t *testing.T) {
+	e := newEnv(t)
+	s := e.store()
+	s.Account = nil
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "Alt", "20261110T080000Z"))
+	r, err := s.Reader(Calendar, "alex", "privat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if err := s.ForgetUser("alex"); err != nil {
+		t.Fatal(err)
+	}
+	mustPut(t, s, Calendar, "privat", "a.ics", ics("a", "Neu", "20261110T080000Z"))
+	if obj, err := r.Get("a.ics"); err == nil || strings.Contains(string(obj.Data), "Neu") {
+		t.Fatalf("old reader gave the new entry: %v %q", err, obj.Data)
+	}
 }

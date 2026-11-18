@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -229,6 +230,10 @@ type account struct {
 	// gate: writes hold it shared, ForgetUser alone; gone is then set.
 	gate sync.RWMutex
 	gone bool
+	// forgotten is gone for readers, which do not take the gate (a reader
+	// may write too, and a second RLock while ForgetUser waits would hang):
+	// set by ForgetUser before the folder goes (openRead).
+	forgotten atomic.Bool
 
 	// mu guards the fields below. Lock order: a collection's mu may be
 	// held when taking mu, never the other way round.
@@ -660,6 +665,14 @@ func (s *Store) openWrite(acc *account) (*os.Root, func(), error) {
 
 // openRead opens the account's folder to read; ErrNotFound when the
 // account keeps nothing.
+//
+// The folder is found by name. A reader that began before the account was
+// deleted and made anew under the same name would otherwise read the new
+// account's files (unabhängige Durchsicht 1.13, A-6): after opening, the
+// folder must still belong to this account (owner.json with its creation
+// time, read through the opened folder, which stays that folder even if
+// the name is taken again meanwhile), and the account must not have been
+// forgotten (for an account without a known creation time).
 func (s *Store) openRead(acc *account) (*os.Root, func(), error) {
 	root, release, err := s.open(acc.kind, false)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -676,7 +689,21 @@ func (s *Store) openRead(acc *account) (*os.Root, func(), error) {
 		}
 		return nil, nil, err
 	}
-	return ar, func() { _ = ar.Close(); release() }, nil
+	done := func() { _ = ar.Close(); release() }
+	if acc.forgotten.Load() {
+		done()
+		return nil, nil, ErrUnavailable
+	}
+	var o owner
+	if err := volumedata.ReadJSON(ar, ownerFile, &o, 4096); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		done()
+		return nil, nil, err
+	}
+	if !sameAccount(o, acc.name, acc.created) {
+		done()
+		return nil, nil, ErrNotFound
+	}
+	return ar, done, nil
 }
 
 // beginWrite takes the account for a write: the gate against ForgetUser.
