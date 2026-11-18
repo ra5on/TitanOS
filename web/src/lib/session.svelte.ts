@@ -24,6 +24,8 @@ export const session = $state<{
 	fileapps: Record<string, unknown> | null;
 	/** PLAN 72: the standard Docker app per file type ({"3mf": "docker:bambu-lab"}). */
 	fileappsdocker: Record<string, unknown> | null;
+	/** 1.13: the order of the side bars of Mail, Kontakte, Kalender (side-order.svelte.ts). */
+	order: Record<string, unknown> | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
 	prefsLoaded: number;
@@ -38,6 +40,7 @@ export const session = $state<{
 	desktop: null,
 	fileapps: null,
 	fileappsdocker: null,
+	order: null,
 	services: {},
 	/** Counts loads of the account's preferences (the desktop applies them once they are there). */
 	prefsLoaded: 0,
@@ -54,6 +57,7 @@ async function loadPreferences() {
 		session.desktop = prefs.desktop ?? null;
 		session.fileapps = prefs.fileapps ?? null;
 		session.fileappsdocker = prefs.fileappsdocker ?? null;
+		session.order = prefs.order ?? null;
 		session.prefsLoaded++;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
@@ -69,6 +73,7 @@ async function loadPreferences() {
 		session.desktop = null;
 		session.fileapps = null;
 		session.fileappsdocker = null;
+		session.order = null;
 	}
 }
 

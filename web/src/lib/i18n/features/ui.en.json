@@ -35,5 +35,12 @@
 	"terminal.lastClosed": "The last NAS shell has ended.",
 	"users.agentData.calendarEvents": "Events in T-Calendar: {count}",
 	"users.agentData.contacts": "Contacts: {count}",
-	"users.agentData.part.calendar": "Events and contacts of T-Calendar and Contacts (cannot be counted right now: the data volume is not mounted. Their folder stays there until a new account with this name first saves something; it never sees it.)"
+	"users.agentData.part.calendar": "Events and contacts of T-Calendar and Contacts (cannot be counted right now: the data volume is not mounted. Their folder stays there until a new account with this name first saves something; it never sees it.)",
+	"ui.columns.side": "Width of the side bar",
+	"ui.columns.list": "Width of the list",
+	"ui.columns.hint": "Drag or use the arrow keys to change the width; a double click resets it.",
+	"ui.sort.move": "Move “{name}”",
+	"ui.sort.hint": "Drag, or move with the arrow keys (Alt+arrow on the entry); the order applies to your account.",
+	"ui.sort.moved": "“{name}” is now at position {pos} of {count}.",
+	"ui.sort.saveFailed": "The order was not saved: {reason}"
 }
