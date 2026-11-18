@@ -16,8 +16,21 @@ const at = (day: string) => {
 	const [y, m, d] = day.split('-').map(Number);
 	return new Date(y, m - 1, d, 12);
 };
+// 1.13: a format is made once per language and options (making one costs
+// far more than using it; the month asked for hundreds per drawing).
+const formats = new Map<string, Intl.DateTimeFormat>();
+function format(locale: string, o: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+	const key = locale + JSON.stringify(o);
+	let f = formats.get(key);
+	if (!f) {
+		f = new Intl.DateTimeFormat(locale, o);
+		formats.set(key, f);
+	}
+	return f;
+}
 const fmt = (day: string, o: Intl.DateTimeFormatOptions) =>
-	new Intl.DateTimeFormat(i18n.locale === 'en' ? 'en-US' : 'de-DE', o).format(at(day));
+	format(i18n.locale === 'en' ? 'en-US' : 'de-DE', o).format(at(day));
+const CLOCK: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
 
 /** "Mo" … "So" (Monday first). */
 export function weekdayShort(i: number): string {
@@ -46,7 +59,7 @@ export function shortDate(day: string): string {
 /** "16. – 22. November 2026 · KW 47". */
 export function weekTitle(start: string): string {
 	const end = addDays(start, 6);
-	const f = new Intl.DateTimeFormat(i18n.locale === 'en' ? 'en-US' : 'de-DE', {
+	const f = format(i18n.locale === 'en' ? 'en-US' : 'de-DE', {
 		day: 'numeric',
 		month: 'long',
 		year: 'numeric',
@@ -177,11 +190,7 @@ export function whenText(e: Pick<CalEvent, 'start' | 'end' | 'allDay'>): string 
 	}
 	const s = new Date(e.start);
 	const en = new Date(e.end || e.start);
-	const f = new Intl.DateTimeFormat(tag(), {
-		hour: '2-digit',
-		minute: '2-digit',
-		hourCycle: 'h23',
-	});
+	const f = format(tag(), CLOCK);
 	const day = (d: Date) =>
 		`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 	if (day(s) === day(en)) return `${longDay(day(s))}, ${f.format(s)}–${f.format(en)}`;
@@ -200,11 +209,7 @@ export function startText(e: Pick<CalEvent, 'start' | 'allDay'>): string {
 	if (e.allDay) return longDay(e.start.slice(0, 10));
 	const s = new Date(e.start);
 	const day = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, '0')}-${String(s.getDate()).padStart(2, '0')}`;
-	const f = new Intl.DateTimeFormat(tag(), {
-		hour: '2-digit',
-		minute: '2-digit',
-		hourCycle: 'h23',
-	});
+	const f = format(tag(), CLOCK);
 	return `${longDay(day)}, ${f.format(s)}`;
 }
 

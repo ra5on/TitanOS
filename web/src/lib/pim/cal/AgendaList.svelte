@@ -9,6 +9,8 @@
 	import { addDays, clock } from '../caldates.ts';
 	import { calColor, type Calendar, type CalEvent, type DayItem } from '../calendar.ts';
 	import { calName, eventTitle, longDay, ruleText } from '../calendar-text.ts';
+	import type { DueTask } from './tasks.ts';
+	import TaskChip from './TaskChip.svelte';
 
 	type Props = {
 		days: string[];
@@ -17,8 +19,22 @@
 		calFor: (id: string) => Calendar | undefined;
 		phone?: boolean;
 		onopen: (ev: CalEvent) => void;
+		/** 1.13: reminders due on the days (after the events). */
+		tasks?: Map<string, DueTask[]>;
+		ontask?: (task: DueTask) => void;
+		ontaskdone?: (task: DueTask) => void;
 	};
-	let { days, today, byDay, calFor, phone = false, onopen }: Props = $props();
+	let {
+		days,
+		today,
+		byDay,
+		calFor,
+		phone = false,
+		onopen,
+		tasks,
+		ontask,
+		ontaskdone,
+	}: Props = $props();
 
 	const dayName = (d: string) =>
 		d === today ? t('calendar.today') : d === addDays(today, 1) ? t('calendar.tomorrow') : '';
@@ -66,7 +82,10 @@
 					>{/if}
 			</button>
 		{:else}
-			<p class="muted none">{t('calendar.noEvents')}</p>
+			{#if !tasks?.get(d)?.length}<p class="muted none">{t('calendar.noEvents')}</p>{/if}
+		{/each}
+		{#each tasks?.get(d) ?? [] as task (task.list + '/' + task.id)}
+			<TaskChip wide {task} onopen={() => ontask?.(task)} ondone={() => ontaskdone?.(task)} />
 		{/each}
 	{/each}
 </div>

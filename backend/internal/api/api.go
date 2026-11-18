@@ -308,8 +308,10 @@ type Server struct {
 	// pimLive hands the changes of calendars and address books to the
 	// pages' streams, pimCache keeps the prepared address books (1.13,
 	// pim_live.go, pim_cache.go).
-	pimLive  *pimHub
-	pimCache *pimCache
+	pimLive *pimHub
+	// reminders plans the alarms of events for the hints in TitanOS (1.13).
+	reminders *calendarReminders
+	pimCache  *pimCache
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -341,6 +343,7 @@ func New(opts Options) *Server {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.devices = newDevices(opts, s.rateLimiter)
 	s.pimLive, s.pimCache = newPIMHub(), newPIMCache()
+	s.reminders = newCalendarReminders()
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -392,12 +395,13 @@ func New(opts Options) *Server {
 	if pim := s.opts.PIM; pim != nil {
 		// Every change of a calendar or address book, from any side, to
 		// the pages' live streams.
-		prev, hub := pim.OnChanged, s.pimLive
+		prev, hub, reminders := pim.OnChanged, s.pimLive, s.reminders
 		pim.OnChanged = func(c pimstore.Changed) {
 			if prev != nil {
 				prev(c)
 			}
 			hub.publish(c)
+			reminders.changed(c)
 		}
 	}
 	if c := s.opts.Cluster; c != nil {

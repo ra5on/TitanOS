@@ -118,6 +118,9 @@ func isJSONObject(data []byte) bool {
 type prefsArea struct {
 	store *config.Store
 	prefs *preferences
+	// calendarChanged is told when an account's preference "calendar"
+	// changed (1.13: the reminders are planned again).
+	calendarChanged func(user string)
 }
 
 func (a prefsArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -178,8 +181,25 @@ func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "bad_request", `fileappsdocker maps file endings (lower case, without dot) to "docker:<app>"`)
 		return
 	}
-	if kind == "calendar" && !validCalendarPrefs(value) {
-		writeError(w, http.StatusBadRequest, "bad_request", `calendar holds hidden: a list of calendar ids`)
+	if kind == "calendar" {
+		if !validCalendarPrefs(value) {
+			writeError(w, http.StatusBadRequest, "bad_request", `calendar holds hidden: a list of calendar ids, reminderHints and reminderPush: true or false`)
+			return
+		}
+		// 1.13: the keys sent replace theirs, the others stay (hidden and
+		// the reminders' choice are saved apart).
+		user := currentUser(r).Name
+		if err := a.prefs.update(user, kind, func(stored json.RawMessage) (json.RawMessage, error) {
+			return mergeCalendarPrefs(stored, value)
+		}); err != nil {
+			slog.Error("write preferences", "user", user, "kind", kind, "err", err)
+			writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
+			return
+		}
+		if a.calendarChanged != nil {
+			a.calendarChanged(user)
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if kind == "order" {

@@ -110,6 +110,18 @@ function allDay(id, cal, title, day, days = 1, more = {}) {
   });
 }
 
+function task(id, list, title, due, more = {}) {
+  return {
+    id,
+    list,
+    uid: id.replace(/\.ics$/, ""),
+    title,
+    ...(due ? { due, ...(due.length === 10 ? { dueAllDay: true } : {}) } : {}),
+    etag: `"t-${id}"`,
+    ...more,
+  };
+}
+
 /** The data a test starts from; change it before or while the page runs. */
 export function calendarState() {
   const calendars = [
@@ -409,6 +421,25 @@ export function calendarState() {
     },
     created: [],
     requests: [],
+    /** 1.13: whole titles of clipped events by file name (else LONG_TITLE). */
+    fullTitles: {},
+    /** 1.13: the live stream ({held: Promise of events}); null refuses it. */
+    stream: null,
+    /** 1.13: milliseconds each answer waits (a NAS is not instant). */
+    delay: 0,
+    /** 1.13: lists of reminders and the reminders (VTODO). */
+    taskLists: [
+      { id: "erinnerungen--titanos", name: "Erinnerungen", color: "#c2410c", order: 0 },
+      { id: "einkauf", name: "Einkauf", color: "#0f766e", order: 1 },
+    ],
+    tasks: [
+      task("steuer.ics", "erinnerungen--titanos", "Steuererklärung abgeben", "2026-11-17", { priority: 1 }),
+      task("arzt.ics", "erinnerungen--titanos", "Arzttermin vereinbaren", at("2026-11-18", "10:00")),
+      task("vertrag.ics", "erinnerungen--titanos", "Handyvertrag kündigen", "2026-11-12"),
+      task("buch.ics", "erinnerungen--titanos", "Buch zurückgeben", ""),
+      task("alt.ics", "erinnerungen--titanos", "Altpapier rausstellen", "2026-11-10", { done: true, completed: "2026-11-10T08:00:00Z" }),
+      task("milch.ics", "einkauf", "Milch", ""),
+    ],
   };
 }
 
@@ -518,6 +549,9 @@ export async function installCalendar(target, state = calendarState()) {
       }
     } else if (type.includes("multipart")) body = "(multipart)";
     s.requests.push([method, path + url.search, body]);
+    // 1.13: a NAS takes some time to answer (measure-ui-kalender.mjs).
+    if (s.delay && path !== "/calendar/stream")
+      await new Promise((r) => setTimeout(r, s.delay));
     const json = (value, status = 200) =>
       route.fulfill({ status, json: value });
     const fail = (status, code) =>
@@ -529,6 +563,92 @@ export async function installCalendar(target, state = calendarState()) {
         headers: { "Retry-After": "300" },
         json: { error: { code: "calendar_unavailable", message: "no volume" } },
       });
+    }
+    // 1.13: reminders (docs/KALENDER.md "Erinnerungen (VTODO, seit 1.13)").
+    if (path === "/calendar/tasklists" && method === "GET")
+      return json(
+        s.taskLists
+          .slice()
+          .sort((a, b) => a.order - b.order)
+          .map((l) => ({
+            ...l,
+            count: s.tasks.filter((t) => t.list === l.id).length,
+            open: s.tasks.filter((t) => t.list === l.id && !t.done).length,
+          })),
+      );
+    if (path === "/calendar/tasklists" && method === "POST") {
+      const l = {
+        id: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "liste",
+        name: body.name,
+        color: body.color ?? "#c2410c",
+        order: s.taskLists.length,
+      };
+      s.taskLists.push(l);
+      return json({ ...l, count: 0, open: 0 }, 201);
+    }
+    let tm = path.match(/^\/calendar\/tasklists\/([^/]+)$/);
+    if (tm) {
+      const id = decodeURIComponent(tm[1]);
+      const l = s.taskLists.find((x) => x.id === id);
+      if (!l) return fail(404, "tasklist_not_found");
+      if (method === "PUT") {
+        Object.assign(l, body);
+        return json(l);
+      }
+      if (method === "DELETE") {
+        if (s.taskLists.length === 1) return fail(409, "tasklist_last");
+        s.taskLists = s.taskLists.filter((x) => x !== l);
+        s.tasks = s.tasks.filter((t) => t.list !== id);
+        return route.fulfill({ status: 204, body: "" });
+      }
+    }
+    if (path === "/calendar/tasks" && method === "GET") {
+      const status = q("status") || "open";
+      const list = s.tasks.filter(
+        (t) =>
+          (!q("list") || t.list === q("list")) &&
+          (status === "all" || (status === "done") === !!t.done),
+      );
+      return json({ tasks: list });
+    }
+    if (path === "/calendar/tasks/due" && method === "GET") {
+      const from = dayOf(q("from"));
+      const to = dayOf(q("to"));
+      return json({
+        tasks: s.tasks.filter(
+          (t) => !t.done && t.due && dayOf(t.due) >= from && dayOf(t.due) < to,
+        ),
+      });
+    }
+    if (path === "/calendar/tasks" && method === "POST") {
+      const id = `neu-${s.tasks.length + 1}.ics`;
+      const t = task(id, body.list || s.taskLists[0].id, body.title, body.due ?? "");
+      s.tasks.push(t);
+      return json(t, 201);
+    }
+    tm = path.match(/^\/calendar\/tasks\/([^/]+)\/([^/]+?)(\/done)?$/);
+    if (tm) {
+      const list = decodeURIComponent(tm[1]);
+      const id = decodeURIComponent(tm[2]);
+      const t = s.tasks.find((x) => x.list === list && x.id === id);
+      if (!t) return fail(404, "task_not_found");
+      if (tm[3] && method === "POST") {
+        t.done = body.done;
+        return json({ task: t });
+      }
+      if (method === "GET")
+        return json({ ...t, notes: "", timezone: "", alarms: [] });
+      if (method === "PUT") {
+        for (const k of ["title", "notes", "priority"])
+          if (k in body) t[k] = body[k];
+        if ("due" in body) t.due = body.due ?? "";
+        if (body.list) t.list = body.list;
+        return json(t);
+      }
+      if (method === "DELETE") {
+        s.tasks = s.tasks.filter((x) => x !== t);
+        return route.fulfill({ status: 204, body: "" });
+      }
     }
     if (path === "/calendar/access")
       return json({
@@ -598,13 +718,63 @@ export async function installCalendar(target, state = calendarState()) {
           : addDays(dayOf(e.end || e.start), 1);
         return start < to && end > from;
       };
+      // 1.13: calendars= names the calendars (hidden ones too), else all shown.
+      const named = q("calendars") ? q("calendars").split(",") : null;
+      const wanted = (id) => (named ? named.includes(id) : !s.hidden.includes(id));
       const list = s.events
-        .filter((e) => !s.hidden.includes(e.calendar) && inWindow(e))
-        .concat(
-          s.hidden.includes("geburtstage") ? [] : s.birthdays.filter(inWindow),
-        )
+        .filter((e) => wanted(e.calendar) && inWindow(e))
+        .concat(wanted("geburtstage") ? s.birthdays.filter(inWindow) : [])
         .sort((a, b) => new Date(a.start) - new Date(b.start));
-      return json({ events: list, truncated: s.truncated });
+      // 1.13: full=1 has whole titles (titand reads up to 200 clipped ones).
+      const shown =
+        q("full") === "1"
+          ? list.map((e) =>
+              e.clipped
+                ? {
+                    ...e,
+                    title: s.fullTitles[e.id] ?? LONG_TITLE,
+                    clipped: false,
+                  }
+                : e,
+            )
+          : list;
+      // 1.13: an ETag of the answer; If-None-Match → 304 without a body.
+      const text = JSON.stringify({ events: shown, truncated: s.truncated });
+      let hash = 0;
+      for (let i = 0; i < text.length; i++)
+        hash = (hash * 31 + text.charCodeAt(i)) | 0;
+      const etag = `"ev-${(hash >>> 0).toString(16)}-${text.length}"`;
+      if (req.headers()["if-none-match"] === etag)
+        return route.fulfill({ status: 304, headers: { ETag: etag }, body: "" });
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ETag: etag,
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json",
+        },
+        body: text,
+      });
+    }
+    // 1.13: the live stream – held open until the test sends its events
+    // (state.stream.send), a later one is refused (no reconnect noise).
+    if (path === "/calendar/stream") {
+      s.streams = (s.streams ?? 0) + 1;
+      if (s.streams > 1 || !s.stream) return route.abort();
+      const events = await s.stream.held;
+      const body =
+        [
+          ": hallo",
+          `event: ready\ndata: ${JSON.stringify({ account: "alex", generations: {} })}`,
+          ...events.map(
+            (e) => `event: ${e.type}\ndata: ${JSON.stringify(e.data)}`,
+          ),
+        ].join("\n\n") + "\n\n";
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body,
+      });
     }
     if (path === "/calendar/events" && method === "POST") {
       const id = `neu-${s.created.length + 1}.ics`;
@@ -634,8 +804,8 @@ export async function installCalendar(target, state = calendarState()) {
       const one = (occ && all.find((e) => e.occurrence === occ)) || all[0];
       if (method === "GET") {
         const full = { ...one, notes: s.notes[id] ?? "" };
-        if (id === "angebot.ics") {
-          full.title = LONG_TITLE;
+        if (one.clipped) {
+          full.title = s.fullTitles[id] ?? LONG_TITLE;
           delete full.clipped;
         }
         return json(full);
@@ -675,6 +845,12 @@ export async function installCalendar(target, state = calendarState()) {
           if (body.scope === "this" && e !== one) continue;
           if (typeof ev.title === "string") e.title = ev.title;
           if (typeof ev.location === "string") e.location = ev.location;
+          // 1.13: a dragged event (start/end as RFC 3339 or dates).
+          if (typeof ev.start === "string" && body.scope !== "all") {
+            e.start = ev.start;
+            e.end = ev.end;
+            e.allDay = !!ev.allDay;
+          }
           if (body.calendar) e.calendar = body.calendar;
         }
         return json({

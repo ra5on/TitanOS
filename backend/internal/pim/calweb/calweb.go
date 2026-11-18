@@ -76,7 +76,9 @@ type Input struct {
 	// Repeat: null = no repetition, a rule with custom:true = keep the
 	// rule the event has.
 	Repeat Opt[recur.Simple] `json:"repeat"`
-	// Alarms: minutes before the start; null or [] = none.
+	// Alarms: minutes before the start (since 1.13 down to −1439: after
+	// it, as the iPhone's "am Tag um 9:00" of an all-day event); null or
+	// [] = none.
 	Alarms Opt[[]int] `json:"alarms"`
 }
 
@@ -191,7 +193,7 @@ func checkAlarms(v []int) ([]int, error) {
 	}
 	out := []int{}
 	for _, m := range v {
-		if m < 0 || m > MaxAlarmMinutes {
+		if m < -recur.MaxAlarmAfter || m > MaxAlarmMinutes {
 			return nil, invalid("alarm %d minutes before", m)
 		}
 		if !slices.Contains(out, m) {

@@ -18,6 +18,9 @@ func (s *Server) registerPIM(mux *routeMux) {
 	// 1.13: the profile of the iPhone (one-time link) and the holidays.
 	s.profileArea().register(mux, s.guards())
 	s.pimLiveArea().register(mux, s.guards())
+	// 1.13: the hints of reminders of events (calendar_reminders.go).
+	g := s.guards()
+	mux.HandleFunc("GET /api/v1/calendar/reminders", g.user(g.clusterLocal(g.browserOnly(s.handleReminders))))
 	dav := davsync.New(s.opts.PIM, s.devices)
 	dav.RemoteIP = remoteIP
 	for _, pattern := range davsync.Patterns {
