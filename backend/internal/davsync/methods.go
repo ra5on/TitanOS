@@ -121,6 +121,9 @@ func (rq *request) propfind() {
 		http.Error(rq.w, "the body is no DAV:propfind", http.StatusBadRequest)
 		return
 	}
+	if rq.tooManyProps(body) {
+		return
+	}
 	pr := parsePropRequest(body)
 	t := rq.t
 	var self *resource

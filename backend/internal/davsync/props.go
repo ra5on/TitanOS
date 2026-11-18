@@ -85,6 +85,31 @@ type propRequest struct {
 	names []xml.Name
 }
 
+// maxPropNames bounds the properties one request asks for: each one is
+// answered for every resource, so thousands of unknown names in a body of
+// 256 KiB made gigabytes of 404 propstats for a collection (security
+// review 1.11, S-4). iOS asks for about 40.
+const maxPropNames = 256
+
+// tooManyProps answers 400 when a prop request below parent names more
+// than maxPropNames properties.
+func (rq *request) tooManyProps(parent *node) bool {
+	if parent == nil {
+		return false
+	}
+	n := 0
+	for _, name := range []xml.Name{davName("prop"), davName("include")} {
+		for _, p := range parent.all(name) {
+			n += len(p.Children)
+		}
+	}
+	if n <= maxPropNames {
+		return false
+	}
+	http.Error(rq.w, "too many properties in one request", http.StatusBadRequest)
+	return true
+}
+
 // parsePropRequest reads the prop request below parent; none is allprop.
 func parsePropRequest(parent *node) propRequest {
 	if parent == nil {

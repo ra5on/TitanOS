@@ -138,6 +138,17 @@ func validFilter() *filterError {
 	return &filterError{status: http.StatusForbidden, cond: calName("valid-filter")}
 }
 
+// maxFilterTerms bounds the prop-filters and text-matches of one query: each
+// is evaluated against every entry of the collection (20 000), so a body of
+// 256 KiB with thousands of them cost minutes of CPU (security review 1.11,
+// S-3). iOS sends one or two. A query has at most one time-range: each
+// one expands every recurring entry again.
+const maxFilterTerms = 64
+
+func tooComplex(precondition func(string) xml.Name) *filterError {
+	return &filterError{status: http.StatusForbidden, cond: precondition("supported-filter")}
+}
+
 func parseCalFilter(f *node) (calFilter, *filterError) {
 	var out calFilter
 	if f == nil {
@@ -161,6 +172,9 @@ func parseCalFilter(f *node) (calFilter, *filterError) {
 			if fe := out.event(c); fe != nil {
 				return out, fe
 			}
+			if len(out.ranges) > 1 || len(out.uids) > maxFilterTerms {
+				return out, tooComplex(calName)
+			}
 		case name == "VTODO" || name == "VJOURNAL" || name == "VFREEBUSY":
 			// Only VEVENT is stored: nothing has one.
 			if !undefined {
@@ -173,7 +187,12 @@ func parseCalFilter(f *node) (calFilter, *filterError) {
 
 // event reads the filters below comp-filter VEVENT.
 func (f *calFilter) event(c *node) *filterError {
-	for _, tr := range c.all(calName("time-range")) {
+	ranges := c.all(calName("time-range"))
+	if len(ranges) > 1 {
+		// RFC 4791 9.7.1: a comp-filter has at most one time-range.
+		return validFilter()
+	}
+	for _, tr := range ranges {
 		start, ok1 := parseUTC(tr.attr("start"))
 		end, ok2 := parseUTC(tr.attr("end"))
 		if !ok1 || !ok2 || (start.IsZero() && end.IsZero()) || (!start.IsZero() && !end.IsZero() && !end.After(start)) {
@@ -305,7 +324,12 @@ func parseCardFilter(f *node) (cardFilter, *filterError) {
 	if out.allof, fe = testAttr(f); fe != nil {
 		return out, fe
 	}
+	terms := 0
 	for _, p := range f.all(cardName("prop-filter")) {
+		terms += 1 + len(p.all(cardName("text-match")))
+		if terms > maxFilterTerms {
+			return out, tooComplex(cardName)
+		}
 		pf := cardPropFilter{name: strings.ToUpper(p.attr("name"))}
 		switch pf.name {
 		case "FN", "EMAIL", "TEL", "UID":

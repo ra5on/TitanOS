@@ -50,6 +50,9 @@ func (rq *request) report() {
 		writeXMLError(rq.w, http.StatusForbidden, davName("supported-report"))
 		return
 	}
+	if rq.tooManyProps(body) {
+		return
+	}
 	rep.serve(rq, body)
 }
 
