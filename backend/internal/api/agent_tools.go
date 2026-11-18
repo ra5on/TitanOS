@@ -577,7 +577,8 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// own tools are otherwise free (Policy.Mode, KindAgent). After content
 	// was read (ReadOutside), a planned task keeps the marks for its runs
 	// (scheduleCreate), a skill and a memory are saved as untrusted.
-	if chat.Marked() && standingInstruction(t.name) {
+	// A reminder of a quick command is the person's own text (personsWords).
+	if chat.Marked() && standingInstruction(t.name) && !(t.name == "schedule_create" && personsWords(ctx)) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 		if s := standingSummary(t.name, args); s != "" {
 			p.Summary = s

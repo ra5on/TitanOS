@@ -421,7 +421,7 @@ func checkSchedule(sc *agent.Schedule) error {
 	return nil
 }
 
-func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
+func (b *agentToolbox) scheduleCreate(ctx context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
 	var req struct {
 		agent.Schedule
 		InMinutes int `json:"in_minutes"`
@@ -444,11 +444,14 @@ func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args 
 	}
 	sc.ID, sc.Enabled, sc.Created, sc.LastRun, sc.Chat, sc.Trigger = agent.NewID(), true, now, time.Time{}, "", nil
 	// Where the task comes from, from the chat only (never the arguments):
-	// its runs start with the same marks (A-1, agentRunSchedule).
+	// its runs start with the same marks (A-1, agentRunSchedule). A quick
+	// command is the person's own text.
 	sc.Untrusted, sc.PIMRead = false, false
 	if chat != nil {
 		sc.Project = chat.Project
-		sc.Untrusted, sc.PIMRead = chat.Tainted, chat.PIMRead
+		if !personsWords(ctx) {
+			sc.Untrusted, sc.PIMRead = chat.Tainted, chat.PIMRead
+		}
 	}
 	if err := checkSchedule(&sc); err != nil {
 		return agent.Outcome{}, err

@@ -346,3 +346,43 @@ func TestHARulesAskInMarkedChat(t *testing.T) {
 		}
 	}
 }
+
+// "Erinnere mich in 20 Minuten an die Pizza" typed by the person in a chat
+// that read a mail: the quick command plans it at once, unmarked (the text
+// is the person's); the same call from the model asks.
+func TestQuickReminderInMarkedChatIsThePersons(t *testing.T) {
+	fake := &agentOllama{replies: []string{`{"role":"assistant","content":"Hallo."}`}}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Hallo"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("chat: %d %s", res.StatusCode, body)
+	}
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	waitChat(t, ts, ts.client, chat.ID)
+	stored, err := ts.server.agentStore().Chat("alex", chat.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.Tainted, stored.PIMRead = true, true
+	if err := ts.server.agentStore().SaveChat("alex", stored); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Erinnere mich in 20 Minuten an die Pizza"}); res.StatusCode >= 300 {
+		t.Fatalf("message: %d %s", res.StatusCode, body)
+	}
+	done := waitChat(t, ts, ts.client, chat.ID)
+	if done.Pending != nil || done.State != agent.StateIdle {
+		t.Fatalf("quick reminder asked: %s %+v", done.State, done.Pending)
+	}
+	list, _ := ts.server.agentStore().Schedules("alex")
+	if len(list) != 1 || list[0].Kind != "reminder" || list[0].Untrusted || list[0].PIMRead {
+		t.Fatalf("quick reminder: %+v", list)
+	}
+	// The model's call of the same in that chat asks.
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), ts.server.agentSettings())
+	p := pimPrepare(t, box, &done, "schedule_create", `{"name":"Pizza","task":"die Pizza","kind":"reminder","every":"once","in_minutes":20}`)
+	if p.Mode != agent.ModeAsk {
+		t.Fatalf("model's schedule_create in the marked chat: %s", p.Mode)
+	}
+}
