@@ -46,6 +46,7 @@ func (s *Store) ForgetUser(name string) error {
 	s.forgetMarks(name)
 	// Writes that run end first; later ones on these states fail.
 	for _, acc := range old {
+		acc.forgotten.Store(true)
 		acc.gate.Lock()
 		acc.gone = true
 		acc.gate.Unlock()

@@ -440,7 +440,7 @@ func (b *agentToolbox) mapTools() []*agentTool {
 					return agent.Outcome{}, toolcatalog.Errorf("invalid arguments")
 				}
 				by := "agent"
-				if chat != nil && chat.Tainted {
+				if chat.ReadOutside() {
 					by = descriptionByOutside
 				}
 				if err := b.s.saveDescription(req.Key, req.Text, by); err != nil {

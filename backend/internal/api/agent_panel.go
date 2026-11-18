@@ -192,7 +192,9 @@ func (s *Server) contextLine(user string, chat *agent.Chat) string {
 		}
 		return fmt.Sprintf("Open in Mail now: the mail with account %q, folder %q, uid %d (for mail_read).%s", c.Mail.A, c.Mail.F, c.Mail.UID, tail)
 	case "contacts":
-		return fmt.Sprintf("Open in Kontakte now: the contact card:%s/%s (id for contacts_update).%s", c.Card.Book, c.Card.ID, tail)
+		// Ids quoted (unabhängige Durchsicht 1.13, A-4): a file name from a
+		// DAV client may hold spaces and quotes.
+		return fmt.Sprintf("Open in Kontakte now: the contact %q (id for contacts_update).%s", "card:"+c.Card.Book+"/"+c.Card.ID, tail)
 	case "calendar":
 		line := "Open in Kalender now"
 		if c.Date != "" {
@@ -200,7 +202,7 @@ func (s *Server) contextLine(user string, chat *agent.Chat) string {
 		}
 		if e := c.Event; e != nil {
 			id := calID(e.Cal, e.ID, e.Occurrence)
-			line += fmt.Sprintf(", the event %s (id for calendar_update)", id)
+			line += fmt.Sprintf(", the event %q (id for calendar_update)", id)
 		}
 		return line + "." + tail
 	}

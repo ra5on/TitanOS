@@ -569,6 +569,21 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	if chat != nil && chat.Autonomy == agent.AutonomyAsk && mode == agent.ModeAllow && kind != agent.KindRead && kind != agent.KindAgent {
 		mode = agent.ModeAsk
 	}
+	// A chat that read outside content or mail, the calendar, the contacts
+	// or reminders (unabhängige Durchsicht 1.13, A-1): what is saved here
+	// to be followed later without the person – a planned task or reminder,
+	// a skill, an automation or script of Home Assistant – waits for the
+	// person, also with "Alles ohne Nachfrage" and in "Direkt". The agent's
+	// own tools are otherwise free (Policy.Mode, KindAgent). After content
+	// was read (ReadOutside), a planned task keeps the marks for its runs
+	// (scheduleCreate), a skill and a memory are saved as untrusted.
+	// A reminder of a quick command is the person's own text (personsWords).
+	if chat.Marked() && standingInstruction(t.name) && !(t.name == "schedule_create" && personsWords(ctx)) {
+		mode = agent.Stricter(mode, agent.ModeAsk)
+		if s := standingSummary(t.name, args); s != "" {
+			p.Summary = s
+		}
+	}
 	// A draft writes nothing: it never waits, whatever tightened above.
 	if p.Draft {
 		if t.draft == nil {
@@ -578,6 +593,51 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	}
 	p.Mode, p.Kind = mode, kind
 	return p, nil
+}
+
+// standingInstruction: tools that save text something follows later
+// without the person watching – the agent (a planned task, a reminder that
+// goes to the devices and Home Assistant, a skill) or Home Assistant (an
+// automation or a script). A memory is not one of them: it is saved marked
+// and makes every later chat ask before the web (OutsideSkill).
+func standingInstruction(name string) bool {
+	switch name {
+	case "schedule_create", "skill_save", "ha_automation_save", "ha_script_save":
+		return true
+	}
+	return false
+}
+
+// standingSummary is the card of a planned task or skill that waits for
+// the person: the whole text, never cut – they approve what will run
+// later; "" keeps the summary Prepare made.
+func standingSummary(name string, args json.RawMessage) string {
+	switch name {
+	case "schedule_create":
+		var req struct {
+			agent.Schedule
+			InMinutes int `json:"in_minutes"`
+		}
+		if json.Unmarshal(args, &req) != nil {
+			return ""
+		}
+		kind := "task"
+		if req.Kind != "" {
+			kind = req.Kind
+		}
+		when := strings.TrimSpace(strings.Join([]string{req.Every, req.Date, req.At, req.Cron}, " "))
+		if req.InMinutes > 0 {
+			when = fmt.Sprintf("once in %d minutes", req.InMinutes)
+		}
+		return fmt.Sprintf("schedule_create: %q (%s, %s) – planned after outside content; task: %s", req.Name, kind, when, req.Task)
+	case "skill_save":
+		var req struct{ Name, When, Steps string }
+		if json.Unmarshal(args, &req) != nil {
+			return ""
+		}
+		return fmt.Sprintf("skill_save: %q – saved after outside content; when: %s; steps: %s", req.Name, req.When, req.Steps)
+	}
+	return ""
 }
 
 func actionSummary(a *toolcatalog.Action) string {

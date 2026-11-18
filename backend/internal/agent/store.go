@@ -216,6 +216,26 @@ type Chat struct {
 	Entries []Entry  `json:"entries"`
 }
 
+// Marked reports whether the chat has read outside content (Tainted), has
+// a skill or memory from outside in its prompt (OutsideSkill) or has read
+// mail, calendar, contacts or reminders (PIMRead). In such a chat, saving
+// what runs later without the person (a planned task, a skill) asks first
+// (1.13, unabhängige Durchsicht A-1).
+func (c *Chat) Marked() bool {
+	return c != nil && (c.Tainted || c.OutsideSkill || c.PIMRead)
+}
+
+// ReadOutside reports whether the chat has read outside content or mail,
+// calendar, contacts or reminders: what the agent saves here – a planned
+// task, a skill, a memory – is saved as untrusted (A-1). An outside skill
+// or memory in the prompt alone (OutsideSkill) does not count: it makes
+// saving ask, but marking would pass on to every later chat and never end
+// (each marked memory makes the next chat OutsideSkill); the run of a task
+// works it out again from the memories and skills of then.
+func (c *Chat) ReadOutside() bool {
+	return c != nil && (c.Tainted || c.PIMRead)
+}
+
 // OwnModel is the model chosen in this chat, or "" to use the settings.
 func (c *Chat) OwnModel() string {
 	if !c.ModelOwn {
@@ -362,6 +382,15 @@ type Schedule struct {
 	// Times before it are not caught up: a daily task switched on again at
 	// ten does not run at once for the seven o'clock it "missed" (0.99).
 	Since time.Time `json:"since,omitzero"`
+	// Untrusted and PIMRead (1.13, unabhängige Durchsicht A-1): the task
+	// was planned by the agent in a chat that had read outside content
+	// (Tainted) or mail, calendar, contacts or reminders (PIMRead). Its text may carry what that content wanted; every run
+	// starts with the same marks (agentRunSchedule), so sending, the web,
+	// MCP, files and notes ask as in that chat. Set only by schedule_create
+	// from the chat, never from the arguments or the page; a task saved by
+	// 1.12 has neither and runs as before (1.12 drops both when it saves).
+	Untrusted bool `json:"untrusted,omitempty"`
+	PIMRead   bool `json:"pimRead,omitempty"`
 }
 
 // Report is what the morning report of an account contains (PLAN 49);

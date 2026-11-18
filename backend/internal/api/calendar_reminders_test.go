@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -166,4 +168,60 @@ func TestCalendarReminders(t *testing.T) {
 		t.Fatal("forgotten account keeps hints")
 	}
 	_ = pimstore.Calendar
+}
+
+const sameUIDEvent = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//y//EN\r\nBEGIN:VEVENT\r\nUID:same-uid@example.org\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261120T090000Z\r\nDTEND:20261120T100000Z\r\nSUMMARY:Termin-%s\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+
+// Unabhängige Durchsicht 1.13, A-2: two accounts with an event of the same
+// file name in calendars of the same id each get their reminder, and a
+// forgotten account leaves nothing that stops a new one of the name.
+func TestReminderKeyPerAccount(t *testing.T) {
+	ts, pim, _, _ := pimServer(t)
+	ts.signIn("bea", auth.RoleUser)
+	c := ts.server.reminders
+	clock := time.Date(2026, 11, 20, 8, 45, 30, 0, time.UTC)
+	var mu sync.Mutex
+	var pushed []string
+	deps := func(now time.Time) *reminderDeps {
+		return &reminderDeps{
+			store:  pim,
+			users:  func() []string { return []string{"alex", "bea"} },
+			prefs:  func(string) reminderPrefs { return reminderPrefs{hints: true, push: true} },
+			hidden: func(string) []string { return nil },
+			push: func(user string, r firedReminder) {
+				mu.Lock()
+				pushed = append(pushed, user+":"+r.Title)
+				mu.Unlock()
+			},
+			now: func() time.Time { return now },
+		}
+	}
+	c.deps.Store(deps(clock.Add(-2 * time.Minute)))
+	for _, u := range []string{"alex", "bea"} {
+		if _, err := pim.Put(pimstore.Calendar, u, pimstore.DefaultCalendar, "same-uid@example.org.ics", []byte(fmt.Sprintf(sameUIDEvent, u)), pimstore.PutOptions{}); err != nil {
+			t.Fatalf("put %s: %v", u, err)
+		}
+	}
+	c.replan("")
+	c.planDirty()
+	c.deps.Store(deps(clock))
+	c.fire()
+	mu.Lock()
+	got := slices.Sorted(slices.Values(pushed))
+	mu.Unlock()
+	if !slices.Equal(got, []string{"alex:Termin-alex", "bea:Termin-bea"}) {
+		t.Fatalf("each account its reminder: %v", got)
+	}
+	// Forgotten: nothing of bea stays in what was sent; alex's stays.
+	c.forget("bea")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.sent) != 1 {
+		t.Fatalf("sent after forget: %d keys", len(c.sent))
+	}
+	for key := range c.sent {
+		if !strings.HasPrefix(key, reminderKeyPrefix("alex")) {
+			t.Fatalf("key of another account kept: %q", key)
+		}
+	}
 }

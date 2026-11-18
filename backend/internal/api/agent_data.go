@@ -340,7 +340,12 @@ func (s *Server) handleAgentSkillSet(w http.ResponseWriter, r *http.Request) {
 		found := false
 		for i := range own {
 			if own[i].ID == id {
-				own[i].Name, own[i].When, own[i].Steps, own[i].Disabled, own[i].Untrusted, own[i].Updated, found = req.Name, req.When, req.Steps, req.Disabled, false, time.Now(), true
+				// Written by the person now: no longer from outside content.
+				// Only switched on or off, it stays marked (A-1).
+				if own[i].Name != req.Name || own[i].When != req.When || own[i].Steps != req.Steps {
+					own[i].Untrusted = false
+				}
+				own[i].Name, own[i].When, own[i].Steps, own[i].Disabled, own[i].Updated, found = req.Name, req.When, req.Steps, req.Disabled, time.Now(), true
 			}
 		}
 		if id == "new" {
@@ -413,6 +418,12 @@ func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) 
 				// What the NAS keeps comes from the list as it is now, not from
 				// what the page read (a run stamped meanwhile stays stamped).
 				sc.ID, sc.Created, sc.LastRun, sc.LastOK, sc.Chat = now[i].ID, now[i].Created, now[i].LastRun, now[i].LastOK, now[i].Chat
+				// Where the task came from stays (A-1), whatever the page
+				// sends; a task the person writes anew is theirs.
+				sc.Untrusted, sc.PIMRead = false, false
+				if sc.Task == now[i].Task {
+					sc.Untrusted, sc.PIMRead = now[i].Untrusted, now[i].PIMRead
+				}
 				// A one-off task with a new time runs again.
 				if sc.Every == "once" && (sc.Date != now[i].Date || sc.At != now[i].At) {
 					sc.LastRun = time.Time{}
@@ -435,6 +446,7 @@ func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) 
 				return nil, errMorningExists
 			}
 			sc.ID, sc.Created = agent.NewID(), time.Now()
+			sc.Untrusted, sc.PIMRead = false, false
 			now, found = append(now, sc), true
 		}
 		if !found {

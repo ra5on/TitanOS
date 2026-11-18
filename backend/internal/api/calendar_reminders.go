@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,7 +64,7 @@ type firedReminder struct {
 	AllDay     bool      `json:"allDay"`
 	// Minutes before the start (negative: after it).
 	Minutes int    `json:"minutes"`
-	key     string // calendar, file, occurrence, minutes
+	key     string // account, calendar, file, occurrence, minutes
 }
 
 type plannedReminder struct {
@@ -279,7 +280,10 @@ func (c *calendarReminders) plan(user string) ([]plannedReminder, error) {
 				}
 				r := firedReminder{Calendar: col.ID, ID: o.Name, Occurrence: v.Occurrence, Title: v.Title, Location: v.Location,
 					Start: v.Start, AllDay: v.AllDay, Minutes: m}
-				r.key = col.ID + "\x00" + o.Name + "\x00" + v.Occurrence + "\x00" + strconv.Itoa(m)
+				// The account first: two accounts may have a calendar of
+				// the same id with a file of the same name (unabhängige
+				// Durchsicht 1.13, A-2); forget drops by this prefix.
+				r.key = reminderKeyPrefix(user) + col.ID + "\x00" + o.Name + "\x00" + v.Occurrence + "\x00" + strconv.Itoa(m)
 				out = append(out, plannedReminder{at: at, firedReminder: r})
 			}
 		}
@@ -398,8 +402,17 @@ func (c *calendarReminders) forget(user string) {
 	c.mu.Lock()
 	delete(c.plans, user)
 	delete(c.fired, user)
+	prefix := reminderKeyPrefix(user)
+	for key := range c.sent {
+		if strings.HasPrefix(key, prefix) {
+			delete(c.sent, key)
+		}
+	}
 	c.mu.Unlock()
 }
+
+// reminderKeyPrefix begins the key of every reminder of an account.
+func reminderKeyPrefix(user string) string { return user + "\x00" }
 
 // handleReminders is GET /api/v1/calendar/reminders: the account's hints
 // of the last 12 hours, {epoch, reminders: [firedReminder]}.
