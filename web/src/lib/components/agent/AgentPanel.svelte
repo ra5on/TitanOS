@@ -169,6 +169,8 @@
 
 <style>
 	.agent-panel {
+		/* Positioned: what the chat places absolutely stays in the panel. */
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
@@ -258,6 +260,7 @@
 		cursor: default;
 	}
 	.talk {
+		position: relative;
 		flex: 1 1 auto;
 		min-height: 0;
 		display: flex;

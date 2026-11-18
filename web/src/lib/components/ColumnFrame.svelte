@@ -370,6 +370,7 @@
 		grid-column: 2 / -2;
 	}
 	.columns > .cf-aside {
+		position: relative;
 		grid-column: -2 / -1;
 		grid-row: 1 / -1;
 		display: flex;
