@@ -409,6 +409,12 @@ export function calendarState() {
     },
     created: [],
     requests: [],
+    /** 1.13: whole titles of clipped events by file name (else LONG_TITLE). */
+    fullTitles: {},
+    /** 1.13: the live stream ({held: Promise of events}); null refuses it. */
+    stream: null,
+    /** 1.13: milliseconds each answer waits (a NAS is not instant). */
+    delay: 0,
   };
 }
 
@@ -518,6 +524,9 @@ export async function installCalendar(target, state = calendarState()) {
       }
     } else if (type.includes("multipart")) body = "(multipart)";
     s.requests.push([method, path + url.search, body]);
+    // 1.13: a NAS takes some time to answer (measure-ui-kalender.mjs).
+    if (s.delay && path !== "/calendar/stream")
+      await new Promise((r) => setTimeout(r, s.delay));
     const json = (value, status = 200) =>
       route.fulfill({ status, json: value });
     const fail = (status, code) =>
@@ -604,7 +613,56 @@ export async function installCalendar(target, state = calendarState()) {
           s.hidden.includes("geburtstage") ? [] : s.birthdays.filter(inWindow),
         )
         .sort((a, b) => new Date(a.start) - new Date(b.start));
-      return json({ events: list, truncated: s.truncated });
+      // 1.13: full=1 has whole titles (titand reads up to 200 clipped ones).
+      const shown =
+        q("full") === "1"
+          ? list.map((e) =>
+              e.clipped
+                ? {
+                    ...e,
+                    title: s.fullTitles[e.id] ?? LONG_TITLE,
+                    clipped: false,
+                  }
+                : e,
+            )
+          : list;
+      // 1.13: an ETag of the answer; If-None-Match → 304 without a body.
+      const text = JSON.stringify({ events: shown, truncated: s.truncated });
+      let hash = 0;
+      for (let i = 0; i < text.length; i++)
+        hash = (hash * 31 + text.charCodeAt(i)) | 0;
+      const etag = `"ev-${(hash >>> 0).toString(16)}-${text.length}"`;
+      if (req.headers()["if-none-match"] === etag)
+        return route.fulfill({ status: 304, headers: { ETag: etag }, body: "" });
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ETag: etag,
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json",
+        },
+        body: text,
+      });
+    }
+    // 1.13: the live stream – held open until the test sends its events
+    // (state.stream.send), a later one is refused (no reconnect noise).
+    if (path === "/calendar/stream") {
+      s.streams = (s.streams ?? 0) + 1;
+      if (s.streams > 1 || !s.stream) return route.abort();
+      const events = await s.stream.held;
+      const body =
+        [
+          ": hallo",
+          `event: ready\ndata: ${JSON.stringify({ account: "alex", generations: {} })}`,
+          ...events.map(
+            (e) => `event: ${e.type}\ndata: ${JSON.stringify(e.data)}`,
+          ),
+        ].join("\n\n") + "\n\n";
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body,
+      });
     }
     if (path === "/calendar/events" && method === "POST") {
       const id = `neu-${s.created.length + 1}.ics`;
@@ -634,8 +692,8 @@ export async function installCalendar(target, state = calendarState()) {
       const one = (occ && all.find((e) => e.occurrence === occ)) || all[0];
       if (method === "GET") {
         const full = { ...one, notes: s.notes[id] ?? "" };
-        if (id === "angebot.ics") {
-          full.title = LONG_TITLE;
+        if (one.clipped) {
+          full.title = s.fullTitles[id] ?? LONG_TITLE;
           delete full.clipped;
         }
         return json(full);
