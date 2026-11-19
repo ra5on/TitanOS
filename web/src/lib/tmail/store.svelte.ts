@@ -2,7 +2,7 @@
 // state and the folders of each. Read from titand; nothing is kept in the
 // browser beyond the open page.
 import { apiErrorText, tOr } from '../i18n/index.svelte.ts';
-import { applyOrder } from '../side-order.svelte.ts';
+import { applyOrder, sideOrder } from '../side-order.svelte.ts';
 import { mailApi } from './api.ts';
 import type { FolderRole, MailAccount, MailFolder, MailStatus } from './types.ts';
 
@@ -81,7 +81,8 @@ export function refreshFolders(id: string, now = false) {
 }
 
 /** A change of a folder's counts, known before the NAS says it. */
-export type FolderDelta = { folder: string; unread?: number; total?: number };
+/** `account` (1.15): set by the lists over all mailboxes; else the open one. */
+export type FolderDelta = { folder: string; unread?: number; total?: number; account?: string };
 
 /** Changes the counts on the page at once (never below 0); the NAS's answer replaces them. */
 export function adjustFolders(id: string, deltas: FolderDelta[]) {
@@ -227,4 +228,29 @@ export async function loadAvatars(): Promise<void> {
 export function isBelow(child: MailFolder, parent: MailFolder): boolean {
 	const delim = child.delim || parent.delim || (child.path.includes('/') ? '/' : '.');
 	return child.path !== parent.path && child.path.startsWith(parent.path + delim);
+}
+
+/**
+ * 1.15 (115-4): the place of the lists over all mailboxes – "Alle
+ * Posteingänge" (folder "inbox") and "Markiert" (folder "flagged").
+ */
+export const ALL = '*';
+export type AllKind = 'inbox' | 'flagged';
+
+/** The mailboxes in the account's order (the first is the main one). */
+export function orderedAccounts(): MailAccount[] {
+	return applyOrder(mail.accounts ?? [], sideOrder().mailAccounts, (a) => a.id);
+}
+
+/** The mailbox "Neue E-Mail" writes from: the open one, else the main one. */
+export function mainAccount(open = ''): MailAccount | undefined {
+	return (
+		(open && open !== ALL ? mail.accounts?.find((a) => a.id === open) : undefined) ??
+		orderedAccounts()[0]
+	);
+}
+
+/** Folders of a mailbox taken out of the side bar (115-4). */
+export function hiddenFolders(id: string): string[] {
+	return sideOrder().mailHidden[id] ?? [];
 }

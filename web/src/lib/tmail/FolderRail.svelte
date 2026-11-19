@@ -6,7 +6,7 @@
 	import Icon, { type IconName } from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import { folderRef, isStrings, readPref } from './prefs.ts';
-	import { folderName, mail } from './store.svelte.ts';
+	import { folderName, mail, orderedAccounts } from './store.svelte.ts';
 	import type { MailAccount, MailFolder } from './types.ts';
 
 	let {
@@ -38,7 +38,7 @@
 			seen.add(folderRef(a.id, f.path));
 			out.push({ a, f });
 		};
-		for (const a of mail.accounts ?? [])
+		for (const a of orderedAccounts())
 			add(
 				a,
 				mail.folders[a.id]?.find((f) => f.role === 'inbox'),

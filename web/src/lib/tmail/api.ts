@@ -14,6 +14,7 @@ import type {
 	MailSettings,
 	Message,
 	MessagePage,
+	MessageRow,
 	NasFile,
 	Provider,
 	SearchResult,
@@ -72,6 +73,13 @@ export function query(params: Record<string, string | number | boolean | null | 
 	return parts.length ? '?' + parts.join('&') : '';
 }
 
+export type UnifiedPage = {
+	messages: (MessageRow & { account: string; folder: string })[];
+	total: number;
+	next: string;
+	failed: { account: string; code: string }[];
+};
+
 /** The filters of 1.12: `since`/`until` are days (YYYY-MM-DD, both counted). */
 export type Filters = {
 	q?: string;
@@ -122,6 +130,16 @@ export const mailApi = noteLimits({
 				limit: q.limit ?? PAGE_SIZE,
 				...filterParams(q),
 			})}`,
+			signal,
+		),
+	/** 1.15 (115-4): "Alle Posteingänge" and "Markiert" over all mailboxes. */
+	unified: (
+		kind: 'inbox' | 'flagged',
+		q: Filters & { cursor?: string | null; limit?: number },
+		signal?: AbortSignal,
+	) =>
+		api.get<UnifiedPage>(
+			`/mail/unified${query({ kind, ...filterParams(q), cursor: q.cursor || undefined, limit: q.limit })}`,
 			signal,
 		),
 	/** 1.12: the newest hits of all folders of a mailbox. */

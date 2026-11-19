@@ -1,5 +1,7 @@
 <script lang="ts" module>
 	export type EntryAction = 'archive' | 'delete' | 'seen' | 'unseen' | 'flag' | 'unflag';
+	/** 1.15: the swipe's "Mehr" opens the list's menu for this entry. */
+	export type EntryMore = 'more';
 </script>
 
 <script lang="ts">
@@ -31,6 +33,14 @@
 		/** The folder of a hit of the search over all folders. */
 		folderName?: string;
 		draggable?: boolean;
+		/** 1.15 (drafts 16–17): the round boxes show only while selecting. */
+		editing?: boolean;
+		/** 1.15: compact views show the arrow after the date (Apple Mail). */
+		arrow?: boolean;
+		/** 1.15: a long press (touch) starts selecting with this entry. */
+		onlongpress?: () => void;
+		/** 1.15: the swipe's "Mehr". */
+		onmore?: () => void;
 		onopen: (e: MouseEvent) => void;
 		onpick: (e: MouseEvent) => void;
 		ontoggle?: () => void;
@@ -50,6 +60,10 @@
 		canArchive = true,
 		folderName = '',
 		draggable = false,
+		editing = false,
+		arrow = false,
+		onlongpress,
+		onmore,
 		onopen,
 		onpick,
 		ontoggle,
@@ -67,6 +81,8 @@
 	const subject = $derived(row.subject?.trim() || t('mail.noSubject'));
 	const deleteLabel = $derived(inTrash ? t('mail.action.deleteForever') : t('mail.action.delete'));
 
+	// 1.15 (draft 19): to the left Mehr · Markieren · Löschen, to the right
+	// read/unread (Apple Mail); archiving is in "Mehr".
 	const swipe = $derived<SwipeAction[]>([
 		{
 			id: 'delete',
@@ -76,28 +92,57 @@
 			run: () => onaction('delete'),
 		},
 		{
-			id: 'seen',
-			label: unread ? t('mail.action.markRead') : t('mail.action.markUnread'),
-			icon: 'mail',
-			run: () => onaction(unread ? 'seen' : 'unseen'),
-		},
-		{
 			id: 'flag',
 			label: flagged ? t('mail.action.unflag') : t('mail.action.flag'),
 			icon: 'flag',
 			run: () => onaction(flagged ? 'unflag' : 'flag'),
 		},
+		...(onmore
+			? [{ id: 'more', label: t('mail.action.more'), icon: 'more' as const, run: () => onmore?.() }]
+			: []),
 	]);
-	const leading = $derived<SwipeAction | undefined>(
-		canArchive
-			? {
-					id: 'archive',
-					label: t('mail.action.archive'),
-					icon: 'archive',
-					run: () => onaction('archive'),
-				}
-			: undefined,
-	);
+	const leading = $derived<SwipeAction | undefined>({
+		id: 'seen',
+		label: unread ? t('mail.action.markRead') : t('mail.action.markUnread'),
+		icon: 'mail',
+		run: () => onaction(unread ? 'seen' : 'unseen'),
+	});
+
+	// A long press with a finger selects (and starts selecting); the click
+	// that follows it opens nothing.
+	let pressTimer: ReturnType<typeof setTimeout> | undefined;
+	let pressAt: { x: number; y: number } | null = null;
+	let pressed = false;
+	function pressStart(e: PointerEvent) {
+		if (!onlongpress || e.pointerType === 'mouse' || editing) return;
+		pressed = false;
+		pressAt = { x: e.clientX, y: e.clientY };
+		clearTimeout(pressTimer);
+		pressTimer = setTimeout(() => {
+			pressed = true;
+			navigator.vibrate?.(10);
+			onlongpress?.();
+		}, 500);
+	}
+	function pressMove(e: PointerEvent) {
+		if (pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 10) pressEnd();
+	}
+	function pressEnd() {
+		clearTimeout(pressTimer);
+		pressAt = null;
+	}
+	function open(e: MouseEvent) {
+		if (pressed) {
+			pressed = false;
+			e.preventDefault();
+			return;
+		}
+		if (editing) {
+			onpick(e);
+			return;
+		}
+		onopen(e);
+	}
 </script>
 
 {#snippet body()}
@@ -115,14 +160,16 @@
 		{ondragend}
 	>
 		<!-- The box and the count of a conversation stand left, apart from the quick actions. -->
-		<div class="side">
-			<input
-				class="pick"
-				type="checkbox"
-				checked={picked}
-				aria-label={t('mail.pick.one', { name: `${name} – ${subject}` })}
-				onclick={onpick}
-			/>
+		<div class="side" class:empty={!editing && !(count > 1 && ontoggle)}>
+			{#if editing}
+				<input
+					class="pick"
+					type="checkbox"
+					checked={picked}
+					aria-label={t('mail.pick.one', { name: `${name} – ${subject}` })}
+					onclick={onpick}
+				/>
+			{/if}
 			{#if count > 1 && ontoggle}
 				<button
 					type="button"
@@ -144,14 +191,19 @@
 			class:unread
 			aria-current={current ? 'true' : undefined}
 			data-uid={row.uid}
-			onclick={onopen}
+			onclick={open}
+			onpointerdown={pressStart}
+			onpointermove={pressMove}
+			onpointerup={pressEnd}
+			onpointercancel={pressEnd}
+			onpointerleave={pressEnd}
+			oncontextmenu={(e) => onlongpress && pressAt && e.preventDefault()}
 		>
 			<SenderAvatar from={row.from} size={child ? 28 : 36} />
 			<span class="lines">
+				{#if unread && !editing}<span class="dot" aria-hidden="true"></span>{/if}
 				<span class="top">
-					{#if unread}<span class="dot" aria-hidden="true"></span><span class="sr-only"
-							>{t('mail.mark.unread')}</span
-						>{/if}
+					{#if unread}<span class="sr-only">{t('mail.mark.unread')}</span>{/if}
 					<span class="from">{name}</span>
 					<span class="marks">
 						{#if attachment}<span class="mark" title={t('mail.mark.attachment')}
@@ -174,7 +226,10 @@
 								></span
 							>{/if}
 					</span>
-					{#if row.date}<time datetime={row.date}>{listDate(row.date, i18n.locale)}</time>{/if}
+					<span class="when"
+						>{#if row.date}<time datetime={row.date}>{listDate(row.date, i18n.locale)}</time
+							>{/if}{#if arrow}<Icon name="chevronRight" size={14} />{/if}</span
+					>
 				</span>
 				{#if row.tooLarge}
 					<!-- Its head is too large to list (titand reads only the uid). -->
@@ -188,7 +243,7 @@
 					>{/if}
 			</span>
 		</button>
-		{#if !phone}
+		{#if !phone && !editing}
 			<div class="quick" role="group" aria-label={t('mail.quick.label')}>
 				{#if canArchive}
 					<button
@@ -235,51 +290,80 @@
 {/if}
 
 <style>
+	/* 1.15 (115-2, drafts 11–19): rows like Apple Mail – the unread dot in
+	   the left margin, the sender always bold, date (and in compact views
+	   the arrow) at the right with the marks below it, subject and the
+	   whole preview; the round boxes only while selecting. */
 	.entry {
 		position: relative;
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr);
 		align-items: start;
-		gap: 0 var(--space-1);
-		padding: 0 var(--space-2) 0 var(--space-1-5);
-		border-left: 3px solid transparent;
+		gap: 0;
+		padding: 0 var(--space-2) 0 18px;
+		border-bottom: 1px solid var(--border);
 		background: var(--surface);
 	}
 	.entry.child {
-		padding-left: calc(var(--space-1-5) + 28px);
+		padding-left: calc(18px + 28px);
 		background: color-mix(in srgb, var(--chip) 40%, var(--surface));
 	}
 	.entry:hover {
-		background: var(--chip);
+		background: color-mix(in srgb, var(--text) 5%, var(--surface));
 	}
 	.entry.current {
-		border-left-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+		background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 	}
 	.entry.picked {
-		background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+		background: color-mix(in srgb, var(--accent) 18%, var(--surface));
 	}
 	.side {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-1);
-		padding-top: calc(var(--space-2) + 10px);
+		padding: calc(var(--space-2) + 8px) var(--space-1) 0 0;
+	}
+	.side.empty {
+		display: none;
 	}
 	.pick {
+		appearance: none;
 		margin: 0;
-		width: 18px;
-		height: 18px;
-		accent-color: var(--accent);
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1.8px solid var(--muted);
+		background: none;
 		cursor: pointer;
+		display: grid;
+		place-items: center;
+	}
+	.pick:checked {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+	.pick:checked::after {
+		content: '';
+		width: 9px;
+		height: 5px;
+		margin-top: -2px;
+		border-left: 2.2px solid var(--on-accent);
+		border-bottom: 2.2px solid var(--on-accent);
+		transform: rotate(-45deg);
+	}
+	.pick:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	.row {
+		grid-column: 2;
 		display: flex;
 		align-items: flex-start;
-		gap: var(--space-2);
+		gap: var(--space-2-5);
 		min-width: 0;
 		min-height: 44px;
-		padding: var(--space-2) var(--space-1);
+		padding: var(--space-2-5) var(--space-1);
 		border: 0;
 		background: none;
 		color: var(--text);
@@ -287,6 +371,7 @@
 		font-size: var(--text-md);
 		text-align: left;
 		cursor: pointer;
+		-webkit-touch-callout: none;
 	}
 	.lines {
 		display: flex;
@@ -296,22 +381,36 @@
 		min-width: 0;
 	}
 	.top {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: start;
 		gap: 0 var(--space-2);
 		min-width: 0;
 	}
 	.from {
-		flex: 1 1 8em;
+		grid-column: 1;
+		grid-row: 1 / span 2;
 		min-width: 0;
-		overflow-wrap: anywhere;
+		font-weight: 600;
+		overflow-wrap: break-word;
+		hyphens: auto;
+	}
+	.when {
+		grid-column: 2;
+		grid-row: 1;
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		justify-self: end;
+		color: var(--muted);
 	}
 	.marks {
+		grid-column: 2;
+		grid-row: 2;
+		justify-self: end;
 		display: inline-flex;
 		gap: var(--space-1);
 		color: var(--muted);
-		align-self: center;
 	}
 	.mark {
 		display: inline-flex;
@@ -326,8 +425,9 @@
 		white-space: nowrap;
 	}
 	.subject {
-		overflow-wrap: anywhere;
-		color: var(--muted);
+		overflow-wrap: break-word;
+		hyphens: auto;
+		color: var(--text);
 	}
 	.subject.large {
 		display: inline-flex;
@@ -337,7 +437,7 @@
 	}
 	.preview {
 		color: var(--muted);
-		font-size: var(--text-sm);
+		font-size: var(--text-md);
 		overflow-wrap: break-word;
 		hyphens: auto;
 	}
@@ -349,14 +449,13 @@
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
-	.unread .from,
 	.unread .subject {
 		font-weight: 700;
-		color: var(--text);
 	}
 	.dot {
-		flex: none;
-		align-self: center;
+		position: absolute;
+		left: 5px;
+		top: calc(var(--space-2-5) + 7px);
 		width: 9px;
 		height: 9px;
 		border-radius: 50%;

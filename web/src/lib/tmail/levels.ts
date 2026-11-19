@@ -11,7 +11,9 @@ export type Address = { pathname: string; searchParams: { get(name: string): str
  * a hit of the search over all folders. The list stays on `f` with its
  * search, so going back returns to the hits.
  */
-export type MailPlace = { a: string; f: string; m: number | null; mf?: string };
+export type MailPlace = { a: string; f: string; m: number | null; mf?: string; ma?: string };
+// `ma` (1.15, 115-4): the mailbox of the open message in a list over all
+// mailboxes (a = "*", f = "inbox" or "flagged").
 
 export function placeOf(url: Address): MailPlace {
 	const m = Number(url.searchParams.get('m'));
@@ -22,6 +24,8 @@ export function placeOf(url: Address): MailPlace {
 	};
 	const mf = url.searchParams.get('mf');
 	if (place.m && mf && mf !== place.f) place.mf = mf;
+	const ma = url.searchParams.get('ma');
+	if (place.m && ma && place.a === '*') place.ma = ma;
 	return place;
 }
 
@@ -31,6 +35,7 @@ export function mailHref(p: Partial<MailPlace>): string {
 	if (p.a && p.f) q.set('f', p.f);
 	if (p.a && p.f && p.m) q.set('m', String(p.m));
 	if (p.a && p.f && p.m && p.mf && p.mf !== p.f) q.set('mf', p.mf);
+	if (p.a === '*' && p.f && p.m && p.ma) q.set('ma', p.ma);
 	const s = q.toString();
 	return '/mail' + (s ? '?' + s : '');
 }

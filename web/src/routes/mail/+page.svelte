@@ -18,7 +18,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import BottomBar from '#lib/components/BottomBar.svelte';
 	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
 	import { compactView } from '#lib/components/compact.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -38,6 +37,7 @@
 	import { openCompose } from '#lib/tmail/open.ts';
 	import { mailKey } from '#lib/tmail/shortcuts.ts';
 	import {
+		ALL,
 		adjustFolders,
 		applyStatus,
 		ensureFolders,
@@ -49,6 +49,8 @@
 		loadFolders,
 		mail,
 		mailDrag,
+		mainAccount,
+		orderedAccounts,
 		refreshFolders,
 		type FolderDelta,
 	} from '#lib/tmail/store.svelte.ts';
@@ -75,13 +77,35 @@
 
 	const place = $derived(placeOf(page.url));
 	const level = $derived(levelOf(place));
+	// 1.15 (115-4): a = "*" is a list over all mailboxes ("Alle Posteingänge",
+	// "Markiert"); the open message then names its own mailbox (ma).
+	const all = $derived(place.a === ALL);
 	const account = $derived(mail.accounts?.find((a) => a.id === place.a));
-	const folder = $derived(place.a && place.f ? findFolder(place.a, place.f) : undefined);
+	const folder = $derived(place.a && place.f && !all ? findFolder(place.a, place.f) : undefined);
 	const listHeading = $derived(
-		folder ? folderName(folder) : place.f ? place.f.split(/[/.]/).at(-1) || place.f : '',
+		all
+			? place.f === 'flagged'
+				? t('mail.box.flagged')
+				: t('mail.box.allInboxes')
+			: folder
+				? folderName(folder)
+				: place.f
+					? place.f.split(/[/.]/).at(-1) || place.f
+					: '',
 	);
 	/** The folder of the open message: a hit of the search may lie elsewhere. */
-	const messageFolder = $derived(place.mf || place.f);
+	const messageFolder = $derived(all ? place.mf || 'INBOX' : place.mf || place.f);
+	/** The mailbox of the open message. */
+	const messageAccount = $derived(all ? place.ma || '' : place.a);
+	const listSub = $derived(
+		all
+			? t('mail.all.sub', { count: mail.accounts?.length ?? 0 })
+			: account
+				? account.name && account.name !== account.email
+					? `${account.name} · ${account.email}`
+					: account.email
+				: '',
+	);
 
 	// 1.13 (owner 18 Nov 2026): the agent's panel – right of the message
 	// (a column of the frame), compact a sheet from below; open or not is
@@ -108,8 +132,8 @@
 		}
 	}
 	const agentContext = $derived<AgentContext | null>(
-		place.a && place.m
-			? { app: 'mail', mail: { a: place.a, f: place.mf || place.f, uid: place.m } }
+		messageAccount && place.m
+			? { app: 'mail', mail: { a: messageAccount, f: messageFolder, uid: place.m } }
 			: null,
 	);
 	const agentActions = $derived(session.services.mail ? mailPanelActions((k) => t(k)) : []);
@@ -122,8 +146,8 @@
 	function go(p: Partial<MailPlace>, push = !wide) {
 		void goto(mailHref(p), { replace: !push, reset: false });
 	}
-	function openMessage(uid: number, inFolder: string) {
-		go({ a: place.a, f: place.f, m: uid, mf: inFolder }, !wide);
+	function openMessage(uid: number, inFolder: string, inAccount?: string) {
+		go({ a: place.a, f: place.f, m: uid, mf: inFolder, ma: inAccount }, !wide);
 	}
 
 	// The folders of every mailbox, read once each; the contacts' pictures once.
@@ -133,16 +157,16 @@
 	});
 	onMount(() => void loadAvatars());
 
-	// Wide: with nothing chosen yet the first mailbox's inbox opens.
+	// Wide: with nothing chosen yet the main mailbox's inbox opens.
 	$effect(() => {
-		const first = mail.accounts?.[0];
+		const first = orderedAccounts()[0];
 		if (!wide || !first || place.a) return;
 		untrack(() => go({ a: first.id, f: inboxOf(first.id) }, false));
 	});
 
 	// A mailbox that is gone (removed elsewhere) leaves the address.
 	$effect(() => {
-		if (place.a && mail.accounts && !account) untrack(() => go({}, false));
+		if (place.a && !all && mail.accounts && !account) untrack(() => go({}, false));
 	});
 
 	// 1.13: a burst of events (ten new mails, marks set on another device)
@@ -168,7 +192,7 @@
 		// New mail and changed marks: the counts once things rest; the
 		// mailboxes' list is not read again (their state comes as "status").
 		refreshFolders(e.account);
-		if (e.account === place.a && e.folder === place.f) listSoon();
+		if ((e.account === place.a && e.folder === place.f) || all) listSoon();
 	}
 	onMount(() => watchMail(onEvent));
 
@@ -182,7 +206,13 @@
 	);
 	onMount(() => {
 		const timer = setInterval(() => {
-			if (document.visibilityState !== 'visible' || !place.a || !account) return;
+			if (document.visibilityState !== 'visible' || !place.a) return;
+			if (all) {
+				for (const a of mail.accounts ?? []) refreshFolders(a.id, true);
+				list?.refresh(true);
+				return;
+			}
+			if (!account) return;
 			if (account.status.state === 'auth_failed' || account.status.state === 'unreachable') return;
 			if (liveHere) return;
 			refreshFolders(place.a, true);
@@ -193,15 +223,23 @@
 
 	function refresh() {
 		void loadAccounts();
-		if (place.a) void loadFolders(place.a);
+		if (all) for (const a of mail.accounts ?? []) void loadFolders(a.id);
+		else if (place.a) void loadFolders(place.a);
 		list?.refresh(false);
 	}
 
 	function compose(mode?: ComposeMode, msg?: Message) {
-		const a = place.a || mail.accounts?.[0]?.id;
+		const a = mainAccount(messageAccount || place.a)?.id;
 		if (!a) return;
 		const back = page.url.pathname + page.url.search;
-		if (mode && msg) openCompose({ a, mode, f: msg.folder || messageFolder, uid: msg.uid, back });
+		if (mode && msg)
+			openCompose({
+				a: messageAccount || a,
+				mode,
+				f: msg.folder || messageFolder,
+				uid: msg.uid,
+				back,
+			});
 		else openCompose({ a, back });
 	}
 
@@ -209,30 +247,56 @@
 		'mail.compose': { run: () => compose(), enabled: () => !!mail.accounts?.length },
 		// PLAN 87: pulling the list down on the phone (PhoneGestures).
 		'mail.refresh': refresh,
+		'mail.agent': { run: () => setAgent(!agentOpen), enabled: () => withAgent },
 	});
 
 	/** Counts changed by this page: shown at once, read from the NAS once things rest. */
 	function counted(deltas: FolderDelta[]) {
-		if (!place.a) return;
-		adjustFolders(place.a, deltas);
-		refreshFolders(place.a);
+		const by = new Map<string, FolderDelta[]>();
+		for (const d of deltas) {
+			const a = d.account ?? (all ? messageAccount : place.a);
+			if (a) by.set(a, [...(by.get(a) ?? []), d]);
+		}
+		for (const [a, list] of by) {
+			adjustFolders(a, list);
+			refreshFolders(a);
+		}
 	}
 	function flagsChanged(uids: number[], change: Partial<Flags>) {
-		list?.setFlags(uids, change, messageFolder);
+		list?.setFlags(uids, change, messageFolder, all ? messageAccount : undefined);
 		if ('seen' in change)
-			counted([{ folder: messageFolder, unread: change.seen ? -uids.length : uids.length }]);
+			counted([
+				{
+					account: messageAccount,
+					folder: messageFolder,
+					unread: change.seen ? -uids.length : uids.length,
+				},
+			]);
 	}
 	/** The open message was moved or deleted in the reading pane. */
 	function removed(uid: number) {
-		const next = wide ? (list?.neighbour(uid, messageFolder) ?? null) : null;
-		list?.drop([uid], messageFolder);
-		counted([{ folder: messageFolder, total: -1 }]);
-		go({ a: place.a, f: place.f, m: next?.uid ?? null, mf: next?.folder }, false);
+		const next = wide
+			? (list?.neighbour(uid, messageFolder, all ? messageAccount : undefined) ?? null)
+			: null;
+		list?.drop([uid], messageFolder, all ? messageAccount : undefined);
+		counted([{ account: messageAccount, folder: messageFolder, total: -1 }]);
+		go(
+			{ a: place.a, f: place.f, m: next?.uid ?? null, mf: next?.folder, ma: next?.account },
+			false,
+		);
 	}
 	/** Mails left the list (quick actions, the bar, a drop): the open one goes on to the next. */
 	function listRemoved(items: MailItem[], next: MailItem | null) {
-		if (!place.m || !items.some((i) => i.uid === place.m && i.folder === messageFolder)) return;
-		if (wide && next) go({ a: place.a, f: place.f, m: next.uid, mf: next.folder }, false);
+		if (
+			!place.m ||
+			!items.some(
+				(i) =>
+					i.uid === place.m && i.folder === messageFolder && (!all || i.account === messageAccount),
+			)
+		)
+			return;
+		if (wide && next)
+			go({ a: place.a, f: place.f, m: next.uid, mf: next.folder, ma: next.account }, false);
 		else go({ a: place.a, f: place.f }, false);
 	}
 	function dropped(a: string, to: string) {
@@ -261,7 +325,7 @@
 			case 'next':
 			case 'prev': {
 				const to = list.step(action === 'next' ? 1 : -1);
-				if (to) go({ a: place.a, f: place.f, m: to.uid, mf: to.folder }, false);
+				if (to) go({ a: place.a, f: place.f, m: to.uid, mf: to.folder, ma: to.account }, false);
 				break;
 			}
 			case 'archive':
@@ -269,9 +333,9 @@
 				list.actOnCurrent(action);
 				break;
 			case 'reply':
-				if (place.m)
+				if (place.m && messageAccount)
 					openCompose({
-						a: place.a,
+						a: messageAccount,
 						mode: 'reply',
 						f: messageFolder,
 						uid: place.m,
@@ -353,6 +417,7 @@
 			account={place.a}
 			folder={place.f}
 			sortable={wide}
+			oncompose={compact ? () => compose() : undefined}
 			onpick={(a, f) => go({ a, f }, !wide)}
 			ondrop={wide ? dropped : undefined}
 		/>
@@ -402,40 +467,18 @@
 			folder={place.f}
 			selected={place.m}
 			selectedFolder={messageFolder}
+			selectedAccount={messageAccount}
 			{phone}
+			{compact}
 			drag={wide}
-			heading={account && (mail.accounts?.length ?? 0) > 1
-				? t('mail.list.heading', {
-						folder: listHeading,
-						account: account.name || account.email,
-					})
-				: listHeading}
-			oncompose={wide || compact ? undefined : () => compose()}
+			heading={listHeading}
+			subheading={listSub}
+			oncompose={() => compose()}
 			onopen={openMessage}
 			onchanged={counted}
 			onremoved={listRemoved}
 			onloaded={(at) => (refreshed = at)}
 		/>
-		{#if compact}
-			<BottomBar label={t('mail.listActions')}>
-				<button
-					type="button"
-					class="bar-btn bar-new"
-					aria-label={t('mail.action.compose')}
-					title={t('mail.action.compose')}
-					onclick={() => compose()}><Icon name="edit" size={20} /></button
-				>
-				{#if withAgent}
-					<button
-						type="button"
-						class="bar-btn"
-						aria-label={t('agentpim.panel.toggle')}
-						title={t('agentpim.panel.toggle')}
-						onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
-					>
-				{/if}
-			</BottomBar>
-		{/if}
 	{/if}
 {/snippet}
 
@@ -463,7 +506,7 @@
 		sideResizeLabel={t('mail.resize.folders')}
 		listResizeLabel={t('mail.resize.list')}
 		resizeHint={t('mail.resize.hint')}
-		action={compose_}
+		action={compact ? undefined : compose_}
 		side={folders}
 		{rail}
 		sideFoot={foot}
@@ -474,7 +517,7 @@
 		asideResizeLabel={t('agentpim.panel.resize')}
 		bind:asideShown={agentColumn}
 	>
-		{#if place.a && place.f && place.m}
+		{#if place.a && place.f && place.m && messageAccount}
 			{#if !wide && !phone}
 				<button type="button" class="btn back" onclick={() => void goto(mailUp(page.url))}
 					><Icon name="chevronLeft" size={16} />{t('mail.back.list', {
@@ -484,7 +527,7 @@
 			{/if}
 			<MessageView
 				{compact}
-				accountId={place.a}
+				accountId={messageAccount}
 				folder={messageFolder}
 				uid={place.m}
 				oncompose={compose}
@@ -492,7 +535,7 @@
 				onremoved={removed}
 				onagent={withAgent ? () => setAgent(true) : undefined}
 			/>
-		{:else if place.a && place.f}
+		{:else if place.a && place.f && !all}
 			<MailOverview
 				accountId={place.a}
 				folder={place.f}

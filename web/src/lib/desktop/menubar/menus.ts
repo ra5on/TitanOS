@@ -452,6 +452,8 @@ const PROGRAMS: Record<string, Menu[]> = {
 		]),
 		menu('view', 'menubar.menu.view', [
 			cmd('mail.refresh', 'menubar.refresh'),
+			// 1.15: the KI-Agent of the program (on the phone in the ⋯ menu).
+			cmd('mail.agent', 'agentpim.panel.toggle'),
 			sep,
 			go('mail.go.mail', 'mail.side.mail', '/mail'),
 			go('mail.go.settings', 'mail.side.settings', '/mail/settings'),
@@ -465,6 +467,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('calendar.newCalendar', 'calendar.newCalendar'),
 		]),
 		menu('view', 'menubar.menu.view', [
+			cmd('calendar.agent', 'agentpim.panel.toggle'),
 			go('calendar.go.calendar', 'calendar.side.calendar', '/calendar'),
 			go('calendar.go.list', 'calendar.side.list', '/calendar?view=list'),
 			sep,
@@ -474,6 +477,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 	contacts: [
 		menu('file', 'menubar.menu.file', [cmd('contacts.new', 'contacts.new')]),
 		menu('view', 'menubar.menu.view', [
+			cmd('contacts.agent', 'agentpim.panel.toggle'),
 			go('contacts.go.contacts', 'contacts.side.contacts', '/contacts'),
 			go('contacts.go.suggestions', 'contacts.side.suggestions', '/contacts?view=suggestions'),
 			sep,

@@ -3,6 +3,7 @@
 	// change the password after a failed login), notices per mailbox,
 	// signatures and rules that run on the NAS for new mail.
 	import { onMount } from 'svelte';
+	// 1.15 (115-2): "Unterhaltungen zusammenfassen" moved here from above the list (per device).
 	import { page } from '$app/state';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -13,6 +14,7 @@
 	import AccountEditor from '#lib/tmail/AccountEditor.svelte';
 	import { mailApi } from '#lib/tmail/api.ts';
 	import StatusBadge from '#lib/tmail/StatusBadge.svelte';
+	import { isBool, readPref, writePref } from '#lib/tmail/prefs.ts';
 	import {
 		folderName,
 		loadAccounts,
@@ -162,6 +164,7 @@
 		const a = mail.accounts?.find((x) => x.id === id);
 		return a ? a.name || a.email : id;
 	};
+	let threads = $state(readPref('threads', true, isBool));
 </script>
 
 <PageHead
@@ -196,6 +199,29 @@
 		{:else}
 			<p class="muted">{t('mail.empty.text')}</p>
 		{/each}
+	</SettingGroup>
+
+	<SettingGroup title={t('mail.settings.view')} id="mail-view">
+		<SettingRow
+			icon="mail"
+			title={t('mail.thread.toggle')}
+			desc={t('mail.settings.threadsDesc')}
+			for="mail-threads"
+		>
+			{#snippet control()}
+				<input
+					id="mail-threads"
+					type="checkbox"
+					role="switch"
+					class="switch"
+					checked={threads}
+					onchange={(e) => {
+						threads = e.currentTarget.checked;
+						writePref('threads', threads, true);
+					}}
+				/>
+			{/snippet}
+		</SettingRow>
 	</SettingGroup>
 
 	<SettingGroup
