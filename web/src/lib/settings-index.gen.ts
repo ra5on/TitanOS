@@ -1871,6 +1871,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{ p: '/account', k: 'ssh.keys', kind: 'row', in: ['account.group.login'], id: 'acc-ssh' },
 	{ p: '/account', k: 'account.devices', kind: 'group', id: 'acc-devices' },
+	{ p: '/account', k: 'androidApps.title', kind: 'row', in: ['account.devices'], id: 'acc-apps' },
 	{ p: '/account', k: 'account.group.bell', kind: 'group', id: 'acc-notify', admin: true },
 	{
 		p: '/account',

@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/appdevices"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -300,6 +301,8 @@ type Server struct {
 	// devices: the device passwords of T-Kalender and Kontakte (RAM of
 	// what the stick holds, "last synced"; devices.go).
 	devices *devices.Manager
+	// appDevices: the paired Android apps (PLAN 116, appdevices.go).
+	appDevices *appdevices.Manager
 	// profileLinks: the one-time links of the iPhone profile (RAM only,
 	// devices_profile.go); profileSigner replaces the certificate it is
 	// signed with in tests.
@@ -342,6 +345,7 @@ func New(opts Options) *Server {
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.devices = newDevices(opts, s.rateLimiter)
+	s.appDevices = newAppDevices(opts, func() int { return s.sessionStore().Stay() })
 	s.pimLive, s.pimCache = newPIMHub(), newPIMCache()
 	s.reminders = newCalendarReminders()
 	if s.sessions == nil {
@@ -472,6 +476,7 @@ func New(opts Options) *Server {
 	s.registerAgent(mux)
 	s.registerMail(mux)
 	s.registerPIM(mux)
+	s.registerApps(mux)
 
 	s.routeCluster(mux)
 
