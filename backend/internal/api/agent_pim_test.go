@@ -425,7 +425,7 @@ func TestPimAccessWithoutStore(t *testing.T) {
 
 func TestPimContactsFlow(t *testing.T) {
 	ts, pim, mailDir, _ := contactsMailServer(t)
-	pim.Local = func() *time.Location { return calBerlin }
+	pim.SetLocal(func() *time.Location { return calBerlin })
 	learnedBook(t, ts, mailDir, "alex", "gelernt@example.org")
 	// 1.13: "Eintragen mit Nachfrage" chosen before stays ask (Q28); the
 	// plain standard makes drafts (TestActionDrafts).

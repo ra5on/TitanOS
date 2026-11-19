@@ -35,7 +35,7 @@ var calBerlin = func() *time.Location { l, _ := time.LoadLocation("Europe/Berlin
 func newCalEnv(t *testing.T) *calEnv {
 	t.Helper()
 	ts, pim, _, setVolume := pimServer(t)
-	pim.Local = func() *time.Location { return calBerlin }
+	pim.SetLocal(func() *time.Location { return calBerlin })
 	return &calEnv{t: t, ts: ts, pim: pim, setVolume: setVolume, client: ts.client}
 }
 

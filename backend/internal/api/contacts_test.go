@@ -46,7 +46,7 @@ type conEnv struct {
 func newConEnv(t *testing.T) *conEnv {
 	t.Helper()
 	ts, pim, mailDir, gone := contactsMailServer(t)
-	pim.Local = func() *time.Location { return calBerlin }
+	pim.SetLocal(func() *time.Location { return calBerlin })
 	bea := ts.newClient()
 	if res, _ := ts.do(bea, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword}); res.StatusCode != http.StatusOK {
 		t.Fatal("bea")
