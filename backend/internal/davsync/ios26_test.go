@@ -735,6 +735,17 @@ func (e *env) check(t *testing.T, s *step, res *http.Response, body []byte, w []
 		if got := innerOf(p.node); p.status != 200 || strings.Contains(got, arg(3)) {
 			return fmt.Errorf("%s %s: %d %q has %q", w[1], w[2], p.status, got, arg(3))
 		}
+	case "value-not":
+		// value-not HREF NAME text: a 200 property whose whole content is
+		// not the text (a ctag of an empty collection is "0-0"; a filled
+		// one may end in "…0-0" by chance, so value-lacks will not do).
+		p, err := prop(w[1], w[2])
+		if err != nil {
+			return err
+		}
+		if got := strings.TrimSpace(innerOf(p.node)); p.status != 200 || got == arg(3) {
+			return fmt.Errorf("%s %s: %d %q is %q", w[1], w[2], p.status, got, arg(3))
+		}
 	case "sync-token-is", "sync-token-not":
 		tok, err := syncTokenOf(body)
 		if err != nil {

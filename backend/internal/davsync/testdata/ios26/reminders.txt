@@ -88,9 +88,9 @@
 < status 207
 < responses 3
 < value /caldav/alex/calendars/privat/ cs:getctag 0-0
-< value-lacks /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
+< value-not /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
 < value /caldav/alex/calendars/erinnerungen--titanos/ d:displayname Erinnerungen
-< value-lacks /caldav/alex/calendars/ cs:getctag {saved:home}
+< value-not /caldav/alex/calendars/ cs:getctag {saved:home}
 
 # The bytes come back as they went (X-APPLE-SORT-ORDER, X-WR-ALARMUID).
 > GET /caldav/alex/calendars/erinnerungen--titanos/9B1F0D3E-2A4C-4B6D-8E0F-1A2B3C4D5E6F.ics
