@@ -565,7 +565,11 @@ test('1.14: built-in skills in the language of the page', () => {
 		steps: '1. system_status',
 		builtIn: true,
 		updated: '',
-		de: { name: 'Gesundheitscheck', when: 'regelmäßiger Bericht', steps: '1. system_status prüfen' },
+		de: {
+			name: 'Gesundheitscheck',
+			when: 'regelmäßiger Bericht',
+			steps: '1. system_status prüfen',
+		},
 	};
 	assert.equal(skillIn(built, 'de').name, 'Gesundheitscheck');
 	assert.equal(skillIn(built, 'de').steps, '1. system_status prüfen');

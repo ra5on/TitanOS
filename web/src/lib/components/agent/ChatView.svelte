@@ -215,8 +215,28 @@
 	});
 	// Keys that move the view are the person's (in an input they type).
 	function key(e: KeyboardEvent) {
-		if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) person();
-	}
+		if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key))
+			person();
+	} // The moves of the person, passive (they never stop the scroll).
+	$effect(() => {
+		const el = scroller;
+		if (!el) return;
+		const down = () => ((touching = true), person());
+		const up = () => ((touching = false), person());
+		const on: [string, EventListener][] = [
+			['wheel', person],
+			['pointerdown', person],
+			['keydown', key as EventListener],
+			['touchstart', down],
+			['touchmove', person],
+			['touchend', up],
+			['touchcancel', up],
+		];
+		for (const [type, fn] of on) el.addEventListener(type, fn, { passive: true });
+		return () => {
+			for (const [type, fn] of on) el.removeEventListener(type, fn);
+		};
+	});
 
 	// What the agent remembered right before an answer goes into the small
 	// row under that answer (PLAN 68), not as a block of its own.
@@ -254,18 +274,7 @@
 	}}
 />
 
-<div
-	class="messages"
-	bind:this={scroller}
-	onscroll={scrolled}
-	onwheel={person}
-	onpointerdown={person}
-	onkeydown={key}
-	ontouchstart={() => ((touching = true), person())}
-	ontouchmove={person}
-	ontouchend={() => ((touching = false), person())}
-	ontouchcancel={() => ((touching = false), person())}
->
+<div class="messages" bind:this={scroller} onscroll={scrolled}>
 	{#if find !== null}
 		<ChatFind bind:find {column} {scroller} version={chat.entries.length} />
 	{/if}
