@@ -750,12 +750,13 @@ try {
       await page.goto(base + (app === "contacts" ? "/contacts" : "/calendar"));
       await page.locator("[data-pim-ready]").first().waitFor();
       // Kontakte opens on the list's level: the KI-Agent next to "‹ Zurück"
-      // (800) or in the bar at the bottom (390).
+      // (800); on the phone (1.15) in the ⋯ menu of the phone's bar.
+      if (phone) await page.locator('header.phone-bar button[aria-haspopup="menu"]').click();
       const toggle =
         width >= 900
           ? page.locator(".agent-toggle", { hasText: "KI-Agent" })
           : phone
-            ? page.locator(".bottombar").getByRole("button", { name: "KI-Agent" })
+            ? page.getByRole("menuitem", { name: "KI-Agent" })
             : app === "contacts"
               ? page.locator(".agent-level")
               : page.locator(".agent-toggle");

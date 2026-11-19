@@ -57,7 +57,8 @@ export async function searchContacts(
 /**
  * The whole list. 1.13: titand names it with an ETag; asked again with it,
  * an unchanged list answers 304 without a body and this gives null – the
- * caller keeps the list it has. The ETag lives here, per page load.
+ * caller keeps the list it has. The ETag lives here, per page load; a new
+ * page of Kontakte starts with `startContactList()` (115-7).
  */
 let listTag = '';
 export async function loadContacts(): Promise<Item[] | null> {
@@ -77,6 +78,17 @@ export async function loadContacts(): Promise<Item[] | null> {
 /** Forgets the list's ETag (the next load reads the body). */
 export function forgetListTag() {
 	listTag = '';
+}
+/**
+ * 115-7: this module outlives the page – a page of Kontakte opened again
+ * in the app (Einstellungen and back) has an empty list, but the old tag
+ * made its first load a 304 and it stayed empty ("0 Kontakte"). A page
+ * calls this when it starts: its first load reads the whole list and the
+ * generation it has seen is unknown again.
+ */
+export function startContactList() {
+	listTag = '';
+	known = '';
 }
 /**
  * The book's ctag the shown list has seen (the live stream's "generation"
@@ -229,7 +241,8 @@ export type ImportResult = {
 	added: number;
 	updated: number;
 	skipped: number;
-	failed: { uid?: string; name?: string; reason: string }[];
+	/** `index` (115-7, when titand names it): the card's place in the file, from 1. */
+	failed: { uid?: string; name?: string; index?: number; reason: string }[];
 };
 export function importVCF(file: File, onDuplicate: 'skip' | 'replace') {
 	const form = new FormData();

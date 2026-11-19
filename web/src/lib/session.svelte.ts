@@ -26,6 +26,8 @@ export const session = $state<{
 	fileappsdocker: Record<string, unknown> | null;
 	/** 1.13: the order of the side bars of Mail, Kontakte, Kalender (side-order.svelte.ts). */
 	order: Record<string, unknown> | null;
+	/** 1.15: Kontakte – the own card ("Meine Karte"), kept on the NAS. */
+	contacts: { me?: string } | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
 	prefsLoaded: number;
@@ -41,6 +43,7 @@ export const session = $state<{
 	fileapps: null,
 	fileappsdocker: null,
 	order: null,
+	contacts: null,
 	services: {},
 	/** Counts loads of the account's preferences (the desktop applies them once they are there). */
 	prefsLoaded: 0,
@@ -58,6 +61,7 @@ async function loadPreferences() {
 		session.fileapps = prefs.fileapps ?? null;
 		session.fileappsdocker = prefs.fileappsdocker ?? null;
 		session.order = prefs.order ?? null;
+		session.contacts = prefs.contacts ?? null;
 		session.prefsLoaded++;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
@@ -74,6 +78,7 @@ async function loadPreferences() {
 		session.fileapps = null;
 		session.fileappsdocker = null;
 		session.order = null;
+		session.contacts = null;
 	}
 }
 

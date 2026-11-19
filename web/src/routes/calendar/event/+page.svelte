@@ -13,6 +13,14 @@
 	// bearbeiten") fills the form – a new event, or a change of the event the
 	// draft names (cal, id, occurrence; only the fields that change). It is
 	// text to check: saved only with "Speichern", a series asks as always.
+	// 1.15 (draft 33, compact: the phone and windows under 620 px): a sheet
+	// as at Apple – on top "Abbrechen · Neues Ereignis · Hinzufügen" (changing:
+	// "Abbrechen · Ereignis bearbeiten · Fertig") in place of the buttons of
+	// the head; the fields in grouped cards (title and place; all-day, start,
+	// end, repetition; calendar; alerts; notes), the word left and the value
+	// right. "Kalender" and each "Hinweis" are rows with the value and an
+	// arrow that open a choice sheet; the repetition is a select in its row.
+	// Changing an event: the red row "Ereignis löschen" at the end.
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
@@ -23,6 +31,7 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Segments from '#lib/components/Segments.svelte';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { compactView } from '#lib/components/compact.svelte.ts';
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -83,6 +92,9 @@
 	import type { Simple } from '#lib/pim/calendar.ts';
 
 	const phone = $derived(phoneView());
+	const compact = $derived(compactView());
+	/** Compact: the choice sheet open now – the calendar, or the alert at an index (its length: a new one). */
+	let choose = $state<{ kind: 'cal' } | { kind: 'alarm'; at: number } | null>(null);
 	const params = page.url.searchParams;
 	// A draft of a change names its event itself (load() sets these).
 	let editCal = $state(params.get('cal') ?? '');
@@ -477,6 +489,20 @@
 	const alarmChoices = $derived(
 		(form.allDay ? ALLDAY_ALARMS : TIMED_ALARMS).filter((m) => !form.alarms.includes(m)),
 	);
+	/** "Hinweis", "Zweiter Hinweis", "3. Hinweis" … */
+	const hintWord = (i: number) =>
+		i === 0
+			? t('calendar.form.hint1')
+			: i === 1
+				? t('calendar.form.hint2')
+				: t('calendar.form.hintN', { n: i + 1 });
+	/** The alert at `at` becomes `m` (null: none); kept sorted and once each. */
+	function setAlarm(at: number, m: number | null) {
+		const rest = form.alarms.filter((_, i) => i !== at);
+		form.alarms = (m === null ? rest : [...new Set([...rest, m])]).sort((x, y) => x - y);
+		choose = null;
+	}
+	const chosenCal = $derived(own.find((c) => c.id === form.calendar));
 
 	const title = $derived(
 		editing ? form.title.trim() || event?.title || t('calendar.untitled') : t('calendar.form.new'),
@@ -488,23 +514,44 @@
 	]);
 </script>
 
-<PageHead {title} path={phone ? undefined : [{ label: t('desktop.app.calendar'), href: back }]}>
-	{#snippet actions()}
-		<button type="button" class="btn" disabled={busy} onclick={discard}
-			><Icon name="close" size={16} />{done
-				? t('calendar.detail.close')
-				: t('calendar.form.discard')}</button
+{#snippet headActions()}
+	<button type="button" class="btn" disabled={busy} onclick={discard}
+		><Icon name="close" size={16} />{done
+			? t('calendar.detail.close')
+			: t('calendar.form.discard')}</button
+	>
+	{#if !done}
+		<button
+			type="button"
+			class="btn btn-primary"
+			disabled={busy || loading || !!loadError || !own.length}
+			onclick={save}><Icon name="check" size={16} />{t('calendar.form.save')}</button
 		>
+	{/if}
+{/snippet}
+<!-- Compact the sheet's own head stands in the page (no bar above it). -->
+<PageHead
+	title={compact && phone ? t('desktop.app.calendar') : title}
+	path={compact || phone ? undefined : [{ label: t('desktop.app.calendar'), href: back }]}
+	actions={compact ? undefined : headActions}
+/>
+
+{#if compact}
+	<div class="sheet-head" data-sheet-head>
+		<button type="button" class="link-btn" disabled={busy} onclick={discard}
+			>{done ? t('calendar.detail.close') : t('common.cancel')}</button
+		>
+		<h1>{editing ? t('calendar.form.editTitle') : t('calendar.form.newTitle')}</h1>
 		{#if !done}
 			<button
 				type="button"
-				class="btn btn-primary"
+				class="link-btn strong"
 				disabled={busy || loading || !!loadError || !own.length}
-				onclick={save}><Icon name="check" size={16} />{t('calendar.form.save')}</button
+				onclick={save}>{editing ? t('calendar.done') : t('calendar.form.add')}</button
 			>
-		{/if}
-	{/snippet}
-</PageHead>
+		{:else}<span></span>{/if}
+	</div>
+{/if}
 
 {#if loading}
 	<p class="muted" role="status">{t('common.loading')}</p>
@@ -518,43 +565,68 @@
 		<p class="notice-error" role="alert">{loadError}</p>
 	{/if}
 {:else}
-	<form class="ev" class:phone onsubmit={(e) => (e.preventDefault(), save())} data-event-form>
+	<form
+		class="ev"
+		class:phone
+		class:compact
+		onsubmit={(e) => (e.preventDefault(), save())}
+		data-event-form
+	>
 		{#if fromAgent === 'applied'}<p class="notice-warn" role="note" data-agent-draft>
 				{t('agentpim.draft.eventNote')}
 			</p>{:else if fromAgent === 'gone'}<p class="muted" role="status">
 				{t('agentpim.draft.gone')}
 			</p>{/if}
 		{#if note}<p class="notice-warn" role="status">{note}</p>{/if}
-		<div class="row">
-			<label class="lbl" for="t-title">{t('calendar.form.title')}</label>
+		<div class="row g-first" class:g-last={!compact}>
+			<label class="lbl" class:sr-only={compact} for="t-title">{t('calendar.form.title')}</label>
 			<input
 				id="t-title"
 				class="field big"
 				type="text"
 				bind:value={form.title}
 				maxlength="2000"
-				placeholder={t('calendar.form.titlePlaceholder')}
+				placeholder={compact ? t('calendar.form.title') : t('calendar.form.titlePlaceholder')}
 			/>
 		</div>
+		{#if compact}{@render placeRow()}{/if}
 
-		<div class="row top">
-			<span class="lbl" id="t-cal">{t('calendar.form.calendar')}</span>
-			<div class="calpick" role="radiogroup" aria-labelledby="t-cal">
-				{#each own as c (c.id)}
-					<label class="cp" class:on={form.calendar === c.id} style:--c={calColor(c.color)}>
-						<input type="radio" name="cal" value={c.id} bind:group={form.calendar} />
-						<span class="sw" aria-hidden="true"></span><span class="cpn">{calName(c)}</span>
-						{#if form.calendar === c.id}<Icon name="check" size={15} />{/if}
-					</label>
-				{/each}
-				{#if !own.length}<p class="muted">{t('calendar.form.noCalendar')}</p>{/if}
+		{#if compact}
+			<div class="row g-first g-last">
+				<span class="lbl" id="t-cal">{t('calendar.form.calendar')}</span>
+				<button
+					type="button"
+					class="pickrow"
+					aria-haspopup="dialog"
+					aria-labelledby="t-cal t-cal-v"
+					disabled={!own.length}
+					onclick={() => (choose = { kind: 'cal' })}
+					><span class="sw" style:--c={calColor(chosenCal?.color ?? '')} aria-hidden="true"
+					></span><span id="t-cal-v" class="pv"
+						>{chosenCal ? calName(chosenCal) : t('calendar.form.noCalendar')}</span
+					><Icon name="chevronRight" size={18} /></button
+				>
 			</div>
-		</div>
+		{:else}
+			<div class="row top">
+				<span class="lbl" id="t-cal">{t('calendar.form.calendar')}</span>
+				<div class="calpick" role="radiogroup" aria-labelledby="t-cal">
+					{#each own as c (c.id)}
+						<label class="cp" class:on={form.calendar === c.id} style:--c={calColor(c.color)}>
+							<input type="radio" name="cal" value={c.id} bind:group={form.calendar} />
+							<span class="sw" aria-hidden="true"></span><span class="cpn">{calName(c)}</span>
+							{#if form.calendar === c.id}<Icon name="check" size={15} />{/if}
+						</label>
+					{/each}
+					{#if !own.length}<p class="muted">{t('calendar.form.noCalendar')}</p>{/if}
+				</div>
+			</div>
+		{/if}
 		{#if moved && event?.recurring}
 			<p class="hint-row muted">{t('calendar.scope.moveOnlyAll')}</p>
 		{/if}
 
-		<div class="row">
+		<div class="row g-first">
 			<label class="lbl" for="t-all">{t('calendar.form.allDay')}</label>
 			<label class="swwrap"
 				><input
@@ -618,7 +690,7 @@
 			<p class="hint-row muted">{t('calendar.form.tzGuess', { zone: zoneName(zone) })}</p>
 		{/if}
 
-		<div class="row top">
+		<div class="row top rep g-last">
 			<label class="lbl" for="t-rep">{t('calendar.form.repeat')}</label>
 			<span class="stack">
 				<select id="t-rep" class="field sel" bind:value={form.repeat.kind}>
@@ -674,62 +746,88 @@
 			</span>
 		</div>
 
-		<div class="row top">
-			<span class="lbl" id="t-alarm">{t('calendar.form.alarm')}</span>
-			<span class="stack" role="group" aria-labelledby="t-alarm">
-				{#each form.alarms as a (a)}
-					<span class="alarm"
-						><Icon name="bell" size={16} /><span class="grow"
-							>{alarmText(a, form.allDay, startMin)}</span
-						><button
-							type="button"
-							class="ib"
-							aria-label={t('calendar.form.removeAlarm', {
-								text: alarmText(a, form.allDay, startMin),
-							})}
-							onclick={() => (form.alarms = form.alarms.filter((x) => x !== a))}
-							><Icon name="close" size={15} /></button
-						></span
+		{#if compact}
+			{#each [...form.alarms, null] as a, i (a ?? 'new')}
+				{#if a !== null || (alarmChoices.length && form.alarms.length < 20)}
+					<div
+						class="row"
+						class:g-first={i === 0}
+						class:g-last={a === null ||
+							(i === form.alarms.length - 1 && !(alarmChoices.length && form.alarms.length < 20))}
 					>
-				{/each}
-				{#if alarmChoices.length && form.alarms.length < 20}
-					<!-- Draft 05/43: "+ Erinnerung" opens the choices. -->
-					<Dropdown label={t('calendar.form.addAlarm')} text={t('calendar.form.alarm')} icon="plus">
-						{#snippet children(close)}
-							{#each alarmChoices as m (m)}
-								<button
-									type="button"
-									role="menuitem"
-									onclick={() => {
-										close();
-										if (!form.alarms.includes(m))
-											form.alarms = [...form.alarms, m].sort((x, y) => x - y);
-									}}><span>{alarmText(m, form.allDay, startMin)}</span></button
-								>
-							{/each}
-						{/snippet}
-					</Dropdown>
+						<span class="lbl" id="t-hint-{i}">{hintWord(i)}</span>
+						<button
+							type="button"
+							class="pickrow"
+							aria-haspopup="dialog"
+							aria-labelledby="t-hint-{i} t-hint-{i}-v"
+							onclick={() => (choose = { kind: 'alarm', at: i })}
+							><span id="t-hint-{i}-v" class="pv"
+								>{a === null
+									? t('calendar.form.hintNone')
+									: alarmText(a, form.allDay, startMin)}</span
+							><Icon name="chevronRight" size={18} /></button
+						>
+					</div>
 				{/if}
-				<small class="muted">{t('calendar.form.alarmHint')}</small>
-			</span>
-		</div>
+			{/each}
+			<p class="hint-row muted">{t('calendar.form.alarmHint')}</p>
+		{:else}
+			<div class="row top">
+				<span class="lbl" id="t-alarm">{t('calendar.form.alarm')}</span>
+				<span class="stack" role="group" aria-labelledby="t-alarm">
+					{#each form.alarms as a (a)}
+						<span class="alarm"
+							><Icon name="bell" size={16} /><span class="grow"
+								>{alarmText(a, form.allDay, startMin)}</span
+							><button
+								type="button"
+								class="ib"
+								aria-label={t('calendar.form.removeAlarm', {
+									text: alarmText(a, form.allDay, startMin),
+								})}
+								onclick={() => (form.alarms = form.alarms.filter((x) => x !== a))}
+								><Icon name="close" size={15} /></button
+							></span
+						>
+					{/each}
+					{#if alarmChoices.length && form.alarms.length < 20}
+						<!-- Draft 05/43: "+ Erinnerung" opens the choices. -->
+						<Dropdown
+							label={t('calendar.form.addAlarm')}
+							text={t('calendar.form.alarm')}
+							icon="plus"
+						>
+							{#snippet children(close)}
+								{#each alarmChoices as m (m)}
+									<button
+										type="button"
+										role="menuitem"
+										onclick={() => {
+											close();
+											if (!form.alarms.includes(m))
+												form.alarms = [...form.alarms, m].sort((x, y) => x - y);
+										}}><span>{alarmText(m, form.allDay, startMin)}</span></button
+									>
+								{/each}
+							{/snippet}
+						</Dropdown>
+					{/if}
+					<small class="muted">{t('calendar.form.alarmHint')}</small>
+				</span>
+			</div>
+		{/if}
 
-		<div class="row">
-			<label class="lbl" for="t-place">{t('calendar.form.place')}</label>
-			<input
-				id="t-place"
-				class="field"
-				type="text"
-				bind:value={form.location}
-				maxlength="2000"
-				placeholder={t('calendar.form.placePlaceholder')}
-			/>
-		</div>
+		{#if !compact}{@render placeRow()}{/if}
 
-		<div class="row top">
-			<label class="lbl" for="t-note">{t('calendar.form.notes')}</label>
-			<textarea id="t-note" class="field note" rows={phone ? 3 : 4} bind:value={form.notes}
-			></textarea>
+		<div class="row top g-first g-last">
+			<label class="lbl" class:sr-only={compact} for="t-note">{t('calendar.form.notes')}</label>
+			<textarea
+				id="t-note"
+				class="field note"
+				rows={phone ? 3 : 4}
+				bind:value={form.notes}
+				placeholder={compact ? t('calendar.form.notesPlaceholder') : undefined}></textarea>
 		</div>
 
 		{#if error}
@@ -741,7 +839,11 @@
 			</p>
 		{/if}
 
-		{#if editing && event && !done}
+		{#if editing && event && !done && compact}
+			<button type="button" class="delrow" disabled={busy} onclick={() => (deleting = true)}
+				>{t('calendar.detail.deleteEvent')}</button
+			>
+		{:else if editing && event && !done}
 			<DangerZone
 				hint={event.recurring ? t('calendar.form.dangerSeries') : t('calendar.form.dangerSingle')}
 			>
@@ -755,6 +857,69 @@
 			</DangerZone>
 		{/if}
 	</form>
+{/if}
+
+{#snippet placeRow()}
+	<div class="row" class:g-last={compact}>
+		<label class="lbl" for="t-place">{t('calendar.form.place')}</label>
+		<input
+			id="t-place"
+			class="field"
+			type="text"
+			bind:value={form.location}
+			maxlength="2000"
+			placeholder={t('calendar.form.placePlaceholder')}
+		/>
+	</div>
+{/snippet}
+
+{#if choose?.kind === 'cal'}
+	<Dialog title={t('calendar.form.calendar')} onclose={() => (choose = null)}>
+		<div class="choices" role="radiogroup" aria-label={t('calendar.form.calendar')}>
+			{#each own as c (c.id)}
+				<label class="choice" style:--c={calColor(c.color)}>
+					<input
+						type="radio"
+						name="cal"
+						value={c.id}
+						bind:group={form.calendar}
+						onchange={() => (choose = null)}
+					/>
+					<span class="sw" aria-hidden="true"></span><span class="cpn">{calName(c)}</span>
+					{#if form.calendar === c.id}<Icon name="check" size={18} />{/if}
+				</label>
+			{/each}
+		</div>
+	</Dialog>
+{:else if choose?.kind === 'alarm'}
+	{@const at = choose.at}
+	{@const now = form.alarms[at]}
+	<Dialog title={hintWord(at)} onclose={() => (choose = null)}>
+		<div class="choices" role="group" aria-label={hintWord(at)}>
+			<button
+				type="button"
+				class="choice"
+				aria-pressed={now === undefined}
+				onclick={() => setAlarm(at, null)}
+				><span class="cpn">{t('calendar.form.hintNone')}</span>{#if now === undefined}<Icon
+						name="check"
+						size={18}
+					/>{/if}</button
+			>
+			{#each (form.allDay ? ALLDAY_ALARMS : TIMED_ALARMS).filter((m) => m === now || !form.alarms.includes(m)) as m (m)}
+				<button
+					type="button"
+					class="choice"
+					aria-pressed={m === now}
+					onclick={() => setAlarm(at, m)}
+					><span class="cpn">{alarmText(m, form.allDay, startMin)}</span>{#if m === now}<Icon
+							name="check"
+							size={18}
+						/>{/if}</button
+				>
+			{/each}
+		</div>
+	</Dialog>
 {/if}
 
 {#if askScope && event}
@@ -829,12 +994,229 @@
 	.row.top .lbl {
 		padding-top: 9px;
 	}
-	.phone .row {
-		grid-template-columns: minmax(0, 1fr);
-		gap: var(--space-1);
+	/* 1.15 (draft 33): the sheet's head and the choice sheets. */
+	.sheet-head {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: var(--space-2);
+		margin: 0 calc(-1 * var(--page-pad, 0px)) var(--space-3);
+		padding: 0 var(--page-pad, 0px);
+		background: var(--bg);
 	}
-	.phone .row.top .lbl {
+	/* Under the phone's bar (it stays at the top as well). */
+	:global(body:has(header.phone-bar)) .sheet-head {
+		top: calc(52px + env(safe-area-inset-top, 0px));
+	}
+	.sheet-head h1 {
+		margin: 0;
+		font-size: var(--text-md);
+		font-weight: 700;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	.sheet-head > :last-child {
+		justify-self: end;
+	}
+	.sheet-head > :first-child {
+		justify-self: start;
+	}
+	.link-btn {
+		min-height: 44px;
+		padding: 0 var(--space-1);
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-md);
+		text-align: left;
+		overflow-wrap: anywhere;
+		cursor: pointer;
+	}
+	.link-btn.strong {
+		font-weight: 700;
+		text-align: right;
+	}
+	.link-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.link-btn:focus-visible,
+	.pickrow:focus-visible,
+	.delrow:focus-visible,
+	.choice:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.pickrow {
+		justify-self: end;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		min-height: 44px;
+		max-width: 100%;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-md);
+		text-align: right;
+		cursor: pointer;
+	}
+	.pickrow .pv {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.pickrow .sw {
+		border-radius: 50%;
+	}
+	.delrow {
+		margin-top: var(--space-3);
+		min-height: 50px;
+		padding: var(--space-2) var(--space-3);
+		border: 0;
+		border-radius: 12px;
+		background: var(--surface);
+		color: var(--cal-delete, #c00012);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+	}
+	/* Red as the draft, ≥ 4.5:1 on the card in both modes. */
+	:global([data-mode='dark']) .delrow {
+		--cal-delete: #ff6b60;
+	}
+	.choices {
+		display: flex;
+		flex-direction: column;
+		margin: 0 0 var(--space-2);
+		border-radius: 12px;
+		background: var(--surface);
+	}
+	.choice {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		min-height: 50px;
+		padding: var(--space-2) var(--space-3);
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-md);
+		text-align: left;
+		cursor: pointer;
+	}
+	.choice + .choice {
+		border-top: 1px solid var(--srow-line);
+	}
+	.choice input {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		cursor: pointer;
+	}
+	.choice:has(input:focus-visible) {
+		outline: 2px solid var(--accent);
+	}
+	.choice .cpn {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.choice :global(svg) {
+		color: var(--accent);
+	}
+	/* 1.15 (draft 33): compact, the fields stand in grouped cards as at
+	   Apple – the word on the left, the value on the right; the repetition's
+	   more lines and the notes below. A group starts at .g-first and ends
+	   at .g-last (rounded there, a line between its rows). */
+	.ev.compact {
+		gap: 0;
+	}
+	.compact .row {
+		grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
+		gap: var(--space-2) var(--space-3);
+		min-height: 50px;
+		padding: var(--space-1) var(--space-3);
+		background: var(--surface);
+		border-top: 1px solid var(--srow-line);
+	}
+	.compact .row.g-first {
+		margin-top: var(--space-4);
+		border-top: 0;
+		border-top-left-radius: 12px;
+		border-top-right-radius: 12px;
+	}
+	.compact .row.g-last {
+		border-bottom-left-radius: 12px;
+		border-bottom-right-radius: 12px;
+	}
+	.compact > .row.g-first:first-of-type {
+		margin-top: 0;
+	}
+	.compact .row.top {
+		grid-template-columns: minmax(0, 1fr);
+		padding-block: var(--space-2);
+	}
+	.compact .row.rep {
+		grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+		align-items: center;
+	}
+	.compact .row.top .lbl {
 		padding-top: 0;
+	}
+	.compact .lbl {
+		color: var(--text);
+	}
+	.compact .row > .when,
+	.compact .row > .swwrap,
+	.compact .row.rep > .stack {
+		justify-self: end;
+	}
+	.compact .row.rep > .stack {
+		align-items: flex-end;
+	}
+	.compact .row > .field:not(.big),
+	.compact .row > .big {
+		min-width: 0;
+		border-color: transparent;
+		background: none;
+	}
+	.compact .row:has(> .sr-only) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.compact .hint-row {
+		margin: 0;
+		padding: var(--space-1) var(--space-3) 0;
+	}
+	/* Date and time in one line where they fit (draft 33). */
+	.compact .when {
+		justify-content: flex-end;
+	}
+	.compact .when .field.date {
+		width: 8.75rem;
+		padding-inline: var(--space-2);
+	}
+	.compact .when .field.time {
+		width: 6.75rem;
+	}
+	.compact .when small {
+		flex-basis: 100%;
+		text-align: right;
+	}
+	.compact .sel {
+		width: auto;
+		max-width: 100%;
+		border-color: transparent;
+		background-color: transparent;
+		color: var(--muted);
+		text-align: right;
 	}
 	/* The switch's whole line is its target (44 px on the phone). */
 	.swwrap {
@@ -1007,11 +1389,11 @@
 		overflow-wrap: break-word;
 	}
 	@media (max-width: 560px) {
-		.ev:not(.phone) .row {
+		.ev:not(.phone):not(.compact) .row {
 			grid-template-columns: minmax(0, 1fr);
 			gap: var(--space-1);
 		}
-		.ev:not(.phone) .hint-row {
+		.ev:not(.phone):not(.compact) .hint-row {
 			margin: 0;
 		}
 	}

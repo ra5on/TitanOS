@@ -17,7 +17,11 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
-import { installMail, mailState, NEWSLETTER_HTML } from "./test-ui-mail-fixtures.mjs";
+import {
+  installMail,
+  mailState,
+  NEWSLETTER_HTML,
+} from "./test-ui-mail-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -33,7 +37,8 @@ const errors = [];
 const create = fixtureFactory(browser, errors);
 const SANDBOXED =
   /document is sandboxed and lacks the 'allow-same-origin' flag/;
-const pageErrors = () => errors.filter((e) => !SANDBOXED.test(e) && !/503/.test(e));
+const pageErrors = () =>
+  errors.filter((e) => !SANDBOXED.test(e) && !/503/.test(e));
 
 async function open({
   width = 1440,
@@ -49,7 +54,12 @@ async function open({
     width,
     locale,
     phone
-      ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3, viewport: { width, height } }
+      ? {
+          isMobile: true,
+          hasTouch: true,
+          deviceScaleFactor: 3,
+          viewport: { width, height },
+        }
       : { viewport: { width, height } },
   );
   const state = mailState();
@@ -59,7 +69,9 @@ async function open({
     subject: "Nachricht 999: Ihr Paket kommt morgen – Zustellung terminiert",
   });
   if (desk)
-    await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+    await made.ctx.addInitScript(() =>
+      localStorage.removeItem("titanos.layout"),
+    );
   await installMail(made.ctx, state);
   // The order of the side bars, kept like titand keeps it (merged per key).
   const order = { puts: [] };
@@ -74,7 +86,9 @@ async function open({
 
 async function sound(target, name) {
   const overflow = await target.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
   );
   assert.ok(overflow <= 0, `${name}: scrolls sideways by ${overflow}px`);
   assert.deepEqual(await target.evaluate(cutTextIn), [], `${name}: cut text`);
@@ -97,7 +111,8 @@ async function windowFrame(page, prefix) {
   let found = null;
   await until(async () => {
     found = page.frames().find((f) => {
-      if (f === page.mainFrame() || f.parentFrame() !== page.mainFrame()) return false;
+      if (f === page.mainFrame() || f.parentFrame() !== page.mainFrame())
+        return false;
       try {
         return new URL(f.url()).pathname.startsWith(prefix);
       } catch {
@@ -127,10 +142,17 @@ async function edgeToEdge(target, name) {
     };
   });
   assert.equal(got.main, "0px", `${name}: main without padding`);
-  assert.deepEqual([got.left, got.right, got.bottom], [0, 0, 0], `${name}: edge to edge ${JSON.stringify(got)}`);
+  assert.deepEqual(
+    [got.left, got.right, got.bottom],
+    [0, 0, 0],
+    `${name}: edge to edge ${JSON.stringify(got)}`,
+  );
   assert.equal(got.border, "0px", `${name}: no card border`);
   assert.equal(got.radius, "0px", `${name}: no card radius`);
-  assert.ok(got.pageScroll <= 0, `${name}: the page itself does not scroll (${got.pageScroll})`);
+  assert.ok(
+    got.pageScroll <= 0,
+    `${name}: the page itself does not scroll (${got.pageScroll})`,
+  );
 }
 
 const PRIVAT = '[aria-labelledby="mail-acc-acc-privat"]';
@@ -152,7 +174,9 @@ try {
     });
     await page.goto(base + "/mail");
     await page.locator(".mail.wide .col-folders").waitFor();
-    await page.locator(".col-folders [role=status]", { hasText: "Wird geladen" }).waitFor();
+    await page
+      .locator(".col-folders [role=status]", { hasText: "Wird geladen" })
+      .waitFor();
     const before = await page.locator(".col-folders").boundingBox();
     await shot(page, "00-laden-1440-hell");
     release();
@@ -166,18 +190,35 @@ try {
     );
 
     await edgeToEdge(page, "1440");
-    assert.equal(await page.getByRole("separator").count(), 2, "two separators");
     assert.equal(
-      await page.locator(".col-folders").getByRole("button", { name: "Neue E-Mail" }).count(),
+      await page.getByRole("separator").count(),
+      2,
+      "two separators",
+    );
+    assert.equal(
+      await page
+        .locator(".col-folders")
+        .getByRole("button", { name: "Neue E-Mail" })
+        .count(),
       1,
       "the main action heads the side bar",
     );
     // Each column scrolls on its own: the list scrolls, the side bar does not move.
     const list = page.locator(".col-list");
-    assert.equal(await list.evaluate((el) => getComputedStyle(el).overflowY), "auto");
-    assert.ok(await list.evaluate((el) => el.scrollHeight > el.clientHeight), "the list is longer than the window");
+    assert.equal(
+      await list.evaluate((el) => getComputedStyle(el).overflowY),
+      "auto",
+    );
+    assert.ok(
+      await list.evaluate((el) => el.scrollHeight > el.clientHeight),
+      "the list is longer than the window",
+    );
     await list.evaluate((el) => el.scrollTo(0, 400));
-    assert.equal(Math.round((await page.locator(".col-folders").boundingBox()).y), 0, "side bar stays");
+    assert.equal(
+      Math.round((await page.locator(".col-folders").boundingBox()).y),
+      0,
+      "side bar stays",
+    );
     await list.evaluate((el) => el.scrollTo(0, 0));
     assert.match(await page.title(), /Posteingang|Mail/);
     await sound(page, "1440 light");
@@ -193,16 +234,25 @@ try {
       "Rechnungen",
       "2026",
     ]);
+    // 1.15: sorting is in "Bearbeiten" of the mailboxes.
+    const folders = page.locator(".col-folders");
+    await folders.getByRole("button", { name: "Bearbeiten" }).click();
     const trashLine = page.locator(PRIVAT + ' [data-sort-key="Papierkorb"]');
     await trashLine.hover();
-    const grip = trashLine.getByRole("button", { name: "„Papierkorb“ verschieben" });
+    const grip = trashLine.getByRole("button", {
+      name: "„Papierkorb“ verschieben",
+    });
     const g = await grip.boundingBox();
-    const inbox = await page.locator(PRIVAT + ' [data-sort-key="INBOX"]').boundingBox();
+    const inbox = await page
+      .locator(PRIVAT + ' [data-sort-key="INBOX"]')
+      .boundingBox();
     await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
     await page.mouse.down();
     await page.mouse.move(g.x + g.width / 2, inbox.y + 30, { steps: 6 });
     await page.mouse.move(g.x + g.width / 2, inbox.y + 4, { steps: 4 });
-    await page.locator(PRIVAT + ' [data-sort-key="INBOX"][data-sort-drop="before"]').waitFor();
+    await page
+      .locator(PRIVAT + ' [data-sort-key="INBOX"][data-sort-drop="before"]')
+      .waitFor();
     await shot(page, "02-ordner-ziehen-1440-hell");
     await page.mouse.up();
     assert.deepEqual((await folderNames(page)).slice(0, 5), [
@@ -212,47 +262,146 @@ try {
       "Gesendet",
       "Spam",
     ]);
-    await page.getByRole("status").filter({ hasText: "„Papierkorb“ steht jetzt an Stelle 1 von 5." }).waitFor({ state: "attached" });
+    await page
+      .getByRole("status")
+      .filter({ hasText: "„Papierkorb“ steht jetzt an Stelle 1 von 5." })
+      .waitFor({ state: "attached" });
     // Alt+↓ on a folder moves it down one.
     await page.locator(PRIVAT + ' [data-sort-key="INBOX"] .folder').focus();
     await page.keyboard.press("Alt+ArrowDown");
-    assert.deepEqual((await folderNames(page)).slice(0, 3), ["Papierkorb", "Entwürfe", "Posteingang"]);
+    assert.deepEqual((await folderNames(page)).slice(0, 3), [
+      "Papierkorb",
+      "Entwürfe",
+      "Posteingang",
+    ]);
     assert.equal(
-      await page.evaluate(() => document.activeElement?.closest("[data-sort-key]")?.getAttribute("data-sort-key")),
+      await page.evaluate(() =>
+        document.activeElement
+          ?.closest("[data-sort-key]")
+          ?.getAttribute("data-sort-key"),
+      ),
       "INBOX",
       "the focus stays on the moved folder",
     );
     await until(() => order.puts.length === 1, "one save after two steps");
     assert.deepEqual(order.puts[0], {
       mail: {
-        "acc-privat": ["Papierkorb", "Entw&APw-rfe", "INBOX", "Gesendet", "Spamverdacht"],
+        "acc-privat": [
+          "Papierkorb",
+          "Entw&APw-rfe",
+          "INBOX",
+          "Gesendet",
+          "Spamverdacht",
+        ],
       },
     });
     // Kept for the account: after a reload (the NAS sends it back).
     assert.ok(data.prefs.order, "the order is on the NAS");
     await page.reload();
     await page.locator(".row").first().waitFor();
-    assert.deepEqual((await folderNames(page)).slice(0, 3), ["Papierkorb", "Entwürfe", "Posteingang"]);
+    assert.deepEqual((await folderNames(page)).slice(0, 3), [
+      "Papierkorb",
+      "Entwürfe",
+      "Posteingang",
+    ]);
     // The other mailbox is not touched.
-    assert.deepEqual(await folderNames(page, "acc-arbeit"), ["Posteingang", "Entwürfe", "Gesendet", "Papierkorb"]);
+    assert.deepEqual(await folderNames(page, "acc-arbeit"), [
+      "Posteingang",
+      "Entwürfe",
+      "Gesendet",
+      "Papierkorb",
+    ]);
+
+    // 1.15 (115-4): a mailbox folds to its head line with its unread mails,
+    // kept per device …
+    await page.locator(PRIVAT + " .acc-btn").click();
+    assert.equal(
+      await page.locator(PRIVAT + " .folder").count(),
+      0,
+      "folded mailbox",
+    );
+    await page.locator(PRIVAT + " .acc-unread").waitFor();
+    await page.reload();
+    await page.locator(".row").first().waitFor();
+    assert.equal(
+      await page.locator(PRIVAT + " .folder").count(),
+      0,
+      "still folded after a reload",
+    );
+    await page.locator(PRIVAT + " .acc-btn").click();
+    await page
+      .locator(PRIVAT + " .folder")
+      .first()
+      .waitFor();
+    // … the mailboxes are sorted in "Bearbeiten" (the first is the main one) …
+    await folders.getByRole("button", { name: "Bearbeiten" }).click();
+    const putsBefore = order.puts.length;
+    await folders.getByRole("button", { name: "„Arbeit“ verschieben" }).focus();
+    await page.keyboard.press("ArrowUp");
+    await until(
+      () => order.puts.some((p, i) => i >= putsBefore && p.mailAccounts),
+      "mailboxes saved",
+    );
+    assert.deepEqual(order.puts.find((p) => p.mailAccounts).mailAccounts, [
+      "acc-arbeit",
+      "acc-privat",
+    ]);
+    assert.equal(
+      await folders.locator(".box.acc").first().getAttribute("aria-labelledby"),
+      "mail-acc-acc-arbeit",
+      "Arbeit on top",
+    );
+    // … and a folder taken out of the side bar (kept for the account).
+    await folders.getByRole("checkbox", { name: "„Spam“ anzeigen" }).click();
+    await until(
+      () =>
+        order.puts.some((p) =>
+          p.mailHidden?.["acc-privat"]?.includes("Spamverdacht"),
+        ),
+      "hidden saved",
+    );
+    await folders.getByRole("button", { name: "Fertig" }).click();
+    assert.ok(!(await folderNames(page)).includes("Spam"), "Spam hidden");
+    await shot(page, "02b-postfaecher-sortiert-1440-hell");
+    await folders.getByRole("button", { name: "Bearbeiten" }).click();
+    await folders.getByRole("checkbox", { name: "„Spam“ anzeigen" }).click();
+    await folders.getByRole("button", { name: "„Arbeit“ verschieben" }).focus();
+    await page.keyboard.press("ArrowDown");
+    await folders.getByRole("button", { name: "Fertig" }).click();
 
     // Folding: the rail with the inboxes and their counts, kept per device.
     await page.getByRole("button", { name: "Seitenleiste einklappen" }).click();
-    assert.equal(await page.getByRole("separator").count(), 1, "the side bar's separator goes");
-    const railInbox = page.getByRole("button", { name: /^Posteingang · Privat, \d+ ungelesen$/ });
+    assert.equal(
+      await page.getByRole("separator").count(),
+      1,
+      "the side bar's separator goes",
+    );
+    const railInbox = page.getByRole("button", {
+      name: /^Posteingang · Privat, \d+ ungelesen$/,
+    });
     await railInbox.waitFor();
     const side = await page.locator(".col-folders").boundingBox();
     assert.ok(side.width <= 64, `rail ${side.width}px`);
-    await page.locator(".col-folders").getByRole("button", { name: "Neue E-Mail" }).waitFor();
+    await page
+      .locator(".col-folders")
+      .getByRole("button", { name: "Neue E-Mail" })
+      .waitFor();
     await sound(page, "1440 folded");
     await shot(page, "03-eingeklappt-1440-hell");
     await page.getByRole("button", { name: /^Posteingang · Arbeit/ }).click();
     await page.waitForURL(/a=acc-arbeit&f=INBOX/);
     await page.reload();
-    await page.getByRole("button", { name: "Seitenleiste ausklappen" }).waitFor();
+    await page
+      .getByRole("button", { name: "Seitenleiste ausklappen" })
+      .waitFor();
     await page.getByRole("button", { name: "Seitenleiste ausklappen" }).click();
     await page.locator(".col-folders .folder").first().waitFor();
-    assert.equal(await page.evaluate(() => localStorage.getItem("titanos.mail.sideFolded")), null);
+    assert.equal(
+      await page.evaluate(() =>
+        localStorage.getItem("titanos.mail.sideFolded"),
+      ),
+      null,
+    );
     await page.close();
   }
 
@@ -262,7 +411,10 @@ try {
     await page.goto(base + "/mail?a=acc-privat&f=INBOX&m=1000");
     await page.locator("#mail-message-subject").waitFor();
     await edgeToEdge(page, "1440 dark");
-    await page.locator(".col-folders").getByRole("button", { name: "New e-mail" }).waitFor();
+    await page
+      .locator(".col-folders")
+      .getByRole("button", { name: "New e-mail" })
+      .waitFor();
     await sound(page, "1440 dark en");
     await shot(page, "04-mail-nachricht-1440-dunkel-en");
     await page.close();
@@ -277,8 +429,17 @@ try {
     await mail.locator(".row").first().waitFor();
     await edgeToEdge(mail, "window");
     assert.equal(await mail.getByRole("separator").count(), 2);
-    await page.locator("section.win .titlebar", { hasText: "Mail" }).first().waitFor();
-    assert.equal(await page.locator("section.win .titlebar", { hasText: "T-Mail" }).count(), 0, "the old name is gone");
+    await page
+      .locator("section.win .titlebar", { hasText: "Mail" })
+      .first()
+      .waitFor();
+    assert.equal(
+      await page
+        .locator("section.win .titlebar", { hasText: "T-Mail" })
+        .count(),
+      0,
+      "the old name is gone",
+    );
     await shot(page, "05-arbeitsplatz-fenster-1440-hell");
     await page.close();
   }
@@ -288,11 +449,22 @@ try {
     const { page } = await open({ width: 800, theme });
     await page.goto(base + "/mail");
     await page.locator(".mail.levels .col-folders").waitFor();
-    assert.equal(await page.getByRole("separator").count(), 0, "no separators when narrow");
-    assert.equal(await page.getByRole("button", { name: /verschieben$/ }).count(), 0, "no sorting in levels");
+    assert.equal(
+      await page.getByRole("separator").count(),
+      0,
+      "no separators when narrow",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: /verschieben$/ }).count(),
+      0,
+      "no sorting in levels",
+    );
     await sound(page, `800 ${theme} folders`);
     await shot(page, `06-ordner-800-${theme === "hell" ? "hell" : "dunkel"}`);
-    await page.locator(".col-folders .folder", { hasText: "Posteingang" }).first().click();
+    await page
+      .locator(".col-folders .folder", { hasText: "Posteingang" })
+      .first()
+      .click();
     await page.locator(".row").first().waitFor();
     await sound(page, `800 ${theme} list`);
     await shot(page, `07-liste-800-${theme === "hell" ? "hell" : "dunkel"}`);
@@ -302,28 +474,51 @@ try {
   // ---- Phone 390 px, light and dark: levels, bars at the bottom, the newsletter fits ----
   for (const theme of ["hell", "graphit"]) {
     const name = theme === "hell" ? "hell" : "dunkel";
-    const { page } = await open({ width: 390, height: 844, phone: true, desk: true, theme });
+    const { page } = await open({
+      width: 390,
+      height: 844,
+      phone: true,
+      desk: true,
+      theme,
+    });
     await page.goto(base + "/mail");
     await page.locator(".mail.levels.compact .col-folders").waitFor();
-    await page.locator(".col-folders").getByRole("button", { name: "Neue E-Mail" }).waitFor();
+    await page
+      .locator(".col-folders")
+      .getByRole("button", { name: "Neue E-Mail" })
+      .waitFor();
     await sound(page, `phone ${name} folders`);
     await shot(page, `08-handy-ordner-390-${name}`);
-    await page.locator(".col-folders .folder", { hasText: "Posteingang" }).first().click();
+    await page
+      .locator(".col-folders .folder", { hasText: "Posteingang" })
+      .first()
+      .click();
     await page.locator(".row").first().waitFor();
     // No card, no second strip under the phone's bar.
-    assert.equal(await page.locator(".win-toolbar").count(), 0, "no strip of the page head");
     assert.equal(
-      await page.locator(".col-list").evaluate((el) => getComputedStyle(el).borderTopWidth),
+      await page.locator(".win-toolbar").count(),
+      0,
+      "no strip of the page head",
+    );
+    assert.equal(
+      await page
+        .locator(".col-list")
+        .evaluate((el) => getComputedStyle(el).borderTopWidth),
       "0px",
       "the list is no card",
     );
-    const listBar = page.getByRole("toolbar", { name: "Aktionen für die Liste" });
+    const listBar = page.getByRole("toolbar", {
+      name: "Aktionen für die Liste",
+    });
     const compose = listBar.getByRole("button", { name: "Neue E-Mail" });
     const cb = await compose.boundingBox();
     assert.ok(cb.width >= 44 && cb.height >= 44, "the new button is 44 px");
     assert.ok(cb.x + cb.width > 390 - 60, "at the right");
     const lb = await listBar.boundingBox();
-    assert.ok(Math.abs(lb.y + lb.height - 844) <= 1, `the bar stands at the bottom (${lb.y + lb.height})`);
+    assert.ok(
+      Math.abs(lb.y + lb.height - 844) <= 1,
+      `the bar stands at the bottom (${lb.y + lb.height})`,
+    );
     await sound(page, `phone ${name} list`);
     await shot(page, `09-handy-liste-390-${name}`);
 
@@ -332,10 +527,18 @@ try {
     const subject = page.locator("#mail-message-subject");
     await subject.waitFor();
     await page.waitForTimeout(400);
-    const bar = await page.locator("header.phone-bar, body > header, header").first().boundingBox();
+    const bar = await page
+      .locator("header.phone-bar, body > header, header")
+      .first()
+      .boundingBox();
     const sb = await subject.boundingBox();
-    assert.ok(!bar || sb.y >= bar.y + bar.height - 1, "the subject is not under the bar above");
-    const frame = page.frames().find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
+    assert.ok(
+      !bar || sb.y >= bar.y + bar.height - 1,
+      "the subject is not under the bar above",
+    );
+    const frame = page
+      .frames()
+      .find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
     assert.ok(frame, "the mail's frame");
     const [sw, cw] = await frame.evaluate(() => [
       document.documentElement.scrollWidth,
@@ -343,16 +546,36 @@ try {
     ]);
     assert.ok(sw <= cw + 1, `the newsletter fits (${sw} > ${cw})`);
     const fb = await page.locator("iframe.frame").boundingBox();
-    assert.ok(fb.x >= 0 && fb.x + fb.width <= 390, "the frame stays on the screen");
-    assert.equal(await page.locator(".message .actions").count(), 0, "no rows of big buttons");
-    const actions = page.getByRole("toolbar", { name: "Aktionen für diese Nachricht" });
-    for (const label of ["Antworten", "Verschieben", "Archivieren", "Löschen", "Markieren", "Weitere Aktionen"]) {
-      const b = await actions.getByRole("button", { name: label, exact: true }).boundingBox();
+    assert.ok(
+      fb.x >= 0 && fb.x + fb.width <= 390,
+      "the frame stays on the screen",
+    );
+    assert.equal(
+      await page.locator(".message .actions").count(),
+      0,
+      "no rows of big buttons",
+    );
+    const actions = page.getByRole("toolbar", {
+      name: "Aktionen für diese Nachricht",
+    });
+    for (const label of [
+      "Antworten",
+      "Verschieben",
+      "Archivieren",
+      "Löschen",
+      "Markieren",
+      "Weitere Aktionen",
+    ]) {
+      const b = await actions
+        .getByRole("button", { name: label, exact: true })
+        .boundingBox();
       assert.ok(b && b.width >= 44 && b.height >= 44, `${label}: 44 px`);
     }
     await sound(page, `phone ${name} newsletter`);
     await shot(page, `10-handy-newsletter-390-${name}`);
-    await actions.getByRole("button", { name: "Antworten", exact: true }).click();
+    await actions
+      .getByRole("button", { name: "Antworten", exact: true })
+      .click();
     await page.getByRole("menuitem", { name: "Allen antworten" }).waitFor();
     await page.getByRole("menuitem", { name: "Weiterleiten" }).waitFor();
     await shot(page, `11-handy-antworten-390-${name}`);
@@ -366,8 +589,12 @@ try {
     await page.goto(base + "/mail?a=acc-privat&f=INBOX&m=999");
     await page.locator("#mail-message-subject").waitFor();
     await page.getByRole("button", { name: /Zurück zu Posteingang/ }).waitFor();
-    await page.getByRole("toolbar", { name: "Aktionen für diese Nachricht" }).waitFor();
-    const frame = page.frames().find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
+    await page
+      .getByRole("toolbar", { name: "Aktionen für diese Nachricht" })
+      .waitFor();
+    const frame = page
+      .frames()
+      .find((f) => f !== page.mainFrame() && f.url() === "about:srcdoc");
     const [sw, cw] = await frame.evaluate(() => [
       document.documentElement.scrollWidth,
       document.documentElement.clientWidth,

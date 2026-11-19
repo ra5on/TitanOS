@@ -8,7 +8,8 @@
 import type { MessageRow } from './types.ts';
 
 /** A row of a list; search results carry their folder. */
-export type Row = MessageRow & { folder?: string };
+/** `account` (1.15): the mailbox of a row in the lists over all mailboxes. */
+export type Row = MessageRow & { folder?: string; account?: string };
 
 export type Thread<T extends Row = Row> = {
 	/** The newest mail's key: stays the same while the conversation is shown. */
@@ -37,7 +38,8 @@ export function isReply(subject: string): boolean {
 }
 
 /** The key of a row: the folder (in a search) and the uid. */
-export const rowKey = (r: Pick<Row, 'uid' | 'folder'>) => `${r.folder ?? ''}\u0000${r.uid}`;
+export const rowKey = (r: Pick<Row, 'uid' | 'folder'> & { account?: string }) =>
+	`${r.account ? r.account + '\u0001' : ''}${r.folder ?? ''}\u0000${r.uid}`;
 
 const ids = (s: string | undefined) => (s ?? '').split(/\s+/).filter((x) => /^<[^<>\s]+>$/.test(x));
 

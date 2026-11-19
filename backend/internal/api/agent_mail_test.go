@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/tmail"
 	"github.com/ra5on/TitanOS/backend/internal/tmail/tmailtest"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
 // Mail for the KI-Agent (1.13, Q27): the tools, the rights per action, a
@@ -286,5 +288,98 @@ func TestAgentRightsMine(t *testing.T) {
 	create := `{"title":"Zahnarzt","start":"` + pimTomorrow().Format("2006-01-02T15:04") + `"}`
 	if p := pimPrepare(t, box, nil, "calendar_create", create); !p.Draft {
 		t.Errorf("own suggest not applied: %+v", p)
+	}
+}
+
+// 1.15 (115-1, owner 19 Nov 2026: "Es kam eine Karte als Vorschlag, aber es
+// wurde nicht umgesetzt"): with "Nur Vorschläge" moving and deleting ask
+// with a card that names the mail and the folder by its role; deleting
+// always asks, from the trash it deletes for good.
+func TestAgentMailDeleteAsks(t *testing.T) {
+	e := newAgentMailEnv(t)
+	std := e.box(t, agent.Policy{Preset: agent.PresetStandard})
+	all := e.box(t, agent.Policy{Preset: agent.PresetAll})
+	page, err := e.m.List(context.Background(), "alex", e.id, tmail.ListQuery{Folder: "INBOX", Limit: 5})
+	if err != nil || len(page.Messages) != 1 {
+		t.Fatalf("inbox: %v %+v", err, page)
+	}
+	uid := jsonNum(page.Messages[0].UID)
+	chat := &agent.Chat{Entries: []agent.Entry{{Role: "user", Content: "Lösch die Mail von Mallory"}}}
+	p := pimPrepare(t, std, chat, "mail_move", `{"folder":"INBOX","uids":[`+uid+`],"to":"Trash"}`)
+	if p.Draft || p.Mode != agent.ModeAsk {
+		t.Fatalf("move with Nur Vorschläge: draft %v, %s", p.Draft, p.Mode)
+	}
+	if !strings.Contains(p.Summary, "Mallory – „Rechnung“") || !strings.Contains(p.Summary, "Papierkorb") || strings.Contains(p.Summary, "Trash") {
+		t.Errorf("card: %q", p.Summary)
+	}
+	if p := pimPrepare(t, std, chat, "mail_move", `{"folder":"INBOX","uids":[`+uid+`],"to":"Archiv"}`); p.Draft || p.Mode != agent.ModeAsk {
+		t.Errorf("move to the archive with Nur Vorschläge: draft %v, %s", p.Draft, p.Mode)
+	}
+	for _, box := range []*agentToolbox{std, all} {
+		p := pimPrepare(t, box, chat, "mail_delete", `{"folder":"INBOX","uids":[`+uid+`]}`)
+		if p.Draft || p.Mode != agent.ModeAsk || p.Level != toolcatalog.LevelDanger || !strings.Contains(p.Summary, "löschen (in den Papierkorb): Mallory") {
+			t.Errorf("delete: %+v", p)
+		}
+	}
+	// After the yes: the mail is in the trash.
+	_, out := mailRun(t, all, chat, "mail_delete", `{"folder":"INBOX","uids":[`+uid+`]}`)
+	if !strings.Contains(out.Text, `"deleted":1`) || e.srv.Count("Trash") != 1 || e.srv.Count("INBOX") != 0 {
+		t.Fatalf("delete ran: %s, trash %d, inbox %d", out.Text, e.srv.Count("Trash"), e.srv.Count("INBOX"))
+	}
+	trash, err := e.m.List(context.Background(), "alex", e.id, tmail.ListQuery{Folder: "Trash", Limit: 5})
+	if err != nil || len(trash.Messages) != 1 {
+		t.Fatalf("trash: %v %+v", err, trash)
+	}
+	p = pimPrepare(t, all, chat, "mail_delete", `{"folder":"Trash","uids":[`+jsonNum(trash.Messages[0].UID)+`]}`)
+	if p.Mode != agent.ModeAsk || p.Level != toolcatalog.LevelDestroy || !strings.Contains(p.Summary, "endgültig") {
+		t.Errorf("delete from the trash: %+v", p)
+	}
+	// English chat: English card.
+	en := &agent.Chat{Entries: []agent.Entry{{Role: "user", Content: "Please delete the mail from Mallory"}}}
+	if p := pimPrepare(t, all, en, "mail_delete", `{"folder":"Trash","uids":[`+jsonNum(trash.Messages[0].UID)+`]}`); !strings.Contains(p.Summary, "for good") {
+		t.Errorf("English card: %q", p.Summary)
+	}
+}
+
+// 1.15 (115-3, owner 19 Nov 2026: links in a mail free): after a mail was
+// read, a page whose address stands as it is in that mail is read without
+// asking when the web is allowed; a changed or built address still asks
+// and the card says why.
+func TestAgentMailLinkFree(t *testing.T) {
+	e := newAgentMailEnv(t)
+	box := e.box(t, agent.Policy{Preset: agent.PresetAll, Areas: map[string]string{agent.AreaWeb: agent.ModeAllow}})
+	if _, ok := box.tools["web_read"]; !ok {
+		t.Fatal("web_read is missing in the test")
+	}
+	link := "https://tracking.example.net/track?nr=01415111591973&lang=de"
+	chat := &agent.Chat{Tainted: true, PIMRead: true, Entries: []agent.Entry{
+		{Role: "user", Content: "Wann kommt meine Bestellung?"},
+		{Role: "tool", Tool: "mail_read", Result: `{"text":"Ihre Sendung: ` + strings.ReplaceAll(link, "&", `&`) + ` – Danke"}`},
+		{Role: "tool", Tool: "mail_list", Result: `{"preview":"https://other.example.net/only-in-a-list"}`},
+	}}
+	cases := []struct {
+		url, mode string
+	}{
+		{link, agent.ModeAllow},
+		{link + "x", agent.ModeAsk},
+		{strings.TrimSuffix(link, "&lang=de"), agent.ModeAsk},
+		{"https://tracking.example.net/track?nr=01415111591973&d=alice", agent.ModeAsk},
+		{"https://other.example.net/only-in-a-list", agent.ModeAsk},
+	}
+	for _, c := range cases {
+		p := pimPrepare(t, box, chat, "web_read", `{"url":`+strconv.Quote(c.url)+`}`)
+		if p.Mode != c.mode {
+			t.Errorf("%s: %s, want %s", c.url, p.Mode, c.mode)
+		}
+		if c.mode == agent.ModeAsk && p.Why != "pim" {
+			t.Errorf("%s: why %q", c.url, p.Why)
+		}
+		if !strings.HasPrefix(p.Summary, "Webseite lesen: https://") {
+			t.Errorf("card: %q", p.Summary)
+		}
+	}
+	// A search after mail still asks.
+	if p := pimPrepare(t, box, chat, "web_search", `{"query":"Sendung 01415111591973"}`); p.Mode != agent.ModeAsk || p.Summary != "Im Web suchen: „Sendung 01415111591973“" {
+		t.Errorf("search: %+v", p)
 	}
 }

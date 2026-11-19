@@ -162,9 +162,20 @@ try {
     const FIT = /<style data-titanos-fit>[^<]*<\/style>/;
     const fit = srcdoc.match(FIT)?.[0] ?? "";
     assert.ok(fit, "the fitting style is there");
-    assert.doesNotMatch(fit, /url\(|@import|expression|script/i, "the style loads nothing");
-    assert.ok(srcdoc.indexOf(fit) > srcdoc.indexOf("Content-Security-Policy"), "after the CSP meta");
-    assert.equal(srcdoc.replace(FIT, ""), bankHtml(false), "document otherwise unchanged in srcdoc");
+    assert.doesNotMatch(
+      fit,
+      /url\(|@import|expression|script/i,
+      "the style loads nothing",
+    );
+    assert.ok(
+      srcdoc.indexOf(fit) > srcdoc.indexOf("Content-Security-Policy"),
+      "after the CSP meta",
+    );
+    assert.equal(
+      srcdoc.replace(FIT, ""),
+      bankHtml(false),
+      "document otherwise unchanged in srcdoc",
+    );
     assert.match(srcdoc, /<script>/, "the fixture's script is in the frame");
     assert.match(
       srcdoc,
@@ -236,7 +247,9 @@ try {
 
     // Flag, unread, move.
     // 1.12: the list's quick actions have the same words; the message's bar.
-    const bar = mail.getByRole("toolbar", { name: "Aktionen für diese Nachricht" });
+    const bar = mail.getByRole("toolbar", {
+      name: "Aktionen für diese Nachricht",
+    });
     await bar.getByRole("button", { name: "Markieren", exact: true }).click();
     await until(
       () => sent(state, "POST", /\/flags$/).length === 1,
@@ -365,12 +378,20 @@ try {
     await shot(page, "05-desktop-suche-1440");
     await search.fill("");
     await search.press("Enter");
-    await mail.getByRole("button", { name: "Ungelesen", exact: true }).click();
+    // 1.15: the filters are a sheet behind the bar's filter button.
+    await mail.getByRole("button", { name: "Filter", exact: true }).click();
+    const sheet = mail.getByRole("dialog", { name: "Filter" });
+    await sheet.getByRole("checkbox", { name: "ungelesen sind" }).click();
     await until(
       () => sent(state, "GET", /\/messages\?.*unread=1/).length > 0,
       "unread filter asked",
     );
-    await mail.getByRole("button", { name: "Alle", exact: true }).click();
+    await mail
+      .getByRole("toolbar", { name: "Aktionen für die Liste" })
+      .getByText("Gefiltert nach:")
+      .waitFor({ state: "attached" });
+    await sheet.getByRole("checkbox", { name: "ungelesen sind" }).click();
+    await sheet.getByRole("button", { name: "Fertig" }).click();
     await until(
       async () => (await mail.locator(".row").count()) === 50,
       "first page",
@@ -780,9 +801,7 @@ try {
       change: (s) => (s.disabled = true),
     });
     await page.goto(base + "/mail");
-    await page
-      .getByText("Mail ist für dein Konto nicht freigegeben")
-      .waitFor();
+    await page.getByText("Mail ist für dein Konto nicht freigegeben").waitFor();
     assert.equal(
       await page.evaluate(
         () =>

@@ -60,6 +60,10 @@ export type Pending = {
 	level: string;
 	summary: string;
 	area?: string;
+	/** read, create, change or agent. */
+	kind?: string;
+	/** 1.15: why the step asks beyond its rights ("pim", "outside"). */
+	why?: string;
 	at: string;
 };
 

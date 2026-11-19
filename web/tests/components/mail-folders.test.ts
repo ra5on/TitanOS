@@ -70,14 +70,19 @@ test('INBOX namespace: the inbox folds nothing, roles never fold away, levels fr
 
 test('spam and trash show no count; favourites go on top and stay', async () => {
 	const first = render(FolderColumn, { account: 'a1', folder: 'INBOX', onpick: () => {} });
-	expect(folderButton('Posteingang')!.querySelector('.count')).not.toBeNull();
-	expect(folderButton('Papierkorb')!.querySelector('.count')).toBeNull();
-	expect(folderButton('Spam')!.querySelector('.count')).toBeNull();
+	expect(folderButton('Posteingang')!.querySelector('.num')).not.toBeNull();
+	expect(folderButton('Papierkorb')!.querySelector('.num')).toBeNull();
+	expect(folderButton('Spam')!.querySelector('.num')).toBeNull();
+	// 1.15: favourites are made in "Bearbeiten" and stand on top.
+	await fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
 	await fireEvent.click(screen.getByRole('button', { name: '„Rechnungen“ als Favorit anheften' }));
-	expect(screen.getByRole('heading', { name: 'Favoriten' })).toBeTruthy();
+	await fireEvent.click(screen.getByRole('button', { name: 'Fertig' }));
+	const top = () => document.querySelector('.box.top')!;
+	expect(top().textContent).toContain('Rechnungen');
 	first.unmount();
 	render(FolderColumn, { account: 'a1', folder: 'INBOX', onpick: () => {} });
-	expect(screen.getByRole('heading', { name: 'Favoriten' })).toBeTruthy();
+	expect(top().textContent).toContain('Rechnungen');
+	await fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
 	expect(
 		screen
 			.getAllByRole('button', { name: '„Rechnungen“ aus den Favoriten lösen' })[0]
@@ -90,8 +95,10 @@ test('1.13: folders sort among their siblings with the keys, saved for the accou
 	const put = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
 	vi.stubGlobal('fetch', put);
 	render(FolderColumn, { account: 'a1', folder: 'INBOX', sortable: true, onpick: () => {} });
+	// 1.15: sorting is in "Bearbeiten".
+	await fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
 	const names = () =>
-		[...document.querySelectorAll('.folder .name')].map((e) => e.textContent?.trim());
+		[...document.querySelectorAll('.box.acc .folder .name')].map((e) => e.textContent?.trim());
 	expect(names()).toEqual(['Posteingang', 'Gesendet', 'Spam', 'Papierkorb', 'Rechnungen', '2026']);
 	// A group of one has nothing to sort: grips only for the four folders with a role.
 	expect(screen.getAllByRole('button', { name: /verschieben$/ })).toHaveLength(4);

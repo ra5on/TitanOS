@@ -462,7 +462,12 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		if err != nil {
 			return agent.Prepared{}, err
 		}
-		if am == agent.ModeSuggest {
+		if am == agent.ModeSuggest && t.draft == nil {
+			// 1.15 (115-1): moving or deleting has nothing to edit; "Nur
+			// Vorschläge" asks with a button instead of a card that only
+			// opened the mail.
+			mode = agent.ModeAsk
+		} else if am == agent.ModeSuggest {
 			p.Draft, mode = true, agent.ModeAllow
 		} else {
 			mode = am
@@ -505,13 +510,20 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	// step although the web was allowed without asking).
 	// The same holds for the tools of connected MCP servers: they send
 	// what the model gives them to a server outside TitanOS (0.99).
-	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !b.webStaysFree(chat, name, args) {
+	// 1.15 (115-3, owner 19 Nov 2026): a page whose address stands as it
+	// is in a mail the agent read (a parcel's tracking link) is read as the
+	// rights of the web say: the model did not write that address, so it
+	// carries nothing out. Built or changed addresses still ask.
+	linkFree := chat != nil && b.mailLinkFree(chat, name, args)
+	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && (chat.Tainted || chat.OutsideSkill) && !linkFree && !b.webStaysFree(chat, name, args) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
+		p.Why = "outside"
 	}
 	// After mail, the calendar, the contacts or reminders were read, the
 	// web and MCP always ask, also with "Web frei" (1.13): a mail can tell
 	// the model to put the address book into a web address.
-	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && chat.PIMRead {
+	if (t.area == agent.AreaWeb || t.area == agent.AreaMCP) && chat != nil && chat.PIMRead && !linkFree {
+		p.Why = "pim"
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.area == agent.AreaNVR {
@@ -559,6 +571,17 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 		if least != "" {
 			mode = agent.Stricter(mode, least)
+		}
+	}
+	// The card of a web step says in words what it reads (115-3: it showed
+	// "web read" and the level "Ändern").
+	if p.Summary == "" && t.area == agent.AreaWeb {
+		en := pimEnglish(chat)
+		switch name {
+		case "web_read":
+			p.Summary = fmt.Sprintf(pick(en, "Webseite lesen: %s", "Read a web page: %s"), argString(args, "url"))
+		case "web_search":
+			p.Summary = fmt.Sprintf(pick(en, "Im Web suchen: „%s“", "Search the web: \"%s\""), argString(args, "query"))
 		}
 	}
 	if p.Summary == "" && t.kind != agent.KindRead && t.kind != agent.KindAgent {
@@ -1197,6 +1220,51 @@ func sameArea(rule, area string) bool {
 // (owner 16 Nov 2026: the switch was on and the agent still asked before
 // every search, because one memory had been saved after a web search).
 var jsonPlain = strings.NewReplacer(`\u0026`, "&", `\u003c`, "<", `\u003e`, ">")
+
+// mailLinkFree: web_read of an address that stands, character for
+// character, in the text of a mail this chat read with mail_read (115-3).
+// Only the whole address counts, at least 12 characters, http or https.
+func (b *agentToolbox) mailLinkFree(chat *agent.Chat, name string, args json.RawMessage) bool {
+	if name != "web_read" {
+		return false
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(args, &req) != nil {
+		return false
+	}
+	address := strings.TrimSpace(req.URL)
+	if len(address) < 12 || !(strings.HasPrefix(address, "https://") || strings.HasPrefix(address, "http://")) {
+		return false
+	}
+	for _, e := range chat.Entries {
+		if e.Role != "tool" || e.Tool != "mail_read" || strings.HasPrefix(e.Result, "Error:") {
+			continue
+		}
+		if linkIn(jsonPlain.Replace(e.Result), address) {
+			return true
+		}
+	}
+	return false
+}
+
+// linkIn: address stands in text as a whole link – the character after it
+// ends a link (space, quote, bracket, end), so "https://a.example/x" does
+// not count inside "https://a.example/xyz".
+func linkIn(text, address string) bool {
+	for from := 0; ; {
+		i := strings.Index(text[from:], address)
+		if i < 0 {
+			return false
+		}
+		end := from + i + len(address)
+		if end == len(text) || strings.ContainsRune(" \t\r\n\"'<>()[]{}|\\", rune(text[end])) {
+			return true
+		}
+		from += i + 1
+	}
+}
 
 func (b *agentToolbox) webStaysFree(chat *agent.Chat, name string, args json.RawMessage) bool {
 	if b.settings.Policy.WebFree {

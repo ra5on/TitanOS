@@ -15,7 +15,14 @@ import (
 //
 //	{"mail": {"<mailbox id>": ["INBOX", "Rechnungen", …]},
 //	 "contacts": ["<address book id>", …],
-//	 "calendar": ["<calendar id>", …]}
+//	 "calendar": ["<calendar id>", …],
+//	 "mailAccounts": ["<mailbox id>", …],
+//	 "mailHidden": {"<mailbox id>": ["Spam", …]}}
+//
+// 1.15 (115-4, owner 19 Nov 2026: "sortieren, welcher Account wichtiger
+// ist"): mailAccounts is the order of the mailboxes – the first is the
+// main one (sender of "Neue E-Mail", first in "Alle Posteingänge");
+// mailHidden are the folders the person took out of the side bar.
 //
 // Each list names entries in the account's order; the web UI puts entries
 // it does not name (new folders, a new calendar) after them and ignores
@@ -39,7 +46,7 @@ const (
 var orderMailboxID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 // orderKeys are the keys the kind holds.
-var orderKeys = map[string]bool{"mail": true, "contacts": true, "calendar": true}
+var orderKeys = map[string]bool{"mail": true, "contacts": true, "calendar": true, "mailAccounts": true, "mailHidden": true}
 
 // validOrderPrefs checks a PUT of the kind "order": only the known keys,
 // each null or of its shape, within the bounds above, no name twice.
@@ -55,7 +62,14 @@ func validOrderPrefs(value json.RawMessage) bool {
 		if string(raw) == "null" {
 			continue
 		}
-		if key == "mail" {
+		if key == "mailAccounts" {
+			var ids []string
+			if json.Unmarshal(raw, &ids) != nil || !orderList(ids, orderMailboxes, orderMailboxID.MatchString) {
+				return false
+			}
+			continue
+		}
+		if key == "mail" || key == "mailHidden" {
 			var boxes map[string][]string
 			if json.Unmarshal(raw, &boxes) != nil || boxes == nil || len(boxes) > orderMailboxes {
 				return false

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	export type MailItem = { folder: string; uid: number };
+	export type MailItem = { folder: string; uid: number; account?: string };
 </script>
 
 <script lang="ts">
@@ -21,8 +21,10 @@
 	import { mailApi, type Filters } from './api.ts';
 	import { groupByDay, type DayGroup } from './groups.ts';
 	import MailEntry, { type EntryAction } from './MailEntry.svelte';
-	import { isBool, rangeOf, readPref, writePref } from './prefs.ts';
+	import { listDate } from './text.ts';
+	import { isBool, rangeOf, readPref } from './prefs.ts';
 	import {
+		ALL,
 		findFolder,
 		folderName,
 		folderOf,
@@ -35,6 +37,7 @@
 	import type { Flags } from './types.ts';
 
 	type Filter = 'all' | 'unread' | 'flagged';
+	type ListAction = EntryAction | 'junk';
 	type Scope = 'folder' | 'all';
 
 	let {
@@ -42,8 +45,11 @@
 		folder,
 		selected = null,
 		selectedFolder = '',
+		selectedAccount = '',
 		heading,
+		subheading = '',
 		phone = false,
+		compact = false,
 		drag = true,
 		onopen,
 		oncompose,
@@ -56,12 +62,18 @@
 		selected?: number | null;
 		/** The folder of the open message ('' = this folder). */
 		selectedFolder?: string;
+		/** 1.15: the mailbox of the open message in a list over all mailboxes. */
+		selectedAccount?: string;
 		heading: string;
+		/** 1.15: the line under the big title (the mailbox). */
+		subheading?: string;
 		phone?: boolean;
+		/** 1.15: the phone and narrow windows (arrow after the date). */
+		compact?: boolean;
 		/** Rows can be dragged onto folders (the desktop's columns). */
 		drag?: boolean;
-		onopen: (uid: number, folder: string) => void;
-		/** A button "Neue E-Mail" in the list (narrow windows and the phone). */
+		onopen: (uid: number, folder: string, account?: string) => void;
+		/** "Neue E-Mail" in the list's bar at the bottom (1.15: always). */
 		oncompose?: () => void;
 		/** Something changed the folders' counts; `deltas` as far as known here (1.13). */
 		onchanged?: (deltas: FolderDelta[]) => void;
@@ -72,16 +84,17 @@
 	} = $props();
 
 	let rows = $state<Row[]>([]);
-	let next = $state<number | null>(null);
+	// A uid below which the next page starts; over all mailboxes a cursor.
+	let next = $state<number | string | null>(null);
 	let total = $state(0);
 	let loading = $state(false);
 	let error = $state('');
 	let loaded = $state(false);
 	let search = $state('');
 	let q = $state('');
-	let filter = $state<Filter>('all');
+	let unreadOnly = $state(false);
+	let flaggedOnly = $state(false);
 	let scope = $state<Scope>('folder');
-	let moreOpen = $state(false);
 	let fromText = $state('');
 	let from = $state('');
 	let attachment = $state(false);
@@ -102,21 +115,74 @@
 	let controller: AbortController | null = null;
 	let more = $state<HTMLElement>();
 	let searchField = $state<HTMLInputElement>();
+	// 1.15 (115-2, drafts 11–19): selecting is a mode ("Bearbeiten"), the
+	// filters are a sheet behind the bar's filter button, "Markieren" a
+	// menu of the selected mails (or of one mail: the swipe's "Mehr").
+	let editing = $state(false);
+	let filterOpen = $state(false);
+	let actionsFor = $state<Row[] | null>(null);
+	let searchFocus = $state(false);
+	let unavailable = $state<string[]>([]);
+	const unified = $derived(accountId === ALL);
+	/** The search is in use: the field stays, "Abbrechen" and the scope show. */
+	const searchActive = $derived(searchFocus || !!search || scope === 'all');
+	const accOf = (r: Pick<Row, 'account'>) => r.account ?? accountId;
+	const roleIn = (a: string, path: string) => findFolder(a, path)?.role ?? '';
+	const roleOf = (r: Row) => roleIn(accOf(r), r.folder ?? folder);
 
 	const filters = $derived<Filters>({
 		q,
-		unread: filter === 'unread',
-		flagged: filter === 'flagged',
+		unread: unreadOnly,
+		flagged: flaggedOnly,
 		from,
 		attachment,
 		since,
 		until,
 	});
-	const hasCriteria = $derived(!!(q || from || attachment || since || until || filter !== 'all'));
+	const hasCriteria = $derived(
+		!!(q || from || attachment || since || until || unreadOnly || flaggedOnly),
+	);
+	/** A filter of the sheet is on (the search field counts apart). */
+	const filterActive = $derived(
+		!!(from || attachment || since || until || unreadOnly || flaggedOnly || scope === 'all'),
+	);
+	const filterWords = $derived(
+		[
+			unreadOnly && t('mail.filter.unread'),
+			flaggedOnly && t('mail.filter.flagged'),
+			attachment && t('mail.filter.attachmentWord'),
+			from && t('mail.filter.fromWord', { from }),
+			(since || until) && t('mail.search.period'),
+			scope === 'all' && t('mail.filter.allFolders'),
+		]
+			.filter(Boolean)
+			.join(', '),
+	);
+	const unreadCount = $derived.by(() => {
+		if (unified)
+			return (mail.accounts ?? []).reduce(
+				(n, a) => n + (mail.folders[a.id]?.find((f) => f.role === 'inbox')?.unread ?? 0),
+				0,
+			);
+		const f = findFolder(accountId, folder);
+		return f && f.role !== 'junk' && f.role !== 'trash' ? f.unread : 0;
+	});
+	const stateLine = $derived(
+		!loaded
+			? t('common.loading')
+			: Date.now() - now.getTime() < 60_000
+				? t('mail.bar.justNow')
+				: t('mail.bar.updatedAt', { time: listDate(now.toISOString(), i18n.locale) }),
+	);
+	const accountLabel = (r: Row) => {
+		const a = mail.accounts?.find((x) => x.id === r.account);
+		const name = a ? a.name || a.email : '';
+		return r.folder && r.folder !== 'INBOX' ? `${name} · ${nameOf(r.folder, r.account)}` : name;
+	};
 	const needCriteria = $derived(scope === 'all' && !hasCriteria);
-	const role = (path: string) => findFolder(accountId, path)?.role ?? '';
-	const nameOf = (path: string) => {
-		const f = findFolder(accountId, path);
+	const role = (path: string) => (unified ? '' : (findFolder(accountId, path)?.role ?? ''));
+	const nameOf = (path: string, a = accountId) => {
+		const f = findFolder(a, path);
 		return f ? folderName(f) : path;
 	};
 
@@ -127,7 +193,23 @@
 		if (!quiet) loading = true;
 		error = '';
 		try {
-			if (scope === 'all') {
+			if (unified) {
+				const page = await mailApi.unified(
+					folder === 'flagged' ? 'flagged' : 'inbox',
+					{ ...filters, cursor: append && typeof next === 'string' ? next : null },
+					own.signal,
+				);
+				if (n !== asked) return;
+				const got: Row[] = page.messages.map((m) => ({ ...m }));
+				searched = null;
+				unavailable = page.failed.map((f) => f.account);
+				if (append) {
+					const have = new Set(rows.map(rowKey));
+					rows = [...rows, ...got.filter((m) => !have.has(rowKey(m)))];
+				} else rows = got;
+				next = page.next || null;
+				total = page.total;
+			} else if (scope === 'all') {
 				if (!hasCriteria) {
 					rows = [];
 					total = 0;
@@ -145,7 +227,7 @@
 			} else {
 				const page = await mailApi.messages(
 					accountId,
-					{ folder, before: append ? next : null, ...filters },
+					{ folder, before: append && typeof next === 'number' ? next : null, ...filters },
 					own.signal,
 				);
 				if (n !== asked) return;
@@ -270,9 +352,13 @@
 	const rowsOf = (s: Shown): Row[] => (s.child || isOpen(s.thread) ? [s.row] : s.thread.rows);
 	const isPicked = (s: Shown) => rowsOf(s).every((r) => picked.has(rowKey(r)));
 	const isCurrent = (r: Row) =>
-		r.uid === selected && (r.folder ?? folder) === (selectedFolder || folder);
+		r.uid === selected &&
+		(r.folder ?? folder) === (selectedFolder || folder) &&
+		(!unified || r.account === selectedAccount);
 
 	function pick(s: Shown, e: MouseEvent | KeyboardEvent) {
+		// Ctrl/Cmd or Shift on a row selects: the bar of the selection shows.
+		editing = true;
 		const key = rowKey(s.row);
 		const nextSet = new Set(picked);
 		if (e.shiftKey && anchor) {
@@ -297,7 +383,8 @@
 			return;
 		}
 		anchor = rowKey(s.row);
-		onopen(s.row.uid, s.row.folder ?? folder);
+		if (s.row.account) onopen(s.row.uid, s.row.folder ?? folder, s.row.account);
+		else onopen(s.row.uid, s.row.folder ?? folder);
 	}
 	function toggleThread(s: Shown) {
 		const keys = s.thread.rows.map(rowKey);
@@ -306,26 +393,26 @@
 		else set.add(keys[0]);
 		expanded = set;
 	}
-	function setThreads(on: boolean) {
-		threadsOn = on;
-		writePref('threads', on, true);
-	}
 
 	const pickedRows = $derived(rows.filter((r) => picked.has(rowKey(r))));
 	function selectAll() {
 		picked = new Set(rows.map(rowKey));
 	}
 
-	/** The rows by folder, in parts titand takes (at most 1000 uids). */
-	function byFolder(items: Row[]): [string, number[]][] {
-		const map = new Map<string, number[]>();
+	/** The rows by mailbox and folder, in parts titand takes (at most 1000 uids). */
+	function byFolder(items: Row[]): [string, string, number[]][] {
+		const map = new Map<string, { a: string; f: string; uids: number[] }>();
 		for (const r of items) {
+			const a = accOf(r);
 			const f = r.folder ?? folder;
-			map.set(f, [...(map.get(f) ?? []), r.uid]);
+			const k = a + '\u0000' + f;
+			const e = map.get(k) ?? { a, f, uids: [] };
+			e.uids.push(r.uid);
+			map.set(k, e);
 		}
-		const out: [string, number[]][] = [];
-		for (const [f, uids] of map)
-			for (let i = 0; i < uids.length; i += 1000) out.push([f, uids.slice(i, i + 1000)]);
+		const out: [string, string, number[]][] = [];
+		for (const { a, f, uids } of map.values())
+			for (let i = 0; i < uids.length; i += 1000) out.push([a, f, uids.slice(i, i + 1000)]);
 		return out;
 	}
 
@@ -336,7 +423,9 @@
 		if (at < 0) return null;
 		const rest = (list: Shown[]) => list.find((s) => !gone.has(rowKey(s.row)));
 		const found = rest(shown.slice(at + 1)) ?? rest(shown.slice(0, at).reverse());
-		return found ? { uid: found.row.uid, folder: found.row.folder ?? folder } : null;
+		return found
+			? { uid: found.row.uid, folder: found.row.folder ?? folder, account: found.row.account }
+			: null;
 	}
 	function dropRows(items: Row[]) {
 		const gone = new Set(items.map(rowKey));
@@ -345,12 +434,12 @@
 		total = Math.max(0, total - items.length);
 		picked = new Set([...picked].filter((k) => !gone.has(k)));
 		onremoved?.(
-			items.map((r) => ({ folder: r.folder ?? folder, uid: r.uid })),
+			items.map((r) => ({ folder: r.folder ?? folder, uid: r.uid, account: r.account })),
 			nextItem,
 		);
 	}
 
-	async function run(kind: EntryAction | 'move', items: Row[], to = '') {
+	async function run(kind: ListAction | 'move', items: Row[], to = '') {
 		if (!items.length) return;
 		busy = true;
 		actionError = '';
@@ -358,44 +447,56 @@
 		const done: Row[] = [];
 		const deltas: FolderDelta[] = [];
 		/** Where archive and delete put mails (none: deleted for good, or not known). */
-		const target = (from: string): string =>
+		const target = (a: string, from: string): string =>
 			kind === 'move'
 				? to
-				: kind === 'archive'
-					? (folderOf(accountId, 'archive')?.path ?? '')
-					: kind === 'delete' && role(from) !== 'trash'
-						? (folderOf(accountId, 'trash')?.path ?? '')
-						: '';
+				: kind === 'junk'
+					? (folderOf(a, 'junk')?.path ?? '')
+					: kind === 'archive'
+						? (folderOf(a, 'archive')?.path ?? '')
+						: kind === 'delete' && roleIn(a, from) !== 'trash'
+							? (folderOf(a, 'trash')?.path ?? '')
+							: '';
 		try {
-			for (const [f, uids] of byFolder(items)) {
+			for (const [a, f, uids] of byFolder(items)) {
 				if (kind === 'move' && f === to) continue;
-				if (kind === 'archive') await mailApi.archive(accountId, { folder: f, uids });
-				else if (kind === 'delete') await mailApi.remove(accountId, { folder: f, uids });
-				else if (kind === 'move') await mailApi.move(accountId, { folder: f, uids, to });
-				else {
+				if (kind === 'archive') await mailApi.archive(a, { folder: f, uids });
+				else if (kind === 'delete') await mailApi.remove(a, { folder: f, uids });
+				else if (kind === 'move') await mailApi.move(a, { folder: f, uids, to });
+				else if (kind === 'junk') {
+					const junk = target(a, f);
+					if (!junk || junk === f) continue;
+					await mailApi.move(a, { folder: f, uids, to: junk });
+				} else {
 					const flag: keyof Flags = kind === 'seen' || kind === 'unseen' ? 'seen' : 'flagged';
 					const on = kind === 'seen' || kind === 'flag';
 					const changing = items.filter(
-						(r) => (r.folder ?? folder) === f && uids.includes(r.uid) && !!r.flags[flag] !== on,
+						(r) =>
+							accOf(r) === a &&
+							(r.folder ?? folder) === f &&
+							uids.includes(r.uid) &&
+							!!r.flags[flag] !== on,
 					).length;
-					await mailApi.flags(accountId, {
+					await mailApi.flags(a, {
 						folder: f,
 						uids,
 						add: on ? [flag] : [],
 						remove: on ? [] : [flag],
 					});
 					for (const r of rows)
-						if ((r.folder ?? folder) === f && uids.includes(r.uid))
+						if (accOf(r) === a && (r.folder ?? folder) === f && uids.includes(r.uid))
 							r.flags = { ...r.flags, [flag]: on };
 					if (flag === 'seen' && changing)
-						deltas.push({ folder: f, unread: on ? -changing : changing });
+						deltas.push({ account: a, folder: f, unread: on ? -changing : changing });
 				}
-				const these = items.filter((r) => (r.folder ?? folder) === f && uids.includes(r.uid));
-				if (kind === 'archive' || kind === 'delete' || kind === 'move') {
+				const these = items.filter(
+					(r) => accOf(r) === a && (r.folder ?? folder) === f && uids.includes(r.uid),
+				);
+				if (kind === 'archive' || kind === 'delete' || kind === 'move' || kind === 'junk') {
 					const unread = these.filter((r) => !r.flags.seen).length;
-					deltas.push({ folder: f, total: -these.length, unread: -unread });
-					const into = target(f);
-					if (into) deltas.push({ folder: into, total: these.length, unread });
+					deltas.push({ account: a, folder: f, total: -these.length, unread: -unread });
+					const into = target(a, f);
+					if (into) deltas.push({ account: a, folder: into, total: these.length, unread });
 				}
 				done.push(...these);
 			}
@@ -405,21 +506,36 @@
 			busy = false;
 		}
 		if (!done.length) return;
-		if (kind === 'archive' || kind === 'delete' || kind === 'move') {
+		if (kind === 'archive' || kind === 'delete' || kind === 'move' || kind === 'junk') {
 			dropRows(done);
 			notice =
 				kind === 'archive'
 					? t('mail.done.archived', { count: done.length })
 					: kind === 'delete'
 						? t('mail.done.deleted', { count: done.length })
-						: t('mail.done.moved', { count: done.length, folder: nameOf(to) });
+						: kind === 'junk'
+							? t('mail.done.junk', { count: done.length })
+							: t('mail.done.moved', { count: done.length, folder: nameOf(to) });
+			if (editing && !rows.some((r) => picked.has(rowKey(r)))) picked = new Set();
 		}
 		onchanged?.(deltas);
 	}
 
+	/** The menu "Markieren": its mails, taken before the menu closes. */
+	function menuAct(kind: ListAction) {
+		const items = actionsFor ?? [];
+		actionsFor = null;
+		act(kind, items);
+	}
+	function menuMove() {
+		const items = actionsFor ?? [];
+		actionsFor = null;
+		moveItems = items;
+	}
+
 	/** Deleting in the trash is for good: asked first, on every way. */
-	function act(kind: EntryAction, items: Row[]) {
-		if (kind === 'delete' && items.some((r) => role(r.folder ?? folder) === 'trash')) {
+	function act(kind: ListAction, items: Row[]) {
+		if (kind === 'delete' && items.some((r) => roleOf(r) === 'trash')) {
 			confirmItems = items;
 			return;
 		}
@@ -432,6 +548,7 @@
 	}
 
 	function dragStart(s: Shown, e: DragEvent) {
+		if (unified) return;
 		const items = picked.has(rowKey(s.row)) ? pickedRows : rowsOf(s);
 		mailDrag.account = accountId;
 		mailDrag.items = items.map((r) => ({ folder: r.folder ?? folder, uid: r.uid }));
@@ -448,29 +565,48 @@
 		}, 0);
 	}
 
-	const inArchive = $derived(role(folder) === 'archive');
-	const pickedInTrash = $derived(pickedRows.some((r) => role(r.folder ?? folder) === 'trash'));
-	const moveTargets = $derived(sortFolders(mail.folders[accountId] ?? []));
+	const pickedInTrash = $derived(pickedRows.some((r) => roleOf(r) === 'trash'));
+	/** "Bewegen" moves within one mailbox: the mailbox of the mails, if it is one. */
+	const moveAccount = $derived.by(() => {
+		const list = moveItems ?? [];
+		const ids = new Set(list.map(accOf));
+		return ids.size === 1 ? [...ids][0] : '';
+	});
+	const moveTargets = $derived(moveAccount ? sortFolders(mail.folders[moveAccount] ?? []) : []);
 
 	/** Reads the first page again (new mail, after an action); `quiet` keeps the rows shown meanwhile. */
 	export function refresh(quiet = true) {
 		void load(false, quiet);
 	}
 	/** Marks changed elsewhere (the open message, the live stream). */
-	export function setFlags(uids: number[], change: Partial<Flags>, inFolder = folder) {
+	export function setFlags(
+		uids: number[],
+		change: Partial<Flags>,
+		inFolder = folder,
+		inAccount?: string,
+	) {
 		for (const r of rows)
-			if ((r.folder ?? folder) === inFolder && uids.includes(r.uid))
+			if (
+				(r.folder ?? folder) === inFolder &&
+				uids.includes(r.uid) &&
+				(!inAccount || r.account === inAccount)
+			)
 				r.flags = { ...r.flags, ...change };
 	}
 	/** Messages moved or deleted elsewhere leave the list. */
-	export function drop(uids: number[], inFolder = folder) {
-		const gone = new Set(uids.map((uid) => rowKey({ uid, folder: inFolder })));
+	export function drop(uids: number[], inFolder = folder, inAccount?: string) {
+		const gone = new Set(uids.map((uid) => rowKey({ uid, folder: inFolder, account: inAccount })));
 		rows = rows.filter((r) => !gone.has(rowKey(r)));
 		total = Math.max(0, total - uids.length);
 	}
 	/** The mail shown after (or before) one, for going on after a delete. */
-	export function neighbour(uid: number, inFolder = folder): MailItem | null {
-		const row = rows.find((r) => r.uid === uid && (r.folder ?? folder) === inFolder);
+	export function neighbour(uid: number, inFolder = folder, inAccount?: string): MailItem | null {
+		const row = rows.find(
+			(r) =>
+				r.uid === uid &&
+				(r.folder ?? folder) === inFolder &&
+				(!inAccount || r.account === inAccount),
+		);
 		return row ? after([row]) : null;
 	}
 	/** j/k: the next or previous entry from the open one. */
@@ -479,7 +615,7 @@
 		const at = shown.findIndex((s) => isCurrent(s.row));
 		const to = at < 0 ? (by > 0 ? 0 : shown.length - 1) : at + by;
 		const s = shown[Math.max(0, Math.min(shown.length - 1, to))];
-		return { uid: s.row.uid, folder: s.row.folder ?? folder };
+		return { uid: s.row.uid, folder: s.row.folder ?? folder, account: s.row.account };
 	}
 	/** e and Delete: the selection, else the open mail. */
 	export function actOnCurrent(kind: 'archive' | 'delete') {
@@ -488,7 +624,7 @@
 			const current = rows.find(isCurrent);
 			items = current ? [current] : [];
 		}
-		if (kind === 'archive' && items.every((r) => role(r.folder ?? folder) === 'archive')) return;
+		if (kind === 'archive' && items.every((r) => roleOf(r) === 'archive')) return;
 		if (items.length) act(kind, items);
 	}
 	/** /: the search field. */
@@ -499,7 +635,8 @@
 	/** The overview's links: a filter of this folder. */
 	export function showFilter(f: Filter) {
 		scope = 'folder';
-		filter = f;
+		unreadOnly = f === 'unread';
+		flaggedOnly = f === 'flagged';
 	}
 	/** A drop onto a folder of this mailbox. */
 	export function moveDropped(items: MailItem[], to: string) {
@@ -507,121 +644,78 @@
 		const list = rows.filter((r) => keys.has(rowKey(r)));
 		if (list.length) void run('move', list, to);
 	}
-
-	const filterList: {
-		id: Filter;
-		key: 'mail.filter.all' | 'mail.filter.unread' | 'mail.filter.flagged';
-	}[] = [
-		{ id: 'all', key: 'mail.filter.all' },
-		{ id: 'unread', key: 'mail.filter.unread' },
-		{ id: 'flagged', key: 'mail.filter.flagged' },
-	];
 </script>
 
-<section class="list" aria-labelledby="mail-list-head">
+<section class="list" class:compact aria-labelledby="mail-list-head">
 	<div class="tools">
-		<div class="headline">
-			<h2 id="mail-list-head">{heading}</h2>
-			{#if oncompose}
-				<button type="button" class="btn btn-primary compose" onclick={oncompose}
-					><Icon name="edit" size={16} />{t('mail.action.compose')}</button
-				>
-			{/if}
-		</div>
-		<form role="search" onsubmit={submit}>
-			<label class="sr-only" for="mail-search"
-				>{scope === 'all' ? t('mail.search.labelAll') : t('mail.search.label')}</label
-			>
-			<input
-				id="mail-search"
-				class="field"
-				type="search"
-				bind:this={searchField}
-				placeholder={scope === 'all'
-					? t('mail.search.placeholderAll')
-					: t('mail.search.placeholder')}
-				bind:value={search}
-				oninput={typed}
-			/>
-			<div class="scope" role="group" aria-label={t('mail.scope.label')}>
+		{#if !searchActive}
+			<div class="nav">
+				{#if editing}
+					<button type="button" class="link" onclick={selectAll}>{t('mail.pick.all')}</button>
+				{:else}<span></span>{/if}
 				<button
 					type="button"
-					class="btn seg"
-					aria-pressed={scope === 'folder'}
-					onclick={() => (scope = 'folder')}>{t('mail.scope.folder')}</button
-				>
-				<button
-					type="button"
-					class="btn seg"
-					aria-pressed={scope === 'all'}
-					onclick={() => (scope = 'all')}>{t('mail.scope.all')}</button
-				>
-				<button
-					type="button"
-					class="btn seg"
-					aria-expanded={moreOpen}
-					aria-controls="mail-more-filters"
-					onclick={() => (moreOpen = !moreOpen)}
-					><Icon name={moreOpen ? 'chevronDown' : 'chevronRight'} size={14} />{t(
-						'mail.search.more',
-					)}</button
+					class="link"
+					class:strong={editing}
+					aria-pressed={editing}
+					onclick={() => {
+						editing = !editing;
+						if (!editing) picked = new Set();
+					}}>{editing ? t('mail.box.done') : t('mail.box.edit')}</button
 				>
 			</div>
-			{#if moreOpen}
-				<div id="mail-more-filters" class="more-filters">
-					<label class="fl">
-						<span>{t('mail.search.from')}</span>
-						<input
-							class="field"
-							type="search"
-							bind:value={fromText}
-							oninput={typed}
-							placeholder={t('mail.search.fromHint')}
-						/>
-					</label>
-					<label class="check">
-						<input type="checkbox" bind:checked={attachment} />
-						<span>{t('mail.search.attachment')}</span>
-					</label>
-					<p class="muted hint">{t('mail.search.attachmentHint')}</p>
-					<fieldset class="period">
-						<legend>{t('mail.search.period')}</legend>
-						<label class="fl">
-							<span>{t('mail.search.since')}</span>
-							<input class="field" type="date" bind:value={since} max={until || undefined} />
-						</label>
-						<label class="fl">
-							<span>{t('mail.search.until')}</span>
-							<input class="field" type="date" bind:value={until} min={since || undefined} />
-						</label>
-					</fieldset>
-					{#if from || attachment || since || until}
-						<button type="button" class="btn" onclick={resetFilters}
-							>{t('mail.search.reset')}</button
-						>
-					{/if}
-				</div>
-			{/if}
-		</form>
-		<div class="filters" role="group" aria-label={t('mail.filter.label')}>
-			{#each filterList as f (f.id)}
-				<button
-					type="button"
-					class="btn filter"
-					aria-pressed={filter === f.id}
-					onclick={() => (filter = f.id)}>{t(f.key)}</button
+			<h2 id="mail-list-head" class="big">
+				{editing && pickedRows.length
+					? t('mail.pick.count', { count: pickedRows.length })
+					: heading}
+			</h2>
+			{#if subheading && !editing}<p class="sub">{subheading}</p>{/if}
+		{:else}
+			<h2 id="mail-list-head" class="sr-only">{heading}</h2>
+		{/if}
+		{#if !editing}
+			<form role="search" class="search" class:on={searchActive} onsubmit={submit}>
+				<label class="sr-only" for="mail-search"
+					>{scope === 'all' ? t('mail.search.labelAll') : t('mail.search.label')}</label
 				>
-			{/each}
-			<label class="check threads">
-				<input
-					type="checkbox"
-					checked={threadsOn}
-					onchange={(e) => setThreads((e.currentTarget as HTMLInputElement).checked)}
-				/>
-				<span>{t('mail.thread.toggle')}</span>
-			</label>
-		</div>
-		{#if loaded && !needCriteria}
+				<span class="field-wrap"
+					><Icon name="search" size={18} /><input
+						id="mail-search"
+						class="field"
+						type="search"
+						bind:this={searchField}
+						placeholder={t('mail.search.placeholderShort')}
+						bind:value={search}
+						oninput={typed}
+						onfocus={() => (searchFocus = true)}
+					/></span
+				>
+				{#if searchActive}
+					<button
+						type="button"
+						class="link"
+						onclick={() => {
+							search = q = '';
+							searchFocus = false;
+							if (scope === 'all') scope = 'folder';
+						}}>{t('common.cancel')}</button
+					>
+					{#if !unified}
+						<div class="seg" role="group" aria-label={t('mail.scope.label')}>
+							<button type="button" aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}
+								>{t('mail.scope.allShort')}</button
+							>
+							<button
+								type="button"
+								aria-pressed={scope === 'folder'}
+								onclick={() => (scope = 'folder')}>{heading}</button
+							>
+						</div>
+					{/if}
+				{/if}
+			</form>
+		{/if}
+		{#if loaded && !needCriteria && (searched || q || hasCriteria)}
 			<p class="muted count" role="status">
 				{#if searched}
 					{t('mail.search.foundAll', {
@@ -630,53 +724,21 @@
 					})}{#if total > rows.length}
 						· {t('mail.search.newest', { shown: rows.length })}{/if}
 				{:else}
-					{q || hasCriteria
-						? t('mail.list.found', { count: total })
-						: t('mail.list.total', { count: total })}
+					{t('mail.list.found', { count: total })}
 				{/if}
 			</p>
 		{/if}
 	</div>
 
-	{#if pickedRows.length}
-		<div class="bulk" role="toolbar" aria-label={t('mail.bulk.label')}>
-			<span class="picked-count" role="status"
-				>{t('mail.pick.count', { count: pickedRows.length })}</span
-			>
-			{#if pickedRows.length < rows.length}
-				<button type="button" class="btn" onclick={selectAll}>{t('mail.pick.all')}</button>
-			{/if}
-			{#if !inArchive || scope === 'all'}
-				<button type="button" class="btn" disabled={busy} onclick={() => act('archive', pickedRows)}
-					><Icon name="archive" size={16} />{t('mail.action.archive')}</button
-				>
-			{/if}
-			<button type="button" class="btn" disabled={busy} onclick={() => act('delete', pickedRows)}
-				><Icon name="trash" size={16} />{pickedInTrash
-					? t('mail.action.deleteForever')
-					: t('mail.action.delete')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => (moveItems = pickedRows)}
-				><Icon name="move" size={16} />{t('mail.action.move')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => act('seen', pickedRows)}
-				>{t('mail.action.markRead')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => act('unseen', pickedRows)}
-				>{t('mail.action.markUnread')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => act('flag', pickedRows)}
-				><Icon name="flag" size={16} />{t('mail.action.flag')}</button
-			>
-			<button type="button" class="btn" disabled={busy} onclick={() => act('unflag', pickedRows)}
-				>{t('mail.action.unflag')}</button
-			>
-			<button type="button" class="btn" onclick={() => (picked = new Set())}
-				><Icon name="close" size={16} />{t('mail.pick.clear')}</button
-			>
-		</div>
+	{#if unified && unavailable.length}
+		<p class="notice-warn done" role="status">
+			{t('mail.all.failed', {
+				names: unavailable
+					.map((id) => mail.accounts?.find((a) => a.id === id)?.name || id)
+					.join(', '),
+			})}
+		</p>
 	{/if}
-
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if actionError}<p class="notice-error" role="alert">{actionError}</p>{/if}
 	{#if notice}<p class="notice-ok done" role="status">{notice}</p>{/if}
@@ -692,7 +754,7 @@
 	{/if}
 	{#each groups as g (g.group)}
 		<section class="group" aria-labelledby="mail-group-{g.group}">
-			<h3 id="mail-group-{g.group}">{groupNames[g.group]}</h3>
+			<h3 id="mail-group-{g.group}" class="sr-only">{groupNames[g.group]}</h3>
 			<ul class="rows">
 				{#each shown.filter((s) => g.items.includes(s.thread)) as s (rowKey(s.row))}
 					<li>
@@ -704,10 +766,21 @@
 							current={isCurrent(s.row)}
 							picked={isPicked(s)}
 							{phone}
-							inTrash={role(s.row.folder ?? folder) === 'trash'}
-							canArchive={role(s.row.folder ?? folder) !== 'archive'}
-							folderName={scope === 'all' ? nameOf(s.row.folder ?? folder) : ''}
-							draggable={drag && !phone}
+							{editing}
+							arrow={compact && !editing}
+							inTrash={roleOf(s.row) === 'trash'}
+							canArchive={roleOf(s.row) !== 'archive'}
+							folderName={unified
+								? accountLabel(s.row)
+								: scope === 'all'
+									? nameOf(s.row.folder ?? folder)
+									: ''}
+							draggable={drag && !phone && !unified && !editing}
+							onlongpress={() => {
+								editing = true;
+								picked = new Set(rowsOf(s).map(rowKey));
+							}}
+							onmore={() => (actionsFor = rowsOf(s))}
 							onopen={(e) => clicked(s, e)}
 							onpick={(e) => pick(s, e)}
 							ontoggle={s.child ? undefined : () => toggleThread(s)}
@@ -730,7 +803,206 @@
 			onclick={() => void load(true)}>{t('mail.list.more')}</button
 		>
 	{/if}
+	<!-- 1.15 (drafts 11–17): the bar at the bottom of the list – filter,
+	     the state and "Neue E-Mail"; while selecting Markieren · Bewegen ·
+	     Löschen. It stays in view at the list's bottom edge. -->
+	<div class="foot" role="toolbar" aria-label={t('mail.listActions')}>
+		{#if editing}
+			<button
+				type="button"
+				class="link"
+				disabled={!pickedRows.length || busy}
+				onclick={() => (actionsFor = pickedRows)}>{t('mail.bar.mark')}</button
+			>
+			<button
+				type="button"
+				class="link"
+				disabled={!pickedRows.length || busy || new Set(pickedRows.map(accOf)).size > 1}
+				title={new Set(pickedRows.map(accOf)).size > 1 ? t('mail.bar.moveOne') : undefined}
+				onclick={() => (moveItems = pickedRows)}>{t('mail.bar.move')}</button
+			>
+			<button
+				type="button"
+				class="link danger"
+				disabled={!pickedRows.length || busy}
+				onclick={() => act('delete', pickedRows)}
+				>{pickedInTrash ? t('mail.action.deleteForever') : t('mail.action.delete')}</button
+			>
+		{:else}
+			<button
+				type="button"
+				class="round"
+				class:on={filterActive}
+				aria-pressed={filterActive}
+				aria-label={t('mail.bar.filter')}
+				title={t('mail.bar.filter')}
+				onclick={() => (filterOpen = true)}><Icon name="filter" size={22} /></button
+			>
+			<button type="button" class="state" onclick={() => (filterOpen = true)}>
+				{#if filterActive}
+					<span>{t('mail.bar.filteredBy')}</span><strong>{filterWords}</strong>
+				{:else}
+					<span>{stateLine}</span>
+					{#if unreadCount > 0}<small>{t('mail.box.unread', { count: unreadCount })}</small>{/if}
+				{/if}
+			</button>
+			{#if oncompose}
+				<button
+					type="button"
+					class="round"
+					aria-label={t('mail.action.compose')}
+					title={t('mail.action.compose')}
+					onclick={oncompose}><Icon name="edit" size={22} /></button
+				>
+			{:else}<span class="round-gap"></span>{/if}
+		{/if}
+	</div>
 </section>
+
+{#if filterOpen}
+	<Dialog title={t('mail.bar.filter')} onclose={() => (filterOpen = false)}>
+		{#if !unified}
+			<h3 class="fh">{t('mail.filter.include')}</h3>
+			<div class="fgroup" role="radiogroup" aria-label={t('mail.filter.include')}>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={scope === 'folder'}
+					onclick={() => (scope = 'folder')}
+					><span>{t('mail.filter.thisFolder')}</span>{#if scope === 'folder'}<Icon
+							name="check"
+							size={18}
+						/>{/if}</button
+				>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={scope === 'all'}
+					onclick={() => (scope = 'all')}
+					><span>{t('mail.filter.allFolders')}</span>{#if scope === 'all'}<Icon
+							name="check"
+							size={18}
+						/>{/if}</button
+				>
+			</div>
+		{/if}
+		<h3 class="fh">{t('mail.filter.mailsThat')}</h3>
+		<div class="fgroup">
+			<button
+				type="button"
+				role="checkbox"
+				aria-checked={unreadOnly}
+				onclick={() => (unreadOnly = !unreadOnly)}
+				><span>{t('mail.filter.areUnread')}</span>{#if unreadOnly}<Icon
+						name="check"
+						size={18}
+					/>{/if}</button
+			>
+			{#if !(unified && folder === 'flagged')}
+				<button
+					type="button"
+					role="checkbox"
+					aria-checked={flaggedOnly}
+					onclick={() => (flaggedOnly = !flaggedOnly)}
+					><span>{t('mail.filter.areFlagged')}</span>{#if flaggedOnly}<Icon
+							name="check"
+							size={18}
+						/>{/if}</button
+				>
+			{/if}
+			<button
+				type="button"
+				role="checkbox"
+				aria-checked={attachment}
+				onclick={() => (attachment = !attachment)}
+				><span>{t('mail.filter.haveAttachment')}</span>{#if attachment}<Icon
+						name="check"
+						size={18}
+					/>{/if}</button
+			>
+		</div>
+		<p class="muted fnote">{t('mail.search.attachmentHint')}</p>
+		<label class="fl">
+			<span>{t('mail.search.from')}</span>
+			<input
+				class="field"
+				type="search"
+				bind:value={fromText}
+				oninput={typed}
+				placeholder={t('mail.search.fromHint')}
+			/>
+		</label>
+		<fieldset class="period">
+			<legend>{t('mail.search.period')}</legend>
+			<label class="fl">
+				<span>{t('mail.search.since')}</span>
+				<input class="field" type="date" bind:value={since} max={until || undefined} />
+			</label>
+			<label class="fl">
+				<span>{t('mail.search.until')}</span>
+				<input class="field" type="date" bind:value={until} min={since || undefined} />
+			</label>
+		</fieldset>
+		<div class="dialog-actions">
+			<button
+				type="button"
+				class="btn"
+				disabled={!filterActive && scope === 'folder'}
+				onclick={() => {
+					unreadOnly = flaggedOnly = false;
+					resetFilters();
+					scope = 'folder';
+				}}>{t('mail.search.reset')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={() => (filterOpen = false)}
+				>{t('mail.box.done')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
+{#if actionsFor}
+	{@const items = actionsFor}
+	{@const allFlagged = items.every((r) => r.flags.flagged)}
+	{@const allSeen = items.every((r) => r.flags.seen)}
+	<Dialog
+		title={items.length === 1
+			? t('mail.bar.markOne')
+			: t('mail.bar.markMany', { count: items.length })}
+		onclose={() => (actionsFor = null)}
+	>
+		<div class="fgroup acts">
+			<button type="button" onclick={() => menuAct(allFlagged ? 'unflag' : 'flag')}
+				><Icon name="flag" size={18} /><span
+					>{allFlagged ? t('mail.action.unflag') : t('mail.action.flag')}</span
+				></button
+			>
+			<button type="button" onclick={() => menuAct(allSeen ? 'unseen' : 'seen')}
+				><Icon name="mail" size={18} /><span
+					>{allSeen ? t('mail.action.markUnread') : t('mail.action.markRead')}</span
+				></button
+			>
+			{#if items.some((r) => roleOf(r) !== 'archive')}
+				<button type="button" onclick={() => menuAct('archive')}
+					><Icon name="archive" size={18} /><span>{t('mail.action.archive')}</span></button
+				>
+			{/if}
+			{#if items.some((r) => roleOf(r) !== 'junk')}
+				<button type="button" onclick={() => menuAct('junk')}
+					><Icon name="shield" size={18} /><span>{t('mail.action.junk')}</span></button
+				>
+			{/if}
+			<button type="button" onclick={() => menuMove()} disabled={new Set(items.map(accOf)).size > 1}
+				><Icon name="move" size={18} /><span>{t('mail.bar.move')}</span></button
+			>
+		</div>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (actionsFor = null)}
+				>{t('common.cancel')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
 
 {#if confirmItems}
 	<Confirm
@@ -784,98 +1056,283 @@
 		flex-direction: column;
 		min-width: 0;
 	}
+	/* 1.15 (115-2, drafts 11–19): the head like Apple Mail – "Bearbeiten",
+	   a big title, the mailbox below it, the search field; the bar at the
+	   bottom with the filter, the state and "Neue E-Mail". Sizes follow the
+	   column (container units): the same look in a narrow column, a wide
+	   window and on the phone. */
+	.list {
+		container-type: inline-size;
+		/* The headings of the days are for screen readers only: they stay
+		   inside the list's own scrolling column. */
+		position: relative;
+	}
 	.tools {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-2-5) var(--space-3);
+		gap: var(--space-1);
+		padding: 0 0 var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
-	.headline {
+	.nav {
 		display: flex;
-		flex-wrap: wrap;
+		justify-content: space-between;
 		align-items: center;
-		gap: var(--space-2);
+		min-height: 44px;
+		padding: 0 var(--space-1);
 	}
-	h2 {
-		flex: 1 1 10em;
-		margin: 0;
-		font-size: var(--text-lg);
+	.link {
+		min-height: 44px;
+		padding: 0 var(--space-2);
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: clamp(15px, 4.4cqi, 17px);
+		cursor: pointer;
 		overflow-wrap: anywhere;
 	}
-	.compose {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
+	.link.strong {
+		font-weight: 600;
 	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		min-width: 0;
+	.link.danger {
+		color: var(--status-error);
 	}
-	form > input {
-		width: 100%;
+	.link:disabled {
+		color: var(--muted);
+		cursor: default;
 	}
-	.scope,
-	.filters {
+	.link:focus-visible,
+	.round:focus-visible,
+	.state:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+		border-radius: var(--radius-small);
+	}
+	.big {
+		margin: 0;
+		padding: 0 var(--space-3);
+		font-size: clamp(24px, 8cqi, 32px);
+		font-weight: 700;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
+	}
+	.sub {
+		margin: 0;
+		padding: 0 var(--space-3);
+		color: var(--muted);
+		font-size: var(--text-md);
+		overflow-wrap: anywhere;
+	}
+	.search {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-1);
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3) 0;
+		min-width: 0;
 	}
-	.seg,
-	.filter {
-		display: inline-flex;
+	.search.on {
+		padding-top: var(--space-3);
+	}
+	.field-wrap {
+		flex: 1 1 12em;
+		min-width: 0;
+		display: flex;
 		align-items: center;
-		gap: var(--space-1);
+		gap: var(--space-1-5);
+		min-height: 44px;
+		padding: 0 var(--space-2-5);
+		border-radius: 10px;
+		background: var(--chip);
+		color: var(--muted);
 	}
-	.seg[aria-pressed='true'],
-	.filter[aria-pressed='true'] {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+	.field-wrap :global(svg) {
+		flex: none;
+	}
+	.field-wrap .field {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		background: none;
+		padding: 0;
+		min-height: 44px;
+		font-size: var(--text-md);
+		color: var(--text);
+		box-shadow: none;
+	}
+	.field-wrap .field:focus {
+		outline: none;
+	}
+	.field-wrap:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: 0;
+	}
+	.seg {
+		flex: 1 1 100%;
+		display: flex;
+		padding: 2px;
+		border-radius: 9px;
+		background: var(--chip);
+	}
+	.seg button {
+		flex: 1;
+		min-height: 36px;
+		padding: var(--space-1) var(--space-2);
+		border: 0;
+		border-radius: 7px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
+		cursor: pointer;
+	}
+	.seg button[aria-pressed='true'] {
+		background: var(--surface);
 		font-weight: 600;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
 	}
-	.more-filters {
+	.count {
+		margin: 0;
+		padding: var(--space-1) var(--space-3) 0;
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
+	}
+	.foot {
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
+		margin-top: auto;
+		display: grid;
+		grid-template-columns: 56px minmax(0, 1fr) 56px;
+		align-items: center;
+		min-height: 56px;
+		padding: var(--space-1) var(--space-1) calc(var(--space-1) + env(safe-area-inset-bottom));
+		border-top: 1px solid var(--border);
+		background: var(--surface);
+	}
+	.foot:has(.link) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.round {
+		display: grid;
+		place-items: center;
+		width: 48px;
+		height: 48px;
+		justify-self: center;
+		border: 0;
+		border-radius: 50%;
+		background: none;
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.round.on {
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+	.round-gap {
+		width: 48px;
+	}
+	.state {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-2);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-small);
+		align-items: center;
+		min-height: 44px;
+		justify-content: center;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		text-align: center;
+		overflow-wrap: anywhere;
+		cursor: pointer;
+	}
+	.state small {
+		color: var(--muted);
+		font-size: var(--text-xs, 12px);
+	}
+	.state strong {
+		color: var(--accent);
+	}
+	/* The sheet of filters and the menu "Markieren". */
+	.fh {
+		margin: var(--space-3) 0 var(--space-1);
+		color: var(--muted);
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.fgroup {
+		display: flex;
+		flex-direction: column;
+		border-radius: 12px;
+		background: var(--chip);
+	}
+	.fgroup button:first-child {
+		border-radius: 12px 12px 0 0;
+	}
+	.fgroup button:last-child {
+		border-radius: 0 0 12px 12px;
+	}
+	.fgroup button:only-child {
+		border-radius: 12px;
+	}
+	.fgroup button {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		min-height: 48px;
+		padding: var(--space-2) var(--space-3);
+		border: 0;
+		border-bottom: 1px solid var(--border);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-md);
+		text-align: left;
+		cursor: pointer;
+	}
+	.fgroup button:last-child {
+		border-bottom: 0;
+	}
+	.fgroup button span {
+		flex: 1;
+		overflow-wrap: anywhere;
+	}
+	.fgroup button :global(svg) {
+		flex: none;
+		color: var(--accent);
+	}
+	.fgroup button:disabled {
+		color: var(--muted);
+		cursor: default;
+	}
+	.fgroup button:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.fnote {
+		margin: var(--space-1) 0 var(--space-2);
+		font-size: var(--text-sm);
 	}
 	.fl {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
 		min-width: 0;
+		margin-top: var(--space-2);
 		font-size: var(--text-sm);
 	}
 	.fl input {
 		width: 100%;
 		min-width: 0;
 	}
-	.check {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		min-height: 32px;
-		overflow-wrap: break-word;
-	}
-	.threads {
-		margin-left: auto;
-		font-size: var(--text-sm);
-	}
-	.hint {
-		margin: 0;
-		font-size: var(--text-sm);
-		overflow-wrap: break-word;
-	}
 	.period {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
-		margin: 0;
+		margin: var(--space-2) 0 0;
 		padding: 0;
 		border: 0;
 		min-width: 0;
@@ -888,43 +1345,7 @@
 	}
 	.period .fl {
 		flex: 1 1 9em;
-	}
-	.count {
-		margin: 0;
-		font-size: var(--text-sm);
-		overflow-wrap: break-word;
-	}
-	.bulk {
-		position: sticky;
-		top: 0;
-		z-index: 4;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1);
-		padding: var(--space-2) var(--space-3);
-		border-bottom: 1px solid var(--border);
-		background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-	}
-	.bulk .btn {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-	}
-	.picked-count {
-		font-weight: 600;
-		margin-right: var(--space-2);
-	}
-	.group h3 {
-		margin: 0;
-		padding: var(--space-1-5) var(--space-3);
-		border-bottom: 1px solid var(--border);
-		background: var(--bg-dim, var(--chip));
-		color: var(--muted);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		margin-top: 0;
 	}
 	.rows {
 		list-style: none;
@@ -958,9 +1379,6 @@
 	}
 	@media (max-width: 899px) {
 		.btn {
-			min-height: 44px;
-		}
-		.check {
 			min-height: 44px;
 		}
 	}

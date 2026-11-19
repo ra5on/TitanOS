@@ -14,7 +14,7 @@
 // (scope asked, only the changed field sent), danger zone. Unavailable
 // (503 and volume:false) shows the message, never a grid. Truncated
 // (titand's cap of occurrences) shows a note. English once.
-// Phone 390 px light and dark: the list, the month with dots (1.13),
+// Phone 390 px light and dark: the list, the month with bars (1.15), a day,
 // the form; targets ≥ 44 px. Once in a real desktop window, with "Ablage ›
 // Neuer Termin" opening the event window. Every view: no sideways scroll,
 // no cut text, the calendar's name beside every color.
@@ -122,8 +122,14 @@ const sent = (state, method, re) =>
 async function ready(page, view) {
   await page.locator(`[data-pim-ready][data-view="${view}"]`).waitFor();
   // The events have come (a chip, block or row).
-  await page.locator(".ev, .blk, .arow").first().waitFor();
+  await page.locator(".ev, .blk, .arow, .month .bar").first().waitFor();
   await page.waitForTimeout(300);
+  // 1.15: a movement that is still running (a day opening) is over first.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 }
 const dialog = (page) => page.locator("dialog[open]").last();
 
@@ -156,20 +162,24 @@ try {
     await ready(page, "month");
     const todayCell = page.locator('.cell[data-day="2026-11-17"]');
     assert.match(await todayCell.innerText(), /Heute/, "today is named");
-    // 1.13: every event of the day in its cell (they scroll there), no "+N weitere".
-    assert.match(await todayCell.innerText(), /Elternabend/, "all of the day's events");
-    assert.equal(
-      await todayCell.locator(".evs").evaluate((el) => getComputedStyle(el).overflowY),
-      "auto",
-      "the day's events scroll in the cell",
-    );
-    // The clipped title of the list is read whole (no cut text).
-    await until(
-      async () =>
-        (await todayCell.innerText()).includes(
-          "Nebenkostenabrechnung 2026 vorbereiten",
-        ),
-      "the whole long title",
+    // 1.15: today a red circle (white on red ≥ 4.5:1).
+    const todayN = await todayCell.locator(".n").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, fg: cs.color };
+    });
+    assert.notEqual(todayN.bg, "rgba(0, 0, 0, 0)", "today's circle");
+    // 1.15: what does not fit a day is "+N weitere" (it opens the day); the
+    // day's own events stand in its stack below the bars.
+    const todayStack = page.locator('.stack[data-stack="2026-11-17"]');
+    assert.match(await todayStack.innerText(), /Fahrgemeinschaft/, "the day's events");
+    assert.match(await todayStack.innerText(), /\+\d+ weitere/, "+N weitere");
+    // A multi-day event is one bar across its days.
+    const oma = page.locator(".mweek .ev.long", { hasText: "Oma zu Besuch" });
+    assert.equal(await oma.count(), 1, "one bar for a multi-day event");
+    assert.ok(
+      (await oma.boundingBox()).width >
+        2 * (await page.locator('.cell[data-day="2026-11-18"]').boundingBox()).width,
+      "the bar spans its days",
     );
     // The hidden calendar says so in words and its events stay away.
     assert.match(
@@ -267,6 +277,15 @@ try {
     await page.goto(base + "/calendar?view=day&date=2026-11-17");
     await ready(page, "day");
     assert.equal(await page.locator(".wk-grid .col").count(), 1, "day: one column");
+    // 1.15: the day with its week strip and the date line.
+    assert.equal(await page.locator("[data-strip] .d").count(), 7, "week strip");
+    assert.match(await page.locator(".dayline").innerText(), /Dienstag – 17\. Nov\. 2026/);
+    assert.match(await page.locator(".wk-grid").innerText(), /Elternabend/, "all of the day's events");
+    assert.match(
+      await page.locator(".wk-grid").innerText(),
+      /Nebenkostenabrechnung 2026 vorbereiten/,
+      "the whole long title",
+    );
     await sound(page, `day ${theme}`);
     await shot(page, `tag-${theme}`);
 
@@ -948,7 +967,8 @@ try {
         await page.getByRole("button", { name: "Kalender", exact: true }).click();
         await page.locator('.calrow[data-calendar="privat"]').waitFor();
       } else if (!(await page.locator(".agenda").count())) {
-        await page.getByRole("button", { name: "Zurück" }).first().click();
+        await page.getByRole("button", { name: "Fertig" }).first().click();
+    await page.waitForURL((u) => !u.searchParams.has("level"));
         await ready(page, "list");
       }
       await opener.click();
@@ -968,7 +988,8 @@ try {
       await sound(page, `phone ${what} ${theme}`);
       await shot(page, `handy-${what.replace(" ", "-")}-${theme}`);
       if (what === "event detail") {
-        await sheet.getByRole("button", { name: "Löschen …" }).click();
+        // 1.15 (draft 35): the red row at the end of the event's page.
+        await sheet.getByRole("button", { name: "Ereignis löschen" }).click();
         await dialog(page).getByText("Nur diesen Termin").waitFor();
         await page.waitForTimeout(500);
         assert.deepEqual(
@@ -987,7 +1008,8 @@ try {
     }
     await shot(page, `handy-liste-${theme}`);
 
-    await page.getByRole("radio", { name: "Monat" }).click();
+    // 1.15: "‹ November" goes back to the months; a bar per event, no titles.
+    await page.locator(".back-pill").click();
     await ready(page, "month");
     assert.equal(
       await page.locator(".month .ev").count(),
@@ -995,23 +1017,28 @@ try {
       "no titles in the cells",
     );
     assert.ok(
-      (await page.locator(".marks i").count()) > 10,
-      "a dot per event",
-    );
-    await page.locator(".pick", { hasText: "19" }).first().click();
-    await until(
-      async () =>
-        (await page.locator(".agenda").innerText()).includes("Messe Köln"),
-      "the chosen day below",
+      (await page.locator(".month .bar").count()) > 10,
+      "a bar per event",
     );
     assert.deepEqual(
-      await small(page, "[data-pim-shell]"),
+      await small(page, ".pills"),
       [],
       `phone month ${theme}: targets under 44 px`,
     );
     await sound(page, `phone month ${theme}`);
     await namedColors(page, `phone month ${theme}`);
     await shot(page, `handy-monat-${theme}`);
+    // A day opens with its hours (the chosen day's events).
+    await page.locator('.pick[data-day="2026-11-19"]').click();
+    await ready(page, "day");
+    assert.match(await page.locator(".wk-grid").innerText(), /Messe Köln/, "the chosen day");
+    assert.deepEqual(
+      await small(page, "[data-strip]"),
+      [],
+      `phone strip ${theme}: targets under 44 px`,
+    );
+    await sound(page, `phone day ${theme}`);
+    await namedColors(page, `phone day ${theme}`);
 
     await page.goto(base + "/calendar/event?date=2026-11-19&time=12:30");
     await page.locator("[data-event-form]").waitFor();

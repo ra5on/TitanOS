@@ -369,3 +369,12 @@ func mustOpen(t *testing.T, data []byte) Contact {
 	}
 	return c
 }
+
+// 1.15 (115-7): an export that starts with a UTF-8 BOM keeps its first card.
+func TestSplitVCFWithBOM(t *testing.T) {
+	data := []byte("\xef\xbb\xbfBEGIN:VCARD\r\nVERSION:3.0\r\nFN:Anna Berg\r\nN:Berg;Anna;;;\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ben\r\nN:;Ben;;;\r\nEND:VCARD\r\n")
+	pieces := SplitVCF(data)
+	if len(pieces) != 2 || pieces[0].FN != "Anna Berg" {
+		t.Fatalf("pieces: %+v", pieces)
+	}
+}

@@ -9,8 +9,15 @@
 	// changed.
 	// 1.13 (owner 18 Nov 2026): a new picture is cut square first
 	// (PhotoCrop); the groups of the contact as boxes to tick.
+	// 1.15 (PLAN 115-6, draft 44): Apple's "Neuer Kontakt" – the round
+	// picture with "Foto hinzufügen" (a menu: a file, the NAS, remove),
+	// first and last name and company in one group, then a group per kind
+	// with its rows (a red "−" takes one out) and a green "+ … hinzufügen";
+	// birthday and groups show their fields once added or filled. Deleting
+	// is the red row at the end (its own dialog). The head with Abbrechen
+	// and Fertig is the page's.
 	import { tick } from 'svelte';
-	import DangerZone from '#lib/components/DangerZone.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NasPicker from '#lib/components/agent/NasPicker.svelte';
 	import { thumbnailURL } from '#lib/file-actions.ts';
@@ -155,20 +162,50 @@
 	function setDay(day: number, month: number) {
 		form.birthdayDate = day && month ? `2000-${pad(month)}-${pad(day)}` : '';
 	}
+	// Birthday and groups show their fields once filled or added.
+	let wantBirthday = $state(false);
+	let wantGroups = $state(false);
+	// What the saved card has stays shown while it is being emptied.
+	const showBirthday = $derived(wantBirthday || !!form.birthdayDate || !!contact?.birthday);
+	const showGroups = $derived(
+		wantGroups ||
+			member.length > 0 ||
+			(!!contact && groups.some((g) => g.members.includes(contact.id))),
+	);
+	async function reveal(what: 'birthday' | 'groups') {
+		if (what === 'birthday') wantBirthday = true;
+		else wantGroups = true;
+		await tick();
+		root?.querySelector<HTMLElement>(`[data-reveal="${what}"] :is(input, select)`)?.focus();
+	}
 </script>
 
 {#snippet typeSelect(row: { type: string; label?: string }, types: readonly string[], what: string)}
-	<select
-		class="field lab first"
-		aria-label={t('contacts.form.typeOf', { what })}
-		bind:value={row.type}
-	>
+	<select class="lab first" aria-label={t('contacts.form.typeOf', { what })} bind:value={row.type}>
 		{#each types as type (type)}
 			<option value={type}
 				>{type === 'other' && row.label ? typeLabel(type, row.label) : typeName(type)}</option
 			>
 		{/each}
 	</select>
+{/snippet}
+
+{#snippet addRow(text: string, onclick: () => void, data: string)}
+	<button type="button" class="addrow" {onclick} data-add={data}
+		><span class="addp" aria-hidden="true"><Icon name="plus" size={14} /></span><span class="at"
+			>{text}</span
+		></button
+	>
+{/snippet}
+
+{#snippet removeButton(what: string, onclick: () => void)}
+	<button
+		type="button"
+		class="rm"
+		aria-label={t('contacts.form.remove', { what })}
+		title={t('contacts.form.remove', { what })}
+		{onclick}><span class="minus" aria-hidden="true"></span></button
+	>
 {/snippet}
 
 <form
@@ -181,215 +218,246 @@
 		if (!busy) onsubmit();
 	}}
 >
-	<div class="photo-row">
-		<Avatar id={contact?.id ?? ''} {name} {hasPhoto} {preview} version={contact?.etag} size={88} />
-		<span class="pbtns">
-			<button type="button" class="btn" onclick={() => fileInput?.click()}
-				><Icon name="image" size={15} />{t('contacts.form.photoPick')}</button
-			>
-			<button type="button" class="btn" onclick={() => (picking = true)}
-				><Icon name="folder" size={15} />{t('contacts.form.photoNas')}</button
-			>
-			{#if preview || hasPhoto}
-				<button type="button" class="btn" onclick={removePicture}
-					>{t('contacts.form.photoRemove')}</button
-				>
-			{/if}
-			<small class="muted" role="status"
-				>{photo.kind === 'file' || photo.kind === 'nas'
-					? t('contacts.form.photoNew')
-					: photo.kind === 'remove'
-						? t('contacts.form.photoGone')
-						: t('contacts.form.photoHint')}</small
-			>
-			<input
-				bind:this={fileInput}
-				class="sr-only"
-				type="file"
-				accept="image/jpeg,image/png,image/webp"
-				tabindex="-1"
-				aria-hidden="true"
-				onchange={chooseFile}
+	<div class="photo">
+		{#if preview || hasPhoto}
+			<Avatar
+				id={contact?.id ?? ''}
+				{name}
+				{hasPhoto}
+				{preview}
+				version={contact?.etag}
+				size={96}
 			/>
-		</span>
-	</div>
-
-	<div class="grid2">
-		<label
-			><span class="lbl">{t('contacts.form.first')}</span><input
-				class="field"
-				autocomplete="off"
-				bind:value={form.first}
-			/></label
+		{:else}
+			<span class="cam" aria-hidden="true"><Icon name="camera" size={34} /></span>
+		{/if}
+		<Dropdown
+			label={preview || hasPhoto ? t('contacts.form.photoChange') : t('contacts.form.photoAdd')}
+			text={preview || hasPhoto ? t('contacts.form.photoChange') : t('contacts.form.photoAdd')}
 		>
-		<label
-			><span class="lbl">{t('contacts.form.last')}</span><input
-				class="field"
-				autocomplete="off"
-				bind:value={form.last}
-			/></label
-		>
-		<label class="span2"
-			><span class="lbl">{t('contacts.form.org')}</span><input
-				class="field"
-				autocomplete="off"
-				placeholder={t('contacts.form.orgPlaceholder')}
-				bind:value={form.org}
-			/></label
-		>
-	</div>
-
-	<fieldset data-list="phones">
-		<legend>{t('contacts.field.phone')}</legend>
-		{#each form.phones as row, i (i)}
-			<span class="multi row"
-				>{@render typeSelect(row, PHONE_TYPES, t('contacts.field.phone'))}<input
-					class="field grow"
-					type="tel"
-					aria-label={t('contacts.form.number')}
-					bind:value={row.value}
-				/><button
+			{#snippet children(close)}
+				<button
 					type="button"
-					class="ib"
-					aria-label={t('contacts.form.remove', { what: row.value || t('contacts.field.phone') })}
-					onclick={() => form.phones.splice(i, 1)}><Icon name="close" size={15} /></button
-				></span
-			>
-		{/each}
-		<button type="button" class="btn add" onclick={() => add('phones')}
-			><Icon name="plus" size={15} />{t('contacts.field.phone')}</button
-		>
-	</fieldset>
-
-	<fieldset data-list="emails">
-		<legend>{t('contacts.field.email')}</legend>
-		{#each form.emails as row, i (i)}
-			<span class="multi row"
-				>{@render typeSelect(row, MAIL_TYPES, t('contacts.field.email'))}<input
-					class="field grow"
-					type="email"
-					aria-label={t('contacts.form.email')}
-					bind:value={row.value}
-				/><button
+					role="menuitem"
+					onclick={() => {
+						close();
+						fileInput?.click();
+					}}>{t('contacts.form.photoPick')}</button
+				>
+				<button
 					type="button"
-					class="ib"
-					aria-label={t('contacts.form.remove', { what: row.value || t('contacts.field.email') })}
-					onclick={() => form.emails.splice(i, 1)}><Icon name="close" size={15} /></button
-				></span
-			>
-		{/each}
-		<button type="button" class="btn add" onclick={() => add('emails')}
-			><Icon name="plus" size={15} />{t('contacts.field.email')}</button
-		>
-	</fieldset>
-
-	<fieldset data-list="addresses">
-		<legend>{t('contacts.field.address')}</legend>
-		{#each form.addresses as row, i (i)}
-			<div class="adr row">
-				<span class="multi"
-					>{@render typeSelect(row, ADDRESS_TYPES, t('contacts.field.address'))}<textarea
-						class="field grow street"
-						rows={Math.max(1, row.street.split('\n').length)}
-						aria-label={t('contacts.form.street')}
-						bind:value={row.street}></textarea><button
+					role="menuitem"
+					onclick={() => {
+						close();
+						picking = true;
+					}}>{t('contacts.form.photoNas')}</button
+				>
+				{#if preview || hasPhoto}
+					<button
 						type="button"
-						class="ib"
-						aria-label={t('contacts.form.remove', { what: t('contacts.field.address') })}
-						onclick={() => form.addresses.splice(i, 1)}><Icon name="close" size={15} /></button
-					></span
-				>
-				<span class="multi indent"
-					><input
-						class="field plz"
-						aria-label={t('contacts.form.postcode')}
-						placeholder={t('contacts.form.postcode')}
-						bind:value={row.postcode}
-					/><input
-						class="field grow"
-						aria-label={t('contacts.form.city')}
-						placeholder={t('contacts.form.city')}
-						bind:value={row.city}
-					/></span
-				>
-				{#if row.region}
-					<span class="multi indent"
-						><input
-							class="field grow"
-							aria-label={t('contacts.form.region')}
-							bind:value={row.region}
-						/></span
+						role="menuitem"
+						onclick={() => {
+							close();
+							removePicture();
+						}}>{t('contacts.form.photoRemove')}</button
 					>
 				{/if}
-				<span class="multi indent"
-					><input
-						class="field grow"
+			{/snippet}
+		</Dropdown>
+		<small class="muted" role="status"
+			>{photo.kind === 'file' || photo.kind === 'nas'
+				? t('contacts.form.photoNew')
+				: photo.kind === 'remove'
+					? t('contacts.form.photoGone')
+					: t('contacts.form.photoHint')}</small
+		>
+		<input
+			bind:this={fileInput}
+			class="sr-only"
+			type="file"
+			accept="image/jpeg,image/png,image/webp"
+			tabindex="-1"
+			aria-hidden="true"
+			onchange={chooseFile}
+		/>
+	</div>
+
+	<div class="grp names">
+		<input
+			class="cell"
+			autocomplete="off"
+			aria-label={t('contacts.form.first')}
+			placeholder={t('contacts.form.first')}
+			bind:value={form.first}
+		/>
+		<input
+			class="cell"
+			autocomplete="off"
+			aria-label={t('contacts.form.last')}
+			placeholder={t('contacts.form.last')}
+			bind:value={form.last}
+		/>
+		<input
+			class="cell"
+			autocomplete="off"
+			aria-label={t('contacts.form.org')}
+			placeholder={t('contacts.form.org')}
+			bind:value={form.org}
+		/>
+	</div>
+
+	<fieldset class="grp" data-list="phones">
+		<legend class="sr-only">{t('contacts.field.phone')}</legend>
+		{#each form.phones as row, i (i)}
+			<div class="row">
+				{@render removeButton(row.value || t('contacts.field.phone'), () =>
+					form.phones.splice(i, 1),
+				)}{@render typeSelect(row, PHONE_TYPES, t('contacts.field.phone'))}<input
+					class="cell grow"
+					type="tel"
+					aria-label={t('contacts.form.number')}
+					placeholder={t('contacts.form.number')}
+					bind:value={row.value}
+				/>
+			</div>
+		{/each}
+		{@render addRow(t('contacts.form.addPhone'), () => add('phones'), 'phone')}
+	</fieldset>
+
+	<fieldset class="grp" data-list="emails">
+		<legend class="sr-only">{t('contacts.field.email')}</legend>
+		{#each form.emails as row, i (i)}
+			<div class="row">
+				{@render removeButton(row.value || t('contacts.field.email'), () =>
+					form.emails.splice(i, 1),
+				)}{@render typeSelect(row, MAIL_TYPES, t('contacts.field.email'))}<input
+					class="cell grow"
+					type="email"
+					aria-label={t('contacts.form.email')}
+					placeholder={t('contacts.form.email')}
+					bind:value={row.value}
+				/>
+			</div>
+		{/each}
+		{@render addRow(t('contacts.form.addEmail'), () => add('emails'), 'email')}
+	</fieldset>
+
+	<fieldset class="grp" data-list="addresses">
+		<legend class="sr-only">{t('contacts.field.address')}</legend>
+		{#each form.addresses as row, i (i)}
+			<div class="row adr">
+				{@render removeButton(t('contacts.field.address'), () =>
+					form.addresses.splice(i, 1),
+				)}{@render typeSelect(row, ADDRESS_TYPES, t('contacts.field.address'))}
+				<span class="adr-fields">
+					<textarea
+						class="cell street"
+						rows={Math.max(1, row.street.split('\n').length)}
+						aria-label={t('contacts.form.street')}
+						placeholder={t('contacts.form.street')}
+						bind:value={row.street}></textarea>
+					<span class="pair"
+						><input
+							class="cell plz"
+							aria-label={t('contacts.form.postcode')}
+							placeholder={t('contacts.form.postcode')}
+							bind:value={row.postcode}
+						/><input
+							class="cell grow"
+							aria-label={t('contacts.form.city')}
+							placeholder={t('contacts.form.city')}
+							bind:value={row.city}
+						/></span
+					>
+					{#if row.region}
+						<input
+							class="cell"
+							aria-label={t('contacts.form.region')}
+							placeholder={t('contacts.form.region')}
+							bind:value={row.region}
+						/>
+					{/if}
+					<input
+						class="cell"
 						aria-label={t('contacts.form.country')}
 						placeholder={t('contacts.form.country')}
 						bind:value={row.country}
-					/></span
-				>
+					/>
+				</span>
 			</div>
 		{/each}
-		<button type="button" class="btn add" onclick={() => add('addresses')}
-			><Icon name="plus" size={15} />{t('contacts.field.address')}</button
-		>
+		{@render addRow(t('contacts.form.addAddress'), () => add('addresses'), 'address')}
 	</fieldset>
 
-	<fieldset>
-		<legend>{t('contacts.field.birthday')}</legend>
-		<span class="multi">
-			{#if form.birthdayNoYear}
-				<select
-					class="field bsel"
-					aria-label={t('contacts.form.day')}
-					value={bDay}
-					onchange={(e) => setDay(Number(e.currentTarget.value), bMonth || 1)}
+	{#if showBirthday}
+		<fieldset class="grp" data-reveal="birthday">
+			<legend class="sr-only">{t('contacts.field.birthday')}</legend>
+			<div class="row wrap">
+				<span class="lbl">{t('contacts.field.birthday')}</span>
+				{#if form.birthdayNoYear}
+					<select
+						class="field bsel"
+						aria-label={t('contacts.form.day')}
+						value={bDay}
+						onchange={(e) => setDay(Number(e.currentTarget.value), bMonth || 1)}
+					>
+						<option value={0}>–</option>
+						{#each Array.from({ length: 31 }, (_, i) => i + 1) as d (d)}<option value={d}
+								>{d}.</option
+							>{/each}
+					</select>
+					<select
+						class="field bsel"
+						aria-label={t('contacts.form.month')}
+						value={bMonth}
+						onchange={(e) => setDay(bDay || 1, Number(e.currentTarget.value))}
+					>
+						<option value={0}>–</option>
+						{#each months as m, i (i)}<option value={i + 1}>{m}</option>{/each}
+					</select>
+				{:else}
+					<input
+						class="field bsel"
+						type="date"
+						aria-label={t('contacts.field.birthday')}
+						bind:value={form.birthdayDate}
+					/>
+				{/if}
+			</div>
+			<div class="row wrap">
+				<label class="chk"
+					><input
+						type="checkbox"
+						checked={form.birthdayNoYear}
+						onchange={(e) => setNoYear(e.currentTarget.checked)}
+					/>
+					{t('contacts.form.noYear')}</label
 				>
-					<option value={0}>–</option>
-					{#each Array.from({ length: 31 }, (_, i) => i + 1) as d (d)}<option value={d}>{d}.</option
-						>{/each}
-				</select>
-				<select
-					class="field bsel"
-					aria-label={t('contacts.form.month')}
-					value={bMonth}
-					onchange={(e) => setDay(bDay || 1, Number(e.currentTarget.value))}
-				>
-					<option value={0}>–</option>
-					{#each months as m, i (i)}<option value={i + 1}>{m}</option>{/each}
-				</select>
-			{:else}
-				<input
-					class="field bsel"
-					type="date"
-					aria-label={t('contacts.field.birthday')}
-					bind:value={form.birthdayDate}
-				/>
-			{/if}
-			<label class="chk"
-				><input
-					type="checkbox"
-					checked={form.birthdayNoYear}
-					onchange={(e) => setNoYear(e.currentTarget.checked)}
-				/>
-				{t('contacts.form.noYear')}</label
-			>
-			{#if form.birthdayDate}
-				<button type="button" class="btn" onclick={() => (form.birthdayDate = '')}
-					>{t('contacts.form.noBirthday')}</button
-				>
-			{/if}
-		</span>
-		<small class="muted">{t('contacts.form.birthdayHint')}</small>
-	</fieldset>
+				{#if form.birthdayDate}
+					<button
+						type="button"
+						class="plain"
+						onclick={() => {
+							form.birthdayDate = '';
+							wantBirthday = false;
+						}}>{t('contacts.form.noBirthday')}</button
+					>
+				{/if}
+			</div>
+			<small class="muted hint">{t('contacts.form.birthdayHint')}</small>
+		</fieldset>
+	{:else}
+		<div class="grp">
+			{@render addRow(t('contacts.form.addBirthday'), () => void reveal('birthday'), 'birthday')}
+		</div>
+	{/if}
 
 	{#if groups.length}
-		<fieldset data-editor-groups>
-			<legend>{t('contacts.groups.title')}</legend>
-			<span class="multi">
+		{#if showGroups}
+			<fieldset class="grp" data-editor-groups data-reveal="groups">
+				<legend class="sr-only">{t('contacts.groups.title')}</legend>
 				{#each groups as g (g.id)}
-					<label class="chk"
+					<label class="row chk"
 						><input
 							type="checkbox"
 							checked={member.includes(g.id)}
@@ -398,25 +466,30 @@
 						{g.name || t('contacts.groups.unnamed')}</label
 					>
 				{/each}
-			</span>
-		</fieldset>
+			</fieldset>
+		{:else}
+			<div class="grp">
+				{@render addRow(t('contacts.form.addGroup'), () => void reveal('groups'), 'group')}
+			</div>
+		{/if}
 	{/if}
 
-	<fieldset>
-		<legend>{t('contacts.field.notes')}</legend>
+	<div class="grp">
 		<textarea
-			class="field note"
+			class="cell note"
 			rows="3"
 			aria-label={t('contacts.field.notes')}
+			placeholder={t('contacts.form.notesPlaceholder')}
 			bind:value={form.notes}></textarea>
-	</fieldset>
+	</div>
 
 	{#if contact}
-		<DangerZone hint={t('contacts.danger.hint')}>
-			<button type="button" class="btn btn-danger" onclick={ondelete}
-				><Icon name="trash" size={15} />{t('contacts.danger.button')}</button
+		<div class="grp">
+			<button type="button" class="delrow" onclick={ondelete} data-contact-delete
+				>{t('contacts.danger.button')}</button
 			>
-		</DangerZone>
+		</div>
+		<p class="muted hint out">{t('contacts.danger.hint')}</p>
 	{/if}
 	<!-- Enter in a field saves (the head's button is outside the form). -->
 	<button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">{t('common.save')}</button>
@@ -438,163 +511,288 @@
 
 <style>
 	.edit {
+		/* The hidden legends and the file field stay inside the column's scroll. */
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
-		max-width: 46rem;
+		width: 100%;
+		max-width: 40rem;
+		margin: 0 auto;
 	}
-	.photo-row {
+	.photo {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.pbtns {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-		flex: 1 1 14rem;
-		min-width: 0;
-	}
-	.phone .pbtns {
 		flex-direction: column;
-		align-items: flex-start;
-		min-width: 10rem;
+		align-items: center;
+		gap: var(--space-1-5);
+		text-align: center;
 	}
-	.pbtns small {
-		flex-basis: 100%;
+	.cam {
+		display: inline-grid;
+		place-items: center;
+		width: 96px;
+		height: 96px;
+		border-radius: 50%;
+		background: var(--chip);
+		color: var(--text);
+	}
+	/* "Foto hinzufügen" as a link in the accent colour. */
+	.photo :global(.dropdown > .btn) {
+		min-height: 44px;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font-weight: 400;
+		white-space: normal;
+	}
+	.photo :global(.dropdown > .btn .chevron) {
+		display: none;
+	}
+	.photo small {
+		max-width: 28rem;
 		font-size: var(--text-sm);
 		overflow-wrap: break-word;
 	}
-	.phone .pbtns small {
-		flex-basis: auto;
-	}
-	.pbtns .btn,
-	.add {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-	}
-	.grid2 {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--space-2) var(--space-3);
-	}
-	.phone .grid2 {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.grid2 label {
+	.grp {
+		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-	}
-	.span2 {
-		grid-column: 1 / -1;
-	}
-	.lbl,
-	legend {
-		color: var(--muted);
-		font-size: var(--text-md);
-	}
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: var(--space-2);
+		min-width: 0;
 		margin: 0;
 		padding: 0;
 		border: 0;
-		min-width: 0;
+		border-radius: calc(12px * var(--radius-scale, 1));
+		background: var(--surface);
+		overflow: clip;
 	}
-	legend {
-		padding: 0;
-		margin-bottom: var(--space-1);
+	.grp > :global(*) {
+		border-bottom: 1px solid var(--border);
 	}
-	.multi {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
+	.grp > :global(*:last-child),
+	.grp > :global(legend) {
+		border-bottom: 0;
+	}
+	.cell {
 		width: 100%;
+		min-width: 0;
+		min-height: 48px;
+		padding: var(--space-2) var(--space-4);
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: 1.0625rem;
 	}
-	.adr {
+	.cell::placeholder {
+		color: var(--muted);
+	}
+	.cell:focus,
+	.lab:focus {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.names .cell {
+		border-bottom: 1px solid var(--border);
+	}
+	.names .cell:last-child {
+		border-bottom: 0;
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: 48px;
+		padding-left: var(--space-2);
+	}
+	.row .cell {
+		padding-left: var(--space-2);
+	}
+	.row.wrap {
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-3);
+	}
+	.row.adr {
+		align-items: flex-start;
+	}
+	.row.adr > .rm,
+	.row.adr > .lab {
+		margin-top: 2px;
+	}
+	.adr-fields {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
-		width: 100%;
 	}
-	.multi.indent {
-		padding-left: calc(7rem + var(--space-2));
-		padding-right: calc(40px + var(--space-2));
+	.adr-fields > .cell,
+	.pair {
+		border-bottom: 1px solid var(--border);
 	}
-	.phone .multi.indent {
-		padding-left: 0;
-		padding-right: calc(44px + var(--space-2));
+	.adr-fields > .cell:last-child {
+		border-bottom: 0;
 	}
-	.lab {
-		width: 7rem;
-		flex: none;
+	.pair {
+		display: flex;
+		min-width: 0;
 	}
-	.phone .lab {
+	.plz {
+		flex: 0 0 6.5rem;
 		width: 6.5rem;
 	}
 	.grow {
 		flex: 1 1 8rem;
-		min-width: 0;
 	}
 	.street {
 		resize: none;
 		field-sizing: content;
-		font: inherit;
 		line-height: 1.4;
+	}
+	.lab {
+		flex: none;
+		/* As wide as its kind ("Mobil"), so the value keeps the room. */
+		field-sizing: content;
+		max-width: 8.5rem;
+		min-height: 44px;
+		padding: 0 var(--space-1);
+		border: 0;
+		border-radius: var(--radius-small);
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+	}
+	.lab option {
+		color: var(--text);
+		background: var(--surface);
+	}
+	/* The red "−" and the green "+": round, 44 px to tap, the sign also as shape. */
+	.rm {
+		flex: none;
+		display: inline-grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border: 0;
+		border-radius: 50%;
+		background: none;
+		cursor: pointer;
+	}
+	.minus {
+		position: relative;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: var(--status-error);
+	}
+	.minus::after {
+		content: '';
+		position: absolute;
+		left: 6px;
+		right: 6px;
+		top: 10px;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--on-accent);
+	}
+	.rm:focus-visible,
+	.addrow:focus-visible,
+	.delrow:focus-visible,
+	.plain:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.addrow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		width: 100%;
+		min-height: 48px;
+		padding: var(--space-2) var(--space-4);
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: 1.0625rem;
+		text-align: left;
+		cursor: pointer;
+	}
+	.addrow:hover,
+	.delrow:hover {
+		background: color-mix(in srgb, var(--text) 5%, var(--surface));
+	}
+	.addp {
+		flex: none;
+		display: inline-grid;
+		place-items: center;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: var(--status-ok);
+		color: var(--on-accent);
+	}
+	.at {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.lbl {
+		color: var(--text);
+		font-size: var(--text-md);
 	}
 	.bsel {
 		width: auto;
 		flex: none;
 		max-width: 100%;
 	}
-	.plz {
-		width: 6rem;
-		flex: none;
-	}
 	.chk {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--space-1-5);
+		gap: var(--space-2);
 		min-height: 44px;
 		overflow-wrap: anywhere;
 	}
-	.note {
-		width: 100%;
+	label.row.chk {
+		display: flex;
+		padding: 0 var(--space-4);
+		cursor: pointer;
+	}
+	.plain {
+		min-height: 44px;
+		padding: 0 var(--space-2);
+		border: 0;
+		border-radius: var(--radius-small);
+		background: none;
+		color: var(--accent);
 		font: inherit;
+		cursor: pointer;
+	}
+	.hint {
+		padding: 0 var(--space-4) var(--space-2);
+		font-size: var(--text-sm);
+		overflow-wrap: break-word;
+	}
+	.out {
+		margin: calc(-1 * var(--space-2)) 0 0;
+		padding: 0 var(--space-4);
+		text-align: center;
+	}
+	.note {
+		min-height: 6rem;
 		line-height: 1.5;
 		resize: vertical;
 	}
-	.ib {
-		flex: none;
-		display: inline-grid;
-		place-items: center;
-		min-width: 40px;
-		min-height: 40px;
+	.delrow {
+		width: 100%;
+		min-height: 48px;
+		padding: var(--space-2) var(--space-4);
 		border: 0;
-		border-radius: var(--radius-ctl);
 		background: none;
-		color: var(--muted);
+		color: var(--error-text);
+		font: inherit;
+		font-size: 1.0625rem;
 		cursor: pointer;
-	}
-	.ib:hover {
-		color: var(--text);
-	}
-	.ib:focus-visible {
-		outline: 2px solid var(--accent);
-	}
-	.phone .ib {
-		min-width: 44px;
-		min-height: 44px;
-	}
-	.phone .field,
-	.phone .btn {
-		min-height: 44px;
+		overflow-wrap: anywhere;
 	}
 	small {
 		overflow-wrap: break-word;

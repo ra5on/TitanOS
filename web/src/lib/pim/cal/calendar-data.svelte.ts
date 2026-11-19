@@ -177,6 +177,25 @@ export class CalendarData {
 		}
 	}
 
+	/**
+	 * 1.15 (draft 34 "Alle ausblenden"): hides or shows every calendar with
+	 * one request; showing reads the window again.
+	 */
+	async setAllHidden(hide: boolean): Promise<void> {
+		const before = this.calendars;
+		this.calendars = this.calendars.map((x) => ({ ...x, hidden: hide }));
+		if (hide) this.events = [];
+		try {
+			await setHidden(hide ? this.calendars.map((x) => x.id) : []);
+			this.error = '';
+			if (!hide) await this.reload();
+		} catch (err) {
+			this.calendars = before;
+			this.error = apiErrorText(err);
+			await this.reload();
+		}
+	}
+
 	/** An event of the views changed here (moved): shown at once, the NAS answers later. */
 	replace(old: CalEvent, next: CalEvent) {
 		this.events = this.events.map((e) => (e === old ? next : e));

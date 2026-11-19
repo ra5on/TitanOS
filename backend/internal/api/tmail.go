@@ -83,6 +83,7 @@ func (a tmailArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("DELETE /api/v1/mail/accounts/{id}/folders", mail(a.handleFolderDelete))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/messages", mail(a.handleMessages))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/search", mail(a.handleSearch))
+	mux.HandleFunc("GET /api/v1/mail/unified", mail(a.handleUnified))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/message", mail(a.handleMessage))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/part", mail(a.handlePart))
 	mux.HandleFunc("GET /api/v1/mail/accounts/{id}/cid", mail(a.handleCID))

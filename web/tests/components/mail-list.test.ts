@@ -109,7 +109,10 @@ test('the next page asks with before=next; search and filters go to titand', asy
 	expect(urls.at(-1)?.searchParams.get('before')).toBe('2');
 	expect(screen.queryByRole('button', { name: 'Weitere Nachrichten laden' })).toBeNull();
 
-	await fireEvent.click(screen.getByRole('button', { name: 'Ungelesen' }));
+	// 1.15: the filters are a sheet behind the bar's filter button.
+	await fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+	await fireEvent.click(screen.getByRole('checkbox', { name: 'ungelesen sind' }));
+	await fireEvent.click(screen.getByRole('button', { name: 'Fertig' }));
 	await waitFor(() => expect(urls.at(-1)?.searchParams.get('unread')).toBe('1'));
 	expect(urls.at(-1)?.searchParams.get('folder')).toBe('INBOX');
 
@@ -143,11 +146,24 @@ test('a conversation is one entry with its count and opens', async () => {
 	expect(screen.getAllByRole('button', { name: /Re: Termin|^Termin/ }).length).toBe(1);
 	await fireEvent.click(toggle);
 	expect(toggle.getAttribute('aria-expanded')).toBe('true');
-	expect(screen.getAllByRole('checkbox', { name: /Termin/ }).length).toBe(3);
-	// Off per device: one entry each, remembered.
-	await fireEvent.click(screen.getByRole('checkbox', { name: 'Unterhaltungen zusammenfassen' }));
+	expect(screen.getAllByRole('button', { name: /Termin/ }).length).toBe(3);
+});
+
+test('1.15: conversations off (Mail-Einstellungen, per device): one entry each', async () => {
+	localStorage.setItem('titanos.mail.threads', 'false');
+	stubList({
+		'': {
+			messages: [
+				row(3, { subject: 'Re: Termin', messageId: '<b@x>', inReplyTo: '<a@x>' }),
+				row(2, { subject: 'Termin', messageId: '<a@x>' }),
+			],
+			next: null,
+		},
+	});
+	render(MessageList, base);
+	await screen.findAllByRole('button', { name: /Termin/ });
 	expect(screen.queryByRole('button', { name: /Unterhaltung aufklappen/ })).toBeNull();
-	expect(localStorage.getItem('titanos.mail.threads')).toBe('false');
+	localStorage.removeItem('titanos.mail.threads');
 });
 
 test('several selected: the bar archives them in one request; Shift selects a range', async () => {
@@ -158,12 +174,18 @@ test('several selected: the bar archives them in one request; Shift selects a ra
 	});
 	const onremoved = vi.fn();
 	render(MessageList, { ...base, onremoved });
+	await screen.findByRole('button', { name: /Betreff Nummer 4/ });
+	// 1.15: "Bearbeiten" shows the round boxes; "Markieren" › "Archivieren".
+	await fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
 	const boxes = await screen.findAllByRole('checkbox', { name: /Auswählen/ });
 	await fireEvent.click(boxes[0]);
 	await fireEvent.click(boxes[2], { shiftKey: true });
-	const bar = screen.getByRole('toolbar', { name: 'Aktionen für die Auswahl' });
-	expect(within(bar).getByRole('status').textContent).toBe('3 ausgewählt');
-	await fireEvent.click(within(bar).getByRole('button', { name: 'Archivieren' }));
+	expect(screen.getByRole('heading', { name: '3 ausgewählt' })).toBeTruthy();
+	const bar = screen.getByRole('toolbar', { name: 'Aktionen für die Liste' });
+	await fireEvent.click(within(bar).getByRole('button', { name: 'Markieren' }));
+	await fireEvent.click(
+		within(await screen.findByRole('dialog')).getByRole('button', { name: 'Archivieren' }),
+	);
 	await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/archive'))).toBe(true));
 	const archive = calls.find((c) => c.url.pathname.endsWith('/archive'))!;
 	expect(archive.body).toEqual({ folder: 'INBOX', uids: [4, 3, 2] });
@@ -199,7 +221,8 @@ test('the search over all folders asks /search and names the folder of each hit'
 	});
 	const onopen = vi.fn();
 	render(MessageList, { ...base, onopen });
-	await fireEvent.click(await screen.findByRole('button', { name: 'Allen Ordnern' }));
+	await fireEvent.focus(await screen.findByRole('searchbox'));
+	await fireEvent.click(await screen.findByRole('button', { name: 'Alle Ordner' }));
 	// Nothing to search for yet: no request over every folder.
 	await screen.findByText(/Gib einen Suchbegriff ein/);
 	expect(calls.some((c) => c.url.pathname.endsWith('/search'))).toBe(false);
@@ -215,8 +238,8 @@ test('the search over all folders asks /search and names the folder of each hit'
 	await fireEvent.click(hit);
 	expect(onopen).toHaveBeenCalledWith(7, 'Archiv');
 	// The filters go along: sender, attachment, period.
-	await fireEvent.click(screen.getByRole('button', { name: 'Weitere Filter' }));
-	await fireEvent.click(screen.getByRole('checkbox', { name: 'Mit Anhang' }));
+	await fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+	await fireEvent.click(screen.getByRole('checkbox', { name: 'einen Anhang haben' }));
 	await waitFor(() =>
 		expect(
 			calls

@@ -10,9 +10,9 @@
 // (Alt+↓, Enter) and the status line says so, in the month an event goes
 // to another day. Reminders: due ones in the month with a round box, ticked
 // off where they stand; the list in the side bar adds one. A hint of a
-// reminder of an event shows as a toast. Phone 390 px light and dark: the
-// month with dots and the chosen day below, the levels "Kalender" and
-// "Erinnerungen" with "Zurück", "Heute" and "+" in the bar at the bottom,
+// reminder of an event shows as a toast. Phone 390 px light and dark (1.15):
+// the month with bars, a day opens with its hours, the levels "Kalender" and
+// "Erinnerungen" with "Fertig", "Heute" in the pills at the bottom, "+" on top,
 // the event window as a page of its own. Every view: no sideways scroll,
 // no cut text. Screenshots to UI_OUTPUT (the Baustand's shots folder).
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5241 node scripts/test-ui-kalender-113.mjs
@@ -87,8 +87,14 @@ async function until(fn, what, ms = 8000) {
 }
 async function ready(page, view) {
   await page.locator(`[data-pim-ready][data-view="${view}"]`).waitFor();
-  await page.locator(".ev, .blk, .arow, .month .pick").first().waitFor();
+  await page.locator(".ev, .blk, .arow, .month .pick, .month .bar").first().waitFor();
   await page.waitForTimeout(400);
+  // 1.15: a movement that is still running (a day opening) is over first.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 }
 const sent = (state, method, re) =>
   state.requests.filter(([m, p]) => m === method && re.test(p));
@@ -144,10 +150,17 @@ try {
         return c.bottom - m.bottom;
       });
       assert.ok(fill < 4, `${theme} ${width}: the month fills the frame (${fill}px left)`);
-      // Reminders due in the month: their own shape and words.
-      const chip = page.locator('.cell[data-day="2026-11-17"] .task');
-      assert.match(await chip.innerText(), /Steuererklärung/);
-      assert.equal(await chip.locator(".tick").getAttribute("aria-pressed"), "false");
+      // Reminders due in the month: their own shape and words (1.15: in the
+      // day's stack, or behind its "+N weitere" when the row is full).
+      if (width === 1440) {
+        const chip = page.locator('.stack[data-stack="2026-11-12"] .task');
+        assert.match(await chip.innerText(), /Handyvertrag/);
+        assert.equal(await chip.locator(".tick").getAttribute("aria-pressed"), "false");
+      } else
+        assert.match(
+          await page.locator('.stack[data-stack="2026-11-12"]').innerText(),
+          /Handyvertrag|\+\d+ weitere/,
+        );
       await sound(page, `month ${theme} ${width}`);
       await shot(page, `monat-${width}-${theme}`);
 
@@ -257,7 +270,7 @@ try {
     const { page, ctx, state } = await open();
     await page.goto(base + "/calendar");
     await ready(page, "month");
-    const tyre = page.locator('.cell[data-day="2026-11-05"] .ev', { hasText: "Reifenwechsel" });
+    const tyre = page.locator('.ev[data-start="2026-11-05"]', { hasText: "Reifenwechsel" });
     const target = await page.locator('.cell[data-day="2026-11-06"]').boundingBox();
     const tb = await tyre.boundingBox();
     await drag(page, tb, target.x + target.width / 2 - (tb.x + tb.width / 2), target.y + target.height / 2 - (tb.y + tb.height / 2));
@@ -266,9 +279,9 @@ try {
     assert.equal(body.event.start, "2026-11-06T07:00:00Z");
     assert.equal(body.event.end, "2026-11-06T08:00:00Z");
 
-    await page.locator('.cell[data-day="2026-11-17"] .task .tick').click();
-    await until(() => sent(state, "POST", /steuer\.ics\/done$/).length === 1, "ticked off");
-    assert.equal(sent(state, "POST", /steuer\.ics\/done$/)[0][2].done, true);
+    await page.locator('.stack[data-stack="2026-11-12"] .task .tick').click();
+    await until(() => sent(state, "POST", /vertrag\.ics\/done$/).length === 1, "ticked off");
+    assert.equal(sent(state, "POST", /vertrag\.ics\/done$/)[0][2].done, true);
     // The side bar's list: a new reminder with Enter.
     const side = page.locator("[data-tasks]");
     assert.match(await side.innerText(), /Erinnerungen[\s\S]*Einkauf/);
@@ -345,25 +358,26 @@ try {
     await ctx.close();
   }
 
-  // ---- Phone 390: levels, the bar at the bottom ----
+  // ---- Phone 390: levels, the floating pills (1.15) ----
   for (const theme of ["hell", "graphit"]) {
     const { page, ctx } = await open({ width: 390, phone: true, theme });
     await page.goto(base + "/calendar");
     await ready(page, "month");
     assert.equal(await page.locator(".month .ev").count(), 0, "no titles in the cells");
-    assert.ok((await page.locator(".marks i").count()) > 20, "dots");
-    await page.locator(".pick", { hasText: "19" }).first().click();
-    await until(
-      async () => (await page.locator(".phone-day").innerText()).includes("Messe Köln"),
-      "the chosen day below",
-    );
-    const bottom = page.locator('.bottombar[role="toolbar"]');
+    assert.ok((await page.locator(".month .bar").count()) > 20, "bars");
+    const bottom = page.locator('.pills.bottom[role="toolbar"]');
     assert.match(await bottom.innerText(), /Heute/);
-    assert.equal(await bottom.locator(".bar-new").count(), 1, "+ at the right");
+    assert.equal(await page.locator('.pills.top button[aria-label="Neuer Termin"]').count(), 1, "+ on top");
     await sound(page, `phone month ${theme}`);
-    assert.deepEqual(await small(page, ".bottombar"), [], `phone bar ${theme}: under 44 px`);
-    assert.deepEqual(await small(page, ".cf-bar"), [], `phone top ${theme}: under 44 px`);
+    assert.deepEqual(await small(page, ".pills.bottom"), [], `phone pills ${theme}: under 44 px`);
+    assert.deepEqual(await small(page, ".pills.top"), [], `phone top ${theme}: under 44 px`);
     await shot(page, `handy-monat-${theme}`);
+    // A day opens with its hours.
+    await page.locator('.pick[data-day="2026-11-19"]').click();
+    await ready(page, "day");
+    assert.match(await page.locator(".wk-grid").innerText(), /Messe Köln/, "the chosen day");
+    await page.locator(".back-pill").click();
+    await ready(page, "month");
 
     await bottom.getByRole("button", { name: "Kalender", exact: true }).click();
     await page.locator('.calrow[data-calendar="privat"]').waitFor();
@@ -372,7 +386,8 @@ try {
     await page.locator("[data-reminder-settings] summary").click();
     assert.deepEqual(await small(page, ".col-cal-side"), [], `phone calendars ${theme}: under 44 px`);
     await shot(page, `handy-kalender-${theme}`);
-    await page.getByRole("button", { name: "Zurück" }).first().click();
+    await page.getByRole("button", { name: "Fertig" }).first().click();
+    await page.waitForURL((u) => !u.searchParams.has("level"));
     await ready(page, "month");
 
     await bottom.getByRole("button", { name: "Erinnerungen" }).click();
@@ -380,15 +395,17 @@ try {
     await sound(page, `phone reminders ${theme}`);
     assert.deepEqual(await small(page, ".col-cal-tasks"), [], `phone reminders ${theme}: under 44 px`);
     await shot(page, `handy-erinnerungen-${theme}`);
-    await page.getByRole("button", { name: "Zurück" }).first().click();
+    await page.getByRole("button", { name: "Fertig" }).first().click();
+    await page.waitForURL((u) => !u.searchParams.has("level"));
     await ready(page, "month");
 
-    await page.getByRole("radio", { name: "Liste" }).click();
+    await page.locator(".pills.top .dropdown > .btn").click();
+    await page.getByRole("menuitemradio", { name: "Liste" }).click();
     await ready(page, "list");
     await sound(page, `phone list ${theme}`);
     await shot(page, `handy-liste-${theme}`);
 
-    await page.locator(".bottombar .bar-new").click();
+    await page.locator('.pills.top button[aria-label="Neuer Termin"]').click();
     await page.waitForURL(/\/calendar\/event/);
     await page.locator("[data-event-form]").waitFor();
     await sound(page, `phone event ${theme}`);

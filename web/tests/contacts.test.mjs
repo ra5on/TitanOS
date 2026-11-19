@@ -7,10 +7,12 @@ import {
 	fold,
 	formOf,
 	groupByLetter,
+	INDEX_LETTERS,
 	initialsOf,
 	inputOf,
 	letterOf,
 	markParts,
+	nameParts,
 	namesSomeone,
 	parseBirthday,
 	sanitizeContact,
@@ -33,7 +35,7 @@ test('letters after German folding: Ä under A, ß like ss, digits and others un
 	assert.equal(letterOf(item('Über uns')), 'U');
 	assert.equal(letterOf(item('112 Notruf')), '#');
 	assert.equal(letterOf(item('', '')), '#');
-	// titand sorts (DIN 5007-1): the groups follow that order, one per letter run.
+	// One group per letter, A–Z (115-7: not one per run of the server's order).
 	const groups = groupByLetter([
 		item('Anna', 'beispiel anna'),
 		item('Ärztehaus', 'arztehaus'),
@@ -43,8 +45,8 @@ test('letters after German folding: Ä under A, ß like ss, digits and others un
 	assert.deepEqual(
 		groups.map((g) => [g.letter, g.items.length]),
 		[
-			['B', 1],
 			['A', 1],
+			['B', 1],
 			['M', 2],
 		],
 	);
@@ -266,4 +268,51 @@ test('the form of a birthday without year uses a leap year; a new contact sends 
 		emails: [{ type: 'work', value: 'lena@x' }],
 		birthday: '1990-05-01',
 	});
+});
+
+test('115-7: titand sorts byte-wise – one "#" and it comes last', () => {
+	// The server's order: no letter before A, folded letters outside a–z after Z.
+	const groups = groupByLetter([
+		item('', ''),
+		item('1&1 Hotline', '1&1 hotline'),
+		item('Anna Berg', 'berg anna'),
+		item('Kari Øvrebø', 'øvrebø kari'),
+		item('Иван Петров', 'петров иван'),
+	]);
+	const letters = groups.map((g) => g.letter);
+	assert.deepEqual(letters, ['B', '#']);
+	assert.equal(new Set(letters).size, letters.length, 'each letter once');
+	assert.deepEqual(
+		groups[1].items.map((i) => i.name),
+		['', '1&1 Hotline', 'Kari Øvrebø', 'Иван Петров'],
+		'the order of titand inside "#"',
+	);
+	assert.equal(INDEX_LETTERS.at(-1), '#');
+	assert.equal(INDEX_LETTERS.length, 27);
+});
+
+test('the family name of a row (bold like Apple) from the sort key', () => {
+	assert.deepEqual(nameParts('Anna Beispiel', 'beispiel anna'), ['Anna ', 'Beispiel', '']);
+	assert.deepEqual(nameParts('Ute von Berg', 'von berg ute'), ['Ute ', 'von Berg', '']);
+	assert.deepEqual(nameParts('Eva Krüger', 'kruger eva'), ['Eva ', 'Krüger', '']);
+	// A company or a card without N: the whole name.
+	assert.deepEqual(nameParts('Bäckerei Sonnenhof', 'bäckerei sonnenhof'), [
+		'',
+		'Bäckerei Sonnenhof',
+		'',
+	]);
+	// A key that names no part of the name: plain.
+	assert.deepEqual(nameParts('Oma', 'beispiel hilde'), ['Oma', '', '']);
+	assert.deepEqual(nameParts('', ''), ['', '', '']);
+});
+
+test('115-7: a birthday this week of a card born this year has no age', () => {
+	const [i] = sanitizeItems([
+		{ id: 'baby.vcf', name: 'Baby', birthdaySoon: { date: '2026-11-18', age: 0 } },
+	]);
+	assert.deepEqual(i.birthdaySoon, { date: '2026-11-18' });
+	const [j] = sanitizeItems([
+		{ id: 'anna.vcf', name: 'Anna', birthdaySoon: { date: '2026-11-18', age: 35 } },
+	]);
+	assert.deepEqual(j.birthdaySoon, { date: '2026-11-18', age: 35 });
 });

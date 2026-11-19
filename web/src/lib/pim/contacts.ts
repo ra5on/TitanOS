@@ -64,7 +64,8 @@ const NO_YEAR = /^--\d{2}-\d{2}$/;
 function soonOf(v: unknown): Soon | null {
 	const s = rec(v);
 	if (!DATE.test(str(s.date))) return null;
-	return typeof s.age === 'number' && s.age >= 0
+	// 115-7: a card born this week has age 0 ("ist am Mittwoch 0 geworden"): no age then.
+	return typeof s.age === 'number' && s.age >= 1
 		? { date: str(s.date), age: Math.floor(s.age) }
 		: { date: str(s.date) };
 }
@@ -252,18 +253,51 @@ export function letterOf(item: Pick<Item, 'sortKey' | 'name'>): string {
 	return /[a-z]/.test(first) ? first.toUpperCase() : '#';
 }
 
-/** The list in groups by letter, in the order titand sorted it. */
+/**
+ * The list in groups by letter: exactly one group per letter, A–Z, then
+ * "#" once and last (like iOS). Inside a letter the order titand sorted
+ * (115-7: titand sorts byte-wise, so names without a letter – digits,
+ * "1&1 Hotline", an empty key – come before A and folded letters outside
+ * a–z – Ø, Ł, Cyrillic, Chinese – after Z; one run per letter gave "#"
+ * twice and the list's keyed each failed).
+ */
 export function groupByLetter<T extends Pick<Item, 'sortKey' | 'name'>>(
 	items: T[],
 ): { letter: string; items: T[] }[] {
-	const out: { letter: string; items: T[] }[] = [];
+	const by = new Map<string, T[]>();
 	for (const item of items) {
 		const letter = letterOf(item);
-		const last = out.at(-1);
-		if (last && last.letter === letter) last.items.push(item);
-		else out.push({ letter, items: [item] });
+		const list = by.get(letter);
+		if (list) list.push(item);
+		else by.set(letter, [item]);
 	}
-	return out;
+	return [...by.keys()]
+		.sort((a, b) => (a === '#' ? 1 : b === '#' ? -1 : a < b ? -1 : a > b ? 1 : 0))
+		.map((letter) => ({ letter, items: by.get(letter) ?? [] }));
+}
+
+/** The letters of the register at the list's edge: A–Z and "#". */
+export const INDEX_LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
+
+/**
+ * The name of a row in three parts, the family name in the middle (shown
+ * bold like Apple's Kontakte). titand's sort key is "family given" (lower
+ * case) or the FN: a split of the name's words whose folded "last first"
+ * is the key names the family part; a key equal to the whole name (a
+ * company, a card without N) makes it all bold; anything else stays plain.
+ */
+export function nameParts(name: string, sortKey: string): [string, string, string] {
+	const key = fold(sortKey.trim()).replace(/\s+/g, ' ');
+	const words = name.trim().split(/\s+/).filter(Boolean);
+	if (!key || !words.length) return [name, '', ''];
+	if (fold(words.join(' ')) === key) return ['', name.trim(), ''];
+	// The family name is the run of words at the end ("Anna Maria Beispiel", "Ute von Berg").
+	for (let cut = 1; cut < words.length; cut++) {
+		const first = words.slice(0, cut).join(' ');
+		const last = words.slice(cut).join(' ');
+		if (fold(`${last} ${first}`) === key) return [first + ' ', last, ''];
+	}
+	return [name, '', ''];
 }
 
 /**
@@ -378,6 +412,69 @@ export function addressLines(a: Omit<Address, 'type' | 'label'>): string[] {
 	]
 		.map((l) => l.trim())
 		.filter(Boolean);
+}
+
+// ---- 1.15: a contact shared as a card ("Teilen") ----
+
+const vEsc = (v: string) =>
+	v
+		.replace(/\\/g, '\\\\')
+		.replace(/\r?\n/g, '\\n')
+		.replace(/([,;])/g, '\\$1');
+const TEL_TYPE: Record<string, string> = { mobile: 'CELL', home: 'HOME', work: 'WORK' };
+const KIND_TYPE: Record<string, string> = { home: 'HOME', work: 'WORK' };
+
+/**
+ * The shown fields of a contact as a vCard 3.0 (CRLF lines) for "Teilen"
+ * (115-6): name, company, numbers, e-mail and postal addresses (each with
+ * its kind, an own label of the card as X-ABLabel like the iPhone),
+ * birthday (without year as the iPhone writes it), web address, note.
+ * The picture and lines TitanOS does not show stay out.
+ */
+export function vcardOf(c: Contact): string {
+	const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+	let item = 0;
+	const labelled = (line: string, label?: string) => {
+		if (!label) return lines.push(line);
+		item++;
+		lines.push(`item${item}.${line}`, `item${item}.X-ABLabel:${vEsc(label)}`);
+	};
+	lines.push(`N:${vEsc(c.last)};${vEsc(c.first)};;;`);
+	lines.push(`FN:${vEsc(c.name || [c.first, c.last].filter(Boolean).join(' ') || c.org)}`);
+	if (c.org) lines.push(`ORG:${vEsc(c.org)}`);
+	for (const p of c.phones) {
+		if (!p.value.trim()) continue;
+		const type = TEL_TYPE[p.type] ?? 'VOICE';
+		labelled(`TEL;TYPE=${type}:${vEsc(p.value.trim())}`, p.label);
+	}
+	for (const e of c.emails) {
+		if (!e.value.trim()) continue;
+		const type = KIND_TYPE[e.type] ? `INTERNET,${KIND_TYPE[e.type]}` : 'INTERNET';
+		labelled(`EMAIL;TYPE=${type}:${vEsc(e.value.trim())}`, e.label);
+	}
+	for (const a of c.addresses) {
+		const parts = [a.street, a.city, a.region, a.postcode, a.country].map((x) => vEsc(x.trim()));
+		if (!parts.some(Boolean)) continue;
+		const type = KIND_TYPE[a.type] ? `;TYPE=${KIND_TYPE[a.type]}` : '';
+		labelled(`ADR${type}:;;${parts.join(';')}`, a.label);
+	}
+	if (/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) lines.push(`BDAY:${c.birthday}`);
+	else if (/^--\d{2}-\d{2}$/.test(c.birthday))
+		lines.push(`BDAY;X-APPLE-OMIT-YEAR=1604:1604${c.birthday.slice(1)}`);
+	if (c.url) lines.push(`URL:${vEsc(c.url)}`);
+	if (c.notes.trim()) lines.push(`NOTE:${vEsc(c.notes.trim())}`);
+	lines.push('END:VCARD');
+	return lines.join('\r\n') + '\r\n';
+}
+
+/** The file name of a shared card: the name without characters file systems refuse. */
+export function vcardName(c: Pick<Contact, 'name' | 'org'>): string {
+	const base = (c.name || c.org || 'Kontakt')
+		.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, 80);
+	return (base || 'Kontakt') + '.vcf';
 }
 
 // ---- Birthdays ----

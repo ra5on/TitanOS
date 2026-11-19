@@ -431,11 +431,13 @@ export async function installContacts(target, state = contactsState()) {
         json: { error: { code: "contacts_unavailable", message: "no volume" } },
       });
     const sorted = () =>
-      [...s.contacts].sort(
-        (a, b) =>
-          sortKey(a).localeCompare(sortKey(b)) ||
-          fullName(a).localeCompare(fullName(b)),
-      );
+      // Like titand (cardweb/list.go): the folded key compared byte-wise, so
+      // "1&1 Hotline" comes before A and "Øvrebø" after Z (115-7).
+      [...s.contacts].sort((a, b) => {
+        const ka = fold(sortKey(a));
+        const kb = fold(sortKey(b));
+        return ka < kb ? -1 : ka > kb ? 1 : fullName(a).localeCompare(fullName(b));
+      });
 
     if (path === "/contacts/books")
       return json([

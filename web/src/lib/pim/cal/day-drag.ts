@@ -31,6 +31,18 @@ export function dayDrag(node: HTMLElement, initial: DayDragOptions) {
 	} | null = null;
 	let swallow = false;
 
+	/** The day under the pointer: bars of the month lie over the days (1.15), so look through them. */
+	function dayAt(x: number, y: number): HTMLElement | null {
+		const all =
+			typeof document.elementsFromPoint === 'function'
+				? document.elementsFromPoint(x, y)
+				: [document.elementFromPoint(x, y)];
+		for (const el of all) {
+			const cell = el?.closest<HTMLElement>('[data-day]');
+			if (cell && node.contains(cell)) return cell;
+		}
+		return null;
+	}
 	function mark(target: HTMLElement | null) {
 		if (!drag || drag.target === target) return;
 		drag.target?.removeAttribute('data-drop');
@@ -46,7 +58,8 @@ export function dayDrag(node: HTMLElement, initial: DayDragOptions) {
 			pointer: e.pointerId,
 			x0: e.clientX,
 			y0: e.clientY,
-			from: el.dataset.dragDay ?? '',
+			// A bar over several days: the day it was taken at.
+			from: dayAt(e.clientX, e.clientY)?.dataset.day ?? el.dataset.dragDay ?? '',
 			moved: false,
 			target: null,
 		};
@@ -57,9 +70,7 @@ export function dayDrag(node: HTMLElement, initial: DayDragOptions) {
 		if (!drag.moved && Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) < 5) return;
 		drag.moved = true;
 		drag.el.setAttribute('data-dragging', '');
-		const under = document.elementFromPoint(e.clientX, e.clientY);
-		const cell = under?.closest<HTMLElement>('[data-day]') ?? null;
-		mark(cell && node.contains(cell) ? cell : null);
+		mark(dayAt(e.clientX, e.clientY));
 	}
 	function up(e: PointerEvent) {
 		if (!drag || e.pointerId !== drag.pointer) return;
@@ -70,8 +81,7 @@ export function dayDrag(node: HTMLElement, initial: DayDragOptions) {
 		if (!d.moved) return;
 		swallow = true;
 		setTimeout(() => (swallow = false), 0);
-		const under = document.elementFromPoint(e.clientX, e.clientY);
-		const to = under?.closest<HTMLElement>('[data-day]')?.dataset.day ?? '';
+		const to = dayAt(e.clientX, e.clientY)?.dataset.day ?? '';
 		const ev = opts.eventOf(d.el.dataset.dragKey ?? '');
 		if (!to || !ev || !d.from) return;
 		const n = daysBetween(d.from, to);

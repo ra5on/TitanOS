@@ -19,6 +19,8 @@ import (
 const importPerCard = 4 << 10
 
 type contactFailure struct {
+	// Index is the card's place in the file, from 1 (1.15: "Karte 3").
+	Index  int    `json:"index,omitempty"`
 	UID    string `json:"uid,omitempty"`
 	Name   string `json:"name,omitempty"`
 	Reason string `json:"reason"`
@@ -152,7 +154,7 @@ func (a pimDataArea) handleImportContacts(w http.ResponseWriter, r *http.Request
 	seen := map[string]bool{}
 	var items []pimstore.Item
 	var who []contactFailure
-	for _, p := range pieces {
+	for at, p := range pieces {
 		key := "uid:" + p.UID
 		if p.UID == "" {
 			key = "key:" + cardweb.Key(p.FN, p.Email)
@@ -186,7 +188,7 @@ func (a pimDataArea) handleImportContacts(w http.ResponseWriter, r *http.Request
 			taken[name] = true
 			items = append(items, pimstore.Item{Name: name, Data: cardData})
 		}
-		who = append(who, contactFailure{UID: p.UID, Name: p.FN})
+		who = append(who, contactFailure{Index: at + 1, UID: p.UID, Name: p.FN})
 	}
 	pieces = nil
 	if len(items) > 0 {

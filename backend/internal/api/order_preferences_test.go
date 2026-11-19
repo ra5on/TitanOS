@@ -101,6 +101,11 @@ func TestOrderPreferencesBounds(t *testing.T) {
 		"101 calendars":               map[string]any{"calendar": many(101, func(i int) string { return "k" + strconv.Itoa(i) })},
 		"a contacts book twice":       map[string]any{"contacts": []string{"kontakte", "kontakte"}},
 		"contacts an object":          map[string]any{"contacts": map[string]any{"a": 1}},
+		"a mailbox twice in order":    map[string]any{"mailAccounts": []string{"a", "a"}},
+		"21 mailboxes in order":       map[string]any{"mailAccounts": many(21, func(i int) string { return "acc-" + strconv.Itoa(i) })},
+		"mailbox order an object":     map[string]any{"mailAccounts": map[string]any{"a": 1}},
+		"a hidden folder of a bad id": map[string]any{"mailHidden": map[string][]string{"../x": {"Spam"}}},
+		"a hidden folder empty":       map[string]any{"mailHidden": map[string][]string{"a": {""}}},
 	} {
 		if res, body := ts.request("PUT", "/api/v1/preferences/order", value); res.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", name, res.StatusCode, body)
@@ -117,6 +122,7 @@ func TestOrderPreferencesBounds(t *testing.T) {
 		"100 calendars":             map[string]any{"calendar": many(100, func(i int) string { return "k" + strconv.Itoa(i) })},
 		"a folder of 1024 bytes":    map[string]any{"mail": map[string][]string{"a": {strings.Repeat("ä", 512)}}},
 		"nothing":                   map[string]any{},
+		"mailbox order and hidden":  map[string]any{"mailAccounts": []string{"acc-2", "acc-0"}, "mailHidden": map[string][]string{"acc-0": {"Spam", "Archiv"}}},
 	} {
 		if res, body := ts.request("PUT", "/api/v1/preferences/order", value); res.StatusCode != http.StatusNoContent {
 			t.Errorf("%s: %d %s", name, res.StatusCode, body)
@@ -134,5 +140,29 @@ func TestOrderPreferencesMergeKeepsOnlyKnownKeys(t *testing.T) {
 	merged, err = mergeOrderPrefs(json.RawMessage(`[1,2]`), json.RawMessage(`{"calendar":["k"]}`))
 	if err != nil || string(merged) != `{"calendar":["k"]}` {
 		t.Fatalf("damaged: %s %v", merged, err)
+	}
+}
+
+// 1.15 (Kontakte "Meine Karte"): the kind "contacts" holds the id of the
+// own card and nothing else; read back as stored.
+func TestContactsPreferences(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	for name, value := range map[string]any{
+		"another key":   map[string]any{"me": "a.vcf", "x": 1},
+		"me a number":   map[string]any{"me": 3},
+		"me too long":   map[string]any{"me": strings.Repeat("a", 257)},
+		"me with a tab": map[string]any{"me": "a\tb"},
+	} {
+		if res, body := ts.request("PUT", "/api/v1/preferences/contacts", value); res.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", name, res.StatusCode, body)
+		}
+	}
+	if res, body := ts.request("PUT", "/api/v1/preferences/contacts", map[string]any{"me": "alex-muster.vcf"}); res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusOK {
+		t.Fatalf("put: %d %s", res.StatusCode, body)
+	}
+	res, body := ts.request("GET", "/api/v1/preferences", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), "alex-muster.vcf") {
+		t.Fatalf("get: %d %s", res.StatusCode, body)
 	}
 }

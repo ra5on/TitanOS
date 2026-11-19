@@ -44,9 +44,16 @@
 			<strong id="pending-{p.id}">{askTitle(p)}</strong>
 			<span
 				>{t('agent.ask.level', {
-					level: t(levelText[p.level] ?? 'agent.levelChange'),
+					level: t(
+						p.kind === 'read' && p.level === 'normal'
+							? 'agent.levelRead'
+							: (levelText[p.level] ?? 'agent.levelChange'),
+					),
 				})} · {t('agent.ask.at', { time: formatDateTime(new Date(p.at)) })}</span
 			>
+			{#if p.why === 'pim' || p.why === 'outside'}
+				<span class="why">{t(p.why === 'pim' ? 'agent.ask.whyPim' : 'agent.ask.whyOutside')}</span>
+			{/if}
 		</div>
 		<div class="ask-acts">
 			<button type="button" class="btn" disabled={deciding} onclick={() => ondecide(p, false)}
@@ -61,7 +68,8 @@
 				type="button"
 				class="btn {p.level === 'destroy' ? 'btn-danger' : 'btn-primary'}"
 				disabled={deciding}
-				onclick={() => ondecide(p, true)}>{t('agent.approve')}</button
+				onclick={() => ondecide(p, true)}
+				>{t(p.tool === 'mail_delete' ? 'agent.ask.delete' : 'agent.approve')}</button
 			>
 		</div>
 	</div>

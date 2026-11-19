@@ -469,25 +469,6 @@ export async function installMail(target, state = mailState()) {
     // 1.12: the contacts with a picture (their photo route answers below).
     if (path === "/mail/avatars")
       return json({ book: "kontakte", photos: s.avatars ?? {} });
-    if (!(m = /^\/mail\/accounts\/([^/]+)\/(.+)$/.exec(path)))
-      return fail(404, "not_found");
-    const id = decodeURIComponent(m[1]);
-    const what = m[2];
-    const a = s.accounts.find((x) => x.id === id);
-    if (!a) return fail(404, "mail_not_found");
-    if (a.status.state === "auth_failed" && what !== "folders")
-      return fail(409, "mail_auth_failed");
-    if (a.status.state === "unreachable" && what !== "folders")
-      return fail(502, "mail_unreachable");
-    const box = s.messages[id];
-
-    if (what === "folders") {
-      if (a.status.state === "auth_failed")
-        return fail(409, "mail_auth_failed");
-      if (a.status.state === "unreachable")
-        return fail(502, "mail_unreachable");
-      return json(s.folders[id]);
-    }
     // The filters of a list and of the search over all folders (1.12).
     const filtered = (rows) => {
       let list = [...rows].sort((x, y) => y.uid - x.uid);
@@ -515,6 +496,55 @@ export async function installMail(target, state = mailState()) {
       if (q("flagged") === "1") list = list.filter((r) => r.flags?.flagged);
       return list;
     };
+    // 1.15 (115-4): "Alle Posteingänge" and "Markiert" over all mailboxes,
+    // newest first, each row with its mailbox (backend tmail_unified.go).
+    if (path === "/mail/unified") {
+      const kind = q("kind");
+      const out = [];
+      let total = 0;
+      for (const acc of s.accounts) {
+        if (acc.status.state !== "ok") continue;
+        const box = s.messages[acc.id] ?? {};
+        const folders = kind === "flagged" ? Object.keys(box) : ["INBOX"];
+        for (const f of folders) {
+          let list = filtered(box[f] ?? []);
+          if (kind === "flagged") list = list.filter((r) => r.flags?.flagged);
+          total += list.length;
+          out.push(...list.map((r) => ({ ...r, account: acc.id, folder: f })));
+        }
+      }
+      out.sort((x, y) =>
+        String(y.date ?? "").localeCompare(String(x.date ?? "")),
+      );
+      const limit = Math.min(100, Number(q("limit") || 50));
+      return json({
+        messages: out.slice(0, limit),
+        total,
+        next: "",
+        failed: s.accounts
+          .filter((a) => a.status.state !== "ok")
+          .map((a) => ({ account: a.id, code: "mail_unreachable" })),
+      });
+    }
+    if (!(m = /^\/mail\/accounts\/([^/]+)\/(.+)$/.exec(path)))
+      return fail(404, "not_found");
+    const id = decodeURIComponent(m[1]);
+    const what = m[2];
+    const a = s.accounts.find((x) => x.id === id);
+    if (!a) return fail(404, "mail_not_found");
+    if (a.status.state === "auth_failed" && what !== "folders")
+      return fail(409, "mail_auth_failed");
+    if (a.status.state === "unreachable" && what !== "folders")
+      return fail(502, "mail_unreachable");
+    const box = s.messages[id];
+
+    if (what === "folders") {
+      if (a.status.state === "auth_failed")
+        return fail(409, "mail_auth_failed");
+      if (a.status.state === "unreachable")
+        return fail(502, "mail_unreachable");
+      return json(s.folders[id]);
+    }
     if (what === "search") {
       const hits = [];
       let total = 0;

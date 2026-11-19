@@ -840,6 +840,11 @@ export function fixtureFactory(browser, errors) {
         data.prefs.appearance = route.request().postDataJSON();
         return route.fulfill({ status: 204 });
       }
+      // 1.15: Kontakte "Meine Karte" is kept like titand does.
+      if (path === "/preferences/contacts" && method === "PUT") {
+        data.prefs.contacts = route.request().postDataJSON();
+        return route.fulfill({ status: 204 });
+      }
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);

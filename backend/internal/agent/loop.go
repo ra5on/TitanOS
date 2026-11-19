@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -45,6 +46,10 @@ type Prepared struct {
 	// makes a draft and writes nothing. Set by Prepare only, never from the
 	// arguments; such a call never waits for approval.
 	Draft bool `json:"draft,omitempty"`
+	// Why the step asks although its rights would let it run (1.15,
+	// 115-3): "pim" after mail, calendar or contacts were read, "outside"
+	// after other outside content. Shown on the card in words.
+	Why string `json:"why,omitempty"`
 }
 
 // Outcome is what a call returned.
@@ -275,6 +280,8 @@ func buildMessages(system string, chat *Chat, resultLimit int, paged func(string
 				msgs = append(msgs, Message{Role: "user", Content: "[Stopped by the person / von der Person angehalten]"})
 			case "verify":
 				msgs = append(msgs, Message{Role: "user", Content: hintVerify})
+			case "notdone":
+				msgs = append(msgs, Message{Role: "user", Content: "[TitanOS] Your last answer said a change happened, but only a draft card exists: nothing was sent, saved, moved or deleted. Never say it happened; say the card waits for the person."})
 			case "badcall":
 				msgs = append(msgs, Message{Role: "user", Content: "[TitanOS] Your last tool call could not be read (" + e.Content + "). Call the tool again with valid JSON arguments, or answer without a tool."})
 			case "limitask":
@@ -361,6 +368,14 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 			return err
 		}
 		if len(msg.ToolCalls) == 0 {
+			// 1.15 (115-1, owner: "fest vom System"): the model said a draft
+			// was sent, moved or deleted although only the card exists; a
+			// note of TitanOS under the answer says what really holds.
+			if draftThisTurn(chat) && ClaimsDone(msg.Content) {
+				if err := r.add(chat, Entry{Role: "note", Note: "notdone"}); err != nil {
+					return err
+				}
+			}
 			// A change without a look afterwards: check once before the end.
 			if needsCheck(chat) && steps+r.extra < maxSteps {
 				if err := r.add(chat, Entry{Role: "note", Note: "verify"}); err != nil {
@@ -610,7 +625,7 @@ func (r *Runner) call(ctx context.Context, chat *Chat, name string, args json.Ra
 		}
 	}
 	if p.Mode == ModeAsk {
-		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, At: r.now()}
+		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Why: p.Why, Untrusted: p.Untrusted, At: r.now()}
 		r.setState(chat, StateWaiting, "")
 		r.emit(Event{Type: "approval", Wait: chat.Pending})
 		return true, r.save(chat)
@@ -779,4 +794,34 @@ func draftFamily(tool string) string {
 		return "mail"
 	}
 	return tool
+}
+
+// draftThisTurn: a step since the person's last message made a draft.
+func draftThisTurn(chat *Chat) bool {
+	for _, e := range chat.Entries[lastUserIndex(chat)+1:] {
+		if e.Role == "tool" && e.Draft != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// claimDone are words that say a change has happened (German and
+// English); claimNot are the words around them that say it has not or
+// will only happen.
+var (
+	claimDone = regexp.MustCompile(`(?i)\b(gelöscht|verschoben|gesendet|versendet|verschickt|abgeschickt|eingetragen|angelegt|gespeichert|erledigt|entfernt|deleted|moved|sent|saved|created|removed)\b`)
+	claimNot  = regexp.MustCompile(`(?i)\b(nicht|noch nicht|kein|keine|erst|sobald|wenn|wird|werden|würde|kannst|vorschlag|entwurf|karte|not|yet|once|when|will|would|draft|suggestion|card)\b`)
+)
+
+// ClaimsDone reports whether an answer says a change happened in a
+// sentence that does not also say it has not (yet): "Die Mail wurde
+// gelöscht." counts, "Sobald du bestätigst, wird sie gelöscht." does not.
+func ClaimsDone(text string) bool {
+	for _, sentence := range regexp.MustCompile(`[.!?\n]+`).Split(text, -1) {
+		if claimDone.MatchString(sentence) && !claimNot.MatchString(sentence) {
+			return true
+		}
+	}
+	return false
 }

@@ -17,8 +17,13 @@ export type SideOrder = {
 	contacts: string[];
 	/** Calendar ids (the birthdays too). */
 	calendar: string[];
+	/** 1.15: the order of the mailboxes – the first is the main one. */
+	mailAccounts: string[];
+	/** 1.15: folder paths taken out of the side bar, per mailbox. */
+	mailHidden: Record<string, string[]>;
 };
-export type OrderProgram = keyof SideOrder;
+export type OrderProgram = 'mail' | 'contacts' | 'calendar';
+type OrderKey = OrderProgram | 'mailAccounts' | 'mailHidden';
 
 // The bounds of the NAS (order_preferences.go); more is cut, never sent.
 const MAILBOXES = 20;
@@ -47,14 +52,19 @@ const validCollection = (s: string) => COLLECTION_ID.test(s);
 /** What the NAS sent (or an older one did not): within the bounds, never throws. */
 export function sanitizeOrder(raw: unknown): SideOrder {
 	const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-	const mail: Record<string, string[]> = Object.create(null);
-	if (o.mail && typeof o.mail === 'object' && !Array.isArray(o.mail))
-		for (const [id, list] of Object.entries(o.mail as Record<string, unknown>).slice(0, MAILBOXES))
-			if (MAILBOX_ID.test(id)) mail[id] = cleanList(list, FOLDERS, validFolder);
+	const perBox = (raw: unknown) => {
+		const out: Record<string, string[]> = Object.create(null);
+		if (raw && typeof raw === 'object' && !Array.isArray(raw))
+			for (const [id, list] of Object.entries(raw as Record<string, unknown>).slice(0, MAILBOXES))
+				if (MAILBOX_ID.test(id)) out[id] = cleanList(list, FOLDERS, validFolder);
+		return out;
+	};
 	return {
-		mail,
+		mail: perBox(o.mail),
 		contacts: cleanList(o.contacts, COLLECTIONS, validCollection),
 		calendar: cleanList(o.calendar, COLLECTIONS, validCollection),
+		mailAccounts: cleanList(o.mailAccounts, MAILBOXES, (s) => MAILBOX_ID.test(s)),
+		mailHidden: perBox(o.mailHidden),
 	};
 }
 
@@ -131,7 +141,7 @@ export function followSideOrder() {
 	ownChannel();
 }
 
-const timers = new Map<OrderProgram, ReturnType<typeof setTimeout>>();
+const timers = new Map<OrderKey, ReturnType<typeof setTimeout>>();
 /** A moment after the last change (a few steps with the keys are one save). */
 const SAVE_AFTER = 600;
 
@@ -153,6 +163,28 @@ export function setOrder(
 				if (!opts.mailboxes.includes(id)) delete next.mail[id];
 	} else next[program] = list;
 	session.order = sanitizeOrder(next) as unknown as Record<string, unknown>;
+	saveSoon(program);
+}
+
+/** 1.15 (115-4): the order of the mailboxes, saved on the NAS. */
+export function setMailAccounts(ids: string[]) {
+	const next = sanitizeOrder($state.snapshot(sideOrder()));
+	next.mailAccounts = ids;
+	session.order = sanitizeOrder(next) as unknown as Record<string, unknown>;
+	saveSoon('mailAccounts');
+}
+
+/** 1.15 (115-4): the folders of a mailbox taken out of the side bar. */
+export function setMailHidden(mailbox: string, paths: string[], mailboxes: string[]) {
+	const next = sanitizeOrder($state.snapshot(sideOrder()));
+	next.mailHidden[mailbox] = paths;
+	for (const id of Object.keys(next.mailHidden))
+		if (!mailboxes.includes(id) || !next.mailHidden[id].length) delete next.mailHidden[id];
+	session.order = sanitizeOrder(next) as unknown as Record<string, unknown>;
+	saveSoon('mailHidden');
+}
+
+function saveSoon(program: OrderKey) {
 	clearTimeout(timers.get(program));
 	timers.set(
 		program,
