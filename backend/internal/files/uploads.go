@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -22,6 +24,10 @@ import (
 
 var ErrVolumeChanged = errors.New("upload target volume is no longer available")
 
+// ErrUploadSum: the finished upload does not have the SHA-256 the client
+// expected. Nothing was published; the upload can only be aborted.
+var ErrUploadSum = errors.New("files: the uploaded file does not have the expected SHA-256")
+
 type upload struct {
 	id, user              string
 	uid                   int
@@ -33,6 +39,11 @@ type upload struct {
 	partInode, partDevice uint64
 	touched               time.Time
 	busy                  bool
+	// sum is the SHA-256 of the acknowledged bytes, fed while they are
+	// written (PLAN 116, photo backup). Nil once it no longer matches the
+	// part file (a failed write, an upload taken up after a restart): a
+	// finish that needs the sum then reads the part file again.
+	sum hash.Hash
 }
 type UploadStatus struct {
 	ID     string `json:"id"`
@@ -40,6 +51,10 @@ type UploadStatus struct {
 	Size   int64  `json:"size"`
 	Name   string `json:"name"`
 	Busy   bool   `json:"busy,omitempty"`
+	// Path and SHA256 come with a finished upload: where in the root the
+	// file now is, and the SHA-256 the server worked out itself.
+	Path   string `json:"path,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 const (
@@ -169,7 +184,7 @@ func (m *Manager) StartUpload(root Root, dir, name string, size int64, conflict,
 		r.Remove(part)
 		return UploadStatus{}, err
 	}
-	u := &upload{id: id, user: user, uid: uid, root: root, name: target, part: part, size: size, conflict: conflict, device: dev, inode: ino, partInode: partInode, partDevice: partDevice, touched: m.now()}
+	u := &upload{id: id, user: user, uid: uid, root: root, name: target, part: part, size: size, conflict: conflict, device: dev, inode: ino, partInode: partInode, partDevice: partDevice, touched: m.now(), sum: sha256.New()}
 	record := uploadRecord{id, user, root.ID, target, part, conflict, size}
 	b, err := json.Marshal(record)
 	if err == nil {
@@ -284,8 +299,17 @@ func (m *Manager) WriteChunkContext(ctx context.Context, id, user string, offset
 			release()
 			return u.status(), err
 		}
-		n, copyErr := io.CopyBuffer(f, io.LimitReader(data, min(window, remaining)), make([]byte, 32<<10))
+		var dst io.Writer = f
+		if u.sum != nil {
+			dst = io.MultiWriter(f, u.sum)
+		}
+		n, copyErr := io.CopyBuffer(dst, io.LimitReader(data, min(window, remaining)), make([]byte, 32<<10))
 		syncErr := m.syncFile(f)
+		if copyErr != nil || syncErr != nil {
+			// The sum may hold bytes the file does not (a short write) or
+			// lose them again (the truncate below).
+			u.sum = nil
+		}
 		if syncErr == nil { // Only durable bytes are acknowledged or evicted.
 			start := u.offset.Load()
 			u.offset.Add(n)
@@ -313,6 +337,19 @@ func (m *Manager) WriteChunkContext(ctx context.Context, id, user string, offset
 	return u.status(), nil
 }
 func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
+	return m.finishUpload(id, user, false, "")
+}
+
+// FinishUploadHashed is FinishUpload with the SHA-256 of the file in the
+// answer, always worked out by the server (photo backup, PLAN 116): from
+// the bytes as they were written, or by reading the part file again where
+// that sum was lost. The client's own sum is never taken for it: with
+// expect set, a file with another sum is not published (ErrUploadSum).
+func (m *Manager) FinishUploadHashed(id, user, expect string) (UploadStatus, error) {
+	return m.finishUpload(id, user, true, expect)
+}
+
+func (m *Manager) finishUpload(id, user string, needSum bool, expect string) (UploadStatus, error) {
 	u, err := m.claim(id, user)
 	if err != nil {
 		return UploadStatus{}, err
@@ -341,6 +378,17 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 	err = errors.Join(err, f.Close())
 	if err != nil {
 		return UploadStatus{}, mapError(err)
+	}
+	sum := ""
+	if u.sum != nil {
+		sum = hex.EncodeToString(u.sum.Sum(nil))
+	} else if needSum {
+		if sum, err = hashPart(r, u); err != nil {
+			return UploadStatus{}, mapError(err)
+		}
+	}
+	if expect != "" && sum != expect {
+		return UploadStatus{}, ErrUploadSum
 	}
 	final := u.name
 	if u.conflict == ConflictReplace {
@@ -380,8 +428,24 @@ func (m *Manager) FinishUpload(id, user string) (UploadStatus, error) {
 		return UploadStatus{}, mapError(err)
 	}
 	status := u.status()
-	status.Name = path.Base(final)
+	status.Name, status.Path, status.SHA256 = path.Base(final), final, sum
 	return status, nil
+}
+
+// hashPart reads a finished part file once for its SHA-256, without
+// keeping it in the page cache.
+func hashPart(r *os.Root, u *upload) (string, error) {
+	f, err := openPart(r, u, os.O_RDONLY)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	defer unix.Fadvise(int(f.Fd()), 0, 0, unix.FADV_DONTNEED)
+	sum := sha256.New()
+	if _, err := io.CopyBuffer(sum, f, make([]byte, 64<<10)); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 // publishOver gives an upload with "Ersetzen" its name (S-43, owner

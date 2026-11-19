@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/ra5on/TitanOS/backend/internal/appdevices"
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -112,6 +113,9 @@ type Options struct {
 	// PIM keeps calendars and address books (TECHNIK 5, pim/store); nil
 	// answers 503 like a missing volume.
 	PIM *pimstore.Store
+	// AppPhotos is the index of the Android app's photo backup (PLAN 116,
+	// appphotos); nil answers 503 like a missing system data volume.
+	AppPhotos *appphotos.Store
 	// HTTPSPort is the port of the web UI over HTTPS (webPorts of titand),
 	// for the addresses of the setup page of the iPhone; 0 is 443.
 	HTTPSPort int
@@ -477,6 +481,7 @@ func New(opts Options) *Server {
 	s.registerMail(mux)
 	s.registerPIM(mux)
 	s.registerApps(mux)
+	s.registerAppPhotos(mux)
 
 	s.routeCluster(mux)
 

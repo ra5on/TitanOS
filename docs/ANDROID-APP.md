@@ -84,6 +84,63 @@ Die App vergleicht beim Verbindungsaufbau den SPKI-Hash des Serverzertifikats mi
   | `pairing_limit` | mehr als drei offene Kopplungen |
   | `app_limit` | mehr als 20 Apps je Konto |
 
+## Foto-Sicherung
+
+Die App sichert Fotos und Videos in eine Freigabe und einen Ordner nach Wahl (TECHNIK §3, Entwürfe 30–33). Hochgeladen wird über den vorhandenen Upload in Stücken des Dateimanagers; neu sind drei Routen, die **nur die Sitzung einer gekoppelten App** erreicht.
+
+- Eine Browser-Sitzung ohne Gerät bekommt `403 app_session_required`.
+- Nicht in `publicRoutes`, nicht im Werkzeugkatalog: API-Tokens, MCP und der KI-Agent kommen nicht heran.
+- Rechte gelten immer so, wie das Konto sie gerade auf der Freigabe hat (`fileRoot`). Ohne Schreibrecht kein Upload, ohne Zugriff keine Antwort.
+
+### Ablauf eines Fotos
+
+1. **Prüfen:** `POST /api/v1/app/photos/check` mit `{root, dir, items:[{sha256, size, path?}]}` (höchstens 500 Einträge, 1 MiB).
+   - `root` ist z. B. `share/Fotos`, `dir` der Ordner der Sicherung, etwa `Handy Zeus`. Unterordner zählen mit.
+   - `sha256` sind 64 Hex-Ziffern in Kleinbuchstaben, gerechnet über genau die Bytes, die die App hochladen würde.
+   - `path` (wahlweise) ist der Ort relativ zu `dir`, an den die App das Foto legen würde, z. B. `2026/11/IMG_1.jpg`.
+   - Antwort `{items:[{sha256, state, root?, path?}]}`, `state`:
+     - `saved`: liegt schon im Ziel, auch wenn es am Handy umbenannt wurde.
+     - `missing`: hochladen.
+     - `unsure`: konnte in dieser Anfrage nicht nachgerechnet werden, später noch einmal fragen.
+   - **Gesichert** heißt: Der Index des Kontos kennt den Inhalt (Index von irgendeinem Gerät des Kontos, damit ein neu gekoppeltes Handy nicht alles noch einmal hochlädt), in derselben Freigabe unter `dir`, und dort liegt eine gewöhnliche Datei mit derselben Größe und Änderungszeit.
+   - Kennt der Index das Foto nicht, liegt unter `path` aber eine Datei gleicher Größe (etwa per SMB kopiert), rechnet das NAS ihre Prüfsumme einmal nach. Stimmt sie, gilt das Foto als gesichert und kommt in den Index.
+2. **Ordner:** Jahr und Monat legt die App mit `POST /api/v1/files/mkdir` an, eine Ebene nach der anderen; `409 file_exists` heißt „schon da“.
+3. **Hochladen:** `POST /api/v1/files/uploads` mit `conflict: "rename"`, dann `PATCH …/uploads/{id}?offset=…` wie im Web.
+   - Bei gleichem Namen mit anderem Inhalt entsteht `IMG_1 (2).jpg`.
+   - Abgebrochene Uploads setzt die App fort; nach einem Neustart des NAS findet `GET /api/v1/files/uploads?root&path` sie wieder.
+4. **Abschließen:** `POST /api/v1/app/photos/uploads/{id}/finish` mit `{sha256}` statt der normalen Finish-Route.
+   - Das NAS bestimmt die Prüfsumme selbst, während die Stücke geschrieben werden. Ging dieser Stand verloren (Schreibfehler, Upload nach einem Neustart fortgesetzt), liest es die fertige Teildatei noch einmal.
+   - Weicht die Prüfsumme von der der App ab, wird nichts veröffentlicht: `409 upload_hash_mismatch`. Die App bricht den Upload ab (`DELETE …/uploads/{id}`) und beginnt neu.
+   - Antwort `{id, size, name, path, sha256, root, recorded}`. `path` ist der endgültige Ort in der Freigabe. `recorded: false` heißt, die Datei liegt da, der Index ließ sich aber gerade nicht schreiben; der nächste `check` mit `path` findet sie dann.
+   - Ohne Volume für Systemdaten wird nichts abgeschlossen: `503 photos_unavailable`.
+
+### Speicher freigeben
+
+`POST /api/v1/app/photos/verify` mit `{items:[{sha256, size}]}` (höchstens 500) direkt bevor die App etwas vom Handy löscht.
+
+- `saved` nur, wenn ein Eintrag im Index in einer Freigabe liegt, die das Konto jetzt erreicht, und die Datei dort eine gewöhnliche Datei mit derselben Größe ist.
+- Hat sich ihre Änderungszeit geändert, rechnet das NAS die Prüfsumme nach (höchstens 1 GiB je Anfrage). Was nicht mehr hineinpasst, ist `unsure` und wird nicht gelöscht.
+- Antwort wie bei `check`, mit `root` und `path` der bestätigten Datei.
+- Gelöscht wird nur am Handy und nur nach Tippen: über `MediaStore.createTrashRequest`, Android fragt noch einmal, alles liegt 30 Tage im Papierkorb des Handys. Aufnahmen der letzten 30 Tage bleiben.
+
+### Ablage am NAS
+
+- `.titanos/apps/<konto>/<gerät>/photos.jsonl` auf dem Volume für Systemdaten (`volumedata.Home`, Funktion `apps`, zieht mit der Vorgabe um wie Kalender und Kontakte). Nie auf dem Stick, nie nur im RAM.
+- Ordner root 0700, Datei 0600. Lesen legt nichts an, erst der erste Eintrag.
+- Eine Zeile je fertiger Datei (`sha256`, `size`, `root`, `path`, `mtime`, `at`), angehängt und mit `fsync`. So schreibt die erste Sicherung von 10 000 Fotos nicht 10 000-mal den ganzen Index. Mehrfache Zeilen für denselben Ort fasst das NAS gelegentlich zusammen (atomar neu geschrieben). Eine beim Absturz abgeschnittene letzte Zeile wird übergangen.
+- Wird das Konto gelöscht, geht sein Ordner mit. Beendet man nur ein Gerät, bleibt sein Index: ein neu gekoppeltes Handy erkennt damit, was schon gesichert ist.
+- **Fehler:**
+
+  | Status | Code | Bedeutung |
+  |---|---|---|
+  | 403 | `app_session_required` | keine Sitzung einer gekoppelten App |
+  | 503 | `photos_unavailable` | kein Volume für Systemdaten |
+  | 409 | `upload_hash_mismatch` | Prüfsumme der hochgeladenen Datei passt nicht, nichts veröffentlicht |
+  | 400 | `invalid_checksum` | Prüfsumme fehlt oder ist kein SHA-256 |
+  | 400 | `photos_too_many` | mehr als 500 Einträge |
+
+- **Prüfstand (19.11.2026):** Go-Tests `TestAppPhotoBackup`, `TestAppPhotoRefusals` (Upload aus der App-Sitzung bis zum Index, falsche Prüfsumme, „(2)“, umbenannt, per SMB vorhanden, neu gekoppeltes Gerät, Änderungszeit/Inhalt geändert, Rechte entzogen, ohne Volume), `TestFinishUploadHashed*` und die Unit-Tests von `appphotos`. Nicht geprüft: echtes NAS mit echtem Volume, echtes Handy.
+
 ## Prüfstand (19.11.2026)
 
 - **Go-Tests:** `TestAppPairingAndSession`, `TestAppPairingRefusals`, `TestAppSessionRefusals`, `TestAppDeviceEndsWithStay` sowie die Unit-Tests von `appdevices`.

@@ -158,6 +158,10 @@ func hidden(name string) bool {
 	return name == ".titanos" || name == ".snapshots" || strings.Contains(name, ".titanos-snapshot-") || name == RecycleDir || strings.HasSuffix(name, partSuffix) || strings.HasSuffix(name, partSuffix+".json")
 }
 
+// CleanPath is the check every path of a request goes through: relative
+// to its root, "." for the root, never into hidden or internal names.
+func CleanPath(p string) (string, error) { return clean(p) }
+
 // clean checks a slash-separated path relative to a root. "" is the root.
 func clean(p string) (string, error) {
 	if p == "" || p == "." || p == "/" {

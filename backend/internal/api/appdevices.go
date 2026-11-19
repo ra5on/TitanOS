@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -416,5 +417,9 @@ func (s *Server) appsRebind(before auth.User) {
 func (s *Server) appsForget(name string) {
 	if s.appDevices != nil {
 		s.appDevices.Forget(name)
+	}
+	// What the photo backup kept goes with the account (logged if not).
+	if err := s.opts.AppPhotos.Forget(name); err != nil {
+		slog.Warn("photo backup: forget an account", "user", name, "err", err)
 	}
 }
