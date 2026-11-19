@@ -385,6 +385,10 @@ func TestPhoneLockMinutes(t *testing.T) {
 	if d, p := ts.server.authArea().lockMinutes("alex", "Firefox"), ts.server.authArea().lockMinutes("alex", iphone); d != 5 || p != 240 {
 		t.Fatalf("chosen: computer %d, phone %d", d, p)
 	}
+	// PLAN 116: the session of a paired Android app never locks by itself.
+	if a := ts.server.authArea().lockMinutes("alex", appAgentPrefix+"titanos Pixel"); a != 0 {
+		t.Fatalf("Android app: %d", a)
+	}
 	// The phone keeps its own value when only the computer's changes.
 	ts.request("PUT", "/api/v1/preferences/desktop", map[string]any{"lockMinutes": 10})
 	if p := ts.server.authArea().lockMinutes("alex", iphone); p != 0 {

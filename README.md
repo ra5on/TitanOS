@@ -96,6 +96,12 @@ Alles im Einzelnen – zum Aufklappen.
 - **Sperrbildschirm und Anmeldung:** Sperren im Menü oder automatisch nach einstellbarer Zeit; Entsperren mit Passwort (und 2FA) oder Passkey. Die Anmeldeseite zeigt das bewegte Nordlicht, Kontobilder (eigenes Foto oder mitgeliefertes Bild) und auf Wunsch einen Übergang in den Arbeitsplatz.
 - **Dateien hineinziehen:** Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den offenen Ordner hoch.
 - **Am Handy:** Startbildschirm mit dem Knopf „Menü“, Suche und App-Raster; jedes Programm und jede Docker-App öffnet im Vollbild mit „Zurück“. Ränder für Notch und Home-Leiste, keine vergrößernden Eingabefelder in Safari. TitanOS lässt sich als App installieren; unter Android nimmt sie über „Teilen › TitanOS“ Fotos und Dateien für das NAS an.
+- **Android-App (Testfassung):** native App „TitanOS“ für Android 13 und neuer im Repo [TitanOS-Android](https://github.com/ra5on/TitanOS-Android).
+  - **Koppeln:** unter Mein Konto › Geräte per QR-Code, Link oder von Hand mit Fingerabdruck; bestätigt wird mit dem Kontopasswort.
+  - **Sicherheit:** eigener Schlüssel je Handy, festgehaltenes Zertifikat; Passwort und 2FA kommen nie aufs Handy. Die App ist eine Sitzung wie der Browser und meldet sich nach einem Neustart des NAS selbst wieder an.
+  - **Heute:** Start und Dateien.
+  - **Geplant:** Foto-Sicherung im Hintergrund, Kontakte und Kalender in den Apps des Handys, Mitteilungen ohne Google, die ganze Systemsteuerung und eine Agent-App.
+  - [Einzelheiten](docs/ANDROID-APP.md).
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe erklärt ein „?“ direkt daneben.
 - **Kein abgeschnittener Text:** Auf den Seiten von TitanOS brechen lange Namen und Texte um, statt abgeschnitten zu werden.
 

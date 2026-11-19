@@ -62,7 +62,7 @@
 > <?xml version="1.0" encoding="UTF-8"?>
 > <A:propfind xmlns:A="DAV:" xmlns:B="http://calendarserver.org/ns/"><A:prop><B:getctag/><A:sync-token/></A:prop></A:propfind>
 < status 207
-< value-lacks /caldav/alex/calendars/privat/ cs:getctag {saved:ctag}
+< value-not /caldav/alex/calendars/privat/ cs:getctag {saved:ctag}
 
 > REPORT /caldav/alex/calendars/privat/
 > Auth: alex

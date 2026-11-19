@@ -38,7 +38,7 @@
 < value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ ical:calendar-order 2
 < value /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/ cal:supported-calendar-component-set <cal:comp name="VTODO"/>
 < value /caldav/alex/calendars/erinnerungen--titanos/ d:displayname Erinnerungen
-< value-lacks /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
+< value-not /caldav/alex/calendars/erinnerungen--titanos/ cs:getctag 0-0
 
 # Renamed and recolored on the iPhone.
 > PROPPATCH /caldav/alex/calendars/5A7C9E1B-3D5F-4A2C-8E4B-6D8F0A2C4E6A/

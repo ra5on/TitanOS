@@ -142,7 +142,7 @@ func TestPIMDataRouteRights(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pim.Local = func() *time.Location { return berlin }
+	pim.SetLocal(func() *time.Location { return berlin })
 	if _, body := ts.do(bea, "GET", "/api/v1/calendar/access", nil); !strings.Contains(string(body), `"timezone":"Europe/Berlin"`) {
 		t.Fatalf("access without the NAS zone: %s", body)
 	}

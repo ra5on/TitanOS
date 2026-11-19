@@ -174,7 +174,9 @@ type Store struct {
 	// same name is not read. Nil: every valid name, without a time.
 	Account func(name string) (created time.Time, ok bool)
 	// Local is the zone of the NAS (floating times, dates); nil = time.Local.
+	// Set it before the store is used; SetLocal changes it later.
 	Local func() *time.Location
+	zone  atomic.Pointer[func() *time.Location]
 	// Now is the clock; nil = time.Now.
 	Now func() time.Time
 	// ReadMark and WriteMark read and write /config/users/<account>/
@@ -270,6 +272,11 @@ func (s *Store) now() time.Time {
 }
 
 func (s *Store) local() *time.Location {
+	if f := s.zone.Load(); f != nil {
+		if loc := (*f)(); loc != nil {
+			return loc
+		}
+	}
 	if s.Local != nil {
 		if loc := s.Local(); loc != nil {
 			return loc
@@ -277,6 +284,11 @@ func (s *Store) local() *time.Location {
 	}
 	return time.Local
 }
+
+// SetLocal replaces the zone of the NAS on a running store (tests set it
+// after the server started, while its reminders already read it); it
+// wins over Local.
+func (s *Store) SetLocal(f func() *time.Location) { s.zone.Store(&f) }
 
 // Zone is the zone of the NAS the store reads dates and floating times in.
 func (s *Store) Zone() *time.Location { return s.local() }

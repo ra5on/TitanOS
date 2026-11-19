@@ -46,6 +46,11 @@ type Session struct {
 	// (owner 16 Nov 2026, Z-9), so the lock outlives a restart of the NAS.
 	Locked   bool      `json:",omitempty"`
 	LockedAt time.Time `json:",omitzero"`
+	// Device is the paired Android app the session belongs to (PLAN 116,
+	// appdevices): the app gets a new session with its key whenever it
+	// needs one, so such a session is never remembered on the stick, and
+	// it ends with the app.
+	Device string `json:",omitempty"`
 }
 
 // ConfirmFor is how long entering the password again opens the door to
@@ -158,6 +163,41 @@ func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
 	s.save()
 	s.keepRemembered()
 	return token, nil
+}
+
+// CreateApp starts a session for a paired Android app (PLAN 116). It is
+// kept in RAM and /run like any other, never on the stick: after a
+// restart of the NAS the app signs in again with its key.
+func (s *Sessions) CreateApp(user, device, remoteIP, userAgent string) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	s.prune(now)
+	s.sessions[sha256.Sum256([]byte(token))] = &Session{
+		User: user, Created: now, LastSeen: now, RemoteIP: remoteIP, UserAgent: userAgent, Device: device,
+	}
+	s.save()
+	return token, nil
+}
+
+// DeleteDevice ends the sessions of one paired app of an account.
+func (s *Sessions) DeleteDevice(user, device string) {
+	if device == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, session := range s.sessions {
+		if session.User == user && session.Device == device {
+			delete(s.sessions, key)
+		}
+	}
+	s.save()
 }
 
 // Get returns the session for a token and marks it as used, unless it is
@@ -395,6 +435,8 @@ type SessionInfo struct {
 	// it ends, absent for no end.
 	Kept  bool       `json:"kept"`
 	Until *time.Time `json:"until,omitempty"`
+	// Device is set for the session of a paired Android app.
+	Device string `json:"device,omitempty"`
 }
 
 func sessionID(key [sha256.Size]byte) string {
@@ -442,7 +484,7 @@ func (s *Sessions) List(user, currentToken string) []SessionInfo {
 	list := []SessionInfo{}
 	for key, session := range s.sessions {
 		if session.User == user {
-			info := SessionInfo{ID: sessionID(key), Created: session.Created, LastSeen: session.LastSeen, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Current: key == current}
+			info := SessionInfo{ID: sessionID(key), Created: session.Created, LastSeen: session.LastSeen, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Current: key == current, Device: session.Device}
 			if session.Remember && s.stay != 0 {
 				info.Kept = true
 				if until := s.until(session); !until.IsZero() {

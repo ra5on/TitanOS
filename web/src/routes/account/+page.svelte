@@ -24,6 +24,7 @@
 	import SshKeys from './SshKeys.svelte';
 	import Passkeys from './Passkeys.svelte';
 	import WebDav from './WebDav.svelte';
+	import AndroidApps from './AndroidApps.svelte';
 	import Picture from './Picture.svelte';
 	import AppInstallCard from '#lib/components/AppInstallCard.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -39,6 +40,8 @@
 		current: boolean;
 		kept?: boolean;
 		until?: string;
+		// PLAN 116: the session of a paired Android app.
+		device?: string;
 	};
 
 	const user = $derived(session.data?.user);
@@ -230,6 +233,12 @@
 
 	/** What a browser calls itself, cut down to what a person recognizes. */
 	function browser(agent: string): string {
+		// The session of an Android app: "TitanOS-Android/<app> <name>".
+		const app = /^TitanOS-Android\/(\w+) (.+)$/.exec(agent);
+		if (app)
+			return t(app[1] === 'agent' ? 'androidApps.sessionAgent' : 'androidApps.sessionTitanos', {
+				name: app[2],
+			});
 		const name = /Firefox\/|Edg\/|Chrome\/|Safari\//.exec(agent)?.[0].replace(/\/$/, '') ?? '';
 		const system = /Windows|Android|iPhone|iPad|Mac OS X|Linux/.exec(agent)?.[0] ?? '';
 		return [name === 'Edg' ? 'Edge' : name, system].filter(Boolean).join(' · ') || agent || '–';
@@ -434,6 +443,7 @@
 			{/each}
 		{/if}
 		<p class="muted note">{t('account.devicesNote')}</p>
+		<AndroidApps onchange={loadDevices} />
 	</SettingGroup>
 
 	<SettingGroup title={t(admin ? 'account.group.bell' : 'account.group.notify')} id="acc-notify">

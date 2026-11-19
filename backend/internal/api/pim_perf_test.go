@@ -20,7 +20,7 @@ import (
 func perfPIM(t *testing.T) (*testServer, *pimstore.Store, *pimtest.Delay) {
 	t.Helper()
 	ts, pim, _, _ := pimServer(t)
-	pim.Local = func() *time.Location { return calBerlin }
+	pim.SetLocal(func() *time.Location { return calBerlin })
 	delay := &pimtest.Delay{}
 	volume := pim.Volume
 	pim.Volume = func(feature string, create bool) (*os.Root, func(), error) {

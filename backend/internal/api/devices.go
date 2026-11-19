@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/appdevices"
 	"net/http"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -32,6 +33,15 @@ type pimArea struct {
 func (s *Server) pimArea() pimArea {
 	return pimArea{users: s.opts.Users, devices: s.devices, webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm,
 		setup: s.deviceSetup}
+}
+
+// newAppDevices builds the manager of the paired Android apps.
+func newAppDevices(opts Options, stay func() int) *appdevices.Manager {
+	var users appdevices.Accounts
+	if opts.Users != nil {
+		users = opts.Users
+	}
+	return appdevices.New(opts.Store, users, stay)
 }
 
 // newDevices builds the manager of the device passwords; "last synced"
@@ -182,6 +192,7 @@ func (a pimArea) handleUserDeviceRevoke(w http.ResponseWriter, r *http.Request) 
 func (s *Server) devicesRevokeAll(name string) {
 	s.devices.RevokeAll(name)
 	s.profileLinks.Forget(name)
+	s.appsRevokeAll(name)
 }
 
 // devicesRebind keeps the devices of an account whose second factor the
@@ -191,6 +202,7 @@ func (s *Server) devicesRebind(before auth.User) {
 	if s.devices != nil {
 		s.devices.Rebind(before)
 	}
+	s.appsRebind(before)
 }
 
 // pimForgetUser drops what T-Kalender and Kontakte keep of an account that
@@ -206,6 +218,7 @@ func (s *Server) devicesRebind(before auth.User) {
 func (s *Server) pimForgetUser(name string) {
 	s.devices.Forget(name)
 	s.profileLinks.Forget(name)
+	s.appsForget(name)
 	s.pimLive.forget(name)
 	s.reminders.forget(name)
 	s.pimCache.forget(name)
