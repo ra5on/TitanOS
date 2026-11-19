@@ -139,7 +139,9 @@ Die App sichert Fotos und Videos in eine Freigabe und einen Ordner nach Wahl (TE
   | 400 | `invalid_checksum` | Prüfsumme fehlt oder ist kein SHA-256 |
   | 400 | `photos_too_many` | mehr als 500 Einträge |
 
-- **Prüfstand (19.11.2026):** Go-Tests `TestAppPhotoBackup`, `TestAppPhotoRefusals` (Upload aus der App-Sitzung bis zum Index, falsche Prüfsumme, „(2)“, umbenannt, per SMB vorhanden, neu gekoppeltes Gerät, Änderungszeit/Inhalt geändert, Rechte entzogen, ohne Volume), `TestFinishUploadHashed*` und die Unit-Tests von `appphotos`. Nicht geprüft: echtes NAS mit echtem Volume, echtes Handy.
+- **Prüfstand (19.11.2026):** Go-Tests `TestAppPhotoBackup`, `TestAppPhotoRefusals` (Upload aus der App-Sitzung bis zum Index, falsche Prüfsumme, „(2)“, umbenannt, per SMB vorhanden, neu gekoppeltes Gerät, Änderungszeit/Inhalt geändert, Rechte entzogen, ohne Volume), `TestFinishUploadHashed*` und die Unit-Tests von `appphotos`.
+  - **Emulator** (Android 17, App-Testfassung 0.02) gegen einen Wegwerf-Testserver mit Freigabe auf einem temporären Volume (wie die Go-Tests, hinter einem HTTPS-Vorbau): Upload in `Ordner/2026/11/`, Prüfsummen auf dem NAS gleich dem Original, eine Index-Zeile je Datei, umbenannte Kopie übersprungen, neues Foto über den Content-Auslöser hochgeladen.
+  - Nicht geprüft: echtes NAS mit echtem Volume (`titand -dev` hat keine Freigaben), echtes Handy, „Speicher freigeben“ mit echten Kandidaten (keine Aufnahme älter als 30 Tage im Emulator).
 
 ## Prüfstand (19.11.2026)
 
