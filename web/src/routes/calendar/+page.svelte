@@ -30,11 +30,26 @@
 	// reference, never its content. A draft of a reminder (?agentDraft=,
 	// "Öffnen und bearbeiten") opens the reminder dialog filled in, ticking
 	// one off asks first; nothing is saved without the person.
-	import { onDestroy, onMount, untrack } from 'svelte';
+	//
+	// 1.15 (PLAN 115-5, drafts 33–39, owner 19 Nov 2026 "wie Apple Kalender";
+	// docs/KALENDER.md "1.15"): compact, the months run on while scrolling
+	// (MonthScroll) with a bar per event and "+N", today a red circle; a tap
+	// on a day opens it – its week moves up and becomes the week strip, the
+	// hours come in from below (motion.ts, only with "Animationen: An" and
+	// without reduced motion). The day: week strip, "Mittwoch – 18. Nov.
+	// 2026", the row "Ganztägig" with chips that wrap, the hours with the
+	// red line of now; a swipe goes to the next day or week. Floating opaque
+	// pills: on top "‹ 2026" (the year) or "‹ November" (back to the month)
+	// and views · search · new; below "Heute" and Kalender · Erinnerungen.
+	// The KI-Agent is in the ⋯ menu of the head (the command calendar.agent;
+	// a narrow browser tab without that menu has it in the views' menu). Wide (from 620 px) the
+	// same language: the month's bars with titles fill the height, the day
+	// has the week strip, the week red circles and the red line of now.
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '#lib/api.ts';
-	import BottomBar from '#lib/components/BottomBar.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
 	import { compactView } from '#lib/components/compact.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -44,6 +59,8 @@
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { entries, menusFor } from '#lib/desktop/menubar/menus.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import { applyOrder, orderOf, setOrder } from '#lib/side-order.svelte.ts';
 	import {
 		addDays,
@@ -57,6 +74,12 @@
 		weekDays,
 		weekStart,
 	} from '#lib/pim/caldates.ts';
+	import CalIcon from '#lib/pim/cal/CalIcon.svelte';
+	import DayStrip from '#lib/pim/cal/DayStrip.svelte';
+	import MonthScroll from '#lib/pim/cal/MonthScroll.svelte';
+	import SearchPanel from '#lib/pim/cal/SearchPanel.svelte';
+	import YearView from '#lib/pim/cal/YearView.svelte';
+	import { glideFrom, motionOn, play } from '#lib/pim/cal/motion.ts';
 	import { BIRTHDAYS, eventsByDay, type CalEvent, type Calendar } from '#lib/pim/calendar.ts';
 	import {
 		eventHref,
@@ -66,12 +89,15 @@
 		type Scope,
 	} from '#lib/pim/calendar-api.ts';
 	import {
+		dayLine,
 		dayTitle,
 		eventTitle,
 		longDay,
+		monthName,
 		monthTitle,
 		weekTitle,
 		whenText,
+		yearText,
 	} from '#lib/pim/calendar-text.ts';
 	import { watchPim } from '#lib/pim/live.ts';
 	import AgendaList from '#lib/pim/cal/AgendaList.svelte';
@@ -97,7 +123,7 @@
 	import { calendarPanelActions } from '#lib/agent/panel-actions.ts';
 	import { session } from '#lib/session.svelte.ts';
 
-	type View = 'month' | 'week' | 'day' | 'list';
+	type View = 'month' | 'week' | 'day' | 'list' | 'year' | 'search';
 
 	const phone = $derived(phoneView());
 	const compact = $derived(compactView());
@@ -115,10 +141,13 @@
 	const nowMinutes = $derived(wallOf(clockNow, zone).minutes);
 
 	// The view, the day and the phone's level live in the address.
+	// Compact: month, day, list, the year and the search; the week is the day there.
 	const view = $derived.by((): View => {
 		const v = page.url.searchParams.get('view');
-		if (compact) return v === 'list' ? 'list' : 'month';
-		return v === 'week' || v === 'day' || v === 'list' ? v : 'month';
+		if (v === 'day' || v === 'list' || v === 'search') return v;
+		if (v === 'week') return compact ? 'day' : 'week';
+		if (v === 'year') return compact ? 'year' : 'month';
+		return 'month';
 	});
 	const anchor = $derived.by(() => {
 		const d = page.url.searchParams.get('date') ?? '';
@@ -128,12 +157,13 @@
 		const l = page.url.searchParams.get('level');
 		return compact && l === 'cals' ? 'side' : compact && l === 'tasks' ? 'list' : 'content';
 	});
-	function go(v: View, date: string, lvl = '') {
+	/** `push`: a step the way back returns from (a day opened from the month, the year). */
+	function go(v: View, date: string, lvl = '', push = false) {
 		const q = new URLSearchParams();
 		q.set('view', v);
 		if (date !== today) q.set('date', date);
 		if (lvl) q.set('level', lvl);
-		void goto(`/calendar?${q}`, { replace: !lvl, reset: false });
+		return goto(`/calendar?${q}`, { replace: !lvl && !push, reset: false });
 	}
 	function up() {
 		if (history.length > 1) history.back();
@@ -142,7 +172,13 @@
 
 	let listLength = $state(30);
 	let miniMonth = $state('');
-	let picked = $state(''); // the chosen day of the phone's month
+	/** The month at the top of the phone's continuous months (its events are read around it). */
+	let seenMonth = $state('');
+	/** Where the continuous months scroll to; `jump` asks them to. */
+	let monthTarget = $state('');
+	let jump = $state(0);
+	/** The day just left for the month (its circle there, as at Apple). */
+	let lastDay = $state('');
 	let detail = $state<CalEvent | null>(null);
 	let deleting = $state<CalEvent | null>(null);
 	let calDialog = $state<{ calendar?: Calendar | TaskList; tasks?: boolean } | null>(null);
@@ -162,12 +198,19 @@
 
 	/** The days the view shows. */
 	const range = $derived.by((): { first: string; last: string } => {
-		if (view === 'month') {
+		if (compact && (view === 'month' || view === 'year' || view === 'search')) {
+			// The month at the top, the one before and two after (the phone scrolls on).
+			const m = (seenMonth || monthTarget || anchor).slice(0, 7) + '-01';
+			return { first: addMonths(m, -1), last: addDays(addMonths(m, 3), -1) };
+		}
+		if (view === 'month' || view === 'year' || view === 'search') {
 			const g = monthGrid(anchor);
 			return { first: g[0][0], last: g[g.length - 1][6] };
 		}
 		if (view === 'week') return { first: weekStart(anchor), last: addDays(weekStart(anchor), 6) };
-		if (view === 'day') return { first: anchor, last: anchor };
+		// The day with its week and the weeks around (the strip, a swipe on).
+		if (view === 'day')
+			return { first: addDays(weekStart(anchor), -7), last: addDays(weekStart(anchor), 13) };
 		return { first: anchor, last: addDays(anchor, listLength - 1) };
 	});
 	const byDay = $derived(eventsByDay(data.events, zone, range.first, range.last));
@@ -206,7 +249,11 @@
 	}
 
 	const back = $derived(page.url.pathname + page.url.search);
-	function newEvent(date = view === 'list' ? today : anchor, minutes?: number, to?: number) {
+	function newEvent(
+		date = view === 'list' || view === 'search' || view === 'year' ? today : anchor,
+		minutes?: number,
+		to?: number,
+	) {
 		const time =
 			minutes !== undefined
 				? clock(minutes)
@@ -309,11 +356,13 @@
 	});
 
 	const heading = $derived(
-		view === 'month' || view === 'list'
-			? monthTitle(anchor)
-			: view === 'week'
-				? weekTitle(weekStart(anchor))
-				: dayTitle(anchor),
+		view === 'search'
+			? t('calendar.search.label')
+			: view === 'month' || view === 'list' || view === 'year'
+				? monthTitle(anchor)
+				: view === 'week'
+					? weekTitle(weekStart(anchor))
+					: dayTitle(anchor),
 	);
 	const viewOptions = $derived(
 		compact
@@ -346,13 +395,15 @@
 		new Set(view === 'week' ? weekDays(anchor) : view === 'day' ? [anchor] : []),
 	);
 	const busyDay = (d: string) => (byDay.get(d)?.length ?? 0) > 0;
-	const phoneDay = $derived(picked && picked.slice(0, 7) === anchor.slice(0, 7) ? picked : anchor);
+	const phoneDay = $derived(anchor);
 	const allHidden = $derived(
 		data.calendars.some((c) => c.hidden) &&
 			!data.calendars.some((c) => !c.hidden && c.id !== BIRTHDAYS),
 	);
 	const title = $derived(
-		compact ? t('desktop.app.calendar') : t(`calendar.view.${view}` as MessageKey),
+		compact || view === 'search' || view === 'year'
+			? t('desktop.app.calendar')
+			: t(`calendar.view.${view}` as MessageKey),
 	);
 	const sortCalendars = (ids: string[]) => setOrder('calendar', ids);
 	const taskHandlers = {
@@ -403,11 +454,119 @@
 			: {}),
 	});
 	const agentActions = $derived(calendarPanelActions((k) => t(k)));
+	// 1.15: the agent in the ⋯ menu of the head (and the desktop's menu bar,
+	// "Ansicht"; menus.ts names calendar.agent).
+	registerMenuCommands({
+		'calendar.agent': {
+			run: () => setAgent(!agentOpen),
+			enabled: () => withAgent,
+			checked: () => agentOpen,
+		},
+	});
+	// The ⋯ menu is the phone's head bar; a window of the desktop has its menu
+	// bar. A narrow browser tab has neither: there the views' menu has it.
+	const menuHasAgent = $derived(
+		(phone || inWindow) &&
+			entries(menusFor('app:calendar', session.data?.user?.role ?? 'user')).some(
+				(e) => e.id === 'calendar.agent',
+			),
+	);
 	function askAgent(ev: CalEvent) {
 		detail = null;
 		agentEvent = ev;
 		setAgent(true);
 	}
+
+	// ---- Compact: the month → a day and back, with their movement (motion.ts) ----
+	let glide: { to: 'day' | 'month'; rect: DOMRect; day: string } | null = null;
+	/** The day came from the month (the way back goes there). */
+	let fromMonth = false;
+	function openDay(d: string, cell?: HTMLElement) {
+		const week = cell?.closest('.mweek');
+		glide = motionOn() && week ? { to: 'day', rect: week.getBoundingClientRect(), day: d } : null;
+		fromMonth = view === 'month';
+		void go('day', d, '', true);
+	}
+	function backToMonth() {
+		const strip = document.querySelector('[data-strip] .days');
+		const d = anchor;
+		glide =
+			motionOn() && strip ? { to: 'month', rect: strip.getBoundingClientRect(), day: d } : null;
+		monthTarget = d;
+		lastDay = d;
+		jump++;
+		if (fromMonth && history.length > 1) {
+			fromMonth = false;
+			history.back();
+		} else void go('month', d);
+	}
+	function toToday() {
+		lastDay = '';
+		monthTarget = today;
+		jump++;
+		void go(view === 'year' || view === 'search' ? 'month' : view, today);
+	}
+	function showMonth(m: string) {
+		lastDay = '';
+		monthTarget = m;
+		jump++;
+		void go('month', m);
+	}
+	$effect(() => {
+		const v = view;
+		if (data.shown.kind !== 'ready' || !glide || glide.to !== (v === 'day' ? 'day' : 'month'))
+			return;
+		const g = glide;
+		glide = null;
+		untrack(() => {
+			if (g.to === 'day')
+				void tick().then(() => {
+					glideFrom(document.querySelector('[data-strip] .days'), g.rect, 380);
+					play(
+						document.querySelector('.calview .week'),
+						[
+							{ transform: 'translateY(45%)', opacity: 0 },
+							{ transform: 'none', opacity: 1 },
+						],
+						{ duration: 420 },
+					);
+					play(document.querySelector('.calview .dayline'), [{ opacity: 0 }, { opacity: 1 }], {
+						duration: 380,
+					});
+				});
+			else
+				// The months scroll to the day first (MonthScroll), then its week glides home.
+				requestAnimationFrame(() =>
+					requestAnimationFrame(() => {
+						const week = document
+							.querySelector(`.calview .mweek [data-day="${g.day}"]`)
+							?.closest('.mweek');
+						glideFrom(week, g.rect, 380);
+						play(document.querySelector('.calview .months'), [{ opacity: 0.3 }, { opacity: 1 }], {
+							duration: 300,
+						});
+					}),
+				);
+		});
+	});
+
+	// Compact: the view is as high as what is left of the window (the pills float over it).
+	let viewEl = $state<HTMLElement>();
+	let viewTop = $state(0);
+	function measure() {
+		if (viewEl) viewTop = Math.max(0, Math.round(viewEl.getBoundingClientRect().top + scrollY));
+	}
+	$effect(() => {
+		if (!compact || !viewEl) return;
+		void level;
+		void data.error;
+		void moveError;
+		void draftNote;
+		void data.shown.kind;
+		measure();
+		addEventListener('resize', measure);
+		return () => removeEventListener('resize', measure);
+	});
 
 	// ---- Drafts of the KI-Agent (?agentDraft=, also while the page is open) ----
 	let draftSeen = '';
@@ -506,15 +665,16 @@
 	>
 {/snippet}
 
-{#snippet backButton(label: string)}
-	<button type="button" class="btn back" onclick={up}
-		><Icon name="chevronLeft" size={16} />{label}</button
-	>
+{#snippet doneHead(label: string)}
+	<div class="sheet-head">
+		<h2>{label}</h2>
+		<button type="button" class="link-btn done" onclick={up}>{t('calendar.done')}</button>
+	</div>
 {/snippet}
 
 {#snippet side()}
 	<div class="side" data-cal-side>
-		{#if compact}{@render backButton(t('calendar.back'))}{/if}
+		{#if compact}{@render doneHead(t('calendar.phoneCalendars'))}{/if}
 		{#if !compact}
 			<MiniMonth
 				month={shownMonth}
@@ -523,7 +683,7 @@
 				busy={busyDay}
 				onpick={(d) => {
 					miniMonth = '';
-					go(view === 'month' ? 'day' : view, d);
+					go(view === 'month' || view === 'search' ? 'day' : view, d);
 				}}
 				onmonth={(d) => (miniMonth = d)}
 			/>
@@ -533,10 +693,12 @@
 				{calendars}
 				phone={compact}
 				adds={compact}
+				account={session.data?.user?.name ?? ''}
 				ontoggle={(c) => void data.toggle(c)}
 				onedit={(c) => (calDialog = { calendar: c })}
 				onnew={() => (calDialog = {})}
 				onsort={compact ? undefined : sortCalendars}
+				onall={compact ? (hide) => void data.setAllHidden(hide) : undefined}
 			/>
 			{#if !compact}
 				<!-- The reminders below the calendars (Baustand step 11). -->
@@ -601,16 +763,16 @@
 {/snippet}
 
 {#snippet bar()}
-	<div class="cbar" class:compact>
+	<div class="cbar">
 		<span class="nav">
 			<button type="button" class="ib" aria-label={t('calendar.prev')} onclick={() => step(-1)}
 				><Icon name="chevronLeft" size={18} /></button
 			>
-			{#if !compact}
-				<button type="button" class="btn today-btn" onclick={() => go(view, today)}
-					>{t('calendar.today')}</button
-				>
-			{/if}
+			<button
+				type="button"
+				class="btn today-btn"
+				onclick={() => go(view === 'search' ? 'month' : view, today)}>{t('calendar.today')}</button
+			>
 			<button type="button" class="ib" aria-label={t('calendar.next')} onclick={() => step(1)}
 				><Icon name="chevronRight" size={18} /></button
 			>
@@ -620,10 +782,19 @@
 			<Segments
 				compact
 				label={t('calendar.views')}
-				value={view}
+				value={view === 'search' || view === 'year' ? 'month' : view}
 				options={viewOptions}
 				onchange={(v) => go(v, anchor)}
 			/>
+			<button
+				type="button"
+				class="ib"
+				aria-pressed={view === 'search'}
+				aria-label={t('calendar.search.label')}
+				title={t('calendar.search.label')}
+				onclick={() => (view === 'search' ? go('month', anchor) : go('search', anchor, '', true))}
+				><Icon name="search" size={17} /></button
+			>
 		</span>
 	</div>
 {/snippet}
@@ -648,7 +819,7 @@
 
 {#snippet taskLevel()}
 	<div class="task-level">
-		{@render backButton(t('calendar.back'))}
+		{@render doneHead(t('calendar.tasks.heading'))}
 		<TaskSide
 			data={tasks}
 			{today}
@@ -657,6 +828,102 @@
 			onedit={(l) => (calDialog = { calendar: l, tasks: true })}
 			onnewlist={() => (calDialog = { tasks: true })}
 		/>
+	</div>
+{/snippet}
+
+{#snippet viewItems(close: () => void)}
+	{#each [['month', 'calendar.view.month'], ['day', 'calendar.view.day'], ['list', 'calendar.view.list'], ['year', 'calendar.view.year']] as const as [v, key] (v)}
+		<button
+			type="button"
+			role="menuitemradio"
+			aria-checked={view === v}
+			onclick={() => {
+				close();
+				if (v === 'month') showMonth(anchor);
+				else void go(v, v === 'list' ? (view === 'month' ? seenMonth || anchor : anchor) : anchor);
+			}}>{t(key)}</button
+		>
+	{/each}
+	{#if withAgent && !menuHasAgent}
+		<button
+			type="button"
+			role="menuitemcheckbox"
+			aria-checked={agentOpen}
+			onclick={() => {
+				close();
+				setAgent(!agentOpen);
+			}}>{t('agentpim.panel.toggle')}</button
+		>
+	{/if}
+{/snippet}
+
+<!-- Compact: the floating pills on top (drafts 36–39). -->
+{#snippet topPills()}
+	<div class="pills top">
+		{#if view === 'month'}
+			<button
+				type="button"
+				class="pill back-pill"
+				aria-label={t('calendar.toYear', { year: yearText(seenMonth || anchor) })}
+				onclick={() => go('year', seenMonth || anchor, '', true)}
+				><Icon name="chevronLeft" size={20} /><span>{yearText(seenMonth || anchor)}</span></button
+			>
+		{:else if view === 'day' || view === 'list'}
+			<button
+				type="button"
+				class="pill back-pill"
+				aria-label={t('calendar.toMonth', { month: monthTitle(anchor) })}
+				onclick={backToMonth}
+				><Icon name="chevronLeft" size={20} /><span>{monthName(anchor)}</span></button
+			>
+		{:else}
+			<span></span>
+		{/if}
+		<span class="pill icons">
+			<Dropdown label={t('calendar.views')} icon="list" align="right">
+				{#snippet children(close)}{@render viewItems(close)}{/snippet}
+			</Dropdown>
+			<button
+				type="button"
+				class="pi"
+				aria-pressed={view === 'search'}
+				aria-label={t('calendar.search.label')}
+				title={t('calendar.search.label')}
+				onclick={() => (view === 'search' ? up() : go('search', anchor, '', true))}
+				><Icon name="search" size={22} /></button
+			>
+			<button
+				type="button"
+				class="pi"
+				aria-label={t('calendar.newEvent')}
+				title={t('calendar.newEvent')}
+				disabled={!own}
+				onclick={() => newEvent(view === 'month' || view === 'day' ? anchor : today)}
+				><Icon name="plus" size={24} /></button
+			>
+		</span>
+	</div>
+{/snippet}
+
+{#snippet bottomPills()}
+	<div class="pills bottom" role="toolbar" aria-label={t('calendar.actions')}>
+		<button type="button" class="pill today-pill" onclick={toToday}>{t('calendar.today')}</button>
+		<span class="pill icons">
+			<button
+				type="button"
+				class="pi"
+				aria-label={t('calendar.phoneCalendars')}
+				title={t('calendar.phoneCalendars')}
+				onclick={() => go(view, anchor, 'cals')}><CalIcon name="month" size={24} /></button
+			>
+			<button
+				type="button"
+				class="pi"
+				aria-label={t('calendar.tasks.heading')}
+				title={t('calendar.tasks.heading')}
+				onclick={() => go(view, anchor, 'tasks')}><CalIcon name="todo" size={24} /></button
+			>
+		</span>
 	</div>
 {/snippet}
 
@@ -676,7 +943,7 @@
 	{side}
 	{rail}
 	sideFoot={compact ? undefined : foot}
-	bar={!compact || (data.shown.kind === 'ready' && level === 'content') ? bar : undefined}
+	bar={compact ? undefined : bar}
 	notices={data.error ||
 	moveError ||
 	data.truncated ||
@@ -694,6 +961,8 @@
 	<div
 		class="calview"
 		class:compact
+		bind:this={viewEl}
+		style:height={compact ? `calc(100dvh - ${viewTop}px)` : undefined}
 		data-pim-shell="calendar"
 		data-pim-state={data.shown.kind}
 		data-pim-ready={data.shown.kind === 'ready' ? '' : undefined}
@@ -711,125 +980,108 @@
 			</div>
 		{:else if data.shown.kind === 'error'}
 			<p class="notice-error state" role="alert">{apiErrorText(data.shown.error)}</p>
-		{:else if view === 'month'}
-			<MonthView
-				month={anchor}
-				{today}
-				{byDay}
-				{calFor}
-				phone={compact}
-				selected={phoneDay}
-				{canEdit}
-				onopen={(ev) => (detail = ev)}
-				onday={(d) => (compact ? (picked = d) : go('day', d))}
-				onshift={compact ? undefined : shift}
-				tasks={dueByDay}
-				{...taskHandlers}
-			/>
-			{#if compact}
-				<div class="phone-day">
+		{:else}
+			{#if compact}{@render topPills()}{/if}
+			{#if view === 'search'}
+				<div class="list-scroll">
+					<SearchPanel
+						{today}
+						{zone}
+						{calFor}
+						phone={compact}
+						onopen={(ev) => (detail = ev)}
+						onclose={compact ? undefined : () => go('month', anchor)}
+					/>
+				</div>
+			{:else if view === 'year'}
+				<div class="list-scroll">
+					<YearView year={anchor} {today} onmonth={showMonth} onyear={(d) => go('year', d)} />
+				</div>
+			{:else if view === 'month' && compact}
+				<MonthScroll
+					target={monthTarget || anchor}
+					{jump}
+					{today}
+					{byDay}
+					{calFor}
+					selected={lastDay}
+					tasks={dueByDay}
+					onopen={(ev) => (detail = ev)}
+					onday={openDay}
+					onvisible={(m) => (seenMonth = m)}
+				/>
+			{:else if view === 'month'}
+				<MonthView
+					month={anchor}
+					{today}
+					{byDay}
+					{calFor}
+					{canEdit}
+					onopen={(ev) => (detail = ev)}
+					onday={(d) => go('day', d)}
+					onshift={shift}
+					tasks={dueByDay}
+					{...taskHandlers}
+				/>
+			{:else if view === 'week' || view === 'day'}
+				{#if view === 'day'}
+					<div class="dayhead">
+						<DayStrip
+							day={anchor}
+							{today}
+							busy={compact ? undefined : busyDay}
+							onpick={(d) => go('day', d)}
+						/>
+						<p class="dayline">{dayLine(anchor)}</p>
+					</div>
+				{/if}
+				<WeekView
+					days={view === 'week' ? weekDays(anchor) : [anchor]}
+					{today}
+					{byDay}
+					{calFor}
+					now={nowMinutes}
+					loaded={data.loaded}
+					strip={view === 'day'}
+					hour={compact ? 64 : 52}
+					{canEdit}
+					onopen={(ev) => (detail = ev)}
+					onslot={(d, m, to) => own && newEvent(d, m, to)}
+					onchange={timedChange}
+					onshift={shift}
+					onannounce={announce}
+					onswipe={(dir) => go(view, addDays(anchor, view === 'week' ? 7 * dir : dir))}
+					tasks={dueByDay}
+					{...taskHandlers}
+				/>
+			{:else}
+				<div class="list-scroll">
 					<AgendaList
-						days={[phoneDay]}
+						days={listDays}
 						{today}
 						{byDay}
 						{calFor}
-						phone
+						phone={compact}
 						onopen={(ev) => (detail = ev)}
 						tasks={dueByDay}
 						{...taskHandlers}
 					/>
+					<!-- The API reads at most 400 days (with a day around): the list stops at 390. -->
+					{#if listLength < 390}
+						<div class="list-more">
+							<button
+								type="button"
+								class="btn"
+								onclick={() => (listLength = Math.min(390, listLength + 30))}
+								>{t('calendar.moreDays')}</button
+							>
+						</div>
+					{/if}
 				</div>
 			{/if}
-		{:else if view === 'week' || view === 'day'}
-			<WeekView
-				days={view === 'week' ? weekDays(anchor) : [anchor]}
-				{today}
-				{byDay}
-				{calFor}
-				now={nowMinutes}
-				loaded={data.loaded}
-				{canEdit}
-				onopen={(ev) => (detail = ev)}
-				onslot={(d, m, to) => own && newEvent(d, m, to)}
-				onchange={timedChange}
-				onshift={shift}
-				onannounce={announce}
-				tasks={dueByDay}
-				{...taskHandlers}
-			/>
-		{:else}
-			<div class="list-scroll">
-				<AgendaList
-					days={listDays}
-					{today}
-					{byDay}
-					{calFor}
-					phone={compact}
-					onopen={(ev) => (detail = ev)}
-					tasks={dueByDay}
-					{...taskHandlers}
-				/>
-				<!-- The API reads at most 400 days (with a day around): the list stops at 390. -->
-				{#if listLength < 390}
-					<div class="list-more">
-						<button
-							type="button"
-							class="btn"
-							onclick={() => (listLength = Math.min(390, listLength + 30))}
-							>{t('calendar.moreDays')}</button
-						>
-					</div>
-				{/if}
-			</div>
+			{#if compact}{@render bottomPills()}{/if}
 		{/if}
 	</div>
-	{#if compact && level === 'content'}
-		<BottomBar label={t('calendar.actions')}>
-			<button
-				type="button"
-				class="bar-btn"
-				title={t('calendar.today')}
-				onclick={() => {
-					picked = '';
-					go(view, today);
-				}}>{t('calendar.today')}</button
-			>
-			<button
-				type="button"
-				class="bar-btn"
-				aria-label={t('calendar.phoneCalendars')}
-				title={t('calendar.phoneCalendars')}
-				disabled={data.shown.kind !== 'ready'}
-				onclick={() => go(view, anchor, 'cals')}><Icon name="calendar" size={20} /></button
-			>
-			<button
-				type="button"
-				class="bar-btn"
-				aria-label={t('calendar.tasks.heading')}
-				title={t('calendar.tasks.heading')}
-				disabled={data.shown.kind !== 'ready'}
-				onclick={() => go(view, anchor, 'tasks')}><Icon name="check" size={20} /></button
-			>
-			{#if withAgent}
-				<button
-					type="button"
-					class="bar-btn"
-					aria-label={t('agentpim.panel.toggle')}
-					title={t('agentpim.panel.toggle')}
-					onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
-				>
-			{/if}
-			<button
-				type="button"
-				class="bar-btn bar-new"
-				aria-label={t('calendar.newEvent')}
-				title={t('calendar.newEvent')}
-				disabled={data.shown.kind !== 'ready' || !own}
-				onclick={() => newEvent(view === 'month' ? phoneDay : today)}
-				><Icon name="plus" size={20} /></button
-			>
-		</BottomBar>
-	{/if}
 </ColumnFrame>
 
 {#if detail}
@@ -944,6 +1196,21 @@
 {/if}
 
 <style>
+	/* 1.15: Kalender's own tokens. Today's red: white on --cal-today
+	   reaches 5.4:1; --cal-today-text reaches 4.5:1 on the theme's
+	   background (darker on light themes, lighter on dark ones). */
+	:global(.cf.calendar),
+	:global(.calview) {
+		--cal-today: #d70015;
+		--cal-on-today: #fff;
+		--cal-today-text: #c00012;
+		--cal-pill-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+	}
+	:global([data-mode='dark'] .cf.calendar),
+	:global([data-mode='dark'] .calview) {
+		--cal-today-text: #ff6b60;
+		--cal-pill-shadow: 0 2px 10px rgb(0 0 0 / 0.45);
+	}
 	.calview {
 		position: relative;
 		display: flex;
@@ -952,7 +1219,14 @@
 		min-height: 0;
 	}
 	.calview.compact {
-		height: auto;
+		overflow: hidden;
+	}
+	/* Compact, the view takes the rest of the window and scrolls inside:
+	   the page around it does not (local to Kalender; ColumnFrame does the
+	   same for its columns). */
+	:global(body main:has(.calview.compact):has(.cf.levels.calendar)) {
+		min-height: 0;
+		padding-bottom: 0;
 	}
 	.state {
 		margin: var(--space-4);
@@ -1033,8 +1307,11 @@
 		flex: 1;
 		min-width: 0;
 	}
-	.nav {
+	.nav,
+	.views {
 		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--space-1);
 	}
 	.ib {
@@ -1049,10 +1326,8 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.compact .ib {
-		min-width: 44px;
-		min-height: 44px;
-		border-color: transparent;
+	.ib[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
 	}
 	.ib:focus-visible {
 		outline: 2px solid var(--accent);
@@ -1065,14 +1340,6 @@
 		font-weight: 600;
 		overflow-wrap: break-word;
 	}
-	.cbar.compact h2 {
-		order: -1;
-		flex-basis: 100%;
-		font-size: var(--text-xl);
-	}
-	.compact .views :global(.segments button) {
-		min-height: 44px;
-	}
 	.msg {
 		margin: var(--space-2) var(--space-3);
 	}
@@ -1083,24 +1350,13 @@
 		overflow-y: auto;
 	}
 	.compact .list-scroll {
-		overflow: visible;
-		padding: 0 var(--space-3);
+		padding: 0 var(--space-3) calc(80px + env(safe-area-inset-bottom, 0px));
+		overscroll-behavior: contain;
 	}
 	.list-more {
 		padding: 0 var(--space-3) var(--space-3);
 	}
 	.list-more .btn {
-		min-height: 44px;
-	}
-	.phone-day {
-		padding: var(--space-3);
-		border-top: 1px solid var(--border);
-	}
-	.back {
-		align-self: flex-start;
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
 		min-height: 44px;
 	}
 	.task-level {
@@ -1111,5 +1367,141 @@
 	}
 	:global(.calendar.levels) .side {
 		padding: var(--space-3);
+	}
+
+	/* The day: week strip and its date (draft 38). */
+	.dayhead {
+		flex: none;
+		padding-top: var(--space-1);
+		border-bottom: 1px solid var(--border);
+	}
+	.dayline {
+		margin: 0;
+		padding: var(--space-2) var(--space-3);
+		border-top: 1px solid var(--border);
+		text-align: center;
+		font-size: var(--text-md);
+		font-weight: 600;
+		overflow-wrap: break-word;
+	}
+	.calview:not(.compact) .dayhead {
+		padding-inline: var(--space-2);
+	}
+
+	/* ---- Compact: floating opaque pills (drafts 36–39; never glass) ---- */
+	.pills {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		padding: var(--space-2) calc(var(--space-3) + env(safe-area-inset-right, 0px)) var(--space-2)
+			calc(var(--space-3) + env(safe-area-inset-left, 0px));
+		flex-wrap: wrap;
+	}
+	.pills.top {
+		flex: none;
+	}
+	.pills.bottom {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 5;
+		padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+		pointer-events: none;
+	}
+	.pills.bottom > * {
+		pointer-events: auto;
+	}
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		min-height: 44px;
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: 22px;
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-md);
+		box-shadow: var(--cal-pill-shadow);
+		cursor: pointer;
+	}
+	.pill span {
+		overflow-wrap: anywhere;
+	}
+	.back-pill {
+		padding-left: var(--space-2);
+	}
+	.today-pill {
+		font-weight: 600;
+		padding-inline: var(--space-4);
+	}
+	.pill.icons {
+		gap: var(--space-1);
+		padding: 0 var(--space-1);
+		cursor: default;
+	}
+	.pi,
+	.pill.icons :global(.dropdown > .btn) {
+		display: inline-grid;
+		place-items: center;
+		min-width: 44px;
+		min-height: 44px;
+		padding: 0;
+		border: 0;
+		border-radius: 22px;
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.pill.icons :global(.dropdown > .btn svg) {
+		width: 22px;
+		height: 22px;
+	}
+	.pi:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.pi[aria-pressed='true'] {
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+	}
+	.pill:focus-visible,
+	.pi:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	/* Room under the hours for the pills at the bottom. */
+	.compact :global(.wk-grid) {
+		margin-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+	}
+
+	/* The levels "Kalender" and "Erinnerungen" as sheets (draft 34). */
+	.sheet-head {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.sheet-head h2 {
+		grid-column: 2;
+		margin: 0;
+		font-size: var(--text-md);
+		font-weight: 700;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	.link-btn {
+		justify-self: end;
+		min-height: 44px;
+		padding: 0 var(--space-1);
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-md);
+		font-weight: 600;
+		cursor: pointer;
 	}
 </style>

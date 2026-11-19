@@ -5,6 +5,9 @@
 	// in notes only http(s), mailto and tel become links, the link's text is
 	// its real target, they open with rel="noopener noreferrer". Birthdays
 	// come from the contacts and are read-only.
+	// 1.15 (draft 35): on the phone the fields stand as rows of grouped
+	// cards with their word ("Kalender", "Hinweis", …) instead of a sign,
+	// the place and the time under the title.
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
@@ -60,7 +63,10 @@
 	<dl class="detail" class:phone data-event-detail>
 		<div class="row">
 			<dt>
-				<Icon name="clock" size={16} /><span class="sr-only">{t('calendar.detail.when')}</span>
+				{#if phone}<span class="word">{t('calendar.detail.when')}</span>{:else}<Icon
+						name="clock"
+						size={16}
+					/><span class="sr-only">{t('calendar.detail.when')}</span>{/if}
 			</dt>
 			<dd>
 				{whenText(ev)}
@@ -72,7 +78,10 @@
 		</div>
 		<div class="row">
 			<dt>
-				<Icon name="calendar" size={16} /><span class="sr-only">{t('calendar.form.calendar')}</span>
+				{#if phone}<span class="word">{t('calendar.form.calendar')}</span>{:else}<Icon
+						name="calendar"
+						size={16}
+					/><span class="sr-only">{t('calendar.form.calendar')}</span>{/if}
 			</dt>
 			<dd class="cal" style:--c={calColor(cal?.color ?? '')}>
 				<span class="sw" aria-hidden="true"></span>{calName(cal)}
@@ -81,7 +90,10 @@
 		{#if ev.recurring}
 			<div class="row">
 				<dt>
-					<Icon name="repeat" size={16} /><span class="sr-only">{t('calendar.form.repeat')}</span>
+					{#if phone}<span class="word">{t('calendar.form.repeat')}</span>{:else}<Icon
+							name="repeat"
+							size={16}
+						/><span class="sr-only">{t('calendar.form.repeat')}</span>{/if}
 				</dt>
 				<dd>
 					{rule || t('calendar.repeats')}
@@ -95,7 +107,10 @@
 		{#if ev.alarms.length}
 			<div class="row">
 				<dt>
-					<Icon name="bell" size={16} /><span class="sr-only">{t('calendar.form.alarm')}</span>
+					{#if phone}<span class="word">{t('calendar.form.alarm')}</span>{:else}<Icon
+							name="bell"
+							size={16}
+						/><span class="sr-only">{t('calendar.form.alarm')}</span>{/if}
 				</dt>
 				<dd>
 					{#each ev.alarms as m (m)}<span class="line">{alarmText(m, ev.allDay, startOf(ev))}</span
@@ -106,7 +121,10 @@
 		{#if ev.location}
 			<div class="row">
 				<dt>
-					<Icon name="place" size={16} /><span class="sr-only">{t('calendar.form.place')}</span>
+					{#if phone}<span class="word">{t('calendar.form.place')}</span>{:else}<Icon
+							name="place"
+							size={16}
+						/><span class="sr-only">{t('calendar.form.place')}</span>{/if}
 				</dt>
 				<dd class="text">{ev.location}</dd>
 			</div>
@@ -114,7 +132,10 @@
 		{#if ev.notes}
 			<div class="row">
 				<dt>
-					<Icon name="note" size={16} /><span class="sr-only">{t('calendar.form.notes')}</span>
+					{#if phone}<span class="word">{t('calendar.form.notes')}</span>{:else}<Icon
+							name="note"
+							size={16}
+						/><span class="sr-only">{t('calendar.form.notes')}</span>{/if}
 				</dt>
 				<dd class="text notes">
 					{#each linkPieces(ev.notes) as piece, i (i)}{#if piece.href && safeHref(piece.href)}<a
@@ -206,5 +227,49 @@
 	}
 	.note {
 		margin: 0;
+	}
+
+	/* ---- Phone: grouped cards (draft 35) ---- */
+	.detail.phone {
+		gap: 0;
+		border-radius: 12px;
+		background: var(--surface);
+	}
+	.phone .row {
+		grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+		gap: var(--space-3);
+		align-items: start;
+		padding: var(--space-3);
+	}
+	.phone .row + .row {
+		border-top: 1px solid var(--srow-line);
+	}
+	.phone dt {
+		color: var(--text);
+		padding: 0;
+	}
+	.phone dd {
+		color: var(--muted);
+		text-align: right;
+		align-items: flex-end;
+	}
+	.phone dd.cal {
+		justify-content: flex-end;
+		align-items: center;
+		font-weight: 400;
+	}
+	.phone dd.cal .sw {
+		border-radius: 50%;
+	}
+	.phone .row:has(.notes) {
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--space-1);
+	}
+	.phone dd.notes {
+		text-align: left;
+		color: var(--text);
+	}
+	.word {
+		overflow-wrap: break-word;
 	}
 </style>

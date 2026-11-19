@@ -29,7 +29,8 @@ export function birthdayLine(value: string, soon: Soon | null, today: string): s
 	const mmdd = `${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`;
 	const date = b.year !== null ? dateText(`${b.year}-${mmdd}`) : shortDate(`2000-${mmdd}`);
 	if (!soon) return date;
-	if (soon.age === undefined) return `${date} · ${soonText(soon, today)}`;
+	// A card born this week (age 0) says no age (115-7).
+	if (soon.age === undefined || soon.age < 1) return `${date} · ${soonText(soon, today)}`;
 	const { when } = soonWhen(soon, today);
 	const day = weekdayLong(soon.date);
 	const age = soon.age;

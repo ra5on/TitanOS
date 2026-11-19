@@ -383,7 +383,8 @@
 			return;
 		}
 		anchor = rowKey(s.row);
-		onopen(s.row.uid, s.row.folder ?? folder, s.row.account);
+		if (s.row.account) onopen(s.row.uid, s.row.folder ?? folder, s.row.account);
+		else onopen(s.row.uid, s.row.folder ?? folder);
 	}
 	function toggleThread(s: Shown) {
 		const keys = s.thread.rows.map(rowKey);

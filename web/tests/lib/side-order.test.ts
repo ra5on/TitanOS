@@ -58,8 +58,8 @@ const f = (path: string, role: MailFolder['role'] = '', unread = 0, total = 10):
 });
 
 test('what the NAS sends is kept within its bounds, never throws', () => {
-	expect(sanitizeOrder(null)).toEqual({ mail: {}, contacts: [], calendar: [] });
-	expect(sanitizeOrder('x')).toEqual({ mail: {}, contacts: [], calendar: [] });
+	expect(sanitizeOrder(null)).toEqual({ mail: {}, contacts: [], calendar: [], mailAccounts: [], mailHidden: {} });
+	expect(sanitizeOrder('x')).toEqual({ mail: {}, contacts: [], calendar: [], mailAccounts: [], mailHidden: {} });
 	const o = sanitizeOrder({
 		mail: { 'acc-privat': ['INBOX', 'INBOX', 3, '', 'A\nB', 'Rechnungen'], '../x': ['INBOX'] },
 		contacts: ['kontakte', '../x', 'kontakte', 'Arbeit'],

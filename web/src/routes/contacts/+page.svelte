@@ -21,10 +21,24 @@
 	// kept per device; the open contact goes with each message as a
 	// reference (book and id), never its content. A draft (?agentDraft=,
 	// also while the page is open) fills the form; saved only by the person.
+	// 1.15 (PLAN 115-6, drafts 40–44 in Entwuerfe/115-mail-handy, owner 19
+	// Nov 2026 "desktop like mobile", "windows resizable"): Apple's Kontakte
+	// – "Listen" (all contacts, address books, groups, Mehr), the list with
+	// the big title, the search, "Meine Karte", sections by the family name
+	// and the register A–Z, the contact with its quick buttons, the form
+	// as Apple's sheet. The layout follows the window (each desktop window
+	// is a page of its own, resized freely): from 620 px columns side by
+	// side (Listen | Kontakte | Karte), under 900 px the side bar folds to
+	// its rail (ColumnFrame foldBelow); under 620 px and on the phone one
+	// level at a time with "‹ Listen" / "‹ Kontakte" on top. No bar at the
+	// bottom any more: "+" stands on top of the list, "Bearbeiten" on top
+	// of the contact, the KI-Agent in the program's ⋯ menu (the phone's bar
+	// and the window's menu bar, command "contacts.agent") – and, where
+	// neither shows it, in a ⋯ of the page's own; at the side bar's foot
+	// in the columns as before.
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import BottomBar from '#lib/components/BottomBar.svelte';
 	import ColumnFrame, { type FrameLevel } from '#lib/components/ColumnFrame.svelte';
 	import { compactView } from '#lib/components/compact.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -32,12 +46,13 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { entries, menusFor } from '#lib/desktop/menubar/menus.ts';
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { openCompose } from '#lib/tmail/open.ts';
-	import { ApiError } from '#lib/api.ts';
+	import { api, ApiError } from '#lib/api.ts';
 	import { clock, viewZone, wallOf } from '#lib/pim/caldates.ts';
 	import { eventHref, loadNasZone, openEventWindow } from '#lib/pim/calendar-api.ts';
 	import {
@@ -84,6 +99,7 @@
 		removePhoto,
 		rowOf,
 		searchContacts,
+		startContactList,
 		updateContact,
 		updateGroup,
 		type Saved,
@@ -105,18 +121,12 @@
 	import { contactsPanelActions } from '#lib/agent/panel-actions.ts';
 	import { shellOfError, type ShellState } from '#lib/pim/shell.ts';
 
-	// ---- Columns or levels (like Mail) ----
-	const WIDE = '(min-width: 900px)';
-	let wideView = $state(typeof matchMedia === 'function' ? matchMedia(WIDE).matches : true);
-	onMount(() => {
-		const query = matchMedia(WIDE);
-		const change = () => (wideView = query.matches);
-		query.addEventListener('change', change);
-		return () => query.removeEventListener('change', change);
-	});
+	// ---- Columns or levels: the window's width decides (1.15) ----
 	const phone = $derived(phoneView());
-	const wide = $derived(wideView && !phone);
-	const compact = $derived(!wide && compactView());
+	/** The phone or under 620 px: one level at a time. */
+	const compact = $derived(compactView());
+	/** Columns side by side (620 px and more); `wide` keeps its old name for them. */
+	const wide = $derived(!compact);
 	/** Mail's release (session.services.mail): "E-Mail schreiben" opens its compose. */
 	const mail = $derived(session.services.mail === true);
 	const bookName = $derived(t('contacts.side.contacts'));
@@ -163,6 +173,8 @@
 	}
 
 	async function start() {
+		// 115-7: the list's ETag of an earlier visit (the module stays) would make this a 304.
+		startContactList();
 		try {
 			const [list, over] = await Promise.all([loadContacts(), loadOverview()]);
 			all = list ?? all;
@@ -808,6 +820,12 @@
 
 	registerMenuCommands({
 		'contacts.new': { run: newContact, enabled: () => shown.kind === 'ready' },
+		// 1.15: the KI-Agent in the program's ⋯ menu (menus.ts names the entry).
+		'contacts.agent': {
+			run: () => setAgent(!agentOpen),
+			enabled: () => !!session.services.agent,
+			checked: () => agentOpen,
+		},
 	});
 
 	const listHeading = $derived(
@@ -838,6 +856,27 @@
 	const duplicates = $derived(dups === null ? (overview?.duplicates ?? 0) : dupShown.length);
 	const sheet = $derived(compact && editing);
 
+	// ---- "Meine Karte" (1.15): a contact the person chose, per account ----
+	// Kept on the NAS (preference kind "contacts", {"me": id}); shown only
+	// when one is chosen and still in the book.
+	const meId = $derived(session.contacts?.me ?? '');
+	let meError = $state('');
+	function setMe(id: string) {
+		const before = session.contacts;
+		session.contacts = id ? { me: id } : {};
+		meError = '';
+		api.put('/preferences/contacts', id ? { me: id } : {}).catch((err) => {
+			session.contacts = before;
+			meError = apiErrorText(err);
+		});
+	}
+	const me = $derived(
+		!group && view === 'contacts' && meId ? (all.find((i) => i.id === meId) ?? null) : null,
+	);
+
+	// ---- "Import und Export" (a row of "Mehr") ----
+	let transfer = $state(false);
+
 	// ---- The KI-Agent's panel (1.13) ----
 	const AGENT_KEY = 'titanos.contacts.agentPanel';
 	const withAgent = $derived(!!session.services.agent);
@@ -865,32 +904,28 @@
 		openRow ? { app: 'contacts', card: { book: openRow.book, id: openRow.id } } : null,
 	);
 	const agentActions = $derived(contactsPanelActions((k) => t(k)));
+	/** The phone's ⋯ menu has the entry "KI-Agent" (desktop/menubar/menus.ts). */
+	const menuHasAgent = $derived(
+		entries(menusFor('app:contacts', session.data?.user?.role ?? 'user')).some(
+			(e) => !!e.do && 'cmd' in e.do && e.do.cmd === 'contacts.agent',
+		),
+	);
+	/** A ⋯ of the page's own: compact where no bar of the program shows the agent. */
+	const ownMenu = $derived(compact && withAgent && !(phone && menuHasAgent));
 </script>
 
 <PageHead {title} />
-
-{#snippet newButton(folded: boolean)}
-	<button
-		type="button"
-		class="btn btn-primary new"
-		class:icon={folded}
-		disabled={shown.kind !== 'ready'}
-		title={folded ? t('contacts.new') : undefined}
-		aria-label={folded ? t('contacts.new') : undefined}
-		data-new-contact
-		onclick={newContact}
-		><Icon name="plus" size={16} />{#if !folded}{t('contacts.new')}{/if}</button
-	>
-{/snippet}
 
 {#snippet side()}
 	<ContactSide
 		{books}
 		{groups}
 		place={sidePlace}
+		total={all.length}
 		{mail}
 		{duplicates}
 		{wide}
+		{compact}
 		loading={overview === null && shown.kind === 'loading'}
 		onpick={pick}
 		onnewgroup={() => {
@@ -898,6 +933,7 @@
 			groupDialog = { kind: 'new', name: '' };
 		}}
 		ondropgroup={dropOnGroup}
+		ontransfer={() => (transfer = true)}
 	/>
 {/snippet}
 
@@ -911,6 +947,7 @@
 			type="button"
 			class="side-link agent-toggle"
 			class:icon={folded}
+			class:agent-level={folded}
 			aria-pressed={agentOpen}
 			title={folded ? t('agentpim.panel.toggle') : undefined}
 			aria-label={folded ? t('agentpim.panel.toggle') : undefined}
@@ -921,53 +958,9 @@
 	{/if}
 {/snippet}
 
-{#snippet barAgent()}
-	{#if withAgent}
-		<button
-			type="button"
-			class="bar-btn"
-			aria-label={t('agentpim.panel.toggle')}
-			title={t('agentpim.panel.toggle')}
-			onclick={() => setAgent(true)}><Icon name="sparkle" size={20} /></button
-		>
-	{/if}
-{/snippet}
-
 {#snippet foot(folded: boolean)}
 	<div class="foot" class:folded>
 		{@render agentToggle(folded)}
-		<Dropdown
-			label={t('contacts.side.transfer')}
-			text={folded ? undefined : t('contacts.side.transfer')}
-			icon="download"
-		>
-			{#snippet children(close)}
-				<button
-					type="button"
-					role="menuitem"
-					onclick={() => {
-						close();
-						importing = true;
-					}}>{t('contacts.import')}</button
-				>
-				<button
-					type="button"
-					role="menuitem"
-					onclick={() => {
-						close();
-						void runExport();
-					}}>{t('contacts.export')}</button
-				>
-			{/snippet}
-		</Dropdown>
-		<a
-			class="side-link"
-			class:icon={folded}
-			href="/contacts/iphone"
-			title={folded ? t('calendar.side.iphone') : undefined}
-			aria-label={folded ? t('calendar.side.iphone') : undefined}
-			><Icon name="device" size={17} />{#if !folded}<span>{t('calendar.side.iphone')}</span>{/if}</a
-		>
 	</div>
 {/snippet}
 
@@ -991,24 +984,14 @@
 	{/if}
 {/snippet}
 
-{#snippet backButton(label: string)}
-	{#if !wide && !phone}
-		<!-- The narrow window: the KI-Agent next to the way back (no bar at the bottom here). -->
+{#snippet levelBack(label: string)}
+	{#if compact}
 		<div class="level-head">
-			<button type="button" class="btn back" onclick={up} data-back
-				><Icon name="chevronLeft" size={16} />{label}</button
+			<button type="button" class="link back" onclick={up} data-back
+				><Icon name="chevronLeft" size={22} />{label}</button
 			>
-			{#if withAgent && !compact}
-				<button type="button" class="btn agent-level" onclick={() => setAgent(true)}
-					><Icon name="sparkle" size={16} />{t('agentpim.panel.toggle')}</button
-				>
-			{/if}
 		</div>
 	{/if}
-{/snippet}
-
-{#snippet listBack()}
-	{@render backButton(t('contacts.back.side'))}
 {/snippet}
 
 {#snippet emptyBook()}
@@ -1030,7 +1013,8 @@
 	</div>
 {/snippet}
 
-{#snippet groupMenu()}
+<!-- Next to "+": the group's menu and, where no bar shows it, the page's own ⋯ with the KI-Agent. -->
+{#snippet listTools()}
 	{#if group}
 		{@const g = group}
 		<Dropdown label={t('contacts.groups.menu', { name: listHeading })} icon="more" align="right">
@@ -1053,9 +1037,37 @@
 						groupDelete = g;
 					}}>{t('contacts.groups.delete')}</button
 				>
+				{#if ownMenu}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							close();
+							setAgent(true);
+						}}>{t('agentpim.panel.toggle')}</button
+					>
+				{/if}
 			{/snippet}
 		</Dropdown>
+	{:else if ownMenu}
+		{@render ownMore()}
 	{/if}
+{/snippet}
+
+{#snippet ownMore()}
+	<Dropdown label={t('contacts.act.more')} icon="more" align="right">
+		{#snippet children(close)}
+			<button
+				type="button"
+				role="menuitem"
+				class="agent-level"
+				onclick={() => {
+					close();
+					setAgent(true);
+				}}><Icon name="sparkle" size={16} />{t('agentpim.panel.toggle')}</button
+			>
+		{/snippet}
+	</Dropdown>
 {/snippet}
 
 {#snippet stateNote()}
@@ -1086,35 +1098,22 @@
 	>
 		{@render listBody()}
 	</div>
-	{#if compact && level === 'list'}
-		<BottomBar label={t('contacts.bar.list')}>
-			{@render barAgent()}
-			<button
-				type="button"
-				class="bar-btn bar-new"
-				aria-label={t('contacts.new')}
-				title={t('contacts.new')}
-				disabled={shown.kind !== 'ready'}
-				onclick={newContact}><Icon name="plus" size={20} /></button
-			>
-		</BottomBar>
-	{/if}
 {/snippet}
 
 {#snippet listBody()}
 	{#if shown.kind !== 'ready'}
+		{#if compact}{@render levelBack(t('contacts.lists.title'))}{/if}
 		{@render stateNote()}
 	{:else if view === 'suggestions'}
 		<div class="sugs" data-suggestions>
-			{@render backButton(t('contacts.back.side'))}
-			<h2 class="sh">{t('contacts.sug.title')}</h2>
+			{@render levelBack(t('contacts.lists.title'))}
+			<h2 class="big">{t('contacts.sug.title')}</h2>
 			{#if !mail}
 				<p class="explain" data-suggestions-off>{t('contacts.sug.noMail')}</p>
 			{:else}
 				<label class="search">
-					<Icon name="search" size={16} />
+					<Icon name="search" size={17} />
 					<input
-						class="field"
 						type="search"
 						placeholder={t('contacts.sug.filter')}
 						aria-label={t('contacts.sug.filter')}
@@ -1143,8 +1142,8 @@
 		</div>
 	{:else if view === 'duplicates'}
 		<div class="dups" data-duplicates>
-			{@render backButton(t('contacts.back.side'))}
-			<h2 class="sh">{t('contacts.dup.title')}</h2>
+			{@render levelBack(t('contacts.lists.title'))}
+			<h2 class="big">{t('contacts.dup.title')}</h2>
 			<p class="muted small">{t('contacts.dup.text')}</p>
 			{#if dupError}<p class="notice-error" role="alert">{dupError}</p>{/if}
 			{#if dups === null && !dupError}
@@ -1177,11 +1176,14 @@
 			selected={wide ? selId : ''}
 			{pictures}
 			{today}
-			phone={compact}
+			{compact}
 			{taking}
 			heading={listHeading}
-			tools={group ? groupMenu : undefined}
-			back={listBack}
+			tools={group || ownMenu ? listTools : undefined}
+			onback={compact ? up : undefined}
+			onnew={newContact}
+			ready={shown.kind === 'ready'}
+			{me}
 			empty={!all.length && !group ? emptyBook : undefined}
 			drag={wide}
 			{onquery}
@@ -1193,16 +1195,16 @@
 
 {#snippet editorHead()}
 	<div class="ed-head" class:sheet-head={sheet}>
-		<button type="button" class="btn" disabled={busy} onclick={cancel} data-editor-cancel
+		<button type="button" class="link" disabled={busy} onclick={cancel} data-editor-cancel
 			>{t('common.cancel')}</button
 		>
 		<h2>{mode === 'new' ? t('contacts.newTitle') : t('contacts.editTitle')}</h2>
 		<button
 			type="button"
-			class="btn btn-primary"
+			class="link strong"
 			disabled={busy || shown.kind !== 'ready' || editKey === ''}
 			onclick={save}
-			data-editor-save><Icon name="check" size={16} />{t('common.save')}</button
+			data-editor-save>{t('contacts.form.done')}</button
 		>
 	</div>
 {/snippet}
@@ -1253,15 +1255,15 @@
 	sideClass="col-side"
 	listClass="col-list"
 	contentClass="col-contact"
-	sideWidth={{ min: 180, max: 400, fallback: 230 }}
-	listWidth={{ min: 280, max: 640, fallback: 340 }}
-	contentMin={340}
+	sideWidth={{ min: 180, max: 400, fallback: 240 }}
+	listWidth={{ min: 240, max: 600, fallback: 330 }}
+	contentMin={300}
+	foldBelow={900}
 	sideResizeLabel={t('contacts.resize.side')}
 	listResizeLabel={t('contacts.resize.list')}
-	action={newButton}
 	{side}
 	{rail}
-	sideFoot={foot}
+	sideFoot={withAgent ? foot : undefined}
 	notices={notice || addedTo || draftNote ? notices : undefined}
 	list={listColumn}
 	aside={withAgent && agentOpen && wide ? agentAside : undefined}
@@ -1274,73 +1276,53 @@
 			<!-- Loading and "nicht verfügbar" stand in the list's column. -->
 		{:else if editing}
 			{#if sheet}
-				<!-- The phone: the form is a sheet over the whole screen (iOS's "Bearbeiten"). -->
-				<div class="sheet" role="dialog" aria-modal="true" aria-label={title} data-editor-sheet>
+				<!-- Compact: Apple's sheet over the screen, the list dimmed behind it. -->
+				<div class="dim" aria-hidden="true"></div>
+				<div
+					class="sheet"
+					class:phone
+					role="dialog"
+					aria-modal="true"
+					aria-label={title}
+					data-editor-sheet
+				>
 					{@render editor()}
 				</div>
 			{:else}
 				{@render editor()}
 			{/if}
 		{:else if mode === 'show'}
-			{@render backButton(listHeading)}
 			{#if contactError}
+				{@render levelBack(listHeading)}
 				<p class="notice-error" role="alert">{contactError}</p>
 			{:else if contact && contact.id === selId}
 				{@const c = contact}
+				{#if meError}<p class="notice-error" role="alert">{meError}</p>{/if}
 				<ContactDetail
 					contact={c}
 					soon={soonOf(c.id)}
 					{today}
-					phone={compact}
+					{compact}
 					{mail}
 					book={bookName}
 					groups={contactGroups}
+					backLabel={listHeading}
+					onback={up}
+					isMe={meId === c.id}
+					inGroup={group && group.members.includes(c.id) ? listHeading : ''}
 					onedit={() => go({ ...listPlace, id: selId, edit: true }, !wide)}
 					onmail={writeMail}
 					onevent={() => void newEvent()}
+					onme={(on) => setMe(on ? c.id : '')}
+					onleavegroup={() => group && void removeFromGroup(group, c.id)}
 				/>
-				{#if group && group.members.includes(c.id) && !compact}
-					{@const g = group}
-					<button type="button" class="btn out" onclick={() => void removeFromGroup(g, c.id)}
-						>{t('contacts.groups.removeFrom', { group: listHeading })}</button
-					>
-				{/if}
 			{:else}
+				{@render levelBack(listHeading)}
 				<p class="muted" role="status">{t('common.loading')}</p>
-			{/if}
-			{#if compact}
-				<BottomBar label={t('contacts.bar.contact')}>
-					<button
-						type="button"
-						class="bar-btn"
-						aria-label={t('contacts.edit')}
-						title={t('contacts.edit')}
-						disabled={!contact}
-						data-bar-edit
-						onclick={() => go({ ...listPlace, id: selId, edit: true }, true)}
-						><Icon name="edit" size={20} /></button
-					>
-					<button
-						type="button"
-						class="bar-btn"
-						aria-label={t('contacts.act.event')}
-						title={t('contacts.act.event')}
-						disabled={!contact}
-						onclick={() => void newEvent()}><Icon name="calendar" size={20} /></button
-					>
-					{@render barAgent()}
-					<button
-						type="button"
-						class="bar-btn bar-new"
-						aria-label={t('contacts.new')}
-						title={t('contacts.new')}
-						onclick={newContact}><Icon name="plus" size={20} /></button
-					>
-				</BottomBar>
 			{/if}
 		{:else if view === 'duplicates' && openSet}
 			{@const s = openSet}
-			{@render backButton(t('contacts.dup.title'))}
+			{@render levelBack(t('contacts.dup.title'))}
 			<MergeView
 				set={s}
 				{nameOf}
@@ -1358,30 +1340,6 @@
 		{/if}
 	</div>
 </ColumnFrame>
-
-{#if compact && level === 'side'}
-	<BottomBar label={t('contacts.bar.side')}>
-		<button
-			type="button"
-			class="bar-btn"
-			aria-label={t('contacts.groups.new')}
-			title={t('contacts.groups.new')}
-			onclick={() => {
-				groupError = '';
-				groupDialog = { kind: 'new', name: '' };
-			}}><Icon name="users" size={20} /></button
-		>
-		{@render barAgent()}
-		<button
-			type="button"
-			class="bar-btn bar-new"
-			aria-label={t('contacts.new')}
-			title={t('contacts.new')}
-			disabled={shown.kind !== 'ready'}
-			onclick={newContact}><Icon name="plus" size={20} /></button
-		>
-	</BottomBar>
-{/if}
 
 {#snippet agentAside()}
 	<AgentPanel
@@ -1402,6 +1360,32 @@
 			onclose={() => setAgent(false)}
 		/>
 	</AgentSheet>
+{/if}
+
+{#if transfer}
+	<Dialog title={t('contacts.side.transfer')} onclose={() => (transfer = false)}>
+		<p class="lead">{t('contacts.transfer.text')}</p>
+		<div class="dialog-actions transfer">
+			<button
+				type="button"
+				class="btn"
+				data-transfer-export
+				onclick={() => {
+					transfer = false;
+					void runExport();
+				}}><Icon name="download" size={15} />{t('contacts.export')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				data-transfer-import
+				onclick={() => {
+					transfer = false;
+					importing = true;
+				}}><Icon name="upload" size={15} />{t('contacts.transfer.import')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#if askDelete && contact}
@@ -1524,18 +1508,6 @@
 {/if}
 
 <style>
-	.new {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-1-5);
-		min-height: 40px;
-	}
-	.new.icon {
-		width: 44px;
-		min-height: 44px;
-		padding: 0;
-	}
 	.foot {
 		display: flex;
 		flex-direction: column;
@@ -1543,44 +1515,6 @@
 	}
 	.foot.folded {
 		align-items: center;
-	}
-	.foot :global(.dropdown) {
-		display: flex;
-		min-width: 0;
-	}
-	/* The menu's button in the look of the side bar's links. */
-	.foot :global(.dropdown > .btn) {
-		flex: 1;
-		justify-content: flex-start;
-		gap: var(--space-2-5);
-		min-width: 0;
-		min-height: 36px;
-		padding: var(--space-1-5) var(--space-2-5);
-		border: 0;
-		background: none;
-		color: var(--text);
-		font-weight: 400;
-		white-space: normal;
-		text-align: left;
-	}
-	.foot :global(.dropdown > .btn .text) {
-		flex: 1;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.foot :global(.dropdown > .btn > svg),
-	.foot :global(.dropdown > .btn .chevron) {
-		flex: none;
-		color: var(--muted);
-	}
-	.foot :global(.dropdown > .btn:hover) {
-		background: color-mix(in srgb, var(--text) 7%, transparent);
-	}
-	.foot.folded :global(.dropdown > .btn) {
-		flex: none;
-		width: 44px;
-		justify-content: center;
-		padding: 0;
 	}
 	.side-link {
 		display: flex;
@@ -1611,19 +1545,6 @@
 	.agent-toggle[aria-pressed='true'] {
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
 	}
-	.level-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2);
-	}
-	.agent-level {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		min-height: 44px;
-	}
 	.side-link :global(svg) {
 		flex: none;
 		color: var(--muted);
@@ -1635,9 +1556,70 @@
 	.side-link:hover {
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
-	.side-link:focus-visible {
+	.side-link:focus-visible,
+	.link:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+	/* The page's own ⋯ and the group's menu: an icon in the accent colour, 44 px. */
+	:global(.contacts [data-contact-list] .navr .dropdown > .btn) {
+		min-width: 44px;
+		min-height: 44px;
+		border: 0;
+		background: none;
+		color: var(--accent);
+	}
+	:global(.contacts [data-contact-list] .navr .dropdown > .btn .chevron) {
+		display: none;
+	}
+	[role='menuitem'].agent-level {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+	}
+	.link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		min-width: 44px;
+		min-height: 44px;
+		padding: 0 var(--space-1-5);
+		border: 0;
+		border-radius: var(--radius-ctl);
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+		overflow-wrap: anywhere;
+	}
+	:global(.contacts.levels.compact) .link {
+		font-size: 1.0625rem;
+	}
+	.link.back {
+		padding-left: 0;
+		text-align: left;
+	}
+	.link.strong {
+		font-weight: 600;
+	}
+	.link:disabled {
+		color: var(--muted);
+		cursor: default;
+	}
+	.level-head {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
+		margin: 0 calc(-1 * var(--space-2));
+	}
+	.big {
+		margin: 0;
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
 	}
 	.notice {
 		display: flex;
@@ -1660,10 +1642,10 @@
 		flex-direction: column;
 		gap: var(--space-3);
 		min-height: 100%;
-		padding: var(--space-4);
+		padding: var(--space-3) var(--space-4) var(--space-5);
 	}
 	:global(.contacts.levels.compact) .content {
-		padding: var(--space-3);
+		padding: 0 var(--space-3) var(--space-5);
 	}
 	.pad {
 		margin: var(--space-3);
@@ -1692,16 +1674,8 @@
 	}
 	.none {
 		margin: var(--space-4) 0;
+		text-align: center;
 		overflow-wrap: break-word;
-	}
-	.back {
-		display: inline-flex;
-		align-items: center;
-		align-self: flex-start;
-		gap: var(--space-1);
-		min-height: 44px;
-		overflow-wrap: anywhere;
-		text-align: left;
 	}
 	.msg {
 		display: flex;
@@ -1714,95 +1688,139 @@
 		margin: 0;
 		overflow-wrap: break-word;
 	}
-	.out {
-		align-self: flex-start;
-	}
-	/* The form's head: Abbrechen, the title, Speichern – sticky in its column. */
-	.ed-head {
-		position: sticky;
-		top: calc(-1 * var(--space-4));
-		z-index: 3;
-		display: flex;
+	.transfer {
 		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-		margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
-		padding: var(--space-2) var(--space-4);
-		border-bottom: 1px solid var(--border);
-		background: var(--bg);
 	}
-	.ed-head h2 {
-		flex: 1 1 8em;
-		margin: 0;
-		font-size: var(--text-lg);
-		overflow-wrap: anywhere;
-	}
-	.ed-head .btn {
+	.transfer .btn {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1-5);
 	}
-	/* The phone: the form over the whole screen, its head at the top. */
-	.sheet {
+	/* The form's head: Abbrechen, the title, Fertig – sticky in its column. */
+	.ed-head {
+		position: sticky;
+		top: calc(-1 * var(--space-3));
+		z-index: 3;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: var(--space-2);
+		margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-4)) 0;
+		padding: var(--space-1) var(--space-2);
+		background: var(--bg);
+	}
+	.ed-head .link:first-child {
+		justify-self: start;
+	}
+	.ed-head .link:last-child {
+		justify-self: end;
+	}
+	.ed-head h2 {
+		margin: 0;
+		font-size: var(--text-md);
+		font-weight: 600;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	/* Compact: Apple's sheet – over the dimmed list, rounded on top. */
+	.dim {
 		position: fixed;
 		inset: 0;
+		z-index: 59;
+		background: var(--overlay);
+	}
+	.sheet {
+		position: fixed;
+		inset: var(--space-3) 0 0;
 		z-index: 60;
 		overflow-y: auto;
 		overscroll-behavior: contain;
+		border-radius: calc(14px * var(--radius-scale, 1)) calc(14px * var(--radius-scale, 1)) 0 0;
 		background: var(--bg);
-		padding: 0 var(--space-3) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+		padding: 0 var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+	}
+	/* On the phone the program's bar stays in sight above the sheet. */
+	.sheet.phone {
+		top: calc(52px + var(--space-3));
 	}
 	.ed-head.sheet-head {
 		top: 0;
-		margin: 0 calc(-1 * var(--space-3)) var(--space-3);
-		padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-3) var(--space-2);
+		margin: 0 calc(-1 * var(--space-4)) var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
+		border-radius: inherit;
 	}
-	.ed-head.sheet-head h2 {
-		text-align: center;
+	:root[data-fx-transitions='on'] .sheet {
+		animation: sheet-up 0.22s ease-out;
 	}
-	.ed-head.sheet-head .btn {
-		min-height: 44px;
+	:root[data-fx-transitions='on'] .dim {
+		animation: dim-in 0.22s ease-out;
+	}
+	@keyframes sheet-up {
+		from {
+			transform: translateY(24px);
+			opacity: 0.6;
+		}
+	}
+	@keyframes dim-in {
+		from {
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:root[data-fx-transitions='on'] .sheet,
+		:root[data-fx-transitions='on'] .dim {
+			animation: none;
+		}
 	}
 	.ed-body {
 		display: flex;
 		flex-direction: column;
-		padding-top: var(--space-3);
+		padding-top: var(--space-2);
 	}
 	.sugs,
 	.dups {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-		padding: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+	}
+	:global(.contacts.levels.compact) .sugs,
+	:global(.contacts.levels.compact) .dups {
+		padding-top: 0;
 	}
 	.sugs p,
 	.dups p {
 		margin: 0;
 		overflow-wrap: break-word;
 	}
-	.sh {
-		margin: 0;
-		font-size: var(--text-lg);
-		font-weight: 600;
-		overflow-wrap: break-word;
-	}
 	.explain {
 		line-height: 1.5;
 	}
 	.search {
-		position: relative;
 		display: flex;
 		align-items: center;
+		gap: var(--space-1-5);
+		min-height: 44px;
+		padding: 0 var(--space-2-5);
+		border-radius: calc(10px * var(--radius-scale, 1));
+		background: var(--chip);
 		color: var(--muted);
 	}
-	.search :global(svg) {
-		position: absolute;
-		left: 10px;
-	}
-	.search .field {
-		width: 100%;
-		padding-left: 34px;
+	.search input {
+		flex: 1;
+		min-width: 0;
 		min-height: 40px;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+	}
+	.search input:focus {
+		outline: none;
+	}
+	.search:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.small {
 		font-size: var(--text-sm);
@@ -1882,23 +1900,15 @@
 		margin: 0;
 		overflow-wrap: break-word;
 	}
-	/* The levels: one at a time; outside the phone's compact view as cards like Mail. */
+	/* The levels (compact): one at a time, edge to edge, no cards. */
 	:global(.contacts.levels) {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
-	}
-	:global(.contacts.levels:not(.compact) .col-list),
-	:global(.contacts.levels:not(.compact) .col-contact) {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-tile);
-		background: var(--surface);
 	}
 	:global(.contacts.levels .col-side) {
-		padding: var(--space-2) 0;
+		padding: 0 0 var(--space-3);
 	}
 	@media (pointer: coarse) {
-		.new,
 		.side-link {
 			min-height: 44px;
 		}

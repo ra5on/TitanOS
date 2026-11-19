@@ -73,7 +73,11 @@
 					<ul>
 						{#each result.failed as f, i (i)}
 							<li>
-								<span class="who">{f.name || f.uid || '–'}</span>:
+								<span class="who"
+									>{f.name ||
+										(f.index ? t('contacts.imp.cardAt', { n: f.index }) : '') ||
+										t('contacts.imp.cardNoName')}</span
+								>:
 								{tOr(`contacts.reason.${f.reason}`, t('contacts.reason.invalid'))}
 							</li>
 						{/each}

@@ -142,3 +142,27 @@ func TestOrderPreferencesMergeKeepsOnlyKnownKeys(t *testing.T) {
 		t.Fatalf("damaged: %s %v", merged, err)
 	}
 }
+
+// 1.15 (Kontakte "Meine Karte"): the kind "contacts" holds the id of the
+// own card and nothing else; read back as stored.
+func TestContactsPreferences(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	for name, value := range map[string]any{
+		"another key":   map[string]any{"me": "a.vcf", "x": 1},
+		"me a number":   map[string]any{"me": 3},
+		"me too long":   map[string]any{"me": strings.Repeat("a", 257)},
+		"me with a tab": map[string]any{"me": "a\tb"},
+	} {
+		if res, body := ts.request("PUT", "/api/v1/preferences/contacts", value); res.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", name, res.StatusCode, body)
+		}
+	}
+	if res, body := ts.request("PUT", "/api/v1/preferences/contacts", map[string]any{"me": "alex-muster.vcf"}); res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusOK {
+		t.Fatalf("put: %d %s", res.StatusCode, body)
+	}
+	res, body := ts.request("GET", "/api/v1/preferences", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), "alex-muster.vcf") {
+		t.Fatalf("get: %d %s", res.StatusCode, body)
+	}
+}

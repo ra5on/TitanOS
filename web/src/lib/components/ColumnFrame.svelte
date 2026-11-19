@@ -349,7 +349,11 @@
 <style>
 	/* The page around the frame: no padding, the window's height, a column
 	   (banners above the frame keep their own height). */
-	:global(main:has(> .cf.columns)) {
+	/* 1.15: also under 760 px, where the shell gives pages their padding
+	   back (.bare main:not(.agent-app)); a frame with columns stays edge to
+	   edge in every size of a window. */
+	:global(main:has(> .cf.columns)),
+	:global(.bare main:not(.agent-app):has(> .cf.columns)) {
 		display: flex;
 		flex-direction: column;
 		gap: 0;

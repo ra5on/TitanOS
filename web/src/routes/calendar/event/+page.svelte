@@ -829,12 +829,37 @@
 	.row.top .lbl {
 		padding-top: 9px;
 	}
+	/* 1.15 (draft 33): on the phone the fields stand in cards as at Apple –
+	   the word on the left, the value on the right; longer ones (calendar,
+	   repetition, reminders, notes) below their word. */
+	.ev.phone {
+		gap: 2px;
+	}
 	.phone .row {
+		grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+		gap: var(--space-2) var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		border-radius: 12px;
+		background: var(--surface);
+	}
+	.phone .row.top {
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--space-1);
 	}
 	.phone .row.top .lbl {
 		padding-top: 0;
+	}
+	.phone .lbl {
+		color: var(--text);
+	}
+	.phone .row > .when,
+	.phone .row > .swwrap {
+		justify-self: end;
+	}
+	.phone .row > .field:not(.big) {
+		min-width: 0;
+	}
+	.phone .hint-row {
+		padding: var(--space-1) var(--space-3) var(--space-2);
 	}
 	/* The switch's whole line is its target (44 px on the phone). */
 	.swwrap {

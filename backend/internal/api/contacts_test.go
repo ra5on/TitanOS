@@ -635,7 +635,7 @@ func TestContactImportExport(t *testing.T) {
 	file := bytes.Join([][]byte{benChanged, evaNoUID, fresh, fresh, broken, groupCard}, nil)
 
 	out := e.importVCF(e.alex, "", file, http.StatusOK)
-	if out.Added != 2 || out.Updated != 0 || out.Skipped != 3 || len(out.Failed) != 1 || out.Failed[0].Reason != "invalid" || out.Failed[0].UID != "kaputt" {
+	if out.Added != 2 || out.Updated != 0 || out.Skipped != 3 || len(out.Failed) != 1 || out.Failed[0].Reason != "invalid" || out.Failed[0].UID != "kaputt" || out.Failed[0].Index != 5 {
 		t.Fatalf("skip: %+v", out)
 	}
 	if strings.Contains(e.raw("alex", "ben.vcf"), "NOTE:Neu") {

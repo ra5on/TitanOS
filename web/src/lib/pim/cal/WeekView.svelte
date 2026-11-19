@@ -19,12 +19,19 @@
 	// same on a block: Alt+↑/↓ 15 minutes, Alt+←/→ a day, Alt+Shift+↑/↓ the
 	// end; Enter keeps it, Escape leaves it. What is about to happen is said
 	// (onannounce). In the all-day row an event is dragged to another day.
+	// 1.15 (PLAN 115-5, drafts 38/39): one day shows its all-day events as
+	// chips that wrap beside "Ganztägig"; today is a red circle in the head,
+	// the line of now is red with its time beside it (the full hour next to
+	// it steps aside). With `strip` the head is left out (the week strip of
+	// the page names the days). With `onswipe` a finger swipes to the next
+	// or previous days: the hours follow it and the new ones slide in.
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { addDays, clock, daysBetween, overlapLanes } from '../caldates.ts';
 	import { calColor, type Calendar, type CalEvent, type DayItem } from '../calendar.ts';
 	import { calName, eventTitle, longDay, partTime, weekdayOf } from '../calendar-text.ts';
 	import { dayDrag } from './day-drag.ts';
+	import { play, swipe } from './motion.ts';
 	import type { DueTask } from './tasks.ts';
 	import TaskChip from './TaskChip.svelte';
 
@@ -54,6 +61,12 @@
 		tasks?: Map<string, DueTask[]>;
 		ontask?: (task: DueTask) => void;
 		ontaskdone?: (task: DueTask) => void;
+		/** 1.15: no head (the page's week strip names the days). */
+		strip?: boolean;
+		/** 1.15: the height of an hour (px). */
+		hour?: number;
+		/** 1.15: a sideways swipe of a finger: 1 to the next days, -1 to the previous. */
+		onswipe?: (dir: 1 | -1) => void;
 	};
 	let {
 		days,
@@ -71,9 +84,12 @@
 		tasks,
 		ontask,
 		ontaskdone,
+		strip = false,
+		hour = 52,
+		onswipe,
 	}: Props = $props();
 
-	const HOUR = 52;
+	const HOUR = $derived(hour);
 	const STEP = 15;
 	/** The shortest block (two lines: title and time), as overlapLanes counts it. */
 	const SHORTEST = 45;
@@ -93,6 +109,24 @@
 		),
 	);
 	const px = (minutes: number) => (minutes / 60) * HOUR;
+	const showsToday = $derived(days.includes(today));
+	/** The full hour beside the line of now steps aside (draft 39). */
+	const nearNow = (h: number) => showsToday && Math.abs(h * 60 - now) < 18;
+
+	// ---- Sideways: the finger moves the hours, the next days slide in ----
+	let pane = $state<HTMLElement>();
+	let follow = $state(0);
+	let shownFirst = '';
+	$effect(() => {
+		const first = days[0];
+		const before = shownFirst;
+		shownFirst = first;
+		if (!before || before === first) return;
+		const dir = daysBetween(before, first) > 0 ? 1 : -1;
+		play(pane, [{ transform: `translateX(${dir * 100}%)` }, { transform: 'none' }], {
+			duration: 300,
+		});
+	});
 	const snap = (minutes: number) => Math.round(minutes / STEP) * STEP;
 
 	let scroller = $state<HTMLDivElement>();
@@ -288,156 +322,185 @@
 	const ghostKey = $derived(ghost?.it?.key ?? '');
 </script>
 
-<div class="week" style:--n={days.length} style:--hour="{HOUR}px">
-	<div class="wk-head">
-		<span></span>
-		{#each days as d (d)}
-			<span class="wh" class:today={d === today}
-				><small>{weekdayOf(d)}</small><b>{Number(d.slice(8))}.</b>{#if d === today}<span class="tag"
-						>{t('calendar.today')}</span
-					>{/if}<span class="sr-only">{longDay(d, today)}</span></span
-			>
-		{/each}
-	</div>
+<div
+	class="week"
+	class:one={days.length === 1}
+	class:stripped={strip}
+	style:--n={days.length}
+	style:--hour="{HOUR}px"
+	use:swipe={{
+		enabled: !!onswipe,
+		onfollow: (dx) => (follow = dx),
+		onswipe: (dir) => {
+			follow = 0;
+			onswipe?.(dir);
+		},
+	}}
+>
 	<div
-		class="wk-all"
-		use:dayDrag={{
-			onmove: (ev, n) => onshift?.(ev, n),
-			enabled: !!onshift,
-			eventOf: (key) => days.flatMap(top).find((it) => it.key === key)?.ev,
-		}}
+		class="wk-pane"
+		bind:this={pane}
+		style:transform={follow ? `translateX(${follow}px)` : undefined}
 	>
-		<span class="lab">{t('calendar.allDay')}</span>
-		{#each days as d (d)}
-			<span class="ad" data-day={d}>
-				{#each top(d) as it (it.key)}
-					{@const c = calFor(it.ev.calendar)}
-					<button
-						type="button"
-						class="ev"
-						style:--c={calColor(c?.color ?? '')}
-						data-drag-day={canEdit(it.ev) && it.ev.allDay ? d : undefined}
-						data-drag-key={it.key}
-						onclick={() => onopen(it.ev)}
-						>{#if !it.part.allDay}<b>{partTime(it.part)}</b>{/if}<span class="ev-t"
-							>{eventTitle(it.ev)}</span
-						><span class="sr-only">{calName(c)}</span></button
+		{#if !strip}<div class="wk-head">
+				<span></span>
+				{#each days as d (d)}
+					<span class="wh" class:today={d === today}
+						><small>{weekdayOf(d)}</small><b>{Number(d.slice(8))}</b>{#if d === today}<span
+								class="sr-only">{t('calendar.today')}</span
+							>{/if}<span class="sr-only">{longDay(d, today)}</span></span
 					>
 				{/each}
-				{#each tasks?.get(d) ?? [] as task (task.list + '/' + task.id)}
-					<TaskChip {task} onopen={() => ontask?.(task)} ondone={() => ontaskdone?.(task)} />
-				{/each}
-			</span>
-		{/each}
-	</div>
-	<div class="wk-scroll" bind:this={scroller}>
-		<div class="wk-grid" class:dragging={!!drag?.moved}>
-			<div class="hours" aria-hidden="true">
-				{#each hours as h (h)}<span>{clock(h * 60)}</span>{/each}
-			</div>
+			</div>{/if}
+		<div
+			class="wk-all"
+			use:dayDrag={{
+				onmove: (ev, n) => onshift?.(ev, n),
+				enabled: !!onshift,
+				eventOf: (key) => days.flatMap(top).find((it) => it.key === key)?.ev,
+			}}
+		>
+			<span class="lab">{days.length === 1 ? t('calendar.form.allDay') : t('calendar.allDay')}</span
+			>
 			{#each days as d (d)}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="col"
-					class:today={d === today}
-					data-day={d}
-					onpointerdown={(e) => {
-						const el = e.target as HTMLElement;
-						if (el === e.currentTarget || el.classList.contains('line')) begin(e, 'new', d);
-					}}
-					onpointermove={move}
-					onpointerup={end}
-					onpointercancel={cancel}
-				>
-					{#each hours as h (h)}<i class="line" style:top="{h * HOUR}px"></i>{/each}
-					{#if d === today}
-						<span class="now" style:top="{px(now)}px"
-							><span class="sr-only">{t('calendar.now', { time: clock(now) })}</span></span
-						>
-					{/if}
-					{#each timedOf.get(d) ?? [] as it (it.key)}
+				<span class="ad" data-day={d}>
+					{#each top(d) as it (it.key)}
 						{@const c = calFor(it.ev.calendar)}
-						{@const length = it.part.to - it.part.from}
-						{@const edit = canEdit(it.ev) && !!onchange && it.part.first && it.part.last}
 						<button
 							type="button"
-							class="blk"
-							class:moving={ghostKey === it.key}
-							class:editable={edit}
-							class:short={length < 50}
-							data-key={it.key}
-							data-lane={it.lane}
-							title={`${eventTitle(it.ev)} · ${partTime(it.part)}`}
+							class="ev"
 							style:--c={calColor(c?.color ?? '')}
-							style:top="{px(it.part.from)}px"
-							style:--h="{px(Math.max(length, SHORTEST))}px"
-							style:left="calc({(it.lane / it.lanes) * 100}% + 2px)"
-							style:width="calc({100 / it.lanes}% - 4px)"
-							aria-keyshortcuts={edit
-								? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowDown'
-								: undefined}
-							onpointerdown={(e) => edit && begin(e, 'move', d, it)}
-							onpointermove={move}
-							onpointerup={end}
-							onpointercancel={cancel}
-							onkeydown={(e) => blockKey(e, it)}
-							onblur={() => {
-								if (pending?.it.key === it.key) pending = null;
-							}}
-							onclick={() => {
-								if (!swallowClick) onopen(it.ev);
-							}}
+							data-drag-day={canEdit(it.ev) && it.ev.allDay ? d : undefined}
+							data-drag-key={it.key}
+							onclick={() => onopen(it.ev)}
+							>{#if !it.part.allDay}<b>{partTime(it.part)}</b>{/if}<span class="ev-t"
+								>{eventTitle(it.ev)}</span
+							><span class="sr-only">{calName(c)}</span></button
 						>
-							<small class="tm"
-								>{partTime(it.part)}{#if it.ev.recurring}<span
-										class="sym"
-										title={t('calendar.repeats')}
-										><Icon name="repeat" size={12} /><span class="sr-only"
-											>{t('calendar.repeats')}</span
-										></span
-									>{/if}{#if it.ev.alarms.length}<span class="sym" title={t('calendar.withAlarm')}
-										><Icon name="bell" size={12} /><span class="sr-only"
-											>{t('calendar.withAlarm')}</span
-										></span
-									>{/if}</small
-							>
-							<b>{eventTitle(it.ev)}</b>
-							{#if it.ev.location && length >= 60}<small class="pl">{it.ev.location}</small>{/if}
-							<span class="sr-only">{calName(c)}</span>
-							{#if edit}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<span
-									class="rs"
-									aria-hidden="true"
-									title={t('calendar.drag.resize')}
-									onpointerdown={(e) => {
-										e.stopPropagation();
-										begin(e, 'resize', d, it);
-									}}
-								></span>
-							{/if}
-						</button>
 					{/each}
-					{#if ghost && ghost.date === d}
-						<span
-							class="ghost"
-							style:top="{px(ghost.from)}px"
-							style:height="{px(Math.max(ghost.to - ghost.from, STEP))}px"
-							style:--c={calColor(ghost.it ? (calFor(ghost.it.ev.calendar)?.color ?? '') : '')}
-							aria-hidden="true"
-							><b>{clock(ghost.from)}–{clock(ghost.to)}</b>{#if ghost.it}<span
-									>{eventTitle(ghost.it.ev)}</span
-								>{/if}</span
-						>
-					{/if}
-				</div>
+					{#each tasks?.get(d) ?? [] as task (task.list + '/' + task.id)}
+						<TaskChip {task} onopen={() => ontask?.(task)} ondone={() => ontaskdone?.(task)} />
+					{/each}
+				</span>
 			{/each}
+		</div>
+		<div class="wk-scroll" bind:this={scroller}>
+			<div class="wk-grid" class:dragging={!!drag?.moved}>
+				<div class="hours" aria-hidden="true">
+					{#each hours as h (h)}<span class:aside={nearNow(h)}>{clock(h * 60)}</span>{/each}
+					{#if showsToday}<b class="nowtime" style:top="{px(now)}px">{clock(now)}</b>{/if}
+				</div>
+				{#each days as d (d)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="col"
+						class:today={d === today}
+						data-day={d}
+						onpointerdown={(e) => {
+							const el = e.target as HTMLElement;
+							if (el === e.currentTarget || el.classList.contains('line')) begin(e, 'new', d);
+						}}
+						onpointermove={move}
+						onpointerup={end}
+						onpointercancel={cancel}
+					>
+						{#each hours as h (h)}<i class="line" style:top="{h * HOUR}px"></i>{/each}
+						{#if d === today}
+							<span class="now" style:top="{px(now)}px"
+								><span class="sr-only">{t('calendar.now', { time: clock(now) })}</span></span
+							>
+						{/if}
+						{#each timedOf.get(d) ?? [] as it (it.key)}
+							{@const c = calFor(it.ev.calendar)}
+							{@const length = it.part.to - it.part.from}
+							{@const edit = canEdit(it.ev) && !!onchange && it.part.first && it.part.last}
+							<button
+								type="button"
+								class="blk"
+								class:moving={ghostKey === it.key}
+								class:editable={edit}
+								class:short={length < 50}
+								data-key={it.key}
+								data-lane={it.lane}
+								title={`${eventTitle(it.ev)} · ${partTime(it.part)}`}
+								style:--c={calColor(c?.color ?? '')}
+								style:top="{px(it.part.from)}px"
+								style:--h="{px(Math.max(length, SHORTEST))}px"
+								style:left="calc({(it.lane / it.lanes) * 100}% + 2px)"
+								style:width="calc({100 / it.lanes}% - 4px)"
+								aria-keyshortcuts={edit
+									? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowDown'
+									: undefined}
+								onpointerdown={(e) => edit && begin(e, 'move', d, it)}
+								onpointermove={move}
+								onpointerup={end}
+								onpointercancel={cancel}
+								onkeydown={(e) => blockKey(e, it)}
+								onblur={() => {
+									if (pending?.it.key === it.key) pending = null;
+								}}
+								onclick={() => {
+									if (!swallowClick) onopen(it.ev);
+								}}
+							>
+								<small class="tm"
+									>{partTime(it.part)}{#if it.ev.recurring}<span
+											class="sym"
+											title={t('calendar.repeats')}
+											><Icon name="repeat" size={12} /><span class="sr-only"
+												>{t('calendar.repeats')}</span
+											></span
+										>{/if}{#if it.ev.alarms.length}<span class="sym" title={t('calendar.withAlarm')}
+											><Icon name="bell" size={12} /><span class="sr-only"
+												>{t('calendar.withAlarm')}</span
+											></span
+										>{/if}</small
+								>
+								<b>{eventTitle(it.ev)}</b>
+								{#if it.ev.location && length >= 60}<small class="pl">{it.ev.location}</small>{/if}
+								<span class="sr-only">{calName(c)}</span>
+								{#if edit}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<span
+										class="rs"
+										aria-hidden="true"
+										title={t('calendar.drag.resize')}
+										onpointerdown={(e) => {
+											e.stopPropagation();
+											begin(e, 'resize', d, it);
+										}}
+									></span>
+								{/if}
+							</button>
+						{/each}
+						{#if ghost && ghost.date === d}
+							<span
+								class="ghost"
+								style:top="{px(ghost.from)}px"
+								style:height="{px(Math.max(ghost.to - ghost.from, STEP))}px"
+								style:--c={calColor(ghost.it ? (calFor(ghost.it.ev.calendar)?.color ?? '') : '')}
+								aria-hidden="true"
+								><b>{clock(ghost.from)}–{clock(ghost.to)}</b>{#if ghost.it}<span
+										>{eventTitle(ghost.it.ev)}</span
+									>{/if}</span
+							>
+						{/if}
+					</div>
+				{/each}
+			</div>
 		</div>
 	</div>
 </div>
 
 <style>
 	.week {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow: hidden;
+	}
+	.wk-pane {
 		display: flex;
 		flex-direction: column;
 		flex: 1 1 auto;
@@ -471,21 +534,21 @@
 	.wh b {
 		font-size: var(--text-lg);
 	}
+	.wh b {
+		display: inline-grid;
+		place-items: center;
+		min-width: 30px;
+		height: 30px;
+		padding: 0 4px;
+		border-radius: 15px;
+		font-variant-numeric: tabular-nums;
+	}
 	.wh.today b {
-		color: var(--accent);
+		background: var(--cal-today, #d70015);
+		color: var(--cal-on-today, #fff);
 	}
 	.wk-head > span:first-child {
 		border-bottom: 1px solid var(--border);
-	}
-	.tag {
-		display: inline-block;
-		padding: 0 6px;
-		border-radius: var(--radius-small);
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: var(--text-xs);
-		font-weight: 600;
-		line-height: 1.6;
 	}
 	.lab {
 		padding: var(--space-1) 4px var(--space-1) 0;
@@ -543,6 +606,7 @@
 		hyphens: auto;
 	}
 	.wk-scroll {
+		touch-action: pan-y;
 		flex: 1 1 auto;
 		min-height: 0;
 		overflow-y: auto;
@@ -560,6 +624,24 @@
 	}
 	.hours span:first-child {
 		transform: none;
+	}
+	.hours {
+		position: relative;
+	}
+	.hours span.aside {
+		visibility: hidden;
+	}
+	.nowtime {
+		position: absolute;
+		right: 0;
+		z-index: 3;
+		padding: 0 var(--space-1) 0 2px;
+		background: var(--bg);
+		color: var(--cal-today-text, #c00012);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		transform: translateY(-50%);
 	}
 	.col {
 		position: relative;
@@ -580,7 +662,7 @@
 		left: 0;
 		right: 0;
 		z-index: 2;
-		border-top: 2px solid var(--accent);
+		border-top: 2px solid var(--cal-today, #d70015);
 		pointer-events: none;
 	}
 	.now::before {
@@ -591,7 +673,7 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background: var(--accent);
+		background: var(--cal-today, #d70015);
 	}
 	.blk {
 		position: absolute;
@@ -701,5 +783,51 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 		z-index: 3;
+	}
+
+	/* One day: the all-day events as chips beside the word, wrapping (draft 38). */
+	.one .wk-all {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-2) var(--space-2);
+		border-bottom: 1px solid var(--border);
+	}
+	.one .lab {
+		flex: none;
+		width: 4.4rem;
+		padding: 6px 0 0;
+		border: 0;
+		text-align: left;
+		font-size: var(--text-sm);
+	}
+	.one .ad {
+		flex: 1;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-content: flex-start;
+		gap: 6px;
+		max-height: 9.5rem;
+		padding: 0;
+		border: 0;
+	}
+	.one .ad .ev {
+		width: auto;
+		max-width: 100%;
+		padding: 4px 10px;
+		border-left: 0;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--c) 26%, transparent);
+		font-size: var(--text-md);
+		font-weight: 600;
+	}
+	.one .ad :global(.task) {
+		width: auto;
+		max-width: 100%;
+		padding: 3px 8px;
+		border-radius: 8px;
+	}
+	.stripped .wk-all {
+		border-top: 0;
 	}
 </style>

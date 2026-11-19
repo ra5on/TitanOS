@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
@@ -21,7 +23,7 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order", "contacts"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -179,6 +181,10 @@ func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) 
 	}
 	if kind == "fileappsdocker" && !validDockerFileApps(value) {
 		writeError(w, http.StatusBadRequest, "bad_request", `fileappsdocker maps file endings (lower case, without dot) to "docker:<app>"`)
+		return
+	}
+	if kind == "contacts" && !validContactsPrefs(value) {
+		writeError(w, http.StatusBadRequest, "bad_request", `contacts holds me: the id of the own card (at most 256 bytes)`)
 		return
 	}
 	if kind == "calendar" {
@@ -369,4 +375,29 @@ func (p *preferences) replaceOpenWith(from, to string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// validContactsPrefs checks the kind "contacts" (1.15, Kontakte "Meine
+// Karte"): {} or {"me": "<id of the card>"}, the id at most 256 bytes of
+// UTF-8 without control characters; nothing else.
+func validContactsPrefs(value json.RawMessage) bool {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(value, &top) != nil {
+		return false
+	}
+	for key, raw := range top {
+		if key != "me" {
+			return false
+		}
+		var me string
+		if json.Unmarshal(raw, &me) != nil || len(me) > 256 || !utf8.ValidString(me) {
+			return false
+		}
+		for _, r := range me {
+			if unicode.IsControl(r) {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -15,10 +15,11 @@
 // compose (mailto: without Mail); possible duplicates merged field by field
 // (POST /contacts/merge after a dialog); two address books sorted by the
 // grip's keys and saved for the account (PUT /preferences/order). Dark and
-// English once; 800 px (levels with "‹ Zurück"); the phone 390 px light and
-// dark: levels without cards, iOS's round actions (tel:, sms:, e-mail, map),
-// the form as a sheet over the screen, bars at the bottom with 44 px
-// targets. Unavailable (503): "nicht verfügbar", never a list; an empty
+// English once; 800 px (1.15: columns with the side bar folded); the phone
+// 390 px light and dark: levels without cards, the quick buttons (sms:,
+// tel:, e-mail, Teilen; the map at the address), the form as a sheet, no
+// bar at the bottom, 44 px targets. The look of 1.15 (Apple's Kontakte) and
+// its sizes: test-ui-kontakte-115.mjs. Unavailable (503): "nicht verfügbar", never a list; an empty
 // book: the friendly empty state. Every screen: no sideways scroll, no cut
 // text. Screenshots into UI_OUTPUT.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5213 UI_OUTPUT=/path node scripts/test-ui-kontakte-113.mjs
@@ -205,8 +206,8 @@ try {
     assert.ok(frame.top <= 1, `nothing above the frame (${frame.top}px)`);
     assert.ok(frame.height >= 880, `the frame is as high as the window (${frame.height})`);
     assert.equal(frame.border, "0px", "no card");
-    // "Neuer Kontakt" on top of the side bar; the search on top of the list.
-    const action = await page.locator(".cf-side [data-new-contact]").boundingBox();
+    // 1.15: "+" (Neuer Kontakt) next to the list's title; the search on top of the list.
+    const action = await page.locator(".cf-list [data-new-contact]").boundingBox();
     assert.ok(action && action.y < 60, "Neuer Kontakt on top");
     assert.ok(await page.locator(".cf-list [data-contact-list] input[type=search]").isVisible());
     assert.equal(await page.locator(".cf-top").count(), 0, "no bar above the columns");
@@ -248,7 +249,7 @@ try {
     await until(async () => !(await page.locator("[data-group='familie.vcf']").count()), "group gone");
     assert.equal(sent(state, "DELETE", /^\/contacts\/groups\/familie\.vcf/).length, 1);
     assert.ok(state.contacts.some((c) => c.id === "anna.vcf"), "contacts stay");
-    assert.equal(new URL(page.url()).searchParams.get("g"), null, "back to all contacts");
+    await until(() => new URL(page.url()).searchParams.get("g") === null, "back to all contacts");
 
     // A new group, then a contact dragged onto it.
     await page.locator("[data-new-group]").click();
@@ -358,12 +359,13 @@ try {
     const { page, ctx, state } = await open();
     await page.goto(base + "/contacts?id=ben.vcf");
     await page.locator("[data-contact-detail]").waitFor();
-    await page.getByRole("button", { name: "Import und Export" }).click();
-    await page.getByRole("menuitem", { name: /Exportieren/ }).click();
+    // 1.15: "Import und Export" is a row of "Mehr" with a dialog of two buttons.
+    await page.locator("[data-side-transfer]").click();
+    await dialog(page).locator("[data-transfer-export]").click();
     await until(() => sent(state, "GET", /\/export$/).length === 1, "export");
-    await page.getByRole("button", { name: "Import und Export" }).click();
-    await page.getByRole("menuitem", { name: /Importieren/ }).click();
-    await dialog(page).waitFor();
+    await page.locator("[data-side-transfer]").click();
+    await dialog(page).locator("[data-transfer-import]").click();
+    await dialog(page).locator("[data-contact-import]").waitFor();
     await dialog(page).getByRole("button", { name: "Abbrechen" }).click();
     await page.getByRole("button", { name: "b.muster@firma.example", exact: true }).click();
     await until(() => new URL(page.url()).pathname === "/mail/compose", "compose");
@@ -395,7 +397,7 @@ try {
     assert.equal(sent(state, "GET", /^\/contacts$/).length, lists, "no list after taking it");
     assert.match(await page.locator("[data-contact-detail]").innerText(), /Sparkasse Beispiel|service@bank\.example/);
     // "Termin" opens Kalender's form with the name.
-    await page.getByRole("button", { name: "Termin" }).click();
+    await page.getByRole("button", { name: "Termin anlegen" }).click();
     await until(() => new URL(page.url()).pathname === "/calendar/event", "event form");
     assert.match(new URL(page.url()).searchParams.get("title") ?? "", /Sparkasse/);
     await ctx.close();
@@ -473,19 +475,19 @@ try {
     await ctx.close();
   }
 
-  // ---- 800 px: levels with "‹ Zurück" ----
+  // ---- 800 px (1.15): columns, the side bar folded to its rail ----
   {
     const { page, ctx } = await open({ width: 800 });
     await page.goto(base + "/contacts");
     await ready(page);
-    await page.locator("[data-contact-list] [data-back]").waitFor();
+    await page.locator(".cf.columns .cf-side.folded").waitFor();
+    assert.equal(await page.locator("[data-contact-list] [data-back]").count(), 0, "no way back in columns");
     await sound(page, "800 list");
     await shot(page, "08-800-liste");
     await page.locator("[data-contact='ben.vcf']").click();
-    await page.locator("[data-contact-detail]").waitFor();
+    await page.locator(".col-contact [data-contact-detail]").waitFor();
+    assert.ok(await page.locator("[data-contact='ben.vcf']").isVisible(), "the list stays beside the contact");
     await sound(page, "800 contact");
-    await page.locator(".col-contact [data-back]").click();
-    await page.locator("[data-contact='ben.vcf']").waitFor();
     await ctx.close();
   }
 
@@ -496,7 +498,9 @@ try {
     await ready(page);
     const listBox = await page.locator(".cf.levels").evaluate((el) => getComputedStyle(el).marginLeft);
     assert.notEqual(listBox, "0px", "edge to edge (the page's padding given up)");
-    assert.ok(await page.locator(".bottombar .bar-new").isVisible(), "Neuer Kontakt at the bottom");
+    // 1.15: no bar at the bottom; "+" on top of the list like Apple's Kontakte.
+    assert.equal(await page.locator(".bottombar").count(), 0, "no bar at the bottom");
+    assert.ok(await page.locator("[data-contact-list] [data-new-contact]").isVisible(), "Neuer Kontakt on top");
     await sound(page, `phone list ${theme}`);
     await shot(page, `10-handy-liste-${theme}`);
     await page.locator("[data-contact='ben.vcf']").click();
@@ -505,16 +509,19 @@ try {
     assert.equal(await acts.locator("a[href^='tel:']").count(), 1, "Anrufen");
     assert.equal(await acts.locator("a[href^='sms:']").count(), 1, "Nachricht");
     assert.equal(await acts.getByRole("button", { name: "E-Mail" }).count(), 1, "E-Mail");
-    assert.equal(await acts.locator("a[href*='openstreetmap'], a[href*='maps.apple']").count(), 1, "Karte");
+    assert.equal(await acts.locator("[data-contact-share]").count(), 1, "Teilen");
+    // The map moved to the address (1.15).
+    assert.equal(await page.locator("[data-contact-map][href*='openstreetmap'], [data-contact-map][href*='maps.apple']").count(), 1, "Karte");
     assert.deepEqual(await small(page, ".col-contact"), [], "targets of 44 px");
-    assert.deepEqual(await small(page, ".bottombar"), [], "bar targets of 44 px");
     await sound(page, `phone contact ${theme}`);
     await shot(page, `11-handy-kontakt-${theme}`);
-    await page.locator("[data-bar-edit]").click();
+    await page.locator("[data-contact-edit]").click();
     const sheet = page.locator("[data-editor-sheet]");
     await sheet.waitFor();
+    await page.waitForTimeout(400); // the sheet slides up
     const box = await sheet.boundingBox();
-    assert.ok(box.x === 0 && box.y === 0 && box.width === 390, "the form covers the screen");
+    // 1.15: Apple's sheet – the whole width, just below the program's bar.
+    assert.ok(box.x === 0 && box.width === 390 && box.y > 50 && box.y < 80, `the form as a sheet ${JSON.stringify(box)}`);
     await sound(page, `phone form ${theme}`);
     await shot(page, `12-handy-bearbeiten-${theme}`);
     await page.locator("[data-editor-cancel]").click();

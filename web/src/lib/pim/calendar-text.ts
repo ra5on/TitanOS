@@ -48,6 +48,18 @@ export function longDay(day: string, today?: string): string {
 	const year = today && today.slice(0, 4) !== day.slice(0, 4) ? 'numeric' : undefined;
 	return fmt(day, { weekday: 'long', day: 'numeric', month: 'long', year });
 }
+/** "November" (1.15: the continuous months of the phone). */
+export function monthName(day: string): string {
+	return fmt(day, { month: 'long' });
+}
+/** "2026". */
+export function yearText(day: string): string {
+	return fmt(day, { year: 'numeric' });
+}
+/** "Mittwoch – 18. Nov. 2026" (1.15: the day of the phone, draft 38). */
+export function dayLine(day: string): string {
+	return `${fmt(day, { weekday: 'long' })} – ${fmt(day, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
 /** "17. November 2026". */
 export function dateText(day: string): string {
 	return fmt(day, { day: 'numeric', month: 'long', year: 'numeric' });

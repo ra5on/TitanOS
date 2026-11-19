@@ -340,6 +340,8 @@ export type Preferences = {
 	fileappsdocker?: Record<string, unknown> | null;
 	/** 1.13: the order of the side bars of Mail, Kontakte, Kalender; missing before 1.13. */
 	order?: Record<string, unknown> | null;
+	/** 1.15: Kontakte – the own card ("Meine Karte"). */
+	contacts?: { me?: string } | null;
 };
 
 export type Temperature = {
