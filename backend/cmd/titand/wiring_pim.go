@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"

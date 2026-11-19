@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 
 	"github.com/ra5on/TitanOS/backend/internal/startup"
 

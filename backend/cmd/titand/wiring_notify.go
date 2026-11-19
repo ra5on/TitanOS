@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
