@@ -354,6 +354,19 @@ func (m *Manager) List(ctx context.Context, user, id string, q ListQuery) (Page,
 	return page, err
 }
 
+// Heads are sender, subject and date of some mails of a folder, without
+// their preview (the card of the KI-Agent names what it moves, 1.15).
+func (m *Manager) Heads(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {
+	if err := checkUIDs(uids); err != nil {
+		return nil, err
+	}
+	out, err := m.fetchLines(ctx, user, id, folder, uids, leanFetch)
+	if errors.Is(err, ErrTooLarge) {
+		return m.oneByOne(ctx, user, id, folder, uids)
+	}
+	return out, err
+}
+
 // summaries fetches the lines of some mails of a folder (search over all
 // folders); a page too large for the budget goes the way of fallback.
 func (m *Manager) summaries(ctx context.Context, user, id, folder string, uids []uint32) ([]Summary, error) {

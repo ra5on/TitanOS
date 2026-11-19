@@ -30,6 +30,9 @@ func Key(fn, email string) string {
 // with the bytes as they came. Text outside a card is skipped; a card
 // without END is cut at the next BEGIN or the end and fails in the store.
 func SplitVCF(data []byte) []Piece {
+	// 1.15 (115-7): an export may start with a UTF-8 BOM; TrimSpace keeps
+	// U+FEFF, so the first BEGIN:VCARD was not found and its card was lost.
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var out []Piece
 	start := -1
 	depth := 0

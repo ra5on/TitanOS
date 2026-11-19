@@ -83,6 +83,7 @@ export const noteText: Record<string, MessageKey> = {
 	timelimit: 'agent.noteTimeLimit',
 	loop: 'agent.noteLoop',
 	undone: 'agent.noteUndone',
+	notdone: 'agent.noteNotDone',
 };
 
 export function askTitle(p: Pending): string {

@@ -72,6 +72,7 @@ func (b *agentToolbox) mailTools() []*agentTool {
 	addrs := func(d string) map[string]any {
 		return map[string]any{"type": "array", "maxItems": agentMailAddrs, "items": str("E-mail address, optionally \"Name <a@b>\"."), "description": d}
 	}
+	uids := map[string]any{"type": "array", "minItems": 1, "maxItems": agentMailMoves, "items": map[string]any{"type": "integer", "minimum": 1}, "description": "uids of the mails."}
 	compose := map[string]any{
 		"account": account,
 		"to":      addrs("Recipients."), "cc": addrs("Copy."), "bcc": addrs("Blind copy (only when the person asks for it)."),
@@ -111,11 +112,17 @@ func (b *agentToolbox) mailTools() []*agentTool {
 			params:      schema(compose, "to", "subject", "text"), own: b.mailSend, prepare: b.mailComposePrepare, draft: b.composeDraft("mail_send"),
 			logged: b.mailLogged},
 		{name: "mail_move", area: area, kind: agent.KindChange, action: agent.ActMailMove,
-			description: "Move mails into another folder (\"Ordner vorschlagen\": suggest one with mail_folders first). Into the trash or junk always asks.",
+			description: "Move mails into another folder (\"Ordner vorschlagen\": suggest one with mail_folders first). To delete a mail use mail_delete. Into the trash or junk always asks.",
 			params: schema(map[string]any{"account": account, "folder": folder,
-				"uids": map[string]any{"type": "array", "minItems": 1, "maxItems": agentMailMoves, "items": map[string]any{"type": "integer", "minimum": 1}, "description": "uids of the mails."},
+				"uids": uids,
 				"to":   str("Target folder path from mail_folders.")}, "folder", "uids", "to"),
-			own: b.mailMove, prepare: b.mailMovePrepare, draft: b.mailMoveDraft, logged: b.mailLogged},
+			own: b.mailMove, prepare: b.mailMovePrepare, logged: b.mailLogged},
+		// 1.15 (115-1): deleting asks always, with a card that names the
+		// mails; there is nothing to edit, so it is never a draft.
+		{name: "mail_delete", area: area, kind: agent.KindChange, action: agent.ActMailMove,
+			description: "Delete mails: into the trash of the mailbox (TitanOS finds it); mails already in the trash are deleted for good. Always asks the person with a card.",
+			params:      schema(map[string]any{"account": account, "folder": folder, "uids": uids}, "folder", "uids"),
+			own:         b.mailDelete, prepare: b.mailDeletePrepare, logged: b.mailLogged},
 	}
 }
 
@@ -512,7 +519,9 @@ type agentMailMove struct {
 }
 
 // mailMovePrepare checks the folders; into the trash or the junk folder
-// it is a delete and always asks.
+// it is a delete and always asks. The card names every mail (sender,
+// subject, date) and the folder by its role ("Papierkorb", not "Deleted
+// Messages", 115-1).
 func (b *agentToolbox) mailMovePrepare(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage, p *agent.Prepared) (string, error) {
 	if err := toolcatalog.ValidateArguments(b.tools[name].params, args); err != nil {
 		return "", err
@@ -534,11 +543,133 @@ func (b *agentToolbox) mailMovePrepare(ctx context.Context, chat *agent.Chat, na
 		return "", toolcatalog.Errorf("there is no folder %q to move to; mail_folders names them", a.To)
 	}
 	en := pimEnglish(chat)
-	p.Summary = fmt.Sprintf(pick(en, "%d Mail(s) in %s von „%s“ nach „%s“ verschieben", "Move %d mail(s) of %s from \"%s\" to \"%s\""), len(a.UIDs), mb.Email, folderOr(a.Folder), a.To)
-	if role := folders[at].Role; role == tmail.RoleTrash || role == tmail.RoleJunk {
+	what := b.mailNames(ctx, en, mb.ID, folderOr(a.Folder), a.UIDs)
+	role := folders[at].Role
+	if role == tmail.RoleTrash {
+		p.Level = toolcatalog.LevelDanger
+		p.Summary = fmt.Sprintf(pick(en, "%s löschen (in den Papierkorb): %s", "Delete %s (into the trash): %s"), mailCount(en, len(a.UIDs)), what)
+		return agent.ModeAsk, nil
+	}
+	p.Summary = fmt.Sprintf(pick(en, "%s nach „%s“ verschieben: %s", "Move %s to \"%s\": %s"), mailCount(en, len(a.UIDs)), folderTitle(en, folders[at]), what)
+	if role == tmail.RoleJunk {
 		return agent.ModeAsk, nil
 	}
 	return "", nil
+}
+
+// mailDeletePrepare: deleting always asks (115-1). In the trash it deletes
+// for good, which the card says and marks as destroying.
+func (b *agentToolbox) mailDeletePrepare(ctx context.Context, chat *agent.Chat, name string, args json.RawMessage, p *agent.Prepared) (string, error) {
+	if err := toolcatalog.ValidateArguments(b.tools[name].params, args); err != nil {
+		return "", err
+	}
+	var a agentMailMove
+	if err := agentMailArgs(args, &a); err != nil {
+		return "", err
+	}
+	mb, err := b.mailBox(a.Account)
+	if err != nil {
+		return "", err
+	}
+	folders, err := b.mail().Folders(ctx, b.mailUser(), mb.ID)
+	if err != nil {
+		return "", b.mailError(err)
+	}
+	from := folderOr(a.Folder)
+	at := slices.IndexFunc(folders, func(f tmail.Folder) bool { return f.Path == from })
+	if at < 0 {
+		return "", toolcatalog.Errorf("there is no folder %q; mail_folders names them", from)
+	}
+	en := pimEnglish(chat)
+	what := b.mailNames(ctx, en, mb.ID, from, a.UIDs)
+	if folders[at].Role == tmail.RoleTrash {
+		p.Level = toolcatalog.LevelDestroy
+		p.Summary = fmt.Sprintf(pick(en, "%s endgültig löschen (aus dem Papierkorb, nicht rückgängig zu machen): %s", "Delete %s for good (from the trash, cannot be undone): %s"), mailCount(en, len(a.UIDs)), what)
+	} else {
+		p.Level = toolcatalog.LevelDanger
+		p.Summary = fmt.Sprintf(pick(en, "%s löschen (in den Papierkorb): %s", "Delete %s (into the trash): %s"), mailCount(en, len(a.UIDs)), what)
+	}
+	return agent.ModeAsk, nil
+}
+
+func (b *agentToolbox) mailDelete(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
+	var a agentMailMove
+	if err := agentMailArgs(args, &a); err != nil {
+		return agent.Outcome{}, err
+	}
+	mb, err := b.mailBox(a.Account)
+	if err != nil {
+		return agent.Outcome{}, err
+	}
+	if err := b.mail().Delete(ctx, b.mailUser(), mb.ID, folderOr(a.Folder), a.UIDs); err != nil {
+		return agent.Outcome{}, b.mailError(err)
+	}
+	return pimJSON(map[string]any{"deleted": len(a.UIDs), "note": "Done: the mails are in the trash (or, from the trash, deleted for good)."})
+}
+
+// mailCount is "1 Mail" / "3 Mails".
+func mailCount(en bool, n int) string {
+	if n == 1 {
+		return pick(en, "1 Mail", "1 mail")
+	}
+	return fmt.Sprintf(pick(en, "%d Mails", "%d mails"), n)
+}
+
+// folderTitle is a folder as Mail shows it: by its role, else its name.
+func folderTitle(en bool, f tmail.Folder) string {
+	switch f.Role {
+	case tmail.RoleInbox:
+		return pick(en, "Posteingang", "Inbox")
+	case tmail.RoleDrafts:
+		return pick(en, "Entwürfe", "Drafts")
+	case tmail.RoleSent:
+		return pick(en, "Gesendet", "Sent")
+	case tmail.RoleTrash:
+		return pick(en, "Papierkorb", "Trash")
+	case tmail.RoleJunk:
+		return pick(en, "Spam", "Junk")
+	case tmail.RoleArchive:
+		return pick(en, "Archiv", "Archive")
+	}
+	if f.Name != "" {
+		return f.Name
+	}
+	return f.Path
+}
+
+// mailNames names the mails of a card: "Müller, Nico – „Škoda …“ (19.11.)"
+// each, whole (no text is cut on a card the person approves). Mails it
+// cannot read are named by their number.
+func (b *agentToolbox) mailNames(ctx context.Context, en bool, box, folder string, uids []uint32) string {
+	heads, err := b.mail().Heads(ctx, b.mailUser(), box, folder, uids)
+	byUID := map[uint32]tmail.Summary{}
+	if err == nil {
+		for _, h := range heads {
+			byUID[h.UID] = h
+		}
+	}
+	parts := make([]string, 0, len(uids))
+	for _, uid := range uids {
+		h, ok := byUID[uid]
+		if !ok {
+			parts = append(parts, fmt.Sprintf(pick(en, "Mail Nr. %d", "mail no. %d"), uid))
+			continue
+		}
+		from := h.From.Name
+		if from == "" {
+			from = h.From.Addr
+		}
+		subject := h.Subject
+		if subject == "" {
+			subject = pick(en, "(ohne Betreff)", "(no subject)")
+		}
+		day := ""
+		if !h.Date.IsZero() {
+			day = " (" + h.Date.Local().Format(pick(en, "02.01.2006", "Jan 2, 2006")) + ")"
+		}
+		parts = append(parts, fmt.Sprintf(pick(en, "%s – „%s“%s", "%s – \"%s\"%s"), from, subject, day))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func (b *agentToolbox) mailMove(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
@@ -554,17 +685,4 @@ func (b *agentToolbox) mailMove(ctx context.Context, _ *agent.Chat, args json.Ra
 		return agent.Outcome{}, b.mailError(err)
 	}
 	return pimJSON(map[string]any{"moved": len(a.UIDs), "to": a.To})
-}
-
-// mailMoveDraft is the suggestion of a folder: the card opens the mail.
-func (b *agentToolbox) mailMoveDraft(_ context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-	var a agentMailMove
-	if err := agentMailArgs(args, &a); err != nil {
-		return agent.Outcome{}, err
-	}
-	mb, err := b.mailBox(a.Account)
-	if err != nil {
-		return agent.Outcome{}, err
-	}
-	return draftOutcome(&agent.Draft{App: "mail", Kind: "move", Fields: map[string]any{"a": mb.ID, "f": folderOr(a.Folder), "uids": a.UIDs, "to": a.To}}, "folder suggestion")
 }

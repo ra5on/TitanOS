@@ -131,6 +131,8 @@ type Pending struct {
 	Summary string          `json:"summary"`
 	Area    string          `json:"area,omitempty"`
 	Kind    string          `json:"kind,omitempty"`
+	// Why: the reason a step asks beyond its rights (Prepared.Why, 1.15).
+	Why string `json:"why,omitempty"`
 	// Untrusted: the step reads outside content; approved, it still marks
 	// the chat (PLAN 59, it was lost on the way through the approval).
 	Untrusted bool      `json:"untrusted,omitempty"`
