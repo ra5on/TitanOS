@@ -208,7 +208,9 @@ func TestAppPairingRefusals(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/account/apps/pair/"+start.ID+"/reject", nil); res.StatusCode != http.StatusOK {
 		t.Fatalf("reject: %d %s", res.StatusCode, body)
 	}
-	res, body = ts.do(phone, "POST", "/api/v1/app/pair/wait", map[string]string{"code": manual, "signature": app.sign("titanos-pair\n" + strings.ToUpper(manual))})
+	// The app signs the code as typed (the Android app sends it with the
+	// dash, as the browser shows it).
+	res, body = ts.do(phone, "POST", "/api/v1/app/pair/wait", map[string]string{"code": start.ManualCode, "signature": app.sign("titanos-pair\n" + start.ManualCode)})
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"rejected"`) || strings.Contains(string(body), "device") {
 		t.Fatalf("wait rejected: %d %s", res.StatusCode, body)
 	}

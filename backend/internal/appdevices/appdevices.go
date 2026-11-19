@@ -623,6 +623,7 @@ func (m *Manager) Wait(code, signature string) (Pairing, error) {
 	defer m.mu.Unlock()
 	now := m.now()
 	m.pruneLocked(now)
+	typed := strings.TrimSpace(code)
 	code = normalCode(code)
 	p := m.pairings[m.byCode[code]]
 	if p == nil || p.key == nil {
@@ -632,7 +633,9 @@ func (m *Manager) Wait(code, signature string) (Pairing, error) {
 	if code == p.Manual {
 		sent = p.Manual
 	}
-	if !verify(p.key, pairText+sent, signature) {
+	// The app signs the code as it sends it, a typed manual code with its
+	// dash and case; the normal form counts as well.
+	if !verify(p.key, pairText+typed, signature) && !verify(p.key, pairText+sent, signature) {
 		return Pairing{}, ErrSignature
 	}
 	out := *p
