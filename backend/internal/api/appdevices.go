@@ -393,8 +393,11 @@ func (a appsArea) handleSession(w http.ResponseWriter, r *http.Request) {
 // appUserAgent is what the list of sessions keeps for the session of an
 // app: "TitanOS-Android/<app>", then the device name. The web UI words it.
 func appUserAgent(d appdevices.Device) string {
-	return "TitanOS-Android/" + d.App + " " + d.Name
+	return appAgentPrefix + d.App + " " + d.Name
 }
+
+// appAgentPrefix starts the user agent of an app's session.
+const appAgentPrefix = "TitanOS-Android/"
 
 // appsRevokeAll, appsRebind and appsForget follow the device passwords
 // (devicesRevokeAll, devicesRebind, pimForgetUser).

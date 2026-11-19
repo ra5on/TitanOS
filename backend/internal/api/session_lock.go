@@ -67,6 +67,12 @@ const (
 // of the session store held: the first read of an account may wake the
 // stick.
 func (au authArea) lockMinutes(user, userAgent string) int {
+	// A paired Android app (PLAN 116) never locks by itself: the phone
+	// has its own lock screen, and a locked session would stop its work
+	// in the background (photos, contacts, calendars).
+	if strings.HasPrefix(userAgent, appAgentPrefix) {
+		return 0
+	}
 	times := au.prefs.lockTimes(user)
 	if phoneAgent(userAgent) {
 		return times.phone
