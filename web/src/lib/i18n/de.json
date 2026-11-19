@@ -9974,6 +9974,11 @@
 	"error.apps_unavailable": "Die gekoppelten Apps lassen sich gerade nicht lesen (USB-Stick nicht erreichbar). Bitte gleich noch einmal versuchen.",
 	"error.invalid_app": "Unbekannte App.",
 	"error.invalid_key": "Der Schlüssel der App ist ungültig.",
+	"error.app_session_required": "Das geht nur aus der gekoppelten Android-App.",
+	"error.photos_unavailable": "Die Foto-Sicherung braucht das Volume für Systemdaten. Es ist gerade nicht eingebunden.",
+	"error.photos_too_many": "Höchstens 500 Fotos je Anfrage.",
+	"error.invalid_checksum": "Die Prüfsumme (SHA-256) fehlt oder ist ungültig.",
+	"error.upload_hash_mismatch": "Die hochgeladene Datei hat nicht die erwartete Prüfsumme. Sie wurde nicht gespeichert; bitte noch einmal hochladen.",
 	"error.pairing_code": "Der Kopplungscode ist unbekannt, schon benutzt oder abgelaufen.",
 	"error.pairing_limit": "Es laufen schon drei Kopplungen. Schließe eine oder warte fünf Minuten.",
 	"error.pairing_state": "Die Kopplung wartet gerade nicht darauf – vielleicht hat das Handy sich noch nicht gemeldet oder sie ist schon abgeschlossen."

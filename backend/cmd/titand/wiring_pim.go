@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
+
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -82,3 +84,27 @@ func (w *titand) wirePIM() error {
 }
 
 func pimMarkFile(account string) string { return "users/" + account + "/pim.json" }
+
+// wireAppPhotos builds the index of the Android app's photo backup
+// (PLAN 116): .titanos/apps on the system data volume, made only to write;
+// without a volume every call is 503, never an empty index.
+func (w *titand) wireAppPhotos() error {
+	w.appPhotos = &appphotos.Store{Volume: func(create bool) (*os.Root, func(), error) {
+		volume, release := w.systemData.Use(appphotos.Feature)
+		if volume == "" {
+			release()
+			return nil, nil, volumedata.ErrUnavailable
+		}
+		open := volumedata.OpenExisting
+		if create {
+			open = volumedata.Open
+		}
+		root, err := open("/mnt", volume, appphotos.Feature, w.volumes.Mounted())
+		if err != nil {
+			release()
+			return nil, nil, err
+		}
+		return root, release, nil
+	}}
+	return nil
+}

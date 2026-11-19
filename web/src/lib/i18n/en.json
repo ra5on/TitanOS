@@ -9974,6 +9974,11 @@
 	"error.apps_unavailable": "The paired apps cannot be read right now (USB stick not reachable). Please try again in a moment.",
 	"error.invalid_app": "Unknown app.",
 	"error.invalid_key": "The key of the app is not valid.",
+	"error.app_session_required": "Only the paired Android app can do this.",
+	"error.photos_unavailable": "The photo backup needs the system data volume, which is not mounted right now.",
+	"error.photos_too_many": "At most 500 photos per request.",
+	"error.invalid_checksum": "The checksum (SHA-256) is missing or not valid.",
+	"error.upload_hash_mismatch": "The uploaded file does not have the expected checksum. It was not saved; please upload it again.",
 	"error.pairing_code": "The pairing code is unknown, used already or expired.",
 	"error.pairing_limit": "Three pairings are open already. Close one or wait five minutes.",
 	"error.pairing_state": "The pairing is not waiting for this – perhaps the phone has not checked in yet, or it is finished already."

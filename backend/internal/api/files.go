@@ -55,6 +55,7 @@ var fileErrors = []struct {
 	{files.ErrReadOnly, http.StatusForbidden, "read_only_share"},
 	{files.ErrNoSpace, http.StatusInsufficientStorage, "no_space"},
 	{files.ErrMismatch, http.StatusConflict, "upload_mismatch"},
+	{files.ErrUploadSum, http.StatusConflict, "upload_hash_mismatch"},
 	{files.ErrIncomplete, http.StatusConflict, "upload_incomplete"},
 	{files.ErrConfirm, http.StatusBadRequest, "not_confirmed"},
 	{files.ErrVolumeChanged, http.StatusConflict, "upload_volume_unavailable"},

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appphotos"
+
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
@@ -64,6 +66,8 @@ func (w *titand) wireNotifications() error {
 			}
 			// Calendars and address books move with the default volume.
 			features = append(features, pimFeatures...)
+			// So does the index of the Android app's photo backup.
+			features = append(features, appphotos.Feature)
 			w.systemData.Watch(ctx, features)
 		})
 	}

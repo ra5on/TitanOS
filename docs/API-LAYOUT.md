@@ -20,6 +20,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | app | `app_access.go`, `app_icon.go`, `app_proxy.go` | `appAccessArea`, `appIconArea`, `appProxyArea` | 4 |
 | appdevices | `appdevices.go` | `appsArea` | 1 |
 | application | `application_restore.go` | – | 0 |
+| appphotos | `appphotos.go` | `appPhotosArea` | 1 |
 | apps | `apps.go` | `appStoreArea` | 0 |
 | area | `area_hooks.go` | – | 0 |
 | auth | `auth.go`, `auth_area.go` | `authArea` | 1 |
