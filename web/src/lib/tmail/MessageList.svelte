@@ -1381,8 +1381,5 @@
 		.btn {
 			min-height: 44px;
 		}
-		.check {
-			min-height: 44px;
-		}
 	}
 </style>
