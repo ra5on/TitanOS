@@ -10,7 +10,7 @@
 // TitanOS-Android. Dazu kommt die Schrift des Webs (--font-sans/--font-mono,
 // IBM Plex, OFL-1.1) aus @fontsource als TTF-Ressource.
 //
-//   node scripts/android-theme.mjs ../TitanOS-Android
+//   node web/scripts/android-theme.mjs ../TitanOS-Android
 //
 // Node 24, keine Abhängigkeiten. Schreibt nur unterhalb des Zielordners.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -18,11 +18,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 
-const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const target = process.argv[2] ? resolve(process.argv[2]) : "";
 if (!target || !existsSync(join(target, "settings.gradle.kts"))) {
   console.error(
-    "Aufruf: node scripts/android-theme.mjs <Pfad zu TitanOS-Android>",
+    "Aufruf: node web/scripts/android-theme.mjs <Pfad zu TitanOS-Android>",
   );
   process.exit(2);
 }
@@ -30,7 +30,7 @@ const read = (p) => readFileSync(join(repo, p), "utf8");
 const KT_PKG = "io.github.ra5on.titanos.ui.generated";
 const KT_DIR = join(target, "core-ui/src/main/kotlin", ...KT_PKG.split("."));
 const FONT_DIR = join(target, "core-ui/src/main/res/font");
-const HEADER = `// Erzeugt von TitanOS/scripts/android-theme.mjs – nicht von Hand ändern.
+const HEADER = `// Erzeugt von TitanOS/web/scripts/android-theme.mjs – nicht von Hand ändern.
 // Quellen: web/src/app.css, web/src/lib/theme/themes.ts, web/src/lib/desktop/DesktopIcon.svelte.
 `;
 
