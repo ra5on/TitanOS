@@ -96,7 +96,7 @@ func (b *agentToolbox) logChange(t *agentTool, p agent.Prepared, err error) {
 func draftOutcome(d *agent.Draft, what string) (agent.Outcome, error) {
 	data, err := json.Marshal(map[string]any{
 		"draft": true, "saved": false, "what": what,
-		"note": "Nothing was written or sent: the person's right for this is \"Nur Vorschläge\". They see a card with \"Öffnen und bearbeiten\" and finish it in the program. Say so in one sentence; do not call the tool again.",
+		"note": "Nothing was written, saved or sent – it is not in the drafts folder either: the person's right for this is \"Nur Vorschläge\". They see a card under your answer in this chat; with \"Öffnen und bearbeiten\" they finish it in the program. Say exactly that in one sentence; do not call the tool again and do not look for it.",
 	})
 	return agent.Outcome{Text: string(data), Draft: d}, err
 }

@@ -927,9 +927,9 @@ async function agent109() {
 async function open(
   width,
   height,
-  { theme = "graphit", path = "/agent", look = null, cluster = null } = {},
+  { theme = "graphit", path = "/agent", look = null, cluster = null, factory = create, options = {} } = {},
 ) {
-  const made = await create("owner", theme, width);
+  const made = await factory("owner", theme, width, "de", options);
   await made.page.setViewportSize({ width, height });
   const appearance = { theme };
   made.data.prefs.appearance = appearance;
@@ -2412,7 +2412,154 @@ async function agent110() {
   }
 }
 
+// 1.14 (owner 19 Nov 2026: "Bei mehreren Nachrichten sind die Punkte
+// wieder zu weit unten und ich muss scrollen damit ich die sehe"): after
+// each of ten messages in one chat the working line stands fully in the
+// chat, on the phone and on the desktop, without scrolling by hand.
+async function agent114() {
+  const long = (n) =>
+    `Antwort ${n}.\n\n` +
+    Array.from({ length: 6 }, (_, i) => `- Punkt ${i + 1} mit etwas mehr Text, damit die Antwort mehrere Zeilen füllt.`).join("\n") +
+    "\n\n| Spalte | Wert |\n|---|---|\n| a | 1 |\n| b | 2 |";
+  const chat = {
+    id: "c1aaaaaaaaaa0114",
+    title: "Viele Nachrichten",
+    created: at(8),
+    updated: at(8, 1),
+    state: "idle",
+    origin: "web",
+    entries: [],
+  };
+  for (let i = 0; i < 3; i++)
+    chat.entries.push(
+      { id: "a" + i, at: at(8, i), role: "user", content: "Frage " + i },
+      { id: "b" + i, at: at(8, i), role: "assistant", content: long("alt " + i) },
+    );
+  // The iPhone: WebKit with touch, as Safari and the app on the home screen.
+  const { webkit, devices } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+  const safari = await webkit.launch({ headless: true });
+  const iphone = fixtureFactory(safari, errors);
+  const { viewport, ...phoneLike } = devices["iPhone 13"];
+  for (const [name, width, height, factory, options] of [
+    ["iphone", 390, 844, iphone, { ...phoneLike, serviceWorkers: "block" }],
+    ["phone", 390, 844, create, {}],
+    ["desktop", 1280, 800, create, {}],
+  ]) {
+    const { ctx, page } = await open(width, height, { factory, options });
+    page.on("response", (r) => {
+      if (r.status() >= 400) console.log(`114 ${name}: ${r.status()} ${r.request().method()} ${r.url()}`);
+    });
+    let entries = [...chat.entries];
+    let state = "idle";
+    let n = 0;
+    await page.route("**/api/v1/agent/chats/" + chat.id, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { ...chat, entries, state } })
+        : route.fallback(),
+    );
+    await page.route("**/api/v1/agent/chats/" + chat.id + "/messages", (route) => {
+      n++;
+      entries = [...entries, { id: "q" + n, at: at(9, n), role: "user", content: route.request().postDataJSON().message }];
+      state = "running";
+      return route.fulfill({ status: 202, json: { ...chat, state, entries } });
+    });
+    await page.route("**/api/v1/agent/chats/" + chat.id + "/events", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          `event: snapshot\ndata: ${JSON.stringify({ type: "snapshot", entries, content: "", state })}\n\n` +
+          `event: state\ndata: ${JSON.stringify({ type: "state", state })}\n\n`,
+      }),
+    );
+    await page.goto(base + "/agent?chat=" + chat.id);
+    await page.getByText("Antwort alt 2.").waitFor();
+    const input = page.locator(".composer textarea");
+    for (let k = 1; k <= 10; k++) {
+      await input.click();
+      await input.fill("Frage Nummer " + k);
+      // On a touch phone Enter makes a new line; the round button sends.
+      if (name === "iphone") await page.getByRole("button", { name: "Senden" }).click();
+      else await page.keyboard.press("Enter");
+      try {
+        await page.locator(".live-line .fig").waitFor({ timeout: 20000 });
+      } catch (err) {
+        await page.screenshot({ path: `${out}/114-${name}-no-line-${k}.png` });
+        throw err;
+      }
+      await page.waitForTimeout(700);
+      const seen = await page.evaluate(() => {
+        const line = document.querySelector(".live-line").getBoundingClientRect();
+        const view = document.querySelector(".messages");
+        const box = view.getBoundingClientRect();
+        return {
+          bottom: Math.round(line.bottom),
+          top: Math.round(line.top),
+          edge: Math.round(box.bottom),
+          below: Math.round(view.scrollHeight - view.scrollTop - view.clientHeight),
+        };
+      });
+      if ([3, 5, 10].includes(k) || seen.bottom > seen.edge + 1)
+        console.log(`114 ${name} message ${k}:`, JSON.stringify(seen));
+      assert.ok(
+        seen.bottom <= seen.edge + 1 && seen.top >= 0,
+        `114 ${name}: after message ${k} the working line is in view (${JSON.stringify(seen)})`,
+      );
+      if (k === 3 || k === 10) await page.screenshot({ path: `${out}/114-${name}-message-${k}.png` });
+      const inView = () =>
+        page.evaluate(() => {
+          const line = document.querySelector(".live-line").getBoundingClientRect();
+          const view = document.querySelector(".messages");
+          return {
+            ok: line.bottom <= view.getBoundingClientRect().bottom + 1,
+            below: Math.round(view.scrollHeight - view.scrollTop - view.clientHeight),
+          };
+        });
+      if (k === 4 || k === 6) {
+        // The keyboard closes after sending and the bar below comes back:
+        // the chat gets shorter while the agent works. At 6 the browser has
+        // also moved the view up by itself first (clamped), no person did.
+        if (k === 6)
+          await page.evaluate(() => {
+            const v = document.querySelector(".messages");
+            v.scrollTop = v.scrollTop - 150;
+          });
+        await page.setViewportSize({ width, height: height - 90 });
+        await page.waitForTimeout(400);
+        const after = await inView();
+        await page.setViewportSize({ width, height });
+        await page.waitForTimeout(300);
+        assert.ok(after.ok, `114 ${name}: message ${k}, the chat got shorter – the working line stays in view (${JSON.stringify(after)})`);
+      }
+      if (k === 8 && name === "desktop") {
+        // Reading further up while it works is the person's: it stays there.
+        await page.mouse.move(width / 2, height / 2);
+        await page.mouse.wheel(0, -400);
+        await page.waitForTimeout(300);
+        await page.setViewportSize({ width, height: height - 90 });
+        await page.waitForTimeout(400);
+        const after = await inView();
+        await page.setViewportSize({ width, height });
+        assert.ok(after.below > 100, `114 ${name}: after the wheel the view stays up (${JSON.stringify(after)})`);
+      }
+      // The answer comes; the next message follows it.
+      entries = [...entries, { id: "r" + k, at: at(9, k), role: "assistant", content: long(k) }];
+      state = "idle";
+      await page.getByText(`Antwort ${k}.`, { exact: true }).waitFor({ timeout: 20000 });
+      await page.locator(".live-line .fig").waitFor({ state: "detached", timeout: 20000 });
+    }
+    await ctx.close();
+  }
+  await safari.close();
+}
+
 try {
+  if (process.env.UI_ONLY === "114") {
+    await agent114();
+    noConsoleErrors();
+    console.log("KI-Agent UI (1.14) ok:", out);
+    process.exit(0);
+  }
   if (process.env.UI_ONLY === "110") {
     await agent110();
     noConsoleErrors();
@@ -3966,6 +4113,7 @@ try {
   }
   await agent107();
   await runs101();
+  await agent114();
   noConsoleErrors();
   console.log("KI-Agent UI ok:", out);
 } finally {

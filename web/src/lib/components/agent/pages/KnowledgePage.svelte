@@ -12,10 +12,11 @@
 	import NASMap from '../NASMap.svelte';
 	import { api, type FileRoot } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import {
 		defaultInitiative,
 		sanitizeInitiative,
+		skillIn,
 		type Initiative,
 		type Project,
 		type Skill,
@@ -118,7 +119,9 @@
 	const q = $derived(query.trim().toLowerCase());
 	const hit = (...texts: (string | undefined)[]) =>
 		!q || texts.some((x) => (x ?? '').toLowerCase().includes(q));
-	const shownSkills = $derived(skills.filter((s) => hit(s.name, s.when, s.steps)));
+	const shownSkills = $derived(
+		skills.map((s) => skillIn(s, i18n.locale)).filter((s) => hit(s.name, s.when, s.steps)),
+	);
 	const withText = $derived(projects.filter((p) => p.instructions?.trim()));
 	const shownProjects = $derived(projects.filter((p) => !p.owner && hit(p.name, p.instructions)));
 	const lines = (text: string) => text.split('\n').filter((l) => l.trim()).length;

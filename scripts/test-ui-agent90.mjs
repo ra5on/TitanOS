@@ -318,6 +318,8 @@ async function open(width, height, theme = "hell") {
             steps: "1. system_status\n2. storage_status",
             builtIn: true,
             updated: at(1),
+            // 1.14: the German text of a built-in skill.
+            de: { name: "Gesundheitscheck", when: "Gesundheitscheck", steps: "1. system_status prüfen\n2. storage_status prüfen" },
           },
           {
             id: "s1",
@@ -737,7 +739,7 @@ const sent = (seen, method, path) =>
   for (const row of [
     "Meine Anweisung",
     "Projekt-Anweisungen",
-    "Health check",
+    "Gesundheitscheck",
     "Rechnungen einsortieren",
     "NAS-Landkarte",
     "Dokumente",
@@ -747,9 +749,11 @@ const sent = (seen, method, path) =>
       await page.locator(".srow-title", { hasText: row }).first().isVisible(),
       row,
     );
+  // 1.14: a built-in skill in the language of the page, not in English.
+  assert.equal(await page.locator(".srow-title", { hasText: "Health check" }).count(), 0, "no English name");
   // The search keeps what fits.
   await page.getByRole("searchbox", { name: "Wissen durchsuchen" }).fill("rechnung");
-  await page.locator(".srow-title", { hasText: "Health check" }).waitFor({
+  await page.locator(".srow-title", { hasText: "Gesundheitscheck" }).waitFor({
     state: "detached",
   });
   assert.ok(

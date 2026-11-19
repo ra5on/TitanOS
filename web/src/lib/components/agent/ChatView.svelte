@@ -136,12 +136,26 @@
 	// long as one was within 80 px of the end, which a finger or a slow
 	// wheel never left. Back at the end, it follows again.
 	let lastTop = 0;
+	// 1.14 (owner 19 Nov 2026: "Bei mehreren Nachrichten sind die Punkte
+	// wieder zu weit unten"): only a move of the person lets go – a wheel,
+	// a finger (with the glide after it), a key, the scroll bar. The view
+	// also moves up when the browser clamps it (content got shorter, the
+	// chat got taller) or iOS pans for the keyboard; that used to let go
+	// too, and the working line then grew under the edge.
+	let moved = 0;
+	const GLIDE = 1500;
+	function person() {
+		moved = performance.now();
+	}
+	let touching = false;
+	function byPerson() {
+		return touching || performance.now() - moved < GLIDE;
+	}
 	function scrolled() {
 		if (!scroller) return;
 		const top = scroller.scrollTop;
 		const below = scroller.scrollHeight - top - scroller.clientHeight;
-		// Content that got shorter moves the view up too: at the end it stays pinned.
-		if (top < lastTop - 1 && below > 2) pinned = false;
+		if (top < lastTop - 1 && below > 2 && byPerson()) pinned = false;
 		else if (below < 24) pinned = true;
 		lastTop = top;
 	}
@@ -168,7 +182,7 @@
 		// A move upwards whose scroll event has not come yet (a fast
 		// stream) is the person's too: do not pull back over it.
 		const below = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-		if (scroller.scrollTop < lastTop - 1 && below > 2) {
+		if (scroller.scrollTop < lastTop - 1 && below > 2 && byPerson()) {
 			pinned = false;
 			lastTop = scroller.scrollTop;
 			return;
@@ -188,12 +202,40 @@
 	// stood half under the edge): whatever makes the chat taller – the
 	// working line coming in after one's own message, a card, an image that
 	// loads, an animation – brings the end into view while it is followed.
+	// 1.14: the chat itself changing its height counts too – on the phone
+	// the keyboard closes after sending and the bar below comes back.
 	$effect(() => {
 		const el = column;
-		if (!el || typeof ResizeObserver === 'undefined') return;
+		const view = scroller;
+		if (!el || !view || typeof ResizeObserver === 'undefined') return;
 		const watch = new ResizeObserver(() => toEnd());
 		watch.observe(el);
+		watch.observe(view);
 		return () => watch.disconnect();
+	});
+	// Keys that move the view are the person's (in an input they type).
+	function key(e: KeyboardEvent) {
+		if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key))
+			person();
+	} // The moves of the person, passive (they never stop the scroll).
+	$effect(() => {
+		const el = scroller;
+		if (!el) return;
+		const down = () => ((touching = true), person());
+		const up = () => ((touching = false), person());
+		const on: [string, EventListener][] = [
+			['wheel', person],
+			['pointerdown', person],
+			['keydown', key as EventListener],
+			['touchstart', down],
+			['touchmove', person],
+			['touchend', up],
+			['touchcancel', up],
+		];
+		for (const [type, fn] of on) el.addEventListener(type, fn, { passive: true });
+		return () => {
+			for (const [type, fn] of on) el.removeEventListener(type, fn);
+		};
 	});
 
 	// What the agent remembered right before an answer goes into the small

@@ -533,10 +533,25 @@ func (s *Server) agentWriteKnowledge(root *os.Root, user auth.User, gid int) err
 			}
 		}
 	}
+	// 114-2: in German like the rest of the folder; files of earlier
+	// versions (English names) go, nothing else lives there.
+	wrote := map[string]bool{}
 	for _, sk := range agent.BuiltInSkills {
+		if de, ok := agent.BuiltInSkillsDE[sk.ID]; ok {
+			sk.Name, sk.When, sk.Steps = de.Name, de.When, de.Steps
+		}
+		name := agentFileName(sk.Name) + ".md"
 		text := fmt.Sprintf("# %s\n\n_Mitgeliefert mit TitanOS, wird bei Updates ersetzt._\n\n**Wann:** %s\n\n%s\n", sk.Name, sk.When, sk.Steps)
-		if err := agentWrite(root, user, gid, "Skills/TitanOS/"+agentFileName(sk.Name)+".md", []byte(text)); err != nil {
+		if err := agentWrite(root, user, gid, "Skills/TitanOS/"+name, []byte(text)); err != nil {
 			return err
+		}
+		wrote[name] = true
+	}
+	if old, err := fs.ReadDir(root.FS(), "Skills/TitanOS"); err == nil {
+		for _, e := range old {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && !wrote[e.Name()] {
+				_ = root.Remove("Skills/TitanOS/" + e.Name())
+			}
 		}
 	}
 	own, _ := s.agentStore().Skills(user.Name)

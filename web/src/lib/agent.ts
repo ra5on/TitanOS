@@ -158,7 +158,17 @@ export type Skill = {
 	disabled?: boolean;
 	untrusted?: boolean;
 	updated: string;
+	/** A built-in skill in German (1.14); name, when and steps above are English. */
+	de?: { name: string; when: string; steps: string };
 };
+
+/** 1.14 (owner 19 Nov 2026: "Skills sind auf Englisch"): a skill in the
+ * language of the page – the German text of a built-in one on a German
+ * page, otherwise as it is. Own skills stay as the person wrote them. */
+export function skillIn(s: Skill, locale: string): Skill {
+	if (!s.builtIn || !s.de || !locale.startsWith('de')) return s;
+	return { ...s, name: s.de.name, when: s.de.when, steps: s.de.steps };
+}
 
 /** What the morning report contains (PLAN 49), set by each person. */
 export type Report = {

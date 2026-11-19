@@ -300,13 +300,28 @@ func (s *Server) agentSkills(user string) ([]agent.Skill, error) {
 	return append(out, list...), nil
 }
 
+// agentSkillView is a skill for the pages: a built-in one also in German
+// (114-2); the page shows the language it is in.
+type agentSkillView struct {
+	agent.Skill
+	DE *agent.SkillText `json:"de,omitempty"`
+}
+
 func (s *Server) handleAgentSkills(w http.ResponseWriter, r *http.Request) {
 	list, err := s.agentSkills(currentUser(r).Name)
 	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": list})
+	out := make([]agentSkillView, 0, len(list))
+	for _, sk := range list {
+		v := agentSkillView{Skill: sk}
+		if de, ok := agent.BuiltInSkillsDE[sk.ID]; ok && sk.BuiltIn {
+			v.DE = &de
+		}
+		out = append(out, v)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"skills": out})
 }
 
 // handleAgentSkillSet changes a skill or switches a built-in one on/off.
