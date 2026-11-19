@@ -88,7 +88,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | system | `system.go` | `powerArea`, `systemArea` | 0 |
 | tailscale | `tailscale.go` | `tailscaleArea` | 0 |
 | terminal | `terminal_console.go` | – | 1 |
-| tmail | `tmail.go`, `tmail_messages.go` | `tmailArea` | 2 |
+| tmail | `tmail.go`, `tmail_messages.go`, `tmail_unified.go` | `tmailArea` | 3 |
 | tokens | `tokens.go` | `tokensArea` | 2 |
 | tool | `tool_env.go` | – | 0 |
 | ui | `ui.go` | – | 0 |
