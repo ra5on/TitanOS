@@ -88,4 +88,5 @@ Die App vergleicht beim Verbindungsaufbau den SPKI-Hash des Serverzertifikats mi
 
 - **Go-Tests:** `TestAppPairingAndSession`, `TestAppPairingRefusals`, `TestAppSessionRefusals`, `TestAppDeviceEndsWithStay` sowie die Unit-Tests von `appdevices`.
 - **Durchgespielt** mit `titand -dev` (nur HTTP) und einem Programm, das das Handy spielt: Koppeln im Browser am Handy-Format, Bestätigen mit Passwort, Sitzung über die Herausforderung, Anzeige unter „Angemeldete Geräte“, „Beenden“.
-- **Nicht geprüft:** HTTPS mit festgehaltenem Zertifikat, die echte Android-App, ein echtes NAS.
+- **Emulator** (Android 17, Testfassung 0.01, Debug- und signierte Release-APK): Adresse von Hand über HTTPS mit selbst signiertem Zertifikat (Vorbau vor `titand -dev`), Fingerabdruck stimmt, Kopplung mit Code, Bestätigen im Browser, Startseite mit echten Daten, neue Sitzung von selbst nach einem Neustart von titand.
+- **Nicht geprüft:** echtes Handy, echtes NAS, QR-Kamera, Tailscale, Dateien mit Freigaben (das Test-NAS hat keine).
