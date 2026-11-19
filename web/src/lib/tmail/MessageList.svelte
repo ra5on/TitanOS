@@ -124,6 +124,8 @@
 	let searchFocus = $state(false);
 	let unavailable = $state<string[]>([]);
 	const unified = $derived(accountId === ALL);
+	/** The search is in use: the field stays, "Abbrechen" and the scope show. */
+	const searchActive = $derived(searchFocus || !!search || scope === 'all');
 	const accOf = (r: Pick<Row, 'account'>) => r.account ?? accountId;
 	const roleIn = (a: string, path: string) => findFolder(a, path)?.role ?? '';
 	const roleOf = (r: Row) => roleIn(accOf(r), r.folder ?? folder);
@@ -355,6 +357,8 @@
 		(!unified || r.account === selectedAccount);
 
 	function pick(s: Shown, e: MouseEvent | KeyboardEvent) {
+		// Ctrl/Cmd or Shift on a row selects: the bar of the selection shows.
+		editing = true;
 		const key = rowKey(s.row);
 		const nextSet = new Set(picked);
 		if (e.shiftKey && anchor) {
@@ -516,6 +520,18 @@
 		onchanged?.(deltas);
 	}
 
+	/** The menu "Markieren": its mails, taken before the menu closes. */
+	function menuAct(kind: ListAction) {
+		const items = actionsFor ?? [];
+		actionsFor = null;
+		act(kind, items);
+	}
+	function menuMove() {
+		const items = actionsFor ?? [];
+		actionsFor = null;
+		moveItems = items;
+	}
+
 	/** Deleting in the trash is for good: asked first, on every way. */
 	function act(kind: ListAction, items: Row[]) {
 		if (kind === 'delete' && items.some((r) => roleOf(r) === 'trash')) {
@@ -631,46 +647,7 @@
 
 <section class="list" class:compact aria-labelledby="mail-list-head">
 	<div class="tools">
-		{#if searchFocus || search}
-			<form role="search" class="search on" onsubmit={submit}>
-				<label class="sr-only" for="mail-search"
-					>{scope === 'all' ? t('mail.search.labelAll') : t('mail.search.label')}</label
-				>
-				<span class="field-wrap"
-					><Icon name="search" size={18} /><input
-						id="mail-search"
-						class="field"
-						type="search"
-						bind:this={searchField}
-						placeholder={t('mail.search.placeholderShort')}
-						bind:value={search}
-						oninput={typed}
-						onfocus={() => (searchFocus = true)}
-					/></span
-				>
-				<button
-					type="button"
-					class="link"
-					onclick={() => {
-						search = q = '';
-						searchFocus = false;
-						if (scope === 'all') scope = 'folder';
-					}}>{t('common.cancel')}</button
-				>
-				{#if !unified}
-					<div class="seg" role="group" aria-label={t('mail.scope.label')}>
-						<button type="button" aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}
-							>{t('mail.scope.allShort')}</button
-						>
-						<button
-							type="button"
-							aria-pressed={scope === 'folder'}
-							onclick={() => (scope = 'folder')}>{heading}</button
-						>
-					</div>
-				{/if}
-			</form>
-		{:else}
+		{#if !searchActive}
 			<div class="nav">
 				{#if editing}
 					<button type="button" class="link" onclick={selectAll}>{t('mail.pick.all')}</button>
@@ -692,23 +669,50 @@
 					: heading}
 			</h2>
 			{#if subheading && !editing}<p class="sub">{subheading}</p>{/if}
-			{#if !editing}
-				<form role="search" class="search" onsubmit={submit}>
-					<label class="sr-only" for="mail-search">{t('mail.search.label')}</label>
-					<span class="field-wrap"
-						><Icon name="search" size={18} /><input
-							id="mail-search"
-							class="field"
-							type="search"
-							bind:this={searchField}
-							placeholder={t('mail.search.placeholderShort')}
-							bind:value={search}
-							oninput={typed}
-							onfocus={() => (searchFocus = true)}
-						/></span
+		{:else}
+			<h2 id="mail-list-head" class="sr-only">{heading}</h2>
+		{/if}
+		{#if !editing}
+			<form role="search" class="search" class:on={searchActive} onsubmit={submit}>
+				<label class="sr-only" for="mail-search"
+					>{scope === 'all' ? t('mail.search.labelAll') : t('mail.search.label')}</label
+				>
+				<span class="field-wrap"
+					><Icon name="search" size={18} /><input
+						id="mail-search"
+						class="field"
+						type="search"
+						bind:this={searchField}
+						placeholder={t('mail.search.placeholderShort')}
+						bind:value={search}
+						oninput={typed}
+						onfocus={() => (searchFocus = true)}
+					/></span
+				>
+				{#if searchActive}
+					<button
+						type="button"
+						class="link"
+						onclick={() => {
+							search = q = '';
+							searchFocus = false;
+							if (scope === 'all') scope = 'folder';
+						}}>{t('common.cancel')}</button
 					>
-				</form>
-			{/if}
+					{#if !unified}
+						<div class="seg" role="group" aria-label={t('mail.scope.label')}>
+							<button type="button" aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}
+								>{t('mail.scope.allShort')}</button
+							>
+							<button
+								type="button"
+								aria-pressed={scope === 'folder'}
+								onclick={() => (scope = 'folder')}>{heading}</button
+							>
+						</div>
+					{/if}
+				{/if}
+			</form>
 		{/if}
 		{#if loaded && !needCriteria && (searched || q || hasCriteria)}
 			<p class="muted count" role="status">
@@ -967,52 +971,27 @@
 		onclose={() => (actionsFor = null)}
 	>
 		<div class="fgroup acts">
-			<button
-				type="button"
-				onclick={() => {
-					actionsFor = null;
-					act(allFlagged ? 'unflag' : 'flag', items);
-				}}
+			<button type="button" onclick={() => menuAct(allFlagged ? 'unflag' : 'flag')}
 				><Icon name="flag" size={18} /><span
 					>{allFlagged ? t('mail.action.unflag') : t('mail.action.flag')}</span
 				></button
 			>
-			<button
-				type="button"
-				onclick={() => {
-					actionsFor = null;
-					act(allSeen ? 'unseen' : 'seen', items);
-				}}
+			<button type="button" onclick={() => menuAct(allSeen ? 'unseen' : 'seen')}
 				><Icon name="mail" size={18} /><span
 					>{allSeen ? t('mail.action.markUnread') : t('mail.action.markRead')}</span
 				></button
 			>
 			{#if items.some((r) => roleOf(r) !== 'archive')}
-				<button
-					type="button"
-					onclick={() => {
-						actionsFor = null;
-						act('archive', items);
-					}}><Icon name="archive" size={18} /><span>{t('mail.action.archive')}</span></button
+				<button type="button" onclick={() => menuAct('archive')}
+					><Icon name="archive" size={18} /><span>{t('mail.action.archive')}</span></button
 				>
 			{/if}
 			{#if items.some((r) => roleOf(r) !== 'junk')}
-				<button
-					type="button"
-					onclick={() => {
-						actionsFor = null;
-						act('junk', items);
-					}}><Icon name="shield" size={18} /><span>{t('mail.action.junk')}</span></button
+				<button type="button" onclick={() => menuAct('junk')}
+					><Icon name="shield" size={18} /><span>{t('mail.action.junk')}</span></button
 				>
 			{/if}
-			<button
-				type="button"
-				onclick={() => {
-					const it = items;
-					actionsFor = null;
-					moveItems = it;
-				}}
-				disabled={new Set(items.map(accOf)).size > 1}
+			<button type="button" onclick={() => menuMove()} disabled={new Set(items.map(accOf)).size > 1}
 				><Icon name="move" size={18} /><span>{t('mail.bar.move')}</span></button
 			>
 		</div>
@@ -1161,7 +1140,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-1-5);
-		min-height: 40px;
+		min-height: 44px;
 		padding: 0 var(--space-2-5);
 		border-radius: 10px;
 		background: var(--chip);
@@ -1176,7 +1155,7 @@
 		border: 0;
 		background: none;
 		padding: 0;
-		min-height: 40px;
+		min-height: 44px;
 		font-size: var(--text-md);
 		color: var(--text);
 		box-shadow: none;
