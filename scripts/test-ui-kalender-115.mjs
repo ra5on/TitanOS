@@ -14,7 +14,10 @@
 // a tap on a day opens it with movement (Animationen an), without it under
 // reduced motion; a swipe goes to the next day and week; "‹ November" goes
 // back; the year and a month of it; the search; "Alle ausblenden" in one
-// request; the KI-Agent in the ⋯ menu of the head (opens it; off without
+// request; draft 33 "Neues Ereignis" (Abbrechen · Neues Ereignis ·
+// Hinzufügen, calendar and alerts in sheets, the request), editing (Fertig,
+// "Ereignis löschen"), draft 35 the event's page ("‹ Di., 17. Nov.",
+// "Bearbeiten", "Ereignis löschen", no Schließen); the KI-Agent in the ⋯ menu of the head (opens it; off without
 // the agent). One window resized while open (wide, lower, compact, wide
 // again). Once in a real desktop window. Screenshots to UI_SHOTS (the
 // Baustand: Entwuerfe/115-mail-handy/bau/kalender-*.png) and UI_OUTPUT.
@@ -94,6 +97,12 @@ async function ready(page, view) {
   await page.locator(`[data-pim-ready][data-view="${view}"]`).waitFor();
   await page.locator(".ev, .blk, .arow, .month .bar, .ym").first().waitFor();
   await page.waitForTimeout(400);
+  // 1.15: a movement that is still running (a day opening) is over first.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 }
 const sent = (state, method, re) => state.requests.filter(([m, p]) => m === method && re.test(p));
 /** The contrast of an element's text on a background color (both computed). */
@@ -377,6 +386,80 @@ try {
     await page.getByRole("button", { name: "Alle einblenden" }).click();
     await until(() => sent(state, "PUT", /^\/preferences\/calendar$/).length === before + 2, "shown again");
     assert.deepEqual(sent(state, "PUT", /^\/preferences\/calendar$/).at(-1)[2].hidden, []);
+    await ctx.close();
+  }
+
+  // ---- Draft 33: "Neues Ereignis" as a sheet; draft 35: the event's page ----
+  for (const theme of ["graphit", "hell"]) {
+    const { page, ctx, state } = await open({ width: 390, height: 844, phone: true, theme });
+    await page.goto(base + "/calendar/event?date=2026-11-19&time=10:00&back=/calendar");
+    await page.locator("[data-event-form]").waitFor();
+    const head = page.locator("[data-sheet-head]");
+    assert.match(await head.innerText(), /Abbrechen\s*Neues Ereignis\s*Hinzufügen/);
+    assert.equal(await page.getByRole("button", { name: "Speichern" }).count(), 0, "no Speichern");
+    assert.equal(await page.getByRole("button", { name: "Verwerfen" }).count(), 0, "no Verwerfen");
+    await page.locator("#t-title").fill("Zahnarzt");
+    await page.locator("#t-place").fill("Praxis am Markt");
+    // The calendar: a row with its value and an arrow, a sheet to choose.
+    await page.getByRole("button", { name: /^Kalender/ }).click();
+    await page.locator("dialog[open] .choice", { hasText: "Arbeit" }).click();
+    await until(async () => (await page.locator("dialog[open]").count()) === 0, "the sheet closes");
+    assert.match(await page.getByRole("button", { name: /^Kalender/ }).innerText(), /Arbeit/);
+    // An alert: "Hinweis · Ohne ›", chosen in a sheet; then "Zweiter Hinweis".
+    await page.getByRole("button", { name: /^Hinweis/ }).click();
+    await page.locator("dialog[open]").waitFor();
+    await page.waitForTimeout(400);
+    await sound(page, `alert sheet ${theme}`);
+    if (theme === "graphit") await keep(page, "neu-hinweis-handy-graphit");
+    await page.locator("dialog[open] .choice", { hasText: "15 Minuten vorher" }).click();
+    await page.getByRole("button", { name: /^Zweiter Hinweis/ }).waitFor();
+    assert.match(await page.getByRole("button", { name: /^Hinweis/ }).innerText(), /15 Minuten vorher/);
+    await page.locator("#t-title").focus();
+    await page.locator("#t-title").blur();
+    await sound(page, `new event ${theme}`);
+    await keep(page, `neu-handy-${theme}`);
+    await page.getByRole("button", { name: "Hinzufügen" }).click();
+    await until(() => sent(state, "POST", /^\/calendar\/events$/).length === 1, "the new event is sent");
+    const made = sent(state, "POST", /^\/calendar\/events$/)[0][2];
+    assert.equal(made.calendar, "arbeit");
+    assert.deepEqual(made.event.alarms, [15]);
+    assert.equal(made.event.title, "Zahnarzt");
+
+    // The event's page: back to its day, "Bearbeiten", the red row.
+    await page.goto(base + "/calendar?view=day");
+    await ready(page, "day");
+    await page.locator(".blk", { hasText: "Elternabend" }).click();
+    const sheet = page.locator("dialog[open].evpage");
+    await sheet.waitFor();
+    await until(async () => (await sheet.innerText()).includes("Bastelsachen"), "the notes");
+    assert.match(await sheet.locator(".evtop").innerText(), /Di\., 17\. Nov\.\s*Bearbeiten/);
+    assert.equal(await sheet.getByRole("button", { name: "Schließen" }).count(), 0, "no Schließen");
+    await page.waitForTimeout(300);
+    await sound(page, `event page ${theme}`);
+    await keep(page, `ereignis-handy-${theme}`);
+    await sheet.getByRole("button", { name: "Ereignis löschen" }).click();
+    await page.getByText("Nur diesen Termin").waitFor();
+    await page.keyboard.press("Escape");
+    await until(async () => (await page.locator("dialog[open]").count()) === 0, "closed");
+    await page.locator(".blk", { hasText: "Elternabend" }).click();
+    await sheet.waitFor();
+    await sheet.locator(".evtop .back").click();
+    await until(async () => (await page.locator("dialog[open]").count()) === 0, "back closes it");
+    await page.goto(base + "/calendar?view=day&date=2026-11-19");
+    await ready(page, "day");
+    await page.locator(".blk", { hasText: "Kino" }).click();
+    await page.locator("dialog[open].evpage").getByRole("button", { name: "Bearbeiten" }).click();
+    await page.waitForURL(/\/calendar\/event\?/);
+    await page.locator("[data-event-form]").waitFor();
+    assert.match(await head.innerText(), /Abbrechen\s*Ereignis bearbeiten\s*Fertig/);
+    await page.locator(".delrow").scrollIntoViewIfNeeded();
+    await sound(page, `edit event ${theme}`);
+    if (theme === "graphit") await keep(page, "neu-bearbeiten-handy-graphit");
+    await page.getByRole("button", { name: "Ereignis löschen" }).click();
+    await page.getByText("Der Termin am", { exact: false }).first().waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Abbrechen" }).click();
+    await page.waitForURL(/\/calendar(\?|$)/);
     await ctx.close();
   }
 

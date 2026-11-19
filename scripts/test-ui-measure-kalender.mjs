@@ -115,9 +115,12 @@ try {
       await page.goto(base + "/calendar?view=month");
       await page.locator(".month .ev").first().waitFor({ state: "visible" });
       const visible = Date.now() - t0;
-      // and until every clipped title is whole (the N+1 of 1.11).
+      // and until every clipped title is whole (the N+1 of 1.11). 1.15: the
+      // month shows what fits a day and "+N weitere" for the rest (the
+      // 16th holds this title then), both from the same first answer.
       await page
-        .getByText("Langer Titel 29 mit allem", { exact: false })
+        .locator('.stack[data-stack="2026-11-16"]')
+        .getByText(/Langer Titel 29 mit allem|\+\d+ weitere/)
         .first()
         .waitFor({ state: "visible", timeout: 15000 });
       const whole = Date.now() - t0;

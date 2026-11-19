@@ -60,6 +60,10 @@ export function yearText(day: string): string {
 export function dayLine(day: string): string {
 	return `${fmt(day, { weekday: 'long' })} – ${fmt(day, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
+/** "Do., 19. Nov." (1.15: the way back from an event, draft 35). */
+export function shortDay(day: string): string {
+	return fmt(day, { weekday: 'short', day: 'numeric', month: 'short' });
+}
 /** "17. November 2026". */
 export function dateText(day: string): string {
 	return fmt(day, { day: 'numeric', month: 'long', year: 'numeric' });

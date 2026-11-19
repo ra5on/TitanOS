@@ -89,6 +89,12 @@ async function ready(page, view) {
   await page.locator(`[data-pim-ready][data-view="${view}"]`).waitFor();
   await page.locator(".ev, .blk, .arow, .month .pick, .month .bar").first().waitFor();
   await page.waitForTimeout(400);
+  // 1.15: a movement that is still running (a day opening) is over first.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 }
 const sent = (state, method, re) =>
   state.requests.filter(([m, p]) => m === method && re.test(p));

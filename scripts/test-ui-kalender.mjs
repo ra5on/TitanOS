@@ -124,6 +124,12 @@ async function ready(page, view) {
   // The events have come (a chip, block or row).
   await page.locator(".ev, .blk, .arow, .month .bar").first().waitFor();
   await page.waitForTimeout(300);
+  // 1.15: a movement that is still running (a day opening) is over first.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 }
 const dialog = (page) => page.locator("dialog[open]").last();
 
@@ -982,7 +988,8 @@ try {
       await sound(page, `phone ${what} ${theme}`);
       await shot(page, `handy-${what.replace(" ", "-")}-${theme}`);
       if (what === "event detail") {
-        await sheet.getByRole("button", { name: "Löschen …" }).click();
+        // 1.15 (draft 35): the red row at the end of the event's page.
+        await sheet.getByRole("button", { name: "Ereignis löschen" }).click();
         await dialog(page).getByText("Nur diesen Termin").waitFor();
         await page.waitForTimeout(500);
         assert.deepEqual(
