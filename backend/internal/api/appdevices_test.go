@@ -166,7 +166,9 @@ func TestAppPairingRefusals(t *testing.T) {
 	app, other := newTestApp(t), newTestApp(t)
 	res, body := ts.request("POST", "/api/v1/account/apps/pair", nil)
 	var start pairStart
-	json.Unmarshal(body, &start)
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &start) != nil {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
 	phone := ts.newClient()
 	claim := func(code, name, key string) (*http.Response, []byte) {
 		return ts.do(phone, "POST", "/api/v1/app/pair/claim", map[string]string{"code": code, "name": name, "app": "titanos", "publicKey": key})
@@ -178,7 +180,7 @@ func TestAppPairingRefusals(t *testing.T) {
 	if res, body := claim("nope", "Pixel", app.public()); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "pairing_code" {
 		t.Fatalf("bad code: %d %s", res.StatusCode, body)
 	}
-	if res, body := claim(start.Code, "a​b", app.public()); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_device_name" {
+	if res, body := claim(start.Code, "a\u200bb", app.public()); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_device_name" {
 		t.Fatalf("bad name: %d %s", res.StatusCode, body)
 	}
 	if res, body := claim(start.Code, "Pixel", "AAAA"); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_key" {

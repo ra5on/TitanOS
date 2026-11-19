@@ -59,7 +59,7 @@ func TestNormalCodeAndNames(t *testing.T) {
 	if normalCode(" k7q4-9xmt ") != "K7Q49XMT" || normalCode("abcDEF-ghijklmnopqrstuvwxyz012") != "abcDEF-ghijklmnopqrstuvwxyz012" {
 		t.Fatal("normalCode")
 	}
-	for _, bad := range []string{"", " x", strings.Repeat("ä", 65), "a​b", "a\nb"} {
+	for _, bad := range []string{"", " x", strings.Repeat("ä", 65), "a\u200bb", "a\nb"} {
 		if ValidName(bad) {
 			t.Fatalf("name %q accepted", bad)
 		}
