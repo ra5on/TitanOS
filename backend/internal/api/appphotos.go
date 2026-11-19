@@ -45,14 +45,24 @@ const (
 )
 
 type appPhotosArea struct {
-	files    filesArea
-	store    *appphotos.Store
+	appSessionGuard
+	files filesArea
+	store *appphotos.Store
+}
+
+func (s *Server) appPhotosArea() appPhotosArea {
+	return appPhotosArea{appSessionGuard: s.appSessionGuard(), files: s.filesArea(), store: s.opts.AppPhotos}
+}
+
+// appSessionGuard lets only the session of a paired app through (photo
+// backup, messages).
+type appSessionGuard struct {
 	sessions sessionsFunc
 	token    func(*http.Request) string
 }
 
-func (s *Server) appPhotosArea() appPhotosArea {
-	return appPhotosArea{files: s.filesArea(), store: s.opts.AppPhotos, sessions: s.sessionStore, token: s.authArea().sessionToken}
+func (s *Server) appSessionGuard() appSessionGuard {
+	return appSessionGuard{sessions: s.sessionStore, token: s.authArea().sessionToken}
 }
 
 func (s *Server) registerAppPhotos(mux *routeMux) {
@@ -64,7 +74,7 @@ func (s *Server) registerAppPhotos(mux *routeMux) {
 }
 
 // device is the paired app behind the request's session, "" for any other.
-func (a appPhotosArea) device(r *http.Request) string {
+func (a appSessionGuard) device(r *http.Request) string {
 	if a.sessions == nil {
 		return ""
 	}
@@ -75,7 +85,7 @@ func (a appPhotosArea) device(r *http.Request) string {
 	return session.Device
 }
 
-func (a appPhotosArea) appOnly(next http.HandlerFunc) http.HandlerFunc {
+func (a appSessionGuard) appOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.device(r) == "" {
 			writeError(w, http.StatusForbidden, "app_session_required", "only the paired Android app can do this")

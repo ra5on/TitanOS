@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appnotify"
 	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 
 	"github.com/ra5on/TitanOS/backend/internal/startup"
@@ -116,15 +117,17 @@ type titand struct {
 	start            *startup.Manager
 	systemContainers *lxc.Manager
 	// consoleMu keeps giving the text console back apart from a VM start.
-	consoleMu       sync.Mutex
-	tailnet         *tailscale.Manager
-	mesh            *netbird.Manager
-	extensions      *plugins.Manager
-	shells          *terminal.Manager
-	notifier        *notify.Manager
-	logs            *logkeep.Manager
-	stick           *stickwatch.Watcher
-	pushes          *webpush.Manager
+	consoleMu  sync.Mutex
+	tailnet    *tailscale.Manager
+	mesh       *netbird.Manager
+	extensions *plugins.Manager
+	shells     *terminal.Manager
+	notifier   *notify.Manager
+	logs       *logkeep.Manager
+	stick      *stickwatch.Watcher
+	pushes     *webpush.Manager
+	// appNotify keeps the messages for the paired Android apps (PLAN 116).
+	appNotify       *appnotify.Hub
 	home            *homeassistant.Manager
 	homes           *homeassistant.Hub
 	stickBackup     *configbackup.Manager

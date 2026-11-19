@@ -39,6 +39,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -176,7 +177,16 @@ type Message struct {
 	URL string `json:"url,omitempty"`
 	// Urgent asks the push service to deliver at once (errors).
 	Urgent bool `json:"-"`
+	// Severity of a NAS message (info, warning, error) for the paired
+	// apps (Mirror); not sent to browsers.
+	Severity string `json:"-"`
 }
+
+// MirrorFunc gets every message as it is sent, also when the account has
+// no subscribed browser: user "" for Broadcast (every owner and
+// administrator), else the account; kind is KindNAS, KindAgent,
+// KindCamera or KindMail. It must not block.
+type MirrorFunc func(user, kind string, msg Message)
 
 // Manager keeps the subscriptions and sends.
 type Manager struct {
@@ -192,6 +202,9 @@ type Manager struct {
 	now      func() time.Time
 	// checkHost decides which endpoint hosts are taken; tests replace it.
 	checkHost func(hostport string) bool
+
+	// mirror hands every message to the paired Android apps (appnotify).
+	mirror atomic.Pointer[MirrorFunc]
 
 	mu     sync.Mutex
 	loaded bool
@@ -463,9 +476,26 @@ func (m *Manager) personal(user string) bool {
 	return m.Allowed == nil || m.Allowed(user)
 }
 
+// SetMirror sets what gets every message besides the browsers (the
+// paired Android apps, appnotify); nil for none.
+func (m *Manager) SetMirror(f MirrorFunc) {
+	if f == nil {
+		m.mirror.Store(nil)
+		return
+	}
+	m.mirror.Store(&f)
+}
+
+func (m *Manager) mirrorTo(user, kind string, msg Message) {
+	if f := m.mirror.Load(); f != nil {
+		(*f)(user, kind, msg)
+	}
+}
+
 // Broadcast sends a message to every device whose account may still get
 // notifications, in the background, one attempt each with one retry.
 func (m *Manager) Broadcast(msg Message) {
+	m.mirrorTo("", KindNAS, msg)
 	m.mu.Lock()
 	all := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
@@ -523,6 +553,7 @@ func (m *Manager) send(user, kind string, msg Message) {
 	if !m.personal(user) {
 		return
 	}
+	m.mirrorTo(user, kind, msg)
 	m.mu.Lock()
 	devices := pick(slices.Clone(m.st.Devices), user, AppOf(msg), kind)
 	m.mu.Unlock()

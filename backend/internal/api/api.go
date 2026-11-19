@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/ra5on/TitanOS/backend/internal/appdevices"
+	"github.com/ra5on/TitanOS/backend/internal/appnotify"
 	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 	"io"
 	"io/fs"
@@ -116,6 +117,9 @@ type Options struct {
 	// AppPhotos is the index of the Android app's photo backup (PLAN 116,
 	// appphotos); nil answers 503 like a missing system data volume.
 	AppPhotos *appphotos.Store
+	// AppNotify keeps the messages for the paired Android apps (PLAN 116,
+	// appnotify); nil makes one here and mirrors WebPush into it.
+	AppNotify *appnotify.Hub
 	// HTTPSPort is the port of the web UI over HTTPS (webPorts of titand),
 	// for the addresses of the setup page of the iPhone; 0 is 443.
 	HTTPSPort int
@@ -395,6 +399,18 @@ func New(opts Options) *Server {
 		s.opts.WebPush = webpush.New(opts.Store)
 		s.pending = append(s.pending, func(context.Context) error { return s.opts.WebPush.Load() })
 	}
+	if s.opts.AppNotify == nil {
+		hub := appnotify.New()
+		hub.Admin = func(name string) bool {
+			if s.opts.Users == nil {
+				return false
+			}
+			user, ok := s.opts.Users.Get(name)
+			return ok && user.Role.CanAdminister() && !user.Disabled
+		}
+		s.opts.AppNotify = hub
+		s.opts.WebPush.SetMirror(hub.FromPush)
+	}
 	// Only now, with every stand-in in place: the areas built here take
 	// the managers as they are at this moment.
 	if s.opts.Shares != nil {
@@ -482,6 +498,7 @@ func New(opts Options) *Server {
 	s.registerPIM(mux)
 	s.registerApps(mux)
 	s.registerAppPhotos(mux)
+	s.registerAppNotify(mux)
 
 	s.routeCluster(mux)
 
