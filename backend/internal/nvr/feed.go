@@ -201,8 +201,9 @@ func (m *Manager) feedSession(parent context.Context, base string) {
 	f.setRunning(true)
 	// The connection ends with the NVR (a restart of Frigate closes it
 	// by itself; this catches a container that was removed).
+	retry := feedRetry
 	go func() {
-		ticker := time.NewTicker(feedRetry)
+		ticker := time.NewTicker(retry)
 		defer ticker.Stop()
 		for {
 			select {

@@ -826,7 +826,9 @@ func TestPTZStopIsGuaranteed(t *testing.T) {
 	}
 	before = stops()
 	r.frigate.Set(func(f *DevFrigate) { f.Down = false })
-	r.wait(func() bool { return stops() == before+1 })
+	// At least once: the retry and the connection that stands again may
+	// both send it (a second STOP does no harm).
+	r.wait(func() bool { return stops() >= before+1 })
 }
 
 // titand ends while a camera turns: the stop goes out before the
