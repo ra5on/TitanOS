@@ -171,7 +171,10 @@ func (h *Hub) FromPush(user, kind string, msg webpush.Message) {
 func (h *Hub) Add(user string, it Item) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.seq++
+	// The number follows the clock (microseconds, always rising): a gap
+	// between two of an account's markers tells nothing about how many
+	// messages other accounts got in between.
+	h.seq = max(h.seq+1, h.now().UnixMicro())
 	it.seq = h.seq
 	it.ID = h.marker(it.seq)
 	if it.Time.IsZero() {

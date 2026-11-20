@@ -49,8 +49,8 @@ func TestAccountsAndAdmins(t *testing.T) {
 	if len(alex) != 2 || alex[0].Category != NAS || alex[0].Severity != "warning" || alex[1].Category != Agent || alex[1].App != webpush.AppAgent {
 		t.Fatalf("alex: %+v", alex)
 	}
-	if latest != h.Epoch()+"-3" {
-		t.Fatalf("latest %s", latest)
+	if latest != alex[1].ID {
+		t.Fatalf("latest %s, newest %s", latest, alex[1].ID)
 	}
 	// sam is no administrator: only the own mail, never the NAS warning.
 	sam, _ := h.List("sam", 0)
@@ -74,18 +74,25 @@ func TestAccountsAndAdmins(t *testing.T) {
 func TestMarkers(t *testing.T) {
 	h, _ := testHub()
 	h.Add("alex", Item{Title: "a"})
+	own, _ := h.List("alex", 0)
 	if seq, reset := h.Since(""); seq != 0 || reset {
 		t.Fatal("empty marker")
 	}
 	// A marker of an earlier start of titand (another epoch), from the
 	// future of this one or unreadable: everything again, with reset.
-	for _, m := range []string{"1-5", h.Epoch() + "-99", "nonsense", h.Epoch() + "-x"} {
+	future := h.Epoch() + "-" + strconv.FormatInt(h.Seq(own[0])+1_000_000, 10)
+	for _, m := range []string{"1-5", future, "nonsense", h.Epoch() + "-x"} {
 		if seq, reset := h.Since(m); seq != 0 || !reset {
 			t.Errorf("%q: %d %v", m, seq, reset)
 		}
 	}
-	if seq, reset := h.Since(h.Epoch() + "-1"); seq != 1 || reset {
+	if seq, reset := h.Since(own[0].ID); seq != h.Seq(own[0]) || reset {
 		t.Fatalf("own: %d %v", seq, reset)
+	}
+	// The numbers follow the clock: a gap tells nothing about how many
+	// messages others got.
+	if h.Seq(own[0]) < 1_000_000 {
+		t.Fatalf("seq %d is a counter, not the clock", h.Seq(own[0]))
 	}
 }
 
