@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/HugoSmits86/nativewebp v1.3.0
-	github.com/anthropics/anthropic-sdk-go/v2 v2.9.0
+	github.com/anthropics/anthropic-sdk-go/v2 v2.10.0
 	github.com/coder/websocket v1.8.15
 	github.com/emersion/go-ical v0.0.0-20261112170022-46c5b53a1723
 	github.com/emersion/go-imap/v2 v2.0.0-beta.9
