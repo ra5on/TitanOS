@@ -172,6 +172,22 @@ Die App bekommt dieselben Meldungen wie Web Push im Browser, ohne Google und ohn
   - **Emulator** (Android 17, App-Testfassung 0.03 vor dem Release) gegen `titand -dev` hinter einem HTTPS-Vorbau: Koppeln, Schalter „Mitteilungen“ beim Einrichten mit Berechtigung und Akku-Ausnahme, Vordergrunddienst `specialUse` verbunden, „Bericht über das NAS jetzt senden“ kommt sofort als Android-Mitteilung (Kanal NAS) mit „Ansehen“ (öffnet die Liste) und „Gelesen“; nach einem Neustart von titand (neue Epoche) verbindet die App von selbst neu und bekommt die nächste Meldung; nach einem App-Update läuft der Dienst wieder.
   - Nicht geprüft: echtes Handy, Doze über Stunden, Neustart des Handys (BOOT_COMPLETED), Mail, Kalender, KI-Agent und NVR als Quelle am echten NAS.
 
+## Kontakte und Kalender (1.19)
+
+Die App trägt ein Android-Konto „TitanOS“ in Kontakte und Kalender des Handys ein (SyncAdapter, TECHNIK §4) und gleicht in beide Richtungen ab. Sie nimmt dafür **nicht** das CalDAV/CardDAV mit Gerätepasswort, sondern die Sitzung der App und eigene Routen, die **nur die Sitzung einer gekoppelten App** erreicht (`403 app_session_required`, nicht in `publicRoutes`, nicht im Werkzeugkatalog, nur dieser Knoten), wie Foto-Sicherung und Mitteilungen.
+
+- **Warum nicht die Routen der Webseiten:** `GET /calendar/events` liefert die Vorkommen eines Zeitfensters (höchstens 400 Tage) in einer eigenen Form – Wiederholungen nur als einfache Regel (`recurUnsupported` für den Rest), ohne EXDATE, ohne RECURRENCE-ID-Ausnahmen, ohne VTIMEZONE, ohne fremde Eigenschaften, ohne Änderungsmarke. Ein Abgleich darauf verlöre, was ein iPhone oder ein anderes CalDAV-Programm geschrieben hat. Die Routen hier sind ein dünner Spiegel von `davsync`: derselbe Speicher (`pim/store`), dieselbe Vorbereitung vor dem Schreiben (`davsync.PrepareEntry`, das Bild einer Karte wird verkleinert), ETags als `If-Match`.
+- **Routen** (`api/apppim.go`), `{kind}` ist `calendar`, `contacts` oder `tasks` (Erinnerungen, VTODO):
+  - `GET /api/v1/app/pim/{kind}` → `{collections:[{id, name, color, order, description?, ctag, syncToken, count, readOnly, virtual?}]}`.
+  - `GET /api/v1/app/pim/{kind}/{col}/changes?token=&limit=` → `{token, truncated, changes:[{name, etag?, deleted?}]}`: ohne Marke jeder Eintrag, sonst was sich seither geändert hat (höchstens 1000 je Antwort, `truncated` heißt: mit `token` weiterfragen). Eine Marke einer anderen Epoche oder älter als das Protokoll ist `410 pim_sync_token`: die App fängt ohne Marke neu an.
+  - `POST /api/v1/app/pim/{kind}/{col}/objects` `{names:[…]}` (höchstens 100) → `{objects:[{name, etag, data}], missing:[…]}` mit den gespeicherten Bytes.
+  - `PUT /api/v1/app/pim/{kind}/{col}/objects/{name}` mit dem Eintrag als Inhalt (`text/calendar` bzw. `text/vcard`, UTF-8): `If-None-Match: *` legt nur neu an, `If-Match: "<etag>"` ersetzt nur diesen Stand, sonst `412 pim_conflict`. Antwort `{etag, created, rewritten}` und `ETag`; `rewritten`: das NAS hat andere Bytes gespeichert (Bild verkleinert), die App holt den Eintrag neu. Dieselbe UID unter anderem Namen ist `409 pim_uid_conflict` mit dem Namen des vorhandenen Eintrags in `X-Conflict-Name`.
+  - `DELETE /api/v1/app/pim/{kind}/{col}/objects/{name}` mit `If-Match`.
+  - Fehler: `404 pim_not_found`, `400 pim_invalid`/`pim_unsupported`/`pim_invalid_name`, `413 pim_too_large`, `415 pim_type`, `507 pim_full`, ohne Volume `503 calendar_unavailable`/`contacts_unavailable`.
+- **Live:** Jede Änderung über diese Routen ist eine Änderung des Speichers und erscheint im Strom `/calendar/stream` der Webseiten und bei CalDAV-Geräten wie eine Änderung vom iPhone.
+- Kalender anlegen, umbenennen, Farbe und Gruppen, Zusammenführen und alles Übrige laufen über die Routen der Webseiten (`browserOnly` lässt die App-Sitzung durch).
+- **Prüfstand (20.11.2026):** Go-Tests `TestAppPIMSync` (Browser 403, ohne Anmeldung 401, Anlegen nur mit `If-None-Match`, Bytes unverändert mit RRULE/EXDATE/Ausnahme/zwei Erinnerungen, Änderungen ab Marke, falsche Marke 410, Multiget mit fehlendem Eintrag, veraltetes/schwaches ETag, falsche Daten/Art/Sammlung, Löschen mit ETag, Karte und UID-Konflikt, Erinnerungen) und `TestAppPIMOtherAccount` (Sammlungen eines anderen Kontos weder gelistet noch lesbar).
+
 ## Prüfstand (19.11.2026)
 
 - **Go-Tests:** `TestAppPairingAndSession`, `TestAppPairingRefusals`, `TestAppSessionRefusals`, `TestAppDeviceEndsWithStay` sowie die Unit-Tests von `appdevices`.
