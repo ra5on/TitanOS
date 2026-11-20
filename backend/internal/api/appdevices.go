@@ -36,6 +36,7 @@ type appsArea struct {
 	addresses    func() []setupAddress
 	certificate  func(host string) (*tls.Certificate, error)
 	remoteIPFunc func(*http.Request) string
+	guard        appSessionGuard
 }
 
 func (s *Server) appsArea() appsArea {
@@ -47,7 +48,8 @@ func (s *Server) appsArea() appsArea {
 	}
 	return appsArea{apps: s.appDevices, sessions: s.sessionStore, cookieName: s.authArea().cookieName,
 		webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm, limiter: s.rateLimiter, record: s.recordActivity,
-		addresses: func() []setupAddress { return s.deviceSetup("").Addresses }, certificate: cert, remoteIPFunc: remoteIP}
+		addresses: func() []setupAddress { return s.deviceSetup("").Addresses }, certificate: cert, remoteIPFunc: remoteIP,
+		guard: s.appSessionGuard()}
 }
 
 func (s *Server) registerApps(mux *routeMux) {
@@ -61,6 +63,7 @@ func (s *Server) registerApps(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/account/apps", web(a.handleList))
 	mux.HandleFunc("DELETE /api/v1/account/apps/{id}", web(a.handleDelete))
 	// The app's own routes: no login; the cluster keeps out (clusterLocal).
+	mux.HandleFunc("POST /api/v1/app/pair/sibling", g.user(g.clusterLocal(g.browserOnly(a.guard.appOnly(a.handleSibling)))))
 	mux.HandleFunc("POST /api/v1/app/pair/claim", g.clusterLocal(a.handleClaim))
 	mux.HandleFunc("POST /api/v1/app/pair/wait", g.clusterLocal(a.handleWait))
 	mux.HandleFunc("POST /api/v1/app/challenge", g.clusterLocal(a.handleChallenge))
@@ -137,7 +140,9 @@ func writeAppsError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "apps_unavailable", "the paired apps cannot be read now")
 	case errors.Is(err, appdevices.ErrInvalidName):
 		writeError(w, http.StatusBadRequest, "invalid_device_name", "the device name is empty, too long or has invisible characters")
-	case errors.Is(err, appdevices.ErrInvalidApp):
+	case errors.Is(err, appdevices.ErrUnknown):
+		writeError(w, http.StatusUnauthorized, "app_unknown", "this app is not paired (any more)")
+	case errors.Is(err, appdevices.ErrInvalidApp), errors.Is(err, appdevices.ErrSameApp):
 		writeError(w, http.StatusBadRequest, "invalid_app", "unknown app")
 	case errors.Is(err, appdevices.ErrInvalidKey):
 		writeError(w, http.StatusBadRequest, "invalid_key", "not a P-256 public key")
@@ -302,7 +307,7 @@ func (a appsArea) handleClaim(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	p, err := a.apps.Claim(req.Code, strings.TrimSpace(req.Name), req.App, req.PublicKey)
+	p, err := a.apps.Claim(req.Code, strings.TrimSpace(req.Name), req.App, req.PublicKey, a.remoteIPFunc(r))
 	switch {
 	case errors.Is(err, appdevices.ErrBadCode), errors.Is(err, appdevices.ErrClaimed):
 		a.limiter().Fail(key)
@@ -313,6 +318,28 @@ func (a appsArea) handleClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"state": p.State, "expires": p.Expires.UTC()})
+}
+
+// handleSibling gives a paired app the code for the other app on the same
+// phone (it hands it over through an interface only apps with the same
+// signature can use). The claim must come from the same address within
+// SiblingTTL; it is confirmed by itself.
+func (a appsArea) handleSibling(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		App string `json:"app"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	p, err := a.apps.Sibling(user, a.guard.device(r), req.App, a.remoteIPFunc(r))
+	if err != nil {
+		a.note(r, user.Name, "app.sibling", req.App, false)
+		writeAppsError(w, err)
+		return
+	}
+	a.note(r, user.Name, "app.sibling", req.App, true)
+	writeJSON(w, http.StatusOK, map[string]any{"code": p.Code, "expires": p.Expires.UTC()})
 }
 
 func (a appsArea) handleWait(w http.ResponseWriter, r *http.Request) {

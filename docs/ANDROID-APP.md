@@ -48,6 +48,12 @@ Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`) und „Agent“ (`io.
    - Antwort: `{cookie, token, user}`. Danach schickt die App `Cookie: <cookie>=<token>`.
    - `401 app_unknown`: Das Gerät ist beendet, abgelaufen oder unbekannt. Die App zeigt die Kopplung wieder.
 
+**Die zweite App ohne zweite Kopplung** (seit 1.19, Inhaber 20.11.2026: „Warum klappt das nicht simultan?“): Eine App kann den Schlüssel der anderen nicht mitbenutzen (jede App hat ihren eigenen Keystore). Deshalb koppelt eine gekoppelte App die andere auf demselben Handy:
+1. **Gekoppelte App:** `POST /api/v1/app/pair/sibling` mit `{app}` aus ihrer App-Sitzung (`appOnly`, sonst 403 `app_session_required`). `app` ist die jeweils andere App (dieselbe: 400 `invalid_app`). Antwort `{code, expires}`, 2 Minuten, nur der lange Code.
+2. Die App gibt den Code über eine Schnittstelle weiter, die Android nur Apps mit derselben Signatur öffnet (signature-Berechtigung), nie über Zwischenablage, Link oder Datei.
+3. **Andere App:** `claim` und `wait` wie oben, mit eigenem Schlüssel. Kommt `claim` von derselben Adresse wie die Anfrage, mit der genannten App, solange Zugangsdaten des Kontos und die fragende App unverändert sind, ist die Kopplung damit bestätigt (`claim` antwortet `confirmed`). Sonst gilt der Code als unbekannt und ist verbraucht.
+- Die Bestätigung mit dem Kontopasswort im Browser hat schon die erste App bekommen; die Sitzung der App hat dieselben Rechte wie das Konto und gibt damit nichts Neues frei. Unter Mein Konto › Geräte stehen beide Apps getrennt, jede mit „Beenden“. Aktivitätsprotokoll `app.sibling`.
+
 **Liste und Beenden:**
 - `GET /api/v1/account/apps` liefert `{apps:[{id, name, app, created, expires}]}`.
 - `DELETE /api/v1/account/apps/{id}` beendet ein Gerät.

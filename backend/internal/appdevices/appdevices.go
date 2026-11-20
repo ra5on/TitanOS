@@ -55,6 +55,9 @@ const (
 	ChallengeTTL = 2 * time.Minute
 	// MaxPending is the number of open pairings per account.
 	MaxPending = 3
+	// SiblingTTL is how long the code for the other app on the same phone
+	// holds: the paired app hands it over at once.
+	SiblingTTL = 2 * time.Minute
 	// maxChallenges bounds the challenges in RAM (they are handed out
 	// without a login).
 	maxChallenges = 1000
@@ -94,6 +97,7 @@ var (
 	ErrUnknown     = errors.New("appdevices: unknown, ended or expired app")
 	ErrSignature   = errors.New("appdevices: signature does not match")
 	ErrUnavailable = errors.New("appdevices: apps.json not readable")
+	ErrSameApp     = errors.New("appdevices: a sibling is the other app")
 )
 
 // Config is the part of config.Store the manager uses.
@@ -150,6 +154,13 @@ type Pairing struct {
 	Device  string
 	key     *ecdsa.PublicKey
 	keyText string
+	// A sibling pairing is started by a paired app for the other app on
+	// the same phone: confirmed by the claim itself, from the same address,
+	// while the account's credentials and the starting app are unchanged.
+	sibling bool
+	from    string
+	address string
+	creds   string
 }
 
 type challenge struct {
@@ -552,9 +563,14 @@ func (m *Manager) Confirm(user auth.User, id string) (Device, error) {
 	if p == nil || p.User != user.Name || now.After(p.Expires) {
 		return Device{}, ErrNotFound
 	}
-	if p.State != Claimed {
+	if p.State != Claimed || p.sibling {
 		return Device{}, ErrBadState
 	}
+	return m.confirmLocked(user, p, now)
+}
+
+// confirmLocked writes the device of a claimed pairing.
+func (m *Manager) confirmLocked(user auth.User, p *Pairing, now time.Time) (Device, error) {
 	st, err := m.stateLocked(user)
 	if err != nil {
 		return Device{}, err
@@ -577,9 +593,59 @@ func (m *Manager) Confirm(user auth.User, id string) (Device, error) {
 	return d, nil
 }
 
+// Sibling starts a pairing for the other app on the same phone, asked by
+// the paired app device of the account (its session). The code goes from
+// app to app on the phone; whoever claims it from address with the right
+// app is paired without the browser (docs/ANDROID-APP.md).
+func (m *Manager) Sibling(user auth.User, device, app, address string) (Pairing, error) {
+	known := false
+	for _, a := range Apps {
+		known = known || a == app
+	}
+	if !known {
+		return Pairing{}, ErrInvalidApp
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.pruneLocked(now)
+	st, err := m.stateLocked(user)
+	if err != nil {
+		return Pairing{}, err
+	}
+	var from *Device
+	for i, d := range st.devices {
+		if d.ID == device && m.live(d) {
+			from = &st.devices[i]
+		}
+	}
+	if from == nil {
+		return Pairing{}, ErrUnknown
+	}
+	if from.App == app {
+		return Pairing{}, ErrSameApp
+	}
+	open := 0
+	for _, p := range m.pairings {
+		if p.User == user.Name && (p.State == Waiting || p.State == Claimed) {
+			open++
+		}
+	}
+	if open >= MaxPending {
+		return Pairing{}, ErrTooManyOpen
+	}
+	p := &Pairing{ID: randomText(12), User: user.Name, Code: randomText(24), Expires: now.Add(SiblingTTL), State: Waiting, App: app,
+		sibling: true, from: device, address: address, creds: credentials(user)}
+	m.pairings[p.ID] = p
+	m.byCode[p.Code] = p.ID
+	return *p, nil
+}
+
 // Claim takes a code for an app: its name, which app and its public key.
 // ErrBadCode is for the caller to count against the address.
-func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
+// address is where the claim comes from; it counts only for a sibling
+// pairing, which it also confirms.
+func (m *Manager) Claim(code, name, app, key, address string) (Pairing, error) {
 	if !ValidName(name) {
 		return Pairing{}, ErrInvalidName
 	}
@@ -605,6 +671,9 @@ func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
 	if p.State != Waiting {
 		return Pairing{}, ErrClaimed
 	}
+	if p.sibling {
+		return m.claimSiblingLocked(p, name, app, pub, key, address, now)
+	}
 	p.State, p.Name, p.App, p.key, p.keyText = Claimed, name, app, pub, strings.TrimSpace(key)
 	p.Expires = now.Add(PairTTL)
 	// Only the code the app sent stays usable for Wait.
@@ -612,6 +681,38 @@ func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
 		delete(m.byCode, p.Code)
 	} else {
 		delete(m.byCode, p.Manual)
+	}
+	return *p, nil
+}
+
+// claimSiblingLocked pairs the other app of the phone. Anything off reads
+// as an unknown code, and the code is gone: it is tried once.
+func (m *Manager) claimSiblingLocked(p *Pairing, name, app string, pub *ecdsa.PublicKey, key, address string, now time.Time) (Pairing, error) {
+	drop := func() {
+		delete(m.pairings, p.ID)
+		delete(m.byCode, p.Code)
+	}
+	user, ok := m.users.Get(p.User)
+	if !ok || app != p.App || address == "" || address != p.address || credentials(user) != p.creds {
+		drop()
+		return Pairing{}, ErrBadCode
+	}
+	st, err := m.stateLocked(user)
+	if err != nil {
+		return Pairing{}, err
+	}
+	still := false
+	for _, d := range st.devices {
+		still = still || (d.ID == p.from && m.live(d))
+	}
+	if !still {
+		drop()
+		return Pairing{}, ErrBadCode
+	}
+	p.State, p.Name, p.key, p.keyText = Claimed, name, pub, strings.TrimSpace(key)
+	if _, err := m.confirmLocked(user, p, now); err != nil {
+		drop()
+		return Pairing{}, err
 	}
 	return *p, nil
 }
