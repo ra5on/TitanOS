@@ -169,6 +169,8 @@ Die App bekommt dieselben Meldungen wie Web Push im Browser, ohne Google und ohn
 - **UnifiedPush** (ntfy & Co.) kommt später: Web Push geht nur an die bekannten Push-Dienste der Browser (`docs/rules/SYSTEM.md`). Ein Verteiler hat eine beliebige, oft eigene Adresse, auch im Heimnetz; das zu erlauben ist eine Entscheidung des Inhabers. In der App steht der Schalter deshalb als „kommt später“.
 - TECHNIK §5 nannte den Strom `/api/v1/app/events`; gebaut ist `/api/v1/app/notifications/stream`.
 - **Prüfstand (20.11.2026):** Go-Tests `TestAppNotifications`, `TestAppNotificationStream` (ohne Browser-Abo, fremdes Konto, Marke, alte Epoche, Browser 403, Strom mit Rückstand, Live-Meldung und Herzschlag) und die Unit-Tests von `appnotify` (Arten, Administratoren beim Abruf, Grenzen, Puffer, Ströme je Konto).
+  - **Emulator** (Android 17, App-Testfassung 0.03 vor dem Release) gegen `titand -dev` hinter einem HTTPS-Vorbau: Koppeln, Schalter „Mitteilungen“ beim Einrichten mit Berechtigung und Akku-Ausnahme, Vordergrunddienst `specialUse` verbunden, „Bericht über das NAS jetzt senden“ kommt sofort als Android-Mitteilung (Kanal NAS) mit „Ansehen“ (öffnet die Liste) und „Gelesen“; nach einem Neustart von titand (neue Epoche) verbindet die App von selbst neu und bekommt die nächste Meldung; nach einem App-Update läuft der Dienst wieder.
+  - Nicht geprüft: echtes Handy, Doze über Stunden, Neustart des Handys (BOOT_COMPLETED), Mail, Kalender, KI-Agent und NVR als Quelle am echten NAS.
 
 ## Prüfstand (19.11.2026)
 
