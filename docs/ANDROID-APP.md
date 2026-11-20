@@ -143,6 +143,35 @@ Die App sichert Fotos und Videos in eine Freigabe und einen Ordner nach Wahl (TE
   - **Emulator** (Android 17, App-Testfassung 0.02) gegen einen Wegwerf-Testserver mit Freigabe auf einem temporären Volume (wie die Go-Tests, hinter einem HTTPS-Vorbau): Upload in `Ordner/2026/11/`, Prüfsummen auf dem NAS gleich dem Original, eine Index-Zeile je Datei, umbenannte Kopie übersprungen, neues Foto über den Content-Auslöser hochgeladen.
   - Nicht geprüft: echtes NAS mit echtem Volume (`titand -dev` hat keine Freigaben), echtes Handy, „Speicher freigeben“ mit echten Kandidaten (keine Aufnahme älter als 30 Tage im Emulator).
 
+## Mitteilungen
+
+Die App bekommt dieselben Meldungen wie Web Push im Browser, ohne Google und ohne Firebase (TECHNIK §5, Entwürfe 70–72). Am NAS sammelt das Paket `appnotify` sie im RAM; der Spiegel sitzt in `webpush.Manager` (`SetMirror`), also an der Stelle, an der jede Push-Mitteilung entsteht, auch wenn das Konto keinen Browser angemeldet hat. Die Routen erreicht **nur die Sitzung einer gekoppelten App** (`403 app_session_required`, nicht in `publicRoutes`, nicht im Werkzeugkatalog), wie die Foto-Sicherung.
+
+- **Was ankommt** (`category`):
+  - `nas`: was die Glocke an die Wege schickt (ab „Verschicken ab“, mit der täglichen Sammelmitteilung und dem Bericht über das NAS), nur für Konten, die beim Abruf Besitzer oder Administrator und nicht gesperrt sind.
+  - `mail`: neue Mail in Mail (`SendMail`), mit Absender und Betreff nur, wenn Web Push sie auch zeigen dürfte.
+  - `calendar`: Erinnerungen an Termine, wenn das Konto im Kalender „Auch als Mitteilung an meine Geräte (Push)“ eingeschaltet hat (`reminderPush`, ab Werk aus; wie Web Push).
+  - `agent`: Antworten, Rückfragen, Aufträge, Notfallzugang und Ransomware-Wächter des KI-Agenten (`SendTo`).
+  - `nvr`: Meldungen einer Kamera an die Konten, die dort als Empfänger mit Push gewählt sind (`SendCamera`).
+  - Die Schalter je Gerät für Web Push gelten nicht für die App; sie hat eigene Schalter je Art (Entwurf 72) und Android-Kanäle.
+- **Abruf:** `GET /api/v1/app/notifications?since=<marke>`.
+  - Antwort `{epoch, latest, reset, items:[{id, time, category, severity, title, text, tag?, link?, app}]}`, älteste zuerst.
+  - `id` und `latest` sind Marken `<epoch>-<nummer>`. Die App merkt sich `latest` und fragt damit das nächste Mal.
+  - Nach einem Neustart von titand gibt es eine neue Epoche. Eine Marke einer anderen Epoche (oder eine, die nicht passt) liefert alles Gehaltene mit `reset: true`; die App zeigt dann nichts davon als neue Mitteilung an, nimmt es nur in die Liste.
+  - `severity` ist `info`, `warning` oder `error` (NAS-Meldungen; sonst `info`). `tag` ersetzt am Handy eine ältere Mitteilung mit demselben Tag, wie im Browser. `link` ist die Seite in TitanOS (`/mail`, `/agent?chat=…`). `app` ist `titanos` oder `agent` (`webpush.AppOf`).
+- **Dauerverbindung:** `GET /api/v1/app/notifications/stream?since=<marke>` (Server-Sent Events).
+  - Zuerst `ready` `{epoch, latest, reset}`, dann was seit `since` kam, dann jede neue Meldung als `notification` mit `id: <marke>`.
+  - Alle 90 Sekunden ein Kommentar `: keep-alive`, damit Heimrouter die Verbindung nicht schließen. Die App setzt ihre Lesezeit auf mehr als das Doppelte.
+  - `resync` `{latest}`: Meldungen passten nicht mehr in den Puffer (64); die App liest die Liste.
+  - Höchstens 8 Ströme je Konto, ein neuer beendet den ältesten. Der Strom endet mit der Anmeldung (Gerät beendet, Konto gesperrt oder gelöscht).
+- **Grenzen:** höchstens 200 Meldungen je Konto und 200 an alle Administratoren, keine älter als 7 Tage. Nur RAM: nichts auf dem Stick, nichts auf einem Volume; nach einem Neustart von titand ist die Liste am NAS leer, die App behält ihren Stand. Gelöscht wird ein Konto: seine Meldungen gehen mit.
+- **Gelesen** hält die App nur für sich; das NAS kennt keine Gelesen-Marke je Gerät.
+- **UnifiedPush** (ntfy & Co.) kommt später: Web Push geht nur an die bekannten Push-Dienste der Browser (`docs/rules/SYSTEM.md`). Ein Verteiler hat eine beliebige, oft eigene Adresse, auch im Heimnetz; das zu erlauben ist eine Entscheidung des Inhabers. In der App steht der Schalter deshalb als „kommt später“.
+- TECHNIK §5 nannte den Strom `/api/v1/app/events`; gebaut ist `/api/v1/app/notifications/stream`.
+- **Prüfstand (20.11.2026):** Go-Tests `TestAppNotifications`, `TestAppNotificationStream` (ohne Browser-Abo, fremdes Konto, Marke, alte Epoche, Browser 403, Strom mit Rückstand, Live-Meldung und Herzschlag) und die Unit-Tests von `appnotify` (Arten, Administratoren beim Abruf, Grenzen, Puffer, Ströme je Konto).
+  - **Emulator** (Android 17, App-Testfassung 0.03 vor dem Release) gegen `titand -dev` hinter einem HTTPS-Vorbau: Koppeln, Schalter „Mitteilungen“ beim Einrichten mit Berechtigung und Akku-Ausnahme, Vordergrunddienst `specialUse` verbunden, „Bericht über das NAS jetzt senden“ kommt sofort als Android-Mitteilung (Kanal NAS) mit „Ansehen“ (öffnet die Liste) und „Gelesen“; nach einem Neustart von titand (neue Epoche) verbindet die App von selbst neu und bekommt die nächste Meldung; nach einem App-Update läuft der Dienst wieder.
+  - Nicht geprüft: echtes Handy, Doze über Stunden, Neustart des Handys (BOOT_COMPLETED), Mail, Kalender, KI-Agent und NVR als Quelle am echten NAS.
+
 ## Prüfstand (19.11.2026)
 
 - **Go-Tests:** `TestAppPairingAndSession`, `TestAppPairingRefusals`, `TestAppSessionRefusals`, `TestAppDeviceEndsWithStay` sowie die Unit-Tests von `appdevices`.

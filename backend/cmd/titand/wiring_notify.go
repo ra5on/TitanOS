@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appnotify"
 	"github.com/ra5on/TitanOS/backend/internal/appphotos"
 
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
@@ -137,13 +138,19 @@ func (w *titand) wireNotifications() error {
 	if err := w.pushes.Load(); err != nil {
 		slog.Warn("web push settings not readable from /config", "err", err)
 	}
+	// The same messages for the paired Android apps (PLAN 116), in RAM:
+	// those to every administrator only for accounts that are one when
+	// the app reads them.
+	w.appNotify = appnotify.New()
+	w.appNotify.Admin = w.pushes.Allowed
+	w.pushes.SetMirror(w.appNotify.FromPush)
 	w.notifier.Push = func(message notify.Message, title string) {
 		// A message about a page (a camera's event, PLAN 82-5) opens it.
 		link := message.Link
 		if link == "" {
 			link = "/"
 		}
-		w.pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: link, Urgent: message.Severity == notify.Error})
+		w.pushes.Broadcast(webpush.Message{Title: title, Body: message.Text, Tag: message.Kind + ":" + message.Subject, URL: link, Urgent: message.Severity == notify.Error, Severity: message.Severity})
 	}
 	// An account whose Linux user cannot be made is left out of the shares.
 	w.folders.SetOnEvent(func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) })

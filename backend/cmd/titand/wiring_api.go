@@ -85,6 +85,7 @@ func (w *titand) wireAPI() error {
 		Firewall:           w.packetFilter,
 		Notify:             w.notifier,
 		WebPush:            w.pushes,
+		AppNotify:          w.appNotify,
 		WireGuard:          w.vpnServer,
 		HealthReport:       w.report,
 		Fans:               w.coolers,
