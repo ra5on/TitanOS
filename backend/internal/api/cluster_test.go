@@ -249,8 +249,14 @@ func TestClusterProxyEndsWithTheLogin(t *testing.T) {
 	if err := conn.Write(ctx, websocket.MessageBinary, []byte("hi\n")); err != nil {
 		t.Fatal(err)
 	}
-	if _, data, err := conn.Read(ctx); err != nil || !strings.Contains(string(data), "hi") {
-		t.Fatalf("console of B through A: %q %v", data, err)
+	// The echo may come in pieces ("h", then "i").
+	var echo strings.Builder
+	for !strings.Contains(echo.String(), "hi") {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("console of B through A: %q %v", echo.String(), err)
+		}
+		echo.Write(data)
 	}
 	closed := make(chan struct{})
 	go func() {
