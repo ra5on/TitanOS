@@ -451,7 +451,7 @@ func (c *client) postJSON(ctx context.Context, p string, body, out any) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/v1.43"+p, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base(ctx)+p, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}

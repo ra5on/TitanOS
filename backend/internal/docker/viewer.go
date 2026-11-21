@@ -300,7 +300,7 @@ func (m *Manager) ViewerImageID(ctx context.Context, ref string) (string, error)
 // ViewerLoadImage loads an image archive (docker save, optionally zstd,
 // gzip or xz compressed: the engine detects it) into the engine.
 func (m *Manager) ViewerLoadImage(ctx context.Context, archive io.Reader) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/v1.43/images/load?quiet=1", archive)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.api.base(ctx)+"/images/load?quiet=1", archive)
 	if err != nil {
 		return err
 	}
