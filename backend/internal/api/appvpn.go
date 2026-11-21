@@ -311,5 +311,7 @@ func (s *Server) startAppVPN() {
 		return
 	}
 	s.appVPNPrune()
-	s.goJob(func(ctx context.Context) { wg.Watch(ctx, appVPNRecheck) })
+	// Not a goJob: it runs as long as the server, and jobs are what Close
+	// and the tests wait for. The root context ends it.
+	go wg.Watch(s.ctx, appVPNRecheck)
 }
