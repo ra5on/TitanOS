@@ -256,7 +256,7 @@ func (m *Manager) Recheck(ctx context.Context) error {
 	if activeKeys(s, m.AppPeerCached) == applied {
 		return nil
 	}
-	return m.Apply(ctx)
+	return m.apply(ctx, m.AppPeerCached)
 }
 
 // Watch calls Recheck every interval until ctx ends: a device whose app

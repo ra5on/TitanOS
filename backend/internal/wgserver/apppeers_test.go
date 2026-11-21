@@ -133,8 +133,15 @@ func TestAppPeersFollowTheirApps(t *testing.T) {
 	// check, nothing written.
 	live["sam/dev2"] = false
 	before, _ := store.Read(settingsFile)
+	// The timer judges from RAM only: AppPeerLive (which may read /config)
+	// is not asked, neither for comparing nor for the interface.
+	liveFunc, asked := m.AppPeerLive, 0
+	m.AppPeerLive = func(account, device string) (bool, bool) { asked++; return liveFunc(account, device) }
 	if err := m.Recheck(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if m.AppPeerLive = liveFunc; asked != 0 {
+		t.Fatalf("recheck asked AppPeerLive %d times", asked)
 	}
 	if strings.Contains(f.conf, k2) || !strings.Contains(f.conf, k1) {
 		t.Fatalf("interface %s", f.conf)

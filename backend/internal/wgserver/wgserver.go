@@ -510,7 +510,11 @@ func activeKeys(s Settings, live func(account, device string) (bool, bool)) stri
 
 // Apply brings the interface in line with the settings: up with all
 // devices while switched on, gone while off.
-func (m *Manager) Apply(ctx context.Context) error {
+func (m *Manager) Apply(ctx context.Context) error { return m.apply(ctx, m.AppPeerLive) }
+
+// apply is Apply with live deciding which devices of apps are let in
+// (AppPeerLive, or AppPeerCached for the timer: then nothing is read).
+func (m *Manager) apply(ctx context.Context, live func(account, device string) (bool, bool)) error {
 	// One apply at a time, each with the settings of when it starts: an
 	// older one finishing last would bring back a removed device.
 	m.applying.Lock()
@@ -518,7 +522,7 @@ func (m *Manager) Apply(ctx context.Context) error {
 	m.mu.Lock()
 	s, private := m.settings, m.private
 	m.mu.Unlock()
-	keys := activeKeys(s, m.AppPeerLive)
+	keys := activeKeys(s, live)
 	if m.Disabled {
 		m.mu.Lock()
 		m.applied = keys
@@ -531,7 +535,7 @@ func (m *Manager) Apply(ctx context.Context) error {
 	defer cancel()
 	var err error
 	if s.Enabled && s.Network != "" && validKey(private) {
-		err = m.up(ctx, s, private)
+		err = m.up(ctx, s, private, func(p Peer) bool { return activeBy(p, live) })
 	} else {
 		m.down(ctx)
 	}
@@ -546,14 +550,14 @@ func (m *Manager) Apply(ctx context.Context) error {
 	return err
 }
 
-func (m *Manager) up(ctx context.Context, s Settings, private string) error {
+func (m *Manager) up(ctx context.Context, s Settings, private string, active func(Peer) bool) error {
 	if err := os.MkdirAll(m.runDir, 0o700); err != nil {
 		return err
 	}
 	// The keys go to wg in a file in /run (RAM, root only), never as
 	// arguments, and the file goes right after.
 	confPath := filepath.Join(m.runDir, Interface+".conf")
-	if err := os.WriteFile(confPath, []byte(serverConfig(s, private, m.active)), 0o600); err != nil {
+	if err := os.WriteFile(confPath, []byte(serverConfig(s, private, active)), 0o600); err != nil {
 		return err
 	}
 	defer os.Remove(confPath)
