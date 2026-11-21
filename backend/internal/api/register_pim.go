@@ -18,6 +18,8 @@ func (s *Server) registerPIM(mux *routeMux) {
 	// 1.13: the profile of the iPhone (one-time link) and the holidays.
 	s.profileArea().register(mux, s.guards())
 	s.pimLiveArea().register(mux, s.guards())
+	// 1.19: the sync of the Android app, its session only (apppim.go).
+	s.appPIMArea().register(mux, s.guards())
 	// 1.13: the hints of reminders of events (calendar_reminders.go).
 	g := s.guards()
 	mux.HandleFunc("GET /api/v1/calendar/reminders", g.user(g.clusterLocal(g.browserOnly(s.handleReminders))))
