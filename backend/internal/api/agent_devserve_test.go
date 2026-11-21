@@ -35,7 +35,14 @@ func TestAgentDevServe(t *testing.T) {
 	if addr == "" {
 		t.Skip("only for the emulator")
 	}
-	ts := newTestServer(t)
+	// The speech services before the server: it registers their routes only when they are there.
+	var speechManager *speech.Manager
+	if root := os.Getenv("TITANOS_SPEECH_REAL"); root != "" {
+		var stop func()
+		speechManager, stop = devSpeech(t, root)
+		defer stop()
+	}
+	ts := newTestServerWith(t, func(o *Options) { o.Speech = speechManager })
 	ts.setup()
 	ts.withShare()
 	dir := t.TempDir()
@@ -54,9 +61,6 @@ func TestAgentDevServe(t *testing.T) {
 	for _, m := range []string{"Home Assistant läuft als VM HAOS.", "Der Zigbee-Stick hängt hinten links.", "Telekom-Rechnungen liegen in Documents › Rechnungen."} {
 		res, _ := ts.request("PUT", "/api/v1/agent/memory/new", map[string]string{"text": m})
 		fmt.Println("MEMORY", res.StatusCode)
-	}
-	if root := os.Getenv("TITANOS_SPEECH_REAL"); root != "" {
-		defer devSpeech(t, ts, root)()
 	}
 	srv := &http.Server{Addr: addr, Handler: ts.server}
 	go srv.ListenAndServe()
@@ -99,7 +103,7 @@ func (devSpeechEngine) EngineReady() bool { return true }
 
 // devSpeech starts Whisper and Piper for the throwaway NAS; the returned
 // function removes the containers again.
-func devSpeech(t *testing.T, ts *testServer, root string) func() {
+func devSpeech(t *testing.T, root string) (*speech.Manager, func()) {
 	if err := os.MkdirAll(filepath.Join(root, "tank"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +140,6 @@ func devSpeech(t *testing.T, ts *testServer, root string) func() {
 	if err := m.SetSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	ts.server.opts.Speech = m
 	go func() {
 		for last := ""; ctx.Err() == nil; time.Sleep(2 * time.Second) {
 			st := m.Status()
@@ -146,7 +149,7 @@ func devSpeech(t *testing.T, ts *testServer, root string) func() {
 			}
 		}
 	}()
-	return func() {
+	return m, func() {
 		s := m.Settings()
 		s.Enabled = false
 		_ = m.SetSettings(s)
