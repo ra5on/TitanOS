@@ -9,8 +9,13 @@ package api
 //   TITANOS_AGENT_DEVSERVE=127.0.0.1:8092 TITANOS_AGENT_OLLAMA=http://127.0.0.1:11999 \
 //     go test ./internal/api -run TestAgentDevServe -timeout 0 -v
 // It ends when the file $TMPDIR/agent-devserve-stop appears.
+// With TITANOS_SPEECH_REAL=<empty folder> the speech services run for real
+// (as TestRealSpeech: Docker of this machine, the tiny Whisper model and the
+// voice de_DE-thorsten-low, about 0.6 GB of images and 140 MB of models), so
+// the Sprechmodus of the app speaks with Whisper and Piper.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,6 +25,9 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/speech"
 )
 
 func TestAgentDevServe(t *testing.T) {
@@ -46,6 +54,9 @@ func TestAgentDevServe(t *testing.T) {
 	for _, m := range []string{"Home Assistant läuft als VM HAOS.", "Der Zigbee-Stick hängt hinten links.", "Telekom-Rechnungen liegen in Documents › Rechnungen."} {
 		res, _ := ts.request("PUT", "/api/v1/agent/memory/new", map[string]string{"text": m})
 		fmt.Println("MEMORY", res.StatusCode)
+	}
+	if root := os.Getenv("TITANOS_SPEECH_REAL"); root != "" {
+		defer devSpeech(t, ts, root)()
 	}
 	srv := &http.Server{Addr: addr, Handler: ts.server}
 	go srv.ListenAndServe()
@@ -78,5 +89,73 @@ func TestAgentDevServe(t *testing.T) {
 			}
 		}
 		time.Sleep(time.Second)
+	}
+}
+
+// devSpeechEngine is the Docker of this machine, which no TitanOS manages.
+type devSpeechEngine struct{ *docker.Manager }
+
+func (devSpeechEngine) EngineReady() bool { return true }
+
+// devSpeech starts Whisper and Piper for the throwaway NAS; the returned
+// function removes the containers again.
+func devSpeech(t *testing.T, ts *testServer, root string) func() {
+	if err := os.MkdirAll(filepath.Join(root, "tank"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := config.Open(t.TempDir())
+	m := speech.New(store)
+	m.Engine, m.MountRoot = devSpeechEngine{docker.NewManager(store, store.Dir())}, root
+	m.Mounted = func() []string { return []string{"tank"} }
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.Run(ctx); close(done) }()
+	if err := m.SetSettings(speech.Settings{Volume: "tank"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Voices(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range [][2]string{{"model", "tiny"}, {"voice", "de_DE-thorsten-low"}} {
+		if err := m.Download(ctx, d[0], d[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for len(m.Jobs()) > 0 {
+		for k, j := range m.Jobs() {
+			if j.Error != "" {
+				t.Fatalf("download %s: %s", k, j.Error)
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	s := speech.Settings{Enabled: true, Volume: "tank", WhisperModel: "tiny", Language: "de", Voice: "de_DE-thorsten-low", Speed: 1, Reach: speech.ReachHA, Agent: true}
+	if err := m.SetSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.opts.Speech = m
+	go func() {
+		for last := ""; ctx.Err() == nil; time.Sleep(2 * time.Second) {
+			st := m.Status()
+			if now := st.Whisper.Phase + "/" + st.Piper.Phase; now != last {
+				fmt.Println("SPEECH", now)
+				last = now
+			}
+		}
+	}()
+	return func() {
+		s := m.Settings()
+		s.Enabled = false
+		_ = m.SetSettings(s)
+		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(time.Second) {
+			if st := m.Status(); st.Whisper.Phase == "off" && st.Piper.Phase == "off" {
+				break
+			}
+		}
+		cancel()
+		<-done
 	}
 }
