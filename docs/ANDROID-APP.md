@@ -197,6 +197,44 @@ Die App trägt ein Android-Konto „TitanOS“ in Kontakte und Kalender des Hand
   - **Emulator** (Android 17, App `feat/1.00-pim`) gegen einen Wegwerf-Testserver mit Kalender-/Kontaktspeicher wie in den Go-Tests (hinter einem HTTPS-Vorbau; `titand -dev` hat kein Systemdaten-Volume): Koppeln, Konto „alex@pc“ in den Android-Konten, erster Abgleich mit Serie (RRULE, EXDATE, Ausnahme), ganztägigem Termin, zwei Kalendern, Kontakten und Gruppe in die Provider (`content query` geprüft). Vom Handy (als normale App über den Provider): geänderter Titel/Ort einer Serie (X-APPLE-Zeile, Ausnahme und VALARM blieben, SEQUENCE+1), neuer Termin mit VTIMEZONE, neue Ausnahme einer Instanz (neues VEVENT mit RECURRENCE-ID), abgesagte Instanz (EXDATE), gelöschter Termin, neuer Kontakt mit Gruppe, gelöschter Kontakt – alles am NAS angekommen (Export geprüft). Live: ein Termin, im Web angelegt, war 1 s später über `/calendar/stream` am Handy. Die Kontakte-App von Google zeigt die Kontakte des Kontos und bietet „Bearbeiten“ mit den Feldern aus `CONTACTS_STRUCTURE`; ein dort geänderter Vorname kam beim nächsten Abgleich am NAS an (übrige vCard-Zeilen wie X-SOCIALPROFILE blieben).
   - Nicht geprüft: ob Android das Hochladen nach einer Änderung in der Kontakte-App von Google von selbst anstößt (in der Probe kam sie mit „Jetzt abgleichen“ an; zwischendurch lief auf dem geteilten Emulator eine andere Fassung der App), die Kalender-App von Google (zeigt ohne Google-Konto keine Kalender an), echtes Handy, echtes NAS.
 
+## VPN (1.19)
+
+Die App „TitanOS“ hat einen eigenen VPN-Dienst mit WireGuard (PLAN 116, Inhaber 21.11.2026: „die App legt je Handy selbst einen WireGuard-Zugang an, sichtbar unter WireGuard, endet mit ‚Beenden‘; Tailscale bleibt möglich“). Das NAS stellt dafür den Zugang je gekoppeltem Gerät bereit; die Routen erreicht **nur die Sitzung einer gekoppelten App** (`403 app_session_required`, nicht in `publicRoutes`, nicht im Werkzeugkatalog, nur dieser Knoten), wie Foto-Sicherung und Mitteilungen.
+
+- **Schlüssel:** Das Schlüsselpaar (X25519) entsteht am Handy, der private Schlüssel verlässt es nie. Das NAS speichert den öffentlichen Schlüssel, einen eigenen Preshared Key und die Adresse wie bei jedem Gerät unter Einstellungen › WireGuard (`/config/wireguard/server.json`, zusätzlich `account` und `device`, `docs/WIREGUARD.md`).
+- **Routen** (`api/appvpn.go`), alle mit `Cache-Control: no-store`:
+  - `GET /api/v1/app/vpn` → `{available, reason?, mayCreate, peer, server}`.
+    - `peer` ist `null` oder `{name, address, publicKey, created, active, lastHandshake?, received, sent}`; `active: false` heißt: gerade nicht im Tunnel.
+    - `server`, solange WireGuard an ist: `{publicKey, port, network, address, homeNetworks, dns, fullTunnel, keepalive, endpoint, endpoints, nasAddresses, nas:{server, spki}}`.
+      - `endpoints`: alle Adressen aus dem Internet, die eingetragene zuerst, dann die Namen aus Dynamisches DNS und Let's Encrypt.
+      - `nasAddresses`: die IPv4-Adresse des NAS im Heimnetz. Mit „nur NAS“ leitet die App sie als /32 durch den Tunnel, damit die gekoppelten Heimnetz-Adressen beider Apps unterwegs gehen.
+      - `nas`: das NAS im Tunnel als Adresse der App (`<address>[:Port]`, SPKI wie bei der Kopplung für IP-Adressen).
+      - `dns`: das DNS-Feld der WireGuard-Seite. Das NAS hat keinen eigenen DNS-Dienst.
+    - `reason`: `wireguard_off`, `wireguard_no_endpoint` oder `wireguard_admin_only`.
+  - `POST /api/v1/app/vpn` mit `{publicKey}` (base64, 32 Bytes) → wie GET, dazu einmal `presharedKey`. Gibt es schon einen Zugang dieses Geräts, bekommt er den neuen Schlüssel und einen neuen Preshared Key an derselben Adresse („neu erzeugen“).
+  - `DELETE /api/v1/app/vpn` → `{removed}`.
+- **Fehler:**
+
+  | Status | Code | Bedeutung |
+  |---|---|---|
+  | 409 | `wireguard_off` | WireGuard am NAS nicht eingerichtet oder aus (Einstellungen › WireGuard) |
+  | 409 | `wireguard_no_endpoint` | keine Adresse aus dem Internet (WireGuard-Seite oder Dynamisches DNS) |
+  | 403 | `wireguard_admin_only` | Konto ist weder Besitzer noch Administrator |
+  | 400 | `invalid_key` | kein WireGuard-Schlüssel |
+  | 409 | `wireguard_key_used` | ein anderes Gerät hat den Schlüssel |
+  | 409 | `wireguard_too_many` | 50 Geräte erreicht |
+  | 401 | `app_unknown` | Gerät beendet oder abgelaufen |
+
+- **Wer darf:** Anlegen nur Besitzer und Administratoren, wie jedes WireGuard-Gerät. Der Zugang erreicht über NAT das ganze Heimnetz, mehr als die Rolle Benutzer sonst darf. Lesen und Entfernen des eigenen Zugangs darf jede gekoppelte App.
+- **Ende:** Der Zugang hängt am Gerät. Er geht mit:
+  - „Beenden“ unter Mein Konto › Geräte;
+  - neuem Passwort oder 2FA;
+  - gelöschtem oder gesperrtem Konto;
+  - Rolle ohne Verwaltungsrecht, auch über den Cluster.
+
+  Abgelaufen nach „Angemeldet bleiben“: stündliche Prüfung nur im RAM, der Schlüssel wird vom Tunnel genommen, gelöscht wird beim nächsten Start. Aktivitätsprotokoll `app.vpn` (Anlegen, neu erzeugen, auch abgelehnt) und `app.vpn.remove`.
+- **Die Agent-App** legt keinen eigenen Zugang an. Ihre Verbindungen laufen durch den systemweiten Tunnel der TitanOS-App.
+
 ## Prüfstand (19.11.2026)
 
 - **Go-Tests:** `TestAppPairingAndSession`, `TestAppPairingRefusals`, `TestAppSessionRefusals`, `TestAppDeviceEndsWithStay` sowie die Unit-Tests von `appdevices`.

@@ -117,6 +117,9 @@ type usersArea struct {
 	// what an earlier account of the name left when one is made.
 	devicesRevokeAll func(name string)
 	pimForgetUser    func(name string)
+	// appVPNPrune takes WireGuard devices of apps out whose account is
+	// locked, deleted or no administrator any more (appvpn.go).
+	appVPNPrune func()
 }
 
 // usersArea is the area of the server.
@@ -126,7 +129,7 @@ func (s *Server) usersArea() usersArea {
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
 		agentForgetUser: s.agentForgetAccount, agentForgetSettings: s.agentForgetSettings,
 		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
-		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser}
+		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser, appVPNPrune: s.appVPNPrune}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -249,6 +252,7 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// T-Mail: a user reaches the internet only, an administrator the home
 	// network too; the connections follow the role at once.
 	a.mailRoleChanged(user.Name)
+	a.appVPNPrune()
 	slog.Info("account role changed", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	// SSH is for owners and administrators only.
 	a.ssh.Kick()
@@ -412,6 +416,9 @@ func (a usersArea) handleLockUser(disabled bool) http.HandlerFunc {
 			slog.Info("account locked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
 		} else {
 			slog.Info("account unlocked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
+		}
+		if disabled {
+			a.appVPNPrune()
 		}
 		// Samba and sshd take the account away or give it back.
 		a.shares.Kick()

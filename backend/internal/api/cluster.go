@@ -63,6 +63,8 @@ type clusterArea struct {
 	mailForgetUser func(name string)
 	// mailRoleChanged: the role decides where T-Mail may connect.
 	mailRoleChanged func(name string)
+	// appVPNPrune: WireGuard devices of apps follow the account's role and lock.
+	appVPNPrune func()
 	// devicesRevokeAll and pimForgetUser as in usersArea: the device
 	// passwords of an account whose password or TOTP changed elsewhere are
 	// revoked; calendars, contacts and devices of one deleted or made anew
@@ -78,7 +80,7 @@ func (s *Server) clusterArea() clusterArea {
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
 		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds,
-		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
+		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged, appVPNPrune: s.appVPNPrune,
 		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser}
 }
 
@@ -596,6 +598,9 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		a.mailForgetUser(name)
 	} else if a.mailRoleChanged != nil && existed && (before.Role != after.Role || before.Disabled != after.Disabled) {
 		a.mailRoleChanged(name)
+	}
+	if a.appVPNPrune != nil && existed && (before.Role != after.Role || before.Disabled != after.Disabled) {
+		a.appVPNPrune()
 	}
 	if a.pimForgetUser != nil && (deleted || !existed || !before.Created.Equal(after.Created)) {
 		a.pimForgetUser(name)

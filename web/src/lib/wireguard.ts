@@ -9,6 +9,10 @@ export type WireGuardPeer = {
 	received: number;
 	sent: number;
 	endpoint?: string;
+	/** Set for the device of a paired Android app (PLAN 116, docs/ANDROID-APP.md "VPN"). */
+	account?: string;
+	/** False for an app device that is out of the tunnel now (app ended, account locked or no administrator). */
+	active?: boolean;
 };
 
 export type WireGuardStatus = {

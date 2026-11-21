@@ -379,6 +379,8 @@ func New(opts Options) *Server {
 		s.opts.WireGuard.Disabled = true
 		s.pending = append(s.pending, func(context.Context) error { return s.opts.WireGuard.Load() })
 	}
+	// The devices of paired apps end with their app (appvpn.go).
+	s.opts.WireGuard.AppPeerLive, s.opts.WireGuard.AppPeerCached = s.appVPNLive, s.appVPNCached
 	if s.opts.Fans == nil {
 		s.opts.Fans = fans.New(opts.Store)
 		s.opts.Fans.Disabled = true
@@ -499,6 +501,7 @@ func New(opts Options) *Server {
 	s.registerApps(mux)
 	s.registerAppPhotos(mux)
 	s.registerAppNotify(mux)
+	s.registerAppVPN(mux)
 
 	s.routeCluster(mux)
 

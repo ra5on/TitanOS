@@ -49,6 +49,11 @@ var (
 	ErrNotFound = errors.New("wireguard: no such device")
 	ErrTooMany  = errors.New("wireguard: too many devices")
 	ErrNameUsed = errors.New("wireguard: name in use")
+	// ErrOff: the server is not set up and switched on (an app asked for a
+	// device of its own).
+	ErrOff = errors.New("wireguard: the server is off")
+	// ErrKeyUsed: another device (or the server) has this public key.
+	ErrKeyUsed = errors.New("wireguard: key in use")
 	// defaultNetworks are tried in turn for the tunnel; the first that
 	// overlaps no network of the NAS is taken.
 	defaultNetworks = []string{"10.253.0.0/24", "10.254.13.0/24", "172.31.253.0/24", "192.168.253.0/24"}
@@ -77,7 +82,16 @@ type Peer struct {
 	Preshared string    `json:"presharedKey"`
 	Address   string    `json:"address"`
 	Created   time.Time `json:"created"`
+	// Account and Device are set for the device of a paired Android app
+	// (docs/ANDROID-APP.md "VPN"): its key was made on the phone, and the
+	// device ends with the app (appdevices). Empty for devices added on
+	// the page.
+	Account string `json:"account,omitempty"`
+	Device  string `json:"device,omitempty"`
 }
+
+// App reports whether the device belongs to a paired app.
+func (p Peer) App() bool { return p.Account != "" && p.Device != "" }
 
 // PeerStatus is a device as the page shows it, without its preshared key.
 type PeerStatus struct {
@@ -89,6 +103,11 @@ type PeerStatus struct {
 	Received      int64      `json:"received"`
 	Sent          int64      `json:"sent"`
 	Endpoint      string     `json:"endpoint,omitempty"`
+	// Account is set for the device of a paired Android app.
+	Account string `json:"account,omitempty"`
+	// Active is false for an app device that is left out of the tunnel
+	// now (its app ended, the account is locked or no administrator).
+	Active bool `json:"active"`
 }
 
 // Status is what the page shows.
@@ -117,8 +136,15 @@ type Manager struct {
 	HomeNetworks func() []string
 	// SuggestEndpoint proposes the name devices dial (dynamic DNS).
 	SuggestEndpoint func() string
-	now             func() time.Time
-	forward         func() error
+	// AppPeerLive says whether the device of a paired app may still use
+	// the tunnel; known is false when that cannot be told now (the stick
+	// is not readable), and such a device stays. nil: every device may.
+	AppPeerLive func(account, device string) (live, known bool)
+	// AppPeerCached is AppPeerLive from what is in RAM only (known false
+	// for anything else); Watch uses it, so the timer never reads /config.
+	AppPeerCached func(account, device string) (live, known bool)
+	now           func() time.Time
+	forward       func() error
 
 	// applying keeps Apply calls from overlapping.
 	applying sync.Mutex
@@ -128,6 +154,8 @@ type Manager struct {
 	private  string
 	running  bool
 	err      string
+	// applied are the public keys the interface got at the last Apply.
+	applied string
 }
 
 // New returns a manager for the configuration in store.
@@ -442,14 +470,42 @@ func ClientConfig(s Settings, peer Peer, private, serverPublic string, home []st
 	return b.String()
 }
 
-// serverConfig is what `wg syncconf` takes (no Address lines).
-func serverConfig(s Settings, private string) string {
+// serverConfig is what `wg syncconf` takes (no Address lines). Devices
+// for which active says no are left out: their key stops working.
+func serverConfig(s Settings, private string, active func(Peer) bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Interface]\nPrivateKey = %s\nListenPort = %d\n", private, s.Port)
 	for _, peer := range s.Peers {
+		if active != nil && !active(peer) {
+			continue
+		}
 		fmt.Fprintf(&b, "\n[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = %s\n", peer.PublicKey, peer.Preshared, peer.Address)
 	}
 	return b.String()
+}
+
+// active says whether a device is in the tunnel now: devices of the page
+// always, the device of an app while its app may (AppPeerLive). A device
+// whose state cannot be told stays in.
+func (m *Manager) active(p Peer) bool { return activeBy(p, m.AppPeerLive) }
+
+func activeBy(p Peer, live func(account, device string) (bool, bool)) bool {
+	if !p.App() || live == nil {
+		return true
+	}
+	ok, known := live(p.Account, p.Device)
+	return ok || !known
+}
+
+// activeKeys lists the public keys active lets in, for comparing.
+func activeKeys(s Settings, live func(account, device string) (bool, bool)) string {
+	var keys []string
+	for _, p := range s.Peers {
+		if activeBy(p, live) {
+			keys = append(keys, p.PublicKey)
+		}
+	}
+	return strings.Join(keys, ",")
 }
 
 // Apply brings the interface in line with the settings: up with all
@@ -462,7 +518,11 @@ func (m *Manager) Apply(ctx context.Context) error {
 	m.mu.Lock()
 	s, private := m.settings, m.private
 	m.mu.Unlock()
+	keys := activeKeys(s, m.AppPeerLive)
 	if m.Disabled {
+		m.mu.Lock()
+		m.applied = keys
+		m.mu.Unlock()
 		return nil
 	}
 	// The settings are stored already: the interface follows them even
@@ -476,6 +536,7 @@ func (m *Manager) Apply(ctx context.Context) error {
 		m.down(ctx)
 	}
 	m.mu.Lock()
+	m.applied = keys
 	m.running = err == nil && s.Enabled
 	m.err = ""
 	if err != nil {
@@ -492,7 +553,7 @@ func (m *Manager) up(ctx context.Context, s Settings, private string) error {
 	// The keys go to wg in a file in /run (RAM, root only), never as
 	// arguments, and the file goes right after.
 	confPath := filepath.Join(m.runDir, Interface+".conf")
-	if err := os.WriteFile(confPath, []byte(serverConfig(s, private)), 0o600); err != nil {
+	if err := os.WriteFile(confPath, []byte(serverConfig(s, private, m.active)), 0o600); err != nil {
 		return err
 	}
 	defer os.Remove(confPath)
@@ -566,9 +627,20 @@ func (m *Manager) Status() Status {
 	for _, peer := range s.Peers {
 		p := live[peer.PublicKey]
 		p.Name, p.PublicKey, p.Address, p.Created = peer.Name, peer.PublicKey, peer.Address, peer.Created
+		p.Account, p.Active = peer.Account, m.active(peer)
 		st.Peers = append(st.Peers, p)
 	}
 	return st
+}
+
+// PeerStatus returns the live state of one device, false if there is none.
+func (m *Manager) PeerStatus(publicKey string) (PeerStatus, bool) {
+	for _, p := range m.Status().Peers {
+		if p.PublicKey == publicKey {
+			return p, true
+		}
+	}
+	return PeerStatus{}, false
 }
 
 // parseDump reads the peer lines of `wg show <if> dump`: public key,

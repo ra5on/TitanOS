@@ -377,6 +377,44 @@ func (m *Manager) List(user auth.User) ([]Device, error) {
 	return out, nil
 }
 
+// Device returns a paired app of an account that has not run out.
+func (m *Manager) Device(user auth.User, id string) (Device, error) {
+	list, err := m.List(user)
+	if err != nil {
+		return Device{}, err
+	}
+	for _, d := range list {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return Device{}, ErrNotFound
+}
+
+// Cached says from RAM only whether a device of an account is paired and
+// has not run out; known is false when the account's apps were not read
+// since the start (the caller then keeps what it has). The account must
+// be the same and its credentials unchanged, like stateLocked checks.
+func (m *Manager) Cached(user auth.User, id string) (live, known bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := m.known[user.Name]
+	if st == nil {
+		return false, false
+	}
+	if !st.created.Equal(user.Created) || st.creds != credentials(user) {
+		// Another account of the name or changed credentials: the apps
+		// of the file end when it is read next.
+		return false, true
+	}
+	for _, d := range st.devices {
+		if d.ID == id {
+			return m.live(d), true
+		}
+	}
+	return false, true
+}
+
 // Delete ends one app of an account. The caller ends its sessions.
 func (m *Manager) Delete(user auth.User, id string) error {
 	m.mu.Lock()

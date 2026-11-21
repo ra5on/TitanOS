@@ -24,6 +24,8 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	s.pending = nil
+	// PLAN 116: devices of apps that ended while titand was down go now.
+	s.startAppVPN()
 	// 1.13: the reminders of events, planned from the store (RAM only).
 	s.startReminders()
 	return errors.Join(errs...)

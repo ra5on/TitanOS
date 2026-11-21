@@ -37,6 +37,8 @@ type appsArea struct {
 	certificate  func(host string) (*tls.Certificate, error)
 	remoteIPFunc func(*http.Request) string
 	guard        appSessionGuard
+	// vpnPrune takes the WireGuard device of an ended app along.
+	vpnPrune func()
 }
 
 func (s *Server) appsArea() appsArea {
@@ -49,7 +51,7 @@ func (s *Server) appsArea() appsArea {
 	return appsArea{apps: s.appDevices, sessions: s.sessionStore, cookieName: s.authArea().cookieName,
 		webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm, limiter: s.rateLimiter, record: s.recordActivity,
 		addresses: func() []setupAddress { return s.deviceSetup("").Addresses }, certificate: cert, remoteIPFunc: remoteIP,
-		guard: s.appSessionGuard()}
+		guard: s.appSessionGuard(), vpnPrune: s.appVPNPrune}
 }
 
 func (s *Server) registerApps(mux *routeMux) {
@@ -277,6 +279,9 @@ func (a appsArea) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.sessions().DeleteDevice(user.Name, id)
+	if a.vpnPrune != nil {
+		a.vpnPrune()
+	}
 	a.note(r, user.Name, "app.end", name, true)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -433,6 +438,8 @@ func (s *Server) appsRevokeAll(name string) {
 	if s.appDevices != nil {
 		s.appDevices.RevokeAll(name)
 	}
+	// Their WireGuard devices go with them (appvpn.go).
+	s.appVPNPrune()
 }
 
 func (s *Server) appsRebind(before auth.User) {
@@ -445,6 +452,7 @@ func (s *Server) appsForget(name string) {
 	if s.appDevices != nil {
 		s.appDevices.Forget(name)
 	}
+	s.appVPNPrune()
 	// What the photo backup kept goes with the account (logged if not).
 	if err := s.opts.AppPhotos.Forget(name); err != nil {
 		slog.Warn("photo backup: forget an account", "user", name, "err", err)
