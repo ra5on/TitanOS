@@ -236,9 +236,14 @@
 		// The session of an Android app: "TitanOS-Android/<app> <name>".
 		const app = /^TitanOS-Android\/(\w+) (.+)$/.exec(agent);
 		if (app)
-			return t(app[1] === 'agent' ? 'androidApps.sessionAgent' : 'androidApps.sessionTitanos', {
-				name: app[2],
-			});
+			return t(
+				app[1] === 'agent'
+					? 'androidApps.sessionAgent'
+					: app[1] === 'watch'
+						? 'androidApps.sessionWatch'
+						: 'androidApps.sessionTitanos',
+				{ name: app[2] },
+			);
 		const name = /Firefox\/|Edg\/|Chrome\/|Safari\//.exec(agent)?.[0].replace(/\/$/, '') ?? '';
 		const system = /Windows|Android|iPhone|iPad|Mac OS X|Linux/.exec(agent)?.[0] ?? '';
 		return [name === 'Edg' ? 'Edge' : name, system].filter(Boolean).join(' · ') || agent || '–';

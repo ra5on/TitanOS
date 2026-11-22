@@ -155,7 +155,13 @@
 	}
 
 	const appName = (app: string) =>
-		t(app === 'agent' ? 'androidApps.appAgent' : 'androidApps.appTitanos');
+		t(
+			app === 'agent'
+				? 'androidApps.appAgent'
+				: app === 'watch'
+					? 'androidApps.appWatch'
+					: 'androidApps.appTitanos',
+		);
 </script>
 
 <SettingRow
