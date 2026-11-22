@@ -243,12 +243,15 @@ Die App „TitanOS“ hat einen eigenen VPN-Dienst mit WireGuard (PLAN 116, Inha
     - Automatisch: aus im eingetragenen Heim-WLAN, an über Mobilfunk, wieder aus im WLAN.
     - Von Hand, Kachel, Mitteilung mit Datenmenge, Always-on von Android an und aus.
     - Zugang entfernen und neu anlegen: am Testserver weg und wieder da, der Tunnel kommt von selbst.
+    - „Neu erzeugen“: neuer Schlüssel an derselben Adresse, der Tunnel läuft danach weiter.
     - Entkoppeln: der Zugang verschwindet am NAS, Schlüssel und Einstellungen am Handy sind weg.
   - Nicht geprüft:
     - echter Tunnel über `titanoswg` und `wg syncconf`; im Testserver ist der WireGuard-Manager `Disabled`;
     - dass ein abgelaufener Zugang live aus dem Tunnel fällt (nur Unit-Tests);
+    - die Heimnetz-Adresse des NAS im Tunnel (die Gegenstelle bediente nur `10.253.0.1`), damit auch die Agent-App durch den Tunnel;
+    - Routing „Heimnetz“ und „Alles“, DNS über das NAS, Wahl der Adresse, MTU und Keepalive im Betrieb;
     - das Lernen der Heim-WLANs im Emulator;
-    - Netzwechsel bei geschlossener App;
+    - Netzwechsel und Start aus dem Hintergrund bei geschlossener App (Mitteilung zum Antippen);
     - echtes Handy, echtes NAS.
 
 ## Prüfstand (19.11.2026)
