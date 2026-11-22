@@ -63,6 +63,7 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 
 - Je Konto in der Einstellung `desktop` auf dem Stick (`/config/users/<name>/desktop.json`): Symbole mit ihren Plätzen, Ordner, Widgets (und ob ausgeblendet), Dock, Größe der Leisten, CPU/RAM in der Leiste, Reihenfolge der Programme im Menü, Hintergrund, Sortierung, Sperrzeit, eingeklappte Seitenleisten, gespeicherte Fenster-Anordnungen. Geschrieben wird nur nach einer Änderung, 1,5 s nach der letzten.
 - Offene Fenster mit Lage und Größe nur im Browser (`localStorage`): sie ändern sich ständig und sollen den Stick nicht abnutzen.
+- Die Android-App zeigt denselben Arbeitsplatz aus derselben Einstellung; mit „eigene Einrichtung für Android“ nimmt sie `androiddesktop` (1.19, docs/ANDROID-APP.md › Arbeitsplatz).
 
 ## Handy (PLAN 64, überarbeitet mit PLAN 87)
 
