@@ -24,6 +24,8 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | appphotos | `appphotos.go` | `appPhotosArea` | 1 |
 | apppim | `apppim.go` | `appPIMArea` | 1 |
 | apps | `apps.go` | `appStoreArea` | 0 |
+| appvpn | `appvpn.go` | `appVPNArea` | 1 |
+| appwatch | `appwatch.go`, `appwatch_rights.go` | – | 1 |
 | area | `area_hooks.go` | – | 0 |
 | auth | `auth.go`, `auth_area.go` | `authArea` | 1 |
 | backup | `backup_coverage.go` | – | 2 |

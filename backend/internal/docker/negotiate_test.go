@@ -2,9 +2,9 @@ package docker
 
 import (
 	"context"
-	"os"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"

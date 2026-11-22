@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"sync"
 	"bufio"
 	"bytes"
 	"context"
@@ -14,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,7 +23,7 @@ type client struct {
 	http   *http.Client
 	socket string
 
-	verMu   sync.Mutex
+	verMu      sync.Mutex
 	apiVersion string // ausgehandelte API-Version, leer bis zur ersten Antwort der Engine
 }
 
