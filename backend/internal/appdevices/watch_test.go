@@ -67,6 +67,13 @@ func TestWatchCodeIsStable(t *testing.T) {
 	if WatchCode("id", "key", "nonce", "secret", "spki", false) == WatchCode("id", "key", "nonce", "secret", "spki", true) {
 		t.Fatal("the public flag must count")
 	}
+	// Fixed values: the watch app (app-watch, WatchCodeTest) checks the same.
+	if WatchCode("id1", "a2V5", "bm9uY2U", "c2VjcmV0", "c3BraQ", false) != "180943" || WatchCode("id1", "a2V5", "bm9uY2U", "c2VjcmV0", "c3BraQ", true) != "005621" {
+		t.Fatal("code format changed")
+	}
+	if WatchCommit("a2V5", "c2VjcmV0") != "orW-eInN5We5WVN-sxk01MXTBbJIwOeouxffCCiYL2A" {
+		t.Fatal("commit format changed")
+	}
 	if WatchCommit("k", "s") == WatchCommit("k", "t") {
 		t.Fatal("commit")
 	}
