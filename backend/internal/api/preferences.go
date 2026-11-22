@@ -23,7 +23,10 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order", "contacts"}
+// "androiddesktop" (1.19) is the Android app's own desktop when the account
+// switches on "eigene Einrichtung für Android"; same shape as "desktop", the
+// web never writes it (docs/ANDROID-APP.md, Arbeitsplatz).
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order", "contacts", "androiddesktop"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20

@@ -499,7 +499,7 @@ func TestPreferences(t *testing.T) {
 	ts.setup()
 
 	_, body := ts.request("GET", "/api/v1/preferences", nil)
-	if strings.TrimSpace(string(body)) != `{"appearance":null,"bell":null,"calendar":null,"contacts":null,"dashboard":null,"desktop":null,"docker":null,"fileapps":null,"fileappsdocker":null,"files":null,"hints":null,"order":null,"shares":null,"sound":null,"vnc":null}` {
+	if strings.TrimSpace(string(body)) != `{"androiddesktop":null,"appearance":null,"bell":null,"calendar":null,"contacts":null,"dashboard":null,"desktop":null,"docker":null,"fileapps":null,"fileappsdocker":null,"files":null,"hints":null,"order":null,"shares":null,"sound":null,"vnc":null}` {
 		t.Errorf("fresh preferences = %s", body)
 	}
 
