@@ -16,7 +16,7 @@ import (
 func watchStart(t *testing.T, ts *testServer, client *http.Client, watch testApp, secret, spki string) (string, string) {
 	t.Helper()
 	res, body := ts.do(client, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "Pixel Watch 3", "publicKey": watch.public(),
-		"commit": appdevices.WatchCommit(watch.public(), secret)})
+		"commit": appdevices.WatchCommit(watch.public(), spki, false, secret)})
 	var started struct{ ID, Nonce string }
 	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &started) != nil || started.ID == "" || started.Nonce == "" {
 		t.Fatalf("start: %d %s", res.StatusCode, body)
@@ -54,11 +54,19 @@ func TestAppWatchPairing(t *testing.T) {
 	wclient := ts.newClient()
 
 	// Another certificate than the NAS serves: someone in between.
-	res, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "s1")})
+	res, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", false, "s1")})
 	var bad struct{ ID string }
 	json.Unmarshal(body, &bad)
 	if res, body := ts.do(wclient, "POST", "/api/v1/app/pair/watch/"+bad.ID+"/reveal", map[string]any{"secret": "s1", "spki": "b3RoZXI"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "watch_certificate" {
 		t.Fatalf("other certificate: %d %s", res.StatusCode, body)
+	}
+
+	// A "public certificate" counts only for a name with a valid public
+	// certificate; the test server has none.
+	res, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", true, "s2")})
+	json.Unmarshal(body, &bad)
+	if res, body := ts.do(wclient, "POST", "/api/v1/app/pair/watch/"+bad.ID+"/reveal", map[string]any{"secret": "s2", "spki": "b3RoZXI", "publicCert": true}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "watch_certificate" {
+		t.Fatalf("public claimed: %d %s", res.StatusCode, body)
 	}
 
 	id, code := watchStart(t, ts, wclient, watch, "secret-of-the-watch", spki)
@@ -108,13 +116,41 @@ func TestAppWatchPairing(t *testing.T) {
 		t.Fatalf("apps %s", listed)
 	}
 
+	// Least rights (security review 22.11.2026): the watch gets what it
+	// needs, nothing else; the phone app keeps everything.
+	for _, ok := range []string{"/api/v1/system", "/api/v1/storage", "/api/v1/agent/chats", "/api/v1/nvr/cameras"} {
+		if res, body := ts.do(wsession, "GET", ok, nil); res.StatusCode == http.StatusForbidden && errorCode(t, body) == "watch_forbidden" {
+			t.Fatalf("watch kept from %s", ok)
+		}
+	}
+	for _, c := range []struct{ method, path string }{
+		{"GET", "/api/v1/app/vpn"}, {"POST", "/api/v1/app/vpn"}, {"GET", "/api/v1/app/pim/contacts"},
+		{"POST", "/api/v1/app/photos/check"}, {"GET", "/api/v1/files/roots"}, {"GET", "/api/v1/account/apps"},
+		{"GET", "/api/v1/account/sessions"}, {"PUT", "/api/v1/agent/settings"}, {"GET", "/api/v1/users"},
+		{"POST", "/api/v1/docker/containers/x/remove"}, {"POST", "/api/v1/vms/x/poweroff"},
+	} {
+		if res, body := ts.do(wsession, c.method, c.path, map[string]any{}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "watch_forbidden" {
+			t.Fatalf("watch %s %s: %d %s", c.method, c.path, res.StatusCode, body)
+		}
+	}
+	// Home Assistant: switching and scenes yes, a lock no.
+	if res, body := ts.do(wsession, "POST", "/api/v1/homeassistant/call", map[string]any{"domain": "lock", "service": "unlock", "entities": []string{"lock.door"}}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "watch_forbidden" {
+		t.Fatalf("watch unlocks: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.do(wsession, "POST", "/api/v1/homeassistant/call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.kitchen"}}); res.StatusCode == http.StatusForbidden && errorCode(t, body) == "watch_forbidden" {
+		t.Fatalf("watch may not switch a light: %s", body)
+	}
+	if res, body := ts.do(phone, "GET", "/api/v1/files/roots", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("phone kept from files: %d %s", res.StatusCode, body)
+	}
+
 	// The watch confirms no other watch and asks for no sibling code.
 	other := newTestApp(t)
 	_, code2 := watchStart(t, ts, ts.newClient(), other, "second", spki)
-	if res, body := ts.do(wsession, "POST", "/api/v1/app/pair/watch/confirm", map[string]string{"code": code2}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "watch_confirmer" {
+	if res, body := ts.do(wsession, "POST", "/api/v1/app/pair/watch/confirm", map[string]string{"code": code2}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "watch_forbidden" {
 		t.Fatalf("watch confirms watch: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.do(wsession, "POST", "/api/v1/app/pair/sibling", map[string]string{"app": "titanos"}); res.StatusCode != http.StatusBadRequest {
+	if res, body := ts.do(wsession, "POST", "/api/v1/app/pair/sibling", map[string]string{"app": "titanos"}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "watch_forbidden" {
 		t.Fatalf("sibling from the watch: %d %s", res.StatusCode, body)
 	}
 	if res, body := ts.do(phone, "POST", "/api/v1/app/pair/sibling", map[string]string{"app": "watch"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_app" {
@@ -129,5 +165,14 @@ func TestAppWatchPairing(t *testing.T) {
 	}
 	if !limited {
 		t.Fatal("wrong codes are not limited")
+	}
+}
+
+func TestWatchAddressCountsIPv6AsPrefix(t *testing.T) {
+	if watchAddress("192.0.2.7") != "192.0.2.7" {
+		t.Fatal("IPv4")
+	}
+	if a, b := watchAddress("2001:db8:1:2::1"), watchAddress("2001:db8:1:2:ffff::9"); a != b || a != "2001:db8:1:2::/64" {
+		t.Fatalf("IPv6 %s %s", a, b)
 	}
 }

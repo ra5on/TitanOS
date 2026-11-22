@@ -152,8 +152,13 @@ func (a appVPNArea) server() (*appVPNServer, string) {
 func (a appVPNArea) answer(user auth.User, device string) appVPNAnswer {
 	out := appVPNAnswer{MayCreate: user.Role.CanAdminister()}
 	server, reason := a.server()
-	out.Server = server
-	if peer, ok := a.wg.AppPeer(user.Name, device); ok {
+	peer, hasPeer := a.wg.AppPeer(user.Name, device)
+	// The server's key, home networks and endpoints only for whom may add a
+	// device or has one already (security review 22.11.2026).
+	if out.MayCreate || hasPeer {
+		out.Server = server
+	}
+	if hasPeer {
 		p := appVPNPeer{Name: peer.Name, Address: peer.Address, PublicKey: peer.PublicKey, Created: peer.Created}
 		if st, ok := a.wg.PeerStatus(peer.PublicKey); ok {
 			p.Active, p.LastHandshake, p.Received, p.Sent = st.Active, st.LastHandshake, st.Received, st.Sent
@@ -191,6 +196,11 @@ func (a appVPNArea) handleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		writeAppsError(w, err)
+		return
+	}
+	if device.App == appdevices.WatchApp {
+		// A WireGuard access only for a phone app, never for a watch.
+		writeError(w, http.StatusForbidden, "app_phone_required", "only a phone app may add a WireGuard device")
 		return
 	}
 	if !user.Role.CanAdminister() {

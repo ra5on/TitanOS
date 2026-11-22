@@ -57,12 +57,13 @@ Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`), „Agent“ (`io.git
 **Die Uhr (Wear OS, seit 1.19, PLAN 116 Paket G):** Die Uhr-App `io.github.ra5on.titanos.watch` spricht selbst mit dem NAS über WLAN, das Handy (Bluetooth-Proxy des Systems) oder LTE, ohne Google: keine Play-Dienste, keine Wearable Data Layer API. Sie hat keine Kamera für den QR-Code und kann deshalb weder Link noch Fingerabdruck vom Handy übernehmen. Gekoppelt wird so:
 1. **Handy:** Die TitanOS-App zeigt unter „Uhr koppeln“ die Adressen des NAS. Eine davon wird auf der Uhr eingetippt.
 2. **Uhr:** baut die TLS-Verbindung auf und merkt sich den SPKI-Hash des Zertifikats, das sie dort sieht (noch ungeprüft). Dann `POST /api/v1/app/pair/watch` mit `{name, publicKey, commit}`.
-   - `commit` = base64url ohne Auffüllung von SHA-256(`titanos-watch-commit\n<publicKey>\n<secret>`). `secret` ist ein Zufallswert der Uhr, `publicKey` genau wie gesendet.
+   - `commit` = base64url ohne Auffüllung von SHA-256(`titanos-watch-commit\n<publicKey>\n<spki>\n<1|0>\n<secret>`). `secret` ist ein Zufallswert der Uhr, `publicKey` genau wie gesendet, `spki` und `1|0` (öffentliches Zertifikat) wie die Uhr sie beim Lesen des Zertifikats gesehen hat. Die Festlegung bindet damit alles, was in die Ziffern eingeht (Sicherheitsdurchsicht 22.11.2026: vorher ließen sich `spki` und die Angabe „öffentlich“ nach dem Erfahren der Ziffern frei wählen). Keiner der Werte darf einen Zeilenumbruch enthalten.
    - Antwort `{id, nonce, expires}`. `nonce` ist der Zufallswert des NAS. Die Kopplung gilt 5 Minuten.
-   - Grenzen: höchstens 20 offene Uhr-Kopplungen am NAS, 3 je Adresse (`429 pairing_limit`).
+   - Grenzen: höchstens 50 offene Uhr-Kopplungen am NAS, 3 offene und 10 Starts in 5 Minuten je Adresse, IPv6 je /64 (`429 pairing_limit`).
 3. **Uhr:** `POST /api/v1/app/pair/watch/{id}/reveal` mit `{secret, spki, publicCert}`.
    - `spki` ist der Hash, den die Uhr gesehen hat. `publicCert` ist `true`, wenn die Uhr ein gültiges öffentliches Zertifikat selbst geprüft hat.
-   - Das NAS prüft `secret` gegen `commit`. Ohne `publicCert` prüft es außerdem `spki` gegen das Zertifikat, das titand auf dieser Verbindung ausliefert (nach dem Servernamen; ohne eigenes TLS gegen die Zertifikate aller Adressen).
+   - Das NAS rechnet `commit` aus `secret`, `spki` und `publicCert` nach; weicht etwas ab, ist die Kopplung verbraucht.
+   - Zertifikat: Über titands eigenes TLS muss `spki` genau das Zertifikat sein, das titand für den Servernamen dieser Verbindung ausliefert, öffentlich oder nicht. Endet TLS vor titand (Tailscale Serve), zählt `publicCert: true` nur für einen Namen, den titand mit gültigem öffentlichem Zertifikat führt (Let's Encrypt, Tailscale); sonst muss `spki` eines der Zertifikate sein, die titand für seine Adressen ausliefert.
    - Passt eines nicht, ist die Kopplung verbraucht: `404 pairing_code` bzw. `409 watch_certificate`.
 4. **Uhr und NAS** rechnen dieselben sechs Ziffern: SHA-256 über `titanos-watch-code\n` + `id`, `publicKey`, `nonce`, `secret`, `spki` und `1`/`0` für `publicCert`, jeweils durch `\n` getrennt. Davon die ersten 8 Bytes als Zahl (big-endian) modulo 10⁶, mit führenden Nullen. Die Uhr zeigt sie als „482 913“.
 5. **Handy:** Die gekoppelte TitanOS- oder Agent-App schickt die eingetippten Ziffern mit `POST /api/v1/app/pair/watch/confirm` `{code}` aus ihrer App-Sitzung.
@@ -80,12 +81,18 @@ Warum so: Die Bestätigung im Browser mit Kontopasswort hat schon das Handy beko
 - Ein Gerät, das sich nur als Uhr ausgibt, sieht die Ziffern auf der echten Uhr nicht.
 - `/app/pair/sibling` nimmt `watch` nicht an (`400 invalid_app`), und eine Uhr bekommt dort keinen Code.
 
+**Rechte der Uhr** (Sicherheitsdurchsicht 22.11.2026): Die Sitzung einer Uhr erreicht nur, was die Uhr-App braucht (`api/appwatch_rights.go`); alles andere ist `403 watch_forbidden`.
+- Erlaubt: `GET /session`, `/system`, `/storage`, `/services/state`, `/app/notifications`; NVR `GET /nvr/cameras`, Standbild, `GET /nvr/events` und Ereignisbilder; KI-Agent Status, Chats lesen, anlegen, Nachricht, `decide`, `transcribe`, `speech/say`, `speech/hear`; Home Assistant `GET /homeassistant/entities` und `POST /homeassistant/call` nur für `light`, `switch`, `fan`, `input_boolean`, `scene`, `script` mit `turn_on`/`turn_off`/`toggle`; `GET /docker` und Container `start`/`stop`/`restart`; `GET /vms` und VM `start`/`shutdown`.
+- Gesperrt unter anderem: `/app/vpn`, `/app/pim/*`, `/app/photos/*`, `/app/pair/sibling`, `/app/pair/watch/confirm`, Dateien, Konto- und Sicherheitsrouten, alle Einstellungen. Die Kontorechte gelten zusätzlich wie immer.
+- `POST /app/vpn` verlangt außerdem eine Handy-App (`403 app_phone_required`).
+
 - **Prüfstand der Uhr (22.11.2026):** Go-Tests `TestWatchPairing`, `TestWatchRefusals` und `TestWatchCodeIsStable` (feste Werte, die die App in `WatchCodeTest` genauso prüft) in `appdevices`, `TestAppWatchPairing` in `api`. Geprüft werden: falsches Zertifikat, falsches Geheimnis, vertauschter Schlüssel, Ablauf, Grenzen je Adresse und für das ganze NAS, Wiederholung, nur Handy-Apps bestätigen, falsche Ziffern zählen, kein Sibling-Code für oder von der Uhr, geänderte Zugangsdaten.
   - **Emulator:** Wear OS 7 (Uhr) und Android 17 (Handy) gegen einen Wegwerf-Testserver mit TLS direkt im Harness (`internal/tlscert`, Port 8463), KI-Agent mit nachgebautem Ollama.
     - Handy über Link gekoppelt; auf der Uhr die Adresse `10.0.2.2:8463` eingetippt, Erlaubnis „Geräte in der Nähe“ (lokales Netzwerk) erteilt.
     - Die Uhr zeigte sechs Ziffern; am Handy unter „Uhr koppeln“ eingegeben, danach Gerät `watch` unter `/account/apps`.
     - Zustand, Meldungen (Web-Push-Spiegel), Kachel, Agent getippt mit Antwort und Vorlesen, Freigabe des Agenten auf der Uhr erlaubt (Datei am Testserver ersetzt).
     - „Beenden“ am NAS meldete die Uhr ab, sie zeigte wieder die Kopplung.
+  - Nach der Sicherheitsdurchsicht (22.11.2026) zusätzlich: geändertes `spki` oder `publicCert` nach der Festlegung, Zeilenumbruch in einem Wert, „öffentlich“ ohne öffentliches Zertifikat, Starts je Adresse und IPv6 als /64, Rechte der Uhr-Sitzung (erlaubte und gesperrte Routen, Home-Assistant-Dienste, Container- und VM-Aktionen), `server` von `/app/vpn` ohne Recht verborgen.
   - Nicht geprüft: echte Uhr, Bluetooth-Proxy des Handys, LTE, Komplikation auf einem Zifferblatt (der Emulator hat keines, das sich per ADB belegen lässt), Selbst-Update der Uhr, Diktat ohne Spracheingabe des Systems.
 
 **Liste und Beenden:**
@@ -248,7 +255,7 @@ Die App „TitanOS“ hat einen eigenen VPN-Dienst mit WireGuard (PLAN 116, Inha
 - **Routen** (`api/appvpn.go`), alle mit `Cache-Control: no-store`:
   - `GET /api/v1/app/vpn` → `{available, reason?, mayCreate, peer, server}`.
     - `peer` ist `null` oder `{name, address, publicKey, created, active, lastHandshake?, received, sent}`; `active: false` heißt: gerade nicht im Tunnel.
-    - `server`, solange WireGuard an ist: `{publicKey, port, network, address, homeNetworks, dns, fullTunnel, keepalive, endpoint, endpoints, nasAddresses, nas:{server, spki}}`.
+    - `server`, solange WireGuard an ist und das Konto Geräte anlegen darf (`mayCreate`) oder dieses Gerät schon einen Zugang hat, sonst `null` (Sicherheitsdurchsicht 22.11.2026): `{publicKey, port, network, address, homeNetworks, dns, fullTunnel, keepalive, endpoint, endpoints, nasAddresses, nas:{server, spki}}`.
       - `endpoints`: alle Adressen aus dem Internet, die eingetragene zuerst, dann die Namen aus Dynamisches DNS und Let's Encrypt.
       - `nasAddresses`: die IPv4-Adresse des NAS im Heimnetz. Mit „nur NAS“ leitet die App sie als /32 durch den Tunnel, damit die gekoppelten Heimnetz-Adressen beider Apps unterwegs gehen.
       - `nas`: das NAS im Tunnel als Adresse der App (`<address>[:Port]`, SPKI wie bei der Kopplung für IP-Adressen).

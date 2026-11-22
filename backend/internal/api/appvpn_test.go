@@ -178,7 +178,8 @@ func TestAppVPNRightsAndEnds(t *testing.T) {
 	readerApp := newTestApp(t)
 	u, d := ts.pairAppWith(reader, readerApp, "Pixel von Reader")
 	readerPhone, _, _ := ts.appSession(readerApp, u, d)
-	if code, got, raw := ts.appVPN(readerPhone, "GET", nil); code != 200 || got.Available || got.Reason != "wireguard_admin_only" || got.MayCreate {
+	// Without the right to add a device the server's key, networks and endpoints stay hidden.
+	if code, got, raw := ts.appVPN(readerPhone, "GET", nil); code != 200 || got.Available || got.Reason != "wireguard_admin_only" || got.MayCreate || got.Server != nil {
 		t.Fatalf("reader get: %d %s", code, raw)
 	}
 	if code, _, raw := ts.appVPN(readerPhone, "POST", map[string]string{"publicKey": wgPublic(t)}); code != http.StatusForbidden || errorCode(t, raw) != "wireguard_admin_only" {

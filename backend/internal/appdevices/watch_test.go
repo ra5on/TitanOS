@@ -59,23 +59,24 @@ func pairedPhone(t *testing.T) (*Manager, auth.User, accounts, Device, *time.Tim
 
 const servedSPKI = "c2VydmVkLXNwa2ktb2YtdGhlLW5hcy0zMi1ieXRlcyE"
 
+// onlyServed accepts the certificate titand serves, never a public one.
+func onlyServed(spki string, public bool) bool { return !public && spki == servedSPKI }
+
+// commitFor is the watch's commitment for the served certificate.
+func commitFor(w watchKey, secret string) string {
+	return WatchCommit(w.text, servedSPKI, false, secret)
+}
+
 func TestWatchCodeIsStable(t *testing.T) {
-	// The app computes the same text; this pins the format.
-	if got := WatchCode("id", "key", "nonce", "secret", "spki", false); got != WatchCode("id", "key", "nonce", "secret", "spki", false) || len(got) != 6 {
-		t.Fatalf("code %q", got)
-	}
-	if WatchCode("id", "key", "nonce", "secret", "spki", false) == WatchCode("id", "key", "nonce", "secret", "spki", true) {
-		t.Fatal("the public flag must count")
-	}
 	// Fixed values: the watch app (app-watch, WatchCodeTest) checks the same.
 	if WatchCode("id1", "a2V5", "bm9uY2U", "c2VjcmV0", "c3BraQ", false) != "180943" || WatchCode("id1", "a2V5", "bm9uY2U", "c2VjcmV0", "c3BraQ", true) != "005621" {
 		t.Fatal("code format changed")
 	}
-	if WatchCommit("a2V5", "c2VjcmV0") != "orW-eInN5We5WVN-sxk01MXTBbJIwOeouxffCCiYL2A" {
-		t.Fatal("commit format changed")
+	if got := WatchCommit("a2V5", "c3BraQ", false, "c2VjcmV0"); got != commitVector {
+		t.Fatalf("commit format changed: %s", got)
 	}
-	if WatchCommit("k", "s") == WatchCommit("k", "t") {
-		t.Fatal("commit")
+	if WatchCommit("k", "s", false, "x") == WatchCommit("k", "s", true, "x") || WatchCommit("k", "s", false, "x") == WatchCommit("k", "t", false, "x") {
+		t.Fatal("spki and flag must count in the commitment")
 	}
 	for in, want := range map[string]string{"482 913": "482913", "482-913": "482913", "48291": "", "4829133": "", "48a913": ""} {
 		if got := normalWatchCode(in); got != want {
@@ -84,11 +85,13 @@ func TestWatchCodeIsStable(t *testing.T) {
 	}
 }
 
+const commitVector = "U33id71fjniJnKVCkSvODTGJiBlT5FJCv7zsx4RRBEg"
+
 func TestWatchPairing(t *testing.T) {
 	m, user, _, phone, now := pairedPhone(t)
 	w := newWatchKey(t)
 	secret := randomText(24)
-	p, err := m.WatchStart("Pixel Watch", w.text, WatchCommit(w.text, secret), "10.0.0.7")
+	p, err := m.WatchStart("Pixel Watch", w.text, commitFor(w, secret), "10.0.0.7")
 	if err != nil || p.Nonce == "" || p.State != WatchStarted || !p.Expires.Equal(now.Add(WatchTTL)) {
 		t.Fatalf("start %+v %v", p, err)
 	}
@@ -96,13 +99,13 @@ func TestWatchPairing(t *testing.T) {
 	if st, err := m.WatchWait(p.ID, w.sign(t, watchWaitText+p.ID)); err != nil || st.State != WatchStarted {
 		t.Fatalf("wait before reveal %+v %v", st, err)
 	}
-	r, err := m.WatchReveal(p.ID, secret, servedSPKI, false, []string{servedSPKI})
+	r, err := m.WatchReveal(p.ID, secret, servedSPKI, false, onlyServed)
 	if err != nil || r.State != WatchRevealed {
 		t.Fatalf("reveal %+v %v", r, err)
 	}
 	code := WatchCode(p.ID, w.text, p.Nonce, secret, servedSPKI, false)
 	// Revealing again does nothing.
-	if _, err := m.WatchReveal(p.ID, secret, servedSPKI, false, nil); !errors.Is(err, ErrBadCode) {
+	if _, err := m.WatchReveal(p.ID, secret, servedSPKI, false, onlyServed); !errors.Is(err, ErrBadCode) {
 		t.Fatalf("second reveal %v", err)
 	}
 	// A wrong signature on wait tells nothing.
@@ -145,8 +148,8 @@ func TestWatchPairing(t *testing.T) {
 	// A watch neither confirms another watch nor asks for a sibling code.
 	w2 := newWatchKey(t)
 	s2 := randomText(24)
-	p2, _ := m.WatchStart("Second", w2.text, WatchCommit(w2.text, s2), "10.0.0.8")
-	m.WatchReveal(p2.ID, s2, servedSPKI, false, nil)
+	p2, _ := m.WatchStart("Second", w2.text, commitFor(w2, s2), "10.0.0.8")
+	m.WatchReveal(p2.ID, s2, servedSPKI, false, onlyServed)
 	if _, err := m.WatchConfirm(user, d.ID, WatchCode(p2.ID, w2.text, p2.Nonce, s2, servedSPKI, false)); !errors.Is(err, ErrWatchConfirmer) {
 		t.Fatalf("watch confirms watch %v", err)
 	}
@@ -166,10 +169,10 @@ func TestWatchRefusals(t *testing.T) {
 	w := newWatchKey(t)
 
 	// Start: name, key and commitment.
-	if _, err := m.WatchStart("", w.text, WatchCommit(w.text, "s"), "a"); !errors.Is(err, ErrInvalidName) {
+	if _, err := m.WatchStart("", w.text, commitFor(w, "s"), "a"); !errors.Is(err, ErrInvalidName) {
 		t.Fatalf("name %v", err)
 	}
-	if _, err := m.WatchStart("W", "nokey", WatchCommit(w.text, "s"), "a"); !errors.Is(err, ErrInvalidKey) {
+	if _, err := m.WatchStart("W", "nokey", commitFor(w, "s"), "a"); !errors.Is(err, ErrInvalidKey) {
 		t.Fatalf("key %v", err)
 	}
 	if _, err := m.WatchStart("W", w.text, "short", "a"); !errors.Is(err, ErrBadCode) {
@@ -177,70 +180,90 @@ func TestWatchRefusals(t *testing.T) {
 	}
 
 	// A secret that does not match the commitment ends the pairing.
-	p, _ := m.WatchStart("W", w.text, WatchCommit(w.text, "right"), "a")
-	if _, err := m.WatchReveal(p.ID, "wrong", servedSPKI, false, nil); !errors.Is(err, ErrBadCode) {
+	p, _ := m.WatchStart("W", w.text, commitFor(w, "right"), "a")
+	if _, err := m.WatchReveal(p.ID, "wrong", servedSPKI, false, onlyServed); !errors.Is(err, ErrBadCode) {
 		t.Fatalf("wrong secret %v", err)
 	}
-	if _, err := m.WatchReveal(p.ID, "right", servedSPKI, false, nil); !errors.Is(err, ErrBadCode) {
+	if _, err := m.WatchReveal(p.ID, "right", servedSPKI, false, onlyServed); !errors.Is(err, ErrBadCode) {
 		t.Fatalf("after a wrong secret %v", err)
 	}
 
 	// Swapped key: someone in between who starts with his own key cannot
 	// keep the watch's commitment.
 	attacker := newWatchKey(t)
-	p, _ = m.WatchStart("W", attacker.text, WatchCommit(w.text, "s"), "a")
-	if _, err := m.WatchReveal(p.ID, "s", servedSPKI, false, nil); !errors.Is(err, ErrBadCode) {
+	p, _ = m.WatchStart("W", attacker.text, commitFor(w, "s"), "a")
+	if _, err := m.WatchReveal(p.ID, "s", servedSPKI, false, onlyServed); !errors.Is(err, ErrBadCode) {
 		t.Fatalf("swapped key %v", err)
 	}
 
-	// Another certificate than the NAS serves: someone in between.
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "s"), "a")
-	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", false, []string{servedSPKI}); !errors.Is(err, ErrWatchCertificate) {
+	// Security review 22.11.2026: the certificate and the public flag are
+	// bound by the commitment. Someone who learns the digits on the watch
+	// cannot search for a certificate or flip the flag afterwards.
+	p, _ = m.WatchStart("W", w.text, commitFor(w, "s"), "b")
+	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", false, func(string, bool) bool { return true }); !errors.Is(err, ErrBadCode) {
+		t.Fatalf("other spki than committed %v", err)
+	}
+	p, _ = m.WatchStart("W", w.text, commitFor(w, "s"), "b")
+	if _, err := m.WatchReveal(p.ID, "s", servedSPKI, true, func(string, bool) bool { return true }); !errors.Is(err, ErrBadCode) {
+		t.Fatalf("public flag flipped %v", err)
+	}
+	// Values with a line break could shift the lines of the commitment.
+	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, servedSPKI, false, "a\nb"), "b")
+	if _, err := m.WatchReveal(p.ID, "a\nb", servedSPKI, false, onlyServed); !errors.Is(err, ErrBadCode) {
+		t.Fatalf("line break %v", err)
+	}
+
+	// Another certificate than the NAS serves, even committed: someone in between.
+	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "b3RoZXI", false, "s"), "c")
+	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", false, onlyServed); !errors.Is(err, ErrWatchCertificate) {
 		t.Fatalf("other certificate %v", err)
 	}
-	// A public certificate the watch checked itself counts, and so does
-	// a NAS that cannot tell what it serves.
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "s"), "a")
-	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", true, []string{servedSPKI}); err != nil {
+	// A public certificate counts only when the API says titand serves one.
+	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "b3RoZXI", true, "s"), "c")
+	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", true, onlyServed); !errors.Is(err, ErrWatchCertificate) {
+		t.Fatalf("public without a public certificate %v", err)
+	}
+	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "b3RoZXI", true, "s"), "c")
+	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", true, func(_ string, public bool) bool { return public }); err != nil {
 		t.Fatalf("public certificate %v", err)
 	}
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "s"), "b")
-	if _, err := m.WatchReveal(p.ID, "s", "b3RoZXI", false, nil); err != nil {
-		t.Fatalf("nothing known %v", err)
+	// Without a check nothing is accepted.
+	p, _ = m.WatchStart("W", w.text, commitFor(w, "s"), "d")
+	if _, err := m.WatchReveal(p.ID, "s", servedSPKI, false, nil); !errors.Is(err, ErrWatchCertificate) {
+		t.Fatalf("no check %v", err)
 	}
 
-	// The digits differ when the certificate the watch saw differs from
-	// what reached the NAS (someone changed the field on the way).
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "x"), "c")
-	m.WatchReveal(p.ID, "x", servedSPKI, false, nil)
-	seen := WatchCode(p.ID, w.text, p.Nonce, "x", "YXR0YWNrZXI", false)
-	if seen == WatchCode(p.ID, w.text, p.Nonce, "x", servedSPKI, false) {
-		t.Fatal("certificate does not count in the code")
-	}
-	if _, err := m.WatchConfirm(user, phone.ID, seen); !errors.Is(err, ErrBadCode) {
-		t.Fatalf("changed certificate %v", err)
-	}
-
-	// Limits: per address and for the whole NAS.
+	// Limits: pending per address, starts per address and the whole NAS.
 	m2 := New(&memConfig{files: map[string][]byte{}}, users, func() int { return 0 })
 	for i := 0; i < MaxWatchPerAddress; i++ {
-		if _, err := m2.WatchStart("W", w.text, WatchCommit(w.text, "s"), "same"); err != nil {
+		if _, err := m2.WatchStart("W", w.text, commitFor(w, "s"), "same"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := m2.WatchStart("W", w.text, WatchCommit(w.text, "s"), "same"); !errors.Is(err, ErrTooManyOpen) {
+	if _, err := m2.WatchStart("W", w.text, commitFor(w, "s"), "same"); !errors.Is(err, ErrTooManyOpen) {
 		t.Fatalf("per address %v", err)
 	}
-	for i := 0; len(m2.watches) < MaxWatchPending; i++ {
-		m2.WatchStart("W", w.text, WatchCommit(w.text, "s"), "addr"+string(rune('a'+i)))
+	m3 := New(&memConfig{files: map[string][]byte{}}, users, func() int { return 0 })
+	for i := 0; i < MaxWatchStarts; i++ {
+		p, err := m3.WatchStart("W", w.text, commitFor(w, "s"), "busy")
+		if err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+		m3.WatchReveal(p.ID, "wrong", servedSPKI, false, onlyServed) // ends it
 	}
-	if _, err := m2.WatchStart("W", w.text, WatchCommit(w.text, "s"), "fresh"); !errors.Is(err, ErrTooManyOpen) {
+	if _, err := m3.WatchStart("W", w.text, commitFor(w, "s"), "busy"); !errors.Is(err, ErrTooManyOpen) {
+		t.Fatalf("starts per address %v", err)
+	}
+	for i := 0; len(m2.watches) < MaxWatchPending; i++ {
+		m2.WatchStart("W", w.text, commitFor(w, "s"), "addr"+string(rune('a'+i%26))+string(rune('a'+i/26)))
+	}
+	if _, err := m2.WatchStart("W", w.text, commitFor(w, "s"), "fresh"); !errors.Is(err, ErrTooManyOpen) {
 		t.Fatalf("whole NAS %v", err)
 	}
 
 	// Expiry: the code is gone after WatchTTL.
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "late"), "d")
-	m.WatchReveal(p.ID, "late", servedSPKI, false, nil)
+	p, _ = m.WatchStart("W", w.text, commitFor(w, "late"), "e")
+	m.WatchReveal(p.ID, "late", servedSPKI, false, onlyServed)
 	code := WatchCode(p.ID, w.text, p.Nonce, "late", servedSPKI, false)
 	*now = now.Add(WatchTTL + time.Second)
 	if _, err := m.WatchConfirm(user, phone.ID, code); !errors.Is(err, ErrBadCode) {
@@ -251,8 +274,8 @@ func TestWatchRefusals(t *testing.T) {
 	}
 
 	// A changed password ends the phone, and with it its right to confirm.
-	p, _ = m.WatchStart("W", w.text, WatchCommit(w.text, "pw"), "e")
-	m.WatchReveal(p.ID, "pw", servedSPKI, false, nil)
+	p, _ = m.WatchStart("W", w.text, commitFor(w, "pw"), "f")
+	m.WatchReveal(p.ID, "pw", servedSPKI, false, onlyServed)
 	changed := auth.User{Name: "zeus", Created: user.Created, PasswordHash: "h2"}
 	users["zeus"] = changed
 	if _, err := m.WatchConfirm(changed, phone.ID, WatchCode(p.ID, w.text, p.Nonce, "pw", servedSPKI, false)); !errors.Is(err, ErrWatchConfirmer) {

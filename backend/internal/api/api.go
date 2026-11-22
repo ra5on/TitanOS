@@ -738,6 +738,11 @@ func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 			writeLocked(w)
 			return
 		}
+		// A watch gets only the routes it needs (appwatch_rights.go).
+		if state == authOK && s.watchSession(r, user) && !watchAllows(r) {
+			writeError(w, http.StatusForbidden, "watch_forbidden", "a watch may not do this")
+			return
+		}
 		noteActivity(r, user)
 		next(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, user)))
 	}

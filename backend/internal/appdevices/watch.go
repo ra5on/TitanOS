@@ -35,8 +35,11 @@ const (
 	// MaxWatchPending bounds the open watch pairings of the whole NAS
 	// (they are started without a login); MaxWatchPerAddress those of one
 	// address.
-	MaxWatchPending    = 20
+	MaxWatchPending    = 50
 	MaxWatchPerAddress = 3
+	// MaxWatchStarts is how many starts one address (an IPv6 /64) may make
+	// within WatchTTL, so that few addresses cannot keep the pool full.
+	MaxWatchStarts = 10
 	// WatchDigits is the length of the code on the watch.
 	WatchDigits = 6
 )
@@ -78,11 +81,36 @@ type WatchPairing struct {
 }
 
 // WatchCommit is what the watch sends at the start: base64url (no padding)
-// of SHA-256("titanos-watch-commit\n" + publicKey + "\n" + secret), with
-// publicKey exactly as sent.
-func WatchCommit(publicKey, secret string) string {
-	sum := sha256.Sum256([]byte(watchCommitText + publicKey + "\n" + secret))
+// of SHA-256 over "titanos-watch-commit\n" + publicKey, the SPKI the
+// watch saw, "1"/"0" for a public certificate and its secret, each on its
+// own line. It binds everything that goes into the code before the watch
+// learns the NAS's random value; none of the values may hold a line break
+// (WatchReveal refuses them), so the lines cannot be shifted.
+func WatchCommit(publicKey, spki string, public bool, secret string) string {
+	sum := sha256.Sum256([]byte(watchCommitText + publicKey + "\n" + spki + "\n" + flagText(public) + "\n" + secret))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func flagText(public bool) string {
+	if public {
+		return "1"
+	}
+	return "0"
+}
+
+// watchValue is a value of the commitment: base64 or base64url text,
+// 1 to 128 characters, no line break.
+func watchValue(v string) bool {
+	if v == "" || len(v) > 128 {
+		return false
+	}
+	for _, r := range v {
+		ok := r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '+' || r == '/' || r == '='
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // WatchCode is the six digits both the watch and the NAS work out:
@@ -91,11 +119,7 @@ func WatchCommit(publicKey, secret string) string {
 // certificate, each on its own line; the first eight bytes big-endian
 // modulo 10^6, with leading zeros.
 func WatchCode(id, publicKey, nonce, secret, spki string, public bool) string {
-	flag := "0"
-	if public {
-		flag = "1"
-	}
-	sum := sha256.Sum256([]byte(watchCodeText + id + "\n" + publicKey + "\n" + nonce + "\n" + secret + "\n" + spki + "\n" + flag))
+	sum := sha256.Sum256([]byte(watchCodeText + id + "\n" + publicKey + "\n" + nonce + "\n" + secret + "\n" + spki + "\n" + flagText(public)))
 	return fmt.Sprintf("%06d", binary.BigEndian.Uint64(sum[:8])%1_000_000)
 }
 
@@ -123,11 +147,17 @@ func (m *Manager) pruneWatchesLocked(now time.Time) {
 			delete(m.watches, id)
 		}
 	}
+	for addr, starts := range m.watchStarts {
+		if len(starts) == 0 || now.Sub(starts[len(starts)-1]) >= WatchTTL {
+			delete(m.watchStarts, addr)
+		}
+	}
 }
 
 // WatchStart begins the pairing of a watch: its name, its public key and
 // its commitment. It answers with an id and the NAS's random value.
-// address is where the watch asks from (for the limits only).
+// address is where the watch asks from (for the limits only; the caller
+// gives an IPv6 address as its /64).
 func (m *Manager) WatchStart(name, key, commit, address string) (WatchPairing, error) {
 	if !ValidName(name) {
 		return WatchPairing{}, ErrInvalidName
@@ -149,21 +179,33 @@ func (m *Manager) WatchStart(name, key, commit, address string) (WatchPairing, e
 			from++
 		}
 	}
-	if len(m.watches) >= MaxWatchPending || from >= MaxWatchPerAddress {
+	recent := m.watchStarts[address][:0]
+	for _, at := range m.watchStarts[address] {
+		if now.Sub(at) < WatchTTL {
+			recent = append(recent, at)
+		}
+	}
+	m.watchStarts[address] = recent
+	if len(m.watches) >= MaxWatchPending || from >= MaxWatchPerAddress || len(recent) >= MaxWatchStarts {
 		return WatchPairing{}, ErrTooManyOpen
 	}
+	m.watchStarts[address] = append(recent, now)
 	p := &WatchPairing{ID: randomText(12), Name: name, Nonce: randomText(24), Expires: now.Add(WatchTTL), State: WatchStarted,
 		key: key, commit: commit, address: address}
 	m.watches[p.ID] = p
 	return *p, nil
 }
 
+// WatchCertificate tells whether the certificate the watch says it saw
+// can be the NAS's: the SPKI hash and whether the watch checked it as a
+// valid public certificate (the API decides by what titand serves).
+type WatchCertificate func(spki string, public bool) bool
+
 // WatchReveal takes the watch's secret and the certificate it saw (the
-// SPKI hash, and whether it was a valid public certificate). served is
-// the SPKI the NAS serves on that connection, "" when it cannot tell (TLS
-// ends before titand). A wrong secret or certificate ends the pairing: it
-// is tried once.
-func (m *Manager) WatchReveal(id, secret, spki string, public bool, served []string) (WatchPairing, error) {
+// SPKI hash, and whether it was a valid public certificate). They must
+// match the commitment of the start, and allowed must accept the
+// certificate. Anything off ends the pairing: it is tried once.
+func (m *Manager) WatchReveal(id, secret, spki string, public bool, allowed WatchCertificate) (WatchPairing, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.now()
@@ -172,19 +214,14 @@ func (m *Manager) WatchReveal(id, secret, spki string, public bool, served []str
 	if p == nil || p.State != WatchStarted {
 		return WatchPairing{}, ErrBadCode
 	}
-	if secret == "" || len(secret) > 128 || subtle.ConstantTimeCompare([]byte(WatchCommit(p.key, secret)), []byte(p.commit)) != 1 {
+	if !watchValue(secret) || !watchValue(spki) ||
+		subtle.ConstantTimeCompare([]byte(WatchCommit(p.key, spki, public, secret)), []byte(p.commit)) != 1 {
 		delete(m.watches, id)
 		return WatchPairing{}, ErrBadCode
 	}
-	if !public && len(served) > 0 {
-		match := false
-		for _, s := range served {
-			match = match || (s != "" && s == spki)
-		}
-		if !match {
-			delete(m.watches, id)
-			return WatchPairing{}, ErrWatchCertificate
-		}
+	if allowed == nil || !allowed(spki, public) {
+		delete(m.watches, id)
+		return WatchPairing{}, ErrWatchCertificate
 	}
 	p.code = WatchCode(p.ID, p.key, p.Nonce, secret, spki, public)
 	p.State = WatchRevealed

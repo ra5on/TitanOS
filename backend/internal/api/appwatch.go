@@ -7,39 +7,62 @@ package api
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/appdevices"
 )
 
-// servedSPKIs is what the watch must have seen: the SPKI of the
-// certificate titand serves on this connection (by its server name), or,
-// when the request did not come over titand's own TLS, the SPKIs of all
-// its addresses. Empty when titand serves no TLS itself.
-func (a appsArea) servedSPKIs(r *http.Request) []string {
-	if a.certificate == nil {
-		return nil
-	}
-	if r.TLS != nil {
+// watchCertificate decides whether the certificate the watch reports can
+// be the NAS's (appdevices.WatchCertificate):
+//   - Over titand's own TLS it must be exactly the certificate titand
+//     serves for the server name of this connection, public or not.
+//   - Without (TLS ends before titand, as with Tailscale Serve) a public
+//     certificate counts only for a name titand lists as having a valid
+//     public certificate (Let's Encrypt, Tailscale); any other must be one
+//     titand serves for one of its addresses.
+func (a appsArea) watchCertificate(r *http.Request) appdevices.WatchCertificate {
+	if r.TLS != nil && a.certificate != nil {
 		if cert, err := a.certificate(r.TLS.ServerName); err == nil {
-			if s := spkiOf(cert); s != "" {
-				return []string{s}
+			if served := spkiOf(cert); served != "" {
+				return func(spki string, _ bool) bool { return spki == served }
 			}
 		}
 	}
-	out := []string{}
-	if cert, err := a.certificate(""); err == nil {
-		if s := spkiOf(cert); s != "" {
-			out = append(out, s)
-		}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
 	}
-	for _, addr := range a.pairAddresses() {
-		if addr.SPKI != "" {
-			out = append(out, addr.SPKI)
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	addresses := a.pairAddresses()
+	return func(spki string, public bool) bool {
+		for _, addr := range addresses {
+			name, _, ok := splitServer(addr.Server)
+			if public && ok && strings.EqualFold(name, host) && addr.Certificate == certValid {
+				return true
+			}
+			if !public && addr.SPKI != "" && addr.SPKI == spki {
+				return true
+			}
 		}
+		if !public && a.certificate != nil {
+			if cert, err := a.certificate(""); err == nil && spkiOf(cert) == spki {
+				return true
+			}
+		}
+		return false
 	}
-	return out
+}
+
+// watchAddress is what the limits of watch pairings count: the address,
+// an IPv6 address as its /64.
+func watchAddress(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil || parsed.To4() != nil {
+		return ip
+	}
+	return parsed.Mask(net.CIDRMask(64, 128)).String() + "/64"
 }
 
 func (a appsArea) handleWatchStart(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +77,7 @@ func (a appsArea) handleWatchStart(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	p, err := a.apps.WatchStart(strings.TrimSpace(req.Name), req.PublicKey, req.Commit, a.remoteIPFunc(r))
+	p, err := a.apps.WatchStart(strings.TrimSpace(req.Name), req.PublicKey, req.Commit, watchAddress(a.remoteIPFunc(r)))
 	switch {
 	case errors.Is(err, appdevices.ErrBadCode):
 		writeError(w, http.StatusBadRequest, "invalid_commit", "the commitment is not a SHA-256 in base64url")
@@ -82,7 +105,7 @@ func (a appsArea) handleWatchReveal(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	p, err := a.apps.WatchReveal(r.PathValue("id"), req.Secret, req.SPKI, req.PublicCert, a.servedSPKIs(r))
+	p, err := a.apps.WatchReveal(r.PathValue("id"), req.Secret, req.SPKI, req.PublicCert, a.watchCertificate(r))
 	switch {
 	case errors.Is(err, appdevices.ErrWatchCertificate):
 		a.limiter().Fail(key)
