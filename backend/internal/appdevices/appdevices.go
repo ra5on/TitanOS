@@ -184,13 +184,15 @@ type Manager struct {
 	byCode     map[string]string
 	challenges map[string]challenge
 	watches    map[string]*WatchPairing
+	// watchStarts are the recent starts of a watch pairing per address.
+	watchStarts map[string][]time.Time
 }
 
 // New makes a manager. stay is the setting "stay logged in" in days
 // (auth.Sessions.Stay): 0 off, auth.StayForever no end.
 func New(config Config, users Accounts, stay func() int) *Manager {
 	return &Manager{config: config, users: users, stay: stay, now: time.Now, known: map[string]*state{},
-		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}, watches: map[string]*WatchPairing{}}
+		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}, watches: map[string]*WatchPairing{}, watchStarts: map[string][]time.Time{}}
 }
 
 // SetClockForTest replaces the clock.
