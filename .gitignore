@@ -58,3 +58,4 @@ Thumbs.db
 
 # Built locally by go build in cmd/titanos-viewer (0.68 checked one in by mistake)
 /backend/cmd/titanos-viewer/titanos-viewer
+backend/proxy.pid

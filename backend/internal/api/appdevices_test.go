@@ -293,3 +293,53 @@ func TestAppDeviceEndsWithStay(t *testing.T) {
 		t.Fatalf("with no end: %d %s", res.StatusCode, body)
 	}
 }
+
+// One pairing for both apps: the paired TitanOS app asks for a code and
+// hands it to the agent app on the same phone, which pairs without the
+// browser.
+func TestAppSiblingPairing(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	titan, agent := newTestApp(t), newTestApp(t)
+	user, device := ts.pairApp(titan, "Pixel 10 Pro XL")
+	phone, res, body := ts.appSession(titan, user, device)
+	if phone == nil {
+		t.Fatalf("session: %d %s", res.StatusCode, body)
+	}
+
+	// Only a paired app asks; the browser pairs with the password.
+	if res, body := ts.request("POST", "/api/v1/app/pair/sibling", map[string]string{"app": "agent"}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "app_session_required" {
+		t.Fatalf("from the browser: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.do(phone, "POST", "/api/v1/app/pair/sibling", map[string]string{"app": "titanos"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_app" {
+		t.Fatalf("for itself: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.do(phone, "POST", "/api/v1/app/pair/sibling", map[string]string{"app": "agent"})
+	var got struct{ Code string }
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &got) != nil || len(got.Code) < 20 {
+		t.Fatalf("sibling: %d %s", res.StatusCode, body)
+	}
+
+	// The agent app claims and waits as always; it is confirmed already.
+	other := ts.newClient()
+	if res, body := ts.do(other, "POST", "/api/v1/app/pair/claim", map[string]string{"code": got.Code, "name": "Pixel 10 Pro XL", "app": "agent", "publicKey": agent.public()}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"confirmed"`) {
+		t.Fatalf("claim: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.do(other, "POST", "/api/v1/app/pair/wait", map[string]string{"code": got.Code, "signature": agent.sign("titanos-pair\n" + got.Code)})
+	var waited struct{ State, Device, User string }
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &waited) != nil || waited.State != "confirmed" || waited.Device == "" || waited.User != user {
+		t.Fatalf("wait: %d %s", res.StatusCode, body)
+	}
+	agentPhone, res, body := ts.appSession(agent, waited.User, waited.Device)
+	if agentPhone == nil {
+		t.Fatalf("agent session: %d %s", res.StatusCode, body)
+	}
+	_, listed := ts.request("GET", "/api/v1/account/apps", nil)
+	if !strings.Contains(string(listed), `"app":"agent"`) || !strings.Contains(string(listed), `"app":"titanos"`) {
+		t.Fatalf("apps %s", listed)
+	}
+	// A code is good once.
+	if res, _ := ts.do(other, "POST", "/api/v1/app/pair/claim", map[string]string{"code": got.Code, "name": "Pixel", "app": "agent", "publicKey": newTestApp(t).public()}); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("second claim: %d", res.StatusCode)
+	}
+}

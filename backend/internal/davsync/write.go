@@ -384,3 +384,20 @@ func (rq *request) delete() {
 	rq.volumeOpen = true
 	rq.w.WriteHeader(http.StatusNoContent)
 }
+
+// PrepareEntry is what a PUT does with the bytes before the store sees
+// them (the picture of a card shrunk, changed = true then). The sync
+// routes of the Android app (api/apppim.go) use it too, so an iPhone and
+// the app store the same bytes for the same card.
+func PrepareEntry(kind store.Kind, data []byte) (out []byte, changed bool) {
+	if kind == store.Contacts {
+		return shrinkPhoto(data)
+	}
+	return data, false
+}
+
+// AcceptedType is acceptedType for the sync routes of the Android app.
+func AcceptedType(kind store.Kind, header string) bool { return acceptedType(kind, header) }
+
+// MaxEntry is maxEntry for the sync routes of the Android app.
+func MaxEntry(kind store.Kind) int64 { return maxEntry(kind) }

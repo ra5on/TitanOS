@@ -382,7 +382,7 @@ func (c *client) stream(ctx context.Context, method, path string, body any) (*ht
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v1.43"+path, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, method, c.base(ctx)+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

@@ -55,13 +55,20 @@ const (
 	ChallengeTTL = 2 * time.Minute
 	// MaxPending is the number of open pairings per account.
 	MaxPending = 3
+	// SiblingTTL is how long the code for the other app on the same phone
+	// holds: the paired app hands it over at once.
+	SiblingTTL = 2 * time.Minute
 	// maxChallenges bounds the challenges in RAM (they are handed out
 	// without a login).
 	maxChallenges = 1000
 )
 
-// Apps are the apps that can be paired.
-var Apps = []string{"titanos", "agent"}
+// Apps are the apps that can be paired: the two phone apps and the watch
+// (watch.go).
+var Apps = []string{"titanos", "agent", WatchApp}
+
+// phoneApps are the apps of a phone; a sibling pairing is only between them.
+var phoneApps = []string{"titanos", "agent"}
 
 // Pairing states.
 const (
@@ -94,6 +101,7 @@ var (
 	ErrUnknown     = errors.New("appdevices: unknown, ended or expired app")
 	ErrSignature   = errors.New("appdevices: signature does not match")
 	ErrUnavailable = errors.New("appdevices: apps.json not readable")
+	ErrSameApp     = errors.New("appdevices: a sibling is the other app")
 )
 
 // Config is the part of config.Store the manager uses.
@@ -150,6 +158,13 @@ type Pairing struct {
 	Device  string
 	key     *ecdsa.PublicKey
 	keyText string
+	// A sibling pairing is started by a paired app for the other app on
+	// the same phone: confirmed by the claim itself, from the same address,
+	// while the account's credentials and the starting app are unchanged.
+	sibling bool
+	from    string
+	address string
+	creds   string
 }
 
 type challenge struct {
@@ -168,13 +183,16 @@ type Manager struct {
 	pairings   map[string]*Pairing
 	byCode     map[string]string
 	challenges map[string]challenge
+	watches    map[string]*WatchPairing
+	// watchStarts are the recent starts of a watch pairing per address.
+	watchStarts map[string][]time.Time
 }
 
 // New makes a manager. stay is the setting "stay logged in" in days
 // (auth.Sessions.Stay): 0 off, auth.StayForever no end.
 func New(config Config, users Accounts, stay func() int) *Manager {
 	return &Manager{config: config, users: users, stay: stay, now: time.Now, known: map[string]*state{},
-		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}}
+		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}, watches: map[string]*WatchPairing{}, watchStarts: map[string][]time.Time{}}
 }
 
 // SetClockForTest replaces the clock.
@@ -366,6 +384,44 @@ func (m *Manager) List(user auth.User) ([]Device, error) {
 	return out, nil
 }
 
+// Device returns a paired app of an account that has not run out.
+func (m *Manager) Device(user auth.User, id string) (Device, error) {
+	list, err := m.List(user)
+	if err != nil {
+		return Device{}, err
+	}
+	for _, d := range list {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return Device{}, ErrNotFound
+}
+
+// Cached says from RAM only whether a device of an account is paired and
+// has not run out; known is false when the account's apps were not read
+// since the start (the caller then keeps what it has). The account must
+// be the same and its credentials unchanged, like stateLocked checks.
+func (m *Manager) Cached(user auth.User, id string) (live, known bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := m.known[user.Name]
+	if st == nil {
+		return false, false
+	}
+	if !st.created.Equal(user.Created) || st.creds != credentials(user) {
+		// Another account of the name or changed credentials: the apps
+		// of the file end when it is read next.
+		return false, true
+	}
+	for _, d := range st.devices {
+		if d.ID == id {
+			return m.live(d), true
+		}
+	}
+	return false, true
+}
+
 // Delete ends one app of an account. The caller ends its sessions.
 func (m *Manager) Delete(user auth.User, id string) error {
 	m.mu.Lock()
@@ -465,6 +521,7 @@ func (m *Manager) dropPairingsLocked(name string) {
 			delete(m.challenges, n)
 		}
 	}
+	m.dropWatchesLocked(name)
 }
 
 // Start begins a pairing for an account.
@@ -552,9 +609,14 @@ func (m *Manager) Confirm(user auth.User, id string) (Device, error) {
 	if p == nil || p.User != user.Name || now.After(p.Expires) {
 		return Device{}, ErrNotFound
 	}
-	if p.State != Claimed {
+	if p.State != Claimed || p.sibling {
 		return Device{}, ErrBadState
 	}
+	return m.confirmLocked(user, p, now)
+}
+
+// confirmLocked writes the device of a claimed pairing.
+func (m *Manager) confirmLocked(user auth.User, p *Pairing, now time.Time) (Device, error) {
 	st, err := m.stateLocked(user)
 	if err != nil {
 		return Device{}, err
@@ -577,9 +639,66 @@ func (m *Manager) Confirm(user auth.User, id string) (Device, error) {
 	return d, nil
 }
 
+// Sibling starts a pairing for the other app on the same phone, asked by
+// the paired app device of the account (its session). The code goes from
+// app to app on the phone; whoever claims it from address with the right
+// app is paired without the browser (docs/ANDROID-APP.md).
+func (m *Manager) Sibling(user auth.User, device, app, address string) (Pairing, error) {
+	// Never the watch: its claim would come from another address, and a
+	// code confirmed by the claim alone is for the other app on the same
+	// phone only (the watch is confirmed with its code, watch.go).
+	known := false
+	for _, a := range phoneApps {
+		known = known || a == app
+	}
+	if !known {
+		return Pairing{}, ErrInvalidApp
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.pruneLocked(now)
+	st, err := m.stateLocked(user)
+	if err != nil {
+		return Pairing{}, err
+	}
+	var from *Device
+	for i, d := range st.devices {
+		if d.ID == device && m.live(d) {
+			from = &st.devices[i]
+		}
+	}
+	if from == nil {
+		return Pairing{}, ErrUnknown
+	}
+	if from.App == app {
+		return Pairing{}, ErrSameApp
+	}
+	if from.App == WatchApp {
+		// A watch has no other app beside it.
+		return Pairing{}, ErrInvalidApp
+	}
+	open := 0
+	for _, p := range m.pairings {
+		if p.User == user.Name && (p.State == Waiting || p.State == Claimed) {
+			open++
+		}
+	}
+	if open >= MaxPending {
+		return Pairing{}, ErrTooManyOpen
+	}
+	p := &Pairing{ID: randomText(12), User: user.Name, Code: randomText(24), Expires: now.Add(SiblingTTL), State: Waiting, App: app,
+		sibling: true, from: device, address: address, creds: credentials(user)}
+	m.pairings[p.ID] = p
+	m.byCode[p.Code] = p.ID
+	return *p, nil
+}
+
 // Claim takes a code for an app: its name, which app and its public key.
 // ErrBadCode is for the caller to count against the address.
-func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
+// address is where the claim comes from; it counts only for a sibling
+// pairing, which it also confirms.
+func (m *Manager) Claim(code, name, app, key, address string) (Pairing, error) {
 	if !ValidName(name) {
 		return Pairing{}, ErrInvalidName
 	}
@@ -605,6 +724,9 @@ func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
 	if p.State != Waiting {
 		return Pairing{}, ErrClaimed
 	}
+	if p.sibling {
+		return m.claimSiblingLocked(p, name, app, pub, key, address, now)
+	}
 	p.State, p.Name, p.App, p.key, p.keyText = Claimed, name, app, pub, strings.TrimSpace(key)
 	p.Expires = now.Add(PairTTL)
 	// Only the code the app sent stays usable for Wait.
@@ -612,6 +734,38 @@ func (m *Manager) Claim(code, name, app, key string) (Pairing, error) {
 		delete(m.byCode, p.Code)
 	} else {
 		delete(m.byCode, p.Manual)
+	}
+	return *p, nil
+}
+
+// claimSiblingLocked pairs the other app of the phone. Anything off reads
+// as an unknown code, and the code is gone: it is tried once.
+func (m *Manager) claimSiblingLocked(p *Pairing, name, app string, pub *ecdsa.PublicKey, key, address string, now time.Time) (Pairing, error) {
+	drop := func() {
+		delete(m.pairings, p.ID)
+		delete(m.byCode, p.Code)
+	}
+	user, ok := m.users.Get(p.User)
+	if !ok || app != p.App || address == "" || address != p.address || credentials(user) != p.creds {
+		drop()
+		return Pairing{}, ErrBadCode
+	}
+	st, err := m.stateLocked(user)
+	if err != nil {
+		return Pairing{}, err
+	}
+	still := false
+	for _, d := range st.devices {
+		still = still || (d.ID == p.from && m.live(d))
+	}
+	if !still {
+		drop()
+		return Pairing{}, ErrBadCode
+	}
+	p.State, p.Name, p.key, p.keyText = Claimed, name, pub, strings.TrimSpace(key)
+	if _, err := m.confirmLocked(user, p, now); err != nil {
+		drop()
+		return Pairing{}, err
 	}
 	return *p, nil
 }

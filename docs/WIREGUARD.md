@@ -27,6 +27,27 @@ Die Geräteliste zeigt Tunnel-Adresse, „verbunden“ (Handshake in den letzten
 drei Minuten), letzten Kontakt und Datenmenge. Entfernen sperrt das Gerät
 sofort aus.
 
+## Zugang der Android-App (seit 1.19)
+
+Die App „TitanOS“ legt je Handy selbst einen Zugang an (PLAN 116, Inhaber
+21.11.2026): Der Schlüssel entsteht auf dem Handy, das NAS bekommt nur den
+öffentlichen Teil (`POST /api/v1/app/vpn`, `docs/ANDROID-APP.md` „VPN“). Der
+Zugang steht in der Geräteliste wie jedes andere Gerät, mit „Android-App von
+<Konto>“, und lässt sich dort auch entfernen. Er endet mit der App:
+
+- „Beenden“ unter Mein Konto › Geräte, neues Passwort oder 2FA des Kontos,
+  Konto gelöscht: sofort aus `server.json` und vom Tunnel.
+- Konto gesperrt oder nicht mehr Besitzer/Administrator: ebenso.
+- Abgelaufen nach „Angemeldet bleiben“: titand prüft stündlich **nur im
+  RAM** und nimmt den Zugang vom Tunnel (Liste: „gerade nicht im Tunnel“);
+  aus `server.json` geht er beim nächsten Start oder beim nächsten Ereignis
+  oben. Ein Zeitgeber schreibt nie auf den Stick und liest `/config` nicht.
+- Sind die Apps eines Kontos gerade nicht lesbar (Stick), bleibt der Zugang.
+
+Ein Gerät je App; „neu erzeugen“ in der App ersetzt Schlüssel und Preshared
+Key an derselben Adresse. Anlegen dürfen wie hier nur Besitzer und
+Administratoren.
+
 ## Technik
 
 - Paket `wgserver`, Schnittstelle `titanoswg`, `wireguard-tools` (seit 0.31.0
@@ -35,7 +56,8 @@ sofort aus.
   Tunnel-Netz (beim ersten Einschalten das erste von `10.253.0.0/24`,
   `10.254.13.0/24`, `172.31.253.0/24`, `192.168.253.0/24`, das kein Netz des NAS
   überlappt; mit Geräten nicht mehr änderbar), Zugriff, DNS und die Geräte
-  (Name, öffentlicher Schlüssel, Preshared Key, Adresse). Schlüssel des
+  (Name, öffentlicher Schlüssel, Preshared Key, Adresse; bei der App dazu
+  `account` und `device`, sonst fehlen die Felder). Schlüssel des
   Servers in `/config/wireguard/server.key`. Geschrieben nur beim Speichern,
   Hinzufügen und Entfernen; der Ordner ist im Stick-Dateimanager ausgeblendet
   und nicht im Diagnosepaket.
@@ -51,6 +73,7 @@ sofort aus.
 - API: `GET`/`PUT /api/v1/network/wireguard`,
   `POST /api/v1/network/wireguard/peers` (Antwort mit Konfiguration,
   `Cache-Control: no-store`), `POST /api/v1/network/wireguard/peers/remove`.
+  Für die App `GET`/`POST`/`DELETE /api/v1/app/vpn` (nur App-Sitzungen).
 
 ## Prüfstand
 
@@ -59,5 +82,14 @@ Mit nachgebautem `ip`/`wg`/`iptables` geprüft (`wgserver_test.go`,
 Kommandozeile oder in `/run`, Gerätekonfiguration (geteilter und voller
 Tunnel, IPv6-Endpunkt, DNS), privater Schlüssel des Geräts nirgends
 gespeichert, Status aus `wg show dump`, Entfernen, Ausschalten,
-Entwicklungsmodus, Rechte. **Nicht geprüft:** echter Tunnel mit der
+Entwicklungsmodus, Rechte. Zugang der App (`apppeers_test.go`,
+`api/appvpn_test.go`): Anlegen, neu erzeugen, Entfernen, fremder Schlüssel,
+Name neben einem gleichnamigen Gerät, Ende mit App, Rolle, Sperre, Löschen,
+Passwortwechsel, Ablauf (nur RAM, auch der Tunnel bekommt nur den Stand aus
+dem RAM), Stick nicht lesbar. Zugang der App im Emulator (22.11.2026, App
+`feat/1.00-vpn`): Handshake und Verkehr gegen wireguard-go im Userspace
+(gVisor-netstack, Schlüssel und Geräte aus `server.json`/`server.key` des
+Test-NAS), nicht gegen `titanoswg`. **Nicht geprüft:** echter Tunnel über
+`titanoswg` (Kernel, `wg syncconf`, im Test-NAS ist `Disabled` gesetzt; damit
+auch nicht live, dass ein abgelaufener Zugang aus dem Tunnel fällt), mit der
 WireGuard-App, NAT neben Docker, Zusammenspiel mit eingeschalteter Firewall.

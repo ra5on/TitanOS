@@ -379,6 +379,8 @@ func New(opts Options) *Server {
 		s.opts.WireGuard.Disabled = true
 		s.pending = append(s.pending, func(context.Context) error { return s.opts.WireGuard.Load() })
 	}
+	// The devices of paired apps end with their app (appvpn.go).
+	s.opts.WireGuard.AppPeerLive, s.opts.WireGuard.AppPeerCached = s.appVPNLive, s.appVPNCached
 	if s.opts.Fans == nil {
 		s.opts.Fans = fans.New(opts.Store)
 		s.opts.Fans.Disabled = true
@@ -499,6 +501,7 @@ func New(opts Options) *Server {
 	s.registerApps(mux)
 	s.registerAppPhotos(mux)
 	s.registerAppNotify(mux)
+	s.registerAppVPN(mux)
 
 	s.routeCluster(mux)
 
@@ -733,6 +736,11 @@ func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 			return
 		case state == authLocked && !slices.Contains(lockExempt, r.Pattern):
 			writeLocked(w)
+			return
+		}
+		// A watch gets only the routes it needs (appwatch_rights.go).
+		if state == authOK && s.watchSession(r, user) && !watchAllows(r) {
+			writeError(w, http.StatusForbidden, "watch_forbidden", "a watch may not do this")
 			return
 		}
 		noteActivity(r, user)

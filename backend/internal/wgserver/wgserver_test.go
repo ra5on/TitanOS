@@ -257,7 +257,7 @@ func TestEndpointsAndConfigs(t *testing.T) {
 	}
 	s := Settings{Network: "10.253.0.0/24", Port: 51820, Endpoint: "nas.example.org",
 		Peers: []Peer{{Name: "Handy", PublicKey: "pub", Preshared: "psk", Address: "10.253.0.2/32"}}}
-	server := serverConfig(s, "priv")
+	server := serverConfig(s, "priv", nil)
 	if !strings.Contains(server, "ListenPort = 51820") || !strings.Contains(server, "PublicKey = pub\nPresharedKey = psk\nAllowedIPs = 10.253.0.2/32") || strings.Contains(server, "Address") {
 		t.Fatalf("server config:\n%s", server)
 	}

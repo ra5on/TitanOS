@@ -266,9 +266,13 @@
 			<SettingRow
 				icon="monitor"
 				title={peer.name}
-				desc={(peer.lastHandshake
-					? t('wg.lastSeen', { time: formatDateTime(new Date(peer.lastHandshake)) })
-					: t('wg.never')) +
+				desc={(peer.account
+					? t(peer.active === false ? 'wg.appInactive' : 'wg.appOf', { account: peer.account }) +
+						' · '
+					: '') +
+					(peer.lastHandshake
+						? t('wg.lastSeen', { time: formatDateTime(new Date(peer.lastHandshake)) })
+						: t('wg.never')) +
 					(peer.received || peer.sent
 						? ` · ↓ ${formatBytes(peer.sent)} · ↑ ${formatBytes(peer.received)}`
 						: '')}

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,85 @@ import (
 type client struct {
 	http   *http.Client
 	socket string
+
+	verMu      sync.Mutex
+	apiVersion string // ausgehandelte API-Version, leer bis zur ersten Antwort der Engine
+}
+
+// preferredAPI is the Engine API version the code is written against.
+// Docker 29 accepts only 1.44 and newer, very old engines stop below 1.43:
+// the client asks the engine once (unversioned /version) and uses 1.43 when
+// the engine still accepts it, otherwise the nearest version it accepts.
+const preferredAPI = "1.43"
+
+// negotiate picks the API version for an engine with the range [min, max].
+// Empty values mean the engine did not say (old engines have no minimum).
+func negotiate(min, max string) string {
+	v := preferredAPI
+	if min != "" && versionLess(v, min) {
+		v = min
+	}
+	if max != "" && versionLess(max, v) {
+		v = max
+	}
+	return v
+}
+
+// versionLess compares "1.43"-style versions numerically.
+func versionLess(a, b string) bool {
+	pa, pb := strings.SplitN(a, ".", 2), strings.SplitN(b, ".", 2)
+	for i := 0; i < 2; i++ {
+		var x, y int
+		if i < len(pa) {
+			_, _ = fmt.Sscan(pa[i], &x) // not a number counts as 0
+		}
+		if i < len(pb) {
+			_, _ = fmt.Sscan(pb[i], &y)
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return false
+}
+
+// askEngineVersion is switched off by the package tests whose fake engines
+// answer only the paths they expect.
+var askEngineVersion = true
+
+// base returns "http://docker/v1.xx". Until the engine answered once the
+// preferred version is used and the question is repeated with the next call
+// (the engine may start after titand).
+func (c *client) base(ctx context.Context) string {
+	c.verMu.Lock()
+	v := c.apiVersion
+	c.verMu.Unlock()
+	if v != "" {
+		return "http://docker/v" + v
+	}
+	v = preferredAPI
+	if !askEngineVersion {
+		return "http://docker/v" + v
+	}
+	ask, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if req, err := http.NewRequestWithContext(ask, http.MethodGet, "http://docker/version", nil); err == nil {
+		if res, err := c.http.Do(req); err == nil {
+			var info struct {
+				APIVersion    string `json:"ApiVersion"`
+				MinAPIVersion string `json:"MinAPIVersion"`
+			}
+			ok := res.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&info) == nil && info.APIVersion != ""
+			res.Body.Close()
+			if ok {
+				v = negotiate(info.MinAPIVersion, info.APIVersion)
+				c.verMu.Lock()
+				c.apiVersion = v
+				c.verMu.Unlock()
+			}
+		}
+	}
+	return "http://docker/v" + v
 }
 
 func newClient(socket string) *client {
@@ -41,7 +121,7 @@ type apiError struct {
 func (e *apiError) Error() string { return fmt.Sprintf("docker: %s (HTTP %d)", e.Message, e.Status) }
 
 func (c *client) do(ctx context.Context, method, path string, query url.Values) (*http.Response, error) {
-	target := "http://docker/v1.43" + path
+	target := c.base(ctx) + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
@@ -76,7 +156,7 @@ func (c *client) sendJSON(ctx context.Context, method, path string, body, v any)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://docker/v1.43"+path, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, method, c.base(ctx)+path, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
@@ -271,7 +351,7 @@ func (c *client) execCreate(ctx context.Context, id string, cmd []string, user s
 		request["User"] = user
 	}
 	body, _ := json.Marshal(request)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/v1.43/containers/"+id+"/exec", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base(ctx)+"/containers/"+id+"/exec", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -310,7 +390,8 @@ func (c *client) execStart(ctx context.Context, execID string) (io.ReadWriteClos
 	defer stop()
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 	const body = `{"Detach":false,"Tty":true}`
-	_, err = fmt.Fprintf(conn, "POST /v1.43/exec/%s/start HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: %d\r\n\r\n%s", execID, len(body), body)
+	path := strings.TrimPrefix(c.base(ctx), "http://docker")
+	_, err = fmt.Fprintf(conn, "POST %s/exec/%s/start HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: %d\r\n\r\n%s", path, execID, len(body), body)
 	if err != nil {
 		conn.Close()
 		return nil, err
