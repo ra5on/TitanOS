@@ -62,6 +62,27 @@ const NOT_SHOWN = new Map([
 	// RemoteView.svelte) or as the answer to a plain download link.
 	['viewer_agent', 'viewer.err.viewer_agent; download link'],
 	['viewer_no_session', 'download link of the remote view'],
+	// Routes only for paired Android apps (appOnly, /app/...) and the watch
+	// pairing: the Android apps explain these codes in their own texts, the
+	// browser never calls the routes (docs/ANDROID-APP.md).
+	['app_phone_required', 'Android app: /app/vpn'],
+	['pim_conflict', 'Android app: /app/pim'],
+	['pim_full', 'Android app: /app/pim'],
+	['pim_if_match', 'Android app: /app/pim'],
+	['pim_if_none_match', 'Android app: /app/pim'],
+	['pim_invalid', 'Android app: /app/pim'],
+	['pim_invalid_name', 'Android app: /app/pim'],
+	['pim_not_found', 'Android app: /app/pim'],
+	['pim_sync_token', 'Android app: /app/pim'],
+	['pim_too_large', 'Android app: /app/pim'],
+	['pim_too_many', 'Android app: /app/pim'],
+	['pim_type', 'Android app: /app/pim'],
+	['pim_uid_conflict', 'Android app: /app/pim'],
+	['pim_unsupported', 'Android app: /app/pim'],
+	['invalid_commit', 'watch app: /app/pair/watch'],
+	['watch_certificate', 'watch app: /app/pair/watch'],
+	['watch_confirmer', 'Android app: /app/pair/watch/confirm'],
+	['watch_forbidden', 'watch app session outside its routes'],
 ]);
 
 // How a literal code reaches writeError. Codes that come out of a
