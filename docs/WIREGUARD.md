@@ -85,5 +85,11 @@ gespeichert, Status aus `wg show dump`, Entfernen, Ausschalten,
 Entwicklungsmodus, Rechte. Zugang der App (`apppeers_test.go`,
 `api/appvpn_test.go`): Anlegen, neu erzeugen, Entfernen, fremder Schlüssel,
 Name neben einem gleichnamigen Gerät, Ende mit App, Rolle, Sperre, Löschen,
-Passwortwechsel, Ablauf (nur RAM), Stick nicht lesbar. **Nicht geprüft:** echter Tunnel mit der
+Passwortwechsel, Ablauf (nur RAM, auch der Tunnel bekommt nur den Stand aus
+dem RAM), Stick nicht lesbar. Zugang der App im Emulator (22.11.2026, App
+`feat/1.00-vpn`): Handshake und Verkehr gegen wireguard-go im Userspace
+(gVisor-netstack, Schlüssel und Geräte aus `server.json`/`server.key` des
+Test-NAS), nicht gegen `titanoswg`. **Nicht geprüft:** echter Tunnel über
+`titanoswg` (Kernel, `wg syncconf`, im Test-NAS ist `Disabled` gesetzt; damit
+auch nicht live, dass ein abgelaufener Zugang aus dem Tunnel fällt), mit der
 WireGuard-App, NAT neben Docker, Zusammenspiel mit eingeschalteter Firewall.

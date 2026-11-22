@@ -234,6 +234,22 @@ Die App „TitanOS“ hat einen eigenen VPN-Dienst mit WireGuard (PLAN 116, Inha
 
   Abgelaufen nach „Angemeldet bleiben“: stündliche Prüfung nur im RAM, der Schlüssel wird vom Tunnel genommen, gelöscht wird beim nächsten Start. Aktivitätsprotokoll `app.vpn` (Anlegen, neu erzeugen, auch abgelehnt) und `app.vpn.remove`.
 - **Die Agent-App** legt keinen eigenen Zugang an. Ihre Verbindungen laufen durch den systemweiten Tunnel der TitanOS-App.
+- **Prüfstand (22.11.2026):**
+  - Go-Tests (`api/appvpn_test.go`, `wgserver/apppeers_test.go`), auch mit `-race`.
+  - **Emulator** (Android 17, App `feat/1.00-vpn`) gegen einen Wegwerf-Testserver mit TLS und eine WireGuard-Gegenstelle aus wireguard-go im Userspace (gVisor-netstack, ein UDP-Socket am Host, keine Schnittstelle; liest `server.json` und `server.key` des Testservers, TCP im Tunnel geht an den Testserver). Geprüft:
+    - Zugang anlegen: der Schlüssel entsteht am Handy, Handshake, Verkehr.
+    - Die App spricht über `10.253.0.1:8443` im Tunnel mit dem NAS, SPKI gepinnt.
+    - Mit „nur NAS“ führt Android nur die NAS-Adressen über `tun0`.
+    - Automatisch: aus im eingetragenen Heim-WLAN, an über Mobilfunk, wieder aus im WLAN.
+    - Von Hand, Kachel, Mitteilung mit Datenmenge, Always-on von Android an und aus.
+    - Zugang entfernen und neu anlegen: am Testserver weg und wieder da, der Tunnel kommt von selbst.
+    - Entkoppeln: der Zugang verschwindet am NAS, Schlüssel und Einstellungen am Handy sind weg.
+  - Nicht geprüft:
+    - echter Tunnel über `titanoswg` und `wg syncconf`; im Testserver ist der WireGuard-Manager `Disabled`;
+    - dass ein abgelaufener Zugang live aus dem Tunnel fällt (nur Unit-Tests);
+    - das Lernen der Heim-WLANs im Emulator;
+    - Netzwechsel bei geschlossener App;
+    - echtes Handy, echtes NAS.
 
 ## Prüfstand (19.11.2026)
 
