@@ -54,7 +54,7 @@ func TestAppWatchPairing(t *testing.T) {
 	wclient := ts.newClient()
 
 	// Another certificate than the NAS serves: someone in between.
-	res, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", false, "s1")})
+	_, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", false, "s1")})
 	var bad struct{ ID string }
 	json.Unmarshal(body, &bad)
 	if res, body := ts.do(wclient, "POST", "/api/v1/app/pair/watch/"+bad.ID+"/reveal", map[string]any{"secret": "s1", "spki": "b3RoZXI"}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "watch_certificate" {
@@ -63,7 +63,7 @@ func TestAppWatchPairing(t *testing.T) {
 
 	// A "public certificate" counts only for a name with a valid public
 	// certificate; the test server has none.
-	res, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", true, "s2")})
+	_, body = ts.do(wclient, "POST", "/api/v1/app/pair/watch", map[string]string{"name": "W", "publicKey": watch.public(), "commit": appdevices.WatchCommit(watch.public(), "b3RoZXI", true, "s2")})
 	json.Unmarshal(body, &bad)
 	if res, body := ts.do(wclient, "POST", "/api/v1/app/pair/watch/"+bad.ID+"/reveal", map[string]any{"secret": "s2", "spki": "b3RoZXI", "publicCert": true}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "watch_certificate" {
 		t.Fatalf("public claimed: %d %s", res.StatusCode, body)

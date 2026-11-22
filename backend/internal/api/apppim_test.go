@@ -115,7 +115,7 @@ func TestAppPIMSync(t *testing.T) {
 	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &again) != nil || again.Created || again.ETag == put.ETag {
 		t.Fatalf("replace: %d %s", res.StatusCode, body)
 	}
-	res, body = appSync(t, ts, phone, "GET", "/api/v1/app/pim/calendar/"+cal+"/changes?token="+token, nil, nil)
+	_, body = appSync(t, ts, phone, "GET", "/api/v1/app/pim/calendar/"+cal+"/changes?token="+token, nil, nil)
 	if json.Unmarshal(body, &ch) != nil || len(ch.Changes) != 1 || ch.Changes[0].ETag != again.ETag {
 		t.Fatalf("changes after replace: %s", body)
 	}
@@ -139,7 +139,7 @@ func TestAppPIMSync(t *testing.T) {
 	if res, body = appSync(t, ts, phone, "DELETE", path, nil, map[string]string{"If-Match": `"` + again.ETag + `"`}); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", res.StatusCode, body)
 	}
-	res, body = appSync(t, ts, phone, "GET", "/api/v1/app/pim/calendar/"+cal+"/changes?token="+token, nil, nil)
+	_, body = appSync(t, ts, phone, "GET", "/api/v1/app/pim/calendar/"+cal+"/changes?token="+token, nil, nil)
 	if json.Unmarshal(body, &ch) != nil || len(ch.Changes) != 1 || !ch.Changes[0].Deleted {
 		t.Fatalf("changes after delete: %s", body)
 	}

@@ -52,10 +52,10 @@ func versionLess(a, b string) bool {
 	for i := 0; i < 2; i++ {
 		var x, y int
 		if i < len(pa) {
-			fmt.Sscan(pa[i], &x)
+			_, _ = fmt.Sscan(pa[i], &x) // not a number counts as 0
 		}
 		if i < len(pb) {
-			fmt.Sscan(pb[i], &y)
+			_, _ = fmt.Sscan(pb[i], &y)
 		}
 		if x != y {
 			return x < y
