@@ -242,7 +242,7 @@
 					: app[1] === 'watch'
 						? 'androidApps.sessionWatch'
 						: 'androidApps.sessionTitanos',
-				{ name: app[2] }
+				{ name: app[2] },
 			);
 		const name = /Firefox\/|Edg\/|Chrome\/|Safari\//.exec(agent)?.[0].replace(/\/$/, '') ?? '';
 		const system = /Windows|Android|iPhone|iPad|Mac OS X|Linux/.exec(agent)?.[0] ?? '';

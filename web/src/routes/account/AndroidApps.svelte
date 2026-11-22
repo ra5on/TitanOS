@@ -160,7 +160,7 @@
 				? 'androidApps.appAgent'
 				: app === 'watch'
 					? 'androidApps.appWatch'
-					: 'androidApps.appTitanos'
+					: 'androidApps.appTitanos',
 		);
 </script>
 
