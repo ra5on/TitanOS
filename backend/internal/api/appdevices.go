@@ -65,6 +65,12 @@ func (s *Server) registerApps(mux *routeMux) {
 	// The app's own routes: no login; the cluster keeps out (clusterLocal).
 	mux.HandleFunc("POST /api/v1/app/pair/sibling", g.user(g.clusterLocal(g.browserOnly(a.guard.appOnly(a.handleSibling)))))
 	mux.HandleFunc("POST /api/v1/app/pair/claim", g.clusterLocal(a.handleClaim))
+	// The watch (docs/ANDROID-APP.md "Die Uhr"): it starts and reveals
+	// without a login, a paired phone app confirms its code.
+	mux.HandleFunc("POST /api/v1/app/pair/watch", g.clusterLocal(a.handleWatchStart))
+	mux.HandleFunc("POST /api/v1/app/pair/watch/{id}/reveal", g.clusterLocal(a.handleWatchReveal))
+	mux.HandleFunc("POST /api/v1/app/pair/watch/{id}/wait", g.clusterLocal(a.handleWatchWait))
+	mux.HandleFunc("POST /api/v1/app/pair/watch/confirm", g.user(g.clusterLocal(g.browserOnly(a.guard.appOnly(a.handleWatchConfirm)))))
 	mux.HandleFunc("POST /api/v1/app/pair/wait", g.clusterLocal(a.handleWait))
 	mux.HandleFunc("POST /api/v1/app/challenge", g.clusterLocal(a.handleChallenge))
 	mux.HandleFunc("POST /api/v1/app/session", g.clusterLocal(a.handleSession))

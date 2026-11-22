@@ -63,8 +63,12 @@ const (
 	maxChallenges = 1000
 )
 
-// Apps are the apps that can be paired.
-var Apps = []string{"titanos", "agent"}
+// Apps are the apps that can be paired: the two phone apps and the watch
+// (watch.go).
+var Apps = []string{"titanos", "agent", WatchApp}
+
+// phoneApps are the apps of a phone; a sibling pairing is only between them.
+var phoneApps = []string{"titanos", "agent"}
 
 // Pairing states.
 const (
@@ -179,13 +183,14 @@ type Manager struct {
 	pairings   map[string]*Pairing
 	byCode     map[string]string
 	challenges map[string]challenge
+	watches    map[string]*WatchPairing
 }
 
 // New makes a manager. stay is the setting "stay logged in" in days
 // (auth.Sessions.Stay): 0 off, auth.StayForever no end.
 func New(config Config, users Accounts, stay func() int) *Manager {
 	return &Manager{config: config, users: users, stay: stay, now: time.Now, known: map[string]*state{},
-		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}}
+		pairings: map[string]*Pairing{}, byCode: map[string]string{}, challenges: map[string]challenge{}, watches: map[string]*WatchPairing{}}
 }
 
 // SetClockForTest replaces the clock.
@@ -476,6 +481,7 @@ func (m *Manager) dropPairingsLocked(name string) {
 			delete(m.challenges, n)
 		}
 	}
+	m.dropWatchesLocked(name)
 }
 
 // Start begins a pairing for an account.
@@ -598,8 +604,11 @@ func (m *Manager) confirmLocked(user auth.User, p *Pairing, now time.Time) (Devi
 // app to app on the phone; whoever claims it from address with the right
 // app is paired without the browser (docs/ANDROID-APP.md).
 func (m *Manager) Sibling(user auth.User, device, app, address string) (Pairing, error) {
+	// Never the watch: its claim would come from another address, and a
+	// code confirmed by the claim alone is for the other app on the same
+	// phone only (the watch is confirmed with its code, watch.go).
 	known := false
-	for _, a := range Apps {
+	for _, a := range phoneApps {
 		known = known || a == app
 	}
 	if !known {
@@ -624,6 +633,10 @@ func (m *Manager) Sibling(user auth.User, device, app, address string) (Pairing,
 	}
 	if from.App == app {
 		return Pairing{}, ErrSameApp
+	}
+	if from.App == WatchApp {
+		// A watch has no other app beside it.
+		return Pairing{}, ErrInvalidApp
 	}
 	open := 0
 	for _, p := range m.pairings {

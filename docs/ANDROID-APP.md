@@ -1,6 +1,6 @@
 # Android-App: Kopplung und Anmeldung (PLAN 116)
 
-Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`) und „Agent“ (`io.github.ra5on.titanos.agent`) liegen im Repo `ra5on/TitanOS-Android`. Dieses Dokument beschreibt, was das NAS dafür bereitstellt. Technikplan und Entwürfe stehen in `Entwuerfe/116-android/`, außerhalb des Repos.
+Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`), „Agent“ (`io.github.ra5on.titanos.agent`) und die Uhr-App (`io.github.ra5on.titanos.watch`, Wear OS) liegen im Repo `ra5on/TitanOS-Android`. Dieses Dokument beschreibt, was das NAS dafür bereitstellt. Technikplan und Entwürfe stehen in `Entwuerfe/116-android/`, außerhalb des Repos.
 
 ## Grundsatz
 
@@ -53,6 +53,32 @@ Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`) und „Agent“ (`io.
 2. Die App gibt den Code über eine Schnittstelle weiter, die Android nur Apps mit derselben Signatur öffnet (signature-Berechtigung), nie über Zwischenablage, Link oder Datei.
 3. **Andere App:** `claim` und `wait` wie oben, mit eigenem Schlüssel. Kommt `claim` von derselben Adresse wie die Anfrage, mit der genannten App, solange Zugangsdaten des Kontos und die fragende App unverändert sind, ist die Kopplung damit bestätigt (`claim` antwortet `confirmed`). Sonst gilt der Code als unbekannt und ist verbraucht.
 - Die Bestätigung mit dem Kontopasswort im Browser hat schon die erste App bekommen; die Sitzung der App hat dieselben Rechte wie das Konto und gibt damit nichts Neues frei. Unter Mein Konto › Geräte stehen beide Apps getrennt, jede mit „Beenden“. Aktivitätsprotokoll `app.sibling`.
+
+**Die Uhr (Wear OS, seit 1.19, PLAN 116 Paket G):** Die Uhr-App `io.github.ra5on.titanos.watch` spricht selbst mit dem NAS über WLAN, das Handy (Bluetooth-Proxy des Systems) oder LTE, ohne Google: keine Play-Dienste, keine Wearable Data Layer API. Sie hat keine Kamera für den QR-Code und kann deshalb weder Link noch Fingerabdruck vom Handy übernehmen. Gekoppelt wird so:
+1. **Handy:** Die TitanOS-App zeigt unter „Uhr koppeln“ die Adressen des NAS. Eine davon wird auf der Uhr eingetippt.
+2. **Uhr:** baut die TLS-Verbindung auf und merkt sich den SPKI-Hash des Zertifikats, das sie dort sieht (noch ungeprüft). Dann `POST /api/v1/app/pair/watch` mit `{name, publicKey, commit}`.
+   - `commit` = base64url ohne Auffüllung von SHA-256(`titanos-watch-commit\n<publicKey>\n<secret>`). `secret` ist ein Zufallswert der Uhr, `publicKey` genau wie gesendet.
+   - Antwort `{id, nonce, expires}`. `nonce` ist der Zufallswert des NAS. Die Kopplung gilt 5 Minuten.
+   - Grenzen: höchstens 20 offene Uhr-Kopplungen am NAS, 3 je Adresse (`429 pairing_limit`).
+3. **Uhr:** `POST /api/v1/app/pair/watch/{id}/reveal` mit `{secret, spki, publicCert}`.
+   - `spki` ist der Hash, den die Uhr gesehen hat. `publicCert` ist `true`, wenn die Uhr ein gültiges öffentliches Zertifikat selbst geprüft hat.
+   - Das NAS prüft `secret` gegen `commit`. Ohne `publicCert` prüft es außerdem `spki` gegen das Zertifikat, das titand auf dieser Verbindung ausliefert (nach dem Servernamen; ohne eigenes TLS gegen die Zertifikate aller Adressen).
+   - Passt eines nicht, ist die Kopplung verbraucht: `404 pairing_code` bzw. `409 watch_certificate`.
+4. **Uhr und NAS** rechnen dieselben sechs Ziffern: SHA-256 über `titanos-watch-code\n` + `id`, `publicKey`, `nonce`, `secret`, `spki` und `1`/`0` für `publicCert`, jeweils durch `\n` getrennt. Davon die ersten 8 Bytes als Zahl (big-endian) modulo 10⁶, mit führenden Nullen. Die Uhr zeigt sie als „482 913“.
+5. **Handy:** Die gekoppelte TitanOS- oder Agent-App schickt die eingetippten Ziffern mit `POST /api/v1/app/pair/watch/confirm` `{code}` aus ihrer App-Sitzung.
+   - Nur App-Sitzungen (`403 app_session_required`), nur Handy-Apps (eine Uhr bestätigt keine Uhr: `403 watch_confirmer`).
+   - Falsche Ziffern: `404 pairing_code`, zählen je Konto (danach 429). Antwort `{state:"confirmed", id, name, app:"watch"}`.
+   - Die Uhr wird ein eigenes Gerät des Kontos (`app: "watch"`), unter Mein Konto › Geräte einzeln mit „Beenden“. Aktivitätsprotokoll `app.pair`.
+6. **Uhr:** fragt `POST /api/v1/app/pair/watch/{id}/wait` mit `{signature}` ab, unterschrieben über `titanos-watch-wait\n<id>`.
+   - Zustände `started`, `revealed`, `confirmed`.
+   - Bei `confirmed` kommen `{device, user, addresses}` dazu, einmal. `addresses` sind alle Adressen mit SPKI wie beim Koppeln im Browser, damit die Uhr das NAS auch unterwegs erreicht.
+   - Danach `challenge`/`session` wie jede App.
+
+Warum so: Die Bestätigung im Browser mit Kontopasswort hat schon das Handy bekommen. Die Sitzung der Handy-App hat dieselben Rechte wie das Konto und gibt mit der Uhr nichts Neues frei, wie bei der zweiten App. Anders als dort kommt die Uhr aber nicht von derselben Adresse, und ihr Zertifikat stammt aus einer eingetippten Adresse. Deshalb gilt:
+- Die sechs Ziffern hängen am Schlüssel der Uhr, an beiden Zufallswerten und am gesehenen Zertifikat.
+- Wer dazwischen sitzt, hat auf jeder Seite andere Werte und damit andere Ziffern. Weil die Uhr ihren Zufallswert vor dem des NAS festlegt, kann er auch keinen Schlüssel mit denselben Ziffern suchen (Trefferchance 1 zu 10⁶ je Versuch, Versuche zählen).
+- Ein Gerät, das sich nur als Uhr ausgibt, sieht die Ziffern auf der echten Uhr nicht.
+- `/app/pair/sibling` nimmt `watch` nicht an (`400 invalid_app`), und eine Uhr bekommt dort keinen Code.
 
 **Liste und Beenden:**
 - `GET /api/v1/account/apps` liefert `{apps:[{id, name, app, created, expires}]}`.
