@@ -80,6 +80,14 @@ Warum so: Die Bestätigung im Browser mit Kontopasswort hat schon das Handy beko
 - Ein Gerät, das sich nur als Uhr ausgibt, sieht die Ziffern auf der echten Uhr nicht.
 - `/app/pair/sibling` nimmt `watch` nicht an (`400 invalid_app`), und eine Uhr bekommt dort keinen Code.
 
+- **Prüfstand der Uhr (22.11.2026):** Go-Tests `TestWatchPairing`, `TestWatchRefusals` und `TestWatchCodeIsStable` (feste Werte, die die App in `WatchCodeTest` genauso prüft) in `appdevices`, `TestAppWatchPairing` in `api`. Geprüft werden: falsches Zertifikat, falsches Geheimnis, vertauschter Schlüssel, Ablauf, Grenzen je Adresse und für das ganze NAS, Wiederholung, nur Handy-Apps bestätigen, falsche Ziffern zählen, kein Sibling-Code für oder von der Uhr, geänderte Zugangsdaten.
+  - **Emulator:** Wear OS 7 (Uhr) und Android 17 (Handy) gegen einen Wegwerf-Testserver mit TLS direkt im Harness (`internal/tlscert`, Port 8463), KI-Agent mit nachgebautem Ollama.
+    - Handy über Link gekoppelt; auf der Uhr die Adresse `10.0.2.2:8463` eingetippt, Erlaubnis „Geräte in der Nähe“ (lokales Netzwerk) erteilt.
+    - Die Uhr zeigte sechs Ziffern; am Handy unter „Uhr koppeln“ eingegeben, danach Gerät `watch` unter `/account/apps`.
+    - Zustand, Meldungen (Web-Push-Spiegel), Kachel, Agent getippt mit Antwort und Vorlesen, Freigabe des Agenten auf der Uhr erlaubt (Datei am Testserver ersetzt).
+    - „Beenden“ am NAS meldete die Uhr ab, sie zeigte wieder die Kopplung.
+  - Nicht geprüft: echte Uhr, Bluetooth-Proxy des Handys, LTE, Komplikation auf einem Zifferblatt (der Emulator hat keines, das sich per ADB belegen lässt), Selbst-Update der Uhr, Diktat ohne Spracheingabe des Systems.
+
 **Liste und Beenden:**
 - `GET /api/v1/account/apps` liefert `{apps:[{id, name, app, created, expires}]}`.
 - `DELETE /api/v1/account/apps/{id}` beendet ein Gerät.
