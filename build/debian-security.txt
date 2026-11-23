@@ -1,5 +1,41 @@
-Debian updates for the image of TitanOS 0.78.0 (latest release 0.81.0).
+Debian updates for the image of TitanOS 0.82.0 (latest release 1.19.0).
 A full release (not an app release) brings them.
-Checked on 2026-11-14.
+Checked on 2026-11-23.
 
-linux-image-amd64: 6.12.116-1 -> 6.12.117-1
+base-files: 13.8+deb13u7 -> 13.8+deb13u8
+docker-cli: 26.1.5+dfsg1-9+deb13u1 -> 26.1.5+dfsg1-9+deb13u1+b1
+docker.io: 26.1.5+dfsg1-9+deb13u1 -> 26.1.5+dfsg1-9+deb13u1+b1
+grub-common: 2.12-9+deb13u2 -> 2.12-9+deb13u4
+grub-efi-ia32-bin: 2.12-9+deb13u2 -> 2.12-9+deb13u4
+grub-efi-ia32-unsigned: 2.12-9+deb13u2 -> 2.12-9+deb13u4
+grub-pc-bin: 2.12-9+deb13u2 -> 2.12-9+deb13u4
+intel-microcode: 3.20251111.1~deb13u1 -> 3.20260925.1~deb13u1
+libbrlapi0.8: 6.7-3.1+deb13u3 -> 6.7-3.1+deb13u5
+libc-bin: 2.41-12+deb13u4 -> 2.41-12+deb13u5
+libc6: 2.41-12+deb13u4 -> 2.41-12+deb13u5
+libefiboot1t64: 38-3.1+b1 -> 38-3.1+deb13u1
+libefivar1t64: 38-3.1+b1 -> 38-3.1+deb13u1
+libfreetype6: 2.13.3+dfsg-1+deb13u1 -> 2.13.3+dfsg-1+deb13u2
+libgpgme11t64: 1.24.2-3 -> 1.24.2-3+deb13u1
+libgpgmepp6t64: 1.24.2-3 -> 1.24.2-3+deb13u1
+libgssapi-krb5-2: 1.21.3-5+deb13u1 -> 1.21.3-5+deb13u2
+libk5crypto3: 1.21.3-5+deb13u1 -> 1.21.3-5+deb13u2
+libkrb5-3: 1.21.3-5+deb13u1 -> 1.21.3-5+deb13u2
+libkrb5support0: 1.21.3-5+deb13u1 -> 1.21.3-5+deb13u2
+libnghttp2-14: 1.64.0-1.1+deb13u1 -> 1.64.0-1.1+deb13u2
+libnutscan2: 2.8.1-5 -> 2.8.1-5+deb13u1
+libparted2t64: 3.6-5 -> 3.6-5+deb13u1
+libssl3t64: 3.5.7-1~deb13u3 -> 3.5.9-1~deb13u1
+libupsclient6t64: 2.8.1-5 -> 2.8.1-5+deb13u1
+linux-image-amd64: 6.12.117-1 -> 6.12.118-1
+mdadm: 4.4-11 -> 4.4-11+deb13u1
+nut-client: 2.8.1-5 -> 2.8.1-5+deb13u1
+nut-server: 2.8.1-5 -> 2.8.1-5+deb13u1
+openssl: 3.5.7-1~deb13u3 -> 3.5.9-1~deb13u1
+openssl-provider-legacy: 3.5.7-1~deb13u3 -> 3.5.9-1~deb13u1
+sudo: 1.9.16p2-3+deb13u2 -> 1.9.16p2-3+deb13u5
+wireless-regdb: 2026.05.30-1~deb13u1 -> 2026.09.03-1~deb13u1
+
+Image with the newer kernel (trixie-backports):
+linux-base-amd64: 7.2.12-1~bpo13+1 -> 7.3.4-1~bpo13+1
+linux-image-amd64: 7.2.12-1~bpo13+1 -> 7.3.4-1~bpo13+1
