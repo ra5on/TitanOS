@@ -463,7 +463,6 @@ func New(opts Options) *Server {
 	s.registerLogin(mux)
 	s.registerPreferences(mux)
 	s.registerPower(mux)
-	s.registerDisclaimer(mux)
 	s.registerStorage(mux)
 	s.registerUsers(mux)
 	s.registerAccount(mux)

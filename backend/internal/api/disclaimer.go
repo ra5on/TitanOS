@@ -72,9 +72,16 @@ func (d *disclaimerStore) accept(store *config.Store, by string) (disclaimerStat
 	return st, nil
 }
 
-func (s *Server) registerDisclaimer(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/system/disclaimer", s.requireUser(s.handleDisclaimer))
-	mux.HandleFunc("POST /api/v1/system/disclaimer", s.requireUser(s.browserOnly(s.handleDisclaimerAccept)))
+// disclaimerArea serves the confirmation: the stick for the file, the
+// state in RAM at the server.
+type disclaimerArea struct {
+	store *config.Store
+	state *disclaimerStore
+}
+
+func (a disclaimerArea) register(mux *routeMux, user, browserOnly func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/disclaimer", user(a.handleDisclaimer))
+	mux.HandleFunc("POST /api/v1/system/disclaimer", user(browserOnly(a.handleDisclaimerAccept)))
 }
 
 func disclaimerView(st disclaimerState, user auth.User) map[string]any {
@@ -88,11 +95,11 @@ func disclaimerView(st disclaimerState, user auth.User) map[string]any {
 	return view
 }
 
-func (s *Server) handleDisclaimer(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, disclaimerView(s.disclaimer.get(s.opts.Store), currentUser(r)))
+func (a disclaimerArea) handleDisclaimer(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, disclaimerView(a.state.get(a.store), currentUser(r)))
 }
 
-func (s *Server) handleDisclaimerAccept(w http.ResponseWriter, r *http.Request) {
+func (a disclaimerArea) handleDisclaimerAccept(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Version int `json:"version"`
 	}
@@ -108,7 +115,7 @@ func (s *Server) handleDisclaimerAccept(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusConflict, "disclaimer_changed", "the disclaimer changed; read it again")
 		return
 	}
-	st, err := s.disclaimer.accept(s.opts.Store, user.Name)
+	st, err := a.state.accept(a.store, user.Name)
 	if err != nil {
 		slog.Error("disclaimer confirmation not stored", "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the confirmation could not be saved to /config")

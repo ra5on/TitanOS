@@ -40,6 +40,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | dashboard | `dashboard_background.go` | – | 1 |
 | devices | `devices.go`, `devices_profile.go` | `pimArea`, `profileArea` | 3 |
 | diagnose | `diagnose.go` | `diagnoseArea` | 0 |
+| disclaimer | `disclaimer.go` | `disclaimerArea` | 1 |
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |
 | fans | `fans.go` | `fansArea` | 0 |
