@@ -268,7 +268,7 @@ type Server struct {
 	powerMu sync.Mutex
 	// disclaimer: the owner's confirmation of DISCLAIMER.md (disclaimer.go).
 	disclaimer disclaimerStore
-	power   pendingPower
+	power      pendingPower
 	// rebuilding replaces the rebuild check in tests.
 	rebuilding func() bool
 	haUndo     haUndoStore
