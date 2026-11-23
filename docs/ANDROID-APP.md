@@ -1,6 +1,6 @@
 # Android-App: Kopplung und Anmeldung (PLAN 116)
 
-Die Android-Apps „TitanOS“ (`io.github.ra5on.titanos`), „Agent“ (`io.github.ra5on.titanos.agent`) und die Uhr-App (`io.github.ra5on.titanos.watch`, Wear OS) liegen im Repo `ra5on/TitanOS-Android`. Dieses Dokument beschreibt, was das NAS dafür bereitstellt. Technikplan und Entwürfe stehen in `Entwuerfe/116-android/`, außerhalb des Repos.
+Die Android-App „TitanOS“ (`io.github.ra5on.titanos`), bis 1.00 auch „Agent“ (`io.github.ra5on.titanos.agent`), und die Uhr-App (`io.github.ra5on.titanos.watch`, Wear OS) liegen im Repo `ra5on/TitanOS-Android`. **Seit der App 1.01 (Entscheidung des Inhabers vom 23.11.2026) steckt der KI-Agent ganz in der TitanOS-App; die Agent-App wird nicht mehr aktualisiert.** Schon gekoppelte Agent-Apps bleiben unter Mein Konto › Geräte sichtbar und lassen sich beenden; das NAS behandelt sie weiter wie bisher. Beide Pakete der App sind seit 23.11.2026 bei Google für die Android-Entwicklerverifizierung registriert (`io.github.ra5on.titanos`, `io.github.ra5on.titanos.watch`). Dieses Dokument beschreibt, was das NAS dafür bereitstellt. Technikplan und Entwürfe stehen in `Entwuerfe/116-android/`, außerhalb des Repos.
 
 ## Grundsatz
 

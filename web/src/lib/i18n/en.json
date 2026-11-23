@@ -9950,7 +9950,7 @@
 	"error.contacts_import_invalid": "The file is not a contacts file (.vcf).",
 	"error.contacts_busy": "TitanOS has no memory free for this right now. Please try again in a moment.",
 	"androidApps.title": "Android apps",
-	"androidApps.intro": "The “TitanOS” and “Agent” apps for Android sign in with a key of their own per phone – with the rights of this account, no more. Password and two-factor code stay on the NAS. A Wear OS watch is paired in the TitanOS app on the phone under “Pair watch”.",
+	"androidApps.intro": "The “TitanOS” app for Android (with the AI agent since 1.01; the former Agent app is no longer updated) signs in with a key of its own per phone – with the rights of this account, no more. Password and two-factor code stay on the NAS. A Wear OS watch is paired in the TitanOS app on the phone under “Pair watch”.",
 	"androidApps.pair": "Pair Android app",
 	"androidApps.none": "No Android app paired yet.",
 	"androidApps.appTitanos": "TitanOS app",
