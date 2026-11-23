@@ -87,6 +87,9 @@ ALLOWED = (
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    # The disclaimer of the repository (23 Nov 2026); the interface carries
+    # its own text (disclaimer.* in the translations), the image no copy.
+    "DISCLAIMER.md",
     # The contributor agreement; checked by the hosted CLA Assistant, never
     # part of an image.
     "CLA.md",
