@@ -324,3 +324,61 @@ func TestObedientVMsAreNotSwitchedOff(t *testing.T) {
 		t.Fatalf("powered %q", got)
 	}
 }
+
+// Asked for in the web UI, but nobody follows the dialog any more (the
+// browser came through a Docker proxy that went down with the apps): the
+// NAS does not wait for ever, it switches the VM off and goes down.
+func TestADecisionNobodyFollowsDoesNotWaitForEver(t *testing.T) {
+	f := newFake()
+	f.stubborn["win"] = true
+	w := f.workloads()
+	var forced []string
+	w.ForceVM = func(_ context.Context, name string) error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.vms[name] = false
+		forced = append(forced, name)
+		return nil
+	}
+	m := New(w)
+	m.Wait, m.Poll, m.Unwatched = 40*time.Millisecond, 5*time.Millisecond, 80*time.Millisecond
+	m.Begin("reboot", "alex", false, f.power("reboot"))
+	if got := powered(t, f, 60*time.Millisecond); got != "" {
+		t.Fatal("went down before the waiting time")
+	}
+	if got := powered(t, f, 2*time.Second); got != "reboot" {
+		t.Fatalf("powered %q", got)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.Equal(forced, []string{"win"}) {
+		t.Errorf("forced %v", forced)
+	}
+}
+
+// As long as the dialog asks, the person decides: the NAS keeps waiting.
+func TestAWatchedDecisionKeepsWaiting(t *testing.T) {
+	f := newFake()
+	f.stubborn["win"] = true
+	m := testManager(f, 30*time.Millisecond)
+	m.Unwatched = 60 * time.Millisecond
+	m.Begin("reboot", "alex", false, f.power("reboot"))
+	deadline := time.Now().Add(400 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if s := m.Watch(); s == nil || s.Phase == "going" {
+			t.Fatalf("status %+v while watched", s)
+		}
+		select {
+		case got := <-f.powered:
+			t.Fatalf("went down (%q) while someone watched", got)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if s := m.Status(); s.Phase != "waiting" {
+		t.Fatalf("phase %q", s.Phase)
+	}
+	// Once the dialog stops asking, the time runs.
+	if got := powered(t, f, 2*time.Second); got != "reboot" {
+		t.Fatalf("powered %q after the watching stopped", got)
+	}
+}

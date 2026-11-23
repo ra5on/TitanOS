@@ -3,9 +3,11 @@ package vm
 import (
 	"bufio"
 	"context"
+	"encoding/xml"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -64,7 +66,19 @@ func (m *Manager) SetMedium(ctx context.Context, name, path string) error {
 type Addresses struct {
 	Addresses []string `json:"addresses"`
 	Source    string   `json:"source"`
+	// Agent is AgentConnected or AgentMissing, empty when libvirt does
+	// not say (no channel for the agent, older VMs taken over).
+	Agent string `json:"agent"`
 }
+
+// States of the QEMU guest agent in a running VM. Without the agent a
+// guest only gets the ACPI power button when it should shut down, and some
+// systems (Linux Mint, desktops in general) answer that with a question on
+// their screen instead of shutting down (23 Nov 2026).
+const (
+	AgentConnected = "connected"
+	AgentMissing   = "missing"
+)
 
 type cachedAddresses struct {
 	at    time.Time
@@ -106,6 +120,10 @@ func (m *Manager) Addresses(ctx context.Context, name string) (Addresses, error)
 		if found := agentAddresses(out, vm.MAC); len(found) > 0 {
 			result = Addresses{Addresses: found, Source: "agent"}
 		}
+	}
+	result.Agent = m.agentState(ctx, name)
+	if result.Source == "agent" {
+		result.Agent = AgentConnected
 	}
 	if result.Source == "" && vm.Network == "bridge" {
 		if found := m.neighbours(vm.MAC); len(found) > 0 {
@@ -176,4 +194,60 @@ func usable(text string) string {
 		return ""
 	}
 	return ip.String()
+}
+
+// agentState reads from libvirt whether the guest agent has opened its
+// channel in the VM. libvirt tracks that itself: the guest is not asked,
+// so a VM without the agent costs no waiting.
+func (m *Manager) agentState(ctx context.Context, name string) string {
+	ask, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := m.runner.Run(ask, "", "virsh", "--quiet", "dumpxml", name)
+	if err != nil {
+		return ""
+	}
+	return agentChannelState(out)
+}
+
+// agentChannelState finds the channel of the guest agent in the live XML of
+// a domain: state "connected" while the agent runs in the guest.
+func agentChannelState(domainXML string) string {
+	var domain struct {
+		Channels []struct {
+			Target struct {
+				Name  string `xml:"name,attr"`
+				State string `xml:"state,attr"`
+			} `xml:"target"`
+		} `xml:"devices>channel"`
+	}
+	if xml.Unmarshal([]byte(domainXML), &domain) != nil {
+		return ""
+	}
+	for _, channel := range domain.Channels {
+		if channel.Target.Name != "org.qemu.guest_agent.0" {
+			continue
+		}
+		if channel.Target.State == "connected" {
+			return AgentConnected
+		}
+		return AgentMissing
+	}
+	return ""
+}
+
+// WithoutAgent lists the running VMs whose guest agent is not there. The
+// restart dialog names them: they may not shut down when asked.
+func (m *Manager) WithoutAgent(ctx context.Context) []string {
+	if m.Disabled {
+		return nil
+	}
+	names := []string{}
+	for name := range m.RunningNames() {
+		// A VM still starting has not had the time to start its agent.
+		if m.pid(name) != 0 && m.agentState(ctx, name) == AgentMissing {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }

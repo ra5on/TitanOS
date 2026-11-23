@@ -164,3 +164,59 @@ func TestAddresses(t *testing.T) {
 		t.Errorf("user network: %+v %v", got, err)
 	}
 }
+
+func TestAgentChannelState(t *testing.T) {
+	channel := func(state string) string {
+		attr := ""
+		if state != "" {
+			attr = " state='" + state + "'"
+		}
+		return `<domain type='kvm'><name>vm</name><devices>
+  <channel type='unix'><source mode='bind' path='/run/libvirt/qemu/channel/1-vm/org.qemu.guest_agent.0'/>
+    <target type='virtio' name='org.qemu.guest_agent.0'` + attr + `/><alias name='channel0'/></channel>
+</devices></domain>`
+	}
+	for xmlText, want := range map[string]string{
+		channel("connected"):    AgentConnected,
+		channel("disconnected"): AgentMissing,
+		channel(""):             AgentMissing,
+		`<domain><devices><channel type='spicevmc'><target type='virtio' name='com.redhat.spice.0'/></channel></devices></domain>`: "",
+		`<domain><devices/></domain>`: "",
+		"error: failed to get domain": "",
+	} {
+		if got := agentChannelState(xmlText); got != want {
+			t.Errorf("%q: %q, want %q", xmlText, got, want)
+		}
+	}
+}
+
+func TestAgentStateAndWithoutAgent(t *testing.T) {
+	m, _ := newTestManager(t)
+	runner := &answerRunner{answers: map[string]string{}}
+	m.runner = runner
+	m.procDir = t.TempDir()
+	os.MkdirAll(filepath.Join(m.procDir, "net"), 0o755)
+	os.MkdirAll(filepath.Join(m.procDir, fmt.Sprint(os.Getpid())), 0o755)
+	ctx := context.Background()
+	m.vms["mint"] = VM{Name: "mint", Template: "linux", Network: "bridge", MAC: "52:54:00:aa:bb:01"}
+	m.vms["haos"] = VM{Name: "haos", Template: "linux", Network: "bridge", MAC: "52:54:00:aa:bb:02"}
+	m.vms["off"] = VM{Name: "off", Template: "linux", Network: "bridge", MAC: "52:54:00:aa:bb:03"}
+	running(t, m, "mint")
+	running(t, m, "haos")
+	runner.answers["dumpxml mint"] = `<domain><devices><channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0' state='disconnected'/></channel></devices></domain>`
+	runner.answers["dumpxml haos"] = `<domain><devices><channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0' state='connected'/></channel></devices></domain>`
+	runner.answers["dumpxml off"] = `<domain><devices><channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0' state='disconnected'/></channel></devices></domain>`
+	runner.answers["domifaddr"] = "error: guest agent is not responding"
+
+	if got := m.WithoutAgent(ctx); !slices.Equal(got, []string{"mint"}) {
+		t.Errorf("without agent: %v", got)
+	}
+	got, err := m.Addresses(ctx, "mint")
+	if err != nil || got.Agent != AgentMissing {
+		t.Errorf("mint: %+v %v", got, err)
+	}
+	got, err = m.Addresses(ctx, "haos")
+	if err != nil || got.Agent != AgentConnected {
+		t.Errorf("haos: %+v %v", got, err)
+	}
+}
