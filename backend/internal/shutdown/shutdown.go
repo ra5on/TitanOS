@@ -7,7 +7,11 @@
 //
 // A restart nobody watches (an update, the power schedule, Home Assistant)
 // goes on by itself once the time is up; one asked for in the web UI waits
-// for the person then.
+// for the person then – as long as someone still follows it there. When
+// the dialog stops asking (the browser came through a Docker proxy that
+// went down with the apps, the tab was closed), nobody can decide any
+// more: after Unwatched the NAS goes on as if unattended. Owner decision
+// of 23 Nov 2026, after a restart that waited for a whole morning.
 package shutdown
 
 import (
@@ -82,12 +86,17 @@ type Manager struct {
 	Wait time.Duration
 	// Poll is how often the state is looked at.
 	Poll time.Duration
+	// Unwatched is how long a preparation waits for a decision that nobody
+	// follows any more (no Watch); then it goes on. 0 waits for ever.
+	Unwatched time.Duration
 
 	mu      sync.Mutex
 	status  *Status
 	now     chan struct{}
 	cancel  context.CancelFunc
 	stopped stopped
+	// seen is the last Watch, waiting when the decision was first asked for.
+	seen, waiting time.Time
 }
 
 // stopped is what this preparation ended, to start it again on cancel.
@@ -98,7 +107,18 @@ type stopped struct {
 
 // New returns a manager with the default times.
 func New(w Workloads) *Manager {
-	return &Manager{Workloads: w, Wait: 5 * time.Minute, Poll: 2 * time.Second}
+	return &Manager{Workloads: w, Wait: 5 * time.Minute, Poll: 2 * time.Second, Unwatched: 2 * time.Minute}
+}
+
+// Watch is Status for the person who follows the preparation in the web
+// UI and can decide. Only these calls keep a waiting preparation waiting.
+func (m *Manager) Watch() *Status {
+	m.mu.Lock()
+	if m.status != nil {
+		m.seen = time.Now()
+	}
+	m.mu.Unlock()
+	return m.Status()
 }
 
 // Status returns the preparation under way, or nil.
@@ -125,6 +145,7 @@ func (m *Manager) Begin(action, by string, unattended bool, power func() error) 
 	now := time.Now()
 	m.status = &Status{Action: action, By: by, Phase: "stopping", Unattended: unattended, Started: now, Deadline: now.Add(m.Wait), Items: []Item{}}
 	m.now, m.cancel, m.stopped = make(chan struct{}), cancel, stopped{}
+	m.seen, m.waiting = time.Time{}, time.Time{}
 	slog.Info("preparing to go down", "action", action, "by", by, "unattended", unattended)
 	go m.run(ctx, m.now, power)
 	return nil
@@ -288,7 +309,18 @@ func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() err
 				slog.Warn("guests still running after the waiting time; going down anyway", "action", m.status.Action)
 			} else {
 				m.status.Phase = "waiting"
+				m.waiting = time.Now()
 				slog.Warn("guests still running after the waiting time; waiting for a decision", "action", m.status.Action)
+			}
+		}
+		if !done && m.status.Phase == "waiting" && m.Unwatched > 0 {
+			last := m.waiting
+			if m.seen.After(last) {
+				last = m.seen
+			}
+			if time.Since(last) > m.Unwatched {
+				done = true
+				slog.Warn("nobody follows the decision any more; going down anyway", "action", m.status.Action, "unwatched", m.Unwatched)
 			}
 		}
 		m.mu.Unlock()

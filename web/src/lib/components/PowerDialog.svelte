@@ -25,6 +25,9 @@
 		pending: { action: string; by: string; since: string } | null;
 		rebuilding: boolean;
 		preparing?: Preparing | null;
+		// This browser reaches the NAS through a Docker container (a reverse
+		// proxy): going down cuts it off before the guests are ended.
+		viaContainer?: boolean;
 	};
 	let phase = $state<'confirm' | 'working' | 'preparing' | 'done' | 'waiting'>('confirm');
 	let error = $state('');
@@ -230,6 +233,9 @@
 				)}
 			</li>
 		</ul>
+		{#if status?.viaContainer}
+			<p class="notice-warn" role="status">{t('power.viaContainer')}</p>
+		{/if}
 		{#if status?.rebuilding}
 			<label class="check"
 				><input type="checkbox" bind:checked={afterRebuild} />{t('power.afterRebuild')}</label

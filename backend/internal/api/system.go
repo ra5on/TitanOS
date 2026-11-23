@@ -120,9 +120,10 @@ func (a powerArea) register(mux *routeMux, admin func(http.HandlerFunc) http.Han
 func (a powerArea) handlePowerStatus(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	res := map[string]any{"pending": nil, "rebuilding": a.rebuildingNow(ctx), "preparing": nil}
+	res := map[string]any{"pending": nil, "rebuilding": a.rebuildingNow(ctx), "preparing": nil, "viaContainer": viaContainer(remoteIP(r))}
 	if a.shutdown() != nil {
-		if status := a.shutdown().Status(); status != nil {
+		// The dialog asks here: someone still follows and can decide.
+		if status := a.shutdown().Watch(); status != nil {
 			res["preparing"] = status
 		}
 	}
