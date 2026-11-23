@@ -9950,7 +9950,7 @@
 	"error.contacts_import_invalid": "Die Datei ist keine Kontaktdatei (.vcf).",
 	"error.contacts_busy": "TitanOS hat gerade keinen Arbeitsspeicher dafür frei. Bitte gleich noch einmal versuchen.",
 	"androidApps.title": "Android-Apps",
-	"androidApps.intro": "Die Apps „TitanOS“ und „Agent“ für Android melden sich mit einem eigenen Schlüssel je Handy an – mit den Rechten dieses Kontos, nicht mehr. Passwort und Zwei-Faktor-Code bleiben auf dem NAS. Eine Wear-OS-Uhr koppelst du in der TitanOS-App am Handy unter „Uhr koppeln“.",
+	"androidApps.intro": "Die App „TitanOS“ für Android (seit 1.01 mit dem KI-Agenten; die frühere Agent-App wird nicht mehr aktualisiert) meldet sich mit einem eigenen Schlüssel je Handy an – mit den Rechten dieses Kontos, nicht mehr. Passwort und Zwei-Faktor-Code bleiben auf dem NAS. Eine Wear-OS-Uhr koppelst du in der TitanOS-App am Handy unter „Uhr koppeln“.",
 	"androidApps.pair": "Android-App koppeln",
 	"androidApps.none": "Noch keine Android-App gekoppelt.",
 	"androidApps.appTitanos": "TitanOS-App",
