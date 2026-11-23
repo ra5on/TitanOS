@@ -503,6 +503,12 @@ Voraussetzungen: Go 1.27+, Node.js 24+, Python 3 und `make`. Für Systemabbilder
 
 Der Entwicklungsmodus verändert keine Host-Platten. In `backend/` funktionieren `go build ./cmd/titand` und `go test ./...` ohne Node.js; ohne Build-Tag `embedui` wird eine Platzhalterseite ausgeliefert. Für Abbild-Builds sind funktionierende Benutzer-Namespaces mit `newuidmap`/`newgidmap` und passenden `/etc/subuid`-/`/etc/subgid`-Einträgen nötig, alternativ `MKOSI_SUDO=1 make zip`.
 
+## Haftungsausschluss
+
+TitanOS ist ein privates, nicht kommerzielles Projekt. Es wird kostenlos und ohne Gewähr bereitgestellt, die Nutzung geschieht auf eigenes Risiko. RAID und Snapshots ersetzen keine Datensicherung. Den vollständigen Hinweis auf Deutsch und Englisch enthält [DISCLAIMER.md](DISCLAIMER.md).
+
+*Part of TitanOS, a private, non-commercial project, provided free of charge and without warranty; use it at your own risk. See [DISCLAIMER.md](DISCLAIMER.md).*
+
 ## Lizenz und Beiträge
 
 TitanOS ist **Fair Source** unter der [Functional Source License 1.1 (FSL-1.1-ALv2)](LICENSE.md). Nutzen, Ändern und Weitergeben ist privat, im Unternehmen, für Lehre und Forschung erlaubt. Ausgenommen ist das Anbieten eines konkurrierenden kommerziellen Produkts oder Dienstes. Jede Version wechselt zwei Jahre nach ihrem Erscheinen zur **Apache License 2.0**. Maßgeblich ist der unveränderte Lizenztext.
