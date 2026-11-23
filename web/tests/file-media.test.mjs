@@ -10,10 +10,11 @@ import {
 import { indexSettings, indexStateLabel } from '../src/lib/file-index.ts';
 test('thumbnails cover the same types as titand', () => {
 	assert.equal(thumbnailKind('Urlaub.JPG'), 'image');
+	assert.equal(thumbnailKind('IMG_0001.HEIC'), 'image');
 	assert.equal(thumbnailKind('scan.pdf'), 'pdf');
 	assert.equal(thumbnailKind('clip.MOV'), 'video');
 	assert.equal(thumbnailKind('vector.svg'), null);
-	assert.equal(thumbnailKind('foto.heic'), null);
+	assert.equal(thumbnailKind('foto.heif'), 'image');
 });
 test('thumbnail addresses carry the version and escape paths', () => {
 	const url = new URL(

@@ -137,7 +137,8 @@ export function fileKind(name: string, dir: boolean): FileKind {
 /** Files titand makes thumbnails of (same list as backend/internal/thumbs). */
 export type ThumbnailKind = 'image' | 'pdf' | 'video' | 'office';
 export function thumbnailKind(name: string): ThumbnailKind | null {
-	if (/\.(jpe?g|png|gif|webp)$/i.test(name)) return 'image';
+	// HEIC/HEIF (iPhone): titand makes the thumbnail with ffmpeg (24.11.2026).
+	if (/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(name)) return 'image';
 	if (/\.pdf$/i.test(name)) return 'pdf';
 	if (/\.(mp4|m4v|mov|mkv|webm|avi|ogv|mts|m2ts|wmv)$/i.test(name)) return 'video';
 	// PLAN 70: the picture an Office document carries (titand reads only that).
