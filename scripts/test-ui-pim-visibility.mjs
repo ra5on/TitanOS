@@ -66,6 +66,8 @@ async function call(ctx, method, path, data) {
     done.status < 300,
     `owner: ${done.status} ${JSON.stringify(done.body)}`,
   );
+  // The owner is asked once for the disclaimer; confirmed here beforehand.
+  await call(owner, "POST", "/system/disclaimer", { version: 1 });
   const made = await call(owner, "POST", "/users", {
     name: USER,
     password: PASSWORD,

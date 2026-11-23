@@ -124,6 +124,15 @@ page.on("pageerror", (e) => errors.push(String(e)));
     JSON.stringify({ name, password }),
   );
   if (status !== 200) throw new Error(`login failed: ${status}`);
+  // The owner of a NAS asks once for the disclaimer (DisclaimerAsk); the
+  // crawl confirms it first so that the dialog does not cover the pages.
+  await page.evaluate(() =>
+    fetch("/api/v1/system/disclaimer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 1 }),
+    }),
+  );
 }
 // PLAN 79-7: the NVR of -dev starts switched off, so all its pages would show
 // the setup. Its stand-in (no Docker, demo cameras) is switched on first, on

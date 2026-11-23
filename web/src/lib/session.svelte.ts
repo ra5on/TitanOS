@@ -136,6 +136,9 @@ export async function login(name: string, password: string, code = '') {
 
 export async function setupOwner(name: string, password: string) {
 	await api.post<User>('/setup', { name, password });
+	// The disclaimer was confirmed on the setup page. Should storing it
+	// fail, the NAS asks once after the next login (DisclaimerAsk).
+	await api.post('/system/disclaimer', { version: 1 }).catch(() => {});
 	await refreshSession();
 }
 

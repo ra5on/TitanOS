@@ -6,7 +6,8 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
-	import { osVersion } from '#lib/format.ts';
+	import DisclaimerText from '#lib/components/DisclaimerText.svelte';
+	import { formatDateTime, osVersion } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
@@ -22,12 +23,26 @@
 		);
 	});
 
+	// The owner's confirmation of the disclaimer (23 Nov 2026).
+	type Disclaimer = { accepted: boolean; by?: string; at?: string };
+	let disclaimer = $state<Disclaimer | null>(null);
+	$effect(() => {
+		api
+			.get<Disclaimer>('/system/disclaimer')
+			.then((res) => (disclaimer = res))
+			.catch(() => (disclaimer = null));
+	});
+
 	const slot = $derived(system.info?.image?.slot.toUpperCase() ?? '');
 </script>
 
 <PageHead title={t('about.title')} />
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+
+{#snippet disclaimerText()}
+	<div class="srow-block"><DisclaimerText /></div>
+{/snippet}
 
 {#snippet licenseText()}
 	<div class="srow-block"><pre>{about?.license}</pre></div>
@@ -69,6 +84,20 @@
 	</SettingGroup>
 
 	<SettingGroup title={t('about.licenses')}>
+		<SettingRow
+			id="about-disclaimer"
+			icon="shield"
+			title={t('disclaimer.title')}
+			desc={disclaimer?.accepted && disclaimer.by && disclaimer.at
+				? t('disclaimer.confirmed', {
+						by: disclaimer.by,
+						at: formatDateTime(new Date(disclaimer.at)),
+					})
+				: disclaimer
+					? t('disclaimer.notConfirmed')
+					: undefined}
+			children={disclaimerText}
+		/>
 		<SettingRow
 			id="about-license"
 			icon="fileText"

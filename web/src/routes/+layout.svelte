@@ -14,6 +14,7 @@
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
 	import LockScreen from '#lib/components/LockScreen.svelte';
+	import DisclaimerAsk from '#lib/components/DisclaimerAsk.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
@@ -257,6 +258,8 @@
 			     SettingRow); the collapsible tiles of style E3 are gone. -->
 			{@render children()}</Shell
 		>
+		<!-- Once for the owner: confirm the disclaimer (23 Nov 2026). Not in windows. -->
+		{#if !inWindow && session.data.user.role === 'owner'}<DisclaimerAsk />{/if}
 		<!-- PLAN 61: the lock screen of the session, above everything. -->
 		<LockScreen background={lockBackground} />
 	{/if}

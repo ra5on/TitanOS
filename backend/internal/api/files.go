@@ -252,7 +252,7 @@ var stickShown = []string{
 	"system/settings.json", "system/terminal.json", "system/backup.json", "system/energy.json", "system/fans.json",
 	"system/power-button.json", "system/power-schedule.json", "system/memory.json", "system/monitoring.json",
 	"system/maintenance.json", "system/login.json", "system/intel-gpu.json", "system/update.json", "system/ssh.json",
-	"system/webdav.json", "system/health-report.json",
+	"system/webdav.json", "system/health-report.json", "system/disclaimer.json",
 }
 
 // requestRoots are the roots of the account behind a request. The stick is
