@@ -47,16 +47,22 @@
 
 	// Addresses: from the guest agent, or from the neighbour table for a VM
 	// on the bridge. Asked when the tab opens and every 30 seconds.
-	let addresses = $state<{ addresses: string[]; source: '' | 'agent' | 'arp' } | null>(null);
+	// agent: whether the QEMU guest agent runs in the VM (libvirt's channel
+	// state); without it a desktop may answer the power button with a
+	// question and not shut down.
+	type Addresses = {
+		addresses: string[];
+		source: '' | 'agent' | 'arp';
+		agent?: '' | 'connected' | 'missing';
+	};
+	let addresses = $state<Addresses | null>(null);
 	$effect(() => {
 		const url = base;
 		addresses = null;
 		if (!running) return;
 		const ask = async () => {
 			try {
-				const result = await api.get<{ addresses: string[]; source: '' | 'agent' | 'arp' }>(
-					url + '/addresses',
-				);
+				const result = await api.get<Addresses>(url + '/addresses');
 				if (url === base) addresses = result;
 			} catch {
 				if (url === base) addresses = { addresses: [], source: '' };
@@ -135,6 +141,23 @@
 		const since = new Date(vm.since).getTime();
 		return running && since > 0 ? formatDuration(Math.max(0, (Date.now() - since) / 1000)) : '';
 	});
+
+	// Installing the guest agent in common Linux guests; it starts by itself
+	// once the package is there (systemd starts it when its port appears).
+	const agentCommands = [
+		{
+			os: 'Debian · Ubuntu · Mint',
+			line: 'sudo apt install -y qemu-guest-agent && sudo systemctl start qemu-guest-agent',
+		},
+		{
+			os: 'Fedora',
+			line: 'sudo dnf install -y qemu-guest-agent && sudo systemctl start qemu-guest-agent',
+		},
+		{
+			os: 'Arch',
+			line: 'sudo pacman -S --noconfirm qemu-guest-agent && sudo systemctl start qemu-guest-agent',
+		},
+	];
 
 	let copied = $state('');
 	async function copy(text: string) {
@@ -335,6 +358,56 @@
 						{/if}
 					{/snippet}
 				</SettingRow>
+				{#if addresses?.agent}
+					<SettingRow title={t('vms.ov.agent')}>
+						{#snippet description()}
+							{#if addresses?.agent === 'missing'}
+								<p>
+									{t(
+										vm.template === 'windows'
+											? 'vms.ov.agentMissingWindows'
+											: 'vms.ov.agentMissing',
+									)}
+								</p>
+								{#if vm.template !== 'windows'}
+									<p class="install-title">{t('vms.ov.agentInstall')}</p>
+									<ul class="install">
+										{#each agentCommands as command (command.os)}
+											<li>
+												<span class="muted small">{command.os}</span>
+												<span class="command">
+													<code class="mono">{command.line}</code>
+													<button
+														type="button"
+														class="icon"
+														aria-label={t('vms.ov.copyCommand', { os: command.os })}
+														title={t('vms.ov.copyCommand', { os: command.os })}
+														onclick={() => copy(command.line)}
+														><Icon
+															name={copied === command.line ? 'check' : 'copy'}
+															size={14}
+														/></button
+													>
+												</span>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							{/if}
+						{/snippet}
+						{#snippet control()}
+							{#if addresses?.agent === 'connected'}
+								<span class="agent-ok"
+									><Icon name="check" size={14} />{t('vms.ov.agentConnected')}</span
+								>
+							{:else}
+								<span class="agent-missing"
+									><Icon name="info" size={14} />{t('vms.ov.agentMissingShort')}</span
+								>
+							{/if}
+						{/snippet}
+					</SettingRow>
+				{/if}
 			{/if}
 			<SettingRow title={t('vms.ov.connection')}>
 				{#snippet control()}<span
@@ -571,6 +644,45 @@
 	}
 	.small {
 		font-size: var(--text-sm);
+	}
+	.agent-ok,
+	.agent-missing {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+	}
+	.agent-ok {
+		color: var(--ok-text);
+	}
+	.agent-missing {
+		color: var(--warn-text);
+	}
+	.install-title {
+		margin-top: var(--space-2-5);
+		font-weight: 600;
+	}
+	.install {
+		margin: var(--space-1-5) 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.install li {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.command {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-1-5);
+	}
+	.command code {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.address {
 		display: inline-flex;

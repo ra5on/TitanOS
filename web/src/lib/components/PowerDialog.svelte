@@ -28,6 +28,9 @@
 		// This browser reaches the NAS through a Docker container (a reverse
 		// proxy): going down cuts it off before the guests are ended.
 		viaContainer?: boolean;
+		// Running VMs without the QEMU guest agent: they may answer the
+		// power button with a question instead of shutting down.
+		vmsWithoutAgent?: string[];
 	};
 	let phase = $state<'confirm' | 'working' | 'preparing' | 'done' | 'waiting'>('confirm');
 	let error = $state('');
@@ -233,6 +236,11 @@
 				)}
 			</li>
 		</ul>
+		{#if status?.vmsWithoutAgent?.length}
+			<p class="notice-warn" role="status">
+				{t('power.vmsWithoutAgent', { names: status.vmsWithoutAgent.join(', ') })}
+			</p>
+		{/if}
 		{#if status?.viaContainer}
 			<p class="notice-warn" role="status">{t('power.viaContainer')}</p>
 		{/if}
