@@ -187,7 +187,9 @@ func TestAppPhotoBackup(t *testing.T) {
 	if res, body := check(phone, "share/Docs", "Handy", photoItem{SHA256: photoSum("by smb"), Size: 6}); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("check without rights: %d %s", res.StatusCode, body)
 	}
-	if got := verify(photoItem{SHA256: photoSum("by smb"), Size: 6}); got[0].State != photoMissing {
+	// Without rights (or with the volume not mounted) nothing can be said:
+	// "unsure", never "missing" (24.11.2026), and never "saved".
+	if got := verify(photoItem{SHA256: photoSum("by smb"), Size: 6}); got[0].State != photoUnsure {
 		t.Fatalf("verify without rights: %+v", got)
 	}
 }
