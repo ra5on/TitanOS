@@ -256,6 +256,23 @@ jobs:
               echo "Waiting for the plugin set of $kernel ($package)"
               until [ "$status" = 0 ]; do
                 sleep 120
+                # GitHub skips runs of the 15-minute schedule of
+                # plugin-sign.yml at times (1.20 waited 1.5 hours for its
+                # signature on 23.11.2026): once a draft of the plugin
+                # repository is there, ask for the signing directly, at most
+                # every 10 minutes. The signing itself is unchanged (newest
+                # v* tag, approval or security-release).
+                if [ $(( $(date +%s) - ${last_sign:-0} )) -ge 600 ]; then
+                  drafts=$(gh api "repos/ra5on/TitanOS-Plugins/releases?per_page=30" --jq '[.[] | select(.draft)] | length' 2>/dev/null || echo 0)
+                  if [ "${drafts:-0}" != 0 ]; then
+                    if gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref main; then
+                      echo "Asked plugin-sign.yml to sign $drafts draft(s)"
+                      last_sign=$(date +%s)
+                    else
+                      echo "::warning::plugin-sign.yml could not be started; the schedule remains"
+                    fi
+                  fi
+                fi
                 status=0; fetch || status=$?
                 [ "$status" = 0 ] || [ "$status" = 3 ] || exit "$status"
               done

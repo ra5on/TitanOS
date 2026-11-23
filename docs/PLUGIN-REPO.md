@@ -107,6 +107,11 @@ Signiert und veröffentlicht wird in TitanOS (`.github/workflows/plugin-sign.yml
   Release-Tag aus, der ihn enthält, denn das Environment `release` erlaubt nur
   Tags `v*`. Ein Tag reicht: Das volle Release, das auf seinen Kernel-Satz wartet,
   ist zu dem Zeitpunkt noch nicht veröffentlicht. Dieser Lauf wartet auf die Freigabe des Projektinhabers.
+- Wartet ein volles Release auf seinen Kernel-Satz, stößt `release.yml` das Signieren
+  selbst an, sobald im Plugin-Repository ein Entwurf liegt (höchstens alle 10 Minuten,
+  `gh workflow run plugin-sign.yml` mit `PLUGINS_DISPATCH_TOKEN`). Der Zeitplan alle
+  15 Minuten fällt bei GitHub manchmal aus; 1.20 wartete am 23.11.2026 deshalb
+  1,5 Stunden auf die Signatur.
 - Vor dem Signieren eines Satzes prüft er für jede Datei des Entwurfs den
   Herkunftsnachweis (GitHub Artifact Attestation, `gh attestation verify`):
   gebaut von `release.yml` des Plugin-Repositorys auf dessen Zweig `main`.
