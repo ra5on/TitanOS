@@ -50,7 +50,7 @@ const (
 // "video" or "" for none. Only the name counts, like the file icons.
 func Kind(name string) string {
 	switch strings.ToLower(path.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif":
 		return "image"
 	case ".pdf":
 		return "pdf"
@@ -60,6 +60,12 @@ func Kind(name string) string {
 		return "office"
 	}
 	return ""
+}
+
+// heif reports a HEIC/HEIF picture, which ffmpeg decodes instead of Go.
+func heif(name string) bool {
+	ext := strings.ToLower(path.Ext(name))
+	return ext == ".heic" || ext == ".heif"
 }
 
 // render turns an open file into a thumbnail that fits into box×box.
@@ -74,6 +80,14 @@ func (m *Manager) render(ctx context.Context, f *os.File, name string, size int6
 		if size > maxImage {
 			return nil, ErrUnsupported
 		}
+		if heif(name) {
+			// HEIC/HEIF (iPhone photos): Go has no decoder; ffmpeg 7.1 of
+			// the image reads them and puts the tiles of the grid together
+			// (24.11.2026). It also turns the picture as the file says.
+			img, err = m.runTool(ctx, f, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-fd", "0", "-i", "fd:", "-frames:v", "1",
+				"-vf", fmt.Sprintf("scale=w=%d:h=%d:force_original_aspect_ratio=decrease", box, box), "-f", "image2pipe", "-vcodec", "png", "pipe:1")
+			break
+		}
 		img, orientation, err = decodeImage(f)
 	case "pdf":
 		img, err = m.runTool(ctx, f, "pdftoppm", "-f", "1", "-l", "1", "-scale-to", strconv.Itoa(box), "-singlefile", "-png", "-")
@@ -81,7 +95,9 @@ func (m *Manager) render(ctx context.Context, f *os.File, name string, size int6
 		// A frame one second in avoids the black first frame of many clips;
 		// a shorter clip falls back to its very first frame.
 		args := func(seek string) []string {
-			return []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-ss", seek, "-i", "fd:0", "-frames:v", "1",
+			// ffmpeg 7.1 (Debian 13) refuses "-i fd:0"; the descriptor is
+			// named with -fd. Video thumbnails failed without it.
+			return []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-ss", seek, "-fd", "0", "-i", "fd:", "-frames:v", "1",
 				"-vf", fmt.Sprintf("scale=w=%d:h=%d:force_original_aspect_ratio=decrease", box, box), "-f", "image2pipe", "-vcodec", "png", "pipe:1"}
 		}
 		img, err = m.runTool(ctx, f, "ffmpeg", args("1")...)

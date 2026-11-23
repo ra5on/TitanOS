@@ -136,7 +136,7 @@ func TestUnsupportedAndMissingHelper(t *testing.T) {
 	if _, _, err := m.Get(context.Background(), source(t, dir, "broken.png", []byte("no png")), 160); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("broken picture: %v", err)
 	}
-	if Kind("a.HEIC") != "" || Kind("b.webp") != "image" || Kind("c.pdf") != "pdf" || Kind("d.MKV") != "video" {
+	if Kind("a.HEIC") != "image" || Kind("b.webp") != "image" || Kind("c.pdf") != "pdf" || Kind("d.MKV") != "video" {
 		t.Fatal("kinds")
 	}
 	if FitSize(1) != 160 || FitSize(321) != 640 || FitSize(99999) != 1280 {
@@ -314,5 +314,53 @@ func TestDecodedSizeLimitCountsBytesPerPixel(t *testing.T) {
 	}
 	if pixels*bytesPerPixel(color.NRGBA64Model) <= maxDecoded {
 		t.Error("a 90 megapixel 16-bit picture with transparency would be decoded in titand")
+	}
+}
+
+// TestRealFFmpeg runs the ffmpeg of the system (or TITANOS_TEST_FFMPEG):
+// a video thumbnail with the descriptor option of ffmpeg 7.1 (24.11.2026,
+// "-i fd:0" was refused) and, with TITANOS_TEST_HEIC, a HEIC picture whose
+// tiles must come back as one picture. Skipped without ffmpeg.
+func TestRealFFmpeg(t *testing.T) {
+	ffmpeg := os.Getenv("TITANOS_TEST_FFMPEG")
+	if ffmpeg == "" {
+		p, err := exec.LookPath("ffmpeg")
+		if err != nil {
+			t.Skip("no ffmpeg")
+		}
+		ffmpeg = p
+	}
+	m := New()
+	m.lookPath = func(string) (string, error) { return ffmpeg, nil }
+	dir := t.TempDir()
+	clip := filepath.Join(dir, "make.mp4")
+	if out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=10", "-y", clip).CombinedOutput(); err != nil {
+		t.Skipf("ffmpeg cannot make a test clip: %v %s", err, out)
+	}
+	data, err := os.ReadFile(clip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thumb, _, err := m.Get(context.Background(), source(t, dir, "clip.mp4", data), 160)
+	if err != nil {
+		t.Fatalf("video: %v", err)
+	}
+	if b := decode(t, thumb).Bounds(); b.Dx() != 160 || b.Dy() != 120 {
+		t.Fatalf("video thumbnail %v", b)
+	}
+	heic := os.Getenv("TITANOS_TEST_HEIC")
+	if heic == "" {
+		return
+	}
+	data, err = os.ReadFile(heic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thumb, _, err = m.Get(context.Background(), source(t, dir, "IMG_0001.HEIC", data), 640)
+	if err != nil {
+		t.Fatalf("heic: %v", err)
+	}
+	if b := decode(t, thumb).Bounds(); b.Dx() != 640 {
+		t.Fatalf("heic thumbnail %v", b)
 	}
 }
