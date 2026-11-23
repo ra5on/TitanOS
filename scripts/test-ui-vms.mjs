@@ -295,8 +295,12 @@ async function context(theme = "graphit", width = 1440, locale = "de") {
     if (addresses)
       return json(
         addresses[1] === "windows-11"
-          ? { addresses: ["192.168.1.42", "fd00::42"], source: "agent" }
-          : { addresses: [], source: "" },
+          ? {
+              addresses: ["192.168.1.42", "fd00::42"],
+              source: "agent",
+              agent: "connected",
+            }
+          : { addresses: [], source: "", agent: "missing" },
       );
     if (/^\/vms\/[^/]+\/snapshots$/.test(path))
       return json({
@@ -369,6 +373,21 @@ try {
     await page.goto(`${base}/vms?vm=windows-11&tab=overview`);
     await page.getByText("192.168.1.42").waitFor();
     assert.ok(await page.getByText("laut Gastagent").isVisible());
+    assert.ok(await page.locator(".agent-ok").isVisible(), "agent connected");
+    // Without the agent (23 Nov 2026): why it matters and how to install it.
+    await page.goto(`${base}/vms?vm=home-assistant&tab=overview`);
+    await page.locator(".agent-missing").waitFor();
+    await page.getByText("Linux Mint", { exact: false }).first().waitFor();
+    assert.equal(await page.locator(".install li").count(), 3);
+    assert.ok(
+      (await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      )) <= 0,
+      "agent rows: no sideways scroll",
+    );
+    await shot(page, "agent-missing-1440");
+    await page.goto(`${base}/vms?vm=windows-11&tab=overview`);
+    await page.getByText("192.168.1.42").waitFor();
     assert.ok(
       await page.getByText("NVIDIA", { exact: false }).first().isVisible(),
     );

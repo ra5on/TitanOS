@@ -103,11 +103,18 @@ type powerArea struct {
 	ctx           context.Context
 	rebuildingNow func(ctx context.Context) bool
 	goJob         jobFunc
+	// withoutAgent lists the running VMs without a guest agent; nil
+	// without VMs.
+	withoutAgent func(ctx context.Context) []string
 }
 
 // powerArea is the area of the server.
 func (s *Server) powerArea() powerArea {
-	return powerArea{shutdown: func() *shutdown.Manager { return s.opts.Shutdown }, power: s.opts.Power, mu: &s.powerMu, pending: &s.power, ctx: s.ctx, rebuildingNow: s.rebuildingNow, goJob: s.goJob}
+	a := powerArea{shutdown: func() *shutdown.Manager { return s.opts.Shutdown }, power: s.opts.Power, mu: &s.powerMu, pending: &s.power, ctx: s.ctx, rebuildingNow: s.rebuildingNow, goJob: s.goJob}
+	if s.opts.VMs != nil {
+		a.withoutAgent = s.opts.VMs.WithoutAgent
+	}
+	return a
 }
 
 func (a powerArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
@@ -120,11 +127,17 @@ func (a powerArea) register(mux *routeMux, admin func(http.HandlerFunc) http.Han
 func (a powerArea) handlePowerStatus(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	res := map[string]any{"pending": nil, "rebuilding": a.rebuildingNow(ctx), "preparing": nil}
+	res := map[string]any{"pending": nil, "rebuilding": a.rebuildingNow(ctx), "preparing": nil, "viaContainer": viaContainer(remoteIP(r))}
 	if a.shutdown() != nil {
-		if status := a.shutdown().Status(); status != nil {
+		// The dialog asks here: someone still follows and can decide.
+		if status := a.shutdown().Watch(); status != nil {
 			res["preparing"] = status
 		}
+	}
+	// Before the confirmation only: the dialog warns about VMs that may not
+	// shut down when asked. Not while it follows a preparation every 2 s.
+	if res["preparing"] == nil && a.withoutAgent != nil {
+		res["vmsWithoutAgent"] = a.withoutAgent(ctx)
 	}
 	a.mu.Lock()
 	if a.pending.action != "" {

@@ -50,7 +50,13 @@ async function open(width) {
     }
     if (req.method() === "DELETE") state.preparing = null;
     return r.fulfill({
-      json: { pending: null, rebuilding: false, preparing: state.preparing },
+      json: {
+        pending: null,
+        rebuilding: false,
+        preparing: state.preparing,
+        viaContainer: true,
+        vmsWithoutAgent: state.preparing ? undefined : ["linux-mint"],
+      },
     });
   });
   // The restart itself: the health check answers once the NAS is "back".
@@ -68,6 +74,14 @@ async function startRestart(page) {
   await page.locator("[data-menu-button]").first().click();
   await page.locator('.launcher [data-menu-do="restart"]').click();
   const dialog = page.locator("dialog[open]");
+  // Before confirming (23 Nov 2026): VMs without guest agent, and the way
+  // in through a Docker container that goes down first.
+  await dialog.getByText(/Ohne Gast-Agent: linux-mint/).waitFor();
+  await dialog.getByText(/über einen Docker-Container/).waitFor();
+  await dialog.screenshot({
+    path: `${out}/confirm-${page.viewportSize().width}.png`,
+    animations: "disabled",
+  });
   await dialog
     .getByRole("button", { name: "Neu starten", exact: true })
     .click();
