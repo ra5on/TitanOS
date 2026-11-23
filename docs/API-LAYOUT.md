@@ -72,7 +72,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | passkeys | `passkeys.go` | – | 1 |
 | pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 4 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
-| power | `power_button.go` | `powerButtonArea` | 0 |
+| power | `power_button.go`, `power_container.go` | `powerButtonArea` | 1 |
 | preferences | `preferences.go` | `prefsArea` | 0 |
 | processes | `processes.go` | `processesArea` | 1 |
 | public | `public_routes.go` | – | 0 |
