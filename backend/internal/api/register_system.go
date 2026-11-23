@@ -4,6 +4,7 @@ package api
 func (s *Server) registerPower(mux *routeMux) {
 	systemArea{monitor: s.opts.Monitor, version: s.opts.Version, network: s.opts.Network, accelerators: s.opts.Accelerators, notify: s.opts.Notify, reminders: s.reminders.latest}.register(mux, s.requireUser)
 	s.powerArea().register(mux, s.requireAdmin)
+	disclaimerArea{store: s.opts.Store, state: &s.disclaimer}.register(mux, s.requireUser, s.browserOnly)
 	// Task manager (PLAN 61): owners and administrators, never tokens/MCP.
 	processesArea{procs: s.opts.Processes, docker: s.opts.Docker, names: &s.containerNames}.register(mux, s.requireAdmin, s.browserOnly)
 }

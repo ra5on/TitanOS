@@ -266,7 +266,9 @@ type Server struct {
 	manual *toolcatalog.Manual
 	// power is a restart or shutdown that waits for a rebuild; see system.go.
 	powerMu sync.Mutex
-	power   pendingPower
+	// disclaimer: the owner's confirmation of DISCLAIMER.md (disclaimer.go).
+	disclaimer disclaimerStore
+	power      pendingPower
 	// rebuilding replaces the rebuild check in tests.
 	rebuilding func() bool
 	haUndo     haUndoStore

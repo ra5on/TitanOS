@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session, setupOwner } from '#lib/session.svelte.ts';
+	import DisclaimerText from '#lib/components/DisclaimerText.svelte';
 	import AuthCard from './AuthCard.svelte';
 	import Restore from './Restore.svelte';
 
@@ -17,7 +18,11 @@
 	let show = $state(false);
 	let busy = $state(false);
 	// A problem with one field is shown under it; anything else above the button.
-	let problems = $state({ name: '', password: '', repeat: '' });
+	let problems = $state({ name: '', password: '', repeat: '', disclaimer: '' });
+	// The owner confirms the disclaimer when setting the NAS up (23 Nov 2026).
+	let disclaimerRead = $state(false);
+	let showDisclaimer = $state(false);
+	let disclaimerField = $state<HTMLInputElement>();
 	let error = $state('');
 	let nameField = $state<HTMLInputElement>();
 	let passwordField = $state<HTMLInputElement>();
@@ -34,6 +39,7 @@
 					? t('auth.passwordTooShort', { min: MIN_PASSWORD_LENGTH })
 					: '',
 			repeat: password !== repeat ? t('auth.passwordMismatch') : '',
+			disclaimer: disclaimerRead ? '' : t('disclaimer.setupHint'),
 		};
 		// The first field with a problem gets the focus.
 		const first = problems.name
@@ -42,7 +48,9 @@
 				? passwordField
 				: problems.repeat
 					? repeatField
-					: undefined;
+					: problems.disclaimer
+						? disclaimerField
+						: undefined;
 		if (first) {
 			first.focus();
 			return;
@@ -122,6 +130,28 @@
 			<label class="check"
 				><input type="checkbox" bind:checked={show} />{t('auth.showPasswords')}</label
 			>
+			<div class="disclaimer">
+				<button
+					type="button"
+					class="link"
+					aria-expanded={showDisclaimer}
+					onclick={() => (showDisclaimer = !showDisclaimer)}>{t('disclaimer.show')}</button
+				>
+				{#if showDisclaimer}<div class="disclaimer-text"><DisclaimerText /></div>{/if}
+				<label class="check"
+					><input
+						bind:this={disclaimerField}
+						type="checkbox"
+						bind:checked={disclaimerRead}
+						onchange={() => (problems.disclaimer = '')}
+						aria-invalid={problems.disclaimer !== ''}
+						aria-describedby={problems.disclaimer ? 'disclaimer-problem' : undefined}
+					/>{t('disclaimer.accept')}</label
+				>
+				{#if problems.disclaimer}<small class="problem" id="disclaimer-problem"
+						>{problems.disclaimer}</small
+					>{/if}
+			</div>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<button class="btn btn-primary" type="submit" disabled={busy}
 				>{t(busy ? 'auth.creatingOwner' : 'auth.createOwner')}</button
@@ -131,6 +161,28 @@
 </AuthCard>
 
 <style>
+	.disclaimer {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.disclaimer .link {
+		align-self: flex-start;
+		background: none;
+		border: 0;
+		padding: 0;
+		color: var(--accent);
+		font: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.disclaimer-text {
+		max-height: 16rem;
+		overflow-y: auto;
+		padding: var(--space-2-5) var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+	}
 	.intro {
 		margin: 0;
 		font-size: var(--text-md);

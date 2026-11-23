@@ -34,6 +34,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	{ p: '/settings/about', k: 'about.licenses', kind: 'group' },
 	{
 		p: '/settings/about',
+		k: 'disclaimer.title',
+		kind: 'row',
+		in: ['about.licenses'],
+		id: 'about-disclaimer',
+	},
+	{
+		p: '/settings/about',
 		k: 'about.license',
 		kind: 'row',
 		in: ['about.licenses'],
