@@ -178,6 +178,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/appearance',
+		k: 'appearance.fx.interaction',
+		kind: 'row',
+		tab: 'glass',
+		in: ['look.effects'],
+	},
+	{
+		p: '/settings/appearance',
 		k: 'appearance.fx.transitions',
 		kind: 'row',
 		tab: 'glass',

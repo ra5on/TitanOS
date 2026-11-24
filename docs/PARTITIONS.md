@@ -1,7 +1,7 @@
 # Partitionseditor
 
-Der Partitionseditor ergänzt „Laufwerk formatieren“ im Dateimanager
-(Dateien › Laufwerk formatieren …, nur Besitzer und Administratoren). Neben
+Der Partitionseditor ergänzt „Laufwerk formatieren“ in der Speicherverwaltung
+(Speicher › Laufwerke › Laufwerk formatieren …, nur Besitzer und Administratoren). Neben
 jedem Laufwerk der Liste steht „Partitionen …“. Er zeigt die Aufteilung einer
 Platte, die zu keinem Volume des NAS gehört, und ändert einzelne Partitionen,
 ohne die ganze Platte zu löschen.

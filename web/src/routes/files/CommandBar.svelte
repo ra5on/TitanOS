@@ -69,7 +69,8 @@
 		{ column: 'size', label: 'files.size' },
 	];
 
-	// 0: everything labelled; 1: symbols only; 2: also Auswahl and Sortieren in "…".
+	// Keep the names of the two primary actions. Fold secondary labels first,
+	// then selection and sorting, and finally the clipboard and delete icons.
 	let stage = $state(0);
 	let bar = $state<HTMLElement>();
 	// Measured after each step is drawn (tick): labels and the two menus come and go with the stage.
@@ -78,7 +79,7 @@
 		if (!bar || fitting) return;
 		fitting = true;
 		try {
-			for (const next of [0, 1, 2]) {
+			for (const next of [0, 1, 2, 3]) {
 				stage = next;
 				await tick();
 				if (!bar || bar.scrollWidth <= bar.clientWidth + 1) break;
@@ -120,7 +121,7 @@
 	aria-label={t('files.commands')}
 >
 	{#if writable}
-		<Dropdown label={t('files.new')} text={stage === 0 ? t('files.new') : undefined} icon="plus">
+		<Dropdown label={t('files.new')} text={t('files.new')} icon="plus">
 			{#snippet children(close)}
 				<button type="button" role="menuitem" onclick={() => run(close, 'mkdir')}
 					><Icon name="folder" size={16} /><span>{t('files.newFolder')}</span></button
@@ -143,7 +144,7 @@
 			title={t('files.upload')}
 			aria-label={t('files.upload')}
 			onclick={() => oncommand('upload')}
-			><Icon name="upload" size={16} /><span class="label">{t('files.upload')}</span></button
+			><Icon name="upload" size={16} /><span>{t('files.upload')}</span></button
 		>
 		<input
 			bind:this={fileInput}
@@ -161,33 +162,61 @@
 		/>
 		<span class="sep" aria-hidden="true"></span>
 	{/if}
-	<button
-		type="button"
-		class="cmd icon"
-		title={t('files.clipboardCopy')}
-		aria-label={t('files.clipboardCopy')}
-		disabled={!selected}
-		onclick={() => oncommand('clipboardCopy')}><Icon name="copy" size={16} /></button
-	>
-	<button
-		type="button"
-		class="cmd icon"
-		title={t('files.paste')}
-		aria-label={t('files.paste')}
-		disabled={!canPaste}
-		onclick={() => oncommand('paste')}><Icon name="paste" size={16} /></button
-	>
-	<button
-		type="button"
-		class="cmd icon"
-		title={t('files.delete')}
-		aria-label={t('files.delete')}
-		disabled={!selected || !writable}
-		onclick={() => oncommand('delete')}><Icon name="trash" size={16} /></button
-	>
-	<span class="sep" aria-hidden="true"></span>
+	{#if stage < 3}<button
+			type="button"
+			class="cmd icon"
+			title={t('files.clipboardCopy')}
+			aria-label={t('files.clipboardCopy')}
+			disabled={!selected}
+			onclick={() => oncommand('clipboardCopy')}><Icon name="copy" size={16} /></button
+		>
+		<button
+			type="button"
+			class="cmd icon"
+			title={t('files.paste')}
+			aria-label={t('files.paste')}
+			disabled={!canPaste}
+			onclick={() => oncommand('paste')}><Icon name="paste" size={16} /></button
+		>
+		<button
+			type="button"
+			class="cmd icon"
+			title={t('files.delete')}
+			aria-label={t('files.delete')}
+			disabled={!selected || !writable}
+			onclick={() => oncommand('delete')}><Icon name="trash" size={16} /></button
+		>
+		<span class="sep" aria-hidden="true"></span>
+	{/if}
 	<Dropdown label={t('ui.more')} icon="more">
 		{#snippet children(close)}
+			{#if stage >= 3}
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!selected}
+					onclick={() => run(close, 'clipboardCopy')}
+				>
+					<Icon name="copy" size={16} />{t('files.clipboardCopy')}
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!canPaste}
+					onclick={() => run(close, 'paste')}
+				>
+					<Icon name="paste" size={16} />{t('files.paste')}
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!selected || !writable}
+					onclick={() => run(close, 'delete')}
+				>
+					<Icon name="trash" size={16} />{t('files.delete')}
+				</button>
+				<hr />
+			{/if}
 			<button
 				type="button"
 				role="menuitem"
@@ -392,7 +421,7 @@
 		gap: var(--space-1);
 		padding: var(--space-1-5) var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
-		overflow: hidden;
+		position: relative;
 		min-width: 0;
 	}
 	/* Quiet buttons as in Explorer: no frame until hovered. */
@@ -417,9 +446,29 @@
 		flex: none;
 	}
 	.cmd.icon {
+		position: relative;
 		width: 2rem;
 		padding: 0;
 		justify-content: center;
+	}
+	.cmd.icon:focus-visible::after {
+		content: attr(aria-label);
+		position: absolute;
+		inset-block-start: calc(100% + 3px);
+		inset-inline-start: 0;
+		z-index: 5;
+		max-width: 14rem;
+		padding: 3px 7px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--panel);
+		white-space: normal;
+		width: max-content;
+		pointer-events: none;
+	}
+	.cmd.icon:last-child:focus-visible::after {
+		inset-inline-start: auto;
+		inset-inline-end: 0;
 	}
 	.cmd:hover:not(:disabled) {
 		background: var(--chip);
@@ -434,9 +483,8 @@
 	.command-bar > :global(*) {
 		flex: none;
 	}
-	.command-bar[data-stage='1'] .label,
-	.command-bar[data-stage='2'] .label {
-		display: none;
+	.command-bar[data-stage='3'] {
+		flex-wrap: wrap;
 	}
 	.sep {
 		width: 1px;

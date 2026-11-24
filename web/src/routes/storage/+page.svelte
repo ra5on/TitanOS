@@ -7,7 +7,8 @@
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
-	import { storage } from '#lib/storage.svelte.ts';
+	import { refreshStorage, storage } from '#lib/storage.svelte.ts';
+	import DriveFormatDialog from '../files/DriveFormatDialog.svelte';
 	import AddDiskDialog from './AddDiskDialog.svelte';
 	import ProfileDialog from './ProfileDialog.svelte';
 	import { takesDisk } from './btrfs.ts';
@@ -22,11 +23,13 @@
 	const sp = new StoragePage();
 	const phone = $derived(phoneView());
 	const degraded = $derived(sp.volumes.find((volume) => volume.state === 'degraded'));
+	let formatDrive = $state(false);
 
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the page.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	import { lockedBlocks } from './crypt.ts';
 	registerMenuCommands({
+		'storage.formatDrive': { run: () => (formatDrive = true), enabled: () => sp.canAdminister },
 		'storage.newVolume': {
 			run: () => (sp.dialog = { kind: 'create' }),
 			enabled: () => sp.canAdminister,
@@ -178,6 +181,11 @@
 		><option value="name">{t('disk.device')}</option><option value="size">{t('disk.size')}</option
 		>{#if sp.tab === 'disks'}<option value="temperature">{t('disk.temp')}</option>{/if}</select
 	>
+	{#if sp.canAdminister && sp.tab === 'disks'}
+		<button type="button" class="btn" onclick={() => (formatDrive = true)}
+			>{t('files.formatDrive')}</button
+		>
+	{/if}
 </div>
 <div
 	class="storage-layout"
@@ -201,6 +209,9 @@
 			>{/if}
 		{#if problems}<span class="warn">{t('storage.problemCount', { count: problems })}</span>{/if}
 	</StatusBar>
+{/if}
+{#if formatDrive && sp.canAdminister}
+	<DriveFormatDialog onclose={() => (formatDrive = false)} onformatted={refreshStorage} />
 {/if}
 {#if sp.sleepOpen}<DiskSleepDialog
 		status={sp.diskSleep}

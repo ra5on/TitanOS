@@ -30,7 +30,6 @@
 		onrefreshbackups: () => void;
 		onmanagefavorites: () => void;
 		onremovefavorite: (favorite: Favorite) => void;
-		onformat: () => void;
 		/** PLAN 69: the places are the side bar of the window (symbols, group headings like it). */
 		windowed?: boolean;
 	};
@@ -54,7 +53,6 @@
 		onrefreshbackups,
 		onmanagefavorites,
 		onremovefavorite,
-		onformat,
 		windowed = false,
 	}: Props = $props();
 
@@ -195,13 +193,6 @@
 			{/if}
 		</div>
 	{/each}
-{/if}
-
-{#if admin}
-	<!-- Also for drives without a filesystem, which are not listed above. -->
-	<button type="button" class="note link format-link" onclick={onformat}
-		><Icon name="disk" size={14} />{t('files.formatDrive')}</button
-	>
 {/if}
 
 <!-- USB backups only take room when there are some; setting them up happens under Settings. -->
@@ -460,16 +451,5 @@
 	}
 	.link {
 		color: var(--accent);
-	}
-	.format-link {
-		display: flex;
-		align-items: center;
-		gap: var(--space-1-5);
-		border: 0;
-		background: none;
-		text-align: left;
-		cursor: pointer;
-		font: inherit;
-		font-size: var(--text-base);
 	}
 </style>

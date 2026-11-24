@@ -200,7 +200,6 @@ export class FilesState {
 
 	// --- USB drives and their backups ---------------------------------------
 
-	formattingDrive = $state(false);
 	backupLocked = $derived(!!this.root && this.usb.isLocked(this.root.id, this.root.kind));
 	writable = $derived(!!this.root?.writable && !this.backupLocked);
 	safeRoots = $derived(
