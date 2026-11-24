@@ -191,6 +191,20 @@ func TestUSBProgressOnlyUsesCachedStates(t *testing.T) {
 	}
 }
 
+func TestCachedListReportsUnknownJobsWithoutReadingDisks(t *testing.T) {
+	// No store, source callback or mount root.
+	manager := &Manager{
+		loaded: true,
+		jobs:   []Job{{ID: "Ready", Password: "secret"}, {ID: "Unknown"}},
+		states: map[string]*State{"Ready": {Running: true}},
+	}
+	views, err := manager.CachedList()
+	if err != nil || len(views) != 2 || !views[0].StateKnown || !views[0].State.Running ||
+		views[0].Job.Password != "" || views[1].StateKnown {
+		t.Fatalf("cached list: %+v, %v", views, err)
+	}
+}
+
 func TestCopySkipsProblemsAndKeepsGoing(t *testing.T) {
 	source, target := t.TempDir(), t.TempDir()
 	m := NewManager(config.Open(t.TempDir()))

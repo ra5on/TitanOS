@@ -4049,6 +4049,7 @@
 	"files.rightReason.protected": "This path is managed by a virtual machine and protected against changes.",
 	"files.rightsHint": "These are the TitanOS permissions for your signed-in account. Unix permissions are listed separately above. Filesystem errors, a read-only drive or subsequent permission changes can also prevent an action.",
 	"files.autoRefreshFailed": "Automatic refresh failed. The last file list stays visible; TitanOS will try again.",
+	"files.pendingUnavailable": "Unfinished uploads could not be loaded.",
 	"files.previousVersion": "Previous version",
 	"files.previousCompare": "Compare versions",
 	"files.currentVersion": "Current version",

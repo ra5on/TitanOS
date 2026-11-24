@@ -166,7 +166,7 @@ Die App sichert Fotos und Videos in eine Freigabe und einen Ordner nach Wahl (TE
 `POST /api/v1/app/photos/verify` mit `{items:[{sha256, size}]}` (höchstens 500) direkt bevor die App etwas vom Handy löscht.
 
 - `saved` nur, wenn ein Eintrag im Index in einer Freigabe liegt, die das Konto jetzt erreicht, und die Datei dort eine gewöhnliche Datei mit derselben Größe ist.
-- Hat sich ihre Änderungszeit geändert, rechnet das NAS die Prüfsumme nach (höchstens 1 GiB je Anfrage). Was nicht mehr hineinpasst, ist `unsure` und wird nicht gelöscht.
+- Das NAS liest die Datei für die Prüfsumme auch bei gleicher Änderungszeit. Die Prüfung liest höchstens 1 GiB je Anfrage. Was nicht hineinpasst oder während der Prüfung nicht zuverlässig gelesen werden kann, ist `unsure` und bleibt am Handy.
 - Liegt das Foto in einer Freigabe, die das Konto gerade nicht erreicht (Volume nicht eingebunden, Freigabe entfernt, Recht entzogen), antwortet `verify` seit 1.22 `unsure` statt `missing`. Die App 1.03 prüft Gesichertes regelmäßig nach und zeigt nur bei `missing` „fehlt auf dem NAS“; ein nicht eingebundenes Volume darf nicht alle Fotos darauf so markieren.
 - Antwort wie bei `check`, mit `root` und `path` der bestätigten Datei.
 - Gelöscht wird nur am Handy und nur nach Tippen: über `MediaStore.createTrashRequest`, Android fragt noch einmal, alles liegt 30 Tage im Papierkorb des Handys. Aufnahmen der letzten 30 Tage bleiben.

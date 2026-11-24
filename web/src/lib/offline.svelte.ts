@@ -243,8 +243,10 @@ export function noteForOffline(path: string, data: unknown) {
 			});
 			return;
 		}
-		case '/backups': {
+		case '/backups':
+		case '/backups?cached=1': {
 			const list = Array.isArray(d.jobs) ? (d.jobs as Record<string, unknown>[]) : [];
+			if (list.some((job) => job.stateKnown === false)) return;
 			save('backups', (c) => {
 				c.backups = {
 					at,
@@ -254,7 +256,12 @@ export function noteForOffline(path: string, data: unknown) {
 						return {
 							name: str(job.name) || str(job.id),
 							lastRun: str(state.lastRun) || undefined,
-							lastOk: typeof state.lastOk === 'boolean' ? state.lastOk : undefined,
+							lastOk:
+								typeof state.lastOk === 'boolean'
+									? state.lastOk
+									: str(state.lastRun)
+										? !str(state.lastError)
+										: undefined,
 							running: state.running === true,
 						};
 					}),

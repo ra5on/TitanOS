@@ -146,15 +146,22 @@ func TestAppPhotoBackup(t *testing.T) {
 	if got[0].State != photoSaved || got[1].State != photoSaved || got[2].State != photoMissing {
 		t.Fatalf("verify: %+v", got)
 	}
-	// A new time with the same content is read again and still confirmed;
-	// changed content is not.
+	// A new time with the same content is confirmed. Changed content is
+	// rejected even if the stored size and modification time still match.
 	one := filepath.Join(dir, "Handy/2026/11/IMG_1.jpg")
 	later := time.Now().Add(time.Hour)
-	os.Chtimes(one, later, later)
+	if err := os.Chtimes(one, later, later); err != nil {
+		t.Fatal(err)
+	}
 	if got := verify(photoItem{SHA256: photoSum("picture one"), Size: 11}); got[0].State != photoSaved {
 		t.Fatalf("touched: %+v", got)
 	}
-	os.WriteFile(one, []byte("picture 1!!"), 0644)
+	if err := os.WriteFile(one, []byte("picture 1!!"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(one, later, later); err != nil {
+		t.Fatal(err)
+	}
 	if got := verify(photoItem{SHA256: photoSum("picture one"), Size: 11}); got[0].State != photoMissing {
 		t.Fatalf("changed: %+v", got)
 	}

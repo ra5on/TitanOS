@@ -1,10 +1,13 @@
 <script lang="ts">
 	// PLAN 61: what one widget of the desktop shows. Reads only data the UI
 	// keeps anyway (system, storage, Docker/VM lists); nothing wakes disks.
+	import { untrack } from 'svelte';
 	import { api } from '../api.ts';
+	import { poll } from '../poll.ts';
 	import {
 		formatBytes,
 		formatBytesOf,
+		formatDateTime,
 		formatDecimal,
 		formatDuration,
 		formatMegabytesPerSecond,
@@ -69,8 +72,8 @@
 	// Network history for the line: the last two minutes, kept in this widget.
 	let history = $state<{ rx: number; tx: number }[]>([]);
 	$effect(() => {
-		if (kind !== 'network') return;
-		history = [...history.slice(-59), { rx, tx }];
+		if (kind !== 'network' || !info) return;
+		history = [...untrack(() => history.slice(-59)), { rx, tx }];
 	});
 	const maxRate = $derived(Math.max(1, ...history.map((h) => Math.max(h.rx, h.tx))));
 	const line = (key: 'rx' | 'tx') =>
@@ -87,14 +90,30 @@
 
 	type BackupJob = {
 		job: { id: string; name?: string };
-		state: { running: boolean; lastRun?: string; lastOk?: boolean; nextRun?: string };
+		stateKnown?: boolean;
+		state: { running: boolean; lastRun?: string; lastError?: string };
 	};
 	let backups = $state<BackupJob[] | null>(null);
+	let backupsChecked = $state<Date | null>(null);
+	let backupsUnavailable = $state(false);
 	$effect(() => {
 		if (kind !== 'backups') return;
-		api.get<{ jobs: BackupJob[] }>('/backups').then(
-			(r) => (backups = r.jobs ?? []),
-			() => (backups = []),
+		return poll(
+			async (signal) => {
+				try {
+					const result = await api.get<{ jobs: BackupJob[] }>(
+						'/backups?cached=1',
+						AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+					);
+					if (signal.aborted) return;
+					backups = result.jobs ?? [];
+					backupsChecked = new Date();
+					backupsUnavailable = false;
+				} catch {
+					if (!signal.aborted) backupsUnavailable = true;
+				}
+			},
+			{ interval: 20000 },
 		);
 	});
 
@@ -366,27 +385,38 @@
 	</div>
 {:else if kind === 'backups'}
 	<h4>{t('desktop.widget.backups')}</h4>
-	{#if backups === null}
+	{#if backupsUnavailable}
+		<p class="warn-text small" role="status">
+			{backupsChecked
+				? t('desktop.widget.backupsStale', { time: formatDateTime(backupsChecked) })
+				: t('desktop.widget.backupsUnavailable')}
+		</p>
+	{:else if backups === null}
 		<p class="muted small">{t('common.loading')}</p>
-	{:else}
+	{/if}
+	{#if backups !== null}
 		{#each backups.slice(0, 4) as b (b.job.id)}
 			<div class="row small">
 				<span class="ellipsis">{b.job.name || b.job.id}</span>
-				<span class="muted"
-					>{b.state.running
-						? t('desktop.widget.backupRunning')
-						: b.state.lastRun
-							? new Date(b.state.lastRun).toLocaleDateString(locale)
-							: '–'}</span
+				<span class="muted" class:warn-text={!!b.state.lastError && !b.state.running}
+					>{b.stateKnown === false
+						? t('safeguard.unknown')
+						: b.state.running
+							? t('desktop.widget.backupRunning')
+							: b.state.lastError
+								? t('desktop.widget.backupsFailed')
+								: b.state.lastRun
+									? new Date(b.state.lastRun).toLocaleDateString(locale)
+									: '–'}</span
 				>
 			</div>
 		{:else}
-			<p class="muted small">{t('desktop.widget.noBackups')}</p>
+			{#if !backupsUnavailable}<p class="muted small">{t('desktop.widget.noBackups')}</p>{/if}
 		{/each}
-		<button type="button" class="btn small-btn" onclick={() => onopen('app:backup')}
-			>{t('desktop.widget.openBackups')}</button
-		>
 	{/if}
+	<button type="button" class="btn small-btn" onclick={() => onopen('app:backup')}
+		>{t('desktop.widget.openBackups')}</button
+	>
 {:else if kind === 'homeassistant'}
 	<h4>{t('desktop.widget.homeassistant')}</h4>
 	{#if entities === null}

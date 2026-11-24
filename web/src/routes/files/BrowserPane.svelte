@@ -146,6 +146,9 @@
 			/>
 		{/if}
 
+		{#if p.pendingError}<p class="notice-warn" role="status">
+				{t('files.pendingUnavailable')}
+			</p>{/if}
 		<UnfinishedUploads
 			pending={p.pending}
 			root={p.root}

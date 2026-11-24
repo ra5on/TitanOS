@@ -217,6 +217,27 @@ func (m *Manager) List() []View {
 	return views
 }
 
+// CachedList is for the desktop widget. It never wakes a data volume just
+// to display a status. Until a job's state is read elsewhere it is unknown.
+func (m *Manager) CachedList() ([]View, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return nil, ErrNotLoaded
+	}
+	views := make([]View, 0, len(m.jobs))
+	for _, job := range m.jobs {
+		shown, set := withoutSecrets(job)
+		view := View{Job: shown, SecretSet: set}
+		if state := m.states[job.ID]; state != nil {
+			view.StateKnown = state.StatusError == ""
+			view.State = *state
+		}
+		views = append(views, view)
+	}
+	return views, nil
+}
+
 // Job returns a stored job without its password.
 func (m *Manager) Job(id string) (Job, bool) {
 	job, ok := m.find(id)

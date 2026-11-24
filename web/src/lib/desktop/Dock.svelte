@@ -25,6 +25,7 @@
 	// desktop. Programs are pinned, moved and removed by dragging; a right click
 	// on the dock (not on an icon) opens its own menu with the edit mode for
 	// size, opacity, animation and position.
+	import { MediaQuery } from 'svelte/reactivity';
 	import { t } from '../i18n/index.svelte.ts';
 	import Icon from '../components/Icon.svelte';
 	import DesktopIcon from './DesktopIcon.svelte';
@@ -68,11 +69,15 @@
 		preview ? [] : [...new Set(wm.windows.map((w) => w.app))].filter((a) => !pinned.includes(a)),
 	);
 	const vertical = $derived(dock.position !== 'bottom');
-	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const motion = new MediaQuery('(prefers-reduced-motion: reduce)');
+	const reduced = $derived(motion.current);
 
 	let bar = $state<HTMLElement>();
 	let scale = $state<Record<string, number>>({});
 	let dropAt = $state<number | null>(null);
+	$effect(() => {
+		if (reduced || !dock.magnify || edit) scale = {};
+	});
 
 	// Growing under the pointer: each icon by its distance to the pointer.
 	function hover(event: PointerEvent) {

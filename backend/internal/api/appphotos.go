@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/appphotos"
+	"github.com/ra5on/TitanOS/backend/internal/diskwake"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
@@ -31,9 +33,8 @@ const (
 	photoItemsMax = 500
 	// photoBodyMax bounds its body.
 	photoBodyMax = 1 << 20
-	// photoHashBudget is how many bytes one request reads again to be sure
-	// (a file whose time changed, a file already in the target that the
-	// index does not know); what does not fit is "unsure".
+	// photoHashBudget bounds the work of one request. A file that does
+	// not fit in the remaining budget is "unsure".
 	photoHashBudget = 1 << 30
 )
 
@@ -166,10 +167,14 @@ func statInRoot(root files.Root, p string) (fileState, error) {
 
 // hashInRoot reads a file of a root for its SHA-256 and takes it from the
 // budget; ok is false once the budget would run out.
-func hashInRoot(root files.Root, p string, budget *int64) (sum string, state fileState, ok bool, err error) {
+func hashInRoot(ctx context.Context, root files.Root, p string, size int64, budget *int64) (sum string, state fileState, ok bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return "", fileState{}, false, err
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
-		return "", fileState{}, false, err
+		// Failure to open the root says nothing about the indexed file.
+		return "", fileState{}, false, nil
 	}
 	defer r.Close()
 	f, err := r.OpenFile(p, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
@@ -181,18 +186,33 @@ func hashInRoot(root files.Root, p string, budget *int64) (sum string, state fil
 	if err != nil {
 		return "", fileState{}, false, err
 	}
-	if !st.Mode().IsRegular() {
+	if !st.Mode().IsRegular() || st.Size() != size {
 		return "", fileState{}, false, fs.ErrNotExist
 	}
 	if st.Size() > *budget {
 		return "", fileState{}, false, nil
 	}
-	*budget -= st.Size()
+	*budget -= size
 	h := sha256.New()
-	if _, err := io.CopyBuffer(h, f, make([]byte, 64<<10)); err != nil {
+	// The length limit also applies if another process extends the file.
+	n, err := io.CopyBuffer(h, io.LimitReader(f, size), make([]byte, 64<<10))
+	if err != nil {
 		return "", fileState{}, false, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), fileState{size: st.Size(), modTime: st.ModTime().UnixNano()}, true, nil
+	if err := ctx.Err(); err != nil {
+		return "", fileState{}, false, err
+	}
+	current, err := r.Lstat(p)
+	if err != nil {
+		return "", fileState{}, false, err
+	}
+	before, haveBefore := st.Sys().(*syscall.Stat_t)
+	after, haveAfter := current.Sys().(*syscall.Stat_t)
+	if n != size || !os.SameFile(st, current) || current.Size() != size ||
+		!st.ModTime().Equal(current.ModTime()) || (haveBefore && haveAfter && before.Ctim != after.Ctim) {
+		return "", fileState{}, false, nil
+	}
+	return hex.EncodeToString(h.Sum(nil)), fileState{size: size, modTime: st.ModTime().UnixNano()}, true, nil
 }
 
 // handleCheck answers which pictures already lie in a target (share and
@@ -238,7 +258,7 @@ func (a appPhotosArea) handleCheck(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if answer.State != photoSaved && it.Path != "" {
-			answer.State = a.probe(root, dir, it, user, device, &budget, &answer)
+			answer.State = a.probe(r.Context(), root, dir, it, user, device, &budget, &answer)
 		}
 		out = append(out, answer)
 	}
@@ -248,7 +268,7 @@ func (a appPhotosArea) handleCheck(w http.ResponseWriter, r *http.Request) {
 // probe looks at the place the app would put a picture: the same content
 // there counts as saved (and goes into the index), another or none as
 // missing.
-func (a appPhotosArea) probe(root files.Root, dir string, it photoItem, user, device string, budget *int64, answer *photoAnswer) string {
+func (a appPhotosArea) probe(ctx context.Context, root files.Root, dir string, it photoItem, user, device string, budget *int64, answer *photoAnswer) string {
 	p, err := files.CleanPath(path.Join(dir, it.Path))
 	if err != nil || p == "." || !within(dir, p) {
 		return photoMissing
@@ -257,7 +277,7 @@ func (a appPhotosArea) probe(root files.Root, dir string, it photoItem, user, de
 	if err != nil || st.size != it.Size {
 		return photoMissing
 	}
-	sum, state, ok, err := hashInRoot(root, p, budget)
+	sum, state, ok, err := hashInRoot(ctx, root, p, it.Size, budget)
 	switch {
 	case err != nil:
 		return photoMissing
@@ -274,10 +294,9 @@ func (a appPhotosArea) probe(root files.Root, dir string, it photoItem, user, de
 }
 
 // handleVerify confirms before "Speicher freigeben" that a picture lies on
-// the NAS with its content: in the index, in a root the account can still
-// reach, a regular file of the same size and time. A changed time is read
-// again within the budget; what cannot be checked now is "unsure", never
-// confirmed.
+// the NAS with its content: a regular file in an accessible root whose
+// bytes still match the indexed hash. An unavailable or incomplete check
+// is "unsure", even when the file's recorded time and size match.
 func (a appPhotosArea) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Items []photoItem `json:"items"`
@@ -314,19 +333,19 @@ func (a appPhotosArea) handleVerify(w http.ResponseWriter, r *http.Request) {
 				}
 				continue
 			}
-			st, err := statInRoot(root, e.Path)
-			if err != nil || st.size != e.Size {
+			diskwake.Note(root.Volume, diskwake.FileManager, user)
+			sum, state, ok, err := hashInRoot(r.Context(), root, e.Path, e.Size, &budget)
+			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ELOOP) {
 				continue
 			}
-			if st.modTime != e.ModTime {
-				sum, state, ok, err := hashInRoot(root, e.Path, &budget)
-				if err != nil || (ok && sum != e.SHA256) {
-					continue
-				}
-				if !ok {
-					answer.State = photoUnsure
-					continue
-				}
+			if err != nil || !ok {
+				answer.State = photoUnsure
+				continue
+			}
+			if sum != e.SHA256 {
+				continue
+			}
+			if state.modTime != e.ModTime {
 				// Same content, new time (copied back, touched): kept anew.
 				if err := a.store.Record(user, device, appphotos.Entry{SHA256: sum, Size: state.size, Root: e.Root, Path: e.Path, ModTime: state.modTime}); err != nil {
 					slog.Warn("photo backup: record a checked picture", "err", err)
