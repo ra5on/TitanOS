@@ -300,8 +300,18 @@ func (a appPhotosArea) handleVerify(w http.ResponseWriter, r *http.Request) {
 	for _, it := range req.Items {
 		answer := photoAnswer{SHA256: it.SHA256, State: photoMissing}
 		for _, e := range index[it.SHA256] {
+			if e.Size != it.Size {
+				continue
+			}
 			root, ok := roots[e.Root]
-			if !ok || e.Size != it.Size {
+			if !ok {
+				// The share is not reachable now (volume not mounted, share
+				// gone or rights taken away): nothing can be said about the
+				// picture, so never "missing" (the app would flag every
+				// picture on an unmounted volume, 24.11.2026).
+				if answer.State == photoMissing {
+					answer.State = photoUnsure
+				}
 				continue
 			}
 			st, err := statInRoot(root, e.Path)
