@@ -100,6 +100,15 @@ func (a backupsArea) register(mux *routeMux, g guards) {
 }
 
 func (a backupsArea) handleBackups(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Query().Get("cached") == "1" {
+		jobs, err := a.backup.CachedList()
+		if err != nil {
+			writeBackupJobError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
+		return
+	}
 	shares := a.backup.Sources()
 	if shares == nil {
 		shares = []backup.Source{}

@@ -4049,6 +4049,7 @@
 	"files.rightReason.protected": "Dieser Pfad wird von einer virtuellen Maschine verwaltet und ist gegen Änderungen geschützt.",
 	"files.rightsHint": "Diese Angaben beschreiben die TitanOS-Rechte für dein angemeldetes Konto. Unix-Rechte stehen oben separat. Dateisystemfehler, ein schreibgeschützter Datenträger oder nachträglich geänderte Rechte können Aktionen zusätzlich verhindern.",
 	"files.autoRefreshFailed": "Die automatische Aktualisierung ist fehlgeschlagen. Die letzte Dateiliste bleibt sichtbar; TitanOS versucht es erneut.",
+	"files.pendingUnavailable": "Unfertige Uploads konnten nicht geladen werden.",
 	"files.previousVersion": "Vorherige Fassung",
 	"files.previousCompare": "Fassungen vergleichen",
 	"files.currentVersion": "Aktuelle Fassung",

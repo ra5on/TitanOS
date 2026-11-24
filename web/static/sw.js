@@ -24,7 +24,8 @@ self.addEventListener('activate', (event) =>
 // not a file, not the API, not a web app or the manual) comes from the NAS
 // as before; its HTML is kept – one for TitanOS, one for the agent app,
 // whose HTML differs a little. When the NAS does not answer within a few
-// seconds, the kept HTML is the answer, and the page shows the last state
+// seconds or a gateway returns 502, 503 or 504, the kept HTML is the answer,
+// and the page shows the last state
 // it saw (lib/offline.svelte.ts). The hashed files of the UI
 // (/_app/immutable/) are kept as the page loads them: a part of TitanOS
 // that was never opened with the NAS is not there without it. A new
@@ -73,17 +74,27 @@ async function navigate(event, url) {
 	const network = fetch(event.request);
 	// Kept whenever the NAS answered, even after the kept page was shown.
 	event.waitUntil(network.then((res) => keepShell(url, res)).catch(() => {}));
-	const kept = async () => (await caches.open(SHELL_CACHE)).match(shellKey(url));
+	const kept = () =>
+		caches
+			.open(SHELL_CACHE)
+			.then((cache) => cache.match(shellKey(url)))
+			.catch(() => undefined);
+	let timer;
 	try {
 		const res = await Promise.race([
 			network,
-			new Promise((_, fail) => setTimeout(() => fail(new Error('slow')), SHELL_WAIT_MS)),
+			new Promise((_, fail) => {
+				timer = setTimeout(() => fail(new Error('slow')), SHELL_WAIT_MS);
+			}),
 		]);
+		if ([502, 503, 504].includes(res.status)) return (await kept()) ?? res;
 		return res;
 	} catch {
 		const page = await kept();
 		if (page) return page;
 		return network; // nothing kept: the browser's own error
+	} finally {
+		clearTimeout(timer);
 	}
 }
 

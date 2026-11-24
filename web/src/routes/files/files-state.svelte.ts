@@ -127,6 +127,7 @@ export class FilesState {
 
 	// Partial uploads of the folder; UnfinishedUploads offers to finish them.
 	pending = $state<UploadStatus[]>([]);
+	pendingError = $state(false);
 	recovering = $state(false);
 
 	// --- List position, history and search ---------------------------------
@@ -230,34 +231,60 @@ export class FilesState {
 			this.error = apiErrorText(err);
 		}
 	};
+	private listingRequest: AbortController | undefined;
+	private navigation = 0;
+
 	load = async () => {
+		await this.loadListing();
+	};
+
+	private loadListing = async () => {
+		this.listingRequest?.abort();
 		if (!this.rootId) {
 			this.entries = null;
 			this.pending = [];
-			return;
+			this.pendingError = false;
+			this.listLoading = false;
+			return false;
 		}
 		const requestedRoot = this.rootId,
 			requestedDir = this.dir;
+		const request = new AbortController();
+		this.listingRequest = request;
+		const current = () =>
+			!request.signal.aborted && this.rootId === requestedRoot && this.dir === requestedDir;
+		const query = new URLSearchParams({ root: requestedRoot, path: requestedDir });
 		this.listLoading = true;
+		this.pendingError = false;
+		if (this.writable) {
+			void api.get<UploadStatus[]>('/files/uploads?' + query, request.signal).then(
+				(parts) => {
+					if (current()) this.pending = parts;
+				},
+				() => {
+					if (current()) this.pendingError = true;
+				},
+			);
+		} else {
+			this.pending = [];
+		}
 		try {
-			const query = `root=${encodeURIComponent(requestedRoot)}&path=${encodeURIComponent(requestedDir)}`;
-			const [listing, parts] = await Promise.all([
-				api.get<FileEntry[]>(`/files/list?${query}`),
-				this.writable ? api.get<UploadStatus[]>(`/files/uploads?${query}`) : Promise.resolve([]),
-			]);
-			if (this.rootId !== requestedRoot || this.dir !== requestedDir) return;
+			const listing = await api.get<FileEntry[]>('/files/list?' + query, request.signal);
+			if (!current()) return false;
 			this.entries = listing;
-			this.pending = parts;
 			const names = new Set(this.entries.map((entry) => entry.name));
 			this.selected = this.selected.filter((name) => names.has(name));
 			this.listError = '';
+			this.refreshError = false;
 			this.error = '';
+			return true;
 		} catch (err) {
-			if (this.rootId !== requestedRoot || this.dir !== requestedDir) return;
+			if (!current()) return false;
 			this.entries = null;
 			this.listError = apiErrorText(err);
+			return false;
 		} finally {
-			if (this.rootId === requestedRoot && this.dir === requestedDir) this.listLoading = false;
+			if (current()) this.listLoading = false;
 		}
 	};
 
@@ -293,6 +320,7 @@ export class FilesState {
 		this.navigate(id, path);
 	};
 	navigate = async (id: string, path: string, restore?: Location) => {
+		const navigation = ++this.navigation;
 		const chosen = this.roots?.find((place) => place.id === id);
 		if (
 			(chosen?.kind === 'share' || chosen?.kind === 'volume') &&
@@ -318,13 +346,14 @@ export class FilesState {
 		this.entries = null;
 		this.listError = '';
 		this.pending = [];
-		await this.load();
-		if (this.rootId !== id || this.dir !== path) return;
+		const loaded = await this.loadListing();
+		if (!loaded || navigation !== this.navigation) return;
 		if (restore) {
 			const names = new Set((this.entries ?? ([] as FileEntry[])).map((e) => e.name));
 			this.selected = restore.selected.filter((name) => names.has(name));
 		}
 		await tick();
+		if (navigation !== this.navigation) return;
 		this.virtualList?.setScroll(restore?.listScroll ?? 0);
 		window.scrollTo({ top: restore?.scroll ?? 0, behavior: 'instant' });
 	};
@@ -406,6 +435,7 @@ export class FilesState {
 		onMount(() => {
 			void this.prefs.load();
 			void loadWebApps();
+			return () => this.listingRequest?.abort();
 		});
 		$effect(() => this.usb.watch());
 		// Looks again every ten seconds, unless the user is in the middle of something.
@@ -417,6 +447,7 @@ export class FilesState {
 				this.backgroundMenu !== null ||
 				this.dragging ||
 				this.trash ||
+				this.listLoading ||
 				!this.rootId ||
 				this.root?.kind === 'stick' ||
 				this.entries === null ||
@@ -424,7 +455,8 @@ export class FilesState {
 			const refresh = async (signal: AbortSignal) => {
 				const id = this.rootId,
 					path = this.dir,
-					before = this.entries;
+					before = this.entries,
+					request = this.listingRequest;
 				try {
 					const listing = await api.get<FileEntry[]>(
 						'/files/list?' + new URLSearchParams({ root: id, path }),
@@ -434,6 +466,7 @@ export class FilesState {
 						signal.aborted ||
 						id !== this.rootId ||
 						path !== this.dir ||
+						request !== this.listingRequest ||
 						before !== this.entries ||
 						blocked()
 					)
@@ -450,7 +483,13 @@ export class FilesState {
 					const names = new Set(listing.map((e) => e.name));
 					this.selected = this.selected.filter((n) => names.has(n));
 					await tick();
-					if (signal.aborted || id !== this.rootId || path !== this.dir) return;
+					if (
+						signal.aborted ||
+						id !== this.rootId ||
+						path !== this.dir ||
+						request !== this.listingRequest
+					)
+						return;
 					const next = Array.from(document.querySelectorAll<HTMLElement>('[data-file-name]')).find(
 						(e) => e.dataset.fileName === name,
 					);
@@ -462,7 +501,13 @@ export class FilesState {
 						behavior: 'instant',
 					});
 				} catch {
-					if (!signal.aborted && id === this.rootId && path === this.dir) this.refreshError = true;
+					if (
+						!signal.aborted &&
+						id === this.rootId &&
+						path === this.dir &&
+						request === this.listingRequest
+					)
+						this.refreshError = true;
 				}
 			};
 			return poll(refresh, { interval: 10000, immediate: false, skip: blocked });
