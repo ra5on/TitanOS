@@ -7,6 +7,7 @@
 	import { userSettingsPaths } from '#lib/settings-search.ts';
 	import { loadSettingsStates } from '#lib/settings-states.svelte.ts';
 	import { markAreaSeen } from '#lib/settings-seen.svelte.ts';
+	import { rememberSetting } from '#lib/settings-opened.ts';
 	let { children }: { children: Snippet } = $props();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const allowed = $derived(
@@ -17,6 +18,7 @@
 	onMount(() => loadSettingsStates(admin));
 	// Opening an area once takes its "new" badge away.
 	$effect(() => markAreaSeen(page.url.pathname));
+	$effect(() => rememberSetting(session.data?.user?.name ?? '', admin, page.url.pathname));
 </script>
 
 <!-- PLAN 61/65: the window (or the phone's bar) lists the settings pages;

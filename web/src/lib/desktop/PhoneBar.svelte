@@ -19,6 +19,7 @@
 	import { settingsGroupOf, settingsMenu } from '../settings-search.ts';
 	import { mailUp } from '../tmail/levels.ts';
 	import { contactsUp } from '../pim/contact-levels.ts';
+	import { pagePath } from '../page-title.svelte.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -47,6 +48,7 @@
 	}
 
 	const app = $derived(appForPath(page.url.pathname));
+	const title = $derived(pagePath.value.at(-1)?.label ?? (app ? t(app.label) : ''));
 	// The arrow goes one level up: in the settings from a page to its area,
 	// from an area to the list of areas, and only from there (and from every
 	// other program) to the home screen.
@@ -139,7 +141,7 @@
 			size={26}
 			name={t(app.label)}
 		/>{/if}
-	<b>{app ? t(app.label) : ''}</b>
+	<b>{title}</b>
 	<span class="space"></span>
 	{#if node}<span
 			class="node mono"

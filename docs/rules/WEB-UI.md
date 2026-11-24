@@ -6,6 +6,8 @@ Bereich: Desktop-Modus, Grundaufbau, Bestätigungsdialoge, Marke, Einstellungsse
 
 ## Web-UI
 
+**Mobiler Seitenkopf seit 1.24:** Die obere Leiste nennt die aktuelle Seite einmal und bietet den Rückweg. Der Inhalt beginnt mit Zustand, Liste oder der gewählten Aufgabe. Aktionen stehen am zugehörigen Inhalt. Wenn der Platz knapp wird, gehen weniger wichtige Aktionen ins ⋯-Menü. In Sicherungen steht Aktualisieren beim Sicherungsstand, in Netzwerk steht Netz hinzufügen bei der Netzliste.
+
 Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
 
 **Entwürfe:** `docs/design/` enthält die Quelltexte aller Entwurfsseiten (`*.dc.html`, Übersicht in `docs/design/README.md`). Vor der Arbeit an einer Seite die passende Datei lesen und Aufbau, Abstände, Farben (siehe `Appearance.dc.html` für alle Theme-Werte) und Verhalten übernehmen – nicht den Code, der nutzt ein Entwurfsformat mit eigener Laufzeit. Beispieldaten darin nie ins Produkt übernehmen. Screenshots, falls vorhanden, in `docs/design/screenshots/`.

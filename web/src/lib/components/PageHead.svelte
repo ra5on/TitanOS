@@ -254,6 +254,11 @@
 	<h1 class="sr-only set-mark" {id}>{section ?? title}</h1>
 	{#if hasBar}<div class="set-head">{@render toolbar()}</div>{/if}
 	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
+{:else if pathHead && phone}
+	<!-- The phone bar shows the current page and provides the way up. -->
+	<h1 class="sr-only set-mark" {id}>{section ?? title}</h1>
+	{#if hasBar}<div class="set-head">{@render toolbar()}</div>{/if}
+	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
 {:else if pathHead}
 	<!-- PLAN 78-1: the path title; the page's actions stand at its right (below it when narrow). -->
 	<div class="set-head">

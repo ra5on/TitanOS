@@ -25,7 +25,6 @@
 		settingsGroupLabel,
 		settingsGroupIcons,
 		settingsGroupOf,
-		settingsGroups,
 		settingsMenu,
 		type SettingsEntry,
 	} from '#lib/settings-search.ts';
@@ -44,6 +43,7 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
+	import SettingsShortcuts from './SettingsShortcuts.svelte';
 
 	const prefix = 'settings-home';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
@@ -55,7 +55,7 @@
 		if ((searching || !inWindow) && !index)
 			void loadSettingsIndex().then((loaded) => (index = loaded));
 	});
-	const hits = $derived(searching ? findSettings(settingsSearch.query, admin, t, index) : []);
+	const flat = $derived(searching ? findSettings(settingsSearch.query, admin, t, index) : []);
 	// The phone shows the areas first and an area's pages on "?area="; a
 	// wide tab of its own has the room for every page under its area.
 	const drill = $derived(!mode.wide);
@@ -70,20 +70,6 @@
 			? []
 			: settingsEntries('', admin, t).filter((group) => (drill ? group.group === openGroup : true)),
 	);
-	// With a search: the hits under the heading of their area, pages of other
-	// programs (Mein Konto) after them.
-	const hitGroups = $derived.by(() => {
-		const out: { id: string; title: string; hits: SettingsHit[] }[] = [];
-		for (const group of settingsGroups) {
-			const mine = hits.filter((hit) => hit.group === group);
-			if (mine.length) out.push({ id: group, title: t(settingsGroupLabel(group)), hits: mine });
-		}
-		const others = hits.filter((hit) => !hit.group);
-		if (others.length)
-			out.push({ id: 'other', title: others[0].where.split(' › ')[0], hits: others });
-		return out;
-	});
-	const flat = $derived(searching ? hitGroups.flatMap((g) => g.hits) : []);
 	const states = $derived(settingsStates());
 	const active = $derived(
 		searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1,
@@ -194,14 +180,11 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div class="groups" id="{prefix}-results" onclick={clear}>
 			{#if searching}
-				{#each hitGroups as group (group.id)}
-					{@const offset = flat.indexOf(group.hits[0])}
-					<SettingGroup title={group.title} id="{prefix}-group-{group.id}">
-						{#each group.hits as hit, i (hit.href + '\n' + hit.label + '\n' + hit.where)}
-							{@render found(hit, `${prefix}-${offset + i}`, offset + i === active)}
-						{/each}
-					</SettingGroup>
-				{/each}
+				<SettingGroup>
+					{#each flat as hit, i (hit.href + '\n' + hit.label + '\n' + hit.where)}
+						{@render found(hit, `${prefix}-${i}`, i === active)}
+					{/each}
+				</SettingGroup>
 			{:else if openGroup || !drill}
 				{#each groups as group (group.group)}
 					<SettingGroup
@@ -212,6 +195,7 @@
 					</SettingGroup>
 				{/each}
 			{:else}
+				<SettingsShortcuts {admin} />
 				<SettingGroup id="{prefix}-areas">
 					{#each areas as area (area.group)}
 						<SettingRow

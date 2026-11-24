@@ -1,6 +1,10 @@
 {
 	"settingshome.all": "All settings",
-	"settingshome.searchHint": "Search settings, e.g. “time zone”, “SSH”, “disk sleep”",
+	"settingshome.searchHint": "Search settings, e.g. “away from home”",
+	"settingshome.tasks": "What would you like to do?",
+	"settingshome.taskRemote": "Connect away from home",
+	"settingshome.taskSleep": "Put idle drives to sleep",
+	"settingshome.opened": "Recently opened",
 	"settingshome.group.system": "System",
 	"settingshome.group.hardware": "Hardware and power",
 	"settingshome.group.network": "Network and remote access",

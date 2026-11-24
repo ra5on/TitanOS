@@ -10,6 +10,7 @@
 	import { api, type VolumeState } from '#lib/api.ts';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingsShortcuts from './SettingsShortcuts.svelte';
 	import { activityLabel, type ActivityEntry, type ActivityPage } from '#lib/activity.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime, formatDuration, osVersion } from '#lib/format.ts';
@@ -98,6 +99,7 @@
 {/snippet}
 
 <div class="overview">
+	<SettingsShortcuts {admin} />
 	<div class="health">
 		<SettingGroup title={t('settingshome.health')} id="{prefix}-health">
 			{#if info}
