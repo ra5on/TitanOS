@@ -61,7 +61,8 @@ export const synonyms: Record<string, string> = {
 	'settings.consoles': 'terminal shell konsole console bestätigung confirmation',
 	'webdav.enabled': 'webdav netzlaufwerk network drive finder',
 	// Netzwerk
-	'netx.tab.remote': 'fernzugriff remote access vpn tailscale netbird',
+	'netx.tab.remote':
+		'fernzugriff von unterwegs außer haus remote access away from home vpn tailscale netbird',
 	'=Tailscale': 'tailscale tailnet vpn fernzugriff remote',
 	'=NetBird': 'netbird vpn fernzugriff remote',
 	'netcfg.hostname': 'hostname name nas-name rechnername umbenennen rename',
@@ -78,6 +79,7 @@ export const synonyms: Record<string, string> = {
 	'cluster.create': 'anlegen create knoten mehrere nas verbund',
 	// Mein Konto
 	'account.group.bell': 'glocke bell töne sounds mitteilungen',
+	'account.password': 'passwort ändern eigenes kennwort wechseln change my password',
 	// Firewall
 	'firewall.tab.zones': 'zone zonen matrix vlan eigene own docker netz network ziel destination',
 	'firewall.tab.networks':
@@ -230,7 +232,11 @@ export function findSettings(
 		const label = entry.k ? translate(entry.k) : (entry.x ?? '');
 		const ref = entry.k ?? `=${entry.x}`;
 		const title = normalize(label);
-		const own = `${title} ${normalize(synonyms[ref] ?? '')}`;
+		const aliases =
+			entry.kind === 'page' && entry.p === '/settings/backups/restore'
+				? 'dateien daten zurückholen wiederbekommen recover files get data back'
+				: (synonyms[ref] ?? '');
+		const own = `${title} ${normalize(aliases)}`;
 		const pageLabel = translate(area?.label ?? other!.label);
 		const tabEntry = entry.tab
 			? index!.find((e) => e.kind === 'tab' && e.p === entry.p && e.tab === entry.tab)

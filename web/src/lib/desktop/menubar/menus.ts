@@ -197,6 +197,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('storage.sleep', 'menubar.storage.sleep'),
 			cmd('storage.rescan', 'menubar.storage.rescan'),
 			go('storage.go.diskTools', 'desktop.side.diskTools', '/tools/disks'),
+			go('storage.go.maintenance', 'ops.maintenance', '/tools/maintenance'),
 		]),
 		menu('view', 'menubar.menu.view', [
 			radio('storage.tab.volumes', 'menubar.storage.volumes'),

@@ -4,20 +4,23 @@
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import Rule321 from './Rule321.svelte';
 	import { notesLine, type BackupNote } from '#lib/backup-notes.ts';
-	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
 	type Jobs = {
 		jobs: {
-			job: { id: string; enabled: boolean };
+			job: { id: string; name?: string; enabled: boolean };
 			stateKnown?: boolean;
 			state: {
 				lastOK: string | null;
 				lastError: string;
+				lastErrorCode?: string;
+				probe?: { at: string; error?: string };
 				warning: string;
 				problems?: BackupNote[] | null;
 				notices?: BackupNote[] | null;
@@ -40,6 +43,7 @@
 	let dataError = $state('');
 	let configError = $state('');
 	let loading = $state(false);
+	let checked = $state<Date | null>(null);
 	async function load() {
 		if (loading) return;
 		loading = true;
@@ -65,6 +69,7 @@
 				},
 			),
 		]);
+		checked = new Date();
 		loading = false;
 	}
 	// Opening/refreshing this page may list backup archives on a volume. Never poll it.
@@ -99,6 +104,12 @@
 	const failures = $derived(
 		jobs?.jobs.filter((v) => v.state.lastError && v.state.lastError !== 'cancelled') ?? [],
 	);
+	const lastProbe = $derived(
+		jobs?.jobs
+			.flatMap(({ state }) => (state.probe ? [state.probe] : []))
+			.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+			.at(-1),
+	);
 	const unknown = $derived(
 		jobs?.jobs.filter((v) => v.stateKnown === false || v.state.statusError) ?? [],
 	);
@@ -116,16 +127,39 @@
 	});
 </script>
 
-<PageHead title={t('safeguard.title')}>
-	<p class="muted">{t('safeguard.intro')}</p>
-	{#snippet actions()}<button class="btn" disabled={loading} onclick={load}
-			>{t(loading ? 'common.loading' : 'safeguard.refresh')}</button
-		>{/snippet}
-</PageHead>
+<PageHead title={t('safeguard.title')} />
 
-<!-- PLAN 78-1: the state as rows; the value stands where a row has its control. -->
-<div class="state" aria-busy={loading}>
-	<SettingGroup title={t('safeguard.state')}>
+<SettingGroup
+	title={t('safeguard.state')}
+	id="backup-status"
+	desc={checked ? t('safeguard.checked', { time: formatDateTime(checked) }) : undefined}
+>
+	{#snippet tools()}
+		<button
+			type="button"
+			class="btn icon-btn"
+			disabled={loading}
+			onclick={load}
+			aria-label={t('safeguard.refresh')}
+			title={t('safeguard.refresh')}><Icon name="refresh" /></button
+		>
+	{/snippet}
+	{#each failures as { job, state } (job.id)}
+		<div class="notice-error backup-warning" role="alert">
+			<strong>{t('safeguard.jobFailed', { name: job.name || job.id })}</strong>
+			{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
+			<a href="/settings/backups/data#backup-{encodeURIComponent(job.id)}"
+				>{t('safeguard.checkJob')}</a
+			>
+		</div>
+	{/each}
+	<SettingRow
+		id="backup-recover-file"
+		icon="folder"
+		title={t('safeguard.filesRestore')}
+		href="/settings/backups/restore#restore-files"
+	/>
+	<div class="state" aria-busy={loading}>
 		<SettingRow id="backup-last-data" icon="archive" title={t('safeguard.lastData')}>
 			{#snippet control()}<strong
 					>{unknown.length
@@ -134,6 +168,17 @@
 							? date(lastData)
 							: t(loading ? 'common.loading' : 'safeguard.unknown')}</strong
 				>{/snippet}
+		</SettingRow>
+		<SettingRow id="backup-last-probe" icon="shield" title={t('safeguard.lastProbe')}>
+			{#snippet control()}<strong>
+					{jobs
+						? lastProbe
+							? t(lastProbe.error ? 'safeguard.probeFailed' : 'safeguard.probePassed', {
+									time: date(lastProbe.at),
+								})
+							: t(unknown.length ? 'safeguard.unknown' : 'safeguard.probeNone')
+						: t(loading ? 'common.loading' : 'safeguard.unknown')}
+				</strong>{/snippet}
 		</SettingRow>
 		<SettingRow id="backup-last-config" icon="gear" title={t('safeguard.lastConfig')}>
 			{#snippet control()}<strong
@@ -149,18 +194,12 @@
 							: t('safeguard.noSchedule')}</strong
 				>{/snippet}
 		</SettingRow>
-	</SettingGroup>
-</div>
+	</div>
+</SettingGroup>
 {#if dataError || configError}<div class="notice-error" role="alert">
 		{#if dataError}<p>{t('safeguard.data')}: {dataError}</p>{/if}
 		{#if configError}<p>{t('safeguard.config')}: {configError}</p>{/if}
 		<button class="btn" disabled={loading} onclick={load}>{t('ui.retry')}</button>
-	</div>{/if}
-{#if failures.length}<div class="notice-error" role="alert">
-		<p>{t('safeguard.dataErrors', { count: failures.length })}</p>
-		{#each failures as view}<a
-				href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a
-			>{/each}
 	</div>{/if}
 {#each unknown as view}<p class="notice-warn">
 		<a href="/settings/backups/data#backup-{encodeURIComponent(view.job.id)}">{view.job.id}</a>: {t(
@@ -180,7 +219,6 @@
 {#if config && !config.backup.settings.enabled}<p class="notice-warn">{t('safeguard.configOff')}</p>
 {:else if config && !config.backup.target}<p class="notice-warn">{t('stick.noVolume')}</p>{/if}
 
-<Rule321 jobs={jobs?.jobs} />
 <!-- Every part of the program as a row that leads there. -->
 <SettingGroup id="backup-data" title={t('safeguard.data')} desc={t('safeguard.dataHint')}>
 	{#snippet tools()}<a class="btn" href="/settings/backups/data">{t('safeguard.manage')}</a
@@ -222,11 +260,6 @@
 	{#snippet tools()}<a class="btn" href="/settings/backups/restore">{t('safeguard.openRestore')}</a
 		>{/snippet}
 	<SettingRow
-		icon="folder"
-		title={t('safeguard.filesRestore')}
-		href="/settings/backups/restore#restore-files"
-	/>
-	<SettingRow
 		icon="undo"
 		title={t('safeguard.configRestore')}
 		href="/settings/backups/restore#restore-config"
@@ -237,6 +270,10 @@
 		href="/settings/backups/restore#stick-replace"
 	/>
 </SettingGroup>
+<details>
+	<summary>{t('safeguard.backupStrategy')}</summary>
+	<Rule321 jobs={jobs?.jobs} />
+</details>
 
 <style>
 	.state {
@@ -248,6 +285,11 @@
 	}
 	p {
 		margin: 0;
+	}
+	.backup-warning {
+		display: grid;
+		justify-items: start;
+		gap: var(--space-1);
 	}
 	.notice-error a {
 		margin-right: var(--space-3);

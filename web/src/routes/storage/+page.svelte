@@ -6,6 +6,7 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import AddDiskDialog from './AddDiskDialog.svelte';
 	import ProfileDialog from './ProfileDialog.svelte';
@@ -19,6 +20,8 @@
 
 	// State and actions live in storage-page.svelte.ts.
 	const sp = new StoragePage();
+	const phone = $derived(phoneView());
+	const degraded = $derived(sp.volumes.find((volume) => volume.state === 'degraded'));
 
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the page.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -55,39 +58,59 @@
 	});
 </script>
 
-<PageHead title={t('storage.title')}>
-	{#if storage.status}<p class="muted">{sp.summary}</p>{/if}
-	{#snippet actions()}{#if sp.canAdminister}
-			<Dropdown label={t('storage.options')} text={t('storage.options')} icon="more" align="right">
-				{#snippet children(close)}
-					<a role="menuitem" href="/storage/import">{t('ops.import')}</a>
-					<a role="menuitem" href="/tools/maintenance">{t('ops.maintenance')}</a>
-					<a role="menuitem" href="/storage/smart">{t('smart.open')}</a>
-					<button
-						role="menuitem"
-						disabled={sp.busy}
-						onclick={() => {
-							close();
-							sp.rescan();
-						}}>{t('storage.rescan')}</button
-					>
-					<button
-						role="menuitem"
-						onclick={() => {
-							close();
-							sp.sleepOpen = true;
-						}}>{t('storage.sleepTitle')}</button
-					>
-				{/snippet}
-			</Dropdown>
-			<button class="btn btn-primary" onclick={() => (sp.dialog = { kind: 'create' })}
-				>{t('storage.newVolume')}</button
-			>
-		{/if}{/snippet}
+{#snippet actions()}{#if sp.canAdminister}
+		<Dropdown label={t('storage.options')} text={t('storage.options')} icon="more" align="right">
+			{#snippet children(close)}
+				<a role="menuitem" href="/storage/import">{t('ops.import')}</a>
+				<a role="menuitem" href="/tools/maintenance">{t('ops.maintenance')}</a>
+				<a role="menuitem" href="/storage/smart">{t('smart.open')}</a>
+				<button
+					role="menuitem"
+					disabled={sp.busy}
+					onclick={() => {
+						close();
+						sp.rescan();
+					}}>{t('storage.rescan')}</button
+				>
+				<button
+					role="menuitem"
+					onclick={() => {
+						close();
+						sp.sleepOpen = true;
+					}}>{t('storage.sleepTitle')}</button
+				>
+			{/snippet}
+		</Dropdown>
+		<button class="btn btn-primary" onclick={() => (sp.dialog = { kind: 'create' })}
+			>{t('storage.newVolume')}</button
+		>
+	{/if}{/snippet}
+
+<PageHead title={t('storage.title')} actions={!phone && sp.canAdminister ? actions : undefined}>
+	{#if !phone && storage.status}<p class="muted">{sp.summary}</p>{/if}
 </PageHead>
 {#if sp.error}<div class="notice-error" role="alert">
 		{sp.error.text}{#if sp.error.detail}<pre>{sp.error.detail}</pre>{/if}
 	</div>{/if}
+{#if phone && degraded}<section
+		class="notice-warn checks-hint"
+		aria-labelledby="storage-degraded-title"
+	>
+		<strong id="storage-degraded-title"
+			>{t('storage.degradedTitle', { volume: degraded.name })}</strong
+		>
+		<p>{t('storage.degradedNote')}</p>
+		<div class="row-actions">
+			<button
+				type="button"
+				class="btn"
+				onclick={() => {
+					sp.switchTab('volumes');
+					sp.selected = degraded?.name ?? '';
+				}}>{t('storage.showVolume')}</button
+			>
+		</div>
+	</section>{/if}
 {#if sp.checksHint.length > 0}<section
 		class="notice-warn checks-hint"
 		aria-labelledby="checks-hint-title"
@@ -121,6 +144,11 @@
 			>{t('storage.tabDisks')} <span>{sp.disks.length}</span></button
 		>
 	</div>
+	{#if phone && sp.canAdminister && sp.tab === 'volumes'}
+		<button type="button" class="btn" onclick={() => (sp.dialog = { kind: 'create' })}>
+			{t('storage.newVolume')}
+		</button>
+	{/if}
 	<input
 		class="field search"
 		type="search"

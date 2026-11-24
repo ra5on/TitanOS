@@ -110,6 +110,9 @@ test('what the owner looked for is found, best hit first (German)', () => {
 	assert.equal(first('ssh').href, '/settings/access#access-ssh');
 	assert.ok(hrefs('Zeitzone').includes('/settings/timezone'));
 	assert.ok(hrefs('platten-ruhe').includes('/settings/energy'));
+	assert.equal(first('von unterwegs').href, '/settings/network?tab=remote');
+	assert.equal(first('Passwort ändern').href, '/account#acc-password');
+	assert.equal(first('Daten zurückholen').href, '/settings/backups/restore');
 	// A part inside a row: the titles lead through the row.
 	assert.ok(
 		hrefs('Exit Node').some((h) =>

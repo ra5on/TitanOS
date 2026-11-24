@@ -6,6 +6,7 @@
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import LinkDialog from './LinkDialog.svelte';
 	import PluginDetails from './PluginDetails.svelte';
 	import ProblemNotice from './ProblemNotice.svelte';
@@ -20,6 +21,7 @@
 	const pg = new PluginsPage();
 	const status = $derived(pg.status);
 	const current = $derived(pg.current);
+	const phone = $derived(phoneView());
 
 	// PLAN 67-1: the menu bar of the desktop – the head's actions of the plugins.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -36,32 +38,34 @@
 	});
 </script>
 
-<PageHead title={t('plugins.title')}>
+{#snippet introduction()}
 	<p class="muted">{t('plugins.intro')} <a href="/apps">{t('nav.apps')}</a></p>
 	<p class="muted">{t('plugins.catalogIntro')}</p>
-	{#snippet actions()}
-		<a class="btn" href="/plugins/cleanup">{t('cleanup.title')}</a>
-		<button
-			type="button"
-			class="btn"
-			disabled={pg.locked}
-			onclick={() => ((pg.error = null), (pg.sourcesOpen = true))}>{t('plugins.sourceList')}</button
-		>
-		<button
-			type="button"
-			class="btn"
-			disabled={pg.locked || !pg.volumes.length}
-			onclick={pg.openLink}>{t('plugins.fromLink')}</button
-		>
-		<button
-			type="button"
-			class="btn"
-			disabled={pg.busy || pg.refreshing}
-			onclick={() => pg.refreshCatalog(true)}
-			>{t(pg.refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button
-		>
-	{/snippet}
-</PageHead>
+{/snippet}
+{#snippet catalogActions()}
+	<a class="btn" href="/plugins/cleanup">{t('cleanup.title')}</a>
+	<button
+		type="button"
+		class="btn"
+		disabled={pg.locked}
+		onclick={() => ((pg.error = null), (pg.sourcesOpen = true))}>{t('plugins.sourceList')}</button
+	>
+	<button type="button" class="btn" disabled={pg.locked || !pg.volumes.length} onclick={pg.openLink}
+		>{t('plugins.fromLink')}</button
+	>
+	<button
+		type="button"
+		class="btn"
+		disabled={pg.busy || pg.refreshing}
+		onclick={() => pg.refreshCatalog(true)}
+		>{t(pg.refreshing ? 'plugins.catalogLoading' : 'plugins.catalogRefresh')}</button
+	>
+{/snippet}
+<PageHead
+	title={t('plugins.title')}
+	children={phone ? undefined : introduction}
+	actions={phone ? undefined : catalogActions}
+/>
 
 {#if status?.catalog.state === 'development'}
 	<p class="notice-warn" role="status">{t('plugins.catalogDevelopment')}</p>
@@ -214,6 +218,13 @@
 				: t('plugins.whereNone')}</span
 		>
 	</StatusBar>
+{/if}
+
+{#if phone}
+	<details>
+		<summary>{t('plugins.catalogHelp')}</summary>
+		{@render introduction()}
+	</details>
 {/if}
 
 {#if pg.removing}

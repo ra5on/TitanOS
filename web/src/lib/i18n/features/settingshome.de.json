@@ -1,6 +1,10 @@
 {
 	"settingshome.all": "Alle Einstellungen",
-	"settingshome.searchHint": "Einstellung suchen, z. B. „Zeitzone“, „SSH“, „Platten-Ruhe“",
+	"settingshome.searchHint": "Einstellung suchen, z. B. „von unterwegs“",
+	"settingshome.tasks": "Was möchtest du tun?",
+	"settingshome.taskRemote": "Von unterwegs zugreifen",
+	"settingshome.taskSleep": "Festplatten ruhen lassen",
+	"settingshome.opened": "Zuletzt geöffnet",
 	"settingshome.group.system": "System",
 	"settingshome.group.hardware": "Hardware und Energie",
 	"settingshome.group.network": "Netzwerk und Fernzugriff",

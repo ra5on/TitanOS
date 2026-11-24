@@ -205,14 +205,7 @@
 	const applied = (n: NASNetwork) => !!current?.networks?.some((c) => c.id === n.id);
 </script>
 
-<PageHead title={t('netcfg.title')}>
-	<p class="muted">{t('netx.intro')}</p>
-	{#snippet actions()}
-		<button class="btn btn-primary" disabled={locked || !draft} onclick={() => editNetwork()}
-			><Icon name="plus" />{t('netx.add')}</button
-		>
-	{/snippet}
-</PageHead>
+<PageHead title={t('netcfg.title')} />
 
 {#if status?.pending}
 	<TrialBanner
@@ -271,6 +264,16 @@
 			id="net-list"
 			desc={status.migrated && !dirty && !status.pending ? t('netx.migrated') : undefined}
 		>
+			{#snippet tools()}
+				<button
+					type="button"
+					class="btn btn-primary"
+					disabled={locked}
+					onclick={() => editNetwork()}
+				>
+					<Icon name="plus" />{t('netx.add')}
+				</button>
+			{/snippet}
 			{#each draft.networks ?? [] as n (n.id)}
 				<NetworkCard
 					network={n}
