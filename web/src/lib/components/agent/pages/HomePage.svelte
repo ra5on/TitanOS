@@ -21,6 +21,7 @@
 		type Schedule,
 		type Suggestion,
 	} from '#lib/agent.ts';
+	import DayJournal from './DayJournal.svelte';
 	import PageShell from './PageShell.svelte';
 
 	let {
@@ -32,6 +33,8 @@
 		fresh = false,
 		phone = false,
 		onunfold,
+		onapproval,
+		calm = false,
 		onopen,
 		onstop,
 		onfill,
@@ -51,6 +54,8 @@
 		fresh?: boolean;
 		phone?: boolean;
 		onunfold?: () => void;
+		onapproval: (id: string) => void;
+		calm?: boolean;
 		onopen: (id: string) => void;
 		onstop: (c: ChatInfo) => void;
 		onfill: (text: string) => void;
@@ -101,24 +106,10 @@
 			{ name: user },
 		),
 	);
-	const today = new Intl.DateTimeFormat(undefined, {
-		weekday: 'long',
-		day: 'numeric',
-		month: 'long',
-	}).format(new Date());
-	// The phone starts short (owner 15 Nov 2026: the whole page at once was
-	// too much): the greeting, one row when something waits or runs, and the
-	// questions; the overview opens on request.
-	let more = $state(false);
-	const brief = $derived(fresh || (phone && !more));
-	const waiting = $derived(chats.filter((c) => c.state === 'waiting' && !c.author));
+	let panel = $state<'ideas' | 'overview' | null>(null);
+	const overviewOpen = $derived(panel === 'overview');
 	const running = $derived(chats.filter((c) => c.state === 'running' && !c.author));
-	const open = $derived(waiting.length + items.length);
-	const lead = $derived(
-		open === 0
-			? today
-			: `${today} · ${open === 1 ? t('agent.home.openOne') : t('agent.home.open', { count: open })}`,
-	);
+	const pendingCount = $derived(items.length + running.length);
 	const next = $derived(
 		planned
 			.filter((s) => s.next && s.enabled)
@@ -311,71 +302,37 @@
 <PageShell
 	title={fresh ? t('agent.freshTitle') : hello}
 	plain
-	center={brief}
-	lead={brief ? undefined : lead}
+	hideTitle={chats.length > 0 || phone}
 	{phone}
 	{onunfold}
 >
-	{#if error && !brief}<p class="notice-error" role="alert">{error}</p>{/if}
-
-	{#if brief && !fresh && waiting[0]}
-		<SettingGroup>
-			<button type="button" class="srow" onclick={() => onopen(waiting[0].id)}>
-				<div class="srow-head">
-					<span class="srow-ico warn"><Icon name="shield" size={19} /></span>
-					<div class="srow-text">
-						<span class="srow-title">{t('agent.home.approval', { title: waiting[0].title })}</span>
-						<p class="srow-desc">{t('agent.home.look')}</p>
-					</div>
-					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-				</div>
+	<DayJournal {chats} {onopen} {onapproval} {calm} />
+	<div class="home-actions" class:phone>
+		{#if show && suggestions.length}
+			<button
+				type="button"
+				aria-expanded={panel === 'ideas'}
+				onclick={() => (panel = panel === 'ideas' ? null : 'ideas')}
+			>
+				<Icon name="sparkle" size={16} /><span>{t('agent.night.ideas')}</span><Icon
+					name={panel === 'ideas' ? 'chevronUp' : 'chevronDown'}
+					size={12}
+				/>
 			</button>
-		</SettingGroup>
-	{:else if brief && !fresh && (open || running.length)}
-		<SettingGroup>
-			<button type="button" class="srow" onclick={() => (more = true)}>
-				<div class="srow-head">
-					<span class="srow-ico {open ? 'warn' : 'live'}"
-						><Icon name={open ? 'shield' : 'activity'} size={19} /></span
-					>
-					<div class="srow-text">
-						<span class="srow-title"
-							>{open === 0
-								? t('agent.home.runningCount', { count: running.length })
-								: open === 1
-									? t('agent.home.openOne')
-									: t('agent.home.open', { count: open })}</span
-						>
-						{#if open && running.length}<p class="srow-desc">
-								{t('agent.home.runningCount', { count: running.length })}
-							</p>{/if}
-					</div>
-					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-				</div>
-			</button>
-		</SettingGroup>
-	{/if}
-
-	{#if open && !brief}
+		{/if}
+		<button
+			type="button"
+			aria-expanded={overviewOpen}
+			onclick={() => (panel = overviewOpen ? null : 'overview')}
+		>
+			<Icon name="activity" size={16} /><span>{t('agent.night.overview')}</span>
+			{#if pendingCount}<small>{pendingCount}</small>{/if}
+			<Icon name={overviewOpen ? 'chevronUp' : 'chevronDown'} size={12} />
+		</button>
+	</div>
+	{#if error && overviewOpen}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if items.length && overviewOpen}
 		<SettingGroup title={t('agent.home.waiting')}>
-			{#each waiting as chat (chat.id)}
-				<div class="srow">
-					<div class="srow-head">
-						<span class="srow-ico warn"><Icon name="shield" size={19} /></span>
-						<div class="srow-text">
-							<span class="srow-title">{t('agent.home.approval', { title: chat.title })}</span>
-							<p class="srow-desc">
-								{t('agent.home.approvalDesc', { time: formatDateTime(new Date(chat.updated)) })}
-							</p>
-						</div>
-						<div class="srow-ctl">
-							<button type="button" class="btn btn-primary" onclick={() => onopen(chat.id)}
-								>{t('agent.home.look')}</button
-							>
-						</div>
-					</div>
-				</div>
-			{/each}
 			{#each items as item (item.id)}
 				<div class="srow">
 					<div class="srow-head">
@@ -419,7 +376,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if running.length && !brief}
+	{#if running.length && overviewOpen}
 		<SettingGroup title={t('agent.home.running')}>
 			{#each running as chat (chat.id)}
 				<div class="srow">
@@ -446,7 +403,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if !brief}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
+	{#if overviewOpen}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
 			{#if rows.length && nas}
 				<SettingGroup title={t('agent.home.state')}>
 					{#snippet tools()}<span class="when"
@@ -539,8 +496,8 @@
 			{/if}
 		</div>{/if}
 
-	{#if show && suggestions.length}
-		<SettingGroup title={t('agent.fitsNow')}>
+	{#if show && suggestions.length && panel === 'ideas'}
+		<SettingGroup title={t('agent.night.ideas')}>
 			{#snippet tools()}{#if onshuffle}<button type="button" class="more" onclick={onshuffle}
 						><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
 					>{/if}{/snippet}
@@ -564,18 +521,73 @@
 			</div>
 		</SettingGroup>
 	{/if}
-
-	{#if phone && !fresh}
-		<button type="button" class="more overview" onclick={() => (more = !more)}
-			>{more ? t('agent.home.less') : t('agent.home.overview')}</button
-		>
-	{/if}
 </PageShell>
 
 <style>
-	.overview {
-		align-self: center;
+	.home-actions {
+		display: flex;
+		align-items: stretch;
+		align-self: flex-start;
+		max-width: 100%;
+		margin-top: calc(4px - var(--space-4));
+		gap: 6px;
+	}
+	.home-actions.phone {
+		margin-top: calc(4px - var(--space-3));
+	}
+	.home-actions button {
+		position: relative;
+		isolation: isolate;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
 		min-height: 44px;
+		min-width: 0;
+		padding: 2px 11px;
+		border: 0;
+		border-radius: 9px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		line-height: 1.2;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.home-actions button::before {
+		content: '';
+		position: absolute;
+		z-index: -1;
+		inset: 4px 0;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--text) 4%, var(--ag-glass, var(--surface)));
+		border: 1px solid color-mix(in srgb, var(--text) 16%, var(--ag-glass, var(--surface)));
+	}
+	.home-actions button :global(svg) {
+		flex: none;
+		color: var(--muted);
+	}
+	.home-actions button :global(svg:first-child) {
+		color: var(--ag-link, var(--accent));
+	}
+	.home-actions button[aria-expanded='true']::before {
+		background: color-mix(in srgb, var(--accent) 12%, var(--ag-glass, var(--surface)));
+		border-color: var(--ag-edge);
+	}
+	.home-actions button:focus-visible {
+		outline: 2px solid var(--ag-edge);
+		outline-offset: 1px;
+	}
+	.home-actions small {
+		font-variant-numeric: tabular-nums;
+		color: var(--muted);
+		font-size: 0.8em;
+	}
+	@media (hover: hover) {
+		.home-actions button:hover::before {
+			border-color: var(--ag-edge);
+		}
 	}
 	.two {
 		display: grid;

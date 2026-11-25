@@ -18,6 +18,7 @@
 		onregenerate,
 		onfind,
 		onremember,
+		ontemplate,
 	}: {
 		entry: Entry;
 		calm?: boolean;
@@ -31,6 +32,7 @@
 		onregenerate: () => void;
 		onfind: () => void;
 		onremember?: () => void;
+		ontemplate?: () => void;
 	} = $props();
 </script>
 
@@ -53,6 +55,10 @@
 	<button type="button" class="sh-item" onclick={onfind}
 		><Icon name="search" size={18} /><span class="sh-text">{t('agent.findInChat')}</span></button
 	>
+	{#if ontemplate}<button type="button" class="sh-item" onclick={ontemplate}
+			><Icon name="fileText" size={18} /><span class="sh-text">{t('agent.library.save')}</span
+			></button
+		>{/if}
 	{#if onremember}
 		<button type="button" class="sh-item" onclick={onremember}
 			><Icon name="bulb" size={18} /><span class="sh-text">{t('agent.rememberThis')}</span></button

@@ -14,6 +14,7 @@
 
 	let {
 		block,
+		runningId,
 		calm = false,
 		busy = false,
 		undone,
@@ -21,6 +22,7 @@
 		onundo,
 	}: {
 		block: StepsBlock;
+		runningId?: string;
 		calm?: boolean;
 		busy?: boolean;
 		undone: Set<string>;
@@ -28,7 +30,10 @@
 		onundo?: (step: Entry) => void;
 	} = $props();
 
-	let shown = $state<Entry | 'thinking' | null>(null);
+	let selection = $state<string | null>(null);
+	const shown = $derived(
+		selection === 'thinking' ? 'thinking' : (block.steps.find((s) => s.id === selection) ?? null),
+	);
 </script>
 
 <BottomSheet label={t('agent.stepsSummary')} {calm} {onclose}>
@@ -38,7 +43,7 @@
 			class="sum-x"
 			aria-label={shown ? t('agent.set.back') : t('common.close')}
 			onclick={() => {
-				if (shown) shown = null;
+				if (shown) selection = null;
 				else onclose();
 			}}><Icon name={shown ? 'chevronLeft' : 'close'} size={18} /></button
 		>
@@ -77,11 +82,12 @@
 				{/if}
 			{:else}
 				<StepList
+					{runningId}
 					{block}
 					tappable
 					{busy}
 					{undone}
-					onshow={(step) => (shown = step)}
+					onshow={(step) => (selection = step === 'thinking' ? step : step.id)}
 					onundo={onundo
 						? (step) => {
 								onclose();

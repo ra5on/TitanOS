@@ -11,6 +11,7 @@
 		clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
 		chip: 'M6 6h12v12H6ZM9 9h6v6H9ZM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3',
 		chevronDown: 'm6 9 6 6 6-6',
+		chevronUp: 'm6 15 6-6 6 6',
 		chevronLeft: 'm15 6-6 6 6 6',
 		chevronRight: 'm9 6 6 6-6 6',
 		users:

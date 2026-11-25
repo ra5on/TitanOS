@@ -138,14 +138,28 @@ func (s *Server) agentSharedChats(user string) []agent.ChatInfo {
 // project shared with user.
 func (s *Server) agentReadableChat(user, author, id string) (*agent.Chat, error) {
 	for _, c := range s.agentSharedChats(user) {
-		if c.ID == id && c.Author == author {
-			chat, err := s.agentStore().Chat(author, id)
-			if err != nil {
-				return nil, err
-			}
-			chat.Project = c.Project
-			return foreignChat(chat), nil
+		if c.ID != id || c.Author != author {
+			continue
 		}
+		chat, err := s.agentStore().Chat(author, id)
+		if err != nil {
+			return nil, err
+		}
+		owner, pid, shared := strings.Cut(c.Project, ":")
+		stored := c.Project
+		switch {
+		case !shared:
+			stored = user + ":" + c.Project
+		case owner == author:
+			stored = pid
+		}
+		// The chat may have moved since its listing was read. Verify the
+		// project of these exact contents before returning any of them.
+		if stored != chat.Project {
+			return nil, agent.ErrNotFound
+		}
+		chat.Project = c.Project
+		return foreignChat(chat), nil
 	}
 	return nil, agent.ErrNotFound
 }

@@ -6,7 +6,14 @@
 	import { untrack } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { busyKind, stepDetail, type Chat, type Entry } from '#lib/agent.ts';
+	import {
+		busyKind,
+		stepWord,
+		stepDetail,
+		type Chat,
+		type DotMode,
+		type Entry,
+	} from '#lib/agent.ts';
 	import BusyFigure from '../BusyFigure.svelte';
 	import Markdown from './Markdown.svelte';
 	import { stepLabel } from './chat-text.svelte.ts';
@@ -15,11 +22,19 @@
 		chat,
 		live,
 		busy = false,
+		mode = 'both',
+		hadTool = false,
+		onsteps,
+		count = 0,
 		calm = false,
 	}: {
 		chat: Chat;
 		live: { thinking: string; content: string; step: Entry | null };
 		busy?: boolean;
+		mode?: DotMode;
+		hadTool?: boolean;
+		count?: number;
+		onsteps?: () => void;
 		calm?: boolean;
 	} = $props();
 
@@ -59,13 +74,17 @@
 	// word while thinking as for a step. A new word is a new element (it
 	// fades in); its trail starts at the place the running one has reached,
 	// so the light glides on instead of starting over.
-	const SWEEP_MS = 1700;
+	const SWEEP_MS = 3200;
 	const sweepPhase = () => `0s, ${-(Math.round(performance.now()) % SWEEP_MS)}ms`;
 	/** The line of a running step: a word of its kind or its name, and what it is about. */
 	const sweepText = $derived.by(() => {
 		if (!live.step) return '';
 		const detail = stepDetail(live.step.args);
-		return (kind ? busyWord : stepLabel(live.step)) + (detail ? ` · ${detail}` : '');
+		const word = stepWord(live.step.tool);
+		return (
+			(word ? t(`agent.night.work.${word}` as MessageKey) + ' …' : stepLabel(live.step)) +
+			(detail ? ` · ${detail}` : '')
+		);
 	});
 	const busyWord = $derived.by(() => {
 		if (kind) return key(`${kind}.${(busyTurn % WORDS[kind]) + 1}`);
@@ -130,11 +149,17 @@
 	{#if live.content}
 		<Markdown text={live.content} streaming answer />
 	{/if}
+	<span class="sr-only" role="status">{live.step ? sweepText : t('agent.night.thinkPreview')}</span>
 	<p class="live-line" class:quiet={!!live.content && !live.step}>
 		<!-- 1.01 (owner 16 Nov 2026): always the same three dots, one size,
 		     one pace (BusyFigure); they are never made anew and run on while
 		     the word beside them changes. Their size is --ag-dot-size (1.05). -->
-		<BusyFigure kind={live.content && !live.step ? 'write' : kind} {calm} />
+		<BusyFigure
+			{mode}
+			tool={!!live.step || hadTool}
+			kind={live.content && !live.step ? 'write' : kind}
+			{calm}
+		/>
 		{#if live.step}
 			<!-- A new text fades in, as the word does; the figure is not keyed. -->
 			{#key sweepText}<span class="sweep trail" style:animation-delay={sweepPhase()}
@@ -144,6 +169,11 @@
 			{#key busyWord}<span class="busy-word trail" style:animation-delay={sweepPhase()}
 					>{busyWord}</span
 				>{/key}
+		{/if}
+		{#if onsteps && (count || live.step)}
+			<button class="activity-details" type="button" aria-haspopup="dialog" onclick={onsteps}
+				>{t('agent.night.calls', { count: count + (live.step ? 1 : 0) })} ›</button
+			>
 		{/if}
 		{#if elapsed >= 20 && !live.content}
 			<span class="took">{t('agent.busy.seconds', { n: elapsed })}</span>
@@ -163,6 +193,16 @@
 	/* While the agent works: three dots, and a light that runs over the
 	   line from left to right (owner 15 Nov 2026). "Animationen: Aus" and
 	   "Weniger Bewegung" leave the line still. */
+	.activity-details {
+		margin-inline-start: auto;
+		min-height: 44px;
+		border: 0;
+		background: none;
+		color: var(--ag-link, var(--accent));
+		font: inherit;
+		font-size: 0.85em;
+		cursor: pointer;
+	}
 	.live-line {
 		display: flex;
 		align-items: center;
@@ -284,12 +324,12 @@
 		/* It fades in like the word when a step begins (1.01), then the light runs. */
 		animation:
 			settle 0.36s ease-out both,
-			sweep 1.7s linear infinite;
+			sweep 3.2s linear infinite;
 	}
 	.busy-word.trail {
 		animation:
 			roll 0.36s cubic-bezier(0.22, 1, 0.36, 1) both,
-			sweep 1.7s linear infinite;
+			sweep 3.2s linear infinite;
 	}
 	@keyframes sweep {
 		from {
@@ -303,6 +343,7 @@
 	:global(.agent.calm) .busy-word {
 		animation: none;
 	}
+	:global(.agent[data-shine='off']) .trail,
 	:global(.agent.calm) .trail {
 		color: var(--sweep);
 		background: none;

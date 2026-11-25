@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LightTrail from '../LightTrail.svelte';
 	// A step that waits for the person (PLAN 68): a ring with "Wartet auf
 	// deine Freigabe", then one banner card – the title in plain words, the
 	// level written out (not only a color), when it was asked, "Abbrechen"
@@ -39,6 +40,7 @@
 	role="group"
 	aria-labelledby="pending-{p.id}"
 >
+	<LightTrail />
 	<div class="ask">
 		<span class="ask-ic" aria-hidden="true">{p.level === 'normal' ? '✎' : '▲'}</span>
 		<div class="ask-text">
@@ -127,7 +129,8 @@
 	/* The step that waits for approval: one banner card. */
 	.approval {
 		border: 1px solid var(--warn-border);
-		border-radius: 20px;
+		position: relative;
+		border-radius: 14px;
 		background: var(--surface);
 		overflow: hidden;
 	}

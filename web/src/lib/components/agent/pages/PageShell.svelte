@@ -13,6 +13,7 @@
 		lead = '',
 		plain = false,
 		center = false,
+		hideTitle = false,
 		phone = false,
 		onunfold,
 		children,
@@ -25,6 +26,7 @@
 		plain?: boolean;
 		/** The greeting of a new chat: in the middle of the page. */
 		center?: boolean;
+		hideTitle?: boolean;
 		phone?: boolean;
 		/** The side bar is folded away: a button brings it back. */
 		onunfold?: () => void;
@@ -34,7 +36,7 @@
 
 <div class="scroll" class:phone>
 	<div class="page" class:center>
-		{#if !phone || plain}
+		{#if (!phone || plain) && (!hideTitle || onunfold)}
 			<div class="head">
 				{#if onunfold}
 					<button
@@ -45,7 +47,7 @@
 						onclick={onunfold}><Icon name="sidebar" size={17} /></button
 					>
 				{/if}
-				<h1>
+				<h1 class:sr-only={hideTitle}>
 					{#if !plain}<span>{t('nav.agent')}</span> <i aria-hidden="true">›</i>
 						{#each crumbs as c (c.href)}<a href={c.href}>{c.label}</a>
 							<i aria-hidden="true">›</i>

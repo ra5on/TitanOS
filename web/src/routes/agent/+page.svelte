@@ -28,6 +28,10 @@
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import ProjectList from '#lib/components/agent/ProjectList.svelte';
 	import ChatSheets from './ChatSheets.svelte';
+	import ChatSearch from './ChatSearch.svelte';
+	import PromptTemplates from './PromptTemplates.svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { isChatSheet } from './chat-sheets.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -47,6 +51,15 @@
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
 	const currentInfo = $derived(ag.currentInfo);
+	async function openWaiting(id: string) {
+		await ag.open(id, false);
+		if (ag.current?.id !== id) return;
+		const url = new URL('/agent', location.origin);
+		url.searchParams.set('chat', id);
+		if (ag.profile) url.searchParams.set('profile', ag.profile);
+		if (ag.current.pending) url.hash = 'pending-' + ag.current.pending.id;
+		await goto(url.pathname + url.search + url.hash);
+	}
 
 	// PLAN 67-1: the menu bar of the desktop – the same actions as the agent's own menu.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -108,7 +121,10 @@
 		if (ag.view === 'chat') wantProjects = false;
 	});
 	const tabsShown = $derived(
-		ag.phone && !ag.keyboard && (ag.view === 'chat' || ag.view === 'planned'),
+		ag.phone &&
+			(ag.current || projectsTab || ag.onPage) &&
+			!ag.keyboard &&
+			(ag.view === 'chat' || ag.view === 'planned'),
 	);
 	const floating = $derived(ag.phone && !ag.onPage);
 	// Height of the floating head on the phone; a title on two or three
@@ -312,6 +328,9 @@
 	style:--ag-busy-text={ag.look.textColor || null}
 	style:--ag-dot-size="{DOT_SIZES[ag.look.dotSize]}px"
 	data-width={ag.look.chatWidth}
+	data-trail={ag.look.trail ? 'on' : 'off'}
+	data-shine={ag.look.textShine ? 'on' : 'off'}
+	style:--ag-orbit={ag.look.trailSeconds + 's'}
 >
 	{#if ag.error}<div class="notice-error" role="alert">{ag.error}</div>{/if}
 	<!-- 1.07: the installed agent app asks once for its own notifications. -->
@@ -377,12 +396,28 @@
 						{#if ag.onPage}
 							<button
 								type="button"
-								class="icon-btn"
-								aria-label={t('agent.set.back')}
-								onclick={() => (ag.part ? ag.show(ag.view) : ag.show('chat'))}
-								><Icon name="chevronLeft" size={22} /></button
+								class="icon-btn back-menu"
+								aria-label={ag.part ? t('agent.set.back') : t('agent.menuOpen')}
+								onclick={() => {
+									if (ag.part) ag.show(ag.view);
+									else ag.menuOpen = true;
+								}}
+								><Icon name="chevronLeft" size={19} /><span
+									>{ag.part ? t('agent.set.back') : t('agent.night.menu')}</span
+								></button
 							>
 							<h1 class="plain">{pageNames[ag.view]}</h1>
+						{:else if !ag.current && !projectsTab}
+							<div class="identity"><span aria-hidden="true">T</span><strong>TitanOS</strong></div>
+							<button
+								class="icon-btn back-menu"
+								type="button"
+								aria-label={t('agent.menuOpen')}
+								aria-haspopup="dialog"
+								aria-expanded={ag.menuOpen}
+								onclick={() => (ag.menuOpen = true)}
+								><Icon name="menu" size={19} />{t('agent.night.menu')}</button
+							>
 						{:else}
 							<button
 								type="button"
@@ -551,9 +586,16 @@
 				{:else if ag.current}
 					<ChatView
 						showSteps={ag.look.steps}
+						mode={ag.look.dotMode}
 						readonly={!!ag.readOnlyBy}
 						onplanned={() => ag.show('planned')}
 						chat={ag.current}
+						jump={page.url.searchParams.get('chat') === ag.current.id
+							? (page.url.searchParams.get('entry') ?? '')
+							: ''}
+						ontemplate={ag.readOnlyBy
+							? undefined
+							: (text) => (ag.dialog = { kind: 'templates', text })}
 						live={ag.look.typing ? ag.live : { ...ag.live, content: '' }}
 						busy={ag.busy}
 						deciding={ag.deciding}
@@ -581,6 +623,8 @@
 						show={ag.look.suggestions}
 						phone={ag.phone}
 						onunfold={unfold}
+						onapproval={openWaiting}
+						calm={ag.calm}
 						onopen={(id) => ag.open(id)}
 						onstop={(c) => ag.stop(c.id)}
 						onfill={(text) => ag.composer?.fill(text)}
@@ -781,6 +825,32 @@
 		}}
 	/>
 {/if}
+{#if ag.dialog?.kind === 'textSearch'}
+	<ChatSearch
+		projects={ag.projects}
+		initial={ag.dialog.query}
+		onclose={() => (ag.dialog = null)}
+		onopen={(h) => {
+			ag.dialog = null;
+			const q = new URLSearchParams({ chat: h.chat, entry: h.entry });
+			if (h.author) q.set('author', h.author);
+			void ag.go('/agent?' + q);
+		}}
+	/>
+{:else if ag.dialog?.kind === 'templates'}
+	<PromptTemplates
+		text={ag.dialog.text}
+		occupied={!!ag.draft.trim() || ag.attachments.length > 0}
+		onclose={() => (ag.dialog = null)}
+		onuse={(text) => {
+			ag.dialog = null;
+			ag.freshChat(ag.project);
+			ag.attachments = [];
+			ag.draft = text;
+			ag.composer?.fill(text);
+		}}
+	/>
+{/if}
 
 <style>
 	/* PLAN 68: the agent in the design language of every window: no
@@ -799,8 +869,10 @@
 		/* Owner 15 Nov 2026: a warm orange for what the agent does (send, the
 		   line while it works) and a calmer blue for its links. Mixed with the
 		   text color, so both stay readable on a light and a dark theme. */
-		--ag-warm: #d9734a;
-		--ag-link: color-mix(in srgb, #5b8fe0 78%, var(--text));
+		--ag-warm: var(--accent);
+		--ag-edge: color-mix(in srgb, var(--accent) 76%, var(--text));
+		--ag-glass: color-mix(in srgb, var(--surface) 88%, var(--accent));
+		--ag-link: var(--ag-edge);
 	}
 	/* 0.96: the model is asked at an outside provider. A word, not only a
 	   colour. */
@@ -1327,5 +1399,60 @@
 		:global(dialog.tile[open]) {
 			animation: none;
 		}
+	}
+
+	:global([data-mode='dark']) .agent {
+		--ag-glass: color-mix(in srgb, #252a24 80%, var(--surface));
+		background:
+			radial-gradient(
+				ellipse at 0% 8%,
+				color-mix(in srgb, #343d32 72%, var(--bg)),
+				transparent 72%
+			),
+			color-mix(in srgb, #191d1a 82%, var(--bg));
+	}
+	.agent .side,
+	.agent .drawer {
+		background: color-mix(in srgb, var(--ag-glass) 90%, var(--bg));
+	}
+	.agent .main {
+		background: transparent;
+	}
+	.agent .dock :global(.composer) {
+		background: var(--ag-glass);
+		border: 1px solid color-mix(in srgb, var(--text) 19%, var(--surface));
+		border-radius: 22px;
+	}
+	.agent .dock :global(.composer:focus-within) {
+		border-color: var(--ag-edge);
+	}
+	.agent .main :global(.grp),
+	.agent .main :global(.srow) {
+		--srow-bg: var(--ag-glass);
+	}
+	.agent.phone .icon-btn.back-menu {
+		width: auto;
+		display: inline-flex;
+		gap: 5px;
+		padding: 0 12px;
+		align-items: center;
+		justify-content: center;
+		font: inherit;
+	}
+	.identity {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+		font-weight: 600;
+	}
+	.identity span {
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		background: var(--accent-fill, var(--accent));
+		color: var(--on-accent);
 	}
 </style>

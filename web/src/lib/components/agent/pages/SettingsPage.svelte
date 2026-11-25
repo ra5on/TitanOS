@@ -15,7 +15,10 @@
 	import FeaturesPanel from '../features/FeaturesPanel.svelte';
 	import PhotosSettings from '../PhotosSettings.svelte';
 	import MyActionRights from '../MyActionRights.svelte';
-	import { i18n, t } from '#lib/i18n/index.svelte.ts';
+	import LightTrail from '../LightTrail.svelte';
+	import { appearance, saveAppearance } from '#lib/theme/appearance.svelte.ts';
+	import { ACCENT_IDS, ACCENTS, type AccentId } from '#lib/theme/themes.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { DOT_SIZES, levelLabel, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import PageShell from './PageShell.svelte';
 	import ColorPick from '../ColorPick.svelte';
@@ -75,6 +78,21 @@
 		look: t('agent.set.lookTitle'),
 		gestures: t('agent.set.gestures'),
 	});
+	let previewTool = $state(false),
+		savingAccent = $state(false),
+		accentError = $state('');
+	async function changeAccent(accent: AccentId, customAccent = appearance.current.customAccent) {
+		if (savingAccent) return;
+		savingAccent = true;
+		accentError = '';
+		try {
+			await saveAppearance({ ...appearance.current, accent, customAccent });
+		} catch (error) {
+			accentError = apiErrorText(error);
+		} finally {
+			savingAccent = false;
+		}
+	}
 	const swipeLabel = (s: Swipe) => t(`agent.set.swipe.${s}`);
 </script>
 
@@ -336,18 +354,6 @@
 			{:else}
 				<div class="grp">
 					<div class="row col">
-						<span class="t"><strong>{t('agent.set.motionLabel')}</strong></span>
-						<span class="seg" role="radiogroup" aria-label={t('agent.set.motionLabel')}>
-							{#each ['full', 'reduced', 'off'] as const as m (m)}
-								<label class:on={look.motion === m}
-									><input type="radio" bind:group={look.motion} value={m} />{t(
-										`agent.set.motion.${m}`,
-									)}</label
-								>
-							{/each}
-						</span>
-					</div>
-					<div class="row col">
 						<span class="t"
 							><strong>{t('agent.set.fontSize')}</strong><small>{t('agent.set.device')}</small
 							></span
@@ -390,6 +396,36 @@
 				     theme's grey. -->
 				<div class="grp">
 					<div class="row col">
+						<span class="t"
+							><strong>{t('appearance.accent')}</strong><small>{t('agent.night.global')}</small
+							></span
+						>
+						<div class="palette" role="group" aria-label={t('appearance.accent')}>
+							{#each ACCENT_IDS as id (id)}<button
+									type="button"
+									disabled={savingAccent}
+									aria-pressed={appearance.current.accent === id}
+									aria-label={t(`accent.${id}`)}
+									style:--swatch={ACCENTS[id].hex}
+									onclick={() => changeAccent(id)}
+								></button>{/each}
+							<label class="custom-accent"
+								>{t('look.accentCustom')}<input
+									type="color"
+									disabled={savingAccent}
+									aria-label={t('appearance.customAccent')}
+									value={appearance.current.customAccent}
+									onchange={(e) =>
+										changeAccent(
+											'custom',
+											e.currentTarget.value as typeof appearance.current.customAccent,
+										)}
+								/></label
+							>
+						</div>
+						{#if accentError}<p role="alert">{accentError}</p>{/if}
+					</div>
+					<div class="row col">
 						<span class="t"><strong>{t('agent.set.dotColor')}</strong></span>
 						<ColorPick
 							bind:value={look.dotColor}
@@ -406,6 +442,54 @@
 							text
 						/>
 					</div>
+				</div>
+				<p class="cap">{t('agent.night.motion')}</p>
+				<div class="grp">
+					<div class="row col">
+						<span class="t"><strong>{t('agent.set.motionLabel')}</strong></span>
+						<span class="seg" role="radiogroup" aria-label={t('agent.set.motionLabel')}>
+							{#each ['full', 'reduced', 'off'] as const as m (m)}
+								<label class:on={look.motion === m}
+									><input type="radio" bind:group={look.motion} value={m} />{t(
+										`agent.set.motion.${m}`,
+									)}</label
+								>
+							{/each}
+						</span>
+					</div>
+					<label class="row"
+						><span class="t"><strong>{t('agent.night.figure')}</strong></span><select
+							class="field"
+							bind:value={look.dotMode}
+							>{#each ['both', 'magnet', 'braid', 'titan'] as const as mode (mode)}<option
+									value={mode}>{t(`agent.night.${mode}`)}</option
+								>{/each}</select
+						></label
+					>
+					<label class="row"
+						><strong>{t('agent.night.trail')}</strong><input
+							class="switch"
+							type="checkbox"
+							bind:checked={look.trail}
+						/></label
+					>
+					<label class="row"
+						><strong>{t('agent.night.speed')}</strong><select
+							class="field"
+							bind:value={look.trailSeconds}
+							disabled={!look.trail}
+							>{#each [3.2, 4.8] as seconds (seconds)}<option value={seconds}
+									>{seconds.toLocaleString(i18n.locale)} s</option
+								>{/each}</select
+						></label
+					>
+					<label class="row"
+						><strong>{t('agent.night.shine')}</strong><input
+							class="switch"
+							type="checkbox"
+							bind:checked={look.textShine}
+						/></label
+					>
 					<!-- 1.05 (owner 17 Nov 2026): the size of the dots, smaller by
 					     default than the 26 px before. -->
 					<div class="row col">
@@ -422,14 +506,26 @@
 					</div>
 					<div
 						class="row busy-preview"
-						role="img"
+						role="group"
 						aria-label={t('agent.set.colorPreview')}
 						style:--ag-dots={look.dotColor || null}
 						style:--ag-busy-text={look.textColor || null}
 						style:--ag-dot-size="{DOT_SIZES[look.dotSize]}px"
 					>
-						<BusyFigure kind="" calm={look.motion === 'off'} />
-						<span class="word">{t('agent.busy.1')}</span>
+						<LightTrail /><BusyFigure
+							kind=""
+							mode={look.dotMode}
+							tool={previewTool}
+							calm={calm || look.motion !== 'full'}
+						/>
+						<span class="word"
+							>{previewTool ? t('agent.night.toolPreview') : t('agent.night.thinkPreview')}</span
+						><button
+							type="button"
+							class="btn"
+							aria-pressed={previewTool}
+							onclick={() => (previewTool = !previewTool)}>{t('agent.night.test')}</button
+						>
 					</div>
 				</div>
 
@@ -599,5 +695,80 @@
 		align-items: center;
 		gap: var(--space-2-5);
 		color: var(--ag-busy-text, var(--muted));
+	}
+	.palette,
+	.custom-accent {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+	.palette button {
+		width: 38px;
+		height: 44px;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		position: relative;
+	}
+	.palette button::before {
+		content: '';
+		position: absolute;
+		inset: 7px 4px;
+		border-radius: 50%;
+		background: var(--swatch);
+	}
+	.palette button[aria-pressed='true']::before {
+		outline: 2px solid var(--text);
+		outline-offset: 2px;
+	}
+	.custom-accent input {
+		width: 32px;
+		height: 32px;
+		cursor: pointer;
+	}
+	.busy-preview {
+		position: relative;
+		border-radius: 14px;
+		flex-wrap: wrap;
+	}
+	.busy-preview .btn {
+		margin-inline-start: auto;
+	}
+	.busy-preview .word {
+		min-width: 0;
+	}
+	:global(.agent[data-shine='off']) .busy-preview .word,
+	:global(.agent.calm) .busy-preview .word {
+		animation: none;
+		background: none;
+		color: var(--ag-busy-text, var(--muted));
+	}
+	.busy-preview .word {
+		background: linear-gradient(
+			95deg,
+			var(--ag-busy-text, var(--muted)) 35%,
+			var(--text) 50%,
+			var(--ag-busy-text, var(--muted)) 65%
+		);
+		background-size: 240% 100%;
+		background-clip: text;
+		color: transparent;
+		animation: preview-shine 2.8s linear infinite;
+	}
+	@keyframes preview-shine {
+		from {
+			background-position: 100% 0;
+		}
+		to {
+			background-position: 0 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.busy-preview .word {
+			animation: none;
+			color: var(--ag-busy-text, var(--muted));
+			background: none;
+		}
 	}
 </style>

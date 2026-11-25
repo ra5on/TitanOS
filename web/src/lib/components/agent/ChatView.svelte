@@ -6,8 +6,8 @@
 	// step that waits for approval and, while it runs, what streams in.
 	// The parts are in ./chat/ (1.01); this view keeps the order of the
 	// lines, the scrolling and the sheets.
-	import { untrack } from 'svelte';
-	import { blocks, type Chat, type Entry, type Pending } from '#lib/agent.ts';
+	import { tick, untrack } from 'svelte';
+	import { blocks, type Chat, type DotMode, type Entry, type Pending } from '#lib/agent.ts';
 	import AnswerBlock from './chat/AnswerBlock.svelte';
 	import ApprovalCard from './chat/ApprovalCard.svelte';
 	import DraftCard from './chat/DraftCard.svelte';
@@ -34,9 +34,12 @@
 		onundo,
 		readonly = false,
 		showSteps = false,
+		mode = 'both',
 		onplanned,
 		onresend,
 		onremember,
+		ontemplate,
+		jump = '',
 		find = $bindable(null),
 		phone = false,
 		calm = false,
@@ -49,6 +52,8 @@
 		onresend?: (entry: Entry, text?: string) => void;
 		/** "Das merken": writes the text into the memory. */
 		onremember?: (text: string) => void;
+		ontemplate?: (text: string) => void;
+		jump?: string;
 		/** The search in this chat: null is closed, else what is looked for. */
 		find?: string | null;
 		phone?: boolean;
@@ -59,6 +64,7 @@
 		readonly?: boolean;
 		/** Open thinking and tool steps by default (PLAN 53). */
 		showSteps?: boolean;
+		mode?: DotMode;
 		chat: Chat;
 		live: { thinking: string; content: string; step: Entry | null };
 		busy?: boolean;
@@ -88,6 +94,7 @@
 	let sheet = $state<Entry | null>(null);
 
 	// ----- the steps of a turn: one line, a sheet with each step -----
+	let liveDetails = $state(false);
 	let stepsOpen = $state<StepsBlock | null>(null);
 	/** A step taken back closes the sheet first. */
 	const undo = $derived(
@@ -120,6 +127,19 @@
 		}
 		return steps;
 	}
+	const lastUserBlock = $derived(list.findLastIndex((block) => block.kind === 'user'));
+	const currentSteps = $derived.by(() => {
+		const start = lastUser ? chat.entries.findLastIndex((e) => e.id === lastUser.id) : -1;
+		return chat.entries.slice(start + 1).filter((e) => e.role === 'tool');
+	});
+	const liveBlock = $derived({
+		steps: live.step ? [...currentSteps, live.step] : currentSteps,
+		thinking: live.thinking,
+	});
+	$effect(() => {
+		void chat.id;
+		liveDetails = false;
+	});
 	// Only the last answer offers its buttons; older questions are answered.
 	const lastAnswer = $derived.by(() => {
 		for (let i = list.length - 1; i >= 0; i--) {
@@ -168,6 +188,26 @@
 		pinned = true;
 		lastTop = 0;
 		ownSent = untrack(() => chat.entries.filter((e) => e.role === 'user').length);
+	});
+	// An explicit search target wins over the initial scroll to the last turn.
+	$effect(() => {
+		const entry = jump,
+			id = chat.id,
+			el = column;
+		if (!entry || !id || !el) return;
+		let active = true;
+		void tick().then(() => {
+			if (!active) return;
+			const target = el.querySelector<HTMLElement>('#agent-entry-' + CSS.escape(entry));
+			if (target) {
+				pinned = false;
+				target.focus({ preventScroll: true });
+				target.scrollIntoView({ block: 'center' });
+			}
+		});
+		return () => {
+			active = false;
+		};
 	});
 	// A message of one's own shows at the end again.
 	let ownSent = 0;
@@ -284,6 +324,7 @@
 				<UserMessage
 					entry={block.entry}
 					bind:editing
+					{ontemplate}
 					{phone}
 					{canChange}
 					{copied}
@@ -291,7 +332,7 @@
 					onresend={(entry, text) => onresend?.(entry, text)}
 				/>
 			{:else if block.kind === 'steps'}
-				{#if block.steps.length || block.thinking}
+				{#if (block.steps.length || block.thinking) && !(busy && i > lastUserBlock && currentSteps.length && !showSteps)}
 					<StepsLine
 						{block}
 						{showSteps}
@@ -342,7 +383,16 @@
 			<PlanBox plan={chat.plan} />
 		{/if}
 
-		<LiveLine {chat} {live} {busy} {calm} />
+		<LiveLine
+			{chat}
+			{live}
+			{busy}
+			{calm}
+			{mode}
+			hadTool={currentSteps.length > 0}
+			count={currentSteps.length}
+			onsteps={() => (liveDetails = true)}
+		/>
 
 		{#if chat.pending && !busy && !readonly}
 			<ApprovalCard pending={chat.pending} {deciding} {ondecide} {onedit} />
@@ -378,6 +428,12 @@
 			sheet = null;
 			find = '';
 		}}
+		ontemplate={ontemplate && shown.role === 'user'
+			? () => {
+					sheet = null;
+					ontemplate(shown.content ?? '');
+				}
+			: undefined}
 		onremember={onremember
 			? () => {
 					const text = shown.content ?? '';
@@ -388,13 +444,17 @@
 	/>
 {/if}
 
-{#if stepsOpen}
+{#if stepsOpen || liveDetails}
 	<StepsSheet
-		block={stepsOpen}
+		block={liveDetails ? liveBlock : stepsOpen!}
+		runningId={liveDetails ? live.step?.id : undefined}
 		{calm}
 		{busy}
 		{undone}
-		onclose={() => (stepsOpen = null)}
+		onclose={() => {
+			stepsOpen = null;
+			liveDetails = false;
+		}}
 		{onundo}
 	/>
 {/if}

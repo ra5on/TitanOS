@@ -15,6 +15,7 @@
 		canChange = false,
 		copied,
 		onhold,
+		ontemplate,
 		onresend,
 	}: {
 		entry: Entry;
@@ -25,6 +26,7 @@
 		canChange?: boolean;
 		copied: Copied;
 		/** The actions of the message (a long press on the phone). */
+		ontemplate?: (text: string) => void;
 		onhold: (entry: Entry) => void;
 		onresend: (entry: Entry, text: string) => void;
 	} = $props();
@@ -114,12 +116,20 @@
 		</div>
 	</form>
 {:else}
-	<div class="me">
+	<div class="me" id={'agent-entry-' + entry.id} tabindex="-1">
 		<div class="user" class:fresh={fresh(entry)} use:hold>
 			<span>{entry.content}</span>
 		</div>
 		{#if !phone}
 			<div class="acts">
+				{#if ontemplate && entry.content}<button
+						type="button"
+						class="act"
+						title={t('agent.library.save')}
+						aria-label={t('agent.library.save')}
+						onclick={() => ontemplate?.(entry.content ?? '')}
+						><Icon name="fileText" size={16} /></button
+					>{/if}
 				{#if canChange}
 					<button
 						type="button"

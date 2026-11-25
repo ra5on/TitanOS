@@ -247,6 +247,14 @@ export class AgentPage extends AgentChats {
 			if (view === 'chat') this.newChat('');
 			else this.show(view);
 		},
+		ontextsearch: (query: string) => {
+			this.menuOpen = false;
+			this.dialog = { kind: 'textSearch', query };
+		},
+		ontemplates: () => {
+			this.menuOpen = false;
+			this.dialog = { kind: 'templates' };
+		},
 		onsearchmemory: (query: string) => this.show('memory', query),
 		waitingCount: this.inboxCount + this.chats.filter((c) => c.state === 'waiting').length,
 		onopen: (id: string, author?: string) => {
@@ -470,6 +478,7 @@ export class AgentPage extends AgentChats {
 							.sort((a, b) => b.updated.localeCompare(a.updated))[0];
 						if (start === 'last' && last) void this.open(last.id, false);
 						else if (start === 'overview' && this.phone) this.menuOpen = true;
+						else if (start === 'new' && this.phone) this.fresh = true;
 					}
 					// From the file manager, the dashboard or a notification.
 					const attach = page.url.searchParams.get('attach');
@@ -542,7 +551,8 @@ export class AgentPage extends AgentChats {
 					untrack(() => this.newChat(this.project, false));
 				return;
 			}
-			if (id === untrack(() => this.current?.id)) return;
+			if (id === untrack(() => this.current?.id) && author === untrack(() => this.readOnlyBy))
+				return;
 			untrack(() => void this.open(id, false, author));
 		});
 

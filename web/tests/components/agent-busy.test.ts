@@ -104,3 +104,28 @@ test('opening another chat while one runs shows no tick there (1.01)', async () 
 	});
 	expect(container.querySelector('.live-line.done')).toBeNull();
 });
+
+test('Nachtglas keeps the braid between tool events of one turn and resets on the next question', async () => {
+	const user = { id: 'u', role: 'user', content: 'Prüfen', at };
+	const first = step('files_list');
+	const { container, rerender } = render(ChatView, {
+		...base,
+		chat: chat([user]),
+		busy: true,
+		calm: true,
+		live: { thinking: '', content: '', step: null },
+	});
+	const figure = container.querySelector('.fig');
+	expect(figure?.getAttribute('data-pattern')).toBe('magnet');
+	await rerender({ live: { thinking: '', content: '', step: first as never } });
+	expect(figure?.getAttribute('data-pattern')).toBe('braid');
+	await rerender({
+		chat: chat([user, { ...first, ok: true }]),
+		live: { thinking: '', content: '', step: null },
+	});
+	expect(container.querySelector('.fig')).toBe(figure);
+	expect(figure?.getAttribute('data-pattern')).toBe('braid');
+	expect(container.querySelector('.activity-details')?.textContent).toContain('1');
+	await rerender({ chat: chat([user, first, { ...user, id: 'u2' }]) });
+	expect(figure?.getAttribute('data-pattern')).toBe('magnet');
+});

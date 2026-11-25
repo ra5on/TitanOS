@@ -35,7 +35,7 @@
 	const done = $derived(copied.of(entry.id));
 </script>
 
-<div class="answer">
+<div class="answer" id={'agent-entry-' + entry.id} tabindex="-1">
 	{#if entry.content}
 		<Markdown text={entry.content} />
 	{/if}

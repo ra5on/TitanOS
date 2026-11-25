@@ -307,3 +307,28 @@ export function figureSpots(kind: BusyKind, t: number): Spot[] {
 export function figureAt(kind: BusyKind, clock: number): Spot[] {
 	return (FIGURES[kind] ?? FIGURES['']).figure(clock);
 }
+
+/** Nachtglas positions use the same half-width coordinates as the original figure. */
+export function nightFigure(t: number, braid: number): Spot[] {
+	const beat = t / 2.65;
+	const cycle = Math.floor(beat);
+	const u = beat - cycle;
+	const pull = easeUnit((u - 0.06) / 0.42);
+	const release = easeUnit((u - 0.56) / 0.33);
+	const radius = 0.71 - 0.4 * pull + 0.4 * release + 0.075 * Math.sin(Math.PI * release);
+	const twist = ((cycle + easeUnit((u - 0.32) / 0.44)) * Math.PI) / 3;
+	return [0, 1, 2].map((n) => {
+		const m = THIRD * n + twist - Math.PI / 2;
+		const b = t * 1.8 + THIRD * n;
+		const mix = (from: number, to: number) => from + (to - from) * braid;
+		return {
+			x: mix(radius * Math.cos(m), 0.65 * Math.sin(b)),
+			y: mix(0.91 * radius * Math.sin(m), 0.37 * Math.sin(2 * b + 0.52) + 0.15 * Math.cos(b)),
+			z: mix(0.4 * Math.sin(m), 0.8 * Math.cos(b)),
+		};
+	});
+}
+export function easeUnit(value: number): number {
+	const x = Math.min(1, Math.max(0, value));
+	return x * x * (3 - 2 * x);
+}

@@ -207,3 +207,20 @@ test('the words of every kind exist in German and English, numbered without a ga
 		}
 	}
 });
+
+test('Nachtglas blends both figures inside the footprint of three equal dots', async () => {
+	const { nightFigure, easeUnit } = await import('../src/lib/agent-figures.ts');
+	assert.equal(easeUnit(-1), 0);
+	assert.equal(easeUnit(2), 1);
+	for (let t = 0; t < 12; t += 0.03) {
+		const magnet = nightFigure(t, 0),
+			braid = nightFigure(t, 1),
+			half = nightFigure(t, 0.5);
+		for (const [i, p] of half.entries()) {
+			for (const axis of ['x', 'y', 'z'])
+				assert.ok(Math.abs(p[axis] - (magnet[i][axis] + braid[i][axis]) / 2) < 1e-8);
+			for (const f of [magnet, braid])
+				assert.ok(Math.max(Math.abs(f[i].x), Math.abs(f[i].y)) <= 1 - SPHERE);
+		}
+	}
+});
