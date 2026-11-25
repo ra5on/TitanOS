@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -176,7 +177,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		return m.copyUSB(ctx, job)
 	}
 	sel := m.selection(job)
-	if len(sel.paths) == 0 && len(job.Applications) == 0 {
+	if len(sel.paths) == 0 && len(job.Applications) == 0 && job.Personal == nil {
 		return ErrSources
 	}
 	if len(job.Applications) > 0 && m.PrepareApplications == nil {
@@ -217,7 +218,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		sel.paths = append(sel.paths, extra...)
 	}
 	paths := sel.paths
-	if len(paths) == 0 {
+	if len(paths) == 0 && job.Personal == nil {
 		return ErrSources
 	}
 	slog.Info("backup started", "job", job.ID, "shares", len(paths))
@@ -227,11 +228,26 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		args = append(args, "--exclude", exclude)
 	}
 	args = append(args, paths...)
+	var input *os.File
+	if job.Personal != nil {
+		var closeFile func()
+		input, closeFile, err = m.personalFile(ctx, job)
+		if err != nil {
+			return err
+		}
+		defer closeFile()
+		args = append(args, "--stdin", "--stdin-filename", "TitanOS-"+job.Personal.Account+".tar.age")
+	}
 	var total uint64
 	var freed []string
 	var out string
 	for {
-		out, err = m.runBackup(ctx, job, env, args, &total)
+		if input != nil {
+			if _, err = input.Seek(0, 0); err != nil {
+				return err
+			}
+		}
+		out, err = m.runBackup(ctx, job, env, args, &total, input)
 		// A full target: with the job's leave, the oldest version goes
 		// and the run starts again, until it fits or one version is left.
 		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.DropsOldest() {
@@ -311,8 +327,12 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 }
 
 // runBackup runs restic backup once and reports progress and the size.
-func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, total *uint64) (string, error) {
-	return m.run(ctx, env, args, func(line string) {
+func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, total *uint64, input *os.File) (string, error) {
+	var stdin io.Reader
+	if input != nil {
+		stdin = input
+	}
+	return m.runWithInput(ctx, env, args, func(line string) {
 		var message struct {
 			Type    string  `json:"message_type"`
 			Percent float64 `json:"percent_done"`
@@ -331,7 +351,7 @@ func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, to
 		case "summary":
 			*total = message.Size
 		}
-	})
+	}, nil, stdin)
 }
 
 // Snapshots lists the backups of a job, the newest first.

@@ -680,6 +680,10 @@ type ImportResult struct {
 // another UID: *UIDConflictError, as Put). Items
 // that fail carry their error; ctx ends the import between files.
 func (s *Store) Import(ctx context.Context, kind Kind, account, col string, items []Item) ([]ImportResult, error) {
+	return s.importItems(ctx, kind, account, col, items, false)
+}
+
+func (s *Store) importItems(ctx context.Context, kind Kind, account, col string, items []Item, missingOnly bool) ([]ImportResult, error) {
 	if !ValidCollection(col) {
 		return nil, ErrInvalidCollection
 	}
@@ -747,6 +751,10 @@ func (s *Store) Import(ctx context.Context, kind Kind, account, col string, item
 		cur := c.st.Index[it.Name]
 		if cur != nil && cur.ETag == e.ETag {
 			results[i].ETag = cur.ETag
+			continue
+		}
+		if cur != nil && missingOnly {
+			results[i].Err = ErrPrecondition
 			continue
 		}
 		if cur != nil && cur.UID != "" && e.UID != cur.UID {

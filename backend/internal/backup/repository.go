@@ -212,7 +212,11 @@ func (m *Manager) run(ctx context.Context, env, args []string, line func(string)
 	return m.runFiles(ctx, env, args, line, nil)
 }
 func (m *Manager) runFiles(ctx context.Context, env, args []string, line func(string), files []*os.File) (string, error) {
+	return m.runWithInput(ctx, env, args, line, files, nil)
+}
+func (m *Manager) runWithInput(ctx context.Context, env, args []string, line func(string), files []*os.File, input io.Reader) (string, error) {
 	cmd := exec.CommandContext(ctx, m.restic, args...)
+	cmd.Stdin = input
 	cmd.Env = env
 	cmd.ExtraFiles = files
 	stdout, err := cmd.StdoutPipe()

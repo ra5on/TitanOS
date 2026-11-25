@@ -200,6 +200,7 @@ type Store struct {
 	features   map[Kind]*featureCache
 	ctxs       map[string]*accountCtx
 	forgetting map[string]int
+	restoring  map[string]bool
 
 	parsed parsedCache
 

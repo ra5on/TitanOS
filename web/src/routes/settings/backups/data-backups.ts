@@ -44,6 +44,7 @@ export type Destination = {
 	password?: string;
 };
 export type Job = {
+	personal?: { account: string; id: string };
 	applications?: Application[];
 	allowStop?: boolean;
 	id: string;

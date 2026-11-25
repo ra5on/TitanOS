@@ -25,6 +25,7 @@
 	import Passkeys from './Passkeys.svelte';
 	import WebDav from './WebDav.svelte';
 	import AndroidApps from './AndroidApps.svelte';
+	import PersonalBackup from './PersonalBackup.svelte';
 	import Picture from './Picture.svelte';
 	import AppInstallCard from '#lib/components/AppInstallCard.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -349,6 +350,7 @@
 		<!-- PLAN 74: the picture of the account on the login page. -->
 		<Picture name={user.name} />
 		<AppInstallCard />
+		<PersonalBackup />
 	</SettingGroup>
 
 	<SettingGroup title={t('account.group.login')} id="acc-login">

@@ -14,6 +14,7 @@ import (
 // catch-all of the web UI.
 func (s *Server) registerPIM(mux *routeMux) {
 	s.pimArea().register(mux, s.guards())
+	s.registerPersonalBackup(mux)
 	s.pimDataArea().register(mux, s.guards())
 	// 1.13: the profile of the iPhone (one-time link) and the holidays.
 	s.profileArea().register(mux, s.guards())

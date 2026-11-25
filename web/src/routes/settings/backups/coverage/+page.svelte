@@ -57,7 +57,9 @@
 		>{/snippet}</PageHead
 >
 <p class="muted">{t('coverage.hint')}</p>
-<p class="muted">{t('coverage.personalData')}</p>
+<p class="muted">
+	{t('coverage.personalData')} <a href="/account#personal-backup">{t('personal.title')}</a>
+</p>
 {#if error}<p class="notice-error" role="alert">
 		{error}
 		{#if lastLoaded}{t('coverage.lastLoaded', { time: formatDateTime(lastLoaded) })}{/if}
@@ -108,7 +110,13 @@
 		{/snippet}
 		<SettingRow
 			id="coverage-{item.kind}-{encodeURIComponent(item.name)}"
-			icon={item.kind === 'share' ? 'folder' : item.kind === 'vm' ? 'monitor' : 'box'}
+			icon={item.kind === 'personal'
+				? 'lock'
+				: item.kind === 'share'
+					? 'folder'
+					: item.kind === 'vm'
+						? 'monitor'
+						: 'box'}
 			title={item.name}
 			desc="{t(`coverage.kind.${item.kind}` as MessageKey)} · {t('ops.lastOK')}: {date(
 				item.lastOK,

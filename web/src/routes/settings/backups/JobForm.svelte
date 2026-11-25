@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The form of a backup job, new or changed: what is saved, where to,
 	// when, how fast and how many versions stay.
-	import { untrack } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import {
 		bandwidthForm,
@@ -121,6 +121,15 @@
 		picking = null;
 	}
 
+	let personal = $state<{ account: string; id: string }[]>([]);
+	let sourceError = $state('');
+	onMount(async () => {
+		try {
+			personal = await api.get<{ account: string; id: string }[]>('/backups/personal-sources');
+		} catch (e) {
+			sourceError = t('personal.sourceError');
+		}
+	});
 	function toggleExtra(extra: string) {
 		if (!draft) return;
 		const list = draft.extras ?? [];
@@ -145,14 +154,17 @@
 		const weekdays = [...(draft.weekdays ?? [])].sort();
 		const job = {
 			...draft,
-			sources: selection.sources,
-			folders: selection.folders,
-			skip,
-			patterns: patterns
-				.split('\n')
-				.map((line) => line.trim())
-				.filter(Boolean),
-			extras: draft.extras ?? [],
+			sources: draft.personal ? [] : selection.sources,
+			folders: draft.personal ? {} : selection.folders,
+			skip: draft.personal ? [] : skip,
+			patterns: draft.personal
+				? []
+				: patterns
+						.split('\n')
+						.map((line) => line.trim())
+						.filter(Boolean),
+			extras: draft.personal ? [] : (draft.extras ?? []),
+			applications: draft.personal ? [] : draft.applications,
 			id: draft.id.trim(),
 			interval: Number(draft.interval) || 0,
 			monthDay: Number(draft.monthDay) || 0,
@@ -175,8 +187,8 @@
 						mirrorDays: draft.copy?.mirror ? Number(draft.copy.mirrorDays) || 30 : 0,
 					}
 				: undefined,
-			volumes: selection.volumes,
-			places: selection.places,
+			volumes: draft.personal ? [] : selection.volumes,
+			places: draft.personal ? [] : selection.places,
 			// Only readable copies have the choice for disks of running VMs.
 			vmDisks: plainCopy(draft.destination.type) ? draft.vmDisks : undefined,
 		};
@@ -214,83 +226,105 @@
 	{/if}
 	<fieldset>
 		<legend>{t('backup.sources')}</legend>
-		<p class="muted small">{t('backup.pick.hint')}</p>
-		{#each chosen as c, i (i)}
-			<div class="picked">
-				<button
-					type="button"
-					class="field pickfield"
-					onclick={() => (picking = i)}
-					aria-label={t('backup.pick.change')}
-					>{#if c.volume}<Icon name="folder" />
-						<span class="mono">{c.volume}{c.path ? ' › ' + c.path.replaceAll('/', ' › ') : ''}</span
-						>{#if !c.path}<span class="muted small">{t('backup.pick.whole')}</span
-							>{:else if shareOf(c) && !shareOf(c)?.rest}<span class="chip"
-								>{t('backup.pick.share')}</span
-							>{/if}{:else}<span class="muted">{t('backup.pick.choose')}</span>{/if}</button
+		{#if personal.length || draft.personal}<label
+				>{t('personal.jobSource')}
+				<select
+					class="field"
+					value={draft.personal?.id ?? ''}
+					onchange={(e) => (draft.personal = personal.find((p) => p.id === e.currentTarget.value))}
 				>
-				{#if chosen.length > 1 || c.volume}<button
-						type="button"
-						class="btn small"
-						aria-label={t('backup.pick.remove')}
-						onclick={() =>
-							(chosen =
-								chosen.length > 1 ? chosen.filter((_, n) => n !== i) : [{ volume: '', path: '' }])}
-						><Icon name="close" /></button
-					>{/if}
-			</div>
-		{/each}
-		<div>
-			<button type="button" class="btn small" onclick={() => (picking = -1)}
-				><Icon name="plus" /> {t('backup.pick.add')}</button
-			>
-		</div>
-		<p class="muted small">{t('backup.neverSaved')}</p>
-		<details class="more">
-			<summary>{t('backup.moreOptions')}</summary>
-			{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
-				<div class="row">
-					{#each EXTRAS as extra (extra)}
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={draft.extras?.includes(extra)}
-								onchange={() => toggleExtra(extra)}
-							/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
-						>
-					{/each}
-				</div>
-				{#if draft.extras?.includes('config')}<p class="notice-warn">
-						{t('backup.extra.configHint')}
-					</p>{/if}
-				<ApplicationSelection
-					bind:applications={draft.applications}
-					bind:allowStop={draft.allowStop}
-				/>
-			{/if}
-			{#if draft.skip?.length}
-				<p class="legend-sub">{t('backup.skipList')}</p>
-				<div class="row">
-					{#each draft.skip as entry (entry)}<span class="chip"
-							>{entry}
-							<button
-								type="button"
-								class="link"
-								aria-label={t('backup.pick.remove')}
-								onclick={() => (draft!.skip = draft!.skip!.filter((e) => e !== entry))}
-								><Icon name="close" size={12} /></button
-							></span
+					<option value="">{t('backup.sources')}</option>
+					{#if draft.personal && !personal.some((p) => p.id === draft.personal?.id)}<option
+							value={draft.personal.id}>{draft.personal.account} · {t('personal.inactive')}</option
+						>{/if}
+					{#each personal as p (p.id)}<option value={p.id}
+							>{p.account} · {t('personal.title')}</option
 						>{/each}
+				</select></label
+			>{/if}
+		{#if sourceError}<p class="notice-warn">{sourceError}</p>{/if}
+		{#if draft.personal}<p>{t('personal.jobHint')}</p>{:else}
+			<p class="muted small">{t('backup.pick.hint')}</p>
+			{#each chosen as c, i (i)}
+				<div class="picked">
+					<button
+						type="button"
+						class="field pickfield"
+						onclick={() => (picking = i)}
+						aria-label={t('backup.pick.change')}
+						>{#if c.volume}<Icon name="folder" />
+							<span class="mono"
+								>{c.volume}{c.path ? ' › ' + c.path.replaceAll('/', ' › ') : ''}</span
+							>{#if !c.path}<span class="muted small">{t('backup.pick.whole')}</span
+								>{:else if shareOf(c) && !shareOf(c)?.rest}<span class="chip"
+									>{t('backup.pick.share')}</span
+								>{/if}{:else}<span class="muted">{t('backup.pick.choose')}</span>{/if}</button
+					>
+					{#if chosen.length > 1 || c.volume}<button
+							type="button"
+							class="btn small"
+							aria-label={t('backup.pick.remove')}
+							onclick={() =>
+								(chosen =
+									chosen.length > 1
+										? chosen.filter((_, n) => n !== i)
+										: [{ volume: '', path: '' }])}><Icon name="close" /></button
+						>{/if}
 				</div>
-			{/if}
-			<label class="block"
-				><span>{t('backup.patterns')}</span>
-				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
-			</label>
-			<p class="muted">
-				{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
-			</p>
-		</details>
+			{/each}
+			<div>
+				<button type="button" class="btn small" onclick={() => (picking = -1)}
+					><Icon name="plus" /> {t('backup.pick.add')}</button
+				>
+			</div>
+			<p class="muted small">{t('backup.neverSaved')}</p>
+			<details class="more">
+				<summary>{t('backup.moreOptions')}</summary>
+				{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
+					<div class="row">
+						{#each EXTRAS as extra (extra)}
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={draft.extras?.includes(extra)}
+									onchange={() => toggleExtra(extra)}
+								/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
+							>
+						{/each}
+					</div>
+					{#if draft.extras?.includes('config')}<p class="notice-warn">
+							{t('backup.extra.configHint')}
+						</p>{/if}
+					<ApplicationSelection
+						bind:applications={draft.applications}
+						bind:allowStop={draft.allowStop}
+					/>
+				{/if}
+				{#if draft.skip?.length}
+					<p class="legend-sub">{t('backup.skipList')}</p>
+					<div class="row">
+						{#each draft.skip as entry (entry)}<span class="chip"
+								>{entry}
+								<button
+									type="button"
+									class="link"
+									aria-label={t('backup.pick.remove')}
+									onclick={() => (draft!.skip = draft!.skip!.filter((e) => e !== entry))}
+									><Icon name="close" size={12} /></button
+								></span
+							>{/each}
+					</div>
+				{/if}
+				<label class="block"
+					><span>{t('backup.patterns')}</span>
+					<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"
+					></textarea>
+				</label>
+				<p class="muted">
+					{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
+				</p>
+			</details>
+		{/if}
 	</fieldset>
 	{#if picking !== null}<FolderPicker
 			volumes={overview.volumes ?? []}
@@ -447,7 +481,9 @@
 			type="submit"
 			class="btn btn-primary"
 			disabled={busy ||
-				(!chosen.some((c) => c.volume) && !draft.extras?.length && !draft.applications?.length)}
+				(draft.personal
+					? plainCopy(draft.destination.type)
+					: !chosen.some((c) => c.volume) && !draft.extras?.length && !draft.applications?.length)}
 			>{isNew ? t('backup.create') : t('notify.save')}</button
 		>
 	</div>

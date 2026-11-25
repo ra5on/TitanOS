@@ -10,6 +10,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"slices"
@@ -78,7 +79,13 @@ type CoordinatedSelection struct {
 	Patterns []string            `json:"patterns,omitempty"`
 }
 
+type PersonalSource struct {
+	Account string `json:"account"`
+	ID      string `json:"id"`
+}
+
 type Job struct {
+	Personal             *PersonalSource       `json:"personal,omitempty"`
 	CoordinatedSelection *CoordinatedSelection `json:"coordinatedSelection,omitempty"`
 	Applications         []Application         `json:"applications,omitempty"`
 	AllowStop            bool                  `json:"allowStop,omitempty"`
@@ -287,6 +294,7 @@ type Manager struct {
 	Disabled bool
 	// Sources returns the shares whose volume is mounted right now.
 	Sources             func() []Source
+	PersonalExport      func(context.Context, io.Writer, PersonalSource, string) error
 	PrepareApplications func(context.Context, Job, string, []string) ([]string, func() error, error)
 	// WithUSB pins a mounted filesystem for the complete copy operation.
 	WithUSB func(context.Context, string, func(*os.Root) error) error

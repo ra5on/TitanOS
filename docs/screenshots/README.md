@@ -2,7 +2,13 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** Alle Bilder der README kommen aus `scripts/capture-readme-screenshots.mjs` und zeigen den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, abgezweigt vom 0.78-Arbeitszweig `feat/078-nvr-ui` bei Commit `052cc095`; der Web-Teil ist bis `e3fe8443` unverändert). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
+**Aufnahmestand:** Die ursprüngliche Bildserie der README kommt aus `scripts/capture-readme-screenshots.mjs` und zeigt den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, abgezweigt vom 0.78-Arbeitszweig `feat/078-nvr-ui` bei Commit `052cc095`; der Web-Teil ist bis `e3fe8443` unverändert). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
+
+Am **25. November 2026** kamen drei Aufnahmen aus Chromium mit isolierten Testdaten hinzu. Die beiden mobilen Bilder zeigen TitanOS 1.26 bei 390 × 844 Pixeln. Die Dock-Aufnahme zeigt den Entwicklungsstand von 1.28 bei 1440 × 1000 Pixeln. Die geöffnete Vorschau stammt aus dem Bedienablauf von `scripts/test-ui-desktop-125.mjs`.
+
+- [Offene Sicherungsprobe auf der mobilen Einstellungsseite](current/sicherungen-mobil-1.26.png)
+- [Vorauswahl einzelner Dateien beim Zurückholen](current/datei-zurueckholen-1.26.png)
+- [Minimiertes Fenster in der Dock-Vorschau](current/dock-fenster-1.28.png)
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`, für den NVR `scripts/test-ui-nvr-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen, Messwerte, Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) und VMs (Home Assistant OS, Windows 11) sind Beispiele des Skripts. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Nachgebildet sind:
 
