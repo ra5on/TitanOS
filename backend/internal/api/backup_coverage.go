@@ -34,6 +34,10 @@ func coverageFor(kind, name string, available bool, jobs []backup.View, mounted 
 		j := view.Job
 		matches := kind == "share" && slices.Contains(j.Sources, name)
 		method := "files"
+		if kind == "personal" && j.Personal != nil && j.Personal.Account == name {
+			matches = true
+			method = "age"
+		}
 		for _, app := range j.Applications {
 			if app.Kind == kind && app.Name == name {
 				matches = true
@@ -84,6 +88,21 @@ func (a backupsArea) handleBackupCoverage(w http.ResponseWriter, r *http.Request
 		out = append(out, coverageFor("share", share.Name, slices.Contains(mounted, share.Volume), jobs, mounted, time.Now()))
 	}
 	sources := []string{}
+	if a.personalSources != nil {
+		personal, err := a.personalSources()
+		if err != nil {
+			sources = append(sources, "personal")
+		} else {
+			for _, source := range personal {
+				// A revoked recovery key must not make a newly enabled account
+				// appear protected by a job that still addresses its old key.
+				current := slices.DeleteFunc(slices.Clone(jobs), func(v backup.View) bool {
+					return v.Job.Personal != nil && v.Job.Personal.Account == source.Account && v.Job.Personal.ID != source.ID
+				})
+				out = append(out, coverageFor("personal", source.Account, true, current, mounted, time.Now()))
+			}
+		}
+	}
 	if a.docker != nil {
 		status := a.docker.Status(r.Context())
 		if status.Settings.Enabled && !status.Running {
@@ -105,6 +124,10 @@ func (a backupsArea) handleBackupCoverage(w http.ResponseWriter, r *http.Request
 		seen[item.Kind+":"+item.Name] = true
 	}
 	for _, view := range jobs {
+		if p := view.Job.Personal; p != nil && !seen["personal:"+p.Account] {
+			out = append(out, coverageFor("personal", p.Account, false, jobs, mounted, time.Now()))
+			seen["personal:"+p.Account] = true
+		}
 		for _, name := range view.Job.Sources {
 			key := "share:" + name
 			if !seen[key] {

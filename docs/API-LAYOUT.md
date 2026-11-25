@@ -72,6 +72,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | operations | `operations.go` | `maintenanceArea`, `monitoringArea` | 1 |
 | order | `order_preferences.go` | – | 1 |
 | passkeys | `passkeys.go` | – | 1 |
+| personal | `personal_backup.go` | – | 1 |
 | pim | `pim_cache.go`, `pim_data.go`, `pim_live.go` | `pimDataArea`, `pimLiveArea` | 4 |
 | plugins | `plugins.go` | `pluginsArea` | 1 |
 | power | `power_button.go`, `power_container.go` | `powerButtonArea` | 1 |

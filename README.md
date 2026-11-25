@@ -96,16 +96,14 @@ Alles im Einzelnen – zum Aufklappen.
 - **Sperrbildschirm und Anmeldung:** Sperren im Menü oder automatisch nach einstellbarer Zeit; Entsperren mit Passwort (und 2FA) oder Passkey. Die Anmeldeseite zeigt das bewegte Nordlicht, Kontobilder (eigenes Foto oder mitgeliefertes Bild) und auf Wunsch einen Übergang in den Arbeitsplatz.
 - **Dateien hineinziehen:** Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den offenen Ordner hoch.
 - **Am Handy:** Startbildschirm mit dem Knopf „Menü“, Suche und App-Raster; jedes Programm und jede Docker-App öffnet im Vollbild mit „Zurück“. Ränder für Notch und Home-Leiste, keine vergrößernden Eingabefelder in Safari. TitanOS lässt sich als App installieren; unter Android nimmt sie über „Teilen › TitanOS“ Fotos und Dateien für das NAS an.
-- **Android-App (Testfassung):** native App „TitanOS“ für Android 13 und neuer im Repo [TitanOS-Android](https://github.com/ra5on/TitanOS-Android).
-  - **Koppeln:** unter Mein Konto › Geräte per QR-Code, Link oder von Hand mit Fingerabdruck; bestätigt wird mit dem Kontopasswort.
-  - **Sicherheit:** eigener Schlüssel je Handy, festgehaltenes Zertifikat; Passwort und 2FA kommen nie aufs Handy. Die App ist eine Sitzung wie der Browser und meldet sich nach einem Neustart des NAS selbst wieder an.
-  - **Heute:** Start und Dateien.
-  - **Geplant:** Foto-Sicherung im Hintergrund, Kontakte und Kalender in den Apps des Handys, Mitteilungen ohne Google, die ganze Systemsteuerung und eine Agent-App.
-  - [Einzelheiten](docs/ANDROID-APP.md).
+- **Auf dem iPhone:** TitanOS lässt sich in Safari zum Home-Bildschirm hinzufügen. Unter „Mein Konto › TitanOS als App“ richtet jedes Gerät seine Startseite und Mitteilungen ein. Für Fotos und Videos dient die Immich-App, für Dokumente die NAS-Freigabe in Apples App „Dateien“.
+- Die frühere [Android-Testfassung](docs/ANDROID-APP.md) und ihre Kopplung sind abgeschlossen. Die mobile Weiterentwicklung konzentriert sich auf das iPhone.
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe erklärt ein „?“ direkt daneben.
 - **Kein abgeschnittener Text:** Auf den Seiten von TitanOS brechen lange Namen und Texte um, statt abgeschnitten zu werden.
 
 [![Menü mit Filtern, Programmen von A bis Z, Docker-Apps und VM-Bildschirmen, unten Konto, Systemsteuerung, Updates, App-Center, Sperren, Abmelden, Neustart und Herunterfahren; oben daneben das Suchfeld der Leiste](docs/screenshots/current/hauptmenue.png)](docs/screenshots/current/hauptmenue.png)
+
+Aufnahmen vom 25. November 2026 mit Beispieldaten: [Sicherungen in der schmalen Ansicht (1.26)](docs/screenshots/current/sicherungen-mobil-1.26.png) · [Eine Datei zurückholen (1.26)](docs/screenshots/current/datei-zurueckholen-1.26.png) · [Minimiertes Fenster im Dock öffnen (1.28)](docs/screenshots/current/dock-fenster-1.28.png).
 
 [Dock bearbeiten](docs/screenshots/current/dock-bearbeiten.png) · [Beschreibung des Desktop-Modus](docs/DESKTOP.md) · [Sperrbildschirm](docs/SESSION-LOCK.md) · [TitanOS als Handy-App](docs/PWA.md)
 
@@ -187,7 +185,7 @@ Alles im Einzelnen – zum Aufklappen.
 - **Abgleich mit dem iPhone:** über CalDAV und CardDAV mit einem **Gerätepasswort je Gerät** – am einfachsten mit einem **signierten Profil per QR-Code**, das Kalender, Erinnerungen und Kontakte in einem Schritt einrichtet (Einmal-Link, optional Feiertage); nur für Kalender, Erinnerungen und Kontakte, einmal sichtbar, in Vierergruppen zum Abtippen, einzeln entziehbar; das Kontopasswort kommt nie aufs Telefon. Die Seite „Am iPhone einrichten“ nennt die passende Adresse (Let's Encrypt, Tailscale oder Heimnetz) und die Schritte. Ein unveränderter Abgleich weckt die Platten nicht; fehlt das Daten-Volume, behält das iPhone seinen Stand statt leer zu werden. Mit einem echten iPhone noch nicht geprüft.
 - **Mail (je Konto freizugeben, bis 1.12 „T-Mail“):** eigenes E-Mail-Programm mit IMAP/SMTP, Ordnern mit Favoriten, Suche auch über alle Ordner (Absender, Anhang, Zeitraum), Anhängen auch aus und in die Dateien des NAS, Signaturen, Regeln und Meldung bei neuer Mail. Drei ziehbare Spalten, Vorschau und Absenderbild in der Liste, nach Datum gruppiert, Unterhaltungen, Schnellaktionen, Mehrfachauswahl, Ziehen auf Ordner und Tastenkürzel; am Handy Ebenen mit Wischen, HTML-Mails auf Bildschirmbreite eingepasst. Beim Schreiben kommen die Kontakte zuerst; an wen du schreibst, schlägt Kontakte unter „Vorschläge aus gesendeten Mails“ zum Übernehmen vor.
 - **Privat:** Termine, Kontakte und Postfächer sieht nur das eigene Konto. Kein Zugriff über API-Tokens oder MCP; der KI-Agent arbeitet mit Mail, Kalender, Kontakten und Erinnerungen nur mit eigenen Rechten je Aktion (siehe unten).
-- **Sicherung:** Kalender und Kontakte stehen noch in keiner Datensicherung; Schutz ist die Kopie auf den Geräten und der Export.
+- **Persönliche Sicherung:** Kalender, Adressbuch und Erinnerungslisten lassen sich je Konto verschlüsselt exportieren oder mit einem eigenen Auftrag regelmäßig sichern. Eine Wiederherstellungsprobe prüft die Daten vor dem Einspielen. [Einrichtung und Rückholung](docs/KALENDER.md#sicherung).
 
 [Kalender und Kontakte](docs/KALENDER.md) · [Mail](docs/TMAIL.md)
 

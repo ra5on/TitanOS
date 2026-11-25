@@ -52,7 +52,7 @@ func relative(text string) bool {
 
 // checkSelection tells whether what a job picks out makes sense.
 func checkSelection(job Job) error {
-	if len(job.Sources) == 0 && len(job.Extras) == 0 && len(job.Applications) == 0 && len(job.Volumes) == 0 && len(job.Places) == 0 {
+	if job.Personal == nil && len(job.Sources) == 0 && len(job.Extras) == 0 && len(job.Applications) == 0 && len(job.Volumes) == 0 && len(job.Places) == 0 {
 		return invalid("no share chosen")
 	}
 	for _, volume := range job.Volumes {
@@ -230,7 +230,7 @@ func (m *Manager) homeVolume(job Job) string {
 	// or what the job knows would be split across volumes; without its
 	// home the job is unavailable (stateFile is empty).
 	var mounted []string
-	if len(job.Volumes) > 0 || len(job.Places) > 0 || len(job.Extras) > 0 || len(job.Applications) > 0 {
+	if job.Personal != nil || len(job.Volumes) > 0 || len(job.Places) > 0 || len(job.Extras) > 0 || len(job.Applications) > 0 {
 		mounted = m.mounted()
 	}
 	home := ""
@@ -245,7 +245,7 @@ func (m *Manager) homeVolume(job Job) string {
 		}
 		return ""
 	}
-	if len(job.Extras) > 0 || len(job.Applications) > 0 {
+	if job.Personal != nil || len(job.Extras) > 0 || len(job.Applications) > 0 {
 		sort.Strings(mounted)
 		for _, volume := range mounted {
 			if !(job.Destination.Type == "local" && volume == job.Destination.Volume) {

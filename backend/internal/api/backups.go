@@ -57,6 +57,7 @@ type backupsArea struct {
 	docker           *docker.Manager
 	vms              *vm.Manager
 	shares           *shares.Manager
+	personalSources  func() ([]backup.PersonalSource, error)
 	applications     func() *appbackup.Manager
 	admitOperation   admitFunc
 	sessionConfirmed confirmedFunc
@@ -65,8 +66,9 @@ type backupsArea struct {
 // backupsArea is the area of the server.
 func (s *Server) backupsArea() backupsArea {
 	return backupsArea{backup: s.opts.Backup, storage: s.opts.Storage, docker: s.opts.Docker, vms: s.opts.VMs, shares: s.opts.Shares,
-		applications:   func() *appbackup.Manager { return s.opts.ApplicationBackups },
-		admitOperation: s.admitOperation, sessionConfirmed: s.sessionConfirmed}
+		personalSources: s.optedInPersonalSources,
+		applications:    func() *appbackup.Manager { return s.opts.ApplicationBackups },
+		admitOperation:  s.admitOperation, sessionConfirmed: s.sessionConfirmed}
 }
 
 // registerOperations registers the routes that belong to the workflows of

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"io"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/appphotos"
-
+	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/pim/personalbackup"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
@@ -23,6 +26,13 @@ var pimFeatures = pimstore.Features
 // ErrUnavailable (503), never an empty collection.
 func (w *titand) wirePIM() error {
 	w.pim = pimstore.New()
+	w.backups.PersonalExport = func(ctx context.Context, dst io.Writer, source backup.PersonalSource, local string) error {
+		u, ok := w.users.Get(source.Account)
+		if !ok || u.Disabled {
+			return pimstore.ErrNoAccount
+		}
+		return (personalbackup.Manager{Config: w.store, PIM: w.pim}).Write(ctx, dst, source.Account, source.ID, local)
+	}
 	w.pim.Account = func(name string) (time.Time, bool) {
 		u, ok := w.users.Get(name)
 		return u.Created, ok

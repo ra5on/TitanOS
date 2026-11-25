@@ -1874,6 +1874,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 		id: 'acc-picture',
 	},
 	{ p: '/account', k: 'share.appTitle', kind: 'row', in: ['account.group.account'], id: 'acc-app' },
+	{
+		p: '/account',
+		k: 'personal.title',
+		kind: 'row',
+		in: ['account.group.account'],
+		id: 'personal-backup',
+	},
 	{ p: '/account', k: 'account.group.login', kind: 'group', id: 'acc-login' },
 	{
 		p: '/account',

@@ -37,11 +37,13 @@ var (
 )
 
 var (
-	clockForm  = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
-	bucketForm = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
-	hostForm   = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$|^\[[0-9a-fA-F:]+\]$`)
-	userForm   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9._-]{0,63}$`)
-	plainForm  = regexp.MustCompile(`^[\x21-\x7e]{1,500}$`)
+	personalAccount = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	personalID      = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	clockForm       = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+	bucketForm      = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+	hostForm        = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$|^\[[0-9a-fA-F:]+\]$`)
+	userForm        = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9._-]{0,63}$`)
+	plainForm       = regexp.MustCompile(`^[\x21-\x7e]{1,500}$`)
 )
 
 func invalid(format string, args ...any) error {
@@ -70,6 +72,12 @@ func check(job Job, shares []Source, volumes []string) error {
 			return invalid("application backup configuration or stop consent")
 		}
 		seenApps[app.Kind+":"+app.Name] = true
+	}
+	if p := job.Personal; p != nil {
+		if !personalAccount.MatchString(p.Account) || !personalID.MatchString(p.ID) || plainCopy(job.Destination.Type) ||
+			len(job.Sources)+len(job.Extras)+len(job.Applications)+len(job.Volumes)+len(job.Places)+len(job.Patterns)+len(job.Skip)+len(job.Folders) > 0 {
+			return invalid("personal archives require a dedicated encrypted job")
+		}
 	}
 	if err := checkSelection(job); err != nil {
 		return err
