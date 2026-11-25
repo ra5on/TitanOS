@@ -477,7 +477,6 @@ export class AgentPage extends AgentChats {
 							.filter((c) => !c.author)
 							.sort((a, b) => b.updated.localeCompare(a.updated))[0];
 						if (start === 'last' && last) void this.open(last.id, false);
-						else if (start === 'overview' && this.phone) this.menuOpen = true;
 						else if (start === 'new' && this.phone) this.fresh = true;
 					}
 					// From the file manager, the dashboard or a notification.
