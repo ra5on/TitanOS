@@ -205,11 +205,15 @@
 		root={p.root}
 		dir={p.dir}
 		showHidden={p.prefs.showHidden}
-		onclose={() => (p.deepSearch = false)}
-		onopen={(path) => {
+		roots={p.roots ?? []}
+		initial={p.searchPosition}
+		prefs={p.prefs}
+		onclose={() => {
 			p.deepSearch = false;
-			p.open(p.rootId, path);
+			p.searchPosition = undefined;
 		}}
+		onopen={p.showSearchHit}
+		onpreview={(root, hit) => (p.otherPreview = { root, path: hit.path, size: hit.size })}
 	/>{/if}
 {#if p.comparison && p.root && p.rightRoot}<CompareDialog
 		left={p.safeRoots.find((r) => r.id === p.rootId) ?? p.root}

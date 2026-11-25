@@ -169,3 +169,66 @@ test('a shared file without a name is named by the page, not the worker', async 
 	const list = JSON.parse(sw.store.get('/share-target/list'));
 	assert.equal(list.files[0].name, '');
 });
+
+test('a background push updates and clears the numeric badge while still showing a notification', async () => {
+	const handlers = {};
+	const badges = [],
+		shown = [];
+	const self = {
+		location: { origin: 'https://nas.local' },
+		addEventListener(type, handler) {
+			handlers[type] = handler;
+		},
+		navigator: {
+			setAppBadge: async (n) => badges.push(n),
+			clearAppBadge: async () => badges.push(0),
+		},
+		registration: { showNotification: async (title, options) => shown.push(options) },
+	};
+	vm.runInNewContext(readFileSync(new URL('../static/sw.js', import.meta.url), 'utf8'), {
+		self,
+		URL,
+	});
+	for (const badge of [4, 0, -1, undefined]) {
+		let done;
+		handlers.push({
+			data: { json: () => ({ badge, url: '//other.example', title: 'Disk' }) },
+			waitUntil: (p) => (done = p),
+		});
+		await done;
+	}
+	assert.deepEqual(badges, [4, 0]);
+	assert.equal(shown.length, 4);
+	assert.ok(shown.every((note) => note.data.url === '/'));
+});
+
+test('only tapping a test stores its opening time and device', async () => {
+	const handlers = {},
+		writes = [];
+	const self = {
+		location: { origin: 'https://nas.local' },
+		addEventListener: (type, handler) => (handlers[type] = handler),
+		clients: { matchAll: async () => [], openWindow: async () => {} },
+		registration: { showNotification: async () => {} },
+	};
+	const caches = { open: async () => ({ put: async (_, body) => writes.push(await body.json()) }) };
+	vm.runInNewContext(readFileSync(new URL('../static/sw.js', import.meta.url), 'utf8'), {
+		self,
+		URL,
+		caches,
+		Response,
+	});
+	const data = {
+		url: '/account#acc-app',
+		test: { device: 'this-phone', user: 'alex', sent: '2026-11-25T06:00:00Z' },
+	};
+	let done;
+	handlers.push({ data: { json: () => data }, waitUntil: (p) => (done = p) });
+	await done;
+	assert.equal(writes.length, 0);
+	handlers.notificationclick({ notification: { close() {}, data }, waitUntil: (p) => (done = p) });
+	await done;
+	assert.equal(writes[0].device, 'this-phone');
+	assert.equal(writes[0].sent, data.test.sent);
+	assert.ok(Number.isFinite(Date.parse(writes[0].opened)));
+});

@@ -6,7 +6,7 @@
 	import { api } from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { formatDate } from '#lib/format.ts';
+	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
 	import SettingGroup from './settings/SettingGroup.svelte';
 	import {
@@ -27,16 +27,19 @@
 	let devices = $state<PushDevice[] | null>(null);
 	async function setKinds(
 		device: PushDevice,
-		kind: 'nas' | 'agent' | 'camera' | 'mail',
+		kind: 'nas' | 'agent' | 'camera' | 'mail' | 'priorityOnly',
 		on: boolean,
 	) {
 		const off = new Set(device.off ?? []);
-		if (on) off.delete(kind);
-		else off.add(kind);
+		if (kind !== 'priorityOnly') {
+			if (on) off.delete(kind);
+			else off.add(kind);
+		}
 		error = '';
 		try {
 			const next = await api.put<PushDevice>(`/notifications/push/${device.id}`, {
 				nas: !off.has('nas'),
+				...(kind === 'priorityOnly' ? { priorityOnly: on } : {}),
 				agent: !off.has('agent'),
 				camera: !off.has('camera'),
 				// 1.05: new mail in T-Mail; only sent where T-Mail is released.
@@ -49,6 +52,7 @@
 	}
 	let publicKey = $state('');
 	let thisDevice = $state('');
+	let openedTest = $state('');
 	let busy = $state(false);
 	let message = $state('');
 	let error = $state('');
@@ -61,6 +65,19 @@
 		error = err instanceof Error && err.message === 'denied' ? t('push.denied') : apiErrorText(err);
 	}
 
+	async function readOpened() {
+		try {
+			const cache = await caches.open('titanos-push-test');
+			const receipt = await (await cache.match('/__push/opened'))?.json();
+			openedTest =
+				receipt?.device === thisDevice && receipt?.user === session.data?.user?.name
+					? formatDateTime(new Date(receipt.opened))
+					: '';
+		} catch {
+			openedTest = '';
+		}
+	}
+
 	async function load() {
 		try {
 			const answer = await api.get<{ publicKey: string; devices: PushDevice[] }>(
@@ -71,6 +88,7 @@
 			const subscription = await currentSubscription().catch(() => null);
 			const id = subscription ? await idOf(subscription) : '';
 			thisDevice = devices.some((d) => d.id === id) ? id : '';
+			if (thisDevice) await readOpened();
 		} catch (err) {
 			fail(err);
 		}
@@ -92,6 +110,11 @@
 		needsHomeScreen = appleMobile(navigator.userAgent, navigator.maxTouchPoints) && !standalone();
 		denied = supported && Notification.permission === 'denied';
 		void load();
+		const receive = (e: MessageEvent) => {
+			if (e.data?.type === 'open' && thisDevice) void readOpened();
+		};
+		navigator.serviceWorker?.addEventListener('message', receive);
+		return () => navigator.serviceWorker?.removeEventListener('message', receive);
 	});
 
 	async function enable() {
@@ -176,7 +199,18 @@
 					<span class="muted small"
 						>{t('push.since', { date: formatDate(new Date(device.created)) })}</span
 					>
+					{#if device.id === thisDevice && openedTest}<span class="muted small"
+							>{t('push.testOpened', { time: openedTest })}</span
+						>{/if}
 					<span class="kinds">
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={!!device.priorityOnly}
+								disabled={busy}
+								onchange={(e) => setKinds(device, 'priorityOnly', e.currentTarget.checked)}
+							/><span>{t('push.priorityOnly')}</span></label
+						>
 						{#if !personal}<label class="check"
 								><input
 									type="checkbox"

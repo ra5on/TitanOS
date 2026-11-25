@@ -1,6 +1,8 @@
 // Back and forward in the file manager, like in a browser. A step keeps
 // the search, the selection and both scroll positions of the folder.
 
+import type { SearchPosition } from '#lib/file-search.ts';
+
 export type Location = {
 	root: string;
 	path: string;
@@ -8,6 +10,7 @@ export type Location = {
 	selected: string[];
 	scroll: number;
 	listScroll: number;
+	deep?: SearchPosition;
 };
 
 export class FileHistory {

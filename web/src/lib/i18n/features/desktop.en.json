@@ -333,7 +333,7 @@
 	"share.appText": "On the home screen, full screen and as a share target: photos and files from other apps go straight to the NAS.",
 	"share.install": "Install",
 	"share.installed": "Installed as an app",
-	"share.iosHint": "On an iPhone: in Safari “Share” › “Add to Home Screen”. iOS does not let web apps receive shares from other apps.",
+	"share.iosHint": "On an iPhone: in Safari “Share” › “Add to Home Screen”, then turn on “Open as Web App”. iOS does not let web apps receive shares from other apps.",
 	"share.otherHint": "Choose “Install app” or “Add to home screen” in the browser menu.",
 	"desktop.menu.searchShort": "Search",
 	"desktop.menu.orderAz": "Sorted A–Z",

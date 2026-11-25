@@ -64,3 +64,42 @@ func TestPushDevices(t *testing.T) {
 		t.Fatalf("test of a removed device: %d", res.StatusCode)
 	}
 }
+
+func TestBellReadFollowsAccountAndFilters(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	m := ts.server.opts.Notify
+	m.Notify("info", "update_ready", "1.27")
+	m.Notify("error", "disk_hot", "sda")
+	a := notifyArea{notify: m, prefs: ts.server.prefs}
+	if err := a.prefs.set("alex", "bell", json.RawMessage(`{"minSeverity":"error","groups":{"disks":false}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if count := a.badge("alex"); count == nil || *count != 1 {
+		t.Fatalf("unread with filter: %v", count)
+	}
+	res, body := ts.request("GET", "/api/v1/notifications", nil)
+	var notes struct{ Messages []struct{ Kind, Time string } }
+	if res.StatusCode != 200 || json.Unmarshal(body, &notes) != nil {
+		t.Fatalf("list: %s", body)
+	}
+	var at string
+	for _, note := range notes.Messages {
+		if note.Kind == "disk_hot" {
+			at = note.Time
+		}
+	}
+	if at == "" {
+		t.Fatal("missing disk notice")
+	}
+	res, body = ts.request("POST", "/api/v1/notifications/read", map[string]any{"times": []string{at}})
+	if res.StatusCode != 204 {
+		t.Fatalf("read: %d %s", res.StatusCode, body)
+	}
+	if count := a.badge("alex"); count == nil || *count != 0 {
+		t.Fatalf("read on second device: %v", count)
+	}
+	if count := a.badge("bea"); count == nil || *count < 2 {
+		t.Fatalf("another account: %v", count)
+	}
+}

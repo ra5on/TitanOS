@@ -16,10 +16,12 @@ import (
 type notifyArea struct {
 	notify  *notify.Manager
 	monitor *system.Monitor
+	prefs   *preferences
 }
 
 func (a notifyArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/v1/notifications", admin(a.handleNotifications))
+	mux.HandleFunc("POST /api/v1/notifications/read", admin(a.handleRead))
 	mux.HandleFunc("POST /api/v1/notifications/dismiss", admin(a.handleDismissNotifications))
 	mux.HandleFunc("GET /api/v1/notifications/settings", admin(a.handleNotifySettings))
 	mux.HandleFunc("PUT /api/v1/notifications/settings", admin(a.handleNotifySettingsChange))
@@ -31,7 +33,14 @@ func (a notifyArea) register(mux *routeMux, admin func(http.HandlerFunc) http.Ha
 // handleNotifications lists what the bell of this account shows: every
 // message but those meant for other accounts (a camera's recipients).
 func (a notifyArea) handleNotifications(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"messages": a.notify.MessagesFor(currentUser(r).Name)})
+	user := currentUser(r).Name
+	answer := map[string]any{"messages": a.notify.MessagesFor(user)}
+	if raw, err := a.prefs.get(user, "notification-read"); err == nil {
+		if read, err := readBellTimes(raw); err == nil {
+			answer["readTimes"] = read.Times
+		}
+	}
+	writeJSON(w, http.StatusOK, answer)
 }
 
 func (a notifyArea) handleDismissNotifications(w http.ResponseWriter, r *http.Request) {

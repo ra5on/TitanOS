@@ -8,6 +8,7 @@ import {
 	type FileView,
 	type FolderView,
 } from '#lib/file-actions.ts';
+import { savedSearches, type SavedSearch } from '#lib/file-search.ts';
 import type { FileSort } from '#lib/file-list.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 
@@ -37,6 +38,7 @@ export class FilePreferenceStore {
 		sort: 'name',
 		descending: false,
 	});
+	searches = $state<SavedSearch[]>([]);
 	ready = $state(false);
 	error = $state('');
 	saving = $state(false);
@@ -69,6 +71,7 @@ export class FilePreferenceStore {
 			this.descending = prefs.descending;
 			this.favorites = prefs.favorites;
 			this.folderViews = prefs.folders;
+			this.searches = savedSearches((result.files as { searches?: unknown } | null)?.searches);
 			this.defaults = { view: prefs.view, sort: prefs.sort, descending: prefs.descending };
 			this.applyFolderView();
 			this.ready = true;
@@ -108,6 +111,7 @@ export class FilePreferenceStore {
 			...this.defaults,
 			folders: $state.snapshot(this.folderViews),
 			favorites: $state.snapshot(this.favorites),
+			searches: $state.snapshot(this.searches),
 		};
 		this.saving = true;
 		this.#queue = this.#queue.then(async () => {

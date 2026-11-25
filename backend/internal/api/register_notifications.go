@@ -2,7 +2,17 @@ package api
 
 // registerNotifications registers the routes of notifications and their settings.
 func (s *Server) registerNotifications(mux *routeMux) {
-	notifyArea{notify: s.opts.Notify, monitor: s.opts.Monitor}.register(mux, s.requireAdmin)
+	a := notifyArea{notify: s.opts.Notify, monitor: s.opts.Monitor, prefs: s.prefs}
+	a.register(mux, s.requireAdmin)
+	if s.opts.WebPush != nil && s.opts.Notify != nil && s.opts.Users != nil && s.opts.Store != nil {
+		s.opts.WebPush.SetBadge(func(name string) *int {
+			user, ok := s.opts.Users.Get(name)
+			if !ok || user.Disabled || !user.Role.CanAdminister() {
+				return nil
+			}
+			return a.badge(name)
+		})
+	}
 }
 
 // registerHealthReport registers the routes of the regular health report.

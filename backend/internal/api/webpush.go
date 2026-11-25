@@ -76,7 +76,8 @@ func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
 		Agent  bool  `json:"agent"`
 		Camera *bool `json:"camera"`
 		// Mail is new mail in T-Mail (1.05); left out it stays as it is.
-		Mail *bool `json:"mail"`
+		Mail         *bool `json:"mail"`
+		PriorityOnly *bool `json:"priorityOnly"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -87,6 +88,9 @@ func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Mail != nil {
 		want[webpush.KindMail] = *req.Mail
+	}
+	if req.PriorityOnly != nil {
+		want["priorityOnly"] = *req.PriorityOnly
 	}
 	device, err := a.push.SetKinds(currentUser(r).Name, r.PathValue("id"), want)
 	switch {
@@ -115,7 +119,9 @@ func (a pushArea) handlePushTest(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	title, text := a.notify.Wording("test", "")
-	err := a.push.Test(ctx, currentUser(r).Name, r.PathValue("id"), webpush.Message{Title: title, Body: text, Tag: "test", URL: "/settings/notifications"})
+	user, id := currentUser(r).Name, r.PathValue("id")
+	err := a.push.Test(ctx, user, id, webpush.Message{Title: title, Body: text, Tag: "test", URL: "/account#acc-app",
+		Test: &webpush.TestReceipt{User: user, Device: id, Sent: time.Now().UTC()}})
 	switch {
 	case errors.Is(err, webpush.ErrNotFound):
 		writeError(w, http.StatusNotFound, "push_device_not_found", err.Error())

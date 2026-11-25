@@ -452,3 +452,27 @@ func TestMessagesGoToTheirApp(t *testing.T) {
 		t.Fatalf("apps %v", apps)
 	}
 }
+
+func TestPriorityDevices(t *testing.T) {
+	devices := []stored{
+		{Device: Device{ID: "phone", User: "alex", PriorityOnly: true}},
+		{Device: Device{ID: "desktop", User: "alex"}},
+		{Device: Device{ID: "other", User: "bea"}},
+	}
+	for _, tc := range []struct {
+		kind string
+		msg  Message
+		want int
+	}{
+		{KindNAS, Message{Severity: "warning"}, 1},
+		{KindNAS, Message{Severity: "error"}, 2},
+		{KindAgent, Message{Approval: true}, 2},
+		{KindAgent, Message{}, 1},
+		{KindMail, Message{}, 1},
+	} {
+		got := pick(devices, "alex", AppTitanOS, tc.kind, tc.msg)
+		if len(got) != tc.want || got[len(got)-1].ID != "desktop" {
+			t.Errorf("%s: %v", tc.kind, got)
+		}
+	}
+}
