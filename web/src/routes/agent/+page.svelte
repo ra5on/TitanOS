@@ -616,6 +616,7 @@
 				{:else}
 					<HomePage
 						fresh={ag.fresh}
+						preferDetails={ag.look.start === 'overview' && !ag.fresh}
 						user={ag.user}
 						chats={ag.listedChats}
 						suggestions={ag.suggestions}

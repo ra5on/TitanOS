@@ -8424,7 +8424,7 @@
 	"agent.noteAlbum": "Photo album",
 	"agent.neverRun": "not run yet",
 	"agent.fitsNow": "Fits right now",
-	"agent.otherSuggestions": "others",
+	"agent.otherSuggestions": "Show different suggestions",
 	"agent.projectChip": "Project",
 	"agent.suggNasSub": "Find the cause and fix it",
 	"agent.suggestNas": "What is behind the message “{title}”? Find the cause and tell me what to do.",
@@ -10155,5 +10155,7 @@
 	"agent.night.work.delegate": "Delegating task",
 	"agent.night.work.code": "Running code",
 	"agent.night.ideas": "Suggestions",
-	"agent.night.overview": "Overview"
+	"agent.night.overview": "Overview",
+	"agent.home.details130": "All details",
+	"agent.home.planLink130": "View tasks and reminders"
 }
