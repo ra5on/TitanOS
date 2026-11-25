@@ -12,16 +12,28 @@
 	// wide as --ag-dot-size (Einstellungen › Darstellung, 18 px by default)
 	// unless a size is given; the dots and their paths grow with it, because
 	// every length below is a share of the figure.
-	import type { BusyKind } from '#lib/agent.ts';
+	import type { BusyKind, DotMode } from '#lib/agent.ts';
 	import { untrack } from 'svelte';
-	import { BLOCK, FIGURES, SPHERE, figureAt, type Spot } from '#lib/agent-figures.ts';
+	import {
+		BLOCK,
+		FIGURES,
+		SPHERE,
+		figureAt,
+		nightFigure,
+		easeUnit,
+		type Spot,
+	} from '#lib/agent-figures.ts';
 
 	let {
 		kind = '',
+		mode = 'both',
+		tool = false,
 		size,
 		calm = false,
 	}: {
 		kind?: BusyKind;
+		mode?: DotMode;
+		tool?: boolean;
 		/** Width and height in px; without it --ag-dot-size. */
 		size?: number;
 		calm?: boolean;
@@ -45,7 +57,10 @@
 
 	/** The still picture at the clock. */
 	function place() {
-		figureAt(kind, clock).forEach((p, n) => {
+		(mode === 'titan'
+			? figureAt(kind, clock)
+			: [-0.64, 0, 0.64].map((x) => ({ x, y: 0, z: 0 }))
+		).forEach((p, n) => {
 			if (dots[n]) dots[n].style.transform = transform(p);
 		});
 	}
@@ -80,63 +95,70 @@
 		for (const a of playing) a.cancel();
 		playing = [];
 	}
-	/** Plays the next stretch of the figure of `k`, from where it stands. */
-	function play(k: BusyKind) {
-		if (playing.length) clock = clockNow();
-		for (const a of playing) a.cancel();
+	// Blend on the same running clock. A second tool has the same target.
+	let blendStart = 0,
+		blendFrom = 0,
+		blendTo = 0;
+	function weight(at: number) {
+		return blendFrom + (blendTo - blendFrom) * easeUnit((at - blendStart) / 0.7);
+	}
+	const target = $derived(mode === 'braid' || (mode === 'both' && tool) ? 1 : 0);
+	const legacyKind = $derived(mode === 'titan' ? kind : '');
+	function play() {
+		stop();
 		from = clock;
-		speed = (FIGURES[k] ?? FIGURES['']).speed;
+		if (blendTo !== target) {
+			blendFrom = weight(clock);
+			blendTo = target;
+			blendStart = clock;
+		}
+		speed = mode === 'titan' ? (FIGURES[legacyKind] ?? FIGURES['']).speed : 1;
 		half = (box?.offsetWidth ?? 0) / 2;
 		const frames: Keyframe[][] = [[], [], []];
-		const count = (STRETCH / 1000) * RATE;
-		for (let i = 0; i <= count; i++)
-			figureAt(k, from + (i / RATE) * speed).forEach((p, n) =>
-				frames[n].push({ transform: transform(p) }),
-			);
-		playing = dots.filter(Boolean).map((el, n) => {
-			// The stretch's first place under the animation: never a flash.
+		for (let i = 0; i <= (STRETCH * RATE) / 1000; i++) {
+			const at = from + (i / RATE) * speed;
+			const points = mode === 'titan' ? figureAt(legacyKind, at) : nightFigure(at, weight(at));
+			points.forEach((point, n) => frames[n].push({ transform: transform(point) }));
+		}
+		playing = dots.map((el, n) => {
 			el.style.transform = String(frames[n][0].transform);
 			return el.animate(frames[n], { duration: STRETCH, fill: 'forwards' });
 		});
-		clearTimeout(next);
-		next = setTimeout(() => play(kind), STRETCH - 400);
+		next = setTimeout(play, STRETCH - 400);
 	}
-
-	// Standing still: one picture.
-	const still = $derived(
-		calm ||
-			typeof window === 'undefined' ||
-			typeof Element.prototype.animate !== 'function' ||
-			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
-	);
+	let reduced = $state(false);
 	$effect(() => {
-		void dots.length;
-		if (still) place();
+		if (typeof matchMedia === 'undefined') return;
+		const media = matchMedia('(prefers-reduced-motion: reduce)');
+		const update = () => (reduced = media.matches);
+		update();
+		media.addEventListener?.('change', update);
+		return () => media.removeEventListener?.('change', update);
 	});
-	// Moving: one clock for the life of the figure. A new kind of work goes
-	// on from where the dots are; it never starts the motion again.
-	// A moving figure begins at a block of its own, so not every run opens
-	// with the same phases (the still picture stays at time 0: the ring).
 	let begun = false;
 	$effect(() => {
-		if (still || dots.length < 3) return;
+		void mode;
+		void target;
+		void legacyKind;
+		if (dots.filter(Boolean).length !== 3) return;
+		if (calm || reduced || typeof Element.prototype.animate !== 'function') {
+			untrack(place);
+			return;
+		}
 		if (!begun) {
 			begun = true;
-			clock += BLOCK * Math.floor(Math.random() * 50);
+			if (mode === 'titan') clock = BLOCK * Math.floor(Math.random() * 50);
+			blendFrom = blendTo = target;
 		}
-		play(untrack(() => kind));
+		untrack(play);
 		return stop;
-	});
-	$effect(() => {
-		const k = kind;
-		if (untrack(() => playing.length)) play(k);
 	});
 	// Another size (Einstellungen › Darstellung): the places of the stretch
 	// are worked out again for it.
 	$effect(() => {
 		if (!box || typeof ResizeObserver === 'undefined') return;
 		const watch = new ResizeObserver(() => {
-			if (playing.length && box && box.offsetWidth / 2 !== half) play(kind);
+			if (playing.length && box && box.offsetWidth / 2 !== half) play();
 		});
 		watch.observe(box);
 		return () => watch.disconnect();
@@ -149,6 +171,8 @@
 	style:--fig-size={size ? `${size}px` : null}
 	style:--fig-dot="{SPHERE * 100}%"
 	data-kind={kind}
+	data-figure={mode}
+	data-pattern={mode === 'titan' ? 'titan' : target ? 'braid' : 'magnet'}
 	aria-hidden="true"
 	>{#each [0, 1, 2] as n (n)}<i bind:this={dots[n]}></i>{/each}</span
 >

@@ -103,6 +103,7 @@
 	const chats = $derived(allChats.filter((c) => !c.archived));
 	const archivedCount = $derived(allChats.filter((c) => c.archived && !c.author).length);
 
+	let section = $state<'menu' | 'chats' | 'projects'>('menu');
 	let query = $state('');
 	const found = $derived(
 		query.trim()
@@ -110,9 +111,6 @@
 					(c.title + ' ' + (c.preview ?? '')).toLowerCase().includes(query.trim().toLowerCase()),
 				)
 			: null,
-	);
-	const loose = $derived(
-		chats.filter((c) => !c.project || !projects.some((p) => p.id === c.project)),
 	);
 	const groupLabel: Record<string, MessageKey> = {
 		pinned: 'agent.groupPinned',
@@ -252,34 +250,59 @@
 				>{#if n}<span class="n">{n}</span>{/if}</button
 			>
 		{/snippet}
-		{#if !found}
-			{@render nav('chat', view === 'start', 'home', t('agent.home'), waitingCount)}
+		{#if !found && section === 'menu'}
+			{@render nav('chat', view === 'start', 'home', t('agent.night.day'), waitingCount)}
+			<button type="button" class="item" onclick={() => (section = 'chats')}
+				><span class="em"><Icon name="chat" size={17} /></span><span class="name"
+					>{t('agent.night.conversations')}</span
+				></button
+			>
+			<button type="button" class="item" onclick={() => (section = 'projects')}
+				><span class="em"><Icon name="folder" size={17} /></span><span class="name"
+					>{t('agent.projects')}</span
+				></button
+			>
 			{@render nav('planned', view === 'planned', 'clock', t('agent.planned'), plannedCount)}
 			{@render nav('memory', view === 'memory', 'bulb', t('agent.memory'))}
 			{@render nav('knowledge', view === 'knowledge', 'fileText', t('agent.knowledge'))}
 		{/if}
-		{#if onnotes && !found}<button type="button" class="item" onclick={onnotes}
+		{#if onnotes && !found && section === 'menu'}<button
+				type="button"
+				class="item"
+				onclick={onnotes}
 				><span class="em"><Icon name="edit" size={17} /></span><span class="name"
 					>{t('agent.notes.title')}</span
 				></button
 			>{/if}
-		{#if ontemplates && !found}<button class="item" type="button" onclick={ontemplates}
+		{#if ontemplates && !found && section === 'menu'}<button
+				class="item"
+				type="button"
+				onclick={ontemplates}
 				><span class="em"><Icon name="fileText" size={16} /></span><span class="name"
 					>{t('agent.library.templates')}</span
 				></button
 			>{/if}
-		{#if onarchive && archivedCount && !found}<button type="button" class="item" onclick={onarchive}
+		{#if onarchive && archivedCount && !found && section === 'menu'}<button
+				type="button"
+				class="item"
+				onclick={onarchive}
 				><span class="em"><Icon name="archive" size={16} /></span><span class="name"
 					>{t('agent.archive.title')}</span
 				><span class="n">{archivedCount}</span></button
 			>{/if}
-		{#each found ? [] : features as f (f.id)}<button
+		{#each found || section !== 'menu' ? [] : features as f (f.id)}<button
 				type="button"
 				class="item"
 				onclick={() => onfeature?.(f.id)}
 				><span class="em"><Icon name={f.icon} size={16} /></span><span class="name">{f.label}</span
 				>{#if f.count}<span class="n">{f.count}</span>{/if}</button
 			>{/each}
+		{#if !found && section !== 'menu'}<button
+				type="button"
+				class="item section-back"
+				onclick={() => (section = 'menu')}
+				><Icon name="chevronLeft" size={20} />{t('agent.night.menu')}</button
+			>{/if}
 		{#if found}
 			<div class="group">{t('agent.found', { count: found.length })}</div>
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}
@@ -300,7 +323,7 @@
 					></button
 				>
 			{/if}
-		{:else}
+		{:else if section === 'projects'}
 			<div class="group">{t('agent.projects')}</div>
 			{#each projects as p (p.id)}
 				{@const st = stateIn(p.id)}
@@ -361,10 +384,12 @@
 					>{t('agent.newProject')}</span
 				></button
 			>
-			{#each groupChats(loose) as group (group.key)}
+		{:else if section === 'chats'}
+			<div class="group">{t('agent.night.conversations')}</div>
+			{#each groupChats(chats) as group (group.key)}
 				<div class="group">{t(groupLabel[group.key])}</div>
 				{#each group.chats as chat (chat.id)}{@render row(chat)}{/each}
-			{/each}
+			{:else}<p class="muted empty">{t('agent.searchNone')}</p>{/each}
 		{/if}
 	</div>
 	<div class="foot">
@@ -755,5 +780,11 @@
 			min-height: 42px;
 			font-size: 15px;
 		}
+	}
+	.section-back {
+		min-height: 48px;
+		gap: 8px;
+		color: var(--ag-link, var(--accent));
+		font-weight: 600;
 	}
 </style>

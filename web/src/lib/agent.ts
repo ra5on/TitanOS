@@ -802,7 +802,12 @@ export function tokens(n: number): string {
  * look (accent, style, background, glass, glassLevel, glow) are ignored.
  */
 export type Swipe = 'pin' | 'archive' | 'delete' | 'menu' | 'none';
+export type DotMode = 'both' | 'magnet' | 'braid' | 'titan';
 export type Look = {
+	dotMode: DotMode;
+	trail: boolean;
+	trailSeconds: number;
+	textShine: boolean;
 	typing: boolean;
 	vibrate: boolean;
 	calm: boolean;
@@ -853,6 +858,10 @@ export const LOOK_KEY = 'titanos.agent.look';
 export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
 
 export const defaultLook = (): Look => ({
+	dotMode: 'both',
+	trail: true,
+	trailSeconds: 4.8,
+	textShine: true,
 	typing: true,
 	vibrate: true,
 	calm: false,
@@ -889,6 +898,10 @@ export function sanitizeLook(v: unknown): Look {
 	const num = (x: unknown, min: number, max: number, def: number) =>
 		typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def;
 	return {
+		dotMode: pick(o.dotMode, ['both', 'magnet', 'braid', 'titan'], d.dotMode),
+		trail: bool(o.trail, d.trail),
+		trailSeconds: o.trailSeconds === 3.2 ? 3.2 : 4.8,
+		textShine: bool(o.textShine, d.textShine),
 		typing: bool(o.typing, d.typing),
 		vibrate: bool(o.vibrate, d.vibrate),
 		calm: bool(o.calm, d.calm),

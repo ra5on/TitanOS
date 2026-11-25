@@ -599,7 +599,11 @@
 					data-agent-figure
 					style:--ag-dots={agentLook.value.dotColor || null}
 					style:--ag-dot-size="{DOT_SIZES[agentLook.value.dotSize]}px"
-					><BusyFigure kind="" calm={lookCalm(agentLook.value)} /></span
+					><BusyFigure
+						mode={agentLook.value.dotMode}
+						kind=""
+						calm={lookCalm(agentLook.value)}
+					/></span
 				>
 				<span class="ellipsis grow">{c.title}</span>
 				<span class="state on">{t('desktop.widget.agentRuns')}</span>

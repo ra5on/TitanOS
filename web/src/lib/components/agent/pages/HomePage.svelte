@@ -21,6 +21,7 @@
 		type Schedule,
 		type Suggestion,
 	} from '#lib/agent.ts';
+	import DayJournal from './DayJournal.svelte';
 	import PageShell from './PageShell.svelte';
 
 	let {
@@ -32,7 +33,8 @@
 		fresh = false,
 		phone = false,
 		onunfold,
-		onoverview,
+		onapproval,
+		calm = false,
 		onopen,
 		onstop,
 		onfill,
@@ -52,7 +54,8 @@
 		fresh?: boolean;
 		phone?: boolean;
 		onunfold?: () => void;
-		onoverview?: () => void;
+		onapproval: (id: string) => void;
+		calm?: boolean;
 		onopen: (id: string) => void;
 		onstop: (c: ChatInfo) => void;
 		onfill: (text: string) => void;
@@ -112,7 +115,8 @@
 	// too much): the greeting, one row when something waits or runs, and the
 	// questions; the overview opens on request.
 	let more = $state(false);
-	const brief = $derived(fresh || (phone && !more));
+	const brief = $derived(!more);
+	let ideasOpen = $state(false);
 	const waiting = $derived(chats.filter((c) => c.state === 'waiting' && !c.author));
 	const running = $derived(chats.filter((c) => c.state === 'running' && !c.author));
 	const open = $derived(waiting.length + items.length);
@@ -313,71 +317,16 @@
 <PageShell
 	title={fresh ? t('agent.freshTitle') : hello}
 	plain
-	center={brief}
+	hideTitle={brief && (chats.length > 0 || phone)}
 	lead={brief ? undefined : lead}
 	{phone}
 	{onunfold}
 >
 	{#if error && !brief}<p class="notice-error" role="alert">{error}</p>{/if}
 
-	{#if brief && !fresh && waiting[0]}
-		<SettingGroup>
-			<button type="button" class="srow" onclick={() => onopen(waiting[0].id)}>
-				<div class="srow-head">
-					<span class="srow-ico warn"><Icon name="shield" size={19} /></span>
-					<div class="srow-text">
-						<span class="srow-title">{t('agent.home.approval', { title: waiting[0].title })}</span>
-						<p class="srow-desc">{t('agent.home.look')}</p>
-					</div>
-					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-				</div>
-			</button>
-		</SettingGroup>
-	{:else if brief && !fresh && (open || running.length)}
-		<SettingGroup>
-			<button type="button" class="srow" onclick={() => (more = true)}>
-				<div class="srow-head">
-					<span class="srow-ico {open ? 'warn' : 'live'}"
-						><Icon name={open ? 'shield' : 'activity'} size={19} /></span
-					>
-					<div class="srow-text">
-						<span class="srow-title"
-							>{open === 0
-								? t('agent.home.runningCount', { count: running.length })
-								: open === 1
-									? t('agent.home.openOne')
-									: t('agent.home.open', { count: open })}</span
-						>
-						{#if open && running.length}<p class="srow-desc">
-								{t('agent.home.runningCount', { count: running.length })}
-							</p>{/if}
-					</div>
-					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
-				</div>
-			</button>
-		</SettingGroup>
-	{/if}
-
-	{#if open && !brief}
+	<DayJournal {chats} {onopen} {onapproval} {calm} />
+	{#if items.length && !brief}
 		<SettingGroup title={t('agent.home.waiting')}>
-			{#each waiting as chat (chat.id)}
-				<div class="srow">
-					<div class="srow-head">
-						<span class="srow-ico warn"><Icon name="shield" size={19} /></span>
-						<div class="srow-text">
-							<span class="srow-title">{t('agent.home.approval', { title: chat.title })}</span>
-							<p class="srow-desc">
-								{t('agent.home.approvalDesc', { time: formatDateTime(new Date(chat.updated)) })}
-							</p>
-						</div>
-						<div class="srow-ctl">
-							<button type="button" class="btn btn-primary" onclick={() => onopen(chat.id)}
-								>{t('agent.home.look')}</button
-							>
-						</div>
-					</div>
-				</div>
-			{/each}
 			{#each items as item (item.id)}
 				<div class="srow">
 					<div class="srow-head">
@@ -542,44 +491,55 @@
 		</div>{/if}
 
 	{#if show && suggestions.length}
-		<SettingGroup title={t('agent.fitsNow')}>
-			{#snippet tools()}{#if onshuffle}<button type="button" class="more" onclick={onshuffle}
-						><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
-					>{/if}{/snippet}
-			<div class="ideas">
-				{#each suggestions as s (s.text)}
-					<button type="button" class="srow" onclick={() => onfill(s.text)}>
-						<div class="srow-head">
-							<span class="srow-ico {s.tone === 'warn' ? 'warn' : ''}"
-								><Icon name={s.icon ?? 'sparkle'} size={19} /></span
-							>
-							<div class="srow-text">
-								<span class="srow-title"
-									>{s.title}{#if s.tag}
-										<span class="chip {s.tone ?? 'info'}">{s.tag}</span>{/if}</span
-								>
-								<p class="srow-desc">{s.sub}</p>
-							</div>
-						</div>
-					</button>
-				{/each}
-			</div>
-		</SettingGroup>
-	{/if}
-
-	{#if phone && fresh && onoverview}<button type="button" class="more overview" onclick={onoverview}
-			>{t('agent.home')}</button
-		>{/if}
-	{#if phone && !fresh}
-		<button type="button" class="more overview" onclick={() => (more = !more)}
-			>{more ? t('agent.home.less') : t('agent.home.overview')}</button
+		<button
+			type="button"
+			class="more ideas-toggle"
+			aria-expanded={ideasOpen}
+			onclick={() => (ideasOpen = !ideasOpen)}
+			><Icon name="sparkle" size={15} />{t('agent.fitsNow')}<Icon
+				name={ideasOpen ? 'chevronUp' : 'chevronDown'}
+				size={13}
+			/></button
 		>
+		{#if ideasOpen}
+			<SettingGroup title={t('agent.fitsNow')}>
+				{#snippet tools()}{#if onshuffle}<button type="button" class="more" onclick={onshuffle}
+							><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
+						>{/if}{/snippet}
+				<div class="ideas">
+					{#each suggestions as s (s.text)}
+						<button type="button" class="srow" onclick={() => onfill(s.text)}>
+							<div class="srow-head">
+								<span class="srow-ico {s.tone === 'warn' ? 'warn' : ''}"
+									><Icon name={s.icon ?? 'sparkle'} size={19} /></span
+								>
+								<div class="srow-text">
+									<span class="srow-title"
+										>{s.title}{#if s.tag}
+											<span class="chip {s.tone ?? 'info'}">{s.tag}</span>{/if}</span
+									>
+									<p class="srow-desc">{s.sub}</p>
+								</div>
+							</div>
+						</button>
+					{/each}
+				</div>
+			</SettingGroup>
+		{/if}
 	{/if}
+	<button type="button" class="more overview" aria-expanded={more} onclick={() => (more = !more)}
+		>{more
+			? t('agent.home.less')
+			: t('agent.home.overview')}{#if !more && (items.length || running.length)}<span
+				>· {items.length + running.length}</span
+			>{/if}<Icon name={more ? 'chevronUp' : 'chevronDown'} size={13} /></button
+	>
 </PageShell>
 
 <style>
+	.ideas-toggle,
 	.overview {
-		align-self: center;
+		align-self: flex-start;
 		min-height: 44px;
 	}
 	.two {

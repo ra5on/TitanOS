@@ -10,6 +10,7 @@
 
 	let {
 		block,
+		runningId,
 		tappable = false,
 		inline = false,
 		busy = false,
@@ -18,6 +19,7 @@
 		onundo,
 	}: {
 		block: StepsBlock;
+		runningId?: string;
 		/** Each step opens what it got and gave (in the sheet). */
 		tappable?: boolean;
 		/** Open in the chat under the line of the turn. */
@@ -33,7 +35,15 @@
 {#snippet stepBody(step: Entry | null, chevron: boolean)}
 	<span class="mark"
 		><Icon
-			name={!step ? 'bulb' : stepFailed(step) ? 'close' : step.role === 'note' ? 'shield' : 'check'}
+			name={!step
+				? 'bulb'
+				: step.id === runningId
+					? 'clock'
+					: stepFailed(step)
+						? 'close'
+						: step.role === 'note'
+							? 'shield'
+							: 'check'}
 			size={16}
 		/></span
 	>
@@ -42,7 +52,8 @@
 				>{stepDetail(step.args)}</small
 			>{/if}</span
 	>
-	{#if step && stepFailed(step)}<span class="sr-only">{t('agent.stepFailed')}</span>{/if}
+	{#if step && step.id === runningId}<small>{t('agent.working')}</small
+		>{:else if step && stepFailed(step)}<span class="sr-only">{t('agent.stepFailed')}</span>{/if}
 	{#if step && (step.durationMs ?? 0) >= 100}<span class="time"
 			>{((step.durationMs ?? 0) / 1000).toFixed(1).replace('.', ',')} s</span
 		>{/if}
