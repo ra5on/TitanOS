@@ -6,7 +6,7 @@
 	// step that waits for approval and, while it runs, what streams in.
 	// The parts are in ./chat/ (1.01); this view keeps the order of the
 	// lines, the scrolling and the sheets.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { blocks, type Chat, type Entry, type Pending } from '#lib/agent.ts';
 	import AnswerBlock from './chat/AnswerBlock.svelte';
 	import ApprovalCard from './chat/ApprovalCard.svelte';
@@ -37,6 +37,8 @@
 		onplanned,
 		onresend,
 		onremember,
+		ontemplate,
+		jump = '',
 		find = $bindable(null),
 		phone = false,
 		calm = false,
@@ -49,6 +51,8 @@
 		onresend?: (entry: Entry, text?: string) => void;
 		/** "Das merken": writes the text into the memory. */
 		onremember?: (text: string) => void;
+		ontemplate?: (text: string) => void;
+		jump?: string;
 		/** The search in this chat: null is closed, else what is looked for. */
 		find?: string | null;
 		phone?: boolean;
@@ -169,6 +173,26 @@
 		lastTop = 0;
 		ownSent = untrack(() => chat.entries.filter((e) => e.role === 'user').length);
 	});
+	// An explicit search target wins over the initial scroll to the last turn.
+	$effect(() => {
+		const entry = jump,
+			id = chat.id,
+			el = column;
+		if (!entry || !id || !el) return;
+		let active = true;
+		void tick().then(() => {
+			if (!active) return;
+			const target = el.querySelector<HTMLElement>('#agent-entry-' + CSS.escape(entry));
+			if (target) {
+				pinned = false;
+				target.focus({ preventScroll: true });
+				target.scrollIntoView({ block: 'center' });
+			}
+		});
+		return () => {
+			active = false;
+		};
+	});
 	// A message of one's own shows at the end again.
 	let ownSent = 0;
 	$effect(() => {
@@ -284,6 +308,7 @@
 				<UserMessage
 					entry={block.entry}
 					bind:editing
+					{ontemplate}
 					{phone}
 					{canChange}
 					{copied}
@@ -378,6 +403,12 @@
 			sheet = null;
 			find = '';
 		}}
+		ontemplate={ontemplate && shown.role === 'user'
+			? () => {
+					sheet = null;
+					ontemplate(shown.content ?? '');
+				}
+			: undefined}
 		onremember={onremember
 			? () => {
 					const text = shown.content ?? '';

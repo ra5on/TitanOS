@@ -32,6 +32,7 @@
 		fresh = false,
 		phone = false,
 		onunfold,
+		onoverview,
 		onopen,
 		onstop,
 		onfill,
@@ -51,6 +52,7 @@
 		fresh?: boolean;
 		phone?: boolean;
 		onunfold?: () => void;
+		onoverview?: () => void;
 		onopen: (id: string) => void;
 		onstop: (c: ChatInfo) => void;
 		onfill: (text: string) => void;
@@ -565,6 +567,9 @@
 		</SettingGroup>
 	{/if}
 
+	{#if phone && fresh && onoverview}<button type="button" class="more overview" onclick={onoverview}
+			>{t('agent.home')}</button
+		>{/if}
 	{#if phone && !fresh}
 		<button type="button" class="more overview" onclick={() => (more = !more)}
 			>{more ? t('agent.home.less') : t('agent.home.overview')}</button

@@ -28,6 +28,10 @@
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import ProjectList from '#lib/components/agent/ProjectList.svelte';
 	import ChatSheets from './ChatSheets.svelte';
+	import ChatSearch from './ChatSearch.svelte';
+	import PromptTemplates from './PromptTemplates.svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { isChatSheet } from './chat-sheets.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -47,6 +51,20 @@
 	// State, requests and effects live in agent-chats.svelte.ts and agent-page.svelte.ts.
 	const ag = new AgentPage();
 	const currentInfo = $derived(ag.currentInfo);
+	const firstWaiting = $derived(
+		ag.listedChats
+			.filter((c) => !c.author && c.state === 'waiting')
+			.sort((a, b) => a.updated.localeCompare(b.updated))[0],
+	);
+	async function openWaiting(id: string) {
+		await ag.open(id, false);
+		if (ag.current?.id !== id) return;
+		const url = new URL('/agent', location.origin);
+		url.searchParams.set('chat', id);
+		if (ag.profile) url.searchParams.set('profile', ag.profile);
+		if (ag.current.pending) url.hash = 'pending-' + ag.current.pending.id;
+		await goto(url.pathname + url.search + url.hash);
+	}
 
 	// PLAN 67-1: the menu bar of the desktop – the same actions as the agent's own menu.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -554,6 +572,12 @@
 						readonly={!!ag.readOnlyBy}
 						onplanned={() => ag.show('planned')}
 						chat={ag.current}
+						jump={page.url.searchParams.get('chat') === ag.current.id
+							? (page.url.searchParams.get('entry') ?? '')
+							: ''}
+						ontemplate={ag.readOnlyBy
+							? undefined
+							: (text) => (ag.dialog = { kind: 'templates', text })}
 						live={ag.look.typing ? ag.live : { ...ag.live, content: '' }}
 						busy={ag.busy}
 						deciding={ag.deciding}
@@ -581,6 +605,7 @@
 						show={ag.look.suggestions}
 						phone={ag.phone}
 						onunfold={unfold}
+						onoverview={() => ag.newChat(ag.project, false)}
 						onopen={(id) => ag.open(id)}
 						onstop={(c) => ag.stop(c.id)}
 						onfill={(text) => ag.composer?.fill(text)}
@@ -595,6 +620,13 @@
 				{/if}
 				{#if !ag.onPage && !projectsTab}
 					<div class="dock">
+						{#if ag.phone && ag.fresh && !ag.current && firstWaiting}<button
+								class="agent-pending-shortcut"
+								onclick={() => openWaiting(firstWaiting.id)}
+								><Icon name="shield" size={16} /><span
+									>{t('agent.home.approval', { title: firstWaiting.title })}</span
+								><Icon name="chevronRight" size={15} /></button
+							>{/if}
 						{#if ag.notice}<p class="said" role="status">{ag.notice}</p>{/if}
 						<Composer
 							micHold={ag.look.mic === 'hold'}
@@ -781,8 +813,57 @@
 		}}
 	/>
 {/if}
+{#if ag.dialog?.kind === 'textSearch'}
+	<ChatSearch
+		projects={ag.projects}
+		initial={ag.dialog.query}
+		onclose={() => (ag.dialog = null)}
+		onopen={(h) => {
+			ag.dialog = null;
+			const q = new URLSearchParams({ chat: h.chat, entry: h.entry });
+			if (h.author) q.set('author', h.author);
+			void ag.go('/agent?' + q);
+		}}
+	/>
+{:else if ag.dialog?.kind === 'templates'}
+	<PromptTemplates
+		text={ag.dialog.text}
+		occupied={!!ag.draft.trim() || ag.attachments.length > 0}
+		onclose={() => (ag.dialog = null)}
+		onuse={(text) => {
+			ag.dialog = null;
+			ag.freshChat(ag.project);
+			ag.attachments = [];
+			ag.draft = text;
+			ag.composer?.fill(text);
+		}}
+	/>
+{/if}
 
 <style>
+	.agent-pending-shortcut {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		min-height: 44px;
+		text-align: left;
+		padding: 0.4rem 0.7rem;
+		color: inherit;
+		border: 1px solid var(--line);
+		border-radius: 0.6rem;
+		background: var(--surface);
+		cursor: pointer;
+	}
+	.agent-pending-shortcut span {
+		flex: 1;
+		overflow-wrap: anywhere;
+	}
+	.agent-pending-shortcut:hover,
+	.agent-pending-shortcut:focus-visible,
+	.agent-pending-shortcut:active {
+		background: var(--hover);
+	}
 	/* PLAN 68: the agent in the design language of every window: no
 	   background of its own, colors from the theme, the side bar like the
 	   side bar of a window, the chat at most 760 px wide in the middle. */

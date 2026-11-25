@@ -32,6 +32,10 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/volume/move", s.requireAdmin(s.handleAgentMove))
 	mux.HandleFunc("POST /api/v1/agent/volume/cleanup", s.requireAdmin(s.handleAgentMoveCleanup))
 
+	mux.HandleFunc("GET /api/v1/agent/text-search", s.requireAgent(s.handleAgentTextSearch))
+	mux.HandleFunc("GET /api/v1/agent/prompt-templates", s.requireAgent(s.handleAgentTemplates))
+	mux.HandleFunc("POST /api/v1/agent/prompt-templates", s.requireAgent(s.handleAgentTemplates))
+	mux.HandleFunc("DELETE /api/v1/agent/prompt-templates/{id}", s.requireAgent(s.handleAgentTemplates))
 	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
 	mux.HandleFunc("POST /api/v1/agent/chats", s.requireAgent(s.handleAgentChatNew))
 	mux.HandleFunc("DELETE /api/v1/agent/chats", s.requireAgent(s.handleAgentChatsDelete))

@@ -10090,5 +10090,15 @@
 	"error.personal_backup_busy": "Another recovery is in progress. Try again when it finishes.",
 	"error.personal_backup_changed": "The selection or a collection changed during the export. Start the backup again.",
 	"error.personal_backup_invalid": "Check the archive, recovery key and selected collections.",
-	"error.personal_backup_unavailable": "Personal data or backup settings are currently unavailable."
+	"error.personal_backup_unavailable": "Personal data or backup settings are currently unavailable.",
+	"agent.library.search": "Search messages and archive",
+	"agent.library.all": "All projects",
+	"agent.library.noHits": "No messages matched.",
+	"agent.library.more": "Search more messages",
+	"agent.library.templates": "Prompt templates",
+	"agent.library.save": "Save as template",
+	"agent.library.empty": "Save a prompt using the actions on your message.",
+	"agent.library.use": "Use in a new chat",
+	"agent.library.draftFirst": "There is an unsent draft in your chat. Send it or clear the composer and attachments before opening a template.",
+	"error.agent_search_term": "Enter between 2 and 120 characters to search messages."
 }

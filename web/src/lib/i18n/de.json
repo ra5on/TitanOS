@@ -10090,5 +10090,15 @@
 	"error.personal_backup_busy": "Eine andere Wiederherstellung läuft. Versuche es anschließend erneut.",
 	"error.personal_backup_changed": "Die Sicherungsauswahl oder eine Sammlung wurde während des Exports geändert. Starte die Sicherung erneut.",
 	"error.personal_backup_invalid": "Prüfe Archiv, Wiederherstellungsschlüssel und ausgewählte Sammlungen.",
-	"error.personal_backup_unavailable": "Die persönlichen Daten oder Sicherungseinstellungen sind derzeit nicht erreichbar."
+	"error.personal_backup_unavailable": "Die persönlichen Daten oder Sicherungseinstellungen sind derzeit nicht erreichbar.",
+	"agent.library.search": "Nachrichten und Archiv durchsuchen",
+	"agent.library.all": "Alle Projekte",
+	"agent.library.noHits": "Kein Nachrichtentext gefunden.",
+	"agent.library.more": "Weitere Nachrichten durchsuchen",
+	"agent.library.templates": "Auftragsvorlagen",
+	"agent.library.save": "Als Vorlage speichern",
+	"agent.library.empty": "Speichere einen Auftrag über die Aktionen deiner Nachricht als Vorlage.",
+	"agent.library.use": "In neuen Chat übernehmen",
+	"agent.library.draftFirst": "Dein Chat enthält einen ungesendeten Entwurf. Sende ihn oder räume das Eingabefeld und die Anhänge frei, bevor du eine Vorlage öffnest.",
+	"error.agent_search_term": "Bitte 2 bis 120 Zeichen für die Nachrichtensuche eingeben."
 }

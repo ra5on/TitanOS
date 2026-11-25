@@ -147,6 +147,8 @@ export class AgentChats {
 		/** A project: its chats, files and memory (from the page Wissen). */
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
+		| { kind: 'textSearch'; query: string }
+		| { kind: 'templates'; text?: string }
 		| { kind: 'talk' }
 		/** Project, model and thinking level of the chat (PLAN 90-4). */
 		| { kind: 'head' }

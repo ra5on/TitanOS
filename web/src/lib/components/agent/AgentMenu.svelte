@@ -33,6 +33,8 @@
 		view = 'chat',
 		onshow,
 		onsearchmemory,
+		ontextsearch,
+		ontemplates,
 		waitingCount = 0,
 		onnotes,
 		features = [],
@@ -70,6 +72,8 @@
 		onshow: (view: AgentView) => void;
 		/** Looks for the words of the search in the memory. */
 		onsearchmemory?: (query: string) => void;
+		ontextsearch?: (query: string) => void;
+		ontemplates?: () => void;
 		/** Approvals and suggestions that wait for the person. */
 		waitingCount?: number;
 		/** Opens the notes (PLAN 57). */
@@ -259,6 +263,11 @@
 					>{t('agent.notes.title')}</span
 				></button
 			>{/if}
+		{#if ontemplates && !found}<button class="item" type="button" onclick={ontemplates}
+				><span class="em"><Icon name="fileText" size={16} /></span><span class="name"
+					>{t('agent.library.templates')}</span
+				></button
+			>{/if}
 		{#if onarchive && archivedCount && !found}<button type="button" class="item" onclick={onarchive}
 				><span class="em"><Icon name="archive" size={16} /></span><span class="name"
 					>{t('agent.archive.title')}</span
@@ -276,6 +285,14 @@
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}
 				<p class="muted empty">{t('agent.searchNone')}</p>
 			{/each}
+			{#if ontextsearch && query.trim().length >= 2}<button
+					class="item"
+					type="button"
+					onclick={() => ontextsearch(query.trim())}
+					><span class="em"><Icon name="search" size={16} /></span><span class="name"
+						>{t('agent.library.search')}</span
+					></button
+				>{/if}
 			{#if onsearchmemory}
 				<button type="button" class="item" onclick={() => onsearchmemory(query.trim())}
 					><span class="em"><Icon name="bulb" size={17} /></span><span class="name"
