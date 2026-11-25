@@ -26,6 +26,7 @@
 	// on the dock (not on an icon) opens its own menu with the edit mode for
 	// size, opacity, animation and position.
 	import { MediaQuery } from 'svelte/reactivity';
+	import { onDestroy } from 'svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import Icon from '../components/Icon.svelte';
 	import DesktopIcon from './DesktopIcon.svelte';
@@ -75,13 +76,20 @@
 	let bar = $state<HTMLElement>();
 	let scale = $state<Record<string, number>>({});
 	let dropAt = $state<number | null>(null);
+	const dockId = $props.id();
+	let peek = $state('');
+	let peekShift = $state(0);
+	let peekTimer: ReturnType<typeof setTimeout> | undefined;
+	onDestroy(() => clearTimeout(peekTimer));
 	$effect(() => {
 		if (reduced || !dock.magnify || edit) scale = {};
+		if (edit || preview || launcher) schedulePeek('', 0);
 	});
 
 	// Growing under the pointer: each icon by its distance to the pointer.
 	function hover(event: PointerEvent) {
 		if (!bar || !dock.magnify || reduced || edit || event.pointerType === 'touch') return;
+		if (event.target instanceof Element && event.target.closest('.dock-peek')) return;
 		const k = dock.magnify === 2 ? 0.75 : 0.38;
 		const reach = dock.size * 2.4;
 		const next: Record<string, number> = {};
@@ -98,8 +106,25 @@
 	function windowsOf(key: string) {
 		return wm.windows.filter((w) => w.app === key);
 	}
+	function schedulePeek(key: string, delay: number, slot?: HTMLElement) {
+		clearTimeout(peekTimer);
+		const show = () => {
+			peek = !preview && !edit && !launcher && windowsOf(key).length ? key : '';
+			if (!peek || !slot || vertical) {
+				peekShift = 0;
+				return;
+			}
+			const bounds = slot.getBoundingClientRect();
+			const middle = bounds.left + bounds.width / 2;
+			const margin = Math.min(128, innerWidth / 2);
+			peekShift = Math.max(margin, Math.min(innerWidth - margin, middle)) - middle;
+		};
+		if (delay) peekTimer = setTimeout(show, delay);
+		else show();
+	}
 	function click(event: MouseEvent, key: string) {
 		if (edit || preview) return;
+		schedulePeek('', 0);
 		const list = windowsOf(key);
 		if (!list.length) return onopen?.(key, event);
 		const front = list.find((w) => w.id === wm.focused && !w.minimized);
@@ -154,6 +179,15 @@
 	}
 	// PLAN 65-5: the arrow keys move along the dock (Tab leaves it).
 	function arrows(event: KeyboardEvent) {
+		if (event.key === 'Escape' && peek && event.target instanceof Element) {
+			const slot = event.target.closest('.slot');
+			if (slot) {
+				event.stopPropagation();
+				slot.querySelector<HTMLButtonElement>('button.it')?.focus();
+				schedulePeek('', 0);
+				return;
+			}
+		}
 		const keys =
 			dock.position === 'bottom' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
 		if (![...keys, 'Home', 'End'].includes(event.key)) return;
@@ -180,13 +214,34 @@
 	{@const p = byKey.get(key)}
 	{#if p}
 		{@const s = scale[key] ?? 1}
-		{@const open = windowsOf(key).length > 0}
+		{@const windows = windowsOf(key)}
+		{@const open = windows.length > 0}
+		{@const peekOpen = peek === key && open}
 		<div
 			class="slot"
+			role="group"
 			class:gap={dropAt === index && kept}
 			data-key={key}
 			data-pinned={kept ? '' : undefined}
 			style:--s={s}
+			onpointerenter={(event) => {
+				if (event.pointerType === 'mouse' && !event.buttons)
+					schedulePeek(key, 330, event.currentTarget);
+			}}
+			onpointerleave={(event) => {
+				if (
+					!event.currentTarget.contains(document.activeElement) ||
+					!document.activeElement?.matches(':focus-visible')
+				)
+					schedulePeek('', 160);
+			}}
+			onfocusout={(event) => {
+				if (
+					!(event.relatedTarget instanceof Node) ||
+					!event.currentTarget.contains(event.relatedTarget)
+				)
+					schedulePeek('', 0);
+			}}
 		>
 			<button
 				type="button"
@@ -194,7 +249,25 @@
 				class:wiggle={edit && !reduced}
 				draggable={!preview}
 				tabindex={preview ? -1 : undefined}
-				ondragstart={(e) => e.dataTransfer?.setData('text/x-titanos-program', key)}
+				ondragstart={(e) => {
+					schedulePeek('', 0);
+					e.dataTransfer?.setData('text/x-titanos-program', key);
+				}}
+				onfocus={(event) => {
+					if (event.currentTarget.matches(':focus-visible'))
+						schedulePeek(key, 0, event.currentTarget.parentElement ?? undefined);
+				}}
+				onkeydown={(event) => {
+					const inspect =
+						dock.position === 'bottom'
+							? 'ArrowDown'
+							: dock.position === 'left'
+								? 'ArrowRight'
+								: 'ArrowLeft';
+					if (event.key !== inspect || !open || edit || preview || launcher) return;
+					event.preventDefault();
+					schedulePeek(key, 0, event.currentTarget.parentElement ?? undefined);
+				}}
 				onclick={(e) => click(e, key)}
 				oncontextmenu={(e) => {
 					e.preventDefault();
@@ -202,6 +275,8 @@
 					if (!preview) onmenu(e, key);
 				}}
 				aria-label={p.label}
+				aria-expanded={open && !edit && !preview ? peekOpen : undefined}
+				aria-controls={peekOpen ? dockId + '-windows-' + index : undefined}
 			>
 				<DesktopIcon
 					glyph={p.glyph}
@@ -212,7 +287,37 @@
 				/>
 				{#if p.badge?.count}<span class="badge">{p.badge.count}</span>{/if}
 			</button>
-			{#if !edit}<span class="tip" role="tooltip">{p.label}</span>{/if}
+			{#if peekOpen}
+				<div
+					class="dock-peek glass-panel"
+					role="group"
+					aria-label={t('desktop.dock.windows', { name: p.label })}
+					id={dockId + '-windows-' + index}
+					style:--peek-shift="{peekShift}px"
+				>
+					<b>{p.label}</b>
+					{#each windows as itemWindow, i (itemWindow.id)}
+						<button
+							type="button"
+							onclick={() => {
+								focus(itemWindow.id);
+								schedulePeek('', 0);
+							}}
+						>
+							<Icon name="monitor" size={15} />
+							<span
+								>{itemWindow.docName ||
+									(windows.length > 1
+										? t('desktop.dock.window', { n: i + 1 })
+										: itemWindow.title)}</span
+							>
+							{#if itemWindow.minimized}<small>{t('desktop.dock.minimizedWindow')}</small>
+							{:else if itemWindow.id === wm.focused}<small>{t('desktop.dock.activeWindow')}</small
+								>{/if}
+						</button>
+					{/each}
+				</div>
+			{:else if !edit}<span class="tip" role="tooltip">{p.label}</span>{/if}
 			{#if edit && kept}
 				<button
 					type="button"
@@ -528,6 +633,62 @@
 	.slot:hover .tip,
 	.it:focus-visible + .tip {
 		opacity: 1;
+	}
+	.dock-peek {
+		position: absolute;
+		z-index: 1;
+		left: 50%;
+		bottom: calc(100% + 6px);
+		transform: translateX(calc(-50% + var(--peek-shift)));
+		display: grid;
+		gap: 3px;
+		width: min(15rem, calc(100vw - 24px));
+		max-height: 16rem;
+		overflow: auto;
+		padding: 8px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-panel);
+		font-size: var(--text-sm);
+	}
+	.left .dock-peek,
+	.right .dock-peek {
+		left: calc(100% + 8px);
+		bottom: auto;
+		top: 50%;
+		transform: translateY(-50%);
+	}
+	.right .dock-peek {
+		left: auto;
+		right: calc(100% + 8px);
+	}
+	.dock-peek b {
+		padding: 3px 5px;
+		overflow-wrap: anywhere;
+	}
+	.dock-peek button {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px;
+		border: 0;
+		border-radius: var(--radius-ctl);
+		background: transparent;
+		color: var(--text);
+		text-align: left;
+		font: inherit;
+		overflow-wrap: anywhere;
+	}
+	.dock-peek button:hover,
+	.dock-peek button:focus-visible {
+		background: var(--chip);
+	}
+	.dock-peek button > :global(svg) {
+		flex: none;
+	}
+	.dock-peek small {
+		color: var(--muted);
+		margin-inline-start: auto;
 	}
 	.badge {
 		position: absolute;

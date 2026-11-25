@@ -5,8 +5,9 @@
 	import DetailPane from '#lib/components/explorer/DetailPane.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
+	import { stackPrimary } from '#lib/docker-layout.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { isRunning, portLabels } from './container.ts';
+	import { isRunning, portLabels, webLinks } from './container.ts';
 	import type { DockerPage } from './docker-page.svelte.ts';
 
 	let { p }: { p: DockerPage } = $props();
@@ -37,6 +38,13 @@
 						{@const cpu = p.groupCpu(group)}
 						{@const ports = p.groupPorts(group)}
 						{@const busy = p.groupBusy(group)}
+						{@const primary = stackPrimary(group, p.layout.primaryServices)}
+						{@const links =
+							primary?.state === 'running' ? webLinks(primary, p.host, p.tailscaleHost) : []}
+						{@const link =
+							links.find((item) => item.icon === 'lock') ??
+							links.find((item) => item.icon === 'external') ??
+							links[0]}
 						<tr
 							class:clickable={!!app || (p.wide && !p.phone)}
 							class:selected={selected?.id === group.id}
@@ -114,16 +122,21 @@
 									>{/if}</td
 							>
 							<td class="actions">
+								{#if link}
+									<a class="btn app-action" href={link.href} target="_blank" rel="noreferrer">
+										{t('docker.openApp')}
+									</a>
+								{/if}
 								<button
 									type="button"
-									class="btn icon-btn small"
+									class={on ? 'btn icon-btn small' : 'btn app-action'}
 									disabled={busy || p.globalBusy}
 									aria-label={t(on ? 'docker.table.stopNamed' : 'docker.table.startNamed', {
 										name: group.name,
 									})}
 									title={t(on ? 'docker.stop' : 'docker.start')}
 									onclick={() => p.groupAction(group, on ? 'stop' : 'start')}
-									><Icon name={on ? 'stop' : 'play'} size={14} /></button
+									>{#if on}<Icon name="stop" size={14} />{:else}{t('docker.start')}{/if}</button
 								>
 								<button
 									type="button"
@@ -446,6 +459,10 @@
 		min-height: 30px;
 		height: 30px;
 		width: 30px;
+	}
+	.app-action {
+		min-height: 30px;
+		white-space: normal;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.app-table tbody tr {

@@ -205,6 +205,17 @@
 	.ico:hover {
 		background: color-mix(in srgb, #fff 12%, transparent);
 	}
+	@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+		:global(html[data-fx-interaction='subtle']) .ico:hover:not(.lifted) {
+			transform: translateY(-2px);
+		}
+		:global(html[data-fx-interaction='expressive']) .ico:hover:not(.lifted) {
+			transform: translateY(-4px) scale(1.025);
+		}
+		:global(html:not([data-fx-interaction='off'])) .ico:active:not(.lifted) {
+			transform: scale(0.97);
+		}
+	}
 	/* Light themes: dark names with a light halo, readable on light wallpapers. */
 	:global(.light) .ico:not(.small) {
 		color: var(--text);

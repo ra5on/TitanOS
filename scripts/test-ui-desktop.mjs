@@ -175,10 +175,12 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   assert.ok(await page.locator(".snap-preview").count(), "snap preview shown");
   await shot(page, "04-andock-vorschau");
   await page.mouse.up();
-  const snapped = await win.boundingBox();
-  assert.ok(
-    snapped.x <= 2 && Math.abs(snapped.width - 800) < 4,
-    "snapped to the left half",
+  await page.waitForFunction(
+    (element) => {
+      const snapped = element.getBoundingClientRect();
+      return snapped.x <= 2 && Math.abs(snapped.width - 800) < 4;
+    },
+    await win.elementHandle(),
   );
   // A second program and the switcher.
   await page.locator(".topbar [data-menu-button]").click();

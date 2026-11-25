@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import type { FileRoot } from '#lib/api.ts';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -64,12 +65,14 @@
 		close();
 		oncommand(command);
 	};
+	const compact = new MediaQuery('(max-width: 380px)');
+	const showTrash = $derived(hasTrash(root) && !compact.current);
 </script>
 
 <!-- Phones: the bars of the list are hidden, these take their place. -->
 <div
 	class="mobile-file-actions"
-	class:with-trash={hasTrash(root)}
+	class:with-trash={showTrash}
 	role="toolbar"
 	aria-label={t('files.moreActions')}
 >
@@ -102,7 +105,7 @@
 		onclick={toggleMobileSearch}
 		><Icon name="search" size={16} /><span>{t('files.mobileSearch')}</span></button
 	>
-	{#if hasTrash(root)}<button
+	{#if showTrash}<button
 			type="button"
 			class="btn icon trash"
 			aria-label={t('files.trash')}
@@ -111,6 +114,11 @@
 		>{/if}
 	<Dropdown label={t('files.moreActions')} text={t('files.mobileMore')} icon="more" align="right"
 		>{#snippet children(close)}
+			{#if hasTrash(root) && !showTrash}
+				<button type="button" role="menuitem" onclick={() => run(close, 'trash')}
+					><Icon name="trash" size={16} />{t('files.trash')}</button
+				>
+			{/if}
 			<button type="button" role="menuitem" disabled={!dir} onclick={() => run(close, 'up')}
 				><Icon name="arrowUp" size={16} />{t('files.up')}</button
 			>
@@ -303,6 +311,16 @@
 			width: 44px;
 			height: 44px;
 			padding: 0;
+		}
+	}
+	@media (max-width: 380px) {
+		.mobile-file-actions {
+			grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 0.9fr);
+		}
+		.mobile-file-actions > .btn,
+		.mobile-file-actions :global(.dropdown > button) {
+			font-size: var(--text-sm);
+			white-space: normal;
 		}
 	}
 </style>

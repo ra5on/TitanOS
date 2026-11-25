@@ -1,4 +1,4 @@
-// "Format drive" in the file manager. Isolated API data only: no request
+// "Format drive" under Storage. Isolated API data only: no request
 // reaches a NAS and no disk of this computer is touched.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -91,6 +91,7 @@ const disks = () => [
 ];
 
 async function openDialog(page) {
+  await page.getByRole("button", { name: /^Laufwerke/ }).click();
   await page
     .getByRole("button", { name: "Laufwerk formatieren …" })
     .filter({ visible: true })
@@ -106,7 +107,7 @@ try {
   {
     const { ctx, page, data } = await create("owner");
     data.usbDisks = disks();
-    await page.goto(base + "/files?root=share/Media&path=");
+    await page.goto(base + "/storage");
     const dialog = await openDialog(page);
     const text = await dialog.textContent();
     // Empty drives, foreign content and why others cannot be formatted.
@@ -174,9 +175,7 @@ try {
     data.usbDisks = disks();
     data.formatError = "usb_not_formattable";
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(base + "/files?root=share/Media&path=");
-    // On a phone the places open from the location button.
-    await page.locator('button[aria-controls="file-places"]').click();
+    await page.goto(base + "/storage");
     const dialog = await openDialog(page);
     await dialog.getByRole("radio", { name: /Samsung SSD 980/ }).click();
     await dialog.getByRole("button", { name: "Formatieren …" }).click();
@@ -232,7 +231,7 @@ try {
       };
       await dialog.getByText("Fertig.").waitFor({ timeout: 5000 });
     };
-    await page.goto(base + "/files?root=share/Media&path=");
+    await page.goto(base + "/storage");
     const list = await openDialog(page);
     await list
       .locator(".drive-row", { hasText: "Ultra Fit" })
@@ -366,8 +365,8 @@ try {
   {
     // Accounts with the role "user" do not see the button.
     const { ctx, page } = await create("user");
-    await page.goto(base + "/files?root=share/Media&path=");
-    await page.waitForTimeout(500);
+    await page.goto(base + "/storage");
+    await page.getByRole("button", { name: /^Laufwerke/ }).click();
     assert.equal(
       await page
         .getByRole("button", { name: "Laufwerk formatieren …" })

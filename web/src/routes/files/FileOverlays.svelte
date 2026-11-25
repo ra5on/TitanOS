@@ -13,7 +13,6 @@
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import DockerMountDialog from './DockerMountDialog.svelte';
 	import DownloadDialog from './DownloadDialog.svelte';
-	import DriveFormatDialog from './DriveFormatDialog.svelte';
 	import DuplicatesDialog from './DuplicatesDialog.svelte';
 	import EntryDialog from './EntryDialog.svelte';
 	import FavoritesDialog from './FavoritesDialog.svelte';
@@ -274,12 +273,6 @@
 		favorites={p.prefs.favorites}
 		onsave={(next) => p.prefs.saveFavorites(next)}
 		onclose={() => (p.favoriteManager = false)}
-	/>{/if}
-{#if p.formattingDrive && p.canAdminister}<DriveFormatDialog
-		onclose={() => (p.formattingDrive = false)}
-		onformatted={() => {
-			p.usb.load();
-		}}
 	/>{/if}
 {#if p.downloadingLink && p.root && p.writable}<UrlDownloadDialog
 		root={p.rootId}

@@ -108,6 +108,8 @@ export type CustomColors = { bg: Hex; surface: Hex; header: Hex; text: Hex; bord
  */
 export type Effects = {
 	enabled: boolean;
+	/** Lift, press and snap feedback on the desktop. */
+	interaction: 'off' | 'subtle' | 'expressive';
 	/** Content fades over when the page changes; header and navigation stay. */
 	transitions: boolean;
 	/** Placeholder bars instead of "Loading…" while a page fetches its data. */
@@ -323,6 +325,7 @@ function sanitizeDialogs(input: unknown): DialogSurface {
 export function defaultEffects(): Effects {
 	return {
 		enabled: true,
+		interaction: 'subtle',
 		transitions: true,
 		skeleton: true,
 		micro: true,
@@ -338,6 +341,7 @@ function sanitizeEffects(input: unknown): Effects {
 	if (typeof input !== 'object' || input === null) return d;
 	const v = input as Record<string, unknown>;
 	const out = { ...d };
+	out.interaction = oneOf(v.interaction, ['off', 'subtle', 'expressive'], d.interaction);
 	for (const key of ['enabled', ...EFFECT_IDS] as const) {
 		if (typeof v[key] === 'boolean') out[key] = v[key] as boolean;
 	}
@@ -609,6 +613,7 @@ export function dataAttributes(a: Appearance, systemLight: boolean): Record<stri
 		'data-mode': resolvePalette(a, systemLight).dark ? 'dark' : 'light',
 		'data-surface': a.style,
 		'data-density': a.density === 'kompakt' ? 'compact' : 'normal',
+		'data-fx-interaction': a.fx.enabled && a.motion ? a.fx.interaction : 'off',
 		...Object.fromEntries(
 			EFFECT_IDS.map((id) => [`data-fx-${id}`, effectOn(a, id) ? 'on' : 'off']),
 		),

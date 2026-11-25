@@ -46,7 +46,6 @@
 			onmanagefavorites={() => (p.favoriteManager = true)}
 			onremovefavorite={(favorite) =>
 				p.prefs.saveFavorites(p.prefs.favorites.filter((f) => f !== favorite))}
-			onformat={() => (p.formattingDrive = true)}
 		/>
 	</div>
 	{#if inWindow}

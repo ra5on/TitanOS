@@ -572,6 +572,20 @@
 			{/snippet}
 		</SettingRow>
 		{#if draft.fx.enabled}
+			<SettingRow title={t('appearance.fx.interaction')} desc={t('appearance.fx.interactionDesc')}>
+				{#snippet control()}
+					<Segments
+						label={t('appearance.fx.interaction')}
+						options={[
+							{ value: 'off', label: t('appearance.fx.interactionOff') },
+							{ value: 'subtle', label: t('appearance.fx.interactionSubtle') },
+							{ value: 'expressive', label: t('appearance.fx.interactionExpressive') },
+						]}
+						value={draft.fx.interaction}
+						onchange={(value) => (draft.fx.interaction = value)}
+					/>
+				{/snippet}
+			</SettingRow>
 			{#each EFFECT_IDS as id (id)}
 				<SettingRow
 					title={t(`appearance.fx.${id}`)}

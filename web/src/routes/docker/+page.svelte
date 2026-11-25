@@ -209,7 +209,10 @@
 
 	{#each p.idleApps as app (app)}
 		<div class="notice-warn" role="status">
-			{t('docker.appIdle', { app, path: `/config/apps/${app}/compose.yaml` })}
+			<div>
+				<strong>{t('docker.appIdleTitle', { app })}</strong>
+				<p>{t('docker.appIdleNext')}</p>
+			</div>
 			<div class="buttons job-actions">
 				<button
 					type="button"
@@ -226,6 +229,10 @@
 					onclick={() => p.askRemoveApp(app)}>{t('docker.remove')}</button
 				>
 			</div>
+			<details class="setup-details">
+				<summary>{t('docker.technicalDetails')}</summary>
+				<code>/config/apps/{app}/compose.yaml</code>
+			</details>
 		</div>
 	{/each}
 
@@ -292,6 +299,10 @@
 	}
 	.setup-actions {
 		margin-top: var(--space-2-5);
+	}
+	.setup-details {
+		flex-basis: 100%;
+		overflow-wrap: anywhere;
 	}
 	.search-box {
 		position: relative;

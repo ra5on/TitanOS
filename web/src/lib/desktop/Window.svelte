@@ -833,6 +833,22 @@
 		right: 0;
 		cursor: nwse-resize;
 	}
+	@media (prefers-reduced-motion: no-preference) {
+		:global(html[data-fx-interaction='subtle'] .desktop:not(.moving)) .win.snapped {
+			transition:
+				left 140ms ease-out,
+				top 140ms ease-out,
+				width 140ms ease-out,
+				height 140ms ease-out;
+		}
+		:global(html[data-fx-interaction='expressive'] .desktop:not(.moving)) .win.snapped {
+			transition:
+				left 220ms ease-out,
+				top 220ms ease-out,
+				width 220ms ease-out,
+				height 220ms ease-out;
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
 		.win.grow {
 			animation: none;

@@ -91,7 +91,13 @@
 	type BackupJob = {
 		job: { id: string; name?: string };
 		stateKnown?: boolean;
-		state: { running: boolean; lastRun?: string; lastError?: string };
+		state: {
+			running: boolean;
+			lastRun?: string;
+			lastOK?: string;
+			lastError?: string;
+			probe?: { at: string; error?: string };
+		};
 	};
 	let backups = $state<BackupJob[] | null>(null);
 	let backupsChecked = $state<Date | null>(null);
@@ -396,20 +402,38 @@
 	{/if}
 	{#if backups !== null}
 		{#each backups.slice(0, 4) as b (b.job.id)}
-			<div class="row small">
-				<span class="ellipsis">{b.job.name || b.job.id}</span>
-				<span class="muted" class:warn-text={!!b.state.lastError && !b.state.running}
-					>{b.stateKnown === false
-						? t('safeguard.unknown')
-						: b.state.running
-							? t('desktop.widget.backupRunning')
-							: b.state.lastError
-								? t('desktop.widget.backupsFailed')
-								: b.state.lastRun
-									? new Date(b.state.lastRun).toLocaleDateString(locale)
-									: '–'}</span
-				>
-			</div>
+			<details class="backup-row">
+				<summary class="row small">
+					<span class="ellipsis">{b.job.name || b.job.id}</span>
+					<span class="muted" class:warn-text={!!b.state.lastError && !b.state.running}
+						>{b.stateKnown === false
+							? t('safeguard.unknown')
+							: b.state.running
+								? t('desktop.widget.backupRunning')
+								: b.state.lastError
+									? t('desktop.widget.backupsFailed')
+									: b.state.lastRun
+										? new Date(b.state.lastRun).toLocaleDateString(locale)
+										: '–'}</span
+					>
+				</summary>
+				<div class="backup-details small">
+					<span>{t('safeguard.lastData')}</span>
+					<strong
+						>{b.state.lastOK
+							? formatDateTime(new Date(b.state.lastOK))
+							: t(b.stateKnown === false ? 'safeguard.unknown' : 'safeguard.none')}</strong
+					>
+					<span>{t('safeguard.lastProbe')}</span>
+					<strong>
+						{b.state.probe
+							? t(b.state.probe.error ? 'safeguard.probeFailed' : 'safeguard.probePassed', {
+									time: formatDateTime(new Date(b.state.probe.at)),
+								})
+							: t(b.stateKnown === false ? 'safeguard.unknown' : 'safeguard.probeNone')}
+					</strong>
+				</div>
+			</details>
 		{:else}
 			{#if !backupsUnavailable}<p class="muted small">{t('desktop.widget.noBackups')}</p>{/if}
 		{/each}
@@ -605,6 +629,29 @@
 {/if}
 
 <style>
+	.backup-row summary {
+		cursor: pointer;
+	}
+	.backup-row::details-content {
+		content-visibility: visible;
+	}
+	.backup-details {
+		display: none;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 3px 8px;
+		padding: 5px 0;
+		color: var(--muted);
+		overflow-wrap: anywhere;
+	}
+	.backup-row[open] .backup-details,
+	.backup-row:focus-within .backup-details {
+		display: grid;
+	}
+	@media (hover: hover) and (pointer: fine) {
+		.backup-row:hover .backup-details {
+			display: grid;
+		}
+	}
 	/* The agent's widget: a rounded field to ask, then what waits or runs. */
 	.ag-ask {
 		display: flex;

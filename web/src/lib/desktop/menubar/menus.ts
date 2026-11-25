@@ -187,6 +187,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 	storage: [
 		menu('file', 'menubar.menu.file', [
 			cmd('storage.newVolume', 'menubar.storage.newVolume'),
+			cmd('storage.formatDrive', 'files.formatDrive'),
 			cmd('storage.addDisk', 'menubar.storage.addDisk'),
 			go('storage.go.replace', 'desktop.side.replace', '/storage/replace'),
 			go('storage.go.import', 'desktop.side.import', '/storage/import'),
