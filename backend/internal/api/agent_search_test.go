@@ -31,9 +31,13 @@ func TestAgentTextSearchAndTemplates(t *testing.T) {
 		Hits   []agentTextHit
 		After  string
 		Offset int
-	}) { res, body := ts.request("GET", "/api/v1/agent/text-search?"+q, nil); if res.StatusCode != 200 || json.Unmarshal(body, &out) != nil {
-		t.Fatalf("search %d %s", res.StatusCode, body)
-	}; return }
+	}) {
+		res, body := ts.request("GET", "/api/v1/agent/text-search?"+q, nil)
+		if res.StatusCode != 200 || json.Unmarshal(body, &out) != nil {
+			t.Fatalf("search %d %s", res.StatusCode, body)
+		}
+		return
+	}
 	first := search("q=SICHERUNGSPROBE")
 	if len(first.Hits) != 40 || first.After == "" || first.Offset != 40 || !first.Hits[0].Archived || first.Hits[0].Chat != chat.ID {
 		t.Fatalf("first page %#v", first)
