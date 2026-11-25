@@ -58,30 +58,24 @@ func exists(p string) bool {
 	return err == nil
 }
 
-// finishing reports whether a job is still saving how it ended.
-func (m *Manager) finishing(id string) bool {
+// finishedJob takes the terminal snapshot only after the worker has saved it.
+func (m *Manager) finishedJob(user, id string) (Job, bool) {
 	m.jobs.mu.Lock()
 	defer m.jobs.mu.Unlock()
 	for _, job := range m.jobs.list {
-		if job.ID == id {
-			return job.finishing
+		if job.ID == id && job.user == user && job.State != JobRunning && !job.finishing {
+			return snapshotLocked(job), true
 		}
 	}
-	return false
+	return Job{}, false
 }
 
-// finishJob waits until a job of an account has ended and saved its end.
 func finishJob(t *testing.T, m *Manager, user, id string) Job {
 	t.Helper()
+	m.loadTransfers(user)
 	for range 1000 {
-		// State and "finishing" change under one lock: checked in this order,
-		// the snapshot below is the final one.
-		if !m.finishing(id) {
-			for _, job := range m.Jobs(user) {
-				if job.ID == id && job.State != JobRunning {
-					return job
-				}
-			}
+		if job, ok := m.finishedJob(user, id); ok {
+			return job
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
