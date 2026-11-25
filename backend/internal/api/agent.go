@@ -473,36 +473,54 @@ func (s *Server) handleAgentStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"running": true})
 }
 
+type agentChatPatch struct {
+	Title   *string `json:"title"`
+	Project *string `json:"project"`
+	Pinned  *bool   `json:"pinned"`
+	// Archived moves the chat to the Archiv and back (PLAN 72).
+	Archived *bool   `json:"archived"`
+	Model    *string `json:"model"`
+	Think    *string `json:"think"`
+	Autonomy *string `json:"autonomy"`
+}
+
+var errAgentChatTitle = errors.New("1 to 200 characters")
+
 func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Title   *string `json:"title"`
-		Project *string `json:"project"`
-		Pinned  *bool   `json:"pinned"`
-		// Archived moves the chat to the Archiv and back (PLAN 72).
-		Archived *bool   `json:"archived"`
-		Model    *string `json:"model"`
-		Think    *string `json:"think"`
-		Autonomy *string `json:"autonomy"`
-	}
+	var req agentChatPatch
 	if !readJSON(w, r, &req) {
 		return
 	}
-	user := currentUser(r)
-	if s.agentRunning(user.Name, r.PathValue("id")) {
+	chat, err := s.patchAgentChat(currentUser(r).Name, r.PathValue("id"), req)
+	switch err {
+	case nil:
+		writeJSON(w, http.StatusOK, chat.Info())
+	case agent.ErrBusy:
 		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat")
-		return
+	case errAgentChatTitle:
+		writeError(w, http.StatusBadRequest, "invalid_title", err.Error())
+	default:
+		agentStoreError(w, err)
+	}
+}
+
+func (s *Server) patchAgentChat(user, id string, req agentChatPatch) (*agent.Chat, error) {
+	// The title worker and new runs use the same lock. Keep the read and the
+	// write together so a later rename or pin always starts from the latest chat.
+	s.agentRT.mu.Lock()
+	defer s.agentRT.mu.Unlock()
+	if _, busy := s.agentRT.runs[runKey(user, id)]; busy {
+		return nil, agent.ErrBusy
 	}
 	store := s.agentStore()
-	chat, err := store.Chat(user.Name, r.PathValue("id"))
+	chat, err := store.Chat(user, id)
 	if err != nil {
-		agentStoreError(w, err)
-		return
+		return nil, err
 	}
 	if req.Title != nil {
 		t := strings.TrimSpace(*req.Title)
 		if t == "" || len(t) > 200 {
-			writeError(w, http.StatusBadRequest, "invalid_title", "1 to 200 characters")
-			return
+			return nil, errAgentChatTitle
 		}
 		chat.Title = t
 		// Named by the person: the model never renames it (1.07).
@@ -510,9 +528,8 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Project != nil {
 		if *req.Project != "" {
-			if _, err := s.agentProject(user.Name, *req.Project); err != nil {
-				agentStoreError(w, err)
-				return
+			if _, err := s.agentProject(user, *req.Project); err != nil {
+				return nil, err
 			}
 		}
 		chat.Project = *req.Project
@@ -532,11 +549,10 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 	if req.Autonomy != nil {
 		chat.Autonomy = autonomyOf(*req.Autonomy, chat.Autonomy)
 	}
-	if err := store.SaveChat(user.Name, chat); err != nil {
-		agentStoreError(w, err)
-		return
+	if err := store.SaveChat(user, chat); err != nil {
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, chat.Info())
+	return chat, nil
 }
 
 func (s *Server) handleAgentChatDelete(w http.ResponseWriter, r *http.Request) {

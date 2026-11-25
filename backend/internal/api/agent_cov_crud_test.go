@@ -327,6 +327,8 @@ func TestCovAgentProjectsAndChatPatch(t *testing.T) {
 	if code, _ := patch(ts.client, map[string]any{"project": agent.NewID()}); code != http.StatusNotFound {
 		t.Fatalf("unknown project: %d", code)
 	}
+	// A model-generated title may finish after the successful manual edit.
+	ts.server.agentRT.work.Wait()
 	stored, _ := ts.server.agentStore().Chat("alex", chat.ID)
 	if stored.Title != "Mein Chat" || !stored.Pinned || stored.Project != project.ID {
 		t.Fatalf("stored: %+v", stored.Info())
