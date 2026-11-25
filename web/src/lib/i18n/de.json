@@ -10153,5 +10153,7 @@
 	"agent.night.work.plan": "Plan aktualisieren",
 	"agent.night.work.toolsLoad": "Werkzeuge laden",
 	"agent.night.work.delegate": "Helfer beauftragen",
-	"agent.night.work.code": "Code ausführen"
+	"agent.night.work.code": "Code ausführen",
+	"agent.night.ideas": "Vorschläge",
+	"agent.night.overview": "Übersicht"
 }

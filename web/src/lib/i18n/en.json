@@ -10153,5 +10153,7 @@
 	"agent.night.work.plan": "Updating plan",
 	"agent.night.work.toolsLoad": "Loading tools",
 	"agent.night.work.delegate": "Delegating task",
-	"agent.night.work.code": "Running code"
+	"agent.night.work.code": "Running code",
+	"agent.night.ideas": "Suggestions",
+	"agent.night.overview": "Overview"
 }

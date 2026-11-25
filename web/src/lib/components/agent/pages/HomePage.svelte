@@ -106,25 +106,10 @@
 			{ name: user },
 		),
 	);
-	const today = new Intl.DateTimeFormat(undefined, {
-		weekday: 'long',
-		day: 'numeric',
-		month: 'long',
-	}).format(new Date());
-	// The phone starts short (owner 15 Nov 2026: the whole page at once was
-	// too much): the greeting, one row when something waits or runs, and the
-	// questions; the overview opens on request.
-	let more = $state(false);
-	const brief = $derived(!more);
-	let ideasOpen = $state(false);
-	const waiting = $derived(chats.filter((c) => c.state === 'waiting' && !c.author));
+	let panel = $state<'ideas' | 'overview' | null>(null);
+	const overviewOpen = $derived(panel === 'overview');
 	const running = $derived(chats.filter((c) => c.state === 'running' && !c.author));
-	const open = $derived(waiting.length + items.length);
-	const lead = $derived(
-		open === 0
-			? today
-			: `${today} · ${open === 1 ? t('agent.home.openOne') : t('agent.home.open', { count: open })}`,
-	);
+	const pendingCount = $derived(items.length + running.length);
 	const next = $derived(
 		planned
 			.filter((s) => s.next && s.enabled)
@@ -317,15 +302,36 @@
 <PageShell
 	title={fresh ? t('agent.freshTitle') : hello}
 	plain
-	hideTitle={brief && (chats.length > 0 || phone)}
-	lead={brief ? undefined : lead}
+	hideTitle={chats.length > 0 || phone}
 	{phone}
 	{onunfold}
 >
-	{#if error && !brief}<p class="notice-error" role="alert">{error}</p>{/if}
-
 	<DayJournal {chats} {onopen} {onapproval} {calm} />
-	{#if items.length && !brief}
+	<div class="home-actions" class:phone>
+		{#if show && suggestions.length}
+			<button
+				type="button"
+				aria-expanded={panel === 'ideas'}
+				onclick={() => (panel = panel === 'ideas' ? null : 'ideas')}
+			>
+				<Icon name="sparkle" size={16} /><span>{t('agent.night.ideas')}</span><Icon
+					name={panel === 'ideas' ? 'chevronUp' : 'chevronDown'}
+					size={12}
+				/>
+			</button>
+		{/if}
+		<button
+			type="button"
+			aria-expanded={overviewOpen}
+			onclick={() => (panel = overviewOpen ? null : 'overview')}
+		>
+			<Icon name="activity" size={16} /><span>{t('agent.night.overview')}</span>
+			{#if pendingCount}<small>{pendingCount}</small>{/if}
+			<Icon name={overviewOpen ? 'chevronUp' : 'chevronDown'} size={12} />
+		</button>
+	</div>
+	{#if error && overviewOpen}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if items.length && overviewOpen}
 		<SettingGroup title={t('agent.home.waiting')}>
 			{#each items as item (item.id)}
 				<div class="srow">
@@ -370,7 +376,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if running.length && !brief}
+	{#if running.length && overviewOpen}
 		<SettingGroup title={t('agent.home.running')}>
 			{#each running as chat (chat.id)}
 				<div class="srow">
@@ -397,7 +403,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if !brief}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
+	{#if overviewOpen}<div class="two" class:single={!rows.length || (!next.length && !done.length)}>
 			{#if rows.length && nas}
 				<SettingGroup title={t('agent.home.state')}>
 					{#snippet tools()}<span class="when"
@@ -490,57 +496,98 @@
 			{/if}
 		</div>{/if}
 
-	{#if show && suggestions.length}
-		<button
-			type="button"
-			class="more ideas-toggle"
-			aria-expanded={ideasOpen}
-			onclick={() => (ideasOpen = !ideasOpen)}
-			><Icon name="sparkle" size={15} />{t('agent.fitsNow')}<Icon
-				name={ideasOpen ? 'chevronUp' : 'chevronDown'}
-				size={13}
-			/></button
-		>
-		{#if ideasOpen}
-			<SettingGroup title={t('agent.fitsNow')}>
-				{#snippet tools()}{#if onshuffle}<button type="button" class="more" onclick={onshuffle}
-							><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
-						>{/if}{/snippet}
-				<div class="ideas">
-					{#each suggestions as s (s.text)}
-						<button type="button" class="srow" onclick={() => onfill(s.text)}>
-							<div class="srow-head">
-								<span class="srow-ico {s.tone === 'warn' ? 'warn' : ''}"
-									><Icon name={s.icon ?? 'sparkle'} size={19} /></span
+	{#if show && suggestions.length && panel === 'ideas'}
+		<SettingGroup title={t('agent.night.ideas')}>
+			{#snippet tools()}{#if onshuffle}<button type="button" class="more" onclick={onshuffle}
+						><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
+					>{/if}{/snippet}
+			<div class="ideas">
+				{#each suggestions as s (s.text)}
+					<button type="button" class="srow" onclick={() => onfill(s.text)}>
+						<div class="srow-head">
+							<span class="srow-ico {s.tone === 'warn' ? 'warn' : ''}"
+								><Icon name={s.icon ?? 'sparkle'} size={19} /></span
+							>
+							<div class="srow-text">
+								<span class="srow-title"
+									>{s.title}{#if s.tag}
+										<span class="chip {s.tone ?? 'info'}">{s.tag}</span>{/if}</span
 								>
-								<div class="srow-text">
-									<span class="srow-title"
-										>{s.title}{#if s.tag}
-											<span class="chip {s.tone ?? 'info'}">{s.tag}</span>{/if}</span
-									>
-									<p class="srow-desc">{s.sub}</p>
-								</div>
+								<p class="srow-desc">{s.sub}</p>
 							</div>
-						</button>
-					{/each}
-				</div>
-			</SettingGroup>
-		{/if}
+						</div>
+					</button>
+				{/each}
+			</div>
+		</SettingGroup>
 	{/if}
-	<button type="button" class="more overview" aria-expanded={more} onclick={() => (more = !more)}
-		>{more
-			? t('agent.home.less')
-			: t('agent.home.overview')}{#if !more && (items.length || running.length)}<span
-				>· {items.length + running.length}</span
-			>{/if}<Icon name={more ? 'chevronUp' : 'chevronDown'} size={13} /></button
-	>
 </PageShell>
 
 <style>
-	.ideas-toggle,
-	.overview {
+	.home-actions {
+		display: flex;
+		align-items: stretch;
 		align-self: flex-start;
+		max-width: 100%;
+		margin-top: calc(4px - var(--space-4));
+		gap: 6px;
+	}
+	.home-actions.phone {
+		margin-top: calc(4px - var(--space-3));
+	}
+	.home-actions button {
+		position: relative;
+		isolation: isolate;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
 		min-height: 44px;
+		min-width: 0;
+		padding: 2px 11px;
+		border: 0;
+		border-radius: 9px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		line-height: 1.2;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.home-actions button::before {
+		content: '';
+		position: absolute;
+		z-index: -1;
+		inset: 4px 0;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--text) 4%, var(--ag-glass, var(--surface)));
+		border: 1px solid color-mix(in srgb, var(--text) 16%, var(--ag-glass, var(--surface)));
+	}
+	.home-actions button :global(svg) {
+		flex: none;
+		color: var(--muted);
+	}
+	.home-actions button :global(svg:first-child) {
+		color: var(--ag-link, var(--accent));
+	}
+	.home-actions button[aria-expanded='true']::before {
+		background: color-mix(in srgb, var(--accent) 12%, var(--ag-glass, var(--surface)));
+		border-color: var(--ag-edge);
+	}
+	.home-actions button:focus-visible {
+		outline: 2px solid var(--ag-edge);
+		outline-offset: 1px;
+	}
+	.home-actions small {
+		font-variant-numeric: tabular-nums;
+		color: var(--muted);
+		font-size: 0.8em;
+	}
+	@media (hover: hover) {
+		.home-actions button:hover::before {
+			border-color: var(--ag-edge);
+		}
 	}
 	.two {
 		display: grid;
