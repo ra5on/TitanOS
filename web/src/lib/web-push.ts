@@ -11,6 +11,7 @@ export type PushDevice = {
 	created: string;
 	/** Kinds switched off: 'nas' (TitanOS), 'agent' (KI-Agent), PLAN 59; 'camera' (the cameras' messages), PLAN 82-3. */
 	off?: string[];
+	priorityOnly?: boolean;
 	/** 1.07: the app the device subscribed in; older NAS send none (TitanOS). */
 	app?: PushApp;
 };

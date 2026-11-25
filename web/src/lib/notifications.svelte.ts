@@ -48,16 +48,24 @@ function readIds(): number[] {
  * it was looked at in this browser, `read` single messages marked read
  * (PLAN 87: a swipe in the phone's list).
  */
-export const notifications = $state<{ list: Notice[]; seen: number; read: number[] }>({
+export const notifications = $state<{
+	list: Notice[];
+	seen: number;
+	read: number[];
+	readTimes: string[];
+}>({
 	list: [],
 	seen: readSeen(),
 	read: readIds(),
+	readTimes: [],
 });
 
 /** PLAN 87: one message counts as read (kept in this browser, like `seen`). */
 export function markRead(id: number) {
 	if (notifications.read.includes(id)) return;
 	notifications.read = [...notifications.read, id].slice(-200);
+	const at = notifications.list.find((n) => n.id === id)?.time;
+	if (at) syncRead([at]);
 	try {
 		localStorage.setItem(READ_KEY, JSON.stringify(notifications.read));
 	} catch {
@@ -67,7 +75,11 @@ export function markRead(id: number) {
 
 /** Whether a message is new to this browser. */
 export function isUnread(notice: Notice): boolean {
-	return Date.parse(notice.time) > notifications.seen && !notifications.read.includes(notice.id);
+	return (
+		Date.parse(notice.time) > notifications.seen &&
+		!notifications.read.includes(notice.id) &&
+		!notifications.readTimes.includes(notice.time)
+	);
 }
 
 /** What this account wants to see in its bell; the NAS keeps every message. */
@@ -83,9 +95,10 @@ let generation = 0;
 export async function loadNotifications() {
 	const request = ++generation;
 	try {
-		const result = await api.get<{ messages: Notice[] }>('/notifications');
+		const result = await api.get<{ messages: Notice[]; readTimes?: string[] }>('/notifications');
 		if (request === generation) {
 			notifications.list = result.messages;
+			notifications.readTimes = result.readTimes ?? [];
 			soundForNotices(result.messages.filter((notice) => bellShows(bell.settings, notice)));
 		}
 	} catch {
@@ -105,10 +118,24 @@ export function unreadCount(): number {
 	return visibleNotices().filter(isUnread).length;
 }
 
+function syncRead(times: string[]) {
+	const missing = times.filter((at) => !notifications.readTimes.includes(at));
+	if (missing.length)
+		void api
+			.post('/notifications/read', { times: missing })
+			.then(() => {
+				notifications.readTimes = [...new Set([...notifications.readTimes, ...missing])].slice(
+					-200,
+				);
+			})
+			.catch(() => {});
+}
+
 /** Marks everything in the list as looked at. */
 export function markSeen() {
 	const newest = notifications.list[0];
 	if (!newest) return;
+	syncRead(notifications.list.map((n) => n.time));
 	notifications.seen = Date.parse(newest.time);
 	try {
 		localStorage.setItem(SEEN_KEY, String(notifications.seen));

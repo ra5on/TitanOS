@@ -120,6 +120,14 @@ self.addEventListener('fetch', (event) => {
 	if (url.pathname.startsWith('/_app/immutable/')) event.respondWith(asset(event));
 });
 
+function notificationTarget(path) {
+	try {
+		const url = new URL(typeof path === 'string' ? path : '/', self.location.origin);
+		if (url.origin === self.location.origin && path?.startsWith('/')) return url;
+	} catch { /* An invalid link opens the app home. */ }
+	return new URL('/', self.location.origin);
+}
+
 self.addEventListener('push', (event) => {
 	let message = {};
 	try {
@@ -127,24 +135,35 @@ self.addEventListener('push', (event) => {
 	} catch {
 		message = { title: 'TitanOS', body: event.data ? event.data.text() : '' };
 	}
-	const url = typeof message.url === 'string' && message.url.startsWith('/') ? message.url : '/';
+	const target = notificationTarget(message.url);
+	const url = target.pathname + target.search + target.hash;
 	event.waitUntil(
+		Promise.all([
+		Number.isSafeInteger(message.badge) && message.badge >= 0 ?
+			Promise.resolve().then(() => message.badge ? self.navigator?.setAppBadge?.(message.badge) : self.navigator?.clearAppBadge?.()).catch(() => {}) : undefined,
 		self.registration.showNotification(message.title || 'TitanOS', {
 			body: message.body || '',
 			tag: message.tag || undefined,
 			icon: '/icons/app-192.png',
 			badge: '/icons/app-192.png',
-			data: { url },
-		}),
+			data: { url, ...(message.test ? { test: message.test } : {}) },
+		})]),
 	);
 });
 
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
-	const url = new URL(event.notification.data?.url || '/', self.location.origin);
+	const url = notificationTarget(event.notification.data?.url);
 	const agent = (path) => path === '/agent' || path.startsWith('/agent/');
 	event.waitUntil(
 		(async () => {
+			const receipt = event.notification.data?.test;
+			if (receipt?.device && receipt?.user && receipt?.sent) {
+				try {
+					const cache = await caches.open('titanos-push-test');
+					await cache.put('/__push/opened', new Response(JSON.stringify({ ...receipt, opened: new Date().toISOString() })));
+				} catch { /* The notification still opens with storage disabled. */ }
+			}
 			const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 			const same = windows.filter((c) => new URL(c.url).origin === self.location.origin);
 			// The agent's message goes to an open agent window, else – like any

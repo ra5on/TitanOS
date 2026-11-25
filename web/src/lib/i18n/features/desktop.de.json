@@ -333,7 +333,7 @@
 	"share.appText": "Auf dem Startbildschirm, im Vollbild und als Ziel zum Teilen: Fotos und Dateien aus anderen Apps landen direkt auf dem NAS.",
 	"share.install": "Installieren",
 	"share.installed": "Als App installiert",
-	"share.iosHint": "Auf dem iPhone: in Safari „Teilen“ › „Zum Home-Bildschirm“. Teilen aus anderen Apps unterstützt iOS für Web-Apps nicht.",
+	"share.iosHint": "Auf dem iPhone: in Safari „Teilen“ › „Zum Home-Bildschirm“, dann „Als Web-App öffnen“ einschalten. Teilen aus anderen Apps unterstützt iOS für Web-Apps nicht.",
 	"share.otherHint": "Im Browser-Menü „App installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen.",
 	"desktop.menu.searchShort": "Suchen",
 	"desktop.menu.orderAz": "Sortiert A–Z",

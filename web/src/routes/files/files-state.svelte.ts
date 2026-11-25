@@ -8,6 +8,7 @@ import { poll } from '#lib/poll.ts';
 import { api, type FileEntry, type FileRoot, type UploadStatus } from '#lib/api.ts';
 import { folderPath, rangeSelection, selectionType } from '#lib/file-actions.ts';
 import type { FileDrag } from '#lib/file-drag.ts';
+import type { SearchPosition } from '#lib/file-search.ts';
 import { fileList } from '#lib/file-list.ts';
 import { preferredFileRoot } from '#lib/file-root.ts';
 import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -81,6 +82,7 @@ export class FilesState {
 	duplicates = $state(false);
 	photos = $state(false);
 	deepSearch = $state(false);
+	searchPosition = $state<SearchPosition>();
 	comparison = $state(false);
 	batchRename = $state(false);
 	archive = $state<string | null>(null);
@@ -318,7 +320,14 @@ export class FilesState {
 		this.placesOpen = false;
 		this.navigate(id, path);
 	};
-	navigate = async (id: string, path: string, restore?: Location) => {
+	showSearchHit = (position: SearchPosition, hitPath: string, name?: string) => {
+		this.steps.leave({ ...this.captureLocation(), deep: position });
+		const parent = hitPath.split('/').slice(0, -1).join('/');
+		void this.navigate(position.root, parent, undefined, name);
+	};
+	navigate = async (id: string, path: string, restore?: Location, select?: string) => {
+		this.deepSearch = false;
+		this.searchPosition = undefined;
 		const navigation = ++this.navigation;
 		const chosen = this.roots?.find((place) => place.id === id);
 		if (
@@ -354,6 +363,18 @@ export class FilesState {
 		await tick();
 		if (navigation !== this.navigation) return;
 		this.virtualList?.setScroll(restore?.listScroll ?? 0);
+		if (select) {
+			const index = this.visibleEntries.findIndex((entry) => entry.name === select);
+			if (index >= 0) {
+				this.selected = [select];
+				this.anchor = select;
+				this.virtualList?.reveal(index);
+			}
+		}
+		if (restore?.deep) {
+			this.searchPosition = restore.deep;
+			this.deepSearch = true;
+		}
 		window.scrollTo({ top: restore?.scroll ?? 0, behavior: 'instant' });
 	};
 

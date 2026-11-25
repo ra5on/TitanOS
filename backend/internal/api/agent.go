@@ -701,7 +701,7 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	if env.webPush == nil || !s.agentShouldPush(user.Name, chat.ID) {
 		return
 	}
-	var body, anchor string
+	var body, anchor, severity string
 	switch chat.State {
 	case agent.StateWaiting:
 		body = "Wartet auf deine Freigabe"
@@ -710,6 +710,7 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 			anchor = "#pending-" + chat.Pending.ID
 		}
 	case agent.StateError:
+		severity = "error"
 		body = "Fehler: " + chat.Error
 	default:
 		body = "Fertig."
@@ -731,12 +732,12 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 		}
 		for _, u := range env.users.List() {
 			if !u.Disabled && u.Role.CanAdminister() && s.agentAllowed(u) {
-				env.webPush.SendTo(u.Name, webpush.Message{Title: "KI-Agent (Home Assistant)", Body: body, URL: "/agent?profile=assist&chat=" + chat.ID + anchor, Tag: "agent-" + chat.ID})
+				env.webPush.SendTo(u.Name, webpush.Message{Title: "KI-Agent (Home Assistant)", Body: body, URL: "/agent?profile=assist&chat=" + chat.ID + anchor, Tag: "agent-" + chat.ID, Approval: chat.State == agent.StateWaiting, Severity: severity})
 			}
 		}
 		return
 	}
-	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.ShownTitle(), Body: body, URL: "/agent?chat=" + chat.ID + anchor, Tag: "agent-" + chat.ID})
+	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.ShownTitle(), Body: body, URL: "/agent?chat=" + chat.ID + anchor, Tag: "agent-" + chat.ID, Approval: chat.State == agent.StateWaiting, Severity: severity})
 }
 
 // agentShouldPush decides whether the end of a run goes out as a push

@@ -10,6 +10,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { afterNavigate, beforeNavigate, goto, onNavigate } from '$app/navigation';
+	import { savedStart } from '#lib/pwa-start.ts';
+	import { standalone } from '#lib/web-push.ts';
 	import { isAgentPath } from '#lib/agent-app.ts';
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
@@ -71,6 +73,22 @@
 	});
 	afterNavigate(({ from, to, type }) => {
 		if (type === 'popstate' && from && to && crosses(from.url, to.url)) location.reload();
+	});
+
+	$effect(() => {
+		const user = session.data?.user;
+		const url = page.url;
+		if (
+			inWindow ||
+			!user ||
+			session.data?.locked ||
+			url.pathname !== '/' ||
+			url.search !== '?launch=home' ||
+			url.hash ||
+			!standalone()
+		)
+			return;
+		void goto(savedStart(user, session.services), { replaceState: true });
 	});
 
 	let { children } = $props();

@@ -85,7 +85,8 @@ type Device struct {
 	// Off are the kinds of messages this device does not want (PLAN 59,
 	// 82-3): KindNAS (what the bell shows), KindAgent (the KI-Agent's) and
 	// KindCamera (the cameras'). Empty, as in older files, means all.
-	Off []string `json:"off,omitempty"`
+	Off          []string `json:"off,omitempty"`
+	PriorityOnly bool     `json:"priorityOnly,omitempty"`
 	// App is the app the device subscribed in (1.07): AppTitanOS or
 	// AppAgent. On the iPhone every web app on the home screen is a
 	// container of its own with its own subscription; a message opens the
@@ -148,6 +149,9 @@ func (m *Manager) SetKinds(user, id string, want map[string]bool) (Device, error
 	next := m.st
 	next.Devices = slices.Clone(m.st.Devices)
 	next.Devices[i].Off = off
+	if only, ok := want["priorityOnly"]; ok {
+		next.Devices[i].PriorityOnly = only
+	}
 	if err := m.store.WriteJSON(file, next); err != nil {
 		return Device{}, err
 	}
@@ -179,7 +183,20 @@ type Message struct {
 	Urgent bool `json:"-"`
 	// Severity of a NAS message (info, warning, error) for the paired
 	// apps (Mirror); not sent to browsers.
-	Severity string `json:"-"`
+	Severity string       `json:"-"`
+	Badge    *int         `json:"badge,omitempty"`
+	Approval bool         `json:"-"`
+	Test     *TestReceipt `json:"test,omitempty"`
+}
+
+type BadgeFunc func(user string) *int
+
+func (m *Manager) SetBadge(f BadgeFunc) { m.badge.Store(&f) }
+
+type TestReceipt struct {
+	Device string    `json:"device"`
+	User   string    `json:"user"`
+	Sent   time.Time `json:"sent"`
 }
 
 // MirrorFunc gets every message as it is sent, also when the account has
@@ -205,6 +222,7 @@ type Manager struct {
 
 	// mirror hands every message to the paired Android apps (appnotify).
 	mirror atomic.Pointer[MirrorFunc]
+	badge  atomic.Pointer[BadgeFunc]
 
 	mu     sync.Mutex
 	loaded bool
@@ -360,6 +378,14 @@ func (m *Manager) SubscribeApp(user, name, app string, s Subscription) (Device, 
 	}
 	d := stored{Device: Device{ID: id, User: user, Name: name, Service: u.Hostname(), Created: m.now().UTC(), App: app},
 		Endpoint: s.Endpoint, P256dh: b64.EncodeToString(pub), Auth: b64.EncodeToString(auth)}
+	for _, existing := range m.st.Devices {
+		if existing.ID == id && existing.User == user {
+			d.Off = slices.Clone(existing.Off)
+			d.PriorityOnly = existing.PriorityOnly
+			d.Created = existing.Created
+			break
+		}
+	}
 	next := m.st
 	next.Devices = append(devices, d)
 	if err := m.store.WriteJSON(file, next); err != nil {
@@ -387,10 +413,10 @@ func (m *Manager) Devices(user string) []Device {
 // of the app the message belongs to (the KI-Agent's chats to the agent
 // app, everything else to TitanOS) that want its kind; when the account
 // has none there, those of the other app, so that nothing is lost.
-func pick(devices []stored, user, app, kind string) []stored {
+func pick(devices []stored, user, app, kind string, msg Message) []stored {
 	var own, other []stored
 	for _, d := range devices {
-		if d.User != user || !d.wants(kind) {
+		if d.User != user || !d.wants(kind) || (d.PriorityOnly && !msg.Approval && msg.Severity != "error") {
 			continue
 		}
 		if d.app() == app {
@@ -423,7 +449,7 @@ func (m *Manager) CameraDevices(user string) (on, off int) {
 	for _, d := range m.st.Devices {
 		switch {
 		case d.User != user:
-		case d.wants(KindCamera):
+		case d.wants(KindCamera) && !d.PriorityOnly:
 			on++
 		default:
 			off++
@@ -506,7 +532,7 @@ func (m *Manager) Broadcast(msg Message) {
 			continue
 		}
 		seen[d.User] = true
-		devices = append(devices, pick(all, d.User, AppOf(msg), KindNAS)...)
+		devices = append(devices, pick(all, d.User, AppOf(msg), KindNAS, msg)...)
 	}
 	for _, d := range devices {
 		go func() {
@@ -555,7 +581,7 @@ func (m *Manager) send(user, kind string, msg Message) {
 	}
 	m.mirrorTo(user, kind, msg)
 	m.mu.Lock()
-	devices := pick(slices.Clone(m.st.Devices), user, AppOf(msg), kind)
+	devices := pick(slices.Clone(m.st.Devices), user, AppOf(msg), kind, msg)
 	m.mu.Unlock()
 	for _, d := range devices {
 		go func() {
@@ -583,6 +609,9 @@ func (m *Manager) sendTo(ctx context.Context, d stored, msg Message) error {
 	}{d.P256dh, d.Auth}})
 	if err != nil {
 		return err
+	}
+	if badge := m.badge.Load(); badge != nil && *badge != nil {
+		msg.Badge = (*badge)(d.User)
 	}
 	payload, err := json.Marshal(msg)
 	if err != nil {
