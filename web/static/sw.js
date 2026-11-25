@@ -161,7 +161,7 @@ self.addEventListener('notificationclick', (event) => {
 				same[0];
 			if (target) {
 				await target.focus();
-				target.postMessage({ type: 'open', url: url.pathname + url.search });
+				target.postMessage({ type: 'open', url: url.pathname + url.search + url.hash });
 				return;
 			}
 			await self.clients.openWindow(url.href);

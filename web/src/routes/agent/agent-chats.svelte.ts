@@ -684,6 +684,7 @@ export class AgentChats {
 	 *  tap sends nothing (two chats with the same question, or an error for
 	 *  the second). */
 	sendingIn = new SvelteSet<string>();
+	private uploaded = new WeakMap<File, Map<string, string>>();
 	/**
 	 * Sends a message; false when nothing was sent (the text stays in the
 	 * input then). While one is on its way or the chat's run works, nothing
@@ -700,8 +701,8 @@ export class AgentChats {
 		const files = this.attachments;
 		const turn = this.opened;
 		const here = () => (this.current?.id ?? null) === from && turn === this.opened;
+		let target = this.current;
 		try {
-			let target = this.current;
 			const uploads = files.filter((a) => a.file);
 			if (!target && uploads.length) {
 				// An empty chat first, so the files are there before it runs.
@@ -714,23 +715,24 @@ export class AgentChats {
 			}
 			// 1.01: the NAS keeps a file under another name when the chat has
 			// one of that name already; the message names the one it kept.
-			const kept = new Map<object, string>();
 			for (const a of uploads) {
+				if (!a.file || this.uploaded.get(a.file)?.has(target!.id)) continue;
 				const res = await apiFetch(
 					`/agent/chats/${target!.id}/attachments?name=${encodeURIComponent(a.name)}`,
 					{ method: 'POST', body: a.file },
 				);
 				if (!res.ok) throw await responseError(res);
 				const saved = (await res.json().catch(() => null)) as { name?: string } | null;
-				if (saved?.name) kept.set(a, saved.name);
+				const names = this.uploaded.get(a.file) ?? new Map<string, string>();
+				names.set(target!.id, saved?.name || a.name);
+				this.uploaded.set(a.file, names);
 			}
 			const refs = files.map((a) =>
 				a.file
-					? `[Anhang: ${kept.get(a) ?? a.name}]`
+					? `[Anhang: ${this.uploaded.get(a.file)?.get(target!.id) ?? a.name}]`
 					: `[Datei: ${(a.ref ?? '').replace(':', '/')}]`,
 			);
 			const message = refs.length ? `${refs.join('\n')}\n\n${text}` : text;
-			this.attachments = [];
 			if (target) {
 				const chat = await api.post<Chat>(`/agent/chats/${target.id}/messages`, {
 					message,
@@ -757,10 +759,16 @@ export class AgentChats {
 					this.watch(chat.id);
 				}
 			}
+			this.attachments = this.attachments.filter((attachment) => !files.includes(attachment));
 			return true;
 		} catch (e) {
-			this.attachments = files;
-			this.error = this.startError(e);
+			if (here()) {
+				if (!from && target) {
+					this.current = target;
+					void this.go(`/agent?chat=${target.id}`, true);
+				}
+				this.error = this.startError(e);
+			}
 			return false;
 		} finally {
 			this.sendingIn.delete(key);

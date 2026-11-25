@@ -20,6 +20,25 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
 
+func TestEventLink(t *testing.T) {
+	for _, kind := range []string{"backup_failed", "backup_check_failed", "backup_probe_failed", "backup_overdue", "backup_incomplete", "backup_recovered", "backup_space_freed"} {
+		if got := eventLink(kind, "Fotos & Musik"); got != "/settings/backups/data#backup-Fotos%20&%20Musik" {
+			t.Errorf("%s links to %q", kind, got)
+		}
+	}
+	for _, tc := range []struct{ kind, subject, want string }{
+		{"config_backup_failed", "Data", "/settings/backups/configuration"},
+		{"disk_wear", "sda (SSD)", "/storage#disk-sda"},
+		{"volume_missing", "Archiv 1", "/storage#volume-Archiv%201"},
+		{"backup_ha_overdue", "Share", ""},
+		{"unknown", "", ""},
+	} {
+		if got := eventLink(tc.kind, tc.subject); got != tc.want {
+			t.Errorf("%s links to %q, want %q", tc.kind, got, tc.want)
+		}
+	}
+}
+
 func newManager(t *testing.T) (*Manager, string) {
 	t.Helper()
 	dir := t.TempDir()

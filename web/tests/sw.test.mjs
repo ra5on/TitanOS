@@ -41,6 +41,16 @@ async function click(sw, url) {
 	await done;
 }
 
+test('an open or freshly opened window receives the same approval anchor', async () => {
+	const url = '/agent?chat=abc#pending-step123';
+	const agent = win('https://nas.local/agent');
+	await click(load([agent]), url);
+	assert.equal(agent.sent[0].url, url);
+	const sw = load([]);
+	await click(sw, url);
+	assert.deepEqual(sw.opened, ['https://nas.local' + url]);
+});
+
 test('agent message goes to the agent window', async () => {
 	const files = win('https://nas.local/files');
 	const agent = win('https://nas.local/agent?app=1');

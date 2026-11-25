@@ -25,6 +25,7 @@
 			state: BackupView['state'];
 		}[];
 	};
+	let lastLoaded = $state<Date | null>(null);
 	let items = $state<Coverage[]>([]),
 		unavailable = $state<string[]>([]),
 		error = $state(''),
@@ -40,6 +41,7 @@
 			);
 			items = result.items;
 			unavailable = result.unavailable;
+			lastLoaded = new Date();
 		} catch (e) {
 			error = operationError(e, t);
 		} finally {
@@ -55,7 +57,11 @@
 		>{/snippet}</PageHead
 >
 <p class="muted">{t('coverage.hint')}</p>
-{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+<p class="muted">{t('coverage.personalData')}</p>
+{#if error}<p class="notice-error" role="alert">
+		{error}
+		{#if lastLoaded}{t('coverage.lastLoaded', { time: formatDateTime(lastLoaded) })}{/if}
+	</p>{/if}
 {#each unavailable as source (source)}<p class="notice-warn">
 		{t('coverage.unavailable', { source })}
 	</p>{/each}

@@ -12,12 +12,14 @@
 
 	let {
 		job,
+		initialMode,
 		volumes,
 		onclose,
 		onfailed,
 		onstarted,
 	}: {
 		job: string;
+		initialMode: 'all' | 'files';
 		volumes: string[];
 		onclose: () => void;
 		/** The saved states could not be read; the page shows why and closes the dialog. */
@@ -45,7 +47,7 @@
 		// The volume list refreshes while the dialog is open; only the opening picks one.
 		volume = untrack(() => volumes[0] ?? '');
 		target = '';
-		mode = 'all';
+		mode = initialMode;
 		paths = [];
 		error = '';
 		api.get<{ snapshots: Snapshot[] }>(`/backups/${id}/snapshots`).then(

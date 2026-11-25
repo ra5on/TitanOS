@@ -429,7 +429,7 @@ const sent = (seen, method, path) =>
   );
   assert.ok(
     await page
-      .locator(".sgroup", { hasText: "Zuletzt erledigt" })
+      .locator(".sgroup", { hasText: "Letzte Auftragsläufe" })
       .getByText("Alles in Ordnung.")
       .isVisible(),
     "last results",

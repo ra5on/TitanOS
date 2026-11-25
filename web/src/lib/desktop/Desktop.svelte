@@ -199,7 +199,7 @@
 	onMount(() => {
 		loadDesktop();
 		// A link to a page opens it in its window (PLAN 61-8: the address shows the window in front).
-		const path = page.url.pathname + page.url.search;
+		const path = page.url.pathname + page.url.search + page.url.hash;
 		if (page.url.pathname !== '/') {
 			const app = appForPath(page.url.pathname);
 			if (app && appAllowed(app, role, session.services))

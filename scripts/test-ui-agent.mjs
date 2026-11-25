@@ -2989,10 +2989,10 @@ try {
       assert.ok(
         await main
           .locator("button.srow .srow-title", {
-            hasText: /wartet auf dich|warten auf dich/,
+            hasText: /Freigabe nötig:/,
           })
           .isVisible(),
-        "one row says that something waits",
+        "the row names the approval",
       );
       await main.getByRole("button", { name: "Übersicht anzeigen" }).click();
       await page.waitForTimeout(300);
@@ -3002,7 +3002,7 @@ try {
         "Wartet auf dich",
         "Läuft gerade",
         "NAS-Zustand",
-        "Zuletzt erledigt",
+        "Letzte Auftragsläufe",
       ])
         assert.ok(
           await main.locator(".sgroup-title", { hasText: title }).isVisible(),
