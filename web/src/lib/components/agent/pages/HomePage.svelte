@@ -318,7 +318,20 @@
 >
 	{#if error && !brief}<p class="notice-error" role="alert">{error}</p>{/if}
 
-	{#if brief && !fresh && (open || running.length)}
+	{#if brief && !fresh && waiting[0]}
+		<SettingGroup>
+			<button type="button" class="srow" onclick={() => onopen(waiting[0].id)}>
+				<div class="srow-head">
+					<span class="srow-ico warn"><Icon name="shield" size={19} /></span>
+					<div class="srow-text">
+						<span class="srow-title">{t('agent.home.approval', { title: waiting[0].title })}</span>
+						<p class="srow-desc">{t('agent.home.look')}</p>
+					</div>
+					<span class="srow-chev"><Icon name="chevronRight" size={16} /></span>
+				</div>
+			</button>
+		</SettingGroup>
+	{:else if brief && !fresh && (open || running.length)}
 		<SettingGroup>
 			<button type="button" class="srow" onclick={() => (more = true)}>
 				<div class="srow-head">
@@ -490,13 +503,28 @@
 					{#if done.length}
 						<SettingGroup title={t('agent.home.done')}>
 							{#each done as chat (chat.id)}
+								{@const failed = chat.state === 'error'}
+								{@const interrupted = chat.state === 'interrupted'}
 								<button type="button" class="srow" onclick={() => onopen(chat.id)}>
 									<div class="srow-head">
-										<span class="srow-ico ok"><Icon name="check" size={19} /></span>
+										<span
+											class="srow-ico"
+											class:error={failed}
+											class:warn={interrupted}
+											class:ok={chat.state === 'idle'}
+										>
+											<Icon name={failed ? 'info' : interrupted ? 'stop' : 'check'} size={19} />
+										</span>
 										<div class="srow-text">
 											<span class="srow-title">{chat.title}</span>
 											<p class="srow-desc">
-												{formatDateTime(new Date(chat.updated))}{chat.preview
+												{t(
+													failed
+														? 'tasks.state.failed'
+														: interrupted
+															? 'disktest.result.interrupted'
+															: 'tasks.state.done',
+												)} · {formatDateTime(new Date(chat.updated))}{chat.preview
 													? ' · ' + chat.preview
 													: ''}
 											</p>

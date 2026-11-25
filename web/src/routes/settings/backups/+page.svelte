@@ -104,6 +104,7 @@
 	const failures = $derived(
 		jobs?.jobs.filter((v) => v.state.lastError && v.state.lastError !== 'cancelled') ?? [],
 	);
+	const failedProbes = $derived(jobs?.jobs.filter((v) => v.state.probe?.error) ?? []);
 	const lastProbe = $derived(
 		jobs?.jobs
 			.flatMap(({ state }) => (state.probe ? [state.probe] : []))
@@ -144,6 +145,15 @@
 			title={t('safeguard.refresh')}><Icon name="refresh" /></button
 		>
 	{/snippet}
+	{#each failedProbes as { job, state } (job.id)}
+		<div class="notice-error backup-warning" role="alert">
+			<strong>{t('safeguard.jobProbeFailed', { name: job.name || job.id })}</strong>
+			<span>{date(state.probe?.at)}</span>
+			<a href="/settings/backups/data#backup-{encodeURIComponent(job.id)}"
+				>{t('safeguard.checkJob')}</a
+			>
+		</div>
+	{/each}
 	{#each failures as { job, state } (job.id)}
 		<div class="notice-error backup-warning" role="alert">
 			<strong>{t('safeguard.jobFailed', { name: job.name || job.id })}</strong>

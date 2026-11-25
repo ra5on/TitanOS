@@ -4,6 +4,7 @@
 	// level written out (not only a color), when it was asked, "Abbrechen"
 	// and "Ausführen", and "Details" with the tool, its arguments and the
 	// content. Nothing here takes the focus or reacts to Enter.
+	import { revealTarget } from '#lib/reveal-target.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { Pending } from '#lib/agent.ts';
@@ -41,7 +42,7 @@
 	<div class="ask">
 		<span class="ask-ic" aria-hidden="true">{p.level === 'normal' ? '✎' : '▲'}</span>
 		<div class="ask-text">
-			<strong id="pending-{p.id}">{askTitle(p)}</strong>
+			<strong id="pending-{p.id}" use:revealTarget>{askTitle(p)}</strong>
 			<span
 				>{t('agent.ask.level', {
 					level: t(

@@ -481,6 +481,7 @@
 {#if restoring}
 	<RestoreDialog
 		job={restoring.id}
+		initialMode={restoreOnly ? 'files' : 'all'}
 		{volumes}
 		onclose={() => (restoring = null)}
 		onfailed={(err) => {

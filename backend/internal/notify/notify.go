@@ -484,13 +484,32 @@ func (m *Manager) Loaded() bool {
 
 var rank = map[string]int{Info: 0, Warning: 1, Error: 2}
 
+func eventLink(kind, subject string) string {
+	switch {
+	case strings.HasPrefix(kind, "config_backup_"):
+		return "/settings/backups/configuration"
+	case kind == "backup_failed", kind == "backup_check_failed", kind == "backup_probe_failed",
+		kind == "backup_overdue", kind == "backup_incomplete", kind == "backup_recovered", kind == "backup_space_freed":
+		return "/settings/backups/data#backup-" + url.PathEscape(subject)
+	case strings.HasPrefix(kind, "update_"):
+		return "/settings/updates"
+	case strings.HasPrefix(kind, "volume_"):
+		return "/storage#volume-" + url.PathEscape(subject)
+	case kind == "disk_hot" || kind == "disk_wear" || kind == "disk_unhealthy":
+		name, _, _ := strings.Cut(subject, " (")
+		return "/storage#disk-" + url.PathEscape(name)
+	default:
+		return ""
+	}
+}
+
 // Notify records an event and sends it out where that is set up. kind and
 // subject pick the wording; see texts.go.
 func (m *Manager) Notify(severity, kind, subject string) {
 	m.mu.Lock()
 	settings := m.settings
 	title, text := wording(settings.Language, kind, subject)
-	message := Message{ID: m.nextID, Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text}
+	message := Message{ID: m.nextID, Time: time.Now(), Severity: severity, Kind: kind, Subject: subject, Title: title, Text: text, Link: eventLink(kind, subject)}
 	m.nextID++
 	m.messages = append(m.messages, message)
 	if len(m.messages) > keep {
