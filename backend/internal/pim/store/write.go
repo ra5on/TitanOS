@@ -446,8 +446,11 @@ func unquote(tag string) string {
 // PutOptions are the conditions of a PUT. IfMatch is an ETag (quotes
 // allowed) or "*"; IfNoneMatch is If-None-Match: *.
 type PutOptions struct {
-	IfMatch     string
-	IfNoneMatch bool
+	// BeforeCommit runs under the collection lock after all native object
+	// preconditions and immediately before writing. It must not open PIM.
+	BeforeCommit func() error
+	IfMatch      string
+	IfNoneMatch  bool
 }
 
 // PutResult says what a PUT did.
@@ -525,6 +528,11 @@ func (s *Store) Put(kind Kind, account, col, name string, data []byte, opt PutOp
 	defer cr.Close()
 	defer or.Close()
 	file := encodeName(name)
+	if opt.BeforeCommit != nil {
+		if err := opt.BeforeCommit(); err != nil {
+			return PutResult{}, err
+		}
+	}
 	if err := volumedata.Write(or, file, data); err != nil {
 		return PutResult{}, err
 	}

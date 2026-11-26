@@ -83,8 +83,12 @@ func TestPersonalNativeMailEditedDraftApprovalAndSMTPOutcomes(t *testing.T) {
 				if j.Status != "done" || j.Result == nil || len(provider.Sent()) != 1 {
 					t.Fatalf("%+v", j)
 				}
-				var receipt struct{ Accepted, SentCopy bool }
-				if err = json.Unmarshal(j.Result.Data, &receipt); err != nil || !receipt.Accepted || receipt.SentCopy != (mode == "confirmed") {
+				var receipt struct {
+					Accepted, SentCopy bool
+					MessageID          string
+					AcceptedAt         time.Time
+				}
+				if err = json.Unmarshal(j.Result.Data, &receipt); err != nil || !receipt.Accepted || receipt.MessageID == "" || receipt.AcceptedAt.IsZero() || receipt.SentCopy != (mode == "confirmed") {
 					t.Fatal(receipt, j.Result)
 				}
 				wire := provider.Sent()[0]
@@ -143,5 +147,44 @@ func TestPersonalSelectedMailIsolationAndUnseen(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatal("model received out-of-scope sources")
+	}
+}
+
+// Exercise the authority callback after the actual TLS and AUTH exchange.
+// A second guard is checked after acceptance, before mutating Sent or Drafts.
+func TestPersonalMailRevokesAtSMTPAndPostSendBoundary(t *testing.T) {
+	ts, provider, m := newMailServer(t)
+	ts.grantMail("alex")
+	box := ts.addMailbox(ts.client, provider)
+	owner, _ := ts.users.Get("alex")
+	view := m.Mailboxes(owner.Name)[0]
+	out := tmail.Outgoing{ExpectedFrom: &tmail.Address{Name: view.SenderName, Addr: view.Email}, To: []tmail.Address{{Addr: "fixture@example.test"}}, Subject: "Fixture", Text: "fixture only", Authorize: pa.Reauthorize}
+	uid, _, err := m.SaveDraft(t.Context(), owner.Name, box, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out.DraftUID = uid
+	if _, err = m.Send(t.Context(), owner.Name, box, out); !errors.Is(err, pa.ErrAuthority) || len(provider.Sent()) != 0 {
+		t.Fatal("unbound broker authority", err)
+	}
+	checks := 0
+	authority := func(context.Context) error {
+		checks++
+		if checks > 1 {
+			return errors.New("permission revoked")
+		}
+		return nil
+	}
+	ctx := pa.WithAuthority(t.Context(), authority, authority)
+	receipt, err := m.Send(ctx, owner.Name, box, out)
+	if err != nil || receipt.SentCopy || receipt.MessageID == "" || len(provider.Sent()) != 1 {
+		t.Fatal(receipt, err)
+	}
+	if _, err = m.ReadQuiet(t.Context(), owner.Name, box, "Drafts", uid); err != nil {
+		t.Fatal("draft removed after revocation", err)
+	}
+	p, err := m.List(t.Context(), owner.Name, box, tmail.ListQuery{Folder: "Sent", Limit: 5})
+	if err != nil || len(p.Messages) != 0 {
+		t.Fatal("mailbox modified after revocation", p, err)
 	}
 }

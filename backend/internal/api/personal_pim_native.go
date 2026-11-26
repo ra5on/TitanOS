@@ -174,8 +174,14 @@ func (p personalPIM) write(ctx context.Context, u auth.User, r pa.Request, appro
 	if err = ctx.Err(); err != nil {
 		return pa.Result{}, err
 	}
-	written, err := p.area.store.Put(p.kind, u.Name, in.Collection, id, data, store.PutOptions{IfNoneMatch: true})
+	if err := pa.Reauthorize(ctx); err != nil {
+		return pa.Result{}, err
+	}
+	written, err := p.area.store.Put(p.kind, u.Name, in.Collection, id, data, store.PutOptions{IfNoneMatch: true, BeforeCommit: func() error { return pa.CheckConsent(ctx) }})
 	if err != nil {
+		if errors.Is(err, pa.ErrNoEffect) {
+			return pa.Result{}, err
+		}
 		return pa.Result{}, errors.New("object creation could not be verified")
 	}
 	current, err := p.area.store.Get(p.kind, u.Name, in.Collection, id)

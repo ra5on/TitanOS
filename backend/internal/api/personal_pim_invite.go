@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
+	"maps"
+
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ import (
 
 // Produce a minimal calendar request. Other attendees, notes, alarms, links
 // and attachments from the original appointment never leave the calendar.
-func inviteICS(v calweb.View, original []byte, from, to string, local *time.Location, cancel, priorInvite bool) ([]byte, error) {
+func inviteICS(v calweb.View, original []byte, from, senderName, to string, local *time.Location, cancel, priorInvite bool) ([]byte, error) {
 	if v.Recurring {
 		return nil, errors.New("select a single, non-recurring appointment")
 	}
@@ -36,11 +37,12 @@ func inviteICS(v calweb.View, original []byte, from, to string, local *time.Loca
 		if item.Name != ical.CompEvent {
 			continue
 		}
-		if owner := item.Props.Get("ORGANIZER"); owner != nil && !strings.EqualFold(owner.Value, "mailto:"+from) {
+		owner := item.Props.Get("ORGANIZER")
+		if owner != nil && !strings.EqualFold(owner.Value, "mailto:"+from) {
 			return nil, errors.New("the selected mailbox is not the organizer")
 		}
 		for _, attendee := range item.Props.Values("ATTENDEE") {
-			if strings.EqualFold(attendee.Value, "mailto:"+to) {
+			if owner != nil && strings.EqualFold(attendee.Value, "mailto:"+to) {
 				known = true
 			}
 		}
@@ -85,7 +87,12 @@ func inviteICS(v calweb.View, original []byte, from, to string, local *time.Loca
 	clean.Props.SetText("METHOD", method)
 	for _, ev := range clean.Children {
 		if ev.Name == ical.CompEvent {
-			ev.Props.SetURI("ORGANIZER", &url.URL{Scheme: "mailto", Opaque: from})
+			organizer := ical.NewProp("ORGANIZER")
+			organizer.Value = "mailto:" + from
+			if senderName != "" {
+				organizer.Params.Set("CN", senderName)
+			}
+			ev.Props.Set(organizer)
 			attendee := ical.NewProp("ATTENDEE")
 			attendee.Value = "mailto:" + to
 			if cancel {
@@ -93,7 +100,9 @@ func inviteICS(v calweb.View, original []byte, from, to string, local *time.Loca
 			} else {
 				attendee.Params.Set("RSVP", "TRUE")
 			}
-			ev.Props.SetText("SEQUENCE", strconv.Itoa(sequence))
+			number := ical.NewProp("SEQUENCE")
+			number.Value = strconv.Itoa(sequence)
+			ev.Props.Set(number)
 			ev.Props.Set(attendee)
 		}
 	}
@@ -144,8 +153,8 @@ func (s *Server) invitePlan(ctx context.Context, u auth.User, r pa.Request) (pa.
 					continue
 				}
 				src := j.Result.Sources[0].Ref
-				var sent struct{ Account, To string }
-				if src["collection"] == ref["collection"] && src["object"] == ref["object"] && json.Unmarshal(j.Request.Args, &sent) == nil && sent.Account == args.Account && strings.EqualFold(sent.To, args.To) {
+
+				if src["collection"] == ref["collection"] && src["object"] == ref["object"] && src["uid"] == v.UID && src["mailbox"] == args.Account && strings.EqualFold(src["organizer"], boxes[at].Email) && strings.EqualFold(src["recipient"], recipients[0].Addr) {
 					prior = true
 					break
 				}
@@ -156,11 +165,16 @@ func (s *Server) invitePlan(ctx context.Context, u auth.User, r pa.Request) (pa.
 			return p, "", out, err
 		}
 	}
-	ics, err := inviteICS(v, obj.Data, boxes[at].Email, recipients[0].Addr, native.area.store.Zone(), cancel, prior)
+	ics, err := inviteICS(v, obj.Data, boxes[at].Email, boxes[at].SenderName, recipients[0].Addr, native.area.store.Zone(), cancel, prior)
 	if err != nil {
 		return p, "", out, err
 	}
 	src.Label = v.Title
+	src.Ref = maps.Clone(src.Ref)
+	src.Ref["uid"] = v.UID
+	src.Ref["organizer"] = boxes[at].Email
+	src.Ref["recipient"] = recipients[0].Addr
+	src.Ref["mailbox"] = boxes[at].ID
 	body := strings.Join([]string{v.Title, v.Start + " – " + v.End, v.Location}, "\n")
 	method := "REQUEST"
 	title := "Zum Termin einladen"
@@ -170,9 +184,10 @@ func (s *Server) invitePlan(ctx context.Context, u auth.User, r pa.Request) (pa.
 		title = "Einladung absagen"
 		subject = "Absage: " + v.Title
 	}
-	out = tmail.Outgoing{To: recipients, Subject: subject, Text: body, Files: []tmail.File{{Name: "termin.ics", Type: "text/calendar; method=" + method + "; charset=utf-8", Data: ics}}}
-	detail := map[string]any{"method": method, "uid": v.UID, "account": boxes[at].ID, "from": boxes[at].Email, "to": addrLines(recipients), "title": v.Title, "start": v.Start, "end": v.End, "timezone": v.Timezone, "location": v.Location, "etag": obj.ETag, "attachments": []string{"termin.ics"}}
-	p = pa.Preview{Title: title, Text: strings.Join([]string{boxes[at].Email + " → " + strings.Join(addrLines(recipients), ", "), body, "termin.ics"}, "\n"), Sources: []pa.Source{src}, Data: jsonPIM(detail)}
+	from := tmail.Address{Name: boxes[at].SenderName, Addr: boxes[at].Email}
+	out = tmail.Outgoing{Authorize: pa.Reauthorize, ExpectedFrom: &from, To: recipients, Subject: subject, Text: body, Files: []tmail.File{{Name: "termin.ics", Type: "text/calendar; method=" + method + "; charset=utf-8", Data: ics}}}
+	detail := map[string]any{"mailbox": boxes[at].Name, "senderName": from.Name, "organizer": from.Addr, "method": method, "uid": v.UID, "account": boxes[at].ID, "from": boxes[at].Email, "to": addrLines(recipients), "title": v.Title, "start": v.Start, "end": v.End, "timezone": v.Timezone, "location": v.Location, "etag": obj.ETag, "attachments": []string{"termin.ics"}}
+	p = pa.Preview{Title: title, Text: strings.Join([]string{strings.Join(addrLines([]tmail.Address{from}), "") + " → " + strings.Join(addrLines(recipients), ", "), body, "termin.ics"}, "\n"), Sources: []pa.Source{src}, Data: jsonPIM(detail)}
 	return p, boxes[at].ID, out, nil
 }
 func init() {

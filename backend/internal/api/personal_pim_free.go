@@ -70,6 +70,9 @@ func (p personalPIM) free(ctx context.Context, u auth.User, r pa.Request) (pa.Pr
 	} else {
 		text += strings.Join(lines, "\n")
 	}
+	if r.PreviousText != "" {
+		text = "Vorschlag aus dem vorherigen Schritt:\n" + limitPersonalText(r.PreviousText, 3000) + "\n\nGeprüfte freie Zeiten:\n" + text
+	}
 	return pa.Preview{Title: "Freie Zeiten", Text: text, Sources: []pa.Source{src}, Data: jsonPIM(map[string]any{"free": slots, "calendar": col.ID, "timezone": zone.String()})}, nil
 }
 func init() {

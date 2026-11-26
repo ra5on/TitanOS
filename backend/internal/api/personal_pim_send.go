@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ type mailFileReceipt struct {
 	SHA  string `json:"sha256"`
 }
 type sendEvidence struct {
+	SenderName  string            `json:"senderName"`
+	Mailbox     string            `json:"mailbox"`
+	DraftUID    uint32            `json:"draftUid,omitempty"`
+	DraftDate   string            `json:"draftDate,omitempty"`
 	Account     string            `json:"account"`
 	From        string            `json:"from"`
 	To          []string          `json:"to"`
@@ -41,6 +46,14 @@ type sendEvidence struct {
 	InReplyTo   string            `json:"inReplyTo"`
 	References  string            `json:"references"`
 	SourceSHA   string            `json:"sourceSHA256"`
+}
+
+func mailEffectKey(_ auth.User, _ pa.Request, p pa.Preview) string {
+	var shown sendEvidence
+	if json.Unmarshal(p.Data, &shown) == nil && shown.DraftUID != 0 && shown.DraftID != "" {
+		return personalDigest([]string{shown.Account, strconv.FormatUint(uint64(shown.DraftUID), 10), shown.DraftID})
+	}
+	return personalDigest(p.Data)
 }
 
 func (m personalMailTools) loadSavedReply(ctx context.Context, u auth.User, a selectedMail, args savedReply) (tmail.Outgoing, error) {
@@ -113,9 +126,11 @@ func (m personalMailTools) sendPlan(ctx context.Context, u auth.User, r pa.Reque
 		}
 		out = tmail.Outgoing{To: recipients, Subject: replySubject(msg.Subject), Text: body, InReplyTo: msg.MessageID, References: strings.TrimSpace(msg.References + " " + msg.MessageID)}
 	}
+	out.Authorize = pa.Reauthorize
+	out.ExpectedFrom = &tmail.Address{Name: a.box.SenderName, Addr: a.box.Email}
 	out.Answers = &tmail.MailRef{Folder: msg.Folder, UID: msg.UID}
-	shown := sendEvidence{Account: a.box.ID, From: a.box.Email, To: addrLines(out.To), Cc: addrLines(out.Cc), Bcc: addrLines(out.Bcc), Subject: out.Subject, Text: out.Text, Attachments: []mailFileReceipt{}, DraftID: args.DraftID, InReplyTo: out.InReplyTo, References: out.References, SourceSHA: fmt.Sprintf("%x", sha256.Sum256(jsonPIM([]string{msg.MessageID, msg.Subject, msg.Text, msg.From.Addr, msg.References})))}
-	lines := []string{shown.From + " → " + strings.Join(shown.To, ", ")}
+	shown := sendEvidence{SenderName: a.box.SenderName, Mailbox: a.box.Name, DraftUID: args.DraftUID, DraftDate: args.DraftDate, Account: a.box.ID, From: a.box.Email, To: addrLines(out.To), Cc: addrLines(out.Cc), Bcc: addrLines(out.Bcc), Subject: out.Subject, Text: out.Text, Attachments: []mailFileReceipt{}, DraftID: args.DraftID, InReplyTo: out.InReplyTo, References: out.References, SourceSHA: fmt.Sprintf("%x", sha256.Sum256(jsonPIM([]string{msg.MessageID, msg.Subject, msg.Text, msg.From.Addr, msg.References})))}
+	lines := []string{strings.Join(addrLines([]tmail.Address{*out.ExpectedFrom}), "") + " → " + strings.Join(shown.To, ", ")}
 	if len(shown.Cc) > 0 {
 		lines = append(lines, "Cc: "+strings.Join(shown.Cc, ", "))
 	}
@@ -159,6 +174,12 @@ func (m personalMailTools) send(ctx context.Context, u auth.User, r pa.Request, 
 
 func sentEvidence(receipt tmail.SendResult, err error, sources []pa.Source, noun string) (pa.Result, error) {
 	if err != nil {
+		if errors.Is(err, tmail.ErrSMTPUnconfirmed) {
+			return pa.Result{}, err
+		}
+		if errors.Is(err, pa.ErrNoEffect) {
+			return pa.Result{}, err
+		}
 		for _, sentinel := range []error{tmail.ErrSMTPRejected, tmail.ErrAuthFailed, tmail.ErrDisabled, tmail.ErrNoPassword, tmail.ErrInvalid, tmail.ErrTooLarge, tmail.ErrNotFound, tmail.ErrTLS, tmail.ErrHostForbidden} {
 			if errors.Is(err, sentinel) {
 				return pa.Result{}, fmt.Errorf("%w: SMTP took no message", pa.ErrNoEffect)
@@ -167,10 +188,12 @@ func sentEvidence(receipt tmail.SendResult, err error, sources []pa.Source, noun
 		return pa.Result{}, errors.New("SMTP acceptance unconfirmed; inspect Sent before a new send")
 	}
 	text := "SMTP hat die " + noun + " angenommen."
-	if receipt.SentCopy {
+	if receipt.ProviderFilesSent {
+		text += " Der Anbieter übernimmt das Ablegen im Gesendet-Ordner."
+	} else if receipt.SentCopy {
 		text += " Kopie im Ordner Gesendet bestätigt."
 	} else {
 		text += " Das Speichern der Kopie im Ordner Gesendet konnte nicht bestätigt werden."
 	}
-	return pa.Result{Title: noun + " gesendet", Text: text, Sources: sources, Data: jsonPIM(map[string]bool{"accepted": true, "sentCopy": receipt.SentCopy})}, nil
+	return pa.Result{Title: noun + " gesendet", Text: text, Sources: sources, Data: jsonPIM(map[string]any{"accepted": true, "sentCopy": receipt.SentCopy && !receipt.ProviderFilesSent, "providerFilesSent": receipt.ProviderFilesSent, "messageId": receipt.MessageID, "acceptedAt": receipt.AcceptedAt})}, nil
 }
