@@ -51,7 +51,6 @@ type servicesArea struct {
 	store   *config.Store
 	storage *storage.Manager
 	state   *servicesState
-	agentOn func(user auth.User) bool
 	// mailOn says whether T-Mail is granted to an account (1.05 opt-in).
 	mailOn func(user auth.User) bool
 }
@@ -60,7 +59,6 @@ type servicesArea struct {
 // KI-Agent ask it which services are on.
 func (s *Server) servicesArea() servicesArea {
 	return servicesArea{docker: s.opts.Docker, vms: s.opts.VMs, lxc: s.opts.LXC, store: s.opts.Store, storage: s.opts.Storage, state: &s.services,
-		agentOn: func(user auth.User) bool { return s.agentSettings().Enabled && s.agentAllowed(user) },
 		mailOn:  func(user auth.User) bool { return s.opts.Mail != nil && s.opts.Mail.Allowed(user.Name) }}
 }
 
@@ -135,8 +133,6 @@ func (a servicesArea) handleServicesState(w http.ResponseWriter, r *http.Request
 	for k, v := range on {
 		out[k] = v
 	}
-	// The tab of the KI-Agent: switched on and allowed for this account.
-	out["agent"] = a.agentOn(currentUser(r))
 	// The program T-Mail: shown only to an account with the grant. Without
 	// this the menu never offered T-Mail, whatever the switch said (1.08).
 	out["mail"] = a.mailOn != nil && a.mailOn(currentUser(r))
@@ -144,7 +140,7 @@ func (a servicesArea) handleServicesState(w http.ResponseWriter, r *http.Request
 	// (decided, TECHNIK 7.5); the keys let the menu show them (optIn) and
 	// leave room to switch them off later without a new web UI.
 	pim := pimOn(currentUser(r))
-	out["calendar"], out["contacts"] = pim, pim
+	out["calendar"], out["contacts"], out["agent"] = pim, pim, pim
 	writeJSON(w, http.StatusOK, out)
 }
 

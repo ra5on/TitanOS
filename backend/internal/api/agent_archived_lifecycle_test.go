@@ -34,58 +34,11 @@ import (
 
 // agentAccountData counts what is deleted with an account, for the
 // question before (GET /api/v1/users/{name}/agent-data, 1.03).
-type agentAccountData struct {
-	// Available is false when the agent's volume is not there; the
-	// counts are then 0 and the page names the parts without numbers.
-	Available bool `json:"available"`
-	Chats     int  `json:"chats"`
-	// Projects the account owns; HandedOver of them go to a member.
-	Projects   int `json:"projects"`
-	HandedOver int `json:"handedOver"`
-	Memories   int `json:"memories"`
-	Skills     int `json:"skills"`
-	Schedules  int `json:"schedules"`
-	Notes      int `json:"notes"`
-	// Folder: the account has a folder in the share KI-Agent.
-	Folder bool `json:"folder"`
-	// MailAccounts are the mailboxes of T-Mail the deletion takes along
-	// (1.05; from the stick's settings in RAM, also without the agent).
-	MailAccounts int `json:"mailAccounts"`
-	// CalendarEvents and Contacts are the events (calendar files) and
-	// contacts (groups not counted) of T-Kalender and Kontakte the deletion
-	// takes along (1.11, TECHNIK 5.7). Both are left out while they cannot
-	// be counted – no data volume, the account's folder on another volume –
-	// and CalendarUnknown says so: never 0 for data that is not known.
-	CalendarEvents  *int `json:"calendarEvents,omitempty"`
-	Contacts        *int `json:"contacts,omitempty"`
-	CalendarUnknown bool `json:"calendarUnknown,omitempty"`
-	// Reminders (1.13) are counted like the events; left out when they
-	// cannot be (CalendarUnknown).
-	Reminders *int `json:"reminders,omitempty"`
-}
-
 // agentDataOf counts the agent's data of an account. It reads the volume
 // (an explicit question of an administrator, not a cyclic look).
 func (s *Server) agentDataOf(name string) agentAccountData {
 	store := s.agentStore()
-	out := agentAccountData{}
-	if s.opts.Mail != nil {
-		out.MailAccounts = s.opts.Mail.MailboxCount(name)
-	}
-	// T-Kalender and Kontakte live on the volume of the system data, not on
-	// the agent's: counted here whatever the agent's volume says.
-	if s.opts.PIM != nil {
-		if events, contacts, err := s.opts.PIM.Counts(name); err == nil {
-			out.CalendarEvents, out.Contacts = &events, &contacts
-		} else {
-			out.CalendarUnknown = true
-		}
-		if reminders, err := s.opts.PIM.CountTasks(name); err == nil {
-			out.Reminders = &reminders
-		} else {
-			out.CalendarUnknown = true
-		}
-	}
+	out := s.countAccountApps(name)
 	if s.agentOpen == nil && s.agentSettings().Volume == "" || store.Available() != nil {
 		return out
 	}

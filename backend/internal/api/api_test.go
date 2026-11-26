@@ -87,6 +87,11 @@ func newTestServer(t *testing.T) *testServer {
 // newTestServerWith is newTestServer with a last change to the options.
 func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 	t.Helper()
+	return testServerRoutes(t, change, true)
+}
+
+func testServerRoutes(t *testing.T, change func(*Options), legacyCompatibility bool) *testServer {
+	t.Helper()
 	store := config.Open(t.TempDir())
 	users := auth.NewUsers(store)
 	if err := users.Load(); err != nil {
@@ -110,6 +115,17 @@ func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 		change(&opts)
 	}
 	handler := New(opts)
+	// Mount the retired API only on compatibility-test servers. Production has
+	// no switch for restoring its routes, event observers or cluster handler.
+	if legacyCompatibility {
+		handler.registerAgent(&routeMux{ServeMux: handler.mux})
+		if opts.Notify != nil {
+			opts.Notify.Observer = handler.agentObserve
+		}
+		if opts.Cluster != nil {
+			opts.Cluster.Agent = handler.agentClusterHandler()
+		}
+	}
 	if err := handler.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}

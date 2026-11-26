@@ -4,8 +4,6 @@
 	// marked as old, instead of an error page. Nothing can be changed here.
 	// It looks again by itself every 15 seconds and with "Jetzt prüfen";
 	// when the NAS answers, TitanOS starts as usual.
-	import { page } from '$app/state';
-	import { isAgentPath } from '#lib/agent-app.ts';
 	import { formatBytesOf, formatDateTime, formatDuration, formatPercent } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { snapshotLocked, type OfflineSnapshot } from '#lib/offline.svelte.ts';
@@ -14,7 +12,6 @@
 
 	let { snap }: { snap: OfflineSnapshot } = $props();
 
-	const agent = $derived(isAgentPath(page.url.pathname));
 	const locked = $derived(snapshotLocked(snap));
 	const when = (ms: number) => (ms ? formatDateTime(new Date(ms)) : '–');
 
@@ -44,19 +41,6 @@
 	{#if locked}
 		<p class="locked">{t('offline.locked')}</p>
 	{:else}
-		{#snippet chats()}
-			{#if snap.chats?.list.length}
-				<section aria-labelledby="off-chats">
-					<h2 id="off-chats">{t('offline.chats')}</h2>
-					<ul class="list">
-						{#each snap.chats.list as c (c.id)}
-							<li>{c.title || t('offline.untitled')}</li>
-						{/each}
-					</ul>
-				</section>
-			{/if}
-		{/snippet}
-		{#if agent}{@render chats()}{/if}
 		{#if snap.system}
 			<section aria-labelledby="off-system">
 				<h2 id="off-system">{t('offline.system')}</h2>
@@ -108,7 +92,6 @@
 				</ul>
 			</section>
 		{/if}
-		{#if !agent}{@render chats()}{/if}
 		<p class="hint">{t('offline.hint')}</p>
 	{/if}
 </AuthCard>

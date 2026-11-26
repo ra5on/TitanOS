@@ -161,15 +161,16 @@ export async function clearAgentNotifications(chat?: string): Promise<void> {
 	try {
 		const registration = await navigator.serviceWorker.getRegistration('/');
 		if (!registration?.getNotifications) return;
-		const shown = (await registration.getNotifications()).filter((n) => agentTag(n.tag ?? ''));
+		const jobID = (tag: string) => /^personal-agent-([a-zA-Z0-9_-]{8,80})$/.exec(tag)?.[1] ?? '';
+		const shown = (await registration.getNotifications()).filter((n) => jobID(n.tag ?? ''));
 		if (!shown.length) return;
 		let read: (id: string) => boolean = (id) => id === chat;
 		if (!chat) {
-			const list = await api.get<{ chats: { id: string; unread?: boolean }[] }>('/agent/chats');
-			const unread = new Set(list.chats.filter((c) => c.unread).map((c) => c.id));
-			read = (id) => !unread.has(id);
+			const list = await api.get<{ jobs: { id: string; seen: boolean }[] }>('/personal-agent/activity');
+			const seen = new Set(list.jobs.filter((j) => j.seen).map((j) => j.id));
+			read = (id) => seen.has(id);
 		}
-		for (const n of shown) if (read(agentTag(n.tag))) n.close();
+		for (const n of shown) if (read(jobID(n.tag))) n.close();
 	} catch {
 		// Without the agent or the API the notifications simply stay.
 	}

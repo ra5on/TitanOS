@@ -177,7 +177,6 @@ func (hass haArea) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		snap.Work = work
 	}
 	hass.haAdditional(&snap)
-	snap.AgentTasks = hass.agentButtons()
 	return snap
 }
 
@@ -194,9 +193,6 @@ func (hass haArea) HACommand(ctx context.Context, kind, name, action string) err
 	var method, route string
 	var body any
 	switch kind {
-	case "agent":
-		// A recurring task of the KI-Agent; it runs as its own account.
-		return hass.agentButton(name, action)
 	case "backup":
 		if action != "run" || hass.backup == nil {
 			return fmt.Errorf("unknown backup command")

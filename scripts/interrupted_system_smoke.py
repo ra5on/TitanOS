@@ -79,11 +79,11 @@ def create_share(request, wait, directory, port, password):
 
 def interrupt_install(request, check, wait, releases, files, version, kill, boot, stick):
     before = request("/api/v1/update")
-    # The first mounted volume is automatically selected for the agent. A
-    # successful read through the API confirms the configuration write completed.
-    agent_path = "config/system/agent.json"
-    wait("agent volume selection saved", lambda: request("/api/v1/agent/settings").get("volume") == "testdaten", 90)
-    saved_agent = stick.read(agent_path)
+    # The SMB file was just read back through this share. Verify its persisted
+    # configuration independently of any optional application or background job.
+    share_path = "config/shares/shares.json"
+    saved_share = stick.read(share_path)
+    assert any(sh.get("name") == "Pruefung" for sh in json.loads(saved_share))
 
     releases.publish(version, files)
     offer = check()
@@ -121,11 +121,7 @@ def interrupt_install(request, check, wait, releases, files, version, kill, boot
     active = next(s for s in after["slots"] if s["running"])
     assert active["name"] == "a" and active["complete"] and after["version"] == before["version"], active
     assert not after["pending"] and not after["unconfirmed"], after
-    restored_agent = stick.read(agent_path)
-    assert json.loads(restored_agent or "{}").get("volume") == "testdaten"
-    if saved_agent:
-        assert restored_agent == saved_agent
-    assert request("/api/v1/agent/settings")["volume"] == "testdaten"
+    assert stick.read(share_path) == saved_share
     print(f"Power cut after {len(copied)} verified bytes of filesystem.squashfs; slot A started {after['version']} with no pending switch.", flush=True)
 
 

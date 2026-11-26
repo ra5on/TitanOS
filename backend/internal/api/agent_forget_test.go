@@ -22,7 +22,7 @@ import (
 // A shared project goes to a member (here the owner of the NAS among the
 // members), with the members' chats in it. A new account of the same name
 // inherits nothing.
-func TestDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
+func TestArchivedAgentDeletionHelper(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
 	mnt := filepath.Dir(filepath.Dir(ts.withShare()))
 	for _, name := range []string{"maria", "ben"} {
@@ -79,17 +79,18 @@ func TestDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
 	}
 
 	// The question before: what goes with the account.
-	res, body := ts.request("GET", "/api/v1/users/maria/agent-data", nil)
-	var data agentAccountData
-	json.Unmarshal(body, &data)
+	data := ts.server.agentDataOf("maria")
 	want := agentAccountData{Available: true, Chats: 2, Projects: 2, HandedOver: 1, Memories: 1, Skills: 1, Schedules: 1, Notes: 1, Folder: true}
-	if res.StatusCode != http.StatusOK || data != want {
-		t.Fatalf("agent-data: %d %s", res.StatusCode, body)
+	if data != want {
+		t.Fatalf("archive counts: %+v", data)
 	}
 
 	if res, body := ts.request("DELETE", "/api/v1/users/maria", nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", res.StatusCode, body)
 	}
+	// Only exercise the historical helpers explicitly in this archival test.
+	ts.server.agentForgetSettings("maria")
+	ts.server.agentForgetAccount("maria")
 	// The settings name it no more as soon as the answer is there.
 	if s := ts.server.agentSettings(); slices.Contains(s.Users, "maria") || s.ReactAs == "maria" || s.Features.Emergency.person("maria") != nil {
 		t.Fatalf("settings still name the account: %v %q %+v", s.Users, s.ReactAs, s.Features.Emergency.Persons)
@@ -126,8 +127,8 @@ func TestDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": "maria", "password": testPassword, "role": "admin"}); res.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", res.StatusCode, body)
 	}
-	_, body = ts.request("GET", "/api/v1/users/maria/agent-data", nil)
-	json.Unmarshal(body, &data)
+	ts.server.agentForgetLeftovers("maria")
+	data = ts.server.agentDataOf("maria")
 	if data != (agentAccountData{Available: true}) {
 		t.Fatalf("new account inherits: %s", body)
 	}
@@ -193,7 +194,7 @@ func TestAgentDataNeedsTheRightToManage(t *testing.T) {
 
 // An account another node of the cluster deleted takes its agent data
 // along here too; one taken over anew from the cluster inherits nothing.
-func TestClusterDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
+func TestClusterAccountChangePreservesArchivedChats(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
 	ts.users.Create("maria", testPassword, auth.RoleUser)
 	store := ts.server.agentStore()
@@ -207,24 +208,21 @@ func TestClusterDeletedAccountTakesTheAgentDataAlong(t *testing.T) {
 	}
 	ts.server.clusterArea().clusterApplied(before, true, auth.User{}, true)
 	ts.server.jobs.Wait()
-	if slices.Contains(store.Accounts(), "maria") {
-		t.Fatal("agent data of an account deleted in the cluster kept")
+	if list, err := store.Chats("maria"); err != nil || len(list) != 1 {
+		t.Fatal("archived chat lost on deletion")
 	}
-	// Left over (the volume was away at the deletion): an account of the
-	// name taken over from the cluster does not get it.
-	store.Unforget("maria")
-	if err := store.SaveChat("maria", c); err != nil {
+	if _, err := ts.users.Create("maria", testPassword, auth.RoleUser); err != nil {
 		t.Fatal(err)
 	}
-	ts.users.Create("maria", testPassword, auth.RoleUser)
 	after, _ := ts.users.Get("maria")
 	ts.server.clusterArea().clusterApplied(auth.User{}, false, after, false)
-	if list, _ := store.Chats("maria"); len(list) != 0 {
-		t.Fatalf("new account from the cluster inherits chats: %+v", list)
+	if list, err := store.Chats("maria"); err != nil || len(list) != 1 {
+		t.Fatal("archived chat lost on recreation")
 	}
-	if err := store.SaveChat("maria", c); err != nil {
-		t.Fatalf("new account cannot keep files: %v", err)
+	if personalKey(before) == personalKey(after) {
+		t.Fatal("replacement shares a personal Agent identity")
 	}
+
 }
 
 // 1.11 (TECHNIK 5.7): the delete dialog counts the events and contacts of
