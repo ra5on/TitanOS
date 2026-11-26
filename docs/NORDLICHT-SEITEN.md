@@ -25,12 +25,12 @@ Die Spalte „Prüfpunkt“ bezeichnet die Aufgabe oder die fachliche Ausnahme. 
 | `/docker/images` | Image-Liste und belegter Platz | Herkunft, Tag und Größe bleiben vergleichbare Tabellendaten. Entfernen führt über den bestehenden Dialog. |
 | `/docker/volumes` | Docker-Volumes | Verwendung und belegten Platz vergleichen. Kein Kartenraster. |
 | `/docker/networks` | Docker- und LAN-Netze | Netzwerkdetails und Einrichtung bleiben in ihrem eigenen Formular. |
-| `/docker/cleanup` | Vorschau der Bereinigung | Vorschau vor Entfernen; Warnung und Bestätigung im Aktionsbereich. |
+| `/docker/cleanup` | Vorschau der Bereinigung | Vor dem Entfernen stehen Vorschau, Warnung und Bestätigung im Aktionsbereich. |
 | `/apps` | Katalog, installierte Apps und Quellen | Katalogkarten mit Originallogo und deutlich lesbarer Herkunft. Der Filter „Installiert“ führt zur bestehenden App. Der Katalog behält den Weg zu einer weiteren Installation. |
 | `/apps/install/[source]/[id]` | Installationsformular und Fortschritt | Quelle und angeforderten Speicher im Formular prüfen. Der Fortschritt folgt dem tatsächlichen Installationsauftrag. |
 | `/apps/new` | Eigener Container | Gleiches Formular mit freier Image-Wahl. Seltene Ressourcenoptionen bleiben erreichbar. |
 | `/plugins`, `/plugins/cleanup` | Erweiterungsliste, Detailbereich und Bereinigung | Auswahl im Katalog markieren. Empfohlene und fremde Erweiterungen sind als solche erkennbar. Bestätigung vor dem Aufräumen. |
-| `/storage` | Volume- und Plattentabelle | Status und Belegung stehen neben dem Namen; belegter und gesamter Platz sind als Messwert zugänglich. Detail- und Aktionsflächen folgen der Auswahl. |
+| `/storage` | Volume- und Plattentabelle | Status und Belegung stehen neben dem Namen. Belegter und gesamter Platz sind als Messwert zugänglich. Detail- und Aktionsflächen folgen der Auswahl. |
 | `/storage/import` | Suche und lesende Prüfung | Import zuerst prüfen. Registrierung und potenziell schreibende Aktionen sind ausdrücklich unterscheidbar. |
 | `/storage/manage` | Volume-Details, Erweiterung, Snapshots | Verlauf, Prüfen und Datei-Rücksicherung nutzen dieselbe Auswahl. Größen bleiben echte Zahlen. |
 | `/storage/replace` | Austausch eines Laufwerks | Quelle, Ersatz und Bestätigung bleiben in einem eigenen Ablauf. |
@@ -40,7 +40,7 @@ Die Spalte „Prüfpunkt“ bezeichnet die Aufgabe oder die fachliche Ausnahme. 
 | `/vms` | Virtuelle Maschinen, Auswahl und Betrieb | Tabellenzeile, Betriebszustand, Aktionen und Detailbereich bleiben zusammen. Konsolen wechseln in die Medienansicht. |
 | `/vms/new`, `/vms/edit` | VM-Assistent und Konfiguration | Laufwerke, Speicher und Geräte sind Formulardaten. Schmale Fenster dürfen die Bestätigung nicht abschneiden. |
 | `/vms/media` | Installationsmedien | Medien und tatsächlicher Downloadstatus im eigenen Verwaltungsbereich. |
-| `/vms/screen` | Gastbild und Bildschirmsteuerung | Unverfälschte Bildfläche, eigener Kontrast für die Werkzeuge; Gast-Tastatureingabe bleibt wirksam. |
+| `/vms/screen` | Gastbild und Bildschirmsteuerung | Unverfälschte Bildfläche, eigener Kontrast für die Werkzeuge. Die Gast-Tastatureingabe bleibt wirksam. |
 | `/lxc` | Liste und Detail eines Systemcontainers | Zustände als Text, markierte Auswahl und Zugriff auf Ressourcendetails. |
 | `/users`, `/account` | Kontenverwaltung und eigenes Konto | Eigene Geräte und Anmeldedaten bleiben von Administrationsaktionen getrennt. Rollen, Passwortwechsel und Bestätigungsdialoge behalten ihre bestehenden Prüfungen. |
 | `/notifications` | Meldungsliste und Einzelheiten | Schweregrad mit Text. Direkter Weg zum betroffenen Programm. |
@@ -53,14 +53,14 @@ Die Spalte „Prüfpunkt“ bezeichnet die Aufgabe oder die fachliche Ausnahme. 
 | `/tools/bundle` | Diagnosepaket | Inhalt vor Erzeugung auswählen. Paket und Fortschritt als eigene Aufgabe. |
 | `/terminal` | Terminalemulator | Terminalzeichen, Cursor und Hintergrund gehören zur Sitzung. Fenster, Fokus und Dialoge folgen dem Desktop. |
 | `/mail`, `/mail/compose` | Drei Spalten, Leser und separates Schreiben | Breite zum Lesen bzw. Schreiben verwenden. HTML-Mails und Anlagen behalten ihre Darstellung. |
-| `/mail/setup`, `/mail/settings` | Postfach hinzufügen und konfigurieren | Anbieterdaten und Kontodaten als Formular; Geheimnisse bleiben verdeckt. |
+| `/mail/setup`, `/mail/settings` | Postfach hinzufügen und konfigurieren | Anbieterdaten und Kontodaten als Formular. Geheimnisse bleiben verdeckt. |
 | `/calendar`, `/calendar/event`, `/calendar/iphone` | Zeitraster, Terminfenster und Geräteeinrichtung | Zeit und Spalten bleiben das Ordnungsprinzip. Lange Termine und private Inhalte dürfen nicht zwischen Konten sichtbar werden. |
 | `/contacts`, `/contacts/iphone` | Adressbücher, Personenliste, Karte und Geräteeinrichtung | Auswahl über Liste und zugehörige Fachdetails. Keine Umstellung auf Systemkacheln. |
 | `/nvr`, `/nvr/cameras` | Live-Ansicht und Kameraverwaltung | Kameraflächen und Bildverhältnis haben Vorrang. Werkzeuge liegen außerhalb des Bildinhalts. |
 | `/nvr/events`, `/nvr/recordings` | Ereignisse, Aufnahme und Zeitleiste | Kamera und Uhrzeit führen durch die Auswahl. Bedienelemente einer Aufnahme gehören zum Player. |
 | `/nvr/diagnosis`, `/nvr/settings` | Verfügbarkeit und Aufzeichnungsregeln | Diagnose als Text und Messwert. Regeln als Formular. |
-| `/agent` | Unterhaltung, Verlauf und Werkzeuge | Die Unterhaltung bleibt ein eigener Arbeitsraum; Rechte, Datenquelle und Rückfragen behalten ihren Platz. |
-| `/welcome`, unbekannte Adresse | Erststart-Assistent und Fehlerseite | Ein klarer nächster Schritt; der Assistent und die Rückkehrnavigation behalten ihre eigenen Inhalte. |
+| `/agent` | Unterhaltung, Verlauf und Werkzeuge | Die Unterhaltung bleibt ein eigener Arbeitsraum. Rechte, Datenquelle und Rückfragen behalten ihren Platz. |
+| `/welcome`, unbekannte Adresse | Erststart-Assistent und Fehlerseite | Ein klarer nächster Schritt. Der Assistent und die Rückkehrnavigation behalten ihre eigenen Inhalte. |
 
 ## Systemsteuerung
 

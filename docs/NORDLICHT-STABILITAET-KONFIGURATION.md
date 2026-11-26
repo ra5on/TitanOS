@@ -2,7 +2,7 @@
 
 ## Befund und Schreibpfad
 
-Beim Abbruch eines A/B-Systemupdates in QEMU startete Slot A mit der vorigen Version. Die Freigabe war erreichbar. Beim nächsten Start meldete `fsck.fat` einen verwaisten 4096-Byte-Cluster; titand konnte `system/agent.json` nicht als JSON lesen. Ein lesender Zugriff auf das Testimage ergab eine leere Datei. Freigaben und Updatekonfiguration waren lesbar. Das erste serielle Protokoll hatte vor dem Abbruch einen Schreibzugriff auf die Agenteneinstellungen aufgezeichnet. Im damaligen Store stand der positive Journaleintrag **vor** dem Synchronisieren des Verzeichnisses. Aus diesem Eintrag allein lässt sich der dauerhafte Abschluss des Schreibens nicht ableiten.
+Beim Abbruch eines A/B-Systemupdates in QEMU startete Slot A mit der vorigen Version. Die Freigabe war erreichbar. Beim nächsten Start meldete `fsck.fat` einen verwaisten 4096-Byte-Cluster. titand konnte `system/agent.json` nicht als JSON lesen. Ein lesender Zugriff auf das Testimage ergab eine leere Datei. Freigaben und Updatekonfiguration waren lesbar. Das erste serielle Protokoll hatte vor dem Abbruch einen Schreibzugriff auf die Agenteneinstellungen aufgezeichnet. Im damaligen Store stand der positive Journaleintrag **vor** dem Synchronisieren des Verzeichnisses. Aus diesem Eintrag allein lässt sich der dauerhafte Abschluss des Schreibens nicht ableiten.
 
 Die automatische Wahl des ersten gemounteten Volumes in `api.agentVolume` speichert die Agenteneinstellungen über `config.Store.WriteJSON`. Der Store schreibt in eine temporäre Datei desselben Verzeichnisses, synchronisiert sie, schließt sie und benennt sie um. Danach synchronisierte er das Elternverzeichnis. Der Code dieses Pfads in v1.31.0 ist bytegleich mit PR #414.
 
