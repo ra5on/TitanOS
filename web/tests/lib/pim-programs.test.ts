@@ -39,7 +39,11 @@ test('the pages belong to their programs; the iPhone page to both', () => {
 	expect(appForPath('/contacts/iphone')?.id).toBe('contacts');
 	// No longer a page of "Mein Konto" (until step 11 it was).
 	expect(appForPath('/account')?.id).toBe('account');
-	expect(SYSTEM_APPS.find((a) => a.id === 'account')!.paths).toEqual(['/account']);
+	expect(SYSTEM_APPS.find((a) => a.id === 'account')!.paths).toEqual([
+		'/account',
+		'/notifications',
+	]);
+	expect(appForPath('/notifications')?.id).toBe('account');
 	// The side bars of the drafts.
 	const hrefs = (app: typeof calendar) => app.side.map((i) => ('href' in i ? i.href : ''));
 	expect(hrefs(calendar)).toEqual(['/calendar', '/calendar?view=list', '/calendar/iphone']);

@@ -154,3 +154,30 @@ test('in the trash, deleting asks first; elsewhere it goes to the trash at once'
 	await fireEvent.click(buttons[1]);
 	await waitFor(() => expect(removedInTrash).toHaveBeenCalledWith(7));
 });
+
+test('phone reader returns to the source list and answers the opened message in one tap', async () => {
+	stub();
+	const oncompose = vi.fn();
+	const { container } = render(MessageView, {
+		...props,
+		compact: true,
+		readerBack: { label: 'Posteingang', href: '/mail?a=a1&f=INBOX' },
+		oncompose,
+	});
+	expect(
+		(await screen.findByRole('link', { name: 'Zurück zu Posteingang' })).getAttribute('href'),
+	).toBe('/mail?a=a1&f=INBOX');
+	expect(container.querySelector('[data-nordlicht-immersive="mail"]')).toBeTruthy();
+	await fireEvent.click(screen.getByRole('button', { name: 'Antworten' }));
+	expect(oncompose).toHaveBeenCalledWith(
+		'reply',
+		expect.objectContaining({ uid: 7, subject: 'Ihr Konto' }),
+	);
+	expect(screen.getByText('Kontoauszug.pdf')).toBeTruthy();
+	// jsdom has no native popover top layer.
+	HTMLElement.prototype.showPopover = function () {
+		this.removeAttribute('popover');
+	};
+	await fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+	expect(await screen.findByRole('menuitem', { name: 'Weiterleiten' })).toBeTruthy();
+});

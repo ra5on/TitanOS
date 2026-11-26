@@ -527,10 +527,7 @@ try {
     const subject = page.locator("#mail-message-subject");
     await subject.waitFor();
     await page.waitForTimeout(400);
-    const bar = await page
-      .locator("header.phone-bar, body > header, header")
-      .first()
-      .boundingBox();
+    const bar = await page.locator(".reader-nav").boundingBox();
     const sb = await subject.boundingBox();
     assert.ok(
       !bar || sb.y >= bar.y + bar.height - 1,
@@ -558,24 +555,17 @@ try {
     const actions = page.getByRole("toolbar", {
       name: "Aktionen für diese Nachricht",
     });
-    for (const label of [
-      "Antworten",
-      "Verschieben",
-      "Archivieren",
-      "Löschen",
-      "Markieren",
-      "Weitere Aktionen",
+    for (const target of [
+      actions.getByRole("button", {name:"Antworten", exact:true}),
+      page.locator(".reader-nav").getByRole("button", {name:"Weitere Aktionen"}),
+      page.getByRole("link", {name:"Zurück zu Posteingang"}),
     ]) {
-      const b = await actions
-        .getByRole("button", { name: label, exact: true })
-        .boundingBox();
-      assert.ok(b && b.width >= 44 && b.height >= 44, `${label}: 44 px`);
+      const b = await target.boundingBox();
+      assert.ok(b && b.width >= 44 && b.height >= 44, "reader controls are at least 44 px");
     }
     await sound(page, `phone ${name} newsletter`);
     await shot(page, `10-handy-newsletter-390-${name}`);
-    await actions
-      .getByRole("button", { name: "Antworten", exact: true })
-      .click();
+    await page.locator(".reader-nav").getByRole("button", {name:"Weitere Aktionen"}).click();
     await page.getByRole("menuitem", { name: "Allen antworten" }).waitFor();
     await page.getByRole("menuitem", { name: "Weiterleiten" }).waitFor();
     await shot(page, `11-handy-antworten-390-${name}`);

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import PhoneDockSize from '#lib/desktop/PhoneDockSize.svelte';
+	import { phoneDockSize } from '#lib/desktop/phone-home.ts';
+	import { setPhoneDockSize } from '#lib/desktop/bar-link.svelte.ts';
+
 	// Settings › Appearance (PLAN 64): one simple page – theme, accent and five
 	// sliders that count everywhere (desktop, every window, the phone; not the
 	// KI-Agent, which keeps its own look). Every change shows at once in all
@@ -32,7 +36,7 @@
 	import DesktopDialogs from '#lib/desktop/DesktopDialogs.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
-	import { loadDesktop } from '#lib/desktop/wm.svelte.ts';
+	import { desktop, loadDesktop } from '#lib/desktop/wm.svelte.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import { page } from '$app/state';
@@ -667,6 +671,12 @@
 						onchange={(e) => setPhoneDock(e.currentTarget.checked)}
 					/>
 				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('phone.nord.size')}>
+				{#snippet control()}<PhoneDockSize
+						size={inWindow ? barLink.phoneSize : phoneDockSize(desktop.prefs.phone.dock.size)}
+						onchange={setPhoneDockSize}
+					/>{/snippet}
 			</SettingRow>
 		</SettingGroup>
 	{/if}

@@ -17,7 +17,7 @@ export async function attachVod(
 	if (el.canPlayType('application/vnd.apple.mpegurl')) {
 		el.src = src;
 		el.addEventListener('loadedmetadata', ready, { once: true });
-		return () => {};
+		return () => el.removeEventListener('loadedmetadata', ready);
 	}
 	try {
 		const { default: Hls } = await import('hls.js');

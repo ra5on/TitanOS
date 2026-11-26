@@ -4,6 +4,7 @@
 	// PLAN 21): name, repository, access, devices, paths, ports and
 	// variables; advanced lines on demand. "Install" then shows the log of
 	// the job until the app runs.
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -34,6 +35,16 @@
 		{#if ins.phase === 'form' && ins.form}<ViewSwitch bind:advanced={ins.advanced} />{/if}
 	{/snippet}
 </PageHead>
+{#if phoneView() && ins.app && ins.phase === 'form'}
+	<div class="catalog-detail">
+		<span class="detail-icon"><AppIcon src={ins.app.icon} name={ins.app.name} /></span>
+		<div>
+			<strong>{ins.app.name}</strong>
+			<p>{localize(ins.app.description, i18n.locale) || ins.app.image}</p>
+			<small>{ins.sourceName}</small>
+		</div>
+	</div>
+{/if}
 {#if source === 'titanos' && id === 'immich' && ins.phase === 'form'}
 	<!-- 1.07: what comes after installing Immich, for the iPhone. -->
 	<div class="immich-guide"><ImmichGuide installHref="" /></div>
@@ -202,6 +213,36 @@
 {/if}
 
 <style>
+	.catalog-detail {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		background: var(--nord-surface);
+		border: 1px solid var(--nord-line);
+		border-radius: var(--nord-radius);
+		padding: 14px;
+	}
+	.catalog-detail strong {
+		font-size: var(--text-md);
+	}
+	.catalog-detail p {
+		margin: 4px 0;
+		overflow-wrap: anywhere;
+	}
+	.catalog-detail small {
+		color: var(--muted);
+	}
+	.detail-icon {
+		flex: none;
+		width: 54px;
+		height: 54px;
+		border-radius: 12px;
+		background: var(--chip);
+		display: grid;
+		place-items: center;
+		overflow: hidden;
+	}
+
 	.immich-guide {
 		margin: 0 0 var(--space-3);
 	}

@@ -15,6 +15,9 @@
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { page } from '$app/state';
 	import { appForPath, SYSTEM_APPS } from '#lib/desktop/apps.ts';
+	import Icon from './Icon.svelte';
+	import { clusterNodes } from '#lib/cluster.svelte.ts';
+	import { activeNode } from '#lib/cluster-node.ts';
 	import Dropdown from './Dropdown.svelte';
 	import { settingsCrumbs } from '#lib/settings-search.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -46,6 +49,12 @@
 
 	const phone = $derived(phoneView());
 	// On the phone the bar above names the program: the page's name only when it differs.
+	const mobileHeading = $derived(
+		phone && /^\/(settings|apps|docker|notifications)(\/|$)/.test(page.url.pathname),
+	);
+	const host = $derived(
+		clusterNodes.nodes.find((n) => n.id === activeNode())?.name || session.data?.hostname,
+	);
 	const program = $derived(appForPath(page.url.pathname));
 	const ownName = $derived(!program || t(program.label) !== title);
 	// A bar only with something in it: actions or the page's name on the phone.
@@ -217,7 +226,7 @@
 		class:beside={pathHead}
 		bind:this={bar}
 	>
-		{#if pathHead}{:else if phone && ownName}
+		{#if mobileHeading || pathHead}{:else if phone && ownName}
 			<h1 class="win-title" {id}>{title}</h1>
 		{:else}
 			<h1 class="sr-only" {id}>{title}</h1>
@@ -249,7 +258,14 @@
 	</div>
 {/snippet}
 
-{#if pathHead && inWindow}
+{#if mobileHeading}
+	<header class="nord-page-head">
+		<h1 {id}>{section ?? title}</h1>
+		{#if host}<span><Icon name="disk" size={14} />{host}</span>{/if}
+	</header>
+	{#if actions}<div class="nord-tools">{@render toolbar()}</div>{/if}
+	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
+{:else if pathHead && inWindow}
 	<!-- The window's title bar shows the path; the page keeps its name for screen readers. -->
 	<h1 class="sr-only set-mark" {id}>{section ?? title}</h1>
 	{#if hasBar}<div class="set-head">{@render toolbar()}</div>{/if}

@@ -1,15 +1,12 @@
 <script lang="ts">
-	// PLAN 87: the notifications on the phone – pulled down from the top (the
-	// home screen's bar, the bar of a program) or from the bell. A few quick
-	// switches above, the list below: a swipe to the left deletes a message
-	// (like its bin), to the right marks it read; pulling the list down loads
-	// it anew. "Alle löschen" asks first.
+	import { page } from '$app/state';
+	import PageHead from '../components/PageHead.svelte';
 	import { goto } from '$app/navigation';
 	import Dialog from '../components/Dialog.svelte';
 	import Icon from '../components/Icon.svelte';
 	import SwipeRow from '../components/SwipeRow.svelte';
 	import { formatDateTime } from '../format.ts';
-	import { apiErrorText, t } from '../i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t } from '../i18n/index.svelte.ts';
 	import { noticeLink } from '../notice-link.ts';
 	import {
 		dismissNotifications,
@@ -20,30 +17,21 @@
 		noticeOwnLink,
 		noticeText,
 		visibleNotices,
+		type Notice,
 	} from '../notifications.svelte.ts';
-	import { system } from '../system.svelte.ts';
-	import { appearance, saveAppearance } from '../theme/appearance.svelte.ts';
-	import { resolvePalette, type ThemeId } from '../theme/themes.ts';
-	import { desktop, savePrefs } from './wm.svelte.ts';
+	import { onMount } from 'svelte';
+	import { phoneView } from './mode.svelte.ts';
+	import { bellGroup } from '../notify-groups.ts';
+	import DesktopIcon from './DesktopIcon.svelte';
 	import { PULL_DISTANCE } from './PhoneGestures.svelte';
 
-	let open = $state(false);
 	let busy = $state(false);
 	let error = $state('');
 	let confirmAll = $state<number[] | null>(null);
 
-	// The list follows the NAS like the bell of the desktop.
-	const latest = $derived(system.info?.notificationsLatest ?? 0);
-	$effect(() => {
-		latest;
-		void loadNotifications();
+	onMount(() => {
+		if (!phoneView()) void loadNotifications();
 	});
-	$effect(() => {
-		const show = () => (open = true);
-		window.addEventListener('titanos-phone-notices', show);
-		return () => window.removeEventListener('titanos-phone-notices', show);
-	});
-
 	const shown = $derived(visibleNotices());
 	const SEVERITY = {
 		info: 'notify.severity.info',
@@ -58,6 +46,8 @@
 		try {
 			await dismissNotifications(ids);
 			confirmAll = null;
+			if (ids.includes(Number(page.url.searchParams.get('id'))))
+				await goto('/notifications', { replaceState: true, state: page.state });
 		} catch (err) {
 			error = apiErrorText(err);
 		} finally {
@@ -65,49 +55,54 @@
 		}
 	}
 	function follow(href: string) {
-		open = false;
 		void goto(href);
 	}
 
-	// Quick switches: light or dark, the moving wallpaper, the phone's dock.
-	const dark = $derived(resolvePalette(appearance.current, appearance.systemLight).dark);
-	const DARK_KEY = 'titanos.phone.darkTheme';
-	async function toggleDark() {
-		let theme: ThemeId;
-		if (dark) {
-			try {
-				localStorage.setItem(DARK_KEY, appearance.current.theme);
-			} catch {
-				// Not remembered: back to Graphit next time.
-			}
-			theme = 'hell';
-		} else {
-			let kept: string | null = null;
-			try {
-				kept = localStorage.getItem(DARK_KEY);
-			} catch {
-				kept = null;
-			}
-			theme =
-				(['graphit', 'schwarz', 'mitternacht', 'eigen'] as const).find((x) => x === kept) ??
-				'graphit';
+	let onlyUnread = $state(false);
+	const detail = $derived(shown.find((n) => String(n.id) === page.url.searchParams.get('id')));
+	const unread = $derived(shown.filter(isUnread));
+	const groups = $derived.by(() => {
+		const result = new Map<string, Notice[]>();
+		for (const notice of onlyUnread ? unread : shown) {
+			const day = new Date(notice.time).toDateString();
+			const list = result.get(day) ?? [];
+			list.push(notice);
+			result.set(day, list);
 		}
-		try {
-			await saveAppearance({ ...appearance.current, theme });
-		} catch (err) {
-			error = apiErrorText(err);
-		}
+		return Array.from(result);
+	});
+	function dayLabel(time: string) {
+		const date = new Date(time);
+		const today = new Date();
+		if (date.toDateString() === today.toDateString()) return t('calendar.today');
+		today.setDate(today.getDate() - 1);
+		if (date.toDateString() === today.toDateString()) return t('nord.notices.yesterday');
+		return date.toLocaleDateString(i18n.locale, { day: 'numeric', month: 'long', year: 'numeric' });
 	}
-	const live = $derived(desktop.prefs.wallpaper.live);
-	const dock = $derived(desktop.prefs.phone.dock.show);
-
+	const glyphs = {
+		storage: 'storage',
+		disks: 'storage',
+		backups: 'backup',
+		updates: 'updates',
+		ups: 'settings',
+		usb: 'shares',
+		cameras: 'nvr',
+		system: 'settings',
+	} as const;
+	function showDetail(notice: Notice) {
+		void goto('/notifications?id=' + notice.id, { state: page.state });
+		markRead(notice.id);
+	}
 	// Pulling the list down at its top loads it anew.
 	let list = $state<HTMLElement>();
 	let pull = $state(0);
 	let pullFrom: number | null = null;
 	let reloading = $state(false);
 	function pullStart(e: TouchEvent) {
-		pullFrom = list && list.scrollTop <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
+		pullFrom =
+			list && window.scrollY <= 0 && list.scrollTop <= 0 && e.touches.length === 1
+				? e.touches[0].clientY
+				: null;
 	}
 	function pullMove(e: TouchEvent) {
 		if (pullFrom === null) return;
@@ -125,160 +120,135 @@
 	}
 </script>
 
-{#if open}
-	<Dialog
-		title={t('notify.title')}
-		dismiss
-		onclose={() => {
-			open = false;
-			confirmAll = null;
-		}}
-	>
-		<div class="quick" role="group" aria-label={t('phone.notices.quick')} data-no-sheet-swipe>
-			<button
-				type="button"
-				class="switch-tile"
-				aria-pressed={dark}
-				data-quick="dark"
-				onclick={toggleDark}
-				><Icon name="eye" size={18} /><span>{t('phone.notices.dark')}</span><small
-					>{dark ? t('look.on') : t('look.off')}</small
-				></button
+<PageHead title={t('notify.title')} />
+<div class="notice-center">
+	{#if detail}
+		{@const text = noticeText(detail)}
+		{@const href = noticeOwnLink(detail) || noticeLink(detail.kind, detail.subject)}
+		<article class="notice-detail">
+			<div class="line">
+				<span class="chip {CHIP[detail.severity]}">{t(SEVERITY[detail.severity])}</span><time
+					datetime={detail.time}>{formatDateTime(new Date(detail.time))}</time
+				>
+			</div>
+			<h3>{text.title}</h3>
+			<p>{text.text}</p>
+			<div class="line">
+				{#if href}<button class="btn btn-primary" onclick={() => follow(href)}
+						>{t('ui.open')}</button
+					>{/if}
+				<button
+					class="btn"
+					disabled={busy}
+					data-notice-delete
+					onclick={() => detail && dismiss([detail.id])}
+					><Icon name="trash" size={16} />{t('common.delete')}</button
+				>
+			</div>
+		</article>
+	{:else}
+		<div class="nord-segments" role="group" aria-label={t('notify.title')}>
+			<button aria-pressed={!onlyUnread} onclick={() => (onlyUnread = false)}
+				>{t('menubar.appcenter.all')}</button
 			>
-			<button
-				type="button"
-				class="switch-tile"
-				aria-pressed={live}
-				data-quick="live"
-				onclick={() =>
-					savePrefs((p) => (p.wallpaper = { ...p.wallpaper, live: !p.wallpaper.live }))}
-				><Icon name="photo" size={18} /><span>{t('phone.notices.live')}</span><small
-					>{live ? t('look.on') : t('look.off')}</small
-				></button
-			>
-			<button
-				type="button"
-				class="switch-tile"
-				aria-pressed={dock}
-				data-quick="dock"
-				onclick={() =>
-					savePrefs(
-						(p) => (p.phone = { ...p.phone, dock: { ...p.phone.dock, show: !p.phone.dock.show } }),
-					)}
-				><Icon name="gridSmall" size={18} /><span>{t('phone.settings.dock')}</span><small
-					>{dock ? t('look.on') : t('look.off')}</small
-				></button
+			<button aria-pressed={onlyUnread} onclick={() => (onlyUnread = true)}
+				>{t('nord.notices.unread')} · {unread.length}</button
 			>
 		</div>
-		<div class="head">
-			<button type="button" class="btn" disabled={!shown.length} onclick={markSeen}
-				>{t('phone.notices.allRead')}</button
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={!shown.length || busy}
-				onclick={() => (confirmAll = shown.map((n) => n.id))}>{t('notify.deleteAll')}</button
-			>
-			<a class="btn" href="/settings/notifications" onclick={() => (open = false)}
-				>{t('notify.channels')}</a
-			>
-		</div>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#if pull > 0 || reloading}
-			<p class="reload muted" role="status">
-				{t(
-					reloading
-						? 'phone.refresh.running'
-						: pull > PULL_DISTANCE
-							? 'phone.refresh.release'
-							: 'phone.refresh.pull',
-				)}
-			</p>
-		{/if}
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<ul
-			class="list"
+		{#if pull > PULL_DISTANCE || reloading}<p role="status">
+				{t(reloading ? 'phone.refresh.running' : 'phone.refresh.release')}
+			</p>{/if}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="notice-days"
 			bind:this={list}
 			data-notices
 			data-no-sheet-swipe
 			ontouchstart={pullStart}
 			ontouchmove={pullMove}
 			ontouchend={pullEnd}
-			ontouchcancel={pullEnd}
+			ontouchcancel={() => {
+				pullFrom = null;
+				pull = 0;
+			}}
 		>
-			{#each shown as notice (notice.id)}
-				{@const text = noticeText(notice)}
-				{@const href = noticeOwnLink(notice) || noticeLink(notice.kind, notice.subject)}
-				{@const fresh = isUnread(notice)}
-				<li>
-					<SwipeRow
-						fullSwipe
-						leading={fresh
-							? {
-									id: 'read',
-									label: t('phone.notices.read'),
-									icon: 'check',
-									run: () => markRead(notice.id),
-								}
-							: undefined}
-						actions={[
-							{
-								id: 'delete',
-								label: t('common.delete'),
-								icon: 'trash',
-								danger: true,
-								run: () => dismiss([notice.id]),
-							},
-						]}
-					>
-						<div class="notice" class:fresh data-notice={notice.id}>
-							<div class="line">
-								<span class="chip {CHIP[notice.severity]}">{t(SEVERITY[notice.severity])}</span>
-								{#if fresh}<span class="new">{t('phone.notices.new')}</span>{/if}
-								<time class="muted" datetime={notice.time}
-									>{formatDateTime(new Date(notice.time))}</time
-								>
-							</div>
-							<b>{text.title}</b>
-							<span class="muted">{text.text}</span>
-							<!-- The same without swiping: open, read, delete. -->
-							<span class="row-actions">
-								{#if href}<button type="button" class="as-link" onclick={() => follow(href)}
-										>{t('ui.open')}</button
-									>{/if}
-								<span class="grow"></span>
-								{#if fresh}<button
-										type="button"
-										class="icon-btn"
-										data-notice-read
-										aria-label={t('phone.notices.readOne', { title: text.title })}
-										title={t('phone.notices.read')}
-										onclick={() => markRead(notice.id)}><Icon name="check" size={18} /></button
-									>{/if}
+			{#each groups as [day, notices], index (day)}
+				<div class="day-head">
+					<h3>{dayLabel(notices[0].time)}</h3>
+					{#if index === 0 && unread.length}<button
+							class="text-button"
+							type="button"
+							onclick={markSeen}>{t('phone.notices.allRead')}</button
+						>{/if}
+				</div>
+				<ul>
+					{#each notices as notice (notice.id)}
+						{@const text = noticeText(notice)}
+						{@const fresh = isUnread(notice)}
+						<li>
+							<SwipeRow
+								fullSwipe
+								leading={fresh
+									? {
+											id: 'read',
+											label: t('phone.notices.read'),
+											icon: 'check',
+											run: () => markRead(notice.id),
+										}
+									: undefined}
+								actions={[
+									{
+										id: 'delete',
+										label: t('common.delete'),
+										icon: 'trash',
+										danger: true,
+										run: () => dismiss([notice.id]),
+									},
+								]}
+							>
 								<button
-									type="button"
-									class="icon-btn"
-									data-notice-delete
-									disabled={busy}
-									aria-label={t('notify.deleteOne', { title: text.title })}
-									title={t('common.delete')}
-									onclick={() => dismiss([notice.id])}><Icon name="trash" size={18} /></button
+									class="notice-row"
+									data-notice={notice.id}
+									onclick={() => showDetail(notice)}
 								>
-							</span>
-						</div>
-					</SwipeRow>
-				</li>
-			{:else}
-				<li class="empty muted">{t('notify.empty')}</li>
-			{/each}
-		</ul>
-		{#if shown.length}<p class="muted small">{t('phone.notices.swipeHint')}</p>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (open = false)}>{t('common.close')}</button>
+									<DesktopIcon
+										glyph={notice.kind.startsWith('mail') ? 'mail' : glyphs[bellGroup(notice.kind)]}
+										size={38}
+									/>
+									<span class="copy"
+										><small
+											>{t(SEVERITY[notice.severity])}{#if fresh}
+												· {t('phone.notices.new')}{/if}</small
+										><strong>{text.title}</strong></span
+									>
+									<time datetime={notice.time}
+										>{new Date(notice.time).toLocaleTimeString(i18n.locale, {
+											hour: '2-digit',
+											minute: '2-digit',
+										})}</time
+									><Icon name="chevronRight" size={15} />
+								</button>
+							</SwipeRow>
+						</li>
+					{/each}
+				</ul>
+			{:else}<p class="empty muted">
+					{t(onlyUnread ? 'nord.notices.emptyUnread' : 'notify.empty')}
+				</p>{/each}
 		</div>
-	</Dialog>
-{/if}
+		<div class="foot">
+			<a class="text-button" href="/settings/notifications"
+				><Icon name="gear" size={17} />{t('notify.channels')}</a
+			>
+			{#if shown.length}<button
+					class="text-button"
+					disabled={busy}
+					onclick={() => (confirmAll = shown.map((n) => n.id))}>{t('notify.deleteAll')}</button
+				>{/if}
+		</div>
+	{/if}
+	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+</div>
 {#if confirmAll}
 	<Dialog title={t('notify.deleteAllTitle')} locked={busy} onclose={() => (confirmAll = null)}>
 		<p>{t('notify.deleteAllText', { count: confirmAll.length })}</p>
@@ -297,135 +267,91 @@
 {/if}
 
 <style>
-	.quick {
+	.notice-center {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--space-2);
+		gap: 12px;
+		min-height: 0;
 	}
-	.switch-tile {
-		min-height: 64px;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		justify-content: center;
-		gap: 2px;
-		padding: var(--space-2) var(--space-2-5);
-		border: 1px solid transparent;
-		border-radius: 18px;
-		background: var(--chip);
-		color: var(--text);
-		font: inherit;
-		font-size: var(--text-sm);
-		text-align: left;
-		overflow-wrap: break-word;
-		hyphens: auto;
-		cursor: pointer;
+	.notice-days {
+		--swipe-bg: var(--nord-surface);
 	}
-	.switch-tile[aria-pressed='true'] {
-		background: color-mix(in srgb, var(--accent) 26%, var(--surface));
-		border-color: var(--accent);
-	}
-	.switch-tile small {
-		color: var(--muted);
-	}
-	/* Two equal buttons for the messages, the way to the settings below
-	   them as a quiet link (owner 16 Nov 2026: three uneven buttons). */
-	.head {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--space-2);
-	}
-	.head .btn {
-		min-height: 46px;
-		border-radius: 999px;
-		text-align: center;
-	}
-	.head a.btn {
-		grid-column: 1 / -1;
-		min-height: 44px;
-		border-color: transparent;
-		background: none;
-		color: var(--accent);
-	}
-	.list {
+	ul {
+		background: var(--nord-surface, var(--surface));
+		padding: 0;
 		margin: 0;
-		padding: 0;
 		list-style: none;
-		max-height: 55dvh;
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		border-radius: 18px;
-		border: 1px solid var(--border);
-		--swipe-bg: var(--dialog-bg, var(--surface));
+		border: 1px solid var(--nord-line);
+		border-radius: 16px;
+		overflow: hidden;
 	}
-	.list > li + li {
-		border-top: 1px solid var(--border);
+	li + li {
+		border-top: 1px solid var(--nord-line);
 	}
-	.notice {
+	.day-head,
+	.line,
+	.foot,
+	.text-button {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		padding: var(--space-3);
-		border-left: 3px solid transparent;
-		overflow-wrap: break-word;
+		align-items: center;
+		gap: 8px;
 	}
-	.notice.fresh {
-		border-left-color: var(--accent);
-	}
+	.day-head,
+	.foot,
 	.line {
-		display: flex;
+		justify-content: space-between;
 		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
 	}
-	.new {
-		font-size: var(--text-xs);
-		font-weight: 700;
-		color: var(--accent);
+	.day-head {
+		min-height: 48px;
 	}
-	time {
-		margin-left: auto;
-		font-size: var(--text-sm);
+	h3,
+	p {
+		margin: 0;
 	}
-	.row-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-	}
-	.grow {
-		flex: 1;
-	}
-	.icon-btn {
-		width: 44px;
-		height: 44px;
-		display: grid;
-		place-items: center;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		background: var(--chip);
-		color: var(--text);
-		cursor: pointer;
-	}
-	.as-link {
-		align-self: flex-start;
+	.text-button {
 		min-height: 44px;
-		padding: 0;
 		border: 0;
 		background: none;
+		padding: 0 3px;
 		color: var(--accent);
 		font: inherit;
-		text-decoration: underline;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.notice-row {
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		display: flex;
+		align-items: center;
+		text-align: start;
+		width: 100%;
+		min-height: 60px;
+		gap: 10px;
+		padding: 8px 12px;
 		cursor: pointer;
 	}
-	.empty {
-		padding: var(--space-4);
+	.copy {
+		flex: 1;
+		min-width: 0;
+		display: grid;
+		overflow-wrap: anywhere;
 	}
-	.reload {
-		margin: 0;
-		text-align: center;
-	}
-	.small {
+	.copy small,
+	time {
 		font-size: var(--text-sm);
-		margin: 0;
+		color: var(--muted);
+	}
+	.notice-detail,
+	.empty {
+		background: var(--nord-surface);
+		border-radius: 16px;
+		padding: 16px;
+	}
+	.notice-detail {
+		display: grid;
+		gap: 14px;
+		overflow-wrap: anywhere;
 	}
 </style>

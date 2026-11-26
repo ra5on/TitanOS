@@ -67,8 +67,21 @@ async function load() {
 	sources.loaded = true;
 }
 
-/** Keeps the data fresh while the page is visible. */
+// The launcher, phone dock and home can share a page. They use one poller
+// while any of them needs the program catalog.
+let subscribers = 0;
+let stopSources: (() => void) | undefined;
 export function watchSources(): () => void {
+	if (subscribers++ === 0) stopSources = startSources();
+	return () => {
+		if (--subscribers === 0) {
+			stopSources?.();
+			stopSources = undefined;
+		}
+	};
+}
+
+function startSources(): () => void {
 	void load();
 	const timer = setInterval(() => {
 		if (document.visibilityState === 'visible') void load();

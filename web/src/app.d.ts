@@ -2,6 +2,7 @@
 declare global {
 	namespace App {
 		interface PageState {
+			noticeReturn?: string;
 			/** PLAN 63: the Docker app shown full screen in its remote view on the phone. */
 			remote?: string;
 			/** PLAN 66: a web app shown full screen on the phone, with the file it opened. */

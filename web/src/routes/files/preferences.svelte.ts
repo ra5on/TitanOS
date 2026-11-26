@@ -12,6 +12,8 @@ import { savedSearches, type SavedSearch } from '#lib/file-search.ts';
 import type { FileSort } from '#lib/file-list.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 
+import { MobileViews, type FileLayouts } from './mobile-views.svelte.ts';
+
 /** The folder on screen; folder views belong to it. */
 type Place = () => { root: string; path: string };
 
@@ -25,6 +27,7 @@ function lastRootHere(): string {
 }
 
 export class FilePreferenceStore {
+	mobile = new MobileViews();
 	split = $state(false);
 	showHidden = $state(false);
 	rememberedRoot = $state('');
@@ -59,8 +62,9 @@ export class FilePreferenceStore {
 
 	async load() {
 		try {
-			const result = await api.get<{ files: unknown }>('/preferences');
+			const result = await api.get<{ files: unknown; fileviews: FileLayouts }>('/preferences');
 			const prefs = filePreferences(result.files);
+			this.mobile.data = result.fileviews;
 			this.split = prefs.split;
 			this.showHidden = prefs.showHidden;
 			// This browser's last place wins; the account's stored one is the

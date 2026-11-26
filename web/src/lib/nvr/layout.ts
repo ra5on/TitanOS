@@ -21,6 +21,8 @@ export type NvrPrefs = {
 	phoneOrder: string[];
 	/** Events beside the pictures. */
 	events: boolean;
+	/** Recent events beneath the phone's camera gallery. */
+	phoneEvents: boolean;
 	/** The camera's name in its picture. */
 	names: boolean;
 	/** What is in the picture right now (person, car …) as a mark in the picture. */
@@ -36,6 +38,7 @@ export const defaultNvrPrefs = (): NvrPrefs => ({
 	custom: false,
 	phoneOrder: [],
 	events: false,
+	phoneEvents: true,
 	names: true,
 	marks: true,
 	recDot: true,
@@ -94,6 +97,7 @@ export function sanitizeNvrPrefs(input: unknown): NvrPrefs {
 		custom: v.custom === true && tiles.length > 0,
 		phoneOrder,
 		events: v.events === true,
+		phoneEvents: v.phoneEvents !== false,
 		names: v.names !== false,
 		marks: v.marks !== false,
 		recDot: v.recDot !== false,

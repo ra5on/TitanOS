@@ -177,5 +177,12 @@
 	"vms.ov.state": "State",
 	"vms.ov.uptime": "Uptime",
 	"vms.tab.hardware": "Hardware",
-	"vms.tab.schedule": "Schedule"
+	"vms.tab.schedule": "Schedule",
+	"nord.notices.yesterday": "Yesterday",
+	"nord.notices.unread": "Unread",
+	"nord.notices.emptyUnread": "All notifications have been read.",
+	"nord.apps.catalog": "Catalog",
+	"nord.apps.noContainers": "No matching Docker app.",
+	"nord.docker.resources": "Resources",
+	"nord.docker.manage": "Manage"
 }

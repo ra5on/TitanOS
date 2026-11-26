@@ -56,6 +56,8 @@ async function phone({ theme = "graphit", reduced = false, desktop } = {}) {
   data.prefs.desktop = desktop ?? {
     version: 1,
     wallpaper: { source: "builtin", id: "wave", live: false },
+    // An existing account keeps its four original pins while arranging pages.
+    phone: { dock: { custom: true, apps: ["app:files", "app:docker", "app:monitor", "app:settings"] } },
   };
   data.puts = 0;
   await ctx.route("**/api/v1/**", async (route) => {
@@ -75,6 +77,7 @@ async function phone({ theme = "graphit", reduced = false, desktop } = {}) {
     return route.fallback();
   });
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
   await page.locator(".home .pages").waitFor({ timeout: 15000 });
   await page.waitForTimeout(900);
   const cdp = await ctx.newCDPSession(page);
@@ -188,6 +191,7 @@ try {
   await page.waitForURL(/\/storage/);
   await page.locator(".phone-zoom").waitFor({ state: "detached" });
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(700);
 
@@ -219,6 +223,7 @@ try {
   await hit.tap();
   await page.waitForURL(/\/settings\/appearance/);
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(700);
 
@@ -227,7 +232,7 @@ try {
   await longPress(page, cdp, await center(shares.locator(".icon-box")));
   await page.locator(".home.editing").waitFor();
   await page.locator("[data-phone-done]").waitFor();
-  assert.equal(page.url(), base + "/", "a long press opens nothing");
+  assert.equal(page.url(), base + "/?phone=pages", "a long press stays on the same saved pages");
   assert.notEqual(
     await shares
       .locator(".wrap")
@@ -345,6 +350,7 @@ try {
   await page.waitForTimeout(1900);
   assert.equal(stored(data).dock.show, false);
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(900);
   assert.equal(await page.locator(".home .dock").count(), 0, "dock off");
@@ -370,6 +376,7 @@ try {
       "no movement with reduced motion",
     );
     await page.goto(base + "/");
+    await page.getByRole("button", { name: "Seiten und Widgets" }).click();
     await page.locator(".home .pages").waitFor();
     await page.waitForTimeout(700);
     await longPress(

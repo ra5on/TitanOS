@@ -88,6 +88,11 @@ test('stored settings are checked: broken ones fall back, the desktop keeps them
 	expect(clean).toMatchObject({ custom: true, events: true, names: false, marks: true });
 	expect(sanitizeDesktop({ nvr: { events: true } }).nvr.events).toBe(true);
 	expect(sanitizeDesktop({}).nvr).toEqual(defaultNvrPrefs());
+	expect(sanitizeNvrPrefs({ events: false })).toMatchObject({ events: false, phoneEvents: true });
+	expect(sanitizeNvrPrefs({ events: true, phoneEvents: false })).toMatchObject({
+		events: true,
+		phoneEvents: false,
+	});
 	expect(phoneOrderFor(clean, ['a', 'b', 'c'])).toEqual(['b', 'a', 'c']);
 });
 

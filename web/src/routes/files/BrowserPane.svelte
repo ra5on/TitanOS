@@ -14,6 +14,7 @@
 	import FileList from './FileList.svelte';
 	import type { FilesPage } from './files-page.svelte.ts';
 	import { join } from './files-state.svelte.ts';
+	import MobileEntries from './MobileEntries.svelte';
 	import NavBar from './NavBar.svelte';
 	import SelectionBar from './SelectionBar.svelte';
 	import StorageAnalysis from './StorageAnalysis.svelte';
@@ -26,6 +27,7 @@
 <section
 	oncontextmenu={p.blankMenu}
 	class="tile browser"
+	class:phone={p.phone}
 	class:dragging={p.dragging}
 	aria-label={p.root?.name}
 	ondragover={(event) => {
@@ -180,43 +182,47 @@
 				{t('files.autoRefreshFailed')}
 			</p>{/if}
 
-		<FileList
-			bind:virtualList={p.virtualList}
-			checks={!inWindow || p.selected.length > 1}
-			items={p.visibleEntries}
-			entries={p.entries}
-			root={p.root}
-			rootId={p.rootId}
-			dir={p.dir}
-			search={p.search}
-			listError={p.listError}
-			listLoading={p.listLoading}
-			view={p.prefs.view}
-			sort={p.prefs.sort}
-			descending={p.prefs.descending}
-			preferencesReady={p.prefs.ready}
-			selectedNames={p.selectedNames}
-			allSelected={p.allSelected}
-			writable={p.writable}
-			menuName={p.menu?.entry.name}
-			onload={p.load}
-			onselectall={(checked) =>
-				(p.selected = checked ? p.visibleEntries.map((entry) => entry.name) : [])}
-			onsort={(column) => p.prefs.sortBy(column)}
-			ontoggle={p.toggle}
-			onrange={p.selectRange}
-			onrowclick={p.rowClicked}
-			onrowdblclick={p.rowDoubleClicked}
-			onfolderclick={p.folderClick}
-			onmenu={p.entryMenu}
-			onmenubutton={p.menuFromButton}
-			ondragentry={p.dragEntry}
-			ondropon={(event, path) => p.reviewDrop(event, p.rootId, path)}
-			onshare={p.phone ? p.shareEntry : undefined}
-			ondelete={p.phone ? p.deleteEntry : undefined}
-		/>
+		{#if p.phone}<MobileEntries {p} bind:this={p.virtualList} />{:else}<FileList
+				bind:virtualList={p.virtualList}
+				checks={!inWindow || p.selected.length > 1}
+				items={p.visibleEntries}
+				entries={p.entries}
+				root={p.root}
+				rootId={p.rootId}
+				dir={p.dir}
+				search={p.search}
+				listError={p.listError}
+				listLoading={p.listLoading}
+				view={p.prefs.view}
+				sort={p.prefs.sort}
+				descending={p.prefs.descending}
+				preferencesReady={p.prefs.ready}
+				selectedNames={p.selectedNames}
+				allSelected={p.allSelected}
+				writable={p.writable}
+				menuName={p.menu?.entry.name}
+				onload={p.load}
+				onselectall={(checked) =>
+					(p.selected = checked ? p.visibleEntries.map((entry) => entry.name) : [])}
+				onsort={(column) => p.prefs.sortBy(column)}
+				ontoggle={p.toggle}
+				onrange={p.selectRange}
+				onrowclick={p.rowClicked}
+				onrowdblclick={p.rowDoubleClicked}
+				onfolderclick={p.folderClick}
+				onmenu={p.entryMenu}
+				onmenubutton={p.menuFromButton}
+				ondragentry={p.dragEntry}
+				ondropon={(event, path) => p.reviewDrop(event, p.rootId, path)}
+				onshare={p.phone ? p.shareEntry : undefined}
+				ondelete={p.phone ? p.deleteEntry : undefined}
+			/>
+		{/if}
 
-		{#if p.writable}<DropHint dragging={p.dragging} path={join(p.root?.name ?? '', p.dir)} />{/if}
+		{#if p.writable && !p.phone}<DropHint
+				dragging={p.dragging}
+				path={join(p.root?.name ?? '', p.dir)}
+			/>{/if}
 		{#if inWindow}
 			<!-- PLAN 73: the status line at the bottom (Explorer): entries, selection, free space. -->
 			<StatusBar label={t('files.statusBar')}>
@@ -274,6 +280,22 @@
 </section>
 
 <style>
+	.browser.phone {
+		background: none;
+		border: 0;
+		box-shadow: none;
+		backdrop-filter: none;
+	}
+	.browser.phone :global(.action-bar),
+	.browser.phone :global(.nav-bar:not(.path-editing)) {
+		display: none;
+	}
+	.browser.phone :global(.nav-bar.path-editing > :not(.path-form)) {
+		display: none;
+	}
+	.browser.phone .list-footer {
+		padding-inline: 0.65rem;
+	}
 	.browser {
 		display: flex;
 		flex-direction: column;

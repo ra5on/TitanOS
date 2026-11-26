@@ -6,6 +6,9 @@
 	import { untrack } from 'svelte';
 	import BottomBar from '../components/BottomBar.svelte';
 	import Dialog from '../components/Dialog.svelte';
+	import PhoneDockHandle from '../desktop/PhoneDockHandle.svelte';
+	import { immersivePhone } from '../desktop/immersive-phone.svelte.ts';
+	import SenderAvatar from './SenderAvatar.svelte';
 	import Dropdown from '../components/Dropdown.svelte';
 	import Icon from '../components/Icon.svelte';
 	import DocsFolderPicker from '../components/agent/features/DocsFolderPicker.svelte';
@@ -25,6 +28,7 @@
 		folder,
 		uid,
 		compact = false,
+		readerBack,
 		oncompose,
 		onflags,
 		onremoved,
@@ -38,6 +42,7 @@
 		 * the bottom (BottomBar), answering and the rest in menus.
 		 */
 		compact?: boolean;
+		readerBack?: { label: string; href: string };
 		oncompose: (mode: ComposeMode, msg: Message) => void;
 		onflags: (uids: number[], change: Partial<Flags>) => void;
 		/** The message left this folder (moved, deleted). */
@@ -182,6 +187,24 @@
 	const moveTargets = $derived(
 		sortFolders(mail.folders[accountId] ?? []).filter((f) => f.path !== folder),
 	);
+	function readerActions(m: Message) {
+		return [
+			{ label: t('mail.action.replyAll'), run: () => oncompose('replyAll', m) },
+			{ label: t('mail.action.forward'), run: () => oncompose('forward', m) },
+			{ label: t('mail.action.move'), run: () => (moving = true) },
+			...(!inArchive ? [{ label: t('mail.action.archive'), run: archive }] : []),
+			{
+				label: t(m.flags.flagged ? 'mail.action.unflag' : 'mail.action.flag'),
+				run: () => setFlag('flagged', !m.flags.flagged),
+			},
+			{
+				label: t(m.flags.seen ? 'mail.action.markUnread' : 'mail.action.markRead'),
+				run: () => setFlag('seen', !m.flags.seen),
+			},
+			...(onagent ? [{ label: t('agentpim.panel.title'), run: onagent }] : []),
+			{ label: t(inTrash ? 'mail.action.deleteForever' : 'mail.action.delete'), run: askDelete },
+		];
+	}
 </script>
 
 {#if error}
@@ -189,28 +212,82 @@
 {:else if !msg}
 	<p class="muted pad" role="status">{t('common.loading')}</p>
 {:else}
-	<article class="message" aria-labelledby="mail-message-subject">
+	<article class="message" class:reader={!!readerBack} aria-labelledby="mail-message-subject">
+		{#if readerBack}
+			{@const m = msg}
+			<nav
+				class="reader-nav"
+				aria-label={t('mail.actions')}
+				data-nordlicht-immersive="mail"
+				use:immersivePhone
+			>
+				<a
+					class="reader-back"
+					href={readerBack.href}
+					aria-label={t('mail.back.list', { folder: readerBack.label })}
+				>
+					<Icon name="chevronLeft" size={21} /><span>{readerBack.label}</span>
+				</a>
+				<Dropdown label={t('ui.more')} icon="more" align="right" disabled={busy}>
+					{#snippet children(close)}
+						{#each readerActions(m) as action (action.label)}
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									action.run();
+								}}>{action.label}</button
+							>
+						{/each}
+					{/snippet}
+				</Dropdown>
+			</nav>
+		{/if}
 		<header class="head">
 			<h2 id="mail-message-subject" tabindex="-1">{msg.subject.trim() || t('mail.noSubject')}</h2>
-			<p class="from">
-				<span class="label">{t('mail.head.from')}</span>
-				<span class="who">{addressText(msg.from)}</span>
-			</p>
-			<p class="date"><time datetime={msg.date}>{fullDate(msg.date, i18n.locale)}</time></p>
-			<div class="to">
-				<span class="label">{t('mail.head.to')}</span>
-				<span class="who">{recipients}</span>
+			{#if readerBack}
 				<button
 					type="button"
-					class="btn toggle"
+					class="sender-details"
 					aria-expanded={showAll}
 					aria-controls="mail-recipients"
 					onclick={() => (showAll = !showAll)}
-					>{showAll ? t('mail.head.less') : t('mail.head.more')}</button
 				>
-			</div>
+					<SenderAvatar from={msg.from} size={32} />
+					<span
+						><strong>{senderName(msg.from)}</strong><time datetime={msg.date}
+							>{fullDate(msg.date, i18n.locale)}</time
+						></span
+					>
+					<Icon name={showAll ? 'chevronUp' : 'chevronDown'} size={16} />
+					<span class="sr-only">{t(showAll ? 'mail.head.less' : 'mail.head.more')}</span>
+				</button>
+			{:else}
+				<p class="from">
+					<span class="label">{t('mail.head.from')}</span>
+					<span class="who">{addressText(msg.from)}</span>
+				</p>
+				<p class="date"><time datetime={msg.date}>{fullDate(msg.date, i18n.locale)}</time></p>
+				<div class="to">
+					<span class="label">{t('mail.head.to')}</span>
+					<span class="who">{recipients}</span>
+					<button
+						type="button"
+						class="btn toggle"
+						aria-expanded={showAll}
+						aria-controls="mail-recipients"
+						onclick={() => (showAll = !showAll)}
+						>{showAll ? t('mail.head.less') : t('mail.head.more')}</button
+					>
+				</div>
+			{/if}
 			{#if showAll}
 				<dl id="mail-recipients" class="all">
+					{#if readerBack}
+						<dt>{t('mail.head.from')}</dt>
+						<dd>{addressText(msg.from)}</dd>
+					{/if}
 					<dt>{t('mail.head.to')}</dt>
 					<dd>{msg.to.map(addressText).join(', ') || '–'}</dd>
 					{#if msg.cc.length}
@@ -294,31 +371,34 @@
 			<p class="notice-warn" role="note">{t('mail.truncated')}</p>
 		{/if}
 
-		{#if files.length}
-			<section class="files" aria-label={t('mail.attachment.title')}>
-				<h3>{t('mail.attachment.title')}</h3>
-				<ul>
-					{#each files as a (a.part)}
-						<li>
-							<Icon name="clip" size={16} />
-							<span class="fname">{a.name || t('mail.attachment.noName')}</span>
-							<span class="muted fsize">{formatBytes(a.size)}</span>
-							<span class="fbtns">
-								<a
-									class="btn"
-									href={mailApi.partUrl(accountId, folder, uid, a.part)}
-									download={a.name || 'attachment'}
-									><Icon name="download" size={16} />{t('mail.attachment.download')}</a
-								>
-								<button type="button" class="btn" disabled={busy} onclick={() => (saving = a)}
-									><Icon name="folder" size={16} />{t('mail.attachment.save')}</button
-								>
-							</span>
-						</li>
-					{/each}
-				</ul>
-			</section>
-		{/if}
+		{#snippet attachments()}
+			{#if files.length}
+				<section class="files" aria-label={t('mail.attachment.title')}>
+					<h3>{t('mail.attachment.title')}</h3>
+					<ul>
+						{#each files as a (a.part)}
+							<li>
+								<Icon name="clip" size={16} />
+								<span class="fname">{a.name || t('mail.attachment.noName')}</span>
+								<span class="muted fsize">{formatBytes(a.size)}</span>
+								<span class="fbtns">
+									<a
+										class="btn"
+										href={mailApi.partUrl(accountId, folder, uid, a.part)}
+										download={a.name || 'attachment'}
+										><Icon name="download" size={16} />{t('mail.attachment.download')}</a
+									>
+									<button type="button" class="btn" disabled={busy} onclick={() => (saving = a)}
+										><Icon name="folder" size={16} />{t('mail.attachment.save')}</button
+									>
+								</span>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+		{/snippet}
+		{#if !readerBack}{@render attachments()}{/if}
 
 		<div class="body">
 			{#if msg.html}
@@ -360,7 +440,19 @@
 				</ul>
 			</details>
 		{/if}
-		{#if compact}
+		{#if readerBack}
+			{@render attachments()}
+			<div class="reader-foot" role="toolbar" aria-label={t('mail.actions')}>
+				<button
+					type="button"
+					class="reader-reply"
+					disabled={busy}
+					onclick={() => oncompose('reply', msg!)}
+					><Icon name="reply" size={19} />{t('mail.action.reply')}</button
+				>
+				<PhoneDockHandle />
+			</div>
+		{:else if compact}
 			{@const m = msg}
 			<BottomBar label={t('mail.actions')}>
 				<Dropdown label={t('mail.action.reply')} icon="reply" disabled={busy}>
@@ -684,6 +776,107 @@
 		.toggle,
 		.links summary {
 			min-height: 44px;
+		}
+	}
+
+	.message.reader {
+		padding: 0 max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+		gap: 12px;
+		min-height: calc(100dvh - env(safe-area-inset-top));
+		background: color-mix(in srgb, var(--surface) 82%, transparent);
+	}
+	.reader-nav,
+	.reader-foot {
+		position: sticky;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-inline: -10px;
+		background: color-mix(in srgb, var(--surface) 94%, transparent);
+	}
+	.reader-nav {
+		top: 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.reader-back,
+	.reader-reply {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		min-height: 48px;
+		padding: 4px 9px;
+		border: 0;
+		border-radius: var(--radius-small);
+		background: transparent;
+		color: var(--accent);
+		text-decoration: none;
+		font: inherit;
+		font-weight: 650;
+		font-size: 17px;
+		cursor: pointer;
+	}
+	.reader-back {
+		min-width: min(125px, 70%);
+		max-width: calc(100% - 48px);
+		overflow-wrap: anywhere;
+	}
+	.reader-back :global(svg) {
+		flex: none;
+	}
+	.reader-nav :global(.dropdown > .btn) {
+		min-width: 44px;
+		min-height: 44px;
+		border: 0;
+		background: transparent;
+	}
+	.reader .head {
+		gap: 5px;
+		border-bottom: 1px solid var(--border);
+		padding-bottom: 6px;
+	}
+	.reader h2 {
+		font-size: 24px;
+		letter-spacing: -0.025em;
+		line-height: 1.16;
+	}
+	.sender-details {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding: 2px 0;
+		min-height: 44px;
+		border: 0;
+		color: var(--text);
+		background: transparent;
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+	}
+	.sender-details > span:not(.sr-only) {
+		display: grid;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.sender-details time {
+		font-size: var(--text-sm);
+		color: var(--muted);
+	}
+	.reader-foot {
+		bottom: 0;
+		padding: 0 8px env(safe-area-inset-bottom);
+		border-top: 1px solid var(--border);
+	}
+	.reader .text {
+		font-size: max(var(--text-md), 16px);
+		line-height: 1.55;
+	}
+	@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+		.reader-nav,
+		.reader-foot {
+			background: color-mix(in srgb, var(--surface) 85%, transparent);
+			-webkit-backdrop-filter: blur(14px);
+			backdrop-filter: blur(14px);
 		}
 	}
 </style>

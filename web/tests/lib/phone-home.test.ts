@@ -20,24 +20,24 @@ import { defaultDesktop, sanitizeDesktop } from '#lib/desktop/prefs.ts';
 
 const programs = [
 	'app:files',
-	'app:shares',
-	'app:storage',
 	'app:docker',
+	'app:storage',
+	'app:calendar',
 	'app:vms',
-	'app:monitor',
+	'app:shares',
 	'app:settings',
 	'docker:immich',
 ];
 
 test('standard: status widget, programs not in the dock, pages by cells', () => {
 	const shown = phoneLayout(defaultPhone(), programs, 12);
-	expect(shown.dock).toEqual(['app:files', 'app:docker', 'app:monitor', 'app:settings']);
+	expect(shown.dock).toEqual(['app:files', 'app:calendar', 'app:shares', 'app:settings']);
 	// The status widget takes 8 cells, so 4 programs fit on the first page.
 	expect(shown.pages).toEqual([
-		['widget:p-status', 'app:shares', 'app:storage', 'app:vms', 'docker:immich'],
+		['widget:p-status', 'app:docker', 'app:storage', 'app:vms', 'docker:immich'],
 	]);
 	expect(phoneLayout(defaultPhone(), programs, 10).pages).toEqual([
-		['widget:p-status', 'app:shares', 'app:storage'],
+		['widget:p-status', 'app:docker', 'app:storage'],
 		['app:vms', 'docker:immich'],
 	]);
 });
@@ -49,11 +49,11 @@ test('dock off: its programs come at the end of the pages', () => {
 	expect(shown.pages.flat()).toEqual([
 		'widget:p-status',
 		'app:files',
-		'app:shares',
-		'app:storage',
 		'app:docker',
+		'app:storage',
+		'app:calendar',
 		'app:vms',
-		'app:monitor',
+		'app:shares',
 		'app:settings',
 		'docker:immich',
 	]);
@@ -65,17 +65,17 @@ test('own arrangement: new programs at the end, gone ones drop out, each once', 
 	expect(phoneLayout(moved, programs, 40).pages[0].slice(0, 3)).toEqual([
 		'widget:p-status',
 		'docker:immich',
-		'app:shares',
+		'app:docker',
 	]);
 	const later = phoneLayout(
 		moved,
-		[...programs.filter((k) => k !== 'app:vms'), 'docker:jellyfin', 'app:shares'],
+		[...programs.filter((k) => k !== 'app:vms'), 'docker:jellyfin', 'app:docker'],
 		40,
 	);
 	expect(later.pages.flat()).toEqual([
 		'widget:p-status',
 		'docker:immich',
-		'app:shares',
+		'app:docker',
 		'app:storage',
 		'docker:jellyfin',
 	]);
@@ -94,37 +94,37 @@ test('a program on another makes a folder; on a folder it goes in; the last one 
 	const p = ownLayout(defaultPhone(), phoneLayout(defaultPhone(), programs, 40));
 	const one = combine(p, 'app:vms', 'app:storage', 'Ordner', 'f1');
 	expect(one.folders).toEqual([{ id: 'f1', name: 'Ordner', apps: ['app:storage', 'app:vms'] }]);
-	expect(one.pages[0]).toEqual(['widget:p-status', 'app:shares', 'folder:f1', 'docker:immich']);
+	expect(one.pages[0]).toEqual(['widget:p-status', 'app:docker', 'folder:f1', 'docker:immich']);
 	const two = combine(one, 'docker:immich', 'folder:f1', 'x', 'f2');
 	expect(two.folders[0].apps).toEqual(['app:storage', 'app:vms', 'docker:immich']);
 	expect(two.folders.length).toBe(1);
 	// Not into a widget, no folder into a folder.
-	expect(combine(two, 'app:shares', 'widget:p-status', 'x', 'f3')).toBe(two);
-	expect(combine(two, 'folder:f1', 'app:shares', 'x', 'f3')).toBe(two);
+	expect(combine(two, 'app:docker', 'widget:p-status', 'x', 'f3')).toBe(two);
+	expect(combine(two, 'folder:f1', 'app:docker', 'x', 'f3')).toBe(two);
 	const renamed = renameFolder(two, 'f1', '  Werkzeuge ');
 	expect(renamed.folders[0].name).toBe('Werkzeuge');
 	expect(renameFolder(two, 'f1', '   ')).toBe(two);
 	const out = outOfFolder(renamed, 'app:vms', 'f1');
-	expect(out.pages[0]).toEqual(['widget:p-status', 'app:shares', 'folder:f1', 'app:vms']);
+	expect(out.pages[0]).toEqual(['widget:p-status', 'app:docker', 'folder:f1', 'app:vms']);
 	const last = outOfFolder(outOfFolder(out, 'docker:immich', 'f1'), 'app:storage', 'f1');
 	expect(last.folders).toEqual([]);
 	expect(last.pages[0]).toContain('app:storage');
 	const gone = dissolveFolder(renamed, 'f1');
 	expect(gone.pages[0]).toEqual([
 		'widget:p-status',
-		'app:shares',
+		'app:docker',
 		'app:storage',
 		'app:vms',
 		'docker:immich',
 	]);
 });
 
-test('dock: holds four, takes no folders or widgets', () => {
+test('dock: scrollable pins extend the initial four, folders and widgets stay on pages', () => {
 	const p = ownLayout(defaultPhone(), phoneLayout(defaultPhone(), programs, 40));
-	expect(moveToDock(p, 'app:vms', 0)).toBe(p);
+	expect(moveToDock(p, 'app:vms', 0).dock.apps).toEqual(['app:vms', ...p.dock.apps]);
 	const freed = moveTo(p, 'app:files', 0, 1);
 	const docked = moveToDock(freed, 'app:vms', 0);
-	expect(docked.dock.apps).toEqual(['app:vms', 'app:docker', 'app:monitor', 'app:settings']);
+	expect(docked.dock.apps).toEqual(['app:vms', 'app:calendar', 'app:shares', 'app:settings']);
 	expect(docked.pages.flat()).not.toContain('app:vms');
 	expect(moveToDock(docked, 'widget:p-status', 0)).toBe(docked);
 });
@@ -147,7 +147,7 @@ test('a page holding too much shows the rest on the next page', () => {
 	expect(shown.pages[0]).toEqual(['widget:b', 'widget:a']);
 	expect(shown.pages[1]).toEqual([
 		'widget:p-status',
-		'app:shares',
+		'app:docker',
 		'app:storage',
 		'app:vms',
 		'docker:immich',
@@ -170,10 +170,27 @@ test('sanitize: broken input falls back, the desktop keeps the field', () => {
 	expect(p.pages).toEqual([['app:files'], []]);
 	expect(p.folders).toEqual([{ id: 'f1', name: 'Name', apps: ['app:vms'] }]);
 	expect(p.widgets).toEqual([{ id: 'w2', kind: 'camera', size: 's', camera: 'front_door' }]);
-	expect(p.dock).toEqual({ show: false, apps: ['a:1', 'a:2', 'a:3', 'a:4'], custom: false });
+	expect(p.dock).toEqual({
+		show: false,
+		size: 'medium',
+		apps: ['a:1', 'a:2', 'a:3', 'a:4', 'a:5'],
+		custom: false,
+	});
 	// The desktop's preference keeps the phone; one without it (0.80) gets the standard.
 	expect(sanitizeDesktop({ phone: { custom: true, pages: [['app:files']] } }).phone.pages).toEqual([
 		['app:files'],
 	]);
 	expect(sanitizeDesktop({}).phone).toEqual(defaultDesktop().phone);
+});
+
+test('favorites may overlap dock pins, remain empty by choice, and survive a preferences reload', () => {
+	const phone = sanitizePhone({
+		favorites: ['app:mail', 'app:files', 'app:mail'],
+		dock: { size: 'large', apps: ['app:files'], custom: true },
+	});
+	expect(sanitizeDesktop({ phone }).phone).toEqual(phone);
+	expect(phone.favorites).toEqual(['app:mail', 'app:files']);
+	expect(phone.dock.apps).toEqual(['app:files']);
+	expect(sanitizePhone({ favorites: [] }).favorites).toEqual([]);
+	expect(sanitizePhone({ dock: { size: 'unknown' } }).dock.size).toBe('medium');
 });

@@ -6,6 +6,7 @@
 		children,
 		key,
 		minWidth = 0,
+		horizontal = false,
 		rowHeight = 64,
 		label,
 		reset = '',
@@ -14,6 +15,7 @@
 		children: Snippet<[T]>;
 		key: (item: T) => string;
 		minWidth?: number;
+		horizontal?: boolean;
 		rowHeight?: number;
 		label: string;
 		reset?: string;
@@ -23,7 +25,15 @@
 		return columns;
 	}
 	export function reveal(index: number) {
-		if (!viewport || !virtual) return;
+		if (!viewport || (!virtual && !horizontal)) return;
+		if (horizontal) {
+			const x = index * (minWidth + 8);
+			if (x < viewport.scrollLeft) viewport.scrollLeft = x;
+			else if (x + minWidth > viewport.scrollLeft + viewport.clientWidth)
+				viewport.scrollLeft = x + minWidth - viewport.clientWidth;
+			left = viewport.scrollLeft;
+			return;
+		}
 		const y = Math.floor(index / columns) * rowHeight;
 		if (y < viewport.scrollTop) viewport.scrollTop = y;
 		else if (y + rowHeight > viewport.scrollTop + viewport.clientHeight)
@@ -41,36 +51,56 @@
 	}
 	let width = $state(600),
 		height = $state(500),
+		left = $state(0),
 		top = $state(0);
 	const virtual = $derived(items.length > 200);
-	const columns = $derived(minWidth ? Math.max(1, Math.floor((width + 8) / (minWidth + 8))) : 1);
-	const start = $derived(virtual ? Math.max(0, Math.floor(top / rowHeight) - 3) * columns : 0);
-	const end = $derived(
-		virtual
-			? Math.min(items.length, (Math.ceil((top + height) / rowHeight) + 3) * columns)
-			: items.length,
+	const columns = $derived(
+		!horizontal && minWidth ? Math.max(1, Math.floor((width + 8) / (minWidth + 8))) : 1,
 	);
+	const verticalVirtual = $derived(virtual && !horizontal);
+	const start = $derived.by(() => {
+		if (!virtual) return 0;
+		if (horizontal) return Math.max(0, Math.floor(left / (minWidth + 8)) - 3);
+		return Math.max(0, Math.floor(top / rowHeight) - 3) * columns;
+	});
+	const end = $derived.by(() => {
+		if (!virtual) return items.length;
+		const last = horizontal
+			? Math.ceil((left + width) / (minWidth + 8)) + 3
+			: (Math.ceil((top + height) / rowHeight) + 3) * columns;
+		return Math.min(items.length, last);
+	});
 	const total = $derived(Math.ceil(items.length / columns) * rowHeight);
 	$effect(() => {
 		reset;
 		if (viewport) {
 			viewport.scrollTop = 0;
+			if (horizontal) viewport.scrollLeft = left = 0;
 			top = 0;
 		}
 	});
 	$effect(() => {
-		if (virtual && top > total - height && viewport) {
+		if (verticalVirtual && top > total - height && viewport) {
 			viewport.scrollTop = Math.max(0, total - height);
 			top = viewport.scrollTop;
 		}
 	});
 	onMount(() => {
+		// Changing the number of grid columns changes its height. Apply the
+		// measurement on the next frame, outside WebKit's ResizeObserver delivery.
+		let frame = 0;
 		const observer = new ResizeObserver(() => {
-			width = viewport.clientWidth;
-			height = viewport.clientHeight;
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => {
+				width = viewport.clientWidth;
+				height = viewport.clientHeight;
+			});
 		});
 		observer.observe(viewport);
-		return () => observer.disconnect();
+		return () => {
+			cancelAnimationFrame(frame);
+			observer.disconnect();
+		};
 	});
 </script>
 
@@ -80,28 +110,37 @@
 	bind:this={viewport}
 	class="viewport"
 	class:virtual
+	class:horizontal
 	tabindex={virtual ? 0 : undefined}
 	role="region"
 	aria-label={label}
-	onscroll={() => (top = viewport.scrollTop)}
+	onscroll={() => {
+		top = viewport.scrollTop;
+		if (horizontal) left = viewport.scrollLeft;
+	}}
 >
 	<div
 		class="items"
-		style:height={virtual ? `${total}px` : undefined}
-		style:grid-template-columns={`repeat(${columns},minmax(0,1fr))`}
+		style:width={horizontal ? `${items.length * (minWidth + 8) - 8}px` : undefined}
+		style:height={verticalVirtual ? `${total}px` : undefined}
+		style:grid-template-columns={horizontal ? undefined : `repeat(${columns},minmax(0,1fr))`}
+		style:grid-auto-columns={horizontal ? `${minWidth}px` : undefined}
 		style:gap={minWidth ? '8px' : '0'}
 	>
 		{#each items.slice(start, end) as item, index (key(item))}
 			<div
 				class="cell"
-				class:positioned={virtual}
-				style:top={virtual ? `${Math.floor((start + index) / columns) * rowHeight}px` : undefined}
-				style:left={virtual
+				class:positioned={verticalVirtual}
+				style:top={verticalVirtual
+					? `${Math.floor((start + index) / columns) * rowHeight}px`
+					: undefined}
+				style:left={verticalVirtual
 					? `calc(${(start + index) % columns} * (100% / ${columns}))`
 					: undefined}
-				style:width={virtual ? `calc(100% / ${columns})` : undefined}
-				style:height={virtual ? `${rowHeight}px` : undefined}
-				style:padding={virtual && minWidth ? '4px' : undefined}
+				style:width={verticalVirtual ? `calc(100% / ${columns})` : undefined}
+				style:height={verticalVirtual ? `${rowHeight}px` : undefined}
+				style:grid-column={horizontal && virtual ? start + index + 1 : undefined}
+				style:padding={verticalVirtual && minWidth ? '4px' : undefined}
 			>
 				{@render children(item)}
 			</div>
@@ -110,6 +149,15 @@
 </div>
 
 <style>
+	.horizontal,
+	.horizontal.virtual {
+		height: auto;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+	}
+	.horizontal .items {
+		grid-auto-flow: column;
+	}
 	.viewport {
 		min-width: 0;
 		grid-column: 1/-1;

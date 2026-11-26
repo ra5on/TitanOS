@@ -12,6 +12,7 @@ import { beginFileDrag, hasFileDrag, takeFileDrag } from '#lib/file-drag.ts';
 import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 import { isEditableText } from '#lib/text-files.ts';
 import { saveFile } from '#lib/save-file.ts';
+import { currentPlace } from './mobile-views.svelte.ts';
 import { phoneView } from '#lib/desktop/mode.svelte.ts';
 import { shareFile, shareLoaded } from './share-file.ts';
 import { enqueue } from '#lib/uploads.svelte.ts';
@@ -360,6 +361,7 @@ export class FilesPage extends FilesState {
 				this.downloadingLink = true;
 				return;
 			case 'selectAll':
+				if (this.phone) this.choosingFiles = true;
 				this.selected = this.visibleEntries.map((e) => e.name);
 				return;
 			case 'clearSelection':
@@ -445,8 +447,23 @@ export class FilesPage extends FilesState {
 				this.prefs.save();
 				return;
 			case 'folderView':
+				if (this.phone && this.prefs.mobile.data) {
+					const place = currentPlace(this.rootId, this.dir);
+					void this.prefs.mobile.change(
+						this.prefs.mobile.folder(place) ? 'inherit' : this.prefs.mobile.data.default,
+						place,
+					);
+					return;
+				}
 				return this.prefs.toggleFolderView();
 			default:
+				if (this.phone) {
+					void this.prefs.mobile.change(
+						action === 'list' ? 'list' : 'grid',
+						currentPlace(this.rootId, this.dir),
+					);
+					return;
+				}
 				return this.prefs.changeView(action);
 		}
 	};

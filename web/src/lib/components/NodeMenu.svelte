@@ -9,7 +9,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import Icon from './Icon.svelte';
 
-	let { variant }: { variant: 'desk' | 'phone' } = $props();
+	let { variant }: { variant: 'desk' | 'phone' | 'hero' } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -66,12 +66,17 @@
 			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
 			<span class="mono name">{current?.name}</span>
 			<Icon name="chevronDown" size={14} />
+		{:else if variant === 'hero'}
+			<span>{current && !current.self ? current.name : t('phone.nord.nas')}</span><span
+				class="hero-chevron"><Icon name="chevronDown" size={16} /></span
+			>
 		{:else}
 			<span class="mono initials">{initials}</span><span class="dot" aria-hidden="true"></span>
 		{/if}
 	</button>
 	{#if open}
 		<div class="menu floating-menu" id="{id}-menu" role="menu" aria-label={t('cluster.switch')}>
+			{#if !clusterNodes.nodes.length}<span class="single">{t('phone.nord.localNas')}</span>{/if}
 			{#each clusterNodes.nodes as node (node.id)}
 				{@const usable = manageable(node)}
 				<button
@@ -97,6 +102,50 @@
 </div>
 
 <style>
+	.hero {
+		color: white;
+	}
+	.single {
+		padding: 10px;
+		display: block;
+	}
+	.hero .trigger {
+		min-height: 54px;
+		padding: 0;
+		color: inherit;
+		font-size: clamp(2.3rem, 10vw, 3.4rem);
+		font-weight: 710;
+		letter-spacing: -0.05em;
+		line-height: 1.12;
+		text-shadow: 0 2px 10px #071e26;
+		max-width: 100%;
+	}
+	.hero .trigger > span:first-child {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.hero-chevron {
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border: 1px solid rgb(255 255 255 / 0.24);
+		border-radius: 50%;
+		background: rgb(25 56 67 / 0.74);
+		flex: none;
+	}
+	.hero .menu {
+		font-size: 1rem;
+		font-weight: 400;
+		text-shadow: none;
+		left: 0;
+		right: auto;
+		top: 100%;
+		color: var(--text);
+		max-width: calc(100vw - 40px);
+	}
+
 	.node-menu {
 		position: relative;
 	}
@@ -245,7 +294,9 @@
 		background: var(--surface);
 	}
 	.phone .menu button,
-	.phone .menu a {
+	.phone .menu a,
+	.hero .menu button,
+	.hero .menu a {
 		min-height: 44px;
 	}
 </style>

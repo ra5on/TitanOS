@@ -40,6 +40,12 @@ export function labelName(label: string): string {
 	return tOr(`nvr.object.${label}`, label);
 }
 
+export function detectedName(label: string): string {
+	return OBJECT_GROUPS.vehicles.some((vehicle) => vehicle === label)
+		? t('nvr.events.vehicleDetected')
+		: t('nvr.events.detected', { label: labelName(label) });
+}
+
 export function deviceName(kind: string, devices: NvrDevice[] = []): string {
 	const found = devices.find((d) => d.kind === kind);
 	const name = tOr(`nvr.device.${kind}`, kind);

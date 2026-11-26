@@ -1,0 +1,207 @@
+/* The phone shell owns these surfaces. Desktop windows can be narrower than a phone. */
+:root[data-nordlicht] {
+	--nord-chrome: rgb(19 43 53 / max(0.55, var(--desk-alpha, 0.72)));
+	--nord-line: color-mix(in srgb, var(--text) 17%, transparent);
+	--nord-surface: color-mix(in srgb, var(--desk-surface) 84%, var(--surface));
+	--nord-radius: calc(18px * var(--radius-scale, 1));
+	--nord-blur: blur(var(--desk-blur, 16px)) saturate(1.18);
+}
+[data-nordlicht] body {
+	isolation: isolate;
+}
+[data-nordlicht] main.phone-page {
+	--page-pad: 16px;
+	--control-height: max(44px, 2.75rem);
+	position: relative;
+	background: none;
+	min-height: calc(100dvh - var(--header-height, 52px));
+	padding-inline: max(var(--page-pad), env(safe-area-inset-left))
+		max(var(--page-pad), env(safe-area-inset-right));
+}
+[data-nordlicht] .nord-page-head {
+	display: grid;
+	gap: 5px;
+	padding: 4px 0 6px;
+}
+[data-nordlicht] .nord-page-head h1 {
+	font-size: clamp(1.7rem, 7vw, 2.4rem);
+	font-weight: 650;
+	line-height: 1.1;
+	letter-spacing: -0.045em;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+[data-nordlicht] .nord-page-head > span {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-sm);
+	color: var(--text);
+}
+[data-nordlicht] .nord-tools:not(:has(.win-actions > :not(.win-more))) {
+	display: none;
+}
+[data-nordlicht] .nord-tools .win-toolbar {
+	position: static;
+	background: none;
+	border: 0;
+	margin: 0;
+	padding: 0;
+	min-height: 0;
+	box-shadow: none;
+}
+[data-nordlicht] .nord-list,
+[data-nordlicht] .nord-segments,
+[data-nordlicht] .nord-summary {
+	border: 1px solid var(--nord-line);
+	border-radius: var(--nord-radius);
+	background: var(--nord-surface);
+	-webkit-backdrop-filter: var(--nord-blur);
+	backdrop-filter: var(--nord-blur);
+}
+[data-nordlicht] .nord-list {
+	overflow: hidden;
+}
+[data-nordlicht] .nord-list .srow {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+[data-nordlicht] .nord-list .srow + .srow {
+	border-top: 1px solid var(--nord-line);
+}
+[data-nordlicht] .nord-segments {
+	display: flex;
+	gap: 2px;
+	padding: 3px;
+	align-items: stretch;
+}
+[data-nordlicht] .nord-segments > :is(button, a) {
+	display: grid;
+	place-items: center;
+	flex: 1;
+	min-width: 0;
+	min-height: 44px;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: calc(var(--nord-radius) - 4px);
+	background: none;
+	color: var(--text);
+	font: inherit;
+	font-weight: 550;
+	font-size: var(--text-base);
+	text-decoration: none;
+	text-align: center;
+	cursor: pointer;
+}
+[data-nordlicht] .nord-segments > :is([aria-pressed='true'], [aria-current='page']) {
+	background: color-mix(in srgb, var(--text) 15%, transparent);
+	box-shadow: inset 0 0 0 1px var(--nord-line);
+}
+[data-nordlicht] .nord-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	padding: 14px 0;
+}
+[data-nordlicht] .nord-summary > div {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 0 clamp(6px, 2.4vw, 16px);
+	min-width: 0;
+}
+[data-nordlicht] .nord-summary > div + div {
+	border-inline-start: 1px solid var(--nord-line);
+}
+[data-nordlicht] .nord-summary small {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--text-sm);
+	font-weight: 500;
+}
+[data-nordlicht] .nord-summary strong {
+	font-size: clamp(1rem, 4vw, 1.5rem);
+	line-height: 1.15;
+	overflow-wrap: anywhere;
+	font-variant-numeric: tabular-nums;
+}
+[data-nordlicht] .phone-page :is(.settings-shell, .form, .browser-apps, .sgroup) {
+	min-width: 0;
+}
+[data-nordlicht] .phone-page .sgroup {
+	gap: 0;
+}
+[data-nordlicht] .phone-page .sgroup-head {
+	margin: 10px 0 7px;
+}
+[data-nordlicht] .phone-page .sgroup > .srow {
+	background: var(--nord-surface);
+	border: 1px solid var(--nord-line);
+	border-radius: var(--nord-radius);
+	min-width: 0;
+}
+[data-nordlicht] .phone-page .sgroup > .srow:has(+ .srow) {
+	border-bottom: 0;
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+}
+[data-nordlicht] .phone-page .sgroup > .srow + .srow {
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+[data-nordlicht] .phone-page .srow-head {
+	min-height: 54px;
+	padding: 9px 12px;
+	gap: 8px 12px;
+}
+[data-nordlicht] .phone-page .srow-ico {
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--text) 9%, transparent);
+	color: var(--text);
+}
+[data-nordlicht] .phone-page .field {
+	min-height: 44px;
+}
+[data-nordlicht] .settings-shell #settings-tasks {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+}
+[data-nordlicht] .settings-shell #settings-tasks .sgroup-head {
+	grid-column: 1/-1;
+}
+[data-nordlicht] .settings-shell #settings-tasks .srow {
+	height: 100%;
+	border: 1px solid var(--nord-line);
+	border-radius: 14px;
+}
+[data-nordlicht] .settings-shell #settings-tasks .srow-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	flex-direction: column;
+	padding: 9px 12px;
+	gap: 5px;
+}
+[data-nordlicht] .settings-shell #settings-tasks .srow-title {
+	font-size: var(--text-base);
+}
+[data-nordlicht] .settings-shell #settings-tasks .srow-chev {
+	display: none;
+}
+[data-nordlicht] .settings-shell .home-search {
+	max-width: none;
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+	:root[data-nordlicht] {
+		--nord-surface: var(--surface);
+		--nord-line: var(--border);
+		--nord-blur: none;
+		--nord-chrome: #182e37;
+		--desk-surface: var(--surface) !important;
+		--desk-blur: 0px !important;
+	}
+}

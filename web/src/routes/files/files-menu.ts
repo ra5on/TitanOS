@@ -4,6 +4,7 @@ import { t } from '#lib/i18n/index.svelte.ts';
 import { isEditableText } from '#lib/text-files.ts';
 import { appsFor, EDITOR, extOf, webAppKey } from '#lib/webapps/protocol.ts';
 import { appForFile, webapps } from '#lib/webapps/webapps.svelte.ts';
+import { currentPlace, layouts } from './mobile-views.svelte.ts';
 import { hasTrash } from './commands.ts';
 import type { FilesPage } from './files-page.svelte.ts';
 import { join } from './files-state.svelte.ts';
@@ -12,6 +13,9 @@ import { join } from './files-state.svelte.ts';
 export function registerFilesMenu(p: FilesPage) {
 	const canWrite = () => !!p.root && p.writable && !p.trash;
 	const some = () => p.selected.length > 0 && !p.trash;
+	const views = p.prefs.mobile;
+	const place = () => currentPlace(p.rootId, p.dir);
+	const own = () => views.folder(place());
 	registerMenuCommands({
 		// PLAN 87: pulling the list down on the phone (PhoneGestures).
 		'files.refresh': { run: () => void p.load(), enabled: () => !!p.root },
@@ -50,6 +54,27 @@ export function registerFilesMenu(p: FilesPage) {
 				{ run: () => p.prefs.sort !== s && p.prefs.sortBy(s), checked: () => p.prefs.sort === s },
 			]),
 		),
+		...Object.fromEntries(
+			layouts.map((layout) => [
+				'files.layout.' + layout.value,
+				{
+					enabled: () =>
+						!!p.root &&
+						!!views.data &&
+						!views.saving &&
+						(!!own() || views.data.folders.length < 200),
+					checked: () => own()?.view === layout.value,
+					run: () => void views.change(layout.value, place()),
+				},
+			]),
+		),
+		'files.layout.inherit': {
+			enabled: () => !!p.root && !!views.data && !views.saving,
+			checked: () => !own(),
+			run: () => {
+				if (own()) void views.change('inherit', place());
+			},
+		},
 		'files.hidden': { run: () => p.command('showHidden'), checked: () => p.prefs.showHidden },
 		'files.twoPanes': { run: () => p.command('twoPanes'), checked: () => p.prefs.split },
 		'files.back': { run: () => p.command('back'), enabled: () => !!p.steps.back.length },
