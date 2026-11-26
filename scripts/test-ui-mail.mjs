@@ -250,7 +250,8 @@ try {
     const bar = mail.getByRole("toolbar", {
       name: "Aktionen für diese Nachricht",
     });
-    await bar.getByRole("button", { name: "Markieren", exact: true }).click();
+    await bar.getByRole("button", { name: "Weitere Aktionen" }).click();
+    await bar.getByRole("menuitem", { name: "Markieren", exact: true }).click();
     await until(
       () => sent(state, "POST", /\/flags$/).length === 1,
       "flag sent",
@@ -261,9 +262,8 @@ try {
       add: ["flagged"],
       remove: [],
     });
-    await bar
-      .getByRole("button", { name: "Markierung entfernen", exact: true })
-      .waitFor();
+    await bar.getByRole("button", { name: "Weitere Aktionen" }).click();
+    await bar.getByRole("menuitem", { name: "Markierung entfernen", exact: true }).press("Escape");
 
     // ---- Writing in a window of its own: reply with a NAS file ----
     await mail.getByRole("button", { name: /^Antworten$/ }).click();

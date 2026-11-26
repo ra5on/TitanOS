@@ -172,14 +172,19 @@
 {/snippet}
 
 <article class="detail" class:compact data-contact-detail={contact.id}>
-	<div class="nav">
-		{#if compact && onback}<button type="button" class="link back" onclick={onback} data-back
-				><Icon name="chevronLeft" size={22} />{backLabel}</button
-			>{:else}<span></span>{/if}
+	{#snippet edit()}
 		<button type="button" class="link" onclick={onedit} data-contact-edit
 			>{t('contacts.edit')}</button
 		>
-	</div>
+	{/snippet}
+	{#if compact}
+		<div class="nav">
+			{#if onback}<button type="button" class="link back" onclick={onback} data-back
+					><Icon name="chevronLeft" size={22} />{backLabel}</button
+				>{:else}<span></span>{/if}
+			{@render edit()}
+		</div>
+	{/if}
 	<header class="dh">
 		<Avatar
 			id={contact.id}
@@ -187,10 +192,13 @@
 			org={contact.org}
 			hasPhoto={contact.hasPhoto}
 			version={contact.etag}
-			size={96}
+			size={compact ? 96 : 64}
 		/>
-		<h2>{title}</h2>
-		{#if contact.org && contact.org !== contact.name}<p class="org">{contact.org}</p>{/if}
+		<div class="identity">
+			<h2>{title}</h2>
+			{#if contact.org && contact.org !== contact.name}<p class="org">{contact.org}</p>{/if}
+		</div>
+		{#if !compact}{@render edit()}{/if}
 	</header>
 	<div class="acts" data-contact-actions>
 		{#if sms}<a class="act" href={sms}>{@render quick('chat', t('contacts.act.sms'), '')}</a
@@ -436,6 +444,30 @@
 		text-align: center;
 		text-decoration: none;
 		cursor: pointer;
+	}
+	.identity {
+		min-width: 0;
+	}
+	.compact .identity {
+		display: contents;
+	}
+	.detail:not(.compact) .dh {
+		flex-direction: row;
+		gap: var(--space-3);
+		text-align: start;
+	}
+	.detail:not(.compact) .acts {
+		display: flex;
+		flex-wrap: wrap;
+	}
+	.detail:not(.compact) .act {
+		flex-direction: row;
+		gap: var(--space-2);
+		min-height: 38px;
+		padding: var(--space-1) var(--space-3);
+	}
+	.detail:not(.compact) .dh .identity {
+		flex: 1;
 	}
 	.act:hover:not(:disabled) {
 		background: color-mix(in srgb, var(--accent) 10%, var(--surface));

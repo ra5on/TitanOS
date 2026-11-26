@@ -187,10 +187,8 @@
 	const moveTargets = $derived(
 		sortFolders(mail.folders[accountId] ?? []).filter((f) => f.path !== folder),
 	);
-	function readerActions(m: Message) {
+	function filingActions(m: Message) {
 		return [
-			{ label: t('mail.action.replyAll'), run: () => oncompose('replyAll', m) },
-			{ label: t('mail.action.forward'), run: () => oncompose('forward', m) },
 			{ label: t('mail.action.move'), run: () => (moving = true) },
 			...(!inArchive ? [{ label: t('mail.action.archive'), run: archive }] : []),
 			{
@@ -202,6 +200,13 @@
 				run: () => setFlag('seen', !m.flags.seen),
 			},
 			...(onagent ? [{ label: t('agentpim.panel.title'), run: onagent }] : []),
+		];
+	}
+	function readerActions(m: Message) {
+		return [
+			{ label: t('mail.action.replyAll'), run: () => oncompose('replyAll', m) },
+			{ label: t('mail.action.forward'), run: () => oncompose('forward', m) },
+			...filingActions(m),
 			{ label: t(inTrash ? 'mail.action.deleteForever' : 'mail.action.delete'), run: askDelete },
 		];
 	}
@@ -320,38 +325,25 @@
 				<button type="button" class="btn" disabled={busy} onclick={() => oncompose('forward', msg!)}
 					><Icon name="forward" size={16} />{t('mail.action.forward')}</button
 				>
-				<button type="button" class="btn" disabled={busy} onclick={() => (moving = true)}
-					><Icon name="move" size={16} />{t('mail.action.move')}</button
-				>
 				<button type="button" class="btn" disabled={busy} onclick={askDelete}
 					><Icon name="trash" size={16} />{inTrash
 						? t('mail.action.deleteForever')
 						: t('mail.action.delete')}</button
 				>
-				{#if onagent}
-					<button type="button" class="btn" onclick={onagent}
-						><Icon name="sparkle" size={16} />{t('agentpim.panel.title')}</button
-					>
-				{/if}
-				<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					aria-pressed={msg.flags.flagged}
-					onclick={() => setFlag('flagged', !msg!.flags.flagged)}
-					><Icon name="flag" size={16} />{msg.flags.flagged
-						? t('mail.action.unflag')
-						: t('mail.action.flag')}</button
-				>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => setFlag('seen', !msg!.flags.seen)}
-					><Icon name="mail" size={16} />{msg.flags.seen
-						? t('mail.action.markUnread')
-						: t('mail.action.markRead')}</button
-				>
+				<Dropdown label={t('ui.more')} icon="more" align="right" disabled={busy}>
+					{#snippet children(close)}
+						{#each filingActions(msg!) as action (action.label)}
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => {
+									close();
+									action.run();
+								}}>{action.label}</button
+							>
+						{/each}
+					{/snippet}
+				</Dropdown>
 			</div>{/if}
 
 		{#if actionError}<p class="notice-error" role="alert">{actionError}</p>{/if}
@@ -669,8 +661,9 @@
 		align-items: center;
 		gap: var(--space-1-5);
 	}
-	.actions .btn[aria-pressed='true'] {
-		border-color: var(--status-warn);
+	:global([data-nord-desktop]) .message:not(.reader) .text {
+		max-inline-size: 75ch;
+		line-height: 1.55;
 	}
 	.images {
 		display: flex;

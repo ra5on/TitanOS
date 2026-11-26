@@ -764,7 +764,7 @@
 
 {#snippet bar()}
 	<div class="cbar">
-		<span class="nav">
+		<span class="nav" role="group" aria-labelledby="cal-period">
 			<button type="button" class="ib" aria-label={t('calendar.prev')} onclick={() => step(-1)}
 				><Icon name="chevronLeft" size={18} /></button
 			>
@@ -777,7 +777,7 @@
 				><Icon name="chevronRight" size={18} /></button
 			>
 		</span>
-		<h2>{heading}</h2>
+		<h2 id="cal-period" aria-live="polite">{heading}</h2>
 		<span class="views">
 			<Segments
 				compact
@@ -1339,6 +1339,21 @@
 		font-size: var(--text-lg);
 		font-weight: 600;
 		overflow-wrap: break-word;
+	}
+	:global([data-nord-desktop]) .cbar .nav {
+		gap: 0;
+		padding: 2px;
+		border: 1px solid var(--nord-line, var(--border));
+		border-radius: var(--radius-ctl);
+		background: var(--surface);
+	}
+	:global([data-nord-desktop]) .cbar .nav :is(.ib, .today-btn) {
+		border: 0;
+		box-shadow: none;
+		background: transparent;
+	}
+	:global([data-nord-desktop]) .cbar .nav button:hover {
+		background: var(--surface-hi, var(--chip));
 	}
 	.msg {
 		margin: var(--space-2) var(--space-3);

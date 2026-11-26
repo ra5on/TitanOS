@@ -1397,7 +1397,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		:global(dialog.tile[open]) {
+		:global(body:has(.agent:not(.calm)) dialog.tile[open]) {
 			animation: none;
 		}
 	}
@@ -1430,6 +1430,26 @@
 	.agent .main :global(.grp),
 	.agent .main :global(.srow) {
 		--srow-bg: var(--ag-glass);
+	}
+	:global([data-nord-desktop]) .agent:not(.phone) {
+		background: var(--bg);
+		--ag-glass: var(--surface);
+	}
+	:global([data-nord-desktop]) .agent:not(.phone) .top {
+		background: var(--surface);
+		border-bottom: 1px solid var(--nord-line, var(--border));
+	}
+	:global([data-nord-desktop]) .agent:not(.phone) .dock :global(.composer) {
+		border-color: var(--nord-line, var(--border));
+		border-radius: var(--nord-radius, 16px);
+	}
+	:global([data-nord-desktop]) .agent:not(.phone) .dock :global(.composer:focus-within) {
+		border-color: var(--ag-edge);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		:global(html[data-nord-desktop] body:has(.agent:not(.phone):not(.calm)) dialog.tile[open]) {
+			animation-duration: 175ms;
+		}
 	}
 	.agent.phone .icon-btn.back-menu {
 		width: auto;
