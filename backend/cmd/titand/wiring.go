@@ -250,7 +250,7 @@ func (w *titand) wireBase() error {
 			slog.Warn("finished move of system data not noted in /config", "feature", feature, "from", from, "err", err)
 		}
 	}
-	w.systemData.NoLegacy = append(append([]string{sysdata.Monitoring}, pimFeatures...), appphotos.Feature)
+	w.systemData.NoLegacy = append(append([]string{sysdata.Monitoring}, pimFeatures...), appphotos.Feature, "personal-agent")
 	w.volumes.ReadOnly = w.opts.dev
 	if err := w.volumes.Load(); err != nil {
 		slog.Warn("volumes not readable from /config", "err", err)
