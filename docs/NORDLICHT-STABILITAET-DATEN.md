@@ -26,3 +26,5 @@ Nach der normalen Testserie setzen sechs Fehlerproben die VM ohne Sync oder Unmo
 ## Reichweite der Prüfung
 
 Die QEMU-Datenträger bilden Verzeichnis-Synchronisation und plötzlichen Verlust des Gast-Kernelcaches ab. Ein physischer USB-Controller mit eigener, fehlerhafter Schreibcache-Firmware, echte Stromunterbrechungen und Netzlaufwerke wurden hier nicht geprüft. ACLs und erweiterte Attribute waren nicht Teil des Rechtevergleichs. Der Checkpoint für undatierte Kopien schützt den vor Laufbeginn vorhandenen Zielbaum. Frühere Mischstände aus einer älteren TitanOS-Version und parallele Änderungen anderer Programme am Ziel lassen sich daraus nicht rekonstruieren. Bei der ersten Sicherung auf ein leeres Ziel gibt es keine frühere Generation.
+
+Den unabhängigen Vorher/Nachher-Versuch zu leeren Konfigurationsdateien auf dem Bootmedium beschreibt die [FAT32-Abbruchprobe](NORDLICHT-STABILITAET-KONFIGURATION.md).
