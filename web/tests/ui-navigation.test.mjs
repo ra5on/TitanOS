@@ -2,7 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { noticeLink } from '../src/lib/notice-link.ts';
 import { matchesSetting, settingsAreaOf } from '../src/lib/settings-search.ts';
-import { taskPercent } from '../src/lib/task-progress.ts';
+import { backupProblemMessage, taskPercent } from '../src/lib/task-progress.ts';
+
+test('USB wait denotes a failed job that will resume when its drive returns', () => {
+	const job = { enabled: true, destination: { type: 'usb-copy', deviceId: 'drive' } };
+	const failure = { lastErrorCode: 'usb_not_found', failingSince: '2026-11-22T12:00:00Z' };
+	assert.equal(backupProblemMessage(job, failure), 'desktop.status.waitingUSB');
+	assert.equal(
+		backupProblemMessage({ ...job, enabled: false }, failure),
+		'desktop.status.missingUSB',
+	);
+	assert.equal(
+		backupProblemMessage(job, { lastErrorCode: 'usb_not_found' }),
+		'desktop.status.missingUSB',
+	);
+	assert.equal(
+		backupProblemMessage(job, { lastErrorCode: 'target_full' }),
+		'desktop.status.backupFailed',
+	);
+});
 
 test('notifications link to existing local destinations and encode untrusted subjects', () => {
 	assert.equal(noticeLink('volume_full', 'data'), '/storage#volume-data');

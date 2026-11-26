@@ -9,6 +9,7 @@
 	import {
 		taskPercent,
 		type TaskItem as Task,
+		backupProblemMessage,
 		type WorkspaceActivity,
 	} from '#lib/task-progress.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
@@ -37,13 +38,19 @@
 
 	type BackupStatus = {
 		jobs: {
-			job: { id: string; name?: string };
+			job: {
+				id: string;
+				name?: string;
+				enabled?: boolean;
+				destination?: { type?: string; deviceId?: string };
+			};
 			stateKnown?: boolean;
 			state: {
 				running: boolean;
 				queued?: boolean;
 				lastError?: string;
 				lastErrorCode?: string;
+				failingSince?: string;
 				bytesDone: number;
 				bytesTotal: number;
 			};
@@ -142,7 +149,7 @@
 									.map(({ job, state }) => ({
 										id: job.id,
 										label: job.name || job.id,
-										missingUSB: state.lastErrorCode === 'usb_not_found',
+										message: backupProblemMessage(job, state),
 									}));
 							}
 							return jobs

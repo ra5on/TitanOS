@@ -22,7 +22,7 @@
 		if (!admin) return [];
 		const result = (activity?.backupProblems ?? []).map((job) => ({
 			href: noticeLink('backup_failed', job.id)!,
-			text: t(job.missingUSB ? 'desktop.status.missingUSB' : 'desktop.status.backupFailed', {
+			text: t(job.message, {
 				name: job.label,
 			}),
 		}));

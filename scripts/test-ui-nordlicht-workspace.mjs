@@ -16,10 +16,11 @@ if (out) await mkdir(out, { recursive: true });
 function backup(id, failed = false) {
   return {
     job: { id, enabled: true, sources: ["Dokumente"], applications: [], every: "daily",
-      time: "03:00", destination: { type: "usb", folder: "Sicherung" }, keep: { last: 3 } },
+      time: "03:00", destination: { type: "usb", deviceId: "test-disk", folder: "Sicherung" }, keep: { last: 3 } },
     stateKnown: true, secretSet: {}, next: null,
     state: { running: false, phase: "", lastError: failed ? "drive missing" : "",
       lastErrorCode: failed ? "usb_not_found" : "", bytesDone: 0, bytesTotal: 0,
+      failingSince: failed ? "2026-11-21T12:00:00Z" : null,
       lastOK: "2026-11-20T12:00:00Z", lastRun: "2026-11-22T12:00:00Z" },
   };
 }
@@ -29,15 +30,15 @@ try {
     { role: "owner", theme: "graphit", reducedMotion: "no-preference" },
     { role: "user", theme: "schnee", reducedMotion: "reduce" },
   ]) {
-    const { ctx, page, data } = await fixture(role, theme, 1440, "de", { reducedMotion });
+    const { ctx, page, data } = await fixture(role, theme, 1440, "de", { reducedMotion, nativeShell: true });
     try {
       data.backups = [backup("archiv"), backup("nachtsicherung", true)];
       data.fileJobs = [{ id: "copy", state: "running", names: ["Rechnung.pdf"], copied: 25, bytes: 100 }];
-      await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+
       await page.goto(base);
       const status = page.locator('[data-widget="status"]');
       await status.getByRole("link", { name: /Rechnung\.pdf.*25 %/ }).waitFor();
-      const problem = status.getByRole("link", { name: /USB-Laufwerk fehlt.*nachtsicherung/ });
+      const problem = status.getByRole("link", { name: /Wartet auf USB.*nachtsicherung/ });
       if (role === "owner") {
         await problem.waitFor();
         assert.equal(await problem.getAttribute("href"), "/settings/backups/data#backup-nachtsicherung");

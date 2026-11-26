@@ -256,6 +256,7 @@
 	"desktop.status.noIssues": "Keine offenen Hinweise",
 	"desktop.status.backupFailed": "Sicherung fehlgeschlagen · {name}",
 	"desktop.status.missingUSB": "USB-Laufwerk fehlt · Sicherung {name} fehlgeschlagen",
+	"desktop.status.waitingUSB": "Wartet auf USB · Sicherung {name} fehlgeschlagen",
 	"desktop.widget.status": "Zustand",
 	"desktop.widget.stopped": "gestoppt",
 	"desktop.widget.camera": "Kamera",

@@ -256,6 +256,7 @@
 	"desktop.status.noIssues": "No outstanding alerts",
 	"desktop.status.backupFailed": "Backup failed · {name}",
 	"desktop.status.missingUSB": "USB drive missing · Backup {name} failed",
+	"desktop.status.waitingUSB": "Waiting for USB · Backup {name} failed",
 	"desktop.widget.status": "Status",
 	"desktop.widget.stopped": "stopped",
 	"desktop.widget.camera": "Camera",
