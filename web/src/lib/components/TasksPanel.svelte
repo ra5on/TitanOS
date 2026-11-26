@@ -5,8 +5,12 @@
 	import { storage } from '#lib/storage.svelte.ts';
 	import { uploads } from '#lib/uploads.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { taskPercent } from '#lib/task-progress.ts';
+	import { t } from '#lib/i18n/index.svelte.ts';
+	import {
+		taskPercent,
+		type TaskItem as Task,
+		type WorkspaceActivity,
+	} from '#lib/task-progress.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import type { MediaJob } from '#lib/media.ts';
 	import { shell } from '#lib/shell.svelte.ts';
@@ -23,20 +27,26 @@
 		compact = false,
 		badge = false,
 		sheetOnly = false,
-	}: { compact?: boolean; badge?: boolean; sheetOnly?: boolean } = $props();
+		onactivity,
+	}: {
+		compact?: boolean;
+		badge?: boolean;
+		sheetOnly?: boolean;
+		onactivity?: (overview: WorkspaceActivity) => void;
+	} = $props();
 
-	type Task = {
-		id: string;
-		title: string;
-		kind: MessageKey;
-		href: string;
-		percent?: number;
-		attention?: boolean;
-	};
 	type BackupStatus = {
 		jobs: {
-			job: { id: string };
-			state: { running: boolean; bytesDone: number; bytesTotal: number };
+			job: { id: string; name?: string };
+			stateKnown?: boolean;
+			state: {
+				running: boolean;
+				queued?: boolean;
+				lastError?: string;
+				lastErrorCode?: string;
+				bytesDone: number;
+				bytesTotal: number;
+			};
 		}[];
 	};
 	type UpdateStatus = { progress: { phase: string; percent: number; file: string } };
@@ -63,9 +73,16 @@
 	let tasks = $state<Task[]>([]);
 	let failed = $state(false);
 	let loaded = $state(false);
+	let backupProblems = $state<WorkspaceActivity['backupProblems']>([]);
+	let unknownBackups = $state(false);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	$effect(() => {
 		const privileged = admin;
+		const overview = onactivity;
+		backupProblems = [];
+		unknownBackups = false;
+		tasks = [];
+		loaded = false;
 		let alive = true;
 		const cache = new Map<string, Task[]>();
 		async function collect() {
@@ -78,6 +95,12 @@
 							.map((job) => ({
 								id: `file-${job.id}`,
 								kind: job.operation === 'download' ? 'files.jobDownload' : 'ui.taskCopy',
+								stateLabel: job.paused
+									? 'files.transferPaused'
+									: job.waiting
+										? 'files.transferWaiting'
+										: undefined,
+								attention: !!(job.blocked || job.paused),
 								title: job.names.join(', '),
 								href: '/files',
 								percent: taskPercent(job.copied, job.bytes),
@@ -104,8 +127,25 @@
 					],
 					[
 						'backups',
-						async () =>
-							(await api.get<BackupStatus>('/backups', AbortSignal.timeout(10000))).jobs
+						async () => {
+							const { jobs } = await api.get<BackupStatus>(
+								overview ? '/backups?cached=1' : '/backups',
+								AbortSignal.timeout(10000),
+							);
+							if (alive && overview) {
+								unknownBackups = jobs.some((view) => view.stateKnown === false);
+								backupProblems = jobs
+									.filter(
+										(view) =>
+											view.stateKnown !== false && view.state.lastError && !view.state.running,
+									)
+									.map(({ job, state }) => ({
+										id: job.id,
+										label: job.name || job.id,
+										missingUSB: state.lastErrorCode === 'usb_not_found',
+									}));
+							}
+							return jobs
 								.filter((view) => view.state.running)
 								.map((view) => ({
 									id: `backup-${view.job.id}`,
@@ -113,7 +153,9 @@
 									kind: 'ui.taskBackup',
 									href: `/settings/backups/data#backup-${encodeURIComponent(view.job.id)}`,
 									percent: taskPercent(view.state.bytesDone, view.state.bytesTotal),
-								})),
+									stateLabel: view.state.queued ? ('files.transferWaiting' as const) : undefined,
+								}));
+						},
 					],
 					[
 						'update',
@@ -190,6 +232,14 @@
 				percent: taskPercent(volume.sync!.percent, 100),
 			})),
 	] as Task[]);
+	$effect(() =>
+		onactivity?.({
+			tasks: all,
+			backupProblems: admin ? backupProblems : [],
+			loaded,
+			partial: failed || unknownBackups,
+		}),
+	);
 </script>
 
 {#if sheetOnly}

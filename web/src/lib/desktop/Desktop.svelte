@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WorkspaceActivity } from '../task-progress.ts';
 	import MigrationDialog from '../webapps/MigrationDialog.svelte';
 	// PLAN 61: the desktop mode – TitanOS as a desktop with programs in
 	// windows, widgets and a main menu. It replaces the head line and side
@@ -104,6 +105,10 @@
 		dragCell = null;
 	}
 	let fileDrop = $state(false);
+	let activity = $state.raw<WorkspaceActivity | null>(null);
+	function setActivity(next: WorkspaceActivity) {
+		activity = next;
+	}
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const light = $derived(THEMES[appearance.current.theme as keyof typeof THEMES]?.dark === false);
@@ -565,6 +570,7 @@
 		bind:query={menuQuery}
 		{role}
 		{deskOp}
+		onactivity={setActivity}
 		onsearchkey={(e) => (launcher ? (launcherView?.searchKey(e) ?? false) : false)}
 	/>
 
@@ -621,7 +627,7 @@
 			{endIconDrag}
 		/>
 
-		<DesktopWidgets bind:menu bind:editWidgets bind:dialog {columns} {open} />
+		<DesktopWidgets bind:menu bind:editWidgets bind:dialog {columns} {open} {activity} />
 
 		{#each wm.windows as w (w.id)}
 			{@const p = programOf(w.app)}

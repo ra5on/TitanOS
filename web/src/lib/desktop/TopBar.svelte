@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WorkspaceActivity } from '../task-progress.ts';
 	// PLAN 67: the bar across the top of the desktop. PLAN 79-10: it starts
 	// with the button "Menü" and the small search field of the menu, then the
 	// menus of the program in front and the node switcher; on the right tasks,
@@ -26,6 +27,7 @@
 		role,
 		deskOp,
 		onsearchkey,
+		onactivity,
 	}: {
 		menu: DeskMenu | null;
 		launcher: boolean;
@@ -35,6 +37,7 @@
 		role: string;
 		deskOp: (op: DeskOp) => void;
 		/** A key in the search field the menu may use (Enter, arrow down); true when it did. */
+		onactivity: (overview: WorkspaceActivity) => void;
 		onsearchkey: (event: KeyboardEvent) => boolean;
 	} = $props();
 
@@ -132,7 +135,7 @@
 	{#if clusterNodes.nodes.length > 1}<NodeMenu variant="desk" />{/if}
 	<span class="space"></span>
 	<div class="status">
-		<TasksPanel badge />
+		<TasksPanel badge {onactivity} />
 		{#if role !== 'user'}<Notifications compact />{/if}
 		{#if info && desktop.prefs.barLoad}
 			<span class="load" title={t('desktop.widget.cpu') + ' · ' + t('desktop.widget.ram')}
