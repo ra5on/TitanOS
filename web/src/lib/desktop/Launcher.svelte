@@ -281,7 +281,9 @@
 
 	let root = $state<HTMLElement>();
 	function openSearchHit(hit: SettingsHit) {
-		const app = appForPath(hit.href.startsWith('/settings') ? '/settings' : hit.href.split(/[?#]/)[0]);
+		const app = appForPath(
+			hit.href.startsWith('/settings') ? '/settings' : hit.href.split(/[?#]/)[0],
+		);
 		if (app) onopen('app:' + app.id, hit.href);
 	}
 	function first() {
