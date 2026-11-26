@@ -24,6 +24,14 @@ Ein Skill enthält höchstens acht vorab gewählte Werkzeuge. Jeder Schritt sieh
 
 Beim Aktivieren einer Mailregel beginnt die Suche bei der aktuell folgenden IMAP-UID. Cursor und neu angelegte Aufträge werden zusammen gespeichert. Ein Wechsel der UIDVALIDITY beginnt eine neue Beobachtungsperiode. Ein neuer Verbindungsversuch nach einem temporären Postfachfehler erscheint als `retry`. Nach Rechteentzug zeigt das Rezept `revoked`; für eine erneute Beobachtung legt der Nutzer die Regel neu an. Bei einer erwarteten Antwort unterdrückt die Bedingung nur die Fertigmeldung. Freigaben und Fehler haben eigene Benachrichtigungseinstellungen.
 
+## Mehrere Dateien vergleichen oder zusammenführen
+
+Für `office.compare` werden zwei bis acht freigegebene Angebote und genau ein beschreibbarer Zielordner ausgewählt. Das Werkzeug liest Text, DOCX, XLSX und ausdrücklich gewählte PDF-Seiten. Es übernimmt beschriftete Angaben zu Anbieter, Gesamtpreis, Lieferzeit, Gültigkeit und Zahlungsbedingungen mit ihrer ursprünglichen Währung und Preisbezeichnung. Fehlende Angaben erscheinen als „Nicht ausgewiesen“. Die bearbeitbare XLSX enthält echte Hyperlinks in Spalte A. Sie führen über die Adresse der lokalen TitanOS-Websitzung zur normalen Dateien-Downloadroute. Wer die Tabelle erhält, braucht für die Originale eine eigene berechtigte NAS-Sitzung.
+
+`office.pdf-merge` nimmt zwei bis acht ausgewählte PDF-Dateien und bis zu zwanzig ausdrücklich aufgelistete Seiten. Die Reihenfolge der Liste bestimmt die Reihenfolge im Ergebnis. Die Vorschau enthält Quelldatei und Originalseitennummer für jede Seite. Die Ausgabe übernimmt die gewählten PDF-Seiten einschließlich ihrer grafischen Inhalte.
+
+Beide Werkzeuge begrenzen die Quelldateien zusammen auf 32 MiB und erzeugen eine neue Datei im gewählten Zielordner. Änderungen an einer Quelle verlangen eine frische Vorschau und Freigabe. Vor der Veröffentlichung prüft der Broker die Dateirechte und Inhalte erneut. Anschließend öffnet er die geschriebene Datei über denselben nativen Zugriff und prüft ihre Prüfsumme.
+
 ## Nachweis im Test
 
 Die Integrationstests in `backend/internal/api/personal_engine_test.go` und `personal_privacy_test.go` verwenden temporäre Daten, getrennte NAS-Testsitzungen, einen privaten Unix-Socket und ein lokales IMAP-Testpostfach. Sie prüfen unter anderem Wiederaufnahme, geänderte Vorschauen, doppelte Einreichungen, Rechteentzug zwischen zwei Schritten und die Sichtbarkeit von Anhängen und Suchergebnissen.
