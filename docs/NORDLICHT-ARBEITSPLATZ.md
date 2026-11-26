@@ -12,3 +12,5 @@ Die Statuskachel verwendet die Daten des ohnehin vorhandenen Aufgabenabrufs in d
 ## Prüfung
 
 `scripts/test-ui-nordlicht-workspace.mjs` öffnete die echte Desktop-Oberfläche in Chromium mit isolierten API-Antworten. Getestet wurden der Tastatursprung vom USB-Sicherungsfehler zum zweiten von zwei Aufträgen, 25 Prozent Fortschritt aus 25 von 100 Bytes, Ausblenden der fremden Sicherungsdetails beim Benutzerkonto, Öffnen von Dateien vom Dock per Eingabetaste und die Position des Animationsursprungs mit zwei CSS-Pixeln Toleranz. Bei emuliertem „Bewegung reduzieren“ blieb die Öffnungsanimation aus. Die Weboberfläche lief lokal, diese Prüfung hat keinen NAS-Sicherungsauftrag ausgeführt. Screenshots zeigen den Arbeitsplatz und das direkt geöffnete Auftragsfenster.
+
+Der vorhandene Chromium-Durchlauf `scripts/test-ui-desktop-125.mjs` bestand ebenfalls. Er prüft das Dock mit Maus und Tastatur, die Dateileisten im schmalen Fenster, Docker-Aktionen und die Verlaufsanzeige.

@@ -30,7 +30,7 @@
 			if (v.state !== 'ok')
 				result.push({
 					href: noticeLink('volume_state', v.name)!,
-					text: v.name + ' · ' + t('desktop.widget.volumeState', { state: v.state }),
+					text: v.name + ' · ' + t(`state.${v.state}`),
 				});
 		}
 		const current = new Set(result.map((item) => item.href));
@@ -43,7 +43,7 @@
 		return result;
 	});
 	const partial = $derived(activity?.partial || (admin && !storage.status));
-	const known = $derived(info && activity?.loaded && !partial);
+	const known = $derived(info && system.reachable && activity?.loaded && !partial);
 	const tasks = $derived(activity?.tasks ?? []);
 
 	function follow(event: MouseEvent, href: string) {
