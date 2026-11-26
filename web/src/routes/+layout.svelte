@@ -6,6 +6,8 @@
 	import '@fontsource/ibm-plex-mono/latin-400.css';
 	import '@fontsource/ibm-plex-mono/latin-500.css';
 	import '../app.css';
+	import '../nordlicht-phone.css';
+	import PhoneWallpaper from '#lib/components/PhoneWallpaper.svelte';
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -182,10 +184,6 @@
 		});
 	});
 
-	// The desktop (PLAN 61) and the phone's home screen draw their own
-	// wallpaper; windows show the page on the theme's colour. A page on the
-	// phone is such a window, full screen: no shapes or picture behind it,
-	// so nothing shines through its cards (the phone follows the desktop).
 	const pageFrame = $derived(
 		frameFor({
 			known: page.url.pathname === '/' || !!appForPath(page.url.pathname),
@@ -206,20 +204,13 @@
 		return [name, host, 'TitanOS'].filter(Boolean).join(' – ');
 	});
 
-	// The agent app reaches under the status bar of the iPhone (PLAN 56):
-	// translucent status bar and the whole screen there, TitanOS keeps the
-	// black bar. iOS reads both at load; crossing to and from the agent
-	// reloads the page.
-	$effect.pre(() => {
-		const status = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-		const viewport = document.querySelector('meta[name="viewport"]');
-		status?.setAttribute('content', agentRoute ? 'black-translucent' : 'black');
-		viewport?.setAttribute(
-			'content',
-			agentRoute
-				? 'width=device-width, initial-scale=1, viewport-fit=cover'
-				: 'width=device-width, initial-scale=1',
-		);
+	// Safari reads the safe-area viewport and status-bar style at launch (app.html).
+	const phoneWorkspace = $derived(
+		!!session.data?.user && !session.data?.setupRequired && !agentRoute && pageFrame === 'phone',
+	);
+	$effect(() => {
+		document.documentElement.toggleAttribute('data-nordlicht', phoneWorkspace);
+		return () => document.documentElement.removeAttribute('data-nordlicht');
 	});
 </script>
 
@@ -247,7 +238,8 @@
 	{/if}
 </svelte:head>
 
-{#if !ownBackground}<Backdrop appearance={appearance.current} />{/if}
+{#if phoneWorkspace && page.url.pathname !== '/'}<PhoneWallpaper
+	/>{:else if !ownBackground}<Backdrop appearance={appearance.current} />{/if}
 
 <!-- PLAN 65-6: the texts of the language load first (lib/i18n). -->
 {#if !i18n.ready}

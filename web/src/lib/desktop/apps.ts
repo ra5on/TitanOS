@@ -429,7 +429,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 		glyph: 'account',
 		gradient: 'grey',
 		href: '/account',
-		paths: ['/account'],
+		paths: ['/account', '/notifications'],
 		side: [],
 		kind: 'system',
 	},

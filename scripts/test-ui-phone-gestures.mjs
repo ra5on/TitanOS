@@ -2,7 +2,7 @@
 // (within the program, then home) – only from a small zone, never when a
 // touch starts outside it, not when the finger goes up or down (the page
 // scrolls), and not in iOS Safari, which has its own swipe; pulling the bar
-// down shows the notifications with quick switches; a message swiped left
+// down opens the notification centre; a message swiped left
 // is deleted, swiped right is read; the number of unread messages goes to
 // the app's symbol (Badging API); pulling a list page down runs its
 // refresh; a file row swiped left offers "Teilen" and "Löschen" (which asks
@@ -84,6 +84,7 @@ async function phone({ ua, theme = "graphit" } = {}) {
   const made = await create("owner", theme, W, "de", {
     isMobile: true,
     hasTouch: true,
+    serviceWorkers: "block",
     deviceScaleFactor: 3,
     viewport: { width: W, height: H },
     ...(ua ? { userAgent: ua } : {}),
@@ -107,12 +108,18 @@ async function phone({ ua, theme = "graphit" } = {}) {
   data.notices = structuredClone(notices);
   data.lists = 0;
   data.dismissed = [];
+  data.readTimes = [];
   await ctx.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(7);
     if (path === "/notifications") {
       data.noticeLoads = (data.noticeLoads ?? 0) + 1;
-      return route.fulfill({ json: { messages: data.notices } });
+      return route.fulfill({ json: { messages: data.notices, readTimes: data.readTimes } });
+    }
+    if (path === "/notifications/read") {
+      const { times } = route.request().postDataJSON();
+      data.readTimes = [...new Set([...data.readTimes, ...times])];
+      return route.fulfill({ status: 204 });
     }
     if (path === "/notifications/dismiss") {
       const { ids } = route.request().postDataJSON();
@@ -132,7 +139,7 @@ async function phone({ ua, theme = "graphit" } = {}) {
     return route.fallback();
   });
   await page.goto(base + "/");
-  await page.locator(".home .pages").waitFor({ timeout: 15000 });
+  await page.locator("[data-nord-home]").waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
   const cdp = await ctx.newCDPSession(page);
   return { ...made, cdp };
@@ -209,29 +216,36 @@ try {
   await page.waitForTimeout(400);
   await swipe(page, cdp, [6, 420], [200, 424]);
   await page.waitForURL((u) => u.pathname === "/");
-  await page.locator(".home .pages").waitFor();
+  await page.locator("[data-nord-home]").waitFor();
 
-  // Pull the bar down: the notifications with quick switches.
+  // Existing app pages remain available from the Nordlicht home screen.
+  await page.getByRole("button", { name: "Seiten und Widgets" }).tap();
+  await page.waitForURL((u) => u.searchParams.get("phone") === "pages");
+  await page.locator(".home .pages").waitFor();
+  await page.goBack();
+  await page.locator("[data-nord-home]").waitFor();
+
+  // A pull on the bar opens the notification page and remembers the source.
   await page.goto(base + "/storage");
   const bar = page.locator("header.phone-bar");
   await bar.waitFor();
   const bb = await bar.boundingBox();
   await swipe(page, cdp, [200, bb.y + 20], [205, bb.y + 260]);
-  const sheet = page.locator("dialog[open]");
-  await sheet.locator("[data-notices]").waitFor();
-  assert.equal(
-    await sheet.locator("[data-quick]").count(),
-    3,
-    "three quick switches",
-  );
-  for (const b of await sheet
-    .locator("[data-quick], .head .btn")
-    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
-    assert.ok(b >= 43.5, `quick switch ≥ 44 px (${b})`);
+  await page.waitForURL((u) => u.pathname === "/notifications" && !u.search);
+  const center = page.locator(".notice-center");
+  await center.locator("[data-notices]").waitFor();
+  const all = center.getByRole("button", { name: "Alle", exact: true });
+  const unread = center.getByRole("button", { name: /^Ungelesen/ });
+  assert.equal(await all.getAttribute("aria-pressed"), "true");
+  assert.equal(await unread.getAttribute("aria-pressed"), "false");
+  for (const filter of [all, unread]) {
+    const b = await filter.boundingBox();
+    assert.ok(b && b.width >= 44 && b.height >= 44, "filter target ≥ 44 px");
+  }
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${out}/mitteilungen-heruntergezogen.png` });
   // Swiped to the right: read; the number on the symbol follows.
-  const second = sheet.locator("[data-notice='2']");
+  const second = center.locator("[data-notice='2']");
   let b = await second.boundingBox();
   await swipe(
     page,
@@ -240,14 +254,16 @@ try {
     [b.x + 300, b.y + b.height / 2 + 4],
   );
   await page.waitForFunction(() => window.__badges.at(-1) === 2);
-  assert.equal(
-    await sheet.locator("[data-notice='2'] .new").count(),
-    0,
-    "marked read",
-  );
+  assert.ok(!(await second.innerText()).includes("Neu"), "the row is marked read");
+  assert.ok(data.readTimes.includes(notices[1].time), "read state sent to the NAS");
+  await unread.tap();
+  assert.equal(await unread.getAttribute("aria-pressed"), "true");
+  assert.deepEqual(await center.locator("[data-notice]").evaluateAll(rows => rows.map(r => r.dataset.notice)), ["3", "1"]);
+  await all.tap();
+  assert.deepEqual(await center.locator("[data-notice]").evaluateAll(rows => rows.map(r => r.dataset.notice)), ["3", "2", "1"]);
   // Swiped far to the left: deleted.
-  await sheet.locator("[data-notice='1']").scrollIntoViewIfNeeded();
-  b = await sheet.locator("[data-notice='1']").boundingBox();
+  await center.locator("[data-notice='1']").scrollIntoViewIfNeeded();
+  b = await center.locator("[data-notice='1']").boundingBox();
   await swipe(
     page,
     cdp,
@@ -259,23 +275,27 @@ try {
   );
   assert.deepEqual(data.dismissed, [1], "deleted on the NAS");
   // Half way: the action shows, nothing is deleted yet.
-  await sheet.locator("[data-notice='3']").scrollIntoViewIfNeeded();
-  b = await sheet.locator("[data-notice='3']").boundingBox();
+  await center.locator("[data-notice='3']").scrollIntoViewIfNeeded();
+  b = await center.locator("[data-notice='3']").boundingBox();
   await swipe(
     page,
     cdp,
     [b.x + b.width - 30, b.y + b.height / 2],
     [b.x + b.width - 140, b.y + b.height / 2],
   );
-  await sheet
+  await center
     .locator("[data-swipe-row].open [data-swipe-action='delete']")
     .waitFor();
   assert.deepEqual(data.dismissed, [1]);
   await page.screenshot({ path: `${out}/mitteilung-gewischt.png` });
-  // Pulling the list down loads it anew; the sheet stays.
-  await sheet.locator("h2").tap();
+  // Tapping the exposed row closes its action without opening or deleting it.
+  await center.locator("[data-notice='3']").tap();
+  await center.locator("[data-swipe-row].open").waitFor({state: "detached"});
+  assert.equal(path(page), "/notifications");
+  assert.deepEqual(data.dismissed, [1]);
+  // Pulling the list down loads it anew and preserves the selected filter.
   const loads = data.noticeLoads;
-  const lb = await sheet.locator("[data-notices]").boundingBox();
+  const lb = await center.locator("[data-notices]").boundingBox();
   await swipe(
     page,
     cdp,
@@ -284,36 +304,35 @@ try {
   );
   await page.waitForTimeout(400);
   assert.equal(
-    await page.locator("dialog[open] [data-notices]").count(),
+    await center.locator("[data-notices]").count(),
     1,
-    "the sheet stays",
+    "the notice list stays open",
   );
   assert.ok(data.noticeLoads > loads, "pulled down: the list loads anew");
-  // Without swiping: each message has its own buttons.
-  assert.equal(
-    await sheet.locator("[data-notice-delete]").count(),
-    await sheet.locator("[data-notice]").count(),
-    "a delete button per message",
-  );
-  for (const b of await sheet
-    .locator("[data-notice-delete], [data-notice-read]")
-    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON())))
-    assert.ok(b.width >= 43.5 && b.height >= 43.5, "row buttons ≥ 44 px");
-  // The sheet goes with a swipe down.
-  const head = await sheet.locator("h2").boundingBox();
-  await swipe(
-    page,
-    cdp,
-    [head.x + 40, head.y + 5],
-    [head.x + 40, head.y + 400],
-  );
-  await sheet.waitFor({ state: "detached" });
-
-  // The bell on the home screen opens the same.
+  // Open the same entry without a swipe: reading its detail clears the badge.
+  await center.locator("[data-notice='3']").tap();
+  await page.waitForURL((u) => u.pathname === "/notifications" && u.searchParams.get("id") === "3");
+  await center.getByRole("heading", {name: notices[0].title}).waitFor();
+  await center.getByText(notices[0].text, {exact: true}).waitFor();
+  await page.waitForFunction(() => window.__badges.at(-1) === 0);
+  const action = await center.locator("[data-notice-delete]").boundingBox();
+  assert.ok(action && action.width >= 44 && action.height >= 44, "detail actions fit a finger");
+  await page.locator("header.phone-bar .back").first().tap();
+  await page.waitForURL((u) => u.pathname === "/notifications" && !u.search);
+  // The second back goes to the program where the bar was pulled.
+  await page.locator("header.phone-bar .back").first().tap();
+  await page.waitForURL((u) => u.pathname === "/storage");
   await page.goto(base + "/");
-  await page.locator(".home [data-phone-bell]").tap();
-  await page.locator("dialog[open] [data-notices]").waitFor();
-  await page.keyboard.press("Escape");
+  await page.locator("[data-nord-home] [data-phone-bell]").tap();
+  await center.locator("[data-notices]").waitFor();
+  await center.locator("[data-notice='2']").tap();
+  await center.locator("[data-notice-delete]").tap();
+  await page.waitForURL((u) => u.pathname === "/notifications" && !u.search);
+  assert.deepEqual(data.dismissed, [1, 2], "deleting from the detail calls the NAS");
+  await unread.tap();
+  assert.equal(await center.locator("[data-notice]").count(), 0);
+  await all.tap();
+  await center.locator("[data-notice='3']").waitFor();
 
   // Files: pull the list down refreshes it; a row swiped left offers Teilen and Löschen.
   await page.goto(base + "/files?root=share%2FDocuments");
@@ -341,7 +360,7 @@ try {
   );
   await page.screenshot({ path: `${out}/liste-gewischt.png` });
   // "Teilen" without swiping: the entry's ⋯ menu.
-  await page.locator("[data-file-name='Notizen.txt'] .entry-more").tap();
+  await page.locator("[data-file-name='Notizen.txt'] [aria-haspopup=menu]").tap();
   await page.locator("[data-menu-share]").waitFor();
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);

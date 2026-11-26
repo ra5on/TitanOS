@@ -23,7 +23,7 @@
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { jumpToSetting } from '#lib/settings-jump.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull } from '#lib/agent-full.svelte.ts';
@@ -31,17 +31,19 @@
 	// The desktop and the phone's home load only where they are shown, not
 	// in every window's frame (PLAN 65-6).
 	import type Desktop from '#lib/desktop/Desktop.svelte';
-	import type PhoneHome from '#lib/desktop/PhoneHome.svelte';
+	import type PhoneHome from '#lib/desktop/NordlichtHome.svelte';
+	import PhoneDock from '#lib/desktop/PhoneDock.svelte';
+	import { phoneChrome } from '#lib/desktop/immersive-phone.svelte.ts';
 	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
 	// PLAN 87: gestures (edge = back, pull = refresh) and the notifications pulled down.
 	import PhoneGestures from '#lib/desktop/PhoneGestures.svelte';
-	import PhoneNotices from '#lib/desktop/PhoneNotices.svelte';
+
+	import { loadNotifications } from '#lib/notifications.svelte.ts';
 	import { watchAppBadge } from '#lib/app-badge.svelte.ts';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
 	import { frameFor, mode } from '#lib/desktop/mode.svelte.ts';
 	import { deskKey } from '#lib/desktop/menubar/keys.ts';
-	import { goto } from '$app/navigation';
 	import { pagePath, pageTitle } from '#lib/page-title.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
@@ -88,11 +90,21 @@
 				() => (viewFailed = true),
 			);
 		if (frame === 'phone' && page.url.pathname === '/' && !PhoneHomeView)
-			void import('#lib/desktop/PhoneHome.svelte').then(
+			void import('#lib/desktop/NordlichtHome.svelte').then(
 				(m) => (PhoneHomeView = m.default),
 				() => (viewFailed = true),
 			);
 	});
+	$effect(() => {
+		if (frame !== 'phone') return;
+		const open = () => {
+			if (page.url.pathname === '/notifications') return;
+			void goto('/notifications', { state: { noticeReturn: page.url.pathname + page.url.search } });
+		};
+		window.addEventListener('titanos-phone-notices', open);
+		return () => window.removeEventListener('titanos-phone-notices', open);
+	});
+
 	afterNavigate(() => {
 		if (inWindow)
 			announcePage(
@@ -241,6 +253,15 @@
 	}
 
 	$effect(() => watchSystem());
+	const noticeVersion = $derived(system.info?.notificationsLatest ?? 0);
+	$effect(() => {
+		if (frame === 'phone') {
+			void noticeVersion;
+			untrack(() => {
+				void loadNotifications();
+			});
+		}
+	});
 	// PLAN 87: the number of unread messages on the app's symbol (where the system offers it).
 	$effect(() => {
 		if (!inWindow) return watchAppBadge();
@@ -287,15 +308,21 @@
 	{#if page.url.pathname === '/'}
 		{#if PhoneHomeView}<PhoneHomeView />{:else if viewFailed}{@render failed()}{/if}
 	{:else}
-		<PhoneBar />
-		<main class="phone-page" class:readable={!dockerPage}>
+		{#if !phoneChrome.immersive}<PhoneBar />{/if}
+		<main class="phone-page" class:immersive={!!phoneChrome.immersive} class:readable={!dockerPage}>
 			<ClusterBanner />
 			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
 	{/if}
+	<PhoneDock
+		home={page.url.pathname === '/'}
+		full={!!page.state.remote ||
+			!!page.state.webapp ||
+			phoneApp ||
+			page.url.pathname.startsWith('/vms/screen')}
+	/>
 	<PhoneGestures />
-	<PhoneNotices />
 	<!-- PLAN 66: a web app full screen (opened from the home grid or the file manager). -->
 	{#if page.state.webapp || phoneApp}
 		{#await import('#lib/webapps/WebAppPhone.svelte') then { default: WebAppPhone }}
@@ -351,6 +378,9 @@
 	.phone-page {
 		padding: var(--page-pad);
 		min-height: 100dvh;
+	}
+	.phone-page:not(.immersive) {
+		padding-bottom: calc(var(--phone-dock-height, 0px) + 45px + env(safe-area-inset-bottom));
 	}
 	/* As an app on the home screen the phone's home indicator lies over
 	   the bottom edge. */

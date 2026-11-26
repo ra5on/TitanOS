@@ -1,4 +1,9 @@
 {
+	"nvr.live.picture": "Live view",
+	"nvr.events.vehicleDetected": "Vehicle detected",
+	"nvr.events.detected": "{label} detected",
+	"nvr.events.clipTimeline": "Recording timeline",
+	"nvr.events.captureTime": "Recording time",
 	"nvr.menu.live": "Live",
 	"nvr.menu.recordings": "Recordings",
 	"nvr.menu.events": "Events",

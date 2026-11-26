@@ -26,7 +26,7 @@ import (
 // "androiddesktop" (1.19) is the Android app's own desktop when the account
 // switches on "eigene Einrichtung für Android"; same shape as "desktop", the
 // web never writes it (docs/ANDROID-APP.md, Arbeitsplatz).
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order", "contacts", "androiddesktop"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "fileviews", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker", "calendar", "order", "contacts", "androiddesktop"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -142,6 +142,9 @@ func (a prefsArea) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 	res := map[string]json.RawMessage{}
 	for _, kind := range preferenceKinds {
 		value, err := a.prefs.get(user, kind)
+		if err == nil && kind == "fileviews" && value == nil {
+			value, err = a.prefs.initialFileViews(user)
+		}
 		if err != nil {
 			slog.Error("read preferences", "user", user, "kind", kind, "err", err)
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config could not be read")
@@ -180,6 +183,10 @@ func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) 
 	}
 	if kind == "dashboard" {
 		a.saveDashboard(w, r, value, nil)
+		return
+	}
+	if kind == "fileviews" {
+		a.changeFileView(w, r, value)
 		return
 	}
 	if kind == "fileappsdocker" && !validDockerFileApps(value) {

@@ -23,7 +23,14 @@ export type PhoneWidget = {
 	camera?: string;
 };
 
+export const PHONE_DOCK_SIZES = ['small', 'medium', 'large'] as const;
+export type PhoneDockSize = (typeof PHONE_DOCK_SIZES)[number];
+export function phoneDockSize(value: unknown): PhoneDockSize {
+	return value === 'small' || value === 'large' ? value : 'medium';
+}
+
 export type PhoneDock = {
+	size?: PhoneDockSize;
 	show: boolean;
 	/** The programs in the dock, in their order. */
 	apps: string[];
@@ -32,6 +39,8 @@ export type PhoneDock = {
 };
 
 export type PhonePrefs = {
+	/** Undefined uses the starter set; an empty list is an explicit choice. */
+	favorites?: string[];
 	/** Whether the account arranged the home screen (false: built from the programs). */
 	custom: boolean;
 	/** The pages, each a list of programs ("app:files"), folders ("folder:x") and widgets ("widget:x") in order. */
@@ -44,15 +53,16 @@ export type PhonePrefs = {
 /** Columns of the home screen. */
 export const PHONE_COLUMNS = 4;
 /** How many programs the dock holds. */
-export const PHONE_DOCK_MAX = 4;
-export const PHONE_DOCK_DEFAULT = ['app:files', 'app:docker', 'app:monitor', 'app:settings'];
+export const PHONE_DOCK_MAX = 80;
+export const PHONE_FAVORITES_DEFAULT = ['app:files', 'app:docker', 'app:mail'];
+export const PHONE_DOCK_DEFAULT = ['app:files', 'app:calendar', 'app:shares', 'app:settings'];
 
 export const defaultPhone = (): PhonePrefs => ({
 	custom: false,
 	pages: [],
 	folders: [],
 	widgets: [{ id: 'p-status', kind: 'status', size: 'l' }],
-	dock: { show: true, apps: [], custom: false },
+	dock: { show: true, size: 'medium', apps: [], custom: false },
 });
 
 const ID = /^[a-z0-9][a-z0-9:._-]{0,95}$/i;
@@ -129,11 +139,13 @@ export function sanitizePhone(input: unknown): PhonePrefs {
 	const d = (typeof v.dock === 'object' && v.dock ? v.dock : {}) as Record<string, unknown>;
 	return {
 		custom: v.custom === true,
+		...(Array.isArray(v.favorites) ? { favorites: keys(v.favorites, 80) } : {}),
 		pages,
 		folders,
 		widgets,
 		dock: {
 			show: d.show !== false,
+			size: phoneDockSize(d.size),
 			apps: keys(d.apps, PHONE_DOCK_MAX),
 			custom: d.custom === true,
 		},

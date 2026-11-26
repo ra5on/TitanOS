@@ -1,4 +1,9 @@
 {
+	"nvr.live.picture": "Livebild",
+	"nvr.events.vehicleDetected": "Fahrzeug erkannt",
+	"nvr.events.detected": "{label} erkannt",
+	"nvr.events.clipTimeline": "Zeitleiste der Aufnahme",
+	"nvr.events.captureTime": "Aufnahmezeit",
 	"nvr.menu.live": "Live",
 	"nvr.menu.recordings": "Aufnahmen",
 	"nvr.menu.events": "Ereignisse",

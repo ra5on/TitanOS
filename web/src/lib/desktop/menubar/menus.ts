@@ -11,6 +11,7 @@
 // - sys:  the help (documentation, shortcuts, diagnosis)
 // - cmd:  a command of the page in the window; it registers its handlers with
 //         lib/menu-commands.svelte.ts. Without a handler the entry is disabled.
+import { layouts as fileLayouts } from '../../file-layouts.ts';
 import type { Role } from '../../api.ts';
 import type { MessageKey } from '../../i18n/index.svelte.ts';
 import { appAllowed, appForPath, SYSTEM_APPS } from '../apps.ts';
@@ -106,8 +107,8 @@ const list = (id: string, label: MessageKey, more: Partial<MenuEntry> = {}) =>
 const radios = (prefix: string, pairs: [string, MessageKey][]) =>
 	pairs.map(([id, label]) => radio(`${prefix}.${id}`, label));
 
-const PROGRAMS: Record<string, Menu[]> = {
-	files: [
+function fileMenus(phone: boolean): Menu[] {
+	return [
 		menu('file', 'menubar.menu.file', [
 			cmd('files.mkdir', 'menubar.files.newFolder'),
 			cmd('files.newFile', 'menubar.files.newFile'),
@@ -136,9 +137,16 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('files.search', 'menubar.edit.find'),
 		]),
 		menu('view', 'menubar.menu.view', [
-			radio('files.view.list', 'files.view.list'),
-			radio('files.view.small', 'files.view.small'),
-			radio('files.view.large', 'files.view.large'),
+			...(phone
+				? [
+						radio('files.layout.inherit', 'files.mobile.inherit'),
+						...fileLayouts.map((l) => radio('files.layout.' + l.value, l.label)),
+					]
+				: [
+						radio('files.view.list', 'files.view.list'),
+						radio('files.view.small', 'files.view.small'),
+						radio('files.view.large', 'files.view.large'),
+					]),
 			sep,
 			sub('files.sortMenu', 'menubar.files.sortBy', [
 				radio('files.sort.name', 'menubar.files.sortName'),
@@ -147,7 +155,7 @@ const PROGRAMS: Record<string, Menu[]> = {
 			]),
 			check('files.hidden', 'menubar.files.hidden'),
 			check('files.twoPanes', 'menubar.files.twoPanes'),
-			check('files.folderView', 'menubar.files.folderView'),
+			...(!phone ? [check('files.folderView', 'menubar.files.folderView')] : []),
 		]),
 		menu('go', 'menubar.menu.go', [
 			cmd('files.back', 'menubar.files.back'),
@@ -160,7 +168,12 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('files.favorites', 'menubar.files.favorites'),
 			cmd('files.trash', 'menubar.files.trash'),
 		]),
-	],
+	];
+}
+
+const PHONE_FILES = fileMenus(true);
+const PROGRAMS: Record<string, Menu[]> = {
+	files: fileMenus(false),
 	shares: [
 		menu('file', 'menubar.menu.file', [
 			cmd('shares.new', 'menubar.shares.new'),
@@ -785,8 +798,10 @@ function forRole(menus: Menu[], role: Role): Menu[] {
 }
 
 /** The menus of a window's program for an account: the program's, then Fenster and Hilfe. */
-export function menusFor(key: string, role: Role): Menu[] {
-	return forRole([...(PROGRAMS[programOf(key)] ?? []), WINDOW_MENU, HELP_MENU], role);
+export function menusFor(key: string, role: Role, frame: 'window' | 'phone' = 'window'): Menu[] {
+	const program = programOf(key);
+	const menus = program === 'files' && frame === 'phone' ? PHONE_FILES : (PROGRAMS[program] ?? []);
+	return forRole([...menus, WINDOW_MENU, HELP_MENU], role);
 }
 
 /** The menus with no window in front. */

@@ -572,6 +572,7 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--font-scale': (a.font / 100).toFixed(2),
 		// PLAN 64: the desktop's own surfaces follow the global sliders too.
 		'--radius-scale': (a.rTile / 14).toFixed(2),
+		'--desk-alpha': deskAlpha(a, p).toFixed(2),
 		'--desk-surface': withAlpha(p.surface, deskAlpha(a, p)),
 		'--desk-blur': a.style === 'glass' ? `${Math.round(a.blur * 1.2)}px` : '0px',
 		'--wallpaper-filter': `saturate(${((a.saturation ?? 100) / 100).toFixed(2)})`,

@@ -14,7 +14,15 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Confirm from '#lib/nvr/Confirm.svelte';
-	import { cameraName, mayRecordings, nvr, nvrAdmin, unixOf } from '#lib/nvr/nvr.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import {
+		cameraName,
+		mayLive,
+		mayRecordings,
+		nvr,
+		nvrAdmin,
+		unixOf,
+	} from '#lib/nvr/nvr.svelte.ts';
 	import { clock, dayClock, labelName } from '#lib/nvr/texts.ts';
 	import Timeline from '#lib/nvr/Timeline.svelte';
 	import {
@@ -328,6 +336,12 @@
 		text={nvrAdmin() ? t('nvr.live.noneAdmin') : t('nvr.rec.noneUser')}
 	/>
 {:else}
+	{#if phoneView() && cameras.some((c) => c.id === camera && mayLive(c))}
+		<nav class="camera-tabs" aria-label={nameOf(camera)}>
+			<a href="/nvr?camera={encodeURIComponent(camera)}">{t('nvr.live.picture')}</a>
+			<span aria-current="page">{t('nvr.menu.recordings')}</span>
+		</nav>
+	{/if}
 	<div class="pick">
 		<label
 			><span>{t('nvr.rec.camera')}</span>

@@ -134,4 +134,24 @@
 	.privacy span {
 		color: var(--muted);
 	}
+	.nvr-page :global(.camera-tabs) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		padding: 3px;
+		border: 1px solid var(--border);
+		border-radius: 13px;
+		background: color-mix(in srgb, var(--surface) 82%, transparent);
+	}
+	.nvr-page :global(.camera-tabs > *) {
+		display: grid;
+		place-items: center;
+		min-height: 44px;
+		color: var(--text);
+		text-decoration: none;
+	}
+	.nvr-page :global(.camera-tabs [aria-current]) {
+		border-radius: 10px;
+		background: var(--chip);
+		font-weight: 650;
+	}
 </style>

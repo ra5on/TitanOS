@@ -5,6 +5,8 @@
 	// on a click. Above it the filters and four figures. The earlier card and
 	// tile views are gone; the stored docker preference is still read (order
 	// and main services of stacks).
+	import { page } from '$app/state';
+	import PhoneContainers from './PhoneContainers.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -22,6 +24,10 @@
 
 	// State and actions live in docker-page.svelte.ts.
 	const p = new DockerPage();
+	const activeGroup = $derived(
+		p.phone ? p.groups.find((g) => g.id === page.url.searchParams.get('group')) : undefined,
+	);
+	const area = $derived(page.url.searchParams.get('area') ?? 'containers');
 
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the toolbar.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -76,46 +82,47 @@
 	</div>
 {/snippet}
 
-<PageHead title={t('docker.title')}>
+<PageHead title={activeGroup?.name || t('docker.title')}>
 	{#snippet actions()}
-		{#if p.status?.running && p.containers.length > 0 && !p.phone}
-			{@render searchBox()}
-			{#if p.roomy}{@render filters()}{/if}
+		{#if !p.phone}
+			{#if p.status?.running && p.containers.length > 0 && !p.phone}
+				{@render searchBox()}
+				{#if p.roomy}{@render filters()}{/if}
+			{/if}
+			{#if p.status?.settings.enabled}
+				<span class="split">
+					<a class="btn btn-primary" href="/apps"
+						><Icon name="plus" size={15} />{t('docker.installApp')}</a
+					><button
+						type="button"
+						class="btn btn-primary"
+						aria-label={t('docker.installMenu')}
+						title={t('docker.installMenu')}
+						aria-haspopup="menu"
+						aria-expanded={p.pageMenu === 'install'}
+						onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'install')}
+						onclick={(event) => p.openPageMenu('install', event.currentTarget)}
+						><Icon name="chevronDown" size={15} /></button
+					>
+				</span>
+			{/if}
+			<button
+				type="button"
+				class="btn icon-btn"
+				aria-label={t('docker.table.more')}
+				title={t('docker.table.more')}
+				aria-haspopup="menu"
+				aria-expanded={p.pageMenu === 'more'}
+				onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'more')}
+				onclick={(event) => p.openPageMenu('more', event.currentTarget)}
+				><Icon name="more" size={17} /></button
+			>
 		{/if}
-		{#if p.status?.settings.enabled}
-			<span class="split">
-				<a class="btn btn-primary" href="/apps"
-					><Icon name="plus" size={15} />{t('docker.installApp')}</a
-				><button
-					type="button"
-					class="btn btn-primary"
-					aria-label={t('docker.installMenu')}
-					title={t('docker.installMenu')}
-					aria-haspopup="menu"
-					aria-expanded={p.pageMenu === 'install'}
-					onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'install')}
-					onclick={(event) => p.openPageMenu('install', event.currentTarget)}
-					><Icon name="chevronDown" size={15} /></button
-				>
-			</span>
-		{/if}
-		<button
-			type="button"
-			class="btn icon-btn"
-			aria-label={t('docker.table.more')}
-			title={t('docker.table.more')}
-			aria-haspopup="menu"
-			aria-expanded={p.pageMenu === 'more'}
-			onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'more')}
-			onclick={(event) => p.openPageMenu('more', event.currentTarget)}
-			><Icon name="more" size={17} /></button
-		>
 	{/snippet}
 </PageHead>
 
-{#if p.phone && p.status?.running && p.containers.length > 0}
-	<!-- PLAN 64: on the phone search and filters get rows of their own under the tool bar. -->
-	<div class="phone-tools">{@render searchBox()}{@render filters()}</div>
+{#if p.phone && p.status?.running}
+	<PhoneContainers {p} {activeGroup} {area} />
 {:else if !p.roomy && p.status?.running && p.containers.length > 0}
 	<div class="phone-tools">{@render filters()}</div>
 {/if}
@@ -236,7 +243,7 @@
 		</div>
 	{/each}
 
-	{#if p.containers.length > 0}
+	{#if !p.phone && p.containers.length > 0}
 		{#if p.shownGroups.length > 0}
 			<AppTable {p} />
 		{:else}
@@ -275,7 +282,7 @@
 			>
 			<span>{t('docker.version', { version: p.status.version })}</span>
 		</StatusBar>
-	{:else if p.jobs.length === 0 && p.idleApps.length === 0}
+	{:else if !p.phone && p.jobs.length === 0 && p.idleApps.length === 0}
 		<EmptyState title={t('docker.empty')} />
 	{/if}
 {/if}
@@ -405,13 +412,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-	}
-	/* In this column the search box keeps its own height: the row layout's
-	   flex-basis (10rem) would otherwise become its height and leave a large
-	   empty gap around the field on the phone. */
-	.phone-tools .search-box {
-		flex: none;
-		width: 100%;
 	}
 	@media (max-width: 639px) {
 		.search-box {

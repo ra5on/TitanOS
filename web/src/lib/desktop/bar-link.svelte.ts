@@ -3,12 +3,18 @@
 // in a window of the desktop the page asks the desktop and sends the change
 // back (the desktop is the only writer of its settings); without a desktop
 // (phone, own tab) it uses the store of this page.
+import { phoneDockSize, type PhoneDockSize } from './phone-home.ts';
 import { frameMessage, inWindow } from './frame.ts';
 import { desktop, loadDesktop, savePrefs } from './wm.svelte.ts';
 
-export const barLink = $state<{ load: boolean | null; phoneDock: boolean | null }>({
+export const barLink = $state<{
+	load: boolean | null;
+	phoneDock: boolean | null;
+	phoneSize: PhoneDockSize;
+}>({
 	load: null,
 	phoneDock: null,
+	phoneSize: 'medium',
 });
 
 /** Starts following the setting; returns the function that stops it. */
@@ -17,6 +23,7 @@ export function connectBar(): () => void {
 		loadDesktop();
 		barLink.load = desktop.prefs.barLoad;
 		barLink.phoneDock = desktop.prefs.phone.dock.show;
+		barLink.phoneSize = phoneDockSize(desktop.prefs.phone.dock.size);
 		return () => {};
 	}
 	const message = (event: MessageEvent) => {
@@ -26,6 +33,7 @@ export function connectBar(): () => void {
 			barLink.load = msg.load === true;
 			// PLAN 87: the phone's dock; a desktop of 0.80 does not send it (on).
 			barLink.phoneDock = msg.phoneDock !== false;
+			barLink.phoneSize = phoneDockSize(msg.phoneSize);
 		}
 	};
 	window.addEventListener('message', message);
@@ -45,4 +53,11 @@ export function setPhoneDock(on: boolean) {
 	if (inWindow)
 		window.parent.postMessage({ type: 'titanos-phone-dock-set', show: on }, location.origin);
 	else savePrefs((p) => (p.phone = { ...p.phone, dock: { ...p.phone.dock, show: on } }));
+}
+
+export function setPhoneDockSize(size: PhoneDockSize) {
+	barLink.phoneSize = size;
+	if (inWindow)
+		window.parent.postMessage({ type: 'titanos-phone-dock-size', size }, location.origin);
+	else savePrefs((p) => (p.phone.dock.size = size));
 }

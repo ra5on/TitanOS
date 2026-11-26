@@ -8,6 +8,7 @@ import { frameMessage, ownPath } from './frame.ts';
 import { appForPath, taskPage } from './apps.ts';
 import { t } from '../i18n/index.svelte.ts';
 import { showToast } from '../toast.svelte.ts';
+import { phoneDockSize } from './phone-home.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
 import { anyUnsaved, closeWindow, desktop, frameOf, savePrefs, wm } from './wm.svelte.ts';
@@ -27,7 +28,12 @@ function sendDock(target: WindowProxy, dock: unknown) {
 export function sendBarToWindows(load: boolean) {
 	for (const f of windowFrames())
 		f.contentWindow?.postMessage(
-			{ type: 'titanos-bar', load, phoneDock: desktop.prefs.phone.dock.show },
+			{
+				type: 'titanos-bar',
+				load,
+				phoneSize: desktop.prefs.phone.dock.size,
+				phoneDock: desktop.prefs.phone.dock.show,
+			},
 			location.origin,
 		);
 }
@@ -62,12 +68,16 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 				{
 					type: 'titanos-bar',
 					load: desktop.prefs.barLoad,
+					phoneSize: desktop.prefs.phone.dock.size,
 					phoneDock: desktop.prefs.phone.dock.show,
 				},
 				location.origin,
 			);
 		else if (msg.type === 'titanos-bar-set') savePrefs((p) => (p.barLoad = msg.load === true));
-		else if (msg.type === 'titanos-phone-dock-set') {
+		else if (msg.type === 'titanos-phone-dock-size') {
+			savePrefs((p) => (p.phone.dock.size = phoneDockSize(msg.size)));
+			sendBarToWindows(desktop.prefs.barLoad);
+		} else if (msg.type === 'titanos-phone-dock-set') {
 			savePrefs(
 				(p) => (p.phone = { ...p.phone, dock: { ...p.phone.dock, show: msg.show === true } }),
 			);

@@ -297,6 +297,7 @@ export class FilesState {
 	pathInput = $state('');
 	pathMessage = $state('');
 	mobileSearch = $state(false);
+	choosingFiles = $state(false);
 	navBar = $state<ReturnType<typeof NavBar>>();
 
 	captureLocation = (): Location => {
@@ -340,6 +341,8 @@ export class FilesState {
 		if (this.rootId !== id) this.usb.unlockedRoot = '';
 		this.rootId = id;
 		this.dir = path;
+		this.choosingFiles = false;
+		this.prefs.mobile.success = '';
 		this.prefs.applyFolderView();
 		this.search = restore?.search ?? '';
 		this.anchor = '';

@@ -329,6 +329,13 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/appearance',
+		k: 'phone.nord.size',
+		kind: 'row',
+		tab: 'dock',
+		in: ['phone.settings.title'],
+	},
+	{
+		p: '/settings/appearance',
 		k: 'loginPick.title',
 		kind: 'group',
 		tab: 'login',

@@ -16,13 +16,33 @@
 	// Craft apps whose web version does not start yet (PLAN 75-9: visible,
 	// installing locked). PhotoCraft: storytold's web zip lacks a file the
 	// app loads (docs/WEBAPPS.md); it comes into the catalog once it starts.
+	let {
+		onlyInstalled = false,
+		query = '',
+		include = true,
+	}: { onlyInstalled?: boolean; query?: string; include?: boolean } = $props();
+	const matches = (name: string) =>
+		name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
 	const NOT_YET: { id: string; name: string; why: MessageKey }[] = [
 		{ id: 'photocraft', name: 'PhotoCraft', why: 'webapps.center.photocraftWhy' },
 	];
-	const notYet = $derived(NOT_YET.filter((n) => !webapps.apps.some((a) => a.id === n.id)));
+	const notYet = $derived(
+		NOT_YET.filter(
+			(n) =>
+				include && !onlyInstalled && matches(n.name) && !webapps.apps.some((a) => a.id === n.id),
+		),
+	);
 	// Originals with our own build as successor (WordCraft → T-Word) are no
 	// longer offered; an installed one stays listed until it is replaced.
-	const shown = $derived(webapps.apps.filter((a) => !a.successor || a.installed));
+	const shown = $derived(
+		webapps.apps.filter(
+			(a) =>
+				include &&
+				(!a.successor || a.installed) &&
+				(!onlyInstalled || a.installed) &&
+				matches(a.name),
+		),
+	);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	let busy = $state('');
 	let error = $state('');
@@ -149,7 +169,7 @@
 	}
 </script>
 
-{#if webapps.loaded && !webapps.unavailable && webapps.apps.length}
+{#if webapps.loaded && !webapps.unavailable && webapps.apps.length && (shown.length || notYet.length)}
 	<!-- PLAN 78-5: no tile around the programs: a plain heading, where they
 	     are stored as a row, the programs themselves stay cards. -->
 	<div class="browser-apps">

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import FolderViewSettings from '../../files/FolderViewSettings.svelte';
+	import { MobileViews } from '../../files/mobile-views.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { poll } from '#lib/poll.ts';
 	import { api } from '#lib/api.ts';
@@ -17,6 +20,12 @@
 		type IndexSettings,
 		type IndexStatus,
 	} from '#lib/file-index.ts';
+
+	const views = new MobileViews();
+	const onPhone = $derived(phoneView());
+	$effect(() => {
+		if (onPhone) void views.load();
+	});
 
 	type Answer = {
 		status: IndexStatus;
@@ -106,15 +115,19 @@
 	}
 </script>
 
-<PageHead title={t('fileIndex.title')}>
-	<p class="muted">{t('fileIndex.intro')}</p>
-</PageHead>
-<!-- PLAN 66: per account, also for accounts that do not manage the index. -->
+{#if onPhone}
+	<PageHead title={t('files.mobile.settings')} />
+	<FolderViewSettings {views} />
+{:else}
+	<PageHead title={t('fileIndex.title')}><p class="muted">{t('fileIndex.intro')}</p></PageHead>
+{/if}
 <StandardApps />
 {#if loadError}<p class="notice-error" role="alert">
 		{loadError} <button class="btn" onclick={refresh}>{t('common.retry')}</button>
 	</p>{/if}
 {#if answer}
+	{#if onPhone}<h2>{t('fileIndex.title')}</h2>
+		<p class="muted">{t('fileIndex.intro')}</p>{/if}
 	{@const off = !draft.enabled || busy}
 	<!-- PLAN 78-1: the settings of the index are rows of one form with one
 	     Save, as before; what is indexed opens inside its row. -->

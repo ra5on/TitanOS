@@ -177,5 +177,12 @@
 	"vms.ov.state": "Zustand",
 	"vms.ov.uptime": "Laufzeit",
 	"vms.tab.hardware": "Hardware",
-	"vms.tab.schedule": "Zeitplan"
+	"vms.tab.schedule": "Zeitplan",
+	"nord.notices.yesterday": "Gestern",
+	"nord.notices.unread": "Ungelesen",
+	"nord.notices.emptyUnread": "Alle Meldungen gelesen.",
+	"nord.apps.catalog": "Katalog",
+	"nord.apps.noContainers": "Keine passende Docker-App.",
+	"nord.docker.resources": "Ressourcen",
+	"nord.docker.manage": "Verwaltung"
 }

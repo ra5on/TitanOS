@@ -105,7 +105,22 @@ async function phone(width, height, { cluster = true, node = "" } = {}) {
     return route.fallback();
   });
   await page.goto(base + "/");
-  await page.locator(".home").waitFor({ timeout: 15000 });
+  await page.locator("[data-nord-home]").waitFor({ timeout: 15000 });
+  const menu = await page.locator(".nord-header [data-menu-button]").boundingBox();
+  const tools = await page.locator(".nord-header .tools").boundingBox();
+  assert.ok(menu.x < 24 && menu.height >= 44, "Nordlicht menu is a full touch target at the left");
+  assert.ok(Math.abs(menu.width - tools.width) <= 1, "the two header controls balance the centered brand");
+  if (cluster) {
+    await page.locator(".hero .trigger").tap();
+    const menu = page.locator(".hero [role=menu]");
+    await menu.getByRole("menuitemradio", {name:/thor/}).waitFor();
+    assert.equal(await menu.getByRole("menuitemradio", {name:/loki/}).isDisabled(), true);
+    const box = await menu.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width, "the cluster menu fits the home screen");
+    await page.keyboard.press("Escape");
+  }
+  await page.getByRole("button", { name: "Seiten und Widgets" }).tap();
+  await page.locator(".home").waitFor();
   await page.waitForTimeout(900);
   return made;
 }
@@ -163,8 +178,8 @@ for (const [width, height] of [
   const sb = await page.locator(".home .search").boundingBox();
   assert.equal((await menuButton.innerText()).trim(), "Menü");
   assert.ok(
-    mb.x < 24 && mb.height >= 44,
-    "menu button top left, a touch target",
+    mb.x < sb.x && mb.height >= 44,
+    "menu button precedes the page search and is a full touch target",
   );
   assert.ok(sb.x >= mb.x + mb.width, "search right of the menu button");
   assert.ok(sb.width >= 90, `search wide enough to type (${sb.width})`);
@@ -299,7 +314,7 @@ for (const [width, height] of [
   await noSideways(page, width, "program page");
   await page.screenshot({ path: `${out}/04-programm-${label}.png` });
   await bar.locator("button").first().tap();
-  await page.locator(".home .search").waitFor();
+  await page.locator("[data-nord-home]").waitFor();
   await ctx.close();
 }
 
@@ -373,8 +388,8 @@ for (const [width, height] of [
     .locator("a.srow", { hasText: "Benachrichtigungen" })
     .first();
   await tile.waitFor({ timeout: 15000 });
-  const column = async (what) => {
-    const boxes = await page.locator("a.srow").evaluateAll((items) =>
+  const column = async (what, container) => {
+    const boxes = await page.locator(container).locator("a.srow").evaluateAll((items) =>
       items.map((li) => {
         const r = li.getBoundingClientRect();
         return { l: Math.round(r.left), r: r.right };
@@ -391,7 +406,12 @@ for (const [width, height] of [
   };
   // The phone has no side bar: it keeps the search, then the areas.
   await page.getByRole("searchbox", { name: "Einstellungen suchen" }).waitFor();
-  assert.ok((await column("areas")) >= 5, "the areas as rows");
+  const shortcuts = await page.locator("#settings-tasks a.srow").evaluateAll((links) =>
+    links.map((link) => link.getBoundingClientRect().toJSON()),
+  );
+  assert.equal(new Set(shortcuts.map((box) => Math.round(box.left))).size, 2, "quick tasks in two columns");
+  assert.ok(shortcuts.every((box) => box.left >= 0 && box.right <= 391), "all quick tasks fit");
+  assert.ok((await column("areas", "#settings-home-areas")) >= 5, "the areas as rows");
   // The overview cards only where there is room: not on the phone.
   await page.waitForTimeout(400);
   assert.equal(await page.locator(".overview").count(), 0, "no overview cards");
@@ -412,7 +432,7 @@ for (const [width, height] of [
     .tap();
   await page.waitForURL(/[?&]area=network/);
   await page.locator("a.srow", { hasText: "WireGuard" }).first().waitFor();
-  assert.ok((await column("pages of an area")) >= 3, "the area's pages");
+  assert.ok((await column("pages of an area", "#settings-home-group-network")) >= 3, "the area's pages");
   assert.equal(
     await page.locator("a.srow", { hasText: "Benachrichtigungen" }).count(),
     0,

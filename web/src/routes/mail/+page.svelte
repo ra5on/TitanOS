@@ -527,6 +527,9 @@
 			{/if}
 			<MessageView
 				{compact}
+				readerBack={phone
+					? { label: listHeading || t('mail.role.inbox'), href: mailUp(page.url) }
+					: undefined}
 				accountId={messageAccount}
 				folder={messageFolder}
 				uid={place.m}

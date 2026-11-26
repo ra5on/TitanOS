@@ -4,7 +4,7 @@
 	import { apiPath } from '../cluster-node.ts';
 	import Icon from '../components/Icon.svelte';
 	import { i18n, t } from '../i18n/index.svelte.ts';
-	import { dayClock, labelName } from './texts.ts';
+	import { dayClock, detectedName, labelName } from './texts.ts';
 	import type { NvrEvent } from './types.ts';
 
 	let {
@@ -12,12 +12,14 @@
 		camera,
 		href,
 		onopen,
+		detected = false,
 	}: {
 		event: NvrEvent;
 		/** The camera's name. */
 		camera: string;
 		href?: string;
 		onopen?: () => void;
+		detected?: boolean;
 	} = $props();
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const extra = $derived(
@@ -43,8 +45,8 @@
 	>
 	<span class="what">
 		<b
-			>{labelName(event.label)} · {camera}{#if !event.reviewed}<span class="sr-only"
-					>, {t('nvr.events.unseen')}</span
+			>{detected ? detectedName(event.label) : labelName(event.label)} · {camera}{#if !event.reviewed}<span
+					class="sr-only">, {t('nvr.events.unseen')}</span
 				>{/if}</b
 		>
 		<small>{dayClock(event.start, locale)}{extra ? ` · ${extra}` : ''}</small>

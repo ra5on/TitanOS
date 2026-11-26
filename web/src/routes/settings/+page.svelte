@@ -164,7 +164,11 @@
 	<SettingsOverview {admin} />
 {:else}
 	<PageHead
-		title={openGroup && !searching ? t(settingsGroupLabel(openGroup)) : t('settingshome.all')}
+		title={openGroup && !searching
+			? t(settingsGroupLabel(openGroup))
+			: drill
+				? t('nav.settings')
+				: t('settingshome.all')}
 	/>
 
 	<div class="home">
@@ -196,13 +200,18 @@
 				{/each}
 			{:else}
 				<SettingsShortcuts {admin} />
-				<SettingGroup id="{prefix}-areas">
+				<SettingGroup title={t('settingshome.all')} id="{prefix}-areas">
 					{#each areas as area (area.group)}
 						<SettingRow
 							href={area.pages.length > 1 ? `/settings?area=${area.group}` : area.href}
 							icon={settingsGroupIcons[area.group]}
 							title={t(area.label)}
-							desc={area.pages.map((p) => t(p.label)).join(' · ')}
+							desc={area.pages.length > 1
+								? area.pages
+										.slice(0, 3)
+										.map((p) => t(p.label))
+										.join(' · ')
+								: undefined}
 						/>
 					{/each}
 				</SettingGroup>

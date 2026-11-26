@@ -658,11 +658,8 @@ try {
       .first()
       .click();
     await page.locator(".row").nth(1).click();
-    // 1.13: on the phone the answers are a menu of the bar at the bottom.
-    await page
-      .getByRole("toolbar", { name: "Aktionen für diese Nachricht" })
-      .getByRole("button", { name: "Antworten", exact: true })
-      .click();
+    // Forward is in the reader's actions, beside the large folder link.
+    await page.locator(".reader-nav").getByRole("button", {name:"Weitere Aktionen"}).click();
     await page.getByRole("menuitem", { name: "Weiterleiten" }).click();
     await page.waitForURL(/\/mail\/compose\?/);
     await page.locator("#mail-subject").waitFor();

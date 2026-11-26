@@ -12,6 +12,7 @@
 	import FolderPane from './FolderPane.svelte';
 	import { fileKeys } from './keyboard.ts';
 	import MobileActions from './MobileActions.svelte';
+	import MobileFolderBar from './MobileFolderBar.svelte';
 	import MobileLocation from './MobileLocation.svelte';
 	import PlacesSide from './PlacesSide.svelte';
 
@@ -41,16 +42,22 @@
 		text={p.canAdminister ? t('files.noRootsAdmin') : undefined}
 	/>
 {:else if p.roots}
-	<div class="layout" class:windowed={inWindow} class:folded={inWindow && p.sideFolded}>
-		<MobileLocation
-			root={p.root}
-			dir={p.dir}
-			bind:placesOpen={p.placesOpen}
-			canBack={!!p.steps.back.length}
-			onback={() => p.historyGo('back')}
-		/>
+	<div
+		class="layout"
+		class:phone={p.phone}
+		class:windowed={inWindow}
+		class:folded={inWindow && p.sideFolded}
+	>
+		{#if p.phone}<MobileFolderBar {p} />{:else}<MobileLocation
+				root={p.root}
+				dir={p.dir}
+				bind:placesOpen={p.placesOpen}
+				canBack={!!p.steps.back.length}
+				onback={() => p.historyGo('back')}
+			/>
+		{/if}
 		<PlacesSide {p} roots={p.roots} />
-		{#if !p.trash}
+		{#if !p.phone && !p.trash}
 			<MobileActions
 				root={p.root}
 				dir={p.dir}
@@ -120,6 +127,7 @@
 {/if}
 
 <FileMenus
+	mobileViews={p.phone ? p.prefs.mobile : undefined}
 	menu={p.menu}
 	background={p.backgroundMenu}
 	root={p.root}
@@ -142,6 +150,18 @@
 <FileOverlays {p} />
 
 <style>
+	.layout.phone {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.65rem;
+	}
+	.layout.phone :global(.places:not(.open)) {
+		display: none;
+	}
+	.layout.phone :global(.places.open) {
+		display: flex;
+		position: static;
+		max-height: none;
+	}
 	.layout {
 		display: grid;
 		grid-template-columns: 240px minmax(0, 1fr);

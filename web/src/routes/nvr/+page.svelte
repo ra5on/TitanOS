@@ -29,9 +29,14 @@
 		type Tile,
 	} from '#lib/nvr/layout.ts';
 	import LiveTile from '#lib/nvr/LiveTile.svelte';
+	import CameraPreview from '#lib/nvr/CameraPreview.svelte';
+	import type { EventList, NvrEvent } from '#lib/nvr/types.ts';
+	import { api } from '#lib/api.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { changeNvrPrefs, connectNvrPrefs, nvrLink } from '#lib/nvr/nvr-link.svelte.ts';
 	import { cameraName, mayLive, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
 
+	const phone = $derived(phoneView());
 	const admin = $derived(nvrAdmin());
 	const running = $derived(nvr.status?.state === 'running');
 	const cameras = $derived(nvr.cameras.filter(mayLive));
@@ -54,7 +59,7 @@
 		return () => observer.disconnect();
 	});
 	/** Below this width the tiles stand below each other (phone). */
-	const stacked = $derived(width > 0 && width < 560);
+	const stacked = $derived(phone || (width > 0 && width < 560));
 	const cell = $derived(width / LIVE_COLS);
 	const GAP = 6;
 
@@ -68,7 +73,7 @@
 	let active = $state<{ id: string; w: number; h: number } | null>(null);
 
 	function arrange() {
-		solo = '';
+		closeSolo();
 		arranging = true;
 		draft = tilesFor(prefs, ids).map((tile) => ({ ...tile }));
 		order = phoneOrderFor(prefs, ids);
@@ -164,9 +169,13 @@
 	let solo = $state('');
 	/** The large camera opens with its pad for moving it. */
 	let soloPtz = $state(false);
-	function showSolo(id: string, ptz = false) {
+	function showSolo(id: string, ptz = false, replace = false) {
 		soloPtz = ptz;
 		solo = id;
+		if (phone) {
+			linkedCamera = id;
+			void goto(`/nvr?camera=${encodeURIComponent(id)}`, { replace, reset: false });
+		}
 	}
 	// A link from the desktop's widget or an event: /nvr?camera=<id>. It
 	// opens the camera large once per link: byId is new with every poll of
@@ -175,6 +184,7 @@
 	$effect(() => {
 		const wanted = page.url.searchParams.get('camera');
 		if (!wanted) {
+			if (phone && linkedCamera) solo = '';
 			linkedCamera = '';
 			return;
 		}
@@ -234,7 +244,7 @@
 		const at = list.indexOf(solo);
 		if (at < 0 || list.length < 2) return;
 		soloPtz = false;
-		solo = list[(at + (dx < 0 ? 1 : -1) + list.length) % list.length];
+		showSolo(list[(at + (dx < 0 ? 1 : -1) + list.length) % list.length], false, true);
 	}
 
 	const OPTIONS: { key: 'events' | 'names' | 'marks' | 'recDot' | 'hideBar'; label: MessageKey }[] =
@@ -245,7 +255,38 @@
 			{ key: 'recDot', label: 'nvr.view.recDot' },
 			{ key: 'hideBar', label: 'nvr.view.hideBar' },
 		];
-	const showEvents = $derived(prefs.events && anyRecordings && !arranging);
+	const eventOption = $derived(phone ? 'phoneEvents' : 'events');
+	const showEvents = $derived(prefs[eventOption] && anyRecordings && !arranging);
+	const selectedCamera = $derived(byId.get(solo));
+	const showCameraEvents = $derived(!!(phone && selectedCamera && mayRecordings(selectedCamera)));
+	let cameraHistory = $state<NvrEvent[]>([]);
+	let historyState = $state<'loading' | 'ready' | 'error'>('loading');
+	$effect(() => {
+		const id = solo;
+		cameraHistory = [];
+		historyState = 'loading';
+		if (!showCameraEvents || !id) return;
+		const controller = new AbortController();
+		const { signal } = controller;
+		api.get<EventList>(`/nvr/events?camera=${encodeURIComponent(id)}&limit=8`, signal).then(
+			(list) => {
+				if (!signal.aborted) {
+					cameraHistory = (list.events ?? []).filter((e) => e.camera === id);
+					historyState = 'ready';
+				}
+			},
+			() => {
+				if (!signal.aborted) historyState = 'error';
+			},
+		);
+		return () => controller.abort();
+	});
+	const visibleEvents = $derived.by(() => {
+		if (!showCameraEvents) return feed.events.slice(0, 8);
+		const byEvent = new Map(cameraHistory.map((e) => [e.id, e]));
+		for (const e of feed.events) if (e.camera === solo) byEvent.set(e.id, e);
+		return [...byEvent.values()].sort((a, b) => b.start - a.start).slice(0, 8);
+	});
 	const nameOf = cameraName;
 </script>
 
@@ -270,7 +311,7 @@
 		/>
 	{/if}
 {:else}
-	<div class="live" class:full class:hide-bar={full && prefs.hideBar} bind:this={root}>
+	<div class="live" class:phone class:full class:hide-bar={full && prefs.hideBar} bind:this={root}>
 		<div class="live-bar" role="toolbar" aria-label={t('nvr.live.toolbar')}>
 			{#if arranging}
 				<span class="hint">{stacked ? t('nvr.arrange.hintPhone') : t('nvr.arrange.hint')}</span>
@@ -280,57 +321,103 @@
 					><Icon name="check" size={15} />{t('nvr.arrange.done')}</button
 				>
 			{:else}
+				{#if phone}
+					{#if selectedCamera}
+						<button type="button" class="btn camera-back" onclick={closeSolo}
+							><Icon name="chevronLeft" size={19} />{t('nvr.menu.cameras')}</button
+						>
+					{:else}<h2>{t('nvr.menu.cameras')}</h2>{/if}
+				{/if}
 				<span class="spacer"></span>
-				{#if anyRecordings}
+				{#if anyRecordings && (!phone || !selectedCamera)}
 					<button
 						type="button"
 						class="btn"
-						class:on={prefs.events}
-						aria-pressed={prefs.events}
-						onclick={() => changeNvrPrefs((p) => (p.events = !p.events))}
+						class:on={prefs[eventOption]}
+						aria-pressed={prefs[eventOption]}
+						onclick={() => changeNvrPrefs((p) => (p[eventOption] = !p[eventOption]))}
 						><Icon name="clock" size={15} />{t('nvr.menu.events')}</button
 					>
 				{/if}
-				<button type="button" class="btn" onclick={arrange}
-					><Icon name="edit" size={15} />{t('nvr.arrange.start')}</button
-				>
-				{#if typeof document !== 'undefined' && document.fullscreenEnabled}
-					<button type="button" class="btn" aria-pressed={full} onclick={fullscreen}
-						><Icon name="maximize" size={15} />{full
-							? t('nvr.live.fullOff')
-							: t('nvr.live.full')}</button
+				{#if !phone}
+					<button type="button" class="btn" onclick={arrange}
+						><Icon name="edit" size={15} />{t('nvr.arrange.start')}</button
 					>
+					{#if typeof document !== 'undefined' && document.fullscreenEnabled}
+						<button type="button" class="btn" aria-pressed={full} onclick={fullscreen}
+							><Icon name="maximize" size={15} />{full
+								? t('nvr.live.fullOff')
+								: t('nvr.live.full')}</button
+						>
+					{/if}
 				{/if}
 				<Dropdown
 					label={t('nvr.view.title')}
-					text={t('nvr.view.title')}
-					icon="eye"
+					text={phone ? undefined : t('nvr.view.title')}
+					icon={phone ? 'more' : 'eye'}
 					kind="panel"
 					align="right"
 				>
-					<div class="view-menu">
-						{#each OPTIONS as option (option.key)}
-							{#if option.key !== 'events' || anyRecordings}
-								<label class="view-row">
-									<span>{t(option.label)}</span>
-									<input
-										type="checkbox"
-										role="switch"
-										class="switch"
-										checked={prefs[option.key]}
-										onchange={(e) => {
-											const on = e.currentTarget.checked;
-											changeNvrPrefs((p) => (p[option.key] = on));
-										}}
-									/>
-								</label>
+					{#snippet children(close)}
+						<div class="view-menu">
+							{#if phone}
+								<button
+									type="button"
+									class="view-reset"
+									onclick={() => {
+										close();
+										arrange();
+									}}>{t('nvr.arrange.start')}</button
+								>
+								{#if typeof document !== 'undefined' && document.fullscreenEnabled}
+									<button
+										type="button"
+										class="view-reset"
+										onclick={() => {
+											close();
+											fullscreen();
+										}}>{t(full ? 'nvr.live.fullOff' : 'nvr.live.full')}</button
+									>
+								{/if}
 							{/if}
-						{/each}
-						<button type="button" class="view-reset" onclick={reset}>{t('nvr.view.reset')}</button>
-					</div>
+							{#each OPTIONS as option (option.key)}
+								{@const key = option.key === 'events' ? eventOption : option.key}
+								{#if option.key !== 'events' || anyRecordings}
+									<label class="view-row">
+										<span>{t(option.label)}</span>
+										<input
+											type="checkbox"
+											role="switch"
+											class="switch"
+											checked={prefs[key]}
+											onchange={(e) => {
+												const on = e.currentTarget.checked;
+												changeNvrPrefs((p) => (p[key] = on));
+											}}
+										/>
+									</label>
+								{/if}
+							{/each}
+							<button type="button" class="view-reset" onclick={reset}>{t('nvr.view.reset')}</button
+							>
+						</div>
+					{/snippet}
 				</Dropdown>
 			{/if}
 		</div>
+		{#if phone && selectedCamera}
+			<div class="camera-detail">
+				<h2>{selectedCamera.name}</h2>
+				{#if mayRecordings(selectedCamera)}
+					<nav class="camera-tabs" aria-label={selectedCamera.name}>
+						<span aria-current="page">{t('nvr.live.picture')}</span>
+						<a href="/nvr/recordings?camera={encodeURIComponent(selectedCamera.id)}"
+							>{t('nvr.menu.recordings')}</a
+						>
+					</nav>
+				{/if}
+			</div>
+		{/if}
 		<div class="body">
 			<div
 				class="wall"
@@ -379,16 +466,27 @@
 						{@const camera = byId.get(id)}
 						{#if camera}
 							<div class="tile row">
-								<LiveTile
-									{camera}
-									{running}
-									{prefs}
-									activity={feed.activity[id]}
-									{arranging}
-									small
-									onsolo={() => showSolo(id)}
-									onptz={() => showSolo(id, true)}
-								/>
+								{#if phone}
+									<CameraPreview
+										{camera}
+										{running}
+										{prefs}
+										objects={feed.activity[id]?.objects}
+										{arranging}
+										onopen={() => showSolo(id)}
+									/>
+								{:else}
+									<LiveTile
+										{camera}
+										{running}
+										{prefs}
+										activity={feed.activity[id]}
+										{arranging}
+										small
+										onsolo={() => showSolo(id)}
+										onptz={() => showSolo(id, true)}
+									/>
+								{/if}
 								{#if arranging}
 									<div class="reorder">
 										<button
@@ -454,26 +552,34 @@
 					{/each}
 				{/if}
 			</div>
-			{#if showEvents}
+			{#if (!phone && showEvents) || (phone && !arranging && (showCameraEvents || (!solo && showEvents)))}
 				<aside class="events" aria-label={t('nvr.menu.events')}>
 					<h2>{t('nvr.menu.events')}</h2>
-					{#if !feed.available}
+					{#if showCameraEvents && historyState === 'loading' && !visibleEvents.length}
+						<p class="muted" role="status">{t('common.loading')}</p>
+					{:else if showCameraEvents ? historyState === 'error' && !visibleEvents.length : !feed.available}
 						<p class="muted">{t('nvr.events.unavailable')}</p>
-					{:else if feed.events.length === 0}
+					{:else if visibleEvents.length === 0}
 						<p class="muted">{t('nvr.events.none')}</p>
 					{:else}
 						<ul>
-							{#each feed.events.slice(0, 8) as event (event.id)}
+							{#each visibleEvents as event (event.id)}
 								<li>
 									<EventCard
 										{event}
 										camera={nameOf(event.camera)}
-										href="/nvr/events?event={encodeURIComponent(event.id)}"
+										href={`/nvr/events?event=${encodeURIComponent(event.id)}${showCameraEvents ? '&from=live&camera=' + encodeURIComponent(solo) : ''}`}
+										detected={phone}
 									/>
 								</li>
 							{/each}
 						</ul>
-						<a class="all" href="/nvr/events">{t('nvr.events.all')}</a>
+						<a
+							class="all"
+							href={showCameraEvents
+								? `/nvr/events?camera=${encodeURIComponent(solo)}`
+								: '/nvr/events'}>{t('nvr.events.all')}</a
+						>
 					{/if}
 				</aside>
 			{/if}
@@ -698,5 +804,56 @@
 			flex: none;
 			width: 100%;
 		}
+	}
+
+	.phone .live-bar h2,
+	.camera-detail h2 {
+		margin: 0;
+		font-size: var(--text-xl);
+	}
+	.phone .wall.stacked:not(.has-solo) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.phone .tile.row {
+		aspect-ratio: auto;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.phone .tile.solo {
+		min-height: 0;
+		height: auto;
+		aspect-ratio: 16/9;
+		border-radius: 15px;
+		overflow: hidden;
+	}
+	.phone .tile.solo:has(:global(.ptz-pop)) {
+		min-height: 300px;
+	}
+	.phone .reorder {
+		position: static;
+		justify-content: center;
+		margin-block: 3px;
+	}
+	.phone .reorder .btn,
+	.phone .camera-back,
+	.phone .live-bar :global(.dropdown > .btn) {
+		min-height: 44px;
+		min-width: 44px;
+	}
+	.camera-detail {
+		display: grid;
+		gap: 9px;
+	}
+	.phone .events {
+		margin-top: 6px;
+	}
+	.phone .events .all {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		align-self: flex-start;
 	}
 </style>

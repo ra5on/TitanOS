@@ -5,6 +5,7 @@
 	// 88: "seen" is per account; administrators keep an event for good
 	// ("Behalten": the NAS saves its video) and give it back.
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -16,17 +17,20 @@
 	import Confirm from '#lib/nvr/Confirm.svelte';
 	import EventCard from '#lib/nvr/EventCard.svelte';
 	import { cameraName, mayRecordings, nvr, nvrAdmin } from '#lib/nvr/nvr.svelte.ts';
-	import { clock, dayClock, labelName, OBJECT_GROUPS } from '#lib/nvr/texts.ts';
+	import { clock, dayClock, detectedName, labelName, OBJECT_GROUPS } from '#lib/nvr/texts.ts';
 	import type { Camera, EventList, NvrEvent } from '#lib/nvr/types.ts';
-	import { attachVod, autoplay } from '#lib/nvr/vod.ts';
-	import { untrack } from 'svelte';
+	import EventPlayback from '#lib/nvr/EventPlayback.svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
+	import { immersivePhone } from '#lib/desktop/immersive-phone.svelte.ts';
+	import PhoneDockHandle from '#lib/desktop/PhoneDockHandle.svelte';
 
 	const locale = $derived(i18n.locale === 'de' ? 'de-DE' : 'en-GB');
 	const admin = $derived(nvrAdmin());
 	const cameras = $derived(nvr.cameras.filter(mayRecordings));
 	const nameOf = cameraName;
 
-	let camera = $state('');
+	const phone = $derived(phoneView());
+	let camera = $state(page.url.searchParams.get('camera') ?? '');
 	let kind = $state<'' | 'persons' | 'vehicles' | 'animals'>('');
 	let span = $state<'day' | 'week' | 'all'>('week');
 	let view = $state<'grid' | 'list'>('grid');
@@ -99,9 +103,6 @@
 	function show(event: NvrEvent) {
 		open = event;
 		detailError = '';
-		// A failure of the event before must not keep the next one from playing.
-		recordingFailed = false;
-		playMuted = false;
 		if (!event.reviewed)
 			api
 				.post<NvrEvent>(`/nvr/events/${encodeURIComponent(event.id)}/reviewed`, { reviewed: true })
@@ -113,66 +114,37 @@
 				);
 	}
 	// A link from the live view or a notification: /nvr/events?event=<id>.
-	let linked = '';
 	$effect(() => {
 		const id = page.url.searchParams.get('event');
-		if (!id || id === linked) return;
-		linked = id;
-		api.get<NvrEvent>(`/nvr/events/${encodeURIComponent(id)}`).then(show, (err) => {
-			error = apiErrorText(err);
-		});
+		if (!id) return;
+		const controller = new AbortController();
+		const { signal } = controller;
+		api.get<NvrEvent>(`/nvr/events/${encodeURIComponent(id)}`, signal).then(
+			(e) => {
+				if (!signal.aborted) show(e);
+			},
+			(err) => {
+				if (!signal.aborted) error = apiErrorText(err);
+			},
+		);
+		return () => controller.abort();
 	});
 	const eventBase = $derived(open ? `/nvr/events/${encodeURIComponent(open.id)}` : '');
 
-	// PLAN 82-5: an event opened (a tap, a push) plays at once in this
-	// dialog, with sound where the browser allows it. It always plays the
-	// recording around it (HLS, from five seconds before to five seconds
-	// after; a running event up to now), never clip.mp4: Frigate streams the
-	// clip from ffmpeg without a length and ignores Range, so iPhones do not
-	// play it and seeking fails elsewhere (Frigate itself says to use HLS on
-	// iOS). The clip stays for "Ausschnitt herunterladen".
-	let player = $state<HTMLVideoElement>();
-	let playMuted = $state(false);
-	let fromRecording = $state(false);
-	let recordingFailed = $state(false);
-	let stopRecording: (() => void) | null = null;
-	$effect(() => {
-		const e = open;
-		const el = player;
-		if (!e || !el) return;
-		untrack(() => void play(e, el));
-		return () => {
-			stopRecording?.();
-			stopRecording = null;
-		};
-	});
-	async function play(e: NvrEvent, el: HTMLVideoElement) {
-		playMuted = false;
-		fromRecording = !e.hasClip;
-		recordingFailed = false;
-		const start = async () => {
-			playMuted = await autoplay(el);
-		};
-		const from = Math.floor(e.start) - 5;
-		const to = Math.max(from + 30, Math.ceil(e.end ?? Date.now() / 1000) + 5);
-		const src = apiPath(
-			`/nvr/cameras/${encodeURIComponent(e.camera)}/vod/${from}/${to}/master.m3u8`,
+	function closeEvent() {
+		open = null;
+		removing = false;
+		const url = new URL(page.url.href);
+		if (!url.searchParams.has('event')) return;
+		const source = url.searchParams.get('from');
+		const id = url.searchParams.get('camera');
+		url.searchParams.delete('event');
+		url.searchParams.delete('from');
+		void goto(
+			source === 'live' && id ? `/nvr?camera=${encodeURIComponent(id)}` : url.pathname + url.search,
+			{ replace: true, reset: false },
 		);
-		el.addEventListener('error', () => (recordingFailed = true), { once: true });
-		const stop = await attachVod(
-			el,
-			src,
-			() => void start(),
-			() => (recordingFailed = true),
-		);
-		if (open?.id === e.id) stopRecording = stop;
-		else stop();
 	}
-
-	// A kept event whose recording is gone plays the video the NAS saved.
-	const keptSrc = $derived(
-		open?.keptExport ? apiPath(`/nvr/exports/${encodeURIComponent(open.keptExport)}/download`) : '',
-	);
 
 	// ---- Keep (administrators, PLAN 88) ----
 	/** Whether an event's video is complete (the NAS waits its seconds after and 20 s). */
@@ -304,7 +276,14 @@
 	{:else if view === 'list'}
 		<ul class="list">
 			{#each events as event (event.id)}
-				<li><EventCard {event} camera={nameOf(event.camera)} onopen={() => show(event)} /></li>
+				<li>
+					<EventCard
+						{event}
+						detected={phone}
+						camera={nameOf(event.camera)}
+						onopen={() => show(event)}
+					/>
+				</li>
 			{/each}
 		</ul>
 	{:else}
@@ -325,9 +304,9 @@
 							/></span
 						>
 						<b
-							>{labelName(event.label)} · {nameOf(event.camera)}{#if !event.reviewed}<span
-									class="sr-only">, {t('nvr.events.unseen')}</span
-								>{/if}</b
+							>{phone ? detectedName(event.label) : labelName(event.label)} · {nameOf(
+								event.camera,
+							)}{#if !event.reviewed}<span class="sr-only">, {t('nvr.events.unseen')}</span>{/if}</b
 						>
 						<small
 							>{dayClock(event.start, locale)}{event.subLabel
@@ -356,40 +335,11 @@
 	{@const e = open}
 	<Dialog
 		wide
-		title="{labelName(e.label)} · {nameOf(e.camera)}"
-		onclose={() => ((open = null), (removing = false))}
+		title="{phone ? detectedName(e.label) : labelName(e.label)} · {nameOf(e.camera)}"
+		onclose={closeEvent}
 	>
 		<div class="detail">
-			{#if !recordingFailed}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video
-					bind:this={player}
-					controls
-					playsinline
-					preload="auto"
-					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
-				></video>
-			{:else if keptSrc}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video
-					src={keptSrc}
-					controls
-					playsinline
-					preload="auto"
-					poster={e.hasSnapshot ? apiPath(`${eventBase}/snapshot.jpg`) : undefined}
-				></video>
-				<p class="muted play-note">{t('nvr.events.keptVideo')}</p>
-			{:else if e.hasSnapshot}
-				<img src={apiPath(`${eventBase}/snapshot.jpg`)} alt={t('nvr.events.snapshot')} />
-			{:else}
-				<p class="muted">{t('nvr.events.noMedia')}</p>
-			{/if}
-			{#if fromRecording && !recordingFailed}<p class="muted play-note">
-					{t('nvr.events.fromRecording')}
-				</p>{/if}
-			{#if playMuted}<p class="muted play-note" role="status">
-					{t('nvr.events.autoplayMuted')}
-				</p>{/if}
+			{#key e.id}<EventPlayback event={e} {phone} />{/key}
 			<dl>
 				<div>
 					<dt>{t('nvr.events.when')}</dt>
@@ -441,8 +391,16 @@
 			{#if admin && !e.kept && !settled(e)}<p class="muted">
 					{t('nvr.events.keepRunning')}
 				</p>{/if}
+			{#if phone}
+				<div class="playback-foot" data-nordlicht-immersive="nvr" use:immersivePhone>
+					<button type="button" class="btn" onclick={closeEvent}>{t('common.close')}</button>
+					<PhoneDockHandle />
+				</div>
+			{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (open = null)}>{t('common.close')}</button>
+				{#if !phone}<button type="button" class="btn" onclick={closeEvent}
+						>{t('common.close')}</button
+					>{/if}
 				{#if admin}
 					{#if e.kept}
 						<button type="button" class="btn" disabled={keepBusy} onclick={() => (unkeeping = true)}
@@ -500,8 +458,20 @@
 		gap: var(--space-2) var(--space-3);
 		min-width: 0;
 	}
-	.play-note {
-		margin: 0;
+	.playback-foot {
+		order: 1;
+		position: sticky;
+		bottom: 0;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 3px 4px;
+		border-top: 1px solid var(--border);
+		background: var(--surface);
+	}
+	.playback-foot .btn {
+		min-height: 44px;
 	}
 	.links {
 		display: flex;
@@ -631,14 +601,6 @@
 		flex-direction: column;
 		gap: var(--space-3);
 		min-width: 0;
-	}
-	.detail video,
-	.detail img {
-		width: 100%;
-		max-height: 60dvh;
-		border-radius: 8px;
-		background: #0b0f14;
-		object-fit: contain;
 	}
 	dl {
 		margin: 0;

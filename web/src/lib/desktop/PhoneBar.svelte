@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
+	import PhoneHeader from './PhoneHeader.svelte';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideFor, appForPath, sideActive } from './apps.ts';
 	import { nvr } from '../nvr/nvr.svelte.ts';
@@ -47,7 +48,12 @@
 		pulled = 0;
 	}
 
-	const app = $derived(appForPath(page.url.pathname));
+	const app = $derived(
+		page.url.pathname === '/notifications' ? undefined : appForPath(page.url.pathname),
+	);
+	const globalHeader = $derived(
+		/^\/(settings|apps|docker|notifications)(\/|$)/.test(page.url.pathname),
+	);
 	const title = $derived(pagePath.value.at(-1)?.label ?? (app ? t(app.label) : ''));
 	// The arrow goes one level up: in the settings from a page to its area,
 	// from an area to the list of areas, and only from there (and from every
@@ -55,10 +61,21 @@
 	const up = $derived.by(() => {
 		const path = page.url.pathname.replace(/\/$/, '');
 		// 1.05: T-Mail in levels – message › list › mailboxes › home screen.
+		if (path === '/notifications') {
+			if (page.url.searchParams.has('id')) return '/notifications';
+			const back = page.state.noticeReturn;
+			return back && back.startsWith('/') && !back.startsWith('//') ? back : '/';
+		}
 		if (path === '/mail' || path.startsWith('/mail/')) return mailUp(page.url);
 		// 1.13: Kontakte in levels – form › contact › list › books and groups › home screen.
 		if (path === '/contacts') return contactsUp(page.url);
-		if (path !== '/settings' && !path.startsWith('/settings/')) return '/';
+		if (
+			path === '/docker' &&
+			(page.url.searchParams.has('group') || page.url.searchParams.has('area'))
+		)
+			return '/docker';
+		if (path !== '/settings' && !path.startsWith('/settings/'))
+			return globalHeader && app && path !== app.href ? app.href : '/';
 		if (path === '/settings') return page.url.searchParams.has('area') ? '/settings' : '/';
 		const group = settingsGroupOf(path);
 		const admin = ['owner', 'admin'].includes(session.data?.user?.role ?? '');
@@ -81,7 +98,7 @@
 	);
 	const groups = $derived(
 		app
-			? menusFor('app:' + app.id, role)
+			? menusFor('app:' + app.id, role, 'phone')
 					.filter((m) => m.id !== 'window' && m.id !== 'help')
 					.map((m) => ({
 						label: m.label,
@@ -119,46 +136,52 @@
 	const node = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : undefined);
 </script>
 
+{#if globalHeader}<PhoneHeader />{/if}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
 	class="phone-bar"
+	class:global-header={globalHeader}
 	ontouchstart={pullStart}
 	ontouchmove={pullMove}
 	ontouchend={pullEnd}
 	ontouchcancel={pullEnd}
 	style:--pulled="{Math.min(pulled, 80)}px"
 >
-	<button
-		type="button"
-		class="back"
-		onclick={() => goto(up)}
-		aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
-		><Icon name="chevronLeft" size={22} /></button
-	>
-	{#if app}<DesktopIcon
+	{#if !globalHeader || up !== '/'}
+		<button
+			type="button"
+			class="back"
+			onclick={() => goto(up, up === '/notifications' ? { state: page.state } : {})}
+			aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
+			><Icon name="chevronLeft" size={22} />{#if globalHeader}<span>{t('files.back')}</span
+				>{/if}</button
+		>
+	{/if}
+	{#if app && !globalHeader}<DesktopIcon
 			glyph={app.glyph}
 			gradient={app.gradient}
 			size={26}
 			name={t(app.label)}
 		/>{/if}
-	<b>{title}</b>
+	{#if !globalHeader}<b>{title}</b>{/if}
 	<span class="space"></span>
 	{#if node}<span
 			class="node mono"
 			title={t('cluster.managing', { name: node.name })}
 			aria-label={t('cluster.managing', { name: node.name })}>{node.name}</span
 		>{/if}
-	<button
-		type="button"
-		class="back bell"
-		data-phone-bell
-		aria-label={unread ? t('phone.bellUnread', { count: unread }) : t('phone.bell')}
-		title={t('phone.bell')}
-		onclick={notices}
-		><Icon name="bell" size={20} />{#if unread}<span class="count"
-				>{unread > 9 ? '9+' : unread}</span
-			>{/if}</button
-	>
+	{#if page.url.pathname !== '/notifications'}
+		<button
+			type="button"
+			class="back bell"
+			data-phone-bell
+			aria-label={unread ? t('phone.bellUnread', { count: unread }) : t('phone.bell')}
+			title={t('phone.bell')}
+			onclick={notices}
+			><Icon name="bell" size={20} />{#if unread}<span class="count"
+					>{unread > 9 ? '9+' : unread}</span
+				>{/if}</button
+		>{/if}
 	{#if items.length > 1 || groups.length}
 		<button
 			type="button"
@@ -231,6 +254,26 @@
 </header>
 
 <style>
+	.phone-bar.global-header {
+		position: relative;
+		top: auto;
+		height: auto;
+		min-height: 44px;
+		padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+		background: transparent;
+		border: 0;
+		color: inherit;
+	}
+	.global-header .back:first-child {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: auto;
+		min-width: 44px;
+		gap: 4px;
+		font: inherit;
+	}
+
 	.phone-bar {
 		position: sticky;
 		top: 0;

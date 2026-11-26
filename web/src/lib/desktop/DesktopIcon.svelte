@@ -67,6 +67,8 @@
 </script>
 
 <script lang="ts">
+	import { phoneView } from './mode.svelte.ts';
+	import { onMount } from 'svelte';
 	import { publicURL } from '#lib/app-links.ts';
 	let {
 		glyph = '',
@@ -83,6 +85,31 @@
 				: publicURL(image)
 			: '',
 	);
+	const art = $derived(
+		phoneView() &&
+			[
+				'files',
+				'docker',
+				'mail',
+				'calendar',
+				'shares',
+				'store',
+				'settings',
+				'storage',
+				'updates',
+			].includes(glyph),
+	);
+	let today = $state(new Date().getDate());
+	onMount(() => {
+		if (!phoneView() || glyph !== 'calendar') return;
+		const update = () => (today = new Date().getDate());
+		const timer = setInterval(update, 60000);
+		document.addEventListener('visibilitychange', update);
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', update);
+		};
+	});
 	const colors = $derived(GRADIENTS[gradient] ?? GRADIENTS.blue);
 	const initials = $derived(
 		name
@@ -95,6 +122,17 @@
 {#if url && failed !== url}
 	<span class="icon app" style:width="{size}px" style:height="{size}px" aria-hidden="true">
 		<img src={url} alt="" referrerpolicy="no-referrer" onerror={() => (failed = url)} />
+	</span>
+{:else if art}
+	<span
+		class="icon artwork"
+		style:width="{size}px"
+		style:height="{size}px"
+		style:background-image={'url("/icons/nordlicht/' + glyph + '.webp")'}
+		aria-hidden="true"
+	>
+		{#if glyph === 'calendar'}<span class="date" style:font-size="{size * 0.44}px">{today}</span
+			>{/if}
 	</span>
 {:else}
 	<span
@@ -125,6 +163,25 @@
 		box-shadow:
 			0 6px 16px rgb(0 0 0 / 0.28),
 			inset 0 1px 0 rgb(255 255 255 / 0.35);
+	}
+	.artwork {
+		position: relative;
+		background-size: cover;
+		background-position: center;
+		box-shadow:
+			inset 0 1px rgb(255 255 255 / 0.17),
+			0 2px 6px rgb(0 0 0 / 0.18);
+	}
+	.date {
+		position: absolute;
+		inset: 39% 8% 13%;
+		display: grid;
+		place-items: center;
+		line-height: 1;
+		color: #141517;
+		font-family: system-ui, sans-serif;
+		font-weight: 750;
+		font-variant-numeric: tabular-nums;
 	}
 	.icon.light {
 		color: #2b3440;

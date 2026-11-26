@@ -1,5 +1,7 @@
 <script lang="ts">
 	// PLAN 66: programs that run directly in the browser, above the Docker catalog.
+	import { tick } from 'svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import BrowserApps from '#lib/webapps/BrowserApps.svelte';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import {
@@ -58,6 +60,12 @@
 	let search = $state('');
 	let category = $state('all');
 	let from = $state('all');
+	const phone = $derived(phoneView());
+	let filtersOpen = $state(false);
+	function showTab(tab: 'catalog' | 'installed' | 'sources') {
+		sourcesOpen = tab === 'sources';
+		onlyInstalled = tab === 'installed';
+	}
 	let sourcesOpen = $state(false);
 	let draft = $state({ url: '', name: '' });
 	let sourceError = $state('');
@@ -177,13 +185,21 @@
 			enabled: () => !busy && !!store,
 		},
 		'appcenter.sources': { run: () => (sourcesOpen = !sourcesOpen), checked: () => sourcesOpen },
-		'appcenter.filter.all': { run: () => (onlyInstalled = false), checked: () => !onlyInstalled },
+		'appcenter.filter.all': { run: () => showTab('catalog'), checked: () => !onlyInstalled },
 		'appcenter.filter.installed': {
-			run: () => (onlyInstalled = true),
+			run: () => showTab('installed'),
 			checked: () => onlyInstalled,
 		},
-		'appcenter.webapps': () =>
-			document.querySelector('.browser-apps')?.scrollIntoView({ behavior: 'smooth' }),
+		'appcenter.webapps': async () => {
+			if (phone) {
+				showTab('catalog');
+				search = '';
+				category = 'all';
+				from = 'all';
+			}
+			await tick();
+			document.querySelector('.browser-apps')?.scrollIntoView({ block: 'start' });
+		},
 		'appcenter.categories': {
 			items: () =>
 				categories.map((key) => ({
@@ -210,21 +226,21 @@
 	});
 </script>
 
-<PageHead title={t('apps.title')}>
-	{#if store}<p class="muted">
+<PageHead title={t(phone ? 'desktop.app.appcenter' : 'apps.title')}>
+	{#if store && !phone}<p class="muted">
 			{t(sources.length === 1 ? 'apps.summaryOne' : 'apps.summary', {
 				apps: apps.length,
 				sources: sources.length,
 			})}
 		</p>{/if}
 	{#snippet actions()}
-		<button
-			type="button"
-			class="btn"
-			aria-expanded={sourcesOpen}
-			onclick={() => (sourcesOpen = !sourcesOpen)}>{t('apps.sources')}</button
-		>
-		<a class="btn" href="/docker#import">{t('apps.import')}</a>
+		{#if !phone}<button
+				type="button"
+				class="btn"
+				aria-expanded={sourcesOpen}
+				onclick={() => (sourcesOpen = !sourcesOpen)}>{t('apps.sources')}</button
+			>
+			<a class="btn" href="/docker#import">{t('apps.import')}</a>{/if}
 	{/snippet}
 </PageHead>
 
@@ -240,7 +256,19 @@
 	</p>
 {/if}
 
-<BrowserApps />
+{#if phone}
+	<div class="nord-segments" role="group" aria-label={t('apps.title')}>
+		<button aria-pressed={!sourcesOpen && !onlyInstalled} onclick={() => showTab('catalog')}
+			>{t('nord.apps.catalog')}</button
+		>
+		<button aria-pressed={!sourcesOpen && onlyInstalled} onclick={() => showTab('installed')}
+			>{t('apps.installed')}</button
+		>
+		<button aria-pressed={sourcesOpen} onclick={() => showTab('sources')}
+			>{t('plugins.sources')}</button
+		>
+	</div>
+{:else}<BrowserApps />{/if}
 
 {#if sourcesOpen && store}
 	<!-- PLAN 78-5: the sources are settings: a plain heading, each source a
@@ -346,8 +374,8 @@
 	</form>
 {/if}
 
-{#if store}
-	<div class="layout">
+{#if store && (!phone || !sourcesOpen)}
+	<div class="layout" class:mobile-catalog={phone}>
 		<div class="catalog">
 			<div class="find">
 				<input
@@ -357,7 +385,13 @@
 					placeholder={t('apps.search')}
 					aria-label={t('apps.search')}
 				/>
-				{#if sources.length > 1}
+				{#if phone}<button
+						class="btn filter-btn"
+						aria-label={t('apps.categories')}
+						aria-expanded={filtersOpen}
+						onclick={() => (filtersOpen = !filtersOpen)}><Icon name="filter" size={19} /></button
+					>{/if}
+				{#if sources.length > 1 && (!phone || filtersOpen)}
 					<select class="field from" bind:value={from} aria-label={t('apps.fromSource')}>
 						<option value="all">{t('apps.allSources')}</option>
 						{#each sources as source (source.id)}<option value={source.id}
@@ -368,13 +402,19 @@
 				<button
 					type="button"
 					class="toggle"
+					hidden={phone}
 					aria-pressed={onlyInstalled}
 					onclick={() => (onlyInstalled = !onlyInstalled)}
 					>{t('apps.filterInstalled')} <span class="num">{installedCount}</span></button
 				>
-				<span class="muted shown">{t('apps.shown', { count: visible.length })}</span>
+				<span class="muted shown" hidden={phone}>{t('apps.shown', { count: visible.length })}</span>
 			</div>
-			<div class="categories" role="group" aria-label={t('apps.categories')}>
+			<div
+				class="categories"
+				hidden={phone && !filtersOpen}
+				role="group"
+				aria-label={t('apps.categories')}
+			>
 				{#each categories as key (key)}
 					<button type="button" aria-pressed={category === key} onclick={() => (category = key)}
 						>{categoryLabel(key)} <span class="num">{categoryCounts[key] ?? 0}</span></button
@@ -385,7 +425,18 @@
 				{#each visible.slice(0, limit) as app (`${app.source}/${app.id}`)}
 					<a
 						class="tile card"
-						href="/apps/install/{encodeURIComponent(app.source)}/{encodeURIComponent(app.id)}"
+						class:feature={phone &&
+							!onlyInstalled &&
+							!search &&
+							category === 'all' &&
+							from === 'all' &&
+							app === visible[0]}
+						href={phone && installed(app)
+							? '/docker/apps/' + encodeURIComponent(app.id)
+							: '/apps/install/' +
+								encodeURIComponent(app.source) +
+								'/' +
+								encodeURIComponent(app.id)}
 					>
 						<span class="card-head">
 							<span class="monogram" aria-hidden="true"
@@ -415,7 +466,7 @@
 					<span class="muted">{t('apps.showing', { shown: limit, total: visible.length })}</span>
 				</div>
 			{/if}
-			{#if visible.length === 0}<EmptyState inline title={t('apps.none')} />{/if}
+			{#if visible.length === 0 && !phone}<EmptyState inline title={t('apps.none')} />{/if}
 		</div>
 	</div>
 	<!-- Style W4 (0.74): the figures of the catalog in the status bar. -->
@@ -426,6 +477,16 @@
 		<span class="end">{t('apps.statSources', { count: sources.length })}</span>
 	</StatusBar>
 {/if}
+
+{#if phone && !sourcesOpen}<BrowserApps
+		{onlyInstalled}
+		query={search}
+		include={category === 'all' && from === 'all'}
+	/>{/if}
+{#if phone && sourcesOpen}<a class="btn" href="/docker#import">{t('apps.import')}</a>{/if}
+{#if phone && !sourcesOpen && store && visible.length === 0}<p class="muted">
+		{t('nord.apps.noContainers')}
+	</p>{/if}
 
 <style>
 	.more {
@@ -604,5 +665,90 @@
 	}
 	.source-label {
 		overflow-wrap: anywhere;
+	}
+	[hidden] {
+		display: none !important;
+	}
+	.mobile-catalog .find {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.mobile-catalog .search {
+		flex: 1 1 65%;
+		min-width: 0;
+		min-height: 44px;
+	}
+	.filter-btn {
+		height: 44px;
+		width: 44px;
+		padding: 0;
+	}
+	.mobile-catalog .from {
+		flex: 1 1 100%;
+		min-height: 44px;
+	}
+	.mobile-catalog .categories {
+		flex-wrap: wrap;
+		gap: 5px;
+	}
+	.mobile-catalog .categories button {
+		min-height: 44px;
+	}
+	.mobile-catalog .cards {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		border-radius: var(--nord-radius);
+		border: 1px solid var(--nord-line);
+		overflow: hidden;
+		background: var(--nord-surface);
+	}
+	.mobile-catalog .cards:empty {
+		display: none;
+	}
+	.mobile-catalog .card {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 6px;
+		min-height: 64px;
+		padding: 10px 12px;
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		background: transparent;
+		backdrop-filter: none;
+	}
+	.mobile-catalog .card + .card {
+		border-top: 1px solid var(--nord-line);
+	}
+	.mobile-catalog .card-foot {
+		padding: 0;
+		min-width: 0;
+	}
+	.mobile-catalog .source-label,
+	.mobile-catalog .description {
+		display: none;
+	}
+	.mobile-catalog .feature {
+		min-height: 106px;
+		align-content: end;
+		background:
+			linear-gradient(140deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+			linear-gradient(0deg, var(--surface), transparent);
+		padding: 14px;
+	}
+	.mobile-catalog .feature .description {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		grid-column: 1/-1;
+		margin: 0;
+	}
+	.mobile-catalog .feature .name {
+		font-size: var(--text-lg);
 	}
 </style>

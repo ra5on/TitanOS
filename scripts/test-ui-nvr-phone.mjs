@@ -1,6 +1,6 @@
 // The NVR (PLAN 79-7) on the phone, 390 px wide (phone emulation: touch,
 // isMobile, deviceScaleFactor 2): every page of the program and what a tap
-// opens (setup, live stacked with its own order, one camera large with the
+// opens (setup, live in two columns with its own order, one camera large with the
 // PTZ pad, events beside the pictures, recordings with export, events with
 // their detail, cameras, adding and changing a camera with whom it tells,
 // settings with faces, plates and the overview of the cameras' messages,
@@ -187,7 +187,7 @@ try {
     await ctx.close();
   }
 
-  // --- Live: the tiles stand below each other in the account's own phone order ---
+  // --- Live: the tiles fill two columns in the account's own phone order ---
   {
     const { ctx, page, saved, state } = await phone("owner");
     await page.goto(base + "/nvr");
@@ -195,11 +195,13 @@ try {
     const order = () =>
       page.locator(".tile.row [data-camera]").evaluateAll((els) => els.map((e) => e.dataset.camera));
     assert.deepEqual(await order(), ["haustuer", "einfahrt", "garten", "terrasse"]);
-    // Every tile takes the width; nothing beside it.
-    for (const box of await page.locator(".tile.row").evaluateAll((els) =>
-      els.map((e) => e.getBoundingClientRect().width),
-    ))
-      assert.ok(box > WIDTH - 40, `a tile takes the width (${box})`);
+    // Two columns remain legible, in the account's saved order.
+    const tiles = await page.locator(".tile.row").evaluateAll((els) =>
+      els.map((e) => { const r = e.getBoundingClientRect(); return { x:r.x, y:r.y, w:r.width }; }));
+    assert.equal(tiles[0].y, tiles[1].y);
+    assert.equal(tiles[0].x, tiles[2].x);
+    assert.ok(tiles[1].x >= tiles[0].x + tiles[0].w);
+    assert.ok(tiles[2].y > tiles[0].y);
     await page.locator('.tile.row [data-camera="haustuer"] .mark', { hasText: "Person" }).waitFor();
     // The phone's bar lists the program's pages.
     const { menu, pages } = await barPages(page);
@@ -212,6 +214,7 @@ try {
     await sound(page, "live");
     await shot(page, "live");
     // Arranging on the phone: arrows move a camera up or down; only the phone order is saved.
+    await page.getByRole("button", { name: de["nvr.view.title"] }).tap();
     await page.getByRole("button", { name: "Anordnen" }).tap();
     await page.getByText(de["nvr.arrange.hintPhone"]).waitFor();
     await page.getByRole("button", { name: "Garten nach oben" }).tap();
@@ -227,9 +230,12 @@ try {
     await page.locator(".tile.row").nth(3).waitFor();
     assert.deepEqual(await order(), ["garten", "haustuer", "einfahrt", "terrasse"]);
     // Events beside the pictures stand below them on the phone.
-    await page.getByRole("button", { name: "Ereignisse" }).tap();
+    const eventsSwitch = page.getByRole("button", { name: "Ereignisse" });
+    assert.equal(await eventsSwitch.getAttribute("aria-pressed"), "true", "recent events are shown on a fresh phone gallery");
+    await eventsSwitch.tap();
+    await eventsSwitch.tap();
     const panel = page.getByRole("complementary", { name: "Ereignisse" });
-    await panel.getByText("Person · Haustür").first().waitFor();
+    await panel.getByText("Person erkannt · Haustür").first().waitFor();
     const wall = await page.locator(".wall").boundingBox();
     const aside = await panel.boundingBox();
     assert.ok(aside.y >= wall.y + wall.height - 1, "events below the pictures");
@@ -298,11 +304,11 @@ try {
   {
     const { ctx, page, state } = await phone("owner", (s) => (s.vod = true));
     await page.goto(base + "/nvr/events");
-    await page.getByRole("button", { name: /Auto · Einfahrt/ }).waitFor();
+    await page.getByRole("button", { name: /Fahrzeug erkannt · Einfahrt/ }).waitFor();
     await sound(page, "events");
     await shot(page, "ereignisse");
-    await page.getByRole("button", { name: /Auto · Einfahrt/ }).tap();
-    const detail = page.getByRole("dialog", { name: "Auto · Einfahrt" });
+    await page.getByRole("button", { name: /Fahrzeug erkannt · Einfahrt/ }).tap();
+    const detail = page.getByRole("dialog", { name: "Fahrzeug erkannt · Einfahrt" });
     await detail.getByText("K-TI 2026").waitFor();
     // PLAN 82-5: the tapped event plays at once, with sound. PLAN 85: it
     // plays the recording around it over HLS, from 5 s before to 5 s after;
@@ -323,6 +329,14 @@ try {
       "the recording around the event",
     );
     await page.waitForFunction(() => document.querySelector(".detail video")?.readyState >= 1);
+    const timeline = detail.getByRole("slider", {name: de["nvr.events.clipTimeline"]});
+    await timeline.waitFor();
+    const player = detail.locator("video");
+    assert.equal(Number(await timeline.getAttribute("max")), await player.evaluate(el => el.duration));
+    await timeline.focus();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowRight");
+    assert.ok(await player.evaluate(el => el.currentTime > 0), "arrow keys seek the actual video");
     assert.equal(state.requests.some(([m, p]) => m === "GET" && p.includes("/clip.mp4")), false, "clip.mp4 only for downloading");
     assert.match(
       await detail.getByRole("link", { name: de["nvr.events.clipSave"] }).getAttribute("href"),
@@ -799,8 +813,8 @@ try {
   {
     const { ctx, page, state } = await phone("owner");
     await page.goto(base + "/nvr/events");
-    await page.getByRole("button", { name: /Person · Garten/ }).tap();
-    const detail = page.getByRole("dialog", { name: "Person · Garten" });
+    await page.getByRole("button", { name: /Person erkannt · Garten/ }).tap();
+    const detail = page.getByRole("dialog", { name: "Person erkannt · Garten" });
     await detail.getByRole("button", { name: "Behalten", exact: true }).tap();
     await detail.locator("#nvr-event-kept").getByText(de["nvr.events.keptText"]).waitFor();
     assert.ok(state.requests.some(([m, p]) => m === "POST" && p.endsWith("/keep")));

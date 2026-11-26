@@ -11,7 +11,11 @@
 	import { appForFile, webapps } from '#lib/webapps/webapps.svelte.ts';
 	import { dockerAppForExt, fileOpeners, type FileOpener } from '#lib/docker-opens.ts';
 
+	import FolderLayoutOptions from './FolderLayoutOptions.svelte';
+	import { currentPlace, type MobileViews } from './mobile-views.svelte.ts';
+
 	type Props = {
+		mobileViews?: MobileViews;
 		/** The menu of entries, opened on one of them. */
 		menu: { entry: FileEntry; x: number; y: number } | null;
 		/** The menu of the empty part of the folder. */
@@ -35,6 +39,7 @@
 		onclose: () => void;
 	};
 	let {
+		mobileViews,
 		menu,
 		background,
 		root,
@@ -335,15 +340,19 @@
 			>
 			<hr />
 		{/if}
-		{#each views as option (option.mode)}
-			<button
-				type="button"
-				role="menuitemradio"
-				aria-checked={view === option.mode}
-				onclick={() => oncommand(option.mode)}
-				><Icon name={option.icon} size={16} /><span>{t(option.label)}</span></button
-			>
-		{/each}
+		{#if mobileViews}<FolderLayoutOptions
+				views={mobileViews}
+				place={currentPlace(root.id, dir)}
+				close={onclose}
+			/>{:else}{#each views as option (option.mode)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={view === option.mode}
+					onclick={() => oncommand(option.mode)}
+					><Icon name={option.icon} size={16} /><span>{t(option.label)}</span></button
+				>
+			{/each}{/if}
 	</ContextMenu>
 {/if}
 

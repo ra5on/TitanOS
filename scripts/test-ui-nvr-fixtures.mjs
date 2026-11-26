@@ -618,6 +618,11 @@ export async function installNvr(target, state = nvrState()) {
       const cam = s.cameras.find((c) => c.id === m[1]);
       return json(cam?.ptz ? s.ptz : { supported: false, features: [], presets: [] });
     }
+    if ((m = /^\/nvr\/cameras\/([^/]+)\/recordings\/frame\.jpg$/.exec(path))) {
+      const at = Number(url.searchParams.get("at"));
+      if (!segments(s, at, at + 1).length) return fail(404, "nvr_no_picture");
+      return image(m[1] + Math.floor(at), "");
+    }
     if (/^\/nvr\/cameras\/[^/]+\/recordings\/summary$/.test(path))
       return json({ days: [{ day: new Date(s.now * 1000).toISOString().slice(0, 10), hours: [] }] });
     // A removed camera's recordings deleted now (owner 13.11.2026): only removed ones, administrators.

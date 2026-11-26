@@ -646,7 +646,7 @@
 	}
 </script>
 
-<section class="list" class:compact aria-labelledby="mail-list-head">
+<section class="list" class:phone class:compact aria-labelledby="mail-list-head">
 	<div class="tools">
 		{#if !searchActive}
 			<div class="nav">
@@ -754,7 +754,9 @@
 	{/if}
 	{#each groups as g (g.group)}
 		<section class="group" aria-labelledby="mail-group-{g.group}">
-			<h3 id="mail-group-{g.group}" class="sr-only">{groupNames[g.group]}</h3>
+			<h3 id="mail-group-{g.group}" class:sr-only={!phone} class="group-heading">
+				{groupNames[g.group]}
+			</h3>
 			<ul class="rows">
 				{#each shown.filter((s) => g.items.includes(s.thread)) as s (rowKey(s.row))}
 					<li>
@@ -1381,5 +1383,23 @@
 		.btn {
 			min-height: 44px;
 		}
+	}
+
+	.phone .group {
+		margin: 0 12px 8px;
+	}
+	.phone .group-heading {
+		margin: 12px 5px 6px;
+		font-size: var(--text-sm);
+		color: var(--muted);
+	}
+	.phone .rows {
+		overflow: hidden;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: color-mix(in srgb, var(--surface) 89%, transparent);
+	}
+	.phone .group :global(.unread .from) {
+		font-weight: 700;
 	}
 </style>
