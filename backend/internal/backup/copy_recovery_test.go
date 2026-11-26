@@ -310,3 +310,53 @@ func TestGuestUndatedRecoveryAcrossPowerCut(t *testing.T) {
 		t.Fatal("invalid phase")
 	}
 }
+
+func TestReadableCheckpointMetadata(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := root.Mkdir("source", 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.WriteFile("source/document", []byte("private"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Symlink("document", "source/reference"); err != nil {
+		t.Fatal(err)
+	}
+	timestamp := time.Unix(1700000000, 0)
+	for _, name := range []string{"source", "source/document"} {
+		if os.Geteuid() == 0 {
+			if err := root.Chown(name, 1234, 2345); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := root.Chtimes(name, timestamp, timestamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Force a physical copy on this POSIX filesystem, independent of its link support.
+	r := copyRecovery{target: root}
+	if err := r.clone(context.Background(), "source", "previous", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{".", "document"} {
+		want, err := root.Lstat(filepath.Join("source", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := root.Lstat(filepath.Join("previous", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, g := want.Sys().(*syscall.Stat_t), got.Sys().(*syscall.Stat_t)
+		if want.Mode() != got.Mode() || w.Uid != g.Uid || w.Gid != g.Gid || !want.ModTime().Equal(got.ModTime()) {
+			t.Errorf("%s attributes: wanted %v %d:%d %v, got %v %d:%d %v", name, want.Mode(), w.Uid, w.Gid, want.ModTime(), got.Mode(), g.Uid, g.Gid, got.ModTime())
+		}
+	}
+	if link, err := root.Readlink("previous/reference"); err != nil || link != "document" {
+		t.Fatalf("symlink: %q, %v", link, err)
+	}
+}

@@ -199,13 +199,15 @@ func (r copyRecovery) restoreMetadata(dest string, want fs.FileInfo) error {
 	if err != nil {
 		return err
 	}
-	if w, g := want.Sys().(*syscall.Stat_t), got.Sys().(*syscall.Stat_t); w.Uid != g.Uid || w.Gid != g.Gid {
+	w, g := want.Sys().(*syscall.Stat_t), got.Sys().(*syscall.Stat_t)
+	ownershipChanged := w.Uid != g.Uid || w.Gid != g.Gid
+	if ownershipChanged {
 		if err := r.target.Chown(dest, int(w.Uid), int(w.Gid)); err != nil {
 			return err
 		}
 	}
 	const mode = fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
-	if want.Mode()&mode != got.Mode()&mode {
+	if ownershipChanged || want.Mode()&mode != got.Mode()&mode {
 		if err := r.target.Chmod(dest, want.Mode()&mode); err != nil {
 			return err
 		}
