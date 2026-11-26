@@ -403,3 +403,70 @@ func TestPersonalAgentBrokenStoreDoesNotStarveOtherAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPersonalAgentConsentAtNativeBoundaryAndVerifiedReceipt(t *testing.T) {
+	for _, accepted := range []bool{false, true} {
+		name := "before commit"
+		if accepted {
+			name = "after accepted"
+		}
+		t.Run(name, func(t *testing.T) {
+			ts := personalFixture(t)
+			s := ts.server
+			checkpoint := make(chan struct{})
+			proceed := make(chan struct{})
+			var effects atomic.Int32
+			tool := personalTool{ID: "fixture.auth", Title: "private role action", App: "fixture", Default: pa.Auto,
+				Prepare: func(context.Context, auth.User, pa.Request) (pa.Preview, error) {
+					return pa.Preview{Title: "exact object"}, nil
+				},
+				Apply: func(ctx context.Context, _ auth.User, _ pa.Request, _ pa.Preview) (pa.Result, error) {
+					if accepted {
+						if err := pa.Reauthorize(ctx); err != nil {
+							return pa.Result{}, err
+						}
+						effects.Add(1)
+					}
+					close(checkpoint)
+					<-proceed
+					if !accepted {
+						if err := pa.Reauthorize(ctx); err != nil {
+							return pa.Result{}, err
+						}
+						effects.Add(1)
+					}
+					return pa.Result{Title: "Sensitive acceptance", Text: "private account data"}, nil
+				}}
+			s.personal.tools[tool.ID] = tool
+			personalHTTP[pa.State](t, ts, ts.client, "PUT", "/settings", map[string]any{"rights": map[string]string{tool.ID: "auto"}})
+			j := personalHTTP[pa.Job](t, ts, ts.client, "POST", "/jobs", pa.Request{Tool: tool.ID, Prompt: "confidential-subject", RequestID: "precise-authority"})
+			lease, err := s.personalClaim()
+			if err != nil || lease == "" {
+				t.Fatal(lease, err)
+			}
+			ready, err := s.personalStep(t.Context(), lease, false)
+			if !ready || err != nil {
+				t.Fatal(ready, err)
+			}
+			finished := make(chan error, 1)
+			go func() { _, err := s.personalStep(t.Context(), lease, true); finished <- err }()
+			<-checkpoint
+			personalHTTP[map[string]any](t, ts, ts.client, "PUT", "/limits/alex", map[string]any{"rights": map[string]string{tool.ID: "never"}})
+			close(proceed)
+			if err := <-finished; err != nil {
+				t.Fatal(err)
+			}
+			got := personalHTTP[pa.Job](t, ts, ts.client, "GET", "/jobs/"+j.ID, nil)
+			if accepted && (effects.Load() != 1 || got.Status != "done" || got.CompletedSteps != 1) || !accepted && (effects.Load() != 0 || got.Status != "failed" || got.Error != "permission_revoked") {
+				t.Fatal(effects.Load(), got)
+			}
+			state := personalHTTP[pa.State](t, ts, ts.client, "GET", "/state", nil)
+			raw, _ := json.Marshal(state)
+			for _, leak := range []string{"confidential-subject", "private account data", "Sensitive acceptance"} {
+				if strings.Contains(string(raw), leak) {
+					t.Fatalf("revoked state showed %s", leak)
+				}
+			}
+		})
+	}
+}

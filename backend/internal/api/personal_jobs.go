@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,9 @@ func personalDigest(v any) string {
 func (s *Server) personalStepRequest(j *pa.Job, p *personalPlan, tool string) pa.Request {
 	req := j.Request
 	req.Tool = tool
+	if p != nil {
+		req.Origin = p.Origin
+	}
 	if p != nil && p.StepArgs[tool] != nil {
 		req.Args = p.StepArgs[tool]
 	}
@@ -91,8 +95,26 @@ func (s *Server) personalEnqueue(a *personalAccount, r pa.Request, steps []strin
 	}
 	j := pa.Job{TotalSteps: len(steps), Audit: []pa.Audit{{Time: now, State: "planned", Tool: steps[0]}}, ID: personalID(), Request: r, Status: "planned", Phase: "queued", Created: now, Updated: now}
 	a.Jobs = append(a.Jobs, j)
-	a.Plans[j.ID] = &personalPlan{Steps: slices.Clone(steps), Ask: ask}
+	a.Plans[j.ID] = &personalPlan{Origin: r.Origin, Steps: slices.Clone(steps), Ask: ask}
 	return j, nil
+}
+
+// Use the authority of the local browser request, never a URL from source content,
+// arguments or forwarded proxy headers. Only fixed, authenticated file routes use it.
+func personalOrigin(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	if strings.ContainsAny(r.Host, "/?#@\\") {
+		return ""
+	}
+	origin := url.URL{Scheme: scheme, Host: r.Host}
+	parsed, err := url.ParseRequestURI(origin.String())
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	return parsed.String()
 }
 func (s *Server) personalCreate(w http.ResponseWriter, r *http.Request) {
 	var req pa.Request
@@ -100,6 +122,7 @@ func (s *Server) personalCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
+	req.Origin = personalOrigin(r)
 	if err := validatePersonalRequest(req); err != nil {
 		personalRespond(w, nil, err)
 		return

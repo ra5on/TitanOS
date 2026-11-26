@@ -46,3 +46,25 @@ func TestWriteFile(t *testing.T) {
 		t.Fatalf("leftovers: %v", entries)
 	}
 }
+
+func TestCheckedPublicationUsesExistingDirectoryAndHonorsRevocation(t *testing.T) {
+	dir := t.TempDir()
+	m := NewManager(0)
+	root := Root{ID: "share/Test", Dir: dir, Writable: true}
+	denied := errors.New("user withdrew approval")
+	if err := m.WriteFileChecked(root, "missing/out.txt", []byte("data"), os.Getuid(), false, func() error { return nil }); err == nil {
+		t.Fatal("output parent was created")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "missing")); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	checked := false
+	err := m.WriteFileChecked(root, "out.txt", []byte("private"), os.Getuid(), false, func() error { checked = true; return denied })
+	if !errors.Is(err, denied) || !checked {
+		t.Fatal(err, checked)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatal(entries, err)
+	}
+}

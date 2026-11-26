@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -54,6 +55,10 @@ func TestPersonalAgentAttachmentsAndSearchStayWithOwner(t *testing.T) {
 	personalHTTP[map[string]bool](t, ts, ts.client, "POST", "/attachments/"+src.ID+"/delete", map[string]string{"confirm": src.ID})
 	if res, _ := ts.request("GET", route+"/content", nil); res.StatusCode != 404 {
 		t.Fatal(res.StatusCode)
+	}
+	reimported := personalHTTP[pa.Source](t, ts, ts.client, "POST", "/attachments?name=Rechnung.pdf", body)
+	if reimported.ID == src.ID {
+		t.Fatal("deleted source consent was resurrected")
 	}
 }
 func TestPersonalAgentGrantRevisionSurvivesMissingVolume(t *testing.T) {
@@ -140,5 +145,55 @@ func TestPersonalAgentMailWatchTakesOnlyNewExactSender(t *testing.T) {
 	}
 	if sent := mail.Sent(); len(sent) != 0 {
 		t.Fatal("unexpected mail send")
+	}
+}
+
+func TestPersonalAgentRoleChangeHidesPreviousAndQueuedWork(t *testing.T) {
+	ts := personalFixture(t)
+	_, err := ts.users.Create("sam", testPassword, auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sam := ts.newClient()
+	login := func() {
+		res, b := ts.do(sam, "POST", "/api/v1/login", credentials{Name: "sam", Password: testPassword})
+		if res.StatusCode != 200 {
+			t.Fatal(res.StatusCode, string(b))
+		}
+	}
+	login()
+	tool := personalTool{ID: "fixture.role", App: "system", Title: "Status", Default: pa.Auto, Available: func(u auth.User) error {
+		if !u.Role.CanAdminister() {
+			return errPersonalDenied
+		}
+		return nil
+	}, Prepare: func(context.Context, auth.User, pa.Request) (pa.Preview, error) {
+		return pa.Preview{Text: "private-result"}, nil
+	}}
+	ts.server.personal.tools[tool.ID] = tool
+	personalHTTP[pa.State](t, ts, sam, "PUT", "/settings", map[string]any{"rights": map[string]string{tool.ID: "auto"}})
+	one := personalHTTP[pa.Job](t, ts, sam, "POST", "/jobs", pa.Request{Tool: tool.ID, RequestID: "first", Prompt: "private-topic"})
+	workOne(t, ts.server)
+	req := pa.Request{Tool: tool.ID, RequestID: "later", RunAt: time.Now().Add(time.Hour), Args: json.RawMessage(`{"detail":"private-arg"}`), Sources: []pa.Source{{Kind: "file", ID: "private-source"}}}
+	personalHTTP[pa.Job](t, ts, sam, "POST", "/jobs", req)
+	if got := personalHTTP[pa.Job](t, ts, sam, "GET", "/jobs/"+one.ID, nil); got.Result == nil {
+		t.Fatal(got)
+	}
+	res, b := ts.request("PUT", "/api/v1/users/sam", map[string]string{"role": "user"})
+	if res.StatusCode != 200 {
+		t.Fatal(res.StatusCode, string(b))
+	}
+	login()
+	state := personalHTTP[pa.State](t, ts, sam, "GET", "/state", nil)
+	raw, _ := json.Marshal(state)
+	if bytes.Contains(raw, []byte("private-")) {
+		t.Fatal("role-restricted fields visible", string(raw))
+	}
+	search := personalHTTP[struct {
+		Chats []pa.Chat
+		Jobs  []pa.Job
+	}](t, ts, sam, "GET", "/search?q=private", nil)
+	if len(search.Chats)+len(search.Jobs) != 0 {
+		t.Fatal(search)
 	}
 }

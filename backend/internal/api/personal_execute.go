@@ -313,11 +313,18 @@ func (s *Server) personalStep(parent context.Context, token string, apply bool) 
 				}
 				checkErr = s.personalFence(ctx, u, l.Job, token, req, readOK, effect)
 				if checkErr == nil {
-					result, checkErr = t.Apply(ctx, u, req, preview)
+					commitCtx := s.personalCommitContext(ctx, u, l.Job, token, req)
+					checkErr = pa.Reauthorize(commitCtx)
+					if checkErr == nil {
+						result, checkErr = t.Apply(commitCtx, u, req, preview)
+					}
 					if checkErr != nil {
 						state = "uncertain"
 						if errors.Is(checkErr, pa.ErrNoEffect) {
 							state = "refused"
+							if errors.Is(checkErr, pa.ErrAuthority) {
+								state = "stopped"
+							}
 						}
 					}
 				} else {
@@ -331,20 +338,18 @@ func (s *Server) personalStep(parent context.Context, token string, apply bool) 
 			result = pa.Result{Silent: preview.Silent, Title: preview.Title, Text: preview.Text, Sources: preview.Sources, Data: preview.Data}
 		}
 	}
-	if ctx.Err() != nil && state != "uncertain" {
-		if apply && state == "done" {
-			state = "uncertain"
-		} else {
+	// A verified irreversible response remains a completed step even if the right was
+	// withdrawn while the remote server acknowledged it. Do not expose returned data.
+	if state == "done" {
+		_, err := s.personalWorkflowCheck(ctx, u, l.Job, req)
+		if ctx.Err() != nil || err != nil {
 			state = "denied"
+			if apply {
+				state = "confirmed_after_revoke"
+			}
 		}
-	}
-	// Recheck immediately on completion as well, even when a tool ignored cancellation.
-	if _, e := s.personalWorkflowCheck(ctx, u, l.Job, req); e != nil && state == "done" {
-		if apply {
-			state = "uncertain"
-		} else {
-			state = "denied"
-		}
+	} else if ctx.Err() != nil && state != "uncertain" && state != "refused" && state != "stopped" {
+		state = "denied"
 	}
 	if state == "done" && (len(result.Text) > 128<<10 || len(result.Data) > 128<<10) {
 		state = "failed"
@@ -421,6 +426,42 @@ func (s *Server) personalFinish(u auth.User, id, token, state string, preview pa
 			j.Token = personalID()
 			p.Approval = ""
 			notice = j.Status
+		case "stopped":
+			if p.Effect != "" && a.Effects[p.Effect] == id {
+				delete(a.Effects, p.Effect)
+				p.Effect = ""
+			}
+			j.Preview, j.Result = nil, nil
+			p.Approval = ""
+			p.ReadOK = false
+			switch {
+			case p.CancelAfter:
+				j.Status = "canceled"
+				j.Phase = "complete"
+			case p.PauseAfter || a.Settings.Paused:
+				j.Status = "paused"
+				j.Phase = "queued"
+				p.PauseAfter = false
+			default:
+				j.Status = "failed"
+				j.Phase = "complete"
+				j.Error = "permission_revoked"
+				p.Prior = ""
+				notice = j.Status
+			}
+		case "confirmed_after_revoke":
+			j.CompletedSteps = p.Index + 1
+			j.Receipts = append(j.Receipts, pa.Receipt{Step: p.Index + 1, Tool: p.Steps[p.Index], Title: "Aktion bestätigt", At: j.Updated})
+			j.Result = &pa.Result{Title: "Aktion bestätigt"}
+			j.Preview = nil
+			p.Prior = ""
+			j.Status = "done"
+			j.Phase = "complete"
+			if p.Index+1 < len(p.Steps) {
+				j.Status = "failed"
+				j.Error = "permission_revoked"
+			}
+			notice = j.Status
 		case "ready":
 			j.Preview = &preview
 			j.Phase = "ready"
@@ -484,6 +525,9 @@ func (s *Server) personalFinish(u auth.User, id, token, state string, preview pa
 				j.Error = "tool_failed"
 			}
 			notice = j.Status
+		}
+		if j.Status == "done" || j.Status == "waiting" || j.Status == "failed" {
+			j.Seen = false
 		}
 		if notice == "done" && !a.Settings.Notifications.Result || notice == "failed" && !a.Settings.Notifications.Blocker || notice == "waiting" && !a.Settings.Notifications.Approval {
 			notice = ""

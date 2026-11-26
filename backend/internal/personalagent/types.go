@@ -25,6 +25,8 @@ type Source struct {
 	Ref   map[string]string `json:"ref,omitempty"`
 }
 type Request struct {
+	// Origin is assigned by the local authenticated HTTP handler for links back to selected originals.
+	Origin string `json:"-"`
 	// PreviousText is inert data from a preceding step and cannot be posted by a client.
 	PreviousText string          `json:"-"`
 	Tool         string          `json:"tool"`

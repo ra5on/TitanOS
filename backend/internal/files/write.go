@@ -17,6 +17,12 @@ const MaxWrite = 64 << 20
 // replace, keeping the old contents as <name>.prev. The data goes to a
 // hidden part file first and becomes visible at once when complete.
 func (m *Manager) WriteFile(root Root, name string, data []byte, uid int, replace bool) error {
+	return m.WriteFileChecked(root, name, data, uid, replace, nil)
+}
+
+// WriteFileChecked revalidates a delegated write after syncing its private staging file
+// and immediately before publishing. Existing native writes use the same implementation.
+func (m *Manager) WriteFileChecked(root Root, name string, data []byte, uid int, replace bool, beforePublish func() error) error {
 	if !root.Writable || root.Kind == "stick" {
 		return ErrReadOnly
 	}
@@ -38,8 +44,10 @@ func (m *Manager) WriteFile(root Root, name string, data []byte, uid int, replac
 		return mapError(err)
 	}
 	defer r.Close()
-	if err := m.makeParents(r, path.Dir(name), uid); err != nil {
-		return mapError(err)
+	if beforePublish == nil {
+		if err := m.makeParents(r, path.Dir(name), uid); err != nil {
+			return mapError(err)
+		}
 	}
 	// Pin the folder and check where it really is before writing.
 	parent, err := r.OpenRoot(path.Dir(name))
@@ -93,6 +101,11 @@ func (m *Manager) WriteFile(root Root, name string, data []byte, uid int, replac
 	}
 	if err = f.Close(); err != nil {
 		return mapError(err)
+	}
+	if beforePublish != nil {
+		if err := beforePublish(); err != nil {
+			return err
+		}
 	}
 	if statErr != nil {
 		return mapError(publishNewFile(parent, temp, base))

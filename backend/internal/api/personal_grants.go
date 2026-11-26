@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"log/slog"
 	"time"
+
+	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
@@ -21,8 +24,14 @@ func personalGrantFile(name string) string {
 // The revision lives on the config store, so revoking an app while the volume holding the
 // approval is disconnected also invalidates the approval after remount or reboot.
 func (s *Server) personalGrantStamp(u auth.User) (string, error) {
+	return s.personalGrantRevisions(u, "", u.Name)
+}
+
+// Inbox observation has no file-share dependency. Its own mailbox or user revocation
+// still prevents importing messages that arrived before an explicit new subscription.
+func (s *Server) personalGrantRevisions(u auth.User, names ...string) (string, error) {
 	stamps := []string{string(u.Role)}
-	for _, name := range []string{"", u.Name} {
+	for _, name := range names {
 		var stamp string
 		if err := s.opts.Store.ReadJSON(personalGrantFile(name), &stamp); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return "", err
@@ -75,4 +84,46 @@ func (s *Server) personalRejectApproval(u auth.User, id string) {
 		personalAudit(j, p, "denied")
 		return nil
 	})
+}
+
+// No tool callback in this closure. PIM and other native writers may already hold their
+// own resource lock. The full check runs immediately before that native transaction.
+func (s *Server) personalCommitContext(ctx context.Context, u auth.User, id, token string, req pa.Request) context.Context {
+	consent := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		current, ok := s.opts.Users.Get(u.Name)
+		if !ok || current.Disabled || current.Role != u.Role || personalKey(current) != personalKey(u) {
+			return errPersonalDenied
+		}
+		stamp, err := s.personalGrantStamp(current)
+		if err != nil {
+			return err
+		}
+		return s.personalTxn(current, false, func(a *personalAccount) error {
+			j, err := a.find(id)
+			if err != nil {
+				return err
+			}
+			p := a.Plans[id]
+			if p == nil || p.Claim != token || p.GrantStamp != stamp || p.PauseAfter || p.CancelAfter || a.Settings.Paused || j.Phase != "executing" || j.Status != "running" || p.Steps[p.Index] != req.Tool {
+				return errPersonalDenied
+			}
+			for _, tool := range p.Steps[:p.Index+1] {
+				t, ok := s.personal.tools[tool]
+				if !ok || personalCap(t, a).Effective == pa.Never {
+					return errPersonalDenied
+				}
+			}
+			return nil
+		})
+	}
+	resources := func(ctx context.Context) error {
+		if _, err := s.personalWorkflowCheck(ctx, u, id, req); err != nil {
+			return err
+		}
+		return consent(ctx)
+	}
+	return pa.WithAuthority(ctx, resources, consent)
 }

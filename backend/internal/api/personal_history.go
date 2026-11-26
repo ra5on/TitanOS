@@ -19,8 +19,16 @@ func (s *Server) personalChatContext(u auth.User, r pa.Request) ([]personalTurn,
 	}
 	err := s.personalTxn(u, false, func(a *personalAccount) error {
 		scope := personalDigest(r.Sources)
-		for i := len(a.Jobs) - 1; i >= 0 && len(turns) < 8; i-- {
+		current := slices.IndexFunc(a.Jobs, func(j pa.Job) bool { return j.Request.RequestID == r.RequestID && j.Request.ChatID == r.ChatID })
+		if current < 0 {
+			return errPersonalMissing
+		}
+		for i := current - 1; i >= 0 && len(turns) < 8; i-- {
 			j := a.Jobs[i]
+			plan := a.Plans[j.ID]
+			if plan == nil || len(plan.Steps) != 1 || plan.Steps[0] != "chat.ask" {
+				continue
+			}
 			if r.ChatID == "" || j.Request.ChatID != r.ChatID || j.Request.Tool != "chat.ask" || j.Request.RequestID == r.RequestID || j.Status != "done" || j.Result == nil || personalDigest(j.Request.Sources) != scope {
 				continue
 			}

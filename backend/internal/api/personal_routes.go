@@ -76,14 +76,26 @@ func (s *Server) personalState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := pa.State{Chats: a.Chats, Jobs: a.Jobs, Settings: a.Settings, Capabilities: s.personalCaps(u, a)}
+	titleVisible := map[string]bool{}
 	for i := range state.Jobs {
-		s.personalRedact(r.Context(), u, a, &state.Jobs[i])
+		j := &state.Jobs[i]
+		visible := s.personalRedact(r.Context(), u, a, j)
+		if _, known := titleVisible[j.Request.ChatID]; !known {
+			titleVisible[j.Request.ChatID] = visible
+		}
+	}
+	for i := range state.Chats {
+		if !titleVisible[state.Chats[i].ID] {
+			state.Chats[i].Title = "Agent"
+		}
 	}
 	personalRespond(w, state, nil)
 }
 func (s *Server) personalRedact(ctx context.Context, u auth.User, a *personalAccount, j *pa.Job) bool {
 	t, ok := s.personal.tools[j.Request.Tool]
-	visible := ok && personalCap(t, a).Effective != pa.Never
+	fresh, active := s.opts.Users.Get(u.Name)
+	visible := active && !fresh.Disabled && personalKey(fresh) == personalKey(u) && ok && personalCap(t, a).Effective != pa.Never
+	u = fresh
 	if visible && t.Available != nil {
 		visible = t.Available(u) == nil
 	}
@@ -98,7 +110,7 @@ func (s *Server) personalRedact(ctx context.Context, u auth.User, a *personalAcc
 			visible = false
 			break
 		}
-		if visible && t.Check != nil && (j.Result != nil || j.Preview != nil) {
+		if visible && t.Check != nil {
 			req := s.personalStepRequest(j, a.Plans[j.ID], tool)
 			if t.Check(ctx, u, req) != nil {
 				visible = false
@@ -110,6 +122,7 @@ func (s *Server) personalRedact(ctx context.Context, u auth.User, a *personalAcc
 		j.Preview = nil
 		j.Result = nil
 		j.Token = ""
+		j.Request.Prompt = ""
 		j.Request.Args = nil
 		j.Request.Sources = nil
 		j.Receipts = nil
@@ -206,6 +219,7 @@ func invalidatePersonalGrants(a *personalAccount, before, after map[string]pa.Le
 		p.ReadOK = false
 		p.Approval = ""
 		if j.Phase == "executing" {
+			p.GrantStamp = ""
 			continue
 		}
 		j.Token = ""
@@ -339,10 +353,11 @@ func (s *Server) personalSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := len(a.Jobs) - 1; i >= 0; i-- {
 		j := a.Jobs[i]
-		if !s.personalRedact(r.Context(), u, a, &j) {
+		visible := s.personalRedact(r.Context(), u, a, &j)
+		allowedChat[j.Request.ChatID] = visible // reverse traversal ends at the title-producing first job
+		if !visible {
 			continue
 		}
-		allowedChat[j.Request.ChatID] = true
 		text := j.Request.Prompt
 		title := s.personal.tools[j.Request.Tool].Title
 		if j.Result != nil {

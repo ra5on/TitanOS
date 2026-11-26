@@ -15,6 +15,7 @@ import (
 )
 
 type personalMailWatch struct {
+	Origin string            `json:"origin,omitempty"`
 	Retry  bool              `json:"retry,omitempty"`
 	Cursor tmail.InboxCursor `json:"cursor"`
 	After  time.Time         `json:"after"`
@@ -60,7 +61,7 @@ func (s *Server) personalWatchBaseline(ctx context.Context, u auth.User, sk pa.S
 	if err != nil || c.Effective != pa.Auto {
 		return w, errPersonalDenied
 	}
-	w.Stamp, err = s.personalGrantStamp(u)
+	w.Stamp, err = s.personalGrantRevisions(u, u.Name)
 	if err != nil {
 		return w, err
 	}
@@ -129,7 +130,7 @@ func (s *Server) personalPollWatches(ctx context.Context) error {
 	return nil
 }
 func (s *Server) personalPollInbox(ctx context.Context, u auth.User, sk pa.Skill, watch personalMailWatch) error {
-	stamp, err := s.personalGrantStamp(u)
+	stamp, err := s.personalGrantRevisions(u, u.Name)
 	if err != nil {
 		return err
 	}
@@ -154,7 +155,7 @@ func (s *Server) personalPollInbox(ctx context.Context, u auth.User, sk pa.Skill
 		if !exists || old.Cursor != watch.Cursor || a.Settings.Paused {
 			return nil
 		}
-		fresh, e := s.personalGrantStamp(u)
+		fresh, e := s.personalGrantRevisions(u, u.Name)
 		if e != nil {
 			return e
 		}
@@ -186,7 +187,7 @@ func (s *Server) personalPollInbox(ctx context.Context, u auth.User, sk pa.Skill
 					sources = append(sources, x)
 				}
 			}
-			req := pa.Request{Tool: sk.Steps[0], Prompt: sk.Prompt, Args: sk.Args, RequestID: "mail:" + personalDigest([]any{sk.ID, source.Ref["account"], cursor.Validity, msg.UID}), Sources: sources}
+			req := pa.Request{Origin: watch.Origin, Tool: sk.Steps[0], Prompt: sk.Prompt, Args: sk.Args, RequestID: "mail:" + personalDigest([]any{sk.ID, source.Ref["account"], cursor.Validity, msg.UID}), Sources: sources}
 			j, e := s.personalEnqueue(a, req, sk.Steps, sk.Approval == "ask")
 			if errors.Is(e, errPersonalDenied) {
 				delete(a.Watches, sk.ID)

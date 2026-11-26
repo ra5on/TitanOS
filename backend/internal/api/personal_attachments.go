@@ -27,11 +27,18 @@ import (
 const personalAttachmentMax = 10 << 20
 
 type personalAttachment struct {
+	Hash string `json:"sha256,omitempty"`
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Size int    `json:"size"`
 }
 
+func (f personalAttachment) digest() string {
+	if f.Hash != "" {
+		return f.Hash
+	}
+	return f.ID
+}
 func (f personalAttachment) source() pa.Source {
 	return pa.Source{Kind: "attachment", ID: f.ID, Label: f.Name}
 }
@@ -83,7 +90,7 @@ func (s *Server) personalUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	digest := sha256.Sum256(data)
-	f := personalAttachment{ID: hex.EncodeToString(digest[:]), Name: name, Size: len(data)}
+	f := personalAttachment{ID: personalID(), Hash: hex.EncodeToString(digest[:]), Name: name, Size: len(data)}
 	s.personal.mu.Lock()
 	defer s.personal.mu.Unlock()
 	root, release, err := s.personalRoot()
@@ -100,7 +107,7 @@ func (s *Server) personalUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		used := 0
 		for _, old := range a.Attachments {
-			if old.ID == f.ID {
+			if old.digest() == f.Hash {
 				f = old
 				return nil
 			}
@@ -192,7 +199,7 @@ func (s *Server) personalAttachment(ctx context.Context, u auth.User, r pa.Reque
 			return pa.Preview{}, errPersonalInvalid
 		}
 	}
-	if first < 1 || last < first || last-first >= 25 || last > 10000 {
+	if first < 1 || last < first || last-first >= 20 || last > 10000 {
 		return pa.Preview{}, errPersonalInvalid
 	}
 	src.Label = record.Name
@@ -213,7 +220,7 @@ func (s *Server) personalAttachment(ctx context.Context, u auth.User, r pa.Reque
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, personalAttachmentMax+1))
 	digest := sha256.Sum256(data)
-	if err != nil || len(data) != record.Size || hex.EncodeToString(digest[:]) != record.ID {
+	if err != nil || len(data) != record.Size || hex.EncodeToString(digest[:]) != record.digest() {
 		return preview, errors.New("invalid personal PDF")
 	}
 	pages, err := office.ReadPDF(ctx, data, first, last)

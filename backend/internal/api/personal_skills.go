@@ -1,12 +1,16 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"path"
 	"slices"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/tmail"
 
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 )
@@ -41,12 +45,45 @@ func (s *Server) personalBuiltIns() []pa.Skill {
 	}
 	return out
 }
+
+// Skill definitions can themselves contain private filenames, senders and prompts.
+func (s *Server) personalSkillVisible(ctx context.Context, u auth.User, a *personalAccount, sk pa.Skill) bool {
+	j := pa.Job{Request: pa.Request{Args: sk.Args, Prompt: sk.Prompt, Sources: sk.Sources}}
+	p := personalPlan{Steps: sk.Steps, StepArgs: sk.StepArgs}
+	if sk.Trigger == "mail" {
+		watch, ok := a.Watches[sk.ID]
+		src, err := watchSource(sk)
+		stamp, e := s.personalGrantRevisions(u, u.Name)
+		if !ok || e != nil || watch.Stamp != stamp || err != nil || s.opts.Mail == nil || !s.opts.Mail.Allowed(u.Name) || personalCap(s.personal.tools["mail.watch"], a).Effective != pa.Auto {
+			return false
+		}
+		boxes := s.opts.Mail.Mailboxes(u.Name)
+		if !slices.ContainsFunc(boxes, func(box tmail.MailboxView) bool { return box.ID == src.Ref["account"] }) {
+			return false
+		}
+	}
+	for _, id := range sk.Steps {
+		t, ok := s.personal.tools[id]
+		if !ok || personalCap(t, a).Effective == pa.Never || t.Available != nil && t.Available(u) != nil {
+			return false
+		}
+		if t.Check == nil || sk.Trigger == "mail" && strings.HasPrefix(id, "mail.") {
+			continue
+		}
+		req := s.personalStepRequest(&j, &p, id)
+		if t.Check(ctx, u, req) != nil {
+			return false
+		}
+	}
+	return true
+}
 func (s *Server) personalSkills(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	if r.Method == http.MethodGet {
-		var out []pa.Skill
-		err := s.personalTxn(u, false, func(a *personalAccount) error {
-			out = s.personalBuiltIns()
+		var a *personalAccount
+		err := s.personalTxn(u, false, func(saved *personalAccount) error { a = saved; return nil })
+		out := s.personalBuiltIns()
+		if err == nil {
 			for _, sk := range a.Skills {
 				if sk.Trigger == "mail" {
 					watch, ok := a.Watches[sk.ID]
@@ -61,10 +98,21 @@ func (s *Server) personalSkills(w http.ResponseWriter, r *http.Request) {
 						sk.WatchState = "active"
 					}
 				}
+				if !s.personalSkillVisible(r.Context(), u, a, sk) {
+					sk.Sources = nil
+					sk.Args = nil
+					sk.StepArgs = nil
+					sk.Prompt = ""
+					sk.Sender = ""
+					sk.PDFName = ""
+					sk.Expected = ""
+					if sk.Trigger == "mail" {
+						sk.WatchState = "revoked"
+					}
+				}
 				out = append(out, sk)
 			}
-			return nil
-		})
+		}
 		personalRespond(w, map[string]any{"skills": out}, err)
 		return
 	}
@@ -117,6 +165,7 @@ func (s *Server) personalSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		var err error
 		baseline, err = s.personalWatchBaseline(r.Context(), u, skill)
+		baseline.Origin = personalOrigin(r)
 		if err != nil {
 			personalRespond(w, nil, err)
 			return
@@ -143,7 +192,7 @@ func (s *Server) personalSkills(w http.ResponseWriter, r *http.Request) {
 			a.Watches[skill.ID] = baseline
 		}
 		if skill.Trigger == "schedule" {
-			req := pa.Request{Tool: skill.Steps[0], Prompt: skill.Prompt, Args: skill.Args, Sources: skill.Sources, RequestID: "schedule:" + skill.ID, RunAt: skill.RunAt}
+			req := pa.Request{Origin: personalOrigin(r), Tool: skill.Steps[0], Prompt: skill.Prompt, Args: skill.Args, Sources: skill.Sources, RequestID: "schedule:" + skill.ID, RunAt: skill.RunAt}
 			j, err := s.personalEnqueue(a, req, skill.Steps, skill.Approval == "ask")
 			if err != nil {
 				return err
@@ -203,6 +252,7 @@ func (s *Server) personalRunSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Tool = skill.Steps[0]
+	req.Origin = personalOrigin(r)
 	if len(skill.Sources) > 0 {
 		if len(req.Sources) > 0 && personalDigest(req.Sources) != personalDigest(skill.Sources) {
 			personalRespond(w, nil, errPersonalDenied)
