@@ -962,7 +962,9 @@
 		class="calview"
 		class:compact
 		bind:this={viewEl}
-		style:height={compact ? `calc(100dvh - ${viewTop}px)` : undefined}
+		style:height={compact
+			? `calc(100dvh - ${viewTop}px - var(--phone-dock-height, 0px))`
+			: undefined}
 		data-pim-shell="calendar"
 		data-pim-state={data.shown.kind}
 		data-pim-ready={data.shown.kind === 'ready' ? '' : undefined}
