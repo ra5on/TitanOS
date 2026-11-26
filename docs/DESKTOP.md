@@ -71,6 +71,8 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 
 ## Handy (PLAN 64, überarbeitet mit PLAN 87)
 
+In Einstellungen, Meldungen, App-Center und Docker führt das Haus-Symbol neben „TitanOS“ in der Mitte der Kopfleiste direkt zum Startbildschirm. Dieser Weg funktioniert auch bei ausgeblendetem Handy-Dock. „Zurück“ in einer Unteransicht behält das jeweilige übergeordnete Ziel.
+
 Am Handy (unter 900 px, die Handy-Ansicht von `mode.svelte.ts`) gibt es statt des Arbeitsplatzes einen **Startbildschirm** (`PhoneHome.svelte`, Logik in `phone-home.ts`); jedes Programm öffnet im Vollbild mit seiner Leiste (`PhoneBar.svelte`). Gewählt vom Inhaber in der Fragerunde vom 13.11.2026 (PLAN 87); nicht gewählt und deshalb nicht gebaut: Wischen von unten (App-Wechsler), Terminal-Tastenleiste, Vibration.
 
 - **Aussehen wie der Arbeitsplatz:** derselbe Hintergrund (auch die bewegten Fotos über `LiveBackground`, „Bewegter Hintergrund“ mit Drift, Farbton nach Tageszeit), Glas aus Deckkraft/Glaseffekt (`.glass-panel` steht seit PLAN 87 in `app.css`, vorher nur im Code des Arbeitsplatzes – am Handy fehlte das Glas), Akzentfarbe, dieselben Programmsymbole. Alle Ziele mindestens 44 px. Oben: „Menü“, Suche, Glocke (mit Zahl ungelesener Mitteilungen), im Cluster der Node-Umschalter.

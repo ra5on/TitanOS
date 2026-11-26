@@ -136,7 +136,7 @@
 	const node = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : undefined);
 </script>
 
-{#if globalHeader}<PhoneHeader />{/if}
+{#if globalHeader}<PhoneHeader showHome />{/if}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
 	class="phone-bar"
