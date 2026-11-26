@@ -19,6 +19,7 @@ func TestAgentVolumeChooseAndMove(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	mnt := t.TempDir()
+	t.Cleanup(ts.server.shareSyncs.Wait)
 	if err := ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
 		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
 		{Name: "fast", Level: "raid1", Filesystem: "btrfs", ArrayUUID: "c", FilesystemUUID: "d"},
@@ -33,7 +34,6 @@ func TestAgentVolumeChooseAndMove(t *testing.T) {
 	}
 	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true, mnt + "/fast": true} })
 	ts.shares.UseMountRoot(mnt)
-	t.Cleanup(func() { time.Sleep(300 * time.Millisecond) })
 
 	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "policy": agent.Policy{Preset: agent.PresetStandard}}
 	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusBadRequest {
@@ -166,6 +166,7 @@ func TestAgentMoveAfterBrokenMove(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	mnt := t.TempDir()
+	t.Cleanup(ts.server.shareSyncs.Wait)
 	ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
 		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
 		{Name: "fast", Level: "raid1", Filesystem: "btrfs", ArrayUUID: "c", FilesystemUUID: "d"},
@@ -215,6 +216,7 @@ func TestAgentMoveAndRunNeverTogether(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	mnt := t.TempDir()
+	t.Cleanup(ts.server.shareSyncs.Wait)
 	if err := ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
 		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
 		{Name: "fast", Level: "raid1", Filesystem: "btrfs", ArrayUUID: "c", FilesystemUUID: "d"},
