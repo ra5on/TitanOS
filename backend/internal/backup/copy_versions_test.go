@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -267,5 +268,35 @@ func TestBrokenRunIsNoVersion(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(filepath.Join(target, "b")); len(entries) != 2 {
 		t.Fatalf("something else is left in the folder: %v", entries)
+	}
+}
+
+func TestDatedCopyKeepsPreviousIfPublishedDirectoryCannotBeSynced(t *testing.T) {
+	m, source, target, now := copyEnv(t)
+	name := filepath.Join(source, "record")
+	if err := os.WriteFile(name, []byte("first complete version"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	job := Job{ID: "copy", Sources: []string{"docs"}, Destination: Destination{Type: "usb-copy", Folder: "b"}, Copy: &CopyOptions{Dated: true}, Keep: Keep{Last: 1}}
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	oldFile := filepath.Join(target, "b", now.Format("2006-01-02_1504"), "docs", "record")
+	*now = now.Add(time.Hour)
+	newFile := filepath.Join(target, "b", now.Format("2006-01-02_1504"), "docs", "record")
+	if err := os.WriteFile(name, []byte("second complete version"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.syncCopyTarget = func(dest *os.Root) error {
+		if _, err := os.Stat(newFile); err == nil {
+			return syscall.EIO
+		}
+		return syncTarget(dest)
+	}
+	if err := runCopy(t, m, job, target); !errors.Is(err, syscall.EIO) {
+		t.Fatalf("unexpected result: %v", err)
+	}
+	if data, err := os.ReadFile(oldFile); err != nil || string(data) != "first complete version" {
+		t.Fatalf("older complete run lost: %q, %v", data, err)
 	}
 }

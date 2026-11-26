@@ -119,10 +119,21 @@ func (m *Manager) dropOldest(ctx context.Context, job Job, env, base []string) (
 	if err != nil {
 		return "", err
 	}
+	state := m.state(job)
+	// Older versions have no snapshot ID to pin. A prior warning leaves
+	// the last complete version uncertain, so do not prune to make room.
+	if state.StatusError != "" || state.LastCompleteSnapshot == "" && state.Warning != "" {
+		return "", nil
+	}
 	var all []retention.Version
 	for _, group := range groups {
-		// The newest of every group stays.
-		all = append(all, retention.OldestFirst(group)...)
+		// Keep the newest in each group as well as the last complete backup.
+		for _, candidate := range retention.OldestFirst(group) {
+			if state.LastCompleteSnapshot != "" && strings.HasPrefix(candidate.ID, state.LastCompleteSnapshot) {
+				continue
+			}
+			all = append(all, candidate)
+		}
 	}
 	if len(all) == 0 {
 		return "", nil

@@ -238,7 +238,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		defer closeFile()
 		args = append(args, "--stdin", "--stdin-filename", "TitanOS-"+job.Personal.Account+".tar.age")
 	}
-	var total uint64
+	var summary backupSummary
 	var freed []string
 	var out string
 	for {
@@ -247,7 +247,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 				return err
 			}
 		}
-		out, err = m.runBackup(ctx, job, env, args, &total, input)
+		out, err = m.runBackup(ctx, job, env, args, &summary, input)
 		// A full target: with the job's leave, the oldest version goes
 		// and the run starts again, until it fits or one version is left.
 		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.DropsOldest() {
@@ -301,7 +301,12 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		missing := "Not available, not saved: " + strings.Join(sel.missing, ", ") + "\nOlder backups are all kept until it is back."
 		warning = strings.TrimSpace(warning + "\n" + missing)
 	}
-	m.update(job, func(s *State) { s.Bytes, s.Warning, s.Phase, s.Percent = total, warning, "cleanup", 100 })
+	m.update(job, func(s *State) {
+		s.Bytes, s.Warning, s.Phase, s.Percent = summary.bytes, warning, "cleanup", 100
+		if !unreadable && len(sel.missing) == 0 && len(sel.notes) == 0 && snapshotForm.MatchString(summary.snapshot) {
+			s.LastCompleteSnapshot = summary.snapshot
+		}
+	})
 	if len(sel.missing) > 0 && m.OnIncomplete != nil {
 		m.OnIncomplete(job.ID)
 	}
@@ -322,23 +327,29 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 			m.update(job, func(s *State) { s.Warning = strings.TrimSpace(s.Warning + "\n" + lastLines(out, job.Password)) })
 		}
 	}
-	slog.Info("backup finished", "job", job.ID, "bytes", total)
+	slog.Info("backup finished", "job", job.ID, "bytes", summary.bytes)
 	return nil
 }
 
+type backupSummary struct {
+	bytes    uint64
+	snapshot string
+}
+
 // runBackup runs restic backup once and reports progress and the size.
-func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, total *uint64, input *os.File) (string, error) {
+func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, summary *backupSummary, input *os.File) (string, error) {
 	var stdin io.Reader
 	if input != nil {
 		stdin = input
 	}
 	return m.runWithInput(ctx, env, args, func(line string) {
 		var message struct {
-			Type    string  `json:"message_type"`
-			Percent float64 `json:"percent_done"`
-			Done    uint64  `json:"bytes_done"`
-			Total   uint64  `json:"total_bytes"`
-			Size    uint64  `json:"total_bytes_processed"`
+			Type     string  `json:"message_type"`
+			Percent  float64 `json:"percent_done"`
+			Done     uint64  `json:"bytes_done"`
+			Total    uint64  `json:"total_bytes"`
+			Size     uint64  `json:"total_bytes_processed"`
+			Snapshot string  `json:"snapshot_id"`
 		}
 		if json.Unmarshal([]byte(line), &message) != nil {
 			return
@@ -349,7 +360,7 @@ func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, to
 				s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
 			})
 		case "summary":
-			*total = message.Size
+			summary.bytes, summary.snapshot = message.Size, message.Snapshot
 		}
 	}, nil, stdin)
 }

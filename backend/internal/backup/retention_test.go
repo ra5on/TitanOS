@@ -179,3 +179,46 @@ func TestNoSpaceOnTheNASRemovesNoVersion(t *testing.T) {
 		t.Fatalf("versions removed although the target was not the full one: %s", data)
 	}
 }
+
+func TestFullTargetWithIncompleteSnapshotsKeepsLastComplete(t *testing.T) {
+	e := newEnv(t)
+	job := s3Job()
+	job.Keep = Keep{Mode: "rolling"}
+	if err := e.m.Create(job, volumes); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Start(job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if result := e.result(t); result != "cloud: ok" {
+		t.Fatal(result)
+	}
+	if id := e.state(job.ID).LastCompleteSnapshot; id != "abcdef0123" {
+		t.Fatal(id)
+	}
+	versions := filepath.Join(e.dir, "versions")
+	if err := os.WriteFile(versions, []byte("abcdef0123 2026-10-01T00:00:00Z\n11112222 2026-10-02T00:00:00Z\n33334444 2026-10-03T00:00:00Z\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e.flag(t, "unreadable", true)
+	if err := e.m.Start(job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if result := e.result(t); result != "cloud: ok" || e.state(job.ID).Warning == "" {
+		t.Fatal(result)
+	}
+	e.flag(t, "unreadable", false)
+	if err := os.WriteFile(filepath.Join(e.dir, "full"), []byte("1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Start(job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if result := e.result(t); !strings.Contains(result, "not enough space") {
+		t.Fatal(result)
+	}
+	left, err := os.ReadFile(versions)
+	if err != nil || !strings.Contains(string(left), "abcdef0123 ") || !strings.Contains(string(left), "33334444 ") {
+		t.Fatalf("last complete or newest missing: %s, %v", left, err)
+	}
+}

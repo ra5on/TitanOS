@@ -49,8 +49,11 @@ case "$command" in
     # "full" holds how many versions fit: more and the target is full.
     if [ -e "$dir/full" ] && [ "$(wc -l < "$dir/versions")" -gt "$(cat "$dir/full")" ]; then echo "Fatal: unable to save snapshot: write /repo/data/ab: no space left on device" >&2; exit 1; fi
     if [ -e "$dir/broken" ]; then echo "Fatal: unable to save snapshot: server said no (password $RESTIC_PASSWORD)" >&2; exit 1; fi
-    echo '{"message_type":"summary","total_bytes_processed":2000,"snapshot_id":"abcdef0123"}'
-    if [ -e "$dir/unreadable" ]; then echo "error: open /mnt/tank/media/locked: permission denied" >&2; exit 3; fi ;;
+    if [ -e "$dir/unreadable" ]; then
+      echo '{"message_type":"summary","total_bytes_processed":1000,"snapshot_id":"33334444"}'
+      echo "error: open /mnt/tank/media/locked: permission denied" >&2; exit 3
+    fi
+    echo '{"message_type":"summary","total_bytes_processed":2000,"snapshot_id":"abcdef0123"}' ;;
   snapshots)
     if [ -e "$dir/versions" ]; then
       printf '['; sep=
