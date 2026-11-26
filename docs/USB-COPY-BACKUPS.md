@@ -72,3 +72,15 @@ Einzelheiten für alle Backupverfahren in `docs/SMB-COPY-BACKUPS.md`, Abschnitt
 Grenzen: Live geprüft wurden diese Fälle nur mit Tests auf temporären
 Verzeichnissen; FAT32/exFAT/NTFS-Verhalten auf echten Laufwerken und Abziehen
 während des Laufs sind noch auf Hardware bzw. in QEMU zu prüfen.
+
+## Vorigen Stand einer abgebrochenen lesbaren Kopie zurückholen
+
+Diese Schritte gelten für undatierte lesbare Kopien und Spiegel auf einem Volume, einem USB-Laufwerk oder einer SMB-Freigabe. Wenn ein Lauf während des Kopierens abbricht, können im normalen Zielordner bereits einzelne Dateien aus dem neuen Stand liegen. Der letzte vor dem Schreiben gesicherte Zusammenhang bleibt in einem eigenen Ordner lesbar.
+
+1. Pausiere den Zeitplan des betroffenen Auftrags, falls du den Stand jetzt zurückholen möchtest. Ein vollständig erfolgreicher neuer Lauf räumt die Arbeitskopie der vorigen Generation auf.
+2. Öffne in „Dateien“ den **Zielordner des Auftrags**. Aktiviere unter den Ansichtsoptionen **„Versteckte Dateien anzeigen“**. Für einen Auftrag mit der Kennung `Fotos` öffnest du dort `.titanos-recovery-Fotos/previous/`. Namen von Freigaben und `Volume-…` entsprechen der normalen Kopie. Der gleichgeordnete Ordner `building` kann während des Schreibens unvollständig sein.
+3. Kopiere die **ganze betroffene Freigabe bzw. die zusammengehörigen Ordner aus `previous`** in einen neuen leeren Wiederherstellungsordner. Prüfe dort die Daten, z. B. Katalog und dazugehörige Mediendateien. Den geprüften Stand kannst du anschließend wieder verwenden und den Zeitplan wieder einschalten. Falls der Fehler bereits bei der Vorbereitung eintrat und es noch kein `previous` gibt, hat dieser Lauf den gewöhnlichen Zielbaum noch nicht überschrieben. Beim ersten Lauf auf ein leeres Ziel gibt es keinen älteren Sicherungsstand.
+
+Auf Dateisystemen mit harten Links teilen sich die alten Dateien bis zum Ersetzen ihre Datenblöcke mit der Arbeitskopie. Auf FAT/exFAT benötigt die Vorbereitung zusätzlich Platz für den vorhandenen geschützten Baum und kann entsprechend länger dauern. Bei einem Platzfehler bleibt der bisherige Stand erhalten. Behandle Ziel und Wiederherstellungsordner während des Laufs als schreibgeschützt für andere Programme. Ein bereits vorhandenes fremdes Verzeichnis am reservierten Ort beendet den Lauf mit einem Fehler.
+
+Der Wiederherstellungsordner bewahrt den Inhalt und die vom **Ziel** dargestellten Dateieigenschaften. Die lesbare Kopie kann nur Rechte abbilden, die das Ziel unterstützt. Eine FAT-/exFAT-Platte hat keine individuellen POSIX-Eigentümer und Zugriffsmodi wie ein Linux-Volume. ACLs, erweiterte Attribute und SMB-Rechte sind durch diese Funktion nicht als vollständig wiederherstellbar zugesichert. Prüfe an der zurückgespielten Freigabe insbesondere Besitzer, Gruppen und wirksamen Zugriff, bevor du sie erneut freigibst.

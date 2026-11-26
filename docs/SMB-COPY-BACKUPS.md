@@ -114,3 +114,5 @@ Geprüft mit Unit-Tests (Argumente für restic, Umrechnung, Fensterwahl über
 Mitternacht, Tempo und Fensterwechsel der Kopie mit künstlicher Uhr, API-Prüfung)
 und nachgebautem restic. Nicht geprüft: tatsächlich erreichte Raten mit echtem
 restic gegen S3/SFTP/REST und SMB/USB auf echter Hardware.
+
+Nach einem abgebrochenen undatierten Kopier- oder Spiegellauf liegt die zuvor geschützte lesbare Generation im Zielordner unter `.titanos-recovery-<Auftragskennung>/previous/`. Zum Zurückholen des gesamten Stands und zur Reichweite der Rechteübernahme siehe [Vorigen Stand einer abgebrochenen lesbaren Kopie zurückholen](USB-COPY-BACKUPS.md#vorigen-stand-einer-abgebrochenen-lesbaren-kopie-zurückholen).
