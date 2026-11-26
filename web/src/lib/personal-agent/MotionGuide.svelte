@@ -41,6 +41,17 @@
 					(p!.top + p!.height / 2 - origin.top - half) +
 					'px,0)',
 			}));
+			if (current.origin && !subtle) {
+				const frame = {
+					transform:
+						'translate3d(' +
+						(current.origin.x - half) +
+						'px,' +
+						(current.origin.y - half) +
+						'px,0)',
+				};
+				if (frame.transform !== frames[0].transform) frames.unshift(frame);
+			}
 			showing = true;
 			const final = frames.at(-1)!;
 			if (!subtle && frames.length > 1) {

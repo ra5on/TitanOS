@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { motifPoints, type Motif } from './guide.ts';
+	import { motifPoints, motifOutline, type Motif } from './guide.ts';
 	let {
 		motif = '',
 		calm = false,
@@ -53,7 +53,11 @@
 	});
 </script>
 
-<span bind:this={figure} class="pa-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+<span bind:this={figure} class="pa-dots" aria-hidden="true"
+	>{#if motif && !calm && !paused}<svg viewBox="-1 -1 2 2"
+			><polyline points={motifOutline(motif)} /></svg
+		>{/if}<i></i><i></i><i></i></span
+>
 
 <style>
 	.pa-dots {
@@ -64,6 +68,20 @@
 		width: clamp(20px, calc(var(--ag-dot-size, 10px) * 2.2), 92px);
 		aspect-ratio: 1;
 		vertical-align: middle;
+	}
+	svg {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		opacity: 0.28;
+		color: var(--pa-dots, var(--accent));
+	}
+	polyline {
+		stroke: currentColor;
+		stroke-width: 0.08;
+		stroke-linejoin: round;
+		fill: none;
 	}
 	i {
 		position: absolute;

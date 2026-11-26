@@ -1,6 +1,12 @@
 import type { Spot } from '../agent-figures.ts';
 export type Motif = '' | 'mail' | 'calendar' | 'document' | 'search';
-export type Cue = { id: number; stops: string[]; motif: Motif; hold?: boolean };
+export type Cue = {
+	id: number;
+	stops: string[];
+	motif: Motif;
+	hold?: boolean;
+	origin?: { x: number; y: number };
+};
 const outlines = {
 	document: [
 		[-0.47, -0.7],
@@ -52,6 +58,21 @@ const outlines = {
 		[0.63, -0.06],
 	],
 };
+export function motifOutline(motif: Motif) {
+	return motif ? outlines[motif].map(([x, y]) => x + ',' + y).join(' ') : '';
+}
+// Give the departure pulse one short beat before handing off to another native view.
+export function depart(el: Element | undefined) {
+	const mode = el?.closest<HTMLElement>('[data-motion]')?.dataset.motion;
+	if (
+		!el ||
+		mode === 'off' ||
+		mode === 'subtle' ||
+		matchMedia('(prefers-reduced-motion: reduce)').matches
+	)
+		return Promise.resolve();
+	return new Promise<void>((resolve) => setTimeout(resolve, 180));
+}
 export function motifPoints(motif: Exclude<Motif, ''>, clock: number): Spot[] {
 	const path = outlines[motif];
 	const lengths = path.slice(1).map(([x, y], i) => Math.hypot(x - path[i][0], y - path[i][1]));

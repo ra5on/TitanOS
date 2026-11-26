@@ -134,7 +134,9 @@
 								<span>{msg('to')} · {draft.to}</span><b>{draft.subject}</b><span>{draft.text}</span>
 							</div>
 							<div class="pa-mobile-card-actions pa-actions">
-								<button class="pa-button" onclick={() => onedit(j)}>{msg('edit')}</button><button
+								<button class="pa-button" data-guide={'editor-' + j.id} onclick={() => onedit(j)}
+									>{msg('edit')}</button
+								><button
 									class="pa-primary"
 									onclick={() => {
 										select(j);

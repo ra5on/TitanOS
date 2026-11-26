@@ -6,6 +6,7 @@
 	import { msg, iconFor, sourceTitle, jobTitle, outputKind, failure } from './labels.ts';
 	import { nativeDraftLink, resultLink } from './open.ts';
 	import { mailFields, sendPreview, sourceLocation } from './sources.ts';
+	import { depart } from './guide.ts';
 	import type { Source, Job, Action, Capability } from './api.ts';
 	let {
 		job,
@@ -55,6 +56,7 @@
 			(sendPreview(job) ? fields.accepted === true : !!job.result && !fields.draft),
 	);
 
+	let article = $state<HTMLElement>();
 	let opening = $state(false),
 		confirmCancel = $state(false);
 	function fieldValue(item: unknown): string {
@@ -70,6 +72,8 @@
 		opening = true;
 		try {
 			oncue(['detail', 'native'], job.request.tool);
+			await depart(article);
+			if (!article?.isConnected) return;
 			if (office) {
 				await loadWebApps();
 				if (webAppById(office.app)) {
@@ -85,7 +89,7 @@
 	}
 </script>
 
-<article class="pa-detail" data-guide="detail" data-job={job.id}>
+<article bind:this={article} class="pa-detail" data-guide="detail" data-job={job.id}>
 	<div class="pa-kicker">
 		<Icon
 			name={job.status === 'waiting' ? 'lock' : verified ? 'check' : iconFor(job.request.tool)}
@@ -160,7 +164,7 @@
 			{#if sendPreview(job) && job.phase === 'approval' && fields.inReplyTo && fields.account}
 				<button
 					class="pa-link"
-					onclick={() => {
+					onclick={async () => {
 						oncue(['detail', 'native'], 'mail.reply');
 						openInProgram('/mail/compose?personalReview=' + encodeURIComponent(job.id));
 					}}>{msg('editDraft')}</button

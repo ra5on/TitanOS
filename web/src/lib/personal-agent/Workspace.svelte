@@ -27,7 +27,7 @@
 	import SourcePreview from './SourcePreview.svelte';
 	import Attachments from './Attachments.svelte';
 	import { colorStyle } from './appearance.ts';
-	import { motifFor, type Cue } from './guide.ts';
+	import { motifFor, depart, type Cue } from './guide.ts';
 	import { msg, sourceTitle, iconFor } from './labels.ts';
 	import MotionGuide from './MotionGuide.svelte';
 	import JobDetail from './JobDetail.svelte';
@@ -121,6 +121,19 @@
 				['office.copy', 'office.inspect'].includes(tool)
 			);
 		}
+		const files = selected.filter((s) => s.kind === 'file');
+		if (
+			selected.length === files.length + 1 &&
+			files.length >= 2 &&
+			files.length <= 8 &&
+			selected.some((s) => s.kind === 'folder')
+		) {
+			return (
+				(tool === 'office.pdf-merge' && files.every((s) => /\.pdf$/i.test(s.id))) ||
+				(tool === 'office.compare' &&
+					files.every((s) => /\.(pdf|docx|xlsx|txt|md|tsv|csv)$/i.test(s.id)))
+			);
+		}
 		if (selected.length !== 1) return false;
 		if (selected[0].kind === 'folder')
 			return ['files.search', 'office.table', 'office.document', 'office.deck'].includes(tool);
@@ -155,7 +168,18 @@
 	const selected = $derived(snapshot?.capabilities.find((c) => c.id === tool));
 	const office = $derived(tool.startsWith('office.'));
 	function signal(stops: string[], action: string, hold = false) {
-		cue = { id: ++sequence, stops, motif: motifFor(action), hold };
+		const origin = box?.getBoundingClientRect();
+		const first = [...(box?.querySelectorAll<HTMLElement>('[data-guide]') ?? [])]
+			.find((n) => n.dataset.guide === stops[0] && n.getClientRects().length)
+			?.getBoundingClientRect();
+		const start =
+			first && origin
+				? {
+						x: first.left + first.width / 2 - origin.left,
+						y: first.top + first.height / 2 - origin.top,
+					}
+				: undefined;
+		cue = { id: ++sequence, stops, motif: motifFor(action), hold, origin: start };
 	}
 	function clearContext() {
 		sources = [];
@@ -306,6 +330,7 @@
 						prompt = h.prompt ?? '';
 						args = {};
 						valid = !tool.startsWith('office.');
+						if (!matches(tool, sources)) syncTool();
 						sheet = 'context';
 					})
 					.catch((e) => {
@@ -402,11 +427,12 @@
 		}
 		openInProgram(dest.href);
 	}
-	function editDraft(j: Job) {
+	async function editDraft(j: Job) {
 		const href = nativeDraftLink(j);
 		if (href) {
-			signal(['card-' + j.id, 'detail', 'native'], j.request.tool);
-			openInProgram(href);
+			signal(['card-' + j.id, 'editor-' + j.id], j.request.tool);
+			await depart(box);
+			if (box?.isConnected) openInProgram(href);
 		}
 	}
 	async function reviewDraft(j: Job) {
@@ -505,7 +531,7 @@
 	}
 	function background(j: Job) {
 		show('jobs');
-		signal([small ? 'composer' : 'chat-tab', 'jobs-tab'], j.request.tool);
+		signal(['reply-' + j.id, 'jobs-tab'], j.request.tool);
 	}
 	function onkey(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!small || e.metaKey || e.ctrlKey)) {
