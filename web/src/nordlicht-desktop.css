@@ -104,7 +104,7 @@
 [data-nord-desktop='files'] .in-window .places.windowed,
 [data-nord-desktop] .cf.columns > .cf-side,
 [data-nord-desktop='lxc'] .layout > .list,
-[data-nord-desktop='agent'] .agent > .side {
+[data-nord-desktop='agent'] .agent .layout > .side {
 	background: var(--nord-rail);
 	border-color: var(--nord-rule);
 }
@@ -136,7 +136,7 @@
 	border-color: var(--nord-rule);
 	font-weight: 600;
 }
-[data-nord-desktop='files'] .file-entries .row.selected,
+[data-nord-desktop='files'] .file-entries .row.picked,
 [data-nord-desktop='storage'] .table tr.selected,
 [data-nord-desktop='shares'] .share-list tr.selected,
 [data-nord-desktop='vms'] .vm.selected,
@@ -190,4 +190,31 @@
 [data-nord-desktop='nvr'] .camera-tabs {
 	background: var(--nord-paper);
 	border-color: var(--nord-rule);
+}
+
+/* The glass rim remains visible around a dialog, while the fields and log
+   output have a reliable background. Keyboard focus stays inside the native dialog. */
+[data-nord-desktop] dialog.tile:not(.as-menu) {
+	background: color-mix(in srgb, var(--nord-paper) 88%, var(--dialog-bg));
+	border-color: var(--nord-line);
+}
+[data-nord-desktop] dialog.tile > h2 {
+	letter-spacing: -0.025em;
+	line-height: 1.2;
+}
+[data-nord-desktop] dialog .dialog-actions {
+	padding-block-start: var(--space-3);
+	border-block-start: 1px solid var(--nord-rule);
+}
+[data-nord-desktop] .danger-zone {
+	border-color: color-mix(in srgb, var(--status-error) 45%, var(--nord-rule));
+}
+[data-nord-desktop='apps'] .catalog .cards {
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+[data-nord-desktop='apps'] .catalog .card:focus-visible {
+	outline-offset: -2px;
+}
+[data-nord-desktop='plugins'] .list .about {
+	min-inline-size: 0;
 }
