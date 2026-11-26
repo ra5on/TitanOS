@@ -43,25 +43,38 @@ def check_share(directory, port, password, upload=False):
     target = directory / "retrieved.bin"
     target.unlink(missing_ok=True)
     commands = (f'put "{source}" pruefung.bin; ' if upload else '') + f'get pruefung.bin "{target}"'
-    result = subprocess.run([
-        "smbclient", "//127.0.0.1/Pruefung", "-p", str(port), "-m", "SMB3",
-        "-U", "systemtester", "-c", commands,
-    ], env=dict(os.environ, PASSWD=password), capture_output=True, timeout=20)
+    try:
+        result = subprocess.run([
+            "smbclient", "//127.0.0.1/Pruefung", "-p", str(port), "-m", "SMB3",
+            "-U", "systemtester", "-c", commands,
+        ], env=dict(os.environ, PASSWD=password), capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
     return result.returncode == 0 and target.is_file() and source.read_bytes() == target.read_bytes()
 
 
 def create_share(request, wait, directory, port, password):
+    def submit(path, body):
+        # A client timeout cannot tell whether the guest finished a format or
+        # SMB reconfiguration. Poll the resulting state; never format twice.
+        try:
+            request(path, body, timeout=180)
+        except urllib.error.HTTPError:
+            raise
+        except (OSError, http.client.HTTPException):
+            pass
+
     disks = request("/api/v1/storage")["disks"]
     disk = next(d for d in disks if d["serial"] == "NORDLICHT-DATA")
     name = disk["name"]
-    request("/api/v1/storage/volumes", {
+    submit("/api/v1/storage/volumes", {
         "name": "testdaten", "level": "raid0", "filesystem": "ext4",
         "disks": [name], "erase": [name], "identities": {name: disk["identity"]},
     })
     wait("disposable volume mounted", lambda: any(v["name"] == "testdaten" and v["mounted"]
-         for v in request("/api/v1/storage")["volumes"]), 150)
-    request("/api/v1/shares", {"name": "Pruefung", "volume": "testdaten", "smb": True})
-    wait("test file written and read over SMB", lambda: check_share(directory, port, password, True), 90)
+         for v in request("/api/v1/storage")["volumes"]), 240)
+    submit("/api/v1/shares", {"name": "Pruefung", "volume": "testdaten", "smb": True})
+    wait("test file written and read over SMB", lambda: check_share(directory, port, password, True), 180)
 
 
 def interrupt_install(request, check, wait, releases, files, version, kill, boot, stick):
