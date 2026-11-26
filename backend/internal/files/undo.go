@@ -304,7 +304,13 @@ func (m *Manager) undoAcrossFilesystems(ctx context.Context, sr, dr *os.Root, mo
 	if e = publishNewFile(dr, target, move.Original); e != nil {
 		return e
 	}
-	return sr.RemoveAll(move.Current)
+	if e := m.syncCopyParent(dr, move.Original); e != nil {
+		return e
+	}
+	if e := sr.RemoveAll(move.Current); e != nil {
+		return e
+	}
+	return m.syncCopyParent(sr, move.Current)
 }
 
 func (m *Manager) DeleteWithUndo(root Root, paths []string, user string, permanent bool) (string, error) {
