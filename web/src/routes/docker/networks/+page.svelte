@@ -418,6 +418,17 @@
 </StatusBar>
 
 <style>
+	.table-wrap {
+		container: docker-resources / inline-size;
+		min-width: 0;
+	}
+	.nets td.name,
+	.nets .subnet,
+	.nets .used {
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
+
 	fieldset {
 		padding: var(--tile-pad);
 	}
@@ -467,12 +478,12 @@
 	.warn-text {
 		color: var(--warn-text);
 	}
-	@media (max-width: 639px) {
+	@container docker-resources (max-width: 40rem) {
 		.nets .driver {
 			display: none;
 		}
 	}
-	@media (max-width: 479px) {
+	@container docker-resources (max-width: 30rem) {
 		.nets .used {
 			display: none;
 		}

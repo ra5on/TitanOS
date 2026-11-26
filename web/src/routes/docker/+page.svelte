@@ -97,110 +97,145 @@
 	</div>
 {/snippet}
 
-<PageHead title={activeGroup?.name || t('docker.title')}>
-	{#snippet actions()}
-		{#if !p.phone}
-			{#if p.status?.running && p.containers.length > 0 && !p.phone}
-				{@render searchBox()}
-				{#if p.roomy}{@render filters()}{/if}
-			{/if}
-			{#if p.status?.settings.enabled}
-				<a class="btn btn-primary" href="/apps"
-					><Icon name="plus" size={15} />{t('docker.installApp')}</a
-				>
-			{/if}
-			<button
-				type="button"
-				class="btn icon-btn"
-				aria-label={t('docker.table.more')}
-				title={t('docker.table.more')}
-				aria-haspopup="menu"
-				aria-expanded={p.pageMenuOpen}
-				onpointerdown={() => (p.pageMenuWasOpen = p.pageMenuOpen)}
-				onclick={(event) => p.openPageMenu(event.currentTarget)}
-				><Icon name="more" size={17} /></button
-			>
-		{/if}
-	{/snippet}
-</PageHead>
-
-{#if logId && p.status && !logTarget}<p class="notice-warn" role="status">
-		{t('settingshome.logMissing')}
-	</p>{/if}
-
-{#if p.phone && p.status?.running}
-	<PhoneContainers {p} {activeGroup} {area} />
-{:else if !p.roomy && p.status?.running && p.containers.length > 0}
-	<div class="phone-tools">{@render filters()}</div>
-{/if}
-
-<PageMenu {p} />
-
-{#if p.error}
-	<div class="notice-error" role="alert">
-		<div class="error-line">
-			<span>{p.error.text}</span>{#if p.failedAction}{@const retry = p.failedAction}<button
+<div class="docker-content" bind:clientWidth={p.contentWidth}>
+	<PageHead title={activeGroup?.name || t('docker.title')}>
+		{#snippet actions()}
+			{#if !p.phone}
+				{#if p.status?.running && p.containers.length > 0 && !p.phone}
+					{@render searchBox()}
+					{#if p.roomy}{@render filters()}{/if}
+				{/if}
+				{#if p.status?.settings.enabled}
+					<a class="btn btn-primary" href="/apps"
+						><Icon name="plus" size={15} />{t('docker.installApp')}</a
+					>
+				{/if}
+				<button
 					type="button"
-					class="btn"
-					disabled={p.busyKeys.has(retry.key)}
-					onclick={() => p.run(retry.key, retry.action, retry.label)}>{t('common.retry')}</button
-				>{/if}
-		</div>
-		{#if p.error.detail}<pre>{p.error.detail}</pre>{/if}
-	</div>
-{/if}
-
-{#if p.refreshError}<div class="notice-warn" role="alert">
-		<span
-			>{p.refreshError}
-			{p.lastRefresh
-				? t('docker.stale', { time: new Date(p.lastRefresh).toLocaleTimeString() })
-				: t('docker.noCurrentData')}</span
-		><button class="btn" disabled={p.refreshing} onclick={p.load}>{t('common.retry')}</button>
-	</div>{/if}
-{#if !p.status && !p.refreshError}<p class="muted loading" role="status">
-		{t('common.loading')}
-	</p>{/if}
-{#if p.status && !p.status.settings.enabled}
-	<!-- PLAN 78-5: setting Docker up is a plain heading with its one setting
-	     as a row; the button below it switches Docker on. -->
-	<SettingGroup title={t('docker.setupTitle')} id="docker-setup" desc={t('docker.setupText')}>
-		{#if p.volumes.length === 0}
-			<p class="notice-warn">{t('docker.setupNeedVolume')}</p>
-		{:else}
-			<SettingRow icon="disk" title={t('docker.volume')} for="docker-volume">
-				{#snippet control()}<select id="docker-volume" class="field" bind:value={p.draft.volume}
-						>{#each p.volumes as volume (volume)}<option value={volume}>{volume}</option
-							>{/each}</select
-					>{/snippet}
-			</SettingRow>
-			<div class="row-actions setup-actions">
-				<button type="button" class="btn btn-primary" onclick={p.enable} disabled={p.globalBusy}
-					>{t('docker.enable')}</button
+					class="btn icon-btn"
+					aria-label={t('docker.table.more')}
+					title={t('docker.table.more')}
+					aria-haspopup="menu"
+					aria-expanded={p.pageMenuOpen}
+					onpointerdown={() => (p.pageMenuWasOpen = p.pageMenuOpen)}
+					onclick={(event) => p.openPageMenu(event.currentTarget)}
+					><Icon name="more" size={17} /></button
 				>
+			{/if}
+		{/snippet}
+	</PageHead>
+
+	{#if logId && p.status && !logTarget}<p class="notice-warn" role="status">
+			{t('settingshome.logMissing')}
+		</p>{/if}
+
+	{#if p.phone && p.status?.running}
+		<PhoneContainers {p} {activeGroup} {area} />
+	{:else if !p.roomy && p.status?.running && p.containers.length > 0}
+		<div class="phone-tools">{@render filters()}</div>
+	{/if}
+
+	<PageMenu {p} />
+
+	{#if p.error}
+		<div class="notice-error" role="alert">
+			<div class="error-line">
+				<span>{p.error.text}</span>{#if p.failedAction}{@const retry = p.failedAction}<button
+						type="button"
+						class="btn"
+						disabled={p.busyKeys.has(retry.key)}
+						onclick={() => p.run(retry.key, retry.action, retry.label)}>{t('common.retry')}</button
+					>{/if}
 			</div>
-		{/if}
-	</SettingGroup>
-{:else if p.status && !p.status.running}
-	<p class="notice-warn" role="status">
-		{p.volumes.includes(p.status.settings.volume) &&
-		storage.status?.volumes.find((volume) => volume.name === p.status?.settings.volume)?.mounted
-			? t('docker.starting')
-			: t('docker.waitingVolume', { volume: p.status.settings.volume })}
-	</p>
-{:else if p.status}
-	{#each p.jobs as [app, job] (app)}
-		<div class={job.state === 'failed' ? 'notice-error' : 'notice-warn'} role="status">
-			{t(job.state === 'failed' ? 'docker.jobFailed' : 'docker.jobRunning', { app })}
-			{#if job.state === 'failed' && job.output}<pre>{dockerJobOutput(job, jobText)}</pre>{/if}
-			{#if job.state === 'failed'}
+			{#if p.error.detail}<pre>{p.error.detail}</pre>{/if}
+		</div>
+	{/if}
+
+	{#if p.refreshError}<div class="notice-warn" role="alert">
+			<span
+				>{p.refreshError}
+				{p.lastRefresh
+					? t('docker.stale', { time: new Date(p.lastRefresh).toLocaleTimeString() })
+					: t('docker.noCurrentData')}</span
+			><button class="btn" disabled={p.refreshing} onclick={p.load}>{t('common.retry')}</button>
+		</div>{/if}
+	{#if !p.status && !p.refreshError}<p class="muted loading" role="status">
+			{t('common.loading')}
+		</p>{/if}
+	{#if p.status && !p.status.settings.enabled}
+		<!-- PLAN 78-5: setting Docker up is a plain heading with its one setting
+	     as a row; the button below it switches Docker on. -->
+		<SettingGroup title={t('docker.setupTitle')} id="docker-setup" desc={t('docker.setupText')}>
+			{#if p.volumes.length === 0}
+				<p class="notice-warn">{t('docker.setupNeedVolume')}</p>
+			{:else}
+				<SettingRow icon="disk" title={t('docker.volume')} for="docker-volume">
+					{#snippet control()}<select id="docker-volume" class="field" bind:value={p.draft.volume}
+							>{#each p.volumes as volume (volume)}<option value={volume}>{volume}</option
+								>{/each}</select
+						>{/snippet}
+				</SettingRow>
+				<div class="row-actions setup-actions">
+					<button type="button" class="btn btn-primary" onclick={p.enable} disabled={p.globalBusy}
+						>{t('docker.enable')}</button
+					>
+				</div>
+			{/if}
+		</SettingGroup>
+	{:else if p.status && !p.status.running}
+		<p class="notice-warn" role="status">
+			{p.volumes.includes(p.status.settings.volume) &&
+			storage.status?.volumes.find((volume) => volume.name === p.status?.settings.volume)?.mounted
+				? t('docker.starting')
+				: t('docker.waitingVolume', { volume: p.status.settings.volume })}
+		</p>
+	{:else if p.status}
+		{#each p.jobs as [app, job] (app)}
+			<div class={job.state === 'failed' ? 'notice-error' : 'notice-warn'} role="status">
+				{t(job.state === 'failed' ? 'docker.jobFailed' : 'docker.jobRunning', { app })}
+				{#if job.state === 'failed' && job.output}<pre>{dockerJobOutput(job, jobText)}</pre>{/if}
+				{#if job.state === 'failed'}
+					<div class="buttons job-actions">
+						<button
+							type="button"
+							class="btn"
+							disabled={p.busyKeys.has(p.appKey(app))}
+							onclick={() =>
+								p.run(p.appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}
+							>{t('common.retry')}</button
+						>
+						<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
+						<button
+							type="button"
+							class="btn btn-danger-outline"
+							disabled={p.busyKeys.has(p.appKey(app))}
+							onclick={() => p.askRemoveApp(app)}>{t('docker.remove')}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={p.busyKeys.has(p.appKey(app))}
+							onclick={() => p.run(p.appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}
+							>{t('docker.jobDismiss')}</button
+						>
+					</div>
+				{/if}
+			</div>
+		{/each}
+
+		{#each p.idleApps as app (app)}
+			<div class="notice-warn" role="status">
+				<div>
+					<strong>{t('docker.appIdleTitle', { app })}</strong>
+					<p>{t('docker.appIdleNext')}</p>
+				</div>
 				<div class="buttons job-actions">
 					<button
 						type="button"
 						class="btn"
 						disabled={p.busyKeys.has(p.appKey(app))}
 						onclick={() => p.run(p.appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}
-						>{t('common.retry')}</button
+						>{t('docker.appStart')}</button
 					>
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
 					<button
@@ -209,94 +244,66 @@
 						disabled={p.busyKeys.has(p.appKey(app))}
 						onclick={() => p.askRemoveApp(app)}>{t('docker.remove')}</button
 					>
-					<button
-						type="button"
-						class="btn"
-						disabled={p.busyKeys.has(p.appKey(app))}
-						onclick={() => p.run(p.appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}
-						>{t('docker.jobDismiss')}</button
-					>
 				</div>
+				<details class="setup-details">
+					<summary>{t('docker.technicalDetails')}</summary>
+					<code>/config/apps/{app}/compose.yaml</code>
+				</details>
+			</div>
+		{/each}
+
+		{#if !p.phone && p.containers.length > 0}
+			{#if p.shownGroups.length > 0}
+				<AppTable {p} />
+			{:else}
+				<EmptyState title={t('docker.noMatch')} />
 			{/if}
-		</div>
-	{/each}
-
-	{#each p.idleApps as app (app)}
-		<div class="notice-warn" role="status">
-			<div>
-				<strong>{t('docker.appIdleTitle', { app })}</strong>
-				<p>{t('docker.appIdleNext')}</p>
-			</div>
-			<div class="buttons job-actions">
-				<button
-					type="button"
-					class="btn"
-					disabled={p.busyKeys.has(p.appKey(app))}
-					onclick={() => p.run(p.appKey(app), () => api.post(`/docker/apps/${app}/update`), app)}
-					>{t('docker.appStart')}</button
+			<StatusBar label={t('docker.table.statusBar')}>
+				<span>{t('docker.table.statApps', { count: p.counts.all })}</span>
+				<span
+					>{t('docker.table.statRunning')}
+					<b
+						>{t('docker.table.statRunningValue', {
+							running: p.counts.running,
+							total: p.counts.all,
+						})}</b
+					></span
 				>
-				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
-				<button
-					type="button"
-					class="btn btn-danger-outline"
-					disabled={p.busyKeys.has(p.appKey(app))}
-					onclick={() => p.askRemoveApp(app)}>{t('docker.remove')}</button
+				<span>{t('docker.cpu')} <b>{formatPercent(p.totalCpu)}</b></span>
+				<span>{t('docker.table.statRam')} <b>{formatBytes(p.totalRam)}</b></span>
+				<span class:warn={p.counts.updates > 0}
+					>{t('docker.table.statUpdates')}
+					<b
+						>{p.counts.updates
+							? t('docker.table.statUpdatesValue', { count: p.counts.updates })
+							: t('docker.table.statUpdatesNone')}</b
+					></span
 				>
-			</div>
-			<details class="setup-details">
-				<summary>{t('docker.technicalDetails')}</summary>
-				<code>/config/apps/{app}/compose.yaml</code>
-			</details>
-		</div>
-	{/each}
-
-	{#if !p.phone && p.containers.length > 0}
-		{#if p.shownGroups.length > 0}
-			<AppTable {p} />
-		{:else}
-			<EmptyState title={t('docker.noMatch')} />
+				<span class="end">{t('docker.onVolume', { volume: p.status.settings.volume })}</span>
+				<span
+					>{p.checked}<button
+						type="button"
+						aria-label={t('docker.checkUpdates')}
+						title={t('docker.checkUpdates')}
+						onclick={p.checkUpdates}
+						disabled={p.globalBusy}><Icon name="refresh" size={13} /></button
+					></span
+				>
+				<span>{t('docker.version', { version: p.status.version })}</span>
+			</StatusBar>
+		{:else if !p.phone && p.jobs.length === 0 && p.idleApps.length === 0}
+			<EmptyState title={t('docker.empty')} />
 		{/if}
-		<StatusBar label={t('docker.table.statusBar')}>
-			<span>{t('docker.table.statApps', { count: p.counts.all })}</span>
-			<span
-				>{t('docker.table.statRunning')}
-				<b
-					>{t('docker.table.statRunningValue', {
-						running: p.counts.running,
-						total: p.counts.all,
-					})}</b
-				></span
-			>
-			<span>{t('docker.cpu')} <b>{formatPercent(p.totalCpu)}</b></span>
-			<span>{t('docker.table.statRam')} <b>{formatBytes(p.totalRam)}</b></span>
-			<span class:warn={p.counts.updates > 0}
-				>{t('docker.table.statUpdates')}
-				<b
-					>{p.counts.updates
-						? t('docker.table.statUpdatesValue', { count: p.counts.updates })
-						: t('docker.table.statUpdatesNone')}</b
-				></span
-			>
-			<span class="end">{t('docker.onVolume', { volume: p.status.settings.volume })}</span>
-			<span
-				>{p.checked}<button
-					type="button"
-					aria-label={t('docker.checkUpdates')}
-					title={t('docker.checkUpdates')}
-					onclick={p.checkUpdates}
-					disabled={p.globalBusy}><Icon name="refresh" size={13} /></button
-				></span
-			>
-			<span>{t('docker.version', { version: p.status.version })}</span>
-		</StatusBar>
-	{:else if !p.phone && p.jobs.length === 0 && p.idleApps.length === 0}
-		<EmptyState title={t('docker.empty')} />
 	{/if}
-{/if}
 
-<DockerDialogs {p} />
+	<DockerDialogs {p} />
+</div>
 
 <style>
+	.docker-content {
+		min-width: 0;
+		width: 100%;
+	}
 	.notice-warn {
 		display: flex;
 		flex-wrap: wrap;
@@ -345,8 +352,7 @@
 		flex: none;
 		min-width: 0;
 		max-width: 100%;
-		overflow-x: auto;
-		scrollbar-width: thin;
+		flex-wrap: wrap;
 		gap: 2px;
 		padding: 3px;
 		background: var(--panel-bg);

@@ -262,6 +262,16 @@
 {/if}
 
 <style>
+	.table-wrap {
+		container: docker-resources / inline-size;
+		min-width: 0;
+	}
+	.resources td.name,
+	.resources .used {
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
+
 	.search {
 		position: relative;
 		display: flex;
@@ -324,12 +334,12 @@
 	.dialog-actions {
 		margin-top: var(--space-4);
 	}
-	@media (max-width: 639px) {
+	@container docker-resources (max-width: 40rem) {
 		.resources .driver {
 			display: none;
 		}
 	}
-	@media (max-width: 479px) {
+	@container docker-resources (max-width: 30rem) {
 		.resources .used {
 			display: none;
 		}
