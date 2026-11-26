@@ -68,7 +68,7 @@ func (w *titand) wireNotifications() error {
 			// Calendars and address books move with the default volume.
 			features = append(features, pimFeatures...)
 			// So does the index of the Android app's photo backup.
-			features = append(features, appphotos.Feature)
+			features = append(features, appphotos.Feature, "personal-agent")
 			w.systemData.Watch(ctx, features)
 		})
 	}

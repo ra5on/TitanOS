@@ -58,12 +58,20 @@ func main() {
 	flag.BoolVar(&opts.dev, "dev", false, "development mode: plain HTTP on -dev-listen, no reboot or poweroff")
 	flag.StringVar(&opts.devAddr, "dev-listen", "127.0.0.1:8080", "address in development mode")
 	flag.StringVar(&opts.webappsDir, "webapps-dir", "", "development mode: folder with web app archives (titanos-webapp-<id>-<version>.zip or the upstream <id>-web-<version>.zip)")
+	personalWorker := flag.Bool("personal-agent-worker", false, "run the unprivileged personal Agent worker")
+	personalSocket := flag.String("personal-agent-socket", "/run/titanos-personal-agent/broker.sock", "private Agent socket")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
 	trialWatchdog := flag.Bool("trial-watchdog", false, "fail if the boot loader still has this system on trial, for the watchdog of a trial start that hangs")
 	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")
 	recovery := flag.Bool("network-recovery", false, "authenticated local-console network recovery")
 	flag.Parse()
+	if *personalWorker {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := runPersonalWorker(ctx, *personalSocket)
+		stop()
+		os.Exit(code)
+	}
 	if *recovery {
 		if err := networkRecovery(opts.configDir); err != nil {
 			fmt.Fprintln(os.Stderr, err)

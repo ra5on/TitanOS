@@ -411,6 +411,9 @@ func (a usersArea) handleLockUser(disabled bool) http.HandlerFunc {
 			writeAccountError(w, err)
 			return
 		}
+		if a.mailRoleChanged != nil {
+			a.mailRoleChanged(user.Name)
+		}
 		if disabled {
 			a.sessions().DeleteUser(user.Name, "")
 			slog.Info("account locked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))

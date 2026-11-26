@@ -111,6 +111,44 @@ def check_uploads(request, opener, url, remote, password):
     remote('rm /mnt/mirror/appdata/upload.bin')
 
 
+def personal_agent_smoke(request, remote):
+    # Both commands address the disposable guest. Check the real systemd identity
+    # and complete a durable job after restarting only the Agent service.
+    remote("""systemctl is-active --quiet titanos-agent.service
+pid=$(systemctl show -p MainPID --value titanos-agent.service)
+uid=$(id -u _titanos-agent)
+test "$uid" -gt 0
+test "$(awk '/^Uid:/ {print $2}' /proc/$pid/status)" = "$uid"
+grep -Eq '^CapEff:[[:space:]]+0+$' /proc/$pid/status
+systemctl stop titanos-agent.service""")
+    deadline = time.monotonic() + 60
+    while True:
+        try:
+            request('/personal-agent/state')
+            break
+        except RuntimeError as error:
+            if '503' not in str(error) or time.monotonic() > deadline:
+                raise
+        time.sleep(1)
+    req = {'tool': 'agent.example', 'requestId': 'qemu-agent-restart'}
+    try:
+        job = request('/personal-agent/jobs', req)
+    finally:
+        remote('systemctl start titanos-agent.service')
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        result = request('/personal-agent/jobs/' + job['id'])
+        if result['status'] == 'done':
+            assert result['result']['text'] == '2 + 3 = 5', result
+            assert request('/personal-agent/jobs', req)['id'] == job['id']
+            print('Agent service: unprivileged PID, no capabilities, queued job completed once after restart', flush=True)
+            return
+        if result['status'] == 'failed':
+            raise AssertionError(result)
+        time.sleep(1)
+    raise TimeoutError('personal Agent worker did not finish')
+
+
 def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False, force_tcg=False):
     os.environ['PATH'] += ':/usr/sbin:/sbin'
     with tempfile.TemporaryDirectory(prefix='titanos-storage-', dir=log.parent) as tmp:
@@ -245,6 +283,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
                         # After mirror: the first new volume gets the default folders.
                         check_share_quotas(boot, request, remote, disks)
+                        personal_agent_smoke(request, remote)
                         profiles = remote('btrfs filesystem usage /mnt/mirror')
                         assert 'Data,RAID1' in profiles and 'Metadata,RAID1' in profiles, profiles
                         request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})

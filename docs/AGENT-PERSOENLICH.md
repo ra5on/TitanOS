@@ -1,0 +1,31 @@
+# Persönlicher Agent – Betrieb und Schnittstellen
+
+TitanOS führt Aufträge pro lokalem Konto. Die persönliche Agent-Oberfläche verwendet eine angemeldete Websession. Die Sitzung bestimmt das Konto. Ein neu angelegtes NAS-Konto erhält einen eigenen Speicher, auch wenn es denselben Namen wie ein früheres Konto trägt.
+
+## Dienst und Daten
+
+`titanos-agent.service` läuft als `_titanos-agent` ohne Linux-Capabilities. Zwei unabhängige Auftragsläufe und die Posteingangsprüfung verwenden den privaten Unix-Socket `/run/titanos-personal-agent/broker.sock`. Der Worker fordert den nächsten Auftrag und dessen nächsten Schritt mit einer kurzlebigen Kennung an. Der Broker in `titand` prüft die UID des anfragenden Prozesses und führt registrierte native Operationen im Kontext des ermittelten NAS-Kontos aus.
+
+Die Kontozustände liegen in `.titanos/personal-agent` auf dem Systemdatenvolume. Eine Transaktion schreibt zuerst eine private temporäre Datei, synchronisiert, ersetzt die Kontodatei und synchronisiert das Verzeichnis. Der Konfigurationsspeicher hält zusätzlich die Berechtigungsrevisionen. Fehlt das Datenvolume, meldet die API den Speicherfehler. Die Daten älterer Agent-Versionen gehören zu eigenen Verzeichnissen.
+
+## Aufträge und Freigaben
+
+`POST /api/v1/personal-agent/jobs` erwartet `requestId`, `tool` und je nach Werkzeug `prompt`, `sources`, `args`, `chatId` oder `runAt`. Dieselbe Request-ID und derselbe Inhalt liefern denselben Auftrag zurück. Der Client liest das Ergebnis und den aktuellen Schritt unter `GET /jobs/{id}` innerhalb dieses API-Präfixes. Die JSON-Verträge für Aufträge, Vorschauen, Belege und Skills stehen in `backend/internal/personalagent/types.go`.
+
+Die effektive Berechtigung ergibt sich aus der aktuellen NAS-Rolle, der App-/Ressourcenberechtigung, den vorab gewählten Quellen und Schritten, der Admin-Obergrenze und der persönlichen Einstellung. Neue Werkzeug-IDs haben die Obergrenze `never`, sofern der Katalog kein eng begrenztes Einstiegsrecht definiert. Ein Konto kann die Obergrenze auf `ask` oder `never` einschränken. Bei `ask` wartet der Auftrag vor dem Zugriff. Für sensible Änderungen bleibt anschließend eine objektbezogene Freigabe erforderlich.
+
+Ein wartender Auftrag akzeptiert `POST /jobs/{id}/approve` mit seinem aktuellen Token. Der Broker baut die konkrete Vorschau vor dem Schreiben erneut auf. Änderungen an Inhalt oder Berechtigung verwerfen die bisherige Freigabe. Mit `revise` kann ein nativer Editor seine geänderten Argumente an denselben wartenden Auftrag binden. `pause`, `resume`, `cancel` und `seen` gelten für diesen einen Auftrag. `PUT /settings` mit `paused` betrifft die Warteschlange des Kontos. Ein schon angestoßener externer Schreibvorgang kann bis zur Rückmeldung laufen.
+
+Vor jeder externen Nebenwirkung setzt der Broker dauerhaft die Phase `executing`. Eine ausgebliebene Bestätigung, etwa nach einem Neustart, ergibt `failed/uncertain`. Für diesen Fall zeigt der Auftrag die letzte konkrete Vorschau. Eine bestätigte Ablehnung ergibt `effect_rejected`. Bei einer bestätigten Durchführung speichert der Broker einen Schrittbeleg und das Ergebnis. Adapter können für dasselbe native Objekt auch über verschiedene Request-IDs hinweg einen gemeinsamen Ausführungsschlüssel verwenden.
+
+## Persönliche Rezepte und Beobachtung
+
+Ein Skill enthält höchstens acht vorab gewählte Werkzeuge. Jeder Schritt sieht nur die für dieses Werkzeug gewählten Quellentypen. Er kann bis zu 8192 Zeichen Text aus dem letzten abgeschlossenen Schritt erhalten. Vor einer Weitergabe kontrolliert der Broker erneut das Zugriffsrecht auf die vorherigen Quellen. `manual` startet auf Wunsch, `schedule` einmalig zum angegebenen Zeitpunkt, `mail` bei neuen Nachrichten des ausgewählten Absenders im gewählten Posteingang. Automatische Mailbeobachtung benötigt ausdrücklich das Recht `mail.watch=auto`.
+
+Beim Aktivieren einer Mailregel beginnt die Suche bei der aktuell folgenden IMAP-UID. Cursor und neu angelegte Aufträge werden zusammen gespeichert. Ein Wechsel der UIDVALIDITY beginnt eine neue Beobachtungsperiode. Ein neuer Verbindungsversuch nach einem temporären Postfachfehler erscheint als `retry`. Nach Rechteentzug zeigt das Rezept `revoked`; für eine erneute Beobachtung legt der Nutzer die Regel neu an. Bei einer erwarteten Antwort unterdrückt die Bedingung nur die Fertigmeldung. Freigaben und Fehler haben eigene Benachrichtigungseinstellungen.
+
+## Nachweis im Test
+
+Die Integrationstests in `backend/internal/api/personal_engine_test.go` und `personal_privacy_test.go` verwenden temporäre Daten, getrennte NAS-Testsitzungen, einen privaten Unix-Socket und ein lokales IMAP-Testpostfach. Sie prüfen unter anderem Wiederaufnahme, geänderte Vorschauen, doppelte Einreichungen, Rechteentzug zwischen zwei Schritten und die Sichtbarkeit von Anhängen und Suchergebnissen.
+
+`scripts/smoke-storage.py` prüft im gebauten Wegwerf-Gast die tatsächliche Worker-UID und den Capability-Satz aus `/proc`, startet den Dienst neu und wartet auf ein persistentes Ergebnis. Im bestätigten A/B-Update prüft `scripts/smoke-system-update.py` die deaktivierten Altrouten und vergleicht die archivierte alte Agent-Konfiguration byteweise.

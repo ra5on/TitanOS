@@ -271,6 +271,10 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
             packed.extractall(stick)
         # The NAS asks the project page on the host (10.0.2.2 in QEMU's network).
         (stick / "config/system").mkdir(parents=True)
+        # An archived legacy Agent config on the disposable USB image must survive
+        # slot installation and the new daemon's first boot byte-for-byte.
+        archived_agent = b'{ "enabled" : false, "fixture" : "legacy-archive" }\n'
+        (stick / "config/system/agent.json").write_bytes(archived_agent)
         (stick / "config/system/update.json").write_text(json.dumps(
             {"channel": "stable", "autoInstall": False, "installTime": "03:30", "source": f"http://10.0.2.2:{releases.port}"}))
         console = "console=tty0 console=ttyS0,115200 systemd.journald.forward_to_console=1"
@@ -579,6 +583,16 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                         raise AssertionError(f"the system of before is gone: {status['slots']}")
                     wait("message about the installed system", lambda: notified("update_installed", good), 120)
                     wait("entry without counter on the stick", lambda: on_stick.tries() == {target: None, before: None}, 60)
+                    archive_read = subprocess.run(["mcopy", "-i", on_stick.partition,
+                        "::config/system/agent.json", "-"], capture_output=True, check=True)
+                    assert archive_read.stdout == archived_agent, "legacy Agent archive changed during update"
+                    for method, route in (("GET", "/api/v1/agent/settings"), ("POST", "/api/v1/agent/schedules/archived/run")):
+                        try:
+                            request(route, {} if method == "POST" else None, method=method)
+                        except urllib.error.HTTPError as error:
+                            assert error.code == 404, (route, error.code)
+                        else:
+                            raise AssertionError("legacy Agent route active after update: " + route)
                     if on_stick.read("config/system/update-pending.json") is not None:
                         raise AssertionError("the pending update is still on the stick")
                     print(f"System update {old} → {good}: slot {target} on trial with {TRIES - 1} tries left, marked good by the boot check, confirmed", flush=True)
