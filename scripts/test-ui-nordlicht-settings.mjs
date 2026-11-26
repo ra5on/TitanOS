@@ -197,6 +197,17 @@ async function check(width) {
       .waitFor({ state: "attached" });
     await openSetting("/settings");
     if (desktop) await settings().locator(".overview").waitFor();
+    await search().fill("Benachrichtigungen");
+    const moved = desktop
+      ? page
+          .locator("nav.side .result")
+          .getByText("Benachrichtigungen", { exact: true })
+          .first()
+      : page.locator('.groups .hit a[href="/settings/notifications"]').first();
+    await moved.click();
+    await settings().locator("#push").waitFor();
+    await openSetting("/settings");
+    if (desktop) await settings().locator(".overview").waitFor();
     await search().fill("Immich Logs");
     const logHit = desktop
       ? page.locator("nav.side .result").filter({ hasText: "immich" })
