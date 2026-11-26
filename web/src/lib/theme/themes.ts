@@ -171,7 +171,11 @@ export type DialogSurface = FloatingSurface & {
 	dim: number;
 };
 
+export const DESKTOP_PROFILES = ['custom', 'nordlicht', 'klar', 'kompakt'] as const;
+export type DesktopProfile = (typeof DESKTOP_PROFILES)[number];
+
 export type Appearance = {
+	desktopProfile: DesktopProfile;
 	theme: ThemeId;
 	accent: AccentId;
 	customAccent: Hex;
@@ -247,6 +251,7 @@ export const FLOATING_INHERIT_MIN = 0.7;
 
 export function defaultAppearance(): Appearance {
 	return {
+		desktopProfile: 'custom',
 		theme: 'graphit',
 		accent: 'blau',
 		customAccent: '#E5B92E',
@@ -392,6 +397,7 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		unknown
 	>;
 	return {
+		desktopProfile: oneOf(v.desktopProfile, DESKTOP_PROFILES, 'custom'),
 		theme: oneOf(v.theme, THEME_IDS, d.theme),
 		accent: oneOf(v.accent, [...ACCENT_IDS, 'custom'] as const, d.accent),
 		customAccent: hex(v.customAccent, d.customAccent),
@@ -425,6 +431,25 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		nav: sanitizeNav(v.nav),
 		saturation: inRange(v.saturation, LIMITS.saturation, d.saturation),
 	};
+}
+
+/** Desktop presets leave the underlying account values available for custom mode and the phone. */
+export function desktopLook(a: Appearance, desktop: boolean): Appearance {
+	if (!desktop || a.desktopProfile === 'custom') return a;
+	const profile = {
+		nordlicht: { glass: 45, blur: 20, radius: 16, density: 'normal', duration: 200 },
+		klar: { glass: 0, blur: 0, radius: 12, density: 'normal', duration: 150 },
+		kompakt: { glass: 15, blur: 8, radius: 8, density: 'kompakt', duration: 150 },
+	} as const;
+	const p = profile[a.desktopProfile];
+	return globalLook({
+		...withCorners(a, p.radius),
+		glass: p.glass,
+		blur: p.blur,
+		glow: 0,
+		density: p.density,
+		duration: p.duration,
+	});
 }
 
 /** The corner radius of tiles and windows ("Ecken"); buttons and fields follow it. */

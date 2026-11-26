@@ -1,8 +1,10 @@
+import { inWindow, mode } from '../desktop/mode.svelte.ts';
 import { api } from '../api.ts';
 import {
 	cssVariables,
 	dataAttributes,
 	defaultAppearance,
+	desktopLook,
 	sanitizeAppearance,
 	type Appearance,
 } from './themes.ts';
@@ -15,10 +17,10 @@ export const appearance = $state<{ current: Appearance; systemLight: boolean }>(
 	systemLight: false,
 });
 
-function apply() {
+export function applyAppearance() {
 	const root = document.documentElement;
 	// Since PLAN 68 the KI-Agent follows the appearance like every program.
-	const value = appearance.current;
+	const value = desktopLook(appearance.current, inWindow || mode.wide);
 	for (const [name, value_] of Object.entries(cssVariables(value, appearance.systemLight))) {
 		root.style.setProperty(name, value_);
 	}
@@ -44,24 +46,20 @@ export function initAppearance() {
 	appearance.systemLight = query.matches;
 	query.addEventListener('change', (event) => {
 		appearance.systemLight = event.matches;
-		apply();
 	});
 	window.addEventListener('storage', (event) => {
 		if (event.key !== CACHE_KEY || !event.newValue) return;
 		try {
 			appearance.current = sanitizeAppearance(JSON.parse(event.newValue));
-			apply();
 		} catch {
 			// Broken content: keep what is shown.
 		}
 	});
-	apply();
 }
 
 /** Uses settings for the whole UI (all windows) without saving them to the account. */
 export function useAppearance(value: Appearance) {
 	appearance.current = value;
-	apply();
 	try {
 		localStorage.setItem(CACHE_KEY, JSON.stringify(value));
 	} catch {
