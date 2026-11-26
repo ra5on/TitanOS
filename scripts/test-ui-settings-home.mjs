@@ -1,5 +1,5 @@
 // Settings overview "Alle Einstellungen" (PLAN 61, drafts 34/35): search,
-// equal tiles in four groups, "Zuletzt geändert", role filter, embedded mode
+// one canonical row for each settings page in its task group, "Zuletzt geändert", role filter, embedded mode
 // (inside a same-origin frame: no sidebar, no way back, full width),
 // and every settings page at 1440, 800 and 390 px without horizontal scroll,
 // overlapping text/controls or cut text. Isolated API data only.

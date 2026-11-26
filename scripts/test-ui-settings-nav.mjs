@@ -1,5 +1,5 @@
 // PLAN 86 (owner 13.11.2026, variant A, draft 1): the menu of Systemsteuerung
-// – eight areas that open their pages in the column, one at a time, the area
+// – seven task areas that open their pages in the column, one at a time, the area
 // of the page shown open by itself, an area with one page opening it at once
 // – and the search that finds every single setting and leads to its row
 // (tab chosen, rows opened, the row marked). Also: a normal account's
@@ -41,6 +41,7 @@ async function shot(page, name) {
 async function desk(role = "owner", path = "/settings", width = 1280) {
   const height = 860;
   const made = await create(role, "hell", width, "de", {
+    nativeShell: true,
     deviceScaleFactor: 2,
     viewport: { width, height },
   });
@@ -73,7 +74,6 @@ async function desk(role = "owner", path = "/settings", width = 1280) {
   };
   await made.ctx.addInitScript(
     ({ path, width, height }) => {
-      localStorage.removeItem("titanos.layout");
       localStorage.setItem(
         "titanos.desktop.windows.alex",
         JSON.stringify([
@@ -307,7 +307,7 @@ const userGroups = ["System", "Darstellung und Mitteilungen", "Sicherheit und Ko
         items.map((item) => item.innerText.replace(/\s+/g, " ").trim()),
       );
   for (const [query, top, picture] of [
-    ["Cluster", "Cluster Cluster", "04-suche-cluster"],
+    ["Cluster", "Cluster Netzwerk und Fernzugriff", "04-suche-cluster"],
     [
       "Sprache",
       "Sprache Darstellung › Farben und Schrift › Sprache und Schrift",
@@ -430,12 +430,12 @@ const userGroups = ["System", "Darstellung und Mitteilungen", "Sicherheit und Ko
 // --- 4. The phone: "Alle Einstellungen" after the new areas, its search ----
 for (const role of ["owner", "user"]) {
   const made = await create(role, "hell", 390, "de", {
+    nativeShell: true,
     deviceScaleFactor: 2,
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
   });
-  await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   const { ctx, page } = made;
   await page.goto(base + "/settings");
   await page.locator(".home .sgroup").first().waitFor({ timeout: 20000 });
@@ -501,7 +501,7 @@ for (const role of ["owner", "user"]) {
     1,
     "one area open",
   );
-  const back = page.locator(".phone-bar button.back").first();
+  const back = page.getByRole("button", { name: "Eine Ebene zurück", exact: true });
   if (role === "owner") await shot(page, "14-handy-bereich");
   await page.locator(`#settings-home-group-${group} a.srow`).first().click();
   await page.waitForURL(/\/settings\/[a-z-]+$/);
@@ -510,7 +510,7 @@ for (const role of ["owner", "user"]) {
   await back.click();
   await page.waitForURL(/\/settings$/);
   await page.locator("#settings-home-areas").waitFor();
-  await back.click();
+  await page.locator("[data-phone-dock] .home-button").click();
   await page.waitForURL((url) => url.pathname === "/");
   await ctx.close();
 }

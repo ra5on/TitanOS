@@ -194,8 +194,16 @@ async function check(width) {
       .locator(".notice-error")
       .getByText("Dieses Laufwerk ist nicht (mehr) angeschlossen.")
       .waitFor();
-    await openSetting("/settings");
-    if (desktop) await settings().locator(".overview").waitFor();
+    if (desktop) {
+      await openSetting("/settings");
+      await settings().locator(".overview").waitFor();
+    } else {
+      const back = page.getByRole("button", { name: "Eine Ebene zurück", exact: true });
+      await back.click();
+      await page.waitForURL("**/settings?area=data");
+      await back.click();
+      await search().waitFor();
+    }
     await page.evaluate(async () => {
       await document.fonts.ready;
       await new Promise(requestAnimationFrame);
