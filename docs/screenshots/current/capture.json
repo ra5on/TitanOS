@@ -43,14 +43,14 @@
     },
     {
       "file": "dateien.png",
-      "script": "scripts/capture-readme-screenshots.mjs",
-      "uiVersion": "0.78.0 (in Arbeit; Seiten nennen 0.78)",
-      "captured": "2026-11-13",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 122190,
-      "sha256": "9b4a66cbc8d9650eabbe9dafefdbc5cbfd62a3db3051f3e01449418b64bdf263",
-      "output": "dateien.png"
+      "script": "scripts/test-ui-nordlicht-desktop-apps.mjs",
+      "uiVersion": "Nordlicht-Desktop auf PR 414 (lokaler Arbeitsstand)",
+      "captured": "2026-11-26",
+      "width": 1440,
+      "height": 900,
+      "bytes": 466384,
+      "sha256": "5316fbde885528fe17cc7ed6bd3b45ee86242ba24b3dcda09b7e3490b6cf782c",
+      "output": "chromium-graphit-1440-dateien.png"
     },
     {
       "file": "dock-bearbeiten.png",
@@ -65,14 +65,14 @@
     },
     {
       "file": "docker.png",
-      "script": "scripts/capture-readme-screenshots.mjs",
-      "output": "docker.png",
-      "uiVersion": "0.78.0 (in Arbeit; Seiten nennen 0.78)",
-      "captured": "2026-11-13",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 141245,
-      "sha256": "6fce2caa9d09cca38d8c83882bd7439330ebee7afdcc9db920722a8e2db37c2c"
+      "script": "scripts/test-ui-nordlicht-desktop-apps.mjs",
+      "output": "chromium-graphit-1440-docker.png",
+      "uiVersion": "Nordlicht-Desktop auf PR 414 (lokaler Arbeitsstand)",
+      "captured": "2026-11-26",
+      "width": 1440,
+      "height": 900,
+      "bytes": 443862,
+      "sha256": "64dcb2cd2b3e0523dad1b758eeb332b87db7fc34438f2dec5d51bec9ae8c4761"
     },
     {
       "file": "fernansicht-mobil.png",
@@ -164,14 +164,14 @@
     },
     {
       "file": "systemsteuerung.png",
-      "script": "scripts/capture-readme-screenshots.mjs",
-      "output": "systemsteuerung.png",
-      "uiVersion": "0.78.0 (in Arbeit; Seiten nennen 0.78)",
-      "captured": "2026-11-13",
-      "width": 1600,
-      "height": 1391,
-      "bytes": 148666,
-      "sha256": "a7aa5774d2de0f54e6fdf8578a8449134c1a713dd56cb78f94ac8c9c5d256673"
+      "script": "scripts/test-ui-nordlicht-settings.mjs",
+      "output": "chromium-1280-systemsteuerung.png",
+      "uiVersion": "Nordlicht-Desktop auf PR 414 (lokaler Arbeitsstand)",
+      "captured": "2026-11-26",
+      "width": 1280,
+      "height": 900,
+      "bytes": 220369,
+      "sha256": "55ab38e242c417a59fd0606482b32c6dd57a1754508d36c822f023ab8b3f669e"
     },
     {
       "file": "vms.png",

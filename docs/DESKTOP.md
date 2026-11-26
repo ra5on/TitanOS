@@ -2,6 +2,10 @@
 
 Seit 0.58.0 zeigt TitanOS am großen Bildschirm einen **Arbeitsplatz**: Programme liegen als Symbole auf einem Hintergrundbild, jedes öffnet sich in einem eigenen Fenster. Er ersetzt Kopfzeile, Seitenleiste und Statusleiste (Entscheidung des Projektinhabers vom 6.11.2026); deren Code ist seit 0.62.0 entfernt, der Arbeitsplatz ist die einzige Oberfläche. Am Handy und auf einem hochkant gehaltenen Tablet (unter 900 px Breite) gibt es stattdessen einen Startbildschirm mit Seiten, Ordnern, Widgets und Dock (PLAN 87, Abschnitt „Handy“); jedes Programm öffnet im Vollbild mit „Zurück“.
 
+## Nordlicht am Desktop
+
+Die Statuskachel am Arbeitsplatz führt von einem Sicherungsfehler direkt zum betroffenen Auftrag. Der Fenstertitel zeigt Programm und Pfad. Häufige Befehle stehen in der Werkzeugleiste, weitere im Menü ⋯. Unter **Systemsteuerung → Darstellung** lassen sich Nordlicht, Klar und Kompakt ausprobieren. Die persönlichen Einzelwerte stehen unter **Erweitert**. Die [Seitenübersicht](NORDLICHT-SEITEN.md) und die [Zuordnung der Einstellungen](NORDLICHT-SYSTEMSTEUERUNG.md) nennen die jeweiligen Hauptorte.
+
 ## Programme
 
 Jede Seite von TitanOS gehört zu genau einem Programm (`web/src/lib/desktop/apps.ts`, ein Test prüft, dass keine Seite fehlt):
