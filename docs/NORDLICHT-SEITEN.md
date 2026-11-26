@@ -68,7 +68,7 @@ Die vollständige Zuordnung der Einstellungen, der früheren Bereiche und der we
 
 ## Dialoge und Zugangsansichten
 
-Der Katalog aus `scripts/nordlicht-dialog-inventory.mjs` ordnet die modalen Svelte-Komponenten, nativen Dialoge und Dialogrollen nach Quelldatei. Auch bedingte Dialoge für gesperrte Freigaben, Laufwerkstausch, Rollenwechsel, Kameraeinrichtung und Wiederherstellung sind so auffindbar. Mehrere Auslöser können denselben Baustein öffnen. Der interaktive Klicktest erfasst zusätzlich den Auslöser, die Seite, den tatsächlich angezeigten Titel und ein Bild. Der Bildvergleich führt diese beiden Verzeichnisse getrennt.
+Der Katalog aus `scripts/test-ui-nordlicht-dialog-inventory.mjs` ordnet die modalen Svelte-Komponenten, nativen Dialoge und Dialogrollen nach Quelldatei. Auch bedingte Dialoge für gesperrte Freigaben, Laufwerkstausch, Rollenwechsel, Kameraeinrichtung und Wiederherstellung sind so auffindbar. Mehrere Auslöser können denselben Baustein öffnen. Der interaktive Klicktest erfasst zusätzlich den Auslöser, die Seite, den tatsächlich angezeigten Titel und ein Bild. Der Bildvergleich führt diese beiden Verzeichnisse getrennt.
 
 Anmeldung, Erstkonfiguration, Sperre und Offline-Zustand werden innerhalb der App-Hülle eingeblendet. Die Anmeldung behält ihr konfiguriertes Erscheinungsbild. Beim Sperren bleiben Dialog und Authentifizierung im Vordergrund. Die Offline-Ansicht muss den Verbindungszustand kenntlich machen.
 
