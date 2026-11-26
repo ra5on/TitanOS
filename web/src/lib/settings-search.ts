@@ -70,20 +70,14 @@ export function matchesSetting(query: string, title: string, id: string): boolea
 }
 
 /** The areas of the control panel's menu, in the order they are shown. */
-// PLAN 86 (owner 13.11.2026, "logischer aufbau", draft 1 confirmed): eight
-// areas by what one looks for. Every page belongs to exactly one; the menu
-// (an area opens its pages right there, PLAN 86 variant A), the path title
-// of a page ("Hardware und Energie › Energie"), the phone's list and the
-// search read it from here. Within an area the pages keep the order of the
-// confirmed draft (the same in both languages), not A–Z.
+// Stable page IDs and one task-based menu for the window, phone, breadcrumbs and search.
 export const settingsGroups = [
 	'system',
-	'hardware',
+	'appearance',
+	'data',
 	'network',
 	'security',
-	'notifications',
-	'data',
-	'cluster',
+	'hardware',
 	'smarthome',
 ] as const;
 export type SettingsGroup = (typeof settingsGroups)[number];
@@ -94,6 +88,8 @@ export type SettingsGroup = (typeof settingsGroups)[number];
  */
 export const legacySettingsGroups: Record<string, SettingsGroup | { page: string }> = {
 	accounts: 'security',
+	notifications: { page: 'notifications' },
+	cluster: { page: 'cluster' },
 	ai: 'smarthome',
 	services: { page: 'services' },
 	updates: { page: 'updates' },
@@ -105,9 +101,8 @@ export const settingsGroupIcons: Record<SettingsGroup, IconName> = {
 	hardware: 'chip',
 	network: 'globe',
 	security: 'shield',
-	notifications: 'bell',
+	appearance: 'palette',
 	data: 'archive',
-	cluster: 'tailnet',
 	smarthome: 'bulb',
 };
 
@@ -166,10 +161,9 @@ export function stillNew(
 // exactly this order (PLAN 86, draft 1); adding a page is one line in the
 // right place.
 export const settingsAreas: SettingsArea[] = [
-	{ id: 'about', label: 'about.title', group: 'system', icon: 'info' },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
-	{ id: 'appearance', label: 'menu.appearance', group: 'system', icon: 'palette' },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
+	{ id: 'about', label: 'about.title', group: 'system', icon: 'info' },
 	{
 		id: 'services',
 		label: 'services.title',
@@ -178,20 +172,24 @@ export const settingsAreas: SettingsArea[] = [
 		admin: true,
 		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
+	{ id: 'appearance', label: 'menu.appearance', group: 'appearance', icon: 'palette' },
 	{
-		id: 'viewer',
-		label: 'settingshome.area.viewer',
-		group: 'system',
-		icon: 'monitor',
+		id: 'notifications',
+		label: 'notify.settingsTitle',
+		group: 'appearance',
+		icon: 'bell',
 		admin: true,
-		newSince: { version: '0.61.0', date: '2026-11-07' },
 	},
-	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'gpu', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
-	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'memory', admin: true },
+	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
+	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
+	{
+		id: 'systemdata',
+		label: 'sysdata.title',
+		group: 'data',
+		icon: 'disk',
+		admin: true,
+		newSince: { version: '0.77.0', date: '2026-11-12' },
+	},
 	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
 	{
 		id: 'wireguard',
@@ -219,6 +217,14 @@ export const settingsAreas: SettingsArea[] = [
 	},
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{
+		id: 'cluster',
+		label: 'cluster.title',
+		group: 'network',
+		icon: 'tailnet',
+		admin: true,
+		newSince: { version: '0.38.0', date: '2026-10-30' },
+	},
+	{
 		id: 'users',
 		label: 'desktop.app.users',
 		group: 'security',
@@ -236,31 +242,12 @@ export const settingsAreas: SettingsArea[] = [
 		newSince: { version: '0.31.0', date: '2026-10-28' },
 	},
 	{ id: 'api', label: 'api.title', group: 'security', icon: 'terminal' },
-	{
-		id: 'notifications',
-		label: 'notify.settingsTitle',
-		group: 'notifications',
-		icon: 'bell',
-		admin: true,
-	},
-	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
-	{
-		id: 'systemdata',
-		label: 'sysdata.title',
-		group: 'data',
-		icon: 'disk',
-		admin: true,
-		newSince: { version: '0.77.0', date: '2026-11-12' },
-	},
-	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
-	{
-		id: 'cluster',
-		label: 'cluster.title',
-		group: 'cluster',
-		icon: 'tailnet',
-		admin: true,
-		newSince: { version: '0.38.0', date: '2026-10-30' },
-	},
+	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'gpu', admin: true },
+	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
+	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'memory', admin: true },
 	{ id: 'homeassistant', label: 'ha.title', group: 'smarthome', icon: 'home', admin: true },
 	{
 		id: 'agent',
@@ -284,6 +271,14 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'smarthome',
 		icon: 'chat',
 		newSince: { version: '0.41.0', date: '2026-10-31' },
+	},
+	{
+		id: 'viewer',
+		label: 'settingshome.area.viewer',
+		group: 'smarthome',
+		icon: 'monitor',
+		admin: true,
+		newSince: { version: '0.61.0', date: '2026-11-07' },
 	},
 ];
 

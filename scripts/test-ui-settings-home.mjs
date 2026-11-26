@@ -162,7 +162,7 @@ const pages = [
 const report = [];
 
 try {
-  // Overview, desktop: search on top, the pages as rows under their eight areas.
+  // Overview, desktop: search on top, the pages as rows under their task groups.
   {
     const { ctx, page, data } = await create("owner");
     data.activity = {
@@ -215,13 +215,12 @@ try {
       // PLAN 86: the areas of the confirmed draft.
       [
         "System",
-        "Hardware und Energie",
+        "Darstellung und Mitteilungen",
+        "Daten und Sicherung",
         "Netzwerk und Fernzugriff",
         "Sicherheit und Konten",
-        "Benachrichtigungen",
-        "Daten und Sicherung",
-        "Cluster",
-        "Smart Home und KI",
+        "Hardware und Energie",
+        "Apps und Integrationen",
       ],
     );
     assert.equal(
@@ -242,7 +241,7 @@ try {
     );
     // PLAN 78: every page is a flat row under the plain heading of its area –
     // one column, all rows as wide as the page.
-    const sizes = await main.locator("a.srow").evaluateAll((a) =>
+    const sizes = await main.locator(".groups a.srow").evaluateAll((a) =>
       a.map((x) => {
         const r = x.getBoundingClientRect();
         return [Math.round(r.width), Math.round(r.left)];
@@ -298,7 +297,7 @@ try {
     await page.goto(base + "/settings");
     await page.locator("a.srow").first().waitFor();
     const lefts = await page
-      .locator(".settings-shell a.srow")
+      .locator(".settings-shell .groups a.srow")
       .evaluateAll(
         (a) =>
           new Set(a.map((x) => Math.round(x.getBoundingClientRect().left)))
