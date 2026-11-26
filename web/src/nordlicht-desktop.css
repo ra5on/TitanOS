@@ -78,3 +78,116 @@
 		scroll-behavior: auto;
 	}
 }
+
+/* Settings and forms in other programs use the same group and row components.
+   A section has one silhouette, including its expanded controls. */
+[data-nord-desktop] .in-window .sgroup {
+	row-gap: var(--space-1);
+}
+[data-nord-desktop] .in-window .sgroup > .srow {
+	background: var(--nord-paper);
+	border: 1px solid var(--nord-rule);
+	border-radius: var(--radius-tile);
+}
+[data-nord-desktop] .in-window .sgroup > .srow:has(+ .srow) {
+	border-end-start-radius: var(--radius-small);
+	border-end-end-radius: var(--radius-small);
+}
+[data-nord-desktop] .in-window .sgroup > .srow + .srow {
+	border-start-start-radius: var(--radius-small);
+	border-start-end-radius: var(--radius-small);
+}
+[data-nord-desktop] .in-window .srow-ico {
+	color: var(--text);
+	background: color-mix(in srgb, var(--nord-paper) 89%, var(--accent));
+}
+[data-nord-desktop='files'] .in-window .places.windowed,
+[data-nord-desktop] .cf.columns > .cf-side,
+[data-nord-desktop='lxc'] .layout > .list,
+[data-nord-desktop='agent'] .agent > .side {
+	background: var(--nord-rail);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .in-window :is(.browser, .file-entries) {
+	background: var(--nord-well);
+}
+[data-nord-desktop='files'] .in-window .nav-bar.windowed {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .in-window .crumbs [aria-current='location'] {
+	font-weight: 600;
+	color: var(--text);
+}
+[data-nord-desktop='files'] .command-bar {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .command-bar .upload-command {
+	background: var(--nord-selected);
+	color: var(--text);
+	border-radius: var(--radius-ctl);
+}
+[data-nord-desktop='files'] .file-entries .row.header,
+[data-nord-desktop='vms'] .vm-cols,
+[data-nord-desktop='storage'] .table th {
+	background: var(--nord-rail);
+	color: var(--nord-reading-ink);
+	border-color: var(--nord-rule);
+	font-weight: 600;
+}
+[data-nord-desktop='files'] .file-entries .row.selected,
+[data-nord-desktop='storage'] .table tr.selected,
+[data-nord-desktop='shares'] .share-list tr.selected,
+[data-nord-desktop='vms'] .vm.selected,
+[data-nord-desktop='lxc'] .list button.current,
+[data-nord-desktop='plugins'] .list .card[aria-pressed='true'] {
+	background: var(--nord-selected);
+	box-shadow: inset 3px 0 var(--accent);
+}
+[data-nord-desktop='storage'] .table td,
+[data-nord-desktop='docker'] .app-table tr.member td {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='docker'] .app-table tr.member,
+[data-nord-desktop='lxc'] .layout > .detail {
+	background: var(--nord-paper);
+}
+[data-nord-desktop='apps'] .catalog .find,
+[data-nord-desktop='tools'] .logs .filters {
+	border-block-end: 1px solid var(--nord-rule);
+	padding-block-end: var(--space-3);
+}
+[data-nord-desktop='apps'] .catalog .card {
+	border-radius: var(--radius-tile);
+	background: var(--nord-paper);
+	box-shadow: none;
+}
+[data-nord-desktop='apps'] .categories [aria-pressed='true'],
+[data-nord-desktop='vms'] .filters [aria-pressed='true'] {
+	color: var(--text);
+	background: var(--nord-selected);
+}
+[data-nord-desktop='tools'] .logs .lines {
+	line-height: 1.55;
+	background: var(--nord-well);
+	font-variant-numeric: tabular-nums;
+}
+[data-nord-desktop='tools'] .logs .line + .line {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop] .cf.columns > .cf-list,
+[data-nord-desktop='agent'] .agent .main,
+[data-nord-desktop='nvr'] .camera-detail .events {
+	background-color: var(--nord-paper);
+}
+[data-nord-desktop='mail'] article.message {
+	background-color: var(--nord-well);
+}
+[data-nord-desktop='mail'] article.message .body {
+	line-height: 1.55;
+}
+[data-nord-desktop='nvr'] .camera-tabs {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
