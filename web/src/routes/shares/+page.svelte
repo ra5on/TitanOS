@@ -24,6 +24,7 @@
 	import ShareDialog from './ShareDialog.svelte';
 	import ConnectDialog from './ConnectDialog.svelte';
 	import DeleteShareDialog from './DeleteShareDialog.svelte';
+	import { tabKeys } from '#lib/radio-group.ts';
 	import ShareMenu, { type ShareChoice } from './ShareMenu.svelte';
 	import UnlockDialog from './UnlockDialog.svelte';
 	import { accessSummary } from './shares-page.ts';
@@ -152,10 +153,26 @@
 		view.sort = column;
 		void saveView();
 	}
-	function chooseShare(name: string) {
-		selected = selected === name ? '' : name;
+	let detailHeading = $state<HTMLElement>();
+	async function chooseShare(name: string, toggle = true) {
+		selected = toggle && selected === name ? '' : name;
 		tab = 'general';
 		navigation.selected = selected;
+		if (selected && inWindow) {
+			await tick();
+			detailHeading?.focus();
+		}
+	}
+	async function closeDetails() {
+		const name = selected;
+		selected = '';
+		navigation.selected = '';
+		if (inWindow) {
+			await tick();
+			document
+				.querySelector<HTMLButtonElement>(`.share-name[data-name="${CSS.escape(name)}"]`)
+				?.focus();
+		}
 	}
 	async function choose(action: () => void) {
 		menu = null;
@@ -165,8 +182,7 @@
 	function menuChoice(share: Share, choice: ShareChoice) {
 		void choose(() => {
 			if (choice === 'details') {
-				selected = share.name;
-				tab = 'general';
+				void chooseShare(share.name, false);
 			} else if (choice === 'delete') dialog = { kind: 'delete', share };
 			else dialog = { kind: choice, share };
 		});
@@ -354,6 +370,7 @@
 								<td
 									><button
 										class="share-name"
+										data-name={share.name}
 										aria-expanded={selected === share.name}
 										onclick={() => chooseShare(share.name)}>{share.name}</button
 									>{#if share.timeMachine.enabled}<small>{t('shares.timeMachineChip')}</small
@@ -388,7 +405,8 @@
 										class="btn more"
 										aria-label={t('shares.actionsFor', { name: share.name })}
 										aria-haspopup="menu"
-										onclick={(e) => showMenu(e, share)}>⋯</button
+										onclick={(e) => showMenu(e, share)}
+										>{#if inWindow}<Icon name="more" size={16} />{:else}⋯{/if}</button
 									></td
 								>
 							</tr>
@@ -403,11 +421,9 @@
 		     of the chosen tab as flat rows. -->
 		{#if detail}<aside class="detail" aria-label={detail.name}>
 				<div class="detail-head">
-					<h2>{detail.name}</h2>
-					<button
-						class="btn more"
-						aria-label={t('shares.closeDetails')}
-						onclick={() => (selected = '')}>×</button
+					<h2 tabindex="-1" bind:this={detailHeading}>{detail.name}</h2>
+					<button class="btn more" aria-label={t('shares.closeDetails')} onclick={closeDetails}
+						>{#if inWindow}<Icon name="close" size={16} />{:else}×{/if}</button
 					>
 				</div>
 				{#if detail.perUser}<p class="notice-ok" role="note">{t('shares.perUser')}</p>{/if}
@@ -423,14 +439,28 @@
 							>{t('shares.guardUnlock')}</button
 						>
 					</div>{/if}
-				<div class="tabs" role="tablist" aria-label={t('shares.details')}>
+				<div
+					class="tabs"
+					role="tablist"
+					tabindex="-1"
+					aria-label={t('shares.details')}
+					onkeydown={tabKeys}
+				>
 					{#each detailTabs as id}<button
 							role="tab"
+							id={'share-tab-' + id}
+							aria-controls="share-detail-panel"
+							tabindex={tab === id ? 0 : -1}
 							aria-selected={tab === id}
 							onclick={() => (tab = id as typeof tab)}>{t(`shares.tab.${id}`)}</button
 						>{/each}
 				</div>
-				<div class="sfacts">
+				<div
+					class="sfacts"
+					role="tabpanel"
+					id="share-detail-panel"
+					aria-labelledby={'share-tab-' + tab}
+				>
 					<SettingGroup>
 						{#if tab === 'general'}<SettingRow title={t('share.volume')}>
 								{#snippet control()}<span>{detail.volume}</span>{/snippet}

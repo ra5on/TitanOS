@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { api, type Account, type Role, type Share } from '#lib/api.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
+	import { tick } from 'svelte';
 	import AccountDetail from './AccountDetail.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -55,7 +57,12 @@
 	);
 	// The status filter lives only in this page visit (no write to the stick).
 	let statusFilter = $state<AccountStatusFilter>('all');
-	const shown = $derived(accounts ? filterAccounts(accounts, statusFilter) : []);
+	let query = $state('');
+	const shown = $derived(
+		filterAccounts(accounts ?? [], statusFilter).filter((a) =>
+			a.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+		),
+	);
 	const filterLabel: Record<
 		AccountStatusFilter,
 		'users.filterAll' | 'users.filterActive' | 'users.filterLocked'
@@ -243,9 +250,20 @@
 			shown[0] ??
 			null,
 	);
-	function choose(name: string) {
+	async function choose(name: string) {
 		chosen = name;
 		showDetail = true;
+		if (inWindow && narrow) {
+			await tick();
+			document.querySelector<HTMLButtonElement>('.account .back')?.focus();
+		}
+	}
+	async function backToAccounts() {
+		showDetail = false;
+		if (inWindow) {
+			await tick();
+			document.querySelector<HTMLButtonElement>('.acct[aria-current="true"]')?.focus();
+		}
 	}
 	function hue(name: string) {
 		let h = 0;
@@ -333,6 +351,13 @@
 	<!-- PLAN 75-19/75-20, draft U2: the accounts at the left, the chosen one at the right. -->
 	<div class="u2" class:detail-only={narrow && showDetail}>
 		<nav class="accounts" aria-label={t('users.list')}>
+			{#if inWindow}<input
+					class="field find-account"
+					type="search"
+					aria-label={t('users.searchByName')}
+					placeholder={t('users.searchByName')}
+					bind:value={query}
+				/>{/if}
 			<label class="filter-row">
 				<span class="sr-only">{t('users.filter')}</span>
 				<select class="field filter" bind:value={statusFilter} aria-label={t('users.filter')}>
@@ -366,10 +391,12 @@
 						</button>
 					</li>
 				{:else}
-					<li class="muted empty">{t('users.filterEmpty')}</li>
+					<li class="muted empty">{query.trim() ? t('ui.noResults') : t('users.filterEmpty')}</li>
 				{/each}
 			</ul>
-			<button type="button" class="acct new" onclick={openCreate}>+ {t('users.new')}</button>
+			{#if !inWindow}<button type="button" class="acct new" onclick={openCreate}
+					>+ {t('users.new')}</button
+				>{/if}
 		</nav>
 		{#if current}
 			{@const account = current}
@@ -398,7 +425,7 @@
 					dialog = { kind: 'twoFactor', account };
 				}}
 				onshares={load}
-				onback={narrow ? () => (showDetail = false) : undefined}
+				onback={narrow ? backToAccounts : undefined}
 			/>
 		{/if}
 	</div>
@@ -633,6 +660,10 @@
 	.acct.locked .name {
 		text-decoration: line-through;
 		color: var(--muted);
+	}
+	.find-account {
+		width: 100%;
+		min-width: 0;
 	}
 	.acct.new {
 		min-height: 36px;
