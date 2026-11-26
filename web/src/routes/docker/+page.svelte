@@ -27,6 +27,21 @@
 	const activeGroup = $derived(
 		p.phone ? p.groups.find((g) => g.id === page.url.searchParams.get('group')) : undefined,
 	);
+	const logId = $derived(page.url.searchParams.get('logs'));
+	const logTarget = $derived(
+		logId && p.status ? p.status.containers.find((c) => c.id === logId) : undefined,
+	);
+	let shownLog = '';
+	$effect(() => {
+		if (!logId) {
+			shownLog = '';
+			return;
+		}
+		if (logTarget && shownLog !== logId) {
+			shownLog = logId;
+			p.dialog = { kind: 'logs', container: logTarget };
+		}
+	});
 	const area = $derived(page.url.searchParams.get('area') ?? 'containers');
 
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the toolbar.
@@ -90,21 +105,9 @@
 				{#if p.roomy}{@render filters()}{/if}
 			{/if}
 			{#if p.status?.settings.enabled}
-				<span class="split">
-					<a class="btn btn-primary" href="/apps"
-						><Icon name="plus" size={15} />{t('docker.installApp')}</a
-					><button
-						type="button"
-						class="btn btn-primary"
-						aria-label={t('docker.installMenu')}
-						title={t('docker.installMenu')}
-						aria-haspopup="menu"
-						aria-expanded={p.pageMenu === 'install'}
-						onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'install')}
-						onclick={(event) => p.openPageMenu('install', event.currentTarget)}
-						><Icon name="chevronDown" size={15} /></button
-					>
-				</span>
+				<a class="btn btn-primary" href="/apps"
+					><Icon name="plus" size={15} />{t('docker.installApp')}</a
+				>
 			{/if}
 			<button
 				type="button"
@@ -112,14 +115,18 @@
 				aria-label={t('docker.table.more')}
 				title={t('docker.table.more')}
 				aria-haspopup="menu"
-				aria-expanded={p.pageMenu === 'more'}
-				onpointerdown={() => (p.pageMenuWasOpen = p.pageMenu === 'more')}
-				onclick={(event) => p.openPageMenu('more', event.currentTarget)}
+				aria-expanded={p.pageMenuOpen}
+				onpointerdown={() => (p.pageMenuWasOpen = p.pageMenuOpen)}
+				onclick={(event) => p.openPageMenu(event.currentTarget)}
 				><Icon name="more" size={17} /></button
 			>
 		{/if}
 	{/snippet}
 </PageHead>
+
+{#if logId && p.status && !logTarget}<p class="notice-warn" role="status">
+		{t('settingshome.logMissing')}
+	</p>{/if}
 
 {#if p.phone && p.status?.running}
 	<PhoneContainers {p} {activeGroup} {area} />
@@ -331,20 +338,6 @@
 	.icon-btn {
 		width: var(--control-height);
 		padding: 0;
-	}
-	.split {
-		display: inline-flex;
-	}
-	.split > :first-child {
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-	}
-	.split > :last-child {
-		width: 2.25rem;
-		padding: 0;
-		border-top-left-radius: 0;
-		border-bottom-left-radius: 0;
-		border-left: 1px solid color-mix(in srgb, var(--on-accent) 25%, transparent);
 	}
 	/* The filters: one segmented control with the number of apps in each. */
 	.segmented {
