@@ -71,7 +71,7 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 
 ## Handy (PLAN 64, überarbeitet mit PLAN 87)
 
-In Einstellungen, Meldungen, App-Center und Docker führt das Haus-Symbol neben „TitanOS“ in der Mitte der Kopfleiste direkt zum Startbildschirm. Dieser Weg funktioniert auch bei ausgeblendetem Handy-Dock. „Zurück“ in einer Unteransicht behält das jeweilige übergeordnete Ziel.
+Der Umschalter auf dem mobilen Startbildschirm zeigt den Namen des ausgewählten NAS. Bei einem einzelnen Gerät verwendet TitanOS den eigenen Hostnamen. In Einstellungen, Meldungen, App-Center und Docker führt das Haus-Symbol neben „TitanOS“ in der Mitte der Kopfleiste direkt zum Startbildschirm. Dieser Weg funktioniert auch bei ausgeblendetem Handy-Dock. „Zurück“ in einer Unteransicht behält das jeweilige übergeordnete Ziel.
 
 Am Handy (unter 900 px, die Handy-Ansicht von `mode.svelte.ts`) gibt es statt des Arbeitsplatzes einen **Startbildschirm** (`PhoneHome.svelte`, Logik in `phone-home.ts`); jedes Programm öffnet im Vollbild mit seiner Leiste (`PhoneBar.svelte`). Gewählt vom Inhaber in der Fragerunde vom 13.11.2026 (PLAN 87); nicht gewählt und deshalb nicht gebaut: Wischen von unten (App-Wechsler), Terminal-Tastenleiste, Vibration.
 
