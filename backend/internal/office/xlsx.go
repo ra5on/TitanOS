@@ -17,6 +17,9 @@ type Sheet struct {
 	Header bool    `json:"header"`
 }
 
+// LiteralCell always remains text, including an equals sign supplied by an external source.
+type LiteralCell string
+
 var ErrTooLarge = errors.New("office: too large")
 
 // MaxCells limits a workbook.
@@ -119,7 +122,8 @@ func XLSX(sheets []Sheet) ([]byte, error) {
 					fmt.Fprintf(&data, `<c r="%s" t="b"%s><v>%d</v></c>`, ref, style, b)
 				default:
 					text := fmt.Sprint(v)
-					if strings.HasPrefix(text, "=") {
+					_, literal := v.(LiteralCell)
+					if !literal && strings.HasPrefix(text, "=") {
 						fmt.Fprintf(&data, `<c r="%s"%s><f>%s</f></c>`, ref, style, xmlText(strings.TrimPrefix(text, "=")))
 						continue
 					}

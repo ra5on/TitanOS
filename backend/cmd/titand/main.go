@@ -32,6 +32,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/office"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
@@ -65,7 +66,17 @@ func main() {
 	trialWatchdog := flag.Bool("trial-watchdog", false, "fail if the boot loader still has this system on trial, for the watchdog of a trial start that hangs")
 	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")
 	recovery := flag.Bool("network-recovery", false, "authenticated local-console network recovery")
+	pdfPages := flag.Bool("selected-pdf-pages", false, "read selected PDF bytes on stdin and emit their pages")
 	flag.Parse()
+	if *pdfPages {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		err := office.FilterPDFPages(ctx, os.Stdin, os.Stdout)
+		cancel()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *personalWorker {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		code := runPersonalWorker(ctx, *personalSocket)
