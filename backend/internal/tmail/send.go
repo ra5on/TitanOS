@@ -294,15 +294,19 @@ func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, m
 	return nil
 }
 
+// ErrSMTPRejected identifies a negative SMTP reply before acceptance.
+// An EOF, timeout or disconnect carries no such evidence.
+var ErrSMTPRejected = errors.New("SMTP rejected the message")
+
 // smtpError keeps the answer of the server (never a password: none is in
 // it) for the person.
 func smtpError(ctx context.Context, err error) error {
+	var smtpErr *smtp.SMTPError
+	if errors.As(err, &smtpErr) && smtpErr.Code >= 400 && smtpErr.Code < 600 {
+		return fmt.Errorf("%w: %w: %d %s", ErrSendFailed, ErrSMTPRejected, smtpErr.Code, safeText(smtpErr.Message))
+	}
 	if ctx.Err() != nil {
 		return ErrTimeout
-	}
-	var smtpErr *smtp.SMTPError
-	if errors.As(err, &smtpErr) {
-		return fmt.Errorf("%w: %d %s", ErrSendFailed, smtpErr.Code, safeText(smtpErr.Message))
 	}
 	if c := classify(err); errors.Is(c, ErrTimeout) || errors.Is(c, ErrTLS) {
 		return c
