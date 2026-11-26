@@ -3,6 +3,7 @@
 	// machines the machines themselves, and at the bottom the fold button.
 	// For Systemsteuerung (PLAN 78, PLAN 86) the account, the search and the
 	// areas, which open their pages right in the column.
+	import { sources } from './sources.svelte.ts';
 	import { tick } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
@@ -59,7 +60,16 @@
 	const area = $derived(searchable ? settingsGroupOf(win.href) : undefined);
 	const pageId = $derived(searchable ? settingsAreaOf(path) : '');
 	const links = $derived<SettingsHit[]>(
-		searchable && query.trim() ? findSettings(query, admin, t, index) : [],
+		searchable && query.trim()
+			? findSettings(
+					query,
+					admin,
+					t,
+					index,
+					80,
+					session.services.docker !== false ? sources.containers : [],
+				)
+			: [],
 	);
 	const searching = $derived(searchable && query.trim() !== '');
 	const current = $derived(links.length ? Math.min(hit, links.length - 1) : -1);

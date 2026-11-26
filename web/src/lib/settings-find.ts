@@ -7,6 +7,8 @@
 // setting that are not in its title ("Glocke", "Knoten", "eingeloggt") stand
 // in `synonyms` below. The menu of the window, "Alle Einstellungen" on the
 // phone and the command palette all search through `findSettings`.
+import type { DockerContainer } from './api.ts';
+import { dockerName } from './docker-name.ts';
 import type { IconName } from './components/Icon.svelte';
 import type { MessageKey } from './i18n/index.svelte.ts';
 import {
@@ -187,6 +189,47 @@ function fit(words: string[], query: string, own: string, title: string, around:
 	return 3;
 }
 
+const logWords = new Set(['log', 'logs', 'protokoll', 'protokolle', 'protokolls', 'journal']);
+
+export function asksForContainerLogs(query: string): boolean {
+	return normalize(query)
+		.split(/\s+/)
+		.some((word) => logWords.has(word));
+}
+
+/** IDs come only from the live, administrator-only container inventory, including unmanaged stacks. */
+export function containerLogHits(
+	query: string,
+	containers: DockerContainer[],
+	admin: boolean,
+	translate: Translate,
+): SettingsHit[] {
+	if (!admin || !asksForContainerLogs(query)) return [];
+	const words = normalize(query)
+		.trim()
+		.split(/\s+/)
+		.filter((word) => !logWords.has(word));
+	// "Logs" alone is also a request for the system log. Keep the unqualified search focused.
+	if (!words.length) return [];
+	return containers.flatMap((container) => {
+		const names = normalize(
+			[container.app, container.service, container.name, 'docker container'].join(' '),
+		);
+		if (!words.every((word) => names.includes(word))) return [];
+		const name = dockerName(container, 'distinct');
+		return [
+			{
+				href: '/docker?' + new URLSearchParams({ logs: container.id }),
+				label: name,
+				where: translate('nav.docker') + ' › ' + translate('docker.logs'),
+				icon: 'fileText' as const,
+				page: 'docker',
+				kind: 'row' as const,
+			},
+		];
+	});
+}
+
 /**
  * The hits for a query, best first: pages, then their tabs, groups, rows and
  * parts of rows; within a fit in the order of the menu and the page. An
@@ -199,6 +242,7 @@ export function findSettings(
 	translate: Translate,
 	index: SettingsIndexEntry[] | null = loaded,
 	limit = 80,
+	containers: DockerContainer[] = [],
 ): SettingsHit[] {
 	const q = normalize(query).trim().replace(/\s+/g, ' ');
 	if (!q) return [];
@@ -232,10 +276,10 @@ export function findSettings(
 		const label = entry.k ? translate(entry.k) : (entry.x ?? '');
 		const ref = entry.k ?? `=${entry.x}`;
 		const title = normalize(label);
-		const aliases =
-			entry.kind === 'page' && entry.p === '/settings/backups/restore'
-				? 'dateien daten zurückholen wiederbekommen recover files get data back'
-				: (synonyms[ref] ?? '');
+		const restorePage = entry.kind === 'page' && entry.p === '/settings/backups/restore';
+		const aliases = restorePage
+			? 'backup backups sicherung wiederherstellen wiederherstellung zurückspielen dateien daten zurückholen wiederbekommen restore recover files get data back'
+			: (synonyms[ref] ?? '');
 		const own = `${title} ${normalize(aliases)}`;
 		const pageLabel = translate(area?.label ?? other!.label);
 		const tabEntry = entry.tab
@@ -260,12 +304,18 @@ export function findSettings(
 			group: area?.group,
 			page: area?.id ?? entry.p.split('/')[1],
 			kind: entry.kind,
-			score: 3 + score,
+			score:
+				restorePage &&
+				words.some((w) =>
+					['restore', 'recover', 'wiederherstellen', 'zurückspielen', 'zuruckspielen'].includes(w),
+				)
+					? 1
+					: 3 + score,
 			n: (order.get(area?.id ?? '') ?? settingsAreas.length) * 10_000 + i,
 		});
 	});
 	const seen = new Set<string>();
-	return hits
+	const settings = hits
 		.sort((a, b) => a.score - b.score || a.n - b.n)
 		.filter((hit) => {
 			const key = `${hit.label}\n${hit.where}`;
@@ -275,4 +325,5 @@ export function findSettings(
 		})
 		.slice(0, limit)
 		.map(({ score: _score, n: _n, ...hit }) => hit);
+	return [...containerLogHits(q, containers, admin, translate), ...settings].slice(0, limit);
 }

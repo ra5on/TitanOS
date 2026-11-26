@@ -1,5 +1,7 @@
 <script lang="ts">
 	// The page's dialogs and the menu of a row.
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { inWindow } from '#lib/desktop/mode.svelte.ts';
 	import { dockerName } from '#lib/docker-name.ts';
@@ -15,6 +17,13 @@
 	import UpdatesDialog from './UpdatesDialog.svelte';
 
 	let { p }: { p: DockerPage } = $props();
+	function closeLogs() {
+		p.dialog = null;
+		const url = new URL(page.url.href);
+		if (!url.searchParams.has('logs')) return;
+		url.searchParams.delete('logs');
+		replaceState(url, page.state);
+	}
 </script>
 
 {#if p.confirmStopAll}
@@ -93,7 +102,7 @@
 	</Dialog>
 {/if}
 {#if p.dialog?.kind === 'logs'}
-	<LogsDialog container={p.dialog.container} onclose={() => (p.dialog = null)} />
+	<LogsDialog container={p.dialog.container} onclose={closeLogs} />
 {:else if p.dialog?.kind === 'updates'}
 	{@const target = p.dialog}
 	<UpdatesDialog

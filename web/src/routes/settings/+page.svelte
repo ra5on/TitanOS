@@ -16,10 +16,12 @@
 	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
+	import { sources, watchSources } from '#lib/desktop/sources.svelte.ts';
 	import { mode } from '#lib/desktop/mode.svelte.ts';
 	import SettingsOverview from './SettingsOverview.svelte';
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
 	import {
+		legacySettingsGroups,
 		settingsAreaTarget,
 		settingsEntries,
 		settingsGroupLabel,
@@ -29,6 +31,7 @@
 		type SettingsEntry,
 	} from '#lib/settings-search.ts';
 	import {
+		asksForContainerLogs,
 		findSettings,
 		loadSettingsIndex,
 		settingsIndexNow,
@@ -55,7 +58,20 @@
 		if ((searching || !inWindow) && !index)
 			void loadSettingsIndex().then((loaded) => (index = loaded));
 	});
-	const flat = $derived(searching ? findSettings(settingsSearch.query, admin, t, index) : []);
+	const logSearch = $derived(
+		!inWindow &&
+			admin &&
+			session.services.docker !== false &&
+			asksForContainerLogs(settingsSearch.query),
+	);
+	$effect(() => {
+		if (logSearch) return watchSources();
+	});
+	const flat = $derived(
+		searching
+			? findSettings(settingsSearch.query, admin, t, index, 80, logSearch ? sources.containers : [])
+			: [],
+	);
 	// The phone shows the areas first and an area's pages on "?area="; a
 	// wide tab of its own has the room for every page under its area.
 	const drill = $derived(!mode.wide);
@@ -89,7 +105,8 @@
 		untrack(() => toArea(search));
 	});
 	function toArea(search: string) {
-		if (inWindow) {
+		const legacy = legacySettingsGroups[new URLSearchParams(search).get('area') ?? ''];
+		if (inWindow || (legacy && typeof legacy !== 'string')) {
 			goto(settingsAreaTarget(search, admin) ?? '/settings', { replaceState: true }).catch(
 				() => {},
 			);

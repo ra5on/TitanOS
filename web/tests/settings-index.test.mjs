@@ -178,3 +178,33 @@ test('a hit leads to its tab and row; the anchor survives the trip', () => {
 		'/settings/x#find=Fern|Tailscale',
 	);
 });
+
+test('backup restore and live Docker log searches lead to the same destinations in both search surfaces', async () => {
+	const { paletteSettings } = await import('../src/lib/command-palette.ts');
+	const containers = [
+		{ id: '123abc', name: 'immich_server', app: 'immich', service: 'server', managed: true },
+		{ id: '456def', name: 'photoprism', app: '', service: '', managed: false },
+	];
+	for (const [query, translate] of [
+		['Backup wiederherstellen', tDe],
+		['Restore backup', tEn],
+	]) {
+		assert.equal(first(query, true, translate).href, '/settings/backups/restore');
+		assert.ok(
+			paletteSettings(query, 'admin', translate, settingsIndex).some(
+				(hit) => hit.href === '/settings/backups/restore',
+			),
+		);
+		assert.deepEqual(hrefs(query, false, translate), []);
+	}
+	for (const [query, id] of [
+		['Immich Logs', '123abc'],
+		['Protokoll photoprism', '456def'],
+	]) {
+		const href = '/docker?logs=' + id;
+		assert.equal(findSettings(query, true, tDe, settingsIndex, 80, containers)[0].href, href);
+		assert.equal(paletteSettings(query, 'owner', tDe, settingsIndex, containers)[0].href, href);
+		assert.deepEqual(paletteSettings(query, 'user', tDe, settingsIndex, containers), []);
+		assert.deepEqual(findSettings(query, false, tDe, settingsIndex, 80, containers), []);
+	}
+});

@@ -19,7 +19,13 @@
 	import { apiErrorText } from '../i18n/index.svelte.ts';
 	import { dockerUpdates, sources } from './sources.svelte.ts';
 	import { matchActions, quickActions, type QuickAction } from './quick-actions.ts';
-	import { findSettings, loadSettingsIndex, type SettingsHit } from '../settings-find.ts';
+	import { appForPath } from './apps.ts';
+	import {
+		findSettings,
+		loadSettingsIndex,
+		settingsIndexNow,
+		type SettingsHit,
+	} from '../settings-find.ts';
 
 	let {
 		onopen,
@@ -88,13 +94,20 @@
 	// index, loaded with the first search).
 	let settingsIndexReady = $state(false);
 	$effect(() => {
-		if (phone && query.trim() && !settingsIndexReady)
+		if (query.trim() && !settingsIndexReady)
 			void loadSettingsIndex().then(() => (settingsIndexReady = true));
 	});
 	const settingsHits = $derived.by((): SettingsHit[] => {
 		void settingsIndexReady;
-		if (!phone || !query.trim()) return [];
-		return findSettings(query, admin, (key) => t(key)).slice(0, 8);
+		if (!query.trim()) return [];
+		return findSettings(
+			query,
+			admin,
+			(key) => t(key),
+			settingsIndexNow(),
+			8,
+			session.services.docker !== false ? sources.containers : [],
+		);
 	});
 	// PLAN 70: quick actions. The backup jobs are asked for only while the menu
 	// is open and something is typed; containers and VMs the desktop has anyway.
@@ -267,9 +280,14 @@
 	}
 
 	let root = $state<HTMLElement>();
+	function openSearchHit(hit: SettingsHit) {
+		const app = appForPath(hit.href.startsWith('/settings') ? '/settings' : hit.href.split(/[?#]/)[0]);
+		if (app) onopen('app:' + app.id, hit.href);
+	}
 	function first() {
 		if (shown[0]) onopen(shown[0].key);
 		else if (pages[0]) onopen(pages[0].key, pages[0].href);
+		else if (settingsHits[0]) openSearchHit(settingsHits[0]);
 		else if (actions[0]) pick(actions[0]);
 	}
 	function items() {
@@ -479,14 +497,16 @@
 		</div>
 	{/if}
 	{#if settingsHits.length}
-		<div class="pages settings-hits" role="group" aria-label={t('phone.search.settings')}>
-			<span class="group-title">{t('phone.search.settings')}</span>
+		<div class="pages settings-hits" role="group" aria-label={t('palette.results')}>
+			<span class="group-title"
+				>{t(
+					settingsHits.some((h) => h.page === 'docker')
+						? 'palette.results'
+						: 'phone.search.settings',
+				)}</span
+			>
 			{#each settingsHits as hit (hit.href + hit.label)}
-				<button
-					type="button"
-					class="page"
-					data-settings-hit
-					onclick={() => onopen('app:settings', hit.href)}
+				<button type="button" class="page" data-settings-hit onclick={() => openSearchHit(hit)}
 					><Icon name={hit.icon} size={17} /><span
 						>{hit.label}<span class="muted small where">{hit.where}</span></span
 					></button
