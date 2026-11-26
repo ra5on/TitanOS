@@ -33,6 +33,7 @@
 		onflags,
 		onremoved,
 		onagent,
+		onloaded,
 	}: {
 		accountId: string;
 		folder: string;
@@ -49,6 +50,7 @@
 		onremoved: (uid: number) => void;
 		/** 1.13: opens the agent's panel with this message (only with the agent). */
 		onagent?: () => void;
+		onloaded?: (account: string, message: Message | null) => void;
 	} = $props();
 
 	let msg = $state<Message | null>(null);
@@ -71,6 +73,7 @@
 			const got = await mailApi.message(accountId, folder, uid, { images });
 			if (n !== asked) return;
 			msg = got;
+			onloaded?.(accountId, got);
 			// Opening marks it read (titand does it with the request); only a
 			// change is passed on (it reads the folders again).
 			if (!got.flags.seen) {
@@ -89,6 +92,7 @@
 		void uid;
 		untrack(() => {
 			msg = null;
+			onloaded?.(accountId, null);
 			images = false;
 			showAll = false;
 			links = [];
@@ -312,6 +316,9 @@
 		</header>
 
 		{#if !compact}<div class="actions" role="toolbar" aria-label={t('mail.actions')}>
+				{#if onagent}<button type="button" class="btn" onclick={onagent}
+						><Icon name="sparkle" size={16} /> {t('agentpim.panel.title')}</button
+					>{/if}
 				<button type="button" class="btn" disabled={busy} onclick={() => oncompose('reply', msg!)}
 					><Icon name="reply" size={16} />{t('mail.action.reply')}</button
 				>
@@ -442,6 +449,12 @@
 					onclick={() => oncompose('reply', msg!)}
 					><Icon name="reply" size={19} />{t('mail.action.reply')}</button
 				>
+				{#if onagent}<button
+						type="button"
+						class="reader-agent"
+						aria-label={t('agentpim.panel.title')}
+						onclick={onagent}><Icon name="sparkle" size={19} /></button
+					>{/if}
 				<PhoneDockHandle />
 			</div>
 		{:else if compact}
@@ -475,6 +488,13 @@
 						>
 					{/snippet}
 				</Dropdown>
+				{#if onagent}<button
+						type="button"
+						class="bar-btn"
+						title={t('agentpim.panel.title')}
+						aria-label={t('agentpim.panel.title')}
+						onclick={onagent}><Icon name="sparkle" size={20} /></button
+					>{/if}
 				<button
 					type="button"
 					class="bar-btn"
@@ -793,7 +813,8 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.reader-back,
-	.reader-reply {
+	.reader-reply,
+	.reader-agent {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;

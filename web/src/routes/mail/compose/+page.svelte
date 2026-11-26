@@ -1,4 +1,11 @@
 <script lang="ts">
+	import MotionGuide from '#lib/personal-agent/MotionGuide.svelte';
+	import type { Cue } from '#lib/personal-agent/guide.ts';
+	import { colorStyle } from '#lib/personal-agent/appearance.ts';
+	import type { Settings } from '#lib/personal-agent/api.ts';
+	import { openInProgram } from '#lib/agent/open.ts';
+	import { createJob, type Source, type Job } from '#lib/personal-agent/api.ts';
+	import { loadPersonalDraft, mailSelection } from '#lib/personal-agent/pim.ts';
 	// 1.05, T-Mail: writing an e-mail (docs/TMAIL.md, "Schreiben"). From one
 	// of the account's mailboxes (the sender is always its address), To/Cc/Bcc
 	// with suggestions, subject, plain text, a signature to choose, files
@@ -8,7 +15,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ApiError } from '#lib/api.ts';
+	import { api, ApiError } from '#lib/api.ts';
 	import NasPicker from '#lib/components/agent/NasPicker.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -20,7 +27,7 @@
 	import { mailApi, nasFileOf, sendForm } from '#lib/tmail/api.ts';
 	import { createAutosave } from '#lib/tmail/autosave.ts';
 	import { closeCompose } from '#lib/tmail/open.ts';
-	import { folderOf, loadFolders, mail } from '#lib/tmail/store.svelte.ts';
+	import { folderOf, loadAccounts, loadFolders, mail } from '#lib/tmail/store.svelte.ts';
 	import {
 		addrOf,
 		addressText,
@@ -33,7 +40,7 @@
 		validAddress,
 	} from '#lib/tmail/text.ts';
 	import type { Attachment, Message, SendMeta, Signature } from '#lib/tmail/types.ts';
-	import { draftList, loadAgentDraft } from '#lib/agent/drafts.ts';
+	import { draftList } from '#lib/agent/drafts.ts';
 
 	/** Contract: at most 100 recipients and 25 MB of attachments. */
 	const MAX_RECIPIENTS = 100;
@@ -73,11 +80,14 @@
 	let references = '';
 	let draftUid = $state(0);
 
-	// 1.13: a draft of the KI-Agent (?agentDraft=<chat>:<entry>, "Öffnen und
-	// bearbeiten"): its fields come in as text to check; nothing is sent
-	// without the person.
-	const agentDraft = params.get('agentDraft');
+	const reviewId = params.get('personalReview');
+	const agentDraft = reviewId || params.get('personalDraft');
+	let reviewToken = '';
+	let arrival = $state<Cue | null>(null),
+		presentation = $state<Pick<Settings, 'colors' | 'dotSize' | 'motion'> | null>(null),
+		reduced = $state(true);
 	let fromAgent = $state(false);
+	let anchor: Source | undefined;
 	let agentAnswers: { folder: string; uid: number } | null = null;
 
 	let loading = $state((!!mode && !!sourceUid) || !!agentDraft);
@@ -89,7 +99,7 @@
 	let pickingNas = $state(false);
 	let confirmDiscard = $state(false);
 	let discarding = $state(false);
-	let done = false;
+	let done = $state(false);
 	// Changes since the last saved draft (for the window's question when closing).
 	let edits = $state(0);
 	let savedEdits = $state(0);
@@ -144,6 +154,7 @@
 				accountId,
 				sendForm(meta(), sentFiles, sentNas.map(nasFileOf)),
 			);
+			if (agentDraft && !res?.uid) throw new Error(t('papim.unsaved'));
 			if (res && typeof res.uid === 'number' && res.uid > 0) {
 				draftUid = res.uid;
 				// Everything attached is in the new draft now: the next save takes
@@ -176,6 +187,7 @@
 		nav.cancel();
 		const target = nav.to.url.pathname + nav.to.url.search;
 		void autosave.flush().finally(() => {
+			if (agentDraft && (draftError || autosave.dirty() || edits !== savedEdits)) return;
 			done = true;
 			void goto(target);
 		});
@@ -228,34 +240,116 @@
 	}
 
 	async function startFromAgent(param: string) {
-		const d = await loadAgentDraft(param);
-		if (!d || d.app !== 'mail' || d.kind === 'move') {
+		const review = reviewId
+			? await api.get<Job>('/personal-agent/jobs/' + encodeURIComponent(reviewId))
+			: null;
+		const fields = review?.preview?.data as Record<string, unknown> | undefined;
+		const ref = review?.preview?.sources?.find((src) => src.kind === 'mail')?.ref;
+		if (
+			review &&
+			(review.status !== 'waiting' ||
+				review.phase !== 'approval' ||
+				!review.token ||
+				!fields ||
+				!ref ||
+				fields.account !== ref.account)
+		) {
+			loadError = t('agentpim.draft.gone');
+			return;
+		}
+		reviewToken = review?.token ?? '';
+		const d =
+			review && fields && ref
+				? {
+						app: 'mail',
+						kind: 'reply',
+						fields: {
+							...fields,
+							a: ref.account,
+							f: ref.folder,
+							uid: Number(ref.uid),
+							messageId: ref.messageId,
+							date: ref.date,
+						},
+					}
+				: await loadPersonalDraft(param);
+		if (!d || d.app !== 'mail' || d.kind !== 'reply') {
 			loadError = t('agentpim.draft.gone');
 			return;
 		}
 		const f = d.fields;
-		if (typeof f.a === 'string' && mail.accounts?.some((a) => a.id === f.a)) accountId = f.a;
+		if (!mail.accounts) await loadAccounts();
+		if (
+			typeof f.a !== 'string' ||
+			!mail.accounts?.some((a) => a.id === f.a) ||
+			typeof f.f !== 'string' ||
+			typeof f.uid !== 'number'
+		) {
+			loadError = t('agentpim.draft.gone');
+			return;
+		}
+		accountId = f.a;
+		const orig = await mailApi.message(accountId, f.f, f.uid);
+		if (orig.messageId !== f.messageId || orig.date !== f.date) {
+			loadError = t('agentpim.draft.gone');
+			return;
+		}
+		anchor = mailSelection(accountId, f.f, orig)[0];
+		agentAnswers = { folder: f.f, uid: f.uid };
+		inReplyTo = orig.messageId;
+		references = [orig.references, orig.messageId].filter(Boolean).join(' ');
+		if (!mail.folders[accountId]) await loadFolders(accountId);
+		if (review && fields?.draftUid) {
+			const folder = folderOf(accountId, 'drafts');
+			if (!folder || typeof fields.draftUid !== 'number') {
+				loadError = t('agentpim.draft.gone');
+				return;
+			}
+			const saved = await mailApi.message(accountId, folder.path, fields.draftUid);
+			if (saved.messageId !== fields.draftMessageId || saved.date !== fields.draftDate) {
+				loadError = t('agentpim.draft.gone');
+				return;
+			}
+			draftUid = saved.uid;
+			carried = { parts: saved.attachments.filter((p) => !p.inline), draft: true };
+		}
+		if (review) {
+			signatureChosen = true;
+			signature = '';
+		}
 		to = draftList(f.to);
 		cc = draftList(f.cc);
 		bcc = draftList(f.bcc);
 		showCopies = cc.length > 0 || bcc.length > 0;
 		subject = typeof f.subject === 'string' ? f.subject : '';
 		text = typeof f.text === 'string' ? f.text : '';
-		// An answer: the mail it answers is marked once sent, and the thread kept.
-		if (d.kind === 'reply' && typeof f.f === 'string' && typeof f.uid === 'number') {
-			agentAnswers = { folder: f.f, uid: f.uid };
-			try {
-				const orig = await mailApi.message(accountId, f.f, f.uid);
-				inReplyTo = orig.messageId;
-				references = `${orig.references ?? ''} ${orig.messageId}`.trim();
-			} catch {
-				// Sent without the thread's references; the answer still goes.
-			}
-		}
+
 		fromAgent = true;
 		touch();
 	}
 
+	onMount(() => {
+		if (!agentDraft) return;
+		const media = matchMedia('(prefers-reduced-motion: reduce)');
+		const change = () => (reduced = media.matches);
+		change();
+		media.addEventListener('change', change);
+		let gone = false;
+		void api
+			.get<Pick<Settings, 'colors' | 'dotSize' | 'motion'>>('/personal-agent/presentation')
+			.then((v) => {
+				if (!gone) presentation = v;
+			})
+			.catch(() => {});
+		return () => {
+			gone = true;
+			media.removeEventListener('change', change);
+		};
+	});
+	$effect(() => {
+		if (fromAgent && !loading && presentation && !arrival)
+			arrival = { id: 1, stops: ['handoff', 'body'], motif: 'mail' };
+	});
 	onMount(async () => {
 		if (accountId && !mail.folders[accountId]) void loadFolders(accountId);
 		mailApi.settings().then(
@@ -336,6 +430,32 @@
 		if (sendError) return;
 		sending = true;
 		try {
+			if (agentDraft) {
+				if (!fromAgent || !anchor || !accountId) throw new Error(t('agentpim.draft.gone'));
+				await autosave.flush();
+				if (draftError || autosave.dirty() || savedEdits !== edits || !draftUid)
+					throw new Error(draftError || t('papim.unsaved'));
+				if (!folderOf(accountId, 'drafts')) await loadFolders(accountId);
+				const folder = folderOf(accountId, 'drafts');
+				if (!folder) throw new Error(t('papim.unsaved'));
+				const draft = await mailApi.message(accountId, folder.path, draftUid);
+				const args = { draftUid, draftMessageId: draft.messageId, draftDate: draft.date };
+				const job = reviewId
+					? await api.post<Job>(
+							'/personal-agent/jobs/' + encodeURIComponent(reviewId) + '/revise',
+							{ token: reviewToken, args },
+						)
+					: await createJob({
+							tool: 'mail.send',
+							sources: [anchor],
+							requestId: 'reply-' + accountId + '-' + draftUid,
+							args,
+						});
+				done = true;
+				autosave.stop();
+				openInProgram('/agent?job=' + encodeURIComponent(job.id));
+				return;
+			}
 			await mailApi.send(accountId, sendForm(meta(), files, nasFiles.map(nasFileOf)));
 			done = true;
 			autosave.stop();
@@ -388,8 +508,11 @@
 		<button
 			type="button"
 			class="btn btn-primary"
-			disabled={sending || loading || !account}
-			onclick={send}><Icon name="send" size={16} />{t('mail.compose.send')}</button
+			disabled={done || sending || loading || !!loadError || !account}
+			onclick={send}
+			><Icon name="send" size={16} />{t(
+				agentDraft ? 'papim.approveSend' : 'mail.compose.send',
+			)}</button
 		>
 	{/snippet}
 </PageHead>
@@ -399,11 +522,16 @@
 {#if loading}
 	<p class="muted" role="status">{t('common.loading')}</p>
 {:else}
-	<form class="compose" onsubmit={(e) => e.preventDefault()}>
+	<form
+		style={colorStyle(presentation ?? undefined)}
+		class="compose"
+		onsubmit={(e) => e.preventDefault()}
+	>
 		<div class="row">
 			<label for="mail-from" class="lbl">{t('mail.compose.from')}</label>
 			<select
 				id="mail-from"
+				disabled={!!agentDraft}
 				class="field"
 				bind:value={accountId}
 				onchange={() => {
@@ -431,11 +559,19 @@
 		{/if}
 		<div class="row">
 			<label for="mail-subject" class="lbl">{t('mail.compose.subject')}</label>
-			<input id="mail-subject" class="field" type="text" bind:value={subject} oninput={touch} />
+			<input
+				id="mail-subject"
+				data-guide="handoff"
+				class="field"
+				type="text"
+				bind:value={subject}
+				oninput={touch}
+			/>
 		</div>
 		<label class="sr-only" for="mail-text">{t('mail.compose.text')}</label>
 		<textarea
 			id="mail-text"
+			data-guide="body"
 			class="field text"
 			bind:value={text}
 			oninput={touch}
@@ -535,6 +671,7 @@
 			{#if draftError}<span class="draft-error">{draftError}</span>{:else}{draftNote ||
 					t('mail.compose.draftAuto')}{/if}
 		</p>
+		{#if fromAgent}<MotionGuide cue={arrival} mode={presentation?.motion || 'off'} {reduced} />{/if}
 	</form>
 {/if}
 
@@ -556,6 +693,7 @@
 
 <style>
 	.compose {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2-5);

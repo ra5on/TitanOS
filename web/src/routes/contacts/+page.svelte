@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { loadPersonalDraft } from '#lib/personal-agent/pim.ts';
 	// 1.11: Kontakte (docs/KALENDER.md, drafts 10–13, 50–53). Without the
 	// data volume titand answers 503 and the page says "nicht verfügbar",
 	// never an empty list.
@@ -114,11 +115,10 @@
 	import ImportDialog from '#lib/pim/con/ImportDialog.svelte';
 	import MergeView from '#lib/pim/con/MergeView.svelte';
 	import SuggestionRow from '#lib/pim/con/SuggestionRow.svelte';
-	import { contactDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
-	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import { contactDraftForm, type AgentDraft } from '#lib/agent/drafts.ts';
+	import AgentPanel from '#lib/personal-agent/PIMPanel.svelte';
+	import { pimSelection } from '#lib/personal-agent/pim.ts';
 	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
-	import type { AgentContext } from '#lib/agent.ts';
-	import { contactsPanelActions } from '#lib/agent/panel-actions.ts';
 	import { shellOfError, type ShellState } from '#lib/pim/shell.ts';
 
 	// ---- Columns or levels: the window's width decides (1.15) ----
@@ -195,14 +195,14 @@
 	let fromAgent = $state(false);
 	let draftNote = $state('');
 	$effect(() => {
-		const param = page.url.searchParams.get('agentDraft') ?? '';
+		const param = page.url.searchParams.get('personalDraft') ?? '';
 		if (!param || param === draftSeen) return;
 		draftSeen = param;
 		untrack(() => void takeDraft(param));
 	});
 	async function takeDraft(param: string) {
 		draftNote = '';
-		const d = await loadAgentDraft(param);
+		const d = await loadPersonalDraft(param);
 		draftSeen = '';
 		if (d?.app !== 'contacts' || d.kind !== 'contact') {
 			draftNote = d ? t('agentpim.draft.foreign') : t('agentpim.draft.gone');
@@ -878,32 +878,16 @@
 	let transfer = $state(false);
 
 	// ---- The KI-Agent's panel (1.13) ----
-	const AGENT_KEY = 'titanos.contacts.agentPanel';
 	const withAgent = $derived(!!session.services.agent);
-	let agentOpen = $state(readAgentOpen());
-	/** The panel stands as a column (room next to the contact); else a sheet. */
+	let agentOpen = $state(false);
 	let agentColumn = $state(false);
-	function readAgentOpen(): boolean {
-		try {
-			return localStorage.getItem(AGENT_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
 	function setAgent(on: boolean) {
 		agentOpen = on;
-		try {
-			if (on) localStorage.setItem(AGENT_KEY, '1');
-			else localStorage.removeItem(AGENT_KEY);
-		} catch {
-			// Kept for this visit only.
-		}
 	}
 	const openRow = $derived(selId && !place.isNew ? all.find((i) => i.id === selId) : undefined);
-	const agentContext = $derived<AgentContext | null>(
-		openRow ? { app: 'contacts', card: { book: openRow.book, id: openRow.id } } : null,
+	const agentSources = $derived(
+		openRow ? pimSelection('contacts', openRow.book, openRow.id, openRow.name) : [],
 	);
-	const agentActions = $derived(contactsPanelActions((k) => t(k)));
 	/** The phone's ⋯ menu has the entry "KI-Agent" (desktop/menubar/menus.ts). */
 	const menuHasAgent = $derived(
 		entries(menusFor('app:contacts', session.data?.user?.role ?? 'user')).some(
@@ -1266,10 +1250,10 @@
 	sideFoot={withAgent ? foot : undefined}
 	notices={notice || addedTo || draftNote ? notices : undefined}
 	list={listColumn}
-	aside={withAgent && agentOpen && wide ? agentAside : undefined}
+	aside={withAgent && agentOpen && wide && agentColumn ? agentAside : undefined}
 	asideKey="titanos.agentPanel.width"
 	asideResizeLabel={t('agentpim.panel.resize')}
-	bind:asideShown={agentColumn}
+	bind:asideAvailable={agentColumn}
 >
 	<div class="content" data-content-mode={mode}>
 		{#if shown.kind !== 'ready'}
@@ -1342,23 +1326,12 @@
 </ColumnFrame>
 
 {#snippet agentAside()}
-	<AgentPanel
-		app="contacts"
-		context={agentContext}
-		actions={agentActions}
-		onclose={() => setAgent(false)}
-	/>
+	<AgentPanel app="contacts" sources={agentSources} onclose={() => setAgent(false)} />
 {/snippet}
 
 {#if withAgent && agentOpen && !(wide && agentColumn)}
 	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
-		<AgentPanel
-			app="contacts"
-			phone
-			context={agentContext}
-			actions={agentActions}
-			onclose={() => setAgent(false)}
-		/>
+		<AgentPanel app="contacts" phone sources={agentSources} onclose={() => setAgent(false)} />
 	</AgentSheet>
 {/if}
 
