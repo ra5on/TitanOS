@@ -45,7 +45,7 @@ Das erste Wort (bis zum ersten `_`) ist die Gruppe. Regeln dazu stehen in
 | docker | `docker.go`, `docker_opens.go`, `docker_resources.go` | `dockerArea`, `dockerOpensArea`, `terminalArea` | 3 |
 | energy | `energy.go` | `energyArea`, `powerScheduleArea` | 0 |
 | fans | `fans.go` | `fansArea` | 0 |
-| file | `file_download.go`, `file_media.go`, `file_tools.go` | – | 2 |
+| file | `file_download.go`, `file_media.go`, `file_tools.go`, `file_view_preferences.go` | – | 3 |
 | files | `files.go` | `filesArea` | 0 |
 | firewall | `firewall.go` | `firewallArea` | 1 |
 | ha | `ha_area.go`, `ha_connections.go`, `ha_storage.go` | `haArea` | 3 |
