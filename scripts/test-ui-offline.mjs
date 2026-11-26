@@ -72,12 +72,12 @@ async function phone() {
 async function seen(made) {
   const { page } = made;
   await page.goto(base + "/");
-  await page.locator(".home .pages").waitFor({ timeout: 20000 });
+  await page.locator("[data-nord-home]").waitFor({ timeout: 20000 });
   await page.evaluate(() => navigator.serviceWorker.ready);
   // The first load is not controlled yet; the second one comes through
   // the worker, which keeps the page and its files.
   await page.reload();
-  await page.locator(".home .pages").waitFor({ timeout: 20000 });
+  await page.locator("[data-nord-home]").waitFor({ timeout: 20000 });
   assert.ok(
     await page.evaluate(() => !!navigator.serviceWorker.controller),
     "the worker controls the page",
@@ -150,7 +150,7 @@ try {
     await ctx.setOffline(false);
     made.nasDown = false;
     await page.getByRole("button", { name: "Jetzt prüfen" }).click();
-    await page.locator(".home .pages").waitFor({ timeout: 20000 });
+    await page.locator("[data-nord-home]").waitFor({ timeout: 20000 });
     await ctx.close();
   }
 
@@ -164,7 +164,7 @@ try {
     await offlineView(page, "02-nas-aus");
     made.nasDown = false;
     // It looks again by itself.
-    await page.locator(".home .pages").waitFor({ timeout: 25000 });
+    await page.locator("[data-nord-home]").waitFor({ timeout: 25000 });
 
     // 4. The NAS goes away while the home screen is open: the banner.
     made.nasDown = true;
