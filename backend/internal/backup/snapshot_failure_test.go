@@ -85,7 +85,11 @@ func TestPreviousSnapshotRestoresAfterFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, writeErr := io.CopyN(extra, rand.Reader, 20<<20)
+			size := int64(20 << 20)
+			if fault == "cancel" {
+				size = 64 << 20 // several independent restic packs
+			}
+			_, writeErr := io.CopyN(extra, rand.Reader, size)
 			if err := errors.Join(writeErr, extra.Close()); err != nil {
 				t.Fatal(err)
 			}
@@ -119,22 +123,31 @@ func TestPreviousSnapshotRestoresAfterFailure(t *testing.T) {
 			}
 			start()
 			if fault == "cancel" {
-				deadline := time.Now().Add(90 * time.Second)
-				for {
-					locks, err := os.ReadDir(filepath.Join(cold, "repo", "locks"))
+				// The original snapshot contains only short text. A large, published
+				// pack proves the update has changed the repository before Stop.
+				wrotePack := false
+				deadline := time.Now().Add(2 * time.Minute)
+				for e.state(job.ID).Running && time.Now().Before(deadline) && !wrotePack {
+					files, err := filepath.Glob(filepath.Join(cold, "repo", "data", "*", "*"))
 					if err != nil {
 						t.Fatal(err)
 					}
-					if len(locks) > 0 {
-						break
+					for _, file := range files {
+						info, err := os.Stat(file)
+						if err == nil && len(info.Name()) == 64 && info.Size() > 1<<20 {
+							t.Logf("Published %d-byte restic data pack before Stop", info.Size())
+							wrotePack = true
+							break
+						}
 					}
-					if !e.state(job.ID).Running || time.Now().After(deadline) {
-						t.Fatal("backup did not reach its repository lock")
+					if !wrotePack {
+						time.Sleep(10 * time.Millisecond)
 					}
-					time.Sleep(5 * time.Millisecond)
 				}
-				if err := e.m.Stop(job.ID); err != nil {
-					t.Fatal(err)
+				err := e.m.Stop(job.ID)
+				if !wrotePack || err != nil {
+					e.m.runs.Wait()
+					t.Fatalf("cancel after first published data pack: found=%t, stop=%v", wrotePack, err)
 				}
 			}
 			e.m.runs.Wait()
