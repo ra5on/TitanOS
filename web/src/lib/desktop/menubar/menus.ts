@@ -351,21 +351,15 @@ const PROGRAMS: Record<string, Menu[]> = {
 	],
 	agent: [
 		menu('file', 'menubar.menu.file', [
-			cmd('agent.newChat', 'menubar.agent.newChat'),
-			cmd('agent.project', 'menubar.agent.project'),
-			list('agent.projects', 'menubar.agent.inProject'),
+			cmd('agent.newChat', 'pa.newChat', { keys: 'Alt+Shift+N' }),
+			list('agent.chats', 'pa.chats'),
+			cmd('agent.previousChat', 'pa.previousChat', { keys: 'Alt+Shift+↑' }),
+			cmd('agent.nextChat', 'pa.nextChat', { keys: 'Alt+Shift+↓' }),
 		]),
 		menu('view', 'menubar.menu.view', [
-			// PLAN 90-4: the pages of the agent, in the order of its side bar.
-			cmd('agent.inbox', 'menubar.agent.inbox'),
-			cmd('agent.planned', 'menubar.agent.planned'),
-			cmd('agent.knowledge', 'menubar.agent.knowledge'),
-			cmd('agent.know', 'menubar.agent.know'),
-			cmd('agent.notes', 'menubar.agent.notes'),
-		]),
-		menu('agent', 'menubar.menu.agent', [
-			list('agent.model', 'menubar.agent.model'),
-			cmd('agent.settings', 'menubar.agent.settings'),
+			{ ...radio('agent.chat', 'pa.chat'), keys: 'Alt+Shift+1' },
+			{ ...radio('agent.jobs', 'pa.jobs'), keys: 'Alt+Shift+2' },
+			{ ...radio('agent.settings', 'pa.settings'), keys: 'Alt+Shift+3' },
 		]),
 	],
 	monitor: [

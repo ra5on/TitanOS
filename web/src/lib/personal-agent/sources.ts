@@ -94,8 +94,11 @@ export function mailFields(j: Job) {
 			: string(key);
 	return {
 		to: list('to'),
-		from: string('from'),
-		account: string('a') || string('account'),
+		from:
+			string('senderName') && string('from')
+				? string('senderName') + ' <' + string('from') + '>'
+				: string('from'),
+		account: string('mailbox') || string('a') || string('account'),
 		cc: list('cc'),
 		bcc: list('bcc'),
 		subject: string('subject'),

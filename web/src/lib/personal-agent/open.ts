@@ -1,9 +1,12 @@
+import { session } from '../session.svelte.ts';
 import { api } from '../api.ts';
 import { openInProgram } from '../agent/open.ts';
 import { base, type Handoff, type Job } from './api.ts';
 
 export async function openPersonalAgent(input: Handoff): Promise<void> {
+	const owner = session.data?.user?.name;
 	const { id } = await api.post<{ id: string }>(base + '/contexts', { ...input });
+	if (!owner || session.data?.user?.name !== owner) return;
 	openInProgram('/agent?context=' + encodeURIComponent(id));
 }
 export function consumeSelection(id: string) {

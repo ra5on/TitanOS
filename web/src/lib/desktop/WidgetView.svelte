@@ -126,15 +126,19 @@
 	let agent = $state<{ on: boolean; jobs: Activity[] } | null>(null);
 	let agentAsk = $state('');
 	$effect(() => {
-		if (kind !== 'agent' || !session.data?.user?.name) return;
+		const account = session.data?.user?.name;
 		agent = null;
+		agentAsk = '';
+		if (kind !== 'agent' || !account) return;
 		return poll(
 			async (signal) => {
 				try {
-					const result = await api.get<{ jobs: Activity[] }>('/personal-agent/activity');
-					if (!signal.aborted) agent = { on: true, jobs: result.jobs ?? [] };
+					const result = await api.get<{ jobs: Activity[] }>('/personal-agent/activity', signal);
+					if (!signal.aborted && session.data?.user?.name === account)
+						agent = { on: true, jobs: result.jobs ?? [] };
 				} catch {
-					if (!signal.aborted) agent = { on: false, jobs: [] };
+					if (!signal.aborted && session.data?.user?.name === account)
+						agent = { on: false, jobs: [] };
 				}
 			},
 			{ interval: 20000 },
@@ -535,11 +539,12 @@
 			onsubmit={(e) => {
 				e.preventDefault();
 				const text = agentAsk.trim();
+				const owner = session.data?.user?.name;
 				agentAsk = '';
 				if (!text) onopen('app:agent', '/agent');
 				else
 					void openPersonalAgent({ sources: [], prompt: text }).catch(() => {
-						agentAsk = text;
+						if (owner && session.data?.user?.name === owner) agentAsk = text;
 					});
 			}}
 		>
