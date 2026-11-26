@@ -165,20 +165,22 @@ export function fixtureFactory(browser, errors) {
     // Extra context options, e.g. phone emulation (isMobile, hasTouch, deviceScaleFactor).
     options = {},
   ) {
+    const { nativeShell = false, ...browserOptions } = options;
     const ctx = await browser.newContext({
       locale: "de-DE",
       viewport: { width, height: 1000 },
-      ...options,
+      ...browserOptions,
     });
     await ctx.addInitScript(
-      ({ theme, locale }) => {
+      ({ theme, locale, nativeShell }) => {
         localStorage.setItem("titanos.locale", locale);
         // The page scripts check pages in the classic frame; the desktop
         // mode (PLAN 61) has scripts/test-ui-desktop.mjs.
-        localStorage.setItem("titanos.layout", "classic");
+        if (nativeShell) localStorage.removeItem("titanos.layout");
+        else localStorage.setItem("titanos.layout", "classic");
         localStorage.setItem("titanos.appearance", JSON.stringify({ theme }));
       },
-      { theme, locale },
+      { theme, locale, nativeShell },
     );
     const data = {
       system: structuredClone(system),
