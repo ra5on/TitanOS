@@ -114,6 +114,7 @@ ALLOWED = (
     # normalize-image-tmpfiles.py, fetch-pci-ids.sh) stays outside this list.
     "scripts/smoke-",
     "scripts/vm_snapshot_smoke.py",
+    "scripts/interrupted_system_smoke.py",
     # Runs the Go test of the VM disk backup against real libvirt in a
     # disposable guest, on the developer's machine only (PLAN 79-9).
     "scripts/test-vm-diskbackup-qemu.py",
