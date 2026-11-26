@@ -38,9 +38,9 @@ async function screenshot(page, name) {
   await page.screenshot({ path: join(dir, engine + "-" + name + ".png") });
 }
 
-async function run() {
+async function run(asHomeApp, role) {
   const { ctx, page, data } = await fixtureFactory(browser, errors)(
-    "owner",
+    role,
     "graphit",
     390,
     "de",
@@ -54,6 +54,19 @@ async function run() {
     },
   );
   try {
+    if (asHomeApp)
+      await ctx.addInitScript(() => {
+        Object.defineProperty(navigator, "standalone", { get: () => true });
+        const original = window.matchMedia.bind(window);
+        window.matchMedia = (query) =>
+          query.includes("display-mode: standalone")
+            ? Object.assign(original("(min-width: 0px)"), {
+                displayMode: "standalone",
+              })
+            : original(query);
+      });
+    const label = [role, asHomeApp ? "homescreen" : "browser"].join("-");
+    const peerRequests = [];
     data.system.hostname = hostname;
     data.prefs.desktop = {
       version: 1,
@@ -65,7 +78,7 @@ async function run() {
         json: {
           configAvailable: true,
           setupRequired: false,
-          user: { name: "alex", role: "owner", twoFactor: false },
+          user: { name: "alex", role, twoFactor: false },
           hostname,
         },
       }),
@@ -75,8 +88,12 @@ async function run() {
         ? r.fulfill({ status: 503, json: { error: { code: "unavailable" } } })
         : r.fulfill({
             json: {
-              nodes: mode === "cluster" ? [local, peer] : [],
-              manages: mode === "cluster",
+              nodes: ["cluster", "member"].includes(mode)
+                ? [local, peer]
+                : mode === "offline"
+                  ? [local, { ...peer, online: false }]
+                  : [],
+              manages: ["cluster", "offline"].includes(mode),
               version: data.system.version,
             },
           }),
@@ -84,6 +101,7 @@ async function run() {
     // On the peer, exercise its real API prefix but use only local fixture data.
     await ctx.route("**/api/v1/cluster/nodes/n2/api/**", (r) => {
       const url = new URL(r.request().url());
+      peerRequests.push(url.pathname);
       url.pathname = url.pathname.replace("/cluster/nodes/n2/api", "");
       if (url.pathname === "/api/v1/system")
         return r.fulfill({ json: { ...data.system, hostname: peerHost } });
@@ -94,7 +112,15 @@ async function run() {
     async function displayed(name) {
       // A matching aria-label alone does not prove the visible heading is correct.
       await trigger.getByText(name, { exact: true }).waitFor();
-      assert.equal((await trigger.innerText()).trim(), name);
+      await page.waitForLoadState("networkidle");
+      assert.equal(
+        (await trigger.locator(".current-name").innerText()).trim(),
+        name,
+      );
+      assert.equal(
+        (await trigger.locator(".switch-label").innerText()).trim(),
+        "NAS wechseln",
+      );
       assert.ok((await trigger.getAttribute("aria-label"))?.includes(name));
     }
     async function choose(name) {
@@ -103,19 +129,20 @@ async function run() {
       await Promise.all([page.waitForEvent("domcontentloaded"), item.click()]);
     }
     await page.goto(base);
+    await page.waitForLoadState("networkidle");
     await trigger.waitFor();
     await trigger.click();
     await menu
       .getByRole("menuitemradio", { name: /Nordlicht-Keller/, checked: true })
       .waitFor();
-    await screenshot(page, "01-lokal-menue");
-    await trigger.click();
-    await screenshot(page, "00-lokaler-name");
     assert.equal(
-      (await trigger.innerText()).trim(),
-      local.name,
-      "visible local NAS name",
+      await menu.getByRole("menuitem", { name: "Cluster verwalten" }).count(),
+      role === "user" ? 0 : 1,
     );
+    await screenshot(page, label + "-01-lokal-menue");
+    await trigger.click();
+    await screenshot(page, label + "-00-lokaler-name");
+    await displayed(local.name);
     await choose(peer.name);
     await displayed(peer.name);
     assert.equal(
@@ -124,8 +151,38 @@ async function run() {
     );
     await page.reload();
     await displayed(peer.name);
-    await screenshot(page, "02-zweiter-knoten");
-    await choose(local.name);
+    await screenshot(page, label + "-02-zweiter-knoten");
+    // Follow two regular app routes with the remote node selected.
+    for (const app of ["files", ...(role === "owner" ? ["docker"] : [])]) {
+      const sent = page.waitForRequest((req) =>
+        new URL(req.url()).pathname.startsWith(
+          "/api/v1/cluster/nodes/n2/api/" + app + "/",
+        ),
+      );
+      await page.goto(new URL("/" + app, base).href);
+      await sent;
+      await page.waitForLoadState("networkidle");
+    }
+    assert.ok(peerRequests.some((path) => path.includes("/api/files/")));
+    await page.goto(new URL("/?phone=pages", base).href);
+    const grid = page.locator(".node-menu.phone");
+    await grid.getByText("NAS wechseln", { exact: true }).waitFor();
+    await grid.getByText(peer.name, { exact: true }).first().waitFor();
+    await grid.getByRole("button").first().click();
+    await grid
+      .getByRole("menuitemradio", {
+        name: new RegExp(peer.name),
+        checked: true,
+      })
+      .waitFor();
+    await screenshot(page, label + "-app-raster");
+    await Promise.all([
+      page.waitForEvent("domcontentloaded"),
+      grid.getByRole("menuitemradio", { name: new RegExp(local.name) }).click(),
+    ]);
+    await grid.getByText(local.name, { exact: true }).first().waitFor();
+    await page.waitForLoadState("networkidle");
+    await page.goto(base, { waitUntil: "networkidle" });
     await displayed(local.name);
     assert.equal(
       await page.evaluate(() => sessionStorage.getItem("titanos.cluster.node")),
@@ -133,7 +190,7 @@ async function run() {
     );
     await page.reload();
     await displayed(local.name);
-    await screenshot(page, "03-zurueck-zum-ersten");
+    await screenshot(page, label + "-03-zurueck-zum-ersten");
     const reopened = await ctx.newPage();
     await reopened.goto(base);
     await reopened
@@ -146,18 +203,38 @@ async function run() {
       ),
       null,
     );
+    await reopened.waitForLoadState("networkidle");
     await reopened.close();
+    mode = "member";
+    await page.reload({ waitUntil: "networkidle" });
+    await displayed(local.name);
+    await trigger.click();
+    assert.equal(await menu.getByRole("menuitemradio").count(), 1);
+    assert.equal(
+      await menu
+        .getByRole("menuitemradio", { name: new RegExp(peer.name) })
+        .count(),
+      0,
+    );
+    mode = "offline";
+    await page.reload();
+    await displayed(local.name);
+    await trigger.click();
+    assert.ok(
+      await menu
+        .getByRole("menuitemradio", { name: new RegExp(peer.name) })
+        .isDisabled(),
+    );
     for (const standalone of ["single", "missing"]) {
       mode = standalone;
       await page.reload();
+      await page.waitForLoadState("networkidle");
       await displayed(hostname);
       await trigger.click();
       await menu.waitFor();
+      await page.waitForLoadState("networkidle");
       assert.equal(await menu.getByRole("menuitemradio").count(), 0);
-      await screenshot(
-        page,
-        standalone === "single" ? "04-einzelgeraet" : "05-ohne-knotenliste",
-      );
+      await screenshot(page, label + "-" + standalone);
     }
     assert.deepEqual(errors, []);
     console.log(
@@ -170,7 +247,9 @@ async function run() {
 }
 
 try {
-  await run();
+  await run(false, "owner");
+  await run(true, "owner");
+  await run(false, "user");
 } finally {
   await browser.close();
 }
