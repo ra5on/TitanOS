@@ -624,6 +624,17 @@
 	.launcher.glass-panel {
 		background: color-mix(in srgb, var(--surface) 97%, transparent);
 	}
+	.launcher:not(.phone) {
+		background: color-mix(in srgb, var(--surface) 92%, transparent);
+		border: 1px solid var(--nord-line, var(--border));
+		border-radius: var(--nord-radius, calc(18px * var(--radius-scale, 1)));
+		-webkit-backdrop-filter: var(--nord-blur, blur(var(--desk-blur, 16px)));
+		backdrop-filter: var(--nord-blur, blur(var(--desk-blur, 16px)));
+	}
+	.launcher:not(.phone) .row + .row {
+		padding-top: var(--space-2);
+		border-top: 1px solid var(--nord-line, var(--border));
+	}
 	.launcher {
 		position: absolute;
 		left: 10px;

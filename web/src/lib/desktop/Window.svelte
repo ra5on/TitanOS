@@ -368,36 +368,23 @@
 	style:transform={drag.shift.x || drag.shift.y
 		? `translate3d(${drag.shift.x}px, ${drag.shift.y}px, 0)`
 		: undefined}
-	style:--from-x="{(win.from?.x ?? rect.x) - rect.x}px"
-	style:--from-y="{(win.from?.y ?? rect.y) - rect.y}px"
+	style:--from-x="{(win.from?.x ?? rect.x) - rect.x - rect.w / 2}px"
+	style:--from-y="{(win.from?.y ?? rect.y) - rect.y - rect.h / 2}px"
 	aria-label={win.title}
 	onpointerdown={() => focus(win.id)}
 	onfocus={(e) => e.target === section && view?.focusApp()}
 	onkeydown={drag.keyResize}
-	onanimationend={() => (win.from = undefined)}
+	onanimationend={(e) => {
+		if (e.target === section) win.from = undefined;
+	}}
 >
 	{#if side.length && !external && !ownSide}
-		<WindowSide
-			bind:this={sideBar}
-			{win}
-			{glyph}
-			{gradient}
-			{side}
-			{folded}
-			{path}
-			ontoggle={toggleFold}
-		/>
+		<WindowSide bind:this={sideBar} {win} {side} {folded} {path} ontoggle={toggleFold} />
 	{/if}
 	<div class="main">
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<header class="titlebar" onpointerdown={drag.startMove} ondblclick={() => toggleMax(win.id)}>
-			{#if !side.length || external || ownSide}<DesktopIcon
-					{glyph}
-					{gradient}
-					{image}
-					size={22}
-					name={win.title}
-				/>{/if}
+			<DesktopIcon {glyph} {gradient} {image} size={22} name={win.title} />
 			<!-- Program and page: the page's name takes a second line before a word is broken. -->
 			<span class="titles"
 				><b class="title"
@@ -602,7 +589,7 @@
 	.win {
 		position: absolute;
 		display: flex;
-		border-radius: calc(14px * var(--radius-scale, 1));
+		border-radius: var(--nord-radius, calc(18px * var(--radius-scale, 1)));
 		overflow: hidden;
 		/* PLAN 65: even at high transparency nothing behind a window stays
 		   readable (icon labels shone through the side bar): a second layer
@@ -612,7 +599,7 @@
 			color-mix(in srgb, var(--surface) 55%, transparent);
 		-webkit-backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
 		backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
-		border: 1px solid var(--border);
+		border: 1px solid var(--nord-line, var(--border));
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
 	}
 	.win.focused {
@@ -632,7 +619,7 @@
 		display: none;
 	}
 	.win.grow {
-		animation: grow 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+		animation: grow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 	}
 	@keyframes grow {
 		from {
@@ -658,9 +645,9 @@
 		z-index: 1;
 		display: flex;
 		align-items: center;
-		gap: 9px;
-		padding: 0 var(--space-1-5) 0 14px;
-		background: color-mix(in srgb, var(--header) 55%, transparent);
+		gap: var(--space-2);
+		padding: 0 var(--space-2) 0 var(--space-4);
+		background: color-mix(in srgb, var(--desk-surface, var(--header)) 72%, transparent);
 		border-bottom: 1px solid var(--border);
 		user-select: none;
 		touch-action: none;
@@ -843,10 +830,10 @@
 		}
 		:global(html[data-fx-interaction='expressive'] .desktop:not(.moving)) .win.snapped {
 			transition:
-				left 220ms ease-out,
-				top 220ms ease-out,
-				width 220ms ease-out,
-				height 220ms ease-out;
+				left 180ms ease-out,
+				top 180ms ease-out,
+				width 180ms ease-out,
+				height 180ms ease-out;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

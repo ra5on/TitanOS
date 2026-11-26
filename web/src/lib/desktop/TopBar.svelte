@@ -161,9 +161,10 @@
 		position: relative;
 		z-index: 9500;
 		border: 0;
-		border-bottom: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+		border-bottom: 1px solid var(--nord-line, color-mix(in srgb, var(--text) 14%, transparent));
+		background: color-mix(in srgb, var(--desk-surface, var(--header)) 94%, transparent);
 		border-radius: 0;
-		box-shadow: 0 1px 10px rgb(0 0 0 / 0.18);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 0.14);
 		--mb-font: max(0.8125rem, calc(var(--bar-h) * 0.34));
 		font-size: var(--mb-font);
 	}
@@ -183,7 +184,7 @@
 		gap: var(--space-1-5);
 		padding: 0 var(--space-2-5);
 		border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
-		border-radius: 8px;
+		border-radius: calc(11px * var(--radius-scale, 1));
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 		color: var(--text);
 		font: inherit;
@@ -210,7 +211,7 @@
 		display: flex;
 		align-items: center;
 		border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
-		border-radius: 8px;
+		border-radius: calc(11px * var(--radius-scale, 1));
 		background: color-mix(in srgb, var(--bg) 45%, transparent);
 	}
 	.bar-search {

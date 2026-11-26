@@ -259,10 +259,15 @@
 	});
 
 	function iconCenter(event: Event): { x: number; y: number } | undefined {
+		if (
+			matchMedia('(prefers-reduced-motion: reduce)').matches ||
+			document.documentElement.dataset.fxInteraction === 'off'
+		)
+			return;
 		const el = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
 		const box = area?.getBoundingClientRect();
 		return el && box
-			? { x: el.left - box.left + el.width / 2 - 40, y: el.top - box.top + el.height / 2 - 30 }
+			? { x: el.left - box.left + el.width / 2, y: el.top - box.top + el.height / 2 }
 			: undefined;
 	}
 	function open(key: string, event?: Event, href?: string) {
