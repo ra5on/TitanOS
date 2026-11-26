@@ -217,6 +217,9 @@ test('text and clipboard are cut to what titand accepts', () => {
 	expect(big.text.length).toBeGreaterThan(500_000);
 	const quotes = fitText('text', '"'.repeat(700_000));
 	expect(bytes(quotes)).toBeLessThanOrEqual(MAX_TEXT_MESSAGE);
+	const room = MAX_TEXT_MESSAGE - bytes({ t: 'text', text: '' });
+	const prefix = 'a'.repeat(room - 3);
+	expect(fitText('text', prefix + '🗂x').text).toBe(prefix);
 });
 
 test('phone keyboard: text, backspace and enter from input events', () => {

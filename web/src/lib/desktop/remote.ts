@@ -326,14 +326,25 @@ export function fitText<T extends 'text' | 'clipboard'>(
 	t: T,
 	text: string,
 ): { t: T; text: string } {
-	const size = (x: string) => new TextEncoder().encode(JSON.stringify({ t, text: x })).length;
-	let out = text;
-	while (out && size(out) > MAX_TEXT_MESSAGE) {
-		const over = size(out) - MAX_TEXT_MESSAGE;
-		// Escapes can take up to 6 bytes per character: cut at least what is over.
-		out = [...out].slice(0, -Math.max(1, Math.ceil(over / 6))).join('');
+	const encoder = new TextEncoder();
+	const size = (value: string) => encoder.encode(JSON.stringify({ t, text: value })).length;
+	if (text.length < MAX_TEXT_MESSAGE && size(text) <= MAX_TEXT_MESSAGE) return { t, text };
+	// Work on bounded prefixes. Serializing and spreading the entire clipboard
+	// repeatedly can otherwise freeze the remote window for several seconds.
+	const prefix = (end: number) => {
+		const next = text.charCodeAt(end);
+		const prev = text.charCodeAt(end - 1);
+		const splitsPair = prev >= 0xd800 && prev <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+		return text.slice(0, splitsPair ? end - 1 : end);
+	};
+	let low = 0;
+	let high = Math.min(text.length, MAX_TEXT_MESSAGE);
+	while (low < high) {
+		const mid = Math.ceil((low + high) / 2);
+		if (size(prefix(mid)) <= MAX_TEXT_MESSAGE) low = mid;
+		else high = mid - 1;
 	}
-	return { t, text: out };
+	return { t, text: prefix(low) };
 }
 
 /** Whether a key types a character (sent as `key`) rather than a function (by `code`). */
