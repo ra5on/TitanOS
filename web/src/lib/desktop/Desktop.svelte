@@ -14,7 +14,7 @@
 	import { session } from '../session.svelte.ts';
 	import { appearance } from '../theme/appearance.svelte.ts';
 	import { THEMES } from '../theme/themes.ts';
-	import { appForPath, appAllowed } from './apps.ts';
+	import { launchAppForPath } from './apps.ts';
 	import Launcher from './Launcher.svelte';
 	import PowerDialog from '../components/PowerDialog.svelte';
 	import LiveBackground from '../live/LiveBackground.svelte';
@@ -196,9 +196,8 @@
 		if ((nav.type !== 'link' && nav.type !== 'goto') || !nav.to) return;
 		const url = nav.to.url;
 		if (url.pathname === '/') return;
-		const app = appForPath(url.pathname);
-		if (app && appAllowed(app, role, session.services))
-			void openProgram('app:' + app.id, { href: url.pathname + url.search + url.hash });
+		const app = launchAppForPath(url.pathname, role, session.services);
+		if (app) void openProgram('app:' + app.id, { href: url.pathname + url.search + url.hash });
 	});
 
 	onMount(() => {
@@ -206,9 +205,8 @@
 		// A link to a page opens it in its window (PLAN 61-8: the address shows the window in front).
 		const path = page.url.pathname + page.url.search + page.url.hash;
 		if (page.url.pathname !== '/') {
-			const app = appForPath(page.url.pathname);
-			if (app && appAllowed(app, role, session.services))
-				void openProgram('app:' + app.id, { href: path });
+			const app = launchAppForPath(page.url.pathname, role, session.services);
+			if (app) void openProgram('app:' + app.id, { href: path });
 		}
 		const stop = watchSources();
 		let measured = false;
