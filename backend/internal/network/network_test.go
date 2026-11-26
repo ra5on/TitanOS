@@ -185,6 +185,30 @@ func TestFirewallBeforeNetworkChange(t *testing.T) {
 	}
 }
 
+func TestRollbackRestoresLinksBeforeRetryingForwarding(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Change(ctx, Config{Hostname: "nas", Ports: []string{"enp1s0"}, Address: "192.0.2.17/24"}); err != nil {
+		t.Fatal(err)
+	}
+	runner.commands, runner.fail = nil, "titanos-firewall-open"
+	if err := m.Revert(ctx); err == nil {
+		t.Fatal("failed forwarding setup should keep the recovery pending")
+	}
+	reload := slices.Index(runner.commands, "networkctl reload")
+	forwarding := slices.IndexFunc(runner.commands, func(cmd string) bool { return strings.Contains(cmd, runner.fail) })
+	if reload < 0 || forwarding < reload || m.pending == nil || !m.reverting {
+		t.Fatalf("old links should have been restored before the helper failed: %v", runner.commands)
+	}
+	runner.fail = ""
+	if err := m.Revert(ctx); err != nil || m.pending != nil {
+		t.Fatalf("retry did not complete recovery: %v", err)
+	}
+}
+
 func TestChangeOnTrial(t *testing.T) {
 	m, runner := newTestManager(t)
 	ctx := context.Background()
@@ -332,9 +356,12 @@ func TestReconfigureFailureAndRetiredBridge(t *testing.T) {
 	if err := m.Change(ctx, fixed); err == nil {
 		t.Fatal("reconfigure failure was ignored")
 	}
-	runner.fail = ""
+	runner.fail, runner.commands = "", nil
 	if err := m.Revert(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Contains(runner.commands, "networkctl reload") {
+		t.Fatalf("retry did not reload the previously written network files: %v", runner.commands)
 	}
 	if err := m.Change(ctx, Config{Hostname: "nas", DHCP: true}); err != nil {
 		t.Fatal(err)

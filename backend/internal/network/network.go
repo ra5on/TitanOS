@@ -161,7 +161,9 @@ type Manager struct {
 	reverting bool
 	// Remember retired netdevs until deletion succeeds, including rollback retries.
 	retired map[string]bool
-	options Options
+	// Retry networkd when its previous reload failed after the files were replaced.
+	reconfigurePending bool
+	options            Options
 }
 
 // NewManager returns a manager working on the real system.
@@ -410,11 +412,34 @@ func (m *Manager) render(cfg Config) map[string]string {
 
 // apply puts a configuration in place. The caller holds the lock.
 func (m *Manager) apply(ctx context.Context, cfg Config) error {
+	// For a new topology forwarding has to be prepared before touching the
+	// links. Its helpers can time out when a trial has cut off the network.
+	// Restore the previously working links first in that case and leave
+	// the trial pending until forwarding is ready again.
+	if m.reverting {
+		if err := m.applyLinks(ctx, cfg); err != nil {
+			return err
+		}
+		return m.prepareForwarding(ctx)
+	}
+	if err := m.prepareForwarding(ctx); err != nil {
+		return err
+	}
+	return m.applyLinks(ctx, cfg)
+}
+
+func (m *Manager) prepareForwarding(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, applyTimeout)
 	defer cancel()
 	if _, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-firewall-open"); err != nil {
-		return fmt.Errorf("disable firewall filtering: %w", err)
+		return fmt.Errorf("prepare forwarding: %w", err)
 	}
+	return nil
+}
+
+func (m *Manager) applyLinks(ctx context.Context, cfg Config) error {
+	ctx, cancel := context.WithTimeout(ctx, applyTimeout)
+	defer cancel()
 	files := m.render(cfg)
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
 		return err
@@ -433,7 +458,7 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 	}
 	// Nothing new: a restart of titand (as for an app update) must not
 	// take the network down for a moment, nor the bridge of the VMs.
-	changed := len(m.retired) > 0 || cfg.Bridge && !m.HasBridge()
+	changed := m.reconfigurePending || len(m.retired) > 0 || cfg.Bridge && !m.HasBridge()
 	for _, entry := range old {
 		if name := entry.Name(); strings.HasPrefix(name, prefix) && files[name] == "" {
 			changed = true
@@ -464,9 +489,11 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 		}
 	}
 	if changed {
+		m.reconfigurePending = true
 		if err := m.reconfigure(ctx, files); err != nil {
 			return err
 		}
+		m.reconfigurePending = false
 	}
 	if current, _ := os.Hostname(); cfg.Hostname != "" && cfg.Hostname != current {
 		if _, err := m.runner.Run(ctx, "", "hostnamectl", "hostname", cfg.Hostname); err != nil {
