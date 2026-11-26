@@ -25,7 +25,12 @@ import { checksHintVolumes, sanitizeHints, uncheckedVolumes } from './checks-hin
 
 // What lives on the volume shown in the details: shares, VMs and Docker.
 // Read when a volume is opened, from the lists the other pages use.
-export type Usage = { shares: string[]; vms: string[]; docker: string[] | null; failed: boolean };
+export type Usage = {
+	shares: string[];
+	vms: { name: string; label: string }[];
+	docker: string[] | null;
+	failed: boolean;
+};
 
 export class StoragePage {
 	canAdminister = $derived(
@@ -178,7 +183,7 @@ export class StoragePage {
 					.filter(
 						(vm) => vm.volume === volume || (vm.disks ?? []).some((disk) => disk.volume === volume),
 					)
-					.map((vm) => vm.displayName || vm.name),
+					.map((vm) => ({ name: vm.name, label: vm.displayName || vm.name })),
 				docker:
 					engine?.settings?.volume === volume && Array.isArray(engine.apps) ? engine.apps : null,
 				failed: !shareList || !vmList || !engine,

@@ -4,7 +4,7 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	/** What lives on the volume, when the page knows it (see the volume details). */
-	type Usage = { shares: string[]; vms: string[]; docker: string[] | null };
+	import type { Usage } from './storage-page.svelte.ts';
 	type Props = { volume: Volume; usage?: Usage | null; onclose: () => void; ondone: () => void };
 	let { volume, usage, onclose, ondone }: Props = $props();
 
@@ -42,7 +42,7 @@
 							{t('delete.affectedShares', { shares: usage.shares.join(', ') })}
 						</li>{/if}
 					{#if usage.vms.length}<li>
-							{t('delete.affectedVms', { vms: usage.vms.join(', ') })}
+							{t('delete.affectedVms', { vms: usage.vms.map((vm) => vm.label).join(', ') })}
 						</li>{/if}
 					{#if usage.docker}<li>
 							{usage.docker.length

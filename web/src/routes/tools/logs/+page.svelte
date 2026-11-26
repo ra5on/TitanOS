@@ -6,6 +6,9 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import { inWindow } from '#lib/desktop/frame.ts';
+	import Dropdown from '#lib/components/Dropdown.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -298,10 +301,33 @@
 		<button type="button" class="btn" disabled={entries.length === 0} onclick={copyLines}
 			>{t('tools.copyLines')}</button
 		>
-		<button type="button" class="btn" disabled={entries.length === 0} onclick={exportLines}
-			>{t('tools.exportLines')}</button
-		>
-		<button type="button" class="btn" onclick={exportPrevious}>{t('tools.exportPrevious')}</button>
+		{#if inWindow}
+			<Dropdown label={t('ui.more')} icon="more" align="right">
+				{#snippet children(close)}
+					<button
+						role="menuitem"
+						disabled={entries.length === 0}
+						onclick={() => {
+							close();
+							exportLines();
+						}}><Icon name="download" size={16} />{t('tools.exportLines')}</button
+					>
+					<button
+						role="menuitem"
+						onclick={() => {
+							close();
+							exportPrevious();
+						}}><Icon name="download" size={16} />{t('tools.exportPrevious')}</button
+					>
+				{/snippet}
+			</Dropdown>
+		{:else}
+			<button type="button" class="btn" disabled={entries.length === 0} onclick={exportLines}
+				>{t('tools.exportLines')}</button
+			>
+			<button type="button" class="btn" onclick={exportPrevious}>{t('tools.exportPrevious')}</button
+			>
+		{/if}
 		<span class="muted count" role="status"
 			>{#if copied === 'ok'}{t('tools.copied')}{:else if copied === 'failed'}{t(
 					'tools.copyFailed',
@@ -320,6 +346,7 @@
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			class="lines mono"
+			class:desktop-log={inWindow}
 			bind:this={list}
 			onscroll={scrolled}
 			role="log"
@@ -430,6 +457,9 @@
 	}
 	.line.harmless {
 		opacity: 0.55;
+	}
+	.desktop-log .line.harmless {
+		opacity: 1;
 	}
 	.lines {
 		height: min(60vh, 640px);

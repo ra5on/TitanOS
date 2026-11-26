@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Beside the list: the chosen volume with what lives on it, or the chosen
 	// disk with its facts, sleep time and actions.
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import ForesightPlay from '#lib/components/agent/features/ForesightPlay.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
@@ -65,16 +66,23 @@
 								>{/snippet}
 						</SettingRow>
 						<SettingRow icon="monitor" title={t('storage.onVolumeVms')}>
-							{#snippet control()}<span>{used.vms.join(', ') || t('storage.onVolumeNone')}</span
+							{#snippet control()}<span
+									>{#each used.vms as vm, i (vm.name)}{i ? ', ' : ''}{#if inWindow}<a
+												href={'/vms?vm=' + encodeURIComponent(vm.name) + '&tab=hardware'}
+												>{vm.label}</a
+											>{:else}{vm.label}{/if}{:else}{t('storage.onVolumeNone')}{/each}</span
 								>{/snippet}
 						</SettingRow>
 						<SettingRow icon="box" title={t('storage.onVolumeDocker')}>
 							{#snippet control()}<span
-									>{used.docker
-										? used.docker.length
-											? t('storage.onVolumeDockerApps', { apps: used.docker.join(', ') })
-											: t('storage.onVolumeDockerEngine')
-										: t('storage.onVolumeNone')}</span
+									>{#if inWindow && used.docker?.length}{#each used.docker as app, i (app)}{i
+												? ', '
+												: ''}<a href={'/docker/apps/' + encodeURIComponent(app)}>{app}</a
+											>{/each}{:else}{used.docker
+											? used.docker.length
+												? t('storage.onVolumeDockerApps', { apps: used.docker.join(', ') })
+												: t('storage.onVolumeDockerEngine')
+											: t('storage.onVolumeNone')}{/if}</span
 								>{/snippet}
 						</SettingRow>
 						{#if used.failed}<div class="notice-warn usage-failed" role="alert">
