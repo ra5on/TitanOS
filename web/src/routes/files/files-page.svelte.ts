@@ -402,7 +402,12 @@ export class FilesPage extends FilesState {
 					ref: { root: this.rootId },
 				}));
 				if (sources.length)
-					void openPersonalAgent({ sources, tool: sources.some((s) => s.kind === 'folder') ? 'office.table' : 'files.read' }).catch((error) => { this.error = apiErrorText(error); });
+					void openPersonalAgent({
+						sources,
+						tool: sources.some((s) => s.kind === 'folder') ? 'office.table' : 'files.read',
+					}).catch((error) => {
+						this.error = apiErrorText(error);
+					});
 				return;
 			}
 			case 'clipboardCopy':

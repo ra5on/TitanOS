@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,7 +32,7 @@ func TestPersonalOfficeCopyRightsAndRevision(t *testing.T) {
 	}
 	args := json.RawMessage(`{"paragraph":2,"replacement":"Geändert","name":"Entwurf.docx"}`)
 	req := pa.Request{Tool: "office.copy", Args: args, Sources: []pa.Source{{Kind: "file", ID: "Brief.docx", Ref: map[string]string{"root": "share/Docs"}}}}
-	ctx := context.Background()
+	ctx := pa.WithAuthority(t.Context(), func(context.Context) error { return nil }, nil)
 	if e := ts.server.personalOfficeAccess(ctx, guest, req); e == nil {
 		t.Fatal("other user can read a private share")
 	}
@@ -52,6 +53,13 @@ func TestPersonalOfficeCopyRightsAndRevision(t *testing.T) {
 	if err = os.WriteFile(file, original, 0600); err != nil {
 		t.Fatal(err)
 	}
+	revoked := pa.WithAuthority(ctx, func(context.Context) error { return errors.New("permission withdrawn") }, nil)
+	if _, err := ts.server.applyPersonalOffice(revoked, owner, req, preview); !errors.Is(err, pa.ErrNoEffect) {
+		t.Fatalf("revoked publication: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Entwurf.docx")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("published after revocation: %v", err)
+	}
 	result, err := ts.server.applyPersonalOffice(ctx, owner, req, preview)
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +79,7 @@ func TestPersonalSearchAndWorkflowDocument(t *testing.T) {
 	ts := personalFixture(t)
 	dir := ts.withShare()
 	u, _ := ts.users.Get("alex")
-	ctx := t.Context()
+	ctx := pa.WithAuthority(t.Context(), func(context.Context) error { return nil }, nil)
 	if err := os.WriteFile(filepath.Join(dir, "Beleg.txt"), []byte("Daten"), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -60,7 +60,7 @@
 <tr>
 <td width="33%"><b>Speicher</b><br>RAID 0, 1, 5, 6, 10. Btrfs-Spiegel. SSD-Cache. Verschlüsselung.</td>
 <td width="33%"><b>Sicherheit</b><br>Signierte Updates mit Rückfall. Firewall. Zwei-Faktor. Passkeys.</td>
-<td width="33%"><b>KI-Agent</b><br>Dein eigenes Ollama. Feste Rechte. MCP für Claude.</td>
+<td width="33%"><b>Agent</b><br>Eigene Chats und Aufträge. Freigaben je Konto.</td>
 </tr>
 <tr>
 <td><b>Sicherung</b><br>Versioniert. Auf USB, SMB oder ein zweites NAS. Mit Prüfung.</td>
@@ -223,7 +223,7 @@ Aufnahmen vom 25. November 2026 mit Beispieldaten: [Sicherungen in der schmalen 
 - **Erkennung auf NPU, iGPU, Coral (USB), Hailo oder CPU:** „Automatisch“ nimmt das beste vorhandene Gerät. Fällt es aus, weicht der NVR auf das nächste aus (NPU → iGPU → CPU) und meldet es. Die Seite Diagnose zeigt ohne Terminal, warum die Erkennung nicht läuft.
 - **Live, Aufnahmen, Ereignisse:** Kacheln frei anordnen (je Konto gemerkt), eine Kamera groß oder im Vollbild, die letzten Ereignisse daneben; Ton, Gegensprechen (nur über HTTPS) und Schwenken, wenn die Kamera es kann. Aufnahmen auf einer Zeitleiste je Kamera und Tag abspielen und Ausschnitte exportieren. Ereignisse als Bilder oder Liste, gefiltert nach Kamera, Art und Zeitraum. Gesichter anlernen und bekannte Kennzeichen benennen (Administratoren).
 - **Aufnahme je Kamera:** Nicht aufnehmen, Bei erkannten Objekten, Bei Bewegung oder Dauerhaft, mit Aufbewahrung in Tagen. Eine Speichergrenze für alle Kameras löscht die ältesten Aufnahmen zuerst.
-- **Meldungen je Kamera:** an die Glocke, als Push, per E-Mail, an Home Assistant (eigene MQTT-Sensoren je Kamera) und an den KI-Agenten; wählbar je Art: Person, Fahrzeug, Tier, Kennzeichen, bekanntes Gesicht, Kamera offline.
+- **Meldungen je Kamera:** an die Glocke, als Push, per E-Mail, an Home Assistant (eigene MQTT-Sensoren je Kamera); wählbar je Art: Person, Fahrzeug, Tier, Kennzeichen, bekanntes Gesicht, Kamera offline.
 - **Rechte je Kamera:** Besitzer und Administratoren sehen alle Kameras. Ein Benutzer sieht eine Kamera nur mit Haken, getrennt für „Live ansehen“ und „Aufnahmen ansehen“. Über API-Tokens und MCP sind die Kameras nicht erreichbar.
 - **Widget „Kamera“:** zeigt eine Kamera auf dem Arbeitsplatz, klein als Standbild, groß als Live-Bild; ein Klick öffnet sie im NVR.
 - **Sicherung:** Einstellungen, Kameras, Kamerarechte und bekannte Kennzeichen laufen mit der Sicherung des Sticks mit, bekannte Gesichter ebenfalls (bis 12 MB). Aufnahmen und Ereignisse gehören nicht dazu.
@@ -238,7 +238,7 @@ Aufnahmen vom 25. November 2026 mit Beispieldaten: [Sicherungen in der schmalen 
 
 - **Eigene Seite „Sprachdienste“ (ab Werk aus):** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) schreibt mit, was gesprochen wird, [Piper](https://github.com/rhasspy/piper) spricht Text – in zwei Containern, die TitanOS selbst verwaltet. Was gesprochen wird, verlässt das NAS nicht.
 - **Für Home Assistant:** beide Dienste sprechen das Wyoming-Protokoll (Ports 10300 und 10200). Die Seite nennt Host und Port und die Schritte in Home Assistant. Ab Werk erreicht nur das eingetragene Home Assistant die Dienste, auf Wunsch das ganze Heimnetz.
-- **Für den KI-Agenten:** das Mikrofon im Eingabefeld und „Vorlesen“ nutzen dieselben Dienste.
+- **Für den KI-Agenten:** das Mikrofon im Eingabefeld nutzt die lokale Spracherkennung.
 - **Modelle und Stimmen wählen:** Whisper von `tiny` bis `large-v3` und alle Piper-Stimmen des Katalogs (auch deutsche) lassen sich herunterladen, aktivieren, wechseln und löschen; TitanOS prüft Größe und Prüfsumme. Mit Hörprobe und „Ausprobieren“ fürs Mikrofon.
 - **Grafikkarte wählbar:** Sprache zu Text rechnet auf einer NVIDIA-Karte (Treiber-Plugin) oder auf dem Prozessor; die Seite zeigt den freien Grafikspeicher. Text zu Sprache läuft auf dem Prozessor.
 - **Prüfstand:** Geprüft mit den echten Abbildern auf einer Entwicklungsmaschine ohne Grafikkarte (kleinstes Modell, eine deutsche Stimme). Nicht geprüft sind eine NVIDIA-Karte, die großen Modelle und echtes Home Assistant.
@@ -344,13 +344,10 @@ Aufnahmen vom 25. November 2026 mit Beispieldaten: [Sicherungen in der schmalen 
 
 - **Persönliche API-Zugänge:** benannte, widerrufbare Tokens mit bewusst gewählten Bereichen und aktuellen Konto-/Share-Rechten. Standard nur lesend, Geheimnis einmalig sichtbar, ausschließlich sein Hash wird gespeichert.
 - **OpenAPI und CLI:** dokumentierter API-Vertrag und statisches `titanosctl` für Status, Dateien sowie erlaubte Docker-/VM-Aktionen. [Verwendung](docs/PUBLIC-API.md).
-- **KI-Agent (optional, ab Werk aus):** erledigt Aufträge in normaler Sprache mit den Werkzeugen von TitanOS, in mehreren Schritten und mit deinem eigenen Ollama (z. B. gpt-oss). Je Werkzeug, Bereich und Ordner einstellbar: ohne Nachfrage, mit Knopf im Chat oder verboten. Im Desktop-Modus ein eigenes Programm, am Handy eine eigene App.
-  - **Chats und Wissen:** Projekte (auch mit anderen Konten geteilt), Archiv, Notizen, Gedächtnis und Skills samt Skill-Katalog; Dateien aus deinen Freigaben im Chat; eigener Ordner je Konto in der Freigabe „KI-Agent“; Websuche.
-  - **Werkzeuge:** Word-, Excel- und PDF-Dateien anlegen und ändern; Spracheingabe über Whisper, Bilder verstehen und Vorlesen; Code in einer Sandbox (ab Werk aus); Snapshot vor riskanten Änderungen; Home Assistant samt Assist.
-  - **Von selbst:** Erinnerungen, geplante Aufträge (einmalig, Intervalle, Wochentage, Cron) und Morgenbericht; Eigeninitiative bei Meldungen des NAS. Geplante Aufträge wählen, ob sie schlafende Platten wecken dürfen.
-  - **Mail, Kalender, Kontakte und Erinnerungen:** lesen, entwerfen, eintragen, ändern, senden – in der Agent-App und als Panel in Mail, Kontakten und Kalender mit einem gemeinsamen Verlauf und Kontext-Aktionen („Zusammenfassen“, „Antwort entwerfen“, „Termin aus Mail“, „Freie Zeit finden“, „Dubletten finden“). Rechte je Aktion („Nur Vorschläge“ ab Werk, „Fragen“, „Selbst ausführen“; der Admin setzt die Obergrenze, jedes Konto darf strenger sein); Vorschläge öffnen sich als Entwurf im jeweiligen Programm; Löschen fragt immer, Senden nach gelesenem fremdem Inhalt ebenfalls; Mail-Zugriff abschaltbar. Home Assistant darf höchstens lesen, ab Werk nichts.
-  - **Funktionen:** Dokumenten-Gedächtnis, Fristenwächter, Papierkram, Ransomware-Wächter, Notfallhandbuch, Notfallzugang, Was-wäre-wenn, Hardware-Berater und Backup-Buddy.
-  - Im Cluster nutzt ein Knoten auf Freigabe das Modell des Admin-Knotens. [Einzelheiten](docs/AGENT.md)
+- **Persönlicher Agent:** Jedes Konto hat eigene Chats, Aufträge, Quellen und Freigaben. Die Systemsteuerung legt Obergrenzen fest. Im Agenten schränkst du den Zugriff auf Apps und Aktionen weiter ein.
+  - Aus T-Mail lässt sich eine Unterhaltung zusammenfassen, ein Antwortentwurf vorbereiten oder ein Termin prüfen. Die Vorschau vor dem Versand zeigt Konto, Empfänger, Text und Anhänge.
+  - Dateien und Office übergeben ausgewählte Quellen. Für eine bearbeitbare Kopie wählst du einen Zielordner und prüfst die Änderung vor dem Speichern.
+  - Ein eigener Hintergrunddienst führt berechtigte Aufträge bei geschlossenem Browser weiter. Den Stand siehst du auf dem Handy und am Desktop unter „Aufträge“. [Einrichtung und Nachweise](docs/AGENT-PERSOENLICH.md)
 - **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. Die Seite Systemsteuerung › KI und Smart Home › MCP-Server zeigt allen Konten Zustand, Endpunkt und Verbindungsanleitung samt Token-Knopf; Schalter, Werkzeuge und letzte Aufrufe sehen nur Besitzer und Administratoren. [Einrichtung](docs/MCP.md).
 
 </details>
@@ -476,7 +473,7 @@ Die Datenplatten nicht als neue Volumes anlegen oder formatieren. Ohne Konfigura
 | Kameras | [NVR](docs/NVR.md) |
 | Hardware und Fernzugriff | [Plugins](docs/PLUGINS.md), [NVIDIA](docs/NVIDIA.md), [Tailscale](docs/TAILSCALE.md), [NetBird](docs/NETBIRD.md), [Netzwerk](docs/NETWORKING.md), [Cluster](docs/CLUSTER.md) |
 | API und Medien | [Öffentliche API/CLI](docs/PUBLIC-API.md), [VM-Medien](docs/VM-MEDIA.md), [Plugin-Aufräumen](docs/PLUGIN-CLEANUP.md) |
-| Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [KI-Agent](docs/AGENT.md), [MCP-Server](docs/MCP.md) |
+| Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [Agent](docs/AGENT-PERSOENLICH.md), [MCP-Server](docs/MCP.md) |
 | Entwicklung und Veröffentlichung | [Entwicklungsumgebung](docs/DEVELOPMENT.md), [Release-Ablauf](docs/RELEASING.md), [UI-Entwürfe](docs/design/README.md), [Screenshots](docs/screenshots/README.md) |
 | Änderungen und Prüfstand | [GitHub Releases](https://github.com/ra5on/TitanOS/releases), [detaillierte Release-Berichte](docs/releases/) |
 

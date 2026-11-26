@@ -115,6 +115,7 @@
 	"pa.cancel": "Cancel",
 	"pa.admin": "Agent permissions",
 	"pa.account": "Account",
+	"pa.userLimits": "User permissions",
 	"pa.limitsNote": "Set the maximum permission for each action on the selected account.",
 	"pa.sensitive": "Separate approval for this object",
 	"pa.model": "Model connection",

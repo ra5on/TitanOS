@@ -166,7 +166,9 @@ export async function clearAgentNotifications(chat?: string): Promise<void> {
 		if (!shown.length) return;
 		let read: (id: string) => boolean = (id) => id === chat;
 		if (!chat) {
-			const list = await api.get<{ jobs: { id: string; seen: boolean }[] }>('/personal-agent/activity');
+			const list = await api.get<{ jobs: { id: string; seen: boolean }[] }>(
+				'/personal-agent/activity',
+			);
 			const seen = new Set(list.jobs.filter((j) => j.seen).map((j) => j.id));
 			read = (id) => seen.has(id);
 		}

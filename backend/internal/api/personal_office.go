@@ -261,7 +261,9 @@ func (s *Server) applyPersonalOffice(ctx context.Context, u auth.User, r pa.Requ
 	if err = ctx.Err(); err != nil {
 		return result, err
 	}
-	if err = s.opts.Files.WriteFile(root, dst.Path, out, u.UID, false); err != nil {
+	if err = s.opts.Files.WriteFileChecked(root, dst.Path, out, u.UID, false, func() error {
+		return pa.Reauthorize(ctx)
+	}); err != nil {
 		return result, err
 	}
 	// Verify the published object through the native account-visible file path.

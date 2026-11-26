@@ -1,4 +1,6 @@
-# KI-Agent
+# Archiv des KI-Agenten bis TitanOS 1.34
+
+Der persönliche Agent ab 1.35 startet mit einem eigenen Datenbestand. Einrichtung, Rechte und Aufträge stehen im [Handbuch des persönlichen Agenten](AGENT-PERSOENLICH.md). Die folgenden Abschnitte dokumentieren die frühere Implementierung.
 
 Der KI-Agent erledigt Aufträge auf dem NAS selbstständig. Du gibst ihm eine Aufgabe, er arbeitet sie in mehreren Schritten mit den Werkzeugen von TitanOS ab und meldet sich mit dem Ergebnis. Das Modell läuft auf deinem eigenen Ollama-Server; andere Anbieter gibt es nicht (Entscheidung des Projektinhabers vom 4.11.2026, PLAN 44).
 

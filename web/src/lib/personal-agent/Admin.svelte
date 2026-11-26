@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { api, type User } from '#lib/api.ts';
-	import { apiErrorText } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
 		agentState,
@@ -79,15 +80,16 @@
 
 <PageHead title={msg('admin')} />
 <section class="pa-ui pa-admin">
-	<p>{msg('limitsNote')}</p>
-	<label class="pa-field"
-		>{msg('account')}<select
-			value={account}
-			disabled={busy || dirty}
-			onchange={(e) => void select(e.currentTarget.value)}
-			>{#each users as u (u.name)}<option value={u.name}>{u.name}</option>{/each}</select
-		></label
-	>
+	<SettingGroup id="users" title={t('pa.userLimits')} desc={msg('limitsNote')}>
+		<label class="pa-field"
+			>{msg('account')}<select
+				value={account}
+				disabled={busy || dirty}
+				onchange={(e) => void select(e.currentTarget.value)}
+				>{#each users as u (u.name)}<option value={u.name}>{u.name}</option>{/each}</select
+			></label
+		>
+	</SettingGroup>
 	{#if error}<p role="alert" class="pa-warning"><Icon name="info" />{error}</p>{/if}
 	{#if ready}{#each [...new Set(caps.map((c) => c.app))] as group}<div class="pa-settings-card">
 				<h2>{group}</h2>

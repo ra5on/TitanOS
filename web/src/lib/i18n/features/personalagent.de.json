@@ -115,6 +115,7 @@
 	"pa.cancel": "Abbrechen",
 	"pa.admin": "Agent-Berechtigungen",
 	"pa.account": "Konto",
+	"pa.userLimits": "Berechtigungen je Benutzer",
 	"pa.limitsNote": "Lege je Aktion die höchste erlaubte Stufe für das ausgewählte Konto fest.",
 	"pa.sensitive": "Gesonderte Freigabe für dieses Objekt",
 	"pa.model": "Modellverbindung",
