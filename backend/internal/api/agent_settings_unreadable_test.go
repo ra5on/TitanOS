@@ -34,6 +34,22 @@ func TestAgentSettingsUnreadableAreNotOverwritten(t *testing.T) {
 	}
 }
 
+// The interrupted FAT update left an existing zero-length agent.json. The
+// automatic first-volume choice on the next boot must preserve that evidence.
+func TestEmptyAgentSettingsSurviveAutomaticVolumeSelection(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if err := ts.store.Write(agentSettingsFile, nil); err != nil {
+		t.Fatal(err)
+	}
+	writes := ts.store.Writes()
+	ts.server.agentVolume([]string{"tank"})
+	data, err := ts.store.Read(agentSettingsFile)
+	if err != nil || len(data) != 0 || ts.store.Writes() != writes {
+		t.Fatalf("empty agent.json was changed: %q, err=%v, writes=%d", data, err, ts.store.Writes()-writes)
+	}
+}
+
 // Keeping the volume chosen at first use is one stick write. agentVolume
 // runs from minute ticks: when that write fails, it is not tried again on
 // every tick (no periodic stick writes).

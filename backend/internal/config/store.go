@@ -25,6 +25,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // State are the files of /config (slash separated, globs as in path.Match)
@@ -133,13 +135,19 @@ func (s *Store) settle(dir string) error {
 	return s.flush(dir)
 }
 
-// wrote notes a write that reached the stick.
-func (s *Store) wrote(name, what string) {
+// finishChange counts actual writes, including ones whose flush fails. Only a
+// confirmed publication earns the success entry in the system log.
+func (s *Store) finishChange(name, what, dir string) error {
 	s.writes.Add(1)
 	if countsAsChange(name) {
 		s.changes.Add(1)
 	}
+	if err := s.flush(dir); err != nil {
+		slog.Warn("configuration change on the stick was not confirmed", "file", name, "change", what, "err", err)
+		return err
+	}
 	slog.Info("configuration on the stick changed", "file", name, "change", what)
+	return nil
 }
 
 // errInvalidName is a name no file can have; it says nothing about the stick.
@@ -175,7 +183,8 @@ func (s *Store) ReadJSON(name string, v any) error {
 
 // Write replaces a file atomically: the content goes to a temporary file in
 // the same directory, is flushed to the stick and then renamed over the old
-// file. A power cut leaves either the old or the new content, never half.
+// file. Success confirms the directory entry as well as the data. On FAT
+// the rename itself has no journal if the write is interrupted before then.
 // A file that holds exactly data already is not written again.
 func (s *Store) Write(name string, data []byte) error {
 	err := s.write(name, data)
@@ -225,8 +234,7 @@ func (s *Store) write(name string, data []byte) error {
 	if err := os.Rename(tmp.Name(), p); err != nil {
 		return err
 	}
-	s.wrote(name, "written")
-	err = s.flush(dir)
+	err = s.finishChange(name, "written", dir)
 	removeStaleTemps(dir, filepath.Base(tmp.Name()))
 	return err
 }
@@ -276,8 +284,7 @@ func (s *Store) Remove(name string) error {
 		}
 		return err
 	}
-	s.wrote(name, "removed")
-	return s.flush(filepath.Dir(p))
+	return s.finishChange(name, "removed", filepath.Dir(p))
 }
 
 // RemoveAll deletes a directory with everything in it. A missing directory
@@ -293,8 +300,7 @@ func (s *Store) RemoveAll(name string) error {
 	if err := os.RemoveAll(p); err != nil {
 		return err
 	}
-	s.wrote(name, "removed")
-	return s.flush(filepath.Dir(p))
+	return s.finishChange(name, "removed", filepath.Dir(p))
 }
 
 // List returns the names of the entries in a directory. A missing directory
@@ -330,6 +336,17 @@ func syncDirectory(dir string) error {
 		return err
 	}
 	defer d.Close()
+	// FAT can leave the renamed inode and its allocation metadata dirty even
+	// after fsync on the pre-rename file and its directory. Flush this
+	// filesystem after changing a name on the boot stick. Unchanged
+	// settings take the no-write path and do not wake or flush the stick.
+	var stat unix.Statfs_t
+	if err := unix.Fstatfs(int(d.Fd()), &stat); err != nil {
+		return err
+	}
+	if stat.Type == unix.MSDOS_SUPER_MAGIC {
+		return unix.Syncfs(int(d.Fd()))
+	}
 	// Some filesystems cannot sync a directory; the data itself is already flushed.
 	if err := d.Sync(); err != nil && !errors.Is(err, errors.ErrUnsupported) && !isInvalid(err) {
 		return err
