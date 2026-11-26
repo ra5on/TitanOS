@@ -21,6 +21,7 @@ async function check(width) {
     width,
     "de",
     {
+      nativeShell: true,
       serviceWorkers: "block",
       hasTouch: !desktop,
       isMobile: !desktop,
@@ -56,10 +57,31 @@ async function check(width) {
         lastRun: "2026-11-26T01:00:00Z",
       },
     };
+    const healthy = structuredClone(job);
+    healthy.job.id = "archiv";
+    healthy.state.lastError = "";
+    healthy.state.lastErrorCode = "";
+    await ctx.route("**/api/v1/notifications", (r) =>
+      r.fulfill({
+        json: {
+          messages: [
+            {
+              id: 71,
+              time: "2026-11-26T01:08:00Z",
+              severity: "error",
+              kind: "backup_failed",
+              subject: "nacht",
+              title: "Backup nacht fehlgeschlagen",
+              text: "Das Ziel ist nicht erreichbar.",
+            },
+          ],
+        },
+      }),
+    );
     await ctx.route("**/api/v1/backups", (r) =>
       r.fulfill({
         json: {
-          jobs: [job],
+          jobs: [healthy, job],
           shares: ["Documents"],
           volumes: ["Safe"],
           smbTargets: [],
@@ -113,7 +135,6 @@ async function check(width) {
     });
     await ctx.addInitScript(
       ({ desktop }) => {
-        localStorage.removeItem("titanos.layout");
         if (desktop)
           localStorage.setItem(
             "titanos.desktop.windows.alex",
@@ -157,10 +178,24 @@ async function check(width) {
     await search().waitFor();
     if (desktop) {
       await settings().locator('.todo a[href$="#backup-nacht"]').click();
-      await settings().locator("#backup-nacht:visible").waitFor();
-      await openSetting("/settings");
-      await settings().locator(".overview").waitFor();
+    } else {
+      await page.locator("[data-phone-bell]").click();
+      await page
+        .getByRole("button", { name: /Backup nacht fehlgeschlagen/ })
+        .click();
+      await page
+        .locator(".notice-detail")
+        .getByRole("button", { name: "Details öffnen" })
+        .click();
+      await page.waitForURL("**/settings/backups/data#backup-nacht");
     }
+    const failed = settings().locator("#backup-nacht");
+    await failed
+      .locator(".notice-error")
+      .getByText("Dieses Laufwerk ist nicht (mehr) angeschlossen.")
+      .waitFor();
+    await openSetting("/settings");
+    if (desktop) await settings().locator(".overview").waitFor();
     await page.evaluate(async () => {
       await document.fonts.ready;
       await new Promise(requestAnimationFrame);
@@ -280,9 +315,15 @@ try {
     "user",
     "hell",
     390,
+    "de",
+    {
+      nativeShell: true,
+      serviceWorkers: "block",
+      isMobile: true,
+      hasTouch: true,
+    },
   );
   try {
-    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
     await page.goto(base + "/settings");
     const search = page.locator(".home-search").getByRole("searchbox");
     for (const term of ["Immich Logs", "Backup wiederherstellen"]) {
