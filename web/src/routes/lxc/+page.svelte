@@ -2,6 +2,9 @@
 	// System containers (LXC): the list on the left, the chosen container on
 	// the right with its actions, settings and snapshots.
 	import { poll } from '#lib/poll.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
+	import Dropdown from '#lib/components/Dropdown.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -119,6 +122,14 @@
 	function choose(c: LXCStatus) {
 		void goto(`/lxc?${new URLSearchParams({ ct: c.name })}`, { replaceState: true });
 	}
+	function confirmKill(c: LXCStatus) {
+		confirming = {
+			title: t('lxc.killTitle'),
+			text: t('lxc.killText', { name: containerLabel(c) }),
+			label: t('lxc.kill'),
+			run: () => action(c, 'kill'),
+		};
+	}
 
 	async function remove() {
 		const c = removing;
@@ -182,12 +193,7 @@
 			run: () => {
 				const c = ct();
 				if (!c) return;
-				confirming = {
-					title: t('lxc.killTitle'),
-					text: t('lxc.killText', { name: containerLabel(c) }),
-					label: t('lxc.kill'),
-					run: () => action(c, 'kill'),
-				};
+				confirmKill(c);
 			},
 			enabled: () => ctFree() && ctOn(),
 		},
@@ -251,7 +257,19 @@
 {:else if list.containers.length === 0}
 	<EmptyState title={t('lxc.empty')} text={t('lxc.emptyText')} />
 {:else}
-	<div class="layout">
+	<div class="layout" class:desktop-window={inWindow}>
+		{#if inWindow}<select
+				class="field container-picker"
+				aria-label={t('lxc.title')}
+				value={selected?.name}
+				onchange={(e) => {
+					const c = list?.containers.find((item) => item.name === e.currentTarget.value);
+					if (c) choose(c);
+				}}
+				>{#each list.containers as c (c.name)}<option value={c.name}
+						>{containerLabel(c)} · {stateText(c)}</option
+					>{/each}</select
+			>{/if}
 		<ul class="list" aria-label={t('lxc.title')}>
 			{#each list.containers as c (c.name)}
 				<li>
@@ -309,7 +327,39 @@
 				{#if c.privileged}<p class="notice-warn">{t('lxc.form.privilegedWarning')}</p>{/if}
 
 				<div class="actions">
-					{#if c.state === 'running'}
+					{#if inWindow && c.state === 'running'}
+						<button
+							class="btn btn-primary"
+							disabled={readOnly || busy === c.name}
+							onclick={() => addLXCConsole(c.name, containerLabel(c))}
+							><Icon name="terminal" size={16} />{t('lxc.shell')}</button
+						>
+						<button
+							class="btn"
+							disabled={readOnly || busy === c.name}
+							onclick={() => action(c, 'stop')}>{t('lxc.stop')}</button
+						>
+						<Dropdown label={t('ui.more')} icon="more" align="right"
+							>{#snippet children(close)}
+								<button
+									role="menuitem"
+									disabled={readOnly || busy === c.name}
+									onclick={() => {
+										close();
+										addLXCConsole(c.name, containerLabel(c), 'console');
+									}}><Icon name="monitor" size={16} />{t('lxc.console')}</button
+								>
+								<button
+									role="menuitem"
+									disabled={readOnly || busy === c.name}
+									onclick={() => {
+										close();
+										action(c, 'restart');
+									}}><Icon name="restart" size={16} />{t('lxc.restart')}</button
+								>
+							{/snippet}</Dropdown
+						>
+					{:else if c.state === 'running'}
 						<button
 							class="btn"
 							disabled={readOnly || busy === c.name}
@@ -334,13 +384,7 @@
 						<button
 							class="btn"
 							disabled={readOnly || busy === c.name}
-							onclick={() =>
-								(confirming = {
-									title: t('lxc.killTitle'),
-									text: t('lxc.killText', { name: containerLabel(c) }),
-									label: t('lxc.kill'),
-									run: () => action(c, 'kill'),
-								})}>{t('lxc.kill')}</button
+							onclick={() => confirmKill(c)}>{t('lxc.kill')}</button
 						>
 					{:else}
 						<button
@@ -487,6 +531,11 @@
 				</SettingGroup>
 
 				<DangerZone hint={t('lxc.removeHint')}>
+					{#if inWindow && c.state === 'running'}<button
+							class="btn btn-danger"
+							disabled={readOnly || busy === c.name}
+							onclick={() => confirmKill(c)}>{t('lxc.kill')}</button
+						>{/if}
 					<button
 						class="btn btn-danger"
 						disabled={readOnly ||
@@ -570,7 +619,17 @@
 		gap: var(--space-4);
 		align-items: start;
 	}
+	.container-picker {
+		display: none;
+	}
 	@media (max-width: 760px) {
+		.desktop-window .container-picker {
+			display: block;
+			width: 100%;
+		}
+		.desktop-window .list {
+			display: none;
+		}
 		.layout {
 			grid-template-columns: 1fr;
 		}
