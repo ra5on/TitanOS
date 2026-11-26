@@ -64,9 +64,16 @@ for arg in $(cat /proc/cmdline); do
         MOVE_CUT_PHASE=*|MOVE_CUT_KIND=*|MOVE_CUT_POINT=*) export "$arg" ;;
     esac
 done
+cut_worker() {
+    if [ "${MOVE_CUT_POINT:-}" = readable-copy ]; then
+        /bin/backup.test -test.v -test.run='^TestGuestUndatedRecoveryAcrossPowerCut$'
+    else
+        /bin/files.test -test.v -test.run='^TestGuestMoveAcrossPowerCut$'
+    fi
+}
 case "${MOVE_CUT_PHASE:-}" in
     arm)
-        /bin/files.test -test.v -test.run='^TestGuestMoveAcrossPowerCut$' &
+        cut_worker &
         worker=$!
         while [ ! -e /tmp/reset-guest ]; do
             kill -0 "$worker" || exit 1
@@ -76,9 +83,9 @@ case "${MOVE_CUT_PHASE:-}" in
         # Immediate guest reset, without sync or unmount. -no-reboot ends QEMU.
         echo b > /proc/sysrq-trigger
         exit 1 ;;
-    check) /bin/files.test -test.v -test.run='^TestGuestMoveAcrossPowerCut$' ;;
+    check) cut_worker ;;
     '') /bin/files.test -test.v -test.run='^TestMove(PublicationBarriers|CrashAtPublication|KeepsSourceIfPublishedTargetIsReplaced)$'
-        RESTIC_TEST_BINARY=/bin/restic /bin/backup.test -test.v -test.timeout=25m -test.run='^TestPreviousSnapshotRestoresAfterFailure$' ;;
+        RESTIC_TEST_BINARY=/bin/restic /bin/backup.test -test.v -test.timeout=25m -test.run='^Test(PreviousSnapshotRestoresAfterFailure|UndatedRecoveryKeepsMatchingPair)$' ;;
 esac
 sync
 echo NORDLICHT_DISK_TESTS_PASSED
@@ -98,7 +105,7 @@ boot() {
 }
 boot NORDLICHT_DISK_TESTS_PASSED
 for kind in internal usb; do
-    for point in before-target-sync after-source-unlink; do
+    for point in before-target-sync after-source-unlink readable-copy; do
         boot NORDLICHT_RESETTING_GUEST MOVE_CUT_PHASE=arm "MOVE_CUT_KIND=$kind" "MOVE_CUT_POINT=$point"
         boot NORDLICHT_DISK_TESTS_PASSED MOVE_CUT_PHASE=check "MOVE_CUT_KIND=$kind" "MOVE_CUT_POINT=$point"
     done
