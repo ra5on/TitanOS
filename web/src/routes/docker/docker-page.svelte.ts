@@ -419,26 +419,24 @@ export class DockerPage {
 		}
 	};
 
-	// The menus of the tool bar: ⋯ (everything at once, settings, LAN,
-	// auto updates) and the arrow next to "Install app" (catalog, compose file,
-	// own container); the menu of a row.
-	pageMenu = $state<'more' | 'install' | null>(null);
+	// The toolbar keeps its primary action visible and groups the rest in one menu.
+	pageMenuOpen = $state(false);
 	pageMenuAt = $state<{ x: number; y: number } | null>(null);
 	pageMenuWasOpen = false;
-	openPageMenu = (kind: 'more' | 'install', anchor: HTMLElement) => {
+	openPageMenu = (anchor: HTMLElement) => {
 		if (this.pageMenuWasOpen) {
 			this.pageMenuWasOpen = false;
-			this.pageMenu = null;
+			this.pageMenuOpen = false;
 			return;
 		}
 		const rect = anchor.getBoundingClientRect();
 		this.pageMenuAt = { x: Math.max(8, rect.right - 280), y: rect.bottom + 4 };
-		this.pageMenu = kind;
+		this.pageMenuOpen = true;
 	};
 	// The action reads what the menu was opened for before the menu closes.
 	pick = (action: () => void) => {
 		action();
-		this.pageMenu = null;
+		this.pageMenuOpen = false;
 		this.rowMenu = null;
 	};
 	rowMenu = $state<{ group: DockerGroup; x: number; y: number } | null>(null);

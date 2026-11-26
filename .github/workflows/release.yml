@@ -64,6 +64,7 @@ on:
       - 'scripts/fetch-pci-ids.sh'
       - 'scripts/smoke-app-update.py'
       - 'scripts/smoke-system-update.py'
+      - 'scripts/interrupted_system_smoke.py'
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
       - 'scripts/autopilot.py'

@@ -89,6 +89,33 @@ const skip = /^(Abmelden|Log out|NAS neu starten|NAS herunterfahren)/;
 
 const errors = [];
 const findings = [];
+const dialogDir = process.env.UI_DIALOG_OUTPUT;
+const dialogs = new Map();
+if (dialogDir) await mkdir(dialogDir, { recursive: true });
+async function captureDialog(route, trigger) {
+  if (!dialogDir) return;
+  const dialog = page
+    .locator('dialog[open]:visible, [role="dialog"]:visible')
+    .last();
+  if (!(await dialog.count())) return;
+  const title = await dialog.evaluate((element) => {
+    const labels = (element.getAttribute("aria-labelledby") || "")
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .filter(Boolean);
+    return (
+      labels.join(" ") ||
+      element.getAttribute("aria-label") ||
+      element.querySelector("h1, h2, h3")?.textContent?.trim()
+    );
+  });
+  if (!title) return;
+  const key = route + "\n" + title;
+  if (dialogs.has(key)) return;
+  const filename = (dialogs.size + 1) + ".png";
+  await dialog.screenshot({ path: dialogDir + "/" + filename, animations: "disabled" });
+  dialogs.set(key, { route, trigger, title, filename });
+}
 // Crawls a titand started with -dev (UI_LOGIN=name:password), whose answers
 // have the real shapes. The shared fixtures answer unknown paths with {}, so
 // pages they were never meant for would look broken.
@@ -274,6 +301,7 @@ async function crawl(route) {
       continue; // covered by an overlay or gone after an earlier click
     }
     await page.waitForTimeout(400);
+    await captureDialog(route, label);
     if ((await broken()) || errors.length || consoleErrors.length) {
       note(
         route,
@@ -321,6 +349,9 @@ for (const route of routes) {
   }
 }
 
+if (dialogDir) {
+  await writeFile(dialogDir + "/dialoge.json", JSON.stringify([...dialogs.values()], null, 2));
+}
 await writeFile(`${out}/findings.json`, JSON.stringify(findings, null, 2));
 await ctx.close();
 await browser.close();

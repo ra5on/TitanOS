@@ -96,6 +96,7 @@ type Job struct {
 	sourceRoot, destinationRoot Root
 	sourceDir, destinationDir   string
 	completedSource             map[string]fs.FileInfo
+	completedDestination        map[string]string
 
 	pendingUndo  []UndoMove
 	undoEligible map[string]bool
@@ -251,6 +252,7 @@ func (m *Manager) runJob(ctx context.Context, job *Job, sr, dr *os.Root, src, ds
 	if job.durable != nil {
 		if err := m.saveTransfer(job, job.durable.Pending); err != nil {
 			m.jobs.mu.Lock()
+			job.State = JobFailed
 			job.Error = "Could not persist transfer outcome: " + err.Error()
 			job.ErrorCode = "store"
 			job.Blocked = true
@@ -702,7 +704,7 @@ func (m *Manager) copyOne(ctx context.Context, job *Job, sr, dr *os.Root, rel, t
 			}
 			return m.noteKept(job, rel, "kept_identical")
 		}
-		return m.markCopied(job, dr, rel, final, info)
+		return m.markCopied(job, dr, rel, final, info, nil)
 	}
 	return m.copyFile(ctx, job, sr, dr, rel, final, info, uid, how == settleReplace)
 }
@@ -741,6 +743,13 @@ func (m *Manager) copyDir(ctx context.Context, job *Job, sr, dr *os.Root, rel, t
 			return mapError(err)
 		}
 		m.own(dr, target, uid, true)
+	}
+	// A file may be synced inside a directory whose own name would still be
+	// lost on a power cut. Commit each directory, including empty ones.
+	if job.Move || job.durable != nil {
+		if err := m.syncCopyParent(dr, target); err != nil {
+			return storeErr(err)
+		}
 	}
 	if !job.paged() && job.targets != nil {
 		job.targets[rel] = target
@@ -823,9 +832,6 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	if err := m.syncFile(out); err != nil {
 		return failure(problemCode(mapError(err), "write"), mapError(err))
 	}
-	if err := out.Close(); err != nil {
-		return failure(problemCode(mapError(err), "write"), mapError(err))
-	}
 	if err := m.copyCheckpoint(ctx, job, 0); err != nil {
 		return err
 	}
@@ -836,6 +842,18 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	m.own(dr, part, uid, false)
 	// The modification time is kept, so that photos stay in order.
 	_ = dr.Chtimes(part, info.ModTime(), info.ModTime()) // permissions and times are a convenience; the data are there either way
+	// Remember the staged inode before the name is exposed. Another client
+	// can replace the target while its directory is being flushed.
+	var staged fs.FileInfo
+	if job.Move {
+		staged, err = out.Stat()
+		if err != nil {
+			return failure("write_error", mapError(err))
+		}
+	}
+	if err := out.Close(); err != nil {
+		return failure(problemCode(mapError(err), "write"), mapError(err))
+	}
 	if err := storeErr(m.saveTransfer(job, "publish "+final)); err != nil {
 		return err
 	}
@@ -851,7 +869,7 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	done = true
 	job.c.count.Add(1)
 	job.c.committed.Add(info.Size())
-	return m.markCopied(job, dr, rel, final, info)
+	return m.markCopied(job, dr, rel, final, info, staged)
 }
 
 // publishCopy gives the finished part file its name and returns that name.
@@ -869,17 +887,17 @@ func (m *Manager) publishCopy(job *Job, dr *os.Root, rel, part, final string, re
 			return final, err
 		}
 		if recycled {
-			return final, mapError(renameNoReplace(dr, part, final))
+			return final, mapError(publishNewFile(dr, part, final))
 		}
 		return final, mapError(dr.Rename(part, final))
 	}
 	if explicit {
-		return final, mapError(renameNoReplace(dr, part, final))
+		return final, mapError(publishNewFile(dr, part, final))
 	}
 	// The name was free when the copy began, which may be hours ago. A
 	// file that took it meanwhile (another job, an upload, a save over
 	// SMB) is never replaced unasked: the copy takes the next free name.
-	err := renameNoReplace(dr, part, final)
+	err := publishNewFile(dr, part, final)
 	for range 5 {
 		if !errors.Is(err, fs.ErrExist) {
 			break
@@ -889,7 +907,7 @@ func (m *Manager) publishCopy(job *Job, dr *os.Root, rel, part, final string, re
 			return final, mapError(nameErr)
 		}
 		final = free
-		err = renameNoReplace(dr, part, final)
+		err = publishNewFile(dr, part, final)
 	}
 	return final, mapError(err)
 }
@@ -911,7 +929,15 @@ func (m *Manager) retire(job *Job, r *os.Root, target string) (bool, error) {
 }
 
 // markCopied records a file whose copy is at final (or was already there).
-func (m *Manager) markCopied(job *Job, dr *os.Root, rel, final string, info fs.FileInfo) error {
+func (m *Manager) markCopied(job *Job, dr *os.Root, rel, final string, info, staged fs.FileInfo) error {
+	if job.Move || job.durable != nil {
+		if err := m.syncCopyParent(dr, final); err != nil {
+			return storeErr(err)
+		}
+	}
+	if err := m.finishTransfer(job, dr, rel, final, copyVersion(info), staged); err != nil {
+		return storeErr(err)
+	}
 	if !job.paged() {
 		if job.targets != nil {
 			job.targets[rel] = final
@@ -923,7 +949,7 @@ func (m *Manager) markCopied(job *Job, dr *os.Root, rel, final string, info fs.F
 			job.completedSource[rel] = info
 		}
 	}
-	return storeErr(m.finishTransfer(job, dr, rel, final, copyVersion(info)))
+	return nil
 }
 
 // markSkipped records an entry that is left alone.

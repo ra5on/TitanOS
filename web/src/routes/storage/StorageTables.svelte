@@ -71,7 +71,17 @@
 							>{#if volume.mounted && volume.sizeBytes > 0}<span class="mono"
 									>{formatDiskBytes(volume.usedBytes)} / {formatDiskBytes(volume.sizeBytes)}</span
 								>
-								<div class="bar">
+								<div
+									class="bar"
+									role="meter"
+									aria-label={t('storage.used')}
+									aria-valuemin={0}
+									aria-valuemax={volume.sizeBytes}
+									aria-valuenow={Math.max(0, Math.min(volume.sizeBytes, volume.usedBytes))}
+									aria-valuetext={formatDiskBytes(volume.usedBytes) +
+										' / ' +
+										formatDiskBytes(volume.sizeBytes)}
+								>
 									<span style:width="{Math.min(100, (volume.usedBytes / volume.sizeBytes) * 100)}%"
 									></span>
 								</div>{:else}<span class="muted">{t('storage.notMounted')}</span>{/if}</td

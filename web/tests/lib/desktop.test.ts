@@ -2,7 +2,13 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import { appAllowed, appForPath, sideActive, SYSTEM_APPS } from '#lib/desktop/apps.ts';
+import {
+	appAllowed,
+	appForPath,
+	launchAppForPath,
+	sideActive,
+	SYSTEM_APPS,
+} from '#lib/desktop/apps.ts';
 import {
 	arrangeIcons,
 	defaultDesktop,
@@ -318,4 +324,12 @@ test('ownPath refuses what the URL parser takes for another host', async () => {
 		'',
 	])
 		expect(ownPath(bad), JSON.stringify(bad)).toBe(false);
+});
+
+test('a disabled service still has a settings window for its authorized administrator', () => {
+	expect(launchAppForPath('/settings/agent', 'owner', { agent: false })?.id).toBe('settings');
+	expect(launchAppForPath('/settings/agent', 'user', { agent: false })).toBeUndefined();
+	expect(launchAppForPath('/agent', 'owner', { agent: false })).toBeUndefined();
+	expect(launchAppForPath('/mail', 'owner', { mail: false })).toBeUndefined();
+	expect(launchAppForPath('/settings/agent', 'admin', { agent: true })?.id).toBe('agent');
 });

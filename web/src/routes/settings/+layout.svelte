@@ -35,6 +35,7 @@
 
 <style>
 	.settings-shell {
+		container: settings-content / inline-size;
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);

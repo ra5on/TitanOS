@@ -6,7 +6,9 @@
 	import '@fontsource/ibm-plex-mono/latin-400.css';
 	import '@fontsource/ibm-plex-mono/latin-500.css';
 	import '../app.css';
+	import '../nordlicht.css';
 	import '../nordlicht-phone.css';
+	import '../nordlicht-desktop.css';
 	import PhoneWallpaper from '#lib/components/PhoneWallpaper.svelte';
 
 	import { onMount } from 'svelte';
@@ -31,7 +33,7 @@
 	import { rememberLoginWallpaper } from '#lib/login/wallpaper.ts';
 	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
-	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
+	import { appearance, applyAppearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { frameFor, inWindow, mode } from '#lib/desktop/mode.svelte.ts';
@@ -94,6 +96,7 @@
 	});
 
 	let { children } = $props();
+	$effect(applyAppearance);
 	// PLAN 76: closing a window would cut off an upload that still runs in its page.
 	guardWindowClose(() =>
 		uploads.items.some((u) => u.state !== 'done' && u.state !== 'failed') ? 'busy' : '',
@@ -211,6 +214,19 @@
 	$effect(() => {
 		document.documentElement.toggleAttribute('data-nordlicht', phoneWorkspace);
 		return () => document.documentElement.removeAttribute('data-nordlicht');
+	});
+	// A narrow application window is still a desktop surface. The phone and
+	// the standalone mobile agent keep their own chrome and touch targets.
+	const desktopSurface = $derived(
+		!!session.data?.user &&
+			!session.data?.setupRequired &&
+			(pageFrame === 'desktop' || pageFrame === 'window' || (pageFrame === 'bare' && mode.wide)),
+	);
+	$effect(() => {
+		const root = document.documentElement;
+		if (desktopSurface) root.dataset.nordDesktop = page.url.pathname.split('/')[1] || 'desktop';
+		else delete root.dataset.nordDesktop;
+		return () => delete root.dataset.nordDesktop;
 	});
 </script>
 

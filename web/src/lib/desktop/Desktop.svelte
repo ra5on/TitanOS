@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WorkspaceActivity } from '../task-progress.ts';
 	import MigrationDialog from '../webapps/MigrationDialog.svelte';
 	// PLAN 61: the desktop mode – TitanOS as a desktop with programs in
 	// windows, widgets and a main menu. It replaces the head line and side
@@ -13,7 +14,7 @@
 	import { session } from '../session.svelte.ts';
 	import { appearance } from '../theme/appearance.svelte.ts';
 	import { THEMES } from '../theme/themes.ts';
-	import { appForPath, appAllowed } from './apps.ts';
+	import { launchAppForPath } from './apps.ts';
 	import Launcher from './Launcher.svelte';
 	import PowerDialog from '../components/PowerDialog.svelte';
 	import LiveBackground from '../live/LiveBackground.svelte';
@@ -104,6 +105,10 @@
 		dragCell = null;
 	}
 	let fileDrop = $state(false);
+	let activity = $state.raw<WorkspaceActivity | null>(null);
+	function setActivity(next: WorkspaceActivity) {
+		activity = next;
+	}
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const light = $derived(THEMES[appearance.current.theme as keyof typeof THEMES]?.dark === false);
@@ -191,9 +196,8 @@
 		if ((nav.type !== 'link' && nav.type !== 'goto') || !nav.to) return;
 		const url = nav.to.url;
 		if (url.pathname === '/') return;
-		const app = appForPath(url.pathname);
-		if (app && appAllowed(app, role, session.services))
-			void openProgram('app:' + app.id, { href: url.pathname + url.search + url.hash });
+		const app = launchAppForPath(url.pathname, role, session.services);
+		if (app) void openProgram('app:' + app.id, { href: url.pathname + url.search + url.hash });
 	});
 
 	onMount(() => {
@@ -201,9 +205,8 @@
 		// A link to a page opens it in its window (PLAN 61-8: the address shows the window in front).
 		const path = page.url.pathname + page.url.search + page.url.hash;
 		if (page.url.pathname !== '/') {
-			const app = appForPath(page.url.pathname);
-			if (app && appAllowed(app, role, session.services))
-				void openProgram('app:' + app.id, { href: path });
+			const app = launchAppForPath(page.url.pathname, role, session.services);
+			if (app) void openProgram('app:' + app.id, { href: path });
 		}
 		const stop = watchSources();
 		let measured = false;
@@ -259,10 +262,15 @@
 	});
 
 	function iconCenter(event: Event): { x: number; y: number } | undefined {
+		if (
+			matchMedia('(prefers-reduced-motion: reduce)').matches ||
+			document.documentElement.dataset.fxInteraction === 'off'
+		)
+			return;
 		const el = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
 		const box = area?.getBoundingClientRect();
 		return el && box
-			? { x: el.left - box.left + el.width / 2 - 40, y: el.top - box.top + el.height / 2 - 30 }
+			? { x: el.left - box.left + el.width / 2, y: el.top - box.top + el.height / 2 }
 			: undefined;
 	}
 	function open(key: string, event?: Event, href?: string) {
@@ -560,6 +568,7 @@
 		bind:query={menuQuery}
 		{role}
 		{deskOp}
+		onactivity={setActivity}
 		onsearchkey={(e) => (launcher ? (launcherView?.searchKey(e) ?? false) : false)}
 	/>
 
@@ -616,7 +625,7 @@
 			{endIconDrag}
 		/>
 
-		<DesktopWidgets bind:menu bind:editWidgets bind:dialog {columns} {open} />
+		<DesktopWidgets bind:menu bind:editWidgets bind:dialog {columns} {open} {activity} />
 
 		{#each wm.windows as w (w.id)}
 			{@const p = programOf(w.app)}

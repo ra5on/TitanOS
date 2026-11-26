@@ -88,7 +88,7 @@
 		const start = from,
 			end = to;
 		timing = null;
-		if (!phone || !playable) return;
+		if (!playable) return;
 		const controller = new AbortController();
 		const { signal } = controller;
 		async function readTiming() {
@@ -125,6 +125,12 @@
 		video.currentTime = Math.min(duration, Math.max(0, seconds));
 		sync(video);
 	}
+	function seekKey(e: KeyboardEvent) {
+		if (phone || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		e.preventDefault();
+		seek(position + (e.key === 'ArrowRight' ? 5 : -5));
+	}
 	function format(seconds: number) {
 		const whole = Math.max(0, Math.floor(seconds));
 		return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
@@ -136,7 +142,7 @@
 		duration = position = 0;
 	}
 	const frames = $derived.by(() => {
-		if (!phone || !playable || saved || !duration || !timing?.segments.length) return [];
+		if (!playable || saved || !duration || !timing?.segments.length) return [];
 		return Array.from({ length: 6 }, (_, i) => wallAt((duration * (i + 0.5)) / 6));
 	});
 </script>
@@ -161,7 +167,7 @@
 			onerror={failed}
 		></video>
 	{/key}
-	{#if phone && duration > 0}
+	{#if duration > 0}
 		<div class="clip-control">
 			<div class="times">
 				<strong>{format(position)} / {format(Math.round(duration))}</strong>
@@ -189,6 +195,7 @@
 					aria-label={t('nvr.events.clipTimeline')}
 					aria-valuetext={format(position) +
 						(wallTime === null ? '' : ' · ' + clock(wallTime, locale, true))}
+					onkeydown={seekKey}
 					oninput={(e) => seek(e.currentTarget.valueAsNumber)}
 				/>
 			</div>

@@ -461,12 +461,18 @@
 		gap: var(--space-1-5);
 		padding: 9px;
 		border-radius: calc((var(--size) * 0.36 + 9px) * min(var(--radius-scale, 1), 1.4));
-		background: color-mix(in srgb, var(--surface) var(--plate), transparent);
+		background: color-mix(
+			in srgb,
+			color-mix(in srgb, var(--surface) 92%, var(--accent)) var(--plate),
+			transparent
+		);
 		/* The global "Glaseffekt" (Settings › Appearance, PLAN 64). */
 		-webkit-backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
 		backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
-		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
-		box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+		border: 1px solid var(--nord-line, color-mix(in srgb, var(--text) 18%, transparent));
+		box-shadow:
+			inset 0 1px rgb(255 255 255 / 0.15),
+			0 9px 26px rgb(0 0 0 / 0.28);
 		max-width: calc(100% - 24px);
 		max-height: calc(100% - 24px);
 	}

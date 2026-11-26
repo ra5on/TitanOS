@@ -1,13 +1,10 @@
 package files
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"path"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 // A copy writes each file as .titanos-copy-<id>.titanos-part next to its
@@ -67,17 +64,4 @@ func (m *Manager) removeStalePart(r *os.Root, p string) bool {
 		return false
 	}
 	return r.Remove(p) == nil
-}
-
-// renameNoReplace renames without replacing what may have appeared at the
-// target. Filesystems that do not know the flag (some FUSE drives) get a
-// plain rename after a check.
-func renameNoReplace(r *os.Root, from, to string) error {
-	err := publishNewFile(r, from, to)
-	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOSYS) {
-		if _, e := r.Lstat(to); errors.Is(e, fs.ErrNotExist) {
-			return r.Rename(from, to)
-		}
-	}
-	return err
 }

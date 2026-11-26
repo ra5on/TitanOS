@@ -2,6 +2,7 @@
 	// The main actions of the chosen VM in the tool bar – the screen as the
 	// main one while the VM runs – and the rest in "⋯" (PLAN 67).
 	import type { VM } from '#lib/api.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
@@ -23,12 +24,12 @@
 		onclick={() => p.act(current, 'shutdown')}
 		disabled={p.isBusy(current)}><Icon name="power" size={15} />{t('vms.shutdown')}</button
 	>
-	<button
-		type="button"
-		class="btn"
-		onclick={() => p.act(current, 'reboot')}
-		disabled={p.isBusy(current)}><Icon name="restart" size={15} />{t('vms.reboot')}</button
-	>
+	{#if !inWindow}<button
+			type="button"
+			class="btn"
+			onclick={() => p.act(current, 'reboot')}
+			disabled={p.isBusy(current)}><Icon name="restart" size={15} />{t('vms.reboot')}</button
+		>{/if}
 	{#if p.tab !== 'screen'}<a
 			class="btn btn-primary"
 			href={p.link(current, 'screen')}
@@ -50,6 +51,15 @@
 		>
 		<hr />
 		{#if current.state === 'running'}
+			{#if inWindow}<button
+					type="button"
+					role="menuitem"
+					disabled={p.isBusy(current)}
+					onclick={() => {
+						close();
+						p.act(current, 'reboot');
+					}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+				>{/if}
 			<button
 				type="button"
 				role="menuitem"

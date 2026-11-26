@@ -93,6 +93,9 @@ func (m *Manager) copyParents(r *os.Root, root Root, dir string, uid int) error 
 		} else if !info.IsDir() {
 			return ErrInvalid
 		}
+		if err := m.syncCopyParent(r, p); err != nil {
+			return storeErr(err)
+		}
 	}
 	return nil
 }

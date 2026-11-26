@@ -1,11 +1,4 @@
 /* The phone shell owns these surfaces. Desktop windows can be narrower than a phone. */
-:root[data-nordlicht] {
-	--nord-chrome: rgb(19 43 53 / max(0.55, var(--desk-alpha, 0.72)));
-	--nord-line: color-mix(in srgb, var(--text) 17%, transparent);
-	--nord-surface: color-mix(in srgb, var(--desk-surface) 84%, var(--surface));
-	--nord-radius: calc(18px * var(--radius-scale, 1));
-	--nord-blur: blur(var(--desk-blur, 16px)) saturate(1.18);
-}
 [data-nordlicht] body {
 	isolation: isolate;
 }

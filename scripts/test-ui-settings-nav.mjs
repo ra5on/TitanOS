@@ -1,5 +1,5 @@
 // PLAN 86 (owner 13.11.2026, variant A, draft 1): the menu of Systemsteuerung
-// – eight areas that open their pages in the column, one at a time, the area
+// – seven task areas that open their pages in the column, one at a time, the area
 // of the page shown open by itself, an area with one page opening it at once
 // – and the search that finds every single setting and leads to its row
 // (tab chosen, rows opened, the row marked). Also: a normal account's
@@ -41,6 +41,7 @@ async function shot(page, name) {
 async function desk(role = "owner", path = "/settings", width = 1280) {
   const height = 860;
   const made = await create(role, "hell", width, "de", {
+    nativeShell: true,
     deviceScaleFactor: 2,
     viewport: { width, height },
   });
@@ -73,7 +74,6 @@ async function desk(role = "owner", path = "/settings", width = 1280) {
   };
   await made.ctx.addInitScript(
     ({ path, width, height }) => {
-      localStorage.removeItem("titanos.layout");
       localStorage.setItem(
         "titanos.desktop.windows.alex",
         JSON.stringify([
@@ -161,21 +161,14 @@ async function sound(page, name, frame) {
   assert.deepEqual(cut, [], `${name}: cut text`);
 }
 
+const ownerGroups = ["System", "Darstellung und Mitteilungen", "Daten und Sicherung", "Netzwerk und Fernzugriff", "Sicherheit und Konten", "Hardware und Energie", "Apps und Integrationen"];
+const userGroups = ["System", "Darstellung und Mitteilungen", "Sicherheit und Konten", "Hardware und Energie", "Apps und Integrationen"];
+
 // --- 1. The column at 1280 px: areas, accordion, keyboard ----------------
 {
   const { ctx, page, side, frame } = await desk("owner", "/settings");
   await frame.locator(".overview .sgroup, .sgroup").first().waitFor();
-  assert.deepEqual(await column(side), [
-    "Übersicht",
-    "System ▸",
-    "Hardware und Energie ▸",
-    "Netzwerk und Fernzugriff ▸",
-    "Sicherheit und Konten ▸",
-    "Benachrichtigungen",
-    "Daten und Sicherung ▸",
-    "Cluster",
-    "Smart Home und KI ▸",
-  ]);
+  assert.deepEqual(await column(side), ["Übersicht", ...ownerGroups.map(label => label + " ▸")]);
   await sound(page, "column");
   await shot(page, "01-spalte-zugeklappt");
 
@@ -183,11 +176,11 @@ async function sound(page, name, frame) {
   const hardware = side.getByRole("button", { name: "Hardware und Energie" });
   await hardware.click();
   assert.equal(await hardware.getAttribute("aria-expanded"), "true");
-  assert.deepEqual((await column(side)).slice(2, 9), [
+  assert.deepEqual((await column(side)).slice(6, 13), [
     "Hardware und Energie ▾",
     "  Hardware",
-    "  Temperaturen",
     "  Energie",
+    "  Temperaturen",
     "  Ein-/Ausschalter",
     "  USV",
     "  Schreibcache",
@@ -195,15 +188,7 @@ async function sound(page, name, frame) {
   // One area at a time.
   await side.getByRole("button", { name: "System", exact: true }).click();
   assert.equal(await hardware.getAttribute("aria-expanded"), "false");
-  assert.deepEqual((await column(side)).slice(1, 8), [
-    "System ▾",
-    "  Über TitanOS",
-    "  Updates",
-    "  Darstellung",
-    "  Datum und Uhrzeit",
-    "  Dienste",
-    "  Fernansicht",
-  ]);
+  assert.deepEqual((await column(side)).slice(1, 6), ["System ▾", "  Updates", "  Datum und Uhrzeit", "  Über TitanOS", "  Dienste"]);
   // A page in two clicks; the window's title bar shows the path with the
   // area, the page has no second path of its own (owner 16 Nov 2026).
   await side.getByRole("button", { name: "Datum und Uhrzeit" }).click();
@@ -227,7 +212,7 @@ async function sound(page, name, frame) {
     await side.locator('.item[aria-current="page"]').innerText(),
     "Datum und Uhrzeit",
   );
-  // An area with one page opens it at once (no expander).
+  await openArea(page, side, "Netzwerk und Fernzugriff");
   await side.getByRole("button", { name: "Cluster", exact: true }).click();
   await at(page, "/settings/cluster");
   // Let the page finish loading: a second navigation at once would abort
@@ -273,8 +258,8 @@ async function sound(page, name, frame) {
   assert.equal(await net.getAttribute("aria-expanded"), "true");
 
   // Darstellung with its area open: the picture of the open column.
-  await openArea(page, side, "System");
-  await side.getByRole("button", { name: "Darstellung" }).click();
+  await openArea(page, side, "Darstellung und Mitteilungen");
+  await side.getByRole("button", { name: "Darstellung", exact: true }).click();
   await at(page, "/settings/appearance");
   await frame.getByRole("heading", { name: "Sprache und Schrift" }).waitFor();
   await sound(page, "appearance");
@@ -322,7 +307,7 @@ async function sound(page, name, frame) {
         items.map((item) => item.innerText.replace(/\s+/g, " ").trim()),
       );
   for (const [query, top, picture] of [
-    ["Cluster", "Cluster Cluster", "04-suche-cluster"],
+    ["Cluster", "Cluster Netzwerk und Fernzugriff", "04-suche-cluster"],
     [
       "Sprache",
       "Sprache Darstellung › Farben und Schrift › Sprache und Schrift",
@@ -355,8 +340,8 @@ async function sound(page, name, frame) {
   }
   // A hit on another tab of the page shown: tab chosen, row marked, keyboard there.
   await search.fill("");
-  await openArea(page, side, "System");
-  await side.getByRole("button", { name: "Darstellung" }).click();
+  await openArea(page, side, "Darstellung und Mitteilungen");
+  await side.getByRole("button", { name: "Darstellung", exact: true }).click();
   await at(page, "/settings/appearance");
   await frame.getByRole("tab", { name: "Feinheiten und Effekte" }).click();
   await search.fill("Sprache");
@@ -431,15 +416,7 @@ async function sound(page, name, frame) {
 {
   const { ctx, page, side } = await desk("user", "/settings/appearance");
   await page.waitForTimeout(400);
-  assert.deepEqual(await column(side), [
-    "Übersicht",
-    "System ▾",
-    "  Über TitanOS",
-    "  Darstellung",
-    "Hardware und Energie",
-    "Sicherheit und Konten",
-    "Smart Home und KI",
-  ]);
+  assert.deepEqual(await column(side), ["Übersicht", ...userGroups]);
   const search = side.getByRole("searchbox", { name: "Einstellung suchen" });
   await search.fill("ssh");
   await side.locator(".items .item.result").first().waitFor();
@@ -453,12 +430,12 @@ async function sound(page, name, frame) {
 // --- 4. The phone: "Alle Einstellungen" after the new areas, its search ----
 for (const role of ["owner", "user"]) {
   const made = await create(role, "hell", 390, "de", {
+    nativeShell: true,
     deviceScaleFactor: 2,
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
   });
-  await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   const { ctx, page } = made;
   await page.goto(base + "/settings");
   await page.locator(".home .sgroup").first().waitFor({ timeout: 20000 });
@@ -472,26 +449,7 @@ for (const role of ["owner", "user"]) {
     0,
     "no overview cards on the phone",
   );
-  assert.deepEqual(
-    headings,
-    role === "owner"
-      ? [
-          "System",
-          "Hardware und Energie",
-          "Netzwerk und Fernzugriff",
-          "Sicherheit und Konten",
-          "Benachrichtigungen",
-          "Daten und Sicherung",
-          "Cluster",
-          "Smart Home und KI",
-        ]
-      : [
-          "System",
-          "Hardware und Energie",
-          "Sicherheit und Konten",
-          "Smart Home und KI",
-        ],
-  );
+  assert.deepEqual(headings, role === "owner" ? ownerGroups : userGroups);
   await sound(page, `phone ${role}`);
   if (role === "owner") await shot(page, "10-handy-alle-einstellungen");
   // The ⋯ menu lists only the areas the account may open (it listed all).
@@ -501,30 +459,8 @@ for (const role of ["owner", "user"]) {
   const pages = await menu
     .locator('[role="menuitemradio"]')
     .evaluateAll((items) => items.map((i) => i.textContent.trim()));
-  assert.deepEqual(
-    pages.slice(0, role === "owner" ? 9 : 5),
-    role === "owner"
-      ? [
-          "Übersicht",
-          "System",
-          "Hardware und Energie",
-          "Netzwerk und Fernzugriff",
-          "Sicherheit und Konten",
-          "Benachrichtigungen",
-          "Daten und Sicherung",
-          "Cluster",
-          "Smart Home und KI",
-        ]
-      : [
-          "Übersicht",
-          "System",
-          "Hardware und Energie",
-          "Sicherheit und Konten",
-          "Smart Home und KI",
-        ],
-  );
-  if (role === "owner") assert.equal(pages.length >= 9, true);
-  else assert.equal(pages.length, 5, pages.join(" | "));
+  const groups = role === "owner" ? ownerGroups : userGroups;
+  assert.deepEqual(pages.slice(0, groups.length + 1), ["Übersicht", ...groups]);
   if (role === "user") await shot(page, "13-handy-menue-benutzer");
   await page.keyboard.press("Escape");
   if (await menu.isVisible())
@@ -546,6 +482,12 @@ for (const role of ["owner", "user"]) {
   // goes up one level at a time: page › area › areas › home screen.
   await page.goto(base + "/settings");
   // An area with one page for this account opens that page directly.
+  if (role === "user") {
+    await page.locator('#settings-home-areas a[href="/settings/appearance"]').click();
+    await page.waitForURL("**/settings/appearance");
+    await ctx.close();
+    continue;
+  }
   const area = page
     .locator('#settings-home-areas a.srow[href*="?area="]')
     .first();
@@ -559,7 +501,7 @@ for (const role of ["owner", "user"]) {
     1,
     "one area open",
   );
-  const back = page.locator(".phone-bar button.back").first();
+  const back = page.getByRole("button", { name: "Eine Ebene zurück", exact: true });
   if (role === "owner") await shot(page, "14-handy-bereich");
   await page.locator(`#settings-home-group-${group} a.srow`).first().click();
   await page.waitForURL(/\/settings\/[a-z-]+$/);
@@ -568,7 +510,7 @@ for (const role of ["owner", "user"]) {
   await back.click();
   await page.waitForURL(/\/settings$/);
   await page.locator("#settings-home-areas").waitFor();
-  await back.click();
+  await page.locator("[data-phone-dock] .home-button").click();
   await page.waitForURL((url) => url.pathname === "/");
   await ctx.close();
 }

@@ -377,7 +377,7 @@
 {#if store && (!phone || !sourcesOpen)}
 	<div class="layout" class:mobile-catalog={phone}>
 		<div class="catalog">
-			<div class="find">
+			<div class="find" role="search" aria-label={t('apps.title')}>
 				<input
 					class="field search"
 					type="search"
@@ -431,7 +431,7 @@
 							category === 'all' &&
 							from === 'all' &&
 							app === visible[0]}
-						href={phone && installed(app)
+						href={(phone || onlyInstalled) && installed(app)
 							? '/docker/apps/' + encodeURIComponent(app.id)
 							: '/apps/install/' +
 								encodeURIComponent(app.source) +
@@ -452,7 +452,13 @@
 						<span class="card-foot">
 							<span class="muted source-label">{sourceName(app.source)}</span>
 							<span class="chip" class:ok={installed(app)}
-								>{t(installed(app) ? 'apps.installed' : 'apps.install')}</span
+								>{t(
+									installed(app)
+										? !phone && onlyInstalled
+											? 'docker.edit'
+											: 'apps.installed'
+										: 'apps.install',
+								)}</span
 							>
 						</span>
 					</a>

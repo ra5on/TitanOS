@@ -156,9 +156,13 @@
 			>
 		</form>
 	{:else}
-		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<!-- Clicking the unused part edits the path. The pencil inside the group
+		     provides the same action as a normal keyboard button. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 		<div
 			class="crumbs mono"
+			role="group"
+			aria-label={t('files.folderPath')}
 			title={t('files.editPathHint')}
 			onclick={(event) => {
 				if (event.target === event.currentTarget) editPath();
@@ -166,11 +170,17 @@
 		>
 			{#if windowed}<span class="box-icon" aria-hidden="true"><Icon name="folder" size={15} /></span
 				>{/if}
-			{#if root}<button type="button" onclick={() => onopen(rootId, '')}>{root.name}</button>{/if}
+			{#if root}<button
+					type="button"
+					aria-current={!dir ? 'location' : undefined}
+					onclick={() => onopen(rootId, '')}>{root.name}</button
+				>{/if}
 			{#each crumbs as crumb, index (index)}
 				<span class="muted" aria-hidden="true">{windowed ? '›' : '/'}</span>
-				<button type="button" onclick={() => onopen(rootId, crumbs.slice(0, index + 1).join('/'))}
-					>{crumb}</button
+				<button
+					type="button"
+					aria-current={index === crumbs.length - 1 ? 'location' : undefined}
+					onclick={() => onopen(rootId, crumbs.slice(0, index + 1).join('/'))}>{crumb}</button
 				>
 			{/each}
 			{#if root}<button

@@ -474,6 +474,16 @@ export function sideFor(side: SideItem[], role: Role): SideItem[] {
 	return side.filter((item) => !('roles' in item) || !item.roles || item.roles.includes(role));
 }
 
+/** Direct links to a service's controls must also work when the service is off. */
+export function launchAppForPath(path: string, role: Role, services: Record<string, boolean>) {
+	const app = appForPath(path);
+	if (app && appAllowed(app, role, services)) return app;
+	const setting = settingsAreas.find((area) => path.replace(/\/$/, '') === '/settings/' + area.id);
+	if (setting && (!setting.admin || role === 'owner' || role === 'admin'))
+		return SYSTEM_APPS.find((program) => program.id === 'settings');
+	return undefined;
+}
+
 /** The program a page belongs to: the longest matching path prefix. */
 export function appForPath(path: string, apps: SystemApp[] = SYSTEM_APPS): SystemApp | undefined {
 	let best: SystemApp | undefined;

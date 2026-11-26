@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WorkspaceActivity } from '../task-progress.ts';
 	// The widgets on the desktop and the bar shown while they are edited.
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
@@ -12,6 +13,7 @@
 		type DeskMenu,
 	} from './desk-ops.ts';
 	import type { Widget } from './prefs.ts';
+	import WorkspaceStatus from './WorkspaceStatus.svelte';
 	import WidgetView from './WidgetView.svelte';
 	import { desktop, savePrefs, wm } from './wm.svelte.ts';
 
@@ -20,6 +22,7 @@
 		editWidgets = $bindable(),
 		dialog = $bindable(),
 		columns,
+		activity,
 		open,
 	}: {
 		menu: DeskMenu | null;
@@ -27,6 +30,7 @@
 		dialog: DeskDialog | null;
 		/** The width of the desktop in cells of the widget grid. */
 		columns: number;
+		activity: WorkspaceActivity | null;
 		open: (key: string, event?: Event, href?: string) => void;
 	} = $props();
 
@@ -83,14 +87,18 @@
 			menu = { ...menuAt(e), kind: 'widget', key: w.id };
 		}}
 	>
-		<WidgetView
-			kind={w.kind}
-			hide={w.hide}
-			device={w.device}
-			camera={w.camera}
-			large={w.w * CELL >= 520}
-			onopen={(key, href) => open(key, undefined, href)}
-		/>
+		{#if w.kind === 'status'}
+			<WorkspaceStatus {activity} onopen={(key, href) => open(key, undefined, href)} />
+		{:else}
+			<WidgetView
+				kind={w.kind}
+				hide={w.hide}
+				device={w.device}
+				camera={w.camera}
+				large={w.w * CELL >= 520}
+				onopen={(key, href) => open(key, undefined, href)}
+			/>
+		{/if}
 		{#if editWidgets}
 			<button
 				type="button"

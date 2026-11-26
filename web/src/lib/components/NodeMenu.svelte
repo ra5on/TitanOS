@@ -1,12 +1,12 @@
 <script lang="ts">
 	// Chooses the node of the cluster this tab manages (lib/cluster-node.ts):
 	// in the desktop's top bar ("desk") or on the phone's home ("phone").
-	// Shown only in a cluster; nodes that are away cannot be chosen, nodes of
-	// another version can.
+	// The phone home also shows the local hostname on a standalone NAS.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
-	import { clusterNodes, manageable, otherVersion } from '#lib/cluster.svelte.ts';
+	import { clusterNodes, homeNode, manageable, otherVersion } from '#lib/cluster.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
+	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 
 	let { variant }: { variant: 'desk' | 'phone' | 'hero' } = $props();
@@ -15,12 +15,19 @@
 	let open = $state(false);
 	let root = $state<HTMLElement>();
 
-	const current = $derived(
-		clusterNodes.nodes.find((n) => n.id === activeNode()) ?? clusterNodes.nodes.find((n) => n.self),
+	// Switching nodes reloads the tab. Session metadata always belongs to the
+	// local NAS, while /system follows the selected node.
+	const nodeId = activeNode();
+	const current = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : homeNode());
+	const currentName = $derived(
+		current?.name ||
+			(!nodeId && session.data?.hostname) ||
+			system.info?.hostname ||
+			t('common.loading'),
 	);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const initials = $derived(
-		(current?.name ?? '')
+		currentName
 			.split(/[-_.\s]+/)
 			.filter(Boolean)
 			.slice(0, 2)
@@ -58,17 +65,17 @@
 		aria-haspopup="menu"
 		aria-expanded={open}
 		aria-controls="{id}-menu"
-		aria-label={t('cluster.switchCurrent', { name: current?.name ?? '' })}
-		title={t('cluster.switchCurrent', { name: current?.name ?? '' })}
+		aria-label={t('cluster.switchCurrent', { name: currentName })}
+		title={t('cluster.switchCurrent', { name: currentName })}
 		onclick={() => (open = !open)}
 	>
 		{#if variant === 'desk'}
 			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
-			<span class="mono name">{current?.name}</span>
+			<span class="mono name">{currentName}</span>
 			<Icon name="chevronDown" size={14} />
 		{:else if variant === 'hero'}
-			<span>{current && !current.self ? current.name : t('phone.nord.nas')}</span><span
-				class="hero-chevron"><Icon name="chevronDown" size={16} /></span
+			<span>{currentName}</span><span class="hero-chevron"
+				><Icon name="chevronDown" size={16} /></span
 			>
 		{:else}
 			<span class="mono initials">{initials}</span><span class="dot" aria-hidden="true"></span>

@@ -511,6 +511,8 @@ func TestAgentEventStream(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	dir := t.TempDir()
+	// The end event may precede the background chat title write.
+	t.Cleanup(ts.server.agentRT.work.Wait)
 	ts.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
 	ts.server.opts.Activity = activity.New(ts.store)
 	if res, body := ts.request("PUT", "/api/v1/agent/settings", map[string]any{"enabled": true, "ollama": srv.URL, "model": "m", "policy": map[string]any{}}); res.StatusCode != 200 {

@@ -267,6 +267,8 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   und GPU auf echter Server-Hardware mit Beta 2 erfolgreich; keine pauschale
   Hardware-Abnahme neuer Beta-7-Funktionen daraus ableiten.
 
+Versionierte Sicherungen schützen beim automatischen Freimachen auch den letzten vom Auftrag bestätigten vollständigen restic-Snapshot. Bei lesbaren Datumsordnern wird der neue Ordnername vor dem Entfernen älterer Stände synchronisiert. Bei undatierten Kopien und Spiegeln schützt ein lesbarer Checkpoint im Zielordner die vorige Generation über mehrere unvollständige Läufe hinweg. Die [Anleitung zum Zurückholen](../USB-COPY-BACKUPS.md#vorigen-stand-einer-abgebrochenen-lesbaren-kopie-zurückholen) beschreibt den Pfad und die unterstützten Metadaten. Der Fehler- und Neustartnachweis steht in [Dateitransfers und Sicherungen](../NORDLICHT-STABILITAET-DATEN.md).
+
 ## SMB-Kopie-Backups
 
 - Ziel auf einem zweiten NAS mit SMB-Zugangsdaten, Freigabenauswahl, Quellordnern und Zeitplan. Neue/geänderte Dateien kopieren; gelöschte Quelldateien im Ziel behalten. Keine Versionierung. Weiterhin als Beta gekennzeichnet; `docs/SMB-COPY-BACKUPS.md`.

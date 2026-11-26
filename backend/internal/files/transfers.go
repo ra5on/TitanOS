@@ -83,12 +83,16 @@ func (m *Manager) transferRoot(volume, user string) (*os.Root, error) {
 	return root.OpenRoot(account)
 }
 
-// prepareTransfer makes the durable plan of a job whose target is on a data
-// volume and fills it with one walk of the selection. Other jobs get the walk
+// prepareTransfer stores the plan on an internal destination, or on the source
+// volume for a move onto removable media. Other jobs get the walk
 // alone. transferMu is held only while the plan is created, not while the
 // tree is walked, so the job list stays responsive.
 func (m *Manager) prepareTransfer(job *Job, src, dst Root, walk func(add func(string, transferEntry) error) error) error {
-	if m.Mounted == nil || dst.Volume == "" {
+	volume := dst.Volume
+	if volume == "" && job.Move && dst.Kind == "usb" {
+		volume = src.Volume
+	}
+	if m.Mounted == nil || volume == "" {
 		return walk(func(string, transferEntry) error { return nil })
 	}
 	source, err := transferIdentity(src.Dir)
@@ -103,7 +107,7 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, walk func(add func(st
 	if err != nil {
 		return err
 	}
-	t := &transfer{User: job.user, Volume: dst.Volume, Boot: strings.TrimSpace(string(boot)), SourceDir: src.Dir, DestinationDir: dst.Dir, SourceIdentity: source, DestinationIdentity: destination, Conflict: job.conflict, Choices: job.choices}
+	t := &transfer{User: job.user, Volume: volume, Boot: strings.TrimSpace(string(boot)), SourceDir: src.Dir, DestinationDir: dst.Dir, SourceIdentity: source, DestinationIdentity: destination, Conflict: job.conflict, Choices: job.choices}
 	m.transferMu.Lock()
 	root, err := m.transferRoot(t.Volume, t.User)
 	if err != nil {
@@ -179,20 +183,27 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 
 // finishTransfer records an entry that is at its target now. source is the
 // version of the source file that was copied ("" for a rename).
-func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final, source string) error {
-	if job.durable == nil {
+func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final, source string, staged fs.FileInfo) error {
+	if job.durable == nil && !job.Move {
 		return nil
-	}
-	if err := syncTransferParent(dr, final); err != nil {
-		return err
 	}
 	info, err := dr.Lstat(final)
 	if err != nil {
 		return err
 	}
+	if staged != nil && (!os.SameFile(staged, info) || copyVersion(staged) != copyVersion(info)) {
+		return ErrTextConflict
+	}
 	version := ""
 	if info.Mode().IsRegular() {
 		version = entryVersion(info)
+	}
+	if job.durable == nil {
+		if job.completedDestination == nil {
+			job.completedDestination = map[string]string{}
+		}
+		job.completedDestination[final] = version
+		return nil
 	}
 	complete := info.Mode().IsRegular()
 	if !job.paged() {
@@ -457,9 +468,6 @@ var copyPartName = regexp.MustCompile(`^\.titanos-copy-([0-9a-f]{12}|[0-9a-f]{24
 // destinationIntact reports whether the copy of a completed file is still
 // the one that was published, so that a move may remove its source.
 func (m *Manager) destinationIntact(job *Job, dr *os.Root, entry transferEntry) bool {
-	if job.durable == nil {
-		return true // RAM jobs remove the source right after the copy
-	}
 	if entry.Target == "" {
 		return false
 	}
@@ -470,8 +478,10 @@ func (m *Manager) destinationIntact(job *Job, dr *os.Root, entry transferEntry) 
 			return false
 		}
 		recorded = v
-	} else {
+	} else if job.durable != nil {
 		recorded = job.durable.Destinations[entry.Target]
+	} else {
+		recorded = job.completedDestination[entry.Target]
 	}
 	info, err := dr.Lstat(entry.Target)
 	return err == nil && recorded != "" && entryVersion(info) == recorded

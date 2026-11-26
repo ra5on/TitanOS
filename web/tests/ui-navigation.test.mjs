@@ -2,7 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { noticeLink } from '../src/lib/notice-link.ts';
 import { matchesSetting, settingsAreaOf } from '../src/lib/settings-search.ts';
-import { taskPercent } from '../src/lib/task-progress.ts';
+import { backupProblemMessage, taskPercent } from '../src/lib/task-progress.ts';
+
+test('USB wait denotes a failed job that will resume when its drive returns', () => {
+	const job = { enabled: true, destination: { type: 'usb-copy', deviceId: 'drive' } };
+	const failure = { lastErrorCode: 'usb_not_found', failingSince: '2026-11-22T12:00:00Z' };
+	assert.equal(backupProblemMessage(job, failure), 'desktop.status.waitingUSB');
+	assert.equal(
+		backupProblemMessage({ ...job, enabled: false }, failure),
+		'desktop.status.missingUSB',
+	);
+	assert.equal(
+		backupProblemMessage(job, { lastErrorCode: 'usb_not_found' }),
+		'desktop.status.missingUSB',
+	);
+	assert.equal(
+		backupProblemMessage(job, { lastErrorCode: 'target_full' }),
+		'desktop.status.backupFailed',
+	);
+});
 
 test('notifications link to existing local destinations and encode untrusted subjects', () => {
 	assert.equal(noticeLink('volume_full', 'data'), '/storage#volume-data');
@@ -46,25 +64,22 @@ test('the HTTPS names of apps have their own admin-only settings page', async ()
 		assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
 });
 
-test('PLAN 86: the eight areas and their pages in the confirmed order, filtered by role', async () => {
+test('Nordlicht control panel groups pages by task and filters them by role', async () => {
 	const { settingsEntries } = await import('../src/lib/settings-search.ts');
 	const { readFileSync } = await import('node:fs');
 	const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url), 'utf8'));
 	const label = (key) => de[key] ?? key;
 	const admin = settingsEntries('', true, label);
-	// Draft 1, confirmed by the owner on 13.11.2026: areas and pages in this
-	// order (the same in both languages, not A–Z).
 	assert.deepEqual(
 		admin.map((g) => [g.group, g.entries.map((e) => e.id)]),
 		[
-			['system', ['about', 'updates', 'appearance', 'timezone', 'services', 'viewer']],
-			['hardware', ['hardware', 'temperatures', 'energy', 'power-button', 'ups', 'memory']],
-			['network', ['network', 'wireguard', 'ddns', 'letsencrypt', 'proxy']],
+			['system', ['updates', 'timezone', 'about', 'services']],
+			['appearance', ['appearance', 'notifications']],
+			['data', ['backups', 'files', 'systemdata']],
+			['network', ['network', 'wireguard', 'ddns', 'letsencrypt', 'proxy', 'cluster']],
 			['security', ['users', 'access', 'firewall', 'api']],
-			['notifications', ['notifications']],
-			['data', ['backups', 'systemdata', 'files']],
-			['cluster', ['cluster']],
-			['smarthome', ['homeassistant', 'agent', 'speech', 'mcp']],
+			['hardware', ['hardware', 'energy', 'temperatures', 'power-button', 'ups', 'memory']],
+			['smarthome', ['homeassistant', 'agent', 'speech', 'mcp', 'viewer']],
 		],
 	);
 	const fresh = admin
@@ -89,9 +104,10 @@ test('PLAN 86: the eight areas and their pages in the confirmed order, filtered 
 	assert.deepEqual(
 		settingsEntries('', false, label).map((g) => [g.group, g.entries.map((e) => e.id)]),
 		[
-			['system', ['about', 'appearance']],
-			['hardware', ['temperatures']],
+			['system', ['about']],
+			['appearance', ['appearance']],
 			['security', ['api']],
+			['hardware', ['temperatures']],
 			['smarthome', ['mcp']],
 		],
 	);
@@ -160,31 +176,31 @@ test('PLAN 86: the menu of Systemsteuerung – areas open in the column, old are
 		menu.map((e) => label(e.label)),
 		[
 			'System',
-			'Hardware und Energie',
+			'Darstellung und Mitteilungen',
+			'Daten und Sicherung',
 			'Netzwerk und Fernzugriff',
 			'Sicherheit und Konten',
-			'Benachrichtigungen',
-			'Daten und Sicherung',
-			'Cluster',
-			'Smart Home und KI',
+			'Hardware und Energie',
+			'Apps und Integrationen',
 		],
 	);
 	for (const entry of menu) assert.ok(en[entry.label], entry.label);
 	// An area leads to its first page; one with a single page is that page
 	// (the menu shows no expander for it).
-	assert.equal(menu[1].href, '/settings/hardware');
+	assert.equal(menu.find((group) => group.group === 'hardware').href, '/settings/hardware');
 	assert.deepEqual(
 		menu.filter((e) => e.pages.length === 1).map((e) => e.href),
-		['/settings/notifications', '/settings/cluster'],
+		[],
 	);
 	// A user: System with two pages, three areas with one page each.
 	const user = settingsMenu(false);
 	assert.deepEqual(
 		user.map((e) => [e.group, e.pages.length, e.href]),
 		[
-			['system', 2, '/settings/about'],
-			['hardware', 1, '/settings/temperatures'],
+			['system', 1, '/settings/about'],
+			['appearance', 1, '/settings/appearance'],
 			['security', 1, '/settings/api'],
+			['hardware', 1, '/settings/temperatures'],
 			['smarthome', 1, '/settings/mcp'],
 		],
 	);
@@ -199,14 +215,16 @@ test('PLAN 86: the menu of Systemsteuerung – areas open in the column, old are
 		{ label: 'safeguard.title', href: '/settings/backups' },
 	]);
 	// One page alone in its area (for this account) has no path above it.
-	assert.deepEqual(settingsCrumbs('/settings/cluster', true), []);
+	assert.deepEqual(settingsCrumbs('/settings/cluster', true), [
+		{ label: 'settingshome.group.network' },
+	]);
 	assert.deepEqual(settingsCrumbs('/settings/temperatures', false), []);
 	assert.deepEqual(settingsCrumbs('/settings', true), []);
 
 	// The area an address belongs to, also for links made before PLAN 86.
 	assert.equal(settingsGroupOf('/settings?area=network'), 'network');
 	assert.equal(settingsGroupOf('/settings/ups'), 'hardware');
-	assert.equal(settingsGroupOf('/settings/cluster'), 'cluster');
+	assert.equal(settingsGroupOf('/settings/cluster'), 'network');
 	assert.equal(settingsGroupOf('/settings?area=accounts'), 'security');
 	assert.equal(settingsGroupOf('/settings?area=ai'), 'smarthome');
 	assert.equal(settingsGroupOf('/settings?area=updates'), 'system');
@@ -225,19 +243,34 @@ test('PLAN 86: the menu of Systemsteuerung – areas open in the column, old are
 	// The program's side list (phone's ⋯ menu, search of the menu) carries
 	// the same areas and hides the ones an account may not open.
 	const app = SYSTEM_APPS.find((a) => a.id === 'settings');
-	assert.equal(app.side.length, 9);
-	assert.ok(sideActive(app.side[2], '/settings/energy', app.side));
-	assert.ok(sideActive(app.side[4], '/settings/firewall', app.side));
-	assert.equal(app.side[2].href, settingsGroupHref('hardware'));
+	assert.equal(app.side.length, menu.length + 1);
+	assert.ok(
+		sideActive(
+			app.side.find((item) => item.href === settingsGroupHref('hardware')),
+			'/settings/energy',
+			app.side,
+		),
+	);
+	assert.ok(
+		sideActive(
+			app.side.find((item) => item.href === settingsGroupHref('security')),
+			'/settings/firewall',
+			app.side,
+		),
+	);
+	assert.equal(settingsAreaTarget('?area=notifications', true), '/settings/notifications');
+	assert.equal(settingsAreaTarget('?area=cluster', true), '/settings/cluster');
+	assert.equal(settingsGroupOf('/settings/appearance?tab=dock'), 'appearance');
 	assert.deepEqual(
 		sideFor(app.side, 'user').map((item) => item.href),
 		[
 			'/settings',
 			'/settings?area=system',
-			'/settings?area=hardware',
+			'/settings?area=appearance',
 			'/settings?area=security',
+			'/settings?area=hardware',
 			'/settings?area=smarthome',
 		],
 	);
-	assert.equal(sideFor(app.side, 'admin').length, 9);
+	assert.equal(sideFor(app.side, 'admin').length, menu.length + 1);
 });

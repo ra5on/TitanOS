@@ -139,7 +139,7 @@ func (m *Manager) TrashRestore(root Root, paths []string, user string, uid int, 
 		// Never over something that took the name since the check above
 		// (a save over SMB, an upload): the restored entry then gets the
 		// dated name instead.
-		err = renameNoReplace(r, source, target)
+		err = publishNewFile(r, source, target)
 		if errors.Is(err, fs.ErrExist) {
 			ext := path.Ext(target)
 			if info, statErr := r.Lstat(source); statErr == nil && info.IsDir() {
@@ -148,7 +148,7 @@ func (m *Manager) TrashRestore(root Root, paths []string, user string, uid int, 
 			dated := fmt.Sprintf("%s (%s)%s", strings.TrimSuffix(target, ext), m.now().Format("2006-01-02 15.04.05"), ext)
 			if dated, _, err = m.settle(r, dated, ConflictRename, nil); err == nil {
 				target = dated
-				err = renameNoReplace(r, source, target)
+				err = publishNewFile(r, source, target)
 			}
 		}
 		if err != nil {

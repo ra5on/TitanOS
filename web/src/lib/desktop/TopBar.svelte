@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { WorkspaceActivity } from '../task-progress.ts';
 	// PLAN 67: the bar across the top of the desktop. PLAN 79-10: it starts
 	// with the button "Menü" and the small search field of the menu, then the
 	// menus of the program in front and the node switcher; on the right tasks,
@@ -26,6 +27,7 @@
 		role,
 		deskOp,
 		onsearchkey,
+		onactivity,
 	}: {
 		menu: DeskMenu | null;
 		launcher: boolean;
@@ -35,6 +37,7 @@
 		role: string;
 		deskOp: (op: DeskOp) => void;
 		/** A key in the search field the menu may use (Enter, arrow down); true when it did. */
+		onactivity: (overview: WorkspaceActivity) => void;
 		onsearchkey: (event: KeyboardEvent) => boolean;
 	} = $props();
 
@@ -132,7 +135,7 @@
 	{#if clusterNodes.nodes.length > 1}<NodeMenu variant="desk" />{/if}
 	<span class="space"></span>
 	<div class="status">
-		<TasksPanel badge />
+		<TasksPanel badge {onactivity} />
 		{#if role !== 'user'}<Notifications compact />{/if}
 		{#if info && desktop.prefs.barLoad}
 			<span class="load" title={t('desktop.widget.cpu') + ' · ' + t('desktop.widget.ram')}
@@ -161,9 +164,10 @@
 		position: relative;
 		z-index: 9500;
 		border: 0;
-		border-bottom: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+		border-bottom: 1px solid var(--nord-line, color-mix(in srgb, var(--text) 14%, transparent));
+		background: color-mix(in srgb, var(--desk-surface, var(--header)) 94%, transparent);
 		border-radius: 0;
-		box-shadow: 0 1px 10px rgb(0 0 0 / 0.18);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 0.14);
 		--mb-font: max(0.8125rem, calc(var(--bar-h) * 0.34));
 		font-size: var(--mb-font);
 	}
@@ -183,7 +187,7 @@
 		gap: var(--space-1-5);
 		padding: 0 var(--space-2-5);
 		border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
-		border-radius: 8px;
+		border-radius: calc(11px * var(--radius-scale, 1));
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 		color: var(--text);
 		font: inherit;
@@ -210,7 +214,7 @@
 		display: flex;
 		align-items: center;
 		border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
-		border-radius: 8px;
+		border-radius: calc(11px * var(--radius-scale, 1));
 		background: color-mix(in srgb, var(--bg) 45%, transparent);
 	}
 	.bar-search {

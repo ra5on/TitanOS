@@ -220,6 +220,8 @@ type Manager struct {
 	// MountRoot is where volumes are mounted ("/mnt" if empty).
 	MountRoot string
 	syncFile  func(*os.File) error
+	// syncCopyParent commits the published name before a move can remove its source.
+	syncCopyParent func(*os.Root, string) error
 	// DownloadClient returns the HTTP client for downloads from a link,
 	// confined to public addresses or not; nil uses the netguard rules.
 	DownloadClient func(confined bool) *http.Client
@@ -242,7 +244,7 @@ type Manager struct {
 
 // NewManager returns a file manager that gives new files the group gid.
 func NewManager(gid int) *Manager {
-	return &Manager{GID: gid, uploads: map[string]*upload{}, now: time.Now, syncFile: func(f *os.File) error { return f.Sync() }}
+	return &Manager{GID: gid, uploads: map[string]*upload{}, now: time.Now, syncFile: (*os.File).Sync, syncCopyParent: syncTransferParent}
 }
 
 func (m *Manager) protected(root Root, p string) bool {

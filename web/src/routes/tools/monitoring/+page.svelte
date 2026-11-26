@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Dropdown from '#lib/components/Dropdown.svelte';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import BackendDetail from '#lib/components/BackendDetail.svelte';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
@@ -181,11 +183,31 @@
 				>30 d</option
 			></select
 		></label
-	><button class="btn" disabled={busy} onclick={() => download('csv')}
-		>{t('tasks.exportCSV')}</button
-	><button class="btn" disabled={busy} onclick={() => download('json')}
-		>{t('tasks.exportJSON')}</button
-	><span class="muted">{t('ops.samples', { count: samples.length })}</span>
+	>{#if phoneView()}<button class="btn" disabled={busy} onclick={() => download('csv')}
+			>{t('tasks.exportCSV')}</button
+		>
+		<button class="btn" disabled={busy} onclick={() => download('json')}
+			>{t('tasks.exportJSON')}</button
+		>
+	{:else}
+		<Dropdown label={t('ui.more')} icon="more" align="right" disabled={busy}>
+			{#snippet children(close)}
+				{#each ['csv', 'json'] as const as format (format)}
+					<button
+						role="menuitem"
+						type="button"
+						onclick={() => {
+							close();
+							void download(format);
+						}}
+					>
+						{t(format === 'csv' ? 'tasks.exportCSV' : 'tasks.exportJSON')}
+					</button>
+				{/each}
+			{/snippet}
+		</Dropdown>
+	{/if}
+	<span class="muted">{t('ops.samples', { count: samples.length })}</span>
 </div>
 {#if trends.length}<SettingGroup title={t('tasks.trends')} desc={t('tasks.trendHint')} id="trends">
 		{#each trends as trend (trend.volume)}<SettingRow icon="disk" title={trend.volume}>

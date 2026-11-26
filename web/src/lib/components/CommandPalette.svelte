@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, type DockerStatus, type FileRoot, type VM } from '#lib/api.ts';
+	import {
+		api,
+		type DockerContainer,
+		type DockerStatus,
+		type FileRoot,
+		type VM,
+	} from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -24,6 +30,7 @@
 		loading = $state(false),
 		partial = $state(false),
 		index = $state(0);
+	let containers = $state<DockerContainer[]>([]);
 	let disposed = false;
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const all = $derived([...palettePages(role, t), ...dynamic]);
@@ -45,7 +52,7 @@
 		[
 			...recent,
 			...findPaletteEntries(all, query).filter((e) => !recent.some((r) => r.href === e.href)),
-			...paletteSettings(query, role, t, settingsIndex),
+			...paletteSettings(query, role, t, settingsIndex, containers),
 		].slice(0, 80),
 	);
 	const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -62,7 +69,9 @@
 		const admin = role === 'owner' || role === 'admin';
 		const result = await Promise.allSettled([
 			api.get<FileRoot[]>('/files/roots'),
-			admin ? api.get<DockerStatus>('/docker') : Promise.resolve(null),
+			admin && session.services.docker !== false
+				? api.get<DockerStatus>('/docker')
+				: Promise.resolve(null),
 			admin ? api.get<{ vms: VM[] }>('/vms') : Promise.resolve(null),
 			admin ? api.get<LXCList>('/lxc') : Promise.resolve(null),
 		]);
@@ -76,6 +85,7 @@
 					section: t('nav.shares'),
 				});
 		if (result[1].status === 'fulfilled' && result[1].value) {
+			containers = result[1].value.containers;
 			const apps = new Set<string>();
 			for (const c of result[1].value.containers)
 				if (c.managed && c.app && !apps.has(c.app)) {

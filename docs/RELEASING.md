@@ -155,6 +155,16 @@ Release-Server auf dem Host: Jedes Release wird über die API in den anderen
 Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
 `loader/entries`, bei GRUB dazu `boot/grub/grubenv`).
 
+- **interrupted** schaltet die Wegwerf-VM während des Downloads von
+  `filesystem.squashfs` aus. Die bereits auf FAT geschriebenen Bytes werden
+  mit dem angebotenen System verglichen. Nach dem Start aus Slot A prüft das
+  Skript die Version, die auf dem Stick gespeicherte Auswahl des
+  Agent-Volumes und liest dieselbe Testdatei erneut über SMB.
+- **network** setzt über die Netzwerk-Einstellungen nacheinander eine falsche
+  Verwaltungs-IP, ein VLAN ohne Gegenstelle und eine Bridge am isolierten
+  Port. Nach jeder unbestätigten Probe müssen die alte IPv4-Adresse, die
+  Konfiguration und die Datei auf der SMB-Freigabe wieder erreichbar sein.
+
 - **good:** ein neueres System. Der Eintrag trägt beim Probestart seinen Zähler
   (`+2-1`), das NAS läuft aus dem anderen Slot, der Boot-Check entfernt den
   Zähler, `/api/v1/update` zeigt das System bestätigt.

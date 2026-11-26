@@ -19,6 +19,7 @@
 		ACCENT_IDS,
 		ACCENTS,
 		defaultAppearance,
+		DESKTOP_PROFILES,
 		EFFECT_IDS,
 		globalLook,
 		LIMITS,
@@ -34,7 +35,7 @@
 	import LoginAppearanceEditor from '#lib/login/LoginAppearanceEditor.svelte';
 	import AppIconEditor from '#lib/components/AppIconEditor.svelte';
 	import DesktopDialogs from '#lib/desktop/DesktopDialogs.svelte';
-	import { inWindow } from '#lib/desktop/frame.ts';
+	import { inWindow, mode as layoutMode } from '#lib/desktop/mode.svelte.ts';
 	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
 	import { desktop, loadDesktop } from '#lib/desktop/wm.svelte.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
@@ -65,6 +66,7 @@
 			{},
 		);
 	}
+	const desktopFrame = $derived(inWindow || layoutMode.wide);
 	const DARK_THEMES = ['graphit', 'schwarz', 'mitternacht', 'eigen'] as const;
 
 	let draft = $state<Appearance>($state.snapshot(appearance.current));
@@ -313,6 +315,24 @@
      sliders (approved draft 7.11.2026; PLAN 78-1: groups are plain headings,
      every setting a row; PLAN 86: language and font size on this tab). -->
 <div class="tab-panel" hidden={tab !== 'colors'} data-tab-panel="colors">
+	{#if desktopFrame || page.url.hash === '#desktop-profile'}
+		<SettingGroup>
+			<SettingRow
+				id="desktop-profile"
+				title={t('settingshome.profile')}
+				desc={t('settingshome.profileHint')}
+				for="look-profile"
+			>
+				{#snippet control()}
+					<select id="look-profile" class="field" bind:value={draft.desktopProfile}>
+						{#each DESKTOP_PROFILES as profile (profile)}
+							<option value={profile}>{t(`settingshome.profile.${profile}`)}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+	{/if}
 	<SettingGroup title={t('look.colors')} id="h-colors">
 		<SettingRow title={t('look.mode')}>
 			{#snippet control()}
@@ -429,82 +449,93 @@
 		)}
 	</SettingGroup>
 
-	<SettingGroup title={t('look.sliders')} id="h-sliders">
-		<!-- PLAN 73: one slider from see-through to opaque instead of
+	<details
+		class="advanced-look"
+		class:desktop={desktopFrame}
+		open={!desktopFrame || !!page.url.hash}
+	>
+		<summary>{t('settingshome.advanced')}</summary>
+		<SettingGroup title={t('look.sliders')} id="h-sliders">
+			<!-- PLAN 73: one slider from see-through to opaque instead of
 		     "Transparenz" and "Glaseffekt"; it sets both stored values (older
 		     apps read them as before). PLAN 80-1: named "Deckkraft" since the
 		     glass frame was dropped (10.11.2026). The live preview stands above
 		     its row. -->
-		<div class="liquid-preview" aria-hidden="true">
-			<span
-				class="pane"
-				style:background={`color-mix(in srgb, var(--surface) ${100 - draft.glass}%, transparent)`}
-				style:backdrop-filter={`blur(${draft.blur}px) saturate(1.4)`}
-				><b>15:11</b><span>{t('look.liquidSample')}</span></span
-			>
-		</div>
-		<SettingRow title={t('look.liquid')} desc={t('look.liquidHint')} for="look-liquid">
-			{#snippet control()}
-				<span class="range liquid-ends"
-					><span>{t('look.liquidClear')}</span><input
-						id="look-liquid"
-						type="range"
-						min="0"
-						max="100"
-						step="5"
-						value={liquidOf(draft.glass)}
-						aria-valuetext={t('look.liquidValue', { value: liquidOf(draft.glass) })}
-						oninput={(e) => {
-							const v = Number(e.currentTarget.value);
-							draft.glass = Math.round((80 - 0.75 * v) / 5) * 5;
-							draft.blur = Math.round((10 + 0.2 * v) / 2) * 2;
-						}}
-					/><span>{t('look.liquidTinted')}</span></span
+			<div class="liquid-preview" aria-hidden="true">
+				<span
+					class="pane"
+					style:background={`color-mix(in srgb, var(--surface) ${100 - draft.glass}%, transparent)`}
+					style:backdrop-filter={`blur(${draft.blur}px) saturate(1.4)`}
+					><b>15:11</b><span>{t('look.liquidSample')}</span></span
 				>
-			{/snippet}
-		</SettingRow>
-		{@render slider(
-			'look-corners',
-			t('look.corners'),
-			t('look.cornersHint'),
-			draft.rTile,
-			LIMITS.rTile,
-			'px',
-			(v) => (draft = withCorners(draft, v)),
-		)}
-		{@render slider(
-			'look-saturation',
-			t('look.saturation'),
-			t('look.saturationHint'),
-			draft.saturation,
-			LIMITS.saturation,
-			'%',
-			(v) => (draft.saturation = v),
-		)}
-	</SettingGroup>
+			</div>
+			<SettingRow title={t('look.liquid')} desc={t('look.liquidHint')} for="look-liquid">
+				{#snippet control()}
+					<span class="range liquid-ends"
+						><span>{t('look.liquidClear')}</span><input
+							id="look-liquid"
+							type="range"
+							min="0"
+							max="100"
+							step="5"
+							value={liquidOf(draft.glass)}
+							aria-valuetext={t('look.liquidValue', { value: liquidOf(draft.glass) })}
+							oninput={(e) => {
+								const v = Number(e.currentTarget.value);
+								if (desktopFrame) draft.desktopProfile = 'custom';
+								draft.glass = Math.round((80 - 0.75 * v) / 5) * 5;
+								draft.blur = Math.round((10 + 0.2 * v) / 2) * 2;
+							}}
+						/><span>{t('look.liquidTinted')}</span></span
+					>
+				{/snippet}
+			</SettingRow>
+			{@render slider(
+				'look-corners',
+				t('look.corners'),
+				t('look.cornersHint'),
+				draft.rTile,
+				LIMITS.rTile,
+				'px',
+				(v) => {
+					if (desktopFrame) draft.desktopProfile = 'custom';
+					draft = withCorners(draft, v);
+				},
+			)}
+			{@render slider(
+				'look-saturation',
+				t('look.saturation'),
+				t('look.saturationHint'),
+				draft.saturation,
+				LIMITS.saturation,
+				'%',
+				(v) => (draft.saturation = v),
+			)}
+		</SettingGroup>
 
-	<SettingGroup title={t('look.file')}>
-		<SettingRow title={t('look.fileRow')} desc={t('look.fileHint')}>
-			{#snippet control()}
-				<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
-				<button type="button" class="btn" onclick={() => themeFile.click()}
-					>{t('appearance.import')}</button
-				>
-				<input
-					bind:this={themeFile}
-					type="file"
-					accept="application/json,.json"
-					hidden
-					onchange={importTheme}
-				/>
-			{/snippet}
-		</SettingRow>
-		<SettingRow title={t('appearance.reset')}>
-			{#snippet control()}
-				<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>
-			{/snippet}
-		</SettingRow>
-	</SettingGroup>
+		<SettingGroup title={t('look.file')}>
+			<SettingRow title={t('look.fileRow')} desc={t('look.fileHint')}>
+				{#snippet control()}
+					<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
+					<button type="button" class="btn" onclick={() => themeFile.click()}
+						>{t('appearance.import')}</button
+					>
+					<input
+						bind:this={themeFile}
+						type="file"
+						accept="application/json,.json"
+						hidden
+						onchange={importTheme}
+					/>
+				{/snippet}
+			</SettingRow>
+			<SettingRow title={t('appearance.reset')}>
+				{#snippet control()}
+					<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>
+				{/snippet}
+			</SettingRow>
+		</SettingGroup>
+	</details>
 </div>
 
 <!-- Feinheiten und Effekte: the finer settings (spacing, edges, glow, motion). -->
@@ -519,7 +550,10 @@
 						{ value: 'kompakt', label: t('density.kompakt') },
 					]}
 					value={draft.density}
-					onchange={(v) => (draft.density = v)}
+					onchange={(v) => {
+						if (desktopFrame) draft.desktopProfile = 'custom';
+						draft.density = v;
+					}}
 				/>
 			{/snippet}
 		</SettingRow>
@@ -550,7 +584,10 @@
 			draft.glow,
 			LIMITS.glow,
 			'%',
-			(v) => (draft.glow = v),
+			(v) => {
+				if (desktopFrame) draft.desktopProfile = 'custom';
+				draft.glow = v;
+			},
 		)}
 		{@render slider(
 			'look-dim',
@@ -718,6 +755,24 @@
 {/if}
 
 <style>
+	.advanced-look {
+		display: contents;
+	}
+	.advanced-look:not(.desktop) > summary {
+		display: none;
+	}
+	.advanced-look.desktop {
+		display: block;
+	}
+	.advanced-look.desktop > summary {
+		cursor: pointer;
+		font-weight: 600;
+		padding: var(--space-3) 0;
+	}
+	.advanced-look.desktop :global(.sgroup) {
+		margin-block: var(--space-3);
+	}
+
 	.liquid-preview {
 		position: relative;
 		height: 110px;

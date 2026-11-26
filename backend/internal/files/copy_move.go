@@ -39,8 +39,12 @@ func (m *Manager) removeMoved(ctx context.Context, job *Job, sr, dr *os.Root, re
 	}
 	switch {
 	case info.IsDir():
+		atTarget, err := dr.Lstat(entry.Target)
+		if err != nil || !atTarget.IsDir() {
+			return false, m.noteKept(job, rel, "kept_target_changed")
+		}
 		var inner error
-		err := eachChild(sr, rel, func(child fs.DirEntry) error {
+		err = eachChild(sr, rel, func(child fs.DirEntry) error {
 			p := path.Join(rel, child.Name())
 			if hidden(child.Name()) {
 				if m.removeStalePart(sr, p) {
@@ -58,15 +62,13 @@ func (m *Manager) removeMoved(ctx context.Context, job *Job, sr, dr *os.Root, re
 		if err != nil {
 			return false, m.noteProblem(job, rel, failure("unreadable_folder", mapError(err)), "")
 		}
-		if job.durable != nil {
-			if err := syncDir(sr, rel); err != nil {
-				return false, storeErr(err)
+		if err := sr.Remove(rel); err != nil {
+			if errors.Is(err, syscall.ENOTEMPTY) {
+				return false, nil // something below stays; it is listed
 			}
+			return false, m.noteProblem(job, rel, failure("remove_failed", mapError(err)), "")
 		}
-		if sr.Remove(rel) != nil {
-			return false, nil // something below stays; it is listed
-		}
-		return true, nil
+		return true, storeErr(m.syncCopyParent(sr, rel))
 	case info.Mode()&fs.ModeSymlink != 0:
 		return false, m.noteKept(job, rel, "kept_link")
 	case !info.Mode().IsRegular():
@@ -81,16 +83,7 @@ func (m *Manager) removeMoved(ctx context.Context, job *Job, sr, dr *os.Root, re
 	if err := sr.Remove(rel); err != nil {
 		return false, m.noteProblem(job, rel, failure("remove_failed", mapError(err)), "")
 	}
-	return true, nil
-}
-
-func syncDir(r *os.Root, rel string) error {
-	dir, err := r.Open(rel)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
+	return true, storeErr(m.syncCopyParent(sr, rel))
 }
 
 // moveRename moves within one root by renaming. A folder that exists at the
@@ -183,7 +176,7 @@ func (m *Manager) moveRenameOne(ctx context.Context, job *Job, r *os.Root, dst R
 		if err != nil {
 			return failure("unreadable_folder", mapError(err))
 		}
-		if r.Remove(rel) == nil && job.durable != nil {
+		if r.Remove(rel) == nil {
 			if err := syncTransferParent(r, rel); err != nil {
 				return storeErr(err)
 			}
@@ -234,13 +227,13 @@ func (m *Manager) renameEntry(ctx context.Context, job *Job, r *os.Root, dst Roo
 		var recycled bool
 		if recycled, err = m.retire(job, r, target); err == nil {
 			if recycled {
-				err = renameNoReplace(r, rel, target)
+				err = publishNewFile(r, rel, target)
 			} else {
 				err = r.Rename(rel, target)
 			}
 		}
 	} else {
-		err = renameNoReplace(r, rel, target)
+		err = publishNewFile(r, rel, target)
 	}
 	if err != nil {
 		empty := ""
@@ -256,11 +249,12 @@ func (m *Manager) renameEntry(ctx context.Context, job *Job, r *os.Root, dst Roo
 		}
 		return mapError(err)
 	}
-	if job.durable != nil {
-		if err := syncTransferParent(r, rel); err != nil {
-			return storeErr(err)
-		}
-		if err := syncTransferParent(r, target); err != nil {
+	// Make the new name durable first, then the removal of the old name.
+	if err := m.syncCopyParent(r, target); err != nil {
+		return storeErr(err)
+	}
+	if path.Dir(rel) != path.Dir(target) {
+		if err := m.syncCopyParent(r, rel); err != nil {
 			return storeErr(err)
 		}
 	}
@@ -268,5 +262,5 @@ func (m *Manager) renameEntry(ctx context.Context, job *Job, r *os.Root, dst Roo
 	if !job.paged() {
 		job.targets[rel] = target
 	}
-	return storeErr(m.finishTransfer(job, r, rel, target, ""))
+	return storeErr(m.finishTransfer(job, r, rel, target, "", nil))
 }

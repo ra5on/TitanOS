@@ -25,13 +25,15 @@ export type SetupTodo = { href: string; key: SetupTodoKey; done: boolean | null 
  * asked (two-factor login): the other answers need an administrator and
  * would only be refused.
  */
-export async function checkSetup(admin: boolean): Promise<{ todos: SetupTodo[]; failed: boolean }> {
+export async function checkSetup(
+	admin: boolean,
+): Promise<{ todos: SetupTodo[]; failed: boolean; failedBackups: string[] }> {
 	const twoFactor: SetupTodo = {
 		href: '/account',
 		key: 'welcome.todoTwoFactor',
 		done: session.data?.user ? session.data.user.twoFactor : null,
 	};
-	if (!admin) return { todos: [twoFactor], failed: false };
+	if (!admin) return { todos: [twoFactor], failed: false, failedBackups: [] };
 	const [storage, shares, notify, stick, plugins, backups, tailnet, wireguard, push] =
 		await Promise.allSettled([
 			api.get<{ volumes: unknown[] }>('/storage'),
@@ -39,7 +41,13 @@ export async function checkSetup(admin: boolean): Promise<{ todos: SetupTodo[]; 
 			api.get<{ settings: Record<string, unknown> }>('/notifications/settings'),
 			api.get<{ backup: { lastError: string; backups: unknown[] } }>('/config-backup'),
 			api.get<{ recommendations?: unknown[] | null }>('/plugins'),
-			api.get<{ jobs: { job: { enabled: boolean } }[] }>('/backups'),
+			api.get<{
+				jobs: {
+					job: { id: string; enabled: boolean };
+					state?: { running?: boolean; lastError?: string };
+					stateKnown?: boolean;
+				}[];
+			}>('/backups'),
 			api.get<{ state: string }>('/plugins/tailscale'),
 			api.get<{ enabled: boolean }>('/network/wireguard'),
 			api.get<{ devices: unknown[] }>('/notifications/push'),
@@ -106,6 +114,20 @@ export async function checkSetup(admin: boolean): Promise<{ todos: SetupTodo[]; 
 	// Plugins for detected hardware (drivers, tools): only when there are any.
 	if (plugins.status === 'fulfilled' && (plugins.value.recommendations?.length ?? 0) > 0)
 		todos.splice(1, 0, { href: '/plugins', key: 'welcome.todoDrivers', done: false });
-	const failed = [storage, shares, notify, stick].some((result) => result.status === 'rejected');
-	return { todos, failed };
+	const failed = [storage, shares, notify, stick, backups].some(
+		(result) => result.status === 'rejected',
+	);
+	const failedBackups =
+		backups.status === 'fulfilled' && Array.isArray(backups.value?.jobs)
+			? backups.value.jobs
+					.filter(
+						(view) =>
+							view.stateKnown !== false &&
+							!view.state?.running &&
+							view.state?.lastError &&
+							view.state.lastError !== 'cancelled',
+					)
+					.map((view) => view.job.id)
+			: [];
+	return { todos, failed, failedBackups };
 }

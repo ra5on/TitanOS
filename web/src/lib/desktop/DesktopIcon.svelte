@@ -67,7 +67,6 @@
 </script>
 
 <script lang="ts">
-	import { phoneView } from './mode.svelte.ts';
 	import { onMount } from 'svelte';
 	import { publicURL } from '#lib/app-links.ts';
 	let {
@@ -86,22 +85,21 @@
 			: '',
 	);
 	const art = $derived(
-		phoneView() &&
-			[
-				'files',
-				'docker',
-				'mail',
-				'calendar',
-				'shares',
-				'store',
-				'settings',
-				'storage',
-				'updates',
-			].includes(glyph),
+		[
+			'files',
+			'docker',
+			'mail',
+			'calendar',
+			'shares',
+			'store',
+			'settings',
+			'storage',
+			'updates',
+		].includes(glyph),
 	);
 	let today = $state(new Date().getDate());
 	onMount(() => {
-		if (!phoneView() || glyph !== 'calendar') return;
+		if (glyph !== 'calendar') return;
 		const update = () => (today = new Date().getDate());
 		const timer = setInterval(update, 60000);
 		document.addEventListener('visibilitychange', update);

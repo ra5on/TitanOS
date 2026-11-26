@@ -1,0 +1,220 @@
+/* The window manager owns the glass. Documents, tables and console output
+   have a stable reading surface even against a bright custom wallpaper. */
+:root[data-nord-desktop] {
+	--nord-paper: color-mix(in srgb, var(--surface) 94%, var(--accent));
+	--nord-well: color-mix(in srgb, var(--bg) 95%, var(--accent));
+	--nord-rail: color-mix(in srgb, var(--nord-well) 92%, var(--accent));
+	--nord-rule: color-mix(in srgb, var(--text) 11%, transparent);
+	--nord-selected: color-mix(in srgb, var(--accent) 17%, var(--nord-paper));
+	--nord-chrome: color-mix(in srgb, var(--desk-surface) 92%, var(--accent));
+	--nord-reading-ink: color-mix(in srgb, var(--text) 22%, var(--muted));
+}
+[data-nord-desktop] main.in-window {
+	background-color: var(--nord-well);
+	color: var(--text);
+	--win-toolbar-bg: var(--nord-paper);
+	--panel-bg: var(--nord-paper);
+	--panel-backdrop: none;
+	--panel-shadow: 0 0 0 transparent;
+	--panel-glow: 0 0 0 transparent;
+	--panel-border: var(--nord-rule);
+}
+[data-nord-desktop] .in-window :is(.tile, .panel) {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop] .in-window :is(.win-toolbar, .statusbar, .card-tools, .set-head) {
+	row-gap: var(--space-2);
+}
+[data-nord-desktop] :is(.win-toolbar:not(.beside), .statusbar) {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop] .in-window :is(.sgroup-head h2, .card-head h2, .set-head h1, h2.tile-title) {
+	letter-spacing: -0.018em;
+	text-transform: none;
+}
+[data-nord-desktop] .in-window :is(.srow-desc, .card-meta, .muted),
+[data-nord-desktop] .statusbar {
+	color: var(--nord-reading-ink);
+}
+[data-nord-desktop] .in-window :is(.field, textarea:not(.terminal)) {
+	background-color: var(--nord-well);
+	border-color: color-mix(in srgb, var(--text) 25%, var(--surface));
+}
+[data-nord-desktop] .in-window :is(.srow-head, .btn:not(.btn-primary, .btn-danger, .btn-warn)) {
+	border-color: var(--nord-line);
+}
+[data-nord-desktop] .in-window :is(.tile, .panel, .form, .sgroup) {
+	min-inline-size: 0;
+}
+[data-nord-desktop] .in-window table {
+	font-variant-numeric: tabular-nums;
+}
+[data-nord-desktop] .in-window :is(.data-table, .share-list table, .table-wrap table) th {
+	background-color: var(--nord-rail);
+	color: var(--nord-reading-ink);
+	font-weight: 600;
+}
+[data-nord-desktop] .in-window :is(.data-table, .share-list table, .table-wrap table) td {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop] .in-window :is(.data-table, .share-list table) tr:focus-within {
+	background: var(--nord-selected);
+}
+[data-nord-desktop] :is(.dropdown-panel, dialog) {
+	border-radius: min(var(--nord-radius), 1.2rem);
+}
+[data-nord-desktop] :is(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+[data-nord-desktop] :is(.notice-warn, .notice-error, .notice-info) {
+	border-inline-start-width: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-nord-desktop] :is(.win, .dock, .dropdown-panel, dialog, .dock .it) {
+		animation: none !important;
+		transition: none !important;
+		scroll-behavior: auto;
+	}
+}
+
+/* Settings and forms in other programs use the same group and row components.
+   A section has one silhouette, including its expanded controls. */
+[data-nord-desktop] .in-window .sgroup {
+	row-gap: var(--space-1);
+}
+[data-nord-desktop] .in-window .sgroup > .srow {
+	background: var(--nord-paper);
+	border: 1px solid var(--nord-rule);
+	border-radius: var(--radius-tile);
+}
+[data-nord-desktop] .in-window .sgroup > .srow:has(+ .srow) {
+	border-end-start-radius: var(--radius-small);
+	border-end-end-radius: var(--radius-small);
+}
+[data-nord-desktop] .in-window .sgroup > .srow + .srow {
+	border-start-start-radius: var(--radius-small);
+	border-start-end-radius: var(--radius-small);
+}
+[data-nord-desktop] .in-window .srow-ico {
+	color: var(--text);
+	background: color-mix(in srgb, var(--nord-paper) 89%, var(--accent));
+}
+[data-nord-desktop='files'] .in-window .places.windowed,
+[data-nord-desktop] .cf.columns > .cf-side,
+[data-nord-desktop='lxc'] .layout > .list,
+[data-nord-desktop='agent'] .agent .layout > .side {
+	background: var(--nord-rail);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .in-window :is(.browser, .file-entries) {
+	background: var(--nord-well);
+}
+[data-nord-desktop='files'] .in-window .nav-bar.windowed {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .in-window .crumbs [aria-current='location'] {
+	font-weight: 600;
+	color: var(--text);
+}
+[data-nord-desktop='files'] .command-bar {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='files'] .command-bar .upload-command {
+	background: var(--nord-selected);
+	color: var(--text);
+	border-radius: var(--radius-ctl);
+}
+[data-nord-desktop='files'] .file-entries .row.header,
+[data-nord-desktop='vms'] .vm-cols,
+[data-nord-desktop='storage'] .table th {
+	background: var(--nord-rail);
+	color: var(--nord-reading-ink);
+	border-color: var(--nord-rule);
+	font-weight: 600;
+}
+[data-nord-desktop='files'] .file-entries .row.picked,
+[data-nord-desktop='storage'] .table tr.selected,
+[data-nord-desktop='shares'] .share-list tr.selected,
+[data-nord-desktop='vms'] .vm.selected,
+[data-nord-desktop='lxc'] .list button.current,
+[data-nord-desktop='plugins'] .list .card[aria-pressed='true'] {
+	background: var(--nord-selected);
+	box-shadow: inset 3px 0 var(--accent);
+}
+[data-nord-desktop='storage'] .table td,
+[data-nord-desktop='docker'] .app-table tr.member td {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop='docker'] .app-table tr.member,
+[data-nord-desktop='lxc'] .layout > .detail {
+	background: var(--nord-paper);
+}
+[data-nord-desktop='apps'] .catalog .find,
+[data-nord-desktop='tools'] .logs .filters {
+	border-block-end: 1px solid var(--nord-rule);
+	padding-block-end: var(--space-3);
+}
+[data-nord-desktop='apps'] .catalog .card {
+	border-radius: var(--radius-tile);
+	background: var(--nord-paper);
+	box-shadow: none;
+}
+[data-nord-desktop='apps'] .categories [aria-pressed='true'],
+[data-nord-desktop='vms'] .filters [aria-pressed='true'] {
+	color: var(--text);
+	background: var(--nord-selected);
+}
+[data-nord-desktop='tools'] .logs .lines {
+	line-height: 1.55;
+	background: var(--nord-well);
+	font-variant-numeric: tabular-nums;
+}
+[data-nord-desktop='tools'] .logs .line + .line {
+	border-color: var(--nord-rule);
+}
+[data-nord-desktop] .cf.columns > .cf-list,
+[data-nord-desktop='agent'] .agent .main,
+[data-nord-desktop='nvr'] .camera-detail .events {
+	background-color: var(--nord-paper);
+}
+[data-nord-desktop='mail'] article.message {
+	background-color: var(--nord-well);
+}
+[data-nord-desktop='mail'] article.message .body {
+	line-height: 1.55;
+}
+[data-nord-desktop='nvr'] .camera-tabs {
+	background: var(--nord-paper);
+	border-color: var(--nord-rule);
+}
+
+/* The glass rim remains visible around a dialog, while the fields and log
+   output have a reliable background. Keyboard focus stays inside the native dialog. */
+[data-nord-desktop] dialog.tile:not(.as-menu) {
+	background: color-mix(in srgb, var(--nord-paper) 88%, var(--dialog-bg));
+	border-color: var(--nord-line);
+}
+[data-nord-desktop] dialog.tile > h2 {
+	letter-spacing: -0.025em;
+	line-height: 1.2;
+}
+[data-nord-desktop] dialog .dialog-actions {
+	padding-block-start: var(--space-3);
+	border-block-start: 1px solid var(--nord-rule);
+}
+[data-nord-desktop] .danger-zone {
+	border-color: color-mix(in srgb, var(--status-error) 45%, var(--nord-rule));
+}
+[data-nord-desktop='apps'] .catalog .cards {
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+[data-nord-desktop='apps'] .catalog .card:focus-visible {
+	outline-offset: -2px;
+}
+[data-nord-desktop='plugins'] .list .about {
+	min-inline-size: 0;
+}

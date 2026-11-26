@@ -1,0 +1,24 @@
+# Nordlicht am Arbeitsplatz
+
+| Bereich | Ausgangsstand | Änderung und bewusste Ausnahme |
+| --- | --- | --- |
+| Arbeitsplatz | Frei platzierbare Symbole und Widgets, standardmäßig Volumestatus über CPU/RAM. Die Statuskachel meldete bei fehlenden Daten „Alles in Ordnung“. | Die vorhandene Statuskachel zeigt den NAS-Namen, fehlgeschlagene Datensicherungen, betroffene Volumes, ungelesene Warnungen und laufende Aufgaben. Fehlende Daten, fehlendes USB-Ziel, Wartezustand und bekannter Fortschritt erhalten Text. Ein Sicherungsfehler öffnet den konkreten Auftrag. Laufzeit und IP bleiben in der Fußzeile. |
+| Oberleiste und Hauptmenü | Ein gemeinsames Menü, Suche, Programmmenüs, Systemanzeigen und Bedienelemente für den Cluster. | Gemeinsame Glasflächen und Radien, optische Trennung zwischen häufigen Zielen und Sitzungs-/Stromaktionen. Die vorhandene Such- und Tastaturbedienung bleibt nutzbar. |
+| Dock und Symbole | Persönliche Reihenfolge, Lupeneffekt, drei Dockpositionen und Fenstervorschau. Der Desktop verwendete eigene Varianten der bereits abgestimmten Handy-Symbole. | Dateien, Docker, Mail, Kalender, Freigaben, App-Center, Einstellungen, Speicher und Updates verwenden das bestehende Nordlicht-Bildmaterial. Individuelle App-Logos haben Vorrang. Die Glasplatte greift den Theme-Akzent auf, Transparenz und Rand bleiben regelbar. |
+| Fenster | Titel sowohl über der Seitenleiste als auch im Fensterkopf, Bewegung aus einem falsch versetzten Punkt. | Der Fensterkopf enthält einmal Programmsymbol, Titel, Pfad und Fenstersteuerung. Die Seitenleiste enthält die Navigation. Die Systemsteuerung behält dort das angemeldete Konto. Fenster öffnen in 180 ms aus der tatsächlichen Mitte des angeklickten Symbols. Bei abgeschalteter Interaktion oder reduzierter Bewegung entfallen diese Bewegungen. |
+
+Die Statuskachel verwendet die Daten des ohnehin vorhandenen Aufgabenabrufs in der Oberleiste. Beim Desktop-Abruf liefert der Server den gespeicherten Sicherungsstand mit `cached=1`. Bei `usb_not_found` meldet die Kachel den fehlgeschlagenen Versuch. Für einen aktivierten USB-Auftrag mit bekanntem Gerät und bestehender Fehlerserie zeigt sie „Wartet auf USB“. Der Sicherungsdienst holt diesen Auftrag beim Wiederanschließen nach. Eine laufende Übertragung ohne bekannte Gesamtgröße erhält keinen Prozentwert. Die Belegung der Widgets, die Ablage der Fenster, die Favoriten und die Dock-Konfiguration behalten ihre bisherigen Datenformate und Positionen.
+
+## Prüfung
+
+`scripts/test-ui-nordlicht-workspace.mjs` öffnete die echte Desktop-Oberfläche in Chromium mit isolierten API-Antworten. Getestet wurden der Tastatursprung vom USB-Sicherungsfehler zum zweiten von zwei Aufträgen, 25 Prozent Fortschritt aus 25 von 100 Bytes, Ausblenden der fremden Sicherungsdetails beim Benutzerkonto, Öffnen von Dateien vom Dock per Eingabetaste und die Position des Animationsursprungs mit zwei CSS-Pixeln Toleranz. Bei emuliertem „Bewegung reduzieren“ blieb die Öffnungsanimation aus. Die Weboberfläche lief lokal, diese Prüfung hat keinen NAS-Sicherungsauftrag ausgeführt. Screenshots zeigen den Arbeitsplatz und das direkt geöffnete Auftragsfenster.
+
+Der vorhandene Chromium-Durchlauf `scripts/test-ui-desktop-125.mjs` bestand ebenfalls. Er prüft das Dock mit Maus und Tastatur, die Dateileisten im schmalen Fenster, Docker-Aktionen und die Verlaufsanzeige.
+
+## Persönlichen Arbeitsplatz nach dem Versionswechsel öffnen
+
+`node scripts/test-ui-desktop-upgrade.mjs <bisheriges-titand> <neues-titand>` startet die beiden Programme nacheinander im Entwicklungsmodus. Sie verwenden dieselbe lokale Adresse und dasselbe temporäre Kontoverzeichnis. Chromium behält seinen Browserspeicher über den Wechsel. Die Probe benötigt zwei Binärdateien mit eingebetteter Oberfläche.
+
+Im alten Stand von PR 414 wurde ein persönliches Layout über die normale Einstellungs-API angelegt. Anschließend wurde das Systemsteuerungsfenster per Maus verkleinert, die Seitenleiste ein- und ausgeklappt und auf die tatsächlichen Speicherantworten gewartet. Nach dem Neustart mit dem neuen Programm öffnete sich das Fenster wieder bei x = 25 und y = 8, mit 1103 × 773 CSS-Pixeln. Die Uhr lag weiterhin bei (520, 40), die Statuskachel bei (80, 280). Auch ihre Größen, vier Arbeitsplatzsymbole samt Rasterposition, die drei ersten Hauptmenü-Einträge und das rechts platzierte Dock mit drei Programmen und 44-Pixel-Symbolen waren identisch.
+
+Die gespeicherte Anordnung „Büro“ enthielt weiterhin beide Fenstergeometrien. Im gerenderten Handy-Arbeitsplatz blieben Freigaben und Systemsteuerung als Favoriten und Dateien und Freigaben im Dock. Zwei zusätzliche Ordnerfavoriten wurden über die Dateien-Einstellungs-API verglichen. Auch nach erneutem Speichern mit der neuen Oberfläche stimmten die vollständigen Kontowerte für Desktop und Dateifavoriten sowie der wiederhergestellte Fensterzustand mit dem alten Stand überein.

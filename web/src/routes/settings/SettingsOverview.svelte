@@ -17,6 +17,7 @@
 	import { settingsAreas } from '#lib/settings-search.ts';
 	import { recentSettingsChanges } from '#lib/settings-recent.ts';
 	import { settingsStates } from '#lib/settings-states.svelte.ts';
+	import { noticeLink } from '#lib/notice-link.ts';
 	import { checkSetup, type SetupTodo } from '#lib/setup-checklist.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -40,6 +41,7 @@
 	const states = $derived(Object.entries(settingsStates()));
 	let setup = $state<SetupTodo[] | null>(null);
 	let setupFailed = $state(false);
+	let failedBackups = $state<string[]>([]);
 	const open = $derived((setup ?? []).filter((todo) => todo.done === false));
 
 	// Services: Docker, VMs and LXC from Settings › Services; SSH and the
@@ -58,6 +60,7 @@
 		void checkSetup(admin).then((result) => {
 			setup = result.todos;
 			setupFailed = result.failed;
+			failedBackups = result.failedBackups;
 		});
 		if (!admin) return;
 		api
@@ -99,7 +102,41 @@
 {/snippet}
 
 <div class="overview">
-	<SettingsShortcuts {admin} />
+	<div class="shortcuts"><SettingsShortcuts {admin} /></div>
+	<div class="todo">
+		<SettingGroup title={t('settingshome.todo')} id="{prefix}-todo">
+			{#each failedBackups as job (job)}
+				<SettingRow
+					href={noticeLink('backup_failed', job) ?? undefined}
+					icon="archive"
+					title={job}
+					desc={t('error.backup_failed')}
+				>
+					{#snippet control()}<span class="chip error">{t('backup.failed')}</span>{/snippet}
+				</SettingRow>
+			{/each}
+			{#each states as [area, state] (area)}
+				<SettingRow href="/settings/{area}" icon="bell" title={areaLabel(area)}>
+					{#snippet control()}<span class="chip {state.tone}">{t(state.text)}</span>{/snippet}
+				</SettingRow>
+			{/each}
+			{#each open as todo (todo.key)}
+				<SettingRow
+					href={todo.href}
+					icon="list"
+					title={t(todo.key)}
+					desc={t(`${todo.key}Text` as MessageKey)}
+				/>
+			{/each}
+			{#if setup === null}
+				<p class="note muted" role="status">{t('settingshome.todo.checking')}</p>
+			{:else if !states.length && !open.length && !failedBackups.length && !setupFailed}
+				<div role="status"><SettingRow icon="check" title={t('settingshome.todo.none')} /></div>
+			{/if}
+			{#if setupFailed}<p class="note muted">{t('settingshome.todo.unknown')}</p>{/if}
+		</SettingGroup>
+	</div>
+
 	<div class="health">
 		<SettingGroup title={t('settingshome.health')} id="{prefix}-health">
 			{#if info}
@@ -137,30 +174,6 @@
 					{/snippet}
 				</SettingRow>
 			{/if}
-		</SettingGroup>
-	</div>
-
-	<div class="todo">
-		<SettingGroup title={t('settingshome.todo')} id="{prefix}-todo">
-			{#each states as [area, state] (area)}
-				<SettingRow href="/settings/{area}" icon="bell" title={areaLabel(area)}>
-					{#snippet control()}<span class="chip {state.tone}">{t(state.text)}</span>{/snippet}
-				</SettingRow>
-			{/each}
-			{#each open as todo (todo.key)}
-				<SettingRow
-					href={todo.href}
-					icon="list"
-					title={t(todo.key)}
-					desc={t(`${todo.key}Text` as MessageKey)}
-				/>
-			{/each}
-			{#if setup === null}
-				<p class="note muted" role="status">{t('settingshome.todo.checking')}</p>
-			{:else if !states.length && !open.length}
-				<div role="status"><SettingRow icon="check" title={t('settingshome.todo.none')} /></div>
-			{/if}
-			{#if setupFailed}<p class="note muted">{t('settingshome.todo.unknown')}</p>{/if}
 		</SettingGroup>
 	</div>
 
@@ -251,6 +264,18 @@
 		flex-direction: column;
 		gap: var(--gap, var(--space-4));
 		min-width: 0;
+	}
+	@container settings-content (min-width: 42rem) {
+		.overview {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			align-items: start;
+			column-gap: var(--space-6);
+		}
+	}
+	.shortcuts {
+		display: grid;
+		gap: var(--gap);
 	}
 	.overview > div {
 		min-width: 0;

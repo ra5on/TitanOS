@@ -4,6 +4,10 @@
 Boots the installation ZIP and installs full system releases through the API,
 each into the slot that is not running, as a NAS does it:
 
+  interrupted  power off while the inactive slot is being written, verify the
+           old slot, a configuration file and real SMB file after reboot.
+  network  break the management IP, VLAN and bridge on trial, verify the
+           old management connection and SMB file after each rollback.
   good     a newer system: the boot entry carries its counter on the stick
            during the trial start, the NAS runs from the other slot, the boot
            check marks it good (entry without counter) and /api/v1/update shows
@@ -72,8 +76,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from interrupted_system_smoke import ReleaseHandler, check_share, create_share, interrupt_install, network_trials
+
 REPO = Path(__file__).resolve().parent.parent
-SCENARIOS = ["good", "nostart", "panic", "hang"]
+SCENARIOS = ["good", "nostart", "panic", "hang", "interrupted", "network"]
 TRIES = 3
 # A mount that never comes: local-fs.target fails and the system changes to
 # emergency mode, long before titand and the boot check.
@@ -196,9 +202,9 @@ class Releases:
 
     def __init__(self, root, base_manifest, key):
         self.root, self.base, self.key = root, base_manifest, key
-        handler = lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory=str(root))
-        http.server.SimpleHTTPRequestHandler.log_message = lambda *args: None
+        handler = lambda *args: ReleaseHandler(*args, directory=str(root))
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.server.hold = None
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.port = self.server.server_address[1]
 
@@ -289,10 +295,10 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
         jar = http.cookiejar.CookieJar()
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), urllib.request.HTTPSHandler(context=context))
 
-        def request(path, data=None, method=None):
+        def request(path, data=None, method=None, timeout=20):
             req = urllib.request.Request(url + path, data=json.dumps(data).encode() if data is not None else None,
                                          headers={"Content-Type": "application/json", "Origin": url}, method=method)
-            with opener.open(req, timeout=20) as response:
+            with opener.open(req, timeout=timeout) as response:
                 body = response.read()
                 return json.loads(body) if body else None
 
@@ -350,11 +356,32 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
             boot_firmware = ["-machine", "q35", "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
                              "-drive", f"if=pflash,format=raw,file={directory}/OVMF_VARS.fd"]
 
+        forwards = f"hostfwd=tcp:127.0.0.1:{port}-:443"
+        extra_devices = []
+        share_scenarios = {"network", "interrupted"}
+        if share_scenarios.intersection(scenarios):
+            smb_port = free_port()
+            forwards += f",hostfwd=tcp:127.0.0.1:{smb_port}-:445"
+            data_disk = directory / "data.qcow2"
+            command("qemu-img", "create", "-q", "-f", "qcow2", str(data_disk), "2G")
+            extra_devices = [
+                "-drive", f"if=none,id=userdata,format=qcow2,file={data_disk}",
+                "-device", "virtio-blk-pci,drive=userdata,serial=NORDLICHT-DATA",
+                # No IPv4 or external route on the spare port. A real
+                # userspace backend also drains the emulated TX queue.
+                "-netdev", "user,id=spare,ipv4=off,ipv6=on,restrict=on",
+                "-device", "virtio-net-pci,netdev=spare,mac=52:54:00:da:7a:02",
+            ]
+
+        # A long software-emulated restart test on a busy builder otherwise
+        # spends most of its time waiting on the other virtual CPU.
+        cpus = "1" if not kvm and set(scenarios) <= share_scenarios else "2"
+
         def qemu(speed):
-            return ["qemu-system-x86_64", *boot_firmware, *speed, "-smp", "2", "-m", memory,
+            return ["qemu-system-x86_64", *boot_firmware, *speed, "-smp", cpus, "-m", memory,
                     "-device", "qemu-xhci", "-drive", f"if=none,id=stick,format=raw,file={disk}",
                     "-device", "usb-storage,drive=stick,removable=on,bootindex=0",
-                    "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443", "-device", "virtio-net-pci,netdev=net0",
+                    "-netdev", f"user,id=net0,{forwards}", "-device", "virtio-net-pci,netdev=net0", *extra_devices,
                     "-smbios", "type=11,value=io.systemd.boot.kernel-cmdline-extra=" + console.replace(",", ",,"),
                     "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot"]
 
@@ -509,6 +536,18 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                 if on_stick.tries() != {"a": None}:
                     raise AssertionError(f"boot entries of a fresh stick: {on_stick.entries()}")
 
+                if share_scenarios.intersection(scenarios):
+                    create_share(request, wait, directory, smb_port, password)
+                    def smb_readable():
+                        return check_share(directory, smb_port, password)
+
+                if "interrupted" in scenarios:
+                    interrupt_install(request, check, wait, releases, slot_files, versions["interrupted"], kill, boot, on_stick)
+                    wait("original share and file after power cut", smb_readable, 90)
+                    print("SMB: all 32768 bytes of the original file verified after restart.", flush=True)
+                if "network" in scenarios:
+                    network_trials(request, wait, smb_readable, log)
+
                 if "good" in scenarios:
                     good = versions["good"]
                     target, before, old = install(good, dict(slot_files, **{"filesystem.squashfs": directory / "good.squashfs"}), titand=directory / "titand-good")
@@ -574,7 +613,7 @@ if __name__ == "__main__":
     parser.add_argument("--log", type=Path, default=Path("out/system-update-smoke.log"))
     parser.add_argument("--tcg", "--force-tcg", action="store_true", help="force CPU emulation to reproduce CI without KVM")
     parser.add_argument("--firmware", choices=["uefi", "bios"], default="uefi", help="64-bit UEFI (systemd-boot) or legacy BIOS (GRUB)")
-    parser.add_argument("--scenarios", default=",".join(SCENARIOS), help="which of good, nostart, panic, hang to run (default: all)")
+    parser.add_argument("--scenarios", default=",".join(SCENARIOS), help="which of good, nostart, panic, hang, interrupted, network to run (default: all)")
     parser.add_argument("--memory", default="4G", help="RAM of the VM")
     parser.add_argument("--real-time", action="store_true", help="hang: wait three times 30 minutes instead of letting the clock of the VM jump")
     args = parser.parse_args()

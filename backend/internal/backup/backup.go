@@ -222,9 +222,12 @@ type State struct {
 	// 0 while it runs without one and when it does not run.
 	BandwidthLimit int `json:"bandwidthLimit,omitempty"`
 	// LastRun is the last attempt, LastOK the last one that worked.
-	LastRun   *time.Time `json:"lastRun"`
-	LastOK    *time.Time `json:"lastOK"`
-	LastError string     `json:"lastError"`
+	LastRun *time.Time `json:"lastRun"`
+	LastOK  *time.Time `json:"lastOK"`
+	// LastCompleteSnapshot is the last restic snapshot made without missing
+	// sources or unreadable files. Newer snapshots can be incomplete.
+	LastCompleteSnapshot string `json:"lastCompleteSnapshot,omitempty"`
+	LastError            string `json:"lastError"`
 	// LastErrorCode names known causes of LastError, so that the page can
 	// say it in the language of the viewer; empty for others.
 	LastErrorCode string `json:"lastErrorCode,omitempty"`
@@ -283,6 +286,7 @@ type Manager struct {
 	// restic is the program; mountRoot where volumes are mounted; workDir
 	// where the SSH key lies while a job runs.
 	restic, mountRoot, workDir string
+	syncCopyTarget             func(*os.Root) error
 	// configDir is the folder of the settings; it is saved if a job asks.
 	configDir string
 	// mountsFile lists what is mounted; /proc/self/mounts.
@@ -371,7 +375,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, restic: "restic", mountRoot: "/mnt", workDir: "/run/titanos-backup", configDir: "/config", mountsFile: "/proc/self/mounts", now: time.Now,
+	return &Manager{store: store, restic: "restic", syncCopyTarget: syncTarget, mountRoot: "/mnt", workDir: "/run/titanos-backup", configDir: "/config", mountsFile: "/proc/self/mounts", now: time.Now,
 		states: map[string]*State{}, cancels: map[string]context.CancelFunc{}}
 }
 

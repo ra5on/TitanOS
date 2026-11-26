@@ -126,3 +126,32 @@ test('dock settings: order, sanitising and the standard set', () => {
 	prefs.dock = { ...prefs.dock, pinned: ['app:settings', 'app:gone'], customPinned: true };
 	assert.deepEqual(dockPinned(prefs, known), ['app:settings']);
 });
+
+test('desktop profiles keep account sliders, wallpaper, text size and motion choices intact', async () => {
+	const { desktopLook, defaultAppearance, sanitizeAppearance } =
+		await import('../src/lib/theme/themes.ts');
+	const saved = {
+		...defaultAppearance(),
+		font: 120,
+		glass: 35,
+		blur: 14,
+		motion: false,
+		bgVersion: 42,
+	};
+	assert.equal(
+		sanitizeAppearance({ ...saved, desktopProfile: 'unknown' }).desktopProfile,
+		'custom',
+	);
+	for (const desktopProfile of ['custom', 'nordlicht', 'klar', 'kompakt']) {
+		const account = sanitizeAppearance({ ...saved, desktopProfile });
+		assert.equal(desktopLook(account, false), account);
+		const applied = desktopLook(account, true);
+		assert.equal(applied.font, 120);
+		assert.equal(applied.motion, false);
+		assert.equal(applied.bgVersion, 42);
+		assert.equal(account.glass, 35);
+		if (desktopProfile === 'klar') assert.equal(applied.style, 'flat');
+		if (desktopProfile === 'kompakt') assert.equal(applied.density, 'kompakt');
+		if (desktopProfile === 'custom') assert.equal(applied, account);
+	}
+});

@@ -10,6 +10,7 @@
 	import { watchSources } from './sources.svelte.ts';
 	import Launcher from './Launcher.svelte';
 
+	let { showHome = false }: { showHome?: boolean } = $props();
 	let dialog: HTMLDialogElement;
 	let search: HTMLInputElement;
 	let launcher = $state<Launcher>();
@@ -47,7 +48,18 @@
 	>
 		<Icon name="menu" size={16} /><span>{t('desktop.menu.title')}</span>
 	</button>
-	<span class="brand"><img src="/favicon.svg" alt="" width="27" height="27" />TitanOS</span>
+	{#if showHome}
+		<a
+			class="pill brand home-link"
+			href="/"
+			aria-label={t('desktop.phone.home')}
+			title={t('desktop.phone.home')}
+		>
+			<Icon name="home" size={21} />TitanOS
+		</a>
+	{:else}
+		<span class="brand"><img src="/favicon.svg" alt="" width="27" height="27" />TitanOS</span>
+	{/if}
 	<span class="pill tools">
 		<button type="button" aria-label={t('desktop.menu.search')} onclick={() => showMenu(true)}
 			><Icon name="search" size={17} /></button
@@ -171,6 +183,18 @@
 		letter-spacing: -0.04em;
 		text-shadow: 0 1px 8px #06151c;
 	}
+	.home-link {
+		justify-self: center;
+		justify-content: center;
+		padding-inline: 9px;
+		min-width: 44px;
+		text-decoration: none;
+	}
+	.home-link:focus-visible {
+		outline: 2px solid currentColor;
+		outline-offset: 2px;
+	}
+
 	.tools {
 		display: flex;
 		justify-self: end;

@@ -4,6 +4,8 @@
 
 **Aufnahmestand:** Die ursprüngliche Bildserie der README kommt aus `scripts/capture-readme-screenshots.mjs` und zeigt den Stand **0.78 in Arbeit** (Zweig `docs/078-readme`, abgezweigt vom 0.78-Arbeitszweig `feat/078-nvr-ui` bei Commit `052cc095`; der Web-Teil ist bis `e3fe8443` unverändert). Aufgenommen am **13. November 2026** mit Chromium/Playwright gegen einen Vite-Entwicklungsserver dieses Stands, Theme Graphit, blauer Akzent, Deutsch; Programmfenster maximiert. Die Seiten nennen die Version 0.78 (`SHOW_VERSION`, ab Werk `0.78.0`).
 
+Am **26. November 2026** wurden [Dateien](current/dateien.png), [Docker](current/docker.png) und die [Systemsteuerung](current/systemsteuerung.png) im Nordlicht-Desktop auf Basis von PR 414 neu aufgenommen. Chromium öffnete die Programme im regulären Arbeitsplatzfenster mit isolierten API-Testdaten. Dateien und Docker zeigen Graphit mit Nordlicht-Hintergrund bei 1440 × 900 Pixeln. Die Systemsteuerung zeigt das helle Profil bei 1280 × 900 Pixeln. Die Herkunft je Bild steht in `current/capture.json`. [Bedienwege und Abnahme](../NORDLICHT-ABNAHME.md)
+
 Am **25. November 2026** kamen drei Aufnahmen aus Chromium mit isolierten Testdaten hinzu. Die beiden mobilen Bilder zeigen TitanOS 1.26 bei 390 × 844 Pixeln. Die Dock-Aufnahme zeigt den Entwicklungsstand von 1.28 bei 1440 × 1000 Pixeln. Die geöffnete Vorschau stammt aus dem Bedienablauf von `scripts/test-ui-desktop-125.mjs`.
 
 - [Offene Sicherungsprobe auf der mobilen Einstellungsseite](current/sicherungen-mobil-1.26.png)

@@ -140,7 +140,7 @@
 		</Dropdown>
 		<button
 			type="button"
-			class="cmd"
+			class="cmd upload-command"
 			title={t('files.upload')}
 			aria-label={t('files.upload')}
 			onclick={() => oncommand('upload')}

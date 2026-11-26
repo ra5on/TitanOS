@@ -57,6 +57,7 @@ async function open({
     "de",
     phone
       ? {
+          nativeShell: true,
           isMobile: true,
           hasTouch: true,
           deviceScaleFactor: 2,
@@ -65,13 +66,13 @@ async function open({
           reducedMotion: reduce ? "reduce" : "no-preference",
         }
       : {
+          nativeShell: desk,
           viewport: { width, height },
           timezoneId: "Europe/Berlin",
           reducedMotion: reduce ? "reduce" : "no-preference",
         },
   );
   await made.ctx.clock.setFixedTime(now);
-  if (phone || desk) await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   const state = calendarState();
   await installCalendar(made.ctx, state);
   return { ...made, state };
@@ -401,10 +402,11 @@ try {
     await page.locator("#t-title").fill("Zahnarzt");
     await page.locator("#t-place").fill("Praxis am Markt");
     // The calendar: a row with its value and an arrow, a sheet to choose.
-    await page.getByRole("button", { name: /^Kalender/ }).click();
+    const calendarField = page.locator("[data-event-form]").getByRole("button", { name: /^Kalender/ });
+    await calendarField.click();
     await page.locator("dialog[open] .choice", { hasText: "Arbeit" }).click();
     await until(async () => (await page.locator("dialog[open]").count()) === 0, "the sheet closes");
-    assert.match(await page.getByRole("button", { name: /^Kalender/ }).innerText(), /Arbeit/);
+    assert.match(await calendarField.innerText(), /Arbeit/);
     // An alert: "Hinweis · Ohne ›", chosen in a sheet; then "Zweiter Hinweis".
     await page.getByRole("button", { name: /^Hinweis/ }).click();
     await page.locator("dialog[open]").waitFor();

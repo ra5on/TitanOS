@@ -3,6 +3,7 @@
 	// machines the machines themselves, and at the bottom the fold button.
 	// For Systemsteuerung (PLAN 78, PLAN 86) the account, the search and the
 	// areas, which open their pages right in the column.
+	import { sources } from './sources.svelte.ts';
 	import { tick } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
@@ -22,22 +23,17 @@
 	} from '../settings-find.ts';
 	import { showsNew } from '../settings-seen.svelte.ts';
 	import { appForPath, sideActive, type SideItem } from './apps.ts';
-	import DesktopIcon from './DesktopIcon.svelte';
 	import { openProgram } from './programs.svelte.ts';
 	import { navigateWindow, type Win } from './wm.svelte.ts';
 
 	let {
 		win,
-		glyph,
-		gradient,
 		side,
 		folded,
 		path,
 		ontoggle,
 	}: {
 		win: Win;
-		glyph: string;
-		gradient: string;
 		side: SideItem[];
 		folded: boolean;
 		/** The page the window shows (without its query). */
@@ -64,7 +60,16 @@
 	const area = $derived(searchable ? settingsGroupOf(win.href) : undefined);
 	const pageId = $derived(searchable ? settingsAreaOf(path) : '');
 	const links = $derived<SettingsHit[]>(
-		searchable && query.trim() ? findSettings(query, admin, t, index) : [],
+		searchable && query.trim()
+			? findSettings(
+					query,
+					admin,
+					t,
+					index,
+					80,
+					session.services.docker !== false ? sources.containers : [],
+				)
+			: [],
 	);
 	const searching = $derived(searchable && query.trim() !== '');
 	const current = $derived(links.length ? Math.min(hit, links.length - 1) : -1);
@@ -163,11 +168,6 @@
 			{#if !folded}<span class="who"
 					><b>{account.name}</b><small>{t(`role.${account.role}`)}</small></span
 				>{:else}<span class="sr-only">{account.name} · {t(`role.${account.role}`)}</span>{/if}
-		</div>
-	{:else}
-		<div class="side-title">
-			<DesktopIcon {glyph} {gradient} size={folded ? 32 : 28} name={win.title} />
-			{#if !folded}<b>{win.title}</b>{/if}
 		</div>
 	{/if}
 	{#if searchable}
@@ -368,7 +368,7 @@
 				color-mix(in srgb, var(--text) 3%, transparent),
 				color-mix(in srgb, var(--accent) 3%, transparent)
 			),
-			color-mix(in srgb, var(--surface) 88%, var(--bg));
+			color-mix(in srgb, var(--surface) 96%, var(--accent));
 		border-right: 1px solid var(--border);
 		overflow: hidden;
 	}
@@ -450,19 +450,6 @@
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
-	.side-title {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2-5);
-		padding: var(--space-1) var(--space-1-5) 14px;
-		font-size: var(--text-lg);
-		min-width: 0;
-	}
-	.side-title b {
-		min-width: 0;
-		overflow-wrap: break-word;
-		hyphens: auto;
-	}
 	.items {
 		flex: 1;
 		overflow-y: auto;
@@ -477,8 +464,8 @@
 		margin: var(--space-3) var(--space-2-5) var(--space-1);
 		font-size: var(--text-xs);
 		color: var(--muted);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		font-weight: 650;
+		letter-spacing: 0.015em;
 	}
 	.item.thing {
 		padding-left: var(--space-4);
@@ -528,7 +515,8 @@
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
 	.item.on {
-		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+		box-shadow: inset 3px 0 color-mix(in srgb, var(--accent) 70%, var(--text));
 		/* Toward the text color: 4.5:1 on the tinted glass in every theme (PLAN 65-5). */
 		color: color-mix(in srgb, var(--accent) 65%, var(--text));
 		font-weight: 600;

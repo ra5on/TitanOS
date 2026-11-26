@@ -505,6 +505,7 @@
 	"users.filterActive": "Aktiv",
 	"users.filterLocked": "Gesperrt",
 	"users.filterEmpty": "Keine Konten mit diesem Status.",
+	"users.searchByName": "Konto suchen",
 	"users.list": "Konten",
 	"users.createdOn": "angelegt am {date}",
 	"users.apps.title": "Apps",

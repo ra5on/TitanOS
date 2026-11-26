@@ -348,6 +348,12 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	base, prev, finalBase := job.Destination.Folder, "", ""
 	links := false
 	var runs []datedRun
+	recovery := recoveryFor(job, target)
+	if !dated {
+		if err := recovery.discardStaging(job); err != nil {
+			return err
+		}
+	}
 	if dated {
 		runs = datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())
 		if len(runs) > 0 {
@@ -587,7 +593,12 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// of it, when the kind changed in the source since the last run. Dated
 	// runs start from an empty folder: nothing can be in the way there.
 	var aside func(to string) error
+	var checkpoint bool
 	if !dated {
+		var err error
+		if checkpoint, err = recovery.prepare(ctx, job); err != nil {
+			return err
+		}
 		aside = func(to string) error { return m.moveAside(target, job, to) }
 	}
 	// ready opens the source of an item and makes its folder at the destination.
@@ -805,12 +816,19 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	if dated {
 		// Whole and on the drive: now it is a version.
 		if _, err := target.Lstat(base); err == nil {
-			if err := syncTarget(target); err != nil {
+			if err := m.syncCopyTarget(target); err != nil {
 				return err
 			}
 			if err := target.Rename(base, finalBase); err != nil {
 				return err
 			}
+			// Retention may remove the only older complete version. The new
+			// name must survive a disconnect before any old version is removed.
+			if err := m.syncCopyTarget(target); err != nil {
+				return err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 		if !incomplete() {
 			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location()), protected); err != nil {
@@ -820,8 +838,16 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	}
 	// Everything on the drive, also the renames, before it counts as done:
 	// whoever pulls the drive then loses nothing.
-	if err := syncTarget(target); err != nil {
+	if err := m.syncCopyTarget(target); err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if checkpoint && problems.total() == 0 {
+		if err := recovery.finish(); err != nil {
+			return err
+		}
 	}
 	if special > 0 {
 		slog.Info("backup: sockets, FIFOs and device files left out, they hold no data", "job", job.ID, "count", special)
@@ -1241,6 +1267,9 @@ func removeCopyLeftovers(ctx context.Context, target *os.Root, folder string) {
 	err := fs.WalkDir(target.FS(), folder, func(at string, entry fs.DirEntry, err error) error {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if err == nil && entry.IsDir() && strings.HasPrefix(entry.Name(), recoveryPrefix) {
+			return fs.SkipDir
 		}
 		if err != nil || entry.IsDir() || !copyTemp.MatchString(entry.Name()) {
 			return nil

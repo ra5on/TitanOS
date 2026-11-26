@@ -1,5 +1,5 @@
 import type { MessageKey } from './i18n/index.svelte.ts';
-import type { Role } from './api.ts';
+import type { DockerContainer, Role } from './api.ts';
 import { settingsAreas, settingsKeywords } from './settings-search.ts';
 import { findSettings, type SettingsIndexEntry } from './settings-find.ts';
 
@@ -72,11 +72,12 @@ export function paletteSettings(
 	role: Role,
 	translate: (key: MessageKey) => string,
 	index: SettingsIndexEntry[] | null,
+	containers: DockerContainer[] = [],
 ): PaletteEntry[] {
 	if (!query.trim()) return [];
 	const admin = role === 'owner' || role === 'admin';
-	return findSettings(query, admin, translate, index, 40)
-		.filter((hit) => hit.kind !== 'page')
+	return findSettings(query, admin, translate, index, 40, containers)
+		.filter((hit) => hit.kind !== 'page' || hit.href !== '/settings/' + hit.page)
 		.map((hit) => ({ href: hit.href, label: hit.label, section: hit.where }));
 }
 export function findPaletteEntries(entries: PaletteEntry[], query: string): PaletteEntry[] {

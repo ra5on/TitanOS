@@ -30,7 +30,13 @@ func (m *Manager) Jobs(user string) []Job {
 	out := []Job{}
 	for i := len(m.jobs.list) - 1; i >= 0; i-- {
 		if job := m.jobs.list[i]; job.user == user {
-			out = append(out, snapshotLocked(job))
+			visible := snapshotLocked(job)
+			if job.finishing {
+				// The last checkpoint can still fail. Report completion only once
+				// the worker has flushed it and closed the plan.
+				visible.State, visible.Finished = JobRunning, time.Time{}
+			}
+			out = append(out, visible)
 		}
 	}
 	return out
