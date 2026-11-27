@@ -55,10 +55,9 @@
 		type FolderDelta,
 	} from '#lib/tmail/store.svelte.ts';
 	import type { ComposeMode, Flags, Message } from '#lib/tmail/types.ts';
-	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentPanel from '#lib/personal-agent/PIMPanel.svelte';
+	import { mailSelection } from '#lib/personal-agent/pim.ts';
 	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
-	import type { AgentContext } from '#lib/agent.ts';
-	import { mailPanelActions } from '#lib/agent/panel-actions.ts';
 	import { session } from '#lib/session.svelte.ts';
 
 	const WIDE = '(min-width: 900px)';
@@ -110,33 +109,30 @@
 	// 1.13 (owner 18 Nov 2026): the agent's panel – right of the message
 	// (a column of the frame), compact a sheet from below; open or not is
 	// kept per device. The open mail goes with each message as a reference.
-	const AGENT_KEY = 'titanos.mail.agentPanel';
 	const withAgent = $derived(!!session.services.agent);
-	let agentOpen = $state(readAgentOpen());
-	/** The panel stands as a column (enough room next to it); else a sheet. */
+	let agentOpen = $state(false);
 	let agentColumn = $state(false);
-	function readAgentOpen(): boolean {
-		try {
-			return localStorage.getItem(AGENT_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
 	function setAgent(on: boolean) {
 		agentOpen = on;
-		try {
-			if (on) localStorage.setItem(AGENT_KEY, '1');
-			else localStorage.removeItem(AGENT_KEY);
-		} catch {
-			// Kept for this visit only.
-		}
 	}
-	const agentContext = $derived<AgentContext | null>(
-		messageAccount && place.m
-			? { app: 'mail', mail: { a: messageAccount, f: messageFolder, uid: place.m } }
-			: null,
+	let selectedMail = $state<{ account: string; message: Message } | null>(null);
+	const agentSources = $derived(
+		selectedMail &&
+			selectedMail.account === messageAccount &&
+			selectedMail.message.uid === place.m &&
+			selectedMail.message.folder === messageFolder
+			? mailSelection(messageAccount, messageFolder, selectedMail.message)
+			: !place.m && !all && place.a && place.f
+				? [
+						{
+							kind: 'mail.folder',
+							id: place.a + '/' + place.f,
+							label: folder?.name || place.f,
+							ref: { account: place.a, folder: place.f },
+						},
+					]
+				: [],
 	);
-	const agentActions = $derived(session.services.mail ? mailPanelActions((k) => t(k)) : []);
 
 	let list = $state<MessageList>();
 	let refreshed = $state<Date | null>(null);
@@ -512,10 +508,10 @@
 		sideFoot={foot}
 		notices={mail.error || live.down ? notices : undefined}
 		list={hasList ? messages : undefined}
-		aside={withAgent && agentOpen && wide ? agentAside : undefined}
+		aside={withAgent && agentOpen && wide && agentColumn ? agentAside : undefined}
 		asideKey="titanos.agentPanel.width"
 		asideResizeLabel={t('agentpim.panel.resize')}
-		bind:asideShown={agentColumn}
+		bind:asideAvailable={agentColumn}
 	>
 		{#if place.a && place.f && place.m && messageAccount}
 			{#if !wide && !phone}
@@ -533,6 +529,7 @@
 				accountId={messageAccount}
 				folder={messageFolder}
 				uid={place.m}
+				onloaded={(account, message) => (selectedMail = message ? { account, message } : null)}
 				oncompose={compose}
 				onflags={flagsChanged}
 				onremoved={removed}
@@ -556,23 +553,12 @@
 {/if}
 
 {#snippet agentAside()}
-	<AgentPanel
-		app="mail"
-		context={agentContext}
-		actions={agentActions}
-		onclose={() => setAgent(false)}
-	/>
+	<AgentPanel app="mail" sources={agentSources} onclose={() => setAgent(false)} />
 {/snippet}
 
 {#if withAgent && agentOpen && !(wide && agentColumn)}
 	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
-		<AgentPanel
-			app="mail"
-			phone
-			context={agentContext}
-			actions={agentActions}
-			onclose={() => setAgent(false)}
-		/>
+		<AgentPanel app="mail" phone sources={agentSources} onclose={() => setAgent(false)} />
 	</AgentSheet>
 {/if}
 

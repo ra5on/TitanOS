@@ -1,14 +1,6 @@
 <script lang="ts">
 	import PushDevices from '#lib/components/PushDevices.svelte';
-	import ProtectEmergency from '#lib/components/agent/features/ProtectEmergency.svelte';
-	import { api as protectApi } from '#lib/api.ts';
-	// PLAN 54: a person registered for the emergency access asks here, also
-	// without the KI-Agent.
-	let emergencyMe = $state(false);
-	void protectApi
-		.get<{ emergency?: boolean }>('/agent/protect/me')
-		.then((m) => (emergencyMe = !!m.emergency))
-		.catch(() => (emergencyMe = false));
+
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import PersonalNotifications from '#lib/components/PersonalNotifications.svelte';
@@ -466,11 +458,6 @@
 		<SoundSettings />
 	</SettingGroup>
 	{#if admin}<PersonalNotifications />{/if}
-	{#if emergencyMe}
-		<SettingGroup title={t('agent.f.menu.emergency')} id="emergency">
-			<div class="emergency"><ProtectEmergency /></div>
-		</SettingGroup>
-	{/if}
 {/if}
 
 {#if changingPassword && user}
@@ -649,15 +636,7 @@
 	.note {
 		font-size: var(--text-base);
 	}
-	/* The emergency access brings its own cards; they stand below the heading
-	   with the spacing the tile gave them. */
-	.emergency {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		min-width: 0;
-		font-size: var(--text-md);
-	}
+
 	.text {
 		font-size: var(--text-md);
 	}

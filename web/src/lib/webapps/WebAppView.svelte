@@ -14,6 +14,8 @@
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import { registerCloseGuard, wm } from '#lib/desktop/wm.svelte.ts';
 	import FileDialog from './FileDialog.svelte';
+	import OfficeHandoff from './OfficeHandoff.svelte';
+	import { activeNode } from '#lib/cluster-node.ts';
 	import { recentDocs, rememberDoc } from './recent.ts';
 	import { namesIn, readDoc, writeDoc } from './files.ts';
 	import {
@@ -537,6 +539,12 @@
 	ondragover={dragOver}
 	ondrop={drop}
 >
+	{#if current && phase === 'ready' && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
+		{#key current.doc.root + '/' + current.doc.path}<OfficeHandoff
+				doc={current.doc}
+				dirty={appDirty || unwritten || busy}
+			/>{/key}
+	{/if}
 	{#key reloads}
 		<iframe
 			bind:this={frame}
@@ -733,8 +741,10 @@
 		min-height: 0;
 		display: flex;
 		background: var(--bg);
+		flex-direction: column;
 	}
 	iframe {
+		min-height: 0;
 		flex: 1;
 		width: 100%;
 		height: 100%;

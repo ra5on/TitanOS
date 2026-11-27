@@ -163,12 +163,11 @@ func TestDocsBillDueOfferedOnce(t *testing.T) {
 	}
 }
 
-// Review 1.02: deleting an account left its own settings of the agent
-// (with the password of its mailbox) and its document memory; a new
-// account of the same name took them over, and the paperwork fetched the
-// former person's mail into the new person's folder.
-func TestDeletedAccountLeavesNoDocuments(t *testing.T) {
+// Seed a real historical document index. Reusing the login must create an empty
+// personal Agent account while preserving the dormant settings and index.
+func TestRecreatedAccountStartsWithoutArchivedDocuments(t *testing.T) {
 	ts, home := docsServer(t)
+	ts.server.opts.PersonalDataDir = t.TempDir()
 	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
 	ts.users.Create("gast", testPassword, "user")
 	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
@@ -191,21 +190,27 @@ func TestDeletedAccountLeavesNoDocuments(t *testing.T) {
 	if res, body := ts.request("DELETE", "/api/v1/users/gast", nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", res.StatusCode, body)
 	}
-	// The clearing runs in the background.
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if m, _ := ts.server.agentFeaturesOf("gast"); m.Paper.Mail.Password == "" {
-			break
-		}
+	if _, err := ts.users.Create("gast", testPassword, "user"); err != nil {
+		t.Fatal(err)
 	}
-	ts.users.Create("gast", testPassword, "user")
-	m2, _ := ts.server.agentFeaturesOf("gast")
-	if m2.Paper.Mail.Password != "" || m2.Paper.On || m2.Docs.On {
-		t.Fatalf("settings taken over: %+v", m2)
+	m2, err := ts.server.agentFeaturesOf("gast")
+	if err != nil || m.Paper.Mail.Password == "" || m2.Paper.Mail.Password != m.Paper.Mail.Password || !m2.Docs.On {
+		t.Fatal("legacy document settings were changed")
 	}
 	var idx docindex.Index
 	ts.server.docsRead("gast", docsIndexFile, &idx, maxDocsIndex)
-	if _, kept := idx.Get("share/KI-Agent", "Dokumente/Arzt.txt"); kept {
-		t.Fatal("document memory taken over")
+	if _, kept := idx.Get("share/KI-Agent", "Dokumente/Arzt.txt"); !kept {
+		t.Fatal("legacy index was modified")
+	}
+	fresh := ts.newClient()
+	ts.do(fresh, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	state := personalHTTP[struct{ Chats, Jobs []json.RawMessage }](t, ts, fresh, "GET", "/state", nil)
+	if len(state.Chats) != 0 || len(state.Jobs) != 0 {
+		t.Fatal("old activity imported into recreated account")
+	}
+	hits := personalHTTP[struct{ Chats, Jobs []json.RawMessage }](t, ts, fresh, "GET", "/search?q=Zahnarzt", nil)
+	if len(hits.Chats) != 0 || len(hits.Jobs) != 0 {
+		t.Fatal("archived index exposed in personal search")
 	}
 }
 

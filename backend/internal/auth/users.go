@@ -33,6 +33,11 @@ type User struct {
 	Role         Role      `json:"role"`
 	PasswordHash string    `json:"passwordHash"`
 	Created      time.Time `json:"created"`
+	// AccessRevision changes in the same durable write as a role or lock transition.
+	AccessRevision uint64 `json:"accessRevision,omitempty"`
+	// LocalAccessStamp binds consent to changes observed by this NAS when an
+	// imported account replaces a local one or a legacy peer reports a new version.
+	LocalAccessStamp string `json:"localAccessStamp,omitempty"`
 	// UID is the number of the Linux user with the same name. The system is
 	// rebuilt on every boot, so the number has to be kept here for files to
 	// keep their owner.
@@ -470,7 +475,10 @@ func (u *Users) SetRole(name string, role Role) (User, error) {
 				return err
 			}
 		}
-		user.Role = role
+		if user.Role != role {
+			user.AccessRevision++
+			user.Role = role
+		}
 		return nil
 	})
 }
@@ -548,6 +556,7 @@ func (u *Users) SetDisabled(name string, disabled bool, by string) (User, error)
 		default:
 			user.Disabled, user.DisabledAt, user.DisabledBy = false, time.Time{}, ""
 		}
+		user.AccessRevision++
 		return nil
 	})
 }

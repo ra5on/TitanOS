@@ -30,11 +30,12 @@ import (
 // files and roots the NAS files of an account (attachments from and to
 // them), whileLoginHolds ends the event stream with its login.
 type tmailArea struct {
-	mail            *tmail.Manager
-	users           *auth.Users
-	files           *files.Manager
-	roots           func(r *http.Request) []files.Root
-	whileLoginHolds func(r *http.Request, user auth.User) (context.Context, context.CancelFunc)
+	agentGrantChanged func(string)
+	mail              *tmail.Manager
+	users             *auth.Users
+	files             *files.Manager
+	roots             func(r *http.Request) []files.Root
+	whileLoginHolds   func(r *http.Request, user auth.User) (context.Context, context.CancelFunc)
 	// contactsFor gives the addresses of the account's contacts that match
 	// q (TECHNIK 7.4, pim/store); nil without calendars and contacts.
 	contactsFor func(user, q string) []tmail.Contact
@@ -46,7 +47,7 @@ type tmailArea struct {
 
 // tmailArea is the area of the server.
 func (s *Server) tmailArea() tmailArea {
-	a := tmailArea{mail: s.opts.Mail, users: s.opts.Users, files: s.opts.Files, roots: s.filesArea().requestRoots,
+	a := tmailArea{agentGrantChanged: s.personalEntitlementsChanged, mail: s.opts.Mail, users: s.opts.Users, files: s.opts.Files, roots: s.filesArea().requestRoots,
 		whileLoginHolds: s.whileLoginHolds}
 	if pim := s.opts.PIM; pim != nil {
 		a.contactsFor = func(user, q string) []tmail.Contact {
@@ -214,6 +215,7 @@ func (a tmailArea) handleGrantSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, target.Name)
+	changed := a.mail.Granted(target.Name) != req.Enabled
 	if err := a.mail.SetAllowed(target.Name, req.Enabled); err != nil {
 		if errors.Is(err, tmail.ErrUnreadable) {
 			writeMailError(w, err)
@@ -222,6 +224,9 @@ func (a tmailArea) handleGrantSet(w http.ResponseWriter, r *http.Request) {
 		slog.Error("T-Mail grant not saved", "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the setting could not be saved to /config")
 		return
+	}
+	if changed && a.agentGrantChanged != nil {
+		a.agentGrantChanged(target.Name)
 	}
 	slog.Info("T-Mail grant changed", "account", target.Name, "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": a.mail.Granted(target.Name)})
@@ -449,6 +454,7 @@ func (s *Server) mailForgetUser(name string) {
 // mailRoleChanged ends the connections of an account whose role (or lock)
 // changed: they are made anew with the rules of the role.
 func (s *Server) mailRoleChanged(name string) {
+	s.personalEntitlementsChanged(name)
 	if s.opts.Mail != nil {
 		s.opts.Mail.RoleChanged(name)
 	}

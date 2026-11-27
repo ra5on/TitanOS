@@ -55,9 +55,7 @@ type clusterArea struct {
 	// The KI-Agent's data of an account another node deleted goes as for
 	// one deleted here (agent_forget.go, 1.03); an account taken over anew
 	// does not inherit what an earlier one of its name left.
-	agentForgetSettings, agentForgetLeftovers func(name string)
-	agentForgetUser                           func(name string)
-	goJob                                     jobFunc
+	forgetAgent func(auth.User)
 	// mailForgetUser: T-Mail of an account deleted elsewhere goes, and an
 	// account taken over anew does not inherit an earlier one's.
 	mailForgetUser func(name string)
@@ -80,7 +78,7 @@ func (s *Server) clusterArea() clusterArea {
 		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
 		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV,
 		nvrForgetUser: s.nvrArea().nvrForgetUser, whileLoginHolds: s.whileLoginHolds,
-		agentForgetSettings: s.agentForgetSettings, agentForgetLeftovers: s.agentForgetLeftovers, agentForgetUser: s.agentForgetAccount, goJob: s.goJob, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged, appVPNPrune: s.appVPNPrune,
+		forgetAgent: s.forgetPersonalAccount, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged, appVPNPrune: s.appVPNPrune,
 		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser}
 }
 
@@ -620,15 +618,13 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 		if a.nvrForgetUser != nil {
 			a.nvrForgetUser(name)
 		}
-		if a.agentForgetSettings != nil {
-			a.agentForgetSettings(name)
-			a.goJob(func(context.Context) { a.agentForgetUser(name) })
+		if a.forgetAgent != nil && existed {
+			a.forgetAgent(before)
 		}
-	case a.agentForgetLeftovers != nil && (!existed || !before.Created.Equal(after.Created)):
-		// A new account of this name (or one that replaced it elsewhere):
-		// nothing of an earlier one goes to it. Runs in the sync of the
-		// cluster, before the account can use the agent here.
-		a.agentForgetLeftovers(name)
+	case !existed || !before.Created.Equal(after.Created):
+		if existed && a.forgetAgent != nil {
+			a.forgetAgent(before)
+		}
 		if existed {
 			a.sessions().DeleteUser(name, "")
 			a.forgetWebDAV(name)

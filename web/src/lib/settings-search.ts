@@ -45,7 +45,7 @@ const keywords: Record<string, string> = {
 		'dienste services docker vm vms virtuelle maschinen lxc container ausschalten abschalten aus off',
 	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	agent:
-		'ki agent assistent ai ollama chat projekte modell denken kontext rechte ablageorte gedächtnis skills zeitplan home assistant assist',
+		'ki agent assistent ai konten benutzer obergrenze maximum freigaben berechtigungen konto rechte permissions user policy grants mail dateien kalender',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate automatisch automatic webui zertifizierungsstelle certificate authority ca installieren install',
 	viewer:
@@ -251,7 +251,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'homeassistant', label: 'ha.title', group: 'smarthome', icon: 'home', admin: true },
 	{
 		id: 'agent',
-		label: 'agent.settingsTitle',
+		label: 'pa.admin',
 		group: 'smarthome',
 		icon: 'sparkle',
 		admin: true,

@@ -124,6 +124,8 @@ func Synthesize(ctx context.Context, addr, text, voice string) (Audio, error) {
 		return Audio{}, err
 	}
 	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
 	req := map[string]any{"text": text}
 	if voice != "" {
 		req["voice"] = map[string]string{"name": voice}
@@ -169,6 +171,8 @@ func Transcribe(ctx context.Context, addr string, audio Audio, language string) 
 		return "", err
 	}
 	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
 	req := map[string]any{}
 	if language != "" && language != "auto" {
 		req["language"] = language

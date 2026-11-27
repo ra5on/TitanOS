@@ -24,8 +24,7 @@
 	import { dockerPrograms, sources } from './sources.svelte.ts';
 	import { session } from '../session.svelte.ts';
 	import BusyFigure from '../components/agent/BusyFigure.svelte';
-	import { DOT_SIZES } from '../agent.ts';
-	import { agentLook, lookCalm } from '../agent-look.svelte.ts';
+	import { openPersonalAgent } from '../personal-agent/open.ts';
 
 	let {
 		kind,
@@ -123,56 +122,31 @@
 		);
 	});
 
-	// 0.92: the KI-Agent – its chats that wait for the person or run, the
-	// last answer, and a field whose question opens the agent with it. Asked
-	// every 20 seconds while the widget is there; titand answers the list of
-	// chats from the RAM, no disk wakes for it.
-	type AgentChat = {
-		id: string;
-		title: string;
-		state: string;
-		preview?: string;
-		updated: string;
-		archived?: boolean;
-		author?: string;
-	};
-	let agent = $state<{ on: boolean; chats: AgentChat[] } | null>(null);
+	type Activity = { id: string; title: string; status: string; updated: string };
+	let agent = $state<{ on: boolean; jobs: Activity[] } | null>(null);
 	let agentAsk = $state('');
 	$effect(() => {
-		if (kind !== 'agent') return;
-		const load = async () => {
-			try {
-				const st = await api.get<{ enabled?: boolean; allowed?: boolean }>('/agent/status');
-				if (!st.enabled || !st.allowed) {
-					agent = { on: false, chats: [] };
-					return;
+		const account = session.data?.user?.name;
+		agent = null;
+		agentAsk = '';
+		if (kind !== 'agent' || !account) return;
+		return poll(
+			async (signal) => {
+				try {
+					const result = await api.get<{ jobs: Activity[] }>('/personal-agent/activity', signal);
+					if (!signal.aborted && session.data?.user?.name === account)
+						agent = { on: true, jobs: result.jobs ?? [] };
+				} catch {
+					if (!signal.aborted && session.data?.user?.name === account)
+						agent = { on: false, jobs: [] };
 				}
-				const r = await api.get<{ chats?: AgentChat[] }>('/agent/chats');
-				agent = { on: true, chats: (r.chats ?? []).filter((c) => !c.archived && !c.author) };
-			} catch {
-				agent = { on: false, chats: [] };
-			}
-		};
-		void load();
-		const timer = setInterval(load, 20000);
-		return () => clearInterval(timer);
+			},
+			{ interval: 20000 },
+		);
 	});
-	const agentWaiting = $derived((agent?.chats ?? []).filter((c) => c.state === 'waiting'));
-	const agentRunning = $derived((agent?.chats ?? []).filter((c) => c.state === 'running'));
-	// 1.06: a running chat shows the chat's figure in the colour and size of
-	// the agent's settings (agent-look.svelte.ts: this browser's copy, the
-	// NAS only when there is none).
-	$effect(() => {
-		if (kind === 'agent') agentLook.start();
-	});
-	$effect(() => {
-		if (agentRunning.length) agentLook.need();
-	});
-	const agentLast = $derived(
-		[...(agent?.chats ?? [])]
-			.filter((c) => c.preview && c.state !== 'running' && c.state !== 'waiting')
-			.sort((a, b) => b.updated.localeCompare(a.updated))[0],
-	);
+	const agentWaiting = $derived(agent?.jobs.filter((j) => j.status === 'waiting') ?? []);
+	const agentRunning = $derived(agent?.jobs.filter((j) => j.status === 'running') ?? []);
+	const agentLast = $derived(agent?.jobs.find((j) => j.status === 'done'));
 
 	type Entity = { id: string; name: string; state: string; domain: string; area?: string };
 	let entities = $state<Entity[] | null>(null);
@@ -565,8 +539,13 @@
 			onsubmit={(e) => {
 				e.preventDefault();
 				const text = agentAsk.trim();
+				const owner = session.data?.user?.name;
 				agentAsk = '';
-				onopen('app:agent', text ? '/agent?ask=' + encodeURIComponent(text) : '/agent');
+				if (!text) onopen('app:agent', '/agent');
+				else
+					void openPersonalAgent({ sources: [], prompt: text }).catch(() => {
+						if (owner && session.data?.user?.name === owner) agentAsk = text;
+					});
 			}}
 		>
 			<input
@@ -581,7 +560,7 @@
 			<button
 				type="button"
 				class="list-row"
-				onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(c.id))}
+				onclick={() => onopen('app:agent', '/agent?job=' + encodeURIComponent(c.id))}
 			>
 				<span class="ag-ring" aria-hidden="true"></span>
 				<span class="ellipsis grow">{c.title}</span>
@@ -592,19 +571,9 @@
 			<button
 				type="button"
 				class="list-row"
-				onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(c.id))}
+				onclick={() => onopen('app:agent', '/agent?job=' + encodeURIComponent(c.id))}
 			>
-				<span
-					class="ag-fig"
-					data-agent-figure
-					style:--ag-dots={agentLook.value.dotColor || null}
-					style:--ag-dot-size="{DOT_SIZES[agentLook.value.dotSize]}px"
-					><BusyFigure
-						mode={agentLook.value.dotMode}
-						kind=""
-						calm={lookCalm(agentLook.value)}
-					/></span
-				>
+				<span class="ag-fig" data-agent-figure><BusyFigure calm /></span>
 				<span class="ellipsis grow">{c.title}</span>
 				<span class="state on">{t('desktop.widget.agentRuns')}</span>
 			</button>
@@ -614,11 +583,9 @@
 				<button
 					type="button"
 					class="ag-last"
-					onclick={() => onopen('app:agent', '/agent?chat=' + encodeURIComponent(agentLast.id))}
+					onclick={() => onopen('app:agent', '/agent?job=' + encodeURIComponent(agentLast.id))}
 				>
 					<strong class="ellipsis">{agentLast.title}</strong>
-					<!-- The start of the chat; the whole one opens with a click (PLAN 76 exception). -->
-					<span data-cut="excerpt">{agentLast.preview}</span>
 				</button>
 			{:else}
 				<p class="muted small">{t('desktop.widget.agentIdle')}</p>
@@ -727,15 +694,7 @@
 	.ag-last:hover {
 		background: color-mix(in srgb, var(--text) 6%, transparent);
 	}
-	.ag-last span {
-		color: var(--muted);
-		font-size: var(--text-sm);
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
+
 	.cam {
 		position: absolute;
 		inset: 0;

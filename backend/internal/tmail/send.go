@@ -30,6 +30,12 @@ type File struct {
 // Outgoing is a mail to send or to keep as a draft. From is always the
 // address of the mailbox.
 type Outgoing struct {
+	// ExpectedFrom binds an approved native draft to the sender identity
+	// of the mailbox snapshot actually used by compose and SMTP.
+	ExpectedFrom *Address
+	// Authorize is optional for native T-Mail. Agent callers supply a new
+	// broker check just before SMTP DATA and subsequent mailbox effects.
+	Authorize   func(context.Context) error
 	To, Cc, Bcc []Address
 	Subject     string
 	Text        string
@@ -60,6 +66,11 @@ type SendResult struct {
 	// SentCopy: a copy lies in the sent folder (by titand or, as with
 	// Gmail, by the provider).
 	SentCopy bool `json:"sentCopy"`
+	// ProviderFilesSent means the provider handles filing. No IMAP APPEND
+	// acknowledgement for a Sent copy was obtained in this case.
+	ProviderFilesSent bool      `json:"providerFilesSent,omitempty"`
+	MessageID         string    `json:"messageId,omitempty"`
+	AcceptedAt        time.Time `json:"acceptedAt"`
 }
 
 // checkAddresses cleans the recipients: real addresses, one line each.
@@ -225,7 +236,7 @@ func msgIDs(value string, max int) []string {
 
 // smtpSend hands a mail to the SMTP server of a mailbox; without data it
 // only logs in (the check of the settings).
-func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, password, from string, rcpt []string, data []byte) error {
+func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, password, from string, rcpt []string, data []byte, authorize func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
 	raw, err := m.dial(ctx, user, mb.SMTP)
@@ -239,14 +250,11 @@ func (m *Manager) smtpSend(ctx context.Context, user string, mb Mailbox, passwor
 	_ = conn.SetDeadline(time.Now().Add(sendTimeout)) // a failure shows in the next read or write
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	err = m.smtpTalk(ctx, conn, user, mb, password, from, rcpt, data)
-	if conn.tooLarge() {
-		return ErrTooLarge
-	}
-	return err
+	err = m.smtpTalk(ctx, conn, user, mb, password, from, rcpt, data, authorize)
+	return smtpBudgetOutcome(data != nil, err, conn.tooLarge())
 }
 
-func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, mb Mailbox, password, from string, rcpt []string, data []byte) error {
+func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, mb Mailbox, password, from string, rcpt []string, data []byte, authorize func(context.Context) error) error {
 	var c *smtp.Client
 	var err error
 	cfg := m.tlsConfig(mb.SMTP.Host)
@@ -286,23 +294,56 @@ func (m *Manager) smtpTalk(ctx context.Context, conn *budgetConn, user string, m
 	}
 	m.succeeded(user, conn.RemoteAddr())
 	if data != nil {
+		if authorize != nil {
+			if err := authorize(ctx); err != nil {
+				return err
+			}
+		}
 		if err := c.SendMail(from, rcpt, bytes.NewReader(data)); err != nil {
-			return smtpError(ctx, err)
+			return smtpSubmissionError(ctx, err)
 		}
 	}
 	_ = c.Quit() // the mail is accepted; a failing goodbye changes nothing
 	return nil
 }
 
+// ErrSMTPUnconfirmed keeps an ambiguous post-submission failure distinct from a refusal.
+var ErrSMTPUnconfirmed = errors.New("SMTP submission outcome unconfirmed")
+
+// Once SendMail starts, a transport/protocol failure may follow an accepted
+// DATA. Only a complete, explicit negative SMTP response proves rejection.
+func smtpSubmissionError(ctx context.Context, cause error) error {
+	err := smtpError(ctx, cause)
+	if errors.Is(err, ErrSMTPRejected) {
+		return err
+	}
+	return errors.Join(ErrSMTPUnconfirmed, err)
+}
+func smtpBudgetOutcome(submission bool, err error, exceeded bool) error {
+	if !exceeded {
+		return err
+	}
+	if submission && (err == nil || errors.Is(err, ErrSMTPRejected)) {
+		return err
+	}
+	if errors.Is(err, ErrSMTPUnconfirmed) {
+		return errors.Join(ErrSMTPUnconfirmed, ErrTooLarge)
+	}
+	return ErrTooLarge
+}
+
+// ErrSMTPRejected identifies a complete negative response from the SMTP peer.
+var ErrSMTPRejected = errors.New("SMTP rejected the message")
+
 // smtpError keeps the answer of the server (never a password: none is in
 // it) for the person.
 func smtpError(ctx context.Context, err error) error {
+	var smtpErr *smtp.SMTPError
+	if errors.As(err, &smtpErr) && smtpErr.Code >= 400 && smtpErr.Code < 600 {
+		return fmt.Errorf("%w: %w: %d %s", ErrSendFailed, ErrSMTPRejected, smtpErr.Code, safeText(smtpErr.Message))
+	}
 	if ctx.Err() != nil {
 		return ErrTimeout
-	}
-	var smtpErr *smtp.SMTPError
-	if errors.As(err, &smtpErr) {
-		return fmt.Errorf("%w: %d %s", ErrSendFailed, smtpErr.Code, safeText(smtpErr.Message))
 	}
 	if c := classify(err); errors.Is(c, ErrTimeout) || errors.Is(c, ErrTLS) {
 		return c
@@ -320,6 +361,9 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	if err != nil {
 		return SendResult{}, err
 	}
+	if want := out.ExpectedFrom; want != nil && (want.Name != mb.SenderName || !strings.EqualFold(want.Addr, mb.Email)) {
+		return SendResult{}, invalid("mailbox identity changed since approval")
+	}
 	if m.authFailed(user, mb) {
 		return SendResult{}, ErrAuthFailed
 	}
@@ -331,26 +375,44 @@ func (m *Manager) Send(ctx context.Context, user, id string, out Outgoing) (Send
 	if err != nil {
 		return SendResult{}, err
 	}
-	if err := m.smtpSend(ctx, user, mb, password, mb.Email, rcpt, data); err != nil {
+	if err := m.smtpSend(ctx, user, mb, password, mb.Email, rcpt, data, out.Authorize); err != nil {
 		if errors.Is(err, ErrAuthFailed) {
 			m.setAuthFailed(user, mb)
 		}
 		return SendResult{}, err
 	}
+
+	result := SendResult{AcceptedAt: m.clock().UTC()}
+	if wire, err := mail.ReadMessage(bytes.NewReader(data)); err == nil {
+		result.MessageID = wire.Header.Get("Message-ID")
+	}
+	canContinue := func() bool { return out.Authorize == nil || out.Authorize(ctx) == nil }
+	if !canContinue() {
+		return result, nil
+	}
 	m.learn(user, append(append(append([]Address{}, out.To...), out.Cc...), out.Bcc...))
-	result := SendResult{}
 	var answered, forwarded *MailRef
 	// The copy and the draft after the mail went out: their failure does
 	// not make the mail unsent.
 	err = m.withIMAP(context.WithoutCancel(ctx), user, id, commandTimeout, func(c *imapclient.Client, s *session) error {
+		if !canContinue() {
+			return nil
+		}
 		if c.Caps().Has("X-GM-EXT-1") {
-			result.SentCopy = true // Gmail keeps the copy itself
+			result.SentCopy = true // traditional T-Mail filing status
+			result.ProviderFilesSent = true
 		} else if sent, err := folderOf(c, RoleSent, "Sent", true); err == nil {
+			if !canContinue() {
+				return nil
+			}
 			if _, err := appendMail(c, sent, data, []imap.Flag{imap.FlagSeen}); err == nil {
 				result.SentCopy = true
 			} else {
 				slog.Warn("T-Mail: copy of a sent mail not kept", "account", user, "code", Code(err))
 			}
+		}
+		if !canContinue() {
+			return nil
 		}
 		if out.DraftUID != 0 {
 			removeDraft(c, s, out.DraftUID)

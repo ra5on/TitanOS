@@ -39,6 +39,7 @@ func (w *titand) wireAPI() error {
 		return w.recorder.Diagnosis(ctx)
 	}
 	w.handler = api.New(api.Options{
+		PersonalDataDir:    personalDevData(w.opts),
 		Media:              w.mediaImports,
 		UI:                 webui.FS(),
 		Store:              w.store,
@@ -129,14 +130,12 @@ func (w *titand) wireAPI() error {
 		_ = w.handler.Close() // cleanup, best effort: nothing more can be done if it fails
 	})
 
+	w.startPersonalBroker(ctx)
+
 	// Old Craft apps give way to the T-apps by themselves (PLAN 75-20).
 	w.background(func() { w.handler.RunCraftReplacement(ctx) })
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })
-	// Leftovers of the AI chat removed in 0.41.0, once.
-	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
-	// The KI-Agent: interrupted runs, recurring tasks, triggers.
-	w.background(func() { w.handler.AgentScheduler(ctx) })
 	w.background(func() { w.logs.Run(ctx) })
 	if !w.opts.dev {
 		w.background(func() { w.stick.Follow(ctx) })

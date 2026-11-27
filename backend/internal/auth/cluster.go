@@ -1,5 +1,7 @@
 package auth
 
+import "crypto/rand"
+
 // Accounts of a cluster: every node keeps the same accounts. The cluster
 // package takes them over from the other nodes with Import and Forget; the
 // Linux user number stays that of this node, since files on its volumes
@@ -31,6 +33,15 @@ func (u *Users) Import(user User) (before User, existed bool, err error) {
 	before, existed = u.users[user.Name]
 	if existed {
 		user.UID = before.UID
+		// Keep the authoritative peer revision exactly as received. A separate
+		// local stamp prevents an imported counter (possibly zero or lower)
+		// from resurrecting a grant made for this NAS's previous account.
+		if user.LocalAccessStamp == "" {
+			user.LocalAccessStamp = before.LocalAccessStamp
+			if user.Role != before.Role || user.Disabled != before.Disabled || user.AccessRevision != before.AccessRevision {
+				user.LocalAccessStamp = rand.Text()
+			}
+		}
 	} else {
 		user.UID = nextUID(u.users)
 	}

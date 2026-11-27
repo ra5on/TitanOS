@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { loadPersonalDraft } from '#lib/personal-agent/pim.ts';
 	// 1.11: a new or changed event of T-Kalender (drafts 05, 06, 43, 44). On
 	// the desktop a window of its own like writing in T-Mail (taskPage), on
 	// the phone a page with the fields one below the other. Title, calendar
@@ -88,7 +89,7 @@
 	import DeleteEventDialog from '#lib/pim/cal/DeleteEventDialog.svelte';
 	import ScopeChoices from '#lib/pim/cal/ScopeChoices.svelte';
 	import { shellOfError } from '#lib/pim/shell.ts';
-	import { eventDraftForm, loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
+	import { eventDraftForm, type AgentDraft } from '#lib/agent/drafts.ts';
 	import type { Simple } from '#lib/pim/calendar.ts';
 
 	const phone = $derived(phoneView());
@@ -101,7 +102,7 @@
 	let editId = $state(params.get('id') ?? '');
 	let editOcc = $state(params.get('occurrence') ?? '');
 	const editing = $derived(!!(editCal && editId));
-	const draftParam = params.get('agentDraft');
+	const draftParam = params.get('personalDraft');
 	/** A draft was put in ('applied') or could not be opened ('gone'). */
 	let fromAgent = $state<'' | 'applied' | 'gone'>('');
 	let draftRule: Simple | null = null;
@@ -241,7 +242,7 @@
 			[calendars, nasZone, got] = await Promise.all([
 				loadCalendars(),
 				loadNasZone(),
-				draftParam ? loadAgentDraft(draftParam) : Promise.resolve(null),
+				draftParam ? loadPersonalDraft(draftParam) : Promise.resolve(null),
 			]);
 			const draft = got?.app === 'calendar' && got.kind === 'event' ? got : null;
 			if (draftParam && !draft) fromAgent = 'gone';

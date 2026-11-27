@@ -87,6 +87,11 @@ func newTestServer(t *testing.T) *testServer {
 // newTestServerWith is newTestServer with a last change to the options.
 func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 	t.Helper()
+	return testServerRoutes(t, change, true)
+}
+
+func testServerRoutes(t *testing.T, change func(*Options), legacyCompatibility bool) *testServer {
+	t.Helper()
 	store := config.Open(t.TempDir())
 	users := auth.NewUsers(store)
 	if err := users.Load(); err != nil {
@@ -103,13 +108,24 @@ func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 	homes.Load()
 	notifier.SetHomeAssistant(homes)
 	opts := Options{
-		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store), Netbird: disabledNetbird(store),
+		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(t.Context()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store), Netbird: disabledNetbird(store),
 		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, HomeAssistants: homes, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3", LetsEncrypt: disabledLetsEncrypt(store), DDNS: disabledDDNS(store),
 	}
 	if change != nil {
 		change(&opts)
 	}
 	handler := New(opts)
+	// Mount the retired API only on compatibility-test servers. Production has
+	// no switch for restoring its routes, event observers or cluster handler.
+	if legacyCompatibility {
+		handler.registerAgent(&routeMux{ServeMux: handler.mux})
+		if opts.Notify != nil {
+			opts.Notify.Observer = handler.agentObserve
+		}
+		if opts.Cluster != nil {
+			opts.Cluster.Agent = handler.agentClusterHandler()
+		}
+	}
 	if err := handler.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -637,7 +653,7 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)
-	handler := New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: fakePower{}})
+	handler := New(Options{UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(t.Context()), Storage: storage.NewManager(store), Shares: shares.NewManager(store), Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: loadedNotify(store), ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: disabledUpdate(store), Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: fakePower{}})
 	// The stick is missing: its settings cannot be read, the server runs anyway.
 	_ = handler.Start(t.Context())
 	defer handler.Close()

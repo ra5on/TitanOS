@@ -131,7 +131,7 @@ func (m *Manager) CheckSettings(ctx context.Context, user, id string, in Mailbox
 	} else {
 		out.IMAP.Code = code(err)
 	}
-	if err := m.smtpSend(ctx, user, mb, password, "", nil, nil); err == nil {
+	if err := m.smtpSend(ctx, user, mb, password, "", nil, nil, nil); err == nil {
 		out.SMTP.OK = true
 	} else {
 		out.SMTP.Code = code(err)

@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { openAgent } from '#lib/agent-app.ts';
-	import { api } from '#lib/api.ts';
-	import { goto } from '$app/navigation';
+	import { openPersonalAgent } from '#lib/personal-agent/open.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { page } from '$app/state';
 	import { noticeLink } from '#lib/notice-link.ts';
@@ -30,18 +28,12 @@
 	// The IDs "delete all" would remove, while its confirmation is open.
 	let confirmAll = $state<number[] | null>(null);
 	let trigger = $state<HTMLButtonElement>();
-	// "Agent ansehen lassen" (PLAN 44): a chat of the KI-Agent about this
-	// notification; the agent looks and reports, changes follow its rules.
-	async function askAgent(title: string, text: string, kind: string, subject?: string) {
+	async function askAgent() {
 		try {
-			const chat = await api.post<{ id: string }>('/agent/chats', {
-				message: t('notify.askAgentMessage', { title, text, kind, subject: subject ?? '' }),
-			});
+			await openPersonalAgent({ sources: [], tool: 'backup.status' });
 			open = false;
-			openAgent(`/agent?chat=${chat.id}`, goto);
-		} catch {
-			// The agent page explains what is missing.
-			openAgent('/agent', goto);
+		} catch (e) {
+			error = apiErrorText(e);
 		}
 	}
 
@@ -211,11 +203,10 @@
 									{#if href}<a class="notice-link" {href} onclick={() => (open = false)}
 											>{t('ui.open')}</a
 										>{/if}
-									{#if session.services.agent}<button
+									{#if session.services.agent && notice.kind.startsWith('backup_') && ['admin', 'owner'].includes(session.data?.user?.role ?? '')}<button
 											type="button"
 											class="notice-link as-link"
-											onclick={() => askAgent(text.title, text.text, notice.kind, notice.subject)}
-											>{t('notify.askAgent')}</button
+											onclick={askAgent}>{t('notify.askAgent')}</button
 										>{/if}
 									{#if notice.subject}<a
 											class="notice-link"

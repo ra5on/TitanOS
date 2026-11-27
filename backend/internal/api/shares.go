@@ -61,14 +61,15 @@ func writeShareError(w http.ResponseWriter, err error) {
 // vms, docker and backup say what still uses the data of a share (nil: not
 // asked); notify and record report the end of a deletion with its data.
 type sharesArea struct {
-	shares  *shares.Manager
-	storage *storage.Manager
-	users   *auth.Users
-	vms     *vm.Manager
-	docker  *docker.Manager
-	backup  *backup.Manager
-	notify  *notify.Manager
-	record  recordFunc
+	agentGrantChanged func(string)
+	shares            *shares.Manager
+	storage           *storage.Manager
+	users             *auth.Users
+	vms               *vm.Manager
+	docker            *docker.Manager
+	backup            *backup.Manager
+	notify            *notify.Manager
+	record            recordFunc
 	// guardHeld refuses a save that would lift the lock of the KI-Agent's
 	// ransomware guard; on success the caller saves, then calls release.
 	guardHeld func(name string, share shares.Share) (release func(), err error)
@@ -76,7 +77,7 @@ type sharesArea struct {
 
 // sharesArea is the area of the server.
 func (s *Server) sharesArea() sharesArea {
-	return sharesArea{shares: s.opts.Shares, storage: s.opts.Storage, users: s.opts.Users, vms: s.opts.VMs, docker: s.opts.Docker,
+	return sharesArea{agentGrantChanged: s.personalEntitlementsChanged, shares: s.opts.Shares, storage: s.opts.Storage, users: s.opts.Users, vms: s.opts.VMs, docker: s.opts.Docker,
 		backup: s.opts.Backup, notify: s.opts.Notify, record: s.recordActivity, guardHeld: s.guardShareHeld}
 }
 
@@ -161,6 +162,9 @@ func (a sharesArea) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	if a.agentGrantChanged != nil {
+		a.agentGrantChanged("")
+	}
 	slog.Info("share changed", "share", name, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -171,6 +175,9 @@ func (a sharesArea) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	if err := a.shares.Delete(name); err != nil {
 		writeShareError(w, err)
 		return
+	}
+	if a.agentGrantChanged != nil {
+		a.agentGrantChanged("")
 	}
 	slog.Info("share deleted (files kept)", "share", name, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)

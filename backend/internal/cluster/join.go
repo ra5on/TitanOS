@@ -80,7 +80,7 @@ func parseJoinInfo(text string) (joinInfo, error) {
 
 // accountVersion describes the account as this node has it now.
 func accountVersion(user auth.User, node string, at time.Time) AccountVersion {
-	return AccountVersion{Hash: accountHash(user), Time: at.UnixNano(), Node: node}
+	return AccountVersion{Hash: accountHash(user), GrantRevision: accountGrantRevision(user), Time: at.UnixNano(), Node: node}
 }
 
 // Create starts a cluster with this node as its only member.
@@ -253,7 +253,7 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 		state.Accounts = map[string]AccountVersion{}
 	}
 	for _, user := range res.Accounts {
-		if m.importAccount(user) != nil {
+		if m.importAccount(user, state.Accounts[user.Name]) != nil {
 			// Without its version the admin node sends it again.
 			delete(state.Accounts, user.Name)
 		}
@@ -271,8 +271,20 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 // importAccount takes over an account of the cluster and lets Applied
 // follow up. An error means the account here is unchanged: its version
 // must not be noted, or the admin node would never send it again.
-func (m *Manager) importAccount(user auth.User) error {
-	if current, ok := m.Users.Get(user.Name); ok && accountHash(current) == accountHash(user) {
+func (m *Manager) importAccount(user auth.User, v AccountVersion) error {
+	user.LocalAccessStamp = "" // never accept another NAS's local stamp
+	if v.GrantRevision != "" && accountGrantRevision(user) != v.GrantRevision {
+		return ErrInvalid
+	}
+	if v.GrantRevision == "" && v.Time > 0 {
+		// Legacy peers cannot report a dedicated rights generation. A newer
+		// authenticated account version invalidates prior consent conservatively,
+		// even if the final role and account bytes are the same again.
+		user.AccessRevision = 0
+		user.LocalAccessStamp = fmt.Sprintf("legacy:%s:%d", v.Node, v.Time)
+	}
+	if current, ok := m.Users.Get(user.Name); ok && accountHash(current) == accountHash(user) &&
+		current.AccessRevision == user.AccessRevision && (user.LocalAccessStamp == "" || current.LocalAccessStamp == user.LocalAccessStamp) {
 		return nil
 	}
 	before, existed, err := m.Users.Import(user)

@@ -74,6 +74,10 @@ func uiHandler(ui fs.FS, frames ...func() []string) http.Handler {
 	}
 	agentIndex := sync.OnceValues(func() ([]byte, error) { return agentIndexHTML(ui) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == assistPrefix || strings.HasPrefix(r.URL.Path, assistPrefix+"/") {
+			http.NotFound(w, r)
+			return
+		}
 		// PLAN 70: the share target of the installed web app. The service
 		// worker takes the shared files in the browser; a POST that reaches
 		// the NAS (worker not active yet) is never read and goes to the page,

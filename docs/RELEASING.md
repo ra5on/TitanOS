@@ -157,9 +157,13 @@ Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
 
 - **interrupted** schaltet die Wegwerf-VM während des Downloads von
   `filesystem.squashfs` aus. Die bereits auf FAT geschriebenen Bytes werden
-  mit dem angebotenen System verglichen. Nach dem Start aus Slot A prüft das
-  Skript die Version, die auf dem Stick gespeicherte Auswahl des
-  Agent-Volumes und liest dieselbe Testdatei erneut über SMB.
+  mit dem angebotenen System verglichen. Schon vor der Installation startet
+  der Gast einmal sauber neu und liest die gespeicherte SMB-Datei vollständig.
+  Unmittelbar vor dem Update schreibt und liest er eine zweite SMB-Datei.
+  Nach dem Stromausfall prüft das Skript den Start von Slot A, Version,
+  Freigabekonfiguration auf dem Stick und beide Dateien mit jeweils 32768
+  ursprünglichen Bytes über SMB. Bei einem Fehler protokolliert es SMB-Status, Mountzustand und
+  einen unabhängigen Leseversuch über die Dateien-API.
 - **network** setzt über die Netzwerk-Einstellungen nacheinander eine falsche
   Verwaltungs-IP, ein VLAN ohne Gegenstelle und eine Bridge am isolierten
   Port. Nach jeder unbestätigten Probe müssen die alte IPv4-Adresse, die
@@ -178,6 +182,18 @@ Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
   Mount, der nie kommt, über die Kommandozeile des Releases).
   `titanos-trial-watchdog.timer` startet es jeweils nach 30 Minuten neu, nach
   drei Starts läuft das System von vorher.
+
+Der zusätzliche UEFI-Lauf `--scenarios good --agent-cutover-from 1.34.0`
+startet vom veröffentlichten Installations-ZIP des Vorgängers. Er prüft die
+Release-Signaturen von ZIP und Manifest sowie den Hash des laufenden titand.
+Erst im laufenden Wegwerfgast erhält der vorhandene Update-Prüfer den
+öffentlichen Schlüssel des Probelaufs. Der Kandidat bekommt für diesen Test
+eine höhere Versionsnummer und wird über die normale Update-API installiert.
+Der Vorgänger erzeugt selbst einen Chat, einen ausgeführten Erinnerungsauftrag
+und einen aktiven Zeitplan. Nach dem Neustart prüft der Test die Dateien des
+Alt-Agenten über die nächste Fälligkeit hinweg, einen abgeschlossenen Auftrag
+des persönlichen Dienstes und den Lesezugriff auf die SMB-Freigabe. Das
+Serienprotokoll steht unter `out/system-update-smoke-agent-cutover.log`.
 
 Mit SeaBIOS/GRUB (`--firmware bios`) laufen im Workflow `good` und `nostart`;
 das Skript kann dort alle vier (`--scenarios`).

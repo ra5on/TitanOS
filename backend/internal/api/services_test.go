@@ -109,23 +109,17 @@ func TestServicesStateShowsCalendarAndContacts(t *testing.T) {
 			}
 		}
 	}
-	// From the start: calendar and contacts for everyone; T-Mail and the
-	// agent for nobody (both off from the start, for the owner too).
+	// The new Agent shell and PIM are personal account features. Native mail
+	// resources still require their independent application grant.
 	expect("start", map[string][4]bool{
-		"alex": {true, true, false, false}, "ada": {true, true, false, false},
-		"bea": {true, true, false, false}, "dora": {true, true, false, false},
+		"alex": {true, true, false, true}, "ada": {true, true, false, true},
+		"bea": {true, true, false, true}, "dora": {true, true, false, true},
 	})
-	// T-Mail released for ada and bea; the agent switched on for bea (the
-	// owner always has it, ada was not released).
 	ts.grantMail("ada")
 	ts.grantMail("bea")
-	if res, body := ts.request("PUT", "/api/v1/agent/settings", map[string]any{"enabled": true, "ollama": "http://127.0.0.1:1", "model": "m", "users": []string{"bea"}}); res.StatusCode != http.StatusOK {
-		t.Fatalf("agent on: %d %s", res.StatusCode, body)
-	}
-	ts.server.shareSyncs.Wait()
 	expect("released", map[string][4]bool{
-		"alex": {true, true, false, true}, "ada": {true, true, true, false},
-		"bea": {true, true, true, true}, "dora": {true, true, false, false},
+		"alex": {true, true, false, true}, "ada": {true, true, true, true},
+		"bea": {true, true, true, true}, "dora": {true, true, false, true},
 	})
 	// Release taken back: T-Mail goes, calendar and contacts stay.
 	ts.request("PUT", "/api/v1/users/bea/mail", map[string]bool{"enabled": false})

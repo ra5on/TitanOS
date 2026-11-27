@@ -91,6 +91,8 @@ import (
 
 // Options are the parts the API works with.
 type Options struct {
+	// PersonalDataDir overrides the mounted Agent volume in fixtures and development only.
+	PersonalDataDir string
 	// UI holds the files of the web UI with index.html at its root.
 	UI          fs.FS
 	Store       *config.Store
@@ -234,12 +236,14 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	opts      Options
-	sessions  *auth.Sessions
-	tokens    *auth.Tokens
-	limiter   *auth.Limiter
-	prefs     *preferences
-	loginLook loginLook
+	personal         personalRuntime
+	opts             Options
+	sessions         *auth.Sessions
+	tokens           *auth.Tokens
+	limiter          *auth.Limiter
+	prefs            *preferences
+	loginLook        loginLook
+	personalContexts personalContextStore
 	// loginAccounts limits and checks the account list of the login page.
 	loginAccounts loginAccountsState
 	// accountPictures: the picture each account chose (account_picture.go).
@@ -451,12 +455,6 @@ func New(opts Options) *Server {
 		s.opts.Notify.Audience = s.notifyAudience
 	}
 	s.haStore.check = make(chan struct{}, 1)
-	if s.opts.Notify != nil {
-		s.opts.Notify.Observer = s.agentObserve
-	}
-	if s.opts.Cluster != nil {
-		s.opts.Cluster.Agent = s.agentClusterHandler()
-	}
 
 	mux := &routeMux{ServeMux: http.NewServeMux()}
 	// The routes by area (register_*.go), in the order they always had.
@@ -497,7 +495,7 @@ func New(opts Options) *Server {
 	s.registerPlugins(mux)
 	s.registerTerminal(mux)
 	s.registerScripts(mux)
-	s.registerAgent(mux)
+	s.registerPersonalAgent(mux)
 	s.registerMail(mux)
 	s.registerPIM(mux)
 	s.registerApps(mux)

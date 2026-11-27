@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { loadPersonalDraft } from '#lib/personal-agent/pim.ts';
 	// 1.11: T-Kalender (docs/KALENDER.md, drafts 01–04, 07, 40–42). Without
 	// the data volume the page says "nicht verfügbar", never an empty grid.
 	// An event opens its details; "Neuer Termin" and "Bearbeiten" open
@@ -116,11 +117,10 @@
 	import { tasksByDay, type DueTask, type TaskList } from '#lib/pim/cal/tasks.ts';
 	import WeekView, { type TimedChange } from '#lib/pim/cal/WeekView.svelte';
 	import { loadTask, setTaskDone, type Task } from '#lib/pim/cal/tasks.ts';
-	import AgentPanel from '#lib/components/agent/AgentPanel.svelte';
+	import AgentPanel from '#lib/personal-agent/PIMPanel.svelte';
+	import { pimSelection } from '#lib/personal-agent/pim.ts';
 	import AgentSheet from '#lib/components/agent/BottomSheet.svelte';
-	import type { AgentContext } from '#lib/agent.ts';
-	import { loadAgentDraft, type AgentDraft } from '#lib/agent/drafts.ts';
-	import { calendarPanelActions } from '#lib/agent/panel-actions.ts';
+	import { type AgentDraft } from '#lib/agent/drafts.ts';
 	import { session } from '#lib/session.svelte.ts';
 
 	type View = 'month' | 'week' | 'day' | 'list' | 'year' | 'search';
@@ -407,53 +407,40 @@
 	);
 	const sortCalendars = (ids: string[]) => setOrder('calendar', ids);
 	const taskHandlers = {
-		ontask: (task: DueTask) => (taskDialog = { task }),
+		ontask: (task: DueTask) => {
+			agentTask = task;
+			taskDialog = { task };
+		},
 		ontaskdone: (task: DueTask) => void tasks.toggleDone(task),
 	};
 
 	// ---- The KI-Agent's panel (1.13) ----
-	const AGENT_KEY = 'titanos.calendar.agentPanel';
 	const withAgent = $derived(!!session.services.agent);
-	let agentOpen = $state(readAgentOpen());
-	/** The panel stands as a column (room next to the content); else a sheet. */
+	let agentOpen = $state(false);
 	let agentColumn = $state(false);
-	function readAgentOpen(): boolean {
-		try {
-			return localStorage.getItem(AGENT_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
 	function setAgent(on: boolean) {
 		agentOpen = on;
-		try {
-			if (on) localStorage.setItem(AGENT_KEY, '1');
-			else localStorage.removeItem(AGENT_KEY);
-		} catch {
-			// Kept for this visit only.
-		}
 	}
 	/** The event asked about from its details; gone with another day or view. */
 	let agentEvent = $state<CalEvent | null>(null);
 	$effect(() => {
 		void anchor;
 		void view;
-		untrack(() => (agentEvent = null));
+		untrack(() => {
+			agentTask = null;
+			agentEvent = null;
+		});
 	});
-	const agentContext = $derived<AgentContext>({
-		app: 'calendar',
-		date: compact && view === 'month' ? phoneDay : anchor,
-		...(agentEvent && agentEvent.kind === 'event'
-			? {
-					event: {
-						cal: agentEvent.calendar,
-						id: agentEvent.id,
-						...(agentEvent.occurrence ? { occurrence: agentEvent.occurrence } : {}),
-					},
-				}
-			: {}),
-	});
-	const agentActions = $derived(calendarPanelActions((k) => t(k)));
+	let agentTask = $state<{ list: string; id: string; title: string } | null>(null);
+	const agentSources = $derived(
+		agentTask
+			? pimSelection('reminders', agentTask.list, agentTask.id, agentTask.title)
+			: agentEvent && agentEvent.kind === 'event'
+				? pimSelection('calendar', agentEvent.calendar, agentEvent.id, agentEvent.title, {
+						occurrence: agentEvent.occurrence || '',
+					})
+				: [],
+	);
 	// 1.15: the agent in the ⋯ menu of the head (and the desktop's menu bar,
 	// "Ansicht"; menus.ts names calendar.agent).
 	registerMenuCommands({
@@ -473,6 +460,7 @@
 	);
 	function askAgent(ev: CalEvent) {
 		detail = null;
+		agentTask = null;
 		agentEvent = ev;
 		setAgent(true);
 	}
@@ -576,21 +564,30 @@
 	let doneBusy = $state(false);
 	let doneError = $state('');
 	$effect(() => {
-		const param = page.url.searchParams.get('agentDraft') ?? '';
+		const param = page.url.searchParams.get('personalDraft') ?? '';
 		if (!param || param === draftSeen) return;
 		draftSeen = param;
 		untrack(() => void takeDraft(param));
 	});
+	let openedTask = '';
+	$effect(() => {
+		const list = page.url.searchParams.get('list'),
+			id = page.url.searchParams.get('task');
+		if (tasks.ready && list && id && openedTask !== list + '/' + id) {
+			openedTask = list + '/' + id;
+			taskDialog = { task: { list, id } };
+		}
+	});
 	async function takeDraft(param: string) {
 		draftNote = '';
-		const d = await loadAgentDraft(param);
+		const d = await loadPersonalDraft(param);
 		// Out of the address: a reload or the way back does not open it again.
 		const q = new URLSearchParams(page.url.search);
-		q.delete('agentDraft');
+		q.delete('personalDraft');
 		await goto(`/calendar${q.size ? '?' + q : ''}`, { replace: true, reset: false });
 		draftSeen = '';
 		if (d?.app === 'calendar' && d.kind === 'event') {
-			openEventWindow(`/calendar/event?agentDraft=${encodeURIComponent(param)}&back=/calendar`);
+			openEventWindow(`/calendar/event?personalDraft=${encodeURIComponent(param)}&back=/calendar`);
 			return;
 		}
 		if (d?.app !== 'tasks' || (d.kind !== 'task' && d.kind !== 'complete')) {
@@ -705,7 +702,10 @@
 				<TaskSide
 					data={tasks}
 					{today}
-					onopen={(task) => (taskDialog = { task })}
+					onopen={(task) => {
+						agentTask = task;
+						taskDialog = { task };
+					}}
 					onedit={(l) => (calDialog = { calendar: l, tasks: true })}
 					onnewlist={() => (calDialog = { tasks: true })}
 				/>
@@ -824,7 +824,10 @@
 			data={tasks}
 			{today}
 			phone
-			onopen={(task) => (taskDialog = { task })}
+			onopen={(task) => {
+				agentTask = task;
+				taskDialog = { task };
+			}}
 			onedit={(l) => (calDialog = { calendar: l, tasks: true })}
 			onnewlist={() => (calDialog = { tasks: true })}
 		/>
@@ -953,10 +956,10 @@
 		? notices
 		: undefined}
 	list={compact && data.shown.kind === 'ready' ? taskLevel : undefined}
-	aside={withAgent && agentOpen && !compact ? agentAside : undefined}
+	aside={withAgent && agentOpen && !compact && agentColumn ? agentAside : undefined}
 	asideKey="titanos.agentPanel.width"
 	asideResizeLabel={t('agentpim.panel.resize')}
-	bind:asideShown={agentColumn}
+	bind:asideAvailable={agentColumn}
 >
 	<div
 		class="calview"
@@ -1161,22 +1164,11 @@
 	</Dialog>
 {/if}
 {#snippet agentAside()}
-	<AgentPanel
-		app="calendar"
-		context={agentContext}
-		actions={agentActions}
-		onclose={() => setAgent(false)}
-	/>
+	<AgentPanel app="calendar" sources={agentSources} onclose={() => setAgent(false)} />
 {/snippet}
 {#if withAgent && agentOpen && !(!compact && agentColumn)}
 	<AgentSheet label={t('agentpim.panel.title')} onclose={() => setAgent(false)}>
-		<AgentPanel
-			app="calendar"
-			phone
-			context={agentContext}
-			actions={agentActions}
-			onclose={() => setAgent(false)}
-		/>
+		<AgentPanel app="calendar" phone sources={agentSources} onclose={() => setAgent(false)} />
 	</AgentSheet>
 {/if}
 {#if moving}

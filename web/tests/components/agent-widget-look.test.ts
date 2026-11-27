@@ -1,94 +1,93 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/svelte';
+import { render, waitFor, fireEvent } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import WidgetView from '#lib/desktop/WidgetView.svelte';
-import { agentLook } from '#lib/agent-look.svelte.ts';
-import { LOOK_KEY } from '#lib/agent.ts';
+import { session } from '#lib/session.svelte.ts';
 import { reply } from './fetch.ts';
 
-// 1.06: the three dots of the desktop widget were a fixed orange and size.
-// They are the chat's figure now, in the colour and size of the agent's
-// settings, without asking the NAS when this browser has the agent's copy.
-
-const running = {
-	id: 'c1',
-	title: 'Bericht schreiben',
-	state: 'running',
-	updated: '2026-11-17T10:00:00Z',
-};
-
-function stubNas(prefs: Record<string, unknown>) {
-	const asked: string[] = [];
-	vi.stubGlobal(
-		'fetch',
-		vi.fn(async (url: string) => {
-			asked.push(String(url));
-			if (String(url).endsWith('/agent/status'))
-				return reply(200, { enabled: true, allowed: true });
-			if (String(url).endsWith('/agent/chats')) return reply(200, { chats: [running] });
-			if (String(url).endsWith('/agent/prefs')) return reply(200, prefs);
-			return reply(404, { error: { code: 'not_found', message: '' } });
-		}),
-	);
-	return asked;
+function signIn(name: string) {
+	session.data = {
+		configAvailable: true,
+		setupRequired: false,
+		hostname: 'test',
+		user: { name, role: 'user', twoFactor: false },
+	};
 }
-
+function activity(id: string, title: string, status: string) {
+	return { id, title, status, updated: '2026-11-17T10:00:00Z' };
+}
 beforeEach(() => {
 	localStorage.clear();
-	agentLook.reset();
+	signIn('mia');
 });
-afterEach(() => vi.unstubAllGlobals());
-
-test('a running chat shows the figure in the colour and size of this browser’s copy', async () => {
-	localStorage.setItem(
-		LOOK_KEY,
-		JSON.stringify({ dotColor: '#2E7D32', dotSize: 'l', motion: 'full' }),
-	);
-	const asked = stubNas({ dotColor: '#000000' });
-	const { container } = render(WidgetView, { props: { kind: 'agent', onopen: () => {} } });
-	await waitFor(() => expect(container.querySelector('[data-agent-figure] .fig')).not.toBeNull());
-	const figure = container.querySelector<HTMLElement>('[data-agent-figure]')!;
-	expect(figure.style.getPropertyValue('--ag-dots')).toBe('#2e7d32');
-	expect(figure.style.getPropertyValue('--ag-dot-size')).toBe('26px');
-	expect(figure.querySelectorAll('.fig i').length).toBe(3);
-	expect(container.querySelector('.ag-dots')).toBeNull();
-	// The copy is there: the NAS is not asked.
-	expect(asked.some((u) => u.endsWith('/agent/prefs'))).toBe(false);
+afterEach(() => {
+	vi.unstubAllGlobals();
+	session.data = null;
 });
 
-test('without a copy the account’s look is asked for once, and changes of the agent window follow', async () => {
-	const asked = stubNas({ dotColor: '#1565c0', dotSize: 's' });
-	const { container } = render(WidgetView, { props: { kind: 'agent', onopen: () => {} } });
-	await waitFor(() =>
-		expect(
-			container
-				.querySelector<HTMLElement>('[data-agent-figure]')
-				?.style.getPropertyValue('--ag-dots'),
-		).toBe('#1565c0'),
-	);
-	const figure = container.querySelector<HTMLElement>('[data-agent-figure]')!;
-	expect(figure.style.getPropertyValue('--ag-dot-size')).toBe('14px');
-	expect(asked.filter((u) => u.endsWith('/agent/prefs')).length).toBe(1);
-	// The agent window (a document of its own) saves another look.
-	localStorage.setItem(LOOK_KEY, JSON.stringify({ dotColor: '#c62828', dotSize: 'm' }));
-	window.dispatchEvent(new StorageEvent('storage', { key: LOOK_KEY }));
-	await waitFor(() => expect(figure.style.getPropertyValue('--ag-dots')).toBe('#c62828'));
-	expect(figure.style.getPropertyValue('--ag-dot-size')).toBe('18px');
-	expect(asked.filter((u) => u.endsWith('/agent/prefs')).length).toBe(1);
-});
-
-test('no running chat, no question about the look', async () => {
-	const asked: string[] = [];
+test('only personal activity is fetched and an approval opens the exact job', async () => {
+	const calls: string[] = [];
+	const job = activity('waiting1', 'Termin prüfen', 'waiting');
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async (url: string) => {
-			asked.push(String(url));
-			if (String(url).endsWith('/agent/status'))
-				return reply(200, { enabled: true, allowed: true });
-			return reply(200, { chats: [] });
+			calls.push(String(url));
+			return reply(200, { jobs: [job] });
 		}),
 	);
-	render(WidgetView, { props: { kind: 'agent', onopen: () => {} } });
-	await waitFor(() => expect(asked.some((u) => u.endsWith('/agent/chats'))).toBe(true));
-	await new Promise((r) => setTimeout(r, 50));
-	expect(asked.some((u) => u.endsWith('/agent/prefs'))).toBe(false);
+	const open = vi.fn();
+	const view = render(WidgetView, { props: { kind: 'agent', onopen: open } });
+	await fireEvent.click(await view.findByText(job.title));
+	expect(open).toHaveBeenCalledWith('app:agent', '/agent?job=waiting1');
+	expect(calls.length).toBeGreaterThan(0);
+	expect(calls.every((x) => x.endsWith('/personal-agent/activity'))).toBe(true);
+});
+
+test('an account switch discards a late response and the unsent prompt', async () => {
+	let late!: (value: Response) => void;
+	let queued = 0;
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => {
+			queued++;
+			if (queued === 1) return reply(200, { jobs: [activity('a', 'Mias Auftrag', 'running')] });
+			if (queued === 2) return new Promise<Response>((resolve) => (late = resolve));
+			return reply(200, { jobs: [activity('c', 'Annas Ergebnis', 'done')] });
+		}),
+	);
+	const view = render(WidgetView, { props: { kind: 'agent', onopen: () => {} } });
+	await view.findByText('Mias Auftrag');
+	await fireEvent.input(view.getByRole('textbox'), { target: { value: 'Mein privater Entwurf' } });
+	signIn('tom');
+	await waitFor(() => expect(queued).toBe(2));
+	expect(view.queryByText('Mias Auftrag')).toBeNull();
+	signIn('anna');
+	await view.findByText('Annas Ergebnis');
+	late(reply(200, { jobs: [activity('b', 'Toms Auftrag', 'running')] }));
+	await tick();
+	expect(view.queryByText('Toms Auftrag')).toBeNull();
+	expect((view.getByRole('textbox') as HTMLInputElement).value).toBe('');
+	session.data = null;
+	await waitFor(() => expect(view.queryByText('Annas Ergebnis')).toBeNull());
+});
+
+test('an empty or unreachable personal account never reads the old profile', async () => {
+	localStorage.setItem('titanos.agent.look', JSON.stringify({ dotColor: '#ff0000' }));
+	const calls: string[] = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string) => {
+			calls.push(String(url));
+			return calls.length === 1
+				? reply(200, { jobs: [] })
+				: reply(503, { error: { code: 'agent_storage_unavailable' } });
+		}),
+	);
+	const view = render(WidgetView, { props: { kind: 'agent', onopen: () => {} } });
+	await view.findByRole('textbox');
+	expect(view.container.querySelector('[data-agent-figure]')).toBeNull();
+	signIn('anna');
+	await waitFor(() => expect(calls.length).toBe(2));
+	await waitFor(() => expect(view.queryByRole('textbox')).toBeNull());
+	expect(calls.every((x) => x.endsWith('/personal-agent/activity'))).toBe(true);
 });

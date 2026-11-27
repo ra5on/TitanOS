@@ -2,8 +2,8 @@
 // "Öffnen mit", the clipboard, the commands of bars and menus, and uploads.
 // The state they work on is in files-state.svelte.ts.
 
-import { openAgent } from '#lib/agent-app.ts';
-import { goto } from '$app/navigation';
+import { openPersonalAgent } from '#lib/personal-agent/open.ts';
+import { activeNode } from '#lib/cluster-node.ts';
 import { apiPath } from '#lib/cluster-node.ts';
 import { onMount } from 'svelte';
 import { api, ApiError, type CopyJob, type FileEntry } from '#lib/api.ts';
@@ -393,10 +393,21 @@ export class FilesPage extends FilesState {
 					this.properties = { root: this.root, path: join(this.dir, entry.name) };
 				return;
 			case 'agent': {
-				// Opens the KI-Agent with the chosen files attached (PLAN 44).
-				const names = this.selected.length ? this.selected : entry ? [entry.name] : [];
-				const attach = names.map((n) => `${this.rootId}:${join(this.dir, n)}`).join('|');
-				openAgent('/agent?' + new URLSearchParams({ attach }).toString(), goto);
+				if (activeNode() || this.root?.kind === 'stick') return;
+				const names = entry && !this.selected.includes(entry.name) ? [entry.name] : this.selected;
+				const sources = names.map((name) => ({
+					kind: this.entries?.find((item) => item.name === name)?.dir ? 'folder' : 'file',
+					id: join(this.dir, name),
+					label: name,
+					ref: { root: this.rootId },
+				}));
+				if (sources.length)
+					void openPersonalAgent({
+						sources,
+						tool: sources.some((s) => s.kind === 'folder') ? 'office.table' : 'files.read',
+					}).catch((error) => {
+						this.error = apiErrorText(error);
+					});
 				return;
 			}
 			case 'clipboardCopy':

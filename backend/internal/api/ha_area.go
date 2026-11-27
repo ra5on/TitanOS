@@ -40,8 +40,7 @@ import (
 // storageBusy says whether an array is rebuilt or checked, internalAs
 // calls a route of the web API in the name of an account, activeUser
 // finds an account that is not locked, webSession lets only a person at a
-// web session through, agentButtons and agentButton are the tasks of the
-// KI-Agent Home Assistant can start, findShare and userNames are the
+// web session through, findShare and userNames are the
 // shares'.
 type haArea struct {
 	home         *homeassistant.Manager
@@ -73,14 +72,12 @@ type haArea struct {
 	stores   *map[string]*haStorageState
 	storesMu *sync.Mutex
 
-	storageBusy  func(ctx context.Context) bool
-	internalAs   func(ctx context.Context, user auth.User, method, route string, body any) (int, string)
-	activeUser   func(name string) (auth.User, bool)
-	webSession   webSessionFunc
-	agentButtons func() []homeassistant.AgentTaskValues
-	agentButton  func(name, action string) error
-	findShare    func(name string) (shares.Share, bool)
-	userNames    func() []string
+	storageBusy func(ctx context.Context) bool
+	internalAs  func(ctx context.Context, user auth.User, method, route string, body any) (int, string)
+	activeUser  func(name string) (auth.User, bool)
+	webSession  webSessionFunc
+	findShare   func(name string) (shares.Share, bool)
+	userNames   func() []string
 }
 
 // haArea is the area of the server; the KI-Agent and the tool catalog ask
@@ -94,7 +91,7 @@ func (s *Server) haArea() haArea {
 		applications: func() *appbackup.Manager { return s.opts.ApplicationBackups },
 		undo:         &s.haUndo, first: &s.haStore, stores: &s.haStores, storesMu: &s.haStoresMu,
 		storageBusy: s.storageBusy, internalAs: s.internalAs, activeUser: s.authArea().activeUser, webSession: s.requireWebSession,
-		agentButtons: s.agentButtons, agentButton: s.agentButton, findShare: s.sharesArea().findShare, userNames: s.sharesArea().userNames}
+		findShare: s.sharesArea().findShare, userNames: s.sharesArea().userNames}
 }
 
 // HASnapshot is what the NAS tells Home Assistant over MQTT; titand's

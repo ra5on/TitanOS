@@ -67,6 +67,10 @@ type Servers struct {
 	// SlowFetch delays every FETCH before it is served (\Seen of an opened
 	// mail is set after the pause).
 	SlowFetch atomic.Int64
+	// Faults for the SMTP response after DATA and the separate IMAP sent copy.
+	RejectData     atomic.Bool
+	LoseDataReply  atomic.Bool
+	RefuseSentCopy atomic.Bool
 
 	mu   sync.Mutex
 	sent []Received
@@ -109,7 +113,7 @@ func Start(t testing.TB) *Servers {
 	go func() { _ = srv.Serve(counting{ln, &s.IMAPConns}) }()
 	t.Cleanup(func() { _ = srv.Close() })
 
-	ss := smtp.NewServer(smtp.BackendFunc(func(*smtp.Conn) (smtp.Session, error) { return &session{s: s}, nil }))
+	ss := smtp.NewServer(smtp.BackendFunc(func(c *smtp.Conn) (smtp.Session, error) { return &session{s: s, conn: c}, nil }))
 	ss.Domain = "localhost"
 	ss.TLSConfig = tlsCfg
 	ss.ErrorLog = discard{}
@@ -243,6 +247,13 @@ func (x *slowSession) Search(kind imapserver.NumKind, criteria *imap.SearchCrite
 	return x.UserSession.Search(kind, criteria, options)
 }
 
+func (x *slowSession) Append(mailbox string, r imap.LiteralReader, options *imap.AppendOptions) (*imap.AppendData, error) {
+	if x.s.RefuseSentCopy.Load() && mailbox == "Sent" {
+		return nil, &imap.Error{Type: imap.StatusResponseTypeNo, Text: "Fixture mailbox full"}
+	}
+	return x.UserSession.Append(mailbox, r, options)
+}
+
 func (x *slowSession) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *imap.FetchOptions) error {
 	wait(&x.s.SlowFetch)
 	return x.UserSession.Fetch(w, numSet, options)
@@ -258,6 +269,7 @@ func (discard) Println(...any)        {}
 
 // session takes mail after a PLAIN login with the test's password.
 type session struct {
+	conn   *smtp.Conn
 	s      *Servers
 	authed bool
 	from   string
@@ -294,9 +306,15 @@ func (x *session) Data(r io.Reader) error {
 	if err != nil {
 		return err
 	}
+	if x.s.RejectData.Load() {
+		return &smtp.SMTPError{Code: 550, Message: "fixture rejected DATA"}
+	}
 	x.s.mu.Lock()
 	x.s.sent = append(x.s.sent, Received{From: x.from, To: x.to, Data: data})
 	x.s.mu.Unlock()
+	if x.s.LoseDataReply.Load() {
+		return x.conn.Conn().Close()
+	}
 	return nil
 }
 

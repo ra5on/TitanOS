@@ -12,6 +12,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/personalagent"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
@@ -68,7 +69,7 @@ func (w *titand) wireNotifications() error {
 			// Calendars and address books move with the default volume.
 			features = append(features, pimFeatures...)
 			// So does the index of the Android app's photo backup.
-			features = append(features, appphotos.Feature)
+			features = append(features, appphotos.Feature, personalagent.Feature)
 			w.systemData.Watch(ctx, features)
 		})
 	}

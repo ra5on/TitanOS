@@ -4,6 +4,8 @@
 
 Eigenes E-Mail-Programm in TitanOS (PLAN §81, Inhaber 13.11. „Eigenes T-Mail“, Fragerunde 16.11.2026). Dieses Dokument ist der Vertrag zwischen Backend (`backend/internal/tmail`, `backend/internal/api/tmail*.go`) und Oberfläche (`web/src/routes/mail/`, `web/src/lib/tmail*`). Abweichungen werden hier eingetragen, bevor sie gebaut werden. Was das Backend genauer festgelegt oder geändert hat, steht im Abschnitt „Festlegungen des Backends“ (17.11.2026); er geht den Zeilen darüber vor.
 
+Für den persönlichen Agenten sind Quellenwahl, Editorübergabe, Versandfreigabe und die Bedeutung der SMTP-Belege gesondert beschrieben. [Persönlicher Agent in T-Mail, Kalender und Kontakte](AGENT-PIM.md)
+
 ## Umfang der ersten Fassung (Entscheidungen des Inhabers)
 
 - IMAP/SMTP mit Passwort oder App-Passwort (GMX, Web.de, IONOS, T-Online, iCloud, Gmail mit App-Passwort, eigene Domains). **Kein OAuth** (Gmail/Microsoft-Anmeldung später).

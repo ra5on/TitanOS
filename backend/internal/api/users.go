@@ -95,16 +95,9 @@ type usersArea struct {
 	// nvrForgetUser takes the account off the cameras of the NVR.
 	nvrForgetUser func(name string)
 	// goJob runs the clearing in the background; Close waits for it.
-	goJob jobFunc
-	// agentForgetUser removes the agent's data of a deleted account
-	// (agent_forget.go); agentForgetSettings takes it out of agent.json at
-	// once, before the answer. agentForgetLeftovers clears what a deletion
-	// left for a new account of the same name, agentDataOf counts what a
-	// deletion takes along.
-	agentForgetUser      func(name string)
-	agentForgetSettings  func(name string)
-	agentForgetLeftovers func(name string)
-	agentDataOf          func(name string) agentAccountData
+	goJob       jobFunc
+	forgetAgent func(auth.User)
+	agentDataOf func(auth.User) agentAccountData
 	// mailForgetUser removes what T-Mail keeps of an account: when it is
 	// deleted, and when one is made (nothing of an earlier account of the
 	// same name goes to it).
@@ -127,8 +120,7 @@ func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, nvrForgetUser: s.nvrArea().nvrForgetUser, goJob: s.goJob,
-		agentForgetUser: s.agentForgetAccount, agentForgetSettings: s.agentForgetSettings,
-		agentForgetLeftovers: s.agentForgetLeftovers, agentDataOf: s.agentDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
+		forgetAgent: s.forgetPersonalAccount, agentDataOf: s.personalDataOf, mailForgetUser: s.mailForgetUser, mailRoleChanged: s.mailRoleChanged,
 		devicesRevokeAll: s.devicesRevokeAll, pimForgetUser: s.pimForgetUser, appVPNPrune: s.appVPNPrune}
 }
 
@@ -174,9 +166,6 @@ func (a usersArea) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
-	// What a deletion of an earlier account of this name could not remove
-	// (the agent's volume was missing) does not go to the new one.
-	a.agentForgetLeftovers(user.Name)
 	a.mailForgetUser(user.Name)
 	a.pimForgetUser(user.Name)
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
@@ -337,7 +326,7 @@ func (a usersArea) handleUserAgentData(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
 		return
 	}
-	writeJSON(w, http.StatusOK, a.agentDataOf(target.Name))
+	writeJSON(w, http.StatusOK, a.agentDataOf(target))
 }
 
 func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -364,10 +353,7 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
 	a.goJob(func(context.Context) { a.viewerForgetUser(target.Name) })
-	// Nothing of the agent's settings may name the account once the answer
-	// is out: a new account of the same name would inherit it.
-	a.agentForgetSettings(target.Name)
-	a.goJob(func(context.Context) { a.agentForgetUser(target.Name) })
+	a.forgetAgent(target)
 	a.nvrForgetUser(target.Name)
 	// T-Mail: connections end, settings, passwords and the address book go.
 	a.mailForgetUser(target.Name)
@@ -410,6 +396,9 @@ func (a usersArea) handleLockUser(disabled bool) http.HandlerFunc {
 		if err != nil {
 			writeAccountError(w, err)
 			return
+		}
+		if a.mailRoleChanged != nil {
+			a.mailRoleChanged(user.Name)
 		}
 		if disabled {
 			a.sessions().DeleteUser(user.Name, "")

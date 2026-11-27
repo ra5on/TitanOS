@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { activeNode } from '#lib/cluster-node.ts';
 	import type { FileEntry, FileRoot } from '#lib/api.ts';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -297,7 +298,7 @@
 					><i class="no-icon" aria-hidden="true"></i><span>{t('files.renameBatch')}</span></button
 				>{/if}
 		{/if}
-		{#if session.services.agent && root.kind !== 'stick'}<hr />
+		{#if session.services.agent && root.kind !== 'stick' && !activeNode()}<hr />
 			<button type="button" role="menuitem" onclick={() => oncommand('agent', entry)}
 				><Icon name="sparkle" size={16} /><span>{t('files.withAgent')}</span></button
 			>{/if}
