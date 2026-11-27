@@ -24,6 +24,10 @@ Vor jeder externen Nebenwirkung setzt der Broker dauerhaft die Phase `executing`
 
 TitanOS prüft den Zugriff auf den konkreten Chattext vor der Synthese und vor der Ausgabe. Das Beenden des Dialogs bricht die HTTP-Anfrage ab und schließt die Verbindung zu Piper. Ein Rechteentzug während der Synthese verwirft die Ausgabe, auch wenn die Berechtigung unmittelbar danach erneut erteilt wird.
 
+Über das Mikrofon im Chat wählt das Konto zwischen Diktat und Sprechmodus. Diktat übernimmt den erkannten Text in das Eingabefeld. Im Sprechmodus startet das Konto die Aufnahme ausdrücklich. Nach einer Sprechpause wird ein Beitrag des aktuellen lokalen Chats angelegt. Die Sprachkugel zeigt Mikrofonpegel und Wiedergabe, der Text benennt den aktuellen Zustand. Eine Antwort wird erst gesprochen, wenn der Auftrag abgeschlossen und die lokale Audiowiedergabe erlaubt ist. Bei „Nachfragen“ erscheint die passende Freigabetaste. „Beenden und zum Chat“, das Schließen des Blatts und das Verlassen der Seite geben das Mikrofon frei und beenden die Wiedergabe. Bereits angelegte Beiträge sind im Chat und unter Aufträge zu finden.
+
+Für eine Aufnahme benötigt der Browser einen sicheren Ursprung, Mikrofonzugriff und eine Audioeingabe. Für den Sprechmodus müssen lokale Erkennung, Chat und lokale Ausgabe für das Konto verfügbar sein. Eine fehlende Einrichtung zeigt das Blatt mit Verweis auf die persönlichen Rechte und für die Verwaltung auf die Sprachdienste.
+
 ## Persönliche Rezepte und Beobachtung
 
 Ein Skill enthält höchstens acht vorab gewählte Werkzeuge. Jeder Schritt sieht nur die für dieses Werkzeug gewählten Quellentypen. Er kann bis zu 8192 Zeichen Text aus dem letzten abgeschlossenen Schritt erhalten. Vor einer Weitergabe kontrolliert der Broker erneut das Zugriffsrecht auf die vorherigen Quellen. `manual` startet auf Wunsch, `schedule` einmalig zum angegebenen Zeitpunkt, `mail` bei neuen Nachrichten des ausgewählten Absenders im gewählten Posteingang. Automatische Mailbeobachtung benötigt ausdrücklich das Recht `mail.watch=auto`.

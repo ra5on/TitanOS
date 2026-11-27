@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { personalMenu } from './menu.ts';
 
 	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
@@ -167,6 +168,16 @@
 	}
 	const selected = $derived(snapshot?.capabilities.find((c) => c.id === tool));
 	const office = $derived(tool.startsWith('office.'));
+	personalMenu({
+		ready: () => !!snapshot,
+		modal: () => !!sheet || !!openedSource || (!!detail && narrow),
+		chats: () => snapshot?.chats ?? [],
+		selected: () => chatId,
+		tab: () => tab,
+		show,
+		newChat,
+		openChat,
+	});
 	function signal(stops: string[], action: string, hold = false) {
 		const origin = box?.getBoundingClientRect();
 		const first = [...(box?.querySelectorAll<HTMLElement>('[data-guide]') ?? [])]
@@ -519,6 +530,22 @@
 			pending = false;
 		}
 	}
+	async function voiceTurn(text: string, id: string): Promise<Job> {
+		const account = session.data?.user?.name;
+		const previousChat = chatId;
+		const j = await createJob({
+			tool: 'chat.ask',
+			prompt: text,
+			requestId: id,
+			chatId: previousChat || undefined,
+		});
+		if (!account || session.data?.user?.name !== account) throw Error(msg('voiceCheckJob'));
+		allowJob(j);
+		if (chatId === previousChat) chatId = j.request.chatId ?? previousChat;
+		void polling?.now();
+		void scrollBottom();
+		return j;
+	}
 	function allowJob(j: Job) {
 		if (snapshot && !snapshot.jobs.some((item) => item.id === j.id))
 			snapshot = { ...snapshot, jobs: [...snapshot.jobs, j] };
@@ -777,15 +804,15 @@
 								: 'placeholder',
 						)}
 						onkeydown={onkey}></textarea>
-					{#if options.some((c) => c.id === 'speech.transcribe')}<button
-							type="button"
-							class="pa-icon"
-							aria-label={msg('mic')}
-							onclick={() => {
-								sheet = 'voice';
-								signal(['composer', 'orb'], tool);
-							}}><Icon name="mic" /></button
-						>{/if}
+					<button
+						type="button"
+						class="pa-icon"
+						aria-label={msg('mic')}
+						onclick={() => {
+							sheet = 'voice';
+							signal(['composer', 'orb'], tool);
+						}}><Icon name="mic" /></button
+					>
 					<button
 						type="submit"
 						class="pa-send"
@@ -844,6 +871,14 @@
 		>
 	{:else if sheet === 'voice'}<VoiceInput
 			{calm}
+			caps={snapshot?.capabilities ?? []}
+			admin={session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}
+			onsettings={() => show('settings')}
+			onturn={voiceTurn}
+			onupdate={(job) => {
+				if (snapshot && job.request.chatId === chatId)
+					snapshot = { ...snapshot, jobs: snapshot.jobs.map((j) => (j.id === job.id ? job : j)) };
+			}}
 			onclose={() => {
 				sheet = '';
 				signal(['orb', 'composer'], tool);
