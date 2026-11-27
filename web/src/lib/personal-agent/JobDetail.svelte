@@ -118,7 +118,7 @@
 		</dl>
 		<div class="pa-readable">{mail.text}</div>
 	{:else if detail?.text}<div class="pa-readable">{detail.text}</div>{/if}
-	{#if before !== null || after !== null}
+	{#if job.request.tool !== 'office.inspect' && (before !== null || after !== null)}
 		<section class:pa-highlight={first} class="pa-diff" data-guide="region">
 			<h3>{typeof fields.region === 'string' ? fields.region : msg('whatChanged')}</h3>
 			{#if before !== null}<strong>{msg('before')}</strong>
