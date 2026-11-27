@@ -38,6 +38,7 @@ func TestPersonalAgentUsesMountedSystemVolume(t *testing.T) {
 	share := ts.withShare()
 	volume := filepath.Dir(share)
 	home := &volumedata.Home{MountRoot: filepath.Dir(volume), Mounted: ts.disks.Mounted, Choose: func() string { return "tank" }, NoLegacy: []string{pa.Feature}}
+	home.Locations = map[string]*volumedata.Location{pa.Feature: volumedata.NewLocation(ts.store, "system/agent-volume.json")}
 	ts.server.opts.SystemData = home
 	t.Cleanup(home.Wait)
 	personalHTTP[pa.State](t, ts, ts.client, "GET", "/state", nil)

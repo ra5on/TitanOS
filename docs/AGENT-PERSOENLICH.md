@@ -8,6 +8,8 @@ TitanOS führt Aufträge pro lokalem Konto. Die persönliche Agent-Oberfläche v
 
 Die Kontozustände liegen in `.titanos/agent-v2` auf dem Systemdatenvolume. Eine Transaktion schreibt zuerst eine private temporäre Datei, synchronisiert, ersetzt die Kontodatei und synchronisiert das Verzeichnis. Der Konfigurationsspeicher hält zusätzlich die Berechtigungsrevisionen. Fehlt das Datenvolume, meldet die API den Speicherfehler. Die Daten älterer Agent-Versionen gehören zu eigenen Verzeichnissen.
 
+Beim ersten eingebundenen Volume speichert TitanOS dessen Namen unter `/config/system/agent-volume.json`. Bei einem Wechsel bleiben Quelle und Ziel eingetragen, bis alle Kontodateien am neuen Ort dauerhaft vorliegen. Fehlt die Quelle, erhalten auch neue Aufträge HTTP 503. Nach dem Wiederanschluss übernimmt TitanOS Verlauf und Aufträge. Bei unterschiedlichen Versionen derselben Kontodatei an beiden Orten bleiben beide erhalten und der Agent wartet auf Klärung.
+
 ## Aufträge und Freigaben
 
 `POST /api/v1/personal-agent/jobs` erwartet `requestId`, `tool` und je nach Werkzeug `prompt`, `sources`, `args`, `chatId` oder `runAt`. Dieselbe Request-ID und derselbe Inhalt liefern denselben Auftrag zurück. Der Client liest das Ergebnis und den aktuellen Schritt unter `GET /jobs/{id}` innerhalb dieses API-Präfixes. Die JSON-Verträge für Aufträge, Vorschauen, Belege und Skills stehen in `backend/internal/personalagent/types.go`.

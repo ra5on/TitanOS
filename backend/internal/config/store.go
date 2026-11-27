@@ -41,6 +41,7 @@ import (
 // without the owner changing a setting belongs in this list, or better in
 // RAM or .titanos/<function> on a volume.
 var State = []string{
+	"system/agent-volume.json",        // authoritative data volume and any unfinished move of the personal Agent
 	"sessions/remembered.json",        // logins that stay (auth)
 	"sessions/locked.json",            // which of them are locked, written at lock and unlock (auth, 1.03)
 	"backup/application-pending.json", // pointer to a cut-off application backup, written only when one is found (appbackup)

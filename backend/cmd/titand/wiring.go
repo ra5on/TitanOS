@@ -244,6 +244,7 @@ func (w *titand) wireBase() error {
 		defer cancel()
 		return w.volumes.SystemDataVolume(ctx)
 	}}
+	w.systemData.Locations = map[string]*volumedata.Location{personalagent.Feature: volumedata.NewLocation(w.store, "system/agent-volume.json")}
 	w.systemData.Override = w.systemDataOverride
 	w.systemData.Pending = w.sysData.Pending
 	w.systemData.Settled = func(feature, from string) {
