@@ -1,10 +1,12 @@
 """Disruption checks for a disposable guest of smoke-system-update.py."""
 import copy
+import hashlib
 import http.client
 import http.server
 import ipaddress
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -35,22 +37,56 @@ class ReleaseHandler(http.server.SimpleHTTPRequestHandler):
         hold.wait(timeout=180)
 
 
-def check_share(directory, port, password, upload=False):
+def check_share(directory, port, password, upload=False, remote_name="pruefung.bin"):
     """Read the same file over SMB2/3 and compare every byte to the original."""
+    assert remote_name in ("pruefung.bin", "frisch.bin")
     source = directory / "original.bin"
     if upload and not source.exists():
         source.write_bytes(os.urandom(32768))
     target = directory / "retrieved.bin"
     target.unlink(missing_ok=True)
-    commands = (f'put "{source}" pruefung.bin; ' if upload else '') + f'get pruefung.bin "{target}"'
+    commands = (f'put "{source}" {remote_name}; ' if upload else '') + f'get {remote_name} "{target}"'
+    last = directory / "smb-observation.txt"
     try:
         result = subprocess.run([
             "smbclient", "//127.0.0.1/Pruefung", "-p", str(port), "-m", "SMB3",
             "-U", "systemtester", "-c", commands,
         ], env=dict(os.environ, PASSWD=password), capture_output=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return False
-    return result.returncode == 0 and target.is_file() and source.read_bytes() == target.read_bytes()
+        problem = "smbclient timed out"
+    else:
+        output = (result.stdout + result.stderr).decode(errors="replace")
+        status = sorted(set(re.findall(r"(?:NT_STATUS|WERR)_[A-Z0-9_]+", output)) - {"NT_STATUS_OK", "WERR_OK"})
+        if result.returncode or status:
+            problem = f"smbclient exit {result.returncode}; status {', '.join(status) or 'unspecified'}"
+        elif not target.is_file():
+            problem = "the client returned without downloading the file"
+        else:
+            expected, received = source.read_bytes(), target.read_bytes()
+            if received == expected:
+                last.unlink(missing_ok=True)
+                return True
+            problem = (f"received {len(received)} bytes SHA-256 {hashlib.sha256(received).hexdigest()}; "
+                       f"expected {len(expected)} bytes SHA-256 {hashlib.sha256(expected).hexdigest()}")
+    # Log a change of outcome and keep retries readable. Never print the
+    # command environment, which holds the random guest account password.
+    if not last.exists() or last.read_text() != problem:
+        print(f"SMB readback {remote_name}: {problem}", flush=True)
+        last.write_text(problem)
+    return False
+
+
+def diagnose_share(request, fetch_file, directory):
+    """Read the failed disposable fixture directly; diagnostics never replace the SMB gate."""
+    try:
+        volumes = request("/api/v1/storage")["volumes"]
+        mounted = any(v["name"] == "testdaten" and v["mounted"] for v in volumes)
+        print(f"SMB diagnosis: testdaten mounted={mounted}", flush=True)
+        data = fetch_file()
+        expected = (directory / "original.bin").read_bytes()
+        print(f"Native Files read {len(data)} bytes; identical to original={data == expected}", flush=True)
+    except (OSError, http.client.HTTPException) as error:
+        print(f"Native Files or storage check failed: {error}", flush=True)
 
 
 def create_share(request, wait, directory, port, password):

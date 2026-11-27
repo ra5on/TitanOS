@@ -80,6 +80,30 @@ class SystemUpdateSmokeTest(unittest.TestCase):
         self.assertEqual(posts, ["/api/v1/storage/volumes", "/api/v1/shares"])
         read_share.assert_called_once()
 
+    def test_smb_readback_distinguishes_a_refusal_from_changed_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "original.bin").write_bytes(b"expected")
+            observation = directory / "smb-observation.txt"
+            denied = subprocess.CompletedProcess([], 1, b"NT_STATUS_ACCESS_DENIED", b"")
+            with patch("interrupted_system_smoke.subprocess.run", return_value=denied):
+                self.assertFalse(smoke.check_share(directory, 0, "discarded"))
+            self.assertIn("NT_STATUS_ACCESS_DENIED", observation.read_text())
+            self.assertNotIn("discarded", observation.read_text())
+
+            def client_result(data):
+                def download(*_args, **_kwargs):
+                    (directory / "retrieved.bin").write_bytes(data)
+                    return subprocess.CompletedProcess([], 0, b"", b"")
+                return download
+
+            with patch("interrupted_system_smoke.subprocess.run", side_effect=client_result(b"wrong")):
+                self.assertFalse(smoke.check_share(directory, 0, "discarded"))
+            self.assertIn("received 5 bytes SHA-256", observation.read_text())
+            with patch("interrupted_system_smoke.subprocess.run", side_effect=client_result(b"expected")):
+                self.assertTrue(smoke.check_share(directory, 0, "discarded"))
+            self.assertFalse(observation.exists())
+
     def test_versions_of_the_test_releases(self):
         self.assertEqual(smoke.bump("0.75.0", 2), "0.75.2")
         self.assertEqual(smoke.bump("0.2.0-beta.4", 1), "0.2.0-beta.5")
