@@ -57,7 +57,7 @@ for engine in chromium webkit; do
 done
 ```
 
-Der Standardlauf erwartet eine Auswahlantwort des Editors. Mit `UI_OFFICE_APP=t-exel` lässt sich ein einzelner installierter Editor prüfen. Ohne diese Angabe durchläuft der Test alle vier Programme. Für die älteren 1.7.0-Pakete prüft `UI_OFFICE_EXPECT_MANUAL=1` denselben Weg mit der manuellen Bereichsangabe. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
+Der Standardlauf erwartet eine Auswahlantwort des Editors. Mit `UI_OFFICE_APP=t-exel` lässt sich ein einzelner installierter Editor prüfen. Ohne diese Angabe durchläuft der Test alle vier Programme. Der Produktkatalog enthält die vier Editoren aus [TitanOS-Office 1.8.0](https://github.com/ra5on/TitanOS-Office/releases/tag/v1.8.0). Die Kompatibilitätsprobe für manuelle Bereichsangaben benötigt einen Testbuild mit dem früheren 1.7.0-Katalog, die dazu passenden Archive und `UI_OFFICE_EXPECT_MANUAL=1`. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
 
 Mit `UI_OFFICE_TOUCH=1` öffnen die Tests die vier Beispieldateien über das Menü der mobilen Dateien-App. Sie markieren mit Touch ein Wort im dritten Absatz, die Zelle `Planung!B2`, die ungeraden PDF-Seiten 1 und 3 sowie Folie 2. Der Test vergleicht die Bezeichnung im Übergabedialog, die an den Auftrag gebundenen Bereiche, den Inhalt im Ergebnisblatt und den Hash der Originaldatei. Für die Tabelle muss der Wert genau `2` sein. In der PDF-Ausgabe müssen die Inhalte beider ausgewählter Seiten stehen. Mit `UI_OFFICE_APP=t-exel` lässt sich die Tabellenprüfung einzeln ausführen. WebKit und Chromium verwenden ein simuliertes Touchgerät.
 
