@@ -64,3 +64,9 @@ Die Schritte und Werkzeugversionen der Build-CI stehen in `.github/workflows/bui
 | Bridge und DHCP | `scripts/test-bridge-forwarding.py` in einem eigenen Netzwerknamespace starten. Der Dateikopf enthält den unprivilegierten Linux-Aufruf. |
 
 Backend- und Berechtigungsfälle sind in [Agent-Betrieb](AGENT-PERSOENLICH.md) und [Mail und Kalender](AGENT-PIM.md) beschrieben. Der T-Mail-Browsertest und der lokale SMTP-/IMAP-Testdienst verwenden Testadressen. Für einen gezielten Backend-Lauf im Verzeichnis `backend` prüft `go test -count=1 ./internal/api -run TestPersonal` die persönlichen Aufträge, den Worker-Socket, die Nutzertrennung, Objektfreigaben und den Rechteentzug.
+
+### Zwei Konten beim Umstieg
+
+`python3 scripts/smoke-agent-legacy.py --help` zeigt die Eingaben für die isolierte Probe mit einer signierten Stable-Vorversion. Für die Browserprüfung zusätzlich `--browser-output <Bildordner> --node-modules <node_modules>` angeben und den Kandidaten mit `-tags embedui` bauen. Als Testpostfächer dienen Adressen unter `.invalid`. Der Kontentest prüft in T-Mail gespeicherte Identitäten und Signaturen. Die separaten Protokolltests verwenden lokale IMAP- und SMTP-Testserver.
+
+Der Browser öffnet die regulären T-Mail- und Kalenderfenster je einmal als Besitzer und als normales Konto. Beim Öffnen der Agent-Panels prüft er die Antwort des persönlichen Agenten, erfasst Aufrufe alter Agent-Routen und schreibt vier Bilder mit Testdaten. Der API-Teil prüft die alten Panel-Zeiger, die wartende Altfreigabe, den MQTT-Knopf sowie die nativen Mail- und Kalenderdaten vor und nach dem Wechsel.

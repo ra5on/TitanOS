@@ -2,6 +2,7 @@
 import hashlib
 import json
 import secrets
+import subprocess
 from pathlib import Path
 
 
@@ -104,3 +105,11 @@ def after(clients, evidence):
     for data in evidence.values():
         assert all(sha(Path(path)) == digest for path, digest in data["archive"].items())
     print("PASS candidate: native mail identities and signatures survived; both calendar events read and edited by their owner; old panel routes retired and archives unchanged; fresh context consumed once by its own account", flush=True)
+    if Path("/tools/test-ui-upgrade-pim.mjs").is_file():
+        sessions = {}
+        for name, client in clients.items():
+            jar = next(h.cookiejar for h in client.opener.handlers if hasattr(h, "cookiejar"))
+            sessions[name] = {"cookies": [{"name": c.name, "value": c.value} for c in jar],
+                              "marker": evidence[name]["marker"]}
+        subprocess.run(["/tools/node", "/tools/test-ui-upgrade-pim.mjs"],
+                       input=json.dumps(sessions), text=True, check=True)

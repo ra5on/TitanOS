@@ -53,6 +53,22 @@ def run(args):
         if args.mqtt_root:
             runner.extend(['--ro-bind', args.mqtt_root.resolve(strict=True), '/mqtt-tools'])
         env = {'PATH': os.defpath + ':/usr/sbin', 'LANG': 'C.UTF-8', 'HOME': '/tmp'}
+        if args.browser_output:
+            # Only the browser tools are shared read-only. The two temporary
+            # sessions and the synthetic PIM data stay inside the namespace.
+            node = shutil.which('node')
+            modules = args.node_modules
+            if not node or not modules or not (modules / 'playwright/index.mjs').is_file():
+                raise ValueError('the browser run needs Node and --node-modules containing Playwright')
+            output = args.browser_output.resolve()
+            output.mkdir(parents=True, exist_ok=True)
+            browsers = Path(os.getenv('PLAYWRIGHT_BROWSERS_PATH', Path.home() / '.cache/ms-playwright'))
+            runner.extend(['--ro-bind', Path(node).resolve(), '/tools/node',
+                           '--ro-bind', modules.resolve(strict=True), '/tools/node_modules',
+                           '--ro-bind', browsers.resolve(strict=True), '/tools/browsers',
+                           '--ro-bind', SCRIPTS / 'test-ui-upgrade-pim.mjs', '/tools/test-ui-upgrade-pim.mjs',
+                           '--bind', output, '/evidence'])
+            env['PLAYWRIGHT_BROWSERS_PATH'] = '/tools/browsers'
         print(f"Original stable {args.version}: release signature and daemon SHA-256 verified.", flush=True)
         subprocess.run([*runner, '--chdir', '/tmp', 'python3', '-u', '/probe.py'], env=env, check=True)
 
@@ -64,4 +80,6 @@ if __name__ == '__main__':
     parser.add_argument('--manifest', required=True, type=Path)
     parser.add_argument('--candidate', required=True, type=Path)
     parser.add_argument('--mqtt-root', type=Path)
+    parser.add_argument('--browser-output', type=Path, help='also open both embedded apps for both users in Chromium and save the four screenshots here; requires an embedui candidate')
+    parser.add_argument('--node-modules', type=Path, help='node_modules with Playwright for the optional browser run')
     run(parser.parse_args())
