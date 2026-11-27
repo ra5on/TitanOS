@@ -96,7 +96,35 @@
 	var waiting = [];
 	var activeDocument = '';
 	var selectionRequest = '';
+	var editorStopped = false;
 	var token = /^[a-f0-9]{32}$/;
+
+	function reportStoppedSelection() {
+		if (!selectionRequest || !activeDocument) return;
+		post({
+			type: 'webapp-agent-selection',
+			version: 1,
+			requestId: selectionRequest,
+			documentId: activeDocument,
+			status: 'failed',
+		});
+		selectionRequest = '';
+	}
+
+	// An uncaught trap can leave the last painted document visible while the
+	// editor no longer processes input. A fresh frame starts with a clean state.
+	function editorError(reason) {
+		if (typeof WebAssembly !== 'undefined' && reason instanceof WebAssembly.RuntimeError) {
+			editorStopped = true;
+			reportStoppedSelection();
+		}
+	}
+	window.addEventListener('error', function (event) {
+		editorError(event.error);
+	});
+	window.addEventListener('unhandledrejection', function (event) {
+		editorError(event.reason);
+	});
 
 	function becomeReady() {
 		if (ready) return;
@@ -234,8 +262,9 @@
 			activeDocument
 		) {
 			var element = canvas();
+			selectionRequest = msg.requestId;
+			if (editorStopped) return reportStoppedSelection();
 			if (element) {
-				selectionRequest = msg.requestId;
 				element.dispatchEvent(
 					new CustomEvent(events + ':agent-selection-request', {
 						detail: { version: 1, requestId: selectionRequest, documentId: activeDocument },

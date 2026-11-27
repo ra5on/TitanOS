@@ -7,7 +7,10 @@ export type OfficeRegion =
 	| { slide: number; paragraph?: number };
 export type EditorSelection =
 	| { status: 'selected'; items: OfficeRegion[] }
-	| { status: 'none' | 'dirty' | 'unsupported' | 'unbound' | 'legacy' | 'changed' | 'timeout' };
+	| {
+			status:
+				'none' | 'dirty' | 'unsupported' | 'unbound' | 'legacy' | 'changed' | 'timeout' | 'failed';
+	  };
 export const selectionId = () =>
 	Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
 		b.toString(16).padStart(2, '0'),
@@ -39,6 +42,7 @@ export function editorSelection(app: string, value: Record<string, unknown>): Ed
 	if (
 		value.status === 'none' ||
 		value.status === 'dirty' ||
+		value.status === 'failed' ||
 		value.status === 'unbound' ||
 		value.status === 'unsupported'
 	)

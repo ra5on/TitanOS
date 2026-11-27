@@ -10,17 +10,21 @@
 	let {
 		doc,
 		appId,
+		ready,
 		dirty,
 		mtime,
 		version,
 		requestSelection,
+		reopen,
 	}: {
 		doc: DocRef;
 		appId: string;
+		ready: boolean;
 		dirty: boolean;
 		mtime: string | null;
 		version: string;
 		requestSelection: () => Promise<EditorSelection>;
+		reopen: () => void;
 	} = $props();
 	let editor = $state<EditorSelection | null>(null),
 		ticket = 0;
@@ -43,7 +47,7 @@
 	const blocked = $derived(
 		!editor ||
 			dirty ||
-			['dirty', 'unbound', 'changed', 'timeout'].includes(editor.status) ||
+			['dirty', 'unbound', 'changed', 'timeout', 'failed'].includes(editor.status) ||
 			!mtime ||
 			!version,
 	);
@@ -73,7 +77,7 @@
 		try {
 			const fresh = await requestSelection();
 			if (token !== ticket || dirty || !initial) return;
-			if (fresh.status === 'timeout') {
+			if (fresh.status === 'timeout' || fresh.status === 'failed') {
 				editor = fresh;
 				valid = false;
 				return;
@@ -119,7 +123,7 @@
 	}
 </script>
 
-<div class="agent-strip"><button class="btn" onclick={show}>Agent</button></div>
+<div class="agent-strip"><button class="btn" disabled={!ready} onclick={show}>Agent</button></div>
 {#if open}
 	<Dialog title={de ? 'Mit Agent bearbeiten' : 'Edit with Agent'} onclose={close}>
 		<p>{baseName(doc.path)}</p>
@@ -137,6 +141,22 @@
 					? 'Öffne die gespeicherte NAS-Datei erneut, um ihre Auswahl zu verwenden.'
 					: 'Reopen the saved NAS file to share its selection.'}
 			</p>
+		{:else if editor.status === 'failed'}
+			<p role="alert">
+				{de
+					? 'Der Editor wurde unterbrochen. Öffne die Datei erneut, um die Auswahl zu prüfen.'
+					: 'The editor stopped. Reopen the file to check its selection.'}
+			</p>
+			<button
+				type="button"
+				class="btn"
+				disabled={dirty}
+				onclick={() => {
+					if (!dirty) reopen();
+				}}
+			>
+				{de ? 'Datei erneut öffnen' : 'Reopen file'}
+			</button>
 		{:else if editor.status === 'timeout'}
 			<p role="status">
 				{de ? 'Der Editor hat noch nicht geantwortet.' : 'The editor has not responded yet.'}

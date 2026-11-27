@@ -124,10 +124,19 @@ export async function verifyNativeSelection({
 }) {
   const example = examples[id];
   const canvas = editor.locator("canvas").first();
-  await show.waitFor({ timeout: 60000 });
+  await show.click({ trial: true, timeout: 60000 });
   await canvas.waitFor({ state: "visible" });
   await frames(canvas);
   await chooseInsideEditor(id, page, canvas);
+  const sizes = await canvas.evaluate(() => window.officeViewport);
+  if (sizes) {
+    console.log(engine, id, "editor viewport from startup to selection", sizes);
+    assert.equal(
+      sizes.length,
+      1,
+      "The host toolbar must not resize the editor while opening the file",
+    );
+  }
   await screenshot(canvas, engine, id, "im-editor");
   await show.click();
   let expected = example.refs;
@@ -215,7 +224,20 @@ async function runLive() {
       });
       try {
         await ctx.addInitScript(() => {
-          if (location.pathname.startsWith("/webapps/")) return;
+          if (location.pathname.startsWith("/webapps/")) {
+            window.officeViewport = [];
+            const record = () => {
+              const size = [innerWidth, innerHeight];
+              if (
+                size.every((n) => n > 0) &&
+                size.join() !== window.officeViewport.at(-1)?.join()
+              )
+                window.officeViewport.push(size);
+            };
+            record();
+            window.addEventListener("resize", record);
+            return;
+          }
           localStorage.setItem("titanos.locale", "de");
         });
         if (process.env.UI_OFFICE_TRACE === "1") {

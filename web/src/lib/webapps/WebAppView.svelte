@@ -647,6 +647,7 @@
 
 	const icon = $derived(app.icon ?? '');
 	const docName = $derived(current ? baseName(current.doc.path) : '');
+	const officeDoc = $derived(current?.doc ?? doc);
 	const startDir = $derived(
 		current ? { root: current.doc.root, dir: parentDir(current.doc.path) } : undefined,
 	);
@@ -662,14 +663,16 @@
 	ondragover={dragOver}
 	ondrop={drop}
 >
-	{#if current && session.services.agent === true && phase === 'ready' && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
-		{#key JSON.stringify( [app.id, user(), current.doc.root, current.doc.path, current.mtime, binding?.id] )}<OfficeHandoff
-				doc={current.doc}
+	{#if officeDoc && session.services.agent === true && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
+		{#key JSON.stringify( [app.id, user(), officeDoc.root, officeDoc.path, current?.mtime, binding?.id] )}<OfficeHandoff
+				doc={officeDoc}
 				appId={app.id}
+				ready={boundOfficeDocument() && !busy}
 				dirty={appDirty || unwritten || busy || !!conflict || !!saving || !!replace}
-				mtime={current.mtime}
-				version={current.version}
+				mtime={current?.mtime ?? null}
+				version={current?.version ?? ''}
 				requestSelection={requestEditorSelection}
+				reopen={restart}
 			/>{/key}
 	{/if}
 	{#key reloads}

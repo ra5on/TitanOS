@@ -205,7 +205,7 @@ try {
         const html = `<!doctype html><title>${name} Testeditor</title><script src="/webapps/_host/host.js" data-bridge="host" data-app="${id}" data-events="${prefix}"></script><canvas data-host="page"></canvas><button id="choose">Auswahl markieren</button><script>
      const c=document.querySelector('canvas'), event=(name,detail)=>c.dispatchEvent(new CustomEvent('${prefix}:'+name,{detail}));
      window.office = {status:'none', items:[],doc:'',calls:0};
-     c.addEventListener('${prefix}:open',e=>{office.doc=e.detail.documentId;office.calls=0;office.status='none'});
+     c.addEventListener('${prefix}:open',e=>{office.doc=e.detail.documentId;c.dataset.opened=office.doc;office.calls=0;office.status='none'});
      c.addEventListener('${prefix}:agent-selection-request', e => {
        office.calls++;
        if (office.dropOnce) { office.dropOnce = false; return; }
@@ -337,6 +337,60 @@ try {
             "echtes 1.7.0 WASM, manueller Bereich übernommen",
           );
           continue;
+        }
+        if (id === "t-pdf") {
+          // A WebAssembly error reported by the editor before its first answer
+          // must not turn a dead editor into a manual, default-page handoff.
+          const frame = page
+            .frames()
+            .find((f) =>
+              new URL(f.url()).pathname.startsWith("/webapps/t-pdf/"),
+            );
+          assert.ok(frame);
+          if (mobile) {
+            await show.click();
+            await dlg.getByText("Im Editor ausgewählt").waitFor();
+          }
+          await frame.evaluate(() => {
+            const error = new WebAssembly.RuntimeError(
+              "Simulierter Editorabbruch",
+            );
+            window.dispatchEvent(new ErrorEvent("error", { error }));
+          });
+          if (mobile) await apply.click();
+          else await show.click();
+          await dlg
+            .getByRole("alert")
+            .filter({ hasText: "Der Editor wurde unterbrochen." })
+            .waitFor();
+          assert.equal(await apply.isDisabled(), true);
+          assert.equal(
+            await dlg.getByLabel("Seite", { exact: true }).count(),
+            0,
+          );
+          assert.equal(context, undefined);
+          if (process.env.UI_OUTPUT) {
+            await mkdir(process.env.UI_OUTPUT, { recursive: true });
+            await dlg.screenshot({
+              path: join(
+                process.env.UI_OUTPUT,
+                engine + "-" + width + "-pdf-editor-unterbrochen.png",
+              ),
+            });
+          }
+          const previousTicket = await frame
+            .locator("canvas")
+            .getAttribute("data-opened");
+          assert.match(previousTicket, /^[a-f0-9]{32}$/);
+          await dlg
+            .getByRole("button", { name: "Datei erneut öffnen" })
+            .click();
+          await editor
+            .locator(
+              `canvas[data-opened]:not([data-opened="${previousTicket}"])`,
+            )
+            .waitFor();
+          await editor.locator("#choose").click();
         }
         if (id === "t-word" && !mobile) {
           // Leave a conflict open and export a different buffer. An uncorrelated
