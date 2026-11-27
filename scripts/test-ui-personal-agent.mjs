@@ -443,7 +443,21 @@ async function run(width, height) {
       assert.equal(handoff.tool, "office.inspect");
       assert.equal(handoff.sources[0].ref.paragraph, "3");
       assert.equal(handoff.sources[0].kind, "office.region");
-      assert.equal(await selection.getByLabel("Absatz").count(), 0);
+      assert.equal(
+        await selection
+          .getByRole("spinbutton", { name: "Absatz", exact: true })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await selection
+          .getByRole("button", {
+            name: "Entfernen Angebot.docx · Absatz 3",
+            exact: true,
+          })
+          .count(),
+        1,
+      );
       await selection
         .getByText("Angebot.docx · Absatz 3", { exact: true })
         .first()
