@@ -3,6 +3,7 @@ package office
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -104,5 +105,23 @@ func TestXLSXSamePartForManySheets(t *testing.T) {
 	}
 	if n := strings.Count(text, "once"); n != 1 {
 		t.Fatalf("part read %d times", n)
+	}
+}
+
+func TestAmbiguousOfficePart(t *testing.T) {
+	for _, alias := range []string{"word/document.xml", "WORD/DOCUMENT.XML", "word/./document.xml"} {
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+		for _, name := range []string{"word/document.xml", alias} {
+			if _, err := w.Create(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DOCXText(buf.Bytes()); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("ambiguous part %q: %v", alias, err)
+		}
 	}
 }
