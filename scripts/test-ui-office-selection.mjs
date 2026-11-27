@@ -206,7 +206,14 @@ try {
      const c=document.querySelector('canvas'), event=(name,detail)=>c.dispatchEvent(new CustomEvent('${prefix}:'+name,{detail}));
      window.office = {status:'none', items:[],doc:'',calls:0};
      c.addEventListener('${prefix}:open',e=>{office.doc=e.detail.documentId;office.calls=0;office.status='none'});
-     c.addEventListener('${prefix}:agent-selection-request',e=>{office.calls++;const {version,requestId,documentId}=e.detail;event('agent-selection',{version,requestId,documentId,status:office.doc===documentId?office.status:'unbound',items:office.items});});
+     c.addEventListener('${prefix}:agent-selection-request', e => {
+       office.calls++;
+       if (office.dropOnce) { office.dropOnce = false; return; }
+       const {version, requestId, documentId} = e.detail;
+       const reply = () => event('agent-selection', {version, requestId, documentId,
+         status: office.doc === documentId ? office.status : 'unbound', items: office.items});
+       setTimeout(reply, ${id === "t-deck" ? 1200 : 0});
+     });
      choose.onclick=()=>{office.status='selected';office.items=${JSON.stringify(items)}};
      event('ready',{});
      </script>`;
@@ -384,6 +391,20 @@ try {
         await show.click();
         await dlg.getByText("Im Editor ausgewählt").waitFor();
         assert.equal(await dlg.locator("li").count(), items.length);
+        if (id === "t-deck") {
+          await editor.locator("canvas").evaluate(() => {
+            window.office.dropOnce = true;
+          });
+          await apply.click();
+          await dlg
+            .getByText("Der Editor hat noch nicht geantwortet.")
+            .waitFor();
+          assert.equal(context, undefined);
+          await dlg
+            .getByRole("button", { name: "Auswahl erneut prüfen" })
+            .click();
+          await dlg.getByText("Im Editor ausgewählt").waitFor();
+        }
         if (id === "t-word") {
           // A changed selection between opening the sheet and handoff cannot submit.
           await editor.locator("canvas").evaluate(() => {

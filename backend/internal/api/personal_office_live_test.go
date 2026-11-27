@@ -170,6 +170,11 @@ func runOfficeBrowser(t *testing.T, ts *testServer, repo string) {
 	if resp, _ := ts.request("POST", "/api/v1/system/disclaimer", map[string]int{"version": 1}); resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.Fatalf("disclaimer: %d", resp.StatusCode)
 	}
+	// The owner has already chosen the editors to install above. Persist that
+	// choice through the same endpoint as the optional migration dialog.
+	if resp, _ := ts.request("PUT", "/api/v1/preferences/hints", map[string]bool{"webapps-0.63": true}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("dismiss optional Office migration dialog: %d", resp.StatusCode)
+	}
 	origin, err := url.Parse(ts.url)
 	if err != nil {
 		t.Fatal(err)

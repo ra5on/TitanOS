@@ -87,8 +87,8 @@
 		const requestId = selectionId();
 		return new Promise((resolve) => {
 			const timer = setTimeout(
-				() => finish({ status: knowsSelection ? 'changed' : 'legacy' }),
-				700,
+				() => finish({ status: knowsSelection ? 'timeout' : 'legacy' }),
+				knowsSelection ? 8000 : 4000,
 			);
 			function finish(status: EditorSelection) {
 				clearTimeout(timer);

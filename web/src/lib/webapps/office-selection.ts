@@ -7,7 +7,7 @@ export type OfficeRegion =
 	| { slide: number; paragraph?: number };
 export type EditorSelection =
 	| { status: 'selected'; items: OfficeRegion[] }
-	| { status: 'none' | 'dirty' | 'unsupported' | 'unbound' | 'legacy' | 'changed' };
+	| { status: 'none' | 'dirty' | 'unsupported' | 'unbound' | 'legacy' | 'changed' | 'timeout' };
 export const selectionId = () =>
 	Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
 		b.toString(16).padStart(2, '0'),

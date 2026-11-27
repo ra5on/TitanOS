@@ -211,6 +211,25 @@ async function runLive() {
           if (location.pathname.startsWith("/webapps/")) return;
           localStorage.setItem("titanos.locale", "de");
         });
+        if (process.env.UI_OFFICE_TRACE === "1") {
+          await ctx.addInitScript(() => {
+            window.addEventListener("message", ({ data }) => {
+              if (
+                data?.type === "webapp-agent-selection-request" ||
+                data?.type === "webapp-agent-selection"
+              ) {
+                console.info(
+                  "office-selection",
+                  Date.now(),
+                  data.type,
+                  data.requestId,
+                  data.status,
+                  JSON.stringify(data.items),
+                );
+              }
+            });
+          });
+        }
         const page = await ctx.newPage(),
           errors = [];
         page.on("pageerror", (e) => {
@@ -218,6 +237,11 @@ async function runLive() {
           errors.push(e.message);
         });
         page.on("console", (m) => {
+          if (
+            process.env.UI_OFFICE_TRACE === "1" &&
+            m.text().startsWith("office-selection")
+          )
+            console.log(engine, id, m.text());
           if (
             m.type() === "error" &&
             (m.location().url.includes("/webapps/") ||

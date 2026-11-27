@@ -43,7 +43,7 @@
 	const blocked = $derived(
 		!editor ||
 			dirty ||
-			['dirty', 'unbound', 'changed'].includes(editor.status) ||
+			['dirty', 'unbound', 'changed', 'timeout'].includes(editor.status) ||
 			!mtime ||
 			!version,
 	);
@@ -73,6 +73,11 @@
 		try {
 			const fresh = await requestSelection();
 			if (token !== ticket || dirty || !initial) return;
+			if (fresh.status === 'timeout') {
+				editor = fresh;
+				valid = false;
+				return;
+			}
 			if (JSON.stringify(initial) !== JSON.stringify(fresh)) {
 				editor = { status: 'changed' };
 				valid = false;
@@ -132,6 +137,13 @@
 					? 'Öffne die gespeicherte NAS-Datei erneut, um ihre Auswahl zu verwenden.'
 					: 'Reopen the saved NAS file to share its selection.'}
 			</p>
+		{:else if editor.status === 'timeout'}
+			<p role="status">
+				{de ? 'Der Editor hat noch nicht geantwortet.' : 'The editor has not responded yet.'}
+			</p>
+			<button type="button" class="btn" onclick={show}
+				>{de ? 'Auswahl erneut prüfen' : 'Check selection again'}</button
+			>
 		{:else if editor.status === 'changed'}
 			<p role="status">
 				{de
