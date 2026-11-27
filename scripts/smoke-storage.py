@@ -25,6 +25,7 @@ import urllib.request
 import zipfile
 
 from cdi_smoke import check_cdi
+import personal_agent_storage_smoke as agent_storage
 from quota_smoke import check_share_quotas
 from vm_snapshot_smoke import check_vm_snapshots
 
@@ -111,45 +112,7 @@ def check_uploads(request, opener, url, remote, password):
     remote('rm /mnt/mirror/appdata/upload.bin')
 
 
-def personal_agent_smoke(request, remote):
-    # Both commands address the disposable guest. Check the real systemd identity
-    # and complete a durable job after restarting only the Agent service.
-    remote("""systemctl is-active --quiet titanos-agent.service
-pid=$(systemctl show -p MainPID --value titanos-agent.service)
-uid=$(id -u _titanos-agent)
-test "$uid" -gt 0
-test "$(awk '/^Uid:/ {print $2}' /proc/$pid/status)" = "$uid"
-grep -Eq '^CapEff:[[:space:]]+0+$' /proc/$pid/status
-systemctl stop titanos-agent.service""")
-    deadline = time.monotonic() + 60
-    while True:
-        try:
-            request('/personal-agent/state')
-            break
-        except RuntimeError as error:
-            if '503' not in str(error) or time.monotonic() > deadline:
-                raise
-        time.sleep(1)
-    req = {'tool': 'agent.example', 'requestId': 'qemu-agent-restart'}
-    try:
-        job = request('/personal-agent/jobs', req)
-    finally:
-        remote('systemctl start titanos-agent.service')
-    deadline = time.monotonic() + 90
-    while time.monotonic() < deadline:
-        result = request('/personal-agent/jobs/' + job['id'])
-        if result['status'] == 'done':
-            assert result['result']['text'] == '2 + 3 = 5', result
-            assert request('/personal-agent/jobs', req)['id'] == job['id']
-            print('Agent service: unprivileged PID, no capabilities, queued job completed once after restart', flush=True)
-            return
-        if result['status'] == 'failed':
-            raise AssertionError(result)
-        time.sleep(1)
-    raise TimeoutError('personal Agent worker did not finish')
-
-
-def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False, force_tcg=False):
+def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, workflows_only=False, force_tcg=False, agent_move=False):
     os.environ['PATH'] += ':/usr/sbin:/sbin'
     with tempfile.TemporaryDirectory(prefix='titanos-storage-', dir=log.parent) as tmp:
         directory = Path(tmp)
@@ -228,15 +191,18 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
             from workflows023_smoke import checks as feature_checks
         password = secrets.token_urlsafe(24)
         with log.open('wb') as serial:
-            for boot in (1, 2, 3, 4):
+            saved_jobs = []
+            boot_disks = agent_storage.MOVE_DISKS if agent_move else ((1, 2, 3), (1, 2, 3), (1, 3), (1, 3))
+            for boot, present_disks in enumerate(boot_disks, start=1):
                 args = list(base_args)
-                for index in ((1, 2, 3) if boot < 3 else (1, 3)):
+                for index in present_disks:
                     args += ['-drive', f'if=none,id=data{index},format=qcow2,file={directory}/data{index}.qcow2',
                              '-device', f'virtio-blk-pci,drive=data{index},serial=BTRFS{index}']
                 for index in (1, 2):
                     args += ['-drive', f'if=none,id=quota{index},format=qcow2,file={directory}/quota{index}.qcow2',
                              '-device', f'virtio-blk-pci,drive=quota{index},serial=QUOTA{index}']
-                print(f'Btrfs boot {boot} ({accel[1]})', flush=True)
+                scenario = 'Agent volume move' if agent_move else 'Btrfs'
+                print(f'{scenario} boot {boot} ({accel[1]})', flush=True)
                 process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=serial, stderr=subprocess.STDOUT)
                 try:
                     deadline = time.monotonic() + timeout
@@ -262,10 +228,16 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         if time.monotonic() > deadline:
                             raise TimeoutError('SSH')
                         time.sleep(1)
+                    if agent_move:
+                        agent_storage.move_boot(boot, request, remote, saved_jobs)
+                        request('/system/power', {'action': 'reboot'})
+                        process.wait(timeout=90)
+                        continue
                     disks = {d['serial']: d['name'] for d in request('/storage')['disks']}
                     if boot != 1:
                         check_share_quotas(boot, request, remote, disks)
                     if boot == 1:
+                        agent_storage.unavailable(request)
                         members = [disks['BTRFS1'], disks['BTRFS2']]
                         # Exercise real foreign RAID release, only on these fresh
                         # virtual disks. A partial selection must change nothing.
@@ -282,8 +254,8 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
                         # After mirror: the first new volume gets the default folders.
+                        agent_storage.worker_restart(request, remote, 'mirror')
                         check_share_quotas(boot, request, remote, disks)
-                        personal_agent_smoke(request, remote)
                         profiles = remote('btrfs filesystem usage /mnt/mirror')
                         assert 'Data,RAID1' in profiles and 'Metadata,RAID1' in profiles, profiles
                         request('/vms', {'name': 'disk-test', 'displayName': 'Home Assistant Test', 'template': 'linux', 'memoryMiB': 512, 'vcpus': 1, 'disks': [{'format': 'qcow2', 'sizeBytes': 1024**3, 'volume': 'mirror'}]})
@@ -415,7 +387,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
-        print('Btrfs and tools smoke test passed', flush=True)
+        print('Agent volume move smoke test passed' if agent_move else 'Btrfs and tools smoke test passed', flush=True)
 
 
 if __name__ == '__main__':
@@ -424,10 +396,11 @@ if __name__ == '__main__':
     parser.add_argument('--plugins', type=Path)
     parser.add_argument('--log', type=Path, default=Path('out/storage-smoke.log'))
     parser.add_argument('--timeout', type=int, default=420)
+    parser.add_argument('--agent-volume-move', action='store_true', help='separate five-boot test of the Agent with its former volume detached and restored')
     parser.add_argument('--tcg', action='store_true', help='force CPU emulation to reproduce CI without KVM')
     parser.add_argument('--workflows023', action='store_true')
     parser.add_argument('--workflows-only', action='store_true', help='focus the additional checks without repeating the independent USB/SMB/snapshot suites')
     parser.add_argument('--online-virtio', action='store_true', help='also download and validate the official stable driver ISO')
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout, args.workflows023, args.online_virtio, args.workflows_only, args.tcg)
+    smoke(args.zip.resolve(), args.plugins.resolve() if args.plugins else None, args.log, args.timeout, args.workflows023, args.online_virtio, args.workflows_only, args.tcg, args.agent_volume_move)

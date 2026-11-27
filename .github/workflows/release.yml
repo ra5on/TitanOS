@@ -69,6 +69,7 @@ on:
       - 'scripts/release-kind.py'
       - 'scripts/autopilot.py'
       - 'scripts/smoke-storage.py'
+      - 'scripts/personal_agent_storage_smoke.py'
       - 'scripts/smoke-cache.py'
       - 'backend/internal/storage/cache.go'
       - 'scripts/workflows023_smoke.py'
@@ -397,6 +398,10 @@ jobs:
         # An app release keeps image and plugins of its base, which were tested then.
         if: steps.kind.outputs.kind == 'system'
         run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420 --workflows023
+
+      - name: Personal Agent storage, worker restart and system data volume change
+        timeout-minutes: 45
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip --agent-volume-move --log out/storage-smoke-agent-move.log
 
       - name: SSD cache with real dm-cache (writeback, switch-off, missing SSD, delete)
         # Also for app releases: the cache logic is titand's own code, which an
