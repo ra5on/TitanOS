@@ -33,6 +33,8 @@ func TestPersonalDeliveryMailCalendarDraftAndApprovedSend(t *testing.T) {
 			o.UI = webui.FS()
 		}
 	})
+	// Mount the test share before any asynchronous job notification reads the volumes.
+	dir := ts.withShare()
 	s := ts.server
 	pim, _, _ := pimTestStore(t)
 	s.opts.PIM = pim
@@ -136,7 +138,6 @@ func TestPersonalDeliveryMailCalendarDraftAndApprovedSend(t *testing.T) {
 		t.Fatal("SMTP did not receive the reviewed envelope and attachment")
 	}
 	// Run the second built-in with the native folder picked as its writing destination.
-	dir := ts.withShare()
 	for _, tool := range tools.tools() {
 		s.personal.tools[tool.ID] = tool
 	}
