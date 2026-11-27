@@ -38,6 +38,23 @@ for engine in chromium webkit; do
 done
 ```
 
+### Bereichsauswahl aus installierten Office-Editoren
+
+`TestOfficeEditorSelectionLive` erstellt ein Wegwerfkonto, die Freigabe „Docs“ und vier Beispieldateien. Der Browser öffnet jede Datei aus der Dateien-App, markiert im Editor einen Bereich und übergibt ihn an den Agenten. Der Test vergleicht die Ergebnisquellen und den gelesenen Inhalt und lädt anschließend die Originaldatei zum Bytevergleich wieder herunter. `UI_OFFICE_PACKAGES` verweist auf die vier zum eingebauten Katalog passenden Paketarchive. TitanOS prüft deren Größen und SHA-256-Prüfsummen bei der Installation.
+
+```sh
+make build
+export TITAND_BIN="$PWD/backend/bin/titand"
+export PLAYWRIGHT_MODULE="$PWD/.test-tools/node_modules/playwright/index.mjs"
+export TITANOS_OFFICE_BROWSER=1
+# UI_OFFICE_PACKAGES auf das lokale Verzeichnis mit den geprüften Archiven setzen.
+for engine in chromium webkit; do
+  UI_ENGINE="$engine" go -C backend test -count=1 -tags embedui ./internal/api -run '^TestOfficeEditorSelectionLive$' -v || exit 1
+done
+```
+
+Der Standardlauf erwartet eine Auswahlantwort des Editors. Für die älteren 1.7.0-Pakete prüft `UI_OFFICE_EXPECT_MANUAL=1` denselben Weg mit der manuellen Bereichsangabe. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
+
 | Einstieg | Prüfschritte |
 |---|---|
 | Arbeitsplatz und Agent | Arbeitsplatzmenü öffnen, neuen Chat starten, per Programmmenü und Tastatur zwischen Chats, Aufträgen und Einstellungen wechseln. |
