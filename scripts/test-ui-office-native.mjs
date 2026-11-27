@@ -1,5 +1,5 @@
 // Run true canvas selections through the installed editors' normal UI.
-// The fixed desktop window and anonymous documents are shared with the Go HTTP test.
+// The desktop and touch paths open anonymous files served by the Go HTTP test.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -121,13 +121,20 @@ export async function verifyNativeSelection({
   version,
   engine,
   expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1",
+  touch = false,
 }) {
   const example = examples[id];
   const canvas = editor.locator("canvas").first();
   await show.click({ trial: true, timeout: 60000 });
   await canvas.waitFor({ state: "visible" });
   await frames(canvas);
-  await chooseInsideEditor(id, page, canvas);
+  if (touch) {
+    // B2 in the unzoomed mobile worksheet. Use the native tap handler.
+    await canvas.tap({ position: { x: 105, y: 240 } });
+    await frames(canvas);
+  } else {
+    await chooseInsideEditor(id, page, canvas);
+  }
   const sizes = await canvas.evaluate(() => window.officeViewport);
   if (sizes) {
     console.log(engine, id, "editor viewport from startup to selection", sizes);
@@ -138,8 +145,9 @@ export async function verifyNativeSelection({
     );
   }
   await screenshot(canvas, engine, id, "im-editor");
-  await show.click();
-  let expected = example.refs;
+  if (touch) await show.tap();
+  else await show.click();
+  let expected = touch ? [{ sheet: "Planung", range: "B2" }] : example.refs;
   if (expectManual) {
     // This is a deliberate compatibility assertion for the old public WASM.
     await dlg.getByText("Bereich manuell wählen", { exact: true }).waitFor();
@@ -158,7 +166,8 @@ export async function verifyNativeSelection({
       id === "t-deck" ? [{ slide: 2, paragraph: 1 }] : example.refs.slice(0, 1);
   } else {
     await dlg.getByText("Im Editor ausgewählt", { exact: true }).waitFor();
-    assert.equal(await dlg.locator("li").count(), example.refs.length);
+    assert.equal(await dlg.locator("li").count(), expected.length);
+    if (touch) await dlg.getByText("Planung · B2", { exact: true }).waitFor();
   }
   await screenshot(
     dlg,
@@ -172,7 +181,7 @@ export async function verifyNativeSelection({
         new URL(r.url()).pathname,
       ),
     ),
-    apply.click(),
+    touch ? apply.tap() : apply.click(),
   ]);
   assert.equal(reply.status(), 200);
   const received = await reply.json();
@@ -200,6 +209,19 @@ async function runLive() {
   assert.equal(new URL(origin).hostname, "127.0.0.1");
   const engine = process.env.UI_ENGINE || "chromium";
   const driver = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+  const expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1";
+  const touch = process.env.UI_OFFICE_TOUCH === "1";
+  if (touch) {
+    assert.equal(
+      process.env.UI_OFFICE_APP,
+      "t-exel",
+      "The touch case opens the worksheet",
+    );
+    assert.ok(
+      !expectManual && process.env.UI_OFFICE_COPY !== "1",
+      "The touch case reads a native cell selection",
+    );
+  }
   const browser = await driver[engine].launch({
     executablePath: process.env.BROWSER_EXECUTABLE,
     args:
@@ -207,7 +229,6 @@ async function runLive() {
         ? ["--enable-unsafe-swiftshader", "--use-angle=swiftshader"]
         : [],
   });
-  const expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1";
   try {
     for (const [id, example] of Object.entries(examples)) {
       const copy = process.env.UI_OFFICE_COPY === "1";
@@ -216,7 +237,9 @@ async function runLive() {
         continue;
       const ctx = await browser.newContext({
         baseURL: origin,
-        viewport: { width: 1440, height: 900 },
+        ...(touch
+          ? { ...driver.devices["iPhone 13"], deviceScaleFactor: 1 }
+          : { viewport: { width: 1440, height: 900 } }),
         locale: "de-DE",
         storageState: process.env.UI_STORAGE_STATE,
         serviceWorkers: "block",
@@ -296,30 +319,36 @@ async function runLive() {
           };
         };
         const before = await download();
-        await page.goto("/");
-        const notice = page.getByRole("dialog", { name: "Haftungsausschluss" });
-        const offer = page
-          .locator("dialog[open]")
-          .filter({ hasText: "Office-Programme direkt im Browser" });
-        await page.locator(".topbar").waitFor();
-        if (await offer.isVisible())
-          await offer
-            .getByRole("button", { name: "Nicht mehr fragen" })
-            .click();
-        if (await notice.isVisible()) {
-          await notice.getByRole("checkbox").check();
-          await notice.getByRole("button", { name: "Weiter" }).click();
+        let files = page;
+        if (touch) {
+          await page.goto("/files?" + new URLSearchParams({ root }));
+        } else {
+          await page.goto("/");
+          const notice = page.getByRole("dialog", {
+            name: "Haftungsausschluss",
+          });
+          const offer = page
+            .locator("dialog[open]")
+            .filter({ hasText: "Office-Programme direkt im Browser" });
+          await page.locator(".topbar").waitFor();
+          if (await offer.isVisible())
+            await offer
+              .getByRole("button", { name: "Nicht mehr fragen" })
+              .click();
+          if (await notice.isVisible()) {
+            await notice.getByRole("checkbox").check();
+            await notice.getByRole("button", { name: "Weiter" }).click();
+          }
+          await page
+            .locator(".ico")
+            .filter({ hasText: "Dateien" })
+            .first()
+            .dblclick();
+          files = page.frameLocator('iframe[data-app="app:files"]');
         }
-        await page
-          .locator(".ico")
-          .filter({ hasText: "Dateien" })
-          .first()
-          .dblclick();
-        const files = page.frameLocator('iframe[data-app="app:files"]');
         const row = files.locator('[data-file-name="' + doc + '"]:visible');
-        // The test share is the default location. Wait for the file list itself;
-        // the shell and the hidden mobile location label render before the list.
-        await row.click({ button: "right" });
+        if (touch) await row.locator("button.more").tap();
+        else await row.click({ button: "right" });
         await files.getByRole("menuitem", { name: "Öffnen mit" }).click();
         await files
           .getByRole("menuitem", { name: new RegExp("^" + example.name) })
@@ -346,20 +375,25 @@ async function runLive() {
           version: before.version,
           engine,
           expectManual,
+          touch,
         });
-        assert.equal(
-          await page.evaluate(() => performance.timeOrigin),
-          desktopDocument,
-          "opening the Agent replaced the desktop document",
-        );
-        assert.equal(
-          await canvas.evaluate(
-            (el) => el.ownerDocument.defaultView.performance.timeOrigin,
-          ),
-          editorDocument,
-          "opening the Agent replaced the live editor",
-        );
-        const agent = page.frameLocator('iframe[data-app="app:agent"]').last();
+        if (!touch) {
+          assert.equal(
+            await page.evaluate(() => performance.timeOrigin),
+            desktopDocument,
+            "opening the Agent replaced the desktop document",
+          );
+          assert.equal(
+            await canvas.evaluate(
+              (el) => el.ownerDocument.defaultView.performance.timeOrigin,
+            ),
+            editorDocument,
+            "opening the Agent replaced the live editor",
+          );
+        }
+        const agent = touch
+          ? page
+          : page.frameLocator('iframe[data-app="app:agent"]').last();
         if (copy) {
           assert.ok(
             !expectManual,
@@ -405,10 +439,17 @@ async function runLive() {
           await delay(250);
         }
         assert.equal(result.status, "done", result.error);
-        assert.ok(
-          result.result.text.includes(example.contains),
-          id + " missing selected content: " + result.result.text,
-        );
+        if (touch)
+          assert.equal(
+            result.result.text.trim(),
+            "2",
+            "Only the value of B2 was requested",
+          );
+        else
+          assert.ok(
+            result.result.text.includes(example.contains),
+            id + " missing selected content: " + result.result.text,
+          );
         assert.ok(
           !result.result.text.includes(example.excludes),
           id + " returned content outside the chosen region",
@@ -421,6 +462,11 @@ async function runLive() {
         await reply.locator(".pa-card-open").click();
         const detail = agent.locator('.pa-detail[data-job="' + jobId + '"]');
         await detail.locator(".pa-readable").waitFor();
+        if (touch)
+          assert.equal(
+            (await detail.locator(".pa-readable").innerText()).trim(),
+            "2",
+          );
         assert.equal(
           await detail.locator(".pa-source-list li").count(),
           sources.length,
