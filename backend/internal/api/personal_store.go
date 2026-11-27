@@ -19,8 +19,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
-const personalFeature = "personal-agent"
-
 // A plan and consent belong to exactly one job. The submitted request stays immutable for
 // idempotency. A prior step contributes plain result text, never tool names, arguments or URLs.
 type personalPlan struct {
@@ -96,12 +94,12 @@ func (s *Server) personalRoot() (*os.Root, func(), error) {
 	if s.opts.Storage == nil || s.opts.SystemData == nil {
 		return nil, nil, volumedata.ErrUnavailable
 	}
-	v, release := s.opts.SystemData.Use(personalFeature)
+	v, release := s.opts.SystemData.Use(pa.Feature)
 	if v == "" {
 		release()
 		return nil, nil, volumedata.ErrUnavailable
 	}
-	root, err := volumedata.Open(filepath.Dir(s.opts.Storage.MountPoint(v)), v, personalFeature, s.opts.Storage.Mounted())
+	root, err := volumedata.Open(filepath.Dir(s.opts.Storage.MountPoint(v)), v, pa.Feature, s.opts.Storage.Mounted())
 	if err != nil {
 		release()
 		return nil, nil, err

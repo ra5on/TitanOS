@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+// Feature names the private data directory used by the volume manager.
+// Its identifiers follow the 12-byte volume naming contract.
+const Feature = "agent-v2"
+
 // ErrNoEffect means the adapter verified that the attempted external action had no effect.
 var ErrNoEffect = errors.New("native action was rejected before any change")
 

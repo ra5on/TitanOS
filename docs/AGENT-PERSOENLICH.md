@@ -6,7 +6,7 @@ TitanOS führt Aufträge pro lokalem Konto. Die persönliche Agent-Oberfläche v
 
 `titanos-agent.service` läuft als `_titanos-agent` ohne Linux-Capabilities. Zwei unabhängige Auftragsläufe und die Posteingangsprüfung verwenden den privaten Unix-Socket `/run/titanos-personal-agent/broker.sock`. Der Worker fordert den nächsten Auftrag und dessen nächsten Schritt mit einer kurzlebigen Kennung an. Der Broker in `titand` prüft die UID des anfragenden Prozesses und führt registrierte native Operationen im Kontext des ermittelten NAS-Kontos aus.
 
-Die Kontozustände liegen in `.titanos/personal-agent` auf dem Systemdatenvolume. Eine Transaktion schreibt zuerst eine private temporäre Datei, synchronisiert, ersetzt die Kontodatei und synchronisiert das Verzeichnis. Der Konfigurationsspeicher hält zusätzlich die Berechtigungsrevisionen. Fehlt das Datenvolume, meldet die API den Speicherfehler. Die Daten älterer Agent-Versionen gehören zu eigenen Verzeichnissen.
+Die Kontozustände liegen in `.titanos/agent-v2` auf dem Systemdatenvolume. Eine Transaktion schreibt zuerst eine private temporäre Datei, synchronisiert, ersetzt die Kontodatei und synchronisiert das Verzeichnis. Der Konfigurationsspeicher hält zusätzlich die Berechtigungsrevisionen. Fehlt das Datenvolume, meldet die API den Speicherfehler. Die Daten älterer Agent-Versionen gehören zu eigenen Verzeichnissen.
 
 ## Aufträge und Freigaben
 
