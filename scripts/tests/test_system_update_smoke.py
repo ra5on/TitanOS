@@ -1,4 +1,8 @@
 import importlib.util
+import json
+import shutil
+import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +16,37 @@ spec.loader.exec_module(smoke)
 
 
 class SystemUpdateSmokeTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("minisign"), "minisign required")
+    def test_predecessor_trust_excludes_the_candidate_key_and_detects_mismatched_artifacts(self):
+        from agent_cutover_smoke import verify_previous
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            archive = directory / "titanos-1.34.0.zip"
+            manifest = directory / "manifest.json"
+            archive.write_bytes(b"disposable historic image")
+            manifest.write_text(json.dumps({"version": "1.34.0", "channel": "stable", "tag": "v1.34.0"}))
+
+            def minisign(*args):
+                subprocess.run(["minisign", *map(str, args)], check=True, capture_output=True)
+
+            historical = directory / "historical.key"
+            candidate = directory / "candidate.key"
+            minisign("-G", "-W", "-p", directory / "titanos-release-test.pub", "-s", historical)
+            minisign("-G", "-W", "-p", directory / "rehearsal.pub", "-s", candidate)
+            for path in [archive, manifest]:
+                minisign("-S", "-s", candidate, "-m", path)
+            with self.assertRaisesRegex(ValueError, "signature"):
+                verify_previous("1.34.0", directory, directory)
+            minisign("-S", "-s", historical, "-m", manifest)
+            with self.assertRaisesRegex(ValueError, "signature"):
+                verify_previous("1.34.0", directory, directory)
+            minisign("-S", "-s", historical, "-m", archive)
+            self.assertEqual(verify_previous("1.34.0", directory, directory)[0], archive)
+            manifest.write_text(json.dumps({"version": "1.33.0", "channel": "stable", "tag": "v1.33.0"}))
+            minisign("-S", "-s", historical, "-m", manifest)
+            with self.assertRaisesRegex(ValueError, "selected stable"):
+                verify_previous("1.34.0", directory, directory)
+
     def test_entry_names_tell_the_tries_left(self):
         self.assertEqual(smoke.tries_left("titanos-a.conf"), ("a", None))
         self.assertEqual(smoke.tries_left("titanos-b+3.conf"), ("b", 3))

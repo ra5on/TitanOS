@@ -4,6 +4,9 @@
 Boots the installation ZIP and installs full system releases through the API,
 each into the slot that is not running, as a NAS does it:
 
+  --agent-cutover-from  Boot a release-signed Stable predecessor, create a real
+           old chat and recurring reminder, install and confirm the candidate
+           system, verify archived bytes and observe the new unprivileged worker.
   interrupted  power off while the inactive slot is being written, verify the
            old slot, a configuration file and real SMB file after reboot.
   network  break the management IP, VLAN and bridge on trial, verify the
@@ -76,6 +79,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from agent_cutover_smoke import Cutover, previous_release
 from interrupted_system_smoke import ReleaseHandler, check_share, create_share, interrupt_install, network_trials
 
 REPO = Path(__file__).resolve().parent.parent
@@ -234,7 +238,7 @@ class Releases:
         command("minisign", "-S", "-s", str(self.key), "-m", str(latest / "manifest.json"), "-t", f"TitanOS {version}: manifest.json")
 
 
-def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi", scenarios=SCENARIOS, memory="4G", real_time=False):
+def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi", scenarios=SCENARIOS, memory="4G", real_time=False, agent_cutover_from=None):
     os.environ["PATH"] += ":/usr/sbin:/sbin"
     context = ssl._create_unverified_context()  # expected self-signed NAS certificate
     base_manifest = json.loads((release / "manifest.json").read_text())
@@ -243,6 +247,13 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
     slot_files = {name: release / f"titanos-{base}-{name}" for name in ["vmlinuz", "initrd.img", "filesystem.squashfs"]}
     with tempfile.TemporaryDirectory(prefix="titanos-system-") as tmp:
         directory = Path(tmp)
+        boot_base = boot_version = base
+        if agent_cutover_from:
+            archive, predecessor = previous_release(agent_cutover_from, directory)
+            boot_version, boot_base = predecessor["version"], predecessor["app"]["base"]
+            # The PR normally builds a synthetic 0.x rehearsal. The real old
+            # updater must see a newer target. Only the candidate version label changes.
+            versions["good"] = bump(boot_version, 1)
         releases = Releases(directory / "server", base_manifest, key)
         images = []
         if "good" in scenarios:
@@ -270,11 +281,12 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                     raise ValueError("unsafe path in installation ZIP")
             packed.extractall(stick)
         # The NAS asks the project page on the host (10.0.2.2 in QEMU's network).
-        (stick / "config/system").mkdir(parents=True)
+        (stick / "config/system").mkdir(parents=True, exist_ok=True)
         # An archived legacy Agent config on the disposable USB image must survive
         # slot installation and the new daemon's first boot byte-for-byte.
         archived_agent = b'{ "enabled" : false, "fixture" : "legacy-archive" }\n'
-        (stick / "config/system/agent.json").write_bytes(archived_agent)
+        if not agent_cutover_from:
+            (stick / "config/system/agent.json").write_bytes(archived_agent)
         (stick / "config/system/update.json").write_text(json.dumps(
             {"channel": "stable", "autoInstall": False, "installTime": "03:30", "source": f"http://10.0.2.2:{releases.port}"}))
         console = "console=tty0 console=ttyS0,115200 systemd.journald.forward_to_console=1"
@@ -363,7 +375,7 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
         forwards = f"hostfwd=tcp:127.0.0.1:{port}-:443"
         extra_devices = []
         share_scenarios = {"network", "interrupted"}
-        if share_scenarios.intersection(scenarios):
+        if share_scenarios.intersection(scenarios) or agent_cutover_from:
             smb_port = free_port()
             forwards += f",hostfwd=tcp:127.0.0.1:{smb_port}-:445"
             data_disk = directory / "data.qcow2"
@@ -376,6 +388,12 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                 "-netdev", "user,id=spare,ipv4=off,ipv6=on,restrict=on",
                 "-device", "virtio-net-pci,netdev=spare,mac=52:54:00:da:7a:02",
             ]
+
+        cutover = None
+        if agent_cutover_from:
+            ssh_port = free_port()
+            forwards += f",hostfwd=tcp:127.0.0.1:{ssh_port}-:22"
+            cutover = Cutover(directory, ssh_port, request, wait, REPO / "build/mkosi.extra/usr/share/titanos/update-keys/rehearsal.pub")
 
         # A long software-emulated restart test on a busy builder otherwise
         # spends most of its time waiting on the other virtual CPU.
@@ -457,6 +475,8 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                     raise AssertionError(f"wrong pending update: {pending}")
                 if there["version"] != version or not there["complete"] or not there["next"] or there["triesLeft"] != TRIES:
                     raise AssertionError(f"slot {target} is not the one on trial next: {there}")
+                if cutover:
+                    cutover.arm()
                 stop()
                 # On the stick, read from the host: the new entry with its
                 # counter comes first, the running system is the fallback.
@@ -533,17 +553,20 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                 print(f"System {version}: not installed again by itself, still offered", flush=True)
 
             try:
-                print(f"Boot 1: TitanOS {base} ({loader}, {accel[1]})", flush=True)
+                print(f"Boot 1: TitanOS {boot_version} ({loader}, {accel[1]})", flush=True)
                 status = boot(first=True)
-                if status["base"] != base or status["version"] != base or running(status) != "a":
-                    raise AssertionError(f"image does not run {base} from slot a: {status}")
+                if status["base"] != boot_base or status["version"] != boot_version or running(status) != "a":
+                    raise AssertionError(f"image does not run {boot_version} from slot a: {status}")
                 if on_stick.tries() != {"a": None}:
                     raise AssertionError(f"boot entries of a fresh stick: {on_stick.entries()}")
 
-                if share_scenarios.intersection(scenarios):
+                if share_scenarios.intersection(scenarios) or cutover:
                     create_share(request, wait, directory, smb_port, password)
                     def smb_readable():
                         return check_share(directory, smb_port, password)
+
+                if cutover:
+                    cutover.old(password, predecessor)
 
                 if "interrupted" in scenarios:
                     interrupt_install(request, check, wait, releases, slot_files, versions["interrupted"], kill, boot, on_stick)
@@ -583,16 +606,20 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                         raise AssertionError(f"the system of before is gone: {status['slots']}")
                     wait("message about the installed system", lambda: notified("update_installed", good), 120)
                     wait("entry without counter on the stick", lambda: on_stick.tries() == {target: None, before: None}, 60)
-                    archive_read = subprocess.run(["mcopy", "-i", on_stick.partition,
-                        "::config/system/agent.json", "-"], capture_output=True, check=True)
-                    assert archive_read.stdout == archived_agent, "legacy Agent archive changed during update"
-                    for method, route in (("GET", "/api/v1/agent/settings"), ("POST", "/api/v1/agent/schedules/archived/run")):
-                        try:
-                            request(route, {} if method == "POST" else None, method=method)
-                        except urllib.error.HTTPError as error:
-                            assert error.code == 404, (route, error.code)
-                        else:
-                            raise AssertionError("legacy Agent route active after update: " + route)
+                    if cutover:
+                        cutover.new()
+                        wait("original SMB file after Stable upgrade", smb_readable, 90)
+                    else:
+                        archive_read = subprocess.run(["mcopy", "-i", on_stick.partition,
+                            "::config/system/agent.json", "-"], capture_output=True, check=True)
+                        assert archive_read.stdout == archived_agent, "legacy Agent archive changed during update"
+                        for method, route in (("GET", "/api/v1/agent/settings"), ("POST", "/api/v1/agent/schedules/archived/run")):
+                            try:
+                                request(route, {} if method == "POST" else None, method=method)
+                            except urllib.error.HTTPError as error:
+                                assert error.code == 404, (route, error.code)
+                            else:
+                                raise AssertionError("legacy Agent route active after update: " + route)
                     if on_stick.read("config/system/update-pending.json") is not None:
                         raise AssertionError("the pending update is still on the stick")
                     print(f"System update {old} → {good}: slot {target} on trial with {TRIES - 1} tries left, marked good by the boot check, confirmed", flush=True)
@@ -630,10 +657,13 @@ if __name__ == "__main__":
     parser.add_argument("--scenarios", default=",".join(SCENARIOS), help="which of good, nostart, panic, hang, interrupted, network to run (default: all)")
     parser.add_argument("--memory", default="4G", help="RAM of the VM")
     parser.add_argument("--real-time", action="store_true", help="hang: wait three times 30 minutes instead of letting the clock of the VM jump")
+    parser.add_argument("--agent-cutover-from", metavar="STABLE", help="boot a release-signed legacy version for the Agent cutover (UEFI good scenario)")
     args = parser.parse_args()
     chosen = [name for name in SCENARIOS if name in args.scenarios.split(",")]
     if not chosen or set(args.scenarios.split(",")) - set(SCENARIOS):
         parser.error("--scenarios takes a list of " + ", ".join(SCENARIOS))
+    if args.agent_cutover_from and (chosen != ["good"] or args.firmware != "uefi"):
+        parser.error("--agent-cutover-from requires UEFI and --scenarios good")
     args.log.parent.mkdir(parents=True, exist_ok=True)
     smoke(args.zip.resolve(), args.release.resolve(), args.key.resolve(), args.timeout, args.log, args.tcg,
-          args.firmware, chosen, args.memory, args.real_time)
+          args.firmware, chosen, args.memory, args.real_time, args.agent_cutover_from)

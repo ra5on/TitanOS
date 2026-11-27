@@ -179,6 +179,18 @@ Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
   `titanos-trial-watchdog.timer` startet es jeweils nach 30 Minuten neu, nach
   drei Starts läuft das System von vorher.
 
+Der zusätzliche UEFI-Lauf `--scenarios good --agent-cutover-from 1.34.0`
+startet vom veröffentlichten Installations-ZIP des Vorgängers. Er prüft die
+Release-Signaturen von ZIP und Manifest sowie den Hash des laufenden titand.
+Erst im laufenden Wegwerfgast erhält der vorhandene Update-Prüfer den
+öffentlichen Schlüssel des Probelaufs. Der Kandidat bekommt für diesen Test
+eine höhere Versionsnummer und wird über die normale Update-API installiert.
+Der Vorgänger erzeugt selbst einen Chat, einen ausgeführten Erinnerungsauftrag
+und einen aktiven Zeitplan. Nach dem Neustart prüft der Test die Dateien des
+Alt-Agenten über die nächste Fälligkeit hinweg, einen abgeschlossenen Auftrag
+des persönlichen Dienstes und den Lesezugriff auf die SMB-Freigabe. Das
+Serienprotokoll steht unter `out/system-update-smoke-agent-cutover.log`.
+
 Mit SeaBIOS/GRUB (`--firmware bios`) laufen im Workflow `good` und `nostart`;
 das Skript kann dort alle vier (`--scenarios`).
 

@@ -64,6 +64,7 @@ on:
       - 'scripts/fetch-pci-ids.sh'
       - 'scripts/smoke-app-update.py'
       - 'scripts/smoke-system-update.py'
+      - 'scripts/agent_cutover_smoke.py'
       - 'scripts/interrupted_system_smoke.py'
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
@@ -382,6 +383,15 @@ jobs:
           if unzip -l "$zip" boot/grub/grub.cfg > /dev/null; then
             python3 scripts/smoke-system-update.py "$zip" --release out/release --key "$RUNNER_TEMP/rehearsal.key" --firmware bios --scenarios good,nostart --log out/system-update-smoke-bios.log --timeout 420
           fi
+
+      - name: Upgrade a published legacy Stable to the personal Agent in UEFI QEMU
+        if: env.REAL_TAG != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="out/release/titanos-${{ steps.version.outputs.version }}.zip"
+          python3 scripts/smoke-system-update.py "$zip" --release out/release --key "$RUNNER_TEMP/rehearsal.key" \
+            --scenarios good --agent-cutover-from 1.34.0 --log out/system-update-smoke-agent-cutover.log
 
       - name: Remove the disposable signing key
         if: always() && env.REAL_TAG != 'true'
