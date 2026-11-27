@@ -700,9 +700,16 @@ main:has(> .pa-shell) {
 .pa-rights label b {
 	display: block;
 }
+.pa-rights label {
+	flex-wrap: wrap;
+}
+.pa-rights label > span {
+	flex: 1 1 14em;
+}
 .pa-rights select {
 	flex: none;
-	max-width: 50%;
+	width: auto;
+	max-width: 100%;
 }
 .pa-colors input {
 	width: 42px;
@@ -785,6 +792,10 @@ main:has(> .pa-shell) {
 	background: var(--pa-navigation);
 	box-shadow: 0 8px 32px #0004;
 	padding: 14px 18px 18px;
+}
+.pa-sheet > .pa-warning {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 }
 .pa-sheet header {
 	display: flex;

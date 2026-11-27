@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { fixtureFactory } from "./test-ui-fixtures.mjs";
+import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 
 const origin = process.env.UI_URL || "http://127.0.0.1:5393";
 assert.ok(
@@ -302,6 +302,38 @@ async function run(width, height) {
     await send.locator(".pa-verified").waitFor();
     assert.equal(approvals, 1);
     await shot("ergebnis");
+    if (!mobile) {
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page
+        .getByRole("button", { name: "Spracheingabe", exact: true })
+        .click();
+      const orb = page.locator(".pa-sheet [data-guide=orb]");
+      await orb.waitFor();
+      await page.waitForFunction(
+        () => {
+          const guide = document.querySelector(".guide");
+          const orb = document.querySelector(".pa-sheet [data-guide=orb]");
+          if (!guide || !orb) return false;
+          const g = guide.getBoundingClientRect(),
+            o = orb.getBoundingClientRect();
+          return (
+            Math.abs(g.top + g.height / 2 - o.top - o.height / 2) < 4 &&
+            Math.abs(g.left + g.width / 2 - o.left - o.width / 2) < 4
+          );
+        },
+        undefined,
+        { timeout: 4000 },
+      );
+      const clipped = await page.evaluate(cutTextIn);
+      assert.deepEqual(
+        clipped.filter(
+          (line) => line.includes("pa-shell") || line.includes("pa-button"),
+        ),
+        [],
+      );
+      await page.keyboard.press("Escape");
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
     if (mobile) await page.keyboard.press("Escape");
     await page.locator('[data-guide="jobs-tab"]:visible').click();
     await page.locator(".pa-row").first().waitFor();
@@ -454,6 +486,12 @@ async function run(width, height) {
         .getByRole("button", { name: "Speichern", exact: true })
         .click();
       assert.equal(limits["mail.send"], "never");
+      await page.setViewportSize({ width: 390, height });
+      const clipped = await page.evaluate(cutTextIn);
+      assert.deepEqual(
+        clipped.filter((line) => line.startsWith("select ")),
+        [],
+      );
     }
   } catch (e) {
     console.error(

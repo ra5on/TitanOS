@@ -9,6 +9,18 @@
 	}: { cue: Cue | null; mode: 'full' | 'subtle' | 'off'; reduced: boolean } = $props();
 	let guide = $state<HTMLElement>();
 	let showing = $state(false);
+	function targetRect(target?: HTMLElement) {
+		if (!target) return;
+		const rect = target.getBoundingClientRect();
+		const sheet = target.closest('.pa-sheet');
+		if (!sheet) return rect;
+		// Fly translates a sheet on entry. Aim at its final position so the trail
+		// meets the source and doesn't extend the scroll area below the window.
+		const transform = getComputedStyle(sheet).transform;
+		if (transform === 'none') return rect;
+		const offset = new DOMMatrixReadOnly(transform);
+		return new DOMRect(rect.x - offset.m41, rect.y - offset.m42, rect.width, rect.height);
+	}
 	$effect(() => {
 		const root = guide?.parentElement,
 			el = guide,
@@ -24,11 +36,10 @@
 			await tick();
 			if (cancelled || !current || !el || !root) return;
 			const origin = root.getBoundingClientRect();
+			const targets = [...root.querySelectorAll<HTMLElement>('[data-guide]')];
 			const points = current.stops
 				.map((id) =>
-					[...root.querySelectorAll<HTMLElement>('[data-guide]')]
-						.find((n) => n.dataset.guide === id && n.getClientRects().length)
-						?.getBoundingClientRect(),
+					targetRect(targets.find((n) => n.dataset.guide === id && n.getClientRects().length)),
 				)
 				.filter((p) => p && p.width && p.height);
 			if (!points.length) return;
