@@ -9196,6 +9196,7 @@
 	"error.speech_failed": "Der Sprachdienst hat nicht geantwortet. Details stehen im Protokoll des NAS.",
 	"error.speech_not_running": "Der Sprachdienst läuft gerade nicht.",
 	"error.speech_not_there": "Das ist noch nicht heruntergeladen.",
+	"error.speech_timeout": "Der lokale Sprachdienst hat das Zeitlimit für die Wiedergabe erreicht.",
 	"error.speech_volume": "Wähle ein eingehängtes Volume für die Modelle.",
 	"agent.home.runningCount": "Läuft gerade: {count}",
 	"agent.home.overview": "Übersicht anzeigen",

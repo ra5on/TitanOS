@@ -236,7 +236,7 @@ type Options struct {
 
 // Server answers all HTTP requests.
 type Server struct {
-	personal personalRuntime
+	personal         personalRuntime
 	opts             Options
 	sessions         *auth.Sessions
 	tokens           *auth.Tokens

@@ -9196,6 +9196,7 @@
 	"error.speech_failed": "The speech service did not answer. Details are in the log of the NAS.",
 	"error.speech_not_running": "The speech service is not running right now.",
 	"error.speech_not_there": "This is not downloaded yet.",
+	"error.speech_timeout": "The local speech service timed out while preparing playback.",
 	"error.speech_volume": "Choose a mounted volume for the models.",
 	"agent.home.runningCount": "Running now: {count}",
 	"agent.home.overview": "Show overview",

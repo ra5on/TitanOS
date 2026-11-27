@@ -59,7 +59,7 @@ type servicesArea struct {
 // KI-Agent ask it which services are on.
 func (s *Server) servicesArea() servicesArea {
 	return servicesArea{docker: s.opts.Docker, vms: s.opts.VMs, lxc: s.opts.LXC, store: s.opts.Store, storage: s.opts.Storage, state: &s.services,
-		mailOn:  func(user auth.User) bool { return s.opts.Mail != nil && s.opts.Mail.Allowed(user.Name) }}
+		mailOn: func(user auth.User) bool { return s.opts.Mail != nil && s.opts.Mail.Allowed(user.Name) }}
 }
 
 func (a servicesArea) register(mux *routeMux, g guards) {
