@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -22,10 +23,17 @@ import (
 // number, which every node keeps for itself.
 func accountHash(user auth.User) string {
 	user.UID = 0
+	// Old peers hash the same account JSON. Grant metadata is versioned
+	// separately so newer nodes can still observe a revoke/regrant cycle.
+	user.AccessRevision, user.LocalAccessStamp = 0, ""
 	data, _ := json.Marshal(user)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+// The empty string denotes a legacy peer; "0" is an upgraded account that
+// has not changed grants. The value form preserves AccountVersion equality.
+func accountGrantRevision(u auth.User) string { return strconv.FormatUint(u.AccessRevision, 10) }
 
 // accountRecord is an account sent to another node.
 type accountRecord struct {
@@ -125,7 +133,7 @@ func (m *Manager) noteLocal(name string, removed bool) bool {
 	}
 	known, had := m.state.Accounts[name]
 	switch {
-	case exists && had && !known.Deleted && known.Hash == accountHash(user):
+	case exists && had && !known.Deleted && known.Hash == accountHash(user) && known.GrantRevision == accountGrantRevision(user):
 		return false
 	case !exists && (!had || known.Deleted):
 		return false
@@ -133,6 +141,7 @@ func (m *Manager) noteLocal(name string, removed bool) bool {
 	v := AccountVersion{Time: time.Now().UnixNano(), Node: m.self.ID}
 	if exists {
 		v.Hash = accountHash(user)
+		v.GrantRevision = accountGrantRevision(user)
 	} else {
 		v.Deleted = true
 	}
@@ -167,6 +176,7 @@ func (m *Manager) record(name string) (accountRecord, bool) {
 		if !exists {
 			return accountRecord{}, false
 		}
+		user.LocalAccessStamp = ""
 		rec.User = &user
 	}
 	return rec, true
@@ -257,7 +267,7 @@ func (m *Manager) takeAccounts(records []accountRecord) error {
 			if rec.User == nil || rec.User.Name != rec.Name || accountHash(*rec.User) != rec.Version.Hash {
 				continue
 			}
-			if m.importAccount(*rec.User) != nil {
+			if m.importAccount(*rec.User, rec.Version) != nil {
 				continue
 			}
 		}
@@ -351,6 +361,7 @@ func (m *Manager) clusterAccounts(state *State) []auth.User {
 	var out []auth.User
 	for _, u := range m.Users.List() {
 		if (admin && !slices.Contains(local, u.Name)) || known[u.Name] {
+			u.LocalAccessStamp = ""
 			out = append(out, u)
 		}
 	}

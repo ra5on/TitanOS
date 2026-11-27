@@ -15,6 +15,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
 )
 
 const personalBase = "/api/v1/personal-agent"
@@ -24,6 +25,35 @@ func personalFixture(t *testing.T) *testServer {
 	ts := newTestServerWith(t, func(o *Options) { o.PersonalDataDir = t.TempDir() })
 	ts.setup()
 	return ts
+}
+
+// The installed image resolves the private directory through volumedata. The
+// developer directory used by most Agent tests does not exercise that path.
+func TestPersonalAgentUsesMountedSystemVolume(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if r, _ := ts.request("GET", personalBase+"/state", nil); r.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unmounted personal state: %d", r.StatusCode)
+	}
+	share := ts.withShare()
+	volume := filepath.Dir(share)
+	home := &volumedata.Home{MountRoot: filepath.Dir(volume), Mounted: ts.disks.Mounted, Choose: func() string { return "tank" }, NoLegacy: []string{pa.Feature}}
+	home.Locations = map[string]*volumedata.Location{pa.Feature: volumedata.NewLocation(ts.store, "system/agent-volume.json")}
+	ts.server.opts.SystemData = home
+	t.Cleanup(home.Wait)
+	personalHTTP[pa.State](t, ts, ts.client, "GET", "/state", nil)
+	req := pa.Request{Tool: "agent.example", RequestID: "volume-smoke"}
+	job := personalHTTP[pa.Job](t, ts, ts.client, "POST", "/jobs", req)
+	if job.ID == "" {
+		t.Fatal("job was not persisted")
+	}
+	user, ok := ts.users.Get("alex")
+	if !ok {
+		t.Fatal("missing fixture account")
+	}
+	if _, err := os.Stat(filepath.Join(volume, ".titanos", pa.Feature, personalKey(user)+".json")); err != nil {
+		t.Fatalf("account state on the selected volume: %v", err)
+	}
 }
 func personalHTTP[T any](t *testing.T, ts *testServer, client *http.Client, method, path string, in any) T {
 	t.Helper()

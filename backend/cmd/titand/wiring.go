@@ -49,6 +49,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/nvr"
+	"github.com/ra5on/TitanOS/backend/internal/personalagent"
 	pimstore "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
@@ -243,6 +244,7 @@ func (w *titand) wireBase() error {
 		defer cancel()
 		return w.volumes.SystemDataVolume(ctx)
 	}}
+	w.systemData.Locations = map[string]*volumedata.Location{personalagent.Feature: volumedata.NewLocation(w.store, "system/agent-volume.json")}
 	w.systemData.Override = w.systemDataOverride
 	w.systemData.Pending = w.sysData.Pending
 	w.systemData.Settled = func(feature, from string) {
@@ -250,7 +252,7 @@ func (w *titand) wireBase() error {
 			slog.Warn("finished move of system data not noted in /config", "feature", feature, "from", from, "err", err)
 		}
 	}
-	w.systemData.NoLegacy = append(append([]string{sysdata.Monitoring}, pimFeatures...), appphotos.Feature, "personal-agent")
+	w.systemData.NoLegacy = append(append([]string{sysdata.Monitoring}, pimFeatures...), appphotos.Feature, personalagent.Feature)
 	w.volumes.ReadOnly = w.opts.dev
 	if err := w.volumes.Load(); err != nil {
 		slog.Warn("volumes not readable from /config", "err", err)

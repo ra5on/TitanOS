@@ -34,7 +34,7 @@ func (s *Server) personalGrantRevisions(u auth.User, names ...string) (string, e
 	if !ok || current.Disabled || personalKey(current) != personalKey(u) {
 		return "", errPersonalDenied
 	}
-	stamps := []string{string(current.Role), strconv.FormatUint(current.AccessRevision, 10)}
+	stamps := []string{string(current.Role), strconv.FormatUint(current.AccessRevision, 10), current.LocalAccessStamp}
 	if s.opts.Mail != nil {
 		stamps = append(stamps, s.opts.Mail.GrantRevision(current.Name))
 	}

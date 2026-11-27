@@ -40,6 +40,8 @@ import (
 // no volume while one waits or runs, so nothing is appended to a file that
 // is being moved away.
 type Home struct {
+	// Locations records the authoritative volume of features whose state must never fork.
+	Locations map[string]*Location
 	MountRoot string
 	// Mounted returns the names of the mounted volumes.
 	Mounted func() []string
@@ -237,6 +239,9 @@ func (h *Home) Volume(feature string) string {
 	volume, own := h.Target(feature)
 	if volume == "" || h.Mounted == nil {
 		return volume
+	}
+	if location := h.Locations[feature]; location != nil {
+		return location.volume(h, feature, volume)
 	}
 	state := h.feature(feature)
 	state.mu.Lock()
@@ -538,6 +543,10 @@ func syncDir(root *os.Root, name string) error {
 // folder that is missing or empty is no error; the emptied one is removed.
 // ctx ends the move between two entries and inside large files.
 func Adopt(ctx context.Context, mountRoot, from, to, feature string, mounted []string) (result Adopted, err error) {
+	return adoptEntries(ctx, mountRoot, from, to, feature, mounted, false)
+}
+
+func adoptEntries(ctx context.Context, mountRoot, from, to, feature string, mounted []string, strict bool) (result Adopted, err error) {
 	if from == to {
 		return result, nil
 	}
@@ -617,6 +626,9 @@ func Adopt(ctx context.Context, mountRoot, from, to, feature string, mounted []s
 				result.Moved++
 				continue
 			}
+			if strict {
+				return result, fmt.Errorf("%s exists with different content on both volumes: %w", name, fs.ErrExist)
+			}
 			target = name + ".from-" + from
 			if _, err := dst.Lstat(target); err == nil {
 				if same, err := sameEntry(ctx, src, dst, name, target); err != nil {
@@ -652,6 +664,14 @@ func Adopt(ctx context.Context, mountRoot, from, to, feature string, mounted []s
 			result.Aside = append(result.Aside, name)
 		} else {
 			result.Moved++
+		}
+	}
+	if strict {
+		if len(result.Left) > 0 {
+			return result, fmt.Errorf("unsupported entries at source: %v", result.Left)
+		}
+		if err := syncDir(src, "."); err != nil {
+			return result, err
 		}
 	}
 	if len(result.Left) == 0 {

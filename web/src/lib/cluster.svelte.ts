@@ -182,19 +182,31 @@ let pending: Promise<void> | undefined;
 export function loadClusterNodes(): Promise<void> {
 	if (pending) return pending;
 	pending = api
-		.get<{ nodes: SwitchNode[]; version: string; manages: boolean }>('/cluster/nodes')
-		.then(
-			(res) => {
-				// A member still has its assigned cluster name when it cannot manage peers.
-				clusterNodes.nodes = res.manages ? res.nodes : res.nodes.filter((node) => node.self);
-				clusterNodes.version = res.version;
-				clusterNodes.failed = false;
-			},
-			() => {
-				// A failed refresh cannot establish that a peer has left the cluster.
+		.get<{ nodes: SwitchNode[]; version: string; manages?: boolean }>('/cluster/nodes')
+		.then((res) => {
+			if (
+				!Array.isArray(res?.nodes) ||
+				!res.nodes.every(
+					(node) =>
+						node &&
+						typeof node.id === 'string' &&
+						typeof node.name === 'string' &&
+						typeof node.self === 'boolean' &&
+						typeof node.online === 'boolean',
+				)
+			) {
 				clusterNodes.failed = true;
-			},
-		)
+				return;
+			}
+			// Older members omit manages. Only an explicit grant makes peers selectable.
+			clusterNodes.nodes = res.manages === true ? res.nodes : res.nodes.filter((node) => node.self);
+			clusterNodes.version = res.version ?? '';
+			clusterNodes.failed = false;
+		})
+		.catch(() => {
+			// A failed refresh cannot establish that a peer has left the cluster.
+			clusterNodes.failed = true;
+		})
 		.finally(() => {
 			clusterNodes.loaded = true;
 			pending = undefined;
