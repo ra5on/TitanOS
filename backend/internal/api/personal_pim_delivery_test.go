@@ -18,12 +18,21 @@ import (
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 	store "github.com/ra5on/TitanOS/backend/internal/pim/store"
 	"github.com/ra5on/TitanOS/backend/internal/tmail"
+	"github.com/ra5on/TitanOS/backend/internal/webui"
 )
 
 // Mail, calendars, permissions, workflow broker and external-effect receipts
 // are real production code. Only the inference response and mailservers are fixtures.
 func TestPersonalDeliveryMailCalendarDraftAndApprovedSend(t *testing.T) {
-	ts, provider, m := newMailServer(t)
+	browser := os.Getenv("TITANOS_AGENT_APPROVAL_BROWSER") == "1"
+	ts, provider, m := newMailServer(t, func(o *Options) {
+		if browser {
+			if !webui.Embedded {
+				t.Fatal("browser acceptance requires -tags embedui")
+			}
+			o.UI = webui.FS()
+		}
+	})
 	s := ts.server
 	pim, _, _ := pimTestStore(t)
 	s.opts.PIM = pim
@@ -64,7 +73,7 @@ func TestPersonalDeliveryMailCalendarDraftAndApprovedSend(t *testing.T) {
 	rights := map[string]string{"mail.event": "auto", "calendar.free": "auto", "mail.reply": "auto", "mail.send": "auto"}
 	personalHTTP[map[string]any](t, ts, ts.client, "PUT", "/limits/alex", map[string]any{"rights": rights})
 	personalHTTP[pa.State](t, ts, ts.client, "PUT", "/settings", map[string]any{"rights": rights})
-	sources := []pa.Source{{Kind: "mail", ID: "m", Ref: map[string]string{"account": box, "folder": "INBOX", "uid": "1", "messageId": src.MessageID, "date": src.Date.Format(time.RFC3339Nano)}}, {Kind: "calendar.range", ID: cal, Ref: map[string]string{"collection": cal, "start": "2026-11-30T09:00:00Z", "end": "2026-11-30T12:00:00Z"}}}
+	sources := []pa.Source{{Kind: "mail", ID: box + "/INBOX/1", Ref: map[string]string{"account": box, "folder": "INBOX", "uid": "1", "messageId": src.MessageID, "date": src.Date.Format(time.RFC3339Nano)}}, {Kind: "calendar.range", ID: cal, Ref: map[string]string{"collection": cal, "start": "2026-11-30T09:00:00Z", "end": "2026-11-30T12:00:00Z"}}}
 	j := personalHTTP[pa.Job](t, ts, ts.client, "POST", "/skills/delivery/run", map[string]any{"sources": sources, "requestId": "liefertermin", "prompt": "Liefertermin prüfen"})
 	read := func() pa.Job { return personalHTTP[pa.Job](t, ts, ts.client, "GET", "/jobs/"+j.ID, nil) }
 	for i := 0; i < 3; i++ {
@@ -85,14 +94,46 @@ func TestPersonalDeliveryMailCalendarDraftAndApprovedSend(t *testing.T) {
 	s.initPersonalTools() // Browser closed and IP service restarted after the saved draft.
 	workOne(t, s)
 	j = read()
-	if j.Phase != "approval" || j.Preview == nil || !strings.Contains(j.Preview.Text, "vendor@example.test") || !strings.Contains(j.Preview.Text, "10 Uhr passt") || calls != 2 {
+	if j.Phase != "approval" || j.CurrentTool != "mail.send" || j.Result == nil || j.Result.Title != "Antwortvorschlag" || j.Preview == nil || !strings.Contains(j.Preview.Text, "vendor@example.test") || !strings.Contains(j.Preview.Text, "10 Uhr passt") || calls != 2 {
 		t.Fatalf("%+v", j)
 	}
-	personalHTTP[pa.Job](t, ts, ts.client, "POST", "/jobs/"+j.ID+"/approve", map[string]string{"token": j.Token})
+	// The mail task is still bound to the same thread, while the reviewed editor
+	// version has a different envelope, body and attachment than the prior step.
+	oldToken := j.Token
+	uid, _, err := m.SaveDraft(t.Context(), "alex", box, tmail.Outgoing{
+		To: []tmail.Address{{Addr: "reviewed@example.test"}}, Cc: []tmail.Address{{Addr: "copy@example.test"}}, Bcc: []tmail.Address{{Addr: "private@example.test"}},
+		Subject: "Revidierter Termin", Text: "Geprüfte Antwortfassung zwei.", InReplyTo: src.MessageID, References: src.MessageID,
+		Files: []tmail.File{{Name: "Bestaetigung.txt", Type: "text/plain", Data: []byte("revision two")}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := m.ReadQuiet(t.Context(), "alex", box, "Drafts", uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	personalHTTP[pa.Job](t, ts, ts.client, "POST", "/jobs/"+j.ID+"/revise", map[string]any{"token": oldToken, "args": map[string]any{"draftUid": uid, "draftMessageId": draft.MessageID, "draftDate": draft.Date.Format(time.RFC3339Nano)}})
 	workOne(t, s)
 	j = read()
-	if j.Status != "done" || len(j.Receipts) != 4 || len(provider.Sent()) != 1 {
+	if j.Preview == nil || j.Result == nil || j.CurrentTool != "mail.send" || j.Token == oldToken || !strings.Contains(j.Preview.Text, "reviewed@example.test") || strings.Contains(j.Result.Text, "Geprüfte Antwortfassung zwei.") {
+		t.Fatal("did not prepare the revised version alongside its prior receipt", j)
+	}
+	if res, _ := ts.request("POST", personalBase+"/jobs/"+j.ID+"/approve", map[string]string{"token": oldToken}); res.StatusCode != 409 || len(provider.Sent()) != 0 {
+		t.Fatal("superseded version accepted", res.StatusCode)
+	}
+	if browser {
+		testDeliveryApprovalUI(t, ts, j, box)
+	} else {
+		personalHTTP[pa.Job](t, ts, ts.client, "POST", "/jobs/"+j.ID+"/approve", map[string]string{"token": j.Token})
+		workOne(t, s)
+	}
+	j = read()
+	if j.Status != "done" || j.CurrentTool != "mail.send" || j.Preview != nil || j.Result == nil || !bytes.Contains(j.Result.Data, []byte(`"accepted":true`)) || len(j.Receipts) != 4 || len(provider.Sent()) != 1 {
 		t.Fatal(j)
+	}
+	wire := provider.Sent()[0]
+	if len(wire.To) != 3 || !strings.Contains(strings.Join(wire.To, ","), "private@example.test") || bytes.Contains(wire.Data, []byte("vendor@example.test")) || !bytes.Contains(wire.Data, []byte("Bestaetigung.txt")) {
+		t.Fatal("SMTP did not receive the reviewed envelope and attachment")
 	}
 	// Run the second built-in with the native folder picked as its writing destination.
 	dir := ts.withShare()

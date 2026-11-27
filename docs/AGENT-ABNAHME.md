@@ -49,6 +49,16 @@ done
 
 Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Die Office-Prüfung verwendet den TitanOS-Hostdialog und einen simulierten Editor-Handshake. Die eingebetteten Office-Apps übermitteln über die aktuelle Hostschnittstelle keine Cursor- oder Bereichsauswahl. Der Nutzer wählt Absatz, Bereich oder Seiten im Übergabedialog. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
 
+### Tatsächliche Versandvorschau eines mehrstufigen Auftrags
+
+Nach `make web` und mit gesetztem `PLAYWRIGHT_MODULE` prüft der folgende Test den Ablauf Liefertermin → Kalender → Antwortentwurf → Versand. Das Modell liefert Testtext. IMAP und SMTP laufen nur auf Loopback. Die Prüfung ändert Empfänger, Kopien, Betreff, Anhang und Text des Entwurfs. Der Browser öffnet denselben Auftrag im Agenten und im T-Mail-Panel, vergleicht beide Vorschauen und gibt die aktuelle Fassung einmal frei. Der Backend-Test vergleicht die angenommene Nachricht mit der Vorschau und weist die Freigabe der alten Fassung zurück.
+
+```sh
+for engine in chromium webkit; do
+  TITANOS_AGENT_APPROVAL_BROWSER=1 UI_ENGINE="$engine" go -C backend test -tags embedui -count=1 -run '^TestPersonalDeliveryMailCalendarDraftAndApprovedSend$' ./internal/api || exit 1
+done
+```
+
 ## Release-Prüfungen
 
 Die Schritte und Werkzeugversionen der Build-CI stehen in `.github/workflows/build.yml`. Der Veröffentlichungsworkflow prüft die erzeugten Release-Dateien. Lokal lassen sich die folgenden Prüfungen wiederholen.

@@ -18,6 +18,7 @@ export type Result = Preview & { link?: string };
 export type JobStatus =
 	'planned' | 'running' | 'waiting' | 'paused' | 'done' | 'failed' | 'canceled';
 export type Job = {
+	currentTool?: string;
 	id: string;
 	request: JobRequest;
 	status: JobStatus;

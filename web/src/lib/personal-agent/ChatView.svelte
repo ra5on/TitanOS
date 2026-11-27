@@ -2,7 +2,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import AgentDots from './AgentDots.svelte';
 	import { sourceTitle, msg, iconFor, jobTitle, outputKind, failure } from './labels.ts';
-	import { mailFields, sourceLocation } from './sources.ts';
+	import { jobOutput, mailFields, sourceLocation, stepTool } from './sources.ts';
 	import { motifFor } from './guide.ts';
 	import type { Capability, Chat, Job, Settings, Source } from './api.ts';
 	let {
@@ -68,6 +68,8 @@
 {:else}
 	<div class="pa-conversation">
 		{#each jobs as j, index (j.id)}
+			{@const output = jobOutput(j)}
+			{@const draft = mailFields(j)}
 			{#if index === 0 || date(j.created) !== date(jobs[index - 1].created)}<p class="pa-date">
 					{date(j.created)}
 				</p>{/if}
@@ -80,23 +82,25 @@
 						datetime={j.created}>{time(j.updated)}</time
 					>
 				</div>
-				{#if mailFields(j)?.isDraft}<p class="pa-readable pa-bubble pa-agent">
-						{j.result?.text && j.result.text.trim() !== mailFields(j)?.text.trim()
-							? j.result.text
+				{#if draft?.isDraft}<p class="pa-readable pa-bubble pa-agent">
+						{output?.text && output.text.trim() !== draft.text.trim()
+							? output.text
 							: msg('draftReady')}
-					</p>{:else if j.result?.text}<div class="pa-readable pa-bubble pa-agent">
-						{j.result.text}
+					</p>{:else if j.status === 'done' && output?.text}<div
+						class="pa-readable pa-bubble pa-agent"
+					>
+						{output.text}
 					</div>
 				{:else if j.error}<p class="pa-warning"><Icon name="info" />{failure(j)}</p>
 				{:else if j.status === 'waiting'}<span class="pa-status"
 						><Icon name="lock" />{msg('needs')}</span
 					>
 				{:else if j.status === 'done'}<p class="pa-readable pa-bubble pa-agent">
-						{j.result?.title || msg('done')}
+						{output?.title || msg('done')}
 					</p>
 				{:else}<div class="pa-status" aria-live="polite">
 						<AgentDots
-							motif={motifFor(j.request.tool)}
+							motif={motifFor(stepTool(j))}
 							paused={j.status === 'paused'}
 							calm={reduced || settings.motion !== 'full' || j.status !== 'running'}
 						/>{msg(
@@ -107,22 +111,21 @@
 									: j.status,
 						)}
 					</div>{/if}
-				{#if (j.result?.sources ?? j.preview?.sources ?? []).length}<div class="pa-chips pa-proof">
-						{#each j.result?.sources ?? j.preview?.sources ?? [] as source, i}<button
+				{#if (output?.sources ?? []).length}<div class="pa-chips pa-proof">
+						{#each output?.sources ?? [] as source, i}<button
 								data-guide={j.id + '-source-' + i}
 								onclick={() => (sourceLocation(source) ? onsource(source, j) : select(j))}
-								><Icon name={j.result ? 'check' : iconFor(source.kind)} size={13} />{sourceTitle(
-									source,
-								)}</button
+								><Icon
+									name={j.status === 'done' ? 'check' : iconFor(source.kind)}
+									size={13}
+								/>{sourceTitle(source)}</button
 							>{/each}
 					</div>{/if}
-				{#if j.preview || j.result}
-					{@const draft = mailFields(j)}
-
+				{#if output}
 					<div class="pa-result-card" data-guide={'card-' + j.id}>
 						<button class="pa-card-open" onclick={() => select(j)}
 							><span class="pa-title-row"
-								><Icon name={iconFor(j.request.tool)} /><b
+								><Icon name={iconFor(stepTool(j))} /><b
 									>{draft?.isDraft ? msg('mailDraft') : jobTitle(j, caps)}</b
 								><Icon name="chevronRight" size={16} /></span
 							>

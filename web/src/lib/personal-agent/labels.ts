@@ -1,5 +1,6 @@
 import { t, type MessageKey } from '../i18n/index.svelte.ts';
 import type { Capability, Job, Source } from './api.ts';
+import { jobOutput, sendPreview, stepTool } from './sources.ts';
 import type { IconName } from '../components/Icon.svelte';
 
 export const msg = (key: string) => t(('pa.' + key) as MessageKey);
@@ -51,25 +52,21 @@ export function reason(cap: Capability): string {
 		: '';
 }
 export function jobTitle(job: Job, caps: Capability[]): string {
-	return (
-		job.result?.title ||
-		job.preview?.title ||
-		caps.find((c) => c.id === job.request.tool)?.title ||
-		job.request.tool
-	);
+	return jobOutput(job)?.title || caps.find((c) => c.id === stepTool(job))?.title || stepTool(job);
 }
 export function outputKind(job: Job): string {
-	if (job.result?.data && typeof job.result.data === 'object' && 'draft' in job.result.data)
-		return msg('draft');
+	const data = jobOutput(job)?.data;
+	if (data && typeof data === 'object' && 'draft' in data) return msg('draft');
+	if (job.status !== 'done') return msg('preview');
 	if (
-		job.request.tool === 'mail.send' &&
-		job.result?.data &&
-		typeof job.result.data === 'object' &&
-		'accepted' in job.result.data &&
-		job.result.data.accepted === true
+		sendPreview(job) &&
+		data &&
+		typeof data === 'object' &&
+		'accepted' in data &&
+		data.accepted === true
 	)
 		return msg('verified');
-	return msg(job.result ? 'result' : 'preview');
+	return msg('result');
 }
 
 export function failure(job: Job): string {
@@ -77,7 +74,7 @@ export function failure(job: Job): string {
 		case 'effect_unconfirmed':
 			return msg('uncertain');
 		case 'effect_rejected':
-			return msg(job.request.tool === 'mail.send' ? 'mailRejected' : 'actionRejected');
+			return msg(sendPreview(job) ? 'mailRejected' : 'actionRejected');
 		case 'action_already_attempted':
 			return msg('duplicate');
 		case 'permission_revoked':

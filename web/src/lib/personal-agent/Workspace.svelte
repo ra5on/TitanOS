@@ -24,7 +24,7 @@
 		type Source,
 	} from './api.ts';
 	import { consumeSelection, nativeDraftLink } from './open.ts';
-	import { mailFields, sourceLocation } from './sources.ts';
+	import { jobOutput, stepTool, mailFields, sourceLocation } from './sources.ts';
 	import SourcePreview from './SourcePreview.svelte';
 	import Attachments from './Attachments.svelte';
 	import { colorStyle } from './appearance.ts';
@@ -225,7 +225,7 @@
 		if (scroller) scroller.scrollTop = scroller.scrollHeight;
 	}
 	async function seen(j: Job) {
-		if (!j.result || j.seen || visited.has(j.id)) return;
+		if (j.status !== 'done' || !j.result || j.seen || visited.has(j.id)) return;
 		visited.add(j.id);
 		firstId = j.id;
 		try {
@@ -242,10 +242,10 @@
 		signal(
 			[
 				'card-' + j.id,
-				...(j.result?.sources ?? j.preview?.sources ?? []).map((_, i) => j.id + '-source-' + i),
+				...(jobOutput(j)?.sources ?? []).map((_, i) => j.id + '-source-' + i),
 				'detail',
 			],
-			j.request.tool,
+			stepTool(j),
 		);
 	}
 	function setData(next: State) {
@@ -270,10 +270,10 @@
 			if (j?.status === 'done' || j?.status === 'waiting') {
 				signal(
 					['reply-' + j.id, 'card-' + j.id, ...(detailId === j.id ? ['detail'] : [])],
-					j.request.tool,
+					stepTool(j),
 				);
 				if (detailId === j.id) void seen(j);
-			} else if (j?.status === 'paused') signal(['reply-' + j.id], j.request.tool);
+			} else if (j?.status === 'paused') signal(['reply-' + j.id], stepTool(j));
 		}
 	}
 	$effect(() => {
@@ -427,10 +427,12 @@
 				'evidence-' +
 					Math.max(
 						0,
-						(job.result?.sources ?? job.request.sources ?? []).findIndex((s) => s.id === src.id),
+						(jobOutput(job)?.sources ?? job.request.sources ?? []).findIndex(
+							(s) => s.id === src.id,
+						),
 					),
 			],
-			job.request.tool,
+			stepTool(job),
 		);
 		if (dest.pdf) {
 			openedSource = src;
@@ -441,7 +443,7 @@
 	async function editDraft(j: Job) {
 		const href = nativeDraftLink(j);
 		if (href) {
-			signal(['card-' + j.id, 'editor-' + j.id], j.request.tool);
+			signal(['card-' + j.id, 'editor-' + j.id], stepTool(j));
 			await depart(box);
 			if (box?.isConnected) openInProgram(href);
 		}
@@ -558,7 +560,7 @@
 	}
 	function background(j: Job) {
 		show('jobs');
-		signal(['reply-' + j.id, 'jobs-tab'], j.request.tool);
+		signal(['reply-' + j.id, 'jobs-tab'], stepTool(j));
 	}
 	function onkey(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!small || e.metaKey || e.ctrlKey)) {

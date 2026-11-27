@@ -13,6 +13,7 @@ export function consumeSelection(id: string) {
 	return api.post<Handoff>(base + '/contexts/' + encodeURIComponent(id) + '/consume', {});
 }
 export function nativeDraftLink(job: Job): string {
+	if (job.status !== 'done') return '';
 	const draft = (job.result?.data as { draft?: { app?: string } } | null)?.draft;
 	const pages: Record<string, string> = {
 		mail: '/mail/compose',
@@ -24,6 +25,7 @@ export function nativeDraftLink(job: Job): string {
 	return path ? path + '?personalDraft=' + encodeURIComponent(job.id) : '';
 }
 export function resultLink(job: Job): string {
+	if (job.status !== 'done') return '';
 	const draft = nativeDraftLink(job);
 	if (draft) return draft;
 	const href = job.result?.link;

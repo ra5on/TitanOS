@@ -77,6 +77,7 @@ type Receipt struct {
 	At    time.Time `json:"at"`
 }
 type Job struct {
+	CurrentTool    string    `json:"currentTool,omitempty"` // Set from the authorized workflow step in HTTP responses.
 	CompletedSteps int       `json:"completedSteps"`
 	TotalSteps     int       `json:"totalSteps"`
 	Audit          []Audit   `json:"audit,omitempty"`
