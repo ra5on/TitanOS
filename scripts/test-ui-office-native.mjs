@@ -53,13 +53,17 @@ async function chooseInsideEditor(id, page, canvas) {
   const click = (x, y, modifiers = []) =>
     canvas.click({ position: { x, y }, modifiers });
   if (id === "t-word") {
-    // Drag across the second and third paragraphs on the centered document page.
-    await page.mouse.move(box.x + box.width / 2 - 296, box.y + 334);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 214, box.y + 363, {
-      steps: 10,
-    });
-    await page.mouse.up();
+    // Navigate by paragraphs so WebKit and Chromium may lay out the page differently.
+    await click(box.width / 2, 310);
+    for (const key of [
+      "Control+Home",
+      "Control+ArrowDown",
+      "Control+Shift+ArrowDown",
+      "Control+Shift+ArrowDown",
+    ]) {
+      await page.keyboard.press(key);
+      await frames(canvas);
+    }
   } else if (id === "t-exel") {
     await click(103, 239); // B2
     await frames(canvas);

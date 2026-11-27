@@ -53,7 +53,7 @@ for engine in chromium webkit; do
 done
 ```
 
-Der Standardlauf erwartet eine Auswahlantwort des Editors. Für die älteren 1.7.0-Pakete prüft `UI_OFFICE_EXPECT_MANUAL=1` denselben Weg mit der manuellen Bereichsangabe. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
+Der Standardlauf erwartet eine Auswahlantwort des Editors. Mit `UI_OFFICE_APP=t-exel` lässt sich ein einzelner installierter Editor prüfen. Ohne diese Angabe durchläuft der Test alle vier Programme. Für die älteren 1.7.0-Pakete prüft `UI_OFFICE_EXPECT_MANUAL=1` denselben Weg mit der manuellen Bereichsangabe. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
 
 | Einstieg | Prüfschritte |
 |---|---|
@@ -64,7 +64,7 @@ Der Standardlauf erwartet eine Auswahlantwort des Editors. Für die älteren 1.7
 | T-Mail | Das Panel an einer Nachricht öffnen, explizite Quellen auswählen, den Entwurf im nativen Editor ändern und die zugehörige Freigabe erneut aufrufen. |
 | Sprache | Synthetische Mikrofon- und Sprachdienstantworten durch die Bedienoberfläche schicken. Chat-Zuordnung, Stopp, Diktat, gesprochene Antwort und fehlende Rechte prüfen. Mit aktiver Bewegung die Ankunft der Punkte im Zentrum der Sprachkugel bei geöffneter Ergebnisvorschau messen. |
 
-Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Die Office-Prüfung verwendet den TitanOS-Hostdialog und einen simulierten Editor-Handshake. Die eingebetteten Office-Apps übermitteln über die aktuelle Hostschnittstelle keine Cursor- oder Bereichsauswahl. Der Nutzer wählt Absatz, Bereich oder Seiten im Übergabedialog. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
+Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Der Test mit simuliertem Editor prüft den TitanOS-Dialog bei geänderter Auswahl, verspäteter Antwort und unterbrochener Übergabe. An den veröffentlichten Office-Paketen 1.7.0 prüft der Produktlauf die manuelle Bereichsangabe. Für Pakete mit nativer Bereichsauswahl markiert derselbe Produktlauf die Absätze, Zellen, Seiten und Folien direkt im geöffneten Editor. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
 
 ## Release-Prüfungen
 
