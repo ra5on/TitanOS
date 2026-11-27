@@ -35,6 +35,9 @@ type User struct {
 	Created      time.Time `json:"created"`
 	// AccessRevision changes in the same durable write as a role or lock transition.
 	AccessRevision uint64 `json:"accessRevision,omitempty"`
+	// LocalAccessStamp binds consent to changes observed by this NAS when an
+	// imported account replaces a local one or a legacy peer reports a new version.
+	LocalAccessStamp string `json:"localAccessStamp,omitempty"`
 	// UID is the number of the Linux user with the same name. The system is
 	// rebuilt on every boot, so the number has to be kept here for files to
 	// keep their owner.

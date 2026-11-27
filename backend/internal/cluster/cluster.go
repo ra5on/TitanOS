@@ -94,10 +94,12 @@ type Node struct {
 // AccountVersion says which change of an account is the newest: the later
 // time wins, on the same time the higher node ID.
 type AccountVersion struct {
-	Hash    string `json:"hash"`
-	Time    int64  `json:"time"`
-	Node    string `json:"node"`
-	Deleted bool   `json:"deleted,omitempty"`
+	// Missing on older peers. Hash remains compatible with those peers.
+	GrantRevision string `json:"grantRevision,omitempty"`
+	Hash          string `json:"hash"`
+	Time          int64  `json:"time"`
+	Node          string `json:"node"`
+	Deleted       bool   `json:"deleted,omitempty"`
 }
 
 func (v AccountVersion) newer(than AccountVersion) bool {

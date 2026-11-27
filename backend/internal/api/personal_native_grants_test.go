@@ -193,22 +193,28 @@ func TestPersonalClusterAccountKeepsAccessRevisionAcrossMixedVersions(t *testing
 		t.Fatal(err)
 	}
 	actual, _ := ts.users.Get(u.Name)
-	if actual.AccessRevision != 2 {
+	if actual.AccessRevision != 2 || actual.LocalAccessStamp == "" {
 		t.Fatal(actual.AccessRevision)
 	}
-	// Older peers send no revision. Each observed role transition must advance
-	// the local grant, and a repeated unchanged import should leave it alone.
-	for _, role := range []auth.Role{auth.RoleUser, auth.RoleAdmin, auth.RoleAdmin} {
+	previous := actual.LocalAccessStamp
+	// Older peers send no dedicated revision. Each observed role transition
+	// must invalidate local consent; a repeated import leaves it alone.
+	for i, role := range []auth.Role{auth.RoleUser, auth.RoleAdmin, auth.RoleAdmin} {
 		peer.Role, peer.AccessRevision = role, 0
 		if _, _, err := ts.users.Import(peer); err != nil {
 			t.Fatal(err)
 		}
+		actual, _ = ts.users.Get(u.Name)
+		if (actual.LocalAccessStamp == previous) != (i == 2) {
+			t.Fatal("local grant did not track the observed transition", i)
+		}
+		previous = actual.LocalAccessStamp
 	}
 	if err := ts.users.Load(); err != nil {
 		t.Fatal(err)
 	}
 	actual, _ = ts.users.Get(u.Name)
-	if actual.Role != u.Role || actual.AccessRevision != 4 {
+	if actual.Role != u.Role || actual.AccessRevision != 0 || actual.LocalAccessStamp != previous {
 		t.Fatal(actual.Role, actual.AccessRevision)
 	}
 }
