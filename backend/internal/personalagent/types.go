@@ -31,6 +31,8 @@ type Source struct {
 type Request struct {
 	// Origin is assigned by the local authenticated HTTP handler for links back to selected originals.
 	Origin string `json:"-"`
+	// MailTriggered is set only for an observed inbox event by the broker.
+	MailTriggered bool `json:"-"`
 	// PreviousText is inert data from a preceding step and cannot be posted by a client.
 	PreviousText string          `json:"-"`
 	Tool         string          `json:"tool"`
@@ -77,6 +79,7 @@ type Receipt struct {
 	At    time.Time `json:"at"`
 }
 type Job struct {
+	CurrentTool    string    `json:"currentTool,omitempty"` // Set from the authorized workflow step in HTTP responses.
 	CompletedSteps int       `json:"completedSteps"`
 	TotalSteps     int       `json:"totalSteps"`
 	Audit          []Audit   `json:"audit,omitempty"`

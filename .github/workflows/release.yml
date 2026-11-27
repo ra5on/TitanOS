@@ -350,6 +350,10 @@ jobs:
       - name: Boot the actual installation ZIP in UEFI QEMU
         run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420
 
+      - name: Personal Agent storage, worker restart and system data volume change
+        timeout-minutes: 45
+        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip --agent-volume-move --log out/storage-smoke-agent-move.log
+
       - name: Boot the image with the newer kernel, and the stick with a legacy BIOS and 32-bit UEFI
         # An app release on a base from before 0.41 has neither.
         env:
@@ -408,10 +412,6 @@ jobs:
         # An app release keeps image and plugins of its base, which were tested then.
         if: steps.kind.outputs.kind == 'system'
         run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420 --workflows023
-
-      - name: Personal Agent storage, worker restart and system data volume change
-        timeout-minutes: 45
-        run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip --agent-volume-move --log out/storage-smoke-agent-move.log
 
       - name: SSD cache with real dm-cache (writeback, switch-off, missing SSD, delete)
         # Also for app releases: the cache logic is titand's own code, which an

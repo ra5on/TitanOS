@@ -29,7 +29,7 @@ import (
 
 // newMailServer is a test server with T-Mail against mail servers in the
 // process, set up with the owner alex.
-func newMailServer(t *testing.T) (*testServer, *tmailtest.Servers, *tmail.Manager) {
+func newMailServer(t *testing.T, configure ...func(*Options)) (*testServer, *tmailtest.Servers, *tmail.Manager) {
 	t.Helper()
 	srv := tmailtest.Start(t)
 	volume := t.TempDir()
@@ -54,6 +54,9 @@ func newMailServer(t *testing.T) (*testServer, *tmailtest.Servers, *tmail.Manage
 			t.Fatal(err)
 		}
 		o.Mail = m
+		for _, option := range configure {
+			option(o)
+		}
 	})
 	ts.setup()
 	return ts, srv, m

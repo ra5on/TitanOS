@@ -25,7 +25,7 @@
 	import JobDetail from './JobDetail.svelte';
 	import MotionGuide from './MotionGuide.svelte';
 	import { motifFor, type Cue } from './guide.ts';
-	import { sourceLocation } from './sources.ts';
+	import { sourceLocation, stepTool, jobProgressChanged } from './sources.ts';
 	import { samePIMSource } from './pim.ts';
 	let {
 		app,
@@ -155,7 +155,7 @@
 	$effect(() => {
 		const id = job?.id,
 			status = job?.status;
-		if (!id || status === 'done' || status === 'failed' || status === 'paused') return;
+		if (!id || status === 'done' || status === 'failed' || status === 'canceled') return;
 		let gone = false,
 			inFlight = false;
 		const timer = setInterval(async () => {
@@ -164,8 +164,9 @@
 			try {
 				const got = await api.get<Job>('/personal-agent/jobs/' + encodeURIComponent(id));
 				if (gone || !live) return;
-				if (got.status === 'done' && job?.status !== 'done')
-					motion(['source', 'detail'], got.request.tool);
+				if (got.status === 'paused') cue = null;
+				else if (jobProgressChanged(job ?? undefined, got))
+					motion(['source', 'detail'], stepTool(got));
 				job = got;
 			} catch (e) {
 				if (!gone && live) error = apiErrorText(e);
@@ -336,7 +337,8 @@
 			const got = await changeJob(j.id, a, j.token);
 			if (live) {
 				job = got;
-				motion([a === 'approve' ? 'lock' : 'detail', 'detail'], j.request.tool);
+				if (got.status === 'paused') cue = null;
+				else motion([a === 'approve' ? 'lock' : 'detail', 'detail'], stepTool(got));
 			}
 		} catch (e) {
 			if (live) error = apiErrorText(e, { detail: true });

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -22,6 +23,8 @@ import (
 // A plan and consent belong to exactly one job. The submitted request stays immutable for
 // idempotency. A prior step contributes plain result text, never tool names, arguments or URLs.
 type personalPlan struct {
+	MailTriggered bool `json:"mailTriggered,omitempty"`
+
 	Origin      string                     `json:"origin,omitempty"`
 	Effect      string                     `json:"effect,omitempty"`
 	SkillID     string                     `json:"skillId,omitempty"`
@@ -57,6 +60,7 @@ func newPersonalAccount() personalAccount {
 }
 
 type personalRuntime struct {
+	localModel  *agent.Ollama                  // shared loopback connection; model preference remains per account
 	replyVoices map[*personalReplyRun]struct{} // guarded by mu; live HTTP playback requests
 
 	watch      sync.Mutex

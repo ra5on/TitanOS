@@ -80,7 +80,7 @@ import zipfile
 from pathlib import Path
 
 from agent_cutover_smoke import Cutover, previous_release
-from interrupted_system_smoke import ReleaseHandler, check_share, create_share, interrupt_install, network_trials
+from interrupted_system_smoke import ReleaseHandler, check_share, create_share, diagnose_share, interrupt_install, network_trials
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIOS = ["good", "nostart", "panic", "hang", "interrupted", "network"]
@@ -565,13 +565,39 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                     def smb_readable():
                         return check_share(directory, smb_port, password)
 
+                    def wait_for_share(phase, fixture=directory, name="pruefung.bin"):
+                        try:
+                            wait(phase, lambda: check_share(fixture, smb_port, password, remote_name=name), 90)
+                        except TimeoutError:
+                            def native_read():
+                                with opener.open(url + "/api/v1/files/download?root=share%2FPruefung&path=" + name,
+                                                 timeout=15) as response:
+                                    return response.read(32769)
+                            diagnose_share(request, native_read, fixture)
+                            raise
+
                 if cutover:
                     cutover.old(password, predecessor)
 
                 if "interrupted" in scenarios:
+                    # Establish that the existing SMB file and its share have survived a
+                    # complete boot before starting an unrelated A/B installation. A read
+                    # immediately after put can still be served from guest page cache.
+                    stop()
+                    baseline = boot()
+                    assert running(baseline) == "a" and baseline["version"] == boot_version
+                    wait_for_share("persisted SMB baseline before installation")
+                    print("SMB: original 32768 bytes verified after clean restart, before installation.", flush=True)
+                    # Also keep the original timing-sensitive gate for a freshly acknowledged
+                    # SMB write. The stable and fresh fixtures contain different random bytes.
+                    fresh = directory / "fresh"
+                    fresh.mkdir()
+                    wait("fresh acknowledged SMB file", lambda:
+                         check_share(fresh, smb_port, password, upload=True, remote_name="frisch.bin"), 180)
                     interrupt_install(request, check, wait, releases, slot_files, versions["interrupted"], kill, boot, on_stick)
-                    wait("original share and file after power cut", smb_readable, 90)
-                    print("SMB: all 32768 bytes of the original file verified after restart.", flush=True)
+                    wait_for_share("original share and file after power cut")
+                    wait_for_share("fresh share file after power cut", fresh, "frisch.bin")
+                    print("SMB: both 32768-byte files verified after restart.", flush=True)
                 if "network" in scenarios:
                     network_trials(request, wait, smb_readable, log)
 
@@ -608,7 +634,7 @@ def smoke(archive, release, key, timeout, log, force_tcg=False, firmware="uefi",
                     wait("entry without counter on the stick", lambda: on_stick.tries() == {target: None, before: None}, 60)
                     if cutover:
                         cutover.new()
-                        wait("original SMB file after Stable upgrade", smb_readable, 90)
+                        wait_for_share("original SMB file after Stable upgrade")
                     else:
                         archive_read = subprocess.run(["mcopy", "-i", on_stick.partition,
                             "::config/system/agent.json", "-"], capture_output=True, check=True)

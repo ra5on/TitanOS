@@ -7,6 +7,7 @@
 	import { openInProgram } from '#lib/agent/open.ts';
 	import { msg, reason } from './labels.ts';
 	import { changeJob, type Job, type Capability, requestId } from './api.ts';
+	import { modelStatus, type LocalModel } from './model.ts';
 	import { VoiceAudio } from './voice-audio.ts';
 	import Sheet from './Sheet.svelte';
 
@@ -19,6 +20,8 @@
 		onturn,
 		onupdate,
 		onsettings,
+		model,
+		onmodel,
 	}: {
 		calm: boolean;
 		caps: Capability[];
@@ -28,6 +31,8 @@
 		onturn: (text: string, id: string) => Promise<Job>;
 		onupdate: (j: Job) => void;
 		onsettings: () => void;
+		model: LocalModel;
+		onmodel: () => void;
 	} = $props();
 	type Phase =
 		| 'idle'
@@ -53,7 +58,8 @@
 	const blocked = $derived(
 		needed.map((id) => caps.find((c) => c.id === id)).filter((c) => !c || c.effective === 'never'),
 	);
-	const enabled = $derived(!blocked.length);
+	const modelBlocked = $derived(mode === 'dialog' && !blocked.length && model.state !== 'ready');
+	const enabled = $derived(!blocked.length && !modelBlocked);
 	const needsSetup = $derived(blocked.some((c) => !c || c.reason === 'app'));
 	const inSession = $derived(!['idle', 'stopped'].includes(phase));
 	const audio = new VoiceAudio();
@@ -73,7 +79,7 @@
 	}
 	onDestroy(leave);
 	$effect(() => {
-		if (!enabled && inSession) stop();
+		if (blocked.length && inSession) stop();
 	});
 
 	function failure(e: unknown) {
@@ -264,7 +270,16 @@
 	{#if heard && mode === 'dialog'}<p class="voice-turn"><b>{msg('you')}</b> {heard}</p>{/if}
 	{#if reply && mode === 'dialog'}<p class="voice-turn"><b>Agent</b> {reply}</p>{/if}
 	{#if error}<p role="alert">{error}</p>{/if}
-	{#if !enabled}<div class="pa-warning">
+	{#if modelBlocked}<div class="pa-warning">
+			<p>{modelStatus(model)}</p>
+			{#if model.state !== 'checking'}<button
+					class="pa-button"
+					onclick={() => {
+						stop();
+						onmodel();
+					}}>{msg('model')}</button
+				>{/if}
+		</div>{:else if !enabled}<div class="pa-warning">
 			<p>{needsSetup ? msg('voiceSetup') : msg('voiceDenied')}</p>
 			{#each blocked as c}{#if c}<p>{c.title}{reason(c) ? ' · ' + reason(c) : ''}</p>{/if}{/each}
 			{#if admin && needsSetup}<button

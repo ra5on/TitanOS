@@ -20,6 +20,12 @@ Ein wartender Auftrag akzeptiert `POST /jobs/{id}/approve` mit seinem aktuellen 
 
 Vor jeder externen Nebenwirkung setzt der Broker dauerhaft die Phase `executing`. Eine ausgebliebene Bestätigung, etwa nach einem Neustart, ergibt `failed/uncertain`. Für diesen Fall zeigt der Auftrag die letzte konkrete Vorschau. Eine bestätigte Ablehnung ergibt `effect_rejected`. Bei einer bestätigten Durchführung speichert der Broker einen Schrittbeleg und das Ergebnis. Adapter können für dasselbe native Objekt auch über verschiedene Request-IDs hinweg einen gemeinsamen Ausführungsschlüssel verwenden.
 
+## Lokales Chatmodell einrichten
+
+Im Chat führt „Modellverbindung“ direkt zur persönlichen Auswahl. „Lokale Modelle suchen“ zeigt die auf dem NAS verfügbaren Chatmodelle. Nach dem Speichern steht das gewählte Modell dem Konto zur Verfügung. Bei leerem Feld verwendet der Agent das erste geeignete Modell. Ist ein ausdrücklich gewähltes Modell inzwischen verschwunden, kann das Konto ein anderes auswählen.
+
+Die Anzeige prüft an `127.0.0.1:11434` Inventar und lokale Modellmetadaten. Cloud-Aliasse und als reine Embedding-Modelle ausgewiesene Einträge stehen für den lokalen Chat nicht zur Verfügung. Die Prüfung sendet weder Chattext noch eine Testnachricht. Die Auftragsausführung prüft die Modellgewichte erneut. Der Beispielauftrag „2 + 3“ funktioniert auch bei ausgeschaltetem Ollama.
+
 ## Antworten lokal vorlesen
 
 `POST /api/v1/personal-agent/jobs/{id}/speech` liest die fertige Antwort eines einzelnen eigenen `chat.ask`-Auftrags. Der Browser sendet einen leeren Anfragekörper. Bei der persönlichen Stufe `ask` gehört zur einzelnen Wiedergabe der Header `X-TitanOS-Play-Reply: yes`. Das eigene Recht `speech.speak` ist bei der Auslieferung gesperrt. Die Sprachausgabe benötigt einen laufenden lokalen Piper-Dienst. Die Antwort enthält eine WAV-Datei mit `Cache-Control: no-store`.

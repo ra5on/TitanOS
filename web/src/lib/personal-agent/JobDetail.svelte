@@ -5,7 +5,7 @@
 	import { openInWebApp } from '#lib/webapps/open.ts';
 	import { msg, iconFor, sourceTitle, jobTitle, outputKind, failure } from './labels.ts';
 	import { nativeDraftLink, resultLink } from './open.ts';
-	import { mailFields, sendPreview, sourceLocation } from './sources.ts';
+	import { jobOutput, mailFields, sendPreview, sourceLocation, stepTool } from './sources.ts';
 	import { depart } from './guide.ts';
 	import type { Source, Job, Action, Capability } from './api.ts';
 	let {
@@ -30,7 +30,7 @@
 		first?: boolean;
 	} = $props();
 	const mail = $derived(mailFields(job));
-	const detail = $derived(job.result ?? job.preview);
+	const detail = $derived(jobOutput(job));
 	const fields = $derived(
 		detail?.data && typeof detail.data === 'object' && !Array.isArray(detail.data)
 			? (detail.data as Record<string, unknown>)
@@ -71,7 +71,7 @@
 		if (opening) return;
 		opening = true;
 		try {
-			oncue(['detail', 'native'], job.request.tool);
+			oncue(['detail', 'native'], stepTool(job));
 			await depart(article);
 			if (!article?.isConnected) return;
 			if (office) {
@@ -92,9 +92,10 @@
 <article bind:this={article} class="pa-detail" data-guide="detail" data-job={job.id}>
 	<div class="pa-kicker">
 		<Icon
-			name={job.status === 'waiting' ? 'lock' : verified ? 'check' : iconFor(job.request.tool)}
+			name={job.status === 'waiting' ? 'lock' : verified ? 'check' : iconFor(stepTool(job))}
 		/>{outputKind(job)}
-		{#if first && job.result}<span class="pa-new">{msg('newResult')}</span>{/if}
+		{#if first && job.status === 'done' && job.result}<span class="pa-new">{msg('newResult')}</span
+			>{/if}
 	</div>
 	<h2>{mail?.isDraft ? msg('mailDraft') : jobTitle(job, caps)}</h2>
 	<p class="pa-status">
@@ -127,7 +128,7 @@
 				<pre>{after}</pre>{/if}
 		</section>
 	{/if}
-	{#if !mail && job.preview && !job.result && Object.keys(fields).some((k) => !['region', 'before', 'after'].includes(k))}
+	{#if !mail && job.status !== 'done' && job.preview && Object.keys(fields).some((k) => !['region', 'before', 'after'].includes(k))}
 		<dl class="pa-fields">
 			{#each Object.entries(fields).filter(([key]) => !['region', 'before', 'after'].includes(key)) as [key, value] (key)}
 				<div>
@@ -149,7 +150,7 @@
 					{#if typeof source.ref?.region === 'string'}<small>{source.ref.region}</small>{/if}
 				</li>{/each}
 		</ul>{/if}
-	{#if verified && fields.sentCopy === false}<p class="pa-warning">
+	{#if verified && fields.sentCopy === false && !fields.providerFilesSent}<p class="pa-warning">
 			<Icon name="info" />{msg('sentCopyFailed')}
 		</p>{/if}
 	{#if job.error && job.phase !== 'uncertain'}<p class="pa-warning" role="status">
@@ -158,7 +159,7 @@
 	{#if job.phase === 'uncertain'}<p class="pa-warning">
 			<Icon name="info" />{msg('uncertain')}
 		</p>{/if}
-	{#if job.status === 'waiting' && job.token}
+	{#if job.status === 'waiting' && job.token && job.preview}
 		<div class="pa-approval" data-guide="lock">
 			<strong><span class="pa-lock"><Icon name="lock" /></span>{msg('needs')}</strong>
 			{#if sendPreview(job) && job.phase === 'approval' && fields.inReplyTo && fields.account}
@@ -191,7 +192,7 @@
 			<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 12 5 5 11-12" pathLength="1" /></svg
 			>{msg(sendPreview(job) ? 'smtpAccepted' : 'verified')}
 		</div>{/if}
-	{#if job.result && (resultLink(job) || office)}<button
+	{#if job.status === 'done' && job.result && (resultLink(job) || office)}<button
 			class="pa-primary"
 			data-guide="native"
 			disabled={opening}

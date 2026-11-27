@@ -17,6 +17,10 @@ Der Live-Test startet das gebaute `titand -dev` auf einem freien Loopback-Port m
 
 Das ist ein Durchlauf mit echtem Backend und eigenem Worker-Prozess im Entwicklungsmodus. Die Benutzerkennung und die systemd-Härtung des installierten Diensts werden im Gast mit `scripts/smoke-storage.py` geprüft. Die Umstellung von einem älteren Systemstand gehört zum Update-Gasttest `scripts/smoke-system-update.py`.
 
+## Wiederkehrende Rechnungen
+
+`go -C backend test -run '^TestPersonalRecurringInvoiceCreatesOneWorksheetPerMail$' ./internal/api` stellt zwei Rechnungen desselben Absenders im lokalen IMAP-Testpostfach zu. Die Regel verwendet für beide den Basisnamen `Rechnung.xlsx`. Der Test prüft die konkreten Namen in beiden Freigaben, die Zellinhalte beider Dateien und eine bereits vorhandene Datei. Anschließend lädt er den gespeicherten Agent-Zustand neu und gibt dieselben IMAP-Nachrichten nochmals zur Prüfung frei. Die zwei erledigten Aufträge und die Dateien bleiben erhalten.
+
 ## Ansichten und native Einstiege vergleichen
 
 Für den Vergleich kann der gebaute Entwicklungsdienst mit eigener temporärer Konfiguration auf Loopback laufen. In einem zweiten Terminal setzen die drei Skripte an der Oberfläche an. Sie liefern definierte API-Antworten für synthetische Benutzer, damit auch Freigaben, Ergebnisse und seltene Zwischenzustände reproduzierbar sind.
@@ -67,6 +71,24 @@ Mit `UI_OFFICE_COPY=1` öffnet derselbe Test die neuen Word- und Tabelleneditore
 | Sprache | Synthetische Mikrofon- und Sprachdienstantworten durch die Bedienoberfläche schicken. Chat-Zuordnung, Stopp, Diktat, gesprochene Antwort und fehlende Rechte prüfen. Mit aktiver Bewegung die Ankunft der Punkte im Zentrum der Sprachkugel bei geöffneter Ergebnisvorschau messen. |
 
 Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Der Test mit simuliertem Editor prüft den TitanOS-Dialog bei geänderter Auswahl, verspäteter Antwort und unterbrochener Übergabe. An den veröffentlichten Office-Paketen 1.7.0 prüft der Produktlauf die manuelle Bereichsangabe. Für Pakete mit nativer Bereichsauswahl markiert derselbe Produktlauf die Absätze, Zellen, Seiten und Folien direkt im geöffneten Editor. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
+
+### Tatsächliche Versandvorschau eines mehrstufigen Auftrags
+
+Nach `make web` und mit gesetztem `PLAYWRIGHT_MODULE` prüft der folgende Test den Ablauf Liefertermin → Kalender → Antwortentwurf → Versand. Das Modell liefert Testtext. IMAP und SMTP laufen nur auf Loopback. Die Prüfung ändert Empfänger, Kopien, Betreff, Anhang und Text des Entwurfs. Der Browser öffnet denselben Auftrag im Agenten und im T-Mail-Panel, vergleicht beide Vorschauen und gibt die aktuelle Fassung einmal frei. Der Backend-Test vergleicht die angenommene Nachricht mit der Vorschau und weist die Freigabe der alten Fassung zurück.
+
+```sh
+for engine in chromium webkit; do
+  TITANOS_AGENT_APPROVAL_BROWSER=1 UI_ENGINE="$engine" go -C backend test -tags embedui -count=1 -run '^TestPersonalDeliveryMailCalendarDraftAndApprovedSend$' ./internal/api || exit 1
+done
+```
+
+### Lokales Chatmodell und Kontowechsel
+
+`TestPersonalModelReadinessThroughAccountSettings` prüft mit einem lokalen Ollama-Testserver die automatische Auswahl, fehlende Modelle, nicht erreichbaren Dienst, reine Embedding-Modelle, Cloud-Aliasse und entzogene Rechte. Für die Browserprüfung nach `make web` setzt man `TITANOS_MODEL_BROWSER=1`, `UI_ENGINE=chromium` oder `webkit` und führt `go -C backend test -tags embedui -count=1 -run '^TestPersonalModelReadinessThroughAccountSettings$' ./internal/api` aus. Der Test öffnet den Agenten, richtet das lokale Modell über die Einstellungen ein und wechselt im selben Browser zu einem zweiten Testkonto mit einer eigenen Modellwahl.
+
+### Werkzeugwechsel und Pausen
+
+`UI_AGENT_STEPS_ONLY=1 UI_ENGINE=webkit UI_WIDTH=390 node scripts/test-ui-personal-agent.mjs` prüft die mobile Unterhaltung am oben gestarteten Testdienst. Mit `UI_ENGINE=chromium UI_WIDTH=1440` läuft derselbe Fall im Desktopfenster. Der Test meldet nacheinander zwei laufende Schritte desselben Auftrags, wechselt von der Mail zum Kalender, pausiert und öffnet den Chat über den Aufträge-Tab erneut. Er vergleicht die ruhende Punktposition und prüft die Fortsetzung mit dem aktuellen Werkzeug. Bei aktivierter Bewegungsreduktion bleibt der Werkzeugwechsel bedienbar und die Punkte stehen still.
 
 ## Release-Prüfungen
 

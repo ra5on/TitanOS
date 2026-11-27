@@ -157,9 +157,13 @@ Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
 
 - **interrupted** schaltet die Wegwerf-VM während des Downloads von
   `filesystem.squashfs` aus. Die bereits auf FAT geschriebenen Bytes werden
-  mit dem angebotenen System verglichen. Nach dem Start aus Slot A prüft das
-  Skript die Version, die auf dem Stick gespeicherte Auswahl des
-  Agent-Volumes und liest dieselbe Testdatei erneut über SMB.
+  mit dem angebotenen System verglichen. Schon vor der Installation startet
+  der Gast einmal sauber neu und liest die gespeicherte SMB-Datei vollständig.
+  Unmittelbar vor dem Update schreibt und liest er eine zweite SMB-Datei.
+  Nach dem Stromausfall prüft das Skript den Start von Slot A, Version,
+  Freigabekonfiguration auf dem Stick und beide Dateien mit jeweils 32768
+  ursprünglichen Bytes über SMB. Bei einem Fehler protokolliert es SMB-Status, Mountzustand und
+  einen unabhängigen Leseversuch über die Dateien-API.
 - **network** setzt über die Netzwerk-Einstellungen nacheinander eine falsche
   Verwaltungs-IP, ein VLAN ohne Gegenstelle und eine Bridge am isolierten
   Port. Nach jeder unbestätigten Probe müssen die alte IPv4-Adresse, die

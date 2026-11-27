@@ -26,6 +26,7 @@ func (s *Server) personalStepRequest(j *pa.Job, p *personalPlan, tool string) pa
 	req.Tool = tool
 	if p != nil {
 		req.Origin = p.Origin
+		req.MailTriggered = p.MailTriggered
 	}
 	if p != nil && p.StepArgs[tool] != nil {
 		req.Args = p.StepArgs[tool]

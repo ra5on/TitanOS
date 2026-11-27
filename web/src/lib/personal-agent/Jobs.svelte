@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { stepTool } from './sources.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { msg, iconFor, jobTitle } from './labels.ts';
 	import type { Capability, Job, JobStatus } from './api.ts';
@@ -51,7 +52,7 @@
 	{#if !rows.length}<p class="pa-muted">{msg('noneJobs')}</p>{/if}
 	<div class="pa-row-list">
 		{#each rows as job (job.id)}<button class="pa-row" onclick={() => select(job)}
-				><i><Icon name={iconFor(job.request.tool)} /></i><span
+				><i><Icon name={iconFor(stepTool(job))} /></i><span
 					><b>{jobTitle(job, caps)}</b><small
 						>{msg(job.status)}{job.status === 'planned' && job.request.runAt
 							? ' · ' + new Date(job.request.runAt).toLocaleString()

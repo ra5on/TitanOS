@@ -197,9 +197,10 @@ func (s *Server) personalPollInbox(ctx context.Context, u auth.User, sk pa.Skill
 				return e
 			}
 			p := a.Plans[j.ID]
-			p.Expected = sk.Expected
-			p.SkillID = sk.ID
-			p.StepArgs = sk.StepArgs
+			if p.SkillID == "" {
+				bindPersonalSkill(p, sk)
+				p.MailTriggered = true
+			}
 		}
 		old.After = time.Now().UTC().Add(time.Minute)
 		old.Retry = false

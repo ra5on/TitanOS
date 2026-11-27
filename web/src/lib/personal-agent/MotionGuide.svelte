@@ -136,7 +136,7 @@
 <span bind:this={guide} class="guide" class:active={showing} aria-hidden="true"
 	><i class="trail"></i><i class="trail second"></i><AgentDots
 		motif={cue?.motif || ''}
-		calm={!showing || mode !== 'full' || reduced}
+		calm={!showing || mode !== 'full' || reduced || !!cue?.hold}
 	/></span
 >
 

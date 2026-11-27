@@ -7,7 +7,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
-	import { apiErrorText } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { openInProgram } from '#lib/agent/open.ts';
 	import {
 		agentState,
@@ -24,11 +24,19 @@
 		type Source,
 	} from './api.ts';
 	import { consumeSelection, nativeDraftLink } from './open.ts';
-	import { mailFields, sourceLocation } from './sources.ts';
+	import {
+		jobOutput,
+		stepTool,
+		jobProgressChanged,
+		visibleSources,
+		mailFields,
+		sourceLocation,
+	} from './sources.ts';
 	import SourcePreview from './SourcePreview.svelte';
 	import Attachments from './Attachments.svelte';
 	import { colorStyle } from './appearance.ts';
 	import { motifFor, depart, type Cue } from './guide.ts';
+	import { localReadiness, modelStatus, usesLocalModel, type LocalModel } from './model.ts';
 	import { msg, sourceTitle, iconFor } from './labels.ts';
 	import MotionGuide from './MotionGuide.svelte';
 	import JobDetail from './JobDetail.svelte';
@@ -54,6 +62,16 @@
 		firstId = $state(''),
 		search = $state('');
 	let openedSource = $state<Source | null>(null);
+	// Retain the three-dot phase while the user switches views in this workspace.
+	const phases = new Map<string, { seconds: number }>();
+	function phaseFor(id: string) {
+		let phase = phases.get(id);
+		if (!phase) {
+			phase = { seconds: 0 };
+			phases.set(id, phase);
+		}
+		return phase;
+	}
 
 	let sheet = $state<'' | 'history' | 'context' | 'voice'>(''),
 		sources = $state<Source[]>([]),
@@ -147,7 +165,32 @@
 			return ['files.search', 'office.table', 'office.document', 'office.deck'].includes(tool);
 		return selected[0].kind === 'attachment' && tool === 'attachment.read';
 	}
-	const tools = $derived(options.filter((c) => matches(c.id, sources)));
+	let model = $state<LocalModel>({ state: 'checking' }),
+		modelRefresh = $state(0),
+		settingsFocus = $state<'' | 'model' | 'permissions'>('');
+	const localAllowed = $derived(options.some((c) => usesLocalModel(c.id)));
+	$effect(() => {
+		const owner = session.data?.user?.name;
+		void modelRefresh;
+		model = { state: 'checking' };
+		if (!owner || !localAllowed) return;
+		return poll(
+			async (signal) => {
+				const next = await localReadiness(signal);
+				if (!signal.aborted && session.data?.user?.name === owner) model = next;
+			},
+			{
+				interval: 60000,
+				onError: () => {
+					model = { state: 'unavailable' };
+				},
+			},
+		);
+	});
+	const readyOptions = $derived(
+		options.filter((c) => !usesLocalModel(c.id) || model.state === 'ready'),
+	);
+	const tools = $derived(readyOptions.filter((c) => matches(c.id, sources)));
 	const canSubmit = $derived(tools.some((c) => c.id === tool));
 	function syncTool() {
 		if (
@@ -208,7 +251,9 @@
 		nonce = '';
 		previousSubmission = '';
 	}
-	function show(t: Tab) {
+	function show(t: Tab, focus: '' | 'model' | 'permissions' = '') {
+		cue = null;
+		settingsFocus = focus;
 		tab = t;
 		sheet = '';
 		detailId = '';
@@ -232,7 +277,7 @@
 		if (scroller) scroller.scrollTop = scroller.scrollHeight;
 	}
 	async function seen(j: Job) {
-		if (!j.result || j.seen || visited.has(j.id)) return;
+		if (j.status !== 'done' || !j.result || j.seen || visited.has(j.id)) return;
 		visited.add(j.id);
 		firstId = j.id;
 		try {
@@ -249,10 +294,10 @@
 		signal(
 			[
 				'card-' + j.id,
-				...(j.result?.sources ?? j.preview?.sources ?? []).map((_, i) => j.id + '-source-' + i),
+				...(jobOutput(j)?.sources ?? []).map((_, i) => j.id + '-source-' + i),
 				'detail',
 			],
-			j.request.tool,
+			stepTool(j),
 		);
 	}
 	function setData(next: State) {
@@ -271,16 +316,28 @@
 		if (previous) {
 			const j = next.jobs.findLast(
 				(j) =>
-					j.request.chatId === chatId &&
-					j.status !== previous.jobs.find((v) => v.id === j.id)?.status,
+					(j.id === detailId || (tab === 'chat' && j.request.chatId === chatId)) &&
+					jobProgressChanged(
+						previous.jobs.find((v) => v.id === j.id),
+						j,
+					),
 			);
 			if (j?.status === 'done' || j?.status === 'waiting') {
 				signal(
 					['reply-' + j.id, 'card-' + j.id, ...(detailId === j.id ? ['detail'] : [])],
-					j.request.tool,
+					stepTool(j),
 				);
 				if (detailId === j.id) void seen(j);
-			} else if (j?.status === 'paused') signal(['reply-' + j.id], j.request.tool);
+			} else if (j?.status === 'running') {
+				signal(
+					[
+						'reply-' + j.id,
+						...visibleSources(j).map((_, i) => j.id + '-source-' + i),
+						detailId === j.id ? 'detail' : 'step-' + j.id,
+					],
+					stepTool(j),
+				);
+			} else if (j?.status === 'paused') cue = null;
 		}
 	}
 	$effect(() => {
@@ -293,6 +350,8 @@
 		sources = [];
 		prompt = '';
 		visited = new Set();
+		phases.clear();
+		cue = null;
 		draft = null;
 		lastContext = '';
 		const p = poll(
@@ -434,10 +493,12 @@
 				'evidence-' +
 					Math.max(
 						0,
-						(job.result?.sources ?? job.request.sources ?? []).findIndex((s) => s.id === src.id),
+						(jobOutput(job)?.sources ?? job.request.sources ?? []).findIndex(
+							(s) => s.id === src.id,
+						),
 					),
 			],
-			job.request.tool,
+			stepTool(job),
 		);
 		if (dest.pdf) {
 			openedSource = src;
@@ -448,7 +509,7 @@
 	async function editDraft(j: Job) {
 		const href = nativeDraftLink(j);
 		if (href) {
-			signal(['card-' + j.id, 'editor-' + j.id], j.request.tool);
+			signal(['card-' + j.id, 'editor-' + j.id], stepTool(j));
 			await depart(box);
 			if (box?.isConnected) openInProgram(href);
 		}
@@ -565,7 +626,7 @@
 	}
 	function background(j: Job) {
 		show('jobs');
-		signal(['reply-' + j.id, 'jobs-tab'], j.request.tool);
+		signal(['reply-' + j.id, 'jobs-tab'], stepTool(j));
 	}
 	function onkey(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!small || e.metaKey || e.ctrlKey)) {
@@ -637,8 +698,11 @@
 		<div class="pa-context">
 			<h3>{msg('available')}</h3>
 			{#if tools.length}<label class="pa-field"
-					>{msg('tool')}<select value={tool} onchange={(e) => setTool(e.currentTarget.value)}
-						>{#each tools as c (c.id)}<option value={c.id}>{c.title}</option>{/each}</select
+					>{msg('tool')}<select
+						value={canSubmit ? tool : ''}
+						onchange={(e) => setTool(e.currentTarget.value)}
+						>{#if !canSubmit}<option value="" disabled>{msg('chooseTool')}</option
+							>{/if}{#each tools as c (c.id)}<option value={c.id}>{c.title}</option>{/each}</select
 					></label
 				>{/if}
 			<Attachments
@@ -733,6 +797,10 @@
 		{#if !snapshot}<p class="pa-muted pa-pane">{msg('loading')}</p>
 		{:else if tab === 'settings'}<SettingsView
 				{snapshot}
+				{settingsFocus}
+				{model}
+				{localAllowed}
+				onmodelchange={() => modelRefresh++}
 				{sources}
 				{pending}
 				onjob={fromSkill}
@@ -756,6 +824,7 @@
 				</header>{/if}
 			<div class="pa-chat-scroll" bind:this={scroller}>
 				<ChatView
+					{phaseFor}
 					chat={chosen}
 					jobs={rows}
 					caps={snapshot.capabilities}
@@ -766,7 +835,8 @@
 					onedit={editDraft}
 					onsource={sourceOpen}
 					onexample={() => void submit(true)}
-					onsettings={() => show('settings')}
+					onsettings={() => show('settings', 'permissions')}
+					available={readyOptions}
 					oncontext={() => (sheet = 'context')}
 					onbackground={background}
 					oncue={signal}
@@ -779,6 +849,17 @@
 					void submit();
 				}}
 			>
+				{#if tool === 'chat.ask' && selected && selected.effective !== 'never' && model.state !== 'ready'}
+					<div class="pa-model-status" role="status">
+						<span>{modelStatus(model)}</span>
+						{#if model.state !== 'checking'}<button
+								type="button"
+								class="pa-link"
+								onclick={() => show('settings', 'model')}
+								>{msg('model')}<Icon name="chevronRight" size={14} /></button
+							>{/if}
+					</div>
+				{/if}
 				{#if sources.length || tool === 'chat.cloud' || office}<div class="pa-chips">
 						{#if tool === 'chat.cloud' || office}<button
 								type="button"
@@ -805,11 +886,11 @@
 						bind:this={input}
 						bind:value={prompt}
 						aria-label={msg('prompt')}
-						placeholder={msg(
-							tool === 'chat.ask' && selected?.effective === 'never'
-								? 'modelUnavailable'
-								: 'placeholder',
-						)}
+						placeholder={tool === 'chat.ask' && selected?.effective === 'never'
+							? msg('modelUnavailable')
+							: tool === 'chat.ask' && model.state === 'ready'
+								? t('papim.model.ask', { model: model.model ?? '' })
+								: msg('placeholder')}
 						onkeydown={onkey}></textarea>
 					<button
 						type="button"
@@ -880,7 +961,9 @@
 			{calm}
 			caps={snapshot?.capabilities ?? []}
 			admin={session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}
-			onsettings={() => show('settings')}
+			onsettings={() => show('settings', 'permissions')}
+			{model}
+			onmodel={() => show('settings', 'model')}
 			onturn={voiceTurn}
 			onupdate={(job) => {
 				if (snapshot && job.request.chatId === chatId)

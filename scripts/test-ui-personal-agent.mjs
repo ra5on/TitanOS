@@ -40,6 +40,9 @@ const draft = {
 const tools = [
   ["agent.example", "Beispiel ansehen"],
   ["chat.ask", "Frage stellen"],
+  ["mail.watch", "Posteingang beobachten"],
+  ["mail.summarize", "Mail zusammenfassen"],
+  ["office.table", "Tabellenentwurf erstellen"],
   ["mail.reply", "Antwort vorbereiten"],
   ["mail.send", "Antwort versenden"],
   ["attachment.read", "PDF lesen"],
@@ -72,6 +75,68 @@ function makeJob(id, tool, prompt, status) {
     updated: time,
     seen: false,
   };
+}
+async function workflowMotion(page, job, shot) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const step = page.locator('[data-guide="step-draft"]');
+  const dots = step.locator(".pa-dots");
+  await step.locator('[data-motif="mail"] svg').waitFor();
+  const firstDot = await dots.locator("i").first().elementHandle();
+  job.currentTool = "calendar.free";
+  job.completedSteps = 1;
+  await page.locator('.guide.active [data-motif="calendar"]').waitFor();
+  await step.locator('[data-motif="calendar"] svg').waitFor();
+  assert.ok(
+    await firstDot.evaluate((el) => el.isConnected),
+    "workflow step replaced the signature",
+  );
+  assert.equal(
+    await page.locator('.pa-proof [data-guide^="draft-source-"]').count(),
+    2,
+  );
+  await shot("termin-schritt");
+
+  job.status = "paused";
+  await step.getByText("Hier pausiert").waitFor();
+  const atRest = () =>
+    dots
+      .locator("i")
+      .first()
+      .evaluate((el) => {
+        const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+        return {
+          x: m.m41,
+          y: m.m42,
+          moving: el.getAnimations().some((a) => a.playState === "running"),
+        };
+      });
+  await page.waitForFunction(
+    () =>
+      !document
+        .querySelector('[data-guide="step-draft"] i')
+        ?.getAnimations()
+        .some((a) => a.playState === "running"),
+  );
+  const paused = await atRest();
+  await page.locator('[data-guide="jobs-tab"]:visible').click();
+  await page.locator('[data-guide="chat-tab"]:visible').click();
+  await step.getByText("Hier pausiert").waitFor();
+  const restored = await atRest();
+  assert.ok(
+    !restored.moving &&
+      Math.hypot(restored.x - paused.x, restored.y - paused.y) < 0.2,
+    "paused signature restarted on tab change",
+  );
+  await shot("pausiert");
+  job.status = "running";
+  await step.locator('[data-motif="calendar"] svg').waitFor();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  job.currentTool = "mail.reply";
+  job.completedSteps = 2;
+  await step.locator('[data-motif="mail"]').waitFor();
+  assert.equal(await step.locator("svg").count(), 0);
+  assert.equal(await page.locator(".guide.active:visible").count(), 0);
+  assert.equal((await atRest()).moving, false);
 }
 async function run(width, height) {
   const mobile = width < 710;
@@ -121,6 +186,13 @@ async function run(width, height) {
     await page.goto(origin + "/agent" + query);
     await page.locator(".pa-welcome, .pa-conversation").first().waitFor();
   };
+  await ctx.route("**/api/v1/mail/accounts", (r) =>
+    r.fulfill({
+      json: [
+        { id: "test-invoice", name: "Testpostfach", email: "test@example.org" },
+      ],
+    }),
+  );
   await ctx.route("**/api/v1/services/state", (r) =>
     r.fulfill({ json: { agent: true } }),
   );
@@ -168,6 +240,8 @@ async function run(width, height) {
       snapshot.jobs.push(j);
       return route.fulfill({ json: j });
     }
+    if (part === "model/readiness")
+      return route.fulfill({ json: { state: "ready", model: "Testmodell" } });
     if (part === "state") return route.fulfill({ json: snapshot });
     if (part === "settings") {
       Object.assign(snapshot.settings, body);
@@ -278,6 +352,8 @@ async function run(width, height) {
     await go("?chat=discussion");
     await page.locator(".pa-author").first().waitFor();
     await shot("laufend");
+    await workflowMotion(page, job, shot);
+    if (process.env.UI_AGENT_STEPS_ONLY === "1") return;
     job.status = "done";
     job.result = {
       title: "Antwortentwurf",
@@ -340,6 +416,39 @@ async function run(width, height) {
     await shot("auftraege");
     await page.locator('[data-guide="settings-tab"]:visible').click();
     await page.locator(".pa-sample").waitFor();
+    const skills = page
+      .locator("details")
+      .filter({ has: page.locator("summary", { hasText: "Skills" }) });
+    await skills.locator("summary").click();
+    await skills.getByRole("button", { name: "Skill erstellen" }).click();
+    const form = skills.locator("form");
+    const trigger = form.getByLabel("Auslöser");
+    await trigger.selectOption("mail");
+    await form.getByLabel("Postfach").selectOption("test-invoice");
+    const tool = form
+      .locator("select")
+      .filter({ has: page.locator('option[value="office.table"]') });
+    await tool.first().selectOption("mail.summarize");
+    await form.getByRole("button", { name: "Schritt hinzufügen" }).click();
+    await tool.nth(1).selectOption("office.table");
+    const baseName = form.getByRole("textbox", {
+      name: /Dateiname für die E-Mail-Regel/,
+    });
+    await baseName.fill("Rechnung.xlsx");
+    const hint = form.getByText(
+      "Für jede eingehende E-Mail wird vor der Dateiendung eine eigene Kennung ergänzt.",
+    );
+    await hint.waitFor();
+    await hint.scrollIntoViewIfNeeded();
+    await shot("rechnungsregel");
+    await trigger.selectOption("manual");
+    assert.equal(await hint.count(), 0);
+    assert.equal(
+      await form.getByLabel("Name der neuen Datei").inputValue(),
+      "Rechnung.xlsx",
+    );
+    await form.getByRole("button", { name: "Abbrechen" }).click();
+    await skills.locator("summary").click();
     const appearance = page
       .locator(".pa-settings-card")
       .filter({ has: page.locator(".pa-sample") });
@@ -641,11 +750,16 @@ try {
       (!process.env.UI_WIDTH || Number(process.env.UI_WIDTH) === w)
     )
       await run(w, h);
-  if (!process.env.UI_WIDTH || process.env.UI_WIDTH === "1440")
+  if (
+    process.env.UI_AGENT_STEPS_ONLY !== "1" &&
+    (!process.env.UI_WIDTH || process.env.UI_WIDTH === "1440")
+  )
     await desktopLauncher();
   assert.deepEqual(errors, []);
   console.log(
-    engine + " personal Agent navigation, draft, approval and result passed",
+    process.env.UI_AGENT_STEPS_ONLY === "1"
+      ? engine + " workflow step change, pause across tabs, resume and Reduced Motion passed"
+      : engine + " personal Agent navigation, draft, approval and result passed",
   );
 } finally {
   await browser.close();

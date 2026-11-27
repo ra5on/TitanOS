@@ -68,22 +68,45 @@ export function sourceLocation(
 	}
 	return null;
 }
-export function sendPreview(j: Job): boolean {
-	const data = j.preview?.data as Record<string, unknown> | undefined;
+// Intermediate results remain in the job while the next step is running. Only
+// its current preview can describe a pending action; completion has its own receipt.
+export function jobOutput(j: Job) {
+	if (j.status === 'done') return j.result;
+	if (j.status === 'failed' && !j.preview) return j.result;
+	return j.preview;
+}
+export function stepTool(j: Job) {
+	return j.currentTool || j.request.tool;
+}
+export function jobProgressChanged(before: Job | undefined, next: Job) {
 	return (
-		j.request.tool === 'mail.send' ||
+		!before ||
+		before.status !== next.status ||
+		(next.status === 'running' &&
+			(stepTool(before) !== stepTool(next) || before.completedSteps !== next.completedSteps))
+	);
+}
+export function visibleSources(job: Job) {
+	return (
+		jobOutput(job)?.sources ?? (job.status === 'running' ? job.request.sources : undefined) ?? []
+	);
+}
+export function sendPreview(j: Job): boolean {
+	const data = jobOutput(j)?.data as Record<string, unknown> | undefined;
+	return (
+		stepTool(j) === 'mail.send' ||
+		(j.status === 'done' && data?.accepted === true) ||
 		!!(typeof data?.inReplyTo === 'string' && typeof data?.account === 'string')
 	);
 }
 export function mailFields(j: Job) {
-	const data = (j.result ?? j.preview)?.data as {
-		draft?: { app?: string; fields?: Record<string, unknown> };
-	} | null;
+	const data = jobOutput(j)?.data as Record<string, unknown> | undefined;
+	const draft = data?.draft as { app?: string; fields?: Record<string, unknown> } | undefined;
 	const fields =
-		data?.draft?.app === 'mail'
-			? data.draft.fields
-			: sendPreview(j) && j.preview?.data
-				? (j.preview.data as Record<string, unknown>)
+		draft?.app === 'mail'
+			? draft.fields
+			: j.status !== 'done' && sendPreview(j) && typeof data?.text === 'string'
+				? data
 				: null;
 	if (!fields) return null;
 	const string = (key: string) => (typeof fields[key] === 'string' ? (fields[key] as string) : '');
@@ -107,7 +130,22 @@ export function mailFields(j: Job) {
 		bcc: list('bcc'),
 		subject: string('subject'),
 		text: string('text'),
-		attachments: list('attachments'),
-		isDraft: data?.draft?.app === 'mail',
+		attachments: Array.isArray(fields.attachments)
+			? fields.attachments
+					.map((item) => {
+						if (!item || typeof item !== 'object') return String(item ?? '');
+						const { name, type, size, sha256 } = item;
+						return [
+							name,
+							type,
+							typeof size === 'number' ? size + ' B' : '',
+							sha256 && 'SHA-256 ' + sha256,
+						]
+							.filter(Boolean)
+							.join(' · ');
+					})
+					.join('\n')
+			: string('attachments'),
+		isDraft: draft?.app === 'mail',
 	};
 }

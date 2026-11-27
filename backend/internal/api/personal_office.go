@@ -50,6 +50,23 @@ func personalWriter(tool string) bool {
 	return tool == "office.table" || tool == "office.document" || tool == "office.deck"
 }
 
+// Keep the selected extension and fit the native 200-byte limit even for a
+// long Unicode basename. The server assigns the mail request ID from the rule,
+// mailbox, UIDVALIDITY and UID. Accounts can share the same output folder.
+func mailDraftName(name, accountKey, requestID string) string {
+	suffix := "-" + personalDigest([]string{accountKey, requestID})[:20]
+	ext := path.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	room := 200 - len(ext) - len(suffix)
+	if len(stem) > room {
+		stem = stem[:room]
+		for !utf8.ValidString(stem) {
+			stem = stem[:len(stem)-1]
+		}
+	}
+	return stem + suffix + ext
+}
+
 func personalNativeOffice(name string) string {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".docx":
@@ -245,6 +262,9 @@ func (s *Server) planOfficeFile(ctx context.Context, u auth.User, r pa.Request, 
 	if r.Tool != "office.inspect" {
 		if a.Name == "" || len(a.Name) > 200 || a.Name != path.Base(a.Name) || strings.ContainsAny(a.Name, "\\\x00\r\n") || strings.HasPrefix(a.Name, ".") || !strings.EqualFold(path.Ext(a.Name), ext) {
 			return preview, nil, errors.New("gib einen neuen Dateinamen mit passender Endung an")
+		}
+		if r.MailTriggered && personalWriter(r.Tool) {
+			a.Name = mailDraftName(a.Name, personalKey(u), r.RequestID)
 		}
 		target := path.Join(dir, a.Name)
 		if _, err = s.fileTarget(u, root.ID, target, true); err != nil {

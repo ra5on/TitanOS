@@ -194,9 +194,9 @@ func contains(list []string, v string) bool {
 	return false
 }
 
-// Models are the installed models. Newer Ollama versions put the
-// capabilities into the list; for older ones Show fills them in.
-func (o *Ollama) Models(ctx context.Context) ([]Model, error) {
+// InstalledModels reads the inventory without a separate /api/show for every
+// entry. Callers that need model capabilities use Models.
+func (o *Ollama) InstalledModels(ctx context.Context) ([]Model, error) {
 	if o.remote != nil {
 		return o.remoteModels(ctx)
 	}
@@ -218,15 +218,27 @@ func (o *Ollama) Models(ctx context.Context) ([]Model, error) {
 	models := make([]Model, 0, len(tags.Models))
 	for _, t := range tags.Models {
 		m := Model{Name: t.Name, Size: t.Size, Family: t.Details.Family, Parameters: t.Details.ParameterSize, Capabilities: t.Capabilities, ContextLength: t.Details.ContextLength}
+		models = append(models, m)
+	}
+	return models, nil
+}
+
+// Models fills in the capabilities omitted by older Ollama inventories.
+func (o *Ollama) Models(ctx context.Context) ([]Model, error) {
+	models, err := o.InstalledModels(ctx)
+	if err != nil || o.remote != nil {
+		return models, err
+	}
+	for i := range models {
+		m := &models[i]
 		if m.Capabilities == nil {
-			if info, err := o.Show(ctx, t.Name); err == nil {
+			if info, err := o.Show(ctx, m.Name); err == nil {
 				m.Capabilities, m.ContextLength = info.Capabilities, info.ContextLength
 			}
 		}
 		if m.Capabilities == nil {
 			m.Capabilities = []string{}
 		}
-		models = append(models, m)
 	}
 	return models, nil
 }

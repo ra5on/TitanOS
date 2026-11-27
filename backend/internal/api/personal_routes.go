@@ -118,7 +118,13 @@ func (s *Server) personalRedact(ctx context.Context, u auth.User, a *personalAcc
 			}
 		}
 	}
-	if !visible {
+	if visible {
+		j.CurrentTool = j.Request.Tool
+		if plan := a.Plans[j.ID]; plan != nil && plan.Index >= 0 && plan.Index < len(plan.Steps) {
+			j.CurrentTool = plan.Steps[plan.Index]
+		}
+	} else {
+		j.CurrentTool = ""
 		j.Preview = nil
 		j.Result = nil
 		j.Token = ""

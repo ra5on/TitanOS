@@ -122,6 +122,8 @@ await ctx.route("**/api/v1/services/state", (r) =>
 await ctx.route("**/api/v1/personal-agent/**", async (r) => {
   const { pathname: p } = new URL(r.request().url());
   const json = (v) => r.fulfill({ json: v });
+  if (p.endsWith("/model/readiness"))
+    return json({ state: "ready", model: "Testmodell" });
   if (p.endsWith("/state"))
     return json({
       chats: jobs.length
