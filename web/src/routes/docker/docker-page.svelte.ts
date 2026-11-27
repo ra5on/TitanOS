@@ -455,12 +455,11 @@ export class DockerPage {
 	// PLAN 75-19 (style W4): a wide window shows the selected app at the
 	// right; a click selects, a double click or the name opens its page. A
 	// narrow window (and the phone) opens the page right away as before.
-	wide = $state(matchMedia('(min-width: 1000px)').matches);
+	contentWidth = $state(0);
+	wide = $derived(this.contentWidth >= 1024);
 	selectedId = $state<string | null>(null);
 	selected = $derived(
-		this.wide && !this.phone
-			? (this.shownGroups.find((g) => g.id === this.selectedId) ?? null)
-			: null,
+		!this.phone ? (this.shownGroups.find((g) => g.id === this.selectedId) ?? null) : null,
 	);
 	// Apps of several containers open downward to show them (style E3).
 	expanded = new SvelteSet<string>();
@@ -529,7 +528,7 @@ export class DockerPage {
 		);
 	// PLAN 64: the phone's full-screen view (in a window: inWindow).
 	// A narrow window: the filters get a row of their own under the tool bar.
-	roomy = $state(matchMedia('(min-width: 760px)').matches);
+	roomy = $derived(this.contentWidth >= 820);
 	FILTERS = [
 		['all', 'docker.table.filterAll'],
 		['running', 'docker.table.filterRunning'],
@@ -566,18 +565,6 @@ export class DockerPage {
 				history.replaceState(history.state, '', location.pathname);
 				this.open('import');
 			}
-		});
-		$effect(() => {
-			const query = matchMedia('(min-width: 1000px)');
-			const change = () => (this.wide = query.matches);
-			query.addEventListener('change', change);
-			return () => query.removeEventListener('change', change);
-		});
-		$effect(() => {
-			const query = matchMedia('(min-width: 760px)');
-			const change = () => (this.roomy = query.matches);
-			query.addEventListener('change', change);
-			return () => query.removeEventListener('change', change);
 		});
 	}
 }

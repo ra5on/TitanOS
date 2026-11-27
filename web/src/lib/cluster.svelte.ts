@@ -165,26 +165,41 @@ export type SwitchNode = {
 };
 
 /** The nodes for the switcher; empty outside a cluster. */
-export const clusterNodes = $state<{ nodes: SwitchNode[]; version: string; loaded: boolean }>({
+export const clusterNodes = $state<{
+	nodes: SwitchNode[];
+	version: string;
+	loaded: boolean;
+	failed: boolean;
+}>({
 	nodes: [],
 	version: '',
 	loaded: false,
+	failed: false,
 });
 
-export async function loadClusterNodes() {
-	try {
-		const res = await api.get<{ nodes: SwitchNode[]; version: string; manages: boolean }>(
-			'/cluster/nodes',
-		);
-		// A member manages nobody: no switcher, and a tab that still
-		// manages another node goes home (ClusterBanner).
-		clusterNodes.nodes = res.manages ? res.nodes : [];
-		clusterNodes.version = res.version;
-	} catch {
-		clusterNodes.nodes = [];
-	} finally {
-		clusterNodes.loaded = true;
-	}
+let pending: Promise<void> | undefined;
+
+export function loadClusterNodes(): Promise<void> {
+	if (pending) return pending;
+	pending = api
+		.get<{ nodes: SwitchNode[]; version: string; manages: boolean }>('/cluster/nodes')
+		.then(
+			(res) => {
+				// A member still has its assigned cluster name when it cannot manage peers.
+				clusterNodes.nodes = res.manages ? res.nodes : res.nodes.filter((node) => node.self);
+				clusterNodes.version = res.version;
+				clusterNodes.failed = false;
+			},
+			() => {
+				// A failed refresh cannot establish that a peer has left the cluster.
+				clusterNodes.failed = true;
+			},
+		)
+		.finally(() => {
+			clusterNodes.loaded = true;
+			pending = undefined;
+		});
+	return pending;
 }
 
 /** The node of this NAS. */

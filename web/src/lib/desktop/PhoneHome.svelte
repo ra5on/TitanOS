@@ -18,7 +18,6 @@
 	import Icon from '../components/Icon.svelte';
 	import Dialog from '../components/Dialog.svelte';
 	import NodeMenu from '../components/NodeMenu.svelte';
-	import { clusterNodes } from '../cluster.svelte.ts';
 	import { t } from '../i18n/index.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
@@ -614,9 +613,9 @@
 						>{unread > 9 ? '9+' : unread}</span
 					>{/if}</button
 			>
-			{#if clusterNodes.nodes.length > 1}<span class="node"><NodeMenu variant="phone" /></span>{/if}
 		{/if}
 	</header>
+	{#if !editing}<div class="node"><NodeMenu variant="phone" /></div>{/if}
 	{#if menu}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div class="menu-back" onclick={closeMenu}></div>
@@ -1009,8 +1008,10 @@
 		flex: 1;
 	}
 	.node {
+		position: relative;
+		z-index: 4;
 		flex: none;
-		display: flex;
+		margin: 0 var(--space-3) var(--space-2);
 	}
 	.search {
 		flex: 1;
