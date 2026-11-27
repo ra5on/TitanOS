@@ -234,7 +234,7 @@ func (s *Server) inferUsing(ctx context.Context, u auth.User, p personalModelPro
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	var client *agent.Ollama
-	model := p.Local
+	var model string
 	if cloud {
 		if source != nil || p.Key == "" || p.Cloud == "" {
 			return "", errors.New("cloud requires a configured provider and a source-free prompt")
