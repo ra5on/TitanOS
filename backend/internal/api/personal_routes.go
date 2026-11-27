@@ -219,6 +219,7 @@ func (s *Server) invalidatePersonalGrants(u auth.User, a *personalAccount, befor
 			continue
 		}
 		affected[j.ID] = true
+		p.Ask = true
 		p.ReadOK = false
 		p.Approval = ""
 		if j.Phase == "executing" {

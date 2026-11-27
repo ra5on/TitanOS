@@ -188,7 +188,7 @@ func (s *Server) personalPollInbox(ctx context.Context, u auth.User, sk pa.Skill
 				}
 			}
 			req := pa.Request{Origin: watch.Origin, Tool: sk.Steps[0], Prompt: sk.Prompt, Args: sk.Args, RequestID: "mail:" + personalDigest([]any{sk.ID, source.Ref["account"], cursor.Validity, msg.UID}), Sources: sources}
-			j, e := s.personalEnqueue(a, req, sk.Steps, sk.Approval == "ask")
+			j, e := s.personalEnqueue(u, a, req, sk.Steps, sk.Approval == "ask")
 			if errors.Is(e, errPersonalDenied) {
 				delete(a.Watches, sk.ID)
 				return nil

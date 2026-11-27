@@ -240,6 +240,9 @@ func (s *Server) personalStep(parent context.Context, token string, apply bool) 
 			return errPersonalConflict
 		}
 		if p.GrantStamp != stamp {
+			// A queued or scheduled job must not silently use an authority that
+			// was taken away and granted again while the worker was offline.
+			p.Ask = true
 			staleSource = p.Index > 0
 			p.ReadOK = false
 			p.Approval = ""

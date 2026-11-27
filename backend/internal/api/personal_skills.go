@@ -193,7 +193,7 @@ func (s *Server) personalSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		if skill.Trigger == "schedule" {
 			req := pa.Request{Origin: personalOrigin(r), Tool: skill.Steps[0], Prompt: skill.Prompt, Args: skill.Args, Sources: skill.Sources, RequestID: "schedule:" + skill.ID, RunAt: skill.RunAt}
-			j, err := s.personalEnqueue(a, req, skill.Steps, skill.Approval == "ask")
+			j, err := s.personalEnqueue(u, a, req, skill.Steps, skill.Approval == "ask")
 			if err != nil {
 				return err
 			}
@@ -280,7 +280,7 @@ func (s *Server) personalRunSkill(w http.ResponseWriter, r *http.Request) {
 			return errPersonalConflict
 		}
 		var err error
-		j, err = s.personalEnqueue(a, req, skill.Steps, skill.Approval == "ask")
+		j, err = s.personalEnqueue(u, a, req, skill.Steps, skill.Approval == "ask")
 		if err != nil {
 			return err
 		}

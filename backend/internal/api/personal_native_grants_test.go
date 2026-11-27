@@ -148,3 +148,67 @@ func TestPersonalNativeAccountAndMailRevisionsPersist(t *testing.T) {
 		t.Fatal("native mail grant revision changed at restart")
 	}
 }
+
+func TestPersonalQueuedJobRequestsConsentAfterRegrant(t *testing.T) {
+	ts := personalFixture(t)
+	_, err := ts.users.Create("bea", testPassword, auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := ts.newClient()
+	if res, _ := ts.do(client, "POST", "/api/v1/login", credentials{Name: "bea", Password: testPassword}); res.StatusCode != 200 {
+		t.Fatal(res.StatusCode)
+	}
+	j := personalHTTP[pa.Job](t, ts, client, "POST", "/jobs", pa.Request{Tool: "agent.example", RequestID: "waiting-for-worker"})
+	// The worker was offline during both native role changes.
+	for _, role := range []auth.Role{auth.RoleUser, auth.RoleAdmin} {
+		if _, err := ts.users.SetRole("bea", role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts.server.initPersonalTools()
+	workOne(t, ts.server)
+	j = personalHTTP[pa.Job](t, ts, client, "GET", "/jobs/"+j.ID, nil)
+	if j.Phase != "permission" || j.Token == "" || j.Result != nil {
+		t.Fatal("queued job used the restored authority unattended", j)
+	}
+	personalHTTP[pa.Job](t, ts, client, "POST", "/jobs/"+j.ID+"/approve", map[string]string{"token": j.Token})
+	workOne(t, ts.server)
+	j = personalHTTP[pa.Job](t, ts, client, "GET", "/jobs/"+j.ID, nil)
+	if j.Status != "done" || j.Result == nil {
+		t.Fatal(j)
+	}
+}
+
+func TestPersonalClusterAccountKeepsAccessRevisionAcrossMixedVersions(t *testing.T) {
+	ts := personalFixture(t)
+	u, err := ts.users.Create("bea", testPassword, auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A newer peer observed a full role change cycle while this NAS was offline.
+	peer := u
+	peer.AccessRevision = 2
+	if _, _, err := ts.users.Import(peer); err != nil {
+		t.Fatal(err)
+	}
+	actual, _ := ts.users.Get(u.Name)
+	if actual.AccessRevision != 2 {
+		t.Fatal(actual.AccessRevision)
+	}
+	// Older peers send no revision. Each observed role transition must advance
+	// the local grant, and a repeated unchanged import should leave it alone.
+	for _, role := range []auth.Role{auth.RoleUser, auth.RoleAdmin, auth.RoleAdmin} {
+		peer.Role, peer.AccessRevision = role, 0
+		if _, _, err := ts.users.Import(peer); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ts.users.Load(); err != nil {
+		t.Fatal(err)
+	}
+	actual, _ = ts.users.Get(u.Name)
+	if actual.Role != u.Role || actual.AccessRevision != 4 {
+		t.Fatal(actual.Role, actual.AccessRevision)
+	}
+}

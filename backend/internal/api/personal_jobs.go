@@ -51,12 +51,12 @@ func (s *Server) personalNewJob(u auth.User, r pa.Request, steps []string, ask b
 	}
 	err := s.personalTxn(u, true, func(a *personalAccount) error {
 		var err error
-		j, err = s.personalEnqueue(a, r, steps, ask)
+		j, err = s.personalEnqueue(u, a, r, steps, ask)
 		return err
 	})
 	return j, err
 }
-func (s *Server) personalEnqueue(a *personalAccount, r pa.Request, steps []string, ask bool) (pa.Job, error) {
+func (s *Server) personalEnqueue(u auth.User, a *personalAccount, r pa.Request, steps []string, ask bool) (pa.Job, error) {
 	for _, old := range a.Jobs {
 		if old.Request.RequestID != r.RequestID {
 			continue
@@ -82,6 +82,10 @@ func (s *Server) personalEnqueue(a *personalAccount, r pa.Request, steps []strin
 			return pa.Job{}, errPersonalDenied
 		}
 	}
+	stamp, err := s.personalGrantStamp(u)
+	if err != nil {
+		return pa.Job{}, err
+	}
 	now := time.Now().UTC()
 	if r.ChatID == "" {
 		r.ChatID = personalID()
@@ -95,7 +99,7 @@ func (s *Server) personalEnqueue(a *personalAccount, r pa.Request, steps []strin
 	}
 	j := pa.Job{TotalSteps: len(steps), Audit: []pa.Audit{{Time: now, State: "planned", Tool: steps[0]}}, ID: personalID(), Request: r, Status: "planned", Phase: "queued", Created: now, Updated: now}
 	a.Jobs = append(a.Jobs, j)
-	a.Plans[j.ID] = &personalPlan{Origin: r.Origin, Steps: slices.Clone(steps), Ask: ask}
+	a.Plans[j.ID] = &personalPlan{Origin: r.Origin, Steps: slices.Clone(steps), Ask: ask, GrantStamp: stamp}
 	return j, nil
 }
 
