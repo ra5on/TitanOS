@@ -382,11 +382,13 @@
 	function enqueueSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
 		const owner = user(),
 			opened = current?.doc,
+			documentId = binding?.id,
 			node = activeNode();
 		saveOrigins.set(
 			bytes,
 			() =>
 				owner === user() &&
+				documentId === binding?.id &&
 				node === activeNode() &&
 				opened?.root === current?.doc.root &&
 				opened?.path === current?.doc.path,
