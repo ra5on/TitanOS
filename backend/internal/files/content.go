@@ -188,6 +188,10 @@ func (m *Manager) WriteContent(root Root, name string, body io.Reader, size int6
 	if err = m.syncFile(f); err != nil {
 		return ContentResult{}, mapError(err)
 	}
+	written, err := f.Stat()
+	if err != nil {
+		return ContentResult{}, mapError(err)
+	}
 	if err = f.Close(); err != nil {
 		return ContentResult{}, mapError(err)
 	}
@@ -220,6 +224,9 @@ func (m *Manager) WriteContent(root Root, name string, body io.Reader, size int6
 	info, err := parent.Lstat(base)
 	if err != nil {
 		return ContentResult{}, mapError(err)
+	}
+	if !os.SameFile(written, info) || written.Size() != info.Size() || !written.ModTime().Equal(info.ModTime()) {
+		return ContentResult{}, ErrChanged
 	}
 	mod := info.ModTime()
 	return ContentResult{Version: entryVersion(info), Modified: mod.UTC(), MTime: strconv.FormatInt(mod.UnixNano(), 10), Size: info.Size()}, nil

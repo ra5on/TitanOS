@@ -489,6 +489,11 @@ func (a filesArea) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	// Let an editor bind its buffer to this opened inode, including when a
+	// different file is installed between the properties and download requests.
+	if rev := files.OpenFileVersion(info); rev != "" {
+		w.Header().Set("X-TitanOS-File-Version", rev)
+	}
 	// A link downloads under its own name, not that of its target.
 	name := path.Base(r.URL.Query().Get("path"))
 	attachment(w, name)

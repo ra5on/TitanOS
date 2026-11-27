@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"strconv"
 	"strings"
@@ -105,6 +106,11 @@ func (s *Server) editorOfficeRoot(ctx context.Context, u auth.User, r pa.Request
 	return root, nil
 }
 
+func editorRevisionMatches(info fs.FileInfo, src pa.Source) bool {
+	return src.Ref["version"] != "" && files.OpenFileVersion(info) == src.Ref["version"] &&
+		strconv.FormatInt(info.ModTime().UnixNano(), 10) == src.Ref["mtime"]
+}
+
 // A restricted source grants the explicit coordinates in its ref. Job arguments
 // may describe a new copy, but can never replace the original coordinates.
 func (s *Server) planOfficeSelection(ctx context.Context, u auth.User, r pa.Request) (pa.Preview, []byte, error) {
@@ -129,7 +135,7 @@ func (s *Server) planOfficeSelection(ctx context.Context, u auth.User, r pa.Requ
 		return empty, nil, err
 	}
 	defer f.Close()
-	if strconv.FormatInt(info.ModTime().UnixNano(), 10) != first.Ref["mtime"] || info.Size() > maxEditDocument {
+	if !editorRevisionMatches(info, first) || info.Size() > maxEditDocument {
 		return empty, nil, errOfficeSelection
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEditDocument+1))
@@ -138,6 +144,10 @@ func (s *Server) planOfficeSelection(ctx context.Context, u auth.User, r pa.Requ
 	}
 	if len(data) > maxEditDocument {
 		return empty, nil, office.ErrTooLarge
+	}
+	after, err := f.Stat()
+	if err != nil || !editorRevisionMatches(after, first) || int64(len(data)) != after.Size() {
+		return empty, nil, errOfficeSelection
 	}
 	p := pa.Preview{Title: fmt.Sprintf("%d Bereiche · %s", len(r.Sources), path.Base(first.ID)), Sources: r.Sources}
 	var text strings.Builder

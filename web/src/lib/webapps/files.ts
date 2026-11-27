@@ -30,7 +30,11 @@ export async function readDoc(
 		'/files/download?' + new URLSearchParams({ root: doc.root, path: doc.path }),
 	);
 	if (!res.ok) throw await responseError(res);
-	return { bytes: await res.arrayBuffer(), ...revision };
+	// A replaced file may keep the same name, size and mtime. Only authorize
+	// Agent region reads when both requests refer to the same opened inode.
+	const version =
+		res.headers.get('X-TitanOS-File-Version') === revision.version ? revision.version : '';
+	return { bytes: await res.arrayBuffer(), mtime: revision.mtime, version };
 }
 
 export type WriteResult =
@@ -62,8 +66,9 @@ export async function writeDoc(
 		// No body: asked below.
 	}
 	if (!mtime) {
-		const revision = await documentRevision(doc);
-		return { ok: true, ...revision };
+		// Older servers omit the save receipt. Keep normal conflict detection on
+		// the next save, but a later path lookup cannot attest these saved bytes.
+		return { ok: true, mtime: await currentMtime(doc), version: '' };
 	}
 	return { ok: true, mtime, version };
 }

@@ -3,15 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"github.com/ra5on/TitanOS/backend/internal/auth"
-	"github.com/ra5on/TitanOS/backend/internal/office"
-	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/office"
+	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 )
 
 func TestPersonalNativeOfficeSelectionIsBoundToRevisionAndRegions(t *testing.T) {
@@ -47,6 +49,10 @@ func TestPersonalNativeOfficeSelectionIsBoundToRevisionAndRegions(t *testing.T) 
 		t.Fatal(err)
 	}
 	first := makeSource("Auswahl.docx", b, map[string]string{"paragraph": "3"})
+	resp, body := ts.request("GET", "/api/v1/files/download?root=share%2FDocs&path=Auswahl.docx", nil)
+	if resp.StatusCode != 200 || resp.Header.Get("X-TitanOS-File-Version") != first.Ref["version"] || string(body) != string(b) {
+		t.Fatal("download not bound to opened revision", resp.StatusCode)
+	}
 	last := first
 	last.Ref = map[string]string{}
 	for k, v := range first.Ref {
@@ -172,5 +178,60 @@ func TestPersonalNativePDFRegionsReadInEditorOrder(t *testing.T) {
 	p, _, err := s.planPersonalOffice(ctx, owner, req)
 	if err != nil || strings.Contains(p.Text, "Privater") || strings.Index(p.Text, "Letzter Marker") < 0 || strings.Index(p.Text, "Erster Marker") < strings.Index(p.Text, "Letzter Marker") {
 		t.Fatal(p.Text, err)
+	}
+}
+
+// The descriptor can change after the path check even when mtime and size
+// match. Exercise both a different inode and an update of the already-open inode.
+func TestPersonalOfficeOpenedRevision(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "saved")
+	if err := os.WriteFile(original, []byte("aaa"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(original, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := pa.Source{Ref: map[string]string{"version": files.OpenFileVersion(info), "mtime": strconv.FormatInt(info.ModTime().UnixNano(), 10)}}
+	if !editorRevisionMatches(info, src) {
+		t.Fatal("current opened revision denied")
+	}
+	other := filepath.Join(dir, "replacement")
+	if err := os.WriteFile(other, []byte("bbb"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(other, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(other, original); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := os.Open(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacement.Close()
+	replaced, err := replacement.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if editorRevisionMatches(replaced, src) {
+		t.Fatal("same-size same-mtime replacement accepted")
+	}
+	if _, err := f.WriteAt([]byte("ccc"), 0); err != nil {
+		t.Fatal(err)
+	}
+	after, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if editorRevisionMatches(after, src) {
+		t.Fatal("in-place update after opened snapshot accepted")
 	}
 }
