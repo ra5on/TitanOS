@@ -55,6 +55,8 @@ done
 
 Der Standardlauf erwartet eine Auswahlantwort des Editors. Mit `UI_OFFICE_APP=t-exel` lässt sich ein einzelner installierter Editor prüfen. Ohne diese Angabe durchläuft der Test alle vier Programme. Für die älteren 1.7.0-Pakete prüft `UI_OFFICE_EXPECT_MANUAL=1` denselben Weg mit der manuellen Bereichsangabe. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
 
+Mit `UI_OFFICE_COPY=1` öffnet derselbe Test die neuen Word- und Tabelleneditoren. Das Testkonto erhält das persönliche Recht „Nachfragen“ zum Erstellen einer Kopie. Der Test vergleicht den markierten Abschnitt mit der sichtbaren Vorher/Nachher-Vorschau, prüft den Zielordner vor der Freigabe und öffnet die gespeicherte Kopie im zugehörigen Editor. Er prüft außerdem die einmalige Hervorhebung beim ersten Ergebnisbesuch, den Inhalt der fertigen Kopien und die unveränderten Originale.
+
 | Einstieg | Prüfschritte |
 |---|---|
 | Arbeitsplatz und Agent | Arbeitsplatzmenü öffnen, neuen Chat starten, per Programmmenü und Tastatur zwischen Chats, Aufträgen und Einstellungen wechseln. |

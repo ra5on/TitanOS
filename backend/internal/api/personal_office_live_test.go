@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/office"
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
@@ -73,12 +74,19 @@ func TestOfficeEditorSelectionLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rights := map[string]any{"rights": map[string]pa.Level{"office.inspect": pa.Auto}}
+	levels := map[string]pa.Level{"office.inspect": pa.Auto}
+	if os.Getenv("UI_OFFICE_COPY") == "1" {
+		levels["office.copy"] = pa.Ask
+	}
+	rights := map[string]any{"rights": levels}
 	personalHTTP[map[string]any](t, ts, ts.client, "PUT", "/limits/alex", rights)
 	personalHTTP[pa.State](t, ts, ts.client, "PUT", "/settings", rights)
 	liveOfficeWorker(t, ts.server, browser)
 	if browser {
 		runOfficeBrowser(t, ts, repo)
+		if os.Getenv("UI_OFFICE_COPY") == "1" {
+			checkLiveOfficeCopies(t, dir, os.Getenv("UI_OFFICE_APP"))
+		}
 		return
 	}
 	for _, check := range checks {
@@ -119,6 +127,34 @@ func TestOfficeEditorSelectionLive(t *testing.T) {
 	}
 }
 
+// Read back the actual files after the browser has opened each new copy.
+func checkLiveOfficeCopies(t *testing.T, dir, only string) {
+	t.Helper()
+	if only == "" || only == "t-word" {
+		copyBytes, err := os.ReadFile(filepath.Join(dir, "Überarbeitet.docx"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, want := range []string{"Erster Absatz", "Der Termin wurde bestätigt.", "Dritter Absatz", "Vierter Absatz", "Fünfter Absatz", "Sechster Absatz"} {
+			text, _, err := office.Paragraph(copyBytes, ".docx", 0, i+1, nil)
+			if err != nil || text != want {
+				t.Fatalf("Word paragraph %d after opening copy: %q, %v", i+1, text, err)
+			}
+		}
+	}
+	if only == "" || only == "t-exel" {
+		copyBytes, err := os.ReadFile(filepath.Join(dir, "Überarbeitet.xlsx"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = "Position\tStück\tPreis\tSumme\nA\t21\t22\t23\nB\t31\t32\t33\nC\t41\t42\t43\nD\t51\t52\t53\nE\t61\t62\t63\nF\t71\t72\t73"
+		text, _, err := office.CellRange(copyBytes, "Planung", "A1:D7", nil, "")
+		if err != nil || text != want {
+			t.Fatalf("spreadsheet values inside or outside the selected range differ: %q, %v", text, err)
+		}
+	}
+}
+
 func liveOfficeWorker(t *testing.T, server *Server, process bool) {
 	t.Helper()
 	ctx, stop := context.WithCancel(t.Context())
@@ -153,6 +189,9 @@ func runOfficeBrowser(t *testing.T, ts *testServer, repo string) {
 	ctx, stop := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer stop()
 	ids := []string{"t-word", "t-exel", "t-pdf", "t-deck"}
+	if os.Getenv("UI_OFFICE_COPY") == "1" {
+		ids = []string{"t-word", "t-exel"}
+	}
 	if id := os.Getenv("UI_OFFICE_APP"); id != "" {
 		if !slices.Contains(ids, id) {
 			t.Fatalf("unknown UI_OFFICE_APP %q", id)

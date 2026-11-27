@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { checkOfficeCopy } from "./test-ui-office-copy.mjs";
 
 const examples = {
   "t-word": {
@@ -200,6 +201,8 @@ async function runLive() {
   const expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1";
   try {
     for (const [id, example] of Object.entries(examples)) {
+      const copy = process.env.UI_OFFICE_COPY === "1";
+      if (copy && !["t-word", "t-exel"].includes(id)) continue;
       if (process.env.UI_OFFICE_APP && process.env.UI_OFFICE_APP !== id)
         continue;
       const ctx = await browser.newContext({
@@ -335,6 +338,29 @@ async function runLive() {
           "opening the Agent replaced the live editor",
         );
         const agent = page.frameLocator('iframe[data-app="app:agent"]').last();
+        if (copy) {
+          assert.ok(
+            !expectManual,
+            "Copy acceptance starts with a native editor selection",
+          );
+          await checkOfficeCopy({
+            id,
+            page,
+            agent,
+            ctx,
+            root,
+            sources,
+            engine,
+            screenshot,
+          });
+          assert.deepEqual(
+            await download(),
+            before,
+            "Creating a copy changed the original",
+          );
+          assert.deepEqual(errors, []);
+          continue;
+        }
         await agent.locator(".pa-context > button").last().click();
         const [created] = await Promise.all([
           page.waitForResponse(
