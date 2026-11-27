@@ -227,7 +227,7 @@ func (s *Server) applyCollection(ctx context.Context, u auth.User, r pa.Request,
 	if err != nil || ctx.Err() != nil {
 		return result, pa.ErrNoEffect
 	}
-	if err = s.opts.Files.WriteFileChecked(root, details.Document.Path, out, u.UID, false, func() error { return pa.Reauthorize(ctx) }); err != nil {
+	if err = s.opts.Files.WriteFileChecked(root, details.Document.Path, out, u.UID, false, s.personalOfficePublish(ctx)); err != nil {
 		if errors.Is(err, files.ErrExists) {
 			return result, pa.ErrNoEffect
 		}

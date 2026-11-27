@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -75,6 +76,16 @@ func (s *Server) personalFileRoot(user auth.User, src pa.Source, write bool) (fi
 	if src.Kind != "folder" || src.ID != "." {
 		if _, err = s.fileTarget(user, rootID, src.ID, write); err != nil {
 			return files.Root{}, errors.New("kein Zugriff auf die Auswahl")
+		}
+	}
+
+	if write {
+		dir := src.ID
+		if src.Kind != "folder" {
+			dir = path.Dir(dir)
+		}
+		if err := s.personalGuardedDirectory(filepath.Join(root.Dir, filepath.FromSlash(dir))); err != nil {
+			return files.Root{}, err
 		}
 	}
 
@@ -261,9 +272,7 @@ func (s *Server) applyPersonalOffice(ctx context.Context, u auth.User, r pa.Requ
 	if err = ctx.Err(); err != nil {
 		return result, err
 	}
-	if err = s.opts.Files.WriteFileChecked(root, dst.Path, out, u.UID, false, func() error {
-		return pa.Reauthorize(ctx)
-	}); err != nil {
+	if err = s.opts.Files.WriteFileChecked(root, dst.Path, out, u.UID, false, s.personalOfficePublish(ctx)); err != nil {
 		return result, err
 	}
 	// Verify the published object through the native account-visible file path.

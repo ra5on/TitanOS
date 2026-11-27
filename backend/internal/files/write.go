@@ -22,7 +22,7 @@ func (m *Manager) WriteFile(root Root, name string, data []byte, uid int, replac
 
 // WriteFileChecked revalidates a delegated write after syncing its private staging file
 // and immediately before publishing. Existing native writes use the same implementation.
-func (m *Manager) WriteFileChecked(root Root, name string, data []byte, uid int, replace bool, beforePublish func() error) error {
+func (m *Manager) WriteFileChecked(root Root, name string, data []byte, uid int, replace bool, beforePublish func(directory string) error) error {
 	if !root.Writable || root.Kind == "stick" {
 		return ErrReadOnly
 	}
@@ -59,18 +59,38 @@ func (m *Manager) WriteFileChecked(root Root, name string, data []byte, uid int,
 	if err != nil {
 		return mapError(err)
 	}
-	resolved, resolveErr := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", directory.Fd()))
-	directory.Close()
-	if resolveErr != nil {
-		return mapError(resolveErr)
+	defer directory.Close()
+	rootDir := root.Dir
+	if beforePublish != nil {
+		// A root itself may be mounted through a symlink. Use the opened
+		// directory as the reference for checks on delegated publications.
+		rootFile, err := r.Open(".")
+		if err != nil {
+			return mapError(err)
+		}
+		rootDir, err = os.Readlink(fmt.Sprintf("/proc/self/fd/%d", rootFile.Fd()))
+		rootFile.Close()
+		if err != nil {
+			return mapError(err)
+		}
 	}
-	actual := filepath.Join(resolved, path.Base(name))
-	rel, err := filepath.Rel(root.Dir, actual)
-	if err != nil || root.secret(filepath.ToSlash(rel)) {
-		return ErrInvalid
+	checkedDirectory := func() (string, error) {
+		resolved, err := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", directory.Fd()))
+		if err != nil {
+			return "", mapError(err)
+		}
+		actual := filepath.Join(resolved, path.Base(name))
+		rel, err := filepath.Rel(rootDir, actual)
+		if err != nil || beforePublish != nil && !filepath.IsLocal(rel) || root.secret(filepath.ToSlash(rel)) {
+			return "", ErrInvalid
+		}
+		if m.Protected != nil && m.Protected(actual) {
+			return "", ErrProtected
+		}
+		return resolved, nil
 	}
-	if m.Protected != nil && m.Protected(actual) {
-		return ErrProtected
+	if _, err := checkedDirectory(); err != nil {
+		return err
 	}
 	base := path.Base(name)
 	existing, statErr := parent.Lstat(base)
@@ -103,7 +123,11 @@ func (m *Manager) WriteFileChecked(root Root, name string, data []byte, uid int,
 		return mapError(err)
 	}
 	if beforePublish != nil {
-		if err := beforePublish(); err != nil {
+		directory, err := checkedDirectory()
+		if err != nil {
+			return err
+		}
+		if err := beforePublish(directory); err != nil {
 			return err
 		}
 	}
