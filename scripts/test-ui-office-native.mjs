@@ -300,10 +300,19 @@ async function runLive() {
           .getByRole("menuitem", { name: new RegExp("^" + example.name) })
           .click();
         const dlg = page.getByRole("dialog", { name: "Mit Agent bearbeiten" });
+        const editor = page.frameLocator('iframe[data-webapp="' + id + '"]');
+        const canvas = editor.locator("canvas").first();
+        await canvas.waitFor({ state: "visible" });
+        const desktopDocument = await page.evaluate(
+          () => performance.timeOrigin,
+        );
+        const editorDocument = await canvas.evaluate(
+          (el) => el.ownerDocument.defaultView.performance.timeOrigin,
+        );
         const sources = await verifyNativeSelection({
           id,
           page,
-          editor: page.frameLocator('iframe[data-webapp="' + id + '"]'),
+          editor,
           show: page.locator(".agent-strip button:visible"),
           dlg,
           apply: dlg.getByRole("button", { name: "Auswahl im Agent öffnen" }),
@@ -313,6 +322,18 @@ async function runLive() {
           engine,
           expectManual,
         });
+        assert.equal(
+          await page.evaluate(() => performance.timeOrigin),
+          desktopDocument,
+          "opening the Agent replaced the desktop document",
+        );
+        assert.equal(
+          await canvas.evaluate(
+            (el) => el.ownerDocument.defaultView.performance.timeOrigin,
+          ),
+          editorDocument,
+          "opening the Agent replaced the live editor",
+        );
         const agent = page.frameLocator('iframe[data-app="app:agent"]').last();
         await agent.locator(".pa-context > button").last().click();
         const [created] = await Promise.all([
