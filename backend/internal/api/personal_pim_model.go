@@ -43,6 +43,7 @@ func (s *Server) personalModel(u auth.User) (personalModelProfile, error) {
 }
 
 func (s *Server) registerPersonalPIMRoutes(mux *routeMux) {
+	mux.HandleFunc("POST /api/v1/personal-agent/jobs/{id}/speech", s.personalBrowser(s.personalReplyVoice(s.sayPersonalReply)))
 	mux.HandleFunc("GET /api/v1/personal-agent/presentation", s.personalBrowser(func(w http.ResponseWriter, r *http.Request) {
 		var out map[string]any
 		err := s.personalTxn(currentUser(r), false, func(a *personalAccount) error {

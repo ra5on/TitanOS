@@ -59,6 +59,8 @@ func newPersonalAccount() personalAccount {
 }
 
 type personalRuntime struct {
+	replyVoices map[*personalReplyRun]struct{} // guarded by mu; live HTTP playback requests
+
 	watch      sync.Mutex
 	watchDue   map[string]time.Time
 	processing map[string]bool

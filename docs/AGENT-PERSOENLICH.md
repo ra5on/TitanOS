@@ -18,6 +18,12 @@ Ein wartender Auftrag akzeptiert `POST /jobs/{id}/approve` mit seinem aktuellen 
 
 Vor jeder externen Nebenwirkung setzt der Broker dauerhaft die Phase `executing`. Eine ausgebliebene Bestätigung, etwa nach einem Neustart, ergibt `failed/uncertain`. Für diesen Fall zeigt der Auftrag die letzte konkrete Vorschau. Eine bestätigte Ablehnung ergibt `effect_rejected`. Bei einer bestätigten Durchführung speichert der Broker einen Schrittbeleg und das Ergebnis. Adapter können für dasselbe native Objekt auch über verschiedene Request-IDs hinweg einen gemeinsamen Ausführungsschlüssel verwenden.
 
+## Antworten lokal vorlesen
+
+`POST /api/v1/personal-agent/jobs/{id}/speech` liest die fertige Antwort eines einzelnen eigenen `chat.ask`-Auftrags. Der Browser sendet einen leeren Anfragekörper. Bei der persönlichen Stufe `ask` gehört zur einzelnen Wiedergabe der Header `X-TitanOS-Play-Reply: yes`. Das eigene Recht `speech.speak` ist bei der Auslieferung gesperrt. Die Sprachausgabe benötigt einen laufenden lokalen Piper-Dienst. Die Antwort enthält eine WAV-Datei mit `Cache-Control: no-store`.
+
+TitanOS prüft den Zugriff auf den konkreten Chattext vor der Synthese und vor der Ausgabe. Das Beenden des Dialogs bricht die HTTP-Anfrage ab und schließt die Verbindung zu Piper. Ein Rechteentzug während der Synthese verwirft die Ausgabe, auch wenn die Berechtigung unmittelbar danach erneut erteilt wird.
+
 ## Persönliche Rezepte und Beobachtung
 
 Ein Skill enthält höchstens acht vorab gewählte Werkzeuge. Jeder Schritt sieht nur die für dieses Werkzeug gewählten Quellentypen. Er kann bis zu 8192 Zeichen Text aus dem letzten abgeschlossenen Schritt erhalten. Vor einer Weitergabe kontrolliert der Broker erneut das Zugriffsrecht auf die vorherigen Quellen. `manual` startet auf Wunsch, `schedule` einmalig zum angegebenen Zeitpunkt, `mail` bei neuen Nachrichten des ausgewählten Absenders im gewählten Posteingang. Automatische Mailbeobachtung benötigt ausdrücklich das Recht `mail.watch=auto`.

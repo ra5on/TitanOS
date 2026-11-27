@@ -181,7 +181,7 @@ func (s *Server) personalSettings(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if !maps.Equal(before, a.Settings.Rights) {
-			affected = invalidatePersonalGrants(a, before, a.Settings.Rights)
+			affected = s.invalidatePersonalGrants(u, a, before, a.Settings.Rights)
 		}
 		if patch.Paused != nil && *patch.Paused {
 			pausePersonalReads(a)
@@ -199,9 +199,12 @@ func (s *Server) personalSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.personalState(w, r)
 }
-func invalidatePersonalGrants(a *personalAccount, before, after map[string]pa.Level) map[string]bool {
+func (s *Server) invalidatePersonalGrants(u auth.User, a *personalAccount, before, after map[string]pa.Level) map[string]bool {
 	affected := map[string]bool{}
 	changed := func(id string) bool { return before[id] != after[id] }
+	if changed(personalReplyVoiceID) || changed("chat.ask") {
+		s.stopPersonalReplyRuns(u.Name)
+	}
 	if changed("mail.watch") {
 		clear(a.Watches)
 	}
@@ -277,7 +280,7 @@ func (s *Server) personalLimits(w http.ResponseWriter, r *http.Request) {
 		if set && !maps.Equal(a.Limits, body.Rights) {
 			before := a.Limits
 			a.Limits = maps.Clone(body.Rights)
-			affected = invalidatePersonalGrants(a, before, a.Limits)
+			affected = s.invalidatePersonalGrants(account, a, before, a.Limits)
 		}
 		body.Rights = a.Limits
 		return nil

@@ -47,6 +47,9 @@ func (s *Server) personalEntitlementsChanged(name string) {
 	if err := s.opts.Store.WriteJSON(personalGrantFile(name), personalID()); err != nil {
 		slog.Warn("Agent grant revision could not be saved", "error", err)
 	}
+	s.personal.mu.Lock()
+	s.stopPersonalReplyRuns(name)
+	s.personal.mu.Unlock()
 	s.cancelPersonalRuns(name, nil)
 }
 func (s *Server) cancelPersonalRuns(name string, affected map[string]bool) {
