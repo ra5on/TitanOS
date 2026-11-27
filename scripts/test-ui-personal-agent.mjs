@@ -385,7 +385,13 @@ async function run(width, height) {
         trusted: true,
       };
       const doc = "Angebot.docx";
-      const entry = { name: doc, dir: false, modified: time, size: 4 };
+      const entry = {
+        name: doc,
+        dir: false,
+        modified: time,
+        size: 4,
+        version: "a".repeat(64),
+      };
       await ctx.route("**/api/v1/webapps", (r) =>
         r.fulfill({ json: { volume: "Data", apps: [word] } }),
       );
@@ -396,7 +402,10 @@ async function run(width, height) {
         r.fulfill({ json: entry }),
       );
       await ctx.route("**/api/v1/files/download?*", (r) =>
-        r.fulfill({ body: Buffer.from("test") }),
+        r.fulfill({
+          body: Buffer.from("test"),
+          headers: { "X-TitanOS-File-Version": entry.version },
+        }),
       );
       // The native host and its document, dirty state, selection and transitions
       // are under test. Only the embedded editor's readiness handshake is simulated.
@@ -433,7 +442,12 @@ async function run(width, height) {
       await selection.waitFor();
       assert.equal(handoff.tool, "office.inspect");
       assert.equal(handoff.sources[0].ref.paragraph, "3");
-      assert.equal(await selection.getByLabel("Absatz").inputValue(), "3");
+      assert.equal(handoff.sources[0].kind, "office.region");
+      assert.equal(await selection.getByLabel("Absatz").count(), 0);
+      await selection
+        .getByText("Angebot.docx · Absatz 3", { exact: true })
+        .first()
+        .waitFor();
       assert.equal(consumed, 2);
     }
     // The same scoped source handoff is used by Files and the native editors.

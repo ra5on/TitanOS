@@ -222,3 +222,8 @@ Der Editor spiegelt beide IDs der Anfrage. Bei einem abweichenden aktiven Dokume
 | T-Deck | `{slide: 2}` für die ganze Folie oder `{slide: 2, paragraph: 1}` für einen Absatz auf dieser Folie |
 
 Alle Nummern beginnen bei eins. Einträge für getrennte Regionen behalten ihre Reihenfolge. Der Editor übermittelt ausschließlich Koordinaten. Der Host bestimmt die Datei und ihre gespeicherte Version. Der Agent prüft die Berechtigung für die NAS-Freigabe und die ausgewählten Regionen vor dem Lesen erneut. Beim Kopieren kann ein einzelner unterstützter Bereich bearbeitet werden. Bei größeren oder nicht abbildbaren Selektionen zeigt der Dialog die Möglichkeit zur ausdrücklichen manuellen Eingrenzung. Ältere Editoren ohne diesen Vertrag behalten die manuelle Bereichsauswahl.
+
+
+Die Dateieigenschaften und der Download müssen dieselbe Revision haben. `X-TitanOS-File-Version` am Download stammt vom geöffneten Dateideskriptor. Diese Revision beschreibt unter anderem Gerät, Inode und Änderungszeiten. Der Agent gleicht sie beim Öffnen und nach dem Lesen mit dem Deskriptor ab und prüft den Pfad vor der Ausgabe erneut.
+
+`scripts/test-ui-office-selection.mjs` prüft die Übergabe aus dem Dateifenster bis in den persönlichen Agenten in WebKit und Chromium (Auswahl über `UI_ENGINE`). Der Standardlauf verwendet einen kleinen Editor, der den Übergabevertrag spricht. Mit `TITAND_BIN` und `UI_OFFICE_PACKAGES` startet der Test zusätzlich benötigte Katalog-Editoren der Version 1.7 in einem lokalen Entwicklungsdaemon und prüft den manuellen Fallback. Die anonymen Dokumente liegen unter `scripts/testdata/editor-selection/`.
