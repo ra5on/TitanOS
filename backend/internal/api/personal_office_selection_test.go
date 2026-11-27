@@ -176,7 +176,9 @@ func TestPersonalNativePDFRegionsReadInEditorOrder(t *testing.T) {
 		req.Sources = append(req.Sources, pa.Source{Kind: officeRegionKind, ID: name, Ref: map[string]string{"root": root.ID, "version": info.Version, "mtime": strconv.FormatInt(info.Modified.UnixNano(), 10), "page": page}})
 	}
 	p, _, err := s.planPersonalOffice(ctx, owner, req)
-	if err != nil || strings.Contains(p.Text, "Privater") || strings.Index(p.Text, "Letzter Marker") < 0 || strings.Index(p.Text, "Erster Marker") < strings.Index(p.Text, "Letzter Marker") {
+	lastPage := strings.Index(p.Text, "Letzter Marker")
+	firstPage := strings.Index(p.Text, "Erster Marker")
+	if err != nil || strings.Contains(p.Text, "Privater") || lastPage < 0 || firstPage < lastPage {
 		t.Fatal(p.Text, err)
 	}
 }

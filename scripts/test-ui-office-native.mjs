@@ -196,6 +196,8 @@ async function runLive() {
   const expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1";
   try {
     for (const [id, example] of Object.entries(examples)) {
+      if (process.env.UI_OFFICE_APP && process.env.UI_OFFICE_APP !== id)
+        continue;
       const ctx = await browser.newContext({
         baseURL: origin,
         viewport: { width: 1440, height: 900 },

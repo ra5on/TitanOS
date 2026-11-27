@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -152,6 +153,12 @@ func runOfficeBrowser(t *testing.T, ts *testServer, repo string) {
 	ctx, stop := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer stop()
 	ids := []string{"t-word", "t-exel", "t-pdf", "t-deck"}
+	if id := os.Getenv("UI_OFFICE_APP"); id != "" {
+		if !slices.Contains(ids, id) {
+			t.Fatalf("unknown UI_OFFICE_APP %q", id)
+		}
+		ids = []string{id}
+	}
 	if resp, body := ts.request("POST", "/api/v1/webapps/defaults/install", map[string]any{"apps": ids}); resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("install: %d %s", resp.StatusCode, body)
 	}
