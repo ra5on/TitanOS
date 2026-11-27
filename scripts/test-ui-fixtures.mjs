@@ -173,6 +173,8 @@ export function fixtureFactory(browser, errors) {
     });
     await ctx.addInitScript(
       ({ theme, locale, nativeShell }) => {
+        // Sandboxed Office documents are opaque. Only TitanOS pages use the UI fixtures' preferences.
+        if (location.pathname.startsWith("/webapps/") && window !== window.top) return;
         localStorage.setItem("titanos.locale", locale);
         // The page scripts check pages in the classic frame; the desktop
         // mode (PLAN 61) has scripts/test-ui-desktop.mjs.

@@ -109,9 +109,13 @@ func (s *Server) personalFileRoot(user auth.User, src pa.Source, write bool) (fi
 	return root, nil
 }
 
-func (s *Server) personalOfficeAccess(_ context.Context, user auth.User, r pa.Request) error {
+func (s *Server) personalOfficeAccess(ctx context.Context, user auth.User, r pa.Request) error {
 	if s.opts.Files == nil {
 		return errors.New("kein Zugriff auf Dateien")
+	}
+	if len(r.Sources) > 0 && r.Sources[0].Kind == officeRegionKind {
+		_, err := s.editorOfficeRoot(ctx, user, r)
+		return err
 	}
 	if len(r.Sources) != 1 {
 		return errors.New("wähle genau eine Quelle")
@@ -132,6 +136,13 @@ func (s *Server) personalOfficeAccess(_ context.Context, user auth.User, r pa.Re
 // planPersonalOffice derives both the preview and the bytes from the explicitly
 // selected source. The broker calls it again on approval; no prior binary is trusted.
 func (s *Server) planPersonalOffice(ctx context.Context, u auth.User, r pa.Request) (pa.Preview, []byte, error) {
+	if len(r.Sources) > 0 && r.Sources[0].Kind == officeRegionKind {
+		return s.planOfficeSelection(ctx, u, r)
+	}
+	return s.planOfficeFile(ctx, u, r, nil)
+}
+
+func (s *Server) planOfficeFile(ctx context.Context, u auth.User, r pa.Request, data []byte) (pa.Preview, []byte, error) {
 	var a personalOfficeArgs
 	var preview pa.Preview
 	if len(r.Args) > 0 {
@@ -191,8 +202,10 @@ func (s *Server) planPersonalOffice(ctx context.Context, u auth.User, r pa.Reque
 		}
 
 	} else {
-		data, e := s.readEditable(root, src.ID)
-		if e != nil {
+		if data == nil {
+			data, err = s.readEditable(root, src.ID)
+		}
+		if err != nil {
 			return preview, nil, errors.New("die Quelldatei ist nicht lesbar oder zu groß")
 		}
 		hash := sha256.Sum256(data)
@@ -207,6 +220,11 @@ func (s *Server) planPersonalOffice(ctx context.Context, u auth.User, r pa.Reque
 		}
 		switch ext {
 		case ".docx", ".pptx":
+			if ext == ".pptx" && a.Slide > 0 && a.Paragraph == 0 && r.Tool == "office.inspect" {
+				region.Region = fmt.Sprintf("Folie %d", a.Slide)
+				region.Before, err = office.SlideText(data, a.Slide)
+				break
+			}
 			if a.Paragraph < 1 {
 				return preview, nil, errors.New("wähle eine Absatznummer")
 			}
@@ -285,7 +303,11 @@ func (s *Server) applyPersonalOffice(ctx context.Context, u auth.User, r pa.Requ
 		return result, errors.New("das Ausgabeziel fehlt")
 	}
 	dst := selection.Document
-	root, err := s.personalFileRoot(u, r.Sources[0], true)
+	src := r.Sources[0]
+	if src.Kind == officeRegionKind {
+		src.Kind = "file"
+	}
+	root, err := s.personalFileRoot(u, src, true)
 	if err != nil {
 		return result, err
 	}

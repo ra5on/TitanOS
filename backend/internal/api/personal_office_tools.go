@@ -32,6 +32,9 @@ func init() {
 				p, _, err := s.planPersonalOffice(ctx, u, r)
 				return p, err
 			}}
+			if item.id == "office.inspect" || item.id == "office.copy" {
+				t.SourceKinds = append(t.SourceKinds, officeRegionKind)
+			}
 			if item.id != "office.inspect" {
 				t.Apply = s.applyPersonalOffice
 			}

@@ -546,6 +546,15 @@ func (m *Manager) binFolders(r *os.Root, top, dir string) error {
 	return nil
 }
 
+// OpenFileVersion gives a regular, opened file's catalog revision. It identifies
+// its inode and status change time as well as its size and modification time.
+func OpenFileVersion(info fs.FileInfo) string {
+	if info == nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return entryVersion(info)
+}
+
 // Open opens a file for download.
 func (m *Manager) Open(root Root, name string) (*os.File, fs.FileInfo, error) {
 	name, err := clean(name)

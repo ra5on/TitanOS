@@ -94,7 +94,37 @@
 
 	var ready = false;
 	var waiting = [];
-	var saveIds = [];
+	var activeDocument = '';
+	var selectionRequest = '';
+	var editorStopped = false;
+	var token = /^[a-f0-9]{32}$/;
+
+	function reportStoppedSelection() {
+		if (!selectionRequest || !activeDocument) return;
+		post({
+			type: 'webapp-agent-selection',
+			version: 1,
+			requestId: selectionRequest,
+			documentId: activeDocument,
+			status: 'failed',
+		});
+		selectionRequest = '';
+	}
+
+	// An uncaught trap can leave the last painted document visible while the
+	// editor no longer processes input. A fresh frame starts with a clean state.
+	function editorError(reason) {
+		if (typeof WebAssembly !== 'undefined' && reason instanceof WebAssembly.RuntimeError) {
+			editorStopped = true;
+			reportStoppedSelection();
+		}
+	}
+	window.addEventListener('error', function (event) {
+		editorError(event.error);
+	});
+	window.addEventListener('unhandledrejection', function (event) {
+		editorError(event.reason);
+	});
 
 	function becomeReady() {
 		if (ready) return;
@@ -110,8 +140,12 @@
 		var target = canvas();
 		if (!target) return void post({ type: 'webapp-failed', text: 'no canvas' });
 		if (bridge === 'host') {
+			activeDocument = message.documentId || '';
+			selectionRequest = '';
 			target.dispatchEvent(
-				new CustomEvent(events + ':open', { detail: { name: message.name, bytes: message.bytes } }),
+				new CustomEvent(events + ':open', {
+					detail: { name: message.name, bytes: message.bytes, documentId: activeDocument },
+				}),
 			);
 			return;
 		}
@@ -214,7 +248,29 @@
 		if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
 		if (msg.type === 'webapp-open') {
 			if (!(msg.bytes instanceof ArrayBuffer)) return;
-			open({ name: cleanName(msg.name, 'document'), bytes: msg.bytes });
+			open({
+				name: cleanName(msg.name, 'document'),
+				bytes: msg.bytes,
+				documentId: token.test(msg.documentId) ? msg.documentId : '',
+			});
+		} else if (
+			msg.type === 'webapp-agent-selection-request' &&
+			bridge === 'host' &&
+			msg.version === 1 &&
+			token.test(msg.requestId) &&
+			msg.documentId === activeDocument &&
+			activeDocument
+		) {
+			var element = canvas();
+			selectionRequest = msg.requestId;
+			if (editorStopped) return reportStoppedSelection();
+			if (element) {
+				element.dispatchEvent(
+					new CustomEvent(events + ':agent-selection-request', {
+						detail: { version: 1, requestId: selectionRequest, documentId: activeDocument },
+					}),
+				);
+			}
 		} else if (msg.type === 'webapp-focus') {
 			// PLAN 79-3: the window gave the keyboard to the app (opened, came to
 			// the front, a file arrived): its keys go to the canvas.
@@ -253,11 +309,19 @@
 				);
 			});
 		} else if (msg.type === 'webapp-saved') {
-			var id = saveIds.shift();
-			if (msg.ok === true && id != null && bridge === 'host') {
+			var id = msg.ticket;
+			if (msg.ok === true && typeof msg.documentId === 'string' && token.test(msg.documentId)) {
+				activeDocument = msg.documentId;
+				selectionRequest = '';
+			}
+			if (typeof id === 'string' && id.length <= 128 && bridge === 'host') {
 				var target = canvas();
 				if (target)
-					target.dispatchEvent(new CustomEvent(events + ':saved', { detail: { id: id } }));
+					target.dispatchEvent(
+						new CustomEvent(events + (msg.ok === true ? ':saved' : ':save-failed'), {
+							detail: { id: id, documentId: activeDocument },
+						}),
+					);
 			}
 		}
 	});
@@ -351,15 +415,68 @@
 			if (event && event.target instanceof Element) announced = event.target;
 			becomeReady();
 		});
+		on('agent-selection', function (detail, event) {
+			if (
+				event.target !== canvas() ||
+				detail.version !== 1 ||
+				!activeDocument ||
+				!selectionRequest ||
+				detail.requestId !== selectionRequest ||
+				detail.documentId !== activeDocument
+			)
+				return;
+			selectionRequest = '';
+			var status = ['selected', 'none', 'dirty', 'unsupported', 'unbound'].includes(detail.status)
+				? detail.status
+				: 'unsupported';
+			var items = [];
+			if (status === 'selected') {
+				if (!Array.isArray(detail.items) || detail.items.length > 16 || !detail.items.length)
+					status = 'unsupported';
+				else
+					for (var item of detail.items) {
+						if (
+							!item ||
+							typeof item !== 'object' ||
+							Object.keys(item).some(function (k) {
+								return (
+									!['paragraph', 'sheet', 'range', 'page', 'slide'].includes(k) ||
+									!['string', 'number'].includes(typeof item[k]) ||
+									(typeof item[k] === 'string' && item[k].length > 128)
+								);
+							})
+						) {
+							status = 'unsupported';
+							break;
+						}
+						items.push(item);
+					}
+			}
+			post({
+				type: 'webapp-agent-selection',
+				version: 1,
+				requestId: detail.requestId,
+				documentId: activeDocument,
+				status: status,
+				items: status === 'selected' ? items : [],
+			});
+		});
 		on('save', function (detail) {
 			var bytes = buffer(detail.bytes);
 			if (!bytes) return;
 			var name = cleanName(detail.name, 'document');
 			if (!framed) return void downloadHere(name, bytes);
-			saveIds.push(typeof detail.id === 'string' ? detail.id : null);
-			post({ type: 'webapp-save', name: name, saveAs: detail.saveAs === true, bytes: bytes }, [
-				bytes,
-			]);
+			var ticket = typeof detail.id === 'string' && detail.id.length <= 128 ? detail.id : undefined;
+			post(
+				{
+					type: 'webapp-save',
+					name: name,
+					saveAs: detail.saveAs === true,
+					ticket: ticket,
+					bytes: bytes,
+				},
+				[bytes],
+			);
 		});
 		on('dirty', function (detail) {
 			post({ type: 'webapp-dirty', dirty: detail.dirty === true });

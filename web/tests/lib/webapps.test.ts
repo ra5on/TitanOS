@@ -56,6 +56,13 @@ test('host messages: only well-formed ones of the contract pass', () => {
 		saveAs: false,
 		bytes,
 	});
+	expect(hostMessage({ type: 'webapp-save', bytes, ticket: 'original-2' })).toHaveProperty(
+		'ticket',
+		'original-2',
+	);
+	expect(hostMessage({ type: 'webapp-save', bytes, ticket: 'x'.repeat(129) })).not.toHaveProperty(
+		'ticket',
+	);
 	expect(hostMessage({ type: 'webapp-save', name: 'a', bytes: new Uint8Array(3) })).toBeNull();
 	expect(hostMessage({ type: 'webapp-save', name: 'a', bytes: 'text' })).toBeNull();
 	expect(hostMessage({ type: 'webapp-dirty', dirty: 'yes' })).toEqual({
@@ -220,11 +227,11 @@ const json = (body: unknown, status = 200) =>
 
 test('writeDoc: PUT with root, path and expect; 409 is a conflict; the time comes back', async () => {
 	const calls = stubFetch(() =>
-		json({ modified: '2026-11-07T10:00:00.5+01:00', mtime: '1', size: 3 }),
+		json({ modified: '2026-11-07T10:00:00.5+01:00', mtime: '1', size: 3, version: 'saved-inode' }),
 	);
 	const doc = { root: 'share/Documents', path: 'Ordner/Angebot.docx' };
 	const r = await writeDoc(doc, new Uint8Array([1, 2, 3]).buffer, '1794039123123456789');
-	expect(r).toEqual({ ok: true, mtime: '1794042000500000000' });
+	expect(r).toEqual({ ok: true, mtime: '1794042000500000000', version: 'saved-inode' });
 	const url = new URL(calls[0].url, 'http://x');
 	expect(url.pathname).toBe('/api/v1/files/content');
 	expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -241,6 +248,19 @@ test('writeDoc: PUT with root, path and expect; 409 is a conflict; the time come
 	await expect(writeDoc(doc, new ArrayBuffer(1), 'none')).rejects.toBeInstanceOf(ApiError);
 });
 
+test('a save without a revision receipt cannot bind a later path lookup', async () => {
+	stubFetch((url) =>
+		url.includes('/properties?')
+			? json({ modified: '2026-11-07T08:12:03Z', version: 'different-file' })
+			: new Response(null, { status: 204 }),
+	);
+	expect(await writeDoc({ root: 'share/D', path: 'a.docx' }, new ArrayBuffer(1), 'none')).toEqual({
+		ok: true,
+		mtime: '1794039123000000000',
+		version: '',
+	});
+});
+
 test('readDoc: the time is taken before the bytes', async () => {
 	const order: string[] = [];
 	stubFetch((url) => {
@@ -253,6 +273,23 @@ test('readDoc: the time is taken before the bytes', async () => {
 	expect(order).toEqual(['/api/v1/files/properties', '/api/v1/files/download']);
 	expect(r.mtime).toBe('1794039123000000000');
 	expect(new Uint8Array(r.bytes)).toEqual(new Uint8Array([80, 75, 3, 4]));
+});
+
+test.each([
+	['selected-inode', 'selected-inode'],
+	['replacement-inode', ''],
+	[null, ''],
+])('readDoc binds only the downloaded file revision (%s)', async (downloaded, expected) => {
+	stubFetch((url) =>
+		url.includes('/properties?')
+			? json({ modified: '2026-11-07T08:12:03Z', version: 'selected-inode' })
+			: new Response('Document', {
+					headers: downloaded ? { 'X-TitanOS-File-Version': downloaded } : {},
+				}),
+	);
+	const doc = await readDoc({ root: 'share/D', path: 'a.docx' });
+	expect(doc.version).toBe(expected);
+	expect(doc.bytes.byteLength).toBe(8);
 });
 
 // PLAN 75-18: Cloudflare Access turns cookie-less requests away with a redirect.

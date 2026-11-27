@@ -132,6 +132,13 @@
 	const options = $derived((snapshot?.capabilities ?? []).filter((c) => c.effective !== 'never'));
 	function matches(tool: string, selected: Source[]) {
 		if (!selected.length) return ['chat.ask', 'chat.cloud', 'backup.status'].includes(tool);
+		if (selected.every((s) => s.kind === 'office.region')) {
+			const ref = selected[0].ref;
+			return (
+				tool === 'office.inspect' ||
+				(tool === 'office.copy' && selected.length === 1 && !(ref?.slide && !ref.paragraph))
+			);
+		}
 		if (selected.every((s) => s.kind === 'file')) {
 			if (tool === 'files.read') return true;
 			return (

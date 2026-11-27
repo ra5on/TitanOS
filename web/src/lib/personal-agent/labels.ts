@@ -25,6 +25,7 @@ export function iconFor(kind: string): IconName {
 		case 'files':
 		case 'office':
 		case 'attachment':
+		case 'office':
 		case 'document':
 			return 'fileText';
 		case 'folder':

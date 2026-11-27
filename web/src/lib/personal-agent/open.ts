@@ -1,13 +1,23 @@
 import { session } from '../session.svelte.ts';
 import { api } from '../api.ts';
 import { openInProgram } from '../agent/open.ts';
+import { agentAppMode } from '../agent-app.ts';
+import { windowView } from '../desktop/mode.svelte.ts';
+import { openProgram } from '../desktop/programs.svelte.ts';
 import { base, type Handoff, type Job } from './api.ts';
 
 export async function openPersonalAgent(input: Handoff): Promise<void> {
 	const owner = session.data?.user?.name;
 	const { id } = await api.post<{ id: string }>(base + '/contexts', { ...input });
 	if (!owner || session.data?.user?.name !== owner) return;
-	openInProgram('/agent?context=' + encodeURIComponent(id));
+	const href = '/agent?context=' + encodeURIComponent(id);
+	// Office editors and widgets can run in the desktop document itself.
+	// A top-level navigation here would discard every live editor.
+	if (!windowView() && !agentAppMode(new URL(location.href))) {
+		await openProgram('app:agent', { href });
+	} else {
+		openInProgram(href);
+	}
 }
 export function consumeSelection(id: string) {
 	return api.post<Handoff>(base + '/contexts/' + encodeURIComponent(id) + '/consume', {});

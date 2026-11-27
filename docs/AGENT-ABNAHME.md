@@ -42,6 +42,27 @@ for engine in chromium webkit; do
 done
 ```
 
+### Bereichsauswahl aus installierten Office-Editoren
+
+`TestOfficeEditorSelectionLive` erstellt ein Wegwerfkonto, die Freigabe „Docs“ und vier Beispieldateien. Der Browser öffnet jede Datei aus der Dateien-App, markiert im Editor einen Bereich und übergibt ihn an den Agenten. Er zeichnet die Größe des Editorfensters vom Start bis zur Auswahl auf. Die Agent-Leiste belegt ihren Platz schon beim Öffnen der Datei und wird bedienbar, sobald der Editor an die Datei gebunden ist. Der Test vergleicht die Ergebnisquellen und den gelesenen Inhalt und lädt anschließend die Originaldatei zum Bytevergleich wieder herunter. `UI_OFFICE_PACKAGES` verweist auf die vier zum eingebauten Katalog passenden Paketarchive. TitanOS prüft deren Größen und SHA-256-Prüfsummen bei der Installation.
+
+```sh
+make build
+export TITAND_BIN="$PWD/backend/bin/titand"
+export PLAYWRIGHT_MODULE="$PWD/.test-tools/node_modules/playwright/index.mjs"
+export TITANOS_OFFICE_BROWSER=1
+# UI_OFFICE_PACKAGES auf das lokale Verzeichnis mit den geprüften Archiven setzen.
+for engine in chromium webkit; do
+  UI_ENGINE="$engine" go -C backend test -count=1 -tags embedui ./internal/api -run '^TestOfficeEditorSelectionLive$' -v || exit 1
+done
+```
+
+Der Standardlauf erwartet eine Auswahlantwort des Editors. Mit `UI_OFFICE_APP=t-exel` lässt sich ein einzelner installierter Editor prüfen. Ohne diese Angabe durchläuft der Test alle vier Programme. Der Produktkatalog enthält die vier Editoren aus [TitanOS-Office 1.8.0](https://github.com/ra5on/TitanOS-Office/releases/tag/v1.8.0). Die Kompatibilitätsprobe für manuelle Bereichsangaben benötigt einen Testbuild mit dem früheren 1.7.0-Katalog, die dazu passenden Archive und `UI_OFFICE_EXPECT_MANUAL=1`. `UI_OUTPUT` speichert Bilder der Auswahl, der Übergabe und des bestätigten Ergebnisses.
+
+Mit `UI_OFFICE_TOUCH=1` öffnen die Tests die vier Beispieldateien über das Menü der mobilen Dateien-App. Sie markieren mit Touch ein Wort im dritten Absatz, die Zelle `Planung!B2`, die ungeraden PDF-Seiten 1 und 3 sowie Folie 2. Der Test vergleicht die Bezeichnung im Übergabedialog, die an den Auftrag gebundenen Bereiche, den Inhalt im Ergebnisblatt und den Hash der Originaldatei. Für die Tabelle muss der Wert genau `2` sein. In der PDF-Ausgabe müssen die Inhalte beider ausgewählter Seiten stehen. Mit `UI_OFFICE_APP=t-exel` lässt sich die Tabellenprüfung einzeln ausführen. WebKit und Chromium verwenden ein simuliertes Touchgerät.
+
+Mit `UI_OFFICE_COPY=1` öffnet derselbe Test die neuen Word- und Tabelleneditoren. Das Testkonto erhält das persönliche Recht „Nachfragen“ zum Erstellen einer Kopie. Der Test vergleicht den markierten Abschnitt mit der sichtbaren Vorher/Nachher-Vorschau, prüft den Zielordner vor der Freigabe und öffnet die gespeicherte Kopie im zugehörigen Editor. Er prüft außerdem die einmalige Hervorhebung beim ersten Ergebnisbesuch, den Inhalt der fertigen Kopien und die unveränderten Originale.
+
 | Einstieg | Prüfschritte |
 |---|---|
 | Arbeitsplatz und Agent | Arbeitsplatzmenü öffnen, neuen Chat starten, per Programmmenü und Tastatur zwischen Chats, Aufträgen und Einstellungen wechseln. |
@@ -51,7 +72,7 @@ done
 | T-Mail | Das Panel an einer Nachricht öffnen, explizite Quellen auswählen, den Entwurf im nativen Editor ändern und die zugehörige Freigabe erneut aufrufen. |
 | Sprache | Synthetische Mikrofon- und Sprachdienstantworten durch die Bedienoberfläche schicken. Chat-Zuordnung, Stopp, Diktat, gesprochene Antwort und fehlende Rechte prüfen. Mit aktiver Bewegung die Ankunft der Punkte im Zentrum der Sprachkugel bei geöffneter Ergebnisvorschau messen. |
 
-Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Die Office-Prüfung verwendet den TitanOS-Hostdialog und einen simulierten Editor-Handshake. Die eingebetteten Office-Apps übermitteln über die aktuelle Hostschnittstelle keine Cursor- oder Bereichsauswahl. Der Nutzer wählt Absatz, Bereich oder Seiten im Übergabedialog. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
+Für Vorherbilder akzeptiert das erste Skript zusätzlich `UI_BASELINE_URL` mit der Loopback-Adresse einer separat gestarteten früheren Weboberfläche. `UI_OUTPUT` und `UI_SHOTS` erhalten ausschließlich Bilder der anonymen Testfälle. Der Test mit simuliertem Editor prüft den TitanOS-Dialog bei geänderter Auswahl, verspäteter Antwort und unterbrochener Übergabe. Beim simulierten WebAssembly-Abbruch vor der ersten Auswahlantwort oder zwischen Vorschau und Übergabe bleibt die Übergabe gesperrt. „Datei erneut öffnen“ startet den Editor im selben Fenster neu und bindet die nächste Auswahl an die erneut geladene Datei. An den veröffentlichten Office-Paketen 1.7.0 prüft der Produktlauf die manuelle Bereichsangabe. Für Pakete mit nativer Bereichsauswahl markiert derselbe Produktlauf die Absätze, Zellen, Seiten und Folien direkt im geöffneten Editor. Die mobile WebKit-Prüfung läuft unter Linux. Gerätemikrofon und Safari auf einem physischen iPhone brauchen eine eigene Geräteprüfung.
 
 ### Tatsächliche Versandvorschau eines mehrstufigen Auftrags
 

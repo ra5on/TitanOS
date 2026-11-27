@@ -15,6 +15,7 @@
 	import { registerCloseGuard, wm } from '#lib/desktop/wm.svelte.ts';
 	import FileDialog from './FileDialog.svelte';
 	import OfficeHandoff from './OfficeHandoff.svelte';
+	import { editorSelection, selectionId, type EditorSelection } from './office-selection.ts';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import { recentDocs, rememberDoc } from './recent.ts';
 	import { namesIn, readDoc, writeDoc } from './files.ts';
@@ -56,12 +57,64 @@
 	const src = $derived(
 		ownAppUrl(app.url) ? appSrc(app, session.data?.user?.name ?? '') : 'about:blank',
 	);
+	let binding = $state<{ id: string; owner: string; app: string; root: string; path: string }>();
+	let selectionReply: { requestId: string; finish: (s: EditorSelection) => void } | null = null;
+	let knowsSelection = false;
+	function forgetOfficeDocument() {
+		knowsSelection = false;
+		binding = undefined;
+		selectionReply?.finish({ status: 'unbound' });
+	}
+	function bindOfficeDocument(doc: DocRef) {
+		knowsSelection = false;
+		binding = { id: selectionId(), owner: user(), app: app.id, root: doc.root, path: doc.path };
+	}
+	function boundOfficeDocument() {
+		return (
+			!!binding &&
+			binding.owner === user() &&
+			binding.app === app.id &&
+			binding.root === current?.doc.root &&
+			binding.path === current?.doc.path &&
+			phase === 'ready' &&
+			!activeNode()
+		);
+	}
+	function requestEditorSelection(): Promise<EditorSelection> {
+		if (!boundOfficeDocument()) return Promise.resolve({ status: 'unbound' });
+		if (appDirty || busy || unwritten) return Promise.resolve({ status: 'dirty' });
+		selectionReply?.finish({ status: 'changed' });
+		const requestId = selectionId();
+		return new Promise((resolve) => {
+			const timer = setTimeout(
+				() => finish({ status: knowsSelection ? 'timeout' : 'legacy' }),
+				knowsSelection ? 8000 : 4000,
+			);
+			function finish(status: EditorSelection) {
+				clearTimeout(timer);
+				if (selectionReply?.requestId === requestId) selectionReply = null;
+				resolve(boundOfficeDocument() ? status : { status: 'unbound' });
+			}
+			selectionReply = { requestId, finish };
+			post({
+				type: 'webapp-agent-selection-request',
+				version: 1,
+				documentId: binding?.id,
+				requestId,
+			});
+		});
+	}
+	onDestroy(forgetOfficeDocument);
+	$effect(() => {
+		if (binding && (binding.owner !== user() || binding.app !== app.id || !!activeNode()))
+			forgetOfficeDocument();
+	});
 	/** Unsaved changes the app reports. */
 	let appDirty = $state(false);
 	/** A save that did not reach the NAS (failed, conflict not resolved): only a successful write clears it. */
 	let unwritten = $state(false);
 	/** The document as opened: its modification time is the condition of the next write. */
-	let current = $state<{ doc: DocRef; mtime: string | null } | null>(null);
+	let current = $state<{ doc: DocRef; mtime: string | null; version: string } | null>(null);
 	let busy = $state(false);
 	let notice = $state<
 		| { kind: 'error'; text: string }
@@ -180,7 +233,7 @@
 
 	/** Hands a file to the app (the bytes are transferred, not copied). */
 	function give(name: string, bytes: ArrayBuffer) {
-		post({ type: 'webapp-open', name, bytes }, [bytes]);
+		post({ type: 'webapp-open', name, bytes, documentId: binding?.id }, [bytes]);
 		onname?.(name);
 		focusSoon();
 	}
@@ -196,15 +249,18 @@
 	async function openDoc(next: DocRef) {
 		const key = next.root + '\n' + next.path;
 		opened = key;
+		forgetOfficeDocument();
+		const owner = user();
 		busy = true;
 		try {
-			const { bytes, mtime } = await readDoc(next);
-			if (opened !== key) return;
-			current = { doc: next, mtime };
+			const { bytes, mtime, version } = await readDoc(next);
+			if (opened !== key || owner !== user()) return;
+			current = { doc: next, mtime, version };
 			appName = '';
 			remember(next);
 			outside = false;
 			unwritten = false;
+			bindOfficeDocument(next);
 			give(baseName(next.path), bytes);
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.openFailed', { error: apiErrorText(e) }) };
@@ -232,9 +288,27 @@
 
 	function message(event: MessageEvent) {
 		if (!frame || event.source !== frame.contentWindow) return;
+		const answer = event.data;
+		if (answer?.type === 'webapp-agent-selection') {
+			if (
+				answer.version === 1 &&
+				binding &&
+				answer.documentId === binding.id &&
+				selectionReply &&
+				answer.requestId === selectionReply.requestId &&
+				boundOfficeDocument()
+			) {
+				knowsSelection = true;
+				selectionReply.finish(
+					appDirty || busy || unwritten ? { status: 'dirty' } : editorSelection(app.id, answer),
+				);
+			}
+			return;
+		}
 		const msg = hostMessage(event.data);
 		if (!msg) return;
 		if (msg.type === 'webapp-ready') {
+			forgetOfficeDocument();
 			opened = '';
 			phase = 'ready';
 			focusSoon();
@@ -250,8 +324,21 @@
 			pick = { types: msg.types, multiple: msg.multiple };
 		} else if (msg.type === 'webapp-save') {
 			saveAsAsked = false;
+			if (msg.ticket) saveTickets.set(msg.bytes, msg.ticket);
 			enqueueSave(msg.name, msg.saveAs, msg.bytes);
 		}
+	}
+
+	// Keep the receipt with the exact bytes through queued writes, Save As and conflict dialogs.
+	const saveTickets = new WeakMap<ArrayBuffer, string>();
+	const saveOrigins = new WeakMap<ArrayBuffer, () => boolean>();
+	function sameSaveOrigin(bytes: ArrayBuffer) {
+		return saveOrigins.get(bytes)?.() === true;
+	}
+	function receipt(bytes: ArrayBuffer, ok: boolean, text?: string) {
+		const ticket = saveTickets.get(bytes);
+		saveTickets.delete(bytes);
+		post({ type: 'webapp-saved', ok, ticket, text, documentId: ok ? binding?.id : undefined });
 	}
 
 	async function onSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
@@ -268,19 +355,20 @@
 			return;
 		}
 		if (target === 'dialog') {
+			if (saving?.adopt) receipt(saving.bytes, false);
 			saving = { name, bytes, adopt: true };
 			return;
 		}
 		if (target === 'created') {
 			// An export or another format: never over the original; the notice offers to keep it.
 			notice = { kind: 'created', name, bytes };
-			post({ type: 'webapp-saved', ok: false });
+			receipt(bytes, false);
 			return;
 		}
 		// The question about a change meanwhile is open: this newer version is the one it is about.
 		if (conflict) {
+			receipt(conflict.bytes, false);
 			conflict = { ...conflict, bytes };
-			post({ type: 'webapp-saved', ok: false });
 			return;
 		}
 		await writeOriginal(bytes);
@@ -292,28 +380,50 @@
 	 */
 	let queue: Promise<void> = Promise.resolve();
 	function enqueueSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
-		queue = queue.then(() => onSave(name, saveAs, bytes)).catch(() => {});
+		const owner = user(),
+			opened = current?.doc,
+			documentId = binding?.id,
+			node = activeNode();
+		saveOrigins.set(
+			bytes,
+			() =>
+				owner === user() &&
+				documentId === binding?.id &&
+				node === activeNode() &&
+				opened?.root === current?.doc.root &&
+				opened?.path === current?.doc.path,
+		);
+		queue = queue
+			.then(() => (sameSaveOrigin(bytes) ? onSave(name, saveAs, bytes) : receipt(bytes, false)))
+			.catch((e) => receipt(bytes, false, apiErrorText(e)));
 	}
 
 	async function writeOriginal(bytes: ArrayBuffer, expect?: string) {
-		if (!current) return;
+		if (!current || !sameSaveOrigin(bytes)) return receipt(bytes, false);
+		const openedDoc = current,
+			owner = user();
 		busy = true;
 		unwritten = true;
 		try {
 			const r = await writeDoc(current.doc, bytes, expect ?? current.mtime ?? 'none');
+			if (owner !== user() || current !== openedDoc) {
+				receipt(bytes, false);
+				return;
+			}
 			if (!r.ok) {
 				conflict = { name: baseName(current.doc.path), bytes };
 				return;
 			}
-			current = { doc: current.doc, mtime: r.mtime };
+			current = { doc: current.doc, mtime: r.mtime, version: r.version };
 			unwritten = false;
 			// A file the app made beside this save (a backup copy of the project)
 			// still waits for its answer: that offer stays.
 			if (notice?.kind !== 'created') notice = null;
-			post({ type: 'webapp-saved', ok: true });
+			if (!boundOfficeDocument()) bindOfficeDocument(current.doc);
+			receipt(bytes, true);
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
-			post({ type: 'webapp-saved', ok: false, text: apiErrorText(e) });
+			receipt(bytes, false, apiErrorText(e));
 		} finally {
 			busy = false;
 		}
@@ -322,9 +432,10 @@
 	/** Changed meanwhile, left as it is: the app's changes stay unsaved here. */
 	function cancelConflict() {
 		if (!conflict) return;
+		const { bytes } = conflict;
 		conflict = null;
 		unwritten = true;
-		post({ type: 'webapp-saved', ok: false });
+		receipt(bytes, false);
 	}
 
 	/** Changed meanwhile: replace it anyway (with its time now as the condition). */
@@ -350,29 +461,38 @@
 
 	/** A new file (Save As, an export, a copy); adopt = it becomes the window's file. */
 	async function writeNew(target: DocRef, bytes: ArrayBuffer, adopt: boolean, expect = 'none') {
+		if (!sameSaveOrigin(bytes)) return receipt(bytes, false);
+		const previous = current,
+			owner = user();
 		busy = true;
 		if (adopt) unwritten = true;
 		try {
 			// The buffer may be needed again for the question "replace?".
 			const r = await writeDoc(target, bytes.slice(0), expect);
+			if (adopt && (owner !== user() || current !== previous)) {
+				receipt(bytes, false);
+				return;
+			}
 			if (!r.ok) {
 				replace = { target, bytes, adopt };
 				return;
 			}
 			if (adopt) {
-				current = { doc: target, mtime: r.mtime };
+				forgetOfficeDocument();
+				bindOfficeDocument(target);
+				current = { doc: target, mtime: r.mtime, version: r.version };
 				appName = askedName;
 				remember(target);
 				opened = target.root + '\n' + target.path;
 				unwritten = false;
 				onname?.(baseName(target.path));
 				ondoc?.(target);
-				post({ type: 'webapp-saved', ok: true });
+				receipt(bytes, true);
 			}
 			notice = { kind: 'info', text: t('webapps.savedAs', { name: baseName(target.path) }) };
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
-			if (adopt) post({ type: 'webapp-saved', ok: false, text: apiErrorText(e) });
+			if (adopt) receipt(bytes, false, apiErrorText(e));
 		} finally {
 			busy = false;
 		}
@@ -382,7 +502,7 @@
 		if (!replace) return;
 		if (replace.adopt) {
 			unwritten = true;
-			post({ type: 'webapp-saved', ok: false });
+			receipt(replace.bytes, false);
 		}
 		replace = null;
 	}
@@ -425,6 +545,7 @@
 		post({ type: 'webapp-command', command: name });
 	}
 	export function restart() {
+		forgetOfficeDocument();
 		phase = 'starting';
 		appDirty = false;
 		opened = '';
@@ -440,6 +561,7 @@
 	/** Answers the app's picker: the chosen files, or none (cancelled). */
 	function answerPick(files: { name: string; bytes: ArrayBuffer }[]) {
 		pick = null;
+		if (files.length) forgetOfficeDocument();
 		post(
 			{ type: 'webapp-picked', files },
 			files.map((f) => f.bytes),
@@ -515,6 +637,7 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (!file || phase !== 'ready') return;
 		// A file of this PC: not a file of the NAS, so saving asks where.
+		forgetOfficeDocument();
 		current = null;
 		opened = '';
 		outside = true;
@@ -524,6 +647,7 @@
 
 	const icon = $derived(app.icon ?? '');
 	const docName = $derived(current ? baseName(current.doc.path) : '');
+	const officeDoc = $derived(current?.doc ?? doc);
 	const startDir = $derived(
 		current ? { root: current.doc.root, dir: parentDir(current.doc.path) } : undefined,
 	);
@@ -539,10 +663,16 @@
 	ondragover={dragOver}
 	ondrop={drop}
 >
-	{#if current && phase === 'ready' && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
-		{#key current.doc.root + '/' + current.doc.path}<OfficeHandoff
-				doc={current.doc}
-				dirty={appDirty || unwritten || busy}
+	{#if officeDoc && session.services.agent === true && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
+		{#key JSON.stringify( [app.id, user(), officeDoc.root, officeDoc.path, current?.mtime, binding?.id] )}<OfficeHandoff
+				doc={officeDoc}
+				appId={app.id}
+				ready={boundOfficeDocument() && !busy}
+				dirty={appDirty || unwritten || busy || !!conflict || !!saving || !!replace}
+				mtime={current?.mtime ?? null}
+				version={current?.version ?? ''}
+				requestSelection={requestEditorSelection}
+				reopen={restart}
 			/>{/key}
 	{/if}
 	{#key reloads}
@@ -690,7 +820,7 @@
 			if (s?.adopt) {
 				// The app counts the save as done; nothing reached the NAS.
 				unwritten = true;
-				post({ type: 'webapp-saved', ok: false });
+				receipt(s.bytes, false);
 			}
 		}}
 	/>

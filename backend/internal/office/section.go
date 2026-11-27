@@ -177,3 +177,49 @@ func Paragraph(data []byte, format string, slide, number int, replacement *strin
 	out, err := replacePart(z, part, edited.Bytes())
 	return original, out, err
 }
+
+// SlideText follows the presentation order, reading only the selected slide's
+// text. Hidden document metadata, notes and neighbouring slides stay outside it.
+func SlideText(data []byte, slide int) (string, error) {
+	z, err := openZip(data)
+	if err != nil {
+		return "", err
+	}
+	part, err := slidePart(z, slide)
+	if err != nil {
+		return "", err
+	}
+	raw, err := readPart(z, part)
+	if err != nil {
+		return "", err
+	}
+	var text strings.Builder
+	decoder := xml.NewDecoder(bytes.NewReader(raw))
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		switch element := token.(type) {
+		case xml.StartElement:
+			if element.Name.Space == drawingNamespace && element.Name.Local == "t" {
+				var run string
+				if err := decoder.DecodeElement(&run, &element); err != nil {
+					return "", err
+				}
+				text.WriteString(run)
+			}
+		case xml.EndElement:
+			if element.Name.Space == drawingNamespace && (element.Name.Local == "p" || element.Name.Local == "br") {
+				text.WriteByte('\n')
+			}
+		}
+		if text.Len() > MaxText {
+			return "", ErrTooLarge
+		}
+	}
+	return strings.TrimSpace(text.String()), nil
+}

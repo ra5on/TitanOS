@@ -24,6 +24,19 @@ func openZip(data []byte) (*zip.Reader, error) {
 	if err != nil {
 		return nil, ErrUnsupported
 	}
+	// Consumers must agree on which bytes a named part denotes. Otherwise a
+	// selection made in one editor can refer to a different XML document here.
+	parts := make(map[string]struct{})
+	for _, part := range z.File {
+		if part.FileInfo().IsDir() {
+			continue
+		}
+		key := strings.ToLower(path.Clean("/" + strings.ReplaceAll(part.Name, "\\", "/")))
+		if _, duplicate := parts[key]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate package part %q", ErrUnsupported, part.Name)
+		}
+		parts[key] = struct{}{}
+	}
 	return z, nil
 }
 
