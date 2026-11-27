@@ -1,6 +1,7 @@
 package tmail
 
 import (
+	"crypto/rand"
 	"errors"
 	"io/fs"
 	"maps"
@@ -16,14 +17,16 @@ import (
 // accessState is /config/tmail/access.json in RAM.
 type accessState struct {
 	// given: account → when the grant was given.
-	given map[string]time.Time
+	given     map[string]time.Time
+	revisions map[string]string
 	// unreadable: the file could not be read at the start; it is never
 	// written over and nobody has the grant until a start reads it.
 	unreadable bool
 }
 
 type accessFileData struct {
-	Given map[string]time.Time `json:"given"`
+	Given     map[string]time.Time `json:"given"`
+	Revisions map[string]string    `json:"revisions,omitempty"`
 }
 
 func (m *Manager) loadAccessLocked() error {
@@ -36,7 +39,7 @@ func (m *Manager) loadAccessLocked() error {
 	if data.Given == nil {
 		data.Given = map[string]time.Time{}
 	}
-	m.access = accessState{given: data.Given}
+	m.access = accessState{given: data.Given, revisions: data.Revisions}
 	return nil
 }
 
@@ -72,6 +75,43 @@ func (m *Manager) Granted(user string) bool {
 	return m.grantedLocked(account)
 }
 
+// GrantRevision identifies the current grant without opening a connection or
+// exposing mailbox configuration. Legacy grants retain their original timestamp.
+func (m *Manager) GrantRevision(user string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.access.unreadable {
+		return "unavailable"
+	}
+	if rev := m.access.revisions[user]; rev != "" {
+		return rev
+	}
+	if granted, ok := m.access.given[user]; ok {
+		return granted.UTC().Format(time.RFC3339Nano)
+	}
+	return ""
+}
+
+func (m *Manager) saveGrantLocked(user string, enabled bool) error {
+	next := maps.Clone(m.access.given)
+	revisions := maps.Clone(m.access.revisions)
+	if enabled {
+		if revisions == nil {
+			revisions = make(map[string]string)
+		}
+		next[user] = m.clock().UTC()
+		revisions[user] = rand.Text()
+	} else {
+		delete(next, user)
+		delete(revisions, user)
+	}
+	if err := m.store.WriteJSON(accessFile, accessFileData{Given: next, Revisions: revisions}); err != nil {
+		return err
+	}
+	m.access.given, m.access.revisions = next, revisions
+	return nil
+}
+
 // SetAllowed gives or takes the grant. The file is written only when
 // something changes. Taking it ends the account's connections; its
 // settings stay.
@@ -90,17 +130,10 @@ func (m *Manager) SetAllowed(user string, enabled bool) error {
 		m.mu.Unlock()
 		return nil
 	}
-	next := maps.Clone(m.access.given)
-	if enabled {
-		next[user] = m.clock().UTC()
-	} else {
-		delete(next, user)
-	}
-	if err := m.store.WriteJSON(accessFile, accessFileData{Given: next}); err != nil {
+	if err := m.saveGrantLocked(user, enabled); err != nil {
 		m.mu.Unlock()
 		return err
 	}
-	m.access.given = next
 	m.mu.Unlock()
 	if !enabled {
 		m.conns.close(user, "")
@@ -118,11 +151,5 @@ func (m *Manager) forgetAccessLocked(user string) error {
 	if _, ok := m.access.given[user]; !ok {
 		return nil
 	}
-	next := maps.Clone(m.access.given)
-	delete(next, user)
-	if err := m.store.WriteJSON(accessFile, accessFileData{Given: next}); err != nil {
-		return err
-	}
-	m.access.given = next
-	return nil
+	return m.saveGrantLocked(user, false)
 }

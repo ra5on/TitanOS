@@ -5,11 +5,11 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"strconv"
 	"time"
 
-	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
-
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 )
 
 const globalPersonalGrants = "system/personal-agent-resource-epoch.json"
@@ -30,8 +30,18 @@ func (s *Server) personalGrantStamp(u auth.User) (string, error) {
 // Inbox observation has no file-share dependency. Its own mailbox or user revocation
 // still prevents importing messages that arrived before an explicit new subscription.
 func (s *Server) personalGrantRevisions(u auth.User, names ...string) (string, error) {
-	stamps := []string{string(u.Role)}
+	current, ok := s.opts.Users.Get(u.Name)
+	if !ok || current.Disabled || personalKey(current) != personalKey(u) {
+		return "", errPersonalDenied
+	}
+	stamps := []string{string(current.Role), strconv.FormatUint(current.AccessRevision, 10)}
+	if s.opts.Mail != nil {
+		stamps = append(stamps, s.opts.Mail.GrantRevision(current.Name))
+	}
 	for _, name := range names {
+		if name == "" && s.opts.Shares != nil {
+			stamps = append(stamps, personalDigest(s.opts.Shares.AccessRevisions(current.Name, current.Role.CanAdminister())))
+		}
 		var stamp string
 		if err := s.opts.Store.ReadJSON(personalGrantFile(name), &stamp); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return "", err

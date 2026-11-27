@@ -31,6 +31,13 @@ func (u *Users) Import(user User) (before User, existed bool, err error) {
 	before, existed = u.users[user.Name]
 	if existed {
 		user.UID = before.UID
+		// A peer may run an older version without an access revision. Record
+		// changes relative to this NAS, including a revoke followed by a regrant.
+		local := before.AccessRevision
+		if user.Role != before.Role || user.Disabled != before.Disabled {
+			local++
+		}
+		user.AccessRevision = max(local, user.AccessRevision)
 	} else {
 		user.UID = nextUID(u.users)
 	}

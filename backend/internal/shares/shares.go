@@ -9,6 +9,7 @@ package shares
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -83,7 +84,14 @@ type Share struct {
 	// shows it only that folder, over SMB (path …/%u, the Unix user of the session) and in the file
 	// manager. Set by titand for the share of the KI-Agent (PLAN 49), never
 	// by the client; such a share has no NFS and no guests.
-	PerUser bool `json:"perUser,omitempty"`
+	PerUser        bool `json:"perUser,omitempty"`
+	accessRevision string
+}
+
+// Only the on-disk representation includes the revision. Clients cannot set it.
+type storedShare struct {
+	Share
+	Revision string `json:"accessRevision,omitempty"`
 }
 
 // NFS exports the share to the listed hosts or networks. NFS knows no
@@ -260,13 +268,16 @@ func (m *Manager) Path(share Share) string {
 
 // Load reads the shares from /config.
 func (m *Manager) Load() error {
-	var shares []Share
-	err := m.store.ReadJSON(configFile, &shares)
+	var data []storedShare
+	err := m.store.ReadJSON(configFile, &data)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		m.notLoaded()
 		return err
 	}
-	for i := range shares {
+	shares := make([]Share, len(data))
+	for i, entry := range data {
+		shares[i] = entry.Share
+		shares[i].accessRevision = entry.Revision
 		if !slices.Contains([]string{"", "off", ReadOnly, ReadWrite}, shares[i].NFS.Mode) {
 			// Nothing of it is taken: what is not understood must not be
 			// offered, and saved over by a change, either.
@@ -296,8 +307,28 @@ func (m *Manager) List() []Share {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	shares := slices.Clone(m.shares)
+	for i := range shares {
+		shares[i].Access = maps.Clone(shares[i].Access)
+	}
 	sort.Slice(shares, func(i, j int) bool { return shares[i].Name < shares[j].Name })
 	return shares
+}
+
+// AccessRevisions identifies the grants visible to one account. A revoked
+// and re-granted share has a new revision even when its final ACL is identical.
+func (m *Manager) AccessRevisions(account string, admin bool) map[string]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return nil
+	}
+	revisions := map[string]string{}
+	for _, sh := range m.shares {
+		if admin || sh.Guest || sh.Access[account] != "" {
+			revisions[sh.Name] = sh.accessRevision
+		}
+	}
+	return revisions
 }
 
 func (m *Manager) save(shares []Share) error {
@@ -309,8 +340,21 @@ func (m *Manager) save(shares []Share) error {
 	if shares == nil {
 		shares = []Share{}
 	}
-	persisted := slices.Clone(shares)
-	for i := range persisted {
+	before := make(map[string]Share, len(m.shares))
+	for _, sh := range m.shares {
+		before[sh.Name] = sh
+	}
+	persisted := make([]storedShare, len(shares))
+	for i := range shares {
+		sh := &shares[i]
+		old, ok := before[sh.Name]
+		sh.accessRevision = old.accessRevision
+		if !ok || old.Volume != sh.Volume || old.Guest != sh.Guest || old.PerUser != sh.PerUser ||
+			(old.GuardLocked == nil) != (sh.GuardLocked == nil) || !maps.Equal(old.Access, sh.Access) {
+			sh.accessRevision = rand.Text()
+		}
+		sh.Access = maps.Clone(sh.Access)
+		persisted[i] = storedShare{Share: *sh, Revision: sh.accessRevision}
 		if persisted[i].NFS.Mode == ReadOnly {
 			persisted[i].NFS.Enabled = false
 		}
