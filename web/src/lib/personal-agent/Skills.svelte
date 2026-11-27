@@ -249,11 +249,11 @@
 			>{/if}
 		{#if officeOutput}
 			<label
-				>{msg('outputName')}<input
+				>{msg(trigger === 'mail' ? 'mailOutputName' : 'outputName')}<input
 					required
 					bind:value={outputName}
 					placeholder={officeOutput === 'office.table' ? 'Entwurf.xlsx' : 'Entwurf.docx'}
-				/></label
+				/>{#if trigger === 'mail'}<small>{msg('mailOutputSuffix')}</small>{/if}</label
 			>
 			<button
 				type="button"

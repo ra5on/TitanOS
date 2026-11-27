@@ -17,6 +17,10 @@ Der Live-Test startet das gebaute `titand -dev` auf einem freien Loopback-Port m
 
 Das ist ein Durchlauf mit echtem Backend und eigenem Worker-Prozess im Entwicklungsmodus. Die Benutzerkennung und die systemd-Härtung des installierten Diensts werden im Gast mit `scripts/smoke-storage.py` geprüft. Die Umstellung von einem älteren Systemstand gehört zum Update-Gasttest `scripts/smoke-system-update.py`.
 
+## Wiederkehrende Rechnungen
+
+`go -C backend test -run '^TestPersonalRecurringInvoiceCreatesOneWorksheetPerMail$' ./internal/api` stellt zwei Rechnungen desselben Absenders im lokalen IMAP-Testpostfach zu. Die Regel verwendet für beide den Basisnamen `Rechnung.xlsx`. Der Test prüft die konkreten Namen in beiden Freigaben, die Zellinhalte beider Dateien und eine bereits vorhandene Datei. Anschließend lädt er den gespeicherten Agent-Zustand neu und gibt dieselben IMAP-Nachrichten nochmals zur Prüfung frei. Die zwei erledigten Aufträge und die Dateien bleiben erhalten.
+
 ## Ansichten und native Einstiege vergleichen
 
 Für den Vergleich kann der gebaute Entwicklungsdienst mit eigener temporärer Konfiguration auf Loopback laufen. In einem zweiten Terminal setzen die drei Skripte an der Oberfläche an. Sie liefern definierte API-Antworten für synthetische Benutzer, damit auch Freigaben, Ergebnisse und seltene Zwischenzustände reproduzierbar sind.

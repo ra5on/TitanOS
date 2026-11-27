@@ -31,6 +31,8 @@ type Source struct {
 type Request struct {
 	// Origin is assigned by the local authenticated HTTP handler for links back to selected originals.
 	Origin string `json:"-"`
+	// MailTriggered is set only for an observed inbox event by the broker.
+	MailTriggered bool `json:"-"`
 	// PreviousText is inert data from a preceding step and cannot be posted by a client.
 	PreviousText string          `json:"-"`
 	Tool         string          `json:"tool"`

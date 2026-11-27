@@ -217,6 +217,8 @@
 	"pa.chooseMailbox": "Posteingang auswählen",
 	"pa.pdfName": "PDF-Anhang mit diesem Namen (optional)",
 	"pa.skillPrompt": "Auftrag für den Agenten",
+	"pa.mailOutputName": "Dateiname für die E-Mail-Regel",
+	"pa.mailOutputSuffix": "Für jede eingehende E-Mail wird vor der Dateiendung eine eigene Kennung ergänzt.",
 	"pa.outputName": "Name der neuen Datei",
 	"pa.outputFolder": "Zielordner wählen",
 	"pa.stopRecording": "Aufnahme beenden",

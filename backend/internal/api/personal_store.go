@@ -22,6 +22,8 @@ import (
 // A plan and consent belong to exactly one job. The submitted request stays immutable for
 // idempotency. A prior step contributes plain result text, never tool names, arguments or URLs.
 type personalPlan struct {
+	MailTriggered bool `json:"mailTriggered,omitempty"`
+
 	Origin      string                     `json:"origin,omitempty"`
 	Effect      string                     `json:"effect,omitempty"`
 	SkillID     string                     `json:"skillId,omitempty"`
