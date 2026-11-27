@@ -39,6 +39,33 @@ const examples = {
   },
 };
 
+const touchExamples = {
+  "t-word": {
+    refs: [{ paragraph: 3 }],
+    labels: ["Absatz 3"],
+    contains: "Dritter Absatz",
+    excludes: "Zweiter Absatz",
+  },
+  "t-exel": {
+    refs: [{ sheet: "Planung", range: "B2" }],
+    labels: ["Planung · B2"],
+    contains: "2",
+    excludes: "Preis",
+  },
+  "t-pdf": {
+    refs: [{ page: 1 }, { page: 3 }],
+    labels: ["Seite 1", "Seite 3"],
+    contains: "Seite drei",
+    excludes: "Seite zwei",
+  },
+  "t-deck": {
+    refs: [{ slide: 2 }],
+    labels: ["Folie 2"],
+    contains: "Planung",
+    excludes: "Angebot",
+  },
+};
+
 async function frames(canvas) {
   // eframe queues input until a paint. Keep taps and screenshots on separate frames.
   await canvas.evaluate(async () => {
@@ -77,6 +104,32 @@ async function chooseInsideEditor(id, page, canvas) {
     await click(860, 242, ["Control"]);
   } else {
     await click(106, 352); // Second slide in the filmstrip.
+  }
+  await frames(canvas);
+}
+
+async function chooseTouchSelection(id, canvas) {
+  const tap = (x, y) => canvas.tap({ position: { x, y } });
+  if (id === "t-word") {
+    // Two taps select a word in the third paragraph of the saved fixture.
+    await tap(159, 337);
+    await tap(159, 337);
+  } else if (id === "t-exel") {
+    await tap(105, 240); // B2
+  } else if (id === "t-pdf") {
+    // Organize Pages → selection menu → odd pages of the three-page fixture.
+    // Navigating to a thumbnail alone does not select it for the Agent.
+    await tap(160, 71); // workspace menu
+    await frames(canvas);
+    await tap(160, 125); // All tools
+    await frames(canvas);
+    await tap(100, 400); // Organize Pages
+    await frames(canvas);
+    await tap(364, 235); // Pages selected
+    await frames(canvas);
+    await tap(275, 378); // Odd pages
+  } else {
+    await tap(115, 349); // second slide in the filmstrip
   }
   await frames(canvas);
 }
@@ -128,13 +181,8 @@ export async function verifyNativeSelection({
   await show.click({ trial: true, timeout: 60000 });
   await canvas.waitFor({ state: "visible" });
   await frames(canvas);
-  if (touch) {
-    // B2 in the unzoomed mobile worksheet. Use the native tap handler.
-    await canvas.tap({ position: { x: 105, y: 240 } });
-    await frames(canvas);
-  } else {
-    await chooseInsideEditor(id, page, canvas);
-  }
+  if (touch) await chooseTouchSelection(id, canvas);
+  else await chooseInsideEditor(id, page, canvas);
   const sizes = await canvas.evaluate(() => window.officeViewport);
   if (sizes) {
     console.log(engine, id, "editor viewport from startup to selection", sizes);
@@ -147,7 +195,7 @@ export async function verifyNativeSelection({
   await screenshot(canvas, engine, id, "im-editor");
   if (touch) await show.tap();
   else await show.click();
-  let expected = touch ? [{ sheet: "Planung", range: "B2" }] : example.refs;
+  let expected = touch ? touchExamples[id].refs : example.refs;
   if (expectManual) {
     // This is a deliberate compatibility assertion for the old public WASM.
     await dlg.getByText("Bereich manuell wählen", { exact: true }).waitFor();
@@ -167,7 +215,10 @@ export async function verifyNativeSelection({
   } else {
     await dlg.getByText("Im Editor ausgewählt", { exact: true }).waitFor();
     assert.equal(await dlg.locator("li").count(), expected.length);
-    if (touch) await dlg.getByText("Planung · B2", { exact: true }).waitFor();
+    if (touch) {
+      for (const label of touchExamples[id].labels)
+        await dlg.getByText(label, { exact: true }).waitFor();
+    }
   }
   await screenshot(
     dlg,
@@ -212,14 +263,9 @@ async function runLive() {
   const expectManual = process.env.UI_OFFICE_EXPECT_MANUAL === "1";
   const touch = process.env.UI_OFFICE_TOUCH === "1";
   if (touch) {
-    assert.equal(
-      process.env.UI_OFFICE_APP,
-      "t-exel",
-      "The touch case opens the worksheet",
-    );
     assert.ok(
       !expectManual && process.env.UI_OFFICE_COPY !== "1",
-      "The touch case reads a native cell selection",
+      "The touch case reads a native editor selection",
     );
   }
   const browser = await driver[engine].launch({
@@ -439,21 +485,19 @@ async function runLive() {
           await delay(250);
         }
         assert.equal(result.status, "done", result.error);
-        if (touch)
-          assert.equal(
-            result.result.text.trim(),
-            "2",
-            "Only the value of B2 was requested",
-          );
-        else
-          assert.ok(
-            result.result.text.includes(example.contains),
-            id + " missing selected content: " + result.result.text,
-          );
+        const selected = touch ? touchExamples[id] : example;
         assert.ok(
-          !result.result.text.includes(example.excludes),
+          result.result.text.includes(selected.contains),
+          id + " missing selected content: " + result.result.text,
+        );
+        assert.ok(
+          !result.result.text.includes(selected.excludes),
           id + " returned content outside the chosen region",
         );
+        if (touch && id === "t-exel")
+          assert.equal(result.result.text.trim(), "2");
+        if (touch && id === "t-pdf")
+          assert.ok(result.result.text.includes("Seite eins"));
         assert.deepEqual(result.result.sources, sources);
         const reply = agent.locator('[data-guide="reply-' + jobId + '"]');
         const answer = reply.locator(".pa-readable");
@@ -462,11 +506,10 @@ async function runLive() {
         await reply.locator(".pa-card-open").click();
         const detail = agent.locator('.pa-detail[data-job="' + jobId + '"]');
         await detail.locator(".pa-readable").waitFor();
-        if (touch)
-          assert.equal(
-            (await detail.locator(".pa-readable").innerText()).trim(),
-            "2",
-          );
+        assert.equal(
+          (await detail.locator(".pa-readable").innerText()).trim(),
+          result.result.text.trim(),
+        );
         assert.equal(
           await detail.locator(".pa-source-list li").count(),
           sources.length,
