@@ -97,7 +97,6 @@
 	var activeDocument = '';
 	var selectionRequest = '';
 	var token = /^[a-f0-9]{32}$/;
-	var saveIds = [];
 
 	function becomeReady() {
 		if (ready) return;
@@ -281,16 +280,18 @@
 				);
 			});
 		} else if (msg.type === 'webapp-saved') {
-			var id = saveIds.shift();
+			var id = msg.ticket;
 			if (msg.ok === true && typeof msg.documentId === 'string' && token.test(msg.documentId)) {
 				activeDocument = msg.documentId;
 				selectionRequest = '';
 			}
-			if (msg.ok === true && id != null && bridge === 'host') {
+			if (typeof id === 'string' && id.length <= 128 && bridge === 'host') {
 				var target = canvas();
 				if (target)
 					target.dispatchEvent(
-						new CustomEvent(events + ':saved', { detail: { id: id, documentId: activeDocument } }),
+						new CustomEvent(events + (msg.ok === true ? ':saved' : ':save-failed'), {
+							detail: { id: id, documentId: activeDocument },
+						}),
 					);
 			}
 		}
@@ -436,10 +437,17 @@
 			if (!bytes) return;
 			var name = cleanName(detail.name, 'document');
 			if (!framed) return void downloadHere(name, bytes);
-			saveIds.push(typeof detail.id === 'string' ? detail.id : null);
-			post({ type: 'webapp-save', name: name, saveAs: detail.saveAs === true, bytes: bytes }, [
-				bytes,
-			]);
+			var ticket = typeof detail.id === 'string' && detail.id.length <= 128 ? detail.id : undefined;
+			post(
+				{
+					type: 'webapp-save',
+					name: name,
+					saveAs: detail.saveAs === true,
+					ticket: ticket,
+					bytes: bytes,
+				},
+				[bytes],
+			);
 		});
 		on('dirty', function (detail) {
 			post({ type: 'webapp-dirty', dirty: detail.dirty === true });

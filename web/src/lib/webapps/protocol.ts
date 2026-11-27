@@ -36,7 +36,7 @@ export type DocRef = { root: string; path: string };
 
 export type HostMessage =
 	| { type: 'webapp-ready' }
-	| { type: 'webapp-save'; name: string; saveAs: boolean; bytes: ArrayBuffer }
+	| { type: 'webapp-save'; name: string; saveAs: boolean; bytes: ArrayBuffer; ticket?: string }
 	| { type: 'webapp-dirty'; dirty: boolean }
 	| { type: 'webapp-failed'; text: string }
 	/** The app opened its file picker (an `<input type=file>`): the window shows its own. */
@@ -74,6 +74,9 @@ export function hostMessage(data: unknown): HostMessage | null {
 				type: 'webapp-save',
 				name: cleanName(d.name, 'document'),
 				saveAs: d.saveAs === true,
+				...(typeof d.ticket === 'string' && d.ticket.length > 0 && d.ticket.length <= 128
+					? { ticket: d.ticket }
+					: {}),
 				bytes: d.bytes,
 			};
 		case 'webapp-dirty':

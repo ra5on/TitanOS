@@ -331,6 +331,56 @@ try {
           );
           continue;
         }
+        if (id === "t-word" && !mobile) {
+          // Leave a conflict open and export a different buffer. An uncorrelated
+          // FIFO receipt would report that the original failed before its dialog closes.
+          let writes = 0;
+          await ctx.route("**/api/v1/files/content?*", (r) =>
+            ++writes === 1
+              ? r.fulfill({ status: 409, json: { code: "conflict" } })
+              : r.fulfill({ json: { mtime: "12345", version } }),
+          );
+          const canvas = editor.locator("canvas");
+          await canvas.evaluate((c, file) => {
+            window.receipts = [];
+            for (const k of ["saved", "save-failed"])
+              c.addEventListener("wordcraft:" + k, (e) =>
+                window.receipts.push([k, e.detail.id]),
+              );
+            window.fixtureSave = (id, name) =>
+              c.dispatchEvent(
+                new CustomEvent("wordcraft:save", {
+                  detail: { id, name, bytes: new Uint8Array([1, 2, 3]).buffer },
+                }),
+              );
+            window.fixtureSave("original", file);
+          }, doc);
+          const cancel = page.getByRole("button", {
+            name: "Abbrechen",
+            exact: true,
+          });
+          await cancel.waitFor();
+          await canvas.evaluate(() =>
+            window.fixtureSave("export", "Kopie.pdf"),
+          );
+          const receipts = (n) =>
+            canvas.evaluate(async (c, n) => {
+              for (let i = 0; i < 100 && window.receipts.length < n; i++)
+                await new Promise((r) => setTimeout(r, 30));
+              return window.receipts;
+            }, n);
+          assert.deepEqual(await receipts(1), [["save-failed", "export"]]);
+          await cancel.click();
+          assert.deepEqual(await receipts(2), [
+            ["save-failed", "export"],
+            ["save-failed", "original"],
+          ]);
+          await canvas.evaluate(
+            (c, file) => window.fixtureSave("next", file),
+            doc,
+          );
+          assert.deepEqual((await receipts(3)).at(-1), ["saved", "next"]);
+        }
         await show.click();
         await dlg.getByText("Im Editor ausgewählt").waitFor();
         assert.equal(await dlg.locator("li").count(), items.length);

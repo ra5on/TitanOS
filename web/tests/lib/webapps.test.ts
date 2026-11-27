@@ -56,6 +56,13 @@ test('host messages: only well-formed ones of the contract pass', () => {
 		saveAs: false,
 		bytes,
 	});
+	expect(hostMessage({ type: 'webapp-save', bytes, ticket: 'original-2' })).toHaveProperty(
+		'ticket',
+		'original-2',
+	);
+	expect(hostMessage({ type: 'webapp-save', bytes, ticket: 'x'.repeat(129) })).not.toHaveProperty(
+		'ticket',
+	);
 	expect(hostMessage({ type: 'webapp-save', name: 'a', bytes: new Uint8Array(3) })).toBeNull();
 	expect(hostMessage({ type: 'webapp-save', name: 'a', bytes: 'text' })).toBeNull();
 	expect(hostMessage({ type: 'webapp-dirty', dirty: 'yes' })).toEqual({

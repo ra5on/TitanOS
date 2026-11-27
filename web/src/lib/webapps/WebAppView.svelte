@@ -324,8 +324,17 @@
 			pick = { types: msg.types, multiple: msg.multiple };
 		} else if (msg.type === 'webapp-save') {
 			saveAsAsked = false;
+			if (msg.ticket) saveTickets.set(msg.bytes, msg.ticket);
 			enqueueSave(msg.name, msg.saveAs, msg.bytes);
 		}
+	}
+
+	// Keep the receipt with the exact bytes through queued writes, Save As and conflict dialogs.
+	const saveTickets = new WeakMap<ArrayBuffer, string>();
+	function receipt(bytes: ArrayBuffer, ok: boolean, text?: string) {
+		const ticket = saveTickets.get(bytes);
+		saveTickets.delete(bytes);
+		post({ type: 'webapp-saved', ok, ticket, text, documentId: ok ? binding?.id : undefined });
 	}
 
 	async function onSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
@@ -342,19 +351,20 @@
 			return;
 		}
 		if (target === 'dialog') {
+			if (saving?.adopt) receipt(saving.bytes, false);
 			saving = { name, bytes, adopt: true };
 			return;
 		}
 		if (target === 'created') {
 			// An export or another format: never over the original; the notice offers to keep it.
 			notice = { kind: 'created', name, bytes };
-			post({ type: 'webapp-saved', ok: false });
+			receipt(bytes, false);
 			return;
 		}
 		// The question about a change meanwhile is open: this newer version is the one it is about.
 		if (conflict) {
+			receipt(conflict.bytes, false);
 			conflict = { ...conflict, bytes };
-			post({ type: 'webapp-saved', ok: false });
 			return;
 		}
 		await writeOriginal(bytes);
@@ -366,11 +376,25 @@
 	 */
 	let queue: Promise<void> = Promise.resolve();
 	function enqueueSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
-		queue = queue.then(() => onSave(name, saveAs, bytes)).catch(() => {});
+		const owner = user(),
+			opened = current?.doc,
+			node = activeNode();
+		queue = queue
+			.then(() => {
+				if (
+					owner !== user() ||
+					node !== activeNode() ||
+					opened?.root !== current?.doc.root ||
+					opened?.path !== current?.doc.path
+				)
+					return receipt(bytes, false);
+				return onSave(name, saveAs, bytes);
+			})
+			.catch((e) => receipt(bytes, false, apiErrorText(e)));
 	}
 
 	async function writeOriginal(bytes: ArrayBuffer, expect?: string) {
-		if (!current) return;
+		if (!current) return receipt(bytes, false);
 		const openedDoc = current,
 			owner = user();
 		busy = true;
@@ -378,7 +402,7 @@
 		try {
 			const r = await writeDoc(current.doc, bytes, expect ?? current.mtime ?? 'none');
 			if (owner !== user() || current !== openedDoc) {
-				post({ type: 'webapp-saved', ok: false });
+				receipt(bytes, false);
 				return;
 			}
 			if (!r.ok) {
@@ -391,10 +415,10 @@
 			// still waits for its answer: that offer stays.
 			if (notice?.kind !== 'created') notice = null;
 			if (!boundOfficeDocument()) bindOfficeDocument(current.doc);
-			post({ type: 'webapp-saved', ok: true, documentId: binding?.id });
+			receipt(bytes, true);
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
-			post({ type: 'webapp-saved', ok: false, text: apiErrorText(e) });
+			receipt(bytes, false, apiErrorText(e));
 		} finally {
 			busy = false;
 		}
@@ -403,9 +427,10 @@
 	/** Changed meanwhile, left as it is: the app's changes stay unsaved here. */
 	function cancelConflict() {
 		if (!conflict) return;
+		const { bytes } = conflict;
 		conflict = null;
 		unwritten = true;
-		post({ type: 'webapp-saved', ok: false });
+		receipt(bytes, false);
 	}
 
 	/** Changed meanwhile: replace it anyway (with its time now as the condition). */
@@ -439,7 +464,7 @@
 			// The buffer may be needed again for the question "replace?".
 			const r = await writeDoc(target, bytes.slice(0), expect);
 			if (adopt && (owner !== user() || current !== previous)) {
-				post({ type: 'webapp-saved', ok: false });
+				receipt(bytes, false);
 				return;
 			}
 			if (!r.ok) {
@@ -456,12 +481,12 @@
 				unwritten = false;
 				onname?.(baseName(target.path));
 				ondoc?.(target);
-				post({ type: 'webapp-saved', ok: true, documentId: binding?.id });
+				receipt(bytes, true);
 			}
 			notice = { kind: 'info', text: t('webapps.savedAs', { name: baseName(target.path) }) };
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
-			if (adopt) post({ type: 'webapp-saved', ok: false, text: apiErrorText(e) });
+			if (adopt) receipt(bytes, false, apiErrorText(e));
 		} finally {
 			busy = false;
 		}
@@ -471,7 +496,7 @@
 		if (!replace) return;
 		if (replace.adopt) {
 			unwritten = true;
-			post({ type: 'webapp-saved', ok: false });
+			receipt(replace.bytes, false);
 		}
 		replace = null;
 	}
@@ -786,7 +811,7 @@
 			if (s?.adopt) {
 				// The app counts the save as done; nothing reached the NAS.
 				unwritten = true;
-				post({ type: 'webapp-saved', ok: false });
+				receipt(s.bytes, false);
 			}
 		}}
 	/>
