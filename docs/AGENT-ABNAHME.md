@@ -67,6 +67,10 @@ done
 
 `TestPersonalModelReadinessThroughAccountSettings` prüft mit einem lokalen Ollama-Testserver die automatische Auswahl, fehlende Modelle, nicht erreichbaren Dienst, reine Embedding-Modelle, Cloud-Aliasse und entzogene Rechte. Für die Browserprüfung nach `make web` setzt man `TITANOS_MODEL_BROWSER=1`, `UI_ENGINE=chromium` oder `webkit` und führt `go -C backend test -tags embedui -count=1 -run '^TestPersonalModelReadinessThroughAccountSettings$' ./internal/api` aus. Der Test öffnet den Agenten, richtet das lokale Modell über die Einstellungen ein und wechselt im selben Browser zu einem zweiten Testkonto mit einer eigenen Modellwahl.
 
+### Werkzeugwechsel und Pausen
+
+`UI_AGENT_STEPS_ONLY=1 UI_ENGINE=webkit UI_WIDTH=390 node scripts/test-ui-personal-agent.mjs` prüft die mobile Unterhaltung am oben gestarteten Testdienst. Mit `UI_ENGINE=chromium UI_WIDTH=1440` läuft derselbe Fall im Desktopfenster. Der Test meldet nacheinander zwei laufende Schritte desselben Auftrags, wechselt von der Mail zum Kalender, pausiert und öffnet den Chat über den Aufträge-Tab erneut. Er vergleicht die ruhende Punktposition und prüft die Fortsetzung mit dem aktuellen Werkzeug. Bei aktivierter Bewegungsreduktion bleibt der Werkzeugwechsel bedienbar und die Punkte stehen still.
+
 ## Release-Prüfungen
 
 Die Schritte und Werkzeugversionen der Build-CI stehen in `.github/workflows/build.yml`. Der Veröffentlichungsworkflow prüft die erzeugten Release-Dateien. Lokal lassen sich die folgenden Prüfungen wiederholen.

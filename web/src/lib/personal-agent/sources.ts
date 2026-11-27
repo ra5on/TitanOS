@@ -74,6 +74,19 @@ export function jobOutput(j: Job) {
 export function stepTool(j: Job) {
 	return j.currentTool || j.request.tool;
 }
+export function jobProgressChanged(before: Job | undefined, next: Job) {
+	return (
+		!before ||
+		before.status !== next.status ||
+		(next.status === 'running' &&
+			(stepTool(before) !== stepTool(next) || before.completedSteps !== next.completedSteps))
+	);
+}
+export function visibleSources(job: Job) {
+	return (
+		jobOutput(job)?.sources ?? (job.status === 'running' ? job.request.sources : undefined) ?? []
+	);
+}
 export function sendPreview(j: Job): boolean {
 	const data = jobOutput(j)?.data as Record<string, unknown> | undefined;
 	return (

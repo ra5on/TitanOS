@@ -24,7 +24,14 @@
 		type Source,
 	} from './api.ts';
 	import { consumeSelection, nativeDraftLink } from './open.ts';
-	import { jobOutput, stepTool, mailFields, sourceLocation } from './sources.ts';
+	import {
+		jobOutput,
+		stepTool,
+		jobProgressChanged,
+		visibleSources,
+		mailFields,
+		sourceLocation,
+	} from './sources.ts';
 	import SourcePreview from './SourcePreview.svelte';
 	import Attachments from './Attachments.svelte';
 	import { colorStyle } from './appearance.ts';
@@ -55,6 +62,16 @@
 		firstId = $state(''),
 		search = $state('');
 	let openedSource = $state<Source | null>(null);
+	// Retain the three-dot phase while the user switches views in this workspace.
+	const phases = new Map<string, { seconds: number }>();
+	function phaseFor(id: string) {
+		let phase = phases.get(id);
+		if (!phase) {
+			phase = { seconds: 0 };
+			phases.set(id, phase);
+		}
+		return phase;
+	}
 
 	let sheet = $state<'' | 'history' | 'context' | 'voice'>(''),
 		sources = $state<Source[]>([]),
@@ -228,6 +245,7 @@
 		previousSubmission = '';
 	}
 	function show(t: Tab, focus: '' | 'model' | 'permissions' = '') {
+		cue = null;
 		settingsFocus = focus;
 		tab = t;
 		sheet = '';
@@ -291,8 +309,11 @@
 		if (previous) {
 			const j = next.jobs.findLast(
 				(j) =>
-					j.request.chatId === chatId &&
-					j.status !== previous.jobs.find((v) => v.id === j.id)?.status,
+					(j.id === detailId || (tab === 'chat' && j.request.chatId === chatId)) &&
+					jobProgressChanged(
+						previous.jobs.find((v) => v.id === j.id),
+						j,
+					),
 			);
 			if (j?.status === 'done' || j?.status === 'waiting') {
 				signal(
@@ -300,7 +321,16 @@
 					stepTool(j),
 				);
 				if (detailId === j.id) void seen(j);
-			} else if (j?.status === 'paused') signal(['reply-' + j.id], stepTool(j));
+			} else if (j?.status === 'running') {
+				signal(
+					[
+						'reply-' + j.id,
+						...visibleSources(j).map((_, i) => j.id + '-source-' + i),
+						detailId === j.id ? 'detail' : 'step-' + j.id,
+					],
+					stepTool(j),
+				);
+			} else if (j?.status === 'paused') cue = null;
 		}
 	}
 	$effect(() => {
@@ -313,6 +343,8 @@
 		sources = [];
 		prompt = '';
 		visited = new Set();
+		phases.clear();
+		cue = null;
 		draft = null;
 		lastContext = '';
 		const p = poll(
@@ -785,6 +817,7 @@
 				</header>{/if}
 			<div class="pa-chat-scroll" bind:this={scroller}>
 				<ChatView
+					{phaseFor}
 					chat={chosen}
 					jobs={rows}
 					caps={snapshot.capabilities}

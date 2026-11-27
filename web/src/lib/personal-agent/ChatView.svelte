@@ -2,7 +2,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import AgentDots from './AgentDots.svelte';
 	import { sourceTitle, msg, iconFor, jobTitle, outputKind, failure } from './labels.ts';
-	import { jobOutput, mailFields, sourceLocation, stepTool } from './sources.ts';
+	import { jobOutput, mailFields, sourceLocation, stepTool, visibleSources } from './sources.ts';
 	import { motifFor } from './guide.ts';
 	import type { Capability, Chat, Job, Settings, Source } from './api.ts';
 	let {
@@ -21,6 +21,7 @@
 		oncontext,
 		onbackground,
 		oncue,
+		phaseFor,
 	}: {
 		chat: Chat | undefined;
 		jobs: Job[];
@@ -37,6 +38,7 @@
 		oncontext: () => void;
 		onbackground: (j: Job) => void;
 		oncue: (stops: string[], tool: string) => void;
+		phaseFor: (id: string) => { seconds: number };
 	} = $props();
 	const example = $derived(available.find((c) => c.id === 'agent.example'));
 	function date(iso: string) {
@@ -70,6 +72,7 @@
 	<div class="pa-conversation">
 		{#each jobs as j, index (j.id)}
 			{@const output = jobOutput(j)}
+			{@const sources = visibleSources(j)}
 			{@const draft = mailFields(j)}
 			{#if index === 0 || date(j.created) !== date(jobs[index - 1].created)}<p class="pa-date">
 					{date(j.created)}
@@ -99,11 +102,14 @@
 				{:else if j.status === 'done'}<p class="pa-readable pa-bubble pa-agent">
 						{output?.title || msg('done')}
 					</p>
-				{:else}<div class="pa-status" aria-live="polite">
+				{:else}<div class="pa-status" aria-live="polite" data-guide={'step-' + j.id}>
 						<AgentDots
+							phase={phaseFor(j.id)}
 							motif={motifFor(stepTool(j))}
 							paused={j.status === 'paused'}
-							calm={reduced || settings.motion !== 'full' || j.status !== 'running'}
+							calm={reduced ||
+								settings.motion !== 'full' ||
+								(j.status !== 'running' && j.status !== 'paused')}
 						/>{msg(
 							j.status === 'running' && ['preparing', 'executing', 'queued'].includes(j.phase)
 								? j.phase
@@ -112,8 +118,8 @@
 									: j.status,
 						)}
 					</div>{/if}
-				{#if (output?.sources ?? []).length}<div class="pa-chips pa-proof">
-						{#each output?.sources ?? [] as source, i}<button
+				{#if sources.length}<div class="pa-chips pa-proof">
+						{#each sources as source, i}<button
 								data-guide={j.id + '-source-' + i}
 								onclick={() => (sourceLocation(source) ? onsource(source, j) : select(j))}
 								><Icon
