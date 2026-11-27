@@ -716,6 +716,8 @@ export function fixtureFactory(browser, errors) {
         return route.fulfill({ status: 202 });
       }
 
+      if (path === "/cluster/nodes" && method === "GET")
+        return json({ nodes: [], version: data.system.version, manages: false });
       if (path === "/session")
         return json({
           configAvailable: true,
