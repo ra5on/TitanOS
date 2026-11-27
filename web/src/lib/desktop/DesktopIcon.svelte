@@ -126,7 +126,10 @@
 		class="icon artwork"
 		style:width="{size}px"
 		style:height="{size}px"
-		style:background-image={'url("/icons/nordlicht/' + glyph + '.webp")'}
+		style:background-image={'url("/icons/nordlicht/' +
+			glyph +
+			(['files', 'store', 'shares'].includes(glyph) ? '.svg' : '.webp') +
+			'")'}
 		aria-hidden="true"
 	>
 		{#if glyph === 'calendar'}<span class="date" style:font-size="{size * 0.44}px">{today}</span

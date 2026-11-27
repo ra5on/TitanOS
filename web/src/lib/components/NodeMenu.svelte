@@ -2,9 +2,16 @@
 	// Chooses the node of the cluster this tab manages (lib/cluster-node.ts):
 	// in the desktop's top bar ("desk") or on the phone's home ("phone").
 	// The phone home also shows the local hostname on a standalone NAS.
+	import { onMount, tick } from 'svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
-	import { clusterNodes, homeNode, manageable, otherVersion } from '#lib/cluster.svelte.ts';
+	import {
+		clusterNodes,
+		homeNode,
+		loadClusterNodes,
+		manageable,
+		otherVersion,
+	} from '#lib/cluster.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
@@ -26,14 +33,23 @@
 			t('common.loading'),
 	);
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	const initials = $derived(
-		currentName
-			.split(/[-_.\s]+/)
-			.filter(Boolean)
-			.slice(0, 2)
-			.map((part) => part.charAt(0).toUpperCase())
-			.join('') || '?',
-	);
+	let trigger: HTMLButtonElement;
+	onMount(() => {
+		if (!clusterNodes.loaded) void loadClusterNodes();
+	});
+
+	async function toggle() {
+		open = !open;
+		if (open) {
+			void loadClusterNodes();
+			await tick();
+			root
+				?.querySelector<HTMLElement>(
+					'[aria-checked="true"]:not(:disabled), .menu button:not(:disabled), .menu a',
+				)
+				?.focus();
+		}
+	}
 
 	function nodeState(node: (typeof clusterNodes.nodes)[number]): string {
 		if (node.self) return t('cluster.thisNode');
@@ -52,7 +68,25 @@
 		if (open && !root?.contains(event.target as Node)) open = false;
 	}
 	function onKeydown(event: KeyboardEvent) {
-		if (open && event.key === 'Escape') open = false;
+		if (!open) return;
+		if (event.key === 'Escape') {
+			open = false;
+			trigger.focus();
+			return;
+		}
+		if (!root?.contains(event.target as Node)) return;
+		const items = Array.from(
+			root.querySelectorAll<HTMLElement>('.menu button:not(:disabled), .menu a'),
+		);
+		if (!items.length) return;
+		let index = items.indexOf(document.activeElement as HTMLElement);
+		if (event.key === 'ArrowDown') index = (index + 1) % items.length;
+		else if (event.key === 'ArrowUp') index = (index + items.length - 1) % items.length;
+		else if (event.key === 'Home') index = 0;
+		else if (event.key === 'End') index = items.length - 1;
+		else return;
+		event.preventDefault();
+		items[index].focus();
 	}
 </script>
 
@@ -67,30 +101,45 @@
 		aria-controls="{id}-menu"
 		aria-label={t('cluster.switchCurrent', { name: currentName })}
 		title={t('cluster.switchCurrent', { name: currentName })}
-		onclick={() => (open = !open)}
+		bind:this={trigger}
+		onclick={toggle}
 	>
 		{#if variant === 'desk'}
 			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
 			<span class="mono name">{currentName}</span>
 			<Icon name="chevronDown" size={14} />
-		{:else if variant === 'hero'}
-			<span>{currentName}</span><span class="hero-chevron"
-				><Icon name="chevronDown" size={16} /></span
-			>
 		{:else}
-			<span class="mono initials">{initials}</span><span class="dot" aria-hidden="true"></span>
+			<span class="current-name">{currentName}</span>
+			<span class="switch-label"
+				>{t('cluster.switchNas')} <Icon name="chevronDown" size={14} /></span
+			>
 		{/if}
 	</button>
 	{#if open}
 		<div class="menu floating-menu" id="{id}-menu" role="menu" aria-label={t('cluster.switch')}>
-			{#if !clusterNodes.nodes.length}<span class="single">{t('phone.nord.localNas')}</span>{/if}
+			{#if !clusterNodes.loaded}
+				<span class="single" role="status">{t('common.loading')}</span>
+			{:else if clusterNodes.failed}
+				<span class="single" role="status">{t('cluster.listUnavailable')}</span>
+				<button type="button" role="menuitem" class="recover" onclick={() => loadClusterNodes()}
+					>{t('cluster.refreshList')}</button
+				>
+				{#if nodeId}<button
+						type="button"
+						role="menuitem"
+						class="recover"
+						onclick={() => switchNode(null)}>{t('cluster.returnHere')}</button
+					>{/if}
+			{:else if !clusterNodes.nodes.some((node) => !node.self)}
+				<span class="single">{t('cluster.noOtherNas')}</span>
+			{/if}
 			{#each clusterNodes.nodes as node (node.id)}
 				{@const usable = manageable(node)}
 				<button
 					type="button"
 					role="menuitemradio"
 					aria-checked={node.id === current?.id}
-					disabled={!usable}
+					disabled={!usable || (clusterNodes.failed && !node.self)}
 					onclick={() => choose(node)}
 				>
 					<span class="dot" class:away={!node.online} aria-hidden="true"></span>
@@ -116,31 +165,45 @@
 		padding: 10px;
 		display: block;
 	}
-	.hero .trigger {
-		min-height: 54px;
-		padding: 0;
-		color: inherit;
-		font-size: clamp(2.3rem, 10vw, 3.4rem);
-		font-weight: 710;
-		letter-spacing: -0.05em;
-		line-height: 1.12;
-		text-shadow: 0 2px 10px #071e26;
+	.hero .trigger,
+	.phone .trigger {
+		background: var(--surface);
+		color: var(--text);
+		min-height: 48px;
 		max-width: 100%;
+		gap: 12px;
+		padding: 4px 6px 4px 14px;
+		border: 1px solid var(--nord-line, var(--border));
+		border-radius: 16px;
+		justify-content: space-between;
 	}
-	.hero .trigger > span:first-child {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	.hero .current-name,
+	.phone .current-name {
+		font-size: clamp(1.25rem, 5.6vw, 1.85rem);
+		font-weight: 700;
+		letter-spacing: -0.035em;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
+		min-width: 0;
+		text-align: start;
 	}
-	.hero-chevron {
-		display: grid;
-		place-items: center;
-		width: 28px;
-		height: 28px;
-		border: 1px solid rgb(255 255 255 / 0.24);
-		border-radius: 50%;
-		background: rgb(25 56 67 / 0.74);
+	.switch-label {
+		display: inline-flex;
+		gap: 5px;
+		align-items: center;
+		justify-content: center;
 		flex: none;
+		min-height: 36px;
+		padding: 0 9px;
+		border-radius: 11px;
+		background: var(--chip);
+		color: var(--text);
+		font-size: 0.82rem;
+		font-weight: 620;
+		letter-spacing: normal;
+	}
+	.menu .recover {
+		display: block;
 	}
 	.hero .menu {
 		font-size: 1rem;
@@ -268,36 +331,18 @@
 		border: 0;
 		border-top: 1px solid var(--border);
 	}
-	/* PLAN 64: on the phone's home beside the search; the menu spans the screen. */
 	.phone .trigger {
-		position: relative;
-		justify-content: center;
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
-		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		width: 100%;
 	}
-	.phone .initials {
-		font-size: var(--text-base);
-		font-weight: 700;
-	}
-	.phone .trigger > .dot {
-		position: absolute;
-		right: -3px;
-		bottom: -3px;
-		width: 11px;
-		height: 11px;
-		border: 2px solid var(--surface);
+	.phone .current-name {
+		font-size: 1rem;
 	}
 	.phone .menu {
-		position: fixed;
-		top: calc(64px + env(safe-area-inset-top));
-		left: 8px;
-		right: 8px;
+		left: 0;
+		right: 0;
+		top: calc(100% + 4px);
 		width: auto;
 		max-width: none;
-		z-index: 60;
 		background: var(--surface);
 	}
 	.phone .menu button,

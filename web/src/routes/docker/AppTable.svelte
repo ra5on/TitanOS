@@ -14,7 +14,7 @@
 	const selected = $derived(p.selected);
 </script>
 
-<div class="explorer" class:with-pane={!!selected}>
+<div class="explorer" class:with-pane={!!selected && p.wide}>
 	<section class="tile ui-card apps" aria-label={t('docker.table.title')}>
 		<div class="table-wrap">
 			<table class="data-table app-table">
@@ -158,7 +158,18 @@
 								<tr class="member" data-container={c.name}>
 									<td class="name"
 										><span class="member-name"
-											><strong>{c.service || c.name}</strong><span class="sub">{c.image}</span
+											><strong>{c.service || c.name}</strong><span class="sub">{c.image}</span>
+											{#if c.updateAvailable}<span class="chip warn narrow-chip"
+													>{t('docker.update')}</span
+												>{/if}
+											<span class="sub narrow"
+												>{[
+													cOn ? t('docker.cpu') + ' ' + formatPercent(c.cpuPercent) : '',
+													cOn ? t('docker.ram') + ' ' + formatBytes(c.memoryBytes) : '',
+													portLabels(c).join(', '),
+												]
+													.filter(Boolean)
+													.join(' · ')}</span
 											></span
 										></td
 									>
@@ -194,52 +205,54 @@
 		{@const sApp = p.groupApp(selected)}
 		{@const sOn = p.isOn(selected)}
 		{@const sIcon = selected.members.find((c) => c.icon)?.icon ?? ''}
-		<DetailPane
-			title={selected.name}
-			sub={p.stateOf.get(selected.id) === 'partial'
-				? t('docker.stackSummary', {
-						running: p.running(selected).length,
-						total: selected.members.length,
-					})
-				: t(`docker.table.state.${p.stateOf.get(selected.id) ?? 'stopped'}`)}
-			facts={[
-				[t('docker.detail.containers'), String(selected.members.length)],
-				[t('docker.cpu'), sOn ? formatPercent(p.groupCpu(selected)) : ''],
-				[t('docker.ram'), sOn ? formatBytes(p.groupRam(selected)) : ''],
-				[t('docker.column.ports'), p.groupPorts(selected).join(', ')],
-				[t('docker.detail.image'), [...new Set(selected.members.map((c) => c.image))].join(', ')],
-				[t('docker.update'), p.groupUpdate(selected) ? t('docker.detail.updateReady') : ''],
-			]}
-			onclose={() => (p.selectedId = null)}
-		>
-			{#snippet icon()}<span
-					class="app-icon big-icon"
-					style:--hue={p.hue(selected.name)}
-					class:letter={!sIcon}
-					aria-hidden="true"><AppIcon src={sIcon} name={selected.name} /></span
-				>{/snippet}
-			{#snippet actions()}
-				{#if sApp}<a class="btn btn-primary" href="/docker/apps/{encodeURIComponent(sApp)}"
-						>{t('docker.edit')}</a
-					>{/if}
-				<button
-					type="button"
-					class="btn"
-					disabled={p.groupBusy(selected) || p.globalBusy}
-					onclick={() => p.groupAction(selected, sOn ? 'stop' : 'start')}
-					>{t(sOn ? 'docker.stop' : 'docker.start')}</button
-				>
-				<button
-					type="button"
-					class="btn icon-btn"
-					aria-label={t('docker.actionsFor', { name: selected.name })}
-					title={t('docker.actionsFor', { name: selected.name })}
-					aria-haspopup="menu"
-					onclick={(event) => p.openRowMenu(selected, event.currentTarget)}
-					><Icon name="more" size={15} /></button
-				>
-			{/snippet}
-		</DetailPane>
+		<div class="detail-area" class:overlay={!p.wide}>
+			<DetailPane
+				title={selected.name}
+				sub={p.stateOf.get(selected.id) === 'partial'
+					? t('docker.stackSummary', {
+							running: p.running(selected).length,
+							total: selected.members.length,
+						})
+					: t(`docker.table.state.${p.stateOf.get(selected.id) ?? 'stopped'}`)}
+				facts={[
+					[t('docker.detail.containers'), String(selected.members.length)],
+					[t('docker.cpu'), sOn ? formatPercent(p.groupCpu(selected)) : ''],
+					[t('docker.ram'), sOn ? formatBytes(p.groupRam(selected)) : ''],
+					[t('docker.column.ports'), p.groupPorts(selected).join(', ')],
+					[t('docker.detail.image'), [...new Set(selected.members.map((c) => c.image))].join(', ')],
+					[t('docker.update'), p.groupUpdate(selected) ? t('docker.detail.updateReady') : ''],
+				]}
+				onclose={() => (p.selectedId = null)}
+			>
+				{#snippet icon()}<span
+						class="app-icon big-icon"
+						style:--hue={p.hue(selected.name)}
+						class:letter={!sIcon}
+						aria-hidden="true"><AppIcon src={sIcon} name={selected.name} /></span
+					>{/snippet}
+				{#snippet actions()}
+					{#if sApp}<a class="btn btn-primary" href="/docker/apps/{encodeURIComponent(sApp)}"
+							>{t('docker.edit')}</a
+						>{/if}
+					<button
+						type="button"
+						class="btn"
+						disabled={p.groupBusy(selected) || p.globalBusy}
+						onclick={() => p.groupAction(selected, sOn ? 'stop' : 'start')}
+						>{t(sOn ? 'docker.stop' : 'docker.start')}</button
+					>
+					<button
+						type="button"
+						class="btn icon-btn"
+						aria-label={t('docker.actionsFor', { name: selected.name })}
+						title={t('docker.actionsFor', { name: selected.name })}
+						aria-haspopup="menu"
+						onclick={(event) => p.openRowMenu(selected, event.currentTarget)}
+						><Icon name="more" size={15} /></button
+					>
+				{/snippet}
+			</DetailPane>
+		</div>
 	{/if}
 </div>
 
@@ -249,6 +262,32 @@
 		padding: 0;
 	}
 	/* PLAN 75-19, style W4: the list and the selected app's details beside it. */
+	.apps {
+		container: docker-list / inline-size;
+		min-width: 0;
+	}
+	.detail-area {
+		min-width: 0;
+	}
+	.detail-area.overlay {
+		position: fixed;
+		z-index: 8;
+		inset-block: 12px;
+		inset-inline-end: 12px;
+		inline-size: min(21rem, calc(100% - 24px));
+		overflow: auto;
+		padding: 2px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		box-shadow: 0 6px 28px #0003;
+	}
+	.member-name,
+	.member-name strong,
+	.member-name .sub {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
 	.explorer {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
@@ -470,7 +509,7 @@
 		}
 	}
 	/* Fewer columns as the window narrows; the figures move into the sub-line. */
-	@media (max-width: 899px) {
+	@container docker-list (max-width: 55rem) {
 		.app-table .ports {
 			max-width: 6rem;
 		}
@@ -481,7 +520,8 @@
 		.app-table th.upd {
 			display: none;
 		}
-		.lines .narrow-chip {
+		.lines .narrow-chip,
+		.member-name .narrow-chip {
 			display: inline-flex !important;
 			font-size: var(--text-xs);
 		}
@@ -489,16 +529,17 @@
 			width: 36px;
 		}
 	}
-	@media (max-width: 699px) {
+	@container docker-list (max-width: 43rem) {
 		.app-table .wide {
 			display: none;
 		}
-		.lines .narrow {
+		.lines .narrow,
+		.member-name .narrow {
 			display: block !important;
 		}
 	}
 	/* Phones: each app a stacked row – name with its figures, state, actions. */
-	@media (max-width: 639px) {
+	@container docker-list (max-width: 39rem) {
 		.app-table thead {
 			display: none;
 		}
@@ -533,6 +574,7 @@
 			padding-left: 42px !important;
 			white-space: normal;
 		}
+		.app-table td.wide,
 		.app-table td.upd {
 			display: none;
 		}
@@ -547,6 +589,23 @@
 		.actions .small {
 			width: 2.75rem;
 			height: 2.75rem;
+		}
+	}
+	@container docker-list (max-width: 24rem) {
+		.app-table tr {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-areas: 'name' 'state' 'actions';
+			row-gap: 4px;
+		}
+		.app-table td.actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 5px;
+			margin-inline-start: 40px;
+			white-space: normal;
+		}
+		.actions .btn + .btn {
+			margin-left: 0;
 		}
 	}
 </style>

@@ -17,7 +17,7 @@
 	const older = $derived(differs && compareVersions(node?.version ?? '', clusterNodes.version) < 0);
 
 	$effect(() => {
-		if (id && clusterNodes.loaded && !node) switchNode(null);
+		if (id && clusterNodes.loaded && !clusterNodes.failed && !node) switchNode(null);
 	});
 </script>
 

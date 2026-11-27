@@ -183,46 +183,49 @@
 				{#snippet tools()}
 					<a class="btn" href="/settings/services">{t('settingshome.services.manage')}</a>
 				{/snippet}
-				{#each NAMES as name (name)}
-					{@const s = services?.[name]}
-					{#if s && typeof s.enabled === 'boolean'}
-						<SettingRow icon={name === 'vms' ? 'monitor' : 'box'} title={t(`services.${name}`)}>
-							{#snippet control()}
-								{#if !s.available}
-									<span class="state">{t('settingshome.services.notPossible')}</span>
-								{:else}
-									{@render onOff(s.enabled)}
-									{#if s.enabled && s.total}<span class="muted"
-											>{t('services.counts', { running: s.running, total: s.total })}</span
-										>{/if}
-								{/if}
-							{/snippet}
+				<details class="service-details">
+					<summary>{t('settingshome.serviceDetails')}</summary>
+					{#each NAMES as name (name)}
+						{@const s = services?.[name]}
+						{#if s && typeof s.enabled === 'boolean'}
+							<SettingRow icon={name === 'vms' ? 'monitor' : 'box'} title={t(`services.${name}`)}>
+								{#snippet control()}
+									{#if !s.available}
+										<span class="state">{t('settingshome.services.notPossible')}</span>
+									{:else}
+										{@render onOff(s.enabled)}
+										{#if s.enabled && s.total}<span class="muted"
+												>{t('services.counts', { running: s.running, total: s.total })}</span
+											>{/if}
+									{/if}
+								{/snippet}
+							</SettingRow>
+						{/if}
+					{/each}
+					{#if accounts}
+						{@const locked = accounts.filter((a) => a.disabled).length}
+						<SettingRow
+							href="/settings/users"
+							icon="users"
+							title={t('desktop.app.users')}
+							summary={t('settingshome.users.count', { n: accounts.length }) +
+								(locked ? ' · ' + t('settingshome.users.locked', { n: locked }) : '')}
+						/>
+					{/if}
+					{#if ssh}
+						<SettingRow href="/settings/access#access-ssh" icon="terminal" title={t('access.ssh')}>
+							{#snippet control()}{@render onOff(ssh?.enabled ?? false)}{/snippet}
 						</SettingRow>
 					{/if}
-				{/each}
-				{#if accounts}
-					{@const locked = accounts.filter((a) => a.disabled).length}
-					<SettingRow
-						href="/settings/users"
-						icon="users"
-						title={t('desktop.app.users')}
-						summary={t('settingshome.users.count', { n: accounts.length }) +
-							(locked ? ' · ' + t('settingshome.users.locked', { n: locked }) : '')}
-					/>
-				{/if}
-				{#if ssh}
-					<SettingRow href="/settings/access#access-ssh" icon="terminal" title={t('access.ssh')}>
-						{#snippet control()}{@render onOff(ssh?.enabled ?? false)}{/snippet}
-					</SettingRow>
-				{/if}
-				{#if firewall}
-					<SettingRow href="/settings/firewall" icon="shield" title={t('firewall.title')}>
-						{#snippet control()}{@render onOff(firewall?.config.enabled ?? false)}{/snippet}
-					</SettingRow>
-				{/if}
-				{#if services === null}
-					<p class="note muted" role="status">{t('settingshome.health.loading')}</p>
-				{/if}
+					{#if firewall}
+						<SettingRow href="/settings/firewall" icon="shield" title={t('firewall.title')}>
+							{#snippet control()}{@render onOff(firewall?.config.enabled ?? false)}{/snippet}
+						</SettingRow>
+					{/if}
+					{#if services === null}
+						<p class="note muted" role="status">{t('settingshome.health.loading')}</p>
+					{/if}
+				</details>
 			</SettingGroup>
 		</div>
 	{/if}
@@ -279,6 +282,17 @@
 	}
 	.overview > div {
 		min-width: 0;
+	}
+	.service-details > summary {
+		cursor: pointer;
+		padding: var(--space-2-5) var(--space-3);
+		border-radius: var(--radius-ctl);
+		background: var(--surface);
+		color: var(--text);
+		font-weight: 550;
+	}
+	.service-details[open] > summary {
+		margin-block-end: var(--space-2);
 	}
 	.value {
 		color: var(--text);

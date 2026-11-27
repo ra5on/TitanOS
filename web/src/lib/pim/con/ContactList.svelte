@@ -403,6 +403,7 @@
 
 <style>
 	.list {
+		background-color: var(--surface);
 		position: relative;
 		display: flex;
 		flex-direction: column;
