@@ -197,3 +197,28 @@ Entscheidung des Projektinhabers vom 9.11.2026: ohne Rückfrage.
 ## Ereignisname der eigenen Fassungen (0.74)
 
 Die T-Apps senden die Host-Ereignisse weiter unter dem Namen ihres Originals (`wordcraft:ready`, `wordcraft:save`). titand gibt `host.js` diesen Namen als `data-events` mit (`App.EventPrefix`); vorher kam bei den T-Apps mit `bridge: host` kein Ereignis an (Öffnen/Speichern über die Brücke ging nicht). **`startNew`** im Katalog (T-Word): ohne Datei geöffnet bleibt die App leer; das Fenster schickt dann „Neu“ (Strg+N), T-Word zeigt seine Startseite mit den Vorlagen.
+
+## Auswahl aus einem Office-Editor an den persönlichen Agenten übergeben
+
+Diese Erweiterung des Craft-Host-Protokolls gilt für T-Word, T-Exel, T-PDF und T-Deck. Jede über `<prefix>:open` geöffnete NAS-Datei erhält zusätzlich zu `name` und `bytes` einen opaken `documentId`. Der Editor ordnet ihn erst nach erfolgreichem Öffnen dem aktiven Dokument zu. Bei internem Dateiwechsel, „Neu“ oder einem fehlgeschlagenen Öffnen verwirft er die Zuordnung. Beim erneuten Öffnen derselben Datei erhält er eine neue ID. Nach „Speichern unter“ kann das bestätigende `<prefix>:saved` einen neuen `documentId` enthalten. Der Editor übernimmt diesen nur, wenn die Antwort-ID zu seiner gerade bestätigten Speicherung des aktiven Dokuments gehört. Die ID enthält weder Kontonamen noch NAS-Pfade.
+
+Beim Öffnen des Agent-Dialogs und erneut beim Übergeben fragt der Host die aktuelle Auswahl auf dem üblichen Craft-Canvas ab. Der Editor beantwortet das `CustomEvent` **`<prefix>:agent-selection-request`** mit einem **`<prefix>:agent-selection`** auf demselben Canvas. Das Präfix entspricht `data-events` (etwa `wordcraft`). Version 1 verwendet diese Event-Details:
+
+```js
+// Anfrage vom Host
+{version: 1, requestId, documentId}
+// Antwort aus dem Editor, beispielhaft für T-Exel
+{version: 1, requestId, documentId, status: 'selected',
+ items: [{sheet: 'Planung', range: 'B2:D7'}]}
+```
+
+Der Editor spiegelt beide IDs der Anfrage. Bei einem abweichenden aktiven Dokument antwortet er mit `status: 'unbound'`, bei ungesicherten Änderungen mit `'dirty'`, bei leerer Auswahl mit `'none'`. Kann er die Selektion nicht vollständig auf die Koordinaten der gespeicherten Datei abbilden, antwortet er mit `'unsupported'`. In diesen vier Fällen ist `items` leer. Die gültige Auswahl umfasst ein bis sechzehn Regionen:
+
+| Editor | Ein Eintrag in `items` |
+| --- | --- |
+| T-Word | `{paragraph: 3}`, Absatz in Dokumentreihenfolge, einschließlich leerer Absätze |
+| T-Exel | `{sheet: 'Januar', range: 'C4:F9'}`, exakter Tabellenname und ein Rechteck mit höchstens 200 Zellen |
+| T-PDF | `{page: 4}`, physische Seitennummer |
+| T-Deck | `{slide: 2}` für die ganze Folie oder `{slide: 2, paragraph: 1}` für einen Absatz auf dieser Folie |
+
+Alle Nummern beginnen bei eins. Einträge für getrennte Regionen behalten ihre Reihenfolge. Der Editor übermittelt ausschließlich Koordinaten. Der Host bestimmt die Datei und ihre gespeicherte Version. Der Agent prüft die Berechtigung für die NAS-Freigabe und die ausgewählten Regionen vor dem Lesen erneut. Beim Kopieren kann ein einzelner unterstützter Bereich bearbeitet werden. Bei größeren oder nicht abbildbaren Selektionen zeigt der Dialog die Möglichkeit zur ausdrücklichen manuellen Eingrenzung. Ältere Editoren ohne diesen Vertrag behalten die manuelle Bereichsauswahl.

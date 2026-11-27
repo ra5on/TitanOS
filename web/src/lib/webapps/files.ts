@@ -4,28 +4,37 @@ import { api, apiFetch, responseError } from '../api.ts';
 import { mtimeNs, savedMtime, type DocRef } from './protocol.ts';
 
 /** The modification time of a file now (ns as a string), or null if it is gone. */
-export async function currentMtime(doc: DocRef): Promise<string | null> {
+async function documentRevision(doc: DocRef) {
 	try {
-		const p = await api.get<{ modified?: string }>(
+		const p = await api.get<{ modified?: string; version?: string }>(
 			'/files/properties?' + new URLSearchParams({ root: doc.root, path: doc.path }),
 		);
-		return typeof p?.modified === 'string' ? mtimeNs(p.modified) : null;
+		return {
+			mtime: typeof p?.modified === 'string' ? mtimeNs(p.modified) : null,
+			version: p?.version || '',
+		};
 	} catch {
-		return null;
+		return { mtime: null, version: '' };
 	}
+}
+export async function currentMtime(doc: DocRef) {
+	return (await documentRevision(doc)).mtime;
 }
 
 /** The file's bytes and its modification time, taken before the bytes (a change in between shows as a conflict later). */
-export async function readDoc(doc: DocRef): Promise<{ bytes: ArrayBuffer; mtime: string | null }> {
-	const mtime = await currentMtime(doc);
+export async function readDoc(
+	doc: DocRef,
+): Promise<{ bytes: ArrayBuffer; mtime: string | null; version: string }> {
+	const revision = await documentRevision(doc);
 	const res = await apiFetch(
 		'/files/download?' + new URLSearchParams({ root: doc.root, path: doc.path }),
 	);
 	if (!res.ok) throw await responseError(res);
-	return { bytes: await res.arrayBuffer(), mtime };
+	return { bytes: await res.arrayBuffer(), ...revision };
 }
 
-export type WriteResult = { ok: true; mtime: string | null } | { ok: false; conflict: true };
+export type WriteResult =
+	{ ok: true; mtime: string | null; version: string } | { ok: false; conflict: true };
 
 /**
  * PUT /files/content: replaces the file atomically when it is unchanged since
@@ -43,13 +52,20 @@ export async function writeDoc(
 	);
 	if (res.status === 409) return { ok: false, conflict: true };
 	if (!res.ok) throw await responseError(res);
-	let mtime: string | null = null;
+	let mtime: string | null = null,
+		version = '';
 	try {
-		mtime = savedMtime(await res.json());
+		const data = await res.json();
+		mtime = savedMtime(data);
+		version = typeof data?.version === 'string' ? data.version : '';
 	} catch {
 		// No body: asked below.
 	}
-	return { ok: true, mtime: mtime ?? (await currentMtime(doc)) };
+	if (!mtime) {
+		const revision = await documentRevision(doc);
+		return { ok: true, ...revision };
+	}
+	return { ok: true, mtime, version };
 }
 
 /** Whether a name is free in a folder (for a copy). */

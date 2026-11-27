@@ -94,6 +94,9 @@
 
 	var ready = false;
 	var waiting = [];
+	var activeDocument = '';
+	var selectionRequest = '';
+	var token = /^[a-f0-9]{32}$/;
 	var saveIds = [];
 
 	function becomeReady() {
@@ -110,8 +113,12 @@
 		var target = canvas();
 		if (!target) return void post({ type: 'webapp-failed', text: 'no canvas' });
 		if (bridge === 'host') {
+			activeDocument = message.documentId || '';
+			selectionRequest = '';
 			target.dispatchEvent(
-				new CustomEvent(events + ':open', { detail: { name: message.name, bytes: message.bytes } }),
+				new CustomEvent(events + ':open', {
+					detail: { name: message.name, bytes: message.bytes, documentId: activeDocument },
+				}),
 			);
 			return;
 		}
@@ -214,7 +221,28 @@
 		if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
 		if (msg.type === 'webapp-open') {
 			if (!(msg.bytes instanceof ArrayBuffer)) return;
-			open({ name: cleanName(msg.name, 'document'), bytes: msg.bytes });
+			open({
+				name: cleanName(msg.name, 'document'),
+				bytes: msg.bytes,
+				documentId: token.test(msg.documentId) ? msg.documentId : '',
+			});
+		} else if (
+			msg.type === 'webapp-agent-selection-request' &&
+			bridge === 'host' &&
+			msg.version === 1 &&
+			token.test(msg.requestId) &&
+			msg.documentId === activeDocument &&
+			activeDocument
+		) {
+			var element = canvas();
+			if (element) {
+				selectionRequest = msg.requestId;
+				element.dispatchEvent(
+					new CustomEvent(events + ':agent-selection-request', {
+						detail: { version: 1, requestId: selectionRequest, documentId: activeDocument },
+					}),
+				);
+			}
 		} else if (msg.type === 'webapp-focus') {
 			// PLAN 79-3: the window gave the keyboard to the app (opened, came to
 			// the front, a file arrived): its keys go to the canvas.
@@ -254,10 +282,16 @@
 			});
 		} else if (msg.type === 'webapp-saved') {
 			var id = saveIds.shift();
+			if (msg.ok === true && typeof msg.documentId === 'string' && token.test(msg.documentId)) {
+				activeDocument = msg.documentId;
+				selectionRequest = '';
+			}
 			if (msg.ok === true && id != null && bridge === 'host') {
 				var target = canvas();
 				if (target)
-					target.dispatchEvent(new CustomEvent(events + ':saved', { detail: { id: id } }));
+					target.dispatchEvent(
+						new CustomEvent(events + ':saved', { detail: { id: id, documentId: activeDocument } }),
+					);
 			}
 		}
 	});
@@ -350,6 +384,52 @@
 		on('ready', function (_detail, event) {
 			if (event && event.target instanceof Element) announced = event.target;
 			becomeReady();
+		});
+		on('agent-selection', function (detail, event) {
+			if (
+				event.target !== canvas() ||
+				detail.version !== 1 ||
+				!activeDocument ||
+				!selectionRequest ||
+				detail.requestId !== selectionRequest ||
+				detail.documentId !== activeDocument
+			)
+				return;
+			selectionRequest = '';
+			var status = ['selected', 'none', 'dirty', 'unsupported', 'unbound'].includes(detail.status)
+				? detail.status
+				: 'unsupported';
+			var items = [];
+			if (status === 'selected') {
+				if (!Array.isArray(detail.items) || detail.items.length > 16 || !detail.items.length)
+					status = 'unsupported';
+				else
+					for (var item of detail.items) {
+						if (
+							!item ||
+							typeof item !== 'object' ||
+							Object.keys(item).some(function (k) {
+								return (
+									!['paragraph', 'sheet', 'range', 'page', 'slide'].includes(k) ||
+									!['string', 'number'].includes(typeof item[k]) ||
+									(typeof item[k] === 'string' && item[k].length > 128)
+								);
+							})
+						) {
+							status = 'unsupported';
+							break;
+						}
+						items.push(item);
+					}
+			}
+			post({
+				type: 'webapp-agent-selection',
+				version: 1,
+				requestId: detail.requestId,
+				documentId: activeDocument,
+				status: status,
+				items: status === 'selected' ? items : [],
+			});
 		});
 		on('save', function (detail) {
 			var bytes = buffer(detail.bytes);

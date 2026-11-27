@@ -44,8 +44,12 @@ export function sourceLocation(
 			pdf: false,
 			page,
 		};
-	if ((source.kind === 'file' || source.kind === 'folder') && r.root && source.id) {
-		if (source.kind === 'file' && source.id.toLowerCase().endsWith('.pdf'))
+	if (
+		(source.kind === 'file' || source.kind === 'folder' || source.kind === 'office.region') &&
+		r.root &&
+		source.id
+	) {
+		if (source.kind !== 'folder' && source.id.toLowerCase().endsWith('.pdf'))
 			return {
 				href: apiPath('/files/download?' + query({ root: r.root, path: source.id }), null),
 				pdf: true,

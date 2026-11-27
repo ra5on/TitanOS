@@ -15,6 +15,7 @@
 	import { registerCloseGuard, wm } from '#lib/desktop/wm.svelte.ts';
 	import FileDialog from './FileDialog.svelte';
 	import OfficeHandoff from './OfficeHandoff.svelte';
+	import { editorSelection, selectionId, type EditorSelection } from './office-selection.ts';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import { recentDocs, rememberDoc } from './recent.ts';
 	import { namesIn, readDoc, writeDoc } from './files.ts';
@@ -56,12 +57,64 @@
 	const src = $derived(
 		ownAppUrl(app.url) ? appSrc(app, session.data?.user?.name ?? '') : 'about:blank',
 	);
+	let binding = $state<{ id: string; owner: string; app: string; root: string; path: string }>();
+	let selectionReply: { requestId: string; finish: (s: EditorSelection) => void } | null = null;
+	let knowsSelection = false;
+	function forgetOfficeDocument() {
+		knowsSelection = false;
+		binding = undefined;
+		selectionReply?.finish({ status: 'unbound' });
+	}
+	function bindOfficeDocument(doc: DocRef) {
+		knowsSelection = false;
+		binding = { id: selectionId(), owner: user(), app: app.id, root: doc.root, path: doc.path };
+	}
+	function boundOfficeDocument() {
+		return (
+			!!binding &&
+			binding.owner === user() &&
+			binding.app === app.id &&
+			binding.root === current?.doc.root &&
+			binding.path === current?.doc.path &&
+			phase === 'ready' &&
+			!activeNode()
+		);
+	}
+	function requestEditorSelection(): Promise<EditorSelection> {
+		if (!boundOfficeDocument()) return Promise.resolve({ status: 'unbound' });
+		if (appDirty || busy || unwritten) return Promise.resolve({ status: 'dirty' });
+		selectionReply?.finish({ status: 'changed' });
+		const requestId = selectionId();
+		return new Promise((resolve) => {
+			const timer = setTimeout(
+				() => finish({ status: knowsSelection ? 'changed' : 'legacy' }),
+				700,
+			);
+			function finish(status: EditorSelection) {
+				clearTimeout(timer);
+				if (selectionReply?.requestId === requestId) selectionReply = null;
+				resolve(boundOfficeDocument() ? status : { status: 'unbound' });
+			}
+			selectionReply = { requestId, finish };
+			post({
+				type: 'webapp-agent-selection-request',
+				version: 1,
+				documentId: binding?.id,
+				requestId,
+			});
+		});
+	}
+	onDestroy(forgetOfficeDocument);
+	$effect(() => {
+		if (binding && (binding.owner !== user() || binding.app !== app.id || !!activeNode()))
+			forgetOfficeDocument();
+	});
 	/** Unsaved changes the app reports. */
 	let appDirty = $state(false);
 	/** A save that did not reach the NAS (failed, conflict not resolved): only a successful write clears it. */
 	let unwritten = $state(false);
 	/** The document as opened: its modification time is the condition of the next write. */
-	let current = $state<{ doc: DocRef; mtime: string | null } | null>(null);
+	let current = $state<{ doc: DocRef; mtime: string | null; version: string } | null>(null);
 	let busy = $state(false);
 	let notice = $state<
 		| { kind: 'error'; text: string }
@@ -180,7 +233,7 @@
 
 	/** Hands a file to the app (the bytes are transferred, not copied). */
 	function give(name: string, bytes: ArrayBuffer) {
-		post({ type: 'webapp-open', name, bytes }, [bytes]);
+		post({ type: 'webapp-open', name, bytes, documentId: binding?.id }, [bytes]);
 		onname?.(name);
 		focusSoon();
 	}
@@ -196,15 +249,18 @@
 	async function openDoc(next: DocRef) {
 		const key = next.root + '\n' + next.path;
 		opened = key;
+		forgetOfficeDocument();
+		const owner = user();
 		busy = true;
 		try {
-			const { bytes, mtime } = await readDoc(next);
-			if (opened !== key) return;
-			current = { doc: next, mtime };
+			const { bytes, mtime, version } = await readDoc(next);
+			if (opened !== key || owner !== user()) return;
+			current = { doc: next, mtime, version };
 			appName = '';
 			remember(next);
 			outside = false;
 			unwritten = false;
+			bindOfficeDocument(next);
 			give(baseName(next.path), bytes);
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.openFailed', { error: apiErrorText(e) }) };
@@ -232,9 +288,27 @@
 
 	function message(event: MessageEvent) {
 		if (!frame || event.source !== frame.contentWindow) return;
+		const answer = event.data;
+		if (answer?.type === 'webapp-agent-selection') {
+			if (
+				answer.version === 1 &&
+				binding &&
+				answer.documentId === binding.id &&
+				selectionReply &&
+				answer.requestId === selectionReply.requestId &&
+				boundOfficeDocument()
+			) {
+				knowsSelection = true;
+				selectionReply.finish(
+					appDirty || busy || unwritten ? { status: 'dirty' } : editorSelection(app.id, answer),
+				);
+			}
+			return;
+		}
 		const msg = hostMessage(event.data);
 		if (!msg) return;
 		if (msg.type === 'webapp-ready') {
+			forgetOfficeDocument();
 			opened = '';
 			phase = 'ready';
 			focusSoon();
@@ -297,20 +371,27 @@
 
 	async function writeOriginal(bytes: ArrayBuffer, expect?: string) {
 		if (!current) return;
+		const openedDoc = current,
+			owner = user();
 		busy = true;
 		unwritten = true;
 		try {
 			const r = await writeDoc(current.doc, bytes, expect ?? current.mtime ?? 'none');
+			if (owner !== user() || current !== openedDoc) {
+				post({ type: 'webapp-saved', ok: false });
+				return;
+			}
 			if (!r.ok) {
 				conflict = { name: baseName(current.doc.path), bytes };
 				return;
 			}
-			current = { doc: current.doc, mtime: r.mtime };
+			current = { doc: current.doc, mtime: r.mtime, version: r.version };
 			unwritten = false;
 			// A file the app made beside this save (a backup copy of the project)
 			// still waits for its answer: that offer stays.
 			if (notice?.kind !== 'created') notice = null;
-			post({ type: 'webapp-saved', ok: true });
+			if (!boundOfficeDocument()) bindOfficeDocument(current.doc);
+			post({ type: 'webapp-saved', ok: true, documentId: binding?.id });
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
 			post({ type: 'webapp-saved', ok: false, text: apiErrorText(e) });
@@ -350,24 +431,32 @@
 
 	/** A new file (Save As, an export, a copy); adopt = it becomes the window's file. */
 	async function writeNew(target: DocRef, bytes: ArrayBuffer, adopt: boolean, expect = 'none') {
+		const previous = current,
+			owner = user();
 		busy = true;
 		if (adopt) unwritten = true;
 		try {
 			// The buffer may be needed again for the question "replace?".
 			const r = await writeDoc(target, bytes.slice(0), expect);
+			if (adopt && (owner !== user() || current !== previous)) {
+				post({ type: 'webapp-saved', ok: false });
+				return;
+			}
 			if (!r.ok) {
 				replace = { target, bytes, adopt };
 				return;
 			}
 			if (adopt) {
-				current = { doc: target, mtime: r.mtime };
+				forgetOfficeDocument();
+				bindOfficeDocument(target);
+				current = { doc: target, mtime: r.mtime, version: r.version };
 				appName = askedName;
 				remember(target);
 				opened = target.root + '\n' + target.path;
 				unwritten = false;
 				onname?.(baseName(target.path));
 				ondoc?.(target);
-				post({ type: 'webapp-saved', ok: true });
+				post({ type: 'webapp-saved', ok: true, documentId: binding?.id });
 			}
 			notice = { kind: 'info', text: t('webapps.savedAs', { name: baseName(target.path) }) };
 		} catch (e) {
@@ -425,6 +514,7 @@
 		post({ type: 'webapp-command', command: name });
 	}
 	export function restart() {
+		forgetOfficeDocument();
 		phase = 'starting';
 		appDirty = false;
 		opened = '';
@@ -440,6 +530,7 @@
 	/** Answers the app's picker: the chosen files, or none (cancelled). */
 	function answerPick(files: { name: string; bytes: ArrayBuffer }[]) {
 		pick = null;
+		if (files.length) forgetOfficeDocument();
 		post(
 			{ type: 'webapp-picked', files },
 			files.map((f) => f.bytes),
@@ -515,6 +606,7 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (!file || phase !== 'ready') return;
 		// A file of this PC: not a file of the NAS, so saving asks where.
+		forgetOfficeDocument();
 		current = null;
 		opened = '';
 		outside = true;
@@ -539,10 +631,14 @@
 	ondragover={dragOver}
 	ondrop={drop}
 >
-	{#if current && phase === 'ready' && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
-		{#key current.doc.root + '/' + current.doc.path}<OfficeHandoff
+	{#if current && session.services.agent === true && phase === 'ready' && !activeNode() && ['t-word', 't-exel', 't-deck', 't-pdf'].includes(app.id)}
+		{#key JSON.stringify( [app.id, user(), current.doc.root, current.doc.path, current.mtime, binding?.id] )}<OfficeHandoff
 				doc={current.doc}
-				dirty={appDirty || unwritten || busy}
+				appId={app.id}
+				dirty={appDirty || unwritten || busy || !!conflict || !!saving || !!replace}
+				mtime={current.mtime}
+				version={current.version}
+				requestSelection={requestEditorSelection}
 			/>{/key}
 	{/if}
 	{#key reloads}

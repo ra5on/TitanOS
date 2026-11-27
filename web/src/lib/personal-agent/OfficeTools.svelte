@@ -14,6 +14,9 @@
 	const de = $derived(i18n.locale === 'de');
 	const collection = $derived(tool === 'office.compare' || tool === 'office.pdf-merge');
 	const src = $derived(sources.length === 1 ? sources[0] : undefined);
+	const editorBound = $derived(
+		sources.length > 0 && sources.every((s) => s.kind === 'office.region'),
+	);
 	const ext = $derived(src?.id.split('.').at(-1)?.toLowerCase() || '');
 	let paragraph = $state(1),
 		slide = $state(1),
@@ -51,6 +54,20 @@
 	);
 	$effect(() => {
 		if (collection) return;
+		if (editorBound) {
+			const args: Record<string, unknown> = {};
+			if (write) {
+				args.name = name;
+				if (ext !== 'pdf') args.replacement = replacement;
+				if (ext === 'xlsx') args.cellType = cellType;
+			}
+			onchange(
+				args,
+				tool === 'office.inspect' ||
+					(tool === 'office.copy' && sources.length === 1 && correctName),
+			);
+			return;
+		}
 		const args: Record<string, unknown> = {};
 		if (table) {
 			args.text = text;
@@ -111,6 +128,21 @@
 								? 'Eine Zeile pro Tabellenzeile, Tabulator zwischen Spalten'
 								: 'One line per row, a tab between columns'}></textarea></label
 			>
+		{:else if editorBound}
+			<ul>
+				{#each sources as selected}<li>{selected.label || selected.id}</li>{/each}
+			</ul>
+			{#if write && ext !== 'pdf'}<label
+					>{de ? 'Neuer Inhalt' : 'Replacement'}<textarea class="field" bind:value={replacement}
+					></textarea></label
+				>{/if}
+			{#if write && ext === 'xlsx'}<label
+					>{de ? 'Zelltyp' : 'Cell type'}<select class="field" bind:value={cellType}
+						><option value="text">Text</option><option value="number"
+							>{de ? 'Zahl' : 'Number'}</option
+						></select
+					></label
+				>{/if}
 		{:else if src}
 			{#if ext === 'pptx'}<label
 					>{de ? 'Folie' : 'Slide'}<input
@@ -164,7 +196,7 @@
 					placeholder={'Entwurf.' + (suffix || 'docx')}
 				/></label
 			>{/if}
-		{#if !src || (table ? src.kind !== 'folder' : !supported)}<p>
+		{#if !editorBound && (!src || (table ? src.kind !== 'folder' : !supported))}<p>
 				{table
 					? de
 						? 'Wähle in Dateien einen Zielordner.'
