@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { apiErrorText } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -16,8 +16,13 @@
 	import Appearance from './Appearance.svelte';
 	import Skills from './Skills.svelte';
 	import ModelSettings from './ModelSettings.svelte';
+	import type { LocalModel } from './model.ts';
 	let {
 		snapshot,
+		settingsFocus,
+		model,
+		localAllowed,
+		onmodelchange,
 		sources,
 		onjob,
 		ondraft,
@@ -25,6 +30,10 @@
 		pending,
 	}: {
 		snapshot: State;
+		settingsFocus: '' | 'permissions' | 'model';
+		model: LocalModel;
+		localAllowed: boolean;
+		onmodelchange: () => void;
 		sources: Source[];
 		onjob: (job: Job) => void;
 		ondraft: (s: Partial<Settings> | null) => void;
@@ -36,6 +45,15 @@
 		savingMemory = $state(false),
 		error = $state(''),
 		saved = $state(false);
+	let section = $state<HTMLElement>();
+	onMount(() => {
+		if (settingsFocus)
+			void tick().then(() =>
+				section
+					?.querySelector<HTMLElement>('[data-section="' + settingsFocus + '"] summary')
+					?.focus(),
+			);
+	});
 	const groups = $derived([...new Set(snapshot.capabilities.map((c) => c.app))]);
 	onMount(() => {
 		let alive = true;
@@ -79,12 +97,16 @@
 	}
 </script>
 
-<div class="pa-pane">
+<div class="pa-pane" bind:this={section}>
 	<h1>{msg('settings')}</h1>
 	<div class="pa-settings-card">
 		<Appearance settings={snapshot.settings} {ondraft} {onsave} {pending} />
 	</div>
-	<details class="pa-settings-card">
+	<details
+		class="pa-settings-card"
+		data-section="permissions"
+		open={settingsFocus === 'permissions'}
+	>
 		<summary><Icon name="shield" />{msg('permissions')}</summary>
 		<p class="pa-muted">{msg('rightsNote')}</p>
 		{#each groups as group}<h3>{group}</h3>
@@ -111,8 +133,12 @@
 					>{/each}
 			</div>{/each}
 	</details>
-	<details class="pa-settings-card">
-		<summary><Icon name="chip" />{msg('model')}</summary><ModelSettings />
+	<details class="pa-settings-card" data-section="model" open={settingsFocus === 'model'}>
+		<summary><Icon name="chip" />{msg('model')}</summary><ModelSettings
+			{model}
+			{localAllowed}
+			{onmodelchange}
+		/>
 	</details>
 	<details class="pa-settings-card">
 		<summary><Icon name="bell" />{msg('notices')}</summary>

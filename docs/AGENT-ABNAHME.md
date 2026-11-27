@@ -63,6 +63,10 @@ for engine in chromium webkit; do
 done
 ```
 
+### Lokales Chatmodell und Kontowechsel
+
+`TestPersonalModelReadinessThroughAccountSettings` prüft mit einem lokalen Ollama-Testserver die automatische Auswahl, fehlende Modelle, nicht erreichbaren Dienst, reine Embedding-Modelle, Cloud-Aliasse und entzogene Rechte. Für die Browserprüfung nach `make web` setzt man `TITANOS_MODEL_BROWSER=1`, `UI_ENGINE=chromium` oder `webkit` und führt `go -C backend test -tags embedui -count=1 -run '^TestPersonalModelReadinessThroughAccountSettings$' ./internal/api` aus. Der Test öffnet den Agenten, richtet das lokale Modell über die Einstellungen ein und wechselt im selben Browser zu einem zweiten Testkonto mit einer eigenen Modellwahl.
+
 ## Release-Prüfungen
 
 Die Schritte und Werkzeugversionen der Build-CI stehen in `.github/workflows/build.yml`. Der Veröffentlichungsworkflow prüft die erzeugten Release-Dateien. Lokal lassen sich die folgenden Prüfungen wiederholen.

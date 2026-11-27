@@ -43,6 +43,8 @@ func (s *Server) personalModel(u auth.User) (personalModelProfile, error) {
 }
 
 func (s *Server) registerPersonalPIMRoutes(mux *routeMux) {
+	s.personal.localModel, _ = agent.NewOllama("http://127.0.0.1:11434")
+	mux.HandleFunc("GET /api/v1/personal-agent/model/readiness", s.personalBrowser(s.personalReadiness))
 	mux.HandleFunc("POST /api/v1/personal-agent/jobs/{id}/speech", s.personalBrowser(s.personalReplyVoice(s.sayPersonalReply)))
 	mux.HandleFunc("GET /api/v1/personal-agent/presentation", s.personalBrowser(func(w http.ResponseWriter, r *http.Request) {
 		var out map[string]any
@@ -80,7 +82,7 @@ func (s *Server) personalModelSettings(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "personal_agent_model_invalid", "invalid model settings")
 			return
 		}
-		if in.Local != p.Local && in.Local != "" && !s.canUsePersonalModel(u, "chat.ask", "mail.summarize", "mail.reply", "mail.event") ||
+		if in.Local != p.Local && in.Local != "" && !s.canUsePersonalLocal(u) ||
 			in.Cloud != "" && (in.Cloud != p.Cloud || in.Key != "") && !s.canUsePersonalModel(u, "chat.cloud") {
 			writeError(w, 403, "personal_agent_denied", "permission for this model connection is required")
 			return
@@ -105,9 +107,74 @@ func (s *Server) personalModelSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"local": p.Local, "cloud": p.Cloud, "keySet": p.Key != ""})
 }
 
-const personalOllama = "http://127.0.0.1:11434"
+type personalLocalStatus struct {
+	State string `json:"state"`
+	Model string `json:"model,omitempty"`
+}
+
+// Resolve the same local weights for the readiness indicator and the worker.
+// An explicit model (including an Ollama alias without a tag) never falls
+// back to another model, and a remote alias never receives account data.
+func resolvePersonalLocal(ctx context.Context, client *agent.Ollama, preferred string) personalLocalStatus {
+	candidates := []string{preferred}
+	if preferred == "" {
+		models, err := client.InstalledModels(ctx)
+		if err != nil {
+			return personalLocalStatus{State: "offline"}
+		}
+		candidates = nil
+		for _, m := range models {
+			candidates = append(candidates, m.Name)
+		}
+	}
+	for _, name := range candidates {
+		if !personalModelName.MatchString(name) {
+			continue
+		}
+		err := client.CheckLocalChatModel(ctx, name)
+		if err == nil {
+			return personalLocalStatus{State: "ready", Model: name}
+		}
+		var resp *agent.StatusError
+		if errors.Is(err, agent.ErrNoLocalChat) || errors.As(err, &resp) && resp.Status == http.StatusNotFound {
+			continue
+		}
+		return personalLocalStatus{State: "offline"}
+	}
+	return personalLocalStatus{State: "missing", Model: preferred}
+}
+
+func (s *Server) personalReadiness(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	u := currentUser(r)
+	if !s.canUsePersonalLocal(u) {
+		personalRespond(w, nil, errPersonalDenied)
+		return
+	}
+	p, err := s.personalModel(u)
+	if err != nil {
+		personalRespond(w, nil, err)
+		return
+	}
+	ctx, stop := context.WithTimeout(r.Context(), 6*time.Second)
+	defer stop()
+	status := resolvePersonalLocal(ctx, s.personal.localModel, p.Local)
+	if !s.canUsePersonalLocal(u) {
+		personalRespond(w, nil, errPersonalDenied)
+		return
+	}
+	writeJSON(w, 200, status)
+}
+
+func (s *Server) canUsePersonalLocal(u auth.User) bool {
+	return s.canUsePersonalModel(u, "chat.ask", "mail.summarize", "mail.reply", "mail.event")
+}
 
 func (s *Server) canUsePersonalModel(u auth.User, tools ...string) bool {
+	current, ok := s.opts.Users.Get(u.Name)
+	if !ok || current.Disabled || personalKey(current) != personalKey(u) {
+		return false
+	}
 	for _, id := range tools {
 		if c, err := s.personalEffective(u, id); err == nil && c.Effective != pa.Never {
 			return true
@@ -117,23 +184,35 @@ func (s *Server) canUsePersonalModel(u auth.User, tools ...string) bool {
 }
 
 func (s *Server) personalLocalModels(w http.ResponseWriter, r *http.Request) {
-	if !s.canUsePersonalModel(currentUser(r), "chat.ask", "mail.summarize", "mail.reply", "mail.event") {
+	if !s.canUsePersonalLocal(currentUser(r)) {
 		writeError(w, 403, "personal_agent_denied", "local model access unavailable")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
-	client, _ := agent.NewOllama(personalOllama)
-	models, err := client.Models(ctx)
+	client := s.personal.localModel
+	models, err := client.InstalledModels(ctx)
 	if err != nil {
 		writeError(w, 503, "personal_agent_local_offline", "local Ollama unavailable")
 		return
 	}
 	names := []string{}
 	for _, m := range models {
-		if personalModelName.MatchString(m.Name) && !strings.Contains(strings.ToLower(m.Name), "cloud") && client.CheckLocalWeights(ctx, m.Name) == nil {
-			names = append(names, m.Name)
+		if m.Name == "" {
+			continue
 		}
+		candidate := resolvePersonalLocal(ctx, client, m.Name)
+		if candidate.State == "offline" {
+			writeError(w, 503, "personal_agent_local_offline", "local Ollama unavailable")
+			return
+		}
+		if candidate.State == "ready" {
+			names = append(names, candidate.Model)
+		}
+	}
+	if !s.canUsePersonalLocal(currentUser(r)) {
+		personalRespond(w, nil, errPersonalDenied)
+		return
 	}
 	writeJSON(w, 200, names)
 }
@@ -147,10 +226,10 @@ func (s *Server) personalInfer(ctx context.Context, u auth.User, cloud bool, tas
 	if err != nil {
 		return "", errors.New("model settings unavailable")
 	}
-	return s.inferUsing(ctx, u, p, personalOllama, cloud, task, prompt, source)
+	return s.inferUsing(ctx, u, p, cloud, task, prompt, source)
 }
 
-func (s *Server) inferUsing(ctx context.Context, u auth.User, p personalModelProfile, localAddress string, cloud bool, task, prompt string, source any) (string, error) {
+func (s *Server) inferUsing(ctx context.Context, u auth.User, p personalModelProfile, cloud bool, task, prompt string, source any) (string, error) {
 	var err error
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -167,20 +246,14 @@ func (s *Server) inferUsing(ctx context.Context, u auth.User, p personalModelPro
 		client, err = agent.NewOpenAI("https://api.openai.com/v1", key)
 		model = p.Cloud
 	} else {
-		client, err = agent.NewOllama(localAddress)
-		if err == nil && model == "" {
-			list, listErr := client.Models(ctx)
-			if listErr != nil {
-				return "", errors.New("local Ollama unavailable")
-			}
-			for _, m := range list {
-				if personalModelName.MatchString(m.Name) && client.CheckLocalWeights(ctx, m.Name) == nil {
-					model = m.Name
-					break
-				}
-			}
-		}
-		if err == nil && (model == "" || client.CheckLocalWeights(ctx, model) != nil) {
+		client = s.personal.localModel
+		status := resolvePersonalLocal(ctx, client, p.Local)
+		switch status.State {
+		case "ready":
+			model = status.Model
+		case "offline":
+			return "", errors.New("local Ollama unavailable")
+		default:
 			return "", errors.New("choose an installed local Ollama model")
 		}
 	}
@@ -257,7 +330,7 @@ func init() {
 				if !bytes.Equal(current.Data, approved.Data) {
 					return pa.Result{}, errors.New("cloud destination or text changed since approval")
 				}
-				text, err := s.inferUsing(ctx, u, p, personalOllama, true, "Answer the user's question.", r.Prompt, nil)
+				text, err := s.inferUsing(ctx, u, p, true, "Answer the user's question.", r.Prompt, nil)
 				return pa.Result{Title: "Antwort von OpenAI", Text: text}, err
 			}}}
 	})

@@ -7,7 +7,7 @@
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
-	import { apiErrorText } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { openInProgram } from '#lib/agent/open.ts';
 	import {
 		agentState,
@@ -29,6 +29,7 @@
 	import Attachments from './Attachments.svelte';
 	import { colorStyle } from './appearance.ts';
 	import { motifFor, depart, type Cue } from './guide.ts';
+	import { localReadiness, modelStatus, usesLocalModel, type LocalModel } from './model.ts';
 	import { msg, sourceTitle, iconFor } from './labels.ts';
 	import MotionGuide from './MotionGuide.svelte';
 	import JobDetail from './JobDetail.svelte';
@@ -140,7 +141,32 @@
 			return ['files.search', 'office.table', 'office.document', 'office.deck'].includes(tool);
 		return selected[0].kind === 'attachment' && tool === 'attachment.read';
 	}
-	const tools = $derived(options.filter((c) => matches(c.id, sources)));
+	let model = $state<LocalModel>({ state: 'checking' }),
+		modelRefresh = $state(0),
+		settingsFocus = $state<'' | 'model' | 'permissions'>('');
+	const localAllowed = $derived(options.some((c) => usesLocalModel(c.id)));
+	$effect(() => {
+		const owner = session.data?.user?.name;
+		void modelRefresh;
+		model = { state: 'checking' };
+		if (!owner || !localAllowed) return;
+		return poll(
+			async (signal) => {
+				const next = await localReadiness(signal);
+				if (!signal.aborted && session.data?.user?.name === owner) model = next;
+			},
+			{
+				interval: 60000,
+				onError: () => {
+					model = { state: 'unavailable' };
+				},
+			},
+		);
+	});
+	const readyOptions = $derived(
+		options.filter((c) => !usesLocalModel(c.id) || model.state === 'ready'),
+	);
+	const tools = $derived(readyOptions.filter((c) => matches(c.id, sources)));
 	const canSubmit = $derived(tools.some((c) => c.id === tool));
 	function syncTool() {
 		if (
@@ -201,7 +227,8 @@
 		nonce = '';
 		previousSubmission = '';
 	}
-	function show(t: Tab) {
+	function show(t: Tab, focus: '' | 'model' | 'permissions' = '') {
+		settingsFocus = focus;
 		tab = t;
 		sheet = '';
 		detailId = '';
@@ -632,8 +659,11 @@
 		<div class="pa-context">
 			<h3>{msg('available')}</h3>
 			{#if tools.length}<label class="pa-field"
-					>{msg('tool')}<select value={tool} onchange={(e) => setTool(e.currentTarget.value)}
-						>{#each tools as c (c.id)}<option value={c.id}>{c.title}</option>{/each}</select
+					>{msg('tool')}<select
+						value={canSubmit ? tool : ''}
+						onchange={(e) => setTool(e.currentTarget.value)}
+						>{#if !canSubmit}<option value="" disabled>{msg('chooseTool')}</option
+							>{/if}{#each tools as c (c.id)}<option value={c.id}>{c.title}</option>{/each}</select
 					></label
 				>{/if}
 			<Attachments
@@ -728,6 +758,10 @@
 		{#if !snapshot}<p class="pa-muted pa-pane">{msg('loading')}</p>
 		{:else if tab === 'settings'}<SettingsView
 				{snapshot}
+				{settingsFocus}
+				{model}
+				{localAllowed}
+				onmodelchange={() => modelRefresh++}
 				{sources}
 				{pending}
 				onjob={fromSkill}
@@ -761,7 +795,8 @@
 					onedit={editDraft}
 					onsource={sourceOpen}
 					onexample={() => void submit(true)}
-					onsettings={() => show('settings')}
+					onsettings={() => show('settings', 'permissions')}
+					available={readyOptions}
 					oncontext={() => (sheet = 'context')}
 					onbackground={background}
 					oncue={signal}
@@ -774,6 +809,17 @@
 					void submit();
 				}}
 			>
+				{#if tool === 'chat.ask' && selected && selected.effective !== 'never' && model.state !== 'ready'}
+					<div class="pa-model-status" role="status">
+						<span>{modelStatus(model)}</span>
+						{#if model.state !== 'checking'}<button
+								type="button"
+								class="pa-link"
+								onclick={() => show('settings', 'model')}
+								>{msg('model')}<Icon name="chevronRight" size={14} /></button
+							>{/if}
+					</div>
+				{/if}
 				{#if sources.length || tool === 'chat.cloud' || office}<div class="pa-chips">
 						{#if tool === 'chat.cloud' || office}<button
 								type="button"
@@ -800,11 +846,11 @@
 						bind:this={input}
 						bind:value={prompt}
 						aria-label={msg('prompt')}
-						placeholder={msg(
-							tool === 'chat.ask' && selected?.effective === 'never'
-								? 'modelUnavailable'
-								: 'placeholder',
-						)}
+						placeholder={tool === 'chat.ask' && selected?.effective === 'never'
+							? msg('modelUnavailable')
+							: tool === 'chat.ask' && model.state === 'ready'
+								? t('papim.model.ask', { model: model.model ?? '' })
+								: msg('placeholder')}
 						onkeydown={onkey}></textarea>
 					<button
 						type="button"
@@ -875,7 +921,9 @@
 			{calm}
 			caps={snapshot?.capabilities ?? []}
 			admin={session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}
-			onsettings={() => show('settings')}
+			onsettings={() => show('settings', 'permissions')}
+			{model}
+			onmodel={() => show('settings', 'model')}
 			onturn={voiceTurn}
 			onupdate={(job) => {
 				if (snapshot && job.request.chatId === chatId)

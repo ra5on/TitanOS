@@ -9,6 +9,7 @@
 		chat,
 		jobs,
 		caps,
+		available,
 		settings,
 		reduced,
 		select,
@@ -24,6 +25,7 @@
 		chat: Chat | undefined;
 		jobs: Job[];
 		caps: Capability[];
+		available: Capability[];
 		settings: Settings;
 		reduced: boolean;
 		select: (j: Job) => void;
@@ -36,7 +38,6 @@
 		onbackground: (j: Job) => void;
 		oncue: (stops: string[], tool: string) => void;
 	} = $props();
-	const available = $derived(caps.filter((c) => c.effective !== 'never'));
 	const example = $derived(available.find((c) => c.id === 'agent.example'));
 	function date(iso: string) {
 		return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });

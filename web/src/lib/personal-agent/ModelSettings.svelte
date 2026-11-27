@@ -2,6 +2,12 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { t, apiErrorText } from '#lib/i18n/index.svelte.ts';
+	import { modelStatus, type LocalModel } from './model.ts';
+	let {
+		model,
+		localAllowed,
+		onmodelchange,
+	}: { model: LocalModel; localAllowed: boolean; onmodelchange: () => void } = $props();
 	type Profile = { local: string; cloud: string; keySet: boolean };
 	let profile = $state<Profile | null>(null),
 		models = $state<string[]>([]),
@@ -22,8 +28,12 @@
 		problem = '';
 		message = '';
 		try {
+			onmodelchange();
 			models = await api.get<string[]>('/personal-agent/models');
-			message = t('papim.model.found', { count: models.length });
+			message =
+				models.length === 1
+					? t('papim.model.foundOne')
+					: t('papim.model.found', { count: models.length });
 		} catch (e) {
 			problem = apiErrorText(e);
 		} finally {
@@ -45,6 +55,7 @@
 			key = '';
 			forget = false;
 			message = t('papim.model.saved');
+			onmodelchange();
 		} catch (e) {
 			problem = apiErrorText(e);
 		} finally {
@@ -56,18 +67,23 @@
 <section class="model">
 	<h3>{t('papim.model.title')}</h3>
 	{#if profile}
-		<label
-			>{t('papim.model.local')}<input
-				list="personal-ollama-models"
-				bind:value={profile.local}
-				placeholder={t('papim.model.auto')}
-				maxlength="128"
-			/></label
-		>
-		<datalist id="personal-ollama-models"
-			>{#each models as model (model)}<option value={model}></option>{/each}</datalist
-		>
-		<button class="btn" disabled={busy} onclick={scan}>{t('papim.model.scan')}</button>
+		{#if localAllowed}
+			<p role="status">{modelStatus(model)}</p>
+			{#if model.state === 'offline'}<p>{t('papim.model.startLocal')}</p>
+			{:else if model.state === 'missing'}<p>{t('papim.model.chooseLocal')}</p>{/if}
+			<label
+				>{t('papim.model.local')}<input
+					list="personal-ollama-models"
+					bind:value={profile.local}
+					placeholder={t('papim.model.auto')}
+					maxlength="128"
+				/></label
+			>
+			<datalist id="personal-ollama-models"
+				>{#each models as model (model)}<option value={model}></option>{/each}</datalist
+			>
+			<button class="btn" disabled={busy} onclick={scan}>{t('papim.model.scan')}</button>
+		{:else}<p>{t('papim.model.noAccess')}</p>{/if}
 		<details>
 			<summary>{t('papim.model.cloud')}</summary>
 			<p>{t('papim.model.scope')}</p>

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	pa "github.com/ra5on/TitanOS/backend/internal/personalagent"
 	"github.com/ra5on/TitanOS/backend/internal/volumedata"
@@ -59,6 +60,7 @@ func newPersonalAccount() personalAccount {
 }
 
 type personalRuntime struct {
+	localModel  *agent.Ollama                  // shared loopback connection; model preference remains per account
 	replyVoices map[*personalReplyRun]struct{} // guarded by mu; live HTTP playback requests
 
 	watch      sync.Mutex

@@ -178,6 +178,8 @@ async function run(width, height) {
       snapshot.jobs.push(j);
       return route.fulfill({ json: j });
     }
+    if (part === "model/readiness")
+      return route.fulfill({ json: { state: "ready", model: "Testmodell" } });
     if (part === "state") return route.fulfill({ json: snapshot });
     if (part === "settings") {
       Object.assign(snapshot.settings, body);

@@ -1019,3 +1019,13 @@ main:has(> .pa-shell) {
 		padding-inline: clamp(0px, 0.5vw, 9px);
 	}
 }
+
+.pa-model-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.25rem 0.65rem;
+	margin-block-end: 0.35rem;
+	color: var(--pa-text);
+	font-size: 0.875rem;
+}
