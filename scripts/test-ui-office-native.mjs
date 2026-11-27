@@ -211,7 +211,18 @@ async function runLive() {
         });
         const page = await ctx.newPage(),
           errors = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => {
+          console.error(engine, id, "pageerror", e.stack || e.message);
+          errors.push(e.message);
+        });
+        page.on("console", (m) => {
+          if (
+            m.type() === "error" &&
+            (m.location().url.includes("/webapps/") ||
+              /wasm|panicked/i.test(m.text()))
+          )
+            console.error(engine, id, m.location().url, m.text());
+        });
         page.setDefaultTimeout(25000);
         const doc = "Bereiche." + example.ext;
         const params = new URLSearchParams({ root, path: doc });

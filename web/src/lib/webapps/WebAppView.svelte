@@ -331,6 +331,10 @@
 
 	// Keep the receipt with the exact bytes through queued writes, Save As and conflict dialogs.
 	const saveTickets = new WeakMap<ArrayBuffer, string>();
+	const saveOrigins = new WeakMap<ArrayBuffer, () => boolean>();
+	function sameSaveOrigin(bytes: ArrayBuffer) {
+		return saveOrigins.get(bytes)?.() === true;
+	}
 	function receipt(bytes: ArrayBuffer, ok: boolean, text?: string) {
 		const ticket = saveTickets.get(bytes);
 		saveTickets.delete(bytes);
@@ -379,22 +383,21 @@
 		const owner = user(),
 			opened = current?.doc,
 			node = activeNode();
+		saveOrigins.set(
+			bytes,
+			() =>
+				owner === user() &&
+				node === activeNode() &&
+				opened?.root === current?.doc.root &&
+				opened?.path === current?.doc.path,
+		);
 		queue = queue
-			.then(() => {
-				if (
-					owner !== user() ||
-					node !== activeNode() ||
-					opened?.root !== current?.doc.root ||
-					opened?.path !== current?.doc.path
-				)
-					return receipt(bytes, false);
-				return onSave(name, saveAs, bytes);
-			})
+			.then(() => (sameSaveOrigin(bytes) ? onSave(name, saveAs, bytes) : receipt(bytes, false)))
 			.catch((e) => receipt(bytes, false, apiErrorText(e)));
 	}
 
 	async function writeOriginal(bytes: ArrayBuffer, expect?: string) {
-		if (!current) return receipt(bytes, false);
+		if (!current || !sameSaveOrigin(bytes)) return receipt(bytes, false);
 		const openedDoc = current,
 			owner = user();
 		busy = true;
@@ -456,6 +459,7 @@
 
 	/** A new file (Save As, an export, a copy); adopt = it becomes the window's file. */
 	async function writeNew(target: DocRef, bytes: ArrayBuffer, adopt: boolean, expect = 'none') {
+		if (!sameSaveOrigin(bytes)) return receipt(bytes, false);
 		const previous = current,
 			owner = user();
 		busy = true;
