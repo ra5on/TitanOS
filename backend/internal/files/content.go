@@ -24,6 +24,7 @@ var ErrChanged = errors.New("files: the file changed since it was opened")
 
 // ContentResult is the answer to a whole-file write.
 type ContentResult struct {
+	Version  string    `json:"version,omitempty"`
 	Modified time.Time `json:"modified"`
 	// MTime is the modification time in nanoseconds since 1970, as text
 	// (it does not fit a JSON number).
@@ -221,7 +222,7 @@ func (m *Manager) WriteContent(root Root, name string, body io.Reader, size int6
 		return ContentResult{}, mapError(err)
 	}
 	mod := info.ModTime()
-	return ContentResult{Modified: mod.UTC(), MTime: strconv.FormatInt(mod.UnixNano(), 10), Size: info.Size()}, nil
+	return ContentResult{Version: entryVersion(info), Modified: mod.UTC(), MTime: strconv.FormatInt(mod.UnixNano(), 10), Size: info.Size()}, nil
 }
 
 // freeBytes is the space left for the account in dir, -1 if unknown.

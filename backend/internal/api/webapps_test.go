@@ -28,11 +28,19 @@ func TestFileContent(t *testing.T) {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}
 	var saved struct {
+		Version  string    `json:"version"`
 		Modified time.Time `json:"modified"`
 		MTime    string    `json:"mtime"`
 		Size     int64     `json:"size"`
 	}
 	json.Unmarshal(body, &saved)
+	check, props := ts.request("GET", "/api/v1/files/properties?root=share/Docs&path=Bericht.docx", nil)
+	var disk struct {
+		Version string `json:"version"`
+	}
+	if check.StatusCode != 200 || json.Unmarshal(props, &disk) != nil || len(saved.Version) != 64 || disk.Version != saved.Version {
+		t.Fatalf("saved revision %q does not match properties %q", saved.Version, disk.Version)
+	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "Bericht.docx")); string(data) != "v1" || saved.Size != 2 || saved.MTime == "" {
 		t.Fatalf("%s %+v", data, saved)
 	}
