@@ -1,6 +1,12 @@
 {
 	"error.advisor_running": "The hardware adviser is already checking. Please wait until it is done.",
 	"error.agent_busy": "The AI agent is still working. Stop it or wait until it is done.",
+	"error.agent_denied": "This account lacks the Agent permission for that.",
+	"error.agent_changed": "That has changed in the meantime. Reload the view and try again.",
+	"error.agent_invalid": "The Agent cannot use this input.",
+	"error.agent_missing": "That no longer exists.",
+	"error.agent_storage_full": "The Agent storage of this account is full. Delete old chats.",
+	"error.agent_storage_unavailable": "The Agent data cannot be reached right now. Is the volume mounted?",
 	"error.agent_cluster": "Models are downloaded on the admin node, not on this NAS.",
 	"error.agent_feature_off": "This function of the AI agent is switched off.",
 	"error.agent_limit": "As many chats are running at once as the settings of the AI agent allow. Wait until one is done, or stop one.",

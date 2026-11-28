@@ -7,6 +7,7 @@
 	import { nativeDraftLink, resultLink } from './open.ts';
 	import { jobOutput, mailFields, sendPreview, sourceLocation, stepTool } from './sources.ts';
 	import { depart } from './guide.ts';
+	import { answerHtml } from './markdown.ts';
 	import type { Source, Job, Action, Capability } from './api.ts';
 	let {
 		job,
@@ -118,7 +119,7 @@
 					</div>{/if}{/each}
 		</dl>
 		<div class="pa-readable">{mail.text}</div>
-	{:else if detail?.text}<div class="pa-readable">{detail.text}</div>{/if}
+	{:else if detail?.text}<div class="pa-readable pa-md">{@html answerHtml(detail.text)}</div>{/if}
 	{#if job.request.tool !== 'office.inspect' && (before !== null || after !== null)}
 		<section class:pa-highlight={first} class="pa-diff" data-guide="region">
 			<h3>{typeof fields.region === 'string' ? fields.region : msg('whatChanged')}</h3>

@@ -112,6 +112,12 @@ export function getMemory() {
 export function saveMemory(items: string[]) {
 	return api.put<{ items: string[] }>(base + '/memory', { items });
 }
+export function renameChat(id: string, title: string) {
+	return api.put<Chat>(base + '/chats/' + esc(id), { title });
+}
+export function deleteChat(id: string) {
+	return api.delete(base + '/chats/' + esc(id));
+}
 export function listSkills() {
 	return api.get<{ skills: Skill[] }>(base + '/skills');
 }

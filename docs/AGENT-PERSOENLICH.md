@@ -20,6 +20,16 @@ Ein wartender Auftrag akzeptiert `POST /jobs/{id}/approve` mit seinem aktuellen 
 
 Vor jeder externen Nebenwirkung setzt der Broker dauerhaft die Phase `executing`. Eine ausgebliebene Bestätigung, etwa nach einem Neustart, ergibt `failed/uncertain`. Für diesen Fall zeigt der Auftrag die letzte konkrete Vorschau. Eine bestätigte Ablehnung ergibt `effect_rejected`. Bei einer bestätigten Durchführung speichert der Broker einen Schrittbeleg und das Ergebnis. Adapter können für dasselbe native Objekt auch über verschiedene Request-IDs hinweg einen gemeinsamen Ausführungsschlüssel verwenden.
 
+## Fragen, Fehler und Chats (seit 1.38)
+
+Eine Frage an das lokale Modell (`chat.ask`) läuft ohne Freigabe: Obergrenze und persönliche Voreinstellung sind ab Werk `auto` (Entscheidung des Inhabers vom 28.11.2026). Ein Administrator kann sie weiter auf `ask` oder `never` begrenzen, ein Konto selbst auf `ask` stellen. Werkzeuge mit Wirkung nach außen behalten ihre Freigaben.
+
+Kann das lokale Modell nicht antworten, trägt der Auftrag den Grund statt `tool_failed`: `model_offline` (Ollama auf dem NAS antwortet nicht), `model_missing` (kein passendes Modell), `model_timeout` (keine Antwort in zwei Minuten), `model_empty` (keine verwendbare Antwort) oder `model_failed` (Ollama hat abgebrochen). Die Oberfläche nennt jeweils den nächsten Schritt.
+
+TitanOS ruft das lokale Modell mit einem Fenster von höchstens 16 384 Token (oder dem kleineren Fenster des Modells), `keep_alive` 30 Minuten und ausgeschaltetem Denken auf; ein Modell, das sich nicht ausschalten lässt, denkt auf der Stufe `low`. Die Werte liest titand einmal je Stunde und Modell über `/api/show`.
+
+Antworten sind Markdown und werden mit markdown-it angezeigt (Überschriften, Listen, Zitate, Tabellen, Code, Aufgabenlisten). HTML in einer Antwort bleibt Text; Links führen nur zu `http(s)`, `mailto:` und Seiten von TitanOS. Ein neuer Chat heißt nach den Wörtern seiner ersten Frage, die in 80 Zeichen passen, nie mitten im Wort geteilt. `PUT /chats/{id}` mit `title` benennt ihn um (eine Zeile, höchstens 120 Zeichen), `DELETE /chats/{id}` löscht ihn mit seinen Aufträgen. Solange ein Auftrag des Chats gerade nach außen schreibt (`executing`), antwortet das Löschen mit 409. Der Vermerk einer bereits ausgeführten Wirkung bleibt, damit ein gelöschter Auftrag nie wiederholt wird.
+
 ## Lokales Chatmodell einrichten
 
 Im Chat führt „Modellverbindung“ direkt zur persönlichen Auswahl. „Lokale Modelle suchen“ zeigt die auf dem NAS verfügbaren Chatmodelle. Nach dem Speichern steht das gewählte Modell dem Konto zur Verfügung. Bei leerem Feld verwendet der Agent das erste geeignete Modell. Ist ein ausdrücklich gewähltes Modell inzwischen verschwunden, kann das Konto ein anderes auswählen.

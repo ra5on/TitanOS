@@ -82,6 +82,16 @@ export function failure(job: Job): string {
 			return msg('revoked');
 		case 'tool_failed':
 			return msg('failedTool');
+		case 'model_offline':
+			return msg('failedModelOffline');
+		case 'model_missing':
+			return msg('failedModelMissing');
+		case 'model_timeout':
+			return msg('failedModelTimeout');
+		case 'model_empty':
+			return msg('failedModelEmpty');
+		case 'model_failed':
+			return msg('failedModel');
 		default:
 			return job.error || '';
 	}
