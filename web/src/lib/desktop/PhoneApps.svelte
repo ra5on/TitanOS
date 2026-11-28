@@ -274,6 +274,23 @@
 	.empty {
 		margin-top: 16px;
 	}
+	/* §121: the large title grows smaller as the list scrolls up (WebKit 26, Chrome). */
+	@supports (animation-timeline: scroll()) {
+		@media (prefers-reduced-motion: no-preference) {
+			h1 {
+				animation: title-up linear both;
+				animation-timeline: scroll(nearest);
+				animation-range: 0 90px;
+				transform-origin: left center;
+			}
+		}
+	}
+	@keyframes title-up {
+		to {
+			transform: scale(0.72);
+			opacity: 0.6;
+		}
+	}
 	@media (prefers-reduced-transparency: reduce) {
 		.search,
 		.rows,

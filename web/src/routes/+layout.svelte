@@ -41,6 +41,7 @@
 	import { desktop } from '#lib/desktop/wm.svelte.ts';
 	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { uploads } from '#lib/uploads.svelte.ts';
+	import { keepAwake } from '#lib/wake-lock.svelte.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
 	import { THEMES } from '#lib/theme/themes.ts';
 	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
@@ -227,6 +228,32 @@
 		if (desktopSurface) root.dataset.nordDesktop = page.url.pathname.split('/')[1] || 'desktop';
 		else delete root.dataset.nordDesktop;
 		return () => delete root.dataset.nordDesktop;
+	});
+	// §121: files being uploaded keep the screen on (a phone would stop them when it sleeps).
+	keepAwake(() =>
+		uploads.items.some(
+			(u) => u.state === 'uploading' || u.state === 'queued' || u.state === 'retrying',
+		),
+	);
+	// §121: on iPhone and iPad a switch gets the attribute `switch` (Safari 18+):
+	// WebKit then gives the short haptic feedback of a system switch. The look
+	// stays TitanOS's (input.switch in app.css). Not checked on a real iPhone.
+	$effect(() => {
+		const apple =
+			/iP(hone|ad|od)/.test(navigator.userAgent) ||
+			(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+		if (!apple) return;
+		const mark = (root: ParentNode) =>
+			root
+				.querySelectorAll?.('input[type="checkbox"].switch:not([switch])')
+				.forEach((el) => el.setAttribute('switch', ''));
+		mark(document);
+		const observer = new MutationObserver((records) => {
+			for (const r of records)
+				for (const node of r.addedNodes) if (node instanceof Element) mark(node.parentNode ?? node);
+		});
+		observer.observe(document.body, { childList: true, subtree: true });
+		return () => observer.disconnect();
 	});
 </script>
 

@@ -198,3 +198,29 @@
 		--desk-blur: 0px !important;
 	}
 }
+
+/* §121: where Safari (27+) and Chrome offer it, the phone's selection lists
+   are drawn in TitanOS's colors instead of the system's list. Elsewhere the
+   system shows its own list as before. */
+@supports (appearance: base-select) {
+	[data-nordlicht] select.field,
+	[data-nordlicht] select.field::picker(select) {
+		appearance: base-select;
+	}
+	[data-nordlicht] select.field::picker(select) {
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--surface);
+		color: var(--text);
+		padding: 6px;
+		box-shadow: 0 12px 36px rgb(0 0 0 / 0.4);
+	}
+	[data-nordlicht] select.field option {
+		min-height: 44px;
+		padding: 8px 12px;
+		border-radius: 10px;
+	}
+	[data-nordlicht] select.field option:checked {
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+	}
+}
