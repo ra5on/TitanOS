@@ -981,6 +981,7 @@ func TestVMsAreForAdministrators(t *testing.T) {
 	for _, tc := range [][2]string{
 		{"GET", "/api/v1/vms"},
 		{"GET", "/api/v1/vms/host"},
+		{"GET", "/api/v1/vms/space"},
 		{"GET", "/api/v1/hardware"},
 		{"GET", "/api/v1/vms/x/serial"},
 		{"GET", "/api/v1/vms/x/snapshots"},

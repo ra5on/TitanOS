@@ -4,16 +4,45 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import PhoneDockSize from './PhoneDockSize.svelte';
+	import Segments from '#lib/components/Segments.svelte';
+	import { goto } from '$app/navigation';
 	import {
+		PHONE_BOTTOMS,
 		PHONE_DOCK_DEFAULT,
 		PHONE_DOCK_MAX,
 		PHONE_FAVORITES_DEFAULT,
+		phoneBottom,
 		phoneDockSize,
+		startSections,
+		type StartSection,
 	} from './phone-home.ts';
 	import { programs } from './programs.svelte.ts';
 	import { desktop, savePrefs } from './wm.svelte.ts';
 	import { phoneChrome } from './immersive-phone.svelte.ts';
-	let section = $state<'favorites' | 'dock'>(phoneChrome.customizeDock ? 'dock' : 'favorites');
+	// §121: the start page's sections, its apps (favorites) and what stands at the bottom.
+	let section = $state<'sections' | 'favorites' | 'dock'>(
+		phoneChrome.customizeDock ? 'dock' : 'sections',
+	);
+	const ordered = $derived(startSections(desktop.prefs.phone));
+	function saveSections(next: { id: StartSection; shown: boolean }[]) {
+		savePrefs((p) => {
+			p.phone = {
+				...p.phone,
+				start: {
+					...p.phone.start,
+					order: next.map((s) => s.id),
+					hidden: next.filter((s) => !s.shown).map((s) => s.id),
+				},
+			};
+		});
+	}
+	function moveSection(i: number, direction: number) {
+		const next = [...ordered];
+		const j = i + direction;
+		if (j < 0 || j >= next.length) return;
+		[next[i], next[j]] = [next[j], next[i]];
+		saveSections(next);
+	}
 	let choice = $state('');
 	const all = $derived(programs());
 	const byKey = $derived(new Map(all.map((app) => [app.key, app])));
@@ -48,80 +77,136 @@
 
 <Dialog title={t('phone.nord.customize')} onclose={() => (phoneChrome.customize = false)} dismiss>
 	<div class="switches">
-		{#each ['favorites', 'dock'] as const as key (key)}
+		{#each ['sections', 'favorites', 'dock'] as const as key (key)}
 			<button
 				type="button"
 				aria-pressed={section === key}
 				onclick={() => {
-					section = key === 'dock' ? 'dock' : 'favorites';
+					section = key;
 					choice = '';
-				}}>{t(`phone.nord.${key}`)}</button
+				}}
+				>{t(
+					key === 'sections'
+						? 'start.sections'
+						: key === 'favorites'
+							? 'phone.tabs.apps'
+							: 'phone.settings.bottom',
+				)}</button
 			>
 		{/each}
 	</div>
-	{#if section === 'dock'}
-		<label class="enabled"
-			><span>{t('phone.settings.dock')}</span><input
-				type="checkbox"
-				checked={phone.dock.show}
-				onchange={(e) => savePrefs((p) => (p.phone.dock.show = e.currentTarget.checked))}
-			/></label
+	{#if section === 'sections'}
+		<ul>
+			{#each ordered as item, i (item.id)}
+				{@const name = t(`start.section.${item.id}`)}
+				<li>
+					<input
+						type="checkbox"
+						role="switch"
+						class="switch"
+						aria-label={t('start.section.show', { name })}
+						checked={item.shown}
+						onchange={(e) =>
+							saveSections(
+								ordered.map((s) =>
+									s.id === item.id ? { ...s, shown: e.currentTarget.checked } : s,
+								),
+							)}
+					/><span>{name}</span>
+					<button
+						type="button"
+						aria-label={t('phone.nord.earlier', { name })}
+						disabled={i === 0}
+						onclick={() => moveSection(i, -1)}><Icon name="arrowUp" size={17} /></button
+					>
+					<button
+						type="button"
+						aria-label={t('phone.nord.later', { name })}
+						disabled={i === ordered.length - 1}
+						onclick={() => moveSection(i, 1)}><Icon name="arrowDown" size={17} /></button
+					>
+				</li>
+			{/each}
+		</ul>
+		<button
+			type="button"
+			class="btn pages"
+			onclick={() => {
+				phoneChrome.customize = false;
+				void goto('/?phone=pages');
+			}}><Icon name="grid" size={16} />{t('start.pages')}</button
 		>
+	{/if}
+	{#if section === 'dock'}
 		<div class="size">
-			<b>{t('phone.nord.size')}</b><PhoneDockSize
-				size={phoneDockSize(phone.dock.size)}
-				onchange={(s) => savePrefs((p) => (p.phone.dock.size = s))}
+			<Segments
+				compact
+				label={t('phone.settings.bottom')}
+				value={phoneBottom(phone)}
+				options={PHONE_BOTTOMS.map((value) => ({
+					value,
+					label: t(`phone.settings.bottom.${value}`),
+				}))}
+				onchange={(bottom) => savePrefs((p) => (p.phone = { ...p.phone, bottom }))}
 			/>
 		</div>
+		{#if phoneBottom(phone) === 'dock'}<div class="size">
+				<b>{t('phone.nord.size')}</b><PhoneDockSize
+					size={phoneDockSize(phone.dock.size)}
+					onchange={(s) => savePrefs((p) => (p.phone.dock.size = s))}
+				/>
+			</div>{/if}
 	{/if}
-	<ul>
-		{#each pinned as key, i (key)}
-			{@const app = byKey.get(key)!}
-			<li>
-				<DesktopIcon
-					glyph={app.glyph}
-					gradient={app.gradient}
-					image={app.image}
-					size={29}
-					name=""
-				/><span>{app.label}</span>
-				<button
+	{#if section !== 'sections' && (section === 'favorites' || phoneBottom(phone) === 'dock')}
+		<ul>
+			{#each pinned as key, i (key)}
+				{@const app = byKey.get(key)!}
+				<li>
+					<DesktopIcon
+						glyph={app.glyph}
+						gradient={app.gradient}
+						image={app.image}
+						size={29}
+						name=""
+					/><span>{app.label}</span>
+					<button
+						type="button"
+						aria-label={t('phone.nord.earlier', { name: app.label })}
+						disabled={i === 0}
+						onclick={() => move(key, -1)}><Icon name="arrowUp" size={17} /></button
+					>
+					<button
+						type="button"
+						aria-label={t('phone.nord.later', { name: app.label })}
+						disabled={i === pinned.length - 1}
+						onclick={() => move(key, 1)}><Icon name="arrowDown" size={17} /></button
+					>
+					<button
+						type="button"
+						aria-label={t('phone.nord.remove', { name: app.label })}
+						onclick={() => update(list.filter((k) => k !== key))}
+						><Icon name="close" size={18} /></button
+					>
+				</li>
+			{/each}
+		</ul>
+		{#if available.length && list.length < PHONE_DOCK_MAX}
+			<div class="add">
+				<select class="field" aria-label={t('phone.nord.chooseApp')} bind:value={choice}
+					><option value="">{t('phone.nord.chooseApp')}</option>
+					{#each available as app (app.key)}<option value={app.key}>{app.label}</option>{/each}
+				</select><button
 					type="button"
-					aria-label={t('phone.nord.earlier', { name: app.label })}
-					disabled={i === 0}
-					onclick={() => move(key, -1)}><Icon name="arrowUp" size={17} /></button
+					class="btn"
+					disabled={!choice}
+					aria-label={t('phone.nord.add')}
+					onclick={() => {
+						if (choice && !list.includes(choice)) update([...list, choice]);
+						choice = '';
+					}}><Icon name="plus" size={18} /></button
 				>
-				<button
-					type="button"
-					aria-label={t('phone.nord.later', { name: app.label })}
-					disabled={i === pinned.length - 1}
-					onclick={() => move(key, 1)}><Icon name="arrowDown" size={17} /></button
-				>
-				<button
-					type="button"
-					aria-label={t('phone.nord.remove', { name: app.label })}
-					onclick={() => update(list.filter((k) => k !== key))}
-					><Icon name="close" size={18} /></button
-				>
-			</li>
-		{/each}
-	</ul>
-	{#if available.length && list.length < PHONE_DOCK_MAX}
-		<div class="add">
-			<select class="field" aria-label={t('phone.nord.chooseApp')} bind:value={choice}
-				><option value="">{t('phone.nord.chooseApp')}</option>
-				{#each available as app (app.key)}<option value={app.key}>{app.label}</option>{/each}
-			</select><button
-				type="button"
-				class="btn"
-				disabled={!choice}
-				aria-label={t('phone.nord.add')}
-				onclick={() => {
-					if (choice && !list.includes(choice)) update([...list, choice]);
-					choice = '';
-				}}><Icon name="plus" size={18} /></button
-			>
-		</div>
+			</div>
+		{/if}
 	{/if}
 	<div class="dialog-actions">
 		<button type="button" class="btn btn-primary" onclick={() => (phoneChrome.customize = false)}
@@ -159,7 +244,6 @@
 		margin: 12px 0;
 	}
 	li,
-	.enabled,
 	.add,
 	.size {
 		display: flex;
@@ -188,17 +272,19 @@
 		color: inherit;
 		cursor: pointer;
 	}
+	.pages {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 4px 0 8px;
+	}
 	button:disabled {
 		opacity: 0.35;
 	}
-	.size,
-	.enabled {
+	.size {
 		margin: 14px 0;
 		justify-content: space-between;
 		flex-wrap: wrap;
-	}
-	.enabled {
-		min-height: 44px;
 	}
 	select {
 		flex: 1;
