@@ -184,5 +184,10 @@
 	"phoneapps.webapps": "Web-Apps",
 	"phoneapps.status.storage": "{count} Volumes · {used} belegt",
 	"phoneapps.status.containers": "{running} von {total} Containern laufen",
-	"phoneapps.none": "Keine Apps in dieser Auswahl."
+	"phoneapps.none": "Keine Apps in dieser Auswahl.",
+	"overview.power": "Ein/Aus",
+	"overview.allGood": "Alles in Ordnung",
+	"overview.attention": "Bitte ansehen",
+	"overview.volumesOk": "{count} Volumes in Ordnung",
+	"overview.temperature": "Temperatur"
 }

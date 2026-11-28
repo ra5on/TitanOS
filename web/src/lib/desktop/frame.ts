@@ -59,7 +59,7 @@ export type FrameMessage =
 	/** The NVR's window changes the arrangement or a view option; the desktop checks and saves it. */
 	| { type: 'titanos-nvr-set'; prefs: unknown }
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
-	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
+	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' | 'restart' | 'shutdown' }
 	| { type: 'titanos-console'; session: unknown }
 	/** PLAN 66: the file manager in a window drags files (null: the drag ended). */
 	| { type: 'titanos-file-drag'; drag: { root: string; paths: string[] } | null }

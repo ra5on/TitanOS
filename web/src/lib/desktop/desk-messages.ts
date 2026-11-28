@@ -8,6 +8,7 @@ import { frameMessage, ownPath } from './frame.ts';
 import { appForPath, taskPage } from './apps.ts';
 import { t } from '../i18n/index.svelte.ts';
 import { showToast } from '../toast.svelte.ts';
+import { session } from '../session.svelte.ts';
 import { PHONE_BOTTOMS, phoneBottom, phoneDockSize, type PhoneBottom } from './phone-home.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
@@ -56,7 +57,12 @@ async function openFile(msg: { root: string; path: string; app?: string }) {
  * Listens while the desktop is shown; returns how to stop. `dockNow` gives the
  * dock's settings as plain data, `onwallpaper` opens the wallpaper dialog.
  */
-export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): () => void {
+export function watchWindows(
+	dockNow: () => unknown,
+	onwallpaper: () => void,
+	// §121: Systemsteuerung › Übersicht asks for the desktop's dialog of restart and shutdown.
+	onpower: (action: 'restart' | 'shutdown') => void = () => {},
+): () => void {
 	function fromWindow(event: MessageEvent) {
 		const msg = frameMessage(event);
 		if (!msg) return;
@@ -103,6 +109,12 @@ export function watchWindows(dockNow: () => unknown, onwallpaper: () => void): (
 		else if (msg.type === 'titanos-nvr-set')
 			savePrefs((p) => (p.nvr = sanitizeNvrPrefs(msg.prefs)));
 		else if (msg.type === 'titanos-desk-dialog' && msg.dialog === 'wallpaper') onwallpaper();
+		else if (
+			msg.type === 'titanos-desk-dialog' &&
+			(msg.dialog === 'restart' || msg.dialog === 'shutdown') &&
+			['owner', 'admin'].includes(session.data?.user?.role ?? '')
+		)
+			onpower(msg.dialog);
 		else if (msg.type === 'titanos-file-drag') {
 			// PLAN 66: the file manager in a window drags files; web app windows take them.
 			setWindowDrag(msg.drag);
