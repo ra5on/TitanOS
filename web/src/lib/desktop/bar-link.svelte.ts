@@ -7,6 +7,7 @@ import {
 	PHONE_BOTTOMS,
 	phoneBottom,
 	phoneDockSize,
+	withBottom,
 	type PhoneBottom,
 	type PhoneDockSize,
 } from './phone-home.ts';
@@ -83,5 +84,5 @@ export function setPhoneBottom(bottom: PhoneBottom) {
 	barLink.phoneBottom = bottom;
 	if (inWindow)
 		window.parent.postMessage({ type: 'titanos-phone-bottom-set', bottom }, location.origin);
-	else savePrefs((p) => (p.phone = { ...p.phone, bottom }));
+	else savePrefs((p) => (p.phone = withBottom(p.phone, bottom)));
 }

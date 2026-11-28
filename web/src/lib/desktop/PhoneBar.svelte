@@ -20,6 +20,8 @@
 	import { mailUp } from '../tmail/levels.ts';
 	import { contactsUp } from '../pim/contact-levels.ts';
 	import { pagePath, pageTitle } from '../page-title.svelte.ts';
+	import { phoneBottom } from './phone-home.ts';
+	import { desktop } from './wm.svelte.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -162,6 +164,13 @@
 			size={30}
 			name=""
 		/>{/if}
+	<!-- §121: without the bar at the bottom the home screen stays one tap away from every level. -->
+	{#if up !== '/' && phoneBottom(desktop.prefs.phone) !== 'tabs'}<a
+			class="back"
+			href="/"
+			aria-label={t('desktop.phone.home')}
+			title={t('desktop.phone.home')}><Icon name="home" size={20} /></a
+		>{/if}
 	<span class="heading">
 		<b>{title}</b>
 		{#if host}<small
@@ -304,6 +313,9 @@
 	}
 	.phone-bar {
 		touch-action: pan-x;
+	}
+	a.back {
+		text-decoration: none;
 	}
 	.back {
 		width: 44px;

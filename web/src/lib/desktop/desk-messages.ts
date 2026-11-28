@@ -9,7 +9,13 @@ import { appForPath, taskPage } from './apps.ts';
 import { t } from '../i18n/index.svelte.ts';
 import { showToast } from '../toast.svelte.ts';
 import { session } from '../session.svelte.ts';
-import { PHONE_BOTTOMS, phoneBottom, phoneDockSize, type PhoneBottom } from './phone-home.ts';
+import {
+	PHONE_BOTTOMS,
+	phoneBottom,
+	phoneDockSize,
+	withBottom,
+	type PhoneBottom,
+} from './phone-home.ts';
 import { sanitizeDock } from './prefs.ts';
 import { findProgram, openProgram } from './programs.svelte.ts';
 import { anyUnsaved, closeWindow, desktop, frameOf, savePrefs, wm } from './wm.svelte.ts';
@@ -87,7 +93,7 @@ export function watchWindows(
 			sendBarToWindows(desktop.prefs.barLoad);
 		} else if (msg.type === 'titanos-phone-bottom-set') {
 			const bottom = msg.bottom as PhoneBottom;
-			if (PHONE_BOTTOMS.includes(bottom)) savePrefs((p) => (p.phone = { ...p.phone, bottom }));
+			if (PHONE_BOTTOMS.includes(bottom)) savePrefs((p) => (p.phone = withBottom(p.phone, bottom)));
 			sendBarToWindows(desktop.prefs.barLoad);
 		} else if (msg.type === 'titanos-phone-dock-set') {
 			savePrefs(

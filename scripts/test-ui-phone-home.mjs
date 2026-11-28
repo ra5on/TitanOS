@@ -77,7 +77,7 @@ async function phone({ theme = "graphit", reduced = false, desktop } = {}) {
     return route.fallback();
   });
   await page.goto(base + "/");
-  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home .pages").waitFor({ timeout: 15000 });
   await page.waitForTimeout(900);
   const cdp = await ctx.newCDPSession(page);
@@ -191,7 +191,7 @@ try {
   await page.waitForURL(/\/storage/);
   await page.locator(".phone-zoom").waitFor({ state: "detached" });
   await page.goto(base + "/");
-  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(700);
 
@@ -223,7 +223,7 @@ try {
   await hit.tap();
   await page.waitForURL(/\/settings\/appearance/);
   await page.goto(base + "/");
-  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(700);
 
@@ -340,17 +340,18 @@ try {
   await page.locator("[data-phone-done]").tap();
   await page.screenshot({ path: `${out}/dock-an.png` });
 
-  // The switch in Settings › Appearance › Dock.
+  // §121: Settings › Appearance › Dock › „Unten am Handy“: nothing switches the dock off too.
   await page.goto(base + "/settings/appearance?tab=dock");
-  const row = page.locator("#phone-dock");
+  const row = page.getByRole("radiogroup", { name: "Unten am Handy" });
   await row.waitFor({ timeout: 15000 });
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${out}/einstellung-handy-dock.png` });
-  await row.tap();
+  await row.getByRole("radio", { name: "Nichts" }).tap();
   await page.waitForTimeout(1900);
+  assert.equal(stored(data).bottom, "none");
   assert.equal(stored(data).dock.show, false);
   await page.goto(base + "/");
-  await page.getByRole("button", { name: "Seiten und Widgets" }).click();
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home .pages").waitFor();
   await page.waitForTimeout(900);
   assert.equal(await page.locator(".home .dock").count(), 0, "dock off");
@@ -376,7 +377,7 @@ try {
       "no movement with reduced motion",
     );
     await page.goto(base + "/");
-    await page.getByRole("button", { name: "Seiten und Widgets" }).click();
+    await page.goto(base + "/?phone=pages");
     await page.locator(".home .pages").waitFor();
     await page.waitForTimeout(700);
     await longPress(

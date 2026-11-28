@@ -510,7 +510,8 @@ for (const role of ["owner", "user"]) {
   await back.click();
   await page.waitForURL(/\/settings$/);
   await page.locator("#settings-home-areas").waitFor();
-  await page.locator("[data-phone-dock] .home-button").click();
+  // §121: the bar at the bottom leads to the start page.
+  await page.locator("[data-phone-tabs] a[href=\"/\"]").click();
   await page.waitForURL((url) => url.pathname === "/");
   await ctx.close();
 }

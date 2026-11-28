@@ -14,6 +14,7 @@
 		phoneBottom,
 		phoneDockSize,
 		startSections,
+		withBottom,
 		type StartSection,
 	} from './phone-home.ts';
 	import { programs } from './programs.svelte.ts';
@@ -147,7 +148,7 @@
 					value,
 					label: t(`phone.settings.bottom.${value}`),
 				}))}
-				onchange={(bottom) => savePrefs((p) => (p.phone = { ...p.phone, bottom }))}
+				onchange={(bottom) => savePrefs((p) => (p.phone = withBottom(p.phone, bottom)))}
 			/>
 		</div>
 		{#if phoneBottom(phone) === 'dock'}<div class="size">

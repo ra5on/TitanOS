@@ -19,16 +19,19 @@ if (output) await mkdir(output, { recursive: true });
 const errors = [];
 const create = fixtureFactory(browser, errors);
 
+// §121: one bar above every program. At the top level its back arrow leads
+// home; below it a separate home link does, since this account has neither
+// the bar nor the dock at the bottom.
 async function checkHeader(page) {
-  const header = page.locator(".nord-header");
-  const home = header.getByRole("link", {
-    name: "Zum Startbildschirm",
-    exact: true,
-  });
+  const header = page.locator("header.phone-bar");
+  await header.waitFor();
+  const home = header
+    .locator('a[href="/"], button[aria-label="Zum Startbildschirm"]')
+    .first();
   await home.waitFor();
-  assert.equal(await home.getAttribute("href"), "/");
-  assert.equal(await page.locator(".nord-header a[href='/']").count(), 1);
+  assert.equal(await page.locator(".nord-header").count(), 0, "no second head row");
   assert.equal(await page.locator("[data-phone-dock]:visible").count(), 0);
+  assert.equal(await page.locator("[data-phone-tabs]").count(), 0);
 
   const bounds = await home.evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -42,8 +45,9 @@ async function checkHeader(page) {
       [cx, r.top + 3],
       [cx, r.bottom - 3],
     ].every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
-    const overlap = [...el.closest("header").querySelectorAll("button")].some(
+    const overlap = [...el.closest("header").querySelectorAll("button, a")].some(
       (button) => {
+        if (button === el) return false;
         const b = button.getBoundingClientRect();
         return (
           Math.min(b.right, r.right) > Math.max(b.left, r.left) &&
@@ -61,7 +65,7 @@ async function checkHeader(page) {
     };
   });
   assert.ok(bounds.width >= 44 && bounds.height >= 44, JSON.stringify(bounds));
-  assert.ok(bounds.offset <= 1 && bounds.overflow <= 1, JSON.stringify(bounds));
+  assert.ok(bounds.overflow <= 1, JSON.stringify(bounds));
   assert.equal(bounds.active, true, "the tap area is unobstructed");
   assert.equal(
     bounds.overlap,

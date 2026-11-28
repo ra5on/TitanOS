@@ -117,10 +117,9 @@ async function run(asHomeApp, role) {
         (await trigger.locator(".current-name").innerText()).trim(),
         name,
       );
-      assert.equal(
-        (await trigger.locator(".switch-label").innerText()).trim(),
-        "NAS wechseln",
-      );
+      // §121: the start page's title is the NAS's name with an arrow; the
+      // button says what it does to screen readers ("Knoten wechseln, gerade: …").
+      assert.equal(await trigger.locator("svg").count(), 1);
       assert.ok((await trigger.getAttribute("aria-label"))?.includes(name));
     }
     async function choose(name) {

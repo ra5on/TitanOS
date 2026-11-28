@@ -110,6 +110,11 @@ export function phoneBottom(p: PhonePrefs): PhoneBottom {
 	return p.bottom ?? (p.dock.show ? 'tabs' : 'none');
 }
 
+/** §121: chooses what stands at the bottom; "Nichts" also switches the dock off, so the pages and older versions leave it out too. */
+export function withBottom(p: PhonePrefs, bottom: PhoneBottom): PhonePrefs {
+	return { ...p, bottom, dock: { ...p.dock, show: bottom !== 'none' } };
+}
+
 /** §121: the start page's sections in order, every known one once (new ones at the end). */
 export function startSections(p: PhonePrefs): { id: StartSection; shown: boolean }[] {
 	const order = [

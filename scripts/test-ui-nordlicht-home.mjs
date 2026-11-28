@@ -22,6 +22,8 @@ try {
     version: 1,
     wallpaper: { source: "builtin", id: "nordlicht", live: false },
     phone: {
+      // §121: this account chose the dock instead of the bar at the bottom.
+      bottom: "dock",
       dock: {
         custom: true,
         apps: ["app:files", "app:mail", "app:docker", "app:calendar", "app:settings", "app:storage"],
@@ -62,10 +64,11 @@ try {
   await page.getByRole("dialog", { name: "Startbildschirm anpassen" }).waitFor();
   await page.mouse.up();
   const editor = page.getByRole("dialog", { name: "Startbildschirm anpassen" });
+  await editor.getByRole("button", { name: "Apps", exact: true }).click();
   await editor.getByLabel("App auswählen").selectOption("app:calendar");
   await editor.getByLabel("App hinzufügen").click();
   await editor.getByLabel("„Kalender“ entfernen").waitFor();
-  await editor.getByRole("button", { name: "Dock", exact: true }).click();
+  await editor.getByRole("button", { name: "Unten am Handy", exact: true }).click();
   const saved = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === "/api/v1/preferences/desktop" &&
@@ -106,14 +109,19 @@ try {
   await page.waitForURL("**/notifications");
   await dock.getByRole("button", { name: "Zum Startbildschirm" }).click();
   await home.waitFor();
-  await home.getByRole("button", { name: "Alle Apps" }).click();
+  // §121: "Apps" leads to the list of all programs; the search opens the menu.
+  await home.locator("a.title-link").click();
+  await page.locator("[data-phone-apps]").waitFor();
+  await page.locator("[data-phone-apps] .search").click();
   await page.locator("dialog.library[open] .launcher").waitFor();
   await page.keyboard.press("Escape");
+  await dock.getByRole("button", { name: "Zum Startbildschirm" }).click();
+  await home.waitFor();
   await home.locator('[data-home-key="app:files"]').click();
   await page.waitForURL("**/files");
   await dock.getByRole("button", { name: "Zum Startbildschirm" }).click();
   await home.waitFor();
-  await home.getByRole("button", { name: "Seiten und Widgets" }).click();
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home .pages").waitFor();
   await page.locator(".home .top").getByRole("button", { name: "Zum Startbildschirm" }).click();
   await home.waitFor();
