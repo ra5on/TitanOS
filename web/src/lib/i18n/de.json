@@ -1211,7 +1211,7 @@
 	"apps.tips": "Hinweise des Autors vor der Installation",
 	"apps.knownTitle": "Bekannte Stores – von anderen gepflegt, von TitanOS nicht geprüft",
 	"apps.known.casaos": "rund 180 Apps, viele mit deutscher Beschreibung; der erste Abruf lädt etwa 240 MB",
-	"apps.known.bigbear": "rund 490 Apps, Beschreibungen auf Englisch",
+	"apps.known.linuxserver": "rund 250 Apps aus den Abbildern von LinuxServer.io, täglich aktualisiert, viele mit deutscher Beschreibung",
 	"apps.knownAdd": "Hinzufügen",
 	"terminal.title": "Terminal",
 	"terminal.sessions": "Sitzungen",

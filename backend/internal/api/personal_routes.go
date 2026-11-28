@@ -40,6 +40,8 @@ func (s *Server) registerPersonalAgent(mux *routeMux) {
 	mux.HandleFunc("DELETE /api/v1/personal-agent/skills/{id}", p(s.personalDeleteSkill))
 	mux.HandleFunc("POST /api/v1/personal-agent/skills/{id}/run", p(s.personalRunSkill))
 	mux.HandleFunc("GET /api/v1/personal-agent/search", p(s.personalSearch))
+	mux.HandleFunc("PUT /api/v1/personal-agent/chats/{id}", p(s.personalRenameChat))
+	mux.HandleFunc("DELETE /api/v1/personal-agent/chats/{id}", p(s.personalDeleteChat))
 	s.registerPersonalAttachments(mux)
 	s.registerPersonalPIMRoutes(mux)
 	s.registerPersonalContextRoutes(mux)

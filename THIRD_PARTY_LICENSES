@@ -78,6 +78,7 @@ noVNC                     MPL-2.0                 https://github.com/novnc/noVNC
 xterm.js                  MIT                     https://github.com/xtermjs/xterm.js
 hls.js                    Apache-2.0              https://github.com/video-dev/hls.js
 qrcode-generator          MIT                     https://github.com/kazuhikoarase/qrcode-generator
+markdown-it               MIT                     https://github.com/markdown-it/markdown-it
 IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 
 Remote view image (titanos-viewer-<version>.tar.zst, a separate release

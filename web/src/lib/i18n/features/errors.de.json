@@ -1,6 +1,12 @@
 {
 	"error.advisor_running": "Der Hardware-Berater prüft gerade schon. Bitte warte, bis er fertig ist.",
 	"error.agent_busy": "Der KI-Agent arbeitet gerade noch. Halte ihn an oder warte, bis er fertig ist.",
+	"error.agent_denied": "Dafür fehlt diesem Konto die Berechtigung im Agenten.",
+	"error.agent_changed": "Das hat sich inzwischen geändert. Lade die Ansicht neu und versuche es noch einmal.",
+	"error.agent_invalid": "Diese Angabe kann der Agent nicht verwenden.",
+	"error.agent_missing": "Das gibt es nicht mehr.",
+	"error.agent_storage_full": "Der Speicher des Agenten für dieses Konto ist voll. Lösche alte Chats.",
+	"error.agent_storage_unavailable": "Die Daten des Agenten sind gerade nicht erreichbar. Ist das Volume eingebunden?",
 	"error.agent_cluster": "Modelle werden auf dem Admin-Knoten heruntergeladen, nicht auf diesem NAS.",
 	"error.agent_feature_off": "Diese Funktion des KI-Agenten ist ausgeschaltet.",
 	"error.agent_limit": "Es laufen schon so viele Chats gleichzeitig, wie die Einstellungen des KI-Agenten erlauben. Warte, bis einer fertig ist, oder halte einen an.",

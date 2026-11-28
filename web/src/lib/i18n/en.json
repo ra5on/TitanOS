@@ -1211,7 +1211,7 @@
 	"apps.tips": "Notes from the author before installing",
 	"apps.knownTitle": "Known stores – maintained by others, not checked by TitanOS",
 	"apps.known.casaos": "about 180 apps; the first fetch downloads about 240 MB",
-	"apps.known.bigbear": "about 490 apps, descriptions in English",
+	"apps.known.linuxserver": "about 250 apps built from the LinuxServer.io images, updated daily",
 	"apps.knownAdd": "Add",
 	"terminal.title": "Terminal",
 	"terminal.sessions": "Sessions",

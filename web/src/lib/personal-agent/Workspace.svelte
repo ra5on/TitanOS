@@ -16,6 +16,8 @@
 		saveSettings,
 		requestId,
 		searchAgent,
+		renameChat,
+		deleteChat,
 		type SearchResult,
 		type Action,
 		type Job,
@@ -98,6 +100,32 @@
 	const narrow = $derived(width < 1040),
 		small = $derived(width < 710);
 	const chosen = $derived(snapshot?.chats.find((c) => c.id === chatId));
+	// 1.38 (§124): rename and delete a chat from its row in the list.
+	let chatTools = $state(''),
+		chatName = $state(''),
+		chatDelete = $state(false),
+		chatBusy = $state(false),
+		chatError = $state('');
+	function toggleChatTools(id: string, title: string) {
+		chatTools = chatTools === id ? '' : id;
+		chatName = title;
+		chatDelete = false;
+		chatError = '';
+	}
+	async function chatAction(work: () => Promise<unknown>, after?: () => void) {
+		chatBusy = true;
+		chatError = '';
+		try {
+			await work();
+			after?.();
+			chatTools = '';
+			setData(await agentState());
+		} catch (e) {
+			chatError = apiErrorText(e);
+		} finally {
+			chatBusy = false;
+		}
+	}
 	const rows = $derived(snapshot?.jobs.filter((j) => j.request.chatId === chatId) ?? []);
 	const detail = $derived(snapshot?.jobs.find((j) => j.id === detailId));
 	const counts = $derived(snapshot?.jobs.filter((j) => j.status === 'waiting').length ?? 0);
@@ -669,10 +697,55 @@
 				bind:value={search}
 			/>{/if}
 		<div class="pa-history">
-			{#each filteredChats as chat (chat.id)}<button
-					aria-current={chat.id === chatId ? 'page' : undefined}
-					onclick={() => openChat(chat.id)}>{chat.title}</button
-				>{/each}
+			{#each filteredChats as chat (chat.id)}<div class="pa-chat-row">
+					<button
+						aria-current={chat.id === chatId ? 'page' : undefined}
+						onclick={() => openChat(chat.id)}>{chat.title}</button
+					><button
+						class="pa-icon pa-chat-more"
+						aria-label={msg('chatMenu') + ': ' + chat.title}
+						aria-expanded={chatTools === chat.id}
+						onclick={() => toggleChatTools(chat.id, chat.title)}
+						><Icon name="more" size={16} /></button
+					>
+				</div>
+				{#if chatTools === chat.id}<div class="pa-approval pa-chat-tools">
+						{#if chatDelete}<strong>{msg('chatDeleteTitle')}</strong>
+							<p class="pa-muted">{msg('chatDeleteText')}</p>
+							<div class="pa-actions">
+								<button
+									class="pa-button pa-danger"
+									disabled={chatBusy}
+									onclick={() =>
+										chatAction(
+											() => deleteChat(chat.id),
+											() => {
+												if (chatId === chat.id) chatId = '';
+											},
+										)}>{msg('chatDelete')}</button
+								><button class="pa-button" onclick={() => (chatDelete = false)}
+									>{msg('cancel')}</button
+								>
+							</div>
+						{:else}<form
+								onsubmit={(e) => {
+									e.preventDefault();
+									if (chatName.trim()) void chatAction(() => renameChat(chat.id, chatName));
+								}}
+							>
+								<label>{msg('chatName')}<input bind:value={chatName} maxlength="120" /></label>
+								<div class="pa-actions">
+									<button class="pa-button" type="submit" disabled={chatBusy || !chatName.trim()}
+										>{msg('save')}</button
+									><button
+										class="pa-button pa-danger"
+										type="button"
+										onclick={() => (chatDelete = true)}>{msg('chatDelete')}</button
+									>
+								</div>
+							</form>{/if}
+						{#if chatError}<small role="alert">{chatError}</small>{/if}
+					</div>{/if}{/each}
 			{#each result?.jobs ?? [] as hit (hit.id)}<button
 					onclick={() => {
 						const job = snapshot?.jobs.find((j) => j.id === hit.id);

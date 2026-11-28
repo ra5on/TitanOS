@@ -4,6 +4,7 @@
 	import { sourceTitle, msg, iconFor, jobTitle, outputKind, failure } from './labels.ts';
 	import { jobOutput, mailFields, sourceLocation, stepTool, visibleSources } from './sources.ts';
 	import { motifFor } from './guide.ts';
+	import { answerHtml } from './markdown.ts';
 	import type { Capability, Chat, Job, Settings, Source } from './api.ts';
 	let {
 		chat,
@@ -86,14 +87,15 @@
 						datetime={j.created}>{time(j.updated)}</time
 					>
 				</div>
-				{#if draft?.isDraft}<p class="pa-readable pa-bubble pa-agent">
-						{output?.text && output.text.trim() !== draft.text.trim()
-							? output.text
-							: msg('draftReady')}
-					</p>{:else if j.status === 'done' && output?.text}<div
-						class="pa-readable pa-bubble pa-agent"
+				{#if draft?.isDraft}{#if output?.text && output.text.trim() !== draft.text.trim()}<div
+							class="pa-readable pa-bubble pa-agent pa-md"
+						>
+							{@html answerHtml(output.text)}
+						</div>{:else}<p class="pa-readable pa-bubble pa-agent">{msg('draftReady')}</p>{/if}
+				{:else if j.status === 'done' && output?.text}<div
+						class="pa-readable pa-bubble pa-agent pa-md"
 					>
-						{output.text}
+						{@html answerHtml(output.text)}
 					</div>
 				{:else if j.error}<p class="pa-warning"><Icon name="info" />{failure(j)}</p>
 				{:else if j.status === 'waiting'}<span class="pa-status"

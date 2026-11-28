@@ -46,10 +46,11 @@
 			url: 'https://github.com/IceWhaleTech/CasaOS-AppStore',
 			note: 'apps.known.casaos',
 		},
+		// 1.38: BigBear's store is gone from GitHub (404 since November 2026).
 		{
-			name: 'BigBear CasaOS',
-			url: 'https://github.com/bigbeartechworld/big-bear-casaos',
-			note: 'apps.known.bigbear',
+			name: 'LinuxServer App Store',
+			url: 'https://github.com/WisdomSky/LinuxServer-AppStore',
+			note: 'apps.known.linuxserver',
 		},
 	] as const;
 

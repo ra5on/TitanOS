@@ -289,7 +289,10 @@ func (s *Server) personalStep(parent context.Context, token string, apply bool) 
 		preview = pa.Preview{Title: t.Title, Text: req.Prompt, Sources: req.Sources}
 	} else {
 		preview, checkErr = t.Prepare(ctx, u, req)
-		if checkErr != nil {
+		var failure personalFailure
+		if errors.As(checkErr, &failure) && personalFailures[string(failure)] {
+			state = string(failure)
+		} else if checkErr != nil {
 			state = "failed"
 		} else if len(preview.Text) > 128<<10 || len(preview.Data) > 128<<10 {
 			state = "failed"
@@ -524,6 +527,8 @@ func (s *Server) personalFinish(u auth.User, id, token, state string, preview pa
 			} else if state == "denied" {
 				j.Error = "permission_revoked"
 				p.Prior = ""
+			} else if personalFailures[state] {
+				j.Error = state
 			} else {
 				j.Error = "tool_failed"
 			}
