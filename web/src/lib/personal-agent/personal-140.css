@@ -559,3 +559,189 @@ html.pa-padlocked main:has(> .pa-shell) {
 html.pa-keyboard .pa-small .pa-compose {
 	padding-bottom: 8px;
 }
+
+/* The menu behind ☰ on the phone (Drawer.svelte): iOS side panel. */
+.pa-ui .pa-drawer {
+	position: fixed;
+	inset: 0 auto 0 0;
+	width: min(88vw, 400px);
+	z-index: 60;
+	display: flex;
+	flex-direction: column;
+	background: var(--pa-background);
+	border-radius: 0 28px 28px 0;
+	box-shadow: 12px 0 40px rgb(0 0 0 / 0.35);
+	padding-top: calc(12px + max(9px, env(safe-area-inset-top)));
+	outline: none;
+}
+.pa-drawer-scrim {
+	z-index: 59;
+}
+.pa-drawer-top {
+	display: flex;
+	justify-content: space-between;
+	padding: 0 14px;
+}
+.pa-ui .pa-drawer-title {
+	font-size: 30px;
+	line-height: 1.15;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	margin: 14px 20px 10px;
+}
+.pa-drawer-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0 14px calc(18px + env(safe-area-inset-bottom, 0px));
+	display: grid;
+	align-content: start;
+	gap: 18px;
+}
+/* Search like iOS: a filled, rounded field with the magnifier inside. */
+.pa-drawer-body > input[type='search'] {
+	border: 0 !important;
+	border-radius: 12px !important;
+	min-height: 40px;
+	padding: 8px 12px 8px 36px !important;
+	background: color-mix(in srgb, var(--pa-text) 10%, var(--pa-background))
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239aa3ad' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E")
+		no-repeat 11px 50% !important;
+	font-size: 16px;
+}
+/* Grouped lists: rounded cards, rows with lines that start after the icon. */
+.pa-drawer-card,
+.pa-drawer .pa-chat-card {
+	background: var(--pa-navigation);
+	border-radius: 22px;
+	overflow: hidden;
+}
+.pa-drawer .pa-history {
+	display: grid;
+	gap: 18px;
+	padding: 0;
+}
+.pa-drawer .pa-chat-group {
+	display: grid;
+	gap: 6px;
+}
+.pa-drawer .pa-group {
+	margin: 0 16px;
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: none;
+}
+.pa-ui .pa-drawer-nav button,
+.pa-ui .pa-drawer .pa-chat-row > button:first-child {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	min-height: 52px;
+	padding: 12px 16px;
+	border-radius: 0;
+	text-align: start;
+	position: relative;
+	font-size: 16px;
+	background: none;
+}
+.pa-ui .pa-drawer-nav button > span:first-of-type {
+	flex: 1;
+}
+.pa-drawer-nav button::after {
+	content: '›';
+	font-size: 22px;
+	line-height: 1;
+	color: var(--pa-muted);
+	margin-left: 4px;
+}
+.pa-drawer-nav button + button::before,
+.pa-drawer .pa-chat-row + .pa-chat-row::before,
+.pa-drawer .pa-chat-tools + .pa-chat-row::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 52px;
+	right: 0;
+	border-top: 1px solid var(--pa-line);
+}
+.pa-drawer .pa-chat-row + .pa-chat-row::before,
+.pa-drawer .pa-chat-tools + .pa-chat-row::before {
+	left: 16px;
+}
+.pa-drawer .pa-chat-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	margin: 0;
+}
+.pa-ui .pa-drawer .pa-chat-row > button:first-child {
+	flex: 1;
+	padding-right: 4px;
+}
+.pa-ui .pa-drawer .pa-chat-row > button[aria-current='page'],
+.pa-ui .pa-drawer-nav button[aria-current='page'] {
+	background: color-mix(in srgb, var(--pa-accent) 14%, transparent);
+	font-weight: 600;
+}
+.pa-ui .pa-drawer .pa-chat-more {
+	width: 44px;
+	height: 44px;
+	margin-right: 6px;
+	border-radius: 50%;
+}
+.pa-drawer .pa-chat-tools {
+	margin: 0 12px 12px;
+	border-radius: 16px;
+}
+.pa-drawer-nav .pa-count {
+	min-width: 22px;
+	height: 22px;
+	border-radius: 11px;
+	display: grid;
+	place-items: center;
+	padding: 0 7px;
+	font-size: 12px;
+	background: var(--pa-wait);
+	color: #1a1204;
+	position: static;
+}
+.pa-drawer-account {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+}
+.pa-drawer-account div {
+	display: grid;
+}
+.pa-drawer-account small {
+	color: var(--pa-muted);
+}
+.pa-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	font-weight: 700;
+	background: color-mix(in srgb, var(--pa-accent) 22%, var(--pa-navigation));
+	color: var(--pa-accent);
+	flex: none;
+}
+.pa-ui .pa-drawer .pa-history {
+	overflow: visible;
+	max-height: none;
+	flex: none;
+}
+.pa-drawer-body {
+	display: flex;
+	flex-direction: column;
+}
+.pa-drawer-body > *,
+.pa-ui .pa-drawer .pa-history {
+	flex: none;
+	height: auto;
+	min-height: auto;
+}

@@ -44,6 +44,7 @@
 	import JobDetail from './JobDetail.svelte';
 	import Jobs from './Jobs.svelte';
 	import Sheet from './Sheet.svelte';
+	import Drawer from './Drawer.svelte';
 	import VoiceInput from './VoiceInput.svelte';
 	import ChatView from './ChatView.svelte';
 	import Start from './Start.svelte';
@@ -190,6 +191,16 @@
 	);
 	const options = $derived((snapshot?.capabilities ?? []).filter((c) => c.effective !== 'never'));
 	// 1.40 (§125): chats under Heute, Gestern, Diese Woche, Älter, newest first.
+	const chatGroups = $derived.by(() => {
+		if (search.trim()) return [{ key: '', chats: filteredChats }];
+		const out: { key: string; chats: typeof filteredChats }[] = [];
+		for (const c of filteredChats) {
+			const key = dayGroup(c.created);
+			if (out.at(-1)?.key !== key) out.push({ key, chats: [] });
+			out.at(-1)!.chats.push(c);
+		}
+		return out;
+	});
 	function dayGroup(iso: string): 'today' | 'yesterday' | 'week' | 'older' {
 		const start = new Date();
 		start.setHours(0, 0, 0, 0);
@@ -789,60 +800,63 @@
 				bind:value={search}
 			/>{/if}
 		<div class="pa-history">
-			{#each filteredChats as chat, i (chat.id)}{#if !search.trim() && (i === 0 || dayGroup(filteredChats[i - 1].created) !== dayGroup(chat.created))}<h3
-						class="pa-group"
-					>
-						{msg('group.' + dayGroup(chat.created))}
-					</h3>{/if}
-				<div class="pa-chat-row">
-					<button
-						aria-current={chat.id === chatId ? 'page' : undefined}
-						onclick={() => openChat(chat.id)}>{chat.title}</button
-					><button
-						class="pa-icon pa-chat-more"
-						aria-label={msg('chatMenu') + ': ' + chat.title}
-						aria-expanded={chatTools === chat.id}
-						onclick={() => toggleChatTools(chat.id, chat.title)}
-						><Icon name="more" size={16} /></button
-					>
-				</div>
-				{#if chatTools === chat.id}<div class="pa-approval pa-chat-tools">
-						{#if chatDelete}<strong>{msg('chatDeleteTitle')}</strong>
-							<p class="pa-muted">{msg('chatDeleteText')}</p>
-							<div class="pa-actions">
+			{#each chatGroups as g (g.key)}<section class="pa-chat-group">
+					{#if g.key}<h3 class="pa-group">{msg('group.' + g.key)}</h3>{/if}
+					<div class="pa-chat-card">
+						{#each g.chats as chat (chat.id)}<div class="pa-chat-row">
 								<button
-									class="pa-button pa-danger"
-									disabled={chatBusy}
-									onclick={() =>
-										chatAction(
-											() => deleteChat(chat.id),
-											() => {
-												if (chatId === chat.id) chatId = '';
-											},
-										)}>{msg('chatDelete')}</button
-								><button class="pa-button" onclick={() => (chatDelete = false)}
-									>{msg('cancel')}</button
+									aria-current={chat.id === chatId ? 'page' : undefined}
+									onclick={() => openChat(chat.id)}>{chat.title}</button
+								><button
+									class="pa-icon pa-chat-more"
+									aria-label={msg('chatMenu') + ': ' + chat.title}
+									aria-expanded={chatTools === chat.id}
+									onclick={() => toggleChatTools(chat.id, chat.title)}
+									><Icon name="more" size={16} /></button
 								>
 							</div>
-						{:else}<form
-								onsubmit={(e) => {
-									e.preventDefault();
-									if (chatName.trim()) void chatAction(() => renameChat(chat.id, chatName));
-								}}
-							>
-								<label>{msg('chatName')}<input bind:value={chatName} maxlength="120" /></label>
-								<div class="pa-actions">
-									<button class="pa-button" type="submit" disabled={chatBusy || !chatName.trim()}
-										>{msg('save')}</button
-									><button
-										class="pa-button pa-danger"
-										type="button"
-										onclick={() => (chatDelete = true)}>{msg('chatDelete')}</button
-									>
-								</div>
-							</form>{/if}
-						{#if chatError}<small role="alert">{chatError}</small>{/if}
-					</div>{/if}{/each}
+							{#if chatTools === chat.id}<div class="pa-approval pa-chat-tools">
+									{#if chatDelete}<strong>{msg('chatDeleteTitle')}</strong>
+										<p class="pa-muted">{msg('chatDeleteText')}</p>
+										<div class="pa-actions">
+											<button
+												class="pa-button pa-danger"
+												disabled={chatBusy}
+												onclick={() =>
+													chatAction(
+														() => deleteChat(chat.id),
+														() => {
+															if (chatId === chat.id) chatId = '';
+														},
+													)}>{msg('chatDelete')}</button
+											><button class="pa-button" onclick={() => (chatDelete = false)}
+												>{msg('cancel')}</button
+											>
+										</div>
+									{:else}<form
+											onsubmit={(e) => {
+												e.preventDefault();
+												if (chatName.trim()) void chatAction(() => renameChat(chat.id, chatName));
+											}}
+										>
+											<label>{msg('chatName')}<input bind:value={chatName} maxlength="120" /></label
+											>
+											<div class="pa-actions">
+												<button
+													class="pa-button"
+													type="submit"
+													disabled={chatBusy || !chatName.trim()}>{msg('save')}</button
+												><button
+													class="pa-button pa-danger"
+													type="button"
+													onclick={() => (chatDelete = true)}>{msg('chatDelete')}</button
+												>
+											</div>
+										</form>{/if}
+									{#if chatError}<small role="alert">{chatError}</small>{/if}
+								</div>{/if}{/each}
+					</div>
+				</section>{/each}
 			{#each result?.jobs ?? [] as hit (hit.id)}<button
 					onclick={() => {
 						const job = snapshot?.jobs.find((j) => j.id === hit.id);
@@ -1171,16 +1185,22 @@
 					first={firstId === detail.id}
 				/>
 			</aside>{/if}{/if}
-	{#if sheet === 'history'}<Sheet title={msg('chats')} {calm} onclose={() => (sheet = '')}
-			><button class="pa-button pa-new" onclick={newChat}
-				><Icon name="edit" />{msg('newChat')}</button
-			>{@render history()}
-			<nav class="pa-sheet-nav" aria-label="Agent">
+	{#if sheet === 'history'}<Drawer
+			title={msg('chats')}
+			{calm}
+			onclose={() => (sheet = '')}
+			onnew={newChat}
+			><nav class="pa-drawer-card pa-drawer-nav" aria-label="Agent">
 				{@render navButtons()}
 				<button onclick={() => openInProgram('/')}
 					><Icon name="home" /><span>{msg('home')}</span></button
 				>
-			</nav></Sheet
+			</nav>
+			{@render history()}
+			<div class="pa-drawer-card pa-drawer-account">
+				<span class="pa-avatar">{(session.data?.user?.name ?? '').slice(0, 1).toUpperCase()}</span>
+				<div><b>{session.data?.user?.name}</b><small>{msg('workspace')}</small></div>
+			</div></Drawer
 		>
 	{:else if sheet === 'context'}<Sheet
 			title={msg('requestType')}

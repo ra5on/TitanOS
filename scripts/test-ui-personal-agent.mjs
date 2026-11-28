@@ -9,7 +9,8 @@ import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 async function openTab(page, id) {
   // A sheet that is still sliding out keeps its buttons for a moment.
   await page
-    .locator(".pa-sheet")
+    .locator(".pa-sheet, .pa-drawer")
+    .first()
     .waitFor({ state: "detached", timeout: 3000 })
     .catch(() => {});
   const tab = page.locator(`[data-guide="${id}-tab"]:visible`);
