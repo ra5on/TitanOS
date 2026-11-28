@@ -187,6 +187,8 @@
 					<Overview
 						bind:this={p.overview}
 						part={p.tab}
+						host={p.status?.host}
+						bridge={!!p.status?.bridge}
 						vm={current}
 						history={p.history[current.name] ?? []}
 						volumes={storage.status?.volumes ?? []}
