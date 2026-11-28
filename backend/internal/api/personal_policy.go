@@ -39,7 +39,9 @@ func personalCap(t personalTool, a *personalAccount) pa.Capability {
 	pref, ok := a.Settings.Rights[t.ID]
 	if !ok {
 		pref = pa.Ask
-		if t.ID == "agent.example" {
+		// 1.38 (owner 28.11.2026): a question to the local model changes nothing
+		// on the NAS and needs no approval; changes keep theirs.
+		if t.ID == "agent.example" || t.ID == "chat.ask" {
 			pref = pa.Auto
 		}
 	}

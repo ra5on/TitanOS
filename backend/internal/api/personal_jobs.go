@@ -90,7 +90,7 @@ func (s *Server) personalEnqueue(u auth.User, a *personalAccount, r pa.Request, 
 	now := time.Now().UTC()
 	if r.ChatID == "" {
 		r.ChatID = personalID()
-		title := personalLimitText(strings.TrimSpace(r.Prompt), 80)
+		title := personalTitleFrom(r.Prompt)
 		if title == "" {
 			title = s.personal.tools[r.Tool].Title
 		}
