@@ -73,6 +73,8 @@ type personalRuntime struct {
 	known      map[string]time.Time // next possible job, or zero after scanning an idle account
 	leases     map[string]personalLease
 	cursor     int
+	looking    sync.Mutex                      // guards seen (1.39, personal_presence.go)
+	seen       map[string]map[string]time.Time // account key → Agent window → last "in view"
 }
 type personalLease struct {
 	Owner   string

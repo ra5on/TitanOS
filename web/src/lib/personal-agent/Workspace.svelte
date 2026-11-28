@@ -46,6 +46,7 @@
 	import Sheet from './Sheet.svelte';
 	import VoiceInput from './VoiceInput.svelte';
 	import ChatView from './ChatView.svelte';
+	import { startPresence } from './presence.ts';
 	import SettingsView from './SettingsView.svelte';
 	import OfficeTools from './OfficeTools.svelte';
 	import './personal.css';
@@ -456,6 +457,8 @@
 			}
 		});
 	});
+	// 1.39: no push while this window is in view (presence.ts).
+	onMount(() => startPresence());
 	onMount(() => {
 		const media = matchMedia('(prefers-reduced-motion: reduce)');
 		const update = () => {

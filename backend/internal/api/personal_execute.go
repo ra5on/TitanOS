@@ -136,7 +136,9 @@ func (s *Server) personalNotice(u auth.User, id, status string) {
 	if s.opts.Notify != nil && u.Role.CanAdminister() {
 		s.opts.Notify.NotifyTo(notify.Info, "personal_agent_"+status, "", []notify.Target{{User: u.Name, Bell: true}}, false, notify.About{Ref: "agent", Link: link})
 	}
-	if s.opts.WebPush != nil {
+	// 1.39: no push while an Agent window of the account is in view, on
+	// this or any other device; that window shows the job itself.
+	if s.opts.WebPush != nil && !s.personalLooking(personalKey(current), time.Now()) {
 		s.opts.WebPush.SendTo(u.Name, webpush.Message{Title: "Agent", Body: body, URL: link, Tag: "personal-agent-" + id})
 	}
 }

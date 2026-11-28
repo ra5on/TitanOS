@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PushDevices from '#lib/components/PushDevices.svelte';
 	import { onMount, tick } from 'svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { apiErrorText } from '#lib/i18n/index.svelte.ts';
@@ -163,6 +164,9 @@
 						}).catch(() => {})}
 				/>{msg('notice.' + v)}</label
 			>{/each}
+		<!-- 1.39: notifications on this device from inside the Agent – iOS asks
+		     only from a tap in the app on the home screen. -->
+		<div class="pa-push"><PushDevices personal bare /></div>
 	</details>
 	<details class="pa-settings-card">
 		<summary><Icon name="book" />{msg('memory')}</summary><label class="pa-field"

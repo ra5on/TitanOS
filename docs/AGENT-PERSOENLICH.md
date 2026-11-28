@@ -30,6 +30,16 @@ TitanOS ruft das lokale Modell mit einem Fenster von höchstens 16 384 Token (od
 
 Antworten sind Markdown und werden mit markdown-it angezeigt (Überschriften, Listen, Zitate, Tabellen, Code, Aufgabenlisten). HTML in einer Antwort bleibt Text; Links führen nur zu `http(s)`, `mailto:` und Seiten von TitanOS. Ein neuer Chat heißt nach den Wörtern seiner ersten Frage, die in 80 Zeichen passen, nie mitten im Wort geteilt. `PUT /chats/{id}` mit `title` benennt ihn um (eine Zeile, höchstens 120 Zeichen), `DELETE /chats/{id}` löscht ihn mit seinen Aufträgen. Solange ein Auftrag des Chats gerade nach außen schreibt (`executing`), antwortet das Löschen mit 409. Der Vermerk einer bereits ausgeführten Wirkung bleibt, damit ein gelöschter Auftrag nie wiederholt wird.
 
+## Mitteilungen (seit 1.39)
+
+Inhaber 28.11.2026: „wenn ein Chatfenster im Agent geöffnet ist, dass ich nicht trotzdem noch eine Benachrichtigung bekomme … aber nur wenn halt auch auf dem Desktop kein Fenster … geöffnet ist.“
+
+- Jedes Fenster des Agenten, das man sehen kann (sichtbarer Tab, nicht minimiertes Fenster des Arbeitsplatzes, App im Vordergrund), meldet alle 15 Sekunden und sofort bei jeder Änderung `POST /api/v1/personal-agent/presence {window, visible}` (`presence.ts`). Beim Schließen meldet es „nicht mehr“ (`keepalive`).
+- Solange irgendein Fenster des Kontos das gemeldet hat (45 Sekunden, nur im RAM, höchstens 32 Fenster je Konto), schickt `personalNotice` keinen Push an irgendein Gerät des Kontos – auch nicht ans iPhone, wenn am Desktop ein Agent-Fenster offen ist. Die Glocke bleibt.
+- Die Mitteilungen gehen an die Agent-App auf dem Home-Bildschirm (Tag `personal-agent-…`, `webpush.AppOf`); ohne sie an die TitanOS-Geräte.
+- Einstellungen › Mitteilungen enthält „Mitteilungen auf diesem Gerät“ (`PushDevices`): auf dem iPhone muss man das in der Agent-App auf dem Home-Bildschirm einmal antippen.
+- Tests: `TestPersonalPresence*`, `TestAppOfPersonalAgent`, `personal-agent-presence.test.ts`. Nicht auf einem echten iPhone geprüft.
+
 ## Lokales Chatmodell einrichten
 
 Im Chat führt „Modellverbindung“ direkt zur persönlichen Auswahl. „Lokale Modelle suchen“ zeigt die auf dem NAS verfügbaren Chatmodelle. Nach dem Speichern steht das gewählte Modell dem Konto zur Verfügung. Bei leerem Feld verwendet der Agent das erste geeignete Modell. Ist ein ausdrücklich gewähltes Modell inzwischen verschwunden, kann das Konto ein anderes auswählen.

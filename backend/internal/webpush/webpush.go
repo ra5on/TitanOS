@@ -432,9 +432,13 @@ func pick(devices []stored, user, app, kind string, msg Message) []stored {
 }
 
 // AppOf is the app a message belongs to: the KI-Agent's messages about a
-// chat (tag "agent-<chat>") to the agent app, all others to TitanOS.
+// chat (tag "agent-<chat>") and, since 1.39, those of the personal Agent
+// about a job (tag "personal-agent-<job>") to the agent app, all others to
+// TitanOS. Before 1.39 the personal Agent's messages counted as TitanOS:
+// with any TitanOS browser subscribed, the Agent app on the home screen of
+// the iPhone never got them.
 func AppOf(msg Message) string {
-	if strings.HasPrefix(msg.Tag, "agent-") {
+	if strings.HasPrefix(msg.Tag, "agent-") || strings.HasPrefix(msg.Tag, "personal-agent-") {
 		return AppAgent
 	}
 	return AppTitanOS
